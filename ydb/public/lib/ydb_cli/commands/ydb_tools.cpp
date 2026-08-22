@@ -2,10 +2,12 @@
 #include "ydb_tools_infer.h"
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/logger/log.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/logger/log.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
+#include <ydb/public/lib/ydb_cli/common/log.h>
 #include <ydb/public/lib/ydb_cli/common/normalize_path.h>
+#include <ydb/public/lib/ydb_cli/common/scheme_path_completer.h>
 #include <ydb/public/lib/ydb_cli/common/pg_dump_parser.h>
 #include <ydb/public/lib/ydb_cli/dump/dump.h>
 #include <ydb/library/backup/util.h>
@@ -26,7 +28,7 @@ TCommandTools::TCommandTools()
     AddCommand(std::make_unique<TCommandRestore>());
     AddCommand(std::make_unique<TCommandCopy>());
     AddCommand(std::make_unique<TCommandRename>());
-    AddCommand(std::make_unique<TCommandPgConvert>());
+    AddHiddenCommand(std::make_unique<TCommandPgConvert>());
     AddCommand(std::make_unique<TCommandToolsInfer>());
 }
 
@@ -51,7 +53,8 @@ void TCommandDump::Config(TConfig& config) {
     config.SetFreeArgsNum(0);
 
     config.Opts->AddLongOption('p', "path", "Database path to a directory or a table to be dumped.")
-        .DefaultValue(".").StoreResult(&Path);
+        .DefaultValue(".").StoreResult(&Path)
+        .SchemePathCompletionForAll();
     config.Opts->AddLongOption("exclude", "Pattern(s) (PCRE) for paths excluded from dump."
             " Option can be used several times - one for each pattern.")
         .RequiredArgument("STRING").Handler([this](const TString& arg) {
@@ -82,7 +85,8 @@ void TCommandDump::Config(TConfig& config) {
             "database - take one consistent snapshot of all tables specified for dump."
             " Takes more time and is more likely to impact workload;\n"
             "table - take consistent snapshot per each table independently.")
-        .DefaultValue(defaults.ConsistencyLevel_).StoreResult(&ConsistencyLevel);
+        .DefaultValue(defaults.ConsistencyLevel_).StoreResult(&ConsistencyLevel)
+        .ChoicesWithCompletion({{"database", "Consistent snapshot of all tables"}, {"table", "Per-table snapshot"}});
     config.Opts->AddLongOption("ordered", "Preserve order by primary key in backup files.")
         .DefaultValue(defaults.Ordered_).StoreTrue(&Ordered);
 }
@@ -109,10 +113,11 @@ int TCommandDump::Run(TConfig& config) {
         .PreservePoolKinds(PreservePoolKinds)
         .Ordered(Ordered);
 
-    auto log = std::make_shared<TLog>(CreateLogBackend("cerr", TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel)));
+    auto log = std::make_shared<TLog>(CreateLogBackend("cerr", VerbosityLevelToELogPriority(config.VerbosityLevel)));
     log->SetFormatter(GetPrefixLogFormatter(""));
 
-    NDump::TClient client(CreateDriver(config), std::move(log));
+    auto driver = CreateDriver(config);
+    NDump::TClient client(driver, std::move(log));
     NStatusHelpers::ThrowOnErrorOrPrintIssues(client.Dump(Path, FilePath, settings));
 
     return EXIT_SUCCESS;
@@ -132,7 +137,8 @@ void TCommandRestore::Config(TConfig& config) {
 
     config.Opts->AddLongOption('p', "path",
             "[Required] Database path to a destination directory where restored directory or table will be placed.")
-        .StoreResult(&Path);
+        .StoreResult(&Path)
+        .SchemePathCompletionForAll();
     config.Opts->AddLongOption('i', "input",
             "[Required] Path in a local filesystem to a directory with dump.")
         .StoreResult(&FilePath);
@@ -153,6 +159,9 @@ void TCommandRestore::Config(TConfig& config) {
 
     config.Opts->AddLongOption("restore-acl", "Whether to restore ACL and owner or not.")
         .DefaultValue(defaults.RestoreACL_).StoreResult(&RestoreACL);
+
+    config.Opts->AddLongOption("replace-sys-acl", "Whether to replace ACL for system objects or not.")
+        .DefaultValue(defaults.ReplaceSysACL_).StoreResult(&ReplaceSysACL);
 
     config.Opts->AddLongOption("skip-document-tables", "Skip Document API tables.")
         .DefaultValue(defaults.SkipDocumentTables_).StoreResult(&SkipDocumentTables)
@@ -222,6 +231,9 @@ void TCommandRestore::Config(TConfig& config) {
         " instead of silently skipping its removal.")
         .StoreTrue(&VerifyExistence);
 
+    config.Opts->AddLongOption("retries", "Max retry count for every request.")
+        .DefaultValue(10).StoreResult(&Retries);
+
     config.Opts->MutuallyExclusive("bandwidth", "rps");
     config.Opts->MutuallyExclusive("import-data", "bulk-upsert");
     config.Opts->MutuallyExclusive("import-data", "upload-batch-rows");
@@ -239,11 +251,13 @@ int TCommandRestore::Run(TConfig& config) {
         .RestoreData(RestoreData)
         .RestoreIndexes(RestoreIndexes)
         .RestoreACL(RestoreACL)
+        .ReplaceSysACL(ReplaceSysACL)
         .SkipDocumentTables(SkipDocumentTables)
         .SavePartialResult(SavePartialResult)
         .RowsPerRequest(NYdb::SizeFromString(RowsPerRequest))
         .Replace(Replace)
-        .VerifyExistence(VerifyExistence);
+        .VerifyExistence(VerifyExistence)
+        .MaxRetries(Retries);
 
     if (InFlight) {
         settings.MaxInFlight(InFlight);
@@ -284,10 +298,11 @@ int TCommandRestore::Run(TConfig& config) {
             << "The --verify-existence option must be used together with the --replace option.";
     }
 
-    auto log = std::make_shared<TLog>(CreateLogBackend("cerr", TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel)));
+    auto log = std::make_shared<TLog>(CreateLogBackend("cerr", VerbosityLevelToELogPriority(config.VerbosityLevel)));
     log->SetFormatter(GetPrefixLogFormatter(""));
 
-    NDump::TClient client(CreateDriver(config), std::move(log));
+    auto driver = CreateDriver(config);
+    NDump::TClient client(driver, std::move(log));
     NStatusHelpers::ThrowOnErrorOrPrintIssues(client.Restore(FilePath, Path, settings));
 
     return EXIT_SUCCESS;
@@ -302,7 +317,8 @@ TCommandCopy::TCommandCopy()
 {
     TItem::DefineFields({
         {"Source", {{"source", "src", "s"}, "Source table path", true}},
-        {"Destination", {{"destination", "dst", "d"}, "Destination table path", true}}
+        {"Destination", {{"destination", "dst", "d"}, "Destination table path", true}},
+        {"OmitIndexes", {{"omit-indexes"}, "Omit indexes when copying table; indexes are copied by default", false}}
     });
 }
 
@@ -311,11 +327,7 @@ void TCommandCopy::Config(TConfig& config) {
 
     config.SetFreeArgsNum(0);
 
-    TStringBuilder itemHelp;
-    itemHelp << "[At least one] Item specification" << Endl
-        << "  Possible property names:" << Endl
-        << TItem::FormatHelp(2);
-    config.Opts->AddLongOption("item", itemHelp)
+    config.Opts->AddLongOption("item", TItem::FormatHelp("[At least one] Item specification", config.HelpCommandVerbosityLevel, 2))
         .RequiredArgument("PROPERTY=VALUE,...");
 }
 
@@ -340,11 +352,25 @@ void TCommandCopy::ExtractParams(TConfig& config) {
 int TCommandCopy::Run(TConfig& config) {
     TVector<NYdb::NTable::TCopyItem> copyItems;
     copyItems.reserve(Items.size());
+    auto driver = CreateDriver(config);
+    auto schemeClient = NScheme::TSchemeClient(driver);
     for (auto& item : Items) {
+        auto describeResult = schemeClient.DescribePath(item.Source).GetValueSync();
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(describeResult);
+        switch (describeResult.GetEntry().Type) {
+            case NScheme::ESchemeEntryType::Table:
+                break;
+            default:
+                Cerr << "Source path " << item.Source << " is of type `" << describeResult.GetEntry().Type << "`. Only row tables are supported for copying." << Endl;
+                return EXIT_FAILURE;
+        }
         copyItems.emplace_back(item.Source, item.Destination);
+        if (item.OmitIndexes) {
+            copyItems.back().SetOmitIndexes();
+        }
     }
     NStatusHelpers::ThrowOnErrorOrPrintIssues(
-        GetSession(config).CopyTables(
+        GetSession(driver).CopyTables(
             copyItems,
             FillSettings(NTable::TCopyTablesSettings())
         ).GetValueSync()
@@ -373,11 +399,7 @@ void TCommandRename::Config(TConfig& config) {
 
     config.SetFreeArgsNum(0);
 
-    TStringBuilder itemHelp;
-    itemHelp << "[At least one] Item specification" << Endl
-        << "  Possible property names:" << Endl
-        << TItem::FormatHelp(2);
-    config.Opts->AddLongOption("item", itemHelp)
+    config.Opts->AddLongOption("item", TItem::FormatHelp("[At least one] Item specification", config.HelpCommandVerbosityLevel, 2))
         .RequiredArgument("PROPERTY=VALUE,...");
 
     AddCommandExamples(
@@ -432,6 +454,7 @@ void TCommandRename::ExtractParams(TConfig& config) {
 }
 
 int TCommandRename::Run(TConfig& config) {
+    auto driver = CreateDriver(config);
     TVector<NYdb::NTable::TRenameItem> renameItems;
     renameItems.reserve(Items.size());
     for (auto& item : Items) {
@@ -441,13 +464,17 @@ int TCommandRename::Run(TConfig& config) {
         }
     }
     NStatusHelpers::ThrowOnErrorOrPrintIssues(
-        GetSession(config).RenameTables(
+        GetSession(driver).RenameTables(
             renameItems,
             FillSettings(NTable::TRenameTablesSettings())
         ).GetValueSync()
     );
     return EXIT_SUCCESS;
 }
+
+////////////////////////////////////////////////////////////////////////////////
+//  PgConvert
+////////////////////////////////////////////////////////////////////////////////
 
 TCommandPgConvert::TCommandPgConvert()
     : TToolsCommand("pg-convert", {}, "Convert pg_dump result SQL file to format readable by YDB postgres layer")

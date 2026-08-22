@@ -5,22 +5,25 @@
 extern "C" {
 #endif
 
-static int raise_unexpected_kwarg(const char *fname, PyObject* argname)
+static inline int
+raise_unexpected_kwarg(const char *fname, PyObject *argname)
 {
     PyErr_Format(PyExc_TypeError,
                  "%.150s() got an unexpected keyword argument '%.150U'",
-                 fname, argname);
+                 fname,
+                 argname);
     return -1;
 }
 
-static int raise_missing_posarg(const char *fname, const char* argname)
+static inline int
+raise_missing_posarg(const char *fname, const char *argname)
 {
     PyErr_Format(PyExc_TypeError,
                  "%.150s() missing 1 required positional argument: '%.150s'",
-                 fname, argname);
+                 fname,
+                 argname);
     return -1;
 }
-
 
 /* Parse FASTCALL|METH_KEYWORDS arguments as two args,
 the first arg is mandatory and the second one is optional.
@@ -32,19 +35,13 @@ The parser accepts three forms:
 3. all named keyword args.
 */
 
-static int parse2(const char* fname,
-                  PyObject*const *args,
-                  Py_ssize_t nargs,
-                  PyObject *kwnames,
-                  Py_ssize_t minargs,
-                  const char* arg1name,
-                  PyObject **arg1,
-                  const char* arg2name,
-                  PyObject **arg2
-)
+static inline int
+parse2(const char *fname, PyObject *const *args, Py_ssize_t nargs,
+       PyObject *kwnames, Py_ssize_t minargs, const char *arg1name,
+       PyObject **arg1, const char *arg2name, PyObject **arg2)
 {
-    assert(minargs>=1);
-    assert(minargs<=2);
+    assert(minargs >= 1);
+    assert(minargs <= 2);
 
     if (kwnames != NULL) {
         Py_ssize_t kwsize = PyTuple_Size(kwnames);
@@ -71,7 +68,8 @@ static int parse2(const char* fname,
                 } else {
                     return raise_unexpected_kwarg(fname, argname);
                 }
-            } else if (PyUnicode_CompareWithASCIIString(argname, arg2name) == 0) {
+            } else if (PyUnicode_CompareWithASCIIString(argname, arg2name) ==
+                       0) {
                 argname = PyTuple_GetItem(kwnames, 1);
                 if (argname == NULL) {
                     return -1;
@@ -113,13 +111,15 @@ static int parse2(const char* fname,
         }
     } else {
         if (nargs < 1) {
-            PyErr_Format(PyExc_TypeError,
-                         "%.150s() missing 1 required positional argument: '%s'",
-                         fname, arg1name);
+            PyErr_Format(
+                PyExc_TypeError,
+                "%.150s() missing 1 required positional argument: '%s'",
+                fname,
+                arg1name);
             return -1;
         }
         if (nargs < minargs || nargs > 2) {
-            const char* txt;
+            const char *txt;
             if (minargs == 2) {
                 txt = "from 1 to 2 positional arguments";
             } else {
@@ -127,7 +127,9 @@ static int parse2(const char* fname,
             }
             PyErr_Format(PyExc_TypeError,
                          "%.150s() takes %s but %zd were given",
-                         fname, txt, nargs);
+                         fname,
+                         txt,
+                         nargs);
             return -1;
         }
         *arg1 = args[0];

@@ -1,8 +1,8 @@
 --- contrib/libs/tbb/src/tbb/co_context.h	(index)
 +++ contrib/libs/tbb/src/tbb/co_context.h	(working tree)
 @@ -47,6 +47,7 @@
-         #pragma clang diagnostic push
-         #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+         #pragma GCC diagnostic push
+         #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
      #endif
 +	#define _XOPEN_SOURCE 700
  #endif // __APPLE__

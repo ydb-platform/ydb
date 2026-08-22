@@ -42,7 +42,7 @@ TRequestQueue* TPerKeyRequestQueueProvider<T>::DoGetQueue(const T& key)
         YT_VERIFY(key == std::any_cast<T>(queue->GetTag()));
 
         // It doesn't matter if configs are outdated since we will reconfigure them
-        // again in the automaton thread.
+        // again in ConfigureQueue.
         auto configs = DefaultConfigs_.Load();
 
         auto [weightThrottlingEnabled, bytesThrottlingEnabled] =
@@ -106,19 +106,6 @@ void TPerKeyRequestQueueProvider<T>::UpdateDefaultConfigs(
 }
 
 template <class T>
-void TPerKeyRequestQueueProvider<T>::ReconfigureAllQueues()
-{
-    if (!ReconfigurationCallback_) {
-        return;
-    }
-
-    RequestQueues_.Flush();
-    RequestQueues_.IterateReadOnly([&] (const auto& key, const auto& queue) {
-        ReconfigurationCallback_(key, queue);
-    });
-}
-
-template <class T>
 void TPerKeyRequestQueueProvider<T>::ReconfigureQueue(const T& key)
 {
     if (!ReconfigurationCallback_) {
@@ -132,6 +119,23 @@ void TPerKeyRequestQueueProvider<T>::ReconfigureQueue(const T& key)
     if (auto* queue = RequestQueues_.Find(key)) {
         ReconfigurationCallback_(key, *queue);
     }
+}
+
+template <class T>
+void TPerKeyRequestQueueProvider<T>::ReconfigureAllQueues()
+{
+    if (!ReconfigurationCallback_) {
+        return;
+    }
+
+    RequestQueues_.Flush();
+    RequestQueues_.IterateReadOnly([&] (const auto& key, const auto& queue) {
+        if (!IsReconfigurationPermitted(key)) {
+            return;
+        }
+
+        ReconfigurationCallback_(key, queue);
+    });
 }
 
 ////////////////////////////////////////////////////////////////////////////////

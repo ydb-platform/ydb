@@ -17,11 +17,13 @@
 #ifndef Y_ABSL_RANDOM_INTERNAL_DISTRIBUTION_CALLER_H_
 #define Y_ABSL_RANDOM_INTERNAL_DISTRIBUTION_CALLER_H_
 
-#include <utility>
+#include <tuple>
 #include <type_traits>
+#include <utility>
 
 #include "y_absl/base/config.h"
 #include "y_absl/base/internal/fast_type_id.h"
+#include "y_absl/meta/type_traits.h"
 #include "y_absl/utility/utility.h"
 
 namespace y_absl {

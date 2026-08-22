@@ -2,6 +2,7 @@
 import functools
 import logging
 import os
+import re
 import time
 import copy
 import pytest
@@ -55,11 +56,23 @@ CLUSTER_CONFIG = dict(
     extra_feature_flags=['enable_serverless_exclusive_dynamic_nodes'],
     datashard_config={
         'keep_snapshot_timeout': 5000,
+        'stats_report_interval_seconds': 1,
     },
     column_shard_config={
         'disabled_on_scheme_shard': False,
+        'max_read_staleness_ms': 200
+    },
+    table_service_config={
     },
 )
+
+
+# regex matching error mesages when database exceeds its disk space quota
+RE_DISK_SPACE_QUOTA_EXCEEDED = re.compile(r'.*out of disk space.*')
+
+
+def is_disk_space_quota_exceeded_exception(e: BaseException):
+    return RE_DISK_SPACE_QUOTA_EXCEEDED.match(str(e))
 
 
 @pytest.fixture(scope='module', params=[True, False], ids=['enable_alter_database_create_hive_first--true', 'enable_alter_database_create_hive_first--false'])
@@ -67,11 +80,17 @@ def enable_alter_database_create_hive_first(request):
     return request.param
 
 
+@pytest.fixture(scope='module', params=[True, False], ids=["enable_pool_encryption--true", "enable_pool_encryption--false"])
+def enable_pool_encryption(request):
+    return request.param
+
+
 # fixtures.ydb_cluster_configuration local override
 @pytest.fixture(scope='module')
-def ydb_cluster_configuration(enable_alter_database_create_hive_first):
+def ydb_cluster_configuration(enable_alter_database_create_hive_first, enable_pool_encryption):
     conf = copy.deepcopy(CLUSTER_CONFIG)
     conf['enable_alter_database_create_hive_first'] = enable_alter_database_create_hive_first
+    conf['enable_pool_encryption'] = enable_pool_encryption
     return conf
 
 
@@ -375,7 +394,7 @@ def test_database_with_disk_quotas(ydb_hostel_db, ydb_disk_quoted_serverless_db,
                         commit_tx=True,
                     )
         except ydb.Unavailable as e:
-            if not ignore_out_of_space or 'DISK_SPACE_EXHAUSTED' not in str(e):
+            if not ignore_out_of_space or not is_disk_space_quota_exceeded_exception(e):
                 raise
 
     @restart_coro_on_bad_session
@@ -437,7 +456,7 @@ def test_database_with_disk_quotas(ydb_hostel_db, ydb_disk_quoted_serverless_db,
         for start in range(0, 1000, 100):
             IOLoop.current().run_sync(lambda: async_write_keys(path, start=start, cnt=100))
 
-        for _ in range(30):
+        for _ in range(60):
             time.sleep(1)
             described = ydb_cluster.client.describe(database, '')
             logger.debug('database state after write_keys: %s', described)
@@ -448,15 +467,15 @@ def test_database_with_disk_quotas(ydb_hostel_db, ydb_disk_quoted_serverless_db,
 
         # Writes should be denied when database moves into DiskQuotaExceeded state
         time.sleep(1)
-        with pytest.raises(ydb.Unavailable, match=r'.*DISK_SPACE_EXHAUSTED.*'):
+        with pytest.raises(ydb.Unavailable, match=RE_DISK_SPACE_QUOTA_EXCEEDED):
             IOLoop.current().run_sync(lambda: async_write_key(path, 0, 'test', ignore_out_of_space=False))
-        with pytest.raises(ydb.Unavailable, match=r'.*out of disk space.*'):
+        with pytest.raises(ydb.Unavailable, match=RE_DISK_SPACE_QUOTA_EXCEEDED):
             IOLoop.current().run_sync(lambda: async_bulk_upsert(path, [BulkUpsertRow(0, 'test')]))
 
         for start in range(0, 1000, 100):
             IOLoop.current().run_sync(lambda: async_erase_keys(path, start=start, cnt=100))
 
-        for _ in range(30):
+        for _ in range(60):
             time.sleep(1)
             described = ydb_cluster.client.describe(database, '')
             logger.debug('database state after erase_keys: %s', described)
@@ -528,7 +547,7 @@ def test_database_with_column_disk_quotas(ydb_hostel_db, ydb_disk_small_quoted_s
             rows = [BulkUpsertRow((now + datetime.timedelta(microseconds=dt))) for dt in range(i * bulk_size, (i + 1) * bulk_size)]
             try:
                 driver.table_client.bulk_upsert(path, rows, column_types)
-            except ydb.issues.Overloaded:
+            except ydb.issues.Unavailable:
                 described = ydb_cluster.client.describe(database, '')
                 logger.debug('database state when oveloaded: %s', described)
                 assert described.PathDescription.DomainDescription.DomainState.DiskQuotaExceeded, 'database did not move into DiskQuotaExceeded state'
@@ -537,7 +556,7 @@ def test_database_with_column_disk_quotas(ydb_hostel_db, ydb_disk_small_quoted_s
             assert False, 'database did not move into Overloaded state'
 
         logger.info("Upsert data whith SQL")
-        with pytest.raises(ydb.issues.Overloaded, match=r'.*overload data error.*'):
+        with pytest.raises(ydb.issues.Unavailable, match=r'.*Column shard.*is overloaded.*'):
             qpool.execute_with_retries(
                 "UPSERT INTO `{}` (ts, value_string) VALUES(Timestamp('2020-01-01T00:00:00.000000Z'), 'xxx')".format(path),
                 retry_settings=RetrySettings(max_retries=0))
@@ -554,21 +573,54 @@ def test_database_with_column_disk_quotas(ydb_hostel_db, ydb_disk_small_quoted_s
             assert False, 'database did not move out of DiskQuotaExceeded state'
 
 
-def test_discovery(ydb_hostel_db, ydb_serverless_db, ydb_endpoint):
-    def list_endpoints(database):
-        logger.debug("List endpoints of %s", database)
-        resolver = ydb.DiscoveryEndpointsResolver(ydb.DriverConfig(ydb_endpoint, database))
-        result = resolver.resolve()
-        if result is not None:
-            return result.endpoints
-        return result
+def list_endpoints(endpoint, database):
+    logger.debug("List endpoints of %s", database)
+    driver_config = ydb.DriverConfig(endpoint, database)
+    with ydb.Driver(driver_config) as driver:
+        driver.wait(120)
+    resolver = ydb.DiscoveryEndpointsResolver(driver_config)
+    result = resolver.resolve()
+    if result is not None:
+        return result.endpoints
+    return result
 
-    hostel_db_endpoints = list_endpoints(ydb_hostel_db)
-    serverless_db_endpoints = list_endpoints(ydb_serverless_db)
+
+def test_discovery(ydb_hostel_db, ydb_serverless_db, ydb_endpoint):
+    hostel_db_endpoints = None
+    serverless_db_endpoints = None
+    for _ in range(60):
+        hostel_db_endpoints = list_endpoints(ydb_endpoint, ydb_hostel_db)
+        serverless_db_endpoints = list_endpoints(ydb_endpoint, ydb_serverless_db)
+        if None in [hostel_db_endpoints, serverless_db_endpoints]:
+            break
+        if len(hostel_db_endpoints) == len(serverless_db_endpoints):
+            break
+        time.sleep(1)
 
     assert_that(hostel_db_endpoints, not_none())
     assert_that(serverless_db_endpoints, not_none())
     assert_that(serverless_db_endpoints, contains_inanyorder(*hostel_db_endpoints))
+
+
+def test_discovery_with_inner_path(ydb_hostel_db, ydb_serverless_db, ydb_endpoint):
+    driver_config = ydb.DriverConfig(
+        ydb_endpoint,
+        ydb_serverless_db
+    )
+
+    driver = ydb.Driver(driver_config)
+    driver.wait(120)
+
+    serverless_inner_path = os.path.join(ydb_serverless_db, "dirA0")
+    driver.scheme_client.make_directory(serverless_inner_path)
+
+    logger.debug("List endpoints of '%s' by path '%s'", ydb_serverless_db, serverless_inner_path)
+
+    # discovery must reject inner (non-database) paths: only a domain or a subdomain
+    resolver = ydb.DiscoveryEndpointsResolver(ydb.DriverConfig(ydb_endpoint, serverless_inner_path))
+    result = resolver.resolve()
+    assert result is None
+    assert "Requested database does not exist" in resolver.debug_details()
 
 
 def ydbcli_db_schema_exec(cluster, operation_proto):
@@ -603,26 +655,22 @@ def alter_database_serverless_compute_resources_mode(cluster, database_path, ser
 
 
 def test_discovery_exclusive_nodes(ydb_hostel_db, ydb_serverless_db_with_exclusive_nodes, ydb_endpoint, ydb_cluster):
-    def list_endpoints(database):
-        logger.debug("List endpoints of %s", database)
-
-        driver_config = ydb.DriverConfig(ydb_endpoint, database)
-        with ydb.Driver(driver_config) as driver:
-            driver.wait(120)
-
-        resolver = ydb.DiscoveryEndpointsResolver(driver_config)
-        result = resolver.resolve()
-        if result is not None:
-            return result.endpoints
-        return result
-
     alter_database_serverless_compute_resources_mode(
         ydb_cluster,
         ydb_serverless_db_with_exclusive_nodes,
         "EServerlessComputeResourcesModeShared"
     )
-    serverless_db_shared_endpoints = list_endpoints(ydb_serverless_db_with_exclusive_nodes)
-    hostel_db_endpoints = list_endpoints(ydb_hostel_db)
+
+    hostel_db_endpoints = None
+    serverless_db_shared_endpoints = None
+    for _ in range(60):
+        hostel_db_endpoints = list_endpoints(ydb_endpoint, ydb_hostel_db)
+        serverless_db_shared_endpoints = list_endpoints(ydb_endpoint, ydb_serverless_db_with_exclusive_nodes)
+        if None in [hostel_db_endpoints, serverless_db_shared_endpoints]:
+            break
+        if len(hostel_db_endpoints) == len(serverless_db_shared_endpoints):
+            break
+        time.sleep(1)
 
     assert_that(hostel_db_endpoints, not_none())
     assert_that(serverless_db_shared_endpoints, not_none())
@@ -633,7 +681,7 @@ def test_discovery_exclusive_nodes(ydb_hostel_db, ydb_serverless_db_with_exclusi
         ydb_serverless_db_with_exclusive_nodes,
         "EServerlessComputeResourcesModeExclusive"
     )
-    serverless_db_exclusive_endpoints = list_endpoints(ydb_serverless_db_with_exclusive_nodes)
+    serverless_db_exclusive_endpoints = list_endpoints(ydb_endpoint, ydb_serverless_db_with_exclusive_nodes)
 
     assert_that(serverless_db_exclusive_endpoints, not_none())
     assert_that(serverless_db_exclusive_endpoints, only_contains(not_(is_in(serverless_db_shared_endpoints))))
@@ -734,3 +782,56 @@ def test_seamless_migration_to_exclusive_nodes(ydb_serverless_db_with_exclusive_
         f"UPSERT INTO `{path}` (id) VALUES (10), (11), (12);",
         commit_tx=True
     )
+
+
+def get_effective_permission_names(scheme_client, path, subject):
+    desc = scheme_client.describe_path(path)
+    names = set()
+    for p in desc.effective_permissions:
+        if p.subject == subject:
+            names.update(p.permission_names)
+    return names
+
+
+def test_connect_permission_not_inherited_in_serverless(ydb_hostel_db, ydb_serverless_db, ydb_endpoint, ydb_root):
+    connect_permission = 'ydb.database.connect'
+    inheritable_permission = 'ydb.generic.read'
+
+    root_domain_driver = ydb.Driver(ydb.DriverConfig(ydb_endpoint, database=ydb_root))
+    root_domain_driver.wait(120)
+    root_domain_sc = root_domain_driver.scheme_client
+
+    serverless_subdomain_driver = ydb.Driver(ydb.DriverConfig(ydb_endpoint, database=ydb_serverless_db))
+    serverless_subdomain_driver.wait(120)
+    serverless_subdomain_sc = serverless_subdomain_driver.scheme_client
+
+    root_domain_sc.modify_permissions(
+        ydb_root,
+        ydb.ModifyPermissionsSettings().grant_permissions('user1', (connect_permission,))
+    )
+
+    root_domain_sc.modify_permissions(
+        ydb_root,
+        ydb.ModifyPermissionsSettings().grant_permissions('user1', (inheritable_permission,))
+    )
+
+    inner_path = os.path.join(ydb_serverless_db, "dirA0")
+    serverless_subdomain_sc.make_directory(inner_path)
+
+    # at the serverless database root user1 must have both connect (inherited from /Root)
+    # and the ordinary inheritable permission
+    serverless_root_perms = get_effective_permission_names(root_domain_sc, ydb_serverless_db, 'user1')
+    logger.info("effective permissions of user1 at serverless root %s: %s", ydb_serverless_db, serverless_root_perms)
+    assert connect_permission in serverless_root_perms, \
+        "connect permission granted on /Root must be inherited down to the serverless database root"
+    assert inheritable_permission in serverless_root_perms, \
+        "ordinary inheritable permission granted on /Root must be inherited down to the serverless database root"
+
+    # inside the serverless database the connect permission must NOT leak,
+    # while the ordinary inheritable permission must still be inherited
+    inner_perms = get_effective_permission_names(serverless_subdomain_sc, inner_path, 'user1')
+    logger.info("effective permissions of user1 at inner %s: %s", inner_path, inner_perms)
+    assert connect_permission not in inner_perms, \
+        "connect permission must NOT be inherited into objects inside a serverless database"
+    assert inheritable_permission in inner_perms, \
+        "ordinary inheritable permission must still be inherited inside a serverless database"

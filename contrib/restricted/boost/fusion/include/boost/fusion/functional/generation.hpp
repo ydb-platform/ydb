@@ -6,7 +6,7 @@
     http://www.boost.org/LICENSE_1_0.txt).
 ==============================================================================*/
 
-#if !defined(BOOST_FUSION_FUNCTIONAL_GENERATION_HPP_INCLUDED)
+#ifndef BOOST_FUSION_FUNCTIONAL_GENERATION_HPP_INCLUDED
 #define BOOST_FUSION_FUNCTIONAL_GENERATION_HPP_INCLUDED
 
 #include <boost/fusion/support/config.hpp>

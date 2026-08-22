@@ -4,8 +4,10 @@
 
 #include <ydb/core/base/row_version.h>
 #include <ydb/core/base/tablet_types.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/protos/subdomains.pb.h>
+#include <ydb/core/protos/table_metrics_settings.pb.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 
 #include <util/generic/fwd.h>
@@ -116,6 +118,7 @@ enum class ETableColumnDefaultKind : ui32 {
     None = 0,
     FromSequence = 1,
     FromLiteral = 2,
+    FromExpression = 3,
 };
 
 enum class EAttachChildResult : ui32 {
@@ -141,6 +144,8 @@ enum class EAttachChildResult : ui32 {
 
 using EServerlessComputeResourcesMode = NKikimrSubDomains::EServerlessComputeResourcesMode;
 
+using ETablesMetricsLevel = NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel;
+
 struct TTempDirsState {
 
     struct TRetryState {
@@ -165,7 +170,7 @@ struct TTempDirInfo {
     TActorId TempDirOwnerActorId;
 };
 
-enum class EDataErasureStatus : ui32 {
+enum class EShredStatus : ui32 {
     UNSPECIFIED = 0,
     COMPLETED = 1,
     IN_PROGRESS = 2,

@@ -59,6 +59,9 @@ class Test(unittest.TestCase):
         # interfaces with equal names but different modules should sort by
         # module name
         from .m1 import I1 as m1_I1
+        # We need to import I1 again to get a module path starting with `zope`
+        # instead of `interfaces`.
+        from __tests__.tests.test_sorting import I1
         iface_list = [I1, m1_I1]
         iface_list.sort()
         self.assertEqual(iface_list, [m1_I1, I1])

@@ -6,11 +6,32 @@
 
 #include <yt/yt/core/misc/error.h>
 
+#include <util/system/compiler.h>
+
 namespace NYT::NYTree {
 
 ////////////////////////////////////////////////////////////////////////////////
 
 namespace NDetail {
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class TEnum, std::same_as<TEnum>... TArgs>
+consteval bool AreAllValuesDifferent(TArgs... args)
+{
+    TEnumIndexedArray<TEnum, bool> array;
+    ((array[args] = true), ...);
+    i64 count = 0;
+    for (auto value : array) {
+        if (value) {
+            ++count;
+        }
+    }
+
+    return count == sizeof...(TArgs);
+}
+
+////////////////////////////////////////////////////////////////////////////////
 
 template <class TEnum, TEnum Value, class TBase, class TDerived>
 TIntrusivePtr<TBase> TMappingLeaf<TEnum, Value, TBase, TDerived>::CreateInstance()
@@ -18,32 +39,55 @@ TIntrusivePtr<TBase> TMappingLeaf<TEnum, Value, TBase, TDerived>::CreateInstance
     return New<TDerived>();
 }
 
-template <class TEnum, TEnum... DefaultValue, TEnum BaseValue, CYsonStructDerived TBase, TEnum... Values, class... TDerived>
-    requires (CHierarchy<TBase, TDerived...>)
+template <const char TypeFieldNameValue[], class TEnum, TEnum... DefaultValue, CYsonStructDerived TBase, TEnum... Values, class... TDerived>
+    requires (
+        CHierarchy<TBase, TDerived...> &&
+        (
+            !TOptionalValue<TEnum, DefaultValue...>::OptionalValue.has_value() ||
+            CIsThereDefaultInMapping<TEnum, DefaultValue..., Values...>)
+        )
 TIntrusivePtr<TBase>
-TPolymorphicMapping<TEnum, TOptionalValue<TEnum, DefaultValue...>, TLeafTag<BaseValue, TBase>, TLeafTag<Values, TDerived>...>::
+TPolymorphicMapping<TypeFieldNameValue, TEnum, TOptionalValue<TEnum, DefaultValue...>, TBase, TLeafTag<Values, TDerived>...>::
 CreateInstance(TEnum value)
 {
-    if (value == BaseValue) {
-        return TLeaf<BaseValue, TBase>::CreateInstance();
+    if (!ValueMap[value]) {
+        THROW_ERROR_EXCEPTION("Creating polymorphic yson struct instance of unsupported type %v", value);
     }
 
     TIntrusivePtr<TBase> ret;
 
-    ([&ret, value] {
+    // NB(apachee): Assignment count is only used as a sanity check.
+    // Case with #assignmentCount > 1 is covered by ensuring uniqueness of enum values at compile-time in a static assertion.
+    // Case with #assignmentCount = 0 case is covered by throwing exception above.
+
+    int assignmentCount = ([&ret, value] {
         if (value == Values) {
             ret = TLeaf<Values, TDerived>::CreateInstance();
-            return false;
+            return 1;
         }
-        return true;
-    } () && ...);
+        return 0;
+    } () + ...);
+
+    YT_VERIFY(assignmentCount == 1);
 
     return ret;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NDetail
 
 ////////////////////////////////////////////////////////////////////////////////
+
+template <CPolymorphicEnumMapping TMapping>
+TPolymorphicYsonStruct<TMapping>::TPolymorphicYsonStruct()
+{
+    if constexpr (DefaultType_) {
+        HeldType_ = *DefaultType_;
+    } else {
+        HeldType_ = {};
+    }
+}
 
 template <CPolymorphicEnumMapping TMapping>
 TPolymorphicYsonStruct<TMapping>::TPolymorphicYsonStruct(TKey key)
@@ -77,15 +121,11 @@ void TPolymorphicYsonStruct<TMapping>::Load(
     SerializedStorage_ = TTraits::AsNode(source);
     IMapNodePtr map = SerializedStorage_->AsMap();
 
-    if (!map || map->GetChildCount() == 0) {
-        // Empty struct.
-        return;
-    }
-
-    auto key = map->FindChildValue<TKey>("type");
+    auto key = map->FindChildValue<TKey>(TypeFieldName);
     THROW_ERROR_EXCEPTION_UNLESS(
         key.has_value() || DefaultType_,
-        "Concrete type must be specified! Use \"type\": \"concrete_type\" or specify default type");
+        "Concrete type must be specified! Use %Qv: \"concrete_type\" or specify default type",
+        TypeFieldName);
 
     auto type = key
         ? *key
@@ -100,14 +140,22 @@ void TPolymorphicYsonStruct<TMapping>::Load(
         Storage_->SetUnrecognizedStrategy(*recursiveUnrecognizedStrategy);
     }
 
-    // "type" must be unrecognized for the original struct
+    // TypeFieldName must be unrecognized for the original struct
     // therefore we must delete it prior to |Load| call.
-    map->RemoveChild("type");
+    map->RemoveChild(TypeFieldName);
     Storage_->Load(map, postprocess, setDefaults, pathGetter);
 
     // NB(arkady-e1ppa): We must not actually remove contents of the node as a postcondition
     // since it mutates serialized data which might be used for config validation.
-    map->AddChild("type", ConvertToNode(HeldType_));
+    map->AddChild(TypeFieldName, ConvertToNode(HeldType_));
+}
+
+template <CPolymorphicEnumMapping TMapping>
+void TPolymorphicYsonStruct<TMapping>::Postprocess(const std::function<NYPath::TYPath()>& pathGetter)
+{
+    if (Storage_) {
+        Storage_->Postprocess(pathGetter);
+    }
 }
 
 template <CPolymorphicEnumMapping TMapping>
@@ -116,7 +164,7 @@ void TPolymorphicYsonStruct<TMapping>::Save(NYson::IYsonConsumer* consumer) cons
     consumer->OnBeginMap();
 
     if (Storage_) {
-        consumer->OnKeyedItem("type");
+        consumer->OnKeyedItem(TypeFieldName);
         consumer->OnStringScalar(FormatEnum(HeldType_));
 
         Storage_->SaveAsMapFragment(consumer);
@@ -143,7 +191,25 @@ TIntrusivePtr<typename TMapping::template TDerivedToEnum<Value>> TPolymorphicYso
 }
 
 template <CPolymorphicEnumMapping TMapping>
-typename TPolymorphicYsonStruct<TMapping>::TKey TPolymorphicYsonStruct<TMapping>::GetCurrentType() const
+template <std::derived_from<typename TMapping::TBaseClass> TConcrete>
+TIntrusivePtr<TConcrete> TPolymorphicYsonStruct<TMapping>::GetConcrete() const
+{
+    auto result = TryGetConcrete<TConcrete>();
+    YT_VERIFY(result);
+    return result;
+}
+
+template <CPolymorphicEnumMapping TMapping>
+template <typename TMapping::TKey Value>
+TIntrusivePtr<typename TMapping::template TDerivedToEnum<Value>> TPolymorphicYsonStruct<TMapping>::GetConcrete() const
+{
+    auto result = TryGetConcrete<Value>();
+    YT_VERIFY(result);
+    return result;
+}
+
+template <CPolymorphicEnumMapping TMapping>
+typename TPolymorphicYsonStruct<TMapping>::TKey TPolymorphicYsonStruct<TMapping>::GetType() const
 {
     return HeldType_;
 }
@@ -169,10 +235,10 @@ void TPolymorphicYsonStruct<TMapping>::MergeWith(const TPolymorphicYsonStruct& o
     }
 
     THROW_ERROR_EXCEPTION_UNLESS(
-        GetCurrentType() == other.GetCurrentType(),
-        "Can't merge polymorphic yson structs with different types stored (ThisType: %v, OtherType: %v)",
-        GetCurrentType(),
-        other.GetCurrentType());
+        GetType() == other.GetType(),
+        "Cannot merge polymorphic YSON structs with different stored types: %Qlv vs %Qlv",
+        GetType(),
+        other.GetType());
 
     SerializedStorage_ = PatchNode(SerializedStorage_, other.SerializedStorage_);
 
@@ -194,6 +260,32 @@ TPolymorphicYsonStruct<TMapping>::operator bool() const
 
 ////////////////////////////////////////////////////////////////////////////////
 
+template <class T>
+    requires NMpl::IsSpecialization<T, NYT::NYTree::TPolymorphicYsonStruct>
+void TraverseYsonStruct(const TYsonStructParameterVisitor& visitor, const NYPath::TYPath& path)
+{
+    static constexpr auto enumValues = TEnumTraits<typename T::TKey>::GetDomainValues();
+    [&]<auto... Is> (std::index_sequence<Is...>) {
+        (TraverseYsonStruct<typename T::template TEnumToDerived<enumValues[Is]>>(visitor, path + "/" + FormatEnum(enumValues[Is])), ...);
+    } (std::make_index_sequence<std::size(enumValues)>());
+}
+
+template <class T>
+    requires NMpl::IsSpecialization<T, NYT::NYTree::TPolymorphicYsonStruct>
+void WriteSchema(NYson::IYsonConsumer* consumer, const TYsonStructWriteSchemaOptions& options)
+{
+    BuildYsonFluently(consumer)
+        .BeginMap()
+            .Item("type_name").Value("optional")
+            .DoIf(options.AddCppTypeNames, [] (auto fluent) {
+                fluent.Item("cpp_type_name").Value(TypeName<T>());
+            })
+            .Item("item").Do([&] (auto fluent) {
+                fluent.Value("yson");
+            })
+        .EndMap();
+}
+
 template <CPolymorphicEnumMapping TMapping>
 void Serialize(const TPolymorphicYsonStruct<TMapping>& value, NYson::IYsonConsumer* consumer)
 {
@@ -212,6 +304,10 @@ void Deserialize(TPolymorphicYsonStruct<TMapping>& value, TSource source)
 #undef DEFINE_POLYMORPHIC_YSON_STRUCT_WITH_DEFAULT
 #undef DEFINE_POLYMORPHIC_YSON_STRUCT_FOR_ENUM
 #undef DEFINE_POLYMORPHIC_YSON_STRUCT_FOR_ENUM_WITH_DEFAULT
+#undef DEFINE_POLYMORPHIC_YSON_STRUCT_WITH_CUSTOM_DISCRIMINATOR
+#undef DEFINE_POLYMORPHIC_YSON_STRUCT_WITH_CUSTOM_DISCRIMINATOR_AND_DEFAULT
+#undef DEFINE_POLYMORPHIC_YSON_STRUCT_FOR_ENUM_WITH_CUSTOM_DISCRIMINATOR
+#undef DEFINE_POLYMORPHIC_YSON_STRUCT_FOR_ENUM_WITH_CUSTOM_DISCRIMINATOR_AND_DEFAULT
 
 #define POLYMORPHIC_YSON_STRUCT_IMPL__GET_ENUM_SEQ_ELEM(item) \
     PP_LEFT_PARENTHESIS PP_ELEMENT(item, 0) PP_RIGHT_PARENTHESIS
@@ -234,53 +330,69 @@ void Deserialize(TPolymorphicYsonStruct<TMapping>& value, TSource source)
 #define POLYMORPHIC_YSON_STRUCT_IMPL__MAKE_LEAF_FROM_ETYPE(item) \
     PP_COMMA() ::NYT::NYTree::NDetail::TLeafTag<EType:: PP_ELEMENT(item, 0), PP_ELEMENT(item, 1)>
 
-#define POLYMORPHIC_YSON_STRUCT_IMPL__MAKE_MAPPING_CLASS(Struct, seq) \
+#define POLYMORPHIC_YSON_STRUCT_IMPL__MAKE_MAPPING_CLASS(Struct, discriminator, base, seq) \
     using TMapping = ::NYT::NYTree::TPolymorphicEnumMapping< \
+        discriminator, \
         EType, \
-        ::NYT::NYTree::NDetail::TOptionalValue<EType> \
+        ::NYT::NYTree::NDetail::TOptionalValue<EType>, \
+        base \
         PP_FOR_EACH(POLYMORPHIC_YSON_STRUCT_IMPL__MAKE_LEAF_FROM_ETYPE, seq) \
     >
 
-#define POLYMORPHIC_YSON_STRUCT_IMPL__MAKE_MAPPING_CLASS_WITH_DEFAULT(Struct, default, seq) \
+#define POLYMORPHIC_YSON_STRUCT_IMPL__MAKE_MAPPING_CLASS_WITH_DEFAULT(Struct, discriminator, default, base, seq) \
     using TMapping = ::NYT::NYTree::TPolymorphicEnumMapping< \
+        discriminator, \
         EType, \
-        ::NYT::NYTree::NDetail::TOptionalValue<EType, default> \
+        ::NYT::NYTree::NDetail::TOptionalValue<EType, default>, \
+        base \
         PP_FOR_EACH(POLYMORPHIC_YSON_STRUCT_IMPL__MAKE_LEAF_FROM_ETYPE, seq) \
     >
 
-#define DEFINE_POLYMORPHIC_YSON_STRUCT(name, seq) \
+#define DEFINE_POLYMORPHIC_YSON_STRUCT_WITH_CUSTOM_DISCRIMINATOR(name, discriminator, base, seq) \
 namespace NPolymorphicYsonStructFor##name { \
     POLYMORPHIC_YSON_STRUCT_IMPL__MAKE_MAPPING_ENUM(seq); \
-    POLYMORPHIC_YSON_STRUCT_IMPL__MAKE_MAPPING_CLASS(name, seq); \
+    POLYMORPHIC_YSON_STRUCT_IMPL__MAKE_MAPPING_CLASS(name, discriminator, base, seq); \
 } /*NPolymorphicYsonStructFor##name*/ \
 using POLYMORPHIC_YSON_STRUCT_IMPL__ENUM_NAME(name) = NPolymorphicYsonStructFor##name::EType; \
 using T##name = ::NYT::NYTree::TPolymorphicYsonStruct<NPolymorphicYsonStructFor##name::TMapping>; \
-static_assert(true)
+Y_SEMICOLON_GUARD
 
-#define DEFINE_POLYMORPHIC_YSON_STRUCT_WITH_DEFAULT(name, default, seq) \
+#define DEFINE_POLYMORPHIC_YSON_STRUCT_WITH_CUSTOM_DISCRIMINATOR_AND_DEFAULT(name, discriminator, default, base, seq) \
 namespace NPolymorphicYsonStructFor##name { \
     POLYMORPHIC_YSON_STRUCT_IMPL__MAKE_MAPPING_ENUM(seq); \
-    POLYMORPHIC_YSON_STRUCT_IMPL__MAKE_MAPPING_CLASS_WITH_DEFAULT(name, EType::default, seq); \
+    POLYMORPHIC_YSON_STRUCT_IMPL__MAKE_MAPPING_CLASS_WITH_DEFAULT(name, discriminator, EType::default, base, seq); \
 } /*NPolymorphicYsonStructFor##name*/ \
 using POLYMORPHIC_YSON_STRUCT_IMPL__ENUM_NAME(name) = NPolymorphicYsonStructFor##name::EType; \
 using T##name = ::NYT::NYTree::TPolymorphicYsonStruct<NPolymorphicYsonStructFor##name::TMapping>; \
-static_assert(true)
+Y_SEMICOLON_GUARD
 
-#define DEFINE_POLYMORPHIC_YSON_STRUCT_FOR_ENUM(name, enum, seq) \
+#define DEFINE_POLYMORPHIC_YSON_STRUCT_FOR_ENUM_WITH_CUSTOM_DISCRIMINATOR(name, discriminator, enum, base, seq) \
 namespace NPolymorphicYsonStructFor##name { \
     POLYMORPHIC_YSON_STRUCT_IMPL__MAKE_MAPPING_ENUM_ALIAS(enum); \
-    POLYMORPHIC_YSON_STRUCT_IMPL__MAKE_MAPPING_CLASS(name, seq); \
+    POLYMORPHIC_YSON_STRUCT_IMPL__MAKE_MAPPING_CLASS(name, discriminator, base, seq); \
 } /*NPolymorphicYsonStructFor##name*/ \
 using T##name = ::NYT::NYTree::TPolymorphicYsonStruct<NPolymorphicYsonStructFor##name::TMapping>; \
-static_assert(true)
+Y_SEMICOLON_GUARD
 
-#define DEFINE_POLYMORPHIC_YSON_STRUCT_FOR_ENUM_WITH_DEFAULT(name, enum, default, seq) \
+#define DEFINE_POLYMORPHIC_YSON_STRUCT_FOR_ENUM_WITH_CUSTOM_DISCRIMINATOR_AND_DEFAULT(name, discriminator, enum, default, base, seq) \
 namespace NPolymorphicYsonStructFor##name { \
     POLYMORPHIC_YSON_STRUCT_IMPL__MAKE_MAPPING_ENUM_ALIAS(enum); \
-    POLYMORPHIC_YSON_STRUCT_IMPL__MAKE_MAPPING_CLASS_WITH_DEFAULT(name, EType::default, seq); \
+    POLYMORPHIC_YSON_STRUCT_IMPL__MAKE_MAPPING_CLASS_WITH_DEFAULT(name, discriminator, EType::default, base, seq); \
 } /*NPolymorphicYsonStructFor##name*/ \
 using T##name = ::NYT::NYTree::TPolymorphicYsonStruct<NPolymorphicYsonStructFor##name::TMapping>; \
-static_assert(true)
+Y_SEMICOLON_GUARD
+
+#define DEFINE_POLYMORPHIC_YSON_STRUCT(name, base, seq) \
+    DEFINE_POLYMORPHIC_YSON_STRUCT_WITH_CUSTOM_DISCRIMINATOR(name, ::NYT::NYTree::DefaultPolymorphicYsonStructTypeFieldName, base, seq)
+
+#define DEFINE_POLYMORPHIC_YSON_STRUCT_WITH_DEFAULT(name, default, base, seq) \
+    DEFINE_POLYMORPHIC_YSON_STRUCT_WITH_CUSTOM_DISCRIMINATOR_AND_DEFAULT(name, ::NYT::NYTree::DefaultPolymorphicYsonStructTypeFieldName, default, base, seq)
+
+#define DEFINE_POLYMORPHIC_YSON_STRUCT_FOR_ENUM(name, enum, base, seq) \
+    DEFINE_POLYMORPHIC_YSON_STRUCT_FOR_ENUM_WITH_CUSTOM_DISCRIMINATOR(name, ::NYT::NYTree::DefaultPolymorphicYsonStructTypeFieldName, enum, base, seq)
+
+#define DEFINE_POLYMORPHIC_YSON_STRUCT_FOR_ENUM_WITH_DEFAULT(name, enum, default, base, seq) \
+    DEFINE_POLYMORPHIC_YSON_STRUCT_FOR_ENUM_WITH_CUSTOM_DISCRIMINATOR_AND_DEFAULT(name, ::NYT::NYTree::DefaultPolymorphicYsonStructTypeFieldName, enum, default, base, seq)
 
 ////////////////////////////////////////////////////////////////////////////////
 

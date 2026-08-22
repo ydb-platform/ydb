@@ -1,13 +1,14 @@
 #include "compile_service.h"
 
-#include <ydb/core/fq/libs/actors/logging/log.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/common/common.h>
-
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/hfunc.h>
 
 #include <yql/essentials/public/purecalc/common/interface.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT ::NKikimrServices::FQ_ROW_DISPATCHER
 
 namespace NFq::NRowDispatcher {
 
@@ -50,7 +51,8 @@ public:
             Finish();
         };
 
-        LOG_ROW_DISPATCHER_TRACE("Started compile request");
+        YDB_LOG_TRACE("Started compile request",
+            {"logPrefix", LogPrefix});
         IProgramHolder::TPtr programHolder = std::move(Request->Get()->ProgramHolder);
 
         TStatus status = TStatus::Success();
@@ -65,10 +67,12 @@ public:
         }
 
         if (status.IsFail()) {
-            LOG_ROW_DISPATCHER_ERROR("Compilation failed for request");
+            YDB_LOG_ERROR("Compilation failed for request",
+                {"logPrefix", LogPrefix});
             Send(Request->Sender, new TEvRowDispatcher::TEvPurecalcCompileResponse(status.GetStatus(), status.GetErrorDescription()), 0, Request->Cookie);
         } else {
-            LOG_ROW_DISPATCHER_TRACE("Compilation completed for request");
+            YDB_LOG_TRACE("Compilation completed for request",
+                {"logPrefix", LogPrefix});
             Send(Request->Sender, new TEvRowDispatcher::TEvPurecalcCompileResponse(std::move(programHolder)), 0, Request->Cookie);
         }
     }
@@ -110,7 +114,7 @@ class TPurecalcCompileService : public NActors::TActor<TPurecalcCompileService> 
     };
 
 public:
-    TPurecalcCompileService(const NConfig::TCompileServiceConfig& config, NMonitoring::TDynamicCounterPtr counters)
+    TPurecalcCompileService(const TRowDispatcherSettings::TCompileServiceSettings& config, NMonitoring::TDynamicCounterPtr counters)
         : TBase(&TPurecalcCompileService::StateFunc)
         , Config(config)
         , InFlightLimit(Config.GetParallelCompilationLimit() ? Config.GetParallelCompilationLimit() : 1)
@@ -129,7 +133,10 @@ public:
     void Handle(TEvRowDispatcher::TEvPurecalcCompileRequest::TPtr& ev) {
         const auto requestActor = ev->Sender;
         const ui64 requestId = ev->Cookie;
-        LOG_ROW_DISPATCHER_TRACE("Add to compile queue request with id " << requestId << " from " << requestActor);
+        YDB_LOG_TRACE("Add to compile queue request with id",
+            {"logPrefix", LogPrefix},
+            {"requestId", requestId},
+            {"requestActor", requestActor});
 
         // Remove old compile request
         RemoveRequest(requestActor, requestId);
@@ -143,13 +150,19 @@ public:
     }
 
     void Handle(TEvRowDispatcher::TEvPurecalcCompileAbort::TPtr& ev) {
-        LOG_ROW_DISPATCHER_TRACE("Abort compile request with id " << ev->Cookie << " from " << ev->Sender);
+        YDB_LOG_TRACE("Abort compile request with id",
+            {"logPrefix", LogPrefix},
+            {"cookie", ev->Cookie},
+            {"sender", ev->Sender});
 
         RemoveRequest(ev->Sender, ev->Cookie);
     }
 
     void Handle(TEvPrivate::TEvCompileFinished::TPtr& ev) {
-        LOG_ROW_DISPATCHER_TRACE("Compile finished for request with id " << ev->Get()->RequestId << " from " << ev->Get()->RequestActor);
+        YDB_LOG_TRACE("Compile finished for request with id",
+            {"logPrefix", LogPrefix},
+            {"requestId", ev->Get()->RequestId},
+            {"requestActor", ev->Get()->RequestActor});
 
         InFlightCompilations.erase(ev->Sender);
         Counters.ActiveCompileActors->Dec();
@@ -188,12 +201,11 @@ private:
         }
         auto options = NYql::NPureCalc::TProgramFactoryOptions();
         options.SetLLVMSettings(settings.EnabledLLVM ? "ON" : "OFF");
-        options.UseAntlr4 = true;
         return ProgramFactories.emplace(settings, NYql::NPureCalc::MakeProgramFactory(options)).first->second;
     }
 
 private:
-    const NConfig::TCompileServiceConfig Config;
+    const TRowDispatcherSettings::TCompileServiceSettings Config;
     const ui64 InFlightLimit;
     const TString LogPrefix;
 
@@ -208,7 +220,7 @@ private:
 
 }  // anonymous namespace
 
-NActors::IActor* CreatePurecalcCompileService(const NConfig::TCompileServiceConfig& config, NMonitoring::TDynamicCounterPtr counters) {
+NActors::IActor* CreatePurecalcCompileService(const TRowDispatcherSettings::TCompileServiceSettings& config, NMonitoring::TDynamicCounterPtr counters) {
     return new TPurecalcCompileService(config, counters);
 }
 

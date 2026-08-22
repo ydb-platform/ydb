@@ -4,34 +4,32 @@
 #include <yql/essentials/minikql/computation/mkql_custom_list.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
 template <bool All>
-class TZipWrapper : public TMutableComputationNode<TZipWrapper<All>> {
-    typedef TMutableComputationNode<TZipWrapper<All>> TBaseComputation;
-public:
-    using TSelf = TZipWrapper<All>;
+class TZipWrapper: public TMutableComputationNode<TZipWrapper<All>> {
+    using TBaseComputation = TMutableComputationNode<TZipWrapper<All>>;
 
-    class TValue : public TCustomListValue {
+public:
+    class TValue: public TCustomListValue {
     public:
-        class TIterator : public TComputationValue<TIterator> {
+        class TIterator: public TComputationValue<TIterator> {
         public:
-            TIterator(TMemoryUsageInfo* memInfo, TUnboxedValueVector&& iters, TComputationContext& ctx, const TSelf* self)
+            TIterator(TMemoryUsageInfo* memInfo, TUnboxedValueVector&& iters, TComputationContext& ctx)
                 : TComputationValue<TIterator>(memInfo)
-                , Iters(std::move(iters))
-                , Ctx(ctx)
-                , Self(self)
-            {}
+                , Iters_(std::move(iters))
+                , Ctx_(ctx)
+            {
+            }
 
         private:
             bool Next(NUdf::TUnboxedValue& value) override {
                 bool hasSome = false;
                 NUdf::TUnboxedValue* items = nullptr;
-                auto tuple = Self->ResTuple.NewArray(Ctx, Iters.size(), items);
-                for (auto& iter : Iters) {
+                NUdf::TUnboxedValue tuple = ResTuple_.NewArray(Ctx_.HolderFactory, Iters_.size(), items);
+                for (auto& iter : Iters_) {
                     if (iter) {
                         NUdf::TUnboxedValue item;
                         if (!iter.Next(item)) {
@@ -39,40 +37,41 @@ public:
                                 *items = std::move(item);
                                 iter = NUdf::TUnboxedValue();
                             } else {
-                                Iters.clear();
+                                Iters_.clear();
                                 return false;
                             }
                         } else {
-                            *items = All ?  NUdf::TUnboxedValue(item.Release().MakeOptional()) : std::move(item);
+                            *items = All ? NUdf::TUnboxedValue(item.Release().MakeOptional()) : std::move(item);
                             hasSome = true;
                         }
                     } else {
                         if (All) {
                             *items = NUdf::TUnboxedValuePod();
                         } else {
-                            Iters.clear();
+                            Iters_.clear();
                             return false;
                         }
                     }
                     ++items;
                 }
 
-                if (!hasSome)
+                if (!hasSome) {
                     return false;
+                }
                 value = std::move(tuple);
                 return true;
             }
 
             bool Skip() override {
                 bool hasSome = false;
-                for (size_t i = 0, e = Iters.size(); i < e; i++) {
-                    auto& iter = Iters[i];
+                for (size_t i = 0, e = Iters_.size(); i < e; i++) {
+                    auto& iter = Iters_[i];
                     if (iter) {
                         if (!iter.Skip()) {
                             if (All) {
-                                Iters[i] = NUdf::TUnboxedValue();
+                                Iters_[i] = NUdf::TUnboxedValue();
                             } else {
-                                Iters.clear();
+                                Iters_.clear();
                                 return false;
                             }
                         } else {
@@ -86,51 +85,49 @@ public:
                 return hasSome;
             }
 
-            TUnboxedValueVector Iters;
+            TUnboxedValueVector Iters_;
 
-            TComputationContext& Ctx;
-            const TSelf* const Self;
+            TComputationContext& Ctx_;
+            TPlainContainerCache ResTuple_;
         };
 
-        TValue(TMemoryUsageInfo* memInfo, TUnboxedValueVector&& lists, TComputationContext& ctx,
-            const TSelf* self)
+        TValue(TMemoryUsageInfo* memInfo, TUnboxedValueVector&& lists, TComputationContext& ctx)
             : TCustomListValue(memInfo)
-            , Lists(std::move(lists))
-            , Ctx(ctx)
-            , Self(self)
+            , Lists_(std::move(lists))
+            , Ctx_(ctx)
         {
-            MKQL_MEM_TAKE(memInfo, &Lists, Lists.capacity() * sizeof(NUdf::TUnboxedValue));
-            Y_ASSERT(!Lists.empty());
+            MKQL_MEM_TAKE(memInfo, &Lists_, Lists_.capacity() * sizeof(NUdf::TUnboxedValue));
+            Y_ASSERT(!Lists_.empty());
         }
 
-        ~TValue() {
-            MKQL_MEM_RETURN(GetMemInfo(), &Lists, Lists.capacity() * sizeof(NUdf::TUnboxedValue));
+        ~TValue() override {
+            MKQL_MEM_RETURN(GetMemInfo(), &Lists_, Lists_.capacity() * sizeof(NUdf::TUnboxedValue));
         }
 
     private:
         NUdf::TUnboxedValue GetListIterator() const override {
-            if (Lists.empty()) {
-                return Ctx.HolderFactory.GetEmptyContainerLazy();
+            if (Lists_.empty()) {
+                return Ctx_.HolderFactory.GetEmptyContainerLazy();
             }
 
             TUnboxedValueVector iters;
-            iters.reserve(Lists.size());
-            for (auto& list : Lists) {
+            iters.reserve(Lists_.size());
+            for (auto& list : Lists_) {
                 iters.emplace_back(list.GetListIterator());
             }
 
-            return Ctx.HolderFactory.Create<TIterator>(std::move(iters), Ctx, Self);
+            return Ctx_.HolderFactory.Create<TIterator>(std::move(iters), Ctx_);
         }
 
         ui64 GetListLength() const override {
             if (!Length_) {
                 ui64 length = 0;
-                if (!Lists.empty()) {
+                if (!Lists_.empty()) {
                     if (!All) {
                         length = Max<ui64>();
                     }
 
-                    for (auto& list : Lists) {
+                    for (auto& list : Lists_) {
                         ui64 partialLength = list.GetListLength();
                         if (All) {
                             length = Max(length, partialLength);
@@ -154,29 +151,29 @@ public:
             return *HasItems_;
         }
 
-        TUnboxedValueVector Lists;
-        TComputationContext& Ctx;
-        const TSelf *const Self;
+        TUnboxedValueVector Lists_;
+        TComputationContext& Ctx_;
     };
 
     TZipWrapper(TComputationMutables& mutables, TComputationNodePtrVector& lists)
         : TBaseComputation(mutables)
-        , Lists(std::move(lists))
-        , ResTuple(mutables)
-    {}
+        , Lists_(std::move(lists))
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         TUnboxedValueVector listValues;
         TSmallVec<const NUdf::TUnboxedValue*, TMKQLAllocator<const NUdf::TUnboxedValue*>> arrays;
-        listValues.reserve(Lists.size());
-        arrays.reserve(Lists.size());
-        for (auto& list : Lists) {
+        listValues.reserve(Lists_.size());
+        arrays.reserve(Lists_.size());
+        for (auto& list : Lists_) {
             listValues.emplace_back(list->GetValue(ctx));
             arrays.emplace_back(listValues.back().GetElements());
         }
 
-        if (std::any_of(arrays.cbegin(), arrays.cend(), std::logical_not<const NUdf::TUnboxedValue*>()))
-            return ctx.HolderFactory.Create<TValue>(std::move(listValues), ctx, this);
+        if (std::any_of(arrays.cbegin(), arrays.cend(), std::logical_not<const NUdf::TUnboxedValue*>())) {
+            return ctx.HolderFactory.Create<TValue>(std::move(listValues), ctx);
+        }
 
         TSmallVec<ui64, TMKQLAllocator<ui64>> sizes;
         sizes.reserve(listValues.size());
@@ -184,21 +181,23 @@ public:
 
         const auto size = *(All ? std::max_element(sizes.cbegin(), sizes.cend()) : std::min_element(sizes.cbegin(), sizes.cend()));
 
-        if (!size)
+        if (!size) {
             return ctx.HolderFactory.GetEmptyContainerLazy();
+        }
 
-        NUdf::TUnboxedValue *listItems = nullptr;
+        NUdf::TUnboxedValue* listItems = nullptr;
         const auto list = ctx.HolderFactory.CreateDirectArrayHolder(size, listItems);
 
         for (auto i = 0U; i < size; ++i) {
-            NUdf::TUnboxedValue *items = nullptr;
+            NUdf::TUnboxedValue* items = nullptr;
             *listItems++ = ctx.HolderFactory.CreateDirectArrayHolder(arrays.size(), items);
             for (auto j = 0U; j < arrays.size(); ++j) {
                 if constexpr (All) {
-                    if (sizes[j] > i)
+                    if (sizes[j] > i) {
                         *items++ = *arrays[j]++;
-                    else
+                    } else {
                         ++items;
+                    }
                 } else {
                     *items++ = *arrays[j]++;
                 }
@@ -209,14 +208,13 @@ public:
 
 private:
     void RegisterDependencies() const final {
-        std::for_each(Lists.cbegin(), Lists.cend(), std::bind(&TZipWrapper::DependsOn, this, std::placeholders::_1));
+        std::for_each(Lists_.cbegin(), Lists_.cend(), std::bind(&TZipWrapper::DependsOn, this, std::placeholders::_1));
     }
 
-    const TComputationNodePtrVector Lists;
-    const TContainerCacheOnContext ResTuple;
+    const TComputationNodePtrVector Lists_;
 };
 
-}
+} // namespace
 
 template <bool All>
 IComputationNode* WrapZip(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
@@ -231,11 +229,8 @@ IComputationNode* WrapZip(TCallable& callable, const TComputationNodeFactoryCont
     return new TZipWrapper<All>(ctx.Mutables, lists);
 }
 
-template
-IComputationNode* WrapZip<false>(TCallable& callable, const TComputationNodeFactoryContext& ctx);
+template IComputationNode* WrapZip<false>(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
-template
-IComputationNode* WrapZip<true>(TCallable& callable, const TComputationNodeFactoryContext& ctx);
+template IComputationNode* WrapZip<true>(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
-}
-}
+} // namespace NKikimr::NMiniKQL

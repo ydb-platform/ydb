@@ -6,7 +6,7 @@
     file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 ==============================================================================*/
 #ifndef BOOST_PP_IS_ITERATING
-#if !defined(FUSION_ZIP_HPP_20060125_2058)
+#ifndef FUSION_ZIP_HPP_20060125_2058
 #define FUSION_ZIP_HPP_20060125_2058
 
 #include <boost/fusion/view/zip_view.hpp>

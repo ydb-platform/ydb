@@ -11,17 +11,21 @@ SRCS(
     persqueue.h
     services_initializer.cpp
     topic.cpp
+    topic_deferred_publish.cpp
 )
 
 PEERDIR(
+    library/cpp/json
     ydb/library/actors/core
     library/cpp/containers/disjoint_interval_tree
     ydb/library/grpc/server
     ydb/core/base
     ydb/core/grpc_services
-    ydb/core/kqp
-    ydb/core/persqueue
-    ydb/core/persqueue/codecs
+    ydb/core/kqp/common
+    ydb/core/kqp/common/events
+    ydb/core/kqp/common/simple
+    ydb/core/persqueue/events
+    ydb/core/persqueue/public/codecs
     ydb/core/persqueue/writer
     ydb/core/protos
     ydb/core/ydb_convert
@@ -29,6 +33,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/library/persqueue/obfuscate
 #    ydb/library/persqueue/tests
     ydb/library/persqueue/topic_parser
+    ydb/library/cloud_permissions
     ydb/public/api/grpc
     ydb/public/api/grpc/draft
     ydb/public/api/protos
@@ -47,4 +52,5 @@ RECURSE_FOR_TESTS(
     ut
     ut/new_schemecache_ut
     ut/describes_ut
+    ut/direct_read_restore_ut
 )

@@ -129,14 +129,14 @@ TString TEvPrivate::TEvUpdateTenantNodes::ToString() const {
     << " }";
 }
 
-TEvPrivate::TEvResolveSecretResult::TEvResolveSecretResult(ui64 rid, const TString& secretValue)
+TEvPrivate::TResolveValueResult::TResolveValueResult(ui64 rid, const TString& value)
     : ReplicationId(rid)
-    , SecretValue(secretValue)
+    , Value(value)
     , Success(true)
 {
 }
 
-TEvPrivate::TEvResolveSecretResult::TEvResolveSecretResult(ui64 rid, bool success, const TString& error)
+TEvPrivate::TResolveValueResult::TResolveValueResult(ui64 rid, bool success, const TString& error)
     : ReplicationId(rid)
     , Success(success)
     , Error(error)
@@ -144,16 +144,24 @@ TEvPrivate::TEvResolveSecretResult::TEvResolveSecretResult(ui64 rid, bool succes
     Y_ABORT_UNLESS(!success);
 }
 
-TString TEvPrivate::TEvResolveSecretResult::ToString() const {
-    return TStringBuilder() << ToStringHeader() << " {"
+TString TEvPrivate::TResolveValueResult::ToString() const {
+    return TStringBuilder() << " {"
         << " ReplicationId: " << ReplicationId
         << " Success: " << Success
         << " Error: " << Error
     << " }";
 }
 
-bool TEvPrivate::TEvResolveSecretResult::IsSuccess() const {
+bool TEvPrivate::TResolveValueResult::IsSuccess() const {
     return Success;
+}
+
+TString TEvPrivate::TEvResolveSecretResult::ToString() const {
+    return TStringBuilder() << ToStringHeader() << TResolveValueResult::ToString();
+}
+
+TString TEvPrivate::TEvResolveResourceIdResult::ToString() const {
+    return TStringBuilder() << ToStringHeader() << TResolveValueResult::ToString();
 }
 
 TEvPrivate::TEvAlterDstResult::TEvAlterDstResult(ui64 rid, ui64 tid, NKikimrScheme::EStatus status, const TString& error)

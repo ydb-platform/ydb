@@ -15,7 +15,8 @@ TTopicMessage::TTopicMessage(const TDataEvent::TMessageBase& msg, ECodec codec, 
         msg.GetMeta(),
         msg.GetMessageMeta(),
         uncompressedSize,
-        msg.GetMessageGroupId()
+        msg.GetMessageGroupId(),
+        msg.GetLogicalMessageCount()
     )
     , Codec(codec)
     , Data(msg.GetData())
@@ -32,11 +33,22 @@ TTopicMessage::TTopicMessage(const TDataEvent::TCompressedMessage& msg)
 {
 }
 
+TTopicMessage::TTopicMessage(TDataEvent::TMessageInformation&& msg, TString&& data)
+    : TDataEvent::TMessageInformation(std::move(msg))
+    , Codec(ECodec::RAW)
+    , Data(std::move(data))
+{
+}
+
 TTopicMessage::TTopicMessage(ui64 offset, const TString& data)
     : TDataEvent::TMessageInformation(offset, "", 0, TInstant::Zero(), TInstant::Zero(), nullptr, nullptr, 0, "")
     , Codec(ECodec::RAW)
     , Data(data)
 {
+}
+
+NYdb::NTopic::TMessageMeta::TPtr TTopicMessage::GetMessageMeta() const {
+    return MessageMeta;
 }
 
 ECodec TTopicMessage::GetCodec() const {
@@ -55,12 +67,20 @@ ui64 TTopicMessage::GetOffset() const {
     return Offset;
 }
 
+ui64 TTopicMessage::GetLogicalMessageCount() const {
+    return LogicalMessageCount;
+}
+
 ui64 TTopicMessage::GetSeqNo() const {
     return SeqNo;
 }
 
 TInstant TTopicMessage::GetCreateTime() const {
     return CreateTime;
+}
+
+TInstant TTopicMessage::GetWriteTime() const {
+    return WriteTime;
 }
 
 TString TTopicMessage::GetMessageGroupId() const {
@@ -76,8 +96,10 @@ void TTopicMessage::Out(IOutputStream& out) const {
         << " Codec: " << Codec
         << " Data: " << Data.size() << "b"
         << " Offset: " << Offset
+        << " LogicalMessageCount: " << LogicalMessageCount
         << " SeqNo: " << SeqNo
         << " CreateTime: " << CreateTime
+        << " WriteTime: " << WriteTime
         << " MessageGroupId: " << MessageGroupId
         << " ProducerId: " << ProducerId
     << " }";

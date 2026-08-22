@@ -131,7 +131,20 @@ struct TSchemeShard::TTxCleanDroppedPaths : public TTransactionBase<TSchemeShard
             TPathId pathId = *--itCandidate;
             Self->CleanDroppedPathsCandidates.erase(itCandidate);
             TPathElement::TPtr path = Self->PathsById.at(pathId);
-            if (path->DbRefCount == 0 && path->Dropped()) {
+            if (path->DbRefCount == 0 && path->Dropped() && path->AllChildrenCount > 0) {
+                // fail fast: a restart recomputes the counters and heals the drift
+                Y_VERIFY_S(Self->TolerateOrphanedPaths,
+                    "TTxCleanDroppedPaths: dropped path with children, DbRefCount is miscounted"
+                    << ", PathId# " << pathId
+                    << ", AllChildrenCount# " << path->AllChildrenCount
+                    << ", at schemeshard: " << Self->TabletID());
+                LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "TTxCleanDroppedPaths: skip dropped path with children, DbRefCount is miscounted"
+                    << ", PathId# " << pathId
+                    << ", AllChildrenCount# " << path->AllChildrenCount
+                    << ", at schemeshard: " << Self->TabletID());
+                ++SkippedCount;
+            } else if (path->DbRefCount == 0 && path->Dropped()) {
                 LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "TTxCleanDroppedPaths: PersistRemovePath for PathId# " << pathId
                     << ", at schemeshard: "<< Self->TabletID());
@@ -224,6 +237,13 @@ struct TSchemeShard::TTxCleanDroppedSubDomains : public TTransactionBase<TScheme
                     << ", at schemeshard: "<< Self->TabletID());
                 Self->PersistRemoveSubDomain(db, pathId);
                 ++RemovedCount;
+
+                // This is for tests, so that tests could wait for actual lifetime end of a subdomain.
+                // It's kinda ok to reply from execute, and actually required for tests with reboots
+                // (to not lose event on a tablet reboot).
+                {
+                    ctx.Send(Self->SelfId(), new TEvPrivate::TEvTestNotifySubdomainCleanup(pathId));
+                }
             } else {
                 // Probably never happens, but better safe than sorry.
                 ++SkippedCount;
@@ -237,12 +257,13 @@ struct TSchemeShard::TTxCleanDroppedSubDomains : public TTransactionBase<TScheme
         Y_ABORT_UNLESS(Self->CleanDroppedSubDomainsInFly);
 
         if (RemovedCount || SkippedCount) {
-            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                         "TTxCleanDroppedSubDomains Complete"
-                           << ", done PersistRemoveSubDomain for " << RemovedCount << " paths"
-                           << ", skipped " << SkippedCount
-                           << ", left " << Self->CleanDroppedSubDomainsCandidates.size() << " candidates"
-                           << ", at schemeshard: "<< Self->TabletID());
+            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxCleanDroppedSubDomains Complete"
+                << ", done PersistRemoveSubDomain for " << RemovedCount << " subdomains"
+                << ", skipped " << SkippedCount
+                << ", left " << Self->CleanDroppedSubDomainsCandidates.size() << " candidates"
+                << ", at schemeshard: "<< Self->TabletID()
+            );
+
         }
 
         if (!Self->CleanDroppedSubDomainsCandidates.empty()) {

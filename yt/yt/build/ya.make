@@ -2,10 +2,14 @@ LIBRARY()
 
 INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 
-SET(YT_VERSION_MAJOR 25)
-SET(YT_VERSION_MINOR 3)
-
+SET(YT_VERSION_MAJOR 26)
+SET(YT_VERSION_MINOR 2)
 DEFAULT(YT_VERSION_PATCH 0)
+
+SET(QT_VERSION_MAJOR 0)
+SET(QT_VERSION_MINOR 5)
+DEFAULT(QT_VERSION_PATCH 0)
+
 DEFAULT(YT_VERSION_BRANCH "local")
 
 # We define this variable in order to mute ya's warnings.
@@ -34,11 +38,14 @@ ELSE()
     SET(YT_VERSION_TYPE "os")
 ENDIF()
 
+IF (YT_CUSTOM_INTERNAL_BUILD)
+    INCLUDE(${ARCADIA_ROOT}/yt/yt/build/yt_custom_internal/yt_custom_internal.inc)
+ENDIF()
+
 SRCS(
   config.h.in
   build.cpp.in
   build.h
-
   ya_version.cpp
 )
 

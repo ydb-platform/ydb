@@ -18,7 +18,7 @@ using namespace NYPath;
 
 namespace {
 
-TString GetNodePath(const IConstNodePtr& node)
+std::string GetNodePath(const IConstNodePtr& node)
 {
     auto path = node->GetPath();
     return path.empty() ? "Root node" : Format("Node %v", path);
@@ -39,7 +39,7 @@ void ThrowInvalidNodeType(const IConstNodePtr& node, ENodeType expectedType, ENo
 void ValidateNodeType(
     const IConstNodePtr& node,
     const THashSet<ENodeType>& expectedTypes,
-    const TString& expectedTypesStringRepresentation)
+    const std::string& expectedTypesStringRepresentation)
 {
     if (!expectedTypes.contains(node->GetType())) {
         THROW_ERROR_EXCEPTION(
@@ -99,7 +99,7 @@ void ThrowNoSuchBuiltinAttribute(TStringBuf key)
         ToYPathLiteral(key));
 }
 
-void ThrowMethodNotSupported(TStringBuf method, const std::optional<TString>& resolveType)
+void ThrowMethodNotSupported(TStringBuf method, const std::optional<std::string>& resolveType)
 {
     auto error = TError(
         NRpc::EErrorCode::NoSuchMethod,
@@ -109,6 +109,15 @@ void ThrowMethodNotSupported(TStringBuf method, const std::optional<TString>& re
         error <<= TErrorAttribute("resolve_type", *resolveType);
     }
     THROW_ERROR(error);
+}
+
+
+void ThrowMethodNotSupportedForAttributes(TStringBuf method)
+{
+    THROW_ERROR_EXCEPTION(
+        NRpc::EErrorCode::NoSuchMethod,
+        "%Qv method is not supported for attributes",
+        method);
 }
 
 void ThrowCannotHaveChildren(const IConstNodePtr& node)

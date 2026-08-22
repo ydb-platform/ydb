@@ -13,6 +13,7 @@ struct TPartitionStats;
 struct TSequenceDescription;
 class TChangefeedDescription;
 class TIndexDescription;
+class TMultiColumnStatisticsDescription;
 class TColumnFamilyDescription;
 class TTableDescription;
 
@@ -64,6 +65,8 @@ struct TPartitioningPolicy;
 struct TReplicationPolicy;
 
 class TBuildIndexOperation;
+class TCompactionOperation;
+class TAnalyzeOperation;
 
 class TTtlDeleteAction;
 class TTtlEvictToExternalStorageAction;

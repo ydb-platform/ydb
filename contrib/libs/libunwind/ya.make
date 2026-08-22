@@ -11,9 +11,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(20.1.6)
+VERSION(22.1.8)
 
-ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/llvmorg-20.1.6.tar.gz)
+ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/llvmorg-22.1.8.tar.gz)
 
 PEERDIR(
     library/cpp/sanitizer/include
@@ -40,6 +40,12 @@ CFLAGS(
     -fno-rtti
     -funwind-tables
 )
+
+IF (OS_LINUX)
+    CFLAGS(
+        -D_LIBUNWIND_HAVE_GETAUXVAL
+    )
+ENDIF()
 
 IF (SANITIZER_TYPE == memory)
     CFLAGS(
@@ -69,13 +75,14 @@ ELSEIF (OS_EMSCRIPTEN AND ARCH_WASM32)
     SRCS(
         src/Unwind-wasm.c
     )
-ELSEIF (OS_EMSCRIPTEN AND NOT ARCH_WASM32)
+ELSEIF (OS_EMSCRIPTEN AND ARCH_WASM64)
     PEERDIR(
         contrib/restricted/emscripten/include
     )
     CFLAGS(
         -D_LIBUNWIND_HIDE_SYMBOLS
         -D__WASM_EXCEPTIONS__
+        -Wno-c23-extensions
     )
     SRCS(
         src/Unwind-wasm.c

@@ -5,6 +5,8 @@
 #include "ydb/core/tx/datashard/datashard_write_operation.h"
 #include <ydb/core/tablet/tablet_exception.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -63,9 +65,9 @@ EExecutionStatus TCheckWriteUnit::Execute(TOperation::TPtr op,
             << "Cannot perform transaction: out of disk space at tablet "
             << DataShard.TabletID() << " txId " << op->GetTxId();
 
-        DataShard.IncCounter(COUNTER_WRITE_OUT_OF_SPACE);
+        DataShard.IncCounter(COUNTER_WRITE_DISK_GROUP_OUT_OF_SPACE);
 
-        writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_OUT_OF_SPACE, err);
+        writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_DISK_GROUP_OUT_OF_SPACE, err);
         op->Abort(EExecutionUnitKind::FinishProposeWrite);
 
         DataShard.SetOverloadSubscribed(writeOp->GetWriteTx()->GetOverloadSubscribe(), writeOp->GetRecipient(), op->GetTarget(), ERejectReasons::YellowChannels, writeOp->GetWriteResult()->Record);
@@ -89,9 +91,9 @@ EExecutionStatus TCheckWriteUnit::Execute(TOperation::TPtr op,
                             // Updates are not allowed when database is out of space
                             TString err = "Cannot perform writes: database is out of disk space";
 
-                            DataShard.IncCounter(COUNTER_WRITE_DISK_SPACE_EXHAUSTED);
+                            DataShard.IncCounter(COUNTER_WRITE_DATABASE_DISK_SPACE_QUOTA_EXCEEDED);
 
-                            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_DISK_SPACE_EXHAUSTED, err);
+                            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_DATABASE_DISK_SPACE_QUOTA_EXCEEDED, err);
                             op->Abort(EExecutionUnitKind::FinishProposeWrite);
 
                             DataShard.SetOverloadSubscribed(writeOp->GetWriteTx()->GetOverloadSubscribe(), writeOp->GetRecipient(), op->GetTarget(), ERejectReasons::YellowChannels, writeOp->GetWriteResult()->Record);
@@ -118,7 +120,8 @@ EExecutionStatus TCheckWriteUnit::Execute(TOperation::TPtr op,
             writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED, err);
             op->Abort(EExecutionUnitKind::FinishProposeWrite);
 
-            LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, err);
+            YDB_LOG_NOTICE_CTX(ctx, "TCheckWriteUnit::Execute: cannot propose tx at blocked shard",
+                {"errorMessage", err});
 
             return EExecutionStatus::Executed;
         }
@@ -132,7 +135,9 @@ EExecutionStatus TCheckWriteUnit::Execute(TOperation::TPtr op,
                 DataShard.GetProcessingParams() ? DataShard.GetProcessingParams()->GetCoordinators() : google::protobuf::RepeatedField<ui64>{}
             }
             ));
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Prepared write transaction " << *op << " at tablet " << DataShard.TabletID());
+        YDB_LOG_DEBUG_CTX(ctx, "TCheckWriteUnit::Execute: prepared write transaction",
+            {"operation", *op},
+            {"tabletId", DataShard.TabletID()});
     }
 
     return EExecutionStatus::Executed;

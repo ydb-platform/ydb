@@ -3,12 +3,16 @@
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/string_utils/base64/base64.h>
+#include <util/string/join.h>
 
 #include <sstream>
+#include <utility>
 
 using namespace NYql;
 
-static TString ConvertToStatisticsTypeString(EStatisticsType type) {
+namespace {
+
+TString ConvertToStatisticsTypeString(EStatisticsType type) {
     switch (type) {
         case EStatisticsType::BaseTable:
             return "BaseTable";
@@ -16,13 +20,10 @@ static TString ConvertToStatisticsTypeString(EStatisticsType type) {
             return "FilteredFactTable";
         case EStatisticsType::ManyManyJoin:
             return "ManyManyJoin";
-        default:
-            Y_ENSURE(false,"Unknown EStatisticsType");
     }
-    return "";
 }
 
-static TString ConvertToStatisticsTypeString(EStorageType storageType) {
+TString ConvertToStatisticsTypeString(EStorageType storageType) {
     switch (storageType) {
         case EStorageType::NA:
             return "NA";
@@ -30,16 +31,35 @@ static TString ConvertToStatisticsTypeString(EStorageType storageType) {
             return "RowStorage";
         case EStorageType::ColumnStorage:
             return "ColumnStorage";
-        default:
-            Y_ENSURE(false,"Unknown Storage type");
     }
-    return "";
 }
+
+} // namespace
 
 TString TOptimizerStatistics::ToString() const {
     std::stringstream ss;
     ss << *this;
     return ss.str();
+}
+
+TString TShufflingOrderingsByJoinLabels::ToString() const
+{
+        if (ShufflingOrderingsByJoinLabels_.empty()) {
+            return "TShufflingOrderingsByJoinLabels{empty}";
+        }
+
+        TStringBuilder result;
+        result << "TShufflingOrderingsByJoinLabels{" << ShufflingOrderingsByJoinLabels_.size() << " entries: ";
+
+        for (size_t i = 0; i < ShufflingOrderingsByJoinLabels_.size(); ++i) {
+            if (i > 0) result << "; ";
+
+            const auto& [joinLabels, shufflings] = ShufflingOrderingsByJoinLabels_[i];
+            result << "{" << JoinSeq(", ", joinLabels) << ":" << shufflings.GetState() << "}";
+        }
+
+        result << "}";
+        return result;
 }
 
 std::ostream& NYql::operator<<(std::ostream& os, const TOptimizerStatistics& s) {
@@ -105,6 +125,10 @@ std::ostream& NYql::operator<<(std::ostream& os, const TOptimizerStatistics& s) 
         os << ", SortingOrderingIdx: " << s.SortingOrderingIdx;
     }
 
+    if (s.ShufflingOrderingIdx >= 0) {
+        os << ", ShufflingOrderingIdx: " << s.ShufflingOrderingIdx;
+    }
+
     os << ", Sel: " << s.Selectivity;
     os << ", Storage: " << ConvertToStatisticsTypeString(s.StorageType);
     if (s.SortColumns) {
@@ -152,8 +176,8 @@ TOptimizerStatistics::TOptimizerStatistics(
     , ByteSize(byteSize)
     , Cost(cost)
     , Selectivity(1.0)
-    , KeyColumns(keyColumns)
-    , ColumnStatistics(columnMap)
+    , KeyColumns(std::move(keyColumns))
+    , ColumnStatistics(std::move(columnMap))
     , ShuffledByColumns(nullptr)
     , SortColumns(nullptr)
     , StorageType(storageType)

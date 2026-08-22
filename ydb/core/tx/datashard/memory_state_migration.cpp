@@ -3,6 +3,8 @@
 
 #include <ydb/core/protos/datashard_config.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr::NDataShard {
 
 static constexpr size_t MAX_DATASHARD_STATE_CHUNK_SIZE = 8_MB;
@@ -51,20 +53,20 @@ private:
         auto* owner = Owner;
         Y_ENSURE(owner);
 
-        if (Locks) {
-            owner->SysLocks.RestoreInMemoryLocks(std::move(Locks));
-        }
-
         if (Vars) {
             owner->SnapshotManager.RestoreImmediateWriteEdge(Vars->ImmediateWriteEdge, Vars->ImmediateWriteEdgeReplied);
             owner->SnapshotManager.RestoreUnprotectedReadEdge(Vars->UnprotectedReadEdge);
             owner->InMemoryVarsRestored = true;
         }
 
+        if (Locks) {
+            owner->SysLocks.RestoreInMemoryLocks(std::move(Locks));
+        }
+
         Detach();
         PassAway();
 
-        owner->OnInMemoryStateRestored();
+        owner->OnInMemoryStateRestored(std::move(Transactions));
     }
 
     void Failed() {
@@ -91,6 +93,9 @@ private:
             Buffer.Insert(Buffer.End(), std::move(payload));
         }
 
+        // We must not have any checkpoints in the buffer yet
+        Y_ENSURE(Checkpoints.empty());
+
         size_t lastOffset = 0;
         for (size_t offset : msg->Record.GetSerializedStateCheckpoints()) {
             // These offsets are relative to the start of the new chunk, we make
@@ -99,14 +104,12 @@ private:
             offset += prevSize;
             // Try to fail gracefully instead of crashing on unexpected data
             if (offset < lastOffset) {
-                LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                    "Received TEvInMemoryStateResponse with checkpoints that go backwards");
+                YDB_LOG_CRIT("Received TEvInMemoryStateResponse with checkpoints that go backwards");
                 Failed();
                 return;
             }
             if (Buffer.size() < offset) {
-                LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                    "Received TEvInMemoryStateResponse with checkpoints that overflow current buffer");
+                YDB_LOG_CRIT("Received TEvInMemoryStateResponse with checkpoints that overflow current buffer");
                 Failed();
                 return;
             }
@@ -130,8 +133,7 @@ private:
                 TRopeStream stream(Buffer.Begin(), chunkSize);
                 bool ok = state->ParseFromZeroCopyStream(&stream);
                 if (!ok) {
-                    LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                        "Received TEvInMemoryStateResponse has a chunk that cannot be parsed");
+                    YDB_LOG_CRIT("Received TEvInMemoryStateResponse has a chunk that cannot be parsed");
                     Failed();
                     return;
                 }
@@ -161,6 +163,13 @@ private:
                 row.Counter = protoLock.GetCounter();
                 row.CreateTs = protoLock.GetCreateTs();
                 row.Flags = protoLock.GetFlags();
+                if (protoLock.HasVictimQuerySpanId()) {
+                    row.VictimQuerySpanId = protoLock.GetVictimQuerySpanId();
+                }
+                if (protoLock.HasBreakerQuerySpanId()) {
+                    row.BreakerQuerySpanId = protoLock.GetBreakerQuerySpanId();
+                    row.BreakerNodeId = protoLock.GetBreakerNodeId();
+                }
                 if (protoLock.HasBreakVersion()) {
                     row.BreakVersion = TRowVersion::FromProto(protoLock.GetBreakVersion());
                 }
@@ -174,8 +183,8 @@ private:
             for (const auto& protoRange : state->GetLockRanges()) {
                 auto* row = Locks.FindPtr(protoRange.GetLockId());
                 if (!row) {
-                    LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                        "Received lock range for a missing lock " << protoRange.GetLockId());
+                    YDB_LOG_CRIT("Received lock range for a missing lock",
+                        {"rangeLockId", protoRange.GetLockId()});
                     Failed();
                     return;
                 }
@@ -187,8 +196,8 @@ private:
             for (const auto& protoConflict : state->GetLockConflicts()) {
                 auto* row = Locks.FindPtr(protoConflict.GetLockId());
                 if (!row) {
-                    LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                        "Received lock conflict for a missing lock " << protoConflict.GetLockId());
+                    YDB_LOG_CRIT("Received lock conflict for a missing lock",
+                        {"conflictLockId", protoConflict.GetLockId()});
                     Failed();
                     return;
                 }
@@ -197,16 +206,51 @@ private:
             for (const auto& protoVolatileDep : state->GetLockVolatileDependencies()) {
                 auto* row = Locks.FindPtr(protoVolatileDep.GetLockId());
                 if (!row) {
-                    LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                        "Received volatile dependency for a missing lock " << protoVolatileDep.GetLockId());
+                    YDB_LOG_CRIT("Received volatile dependency for a missing lock",
+                        {"volatileDepLockId", protoVolatileDep.GetLockId()});
                     Failed();
                     return;
                 }
                 row->VolatileDependencies.push_back(protoVolatileDep.GetTxId());
             }
 
+            for (const auto& protoTx : state->GetPreparedVolatileTxs()) {
+                ui64 txId = protoTx.GetTxId();
+                EOperationKind kind = EOperationKind(protoTx.GetKind());
+                ui64 flags = protoTx.GetFlags();
+                if (flags & TTxFlags::Immediate) {
+                    // Cannot restore immediate transactions
+                    continue;
+                }
+                if (!(flags & TTxFlags::VolatilePrepare)) {
+                    // Cannot restore non-volatile transactions
+                    continue;
+                }
+                flags |= TTxFlags::Stored; // Volatile transactions also have a Stored flag (stored in memory, not on disk)
+                ui64 maxStep = protoTx.GetMaxStep();
+                ui64 receivedAt = protoTx.GetReceivedAt();
+                TBasicOpInfo info(txId, kind, flags, maxStep, TInstant::MicroSeconds(receivedAt), Owner->NextTieBreakerIndex++);
+                TOperation::TPtr op = NEvWrite::TConvertor::MakeOperation(kind, info, Owner->TabletID());
+                op->SetMinStep(protoTx.GetMinStep());
+                if (protoTx.HasStep()) {
+                    op->SetStep(protoTx.GetStep());
+                }
+                if (protoTx.HasPredictedStep()) {
+                    op->SetPredictedStep(protoTx.GetPredictedStep());
+                }
+                op->SetTarget(ActorIdFromProto(protoTx.GetSource()));
+                op->SetCookie(protoTx.GetCookie());
+                if (!op->OnRestoreMigrated(*Owner, protoTx.GetBody())) {
+                    // This transaction cannot be restored
+                    continue;
+                }
+                Transactions[txId] = std::move(op);
+            }
+
             Arena.Reset();
         }
+
+        Checkpoints.clear();
 
         if (msg->Record.HasContinuationToken()) {
             // Request the next data chunk
@@ -256,8 +300,9 @@ private:
     TVector<size_t> Checkpoints;
 
     google::protobuf::Arena Arena;
-    THashMap<ui64, ILocksDb::TLockRow> Locks;
     std::optional<TVars> Vars;
+    THashMap<ui64, ILocksDb::TLockRow> Locks;
+    THashMap<ui64, TOperation::TPtr> Transactions;
 };
 
 void TDataShard::StartInMemoryRestoreActor() {
@@ -274,7 +319,7 @@ void TDataShard::StartInMemoryRestoreActor() {
         return;
     }
 
-    OnInMemoryStateRestored();
+    OnInMemoryStateRestored({});
 }
 
 class TDataShardInMemoryStateActor
@@ -519,6 +564,8 @@ private:
 };
 
 TDataShard::TPreservedInMemoryState TDataShard::PreserveInMemoryState() {
+    TActorContext ctx = TActivationContext::ActorContextFor(SelfId());
+
     TDataShardPreservedInMemoryStateOutputStream stream;
     TVector<size_t> checkpoints;
 
@@ -540,6 +587,9 @@ TDataShard::TPreservedInMemoryState TDataShard::PreserveInMemoryState() {
     };
 
     auto addedMessage = [&](size_t messageSize) {
+        // Note: assumes field tag is always 1 byte, which is exact as long as
+        // all field numbers are less than 15 in TInMemoryState. Checkpoints
+        // don't rely on this being exact however.
         currentStateSize += 1 + google::protobuf::io::CodedOutputStream::VarintSize32(messageSize) + messageSize;
         if (currentStateSize >= MAX_DATASHARD_STATE_CHUNK_SIZE) {
             flushState();
@@ -578,8 +628,7 @@ TDataShard::TPreservedInMemoryState TDataShard::PreserveInMemoryState() {
         InMemoryVarsFrozen = true;
     }
 
-    for (const auto& pr : SysLocks.GetLocks()) {
-        const auto& lockInfo = *pr.second;
+    auto processLock = [&](TLockInfo& lockInfo) {
         auto* protoLockInfo = state->AddLocks();
         protoLockInfo->SetLockId(lockInfo.GetLockId());
         protoLockInfo->SetLockNodeId(lockInfo.GetLockNodeId());
@@ -587,6 +636,13 @@ TDataShard::TPreservedInMemoryState TDataShard::PreserveInMemoryState() {
         protoLockInfo->SetCounter(lockInfo.GetRawCounter());
         protoLockInfo->SetCreateTs(lockInfo.GetCreationTime().MicroSeconds());
         protoLockInfo->SetFlags((ui64)lockInfo.GetFlags());
+        if (ui64 victimId = lockInfo.GetVictimQuerySpanId(); victimId != 0) {
+            protoLockInfo->SetVictimQuerySpanId(victimId);
+        }
+        if (ui64 breakerSpanId = lockInfo.GetBreakerQuerySpanId(); breakerSpanId != 0) {
+            protoLockInfo->SetBreakerQuerySpanId(breakerSpanId);
+            protoLockInfo->SetBreakerNodeId(lockInfo.GetBreakerNodeId());
+        }
         if (const auto& version = lockInfo.GetBreakVersion()) {
             version->ToProto(protoLockInfo->MutableBreakVersion());
         }
@@ -630,6 +686,44 @@ TDataShard::TPreservedInMemoryState TDataShard::PreserveInMemoryState() {
                 protoDep->SetTxId(txId);
                 addedMessage(protoDep->ByteSizeLong());
             });
+        maybeCheckpoint();
+    };
+
+    for (const auto& pr : SysLocks.GetLocks()) {
+        processLock(*pr.second);
+    }
+
+    for (const auto& pr : SysLocks.GetRemovedLocks()) {
+        processLock(*pr.second);
+    }
+
+    for (const auto& [txId, op] : TransQueue.GetTxsInFly()) {
+        if (op->IsImmediate() || !op->HasVolatilePrepareFlag()) {
+            // Non-volatile transactions don't need to be migrated
+            continue;
+        }
+        auto txBody = op->OnMigration(*this, ctx);
+        if (!txBody) {
+            // This transaction cannot be migrated
+            continue;
+        }
+        auto* protoTx = state->AddPreparedVolatileTxs();
+        protoTx->SetTxId(txId);
+        ActorIdToProto(op->GetTarget(), protoTx->MutableSource());
+        protoTx->SetCookie(op->GetCookie());
+        protoTx->SetKind(static_cast<ui64>(op->GetKind()));
+        protoTx->SetBody(std::move(*txBody));
+        protoTx->SetFlags(op->GetFlags() & (TTxFlags::PublicFlagsMask | TTxFlags::PreservedPrivateFlagsMask));
+        protoTx->SetMinStep(op->GetMinStep());
+        protoTx->SetMaxStep(op->GetMaxStep());
+        if (auto step = op->GetPredictedStep()) {
+            protoTx->SetPredictedStep(step);
+        }
+        if (auto step = op->GetStep()) {
+            protoTx->SetStep(step);
+        }
+        protoTx->SetReceivedAt(op->GetReceivedAt().MicroSeconds());
+        addedMessage(protoTx->ByteSizeLong());
         maybeCheckpoint();
     }
 

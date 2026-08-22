@@ -12,6 +12,7 @@ https://github.com/google/tcmalloc/archive/{{self.version().strip()}}.tar.gz
 common.inc
 default/ya.make
 dynamic/ya.make
+internal_utils/ya.make
 malloc_extension/ya.make
 no_percpu_cache/ya.make
 no_percpu_cache/aligned_alloc.c
@@ -25,8 +26,6 @@ tcmalloc/internal/ya.make
 {% block ya_make %}
 SUBSCRIBER(
     g:cpp-contrib
-    ayles
-    mikailbag
 )
 
 SRCS(
@@ -37,7 +36,7 @@ SRCS(
 INCLUDE(common.inc)
 
 CFLAGS(
-    -DTCMALLOC_256K_PAGES
+    -DTCMALLOC_INTERNAL_256K_PAGES
 )
 {% endblock %}
 
@@ -46,6 +45,7 @@ IF (NOT DLL_FOR)
     RECURSE(
         default
         dynamic
+        internal_utils
         malloc_extension
         no_percpu_cache
         numa_256k
@@ -55,6 +55,14 @@ IF (NOT DLL_FOR)
         tcmalloc/internal
     )
 ENDIF()
+{% endblock %}
+
+{% block patch_source %}
+{{super()}}
+find . -type f -name "ya.make" | while read -r file; do
+    sed -i -e 's/VERSION(.*)/VERSION({{self.date()}})/g' "$file"
+    sed -i -e 's|ORIGINAL_SOURCE(.*)|ORIGINAL_SOURCE({{self.current_url().strip()}})|g' "$file"
+done
 {% endblock %}
 
 {% block move_to_output %}

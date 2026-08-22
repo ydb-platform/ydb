@@ -1,11 +1,17 @@
 #include "validators.h"
 
+#include <ydb/core/base/statestorage.h>
+#include <ydb/core/blobstorage/base/infer_pdisk_slot_count_settings.h>
+#include <ydb/core/blobstorage/base/pdisk_config_validation.h>
 #include <ydb/core/config/protos/marker.pb.h>
 #include <ydb/core/protos/blobstorage.pb.h>
+#include <ydb/core/protos/blobstorage_base.pb.h>
 #include <ydb/core/protos/blobstorage_disk.pb.h>
+#include <ydb/core/util/pb.h>
 
 #include <library/cpp/protobuf/json/util.h>
 
+#include <util/generic/xrange.h>
 #include <util/string/builder.h>
 
 #include <map>
@@ -51,6 +57,16 @@ bool IsSame(const NKikimrBlobStorage::TVDiskID& lhs, const NKikimrBlobStorage::T
 bool IsSame(const NKikimrBlobStorage::TNodeWardenServiceSet::TVDisk& lhs, const NKikimrBlobStorage::TNodeWardenServiceSet::TVDisk& rhs) {
     return
         IsSame(lhs.GetVDiskID(), rhs.GetVDiskID()) && IsSame(lhs.GetVDiskLocation(), rhs.GetVDiskLocation());
+}
+
+bool ValidatePDiskConfig(const NKikimrBlobStorage::TPDiskConfig& config, const TString& context,
+        std::vector<TString>& msg) {
+    if (auto error = ::NKikimr::ValidatePDiskConfig(config, context)) {
+        msg.push_back(*error);
+        return false;
+    }
+
+    return true;
 }
 
 EValidationResult ValidateStaticGroup(const NKikimrConfig::TAppConfig& current, const NKikimrConfig::TAppConfig& proposed, std::vector<TString>& msg) {
@@ -166,6 +182,54 @@ EValidationResult ValidateStaticGroup(const NKikimrConfig::TAppConfig& current, 
     return EValidationResult::Ok;
 }
 
+
+EValidationResult ValidateStateStorageConfig(const NKikimrConfig::TAppConfig& proposed, std::vector<TString>& msg) {
+    if (proposed.HasSelfManagementConfig()) {
+        const auto& sm = proposed.GetSelfManagementConfig();
+        if (sm.GetEnabled()) {
+            return EValidationResult::Ok;
+        }
+    }
+    if (!proposed.HasDomainsConfig()) {
+        return EValidationResult::Ok;
+    }
+    const auto& domains = proposed.GetDomainsConfig();
+    bool isExplicit = domains.HasExplicitStateStorageConfig() && domains.HasExplicitStateStorageBoardConfig() && domains.HasExplicitSchemeBoardConfig();
+    if (!isExplicit) {
+        if (domains.DomainSize() < 1) {
+            msg.push_back(TStringBuilder() << "Domains is not defined in DomainsConfig");
+            return EValidationResult::Error;
+        }
+        const auto& domain = domains.GetDomain(0);
+        bool found = false;
+        for (const auto& ss : domains.GetStateStorage()) {
+            if (domain.SSIdSize() == 0 || (domain.SSIdSize() == 1 && ss.GetSSId() == domain.GetSSId(0))) {
+                found = true;
+                if (auto res = ValidateStateStorageConfig("StateStorage", {}, ss); !res.empty()) {
+                    msg.push_back(res);
+                    return EValidationResult::Error;
+                }
+            }
+        }
+        if (!found) {
+            msg.push_back(TStringBuilder() << "State storage config is not defined in DomainsConfig section");
+            return EValidationResult::Error;
+        }
+    }
+#define VALIDATE_EXPLICIT(NAME) \
+        if (domains.HasExplicit##NAME##Config()) { \
+            if (auto res = ValidateStateStorageConfig(#NAME, {}, domains.GetExplicit##NAME##Config())) { \
+                msg.push_back(res); \
+                return EValidationResult::Error; \
+            } \
+        }
+    VALIDATE_EXPLICIT(StateStorage)
+    VALIDATE_EXPLICIT(StateStorageBoard)
+    VALIDATE_EXPLICIT(SchemeBoard)
+
+    return EValidationResult::Ok;
+}
+
 EValidationResult ValidateDatabaseConfig(const NKikimrConfig::TAppConfig& config, std::vector<TString>& msg) {
     const auto* desc = config.GetDescriptor();
     const auto* reflection = config.GetReflection();
@@ -210,11 +274,213 @@ EValidationResult ValidateConfig(const NKikimrConfig::TAppConfig& config, std::v
             return EValidationResult::Error;
         }
     }
+    if (config.HasMonitoringConfig()) {
+        NKikimr::NConfig::EValidationResult result = NKikimr::NConfig::ValidateMonitoringConfig(config, msg);
+        if (result == NKikimr::NConfig::EValidationResult::Error) {
+            return EValidationResult::Error;
+        }
+    }
+    if (config.HasBlobStorageConfig()) {
+        const auto& blobStorageConfig = config.GetBlobStorageConfig();
+        if (blobStorageConfig.HasInferPDiskSlotCountSettings()) {
+            if (auto error = ValidateInferPDiskSlotCountSettings(
+                    blobStorageConfig.GetInferPDiskSlotCountSettings(),
+                    "BlobStorageConfig.InferPDiskSlotCountSettings")) {
+                msg.push_back(*error);
+                return EValidationResult::Error;
+            }
+        }
+        for (ui32 hostConfigIndex = 0; hostConfigIndex < blobStorageConfig.DefineHostConfigSize(); ++hostConfigIndex) {
+            const auto& hostConfig = blobStorageConfig.GetDefineHostConfig(hostConfigIndex);
+            if (hostConfig.HasDefaultHostPDiskConfig() && !ValidatePDiskConfig(
+                    hostConfig.GetDefaultHostPDiskConfig(),
+                    TStringBuilder() << "BlobStorageConfig.DefineHostConfig[" << hostConfigIndex
+                        << "].DefaultHostPDiskConfig",
+                    msg)) {
+                return EValidationResult::Error;
+            }
+            for (ui32 driveIndex = 0; driveIndex < hostConfig.DriveSize(); ++driveIndex) {
+                const auto& drive = hostConfig.GetDrive(driveIndex);
+                if (drive.HasPDiskConfig() && !ValidatePDiskConfig(
+                        drive.GetPDiskConfig(),
+                        TStringBuilder() << "BlobStorageConfig.DefineHostConfig[" << hostConfigIndex
+                            << "].Drive[" << driveIndex << "].PDiskConfig",
+                        msg)) {
+                    return EValidationResult::Error;
+                }
+            }
+        }
+        if (blobStorageConfig.HasServiceSet()) {
+            const auto& serviceSet = blobStorageConfig.GetServiceSet();
+            for (ui32 pdiskIndex = 0; pdiskIndex < serviceSet.PDisksSize(); ++pdiskIndex) {
+                const auto& pdisk = serviceSet.GetPDisks(pdiskIndex);
+                if (pdisk.HasPDiskConfig() && !ValidatePDiskConfig(
+                        pdisk.GetPDiskConfig(),
+                        TStringBuilder() << "BlobStorageConfig.ServiceSet.PDisks[" << pdiskIndex << "].PDiskConfig",
+                        msg)) {
+                    return EValidationResult::Error;
+                }
+            }
+        }
+    }
+    {
+        NKikimr::NConfig::EValidationResult result = NKikimr::NConfig::ValidateClientCertificateAuthorization(config, msg);
+        if (result == NKikimr::NConfig::EValidationResult::Error) {
+            return EValidationResult::Error;
+        }
+    }
+    NKikimr::NConfig::EValidationResult result = NKikimr::NConfig::ValidateStateStorageConfig(config, msg);
+    if (result == NKikimr::NConfig::EValidationResult::Error) {
+        return EValidationResult::Error;
+    }
     if (msg.size() > 0) {
         return EValidationResult::Warn;
     }
 
     return EValidationResult::Ok;
 }
+
+
+TString ValidateStateStorageConfig(const char* name, const NKikimrConfig::TStateStorageConfig& oldSSConfig, const NKikimrConfig::TStateStorageConfig& newSSConfig) {
+    if (!newSSConfig.HasRing() && newSSConfig.RingGroupsSize() == 0) {
+        return TStringBuilder() << "New " << name << " configuration is not filled in";
+    }
+    if (!oldSSConfig.HasRing() && oldSSConfig.RingGroupsSize() == 0) {
+        auto info = BuildStateStorageInfo(newSSConfig);
+        if (info->RingGroups[0].WriteOnly) {
+            return TStringBuilder() << "New " << name << " configuration first ring group is WriteOnly";
+        }
+        for (auto &rg : info->RingGroups) {
+            if (rg.NToSelect < 1 || rg.NToSelect > rg.Rings.size()) {
+                return TStringBuilder() << "New " << name << " configuration NToSelect has invalid value";
+            }
+
+            ui32 disabledCnt = 0;
+            for (auto &ring : rg.Rings) {
+                if (ring.IsDisabled) {
+                    disabledCnt++;
+                }
+            }
+            if (disabledCnt > rg.NToSelect / 2 - 1) { // -1 ring for rolling restart
+                return TStringBuilder() << "New " << name << " configuration disabled too many rings";
+            }
+        }
+        return "";
+    }
+
+    if ((oldSSConfig.HasRing() || oldSSConfig.RingGroupsSize() == 1) && (newSSConfig.HasRing() || newSSConfig.RingGroupsSize() == 1)) {
+        auto toInfo = BuildStateStorageInfo(newSSConfig);
+        auto fromInfo = BuildStateStorageInfo(oldSSConfig);
+        auto &fromInfoGroup = fromInfo->RingGroups[0];
+        auto &toInfoGroup = toInfo->RingGroups[0];
+        if (fromInfoGroup.Rings.size() != toInfoGroup.Rings.size()
+            || fromInfoGroup.NToSelect != toInfoGroup.NToSelect
+            || toInfoGroup.WriteOnly) {
+             return TStringBuilder() << name << " NToSelect/rings differs or writeOnly"
+                << " from# " << SingleLineProto(oldSSConfig)
+                << " to# " << SingleLineProto(newSSConfig);
+        }
+        ui32 disabledCnt = 0;
+        for (ui32 i : xrange(fromInfoGroup.Rings.size())) {
+            auto &fromRing = fromInfoGroup.Rings[i];
+            auto &toRing = toInfoGroup.Rings[i];
+            if (fromRing.IsDisabled || toRing.IsDisabled) {
+                disabledCnt++;
+            } else if (fromRing != toRing) {
+                return TStringBuilder() << name << " ring #" << i << "differs"
+                    << " from# " << SingleLineProto(oldSSConfig)
+                    << " to# " << SingleLineProto(newSSConfig);
+            }
+        }
+        if (disabledCnt > fromInfoGroup.NToSelect / 2) {
+            return TStringBuilder() << name << " configuration disabled too many rings"
+                << " from# " << SingleLineProto(oldSSConfig)
+                << " to# " << SingleLineProto(newSSConfig);
+        }
+        return "";
+    }
+    if (newSSConfig.RingGroupsSize() < 1) {
+        return TStringBuilder() << "New " << name << " configuration RingGroups is not filled in";
+    }
+    if (newSSConfig.GetRingGroups(0).GetWriteOnly()) {
+        return TStringBuilder() << "New " << name << " configuration first RingGroup is writeOnly";
+    }
+    for (auto& rg : newSSConfig.GetRingGroups()) {
+        if (rg.RingSize() && rg.NodeSize()) {
+            return TStringBuilder() << name << " Ring and Node are defined, use the one of them";
+        }
+        const size_t numItems = Max(rg.RingSize(), rg.NodeSize());
+        if (!rg.HasNToSelect() || numItems < 1 || rg.GetNToSelect() < 1 || rg.GetNToSelect() > numItems) {
+            return TStringBuilder() << name << " invalid ring group selection";
+        }
+        for (auto &ring : rg.GetRing()) {
+            if (ring.RingSize() > 0) {
+                return TStringBuilder() << name << " too deep nested ring declaration";
+            }
+            if (ring.HasRingGroupActorIdOffset()) {
+                return TStringBuilder() << name << " RingGroupActorIdOffset should be used in ring group level, not ring";
+            }
+            if (ring.NodeSize() < 1) {
+                return TStringBuilder() << name << " empty ring";
+            }
+        }
+    }
+    try {
+        TIntrusivePtr<TStateStorageInfo> newSSInfo;
+        TIntrusivePtr<TStateStorageInfo> oldSSInfo;
+        newSSInfo = BuildStateStorageInfo(newSSConfig);
+        oldSSInfo = BuildStateStorageInfo(oldSSConfig);
+        THashSet<TActorId> replicas;
+        for (auto& ringGroup : newSSInfo->RingGroups) {
+            for (auto& ring : ringGroup.Rings) {
+                for (auto& node : ring.Replicas) {
+                    if (!replicas.insert(node).second) {
+                        return TStringBuilder() << name << " replicas ActorId intersection, specify"
+                            " RingGroupActorIdOffset if you run multiple replicas on one node";
+                    }
+                }
+            }
+        }
+
+        Y_ABORT_UNLESS(newSSInfo->RingGroups.size() > 0 && oldSSInfo->RingGroups.size() > 0);
+
+        for (auto& newGroup : newSSInfo->RingGroups) {
+            if (newGroup.WriteOnly) {
+                continue;
+            }
+            bool found = false;
+            for (auto& rg : oldSSInfo->RingGroups) {
+                if (newGroup.SameConfiguration(rg)) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                return TStringBuilder() << "New introduced ring group should be WriteOnly old: " << oldSSInfo->ToString()
+                    << " new: " << newSSInfo->ToString();
+            }
+        }
+        for (auto& oldGroup : oldSSInfo->RingGroups) {
+            if (oldGroup.WriteOnly) {
+                continue;
+            }
+            bool found = false;
+            for (auto& rg : newSSInfo->RingGroups) {
+                if (oldGroup.SameConfiguration(rg)) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                return TStringBuilder() << "Can not delete not WriteOnly ring group. Make it WriteOnly before deletion old: "
+                    << oldSSInfo->ToString() << " new: " << newSSInfo->ToString();
+            }
+        }
+    } catch (const std::exception& e) {
+        return TStringBuilder() << "Can not build " << name << " info from config. " << e.what();
+    }
+    return "";
+}
+
 
 } // namespace NKikimr::NConfig

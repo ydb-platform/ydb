@@ -2,7 +2,7 @@
 
 Для развёртывания кластера {{ ydb-short-name }}, добавления в кластер новых узлов и изменения параметров требуется конфигурация.
 
-{% include [new](../_includes/configuration-version-note.md) %}
+{% include [_](../_includes/experimental_v2.md) %}
 
 Конфигурация кластера {{ ydb-short-name }} V2 представляет собой текстовый файл в формате [YAML](https://en.wikipedia.org/wiki/YAML). В минимальном варианте он содержит секцию `config` с различными параметрами, необходимыми для запуска и настройки узлов кластера, а также секцию с метаданными `metadata`. Расширенные возможности для гибкого конфигурирования описаны в статье [{#T}](dynamic-config-selectors.md). Подробнее о доступных параметрах можно узнать в [справке по конфигурации](config-settings.md).
 
@@ -69,9 +69,9 @@ $ ydb -e grpc://<ydb.example.com>:2135 admin cluster config replace -f config.ya
 
 Для конфигурации кластера при первоначальном развёртывании рекомендуется использовать инструкции для выбранного способа управления инфраструктурой:
 
-- [{#T}](../../deployment-options/ansible/initial-deployment.md);
+- [{#T}](../../deployment-options/ansible/initial-deployment/index.md);
 - [{#T}](../../deployment-options/kubernetes/initial-deployment.md);
-- [{#T}](../../deployment-options/manual/initial-deployment.md).
+- [{#T}](../../deployment-options/manual/initial-deployment/index.md).
 
 ### Обновление конфигурации {#update-config}
 

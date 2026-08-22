@@ -23,6 +23,8 @@
 #include <yt/yt/core/ytree/convert.h>
 #include <yt/yt/core/ytree/fluent.h>
 
+#include <library/cpp/yt/system/thread_id.h>
+
 #include <library/cpp/yt/compact_containers/compact_vector.h>
 
 #include <library/cpp/string_utils/quote/quote.h>
@@ -68,7 +70,7 @@ class TServer
 {
 public:
     explicit TServer(TServerConfigPtr config)
-        : TServerBase(GrpcLogger().WithTag("GrpcServerId: %v", TGuid::Create()))
+        : TServerBase(GrpcLogger().WithTag("GrpcServerId", TGuid::Create()))
         , Config_(std::move(config))
         , ShutdownCookie_(RegisterShutdownCallback(
             "GrpcServer",
@@ -149,7 +151,8 @@ private:
                     THROW_ERROR_EXCEPTION("Error configuring server to listen at %Qv",
                         addressConfig->Address);
                 }
-                YT_LOG_DEBUG("Server address configured (Address: %v)", addressConfig->Address);
+                YT_TLOG_DEBUG("Server address configured")
+                    .With("Address", addressConfig->Address);
             }
         } catch (const std::exception& ex) {
             Cleanup();
@@ -171,13 +174,13 @@ private:
     void Shutdown(bool graceful)
     {
         try {
-            DoStop(graceful).Get().ThrowOnError();
+            DoStop(graceful).BlockingGet().ThrowOnError();
         } catch (...) {
             if (auto* logFile = TryGetShutdownLogFile()) {
                 ::fprintf(logFile, "%s\tGRPC server shutdown failed: %s (ThreadId: %" PRISZT ")\n",
                     GetInstant().ToString().c_str(),
                     CurrentExceptionMessage().c_str(),
-                    GetCurrentThreadId());
+                    GetSystemThreadId());
             }
         }
     }
@@ -202,6 +205,15 @@ private:
         private:
             const TServerPtr Owner_;
         };
+
+        // The server may have never been started (e.g. when the process is
+        // shutting down due to a startup failure in some other component), in
+        // which case there is nothing to shut down. The public Stop() already
+        // guards this via the Started_ flag, but the shutdown callback invokes
+        // DoStop directly, bypassing that check.
+        if (!Started_) {
+            return OKFuture;
+        }
 
         if (!ShutdownStarted_.exchange(true)) {
             YT_VERIFY(Native_);
@@ -275,7 +287,7 @@ private:
 
         TFuture<void> GetReadyFuture() const override
         {
-            return VoidFuture;
+            return OKFuture;
         }
 
         TFuture<void> Send(TSharedRefArray message, const NBus::TSendOptions& /*options*/) override
@@ -406,7 +418,7 @@ private:
         TNetworkAddress PeerAddress_;
 
         TRequestId RequestId_;
-        std::optional<std::string> User_;
+        std::string User_ = RootUserName;
         std::optional<std::string> UserTag_;
         std::optional<std::string> UserAgent_;
         std::optional<NGrpc::NProto::TSslCredentialsExt> SslCredentialsExt_;
@@ -455,7 +467,7 @@ private:
         {
             if (!success) {
                 // This normally happens on server shutdown.
-                YT_LOG_DEBUG("Server accept failed");
+                YT_TLOG_DEBUG("Server accept failed");
                 Unref();
                 return;
             }
@@ -465,9 +477,9 @@ private:
             ParseRequestId();
 
             if (!TryParsePeerAddress()) {
-                YT_LOG_WARNING("Malformed peer address (PeerAddress: %v, RequestId: %v)",
-                    PeerAddressString_,
-                    RequestId_);
+                YT_TLOG_WARNING("Malformed peer address")
+                    .With("PeerAddress", PeerAddressString_)
+                    .With("RequestId", RequestId_);
                 Unref();
                 return;
             }
@@ -486,16 +498,17 @@ private:
                 SslCredentialsExt_ = WaitFor(ParseSslCredentials())
                     .ValueOrThrow();
             } catch (const std::exception& ex) {
-                YT_LOG_DEBUG(ex, "Failed to parse ssl credentials (RequestId: %v)",
-                    RequestId_);
+                YT_TLOG_DEBUG("Failed to parse ssl credentials")
+                    .With("RequestId", RequestId_)
+                    .With(TError(ex));
                 Unref();
                 return;
             }
 
             if (!TryParseRoutingParameters()) {
-                YT_LOG_DEBUG("Malformed request routing parameters (RawMethod: %v, RequestId: %v)",
-                    ToStringBuf(CallDetails_->method),
-                    RequestId_);
+                YT_TLOG_DEBUG("Malformed request routing parameters")
+                    .With("RawMethod", ToStringBuf(CallDetails_->method))
+                    .With("RequestId", RequestId_);
                 Unref();
                 return;
             }
@@ -510,24 +523,15 @@ private:
                 return;
             }
 
-            YT_LOG_DEBUG("Request accepted (RequestId: %v, Host: %v, Method: %v.%v, %v%vPeerAddress: %v, Timeout: %v, ProtocolVersion: %v)",
-                RequestId_,
-                ToStringBuf(CallDetails_->host),
-                ServiceName_,
-                MethodName_,
-                MakeFormatterWrapper([&] (auto* builder) {
-                    if (User_) {
-                        builder->AppendFormat("User: %v, ", *User_);
-                    }
-                }),
-                MakeFormatterWrapper([&] (auto* builder) {
-                    if (User_ && UserTag_ && *UserTag_ != *User_) {
-                        builder->AppendFormat("UserTag: %v, ", *UserTag_);
-                    }
-                }),
-                PeerAddressString_,
-                Timeout_,
-                ProtocolVersion_);
+            YT_TLOG_DEBUG("Request accepted")
+                .With("RequestId", RequestId_)
+                .With("Host", ToStringBuf(CallDetails_->host))
+                .WithFormat("Method", "%v.%v", ServiceName_, MethodName_)
+                .With("User", User_)
+                .WithIf(UserTag_ && *UserTag_ != User_, "UserTag", UserTag_)
+                .With("PeerAddress", PeerAddressString_)
+                .With("Timeout", Timeout_)
+                .With("ProtocolVersion", ProtocolVersion_);
 
             Service_ = Owner_->FindService(TServiceId(ServiceName_));
 
@@ -580,39 +584,50 @@ private:
             const auto sampledString = CallMetadata_.Find(TracingSampledMetadataKey);
             const auto debugString = CallMetadata_.Find(TracingDebugMetadataKey);
 
+            NTracing::NProto::TTracingExt traceContext{};
             if (!traceIdString &&
                 !spanIdString &&
                 !sampledString &&
                 !debugString)
             {
+                auto traceParentString = CallMetadata_.Find(TracingTraceParentMetadataKey);
+                NTracing::TSpanContext spanContext;
+                if (!traceParentString || !NTracing::TryParseTraceParent(*traceParentString, spanContext)) {
+                    return;
+                }
+
+                ToProto(traceContext.mutable_trace_id(), spanContext.TraceId);
+                traceContext.set_span_id(spanContext.SpanId);
+                traceContext.set_sampled(spanContext.Sampled);
+                traceContext.set_debug(spanContext.Debug);
+                TraceContext_.emplace(std::move(traceContext));
                 return;
             }
 
-            NTracing::NProto::TTracingExt traceContext{};
             if (traceIdString) {
                 TGuid traceId;
-                if (!TGuid::FromString(traceIdString, &traceId)) {
+                if (!TGuid::FromString(*traceIdString, &traceId)) {
                     return;
                 }
                 ToProto(traceContext.mutable_trace_id(), traceId);
             }
             if (spanIdString) {
                 NTracing::TSpanId spanId;
-                if (!TryFromString(spanIdString, spanId)) {
+                if (!TryFromString(*spanIdString, spanId)) {
                     return;
                 }
                 traceContext.set_span_id(spanId);
             }
             if (sampledString) {
                 bool sampled;
-                if (!TryFromString(sampledString, sampled)) {
+                if (!TryFromString(*sampledString, sampled)) {
                     return;
                 }
                 traceContext.set_sampled(sampled);
             }
             if (debugString) {
                 bool debug;
-                if (!TryFromString(debugString, debug)) {
+                if (!TryFromString(*debugString, debug)) {
                     return;
                 }
                 traceContext.set_debug(debug);
@@ -628,11 +643,11 @@ private:
                 return;
             }
 
-            if (!TRequestId::FromString(idString, &RequestId_)) {
+            if (!TRequestId::FromString(*idString, &RequestId_)) {
                 RequestId_ = TRequestId::Create();
-                YT_LOG_WARNING("Malformed request id, using a random one (MalformedRequestId: %v, RequestId: %v)",
-                    idString,
-                    RequestId_);
+                YT_TLOG_WARNING("Malformed request id, using a random one")
+                    .With("MalformedRequestId", *idString)
+                    .With("RequestId", RequestId_);
             }
         }
 
@@ -643,7 +658,12 @@ private:
                 return;
             }
 
-            User_ = std::string(userString);
+            // COMPAT(bulatman): old gRPC clients send an empty yt-user when no user is specified.
+            if (userString->empty()) {
+                return;
+            }
+
+            User_ = std::string(*userString);
         }
 
         void ParseUserTag()
@@ -653,7 +673,7 @@ private:
                 return;
             }
 
-            UserTag_ = std::string(userTagString);
+            UserTag_ = std::string(*userTagString);
         }
 
         void ParseUserAgent()
@@ -663,7 +683,7 @@ private:
                 return;
             }
 
-            UserAgent_ = std::string(userAgentString);
+            UserAgent_ = std::string(*userAgentString);
         }
 
         void ParseRequestCodec()
@@ -674,16 +694,16 @@ private:
             }
 
             int intCodecId;
-            if (!TryFromString(requestCodecString, intCodecId)) {
-                YT_LOG_WARNING("Failed to parse request codec from request metadata (RequestId: %v)",
-                    RequestId_);
+            if (!TryFromString(*requestCodecString, intCodecId)) {
+                YT_TLOG_WARNING("Failed to parse request codec from request metadata")
+                    .With("RequestId", RequestId_);
                 return;
             }
             auto codecId = TryCheckedEnumCast<NCompression::ECodec>(intCodecId);
             if (!codecId) {
-                YT_LOG_WARNING("Request codec %v is not supported (RequestId: %v)",
-                    intCodecId,
-                    RequestId_);
+                YT_TLOG_WARNING("Request codec is not supported")
+                    .With("Codec", intCodecId)
+                    .With("RequestId", RequestId_);
                 return;
             }
 
@@ -698,16 +718,16 @@ private:
             }
 
             int intCodecId;
-            if (!TryFromString(responseCodecString, intCodecId)) {
-                YT_LOG_WARNING("Failed to parse response codec from request metadata (RequestId: %v)",
-                    RequestId_);
+            if (!TryFromString(*responseCodecString, intCodecId)) {
+                YT_TLOG_WARNING("Failed to parse response codec from request metadata")
+                    .With("RequestId", RequestId_);
                 return;
             }
             auto codecId = TryCheckedEnumCast<NCompression::ECodec>(intCodecId);
             if (!codecId) {
-                YT_LOG_WARNING("Response codec is not supported (RequestId: %v, Codec: %v)",
-                    RequestId_,
-                    intCodecId);
+                YT_TLOG_WARNING("Response codec is not supported")
+                    .With("RequestId", RequestId_)
+                    .With("Codec", intCodecId);
                 return;
             }
 
@@ -734,19 +754,19 @@ private:
             RpcCredentialsExt_.emplace();
 
             if (tokenString) {
-                RpcCredentialsExt_->set_token(std::string(tokenString));
+                RpcCredentialsExt_->set_token(std::string(*tokenString));
             }
             if (sessionIdString) {
-                RpcCredentialsExt_->set_session_id(std::string(sessionIdString));
+                RpcCredentialsExt_->set_session_id(std::string(*sessionIdString));
             }
             if (sslSessionIdString) {
-                RpcCredentialsExt_->set_ssl_session_id(std::string(sslSessionIdString));
+                RpcCredentialsExt_->set_ssl_session_id(std::string(*sslSessionIdString));
             }
             if (userTicketString) {
-                RpcCredentialsExt_->set_user_ticket(std::string(userTicketString));
+                RpcCredentialsExt_->set_user_ticket(std::string(*userTicketString));
             }
             if (serviceTicketString) {
-                RpcCredentialsExt_->set_service_ticket(std::string(serviceTicketString));
+                RpcCredentialsExt_->set_service_ticket(std::string(*serviceTicketString));
             }
         }
 
@@ -884,10 +904,11 @@ private:
             }
 
             try {
-                RequestMessageBodySize_ = FromString<ui32>(messageBodySizeString);
+                RequestMessageBodySize_ = FromString<ui32>(*messageBodySizeString);
             } catch (const std::exception& ex) {
-                YT_LOG_WARNING(ex, "Failed to parse message body size from request metadata (RequestId: %v)",
-                    RequestId_);
+                YT_TLOG_WARNING("Failed to parse message body size from request metadata")
+                    .With("RequestId", RequestId_)
+                    .With(TError(ex));
                 return false;
             }
 
@@ -902,10 +923,11 @@ private:
             }
 
             try {
-                ProtocolVersion_ = TProtocolVersion::FromString(protocolVersionString);
+                ProtocolVersion_ = TProtocolVersion::FromString(*protocolVersionString);
             } catch (const std::exception& ex) {
-                YT_LOG_WARNING(ex, "Failed to parse protocol version from string (RequestId: %v)",
-                    RequestId_);
+                YT_TLOG_WARNING("Failed to parse protocol version from string")
+                    .With("RequestId", RequestId_)
+                    .With(TError(ex));
                 return false;
             }
 
@@ -915,23 +937,23 @@ private:
         void OnRequestReceived(bool success)
         {
             if (!success) {
-                YT_LOG_DEBUG("Failed to receive request body (RequestId: %v)",
-                    RequestId_);
+                YT_TLOG_DEBUG("Failed to receive request body")
+                    .With("RequestId", RequestId_);
                 Unref();
                 return;
             }
 
             if (!RequestBodyBuffer_) {
-                YT_LOG_DEBUG("Empty request body received (RequestId: %v)",
-                    RequestId_);
+                YT_TLOG_DEBUG("Empty request body received")
+                    .With("RequestId", RequestId_);
                 Unref();
                 return;
             }
 
             auto header = std::make_unique<NRpc::NProto::TRequestHeader>();
             ToProto(header->mutable_request_id(), RequestId_);
-            if (User_) {
-                header->set_user(*User_);
+            if (User_ != RootUserName) {
+                header->set_user(User_);
             }
             if (UserTag_) {
                 header->set_user_tag(*UserTag_);
@@ -969,8 +991,9 @@ private:
                     RequestMessageBodySize_,
                     !header->has_request_codec());
             } catch (const std::exception& ex) {
-                YT_LOG_DEBUG(ex, "Failed to receive request body (RequestId: %v)",
-                    RequestId_);
+                YT_TLOG_DEBUG("Failed to receive request body")
+                    .With("RequestId", RequestId_)
+                    .With(TError(ex));
                 Unref();
                 return;
             }
@@ -980,8 +1003,8 @@ private:
                 Stage_ = EServerCallStage::SendingInitialMetadata;
             }
 
-            YT_LOG_DEBUG("Request received (RequestId: %v)",
-                RequestId_);
+            YT_TLOG_DEBUG("Request received")
+                .With("RequestId", RequestId_);
 
             InitialMetadataBuilder_.Add(RequestIdMetadataKey, ToString(RequestId_));
 
@@ -1025,7 +1048,7 @@ private:
                 auto error = TError(
                     NRpc::EErrorCode::NoSuchService,
                     "Service is not registered")
-                    << TErrorAttribute("service", ServiceName_);
+                    .With("service", ServiceName_);
                 YT_LOG_WARNING(error);
 
                 auto responseMessage = CreateErrorResponseMessage(RequestId_, error);
@@ -1036,8 +1059,8 @@ private:
         void OnInitialMetadataSent(bool success)
         {
             if (!success) {
-                YT_LOG_DEBUG("Failed to send initial metadata (RequestId: %v)",
-                    RequestId_);
+                YT_TLOG_DEBUG("Failed to send initial metadata")
+                    .With("RequestId", RequestId_);
                 Unref();
                 return;
             }
@@ -1070,8 +1093,8 @@ private:
             Stage_ = EServerCallStage::SendingResponse;
             guard.Release();
 
-            YT_LOG_DEBUG("Sending response (RequestId: %v)",
-                RequestId_);
+            YT_TLOG_DEBUG("Sending response")
+                .With("RequestId", RequestId_);
 
             {
                 auto guard = Guard(TraceContextSpinLock_);
@@ -1115,7 +1138,7 @@ private:
             ops.back().op = GRPC_OP_SEND_STATUS_FROM_SERVER;
             ops.back().flags = 0;
             ops.back().reserved = nullptr;
-            ops.back().data.send_status_from_server.status = error.IsOK() ? GRPC_STATUS_OK : grpc_status_code(GenericErrorStatusCode);
+            ops.back().data.send_status_from_server.status = error.IsOK() ? GRPC_STATUS_OK : GRPC_STATUS_UNKNOWN;
             ops.back().data.send_status_from_server.status_details = error.IsOK() ? nullptr : ErrorMessageSlice_.Unwrap();
             ops.back().data.send_status_from_server.trailing_metadata_count = TrailingMetadataBuilder_.GetSize();
             ops.back().data.send_status_from_server.trailing_metadata = TrailingMetadataBuilder_.Unwrap();
@@ -1132,11 +1155,11 @@ private:
             }
 
             if (success) {
-                YT_LOG_DEBUG("Response sent (RequestId: %v)",
-                    RequestId_);
+                YT_TLOG_DEBUG("Response sent")
+                    .With("RequestId", RequestId_);
             } else {
-                YT_LOG_DEBUG("Failed to send response (RequestId: %v)",
-                    RequestId_);
+                YT_TLOG_DEBUG("Failed to send response")
+                    .With("RequestId", RequestId_);
             }
 
             Unref();
@@ -1148,12 +1171,12 @@ private:
                 if (RawCanceled_) {
                     OnCanceled();
                 } else {
-                    YT_LOG_DEBUG("Request closed (RequestId: %v)",
-                        RequestId_);
+                    YT_TLOG_DEBUG("Request closed")
+                        .With("RequestId", RequestId_);
                 }
             } else {
-                YT_LOG_DEBUG("Failed to close request (RequestId: %v)",
-                    RequestId_);
+                YT_TLOG_DEBUG("Failed to close request")
+                    .With("RequestId", RequestId_);
             }
 
             Unref();
@@ -1161,8 +1184,8 @@ private:
 
         void OnCanceled()
         {
-            YT_LOG_DEBUG("Request cancelation received (RequestId: %v)",
-                RequestId_);
+            YT_TLOG_DEBUG("Request cancelation received")
+                .With("RequestId", RequestId_);
 
             if (Service_) {
                 Service_->HandleRequestCancellation(RequestId_);

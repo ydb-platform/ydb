@@ -1,6 +1,6 @@
 #include "kqp_proxy_service_impl.h"
 
-#include <ydb/core/sys_view/common/schema.h>
+#include <ydb/core/sys_view/common/registry.h>
 
 namespace NKikimr::NKqp {
 
@@ -74,6 +74,54 @@ void TKqpSessionInfo::SerializeTo(::NKikimrKqp::TSessionInfo* proto, const TFiel
 
     if (fieldsMap.NeedField(VSessions::UserSID::ColumnId)) {  // 14
         proto->SetUserSID(ClientSID);
+    }
+
+    if (fieldsMap.NeedField(VSessions::WmPoolId::ColumnId)) { // 17
+        if (WmState) {
+            proto->SetWmPoolId(WmState->GetPoolId());
+        }
+    }
+
+    if (fieldsMap.NeedField(VSessions::WmState::ColumnId)) { // 18
+        if (WmState) {
+            using EWmState = NWorkloadManager::ISessionUpdater::EState;
+            switch(WmState->GetState()) {
+                case EWmState::NONE: {
+                    proto->SetWmState("NONE");
+                    break;
+                }
+                case EWmState::PENDING: {
+                    proto->SetWmState("PENDING");
+                    break;
+                }
+                case EWmState::DELAYED: {
+                    proto->SetWmState("DELAYED");
+                    break;
+                }
+                case EWmState::EXITED: {
+                    proto->SetWmState("EXITED");
+                    break;
+                }
+            }
+        }
+    }
+
+    if (fieldsMap.NeedField(VSessions::WmEnterTime::ColumnId)) { // 19
+        if (WmState) {
+            proto->SetWmEnterTime(WmState->GetEnterTime().MicroSeconds());
+        }
+    }
+
+    if (fieldsMap.NeedField(VSessions::WmExitTime::ColumnId)) { // 20
+        if (WmState) {
+            proto->SetWmExitTime(WmState->GetExitTime().MicroSeconds());
+        }
+    }
+
+    if (fieldsMap.NeedField(VSessions::TraceId::ColumnId)) { // 21
+        if (State == TKqpSessionInfo::EXECUTING && !TraceId.empty()) {
+            proto->SetTraceId(TraceId);
+        }
     }
 }
 

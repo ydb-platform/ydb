@@ -1,7 +1,7 @@
 #pragma once
 
 #include <util/random/random.h>
-#include <ydb/core/persqueue/utils.h>
+#include <ydb/core/persqueue/public/utils.h>
 
 #include "partition_chooser_impl__old_chooser_actor.h"
 #include "partition_chooser_impl__sm_chooser_actor.h"
@@ -100,7 +100,9 @@ const typename TBoundaryChooser<THasher>::TPartitionInfo* TBoundaryChooser<THash
     const auto keyHash = Hasher(sourceId);
     auto result = std::upper_bound(Partitions.begin(), Partitions.end(), keyHash,
                     [](const TString& value, const TPartitionInfo& partition) { return !partition.ToBound || value < partition.ToBound; });
-    Y_ABORT_UNLESS(result != Partitions.end(), "Partition not found. Maybe wrong partitions bounds. Topic '%s'", TopicName.c_str());
+    AFL_ENSURE(result != Partitions.end())
+        ("d", "Partition not found. Maybe wrong partitions bounds")
+        ("Topic", TopicName);
     return result;
 }
 

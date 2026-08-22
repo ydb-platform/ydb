@@ -3,6 +3,10 @@
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
 
+#include <ydb/library/aclib/user_context.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -27,26 +31,35 @@ public:
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
         Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
-        // Only applicable when ALTER TABLE is in the transaction
+        // AlterMoveShadow is only applicable when AlterTable or PrepareIndexValidation is in the transaction
         auto& schemeTx = tx->GetSchemeTx();
-        if (!schemeTx.HasAlterTable())
+        bool shadowDisabled = false;
+        ui64 tableId = 0;
+        if (schemeTx.HasAlterTable()) {
+            // Only applicable when ALTER TABLE has disabled ShadowData
+            const auto& alter = schemeTx.GetAlterTable();
+            shadowDisabled = (
+                alter.HasPartitionConfig() &&
+                alter.GetPartitionConfig().HasShadowData() &&
+                !alter.GetPartitionConfig().GetShadowData());
+            tableId = alter.GetId_Deprecated();
+            if (alter.HasPathId()) {
+                auto& pathId = alter.GetPathId();
+                Y_ENSURE(DataShard.GetPathOwnerId() == pathId.GetOwnerId());
+                tableId = pathId.GetLocalId();
+            }
+        } else if (schemeTx.HasPrepareIndexValidation()) {
+            const auto& snap = schemeTx.GetPrepareIndexValidation();
+            shadowDisabled = true;
+            tableId = snap.GetIndexId().GetLocalId();
+            Y_ENSURE(DataShard.GetPathOwnerId() == snap.GetIndexId().GetOwnerId());
+        } else {
             return EExecutionStatus::Executed;
+        }
 
-        // Only applicable when ALTER TABLE has disabled ShadowData
-        const auto& alter = schemeTx.GetAlterTable();
-        const bool shadowDisabled = (
-            alter.HasPartitionConfig() &&
-            alter.GetPartitionConfig().HasShadowData() &&
-            !alter.GetPartitionConfig().GetShadowData());
+        // Only applicable when tx has disabled ShadowData
         if (!shadowDisabled)
             return EExecutionStatus::Executed;
-
-        ui64 tableId = alter.GetId_Deprecated();
-        if (alter.HasPathId()) {
-            auto& pathId = alter.GetPathId();
-            Y_ENSURE(DataShard.GetPathOwnerId() == pathId.GetOwnerId());
-            tableId = pathId.GetLocalId();
-        }
 
         // Only applicable when table has ShadowData enabled
         Y_ENSURE(DataShard.GetUserTables().contains(tableId));
@@ -140,9 +153,9 @@ EExecutionStatus TAlterTableUnit::Execute(TOperation::TPtr op,
     const auto version = alterTableTx.GetTableSchemaVersion();
     Y_ENSURE(version);
 
-    LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
-               "Trying to ALTER TABLE at " << DataShard.TabletID()
-               << " version " << version);
+    YDB_LOG_INFO_CTX(ctx, "TAlterTableUnit::Execute: trying to alter table",
+        {"tabletId", DataShard.TabletID()},
+        {"version", version});
 
     TPathId tableId(DataShard.GetPathOwnerId(), alterTableTx.GetId_Deprecated());
     if (alterTableTx.HasPathId()) {
@@ -154,7 +167,7 @@ EExecutionStatus TAlterTableUnit::Execute(TOperation::TPtr op,
     auto oldInfo = DataShard.FindUserTable(tableId);
     auto newInfo = DataShard.AlterUserTable(ctx, txc, alterTableTx);
     TDataShardLocksDb locksDb(DataShard, txc);
-    DataShard.AddUserTable(tableId, newInfo, &locksDb);
+    DataShard.ReplaceUserTable(tableId, newInfo, locksDb);
 
     if (newInfo->NeedSchemaSnapshots()) {
         DataShard.AddSchemaSnapshot(tableId, version, op->GetStep(), op->GetTxId(), txc, ctx);
@@ -184,6 +197,7 @@ EExecutionStatus TAlterTableUnit::Execute(TOperation::TPtr op,
                 .WithPathId(streamPathId)
                 .WithTableId(tableId)
                 .WithSchemaVersion(newInfo->GetTableSchemaVersion())
+                .WithUserCtx(NACLib::TUserContextBuilder().WithUserSID(BUILTIN_ACL_CDC_WITHOUT_USER_SID).Build())
                 .Build();
 
             const auto& record = *recordPtr;

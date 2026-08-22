@@ -30,14 +30,14 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::PushMergeLimitToInput(T
         return node;
     }
 
-    if (AnyOf(section.Paths(), [](const TYtPath& path) { return !path.Ranges().Maybe<TCoVoid>().IsValid(); })) {
+    if (AnyOf(section.Paths(), [](const TYtPath& path) { return !path.Ranges().Maybe<TCoVoid>().IsValid() || !path.QLFilter().Maybe<TCoVoid>().IsValid(); })) {
         return node;
     }
 
     for (auto path: section.Paths()) {
         TYtPathInfo pathInfo(path);
-        // Dynamic tables don't support range selectors
-        if (pathInfo.Table->Meta->IsDynamic) {
+        // Dynamic and RLS tables don't support range selectors
+        if (pathInfo.Table->Meta->IsDynamic || pathInfo.Table->Meta->HasRLS) {
             return node;
         }
     }
@@ -301,9 +301,17 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::PushDownKeyExtract(TExp
 
                     auto updatedSectionList = Build<TYtSectionList>(ctx, innerOp.Input().Pos()).Add(updatedSection).Done();
                     auto updatedInnerOp = ctx.ChangeChild(innerOp.Ref(), TYtTransientOpBase::idx_Input, updatedSectionList.Ptr());
+                    auto innerWorld = innerOp.World().Ptr();
                     if (!syncList.empty()) {
-                        updatedInnerOp = ctx.ChangeChild(*updatedInnerOp, TYtTransientOpBase::idx_World, ApplySyncListToWorld(innerOp.World().Ptr(), syncList, ctx));
+                        innerWorld = ApplySyncListToWorld(innerWorld, syncList, ctx);
                     }
+                    if (!op.World().Ref().IsWorld()) {
+                        innerWorld = Build<TCoSync>(ctx, op.Pos())
+                            .Add(innerWorld)
+                            .Add(op.World())
+                            .Done().Ptr();
+                    }
+                    updatedInnerOp = ctx.ChangeChild(*updatedInnerOp, TYtTransientOpBase::idx_World, std::move(innerWorld));
 
                     updatedPaths.push_back(
                         Build<TYtPath>(ctx, path.Pos())
@@ -450,6 +458,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::PushDownYtMapOverSorted
             .Columns<TCoVoid>().Build()
             .Ranges<TCoVoid>().Build()
             .Stat<TCoVoid>().Build()
+            .QLFilter<TCoVoid>().Build()
             .Done();
         paths.push_back(std::move(newPath));
     }
@@ -471,4 +480,4 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::PushDownYtMapOverSorted
         .Done();
 }
 
-}  // namespace NYql
+} // namespace NYql

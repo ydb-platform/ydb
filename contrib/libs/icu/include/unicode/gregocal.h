@@ -518,7 +518,7 @@ public:
      * default implementation in Calendar.
      * @stable ICU 2.0
      */
-    virtual int32_t handleGetYearLength(int32_t eyear) const override;
+    virtual int32_t handleGetYearLength(int32_t eyear, UErrorCode& status) const override;
 
     /**
      * return the length of the given month.
@@ -674,13 +674,6 @@ public:
      * Julian day number of the Gregorian cutover
      */
     int32_t             fCutoverJulianDay;
-
-    /**
-     * Midnight, local time (using this Calendar's TimeZone) at or before the
-     * gregorianCutover. This is a pure date value with no time of day or
-     * timezone component.
-     */
-    UDate                 fNormalizedGregorianCutover;// = gregorianCutover;
 
     /**
      * The year of the gregorianCutover, with 0 representing

@@ -1,8 +1,8 @@
-# Настройка TLS
+# tls
 
-{{ ydb-short-name }} поддерживает [шифрование данных при передаче по сети](../../security/encryption/data-in-transit.md), и каждый сетевой протокол может иметь свои настройки [TLS](https://ru.wikipedia.org/wiki/Transport_Layer_Security). Этот раздел документации предоставляет справочную информацию по настройке TLS в {{ ydb-short-name }}.
+Секция `tls` настраивает параметры [TLS](https://ru.wikipedia.org/wiki/Transport_Layer_Security) для [шифрования данных при передаче по сети](../../security/encryption/data-in-transit.md) в {{ ydb-short-name }}. Каждый сетевой протокол может иметь различные настройки TLS для обеспечения безопасной связи между компонентами кластера и клиентами.
 
-## Interconnect
+## Interconnect {#interconnect}
 
 [Интерконнект акторной системы {{ ydb-short-name }}](../../concepts/glossary.md#actor-system-interconnect) — это специализированный протокол для обмена данными между узлами {{ ydb-short-name }}.
 
@@ -19,7 +19,7 @@ interconnect_config:
 
 ## {{ ydb-short-name }} в роли сервера
 
-### gRPC
+### gRPC {#grpc}
 
 [Основной API {{ ydb-short-name }}](../../reference/ydb-sdk/overview-grpc-api.md) основан на [gRPC](https://grpc.io/). Он используется для внешнего взаимодействия с клиентскими приложениями, которые работают напрямую с {{ ydb-short-name }} через [SDK](../../reference/ydb-sdk/index.md) или [CLI](../../reference/ydb-cli/index.md).
 
@@ -30,17 +30,6 @@ grpc_config:
    cert: "/opt/ydb/certs/node.crt"
    key: "/opt/ydb/certs/node.key"
    ca: "/opt/ydb/certs/ca.crt"
-```
-
-### Протокол PostgreSQL
-
-{{ ydb-short-name }} открывает отдельный сетевой порт для [протокола PostgreSQL](../../postgresql/intro.md). Этот протокол используется для внешнего взаимодействия с клиентскими приложениями, изначально разработанными для работы с [PostgreSQL](https://www.postgresql.org/).
-
-Пример включения TLS для протокола PostgreSQL:
-
-```yaml
-local_pg_wire_config:
-    ssl_certificate: "/opt/ydb/certs/node.crt"
 ```
 
 ### Протокол Kafka
@@ -107,7 +96,7 @@ auth_config:
 
 ### Федеративные запросы
 
-[Федеративные запросы](../../concepts/federated_query/index.md) позволяют {{ ydb-short-name }} выполнять запросы к различным внешним источникам данных. Использование TLS при выполнении таких запросов контролируется параметром `USE_TLS` в запросах [CREATE EXTERNAL DATA SOURCE](../../yql/reference/syntax/create-external-data-source.md). Изменения в серверной конфигурации не требуются.
+[Федеративные запросы](../../concepts/query_execution/federated_query/index.md) позволяют {{ ydb-short-name }} выполнять запросы к различным внешним источникам данных. Использование TLS при выполнении таких запросов контролируется параметром `USE_TLS` в запросах [CREATE EXTERNAL DATA SOURCE](../../yql/reference/syntax/create-external-data-source.md). Изменения в серверной конфигурации не требуются.
 
 ### Трассировка
 
@@ -127,6 +116,8 @@ tracing_config:
 
 ## Асинхронная репликация
 
-[Асинхронная репликация](../../concepts/async-replication.md) синхронизирует данные между двумя базами данных {{ ydb-short-name }}, одна из которых выступает в роли клиента для другой. Использование TLS при такой коммуникации контролируется параметром `CONNECTION_STRING` в запросах [CREATE ASYNC REPLICATION](../../yql/reference/syntax/create-async-replication.md). Для TLS-соединений используйте протокол `grpcs://`. Изменения в серверной конфигурации не требуются.
+[Асинхронная репликация](../../concepts/async-replication.md) синхронизирует данные между двумя базами данных {{ ydb-short-name }}, одна из них выступает в роли клиента по отношению к другой. Использование TLS при такой коммуникации контролируется параметром `CONNECTION_STRING` в запросах [CREATE ASYNC REPLICATION](../../yql/reference/syntax/create-async-replication.md). Для TLS-соединений используйте протокол `grpcs://`. Изменения в серверной конфигурации не требуются.
+
+При использовании пользовательского удостоверяющего центра (Certificate Authority, CA) передайте его сертификат в параметре `CA_CERT` при создании экземпляра асинхронной репликации.
 
 {% endif %}

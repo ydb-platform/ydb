@@ -3,7 +3,9 @@
 #include "yql_generic_settings.h"
 
 #include <yql/essentials/core/yql_data_provider.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
+#include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 
@@ -12,6 +14,37 @@ namespace NKikimr::NMiniKQL {
 } // namespace NKikimr::NMiniKQL
 
 namespace NYql {
+    ///
+    /// A key for a select query on a cluster table. Hash value is
+    /// calculated in a constructor and stored in a Hash field.
+    ///
+    struct TSelectKey {
+        const TString Cluster;
+        const TString Table;
+        const std::vector<TString> Columns;
+        const TString Where;
+        const size_t Hash;
+
+        TSelectKey(const TSelectKey& select) = default;
+
+        TSelectKey(const TString& Cluster, const NConnector::NApi::TSelect& select);
+
+        bool operator==(const TSelectKey& other) const = default;
+
+        TSelectKey& operator=(const TSelectKey& other) = default;
+
+        size_t CalculateHash() const;
+    };
+
+    ///
+    /// Hasher for TSelectKey
+    ///
+    struct TSelectKeyHash {
+        size_t operator()(const TSelectKey& key) const noexcept {
+            return key.Hash;
+        }
+    };
+
     struct TGenericState: public TThrRefBase {
         using TPtr = TIntrusivePtr<TGenericState>;
 
@@ -27,9 +60,12 @@ namespace NYql {
                 return ClusterName == other.ClusterName && TableName == other.TableName;
             }
 
-            explicit operator size_t() const {
-                return CombineHashes(std::hash<TString>()(ClusterName), std::hash<TString>()(TableName));
-            }
+            explicit operator size_t() const;
+
+            ///
+            /// Make a key for a select request on a cluster table
+            ///
+            TSelectKey MakeKeyFor(const NConnector::NApi::TSelect& select) const;
         };
 
         struct TTableMeta {
@@ -40,8 +76,18 @@ namespace NYql {
             NYql::TGenericDataSourceInstance DataSourceInstance;
             // External table schema
             NYql::NConnector::NApi::TSchema Schema;
+            // Deprecated
             // Contains some binary description of table splits (partitions) produced by Connector
             std::vector<NYql::NConnector::NApi::TSplit> Splits;
+            // Contains splits for a particular select
+            std::unordered_map<TSelectKey, std::vector<NYql::NConnector::NApi::TSplit>, TSelectKeyHash> SelectSplits;
+
+            bool HasSplitsForSelect(const TSelectKey& key) const;
+
+            void AttachSplitsForSelect(const TSelectKey& key,
+                                       std::vector<NYql::NConnector::NApi::TSplit>&& splits);
+
+            const std::vector<NYql::NConnector::NApi::TSplit>& GetSplitsForSelect(const TSelectKey& key) const;
         };
 
         using TGetTableResult = std::pair<const TTableMeta*, TIssues>;
@@ -52,7 +98,7 @@ namespace NYql {
             TTypeAnnotationContext* types,
             const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
             const std::shared_ptr<IDatabaseAsyncResolver>& databaseResolver,
-            const ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory,
+            const IStructuredTokenCredentialsFactory::TPtr& credentialsFactory,
             const NConnector::IClient::TPtr& genericClient,
             const TGenericGatewayConfig& gatewayConfig)
             : Types(types)
@@ -65,7 +111,11 @@ namespace NYql {
             Configuration->Init(gatewayConfig, databaseResolver, DatabaseAuth, types->Credentials);
         }
 
+        bool HasTable(const TTableAddress& tableAddress);
         void AddTable(const TTableAddress& tableAddress, TTableMeta&& tableMeta);
+        std::optional<TIssue> AttachSplitsToTable(const TTableAddress& tableAddress,
+                                                  const TSelectKey& key,
+                                                  std::vector<NYql::NConnector::NApi::TSplit>&& splits);
         TGetTableResult GetTable(const TTableAddress& tableAddress) const;
 
         TTypeAnnotationContext* Types;
@@ -78,13 +128,15 @@ namespace NYql {
 
         // key - cluster name, value - TCredentialsProviderPtr
         // It's important to cache credentials providers, because they make IO
-        // (synchronous call via Token Accessor client) during the construction.
+        // (e.g. synchronous call via Token Accessor client) during the construction.
+        // TODO: reconsider cache usefulness; TokenAccessor is part of deprecated yqv1, IAM cloud delegated auth (which also uses IO) shares singleton instance internally, "simple" providers are inexpensive
         std::unordered_map<TString, NYdb::TCredentialsProviderPtr> CredentialProviders;
-        ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
+        IStructuredTokenCredentialsFactory::TPtr CredentialsFactory;
 
         NConnector::IClient::TPtr GenericClient;
 
     private:
         THashMap<TTableAddress, TTableMeta> Tables_;
     };
+
 } // namespace NYql

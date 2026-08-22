@@ -96,7 +96,7 @@ TActorId RateLimiterAcquireUseSameMailbox(
         request.set_required(required);
         return RateLimiterAcquireUseSameMailbox(
             std::move(request),
-            reqCtx.GetDatabaseName().GetOrElse(""),
+            rlPath.DatabaseName,
             reqCtx.GetSerializedToken(),
             std::move(cb),
             ctx,
@@ -130,7 +130,7 @@ static void Fill(const TRlConfig::TOnRespAction&,
     res.push_back({Actions::OnResp, request});
 }
 
-TMaybe<TRlPath> Match(const TRlConfig& rlConfig, const THashMap<TString, TString>& attrs) {
+TMaybe<TRlPath> MakeRlPath(const TString& database, const TRlConfig& rlConfig, const THashMap<TString, TString>& attrs) {
     const auto coordinationNodeIt = attrs.find(rlConfig.CoordinationNodeKey);
     if (coordinationNodeIt == attrs.end()) {
         return {};
@@ -141,7 +141,7 @@ TMaybe<TRlPath> Match(const TRlConfig& rlConfig, const THashMap<TString, TString
         return {};
     }
 
-    return TRlPath{coordinationNodeIt->second, rlResourcePathIt->second};
+    return TRlPath{database, coordinationNodeIt->second, rlResourcePathIt->second};
 }
 
 TVector<std::pair<Actions, Ydb::RateLimiter::AcquireResourceRequest>> MakeRequests(

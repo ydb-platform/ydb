@@ -6,6 +6,7 @@ from . import issues
 _errors_retriable_fast_backoff_types = [
     issues.Unavailable,
     issues.ClientInternalError,
+    issues.SessionExpired,
 ]
 _errors_retriable_slow_backoff_types = [
     issues.Aborted,
@@ -13,6 +14,7 @@ _errors_retriable_slow_backoff_types = [
     issues.Overloaded,
     issues.SessionPoolEmpty,
     issues.ConnectionError,
+    issues.ConnectionLost,
 ]
 _errors_retriable_slow_backoff_idempotent_types = [
     issues.Undetermined,
@@ -20,6 +22,10 @@ _errors_retriable_slow_backoff_idempotent_types = [
 
 
 def check_retriable_error(err, retry_settings, attempt):
+    if isinstance(err, issues.Cancelled):
+        if retry_settings.retry_cancelled:
+            return ErrorRetryInfo(True, retry_settings.fast_backoff.calc_timeout(attempt))
+
     if isinstance(err, issues.NotFound):
         if retry_settings.retry_not_found:
             return ErrorRetryInfo(True, retry_settings.fast_backoff.calc_timeout(attempt))

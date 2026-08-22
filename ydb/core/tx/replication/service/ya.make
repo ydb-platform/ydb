@@ -6,7 +6,6 @@ PEERDIR(
     ydb/core/change_exchange
     ydb/core/fq/libs/row_dispatcher/events
     ydb/core/io_formats/cell_maker
-    ydb/core/persqueue/purecalc
     ydb/core/protos
     ydb/core/scheme
     ydb/core/scheme_types
@@ -32,7 +31,7 @@ GENERATE_ENUM_SERIALIZATION(worker.h)
 
 YQL_LAST_ABI_VERSION()
 
-IF (!OS_WINDOWS)
+IF (NOT OS_WINDOWS)
     SRCS(
         s3_writer.cpp
     )
@@ -47,7 +46,7 @@ RECURSE_FOR_TESTS(
     ut_worker
 )
 
-IF (!OS_WINDOWS)
+IF (NOT OS_WINDOWS)
     RECURSE_FOR_TESTS(
         ut_s3_writer
     )

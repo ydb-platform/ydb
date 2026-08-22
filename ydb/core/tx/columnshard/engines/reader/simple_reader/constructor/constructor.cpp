@@ -7,11 +7,10 @@
 namespace NKikimr::NOlap::NReader::NSimple {
 
 NKikimr::TConclusionStatus TIndexScannerConstructor::ParseProgram(
-    const TVersionedIndex* vIndex, const NKikimrTxDataShard::TEvKqpScan& proto, TReadDescription& read) const {
-    AFL_VERIFY(vIndex);
-    auto& indexInfo = vIndex->GetSchemaVerified(Snapshot)->GetIndexInfo();
+    const TProgramParsingContext& context, const NKikimrTxDataShard::TEvKqpScan& proto, TReadDescription& read) const {
+    auto& indexInfo = read.TableMetadataAccessor->GetSnapshotSchemaVerified(context.GetVersionedSchemas(), Snapshot)->GetIndexInfo();
     NCommon::TIndexColumnResolver columnResolver(indexInfo);
-    return TBase::ParseProgram(vIndex, proto.GetOlapProgramType(), proto.GetOlapProgram(), read, columnResolver);
+    return TBase::ParseProgram(context, proto.GetOlapProgramType(), proto.GetOlapProgram(), read, columnResolver);
 }
 
 std::vector<TNameTypeInfo> TIndexScannerConstructor::GetPrimaryKeyScheme(const NColumnShard::TColumnShard* self) const {
@@ -19,36 +18,63 @@ std::vector<TNameTypeInfo> TIndexScannerConstructor::GetPrimaryKeyScheme(const N
     return indexInfo.GetPrimaryKeyColumns();
 }
 
-NKikimr::TConclusion<std::shared_ptr<TReadMetadataBase>> TIndexScannerConstructor::DoBuildReadMetadata(
+TConclusion<std::shared_ptr<TReadMetadataBase>> TIndexScannerConstructor::DoBuildReadMetadata(
     const NColumnShard::TColumnShard* self, const TReadDescription& read) const {
-    auto& index = self->TablesManager.GetPrimaryIndex();
-    if (!index) {
-        return std::shared_ptr<TReadMetadataBase>();
+    TVersionedPresetSchemas* schemas = nullptr;
+    TVersionedPresetSchemas defaultSchemas(
+        0, self->GetStoragesManager(), self->GetTablesManager().GetSchemaObjectsCache().GetObjectPtrVerified());
+    auto* index = self->TablesManager.MutablePrimaryIndexAsOptional<TColumnEngineForLogs>();
+    if (index) {
+        schemas = &index->MutableVersionedSchemas();
+    } else {
+        schemas = &defaultSchemas;
+    }
+    if (read.TableMetadataAccessor->NeedStalenessChecker()) {
+        auto pathId = read.TableMetadataAccessor->GetPathIdVerified();
+        if (!self->MayStartScanAt(read.GetSnapshot(), pathId.GetSchemeShardLocalPathId())) {
+            return TConclusionStatus::Fail(TStringBuilder() << "Snapshot too old: " << read.GetSnapshot() << ". CS min read snapshot: "
+                                                            << self->GetMinSnapshotForNewReads() << ". now: " << TInstant::Now());
+        }
     }
 
-    if (read.GetSnapshot().GetPlanInstant() < self->GetMinReadSnapshot().GetPlanInstant()) {
-        return TConclusionStatus::Fail(TStringBuilder() << "Snapshot too old: " << read.GetSnapshot() << ". CS min read snapshot: "
-                                                        << self->GetMinReadSnapshot() << ". now: " << TInstant::Now());
-    }
+    auto readMetadata = std::make_shared<TReadMetadata>(read.TableMetadataAccessor->GetVersionedIndexCopyVerified(*schemas), read);
 
-    TDataStorageAccessor dataAccessor(index);
-    AFL_VERIFY(read.PathId);
-    auto readMetadata = std::make_shared<TReadMetadata>(index->CopyVersionedIndexPtr(), read);
-
-    auto initResult = readMetadata->Init(self, read, dataAccessor);
+    auto initResult = readMetadata->Init(self, read, EReaderClass::Simple);
     if (!initResult) {
         return initResult;
     }
     return static_pointer_cast<TReadMetadataBase>(readMetadata);
 }
 
-std::shared_ptr<NKikimr::NOlap::IScanCursor> TIndexScannerConstructor::DoBuildCursor() const {
+std::shared_ptr<IScanCursor> TIndexScannerConstructor::DoBuildCursor(const NKikimrKqp::TEvKqpScanCursor::ImplementationCase impl) const {
     switch (Sorting) {
         case ERequestSorting::ASC:
         case ERequestSorting::DESC:
-            return std::make_shared<TSimpleScanCursor>();
+            switch (impl) {
+                case NKikimrKqp::TEvKqpScanCursor::kColumnShardSimple:
+                case NKikimrKqp::TEvKqpScanCursor::IMPLEMENTATION_NOT_SET:
+                    return std::make_shared<TSimpleScanCursor>();
+                case NKikimrKqp::TEvKqpScanCursor::kDeprecatedColumnShardSimple:
+                    return std::make_shared<TDeprecatedSimpleScanCursor>();
+                case NKikimrKqp::TEvKqpScanCursor::kDeprecatedColumnShardNotSortedSimple:
+                case NKikimrKqp::TEvKqpScanCursor::kColumnShardNotSortedSimple:
+                case NKikimrKqp::TEvKqpScanCursor::kColumnShardPlain:
+                    AFL_VERIFY(false)("impl", static_cast<ui64>(impl));
+            }
+            Y_ABORT("unreachable");
         case ERequestSorting::NONE:
-            return std::make_shared<TNotSortedSimpleScanCursor>();
+            switch (impl) {
+                case NKikimrKqp::TEvKqpScanCursor::kColumnShardNotSortedSimple:
+                case NKikimrKqp::TEvKqpScanCursor::IMPLEMENTATION_NOT_SET:
+                    return std::make_shared<TNotSortedSimpleScanCursor>();
+                case NKikimrKqp::TEvKqpScanCursor::kDeprecatedColumnShardNotSortedSimple:
+                    return std::make_shared<TDeprecatedNotSortedSimpleScanCursor>();
+                case NKikimrKqp::TEvKqpScanCursor::kColumnShardSimple:
+                case NKikimrKqp::TEvKqpScanCursor::kDeprecatedColumnShardSimple:
+                case NKikimrKqp::TEvKqpScanCursor::kColumnShardPlain:
+                    AFL_VERIFY(false)("impl", static_cast<ui64>(impl));
+            }
+            Y_ABORT("unreachable");
     }
 }
 

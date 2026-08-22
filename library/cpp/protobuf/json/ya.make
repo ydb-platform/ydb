@@ -23,6 +23,10 @@ PEERDIR(
 
 END()
 
+RECURSE(
+    ordered_maps
+)
+
 RECURSE_FOR_TESTS(
     ut
 )

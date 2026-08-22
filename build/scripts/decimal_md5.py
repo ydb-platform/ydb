@@ -16,10 +16,7 @@ def print_code(checksum, func_name):
 
 
 def ensure_paths_exist(paths):
-    bad_paths = sorted(
-        path for path in paths
-        if not os.path.exists(path)
-    )
+    bad_paths = sorted(path for path in paths if not os.path.exists(path))
     if bad_paths:
         print("decimal_md5 inputs do not exist:", file=sys.stderr)
         for path in bad_paths:
@@ -28,7 +25,7 @@ def ensure_paths_exist(paths):
 
 
 def _update_digest_with_file_contents(digest, path, block_size=65535):
-    with open(path) as f:
+    with open(path, 'rb') as f:
         while True:
             block = f.read(block_size)
             if not block:
@@ -46,10 +43,7 @@ def main():
 
     args = parser.parse_args()
 
-    abs_paths = [
-        os.path.join(args.source_root, target)
-        for target in args.targets
-    ]
+    abs_paths = [os.path.join(args.source_root, target) for target in args.targets]
     ensure_paths_exist(abs_paths)
 
     if args.fixed_output:

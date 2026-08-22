@@ -1,24 +1,23 @@
 #pragma once
 
 #include <ydb/public/lib/ydb_cli/common/command.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/tx.h>
 
 #include <library/cpp/logger/priority.h>
 
 #include <util/datetime/base.h>
 
-#include <stop_token>
-
 namespace NYdb::NTPCC {
 
-constexpr int DEFAULT_WAREHOUSE_COUNT = 1;
-constexpr TDuration DEFAULT_WARMUP_DURATION = TDuration::Minutes(1); // TODO
-constexpr TDuration DEFAULT_RUN_DURATION = TDuration::Minutes(2); // TODO
+constexpr int DEFAULT_WAREHOUSE_COUNT = 10;
+constexpr TDuration DEFAULT_RUN_DURATION = TDuration::Minutes(120);
 
-constexpr int DEFAULT_MAX_SESSIONS = 100; // TODO
-constexpr int DEFAULT_THREAD_COUNT = 0; // autodetect
-constexpr int DEFAULT_LOAD_THREAD_COUNT = 10;
+constexpr int DEFAULT_MAX_SESSIONS = 0; // autodetect based on number of database compute CPUs
 
-constexpr int DEFAULT_LOG_LEVEL = 6; // TODO: properly use enum
+constexpr int DEFAULT_THREAD_COUNT = 0; // autodetect based on WAREHOUSES_PER_CPU_CORE
+constexpr int DEFAULT_LOAD_THREAD_COUNT = 0; // autodetect based on number of database compute CPUs
+
+constexpr ELogPriority DEFAULT_LOG_LEVEL = TLOG_INFO;
 
 struct TRunConfig {
     enum class EDisplayMode {
@@ -49,7 +48,7 @@ struct TRunConfig {
     void SetDisplay();
 
     int WarehouseCount = DEFAULT_WAREHOUSE_COUNT;
-    TDuration WarmupDuration = DEFAULT_WARMUP_DURATION;
+    TDuration WarmupDuration = {};
     TDuration RunDuration = DEFAULT_RUN_DURATION;
 
     int MaxInflight = DEFAULT_MAX_SESSIONS;
@@ -57,6 +56,13 @@ struct TRunConfig {
     TString Path;
 
     EFormat Format = EFormat::Pretty;
+    NQuery::TTxSettings TxMode = NQuery::TTxSettings::SerializableRW();
+
+    // mixed tx mode weights (used when MixedTxMode is true)
+    bool MixedTxMode = false;
+    double TxModeWeightSerializable = 0.0;
+    double TxModeWeightSnapshot = 0.0;
+    double TxModeWeightReadCommitted = 0.0;
 
     TString JsonResultPath;
 
@@ -67,8 +73,10 @@ struct TRunConfig {
     int DriverCount = 0;
     ELogPriority LogPriority = static_cast<ELogPriority>(DEFAULT_LOG_LEVEL);
     bool NoDelays = false;
+    bool HighResHistogram = false;
     bool ExtendedStats = false;
     bool NoTui = false;
+    bool Compact = false;
     EDisplayMode DisplayMode = EDisplayMode::None;
 
     // instead of actual transaction just async sleep and return SUCCESS
@@ -77,13 +85,14 @@ struct TRunConfig {
 
     std::chrono::duration<long long> DisplayUpdateInterval;
 
+    // used by check command only
+    bool JustImported = false;
+
     static constexpr auto SleepMsEveryIterationMainLoop = std::chrono::milliseconds(50);
     static constexpr auto DisplayUpdateTextInterval = std::chrono::seconds(5);
     static constexpr auto DisplayUpdateTuiInterval = std::chrono::seconds(1);
 };
 
 void RunSync(const NConsoleClient::TClientCommand::TConfig& connectionConfig, const TRunConfig& runConfig);
-
-std::stop_source GetGlobalInterruptSource();
 
 } // namespace NYdb::NTPCC

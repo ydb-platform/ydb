@@ -78,8 +78,8 @@ public:
             str << " VDiskId# " << *VDiskId;
         }
         str << "\n";
-        str << " HardLimit# " << HardLimit;
-        str << " Free# " << Free;
+        str << " HardLimit# " << AtomicGet(HardLimit);
+        str << " Free# " << AtomicGet(Free);
         str << " Used# " << GetUsed();
         str << " Weight# " << GetWeight();
         double occupancy;
@@ -111,6 +111,11 @@ public:
 
     bool ForceAllocate(i64 count) {
         return AtomicSub(Free, count) > AtomicGet(Black);
+    }
+
+    // The largest count TryAllocate can satisfy right now
+    i64 GetAllocatableFree() const {
+        return Max<i64>(0, AtomicGet(Free) - AtomicGet(Black) - 1);
     }
 
     // Called only from the main thread
@@ -150,8 +155,13 @@ public:
     NKikimrBlobStorage::TPDiskSpaceColor::E EstimateSpaceColor(i64 count, double *occupancy) const {
         using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
         const i64 newFree = AtomicGet(Free) - count;
+        const i64 hardLimit = AtomicGet(HardLimit);
 
-        *occupancy = HardLimit ? (double)(HardLimit - newFree) / HardLimit : 1.0;
+        if (hardLimit) {
+            *occupancy = (double)(std::max(static_cast<i64>(0), hardLimit - newFree)) / hardLimit;
+        } else {
+            *occupancy = 1.0;
+        }
 
         if (newFree > AtomicGet(Cyan)) {
             return TColor::GREEN;
@@ -174,7 +184,7 @@ public:
         }
     }
 
-    ui32 ColorFlagLimit(NKikimrBlobStorage::TPDiskSpaceColor::E color) {
+    ui32 ColorFlagLimit(NKikimrBlobStorage::TPDiskSpaceColor::E color) const {
         using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
 
         switch (color) {
@@ -199,6 +209,48 @@ public:
         }
     }
 };
+
+// The same ladder as TQuotaRecord::EstimateSpaceColor, for a pool that is a sum of several quota records
+inline NKikimrBlobStorage::TPDiskSpaceColor::E EstimateSpaceColor(const TColorLimits &limits, i64 free, i64 hardLimit,
+        double *occupancy) {
+    using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+
+    if (hardLimit) {
+        *occupancy = (double)Max<i64>(0, hardLimit - free) / hardLimit;
+    } else {
+        *occupancy = 1.0;
+    }
+
+    i64 value = 0;
+    i64 border[8];
+    size_t idx = 0;
+#define CALCULATE_COLOR(NAME) \
+    value = Max(value, limits.NAME.CalculateQuota(hardLimit)); \
+    border[idx++] = value; \
+    ++value;
+    DISK_SPACE_COLORS(CALCULATE_COLOR)
+#undef CALCULATE_COLOR
+
+    if (free > border[7]) {
+        return TColor::GREEN;
+    } else if (free > border[6]) {
+        return TColor::CYAN;
+    } else if (free > border[5]) {
+        return TColor::LIGHT_YELLOW;
+    } else if (free > border[4]) {
+        return TColor::YELLOW;
+    } else if (free > border[3]) {
+        return TColor::LIGHT_ORANGE;
+    } else if (free > border[2]) {
+        return TColor::PRE_ORANGE;
+    } else if (free > border[1]) {
+        return TColor::ORANGE;
+    } else if (free > border[0]) {
+        return TColor::RED;
+    } else {
+        return TColor::BLACK;
+    }
+}
 
 } // NPDisk
 } // NKikimr

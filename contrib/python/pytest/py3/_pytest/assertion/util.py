@@ -329,7 +329,7 @@ def _compare_eq_iterable(
     verbose: int = 0,
 ) -> List[str]:
     if verbose <= 0 and not running_on_ci():
-        return ["Use -v to get more diff"]
+        return ["Use --pytest-args=-v to get more diff"]
     # dynamic import to speedup pytest
     import difflib
 

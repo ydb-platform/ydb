@@ -17,7 +17,7 @@ struct THasRecordWithGetHandleClass<TEv, std::void_t<decltype(std::declval<TEv>(
 
 struct TCommonHandleClass {
     TCommonHandleClass() = default;
-    
+
     template <typename TEv>
     TCommonHandleClass(const TEv& ev) {
         if constexpr (THasRecordWithGetHandleClass<TEv>::value) {

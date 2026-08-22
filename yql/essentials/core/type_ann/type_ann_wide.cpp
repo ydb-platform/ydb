@@ -3,10 +3,24 @@
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 
-namespace NYql {
-namespace NTypeAnnImpl {
+
+namespace NYql::NTypeAnnImpl {
 
 namespace {
+
+bool EnsureThatWideMapStreamAllowedForBlocksOnly(bool isFlow, const TMultiExprType* multiType, const TExprNode::TPtr& input, TContext& ctx) {
+    if (!isFlow && !IsWideBlockType(*multiType)) {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "WideMap must accept stream for block types."));
+        return false;
+    }
+
+    if (isFlow && IsWideBlockType(*multiType)) {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "WideMap must accept flow for non-block types."));
+        return false;
+    }
+
+    return true;
+}
 
 const TMultiExprType* GetWideLambdaOutputType(const TExprNode& lambda, TExprContext& ctx) {
     TTypeAnnotationNode::TListType types;
@@ -24,6 +38,11 @@ IGraphTransformer::TStatus ExpandMapWrapper(const TExprNode::TPtr& input, TExprN
         return IGraphTransformer::TStatus::Error;
     }
 
+    if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Head().GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     if (!EnsureFlowType(input->Head(), ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
@@ -32,9 +51,15 @@ IGraphTransformer::TStatus ExpandMapWrapper(const TExprNode::TPtr& input, TExprN
 
     auto& lambda = input->TailRef();
 
-    const auto status = ConvertToLambda(lambda, ctx.Expr, 1U);
+    bool isUniversal;
+    const auto status = ConvertToLambda(lambda, ctx.Expr, isUniversal, 1U);
     if (status.Level != IGraphTransformer::TStatus::Ok) {
         return status;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (!UpdateLambdaAllArgumentsTypes(lambda, {itemType}, ctx.Expr)) {
@@ -54,16 +79,32 @@ IGraphTransformer::TStatus WideMapWrapper(const TExprNode::TPtr& input, TExprNod
         return IGraphTransformer::TStatus::Error;
     }
 
-    if (!EnsureWideFlowType(input->Head(), ctx.Expr)) {
+    if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Head().GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    if (!EnsureWideFlowOrStreamType(input->Head(), ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
 
-    const auto multiType = input->Head().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>();
+    const auto multiType = GetWideFlowOrStreamComponents(*input->Head().GetTypeAnn());
+    bool isFlow = input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow;
+
+    if (!EnsureThatWideMapStreamAllowedForBlocksOnly(isFlow, multiType, input, ctx)) {
+        return IGraphTransformer::TStatus::Error;
+    }
 
     auto& lambda = input->TailRef();
-    const auto status = ConvertToLambda(lambda, ctx.Expr, multiType->GetSize());
+    bool isUniversal;
+    const auto status = ConvertToLambda(lambda, ctx.Expr, isUniversal, multiType->GetSize());
     if (status.Level != IGraphTransformer::TStatus::Ok) {
         return status;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (!UpdateLambdaAllArgumentsTypes(lambda, multiType->GetItems(), ctx.Expr)) {
@@ -85,7 +126,11 @@ IGraphTransformer::TStatus WideMapWrapper(const TExprNode::TPtr& input, TExprNod
         }
     }
 
-    input->SetTypeAnn(ctx.Expr.MakeType<TFlowExprType>(GetWideLambdaOutputType(*lambda, ctx.Expr)));
+    if (isFlow) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TFlowExprType>(GetWideLambdaOutputType(*lambda, ctx.Expr)));
+    } else {
+        input->SetTypeAnn(ctx.Expr.MakeType<TStreamExprType>(GetWideLambdaOutputType(*lambda, ctx.Expr)));
+    }
     return IGraphTransformer::TStatus::Ok;
 }
 
@@ -102,8 +147,14 @@ IGraphTransformer::TStatus WideChain1MapWrapper(const TExprNode::TPtr& input, TE
 
     auto& initLambda = input->ChildRef(1U);
 
-    if (const auto status = ConvertToLambda(initLambda, ctx.Expr, multiType->GetSize()); status.Level != IGraphTransformer::TStatus::Ok) {
+    bool isUniversal;
+    if (const auto status = ConvertToLambda(initLambda, ctx.Expr, isUniversal, multiType->GetSize()); status.Level != IGraphTransformer::TStatus::Ok) {
         return status;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (!UpdateLambdaAllArgumentsTypes(initLambda, multiType->GetItems(), ctx.Expr)) {
@@ -121,8 +172,13 @@ IGraphTransformer::TStatus WideChain1MapWrapper(const TExprNode::TPtr& input, TE
     argTypes.insert(argTypes.cend(), stateTypes.cbegin(), stateTypes.cend());
 
     auto& updateLambda = input->TailRef();
-    if (const auto status = ConvertToLambda(updateLambda, ctx.Expr, argTypes.size()); status.Level != IGraphTransformer::TStatus::Ok) {
+    if (const auto status = ConvertToLambda(updateLambda, ctx.Expr, isUniversal, argTypes.size()); status.Level != IGraphTransformer::TStatus::Ok) {
         return status;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (!UpdateLambdaAllArgumentsTypes(updateLambda, argTypes, ctx.Expr)) {
@@ -149,8 +205,12 @@ IGraphTransformer::TStatus WideFilterWrapper(const TExprNode::TPtr& input, TExpr
     }
 
     if (input->ChildrenSize() > 2U) {
+        if (!EnsureComputable(input->Tail(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
         const auto expectedType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint64);
-        const auto convertStatus = TryConvertTo(input->TailRef(), *expectedType, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError);
+        const auto convertStatus = TryConvertTo(input->TailRef(), *expectedType, ctx.Expr, ctx.Types);
         if (convertStatus.Level == IGraphTransformer::TStatus::Error) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Tail().Pos()),
                 TStringBuilder() << "Mismatch 'limit' type. Expected Uint64, got: " << *input->Tail().GetTypeAnn()));
@@ -165,9 +225,15 @@ IGraphTransformer::TStatus WideFilterWrapper(const TExprNode::TPtr& input, TExpr
     const auto multiType = input->Head().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>();
 
     auto& lambda = input->ChildRef(1U);
-    const auto status = ConvertToLambda(lambda, ctx.Expr, multiType->GetSize());
+    bool isUniversal;
+    const auto status = ConvertToLambda(lambda, ctx.Expr, isUniversal, multiType->GetSize());
     if (status.Level != IGraphTransformer::TStatus::Ok) {
         return status;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (!UpdateLambdaAllArgumentsTypes(lambda, multiType->GetItems(), ctx.Expr)) {
@@ -198,9 +264,15 @@ IGraphTransformer::TStatus WideWhileWrapper(const TExprNode::TPtr& input, TExprN
     const auto multiType = input->Head().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>();
 
     auto& lambda = input->TailRef();
-    const auto status = ConvertToLambda(lambda, ctx.Expr, multiType->GetSize());
+    bool isUniversal;
+    const auto status = ConvertToLambda(lambda, ctx.Expr, isUniversal, multiType->GetSize());
     if (status.Level != IGraphTransformer::TStatus::Ok) {
         return status;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (!UpdateLambdaAllArgumentsTypes(lambda, multiType->GetItems(), ctx.Expr)) {
@@ -234,8 +306,14 @@ IGraphTransformer::TStatus WideCondense1Wrapper(const TExprNode::TPtr& input, TE
     auto& switchLambda = input->ChildRef(2U);
     auto& updateLambda = input->ChildRef(3U);
 
-    if (const auto status = ConvertToLambda(initLambda, ctx.Expr, multiType->GetSize()); status.Level != IGraphTransformer::TStatus::Ok) {
+    bool isUniversal;
+    if (const auto status = ConvertToLambda(initLambda, ctx.Expr, isUniversal, multiType->GetSize()); status.Level != IGraphTransformer::TStatus::Ok) {
         return status;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (!UpdateLambdaAllArgumentsTypes(initLambda, multiType->GetItems(), ctx.Expr)) {
@@ -257,8 +335,13 @@ IGraphTransformer::TStatus WideCondense1Wrapper(const TExprNode::TPtr& input, TE
     auto argTypes = multiType->GetItems();
     argTypes.insert(argTypes.cend(), stateTypes.cbegin(), stateTypes.cend());
 
-    if (const auto status = ConvertToLambda(switchLambda, ctx.Expr, argTypes.size()); status.Level != IGraphTransformer::TStatus::Ok) {
+    if (const auto status = ConvertToLambda(switchLambda, ctx.Expr, isUniversal, argTypes.size()); status.Level != IGraphTransformer::TStatus::Ok) {
         return status;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (!UpdateLambdaAllArgumentsTypes(switchLambda, argTypes, ctx.Expr)) {
@@ -276,8 +359,13 @@ IGraphTransformer::TStatus WideCondense1Wrapper(const TExprNode::TPtr& input, TE
         return IGraphTransformer::TStatus::Error;
     }
 
-    if (const auto status = ConvertToLambda(updateLambda, ctx.Expr, argTypes.size()); status.Level != IGraphTransformer::TStatus::Ok) {
+    if (const auto status = ConvertToLambda(updateLambda, ctx.Expr, isUniversal, argTypes.size()); status.Level != IGraphTransformer::TStatus::Ok) {
         return status;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (!UpdateLambdaAllArgumentsTypes(updateLambda, argTypes, ctx.Expr)) {
@@ -327,8 +415,14 @@ IGraphTransformer::TStatus WideCombinerWrapper(const TExprNode::TPtr& input, TEx
     auto& updateHandler = input->ChildRef(4U);
     auto& finishHandler = input->ChildRef(5U);
 
-    if (const auto status = ConvertToLambda(keyExtractor, ctx.Expr, multiType->GetSize()); status.Level != IGraphTransformer::TStatus::Ok) {
+    bool isUniversal;
+    if (const auto status = ConvertToLambda(keyExtractor, ctx.Expr, isUniversal, multiType->GetSize()); status.Level != IGraphTransformer::TStatus::Ok) {
         return status;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (!UpdateLambdaAllArgumentsTypes(keyExtractor, multiType->GetItems(), ctx.Expr)) {
@@ -355,8 +449,13 @@ IGraphTransformer::TStatus WideCombinerWrapper(const TExprNode::TPtr& input, TEx
     auto argTypes = multiType->GetItems();
     argTypes.insert(argTypes.cbegin(), keyTypes.cbegin(), keyTypes.cend());
 
-    if (const auto status = ConvertToLambda(initHandler, ctx.Expr, argTypes.size()); status.Level != IGraphTransformer::TStatus::Ok) {
+    if (const auto status = ConvertToLambda(initHandler, ctx.Expr, isUniversal, argTypes.size()); status.Level != IGraphTransformer::TStatus::Ok) {
         return status;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (!UpdateLambdaAllArgumentsTypes(initHandler, argTypes, ctx.Expr)) {
@@ -379,8 +478,13 @@ IGraphTransformer::TStatus WideCombinerWrapper(const TExprNode::TPtr& input, TEx
 
     argTypes.insert(argTypes.cend(), stateTypes.cbegin(), stateTypes.cend());
 
-    if (const auto status = ConvertToLambda(updateHandler, ctx.Expr, argTypes.size()); status.Level != IGraphTransformer::TStatus::Ok) {
+    if (const auto status = ConvertToLambda(updateHandler, ctx.Expr, isUniversal, argTypes.size()); status.Level != IGraphTransformer::TStatus::Ok) {
         return status;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (!UpdateLambdaAllArgumentsTypes(updateHandler, argTypes, ctx.Expr)) {
@@ -402,8 +506,13 @@ IGraphTransformer::TStatus WideCombinerWrapper(const TExprNode::TPtr& input, TEx
 
     argTypes.erase(argTypes.cbegin() + keyTypes.size(), argTypes.cbegin() + keyTypes.size() + multiType->GetSize());
 
-    if (const auto status = ConvertToLambda(finishHandler, ctx.Expr, argTypes.size()); status.Level != IGraphTransformer::TStatus::Ok) {
+    if (const auto status = ConvertToLambda(finishHandler, ctx.Expr, isUniversal, argTypes.size()); status.Level != IGraphTransformer::TStatus::Ok) {
         return status;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (!UpdateLambdaAllArgumentsTypes(finishHandler, argTypes, ctx.Expr)) {
@@ -423,6 +532,11 @@ IGraphTransformer::TStatus WideChopperWrapper(const TExprNode::TPtr& input, TExp
         return IGraphTransformer::TStatus::Error;
     }
 
+    if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Head().GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     if (!EnsureFlowType(input->Head(), ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
@@ -439,8 +553,14 @@ IGraphTransformer::TStatus WideChopperWrapper(const TExprNode::TPtr& input, TExp
     auto& groupSwitch = input->ChildRef(2U);
     auto& handler = input->TailRef();
 
-    if (const auto status = ConvertToLambda(keyExtractor, ctx.Expr, multiType->GetSize()); status.Level != IGraphTransformer::TStatus::Ok) {
+    bool isUniversal;
+    if (const auto status = ConvertToLambda(keyExtractor, ctx.Expr, isUniversal, multiType->GetSize()); status.Level != IGraphTransformer::TStatus::Ok) {
         return status;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (!UpdateLambdaAllArgumentsTypes(keyExtractor, multiType->GetItems(), ctx.Expr)) {
@@ -463,8 +583,13 @@ IGraphTransformer::TStatus WideChopperWrapper(const TExprNode::TPtr& input, TExp
     auto argTypes = multiType->GetItems();
     argTypes.insert(argTypes.cbegin(), keyTypes.cbegin(), keyTypes.cend());
 
-    if (const auto status = ConvertToLambda(groupSwitch, ctx.Expr, argTypes.size()); status.Level != IGraphTransformer::TStatus::Ok) {
+    if (const auto status = ConvertToLambda(groupSwitch, ctx.Expr, isUniversal, argTypes.size()); status.Level != IGraphTransformer::TStatus::Ok) {
         return status;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (!UpdateLambdaAllArgumentsTypes(groupSwitch, argTypes, ctx.Expr)) {
@@ -482,8 +607,13 @@ IGraphTransformer::TStatus WideChopperWrapper(const TExprNode::TPtr& input, TExp
     argTypes.resize(keyTypes.size());
     argTypes.emplace_back(input->Head().GetTypeAnn());
 
-    if (const auto status = ConvertToLambda(handler, ctx.Expr, argTypes.size()); status.Level != IGraphTransformer::TStatus::Ok) {
+    if (const auto status = ConvertToLambda(handler, ctx.Expr, isUniversal, argTypes.size()); status.Level != IGraphTransformer::TStatus::Ok) {
         return status;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (!UpdateLambdaAllArgumentsTypes(handler, argTypes, ctx.Expr)) {
@@ -511,6 +641,11 @@ IGraphTransformer::TStatus NarrowMapWrapper(const TExprNode::TPtr& input, TExprN
         return IGraphTransformer::TStatus::Error;
     }
 
+    if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Head().GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     if (!EnsureWideFlowType(input->Head(), ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
@@ -518,9 +653,15 @@ IGraphTransformer::TStatus NarrowMapWrapper(const TExprNode::TPtr& input, TExprN
     const auto multiType = input->Head().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>();
 
     auto& lambda = input->TailRef();
-    const auto status = ConvertToLambda(lambda, ctx.Expr, multiType->GetSize());
+    bool isUniversal;
+    const auto status = ConvertToLambda(lambda, ctx.Expr, isUniversal, multiType->GetSize());
     if (status.Level != IGraphTransformer::TStatus::Ok) {
         return status;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (!UpdateLambdaAllArgumentsTypes(lambda, multiType->GetItems(), ctx.Expr)) {
@@ -545,6 +686,11 @@ IGraphTransformer::TStatus NarrowMultiMapWrapper(const TExprNode::TPtr& input, T
         return IGraphTransformer::TStatus::Error;
     }
 
+    if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Head().GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     if (!EnsureWideFlowType(input->Head(), ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
@@ -552,9 +698,15 @@ IGraphTransformer::TStatus NarrowMultiMapWrapper(const TExprNode::TPtr& input, T
     const auto multiType = input->Head().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>();
 
     auto& lambda = input->TailRef();
-    const auto status = ConvertToLambda(lambda, ctx.Expr, multiType->GetSize());
+    bool isUniversal;
+    const auto status = ConvertToLambda(lambda, ctx.Expr, isUniversal, multiType->GetSize());
     if (status.Level != IGraphTransformer::TStatus::Ok) {
         return status;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (lambda->ChildrenSize() < 3U) {
@@ -599,9 +751,15 @@ IGraphTransformer::TStatus NarrowFlatMapWrapper(const TExprNode::TPtr& input, TE
     const auto multiType = input->Head().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>();
 
     auto& lambda = input->TailRef();
-    const auto status = ConvertToLambda(lambda, ctx.Expr, multiType->GetSize());
+    bool isUniversal;
+    const auto status = ConvertToLambda(lambda, ctx.Expr, isUniversal, multiType->GetSize());
     if (status.Level != IGraphTransformer::TStatus::Ok) {
         return status;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (!UpdateLambdaAllArgumentsTypes(lambda, multiType->GetItems(), ctx.Expr)) {
@@ -639,8 +797,14 @@ IGraphTransformer::TStatus WideTopWrapper(const TExprNode::TPtr& input, TExprNod
     }
 
     const auto& types = input->Head().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>()->GetItems();
-    if (!ValidateWideTopKeys(input->Tail(), types, ctx.Expr)) {
+    bool isUniversal;
+    if (!ValidateWideTopKeys(input->Tail(), types, ctx.Expr, isUniversal)) {
         return IGraphTransformer::TStatus::Error;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     output = input;
@@ -659,15 +823,27 @@ IGraphTransformer::TStatus WideSortWrapper(const TExprNode::TPtr& input, TExprNo
     }
 
     const auto& types = input->Head().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>()->GetItems();
-    if (!ValidateWideTopKeys(input->Tail(), types, ctx.Expr)) {
+    bool isUniversal;
+    if (!ValidateWideTopKeys(input->Tail(), types, ctx.Expr, isUniversal)) {
         return IGraphTransformer::TStatus::Error;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     input->SetTypeAnn(input->Head().GetTypeAnn());
     return IGraphTransformer::TStatus::Ok;
 }
 
-bool ValidateWideTopKeys(TExprNode& keys, const TTypeAnnotationNode::TListType& types, TExprContext& ctx) {
+bool ValidateWideTopKeys(TExprNode& keys, const TTypeAnnotationNode::TListType& types, TExprContext& ctx, bool& isUniversal) {
+    isUniversal = false;
+    if (keys.GetTypeAnn() && keys.GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        isUniversal = true;
+        return true;
+    }
+
     if (!(EnsureTupleMinSize(keys, 1U, ctx) && EnsureTupleMaxSize(keys, types.size(), ctx))) {
         return false;
     }
@@ -678,8 +854,12 @@ bool ValidateWideTopKeys(TExprNode& keys, const TTypeAnnotationNode::TListType& 
             return false;
         }
 
-        if (!EnsureAtom(item->Head(), ctx)) {
+        if (!EnsureAtomOrUniversal(item->Head(), ctx, isUniversal)) {
             return false;
+        }
+
+        if (isUniversal) {
+            return true;
         }
 
         if (ui32 index; TryFromString(item->Head().Content(), index)) {
@@ -710,5 +890,5 @@ bool ValidateWideTopKeys(TExprNode& keys, const TTypeAnnotationNode::TListType& 
     return true;
 }
 
-} // namespace NTypeAnnImpl
-}
+} // namespace NYql::NTypeAnnImpl
+

@@ -45,6 +45,12 @@ NApi::IClientPtr CreateHedgingClient(const THedgingClientOptionsPtr& config);
 
 //! Method for creating HedgingClient with given options and ability to use penalty updater policy.
 //! Currently for experimental usage.
+NApi::IClientPtr CreateHedgingClient(
+    const THedgingClientOptionsPtr& config,
+    const IPenaltyProviderPtr& penaltyProvider,
+    const NApi::TClientOptions& clientOptions);
+
+//! Shortcut to create client with client config from env variables.
 NApi::IClientPtr CreateHedgingClient(const THedgingClientOptionsPtr& config, const IPenaltyProviderPtr& penaltyProvider);
 
 //! Method for creating HedgingClient with given rpc clients config and preinitialized clients.

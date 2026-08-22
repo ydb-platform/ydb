@@ -3,6 +3,8 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_log.h>
 #include <ydb/core/control/lib/immediate_control_board_wrapper.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_SYNCER
+
 namespace NKikimr {
 
     class TSyncBroker : public TActorBootstrapped<TSyncBroker> {
@@ -43,11 +45,11 @@ namespace NKikimr {
                 it->second.insert(actorId);
                 Send(actorId, new TEvSyncToken);
 
-                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_SYNCER,
-                    "TEvQuerySyncToken, VDisk actor id: " << vDiskActorId <<
-                    ", actor id: " << actorId <<
-                    ", token sent, active: " << Active.size() <<
-                    ", waiting: " << WaitQueue.size());
+                YDB_LOG_DEBUG("TEvQuerySyncToken, token sent (1): VDisk actor actor",
+                    {"id", vDiskActorId},
+                    {"actorId", actorId},
+                    {"active", Active.size()},
+                    {"waiting", WaitQueue.size()});
                 return;
             }
 
@@ -57,11 +59,11 @@ namespace NKikimr {
                 Active[vDiskActorId].insert(actorId);
                 Send(actorId, new TEvSyncToken);
 
-                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_SYNCER,
-                    "TEvQuerySyncToken, VDisk actor id: " << vDiskActorId <<
-                    ", actor id: " << actorId <<
-                    ", token sent, active: " << Active.size() <<
-                    ", waiting: " << WaitQueue.size());
+                YDB_LOG_DEBUG("TEvQuerySyncToken, token sent (2): VDisk actor actor",
+                    {"id", vDiskActorId},
+                    {"actorId", actorId},
+                    {"active", Active.size()},
+                    {"waiting", WaitQueue.size()});
                 return;
             }
 
@@ -72,40 +74,48 @@ namespace NKikimr {
             if (const auto it = std::find_if(WaitQueue.begin(), WaitQueue.end(), pred); it != WaitQueue.end()) {
                 it->ActorIds.insert(actorId);
 
-                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_SYNCER,
-                    "TEvQuerySyncToken, VDisk actor id: " << vDiskActorId <<
-                    ", actor id: " << actorId <<
-                    ", enqueued, active: " << Active.size() <<
-                    ", waiting: " << WaitQueue.size());
+                YDB_LOG_DEBUG("TEvQuerySyncToken, enqueued (1): VDisk actor actor",
+                    {"id", vDiskActorId},
+                    {"actorId", actorId},
+                    {"active", Active.size()},
+                    {"waiting", WaitQueue.size()});
                 return;
             }
-            
+
             TWaitSync sync{vDiskActorId, {actorId}};
             WaitQueue.emplace_back(std::move(sync));
 
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_SYNCER,
-                "TEvQuerySyncToken, VDisk actor id: " << vDiskActorId <<
-                ", actor id: " << actorId <<
-                ", enqueued, active: " << Active.size() <<
-                ", waiting: " << WaitQueue.size());
+            YDB_LOG_DEBUG("TEvQuerySyncToken, enqueued (2): VDisk actor actor",
+                {"id", vDiskActorId},
+                {"actorId", actorId},
+                {"active", Active.size()},
+                {"waiting", WaitQueue.size()});
         }
 
         void ProcessQueue() {
             const auto limit = (ui64)MaxInProgressSyncCount;
+            bool processed = false;
 
             while (!WaitQueue.empty() && (!limit || Active.size() < limit)) {
                 const auto& waitSync = WaitQueue.front();
                 for (const auto& actorId : waitSync.ActorIds) {
                     Send(actorId, new TEvSyncToken);
 
-                    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_SYNCER,
-                        "ProcessQueue(), VDisk actor id: " << waitSync.VDiskActorId <<
-                        ", actor id: " << actorId <<
-                        ", token sent, active: " << Active.size() <<
-                        ", waiting: " << WaitQueue.size());
+                    YDB_LOG_DEBUG("ProcessQueue(), token sent: VDisk actor actor",
+                        {"id", waitSync.VDiskActorId},
+                        {"actorId", actorId},
+                        {"active", Active.size()},
+                        {"waiting", WaitQueue.size()});
                 }
                 Active[waitSync.VDiskActorId] = std::move(waitSync.ActorIds);
                 WaitQueue.pop_front();
+                processed = true;
+            }
+
+            if (processed) {
+                YDB_LOG_DEBUG("ProcessQueue() done",
+                    {"active", Active.size()},
+                    {"waiting", WaitQueue.size()});
             }
         }
 
@@ -115,17 +125,16 @@ namespace NKikimr {
 
             if (const auto it = Active.find(vDiskActorId); it != Active.end()) {
                 it->second.erase(actorId);
-
-                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_SYNCER,
-                    "TEvReleaseSyncToken, VDisk actor id: " << vDiskActorId <<
-                    ", actor id: " << actorId <<
-                    ", token released, active: " << Active.size() <<
-                    ", waiting: " << WaitQueue.size());
-
                 if (it->second.empty()) {
                     Active.erase(vDiskActorId);
                     ProcessQueue();
                 }
+
+                YDB_LOG_DEBUG("TEvReleaseSyncToken, token released: VDisk actor actor",
+                    {"id", vDiskActorId},
+                    {"actorId", actorId},
+                    {"active", Active.size()},
+                    {"waiting", WaitQueue.size()});
                 return;
             }
 
@@ -139,11 +148,11 @@ namespace NKikimr {
                     WaitQueue.erase(it);
                 }
 
-                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_SYNCER,
-                    "TEvReleaseSyncToken, VDisk actor id: " << vDiskActorId <<
-                    ", actor id: " << actorId <<
-                    ", removed from queue, active: " << Active.size() <<
-                    ", waiting: " << WaitQueue.size());
+                YDB_LOG_DEBUG("TEvReleaseSyncToken, removed from queue: VDisk actor actor",
+                    {"id", vDiskActorId},
+                    {"actorId", actorId},
+                    {"active", Active.size()},
+                    {"waiting", WaitQueue.size()});
             }
         }
 

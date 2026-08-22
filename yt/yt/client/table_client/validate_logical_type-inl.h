@@ -228,7 +228,7 @@ void ValidateSimpleLogicalType(TStringBuf value)
 
             using TInt = TUnderlyingTimestampIntegerType<underlyingDateType>;
 
-            const auto& [timestamp, tzName] = NTzTypes::ParseTzValue<TInt>(value);
+            const auto& [timestamp, tzId] = NTzTypes::ParseTzValue<TInt>(value);
 
             try {
                 if constexpr (std::is_signed_v<TInt>) {
@@ -237,17 +237,17 @@ void ValidateSimpleLogicalType(TStringBuf value)
                     ValidateSimpleLogicalType<underlyingDateType>(static_cast<ui64>(timestamp));
                 }
             } catch (const std::exception& ex) {
-                THROW_ERROR_EXCEPTION("Cannot validate underlying timestamp of %Qv type", type)
-                    << ex;
+                THROW_ERROR_EXCEPTION("Cannot validate underlying timestamp of %Qlv type", type)
+                    .With(ex);
             }
 
-            NTzTypes::ValidateTzName(tzName);
+            NTzTypes::ValidateTzId(tzId);
         } catch (const std::exception& ex) {
             THROW_ERROR_EXCEPTION(
                 NTableClient::EErrorCode::SchemaViolation,
-                "Not a valid timezone time")
-                << TErrorAttribute("value", value)
-                << ex;
+                "Not a valid timezone type")
+                .With("value", value)
+                .With(ex);
         }
     } else {
         static_assert(type == ESimpleLogicalValueType::String, "Bad logical type");

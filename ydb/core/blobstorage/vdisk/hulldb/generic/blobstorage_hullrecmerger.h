@@ -137,10 +137,9 @@ namespace NKikimr {
         using TBase::AddBasic;
 
     public:
-        TCompactRecordMerger(TBlobStorageGroupType gtype, bool addHeader)
+        TCompactRecordMerger(TBlobStorageGroupType gtype, EBlobHeaderMode blobHeaderMode)
             : TBase(gtype, true)
-            , AddHeader(addHeader)
-            , DataMerger(gtype, addHeader)
+            , DataMerger(gtype, blobHeaderMode)
         {}
 
         void Clear() {
@@ -209,7 +208,6 @@ namespace NKikimr {
         }
 
     protected:
-        const bool AddHeader;
         TDataMerger DataMerger;
         TKey Key;
         bool ExternalDataStage = false;
@@ -254,7 +252,7 @@ namespace NKikimr {
                     if (memRec.GetType() == TBlobType::DiskBlob) {
                         // don't deduplicate inplaced data
                         if (!v.Empty()) {
-                            (*Callback)(extr.SwearOne(), v);
+                            (*Callback)(extr.SwearOne(), v, false);
                         }
                     } else if (memRec.GetType() == TBlobType::HugeBlob) {
                         Y_ABORT_UNLESS(v.CountBits() == 1u);
@@ -340,7 +338,7 @@ namespace NKikimr {
 
             void Finish(TCallback *callback) {
                 for (ui8 i = ResParts.FirstPosition(); i != ResParts.GetSize(); i = ResParts.NextPosition(i)) {
-                    (*callback)(Res[i].Part, NMatrix::TVectorType::MakeOneHot(i, ResParts.GetSize()));
+                    (*callback)(Res[i].Part, NMatrix::TVectorType::MakeOneHot(i, ResParts.GetSize()), true);
                 }
             }
 

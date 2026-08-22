@@ -5,6 +5,8 @@
 #include "msgbus_http_server.h"
 #include "grpc_server.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::MSGBUS_REQUEST
+
 namespace NKikimr {
 namespace NMsgBusProxy {
 
@@ -17,6 +19,14 @@ public:
     virtual TVector<TStringBuf> FindClientCert() const = 0;
     virtual THolder<TMessageBusSessionIdentHolder::TImpl> CreateSessionIdentHolder() = 0;
     virtual TString GetPeerName() const = 0;
+
+    // If ticket parser authentication/authorization is already done, returns the internal token.
+    // In real life this happens only in case of grpc requests that is done through proxy (TImplNoOpGrpc)
+    virtual TIntrusiveConstPtr<NACLib::TUserToken> GetInternalToken() const {
+        return {};
+    }
+
+    virtual void SetFinishAction(std::function<void()>&& cb) = 0;
 };
 
 class TBusMessageContext::TImplMessageBus
@@ -71,17 +81,20 @@ public:
     }
 
     THolder<TMessageBusSessionIdentHolder::TImpl> CreateSessionIdentHolder() override;
+
+    void SetFinishAction(std::function<void()>&& /*cb*/) override {
+    }
 };
 
-class TBusMessageContext::TImplGRpc
+class TBusMessageContext::TImplNoOpGrpc
     : public TBusMessageContext::TImpl
 {
-    NGRpcProxy::IRequestContext *RequestContext;
+    std::unique_ptr<NGRpcService::IRequestNoOpCtx> RequestContext;
     THolder<NBus::TBusMessage> Message;
 
 public:
-    TImplGRpc(NGRpcProxy::IRequestContext *requestContext, int type)
-        : RequestContext(requestContext)
+    TImplNoOpGrpc(std::unique_ptr<NGRpcService::IRequestNoOpCtx> requestContext, int type)
+        : RequestContext(std::move(requestContext))
     {
         switch (type) {
 #define MTYPE(TYPE) \
@@ -128,13 +141,11 @@ public:
         Y_ABORT();
     }
 
-    ~TImplGRpc() {
-        ForgetRequest();
-    }
+    ~TImplNoOpGrpc() = default;
 
     void ForgetRequest() {
         if (RequestContext) {
-            RequestContext->ReplyError("request wasn't processed properly");
+            RequestContext->ReplyWithRpcStatus(grpc::StatusCode::INTERNAL, "request wasn't processed properly");
             RequestContext = nullptr;
         }
     }
@@ -154,7 +165,7 @@ public:
             case TYPE::MessageType: { \
                 auto *msg = dynamic_cast<TYPE *>(resp); \
                 Y_ABORT_UNLESS(msg); \
-                RequestContext->Reply(msg->Record); \
+                RequestContext->Reply(&msg->Record, Ydb::StatusIds::SUCCESS); \
                 break; \
             }
 
@@ -163,6 +174,7 @@ public:
             REPLY_OPTION(TBusCmsResponse)
             REPLY_OPTION(TBusSqsResponse)
             REPLY_OPTION(TBusConsoleResponse)
+#undef REPLY_OPTION
 
             default:
                 Y_ABORT("unexpected response type %" PRIu32, type);
@@ -181,7 +193,15 @@ public:
     THolder<TMessageBusSessionIdentHolder::TImpl> CreateSessionIdentHolder() override;
 
     TString GetPeerName() const override {
-        return RequestContext->GetPeer();
+        return RequestContext->GetPeerName();
+    }
+
+    TIntrusiveConstPtr<NACLib::TUserToken> GetInternalToken() const override {
+        return RequestContext->GetInternalToken();
+    }
+
+    void SetFinishAction(std::function<void()>&& cb) override {
+        RequestContext->SetFinishAction(std::move(cb));
     }
 };
 
@@ -196,8 +216,8 @@ TBusMessageContext::TBusMessageContext(NBus::TOnMessageContext &messageContext, 
     : Impl(new TImplMessageBus(messageContext, messageWatcher))
 {}
 
-TBusMessageContext::TBusMessageContext(NGRpcProxy::IRequestContext *requestContext, int type)
-    : Impl(new TImplGRpc(requestContext, type))
+TBusMessageContext::TBusMessageContext(std::unique_ptr<NGRpcService::IRequestNoOpCtx> requestContext, int type)
+    : Impl(new TImplNoOpGrpc(std::move(requestContext), type))
 {}
 
 TBusMessageContext::~TBusMessageContext()
@@ -244,7 +264,11 @@ public:
     virtual void SendReplyMove(NBus::TBusMessageAutoPtr resp) = 0;
     virtual ui64 GetTotalTimeout() const = 0;
     virtual TVector<TStringBuf> FindClientCert() const = 0;
-
+    // If ticket parser authentication/authorization is already done, returns the internal token.
+    virtual TIntrusiveConstPtr<NACLib::TUserToken> GetInternalToken() const {
+        return {};
+    }
+    virtual void SetFinishAction(std::function<void()>&& cb) = 0;
 };
 
 class TMessageBusSessionIdentHolder::TImplMessageBus
@@ -288,28 +312,27 @@ public:
     TVector<TStringBuf> FindClientCert() const override {
         return {};
     }
+
+    void SetFinishAction(std::function<void()>&& /*cb*/) override {
+    }
 };
 
 THolder<TMessageBusSessionIdentHolder::TImpl> TBusMessageContext::TImplMessageBus::CreateSessionIdentHolder() {
     return MakeHolder<TMessageBusSessionIdentHolder::TImplMessageBus>(static_cast<NBus::TOnMessageContext&>(*this));
 }
 
-class TMessageBusSessionIdentHolder::TImplGRpc
+class TMessageBusSessionIdentHolder::TImplNoOpGrpc
     : public TMessageBusSessionIdentHolder::TImpl
 {
-    TIntrusivePtr<TBusMessageContext::TImplGRpc> Context;
+    TIntrusivePtr<TBusMessageContext::TImplNoOpGrpc> Context;
 
 public:
-    TImplGRpc(TIntrusivePtr<TBusMessageContext::TImplGRpc> context)
+    TImplNoOpGrpc(TIntrusivePtr<TBusMessageContext::TImplNoOpGrpc> context)
         : Context(context)
     {
     }
 
-    ~TImplGRpc() {
-        if (Context) {
-            Context->ForgetRequest();
-        }
-    }
+    ~TImplNoOpGrpc() = default;
 
     void SendReply(NBus::TBusMessage *resp) override {
         Y_ABORT_UNLESS(Context);
@@ -332,10 +355,18 @@ public:
     ui64 GetTotalTimeout() const override {
         return 90000;
     }
+
+    TIntrusiveConstPtr<NACLib::TUserToken> GetInternalToken() const override {
+        return Context->GetInternalToken();
+    }
+
+    void SetFinishAction(std::function<void()>&& cb) override {
+        Context->SetFinishAction(std::move(cb));
+    }
 };
 
-THolder<TMessageBusSessionIdentHolder::TImpl> TBusMessageContext::TImplGRpc::CreateSessionIdentHolder() {
-    return MakeHolder<TMessageBusSessionIdentHolder::TImplGRpc>(this);
+THolder<TMessageBusSessionIdentHolder::TImpl> TBusMessageContext::TImplNoOpGrpc::CreateSessionIdentHolder() {
+    return MakeHolder<TMessageBusSessionIdentHolder::TImplNoOpGrpc>(this);
 }
 
 TMessageBusSessionIdentHolder::TMessageBusSessionIdentHolder()
@@ -370,6 +401,15 @@ void TMessageBusSessionIdentHolder::SendReplyMove(NBus::TBusMessageAutoPtr resp)
 
 TVector<TStringBuf> TMessageBusSessionIdentHolder::FindClientCert() const {
     return Impl->FindClientCert();
+}
+
+TIntrusiveConstPtr<NACLib::TUserToken> TMessageBusSessionIdentHolder::GetInternalToken() const {
+    Y_ABORT_UNLESS(Impl);
+    return Impl->GetInternalToken();
+}
+
+void TMessageBusSessionIdentHolder::SetFinishAction(std::function<void()>&& cb) {
+    Impl->SetFinishAction(std::move(cb));
 }
 
 
@@ -538,11 +578,12 @@ void TMessageBusServer::OnMessage(TBusMessageContext &msg) {
 void TMessageBusServer::OnError(TAutoPtr<NBus::TBusMessage> msg, NBus::EMessageStatus status) {
     if (ActorSystem) {
         if (status == NBus::MESSAGE_SHUTDOWN) {
-            LOG_DEBUG_S(*ActorSystem, NKikimrServices::MSGBUS_REQUEST, "Msgbus client disconnected before reply was sent"
-                    << " msg# " << msg->Describe());
+            YDB_LOG_DEBUG_CTX(*ActorSystem, "Msgbus client disconnected before reply was sent",
+                {"msg", msg->Describe()});
         } else {
-            LOG_ERROR_S(*ActorSystem, NKikimrServices::MSGBUS_REQUEST, "Failed to send reply over msgbus status# " << status
-                    << " msg# " << msg->Describe());
+            YDB_LOG_ERROR_CTX(*ActorSystem, "Failed to send reply over msgbus",
+                {"status", status},
+                {"msg", msg->Describe()});
         }
     }
 }

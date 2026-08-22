@@ -8,9 +8,9 @@
 
 #include <yt/yt/core/ytree/public.h>
 
-#include <yt/yt/core/misc/property.h>
-
 #include <library/cpp/yt/compact_containers/compact_flat_map.h>
+
+#include <library/cpp/yt/misc/property.h>
 
 #include <library/cpp/yt/string/format.h>
 
@@ -22,10 +22,10 @@ namespace NProto {
 
 bool HasInvalidDataWeight(const TDataStatistics& statistics);
 
-TDataStatistics& operator += (TDataStatistics& lhs, const TDataStatistics& rhs);
+TDataStatistics& operator+=(TDataStatistics& lhs, const TDataStatistics& rhs);
 TDataStatistics  operator +  (const TDataStatistics& lhs, const TDataStatistics& rhs);
 
-bool operator == (const TDataStatistics& lhs, const TDataStatistics& rhs);
+bool operator==(const TDataStatistics& lhs, const TDataStatistics& rhs);
 
 void Serialize(const TDataStatistics& statistics, NYson::IYsonConsumer* consumer);
 

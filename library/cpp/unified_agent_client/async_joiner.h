@@ -17,6 +17,19 @@ namespace NUnifiedAgent {
             return result;
         }
 
+        // UNIFIEDAGENT-1489: Safe variant of Ref() that does not abort. Returns false if already
+        // joined (Refs < 1), e.g. when another thread has called Join() before this ran. Callers
+        // (e.g. TLocalTimersQueue::CommitTimer) use this to bail out gracefully instead of crashing.
+        inline bool TryRef(i64 count = 1) noexcept {
+            i64 current = Refs.load();
+            do {
+                if (current < 1) {
+                    return false;
+                }
+            } while (!Refs.compare_exchange_weak(current, current + count));
+            return true;
+        }
+
         inline i64 UnRef() noexcept {
             const auto prev = Refs.fetch_sub(1);
             Y_ABORT_UNLESS(prev >= 1);

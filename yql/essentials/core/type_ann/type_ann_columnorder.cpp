@@ -4,8 +4,8 @@
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_join.h>
 
-namespace NYql {
-namespace NTypeAnnImpl {
+
+namespace NYql::NTypeAnnImpl {
 
 namespace {
 void FilterColumnOrderByType(TColumnOrder& columnOrder, const TTypeAnnotationNode& type) {
@@ -41,12 +41,62 @@ void AddPrefix(TColumnOrder& columnOrder, const TString& prefix) {
 
 } // namespace
 
+TMaybe<TColumnOrder> InferOrderForUnionAll(
+    const TTypeAnnotationNode* resultType,
+    const TExprNode::TListType& children,
+    TTypeAnnotationContext& ctx)
+{
+    YQL_ENSURE(!children.empty());
+
+    auto common = ctx.LookupColumnOrder(*children[0]);
+    if (!common) {
+        return Nothing();
+    }
+
+    for (ui32 i = 1; i < children.size(); i++) {
+        auto input = children[i];
+        auto current = ctx.LookupColumnOrder(*input);
+        if (!current) {
+            return Nothing();
+        }
+
+        bool truncated = false;
+        for (size_t i = 0; i < Min(common->Size(), current->Size()); ++i) {
+            if (current->at(i).LogicalName != common->at(i).LogicalName) {
+                common->Shrink(i);
+                truncated = true;
+                break;
+            }
+        }
+        if (!truncated && current->Size() > common->Size()) {
+            common = current;
+        }
+    }
+
+    if (common->Size() > 0) {
+        auto allColumns = GetColumnsOfStructOrSequenceOfStruct(*resultType);
+        for (auto& [col, gen_col] : *common) {
+            auto it = allColumns.find(gen_col);
+            YQL_ENSURE(it != allColumns.end());
+            allColumns.erase(it);
+        }
+
+        for (auto& remain : allColumns) {
+            common->AddColumn(TString(remain));
+        }
+
+        return *common;
+    }
+
+    return Nothing();
+}
+
 IGraphTransformer::TStatus OrderForPgSetItem(const TExprNode::TPtr& node, TExprNode::TPtr& output, TExtContext& ctx) {
     Y_UNUSED(output);
     if (node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Unit) {
         return IGraphTransformer::TStatus::Ok;
     }
-    
+
     TColumnOrder columnOrder;
     auto result = GetSetting(node->Tail(), "result");
     auto emitPgStar = GetSetting(node->Tail(), "emit_pg_star");
@@ -169,44 +219,14 @@ IGraphTransformer::TStatus OrderForMergeExtend(const TExprNode::TPtr& node, TExp
 
 IGraphTransformer::TStatus OrderForUnionAll(const TExprNode::TPtr& node, TExprNode::TPtr& output, TExtContext& ctx) {
     Y_UNUSED(output);
-    YQL_ENSURE(node->ChildrenSize());
-    auto common = ctx.Types.LookupColumnOrder(node->Head());
-    if (!common) {
-        return IGraphTransformer::TStatus::Ok;
-    }
 
-    for (ui32 i = 1; i < node->ChildrenSize(); i++) {
-        auto input = node->Child(i);
-        auto current = ctx.Types.LookupColumnOrder(*input);
-        if (!current) {
-            return IGraphTransformer::TStatus::Ok;
-        }
+    auto columnOrder = InferOrderForUnionAll(
+        node->GetTypeAnn(),
+        node->ChildrenList(),
+        ctx.Types);
 
-        bool truncated = false;
-        for (size_t i = 0; i < Min(common->Size(), current->Size()); ++i) {
-            if (current->at(i).LogicalName != common->at(i).LogicalName) {
-                common->Shrink(i);
-                truncated = true;
-                break;
-            }
-        }
-        if (!truncated && current->Size() > common->Size()) {
-            common = current;
-        }
-    }
-
-    if (common->Size() > 0) {
-        auto allColumns = GetColumnsOfStructOrSequenceOfStruct(*node->GetTypeAnn());
-        for (auto& [col, gen_col] : *common) {
-            auto it = allColumns.find(gen_col);
-            YQL_ENSURE(it != allColumns.end());
-            allColumns.erase(it);
-        }
-
-        for (auto& remain : allColumns) {
-            common->AddColumn(TString(remain));
-        }
-        return ctx.Types.SetColumnOrder(*node, *common, ctx.Expr);
+    if (columnOrder) {
+        return ctx.Types.SetColumnOrder(*node, *columnOrder, ctx.Expr);
     }
 
     return IGraphTransformer::TStatus::Ok;
@@ -315,5 +335,4 @@ IGraphTransformer::TStatus OrderFromFirstAndOutputType(const TExprNode::TPtr& no
     return IGraphTransformer::TStatus::Ok;
 }
 
-} // namespace NTypeAnnImpl
-} // namespace NYql
+} // namespace NYql::NTypeAnnImpl

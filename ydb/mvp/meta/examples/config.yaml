@@ -1,0 +1,12 @@
+generic:
+  access_service_type: "nebius_v1"
+  auth:
+    token_file: ydb/mvp/core/examples/token_file.pb.txt
+
+meta:
+  # YDB endpoint of Meta DB cluster used by meta handlers.
+  meta_api_endpoint: grpc://meta.ydb.example.net:2135
+  # Meta database path.
+  meta_database: /Root/meta
+  # Token must be defined in generic.auth.tokens.oauth2_exchange (see core/examples/federated_config.yaml).
+  meta_database_token_name: "federated-token"

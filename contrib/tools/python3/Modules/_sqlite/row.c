@@ -21,6 +21,10 @@
  * 3. This notice may not be removed or altered from any source distribution.
  */
 
+#ifndef Py_BUILD_CORE_BUILTIN
+#  define Py_BUILD_CORE_MODULE 1
+#endif
+
 #include "row.h"
 #include "cursor.h"
 
@@ -216,7 +220,15 @@ static PyObject* pysqlite_iter(pysqlite_Row* self)
 
 static Py_hash_t pysqlite_row_hash(pysqlite_Row *self)
 {
-    return PyObject_Hash(self->description) ^ PyObject_Hash(self->data);
+    Py_hash_t hash_description = PyObject_Hash(self->description);
+    if (hash_description == -1) {
+        return -1;
+    }
+    Py_hash_t hash_data = PyObject_Hash(self->data);
+    if (hash_data == -1) {
+        return -1;
+    }
+    return hash_description ^ hash_data;
 }
 
 static PyObject* pysqlite_row_richcompare(pysqlite_Row *self, PyObject *_other, int opid)

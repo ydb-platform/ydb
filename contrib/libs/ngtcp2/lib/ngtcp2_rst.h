@@ -31,8 +31,6 @@
 
 #include <ngtcp2/ngtcp2.h>
 
-#include "ngtcp2_window_filter.h"
-
 typedef struct ngtcp2_rtb_entry ngtcp2_rtb_entry;
 typedef struct ngtcp2_conn_stat ngtcp2_conn_stat;
 
@@ -48,10 +46,9 @@ typedef struct ngtcp2_rs {
   ngtcp2_tstamp prior_ts;
   uint64_t tx_in_flight;
   uint64_t lost;
-  uint64_t prior_lost;
   ngtcp2_duration send_elapsed;
   ngtcp2_duration ack_elapsed;
-  int64_t last_end_seq;
+  int64_t last_acked_pkt_id;
   int is_app_limited;
 } ngtcp2_rs;
 
@@ -68,21 +65,19 @@ typedef struct ngtcp2_rst {
   ngtcp2_tstamp first_sent_ts;
   uint64_t app_limited;
   uint64_t lost;
-  /* last_seq is the sequence number of packets across all packet
-     number spaces.  If we would adopt single packet number sequence
-     across all packet number spaces, we can replace this with a
-     packet number. */
-  int64_t last_seq;
-  /* valid_after_seq is the sequence number, and ignore a packet if
-     the sequence number of the packet is less than or equal to this
+  /* pkt_id is the identifier of packets across all packet number
+     spaces.  If we would adopt single packet number sequence across
+     all packet number spaces, we can replace this with a packet
      number. */
-  int64_t valid_after_seq;
+  int64_t pkt_id;
   int is_cwnd_limited;
 } ngtcp2_rst;
 
 void ngtcp2_rst_init(ngtcp2_rst *rst);
 
 void ngtcp2_rst_reset(ngtcp2_rst *rst);
+
+void ngtcp2_rst_reset_rate_sample(ngtcp2_rst *rst, ngtcp2_conn_stat *cstat);
 
 void ngtcp2_rst_on_pkt_sent(ngtcp2_rst *rst, ngtcp2_rtb_entry *ent,
                             const ngtcp2_conn_stat *cstat);

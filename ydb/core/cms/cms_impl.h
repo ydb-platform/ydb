@@ -23,6 +23,7 @@
 #include <util/datetime/base.h>
 #include <util/generic/queue.h>
 #include <util/generic/stack.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
 
 namespace NKikimr::NCms {
 
@@ -105,18 +106,22 @@ private:
     class TTxStoreWalleTask;
     class TTxUpdateConfig;
     class TTxUpdateDowntimes;
+    class TTxStoreFirstBootTimestamp;
 
     struct TActionOptions {
         TDuration PermissionDuration;
         NKikimrCms::ETenantPolicy TenantPolicy;
         NKikimrCms::EAvailabilityMode AvailabilityMode;
         bool PartialPermissionAllowed;
+        i32 Priority;
+        TString RequestId;
 
         TActionOptions(TDuration dur)
             : PermissionDuration(dur)
             , TenantPolicy(NKikimrCms::DEFAULT)
             , AvailabilityMode(NKikimrCms::MODE_MAX_AVAILABILITY)
             , PartialPermissionAllowed(false)
+            , Priority(0)
         {}
     };
 
@@ -143,12 +148,14 @@ private:
     ITransaction *CreateTxRemoveWalleTask(const TString &id);
     ITransaction *CreateTxRemoveMaintenanceTask(const TString &id);
     ITransaction *CreateTxStorePermissions(THolder<IEventBase> req, TAutoPtr<IEventHandle> resp,
-                                           const TString &owner, TAutoPtr<TRequestInfo> scheduled,
+                                           const TString &owner, const TString &requestId, i32 priority,
+                                           TAutoPtr<TRequestInfo> scheduled,
                                            const TMaybe<TString> &maintenanceTaskId = {});
     ITransaction *CreateTxStoreWalleTask(const TTaskInfo &task, THolder<IEventBase> req, TAutoPtr<IEventHandle> resp);
     ITransaction *CreateTxUpdateConfig(TEvCms::TEvSetConfigRequest::TPtr &ev);
     ITransaction *CreateTxUpdateConfig(TEvConsole::TEvConfigNotificationRequest::TPtr &ev);
     ITransaction *CreateTxUpdateDowntimes();
+    ITransaction *CreateTxStoreFirstBootTimestamp();
 
     static void AuditLog(const TActorContext &ctx, const TString &message) {
         NCms::AuditLog("CMS tablet", message, ctx);
@@ -181,8 +188,9 @@ private:
     }
 
     STFUNC(StateInit) {
-        LOG_DEBUG(*TlsActivationContext, NKikimrServices::CMS, "StateInit event type: %" PRIx32 " event: %s",
-                  ev->GetTypeRewrite(), ev->ToString().data());
+        YDB_LOG_DEBUG_CTX_COMP(*TlsActivationContext, NKikimrServices::CMS, "StateInit event",
+            {"type", ev->GetTypeRewrite()},
+            {"ev", ev->ToString()});
         StateInitImpl(ev, SelfId());
     }
 
@@ -216,11 +224,23 @@ private:
 
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
-                LOG_DEBUG(*TlsActivationContext, NKikimrServices::CMS, "StateNotSupported unexpected event type: %" PRIx32 " event: %s",
-                          ev->GetTypeRewrite(), ev->ToString().data());
+                YDB_LOG_DEBUG_CTX_COMP(*TlsActivationContext, NKikimrServices::CMS, "StateNotSupported unexpected event",
+                    {"type", ev->GetTypeRewrite()},
+                    {"ev", ev->ToString()});
             }
         }
     }
+
+    #define HFuncChecked(TEvType, HandleFunc) \
+        case TEvType::EventType: { \
+            typename TEvType::TPtr* x = reinterpret_cast<typename TEvType::TPtr*>(&ev); \
+            if (State->Config.DisableMaintenance) { \
+                ReplyWithError<TEvCms::TEvPermissionResponse>(*x, NKikimrCms::TStatus::ERROR_TEMP, "Maintenance is disabled", this->ActorContext()); \
+            } else { \
+                HandleFunc(*x, this->ActorContext()); \
+            } \
+            break; \
+        } Y_SEMICOLON_GUARD
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
@@ -233,9 +253,9 @@ private:
             cFunc(TEvPrivate::EvStartCollecting, StartCollecting);
             cFunc(TEvPrivate::EvProcessQueue, ProcessQueue);
             FFunc(TEvCms::EvClusterStateRequest, EnqueueRequest);
-            HFunc(TEvCms::TEvPermissionRequest, CheckAndEnqueueRequest);
+            HFuncChecked(TEvCms::TEvPermissionRequest, CheckAndEnqueueRequest);
             HFunc(TEvCms::TEvManageRequestRequest, Handle);
-            HFunc(TEvCms::TEvCheckRequest, CheckAndEnqueueRequest);
+            HFuncChecked(TEvCms::TEvCheckRequest, CheckAndEnqueueRequest);
             HFunc(TEvCms::TEvManagePermissionRequest, Handle);
             HFunc(TEvCms::TEvConditionalPermissionRequest, CheckAndEnqueueRequest);
             HFunc(TEvCms::TEvNotification, CheckAndEnqueueRequest);
@@ -264,6 +284,7 @@ private:
             FFunc(TEvCms::EvGetClusterInfoRequest, EnqueueRequest);
             HFunc(TEvConsole::TEvConfigNotificationRequest, Handle);
             HFunc(TEvConsole::TEvReplaceConfigSubscriptionsResponse, Handle);
+            HFunc(NKikimr::TEvNodeWardenStorageConfig, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             IgnoreFunc(TEvTabletPipe::TEvServerConnected);
@@ -273,8 +294,9 @@ private:
 
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
-                LOG_DEBUG(*TlsActivationContext, NKikimrServices::CMS, "StateWork unexpected event type: %" PRIx32 " event: %s",
-                          ev->GetTypeRewrite(), ev->ToString().data());
+                YDB_LOG_DEBUG_CTX_COMP(*TlsActivationContext, NKikimrServices::CMS, "StateWork unexpected event",
+                    {"type", ev->GetTypeRewrite()},
+                    {"ev", ev->ToString()});
             }
         }
     }
@@ -292,6 +314,7 @@ private:
     bool CheckPermissionRequest(const NKikimrCms::TPermissionRequest &request,
         NKikimrCms::TPermissionResponse &response,
         NKikimrCms::TPermissionRequest &scheduled,
+        const TString &requestId,
         const TActorContext &ctx);
     bool IsActionHostValid(const NKikimrCms::TAction &action, TErrorInfo &error) const;
     bool ParseServices(const NKikimrCms::TAction &action, TServices &services, TErrorInfo &error) const;
@@ -325,6 +348,8 @@ private:
     bool CheckSysTabletsNode(const TActionOptions &opts,
         const TNodeInfo &node,
         TErrorInfo &error) const;
+    void SortActionsBySysTabletPriority(
+        NKikimrCms::TPermissionRequest &request) const;
     bool TryToLockNode(const NKikimrCms::TAction &action,
         const TActionOptions &options,
         const TNodeInfo &node,
@@ -347,7 +372,7 @@ private:
         TErrorInfo &error,
         const TActorContext &ctx) const;
     void AcceptPermissions(NKikimrCms::TPermissionResponse &resp, const TString &requestId,
-        const TString &owner, const TActorContext &ctx, bool check = false);
+        const TString &owner, i32 priority, const TActorContext &ctx, bool check = false);
     void ScheduleUpdateClusterInfo(const TActorContext &ctx, bool now = false);
     void ScheduleCleanup(TInstant time, const TActorContext &ctx);
     void SchedulePermissionsCleanup(const TActorContext &ctx);
@@ -382,6 +407,7 @@ private:
     void RemovePermission(TEvCms::TEvManagePermissionRequest::TPtr &ev, bool done, const TActorContext &ctx);
     void GetRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, bool all, const TActorContext &ctx);
     void RemoveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, const TActorContext &ctx);
+    void ManuallyApproveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, const TActorContext &ctx);
     void GetNotifications(TEvCms::TEvManageNotificationRequest::TPtr &ev, bool all, const TActorContext &ctx);
     bool RemoveNotification(const TString &id, const TString &user, bool remove, TErrorInfo &error);
 
@@ -434,6 +460,7 @@ private:
     void Handle(TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx);
+    void Handle(NKikimr::TEvNodeWardenStorageConfig::TPtr &ev, const TActorContext &ctx);
 
     bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx) override;
 

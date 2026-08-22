@@ -9,16 +9,19 @@ namespace NKikimr::NCms {
 
 struct Schema : NIceDb::Schema {
     struct Param : Table<1> {
+        static constexpr ui32 Key = 1;
+
         struct ID : Column<1, NScheme::NTypeIds::Uint32> {};
         struct NextPermissionID : Column<2, NScheme::NTypeIds::Uint64> {};
         struct NextRequestID : Column<3, NScheme::NTypeIds::Uint64> {};
         struct NextNotificationID : Column<4, NScheme::NTypeIds::Uint64> {};
         struct Config : Column<5, NScheme::NTypeIds::String> { using Type = NKikimrCms::TCmsConfig; };
         struct LastLogRecordTimestamp : Column<6, NScheme::NTypeIds::Uint64> {};
+        struct FirstBootTimestamp : Column<7, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<ID>;
         using TColumns = TableColumns<ID, NextPermissionID, NextRequestID, NextNotificationID,
-            Config, LastLogRecordTimestamp>;
+            Config, LastLogRecordTimestamp, FirstBootTimestamp>;
     };
 
     struct Permission : Table<2> {
@@ -27,9 +30,10 @@ struct Schema : NIceDb::Schema {
         struct Action : Column<3, NScheme::NTypeIds::Utf8> {};
         struct Deadline : Column<4, NScheme::NTypeIds::Uint64> {};
         struct RequestID : Column<5, NScheme::NTypeIds::Utf8> {};
+        struct Priority : Column<6, NScheme::NTypeIds::Int32> {};
 
         using TKey = TableKey<ID>;
-        using TColumns = TableColumns<ID, Owner, Action, Deadline, RequestID>;
+        using TColumns = TableColumns<ID, Owner, Action, Deadline, RequestID, Priority>;
     };
 
     struct Request : Table<3> {
@@ -137,6 +141,7 @@ struct Schema : NIceDb::Schema {
         struct HasSingleCompositeActionGroup : Column<4, NScheme::NTypeIds::Bool> {};
         struct CreateTime : Column<5, NScheme::NTypeIds::Uint64> {};
         struct LastRefreshTime : Column<6, NScheme::NTypeIds::Uint64> {};
+        struct MaxInflightActions : Column<7, NScheme::NTypeIds::Uint32> {};
 
         using TKey = TableKey<TaskID>;
         using TColumns = TableColumns<
@@ -145,7 +150,8 @@ struct Schema : NIceDb::Schema {
             Owner,
             HasSingleCompositeActionGroup,
             CreateTime,
-            LastRefreshTime
+            LastRefreshTime,
+            MaxInflightActions
         >;
     };
 

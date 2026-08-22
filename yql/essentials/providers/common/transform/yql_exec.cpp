@@ -8,7 +8,6 @@
 #include <util/generic/vector.h>
 #include <util/generic/string.h>
 
-
 namespace NYql {
 
 using namespace NNodes;
@@ -35,13 +34,13 @@ void TExecTransformerBase::AddHandler(std::initializer_list<TStringBuf> names, T
     THandlerInfo info;
     info.Handler = std::move(handler);
     info.Prerequisite = std::move(prerequisite);
-    for (auto name: names) {
+    for (auto name : names) {
         YQL_ENSURE(Handlers_.emplace(name, info).second, "Duplicate execution handler for " << name);
     }
 }
 
 TExecTransformerBase::THandler TExecTransformerBase::Pass() {
-    return [] (const TExprNode::TPtr& input, TExprNode::TPtr& /*output*/, TExprContext& ctx) {
+    return [](const TExprNode::TPtr& input, TExprNode::TPtr& /*output*/, TExprContext& ctx) {
         return ExecPass(input, ctx);
     };
 }
@@ -53,7 +52,7 @@ TExecTransformerBase::TStatusCallbackPair TExecTransformerBase::ExecPass(const T
 }
 
 TExecTransformerBase::TPrerequisite TExecTransformerBase::RequireAll() {
-    return [] (const TExprNode::TPtr& input) {
+    return [](const TExprNode::TPtr& input) {
         TStatus combinedStatus = TStatus::Ok;
         for (size_t i = 0; i < input->ChildrenSize(); ++i) {
             combinedStatus = combinedStatus.Combine(RequireChild(*input, (ui32)i));
@@ -63,21 +62,21 @@ TExecTransformerBase::TPrerequisite TExecTransformerBase::RequireAll() {
 }
 
 TExecTransformerBase::TPrerequisite TExecTransformerBase::RequireNone() {
-    return [] (const TExprNode::TPtr& /*input*/) {
+    return [](const TExprNode::TPtr& /*input*/) {
         return TStatus::Ok;
     };
 }
 
 TExecTransformerBase::TPrerequisite TExecTransformerBase::RequireFirst() {
-    return [] (const TExprNode::TPtr& input) {
+    return [](const TExprNode::TPtr& input) {
         return RequireChild(*input, 0);
     };
 }
 
 TExecTransformerBase::TPrerequisite TExecTransformerBase::RequireAllOf(std::initializer_list<size_t> children) {
-    return [required = TVector<size_t>(children)] (const TExprNode::TPtr& input) {
+    return [required = TVector<size_t>(children)](const TExprNode::TPtr& input) {
         TStatus combinedStatus = TStatus::Ok;
-        for (size_t i: required) {
+        for (size_t i : required) {
             YQL_ENSURE(i < input->ChildrenSize());
             combinedStatus = combinedStatus.Combine(RequireChild(*input, (ui32)i));
         }
@@ -86,8 +85,8 @@ TExecTransformerBase::TPrerequisite TExecTransformerBase::RequireAllOf(std::init
 }
 
 TExecTransformerBase::TPrerequisite TExecTransformerBase::RequireSequenceOf(std::initializer_list<size_t> children) {
-    return [required = TVector<size_t>(children)] (const TExprNode::TPtr& input) -> TStatus {
-        for (size_t i: required) {
+    return [required = TVector<size_t>(children)](const TExprNode::TPtr& input) -> TStatus {
+        for (size_t i : required) {
             YQL_ENSURE(i < input->ChildrenSize());
             auto status = RequireChild(*input, (ui32)i);
             if (status.Level != TStatus::Ok) {
@@ -98,4 +97,4 @@ TExecTransformerBase::TPrerequisite TExecTransformerBase::RequireSequenceOf(std:
     };
 }
 
-}
+} // namespace NYql

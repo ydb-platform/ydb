@@ -1,27 +1,28 @@
 #include "mkql_invoke.h"
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_node_builder.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
-template<bool IsOptional>
+template <bool IsOptional>
 class TUnaryArgInvokeBase {
 protected:
     TUnaryArgInvokeBase(TStringBuf name, const TFunctionDescriptor& descr)
-        : Name(name), Descriptor(descr)
-    {}
+        : Name_(name)
+        , Descriptor_(descr)
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalc(const NUdf::TUnboxedValuePod& arg) const {
         if (IsOptional && !arg) {
             return {};
         }
-        return Descriptor.Function(&arg);
+        return Descriptor_.Function(&arg);
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
@@ -37,7 +38,7 @@ protected:
             BranchInst::Create(good, done, IsExists(arg, block, context), block);
 
             block = good;
-            const auto out = reinterpret_cast<TGeneratorPtr>(Descriptor.Generator)(&arg, ctx, block);
+            const auto out = reinterpret_cast<TGeneratorPtr>(Descriptor_.Generator)(&arg, ctx, block);
 
             result->addIncoming(out, block);
             BranchInst::Create(done, block);
@@ -45,142 +46,152 @@ protected:
             block = done;
             return result;
         } else {
-            return reinterpret_cast<TGeneratorPtr>(Descriptor.Generator)(&arg, ctx, block);
+            return reinterpret_cast<TGeneratorPtr>(Descriptor_.Generator)(&arg, ctx, block);
         }
     }
 #endif
-    const TStringBuf Name;
-    const TFunctionDescriptor Descriptor;
+    const TStringBuf Name_;
+    const TFunctionDescriptor Descriptor_;
 };
 
-template<bool IsOptional>
-class TSimpleUnaryArgInvokeWrapper : public TDecoratorCodegeneratorNode<TSimpleUnaryArgInvokeWrapper<IsOptional>>, private TUnaryArgInvokeBase<IsOptional> {
-    typedef TDecoratorCodegeneratorNode<TSimpleUnaryArgInvokeWrapper<IsOptional>> TBaseComputation;
+template <bool IsOptional>
+class TSimpleUnaryArgInvokeWrapper: public TDecoratorCodegeneratorNode<TSimpleUnaryArgInvokeWrapper<IsOptional>>, private TUnaryArgInvokeBase<IsOptional> {
+    using TBaseComputation = TDecoratorCodegeneratorNode<TSimpleUnaryArgInvokeWrapper<IsOptional>>;
+
 public:
     TSimpleUnaryArgInvokeWrapper(TStringBuf name, const TFunctionDescriptor& descr, IComputationNode* arg)
-        : TBaseComputation(arg), TUnaryArgInvokeBase<IsOptional>(name, descr)
-    {}
+        : TBaseComputation(arg)
+        , TUnaryArgInvokeBase<IsOptional>(name, descr)
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext&, const NUdf::TUnboxedValuePod& arg) const {
         return this->DoCalc(arg);
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* arg, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* arg, BasicBlock*& block) const override {
         return this->DoGenGetValue(ctx, arg, block);
     }
 #endif
 
 private:
     TString DebugString() const final {
-        return TBaseComputation::DebugString() + "(" + this->Name + ")" ;
+        return TBaseComputation::DebugString() + "(" + this->Name_ + ")";
     }
 };
 
-template<bool IsOptional>
-class TDefaultUnaryArgInvokeWrapper : public TMutableCodegeneratorNode<TDefaultUnaryArgInvokeWrapper<IsOptional>>, private TUnaryArgInvokeBase<IsOptional> {
-    typedef TMutableCodegeneratorNode<TDefaultUnaryArgInvokeWrapper<IsOptional>> TBaseComputation;
+template <bool IsOptional>
+class TDefaultUnaryArgInvokeWrapper: public TMutableCodegeneratorNode<TDefaultUnaryArgInvokeWrapper<IsOptional>>, private TUnaryArgInvokeBase<IsOptional> {
+    using TBaseComputation = TMutableCodegeneratorNode<TDefaultUnaryArgInvokeWrapper<IsOptional>>;
+
 public:
     TDefaultUnaryArgInvokeWrapper(TComputationMutables& mutables, EValueRepresentation kind, TStringBuf name, const TFunctionDescriptor& descr, IComputationNode* arg)
-        : TBaseComputation(mutables, kind), TUnaryArgInvokeBase<IsOptional>(name, descr), Arg(arg)
-    {}
+        : TBaseComputation(mutables, kind)
+        , TUnaryArgInvokeBase<IsOptional>(name, descr)
+        , Arg_(arg)
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        return this->DoCalc(Arg->GetValue(ctx));
+        return this->DoCalc(Arg_->GetValue(ctx));
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
-        const auto arg = GetNodeValue(Arg, ctx, block);
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
+        const auto arg = GetNodeValue(Arg_, ctx, block);
         return this->DoGenGetValue(ctx, arg, block);
     }
 #endif
 
 private:
     void RegisterDependencies() const final {
-        this->DependsOn(Arg);
+        this->DependsOn(Arg_);
     }
 
     TString DebugString() const final {
-        return TBaseComputation::DebugString() + "(" + this->Name + ")" ;
+        return TBaseComputation::DebugString() + "(" + this->Name_ + ")";
     }
 
-    IComputationNode *const Arg;
+    IComputationNode* const Arg_;
 };
 
-class TBinaryInvokeWrapper : public TBinaryCodegeneratorNode<TBinaryInvokeWrapper> {
-    typedef TBinaryCodegeneratorNode<TBinaryInvokeWrapper> TBaseComputation;
+class TBinaryInvokeWrapper: public TBinaryCodegeneratorNode<TBinaryInvokeWrapper> {
+    using TBaseComputation = TBinaryCodegeneratorNode<TBinaryInvokeWrapper>;
+
 public:
     TBinaryInvokeWrapper(TStringBuf name, const TFunctionDescriptor& descr, IComputationNode* left, IComputationNode* right, EValueRepresentation kind = EValueRepresentation::Embedded)
-        : TBaseComputation(left, right, kind), Name(name), Descriptor(descr)
+        : TBaseComputation(left, right, kind)
+        , Name_(name)
+        , Descriptor_(descr)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
-        const std::array<NUdf::TUnboxedValue, 2U> args {{Left_->GetValue(compCtx), Right_->GetValue(compCtx)}};
-        return Descriptor.Function(args.data());
+        const std::array<NUdf::TUnboxedValue, 2U> args{{Left_->GetValue(compCtx), Right_->GetValue(compCtx)}};
+        return Descriptor_.Function(args.data());
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
-        const std::array<Value*, 2U> args {{GetNodeValue(Left_, ctx, block), GetNodeValue(Right_, ctx, block)}};
-        return reinterpret_cast<TGeneratorPtr>(Descriptor.Generator)(args.data(), ctx, block);
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
+        const std::array<Value*, 2U> args{{GetNodeValue(Left_, ctx, block), GetNodeValue(Right_, ctx, block)}};
+        return reinterpret_cast<TGeneratorPtr>(Descriptor_.Generator)(args.data(), ctx, block);
     }
 #endif
 
 private:
     TString DebugString() const final {
-        return TBaseComputation::DebugString() + "(" + Name + ")" ;
+        return TBaseComputation::DebugString() + "(" + Name_ + ")";
     }
 
-    const TStringBuf Name;
-    const TFunctionDescriptor Descriptor;
+    const TStringBuf Name_;
+    const TFunctionDescriptor Descriptor_;
 };
 
-template<size_t Size>
-class TInvokeWrapper : public TMutableCodegeneratorNode<TInvokeWrapper<Size>> {
-    typedef TMutableCodegeneratorNode<TInvokeWrapper<Size>> TBaseComputation;
+template <size_t Size>
+class TInvokeWrapper: public TMutableCodegeneratorNode<TInvokeWrapper<Size>> {
+    using TBaseComputation = TMutableCodegeneratorNode<TInvokeWrapper<Size>>;
+
 public:
     TInvokeWrapper(TComputationMutables& mutables, EValueRepresentation kind, TStringBuf name, const TFunctionDescriptor& descr, TComputationNodePtrVector&& argNodes)
         : TBaseComputation(mutables, kind)
-        , Name(name), Descriptor(descr)
-        , ArgNodes(std::move(argNodes))
+        , Name_(name)
+        , Descriptor_(descr)
+        , ArgNodes_(std::move(argNodes))
     {
     }
 
     NUdf::TUnboxedValue DoCalculate(TComputationContext& ctx) const {
         std::array<NUdf::TUnboxedValue, Size> values;
-        std::transform(ArgNodes.cbegin(), ArgNodes.cend(), values.begin(),
-            std::bind(&IComputationNode::GetValue, std::placeholders::_1, std::ref(ctx))
-        );
-        return Descriptor.Function(values.data());
+        std::transform(ArgNodes_.cbegin(), ArgNodes_.cend(), values.begin(),
+                       std::bind(&IComputationNode::GetValue, std::placeholders::_1, std::ref(ctx)));
+        return Descriptor_.Function(values.data());
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         std::array<Value*, Size> values;
-        std::transform(ArgNodes.cbegin(), ArgNodes.cend(), values.begin(),
-            [&](IComputationNode* node) { return GetNodeValue(node, ctx, block); }
-        );
-        return reinterpret_cast<TGeneratorPtr>(Descriptor.Generator)(values.data(), ctx, block);
+        std::transform(ArgNodes_.cbegin(), ArgNodes_.cend(), values.begin(),
+                       [&](IComputationNode* node) { return GetNodeValue(node, ctx, block); });
+        return reinterpret_cast<TGeneratorPtr>(Descriptor_.Generator)(values.data(), ctx, block);
     }
 #endif
 
 private:
     void RegisterDependencies() const final {
-        std::for_each(ArgNodes.cbegin(), ArgNodes.cend(), std::bind(&TInvokeWrapper::DependsOn, this, std::placeholders::_1));
+        std::for_each(ArgNodes_.cbegin(), ArgNodes_.cend(), std::bind(&TInvokeWrapper::DependsOn, this, std::placeholders::_1));
     }
 
     TString DebugString() const final {
-        return TBaseComputation::DebugString() + "(" + Name + ")" ;
+        return TBaseComputation::DebugString() + "(" + Name_ + ")";
     }
 
-    const TStringBuf Name;
-    const TFunctionDescriptor Descriptor;
-    const TComputationNodePtrVector ArgNodes;
+    const TStringBuf Name_;
+    const TFunctionDescriptor Descriptor_;
+    const TComputationNodePtrVector ArgNodes_;
 };
 
-}
+} // namespace
 
 IComputationNode* WrapInvoke(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() >= 2U && callable.GetInputsCount() <= 4U, "Expected from one to three arguments.");
@@ -201,23 +212,22 @@ IComputationNode* WrapInvoke(TCallable& callable, const TComputationNodeFactoryC
 
     const auto returnKind = GetValueRepresentation(returnType);
     switch (argNodes.size()) {
-    case 1U:
-        if (EValueRepresentation::Embedded == returnKind) {
-            return new TSimpleUnaryArgInvokeWrapper<false>(funcName, funcDesc, argNodes.front());
-        } else {
-            return new TDefaultUnaryArgInvokeWrapper<false>(ctx.Mutables, returnKind, funcName, funcDesc, argNodes.front());
-        }
-    case 2U:
-        if (EValueRepresentation::Embedded == returnKind) {
-            return new TBinaryInvokeWrapper(funcName, funcDesc, argNodes.front(), argNodes.back());
-        }
-        return new TInvokeWrapper<2U>(ctx.Mutables, returnKind, funcName, funcDesc, std::move(argNodes));
-    case 3U:
-        return new TInvokeWrapper<3U>(ctx.Mutables, returnKind, funcName, funcDesc, std::move(argNodes));
-    default:
-        Y_ABORT("Too wide invoke.");
+        case 1U:
+            if (EValueRepresentation::Embedded == returnKind) {
+                return new TSimpleUnaryArgInvokeWrapper<false>(funcName, funcDesc, argNodes.front());
+            } else {
+                return new TDefaultUnaryArgInvokeWrapper<false>(ctx.Mutables, returnKind, funcName, funcDesc, argNodes.front());
+            }
+        case 2U:
+            if (EValueRepresentation::Embedded == returnKind) {
+                return new TBinaryInvokeWrapper(funcName, funcDesc, argNodes.front(), argNodes.back());
+            }
+            return new TInvokeWrapper<2U>(ctx.Mutables, returnKind, funcName, funcDesc, std::move(argNodes));
+        case 3U:
+            return new TInvokeWrapper<3U>(ctx.Mutables, returnKind, funcName, funcDesc, std::move(argNodes));
+        default:
+            Y_ABORT("Too wide invoke.");
     }
 }
 
-}
-}
+} // namespace NKikimr::NMiniKQL

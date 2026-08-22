@@ -1,3 +1,7 @@
+#include <ydb/core/scheme/protos/type_info.pb.h>
+#include <ydb/core/tx/schemeshard/olap/operations/checks.h>
+#include <ydb/core/tx/schemeshard/olap/statistics/schema.h>
+#include <ydb/core/tx/schemeshard/olap/statistics/update.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
@@ -164,6 +168,7 @@ private:
 
 class TOlapTableConstructor : public TTableConstructorBase {
     TOlapSchema TableSchema;
+    TOlapMultiColumnStatisticsDescription TableMultiColumnStatistics;
     ui32 ChannelsCount = 64;
 private:
     bool DoDeserialize(const NKikimrSchemeOp::TColumnTableDescription& description, IErrorCollector& errors) override {
@@ -181,15 +186,15 @@ private:
             ChannelsCount = description.GetStorageConfig().GetDataChannelCount();
         }
 
-        TOlapSchemaUpdate schemaDiff;
-        if (!schemaDiff.Parse(description.GetSchema(), errors, AppData()->ColumnShardConfig.GetAllowNullableColumnsInPK())) {
+        if (!TableSchema.ParseFromProto(description.GetSchema(), errors, AppData()->ColumnShardConfig.GetAllowNullableColumnsInPK())) {
             return false;
         }
 
-        if (!TableSchema.Update(schemaDiff, errors)) {
+        TOlapMultiColumnStatisticsUpdate statisticsUpdate;
+        if (!statisticsUpdate.Parse(description, errors)) {
             return false;
         }
-        return true;
+        return TableMultiColumnStatistics.ApplyUpdate(TableSchema, statisticsUpdate, errors);
     }
 
 private:
@@ -197,6 +202,7 @@ private:
         auto& description = table->Description;
         description.MutableStorageConfig()->SetDataChannelCount(ChannelsCount);
         TableSchema.Serialize(*description.MutableSchema());
+        TableMultiColumnStatistics.Serialize(description);
         return TConclusionStatus::Success();
     }
 
@@ -495,7 +501,7 @@ public:
             event->Record.SetTxId(ui64(OperationId.GetTxId()));
             event->Record.SetTxPartId(OperationId.GetSubTxId());
             TPathId pathId = txState->TargetPathId;
-            auto hiveToRequest = context.SS->ResolveHive(pathId, context.Ctx);
+            auto hiveToRequest = context.SS->ResolveHive(pathId);
             context.OnComplete.BindMsgToPipe(OperationId, hiveToRequest, pathId, event.release());
         }
 
@@ -550,27 +556,6 @@ class TCreateColumnTable: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
-    void AddDefaultFamilyIfNotExists(NKikimrSchemeOp::TColumnTableDescription& createDescription) {
-        auto schema = createDescription.GetSchema();
-        for (const auto& family : schema.GetColumnFamilies()) {
-            if (family.GetName() == "default") {
-                return;
-            }
-        }
-
-        auto mutableSchema = createDescription.MutableSchema();
-        auto defaultFamily = mutableSchema->AddColumnFamilies();
-        defaultFamily->SetName("default");
-        defaultFamily->SetId(0);
-
-        for (ui32 i = 0; i < schema.ColumnsSize(); i++) {
-            if (!schema.GetColumns(i).HasColumnFamilyName() || !schema.GetColumns(i).HasColumnFamilyId()) {
-                mutableSchema->MutableColumns(i)->SetColumnFamilyName("default");
-                mutableSchema->MutableColumns(i)->SetColumnFamilyId(0);
-            }
-        }
-    }
-
     THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
@@ -605,6 +590,13 @@ public:
             result->SetError(NKikimrScheme::StatusPreconditionFailed,
                 "Incoming tx message has initialized shard ids");
             return result;
+        }
+
+        if (createDescription.HasSchema()) {
+            if (auto checkResult = NOlap::CheckColumns(createDescription.GetSchema().GetColumns(), AppData()); !checkResult) {
+                result->SetError(NKikimrScheme::StatusSchemeError, checkResult.error());
+                return result;
+            }
         }
 
         TOlapStoreInfo::TPtr storeInfo;
@@ -711,7 +703,6 @@ public:
                 result->SetError(NKikimrScheme::StatusSchemeError, errStr);
                 return result;
             }
-            AddDefaultFamilyIfNotExists(createDescription);
             TOlapTableConstructor tableConstructor;
             tableInfo = tableConstructor.BuildTableInfo(createDescription, context, errors);
         }

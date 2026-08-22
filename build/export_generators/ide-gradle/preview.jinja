@@ -1,4 +1,4 @@
-{%- if target.enable_preview %}
+{%- if all_targets|selectattr('enable_preview', 'eq', true)|length %}
 
 tasks.withType<JavaCompile> {
     options.compilerArgs.add("--enable-preview")
@@ -11,5 +11,5 @@ tasks.withType<Javadoc> {
     javadocOptions.addStringOption("source", "{{ jdk_version }}")
     javadocOptions.addBooleanOption("-enable-preview", true)
 }
-{#- AND SEE ALSO jvm_args.jinja -#}
+{#- AND SEE ALSO jvm_args.jinja #}
 {% endif -%}

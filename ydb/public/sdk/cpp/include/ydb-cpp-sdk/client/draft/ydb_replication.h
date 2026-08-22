@@ -12,9 +12,11 @@ namespace Ydb::Replication {
     class ConsistencyLevelGlobal;
     class DescribeReplicationResult;
     class DescribeReplicationResult_Stats;
+    class DescribeTransferResult;
+    class DescribeTransferResult_Stats;
 }
 
-namespace NYdb::inline Dev {
+namespace NYdb::inline Dev::NDraft {
     class TProtoAccessor;
 }
 
@@ -26,6 +28,9 @@ using TAsyncDescribeReplicationResult = NThreading::TFuture<TDescribeReplication
 struct TDescribeReplicationSettings: public TOperationRequestSettings<TDescribeReplicationSettings> {
     using TSelf = TDescribeReplicationSettings;
     FLUENT_SETTING_DEFAULT(bool, IncludeStats, false);
+};
+
+struct TDescribeTransferSettings: public TDescribeReplicationSettings {
 };
 
 struct TStaticCredentials {
@@ -168,7 +173,7 @@ private:
 };
 
 class TDescribeReplicationResult: public NScheme::TDescribePathResult {
-    friend class NYdb::TProtoAccessor;
+    friend class NYdb::NDraft::TProtoAccessor;
     const Ydb::Replication::DescribeReplicationResult& GetProto() const;
 
 public:
@@ -180,6 +185,83 @@ private:
     std::unique_ptr<Ydb::Replication::DescribeReplicationResult> Proto_;
 };
 
+
+
+struct TBatchingSettings {
+    TDuration FlushInterval;
+    std::uint64_t SizeBytes;
+};
+
+struct TTransferStats {
+    enum class EWorkOperation {
+        Unspecified = 0,
+        Read = 1,
+        Decompress = 2,
+        Process = 3,
+        Write = 4,
+    };
+
+    EWorkOperation Operation;
+    ui64 MinWorkerUptime;
+};
+
+class TTransferDescription {
+public:
+    enum class EState {
+        Running,
+        Error,
+        Done,
+        Paused,
+    };
+
+    explicit TTransferDescription(const Ydb::Replication::DescribeTransferResult& desc);
+
+    const TConnectionParams& GetConnectionParams() const;
+    const std::string& GetSrcPath() const;
+    const std::string& GetDstPath() const;
+    const std::string& GetTransformationLambda() const;
+    const std::string& GetConsumerName() const;
+    const TBatchingSettings& GetBatchingSettings() const;
+
+    EState GetState() const;
+    const TRunningState& GetRunningState() const;
+    const TErrorState& GetErrorState() const;
+    const TDoneState& GetDoneState() const;
+    const TPausedState& GetPausedState() const;
+
+private:
+    TConnectionParams ConnectionParams_;
+
+    std::string SrcPath_;
+    std::string DstPath_;
+    std::string TransformationLambda_;
+    std::string ConsumerName_;
+    TBatchingSettings BatchingSettings_;
+
+    std::variant<
+        TRunningState,
+        TErrorState,
+        TDoneState,
+        TPausedState
+    > State_;
+};
+
+class TDescribeTransferResult: public NScheme::TDescribePathResult {
+    friend class NYdb::NDraft::TProtoAccessor;
+    const Ydb::Replication::DescribeTransferResult& GetProto() const;
+
+public:
+    TDescribeTransferResult(TStatus&& status, Ydb::Replication::DescribeTransferResult&& desc);
+    const TTransferDescription& GetTransferDescription() const;
+    const Ydb::Replication::DescribeTransferResult_Stats& GetStats() const;
+
+private:
+    TTransferDescription TransferDescription_;
+    std::unique_ptr<Ydb::Replication::DescribeTransferResult> Proto_;
+};
+
+using TAsyncDescribeTransferResult = NThreading::TFuture<TDescribeTransferResult>;
+
 class TReplicationClient {
     class TImpl;
 
@@ -188,6 +270,8 @@ public:
 
     TAsyncDescribeReplicationResult DescribeReplication(const std::string& path,
         const TDescribeReplicationSettings& settings = TDescribeReplicationSettings());
+
+    TAsyncDescribeTransferResult DescribeTransfer(const std::string& path, const TDescribeTransferSettings& settings = TDescribeTransferSettings());
 
 private:
     std::shared_ptr<TImpl> Impl_;

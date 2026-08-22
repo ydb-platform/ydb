@@ -13,6 +13,7 @@
 #include <util/generic/maybe.h>
 #include <util/generic/ptr.h>
 #include <util/generic/vector.h>
+#include <util/random/fast.h>
 #include <util/system/mutex.h>
 
 namespace NKikimr::NJaegerTracing {
@@ -35,12 +36,12 @@ public:
 
 private:
     TSettings<double, TIntrusivePtr<TThrottler>> GenerateThrottlers(
-        TSettings<double, TWithTag<TThrottlingSettings>> settings);
+        TSettings<double, TWithTag<TThrottlingSettings>> settings) const;
 
     std::unique_ptr<TSamplingThrottlingControl::TSamplingThrottlingImpl> GenerateSetup();
 
     TVector<TIntrusivePtr<TSamplingThrottlingControl>> IssuedControls;
-    TIntrusivePtr<ITimeProvider> TimeProvider;
+    const TIntrusivePtr<ITimeProvider> TimeProvider;
     TFastRng64 Rng;
     TSettings<double, TIntrusivePtr<TThrottler>> CurrentSettings;
     TMutex ControlMutex;

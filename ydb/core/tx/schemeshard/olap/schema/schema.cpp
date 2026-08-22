@@ -5,6 +5,16 @@
 
 namespace NKikimr::NSchemeShard {
 
+namespace {
+
+void AdvanceNextColumnIdPastIndexes(ui32& nextColumnId, const NKikimrSchemeOp::TColumnTableSchema& tableSchema) {
+    for (const auto& indexProto : tableSchema.GetIndexes()) {
+        nextColumnId = Max(nextColumnId, indexProto.GetId() + 1);
+    }
+}
+
+} // namespace
+
 bool TOlapSchema::ValidateTtlSettings(
     const NKikimrSchemeOp::TColumnDataLifeCycle& ttl, const TOperationContext& context, IErrorCollector& errors) const {
     using TTtlProto = NKikimrSchemeOp::TColumnDataLifeCycle;
@@ -27,11 +37,7 @@ bool TOlapSchema::ValidateTtlSettings(
 }
 
 bool TOlapSchema::Update(const TOlapSchemaUpdate& schemaUpdate, IErrorCollector& errors) {
-    if (!ColumnFamilies.ApplyUpdate(schemaUpdate.GetColumnFamilies(), errors, NextColumnFamilyId)) {
-        return false;
-    }
-
-    if (!Columns.ApplyUpdate(schemaUpdate.GetColumns(), ColumnFamilies, errors, NextColumnId)) {
+    if (!Columns.ApplyUpdate(schemaUpdate.GetColumns(), errors, NextColumnId)) {
         return false;
     }
 
@@ -47,24 +53,41 @@ bool TOlapSchema::Update(const TOlapSchemaUpdate& schemaUpdate, IErrorCollector&
     return true;
 }
 
+bool TOlapSchema::ParseFromProto(const NKikimrSchemeOp::TColumnTableSchema& tableSchema, IErrorCollector& errors, bool allowNullKeys) {
+    TOlapSchemaUpdate schemaDiff;
+    if (!schemaDiff.Parse(tableSchema, errors, allowNullKeys)) {
+        return false;
+    }
+    if (!Update(schemaDiff, errors)) {
+        return false;
+    }
+    ParseIndexesFromFullSchema(tableSchema);
+    if (!Indexes.ValidateNoDuplicateMinMaxAndBloomFilterIndexes(*this, errors)) {
+        return false;
+    }
+    return true;
+}
+
 void TOlapSchema::ParseFromLocalDB(const NKikimrSchemeOp::TColumnTableSchema& tableSchema) {
     NextColumnId = tableSchema.GetNextColumnId();
-    NextColumnFamilyId = tableSchema.GetNextColumnFamilyId();
     Version = tableSchema.GetVersion();
 
-    ColumnFamilies.Parse(tableSchema);
     Columns.Parse(tableSchema);
     Indexes.Parse(tableSchema);
     Options.Parse(tableSchema);
+    AdvanceNextColumnIdPastIndexes(NextColumnId, tableSchema);
+}
+
+void TOlapSchema::ParseIndexesFromFullSchema(const NKikimrSchemeOp::TColumnTableSchema& tableSchema) {
+    Indexes.Parse(tableSchema);
+    AdvanceNextColumnIdPastIndexes(NextColumnId, tableSchema);
 }
 
 void TOlapSchema::Serialize(NKikimrSchemeOp::TColumnTableSchema& tableSchemaExt) const {
     NKikimrSchemeOp::TColumnTableSchema resultLocal;
     resultLocal.SetNextColumnId(NextColumnId);
-    resultLocal.SetNextColumnFamilyId(NextColumnFamilyId);
     resultLocal.SetVersion(Version);
 
-    ColumnFamilies.Serialize(resultLocal);
     Columns.Serialize(resultLocal);
     Indexes.Serialize(resultLocal);
     Options.Serialize(resultLocal);
@@ -84,9 +107,6 @@ bool TOlapSchema::ValidateForStore(const NKikimrSchemeOp::TColumnTableSchema& op
         return false;
     }
 
-    if (!ColumnFamilies.ValidateForStore(opSchema, errors)) {
-        return false;
-    }
     return true;
 }
 

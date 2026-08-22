@@ -4,7 +4,6 @@
 // For the sake of sane code completion.
 #include "spin_lock.h"
 #endif
-#undef SPIN_LOCK_INL_H_
 
 #include "spin_wait.h"
 
@@ -52,7 +51,7 @@ inline bool TSpinLock::TryAcquire() noexcept
         newValue,
         std::memory_order::acquire,
         std::memory_order::relaxed);
-    NDetail::RecordSpinLockAcquired(acquired);
+    NDetail::MaybeRecordSpinLockAcquired(acquired);
     return acquired;
 }
 

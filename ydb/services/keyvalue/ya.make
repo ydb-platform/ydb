@@ -1,7 +1,8 @@
 LIBRARY()
 
 SRCS(
-    grpc_service.cpp
+    grpc_service_v1.cpp
+    grpc_service_v2.cpp
 )
 
 PEERDIR(

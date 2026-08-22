@@ -14,19 +14,28 @@ public:
     {
     }
 
-    ui64 GetTabletId(const TActorContext &) const override {
-        const TCgiParameters &cgi = this->RequestEvent->Get()->Request.GetParams();
+    ui64 GetTabletId(const TActorContext&) const override {
+        const TCgiParameters& cgi = this->RequestEvent->Get()->Request.GetParams();
         ui64 tabletId = 0;
 
         if (cgi.Has("tabletid")) {
             TryFromString(cgi.Get("tabletid"), tabletId);
         }
 
-        if (!tabletId && cgi.Has("followerid")) {
-            TryFromString(cgi.Get("followerid"), tabletId);
+        return tabletId;
+    }
+
+    std::optional<ui32> GetFollowerId(const TActorContext&) const override {
+        const TCgiParameters& cgi = this->RequestEvent->Get()->Request.GetParams();
+
+        // NOTE: This forces the leader, if the followerId parameter is not specified
+        ui32 followerId = 0;
+
+        if (cgi.Has("followerid")) {
+            TryFromString(cgi.Get("followerid"), followerId);
         }
 
-        return tabletId;
+        return followerId;
     }
 
     TString GetTabletName() const override {

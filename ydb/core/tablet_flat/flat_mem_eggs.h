@@ -45,7 +45,8 @@ namespace NMem {
         const TUpdate *Next;
         TRowVersion RowVersion;
         ui16 Items;
-        ERowOp Rop;
+        ERowOp Rop : 4;
+        ELockMode Lock : 4;
     };
 
     struct TTreeKey {

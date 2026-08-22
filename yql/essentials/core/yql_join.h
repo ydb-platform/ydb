@@ -3,6 +3,7 @@
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/yql_graph_transformer.h>
 #include <yql/essentials/core/yql_cost_function.h>
+#include <yql/essentials/core/yql_type_annotation.h>
 
 #include <util/generic/set.h>
 #include <util/generic/vector.h>
@@ -23,7 +24,7 @@ inline void SplitTableName(const TStringBuf& fullName, TStringBuf& table, TStrin
 }
 
 struct TJoinLabel {
-    TMaybe<TIssue> Parse(TExprContext& ctx, TExprNode& node, const TStructExprType* structType, const TUniqueConstraintNode* unique, const TDistinctConstraintNode* distinct);
+    TMaybe<TIssue> Parse(TExprContext& ctx, TExprNode& node, const TStructExprType* structType, const TUniqueConstraintNode* unique, const TDistinctConstraintNode* distinct, const TStreamingConstraintNode* streaming);
     TMaybe<TIssue> ValidateLabel(TExprContext& ctx, const NNodes::TCoAtom& label);
     TString FullName(const TStringBuf& column) const;
     TVector<TString> AllNames(const TStringBuf& column) const;
@@ -40,10 +41,11 @@ struct TJoinLabel {
     TVector<TStringBuf> Tables;
     const TUniqueConstraintNode* Unique = nullptr;
     const TDistinctConstraintNode* Distinct = nullptr;
+    const TStreamingConstraintNode* Streaming = nullptr;
 };
 
 struct TJoinLabels {
-    TMaybe<TIssue> Add(TExprContext& ctx, TExprNode& node, const TStructExprType* structType, const TUniqueConstraintNode* unique = nullptr, const TDistinctConstraintNode* distinct = nullptr);
+    TMaybe<TIssue> Add(TExprContext& ctx, TExprNode& node, const TStructExprType* structType, const TUniqueConstraintNode* unique = nullptr, const TDistinctConstraintNode* distinct = nullptr, const TStreamingConstraintNode* streaming = nullptr);
     TMaybe<const TJoinLabel*> FindInput(const TStringBuf& table) const;
     TMaybe<ui32> FindInputIndex(const TStringBuf& table) const;
     TMaybe<const TTypeAnnotationNode*> FindColumn(const TStringBuf& table, const TStringBuf& column) const;
@@ -75,26 +77,38 @@ IGraphTransformer::TStatus EquiJoinAnnotation(
     const TJoinLabels& labels,
     TExprNode& joins,
     const TJoinOptions& options,
-    TExprContext& ctx
+    TExprContext& ctx,
+    const TTypeAnnotationContext& typesCtx
 );
 
 IGraphTransformer::TStatus EquiJoinConstraints(
     TPositionHandle positionHandle,
     const TUniqueConstraintNode*& unique,
     const TDistinctConstraintNode*& distinct,
+    const TStreamingConstraintNode*& streaming,
     const TJoinLabels& labels,
     TExprNode& joins,
     TExprContext& ctx
 );
 
 THashMap<TStringBuf, THashSet<TStringBuf>> CollectEquiJoinKeyColumnsByLabel(const TExprNode& joinTree);
+THashMap<TStringBuf, TVector<TStringBuf>> CollectOrderedEquiJoinKeyColumnsByLabel(const TExprNode& joinTree);
 
 bool IsLeftJoinSideOptional(const TStringBuf& joinType);
 bool IsRightJoinSideOptional(const TStringBuf& joinType);
 THashMap<TStringBuf, bool> CollectAdditiveInputLabels(const NNodes::TCoEquiJoinTuple& joinTree);
 
-TExprNode::TPtr FilterOutNullJoinColumns(TPositionHandle pos, const TExprNode::TPtr& input,
-    const TJoinLabel& label, const TSet<TString>& optionalKeyColumns, TExprContext& ctx);
+bool IsSkipNullsUnessential(const TTypeAnnotationContext* types);
+
+TExprNode::TPtr FilterOutNullJoinColumns(
+    TPositionHandle pos,
+    const TExprNode::TPtr& input,
+    const TJoinLabel& label,
+    const TSet<TString>& optionalKeyColumns,
+    bool ordered,
+    const TTypeAnnotationContext* types,
+    TExprContext& ctx
+);
 
 TMap<TStringBuf, TVector<TStringBuf>> LoadJoinRenameMap(const TExprNode& settings);
 NNodes::TCoLambda BuildJoinRenameLambda(TPositionHandle pos, const TMap<TStringBuf, TVector<TStringBuf>>& renameMap,
@@ -149,6 +163,8 @@ struct TEquiJoinLinkSettings {
     bool ForceSortedMerge = false;
     bool Compact = false;
     TVector<TString> JoinAlgoOptions;
+    // Left join side is enforced to be star join center if flag is set
+    bool ForceStar = false;
 
     TVector<NDq::TJoinColumn> ShuffleLhsBy;
     TVector<NDq::TJoinColumn> ShuffleRhsBy;
@@ -169,19 +185,31 @@ TExprNode::TPtr MakeDictForJoin(TExprNode::TPtr&& list, bool payload, bool multi
 TExprNode::TPtr MakeCrossJoin(TPositionHandle pos, TExprNode::TPtr left, TExprNode::TPtr right, TExprContext& ctx);
 
 void GatherAndTerms(const TExprNode::TPtr& predicate, TExprNode::TListType& andTerms, bool& isPg, TExprContext& ctx);
-TExprNode::TPtr FuseAndTerms(TPositionHandle position, const TExprNode::TListType& andTerms, const TExprNode::TPtr& exclude, bool isPg, TExprContext& ctx);
+TExprNode::TPtr FuseAndTerms(TPositionHandle position, const TExprNode::TListType& andTerms, const TExprNode::TPtr& exclude, TExprNode::TPtr&& replaceWith, bool isPg, TExprContext& ctx);
 
 bool IsEquality(TExprNode::TPtr predicate, TExprNode::TPtr& left, TExprNode::TPtr& right);
+bool IsMemberEquality(const TExprNode::TPtr& predicate, const TExprNode& row, TExprNode::TPtr& leftMember, TExprNode::TPtr& rightMember);
 
 void GatherJoinInputs(const TExprNode::TPtr& expr, const TExprNode& row,
     const TParentsMap& parentsMap, const THashMap<TString, TString>& backRenameMap,
     const TJoinLabels& labels, TSet<ui32>& inputs, TSet<TStringBuf>& usedFields);
+bool GatherJoinInputsForAllNodes(const TExprNode::TPtr& expr, const TExprNode& row,
+    const THashMap<TString, TString>& backRenameMap, const TJoinLabels& labels, TNodeMap<TSet<ui32>>& inputs);
 
 bool IsCachedJoinOption(TStringBuf name);
 bool IsCachedJoinLinkOption(TStringBuf name);
 
+TExprNode::TPtr PushAnyInEquiJoin(TExprContext& ctx, const NNodes::TCoEquiJoinTuple& joinTree, TExprNode::TPtr keyColumnsFromParent = nullptr);
 void GetPruneKeysColumnsForJoinLeaves(const NNodes::TCoEquiJoinTuple& joinTree, THashMap<TStringBuf, THashSet<TStringBuf>>& columnsForPruneKeysExtractor);
 
 TExprNode::TPtr DropAnyOverJoinInputs(TExprNode::TPtr joinTree, const TJoinLabels& labels, const THashMap<TStringBuf, THashSet<TStringBuf>>& keyColumnsByLabel, TExprContext& ctx);
 
+static constexpr TStringBuf YqlCanaryColumnName = "_yql_canary_";
+static constexpr TStringBuf YqlJoinKeyColumnName = "_yql_join_key";
+
+bool IsNoPullColumn(TStringBuf columnName);
+
+static constexpr TStringBuf YqlListJoinCoreKeyPrefix = "_yql_ljc_key_";
+static constexpr TStringBuf YqlListJoinCoreLeftInputPrefix = "_yql_ljc_left_";
+static constexpr TStringBuf YqlListJoinCoreRightInputPrefix = "_yql_ljc_right_";
 }

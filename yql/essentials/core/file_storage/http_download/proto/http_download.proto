@@ -1,5 +1,0 @@
-package NYql;
-
-message THttpDownloaderConfig {
-    optional uint32 SocketTimeoutMs = 3 [default = 300000];
-}

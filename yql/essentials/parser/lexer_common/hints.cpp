@@ -5,6 +5,8 @@
 
 #include <util/string/escape.h>
 
+#include <utility>
+
 namespace NSQLTranslation {
 
 using NYql::TPosition;
@@ -31,11 +33,12 @@ namespace {
 
 class TTokenProcessor {
 public:
-    TTokenProcessor(const TString& queryFile, TSQLHints& hints, bool utf8Aware)
-        : QueryFile_(queryFile)
+    TTokenProcessor(TString queryFile, TSQLHints& hints, bool utf8Aware)
+        : QueryFile_(std::move(queryFile))
         , Hints_(hints)
         , Utf8Aware_(utf8Aware)
-    {}
+    {
+    }
 
     TPosition ExtractPosition(const TParsedToken& token) const {
         return TPosition(token.LinePos + 1, token.Line, QueryFile_);
@@ -74,13 +77,12 @@ private:
     const bool Utf8Aware_;
 };
 
-}
+} // namespace
 
 bool CollectSqlHints(ILexer& lexer, const TString& query, const TString& queryName,
-    const TString& queryFile, TSQLHints& hints, NYql::TIssues& issues, size_t maxErrors, bool utf8Aware) {
+                     const TString& queryFile, TSQLHints& hints, NYql::TIssues& issues, size_t maxErrors, bool utf8Aware) {
     TTokenProcessor tp(queryFile, hints, utf8Aware);
     return lexer.Tokenize(query, queryName, [&tp](TParsedToken&& token) { tp.ProcessToken(std::move(token)); }, issues, maxErrors);
 }
 
-
-}
+} // namespace NSQLTranslation

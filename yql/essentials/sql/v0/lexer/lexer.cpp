@@ -10,6 +10,7 @@
 #endif
 
 namespace NALP {
+// NOLINTNEXTLINE(modernize-avoid-c-arrays)
 extern ANTLR_UINT8* SQLParserTokenNames[];
 }
 

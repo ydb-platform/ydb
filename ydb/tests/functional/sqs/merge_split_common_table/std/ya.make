@@ -1,14 +1,15 @@
 PY3TEST()
-INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 
 TEST_SRCS(
     test.py
 )
 
+REQUIREMENTS(cpu:4)
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
-    TAG(ya:fat)
-    REQUIREMENTS(ram:32 cpu:4)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+    REQUIREMENTS(ram:32)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()

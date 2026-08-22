@@ -10,6 +10,8 @@
 #include <ydb/core/base/location.h>
 #include <ydb/core/base/statestorage.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::GRPC_SERVER
+
 namespace NKikimr::NGRpcService {
 
 using namespace NActors;
@@ -17,6 +19,7 @@ using namespace NActors;
 class TGRpcEndpointPublishActor : public TActorBootstrapped<TGRpcEndpointPublishActor> {
     TIntrusivePtr<TGrpcEndpointDescription> Description;
     TString SelfDatacenter;
+    std::optional<TString> BridgePileName;
     TActorId PublishActor;
 
     void CreatePublishActor() {
@@ -51,8 +54,12 @@ class TGRpcEndpointPublishActor : public TActorBootstrapped<TGRpcEndpointPublish
         if (Description->EndpointId) {
             entry.SetEndpointId(Description->EndpointId);
         }
-        for (const auto &service : Description->ServedServices)
+        for (const auto &service : Description->ServedServices) {
             entry.AddServices(service);
+        }
+        if (BridgePileName) {
+            entry.SetBridgePileName(*BridgePileName);
+        }
 
         Y_ABORT_UNLESS(entry.SerializeToString(&payload));
 
@@ -61,7 +68,8 @@ class TGRpcEndpointPublishActor : public TActorBootstrapped<TGRpcEndpointPublish
 
     void PassAway() override {
         if (PublishActor) {
-            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Stop publish endpoints for database: " << AppData()->TenantName);
+            YDB_LOG_NOTICE("Stop publish endpoints",
+                {"database", AppData()->TenantName});
             Send(PublishActor, new TEvents::TEvPoisonPill());
         }
 
@@ -70,9 +78,12 @@ class TGRpcEndpointPublishActor : public TActorBootstrapped<TGRpcEndpointPublish
 
     void Handle(TEvInterconnect::TEvNodeInfo::TPtr &ev) {
         auto *msg = ev->Get();
-        if (msg->Node && msg->Node->Location.GetDataCenterId())
+        if (msg->Node && msg->Node->Location.GetDataCenterId()) {
             SelfDatacenter = msg->Node->Location.GetDataCenterId();
-
+        }
+        if (msg->Node) {
+            BridgePileName = msg->Node->Location.GetBridgePileName();
+        }
         CreatePublishActor();
         Become(&TThis::StateWork);
     }

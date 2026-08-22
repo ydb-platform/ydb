@@ -65,6 +65,24 @@ Y_UNIT_TEST_SUITE(Cache) {
         UNIT_ASSERT_VALUES_EQUAL(cache.Get(100, &t), false);
         UNIT_ASSERT_VALUES_EQUAL(cache.Size(), 0);
     }
+
+    Y_UNIT_TEST(Test6) {
+        TCache cache(TTtlCacheSettings().SetTtl(TDuration::Seconds(1)).SetMaxSize(3).SetTouchOnGet(true));
+        cache.Put(100, 10);
+        UNIT_ASSERT_VALUES_EQUAL(cache.Size(), 1);
+        TMaybe<int> t;
+        Sleep(TDuration::MilliSeconds(250));
+        UNIT_ASSERT_VALUES_EQUAL(cache.Get(100, &t), true);
+        Sleep(TDuration::MilliSeconds(750));
+        UNIT_ASSERT_VALUES_EQUAL(*t, 10);
+        t.Clear();
+        UNIT_ASSERT_VALUES_EQUAL(cache.Get(100, &t), true);
+        UNIT_ASSERT_VALUES_EQUAL(*t, 10);
+        UNIT_ASSERT_VALUES_EQUAL(cache.Size(), 1);
+        Sleep(TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(cache.Get(100, &t), false);
+        UNIT_ASSERT_VALUES_EQUAL(cache.Size(), 0);
+    }
 }
 
 }  // namespace NFq

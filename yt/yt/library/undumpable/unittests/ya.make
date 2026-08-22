@@ -1,4 +1,4 @@
-GTEST()
+GTEST(unittester-library-undumpable)
 
 INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 

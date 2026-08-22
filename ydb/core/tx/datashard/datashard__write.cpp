@@ -49,7 +49,7 @@ bool TDataShard::TTxWrite::Execute(TTransactionContext& txc, const TActorContext
                 return false;
 
             if (status != NKikimrTxDataShard::TError::OK) {
-                LOG_LOG_S_THROTTLE(Self->GetLogThrottler(TDataShard::ELogThrottlerType::TxProposeTransactionBase_Execute), ctx, NActors::NLog::PRI_ERROR, NKikimrServices::TX_DATASHARD, 
+                LOG_LOG_S_THROTTLE(Self->GetLogThrottler(TDataShard::ELogThrottlerType::TxProposeTransactionBase_Execute), ctx, NActors::NLog::PRI_ERROR, NKikimrServices::TX_DATASHARD,
                     "TTxWrite:: errors while proposing transaction txid " << TxId << " at tablet " << Self->TabletID() << " status: " << status << " error: " << errMessage);
 
                 auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(Self->TabletID(), TxId, NKikimrDataEvents::TEvWriteResult::STATUS_SCHEME_CHANGED, errMessage);
@@ -282,10 +282,10 @@ NKikimrDataEvents::TEvWriteResult::EStatus NEvWrite::TConvertor::ConvertErrCode(
             return NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST;
         case NKikimrTxDataShard::TError_EKind_SCHEME_CHANGED:
             return NKikimrDataEvents::TEvWriteResult::STATUS_SCHEME_CHANGED;
-        case NKikimrTxDataShard::TError_EKind_OUT_OF_SPACE:
-            return NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED;
-        case NKikimrTxDataShard::TError_EKind_DISK_SPACE_EXHAUSTED:
-            return NKikimrDataEvents::TEvWriteResult::STATUS_DISK_SPACE_EXHAUSTED;
+        case NKikimrTxDataShard::TError_EKind_DISK_GROUP_OUT_OF_SPACE:
+            return NKikimrDataEvents::TEvWriteResult::STATUS_DISK_GROUP_OUT_OF_SPACE;
+        case NKikimrTxDataShard::TError_EKind_DATABASE_DISK_SPACE_QUOTA_EXCEEDED:
+            return NKikimrDataEvents::TEvWriteResult::STATUS_DATABASE_DISK_SPACE_QUOTA_EXCEEDED;
         default:
             return NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR;
     }

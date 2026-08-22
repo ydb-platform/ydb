@@ -4,6 +4,7 @@
  *
  * Copyright © 2017-2020 Mickaël Salaün <mic@digikod.net>
  * Copyright © 2018-2020 ANSSI
+ * Copyright © 2021-2025 Microsoft Corporation
  */
 
 #ifndef _LINUX_LANDLOCK_H
@@ -12,35 +13,115 @@
 #include <linux/types.h>
 
 /**
- * struct landlock_ruleset_attr - Ruleset definition
+ * struct landlock_ruleset_attr - Ruleset definition.
  *
- * Argument of sys_landlock_create_ruleset().  This structure can grow in
- * future versions.
+ * Argument of sys_landlock_create_ruleset().
+ *
+ * This structure defines a set of *handled access rights*, a set of actions on
+ * different object types, which should be denied by default when the ruleset is
+ * enacted.  Vice versa, access rights that are not specifically listed here are
+ * not going to be denied by this ruleset when it is enacted.
+ *
+ * For historical reasons, the %LANDLOCK_ACCESS_FS_REFER right is always denied
+ * by default, even when its bit is not set in @handled_access_fs.  In order to
+ * add new rules with this access right, the bit must still be set explicitly
+ * (cf. `Filesystem flags`_).
+ *
+ * The explicit listing of *handled access rights* is required for backwards
+ * compatibility reasons.  In most use cases, processes that use Landlock will
+ * *handle* a wide range or all access rights that they know about at build time
+ * (and that they have tested with a kernel that supported them all).
+ *
+ * This structure can grow in future Landlock versions.
  */
 struct landlock_ruleset_attr {
 	/**
-	 * @handled_access_fs: Bitmask of actions (cf. `Filesystem flags`_)
-	 * that is handled by this ruleset and should then be forbidden if no
-	 * rule explicitly allow them: it is a deny-by-default list that should
-	 * contain as much Landlock access rights as possible. Indeed, all
-	 * Landlock filesystem access rights that are not part of
-	 * handled_access_fs are allowed.  This is needed for backward
-	 * compatibility reasons.  One exception is the
-	 * %LANDLOCK_ACCESS_FS_REFER access right, which is always implicitly
-	 * handled, but must still be explicitly handled to add new rules with
-	 * this access right.
+	 * @handled_access_fs: Bitmask of handled filesystem actions
+	 * (cf. `Filesystem flags`_).
 	 */
 	__u64 handled_access_fs;
+	/**
+	 * @handled_access_net: Bitmask of handled network actions (cf. `Network
+	 * flags`_).
+	 */
+	__u64 handled_access_net;
+	/**
+	 * @scoped: Bitmask of scopes (cf. `Scope flags`_)
+	 * restricting a Landlock domain from accessing outside
+	 * resources (e.g. IPCs).
+	 */
+	__u64 scoped;
 };
 
-/*
- * sys_landlock_create_ruleset() flags:
+/**
+ * DOC: landlock_create_ruleset_flags
  *
- * - %LANDLOCK_CREATE_RULESET_VERSION: Get the highest supported Landlock ABI
- *   version.
+ * **Flags**
+ *
+ * %LANDLOCK_CREATE_RULESET_VERSION
+ *     Get the highest supported Landlock ABI version (starting at 1).
+ *
+ * %LANDLOCK_CREATE_RULESET_ERRATA
+ *     Get a bitmask of fixed issues for the current Landlock ABI version.
  */
 /* clang-format off */
 #define LANDLOCK_CREATE_RULESET_VERSION			(1U << 0)
+#define LANDLOCK_CREATE_RULESET_ERRATA			(1U << 1)
+/* clang-format on */
+
+/**
+ * DOC: landlock_restrict_self_flags
+ *
+ * **Flags**
+ *
+ * By default, denied accesses originating from programs that sandbox themselves
+ * are logged via the audit subsystem. Such events typically indicate unexpected
+ * behavior, such as bugs or exploitation attempts. However, to avoid excessive
+ * logging, access requests denied by a domain not created by the originating
+ * program are not logged by default. The rationale is that programs should know
+ * their own behavior, but not necessarily the behavior of other programs.  This
+ * default configuration is suitable for most programs that sandbox themselves.
+ * For specific use cases, the following flags allow programs to modify this
+ * default logging behavior.
+ *
+ * The %LANDLOCK_RESTRICT_SELF_LOG_SAME_EXEC_OFF and
+ * %LANDLOCK_RESTRICT_SELF_LOG_NEW_EXEC_ON flags apply to the newly created
+ * Landlock domain.
+ *
+ * %LANDLOCK_RESTRICT_SELF_LOG_SAME_EXEC_OFF
+ *     Disables logging of denied accesses originating from the thread creating
+ *     the Landlock domain, as well as its children, as long as they continue
+ *     running the same executable code (i.e., without an intervening
+ *     :manpage:`execve(2)` call). This is intended for programs that execute
+ *     unknown code without invoking :manpage:`execve(2)`, such as script
+ *     interpreters. Programs that only sandbox themselves should not set this
+ *     flag, so users can be notified of unauthorized access attempts via system
+ *     logs.
+ *
+ * %LANDLOCK_RESTRICT_SELF_LOG_NEW_EXEC_ON
+ *     Enables logging of denied accesses after an :manpage:`execve(2)` call,
+ *     providing visibility into unauthorized access attempts by newly executed
+ *     programs within the created Landlock domain. This flag is recommended
+ *     only when all potential executables in the domain are expected to comply
+ *     with the access restrictions, as excessive audit log entries could make
+ *     it more difficult to identify critical events.
+ *
+ * %LANDLOCK_RESTRICT_SELF_LOG_SUBDOMAINS_OFF
+ *     Disables logging of denied accesses originating from nested Landlock
+ *     domains created by the caller or its descendants. This flag should be set
+ *     according to runtime configuration, not hardcoded, to avoid suppressing
+ *     important security events. It is useful for container runtimes or
+ *     sandboxing tools that may launch programs which themselves create
+ *     Landlock domains and could otherwise generate excessive logs. Unlike
+ *     ``LANDLOCK_RESTRICT_SELF_LOG_SAME_EXEC_OFF``, this flag only affects
+ *     future nested domains, not the one being created. It can also be used
+ *     with a @ruleset_fd value of -1 to mute subdomain logs without creating a
+ *     domain.
+ */
+/* clang-format off */
+#define LANDLOCK_RESTRICT_SELF_LOG_SAME_EXEC_OFF		(1U << 0)
+#define LANDLOCK_RESTRICT_SELF_LOG_NEW_EXEC_ON			(1U << 1)
+#define LANDLOCK_RESTRICT_SELF_LOG_SUBDOMAINS_OFF		(1U << 2)
 /* clang-format on */
 
 /**
@@ -54,6 +135,11 @@ enum landlock_rule_type {
 	 * landlock_path_beneath_attr .
 	 */
 	LANDLOCK_RULE_PATH_BENEATH = 1,
+	/**
+	 * @LANDLOCK_RULE_NET_PORT: Type of a &struct
+	 * landlock_net_port_attr .
+	 */
+	LANDLOCK_RULE_NET_PORT,
 };
 
 /**
@@ -80,6 +166,32 @@ struct landlock_path_beneath_attr {
 } __attribute__((packed));
 
 /**
+ * struct landlock_net_port_attr - Network port definition
+ *
+ * Argument of sys_landlock_add_rule().
+ */
+struct landlock_net_port_attr {
+	/**
+	 * @allowed_access: Bitmask of allowed network actions for a port
+	 * (cf. `Network flags`_).
+	 */
+	__u64 allowed_access;
+	/**
+	 * @port: Network port in host endianness.
+	 *
+	 * It should be noted that port 0 passed to :manpage:`bind(2)` will bind
+	 * to an available port from the ephemeral port range.  This can be
+	 * configured with the ``/proc/sys/net/ipv4/ip_local_port_range`` sysctl
+	 * (also used for IPv6).
+	 *
+	 * A Landlock rule with port 0 and the ``LANDLOCK_ACCESS_NET_BIND_TCP``
+	 * right means that requesting to bind on port 0 is allowed and it will
+	 * automatically translate to binding on the related port range.
+	 */
+	__u64 port;
+};
+
+/**
  * DOC: fs_access
  *
  * A set of actions on kernel objects may be defined by an attribute (e.g.
@@ -92,22 +204,23 @@ struct landlock_path_beneath_attr {
  * files and directories.  Files or directories opened before the sandboxing
  * are not subject to these restrictions.
  *
- * A file can only receive these access rights:
+ * The following access rights apply only to files:
  *
  * - %LANDLOCK_ACCESS_FS_EXECUTE: Execute a file.
- * - %LANDLOCK_ACCESS_FS_WRITE_FILE: Open a file with write access. Note that
- *   you might additionally need the %LANDLOCK_ACCESS_FS_TRUNCATE right in order
- *   to overwrite files with :manpage:`open(2)` using ``O_TRUNC`` or
- *   :manpage:`creat(2)`.
+ * - %LANDLOCK_ACCESS_FS_WRITE_FILE: Open a file with write access.  When
+ *   opening files for writing, you will often additionally need the
+ *   %LANDLOCK_ACCESS_FS_TRUNCATE right.  In many cases, these system calls
+ *   truncate existing files when overwriting them (e.g., :manpage:`creat(2)`).
  * - %LANDLOCK_ACCESS_FS_READ_FILE: Open a file with read access.
  * - %LANDLOCK_ACCESS_FS_TRUNCATE: Truncate a file with :manpage:`truncate(2)`,
  *   :manpage:`ftruncate(2)`, :manpage:`creat(2)`, or :manpage:`open(2)` with
- *   ``O_TRUNC``. Whether an opened file can be truncated with
- *   :manpage:`ftruncate(2)` is determined during :manpage:`open(2)`, in the
- *   same way as read and write permissions are checked during
- *   :manpage:`open(2)` using %LANDLOCK_ACCESS_FS_READ_FILE and
- *   %LANDLOCK_ACCESS_FS_WRITE_FILE. This access right is available since the
- *   third version of the Landlock ABI.
+ *   ``O_TRUNC``.  This access right is available since the third version of the
+ *   Landlock ABI.
+ *
+ * Whether an opened file can be truncated with :manpage:`ftruncate(2)` or used
+ * with `ioctl(2)` is determined during :manpage:`open(2)`, in the same way as
+ * read and write permissions are checked during :manpage:`open(2)` using
+ * %LANDLOCK_ACCESS_FS_READ_FILE and %LANDLOCK_ACCESS_FS_WRITE_FILE.
  *
  * A directory can receive access rights related to files or directories.  The
  * following access right is applied to the directory itself, and the
@@ -162,13 +275,33 @@ struct landlock_path_beneath_attr {
  *   If multiple requirements are not met, the ``EACCES`` error code takes
  *   precedence over ``EXDEV``.
  *
+ * The following access right applies both to files and directories:
+ *
+ * - %LANDLOCK_ACCESS_FS_IOCTL_DEV: Invoke :manpage:`ioctl(2)` commands on an opened
+ *   character or block device.
+ *
+ *   This access right applies to all `ioctl(2)` commands implemented by device
+ *   drivers.  However, the following common IOCTL commands continue to be
+ *   invokable independent of the %LANDLOCK_ACCESS_FS_IOCTL_DEV right:
+ *
+ *   * IOCTL commands targeting file descriptors (``FIOCLEX``, ``FIONCLEX``),
+ *   * IOCTL commands targeting file descriptions (``FIONBIO``, ``FIOASYNC``),
+ *   * IOCTL commands targeting file systems (``FIFREEZE``, ``FITHAW``,
+ *     ``FIGETBSZ``, ``FS_IOC_GETFSUUID``, ``FS_IOC_GETFSSYSFSPATH``)
+ *   * Some IOCTL commands which do not make sense when used with devices, but
+ *     whose implementations are safe and return the right error codes
+ *     (``FS_IOC_FIEMAP``, ``FICLONE``, ``FICLONERANGE``, ``FIDEDUPERANGE``)
+ *
+ *   This access right is available since the fifth version of the Landlock
+ *   ABI.
+ *
  * .. warning::
  *
  *   It is currently not possible to restrict some file-related actions
  *   accessible through these syscall families: :manpage:`chdir(2)`,
  *   :manpage:`stat(2)`, :manpage:`flock(2)`, :manpage:`chmod(2)`,
  *   :manpage:`chown(2)`, :manpage:`setxattr(2)`, :manpage:`utime(2)`,
- *   :manpage:`ioctl(2)`, :manpage:`fcntl(2)`, :manpage:`access(2)`.
+ *   :manpage:`fcntl(2)`, :manpage:`access(2)`.
  *   Future Landlock evolutions will enable to restrict them.
  */
 /* clang-format off */
@@ -187,6 +320,54 @@ struct landlock_path_beneath_attr {
 #define LANDLOCK_ACCESS_FS_MAKE_SYM			(1ULL << 12)
 #define LANDLOCK_ACCESS_FS_REFER			(1ULL << 13)
 #define LANDLOCK_ACCESS_FS_TRUNCATE			(1ULL << 14)
+#define LANDLOCK_ACCESS_FS_IOCTL_DEV			(1ULL << 15)
 /* clang-format on */
+
+/**
+ * DOC: net_access
+ *
+ * Network flags
+ * ~~~~~~~~~~~~~~~~
+ *
+ * These flags enable to restrict a sandboxed process to a set of network
+ * actions.
+ *
+ * This is supported since Landlock ABI version 4.
+ *
+ * The following access rights apply to TCP port numbers:
+ *
+ * - %LANDLOCK_ACCESS_NET_BIND_TCP: Bind a TCP socket to a local port.
+ * - %LANDLOCK_ACCESS_NET_CONNECT_TCP: Connect an active TCP socket to
+ *   a remote port.
+ */
+/* clang-format off */
+#define LANDLOCK_ACCESS_NET_BIND_TCP			(1ULL << 0)
+#define LANDLOCK_ACCESS_NET_CONNECT_TCP			(1ULL << 1)
+/* clang-format on */
+
+/**
+ * DOC: scope
+ *
+ * Scope flags
+ * ~~~~~~~~~~~
+ *
+ * These flags enable to isolate a sandboxed process from a set of IPC actions.
+ * Setting a flag for a ruleset will isolate the Landlock domain to forbid
+ * connections to resources outside the domain.
+ *
+ * This is supported since Landlock ABI version 6.
+ *
+ * Scopes:
+ *
+ * - %LANDLOCK_SCOPE_ABSTRACT_UNIX_SOCKET: Restrict a sandboxed process from
+ *   connecting to an abstract UNIX socket created by a process outside the
+ *   related Landlock domain (e.g., a parent domain or a non-sandboxed process).
+ * - %LANDLOCK_SCOPE_SIGNAL: Restrict a sandboxed process from sending a signal
+ *   to another process outside the domain.
+ */
+/* clang-format off */
+#define LANDLOCK_SCOPE_ABSTRACT_UNIX_SOCKET		(1ULL << 0)
+#define LANDLOCK_SCOPE_SIGNAL		                (1ULL << 1)
+/* clang-format on*/
 
 #endif /* _LINUX_LANDLOCK_H */

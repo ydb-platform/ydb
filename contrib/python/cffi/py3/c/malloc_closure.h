@@ -154,23 +154,38 @@ static void more_core(void)
 
 /******************************************************************/
 
+#ifdef Py_GIL_DISABLED
+static PyMutex malloc_closure_lock;
+# define MALLOC_CLOSURE_LOCK()   PyMutex_Lock(&malloc_closure_lock)
+# define MALLOC_CLOSURE_UNLOCK() PyMutex_Unlock(&malloc_closure_lock)
+#else
+# define MALLOC_CLOSURE_LOCK()   ((void)0)
+# define MALLOC_CLOSURE_UNLOCK() ((void)0)
+#endif
+
 /* put the item back into the free list */
 static void cffi_closure_free(ffi_closure *p)
 {
+    MALLOC_CLOSURE_LOCK();
     union mmaped_block *item = (union mmaped_block *)p;
     item->next = free_list;
     free_list = item;
+    MALLOC_CLOSURE_UNLOCK();
 }
 
 /* return one item from the free list, allocating more if needed */
 static ffi_closure *cffi_closure_alloc(void)
 {
     union mmaped_block *item;
+    MALLOC_CLOSURE_LOCK();
     if (!free_list)
         more_core();
-    if (!free_list)
+    if (!free_list) {
+        MALLOC_CLOSURE_UNLOCK();
         return NULL;
+    }
     item = free_list;
     free_list = item->next;
+    MALLOC_CLOSURE_UNLOCK();
     return &item->closure;
 }

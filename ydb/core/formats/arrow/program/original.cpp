@@ -9,14 +9,15 @@ TConclusion<IResourceProcessor::EExecutionResult> TOriginalColumnDataProcessor::
     if (!source) {
         return TConclusionStatus::Fail("source was destroyed before (original fetch start)");
     }
+    THashSet<uint32_t> uniqueEntityIds;
     std::vector<std::shared_ptr<IFetchLogic>> logic;
     for (auto&& [_, i] : DataAddresses) {
-        auto acc = context.GetResources()->GetAccessorOptional(i.GetColumnId());
+        auto acc = context.GetResources().GetAccessorOptional(i.GetColumnId());
         THashSet<TString> subColumnsToFetch;
         for (auto&& sc : i.GetSubColumnNames(true)) {
             if (!acc || !acc->HasSubColumnData(sc)) {
                 if (!sc && acc) {
-                    context.GetResources()->Remove(i.GetColumnId());
+                    context.MutableResources().Remove(i.GetColumnId());
                 }
                 subColumnsToFetch.emplace(sc);
             }
@@ -28,6 +29,11 @@ TConclusion<IResourceProcessor::EExecutionResult> TOriginalColumnDataProcessor::
         if (conclusion.IsFail()) {
             return conclusion;
         } else if (!!conclusion.GetResult()) {
+            auto entityId = conclusion.GetResult()->GetEntityId();
+            auto [_, emplaced] = uniqueEntityIds.emplace(entityId);
+            if (!emplaced) {
+                return TConclusionStatus::Fail(TStringBuilder{} << "Try to process the same entity id (data) " << entityId << " twice");
+            }
             logic.emplace_back(conclusion.DetachResult());
         } else {
             continue;
@@ -39,17 +45,29 @@ TConclusion<IResourceProcessor::EExecutionResult> TOriginalColumnDataProcessor::
         if (conclusion.IsFail()) {
             return conclusion;
         } else {
+            for (const auto& index: conclusion.GetResult()) {
+                auto entityId = index->GetEntityId();
+                auto [_, emplaced] = uniqueEntityIds.emplace(entityId);
+                if (!emplaced) {
+                    return TConclusionStatus::Fail(TStringBuilder{} << "Try to process the same entity id (index) " << entityId << " twice");
+                }
+            }
             logic.insert(logic.end(), conclusion.GetResult().begin(), conclusion.GetResult().end());
         }
     }
     for (auto&& [_, i] : HeaderContext) {
-        if (context.GetResources()->GetAccessorOptional(i.GetColumnId())) {
+        if (context.GetResources().GetAccessorOptional(i.GetColumnId())) {
             continue;
         }
         auto conclusion = source->StartFetchHeader(context, i);
         if (conclusion.IsFail()) {
             return conclusion;
         } else if (!!conclusion.GetResult()) {
+            auto entityId = conclusion.GetResult()->GetEntityId();
+            auto [_, emplaced] = uniqueEntityIds.emplace(entityId);
+            if (!emplaced) {
+                return TConclusionStatus::Fail(TStringBuilder{} << "Try to process the same entity id (header) " << entityId << " twice");
+            }
             logic.emplace_back(conclusion.DetachResult());
         } else {
             continue;
@@ -68,7 +86,7 @@ TConclusion<IResourceProcessor::EExecutionResult> TOriginalColumnDataProcessor::
 
 TConclusion<IResourceProcessor::EExecutionResult> TOriginalColumnAccessorProcessor::DoExecute(
     const TProcessorContext& context, const TExecutionNodeContext& /*nodeContext*/) const {
-    const auto acc = context.GetResources()->GetAccessorOptional(GetOutputColumnIdOnce());
+    const auto acc = context.GetResources().GetAccessorOptional(GetOutputColumnIdOnce());
     for (auto&& sc : DataAddress.GetSubColumnNames(true)) {
         if (!acc || !acc->HasSubColumnData(sc)) {
             auto source = context.GetDataSource().lock();

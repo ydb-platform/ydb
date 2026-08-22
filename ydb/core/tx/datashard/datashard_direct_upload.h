@@ -15,8 +15,8 @@ public:
     explicit TDirectTxUpload(TEvDataShard::TEvUploadRowsRequest::TPtr& ev);
 
     bool Execute(TDataShard* self, TTransactionContext& txc,
-        const TRowVersion& readVersion, const TRowVersion& writeVersion,
-        ui64 globalTxId, absl::flat_hash_set<ui64>& volatileReadDependencies) override;
+        const TRowVersion& mvccVersion, ui64 globalTxId,
+        absl::flat_hash_set<ui64>& volatileReadDependencies) override;
     TDirectTxResult GetResult(TDataShard* self) override;
     TVector<IDataShardChangeCollector::TChange> GetCollectedChanges() const override;
 };

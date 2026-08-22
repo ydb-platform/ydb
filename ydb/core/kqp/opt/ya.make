@@ -5,24 +5,31 @@ SRCS(
     kqp_opt_build_phy_query.cpp
     kqp_opt_build_txs.cpp
     kqp_opt_effects.cpp
+    kqp_opt_generated_columns.cpp
     kqp_opt_kql.cpp
     kqp_opt_phase.cpp
     kqp_opt_phy_check.cpp
     kqp_opt_phy_finalize.cpp
+    kqp_opt_sink_precompute.cpp
     kqp_query_blocks_transformer.cpp
     kqp_query_plan.cpp
     kqp_statistics_transformer.cpp
+    kqp_column_statistics_utils.cpp
     kqp_column_statistics_requester.cpp
     kqp_constant_folding_transformer.cpp
     kqp_opt_hash_func_propagate_transformer.cpp
+    kqp_type_ann.cpp
 )
 
 PEERDIR(
     ydb/core/kqp/common
+    ydb/core/kqp/opt/cbo
+    ydb/core/kqp/opt/cbo/solver
     ydb/core/kqp/opt/logical
     ydb/core/kqp/opt/peephole
     ydb/core/kqp/opt/physical
     ydb/core/kqp/opt/rbo
+    ydb/library/mkql_proto
     ydb/library/yql/dq/common
     ydb/library/yql/dq/opt
     ydb/library/yql/dq/type_ann
@@ -31,6 +38,8 @@ PEERDIR(
     ydb/library/yql/utils/plan
     ydb/core/kqp/provider
     ydb/library/formats/arrow/protos
+    ydb/library/json_index
+    yql/essentials/providers/common/mkql
 )
 
 YQL_LAST_ABI_VERSION()
@@ -38,3 +47,7 @@ YQL_LAST_ABI_VERSION()
 GENERATE_ENUM_SERIALIZATION(kqp_query_plan.h)
 
 END()
+
+RECURSE(
+    cbo
+)

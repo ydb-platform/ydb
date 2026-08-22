@@ -5,11 +5,13 @@
 #include "key_validator.h"
 #include "operation.h"
 
-#include <ydb/core/kqp/runtime/kqp_tasks_runner.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 #include <ydb/core/engine/mkql_engine_flat.h>
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
-#include <ydb/core/tx/datashard/datashard_kqp_compute.h>
+
+namespace NACLib {
+    class TUserContext;
+}
 
 namespace NKikimr {
 
@@ -43,7 +45,7 @@ public:
         ui64 TotalKeysSize = 0;
     };
 
-    TEngineBay(TDataShard* self, TTransactionContext& txc, const TActorContext& ctx, const TStepOrder& stepTxId);
+    TEngineBay(TDataShard* self, TTransactionContext& txc, const TActorContext& ctx, const TStepOrder& stepTxId, TIntrusivePtr<NACLib::TUserContext> userCtx);
 
     virtual ~TEngineBay();
 
@@ -76,17 +78,6 @@ public:
 
     /// @note it expects TValidationInfo keys are materialized outsize of engine's allocs
     void DestroyEngine() {
-        ComputeCtx->Clear();
-        if (KqpTasksRunner) {
-            KqpTasksRunner.Reset();
-            {
-                auto guard = TGuard(*KqpAlloc);
-                KqpTypeEnv.Reset();
-            }
-            KqpAlloc.reset();
-        }
-        KqpExecCtx = {};
-
         Engine.Reset();
         EngineHost.Reset();
     }
@@ -97,8 +88,7 @@ public:
     const TValidationInfo& TxInfo() const { return KeyValidator.GetInfo(); }
     TEngineBay::TSizes CalcSizes(bool needsTotalKeysSize) const;
 
-    void SetWriteVersion(TRowVersion writeVersion);
-    void SetReadVersion(TRowVersion readVersion);
+    void SetMvccVersion(TRowVersion mvccVersion);
     void SetVolatileTxId(ui64 txId);
     void SetIsImmediateTx();
     void SetUsesMvccSnapshot();
@@ -115,9 +105,6 @@ public:
     void ResetCounters() { EngineHostCounters = TEngineHostCounters(); }
     const TEngineHostCounters& GetCounters() const { return EngineHostCounters; }
 
-    NKqp::TKqpTasksRunner& GetKqpTasksRunner(NKikimrTxDataShard::TKqpTransaction& tx);
-    NMiniKQL::TKqpDatashardComputeContext& GetKqpComputeCtx();
-
 private:
     TStepOrder StepTxId;
     THolder<NMiniKQL::TEngineHost> EngineHost;
@@ -125,13 +112,6 @@ private:
     THolder<NMiniKQL::IEngineFlat> Engine;
     TKeyValidator KeyValidator;
     TEngineHostCounters EngineHostCounters;
-    NYql::NDq::TLogFunc KqpLogFunc;
-    THolder<NUdf::IApplyContext> KqpApplyCtx;
-    THolder<NMiniKQL::TKqpDatashardComputeContext> ComputeCtx;
-    std::shared_ptr<NMiniKQL::TScopedAlloc> KqpAlloc;
-    THolder<NMiniKQL::TTypeEnvironment> KqpTypeEnv;
-    NYql::NDq::TDqTaskRunnerContext KqpExecCtx;
-    TIntrusivePtr<NKqp::TKqpTasksRunner> KqpTasksRunner;
 };
 
 }}

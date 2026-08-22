@@ -15,6 +15,7 @@ namespace NWriter {
 
     struct TConf {
         using ECache = NTable::NPage::ECache;
+        using ECacheMode = NTable::NPage::ECacheMode;
         using TSlot = NPageCollection::TSlot;
 
         TConf() {
@@ -25,6 +26,7 @@ namespace NWriter {
         struct TGroup {
             ui8 Channel = 1;              /* Data channel for page collection */
             ECache Cache = ECache::None;  /* Keep data pages in memory */
+            ECacheMode CacheMode = ECacheMode::Regular;
             ui32 MaxBlobSize = 8 * 1024 * 1024; /* Page collection max blob size */
         };
 

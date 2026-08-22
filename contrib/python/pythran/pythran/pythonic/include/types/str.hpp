@@ -105,8 +105,7 @@ namespace types
     chr operator[](long i) const;
     chr fast(long i) const;
     template <class Sp>
-    typename std::enable_if<is_slice<Sp>::value, sliced_str<Sp>>::type
-    operator[](Sp const &s) const;
+    std::enable_if_t<is_slice<Sp>::value, sliced_str<Sp>> operator[](Sp const &s) const;
 
     // conversion
     operator long() const;
@@ -119,8 +118,7 @@ namespace types
 
     // io
     template <class SS>
-    friend std::ostream &operator<<(std::ostream &os,
-                                    types::sliced_str<SS> const &v);
+    friend std::ostream &operator<<(std::ostream &os, types::sliced_str<SS> const &v);
   };
 
   struct string_iterator;
@@ -209,15 +207,13 @@ namespace types
     bool operator==(chr other) const;
 
     template <class S>
-    typename std::enable_if<is_slice<S>::value, sliced_str<S>>::type
-    operator()(S const &s) const;
+    std::enable_if_t<is_slice<S>::value, sliced_str<S>> operator()(S const &s) const;
 
     chr operator[](long i) const;
     chr fast(long i) const;
 
     template <class S>
-    typename std::enable_if<is_slice<S>::value, sliced_str<S>>::type
-    operator[](S const &s) const;
+    std::enable_if_t<is_slice<S>::value, sliced_str<S>> operator[](S const &s) const;
 
     explicit operator bool() const;
     long count(types::str const &sub) const;
@@ -228,8 +224,8 @@ namespace types
     }
   };
 
-  struct string_iterator : std::iterator<std::random_access_iterator_tag, str,
-                                         std::ptrdiff_t, str *, str> {
+  struct string_iterator
+      : std::iterator<std::random_access_iterator_tag, str, std::ptrdiff_t, str *, str> {
     std::string::const_iterator curr;
     string_iterator() = default;
     string_iterator(std::string::const_iterator iter) : curr(iter)
@@ -275,14 +271,21 @@ namespace types
     {
       return curr != other.curr;
     }
+    bool operator<(string_iterator const &other) const
+    {
+      return curr < other.curr;
+    }
+    bool operator<=(string_iterator const &other) const
+    {
+      return curr <= other.curr;
+    }
     std::ptrdiff_t operator-(string_iterator const &other) const
     {
       return curr - other.curr;
     }
   };
   struct const_sliced_str_iterator
-      : std::iterator<std::random_access_iterator_tag, str, std::ptrdiff_t,
-                      str *, str> {
+      : std::iterator<std::random_access_iterator_tag, str, std::ptrdiff_t, str *, str> {
     const char *data;
     long step;
     const_sliced_str_iterator(char const *data, long step);
@@ -328,9 +331,8 @@ namespace operator_
 {
 
   template <size_t N, class Arg>
-  auto mod(const char (&fmt)[N],
-           Arg &&arg) -> decltype(pythonic::types::str(fmt) %
-                                  std::forward<Arg>(arg));
+  auto mod(const char (&fmt)[N], Arg &&arg)
+      -> decltype(pythonic::types::str(fmt) % std::forward<Arg>(arg));
 
   pythonic::types::str add(char const *self, char const *other);
 

@@ -14,7 +14,7 @@ from parso.utils import parse_version_string
 
 collect_ignore = ["setup.py"]
 
-_SUPPORTED_VERSIONS = '3.6', '3.7', '3.8', '3.9', '3.10'
+_SUPPORTED_VERSIONS = '3.6', '3.7', '3.8', '3.9', '3.10', '3.11', '3.12', '3.13', '3.14'
 
 
 @pytest.fixture(scope='session')
@@ -146,3 +146,15 @@ def works_ge_py38(each_version):
 def works_ge_py39(each_version):
     version_info = parse_version_string(each_version)
     return Checker(each_version, version_info >= (3, 9))
+
+
+@pytest.fixture
+def works_ge_py312(each_version):
+    version_info = parse_version_string(each_version)
+    return Checker(each_version, version_info >= (3, 12))
+
+
+@pytest.fixture
+def works_ge_py313(each_version):
+    version_info = parse_version_string(each_version)
+    return Checker(each_version, version_info >= (3, 13))

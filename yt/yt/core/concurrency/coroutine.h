@@ -1,11 +1,11 @@
 #pragma once
 
 #include "public.h"
-#include "execution_stack.h"
+#include "pooled_execution_stack.h"
 
 #include <yt/yt/core/actions/callback.h>
 
-#include <library/cpp/yt/misc/concepts.h>
+#include <library/cpp/yt/mpl/concepts.h>
 
 #include <util/system/context.h>
 
@@ -35,7 +35,7 @@ public:
     bool IsCompleted() const noexcept;
 
 protected:
-    template <CInvocable<void()> TBody>
+    template <NMpl::CInvocable<void()> TBody>
     explicit TCoroutineBase(TBody body, EExecutionStackKind stackKind);
 
     void Resume();
@@ -49,9 +49,14 @@ private:
         Completed,
     };
 
-    std::shared_ptr<TExecutionStack> CoroutineStack_;
+    std::shared_ptr<NThreading::TExecutionStack> CoroutineStack_;
 
-    TExceptionSafeContext CallerContext_;
+    // Points to a TExceptionSafeContext placed on the stack of the thread that
+    // called Resume(). Owning the caller context per-invocation (rather than as
+    // a member captured once at construction) keeps TSAN's fiber and ASAN's
+    // stack bounds in sync with the thread actually driving the coroutine,
+    // which may differ from the thread that constructed it.
+    TExceptionSafeContext* CallerContext_ = nullptr;
 
     // We have to delay initialization of this object until the body
     // of ctor.
@@ -73,7 +78,7 @@ private:
     // and eliminate type-erasure. If this class was more
     // popular it would make sense to move the rest of the fields
     // to the stack at the cost of much worse readability.
-    template <CInvocable<void()> TBody>
+    template <NMpl::CInvocable<void()> TBody>
     class TTrampoLine
         : public ITrampoLine
     {
@@ -107,10 +112,10 @@ public:
     // definition with concepts which refer to the class
     // name, aliases or variables. That's why it is commented out.
     template <class TCallee>
-    // requires CInvocable<TCallee, void(TCoroutine<R(TArgs...)>&, TArgs...)>
+    // requires NMpl::CInvocable<TCallee, void(TCoroutine<R(TArgs...)>&, TArgs...)>
     TCoroutine(
         TCallee&& callee,
-        const EExecutionStackKind stackKind = EExecutionStackKind::Small);
+        EExecutionStackKind stackKind = DefaultExecutionStackKind);
 
     template <class... TParams>
     const std::optional<R>& Run(TParams&&... params);
@@ -123,7 +128,7 @@ private:
     std::optional<R> Result_;
 
     template <class TCallee>
-    CInvocable<void()> auto MakeBody(TCallee&& callee);
+    NMpl::CInvocable<void()> auto MakeBody(TCallee&& callee);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -141,10 +146,10 @@ public:
     // definition with concepts which refer to the class
     // name, aliases or variables. That's why it is commented out.
     template <class TCallee>
-    // requires CInvocable<TCallee, void(TCoroutine<R(TArgs...)>&, TArgs...)>
+    // requires NMpl::CInvocable<TCallee, void(TCoroutine<R(TArgs...)>&, TArgs...)>
     TCoroutine(
         TCallee&& callee,
-        const EExecutionStackKind stackKind = EExecutionStackKind::Small);
+        EExecutionStackKind stackKind = DefaultExecutionStackKind);
 
     template <class... TParams>
     bool Run(TParams&&... params);
@@ -156,7 +161,7 @@ private:
     bool Result_ = false;
 
     template <class TCallee>
-    CInvocable<void()> auto MakeBody(TCallee&& callee);
+    NMpl::CInvocable<void()> auto MakeBody(TCallee&& callee);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

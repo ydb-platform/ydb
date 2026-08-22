@@ -3,7 +3,6 @@
 // For the sake of sane code completion.
 #include "parallel_runner.h"
 #endif
-#undef PARALLEL_RUNNER_INL_H_
 
 namespace NYT::NConcurrency {
 
@@ -69,7 +68,7 @@ TFuture<void> TParallelRunner<T>::Run(F func)
         for (auto& item : CurrentBatch_) {
             func(item);
         }
-        return VoidFuture;
+        return OKFuture;
     }
 }
 

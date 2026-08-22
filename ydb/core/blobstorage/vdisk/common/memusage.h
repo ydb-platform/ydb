@@ -22,6 +22,8 @@ namespace NKikimr {
         TMemoryConsumer(TMemoryConsumer&& other) = default;
         explicit TMemoryConsumer(const TMemoryConsumer& other) = default;
 
+        TMemoryConsumer& operator=(const TMemoryConsumer& other) = default;
+
         void Add(size_t bytes) {
             Delta(bytes);
         }

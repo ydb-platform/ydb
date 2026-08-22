@@ -9,16 +9,29 @@ namespace NYT::NYTree {
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
-class TDefaultConversionTraits
+struct TDefaultConversionTraits
 { };
 
 template <>
-class TDefaultConversionTraits<TString>
+struct TDefaultConversionTraits<std::string>
 {
-public:
-    static TString ConvertKeyToString(const TString& key)
+    static std::string ConvertKeyToString(const std::string& key)
     {
         return key;
+    }
+
+    static std::string ConvertStringToKey(TStringBuf key)
+    {
+        return std::string(key);
+    }
+};
+
+template <>
+struct TDefaultConversionTraits<TString>
+{
+    static std::string ConvertKeyToString(const TString& key)
+    {
+        return std::string(key);
     }
 
     static TString ConvertStringToKey(TStringBuf key)

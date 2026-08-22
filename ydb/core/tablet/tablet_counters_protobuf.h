@@ -3,15 +3,24 @@
 #include "tablet_counters.h"
 #include "tablet_counters_aggregator.h"
 #include <ydb/core/tablet_flat/defs.h>
-#include <util/string/vector.h>
+#include <util/string/join.h>
 #include <util/string/split.h>
+#include <util/string/vector.h>
 
 namespace NKikimr {
 
 namespace NAux {
 
-// Class that incapsulates protobuf options parsing for app counters
-template <const NProtoBuf::EnumDescriptor* AppCountersDesc()>
+/**
+ * The holder for parsed application counter definitions from .proto files.
+ *
+ * @tparam AppCountersDesc The function, which returns the enum description to parse
+ * @tparam ParseSourceCounters Indicates whether to parse the SourceCounters fields
+ */
+template <
+    const NProtoBuf::EnumDescriptor* AppCountersDesc(),
+    bool ParseSourceCounters = false
+>
 struct TAppParsedOpts {
 public:
     const size_t Size;
@@ -21,6 +30,14 @@ protected:
     TVector<TVector<TTabletPercentileCounter::TRangeDef>> Ranges;
     TVector<TTabletPercentileCounter::TRangeDef> AppGlobalRanges;
     TVector<bool> Integral;
+
+    /**
+     * The list of source counters for each enum value.
+     *
+     * @note Each entry is guaranteed to be not empty, if ParseSourceCounters is true.
+     */
+    TVector<TVector<TSourceCounter>> SourceCounters;
+
 public:
     explicit TAppParsedOpts(const size_t diff = 0)
         : Size(AppCountersDesc()->value_count() + diff)
@@ -29,6 +46,11 @@ public:
         NamesStrings.reserve(Size);
         Names.reserve(Size);
         Ranges.reserve(Size);
+        Integral.reserve(Size);
+
+        if constexpr (ParseSourceCounters) {
+            SourceCounters.reserve(Size);
+        }
 
         // Parse protobuf options for enum values for app counters
         for (int i = 0; i < appDesc->value_count(); i++) {
@@ -39,6 +61,14 @@ public:
                 NamesStrings.emplace_back(); // empty name
                 Ranges.emplace_back(); // empty ranges
                 Integral.push_back(false);
+
+                Y_ABORT_UNLESS(
+                    !ParseSourceCounters,
+                    "ParseSourceCounters is set, but the counter '%s' (value %d) is not defined using CounterOpts",
+                    vdesc->full_name().c_str(),
+                    vdesc->number()
+                );
+
                 continue;
             }
             const TCounterOptions& co = vdesc->options().GetExtension(CounterOpts);
@@ -54,6 +84,25 @@ public:
             NamesStrings.emplace_back(nameString);
             Ranges.push_back(ParseRanges(co));
             Integral.push_back(co.GetIntegral());
+
+            if constexpr (ParseSourceCounters) {
+                // Parse SourceCounters but make sure there is always at least one
+                Y_ABORT_UNLESS(
+                    co.SourceCountersSize() != 0,
+                    "ParseSourceCounters is set, but the counter '%s' (value %d) does not define SourceCounters",
+                    vdesc->full_name().c_str(),
+                    vdesc->number()
+                );
+
+                TVector<TSourceCounter> allSourceCounters;
+                allSourceCounters.reserve(co.SourceCountersSize());
+
+                for (const auto& counter : co.GetSourceCounters()) {
+                    allSourceCounters.emplace_back(counter);
+                }
+
+                SourceCounters.emplace_back(std::move(allSourceCounters));
+            }
         }
 
         // Make plain strings out of Strokas to fullfil interface of TTabletCountersBase
@@ -69,7 +118,7 @@ public:
 
     const char* const * GetNames() const
     {
-        return Names.begin();
+        return Names.data();
     }
 
     virtual const TVector<TTabletPercentileCounter::TRangeDef>& GetRanges(size_t idx) const
@@ -87,6 +136,22 @@ public:
     virtual bool GetIntegral(size_t idx) const {
         Y_ABORT_UNLESS(idx < Size);
         return Integral[idx];
+    }
+
+    /**
+     * Return the source counters for the given enum index.
+     *
+     * @warning This function can be called only if ParseSourceCounters is set.
+     *
+     * @param index The enum index for which to retrieve the source counters
+     *
+     * @return The corresponding source counters
+     */
+    const TVector<TSourceCounter>& GetSourceCounters(size_t index) const {
+        Y_ABORT_UNLESS(ParseSourceCounters);
+        Y_ABORT_UNLESS(index < Size);
+
+        return SourceCounters[index];
     }
 
 protected:
@@ -247,10 +312,21 @@ TParsedOpts<AppCountersDesc, TxCountersDesc, TxTypesDesc>* GetOpts() {
     return Singleton<TParsedOpts<AppCountersDesc, TxCountersDesc, TxTypesDesc>>();
 }
 
-template <const NProtoBuf::EnumDescriptor* AppCountersDesc()>
-TAppParsedOpts<AppCountersDesc>* GetAppOpts() {
+/**
+ * Create the singleton, which holds the parsed options for the given counters enum.
+ *
+ * @tparam AppCountersDesc The function, which returns the enum description to parse
+ * @tparam ParseSourceCounters Indicates whether to parse the SourceCounters fields
+ *
+ * @return The singleton with the parsed options for the given counters enum
+ */
+template <
+    const NProtoBuf::EnumDescriptor* AppCountersDesc(),
+    bool ParseSourceCounters = false
+>
+TAppParsedOpts<AppCountersDesc, ParseSourceCounters>* GetAppOpts() {
     // Use singleton to avoid thread-safety issues and parse enum descriptor once
-    return Singleton<TAppParsedOpts<AppCountersDesc>>();
+    return Singleton<TAppParsedOpts<AppCountersDesc, ParseSourceCounters>>();
 }
 
 template <class T1, class T2>
@@ -262,7 +338,6 @@ TParsedOptsPair<T1,T2>* GetOptsPair() {
 
 
 // Class that incapsulates protobuf options parsing for user counters
-template <const NProtoBuf::EnumDescriptor* LabeledCountersDesc()>
 struct TLabeledCounterParsedOpts {
 public:
     const size_t Size;
@@ -275,51 +350,10 @@ protected:
     TVector<ui8> Types;
     TVector<TString> GroupNamesStrings;
     TVector<const char*> GroupNames;
+    TString Groups;
 public:
-    explicit TLabeledCounterParsedOpts()
-        : Size(LabeledCountersDesc()->value_count())
-    {
-        const NProtoBuf::EnumDescriptor* labeledCounterDesc = LabeledCountersDesc();
-        NamesStrings.reserve(Size);
-        Names.reserve(Size);
-        SVNamesStrings.reserve(Size);
-        SVNames.reserve(Size);
-        AggregateFuncs.reserve(Size);
-        Types.reserve(Size);
+    explicit TLabeledCounterParsedOpts(const NProtoBuf::EnumDescriptor* labeledCountersDesc);
 
-        // Parse protobuf options for enum values for app counters
-        for (ui32 i = 0; i < Size; ++i) {
-            const NProtoBuf::EnumValueDescriptor* vdesc = labeledCounterDesc->value(i);
-            Y_ABORT_UNLESS(vdesc->number() == vdesc->index(), "counter '%s' number (%d) != index (%d)",
-                   vdesc->full_name().data(), vdesc->number(), vdesc->index());
-            const TLabeledCounterOptions& co = vdesc->options().GetExtension(LabeledCounterOpts);
-
-            NamesStrings.push_back(GetFilePrefix(labeledCounterDesc->file()) + co.GetName());
-            SVNamesStrings.push_back(co.GetSVName());
-            AggregateFuncs.push_back(co.GetAggrFunc());
-            Types.push_back(co.GetType());
-        }
-
-        // Make plain strings out of Strokas to fullfil interface of TTabletCountersBase
-        std::transform(NamesStrings.begin(), NamesStrings.end(),
-                  std::back_inserter(Names), [](auto& string) { return string.data(); } );
-
-        std::transform(SVNamesStrings.begin(), SVNamesStrings.end(),
-                  std::back_inserter(SVNames), [](auto& string) { return string.data(); } );
-
-        //parse types for counter groups;
-        const TLabeledCounterGroupNamesOptions& gn = labeledCounterDesc->options().GetExtension(GlobalGroupNamesOpts);
-        ui32 size = gn.NamesSize();
-        GroupNamesStrings.reserve(size);
-        GroupNames.reserve(size);
-        for (ui32 i = 0; i < size; ++i) {
-            GroupNamesStrings.push_back(gn.GetNames(i));
-        }
-
-        std::transform(GroupNamesStrings.begin(), GroupNamesStrings.end(),
-                  std::back_inserter(GroupNames), [](auto& string) { return string.data(); } );
-
-    }
     virtual ~TLabeledCounterParsedOpts()
     {}
 
@@ -353,20 +387,35 @@ public:
         return AggregateFuncs.begin();
     }
 
-protected:
-    TString GetFilePrefix(const NProtoBuf::FileDescriptor* desc) {
-        if (desc->options().HasExtension(TabletTypeName)) {
-            return desc->options().GetExtension(TabletTypeName) + "/";
-        } else {
-            return TString();
-        }
+    const TString& GetGroups() const
+    {
+        return Groups;
+    }
+
+    const TVector<ui8>& GetTypes() const
+    {
+        return Types;
     }
 };
 
 template <const NProtoBuf::EnumDescriptor* LabeledCountersDesc()>
-TLabeledCounterParsedOpts<LabeledCountersDesc>* GetLabeledCounterOpts() {
+struct TLabeledCounterParsedOptsProvider {
+    TLabeledCounterParsedOptsProvider()
+        : ParsedOpts(LabeledCountersDesc())
+    {
+    }
+
+    TLabeledCounterParsedOpts ParsedOpts;
+
+    TLabeledCounterParsedOpts* Get() {
+        return &ParsedOpts;
+    }
+};
+
+template<const NProtoBuf::EnumDescriptor* LabeledCountersDesc()>
+TLabeledCounterParsedOpts* GetLabeledCounterOpts() {
     // Use singleton to avoid thread-safety issues and parse enum descriptor once
-    return Singleton<TLabeledCounterParsedOpts<LabeledCountersDesc>>();
+    return Singleton<TLabeledCounterParsedOptsProvider<LabeledCountersDesc>>()->Get();
 }
 
 } // NAux
@@ -623,42 +672,36 @@ public:
     }
 };
 
-
+void VerifyGroups(const NAux::TLabeledCounterParsedOpts* simpleOpts, const TString& group, const char delimiter);
+void VerifyGroupsSkipEmpty(const NAux::TLabeledCounterParsedOpts* simpleOpts, const TString& group, const char delimiter);
 
 // Tablet app user counters
 template <const NProtoBuf::EnumDescriptor* SimpleDesc()>
-class TProtobufTabletLabeledCounters : public TTabletLabeledCountersBase {
-public:
-    typedef NAux::TLabeledCounterParsedOpts<SimpleDesc> TLabeledCounterOpts;
+TTabletLabeledCountersBase CreateProtobufTabletLabeledCounters(TMaybe<TString> databasePath = Nothing(), const ui64 id = 0) {
+    const auto* simpleOpts = NAux::GetLabeledCounterOpts<SimpleDesc>();
+    return TTabletLabeledCountersBase(simpleOpts->Size, simpleOpts->GetSVNames(), simpleOpts->GetCounterTypes(),
+            simpleOpts->GetAggregateFuncs(), simpleOpts->GetGroups(), simpleOpts->GetGroupNames(),
+             id, databasePath);
+}
 
-    static TLabeledCounterOpts* SimpleOpts() {
-        return NAux::GetLabeledCounterOpts<SimpleDesc>();
-    }
+template <const NProtoBuf::EnumDescriptor* SimpleDesc()>
+TTabletLabeledCountersBase CreateProtobufTabletLabeledCounters(const TString& group, const ui64 id) {
+    const auto* simpleOpts = NAux::GetLabeledCounterOpts<SimpleDesc>();
 
-    TProtobufTabletLabeledCounters(const TString& group, const ui64 id)
-        : TTabletLabeledCountersBase(
-              SimpleOpts()->Size, SimpleOpts()->GetNames(), SimpleOpts()->GetCounterTypes(),
-              SimpleOpts()->GetAggregateFuncs(), group, SimpleOpts()->GetGroupNames(), id, Nothing())
-    {
-        TVector<TString> groups;
-        StringSplitter(group).Split('/').SkipEmpty().Collect(&groups);
+    VerifyGroupsSkipEmpty(simpleOpts, group, '/');
 
-        Y_ABORT_UNLESS(SimpleOpts()->GetGroupNamesSize() == groups.size());
-    }
+    return TTabletLabeledCountersBase(simpleOpts->Size, simpleOpts->GetNames(), simpleOpts->GetCounterTypes(),
+        simpleOpts->GetAggregateFuncs(), group, simpleOpts->GetGroupNames(), id, Nothing());
+}
 
-    TProtobufTabletLabeledCounters(const TString& group, const ui64 id,
-                                   const TString& databasePath)
-        : TTabletLabeledCountersBase(
-              SimpleOpts()->Size, SimpleOpts()->GetSVNames(), SimpleOpts()->GetCounterTypes(),
-              SimpleOpts()->GetAggregateFuncs(), group, SimpleOpts()->GetGroupNames(), id, databasePath)
-    {
-        TVector<TString> groups;
-        StringSplitter(group).Split('|').Collect(&groups);
+template <const NProtoBuf::EnumDescriptor* SimpleDesc()>
+TTabletLabeledCountersBase CreateProtobufTabletLabeledCounters(const TString& group, const ui64 id, const TString& databasePath) {
+    const auto* simpleOpts = NAux::GetLabeledCounterOpts<SimpleDesc>();
 
-        Y_ABORT_UNLESS(SimpleOpts()->GetGroupNamesSize() == groups.size());
-    }
-};
+    VerifyGroups(simpleOpts, group, '|');
 
-
+    return TTabletLabeledCountersBase(simpleOpts->Size, simpleOpts->GetSVNames(), simpleOpts->GetCounterTypes(),
+        simpleOpts->GetAggregateFuncs(), group, simpleOpts->GetGroupNames(), id, databasePath);
+}
 
 } // end of NKikimr

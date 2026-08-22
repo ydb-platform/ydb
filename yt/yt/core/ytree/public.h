@@ -6,6 +6,9 @@
 
 #include <yt/yt/core/rpc/public.h>
 
+#include <library/cpp/yt/mpl/concepts.h>
+#include <library/cpp/yt/mpl/type_traits.h>
+
 namespace NYT::NYTree {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -17,14 +20,61 @@ class TAttributeFilter;
 
 } // namespace NProto
 
-struct TAttributeFilter;
+class TAttributeFilter;
 
 struct IYsonStructMeta;
+struct IYsonStructParameter;
 class TYsonStructBase;
+class TYsonStruct;
 class TYsonStructLite;
+
+struct TYsonStructTraverseContext {
+    NYPath::TYPath Path;
+    const std::type_info* StructType;
+    std::string Key;
+    const IYsonStructParameter* Parameter;
+};
+using TYsonStructParameterVisitor = std::function<void(const TYsonStructTraverseContext&)>;
+
+template <class T>
+concept CEnum = TEnumTraits<T>::IsEnum;
+
+template <class T>
+concept CNullable = NMpl::IsSpecialization<T, std::unique_ptr> ||
+    NMpl::IsSpecialization<T, std::shared_ptr> ||
+    NMpl::IsSpecialization<T, std::optional> ||
+    NMpl::IsSpecialization<T, NYT::TIntrusivePtr>;
 
 template <class T>
 concept CYsonStructDerived = std::derived_from<T, TYsonStructBase>;
+
+// TODO(mikari): revise naming
+template <class T>
+concept CYsonStruct = std::derived_from<T, TYsonStruct>;
+
+template <class T>
+concept CYsonStructLite = std::derived_from<T, TYsonStructLite>;
+
+template <class T>
+concept CTuple = requires {
+    std::tuple_size<T>::value;
+} && !CYsonStructDerived<T>;
+
+template <class T>
+concept CStringLike = std::is_same_v<std::decay_t<T>, std::string> ||
+    std::is_same_v<std::decay_t<T>, std::string_view> ||
+    std::is_same_v<std::decay_t<T>, TString> ||
+    std::is_same_v<std::decay_t<T>, TStringBuf>;
+
+// To remove ambiguous behaviour for std::array.
+// std::array is handling as tuple
+template <class T>
+concept CList = std::ranges::range<T> && !CTuple<T> && !CStringLike<T> && !CYsonStructDerived<T>;
+
+template <class T>
+concept CDict = CList<T> && NMpl::CMapping<T> && !CYsonStructDerived<T>;
+
+////////////////////////////////////////////////////////////////////////////////
 
 DECLARE_REFCOUNTED_STRUCT(INode)
 using IConstNodePtr = TIntrusivePtr<const INode>;
@@ -52,7 +102,8 @@ struct ISystemAttributeProvider;
 DECLARE_REFCOUNTED_STRUCT(IYPathService)
 DECLARE_REFCOUNTED_STRUCT(IYPathServiceContext)
 DECLARE_REFCOUNTED_STRUCT(ICachedYPathService)
-DECLARE_REFCOUNTED_CLASS(TCompositeMapService)
+DECLARE_REFCOUNTED_STRUCT(IServiceCombiner)
+DECLARE_REFCOUNTED_STRUCT(ICompositeMapService)
 
 DECLARE_REFCOUNTED_CLASS(TYPathRequest)
 DECLARE_REFCOUNTED_CLASS(TYPathResponse)
@@ -62,8 +113,6 @@ class TTypedYPathRequest;
 
 template <class TRequestMessage, class TResponseMessage>
 class TTypedYPathResponse;
-
-DECLARE_REFCOUNTED_CLASS(TServiceCombiner)
 
 using NYPath::TYPath;
 using NYPath::TYPathBuf;
@@ -94,7 +143,7 @@ using TTypedYPathServiceContext = NRpc::TGenericTypedServiceContext<
 
 //! A static node type.
 DEFINE_ENUM(ENodeType,
-    // Node contains a string (TString).
+    // Node contains a string (std::string).
     (String)
     // Node contains an int64 number (i64).
     (Int64)

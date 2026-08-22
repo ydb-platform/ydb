@@ -1,3 +1,6 @@
+#pragma once
+
+#include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/statistics/events.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -19,33 +22,34 @@ struct TEvAnalyzePrivate {
     struct TEvAnalyzeRetry : public TEventLocal<TEvAnalyzeRetry, EvAnalyzeRetry> {};
 };
 
-class TAnalyzeActor : public NActors::TActorBootstrapped<TAnalyzeActor> { 
+class TAnalyzeActor : public NActors::TActorBootstrapped<TAnalyzeActor> {
 public:
-    TAnalyzeActor(TString tablePath, TVector<TString> columns, NThreading::TPromise<NYql::IKikimrGateway::TGenericResult> promise);
+    TAnalyzeActor(const TString& database,const TString& tablePath,
+        const TVector<TString>& columns, NThreading::TPromise<NYql::IKikimrGateway::TGenericResult> promise);
 
     void Bootstrap();
 
     STFUNC(StateWork) {
         switch(ev->GetTypeRewrite()) {
             HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
-            HFunc(NStat::TEvStatistics::TEvAnalyzeResponse, Handle);
             HFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
             HFunc(TEvAnalyzePrivate::TEvAnalyzeRetry, Handle);
-            default: 
+            HFunc(NStat::TEvStatistics::TEvAnalyzeResponse, Handle);
+            HFunc(TEvKqp::TEvAbortExecution, Handle);
+            default:
                 HandleUnexpectedEvent(ev->GetTypeRewrite());
         }
     }
 
 private:
-    void Handle(NStat::TEvStatistics::TEvAnalyzeResponse::TPtr& ev, const TActorContext& ctx);
-
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx);
-
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev, const TActorContext& ctx);
-
     void Handle(TEvAnalyzePrivate::TEvAnalyzeRetry::TPtr& ev, const TActorContext& ctx);
-
+    void Handle(NStat::TEvStatistics::TEvAnalyzeResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvKqp::TEvAbortExecution::TPtr& ev, const TActorContext& ctx);
     void HandleUnexpectedEvent(ui32 typeRewrite);
+
+    void PassAway() final;
 
 private:
     void SendStatisticsAggregatorAnalyze(const NSchemeCache::TSchemeCacheNavigate::TEntry&, const TActorContext&);
@@ -53,13 +57,15 @@ private:
     TDuration CalcBackoffTime();
 
 private:
-    TString TablePath;
-    TVector<TString> Columns;
+    const TString Database;
+    const TString TablePath;
+    const TVector<TString> Columns;
     NThreading::TPromise<NYql::IKikimrGateway::TGenericResult> Promise;
     // For Statistics Aggregator
     std::optional<ui64> StatisticsAggregatorId;
+    TULIDGenerator UlidGen;
     TPathId PathId;
-    TString OperationId;
+    const TString OperationId;
 
     // for retries
     NStat::TEvStatistics::TEvAnalyze Request;

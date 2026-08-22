@@ -23,7 +23,7 @@ public:
     }
 
     void ReplyError(grpc::StatusCode code, const TString& msg, const TString& details = "") override {
-        NYql::TIssue issue{TStringBuilder() << "grpc code: " << code << ", msg: " << msg << " (" << details << ")"};
+        NYql::TIssue issue{TStringBuilder() << "grpc code: " << static_cast<i32>(code) << ", msg: " << msg << " (" << details << ")"};
         issue.SetCode(code, NYql::ESeverity::TSeverityIds_ESeverityId_S_ERROR);
         RaiseIssue(issue);
         ReplyWithYdbStatus(Ydb::StatusIds::GENERIC_ERROR);
@@ -41,7 +41,8 @@ public:
     TVector<TStringBuf> GetPeerMetaValues(TStringBuf key) const override {
         auto value = BaseRequest_->GetPeerMetaValues(TString{key});
         if (value) {
-            return {std::move(*value)};
+            MetaValueCache_ = std::move(*value);
+            return {TStringBuf(MetaValueCache_)};
         }
         return {};
     }
@@ -104,6 +105,7 @@ private:
 
     NYql::TIssueManager IssueManager_;
     google::protobuf::Arena Arena_;
+    mutable TString MetaValueCache_;
 };
 
 template<typename TReq, typename TResp>

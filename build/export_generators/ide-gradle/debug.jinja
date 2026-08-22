@@ -1,4 +1,5 @@
 {% if dump_sems is defined %}
+
 // vvvvvv SEMANTICS
 {#- replace(' ', ' ') is workaround, else `split` function in C++ receive invalid input -#}
 {%-    set lines = split(dump_sems|replace(' ', ' '), '\n') -%}
@@ -6,9 +7,11 @@
 // {{ line }}
 {%-    endfor %}
 // ^^^^^^ SEMANTICS
-{%- endif %}
+{# empty line -#}
+{%- endif -%}
 
-{% if dump_attrs is defined %}
+{%- if dump_attrs is defined %}
+
 // vvvvvv ATTRIBUTES
 {#- replace(' ', ' ') is workaround, else `split` function in C++ receive invalid input -#}
 {%-    set lines = split(dump_attrs|replace(' ', ' '), '\n') -%}
@@ -16,4 +19,5 @@
 // {{ line }}
 {%-    endfor %}
 // ^^^^^^ ATTRIBUTES
-{%- endif %}
+{# empty line -#}
+{%- endif -%}

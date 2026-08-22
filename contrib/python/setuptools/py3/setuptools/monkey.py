@@ -69,7 +69,7 @@ def get_unpatched_class(cls: type[_T]) -> type[_T]:
     return base
 
 
-def patch_all():
+def patch_all() -> None:
     import setuptools
 
     # we can't patch distutils.cmd, alas
@@ -105,7 +105,7 @@ def _patch_distribution_metadata():
         setattr(distutils.dist.DistributionMetadata, attr, new_val)
 
 
-def patch_func(replacement, target_mod, func_name):
+def patch_func(replacement, target_mod, func_name) -> None:
     """
     Patch func_name in target_mod with replacement
 

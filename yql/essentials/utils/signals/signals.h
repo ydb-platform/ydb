@@ -6,7 +6,6 @@
 
 #include <signal.h>
 
-
 namespace NYql {
 
 #ifdef _win_
@@ -25,6 +24,8 @@ extern TPipe SignalPipeR;
 
 void InitSignals();
 void InitSignalsWithSelfPipe();
+void ResetSignalFlags();
+void EnsureSignalsAreBlocked();
 void CatchInterruptSignal(bool doCatch);
 
 void SigSuspend(const sigset_t* mask);

@@ -12,10 +12,9 @@ namespace numpy
   {
 
     template <class T, class pS>
-    types::ndarray<std::complex<T>,
-                   types::array_tuple<long, std::tuple_size<pS>::value>>
-    c2c(types::ndarray<std::complex<T>, pS> const &a, long n = -1,
-        long axis = -1, types::str const &norm = {}, bool const forward = true);
+    types::ndarray<std::complex<T>, types::array_tuple<long, std::tuple_size<pS>::value>>
+    c2c(types::ndarray<std::complex<T>, pS> const &a, long n = -1, long axis = -1,
+        types::str const &norm = {}, bool const forward = true);
   }
 } // namespace numpy
 PYTHONIC_NS_END

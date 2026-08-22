@@ -3,6 +3,8 @@ LIBRARY()
 SRCS(
     init.h
     init.cpp
+    yaml_config_helpers.h
+    yaml_config_helpers.cpp
     init_noop.cpp
     dummy.h
     dummy.cpp

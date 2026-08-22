@@ -150,7 +150,7 @@ public:
     TString GetLogPrefix() const;
 
 protected:
-    NKikimrTabletBase::TMetrics ResourceValues; // current values of various metrics
+    TMetrics ResourceValues; // current values of various metrics
     TTabletMetricsAggregates ResourceMetricsAggregates;
     TResourceNormalizedValues ResourceNormalizedValues;
 
@@ -161,11 +161,13 @@ public:
     mutable TString BootState;
     TInstant PostponedStart;
     EBalancerPolicy BalancerPolicy;
+    bool IsBackup = false;
     TNodeId FailedNodeId = 0; // last time we tried to start the tablet, we failed on this node
     TInstant BootTime;
     TNodeFilter NodeFilter;
     bool InWaitQueue = false;
     double UsageImpact = 0;
+    bool UpdateMetricsEnqueued = false;
 
     TTabletInfo(ETabletRole role, THive& hive);
     TTabletInfo(const TTabletInfo&) = delete;
@@ -203,10 +205,8 @@ public:
     TString FamilyString() const;
     void ChangeVolatileState(EVolatileState state);
 
-    bool IsReadyToBoot() const {
-        return NodeId == 0 && VolatileState == EVolatileState::TABLET_VOLATILE_STATE_STOPPED;
-    }
-
+    bool IsReadyToWork() const;
+    bool IsReadyToBoot() const;
     bool IsReadyToStart(TInstant now) const;
     bool IsStarting() const;
     bool IsStartingOnNode(TNodeId nodeId) const;
@@ -281,7 +281,7 @@ public:
     const TNodeFilter& GetNodeFilter() const;
     bool InitiateStart(TNodeInfo* node);
 
-    const NKikimrTabletBase::TMetrics& GetResourceValues() const {
+    const TMetrics& GetResourceValues() const {
         return ResourceValues;
     }
 
@@ -298,10 +298,11 @@ public:
     }
 
     // ONLY for use in unit tests
-    NKikimrTabletBase::TMetrics& GetMutableResourceValues() {
+    TMetrics& GetMutableResourceValues() {
         return ResourceValues;
     }
 
+    void AddRestartTimestamp(TInstant now);
     void ActualizeTabletStatistics(TInstant now);
     ui64 GetRestartsPerPeriod(TInstant barrier) const;
     bool RestartsOften() const;
@@ -309,6 +310,8 @@ public:
     bool HasCounter() {
         return std::get<NMetrics::EResource::Counter>(GetResourceCurrentValues()) > 0;
     }
+
+    void NotifyOnRestart(const TString& status, TSideEffects& sideEffects);
 };
 
 

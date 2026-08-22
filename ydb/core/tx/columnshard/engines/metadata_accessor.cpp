@@ -1,0 +1,87 @@
+#include "metadata_accessor.h"
+
+#include "reader/common/description.h"
+#include "reader/common_reader/constructor/read_metadata.h"
+#include "reader/plain_reader/iterator/constructors.h"
+#include "reader/simple_reader/iterator/collections/constructors.h"
+#include "reader/trivial_reader/iterator/collections/constructors.h"
+
+#include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
+#include <ydb/core/formats/arrow/accessor/plain/accessor.h>
+#include <ydb/core/tx/conveyor_composite/usage/service.h>
+
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/formats/arrow/simple_arrays_cache.h>
+
+#include <util/folder/path.h>
+
+namespace NKikimr::NOlap {
+ITableMetadataAccessor::ITableMetadataAccessor(const TString& tablePath)
+    : TablePath(tablePath)
+{
+    AFL_VERIFY(!!TablePath);
+}
+
+std::vector<TNameTypeInfo> ITableMetadataAccessor::GetPrimaryKeyInfo(const TVersionedPresetSchemas& vSchemas) const {
+    return GetSnapshotSchemaVerified(vSchemas, TSnapshot::Max())->GetIndexInfo().GetPrimaryKeyColumns();
+}
+
+const std::shared_ptr<arrow::Schema>& ITableMetadataAccessor::GetPrimaryKeyScheme(const TVersionedPresetSchemas& vSchemas) const {
+    return GetSnapshotSchemaVerified(vSchemas, TSnapshot::Max())->GetIndexInfo().GetPrimaryKey();
+}
+
+TString ITableMetadataAccessor::GetTableName() const {
+    return TFsPath(TablePath).Fix().GetName();
+}
+
+TUserTableAccessor::TUserTableAccessor(const TString& tableName, const NColumnShard::TUnifiedPathId& pathId)
+    : TBase(tableName)
+    , PathId(pathId)
+{
+    AFL_VERIFY(pathId.IsValid());
+}
+
+std::unique_ptr<NReader::NCommon::ISourcesConstructor> TUserTableAccessor::SelectMetadata(
+    const TSelectMetadataContext& context, const NReader::TReadDescription& readDescription, const NReader::EReaderClass readerClass) const {
+    AFL_VERIFY(readDescription.PKRangesFilter);
+    // here we select portions for a read
+    std::vector<IColumnEngine::TSelectedPortionInfo> portions =
+        context.GetEngine().Select(PathId.InternalPathId, readDescription, context.GetDataLocksManager());
+
+    switch (readerClass) {
+        case NReader::EReaderClass::Plain: {
+            return std::make_unique<NReader::NPlain::TPortionSources>(std::move(portions));
+        }
+        case NReader::EReaderClass::Simple: {
+            std::deque<NReader::NSimple::TSourceConstructor> sources;
+            for (auto&& i : portions) {
+                sources.emplace_back(NReader::NSimple::TSourceConstructor(i.GetPortion(), i.GetIsVisible(), readDescription.GetSorting()));
+            }
+            return std::make_unique<NReader::NSimple::TPortionsSources>(std::move(sources), readDescription.GetSorting());
+        }
+        case NReader::EReaderClass::Trivial: {
+            std::deque<NReader::NTrivial::TSourceConstructor> sources;
+            for (auto&& i : portions) {
+                sources.emplace_back(NReader::NTrivial::TSourceConstructor(i.GetPortion(), i.GetIsVisible(), readDescription.GetSorting()));
+            }
+            return std::make_unique<NReader::NTrivial::TPortionsSources>(
+                std::move(sources), readDescription.GetSorting(), readDescription.GetFakeSort());
+        }
+    }
+    return nullptr;
+}
+
+std::unique_ptr<NReader::NCommon::ISourcesConstructor> TAbsentTableAccessor::SelectMetadata(const TSelectMetadataContext& /*context*/,
+    const NReader::TReadDescription& /*readDescription*/, const NReader::EReaderClass readerClass) const {
+    switch (readerClass) {
+        case NReader::EReaderClass::Plain:
+            return std::make_unique<NReader::NPlain::TPortionSources>(std::vector<IColumnEngine::TSelectedPortionInfo>());
+        case NReader::EReaderClass::Simple:
+            return NReader::NSimple::TPortionsSources::BuildEmpty();
+        case NReader::EReaderClass::Trivial:
+            return NReader::NTrivial::TPortionsSources::BuildEmpty();
+    }
+    return nullptr;
+}
+
+}   // namespace NKikimr::NOlap

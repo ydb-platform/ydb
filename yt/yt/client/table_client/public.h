@@ -51,6 +51,7 @@ class TVersionedRowDigestExt;
 class TCompressionDictionaryExt;
 class TVersionedReadOptions;
 class TVersionedWriteOptions;
+class TColumnNameToConstraintMap;
 
 } // namespace NProto
 
@@ -94,7 +95,7 @@ constexpr int MaxColumnGroupLength = 256;
 
 // Only for dynamic tables.
 constexpr int MaxValuesPerRow = 1024;
-constexpr int MaxRowsPerRowset = 5 * 1024 * 1024;
+constexpr int MaxRowsPerRowset = 15 * 1024 * 1024;
 constexpr i64 MaxStringValueLength = 16_MB;
 constexpr i64 MaxAnyValueLength = 16_MB;
 constexpr i64 MaxCompositeValueLength = 16_MB;
@@ -123,7 +124,6 @@ constexpr int MaxSchemaTotalTypeComplexity = MaxColumnId;
 constexpr int MaxSchemaDepth = 32;
 
 extern const std::string PrimaryLockName;
-
 extern const std::string SystemColumnNamePrefix;
 extern const std::string NonexistentColumnName;
 extern const std::string TableIndexColumnName;
@@ -149,18 +149,18 @@ DEFINE_ENUM_WITH_UNDERLYING_TYPE(EHunkValueTag, ui8,
 );
 
 // Do not change these values since they are stored in the master snapshot.
-DEFINE_ENUM(ETableSchemaMode,
+DEFINE_ENUM_WITH_UNDERLYING_TYPE(ETableSchemaMode, i8,
     ((Weak)      (0))
     ((Strong)    (1))
 );
 
-// TODO(cherepashka): remove after corresponding compat in 25.1 will be removed.
-DEFINE_ENUM(ECompatOptimizeFor,
+// COMPAT(cherepashka)
+DEFINE_ENUM_WITH_UNDERLYING_TYPE(ECompatOptimizeFor, i32,
     ((Lookup)  (0))
     ((Scan)    (1))
 );
 
-DEFINE_ENUM_WITH_UNDERLYING_TYPE(EOptimizeFor, i32,
+DEFINE_ENUM_WITH_UNDERLYING_TYPE(EOptimizeFor, i8,
     ((Lookup)  (0))
     ((Scan)    (1))
 );
@@ -340,6 +340,13 @@ struct TColumnarStatistics;
 class TTableSchema;
 using TTableSchemaPtr = TIntrusivePtr<TTableSchema>;
 
+class TConstrainedTableSchema;
+
+// NB: Used to store constraints on master side.
+using TColumnStableNameToConstraintMap = THashMap<TColumnStableName, std::string>;
+// NB: Used to handle constraints on user side.
+using TColumnNameToConstraintMap = THashMap<std::string, std::string>;
+
 class TLegacyLockMask;
 using TLegacyLockBitmap = ui64;
 
@@ -371,6 +378,8 @@ DECLARE_REFCOUNTED_STRUCT(THashTableChunkIndexWriterConfig)
 DECLARE_REFCOUNTED_STRUCT(TChunkIndexesWriterConfig)
 DECLARE_REFCOUNTED_STRUCT(TSlimVersionedWriterConfig)
 
+DECLARE_REFCOUNTED_STRUCT(TCompactionHintWriterConfig);
+
 DECLARE_REFCOUNTED_STRUCT(TChunkWriterTestingOptions)
 
 DECLARE_REFCOUNTED_STRUCT(TChunkReaderConfig)
@@ -392,15 +401,19 @@ DECLARE_REFCOUNTED_STRUCT(TRetentionConfig)
 
 DECLARE_REFCOUNTED_STRUCT(TTypeConversionConfig)
 DECLARE_REFCOUNTED_STRUCT(TInsertRowsFormatConfig)
+DECLARE_REFCOUNTED_STRUCT(TPushQueueProducerFormatConfig)
 
 DECLARE_REFCOUNTED_STRUCT(TChunkReaderOptions)
 DECLARE_REFCOUNTED_STRUCT(TChunkWriterOptions)
 
-DECLARE_REFCOUNTED_STRUCT(TVersionedRowDigestConfig)
+DECLARE_REFCOUNTED_STRUCT(TMinHashDigestConfig)
 
 DECLARE_REFCOUNTED_STRUCT(TSchemalessBufferedDynamicTableWriterConfig)
 
-DECLARE_REFCOUNTED_CLASS(TSchemafulPipe)
+DECLARE_REFCOUNTED_STRUCT(ISchemafulPipe)
+
+DECLARE_REFCOUNTED_CLASS(TMemoryProviderMapByTag)
+DECLARE_REFCOUNTED_CLASS(TTrackedMemoryChunkProvider)
 
 class TSaveContext;
 class TLoadContext;
@@ -471,6 +484,9 @@ template <ESimpleLogicalValueType type>
 struct TUnderlyingTzTypeImpl;
 
 template <ESimpleLogicalValueType type>
+static constexpr ESimpleLogicalValueType TUnderlyingTzType = TUnderlyingTzTypeImpl<type>::TValue;
+
+template <ESimpleLogicalValueType type>
 struct TUnderlyingTimestampIntegerTypeImpl;
 
 template <ESimpleLogicalValueType type>
@@ -481,6 +497,10 @@ using TUnderlyingTimestampIntegerType = TUnderlyingTimestampIntegerTypeImpl<type
 YT_DEFINE_STRONG_TYPEDEF(TSignedDistributedWriteSessionPtr, NSignature::TSignaturePtr);
 YT_DEFINE_STRONG_TYPEDEF(TSignedWriteFragmentCookiePtr, NSignature::TSignaturePtr);
 YT_DEFINE_STRONG_TYPEDEF(TSignedWriteFragmentResultPtr, NSignature::TSignaturePtr);
+
+////////////////////////////////////////////////////////////////////////////////
+
+YT_DEFINE_STRONG_TYPEDEF(TRowsDigest, ui64);
 
 ////////////////////////////////////////////////////////////////////////////////
 

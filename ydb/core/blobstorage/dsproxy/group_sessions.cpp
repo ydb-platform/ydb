@@ -2,6 +2,8 @@
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
 #include <ydb/core/blobstorage/backpressure/queue_backpressure_client.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_PROXY
+
 namespace NKikimr {
 
 static NKikimrBlobStorage::EVDiskQueueId VDiskQueues[] = {
@@ -76,16 +78,17 @@ TGroupSessions::TGroupSessions(const TIntrusivePtr<TBlobStorageGroupInfo>& info,
             TActorId queue = TActivationContext::Register(queueActor.release(), ProxyActor, TMailboxType::ReadAsFilled,
                 AppData()->SystemPoolId);
 
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_PROXY, "Group# " << info->GroupID
-                << " Actor# " << ProxyActor
-                << " Create Queue# " << queue.ToString()
-                << " targetNodeId# " << targetNodeId
-                << " Marker# DSP01");
+            YDB_LOG_DEBUG("Create",
+                {"group", info->GroupID},
+                {"actor", ProxyActor},
+                {"queue", queue},
+                {"targetNodeId", targetNodeId},
+                {"marker", "DSP01"});
 
             auto& q = stateVDisk.Queues.GetQueue(queueId);
             q.ActorId = queue;
             q.FlowRecord = std::move(flowRecord);
-            q.ExtraBlockChecksSupport.reset();
+            q.ExtraBlockChecksSupport.store(false);
         }
     }
 }
@@ -116,7 +119,8 @@ bool TGroupSessions::GoodToGo(const TBlobStorageGroupInfo::TTopology& topology, 
 }
 
 void TGroupSessions::QueueConnectUpdate(ui32 orderNumber, NKikimrBlobStorage::EVDiskQueueId queueId, bool connected,
-        bool extraGroupChecksSupport, std::shared_ptr<const TCostModel> costModel, const TBlobStorageGroupInfo::TTopology& topology) {
+        bool extraGroupChecksSupport, bool checksumming, std::shared_ptr<const TCostModel> costModel,
+        const TBlobStorageGroupInfo::TTopology& topology) {
     const auto v = topology.GetVDiskId(orderNumber);
     const ui32 fdom = topology.GetFailDomainOrderNumber(v);
     auto& f = GroupQueues->FailDomains[fdom];
@@ -127,7 +131,8 @@ void TGroupSessions::QueueConnectUpdate(ui32 orderNumber, NKikimrBlobStorage::EV
 
     if (connected) {
         ConnectedQueuesMask[orderNumber] |= 1 << queueId;
-        q.ExtraBlockChecksSupport = extraGroupChecksSupport;
+        q.ExtraBlockChecksSupport.store(extraGroupChecksSupport);
+        q.Checksumming.store(checksumming);
         Y_ABORT_UNLESS(costModel);
         if (!q.CostModel || *q.CostModel != *costModel) {
             updated = true;
@@ -135,13 +140,14 @@ void TGroupSessions::QueueConnectUpdate(ui32 orderNumber, NKikimrBlobStorage::EV
         }
     } else {
         ConnectedQueuesMask[orderNumber] &= ~(1 << queueId);
-        q.ExtraBlockChecksSupport.reset();
+        q.ExtraBlockChecksSupport.store(false);
+        q.Checksumming.store(false);
         if (q.CostModel) {
             updated = true;
             q.CostModel = nullptr;
         }
     }
-    q.IsConnected = connected;
+    q.IsConnected.store(connected, std::memory_order_release);
 
     if (updated) {
         auto iterate = [](auto& currentCostModel, const auto& next) {

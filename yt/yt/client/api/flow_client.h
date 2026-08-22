@@ -2,7 +2,7 @@
 
 #include "client_common.h"
 
-#include <yt/yt/flow/lib/client/public.h>
+#include <yt/yt/flow/library/cpp/client/public.h>
 
 namespace NYT::NApi {
 
@@ -138,7 +138,7 @@ struct IFlowClient
 
     virtual TFuture<TFlowExecuteResult> FlowExecute(
         const NYPath::TYPath& pipelinePath,
-        const TString& command,
+        const std::string& command,
         const NYson::TYsonString& argument,
         const TFlowExecuteOptions& options = {}) = 0;
 };

@@ -1,8 +1,10 @@
 #include "quoter_resource_tree.h"
 
 #include "probes.h"
+#include "public_counters.h"
 #include "quoter_constants.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
 
 #include <util/string/builder.h>
@@ -164,6 +166,9 @@ public:
     void CalcParametersForAccounting();
     void CalcParametersForReplication();
 
+    void SetupTotalCounters();
+    void ReportConsumedTotal(double consumed);
+
     THolder<TQuoterSession> DoCreateSession(const NActors::TActorId& clientId, ui32 clientVersion) override;
 
     void ReportConsumed(double consumed, TTickProcessorQueue& queue, TInstant now) override;
@@ -228,6 +233,10 @@ public:
 
     void DeactivateIfFull(TInstant now);
 
+    bool IsEffectivePropsChanged() const override {
+        return EffectivePropsChanged;
+    }
+
     void SetResourceCounters(TIntrusivePtr<::NMonitoring::TDynamicCounters> resourceCounters) override;
 
     void SetLimitCounter();
@@ -281,6 +290,7 @@ private:
     double BucketSize = 0.0;
 
     bool Active = false;
+    bool EffectivePropsChanged = false;
     THierarchicalDRRResourceConsumer* CurrentActiveChild = nullptr;
     size_t ActiveChildrenCount = 0;
     size_t ActiveV1ChildrenCount = 0;
@@ -727,6 +737,8 @@ void THierarchicalDRRQuoterResourceTree::CalcParameters() {
         PrefetchWatermark = parent->PrefetchWatermark;
     }
 
+    const double prevResourceTickQuantum = ResourceTickQuantum;
+
     ResourceTickQuantum = MaxUnitsPerSecond >= 0.0 ? MaxUnitsPerSecond / TICKS_PER_SECOND : 0.0;
     ResourceFillingEpsilon = ResourceTickQuantum * EPSILON_COEFFICIENT;
     TickSize = TDuration::Seconds(1) / TICKS_PER_SECOND;
@@ -745,7 +757,18 @@ void THierarchicalDRRQuoterResourceTree::CalcParameters() {
         parent->ActiveChildrenWeight += weightDiff;
     }
 
-    FreeResource = Min(FreeResource, HasActiveChildren() ? ResourceTickQuantum : GetBurst());
+    const double freeResourceLimit = HasActiveChildren() ? ResourceTickQuantum : GetBurst();
+    if (ResourceTickQuantum < prevResourceTickQuantum || FreeResource > freeResourceLimit) {
+        FreeResource = Min(FreeResource, freeResourceLimit);
+    }
+
+    {
+        const auto& oldEffCfg = EffectiveProps.GetHierarchicalDRRResourceConfig();
+        EffectivePropsChanged = (MaxUnitsPerSecond != oldEffCfg.GetMaxUnitsPerSecond() ||
+                                  PrefetchCoefficient != oldEffCfg.GetPrefetchCoefficient() ||
+                                  PrefetchWatermark != oldEffCfg.GetPrefetchWatermark() ||
+                                  Weight != oldEffCfg.GetWeight());
+    }
 
     // Update in props
     auto* effectiveConfig = EffectiveProps.MutableHierarchicalDRRResourceConfig();
@@ -821,6 +844,43 @@ void THierarchicalDRRQuoterResourceTree::CalcParametersForAccounting() {
     } else if (RateAccounting) { // delete
         RateAccounting->Stop();
         RateAccounting.Destroy();
+    }
+
+    SetupTotalCounters();
+}
+
+void THierarchicalDRRQuoterResourceTree::SetupTotalCounters() {
+    const auto& accCfg = EffectiveProps.GetAccountingConfig();
+    const auto& metric = accCfg.GetOnDemand();
+    THierarchicalDRRQuoterResourceTree* const parent = GetParent();
+
+    // Reported for non-root resources whose billing metric is published (same gate as the per-category limit/consumed).
+    if (accCfg.GetEnabled() && parent && !parent->GetParent() && IsPublicMetric(metric)) {
+        auto counters = GetPublicCounters(metric, AppData()->Counters);
+        Counters.LimitTotal = counters->GetExpiringNamedCounter("name", "resources.request_units.limit_total", false);
+        Counters.ConsumedTotal = counters->GetExpiringNamedCounter("name", "resources.request_units.consumed_total", true);
+
+        *Counters.LimitTotal = parent->GetMaxUnitsPerSecond();
+    } else {
+        Counters.LimitTotal.Reset();
+        Counters.ConsumedTotal.Reset();
+    }
+}
+
+void THierarchicalDRRQuoterResourceTree::ReportConsumedTotal(double consumed) {
+    THierarchicalDRRQuoterResourceTree* parent = GetParent();
+    while (parent && parent->GetParent()) {
+        parent = parent->GetParent();
+    }
+    if (!parent) {
+        return;
+    }
+
+    for (TQuoterResourceTree* childBase : parent->GetChildren()) {
+        auto* child = static_cast<THierarchicalDRRQuoterResourceTree*>(childBase);
+        if (child->Counters.ConsumedTotal) {
+            *child->Counters.ConsumedTotal += consumed;
+        }
     }
 }
 
@@ -983,7 +1043,11 @@ TInstant THierarchicalDRRQuoterResourceTree::Report(
 
 void THierarchicalDRRQuoterResourceTree::RunAccounting() {
     if (RateAccounting) {
-        ActiveAccounting = RateAccounting->RunAccounting();
+        double accountedConsumed = 0.0;
+        ActiveAccounting = RateAccounting->RunAccounting(accountedConsumed);
+        if (accountedConsumed > 0.0) {
+            ReportConsumedTotal(accountedConsumed);
+        }
     } else {
         ActiveAccounting = false;
     }
@@ -1063,6 +1127,10 @@ void THierarchicalDRRQuoterResourceTree::ReportConsumed(double consumed, TTickPr
             Available = Max(Available, ImmediatelyFillUpTo);
         }
         ScheduleNextTick(queue, now);
+    }
+
+    if (auto* parent = GetParent()) {
+        parent->ReportConsumed(consumed, queue, now);
     }
 }
 
@@ -1279,11 +1347,13 @@ const TQuoterSession* TQuoterResources::FindSession(const NActors::TActorId& cli
 }
 
 void TQuoterResources::OnUpdateResourceProps(TQuoterResourceTree* rootResource) {
-    const ui64 resId = rootResource->GetResourceId();
-    for (const auto& [sessionActor, _] : rootResource->GetSessions()) {
-        TQuoterSession* session = FindSession(sessionActor, resId);
-        Y_ABORT_UNLESS(session);
-        session->OnPropsChanged();
+    if (rootResource->IsEffectivePropsChanged()) {
+        const ui64 resId = rootResource->GetResourceId();
+        for (const auto& [sessionActor, _] : rootResource->GetSessions()) {
+            TQuoterSession* session = FindSession(sessionActor, resId);
+            Y_ABORT_UNLESS(session);
+            session->OnPropsChanged();
+        }
     }
     for (TQuoterResourceTree* child : rootResource->GetChildren()) {
         OnUpdateResourceProps(child);
@@ -1342,35 +1412,35 @@ void TQuoterResources::FillCounters(NKikimrKesus::TEvGetQuoterResourceCountersRe
 
 void TQuoterResources::SetPipeServerId(TQuoterSessionId sessionId, const NActors::TActorId& prevId, const NActors::TActorId& id) {
     if (prevId) {
-        auto [prevIt, prevItEnd] = PipeServerIdToSession.equal_range(prevId);
-        for (; prevIt != prevItEnd; ++prevIt) {
-            if (prevIt->second.second == sessionId.second) { // compare resource id
-                PipeServerIdToSession.erase(prevIt);
-                break;
+        auto outerIt = PipeServerIdToSession.find(prevId);
+        if (outerIt != PipeServerIdToSession.end()) {
+            outerIt->second.erase(sessionId);
+            if (outerIt->second.empty()) {
+                PipeServerIdToSession.erase(outerIt);
             }
         }
     }
     if (id) {
-        PipeServerIdToSession.emplace(id, sessionId);
+        PipeServerIdToSession[id].insert(sessionId);
     }
 }
 
 void TQuoterResources::DisconnectSession(const NActors::TActorId& pipeServerId) {
-    auto [pipeToSessionItBegin, pipeToSessionItEnd] = PipeServerIdToSession.equal_range(pipeServerId);
-    for (auto pipeToSessionIt = pipeToSessionItBegin; pipeToSessionIt != pipeToSessionItEnd; ++pipeToSessionIt) {
-        const TQuoterSessionId sessionId = pipeToSessionIt->second;
+    auto outerIt = PipeServerIdToSession.find(pipeServerId);
+    if (outerIt == PipeServerIdToSession.end()) {
+        return;
+    }
+    for (const TQuoterSessionId& sessionId : outerIt->second) {
         const NActors::TActorId sessionClientId = sessionId.first;
 
-        {
-            const auto sessionIter = Sessions.find(sessionId);
-            Y_ABORT_UNLESS(sessionIter != Sessions.end());
-            TQuoterSession* session = sessionIter->second.Get();
-            session->GetResource()->OnSessionDisconnected(sessionClientId);
-            session->CloseSession(Ydb::StatusIds::SESSION_EXPIRED, "Disconected.");
-            Sessions.erase(sessionIter);
-        }
+        const auto sessionIter = Sessions.find(sessionId);
+        Y_ABORT_UNLESS(sessionIter != Sessions.end());
+        TQuoterSession* session = sessionIter->second.Get();
+        session->GetResource()->OnSessionDisconnected(sessionClientId);
+        session->CloseSession(Ydb::StatusIds::SESSION_EXPIRED, "Disconnected.");
+        Sessions.erase(sessionIter);
     }
-    PipeServerIdToSession.erase(pipeToSessionItBegin, pipeToSessionItEnd);
+    PipeServerIdToSession.erase(outerIt);
 }
 
 void TQuoterResources::SetQuoterPath(const TString& quoterPath) {

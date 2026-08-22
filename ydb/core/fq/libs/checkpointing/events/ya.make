@@ -6,8 +6,7 @@ SRCS(
 
 PEERDIR(
     ydb/library/actors/core
-    ydb/library/actors/interconnect
-    ydb/core/fq/libs/checkpointing_common
+    yql/essentials/public/issue/protos
 )
 
 END()

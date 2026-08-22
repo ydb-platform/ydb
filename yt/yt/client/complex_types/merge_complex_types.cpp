@@ -5,12 +5,13 @@
 #include <yt/yt/client/table_client/logical_type.h>
 
 namespace NYT::NComplexTypes {
+namespace {
+
+////////////////////////////////////////////////////////////////////////////////
 
 using namespace NYT::NTableClient;
 
 ////////////////////////////////////////////////////////////////////////////////
-
-namespace {
 
 std::vector<TLogicalTypePtr> MergeTupleTypes(
     const TComplexTypeFieldDescriptor& firstDescriptor,
@@ -27,9 +28,7 @@ std::vector<TLogicalTypePtr> MergeTupleTypes(
     auto secondSize = std::ssize(secondDescriptor.GetType()->GetElements());
 
     if (firstSize > secondSize) {
-        return MergeTupleTypes(
-            secondDescriptor,
-            firstDescriptor);
+        return MergeTupleTypes(secondDescriptor, firstDescriptor);
     }
 
     if (!allowNewElements && firstSize != secondSize) {
@@ -88,32 +87,38 @@ std::vector<TStructField> MergeStructTypes(
             THROW_ERROR_EXCEPTION(
                 "Struct member name mismatch in %Qv",
                 firstDescriptor.GetDescription())
-                << TErrorAttribute("first_name", firstName)
-                << TErrorAttribute("second_name", secondName);
+                .With("first_name", firstName)
+                .With("second_name", secondName);
         }
+
         const auto& firstFieldDescriptor = firstDescriptor.Field(fieldIndex);
         const auto& secondFieldDescriptor = secondDescriptor.Field(fieldIndex);
         try {
             auto mergedField = MergeTypes(
                 firstFieldDescriptor.GetType(),
                 secondFieldDescriptor.GetType());
+
+            // NB: Merging types intentionally removes information regarding stable field names.
             resultFields.push_back(TStructField{
                 .Name = firstName,
+                .StableName = firstName,
                 .Type = std::move(mergedField),
             });
         } catch (const std::exception& ex) {
             THROW_ERROR_EXCEPTION(
                 "Struct member type mismatch in %Qv",
                 firstDescriptor.GetDescription())
-                << ex;
+                .With(ex);
         }
     }
 
     for (; fieldIndex < secondSize; ++fieldIndex) {
         const auto& secondFieldDescriptor = secondDescriptor.Field(fieldIndex);
         if (!secondFieldDescriptor.GetType()->IsNullable() && makeNullability) {
+            // NB: Merging types intentionally removes information regarding stable field names.
             resultFields.push_back(TStructField{
                 .Name = secondFields[fieldIndex].Name,
+                .StableName = secondFields[fieldIndex].Name, // NB: Not a typo.
                 .Type = New<TOptionalLogicalType>(secondFieldDescriptor.GetType()),
             });
         } else {
@@ -159,12 +164,12 @@ TLogicalTypePtr UnwrapTaggedType(const TLogicalTypePtr& type)
     return type;
 }
 
-TString GetTag(const TLogicalTypePtr& type)
+std::string GetTag(const TLogicalTypePtr& type)
 {
     return type->AsTaggedTypeRef().GetTag();
 }
 
-TString ExtractTagFromOneOfTypes(
+std::string ExtractTagFromOneOfTypes(
     const TLogicalTypePtr& firstType,
     const TLogicalTypePtr& secondType)
 {
@@ -176,13 +181,11 @@ TString ExtractTagFromOneOfTypes(
     YT_ABORT();
 }
 
-} // namespace
-
 ////////////////////////////////////////////////////////////////////////////////
 
-TLogicalTypePtr MergeTypes(
-    const TLogicalTypePtr& firstType,
-    const TLogicalTypePtr& secondType)
+} // namespace
+
+TLogicalTypePtr MergeTypes(const TLogicalTypePtr& firstType, const TLogicalTypePtr& secondType)
 {
     auto firstDescriptor = TComplexTypeFieldDescriptor(firstType);
     auto secondDescriptor = TComplexTypeFieldDescriptor(secondType);
@@ -224,14 +227,11 @@ TLogicalTypePtr MergeTypes(
                 "Type of fields %Qv and %Qv cannot be merged",
                 firstDescriptor.GetDescription(),
                 secondDescriptor.GetDescription())
-                << TErrorAttribute("first_type", ToString(*firstDescriptor.GetType()))
-                << TErrorAttribute("second_type", ToString(*secondDescriptor.GetType()));
+                .With("first_type", ToString(*firstDescriptor.GetType()))
+                .With("second_type", ToString(*secondDescriptor.GetType()));
         }
 
-        auto mergedType = MergeTypes(
-            UnwrapOptionalType(firstType),
-            UnwrapOptionalType(secondType));
-
+        auto mergedType = MergeTypes(UnwrapOptionalType(firstType),UnwrapOptionalType(secondType));
         return New<TOptionalLogicalType>(std::move(mergedType));
     }
 
@@ -239,76 +239,67 @@ TLogicalTypePtr MergeTypes(
         THROW_ERROR_EXCEPTION(
             "Type of %Qv field cannot be merged: metatypes are incompatible",
             firstDescriptor.GetDescription())
-            << TErrorAttribute("first_type", ToString(*firstDescriptor.GetType()))
-            << TErrorAttribute("second_type", ToString(*secondDescriptor.GetType()));
+            .With("first_type", ToString(*firstDescriptor.GetType()))
+            .With("second_type", ToString(*secondDescriptor.GetType()));
     }
 
+    auto areTypesCompatible = [] (const TLogicalTypePtr& lhs, const TLogicalTypePtr& rhs) {
+        static constexpr TTypeCompatibilityOptions CompatibilityOptions{
+            .AllowStructFieldRenaming = false,
+            .AllowStructFieldRemoval = false,
+            .IgnoreUnknownRemovedFieldNames = false,
+        };
+        auto [result, error] = CheckTypeCompatibility(lhs, rhs, CompatibilityOptions);
+        return result == ESchemaCompatibility::FullyCompatible;
+    };
+
     switch (firstMetatype) {
-        case ELogicalMetatype::Simple:
-        {
-            if (CheckTypeCompatibility(firstType, secondType).first == ESchemaCompatibility::FullyCompatible) {
+        case ELogicalMetatype::Simple: {
+            if (areTypesCompatible(firstType, secondType)) {
                 return secondType;
             }
-            if (CheckTypeCompatibility(secondType, firstType).first == ESchemaCompatibility::FullyCompatible) {
+            if (areTypesCompatible(secondType, firstType)) {
                 return firstType;
             }
             THROW_ERROR_EXCEPTION(
                 "Type of fields %Qv and %Qv cannot be merged",
                 firstDescriptor.GetDescription(),
                 secondDescriptor.GetDescription())
-                << TErrorAttribute("first_type", ToString(*firstDescriptor.GetType()))
-                << TErrorAttribute("second_type", ToString(*secondDescriptor.GetType()));
+                .With("first_type", ToString(*firstDescriptor.GetType()))
+                .With("second_type", ToString(*secondDescriptor.GetType()));
 
         }
-        case ELogicalMetatype::List:
-        {
+        case ELogicalMetatype::List: {
             auto mergedType = MergeTypes(
                 firstType->AsListTypeRef().GetElement(),
                 secondType->AsListTypeRef().GetElement());
 
-            return New<TListLogicalType>(mergedType);
+            return New<TListLogicalType>(std::move(mergedType));
         }
-        case ELogicalMetatype::VariantStruct:
-        {
-            auto mergedFields = MergeStructTypes(
-                firstDescriptor,
-                secondDescriptor);
-
-            return New<TVariantStructLogicalType>(mergedFields);
+        case ELogicalMetatype::VariantStruct: {
+            // NB: Merging struct and variant struct type intentionally removes information
+            // regarding stable field names.
+            auto mergedFields = MergeStructTypes(firstDescriptor, secondDescriptor);
+            return New<TVariantStructLogicalType>(std::move(mergedFields));
         }
-
-        case ELogicalMetatype::Struct:
-        {
-            auto mergedFields = MergeStructTypes(
-                firstDescriptor,
-                secondDescriptor);
-
-            return New<TStructLogicalType>(mergedFields);
+        case ELogicalMetatype::Struct: {
+            auto mergedFields = MergeStructTypes(firstDescriptor, secondDescriptor);
+            return New<TStructLogicalType>(
+                std::move(mergedFields),
+                /*removedFieldStableNames*/ std::vector<std::string>{});
         }
-
-        case ELogicalMetatype::Tuple:
-        {
-            auto mergedElements = MergeTupleTypes(
-                firstDescriptor,
-                secondDescriptor);
-
+        case ELogicalMetatype::Tuple: {
+            auto mergedElements = MergeTupleTypes(firstDescriptor, secondDescriptor);
             return New<TTupleLogicalType>(mergedElements);
         }
-
-        case ELogicalMetatype::VariantTuple:
-        {
-            auto mergedElements = MergeTupleTypes(
-                firstDescriptor,
-                secondDescriptor);
-
-            return New<TVariantTupleLogicalType>(mergedElements);
+        case ELogicalMetatype::VariantTuple: {
+            auto mergedElements = MergeTupleTypes(firstDescriptor, secondDescriptor);
+            return New<TVariantTupleLogicalType>(std::move(mergedElements));
         }
-
-        case ELogicalMetatype::Dict:
+        case ELogicalMetatype::Dict: {
             return MergeDictTypes(firstDescriptor, secondDescriptor);
-
-        case ELogicalMetatype::Decimal:
-        {
+        }
+        case ELogicalMetatype::Decimal: {
             if (*firstDescriptor.GetType() == *secondDescriptor.GetType()) {
                 return firstType;
             } else {
@@ -316,11 +307,10 @@ TLogicalTypePtr MergeTypes(
                     "Type of fields %Qv and %Qv cannot be merged",
                     firstDescriptor.GetDescription(),
                     secondDescriptor.GetDescription())
-                    << TErrorAttribute("first_type", ToString(*firstDescriptor.GetType()))
-                    << TErrorAttribute("second_type", ToString(*secondDescriptor.GetType()));
+                    .With("first_type", ToString(*firstDescriptor.GetType()))
+                    .With("second_type", ToString(*secondDescriptor.GetType()));
             }
         }
-
         case ELogicalMetatype::Optional:
         case ELogicalMetatype::Tagged:
             // Optional and Tagged cases were checked earlier in this function.

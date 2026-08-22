@@ -3,10 +3,11 @@
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/public/lib/base/msgbus.h>
 #include "msgbus_http_server.h"
-#include "http_ping.h"
 #include <ydb/core/base/counters.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/base/ticket_parser.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NActorsServices::HTTP
 
 namespace NKikimr {
 namespace NMsgBusProxy {
@@ -205,12 +206,10 @@ void TMessageBusHttpServer::Output(NMonitoring::IMonHttpRequest& request) {
                 }
             }
 
-            LOG_DEBUG_S(*ActorSystem, NActorsServices::HTTP, "HttpRequest "
-                        << request.GetMethod()
-                        << " "
-                        << request.GetUri()
-                        << " "
-                        << message->GetRecord()->AsJSON());
+            YDB_LOG_DEBUG_CTX(*ActorSystem, "HttpRequest",
+                {"method", request.GetMethod()},
+                {"uri", request.GetUri()},
+                {"json", message->GetRecord()->AsJSON()});
 
             TBusHttpServerSession session(this, request, Protocol, Config);
             TBusHttpIdentity identity;

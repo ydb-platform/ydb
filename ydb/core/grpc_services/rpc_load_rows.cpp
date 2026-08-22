@@ -1,11 +1,14 @@
 #include <ydb/core/grpc_services/base/base.h>
 
 #include "rpc_common/rpc_common.h"
+#include "rpc_load_rows.h"
 #include "service_table.h"
 #include "audit_dml_operations.h"
 
 #include <ydb/core/tx/tx_proxy/upload_rows_common_impl.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
+
+#include <ydb/library/aclib/user_context.h>
 
 #include <yql/essentials/public/udf/udf_types.h>
 #include <yql/essentials/minikql/dom/yson.h>
@@ -18,6 +21,7 @@
 
 #include <util/string/vector.h>
 #include <util/generic/size_literals.h>
+#include <algorithm>
 
 namespace NKikimr {
 namespace NGRpcService {
@@ -28,11 +32,8 @@ using namespace Ydb;
 namespace {
 
 // TODO: no mapping for DATE, DATETIME, TZ_*, YSON, JSON, UUID, JSON_DOCUMENT, DYNUMBER
-bool ConvertArrowToYdbPrimitive(const arrow::DataType& type, Ydb::Type& toType) {
+bool ConvertArrowToYdbPrimitive(const arrow::DataType& type, Ydb::Type& toType, const NScheme::TTypeInfo* tableColumnType = nullptr) {
     switch (type.id()) {
-        case arrow::Type::BOOL:
-            toType.set_type_id(Ydb::Type::BOOL);
-            return true;
         case arrow::Type::UINT8:
             toType.set_type_id(Ydb::Type::UINT8);
             return true;
@@ -75,16 +76,29 @@ bool ConvertArrowToYdbPrimitive(const arrow::DataType& type, Ydb::Type& toType) 
         case arrow::Type::DURATION:
             toType.set_type_id(Ydb::Type::INTERVAL);
             return true;
-        case arrow::Type::DECIMAL: {
-            auto arrowDecimal = static_cast<const arrow::DecimalType *>(&type);
-            Ydb::DecimalType* decimalType = toType.mutable_decimal_type();
-            decimalType->set_precision(arrowDecimal->precision());
-            decimalType->set_scale(arrowDecimal->scale());
-            return true;
+        case arrow::Type::FIXED_SIZE_BINARY: {
+            if (!tableColumnType || dynamic_cast<const arrow::FixedSizeBinaryType&>(type).byte_width() != NScheme::FSB_SIZE) {
+                break;
+            }
+
+            switch (tableColumnType->GetTypeId()) {
+                case NScheme::NTypeIds::Decimal: {
+                    Ydb::DecimalType* decimalType = toType.mutable_decimal_type();
+                    decimalType->set_precision(tableColumnType->GetDecimalType().GetPrecision());
+                    decimalType->set_scale(tableColumnType->GetDecimalType().GetScale());
+                    return true;
+                }
+
+                case NScheme::NTypeIds::Uuid: {
+                    toType.set_type_id(Ydb::Type::UUID);
+                    return true;
+                }
+            }
+            break;
         }
+        case arrow::Type::BOOL:
         case arrow::Type::NA:
         case arrow::Type::HALF_FLOAT:
-        case arrow::Type::FIXED_SIZE_BINARY:
         case arrow::Type::DATE32:
         case arrow::Type::DATE64:
         case arrow::Type::TIME32:
@@ -92,6 +106,7 @@ bool ConvertArrowToYdbPrimitive(const arrow::DataType& type, Ydb::Type& toType) 
         case arrow::Type::INTERVAL_MONTHS:
         case arrow::Type::LARGE_STRING:
         case arrow::Type::LARGE_BINARY:
+        case arrow::Type::DECIMAL:
         case arrow::Type::DECIMAL256:
         case arrow::Type::DENSE_UNION:
         case arrow::Type::DICTIONARY:
@@ -143,6 +158,65 @@ bool CheckAccess(const TString& table, const TString& token, const NSchemeCache:
 
 }
 
+std::shared_ptr<arrow::RecordBatch> RowsToBatch(
+    const TVector<std::pair<TSerializedCellVec, TString>>& rows,
+    const TVector<std::pair<TString, NScheme::TTypeInfo>>& ydbSchema,
+    const std::set<std::string>& notNullColumns,
+    bool enableValidation,
+    TString& errorMessage)
+{
+    NArrow::TArrowBatchBuilder batchBuilder(arrow::Compression::UNCOMPRESSED, notNullColumns);
+    batchBuilder.Reserve(rows.size()); // TODO: ReserveData()
+    const auto startStatus = batchBuilder.Start(ydbSchema);
+    if (!startStatus.ok()) {
+        errorMessage = "Cannot make Arrow batch from rows: " + startStatus.ToString();
+        return {};
+    }
+
+    for (size_t rowIdx = 0; rowIdx < rows.size(); ++rowIdx) {
+        const auto& key = rows[rowIdx].first;
+        const auto& valueSerialized = rows[rowIdx].second;
+
+        TSerializedCellVec value;
+        if (!TSerializedCellVec::TryParse(valueSerialized, value)) {
+            errorMessage = "Cannot parse serialized cell vec for value";
+            return {};
+        }
+
+        const auto keyCells = key.GetCells();
+        const auto valueCells = value.GetCells();
+
+        if (enableValidation) {
+            if (keyCells.size() + valueCells.size() != ydbSchema.size()) {
+                errorMessage = TStringBuilder()
+                    << "Row " << rowIdx << " has unexpected cells count " << (keyCells.size() + valueCells.size())
+                    << " (expected " << ydbSchema.size() << ")";
+                return {};
+            }
+
+            for (size_t i = 0; i < keyCells.size(); ++i) {
+                const TString sizeErr = NScheme::HasUnexpectedValueSize(keyCells[i], ydbSchema[i].second);
+                if (!sizeErr.empty()) {
+                    errorMessage = TStringBuilder() << "Row " << rowIdx << ", column '" << ydbSchema[i].first << "': " << sizeErr;
+                    return {};
+                }
+            }
+            for (size_t i = 0; i < valueCells.size(); ++i) {
+                const size_t col = keyCells.size() + i;
+                const TString sizeErr = NScheme::HasUnexpectedValueSize(valueCells[i], ydbSchema[col].second);
+                if (!sizeErr.empty()) {
+                    errorMessage = TStringBuilder() << "Row " << rowIdx << ", column '" << ydbSchema[col].first << "': " << sizeErr;
+                    return {};
+                }
+            }
+        }
+
+        batchBuilder.AddRow(keyCells, valueCells);
+    }
+
+    return batchBuilder.FlushBatch(false);
+}
+
 using TEvBulkUpsertRequest = TGrpcRequestOperationCall<Ydb::Table::BulkUpsertRequest,
     Ydb::Table::BulkUpsertResponse>;
 
@@ -150,14 +224,28 @@ const Ydb::Table::BulkUpsertRequest* GetProtoRequest(IRequestOpCtx* req) {
     return TEvBulkUpsertRequest::GetProtoRequest(req);
 }
 
+static TString GetUserSID(const IRequestOpCtx* request) {
+    if (request == nullptr ) {
+        return BUILTIN_ACL_NO_USER_SID;
+    }
+    return (request->GetInternalToken() != nullptr) ? request->GetInternalToken()->GetUserSID() : BUILTIN_ACL_NO_USER_SID;
+}
+
 class TUploadRowsRPCPublic : public NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ> {
     using TBase = NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ>;
 public:
     explicit TUploadRowsRPCPublic(IRequestOpCtx* request, bool diskQuotaExceeded, const char* name)
-        : TBase(GetDuration(GetProtoRequest(request)->operation_params().operation_timeout()), diskQuotaExceeded,
-                NWilson::TSpan(TWilsonKqp::BulkUpsertActor, request->GetWilsonTraceId(), name))
+        : TBase(std::make_shared<TVector<std::pair<TSerializedCellVec,TString>>>(),
+            NACLib::TUserContextBuilder()
+                .WithUserSID(GetUserSID(request))
+                .WithUserTraceId(request->GetWilsonTraceId())
+                .Build(),
+            GetDuration(GetProtoRequest(request)->operation_params().operation_timeout()), diskQuotaExceeded,
+            NWilson::TSpan(TWilsonKqp::BulkUpsertActor, request->GetWilsonTraceId(), name))
         , Request(request)
-    {}
+        , Database(Request->GetDatabaseName().GetOrElse(""))
+    {
+    }
 
 private:
     void OnBeforeStart(const TActorContext& ctx) override {
@@ -179,16 +267,12 @@ private:
         NKikimr::NGRpcService::AuditContextAppend(Request.get(), *GetProtoRequest(Request.get()));
     }
 
-    TString GetDatabase() override {
-        return Request->GetDatabaseName().GetOrElse(DatabaseFromDomain(AppData()));
+    const TString& GetDatabase() const override {
+        return Database;
     }
 
-    const TString& GetTable() override {
+    const TString& GetTable() const override {
         return GetProtoRequest(Request.get())->table();
-    }
-
-    const TVector<std::pair<TSerializedCellVec, TString>>& GetRows() const override {
-        return AllRows;
     }
 
     void RaiseIssue(const NYql::TIssue& issue) override {
@@ -237,13 +321,13 @@ private:
         TVector<TCell> keyCells;
         TVector<TCell> valueCells;
         float cost = 0.0f;
+        TVector<std::pair<TSerializedCellVec, TString>> rows;
 
         // TODO: check that value is a list of structs
 
         // For each row in values
         TMemoryPool valueDataPool(256);
-        const auto& rows = GetProtoRequest(Request.get())->Getrows().Getvalue().Getitems();
-        for (const auto& r : rows) {
+        for (const auto& r : GetProtoRequest(Request.get())->Getrows().Getvalue().Getitems()) {
             valueDataPool.Clear();
 
             ui64 sz = 0;
@@ -270,51 +354,38 @@ private:
             // Save serialized key and value
             TSerializedCellVec serializedKey(keyCells);
             TString serializedValue = TSerializedCellVec::Serialize(valueCells);
-            AllRows.emplace_back(std::move(serializedKey), std::move(serializedValue));
+            rows.emplace_back(std::move(serializedKey), std::move(serializedValue));
         }
 
+        Rows = std::make_shared<TVector<std::pair<TSerializedCellVec, TString>>>(std::move(rows));
         RuCost = TUpsertCost::CostToRu(cost);
         return true;
     }
 
     bool ExtractBatch(TString& errorMessage) override {
-        Batch = RowsToBatch(AllRows, errorMessage);
+        Batch = NGRpcService::RowsToBatch(*Rows, YdbSchema, NotNullColumns, IsBulkUpsertValidationEnabled(), errorMessage);
         return Batch.get();
-    }
-
-    std::shared_ptr<arrow::RecordBatch> RowsToBatch(const TVector<std::pair<TSerializedCellVec, TString>>& rows,
-                                                    TString& errorMessage)
-    {
-        NArrow::TArrowBatchBuilder batchBuilder(arrow::Compression::UNCOMPRESSED, NotNullColumns);
-        batchBuilder.Reserve(rows.size()); // TODO: ReserveData()
-        const auto startStatus = batchBuilder.Start(YdbSchema);
-        if (!startStatus.ok()) {
-            errorMessage = "Cannot make Arrow batch from rows: " + startStatus.ToString();
-            return {};
-        }
-
-        for (const auto& kv : rows) {
-            const TSerializedCellVec& key = kv.first;
-            const TSerializedCellVec value(kv.second);
-
-            batchBuilder.AddRow(key.GetCells(), value.GetCells());
-        }
-
-        return batchBuilder.FlushBatch(false);
     }
 
 private:
     std::unique_ptr<IRequestOpCtx> Request;
-    TVector<std::pair<TSerializedCellVec, TString>> AllRows;
+    const TString Database;
 };
 
 class TUploadColumnsRPCPublic : public NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ> {
     using TBase = NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ>;
 public:
     explicit TUploadColumnsRPCPublic(IRequestOpCtx* request, bool diskQuotaExceeded)
-        : TBase(GetDuration(GetProtoRequest(request)->operation_params().operation_timeout()), diskQuotaExceeded)
+        : TBase(std::make_shared<TVector<std::pair<TSerializedCellVec,TString>>>(),
+            NACLib::TUserContextBuilder()
+                .WithUserSID(GetUserSID(request))
+                .WithUserTraceId(request->GetWilsonTraceId())
+                .Build(),
+            GetDuration(GetProtoRequest(request)->operation_params().operation_timeout()), diskQuotaExceeded)
         , Request(request)
-    {}
+        , Database(Request->GetDatabaseName().GetOrElse(""))
+    {
+    }
 
 private:
     void OnBeforeStart(const TActorContext& ctx) override {
@@ -347,16 +418,12 @@ private:
         NKikimr::NGRpcService::AuditContextAppend(Request.get(), *GetProtoRequest(Request.get()));
     }
 
-    TString GetDatabase() override {
-        return Request->GetDatabaseName().GetOrElse(DatabaseFromDomain(AppData()));
+    const TString& GetDatabase() const override {
+        return Database;
     }
 
-    const TString& GetTable() override {
+    const TString& GetTable() const override {
         return GetProtoRequest(Request.get())->table();
-    }
-
-    const TVector<std::pair<TSerializedCellVec, TString>>& GetRows() const override {
-        return Rows;
     }
 
     const TString& GetSourceData() const override {
@@ -405,14 +472,34 @@ private:
 
         out.reserve(schema->num_fields());
 
+        const NSchemeCache::TSchemeCacheNavigate* resolveResult = GetResolveNameResult();
+        THashMap<TString, NScheme::TTypeInfo> tableColumnTypes;
+        if (!resolveResult || resolveResult->ResultSet.size() != 1) {
+            return TConclusionStatus::Fail(TStringBuilder() <<
+                "Wrong table resolve result: expected exactly one entry, got " <<
+                (resolveResult ? std::to_string(resolveResult->ResultSet.size()) : "none"));
+        }
+
+        const auto& entry = resolveResult->ResultSet.front();
+        for (auto&& [_, colInfo] : entry.Columns) {
+            tableColumnTypes[colInfo.Name] = colInfo.PType;
+        }
+
         for (auto& field : schema->fields()) {
             auto& name = field->name();
             auto& type = field->type();
 
             Ydb::Type ydbType;
-            if (!ConvertArrowToYdbPrimitive(*type, ydbType)) {
+            const NScheme::TTypeInfo* tableColumnType = nullptr;
+            auto tableTypeIt = tableColumnTypes.find(name);
+            if (tableTypeIt != tableColumnTypes.end()) {
+                tableColumnType = &tableTypeIt->second;
+            }
+
+            if (!ConvertArrowToYdbPrimitive(*type, ydbType, tableColumnType)) {
                 return TConclusionStatus::Fail("Cannot convert arrow type to ydb one: " + type->ToString());
             }
+
             out.emplace_back(name, std::move(ydbType));
         }
 
@@ -421,7 +508,7 @@ private:
 
     bool ExtractRows(TString& errorMessage) override {
         Y_ABORT_UNLESS(Batch);
-        Rows = BatchToRows(Batch, errorMessage);
+        Rows = std::make_shared<TVector<std::pair<TSerializedCellVec, TString>>>(BatchToRows(Batch, errorMessage));
         return errorMessage.empty();
     }
 
@@ -463,6 +550,7 @@ private:
                     errorMessage = "Cannot deserialize arrow batch with specified schema";
                     return false;
                 }
+
                 break;
             }
             case EUploadSource::CSV:
@@ -488,12 +576,71 @@ private:
             }
         }
 
+        return ValidateInputBatch(errorMessage);
+    }
+
+    bool ValidateInputBatch(TString& errorMessage) {
+        return ValidateNotNullColumns(errorMessage) &&
+            ValidateUtf8(errorMessage);
+    }
+
+    bool ValidateNotNullColumns(TString& errorMessage) {
+        if (!Batch || NotNullColumns.empty()) {
+            return true;
+        }
+
+        for (const std::string& columnName : NotNullColumns) {
+            auto column = Batch->GetColumnByName(columnName);
+            if (!column) {
+                errorMessage = "Missing not null column: " + TString(columnName);
+                return false;
+            }
+
+            if (column->null_count() > 0) {
+                errorMessage = "Received NULL value for not null column: " + TString(columnName);
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    bool ValidateUtf8(TString& errorMessage) {
+        if (!Batch) {
+            return true;
+        }
+
+        for (const auto& [columnName, columnType] : YdbSchema) {
+            if (columnType.GetTypeId() != NScheme::NTypeIds::Utf8) {
+                continue;
+            }
+
+            auto column = Batch->GetColumnByName(columnName);
+            if (!column) {
+                errorMessage = "Missing Utf8 column: " + columnName;
+                return false;
+            }
+
+            if (column->type_id() != arrow::Type::STRING) {
+                errorMessage = Sprintf("Unexpected Arrow type %s for Utf8 column '%s'",
+                    column->type()->ToString().c_str(), columnName.c_str());
+                return false;
+            }
+
+            const auto& typedColumn = static_cast<const arrow::StringArray&>(*column);
+            arrow::Status validationStatus = typedColumn.ValidateUTF8();
+            if (!validationStatus.ok()) {
+                errorMessage = TStringBuilder() << "Invalid UTF-8 data in column " << columnName << ": " << validationStatus.message();
+                return false;
+            }
+        }
+
         return true;
     }
 
 private:
     std::unique_ptr<IRequestOpCtx> Request;
-    TVector<std::pair<TSerializedCellVec, TString>> Rows;
+    const TString Database;
 
     const Ydb::Formats::CsvSettings& GetCsvSettings() const {
         return GetProtoRequest(Request.get())->csv_settings();

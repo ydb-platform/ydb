@@ -7,8 +7,6 @@
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <yql/essentials/minikql/mkql_alloc.h>
 
-#include <ydb/core/testlib/basics/runtime.h>
-
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <chrono>
@@ -20,10 +18,6 @@ void InitAsyncOutput(
     TFakeCASetup& caSetup,
     NSo::NProto::TDqSolomonShard&& settings,
     i64 freeSpace = 100000);
-
-void CleanupSolomon(TString cloudId, TString folderId, TString service, bool isCloud);
-
-TString GetSolomonMetrics(TString folderId, TString service);
 
 NSo::NProto::TDqSolomonShard BuildSolomonShardSettings(bool isCloud);
 

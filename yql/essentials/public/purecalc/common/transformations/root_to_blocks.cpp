@@ -51,7 +51,7 @@ public:
 
         Wrapped_ = true;
 
-        return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
+        return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, /*hasRestart=*/true);
     }
 };
 
@@ -59,7 +59,6 @@ public:
 
 TAutoPtr<IGraphTransformer> NYql::NPureCalc::MakeRootToBlocks(
     bool acceptsBlocks,
-    EProcessorMode processorMode
-) {
+    EProcessorMode processorMode) {
     return new TRootToBlocks(acceptsBlocks, processorMode);
 }

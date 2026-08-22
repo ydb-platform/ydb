@@ -6,6 +6,7 @@ __all__ = [
     "TopicClientSettings",
     "TopicCodec",
     "TopicConsumer",
+    "TopicConsumerDescription",
     "TopicAlterConsumer",
     "TopicAlterAutoPartitioningSettings",
     "TopicAutoPartitioningSettings",
@@ -31,6 +32,7 @@ __all__ = [
     "TopicWriterInitInfo",
     "TopicWriterMessage",
     "TopicWriterSettings",
+    "TopicWriterBufferFullError",
 ]
 
 import concurrent.futures
@@ -71,6 +73,7 @@ from ._topic_writer.topic_writer import (  # noqa: F401
     RetryPolicy as TopicWriterRetryPolicy,
     PublicWriterInitInfo as TopicWriterInitInfo,
     PublicWriteResult as TopicWriteResult,
+    TopicWriterBufferFullError,
 )
 
 from ydb._topic_writer.topic_writer_asyncio import TxWriterAsyncIO as TopicTxWriterAsyncIO
@@ -87,6 +90,7 @@ from ._grpc.grpcwrapper import ydb_topic as _ydb_topic
 from ._grpc.grpcwrapper import ydb_topic_public_types as _ydb_topic_public_types
 from ._grpc.grpcwrapper.ydb_topic_public_types import (  # noqa: F401
     PublicDescribeTopicResult as TopicDescription,
+    PublicDescribeConsumerResult as TopicConsumerDescription,
     PublicMultipleWindowsStat as TopicStatWindow,
     PublicPartitionStats as TopicPartitionStats,
     PublicCodec as TopicCodec,
@@ -97,6 +101,8 @@ from ._grpc.grpcwrapper.ydb_topic_public_types import (  # noqa: F401
     PublicAutoPartitioningSettings as TopicAutoPartitioningSettings,
     PublicAlterAutoPartitioningSettings as TopicAlterAutoPartitioningSettings,
 )
+
+from .retries import ydb_retry
 
 logger = logging.getLogger(__name__)
 
@@ -122,7 +128,7 @@ class TopicClientAsyncIO:
     def __del__(self):
         if not self._closed:
             try:
-                logger.warning("Topic client was not closed properly. Consider using method close().")
+                logger.debug("Topic client was not closed properly. Consider using method close().")
                 self.close()
             except BaseException:
                 logger.warning("Something went wrong during topic client close in __del__")
@@ -161,6 +167,7 @@ class TopicClientAsyncIO:
         :param consumers: List of consumers for this topic
         :param metering_mode: Metering mode for the topic in a serverless database
         """
+        logger.debug("Create topic request: path=%s", path)
         args = locals().copy()
         del args["self"]
         req = _ydb_topic_public_types.CreateTopicRequestParams(**args)
@@ -210,10 +217,11 @@ class TopicClientAsyncIO:
         :param set_supported_codecs: List of allowed codecs for writers. Writes with codec not from this list are forbidden.
             Empty list mean disable codec compatibility checks for the topic.
         """
+        logger.debug("Alter topic request: path=%s", path)
         args = locals().copy()
         del args["self"]
-        req = _ydb_topic_public_types.AlterTopicRequestParams(**args)
-        req = _ydb_topic.AlterTopicRequest.from_public(req)
+        req_params = _ydb_topic_public_types.AlterTopicRequestParams(**args)
+        req = _ydb_topic.AlterTopicRequest.from_public(req_params)
         await self._driver(
             req.to_proto(),
             _apis.TopicService.Stub,
@@ -222,6 +230,7 @@ class TopicClientAsyncIO:
         )
 
     async def describe_topic(self, path: str, include_stats: bool = False) -> TopicDescription:
+        logger.debug("Describe topic request: path=%s", path)
         args = locals().copy()
         del args["self"]
         req = _ydb_topic_public_types.DescribeTopicRequestParams(**args)
@@ -233,7 +242,37 @@ class TopicClientAsyncIO:
         )  # type: _ydb_topic.DescribeTopicResult
         return res.to_public()
 
+    async def describe_consumer(
+        self,
+        path: str,
+        consumer: str,
+        *,
+        include_stats: bool = False,
+        include_location: bool = False,
+    ) -> TopicConsumerDescription:
+        """
+        Describe topic's consumer.
+
+        :param path: full path to topic
+        :param consumer: consumer name
+        :param include_stats: include consumer statistics
+        :param include_location: include partition location
+        :return: consumer description
+        """
+        logger.debug("Describe consumer request: path=%s consumer=%s", path, consumer)
+        args = locals().copy()
+        del args["self"]
+        req = _ydb_topic_public_types.DescribeConsumerRequestParams(**args)
+        res = await self._driver(
+            req.to_proto(),
+            _apis.TopicService.Stub,
+            _apis.TopicService.DescribeConsumer,
+            _create_result_wrapper(_ydb_topic.DescribeConsumerResult),
+        )  # type: _ydb_topic.DescribeConsumerResult
+        return res.to_public()
+
     async def drop_topic(self, path: str):
+        logger.debug("Drop topic request: path=%s", path)
         req = _ydb_topic_public_types.DropTopicRequestParams(path=path)
         await self._driver(
             req.to_proto(),
@@ -255,7 +294,10 @@ class TopicClientAsyncIO:
         decoder_executor: Optional[concurrent.futures.Executor] = None,
         auto_partitioning_support: Optional[bool] = True,  # Auto partitioning feature flag. Default - True.
         event_handler: Optional[TopicReaderEvents.EventHandler] = None,
+        buffer_release_threshold: float = 0.5,
     ) -> TopicReaderAsyncIO:
+
+        logger.debug("Create reader for topic=%s consumer=%s", topic, consumer)
 
         if not decoder_executor:
             decoder_executor = self._executor
@@ -300,7 +342,11 @@ class TopicClientAsyncIO:
         # custom encoder executor for call builtin and custom decoders. If None - use shared executor pool.
         # If max_worker in the executor is 1 - then encoders will be called from the thread without parallel.
         encoder_executor: Optional[concurrent.futures.Executor] = None,
+        max_buffer_size_bytes: Optional[int] = None,
+        max_buffer_messages: Optional[int] = None,
+        buffer_wait_timeout_sec: Optional[float] = None,
     ) -> TopicWriterAsyncIO:
+        logger.debug("Create writer for topic=%s producer_id=%s", topic, producer_id)
         args = locals().copy()
         del args["self"]
 
@@ -328,7 +374,11 @@ class TopicClientAsyncIO:
         # custom encoder executor for call builtin and custom decoders. If None - use shared executor pool.
         # If max_worker in the executor is 1 - then encoders will be called from the thread without parallel.
         encoder_executor: Optional[concurrent.futures.Executor] = None,
+        max_buffer_size_bytes: Optional[int] = None,
+        max_buffer_messages: Optional[int] = None,
+        buffer_wait_timeout_sec: Optional[float] = None,
     ) -> TopicTxWriterAsyncIO:
+        logger.debug("Create tx writer for topic=%s tx=%s", topic, tx)
         args = locals().copy()
         del args["self"]
         del args["tx"]
@@ -340,9 +390,17 @@ class TopicClientAsyncIO:
 
         return TopicTxWriterAsyncIO(tx=tx, driver=self._driver, settings=settings, _client=self)
 
+    @ydb_retry(retry_cancelled=True, idempotent=True)
     async def commit_offset(
         self, path: str, consumer: str, partition_id: int, offset: int, read_session_id: Optional[str] = None
     ) -> None:
+        logger.debug(
+            "Commit offset: path=%s partition_id=%s offset=%s consumer=%s",
+            path,
+            partition_id,
+            offset,
+            consumer,
+        )
         req = _ydb_topic.CommitOffsetRequest(
             path=path,
             consumer=consumer,
@@ -362,6 +420,7 @@ class TopicClientAsyncIO:
         if self._closed:
             return
 
+        logger.debug("Close topic client")
         self._closed = True
         self._executor.shutdown(wait=False)
 
@@ -433,6 +492,7 @@ class TopicClient:
         :param consumers: List of consumers for this topic
         :param metering_mode: Metering mode for the topic in a serverless database
         """
+        logger.debug("Create topic request: path=%s", path)
         args = locals().copy()
         del args["self"]
         self._check_closed()
@@ -484,12 +544,13 @@ class TopicClient:
         :param set_supported_codecs: List of allowed codecs for writers. Writes with codec not from this list are forbidden.
             Empty list mean disable codec compatibility checks for the topic.
         """
+        logger.debug("Alter topic request: path=%s", path)
         args = locals().copy()
         del args["self"]
         self._check_closed()
 
-        req = _ydb_topic_public_types.AlterTopicRequestParams(**args)
-        req = _ydb_topic.AlterTopicRequest.from_public(req)
+        req_params = _ydb_topic_public_types.AlterTopicRequestParams(**args)
+        req = _ydb_topic.AlterTopicRequest.from_public(req_params)
         self._driver(
             req.to_proto(),
             _apis.TopicService.Stub,
@@ -498,6 +559,7 @@ class TopicClient:
         )
 
     def describe_topic(self, path: str, include_stats: bool = False) -> TopicDescription:
+        logger.debug("Describe topic request: path=%s", path)
         args = locals().copy()
         del args["self"]
         self._check_closed()
@@ -511,8 +573,41 @@ class TopicClient:
         )  # type: _ydb_topic.DescribeTopicResult
         return res.to_public()
 
+    def describe_consumer(
+        self,
+        path: str,
+        consumer: str,
+        *,
+        include_stats: bool = False,
+        include_location: bool = False,
+    ) -> TopicConsumerDescription:
+        """
+        Describe topic's consumer.
+
+        :param path: full path to topic
+        :param consumer: consumer name
+        :param include_stats: include consumer statistics
+        :param include_location: include partition location
+        :return: consumer description
+        """
+        logger.debug("Describe consumer request: path=%s consumer=%s", path, consumer)
+        args = locals().copy()
+        del args["self"]
+        self._check_closed()
+
+        req = _ydb_topic_public_types.DescribeConsumerRequestParams(**args)
+        res = self._driver(
+            req.to_proto(),
+            _apis.TopicService.Stub,
+            _apis.TopicService.DescribeConsumer,
+            _create_result_wrapper(_ydb_topic.DescribeConsumerResult),
+        )  # type: _ydb_topic.DescribeConsumerResult
+        return res.to_public()
+
     def drop_topic(self, path: str):
         self._check_closed()
+
+        logger.debug("Drop topic request: path=%s", path)
 
         req = _ydb_topic_public_types.DropTopicRequestParams(path=path)
         self._driver(
@@ -535,7 +630,9 @@ class TopicClient:
         decoder_executor: Optional[concurrent.futures.Executor] = None,  # default shared client executor pool
         auto_partitioning_support: Optional[bool] = True,  # Auto partitioning feature flag. Default - True.
         event_handler: Optional[TopicReaderEvents.EventHandler] = None,
+        buffer_release_threshold: float = 0.5,
     ) -> TopicReader:
+        logger.debug("Create reader for topic=%s consumer=%s", topic, consumer)
         if not decoder_executor:
             decoder_executor = self._executor
 
@@ -579,7 +676,11 @@ class TopicClient:
         # custom encoder executor for call builtin and custom decoders. If None - use shared executor pool.
         # If max_worker in the executor is 1 - then encoders will be called from the thread without parallel.
         encoder_executor: Optional[concurrent.futures.Executor] = None,  # default shared client executor pool
+        max_buffer_size_bytes: Optional[int] = None,
+        max_buffer_messages: Optional[int] = None,
+        buffer_wait_timeout_sec: Optional[float] = None,
     ) -> TopicWriter:
+        logger.debug("Create writer for topic=%s producer_id=%s", topic, producer_id)
         args = locals().copy()
         del args["self"]
         self._check_closed()
@@ -608,7 +709,11 @@ class TopicClient:
         # custom encoder executor for call builtin and custom decoders. If None - use shared executor pool.
         # If max_worker in the executor is 1 - then encoders will be called from the thread without parallel.
         encoder_executor: Optional[concurrent.futures.Executor] = None,  # default shared client executor pool
+        max_buffer_size_bytes: Optional[int] = None,
+        max_buffer_messages: Optional[int] = None,
+        buffer_wait_timeout_sec: Optional[float] = None,
     ) -> TopicWriter:
+        logger.debug("Create tx writer for topic=%s tx=%s", topic, tx)
         args = locals().copy()
         del args["self"]
         del args["tx"]
@@ -621,9 +726,17 @@ class TopicClient:
 
         return TopicTxWriter(tx, self._driver, settings, _parent=self)
 
+    @ydb_retry(retry_cancelled=True, idempotent=True)
     def commit_offset(
         self, path: str, consumer: str, partition_id: int, offset: int, read_session_id: Optional[str] = None
     ) -> None:
+        logger.debug(
+            "Commit offset: path=%s partition_id=%s offset=%s consumer=%s",
+            path,
+            partition_id,
+            offset,
+            consumer,
+        )
         req = _ydb_topic.CommitOffsetRequest(
             path=path,
             consumer=consumer,
@@ -643,8 +756,10 @@ class TopicClient:
         if self._closed:
             return
 
+        logger.debug("Close topic client")
         self._closed = True
         self._executor.shutdown(wait=False)
+        logger.debug("Topic client was closed")
 
     def _check_closed(self):
         if not self._closed:

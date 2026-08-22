@@ -1,7 +1,21 @@
 --- contrib/libs/protobuf/src/google/protobuf/json/json.h	(94b865765aa38dc5e4ac99e0051d228ebc9d2a80)
 +++ contrib/libs/protobuf/src/google/protobuf/json/json.h	(a305e8c438c21585e001abb5ada0122f6e1fc694)
-@@ -45,7 +45,11 @@
- 
+@@ -30,8 +30,12 @@
+
+ // Utility functions to convert between protobuf binary format and proto3 JSON
+ // format.
+-#ifndef GOOGLE_PROTOBUF_JSON_JSON_H__
++#if (!defined(USE_DEPRECATED_NAMESPACE) && !defined(GOOGLE_PROTOBUF_JSON_JSON_H__)) || (defined(USE_DEPRECATED_NAMESPACE) && !defined(GOOGLE_PROTOBUF_UTIL_JSON_UTIL_H__))
++#if defined(USE_DEPRECATED_NAMESPACE)
++#define GOOGLE_PROTOBUF_UTIL_JSON_UTIL_H__
++#else
+ #define GOOGLE_PROTOBUF_JSON_JSON_H__
++#endif
+
+ #include <string>
+
+@@ -45,7 +49,11 @@
+
  namespace google {
  namespace protobuf {
 +#ifdef USE_DEPRECATED_NAMESPACE

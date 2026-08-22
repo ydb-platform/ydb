@@ -1,5 +1,6 @@
 #pragma once
 
+#include "api_service_proxy.h"
 #include "public.h"
 
 #include <yt/yt/library/re2/re2.h>
@@ -16,11 +17,21 @@ namespace NYT::NApi::NRpcProxy {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-[[noreturn]] void ThrowUnimplemented(const TString& method);
+void PatchProxyForStallRequests(const TConnectionConfigPtr& config, TApiServiceProxy* proxy);
+
+////////////////////////////////////////////////////////////////////////////////
+
+[[noreturn]] void ThrowUnimplemented(const std::string& method);
+
+////////////////////////////////////////////////////////////////////////////////
+
+void SetControlMultiplexingBandIfEnabled(NRpc::TClientRequest& req, const TConnectionConfigPtr& config);
 
 ////////////////////////////////////////////////////////////////////////////////
 
 namespace NProto {
+
+////////////////////////////////////////////////////////////////////////////////
 
 void ToProto(
     NProto::TTransactionalOptions* proto,
@@ -121,6 +132,22 @@ void ToProto(
 void FromProto(
     NApi::TOperationEvent* result,
     const NProto::TOperationEvent& proto);
+
+void ToProto(
+    NProto::TJobTrace* proto,
+    const NApi::TJobTraceMeta& result);
+
+void FromProto(
+    NApi::TJobTraceMeta* result,
+    const NProto::TJobTrace& proto);
+
+void ToProto(
+    NProto::TCheckOperationPermissionResult* proto,
+    const NApi::TCheckOperationPermissionResult& result);
+
+void FromProto(
+    NApi::TCheckOperationPermissionResult* result,
+    const NProto::TCheckOperationPermissionResult& proto);
 
 void ToProto(NProto::TColumnSchema* protoSchema, const NTableClient::TColumnSchema& schema);
 void FromProto(NTableClient::TColumnSchema* schema, const NProto::TColumnSchema& protoSchema);
@@ -238,10 +265,10 @@ void FromProto(
 
 void ToProto(
     NProto::TBackupManifest::TClusterManifest* protoEntry,
-    const std::pair<TString, std::vector<NApi::TTableBackupManifestPtr>>& entry);
+    const std::pair<std::string, std::vector<NApi::TTableBackupManifestPtr>>& entry);
 
 void FromProto(
-    std::pair<TString, std::vector<NApi::TTableBackupManifestPtr>>* entry,
+    std::pair<std::string, std::vector<NApi::TTableBackupManifestPtr>>* entry,
     const NProto::TBackupManifest::TClusterManifest& protoEntry);
 
 void ToProto(
@@ -259,6 +286,10 @@ void ToProto(
 void FromProto(
     NApi::TQuery* query,
     const NProto::TQuery& protoQuery);
+
+void FromProto(
+    NApi::TSuppressableAccessTrackingOptions* options,
+    const NApi::NRpcProxy::NProto::TSuppressableAccessTrackingOptions& proto);
 
 NProto::EOperationType ConvertOperationTypeToProto(
     NScheduler::EOperationType operationType);
@@ -308,6 +339,62 @@ NProto::EQueryState ConvertQueryStateToProto(
 NQueryTrackerClient::EQueryState ConvertQueryStateFromProto(
     NProto::EQueryState proto);
 
+NApi::EJobStderrType ConvertJobStderrTypeFromProto(
+    NProto::EJobStderrType proto);
+
+NProto::EJobStderrType ConvertJobStderrTypeToProto(
+    NApi::EJobStderrType jobStderrType);
+
+NProto::EJobTraceProgress ConvertJobTraceProgressToProto(
+    NApi::EJobTraceProgress progress);
+
+NApi::EJobTraceProgress ConvertJobTraceProgressFromProto(
+    NProto::EJobTraceProgress proto);
+
+NProto::EJobTraceHealth ConvertJobTraceHealthToProto(
+    NApi::EJobTraceHealth health);
+
+NApi::EJobTraceHealth ConvertJobTraceHealthFromProto(
+    NProto::EJobTraceHealth proto);
+
+NProto::EJobTraceState ConvertJobTraceStateToProto(
+    NJobTrackerClient::EJobTraceState state);
+
+NJobTrackerClient::EJobTraceState ConvertJobTraceStateFromProto(
+    NProto::EJobTraceState proto);
+
+////////////////////////////////////////////////////////////////////////////////
+
+void FillRequest(
+    TReqReadTable* req,
+    const NYPath::TRichYPath& path,
+    const std::optional<NYson::TYsonString>& format,
+    const TTableReaderOptions& options);
+
+void ParseRequest(
+    NYPath::TRichYPath* mutablePath,
+    std::optional<NYson::TYsonStringBuf>* mutableFormat,
+    ERowsetFormat* mutableDesiredRowsetFormat,
+    ERowsetFormat* mutableArrowFallbackFormat,
+    TTableReaderOptions* mutableOptions,
+    const TReqReadTable& req);
+
+////////////////////////////////////////////////////////////////////////////////
+
+void FillRequest(
+    TReqReadTablePartition* req,
+    const TTablePartitionCookiePtr& cookie,
+    const std::optional<NYson::TYsonString>& format,
+    const TReadTablePartitionOptions& options);
+
+void ParseRequest(
+    TTablePartitionCookiePtr* mutableCookie,
+    std::optional<NYson::TYsonStringBuf>* mutableFormat,
+    ERowsetFormat* mutableDesiredRowsetFormat,
+    ERowsetFormat* mutableArrowFallbackFormat,
+    TReadTablePartitionOptions* mutableOptions,
+    const TReqReadTablePartition& req);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 void FillRequest(
@@ -319,6 +406,18 @@ void ParseRequest(
     NYPath::TRichYPath* mutablePath,
     TDistributedWriteSessionStartOptions* mutableOptions,
     const TReqStartDistributedWriteSession& req);
+
+////////////////////////////////////////////////////////////////////////////////
+
+void FillRequest(
+    TReqPingDistributedWriteSession* req,
+    const TSignedDistributedWriteSessionPtr& session,
+    const TDistributedWriteSessionPingOptions& options);
+
+void ParseRequest(
+    TSignedDistributedWriteSessionPtr* mutableSession,
+    TDistributedWriteSessionPingOptions* mutableOptions,
+    const TReqPingDistributedWriteSession& req);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -343,6 +442,56 @@ void ParseRequest(
     TSignedWriteFragmentCookiePtr* mutableCookie,
     TTableFragmentWriterOptions* mutableOptions,
     const TReqWriteTableFragment& req);
+
+////////////////////////////////////////////////////////////////////////////////
+
+void FillRequest(
+    TReqStartDistributedWriteFileSession* req,
+    const NYPath::TRichYPath& path,
+    const TDistributedWriteFileSessionStartOptions& options);
+
+void ParseRequest(
+    NYPath::TRichYPath* mutablePath,
+    TDistributedWriteFileSessionStartOptions* mutableOptions,
+    const TReqStartDistributedWriteFileSession& req);
+
+////////////////////////////////////////////////////////////////////////////////
+
+void FillRequest(
+    TReqPingDistributedWriteFileSession* req,
+    const TSignedDistributedWriteFileSessionPtr& session,
+    const TDistributedWriteFileSessionPingOptions& options);
+
+void ParseRequest(
+    TSignedDistributedWriteFileSessionPtr* mutableSession,
+    TDistributedWriteFileSessionPingOptions* mutableOptions,
+    const TReqPingDistributedWriteFileSession& req);
+
+////////////////////////////////////////////////////////////////////////////////
+
+void FillRequest(
+    TReqFinishDistributedWriteFileSession* req,
+    const TDistributedWriteFileSessionWithResults& sessionWithResults,
+    const TDistributedWriteFileSessionFinishOptions& options);
+
+void ParseRequest(
+    TDistributedWriteFileSessionWithResults* mutableSessionWithResults,
+    TDistributedWriteFileSessionFinishOptions* mutableOptions,
+    const TReqFinishDistributedWriteFileSession& req);
+
+////////////////////////////////////////////////////////////////////////////////
+
+void FillRequest(
+    TReqWriteFileFragment* req,
+    const TSignedWriteFileFragmentCookiePtr& cookie,
+    const TFileFragmentWriterOptions& options);
+
+void ParseRequest(
+    TSignedWriteFileFragmentCookiePtr* mutableCookie,
+    TFileFragmentWriterOptions* mutableOptions,
+    const TReqWriteFileFragment& req);
+
+////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NProto
 
@@ -390,7 +539,7 @@ TIntrusivePtr<NApi::IRowset<NTableClient::TTypeErasedRow>> DeserializeRowset(
 
 //! Invokes std::stable_sort reordering addresses by the index of the first regex they match;
 //! addresses not matching any regex are placed at the very end.
-void SortByRegexes(std::vector<TString>& values, const std::vector<NRe2::TRe2Ptr>& regexes);
+void SortByRegexes(std::vector<std::string>& values, const std::vector<NRe2::TRe2Ptr>& regexes);
 
 ////////////////////////////////////////////////////////////////////////////////
 

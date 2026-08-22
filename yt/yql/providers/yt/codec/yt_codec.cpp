@@ -1,4 +1,5 @@
 #include "yt_codec.h"
+#include "yt_codec_tz.h"
 
 #include <yt/yql/providers/yt/common/yql_names.h>
 #include <yt/yql/providers/yt/lib/skiff/yql_skiff_schema.h>
@@ -231,6 +232,9 @@ void TMkqlIOSpecs::LoadSpecInfo(bool inputSpec, const NYT::TNode& attrs, NCommon
     if (attrs.HasKey(YqlDynamicAttribute)) {
         info.Dynamic = attrs[YqlDynamicAttribute].AsBool();
     }
+    if (attrs.HasKey(YqlRLSAttribute)) {
+        info.RLS = attrs[YqlRLSAttribute].AsBool();
+    }
     if (attrs.HasKey(YqlSysColumnPrefix)) {
         for (auto& n: attrs[YqlSysColumnPrefix].AsList()) {
             const TString sys = n.AsString();
@@ -272,6 +276,7 @@ void TMkqlIOSpecs::InitDecoder(NCommon::TCodecContext& codecCtx,
     decoder.StructSize = structColumns.size();
     decoder.NativeYtTypeFlags = specInfo.NativeYtTypeFlags;
     decoder.Dynamic = specInfo.Dynamic;
+    decoder.RLS = specInfo.RLS;
     THashSet<ui32> virtualColumns;
 
     if (specInfo.SysColumns.contains("path")) {
@@ -705,6 +710,66 @@ T ReadYsonFloatNumberInTableFormat(char cmd, NCommon::TInputBuf& buf) {
     return dbl;
 }
 
+namespace {
+
+// YT format
+template<typename T>
+NUdf::TUnboxedValuePod ReadTz(bool native, NCommon::TInputBuf& buf) {
+    using TLayout = NUdf::TDataType<T>::TLayout;
+    TLayout value;
+    ui16 tzId;
+    if (native) {
+        ReadTzNative<T>(buf, value, tzId);
+    } else {
+        YQL_ENSURE(ReadTzYql<T>(buf, value, tzId), "Failed to read " << NUdf::TDataType<T>::Slot << ": invalid payload length");
+    }
+    YQL_ENSURE(NUdf::IsValidLayoutValue<T>(value), "Failed to read " << NUdf::TDataType<T>::Slot << ": time value " << value << " is invalid");
+    YQL_ENSURE(NKikimr::NMiniKQL::IsValidTimezoneId(tzId), "Failed to read " << NUdf::TDataType<T>::Slot << ": invalid time zone id " << tzId);
+    NUdf::TUnboxedValuePod result(value);
+    result.SetTimezoneId(tzId);
+    return result;
+}
+
+template<typename T>
+void WriteTz(bool native, const NUdf::TUnboxedValuePod& value, NCommon::TOutputBuf& buf) {
+    using TLayout = NUdf::TDataType<T>::TLayout;
+    if (native) {
+        WriteTzNative<T>(buf, value.Get<TLayout>(), value.GetTimezoneId());
+    } else {
+        WriteTzYql<T>(buf, value.Get<TLayout>(), value.GetTimezoneId());
+    }
+}
+
+// table format
+template<typename T>
+NUdf::TUnboxedValuePod ReadTzTable(bool native, NCommon::TInputBuf& buf) {
+    using TLayout = NUdf::TDataType<T>::TLayout;
+    TLayout value;
+    ui16 tzId;
+    if (native) {
+        YQL_ENSURE(ReadTzTableNative<T>(buf, value, tzId), "Failed to read " << NUdf::TDataType<T>::Slot << ": invalid timezone string");
+    } else {
+        YQL_ENSURE(ReadTzYqlTable<T>(buf, value, tzId), "Failed to read " << NUdf::TDataType<T>::Slot << ": invalid payload length");
+        YQL_ENSURE(NKikimr::NMiniKQL::IsValidTimezoneId(tzId), "Failed to read " << NUdf::TDataType<T>::Slot << ": invalid time zone id " << tzId);
+    }
+    YQL_ENSURE(NUdf::IsValidLayoutValue<T>(value), "Failed to read " << NUdf::TDataType<T>::Slot << ": time value " << value << " is invalid");
+    NUdf::TUnboxedValuePod result(value);
+    result.SetTimezoneId(tzId);
+    return result;
+}
+
+template<typename T>
+void WriteTzTable(bool native, const NUdf::TUnboxedValuePod& value, NCommon::TOutputBuf& buf) {
+    using TLayout = NUdf::TDataType<T>::TLayout;
+    if (native) {
+        WriteTzTableNative<T>(buf, value.Get<TLayout>(), value.GetTimezoneId());
+    } else {
+        WriteTzYqlTable<T>(buf, value.Get<TLayout>(), value.GetTimezoneId());
+    }
+}
+
+}
+
 NUdf::TUnboxedValue ReadYsonValueInTableFormat(TType* type, ui64 nativeYtTypeFlags,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory, char cmd, NCommon::TInputBuf& buf) {
     switch (type->GetKind()) {
@@ -900,38 +965,17 @@ NUdf::TUnboxedValue ReadYsonValueInTableFormat(TType* type, ui64 nativeYtTypeFla
             CHECK_EXPECTED(cmd, Int64Marker);
             return NUdf::TUnboxedValuePod(buf.ReadVarI64());
 
-        case NUdf::TDataType<NUdf::TTzDate>::Id: {
-            auto nextString = ReadNextString(cmd, buf);
-            NUdf::TUnboxedValuePod data;
-            ui16 value;
-            ui16 tzId = 0;
-            YQL_ENSURE(DeserializeTzDate(nextString, value, tzId));
-            data = NUdf::TUnboxedValuePod(value);
-            data.SetTimezoneId(tzId);
-            return data;
-        }
+        case NUdf::TDataType<NUdf::TTzDate>::Id:
+            CHECK_EXPECTED(cmd, StringMarker);
+            return ReadTzTable<NUdf::TTzDate>(nativeYtTypeFlags & NTCF_TZDATE, buf);
 
-        case NUdf::TDataType<NUdf::TTzDatetime>::Id: {
-            auto nextString = ReadNextString(cmd, buf);
-            NUdf::TUnboxedValuePod data;
-            ui32 value;
-            ui16 tzId = 0;
-            YQL_ENSURE(DeserializeTzDatetime(nextString, value, tzId));
-            data = NUdf::TUnboxedValuePod(value);
-            data.SetTimezoneId(tzId);
-            return data;
-        }
+        case NUdf::TDataType<NUdf::TTzDatetime>::Id:
+            CHECK_EXPECTED(cmd, StringMarker);
+            return ReadTzTable<NUdf::TTzDatetime>(nativeYtTypeFlags & NTCF_TZDATE, buf);
 
-        case NUdf::TDataType<NUdf::TTzTimestamp>::Id: {
-            auto nextString = ReadNextString(cmd, buf);
-            NUdf::TUnboxedValuePod data;
-            ui64 value;
-            ui16 tzId = 0;
-            YQL_ENSURE(DeserializeTzTimestamp(nextString, value, tzId));
-            data = NUdf::TUnboxedValuePod(value);
-            data.SetTimezoneId(tzId);
-            return data;
-        }
+        case NUdf::TDataType<NUdf::TTzTimestamp>::Id:
+            CHECK_EXPECTED(cmd, StringMarker);
+            return ReadTzTable<NUdf::TTzTimestamp>(nativeYtTypeFlags & NTCF_TZDATE, buf);
 
         case NUdf::TDataType<NUdf::TDate32>::Id:
             CHECK_EXPECTED(cmd, Int64Marker);
@@ -947,38 +991,17 @@ NUdf::TUnboxedValue ReadYsonValueInTableFormat(TType* type, ui64 nativeYtTypeFla
             return ValueFromString(EDataSlot::JsonDocument, ReadNextString(cmd, buf));
         }
 
-        case NUdf::TDataType<NUdf::TTzDate32>::Id: {
-            auto nextString = ReadNextString(cmd, buf);
-            NUdf::TUnboxedValuePod data;
-            i32 value;
-            ui16 tzId = 0;
-            YQL_ENSURE(DeserializeTzDate32(nextString, value, tzId));
-            data = NUdf::TUnboxedValuePod(value);
-            data.SetTimezoneId(tzId);
-            return data;
-        }
+        case NUdf::TDataType<NUdf::TTzDate32>::Id:
+            CHECK_EXPECTED(cmd, StringMarker);
+            return ReadTzTable<NUdf::TTzDate32>(nativeYtTypeFlags & NTCF_BIGTZDATE, buf);
 
-        case NUdf::TDataType<NUdf::TTzDatetime64>::Id: {
-            auto nextString = ReadNextString(cmd, buf);
-            NUdf::TUnboxedValuePod data;
-            i64 value;
-            ui16 tzId = 0;
-            YQL_ENSURE(DeserializeTzDatetime64(nextString, value, tzId));
-            data = NUdf::TUnboxedValuePod(value);
-            data.SetTimezoneId(tzId);
-            return data;
-        }
+        case NUdf::TDataType<NUdf::TTzDatetime64>::Id:
+            CHECK_EXPECTED(cmd, StringMarker);
+            return ReadTzTable<NUdf::TTzDatetime64>(nativeYtTypeFlags & NTCF_BIGTZDATE, buf);
 
-        case NUdf::TDataType<NUdf::TTzTimestamp64>::Id: {
-            auto nextString = ReadNextString(cmd, buf);
-            NUdf::TUnboxedValuePod data;
-            i64 value;
-            ui16 tzId = 0;
-            YQL_ENSURE(DeserializeTzTimestamp64(nextString, value, tzId));
-            data = NUdf::TUnboxedValuePod(value);
-            data.SetTimezoneId(tzId);
-            return data;
-        }
+        case NUdf::TDataType<NUdf::TTzTimestamp64>::Id:
+            CHECK_EXPECTED(cmd, StringMarker);
+            return ReadTzTable<NUdf::TTzTimestamp64>(nativeYtTypeFlags & NTCF_BIGTZDATE, buf);
 
         default:
             YQL_ENSURE(false, "Unsupported data type: " << schemeType);
@@ -1035,11 +1058,12 @@ NUdf::TUnboxedValue ReadYsonValueInTableFormat(TType* type, ui64 nativeYtTypeFla
             }
 
             for (ui32 i = 0; i < structType->GetMembersCount(); ++i) {
-                if (items[i]) {
+                auto memberType = structType->GetMemberType(i);
+                if (items[i] || memberType->IsVoid() || memberType->IsNull()) {
                     continue;
                 }
 
-                YQL_ENSURE(structType->GetMemberType(i)->IsOptional(), "Missing required field: " << structType->GetMemberName(i));
+                YQL_ENSURE(memberType->IsOptional(), "Missing required field: " << structType->GetMemberName(i));
             }
 
             return ret;
@@ -1327,27 +1351,25 @@ TMaybe<NUdf::TUnboxedValue> ParseYsonNode(const THolderFactory& holderFactory,
     return ParseYsonValueInTableFormat(holderFactory, NYT::NodeToYsonString(node, NYson::EYsonFormat::Binary), type, nativeYtTypeFlags, err);
 }
 
-extern "C" void ReadYsonContainerValue(TType* type, ui64 nativeYtTypeFlags, const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+extern "C" void ReadYsonContainerValue(TType* type, const NKikimr::NMiniKQL::THolderFactory& holderFactory,
     NUdf::TUnboxedValue& value, NCommon::TInputBuf& buf, bool wrapOptional) {
     // yson content
     ui32 size;
     buf.ReadMany((char*)&size, sizeof(size));
     CHECK_STRING_LENGTH_UNSIGNED(size);
-    // parse binary yson...
     YQL_ENSURE(size > 0);
     char cmd = buf.Read();
-    auto tmp = ReadYsonValueInTableFormat(type, nativeYtTypeFlags, holderFactory, cmd, buf);
+    auto tmp = ReadYsonValueInTableFormat(type, 0, holderFactory, cmd, buf);
     if (!wrapOptional) {
         value = std::move(tmp);
-    }
-    else {
+    } else {
         value = tmp.Release().MakeOptional();
     }
 }
 
 extern "C" void ReadContainerNativeYtValue(TType* type, ui64 nativeYtTypeFlags, const NKikimr::NMiniKQL::THolderFactory& holderFactory,
     NUdf::TUnboxedValue& value, NCommon::TInputBuf& buf, bool wrapOptional) {
-    auto tmp = ReadSkiffNativeYtValue(type, nativeYtTypeFlags, holderFactory, buf);
+    auto tmp = ReadSkiffComplexValue(type, nativeYtTypeFlags, holderFactory, buf);
     if (!wrapOptional) {
         value = std::move(tmp);
     } else {
@@ -1530,71 +1552,29 @@ void WriteYsonValueInTableFormat(NCommon::TOutputBuf& buf, TType* type, ui64 nat
             buf.WriteVarI64(value.Get<i32>());
             break;
 
-        case NUdf::TDataType<NUdf::TTzDate>::Id: {
-            ui16 tzId = SwapBytes(value.GetTimezoneId());
-            ui16 data = SwapBytes(value.Get<ui16>());
-            ui32 size = sizeof(data) + sizeof(tzId);
-            buf.Write(StringMarker);
-            buf.WriteVarI32(size);
-            buf.WriteMany((const char*)&data, sizeof(data));
-            buf.WriteMany((const char*)&tzId, sizeof(tzId));
+        case NUdf::TDataType<NUdf::TTzDate>::Id:
+            WriteTzTable<NUdf::TTzDate>(nativeYtTypeFlags & NTCF_TZDATE, value, buf);
             break;
-        }
 
-        case NUdf::TDataType<NUdf::TTzDatetime>::Id: {
-            ui16 tzId = SwapBytes(value.GetTimezoneId());
-            ui32 data = SwapBytes(value.Get<ui32>());
-            ui32 size = sizeof(data) + sizeof(tzId);
-            buf.Write(StringMarker);
-            buf.WriteVarI32(size);
-            buf.WriteMany((const char*)&data, sizeof(data));
-            buf.WriteMany((const char*)&tzId, sizeof(tzId));
+        case NUdf::TDataType<NUdf::TTzDatetime>::Id:
+            WriteTzTable<NUdf::TTzDatetime>(nativeYtTypeFlags & NTCF_TZDATE, value, buf);
             break;
-        }
 
-        case NUdf::TDataType<NUdf::TTzTimestamp>::Id: {
-            ui16 tzId = SwapBytes(value.GetTimezoneId());
-            ui64 data = SwapBytes(value.Get<ui64>());
-            ui32 size = sizeof(data) + sizeof(tzId);
-            buf.Write(StringMarker);
-            buf.WriteVarI32(size);
-            buf.WriteMany((const char*)&data, sizeof(data));
-            buf.WriteMany((const char*)&tzId, sizeof(tzId));
+        case NUdf::TDataType<NUdf::TTzTimestamp>::Id:
+            WriteTzTable<NUdf::TTzTimestamp>(nativeYtTypeFlags & NTCF_TZDATE, value, buf);
             break;
-        }
 
-        case NUdf::TDataType<NUdf::TTzDate32>::Id: {
-            ui16 tzId = SwapBytes(value.GetTimezoneId());
-            ui32 data = 0x80 ^ SwapBytes((ui32)value.Get<i32>());
-            ui32 size = sizeof(data) + sizeof(tzId);
-            buf.Write(StringMarker);
-            buf.WriteVarI32(size);
-            buf.WriteMany((const char*)&data, sizeof(data));
-            buf.WriteMany((const char*)&tzId, sizeof(tzId));
+        case NUdf::TDataType<NUdf::TTzDate32>::Id:
+            WriteTzTable<NUdf::TTzDate32>(nativeYtTypeFlags & NTCF_BIGTZDATE, value, buf);
             break;
-        }
 
-        case NUdf::TDataType<NUdf::TTzDatetime64>::Id: {
-            ui16 tzId = SwapBytes(value.GetTimezoneId());
-            ui64 data = 0x80 ^ SwapBytes((ui64)value.Get<i64>());
-            ui32 size = sizeof(data) + sizeof(tzId);
-            buf.Write(StringMarker);
-            buf.WriteVarI32(size);
-            buf.WriteMany((const char*)&data, sizeof(data));
-            buf.WriteMany((const char*)&tzId, sizeof(tzId));
+        case NUdf::TDataType<NUdf::TTzDatetime64>::Id:
+            WriteTzTable<NUdf::TTzDatetime64>(nativeYtTypeFlags & NTCF_BIGTZDATE, value, buf);
             break;
-        }
 
-        case NUdf::TDataType<NUdf::TTzTimestamp64>::Id: {
-            ui16 tzId = SwapBytes(value.GetTimezoneId());
-            ui64 data = 0x80 ^ SwapBytes((ui64)value.Get<i64>());
-            ui32 size = sizeof(data) + sizeof(tzId);
-            buf.Write(StringMarker);
-            buf.WriteVarI32(size);
-            buf.WriteMany((const char*)&data, sizeof(data));
-            buf.WriteMany((const char*)&tzId, sizeof(tzId));
+        case NUdf::TDataType<NUdf::TTzTimestamp64>::Id:
+            WriteTzTable<NUdf::TTzTimestamp64>(nativeYtTypeFlags & NTCF_BIGTZDATE, value, buf);
             break;
-        }
 
         case NUdf::TDataType<NUdf::TJsonDocument>::Id: {
             buf.Write(StringMarker);
@@ -1820,101 +1800,120 @@ private:
     TPageHeader Dummy_;
 };
 
-extern "C" void WriteYsonContainerValue(TType* type, ui64 nativeYtTypeFlags, const NUdf::TUnboxedValuePod& value, NCommon::TOutputBuf& buf) {
+extern "C" void WriteYsonContainerValue(TType* type, const NUdf::TUnboxedValuePod& value, NCommon::TOutputBuf& buf) {
     TTempBlockWriter blockWriter;
     NCommon::TOutputBuf ysonBuf(blockWriter, nullptr);
-    WriteYsonValueInTableFormat(ysonBuf, type, nativeYtTypeFlags, value, true);
+    WriteYsonValueInTableFormat(ysonBuf, type, 0, value, true);
     ysonBuf.Flush();
     ui32 size = ysonBuf.GetWrittenBytes();
     buf.WriteMany((const char*)&size, sizeof(size));
     blockWriter.WriteBlocks(buf);
 }
 
-void SkipSkiffField(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, NCommon::TInputBuf& buf) {
-    const bool isOptional = type->IsOptional();
-    if (isOptional) {
-        // Unwrap optional
-        type = static_cast<TOptionalType*>(type)->GetItemType();
+void SkipSkiffData(TType* type, ui64 nativeYtTypeFlags, NCommon::TInputBuf& buf) {
+    auto schemeType = static_cast<TDataType*>(type)->GetSchemeType();
+    switch (schemeType) {
+    case NUdf::TDataType<bool>::Id:
+        buf.SkipMany(sizeof(ui8));
+        break;
+
+    case NUdf::TDataType<ui8>::Id:
+    case NUdf::TDataType<ui16>::Id:
+    case NUdf::TDataType<ui32>::Id:
+    case NUdf::TDataType<ui64>::Id:
+    case NUdf::TDataType<NUdf::TDate>::Id:
+    case NUdf::TDataType<NUdf::TDatetime>::Id:
+    case NUdf::TDataType<NUdf::TTimestamp>::Id:
+        buf.SkipMany(sizeof(ui64));
+        break;
+
+    case NUdf::TDataType<i8>::Id:
+    case NUdf::TDataType<i16>::Id:
+    case NUdf::TDataType<i32>::Id:
+    case NUdf::TDataType<i64>::Id:
+    case NUdf::TDataType<NUdf::TInterval>::Id:
+    case NUdf::TDataType<NUdf::TDate32>::Id:
+    case NUdf::TDataType<NUdf::TDatetime64>::Id:
+    case NUdf::TDataType<NUdf::TTimestamp64>::Id:
+    case NUdf::TDataType<NUdf::TInterval64>::Id:
+        buf.SkipMany(sizeof(i64));
+        break;
+
+    case NUdf::TDataType<float>::Id:
+    case NUdf::TDataType<double>::Id:
+        buf.SkipMany(sizeof(double));
+        break;
+
+    case NUdf::TDataType<NUdf::TUtf8>::Id:
+    case NUdf::TDataType<char*>::Id:
+    case NUdf::TDataType<NUdf::TJson>::Id:
+    case NUdf::TDataType<NUdf::TYson>::Id:
+    case NUdf::TDataType<NUdf::TUuid>::Id:
+    case NUdf::TDataType<NUdf::TDyNumber>::Id:
+    case NUdf::TDataType<NUdf::TJsonDocument>::Id: {
+        ui32 size;
+        buf.ReadMany((char*)&size, sizeof(size));
+        CHECK_STRING_LENGTH_UNSIGNED(size);
+        buf.SkipMany(size);
+        break;
     }
 
-    if (isOptional) {
-        auto marker = buf.Read();
-        if (!marker) {
-            return;
-        }
-    }
-
-    if (type->IsData()) {
-        auto schemeType = static_cast<TDataType*>(type)->GetSchemeType();
-        switch (schemeType) {
-        case NUdf::TDataType<bool>::Id:
-            buf.SkipMany(sizeof(ui8));
-            break;
-
-        case NUdf::TDataType<ui8>::Id:
-        case NUdf::TDataType<ui16>::Id:
-        case NUdf::TDataType<ui32>::Id:
-        case NUdf::TDataType<ui64>::Id:
-        case NUdf::TDataType<NUdf::TDate>::Id:
-        case NUdf::TDataType<NUdf::TDatetime>::Id:
-        case NUdf::TDataType<NUdf::TTimestamp>::Id:
-            buf.SkipMany(sizeof(ui64));
-            break;
-
-        case NUdf::TDataType<i8>::Id:
-        case NUdf::TDataType<i16>::Id:
-        case NUdf::TDataType<i32>::Id:
-        case NUdf::TDataType<i64>::Id:
-        case NUdf::TDataType<NUdf::TInterval>::Id:
-        case NUdf::TDataType<NUdf::TDate32>::Id:
-        case NUdf::TDataType<NUdf::TDatetime64>::Id:
-        case NUdf::TDataType<NUdf::TTimestamp64>::Id:
-        case NUdf::TDataType<NUdf::TInterval64>::Id:
-            buf.SkipMany(sizeof(i64));
-            break;
-
-        case NUdf::TDataType<float>::Id:
-        case NUdf::TDataType<double>::Id:
-            buf.SkipMany(sizeof(double));
-            break;
-
-        case NUdf::TDataType<NUdf::TUtf8>::Id:
-        case NUdf::TDataType<char*>::Id:
-        case NUdf::TDataType<NUdf::TJson>::Id:
-        case NUdf::TDataType<NUdf::TYson>::Id:
-        case NUdf::TDataType<NUdf::TUuid>::Id:
-        case NUdf::TDataType<NUdf::TDyNumber>::Id:
-        case NUdf::TDataType<NUdf::TTzDate>::Id:
-        case NUdf::TDataType<NUdf::TTzDatetime>::Id:
-        case NUdf::TDataType<NUdf::TTzTimestamp>::Id:
-        case NUdf::TDataType<NUdf::TJsonDocument>::Id: {
+    case NUdf::TDataType<NUdf::TTzDate>::Id:
+    case NUdf::TDataType<NUdf::TTzDatetime>::Id:
+    case NUdf::TDataType<NUdf::TTzTimestamp>::Id: {
+        if (nativeYtTypeFlags & NTCF_TZDATE) {
+            buf.SkipMany(NUdf::GetDataTypeInfo(NUdf::GetDataSlot(schemeType)).FixedSize + sizeof(ui16));
+        } else {
             ui32 size;
             buf.ReadMany((char*)&size, sizeof(size));
             CHECK_STRING_LENGTH_UNSIGNED(size);
             buf.SkipMany(size);
-            break;
         }
-        case NUdf::TDataType<NUdf::TDecimal>::Id: {
-            if (nativeYtTypeFlags & NTCF_DECIMAL) {
-                auto const params = static_cast<TDataDecimalType*>(type)->GetParams();
-                if (params.first < 10) {
-                    buf.SkipMany(sizeof(i32));
-                } else if (params.first < 19) {
-                    buf.SkipMany(sizeof(i64));
-                } else {
-                    buf.SkipMany(sizeof(NDecimal::TInt128));
-                }
+        break;
+    }
+
+    case NUdf::TDataType<NUdf::TTzDate32>::Id:
+    case NUdf::TDataType<NUdf::TTzDatetime64>::Id:
+    case NUdf::TDataType<NUdf::TTzTimestamp64>::Id: {
+        if (nativeYtTypeFlags & NTCF_BIGTZDATE) {
+            buf.SkipMany(NUdf::GetDataTypeInfo(NUdf::GetDataSlot(schemeType)).FixedSize + sizeof(ui16));
+        } else {
+            ui32 size;
+            buf.ReadMany((char*)&size, sizeof(size));
+            CHECK_STRING_LENGTH_UNSIGNED(size);
+            buf.SkipMany(size);
+        }
+        break;
+    }
+
+    case NUdf::TDataType<NUdf::TDecimal>::Id: {
+        if (nativeYtTypeFlags & NTCF_DECIMAL) {
+            auto const params = static_cast<TDataDecimalType*>(type)->GetParams();
+            if (params.first < 10) {
+                buf.SkipMany(sizeof(i32));
+            } else if (params.first < 19) {
+                buf.SkipMany(sizeof(i64));
             } else {
-                ui32 size;
-                buf.ReadMany((char*)&size, sizeof(size));
-                CHECK_STRING_LENGTH_UNSIGNED(size);
-                buf.SkipMany(size);
+                YQL_ENSURE(params.first < 36);
+                buf.SkipMany(sizeof(NDecimal::TInt128));
             }
-            break;
+        } else {
+            ui32 size;
+            buf.ReadMany((char*)&size, sizeof(size));
+            CHECK_STRING_LENGTH_UNSIGNED(size);
+            buf.SkipMany(size);
         }
-        default:
-            YQL_ENSURE(false, "Unsupported data type: " << schemeType);
-        }
+        break;
+    }
+
+    default:
+        YQL_ENSURE(false, "Unsupported data type: " << schemeType);
+    }
+}
+
+void SkipSkiffComplexValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, NCommon::TInputBuf& buf) {
+    if (type->IsData()) {
+        SkipSkiffData(type, nativeYtTypeFlags, buf);
         return;
     }
 
@@ -1923,31 +1922,43 @@ void SkipSkiffField(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, NCom
         return;
     }
 
-    if (type->IsStruct()) {
-        auto structType = static_cast<TStructType*>(type);
-        const std::vector<size_t>* reorder = nullptr;
-        if (auto cookie = structType->GetCookie()) {
-            reorder = ((const std::vector<size_t>*)cookie);
+    if (type->IsOptional()) {
+        auto marker = buf.Read();
+        if (!marker) {
+            return;
         }
-        for (ui32 i = 0; i < structType->GetMembersCount(); ++i) {
-            SkipSkiffField(structType->GetMemberType(reorder ? reorder->at(i) : i), nativeYtTypeFlags, buf);
-        }
+        SkipSkiffComplexValue(AS_TYPE(TOptionalType, type)->GetItemType(), nativeYtTypeFlags, buf);
         return;
     }
 
-    if (type->IsList()) {
-        auto itemType = static_cast<TListType*>(type)->GetItemType();
-        while (buf.Read() == '\0') {
-            SkipSkiffField(itemType, nativeYtTypeFlags, buf);
+    if (type->IsVoid() || type->IsNull() || type->IsEmptyList() || type->IsEmptyDict()) {
+        return;
+    }
+
+    if (type->IsStruct()) {
+        auto structType = AS_TYPE(TStructType, type);
+        const std::vector<size_t>* reorder = nullptr;
+        if (auto cookie = structType->GetCookie()) {
+            reorder = (const std::vector<size_t>*)cookie;
+        }
+        for (ui32 i = 0; i < structType->GetMembersCount(); ++i) {
+            SkipSkiffComplexValue(structType->GetMemberType(reorder ? reorder->at(i) : i), nativeYtTypeFlags, buf);
         }
         return;
     }
 
     if (type->IsTuple()) {
-        auto tupleType = static_cast<TTupleType*>(type);
-
+        auto tupleType = AS_TYPE(TTupleType, type);
         for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
-            SkipSkiffField(tupleType->GetElementType(i), nativeYtTypeFlags, buf);
+            SkipSkiffComplexValue(tupleType->GetElementType(i), nativeYtTypeFlags, buf);
+        }
+        return;
+    }
+
+    if (type->IsList()) {
+        auto itemType = AS_TYPE(TListType, type)->GetItemType();
+        while (buf.Read() == '\0') {
+            SkipSkiffComplexValue(itemType, nativeYtTypeFlags, buf);
         }
         return;
     }
@@ -1960,43 +1971,26 @@ void SkipSkiffField(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, NCom
         } else {
             buf.ReadMany((char*)&data, sizeof(data));
         }
-
         if (varType->GetUnderlyingType()->IsTuple()) {
             auto tupleType = AS_TYPE(TTupleType, varType->GetUnderlyingType());
             YQL_ENSURE(data < tupleType->GetElementsCount());
-            SkipSkiffField(tupleType->GetElementType(data), nativeYtTypeFlags, buf);
+            SkipSkiffComplexValue(tupleType->GetElementType(data), nativeYtTypeFlags, buf);
         } else {
             auto structType = AS_TYPE(TStructType, varType->GetUnderlyingType());
             if (auto cookie = structType->GetCookie()) {
-                const std::vector<size_t>& reorder = *((const std::vector<size_t>*)cookie);
-                data = reorder[data];
+                data = ((const std::vector<size_t>*)cookie)->at(data);
             }
             YQL_ENSURE(data < structType->GetMembersCount());
-
-            SkipSkiffField(structType->GetMemberType(data), nativeYtTypeFlags, buf);
+            SkipSkiffComplexValue(structType->GetMemberType(data), nativeYtTypeFlags, buf);
         }
-        return;
-    }
-
-    if (type->IsVoid()) {
-        return;
-    }
-
-    if (type->IsNull()) {
-        return;
-    }
-
-    if (type->IsEmptyList() || type->IsEmptyDict()) {
         return;
     }
 
     if (type->IsDict()) {
         auto dictType = AS_TYPE(TDictType, type);
-        auto keyType = dictType->GetKeyType();
-        auto payloadType = dictType->GetPayloadType();
         while (buf.Read() == '\0') {
-            SkipSkiffField(keyType, nativeYtTypeFlags, buf);
-            SkipSkiffField(payloadType, nativeYtTypeFlags, buf);
+            SkipSkiffComplexValue(dictType->GetKeyType(), nativeYtTypeFlags, buf);
+            SkipSkiffComplexValue(dictType->GetPayloadType(), nativeYtTypeFlags, buf);
         }
         return;
     }
@@ -2004,7 +1998,94 @@ void SkipSkiffField(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, NCom
     YQL_ENSURE(false, "Unsupported type for skip: " << type->GetKindAsStr());
 }
 
-NKikimr::NUdf::TUnboxedValue ReadSkiffNativeYtValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags,
+bool IsOptionalSingular(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags) {
+    if (nativeYtTypeFlags & NTCF_COMPLEX) {
+        return false;
+    }
+
+    if (!type->IsOptional()) {
+        return false;
+    }
+
+    auto itemType = AS_TYPE(TOptionalType, type)->GetItemType();
+    return itemType->IsVoid() || itemType->IsNull();
+}
+
+void SkipSkiffValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, NCommon::TInputBuf& buf) {
+    TType* unwrappedType = type;
+    if (type->IsOptional()) {
+        unwrappedType = AS_TYPE(TOptionalType, type)->GetItemType();
+        if (!IsOptionalSingular(type, nativeYtTypeFlags)) {
+            auto marker = buf.Read();
+            if (!marker) {
+                return;
+            }
+        }
+    }
+
+    if (unwrappedType->IsVoid() || unwrappedType->IsNull()) {
+        return;
+    }
+
+    if (unwrappedType->IsData()) {
+        SkipSkiffData(unwrappedType, nativeYtTypeFlags, buf);
+    } else if (!type->IsOptional() && unwrappedType->IsPg()) {
+        SkipSkiffPg(static_cast<TPgType*>(unwrappedType), buf);
+    } else {
+        // yson content
+        ui32 size;
+        buf.ReadMany((char*)&size, sizeof(size));
+        CHECK_STRING_LENGTH_UNSIGNED(size);
+        buf.SkipMany(size);
+    }
+}
+
+NKikimr::NUdf::TUnboxedValue ReadSkiffValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags,
+    const NKikimr::NMiniKQL::THolderFactory& holderFactory, NCommon::TInputBuf& buf, bool withDefVal)
+{
+    const bool isOptional = withDefVal || type->IsOptional();
+    TType* uwrappedType = type;
+    if (type->IsOptional()) {
+        uwrappedType = static_cast<TOptionalType*>(type)->GetItemType();
+    }
+
+    if (isOptional && !IsOptionalSingular(type, nativeYtTypeFlags)) {
+        auto marker = buf.Read();
+        if (!marker) {
+            return NUdf::TUnboxedValue();
+        }
+    }
+
+    if (uwrappedType->IsVoid()) {
+        // Incorrect backward-compatible behavior TODO: switch
+        // return isOptional ? NUdf::TUnboxedValuePod::Zero().MakeOptional() : NUdf::TUnboxedValuePod::Zero();
+        return NUdf::TUnboxedValuePod();
+    }
+
+    if (uwrappedType->IsNull()) {
+        // Incorrect backward-compatible behavior TODO: switch
+        // return isOptional ? NUdf::TUnboxedValuePod().MakeOptional() : NUdf::TUnboxedValuePod();
+        return NUdf::TUnboxedValuePod();
+    }
+
+    if (uwrappedType->IsData()) {
+        return ReadSkiffData(uwrappedType, nativeYtTypeFlags, buf);
+    } else if (!isOptional && uwrappedType->IsPg()) {
+        return NCommon::ReadSkiffPg(static_cast<TPgType*>(uwrappedType), buf);
+    } else {
+        // yson content
+        ui32 size;
+        buf.ReadMany((char*)&size, sizeof(size));
+        CHECK_STRING_LENGTH_UNSIGNED(size);
+        // parse binary yson...
+        YQL_ENSURE(size > 0);
+        char cmd = buf.Read();
+        auto value = ReadYsonValueInTableFormat(uwrappedType, 0, holderFactory, cmd, buf);
+        return isOptional ? value.Release().MakeOptional() : value;
+    }
+}
+
+NKikimr::NUdf::TUnboxedValue ReadSkiffComplexValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory, NCommon::TInputBuf& buf)
 {
     if (type->IsData()) {
@@ -2021,7 +2102,7 @@ NKikimr::NUdf::TUnboxedValue ReadSkiffNativeYtValue(NKikimr::NMiniKQL::TType* ty
             return NUdf::TUnboxedValue();
         }
 
-        auto value = ReadSkiffNativeYtValue(AS_TYPE(TOptionalType, type)->GetItemType(), nativeYtTypeFlags, holderFactory, buf);
+        auto value = ReadSkiffComplexValue(AS_TYPE(TOptionalType, type)->GetItemType(), nativeYtTypeFlags, holderFactory, buf);
         return value.Release().MakeOptional();
     }
 
@@ -2030,7 +2111,7 @@ NKikimr::NUdf::TUnboxedValue ReadSkiffNativeYtValue(NKikimr::NMiniKQL::TType* ty
         NUdf::TUnboxedValue* items;
         auto value = holderFactory.CreateDirectArrayHolder(tupleType->GetElementsCount(), items);
         for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
-            items[i] = ReadSkiffNativeYtValue(tupleType->GetElementType(i), nativeYtTypeFlags, holderFactory, buf);
+            items[i] = ReadSkiffComplexValue(tupleType->GetElementType(i), nativeYtTypeFlags, holderFactory, buf);
         }
 
         return value;
@@ -2045,11 +2126,11 @@ NKikimr::NUdf::TUnboxedValue ReadSkiffNativeYtValue(NKikimr::NMiniKQL::TType* ty
             const std::vector<size_t>& reorder = *((const std::vector<size_t>*)cookie);
             for (ui32 i = 0; i < structType->GetMembersCount(); ++i) {
                 const auto ndx = reorder[i];
-                items[ndx] = ReadSkiffNativeYtValue(structType->GetMemberType(ndx), nativeYtTypeFlags, holderFactory, buf);
+                items[ndx] = ReadSkiffComplexValue(structType->GetMemberType(ndx), nativeYtTypeFlags, holderFactory, buf);
             }
         } else {
             for (ui32 i = 0; i < structType->GetMembersCount(); ++i) {
-                items[i] = ReadSkiffNativeYtValue(structType->GetMemberType(i), nativeYtTypeFlags, holderFactory, buf);
+                items[i] = ReadSkiffComplexValue(structType->GetMemberType(i), nativeYtTypeFlags, holderFactory, buf);
             }
         }
 
@@ -2060,7 +2141,7 @@ NKikimr::NUdf::TUnboxedValue ReadSkiffNativeYtValue(NKikimr::NMiniKQL::TType* ty
         auto itemType = AS_TYPE(TListType, type)->GetItemType();
         TDefaultListRepresentation items;
         while (buf.Read() == '\0') {
-            items = items.Append(ReadSkiffNativeYtValue(itemType, nativeYtTypeFlags, holderFactory, buf));
+            items = items.Append(ReadSkiffComplexValue(itemType, nativeYtTypeFlags, holderFactory, buf));
         }
 
         return holderFactory.CreateDirectListHolder(std::move(items));
@@ -2077,7 +2158,7 @@ NKikimr::NUdf::TUnboxedValue ReadSkiffNativeYtValue(NKikimr::NMiniKQL::TType* ty
         if (varType->GetUnderlyingType()->IsTuple()) {
             auto tupleType = AS_TYPE(TTupleType, varType->GetUnderlyingType());
             YQL_ENSURE(data < tupleType->GetElementsCount());
-            auto item = ReadSkiffNativeYtValue(tupleType->GetElementType(data), nativeYtTypeFlags, holderFactory, buf);
+            auto item = ReadSkiffComplexValue(tupleType->GetElementType(data), nativeYtTypeFlags, holderFactory, buf);
             return holderFactory.CreateVariantHolder(item.Release(), data);
         }
         else {
@@ -2088,7 +2169,7 @@ NKikimr::NUdf::TUnboxedValue ReadSkiffNativeYtValue(NKikimr::NMiniKQL::TType* ty
             }
             YQL_ENSURE(data < structType->GetMembersCount());
 
-            auto item = ReadSkiffNativeYtValue(structType->GetMemberType(data), nativeYtTypeFlags, holderFactory, buf);
+            auto item = ReadSkiffComplexValue(structType->GetMemberType(data), nativeYtTypeFlags, holderFactory, buf);
             return holderFactory.CreateVariantHolder(item.Release(), data);
         }
     }
@@ -2112,8 +2193,8 @@ NKikimr::NUdf::TUnboxedValue ReadSkiffNativeYtValue(NKikimr::NMiniKQL::TType* ty
 
         auto builder = holderFactory.NewDict(dictType, NUdf::TDictFlags::EDictKind::Hashed);
         while (buf.Read() == '\0') {
-            auto key = ReadSkiffNativeYtValue(keyType, nativeYtTypeFlags, holderFactory, buf);
-            auto payload = ReadSkiffNativeYtValue(payloadType, nativeYtTypeFlags, holderFactory, buf);
+            auto key = ReadSkiffComplexValue(keyType, nativeYtTypeFlags, holderFactory, buf);
+            auto payload = ReadSkiffComplexValue(payloadType, nativeYtTypeFlags, holderFactory, buf);
             builder->Add(std::move(key), std::move(payload));
         }
 
@@ -2245,50 +2326,18 @@ NUdf::TUnboxedValue ReadSkiffData(TType* type, ui64 nativeYtTypeFlags, NCommon::
         }
     }
 
-    case NUdf::TDataType<NUdf::TTzDate>::Id: {
-        ui32 size;
-        buf.ReadMany((char*)&size, sizeof(size));
-        CHECK_STRING_LENGTH_UNSIGNED(size);
-        auto& vec = buf.YsonBuffer();
-        vec.resize(size);
-        buf.ReadMany(vec.data(), size);
-        ui16 value;
-        ui16 tzId;
-        YQL_ENSURE(DeserializeTzDate(TStringBuf(vec.begin(), vec.end()), value, tzId));
-        auto data = NUdf::TUnboxedValuePod(value);
-        data.SetTimezoneId(tzId);
-        return data;
-    }
-
-    case NUdf::TDataType<NUdf::TTzDatetime>::Id: {
-        ui32 size;
-        buf.ReadMany((char*)&size, sizeof(size));
-        CHECK_STRING_LENGTH_UNSIGNED(size);
-        auto& vec = buf.YsonBuffer();
-        vec.resize(size);
-        buf.ReadMany(vec.data(), size);
-        ui32 value;
-        ui16 tzId;
-        YQL_ENSURE(DeserializeTzDatetime(TStringBuf(vec.begin(), vec.end()), value, tzId));
-        auto data = NUdf::TUnboxedValuePod(value);
-        data.SetTimezoneId(tzId);
-        return data;
-    }
-
-    case NUdf::TDataType<NUdf::TTzTimestamp>::Id: {
-        ui32 size;
-        buf.ReadMany((char*)&size, sizeof(size));
-        CHECK_STRING_LENGTH_UNSIGNED(size);
-        auto& vec = buf.YsonBuffer();
-        vec.resize(size);
-        buf.ReadMany(vec.data(), size);
-        ui64 value;
-        ui16 tzId;
-        YQL_ENSURE(DeserializeTzTimestamp(TStringBuf(vec.begin(), vec.end()), value, tzId));
-        auto data = NUdf::TUnboxedValuePod(value);
-        data.SetTimezoneId(tzId);
-        return data;
-    }
+    case NUdf::TDataType<NUdf::TTzDate>::Id:
+        return ReadTz<NUdf::TTzDate>(nativeYtTypeFlags & NTCF_TZDATE, buf);
+    case NUdf::TDataType<NUdf::TTzDatetime>::Id:
+        return ReadTz<NUdf::TTzDatetime>(nativeYtTypeFlags & NTCF_TZDATE, buf);
+    case NUdf::TDataType<NUdf::TTzTimestamp>::Id:
+        return ReadTz<NUdf::TTzTimestamp>(nativeYtTypeFlags & NTCF_TZDATE, buf);
+    case NUdf::TDataType<NUdf::TTzDate32>::Id:
+        return ReadTz<NUdf::TTzDate32>(nativeYtTypeFlags & NTCF_BIGTZDATE, buf);
+    case NUdf::TDataType<NUdf::TTzDatetime64>::Id:
+        return ReadTz<NUdf::TTzDatetime64>(nativeYtTypeFlags & NTCF_BIGTZDATE, buf);
+    case NUdf::TDataType<NUdf::TTzTimestamp64>::Id:
+        return ReadTz<NUdf::TTzTimestamp64>(nativeYtTypeFlags & NTCF_BIGTZDATE, buf);
 
     case NUdf::TDataType<NUdf::TJsonDocument>::Id: {
         ui32 size;
@@ -2419,62 +2468,32 @@ void WriteSkiffData(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, cons
     }
 
     case NUdf::TDataType<NUdf::TTzDate>::Id: {
-        ui16 tzId = SwapBytes(value.GetTimezoneId());
-        ui16 data = SwapBytes(value.Get<ui16>());
-        ui32 size = sizeof(data) + sizeof(tzId);
-        buf.WriteMany((const char*)&size, sizeof(size));
-        buf.WriteMany((const char*)&data, sizeof(data));
-        buf.WriteMany((const char*)&tzId, sizeof(tzId));
+        WriteTz<NUdf::TTzDate>(nativeYtTypeFlags & NTCF_TZDATE, value, buf);
         break;
     }
 
     case NUdf::TDataType<NUdf::TTzDatetime>::Id: {
-        ui16 tzId = SwapBytes(value.GetTimezoneId());
-        ui32 data = SwapBytes(value.Get<ui32>());
-        ui32 size = sizeof(data) + sizeof(tzId);
-        buf.WriteMany((const char*)&size, sizeof(size));
-        buf.WriteMany((const char*)&data, sizeof(data));
-        buf.WriteMany((const char*)&tzId, sizeof(tzId));
+        WriteTz<NUdf::TTzDatetime>(nativeYtTypeFlags & NTCF_TZDATE, value, buf);
         break;
     }
 
     case NUdf::TDataType<NUdf::TTzTimestamp>::Id: {
-        ui16 tzId = SwapBytes(value.GetTimezoneId());
-        ui64 data = SwapBytes(value.Get<ui64>());
-        ui32 size = sizeof(data) + sizeof(tzId);
-        buf.WriteMany((const char*)&size, sizeof(size));
-        buf.WriteMany((const char*)&data, sizeof(data));
-        buf.WriteMany((const char*)&tzId, sizeof(tzId));
+        WriteTz<NUdf::TTzTimestamp>(nativeYtTypeFlags & NTCF_TZDATE, value, buf);
         break;
     }
 
     case NUdf::TDataType<NUdf::TTzDate32>::Id: {
-        ui16 tzId = SwapBytes(value.GetTimezoneId());
-        ui32 data = 0x80 ^ SwapBytes((ui32)value.Get<i32>());
-        ui32 size = sizeof(data) + sizeof(tzId);
-        buf.WriteMany((const char*)&size, sizeof(size));
-        buf.WriteMany((const char*)&data, sizeof(data));
-        buf.WriteMany((const char*)&tzId, sizeof(tzId));
+        WriteTz<NUdf::TTzDate32>(nativeYtTypeFlags & NTCF_BIGTZDATE, value, buf);
         break;
     }
 
     case NUdf::TDataType<NUdf::TTzDatetime64>::Id: {
-        ui16 tzId = SwapBytes(value.GetTimezoneId());
-        ui64 data = 0x80 ^ SwapBytes((ui64)value.Get<i64>());
-        ui32 size = sizeof(data) + sizeof(tzId);
-        buf.WriteMany((const char*)&size, sizeof(size));
-        buf.WriteMany((const char*)&data, sizeof(data));
-        buf.WriteMany((const char*)&tzId, sizeof(tzId));
+        WriteTz<NUdf::TTzDatetime64>(nativeYtTypeFlags & NTCF_BIGTZDATE, value, buf);
         break;
     }
 
     case NUdf::TDataType<NUdf::TTzTimestamp64>::Id: {
-        ui16 tzId = SwapBytes(value.GetTimezoneId());
-        ui64 data = 0x80 ^ SwapBytes((ui64)value.Get<i64>());
-        ui32 size = sizeof(data) + sizeof(tzId);
-        buf.WriteMany((const char*)&size, sizeof(size));
-        buf.WriteMany((const char*)&data, sizeof(data));
-        buf.WriteMany((const char*)&tzId, sizeof(tzId));
+        WriteTz<NUdf::TTzTimestamp64>(nativeYtTypeFlags & NTCF_BIGTZDATE, value, buf);
         break;
     }
 
@@ -2492,7 +2511,20 @@ void WriteSkiffData(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, cons
     }
 }
 
-void WriteSkiffNativeYtValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, const NKikimr::NUdf::TUnboxedValuePod& value, NCommon::TOutputBuf& buf) {
+void WriteSkiffValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, const NKikimr::NUdf::TUnboxedValuePod& value, NCommon::TOutputBuf& buf, bool wasOptional) {
+    if (type->IsVoid() || type->IsNull()) {
+        return;
+    } else if (type->IsData()) {
+        WriteSkiffData(type, nativeYtTypeFlags, value, buf);
+    } else if (!wasOptional && type->IsPg()) {
+        NCommon::WriteSkiffPg(static_cast<TPgType*>(type), value, buf);
+    } else {
+        // yson content
+        WriteYsonContainerValue(type, value, buf);
+    }
+}
+
+void WriteSkiffComplexValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, const NKikimr::NUdf::TUnboxedValuePod& value, NCommon::TOutputBuf& buf) {
     if (type->IsData()) {
         WriteSkiffData(type, nativeYtTypeFlags, value, buf);
     } else if (type->IsPg()) {
@@ -2504,7 +2536,7 @@ void WriteSkiffNativeYtValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFl
         }
 
         buf.Write('\1');
-        WriteSkiffNativeYtValue(AS_TYPE(TOptionalType, type)->GetItemType(), nativeYtTypeFlags, value.GetOptionalValue(), buf);
+        WriteSkiffComplexValue(AS_TYPE(TOptionalType, type)->GetItemType(), nativeYtTypeFlags, value.GetOptionalValue(), buf);
     } else if (type->IsList()) {
         auto itemType = AS_TYPE(TListType, type)->GetItemType();
         auto elements = value.GetElements();
@@ -2512,13 +2544,13 @@ void WriteSkiffNativeYtValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFl
             ui32 size = value.GetListLength();
             for (ui32 i = 0; i < size; ++i) {
                 buf.Write('\0');
-                WriteSkiffNativeYtValue(itemType, nativeYtTypeFlags, elements[i], buf);
+                WriteSkiffComplexValue(itemType, nativeYtTypeFlags, elements[i], buf);
             }
         } else {
             NUdf::TUnboxedValue item;
             for (auto iter = value.GetListIterator(); iter.Next(item); ) {
                 buf.Write('\0');
-                WriteSkiffNativeYtValue(itemType, nativeYtTypeFlags, item, buf);
+                WriteSkiffComplexValue(itemType, nativeYtTypeFlags, item, buf);
             }
         }
 
@@ -2528,11 +2560,11 @@ void WriteSkiffNativeYtValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFl
         auto elements = value.GetElements();
         if (elements) {
             for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
-                WriteSkiffNativeYtValue(tupleType->GetElementType(i), nativeYtTypeFlags, elements[i], buf);
+                WriteSkiffComplexValue(tupleType->GetElementType(i), nativeYtTypeFlags, elements[i], buf);
             }
         } else {
             for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
-                WriteSkiffNativeYtValue(tupleType->GetElementType(i), nativeYtTypeFlags, value.GetElement(i), buf);
+                WriteSkiffComplexValue(tupleType->GetElementType(i), nativeYtTypeFlags, value.GetElement(i), buf);
             }
         }
     } else if (type->IsStruct()) {
@@ -2543,22 +2575,22 @@ void WriteSkiffNativeYtValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFl
             if (elements) {
                 for (ui32 i = 0; i < structType->GetMembersCount(); ++i) {
                     const auto ndx = reorder[i];
-                    WriteSkiffNativeYtValue(structType->GetMemberType(ndx), nativeYtTypeFlags, elements[ndx], buf);
+                    WriteSkiffComplexValue(structType->GetMemberType(ndx), nativeYtTypeFlags, elements[ndx], buf);
                 }
             } else {
                 for (ui32 i = 0; i < structType->GetMembersCount(); ++i) {
                     const auto ndx = reorder[i];
-                    WriteSkiffNativeYtValue(structType->GetMemberType(ndx), nativeYtTypeFlags, value.GetElement(ndx), buf);
+                    WriteSkiffComplexValue(structType->GetMemberType(ndx), nativeYtTypeFlags, value.GetElement(ndx), buf);
                 }
             }
         } else {
             if (elements) {
                 for (ui32 i = 0; i < structType->GetMembersCount(); ++i) {
-                    WriteSkiffNativeYtValue(structType->GetMemberType(i), nativeYtTypeFlags, elements[i], buf);
+                    WriteSkiffComplexValue(structType->GetMemberType(i), nativeYtTypeFlags, elements[i], buf);
                 }
             } else {
                 for (ui32 i = 0; i < structType->GetMembersCount(); ++i) {
-                    WriteSkiffNativeYtValue(structType->GetMemberType(i), nativeYtTypeFlags, value.GetElement(i), buf);
+                    WriteSkiffComplexValue(structType->GetMemberType(i), nativeYtTypeFlags, value.GetElement(i), buf);
                 }
             }
         }
@@ -2573,7 +2605,7 @@ void WriteSkiffNativeYtValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFl
 
         if (varType->GetUnderlyingType()->IsTuple()) {
             auto tupleType = AS_TYPE(TTupleType, varType->GetUnderlyingType());
-            WriteSkiffNativeYtValue(tupleType->GetElementType(index), nativeYtTypeFlags, value.GetVariantItem(), buf);
+            WriteSkiffComplexValue(tupleType->GetElementType(index), nativeYtTypeFlags, value.GetVariantItem(), buf);
         } else {
             auto structType = AS_TYPE(TStructType, varType->GetUnderlyingType());
             if (auto cookie = structType->GetCookie()) {
@@ -2582,7 +2614,7 @@ void WriteSkiffNativeYtValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFl
             }
             YQL_ENSURE(index < structType->GetMembersCount());
 
-            WriteSkiffNativeYtValue(structType->GetMemberType(index), nativeYtTypeFlags, value.GetVariantItem(), buf);
+            WriteSkiffComplexValue(structType->GetMemberType(index), nativeYtTypeFlags, value.GetVariantItem(), buf);
         }
     } else if (type->IsVoid() || type->IsNull() || type->IsEmptyList() || type->IsEmptyDict()) {
     } else if (type->IsDict()) {
@@ -2592,8 +2624,8 @@ void WriteSkiffNativeYtValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFl
         NUdf::TUnboxedValue key, payload;
         for (auto iter = value.GetDictIterator(); iter.NextPair(key, payload); ) {
             buf.Write('\0');
-            WriteSkiffNativeYtValue(keyType, nativeYtTypeFlags, key, buf);
-            WriteSkiffNativeYtValue(payloadType, nativeYtTypeFlags, payload, buf);
+            WriteSkiffComplexValue(keyType, nativeYtTypeFlags, key, buf);
+            WriteSkiffComplexValue(payloadType, nativeYtTypeFlags, payload, buf);
         }
 
         buf.Write('\xff');
@@ -2603,7 +2635,7 @@ void WriteSkiffNativeYtValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFl
 }
 
 extern "C" void WriteContainerNativeYtValue(TType* type, ui64 nativeYtTypeFlags, const NUdf::TUnboxedValuePod& value, NCommon::TOutputBuf& buf) {
-    WriteSkiffNativeYtValue(type, nativeYtTypeFlags, value, buf);
+    WriteSkiffComplexValue(type, nativeYtTypeFlags, value, buf);
 }
 
 } // NYql

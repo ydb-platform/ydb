@@ -9,6 +9,7 @@ PEERDIR(
     ydb/library/actors/core
     yql/essentials/minikql
     ydb/library/yql/dq/actors/compute
+    ydb/library/yql/dq/runtime/streaming
 )
 
 YQL_LAST_ABI_VERSION()

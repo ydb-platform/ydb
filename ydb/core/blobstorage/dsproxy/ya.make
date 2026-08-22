@@ -71,13 +71,14 @@ PEERDIR(
     ydb/core/blobstorage/vdisk/common
     ydb/core/blobstorage/vdisk/ingress
     ydb/core/control/lib
+    ydb/core/retro_tracing_impl/spans
     ydb/core/util
+    ydb/library/actors/retro_tracing/collector
 )
 
 END()
 
 RECURSE(
-    bridge
     mock
 )
 

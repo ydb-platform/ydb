@@ -3,24 +3,34 @@
 #include "codecs.h"
 #include "helpers.h"
 
+#include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
 #include <ydb/services/metadata/manager/common.h>
 
 #include <ydb/library/persqueue/topic_parser/counters.h>
+#include <ydb/library/persqueue/constants.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/core/base/wilson_tracing_control.h>
-#include <ydb/core/persqueue/pq_database.h>
-#include <ydb/core/persqueue/write_meta.h>
+#include <ydb/core/persqueue/public/constants.h>
+#include <ydb/core/persqueue/public/codecs/pqv1.h>
+#include <ydb/core/persqueue/public/pq_database.h>
+#include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/base/feature_flags.h>
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/persqueue/deferred_publish/constants.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/core/persqueue/public/config.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/library/actors/core/log.h>
 #include <google/protobuf/util/time_util.h>
+#include <util/string/cast.h>
 #include <util/string/hex.h>
 #include <util/string/vector.h>
 #include <util/string/escape.h>
 #include <util/string/printf.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PQ_WRITE_PROXY
 
 using namespace NActors;
 using namespace NKikimrClient;
@@ -30,16 +40,19 @@ using namespace NKikimrClient;
 namespace NKikimr {
 using namespace NSchemeCache;
 using namespace NPQ;
+using NGRpcProxy::V1::EProtocol;
 
-template <bool UseMigrationProtocol>
-using ECodec = std::conditional_t<UseMigrationProtocol, Ydb::PersQueue::V1::Codec, i32>;
+template <EProtocol Protocol>
+using ECodec = std::conditional_t<Protocol == EProtocol::PQv1, Ydb::PersQueue::V1::Codec, i32>;
 
 static constexpr ui64 MAX_METADATA_SIZE_PER_MESSAGE = 4096;
 
-template <bool UseMigrationProtocol>
-ECodec<UseMigrationProtocol> CodecByName(const TString& codec) {
-    THashMap<TString, ECodec<UseMigrationProtocol>> codecsByName;
-    if constexpr (UseMigrationProtocol) {
+static constexpr auto PARTITION_KEY_META_KEY = "__partition_key";
+
+template <EProtocol Protocol>
+ECodec<Protocol> CodecByName(const TString& codec) {
+    THashMap<TString, ECodec<Protocol>> codecsByName;
+    if constexpr (Protocol == EProtocol::PQv1) {
         codecsByName = {
             { "raw",  Ydb::PersQueue::V1::CODEC_RAW  },
             { "gzip", Ydb::PersQueue::V1::CODEC_GZIP },
@@ -47,7 +60,7 @@ ECodec<UseMigrationProtocol> CodecByName(const TString& codec) {
             { "zstd", Ydb::PersQueue::V1::CODEC_ZSTD },
         };
     }
-    if constexpr (!UseMigrationProtocol) {
+    if constexpr (Protocol == EProtocol::Topic) {
         codecsByName = {
             { "raw",  (i32)Ydb::Topic::CODEC_RAW  },
             { "gzip", (i32)Ydb::Topic::CODEC_GZIP },
@@ -58,20 +71,20 @@ ECodec<UseMigrationProtocol> CodecByName(const TString& codec) {
 
     auto codecIt = codecsByName.find(codec);
     if (codecIt == codecsByName.end()) {
-        if constexpr (UseMigrationProtocol) {
+        if constexpr (Protocol == EProtocol::PQv1) {
             return Ydb::PersQueue::V1::CODEC_UNSPECIFIED;
         }
-        if constexpr (!UseMigrationProtocol) {
+        if constexpr (Protocol == EProtocol::Topic) {
             return (i32)Ydb::Topic::CODEC_UNSPECIFIED;
         }
-        Y_ABORT("Unsupported codec enum");
+        AFL_ENSURE(false)("reason", "Unsupported codec enum")("codec", codec);
     }
     return codecIt->second;
 }
 
 //explicit instantation
-template Ydb::PersQueue::V1::Codec CodecByName<true>(const TString& codec);
-template i32 CodecByName<false>(const TString& codec);
+template Ydb::PersQueue::V1::Codec CodecByName<EProtocol::PQv1>(const TString& codec);
+template i32 CodecByName<EProtocol::Topic>(const TString& codec);
 
 template <>
 inline void FillExtraFieldsForDataChunk(
@@ -117,6 +130,8 @@ inline void FillExtraFieldsForDataChunk(
             logType = item.second;
         } else if (item.first == "file") {
             file = item.second;
+        } else if (item.first == NPersQueue::WRITE_SESSION_ATTRIBUTE_TRACK_PRODUCER_ID_IN_TX) {
+            continue;
         } else {
             auto res = data.MutableExtraFields()->AddItems();
             res->SetKey(item.first);
@@ -146,9 +161,8 @@ inline void FillChunkDataFromReq(
     const auto& msg = writeRequest.messages(messageIndex);
     proto.SetSeqNo(msg.seq_no());
     proto.SetCreateTime(::google::protobuf::util::TimeUtil::TimestampToMilliseconds(msg.created_at()));
-    // TODO (ildar-khisam@): refactor codec enum convert
     if (writeRequest.codec() > 0) {
-        proto.SetCodec(writeRequest.codec() - 1);
+        proto.SetCodec(static_cast<NPersQueueCommon::ECodec>(FromTopicCodec(static_cast<NYdb::NTopic::ECodec>(writeRequest.codec()))));
     }
     proto.SetData(msg.data());
     auto* msgMeta = proto.MutableMessageMeta();
@@ -164,11 +178,32 @@ static const TDuration SOURCEID_UPDATE_PERIOD = TDuration::Hours(1);
 // metering
 static const ui64 WRITE_BLOCK_SIZE = 4_KB;
 
+void FillBatchFieldsFromTopicWriteMessage(
+        const Ydb::Topic::StreamWriteMessage::WriteRequest& writeRequest,
+        const Ydb::Topic::StreamWriteMessage::WriteRequest::MessageData& msg,
+        NKikimrClient::TPersQueuePartitionRequest::TCmdWrite& cmdWrite)
+{
+    if (writeRequest.codec() != static_cast<i32>(Ydb::Topic::CODEC_KAFKA_BATCH)) {
+        return;
+    }
+
+    const auto header = NKafka::ReadKafkaBatchHeader(msg.data());
+    if (!header || header->RecordsCount == 0) {
+        return;
+    }
+
+    const i64 maxSeqNo = msg.seq_no();
+    cmdWrite.SetSeqNo(header->BaseSequence);
+    cmdWrite.SetLogicalMessageCount(static_cast<size_t>(header->RecordsCount));
+    cmdWrite.SetIsBatch(true);
+    cmdWrite.SetMaxSeqNo(maxSeqNo);
+}
+
 //TODO: add here tracking of bytes in/out
 
 
-template<bool UseMigrationProtocol>
-TWriteSessionActor<UseMigrationProtocol>::TWriteSessionActor(
+template <EProtocol Protocol>
+TWriteSessionActor<Protocol>::TWriteSessionActor(
         TEvStreamWriteRequest* request, const ui64 cookie,
         const NActors::TActorId& schemeCache,
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, const TMaybe<TString> clientDC,
@@ -202,23 +237,23 @@ TWriteSessionActor<UseMigrationProtocol>::TWriteSessionActor(
 {
     Y_ASSERT(Request);
 
-    if (auto values = Request->GetStreamCtx()->GetPeerMetaValues(NYdb::YDB_APPLICATION_NAME); !values.empty()) {
-        UserAgent = values[0];
+    if (auto value = Request->GetPeerMetaValues(NYdb::YDB_APPLICATION_NAME)) {
+        UserAgent = *value;
     }
-    if (auto values = Request->GetStreamCtx()->GetPeerMetaValues(NYdb::YDB_SDK_BUILD_INFO_HEADER); !values.empty()) {
-        SdkBuildInfo = values[0];
+    if (auto value = Request->GetPeerMetaValues(NYdb::YDB_SDK_BUILD_INFO_HEADER)) {
+        SdkBuildInfo = *value;
     }
 }
 
-template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::Bootstrap(const TActorContext& ctx) {
-    Y_ABORT_UNLESS(Request);
+template <EProtocol Protocol>
+void TWriteSessionActor<Protocol>::Bootstrap(const TActorContext& ctx) {
+    AFL_ENSURE(Request);
 
-    Span = NWilson::TSpan(TWilsonTopic::TopicTopLevel, Request->GetWilsonTraceId(), UseMigrationProtocol ? "Topic.WriteSession[migration]" : "Topic.WriteSession");
+    Span = NWilson::TSpan(TWilsonTopic::TopicTopLevel, Request->GetWilsonTraceId(), Protocol == EProtocol::PQv1 ? "Topic.WriteSession[migration]" : "Topic.WriteSession");
 
-    Request->GetStreamCtx()->Attach(ctx.SelfID);
-    if (!Request->GetStreamCtx()->Read()) {
-        LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "grpc read failed at start");
+    Request->Attach(ctx.SelfID);
+    if (!Request->Read()) {
+        YDB_LOG_INFO_CTX(ctx, "Grpc read failed at start");
         Die(ctx);
         return;
     }
@@ -226,10 +261,12 @@ void TWriteSessionActor<UseMigrationProtocol>::Bootstrap(const TActorContext& ct
     StartTime = ctx.Now();
 }
 
-template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::Handle(typename IContext::TEvNotifiedWhenDone::TPtr& ev, const TActorContext& ctx) {
+template <EProtocol Protocol>
+void TWriteSessionActor<Protocol>::Handle(typename IContext::TEvNotifiedWhenDone::TPtr& ev, const TActorContext& ctx) {
     CloseSpans("Done", ev->Get()->Success ? PersQueue::ErrorCode::OK : PersQueue::ErrorCode::BAD_REQUEST);
-    LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " grpc closed");
+    YDB_LOG_INFO_CTX(ctx, "Session v1 grpc closed",
+        {"cookie", Cookie},
+        {"sessionId", OwnerCookie});
     Die(ctx);
 }
 
@@ -249,11 +286,17 @@ TString WriteRequestToLog(const TClientMessage& proto) {
     }
 }
 
-template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::Handle(typename IContext::TEvReadFinished::TPtr& ev, const TActorContext& ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " grpc read done: success: " << ev->Get()->Success << " data: " << WriteRequestToLog(ev->Get()->Record));
+template <EProtocol Protocol>
+void TWriteSessionActor<Protocol>::Handle(typename IContext::TEvReadFinished::TPtr& ev, const TActorContext& ctx) {
+    YDB_LOG_DEBUG_CTX(ctx, "Session v1 grpc read done",
+        {"cookie", Cookie},
+        {"sessionId", OwnerCookie},
+        {"success", ev->Get()->Success},
+        {"data", WriteRequestToLog(ev->Get()->Record)});
     if (!ev->Get()->Success) {
-        LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " grpc read failed");
+        YDB_LOG_INFO_CTX(ctx, "Session v1 grpc read failed",
+            {"cookie", Cookie},
+            {"sessionId", OwnerCookie});
         ctx.Send(ctx.SelfID, new TEvPQProxy::TEvDone());
         return;
     }
@@ -262,7 +305,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(typename IContext::TEvRead
 
     switch(req.client_message_case()) {
         case TClientMessage::kInitRequest:
-            ctx.Send(ctx.SelfID, new TEvWriteInit(std::move(req), Request->GetStreamCtx()->GetPeerName()));
+            ctx.Send(ctx.SelfID, new TEvWriteInit(std::move(req), Request->GetPeerName()));
             break;
         case TClientMessage::kWriteRequest:
             ctx.Send(ctx.SelfID, new TEvWrite(std::move(req)));
@@ -278,18 +321,22 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(typename IContext::TEvRead
     }
 }
 
-template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::Handle(typename IContext::TEvWriteFinished::TPtr& ev, const TActorContext& ctx) {
+template <EProtocol Protocol>
+void TWriteSessionActor<Protocol>::Handle(typename IContext::TEvWriteFinished::TPtr& ev, const TActorContext& ctx) {
     if (!ev->Get()->Success) {
-        LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " grpc write failed");
+        YDB_LOG_INFO_CTX(ctx, "Session v1 grpc write failed",
+            {"cookie", Cookie},
+            {"sessionId", OwnerCookie});
         Die(ctx);
     }
 }
 
-template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::Die(const TActorContext& ctx) {
+template <EProtocol Protocol>
+void TWriteSessionActor<Protocol>::Die(const TActorContext& ctx) {
     if (State == ES_DYING) {
-        LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " is already DEAD");
+        YDB_LOG_INFO_CTX(ctx, "Session v1 is already DEAD",
+            {"cookie", Cookie},
+            {"sessionId", OwnerCookie});
         return;
     }
 
@@ -301,7 +348,9 @@ void TWriteSessionActor<UseMigrationProtocol>::Die(const TActorContext& ctx) {
         }
     }
 
-    LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " is DEAD");
+    YDB_LOG_INFO_CTX(ctx, "Session v1 is DEAD",
+        {"cookie", Cookie},
+        {"sessionId", OwnerCookie});
 
     ctx.Send(GetPQWriteServiceActorID(), new TEvPQProxy::TEvSessionDead(Cookie));
 
@@ -310,13 +359,32 @@ void TWriteSessionActor<UseMigrationProtocol>::Die(const TActorContext& ctx) {
         ctx.Send(PartitionChooser,  new TEvents::TEvPoison());
     }
 
+    if (Request) {
+        // Write to audit log if it is needed and we have not written yet.
+        Request->AuditLogRequestEnd(Ydb::StatusIds::SUCCESS);
+    }
+
     State = ES_DYING;
     TRlHelpers::PassAway(TActorBootstrapped<TWriteSessionActor>::SelfId());
     TActorBootstrapped<TWriteSessionActor>::Die(ctx);
 }
 
-template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::CheckFinish(const TActorContext& ctx) {
+
+template <EProtocol Protocol>
+bool TWriteSessionActor<Protocol>::OnUnhandledException(const std::exception& exc) {
+    auto ctx = *NActors::TlsActivationContext;
+    YDB_LOG_CRIT_CTX(ctx, "Unhandled exception",
+        {"typeName", TypeName(exc)},
+        {"exception", exc.what()},
+        {"backTrace", TBackTrace::FromCurrentException().PrintToString()});
+
+    CloseSession("Internal error", PersQueue::ErrorCode::ErrorCode::ERROR, ctx.AsActorContext());
+
+    return true;
+}
+
+template <EProtocol Protocol>
+void TWriteSessionActor<Protocol>::CheckFinish(const TActorContext& ctx) {
     if (!WritesDone)
         return;
     if (State != ES_INITED) {
@@ -329,19 +397,19 @@ void TWriteSessionActor<UseMigrationProtocol>::CheckFinish(const TActorContext& 
     }
 }
 
-template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvDone::TPtr&, const TActorContext& ctx) {
+template <EProtocol Protocol>
+void TWriteSessionActor<Protocol>::Handle(TEvPQProxy::TEvDone::TPtr&, const TActorContext& ctx) {
     WritesDone = true;
     CheckFinish(ctx);
 }
 
-template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::CheckACL(const TActorContext& ctx) {
-    //Y_ABORT_UNLESS(ACLCheckInProgress);
+template <EProtocol Protocol>
+void TWriteSessionActor<Protocol>::CheckACL(const TActorContext& ctx) {
+    //AFL_ENSURE(ACLCheckInProgress);
 
     NACLib::EAccessRights rights = NACLib::EAccessRights::UpdateRow;
 
-    Y_ABORT_UNLESS(ACL);
+    AFL_ENSURE(ACL);
     if (ACL->CheckAccess(rights, *Token)) {
         ACLCheckInProgress = false;
         if (FirstACLCheck) {
@@ -353,8 +421,10 @@ void TWriteSessionActor<UseMigrationProtocol>::CheckACL(const TActorContext& ctx
             TServerMessage serverMessage;
             serverMessage.set_status(Ydb::StatusIds::SUCCESS);
             serverMessage.mutable_update_token_response();
-            if (!Request->GetStreamCtx()->Write(std::move(serverMessage))) {
-                LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " grpc write failed");
+            if (!Request->Write(std::move(serverMessage))) {
+                YDB_LOG_INFO_CTX(ctx, "Session v1 grpc write failed",
+                    {"cookie", Cookie},
+                    {"sessionId", OwnerCookie});
                 Die(ctx);
             }
         }
@@ -366,8 +436,8 @@ void TWriteSessionActor<UseMigrationProtocol>::CheckACL(const TActorContext& ctx
     }
 }
 
-template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::Handle(typename TEvWriteInit::TPtr& ev, const TActorContext& ctx) {
+template <EProtocol Protocol>
+void TWriteSessionActor<Protocol>::Handle(typename TEvWriteInit::TPtr& ev, const TActorContext& ctx) {
     InitSpan = GenerateInitSpan();
     THolder<TEvWriteInit> event(ev->Release());
 
@@ -379,7 +449,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(typename TEvWriteInit::TPt
     InitRequest = event->Request.init_request();
 
     TString topic_path = [this]() {
-        if constexpr (UseMigrationProtocol) {
+        if constexpr (Protocol == EProtocol::PQv1) {
             return InitRequest.topic();
         } else {
             return InitRequest.path();
@@ -390,7 +460,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(typename TEvWriteInit::TPt
         return;
     }
 
-    if constexpr (UseMigrationProtocol) {
+    if constexpr (Protocol == EProtocol::PQv1) {
         if (InitRequest.message_group_id().empty()) {
             CloseSession("no message_group_id in init request",  PersQueue::ErrorCode::BAD_REQUEST, ctx);
             return;
@@ -430,7 +500,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(typename TEvWriteInit::TPt
     PeerName = event->PeerName;
 
     SourceId = [this]() {
-        if constexpr (UseMigrationProtocol) {
+        if constexpr (Protocol == EProtocol::PQv1) {
             return InitRequest.message_group_id();
         } else {
             if (InitRequest.producer_id().empty() && InitRequest.message_group_id().empty()) {
@@ -439,9 +509,13 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(typename TEvWriteInit::TPt
             return !InitRequest.message_group_id().empty() ? InitRequest.message_group_id() : InitRequest.producer_id();
         }
     }();
-    LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session request cookie: " << Cookie << " " << InitRequest.ShortDebugString() << " from " << PeerName);
+    YDB_LOG_INFO_CTX(ctx, "Session request",
+        {"cookie", Cookie},
+        {"initRequest", InitRequest},
+        {"peerName", PeerName});
     if (!UseDeduplication) {
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session request cookie: " << Cookie << ". Disable deduplication for empty producer id");
+        YDB_LOG_DEBUG_CTX(ctx, "Session request Disable deduplication for empty producer id",
+            {"cookie", Cookie});
     }
     LogSession(ctx);
 
@@ -456,7 +530,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(typename TEvWriteInit::TPt
     InitCheckSchema(ctx, true, InitSpan.GetTraceId());
 
     PreferedPartition = Max<ui32>();
-    if constexpr (UseMigrationProtocol) {
+    if constexpr (Protocol == EProtocol::PQv1) {
         if (InitRequest.partition_group_id() > 0) {
             PreferedPartition = InitRequest.partition_group_id() - 1;
         }
@@ -467,18 +541,21 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(typename TEvWriteInit::TPt
     } else {
         if (InitRequest.has_partition_id()) {
             PreferedPartition = InitRequest.partition_id();
-            LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session to partition: " << PreferedPartition);
+            YDB_LOG_INFO_CTX(ctx, "Session",
+                {"partition", PreferedPartition});
         }
         else if (InitRequest.has_partition_with_generation()) {
             PreferedPartition = InitRequest.partition_with_generation().partition_id();
             ExpectedGeneration = InitRequest.partition_with_generation().generation();
-            LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session to partition: " << PreferedPartition << ", generation: " << ExpectedGeneration);
+            YDB_LOG_INFO_CTX(ctx, "Session",
+                {"partition", PreferedPartition},
+                {"generation", ExpectedGeneration});
         }
     }
 }
 
-template<bool UseMigrationProtocol>
-bool TWriteSessionActor<UseMigrationProtocol>::InitAfterDiscovery(const TActorContext& ctx) {
+template <EProtocol Protocol>
+bool TWriteSessionActor<Protocol>::InitAfterDiscovery(const TActorContext& ctx) {
     if (SourceId.empty() && UseDeduplication) {
         CloseSession("Internal server error: got empty SourceId with enabled deduplication", PersQueue::ErrorCode::VALIDATION_ERROR, ctx);
         return false;
@@ -495,9 +572,9 @@ bool TWriteSessionActor<UseMigrationProtocol>::InitAfterDiscovery(const TActorCo
     return true;
 }
 
-template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::SetupBytesWrittenByUserAgentCounter(const TString& topicPath) {
-    static constexpr auto protocol = UseMigrationProtocol ? "pqv1" : "topic";
+template <EProtocol Protocol>
+void TWriteSessionActor<Protocol>::SetupBytesWrittenByUserAgentCounter(const TString& topicPath) {
+    static constexpr auto protocol = Protocol == EProtocol::PQv1 ? "pqv1" : "topic";
     BytesWrittenByUserAgent = GetServiceCounters(Counters, "pqproxy|userAgents", false)
         ->GetSubgroup("host", "")
         ->GetSubgroup("protocol", protocol)
@@ -507,8 +584,8 @@ void TWriteSessionActor<UseMigrationProtocol>::SetupBytesWrittenByUserAgentCount
         ->GetExpiringNamedCounter("sensor", "BytesWrittenByUserAgent", true);
 }
 
-template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::SetupCounters()
+template <EProtocol Protocol>
+void TWriteSessionActor<Protocol>::SetupCounters()
 {
     if (SessionsCreated) {
         return;
@@ -540,8 +617,8 @@ void TWriteSessionActor<UseMigrationProtocol>::SetupCounters()
     SetupBytesWrittenByUserAgentCounter(FullConverter->GetFederationPath());
 }
 
-template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::SetupCounters(const TString& cloudId, const TString& dbId, const TString& dbPath, const bool isServerless, const TString& folderId)
+template <EProtocol Protocol>
+void TWriteSessionActor<Protocol>::SetupCounters(const TString& cloudId, const TString& dbId, const TString& dbPath, const bool isServerless, const TString& folderId)
 {
     if (SessionsCreated) {
         return;
@@ -561,9 +638,9 @@ void TWriteSessionActor<UseMigrationProtocol>::SetupCounters(const TString& clou
     SetupBytesWrittenByUserAgentCounter(NPersQueue::GetFullTopicPath(dbPath, FullConverter->GetPrimaryPath()));
 }
 
-template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::InitCheckSchema(const TActorContext& ctx, bool needWaitSchema, NWilson::TTraceId traceId) {
-    LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "init check schema");
+template <EProtocol Protocol>
+void TWriteSessionActor<Protocol>::InitCheckSchema(const TActorContext& ctx, bool needWaitSchema, NWilson::TTraceId traceId) {
+    YDB_LOG_INFO_CTX(ctx, "Init check schema");
 
     if (!needWaitSchema) {
         ACLCheckInProgress = true;
@@ -574,10 +651,10 @@ void TWriteSessionActor<UseMigrationProtocol>::InitCheckSchema(const TActorConte
     }
 }
 
-template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx) {
+template <EProtocol Protocol>
+void TWriteSessionActor<Protocol>::Handle(TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx) {
     auto& res = ev->Get()->Result;
-    Y_ABORT_UNLESS(res->ResultSet.size() == 1);
+    AFL_ENSURE(res->ResultSet.size() == 1);
 
     auto& entry = res->ResultSet[0];
     TString errorReason;
@@ -586,22 +663,23 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvDescribeTopicsResponse:
         CloseSession(processResult.Reason, processResult.ErrorCode, ctx);
         return;
     }
-    Y_ABORT_UNLESS(entry.PQGroupInfo); // checked at ProcessMetaCacheTopicResponse()
-    Config = std::move(entry.PQGroupInfo->Description);
-    Chooser = entry.PQGroupInfo->PartitionChooser;
-    Y_ABORT_UNLESS(Chooser);
-    PartitionGraph = entry.PQGroupInfo->PartitionGraph;
-    Y_ABORT_UNLESS(PartitionGraph);
+    AFL_ENSURE(entry.PQGroupInfo); // checked at ProcessMetaCacheTopicResponse()
+    PQGroupInfo = entry.PQGroupInfo;
+    const auto& config = PQGroupInfo->Description;
+    Chooser = PQGroupInfo->PartitionChooser;
+    AFL_ENSURE(Chooser);
+    PartitionGraph = PQGroupInfo->PartitionGraph;
+    AFL_ENSURE(PartitionGraph);
 
-    Y_ABORT_UNLESS(Config.PartitionsSize() > 0);
-    Y_ABORT_UNLESS(Config.HasPQTabletConfig());
-    InitialPQTabletConfig = Config.GetPQTabletConfig();
+    AFL_ENSURE(config.PartitionsSize() > 0);
+    AFL_ENSURE(config.HasPQTabletConfig());
+    InitialPQTabletConfig = config.GetPQTabletConfig();
     if (!DiscoveryConverter->IsValid()) {
         errorReason = Sprintf("Internal server error with topic '%s', Marker# PQ503", DiscoveryConverter->GetPrintableString().c_str());
         CloseSession(errorReason, PersQueue::ErrorCode::ERROR, ctx);
         return;
     }
-    if (!AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen() && !Config.GetPQTabletConfig().GetLocalDC()) {
+    if (!AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen() && !config.GetPQTabletConfig().GetLocalDC()) {
         errorReason = Sprintf("Write to mirrored topic '%s' is forbidden", DiscoveryConverter->GetPrintableString().c_str());
         CloseSession(errorReason, PersQueue::ErrorCode::BAD_REQUEST, ctx);
         return;
@@ -614,7 +692,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvDescribeTopicsResponse:
     }
 
     if (AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
-        const auto& tabletConfig = Config.GetPQTabletConfig();
+        const auto& tabletConfig = config.GetPQTabletConfig();
         SetupCounters(tabletConfig.GetYcCloudId(), tabletConfig.GetYdbDatabaseId(),
                         tabletConfig.GetYdbDatabasePath(), entry.DomainInfo->IsServerless(),
                       tabletConfig.GetYcFolderId());
@@ -622,11 +700,13 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvDescribeTopicsResponse:
         SetupCounters();
     }
 
-    Y_ABORT_UNLESS(entry.SecurityObject);
+    AFL_ENSURE(entry.SecurityObject);
     ACL.Reset(new TAclWrapper(entry.SecurityObject));
-    LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " describe result for acl check");
+    YDB_LOG_INFO_CTX(ctx, "Session v1 describe result for acl check",
+        {"cookie", Cookie},
+        {"sessionId", OwnerCookie});
 
-    const auto meteringMode = Config.GetPQTabletConfig().GetMeteringMode();
+    const auto meteringMode = config.GetPQTabletConfig().GetMeteringMode();
     if (meteringMode != GetMeteringMode().GetOrElse(meteringMode)) {
         return CloseSession("Metering mode has been changed", PersQueue::ErrorCode::OVERLOAD, ctx);
     }
@@ -639,24 +719,24 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvDescribeTopicsResponse:
             Die(ctx);
             return;
         }
-        Y_ABORT_UNLESS(FirstACLCheck);
+        AFL_ENSURE(FirstACLCheck);
         FirstACLCheck = false;
         DiscoverPartition(ctx);
     } else {
-        Y_ABORT_UNLESS(Request->GetYdbToken());
+        AFL_ENSURE(Request->GetYdbToken());
         Auth = *Request->GetYdbToken();
         Token = new NACLib::TUserToken(Request->GetSerializedToken());
 
         if (FirstACLCheck && IsQuotaRequired()) {
-            Y_ABORT_UNLESS(MaybeRequestQuota(1, EWakeupTag::RlInit, ctx, InitSpan.GetTraceId()));
+            AFL_ENSURE(MaybeRequestQuota(1, EWakeupTag::RlInit, ctx, InitSpan.GetTraceId()));
         } else {
             CheckACL(ctx);
         }
     }
 }
 
-template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::DiscoverPartition(const NActors::TActorContext& ctx) {
+template <EProtocol Protocol>
+void TWriteSessionActor<Protocol>::DiscoverPartition(const NActors::TActorContext& ctx) {
     State = ES_WAIT_PARTITION;
 
     if (PartitionChooser) {
@@ -664,11 +744,20 @@ void TWriteSessionActor<UseMigrationProtocol>::DiscoverPartition(const NActors::
     }
 
     std::optional<ui32> preferedPartition = PreferedPartition == Max<ui32>() ? std::nullopt : std::optional(PreferedPartition);
-    PartitionChooser = ctx.RegisterWithSameMailbox(NPQ::CreatePartitionChooserActor(ctx.SelfID, Config, Chooser, PartitionGraph, FullConverter, SourceId, preferedPartition, InitSpan.GetTraceId()));
+    AFL_ENSURE(PQGroupInfo);
+    const auto& config = PQGroupInfo->Description;
+    PartitionChooser = ctx.RegisterWithSameMailbox(NPQ::CreatePartitionChooserActor(ctx.SelfID,
+                                                                                    config,
+                                                                                    Chooser,
+                                                                                    PartitionGraph,
+                                                                                    FullConverter,
+                                                                                    SourceId,
+                                                                                    preferedPartition,
+                                                                                    InitSpan.GetTraceId()));
 }
 
-template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::Handle(NPQ::TEvPartitionChooser::TEvChooseResult::TPtr& ev, const NActors::TActorContext& ctx) {
+template <EProtocol Protocol>
+void TWriteSessionActor<Protocol>::Handle(NPQ::TEvPartitionChooser::TEvChooseResult::TPtr& ev, const NActors::TActorContext& ctx) {
     auto* r = ev->Get();
     PartitionTabletId = r->TabletId;
     InitialSeqNo = r->SeqNo;
@@ -677,16 +766,20 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(NPQ::TEvPartitionChooser::
     ProceedPartition(r->PartitionId, ctx);
 }
 
-template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::Handle(NPQ::TEvPartitionChooser::TEvChooseError::TPtr& ev, const NActors::TActorContext& ctx) {
+template <EProtocol Protocol>
+void TWriteSessionActor<Protocol>::Handle(NPQ::TEvPartitionChooser::TEvChooseError::TPtr& ev, const NActors::TActorContext& ctx) {
     CloseSession(ev->Get()->ErrorMessage, ev->Get()->Code, ctx);
 }
 
-template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::ProceedPartition(const ui32 partition, const TActorContext& ctx) {
+template <EProtocol Protocol>
+void TWriteSessionActor<Protocol>::ProceedPartition(const ui32 partition, const TActorContext& ctx) {
     Partition = partition;
 
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "ProceedPartition. session cookie: " << Cookie << " sessionId: " << OwnerCookie << " partition: " << Partition << " expectedGeneration: " << ExpectedGeneration);
+    YDB_LOG_DEBUG_CTX(ctx, "ProceedPartition. session",
+        {"cookie", Cookie},
+        {"sessionId", OwnerCookie},
+        {"partition", Partition},
+        {"expectedGeneration", ExpectedGeneration});
 
     if (!PartitionTabletId) {
         CloseSession(
@@ -697,7 +790,9 @@ void TWriteSessionActor<UseMigrationProtocol>::ProceedPartition(const ui32 parti
         return;
     }
 
-    CreatePartitionWriterCache(ctx);
+    if (!CreatePartitionWriterCache(ctx)) {
+        return;
+    }
 
     State = ES_WAIT_WRITER_INIT;
 
@@ -714,8 +809,8 @@ void TWriteSessionActor<UseMigrationProtocol>::ProceedPartition(const ui32 parti
     }
 }
 
-template <bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::CreatePartitionWriterCache(const TActorContext& ctx)
+template <EProtocol Protocol>
+bool TWriteSessionActor<Protocol>::CreatePartitionWriterCache(const TActorContext& ctx)
 {
     NPQ::TPartitionWriterOpts opts;
 
@@ -724,7 +819,26 @@ void TWriteSessionActor<UseMigrationProtocol>::CreatePartitionWriterCache(const 
     opts.WithInitialSeqNo(InitialSeqNo);
     opts.WithExpectedGeneration(ExpectedGeneration);
 
-    if constexpr (UseMigrationProtocol) {
+    if constexpr (Protocol == EProtocol::Topic) {
+        for (const auto& item : InitRequest.write_session_meta()) {
+            if (item.first == NPersQueue::WRITE_SESSION_ATTRIBUTE_TRACK_PRODUCER_ID_IN_TX) {
+                bool trackProducerId = opts.TrackProducerId;
+                if (!TryFromString<bool>(item.second, trackProducerId)) {
+                    CloseSession(
+                        Sprintf("invalid value for write_session_meta key '%s': expected boolean, got '%s'",
+                                TString{NPersQueue::WRITE_SESSION_ATTRIBUTE_TRACK_PRODUCER_ID_IN_TX}.c_str(),
+                                item.second.c_str()),
+                        PersQueue::ErrorCode::BAD_REQUEST,
+                        ctx);
+                    return false;
+                }
+                opts.WithTrackProducerId(trackProducerId);
+                break;
+            }
+        }
+    }
+
+    if constexpr (Protocol == EProtocol::PQv1) {
         opts.WithTopicPath(InitRequest.topic());
     } else {
         if (Request->GetDatabaseName()) {
@@ -749,10 +863,11 @@ void TWriteSessionActor<UseMigrationProtocol>::CreatePartitionWriterCache(const 
                                                      opts);
 
     PartitionWriterCache = ctx.RegisterWithSameMailbox(actor.release());
+    return true;
 }
 
-template <bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::DestroyPartitionWriterCache(const TActorContext& ctx)
+template <EProtocol Protocol>
+void TWriteSessionActor<Protocol>::DestroyPartitionWriterCache(const TActorContext& ctx)
 {
     if (PartitionWriterCache == TActorId()) {
         return;
@@ -772,8 +887,8 @@ static void CloseSpan(NWilson::TSpan& span, const TString& errorReason, const Pe
     }
 }
 
-template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::CloseSpans(const TString& errorReason, const PersQueue::ErrorCode::ErrorCode errorCode) {
+template <EProtocol Protocol>
+void TWriteSessionActor<Protocol>::CloseSpans(const TString& errorReason, const PersQueue::ErrorCode::ErrorCode errorCode) {
     CloseSpan(InitSpan, errorReason, errorCode);
     CloseSpan(UpdateTokenSpan, errorReason, errorCode);
     for (auto& writeInfoPtr : PendingRequests) {
@@ -783,13 +898,20 @@ void TWriteSessionActor<UseMigrationProtocol>::CloseSpans(const TString& errorRe
     CloseSpan(Span, errorReason, errorCode);
 }
 
-template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::CloseSession(const TString& errorReason, const PersQueue::ErrorCode::ErrorCode errorCode, const NActors::TActorContext& ctx) {
+template <EProtocol Protocol>
+void TWriteSessionActor<Protocol>::CloseSession(
+    const TString& errorReason,
+    const PersQueue::ErrorCode::ErrorCode errorCode,
+    const NActors::TActorContext& ctx,
+    std::optional<Ydb::StatusIds::StatusCode> statusOverride)
+{
     if (SessionClosed) {
         return;
     }
     SessionClosed = true;
 
+    const Ydb::StatusIds::StatusCode statusCode = statusOverride.value_or(
+        ConvertPersQueueInternalCodeToStatus(errorCode));
     if (errorCode != PersQueue::ErrorCode::OK) {
 
         if (InternalErrorCode(errorCode)) {
@@ -803,26 +925,35 @@ void TWriteSessionActor<UseMigrationProtocol>::CloseSession(const TString& error
         }
 
         TServerMessage result;
-        result.set_status(ConvertPersQueueInternalCodeToStatus(errorCode));
+        result.set_status(statusCode);
         FillIssue(result.add_issues(), errorCode, errorReason);
 
-        LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 error cookie: " << Cookie << " reason: " << errorReason << " sessionId: " << OwnerCookie);
+        YDB_LOG_INFO_CTX(ctx, "Session v1 error",
+            {"cookie", Cookie},
+            {"reason", errorReason},
+            {"sessionId", OwnerCookie});
 
-        if (!Request->GetStreamCtx()->WriteAndFinish(std::move(result), grpc::Status::OK)) {
-            LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " grpc last write failed");
+        if (!Request->WriteAndFinish(std::move(result), statusCode)) {
+            YDB_LOG_INFO_CTX(ctx, "Session v1 grpc last write failed",
+                {"cookie", Cookie},
+                {"sessionId", OwnerCookie});
         }
     } else {
-        if (!Request->GetStreamCtx()->Finish(grpc::Status::OK)) {
-            LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " double finish call");
+        if (!Request->Finish(statusCode)) {
+            YDB_LOG_INFO_CTX(ctx, "Session v1 double finish call",
+                {"cookie", Cookie},
+                {"sessionId", OwnerCookie});
         }
-        LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 closed cookie: " << Cookie << " sessionId: " << OwnerCookie);
+        YDB_LOG_INFO_CTX(ctx, "Session v1 closed",
+            {"cookie", Cookie},
+            {"sessionId", OwnerCookie});
     }
     CloseSpans(errorReason, errorCode);
     Die(ctx);
 }
 
-template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::MakeAndSendInitResponse(
+template <EProtocol Protocol>
+void TWriteSessionActor<Protocol>::MakeAndSendInitResponse(
         const TMaybe<ui64>& maxSeqNo, const TActorContext& ctx
 ) {
     TServerMessage response;
@@ -832,7 +963,7 @@ void TWriteSessionActor<UseMigrationProtocol>::MakeAndSendInitResponse(
     if (!OwnerCookie.empty()) {
         init->set_session_id(EscapeC(OwnerCookie));
     }
-    if constexpr (UseMigrationProtocol) {
+    if constexpr (Protocol == EProtocol::PQv1) {
         if (maxSeqNo.Defined()) {
             init->set_last_sequence_number(*maxSeqNo);
         }
@@ -842,7 +973,7 @@ void TWriteSessionActor<UseMigrationProtocol>::MakeAndSendInitResponse(
         init->set_block_format_version(0);
         if (InitialPQTabletConfig.HasCodecs()) {
             for (const auto& codecName : InitialPQTabletConfig.GetCodecs().GetCodecs()) {
-                init->add_supported_codecs(CodecByName<UseMigrationProtocol>(codecName));
+                init->add_supported_codecs(CodecByName<Protocol>(codecName));
             }
         }
     } else {
@@ -853,19 +984,25 @@ void TWriteSessionActor<UseMigrationProtocol>::MakeAndSendInitResponse(
         init->set_partition_id(Partition);
         if (InitialPQTabletConfig.HasCodecs()) {
             for (const auto& codecName : InitialPQTabletConfig.GetCodecs().GetCodecs()) {
-                init->mutable_supported_codecs()->add_codecs(CodecByName<UseMigrationProtocol>(codecName));
+                init->mutable_supported_codecs()->add_codecs(CodecByName<Protocol>(codecName));
             }
         }
+        init->set_is_batching_supported(NPQ::IsTopicMessagesBatchingEnabled(ctx));
     }
 
     InitSpan.End();
     InitSpan = {};
 
-    LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session inited cookie: " << Cookie << " partition: " << Partition
-                                                      << " MaxSeqNo: " << maxSeqNo << " sessionId: " << OwnerCookie);
+    YDB_LOG_INFO_CTX(ctx, "Session inited",
+        {"cookie", Cookie},
+        {"partition", Partition},
+        {"maxSeqNo", maxSeqNo},
+        {"sessionId", OwnerCookie});
 
-    if (!Request->GetStreamCtx()->Write(std::move(response))) {
-        LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " grpc write failed");
+    if (!Request->Write(std::move(response))) {
+        YDB_LOG_INFO_CTX(ctx, "Session v1 grpc write failed",
+            {"cookie", Cookie},
+            {"sessionId", OwnerCookie});
         Die(ctx);
         return;
     }
@@ -876,22 +1013,24 @@ void TWriteSessionActor<UseMigrationProtocol>::MakeAndSendInitResponse(
 
     //init completed; wait for first data chunk
     NextRequestInited = true;
-    if (!Request->GetStreamCtx()->Read()) {
-        LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " grpc read failed");
+    if (!Request->Read()) {
+        YDB_LOG_INFO_CTX(ctx, "Session v1 grpc read failed",
+            {"cookie", Cookie},
+            {"sessionId", OwnerCookie});
         Die(ctx);
         return;
     }
 }
 
-template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::Handle(NPQ::TEvPartitionWriter::TEvInitResult::TPtr& ev, const TActorContext& ctx) {
+template <EProtocol Protocol>
+void TWriteSessionActor<Protocol>::Handle(NPQ::TEvPartitionWriter::TEvInitResult::TPtr& ev, const TActorContext& ctx) {
     const auto& result = *ev->Get();
 
     if (State != ES_WAIT_WRITER_INIT) {
         return CloseSession("got init result but not wait for it", PersQueue::ErrorCode::ERROR, ctx);
     }
 
-    Y_ABORT_UNLESS(!result.SessionId && !result.TxId);
+    AFL_ENSURE(!result.SessionId && !result.TxId);
 
     if (!result.IsSuccess()) {
         const auto& error = result.GetError();
@@ -918,13 +1057,13 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(NPQ::TEvPartitionWriter::T
     MakeAndSendInitResponse(maxSeqNo, ctx);
 }
 
-template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::Handle(NPQ::TEvPartitionWriter::TEvWriteAccepted::TPtr& ev, const TActorContext& ctx) {
+template <EProtocol Protocol>
+void TWriteSessionActor<Protocol>::Handle(NPQ::TEvPartitionWriter::TEvWriteAccepted::TPtr& ev, const TActorContext& ctx) {
     if (State != ES_INITED) {
         return CloseSession("got write permission but not wait for it", PersQueue::ErrorCode::ERROR, ctx);
     }
 
-    Y_ABORT_UNLESS(!SentRequests.empty());
+    AFL_ENSURE(!SentRequests.empty());
     auto writeRequest = std::move(SentRequests.front());
 
     if (ev->Get()->Cookie != writeRequest->Cookie) {
@@ -943,8 +1082,10 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(NPQ::TEvPartitionWriter::T
     }
     if (!NextRequestInited && BytesInflight_ < AppData(ctx)->PQConfig.GetMaxWriteSessionBytesInflight()) { //allow only one big request to be readed but not sended
         NextRequestInited = true;
-        if (!Request->GetStreamCtx()->Read()) {
-            LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " grpc read failed");
+        if (!Request->Read()) {
+            YDB_LOG_INFO_CTX(ctx, "Session v1 grpc read failed",
+                {"cookie", Cookie},
+                {"sessionId", OwnerCookie});
             Die(ctx);
             return;
         }
@@ -956,8 +1097,8 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(NPQ::TEvPartitionWriter::T
     }
 }
 
-template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::ProcessWriteResponse(
+template <EProtocol Protocol>
+void TWriteSessionActor<Protocol>::ProcessWriteResponse(
         const NKikimrClient::TPersQueuePartitionResponse& response, const TActorContext& ctx
 ) {
     auto writeRequest = std::move(AcceptedRequests.front());
@@ -972,7 +1113,7 @@ void TWriteSessionActor<UseMigrationProtocol>::ProcessWriteResponse(
         batchWriteResponse->add_sequence_numbers(res.GetSeqNo());
         batchWriteResponse->add_offsets(res.GetOffset());
         if (!UseDeduplication) {
-            Y_ABORT_UNLESS(!res.GetAlreadyWritten());
+            AFL_ENSURE(!res.GetAlreadyWritten());
         }
         batchWriteResponse->add_already_written(res.GetAlreadyWritten());
         stat->set_queued_in_partition_duration_ms(
@@ -991,7 +1132,7 @@ void TWriteSessionActor<UseMigrationProtocol>::ProcessWriteResponse(
         // TODO (ildar-khisam@): validate res before filling ack fields
         ack->set_seq_no(res.GetSeqNo());
         if (res.GetAlreadyWritten()) {
-            Y_ABORT_UNLESS(UseDeduplication);
+            AFL_ENSURE(UseDeduplication);
             ack->mutable_skipped()->set_reason(Topic::StreamWriteMessage::WriteResponse::WriteAck::Skipped::REASON_ALREADY_WRITTEN);
         } else if (res.HasWrittenInTx() && res.GetWrittenInTx()) {
             ack->mutable_written_in_tx();
@@ -1026,7 +1167,7 @@ void TWriteSessionActor<UseMigrationProtocol>::ProcessWriteResponse(
         TServerMessage result;
         result.set_status(Ydb::StatusIds::SUCCESS);
 
-        if constexpr (UseMigrationProtocol) {
+        if constexpr (Protocol == EProtocol::PQv1) {
             auto batchWriteResponse = result.mutable_batch_write_response();
             batchWriteResponse->set_partition_id(Partition);
 
@@ -1060,11 +1201,18 @@ void TWriteSessionActor<UseMigrationProtocol>::ProcessWriteResponse(
                     return;
                 }
                 const auto& partitionCmdWriteResult = response.GetCmdWriteResult(partitionCmdWriteResultIndex);
-                const auto writtenSequenceNumber = userWriteRequest->Request.write_request().messages(messageIndex).seq_no();
-                if (UseDeduplication && partitionCmdWriteResult.GetSeqNo() != writtenSequenceNumber) {
+                const auto& writeMessage = userWriteRequest->Request.write_request().messages(messageIndex);
+                const auto writtenSequenceNumber = writeMessage.seq_no();
+                auto expectedPartitionSequenceNumber = writtenSequenceNumber;
+                if (userWriteRequest->Request.write_request().codec() == static_cast<i32>(Ydb::Topic::CODEC_KAFKA_BATCH)) {
+                    if (const auto header = NKafka::ReadKafkaBatchHeader(writeMessage.data())) {
+                        expectedPartitionSequenceNumber = header->BaseSequence;
+                    }
+                }
+                if (UseDeduplication && partitionCmdWriteResult.GetSeqNo() != expectedPartitionSequenceNumber) {
                     CloseSession(TStringBuilder() << "Expected partition " << Partition
                                                   << " write result for message with sequence number "
-                                                  << writtenSequenceNumber << " but got for "
+                                                  << expectedPartitionSequenceNumber << " but got for "
                                                   << partitionCmdWriteResult.GetSeqNo(), PersQueue::ErrorCode::ERROR, ctx);
                     return;
                 }
@@ -1075,9 +1223,11 @@ void TWriteSessionActor<UseMigrationProtocol>::ProcessWriteResponse(
 
         }
 
-        if (!Request->GetStreamCtx()->Write(std::move(result))) {
+        if (!Request->Write(std::move(result))) {
             // TODO: Log gRPC write error code
-            LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " grpc write failed");
+            YDB_LOG_INFO_CTX(ctx, "Session v1 grpc write failed",
+                {"cookie", Cookie},
+                {"sessionId", OwnerCookie});
             Die(ctx);
             return;
         }
@@ -1093,8 +1243,8 @@ void TWriteSessionActor<UseMigrationProtocol>::ProcessWriteResponse(
     CheckFinish(ctx);
 }
 
-template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::Handle(NPQ::TEvPartitionWriter::TEvWriteResponse::TPtr& ev, const TActorContext& ctx) {
+template <EProtocol Protocol>
+void TWriteSessionActor<Protocol>::Handle(NPQ::TEvPartitionWriter::TEvWriteResponse::TPtr& ev, const TActorContext& ctx) {
     const auto& result = *ev->Get();
     if (!result.IsSuccess()) {
         const auto& record = result.Record;
@@ -1123,14 +1273,14 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(NPQ::TEvPartitionWriter::T
     ProcessWriteResponse(resp, ctx);
 }
 
-template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::Handle(NPQ::TEvPartitionWriter::TEvDisconnected::TPtr& ev, const TActorContext& ctx) {
+template <EProtocol Protocol>
+void TWriteSessionActor<Protocol>::Handle(NPQ::TEvPartitionWriter::TEvDisconnected::TPtr& ev, const TActorContext& ctx) {
     CloseSession(TStringBuilder() << "pipe to partition's " << Partition << " tablet is dead #" << static_cast<int>(ev->Get()->ErrorCode),
              PersQueue::ErrorCode::TABLET_PIPE_DISCONNECTED, ctx);
 }
 
-template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
+template <EProtocol Protocol>
+void TWriteSessionActor<Protocol>::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
     TEvTabletPipe::TEvClientConnected *msg = ev->Get();
     //TODO: add here retries for connecting to PQRB
     if (msg->Status != NKikimrProto::OK) {
@@ -1139,28 +1289,20 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvTabletPipe::TEvClientCo
     }
 }
 
-template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx) {
+template <EProtocol Protocol>
+void TWriteSessionActor<Protocol>::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx) {
     //TODO: add here retries for connecting to PQRB
     CloseSession(TStringBuilder() << "pipe to tablet is dead " << ev->Get()->TabletId, PersQueue::ErrorCode::TABLET_PIPE_DISCONNECTED, ctx);
 }
 
-template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::PrepareRequest(THolder<TEvWrite>&& ev, const TActorContext& ctx) {
+template <EProtocol Protocol>
+void TWriteSessionActor<Protocol>::PrepareRequest(THolder<TEvWrite>&& ev, const TActorContext& ctx) {
     const auto& writeRequest = ev->Request.write_request();
-
-    if constexpr (!UseMigrationProtocol) {
-        if (writeRequest.has_tx() && !AppData(ctx)->FeatureFlags.GetEnableTopicServiceTx()) {
-            CloseSession("Disabled transaction support for TopicService.",
-                         PersQueue::ErrorCode::ERROR, ctx);
-            return;
-        }
-    }
 
     if (PendingRequests.empty()) {
         PendingRequests.emplace_back(new TWriteRequestInfo(++NextRequestCookie, GenerateWriteSpan()));
-    } else if constexpr (!UseMigrationProtocol) {
-        Y_ABORT_UNLESS(!PendingRequests.back()->UserWriteRequests.empty());
+    } else if constexpr (Protocol == EProtocol::Topic) {
+        AFL_ENSURE(!PendingRequests.back()->UserWriteRequests.empty());
 
         auto& last = PendingRequests.back()->UserWriteRequests.back().Write->Request.write_request();
 
@@ -1175,6 +1317,13 @@ void TWriteSessionActor<UseMigrationProtocol>::PrepareRequest(THolder<TEvWrite>&
             }
         } else if (last.has_tx()) {
             PendingRequests.emplace_back(new TWriteRequestInfo(++NextRequestCookie, GenerateWriteSpan()));
+        } else if (writeRequest.has_deferred_publish() != last.has_deferred_publish()) {
+            PendingRequests.emplace_back(new TWriteRequestInfo(++NextRequestCookie, GenerateWriteSpan()));
+        } else if (writeRequest.has_deferred_publish()) {
+            if (writeRequest.deferred_publish().int_publication_id() !=
+                last.deferred_publish().int_publication_id()) {
+                PendingRequests.emplace_back(new TWriteRequestInfo(++NextRequestCookie, GenerateWriteSpan()));
+            }
         }
     }
 
@@ -1198,6 +1347,7 @@ void TWriteSessionActor<UseMigrationProtocol>::PrepareRequest(THolder<TEvWrite>&
     };
 
     ui64 maxMessageMetadataSize = 0;
+    TMaybe<TString> batchError;
     auto addData = [&](const Topic::StreamWriteMessage::WriteRequest& writeRequest, const i32 messageIndex) {
         const auto& msg = writeRequest.messages(messageIndex);
 
@@ -1214,33 +1364,42 @@ void TWriteSessionActor<UseMigrationProtocol>::PrepareRequest(THolder<TEvWrite>&
         w->SetClientDC(ClientDC);
         w->SetIgnoreQuotaDeadline(true);
 
+        FillBatchFieldsFromTopicWriteMessage(writeRequest, msg, *w);
+
         payloadSize += w->GetData().size() + w->GetSourceId().size();
 
         ui64 currMetadataSize = 0;
+        const bool isBatch = w->HasLogicalMessageCount() && w->GetLogicalMessageCount() > 1;
         for (const auto& metaItem : msg.metadata_items()) {
+            if (metaItem.key() == PARTITION_KEY_META_KEY) {
+                if (isBatch) {
+                    auto* partitionKey = w->AddPartitionKeys();
+                    partitionKey->SetKey(metaItem.value());
+                } else {
+                    w->SetChoosePartitionKey(metaItem.value());
+                }
+            }
             currMetadataSize += metaItem.key().size() + metaItem.value().size();
         }
         maxMessageMetadataSize = std::max(maxMessageMetadataSize, currMetadataSize);
     };
 
-    if constexpr (UseMigrationProtocol) {
+    if constexpr (Protocol == EProtocol::PQv1) {
         for (i32 messageIndex = 0; messageIndex != writeRequest.sequence_numbers_size(); ++messageIndex) {
             addDataMigration(writeRequest, messageIndex);
         }
     } else {
         for (i32 messageIndex = 0; messageIndex != writeRequest.messages_size(); ++messageIndex) {
             addData(writeRequest, messageIndex);
+            if (batchError) {
+                CloseSession(*batchError, PersQueue::ErrorCode::BAD_REQUEST, ctx);
+                return;
+            }
         }
     }
 
     pendingRequest->UserWriteRequests.emplace_back(std::move(ev));
     pendingRequest->ByteSize = request.ByteSize();
-
-    auto msgMetaEnabled = AppData(ctx)->FeatureFlags.GetEnableTopicMessageMeta();
-    if (!msgMetaEnabled && maxMessageMetadataSize > 0) {
-        CloseSession("Message level metadata support is disabled on server size", PersQueue::ErrorCode::BAD_REQUEST, ctx);
-        return;
-    }
 
     if (maxMessageMetadataSize > MAX_METADATA_SIZE_PER_MESSAGE) {
         CloseSession(
@@ -1263,17 +1422,17 @@ void TWriteSessionActor<UseMigrationProtocol>::PrepareRequest(THolder<TEvWrite>&
     }
 }
 
-template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::SendWriteRequest(typename TWriteRequestInfo::TPtr&& request, const TActorContext& ctx)
+template <EProtocol Protocol>
+void TWriteSessionActor<Protocol>::SendWriteRequest(typename TWriteRequestInfo::TPtr&& request, const TActorContext& ctx)
 {
-    Y_ABORT_UNLESS(request->PartitionWriteRequest);
+    AFL_ENSURE(request->PartitionWriteRequest);
 
     i64 diff = 0;
     for (const auto& [w] : request->UserWriteRequests) {
         diff -= w->Request.ByteSize();
     }
 
-    Y_ABORT_UNLESS(-diff <= (i64)BytesInflight_);
+    AFL_ENSURE(-diff <= (i64)BytesInflight_);
     const auto byteSize = request->PartitionWriteRequest->Record.ByteSize();
     diff += byteSize;
     request->Span.Attribute("bytes", byteSize);
@@ -1287,8 +1446,11 @@ void TWriteSessionActor<UseMigrationProtocol>::SendWriteRequest(typename TWriteR
 
     auto [sessionId, txId] = request->GetTransactionId();
     auto event =
-        std::make_unique<NPQ::TEvPartitionWriter::TEvTxWriteRequest>(sessionId, txId,
-                                                                     std::move(request->PartitionWriteRequest));
+        std::make_unique<NPQ::TEvPartitionWriter::TEvTxWriteRequest>(
+            sessionId,
+            txId,
+            std::move(request->PartitionWriteRequest),
+            request->GetDeferredPublishOpts());
 
     ctx.Send(PartitionWriterCache, std::move(event), 0, 0, request->Span.GetTraceId());
 
@@ -1297,8 +1459,8 @@ void TWriteSessionActor<UseMigrationProtocol>::SendWriteRequest(typename TWriteR
     SentRequests.push_back(std::move(request));
 }
 
-template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::Handle(typename TEvUpdateToken::TPtr& ev, const TActorContext& ctx) {
+template <EProtocol Protocol>
+void TWriteSessionActor<Protocol>::Handle(typename TEvUpdateToken::TPtr& ev, const TActorContext& ctx) {
     UpdateTokenSpan = GenerateUpdateTokenSpan();
     if (State != ES_INITED) {
         CloseSession("got 'update_token_request' but write session is not initialized", PersQueue::ErrorCode::BAD_REQUEST, ctx);
@@ -1315,8 +1477,10 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(typename TEvUpdateToken::T
         TServerMessage serverMessage;
         serverMessage.set_status(Ydb::StatusIds::SUCCESS);
         serverMessage.mutable_update_token_response();
-        if (!Request->GetStreamCtx()->Write(std::move(serverMessage))) {
-            LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " grpc write failed");
+        if (!Request->Write(std::move(serverMessage))) {
+            YDB_LOG_INFO_CTX(ctx, "Session v1 grpc write failed",
+                {"cookie", Cookie},
+                {"sessionId", OwnerCookie});
             Die(ctx);
             return;
         }
@@ -1334,16 +1498,18 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(typename TEvUpdateToken::T
     }
 
     NextRequestInited = true;
-    if (!Request->GetStreamCtx()->Read()) {
-        LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " grpc read failed");
+    if (!Request->Read()) {
+        YDB_LOG_INFO_CTX(ctx, "Session v1 grpc read failed",
+            {"cookie", Cookie},
+            {"sessionId", OwnerCookie});
         Die(ctx);
         return;
     }
 }
 
-template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::Handle(NGRpcService::TGRpcRequestProxy::TEvRefreshTokenResponse::TPtr &ev , const TActorContext& ctx) {
-    LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "updating token");
+template <EProtocol Protocol>
+void TWriteSessionActor<Protocol>::Handle(NGRpcService::TGRpcRequestProxy::TEvRefreshTokenResponse::TPtr &ev , const TActorContext& ctx) {
+    YDB_LOG_INFO_CTX(ctx, "Updating token");
 
     if (ev->Get()->Authenticated && ev->Get()->InternalToken && !ev->Get()->InternalToken->GetSerializedToken().empty()) {
         UpdateTokenSpan.EndOk();
@@ -1358,7 +1524,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(NGRpcService::TGRpcRequest
         if (ev->Get()->Retryable) {
             TServerMessage serverMessage;
             serverMessage.set_status(Ydb::StatusIds::UNAVAILABLE);
-            Request->GetStreamCtx()->WriteAndFinish(std::move(serverMessage), grpc::Status::OK);
+            Request->WriteAndFinish(std::move(serverMessage), Ydb::StatusIds::UNAVAILABLE);
         } else {
             Request->RaiseIssues(ev->Get()->Issues);
             Request->ReplyUnauthenticated("refreshed token is invalid");
@@ -1368,8 +1534,8 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(NGRpcService::TGRpcRequest
     UpdateTokenSpan = {};
 }
 
-template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::Handle(typename TEvWrite::TPtr& ev, const TActorContext& ctx) {
+template <EProtocol Protocol>
+void TWriteSessionActor<Protocol>::Handle(typename TEvWrite::TPtr& ev, const TActorContext& ctx) {
     RequestNotChecked = true;
 
     if (State != ES_INITED) {
@@ -1380,7 +1546,60 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(typename TEvWrite::TPtr& e
 
     const auto& writeRequest = ev->Get()->Request.write_request();
 
-    if constexpr (UseMigrationProtocol) {
+    if constexpr (Protocol == EProtocol::Topic) {
+        if (writeRequest.has_deferred_publish()) {
+            if (!AppData(ctx)->FeatureFlags.GetEnableTopicDeferredPublish()) {
+                CloseSession(
+                    TString(NPQ::NDeferredPublish::DisabledMessage),
+                    PersQueue::ErrorCode::BAD_REQUEST,
+                    ctx,
+                    Ydb::StatusIds::UNSUPPORTED);
+                return;
+            }
+            if (writeRequest.has_tx()) {
+                CloseSession(
+                    "WriteRequest must not contain both tx and deferred_publish",
+                    PersQueue::ErrorCode::BAD_REQUEST,
+                    ctx);
+                return;
+            }
+
+            const auto& deferredPublish = writeRequest.deferred_publish();
+            if (deferredPublish.int_publication_id() == 0) {
+                CloseSession(
+                    "WriteRequest.deferred_publish.int_publication_id must be greater than 0",
+                    PersQueue::ErrorCode::BAD_REQUEST,
+                    ctx);
+                return;
+            }
+            if (deferredPublish.has_ext_publication_id()
+                && deferredPublish.ext_publication_id().size() > NPQ::NDeferredPublish::MaxDeferredPublishStringLength) {
+                CloseSession(
+                    "WriteRequest.deferred_publish.ext_publication_id is too long",
+                    PersQueue::ErrorCode::BAD_REQUEST,
+                    ctx);
+                return;
+            }
+
+            const ui64 intPublicationId = deferredPublish.int_publication_id();
+            if (deferredPublish.has_ext_publication_id()) {
+                const auto& extPublicationId = deferredPublish.ext_publication_id();
+                const auto knownExt = DeferredPublicationExtByInt.FindPtr(intPublicationId);
+                if (knownExt && *knownExt != extPublicationId) {
+                    YDB_LOG_WARN_CTX(ctx, "Deferred publish ext_publication_id mismatch",
+                        {"cookie", Cookie},
+                        {"sessionId", OwnerCookie},
+                        {"intPublicationId", intPublicationId},
+                        {"expectedExtPublicationId", *knownExt},
+                        {"actualExtPublicationId", extPublicationId});
+                } else if (!knownExt) {
+                    DeferredPublicationExtByInt[intPublicationId] = extPublicationId;
+                }
+            }
+        }
+    }
+
+    if constexpr (Protocol == EProtocol::PQv1) {
     if (!AllEqual(writeRequest.sequence_numbers_size(), writeRequest.created_at_ms_size(), writeRequest.sent_at_ms_size(), writeRequest.message_sizes_size())) {
         CloseSession(TStringBuilder() << "messages meta repeated fields do not have same size, 'sequence_numbers' size is " << writeRequest.sequence_numbers_size()
             << ", 'message_sizes' size is " << writeRequest.message_sizes_size() << ", 'created_at_ms' size is " << writeRequest.created_at_ms_size()
@@ -1466,8 +1685,9 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(typename TEvWrite::TPtr& e
             }
 
             const ui32 codecID = data.codec();
+            const bool isKafkaBatch = codecID == static_cast<ui32>(Ydb::Topic::CODEC_KAFKA_BATCH);
             TString error = "unspecified (id 0)";
-            if (codecID == 0 || !ValidateWriteWithCodec(InitialPQTabletConfig, codecID - 1, error)) {
+            if (codecID == 0 || (!isKafkaBatch && !ValidateWriteWithCodec(InitialPQTabletConfig, FromTopicCodec(static_cast<NYdb::NTopic::ECodec>(codecID)), error))) {
                 CloseSession(TStringBuilder() << "bad write request - codec is invalid: " << error, PersQueue::ErrorCode::BAD_REQUEST, ctx);
                 return false;
             }
@@ -1495,9 +1715,11 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(typename TEvWrite::TPtr& e
     }
 
     if (BytesInflight_ < AppData(ctx)->PQConfig.GetMaxWriteSessionBytesInflight()) { //allow only one big request to be readed but not sended
-        Y_ABORT_UNLESS(NextRequestInited);
-        if (!Request->GetStreamCtx()->Read()) {
-            LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " grpc read failed");
+        AFL_ENSURE(NextRequestInited);
+        if (!Request->Read()) {
+            YDB_LOG_INFO_CTX(ctx, "Session v1 grpc read failed",
+                {"cookie", Cookie},
+                {"sessionId", OwnerCookie});
             Die(ctx);
             return;
 
@@ -1509,33 +1731,38 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(typename TEvWrite::TPtr& e
     PrepareRequest(THolder<TEvWrite>(ev->Release()), ctx);
 }
 
-template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::HandlePoison(TEvPQProxy::TEvDieCommand::TPtr& ev, const TActorContext& ctx) {
+template <EProtocol Protocol>
+void TWriteSessionActor<Protocol>::HandlePoison(TEvPQProxy::TEvDieCommand::TPtr& ev, const TActorContext& ctx) {
     CloseSession(ev->Get()->Reason, ev->Get()->ErrorCode, ctx);
 }
 
-template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::LogSession(const TActorContext& ctx) {
+template <EProtocol Protocol>
+void TWriteSessionActor<Protocol>::LogSession(const TActorContext& ctx) {
     TString topic_path = [this]() {
-        if constexpr (UseMigrationProtocol) {
+        if constexpr (Protocol == EProtocol::PQv1) {
             return InitRequest.topic();
         } else {
             return InitRequest.path();
         }
     }();
-    LOG_INFO_S(
-            ctx, NKikimrServices::PQ_WRITE_PROXY,
-            "write session:  cookie=" << Cookie << " sessionId=" << OwnerCookie << " userAgent=\"" << UserAgent
-                                      << "\" ip=" << PeerName << " proto=" << ProtoName << " "
-                                      << " topic=" << topic_path
-                                      << " durationSec=" << (ctx.Now() - StartTime).Seconds()
-    );
+    if (DiscoveryConverter && DiscoveryConverter->IsValid()) {
+        topic_path = DiscoveryConverter->GetPrintableString();
+    }
+    YDB_LOG_INFO_CTX(ctx, "Write session: userAgent=",
+        {"cookie", Cookie},
+        {"sessionId", OwnerCookie},
+        {"userAgent", UserAgent},
+        {"ip", PeerName},
+        {"proto", ProtoName},
+        {"user", (Token ? Token->GetUserSID() : "-")},
+        {"topic", topic_path},
+        {"durationSec", (ctx.Now() - StartTime).Seconds()});
 
     LogSessionDeadline = ctx.Now() + TDuration::Hours(1) + TDuration::Seconds(rand() % 60);
 }
 
-template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx) {
+template <EProtocol Protocol>
+void TWriteSessionActor<Protocol>::Handle(TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx) {
     const auto tag = static_cast<EWakeupTag>(ev->Get()->Tag);
     OnWakeup(tag);
     switch (tag) {
@@ -1564,7 +1791,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvents::TEvWakeup::TPtr& 
                 PendingQuotaRequest->QuotaSpan.EndError("Timeout");
                 PendingQuotaRequest->StartQuotaSpan(); // Start new quota span for second request
                 PendingQuotaRequest->SetSpanParamRequestedQuota();
-                Y_ABORT_UNLESS(MaybeRequestQuota(PendingQuotaRequest->RequiredQuota, EWakeupTag::RlAllowed, ctx));
+                AFL_ENSURE(MaybeRequestQuota(PendingQuotaRequest->RequiredQuota, EWakeupTag::RlAllowed, ctx));
             } else {
                 return CloseSession("Throughput limit exceeded", PersQueue::ErrorCode::OVERLOAD, ctx);
             }
@@ -1572,10 +1799,11 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvents::TEvWakeup::TPtr& 
     }
 }
 
-template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::RecheckACL(const TActorContext& ctx) {
+template <EProtocol Protocol>
+void TWriteSessionActor<Protocol>::RecheckACL(const TActorContext& ctx) {
     if (State != ES_INITED) {
-        LOG_ERROR_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "WriteSessionActor state is wrong. Actual state '" << (int)State << "'");
+        YDB_LOG_ERROR_CTX(ctx, "WriteSessionActor state is wrong. Actual state",
+            {"state", (int)State});
         return CloseSession("erroneous internal state", PersQueue::ErrorCode::ERROR, ctx);
     }
 
@@ -1596,8 +1824,8 @@ void TWriteSessionActor<UseMigrationProtocol>::RecheckACL(const TActorContext& c
     }
 }
 
-template<bool UseMigrationProtocol>
-NWilson::TSpan TWriteSessionActor<UseMigrationProtocol>::GenerateSpan(NJaegerTracing::ERequestType subrequestType, const TStringBuf name) const {
+template <EProtocol Protocol>
+NWilson::TSpan TWriteSessionActor<Protocol>::GenerateSpan(NJaegerTracing::ERequestType subrequestType, const TStringBuf name) const {
     if (Span) {
         return Span.CreateChild(TWilsonTopic::TopicBasic, TString(name));
     }
@@ -1609,14 +1837,14 @@ NWilson::TSpan TWriteSessionActor<UseMigrationProtocol>::GenerateSpan(NJaegerTra
     }, {});
 
     if (traceId) {
-        return NWilson::TSpan(TWilsonTopic::TopicTopLevel, std::move(traceId), !UseMigrationProtocol ? TString(name)  : TStringBuilder() << name << "[migration]");
+        return NWilson::TSpan(TWilsonTopic::TopicTopLevel, std::move(traceId), Protocol == EProtocol::Topic ? TString(name)  : TStringBuilder() << name << "[migration]");
     }
 
     return {};
 }
 
-template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::MaybeRequestQuota(EWakeupTag tag, const TActorContext& ctx) {
+template <EProtocol Protocol>
+void TWriteSessionActor<Protocol>::MaybeRequestQuota(EWakeupTag tag, const TActorContext& ctx) {
     if (!PendingQuotaRequest && !PendingRequests.empty()) {
         auto& pending = PendingRequests.front();
         if (MaybeRequestQuota(pending->RequiredQuota, tag, ctx, pending->QuotaSpan.GetTraceId())) {
@@ -1628,8 +1856,8 @@ void TWriteSessionActor<UseMigrationProtocol>::MaybeRequestQuota(EWakeupTag tag,
 }
 
 //explicit instantation
-template class TWriteSessionActor<true>;
-template class TWriteSessionActor<false>;
+template class TWriteSessionActor<EProtocol::PQv1>;
+template class TWriteSessionActor<EProtocol::Topic>;
 
 }
 }

@@ -4,6 +4,9 @@ Contains interface (MultiDomainBasicAuth) and associated glue code for
 providing credentials in the context of network requests.
 """
 
+from __future__ import annotations
+
+import json
 import logging
 import os
 import shutil
@@ -12,13 +15,12 @@ import sysconfig
 import typing
 import urllib.parse
 from abc import ABC, abstractmethod
-from functools import lru_cache
-from os.path import commonprefix
+from functools import cache
+from os.path import commonpath
 from pathlib import Path
-from typing import Any, Dict, List, NamedTuple, Optional, Tuple
+from typing import Any, NamedTuple
 
 from pip._vendor.requests.auth import AuthBase, HTTPBasicAuth
-from pip._vendor.requests.models import Request, Response
 from pip._vendor.requests.utils import get_netrc_auth
 
 from pip._internal.utils.logging import getLogger
@@ -30,6 +32,10 @@ from pip._internal.utils.misc import (
     split_auth_netloc_from_url,
 )
 from pip._internal.vcs.versioncontrol import AuthInfo
+
+if typing.TYPE_CHECKING:
+    from pip._vendor.requests import PreparedRequest
+    from pip._vendor.requests.models import Response
 
 logger = getLogger(__name__)
 
@@ -48,9 +54,7 @@ class KeyRingBaseProvider(ABC):
     has_keyring: bool
 
     @abstractmethod
-    def get_auth_info(
-        self, url: str, username: Optional[str]
-    ) -> Optional[AuthInfo]: ...
+    def get_auth_info(self, url: str, username: str | None) -> AuthInfo | None: ...
 
     @abstractmethod
     def save_auth_info(self, url: str, username: str, password: str) -> None: ...
@@ -61,7 +65,7 @@ class KeyRingNullProvider(KeyRingBaseProvider):
 
     has_keyring = False
 
-    def get_auth_info(self, url: str, username: Optional[str]) -> Optional[AuthInfo]:
+    def get_auth_info(self, url: str, username: str | None) -> AuthInfo | None:
         return None
 
     def save_auth_info(self, url: str, username: str, password: str) -> None:
@@ -78,7 +82,7 @@ class KeyRingPythonProvider(KeyRingBaseProvider):
 
         self.keyring = keyring
 
-    def get_auth_info(self, url: str, username: Optional[str]) -> Optional[AuthInfo]:
+    def get_auth_info(self, url: str, username: str | None) -> AuthInfo | None:
         # Support keyring's get_credential interface which supports getting
         # credentials without a username. This is only available for
         # keyring>=15.2.0.
@@ -114,35 +118,49 @@ class KeyRingCliProvider(KeyRingBaseProvider):
     def __init__(self, cmd: str) -> None:
         self.keyring = cmd
 
-    def get_auth_info(self, url: str, username: Optional[str]) -> Optional[AuthInfo]:
-        # This is the default implementation of keyring.get_credential
-        # https://github.com/jaraco/keyring/blob/97689324abcf01bd1793d49063e7ca01e03d7d07/keyring/backend.py#L134-L139
-        if username is not None:
-            password = self._get_password(url, username)
-            if password is not None:
-                return username, password
-        return None
+    def get_auth_info(self, url: str, username: str | None) -> AuthInfo | None:
+        return self._get_creds(url, username)
 
     def save_auth_info(self, url: str, username: str, password: str) -> None:
         return self._set_password(url, username, password)
 
-    def _get_password(self, service_name: str, username: str) -> Optional[str]:
-        """Mirror the implementation of keyring.get_password using cli"""
+    def _get_creds(self, service_name: str, username: str | None) -> AuthInfo | None:
+        """Mirror the implementation of keyring.get_credential using cli"""
         if self.keyring is None:
             return None
 
-        cmd = [self.keyring, "get", service_name, username]
+        cmd = [self.keyring, "--mode=creds", "--output=json", "get", service_name]
+        if username is not None:
+            cmd.append(username)
+
         env = os.environ.copy()
         env["PYTHONIOENCODING"] = "utf-8"
-        res = subprocess.run(
+        res = subprocess.run(  # noqa: UP022
             cmd,
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             env=env,
         )
+
+        # Detect if the user is running an outdated version of keyring without support
+        # for querying credentials without username
+        errs = res.stderr.decode("utf-8")
+        if (
+            res.returncode == 2
+            and "unrecognized arguments" in errs
+            and "--mode=creds" in errs
+        ):
+            raise RuntimeError(
+                "Keyring util is outdated; must be at least version 25.2.1, "
+                "please upgrade it"
+            )
+
         if res.returncode:
             return None
-        return res.stdout.decode("utf-8").strip(os.linesep)
+
+        data = json.loads(res.stdout.decode("utf-8"))
+        return (data["username"], data["password"])
 
     def _set_password(self, service_name: str, username: str, password: str) -> None:
         """Mirror the implementation of keyring.set_password using cli"""
@@ -159,7 +177,7 @@ class KeyRingCliProvider(KeyRingBaseProvider):
         return None
 
 
-@lru_cache(maxsize=None)
+@cache
 def get_keyring_provider(provider: str) -> KeyRingBaseProvider:
     logger.verbose("Keyring provider requested: %s", provider)
 
@@ -225,19 +243,19 @@ class MultiDomainBasicAuth(AuthBase):
     def __init__(
         self,
         prompting: bool = True,
-        index_urls: Optional[List[str]] = None,
+        index_urls: list[str] | None = None,
         keyring_provider: str = "auto",
     ) -> None:
         self.prompting = prompting
         self.index_urls = index_urls
-        self.keyring_provider = keyring_provider  # type: ignore[assignment]
-        self.passwords: Dict[str, AuthInfo] = {}
+        self.keyring_provider = keyring_provider
+        self.passwords: dict[str, AuthInfo] = {}
         # When the user is prompted to enter credentials and keyring is
         # available, we will offer to save them. If the user accepts,
         # this value is set to the credentials they entered. After the
         # request authenticates, the caller should call
         # ``save_credentials`` to save these.
-        self._credentials_to_save: Optional[Credentials] = None
+        self._credentials_to_save: Credentials | None = None
 
     @property
     def keyring_provider(self) -> KeyRingBaseProvider:
@@ -260,9 +278,9 @@ class MultiDomainBasicAuth(AuthBase):
 
     def _get_keyring_auth(
         self,
-        url: Optional[str],
-        username: Optional[str],
-    ) -> Optional[AuthInfo]:
+        url: str | None,
+        username: str | None,
+    ) -> AuthInfo | None:
         """Return the tuple auth for a given url from keyring."""
         # Do nothing if no url was provided
         if not url:
@@ -284,7 +302,7 @@ class MultiDomainBasicAuth(AuthBase):
             get_keyring_provider.cache_clear()
             return None
 
-    def _get_index_url(self, url: str) -> Optional[str]:
+    def _get_index_url(self, url: str) -> str | None:
         """Return the original index URL matching the requested URL.
 
         Cached or dynamically generated credentials may work against
@@ -322,12 +340,14 @@ class MultiDomainBasicAuth(AuthBase):
 
         candidates.sort(
             reverse=True,
-            key=lambda candidate: commonprefix(
-                [
-                    parsed_url.path,
-                    candidate.path,
-                ]
-            ).rfind("/"),
+            key=lambda candidate: len(
+                commonpath(
+                    [
+                        parsed_url.path,
+                        candidate.path,
+                    ]
+                )
+            ),
         )
 
         return urllib.parse.urlunsplit(candidates[0])
@@ -391,7 +411,7 @@ class MultiDomainBasicAuth(AuthBase):
 
     def _get_url_and_credentials(
         self, original_url: str
-    ) -> Tuple[str, Optional[str], Optional[str]]:
+    ) -> tuple[str, str | None, str | None]:
         """Return the credentials to use for the provided URL.
 
         If allowed, netrc and keyring may be used to obtain the
@@ -437,8 +457,9 @@ class MultiDomainBasicAuth(AuthBase):
 
         return url, username, password
 
-    def __call__(self, req: Request) -> Request:
+    def __call__(self, req: PreparedRequest) -> PreparedRequest:
         # Get credentials for this request
+        assert req.url is not None
         url, username, password = self._get_url_and_credentials(req.url)
 
         # Set the url of the request to the url without any credentials
@@ -454,9 +475,7 @@ class MultiDomainBasicAuth(AuthBase):
         return req
 
     # Factored out to allow for easy patching in tests
-    def _prompt_for_password(
-        self, netloc: str
-    ) -> Tuple[Optional[str], Optional[str], bool]:
+    def _prompt_for_password(self, netloc: str) -> tuple[str | None, str | None, bool]:
         username = ask_input(f"User for {netloc}: ") if self.prompting else None
         if not username:
             return None, None, False
@@ -483,15 +502,17 @@ class MultiDomainBasicAuth(AuthBase):
         if resp.status_code != 401:
             return resp
 
-        username, password = None, None
-
-        # Query the keyring for credentials:
-        if self.use_keyring:
-            username, password = self._get_new_credentials(
-                resp.url,
-                allow_netrc=False,
-                allow_keyring=True,
-            )
+        # Look for credentials for the (possibly redirected) URL. Credentials
+        # embedded in the URL -- e.g. carried in the ``Location`` of a
+        # cross-origin redirect, whose ``Authorization`` header requests strips
+        # -- are always honoured, since recovering them needs no user
+        # interaction. Keyring is only consulted when it is enabled, because it
+        # may require interaction and is therefore disabled under --no-input.
+        username, password = self._get_new_credentials(
+            resp.url,
+            allow_netrc=False,
+            allow_keyring=self.use_keyring,
+        )
 
         # We are not able to prompt the user so simply return the response
         if not self.prompting and not username and not password:

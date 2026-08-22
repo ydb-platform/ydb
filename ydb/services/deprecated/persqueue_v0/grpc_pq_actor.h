@@ -20,7 +20,7 @@
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/writer/partition_chooser.h>
 #include <ydb/core/persqueue/writer/writer.h>
-#include <ydb/core/persqueue/percentile_counter.h>
+#include <ydb/core/persqueue/public/counters/percentile_counter.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
@@ -804,7 +804,7 @@ private:
     THashMap<std::pair<TString, ui32>, TPartitionActorInfo> Partitions; //topic[ClientSideName!]:partition -> info
 
     THashMap<TString, NPersQueue::TTopicConverterPtr> FullPathToConverter; // PrimaryFullPath -> Converter, for balancer replies matching
-    THashMap<TString, TTopicHolder> Topics; // PrimaryName ->topic info
+    THashMap<TString, TTopicHolder::TPtr> Topics; // PrimaryName ->topic info
 
     TVector<ui32> Groups;
     bool ReadOnlyLocal;

@@ -5,6 +5,9 @@ TEST_SRCS(
 )
 
 SIZE(MEDIUM)
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(cpu:2)
+ENDIF()
 
 NO_CHECK_IMPORTS()
 
@@ -18,7 +21,7 @@ DATA(
     arcadia/ydb/library/yql/tests/sql # python files
 )
 
-INCLUDE(${ARCADIA_ROOT}/ydb/library/yql/tools/solomon_emulator_grpc/recipe.inc)
+INCLUDE(${ARCADIA_ROOT}/ydb/library/yql/tools/solomon_emulator/recipe/recipe.inc)
 
 PEERDIR(
     ydb/tests/fq/tools
@@ -26,3 +29,7 @@ PEERDIR(
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+    scalar_write
+)

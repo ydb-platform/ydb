@@ -3,6 +3,7 @@
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/gateway/kqp_metadata_loader.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/resource_pools/resource_pool_settings.h>
 
 #include <util/generic/maybe.h>
 
@@ -172,6 +173,7 @@ void TestDropObjectCommon(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGatew
 void TestCreateExternalDataSource(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGateway> gateway, const TString& path) {
     TCreateObjectSettings settings("EXTERNAL_DATA_SOURCE", path, {
         {"source_type", "ObjectStorage"},
+        {"location", "my-bucket"},
         {"auth_method", "NONE"},
         {"installation", "cloud"}
     });
@@ -181,7 +183,7 @@ void TestCreateExternalDataSource(TTestActorRuntime& runtime, TIntrusivePtr<IKik
     UNIT_ASSERT(externalDataSource.ExternalDataSourceInfo);
     UNIT_ASSERT_VALUES_EQUAL(externalDataSource.ExternalDataSourceInfo->Description.GetSourceType(), "ObjectStorage");
     UNIT_ASSERT_VALUES_EQUAL(externalDataSource.ExternalDataSourceInfo->Description.GetInstallation(), "cloud");
-    UNIT_ASSERT_VALUES_EQUAL(externalDataSource.ExternalDataSourceInfo->Description.GetLocation(), "");
+    UNIT_ASSERT_VALUES_EQUAL(externalDataSource.ExternalDataSourceInfo->Description.GetLocation(), "my-bucket");
     UNIT_ASSERT_VALUES_EQUAL(externalDataSource.ExternalDataSourceInfo->Description.GetName(), SplitPath(path).back());
     UNIT_ASSERT(externalDataSource.ExternalDataSourceInfo->Description.GetAuth().HasNone());
 }
@@ -243,7 +245,7 @@ void TestCreateResourcePool(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGat
 void TestAlterResourcePool(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGateway> gateway, const TString& poolId) {
     TCreateObjectSettings settings("RESOURCE_POOL", poolId, {
         {"concurrent_query_limit", "20"},
-        {"query_memory_limit_percent_per_node", "80.5"}
+        {"total_memory_limit_percent_per_node", "80.5"}
     }, {
         "queue_size"
     });
@@ -255,7 +257,7 @@ void TestAlterResourcePool(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGate
     UNIT_ASSERT_VALUES_EQUAL(properties.size(), 3);
     UNIT_ASSERT_VALUES_EQUAL(properties.at("concurrent_query_limit"), "20");
     UNIT_ASSERT_VALUES_EQUAL(properties.at("queue_size"), "-1");
-    UNIT_ASSERT_VALUES_EQUAL(properties.at("query_memory_limit_percent_per_node"), "80.5");
+    UNIT_ASSERT_VALUES_EQUAL(properties.at("total_memory_limit_percent_per_node"), "80.5");
 }
 
 void TestDropResourcePool(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGateway> gateway, const TString& poolId) {
@@ -263,13 +265,59 @@ void TestDropResourcePool(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGatew
     TestDropObjectCommon(runtime, gateway, settings, TStringBuilder() << "/Root/.metadata/workload_manager/pools/" << poolId);
 }
 
+void TestCreateStreamingQuery(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGateway> gateway, const TString& queryName) {
+    TCreateObjectSettings settings("STREAMING_QUERY", queryName, {
+        {"run", "false"},
+        {"__query_text", "SELECT 42"},
+    });
+    const auto& streamingQuery = TestCreateObjectCommon(runtime, gateway, settings, queryName);
+
+    UNIT_ASSERT_VALUES_EQUAL(streamingQuery.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindStreamingQuery);
+    UNIT_ASSERT(streamingQuery.StreamingQueryInfo);
+    const auto& properties = streamingQuery.StreamingQueryInfo->Description.GetProperties().GetProperties();
+    UNIT_ASSERT_GE(properties.size(), 3);
+    UNIT_ASSERT_VALUES_EQUAL(properties.at("run"), "false");
+    UNIT_ASSERT_VALUES_EQUAL(properties.at("__query_text"), "SELECT 42");
+    UNIT_ASSERT_VALUES_EQUAL(properties.at("resource_pool"), "");
+}
+
+void TestAlterStreamingQuery(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGateway> gateway, const TString& queryName) {
+    TCreateObjectSettings settings("STREAMING_QUERY", queryName, {
+        {"force", "true"},
+        {"__query_text", "SELECT 84"},
+        {"resource_pool", "my_pool"},
+    });
+    const auto& streamingQuery = TestAlterObjectCommon(runtime, gateway, settings, queryName);
+
+    UNIT_ASSERT_VALUES_EQUAL(streamingQuery.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindStreamingQuery);
+    UNIT_ASSERT(streamingQuery.StreamingQueryInfo);
+    const auto& properties = streamingQuery.StreamingQueryInfo->Description.GetProperties().GetProperties();
+    UNIT_ASSERT_GE(properties.size(), 3);
+    UNIT_ASSERT_VALUES_EQUAL(properties.at("run"), "false");
+    UNIT_ASSERT_VALUES_EQUAL(properties.at("__query_text"), "SELECT 84");
+    UNIT_ASSERT_VALUES_EQUAL(properties.at("resource_pool"), "my_pool");
+}
+
+void TestDropStreamingQuery(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGateway> gateway, const TString& queryName) {
+    TDropObjectSettings settings("STREAMING_QUERY", queryName, {});
+    TestDropObjectCommon(runtime, gateway, settings, queryName);
+}
+
 TKikimrRunner GetKikimrRunnerWithResourcePools() {
     NKikimrConfig::TAppConfig config;
     config.MutableFeatureFlags()->SetEnableResourcePools(true);
 
-    return TKikimrRunner(NKqp::TKikimrSettings()
-        .SetAppConfig(config)
+    return TKikimrRunner(NKqp::TKikimrSettings(config)
         .SetEnableResourcePools(true)
+        .SetWithSampleTables(false));
+}
+
+TKikimrRunner GetKikimrRunnerWithStreamingQuerys() {
+    NKikimrConfig::TAppConfig config;
+    config.MutableFeatureFlags()->SetEnableStreamingQueries(true);
+
+    return TKikimrRunner(NKqp::TKikimrSettings(config)
+        .SetEnableStreamingQueries(true)
         .SetWithSampleTables(false));
 }
 
@@ -298,7 +346,7 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
     Y_UNIT_TEST(TestCreateExternalTable) {
         NKikimrConfig::TAppConfig appCfg;
         appCfg.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
-        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false).SetAppConfig(appCfg));
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appCfg).SetWithSampleTables(false));
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
         TestCreateExternalDataSource(*kikimr.GetTestServer().GetRuntime(), GetIcGateway(kikimr.GetTestServer()), "/Root/f1/f2/external_data_source");
         TestCreateExternalTable(*kikimr.GetTestServer().GetRuntime(), GetIcGateway(kikimr.GetTestServer()), "/Root/f1/f2/external_table");
@@ -307,7 +355,7 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
     Y_UNIT_TEST(TestCreateSameExternalTable) {
         NKikimrConfig::TAppConfig appCfg;
         appCfg.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
-        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false).SetAppConfig(appCfg));
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appCfg).SetWithSampleTables(false));
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
         TestCreateExternalDataSource(*kikimr.GetTestServer().GetRuntime(), GetIcGateway(kikimr.GetTestServer()), "/Root/f1/f2/external_data_source");
         TestCreateExternalTable(*kikimr.GetTestServer().GetRuntime(), GetIcGateway(kikimr.GetTestServer()), "/Root/f1/f2/external_table");
@@ -317,7 +365,7 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
     Y_UNIT_TEST(TestDropExternalTable) {
         NKikimrConfig::TAppConfig appCfg;
         appCfg.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
-        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false).SetAppConfig(appCfg));
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appCfg).SetWithSampleTables(false));
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
         TestCreateExternalDataSource(*kikimr.GetTestServer().GetRuntime(), GetIcGateway(kikimr.GetTestServer()), "/Root/f1/f2/external_data_source");
         TestCreateExternalTable(*kikimr.GetTestServer().GetRuntime(), GetIcGateway(kikimr.GetTestServer()), "/Root/f1/f2/external_table");
@@ -327,7 +375,7 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
     Y_UNIT_TEST(TestDropExternalDataSource) {
         NKikimrConfig::TAppConfig appCfg;
         appCfg.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
-        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false).SetAppConfig(appCfg));
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appCfg).SetWithSampleTables(false));
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
         TestCreateExternalDataSource(*kikimr.GetTestServer().GetRuntime(), GetIcGateway(kikimr.GetTestServer()), "/Root/f1/f2/external_data_source");
         TestDropExternalDataSource(*kikimr.GetTestServer().GetRuntime(), GetIcGateway(kikimr.GetTestServer()), "/Root/f1/f2/external_data_source");
@@ -336,7 +384,7 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
     Y_UNIT_TEST(TestLoadExternalTable) {
         NKikimrConfig::TAppConfig appCfg;
         appCfg.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
-        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetAppConfig(appCfg));
+        TKikimrRunner kikimr{ NKqp::TKikimrSettings(appCfg) };
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -357,7 +405,8 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
             );)";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-        auto responseFuture = GetIcGateway(kikimr.GetTestServer())->LoadTableMetadata(TestCluster, externalTableName, IKikimrGateway::TLoadTableMetadataSettings());
+        auto gateway = GetIcGateway(kikimr.GetTestServer());
+        auto responseFuture = gateway->LoadTableMetadata(TestCluster, externalTableName, IKikimrGateway::TLoadTableMetadataSettings());
         responseFuture.Wait();
         auto response = responseFuture.GetValue();
         response.Issues().PrintTo(Cerr);
@@ -375,17 +424,36 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
         UNIT_ASSERT_C(createSecretQueryResult.GetStatus() == NYdb::EStatus::SUCCESS, createSecretQueryResult.GetIssues().ToString());
     }
 
-    Y_UNIT_TEST(TestLoadServiceAccountSecretValueFromExternalDataSourceMetadata) {
+    void CreateSchemaSecret(const TString& secretName, const TString& secretValue, TSession& session) {
+        auto createSecretQuery = "CREATE SECRET `" + secretName + "` WITH (value = \"" + secretValue + "\");";
+        auto createSecretQueryResult = session.ExecuteSchemeQuery(createSecretQuery).GetValueSync();
+        UNIT_ASSERT_C(createSecretQueryResult.GetStatus() == NYdb::EStatus::SUCCESS, createSecretQueryResult.GetIssues().ToString());
+    }
+
+    template<bool UseSchemaSecrets>
+    void CreateSecret(TString& secretName, const TString& secretValue, TSession& session) {
+        if constexpr (UseSchemaSecrets) {
+            secretName = "/Root/" + secretName;
+            CreateSchemaSecret(secretName, secretValue, session);
+        } else {
+            CreateSecretObject(secretName, secretValue, session);
+        }
+    }
+
+    Y_UNIT_TEST_QUAD(TestLoadServiceAccountSecretValueFromExternalDataSourceMetadata, UseSchemaSecrets, UseAuthToken) {
         NKikimrConfig::TAppConfig appCfg;
         appCfg.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
-        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetAppConfig(appCfg));
+        TKikimrRunner kikimr{ NKqp::TKikimrSettings(appCfg) };
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
-        auto db = kikimr.GetTableClient();
+        if (UseSchemaSecrets) {
+            kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);
+        }
+        auto db = UseAuthToken ? kikimr.GetTableClient(NYdb::NTable::TClientSettings().AuthToken("root@builtin")) : kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         TString secretId = "mySaSecretId";
         TString secretValue = "mySaSecretValue";
-        CreateSecretObject(secretId, secretValue, session);
+        CreateSecret<UseSchemaSecrets>(secretId, secretValue, session);
 
         TString externalDataSourceName = "/Root/ExternalDataSource";
         TString externalTableName = "/Root/ExternalTable";
@@ -394,7 +462,7 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
                 SOURCE_TYPE="ObjectStorage",
                 LOCATION="my-bucket",
                 AUTH_METHOD="SERVICE_ACCOUNT",
-                SERVICE_ACCOUNT_ID="",
+                SERVICE_ACCOUNT_ID="mySaId",
                 SERVICE_ACCOUNT_SECRET_NAME=")" << secretId << R"("
             );
             CREATE EXTERNAL TABLE `)" << externalTableName << R"(` (
@@ -407,7 +475,11 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
 
-        auto responseFuture = GetIcGateway(kikimr.GetTestServer())->LoadTableMetadata(TestCluster, externalTableName, IKikimrGateway::TLoadTableMetadataSettings());
+        auto gateway = GetIcGateway(kikimr.GetTestServer());
+        if (UseAuthToken) {
+            gateway->SetToken(TestCluster, new NACLib::TUserToken("root@builtin", {}));
+        }
+        auto responseFuture = gateway->LoadTableMetadata(TestCluster, externalTableName, IKikimrGateway::TLoadTableMetadataSettings());
         responseFuture.Wait();
 
         auto response = responseFuture.GetValue();
@@ -415,17 +487,20 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
         UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.ServiceAccountIdSignature, secretValue);
     }
 
-    Y_UNIT_TEST(TestLoadBasicSecretValueFromExternalDataSourceMetadata) {
+    Y_UNIT_TEST_TWIN(TestLoadBasicSecretValueFromExternalDataSourceMetadata, UseSchemaSecrets) {
         NKikimrConfig::TAppConfig appCfg;
         appCfg.MutableQueryServiceConfig()->AddAvailableExternalDataSources("PostgreSQL");
-        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetAppConfig(appCfg));
+        TKikimrRunner kikimr{ NKqp::TKikimrSettings(appCfg) };
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
+        if (UseSchemaSecrets) {
+            kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);
+        }
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         TString secretId = "myPasswordSecretId";
         TString secretValue = "pswd";
-        CreateSecretObject(secretId, secretValue, session);
+        CreateSecret<UseSchemaSecrets>(secretId, secretValue, session);
 
         TString externalDataSourceName = "/Root/ExternalDataSource";
         auto query = TStringBuilder() << R"(
@@ -440,7 +515,8 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
 
-        auto responseFuture = GetIcGateway(kikimr.GetTestServer())->LoadTableMetadata(TestCluster, externalDataSourceName, IKikimrGateway::TLoadTableMetadataSettings());
+        auto gateway = GetIcGateway(kikimr.GetTestServer());
+        auto responseFuture = gateway->LoadTableMetadata(TestCluster, externalDataSourceName, IKikimrGateway::TLoadTableMetadataSettings());
         responseFuture.Wait();
 
         auto response = responseFuture.GetValue();
@@ -448,21 +524,24 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
         UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.Password, secretValue);
     }
 
-    Y_UNIT_TEST(TestLoadMdbBasicSecretValueFromExternalDataSourceMetadata) {
+    Y_UNIT_TEST_TWIN(TestLoadMdbBasicSecretValueFromExternalDataSourceMetadata, UseSchemaSecrets) {
         NKikimrConfig::TAppConfig appCfg;
         appCfg.MutableQueryServiceConfig()->AddAvailableExternalDataSources("PostgreSQL");
-        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetAppConfig(appCfg));
+        TKikimrRunner kikimr{ NKqp::TKikimrSettings(appCfg) };
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
+        if (UseSchemaSecrets) {
+            kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);
+        }
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         TString secretPasswordId = "myPasswordSecretId";
         TString secretPasswordValue = "pswd";
-        CreateSecretObject(secretPasswordId, secretPasswordValue, session);
+        CreateSecret<UseSchemaSecrets>(secretPasswordId, secretPasswordValue, session);
 
         TString secretSaId = "mySa";
         TString secretSaValue = "sign(mySa)";
-        CreateSecretObject(secretSaId, secretSaValue, session);
+        CreateSecret<UseSchemaSecrets>(secretSaId, secretSaValue, session);
 
         TString externalDataSourceName = "/Root/ExternalDataSource";
         auto query = TStringBuilder() << R"(
@@ -478,8 +557,8 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
             );)";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-
-        auto responseFuture = GetIcGateway(kikimr.GetTestServer())->LoadTableMetadata(TestCluster, externalDataSourceName, IKikimrGateway::TLoadTableMetadataSettings());
+        auto gateway = GetIcGateway(kikimr.GetTestServer());
+        auto responseFuture = gateway->LoadTableMetadata(TestCluster, externalDataSourceName, IKikimrGateway::TLoadTableMetadataSettings());
         responseFuture.Wait();
 
         auto response = responseFuture.GetValue();
@@ -488,21 +567,24 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
         UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.ServiceAccountIdSignature, secretSaValue);
     }
 
-     Y_UNIT_TEST(TestLoadAwsSecretValueFromExternalDataSourceMetadata) {
+     Y_UNIT_TEST_TWIN(TestLoadAwsSecretValueFromExternalDataSourceMetadata, UseSchemaSecrets) {
         NKikimrConfig::TAppConfig appCfg;
         appCfg.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
-        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetAppConfig(appCfg));
+        TKikimrRunner kikimr{ NKqp::TKikimrSettings(appCfg) };
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
+        if (UseSchemaSecrets) {
+            kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);
+        }
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         TString awsAccessKeyIdSecretId = "awsAccessKeyIdSecretId";
         TString awsAccessKeyIdSecretValue = "key";
-        CreateSecretObject(awsAccessKeyIdSecretId, awsAccessKeyIdSecretValue, session);
+        CreateSecret<UseSchemaSecrets>(awsAccessKeyIdSecretId, awsAccessKeyIdSecretValue, session);
 
         TString awsSecretAccessKeySecretId = "awsSecretAccessKeySecretId";
         TString awsSecretAccessKeySecretValue = "value";
-        CreateSecretObject(awsSecretAccessKeySecretId, awsSecretAccessKeySecretValue, session);
+        CreateSecret<UseSchemaSecrets>(awsSecretAccessKeySecretId, awsSecretAccessKeySecretValue, session);
 
         TString externalDataSourceName = "/Root/ExternalDataSource";
         auto query = TStringBuilder() << R"(
@@ -517,7 +599,8 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
 
-        auto responseFuture = GetIcGateway(kikimr.GetTestServer())->LoadTableMetadata(TestCluster, externalDataSourceName, IKikimrGateway::TLoadTableMetadataSettings());
+        auto gateway = GetIcGateway(kikimr.GetTestServer());
+        auto responseFuture = gateway->LoadTableMetadata(TestCluster, externalDataSourceName, IKikimrGateway::TLoadTableMetadataSettings());
         responseFuture.Wait();
 
         auto response = responseFuture.GetValue();
@@ -527,21 +610,24 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
         UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.DataSourceAuth.GetAws().GetAwsRegion(), "ru-central-1");
     }
 
-    Y_UNIT_TEST(TestLoadDataSourceProperties) {
+    Y_UNIT_TEST_TWIN(TestLoadDataSourceProperties, UseSchemaSecrets) {
         NKikimrConfig::TAppConfig appCfg;
         appCfg.MutableQueryServiceConfig()->AddAvailableExternalDataSources("PostgreSQL");
-        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetAppConfig(appCfg));
+        TKikimrRunner kikimr{ NKqp::TKikimrSettings(appCfg) };
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
+        if (UseSchemaSecrets) {
+            kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);
+        }
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         TString secretPasswordId = "myPasswordSecretId";
         TString secretPasswordValue = "pswd";
-        CreateSecretObject(secretPasswordId, secretPasswordValue, session);
+        CreateSecret<UseSchemaSecrets>(secretPasswordId, secretPasswordValue, session);
 
         TString secretSaId = "mySa";
         TString secretSaValue = "sign(mySa)";
-        CreateSecretObject(secretSaId, secretSaValue, session);
+        CreateSecret<UseSchemaSecrets>(secretSaId, secretSaValue, session);
 
         TString externalDataSourceName = "/Root/ExternalDataSource";
         auto query = TStringBuilder() << R"(
@@ -562,7 +648,8 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
 
-        auto responseFuture = GetIcGateway(kikimr.GetTestServer())->LoadTableMetadata(TestCluster, externalDataSourceName, IKikimrGateway::TLoadTableMetadataSettings());
+        auto gateway = GetIcGateway(kikimr.GetTestServer());
+        auto responseFuture = gateway->LoadTableMetadata(TestCluster, externalDataSourceName, IKikimrGateway::TLoadTableMetadataSettings());
         responseFuture.Wait();
 
         auto response = responseFuture.GetValue();
@@ -577,17 +664,20 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
         UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.Properties.GetProperties().at("schema"), "public");
     }
 
-    Y_UNIT_TEST(TestLoadTokenSecretValueFromExternalDataSourceMetadata) {
+    Y_UNIT_TEST_TWIN(TestLoadTokenSecretValueFromExternalDataSourceMetadata, UseSchemaSecrets) {
         NKikimrConfig::TAppConfig appCfg;
         appCfg.MutableQueryServiceConfig()->AddAvailableExternalDataSources("YT");
-        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetAppConfig(appCfg));
+        TKikimrRunner kikimr{ NKqp::TKikimrSettings(appCfg) };
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
+        if (UseSchemaSecrets) {
+            kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);
+        }
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         TString secretTokenId = "myTokenSecretId";
         TString secretTokenValue = "token";
-        CreateSecretObject(secretTokenId, secretTokenValue, session);
+        CreateSecret<UseSchemaSecrets>(secretTokenId, secretTokenValue, session);
 
         TString externalDataSourceName = "/Root/ExternalDataSource";
         auto query = TStringBuilder() << R"(
@@ -600,7 +690,8 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
 
-        auto responseFuture = GetIcGateway(kikimr.GetTestServer())->LoadTableMetadata(TestCluster, externalDataSourceName, IKikimrGateway::TLoadTableMetadataSettings());
+        auto gateway = GetIcGateway(kikimr.GetTestServer());
+        auto responseFuture = gateway->LoadTableMetadata(TestCluster, externalDataSourceName, IKikimrGateway::TLoadTableMetadataSettings());
         responseFuture.Wait();
 
         auto response = responseFuture.GetValue();
@@ -609,15 +700,18 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
         UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.Properties.GetProperties().size(), 0);
     }
 
-    Y_UNIT_TEST(TestSecretsExistingValidation) {
+    Y_UNIT_TEST_TWIN(TestSecretsExistingValidation, UseSchemaSecrets) {
         NKikimrConfig::TAppConfig appCfg;
         appCfg.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
-        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetAppConfig(appCfg));
+        TKikimrRunner kikimr{ NKqp::TKikimrSettings(appCfg) };
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
+        if (UseSchemaSecrets) {
+            kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);
+        }
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        TString secretId = "unexisting_secret_name";
+        TString secretId = UseSchemaSecrets ? "/Root/unexisting_secret_name" : "unexisting_secret_name";
         auto query = TStringBuilder() << R"(
             CREATE EXTERNAL DATA SOURCE `/Root/ExternalDataSource` WITH (
                 SOURCE_TYPE="YT",
@@ -628,7 +722,11 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
 
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::BAD_REQUEST, result.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), TStringBuilder() << "secret with name '" << secretId << "' not found");
+        if (UseSchemaSecrets) {
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), TStringBuilder() << "secret `" << secretId << "` not found");
+        } else {
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), TStringBuilder() << "secret with name '" << secretId << "' not found");
+        }
     }
 
     Y_UNIT_TEST(TestCreateResourcePool) {
@@ -636,7 +734,7 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
         TestCreateResourcePool(*kikimr.GetTestServer().GetRuntime(), GetIcGateway(kikimr.GetTestServer()), "MyResourcePool");
     }
 
-    Y_UNIT_TEST(TestALterResourcePool) {
+    Y_UNIT_TEST(TestAlterResourcePool) {
         TKikimrRunner kikimr = GetKikimrRunnerWithResourcePools();
         TestCreateResourcePool(*kikimr.GetTestServer().GetRuntime(), GetIcGateway(kikimr.GetTestServer()), "MyResourcePool");
         TestAlterResourcePool(*kikimr.GetTestServer().GetRuntime(), GetIcGateway(kikimr.GetTestServer()), "MyResourcePool");
@@ -646,6 +744,23 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
         TKikimrRunner kikimr = GetKikimrRunnerWithResourcePools();
         TestCreateResourcePool(*kikimr.GetTestServer().GetRuntime(), GetIcGateway(kikimr.GetTestServer()), "MyResourcePool");
         TestDropResourcePool(*kikimr.GetTestServer().GetRuntime(), GetIcGateway(kikimr.GetTestServer()), "MyResourcePool");
+    }
+
+    Y_UNIT_TEST(TestCreateStreamingQuery) {
+        TKikimrRunner kikimr = GetKikimrRunnerWithStreamingQuerys();
+        TestCreateStreamingQuery(*kikimr.GetTestServer().GetRuntime(), GetIcGateway(kikimr.GetTestServer()), "/Root/MyFolder/MyStreamingQuery");
+    }
+
+    Y_UNIT_TEST(TestAlterStreamingQuery) {
+        TKikimrRunner kikimr = GetKikimrRunnerWithStreamingQuerys();
+        TestCreateStreamingQuery(*kikimr.GetTestServer().GetRuntime(), GetIcGateway(kikimr.GetTestServer()), "/Root/MyFolder/MyStreamingQuery");
+        TestAlterStreamingQuery(*kikimr.GetTestServer().GetRuntime(), GetIcGateway(kikimr.GetTestServer()), "/Root/MyFolder/MyStreamingQuery");
+    }
+
+    Y_UNIT_TEST(TestDropStreamingQuery) {
+        TKikimrRunner kikimr = GetKikimrRunnerWithStreamingQuerys();
+        TestCreateStreamingQuery(*kikimr.GetTestServer().GetRuntime(), GetIcGateway(kikimr.GetTestServer()), "/Root/MyFolder/MyStreamingQuery");
+        TestDropStreamingQuery(*kikimr.GetTestServer().GetRuntime(), GetIcGateway(kikimr.GetTestServer()), "/Root/MyFolder/MyStreamingQuery");
     }
 }
 

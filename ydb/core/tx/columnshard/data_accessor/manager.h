@@ -14,7 +14,7 @@ namespace NKikimr::NOlap::NDataAccessorControl {
 class IDataAccessorsManager {
 private:
     virtual void DoAskData(const std::shared_ptr<TDataAccessorsRequest>& request) = 0;
-    virtual void DoAddPortion(const TPortionDataAccessor& accessor) = 0;
+    virtual void DoAddPortion(const std::shared_ptr<TPortionDataAccessor>& accessor) = 0;
     virtual void DoRemovePortion(const TPortionInfo::TConstPtr& portion) = 0;
     const NActors::TActorId TabletActorId;
 
@@ -24,17 +24,20 @@ public:
     }
 
     IDataAccessorsManager(const NActors::TActorId& tabletActorId)
-        : TabletActorId(tabletActorId) {
+        : TabletActorId(tabletActorId)
+    {
     }
 
     virtual ~IDataAccessorsManager() = default;
 
-    void AddPortion(const TPortionDataAccessor& accessor) {
+    void AddPortion(const std::shared_ptr<TPortionDataAccessor>& accessor) {
         DoAddPortion(accessor);
     }
+
     void RemovePortion(const TPortionInfo::TConstPtr& portion) {
         DoRemovePortion(portion);
     }
+
     void AskData(const std::shared_ptr<TDataAccessorsRequest>& request) {
         AFL_VERIFY(request);
         AFL_VERIFY(request->HasSubscriber());
@@ -53,33 +56,38 @@ public:
 class TActorAccessorsManager: public IDataAccessorsManager {
 private:
     using TBase = IDataAccessorsManager;
+
     virtual void DoAskData(const std::shared_ptr<TDataAccessorsRequest>& request) override {
         class TAdapterCallback: public TGeneralCache::ICallback {
         private:
             std::shared_ptr<IDataAccessorRequestsSubscriber> AccessorsCallback;
             const ui64 RequestId;
+
             virtual bool DoIsAborted() const override {
                 return AccessorsCallback->GetAbortionFlag() && AccessorsCallback->GetAbortionFlag()->Val();
             }
 
-            virtual void DoOnResultReady(THashMap<NGeneralCache::TGlobalPortionAddress, TPortionDataAccessor>&& objectAddresses,
+            virtual void DoOnResultReady(THashMap<NGeneralCache::TGlobalPortionAddress, std::shared_ptr<TPortionDataAccessor>>&& objectAddresses,
                 THashSet<NGeneralCache::TGlobalPortionAddress>&& removedAddresses,
-                THashMap<NGeneralCache::TGlobalPortionAddress, TString>&& errorAddresses) const override {
-                AFL_VERIFY(removedAddresses.empty());
-                AFL_VERIFY(errorAddresses.empty());
-                THashMap<ui64, TPortionDataAccessor> objects;
+                ::NKikimr::NGeneralCache::NPublic::TErrorAddresses<NGeneralCache::TPortionsMetadataCachePolicy>&& errorAddresses) override {
+                THashMap<ui64, std::shared_ptr<TPortionDataAccessor>> objects;
                 for (auto&& i : objectAddresses) {
                     objects.emplace(i.first.GetPortionId(), std::move(i.second));
                 }
                 TDataAccessorsResult result;
                 result.AddData(std::move(objects));
+                result.AddRemovedData(std::move(removedAddresses));
+                for (auto&& i : errorAddresses.GetErrors()) {
+                    result.AddError(i.first.GetPathId(), i.second);
+                }
                 AccessorsCallback->OnResult(RequestId, std::move(result));
             }
 
         public:
             TAdapterCallback(const std::shared_ptr<IDataAccessorRequestsSubscriber>& accCallback, const ui64 requestId)
                 : AccessorsCallback(accCallback)
-                , RequestId(requestId) {
+                , RequestId(requestId)
+            {
             }
         };
 
@@ -87,22 +95,28 @@ private:
             request->BuildAddresses(GetTabletActorId()),
             std::make_shared<TAdapterCallback>(request->ExtractSubscriber(), request->GetRequestId()));
     }
-    virtual void DoAddPortion(const TPortionDataAccessor& accessor) override {
-        THashMap<NGeneralCache::TGlobalPortionAddress, TPortionDataAccessor> add;
+
+    virtual void DoAddPortion(const std::shared_ptr<TPortionDataAccessor>& accessor) override {
+        THashMap<NGeneralCache::TGlobalPortionAddress, std::shared_ptr<TPortionDataAccessor>> add;
         THashSet<NGeneralCache::TGlobalPortionAddress> remove;
-        add.emplace(NGeneralCache::TGlobalPortionAddress(GetTabletActorId(), accessor.GetPortionInfo().GetAddress()), accessor);
-        NKikimr::NGeneralCache::TServiceOperator<NGeneralCache::TPortionsMetadataCachePolicy>::ModifyObjects(std::move(add), std::move(remove));
+        NGeneralCache::TGlobalPortionAddress address(GetTabletActorId(), accessor->GetPortionInfo().GetAddress());
+        add.emplace(address, std::move(accessor));
+        NKikimr::NGeneralCache::TServiceOperator<NGeneralCache::TPortionsMetadataCachePolicy>::ModifyObjects(
+            GetTabletActorId(), std::move(add), std::move(remove));
     }
+
     virtual void DoRemovePortion(const TPortionInfo::TConstPtr& portion) override {
-        THashMap<NGeneralCache::TGlobalPortionAddress, TPortionDataAccessor> add;
+        THashMap<NGeneralCache::TGlobalPortionAddress, std::shared_ptr<TPortionDataAccessor>> add;
         THashSet<NGeneralCache::TGlobalPortionAddress> remove;
         remove.emplace(NGeneralCache::TGlobalPortionAddress(GetTabletActorId(), portion->GetAddress()));
-        NKikimr::NGeneralCache::TServiceOperator<NGeneralCache::TPortionsMetadataCachePolicy>::ModifyObjects(std::move(add), std::move(remove));
+        NKikimr::NGeneralCache::TServiceOperator<NGeneralCache::TPortionsMetadataCachePolicy>::ModifyObjects(
+            GetTabletActorId(), std::move(add), std::move(remove));
     }
 
 public:
     TActorAccessorsManager(const NActors::TActorId& tabletActorId)
-        : TBase(tabletActorId) {
+        : TBase(tabletActorId)
+    {
         AFL_VERIFY(!!tabletActorId);
     }
 };

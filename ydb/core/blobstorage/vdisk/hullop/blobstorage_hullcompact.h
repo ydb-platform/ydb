@@ -2,6 +2,7 @@
 
 #include "defs.h"
 #include "blobstorage_hullcompactworker.h"
+#include <ydb/core/blobstorage/vdisk/common/vdisk_events_quoter.h>
 #include <ydb/core/blobstorage/vdisk/hullop/blobstorage_hullload.h>
 #include <ydb/core/blobstorage/vdisk/huge/blobstorage_hullhuge.h>
 #include <library/cpp/random_provider/random_provider.h>
@@ -33,6 +34,7 @@ namespace NKikimr {
         TDiskPartVec AllocatedHugeBlobs;
         // was the compaction process aborted by some reason?
         bool Aborted = false;
+        bool FreshCompaction = false;
 
         THullChange() = default;
     };
@@ -88,15 +90,14 @@ namespace NKikimr {
         bool IsAborting = false;
         ui32 PendingResponses = 0;
 
+        //  Compaction throttler
+        TEventsQuoter::TPtr Throttler;
+
         ///////////////////////// BOOTSTRAP ////////////////////////////////////////////////
         void Bootstrap(const TActorContext &ctx) {
             Worker.Statistics.StartTime = TAppData::TimeProvider->Now();
 
-            LOG_INFO(ctx, NKikimrServices::BS_HULLCOMP,
-                       VDISKP(HullCtx->VCtx->VDiskLogPrefix,
-                             "%s: Compaction job (%" PRIu64 ") started: fresh# %s freedHugeBlobs# %s",
-                             PDiskSignatureForHullDbKey<TKey>().ToString().data(), CompactionID,
-                             (FreshSegment ? "true" : "false"), Worker.GetFreedHugeBlobs().ToString().data()));
+            YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::BS_HULLCOMP, VDISKP(HullCtx->VCtx->VDiskLogPrefix, "%s: Compaction job (%" PRIu64 ") started: fresh# %s freedHugeBlobs# %s", PDiskSignatureForHullDbKey<TKey>().ToString().data(), CompactionID, (FreshSegment ? "true" : "false"), Worker.GetFreedHugeBlobs().ToString().data()));
 
             // bool debug output of brs
             int brsDebugLevel = 0;
@@ -135,9 +136,12 @@ namespace NKikimr {
             const bool done = Worker.MainCycle(MsgsForYard, &slotsToAllocate);
             // check if there are messages we have for yard
             for (std::unique_ptr<IEventBase>& msg : MsgsForYard) {
-                ctx.Send(PDiskCtx->PDiskId, msg.release());
+                ui64 bytes = GetMsgSize(msg);
+                TEventsQuoter::QuoteMessage(Throttler, std::make_unique<IEventHandle>(
+                            PDiskCtx->PDiskId, ctx.SelfID, msg.release()), bytes, HullCtx->VCfg->HullCompThrottlerBytesRate);
                 ++PendingResponses;
             }
+
             MsgsForYard.clear();
             // send slots to allocate to huge keeper, if any
             if (slotsToAllocate) {
@@ -147,6 +151,17 @@ namespace NKikimr {
             if (done) {
                 Finalize(ctx);
             }
+        }
+
+        ui32 GetMsgSize(std::unique_ptr<IEventBase>& msg) {
+            if (msg->Type() == TEvBlobStorage::EvChunkWrite) {
+                auto *write = static_cast<NPDisk::TEvChunkWrite*>(msg.get());
+                return write->PartsPtr ? write->PartsPtr->ByteSize() : 0;
+            } else if (msg->Type() == TEvBlobStorage::EvChunkRead) {
+                auto *read = static_cast<NPDisk::TEvChunkRead*>(msg.get());
+                return read->Size;
+            }
+            return 0;
         }
 
         bool FinalizeIfAborting(const TActorContext& ctx) {
@@ -211,14 +226,18 @@ namespace NKikimr {
 
         void HandleYardResponse(NPDisk::TEvChunkReserveResult::TPtr& ev, const TActorContext& ctx) {
             --PendingResponses;
+            if (ev->Get()->Status == NKikimrProto::OUT_OF_SPACE) {
+                IsAborting = true;
+                const bool flag = FinalizeIfAborting(ctx);
+                Y_ABORT_UNLESS(flag);
+                return;
+            }
             CHECK_PDISK_RESPONSE(HullCtx->VCtx, ev, ctx);
             if (FinalizeIfAborting(ctx)) {
                 return;
             }
 
-            LOG_INFO(ctx, NKikimrServices::BS_SKELETON,
-                    VDISKP(HullCtx->VCtx->VDiskLogPrefix,
-                            "comp reserve ChunkIds# %s", FormatList(ev->Get()->ChunkIds).data()));
+            YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::BS_SKELETON, VDISKP(HullCtx->VCtx->VDiskLogPrefix, "comp reserve ChunkIds# %s", FormatList(ev->Get()->ChunkIds).data()));
 
             Worker.Apply(ev->Get());
             MainCycle(ctx);
@@ -259,12 +278,17 @@ namespace NKikimr {
             const auto& reservedChunks = IsAborting ? Worker.GetAllocatedChunks() : Worker.GetReservedChunks();
             msg->ReservedChunks = {reservedChunks.begin(), reservedChunks.end()};
 
-            // huge blobs to free
-            LOG_LOG(ctx, IsAborting ? NLog::PRI_ERROR : NLog::PRI_INFO, NKikimrServices::BS_HULLCOMP,
-                       VDISKP(HullCtx->VCtx->VDiskLogPrefix,
-                            "%s: Compaction job (%" PRIu64 ") finished (freedHugeBlobs): fresh# %s freedHugeBlobs# %s",
-                            PDiskSignatureForHullDbKey<TKey>().ToString().data(), CompactionID,
-                            (FreshSegment ? "true" : "false"), Worker.GetFreedHugeBlobs().ToString().data()));
+            YDB_LOG_CTX_COMP(ctx, IsAborting ? NLog::PRI_ERROR : NLog::PRI_INFO, NKikimrServices::BS_HULLCOMP, "Compaction job finished",
+                {"VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix},
+                {"signature", PDiskSignatureForHullDbKey<TKey>()},
+                {"compactionID", CompactionID},
+                {"freshSegment", (FreshSegment ? "true" : "false")},
+                {"freedHugeBlobs", Worker.GetFreedHugeBlobs().Size()},
+                {"allocatedHugeBlobs", Worker.GetAllocatedHugeBlobs().Size()},
+                {"commitChunks", FormatList(Worker.GetCommitChunks())},
+                {"stats", Worker.Statistics},
+                {"isAborting", (IsAborting ? "true" : "false")});
+
             msg->FreedHugeBlobs = IsAborting ? TDiskPartVec() : Worker.GetFreedHugeBlobs();
             msg->AllocatedHugeBlobs = IsAborting ? TDiskPartVec() : Worker.GetAllocatedHugeBlobs();
 
@@ -280,15 +304,7 @@ namespace NKikimr {
             msg->SegVec = IsAborting ? nullptr : std::move(Result);
             msg->FreshSegment = IsAborting ? nullptr : FreshSegment;
             msg->Aborted = IsAborting;
-
-            Worker.Statistics.FinishTime = TAppData::TimeProvider->Now();
-            LOG_INFO(ctx, NKikimrServices::BS_HULLCOMP,
-                       VDISKP(HullCtx->VCtx->VDiskLogPrefix,
-                             "%s: Compaction job (%" PRIu64 ") finished: fresh# %s chunks# %" PRIu32 " stat# %s "
-                             "IsAborting# %s",
-                             PDiskSignatureForHullDbKey<TKey>().ToString().data(),
-                             CompactionID, (FreshSegment ? "true" : "false"), ui32(msg->CommitChunks.size()),
-                             Worker.Statistics.ToString().data(), IsAborting ? "true" : "false"));
+            msg->FreshCompaction = static_cast<bool>(FreshSegment);
 
             ctx.Send(LIActor, msg.release());
             TThis::Die(ctx);
@@ -321,7 +337,8 @@ namespace NKikimr {
                         ui64 lastLsn,
                         TDuration restoreDeadline,
                         std::optional<TKey> partitionKey,
-                        bool allowGarbageCollection)
+                        bool allowGarbageCollection,
+                        bool useThrottle)
             : TActorBootstrapped<TThis>()
             , HullCtx(std::move(hullCtx))
             , PDiskCtx(rtCtx->PDiskCtx)
@@ -337,7 +354,11 @@ namespace NKikimr {
             , CompactionID(TAppData::RandomProvider->GenRand64())
             , SkeletonId(rtCtx->SkeletonId)
             , HugeKeeperId(rtCtx->HugeKeeperId)
-        {}
+        {
+            if (!(bool)FreshSegment && useThrottle) {
+                Throttler = std::make_shared<TEventsQuoter>();
+            }
+        }
     };
 
 } // NKikimr

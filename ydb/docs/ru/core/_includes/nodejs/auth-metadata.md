@@ -1,15 +1,10 @@
 ```typescript
-import { Driver, MetadataAuthService } from 'ydb-sdk';
+import { Driver } from "@ydbjs/core";
+import { MetadataCredentialsProvider } from "@ydbjs/auth/metadata";
 
-export async function connect(endpoint: string, database: string) {
-    const authService = new MetadataAuthService();
-    const driver = new Driver({endpoint, database, authService});
-    const timeout = 10000;
-    if (!await driver.ready(timeout)) {
-        console.log(`Driver has not become ready in ${timeout}ms!`);
-        process.exit(1);
-    }
-    console.log('Driver connected')
-    return driver
-}
+const driver = new Driver("grpc://localhost:2136/local", {
+  credentialsProvider: new MetadataCredentialsProvider(),
+});
+
+await driver.ready();
 ```

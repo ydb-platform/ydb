@@ -169,12 +169,30 @@ struct THash<NKikimr::TVDiskID> {
     }
 };
 
+namespace std {
+template <>
+struct hash<NKikimr::TVDiskID> {
+    inline size_t operator()(const NKikimr::TVDiskID& d) const {
+        return d.Hash();
+    }
+};
+}
+
 template <>
 struct THash<NKikimr::TVDiskIdShort> {
     inline size_t operator()(const NKikimr::TVDiskIdShort& d) const {
         return d.Hash();
     }
 };
+
+namespace std {
+template <>
+struct hash<NKikimr::TVDiskIdShort> {
+    inline size_t operator()(const NKikimr::TVDiskIdShort& d) const {
+        return d.Hash();
+    }
+};
+}
 
 template<>
 inline void Out<NKikimr::TVDiskID>(IOutputStream& os, const NKikimr::TVDiskID& vdiskId) {

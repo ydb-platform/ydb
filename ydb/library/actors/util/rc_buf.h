@@ -270,6 +270,11 @@ public:
 struct IContiguousChunk : TThrRefBase {
     using TPtr = TIntrusivePtr<IContiguousChunk>;
 
+    enum EInnerType {
+        OTHER=0,
+        RDMA_MEM_REG=1,
+    };
+
     virtual ~IContiguousChunk() = default;
 
     /**
@@ -278,31 +283,35 @@ struct IContiguousChunk : TThrRefBase {
     virtual TContiguousSpan GetData() const = 0;
 
     /**
-     * Should give mutable access to underlying data
-     * If data is shared - data should be copied
-     * E.g. for TString str.Detach() should be used
-     * Possibly invalidates previous *GetData*() calls
-     */
-    virtual TMutableContiguousSpan GetDataMut() = 0;
-
-    /**
      * Should give mutable access to undelying data as fast as possible
      * Even if data is shared this property should be ignored
      * E.g. in TString const_cast<char *>(str.data()) should be used
      * Possibly invalidates previous *GetData*() calls
      */
-    virtual TMutableContiguousSpan UnsafeGetDataMut() {
-        return GetDataMut();
-    }
+    virtual TMutableContiguousSpan UnsafeGetDataMut() = 0;
 
     /**
-     * Should return true if GetDataMut() would not copy contents when called.
+     * Must return false if the implementation shares data
      */
     virtual bool IsPrivate() const {
-        return true;
+        return RefCount() == 1;
     }
 
     virtual size_t GetOccupiedMemorySize() const = 0;
+
+    /**
+     * Returns type of the inner data
+     * Used to distinguish between different types of data and downcast
+     */
+    virtual EInnerType GetInnerType() const noexcept {
+        return OTHER;
+    }
+
+    /**
+     * Allocate new chunk and copy data into it
+     * NOTE: The actual implementation of clonned chunk may be different
+     */
+    virtual IContiguousChunk::TPtr Clone() = 0;
 };
 
 class TRope;
@@ -445,7 +454,7 @@ class TRcBuf {
                 } else if constexpr (std::is_same_v<T, TString>) {
                     return value.IsDetached();
                 } else if constexpr (std::is_same_v<T, IContiguousChunk::TPtr>) {
-                    return value.RefCount() == 1 && value->IsPrivate();
+                    return value->IsPrivate();
                 } else {
                     static_assert(TDependentFalse<T>);
                 }
@@ -487,7 +496,10 @@ class TRcBuf {
                     }
                     return {value.mutable_data(), value.size()};
                 } else if constexpr (std::is_same_v<T, IContiguousChunk::TPtr>) {
-                    return value->GetDataMut();
+                    if (!value->IsPrivate()) {
+                        value = value->Clone();
+                    }
+                    return value->UnsafeGetDataMut();
                 } else {
                     static_assert(TDependentFalse<T>, "unexpected type");
                 }
@@ -580,6 +592,20 @@ class TRcBuf {
             return false;
         }
 
+        // Like UpdateCookiesBegin, but uses a strong compare-exchange so it never fails spuriously.
+        // Use this when the result is asserted (e.g. Y_ABORT_UNLESS), so a spurious weak failure can't crash.
+        bool UpdateCookiesBeginStrong(const char* curBegin, const char* contBegin) {
+            if (!Owner) {
+                return false;
+            }
+
+            TCookies* cookies = GetCookies();
+            if (cookies) {
+                return cookies->Begin.compare_exchange_strong(curBegin, contBegin);
+            }
+            return false;
+        }
+
         bool UpdateCookiesEnd(const char* curEnd, const char* contEnd) {
             if (!Owner) {
                 return false;
@@ -614,6 +640,17 @@ class TRcBuf {
 
         explicit operator bool() const {
             return static_cast<bool>(Owner);
+        }
+
+        bool IsRdma() const noexcept {
+            return Visit(Owner, [&](EType, auto& value) {
+                using T = std::decay_t<decltype(value)>;
+                if constexpr (std::is_same_v<T, IContiguousChunk::TPtr>) {
+                    return value->GetInnerType() == IContiguousChunk::EInnerType::RDMA_MEM_REG;
+                } else {
+                    return false;
+                }
+            });
         }
 
     private:
@@ -767,10 +804,17 @@ public:
 
     template<typename T>
     TRcBuf(T&& backend, const TContiguousSpan& data)
-        : Backend(std::forward<T>(backend))
-        , Begin(data.data())
-        , End(Begin + data.size())
-    {}
+    {
+        ptrdiff_t beginOffset = 0;
+        if constexpr (std::is_same_v<std::decay_t<T>, IContiguousChunk::TPtr>) {
+            beginOffset = data.data() - backend->GetData().data();
+        } else {
+            beginOffset = data.data() - backend.GetData().data();
+        }
+        Backend = std::forward<T>(backend);
+        Begin = Backend.GetData().data() + beginOffset;
+        End = Begin + data.size();
+    }
 
     explicit TRcBuf(TString s)
         : Backend(std::move(s))
@@ -806,9 +850,12 @@ public:
 
     TRcBuf(const TRcBuf& other)
         : Backend(other.Backend)
-        , Begin(other.Begin)
-        , End(other.End)
-    {}
+    {
+        ptrdiff_t beginOffset = other.Begin - other.Backend.GetData().data();
+        ptrdiff_t endOffset = other.End - other.Backend.GetData().data();
+        Begin = Backend.GetData().data() + beginOffset;
+        End = Backend.GetData().data() + endOffset;
+    }
 
     TRcBuf(TRcBuf&& other)
         : Backend(std::move(other.Backend))
@@ -816,7 +863,18 @@ public:
         , End(other.End)
     {}
 
-    TRcBuf& operator =(const TRcBuf&) = default;
+    TRcBuf& operator =(const TRcBuf& other) {
+        if (this != &other) {
+            Backend = other.Backend;
+            ptrdiff_t beginOffset =
+                other.Begin - other.Backend.GetData().data();
+            ptrdiff_t endOffset = other.End - other.Backend.GetData().data();
+            Begin = Backend.GetData().data() + beginOffset;
+            End = Backend.GetData().data() + endOffset;
+        }
+        return *this;
+    }
+
     TRcBuf& operator =(TRcBuf&&) = default;
 
     static TRcBuf Uninitialized(size_t size, size_t headroom = 0, size_t tailroom = 0)
@@ -838,16 +896,32 @@ public:
         return TRcBuf(res, res.data() + headroom, size);
     }
 
-    static TRcBuf UninitializedPageAligned(size_t size, size_t tailroom = 0) {
-        const size_t pageSize = NSystemInfo::GetPageSize();
-        TRcBuf res = Uninitialized(size + pageSize - 1, 0, tailroom);
-        const size_t misalign = (pageSize - reinterpret_cast<uintptr_t>(res.data())) & (pageSize - 1);
+    // Allocates an uninitialized buffer of `size` bytes whose data pointer is aligned to `alignment`
+    // (which must be a power of 2). `tailroom` extra bytes are reserved after the data.
+    static TRcBuf UninitializedAligned(size_t size, size_t alignment, size_t tailroom = 0) {
+        if (alignment <= 1) {
+            return Uninitialized(size, 0, tailroom);
+        }
+        Y_ABORT_UNLESS((alignment & (alignment - 1)) == 0);
+        if (size == 0) {
+            // A zero-length aligned piece can't be expressed as a Piece into a temporary buffer
+            // (the Piece ctor requires data to lie strictly inside the source), so short-circuit.
+            return Uninitialized(0, 0, tailroom);
+        }
+        TRcBuf res = Uninitialized(size + alignment - 1, 0, tailroom);
+        const size_t misalign = (alignment - reinterpret_cast<uintptr_t>(res.data())) & (alignment - 1);
         return TRcBuf(Piece, res.data() + misalign, size, res);
+    }
+
+    static TRcBuf UninitializedPageAligned(size_t size, size_t tailroom = 0) {
+        return UninitializedAligned(size, NSystemInfo::GetPageSize(), tailroom);
     }
 
     static TRcBuf Copy(TContiguousSpan data, size_t headroom = 0, size_t tailroom = 0) {
         TRcBuf res = Uninitialized(data.size(), headroom, tailroom);
-        std::memcpy(res.UnsafeGetDataMut(), data.GetData(), data.GetSize());
+        if (data.GetSize()) {
+            std::memcpy(res.UnsafeGetDataMut(), data.GetData(), data.GetSize());
+        }
         return res;
     }
 
@@ -936,6 +1010,17 @@ public:
             std::memcpy(data, GetData(), GetSize());
         }
 
+        return res;
+    }
+
+    template<class TResult>
+    std::optional<TResult> ExtractFullUnderlyingContainer() const {
+        std::optional<TResult> res = std::nullopt;
+        Backend.ApplySpecificValue<TResult>([&](const TResult *raw) {
+            if (raw) {
+                res = *raw;
+            }
+        });
         return res;
     }
 
@@ -1058,6 +1143,33 @@ public:
         }
     }
 
+    // Returns a new owning TRcBuf that shares this buffer's backend but additionally covers `frontBytes` of the
+    // reserved headroom in front of the current data (no allocation, no copy). Unlike GrowFront, this leaves
+    // *this's own Begin/End untouched and works for backends without cookies (e.g. TRopeAlignedBuffer). It does,
+    // however, claim the headroom by moving the shared backend's front-edge cookie, which changes the observable
+    // Headroom()/CanGrowFront() of *this and any sibling view over the same backend. The safe Headroom() is used,
+    // so it only succeeds when this buffer privately owns (or, for cookie-bearing backends, currently owns the
+    // front edge of) that space.
+    TRcBuf ExpandFront(size_t frontBytes) const {
+        Y_ABORT_UNLESS(Headroom() >= frontBytes);
+        if (frontBytes == 0) {
+            // Nothing to claim: return a plain shared view without touching cookies. Doing the cookie
+            // bookkeeping here would abort for shared buffers whose front edge has already moved.
+            return TRcBuf(Backend, TContiguousSpan{Begin, GetSize()});
+        }
+        const bool isPrivate = IsPrivate();
+        TRcBuf result(Backend, TContiguousSpan{Begin - frontBytes, GetSize() + frontBytes});
+        if (result.Backend.GetCookies()) {
+            if (isPrivate) {
+                result.Backend.UpdateCookiesUnsafe(result.Begin, result.End);
+            } else {
+                // Strong CAS: the result is asserted, so a spurious weak failure must not crash.
+                Y_ABORT_UNLESS(result.Backend.UpdateCookiesBeginStrong(Begin, result.Begin));
+            }
+        }
+        return result;
+    }
+
     EResizeResult GrowBack(size_t size, EResizeStrategy strategy = EResizeStrategy::KeepRooms) {
         if (Tailroom() > size && Backend.UpdateCookiesEnd(End, End + size)) {
             End += size;
@@ -1103,7 +1215,7 @@ public:
     }
 
     size_t Headroom() const {
-        if (Backend.CanGrowFront(Begin)) {
+        if (Backend.CanGrowFront(Begin) || IsPrivate()) {
             return UnsafeHeadroom();
         }
 
@@ -1111,7 +1223,7 @@ public:
     }
 
     size_t Tailroom() const {
-        if (Backend.CanGrowBack(End)) {
+        if (Backend.CanGrowBack(End) || IsPrivate()) {
             return UnsafeTailroom();
         }
 
@@ -1125,4 +1237,17 @@ public:
     explicit operator TMutableContiguousSpan() noexcept {
         return TMutableContiguousSpan(GetDataMut(), GetSize());
     }
+
+    bool IsRdma() const noexcept {
+        return Backend.IsRdma();
+    }
 };
+
+class IRcBufAllocator {
+public:
+    virtual ~IRcBufAllocator() = default;
+    virtual TRcBuf AllocRcBuf(size_t size, size_t headRoom, size_t tailRoom) noexcept = 0;
+    virtual TRcBuf AllocPageAlignedRcBuf(size_t size, size_t tailRoom) noexcept = 0;
+};
+
+IRcBufAllocator* GetDefaultRcBufAllocator() noexcept;

@@ -11,7 +11,7 @@ using namespace NYTree;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString BuildYsonAndGetResult(std::function<void(TFluentAny&)> build, std::optional<int> limit = std::nullopt)
+std::string BuildYsonAndGetResult(std::function<void(TFluentAny&)> build, std::optional<int> limit = std::nullopt)
 {
     TStringStream yson;
     TYsonWriter writer(&yson, EYsonFormat::Text);
@@ -25,7 +25,7 @@ TString BuildYsonAndGetResult(std::function<void(TFluentAny&)> build, std::optio
 
 TEST(TListVerbLazyYsonConsumerTest, TestSimple)
 {
-    TString actual = BuildYsonAndGetResult([] (TFluentAny& fluent) {
+    std::string actual = BuildYsonAndGetResult([] (TFluentAny& fluent) {
         fluent
             .BeginMap()
                 .Item("a").Value("x")
@@ -38,7 +38,7 @@ TEST(TListVerbLazyYsonConsumerTest, TestSimple)
 
 TEST(TListVerbLazyYsonConsumerTest, TestLimit)
 {
-    TString actual = BuildYsonAndGetResult([] (TFluentAny& fluent) {
+    std::string actual = BuildYsonAndGetResult([] (TFluentAny& fluent) {
         fluent
             .BeginMap()
                 .Item("a").Value("x")
@@ -53,7 +53,7 @@ TEST(TListVerbLazyYsonConsumerTest, TestLimit)
 
 TEST(TListVerbLazyYsonConsumerTest, TestNestedMap)
 {
-    TString actual = BuildYsonAndGetResult([] (TFluentAny& fluent) {
+    std::string actual = BuildYsonAndGetResult([] (TFluentAny& fluent) {
         fluent
             .BeginMap()
                 .Item("a").Value("x")
@@ -79,7 +79,7 @@ TEST(TListVerbLazyYsonConsumerTest, TestThrowOnNonMapNode)
 
 TEST(TListVerbLazyYsonConsumerTest, TestIgnoreAttributes)
 {
-    TString actual = BuildYsonAndGetResult([] (TFluentAny& fluent) {
+    std::string actual = BuildYsonAndGetResult([] (TFluentAny& fluent) {
         fluent
             .BeginAttributes()
                 .Item("attr1").Value("v1")
@@ -97,7 +97,7 @@ TEST(TListVerbLazyYsonConsumerTest, TestIgnoreAttributes)
                 .EndMap()
             .EndMap();
     });
-    auto expected = std::vector<TString>{"a", "b"};
+    auto expected = std::vector<std::string>{"a", "b"};
     EXPECT_EQ("[\"a\";\"b\";]", actual);
 }
 

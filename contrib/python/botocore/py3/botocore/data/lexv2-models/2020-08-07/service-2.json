@@ -5,12 +5,14 @@
     "endpointPrefix":"models-v2-lex",
     "jsonVersion":"1.1",
     "protocol":"rest-json",
+    "protocols":["rest-json"],
     "serviceAbbreviation":"Lex Models V2",
     "serviceFullName":"Amazon Lex Model Building V2",
     "serviceId":"Lex Models V2",
     "signatureVersion":"v4",
     "signingName":"lex",
-    "uid":"models.lex.v2-2020-08-07"
+    "uid":"models.lex.v2-2020-08-07",
+    "auth":["aws.auth#sigv4"]
   },
   "operations":{
     "BatchCreateCustomVocabularyItem":{
@@ -143,6 +145,25 @@
       ],
       "documentation":"<p>Creates a locale in the bot. The locale contains the intents and slot types that the bot uses in conversations with users in the specified language and locale. You must add a locale to a bot before you can add intents and slot types to the bot.</p>"
     },
+    "CreateBotReplica":{
+      "name":"CreateBotReplica",
+      "http":{
+        "method":"PUT",
+        "requestUri":"/bots/{botId}/replicas/",
+        "responseCode":202
+      },
+      "input":{"shape":"CreateBotReplicaRequest"},
+      "output":{"shape":"CreateBotReplicaResponse"},
+      "errors":[
+        {"shape":"ThrottlingException"},
+        {"shape":"ServiceQuotaExceededException"},
+        {"shape":"ValidationException"},
+        {"shape":"PreconditionFailedException"},
+        {"shape":"ConflictException"},
+        {"shape":"InternalServerException"}
+      ],
+      "documentation":"<p>Action to create a replication of the source bot in the secondary region.</p>"
+    },
     "CreateBotVersion":{
       "name":"CreateBotVersion",
       "http":{
@@ -160,7 +181,7 @@
         {"shape":"ConflictException"},
         {"shape":"InternalServerException"}
       ],
-      "documentation":"<p>Creates a new version of the bot based on the <code>DRAFT</code> version. If the <code>DRAFT</code> version of this resource hasn't changed since you created the last version, Amazon Lex doesn't create a new version, it returns the last created version.</p> <p>When you create the first version of a bot, Amazon Lex sets the version to 1. Subsequent versions increment by 1.</p>"
+      "documentation":"<p>Creates an immutable version of the bot. When you create the first version of a bot, Amazon Lex sets the version number to 1. Subsequent bot versions increase in an increment of 1. The version number will always represent the total number of versions created of the bot, not the current number of versions. If a bot version is deleted, that bot version number will not be reused.</p>"
     },
     "CreateExport":{
       "name":"CreateExport",
@@ -237,7 +258,7 @@
         {"shape":"InternalServerException"},
         {"shape":"ThrottlingException"}
       ],
-      "documentation":"<p>Adds a new resource policy statement to a bot or bot alias. If a resource policy exists, the statement is added to the current resource policy. If a policy doesn't exist, a new policy is created.</p> <p>You can't create a resource policy statement that allows cross-account access.</p>"
+      "documentation":"<p>Adds a new resource policy statement to a bot or bot alias. If a resource policy exists, the statement is added to the current resource policy. If a policy doesn't exist, a new policy is created.</p> <p>You can't create a resource policy statement that allows cross-account access.</p> <p>You need to add the <code>CreateResourcePolicy</code> or <code>UpdateResourcePolicy</code> action to the bot role in order to call the API.</p>"
     },
     "CreateSlot":{
       "name":"CreateSlot",
@@ -371,6 +392,25 @@
       ],
       "documentation":"<p>Removes a locale from a bot.</p> <p>When you delete a locale, all intents, slots, and slot types defined for the locale are also deleted.</p>"
     },
+    "DeleteBotReplica":{
+      "name":"DeleteBotReplica",
+      "http":{
+        "method":"DELETE",
+        "requestUri":"/bots/{botId}/replicas/{replicaRegion}/",
+        "responseCode":202
+      },
+      "input":{"shape":"DeleteBotReplicaRequest"},
+      "output":{"shape":"DeleteBotReplicaResponse"},
+      "errors":[
+        {"shape":"ThrottlingException"},
+        {"shape":"ServiceQuotaExceededException"},
+        {"shape":"ValidationException"},
+        {"shape":"PreconditionFailedException"},
+        {"shape":"ConflictException"},
+        {"shape":"InternalServerException"}
+      ],
+      "documentation":"<p>The action to delete the replicated bot in the secondary region.</p>"
+    },
     "DeleteBotVersion":{
       "name":"DeleteBotVersion",
       "http":{
@@ -495,7 +535,7 @@
         {"shape":"InternalServerException"},
         {"shape":"ThrottlingException"}
       ],
-      "documentation":"<p>Deletes a policy statement from a resource policy. If you delete the last statement from a policy, the policy is deleted. If you specify a statement ID that doesn't exist in the policy, or if the bot or bot alias doesn't have a policy attached, Amazon Lex returns an exception.</p>"
+      "documentation":"<p>Deletes a policy statement from a resource policy. If you delete the last statement from a policy, the policy is deleted. If you specify a statement ID that doesn't exist in the policy, or if the bot or bot alias doesn't have a policy attached, Amazon Lex returns an exception.</p> <p>You need to add the <code>DeleteResourcePolicy</code> or <code>UpdateResourcePolicy</code> action to the bot role in order to call the API.</p>"
     },
     "DeleteSlot":{
       "name":"DeleteSlot",
@@ -638,6 +678,41 @@
         {"shape":"InternalServerException"}
       ],
       "documentation":"<p>Provides metadata information about a bot recommendation. This information will enable you to get a description on the request inputs, to download associated transcripts after processing is complete, and to download intents and slot-types generated by the bot recommendation.</p>"
+    },
+    "DescribeBotReplica":{
+      "name":"DescribeBotReplica",
+      "http":{
+        "method":"GET",
+        "requestUri":"/bots/{botId}/replicas/{replicaRegion}/",
+        "responseCode":200
+      },
+      "input":{"shape":"DescribeBotReplicaRequest"},
+      "output":{"shape":"DescribeBotReplicaResponse"},
+      "errors":[
+        {"shape":"ThrottlingException"},
+        {"shape":"ServiceQuotaExceededException"},
+        {"shape":"ValidationException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"InternalServerException"}
+      ],
+      "documentation":"<p>Monitors the bot replication status through the UI console.</p>"
+    },
+    "DescribeBotResourceGeneration":{
+      "name":"DescribeBotResourceGeneration",
+      "http":{
+        "method":"GET",
+        "requestUri":"/bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/generations/{generationId}",
+        "responseCode":200
+      },
+      "input":{"shape":"DescribeBotResourceGenerationRequest"},
+      "output":{"shape":"DescribeBotResourceGenerationResponse"},
+      "errors":[
+        {"shape":"ThrottlingException"},
+        {"shape":"ValidationException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"InternalServerException"}
+      ],
+      "documentation":"<p>Returns information about a request to generate a bot through natural language description, made through the <code>StartBotResource</code> API. Use the <code>generatedBotLocaleUrl</code> to retrieve the Amazon S3 object containing the bot locale configuration. You can then modify and import this configuration.</p>"
     },
     "DescribeBotVersion":{
       "name":"DescribeBotVersion",
@@ -851,6 +926,27 @@
       ],
       "documentation":"<p>Gets metadata information about the test set generation.</p>"
     },
+    "GenerateBotElement":{
+      "name":"GenerateBotElement",
+      "http":{
+        "method":"POST",
+        "requestUri":"/bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/generate",
+        "responseCode":202
+      },
+      "input":{"shape":"GenerateBotElementRequest"},
+      "output":{"shape":"GenerateBotElementResponse"},
+      "errors":[
+        {"shape":"ThrottlingException"},
+        {"shape":"ServiceQuotaExceededException"},
+        {"shape":"ValidationException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"ConflictException"},
+        {"shape":"PreconditionFailedException"},
+        {"shape":"ConflictException"},
+        {"shape":"InternalServerException"}
+      ],
+      "documentation":"<p>Generates sample utterances for an intent.</p>"
+    },
     "GetTestExecutionArtifactsUrl":{
       "name":"GetTestExecutionArtifactsUrl",
       "http":{
@@ -885,6 +981,23 @@
         {"shape":"InternalServerException"}
       ],
       "documentation":"<p>Provides a list of utterances that users have sent to the bot.</p> <p>Utterances are aggregated by the text of the utterance. For example, all instances where customers used the phrase \"I want to order pizza\" are aggregated into the same line in the response.</p> <p>You can see both detected utterances and missed utterances. A detected utterance is where the bot properly recognized the utterance and activated the associated intent. A missed utterance was not recognized by the bot and didn't activate an intent.</p> <p>Utterances can be aggregated for a bot alias or for a bot version, but not both at the same time.</p> <p>Utterances statistics are not generated under the following conditions:</p> <ul> <li> <p>The <code>childDirected</code> field was set to true when the bot was created.</p> </li> <li> <p>You are using slot obfuscation with one or more slots.</p> </li> <li> <p>You opted out of participating in improving Amazon Lex.</p> </li> </ul>"
+    },
+    "ListBotAliasReplicas":{
+      "name":"ListBotAliasReplicas",
+      "http":{
+        "method":"POST",
+        "requestUri":"/bots/{botId}/replicas/{replicaRegion}/botaliases/",
+        "responseCode":200
+      },
+      "input":{"shape":"ListBotAliasReplicasRequest"},
+      "output":{"shape":"ListBotAliasReplicasResponse"},
+      "errors":[
+        {"shape":"ThrottlingException"},
+        {"shape":"ServiceQuotaExceededException"},
+        {"shape":"ValidationException"},
+        {"shape":"InternalServerException"}
+      ],
+      "documentation":"<p>The action to list the replicated bots created from the source bot alias.</p>"
     },
     "ListBotAliases":{
       "name":"ListBotAliases",
@@ -936,6 +1049,57 @@
         {"shape":"ResourceNotFoundException"}
       ],
       "documentation":"<p>Get a list of bot recommendations that meet the specified criteria.</p>"
+    },
+    "ListBotReplicas":{
+      "name":"ListBotReplicas",
+      "http":{
+        "method":"POST",
+        "requestUri":"/bots/{botId}/replicas/",
+        "responseCode":200
+      },
+      "input":{"shape":"ListBotReplicasRequest"},
+      "output":{"shape":"ListBotReplicasResponse"},
+      "errors":[
+        {"shape":"ThrottlingException"},
+        {"shape":"ServiceQuotaExceededException"},
+        {"shape":"ValidationException"},
+        {"shape":"InternalServerException"}
+      ],
+      "documentation":"<p>The action to list the replicated bots.</p>"
+    },
+    "ListBotResourceGenerations":{
+      "name":"ListBotResourceGenerations",
+      "http":{
+        "method":"POST",
+        "requestUri":"/bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/generations",
+        "responseCode":200
+      },
+      "input":{"shape":"ListBotResourceGenerationsRequest"},
+      "output":{"shape":"ListBotResourceGenerationsResponse"},
+      "errors":[
+        {"shape":"ThrottlingException"},
+        {"shape":"ValidationException"},
+        {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"}
+      ],
+      "documentation":"<p>Lists the generation requests made for a bot locale.</p>"
+    },
+    "ListBotVersionReplicas":{
+      "name":"ListBotVersionReplicas",
+      "http":{
+        "method":"POST",
+        "requestUri":"/bots/{botId}/replicas/{replicaRegion}/botversions/",
+        "responseCode":200
+      },
+      "input":{"shape":"ListBotVersionReplicasRequest"},
+      "output":{"shape":"ListBotVersionReplicasResponse"},
+      "errors":[
+        {"shape":"ThrottlingException"},
+        {"shape":"ServiceQuotaExceededException"},
+        {"shape":"ValidationException"},
+        {"shape":"InternalServerException"}
+      ],
+      "documentation":"<p>Contains information about all the versions replication statuses applicable for Global Resiliency.</p>"
     },
     "ListBotVersions":{
       "name":"ListBotVersions",
@@ -1375,6 +1539,26 @@
         {"shape":"InternalServerException"}
       ],
       "documentation":"<p>Use this to provide your transcript data, and to start the bot recommendation process.</p>"
+    },
+    "StartBotResourceGeneration":{
+      "name":"StartBotResourceGeneration",
+      "http":{
+        "method":"PUT",
+        "requestUri":"/bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/startgeneration",
+        "responseCode":202
+      },
+      "input":{"shape":"StartBotResourceGenerationRequest"},
+      "output":{"shape":"StartBotResourceGenerationResponse"},
+      "errors":[
+        {"shape":"ThrottlingException"},
+        {"shape":"ServiceQuotaExceededException"},
+        {"shape":"ValidationException"},
+        {"shape":"PreconditionFailedException"},
+        {"shape":"ConflictException"},
+        {"shape":"InternalServerException"}
+      ],
+      "documentation":"<p>Starts a request for the descriptive bot builder to generate a bot locale configuration based on the prompt you provide it. After you make this call, use the <code>DescribeBotResourceGeneration</code> operation to check on the status of the generation and for the <code>generatedBotLocaleUrl</code> when the generation is complete. Use that value to retrieve the Amazon S3 object containing the bot locale configuration. You can then modify and import this configuration.</p>",
+      "idempotent":true
     },
     "StartImport":{
       "name":"StartImport",
@@ -2800,6 +2984,15 @@
       "type":"string",
       "enum":["UtteranceTimestamp"]
     },
+    "AnswerField":{"type":"string"},
+    "AssistedNluMode":{
+      "type":"string",
+      "documentation":"<p>Defines the operational mode for Assisted Natural Language Understanding. This enum determines how the enhanced NLU capabilities integrate with standard intent recognition.</p>",
+      "enum":[
+        "Primary",
+        "Fallback"
+      ]
+    },
     "AssociatedTranscript":{
       "type":"structure",
       "members":{
@@ -2902,7 +3095,11 @@
           "shape":"Boolean",
           "documentation":"<p>Determines whether audio logging in enabled for the bot.</p>"
         },
-        "destination":{"shape":"AudioLogDestination"}
+        "destination":{"shape":"AudioLogDestination"},
+        "selectiveLoggingEnabled":{
+          "shape":"BoxedBoolean",
+          "documentation":"<p>The option to enable selective conversation log capture for audio.</p>"
+        }
       },
       "documentation":"<p>Settings for logging audio of conversations between Amazon Lex and a user. You specify whether to log audio and the Amazon S3 bucket where the audio file is stored.</p>"
     },
@@ -3108,6 +3305,108 @@
         }
       }
     },
+    "BedrockGuardrailConfiguration":{
+      "type":"structure",
+      "required":[
+        "identifier",
+        "version"
+      ],
+      "members":{
+        "identifier":{
+          "shape":"BedrockGuardrailIdentifier",
+          "documentation":"<p>The unique guardrail id for the Bedrock guardrail configuration.</p>"
+        },
+        "version":{
+          "shape":"BedrockGuardrailVersion",
+          "documentation":"<p>The guardrail version for the Bedrock guardrail configuration.</p>"
+        }
+      },
+      "documentation":"<p>The details on the Bedrock guardrail configuration.</p>"
+    },
+    "BedrockGuardrailIdentifier":{
+      "type":"string",
+      "max":2048,
+      "min":1,
+      "pattern":"^(([a-z0-9]+)|(arn:aws(-[^:]+)?:bedrock:[a-z0-9-]{1,20}:[0-9]{12}:guardrail/[a-z0-9]+))$"
+    },
+    "BedrockGuardrailVersion":{
+      "type":"string",
+      "pattern":"^(([1-9][0-9]{0,7})|(DRAFT))$"
+    },
+    "BedrockKnowledgeBaseArn":{
+      "type":"string",
+      "max":200,
+      "min":1,
+      "pattern":"^arn:aws(-[^:]+)?:bedrock:[a-z0-9-]{1,40}:[0-9]{12}:knowledge-base\\/[A-Za-z0-9]{10}$|^[A-Za-z0-9]{10}$"
+    },
+    "BedrockKnowledgeStoreConfiguration":{
+      "type":"structure",
+      "required":["bedrockKnowledgeBaseArn"],
+      "members":{
+        "bedrockKnowledgeBaseArn":{
+          "shape":"BedrockKnowledgeBaseArn",
+          "documentation":"<p>The base ARN of the knowledge base used.</p>"
+        },
+        "exactResponse":{
+          "shape":"Boolean",
+          "documentation":"<p>Specifies whether to return an exact response, or to return an answer generated by the model, using the fields you specify from the database.</p>"
+        },
+        "exactResponseFields":{
+          "shape":"BedrockKnowledgeStoreExactResponseFields",
+          "documentation":"<p>Contains the names of the fields used for an exact response to the user.</p>"
+        }
+      },
+      "documentation":"<p>Contains details about the configuration of a Amazon Bedrock knowledge base.</p>"
+    },
+    "BedrockKnowledgeStoreExactResponseFields":{
+      "type":"structure",
+      "members":{
+        "answerField":{
+          "shape":"AnswerField",
+          "documentation":"<p>The answer field used for an exact response from Bedrock Knowledge Store.</p>"
+        }
+      },
+      "documentation":"<p>The exact response fields given by the Bedrock knowledge store.</p>"
+    },
+    "BedrockModelArn":{
+      "type":"string",
+      "pattern":"^arn:aws(-[^:]+)?:bedrock:[a-z0-9-]{1,20}::foundation-model\\/[a-z0-9-]{1,63}[.]{1}([a-z0-9-]{1,63}[.]){0,2}[a-z0-9-]{1,63}([:][a-z0-9-]{1,63}){0,2}$"
+    },
+    "BedrockModelCustomPrompt":{
+      "type":"string",
+      "max":4000,
+      "min":1
+    },
+    "BedrockModelSpecification":{
+      "type":"structure",
+      "required":["modelArn"],
+      "members":{
+        "modelArn":{
+          "shape":"BedrockModelArn",
+          "documentation":"<p>The ARN of the foundation model used in descriptive bot building.</p>"
+        },
+        "guardrail":{
+          "shape":"BedrockGuardrailConfiguration",
+          "documentation":"<p>The guardrail configuration in the Bedrock model specification details.</p>"
+        },
+        "traceStatus":{
+          "shape":"BedrockTraceStatus",
+          "documentation":"<p>The Bedrock trace status in the Bedrock model specification details.</p>"
+        },
+        "customPrompt":{
+          "shape":"BedrockModelCustomPrompt",
+          "documentation":"<p>The custom prompt used in the Bedrock model specification details.</p>"
+        }
+      },
+      "documentation":"<p>Contains information about the Amazon Bedrock model used to interpret the prompt used in descriptive bot building.</p>"
+    },
+    "BedrockTraceStatus":{
+      "type":"string",
+      "enum":[
+        "ENABLED",
+        "DISABLED"
+      ]
+    },
     "Boolean":{"type":"boolean"},
     "BotAliasHistoryEvent":{
       "type":"structure",
@@ -3163,6 +3462,51 @@
       "max":100,
       "min":1,
       "pattern":"^(\\bAmazonLexTestAlias\\b|[0-9a-zA-Z][_-]?)+$"
+    },
+    "BotAliasReplicaSummary":{
+      "type":"structure",
+      "members":{
+        "botAliasId":{
+          "shape":"BotAliasId",
+          "documentation":"<p>The bot alias ID for all the alias bot replications.</p>"
+        },
+        "botAliasReplicationStatus":{
+          "shape":"BotAliasReplicationStatus",
+          "documentation":"<p>The replication statuses for all the alias bot replications.</p>"
+        },
+        "botVersion":{
+          "shape":"BotVersion",
+          "documentation":"<p>The bot version for all the alias bot replications.</p>"
+        },
+        "creationDateTime":{
+          "shape":"Timestamp",
+          "documentation":"<p>The creation time and date for all the alias bot replications.</p>"
+        },
+        "lastUpdatedDateTime":{
+          "shape":"Timestamp",
+          "documentation":"<p>The last time and date updated for all the alias bot replications.</p>"
+        },
+        "failureReasons":{
+          "shape":"FailureReasons",
+          "documentation":"<p>The reasons for failure for the aliases bot replications.</p>"
+        }
+      },
+      "documentation":"<p>Contains information about all the aliases replication statuses applicable for global resiliency.</p>"
+    },
+    "BotAliasReplicaSummaryList":{
+      "type":"list",
+      "member":{"shape":"BotAliasReplicaSummary"}
+    },
+    "BotAliasReplicationStatus":{
+      "type":"string",
+      "documentation":"<p>The status of the operation to replicate the bot alias. Values: Creating, Updating, Available, Deleting, Failed.</p>",
+      "enum":[
+        "Creating",
+        "Updating",
+        "Available",
+        "Deleting",
+        "Failed"
+      ]
     },
     "BotAliasStatus":{
       "type":"string",
@@ -3313,6 +3657,10 @@
           "documentation":"<p>The Amazon Resource Name (ARN) of the IAM role used to build and run the bot.</p>"
         },
         "dataPrivacy":{"shape":"DataPrivacy"},
+        "errorLogSettings":{
+          "shape":"ErrorLogSettings",
+          "documentation":"<p>Allows you to configure destinations where error logs will be published during the bot import process.</p>"
+        },
         "idleSessionTTLInSeconds":{
           "shape":"SessionTTL",
           "documentation":"<p>The time, in seconds, that Amazon Lex should keep information about a user's conversation with the bot. </p> <p>A user interaction remains active for the amount of time specified. If no conversation occurs during this time, the session expires and Amazon Lex deletes any data provided before the timeout.</p> <p>You can specify between 60 (1 minute) and 86,400 (24 hours) seconds.</p>"
@@ -3438,7 +3786,19 @@
           "shape":"ConfidenceThreshold",
           "documentation":"<p>Determines the threshold where Amazon Lex will insert the <code>AMAZON.FallbackIntent</code>, <code>AMAZON.KendraSearchIntent</code>, or both when returning alternative intents. <code>AMAZON.FallbackIntent</code> and <code>AMAZON.KendraSearchIntent</code> are only inserted if they are configured for the bot. </p> <p>For example, suppose a bot is configured with the confidence threshold of 0.80 and the <code>AMAZON.FallbackIntent</code>. Amazon Lex returns three alternative intents with the following confidence scores: IntentA (0.70), IntentB (0.60), IntentC (0.50). The response from the <code>PostText</code> operation would be:</p> <ul> <li> <p> <code>AMAZON.FallbackIntent</code> </p> </li> <li> <p> <code>IntentA</code> </p> </li> <li> <p> <code>IntentB</code> </p> </li> <li> <p> <code>IntentC</code> </p> </li> </ul>"
         },
-        "voiceSettings":{"shape":"VoiceSettings"}
+        "voiceSettings":{"shape":"VoiceSettings"},
+        "speechRecognitionSettings":{
+          "shape":"SpeechRecognitionSettings",
+          "documentation":"<p>Speech-to-text settings to apply when importing the bot locale configuration.</p>"
+        },
+        "speechDetectionSensitivity":{
+          "shape":"SpeechDetectionSensitivity",
+          "documentation":"<p>The sensitivity level for voice activity detection (VAD) in the bot locale. This setting helps optimize speech recognition accuracy by adjusting how the system responds to background noise during voice interactions.</p>"
+        },
+        "unifiedSpeechSettings":{
+          "shape":"UnifiedSpeechSettings",
+          "documentation":"<p>Unified speech settings to apply when importing the bot locale configuration.</p>"
+        }
       },
       "documentation":"<p>Provides the bot locale parameters required for importing a bot locale.</p>"
     },
@@ -3627,6 +3987,42 @@
       "type":"list",
       "member":{"shape":"BotRecommendationSummary"}
     },
+    "BotReplicaStatus":{
+      "type":"string",
+      "documentation":"<p>The status of the operation to replicate the bot. Values: Enabling, Enabled, Deleting, Failed.</p>",
+      "enum":[
+        "Enabling",
+        "Enabled",
+        "Deleting",
+        "Failed"
+      ]
+    },
+    "BotReplicaSummary":{
+      "type":"structure",
+      "members":{
+        "replicaRegion":{
+          "shape":"ReplicaRegion",
+          "documentation":"<p>The replica region used in the replication statuses summary.</p>"
+        },
+        "creationDateTime":{
+          "shape":"Timestamp",
+          "documentation":"<p>The creation time and date for the replicated bots.</p>"
+        },
+        "botReplicaStatus":{
+          "shape":"BotReplicaStatus",
+          "documentation":"<p>The operation status for the replicated bot applicable.</p>"
+        },
+        "failureReasons":{
+          "shape":"FailureReasons",
+          "documentation":"<p>The reasons for the failure for the replicated bot.</p>"
+        }
+      },
+      "documentation":"<p>Contains summary information about all the replication statuses applicable for global resiliency.</p>"
+    },
+    "BotReplicaSummaryList":{
+      "type":"list",
+      "member":{"shape":"BotReplicaSummary"}
+    },
     "BotSortAttribute":{
       "type":"string",
       "enum":["BotName"]
@@ -3729,6 +4125,64 @@
       "key":{"shape":"LocaleId"},
       "value":{"shape":"BotVersionLocaleDetails"},
       "min":1
+    },
+    "BotVersionReplicaSortAttribute":{
+      "type":"string",
+      "enum":["BotVersion"]
+    },
+    "BotVersionReplicaSortBy":{
+      "type":"structure",
+      "required":[
+        "attribute",
+        "order"
+      ],
+      "members":{
+        "attribute":{
+          "shape":"BotVersionReplicaSortAttribute",
+          "documentation":"<p>The attribute of the sort category for the version replicated bots.</p>"
+        },
+        "order":{
+          "shape":"SortOrder",
+          "documentation":"<p>The order of the sort category for the version replicated bots.</p>"
+        }
+      },
+      "documentation":"<p>The sort category for the version replicated bots.</p>"
+    },
+    "BotVersionReplicaSummary":{
+      "type":"structure",
+      "members":{
+        "botVersion":{
+          "shape":"BotVersion",
+          "documentation":"<p>The bot version for the summary information for all the version replication statuses.</p>"
+        },
+        "botVersionReplicationStatus":{
+          "shape":"BotVersionReplicationStatus",
+          "documentation":"<p>The version replication status for all the replicated bots.</p>"
+        },
+        "creationDateTime":{
+          "shape":"Timestamp",
+          "documentation":"<p>The creation date and time of the replication status for all the replicated bots.</p>"
+        },
+        "failureReasons":{
+          "shape":"FailureReasons",
+          "documentation":"<p>The reasons for replication failure for all the replicated bots.</p>"
+        }
+      },
+      "documentation":"<p>Contains summary information for all the version replication statuses applicable for Global resiliency.</p>"
+    },
+    "BotVersionReplicaSummaryList":{
+      "type":"list",
+      "member":{"shape":"BotVersionReplicaSummary"}
+    },
+    "BotVersionReplicationStatus":{
+      "type":"string",
+      "documentation":"<p>The status of the operation to replicate the bot version. Values: Creating, Available, Deleting, Failed.</p>",
+      "enum":[
+        "Creating",
+        "Available",
+        "Deleting",
+        "Failed"
+      ]
     },
     "BotVersionSortAttribute":{
       "type":"string",
@@ -3838,6 +4292,20 @@
           "documentation":"<p>A timestamp indicating the date and time that the bot was last built for this locale.</p>"
         }
       }
+    },
+    "BuildtimeSettings":{
+      "type":"structure",
+      "members":{
+        "descriptiveBotBuilder":{
+          "shape":"DescriptiveBotBuilderSpecification",
+          "documentation":"<p>An object containing specifications for the descriptive bot building feature.</p>"
+        },
+        "sampleUtteranceGeneration":{
+          "shape":"SampleUtteranceGenerationSpecification",
+          "documentation":"<p>Contains specifications for the sample utterance generation feature.</p>"
+        }
+      },
+      "documentation":"<p>Contains specifications about the Amazon Lex build time generative AI capabilities from Amazon Bedrock that you can turn on for your bot.</p>"
     },
     "BuiltInIntentSortAttribute":{
       "type":"string",
@@ -4458,6 +4926,19 @@
         "voiceSettings":{
           "shape":"VoiceSettings",
           "documentation":"<p>The Amazon Polly voice ID that Amazon Lex uses for voice interaction with the user.</p>"
+        },
+        "unifiedSpeechSettings":{
+          "shape":"UnifiedSpeechSettings",
+          "documentation":"<p>Unified speech settings to configure for the new bot locale.</p>"
+        },
+        "speechRecognitionSettings":{
+          "shape":"SpeechRecognitionSettings",
+          "documentation":"<p>Speech-to-text settings to configure for the new bot locale.</p>"
+        },
+        "generativeAISettings":{"shape":"GenerativeAISettings"},
+        "speechDetectionSensitivity":{
+          "shape":"SpeechDetectionSensitivity",
+          "documentation":"<p>The sensitivity level for voice activity detection (VAD) in the bot locale. This setting helps optimize speech recognition accuracy by adjusting how the system responds to background noise during voice interactions.</p>"
         }
       }
     },
@@ -4492,6 +4973,14 @@
           "shape":"VoiceSettings",
           "documentation":"<p>The Amazon Polly voice ID that Amazon Lex uses for voice interaction with the user.</p>"
         },
+        "unifiedSpeechSettings":{
+          "shape":"UnifiedSpeechSettings",
+          "documentation":"<p>The unified speech settings configured for the created bot locale.</p>"
+        },
+        "speechRecognitionSettings":{
+          "shape":"SpeechRecognitionSettings",
+          "documentation":"<p>The speech-to-text settings configured for the created bot locale.</p>"
+        },
         "botLocaleStatus":{
           "shape":"BotLocaleStatus",
           "documentation":"<p>The status of the bot.</p> <p>When the status is <code>Creating</code> the bot locale is being configured. When the status is <code>Building</code> Amazon Lex is building the bot for testing and use.</p> <p>If the status of the bot is <code>ReadyExpressTesting</code>, you can test the bot using the exact utterances specified in the bots' intents. When the bot is ready for full testing or to run, the status is <code>Built</code>.</p> <p>If there was a problem with building the bot, the status is <code>Failed</code>. If the bot was saved but not built, the status is <code>NotBuilt</code>.</p>"
@@ -4499,6 +4988,55 @@
         "creationDateTime":{
           "shape":"Timestamp",
           "documentation":"<p>A timestamp specifying the date and time that the bot locale was created.</p>"
+        },
+        "generativeAISettings":{"shape":"GenerativeAISettings"},
+        "speechDetectionSensitivity":{
+          "shape":"SpeechDetectionSensitivity",
+          "documentation":"<p>The sensitivity level for voice activity detection (VAD) that was specified for the bot locale.</p>"
+        }
+      }
+    },
+    "CreateBotReplicaRequest":{
+      "type":"structure",
+      "required":[
+        "botId",
+        "replicaRegion"
+      ],
+      "members":{
+        "botId":{
+          "shape":"Id",
+          "documentation":"<p>The request for the unique bot ID of the source bot to be replicated in the secondary region.</p>",
+          "location":"uri",
+          "locationName":"botId"
+        },
+        "replicaRegion":{
+          "shape":"ReplicaRegion",
+          "documentation":"<p>The request for the secondary region that will be used in the replication of the source bot.</p>"
+        }
+      }
+    },
+    "CreateBotReplicaResponse":{
+      "type":"structure",
+      "members":{
+        "botId":{
+          "shape":"Id",
+          "documentation":"<p>The unique bot ID of the replicated bot generated.</p>"
+        },
+        "replicaRegion":{
+          "shape":"ReplicaRegion",
+          "documentation":"<p>The region of the replicated bot generated.</p>"
+        },
+        "sourceRegion":{
+          "shape":"ReplicaRegion",
+          "documentation":"<p>The source region for the source bot used for the replicated bot generated.</p>"
+        },
+        "creationDateTime":{
+          "shape":"Timestamp",
+          "documentation":"<p>The creation date and time of the replicated bot generated.</p>"
+        },
+        "botReplicaStatus":{
+          "shape":"BotReplicaStatus",
+          "documentation":"<p>The operational status of the replicated bot generated.</p>"
         }
       }
     },
@@ -4546,6 +5084,10 @@
         "botMembers":{
           "shape":"BotMembers",
           "documentation":"<p>The list of bot members in a network to be created.</p>"
+        },
+        "errorLogSettings":{
+          "shape":"ErrorLogSettings",
+          "documentation":"<p>Specifies the configuration for error logging during bot creation.</p>"
         }
       }
     },
@@ -4599,6 +5141,10 @@
         "botMembers":{
           "shape":"BotMembers",
           "documentation":"<p>The list of bots in a network that was created.</p>"
+        },
+        "errorLogSettings":{
+          "shape":"ErrorLogSettings",
+          "documentation":"<p>Specifies configuration settings for delivering error logs to Cloudwatch Logs in an Amazon Lex bot response.</p>"
         }
       }
     },
@@ -4719,6 +5265,10 @@
           "shape":"Name",
           "documentation":"<p>The name of the intent. Intent names must be unique in the locale that contains the intent and cannot match the name of any built-in intent.</p>"
         },
+        "intentDisplayName":{
+          "shape":"DisplayName",
+          "documentation":"<p>A display name for the intent. If configured, This name will be shown to users during Intent Disambiguation instead of the intent name. Display names should be user-friendly, descriptive and match the intent's purpose to improve user experience during disambiguation.</p>"
+        },
         "description":{
           "shape":"Description",
           "documentation":"<p>A description of the intent. Use the description to help identify the intent in lists.</p>"
@@ -4780,6 +5330,14 @@
         "initialResponseSetting":{
           "shape":"InitialResponseSetting",
           "documentation":"<p>Configuration settings for the response that is sent to the user at the beginning of a conversation, before eliciting slot values.</p>"
+        },
+        "qnAIntentConfiguration":{
+          "shape":"QnAIntentConfiguration",
+          "documentation":"<p>Specifies the configuration of the built-in <code>Amazon.QnAIntent</code>. The <code>AMAZON.QnAIntent</code> intent is called when Amazon Lex can't determine another intent to invoke. If you specify this field, you can't specify the <code>kendraConfiguration</code> field.</p>"
+        },
+        "qInConnectIntentConfiguration":{
+          "shape":"QInConnectIntentConfiguration",
+          "documentation":"<p>Qinconnect intent configuration details for the create intent request.</p>"
         }
       }
     },
@@ -4793,6 +5351,10 @@
         "intentName":{
           "shape":"Name",
           "documentation":"<p>The name specified for the intent.</p>"
+        },
+        "intentDisplayName":{
+          "shape":"DisplayName",
+          "documentation":"<p>The display name specified for the intent.</p>"
         },
         "description":{
           "shape":"Description",
@@ -4853,6 +5415,14 @@
         "initialResponseSetting":{
           "shape":"InitialResponseSetting",
           "documentation":"<p>Configuration settings for the response that is sent to the user at the beginning of a conversation, before eliciting slot values.</p>"
+        },
+        "qnAIntentConfiguration":{
+          "shape":"QnAIntentConfiguration",
+          "documentation":"<p>Details about the the configuration of the built-in <code>Amazon.QnAIntent</code>.</p>"
+        },
+        "qInConnectIntentConfiguration":{
+          "shape":"QInConnectIntentConfiguration",
+          "documentation":"<p>Qinconnect intent configuration details for the create intent response.</p>"
         }
       }
     },
@@ -5219,8 +5789,7 @@
     },
     "CreateUploadUrlRequest":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "CreateUploadUrlResponse":{
       "type":"structure",
@@ -5234,6 +5803,11 @@
           "documentation":"<p>A pre-signed S3 write URL. Upload the zip archive file that contains the definition of your bot or bot locale.</p>"
         }
       }
+    },
+    "CustomDisambiguationMessage":{
+      "type":"string",
+      "max":1000,
+      "min":1
     },
     "CustomPayload":{
       "type":"structure",
@@ -5391,6 +5965,24 @@
       },
       "documentation":"<p>By default, data stored by Amazon Lex is encrypted. The <code>DataPrivacy</code> structure provides settings that determine how Amazon Lex handles special cases of securing the data for your bot. </p>"
     },
+    "DataSourceConfiguration":{
+      "type":"structure",
+      "members":{
+        "opensearchConfiguration":{
+          "shape":"OpensearchConfiguration",
+          "documentation":"<p>Contains details about the configuration of the Amazon OpenSearch Service database used for the <code>AMAZON.QnAIntent</code>. To create a domain, follow the steps at <a href=\"https://docs.aws.amazon.com/opensearch-service/latest/developerguide/createupdatedomains.html\">Creating and managing Amazon OpenSearch Service domains</a>.</p>"
+        },
+        "kendraConfiguration":{
+          "shape":"QnAKendraConfiguration",
+          "documentation":"<p>Contains details about the configuration of the Amazon Kendra index used for the <code>AMAZON.QnAIntent</code>. To create a Amazon Kendra index, follow the steps at <a href=\"https://docs.aws.amazon.com/kendra/latest/dg/create-index.html\">Creating an index</a>.</p>"
+        },
+        "bedrockKnowledgeStoreConfiguration":{
+          "shape":"BedrockKnowledgeStoreConfiguration",
+          "documentation":"<p>Contains details about the configuration of the Amazon Bedrock knowledge base used for the <code>AMAZON.QnAIntent</code>. To set up a knowledge base, follow the steps at <a href=\"https://docs.aws.amazon.com/bedrock/latest/userguide/knowledge-base.html\">Building a knowledge base</a>.</p>"
+        }
+      },
+      "documentation":"<p>Contains details about the configuration of the knowledge store used for the <code>AMAZON.QnAIntent</code>. You must have already created the knowledge store and indexed the documents within it.</p>"
+    },
     "DateRangeFilter":{
       "type":"structure",
       "required":[
@@ -5408,6 +6000,27 @@
         }
       },
       "documentation":"<p>The object used for specifying the data range that the customer wants Amazon Lex to read through in the input transcripts.</p>"
+    },
+    "DeepgramModelId":{
+      "type":"string",
+      "max":32,
+      "min":1,
+      "pattern":"[A-Za-z0-9-_]+"
+    },
+    "DeepgramSpeechModelConfig":{
+      "type":"structure",
+      "required":["apiTokenSecretArn"],
+      "members":{
+        "apiTokenSecretArn":{
+          "shape":"SecretsManagerSecretArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the Secrets Manager secret that contains the Deepgram API token.</p>"
+        },
+        "modelId":{
+          "shape":"DeepgramModelId",
+          "documentation":"<p>The identifier of the Deepgram speech-to-text model to use for processing speech input.</p>"
+        }
+      },
+      "documentation":"<p>Configuration settings for integrating Deepgram speech-to-text models with Amazon Lex.</p>"
     },
     "DefaultConditionalBranch":{
       "type":"structure",
@@ -5510,6 +6123,44 @@
         "botLocaleStatus":{
           "shape":"BotLocaleStatus",
           "documentation":"<p>The status of deleting the bot locale. The locale first enters the <code>Deleting</code> status. Once the locale is deleted it no longer appears in the list of locales for the bot.</p>"
+        }
+      }
+    },
+    "DeleteBotReplicaRequest":{
+      "type":"structure",
+      "required":[
+        "botId",
+        "replicaRegion"
+      ],
+      "members":{
+        "botId":{
+          "shape":"Id",
+          "documentation":"<p>The unique ID of the replicated bot to be deleted from the secondary region</p>",
+          "location":"uri",
+          "locationName":"botId"
+        },
+        "replicaRegion":{
+          "shape":"ReplicaRegion",
+          "documentation":"<p>The secondary region of the replicated bot that will be deleted.</p>",
+          "location":"uri",
+          "locationName":"replicaRegion"
+        }
+      }
+    },
+    "DeleteBotReplicaResponse":{
+      "type":"structure",
+      "members":{
+        "botId":{
+          "shape":"Id",
+          "documentation":"<p>The unique bot ID of the replicated bot generated.</p>"
+        },
+        "replicaRegion":{
+          "shape":"ReplicaRegion",
+          "documentation":"<p>The region of the replicated bot generated.</p>"
+        },
+        "botReplicaStatus":{
+          "shape":"BotReplicaStatus",
+          "documentation":"<p>The operational status of the replicated bot generated.</p>"
         }
       }
     },
@@ -5920,8 +6571,7 @@
     },
     "DeleteUtterancesResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DescribeBotAliasRequest":{
       "type":"structure",
@@ -6057,6 +6707,14 @@
           "shape":"VoiceSettings",
           "documentation":"<p>The Amazon Polly voice Amazon Lex uses for voice interaction with the user.</p>"
         },
+        "unifiedSpeechSettings":{
+          "shape":"UnifiedSpeechSettings",
+          "documentation":"<p>The unified speech settings configured for the bot locale.</p>"
+        },
+        "speechRecognitionSettings":{
+          "shape":"SpeechRecognitionSettings",
+          "documentation":"<p>The speech-to-text settings configured for the bot locale.</p>"
+        },
         "intentsCount":{
           "shape":"ResourceCount",
           "documentation":"<p>The number of intents defined for the locale.</p>"
@@ -6092,6 +6750,14 @@
         "recommendedActions":{
           "shape":"RecommendedActions",
           "documentation":"<p>Recommended actions to take to resolve an error in the <code>failureReasons</code> field.</p>"
+        },
+        "generativeAISettings":{
+          "shape":"GenerativeAISettings",
+          "documentation":"<p>Contains settings for Amazon Bedrock's generative AI features for your bot locale.</p>"
+        },
+        "speechDetectionSensitivity":{
+          "shape":"SpeechDetectionSensitivity",
+          "documentation":"<p>The sensitivity level for voice activity detection (VAD) configured for the bot locale.</p>"
         }
       }
     },
@@ -6179,6 +6845,56 @@
         }
       }
     },
+    "DescribeBotReplicaRequest":{
+      "type":"structure",
+      "required":[
+        "botId",
+        "replicaRegion"
+      ],
+      "members":{
+        "botId":{
+          "shape":"Id",
+          "documentation":"<p>The request for the unique bot ID of the replicated bot being monitored.</p>",
+          "location":"uri",
+          "locationName":"botId"
+        },
+        "replicaRegion":{
+          "shape":"ReplicaRegion",
+          "documentation":"<p>The request for the region of the replicated bot being monitored.</p>",
+          "location":"uri",
+          "locationName":"replicaRegion"
+        }
+      }
+    },
+    "DescribeBotReplicaResponse":{
+      "type":"structure",
+      "members":{
+        "botId":{
+          "shape":"Id",
+          "documentation":"<p>The unique bot ID of the replicated bot being monitored.</p>"
+        },
+        "replicaRegion":{
+          "shape":"ReplicaRegion",
+          "documentation":"<p>The region of the replicated bot being monitored.</p>"
+        },
+        "sourceRegion":{
+          "shape":"ReplicaRegion",
+          "documentation":"<p>The source region of the replicated bot being monitored.</p>"
+        },
+        "creationDateTime":{
+          "shape":"Timestamp",
+          "documentation":"<p>The creation date and time of the replicated bot being monitored.</p>"
+        },
+        "botReplicaStatus":{
+          "shape":"BotReplicaStatus",
+          "documentation":"<p>The operational status of the replicated bot being monitored.</p>"
+        },
+        "failureReasons":{
+          "shape":"FailureReasons",
+          "documentation":"<p>The failure reasons the bot being monitored failed to replicate.</p>"
+        }
+      }
+    },
     "DescribeBotRequest":{
       "type":"structure",
       "required":["botId"],
@@ -6188,6 +6904,90 @@
           "documentation":"<p>The unique identifier of the bot to describe.</p>",
           "location":"uri",
           "locationName":"botId"
+        }
+      }
+    },
+    "DescribeBotResourceGenerationRequest":{
+      "type":"structure",
+      "required":[
+        "botId",
+        "botVersion",
+        "localeId",
+        "generationId"
+      ],
+      "members":{
+        "botId":{
+          "shape":"Id",
+          "documentation":"<p>The unique identifier of the bot for which to return the generation details.</p>",
+          "location":"uri",
+          "locationName":"botId"
+        },
+        "botVersion":{
+          "shape":"BotVersion",
+          "documentation":"<p>The version of the bot for which to return the generation details.</p>",
+          "location":"uri",
+          "locationName":"botVersion"
+        },
+        "localeId":{
+          "shape":"LocaleId",
+          "documentation":"<p>The locale of the bot for which to return the generation details.</p>",
+          "location":"uri",
+          "locationName":"localeId"
+        },
+        "generationId":{
+          "shape":"Id",
+          "documentation":"<p>The unique identifier of the generation request for which to return the generation details.</p>",
+          "location":"uri",
+          "locationName":"generationId"
+        }
+      }
+    },
+    "DescribeBotResourceGenerationResponse":{
+      "type":"structure",
+      "members":{
+        "botId":{
+          "shape":"Id",
+          "documentation":"<p>The unique identifier of the bot for which the generation request was made.</p>"
+        },
+        "botVersion":{
+          "shape":"BotVersion",
+          "documentation":"<p>The version of the bot for which the generation request was made.</p>"
+        },
+        "localeId":{
+          "shape":"LocaleId",
+          "documentation":"<p>The locale of the bot for which the generation request was made.</p>"
+        },
+        "generationId":{
+          "shape":"Id",
+          "documentation":"<p>The generation ID for which to return the generation details.</p>"
+        },
+        "failureReasons":{
+          "shape":"FailureReasons",
+          "documentation":"<p>A list of reasons why the generation of bot resources through natural language description failed.</p>"
+        },
+        "generationStatus":{
+          "shape":"GenerationStatus",
+          "documentation":"<p>The status of the generation request.</p>"
+        },
+        "generationInputPrompt":{
+          "shape":"GenerationInput",
+          "documentation":"<p>The prompt used in the generation request.</p>"
+        },
+        "generatedBotLocaleUrl":{
+          "shape":"PresignedS3Url",
+          "documentation":"<p>The Amazon S3 location of the generated bot locale configuration.</p>"
+        },
+        "creationDateTime":{
+          "shape":"Timestamp",
+          "documentation":"<p>The date and time at which the item was generated.</p>"
+        },
+        "modelArn":{
+          "shape":"BedrockModelArn",
+          "documentation":"<p>The ARN of the model used to generate the bot resources.</p>"
+        },
+        "lastUpdatedDateTime":{
+          "shape":"Timestamp",
+          "documentation":"<p>The date and time at which the generated item was updated.</p>"
         }
       }
     },
@@ -6241,6 +7041,10 @@
         "failureReasons":{
           "shape":"FailureReasons",
           "documentation":"<p>If the <code>botStatus</code> is <code>Failed</code>, this contains a list of reasons that the bot couldn't be built.</p>"
+        },
+        "errorLogSettings":{
+          "shape":"ErrorLogSettings",
+          "documentation":"<p>Contains the configuration for error logging that specifies where and how bot errors are recorded, including destinations like CloudWatch Logs.</p>"
         }
       }
     },
@@ -6527,6 +7331,10 @@
           "shape":"Name",
           "documentation":"<p>The name specified for the intent.</p>"
         },
+        "intentDisplayName":{
+          "shape":"DisplayName",
+          "documentation":"<p>The display name specified for the intent.</p>"
+        },
         "description":{
           "shape":"Description",
           "documentation":"<p>The description of the intent.</p>"
@@ -6594,6 +7402,14 @@
         "initialResponseSetting":{
           "shape":"InitialResponseSetting",
           "documentation":"<p>Configuration setting for a response sent to the user before Amazon Lex starts eliciting slots.</p>"
+        },
+        "qnAIntentConfiguration":{
+          "shape":"QnAIntentConfiguration",
+          "documentation":"<p>Details about the configuration of the built-in <code>Amazon.QnAIntent</code>.</p>"
+        },
+        "qInConnectIntentConfiguration":{
+          "shape":"QInConnectIntentConfiguration",
+          "documentation":"<p>Qinconnect intent configuration details for the describe intent response.</p>"
         }
       }
     },
@@ -7048,8 +7864,23 @@
     },
     "Description":{
       "type":"string",
-      "max":200,
+      "max":2000,
       "min":0
+    },
+    "DescriptiveBotBuilderSpecification":{
+      "type":"structure",
+      "required":["enabled"],
+      "members":{
+        "enabled":{
+          "shape":"Boolean",
+          "documentation":"<p>Specifies whether the descriptive bot building feature is activated or not.</p>"
+        },
+        "bedrockModelSpecification":{
+          "shape":"BedrockModelSpecification",
+          "documentation":"<p>An object containing information about the Amazon Bedrock model used to interpret the prompt used in descriptive bot building.</p>"
+        }
+      },
+      "documentation":"<p>Contains specifications for the descriptive bot building feature.</p>"
     },
     "DialogAction":{
       "type":"structure",
@@ -7134,6 +7965,15 @@
       },
       "documentation":"<p>The current state of the conversation with the user.</p>"
     },
+    "DisplayName":{
+      "type":"string",
+      "max":100,
+      "min":1
+    },
+    "DomainEndpoint":{
+      "type":"string",
+      "pattern":"^(http|https):\\/\\/+[^\\s]+[\\w]"
+    },
     "DraftBotVersion":{
       "type":"string",
       "max":5,
@@ -7162,6 +8002,7 @@
       },
       "documentation":"<p>Settings that specify the dialog code hook that is called by Amazon Lex between eliciting slot values.</p>"
     },
+    "Enabled":{"type":"boolean"},
     "EncryptionSetting":{
       "type":"structure",
       "members":{
@@ -7189,7 +8030,36 @@
         "INTERNAL_SERVER_FAILURE"
       ]
     },
+    "ErrorLogSettings":{
+      "type":"structure",
+      "required":["enabled"],
+      "members":{
+        "enabled":{
+          "shape":"BoxedBoolean",
+          "documentation":"<p>Settings parameters for the error logs, when it is enabled.</p>"
+        }
+      },
+      "documentation":"<p>Settings parameters for the error logs, whether it is enabled or disabled.</p>"
+    },
     "ErrorMessage":{"type":"string"},
+    "ExactResponseFields":{
+      "type":"structure",
+      "required":[
+        "questionField",
+        "answerField"
+      ],
+      "members":{
+        "questionField":{
+          "shape":"QuestionField",
+          "documentation":"<p>The name of the field that contains the query made to the OpenSearch Service database.</p>"
+        },
+        "answerField":{
+          "shape":"AnswerField",
+          "documentation":"<p>The name of the field that contains the answer to the query made to the OpenSearch Service database.</p>"
+        }
+      },
+      "documentation":"<p>Contains the names of the fields used for an exact response to the user.</p>"
+    },
     "ExceptionMessage":{"type":"string"},
     "ExecutionErrorDetails":{
       "type":"structure",
@@ -7496,6 +8366,136 @@
       },
       "documentation":"<p>Provides information for updating the user on the progress of fulfilling an intent.</p>"
     },
+    "GenerateBotElementRequest":{
+      "type":"structure",
+      "required":[
+        "intentId",
+        "botId",
+        "botVersion",
+        "localeId"
+      ],
+      "members":{
+        "intentId":{
+          "shape":"Id",
+          "documentation":"<p>The intent unique Id for the bot request to generate utterances.</p>"
+        },
+        "botId":{
+          "shape":"Id",
+          "documentation":"<p>The bot unique Id for the bot request to generate utterances.</p>",
+          "location":"uri",
+          "locationName":"botId"
+        },
+        "botVersion":{
+          "shape":"BotVersion",
+          "documentation":"<p>The bot version for the bot request to generate utterances.</p>",
+          "location":"uri",
+          "locationName":"botVersion"
+        },
+        "localeId":{
+          "shape":"LocaleId",
+          "documentation":"<p>The unique locale Id for the bot request to generate utterances.</p>",
+          "location":"uri",
+          "locationName":"localeId"
+        }
+      }
+    },
+    "GenerateBotElementResponse":{
+      "type":"structure",
+      "members":{
+        "botId":{
+          "shape":"Id",
+          "documentation":"<p>The unique bot Id for the bot which received the response.</p>"
+        },
+        "botVersion":{
+          "shape":"DraftBotVersion",
+          "documentation":"<p>The unique bot version for the bot which received the response.</p>"
+        },
+        "localeId":{
+          "shape":"LocaleId",
+          "documentation":"<p>The unique locale Id for the bot which received the response.</p>"
+        },
+        "intentId":{
+          "shape":"Id",
+          "documentation":"<p>The unique intent Id for the bot which received the response.</p>"
+        },
+        "sampleUtterances":{
+          "shape":"SampleUtterancesList",
+          "documentation":"<p>The sample utterances for the bot which received the response.</p>"
+        }
+      }
+    },
+    "GenerationInput":{
+      "type":"string",
+      "max":2000,
+      "min":100
+    },
+    "GenerationSortBy":{
+      "type":"structure",
+      "required":[
+        "attribute",
+        "order"
+      ],
+      "members":{
+        "attribute":{
+          "shape":"GenerationSortByAttribute",
+          "documentation":"<p>The attribute by which to sort the generation request information. You can sort by the following attributes.</p> <ul> <li> <p> <code>creationStartTime</code> – The time at which the generation request was created.</p> </li> <li> <p> <code>lastUpdatedTime</code> – The time at which the generation request was last updated.</p> </li> </ul>"
+        },
+        "order":{
+          "shape":"SortOrder",
+          "documentation":"<p>The order by which to sort the generation request information.</p>"
+        }
+      },
+      "documentation":"<p>Specifies the attribute and method by which to sort the generation request information.</p>"
+    },
+    "GenerationSortByAttribute":{
+      "type":"string",
+      "enum":[
+        "creationStartTime",
+        "lastUpdatedTime"
+      ]
+    },
+    "GenerationStatus":{
+      "type":"string",
+      "enum":[
+        "Failed",
+        "Complete",
+        "InProgress"
+      ]
+    },
+    "GenerationSummary":{
+      "type":"structure",
+      "members":{
+        "generationId":{
+          "shape":"Id",
+          "documentation":"<p>The unique identifier of the generation request.</p>"
+        },
+        "generationStatus":{
+          "shape":"GenerationStatus",
+          "documentation":"<p>The status of the generation request.</p>"
+        },
+        "creationDateTime":{
+          "shape":"Timestamp",
+          "documentation":"<p>The date and time at which the generation request was made.</p>"
+        },
+        "lastUpdatedDateTime":{
+          "shape":"Timestamp",
+          "documentation":"<p>The date and time at which the generation request was last updated.</p>"
+        }
+      },
+      "documentation":"<p>Contains information about a generation request made for the bot locale.</p>"
+    },
+    "GenerationSummaryList":{
+      "type":"list",
+      "member":{"shape":"GenerationSummary"}
+    },
+    "GenerativeAISettings":{
+      "type":"structure",
+      "members":{
+        "runtimeSettings":{"shape":"RuntimeSettings"},
+        "buildtimeSettings":{"shape":"BuildtimeSettings"}
+      },
+      "documentation":"<p>Contains specifications about the generative AI capabilities from Amazon Bedrock that you can turn on for your bot.</p>"
+    },
     "GetTestExecutionArtifactsUrlRequest":{
       "type":"structure",
       "required":["testExecutionId"],
@@ -7744,6 +8744,7 @@
       "min":5,
       "pattern":"^([0-9a-zA-Z_])+$"
     },
+    "IncludeField":{"type":"string"},
     "InitialResponseSetting":{
       "type":"structure",
       "members":{
@@ -7924,6 +8925,25 @@
       },
       "documentation":"<p>Provides a prompt for making sure that the user is ready for the intent to be fulfilled.</p>"
     },
+    "IntentDisambiguationSettings":{
+      "type":"structure",
+      "required":["enabled"],
+      "members":{
+        "enabled":{
+          "shape":"Enabled",
+          "documentation":"<p>Determines whether the Intent Disambiguation feature is enabled. When set to <code>true</code>, Amazon Lex will present disambiguation options to users when multiple intents could match their input, with the default being <code>false</code>.</p>"
+        },
+        "maxDisambiguationIntents":{
+          "shape":"MaxDisambiguationIntents",
+          "documentation":"<p>Specifies the maximum number of intent options (2-5) to present to users when disambiguation is needed. This setting determines how many intent options will be shown to users when the system detects ambiguous input. The default value is 3.</p>"
+        },
+        "customDisambiguationMessage":{
+          "shape":"CustomDisambiguationMessage",
+          "documentation":"<p>Provides a custom message that will be displayed before presenting the disambiguation options to users. This message helps set the context for users and can be customized to match your bot's tone and brand. If not specified, a default message will be used.</p>"
+        }
+      },
+      "documentation":"<p>Configures the Intent Disambiguation feature that helps resolve ambiguous user inputs when multiple intents could match. When enabled, the system presents clarifying questions to users, helping them specify their exact intent for improved conversation accuracy.</p>"
+    },
     "IntentFilter":{
       "type":"structure",
       "required":[
@@ -8073,6 +9093,10 @@
         "intentName":{
           "shape":"Name",
           "documentation":"<p>The name of the intent.</p>"
+        },
+        "intentDisplayName":{
+          "shape":"DisplayName",
+          "documentation":"<p>The display name of the intent.</p>"
         },
         "description":{
           "shape":"Description",
@@ -8288,6 +9312,60 @@
         }
       }
     },
+    "ListBotAliasReplicasRequest":{
+      "type":"structure",
+      "required":[
+        "botId",
+        "replicaRegion"
+      ],
+      "members":{
+        "botId":{
+          "shape":"Id",
+          "documentation":"<p>The request for the unique bot ID of the replicated bot created from the source bot alias.</p>",
+          "location":"uri",
+          "locationName":"botId"
+        },
+        "replicaRegion":{
+          "shape":"ReplicaRegion",
+          "documentation":"<p>The request for the secondary region of the replicated bot created from the source bot alias.</p>",
+          "location":"uri",
+          "locationName":"replicaRegion"
+        },
+        "maxResults":{
+          "shape":"MaxResults",
+          "documentation":"<p>The request for maximum results to list the replicated bots created from the source bot alias.</p>"
+        },
+        "nextToken":{
+          "shape":"NextToken",
+          "documentation":"<p>The request for the next token for the replicated bot created from the source bot alias.</p>"
+        }
+      }
+    },
+    "ListBotAliasReplicasResponse":{
+      "type":"structure",
+      "members":{
+        "botId":{
+          "shape":"Id",
+          "documentation":"<p>The unique bot ID of the replicated bot created from the source bot alias.</p>"
+        },
+        "sourceRegion":{
+          "shape":"ReplicaRegion",
+          "documentation":"<p>The source region of the replicated bot created from the source bot alias.</p>"
+        },
+        "replicaRegion":{
+          "shape":"ReplicaRegion",
+          "documentation":"<p>The secondary region of the replicated bot created from the source bot alias.</p>"
+        },
+        "botAliasReplicaSummaries":{
+          "shape":"BotAliasReplicaSummaryList",
+          "documentation":"<p>The summary information of the replicated bot created from the source bot alias.</p>"
+        },
+        "nextToken":{
+          "shape":"NextToken",
+          "documentation":"<p>The next token for the replicated bots created from the source bot alias.</p>"
+        }
+      }
+    },
     "ListBotAliasesRequest":{
       "type":"structure",
       "required":["botId"],
@@ -8441,6 +9519,158 @@
         "nextToken":{
           "shape":"NextToken",
           "documentation":"<p>A token that indicates whether there are more results to return in a response to the ListBotRecommendations operation. If the nextToken field is present, you send the contents as the nextToken parameter of a ListBotRecommendations operation request to get the next page of results. </p>"
+        }
+      }
+    },
+    "ListBotReplicasRequest":{
+      "type":"structure",
+      "required":["botId"],
+      "members":{
+        "botId":{
+          "shape":"Id",
+          "documentation":"<p>The request for the unique bot IDs in the list of replicated bots.</p>",
+          "location":"uri",
+          "locationName":"botId"
+        }
+      }
+    },
+    "ListBotReplicasResponse":{
+      "type":"structure",
+      "members":{
+        "botId":{
+          "shape":"Id",
+          "documentation":"<p>the unique bot IDs in the list of replicated bots.</p>"
+        },
+        "sourceRegion":{
+          "shape":"ReplicaRegion",
+          "documentation":"<p>The source region of the source bots in the list of replicated bots.</p>"
+        },
+        "botReplicaSummaries":{
+          "shape":"BotReplicaSummaryList",
+          "documentation":"<p>The summary details for the replicated bots.</p>"
+        }
+      }
+    },
+    "ListBotResourceGenerationsRequest":{
+      "type":"structure",
+      "required":[
+        "botId",
+        "botVersion",
+        "localeId"
+      ],
+      "members":{
+        "botId":{
+          "shape":"Id",
+          "documentation":"<p>The unique identifier of the bot whose generation requests you want to view.</p>",
+          "location":"uri",
+          "locationName":"botId"
+        },
+        "botVersion":{
+          "shape":"BotVersion",
+          "documentation":"<p>The version of the bot whose generation requests you want to view.</p>",
+          "location":"uri",
+          "locationName":"botVersion"
+        },
+        "localeId":{
+          "shape":"LocaleId",
+          "documentation":"<p>The locale of the bot whose generation requests you want to view.</p>",
+          "location":"uri",
+          "locationName":"localeId"
+        },
+        "sortBy":{
+          "shape":"GenerationSortBy",
+          "documentation":"<p>An object containing information about the attribute and the method by which to sort the results</p>"
+        },
+        "maxResults":{
+          "shape":"MaxResults",
+          "documentation":"<p>The maximum number of results to return in the response.</p>"
+        },
+        "nextToken":{
+          "shape":"NextToken",
+          "documentation":"<p>If the total number of results is greater than the number specified in the <code>maxResults</code>, the response returns a token in the <code>nextToken</code> field. Use this token when making a request to return the next batch of results.</p>"
+        }
+      }
+    },
+    "ListBotResourceGenerationsResponse":{
+      "type":"structure",
+      "members":{
+        "botId":{
+          "shape":"Id",
+          "documentation":"<p>The unique identifier of the bot for which the generation requests were made.</p>"
+        },
+        "botVersion":{
+          "shape":"BotVersion",
+          "documentation":"<p>The version of the bot for which the generation requests were made.</p>"
+        },
+        "localeId":{
+          "shape":"LocaleId",
+          "documentation":"<p>The locale of the bot for which the generation requests were made.</p>"
+        },
+        "generationSummaries":{
+          "shape":"GenerationSummaryList",
+          "documentation":"<p>A list of objects, each containing information about a generation request for the bot locale.</p>"
+        },
+        "nextToken":{
+          "shape":"NextToken",
+          "documentation":"<p>If the total number of results is greater than the number specified in the <code>maxResults</code>, the response returns a token in the <code>nextToken</code> field. Use this token when making a request to return the next batch of results.</p>"
+        }
+      }
+    },
+    "ListBotVersionReplicasRequest":{
+      "type":"structure",
+      "required":[
+        "botId",
+        "replicaRegion"
+      ],
+      "members":{
+        "botId":{
+          "shape":"Id",
+          "documentation":"<p>The request for the unique ID in the list of replicated bots.</p>",
+          "location":"uri",
+          "locationName":"botId"
+        },
+        "replicaRegion":{
+          "shape":"ReplicaRegion",
+          "documentation":"<p>The request for the region used in the list of replicated bots.</p>",
+          "location":"uri",
+          "locationName":"replicaRegion"
+        },
+        "maxResults":{
+          "shape":"MaxResults",
+          "documentation":"<p>The maximum results given in the list of replicated bots.</p>"
+        },
+        "nextToken":{
+          "shape":"NextToken",
+          "documentation":"<p>The next token given in the list of replicated bots.</p>"
+        },
+        "sortBy":{
+          "shape":"BotVersionReplicaSortBy",
+          "documentation":"<p>The requested sort category for the list of replicated bots.</p>"
+        }
+      }
+    },
+    "ListBotVersionReplicasResponse":{
+      "type":"structure",
+      "members":{
+        "botId":{
+          "shape":"Id",
+          "documentation":"<p>The unique ID of the bots in the list of replicated bots.</p>"
+        },
+        "sourceRegion":{
+          "shape":"ReplicaRegion",
+          "documentation":"<p>The source region used for the bots in the list of replicated bots.</p>"
+        },
+        "replicaRegion":{
+          "shape":"ReplicaRegion",
+          "documentation":"<p>The region used for the replicated bots in the list of replicated bots.</p>"
+        },
+        "botVersionReplicaSummaries":{
+          "shape":"BotVersionReplicaSummaryList",
+          "documentation":"<p>The information summary used for the replicated bots in the list of replicated bots.</p>"
+        },
+        "nextToken":{
+          "shape":"NextToken",
+          "documentation":"<p>The next token used for the replicated bots in the list of replicated bots.</p>"
         }
       }
     },
@@ -9652,6 +10882,12 @@
       "type":"string",
       "max":1024
     },
+    "MaxDisambiguationIntents":{
+      "type":"integer",
+      "box":true,
+      "max":5,
+      "min":2
+    },
     "MaxResults":{
       "type":"integer",
       "box":true,
@@ -9770,6 +11006,25 @@
       "min":0
     },
     "NextToken":{"type":"string"},
+    "NluImprovementSpecification":{
+      "type":"structure",
+      "required":["enabled"],
+      "members":{
+        "enabled":{
+          "shape":"Enabled",
+          "documentation":"<p>Determines whether the Assisted NLU feature is enabled for the bot. When set to <code>true</code>, Amazon Lex uses advanced models to improve intent recognition and slot resolution, with the default being <code>false</code>.</p>"
+        },
+        "assistedNluMode":{
+          "shape":"AssistedNluMode",
+          "documentation":"<p>Specifies the mode for Assisted NLU operation. Use <code>Primary</code> to make Assisted NLU the primary intent recognition method, or <code>Fallback</code> to use it only when standard NLU confidence is low.</p>"
+        },
+        "intentDisambiguationSettings":{
+          "shape":"IntentDisambiguationSettings",
+          "documentation":"<p>An object containing specifications for the Intent Disambiguation feature within the Assisted NLU settings. These settings determine how the bot handles ambiguous user inputs that could match multiple intents.</p>"
+        }
+      },
+      "documentation":"<p>Configures the Assisted Natural Language Understanding (NLU) feature for your bot. This specification determines whether enhanced intent recognition and utterance understanding capabilities are active.</p>"
+    },
     "NonEmptyString":{
       "type":"string",
       "min":1
@@ -9779,6 +11034,18 @@
       "max":5,
       "min":1,
       "pattern":"^[0-9]+$"
+    },
+    "OSIncludeFields":{
+      "type":"list",
+      "member":{"shape":"IncludeField"},
+      "max":5,
+      "min":1
+    },
+    "OSIndexName":{
+      "type":"string",
+      "max":255,
+      "min":1,
+      "pattern":"^(?![_-])[a-z0-9][a-z0-9_\\-]{0,254}$"
     },
     "ObfuscationSetting":{
       "type":"structure",
@@ -9808,6 +11075,36 @@
       "member":{"shape":"ObjectPrefix"},
       "max":2,
       "min":1
+    },
+    "OpensearchConfiguration":{
+      "type":"structure",
+      "required":[
+        "domainEndpoint",
+        "indexName"
+      ],
+      "members":{
+        "domainEndpoint":{
+          "shape":"DomainEndpoint",
+          "documentation":"<p>The endpoint of the Amazon OpenSearch Service domain.</p>"
+        },
+        "indexName":{
+          "shape":"OSIndexName",
+          "documentation":"<p>The name of the Amazon OpenSearch Service index.</p>"
+        },
+        "exactResponse":{
+          "shape":"Boolean",
+          "documentation":"<p>Specifies whether to return an exact response or to return an answer generated by the model using the fields you specify from the database.</p>"
+        },
+        "exactResponseFields":{
+          "shape":"ExactResponseFields",
+          "documentation":"<p>Contains the names of the fields used for an exact response to the user.</p>"
+        },
+        "includeFields":{
+          "shape":"OSIncludeFields",
+          "documentation":"<p>Contains a list of fields from the Amazon OpenSearch Service that the model can use to generate the answer to the query.</p>"
+        }
+      },
+      "documentation":"<p>Contains details about the configuration of the Amazon OpenSearch Service database used for the <code>AMAZON.QnAIntent</code>.</p>"
     },
     "Operation":{
       "type":"string",
@@ -10133,11 +11430,71 @@
       },
       "documentation":"<p>Specifies a list of message groups that Amazon Lex sends to a user to elicit a response.</p>"
     },
+    "QInConnectAssistantARN":{
+      "type":"string",
+      "pattern":"^arn:[a-z-]*?:wisdom:[a-z0-9-]*?:[0-9]{12}:[a-z-]*?/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}(?:/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}){0,2}$"
+    },
+    "QInConnectAssistantConfiguration":{
+      "type":"structure",
+      "required":["assistantArn"],
+      "members":{
+        "assistantArn":{
+          "shape":"QInConnectAssistantARN",
+          "documentation":"<p>The assistant Arn details of the Qinconnect assistant configuration.</p>"
+        }
+      },
+      "documentation":"<p>The configuration details of the Qinconnect assistant.</p>"
+    },
+    "QInConnectIntentConfiguration":{
+      "type":"structure",
+      "members":{
+        "qInConnectAssistantConfiguration":{
+          "shape":"QInConnectAssistantConfiguration",
+          "documentation":"<p>The Qinconnect assistant configuration details of the Qinconnect intent.</p>"
+        }
+      },
+      "documentation":"<p>The configuration details of the Qinconnect intent.</p>"
+    },
+    "QnAIntentConfiguration":{
+      "type":"structure",
+      "members":{
+        "dataSourceConfiguration":{
+          "shape":"DataSourceConfiguration",
+          "documentation":"<p>Contains details about the configuration of the data source used for the <code>AMAZON.QnAIntent</code>.</p>"
+        },
+        "bedrockModelConfiguration":{"shape":"BedrockModelSpecification"}
+      },
+      "documentation":"<p>Details about the the configuration of the built-in <code>Amazon.QnAIntent</code>.</p>"
+    },
+    "QnAKendraConfiguration":{
+      "type":"structure",
+      "required":["kendraIndex"],
+      "members":{
+        "kendraIndex":{
+          "shape":"KendraIndexArn",
+          "documentation":"<p>The ARN of the Amazon Kendra index to use.</p>"
+        },
+        "queryFilterStringEnabled":{
+          "shape":"Boolean",
+          "documentation":"<p>Specifies whether to enable an Amazon Kendra filter string or not.</p>"
+        },
+        "queryFilterString":{
+          "shape":"QueryFilterString",
+          "documentation":"<p>Contains the Amazon Kendra filter string to use if enabled. For more information on the Amazon Kendra search filter JSON format, see <a href=\"https://docs.aws.amazon.com/kendra/latest/dg/filtering.html#search-filtering\">Using document attributes to filter search results</a>.</p>"
+        },
+        "exactResponse":{
+          "shape":"Boolean",
+          "documentation":"<p>Specifies whether to return an exact response from the Amazon Kendra index or to let the Amazon Bedrock model you select generate a response based on the results. To use this feature, you must first add FAQ questions to your index by following the steps at <a href=\"https://docs.aws.amazon.com/kendra/latest/dg/in-creating-faq.html\">Adding frequently asked questions (FAQs) to an index</a>.</p>"
+        }
+      },
+      "documentation":"<p>Contains details about the configuration of the Amazon Kendra index used for the <code>AMAZON.QnAIntent</code>.</p>"
+    },
     "QueryFilterString":{
       "type":"string",
       "max":5000,
       "min":1
     },
+    "QuestionField":{"type":"string"},
     "RecommendedAction":{"type":"string"},
     "RecommendedActions":{
       "type":"list",
@@ -10192,6 +11549,12 @@
         }
       },
       "documentation":"<p>Specifies the time window that utterance statistics are returned for. The time window is always relative to the last time that the that utterances were aggregated. For example, if the <code>ListAggregatedUtterances</code> operation is called at 1600, the time window is set to 1 hour, and the last refresh time was 1530, only utterances made between 1430 and 1530 are returned.</p> <p>You can choose the time window that statistics should be returned for.</p> <ul> <li> <p> <b>Hours</b> - You can request utterance statistics for 1, 3, 6, 12, or 24 hour time windows. Statistics are refreshed every half hour for 1 hour time windows, and hourly for the other time windows.</p> </li> <li> <p> <b>Days</b> - You can request utterance statistics for 3 days. Statistics are refreshed every 6 hours.</p> </li> <li> <p> <b>Weeks</b> - You can see statistics for one or two weeks. Statistics are refreshed every 12 hours for one week time windows, and once per day for two week time windows.</p> </li> </ul>"
+    },
+    "ReplicaRegion":{
+      "type":"string",
+      "documentation":"<p>The region that contains the replicated bots. Minimum value = 2, maximum value = 25.</p>",
+      "max":25,
+      "min":2
     },
     "ResourceCount":{"type":"integer"},
     "ResourceNotFoundException":{
@@ -10276,6 +11639,20 @@
         }
       },
       "documentation":"<p>You can provide Amazon Lex with hints to the phrases that a customer is likely to use for a slot. When a slot with hints is resolved, the phrases in the runtime hints are preferred in the resolution. You can provide hints for a maximum of 100 intents. You can provide a maximum of 100 slots.</p> <p>Before you can use runtime hints with an existing bot, you must first rebuild the bot.</p> <p>For more information, see <a href=\"https://docs.aws.amazon.com/lexv2/latest/dg/using-hints.html\">Using runtime hints to improve recognition of slot values</a>.</p>"
+    },
+    "RuntimeSettings":{
+      "type":"structure",
+      "members":{
+        "slotResolutionImprovement":{
+          "shape":"SlotResolutionImprovementSpecification",
+          "documentation":"<p>An object containing specifications for the assisted slot resolution feature.</p>"
+        },
+        "nluImprovement":{
+          "shape":"NluImprovementSpecification",
+          "documentation":"<p>An object containing specifications for the Assisted NLU feature within the bot's runtime settings. These settings determine how the bot processes and interprets user utterances during conversations.</p>"
+        }
+      },
+      "documentation":"<p>Contains specifications about the Amazon Lex runtime generative AI capabilities from Amazon Bedrock that you can turn on for your bot.</p>"
     },
     "S3BucketArn":{
       "type":"string",
@@ -10373,6 +11750,18 @@
         }
       },
       "documentation":"<p>A sample utterance that invokes an intent or respond to a slot elicitation prompt.</p>"
+    },
+    "SampleUtteranceGenerationSpecification":{
+      "type":"structure",
+      "required":["enabled"],
+      "members":{
+        "enabled":{
+          "shape":"Boolean",
+          "documentation":"<p>Specifies whether to enable sample utterance generation or not.</p>"
+        },
+        "bedrockModelSpecification":{"shape":"BedrockModelSpecification"}
+      },
+      "documentation":"<p>Contains specifications for the sample utterance generation feature.</p>"
     },
     "SampleUtterancesCount":{"type":"integer"},
     "SampleUtterancesList":{
@@ -10481,6 +11870,12 @@
         "Ascending",
         "Descending"
       ]
+    },
+    "SecretsManagerSecretArn":{
+      "type":"string",
+      "max":2048,
+      "min":20,
+      "pattern":"^arn:aws[A-Za-z-]*:secretsmanager:[a-z0-9-]{1,20}:[0-9]{12}:secret:[A-Za-z0-9/_+=.@-]{1,512}-[A-Za-z0-9]{6}$"
     },
     "SentimentAnalysisSettings":{
       "type":"structure",
@@ -10743,6 +12138,39 @@
         }
       },
       "documentation":"<p>Sets the priority that Amazon Lex should use when eliciting slot values from a user.</p>"
+    },
+    "SlotResolutionImprovementSpecification":{
+      "type":"structure",
+      "required":["enabled"],
+      "members":{
+        "enabled":{
+          "shape":"Enabled",
+          "documentation":"<p>Specifies whether assisted slot resolution is turned on or off.</p>"
+        },
+        "bedrockModelSpecification":{
+          "shape":"BedrockModelSpecification",
+          "documentation":"<p>An object containing information about the Amazon Bedrock model used to assist slot resolution.</p>"
+        }
+      },
+      "documentation":"<p>Contains specifications for the assisted slot resolution feature.</p>"
+    },
+    "SlotResolutionSetting":{
+      "type":"structure",
+      "required":["slotResolutionStrategy"],
+      "members":{
+        "slotResolutionStrategy":{
+          "shape":"SlotResolutionStrategy",
+          "documentation":"<p>Specifies whether assisted slot resolution is turned on for the slot or not. If the value is <code>EnhancedFallback</code>, assisted slot resolution is activated when Amazon Lex defaults to the <code>AMAZON.FallbackIntent</code>. If the value is <code>Default</code>, assisted slot resolution is turned off.</p>"
+        }
+      },
+      "documentation":"<p>Contains information about whether assisted slot resolution is turned on for the slot or not.</p>"
+    },
+    "SlotResolutionStrategy":{
+      "type":"string",
+      "enum":[
+        "EnhancedFallback",
+        "Default"
+      ]
     },
     "SlotResolutionTestResultItem":{
       "type":"structure",
@@ -11034,6 +12462,10 @@
         "slotCaptureSetting":{
           "shape":"SlotCaptureSetting",
           "documentation":"<p>Specifies the settings that Amazon Lex uses when a slot value is successfully entered by a user.</p>"
+        },
+        "slotResolutionSetting":{
+          "shape":"SlotResolutionSetting",
+          "documentation":"<p>An object containing information about whether assisted slot resolution is turned on for the slot or not.</p>"
         }
       },
       "documentation":"<p>Specifies the elicitation setting details eliciting a slot.</p>"
@@ -11128,6 +12560,62 @@
       },
       "documentation":"<p>Subslot specifications.</p>"
     },
+    "SpeechDetectionSensitivity":{
+      "type":"string",
+      "documentation":"<p>Determines the sensitivity level for voice activity detection (VAD) in noisy environments. This setting helps optimize speech recognition accuracy by adjusting how the system responds to background noise.</p> <p>Valid values include:</p> <ul> <li> <p> <code>Default</code> - Standard sensitivity level suitable for most environments</p> </li> <li> <p> <code>HighNoiseTolerance</code> - Increased tolerance for moderate background noise</p> </li> <li> <p> <code>MaximumNoiseTolerance</code> - Maximum tolerance for high levels of background noise</p> </li> </ul>",
+      "enum":[
+        "Default",
+        "HighNoiseTolerance",
+        "MaximumNoiseTolerance"
+      ]
+    },
+    "SpeechFoundationModel":{
+      "type":"structure",
+      "required":["modelArn"],
+      "members":{
+        "modelArn":{
+          "shape":"BedrockModelArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the foundation model used for speech processing.</p>"
+        },
+        "voiceId":{
+          "shape":"VoiceId",
+          "documentation":"<p>The identifier of the voice to use for speech synthesis with the foundation model.</p>"
+        }
+      },
+      "documentation":"<p>Configuration for a foundation model used for speech synthesis and recognition capabilities.</p>"
+    },
+    "SpeechModelConfig":{
+      "type":"structure",
+      "members":{
+        "deepgramConfig":{
+          "shape":"DeepgramSpeechModelConfig",
+          "documentation":"<p>Configuration settings for using Deepgram as the speech-to-text provider.</p>"
+        }
+      },
+      "documentation":"<p>Configuration settings that define which speech-to-text model to use for processing speech input.</p>"
+    },
+    "SpeechModelPreference":{
+      "type":"string",
+      "enum":[
+        "Standard",
+        "Neural",
+        "Deepgram"
+      ]
+    },
+    "SpeechRecognitionSettings":{
+      "type":"structure",
+      "members":{
+        "speechModelPreference":{
+          "shape":"SpeechModelPreference",
+          "documentation":"<p>The speech-to-text model to use.</p>"
+        },
+        "speechModelConfig":{
+          "shape":"SpeechModelConfig",
+          "documentation":"<p>Configuration settings for the selected speech-to-text model.</p>"
+        }
+      },
+      "documentation":"<p>Settings that control how Amazon Lex processes and recognizes speech input from users.</p>"
+    },
     "StartBotRecommendationRequest":{
       "type":"structure",
       "required":[
@@ -11199,6 +12687,72 @@
         "encryptionSetting":{
           "shape":"EncryptionSetting",
           "documentation":"<p>The object representing the passwords that were used to encrypt the data related to the bot recommendation results, as well as the KMS key ARN used to encrypt the associated metadata.</p>"
+        }
+      }
+    },
+    "StartBotResourceGenerationRequest":{
+      "type":"structure",
+      "required":[
+        "generationInputPrompt",
+        "botId",
+        "botVersion",
+        "localeId"
+      ],
+      "members":{
+        "generationInputPrompt":{
+          "shape":"GenerationInput",
+          "documentation":"<p>The prompt to generate intents and slot types for the bot locale. Your description should be both <i>detailed</i> and <i>precise</i> to help generate appropriate and sufficient intents for your bot. Include a list of actions to improve the intent creation process.</p>"
+        },
+        "botId":{
+          "shape":"Id",
+          "documentation":"<p>The unique identifier of the bot for which to generate intents and slot types.</p>",
+          "location":"uri",
+          "locationName":"botId"
+        },
+        "botVersion":{
+          "shape":"BotVersion",
+          "documentation":"<p>The version of the bot for which to generate intents and slot types.</p>",
+          "location":"uri",
+          "locationName":"botVersion"
+        },
+        "localeId":{
+          "shape":"LocaleId",
+          "documentation":"<p>The locale of the bot for which to generate intents and slot types.</p>",
+          "location":"uri",
+          "locationName":"localeId"
+        }
+      }
+    },
+    "StartBotResourceGenerationResponse":{
+      "type":"structure",
+      "members":{
+        "generationInputPrompt":{
+          "shape":"GenerationInput",
+          "documentation":"<p>The prompt that was used generate intents and slot types for the bot locale.</p>"
+        },
+        "generationId":{
+          "shape":"Id",
+          "documentation":"<p>The unique identifier of the generation request.</p>"
+        },
+        "botId":{
+          "shape":"Id",
+          "documentation":"<p>The unique identifier of the bot for which the generation request was made.</p>"
+        },
+        "botVersion":{
+          "shape":"BotVersion",
+          "documentation":"<p>The version of the bot for which the generation request was made.</p>"
+        },
+        "localeId":{
+          "shape":"LocaleId",
+          "documentation":"<p>The locale of the bot for which the generation request was made.</p>"
+        },
+        "generationStatus":{
+          "shape":"GenerationStatus",
+          "documentation":"<p>The status of the generation request.</p>"
+        },
+        "creationDateTime":{
+          "shape":"Timestamp",
+          "documentation":"<p>The date and time at which the generation request was made.</p>"
         }
       }
     },
@@ -11599,8 +13153,7 @@
     },
     "TagResourceResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "TagValue":{
       "type":"string",
@@ -12188,7 +13741,11 @@
           "shape":"Boolean",
           "documentation":"<p>Determines whether conversation logs should be stored for an alias.</p>"
         },
-        "destination":{"shape":"TextLogDestination"}
+        "destination":{"shape":"TextLogDestination"},
+        "selectiveLoggingEnabled":{
+          "shape":"BoxedBoolean",
+          "documentation":"<p>The option to enable selective conversation log capture for text.</p>"
+        }
       },
       "documentation":"<p>Defines settings to enable text conversation logs.</p>"
     },
@@ -12280,6 +13837,17 @@
       },
       "documentation":"<p>Contains information about the messages in the turn.</p>"
     },
+    "UnifiedSpeechSettings":{
+      "type":"structure",
+      "required":["speechFoundationModel"],
+      "members":{
+        "speechFoundationModel":{
+          "shape":"SpeechFoundationModel",
+          "documentation":"<p>The foundation model configuration to use for unified speech processing capabilities.</p>"
+        }
+      },
+      "documentation":"<p>Unified configuration settings that combine speech recognition and synthesis capabilities.</p>"
+    },
     "UntagResourceRequest":{
       "type":"structure",
       "required":[
@@ -12303,8 +13871,7 @@
     },
     "UntagResourceResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateBotAliasRequest":{
       "type":"structure",
@@ -12433,6 +14000,22 @@
         "voiceSettings":{
           "shape":"VoiceSettings",
           "documentation":"<p>The new Amazon Polly voice Amazon Lex should use for voice interaction with the user.</p>"
+        },
+        "unifiedSpeechSettings":{
+          "shape":"UnifiedSpeechSettings",
+          "documentation":"<p>Updated unified speech settings to apply to the bot locale.</p>"
+        },
+        "speechRecognitionSettings":{
+          "shape":"SpeechRecognitionSettings",
+          "documentation":"<p>Updated speech-to-text settings to apply to the bot locale.</p>"
+        },
+        "generativeAISettings":{
+          "shape":"GenerativeAISettings",
+          "documentation":"<p>Contains settings for generative AI features powered by Amazon Bedrock for your bot locale. Use this object to turn generative AI features on and off. Pricing may differ if you turn a feature on. For more information, see LINK.</p>"
+        },
+        "speechDetectionSensitivity":{
+          "shape":"SpeechDetectionSensitivity",
+          "documentation":"<p>The new sensitivity level for voice activity detection (VAD) in the bot locale. This setting helps optimize speech recognition accuracy by adjusting how the system responds to background noise during voice interactions.</p>"
         }
       }
     },
@@ -12467,6 +14050,14 @@
           "shape":"VoiceSettings",
           "documentation":"<p>The updated Amazon Polly voice to use for voice interaction with the user.</p>"
         },
+        "unifiedSpeechSettings":{
+          "shape":"UnifiedSpeechSettings",
+          "documentation":"<p>The updated unified speech settings for the bot locale.</p>"
+        },
+        "speechRecognitionSettings":{
+          "shape":"SpeechRecognitionSettings",
+          "documentation":"<p>The updated speech-to-text settings for the bot locale.</p>"
+        },
         "botLocaleStatus":{
           "shape":"BotLocaleStatus",
           "documentation":"<p>The current status of the locale. When the bot status is <code>Built</code> the locale is ready for use.</p>"
@@ -12486,6 +14077,14 @@
         "recommendedActions":{
           "shape":"RecommendedActions",
           "documentation":"<p>Recommended actions to take to resolve an error in the <code>failureReasons</code> field.</p>"
+        },
+        "generativeAISettings":{
+          "shape":"GenerativeAISettings",
+          "documentation":"<p>Contains settings for generative AI features powered by Amazon Bedrock for your bot locale.</p>"
+        },
+        "speechDetectionSensitivity":{
+          "shape":"SpeechDetectionSensitivity",
+          "documentation":"<p>The updated sensitivity level for voice activity detection (VAD) in the bot locale.</p>"
         }
       }
     },
@@ -12613,6 +14212,10 @@
         "botMembers":{
           "shape":"BotMembers",
           "documentation":"<p>The list of bot members in the network associated with the update action.</p>"
+        },
+        "errorLogSettings":{
+          "shape":"ErrorLogSettings",
+          "documentation":"<p>Allows you to modify how Amazon Lex logs errors during bot interactions, including destinations for error logs and the types of errors to be captured.</p>"
         }
       }
     },
@@ -12662,6 +14265,10 @@
         "botMembers":{
           "shape":"BotMembers",
           "documentation":"<p>The list of bot members in the network that was updated.</p>"
+        },
+        "errorLogSettings":{
+          "shape":"ErrorLogSettings",
+          "documentation":"<p>Settings for managing error logs within the response of an update bot operation.</p>"
         }
       }
     },
@@ -12736,6 +14343,10 @@
           "shape":"Name",
           "documentation":"<p>The new name for the intent.</p>"
         },
+        "intentDisplayName":{
+          "shape":"DisplayName",
+          "documentation":"<p>The new display name for the intent.</p>"
+        },
         "description":{
           "shape":"Description",
           "documentation":"<p>The new description of the intent.</p>"
@@ -12801,6 +14412,14 @@
         "initialResponseSetting":{
           "shape":"InitialResponseSetting",
           "documentation":"<p>Configuration settings for a response sent to the user before Amazon Lex starts eliciting slots.</p>"
+        },
+        "qnAIntentConfiguration":{
+          "shape":"QnAIntentConfiguration",
+          "documentation":"<p>Specifies the configuration of the built-in <code>Amazon.QnAIntent</code>. The <code>AMAZON.QnAIntent</code> intent is called when Amazon Lex can't determine another intent to invoke. If you specify this field, you can't specify the <code>kendraConfiguration</code> field.</p>"
+        },
+        "qInConnectIntentConfiguration":{
+          "shape":"QInConnectIntentConfiguration",
+          "documentation":"<p>Qinconnect intent configuration details for the update intent request.</p>"
         }
       }
     },
@@ -12814,6 +14433,10 @@
         "intentName":{
           "shape":"Name",
           "documentation":"<p>The updated name of the intent.</p>"
+        },
+        "intentDisplayName":{
+          "shape":"DisplayName",
+          "documentation":"<p>The updated display name of the intent.</p>"
         },
         "description":{
           "shape":"Description",
@@ -12882,6 +14505,14 @@
         "initialResponseSetting":{
           "shape":"InitialResponseSetting",
           "documentation":"<p>Configuration settings for a response sent to the user before Amazon Lex starts eliciting slots.</p>"
+        },
+        "qnAIntentConfiguration":{
+          "shape":"QnAIntentConfiguration",
+          "documentation":"<p>Details about the configuration of the built-in <code>Amazon.QnAIntent</code>.</p>"
+        },
+        "qInConnectIntentConfiguration":{
+          "shape":"QInConnectIntentConfiguration",
+          "documentation":"<p>Qinconnect intent configuration details for the update intent response.</p>"
         }
       }
     },
@@ -13617,7 +15248,9 @@
       "type":"string",
       "enum":[
         "standard",
-        "neural"
+        "neural",
+        "long-form",
+        "generative"
       ]
     },
     "VoiceId":{"type":"string"},
@@ -13625,16 +15258,16 @@
       "type":"structure",
       "required":["voiceId"],
       "members":{
-        "voiceId":{
-          "shape":"VoiceId",
-          "documentation":"<p>The identifier of the Amazon Polly voice to use.</p>"
-        },
         "engine":{
           "shape":"VoiceEngine",
           "documentation":"<p>Indicates the type of Amazon Polly voice that Amazon Lex should use for voice interaction with the user. For more information, see the <a href=\"https://docs.aws.amazon.com/polly/latest/dg/API_SynthesizeSpeech.html#polly-SynthesizeSpeech-request-Engine\"> <code>engine</code> parameter of the <code>SynthesizeSpeech</code> operation</a> in the <i>Amazon Polly developer guide</i>.</p> <p>If you do not specify a value, the default is <code>standard</code>.</p>"
+        },
+        "voiceId":{
+          "shape":"VoiceId",
+          "documentation":"<p>The identifier of the Amazon Polly voice to use.</p>"
         }
       },
-      "documentation":"<p>Defines settings for using an Amazon Polly voice to communicate with a user.</p>"
+      "documentation":"<p>Defines settings for using an Amazon Polly voice to communicate with a user.</p> <p>Valid values include:</p> <ul> <li> <p> <code>standard</code> </p> </li> <li> <p> <code>neural</code> </p> </li> <li> <p> <code>long-form</code> </p> </li> <li> <p> <code>generative</code> </p> </li> </ul>"
     },
     "WaitAndContinueSpecification":{
       "type":"structure",
@@ -13669,5 +15302,5 @@
       "min":0
     }
   },
-  "documentation":"<p/>"
+  "documentation":"<p>Amazon Lex Model Building Service provides APIs for creating, managing, and deploying conversational bots and their components.</p>"
 }

@@ -28,13 +28,11 @@ PYTHONIC_NS_END
 
 template <class T>
 auto to_python(T &&value)
-    -> decltype(pythonic::to_python<typename std::remove_cv<
-                    typename std::remove_reference<T>::type>::type>::
-                    convert(std::forward<T>(value)))
+    -> decltype(pythonic::to_python<std::remove_cv_t<std::remove_reference_t<T>>>::convert(
+        std::forward<T>(value)))
 {
-  return pythonic::to_python<
-      typename std::remove_cv<typename std::remove_reference<T>::type>::type>::
-      convert(std::forward<T>(value));
+  return pythonic::to_python<std::remove_cv_t<std::remove_reference_t<T>>>::convert(
+      std::forward<T>(value));
 }
 template <class T>
 T from_python(PyObject *obj)
@@ -52,16 +50,54 @@ PYTHONIC_NS_BEGIN
 namespace python
 {
 
+#ifdef Py_LIMITED_API
+
+  struct ByteHolder {
+    PyObject *holder;
+    friend std::ostream &operator<<(std::ostream &os, ByteHolder const &byte_holder)
+    {
+      return os << (char *)(byte_holder);
+    }
+    operator char *() const
+    {
+      return PyBytes_AsString(holder);
+    }
+    ~ByteHolder()
+    {
+      Py_DECREF(holder);
+    }
+  };
+
+#define PyString_AS_STRING(obj)                                                                    \
+  [obj]() {                                                                                        \
+    auto *str_obj = PyUnicode_AsEncodedString(obj, "ascii", "strict");                             \
+    return ::pythonic::python::ByteHolder{str_obj};                                                \
+  }()
+#else
 #ifndef PyString_AS_STRING
 #define PyString_AS_STRING (char *)_PyUnicode_COMPACT_DATA
+#endif
 #endif
 
   inline void PyObject_TypePrettyPrinter(std::ostream &oss, PyObject *obj)
   {
     if (PyTuple_Check(obj)) {
       oss << '(';
-      for (long n = PyTuple_GET_SIZE(obj), i = 0; i < n; ++i) {
-        PyObject_TypePrettyPrinter(oss, PyTuple_GET_ITEM(obj, i));
+#ifdef Py_LIMITED_API
+      Py_ssize_t obj_size = PyTuple_Size(obj);
+      // FIXME: should we propagate the error or something?
+      assert(obj_size != -1);
+#else
+      Py_ssize_t obj_size = PyTuple_GET_SIZE(obj);
+#endif
+      for (long n = obj_size, i = 0; i < n; ++i) {
+#ifdef Py_LIMITED_API
+        PyObject *obj_item = PyTuple_GetItem(obj, i);
+        assert(obj_item);
+#else
+        PyObject *obj_item = PyTuple_GET_ITEM(obj, i);
+#endif
+        PyObject_TypePrettyPrinter(oss, obj_item);
         if (i != n - 1)
           oss << ", ";
       }
@@ -82,8 +118,7 @@ namespace python
       }
       oss << ']';
       if ((PyArray_FLAGS(arr) & NPY_ARRAY_F_CONTIGUOUS) &&
-          ((PyArray_FLAGS(arr) & NPY_ARRAY_C_CONTIGUOUS) == 0) &&
-          (PyArray_NDIM(arr) > 1)) {
+          ((PyArray_FLAGS(arr) & NPY_ARRAY_C_CONTIGUOUS) == 0) && (PyArray_NDIM(arr) > 1)) {
         oss << " (with unsupported column-major layout)";
       } else if (PyArray_BASE(arr)) {
         oss << " (is a view)";
@@ -103,7 +138,15 @@ namespace python
       if (PyObject_Not(obj)) {
         oss << "empty list";
       } else {
-        PyObject_TypePrettyPrinter(oss, PySequence_Fast_GET_ITEM(obj, 0));
+#ifdef Py_LIMITED_API
+        PyObject *obj_item = PySequence_GetItem(obj, 0);
+#else
+        PyObject *obj_item = PySequence_Fast_GET_ITEM(obj, 0);
+#endif
+        PyObject_TypePrettyPrinter(oss, obj_item);
+#ifdef Py_LIMITED_API
+        Py_DECREF(obj_item);
+#endif
         oss << " list";
       }
     } else if (PySet_Check(obj)) {
@@ -136,14 +179,26 @@ namespace python
     }
   }
 
-  inline std::nullptr_t raise_invalid_argument(char const name[],
-                                               char const alternatives[],
+  inline std::nullptr_t raise_invalid_argument(char const name[], char const alternatives[],
                                                PyObject *args, PyObject *kwargs)
   {
     std::ostringstream oss;
     oss << "Invalid call to pythranized function `" << name << '(';
-    for (long n = PyTuple_GET_SIZE(args), i = 0; i < n; ++i) {
-      PyObject_TypePrettyPrinter(oss, PyTuple_GET_ITEM(args, i));
+#ifdef Py_LIMITED_API
+    Py_ssize_t args_size = PyTuple_Size(args);
+    // FIXME: should we propagate the error or something?
+    assert(args_size != -1);
+#else
+    Py_ssize_t args_size = PyTuple_GET_SIZE(args);
+#endif
+    for (long n = args_size, i = 0; i < n; ++i) {
+#ifdef Py_LIMITED_API
+      PyObject *args_item = PyTuple_GetItem(args, i);
+      assert(args_item);
+#else
+      PyObject *args_item = PyTuple_GET_ITEM(args, i);
+#endif
+      PyObject_TypePrettyPrinter(oss, args_item);
       if (i != n - 1 || (kwargs && PyDict_Size(kwargs)))
         oss << ", ";
     }
@@ -153,8 +208,7 @@ namespace python
       Py_ssize_t pos = 0;
 
       for (int next = PyDict_Next(kwargs, &pos, &key, &value); next;) {
-        PyObject *vrepr =
-            PyObject_GetAttrString((PyObject *)Py_TYPE(value), "__name__");
+        PyObject *vrepr = PyObject_GetAttrString((PyObject *)Py_TYPE(value), "__name__");
         oss << PyString_AS_STRING(key) << '=' << PyString_AS_STRING(vrepr);
         Py_DECREF(vrepr);
         if ((next = PyDict_Next(kwargs, &pos, &key, &value)))

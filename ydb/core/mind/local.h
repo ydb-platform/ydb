@@ -377,6 +377,7 @@ struct TLocalConfig : public TThrRefBase {
     };
 
     TMap<TTabletTypes::EType, TTabletClassInfo> TabletClassInfo;
+    TDuration DrainNodeTimeout = TDuration::Seconds(30);
 };
 
 IActor* CreateLocal(TLocalConfig *config);

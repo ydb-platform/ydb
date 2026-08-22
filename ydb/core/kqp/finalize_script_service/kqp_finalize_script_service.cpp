@@ -1,42 +1,42 @@
 #include "kqp_finalize_script_service.h"
 #include "kqp_finalize_script_actor.h"
+#include "kqp_check_script_lease_actor.h"
 
 #include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
-
-#include <ydb/library/yql/providers/s3/proto/sink.pb.h>
-
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
+
+#include <ydb/library/table_creator/table_creator.h>
 
 #include <queue>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_PROXY
 
 namespace NKikimr::NKqp {
 
 namespace {
 
 class TKqpFinalizeScriptService : public TActorBootstrapped<TKqpFinalizeScriptService> {
+    using TRetryPolicy = IRetryPolicy<bool>;
+
 public:
     TKqpFinalizeScriptService(const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
-        IKqpFederatedQuerySetupFactory::TPtr federatedQuerySetupFactory,
+        const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
         std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory)
         : QueryServiceConfig(queryServiceConfig)
-        , FederatedQuerySetupFactory(federatedQuerySetupFactory)
+        , FederatedQuerySetup(federatedQuerySetup)
+        , EnableBackgroundLeaseChecks(FederatedQuerySetup && FederatedQuerySetup->ScriptExecutionSettings.EnableBackgroundLeaseChecks)
+        , LeaseCheckStartupTimeout(FederatedQuerySetup ? FederatedQuerySetup->ScriptExecutionSettings.LeaseCheckStartupTimeout : TDuration::Zero())
         , S3ActorsFactory(std::move(s3ActorsFactory))
     {}
 
-    void Bootstrap(const TActorContext &ctx) {
-        FederatedQuerySetup = FederatedQuerySetupFactory->Make(ctx.ActorSystem());
-        
+    void Bootstrap() {
+        Counters = MakeIntrusive<TKqpCounters>(AppData()->Counters, &TlsActivationContext->AsActorContext());
+
         Become(&TKqpFinalizeScriptService::MainState);
-    }
 
-    void Handle(TEvSaveScriptExternalEffectRequest::TPtr& ev) {
-        auto& description = ev->Get()->Description;
-        description.Sinks = FilterExternalSinks(description.Sinks);
-
-        if (!description.Sinks.empty()) {
-            Register(CreateSaveScriptExternalEffectActor(std::move(ev)));
-        } else {
-            Send(ev->Sender, new TEvSaveScriptExternalEffectResponse(Ydb::StatusIds::SUCCESS, {}));
+        if (EnableBackgroundLeaseChecks) {
+            CheckScriptExecutionTablesExistence();
         }
     }
 
@@ -51,15 +51,23 @@ public:
         TryStartFinalizeRequest();
     }
 
-    STATEFN(MainState) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(TEvSaveScriptExternalEffectRequest, Handle);
-            hFunc(TEvScriptFinalizeRequest, Handle);
-            hFunc(TEvScriptFinalizeResponse, Handle);
-        default:
-            Y_ABORT("TKqpScriptFinalizeService: unexpected event type: %" PRIx32 " event: %s", ev->GetTypeRewrite(), ev->ToString().data());
+    void StartScriptExecutionBackgroundChecks() {
+        if (!EnableBackgroundLeaseChecks || ScriptExecutionLeaseCheckActor) {
+            return;
         }
+
+        ScriptExecutionLeaseCheckActor = Register(CreateScriptExecutionLeaseCheckActor(QueryServiceConfig, LeaseCheckStartupTimeout, Counters));
     }
+
+    STRICT_STFUNC(MainState,
+        hFunc(TEvScriptFinalizeRequest, Handle);
+        hFunc(TEvScriptFinalizeResponse, Handle);
+        sFunc(TEvStartScriptExecutionBackgroundChecks, StartScriptExecutionBackgroundChecks);
+
+        hFunc(TEvents::TEvUndelivered, Handle)
+        hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
+        sFunc(TEvents::TEvWakeup, CheckScriptExecutionTablesExistence);
+    )
 
 private:
     void TryStartFinalizeRequest() {
@@ -101,34 +109,97 @@ private:
     }
 
 private:
-    bool ValidateExternalSink(const NKqpProto::TKqpExternalSink& sink) {
-        if (sink.GetType() != "S3Sink") {
-            return false;
-        }
-
-        NYql::NS3::TSink sinkSettings;
-        sink.GetSettings().UnpackTo(&sinkSettings);
-
-        return sinkSettings.GetAtomicUploadCommit();
+    void CheckScriptExecutionTablesExistence() const {
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(NTableCreator::BuildSchemeCacheNavigateRequest({
+            {".metadata", "script_executions"},
+            {".metadata", "script_execution_leases"},
+            {".metadata", "result_sets"},
+        }).Release()), IEventHandle::FlagTrackDelivery);
     }
 
-    std::vector<NKqpProto::TKqpExternalSink> FilterExternalSinks(const std::vector<NKqpProto::TKqpExternalSink>& sinks) {
-        std::vector<NKqpProto::TKqpExternalSink> filteredSinks;
-        filteredSinks.reserve(sinks.size());
-        for (const auto& sink : sinks) {
-            if (ValidateExternalSink(sink)) {
-                filteredSinks.push_back(sink);
+    void Handle(TEvents::TEvUndelivered::TPtr& ev) {
+        YDB_LOG_WARN("Failed to check script execution tables existence, got undelivered to scheme",
+            {"logPrefix", LogPrefix()},
+            {"cache", ev->Get()->Reason});
+        Retry();
+    }
+
+    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+        using EStatus = NSchemeCache::TSchemeCacheNavigate::EStatus;
+
+        const NSchemeCache::TSchemeCacheNavigate& request = *ev->Get()->Request;
+        Y_ABORT_UNLESS(request.ResultSet.size() == 3);
+
+        for (const auto& result : request.ResultSet) {
+            if (result.Status != EStatus::Ok) {
+                YDB_LOG_WARN("Failed to check script execution tables existence, scheme",
+                    {"logPrefix", LogPrefix()},
+                    {"status", result.Status},
+                    {"path", JoinPath(result.Path)});
+            }
+
+            switch (result.Status) {
+                case EStatus::Unknown:
+                case EStatus::PathNotTable:
+                case EStatus::PathNotPath:
+                case EStatus::AccessDenied:
+                case EStatus::RedirectLookupError:
+                case EStatus::RootUnknown:
+                case EStatus::PathErrorUnknown:
+                    YDB_LOG_DEBUG("Script execution table not found",
+                        {"logPrefix", LogPrefix()},
+                        {"tablePath", JoinPath(result.Path)});
+                    return;
+                case EStatus::LookupError:
+                case EStatus::TableCreationNotComplete:
+                    Retry(true);
+                    return;
+                case EStatus::Ok:
+                    break;
             }
         }
 
-        return filteredSinks;
+        YDB_LOG_DEBUG("Start script execution background checks",
+            {"logPrefix", LogPrefix()});
+        StartScriptExecutionBackgroundChecks();
+    }
+
+    void Retry(bool longDelay = false) {
+        if (!RetryState) {
+            RetryState = TRetryPolicy::GetExponentialBackoffPolicy(
+                [](bool longDelay) {
+                    return longDelay ? ERetryErrorClass::LongRetry : ERetryErrorClass::ShortRetry;
+                },
+                TDuration::MilliSeconds(100),
+                TDuration::MilliSeconds(300),
+                TDuration::Minutes(1),
+                std::numeric_limits<size_t>::max(),
+                TDuration::Max()
+            )->CreateRetryState();
+        }
+
+        if (const auto delay = RetryState->GetNextRetryDelay(longDelay)) {
+            Schedule(*delay, new NActors::TEvents::TEvWakeup());
+        } else {
+            YDB_LOG_ERROR("Failed to check script execution tables existence, retry limit exceeded",
+                {"logPrefix", LogPrefix()});
+        }
+    }
+
+private:
+    TString LogPrefix() const {
+        return TStringBuilder() << "[ScriptExecutions] [TKqpFinalizeScriptService] ";
     }
 
 private:
     const NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
+    const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
+    const bool EnableBackgroundLeaseChecks = true;
+    const TDuration LeaseCheckStartupTimeout;
 
-    IKqpFederatedQuerySetupFactory::TPtr FederatedQuerySetupFactory;
-    std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
+    TIntrusivePtr<TKqpCounters> Counters;
+    TRetryPolicy::IRetryState::TPtr RetryState;  // Used for check script execution tables existence
+    TActorId ScriptExecutionLeaseCheckActor;
 
     ui32 FinalizationRequestsInFlight = 0;
     std::queue<TString> WaitingFinalizationExecutions;
@@ -140,9 +211,9 @@ private:
 }  // anonymous namespace
 
 IActor* CreateKqpFinalizeScriptService(const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
-    IKqpFederatedQuerySetupFactory::TPtr federatedQuerySetupFactory,
+    const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
     std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory) {
-    return new TKqpFinalizeScriptService(queryServiceConfig, std::move(federatedQuerySetupFactory), std::move(s3ActorsFactory));
+    return new TKqpFinalizeScriptService(queryServiceConfig, federatedQuerySetup, std::move(s3ActorsFactory));
 }
 
 }  // namespace NKikimr::NKqp

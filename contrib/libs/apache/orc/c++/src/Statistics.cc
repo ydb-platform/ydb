@@ -44,6 +44,8 @@ namespace orc {
       return new DateColumnStatisticsImpl(s, statContext);
     } else if (s.has_binary_statistics()) {
       return new BinaryColumnStatisticsImpl(s, statContext);
+    } else if (s.has_geospatial_statistics()) {
+      return new GeospatialColumnStatisticsImpl(s);
     } else {
       return new ColumnStatisticsImpl(s);
     }
@@ -81,11 +83,20 @@ namespace orc {
     // PASS
   }
 
-  StripeStatisticsImpl::StripeStatisticsImpl(
+  StripeStatisticsImpl::StripeStatisticsImpl(const proto::StripeStatistics& stripeStats,
+                                             const StatContext& statContext) {
+    columnStats_ = std::make_unique<StatisticsImpl>(stripeStats, statContext);
+  }
+
+  StripeStatisticsWithRowGroupIndexImpl::~StripeStatisticsWithRowGroupIndexImpl() {
+    // PASS
+  }
+
+  StripeStatisticsWithRowGroupIndexImpl::StripeStatisticsWithRowGroupIndexImpl(
       const proto::StripeStatistics& stripeStats,
       std::vector<std::vector<proto::ColumnStatistics> >& indexStats,
-      const StatContext& statContext) {
-    columnStats_ = std::make_unique<StatisticsImpl>(stripeStats, statContext);
+      const StatContext& statContext)
+      : StripeStatisticsImpl(stripeStats, statContext) {
     rowIndexStats_.resize(indexStats.size());
     for (size_t i = 0; i < rowIndexStats_.size(); i++) {
       for (size_t j = 0; j < indexStats[i].size(); j++) {
@@ -139,6 +150,10 @@ namespace orc {
     // PASS
   }
 
+  GeospatialColumnStatistics::~GeospatialColumnStatistics() {
+    // PASS
+  }
+
   ColumnStatisticsImpl::~ColumnStatisticsImpl() {
     // PASS
   }
@@ -176,6 +191,10 @@ namespace orc {
   }
 
   TimestampColumnStatisticsImpl::~TimestampColumnStatisticsImpl() {
+    // PASS
+  }
+
+  GeospatialColumnStatisticsImpl::~GeospatialColumnStatisticsImpl() {
     // PASS
   }
 
@@ -382,6 +401,40 @@ namespace orc {
     }
   }
 
+  GeospatialColumnStatisticsImpl::GeospatialColumnStatisticsImpl(
+      const proto::ColumnStatistics& pb) {
+    reset();
+    if (!pb.has_geospatial_statistics()) {
+      bounder_.invalidate();
+    } else {
+      const proto::GeospatialStatistics& stats = pb.geospatial_statistics();
+      geospatial::BoundingBox::XYZM min;
+      geospatial::BoundingBox::XYZM max;
+      for (int i = 0; i < geospatial::MAX_DIMENSIONS; i++) {
+        min[i] = max[i] = std::numeric_limits<double>::quiet_NaN();
+      }
+      if (stats.has_bbox()) {
+        const auto& protoBBox = stats.bbox();
+        min[0] = protoBBox.xmin();
+        min[1] = protoBBox.ymin();
+        max[0] = protoBBox.xmax();
+        max[1] = protoBBox.ymax();
+        if (protoBBox.has_zmin() && protoBBox.has_zmax()) {
+          min[2] = protoBBox.zmin();
+          max[2] = protoBBox.zmax();
+        }
+        if (protoBBox.has_mmin() && protoBBox.has_mmax()) {
+          min[3] = protoBBox.mmin();
+          max[3] = protoBBox.mmax();
+        }
+      }
+      bounder_.mergeBox(geospatial::BoundingBox(min, max));
+      std::vector<int32_t> types = {stats.geospatial_types().begin(),
+                                    stats.geospatial_types().end()};
+      bounder_.mergeGeometryTypes(types);
+    }
+  }
+
   std::unique_ptr<MutableColumnStatistics> createColumnStatistics(const Type& type) {
     switch (static_cast<int64_t>(type.getKind())) {
       case BOOLEAN:
@@ -413,6 +466,9 @@ namespace orc {
         return std::make_unique<TimestampColumnStatisticsImpl>();
       case DECIMAL:
         return std::make_unique<DecimalColumnStatisticsImpl>();
+      case GEOGRAPHY:
+      case GEOMETRY:
+        return std::make_unique<GeospatialColumnStatisticsImpl>();
       default:
         throw NotImplementedYet("Not supported type: " + type.toString());
     }

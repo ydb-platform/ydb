@@ -15,9 +15,9 @@ namespace NYql {
 using namespace NNodes;
 
 
-class TYtYtflowOptimization: public IYtflowOptimization {
+class TYtYtflowOptimization: public TEmptyYtflowOptimization {
 public:
-    TYtYtflowOptimization(TYtState* state)
+    TYtYtflowOptimization(TYtState::TWeakPtr state)
         : State_(state)
     {
         Y_UNUSED(State_);
@@ -78,7 +78,7 @@ public:
 
         YQL_CLOG(DEBUG, ProviderYt) << __FUNCTION__;
 
-        auto* listType = maybeWriteTable.Cast().Content().Ref().GetTypeAnn();
+        auto listType = maybeWriteTable.Cast().Content().Ref().GetTypeAnn();
         auto* itemType = listType->Cast<TListExprType>()->GetItemType();
 
         return Build<TYtWriteTable>(ctx, write->Pos())
@@ -91,11 +91,11 @@ public:
     }
 
 private:
-    TYtState* State_;
+    TYtState::TWeakPtr State_;
 };
 
-THolder<IYtflowOptimization> CreateYtYtflowOptimization(TYtState* state) {
-    Y_ABORT_UNLESS(state);
+THolder<IYtflowOptimization> CreateYtYtflowOptimization(TYtState::TWeakPtr state) {
+    YQL_ENSURE(!state.expired());
     return MakeHolder<TYtYtflowOptimization>(state);
 }
 

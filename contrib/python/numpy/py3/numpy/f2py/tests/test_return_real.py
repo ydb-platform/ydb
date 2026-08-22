@@ -1,11 +1,12 @@
 import platform
 import pytest
-import numpy as np
 
 from numpy import array
+from numpy.testing import IS_64BIT
 from . import util
 
 
+@pytest.mark.slow
 class TestReturnReal(util.F2PyTest):
     def check_function(self, t, tname):
         if tname in ["t0", "t4", "s0", "s4"]:
@@ -52,8 +53,7 @@ class TestReturnReal(util.F2PyTest):
     "but not when run in isolation",
 )
 @pytest.mark.skipif(
-    np.dtype(np.intp).itemsize < 8,
-    reason="32-bit builds are buggy"
+    not IS_64BIT, reason="32-bit builds are buggy"
 )
 class TestCReturnReal(TestReturnReal):
     suffix = ".pyf"

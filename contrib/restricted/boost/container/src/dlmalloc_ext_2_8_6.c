@@ -36,6 +36,8 @@
 #define FORCEINLINE inline
 #endif
 
+#define DLMALLOC_EXT_GCC_VERSION 
+
 #ifdef _MSC_VER
 #pragma warning (push)
 #pragma warning (disable : 4127)
@@ -47,6 +49,18 @@
 #pragma warning (disable : 4057) /*differs in indirection to slightly different base types from*/
 #pragma warning (disable : 4702) /*unreachable code*/
 #pragma warning (disable : 4127) /*conditional expression is constant*/
+#elif defined(__GNUC__)
+
+# if ((__GNUC__ * 10000 + __GNUC_MINOR__ * 100 + __GNUC_PATCHLEVEL__) >= 40800)
+   //Disable false positives triggered by -Waggressive-loop-optimizations
+#  pragma GCC diagnostic ignored "-Waggressive-loop-optimizations"
+#  endif
+
+# if ((__GNUC__ * 10000 + __GNUC_MINOR__ * 100 + __GNUC_PATCHLEVEL__) >= 40600)
+   //Disable false positives triggered by -Warray-bounds
+#  pragma GCC diagnostic ignored "-Warray-bounds"
+#  endif
+
 #endif
 
 #include "dlmalloc_2_8_6.c"
@@ -1160,7 +1174,7 @@ void* boost_cont_malloc(size_t bytes)
    size_t received_bytes;
    ensure_initialization();
    return boost_cont_allocation_command
-      (BOOST_CONTAINER_ALLOCATE_NEW, 1, bytes, bytes, &received_bytes, 0).first;
+      (BOOST_CONTAINER_ALLOCATE_NEW, 1, 1, bytes, bytes, &received_bytes, 0).first;
 }
 
 void boost_cont_free(void* mem)
@@ -1204,12 +1218,12 @@ int boost_cont_multialloc_nodes
    return ret;
 }
 
-size_t boost_cont_footprint()
+size_t boost_cont_footprint(void)
 {
    return ((mstate)gm)->footprint;
 }
 
-size_t boost_cont_allocated_memory()
+size_t boost_cont_allocated_memory(void)
 {
    size_t alloc_mem = 0;
    mstate m = (mstate)gm;
@@ -1255,10 +1269,10 @@ size_t boost_cont_allocated_memory()
 size_t boost_cont_chunksize(const void *p)
 {  return chunksize(mem2chunk(p));   }
 
-int boost_cont_all_deallocated()
+int boost_cont_all_deallocated(void)
 {  return !s_allocated_memory;  }
 
-boost_cont_malloc_stats_t boost_cont_malloc_stats()
+boost_cont_malloc_stats_t boost_cont_malloc_stats(void)
 {
   mstate ms = (mstate)gm;
   if (ok_magic(ms)) {
@@ -1271,7 +1285,7 @@ boost_cont_malloc_stats_t boost_cont_malloc_stats()
   }
 }
 
-size_t boost_cont_in_use_memory()
+size_t boost_cont_in_use_memory(void)
 {  return s_allocated_memory;   }
 
 int boost_cont_trim(size_t pad)
@@ -1327,7 +1341,7 @@ void* boost_cont_alloc
 {
    //ensure_initialization provided by boost_cont_allocation_command
    return boost_cont_allocation_command
-      (BOOST_CONTAINER_ALLOCATE_NEW, 1, minbytes, preferred_bytes, received_bytes, 0).first;
+      (BOOST_CONTAINER_ALLOCATE_NEW, 1, 1,  minbytes, preferred_bytes, received_bytes, 0).first;
 }
 
 void boost_cont_multidealloc(boost_cont_memchain *pchain)
@@ -1340,7 +1354,7 @@ void boost_cont_multidealloc(boost_cont_memchain *pchain)
    internal_multialloc_free(ms, pchain);
 }
 
-int boost_cont_malloc_check()
+int boost_cont_malloc_check(void)
 {
 #ifdef DEBUG
    mstate ms = (mstate)gm;
@@ -1359,7 +1373,7 @@ int boost_cont_malloc_check()
 
 
 boost_cont_command_ret_t boost_cont_allocation_command
-   (allocation_type command, size_t sizeof_object, size_t limit_size
+   (allocation_type command, size_t sizeof_object, size_t alignof_object, size_t limit_size
    , size_t preferred_size, size_t *received_size, void *reuse_ptr)
 {
    boost_cont_command_ret_t ret = { 0, 0 };
@@ -1402,12 +1416,16 @@ boost_cont_command_ret_t boost_cont_allocation_command
          }
 
          if(command & BOOST_CONTAINER_ALLOCATE_NEW){
-            void *addr = mspace_malloc_lockless(ms, preferred_size);
-            if(!addr)   addr = mspace_malloc_lockless(ms, limit_size);
+            void* addr;
+            disable_lock(ms);
+            addr = mspace_memalign(ms, alignof_object, preferred_size);
+            if(!addr)   addr = mspace_memalign(ms, alignof_object, limit_size);
             if(addr){
                s_allocated_memory += chunksize(mem2chunk(addr));
                *received_size = DL_SIZE_IMPL(addr);
             }
+            enable_lock(ms);
+
             ret.first  = addr;
             ret.second = 0;
             if(addr){
@@ -1438,7 +1456,7 @@ int boost_cont_mallopt(int param_number, int value)
   return change_mparam(param_number, value);
 }
 
-void *boost_cont_sync_create()
+void *boost_cont_sync_create(void)
 {
    void *p = boost_cont_malloc(sizeof(MLOCK_T));
    if(p){
@@ -1464,7 +1482,7 @@ int boost_cont_sync_lock(void *sync)
 void boost_cont_sync_unlock(void *sync)
 {  RELEASE_LOCK((MLOCK_T*)sync);  }
 
-int boost_cont_global_sync_lock()
+int boost_cont_global_sync_lock(void)
 {
    int ret;
    ensure_initialization();
@@ -1472,7 +1490,7 @@ int boost_cont_global_sync_lock()
    return 0 == ret;
 }
 
-void boost_cont_global_sync_unlock()
+void boost_cont_global_sync_unlock(void)
 {
    RELEASE_MALLOC_GLOBAL_LOCK()
 }

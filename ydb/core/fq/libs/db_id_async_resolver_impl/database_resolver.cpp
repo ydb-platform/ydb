@@ -1,23 +1,23 @@
 #include "database_resolver.h"
 
-#include <util/string/split.h>
 #include <ydb/core/fq/libs/common/cache.h>
 #include <ydb/core/fq/libs/config/protos/issue_id.pb.h>
 #include <ydb/core/fq/libs/events/events.h>
-#include <yql/essentials/utils/exceptions.h>
 #include <ydb/core/util/tuples.h>
-#include <ydb/library/services/services.pb.h>
-#include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
-#include <yql/essentials/utils/url_builder.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/http/http.h>
 #include <ydb/library/actors/http/http_proxy.h>
+#include <ydb/library/services/services.pb.h>
+#include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
+#include <ydb/core/util/exceptions.h>
+
+#include <yql/essentials/utils/url_builder.h>
+
 #include <library/cpp/json/json_reader.h>
 
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_DATABASE_RESOLVER, "TraceId: " << TraceId << " " << stream)
-#define LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_DATABASE_RESOLVER, "TraceId: " << TraceId << " " << stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_DATABASE_RESOLVER, "TraceId: " << TraceId << " " << stream)
-#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FQ_DATABASE_RESOLVER, "TraceId: " << TraceId << " " << stream)
+#include <util/string/split.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FQ_DATABASE_RESOLVER
 
 namespace NFq {
 
@@ -37,12 +37,12 @@ struct TResolveParams {
     // Treat ID as:
     // - cluster ID (ClickHouse, PostgreSQL)
     // - database ID (YDB)
-    TString Id; 
+    TString Id;
     NYql::EDatabaseType DatabaseType = NYql::EDatabaseType::Ydb;
     NYql::TDatabaseAuth DatabaseAuth;
 
     TString ToDebugString() const {
-        return TStringBuilder() << "id=" << Id 
+        return TStringBuilder() << "id=" << Id
                                 << ", database_type=" << DatabaseType;
     }
 };
@@ -89,7 +89,9 @@ public:
 
 private:
     void HandleWakeup(NActors::TEvents::TEvWakeup::TPtr& ev) {
-        LOG_T("ResponseProcessor::HandleWakeup: tag=" << ev->Get()->Tag);
+        YDB_LOG_TRACE("ResponseProcessor::HandleWakeup",
+            {"traceId", TraceId},
+            {"tag", ev->Get()->Tag});
         auto tag = ev->Get()->Tag;
         switch (tag) {
         case WU_DIE_ON_TTL:
@@ -110,7 +112,9 @@ private:
             }
         }
         errorMsg << " in " << ResolvingTtl << " seconds.";
-        LOG_E("ResponseProcessor::DieOnTtl: errorMsg=" << errorMsg);
+        YDB_LOG_ERROR("ResponseProcessor::DieOnTtl",
+            {"traceId", TraceId},
+            {"errorMsg", errorMsg});
         Issues.AddIssue(errorMsg);
         SendResolvedEndpointsAndDie();
     }
@@ -120,7 +124,8 @@ private:
             new TEvents::TEvEndpointResponse(
                 NYql::TDatabaseResolverResponse(std::move(DatabaseId2Description), Issues.Empty(), Issues)));
         PassAway();
-        LOG_D("ResponseProcessor::SendResolvedEndpointsAndDie: passed away");
+        YDB_LOG_DEBUG("ResponseProcessor::SendResolvedEndpointsAndDie: passed away",
+            {"traceId", TraceId});
     }
 
     void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr& ev)
@@ -129,7 +134,9 @@ private:
         const auto requestIter = Requests.find(ev->Get()->Request);
         HandledIds++;
 
-        LOG_T("ResponseProcessor::Handle(HttpIncomingResponse): got API response: code=" << ev->Get()->Response->Status);
+        YDB_LOG_TRACE("ResponseProcessor::Handle(HttpIncomingResponse): got API response",
+            {"traceId", TraceId},
+            {"code", ev->Get()->Response->Status});
 
         try {
             HandleResponse(ev, requestIter, result);
@@ -137,12 +144,16 @@ private:
             const TString msg = TStringBuilder() << "error while response processing, params "
                 << ((requestIter != Requests.end()) ? requestIter->second.ToDebugString() : TString{"unknown"})
                 << ", details: " << CurrentExceptionMessage();
-            LOG_E("ResponseProccessor::Handle(TEvHttpIncomingResponse): " << msg);
+            YDB_LOG_ERROR("ResponseProccesor::Handle(TEvHttpIncomingResponse)",
+                {"traceId", TraceId},
+                {"msg", msg});
             Issues.AddIssue(msg);
         }
 
-        LOG_T("ResponseProcessor::Handle(HttpIncomingResponse): progress: " 
-              << DatabaseId2Description.size() << " of " << Requests.size() << " requests are done");
+        YDB_LOG_TRACE("ResponseProcessor::Handle(HttpIncomingResponse): of requests are done",
+            {"traceId", TraceId},
+            {"progress", DatabaseId2Description.size()},
+            {"requestsCount", Requests.size()});
 
         if (HandledIds == Requests.size()) {
             SendResolvedEndpointsAndDie();
@@ -155,7 +166,7 @@ private:
         NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr& ev,
         const TRequestMap::const_iterator& requestIter,
         TMaybe<TDatabaseDescription>& result)
-    { 
+    {
         TString errorMessage;
 
         if (requestIter == Requests.end()) {
@@ -172,19 +183,23 @@ private:
 
         if (errorMessage) {
             Issues.AddIssue(errorMessage);
-            LOG_E("ResponseProcessor::Handle(HttpIncomingResponse): error=" << errorMessage);
+            YDB_LOG_ERROR("ResponseProcessor::Handle(HttpIncomingResponse)",
+                {"traceId", TraceId},
+                {"error", errorMessage});
         } else {
             const auto& params = requestIter->second;
             auto key = std::make_tuple(params.Id, params.DatabaseType, params.DatabaseAuth);
             if (errorMessage) {
-                LOG_T("ResponseProcessor::Handle(HttpIncomingResponse): put value in cache"
-                    << "; params: " << params.ToDebugString()
-                    << ", error: " << errorMessage);
+                YDB_LOG_TRACE("ResponseProcessor::Handle(HttpIncomingResponse): put value in cache",
+                    {"traceId", TraceId},
+                    {"params", params.ToDebugString()},
+                    {"error", errorMessage});
                 Cache.Put(key, errorMessage);
             } else {
-                LOG_T("ResponseProcessor::Handle(HttpIncomingResponse): put value in cache"
-                    << "; params: " << params.ToDebugString()
-                    << ", result: " << result->ToDebugString());
+                YDB_LOG_TRACE("ResponseProcessor::Handle(HttpIncomingResponse): put value in cache",
+                    {"traceId", TraceId},
+                    {"params", params.ToDebugString()},
+                    {"result", result->ToDebugString()});
                 Cache.Put(key, result);
             }
         }
@@ -208,18 +223,24 @@ private:
                     MdbEndpointGenerator,
                     params.DatabaseAuth.UseTls,
                     params.DatabaseAuth.Protocol);
-                LOG_D("ResponseProcessor::Handle(HttpIncomingResponse): got description" << ": params: " << params.ToDebugString()
-                                                                                            << ", description: " << description.ToDebugString());
+                YDB_LOG_DEBUG("ResponseProcessor::Handle(HttpIncomingResponse): got description",
+                    {"traceId", TraceId},
+                    {"params", params.ToDebugString()},
+                    {"description", description.ToDebugString()});
                 DatabaseId2Description[std::make_pair(params.Id, params.DatabaseType)] = description;
                 result.ConstructInPlace(description);
                 return "";
-            } catch (const NYql::TCodeLineException& ex) {
-                LOG_E("ResponseProcessor::Handle(HttpIncomingResponse): " << ex.what());
+            } catch (const NKikimr::TCodeLineException& ex) {
+                YDB_LOG_ERROR("ResponseProcessor::Handle(HttpIncomingResponse)",
+                    {"traceId", TraceId},
+                    {"ex", ex.what()});
                 return TStringBuilder()
                     << "response parser error: " << params.ToDebugString() << Endl
                     << ex.GetRawMessage();
             } catch (...) {
-                LOG_E("ResponseProcessor::Handle(HttpIncomingResponse): " << CurrentExceptionMessage());
+                YDB_LOG_ERROR("ResponseProcessor::Handle(HttpIncomingResponse)",
+                    {"traceId", TraceId},
+                    {"ex", CurrentExceptionMessage()});
                 return TStringBuilder()
                     << "response parser error: " << params.ToDebugString() << Endl
                     << CurrentExceptionMessage();
@@ -233,7 +254,7 @@ private:
         NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr& ev,
         const TRequestMap::value_type& requestWithParams
     ) const {
-        auto sb = TStringBuilder() 
+        auto sb = TStringBuilder()
             << "Error while trying to resolve managed " << ToString(requestWithParams.second.DatabaseType)
             << " database with id " << requestWithParams.second.Id << " via HTTP request to"
             << ": endpoint '" << requestWithParams.first->Host << "'"
@@ -261,7 +282,7 @@ private:
     TString DetailedPermissionsError(const TResolveParams& params) const {
         if (params.DatabaseType == EDatabaseType::ClickHouse || params.DatabaseType == EDatabaseType::PostgreSQL) {
                 auto mdbTypeStr = NYql::DatabaseTypeLowercase(params.DatabaseType);
-                return TStringBuilder() << " Please check that your service account has role "  << 
+                return TStringBuilder() << " Please check that your service account has role "  <<
                                        "`managed-" << mdbTypeStr << ".viewer`.";
         }
         return {};
@@ -282,7 +303,7 @@ private:
 class TDatabaseResolver: public TActor<TDatabaseResolver>
 {
 public:
-    TDatabaseResolver(TActorId httpProxy, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory)
+    TDatabaseResolver(TActorId httpProxy, NYql::IStructuredTokenCredentialsFactory::TPtr credentialsFactory)
         : TActor<TDatabaseResolver>(&TDatabaseResolver::State)
         , HttpProxy(httpProxy)
         , CredentialsFactory(credentialsFactory)
@@ -361,7 +382,7 @@ public:
             }
 
             if (aliveHosts.empty()) {
-                ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "No ALIVE ClickHouse hosts found";
+                ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "No ALIVE ClickHouse hosts found";
             }
 
             NYql::IMdbEndpointGenerator::TParams params = {
@@ -407,9 +428,9 @@ public:
                     aliveHosts.push_back(host["name"].GetString());
                 }
             }
-            
+
             if (aliveHosts.empty()) {
-                ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "No ALIVE PostgreSQL hosts found";
+                ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "No ALIVE PostgreSQL hosts found";
             }
 
             NYql::IMdbEndpointGenerator::TParams params = {
@@ -445,9 +466,9 @@ public:
                 aliveHost = hostMap.at("name").GetString();
                 break;
             }
-    
+
             if (aliveHost == "") {
-                ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "No ALIVE Greenplum hosts found";
+                ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "No ALIVE Greenplum hosts found";
             }
 
             NYql::IMdbEndpointGenerator::TParams params = {
@@ -497,7 +518,7 @@ public:
             }
 
             if (aliveHosts.empty()) {
-                ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "No ALIVE MySQL hosts found";
+                ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "No ALIVE MySQL hosts found";
             }
 
             NYql::IMdbEndpointGenerator::TParams params = {
@@ -527,7 +548,10 @@ private:
         bool success = true,
         const TString& errorMessage = "")
     {
-        LOG_D("ResponseProccessor::SendResponse: Success: " << success << ", Errors: " << (errorMessage ? errorMessage : "no"));
+        YDB_LOG_DEBUG("ResponseProcessor::SendResponse",
+            {"traceId", TraceId},
+            {"success", success},
+            {"errors", (errorMessage ? errorMessage : "no")});
         NYql::TIssues issues;
         if (errorMessage)
             issues.AddIssue(errorMessage);
@@ -546,7 +570,9 @@ private:
             const auto& kind = item.first.second;
             initMsg << id << " (" << kind << ")" << ", ";
         }
-        LOG_D("ResponseProccessor::Handle(EndpointRequest): " << initMsg);
+        YDB_LOG_DEBUG("Dump traceId, initMsg",
+            {"traceId", TraceId},
+            {"initMsg", initMsg});
 
         TRequestMap requests;
         TDatabaseResolverResponse::TDatabaseDescriptionMap ready;
@@ -557,30 +583,34 @@ private:
             if (Cache.Get(key, &cacheVal)) {
                 switch(cacheVal->index()) {
                     case 0U: {
-                        LOG_T("ResponseProccessor::Handle(EndpointRequest): obtained description from cache" 
-                              << ": databaseId: " << std::get<0>(key)
-                              << ", databaseType: " << std::get<1>(key)
-                              << ", value: " << std::get<0>(*cacheVal).ToDebugString());
+                        YDB_LOG_TRACE("ResponseProcessor::Handle(EndpointRequest): obtained description from cache",
+                            {"traceId", TraceId},
+                            {"databaseId", std::get<0>(key)},
+                            {"databaseType", std::get<1>(key)},
+                            {"value", std::get<0>(*cacheVal).ToDebugString()});
                         ready.insert(std::make_pair(p, std::get<0U>(*cacheVal)));
                         break;
                     }
                     case 1U: {
-                        LOG_T("ResponseProccessor::Handle(EndpointRequest): obtained error from cache" 
-                              << ": databaseId: " << std::get<0>(key)
-                              << ", databaseType: " << std::get<1>(key)
-                              << ", value: " << std::get<1>(*cacheVal));
+                        YDB_LOG_TRACE("ResponseProcessor::Handle(EndpointRequest): obtained error from cache",
+                            {"traceId", TraceId},
+                            {"databaseId", std::get<0>(key)},
+                            {"databaseType", std::get<1>(key)},
+                            {"value", std::get<1>(*cacheVal)});
                         SendResponse(ev->Sender, {}, false, std::get<1U>(*cacheVal));
                         return;
                     }
                     default: {
-                        LOG_E("ResponseProccessor::Handle(EndpointRequest): unsupported cache value type");
+                        YDB_LOG_ERROR("ResponseProcessor::Handle(EndpointRequest): unsupported cache value type",
+                            {"traceId", TraceId});
                     }
                 }
                 continue;
             } else {
-                LOG_T("ResponseProccessor::Handle(EndpointRequest): key is missing in cache" 
-                       << ": databaseId: " << std::get<0>(key)
-                       << ", databaseType: " << std::get<1>(key));
+                YDB_LOG_TRACE("ResponseProcessor::Handle(EndpointRequest): key is missing in cache",
+                    {"traceId", TraceId},
+                    {"databaseId", std::get<0>(key)},
+                    {"databaseType", std::get<1>(key)});
             }
 
             try {
@@ -608,19 +638,23 @@ private:
 
                 NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestGet(url);
 
-                auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(CredentialsFactory, databaseAuth.StructuredToken, databaseAuth.AddBearerToToken);
+                auto credentialsProviderFactory = CredentialsFactory->Create(databaseAuth.StructuredToken, databaseAuth.AddBearerToToken);
                 auto token = credentialsProviderFactory->CreateProvider()->GetAuthInfo();
                 if (!token.empty()) {
                     httpRequest->Set("Authorization", token);
                 }
 
-                LOG_D("ResponseProccessor::Handle(EndpointRequest): start GET request: " << "url: "  << httpRequest->URL);
+                YDB_LOG_DEBUG("ResponseProcessor::Handle(EndpointRequest): start GET request",
+                    {"traceId", TraceId},
+                    {"url", httpRequest->URL});
 
                 requests[httpRequest] = TResolveParams{databaseId, databaseType, databaseAuth};
             } catch (const std::exception& e) {
-                const TString msg = TStringBuilder() << "error while preparing to resolve database id: " << databaseId 
+                const TString msg = TStringBuilder() << "error while preparing to resolve database id: " << databaseId
                                                      << ", details: " << e.what();
-                LOG_E("ResponseProccessor::Handle(EndpointRequest): put error in cache: " << msg);
+                YDB_LOG_ERROR("ResponseProcessor::Handle(EndpointRequest): put error",
+                    {"traceId", TraceId},
+                    {"inCache", msg});
                 Cache.Put(key, msg);
                 SendResponse(ev->Sender, {}, /*success=*/false, msg);
                 return;
@@ -642,12 +676,12 @@ private:
 private:
     TParsers Parsers;
     const TActorId HttpProxy;
-    const ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
+    const IStructuredTokenCredentialsFactory::TPtr CredentialsFactory;
     TString TraceId;
     TCache Cache;
 };
 
-NActors::IActor* CreateDatabaseResolver(NActors::TActorId httpProxy, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory) {
+NActors::IActor* CreateDatabaseResolver(NActors::TActorId httpProxy, NYql::IStructuredTokenCredentialsFactory::TPtr credentialsFactory) {
     return new TDatabaseResolver(httpProxy, credentialsFactory);
 }
 

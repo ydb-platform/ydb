@@ -3,6 +3,8 @@
 #include <ydb/core/io_formats/cell_maker/cell_maker.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 
+#include <library/cpp/json/json_writer.h>
+
 namespace NKikimr::NReplication::NService {
 
 ui64 TChangeRecord::GetGroup() const {
@@ -69,6 +71,26 @@ static bool ParseKey(TVector<TCell>& cells,
     return true;
 }
 
+template <typename T>
+static bool TransformKey(T& to,
+        const NJson::TJsonValue::TArray& from, TLightweightSchema::TCPtr schema, TMemoryPool& pool, TString& error)
+{
+    TVector<TCell> cells;
+    if (!ParseKey(cells, from, schema, pool, error)) {
+        return false;
+    }
+
+    if constexpr (std::is_same_v<T, NKikimrTxDataShard::TEvApplyReplicationChanges::TChange>) {
+        to.SetKey(TSerializedCellVec::Serialize(cells));
+    } else if constexpr (std::is_same_v<T, TMaybe<TOwnedCellVec>>) {
+        to.ConstructInPlace(cells);
+    } else {
+        static_assert(false, "Unsupported type");
+    }
+
+    return true;
+}
+
 static bool ParseValue(TVector<NTable::TTag>& tags, TVector<TCell>& cells,
         const NJson::TJsonValue::TMapType& value, TLightweightSchema::TCPtr schema, TMemoryPool& pool, TString& error)
 {
@@ -88,6 +110,21 @@ static bool ParseValue(TVector<NTable::TTag>& tags, TVector<TCell>& cells,
     return true;
 }
 
+static bool TransformValue(NKikimrTxDataShard::TEvApplyReplicationChanges::TUpdates& to,
+        const NJson::TJsonValue::TMapType& from, TLightweightSchema::TCPtr schema, TMemoryPool& pool, TString& error)
+{
+    TVector<NTable::TTag> tags;
+    TVector<TCell> cells;
+    if (!ParseValue(tags, cells, from, schema, pool, error)) {
+        return false;
+    }
+
+    *to.MutableTags() = {tags.begin(), tags.end()};
+    to.SetData(TSerializedCellVec::Serialize(cells));
+
+    return true;
+}
+
 void TChangeRecord::Serialize(NKikimrTxDataShard::TEvApplyReplicationChanges_TChange& record, TMemoryPool& pool) const {
     pool.Clear();
     record.SetSourceOffset(GetOrder());
@@ -98,32 +135,22 @@ void TChangeRecord::Serialize(NKikimrTxDataShard::TEvApplyReplicationChanges_TCh
     TString error;
 
     if (JsonBody.Has("key") && JsonBody["key"].IsArray()) {
-        const auto& key = JsonBody["key"].GetArray();
-        TVector<TCell> cells;
-
-        auto res = ParseKey(cells, key, Schema, pool, error);
-        Y_ABORT_UNLESS(res);
-
-        record.SetKey(TSerializedCellVec::Serialize(cells));
+        auto res = TransformKey(record, JsonBody["key"].GetArray(), Schema, pool, error);
+        Y_ABORT_UNLESS(res, "Cannot transform key: %s", error.c_str());
     } else {
-        Y_ABORT("Malformed json record");
+        Y_ABORT("Malformed json record: %s", NJson::WriteJson(JsonBody, false).c_str());
     }
 
     if (JsonBody.Has("update") && JsonBody["update"].IsMap()) {
-        const auto& update = JsonBody["update"].GetMap();
-        TVector<NTable::TTag> tags;
-        TVector<TCell> cells;
-
-        auto res = ParseValue(tags, cells, update, Schema, pool, error);
-        Y_ABORT_UNLESS(res);
-
-        auto& upsert = *record.MutableUpsert();
-        *upsert.MutableTags() = {tags.begin(), tags.end()};
-        upsert.SetData(TSerializedCellVec::Serialize(cells));
+        auto res = TransformValue(*record.MutableUpsert(), JsonBody["update"].GetMap(), Schema, pool, error);
+        Y_ABORT_UNLESS(res, "Cannot transform value: %s", error.c_str());
+    } else if (JsonBody.Has("reset") && JsonBody["reset"].IsMap()) {
+        auto res = TransformValue(*record.MutableReset(), JsonBody["reset"].GetMap(), Schema, pool, error);
+        Y_ABORT_UNLESS(res, "Cannot transform value: %s", error.c_str());
     } else if (JsonBody.Has("erase")) {
         record.MutableErase();
     } else {
-        Y_ABORT("Malformed json record");
+        Y_ABORT("Malformed json record: %s", NJson::WriteJson(JsonBody, false).c_str());
     }
 }
 
@@ -132,15 +159,10 @@ TConstArrayRef<TCell> TChangeRecord::GetKey(TMemoryPool& pool) const {
         TString error;
 
         if (JsonBody.Has("key") && JsonBody["key"].IsArray()) {
-            const auto& key = JsonBody["key"].GetArray();
-            TVector<TCell> cells;
-
-            auto res = ParseKey(cells, key, Schema, pool, error);
-            Y_ABORT_UNLESS(res);
-
-            Key.ConstructInPlace(cells);
+            auto res = TransformKey(Key, JsonBody["key"].GetArray(), Schema, pool, error);
+            Y_ABORT_UNLESS(res, "Cannot transform key: %s", error.c_str());
         } else {
-            Y_ABORT("Malformed json record");
+            Y_ABORT("Malformed json record: %s", NJson::WriteJson(JsonBody, false).c_str());
         }
     }
 

@@ -19,11 +19,8 @@ namespace numpy
       return res;
     }
 
-    int const ndigits =
-        (number == 0 ? 1
-                     : std::ceil(std::log(std::labs(number)) / std::log(base)));
-    int const effective_padding =
-        padding - ((number == 0) && (padding > 0) ? 1 : 0);
+    int const ndigits = (number == 0 ? 1 : std::ceil(std::log(std::labs(number)) / std::log(base)));
+    int const effective_padding = padding - ((number == 0) && (padding > 0) ? 1 : 0);
 
     res.resize(ndigits + effective_padding + (number < 0 ? 1 : 0));
 

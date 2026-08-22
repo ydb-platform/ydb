@@ -1,26 +1,27 @@
 #include "kqp_finalize_script_actor.h"
 
-#include <ydb/core/fq/libs/common/compression.h>
 #include <ydb/core/fq/libs/events/events.h>
-
-#include <ydb/core/kqp/federated_query/kqp_federated_query_actors.h>
+#include <ydb/core/kqp/common/kqp_script_executions.h>
+#include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
+#include <ydb/core/kqp/proxy_service/script_executions_utils/kqp_script_execution_compression.h>
 #include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
-
 #include <ydb/core/tx/datashard/const.h>
-
-#include <yql/essentials/providers/common/provider/yql_provider_names.h>
-#include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_applicator_actor.h>
 #include <ydb/library/yql/providers/s3/proto/sink.pb.h>
 
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 
 namespace NKikimr::NKqp {
 
 namespace {
 
-class TScriptFinalizerActor : public TActorBootstrapped<TScriptFinalizerActor> {
-    static constexpr size_t MAX_ARTIFACTS_SIZE_BYTES = 40_MB;
+// Actor for performing finalization of script execution external effects (for example commit / roll back S3 uploads).
+// NOTE: if S3 become unavailable and/or secrets unavailable script execution will be never finalized and therefore can not be removed.
 
+class TScriptFinalizerActor : public TActorBootstrapped<TScriptFinalizerActor> {
 public:
     TScriptFinalizerActor(TEvScriptFinalizeRequest::TPtr request,
         const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
@@ -30,6 +31,7 @@ public:
         , ExecutionId(request->Get()->Description.ExecutionId)
         , Database(request->Get()->Description.Database)
         , FinalizationStatus(request->Get()->Description.FinalizationStatus)
+        , LeaseGeneration(request->Get()->Description.LeaseGeneration)
         , Request(std::move(request))
         , FinalizationTimeout(TDuration::Seconds(queryServiceConfig.GetFinalizeScriptServiceConfig().GetScriptFinalizationTimeoutSeconds()))
         , FederatedQuerySetup(federatedQuerySetup)
@@ -37,38 +39,15 @@ public:
         , S3ActorsFactor(std::move(s3ActorsFactor))
     {}
 
-    void CompressScriptArtifacts() const {
-        auto& description = Request->Get()->Description;
-
-        TString astTruncateDescription;
-        if (size_t planSize = description.QueryPlan.value_or("").size(); description.QueryAst && description.QueryAst->size() + planSize > MAX_ARTIFACTS_SIZE_BYTES) {
-            astTruncateDescription = TStringBuilder() << "Query artifacts size is " << description.QueryAst->size() + planSize << " bytes (plan + ast), that is larger than allowed limit " << MAX_ARTIFACTS_SIZE_BYTES << " bytes, ast was truncated";
-            size_t toRemove = std::min(description.QueryAst->size() + planSize - MAX_ARTIFACTS_SIZE_BYTES, description.QueryAst->size());
-            description.QueryAst = TruncateString(*description.QueryAst, description.QueryAst->size() - toRemove);
-        }
-
-        auto ast = description.QueryAst;
-        if (Compressor.IsEnabled() && ast) {
-            const auto& [astCompressionMethod, astCompressed] = Compressor.Compress(*ast);
-            description.QueryAstCompressionMethod = astCompressionMethod;
-            description.QueryAst = astCompressed;
-        }
-
-        if (description.QueryAst && description.QueryAst->size() > NDataShard::NLimits::MaxWriteValueSize) {
-            astTruncateDescription = TStringBuilder() << "Query ast size is " << description.QueryAst->size() << " bytes, that is larger than allowed limit " << NDataShard::NLimits::MaxWriteValueSize << " bytes, ast was truncated";
-            description.QueryAst = TruncateString(*ast, NDataShard::NLimits::MaxWriteValueSize - 1_KB);
-            description.QueryAstCompressionMethod = std::nullopt;
-        }
-
-        if (astTruncateDescription) {
-            NYql::TIssue astTruncatedIssue(astTruncateDescription);
-            astTruncatedIssue.SetCode(NYql::DEFAULT_ERROR, NYql::TSeverityIds::S_INFO);
-            description.Issues.AddIssue(astTruncatedIssue);
-        }
-    }
-
     void Bootstrap() {
-        CompressScriptArtifacts();
+        auto& description = Request->Get()->Description;
+        const auto& artifacts = CompressScriptArtifacts(description.QueryAst, description.QueryPlan, Compressor);
+        description.QueryAst = artifacts.Ast;
+        description.QueryAstCompressionMethod = artifacts.AstCompressionMethod;
+        description.QueryPlan = artifacts.Plan;
+        description.QueryPlanCompressionMethod = artifacts.PlanCompressionMethod;
+        description.Issues.AddIssues(artifacts.Issues);
+
         Register(CreateSaveScriptFinalStatusActor(SelfId(), std::move(Request)));
         Become(&TScriptFinalizerActor::FetchState);
     }
@@ -79,7 +58,8 @@ public:
 
     void Handle(TEvSaveScriptFinalStatusResponse::TPtr& ev) {
         if (!ev->Get()->ApplicateScriptExternalEffectRequired || ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
-            Reply(ev->Get()->OperationAlreadyFinalized, ev->Get()->Status, std::move(ev->Get()->Issues));
+            auto& into = *ev->Get();
+            Reply(into.Status, into.ExecutionEntryExists, into.FinalStatusAlreadySaved, std::move(into.Issues));
             return;
         }
 
@@ -112,7 +92,7 @@ private:
     }
 
     void FetchSecrets() {
-        RegisterDescribeSecretsActor(SelfId(), UserToken, SecretNames, ActorContext().ActorSystem());
+        RegisterDescribeSecretsActor(SelfId(), UserToken, Database, SecretNames, ActorContext().ActorSystem());
     }
 
     void Handle(TEvDescribeSecretsResponse::TPtr& ev) {
@@ -174,8 +154,8 @@ private:
     }
 
     void RunS3ApplicatorActor(const NYql::NDqProto::TExternalEffect& externalEffect) {
-        if (!FederatedQuerySetup) {
-            FinishScriptFinalization(Ydb::StatusIds::INTERNAL_ERROR, "unable to aplicate s3 external effect, invalid federated query setup");
+        if (!FederatedQuerySetup || !S3ActorsFactor) {
+            FinishScriptFinalization(Ydb::StatusIds::INTERNAL_ERROR, "unable to apply s3 external effect, invalid federated query setup");
             return;
         }
 
@@ -194,11 +174,7 @@ private:
 
     void Handle(NFq::TEvents::TEvEffectApplicationResult::TPtr& ev) {
         if (ev->Get()->FatalError) {
-            NYql::TIssue rootIssue("Failed to commit/abort s3 multipart uploads");
-            for (const NYql::TIssue& issue : ev->Get()->Issues) {
-                rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue));
-            }
-            FinishScriptFinalization(Ydb::StatusIds::BAD_REQUEST, {rootIssue});
+            FinishScriptFinalization(Ydb::StatusIds::BAD_REQUEST, AddRootIssue("Failed to commit/abort s3 multipart uploads", ev->Get()->Issues));
         } else {
             FinishScriptFinalization();
         }
@@ -213,7 +189,7 @@ private:
     )
 
     void FinishScriptFinalization(std::optional<Ydb::StatusIds::StatusCode> status, NYql::TIssues issues) {
-        Register(CreateScriptFinalizationFinisherActor(SelfId(), ExecutionId, Database, status, std::move(issues)));
+        Register(CreateScriptFinalizationFinisherActor(SelfId(), Database, ExecutionId, status, std::move(issues), LeaseGeneration));
         Become(&TScriptFinalizerActor::FinishState);
     }
 
@@ -226,19 +202,17 @@ private:
     }
 
     void Handle(TEvScriptExecutionFinished::TPtr& ev) {
-        Reply(ev->Get()->OperationAlreadyFinalized, ev->Get()->Status, std::move(ev->Get()->Issues));
+        const auto& info = ev->Get()->Info;
+        Reply(ev->Get()->Status, info.ExecutionEntryExists, info.AlreadyStopped, std::move(ev->Get()->Issues));
     }
 
-    void Reply(bool operationAlreadyFinalized, Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) {
-        Send(ReplyActor, new TEvScriptExecutionFinished(operationAlreadyFinalized, status, std::move(issues)));
+    void Reply(const Ydb::StatusIds::StatusCode status, bool executionEntryExists, bool alreadyStopped, NYql::TIssues&& issues) {
+        Send(ReplyActor, new TEvScriptExecutionFinished(status, {
+            .ExecutionEntryExists = executionEntryExists,
+            .AlreadyStopped = alreadyStopped,
+        }, std::move(issues)));
         Send(MakeKqpFinalizeScriptServiceId(SelfId().NodeId()), new TEvScriptFinalizeResponse(ExecutionId));
-
         PassAway();
-    }
-
-private:
-    static TString TruncateString(const TString& str, size_t size) {
-        return str.substr(0, std::min(str.size(), size)) + "...\n(TRUNCATED)";
     }
 
 private:
@@ -246,17 +220,18 @@ private:
     const TString ExecutionId;
     const TString Database;
     const EFinalizationStatus FinalizationStatus;
+    const i64 LeaseGeneration = 0;
     TEvScriptFinalizeRequest::TPtr Request;
 
     const TDuration FinalizationTimeout;
-    const std::optional<TKqpFederatedQuerySetup>& FederatedQuerySetup;
-    const NFq::TCompressor Compressor;
+    const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
+    const TCompressor Compressor;
     std::shared_ptr<NYql::NDq::IS3ActorsFactory> S3ActorsFactor;
 
     TString CustomerSuppliedId;
     std::vector<NKqpProto::TKqpExternalSink> Sinks;
 
-    TString UserToken;
+    TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     std::vector<TString> SecretNames;
     std::unordered_map<TString, TString> SecureParams;
 };

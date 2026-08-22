@@ -6,6 +6,8 @@
 
 #include <yt/yt/client/table_client/public.h>
 
+#include <yt/yt/client/file_client/public.h>
+
 #include <yt/yt/client/transaction_client/public.h>
 
 #include <yt/yt/client/prerequisite_client/public.h>
@@ -26,6 +28,7 @@ namespace NYT::NApi {
 ////////////////////////////////////////////////////////////////////////////////
 
 using TClusterTag = NObjectClient::TCellTag;
+using TStrongOrderingTagsMap = THashMap<NObjectClient::TCellId, std::vector<std::string>>;
 
 // Keep in sync with NRpcProxy::NProto::EMasterReadKind.
 // On cache miss request is redirected to next level as follows:
@@ -57,6 +60,8 @@ YT_DEFINE_ERROR_ENUM(
     ((NoSuchAttribute)                                   (1920))
     ((FormatDisabled)                                    (1925))
     ((ClusterLivenessCheckFailed)                        (1926))
+    ((UnsupportedArchiveVersion)                         (1927))
+    ((SignatureGenerationIsUnsupported)                  (1928))
 );
 
 DEFINE_ENUM(ERowModificationType,
@@ -98,6 +103,12 @@ DEFINE_ENUM(EOperationSortDirection,
     ((None)   (0))
     ((Past)   (1))
     ((Future) (2))
+);
+
+DEFINE_ENUM(EListQueriesSortOrder,
+    ((Cursor)     (0))
+    ((Ascending)  (1))
+    ((Descending) (2))
 );
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -143,6 +154,7 @@ DECLARE_REFCOUNTED_STRUCT(IConnection)
 DECLARE_REFCOUNTED_STRUCT(IClientBase)
 DECLARE_REFCOUNTED_STRUCT(IClient)
 DECLARE_REFCOUNTED_STRUCT(IInternalClient)
+DECLARE_REFCOUNTED_STRUCT(IDynamicTableTransaction)
 DECLARE_REFCOUNTED_STRUCT(ITransaction)
 DECLARE_REFCOUNTED_STRUCT(IPrerequisite)
 DECLARE_REFCOUNTED_STRUCT(IStickyTransactionPool)
@@ -155,10 +167,14 @@ DECLARE_REFCOUNTED_STRUCT(ITableWriter)
 
 DECLARE_REFCOUNTED_CLASS(ITablePartitionReader)
 
+DECLARE_REFCOUNTED_STRUCT(IFormattedTableReader)
+
 DECLARE_REFCOUNTED_STRUCT(ITableFragmentWriter);
 
 DECLARE_REFCOUNTED_STRUCT(IFileReader)
 DECLARE_REFCOUNTED_STRUCT(IFileWriter)
+
+DECLARE_REFCOUNTED_STRUCT(IFileFragmentWriter)
 
 DECLARE_REFCOUNTED_STRUCT(IJournalReader)
 DECLARE_REFCOUNTED_STRUCT(IJournalWriter)
@@ -257,6 +273,13 @@ using NTableClient::TSignedDistributedWriteSessionPtr;
 using NTableClient::TSignedWriteFragmentCookiePtr;
 using NTableClient::TSignedWriteFragmentResultPtr;
 struct TWriteFragmentCookie;
+
+////////////////////////////////////////////////////////////////////////////////
+
+using NFileClient::TSignedDistributedWriteFileSessionPtr;
+using NFileClient::TSignedWriteFileFragmentCookiePtr;
+using NFileClient::TSignedWriteFileFragmentResultPtr;
+struct TWriteFileFragmentCookie;
 
 ////////////////////////////////////////////////////////////////////////////////
 

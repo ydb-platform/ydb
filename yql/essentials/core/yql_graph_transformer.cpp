@@ -2,6 +2,9 @@
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/utils/yql_panic.h>
 #include <yql/essentials/public/issue/yql_issue_manager.h>
+#include <yql/essentials/utils/log/log.h>
+
+#include <util/generic/scope.h>
 
 namespace NYql {
 
@@ -9,19 +12,19 @@ namespace {
 
 class TSharedTransformerProxy : public IGraphTransformer {
 public:
-    TSharedTransformerProxy(const std::shared_ptr<IGraphTransformer>& inner)
+    explicit TSharedTransformerProxy(const std::shared_ptr<IGraphTransformer>& inner)
         : Inner_(inner)
     {}
 
-    TStatus Transform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
+    TStatus Transform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
         return Inner_->Transform(input, output, ctx);
     }
 
-    NThreading::TFuture<void> GetAsyncFuture(const TExprNode& input) {
+    NThreading::TFuture<void> GetAsyncFuture(const TExprNode& input) final {
         return Inner_->GetAsyncFuture(input);
     }
 
-    TStatus ApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
+    TStatus ApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
         return Inner_->ApplyAsyncChanges(input, output, ctx);
     }
 
@@ -38,6 +41,7 @@ private:
 };
 
 class TCompositeGraphTransformer : public TGraphTransformerBase {
+    static constexpr ui64 MinAllocationDelta = 1000;
 public:
     TCompositeGraphTransformer(const TVector<TTransformStage>& stages, bool useIssueScopes, bool doCheckArguments)
         : Stages_(stages)
@@ -74,6 +78,7 @@ public:
             return TStatus::Ok;
         }
 
+        auto prevUniqueId = ctx.NextUniqueId;
         auto status = WithScope(ctx, [&]() {
             return Stages_[Index_].GetTransformer().Transform(input, output, ctx);
         });
@@ -92,6 +97,10 @@ public:
         Y_UNUSED(DoCheckArguments_);
         Y_UNUSED(CheckArgumentsCount_);
 #endif
+        if (ctx.NextUniqueId >= prevUniqueId + MinAllocationDelta) {
+            YQL_CLOG(DEBUG, Perf) << "Allocated " << (ctx.NextUniqueId - prevUniqueId) << " nodes after Transform, stage: " << Stages_[Index_].Name;
+        }
+
         status = HandleStatus(status);
         return status;
     }
@@ -103,9 +112,14 @@ public:
 
     TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
         YQL_ENSURE(Index_ < Stages_.size());
+        auto prevUniqueId = ctx.NextUniqueId;
         auto status = WithScope(ctx, [&]() {
             return Stages_[Index_].GetTransformer().ApplyAsyncChanges(input, output, ctx);
         });
+
+        if (ctx.NextUniqueId >= prevUniqueId + MinAllocationDelta) {
+            YQL_CLOG(DEBUG, Perf) << "Allocated " << (ctx.NextUniqueId - prevUniqueId) << " nodes after ApplyAsyncChanges, stage: " << Stages_[Index_].Name;
+        }
 
         status = HandleStatus(status);
         return status;
@@ -135,7 +149,7 @@ private:
         if (status.HasRestart) {
             // ignore Async status in this case
             Index_ = 0;
-            status = IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
+            status = IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, /*hasRestart=*/true);
         } else if (status.Level == IGraphTransformer::TStatus::Ok) {
             status = IGraphTransformer::TStatus::Repeat;
             ++Index_;
@@ -171,10 +185,17 @@ protected:
 };
 
 void AddTooManyTransformationsError(TPositionHandle pos, const TStringBuf& where, TExprContext& ctx) {
-    ctx.AddError(TIssue(ctx.GetPosition(pos),
-                        TStringBuilder() << "YQL: Internal core error! " << where << " takes too much iterations: "
-                                         << ctx.RepeatTransformLimit
-                                         << ". You may set RepeatTransformLimit as flags for config provider."));
+    auto builder = TStringBuilder();
+    builder << "YQL: Internal core error! " << where << " takes too much iterations: "
+            << ctx.RepeatTransformLimit
+            << ". You may set RepeatTransformLimit as flags for config provider, ";
+    if (!ctx.CycleDetector) {
+        builder << "or you may set TransformCycleDetector as flags for config provider.";
+    } else {
+        builder << "or you may increase TransformCycleDetector limit";
+    }
+
+    ctx.AddError(TIssue(ctx.GetPosition(pos), builder));
 }
 
 }
@@ -198,7 +219,7 @@ public:
         : TCompositeGraphTransformer(
             {WrapCondition(condition), left, right},
             /* useIssueScopes = */ false,
-            /* doCheckArgumentstrue = */ true)
+            /* doCheckArguments = */ true)
     { }
 
 private:
@@ -215,7 +236,7 @@ private:
         if (status.HasRestart) {
             // ignore Async status in this case
             Index_ = 0;
-            status = IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
+            status = IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, /*hasRestart=*/true);
         } else if (status.Level == IGraphTransformer::TStatus::Ok) {
             status = IGraphTransformer::TStatus::Repeat;
             YQL_ENSURE(!Condition_.Empty(), "Condition must be set");
@@ -262,10 +283,19 @@ TAutoPtr<IGraphTransformer> CreateChoiceGraphTransformer(
 
 IGraphTransformer::TStatus SyncTransform(IGraphTransformer& transformer, TExprNode::TPtr& root, TExprContext& ctx) {
     try {
+        ctx.ResetCycleDetector();
+        Y_DEFER {
+            ctx.ResetCycleDetector();
+        };
+
         for (; ctx.RepeatTransformCounter < ctx.RepeatTransformLimit; ++ctx.RepeatTransformCounter) {
             TExprNode::TPtr newRoot;
             auto status = transformer.Transform(root, newRoot, ctx);
             if (newRoot) {
+                if (newRoot != root) {
+                    ctx.CheckCycle(*newRoot);
+                }
+
                 root = newRoot;
             }
 
@@ -331,7 +361,7 @@ IGraphTransformer::TStatus AsyncTransformStepImpl(IGraphTransformer& transformer
                 if (breakOnRestart && status.HasRestart) {
                     return status;
                 }
-                return AsyncTransformStepImpl(transformer, root, ctx, false /* no async changes */, breakOnRestart, name);
+                return AsyncTransformStepImpl(transformer, root, ctx, /*applyAsyncChanges=*/false /* no async changes */, breakOnRestart, name);
             case IGraphTransformer::TStatus::Async:
                 YQL_ENSURE(false, "Async status is forbidden for ApplyAsyncChanges");
                 break;
@@ -345,6 +375,10 @@ IGraphTransformer::TStatus AsyncTransformStepImpl(IGraphTransformer& transformer
             TExprNode::TPtr newRoot;
             auto status = transformer.Transform(root, newRoot, ctx);
             if (newRoot) {
+                if (newRoot != root) {
+                    ctx.CheckCycle(*newRoot);
+                }
+
                 root = newRoot;
             }
 
@@ -379,7 +413,12 @@ IGraphTransformer::TStatus AsyncTransformStepImpl(IGraphTransformer& transformer
 }
 
 IGraphTransformer::TStatus InstantTransform(IGraphTransformer& transformer, TExprNode::TPtr& root, TExprContext& ctx, bool breakOnRestart) {
-    IGraphTransformer::TStatus status = AsyncTransformStepImpl(transformer, root, ctx, false, breakOnRestart, "InstantTransform");
+    ctx.ResetCycleDetector();
+    Y_DEFER {
+        ctx.ResetCycleDetector();
+    };
+
+    IGraphTransformer::TStatus status = AsyncTransformStepImpl(transformer, root, ctx, /*applyAsyncChanges=*/false, breakOnRestart, "InstantTransform");
     if (status.Level == IGraphTransformer::TStatus::Async) {
         ctx.AddError(TIssue(ctx.GetPosition(root->Pos()), "Instant transform can not be delayed"));
         return IGraphTransformer::TStatus::Error;
@@ -390,12 +429,13 @@ IGraphTransformer::TStatus InstantTransform(IGraphTransformer& transformer, TExp
 IGraphTransformer::TStatus AsyncTransformStep(IGraphTransformer& transformer, TExprNode::TPtr& root,
                                             TExprContext& ctx, bool applyAsyncChanges)
 {
-    return AsyncTransformStepImpl(transformer, root, ctx, applyAsyncChanges, false, "AsyncTransformStep");
+    return AsyncTransformStepImpl(transformer, root, ctx, applyAsyncChanges, /*breakOnRestart=*/false, "AsyncTransformStep");
 }
 
 NThreading::TFuture<IGraphTransformer::TStatus> AsyncTransform(IGraphTransformer& transformer, TExprNode::TPtr& root, TExprContext& ctx,
                                                                 bool applyAsyncChanges) {
-    IGraphTransformer::TStatus status = AsyncTransformStepImpl(transformer, root, ctx, applyAsyncChanges, false, "AsyncTransform");
+    ctx.ResetCycleDetector();
+    IGraphTransformer::TStatus status = AsyncTransformStepImpl(transformer, root, ctx, applyAsyncChanges, /*breakOnRestart=*/false, "AsyncTransform");
     if (status.Level != IGraphTransformer::TStatus::Async) {
         return NThreading::MakeFuture(status);
     }
@@ -419,16 +459,16 @@ void AsyncTransform(IGraphTransformer& transformer, TExprNode::TPtr& root, TExpr
 }
 
 template<>
-void Out<NYql::IGraphTransformer::TStatus::ELevel>(class IOutputStream &o, NYql::IGraphTransformer::TStatus::ELevel x) {
+void Out<NYql::IGraphTransformer::TStatus::ELevel>(class IOutputStream &out, NYql::IGraphTransformer::TStatus::ELevel value) {
 #define YQL_GT_STATUS_MAP_TO_STRING_IMPL(name, ...) \
     case NYql::IGraphTransformer::TStatus::name: \
-        o << #name; \
+        out << #name; \
         return;
 
-    switch (x) {
+    switch (value) {
         YQL_GT_STATUS_MAP(YQL_GT_STATUS_MAP_TO_STRING_IMPL)
     default:
-        o << static_cast<int>(x);
+        out << static_cast<int>(value);
         return;
     }
 }

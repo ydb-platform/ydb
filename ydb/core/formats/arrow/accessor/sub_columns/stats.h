@@ -1,7 +1,9 @@
 #pragma once
 #include "settings.h"
+#include "types.h"
 
 #include <ydb/core/formats/arrow/accessor/abstract/constructor.h>
+#include <ydb/core/formats/arrow/accessor/sub_columns/json_value_path.h>
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/log.h>
@@ -13,15 +15,30 @@
 
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
-class TSplittedColumns;
-
 class TDictStats {
 private:
+    using TJsonPathAccessorTriePtr = std::shared_ptr<NKikimr::NArrow::NAccessor::NSubColumns::TJsonPathAccessorTrie>;
+
     std::shared_ptr<arrow::RecordBatch> Original;
-    std::shared_ptr<arrow::StringArray> DataNames;
+    std::shared_ptr<arrow::BinaryArray> DataNames;
     std::shared_ptr<arrow::UInt32Array> DataRecordsCount;
     std::shared_ptr<arrow::UInt32Array> DataSize;
     std::shared_ptr<arrow::UInt8Array> AccessorType;
+    std::shared_ptr<arrow::UInt8Array> ValueType;
+    TJsonPathAccessorTriePtr CachedJsonPathAccessorTrie;
+
+    TJsonPathAccessorTriePtr GenerateJsonPathAccessorTrie() const {
+        auto jsonPathAccessorTrie = std::make_shared<NKikimr::NArrow::NAccessor::NSubColumns::TJsonPathAccessorTrie>();
+        for (ui32 i = 0; i < DataNames->length(); ++i) {
+            const auto arrView = DataNames->GetView(i);
+            auto insertResult = jsonPathAccessorTrie->Insert(ToJsonPath(TStringBuf(arrView.data(), arrView.size())), nullptr, OthersExplicitBinaryJson, i);
+            AFL_VERIFY(insertResult.IsSuccess())("key_name", TStringBuf(arrView.data(), arrView.size()))
+                ("json_path", ToJsonPath(TStringBuf(arrView.data(), arrView.size())))
+                ("error", insertResult.GetErrorMessage());
+        }
+
+        return jsonPathAccessorTrie;
+    }
 
 public:
     ui32 GetFilledValuesCount() const {
@@ -38,42 +55,56 @@ public:
         result.InsertValue("records", NArrow::DebugJson(DataRecordsCount, 1000000, 1000000)["data"]);
         result.InsertValue("size", NArrow::DebugJson(DataSize, 1000000, 1000000)["data"]);
         result.InsertValue("accessor", NArrow::DebugJson(AccessorType, 1000000, 1000000)["data"]);
+        result.InsertValue("value_type", NArrow::DebugJson(ValueType, 1000000, 1000000)["data"]);
         return result;
     }
     static TDictStats BuildEmpty();
     TString SerializeAsString(const std::shared_ptr<NSerialization::ISerializer>& serializer) const;
 
+    // Deserialize a stats blob, transparently accepting both the current (5-column, with value_type)
+    // and the legacy (4-column) layout via try-decode-fallback.
+    static TDictStats DeserializeFromBlob(const TString& blob);
+
+    void CreateJsonPathAccessorTrieCache() {
+        CachedJsonPathAccessorTrie = GenerateJsonPathAccessorTrie();
+    }
+
     std::optional<ui32> GetKeyIndexOptional(const std::string_view keyName) const {
-        for (ui32 i = 0; i < DataNames->length(); ++i) {
-            const auto arrView = DataNames->GetView(i);
-            if (std::string_view(arrView.data(), arrView.size()) == keyName) {
-                return i;
-            }
+        auto accessorResult = CachedJsonPathAccessorTrie ? CachedJsonPathAccessorTrie->GetAccessor(ToJsonPath(keyName))
+                                                         : GenerateJsonPathAccessorTrie()->GetAccessor(ToJsonPath(keyName));
+        AFL_VERIFY(accessorResult.IsSuccess())("keyName", keyName)("jsonPath", ToJsonPath(keyName))("error", accessorResult.GetErrorMessage());
+
+        auto accessor = accessorResult.DetachResult();
+        if (!accessor) {
+            return std::nullopt;
         }
-        return std::nullopt;
+
+        return accessor->GetCookie();
     }
 
     ui32 GetKeyIndexVerified(const std::string_view keyName) const {
-        for (ui32 i = 0; i < DataNames->length(); ++i) {
-            const auto arrView = DataNames->GetView(i);
-            if (std::string_view(arrView.data(), arrView.size()) == keyName) {
-                return i;
-            }
-        }
-        AFL_VERIFY(false);
-        return 0;
+        auto idx = GetKeyIndexOptional(keyName);
+        AFL_VERIFY(idx.has_value());
+
+        return idx.value();
     }
 
     class TRTStatsValue {
     private:
         YDB_READONLY(ui32, RecordsCount, 0);
         YDB_READONLY(ui32, DataSize, 0);
+        std::optional<EValueType> DeducedValueType;
 
     public:
         TRTStatsValue() = default;
-        TRTStatsValue(const ui32 recordsCount, const ui32 dataSize)
+        TRTStatsValue(const ui32 recordsCount, const ui32 dataSize, const std::optional<EValueType>& valueType)
             : RecordsCount(recordsCount)
-            , DataSize(dataSize) {
+            , DataSize(dataSize)
+            , DeducedValueType(valueType) {
+        }
+
+        EValueType GetValueType() const {
+            return DeducedValueType.value_or(EValueType::BinaryJson);
         }
 
         void AddValue(const std::string_view str) {
@@ -84,8 +115,11 @@ public:
         void Add(const TDictStats& stats, const ui32 idx) {
             RecordsCount += stats.GetColumnRecordsCount(idx);
             DataSize += stats.GetColumnSize(idx);
+            DeducedValueType = MergeValueTypes(DeducedValueType, stats.GetValueType(idx));
         }
 
+        // Decides only the Array-vs-Sparsed axis and never returns Dictionary,
+        // because dictionary decision is deferred until the values are materialized.
         IChunkedArray::EType GetAccessorType(const TSettings& settings, const ui32 recordsCount) const {
             return settings.IsSparsed(RecordsCount, recordsCount) ? IChunkedArray::EType::SparsedArray : IChunkedArray::EType::Array;
         }
@@ -100,16 +134,16 @@ public:
         TRTStats(const TString& keyName)
             : KeyName(keyName) {
         }
-        TRTStats(const TString& keyName, const ui32 recordsCount, const ui32 dataSize)
-            : TBase(recordsCount, dataSize)
+        TRTStats(const TString& keyName, const ui32 recordsCount, const ui32 dataSize, const std::optional<EValueType>& valueType)
+            : TBase(recordsCount, dataSize, valueType)
             , KeyName(keyName) {
         }
 
         TRTStats(const std::string_view keyName)
             : KeyName(keyName.data(), keyName.size()) {
         }
-        TRTStats(const std::string_view keyName, const ui32 recordsCount, const ui32 dataSize)
-            : TBase(recordsCount, dataSize)
+        TRTStats(const std::string_view keyName, const ui32 recordsCount, const ui32 dataSize, const std::optional<EValueType>& valueType)
+            : TBase(recordsCount, dataSize, valueType)
             , KeyName(keyName.data(), keyName.size()) {
         }
 
@@ -118,25 +152,30 @@ public:
         }
     };
 
-    static TDictStats Merge(const std::vector<const TDictStats*>& stats, const TSettings& settings, const ui32 recordsCount);
+    static TDictStats Merge(const std::vector<TDictStats>& stats, const TSettings& settings, const ui32 recordsCount);
 
-    TSplittedColumns SplitByVolume(const TSettings& settings, const ui32 recordsCount) const;
+    // Selects which keys become separated columns;
+    // the rest fall into the Others store, whose stats are built by the caller.
+    TDictStats SelectSeparatedColumns(const TSettings& settings, const ui32 recordsCount) const;
 
     class TBuilder: TNonCopyable {
     private:
         std::vector<std::unique_ptr<arrow::ArrayBuilder>> Builders;
-        arrow::StringBuilder* Names;
+        arrow::BinaryBuilder* Names;
         arrow::UInt32Builder* Records;
         arrow::UInt32Builder* DataSize;
         arrow::UInt8Builder* AccessorType;
+        arrow::UInt8Builder* ValueType;
 
         std::optional<TString> LastKeyName;
         ui32 RecordsCount = 0;
 
     public:
         TBuilder();
-        void Add(const TString& name, const ui32 recordsCount, const ui32 dataSize, const IChunkedArray::EType accessorType);
-        void Add(const std::string_view name, const ui32 recordsCount, const ui32 dataSize, const IChunkedArray::EType accessorType);
+        void Add(const TString& name, const ui32 recordsCount, const ui32 dataSize, const IChunkedArray::EType accessorType,
+            const EValueType valueType);
+        void Add(const std::string_view name, const ui32 recordsCount, const ui32 dataSize, const IChunkedArray::EType accessorType,
+            const EValueType valueType);
         TDictStats Finish();
     };
 
@@ -147,8 +186,7 @@ public:
     std::shared_ptr<arrow::Schema> BuildColumnsSchema() const {
         arrow::FieldVector fields;
         for (ui32 i = 0; i < DataNames->length(); ++i) {
-            const auto view = DataNames->GetView(i);
-            fields.emplace_back(std::make_shared<arrow::Field>(std::string(view.data(), view.size()), arrow::utf8()));
+            fields.emplace_back(GetField(i));
         }
         return std::make_shared<arrow::Schema>(fields);
     }
@@ -156,12 +194,16 @@ public:
     std::shared_ptr<arrow::Field> GetField(const ui32 index) const {
         AFL_VERIFY(index < DataNames->length());
         auto name = DataNames->GetView(index);
-        return std::make_shared<arrow::Field>(std::string(name.data(), name.size()), arrow::utf8());
+        return std::make_shared<arrow::Field>(std::string(name.data(), name.size()), GetArrowTypeForValueType(GetValueType(index)));
     }
 
     TRTStats GetRTStats(const ui32 index) const {
         auto view = GetColumnName(index);
-        return TRTStats(TString(view.data(), view.size()), GetColumnRecordsCount(index), GetColumnSize(index));
+        return TRTStats(TString(view.data(), view.size()), GetColumnRecordsCount(index), GetColumnSize(index), GetValueType(index));
+    }
+
+    ui32 GetDataNamesCount() const {
+        return DataNames->length();
     }
 
     ui32 GetColumnsCount() const {
@@ -170,6 +212,7 @@ public:
 
     TConstructorContainer GetAccessorConstructor(const ui32 columnIndex) const;
     IChunkedArray::EType GetAccessorType(const ui32 columnIndex) const;
+    EValueType GetValueType(const ui32 columnIndex) const;
 
     std::string_view GetColumnName(const ui32 index) const;
     TString GetColumnNameString(const ui32 index) const {
@@ -180,32 +223,23 @@ public:
     ui32 GetColumnSize(const ui32 index) const;
 
     static std::shared_ptr<arrow::Schema> GetStatsSchema() {
-        static arrow::FieldVector fields = { std::make_shared<arrow::Field>("name", arrow::utf8()),
+        static arrow::FieldVector fields = { std::make_shared<arrow::Field>("name", arrow::binary()),
+            std::make_shared<arrow::Field>("count", arrow::uint32()), std::make_shared<arrow::Field>("size", arrow::uint32()),
+            std::make_shared<arrow::Field>("accessor_type", arrow::uint8()), std::make_shared<arrow::Field>("value_type", arrow::uint8()) };
+        static std::shared_ptr<arrow::Schema> result = std::make_shared<arrow::Schema>(fields);
+        return result;
+    }
+
+    // Legacy schema without value_type; used only as the fallback when deserializing blobs written
+    // before native scalar columns existed.
+    static std::shared_ptr<arrow::Schema> GetStatsSchemaLegacy() {
+        static arrow::FieldVector fields = { std::make_shared<arrow::Field>("name", arrow::binary()),
             std::make_shared<arrow::Field>("count", arrow::uint32()), std::make_shared<arrow::Field>("size", arrow::uint32()),
             std::make_shared<arrow::Field>("accessor_type", arrow::uint8()) };
         static std::shared_ptr<arrow::Schema> result = std::make_shared<arrow::Schema>(fields);
         return result;
     }
 
-    bool IsSparsed(const ui32 columnIndex, const ui32 recordsCount, const TSettings& settings) const;
     TDictStats(const std::shared_ptr<arrow::RecordBatch>& original);
-};
-
-class TSplittedColumns {
-private:
-    TDictStats Columns;
-    TDictStats Others;
-
-public:
-    TDictStats ExtractColumns() {
-        return std::move(Columns);
-    }
-    TDictStats ExtractOthers() {
-        return std::move(Others);
-    }
-    TSplittedColumns(TDictStats&& columns, TDictStats&& others)
-        : Columns(std::move(columns))
-        , Others(std::move(others)) {
-    }
 };
 }   // namespace NKikimr::NArrow::NAccessor::NSubColumns

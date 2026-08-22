@@ -32,7 +32,7 @@ template <typename UC> fastfloat_really_inline constexpr bool has_simd_opt() {
 // able to optimize it well.
 template <typename UC>
 fastfloat_really_inline constexpr bool is_integer(UC c) noexcept {
-  return !(c > UC('9') || c < UC('0'));
+  return (unsigned)(c - UC('0')) <= 9u;
 }
 
 fastfloat_really_inline constexpr uint64_t byteswap(uint64_t val) {
@@ -40,6 +40,11 @@ fastfloat_really_inline constexpr uint64_t byteswap(uint64_t val) {
          (val & 0x0000FF0000000000) >> 24 | (val & 0x000000FF00000000) >> 8 |
          (val & 0x00000000FF000000) << 8 | (val & 0x0000000000FF0000) << 24 |
          (val & 0x000000000000FF00) << 40 | (val & 0x00000000000000FF) << 56;
+}
+
+fastfloat_really_inline constexpr uint32_t byteswap_32(uint32_t val) {
+  return (val >> 24) | ((val >> 8) & 0x0000FF00u) | ((val << 8) & 0x00FF0000u) |
+         (val << 24);
 }
 
 // Read 8 UC into a u64. Truncates UC if not char.
@@ -63,6 +68,25 @@ read8_to_u64(UC const *chars) {
   return val;
 }
 
+// Read 4 UC into a u32. Truncates UC if not char.
+template <typename UC>
+fastfloat_really_inline FASTFLOAT_CONSTEXPR20 uint32_t
+read4_to_u32(UC const *chars) {
+  if (cpp20_and_in_constexpr() || !std::is_same<UC, char>::value) {
+    uint32_t val = 0;
+    for (int i = 0; i < 4; ++i) {
+      val |= uint32_t(uint8_t(*chars)) << (i * 8);
+      ++chars;
+    }
+    return val;
+  }
+  uint32_t val;
+  ::memcpy(&val, chars, sizeof(uint32_t));
+#if FASTFLOAT_IS_BIG_ENDIAN == 1
+  val = byteswap_32(val);
+#endif
+  return val;
+}
 #ifdef FASTFLOAT_SSE2
 
 fastfloat_really_inline uint64_t simd_read8_to_u64(__m128i const data) {
@@ -142,6 +166,18 @@ fastfloat_really_inline constexpr bool
 is_made_of_eight_digits_fast(uint64_t val) noexcept {
   return !((((val + 0x4646464646464646) | (val - 0x3030303030303030)) &
             0x8080808080808080));
+}
+
+fastfloat_really_inline constexpr bool
+is_made_of_four_digits_fast(uint32_t val) noexcept {
+  return !((((val + 0x46464646) | (val - 0x30303030)) & 0x80808080));
+}
+
+fastfloat_really_inline FASTFLOAT_CONSTEXPR14 uint32_t
+parse_four_digits_unrolled(uint32_t val) noexcept {
+  val -= 0x30303030;
+  val = (val * 10) + (val >> 8);
+  return (((val & 0x00FF00FF) * 0x00640001) >> 16) & 0xFFFF;
 }
 
 #ifdef FASTFLOAT_HAS_SIMD
@@ -230,6 +266,21 @@ loop_parse_if_eight_digits(char const *&p, char const *const pend,
             p)); // in rare cases, this will overflow, but that's ok
     p += 8;
   }
+  // Consume a remaining 4-7 digit run in a single SWAR step instead of
+  // byte-by-byte (reuses the existing 4-digit helpers). The parsed result is
+  // identical either way. Gated to clang: on gcc the extra 4-digit check
+  // regresses inputs whose remainder is shorter than 4 digits (it becomes pure
+  // overhead there); clang does not show that.
+#if defined(__clang__)
+  if ((pend - p) >= 4) {
+    uint32_t const val4 = read4_to_u32(p);
+    if (is_made_of_four_digits_fast(val4)) {
+      i = i * 10000 +
+          parse_four_digits_unrolled(val4); // may overflow, that's ok
+      p += 4;
+    }
+  }
+#endif
 }
 
 enum class parse_error {
@@ -279,10 +330,17 @@ report_parse_error(UC const *p, parse_error error) {
 
 // Assuming that you use no more than 19 digits, this will
 // parse an ASCII string.
+//
+// store_spans is a *runtime* flag (not a template parameter, deliberately: a
+// template would create a second instantiation of this whole function and the
+// extra icache pressure wipes out the gain). When false, the integer/fraction
+// spans (read only by the rare digit_comp slow path) are not materialized,
+// which keeps the fat parsed_number_string_t off the hot path. The caller
+// re-parses with store_spans=true if the slow path is actually reached.
 template <bool basic_json_fmt, typename UC>
 fastfloat_really_inline FASTFLOAT_CONSTEXPR20 parsed_number_string_t<UC>
-parse_number_string(UC const *p, UC const *pend,
-                    parse_options_t<UC> options) noexcept {
+parse_number_string(UC const *p, UC const *pend, parse_options_t<UC> options,
+                    bool store_spans = true) noexcept {
   chars_format const fmt = detail::adjust_for_feature_macros(options.format);
   UC const decimal_point = options.decimal_point;
 
@@ -318,17 +376,42 @@ parse_number_string(UC const *p, UC const *pend,
 
   uint64_t i = 0; // an unsigned int avoids signed overflows (which are bad)
 
-  while ((p != pend) && is_integer(*p)) {
-    // a multiplication by 10 is cheaper than an arbitrary integer
-    // multiplication
-    i = 10 * i +
-        uint64_t(*p -
-                 UC('0')); // might overflow, we will handle the overflow later
+  // Straight-line unroll of the integer-part scan: most integer parts are
+  // 1-5 digits, so peeling the first iterations eliminates the loop back-edge
+  // for the common case. Semantics are identical to the original `while` loop:
+  // i = 10*i + digit, advancing p.
+  if ((p != pend) && is_integer(*p)) {
+    i = uint64_t(*p - UC('0'));
     ++p;
+    if ((p != pend) && is_integer(*p)) {
+      i = 10 * i + uint64_t(*p - UC('0'));
+      ++p;
+      if ((p != pend) && is_integer(*p)) {
+        i = 10 * i + uint64_t(*p - UC('0'));
+        ++p;
+        if ((p != pend) && is_integer(*p)) {
+          i = 10 * i + uint64_t(*p - UC('0'));
+          ++p;
+          if ((p != pend) && is_integer(*p)) {
+            i = 10 * i + uint64_t(*p - UC('0'));
+            ++p;
+            while ((p != pend) && is_integer(*p)) {
+              // a multiplication by 10 is cheaper than an arbitrary integer
+              // multiplication
+              i = 10 * i +
+                  uint64_t(*p - UC('0')); // might overflow, handled later
+              ++p;
+            }
+          }
+        }
+      }
+    }
   }
   UC const *const end_of_integer_part = p;
   int64_t digit_count = int64_t(end_of_integer_part - start_digits);
-  answer.integer = span<UC const>(start_digits, size_t(digit_count));
+  if (store_spans) {
+    answer.integer = span<UC const>(start_digits, size_t(digit_count));
+  }
   FASTFLOAT_IF_CONSTEXPR17(basic_json_fmt) {
     // at least 1 digit in integer part, without leading zeros
     if (digit_count == 0) {
@@ -355,7 +438,9 @@ parse_number_string(UC const *p, UC const *pend,
       i = i * 10 + digit; // in rare cases, this will overflow, but that's ok
     }
     exponent = before - p;
-    answer.fraction = span<UC const>(before, size_t(p - before));
+    if (store_spans) {
+      answer.fraction = span<UC const>(before, size_t(p - before));
+    }
     digit_count -= exponent;
   }
   FASTFLOAT_IF_CONSTEXPR17(basic_json_fmt) {
@@ -440,29 +525,35 @@ parse_number_string(UC const *p, UC const *pend,
 
     if (digit_count > 19) {
       answer.too_many_digits = true;
-      // Let us start again, this time, avoiding overflows.
-      // We don't need to check if is_integer, since we use the
-      // pre-tokenized spans from above.
-      i = 0;
-      p = answer.integer.ptr;
-      UC const *int_end = p + answer.integer.len();
-      uint64_t const minimal_nineteen_digit_integer{1000000000000000000};
-      while ((i < minimal_nineteen_digit_integer) && (p != int_end)) {
-        i = i * 10 + uint64_t(*p - UC('0'));
-        ++p;
-      }
-      if (i >= minimal_nineteen_digit_integer) { // We have a big integers
-        exponent = end_of_integer_part - p + exp_number;
-      } else { // We have a value with a fractional component.
-        p = answer.fraction.ptr;
-        UC const *frac_end = p + answer.fraction.len();
-        while ((i < minimal_nineteen_digit_integer) && (p != frac_end)) {
+      // The truncation recompute below reads the integer/fraction spans. When
+      // store_spans is false we didn't materialize them, so just flag
+      // too_many_digits; the caller re-parses with store_spans=true to obtain
+      // the corrected mantissa/exponent before taking the slow path.
+      if (store_spans) {
+        // Let us start again, this time, avoiding overflows.
+        // We don't need to call if is_integer, since we use the
+        // pre-tokenized spans from above.
+        i = 0;
+        p = answer.integer.ptr;
+        UC const *int_end = p + answer.integer.len();
+        uint64_t const minimal_nineteen_digit_integer{1000000000000000000};
+        while ((i < minimal_nineteen_digit_integer) && (p != int_end)) {
           i = i * 10 + uint64_t(*p - UC('0'));
           ++p;
         }
-        exponent = answer.fraction.ptr - p + exp_number;
+        if (i >= minimal_nineteen_digit_integer) { // We have a big integer
+          exponent = end_of_integer_part - p + exp_number;
+        } else { // We have a value with a fractional component.
+          p = answer.fraction.ptr;
+          UC const *frac_end = p + answer.fraction.len();
+          while ((i < minimal_nineteen_digit_integer) && (p != frac_end)) {
+            i = i * 10 + uint64_t(*p - UC('0'));
+            ++p;
+          }
+          exponent = answer.fraction.ptr - p + exp_number;
+        }
+        // We have now corrected both exponent and i, to a truncated value
       }
-      // We have now corrected both exponent and i, to a truncated value
     }
   }
   answer.exponent = exponent;
@@ -509,6 +600,150 @@ parse_int_string(UC const *p, UC const *pend, T &value,
 
   UC const *const start_digits = p;
 
+  FASTFLOAT_IF_CONSTEXPR17(
+      (std::is_same<T, std::uint8_t>::value && sizeof(UC) == 1)) {
+    if (base == 10) {
+      const size_t len = (size_t)(pend - p);
+      if (len == 0) {
+        if (has_leading_zeros) {
+          value = 0;
+          answer.ec = std::errc();
+          answer.ptr = p;
+        } else {
+          answer.ec = std::errc::invalid_argument;
+          answer.ptr = first;
+        }
+        return answer;
+      }
+
+      uint32_t digits;
+
+#if FASTFLOAT_HAS_IS_CONSTANT_EVALUATED && FASTFLOAT_HAS_BIT_CAST
+      if (std::is_constant_evaluated()) {
+        uint8_t str[4]{};
+        for (size_t j = 0; j < 4 && j < len; ++j) {
+          str[j] = static_cast<uint8_t>(p[j]);
+        }
+        digits = std::bit_cast<uint32_t>(str);
+#if FASTFLOAT_IS_BIG_ENDIAN
+        digits = byteswap_32(digits);
+#endif
+      }
+#else
+      if (false) {
+      }
+#endif
+      else if (len >= 4) {
+        ::memcpy(&digits, p, 4);
+#if FASTFLOAT_IS_BIG_ENDIAN
+        digits = byteswap_32(digits);
+#endif
+      } else {
+        uint32_t b0 = static_cast<uint8_t>(p[0]);
+        uint32_t b1 = (len > 1) ? static_cast<uint8_t>(p[1]) : 0xFFu;
+        uint32_t b2 = (len > 2) ? static_cast<uint8_t>(p[2]) : 0xFFu;
+        uint32_t b3 = 0xFFu;
+        digits = b0 | (b1 << 8) | (b2 << 16) | (b3 << 24);
+      }
+
+      uint32_t magic =
+          ((digits + 0x46464646u) | (digits - 0x30303030u)) & 0x80808080u;
+      uint32_t tz = (uint32_t)countr_zero_32(magic); // 7, 15, 23, 31, or 32
+      uint32_t nd = (tz == 32) ? 4 : (tz >> 3);
+      nd = (uint32_t)(nd < len ? nd : len);
+      if (nd == 0) {
+        if (has_leading_zeros) {
+          value = 0;
+          answer.ec = std::errc();
+          answer.ptr = p;
+          return answer;
+        }
+        answer.ec = std::errc::invalid_argument;
+        answer.ptr = first;
+        return answer;
+      }
+      if (nd > 3) {
+        const UC *q = p + nd;
+        size_t rem = len - nd;
+        while (rem) {
+          if (*q < UC('0') || *q > UC('9'))
+            break;
+          ++q;
+          --rem;
+        }
+        answer.ec = std::errc::result_out_of_range;
+        answer.ptr = q;
+        return answer;
+      }
+
+      digits ^= 0x30303030u;
+      digits <<= ((4 - nd) * 8);
+
+      uint32_t check = ((digits >> 24) & 0xff) | ((digits >> 8) & 0xff00) |
+                       ((digits << 8) & 0xff0000);
+      if (check > 0x00020505) {
+        answer.ec = std::errc::result_out_of_range;
+        answer.ptr = p + nd;
+        return answer;
+      }
+      value = (uint8_t)((0x640a01 * digits) >> 24);
+      answer.ec = std::errc();
+      answer.ptr = p + nd;
+      return answer;
+    }
+  }
+
+  FASTFLOAT_IF_CONSTEXPR17(
+      (std::is_same<T, std::uint16_t>::value && sizeof(UC) == 1)) {
+    if (base == 10) {
+      const size_t len = size_t(pend - p);
+      if (len == 0) {
+        if (has_leading_zeros) {
+          value = 0;
+          answer.ec = std::errc();
+          answer.ptr = p;
+        } else {
+          answer.ec = std::errc::invalid_argument;
+          answer.ptr = first;
+        }
+        return answer;
+      }
+
+      if (len >= 4) {
+        uint32_t digits = read4_to_u32(p);
+        if (is_made_of_four_digits_fast(digits)) {
+          uint32_t v = parse_four_digits_unrolled(digits);
+          if (len >= 5 && is_integer(p[4])) {
+            v = v * 10 + uint32_t(p[4] - '0');
+            if (len >= 6 && is_integer(p[5])) {
+              answer.ec = std::errc::result_out_of_range;
+              const UC *q = p + 5;
+              while (q != pend && is_integer(*q)) {
+                q++;
+              }
+              answer.ptr = q;
+              return answer;
+            }
+            if (v > 65535) {
+              answer.ec = std::errc::result_out_of_range;
+              answer.ptr = p + 5;
+              return answer;
+            }
+            value = uint16_t(v);
+            answer.ec = std::errc();
+            answer.ptr = p + 5;
+            return answer;
+          }
+          // 4 digits
+          value = uint16_t(v);
+          answer.ec = std::errc();
+          answer.ptr = p + 4;
+          return answer;
+        }
+      }
+    }
+  }
+
   uint64_t i = 0;
   if (base == 10) {
     loop_parse_if_eight_digits(p, pend, i); // use SIMD if possible
@@ -546,9 +781,27 @@ parse_int_string(UC const *p, UC const *pend, T &value,
   }
   // this check can be eliminated for all other types, but they will all require
   // a max_digits(base) equivalent
-  if (digit_count == max_digits && i < min_safe_u64(base)) {
-    answer.ec = std::errc::result_out_of_range;
-    return answer;
+  if (digit_count == max_digits) {
+    // At the max_digits boundary the accumulator `i` may have wrapped around
+    // 2^64. A plain `i < min_safe_u64(base)` test is not sufficient: for any
+    // base whose max_digits-length range exceeds 2^64 (base 10 reaches
+    // ~5.4 * 2^64 at 20 digits) the value can wrap a whole multiple of 2^64 and
+    // land back above min_safe, slipping through. Decide exactly in O(1) using
+    // the leading digit, following the approach used in simdjson:
+    //   ms   == min_safe_u64(base) == base^(max_digits-1), the smallest
+    //           max_digits-length value.
+    //   dmax == the largest leading digit whose number can still fit in u64.
+    // The leading-digit band [d*ms, (d+1)*ms) has width ms < 2^64, so within
+    // the single band where d == dmax the value straddles 2^64 at most once,
+    // and a single threshold separates wrapped from non-wrapped values. A
+    // leading digit above dmax always overflows; below dmax always fits.
+    uint64_t const ms = min_safe_u64(base);
+    uint64_t const dmax = (std::numeric_limits<uint64_t>::max)() / ms;
+    uint64_t const lead = ch_to_digit(*start_digits);
+    if (lead > dmax || (lead == dmax && i < dmax * ms)) {
+      answer.ec = std::errc::result_out_of_range;
+      return answer;
+    }
   }
 
   // check other types overflow

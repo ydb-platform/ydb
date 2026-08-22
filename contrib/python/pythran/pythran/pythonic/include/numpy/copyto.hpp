@@ -14,12 +14,10 @@ namespace numpy
   types::none_type copyto(types::ndarray<T, pS> &&out, E const &expr);
 
   template <class T, class pS, class E>
-  types::none_type copyto(types::numpy_texpr<types::ndarray<T, pS>> &out,
-                          E const &expr);
+  types::none_type copyto(types::numpy_texpr<types::ndarray<T, pS>> &out, E const &expr);
 
   template <class T, class pS, class E>
-  types::none_type copyto(types::numpy_texpr<types::ndarray<T, pS>> &&out,
-                          E const &expr);
+  types::none_type copyto(types::numpy_texpr<types::ndarray<T, pS>> &&out, E const &expr);
 
   // pythran extensions
   template <class E, class F>

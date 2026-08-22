@@ -15,9 +15,9 @@ namespace NYT::NApi {
 struct TDistributedWriteSessionWithCookies
     : public NYTree::TYsonStructLite
 {
-    // TDistributedWriteSession.
+    //! TDistributedWriteSession.
     TSignedDistributedWriteSessionPtr Session;
-    // std::vector<TWriteFragmentCookie>.
+    //! std::vector<TWriteFragmentCookie>.
     std::vector<TSignedWriteFragmentCookiePtr> Cookies;
 
     REGISTER_YSON_STRUCT_LITE(TDistributedWriteSessionWithCookies)
@@ -27,9 +27,9 @@ struct TDistributedWriteSessionWithCookies
 
 struct TDistributedWriteSessionWithResults
 {
-    // TDistributedWriteSession.
+    //! TDistributedWriteSession.
     TSignedDistributedWriteSessionPtr Session;
-    // std::vector<TWriteFragmentResult>.
+    //! std::vector<TWriteFragmentResult>.
     std::vector<TSignedWriteFragmentResultPtr> Results;
 };
 
@@ -37,14 +37,22 @@ struct TDistributedWriteSessionWithResults
 
 struct TDistributedWriteSessionStartOptions
     : public TTransactionalOptions
+    , public TTimeoutOptions
 {
     int CookieCount = 0;
+    //! Timeout for session. Similar to transaction timeout.
+    //! This option should not be confused with "Timeout",
+    //! which is used to specify the maximum execution time of an API call.
+    std::optional<TDuration> SessionTimeout;
 };
 
+struct TDistributedWriteSessionPingOptions
+    : public TTimeoutOptions
+{ };
+
 struct TDistributedWriteSessionFinishOptions
-{
-    int MaxChildrenPerAttachRequest = 10'000;
-};
+    : public TTimeoutOptions
+{ };
 
 struct TTableFragmentWriterOptions
     : public TTableWriterOptions
@@ -59,6 +67,10 @@ struct IDistributedTableClientBase
     virtual TFuture<TDistributedWriteSessionWithCookies> StartDistributedWriteSession(
         const NYPath::TRichYPath& path,
         const TDistributedWriteSessionStartOptions& options = {}) = 0;
+
+    virtual TFuture<void> PingDistributedWriteSession(
+        TSignedDistributedWriteSessionPtr session,
+        const TDistributedWriteSessionPingOptions& options = {}) = 0;
 
     virtual TFuture<void> FinishDistributedWriteSession(
         const TDistributedWriteSessionWithResults& sessionWithResults,
@@ -75,13 +87,6 @@ struct IDistributedTableClient
         const TSignedWriteFragmentCookiePtr& cookie,
         const TTableFragmentWriterOptions& options = {}) = 0;
 };
-
-////////////////////////////////////////////////////////////////////////////////
-
-// Defined in distributed_table_session.cpp.
-TFuture<void> PingDistributedWriteSession(
-    const TSignedDistributedWriteSessionPtr& session,
-    const IClientPtr& client);
 
 ////////////////////////////////////////////////////////////////////////////////
 

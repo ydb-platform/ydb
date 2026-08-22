@@ -50,11 +50,17 @@ def enable_alter_database_create_hive_first(request):
     return request.param
 
 
+@pytest.fixture(scope='module', params=[True, False], ids=["enable_pool_encryption--true", "enable_pool_encryption--false"])
+def enable_pool_encryption(request):
+    return request.param
+
+
 # fixtures.ydb_cluster_configuration local override
 @pytest.fixture(scope='module')
-def ydb_cluster_configuration(enable_alter_database_create_hive_first):
+def ydb_cluster_configuration(enable_alter_database_create_hive_first, enable_pool_encryption):
     conf = copy.deepcopy(CLUSTER_CONFIG)
     conf['enable_alter_database_create_hive_first'] = enable_alter_database_create_hive_first
+    conf['enable_pool_encryption'] = enable_pool_encryption
     return conf
 
 
@@ -128,57 +134,6 @@ def test_drop_tenant_without_nodes_could_complete(ydb_cluster):
 
     logger.debug("remove database")
     ydb_cluster.remove_database(database)
-
-
-def test_create_tenant_then_exec_yql_empty_database_header(ydb_cluster, ydb_endpoint):
-    database = '/Root/users/database'
-
-    driver_config = ydb.DriverConfig(ydb_endpoint, database)
-
-    ydb_cluster.create_database(
-        database,
-        storage_pool_units_count={
-            'hdd': 1
-        }
-    )
-    database_nodes = ydb_cluster.register_and_start_slots(database, count=1)
-    ydb_cluster.wait_tenant_up(database)
-
-    def list_endpoints(database):
-        logger.debug("List endpoints of %s", database)
-        resolver = ydb.DiscoveryEndpointsResolver(driver_config)
-        result = resolver.resolve()
-        if result is not None:
-            return result.endpoints
-        return result
-
-    endpoints = list_endpoints(database)
-
-    driver_config2 = ydb.DriverConfig(
-        "%s" % endpoints[0].endpoint,
-        None,
-        credentials=ydb.AuthTokenCredentials("root@builtin")
-    )
-
-    table_path = '%s/table-1' % database
-    with ydb.Driver(driver_config2) as driver:
-        with ydb.SessionPool(driver, size=1) as pool:
-            with pool.checkout() as session:
-                session.execute_scheme(
-                    "create table `{}` (key Int32, value String, primary key(key));".format(
-                        table_path
-                    )
-                )
-
-                session.transaction().execute(
-                    "upsert into `{}` (key) values (101);".format(table_path),
-                    commit_tx=True
-                )
-
-                session.transaction().execute("select key from `{}`;".format(table_path), commit_tx=True)
-
-    ydb_cluster.remove_database(database)
-    ydb_cluster.unregister_and_stop_slots(database_nodes)
 
 
 def test_create_tenant_then_exec_yql(ydb_cluster):
@@ -387,6 +342,42 @@ def test_create_and_drop_the_same_tenant2(ydb_cluster, ydb_endpoint, robust_retr
         logger.debug("done %d", iNo)
 
 
+def test_recreate_database(ydb_cluster):
+    database = '/Root/users/database'
+    for i in range(2):
+        ydb_cluster.create_database(
+            database,
+            storage_pool_units_count={'hdd': 1}
+        )
+        database_nodes = ydb_cluster.register_and_start_slots(database, count=1)
+        ydb_cluster.wait_tenant_up(database)
+
+        user_config = ydb.DriverConfig(
+            endpoint="%s:%s" % (ydb_cluster.nodes[1].host, ydb_cluster.nodes[1].port),
+            database="/Root/users/database",
+        )
+
+        def check_create_table(table_name):
+            with ydb.Driver(user_config) as driver:
+                with ydb.QuerySessionPool(driver, size=1) as pool:
+                    pool.execute_with_retries("CREATE TABLE " + table_name + " (key Int32, value String, primary key(key));")
+
+                    pool.execute_with_retries("""UPSERT INTO """ + table_name + """ (key, value) VALUES (1, "value1");""")
+
+                    result_sets = pool.execute_with_retries("SELECT * FROM " + table_name)
+                    assert len(result_sets) == 1
+                    assert len(result_sets[0].rows) == 1
+                    assert result_sets[0].rows[0].key == 1
+                    assert result_sets[0].rows[0].value == b"value1"
+
+        table_names = ["`T`", "`DIR/T`", "`DIR/DIR/T`", "`DIR/DIR/DIR/T`"]
+        for table_name in table_names:
+            check_create_table(table_name)
+
+        ydb_cluster.remove_database(database)
+        ydb_cluster.unregister_and_stop_slots(database_nodes)
+
+
 def test_check_access(ydb_cluster):
     users = {}
     for user in ('user_1', 'user_2'):
@@ -447,7 +438,7 @@ def test_check_access(ydb_cluster):
             calling(client.list_directory).with_args(
                 user_2['path']
             ),
-            raises(ydb.Unauthorized)
+            raises(ydb.SchemeError)
         )
 
         assert_that(

@@ -3,7 +3,7 @@
 #include "public.h"
 
 #include <library/cpp/yt/misc/guid.h>
-#include <library/cpp/yt/misc/tag_invoke_cpo.h>
+#include <library/cpp/yt/mpl/tag_invoke_cpo.h>
 
 #include <string>
 
@@ -14,9 +14,11 @@ namespace NYT {
 template <class T>
 concept CPrimitiveConvertible =
     std::same_as<T, i8> ||
+    std::same_as<T, i16> ||
     std::same_as<T, i32> ||
     std::same_as<T, i64> ||
     std::same_as<T, ui8> ||
+    std::same_as<T, ui16> ||
     std::same_as<T, ui32> ||
     std::same_as<T, ui64> ||
     std::same_as<T, float> ||
@@ -32,14 +34,14 @@ concept CPrimitiveConvertible =
 namespace NAttributeValueConversionImpl {
 
 struct TTo
-    : public TTagInvokeCpoBase<TTo>
+    : public NMpl::TTagInvokeCpoBase<TTo>
 { };
 
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class U>
 struct TFrom
-    : public TTagInvokeCpoBase<TFrom<U>>
+    : public NMpl::TTagInvokeCpoBase<TFrom<U>>
 { };
 
 } // namespace NAttributeValueConversionImpl

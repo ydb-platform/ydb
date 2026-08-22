@@ -1,13 +1,13 @@
 #pragma once
 #include "schemeshard_identificators.h"
 
+#include <ydb/core/base/storage_pools.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/events.h>
-#include <ydb/library/login/login.h>
 
 #include <util/datetime/base.h>
 
@@ -39,15 +39,23 @@ namespace TEvPrivate {
         EvPersistTableStats,
         EvConsoleConfigsTimeout,
         EvRunCdcStreamScan,
+        EvRunIncrementalRestore,
+        EvProgressIncrementalRestore,
         EvPersistTopicStats,
         EvSendBaseStatsToSA,
         EvRunBackgroundCleaning,
         EvRetryNodeSubscribe,
-        EvRunDataErasure,
-        EvRunTenantDataErasure,
-        EvAddNewShardToDataErasure,
-        EvVerifyPassword,
-        EvLoginFinalize,
+        EvRunShred,
+        EvRunTenantShred,
+        EvAddNewShardToShred,
+        EvContinuousBackupCleanerResult,
+        EvTestNotifySubdomainCleanup,
+        EvFlushConditionalEraseBatch,
+        EvRunForcedCompaction,
+        EvProgressTablePartitionsFormatSweep,
+        EvFullBackupItemDone,
+        EvProgressForcedCompaction,
+        EvMoveShardToStoragePool,
         EvEnd
     };
 
@@ -86,6 +94,14 @@ namespace TEvPrivate {
     };
 
     struct TEvRunConditionalErase: public TEventLocal<TEvRunConditionalErase, EvRunConditionalErase> {
+    };
+
+    struct TEvFlushConditionalEraseBatch : public TEventLocal<TEvFlushConditionalEraseBatch, EvFlushConditionalEraseBatch> {
+        TInstant BatchStartTime;
+
+        explicit TEvFlushConditionalEraseBatch(const TInstant& batchStartTime)
+            : BatchStartTime(batchStartTime)
+        { }
     };
 
     struct TEvIndexBuildingMakeABill: public TEventLocal<TEvIndexBuildingMakeABill, EvIndexBuildBilling> {
@@ -202,6 +218,14 @@ namespace TEvPrivate {
         { }
     };
 
+    struct TEvTestNotifySubdomainCleanup : public TEventLocal<TEvTestNotifySubdomainCleanup, EvTestNotifySubdomainCleanup> {
+        TPathId SubdomainPathId;
+
+        explicit TEvTestNotifySubdomainCleanup(const TPathId& subdomainPathId)
+            : SubdomainPathId(subdomainPathId)
+        { }
+    };
+
     struct TEvCompletePublication: public TEventLocal<TEvCompletePublication, EvCompletePublication> {
         const TOperationId OpId;
         const TPathId PathId;
@@ -260,6 +284,27 @@ namespace TEvPrivate {
         {}
     };
 
+    struct TEvRunIncrementalRestore: public TEventLocal<TEvRunIncrementalRestore, EvRunIncrementalRestore> {
+        const TPathId BackupCollectionPathId;
+        const TOperationId OperationId;
+        const TVector<TString> IncrementalBackupNames;
+
+        TEvRunIncrementalRestore(const TPathId& backupCollectionPathId, const TOperationId& operationId, const TVector<TString>& incrementalBackupNames)
+            : BackupCollectionPathId(backupCollectionPathId)
+            , OperationId(operationId)
+            , IncrementalBackupNames(incrementalBackupNames)
+        {}
+
+    };
+
+    struct TEvProgressIncrementalRestore : public TEventLocal<TEvProgressIncrementalRestore, EvProgressIncrementalRestore> {
+        ui64 OperationId;
+
+        explicit TEvProgressIncrementalRestore(ui64 operationId)
+            : OperationId(operationId)
+        {}
+    };
+
     struct TEvSendBaseStatsToSA: public TEventLocal<TEvSendBaseStatsToSA, EvSendBaseStatsToSA> {
     };
 
@@ -271,58 +316,69 @@ namespace TEvPrivate {
         { }
     };
 
-    struct TEvAddNewShardToDataErasure : public TEventLocal<TEvAddNewShardToDataErasure, EvAddNewShardToDataErasure> {
+    struct TEvAddNewShardToShred : public TEventLocal<TEvAddNewShardToShred, EvAddNewShardToShred> {
         const std::vector<TShardIdx> Shards;
 
-        TEvAddNewShardToDataErasure(std::vector<TShardIdx>&& shards)
+        TEvAddNewShardToShred(std::vector<TShardIdx>&& shards)
             : Shards(std::move(shards))
         {}
     };
 
-    struct TEvVerifyPassword : public NActors::TEventLocal<TEvVerifyPassword, EvVerifyPassword> {
+    struct TEvContinuousBackupCleanerResult : public NActors::TEventLocal<TEvContinuousBackupCleanerResult, EvContinuousBackupCleanerResult> {
     public:
-        TEvVerifyPassword(
-            const NLogin::TLoginProvider::TLoginUserRequest& request,
-            const NLogin::TLoginProvider::TPasswordCheckResult& checkResult,
-            const NActors::TActorId source,
-            const TString& passwordHash
-        )
-            : Request(request)
-            , CheckResult(checkResult)
-            , Source(source)
-            , PasswordHash(passwordHash)
+        TEvContinuousBackupCleanerResult(ui64 backupId, TPathId item, bool success, const TString& error = "")
+            : BackupId(backupId)
+            , Item(item)
+            , Success(success)
+            , Error(error)
         {}
 
-    public:
-        const NLogin::TLoginProvider::TLoginUserRequest Request;
-        NLogin::TLoginProvider::TPasswordCheckResult CheckResult;
-        const NActors::TActorId Source; // actorId of the initial schemeshard client which requested user login
-        const TString PasswordHash;
+        const ui64 BackupId = 0;
+        const TPathId Item;
+        const bool Success = false;
+        const TString Error;
     };
 
-    struct TEvLoginFinalize : public NActors::TEventLocal<TEvLoginFinalize, EvLoginFinalize> {
-    public:
-        TEvLoginFinalize(
-            const NLogin::TLoginProvider::TLoginUserRequest& request,
-            const NLogin::TLoginProvider::TPasswordCheckResult& checkResult,
-            const NActors::TActorId source,
-            const TString& passwordHash,
-            const bool needUpdateCache
-        )
-            : Request(request)
-            , CheckResult(checkResult)
-            , Source(source)
-            , PasswordHash(passwordHash)
-            , NeedUpdateCache(needUpdateCache)
+    struct TEvProgressTablePartitionsFormatSweep
+        : public TEventLocal<TEvProgressTablePartitionsFormatSweep, EvProgressTablePartitionsFormatSweep>
+    {};
+
+    // Sent self->self post-commit when a CopyTable sub-op of a tracked full backup finishes.
+    struct TEvFullBackupItemDone : public NActors::TEventLocal<TEvFullBackupItemDone, EvFullBackupItemDone> {
+        TEvFullBackupItemDone(ui64 fullBackupId, TPathId dstPathId, bool success)
+            : FullBackupId(fullBackupId)
+            , DstPathId(dstPathId)
+            , Success(success)
         {}
 
-    public:
-        const NLogin::TLoginProvider::TLoginUserRequest Request;
-        const NLogin::TLoginProvider::TPasswordCheckResult CheckResult;
-        const NActors::TActorId Source; // actorId of the initial schemeshard client which requested user login
-        const TString PasswordHash;
-        const bool NeedUpdateCache;
+        const ui64 FullBackupId;
+        const TPathId DstPathId;
+        const bool Success;
     };
+
+    struct TEvProgressForcedCompaction : TEventLocal<TEvProgressForcedCompaction, EvProgressForcedCompaction> {
+        TEvProgressForcedCompaction()
+        {}
+    };
+
+    // Sent by the DevUI move-shard actor once Hive acks, to persist the shard's new channel
+    // bindings in a dedicated tx. That tx also answers the HTTP request (from Complete()), so
+    // success is reported only after the binding is durable. HttpSender: the request's sender;
+    // HiveReply: the already-serialized Hive response to hand back.
+    struct TEvMoveShardToStoragePool : public TEventLocal<TEvMoveShardToStoragePool, EvMoveShardToStoragePool> {
+        TShardIdx ShardIdx;
+        TChannelsBindings NewBindings;
+        TActorId HttpSender;
+        TString HiveReply;
+
+        TEvMoveShardToStoragePool(const TShardIdx& shardIdx, TChannelsBindings newBindings, const TActorId& httpSender, TString hiveReply)
+            : ShardIdx(shardIdx)
+            , NewBindings(std::move(newBindings))
+            , HttpSender(httpSender)
+            , HiveReply(std::move(hiveReply))
+        {}
+    };
+
 }; // TEvPrivate
 
 } // NSchemeShard

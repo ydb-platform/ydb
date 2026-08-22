@@ -14,3 +14,6 @@ mark_as_sources:
   - setuptools/command/test.py
 exclude:
   - setuptools/_vendor/*
+keep:
+  - setuptools/_distutils/compilers/__init__.py
+  - setuptools/_distutils/compilers/C/__init__.py

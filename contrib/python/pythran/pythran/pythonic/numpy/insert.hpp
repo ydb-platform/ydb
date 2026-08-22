@@ -16,15 +16,12 @@ namespace numpy
 {
 
   template <class T, class pS, class I, class F>
-  typename std::enable_if<types::is_iterable<I>::value &&
-                              types::is_iterable<F>::value,
-                          types::ndarray<T, types::pshape<long>>>::type
-  insert(types::ndarray<T, pS> in, I const &indices, F const &data,
-         types::none_type axis)
+  std::enable_if_t<types::is_iterable<I>::value && types::is_iterable<F>::value,
+                   types::ndarray<T, types::pshape<long>>>
+  insert(types::ndarray<T, pS> in, I const &indices, F const &data, types::none_type axis)
   {
     types::ndarray<T, types::pshape<long>> out(
-        types::pshape<long>(long(
-            in.flat_size() + std::min(indices.flat_size(), data.flat_size()))),
+        types::pshape<long>(long(in.flat_size() + std::min(indices.flat_size(), data.flat_size()))),
         builtins::None);
     auto out_iter = out.fbegin();
     auto in_iter = in.fbegin();
@@ -39,31 +36,25 @@ namespace numpy
   }
 
   template <class T, class pS, class I, class F>
-  typename std::enable_if<types::is_iterable<I>::value &&
-                              !types::is_iterable<F>::value,
-                          types::ndarray<T, types::pshape<long>>>::type
-  insert(types::ndarray<T, pS> in, I const &indices, F const &data,
-         types::none_type axis)
+  std::enable_if_t<types::is_iterable<I>::value && !types::is_iterable<F>::value,
+                   types::ndarray<T, types::pshape<long>>>
+  insert(types::ndarray<T, pS> in, I const &indices, F const &data, types::none_type axis)
   {
     return insert(in, indices, types::list<F>({data}), axis);
   }
 
   template <class T, class pS, class I, class F>
-  typename std::enable_if<!types::is_iterable<I>::value &&
-                              types::is_iterable<F>::value,
-                          types::ndarray<T, types::pshape<long>>>::type
-  insert(types::ndarray<T, pS> in, I const &indices, F const &data,
-         types::none_type axis)
+  std::enable_if_t<!types::is_iterable<I>::value && types::is_iterable<F>::value,
+                   types::ndarray<T, types::pshape<long>>>
+  insert(types::ndarray<T, pS> in, I const &indices, F const &data, types::none_type axis)
   {
     return insert(in, types::list<I>({indices}), {data}, axis);
   }
 
   template <class T, class pS, class I, class F>
-  typename std::enable_if<!types::is_iterable<I>::value &&
-                              !types::is_iterable<F>::value,
-                          types::ndarray<T, types::pshape<long>>>::type
-  insert(types::ndarray<T, pS> in, I const &indices, F const &data,
-         types::none_type axis)
+  std::enable_if_t<!types::is_iterable<I>::value && !types::is_iterable<F>::value,
+                   types::ndarray<T, types::pshape<long>>>
+  insert(types::ndarray<T, pS> in, I const &indices, F const &data, types::none_type axis)
   {
     return insert(in, types::list<I>({indices}), types::list<F>({data}), axis);
   }

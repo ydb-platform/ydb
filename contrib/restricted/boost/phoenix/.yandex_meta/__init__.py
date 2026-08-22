@@ -9,7 +9,7 @@ def post_install(self):
 boost_phoenix = NixSourceProject(
     nixattr="boost_phoenix",
     arcdir="contrib/restricted/boost/phoenix",
-    owners=["g:cpp-contrib", "g:taxi-common"],
+    owners=["g:cpp-contrib"],
     copy_sources=[
         "include/boost/",
     ],

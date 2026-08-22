@@ -2,6 +2,10 @@
 
 namespace NKikimr::NKqp {
 
-std::shared_ptr<TControlWrapper> MergeDatashardReadsControl();
+bool IsEnabledReadsMerge();
+
+// The calls below are for unittests only
+void SetMaxTaskSize(ui64 size);
+ui64 GetMaxTaskSize();
 
 } // namespace NKikimr::NKqp

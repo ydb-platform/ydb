@@ -35,7 +35,26 @@ class YdbCluster:
                 self.type: str = desc.get('Type', 'Unknown')
                 self.count: int = desc.get('Count', 0)
 
-        def __init__(self, desc: dict):
+        @staticmethod
+        def _load_kafka_port(host: str, mon_port: int) -> int:
+            if not host or mon_port <= 0:
+                return 0
+            try:
+                url = f'http://{host}:{mon_port}/viewer/json/config'
+                response = requests.get(url, timeout=10)
+                response.raise_for_status()
+                config = response.json()
+                kafka_config = config.get('KafkaProxyConfig') or config.get('kafka_proxy_config') or {}
+                enabled = kafka_config.get('EnableKafkaProxy') or kafka_config.get('enable_kafka_proxy')
+                if not enabled:
+                    return 0
+                port = kafka_config.get('ListeningPort') or kafka_config.get('listening_port') or 0
+                return int(port)
+            except Exception as e:
+                LOGGER.debug(f'Failed to get kafka port from {host}:{mon_port}: {e}')
+                return 0
+
+        def __init__(self, desc: dict, load_kafka_port: bool = False):
             ss = desc.get('SystemState', {})
             self.host: str = ss.get('Host', '')
             ports = {
@@ -45,12 +64,13 @@ class YdbCluster:
             self.ic_port: int = ports.get('ic', 0)
             self.mon_port: int = ports.get('http-mon', 0)
             self.grpc_port: int = ports.get('grpc', 0)
+            self.kafka_port: int = self._load_kafka_port(self.host, self.mon_port) if load_kafka_port else 0
             self.disconnected: bool = desc.get('Disconnected', False)
             self.version: str = ss.get('Version', '')
             self.start_time: float = 0.001 * int(ss.get('StartTime', time() * 1000))
             if 'Storage' in ss.get('Roles', []):
                 self.role = YdbCluster.Node.Role.STORAGE
-            elif 'Tenants' in ss.get('Roles', []):
+            elif 'Tenant' in ss.get('Roles', []):
                 self.role = YdbCluster.Node.Role.COMPUTE
             else:
                 self.role = YdbCluster.Node.Role.UNKNOWN
@@ -66,10 +86,30 @@ class YdbCluster:
     _cluster_info = None
     ydb_endpoint = get_external_param('ydb-endpoint', 'grpc://ydb-olap-testing-vla-0002.search.yandex.net:2135')
     ydb_database = get_external_param('ydb-db', 'olap-testing/kikimr/testing/acceptance-2').lstrip('/')
-    ydb_mon_port = 8765
+    ydb_mon_port = int(get_external_param('ydb-mon-port', 8765))
+    ydb_iam_file = get_external_param('ydb-iam-file', os.getenv('YDB_IAM_FILE'))
     _tables_path = get_external_param('tables-path', 'olap_yatests').rstrip('/')
     _monitoring_urls: list[YdbCluster.MonitoringUrl] = None
     _dyn_nodes_count: Optional[int] = None
+    _client_host: Optional[str] = None
+
+    @classmethod
+    def get_client_host(cls) -> str:
+        if not cls._client_host:
+            cls._client_host = get_external_param('client-host', 'localhost')
+            if cls._client_host == 'static':
+                nodes = cls.get_cluster_nodes(role=YdbCluster.Node.Role.STORAGE, db_only=False)
+                if not nodes:
+                    raise RuntimeError(
+                        "client-host is set to 'static', but no STORAGE nodes are available from get_cluster_nodes()"
+                    )
+                for n in nodes:
+                    if cls.ydb_endpoint.find(n.host) >= 0:
+                        cls._client_host = n.host
+                        break
+                if not cls._client_host:
+                    cls._client_host = nodes[0].host
+        return cls._client_host
 
     @classmethod
     def get_tables_path(cls, subpath: str = '') -> str:
@@ -106,37 +146,65 @@ class YdbCluster:
 
     @classmethod
     def get_cluster_nodes(cls, path: Optional[str] = None, db_only: bool = False,
-                          role: Optional[YdbCluster.Node.Role] = None
+                          role: Optional[YdbCluster.Node.Role] = None,
+                          load_kafka_port: bool = False,
                           ) -> list[YdbCluster.Node]:
-        try:
-            url = f'{cls._get_service_url()}/viewer/json/nodes?'
-            if db_only or path is not None:
-                url += f'database=/{cls.ydb_database}'
-            if path is not None:
-                url += f'&path={path}&tablets=true'
-            headers = {}
-            response = requests.get(url, headers=headers)
-            response.raise_for_status()
-            data = response.json()
-            if not isinstance(data, dict):
-                raise Exception(f'Incorrect response type: {data}')
+        if cls.ydb_mon_port == 0:
+            return []
 
-            # Create nodes from the response
-            nodes = [YdbCluster.Node(n) for n in data.get('Nodes', [])]
+        # Получаем таймаут из переменной окружения, как в wait_ydb_alive
+        timeout = int(os.getenv('WAIT_CLUSTER_ALIVE_TIMEOUT', 2 * 60))  # По умолчанию 20 минут
+        retry_interval = 2  # Интервал между попытками в секундах
 
-            # Filter nodes by role if specified
-            if role is not None:
-                nodes = [node for node in nodes if node.role == role]
+        deadline = time() + timeout
+        last_error = None
 
-            return nodes
-        except requests.HTTPError as e:
-            LOGGER.error(f'{e.strerror}: {e.response.content}')
-        except Exception as e:
-            LOGGER.error(e)
+        while time() < deadline:
+            try:
+                url = f'{cls._get_service_url()}/viewer/json/nodes?'
+                if db_only or path is not None:
+                    url += f'database=/{cls.ydb_database}'
+                if path is not None:
+                    url += f'&path={path}&tablets=true'
+
+                headers = {}
+                # Добавляем таймаут для каждого запроса
+                request_timeout = min(30, deadline - time())
+                if request_timeout <= 0:
+                    break
+
+                response = requests.get(url, headers=headers, timeout=request_timeout)
+                response.raise_for_status()
+                data = response.json()
+
+                if not isinstance(data, dict):
+                    raise Exception(f'Incorrect response type: {data}')
+
+                # Create nodes from the response
+                nodes = [YdbCluster.Node(n, load_kafka_port=load_kafka_port) for n in data.get('Nodes', [])]
+
+                # Filter nodes by role if specified
+                if role is not None:
+                    nodes = [node for node in nodes if node.role == role]
+
+                return nodes
+
+            except Exception as e:
+                last_error = e
+                LOGGER.debug(f'Failed to get cluster nodes: {e}. Retrying in {retry_interval}s...')
+
+                # Проверяем, есть ли время для следующей попытки
+                if time() + retry_interval >= deadline:
+                    break
+
+                sleep(retry_interval)
+
+        # Если все попытки неудачны, логируем ошибку и возвращаем пустой список
+        LOGGER.error(f'Failed to get cluster nodes after {timeout}s timeout. Last error: {last_error}')
         return []
 
     @classmethod
-    def get_metrics(cls, metrics: dict[str, dict[str, str]], db_only: bool = False, role: Optional[YdbCluster.Node.Role] = None) -> dict[str, dict[str, float]]:
+    def get_metrics(cls, metrics: dict[str, dict[str, str]], db_only: bool = False, role: Optional[YdbCluster.Node.Role] = None, counters: str = 'tablets') -> dict[str, dict[str, float]]:
         def sensor_has_labels(sensor, labels: dict[str, str]) -> bool:
             for k, v in labels.items():
                 if sensor.get('labels', {}).get(k, '') != v:
@@ -145,7 +213,11 @@ class YdbCluster:
         nodes = cls.get_cluster_nodes(db_only=db_only, role=role)
         result = {}
         for node in nodes:
-            response = requests.get(f'http://{node.host}:{node.mon_port}/counters/counters=tablets/json')
+            url = f'http://{node.host}:{node.mon_port}/counters/'
+            if counters:
+                url += f'counters={counters}/'
+            url += 'json'
+            response = requests.get(url)
             response.raise_for_status()
             sensor_values = {}
             for name, labels in metrics.items():
@@ -174,7 +246,7 @@ class YdbCluster:
     @staticmethod
     def _create_ydb_driver(endpoint, database, oauth=None, iam_file=None):
         credentials = None
-        LOGGER.info(f"Connecting to {endpoint} to {database} ydb_access_token is set {oauth is not None}")
+        LOGGER.info(f"Connecting to {endpoint} to {database} ydb_access_token is set {oauth is not None}, iam file path is {iam_file}")
 
         if oauth is not None:
             credentials = ydb.AccessTokenCredentials(oauth)
@@ -205,12 +277,13 @@ class YdbCluster:
         cls.ydb_mon_port = ydb_mon_port
         cls._dyn_nodes_count = dyn_nodes_count
         cls._ydb_driver = None
+        cls._client_host = None
 
     @classmethod
     def get_ydb_driver(cls):
         if cls._ydb_driver is None:
             cls._ydb_driver = cls._create_ydb_driver(
-                cls.ydb_endpoint, cls.ydb_database, oauth=os.getenv('OLAP_YDB_OAUTH', None)
+                cls.ydb_endpoint, cls.ydb_database, oauth=os.getenv('OLAP_YDB_OAUTH', None), iam_file=cls.ydb_iam_file
             )
         return cls._ydb_driver
 
@@ -265,13 +338,13 @@ class YdbCluster:
     @allure.step('Execute scan query')
     def execute_single_result_query(cls, query, timeout=10):
         allure.attach(query, 'query', attachment_type=allure.attachment_type.TEXT)
-        query = ydb.ScanQuery(query, {})
         settings = ydb.BaseRequestSettings()
         settings = settings.with_timeout(timeout)
         try:
-            it = cls.get_ydb_driver().table_client.scan_query(query, settings=settings)
+            session = ydb.query.QueryClientSync(cls.get_ydb_driver()).session().create()
+            it = session.execute(query, settings=settings)
             result = next(it)
-            return result.result_set.rows[0][0]
+            return result.rows[0][0]
         except BaseException:
             LOGGER.error("Cannot connect to YDB")
             raise
@@ -334,53 +407,54 @@ class YdbCluster:
         errors = []
         warnings = []
         try:
-            nodes = cls.get_cluster_nodes(db_only=True)
-            expected_nodes_count = cls.get_dyn_nodes_count()
-            nodes_count = len(nodes)
-            if expected_nodes_count:
-                LOGGER.debug(f'Expected nodes count: {expected_nodes_count}')
-                if nodes_count < expected_nodes_count:
-                    errors.append(f"{expected_nodes_count - nodes_count} nodes from {expected_nodes_count} don't alive")
-            ok_node_count = 0
-            node_errors = []
-            for n in nodes:
-                error = _check_node(n)
-                if error:
-                    node_errors.append(error)
-                else:
-                    ok_node_count += 1
-            if ok_node_count < nodes_count:
-                errors.append(f'Only {ok_node_count} from {nodes_count} dynnodes are ok: {",".join(node_errors)}')
-            paths_to_balance = []
-            if isinstance(balanced_paths, str):
-                paths_to_balance += cls.get_tables(balanced_paths)
-            elif isinstance(balanced_paths, list):
-                for path in balanced_paths:
-                    paths_to_balance += cls.get_tables(path)
-            for p in paths_to_balance:
-                table_nodes = cls.get_cluster_nodes(p)
-                min = None
-                max = None
+            if cls.ydb_mon_port != 0:
+                nodes = cls.get_cluster_nodes(db_only=True)
+                expected_nodes_count = cls.get_dyn_nodes_count()
+                nodes_count = len(nodes)
                 if expected_nodes_count:
-                    if len(table_nodes) < expected_nodes_count:
-                        min = 0
-                for tn in table_nodes:
-                    tablet_count = 0
-                    for tablet in tn.tablets:
-                        if tablet.count > 0 and tablet.state != "Green":
-                            warnings.append(f'Node {tn.host}: {tablet.count} tablets of type {tablet.type} in {tablet.state} state')
-                        if tablet.type in {"ColumnShard", "DataShard"}:
-                            tablet_count += tablet.count
-                    if tablet_count > 0:
-                        if min is None or tablet_count < min:
-                            min = tablet_count
-                        if max is None or tablet_count > max:
-                            max = tablet_count
-                if min is None or max is None:
-                    warnings.append(f'Table {p} has no tablets')
-                elif max - min > 1:
-                    warnings.append(f'Table {p} is not balanced: {min}-{max} shards.')
-                LOGGER.info(f'Table {p} balance: {min}-{max} shards.')
+                    LOGGER.debug(f'Expected nodes count: {expected_nodes_count}')
+                    if nodes_count < expected_nodes_count:
+                        errors.append(f"{expected_nodes_count - nodes_count} nodes from {expected_nodes_count} don't alive")
+                ok_node_count = 0
+                node_errors = []
+                for n in nodes:
+                    error = _check_node(n)
+                    if error:
+                        node_errors.append(error)
+                    else:
+                        ok_node_count += 1
+                if ok_node_count < nodes_count:
+                    errors.append(f'Only {ok_node_count} from {nodes_count} dynnodes are ok: {",".join(node_errors)}')
+                paths_to_balance = []
+                if isinstance(balanced_paths, str):
+                    paths_to_balance += cls.get_tables(balanced_paths)
+                elif isinstance(balanced_paths, list):
+                    for path in balanced_paths:
+                        paths_to_balance += cls.get_tables(path)
+                for p in paths_to_balance:
+                    table_nodes = cls.get_cluster_nodes(p)
+                    min = None
+                    max = None
+                    if expected_nodes_count:
+                        if len(table_nodes) < expected_nodes_count:
+                            min = 0
+                    for tn in table_nodes:
+                        tablet_count = 0
+                        for tablet in tn.tablets:
+                            if tablet.count > 0 and tablet.state != "Green":
+                                warnings.append(f'Node {tn.host}: {tablet.count} tablets of type {tablet.type} in {tablet.state} state')
+                            if tablet.type in {"ColumnShard", "DataShard"}:
+                                tablet_count += tablet.count
+                        if tablet_count > 0:
+                            if min is None or tablet_count < min:
+                                min = tablet_count
+                            if max is None or tablet_count > max:
+                                max = tablet_count
+                    if min is None or max is None:
+                        warnings.append(f'Table {p} has no tablets')
+                    elif max - min > 1:
+                        warnings.append(f'Table {p} is not balanced: {min}-{max} shards.')
+                    LOGGER.info(f'Table {p} balance: {min}-{max} shards.')
 
             cls.execute_single_result_query("select 1", timeout)
         except BaseException as ex:

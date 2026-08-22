@@ -9,13 +9,6 @@
 
 namespace NKikimr::NArrow {
 
-class THashConstructor {
-public:
-    static bool BuildHashUI64(std::shared_ptr<arrow::Table>& batch, const std::vector<std::string>& fieldNames, const std::string& hashFieldName);
-    static bool BuildHashUI64(std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::string>& fieldNames, const std::string& hashFieldName);
-
-};
-
 std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(
     const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& sortingKey, const bool andUnique);
 

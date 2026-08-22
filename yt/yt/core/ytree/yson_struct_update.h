@@ -189,7 +189,7 @@ public:
     NDetail::TFieldConfigurator<TValue>& Field(const std::string& name, TYsonStructField<TStruct, TValue> field);
 
     template <class TValue>
-    NDetail::TMapFieldConfigurator<TValue>& MapField(const TString& name, TYsonStructField<TStruct, TValue> field);
+    NDetail::TMapFieldConfigurator<TValue>& MapField(const std::string& name, TYsonStructField<TStruct, TValue> field);
 
     // Converts to a configurator of a base class
     template <class TAncestor>

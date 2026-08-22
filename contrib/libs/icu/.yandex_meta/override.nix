@@ -1,11 +1,9 @@
 self: super: with self; rec {
-  version = "76.1";
-  version_dash = "${lib.replaceStrings [ "." ] [ "-" ] version}";
-  version_us = "${lib.replaceStrings [ "." ] [ "_" ] version}";
+  version = "78.3";
 
   src = fetchurl {
-    url = "https://github.com/unicode-org/icu/releases/download/release-${version_dash}/icu4c-${version_us}-src.tgz";
-    hash = "sha256-36y0a/5HR0EEcs4+EUS/KKEC/uqk44dbrJtMbPMPTz4=";
+    url = "https://github.com/unicode-org/icu/releases/download/release-${version}/icu4c-${version}-sources.tgz";
+    hash = "sha256-Oi56R2BLpwLzRYeDCOb+/sphLuiVz0pfIi55Vfq/4MA=";
   };
 
   sourceRoot = "icu/source";

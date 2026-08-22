@@ -13,6 +13,8 @@ PY3_LIBRARY()
     PEERDIR(
         contrib/python/boto3
         contrib/python/numpy
+        contrib/python/requests
+        library/python/port_manager
         library/recipes/common
         ydb/public/sdk/python
     )

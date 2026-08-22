@@ -55,12 +55,17 @@ struct TConnectionConfig
     TDuration DefaultTransactionTimeout;
     TDuration DefaultLookupRowsTimeout;
     TDuration DefaultSelectRowsTimeout;
+
     TDuration DefaultTotalStreamingTimeout;
     TDuration DefaultStreamingStallTimeout;
+    /// NB(achains): Some reads may be stall by default (e.g. reconstructing erasure-coded chunks).
+    ///              If set use DefaultTotalStreamingTimeout for read requests until ping mechanism is designed in YT-26196.
+    bool UseTotalStreamingTimeoutForHeavyReads;
+
     TDuration DefaultPingPeriod;
     TDuration DefaultChaosLeaseTimeout;
 
-    NBus::TBusConfigPtr BusClient;
+    NBus::NTcp::TBusConfigPtr BusClient;
     TDuration IdleChannelTtl;
 
     NHttp::TClientConfigPtr HttpClient;
@@ -83,6 +88,17 @@ struct TConnectionConfig
 
     //! If |true| select query will be added to tracing tags of SelectRows span.
     bool EnableSelectQueryTracingTag;
+
+    // Old heuristic cause pure locks to be dropped. Option is introduced to roll fix back in case of problems.
+    bool DoNotDropPureExclusiveLocks;
+
+    //! Use a separate connection for lightweight control requests.
+    /**
+    *  If this option is set to true, a separate connection is opened for lightweight requests (for example, ping_transaction).
+    *  This is needed so that important lightweight requests do not wait for heavy requests, such as file writes, to complete.
+    *  However, using this option increases the number of open TCP connections.
+    */
+    bool EnableControlMultiplexingBand;
 
     REGISTER_YSON_STRUCT(TConnectionConfig);
 

@@ -7,6 +7,7 @@
 #include <ydb/library/yql/dq/common/dq_serialized_batch.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <ydb/core/kqp/common/result_set_format/kqp_result_set_format_settings.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -21,7 +22,8 @@ public:
     ~TKqpProtoBuilder();
 
     void BuildYdbResultSet(Ydb::ResultSet& resultSet, TVector<NYql::NDq::TDqSerializedBatch>&& data,
-        NKikimr::NMiniKQL::TType* srcRowType, const TVector<ui32>* columnOrder = nullptr, const TVector<TString>* columnHints = nullptr);
+        NKikimr::NMiniKQL::TType* srcRowType, const NFormats::TFormatsSettings& formatsSettings, bool fillSchema,
+        const TVector<ui32>* columnOrder = nullptr, const TVector<TString>* columnHints = nullptr);
 
 private:
     NMiniKQL::TScopedAlloc* Alloc = nullptr;

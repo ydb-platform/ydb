@@ -1,16 +1,16 @@
 #include "mkql_coalesce.h"
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_node_builder.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
-template<bool Unpack>
-class TCoalesceWrapper : public TBinaryCodegeneratorNode<TCoalesceWrapper<Unpack>> {
-    typedef TBinaryCodegeneratorNode<TCoalesceWrapper<Unpack>> TBaseComputation;
+template <bool Unpack>
+class TCoalesceWrapper: public TBinaryCodegeneratorNode<TCoalesceWrapper<Unpack>> {
+    using TBaseComputation = TBinaryCodegeneratorNode<TCoalesceWrapper<Unpack>>;
+
 public:
     TCoalesceWrapper(IComputationNode* left, IComputationNode* right, EValueRepresentation kind)
         : TBaseComputation(left, right, kind)
@@ -26,7 +26,7 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto left = GetNodeValue(this->Left_, ctx, block);
@@ -57,7 +57,7 @@ public:
 #endif
 };
 
-}
+} // namespace
 
 IComputationNode* WrapCoalesce(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 args");
@@ -74,11 +74,11 @@ IComputationNode* WrapCoalesce(TCallable& callable, const TComputationNodeFactor
 
     const auto kind = GetValueRepresentation(callable.GetType()->GetReturnType());
 
-    if (isRightOptional)
+    if (isRightOptional) {
         return new TCoalesceWrapper<false>(LocateNode(ctx.NodeLocator, callable, 0), LocateNode(ctx.NodeLocator, callable, 1), kind);
-    else
+    } else {
         return new TCoalesceWrapper<true>(LocateNode(ctx.NodeLocator, callable, 0), LocateNode(ctx.NodeLocator, callable, 1), kind);
+    }
 }
 
-}
-}
+} // namespace NKikimr::NMiniKQL

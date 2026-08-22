@@ -21,6 +21,12 @@ class RepeatedPtrField;
 
 class Timestamp;
 
+template <class TProtobufEnum>
+const EnumDescriptor* GetEnumDescriptor();
+
+template <class TEnum>
+struct is_proto_enum;
+
 namespace io {
 
 class ZeroCopyInputStream;
@@ -89,9 +95,6 @@ DEFINE_ENUM(ESerializationDumpMode,
 
 using TSerializationDumpScopeFilter = std::optional<THashSet<std::string>>;
 
-template <class TKey, class TComparer>
-class TSkipList;
-
 class TBlobOutput;
 
 class TStringBuilderBase;
@@ -102,6 +105,9 @@ DECLARE_REFCOUNTED_STRUCT(IPersistentDigest)
 
 DECLARE_REFCOUNTED_STRUCT(TSlruCacheDynamicConfig)
 DECLARE_REFCOUNTED_STRUCT(TSlruCacheConfig)
+
+template <class TKey, class TValue, class THash = THash<TKey>>
+class TSimpleLruCache;
 
 DECLARE_REFCOUNTED_STRUCT(TAsyncExpiringCacheDynamicConfig)
 DECLARE_REFCOUNTED_STRUCT(TAsyncExpiringCacheConfig)
@@ -131,7 +137,7 @@ class TRefCountedProto;
 DECLARE_REFCOUNTED_CLASS(TProcessBase)
 
 const ui32 YTCoreNoteType = 0x5f59545f; // = hex("_YT_") ;)
-extern const TString YTCoreNoteName;
+extern const std::string YTCoreNoteName;
 
 template <class T>
 class TInternRegistry;
@@ -191,8 +197,8 @@ class TFairShareHierarchicalSlotQueue;
 template <typename TTag>
 using TFairShareHierarchicalSlotQueuePtr = TIntrusivePtr<TFairShareHierarchicalSlotQueue<TTag>>;
 
+DECLARE_REFCOUNTED_STRUCT(IAdaptiveHedgingManager)
 DECLARE_REFCOUNTED_STRUCT(TAdaptiveHedgingManagerConfig)
-DECLARE_REFCOUNTED_STRUCT(IHedgingManager)
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -207,6 +213,7 @@ DEFINE_ENUM(EProcessErrorCode,
 
 DECLARE_REFCOUNTED_STRUCT(IMemoryUsageTracker)
 DECLARE_REFCOUNTED_STRUCT(IReservingMemoryUsageTracker)
+DECLARE_REFCOUNTED_STRUCT(IScopedMemoryUsageTracker)
 
 ////////////////////////////////////////////////////////////////////////////////
 

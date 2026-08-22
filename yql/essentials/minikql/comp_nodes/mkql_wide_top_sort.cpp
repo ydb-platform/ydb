@@ -1,20 +1,22 @@
 #include "mkql_wide_top_sort.h"
 
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
-#include <yql/essentials/minikql/computation/mkql_llvm_base.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_llvm_base.h>                // Y_IGNORE
 #include <yql/essentials/minikql/computation/mkql_spiller_adapter.h>
 #include <yql/essentials/minikql/computation/presort.h>
 #include <yql/essentials/minikql/mkql_node_builder.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/mkql_program_builder.h>
 #include <yql/essentials/minikql/defs.h>
+#include <yql/essentials/public/udf/udf_log.h>
 #include <yql/essentials/utils/cast.h>
 #include <yql/essentials/utils/log/log.h>
 
 #include <yql/essentials/utils/sort.h>
 
+#include <deque>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -26,14 +28,14 @@ struct TKeyInfo {
 };
 
 struct TRuntimeKeyInfo {
-    TRuntimeKeyInfo(const TKeyInfo& keyInfo)
+    explicit TRuntimeKeyInfo(const TKeyInfo& keyInfo)
         : Slot(keyInfo.Slot)
         , IsOptional(keyInfo.IsOptional)
         , Compare(keyInfo.Compare.Get())
     {
         if (keyInfo.PresortType) {
-            LeftPacker = keyInfo.PresortType;
-            RightPacker = keyInfo.PresortType;
+            LeftPacker = TGenericPresortEncoder(keyInfo.PresortType);
+            RightPacker = TGenericPresortEncoder(keyInfo.PresortType);
         }
     }
 
@@ -45,13 +47,13 @@ struct TRuntimeKeyInfo {
 };
 
 struct TMyValueCompare {
-    TMyValueCompare(const std::vector<TKeyInfo>& keys)
+    explicit TMyValueCompare(const std::vector<TKeyInfo>& keys)
         : Keys(keys.cbegin(), keys.cend())
     {
     }
 
     int operator()(const bool* directions, const NUdf::TUnboxedValuePod* left, const NUdf::TUnboxedValuePod* right) const {
-        for (auto i = 0u; i < Keys.size(); ++i) {
+        for (auto i = 0U; i < Keys.size(); ++i) {
             auto& key = Keys[i];
             int cmp;
             if (key.Compare) {
@@ -60,8 +62,8 @@ struct TMyValueCompare {
                     cmp = -cmp;
                 }
             } else if (key.LeftPacker) {
-                auto strLeft = key.LeftPacker->Encode(left[i], false);
-                auto strRight = key.RightPacker->Encode(right[i], false);
+                auto strLeft = key.LeftPacker->Encode(left[i], /*desc=*/false);
+                auto strRight = key.RightPacker->Encode(right[i], /*desc=*/false);
                 cmp = strLeft.compare(strRight);
                 if (!directions[i]) {
                     cmp = -cmp;
@@ -70,7 +72,7 @@ struct TMyValueCompare {
                 cmp = CompareValues(key.Slot, directions[i], key.IsOptional, left[i], right[i]);
             }
 
-            if (cmp)  {
+            if (cmp) {
                 return cmp;
             }
         }
@@ -85,98 +87,156 @@ using NYql::TChunkedBuffer;
 using TAsyncWriteOperation = std::optional<NThreading::TFuture<ISpiller::TKey>>;
 using TAsyncReadOperation = std::optional<NThreading::TFuture<std::optional<TChunkedBuffer>>>;
 using TStorage = std::vector<NUdf::TUnboxedValue, TMKQLAllocator<NUdf::TUnboxedValue, EMemorySubPool::Temporary>>;
+using TStorageDeque = std::deque<TStorage, TMKQLAllocator<TStorage, EMemorySubPool::Temporary>>;
 
 struct TSpilledData {
-    using TPtr = TSpilledData*;
+    using TPtr = std::shared_ptr<TSpilledData>;
 
-    TSpilledData(std::unique_ptr<TWideUnboxedValuesSpillerAdapter> &&spiller)
-    : Spiller(std::move(spiller)) {}
+    TSpilledData() = default;
+
+    void Open(ISpiller::TPtr spiller, const TMultiType* tupleMultiType, size_t packSize, NYql::EDatumValidationMode datumValidationMode) {
+        MKQL_ENSURE(IsEmpty(), "SpilledData_ must be empty to Open");
+        Spiller_ = std::make_unique<TWideUnboxedValuesSpillerAdapter>(spiller, tupleMultiType, packSize, datumValidationMode);
+        RowCount_ = 0;
+        AsyncWriteOperation_ = std::nullopt;
+        AsyncReadOperation_ = std::nullopt;
+        IsFinished_ = false;
+        Sealed_ = false;
+    }
 
     TAsyncWriteOperation Write(NUdf::TUnboxedValue* item, size_t size) {
-        AsyncWriteOperation = Spiller->WriteWideItem({item, size});
-        return AsyncWriteOperation;
+        MKQL_ENSURE(Spiller_, "SpilledData_ must be opened to Write");
+        MKQL_ENSURE(!Sealed_, "SpilledData_ must not be sealed to Write");
+        ++RowCount_;
+        AsyncWriteOperation_ = Spiller_->WriteWideItem({item, size});
+        return AsyncWriteOperation_;
     }
 
     TAsyncWriteOperation FinishWrite() {
-        AsyncWriteOperation = Spiller->FinishWriting();
-        return AsyncWriteOperation;
+        MKQL_ENSURE(Spiller_, "SpilledData_ must be opened to FinishWrite");
+        MKQL_ENSURE(!Sealed_, "SpilledData_ must not be sealed to FinishWrite");
+        AsyncWriteOperation_ = Spiller_->FinishWriting();
+        return AsyncWriteOperation_;
     }
 
-    TAsyncReadOperation Read(TStorage &buffer, const TComputationContext& ctx) {
-        if (AsyncReadOperation) {
-            if (AsyncReadOperation->HasValue()) {
-                Spiller->AsyncReadCompleted(AsyncReadOperation->ExtractValue().value(), ctx.HolderFactory);
-                AsyncReadOperation = std::nullopt;
+    void CompleteAsyncWrite() {
+        MKQL_ENSURE(AsyncWriteOperation_.has_value() && AsyncWriteOperation_->HasValue(),
+                    "No completed async write operation");
+        Spiller_->AsyncWriteCompleted(AsyncWriteOperation_->ExtractValue());
+        AsyncWriteOperation_ = std::nullopt;
+    }
+
+    void Seal() {
+        Sealed_ = true;
+    }
+
+    TAsyncReadOperation Read(TStorage& buffer, const TComputationContext& ctx) {
+        if (AsyncReadOperation_) {
+            if (AsyncReadOperation_->HasValue()) {
+                Spiller_->AsyncReadCompleted(AsyncReadOperation_->ExtractValue().value(), ctx.HolderFactory);
+                AsyncReadOperation_ = std::nullopt;
             } else {
-                return AsyncReadOperation;
+                return AsyncReadOperation_;
             }
         }
-        if (Spiller->Empty()) {
-            IsFinished = true;
+        if (Spiller_->Empty()) {
+            IsFinished_ = true;
             return std::nullopt;
         }
-        AsyncReadOperation = Spiller->ExtractWideItem(buffer);
-        return AsyncReadOperation;
+        AsyncReadOperation_ = Spiller_->ExtractWideItem(buffer);
+        return AsyncReadOperation_;
     }
 
-    bool Empty() const {
-        return IsFinished;
+    void Reset() {
+        Spiller_.reset();
+        RowCount_ = 0;
+        AsyncWriteOperation_ = std::nullopt;
+        AsyncReadOperation_ = std::nullopt;
+        IsFinished_ = false;
+        Sealed_ = false;
     }
 
-    std::unique_ptr<TWideUnboxedValuesSpillerAdapter> Spiller;
-    TAsyncWriteOperation AsyncWriteOperation = std::nullopt;
-    TAsyncReadOperation AsyncReadOperation = std::nullopt;
-    bool IsFinished = false;
+    bool IsEmpty() const {
+        return !Spiller_;
+    }
+    bool IsSealed() const {
+        return Sealed_;
+    }
+    bool IsReadFinished() const {
+        return IsFinished_;
+    }
+    size_t GetRowCount() const {
+        return RowCount_;
+    }
+
+    bool HasPendingWrite() const {
+        return AsyncWriteOperation_.has_value();
+    }
+    bool IsWriteReady() const {
+        return AsyncWriteOperation_.has_value() && AsyncWriteOperation_->HasValue();
+    }
+
+private:
+    std::unique_ptr<TWideUnboxedValuesSpillerAdapter> Spiller_;
+    size_t RowCount_ = 0;
+    bool Sealed_ = false;
+    TAsyncWriteOperation AsyncWriteOperation_ = std::nullopt;
+    TAsyncReadOperation AsyncReadOperation_ = std::nullopt;
+    bool IsFinished_ = false;
 };
 
 class TSpilledUnboxedValuesIterator {
 private:
-    TStorage Data;
-    TSpilledData::TPtr SpilledData;
-    std::function<bool(const NUdf::TUnboxedValuePod*, const NUdf::TUnboxedValuePod*)> LessFunc;
+    TStorage Data_;
+    TSpilledData::TPtr SpilledData_;
+    std::function<bool(const NUdf::TUnboxedValuePod*, const NUdf::TUnboxedValuePod*)> LessFunc_;
     ui32 Width_;
-    const TComputationContext* Ctx;
-    bool HasValue = false;
-public:
+    const TComputationContext* Ctx_;
+    bool HasValue_ = false;
 
+public:
     TSpilledUnboxedValuesIterator(
-        const std::function<bool(const NUdf::TUnboxedValuePod*,const NUdf::TUnboxedValuePod*)>& lessFunc,
+        const std::function<bool(const NUdf::TUnboxedValuePod*, const NUdf::TUnboxedValuePod*)>& lessFunc,
         TSpilledData::TPtr spilledData,
         size_t dataWidth,
-        const TComputationContext* ctx
-        )
-        : SpilledData(spilledData)
-        , LessFunc(lessFunc)
+        const TComputationContext* ctx)
+        : SpilledData_(std::move(spilledData))
+        , LessFunc_(lessFunc)
         , Width_(dataWidth)
-        , Ctx(ctx)
+        , Ctx_(ctx)
     {
-        Data.resize(Width_);
+        Data_.resize(Width_);
     }
 
     EFetchResult Read() {
-        if (!HasValue) {
-            if (SpilledData->Read(Data, *Ctx)) {
+        if (!HasValue_) {
+            MKQL_ENSURE(SpilledData_, "Spilled iterator data is null");
+            MKQL_ENSURE(Ctx_, "Spilled iterator context is null");
+            if (SpilledData_->Read(Data_, *Ctx_)) {
                 return EFetchResult::Yield;
             }
-            if (SpilledData->Empty()) {
+            if (SpilledData_->IsReadFinished()) {
                 return EFetchResult::Finish;
             }
+            HasValue_ = true;
         }
-        HasValue = true;
         return EFetchResult::One;
     }
 
     bool CheckForInit() {
-        Read();
-        return HasValue;
+        if (HasValue_ || IsFinished()) {
+            return true;
+        }
+        EFetchResult result = Read();
+        return result != EFetchResult::Yield;
     }
 
     bool IsFinished() const {
-        return SpilledData->Empty();
+        return SpilledData_->IsReadFinished();
     }
 
     bool operator<(const TSpilledUnboxedValuesIterator& item) const {
-        return !LessFunc(GetValue(), item.GetValue());
+        return !LessFunc_(GetValue(), item.GetValue());
     }
 
     ui32 Width() const {
@@ -184,125 +244,145 @@ public:
     }
 
     TStorage Pop() {
-        auto data(std::move(Data));
-        HasValue = false;
+        auto data(std::move(Data_));
+        Data_.resize(Width_);
+        HasValue_ = false;
         Read();
         return data;
     }
 
     const NUdf::TUnboxedValue* GetValue() const {
-        return &Data.front();
+        return &Data_.front();
     }
 };
 
-using TComparePtr = int(*)(const bool*, const NUdf::TUnboxedValuePod*, const NUdf::TUnboxedValuePod*);
+using TComparePtr = int (*)(const bool*, const NUdf::TUnboxedValuePod*, const NUdf::TUnboxedValuePod*);
 using TCompareFunc = std::function<int(const bool*, const NUdf::TUnboxedValuePod*, const NUdf::TUnboxedValuePod*)>;
 
 template <bool Sort>
-class TState : public TComputationValue<TState<Sort>> {
-using TBase = TComputationValue<TState<Sort>>;
+class TState: public TComputationValue<TState<Sort>> {
+    using TBase = TComputationValue<TState<Sort>>;
+
 private:
     using TFields = std::vector<NUdf::TUnboxedValue*, TMKQLAllocator<NUdf::TUnboxedValue*, EMemorySubPool::Temporary>>;
     using TPointers = std::vector<NUdf::TUnboxedValuePod*, TMKQLAllocator<NUdf::TUnboxedValuePod*, EMemorySubPool::Temporary>>;
 
     size_t GetStorageSize() const {
-        return std::max<size_t>(Count << 2ULL, 1ULL << 8ULL);
+        return std::max<size_t>(Count_ << 2ULL, 1ULL << 8ULL);
+    }
+
+    static constexpr size_t GetStorageBlockSize() {
+        return 1ULL << 10ULL;
     }
 
     void ResetFields() {
-        auto ptr = Tongue = Free.back();
-        std::for_each(Indexes.cbegin(), Indexes.cend(), [&](ui32 index) { Fields[index] = static_cast<NUdf::TUnboxedValue*>(ptr++); });
+        MaybeGrowStorage();
+        auto ptr = Tongue = Free_.back();
+        std::for_each(Indexes_.cbegin(), Indexes_.cend(), [&](ui32 index) { Fields_[index] = static_cast<NUdf::TUnboxedValue*>(ptr++); });
     }
+
+    void MaybeGrowStorage() {
+        if (Free_.empty()) {
+            const size_t fieldsCount = Indexes_.size();
+            const size_t blockSize = std::min(GetStorageBlockSize(), GetStorageSize());
+            TStorage& newStorageBlock = Storage_.emplace_back(blockSize * fieldsCount);
+            auto* ptr = newStorageBlock.data();
+            Free_.reserve(Free_.size() + blockSize);
+            for (size_t i = 0; i < blockSize; ++i) {
+                Free_.emplace_back(ptr);
+                ptr += fieldsCount;
+            }
+        }
+    }
+
 public:
     TState(TMemoryUsageInfo* memInfo, ui64 count, const bool* directons, size_t keyWidth, const TCompareFunc& compare, const std::vector<ui32>& indexes)
         : TBase(memInfo)
-        , Count(count)
-        , Indexes(indexes)
-        , Directions(directons, directons + keyWidth)
-        , LessFunc(std::bind(std::less<int>(), std::bind(compare, Directions.data(), std::placeholders::_1, std::placeholders::_2), 0))
-        , Fields(Indexes.size(), nullptr)
+        , Count_(count)
+        , Indexes_(indexes)
+        , Directions_(directons, directons + keyWidth)
+        , LessFunc_(std::bind(std::less<int>(), std::bind(compare, Directions_.data(), std::placeholders::_1, std::placeholders::_2), 0))
+        , Fields_(Indexes_.size(), nullptr)
     {
-        Storage.resize(GetStorageSize() * Indexes.size());
-        Free.resize(GetStorageSize(), nullptr);
-        if (Count) {
-            Full.reserve(GetStorageSize());
-            auto ptr = Storage.data();
-            std::generate(Free.begin(), Free.end(), [&ptr, this]() {
-                const auto p = ptr;
-                ptr += Indexes.size();
-                return p;
-            });
+        if (Count_) {
+            Full_.reserve(std::min(GetStorageBlockSize(), GetStorageSize()));
             ResetFields();
-        } else
+        } else {
             InputStatus = EFetchResult::Finish;
+        }
     }
 
-    NUdf::TUnboxedValue*const* GetFields() const {
-        return Fields.data();
+    NUdf::TUnboxedValue* const* GetFields() const {
+        return Fields_.data();
     }
 
     bool Put() {
-        if (Full.size() + 1U == GetStorageSize()) {
-            Free.pop_back();
+        if (Full_.size() + 1U == GetStorageSize()) {
+            Free_.pop_back();
 
-            NYql::FastNthElement(Full.begin(), Full.begin() + Count, Full.end(), LessFunc);
-            std::copy(Full.cbegin() + Count, Full.cend(), std::back_inserter(Free));
-            Full.resize(Count);
+            NYql::FastNthElement(Full_.begin(), Full_.begin() + Count_, Full_.end(), LessFunc_);
+            std::copy(Full_.cbegin() + Count_, Full_.cend(), std::back_inserter(Free_));
+            Full_.resize(Count_);
 
-            std::for_each(Free.cbegin(), Free.cend(), [this](NUdf::TUnboxedValuePod* ptr) {
-                std::fill_n(static_cast<NUdf::TUnboxedValue*>(ptr), Indexes.size(), NUdf::TUnboxedValuePod());
+            std::for_each(Free_.cbegin(), Free_.cend(), [this](NUdf::TUnboxedValuePod* ptr) {
+                std::fill_n(static_cast<NUdf::TUnboxedValue*>(ptr), Indexes_.size(), NUdf::TUnboxedValuePod());
             });
-            Free.emplace_back(Tongue);
+            Free_.emplace_back(Tongue);
             Throat = nullptr;
         }
 
-        if (Full.size() >= Count) {
-            if (!Throat)
-                Throat = *std::max_element(Full.cbegin(), Full.cend(), LessFunc);
+        if (Full_.size() >= Count_) {
+            if (!Throat) {
+                Throat = *std::max_element(Full_.cbegin(), Full_.cend(), LessFunc_);
+            }
 
-            if (!LessFunc(Tongue, Throat))
+            if (!LessFunc_(Tongue, Throat)) {
                 return false;
+            }
         }
 
-        Full.emplace_back(Free.back());
-        Free.pop_back();
+        Full_.emplace_back(Free_.back());
+        Free_.pop_back();
         ResetFields();
         return true;
     }
 
     void Seal() {
-        Free.clear();
-        Free.shrink_to_fit();
+        Free_.clear();
+        Free_.shrink_to_fit();
 
-        if (Full.size() > Count) {
-            NYql::FastNthElement(Full.begin(), Full.begin() + Count, Full.end(), LessFunc);
-            Full.resize(Count);
+        if (Full_.size() > Count_) {
+            NYql::FastNthElement(Full_.begin(), Full_.begin() + Count_, Full_.end(), LessFunc_);
+            Full_.resize(Count_);
         }
 
-        if constexpr (Sort)
-            std::sort(Full.rbegin(), Full.rend(), LessFunc);
+        if constexpr (Sort) {
+            std::sort(Full_.rbegin(), Full_.rend(), LessFunc_);
+        }
     }
 
     NUdf::TUnboxedValue* Extract() {
-        if (Full.empty())
+        if (Full_.empty()) {
             return nullptr;
+        }
 
-        const auto ptr = Full.back();
-        Full.pop_back();
+        const auto ptr = Full_.back();
+        Full_.pop_back();
         return static_cast<NUdf::TUnboxedValue*>(ptr);
     }
 
     EFetchResult InputStatus = EFetchResult::One;
     NUdf::TUnboxedValuePod* Tongue = nullptr;
     NUdf::TUnboxedValuePod* Throat = nullptr;
+
 private:
-    const ui64 Count;
-    const std::vector<ui32> Indexes;
-    const std::vector<bool> Directions;
-    const std::function<bool(const NUdf::TUnboxedValuePod*, const NUdf::TUnboxedValuePod*)> LessFunc;
-    TStorage Storage;
-    TPointers Free, Full;
-    TFields Fields;
+    const ui64 Count_;
+    const std::vector<ui32> Indexes_;
+    const std::vector<bool> Directions_;
+    const std::function<bool(const NUdf::TUnboxedValuePod*, const NUdf::TUnboxedValuePod*)> LessFunc_;
+    TStorageDeque Storage_;
+    TPointers Free_, Full_;
+    TFields Fields_;
 };
 
 #ifndef MKQL_DISABLE_CODEGEN
@@ -310,72 +390,81 @@ template <class TState>
 class TLLVMFieldsStructureState: public TLLVMFieldsStructure<TComputationValue<TState>> {
 private:
     using TBase = TLLVMFieldsStructure<TComputationValue<TState>>;
-    llvm::IntegerType* ValueType;
-    llvm::PointerType* PtrValueType;
-    llvm::IntegerType* StatusType;
+    llvm::IntegerType* ValueType_;
+    llvm::PointerType* PtrValueType_;
+    llvm::IntegerType* StatusType_;
+
 protected:
-    using TBase::Context;
+    using TBase::GetContext;
+
 public:
     std::vector<llvm::Type*> GetFieldsArray() {
         std::vector<llvm::Type*> result = TBase::GetFields();
-        result.emplace_back(StatusType); //status
-        result.emplace_back(PtrValueType); //tongue
+        result.emplace_back(StatusType_);   // status
+        result.emplace_back(PtrValueType_); // tongue
         return result;
     }
 
     llvm::Constant* GetStatus() {
-        return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + 0);
+        return ConstantInt::get(Type::getInt32Ty(GetContext()), TBase::GetFieldsCount() + 0);
     }
 
     llvm::Constant* GetTongue() {
-        return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + 1);
+        return ConstantInt::get(Type::getInt32Ty(GetContext()), TBase::GetFieldsCount() + 1);
     }
 
-    TLLVMFieldsStructureState(llvm::LLVMContext& context)
+    explicit TLLVMFieldsStructureState(llvm::LLVMContext& context)
         : TBase(context)
-        , ValueType(Type::getInt128Ty(Context))
-        , PtrValueType(PointerType::getUnqual(ValueType))
-        , StatusType(Type::getInt32Ty(Context)) {
-
+        , ValueType_(Type::getInt128Ty(context))
+        , PtrValueType_(PointerType::getUnqual(ValueType_))
+        , StatusType_(Type::getInt32Ty(context))
+    {
     }
 };
 #endif
 
-template<bool Sort>
+template <bool Sort>
 class TWideTopWrapper: public TStatefulWideFlowCodegeneratorNode<TWideTopWrapper<Sort>>
 #ifndef MKQL_DISABLE_CODEGEN
-    , public ICodegeneratorRootNode
+    ,
+                       public ICodegeneratorRootNode
 #endif
 {
-using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideTopWrapper<Sort>>;
+    using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideTopWrapper<Sort>>;
+
 public:
     TWideTopWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, IComputationNode* count, TComputationNodePtrVector&& directions, std::vector<TKeyInfo>&& keys,
-        std::vector<ui32>&& indexes, std::vector<EValueRepresentation>&& representations)
-        : TBaseComputation(mutables, flow, EValueRepresentation::Boxed), Flow(flow), Count(count), Directions(std::move(directions)), Keys(std::move(keys))
-        , Indexes(std::move(indexes)), Representations(std::move(representations))
+                    std::vector<ui32>&& indexes, std::vector<EValueRepresentation>&& representations)
+        : TBaseComputation(mutables, flow, EValueRepresentation::Boxed)
+        , Flow_(flow)
+        , Count_(count)
+        , Directions_(std::move(directions))
+        , Keys_(std::move(keys))
+        , Indexes_(std::move(indexes))
+        , Representations_(std::move(representations))
     {
-        for (const auto& x : Keys) {
+        for (const auto& x : Keys_) {
             if (x.Compare || x.PresortType) {
-                KeyTypes.clear();
-                HasComplexType = true;
+                KeyTypes_.clear();
+                HasComplexType_ = true;
                 break;
             }
 
-            KeyTypes.emplace_back(x.Slot, x.IsOptional);
+            KeyTypes_.emplace_back(x.Slot, x.IsOptional);
         }
     }
 
-    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
+    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const {
         if (state.IsInvalid()) {
-            const auto count = Count->GetValue(ctx).Get<ui64>();
-            std::vector<bool> dirs(Directions.size());
-            std::transform(Directions.cbegin(), Directions.cend(), dirs.begin(), [&ctx](IComputationNode* dir){ return dir->GetValue(ctx).Get<bool>(); });
+            const auto count = Count_->GetValue(ctx).Get<ui64>();
+            std::vector<bool> dirs(Directions_.size());
+            std::transform(Directions_.cbegin(), Directions_.cend(), dirs.begin(), [&ctx](IComputationNode* dir) { return dir->GetValue(ctx).Get<bool>(); });
             MakeState(ctx, state, count, dirs.data());
         }
 
         if (const auto ptr = static_cast<TState<Sort>*>(state.AsBoxed().Get())) {
             while (EFetchResult::Finish != ptr->InputStatus) {
-                switch (ptr->InputStatus = Flow->FetchValues(ctx, ptr->GetFields())) {
+                switch (ptr->InputStatus = Flow_->FetchValues(ctx, ptr->GetFields())) {
                     case EFetchResult::One:
                         ptr->Put();
                         continue;
@@ -388,11 +477,12 @@ public:
             }
 
             if (auto extract = ptr->Extract()) {
-                for (const auto index : Indexes) {
-                    if (const auto to = output[index])
+                for (const auto index : Indexes_) {
+                    if (const auto to = output[index]) {
                         *to = std::move(*extract++);
-                    else
+                    } else {
                         ++extract;
+                    }
                 }
                 return EFetchResult::One;
             }
@@ -400,10 +490,10 @@ public:
             return EFetchResult::Finish;
         }
 
-        Y_UNREACHABLE();
+        MKQL_ENSURE(false, "Unreachable");
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
         DIScopeAnnotator annotate(ctx.Annotator);
 
@@ -417,14 +507,14 @@ public:
 
         const auto statePtrType = PointerType::getUnqual(stateType);
 
-        const auto outputType = ArrayType::get(valueType, Representations.size());
+        const auto outputType = ArrayType::get(valueType, Representations_.size());
         const auto outputPtrType = PointerType::getUnqual(outputType);
         const auto outs = annotate(new AllocaInst(outputPtrType, 0U, "outs", &ctx.Func->getEntryBlock().back()));
 
-        ICodegeneratorInlineWideNode::TGettersList getters(Representations.size());
+        ICodegeneratorInlineWideNode::TGettersList getters(Representations_.size());
 
         for (auto i = 0U; i < getters.size(); ++i) {
-            getters[Indexes[i]] = [i, outs, indexType, valueType, outputPtrType, outputType](const TCodegenContext& ctx, BasicBlock*& block) {
+            getters[Indexes_[i]] = [i, outs, indexType, valueType, outputPtrType, outputType](const TCodegenContext& ctx, BasicBlock*& block) {
                 DIScopeAnnotator annotate(ctx.Annotator);
                 const auto values = annotate(new LoadInst(outputPtrType, outs, "values", block));
                 const auto pointer = annotate(GetElementPtrInst::CreateInBounds(outputType, values, {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, i)}, (TString("ptr_") += ToString(i)).c_str(), block));
@@ -439,13 +529,13 @@ public:
         annotate(BranchInst::Create(make, main, IsInvalid(statePtr, block, context), block));
         block = make;
 
-        const auto count = GetNodeValue(Count, ctx, block);
+        const auto count = GetNodeValue(Count_, ctx, block);
         const auto trunc = GetterFor<ui64>(count, context, block);
 
-        const auto arrayType = ArrayType::get(Type::getInt1Ty(context), Directions.size());
+        const auto arrayType = ArrayType::get(Type::getInt1Ty(context), Directions_.size());
         const auto dirs = annotate(new AllocaInst(arrayType, 0U, "dirs", block));
-        for (auto i = 0U; i < Directions.size(); ++i) {
-            const auto dir = GetNodeValue(Directions[i], ctx, block);
+        for (auto i = 0U; i < Directions_.size(); ++i) {
+            const auto dir = GetNodeValue(Directions_[i], ctx, block);
             const auto cut = GetterFor<bool>(dir, context, block);
             const auto ptr = annotate(GetElementPtrInst::CreateInBounds(arrayType, dirs, {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, i)}, "ptr", block));
             annotate(new StoreInst(cut, ptr, block));
@@ -453,10 +543,7 @@ public:
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto self = annotate(CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block));
-        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TWideTopWrapper::MakeState>());
-        const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType(), trunc->getType(), dirs->getType()}, false);
-        const auto makeFuncPtr = annotate(CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block));
-        annotate(CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, statePtr, trunc, dirs}, "", block));
+        EmitFunctionCall<&TWideTopWrapper::MakeState>(Type::getVoidTy(context), {self, ctx.Ctx, statePtr, trunc, dirs}, ctx, block);
         annotate(BranchInst::Create(main, block));
 
         block = main;
@@ -485,7 +572,7 @@ public:
 
             block = loop;
 
-            const auto getres = GetNodeValues(Flow, ctx, block);
+            const auto getres = GetNodeValues(Flow_, ctx, block);
 
             result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Yield)), block);
 
@@ -496,32 +583,26 @@ public:
             block = rest;
 
             annotate(new StoreInst(ConstantInt::get(last->getType(), static_cast<i32>(EFetchResult::Finish)), statusPtr, block));
-            const auto sealFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState<Sort>::Seal>());
-            const auto sealType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType()}, false);
-            const auto sealPtr = annotate(CastInst::Create(Instruction::IntToPtr, sealFunc, PointerType::getUnqual(sealType), "seal", block));
-            annotate(CallInst::Create(sealType, sealPtr, {stateArg}, "", block));
+            EmitFunctionCall<&TState<Sort>::Seal>(Type::getVoidTy(context), {stateArg}, ctx, block);
 
             annotate(BranchInst::Create(full, block));
 
             block = good;
 
-            const auto tonguePtr = annotate(GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetTongue() }, "tongue_ptr", block));
+            const auto tonguePtr = annotate(GetElementPtrInst::CreateInBounds(stateType, stateArg, {stateFields.This(), stateFields.GetTongue()}, "tongue_ptr", block));
             const auto tongue = annotate(new LoadInst(ptrValueType, tonguePtr, "tongue", block));
 
-            std::vector<Value*> placeholders(Representations.size());
+            std::vector<Value*> placeholders(Representations_.size());
             for (auto i = 0U; i < placeholders.size(); ++i) {
                 placeholders[i] = annotate(GetElementPtrInst::CreateInBounds(valueType, tongue, {ConstantInt::get(indexType, i)}, (TString("placeholder_") += ToString(i)).c_str(), block));
             }
 
-            for (auto i = 0U; i < Keys.size(); ++i) {
-                const auto item = getres.second[Indexes[i]](ctx, block);
+            for (auto i = 0U; i < Keys_.size(); ++i) {
+                const auto item = getres.second[Indexes_[i]](ctx, block);
                 annotate(new StoreInst(item, placeholders[i], block));
             }
 
-            const auto pushFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState<Sort>::Put>());
-            const auto pushType = FunctionType::get(Type::getInt1Ty(context), {stateArg->getType()}, false);
-            const auto pushPtr = annotate(CastInst::Create(Instruction::IntToPtr, pushFunc, PointerType::getUnqual(pushType), "function", block));
-            const auto accepted = annotate(CallInst::Create(pushType, pushPtr, {stateArg}, "accepted", block));
+            const auto accepted = EmitFunctionCall<&TState<Sort>::Put>(Type::getInt1Ty(context), {stateArg}, ctx, block);
 
             const auto push = BasicBlock::Create(context, "push", ctx.Func);
             const auto skip = BasicBlock::Create(context, "skip", ctx.Func);
@@ -530,13 +611,13 @@ public:
 
             block = push;
 
-            for (auto i = 0U; i < Keys.size(); ++i) {
-                ValueAddRef(Representations[i], placeholders[i], ctx, block);
+            for (auto i = 0U; i < Keys_.size(); ++i) {
+                ValueAddRef(Representations_[i], placeholders[i], ctx, block);
             }
 
-            for (auto i = Keys.size(); i < Representations.size(); ++i) {
-                const auto item = getres.second[Indexes[i]](ctx, block);
-                ValueAddRef(Representations[i], item, ctx, block);
+            for (auto i = Keys_.size(); i < Representations_.size(); ++i) {
+                const auto item = getres.second[Indexes_[i]](ctx, block);
+                ValueAddRef(Representations_[i], item, ctx, block);
                 annotate(new StoreInst(item, placeholders[i], block));
             }
 
@@ -544,8 +625,8 @@ public:
 
             block = skip;
 
-            for (auto i = 0U; i < Keys.size(); ++i) {
-                ValueCleanup(Representations[i], placeholders[i], ctx, block);
+            for (auto i = 0U; i < Keys_.size(); ++i) {
+                ValueCleanup(Representations_[i], placeholders[i], ctx, block);
                 annotate(new StoreInst(ConstantInt::get(valueType, 0), placeholders[i], block));
             }
 
@@ -557,10 +638,7 @@ public:
 
             const auto good = BasicBlock::Create(context, "good", ctx.Func);
 
-            const auto extractFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState<Sort>::Extract>());
-            const auto extractType = FunctionType::get(outputPtrType, {stateArg->getType()}, false);
-            const auto extractPtr = annotate(CastInst::Create(Instruction::IntToPtr, extractFunc, PointerType::getUnqual(extractType), "extract", block));
-            const auto out = annotate(CallInst::Create(extractType, extractPtr, {stateArg}, "out", block));
+            const auto out = EmitFunctionCall<&TState<Sort>::Extract>(outputPtrType, {stateArg}, ctx, block);
             const auto has = annotate(CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, out, ConstantPointerNull::get(outputPtrType), "has", block));
 
             result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Finish)), block);
@@ -582,32 +660,32 @@ public:
 private:
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state, ui64 count, const bool* directions) const {
 #ifdef MKQL_DISABLE_CODEGEN
-        state = ctx.HolderFactory.Create<TState<Sort>>(count, directions, Directions.size(), TMyValueCompare(Keys), Indexes);
+        state = ctx.HolderFactory.Create<TState<Sort>>(count, directions, Directions_.size(), TMyValueCompare(Keys_), Indexes_);
 #else
-        state = ctx.HolderFactory.Create<TState<Sort>>(count, directions, Directions.size(), ctx.ExecuteLLVM && Compare ? TCompareFunc(Compare) : TCompareFunc(TMyValueCompare(Keys)), Indexes);
+        state = ctx.HolderFactory.Create<TState<Sort>>(count, directions, Directions_.size(), ctx.ExecuteLLVM && Compare_ ? TCompareFunc(Compare_) : TCompareFunc(TMyValueCompare(Keys_)), Indexes_);
 #endif
     }
 
     void RegisterDependencies() const final {
-        if (const auto flow = this->FlowDependsOn(Flow)) {
-            TWideTopWrapper::DependsOn(flow, Count);
-            std::for_each(Directions.cbegin(), Directions.cend(), std::bind(&TWideTopWrapper::DependsOn, flow, std::placeholders::_1));
+        if (const auto flow = this->FlowDependsOn(Flow_)) {
+            TWideTopWrapper::DependsOn(flow, Count_);
+            std::for_each(Directions_.cbegin(), Directions_.cend(), std::bind(&TWideTopWrapper::DependsOn, flow, std::placeholders::_1));
         }
     }
 
-    IComputationWideFlowNode *const Flow;
-    IComputationNode *const Count;
-    const TComputationNodePtrVector Directions;
-    const std::vector<TKeyInfo> Keys;
-    const std::vector<ui32> Indexes;
-    const std::vector<EValueRepresentation> Representations;
-    TKeyTypes KeyTypes;
-    bool HasComplexType = false;
+    IComputationWideFlowNode* const Flow_;
+    IComputationNode* const Count_;
+    const TComputationNodePtrVector Directions_;
+    const std::vector<TKeyInfo> Keys_;
+    const std::vector<ui32> Indexes_;
+    const std::vector<EValueRepresentation> Representations_;
+    TKeyTypes KeyTypes_;
+    bool HasComplexType_ = false;
 
 #ifndef MKQL_DISABLE_CODEGEN
-    TComparePtr Compare = nullptr;
+    TComparePtr Compare_ = nullptr;
 
-    Function* CompareFunc = nullptr;
+    Function* CompareFunc_ = nullptr;
 
     TString MakeName() const {
         TStringStream out;
@@ -616,21 +694,22 @@ private:
     }
 
     void FinalizeFunctions(NYql::NCodegen::ICodegen& codegen) final {
-        if (CompareFunc) {
-            Compare = reinterpret_cast<TComparePtr>(codegen.GetPointerToFunction(CompareFunc));
+        if (CompareFunc_) {
+            Compare_ = reinterpret_cast<TComparePtr>(codegen.GetPointerToFunction(CompareFunc_));
         }
     }
 
     void GenerateFunctions(NYql::NCodegen::ICodegen& codegen) final {
-        if (!HasComplexType) {
-            codegen.ExportSymbol(CompareFunc = GenerateCompareFunction(codegen, MakeName(), KeyTypes));
+        if (!HasComplexType_) {
+            codegen.ExportSymbol(CompareFunc_ = GenerateCompareFunction(codegen, MakeName(), KeyTypes_));
         }
     }
 #endif
 };
 
-class TSpillingSupportState : public TComputationValue<TSpillingSupportState> {
-using TBase = TComputationValue<TSpillingSupportState>;
+class TSpillingSupportState: public TComputationValue<TSpillingSupportState> {
+    using TBase = TComputationValue<TSpillingSupportState>;
+
 private:
     using TStorage = std::vector<NUdf::TUnboxedValue, TMKQLAllocator<NUdf::TUnboxedValue, EMemorySubPool::Temporary>>;
     using TFields = std::vector<NUdf::TUnboxedValue*, TMKQLAllocator<NUdf::TUnboxedValue*, EMemorySubPool::Temporary>>;
@@ -639,93 +718,154 @@ private:
     enum class EOperatingMode {
         InMemory,
         Spilling,
+        MergeSpilled,
         ProcessSpilled
     };
 
+    enum class ESpillReason {
+        None,
+        YellowZone,
+        FinalFlush,
+        Exception,
+    };
+
+    TString SpillReasonName(ESpillReason r) {
+        switch (r) {
+            case ESpillReason::None:
+                return "None";
+            case ESpillReason::YellowZone:
+                return "YellowZone";
+            case ESpillReason::FinalFlush:
+                return "FinalFlush";
+            case ESpillReason::Exception:
+                return "Exception";
+        }
+        return "Unknown";
+    }
+
+    bool HasPlaceholder() const {
+        return SpillReason_ != ESpillReason::Exception;
+    }
+
+    struct TMergeState {
+        TSpilledData::TPtr Target;
+        std::vector<TSpilledUnboxedValuesIterator> Iterators;
+        bool HeapBuilt = false;
+        bool FinishWriteInProgress = false;
+    };
+
     void ResetFields() {
-        auto pos = Storage.size();
-        Storage.insert(Storage.end(), Indexes.size(), {});
-        auto ptr = Pointer = Storage.data() + pos;
-        std::for_each(Indexes.cbegin(), Indexes.cend(), [&](ui32 index) { Fields[index] = static_cast<NUdf::TUnboxedValue*>(ptr++); });
+        const size_t newRowCount = Storage_.size() / Indexes_.size() + 1;
+
+        try {
+            if (Full_.capacity() < newRowCount) {
+                Full_.reserve(newRowCount);
+            }
+            Storage_.insert(Storage_.end(), Indexes_.size(), {});
+        } catch (const TMemoryLimitExceededException&) {
+            if (CanSpill()) {
+                SpillReason_ = ESpillReason::Exception;
+                SwitchMode(EOperatingMode::Spilling);
+                return;
+            }
+            throw;
+        }
+
+        const auto pos = Storage_.size() - Indexes_.size();
+        auto ptr = Pointer = Storage_.data() + pos;
+        std::for_each(Indexes_.cbegin(), Indexes_.cend(), [&](ui32 index) { Fields_[index] = static_cast<NUdf::TUnboxedValue*>(ptr++); });
+
+        if (CanSpill() && !HasMemoryForProcessing() && HasEnoughRowsToSpill()) {
+            SpillReason_ = ESpillReason::YellowZone;
+            SwitchMode(EOperatingMode::Spilling);
+        }
     }
 
 public:
     TSpillingSupportState(TMemoryUsageInfo* memInfo, const bool* directons, size_t keyWidth, const TCompareFunc& compare,
-        const std::vector<ui32>& indexes, TMultiType* tupleMultiType, const TComputationContext& ctx, NUdf::TLoggerPtr logger, NUdf::TLogComponentId logComponent)
+                          const std::vector<ui32>& indexes, TMultiType* tupleMultiType, const TComputationContext& ctx,
+                          bool allowSpilling, NUdf::TLoggerPtr logger, NUdf::TLogComponentId logComponent)
         : TBase(memInfo)
-        , Indexes(indexes)
-        , Directions(directons, directons + keyWidth)
-        , LessFunc(std::bind(std::less<int>(), std::bind(compare, Directions.data(), std::placeholders::_1, std::placeholders::_2), 0))
-        , Fields(Indexes.size(), nullptr)
-        , TupleMultiType(tupleMultiType)
-        , Ctx(ctx)
-        , Logger(logger)
-        , LogComponent(logComponent)
+        , Indexes_(indexes)
+        , Directions_(directons, directons + keyWidth)
+        , LessFunc_(std::bind(std::less<int>(), std::bind(compare, Directions_.data(), std::placeholders::_1, std::placeholders::_2), 0))
+        , Fields_(Indexes_.size(), nullptr)
+        , TupleMultiType_(tupleMultiType)
+        , Ctx_(ctx)
+        , AllowSpilling_(allowSpilling)
+        , Logger_(std::move(logger))
+        , LogComponent_(logComponent)
     {
-        if (Ctx.SpillerFactory) {
-            Spiller = Ctx.SpillerFactory->CreateSpiller();
+        if (AllowSpilling_ && Ctx_.SpillerFactory) {
+            Spiller_ = Ctx_.SpillerFactory->CreateSpiller();
         }
+        UDF_LOG(Logger_, LogComponent_, NUdf::ELogLevel::Info, TStringBuilder() << (const void*)this << "# Sort state initialized, allowSpilling=" << AllowSpilling_);
         ResetFields();
     }
 
     bool IsReadyToContinue() {
-        switch (GetMode()) {
+        switch (Mode_) {
             case EOperatingMode::InMemory:
-               return true;
-            case EOperatingMode::Spilling:
-            {
+                return true;
+            case EOperatingMode::Spilling: {
                 if (!SpillState()) {
                     return false;
                 }
                 ResetFields();
-                auto nextMode = (IsReadFromChannelFinished() ? EOperatingMode::ProcessSpilled : EOperatingMode::InMemory);
-
-                UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info, TStringBuilder() <<
-                        (nextMode == EOperatingMode::ProcessSpilled ? "Switching to ProcessSpilled" : "Switching to Memory mode"));
-
-                SwitchMode(nextMode);
+                if (ActiveSpill_) {
+                    return IsReadyToContinue();
+                }
+                SwitchMode(ChooseNextMode());
                 return IsReadyToContinue();
             }
-            case EOperatingMode::ProcessSpilled:
-            {
-                if (SpilledUnboxedValuesIterators.empty()) {
+            case EOperatingMode::MergeSpilled: {
+                if (!MergeStep()) {
+                    return false;
+                }
+                SwitchMode(ChooseNextMode());
+                return IsReadyToContinue();
+            }
+            case EOperatingMode::ProcessSpilled: {
+                if (SpilledUnboxedValuesIterators_.empty()) {
                     return true;
                 }
-                for (auto &spilledUnboxedValuesIterator : SpilledUnboxedValuesIterators) {
-                    if (!spilledUnboxedValuesIterator.CheckForInit()) {
-                        return false;
+                bool allReady = true;
+                for (auto& it : SpilledUnboxedValuesIterators_) {
+                    if (!it.CheckForInit()) {
+                        allReady = false;
                     }
                 }
-                return true;
+                return allReady;
             }
         }
     }
 
     bool IsFinished() const {
-        return IsReadFromChannelFinished() && SpilledUnboxedValuesIterators.empty();
+        if (!IsReadFromChannelFinished()) {
+            return false;
+        }
+        if (Mode_ == EOperatingMode::Spilling || Mode_ == EOperatingMode::MergeSpilled) {
+            return false;
+        }
+        if (Mode_ == EOperatingMode::ProcessSpilled) {
+            return SpilledUnboxedValuesIterators_.empty();
+        }
+        return SealedStates_.empty();
     }
 
-    NUdf::TUnboxedValue*const* GetFields() const {
-        return Fields.data();
+    NUdf::TUnboxedValue* const* GetFields() const {
+        return Fields_.data();
     }
 
     void Put() {
         ResetFields();
-        if (Ctx.SpillerFactory && !HasMemoryForProcessing()) {
-            const auto used = TlsAllocState->GetUsed();
-            const auto limit = TlsAllocState->GetLimit();
-
-            UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info, TStringBuilder() << "Yellow zone reached " << (used*100/limit) << "%=" << used << "/" << limit);
-            UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info, "Switching Memory mode to Spilling");
-
-            SwitchMode(EOperatingMode::Spilling);
-        }
     }
 
     bool Seal() {
-        if (SpilledStates.empty()) {
+        if (SealedStates_.empty() && !ActiveSpill_) {
             SealInMemory();
         } else {
+            SpillReason_ = ESpillReason::FinalFlush;
             SwitchMode(EOperatingMode::Spilling);
         }
         return IsReadyToContinue();
@@ -736,164 +876,349 @@ public:
             return nullptr;
         }
 
-        if (SpilledUnboxedValuesIterators.empty()) {
-            // No spilled data
+        if (SpilledUnboxedValuesIterators_.empty()) {
             return ExtractInMemory();
         }
 
-        if (!IsHeapBuilt) {
-            std::make_heap(SpilledUnboxedValuesIterators.begin(), SpilledUnboxedValuesIterators.end());
-            IsHeapBuilt = true;
-        } else {
-            std::push_heap(SpilledUnboxedValuesIterators.begin(), SpilledUnboxedValuesIterators.end());
+        auto end = std::remove_if(SpilledUnboxedValuesIterators_.begin(), SpilledUnboxedValuesIterators_.end(),
+                                  [](const TSpilledUnboxedValuesIterator& it) { return it.IsFinished(); });
+        SpilledUnboxedValuesIterators_.erase(end, SpilledUnboxedValuesIterators_.end());
+        if (SpilledUnboxedValuesIterators_.empty()) {
+            return nullptr;
         }
 
-        std::pop_heap(SpilledUnboxedValuesIterators.begin(), SpilledUnboxedValuesIterators.end());
-        auto &currentIt = SpilledUnboxedValuesIterators.back();
-        Storage = currentIt.Pop();
-        if (currentIt.IsFinished()) {
-            SpilledUnboxedValuesIterators.pop_back();
-        }
-        return Storage.data();
+        auto minIt = std::min_element(SpilledUnboxedValuesIterators_.begin(), SpilledUnboxedValuesIterators_.end(),
+                                      [](const TSpilledUnboxedValuesIterator& a, const TSpilledUnboxedValuesIterator& b) { return b < a; });
+        Storage_ = minIt->Pop();
+        return Storage_.data();
     }
+
 private:
-    EOperatingMode GetMode() const { return Mode; }
+    bool CanSpill() const {
+        return AllowSpilling_ && Ctx_.SpillerFactory;
+    }
+
+    bool HasEnoughRowsToSpill() const {
+        return Storage_.size() / Indexes_.size() >= MinSpillBatchRows;
+    }
 
     bool HasMemoryForProcessing() const {
-        // We decided to turn off spilling in Sort nodes for now
-        // Because in current benchmarks we don't have huge amount of data to sort
-        // return !TlsAllocState->IsMemoryYellowZoneEnabled();
-        return true;
+        return !TlsAllocState->IsMemoryYellowZoneEnabled();
     }
 
     bool IsReadFromChannelFinished() const {
         return InputStatus == EFetchResult::Finish;
     }
 
+    EOperatingMode ChooseNextMode() const {
+        MKQL_ENSURE(Mode_ == EOperatingMode::Spilling || Mode_ == EOperatingMode::MergeSpilled,
+                    "ChooseNextMode called from unexpected mode: " << ModeName(Mode_));
+        MKQL_ENSURE(!ActiveSpill_, "ChooseNextMode called with active spill still in progress");
+        MKQL_ENSURE(!Merge_, "ChooseNextMode called with active merge still in progress");
+        if (SealedStates_.size() >= MaxSealedStates) {
+            return EOperatingMode::MergeSpilled;
+        } else if (IsReadFromChannelFinished()) {
+            return EOperatingMode::ProcessSpilled;
+        } else {
+            return EOperatingMode::InMemory;
+        }
+    }
+
+    static const char* ModeName(EOperatingMode m) {
+        switch (m) {
+            case EOperatingMode::InMemory:
+                return "InMemory";
+            case EOperatingMode::Spilling:
+                return "Spilling";
+            case EOperatingMode::MergeSpilled:
+                return "MergeSpilled";
+            case EOperatingMode::ProcessSpilled:
+                return "ProcessSpilled";
+        }
+        return "Unknown";
+    }
+
     void SwitchMode(EOperatingMode mode) {
-        switch(mode) {
+        const size_t rowsInMemory = !Indexes_.empty() ? Storage_.size() / Indexes_.size() : 0;
+        // clang-format off
+        UDF_LOG(Logger_, LogComponent_, NUdf::ELogLevel::Info, TStringBuilder()
+            << (const void*)this << "# SwitchMode "
+            << ModeName(Mode_) << " -> " << ModeName(mode)
+            << " | reason=" << SpillReasonName(SpillReason_)
+            << " memUsed=" << TlsAllocState->GetUsed()
+            << " memLimit=" << TlsAllocState->GetLimit()
+            << " yellowZone=" << (TlsAllocState->IsMemoryYellowZoneEnabled() ? "yes" : "no")
+            << " maxLimitReached=" << (TlsAllocState->GetMaximumLimitValueReached() ? "yes" : "no")
+            << " rowsInMemory=" << rowsInMemory
+            << " lastSpilledRows=" << LastSpilledRows_
+            << " sealedStates=" << SealedStates_.size() << "\n");
+        // clang-format on
+        switch (mode) {
             case EOperatingMode::InMemory:
                 break;
-            case EOperatingMode::Spilling:
-            {
-                const size_t PACK_SIZE = 5_MB;
-                SpilledStates.emplace_back(std::make_unique<TWideUnboxedValuesSpillerAdapter>(Spiller, TupleMultiType, PACK_SIZE));
+            case EOperatingMode::Spilling: {
+                ActiveSpill_ = std::make_shared<TSpilledData>();
+                ActiveSpill_->Open(Spiller_, TupleMultiType_, PackSize, Ctx_.RuntimeSettings.DatumValidation.Get());
                 break;
             }
-            case EOperatingMode::ProcessSpilled:
-            {
-                SpilledUnboxedValuesIterators.reserve(SpilledStates.size());
-                for (auto &state: SpilledStates) {
-                    SpilledUnboxedValuesIterators.emplace_back(LessFunc, &state, Indexes.size(), &Ctx);
+            case EOperatingMode::MergeSpilled: {
+                StartMerge();
+                break;
+            }
+            case EOperatingMode::ProcessSpilled: {
+                SpilledUnboxedValuesIterators_.clear();
+                for (auto& state : SealedStates_) {
+                    SpilledUnboxedValuesIterators_.emplace_back(LessFunc_, state, Indexes_.size(), &Ctx_);
                 }
                 break;
             }
         }
-        Mode = mode;
+        Mode_ = mode;
+    }
+
+    void SealActiveSpill() {
+        ActiveSpill_->Seal();
+        SealedStates_.push_back(std::move(ActiveSpill_));
+        TStorage().swap(Storage_);
+        Full_.clear();
+        Full_.shrink_to_fit();
     }
 
     bool SpillState() {
-        MKQL_ENSURE(!SpilledStates.empty(), "At least one Spiller must be created to spill data in Sort operation.");
-        auto &lastSpilledState = SpilledStates.back();
-        if (lastSpilledState.AsyncWriteOperation.has_value()) {
-            if (!lastSpilledState.AsyncWriteOperation->HasValue()) {
+        MKQL_ENSURE(ActiveSpill_, "No active spill");
+        if (ActiveSpill_->HasPendingWrite()) {
+            if (!ActiveSpill_->IsWriteReady()) {
                 return false;
             }
-            lastSpilledState.Spiller->AsyncWriteCompleted(lastSpilledState.AsyncWriteOperation->ExtractValue());
-            lastSpilledState.AsyncWriteOperation = std::nullopt;
+            ActiveSpill_->CompleteAsyncWrite();
+            if (IsFinishWriteInProgress_) {
+                IsFinishWriteInProgress_ = false;
+                SealActiveSpill();
+                return true;
+            }
         } else {
             SealInMemory();
-            if (Full.empty()) {
-                // Nothing to spill
-                SpilledStates.pop_back();
+            LastSpilledRows_ = Full_.size();
+            if (Full_.empty()) {
+                ActiveSpill_.reset();
                 return true;
             }
         }
 
         while (auto extract = ExtractInMemory()) {
-            auto writeOp = lastSpilledState.Write(extract, Indexes.size());
+            auto writeOp = ActiveSpill_->Write(extract, Indexes_.size());
             if (writeOp) {
                 return false;
             }
         }
 
-        auto writeFinishOp = lastSpilledState.FinishWrite();
-        if (writeFinishOp){
+        auto writeFinishOp = ActiveSpill_->FinishWrite();
+        if (writeFinishOp) {
+            IsFinishWriteInProgress_ = true;
             return false;
         }
-        Storage.resize(0);
+        SealActiveSpill();
         return true;
     }
 
-    NUdf::TUnboxedValue* ExtractInMemory() {
-        if (Full.empty())
-            return nullptr;
+    std::pair<size_t, size_t> FindTwoSmallestSealed() const {
+        MKQL_ENSURE(SealedStates_.size() >= 2, "Need at least 2 sealed states to merge");
+        size_t min1 = 0;
+        size_t min2 = 1;
+        if (SealedStates_[min2]->GetRowCount() < SealedStates_[min1]->GetRowCount()) {
+            std::swap(min1, min2);
+        }
+        for (size_t i = 2; i < SealedStates_.size(); ++i) {
+            if (SealedStates_[i]->GetRowCount() < SealedStates_[min2]->GetRowCount()) {
+                min2 = i;
+                if (SealedStates_[min2]->GetRowCount() < SealedStates_[min1]->GetRowCount()) {
+                    std::swap(min1, min2);
+                }
+            }
+        }
+        return {min1, min2};
+    }
 
-        const auto ptr = Full.back();
-        Full.pop_back();
+    void StartMerge() {
+        auto [src1, src2] = FindTwoSmallestSealed();
+
+        Merge_.emplace();
+        Merge_->Target = std::make_shared<TSpilledData>();
+        Merge_->Target->Open(Spiller_, TupleMultiType_, PackSize, Ctx_.RuntimeSettings.DatumValidation.Get());
+
+        Merge_->Iterators.reserve(2);
+        Merge_->Iterators.emplace_back(LessFunc_, SealedStates_[src1], Indexes_.size(), &Ctx_);
+        Merge_->Iterators.emplace_back(LessFunc_, SealedStates_[src2], Indexes_.size(), &Ctx_);
+
+        // Remove sources from SealedStates_ (remove larger index first to preserve smaller)
+        size_t first = std::min(src1, src2);
+        size_t second = std::max(src1, src2);
+        SealedStates_.erase(SealedStates_.begin() + second);
+        SealedStates_.erase(SealedStates_.begin() + first);
+    }
+
+    bool MergeStep() {
+        MKQL_ENSURE(Merge_, "No active merge");
+        auto& target = *Merge_->Target;
+
+        if (target.HasPendingWrite()) {
+            if (!target.IsWriteReady()) {
+                return false;
+            }
+            target.CompleteAsyncWrite();
+            if (Merge_->FinishWriteInProgress) {
+                Merge_->FinishWriteInProgress = false;
+                FinishMerge();
+                return true;
+            }
+        }
+
+        {
+            bool allReady = true;
+            for (auto& it : Merge_->Iterators) {
+                if (!it.CheckForInit()) {
+                    allReady = false;
+                }
+            }
+            if (!allReady) {
+                return false;
+            }
+        }
+
+        if (!Merge_->HeapBuilt) {
+            auto end = std::remove_if(Merge_->Iterators.begin(), Merge_->Iterators.end(),
+                                      [](const TSpilledUnboxedValuesIterator& it) { return it.IsFinished(); });
+            Merge_->Iterators.erase(end, Merge_->Iterators.end());
+            std::make_heap(Merge_->Iterators.begin(), Merge_->Iterators.end());
+            Merge_->HeapBuilt = true;
+        }
+
+        while (!Merge_->Iterators.empty()) {
+            std::pop_heap(Merge_->Iterators.begin(), Merge_->Iterators.end());
+            auto& currentIt = Merge_->Iterators.back();
+            auto row = currentIt.Pop();
+            bool iteratorFinished = currentIt.IsFinished();
+            bool iteratorReady = !iteratorFinished && currentIt.CheckForInit();
+
+            if (iteratorFinished) {
+                Merge_->Iterators.pop_back();
+            } else if (iteratorReady) {
+                std::push_heap(Merge_->Iterators.begin(), Merge_->Iterators.end());
+            } else {
+                Merge_->HeapBuilt = false;
+            }
+
+            auto writeOp = target.Write(row.data(), Indexes_.size());
+            if (writeOp) {
+                return false;
+            }
+            if (!iteratorReady && !iteratorFinished) {
+                return false;
+            }
+        }
+
+        auto writeFinishOp = target.FinishWrite();
+        if (writeFinishOp) {
+            Merge_->FinishWriteInProgress = true;
+            return false;
+        }
+        FinishMerge();
+        return true;
+    }
+
+    void FinishMerge() {
+        Merge_->Target->Seal();
+        SealedStates_.push_back(std::move(Merge_->Target));
+        Merge_.reset();
+    }
+
+    NUdf::TUnboxedValue* ExtractInMemory() {
+        if (Full_.empty()) {
+            return nullptr;
+        }
+
+        const auto ptr = Full_.back();
+        Full_.pop_back();
         return static_cast<NUdf::TUnboxedValue*>(ptr);
     }
 
     void SealInMemory() {
-        // Remove placeholder for new data
-        Storage.resize(Storage.size() - Indexes.size());
-
-        Full.reserve(Storage.size() / Indexes.size());
-        for (auto it = Storage.begin(); it != Storage.end(); it += Indexes.size()) {
-            Full.emplace_back(&*it);
+        if (HasPlaceholder()) {
+            MKQL_ENSURE(Storage_.size() >= Indexes_.size(), "Cannot drop placeholder: Storage_ too small");
+            Storage_.resize(Storage_.size() - Indexes_.size());
         }
-
-        std::sort(Full.rbegin(), Full.rend(), LessFunc);
+        Full_.clear();
+        for (auto it = Storage_.begin(); it != Storage_.end(); it += Indexes_.size()) {
+            Full_.emplace_back(&*it);
+        }
+        std::sort(Full_.rbegin(), Full_.rend(), LessFunc_);
     }
 
 public:
     EFetchResult InputStatus = EFetchResult::One;
     NUdf::TUnboxedValuePod* Pointer = nullptr;
+
 private:
-    const std::vector<ui32> Indexes;
-    const std::vector<bool> Directions;
-    const std::function<bool(const NUdf::TUnboxedValuePod*, const NUdf::TUnboxedValuePod*)> LessFunc;
-    TStorage Storage;
-    TPointers Free, Full;
-    TFields Fields;
-    TMultiType* TupleMultiType;
-    const TComputationContext& Ctx;
-    std::vector<TSpilledData> SpilledStates;
-    EOperatingMode Mode = EOperatingMode::InMemory;
-    std::vector<TSpilledUnboxedValuesIterator> SpilledUnboxedValuesIterators;
-    ISpiller::TPtr Spiller = nullptr;
-    bool IsHeapBuilt = false;
-    const NYql::NUdf::TLoggerPtr Logger;
-    const NYql::NUdf::TLogComponentId LogComponent;
+    const std::vector<ui32> Indexes_;
+    const std::vector<bool> Directions_;
+    const std::function<bool(const NUdf::TUnboxedValuePod*, const NUdf::TUnboxedValuePod*)> LessFunc_;
+    TStorage Storage_;
+    TPointers Full_;
+    TFields Fields_;
+    TMultiType* TupleMultiType_;
+    const TComputationContext& Ctx_;
+    const bool AllowSpilling_;
+    const NUdf::TLoggerPtr Logger_;
+    const NUdf::TLogComponentId LogComponent_;
+    static constexpr size_t PackSize = 1_MB;
+    static constexpr size_t MaxSealedStates = 64;
+    static constexpr size_t MinSpillBatchRows = 1024;
+    std::vector<TSpilledData::TPtr> SealedStates_;
+    TSpilledData::TPtr ActiveSpill_;
+    EOperatingMode Mode_ = EOperatingMode::InMemory;
+    std::vector<TSpilledUnboxedValuesIterator> SpilledUnboxedValuesIterators_;
+    ISpiller::TPtr Spiller_ = nullptr;
+    bool IsFinishWriteInProgress_ = false;
+    ESpillReason SpillReason_ = ESpillReason::None;
+    std::optional<TMergeState> Merge_;
+    size_t LastSpilledRows_ = 0;
 };
 
 class TWideSortWrapper: public TStatefulWideFlowCodegeneratorNode<TWideSortWrapper>
 #ifndef MKQL_DISABLE_CODEGEN
-    , public ICodegeneratorRootNode
+    ,
+                        public ICodegeneratorRootNode
 #endif
 {
-using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideSortWrapper>;
+    using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideSortWrapper>;
+
 public:
     TWideSortWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, TComputationNodePtrVector&& directions, std::vector<TKeyInfo>&& keys,
-        std::vector<ui32>&& indexes, std::vector<EValueRepresentation>&& representations, TMultiType* tupleMultiType)
-        : TBaseComputation(mutables, flow, EValueRepresentation::Boxed), Flow(flow), Directions(std::move(directions)), Keys(std::move(keys))
-        , Indexes(std::move(indexes)), Representations(std::move(representations)), TupleMultiType(tupleMultiType)
+                     std::vector<ui32>&& indexes, std::vector<EValueRepresentation>&& representations, TMultiType* tupleMultiType, bool allowSpilling)
+        : TBaseComputation(mutables, flow, EValueRepresentation::Boxed)
+        , Flow_(flow)
+        , Directions_(std::move(directions))
+        , Keys_(std::move(keys))
+        , Indexes_(std::move(indexes))
+        , Representations_(std::move(representations))
+        , TupleMultiType_(tupleMultiType)
+        , AllowSpilling_(allowSpilling)
     {
-        for (const auto& x : Keys) {
+        for (const auto& x : Keys_) {
             if (x.Compare || x.PresortType) {
-                KeyTypes.clear();
-                HasComplexType = true;
+                KeyTypes_.clear();
+                HasComplexType_ = true;
                 break;
             }
 
-            KeyTypes.emplace_back(x.Slot, x.IsOptional);
+            KeyTypes_.emplace_back(x.Slot, x.IsOptional);
         }
     }
 
-    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
+    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const {
         if (state.IsInvalid()) {
-            std::vector<bool> dirs(Directions.size());
-            std::transform(Directions.cbegin(), Directions.cend(), dirs.begin(), [&ctx](IComputationNode* dir){ return dir->GetValue(ctx).Get<bool>(); });
+            std::vector<bool> dirs(Directions_.size());
+            std::transform(Directions_.cbegin(), Directions_.cend(), dirs.begin(), [&ctx](IComputationNode* dir) { return dir->GetValue(ctx).Get<bool>(); });
             MakeState(ctx, state, dirs.data());
         }
 
@@ -902,13 +1227,14 @@ public:
                 if (!ptr->IsReadyToContinue()) {
                     return EFetchResult::Yield;
                 }
-                switch (ptr->InputStatus = Flow->FetchValues(ctx, ptr->GetFields())) {
+                switch (ptr->InputStatus = Flow_->FetchValues(ctx, ptr->GetFields())) {
                     case EFetchResult::One:
                         ptr->Put();
                         continue;
                     case EFetchResult::Finish:
-                        if (ptr->Seal())
+                        if (ptr->Seal()) {
                             break;
+                        }
                         [[fallthrough]];
                     case EFetchResult::Yield:
                         return EFetchResult::Yield;
@@ -916,22 +1242,24 @@ public:
             }
 
             if (auto extract = ptr->Extract()) {
-                for (const auto index : Indexes) {
-                    if (const auto to = output[index])
+                for (const auto index : Indexes_) {
+                    if (const auto to = output[index]) {
                         *to = std::move(*extract++);
-                    else
+                    } else {
                         ++extract;
+                    }
                 }
                 return EFetchResult::One;
             }
 
-            return ptr->IsFinished() ? EFetchResult::Finish : EFetchResult::Yield;
+            auto finished = ptr->IsFinished();
+            return finished ? EFetchResult::Finish : EFetchResult::Yield;
         }
 
-        Y_UNREACHABLE();
+        MKQL_ENSURE(false, "Unreachable");
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
         DIScopeAnnotator annotate(ctx.Annotator);
 
@@ -945,14 +1273,14 @@ public:
 
         const auto statePtrType = PointerType::getUnqual(stateType);
 
-        const auto outputType = ArrayType::get(valueType, Representations.size());
+        const auto outputType = ArrayType::get(valueType, Representations_.size());
         const auto outputPtrType = PointerType::getUnqual(outputType);
         const auto outs = annotate(new AllocaInst(outputPtrType, 0U, "outs", &ctx.Func->getEntryBlock().back()));
 
-        ICodegeneratorInlineWideNode::TGettersList getters(Representations.size());
+        ICodegeneratorInlineWideNode::TGettersList getters(Representations_.size());
 
         for (auto i = 0U; i < getters.size(); ++i) {
-            getters[Indexes[i]] = [i, outs, indexType, valueType, outputPtrType, outputType](const TCodegenContext& ctx, BasicBlock*& block) {
+            getters[Indexes_[i]] = [i, outs, indexType, valueType, outputPtrType, outputType](const TCodegenContext& ctx, BasicBlock*& block) {
                 DIScopeAnnotator annotate(ctx.Annotator);
                 const auto values = annotate(new LoadInst(outputPtrType, outs, "values", block));
                 const auto pointer = annotate(GetElementPtrInst::CreateInBounds(outputType, values, {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, i)}, (TString("ptr_") += ToString(i)).c_str(), block));
@@ -967,10 +1295,10 @@ public:
         annotate(BranchInst::Create(make, main, IsInvalid(statePtr, block, context), block));
         block = make;
 
-        const auto arrayType = ArrayType::get(Type::getInt1Ty(context), Directions.size());
+        const auto arrayType = ArrayType::get(Type::getInt1Ty(context), Directions_.size());
         const auto dirs = annotate(new AllocaInst(arrayType, 0U, "dirs", block));
-        for (auto i = 0U; i < Directions.size(); ++i) {
-            const auto dir = GetNodeValue(Directions[i], ctx, block);
+        for (auto i = 0U; i < Directions_.size(); ++i) {
+            const auto dir = GetNodeValue(Directions_[i], ctx, block);
             const auto cut = GetterFor<bool>(dir, context, block);
             const auto ptr = annotate(GetElementPtrInst::CreateInBounds(arrayType, dirs, {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, i)}, "ptr", block));
             annotate(new StoreInst(cut, ptr, block));
@@ -978,10 +1306,7 @@ public:
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto self = annotate(CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block));
-        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TWideSortWrapper::MakeState>());
-        const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType(), dirs->getType()}, false);
-        const auto makeFuncPtr = annotate(CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block));
-        annotate(CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, statePtr, dirs}, "", block));
+        EmitFunctionCall<&TWideSortWrapper::MakeState>(Type::getVoidTy(context), {self, ctx.Ctx, statePtr, dirs}, ctx, block);
         annotate(BranchInst::Create(main, block));
 
         block = main;
@@ -989,7 +1314,6 @@ public:
         const auto state = annotate(new LoadInst(valueType, statePtr, "state", block));
         const auto half = annotate(CastInst::Create(Instruction::Trunc, state, Type::getInt64Ty(context), "half", block));
         const auto stateArg = annotate(CastInst::Create(Instruction::IntToPtr, half, statePtrType, "state_arg", block));
-        const auto boolFuncType = FunctionType::get(Type::getInt1Ty(context), {stateArg->getType()}, false);
         annotate(BranchInst::Create(more, block));
 
         block = more;
@@ -1012,9 +1336,7 @@ public:
 
             block = loop;
 
-            const auto readyFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TSpillingSupportState::IsReadyToContinue>());
-            const auto readyPtr = annotate(CastInst::Create(Instruction::IntToPtr, readyFunc, PointerType::getUnqual(boolFuncType), "ready", block));
-            const auto process = annotate(CallInst::Create(boolFuncType, readyPtr, {stateArg}, "process", block));
+            const auto process = EmitFunctionCall<&TSpillingSupportState::IsReadyToContinue>(Type::getInt1Ty(context), {stateArg}, ctx, block);
 
             result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Yield)), block);
 
@@ -1022,7 +1344,7 @@ public:
 
             block = pull;
 
-            const auto getres = GetNodeValues(Flow, ctx, block);
+            const auto getres = GetNodeValues(Flow_, ctx, block);
 
             result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Yield)), block);
 
@@ -1033,9 +1355,7 @@ public:
             block = rest;
 
             annotate(new StoreInst(ConstantInt::get(last->getType(), static_cast<i32>(EFetchResult::Finish)), statusPtr, block));
-            const auto sealFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TSpillingSupportState::Seal>());
-            const auto sealPtr = annotate(CastInst::Create(Instruction::IntToPtr, sealFunc, PointerType::getUnqual(boolFuncType), "seal", block));
-            const auto stop = annotate(CallInst::Create(boolFuncType, sealPtr, {stateArg}, "stop", block));
+            const auto stop = EmitFunctionCall<&TSpillingSupportState::Seal>(Type::getInt1Ty(context), {stateArg}, ctx, block);
 
             result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Yield)), block);
 
@@ -1043,24 +1363,21 @@ public:
 
             block = good;
 
-            const auto tonguePtr = annotate(GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetTongue() }, "tongue_ptr", block));
+            const auto tonguePtr = annotate(GetElementPtrInst::CreateInBounds(stateType, stateArg, {stateFields.This(), stateFields.GetTongue()}, "tongue_ptr", block));
             const auto tongue = annotate(new LoadInst(ptrValueType, tonguePtr, "tongue", block));
 
-            std::vector<Value*> placeholders(Representations.size());
+            std::vector<Value*> placeholders(Representations_.size());
             for (auto i = 0U; i < placeholders.size(); ++i) {
                 placeholders[i] = annotate(GetElementPtrInst::CreateInBounds(valueType, tongue, {ConstantInt::get(indexType, i)}, (TString("placeholder_") += ToString(i)).c_str(), block));
             }
 
-            for (auto i = 0U; i < Representations.size(); ++i) {
-                const auto item = getres.second[Indexes[i]](ctx, block);
-                ValueAddRef(Representations[i], item, ctx, block);
+            for (auto i = 0U; i < Representations_.size(); ++i) {
+                const auto item = getres.second[Indexes_[i]](ctx, block);
+                ValueAddRef(Representations_[i], item, ctx, block);
                 annotate(new StoreInst(item, placeholders[i], block));
             }
 
-            const auto pushFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TSpillingSupportState::Put>());
-            const auto pushType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType()}, false);
-            const auto pushPtr = annotate(CastInst::Create(Instruction::IntToPtr, pushFunc, PointerType::getUnqual(pushType), "function", block));
-            annotate(CallInst::Create(pushType, pushPtr, {stateArg}, "", block));
+            EmitFunctionCall<&TSpillingSupportState::Put>(Type::getVoidTy(context), {stateArg}, ctx, block);
 
             annotate(BranchInst::Create(loop, block));
         }
@@ -1071,10 +1388,7 @@ public:
             const auto good = BasicBlock::Create(context, "good", ctx.Func);
             const auto last = BasicBlock::Create(context, "last", ctx.Func);
 
-            const auto extractFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TSpillingSupportState::Extract>());
-            const auto extractType = FunctionType::get(outputPtrType, {stateArg->getType()}, false);
-            const auto extractPtr = annotate(CastInst::Create(Instruction::IntToPtr, extractFunc, PointerType::getUnqual(extractType), "extract", block));
-            const auto out = annotate(CallInst::Create(extractType, extractPtr, {stateArg}, "out", block));
+            const auto out = EmitFunctionCall<&TSpillingSupportState::Extract>(outputPtrType, {stateArg}, ctx, block);
             const auto has = annotate(CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, out, ConstantPointerNull::get(outputPtrType), "has", block));
 
             annotate(BranchInst::Create(good, last, has, block));
@@ -1088,13 +1402,11 @@ public:
 
             block = last;
 
-            const auto finishedFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TSpillingSupportState::IsFinished>());
-            const auto finishedPtr = annotate(CastInst::Create(Instruction::IntToPtr, finishedFunc, PointerType::getUnqual(boolFuncType), "finished_ptr", block));
-            const auto finished = annotate(CallInst::Create(boolFuncType, finishedPtr, {stateArg}, "finished", block));
+            const auto finished = EmitFunctionCall<&TSpillingSupportState::IsFinished>(Type::getInt1Ty(context), {stateArg}, ctx, block);
             const auto output = SelectInst::Create(finished,
-                ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Finish)),
-                ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Yield)),
-                "output", block);
+                                                   ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Finish)),
+                                                   ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Yield)),
+                                                   "output", block);
 
             result->addIncoming(output, block);
             annotate(BranchInst::Create(over, block));
@@ -1107,34 +1419,34 @@ public:
 private:
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state, const bool* directions) const {
         NYql::NUdf::TLoggerPtr logger = ctx.MakeLogger();
-        NYql::NUdf::TLogComponentId logComponent = logger->RegisterComponent("WideSort");
-        UDF_LOG(logger, logComponent, NUdf::ELogLevel::Debug, TStringBuilder() << "State initialized");
+        NYql::NUdf::TLogComponentId logComponent = logger->RegisterComponent("Sort");
 #ifdef MKQL_DISABLE_CODEGEN
-        state = ctx.HolderFactory.Create<TSpillingSupportState>(directions, Directions.size(), TMyValueCompare(Keys), Indexes, TupleMultiType, ctx, logger, logComponent);
+        state = ctx.HolderFactory.Create<TSpillingSupportState>(directions, Directions_.size(), TMyValueCompare(Keys_), Indexes_, TupleMultiType_, ctx, AllowSpilling_, std::move(logger), logComponent);
 #else
-        state = ctx.HolderFactory.Create<TSpillingSupportState>(directions, Directions.size(), ctx.ExecuteLLVM && Compare ? TCompareFunc(Compare) : TCompareFunc(TMyValueCompare(Keys)), Indexes, TupleMultiType, ctx, logger, logComponent);
+        state = ctx.HolderFactory.Create<TSpillingSupportState>(directions, Directions_.size(), ctx.ExecuteLLVM && Compare_ ? TCompareFunc(Compare_) : TCompareFunc(TMyValueCompare(Keys_)), Indexes_, TupleMultiType_, ctx, AllowSpilling_, std::move(logger), logComponent);
 #endif
     }
 
     void RegisterDependencies() const final {
-        if (const auto flow = this->FlowDependsOn(Flow)) {
-            std::for_each(Directions.cbegin(), Directions.cend(), std::bind(&TWideSortWrapper::DependsOn, flow, std::placeholders::_1));
+        if (const auto flow = this->FlowDependsOn(Flow_)) {
+            std::for_each(Directions_.cbegin(), Directions_.cend(), std::bind(&TWideSortWrapper::DependsOn, flow, std::placeholders::_1));
         }
     }
 
-    IComputationWideFlowNode *const Flow;
-    const TComputationNodePtrVector Directions;
-    const std::vector<TKeyInfo> Keys;
-    const std::vector<ui32> Indexes;
-    const std::vector<EValueRepresentation> Representations;
-    TKeyTypes KeyTypes;
-    TMultiType *const TupleMultiType;
-    bool HasComplexType = false;
+    IComputationWideFlowNode* const Flow_;
+    const TComputationNodePtrVector Directions_;
+    const std::vector<TKeyInfo> Keys_;
+    const std::vector<ui32> Indexes_;
+    const std::vector<EValueRepresentation> Representations_;
+    TKeyTypes KeyTypes_;
+    TMultiType* const TupleMultiType_;
+    const bool AllowSpilling_;
+    bool HasComplexType_ = false;
 
 #ifndef MKQL_DISABLE_CODEGEN
-    TComparePtr Compare = nullptr;
+    TComparePtr Compare_ = nullptr;
 
-    Function* CompareFunc = nullptr;
+    Function* CompareFunc_ = nullptr;
 
     TString MakeName() const {
         TStringStream out;
@@ -1143,22 +1455,22 @@ private:
     }
 
     void FinalizeFunctions(NYql::NCodegen::ICodegen& codegen) final {
-        if (CompareFunc) {
-            Compare = reinterpret_cast<TComparePtr>(codegen.GetPointerToFunction(CompareFunc));
+        if (CompareFunc_) {
+            Compare_ = reinterpret_cast<TComparePtr>(codegen.GetPointerToFunction(CompareFunc_));
         }
     }
 
     void GenerateFunctions(NYql::NCodegen::ICodegen& codegen) final {
-        if (!HasComplexType) {
-            codegen.ExportSymbol(CompareFunc = GenerateCompareFunction(codegen, MakeName(), KeyTypes));
+        if (!HasComplexType_) {
+            codegen.ExportSymbol(CompareFunc_ = GenerateCompareFunction(codegen, MakeName(), KeyTypes_));
         }
     }
 #endif
 };
 
-}
+} // namespace
 
-template<bool Sort, bool HasCount>
+template <bool Sort, bool HasCount>
 IComputationNode* WrapWideTopT(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     constexpr ui32 offset = HasCount ? 0 : 1;
     const ui32 inputsWithCount = callable.GetInputsCount() + offset;
@@ -1191,7 +1503,7 @@ IComputationNode* WrapWideTopT(TCallable& callable, const TComputationNodeFactor
         bool encoded;
         bool useIHash;
         TKeyTypes oneKeyTypes;
-        GetDictionaryKeyTypes(inputWideComponents[keyIndex], oneKeyTypes, isTuple,encoded, useIHash, false);
+        GetDictionaryKeyTypes(inputWideComponents[keyIndex], oneKeyTypes, isTuple, encoded, useIHash, /*expandTuple=*/false);
         if (useIHash) {
             keys[i].Compare = MakeCompareImpl(inputWideComponents[keyIndex]);
         } else if (encoded) {
@@ -1202,7 +1514,6 @@ IComputationNode* WrapWideTopT(TCallable& callable, const TComputationNodeFactor
             keys[i].IsOptional = oneKeyTypes.front().second;
         }
     }
-
 
     size_t payloadPos = keyWidth;
     for (auto i = 0U; i < indexes.size(); ++i) {
@@ -1215,21 +1526,25 @@ IComputationNode* WrapWideTopT(TCallable& callable, const TComputationNodeFactor
     }
 
     std::vector<EValueRepresentation> representations(inputWideComponents.size());
-    for (auto i = 0U; i < representations.size(); ++i)
+    for (auto i = 0U; i < representations.size(); ++i) {
         representations[i] = GetValueRepresentation(inputWideComponents[indexes[i]]);
+    }
 
-    auto tupleMultiType = TMultiType::Create(tupleTypes.size(),tupleTypes.data(), ctx.Env);
+    auto tupleMultiType = TMultiType::Create(tupleTypes.size(), tupleTypes.data(), ctx.Env);
     TComputationNodePtrVector directions(keyWidth);
     auto index = 1U - offset;
-    std::generate(directions.begin(), directions.end(), [&](){ return LocateNode(ctx.NodeLocator, callable, ++++index); });
+    std::generate(directions.begin(), directions.end(), [&]() { return LocateNode(ctx.NodeLocator, callable, ++ ++index); });
+
+    const bool allowSpilling = HasSpillingFlag(callable);
 
     if (const auto wide = dynamic_cast<IComputationWideFlowNode*>(flow)) {
-        if constexpr (HasCount)
+        if constexpr (HasCount) {
             return new TWideTopWrapper<Sort>(ctx.Mutables, wide, count, std::move(directions), std::move(keys),
-                std::move(indexes), std::move(representations));
-        else
+                                             std::move(indexes), std::move(representations));
+        } else {
             return new TWideSortWrapper(ctx.Mutables, wide, std::move(directions), std::move(keys),
-                std::move(indexes), std::move(representations), tupleMultiType);
+                                        std::move(indexes), std::move(representations), tupleMultiType, allowSpilling);
+        }
     }
 
     THROW yexception() << "Expected wide flow.";
@@ -1247,5 +1562,4 @@ IComputationNode* WrapWideSort(TCallable& callable, const TComputationNodeFactor
     return WrapWideTopT<true, false>(callable, ctx);
 }
 
-}
-}
+} // namespace NKikimr::NMiniKQL

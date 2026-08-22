@@ -1,0 +1,1 @@
+UPDATE table_0 SET column_4 = 'str' , column_2 = 0 WHERE column_0 = 0

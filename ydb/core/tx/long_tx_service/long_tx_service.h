@@ -15,6 +15,20 @@ namespace NLongTxService {
         TCounterPtr AcquireReadSnapshotInInFlight;
         TCounterPtr AcquireReadSnapshotOutInFlight;
 
+        TCounterPtr TimeSinceLastRemoteSnapshotsUpdateMs;
+        TCounterPtr RemoteSnapshotsInRegistry;
+        TCounterPtr OldestSnapshotInRegistryAgeSeconds;
+        TCounterPtr OldestLocalSnapshotInRegistryAgeSeconds;
+        TCounterPtr SnapshotsCollectionTimeMs;
+        TCounterPtr SnapshotsPropagationTimeMs;
+
+        TCounterPtr RemoteLockSubscriptions;
+        TCounterPtr WaitGraphEdges;
+        TCounterPtr LocalWaitGraphEdges;
+        TCounterPtr WaitGraphEdgesSent;
+        TCounterPtr WaitGraphEdgesReceived;
+        TCounterPtr WaitGraphEdgesBroken;
+
         explicit TLongTxServiceCounters(const TGroupPtr& group);
     };
 

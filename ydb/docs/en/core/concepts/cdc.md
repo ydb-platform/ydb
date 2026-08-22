@@ -2,7 +2,7 @@
 
 {% include [olap_not_allow](../_includes/not_allow_for_olap_note.md) %}
 
-Change Data Capture (CDC) captures changes to {{ ydb-short-name }} table rows, uses these changes to generate a _changefeed_, writes them to distributed storage, and provides access to these records for further processing. It uses a [topic](topic.md) as distributed storage to efficiently store the table change log.
+Change Data Capture (CDC) captures changes to {{ ydb-short-name }} table rows, uses these changes to generate a _changefeed_, writes them to distributed storage, and provides access to these records for further processing. It uses a [topic](datamodel/topic.md) as distributed storage to efficiently store the table change log.
 
 When adding, updating, or deleting a table row, CDC generates a change record by specifying the [primary key](datamodel/table.md) of the row and writes it to the topic partition corresponding to this key.
 
@@ -15,13 +15,13 @@ When adding, updating, or deleting a table row, CDC generates a change record by
 
 ## Limitations {#restrictions}
 
-* The number of topic partitions is fixed as of changefeed creation and remains unchanged (unlike tables, topics are not elastic).
 * Changefeeds support records of the following types of operations:
 
-  * Updates
-  * Erases
+  * Updates: overwriting the values of the specified columns. Query example: [UPDATE](../yql/reference/syntax/update.md).
+  * Replacements: overwriting the values of the specified columns, the values of the unspecified columns are replaced by their default values. Query example: [REPLACE INTO](../yql/reference/syntax/replace_into.md).
+  * Erases. Query example: [DELETE FROM](../yql/reference/syntax/delete.md).
 
-Adding rows is a special update case, and a record of adding a row in a changefeed will look similar to an update record.
+Adding rows is a special update or replace case, and a record of adding a row in a changefeed will look similar to an update or replace record, depending on the original request that led to the change.
 
 ## Virtual Timestamps {#virtual-timestamps}
 
@@ -34,7 +34,19 @@ Using these timestamps, you can arrange records from different partitions of the
 
 {% note info %}
 
-By default, virtual timestamps are not uploaded to the changefeed. To enable them, use the [appropriate parameter](../yql/reference/syntax/alter_table/changefeed.md) when creating a changefeed.
+By default, virtual timestamps are not emitted to the changefeed. To enable them, use the [appropriate parameter](../yql/reference/syntax/alter_table/changefeed.md) when creating a changefeed.
+
+{% endnote %}
+
+## Barriers {#barriers}
+
+Barriers are service records without data about modification or deletion with [virtual timestamps](#virtual-timestamps) that appear in each partition of a topic at a specified interval. A barrier guarantees that any change with a virtual timestamp earlier than the barrier's has been written to this topic partition.
+
+Barriers can be used to ensure strict ordering and global data consistency by buffering data between them.
+
+{% note info %}
+
+By default, barriers are not emitted to the changefeed. To set the frequency at which barriers are emitted, use the [appropriate parameter](../yql/reference/syntax/alter_table/changefeed.md) when creating a changefeed.
 
 {% endnote %}
 
@@ -60,7 +72,7 @@ During the scanning process, depending on the table update frequency, you might 
 
 {% note warning %}
 
-[Automatic partitioning](datamodel/table.md#partitioning) processes are suspended in the table during the initial scan.
+[Automatic partitioning](datamodel/table.md#partitioning) processes are suspended in the table and [barriers](#barriers) are not emitted to the changefeed during the initial scan.
 
 {% endnote %}
 
@@ -76,19 +88,25 @@ A [JSON](https://en.wikipedia.org/wiki/JSON) record has the following structure:
 {
     "key": [<key components>],
     "update": {<columns>},
+    "reset": {<columns>},
     "erase": {},
     "newImage": {<columns>},
     "oldImage": {<columns>},
-    "ts": [<step>, <txId>]
+    "ts": [<step>, <txId>],
+    "user": "<user SID>",
+    "traceId": "<Trace ID>"
 }
 ```
 
-* `key`: An array of primary key component values. Always present.
+* `key`: An array of primary key component values. Always present. The order of elements matches the order of the columns listed in the primary key of the table.
 * `update`: Update flag. Present if a record matches the update operation. In `UPDATES` mode, it also contains the names and values of updated columns.
+* `reset`: Replacement flag. Present if a record matches the replacement operation. In `UPDATES` mode, it also contains the names and values of the columns for which a value is set.
 * `erase`: Erase flag. Present if a record matches the erase operation.
 * `newImage`: Row snapshot that results from its being changed. Present in `NEW_IMAGE` and `NEW_AND_OLD_IMAGES` modes. Contains column names and values.
 * `oldImage`: Row snapshot before the change. Present in `OLD_IMAGE` and `NEW_AND_OLD_IMAGES` modes. Contains column names and values.
 * `ts`: [Virtual timestamp](#virtual-timestamps). Present if the `VIRTUAL_TIMESTAMPS` setting is enabled. Contains the value of the global coordinator time (`step`) and the unique transaction ID (`txId`).
+* `user`: User identifier. Present if the `USER_SIDS` setting is enabled. Contains the user's [SID](glossary.md#sid-access-sid) and is set to `ttl@system` if the record is deleted by the [TTL](ttl.md) process.
+* `traceId`: OpenTelemetry [trace identifier](../reference/observability/tracing/external-traces.md). Present if the `TRACE_IDS` setting is enabled.
 
 Sample record of an update in `UPDATES` mode:
 
@@ -143,11 +161,19 @@ Record with virtual timestamps:
 }
 ```
 
+A barrier record contains a single field `resolved` with a virtual timestamp:
+
+```json
+{
+    "resolved": [1670792500000, 0]
+}
+```
+
 {% note info %}
 
-* The same record may not contain the `update` and `erase` fields simultaneously, since these fields are operation flags (you can't update and erase a table row at the same time). However, each record contains one of these fields (any operation is either an update or an erase).
-* In `UPDATES` mode, the `update` field for update operations is an operation flag (update) and contains the names and values of updated columns.
-* JSON object fields containing column names and values (`newImage`, `oldImage`, and `update` in `UPDATES` mode), _do not include_ the columns that are primary key components.
+* The same record may not contain the `update`, `reset` and `erase` fields simultaneously, since these fields are operation flags (you can't update and erase a table row at the same time). However, each record contains one of these fields (any operation is either an update, a replacement, or an erase).
+* In `UPDATES` mode, the `update` or `reset` field for update or replacement operations is an operation flag and contains the names and values of updated columns.
+* JSON object fields containing column names and values (`newImage`, `oldImage`, and `update` & `reset` in `UPDATES` mode), _do not include_ the columns that are primary key components.
 * If a record contains the `erase` field (indicating that the record matches the erase operation), this is always an empty JSON object (`{}`).
 
 {% endnote %}
@@ -166,6 +192,7 @@ The record structure is the same as for [Amazon DynamoDB Streams](https://docs.a
 * `eventName`: `INSERT`, `MODIFY`, or `REMOVE`. You can only use `INSERT` in the `NEW_AND_OLD_IMAGES` mode.
 * `eventSource`: Includes the `ydb:document-table` string.
 * `eventVersion`: Includes the `1.0` string.
+* `userIdentity`: Includes user information. Present if the `USER_SIDS` setting is enabled. Contains `type` (`"User"` or `"Service"`) and `principalId` (user's [SID](glossary.md#sid-access-sid)). If record is deleted by the [TTL](ttl.md) process, `type` is `"Service"` and `principalId` is `"dynamodb.amazonaws.com"`.
 
 {% endif %}
 
@@ -185,7 +212,9 @@ A [Debezium](https://debezium.io)-compatible JSON record structure has the follo
             "ts_ms": <ts_ms>,
             "step": <step>,
             "txId": <txId>,
-            "snapshot": <bool>
+            "snapshot": <bool>,
+            "user": <user SID>,
+            "traceId": <Trace ID>
         }
     }
 }
@@ -208,6 +237,8 @@ A [Debezium](https://debezium.io)-compatible JSON record structure has the follo
   * `step`: Global coordinator time. Part of the [virtual timestamp](#virtual-timestamps).
   * `txId`: Unique transaction ID. Part of the [virtual timestamp](#virtual-timestamps).
   * `snapshot`: Whether the event is part of a snapshot.
+  * `user`: User identifier. Present if the `USER_SIDS` setting is enabled. Contains the user's [SID](glossary.md#sid-access-sid) and equals `ttl@system` if the record is deleted by the [TTL](ttl.md) process.
+  * `traceId`: OpenTelemetry [trace identifier](../reference/observability/tracing/external-traces.md). Present if the `TRACE_IDS` setting is enabled.
 
 When reading using Kafka API, the Debezium-compatible primary key of the modified row is specified as the message key:
 
@@ -229,13 +260,13 @@ Records whose retention time has expired are deleted, regardless of whether they
 
 {% endnote %}
 
-Deleting records before they are processed by the client will cause [offset](topic.md#offset) skips, which means that the offsets of the last record read from the partition and the earliest available record will differ by more than one.
+Deleting records before they are processed by the client will cause [offset](datamodel/topic.md#offset) skips, which means that the offsets of the last record read from the partition and the earliest available record will differ by more than one.
 
 To set up the record retention period, specify the [RETENTION_PERIOD](../yql/reference/syntax/alter_table/changefeed.md) parameter when creating a changefeed.
 
 ## Topic Partitions {#topic-partitions}
 
-By default, the initial number of [topic partitions](topic.md#partitioning) is equal to the number of table partitions. You can redefine the initial number of topic partitions by specifying the [TOPIC_MIN_ACTIVE_PARTITIONS](../yql/reference/syntax/alter_table/changefeed.md) parameter when creating a changefeed. To create a changefeed with a dynamically changing number of partitions, set the [TOPIC_AUTO_PARTITIONING](../yql/reference/syntax/alter_table/changefeed.md) parameter when creating the changefeed.
+By default, the initial number of [topic partitions](datamodel/topic.md#partitioning) is equal to the number of table partitions. You can redefine the initial number of topic partitions by specifying the [TOPIC_MIN_ACTIVE_PARTITIONS](../yql/reference/syntax/alter_table/changefeed.md) parameter when creating a changefeed. To create a changefeed with a dynamically changing number of partitions, set the [TOPIC_AUTO_PARTITIONING](../yql/reference/syntax/alter_table/changefeed.md) parameter when creating the changefeed.
 
 {% note info %}
 
@@ -267,6 +298,8 @@ The topic settings can be updated using the expression [ALTER TOPIC](../yql/refe
 
   * `retention_period`;
   * `retention_storage_mb`;
+  * `partition_write_burst_bytes`;
+  * `partition_write_speed_bytes_per_second`.
 
 * [updating consumers](../yql/reference/syntax/alter-topic.md#updating-a-set-of-consumers).
 

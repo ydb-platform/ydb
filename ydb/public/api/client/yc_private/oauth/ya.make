@@ -1,4 +1,5 @@
 PROTO_LIBRARY()
+PROTOC_FATAL_WARNINGS()
 
 PY_NAMESPACE(yandex.cloud.priv.oauth.v1)
 
@@ -10,6 +11,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/public/api/client/yc_private/accessservice
     ydb/public/api/client/yc_private/iam
 )
 

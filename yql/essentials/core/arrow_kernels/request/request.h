@@ -43,7 +43,7 @@ public:
         Coalesce
     };
 
-    TKernelRequestBuilder(const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry, TLangVersion langver = MinLangVersion);
+    explicit TKernelRequestBuilder(const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry, TLangVersion langver = MinLangVersion);
     ~TKernelRequestBuilder();
 
     ui32 AddUnaryOp(EUnaryOp op, const TTypeAnnotationNode* arg1Type, const TTypeAnnotationNode* retType);
@@ -59,6 +59,7 @@ public:
 private:
     NKikimr::NMiniKQL::TRuntimeNode MakeArg(const TTypeAnnotationNode* type);
     NKikimr::NMiniKQL::TBlockType* MakeType(const TTypeAnnotationNode* type);
+
 private:
     const TLangVersion Langver_;
     NKikimr::NMiniKQL::TScopedAlloc Alloc_;
@@ -70,4 +71,4 @@ private:
     std::unordered_map<const TTypeAnnotationNode*, NKikimr::NMiniKQL::TRuntimeNode> CachedArgs_;
 };
 
-}
+} // namespace NYql

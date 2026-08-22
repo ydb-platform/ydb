@@ -1,5 +1,6 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/ticket_parser.h>
 #include <ydb/core/raw_socket/sock_config.h>
 #include <ydb/core/util/address_classifier.h>
 #include <ydb/core/kafka_proxy/kafka_transactions_coordinator.h>
@@ -8,10 +9,16 @@
 
 
 #include "actors/actors.h"
+#include "actors/kafka_api_versions_actor.h"
 #include "kafka_connection.h"
 #include "kafka_events.h"
-#include "kafka_log_impl.h"
+
+
+#include <ydb/core/kafka_proxy/kafka_log_impl.h>
+
 #include "kafka_metrics.h"
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KAFKA_PROXY
 
 namespace NKafka {
 
@@ -55,7 +62,7 @@ public:
     TIntrusivePtr<TSocketDescriptor> Socket;
     TSocketAddressType Address;
     TPollerToken::TPtr PollerToken;
-    TBufferedWriter Buffer;
+    TBufferedWriter<> BufferedWriter;
 
     THPTimer InactivityTimer;
 
@@ -66,13 +73,16 @@ public:
     bool ConnectionEstablished = false;
     bool CloseConnection = false;
 
+    bool RetryingWriteToSocket = false;
+    TEvPollerReady::TPtr PollerEventSaved = nullptr;
+
     NAddressClassifier::TLabeledAddressClassifier::TConstPtr DatacenterClassifier;
 
     std::shared_ptr<Msg> Request;
     std::unordered_map<ui64, Msg::TPtr> PendingRequests;
     std::deque<Msg::TPtr> PendingRequestsQueue;
 
-    enum EReadSteps { SIZE_READ, SIZE_PREPARE, INFLIGTH_CHECK, HEADER_READ, HEADER_PROCESS, MESSAGE_READ, MESSAGE_PROCESS };
+    enum EReadSteps { SIZE_READ, SIZE_PREPARE, INFLIGHT_CHECK, HEADER_READ, HEADER_PROCESS, MESSAGE_READ, MESSAGE_PROCESS };
     EReadSteps Step;
 
     TReadDemand Demand;
@@ -80,21 +90,29 @@ public:
     size_t InflightSize;
 
     TActorId ProduceActorId;
-    TActorId ReadSessionActorId;
+    TActorId AuthActorId;
+
+    enum MtlsAuthStages { NO_CERT_YET, PROCESSING_CERT, AUTH_SUCCESSFUL, AUTH_FAILED };
+    MtlsAuthStages MtlsAuthStage;
+    std::shared_ptr<TInet64SecureStreamSocket::TServerMtlsCreds> ServerCreds;
+
+    enum SslHandshakeErrors {ERROR_NONE = 0, ERROR_WANT_READ = 1, ERROR_WANT_WRITE = 2};
 
     TContext::TPtr Context;
 
     TKafkaConnection(const TActorId& listenerActorId,
                      TIntrusivePtr<TSocketDescriptor> socket,
                      TNetworkConfig::TSocketAddressType address,
-                     const NKikimrConfig::TKafkaProxyConfig& config)
+                     const NKikimrConfig::TKafkaProxyConfig& config,
+                     std::shared_ptr<NKafka::TInet64SecureStreamSocket::TServerMtlsCreds> serverCreds)
         : ListenerActorId(listenerActorId)
         , Socket(std::move(socket))
         , Address(address)
-        , Buffer(Socket.Get(), config.GetPacketSize())
+        , BufferedWriter(Socket.Get(), config.GetPacketSize())
         , Step(SIZE_READ)
         , Demand(NoDemand)
         , InflightSize(0)
+        , ServerCreds(serverCreds)
         , Context(std::make_shared<TContext>(config))
     {
         SetNonBlock();
@@ -107,22 +125,32 @@ public:
         // if no authentication required, then we can use local database as our target
         if (!Context->RequireAuthentication) {
             Context->DatabasePath = NKikimr::AppData()->TenantName;
+            Context->ResourceDatabasePath = NKikimr::AppData()->TenantName;
+            Context->InitialServerlessTransactionsFlagValue = NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions();
         }
+
+        MtlsAuthStage = NO_CERT_YET;
 
         Become(&TKafkaConnection::StateAccepting);
         Schedule(InactivityTimeout, InactivityEvent = new TEvPollerReady(nullptr, false, false));
-        KAFKA_LOG_I("incoming connection opened " << Address);
+        YDB_LOG_INFO("Incoming connection opened",
+            {LogPrefix()},
+            {"address", Address});
     }
 
     void PassAway() override {
-        KAFKA_LOG_D("PassAway");
+        YDB_LOG_DEBUG("PassAway",
+            {LogPrefix()});
 
         ConnectionEstablished = false;
         if (ProduceActorId) {
             Send(ProduceActorId, new TEvents::TEvPoison());
         }
-        if (ReadSessionActorId) {
-            Send(ReadSessionActorId, new TEvents::TEvPoison());
+        if (AuthActorId) {
+            Send(AuthActorId, new TEvents::TEvPoison());
+        }
+        if (Context->ReadSession.ProxyActorId) {
+            Send(Context->ReadSession.ProxyActorId, new TEvents::TEvPoison());
         }
         Send(ListenerActorId, new TEvents::TEvUnsubscribe());
         Shutdown();
@@ -131,7 +159,9 @@ public:
 
 protected:
     void LogEvent(IEventHandle& ev) {
-        KAFKA_LOG_T("Received event: " << ev.GetTypeName());
+        YDB_LOG_TRACE("Received",
+            {LogPrefix()},
+            {"event", ev.GetTypeName()});
     }
 
     void SetNonBlock() noexcept {
@@ -139,7 +169,8 @@ protected:
     }
 
     void Shutdown() {
-        KAFKA_LOG_D("Shutdown");
+        YDB_LOG_DEBUG("Shutdown",
+            {LogPrefix()});
 
         PendingRequests.clear();
         PendingRequestsQueue.clear();
@@ -150,7 +181,9 @@ protected:
     }
 
     ssize_t SocketSend(const void* data, size_t size) {
-        KAFKA_LOG_T("SocketSend Size=" << size);
+        YDB_LOG_TRACE("SocketSend",
+            {LogPrefix()},
+            {"size", size});
         return Socket->Send(data, size);
     }
 
@@ -166,18 +199,24 @@ protected:
         return Socket->GetRawSocket();
     }
 
-    TString LogPrefix() const {
-        TStringBuilder sb;
-        sb << "TKafkaConnection " << SelfId() << "(#" << GetRawSocket() << "," << Address->ToString() << ") State: ";
+    NStructuredLog::TStructuredMessage LogPrefix() const {
+        TString state;
+
         auto stateFunc = CurrentStateFunc();
         if (stateFunc == &TKafkaConnection::StateConnected) {
-            sb << "Connected ";
+            state = "Connected";
         } else if (stateFunc == &TKafkaConnection::StateAccepting) {
-            sb << "Accepting ";
+            state = "Accepting";
         } else {
-            sb << "Unknown ";
+            state = "Unknown";
         }
-        return sb;
+
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "TKafkaConnection"},
+            {"selfId", SelfId()},
+            {"state", state},
+            {"rawSocket", GetRawSocket()},
+            {"address", Address->ToString()});
     }
 
     void SendRequestMetrics(const TActorContext& ctx) {
@@ -223,12 +262,14 @@ protected:
             HFunc(TEvKafka::TEvResponse, Handle);
             sFunc(NActors::TEvents::TEvPoison, PassAway);
             default:
-                KAFKA_LOG_ERROR("TKafkaConnection: Unexpected " << ev.Get()->GetTypeName());
+                YDB_LOG_ERROR("TKafkaConnection: Unexpected",
+                    {LogPrefix()},
+                    {"typeName", ev.Get()->GetTypeName()});
         }
     }
 
     void HandleMessage(TRequestHeaderData* header, const TMessagePtr<TApiVersionsRequestData>& message) {
-        Register(CreateKafkaApiVersionsActor(Context, header->CorrelationId, message));
+        RegisterWithSameMailbox(CreateKafkaApiVersionsActor(Context, header->CorrelationId, message, header->RequestApiVersion));
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TProduceRequestData>& message, const TActorContext& ctx) {
@@ -239,139 +280,141 @@ protected:
         Send(ProduceActorId, new TEvKafka::TEvProduceRequest(header->CorrelationId, message));
     }
 
-    void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TJoinGroupRequestData>& message, const TActorContext& /*ctx*/) {
-        if (NKikimr::AppData()->FeatureFlags.GetEnableKafkaNativeBalancing()) {
-            HandleKillReadSession();
-            Register(new TKafkaBalancerActor(Context, 0, header->CorrelationId, message));
-        } else {
-            if (!ReadSessionActorId) {
-                ReadSessionActorId = RegisterWithSameMailbox(CreateKafkaReadSessionActor(Context, 0));
-            }
-            Send(ReadSessionActorId, new TEvKafka::TEvJoinGroupRequest(header->CorrelationId, message));
+    void EnsureReadSessionActor() {
+        if (!Context->ReadSession.ProxyActorId) {
+            Context->ReadSession.ProxyActorId = RegisterWithSameMailbox(CreateKafkaReadSessionProxyActor(Context, 0));
         }
+    }
+
+    void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TJoinGroupRequestData>& message, const TActorContext& /*ctx*/) {
+        EnsureReadSessionActor();
+        Send(Context->ReadSession.ProxyActorId, new TEvKafka::TEvJoinGroupRequest(header->CorrelationId, message));
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TSyncGroupRequestData>& message, const TActorContext& /*ctx*/) {
-        if (NKikimr::AppData()->FeatureFlags.GetEnableKafkaNativeBalancing()) {
-            HandleKillReadSession();
-            Register(new TKafkaBalancerActor(Context, 0, header->CorrelationId, message));
-        } else {
-            if (!ReadSessionActorId) {
-                ReadSessionActorId = RegisterWithSameMailbox(CreateKafkaReadSessionActor(Context, 0));
-            }
-            Send(ReadSessionActorId, new TEvKafka::TEvSyncGroupRequest(header->CorrelationId, message));
-        }
+        EnsureReadSessionActor();
+        Send(Context->ReadSession.ProxyActorId, new TEvKafka::TEvSyncGroupRequest(header->CorrelationId, message));
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<THeartbeatRequestData>& message, const TActorContext& /*ctx*/) {
-        if (NKikimr::AppData()->FeatureFlags.GetEnableKafkaNativeBalancing()) {
-            HandleKillReadSession();
-            Register(new TKafkaBalancerActor(Context, 0, header->CorrelationId, message));
-        } else {
-            if (!ReadSessionActorId) {
-                ReadSessionActorId = RegisterWithSameMailbox(CreateKafkaReadSessionActor(Context, 0));
-            }
-            Send(ReadSessionActorId, new TEvKafka::TEvHeartbeatRequest(header->CorrelationId, message));
-        }
+        EnsureReadSessionActor();
+        Send(Context->ReadSession.ProxyActorId, new TEvKafka::TEvHeartbeatRequest(header->CorrelationId, message));
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TLeaveGroupRequestData>& message, const TActorContext& /*ctx*/) {
-        if (NKikimr::AppData()->FeatureFlags.GetEnableKafkaNativeBalancing()) {
-            HandleKillReadSession();
-            Register(new TKafkaBalancerActor(Context, 0, header->CorrelationId, message));
-        } else {
-            if (!ReadSessionActorId) {
-                ReadSessionActorId = RegisterWithSameMailbox(CreateKafkaReadSessionActor(Context, 0));
-            }
-            Send(ReadSessionActorId, new TEvKafka::TEvLeaveGroupRequest(header->CorrelationId, message));
-        }
+        EnsureReadSessionActor();
+        Send(Context->ReadSession.ProxyActorId, new TEvKafka::TEvLeaveGroupRequest(header->CorrelationId, message));
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TInitProducerIdRequestData>& message) {
-        Register(CreateKafkaInitProducerIdActor(Context, header->CorrelationId, message));
+        RegisterWithSameMailbox(CreateKafkaInitProducerIdActor(Context, header->CorrelationId, message));
     }
 
     void HandleMessage(TRequestHeaderData* header, const TMessagePtr<TMetadataRequestData>& message) {
-        Register(CreateKafkaMetadataActor(Context, header->CorrelationId, message, NKafka::MakeKafkaDiscoveryCacheID()));
+        RegisterWithSameMailbox(CreateKafkaMetadataActor(Context, header->CorrelationId, message, NKafka::MakeKafkaDiscoveryCacheID()));
     }
 
     void HandleMessage(TRequestHeaderData* header, const TMessagePtr<TDescribeConfigsRequestData>& message) {
-        Register(CreateKafkaDescribeConfigsActor(Context, header->CorrelationId, message));
+        RegisterWithSameMailbox(CreateKafkaDescribeConfigsActor(Context, header->CorrelationId, message));
+    }
+
+    void EnsureKafkaSaslAuthActor() {
+        if (!AuthActorId) {
+            AuthActorId = RegisterWithSameMailbox(CreateKafkaSaslAuthActor(Context, Address));
+        }
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TSaslAuthenticateRequestData>& message) {
-        Register(CreateKafkaSaslAuthActor(Context, header->CorrelationId, Address, message));
+        EnsureKafkaSaslAuthActor();
+        Send(AuthActorId, new TEvKafka::TEvAuthRequest(header->CorrelationId, message));
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TSaslHandshakeRequestData>& message) {
-        Register(CreateKafkaSaslHandshakeActor(Context, header->CorrelationId, message));
+        RegisterWithSameMailbox(CreateKafkaSaslHandshakeActor(Context, header->CorrelationId, message));
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TListOffsetsRequestData>& message) {
-        Register(CreateKafkaListOffsetsActor(Context, header->CorrelationId, message));
+        RegisterWithSameMailbox(CreateKafkaListOffsetsActor(Context, header->CorrelationId, message));
+    }
+
+    void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TDescribeGroupsRequestData>& message) {
+        RegisterWithSameMailbox(CreateKafkaDescribeGroupsActor(Context, header->CorrelationId, message));
+    }
+
+    void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TListGroupsRequestData>& message) {
+        RegisterWithSameMailbox(CreateKafkaListGroupsActor(Context, header->CorrelationId, message));
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TFetchRequestData>& message) {
-        Register(CreateKafkaFetchActor(Context, header->CorrelationId, message));
+        EnsureReadSessionActor();
+        Send(Context->ReadSession.ProxyActorId, new TEvKafka::TEvFetchRequest(header->CorrelationId, message));
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TFindCoordinatorRequestData>& message) {
-        Register(CreateKafkaFindCoordinatorActor(Context, header->CorrelationId, message));
+        RegisterWithSameMailbox(CreateKafkaFindCoordinatorActor(Context, header->CorrelationId, message));
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TOffsetFetchRequestData>& message) {
-        Register(CreateKafkaOffsetFetchActor(Context, header->CorrelationId, message));
+        RegisterWithSameMailbox(CreateKafkaOffsetFetchActor(Context, header->CorrelationId, message));
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TOffsetCommitRequestData>& message) {
-        Register(CreateKafkaOffsetCommitActor(Context, header->CorrelationId, message));
+        RegisterWithSameMailbox(CreateKafkaOffsetCommitActor(Context, header->CorrelationId, message));
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TCreateTopicsRequestData>& message) {
-        Register(CreateKafkaCreateTopicsActor(Context, header->CorrelationId, message));
+        RegisterWithSameMailbox(CreateKafkaCreateTopicsActor(Context, header->CorrelationId, message));
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TCreatePartitionsRequestData>& message) {
-        Register(CreateKafkaCreatePartitionsActor(Context, header->CorrelationId, message));
+        RegisterWithSameMailbox(CreateKafkaCreatePartitionsActor(Context, header->CorrelationId, message));
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TAlterConfigsRequestData>& message) {
-        Register(CreateKafkaAlterConfigsActor(Context, header->CorrelationId, message));
+        RegisterWithSameMailbox(CreateKafkaAlterConfigsActor(Context, header->CorrelationId, message));
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TAddPartitionsToTxnRequestData>& message) {
         Send(MakeTransactionsServiceID(SelfId().NodeId()), new TEvKafka::TEvAddPartitionsToTxnRequest(
-            header->CorrelationId, 
+            header->CorrelationId,
             message,
             Context->ConnectionId,
-            Context->DatabasePath
+            Context->DatabasePath,
+            Context->ResourceDatabasePath,
+            Context->InitialServerlessTransactionsFlagValue.value_or(false)
         ));
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TAddOffsetsToTxnRequestData>& message) {
         Send(MakeTransactionsServiceID(SelfId().NodeId()), new TEvKafka::TEvAddOffsetsToTxnRequest(
-            header->CorrelationId, 
+            header->CorrelationId,
             message,
             Context->ConnectionId,
-            Context->DatabasePath
+            Context->DatabasePath,
+            Context->ResourceDatabasePath,
+            Context->InitialServerlessTransactionsFlagValue.value_or(false)
         ));
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TTxnOffsetCommitRequestData>& message) {
         Send(MakeTransactionsServiceID(SelfId().NodeId()), new TEvKafka::TEvTxnOffsetCommitRequest(
-            header->CorrelationId, 
+            header->CorrelationId,
             message,
             Context->ConnectionId,
-            Context->DatabasePath
+            Context->DatabasePath,
+            Context->ResourceDatabasePath,
+            Context->InitialServerlessTransactionsFlagValue.value_or(false)
         ));
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TEndTxnRequestData>& message) {
         Send(MakeTransactionsServiceID(SelfId().NodeId()), new TEvKafka::TEvEndTxnRequest(
-            header->CorrelationId, 
+            header->CorrelationId,
             message,
             Context->ConnectionId,
-            Context->DatabasePath
+            Context->DatabasePath,
+            Context->ResourceDatabasePath,
+            Context->InitialServerlessTransactionsFlagValue.value_or(false)
         ));
     }
 
@@ -381,12 +424,17 @@ protected:
     }
 
     bool ProcessRequest(const TActorContext& ctx) {
-        KAFKA_LOG_D("process message: ApiKey=" << Request->Header.RequestApiKey << ", ExpectedSize=" << Request->ExpectedSize
-                                               << ", Size=" << Request->Size);
+        YDB_LOG_DEBUG("Process message",
+            {LogPrefix()},
+            {"apiKey", Request->Header.RequestApiKey},
+            {"expectedSize", Request->ExpectedSize},
+            {"size", Request->Size});
 
         auto apiKeyNameIt = EApiKeyNames.find(static_cast<EApiKey>(Request->Header.RequestApiKey));
         if (apiKeyNameIt == EApiKeyNames.end()) {
-            KAFKA_LOG_ERROR("Unsupported message: ApiKey=" << Request->Header.RequestApiKey);
+            YDB_LOG_ERROR("Unsupported message",
+                {LogPrefix()},
+                {"apiKey", Request->Header.RequestApiKey});
             PassAway();
             return false;
         }
@@ -400,9 +448,10 @@ protected:
         if (Request->Header.ClientId.has_value() && Request->Header.ClientId != "") {
             Context->KafkaClient = Request->Header.ClientId.value();
         }
-        
+
         if (IsTransactionalApiKey(Request->Header.RequestApiKey) && !TransactionsEnabled()) {
-            KAFKA_LOG_ERROR("Transactional API keys are not enabled. To enable them set \"EnableKafkaTransactions\" feature flag to true in cluster configuration.");
+            YDB_LOG_ERROR("Transactional API keys are not enabled. To enable them set \"EnableKafkaTransactions\" feature flag to true in cluster configuration",
+                {LogPrefix()});
             PassAway();
             return false;
         }
@@ -434,6 +483,13 @@ protected:
 
             case LIST_OFFSETS:
                 HandleMessage(&Request->Header, Cast<TListOffsetsRequestData>(Request));
+                break;
+
+            case LIST_GROUPS:
+                HandleMessage(&Request->Header, Cast<TListGroupsRequestData>(Request));
+                break;
+            case DESCRIBE_GROUPS:
+                HandleMessage(&Request->Header, Cast<TDescribeGroupsRequestData>(Request));
                 break;
 
             case FETCH:
@@ -501,7 +557,9 @@ protected:
                 break;
 
             default:
-                KAFKA_LOG_ERROR("Unsupported message: ApiKey=" << Request->Header.RequestApiKey);
+                YDB_LOG_ERROR("Unsupported message",
+                    {LogPrefix()},
+                    {"apiKey", Request->Header.RequestApiKey});
                 PassAway();
                 return false;
         }
@@ -517,11 +575,20 @@ protected:
 
     void Handle(TEvKafka::TEvResponse::TPtr response, const TActorContext& ctx) {
         auto r = response->Get();
+        if ((r->ErrorCode == EKafkaErrors::COORDINATOR_NOT_AVAILABLE || r->ErrorCode == EKafkaErrors::INVALID_TXN_STATE)
+                && Context->KafkaTableFeatureFlagChanged(NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions())) {
+            YDB_LOG_DEBUG("EnableKafkaServerlessTransactions feature flag changed; closing connection so the client reconnects and rebinds Kafka metadata tables.",
+                {LogPrefix()});
+            CloseConnection = true;
+        }
         Reply(r->CorrelationId, r->Response, r->ErrorCode, ctx);
     }
 
     void Handle(TEvKafka::TEvReadSessionInfo::TPtr readInfo, const TActorContext& /*ctx*/) {
         auto r = readInfo->Get();
+        YDB_LOG_DEBUG("Initializing",
+            {LogPrefix()},
+            {"groupId", r->GroupId});
         Context->GroupId = r->GroupId;
     }
 
@@ -530,8 +597,29 @@ protected:
 
         auto authStep = event->AuthStep;
         if (authStep == EAuthSteps::FAILED) {
-            KAFKA_LOG_ERROR(event->Error);
+            if (IsSslActive && NKikimr::AppData()->KafkaProxyConfig.GetMtlsEnable()) {
+                MtlsAuthStage = AUTH_FAILED;
+            }
+            YDB_LOG_ERROR("",
+                {LogPrefix()},
+                {"error", event->Error});
             Reply(event->ClientResponse->CorrelationId, event->ClientResponse->Response, event->ClientResponse->ErrorCode, ctx);
+            CloseConnection = true;
+            return;
+        }
+
+        if (Context->SaslMechanism != "MTLS" && IsSslActive && NKikimr::AppData()->KafkaProxyConfig.GetMtlsEnable()) {
+            auto kafkaError = EKafkaErrors::SASL_AUTHENTICATION_FAILED;
+            auto responseToClient = std::make_shared<TSaslAuthenticateResponseData>();
+            responseToClient->ErrorCode = kafkaError;
+            TString errorMessage = TStringBuilder() << Context->SaslMechanism << " authentication mechanism is disabled, because mTLS flag is on. Turn of mTLS in configuration to use this mechanism.";
+            responseToClient->ErrorMessage = errorMessage;
+            YDB_LOG_DEBUG("Dump logPrefix, errorMessage",
+                {LogPrefix()},
+                {"errorMessage", errorMessage});
+
+            std::shared_ptr<TEvKafka::TEvResponse> errorResponse = std::make_shared<TEvKafka::TEvResponse>(event->ClientResponse->CorrelationId, responseToClient, kafkaError);
+            Reply(event->ClientResponse->CorrelationId, errorResponse->Response, kafkaError, ctx);
             CloseConnection = true;
             return;
         }
@@ -545,18 +633,42 @@ protected:
         Context->CloudId = event->CloudId;
         Context->FolderId = event->FolderId;
         Context->IsServerless = event->IsServerless;
+        Context->ResourceDatabasePath = event->ResourceDatabasePath ? NKikimr::CanonizePath(event->ResourceDatabasePath) : Context->DatabasePath;
+        Context->InitialServerlessTransactionsFlagValue = NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions();
 
-        KAFKA_LOG_D("Authentificated successful. SID=" << Context->UserToken->GetUserSID());
-        Reply(event->ClientResponse->CorrelationId, event->ClientResponse->Response, event->ClientResponse->ErrorCode, ctx);
+        YDB_LOG_DEBUG("Authentication successful",
+            {LogPrefix()},
+            {"SID", Context->UserToken->GetUserSID()});
+        if (Context->SaslMechanism != "MTLS") {
+            Reply(event->ClientResponse->CorrelationId, event->ClientResponse->Response, event->ClientResponse->ErrorCode, ctx);
+        } else {
+            MtlsAuthStage = AUTH_SUCCESSFUL;
+            HandleConnected(PollerEventSaved, ctx);
+        }
     }
 
     void Handle(TEvKafka::TEvHandshakeResult::TPtr ev, const TActorContext& ctx) {
         auto event = ev->Get();
-        Reply(event->ClientResponse->CorrelationId, event->ClientResponse->Response, event->ClientResponse->ErrorCode, ctx);
 
+        if (IsSslActive && NKikimr::AppData()->KafkaProxyConfig.GetMtlsEnable()) {
+            EKafkaErrors kafkaError = EKafkaErrors::SASL_AUTHENTICATION_FAILED;
+            auto responseToClient = std::make_shared<TSaslHandshakeResponseData>();
+            responseToClient->ErrorCode = kafkaError;
+
+            auto errorResponse = std::make_shared<TEvKafka::TEvResponse>(event->ClientResponse->CorrelationId, responseToClient, kafkaError);
+            TString errorMessage = TStringBuilder() << event->SaslMechanism << " authentication mechanism is disabled, because mTLS flag is on. Turn of mTLS in configuration to use this mechanism.";
+            YDB_LOG_DEBUG(errorMessage,
+                {LogPrefix()});
+            Reply(event->ClientResponse->CorrelationId, errorResponse->Response, kafkaError, ctx);
+            CloseConnection = true;
+            return;
+        }
+
+        Reply(event->ClientResponse->CorrelationId, event->ClientResponse->Response, event->ClientResponse->ErrorCode, ctx);
         auto authStep = event->AuthStep;
         if (authStep == EAuthSteps::FAILED) {
-            KAFKA_LOG_ERROR(event->Error);
+            YDB_LOG_ERROR(event->Error,
+                {LogPrefix()});
             CloseConnection = true;
             return;
         }
@@ -566,18 +678,19 @@ protected:
     }
 
     void HandleKillReadSession() {
-        if (ReadSessionActorId) {
-            Send(ReadSessionActorId, new TEvents::TEvPoison());
+        if (Context->ReadSession.ProxyActorId) {
+            Send(Context->ReadSession.ProxyActorId, new TEvents::TEvPoison());
 
-            TActorId emptyActor;
-            ReadSessionActorId = emptyActor;
+            Context->ReadSession.ProxyActorId = {};
         }
     }
 
     void Reply(const ui64 correlationId, TApiMessage::TPtr response, EKafkaErrors errorCode, const TActorContext& ctx) {
         auto it = PendingRequests.find(correlationId);
         if (it == PendingRequests.end()) {
-            KAFKA_LOG_ERROR("Unexpected correlationId " << correlationId);
+            YDB_LOG_ERROR("Unexpected correlationId",
+                {LogPrefix()},
+                {"correlationId", correlationId});
             return;
         }
 
@@ -591,53 +704,97 @@ protected:
         RequestPoller();
     }
 
+    void OnRequestProcessed(const Msg::TPtr& request) {
+        YDB_LOG_TRACE("Request with correlationId processed. Erasing it from PendingRequests and PendingRequestsQueue",
+            {LogPrefix()},
+            {"correlationId", request->Header.CorrelationId});
+        InflightSize -= request->ExpectedSize;
+        PendingRequests.erase(request->Header.CorrelationId);
+        PendingRequestsQueue.pop_front();
+    }
+
     bool ProcessReplyQueue(const TActorContext& ctx) {
         while(!PendingRequestsQueue.empty()) {
             auto& request = PendingRequestsQueue.front();
+            YDB_LOG_TRACE("Processing reply queue for request with correlationId",
+                {LogPrefix()},
+                {"correlationId", request->Header.CorrelationId});
             if (request->Response.get() == nullptr) {
+                YDB_LOG_TRACE("Response for request with correlationId is empty",
+                    {LogPrefix()},
+                    {"correlationId", request->Header.CorrelationId});
                 break;
             }
 
-            if (!Reply(&request->Header, request->Response.get(), request->Method, request->StartTime, request->ResponseErrorCode, ctx)) {
+            if (RetryingWriteToSocket || !Reply(&request->Header, request->Response.get(), request->Method, request->StartTime, request->ResponseErrorCode, ctx)) {
                 return false;
             }
 
-            InflightSize -= request->ExpectedSize;
+            OnRequestProcessed(request);
+        }
 
-            PendingRequests.erase(request->Header.CorrelationId);
-            PendingRequestsQueue.pop_front();
+        if (!CloseConnection && Step == INFLIGHT_CHECK) {
+            DoRead(ctx);
         }
 
         return true;
     }
 
     bool Reply(const TRequestHeaderData* header, const TApiMessage* reply, const TString method, const TInstant requestStartTime, EKafkaErrors errorCode, const TActorContext& ctx) {
+        YDB_LOG_TRACE("Building reply for method and correlationId with error",
+            {LogPrefix()},
+            {"method", method},
+            {"correlationId", header->CorrelationId},
+            {"code", errorCode});
         TKafkaVersion headerVersion = ResponseHeaderVersion(header->RequestApiKey, header->RequestApiVersion);
         TKafkaVersion version = header->RequestApiVersion;
+        if (header->RequestApiKey == API_VERSIONS) {
+            version = ApiVersionsResponseWriteVersion(version);
+        }
 
         TResponseHeaderData responseHeader;
         responseHeader.CorrelationId = header->CorrelationId;
 
         TKafkaInt32 size = responseHeader.Size(headerVersion) + reply->Size(version);
-
-        TKafkaWritable writable(Buffer);
         SendResponseMetrics(method, requestStartTime, size, errorCode, ctx);
         try {
+            TKafkaWriteBuffer replyBuffer(Context->Config.GetPacketSize());
+            TKafkaWritable writable(replyBuffer);
             writable << size;
             responseHeader.Write(writable, headerVersion);
             reply->Write(writable, version);
 
-            ssize_t res = Buffer.flush();
-            if (res < 0) {
-                ythrow yexception() << "Error during flush of the written to socket data. Error code: " << strerror(-res) << " (" << res << ")";
+            for (auto it = replyBuffer.GetBuffersDeque().rbegin(); it != replyBuffer.GetBuffersDeque().rend(); ++it) {
+                BufferedWriter.write(it->Data(), it->Size());
             }
 
-            KAFKA_LOG_D("Sent reply: ApiKey=" << header->RequestApiKey << ", Version=" << version << ", Correlation=" << responseHeader.CorrelationId <<  ", Size=" << size);
+            ssize_t res = BufferedWriter.flush();
+            // if we got EAGAIN or EWOULDBLOCK it means that socket is busy and we need to wait for PollerReady event to proceed
+            // PollerReady means that poller polled socket ready status
+            if (res == -EAGAIN || res == -EWOULDBLOCK) {
+                RetryingWriteToSocket = true;
+                YDB_LOG_DEBUG("Socket is busy. Buffer queue Waiting for PollerReady event",
+                    {LogPrefix()},
+                    {"size", BufferedWriter.GetBuffersDeque().size()});
+                RequestPoller();
+                return false;
+            } else if (res < 0) {
+                ythrow yexception() << "Error during flush of the written to socket data. Error code: " << strerror(-res) << " (" << res << ")";
+            } else {
+                YDB_LOG_DEBUG("Sent reply",
+                    {LogPrefix()},
+                    {"apiKey", header->RequestApiKey},
+                    {"version", version},
+                    {"correlation", responseHeader.CorrelationId},
+                    {"size", size});
+            }
         } catch(const yexception& e) {
-            KAFKA_LOG_ERROR("error on processing response: ApiKey=" << reply->ApiKey()
-                                                     << ", Version=" << version
-                                                     << ", CorrelationId=" << header->CorrelationId
-                                                     << ", Error=" <<  e.what());
+            YDB_LOG_ERROR("Error on processing response",
+                {LogPrefix()},
+                {"apiKey", reply->ApiKey()},
+                {"version", version},
+                {"correlationId", header->CorrelationId},
+                {"error", e.what()});
             PassAway();
             return false;
         }
@@ -647,9 +804,11 @@ protected:
 
     bool UpgradeToSecure() {
         if (IsSslRequired && !IsSslActive) {
-            int res = Socket->TryUpgradeToSecure();
+            int res = Socket->TryUpgradeToSecure(NKikimrServices::KAFKA_PROXY, ServerCreds ? std::make_optional(ServerCreds) : std::nullopt);
             if (res < 0) {
-                KAFKA_LOG_ERROR("connection closed - error in UpgradeToSecure: " << strerror(-res));
+                YDB_LOG_ERROR("Connection closed - error in UpgradeToSecure",
+                    {LogPrefix()},
+                    {"error", strerror(-res)});
                 PassAway();
                 return false;
             }
@@ -659,7 +818,10 @@ protected:
     }
 
     bool DoRead(const TActorContext& ctx) {
-        KAFKA_LOG_T("DoRead: Demand=" << Demand.Length << ", Step=" << static_cast<i32>(Step));
+        YDB_LOG_TRACE("DoRead",
+            {LogPrefix()},
+            {"demand", Demand.Length},
+            {"step", static_cast<i32>(Step)});
         for (;;) {
             while (Demand) {
                 ssize_t received = 0;
@@ -669,11 +831,14 @@ protected:
                 } else if (-res == EINTR) {
                     continue;
                 } else if (!res) {
-                    KAFKA_LOG_I("connection closed");
+                    YDB_LOG_INFO("Connection closed",
+                        {LogPrefix()});
                     PassAway();
                     return false;
                 } else if (res < 0) {
-                    KAFKA_LOG_I("connection closed - error in recv: " << strerror(-res));
+                    YDB_LOG_INFO("Connection closed - error",
+                        {LogPrefix()},
+                        {"error", strerror(-res)});
                     PassAway();
                     return false;
                 }
@@ -694,35 +859,46 @@ protected:
                     case SIZE_PREPARE:
                         NormalizeNumber(Request->ExpectedSize);
                         if (Request->ExpectedSize < 0) {
-                            KAFKA_LOG_ERROR("Wrong message size. Size: " << Request->ExpectedSize);
+                            YDB_LOG_ERROR("Wrong message size",
+                                {LogPrefix()},
+                                {"size", Request->ExpectedSize});
                             PassAway();
                             return false;
                         }
                         if ((ui64)Request->ExpectedSize > Context->Config.GetMaxMessageSize()) {
-                            KAFKA_LOG_ERROR("message is big. Size: " << Request->ExpectedSize << ". MaxSize: "
-                                                                     << Context->Config.GetMaxMessageSize());
+                            YDB_LOG_ERROR("Message is big",
+                                {LogPrefix()},
+                                {"size", Request->ExpectedSize},
+                                {"maxSize", Context->Config.GetMaxMessageSize()});
                             PassAway();
                             return false;
                         }
                         if (static_cast<size_t>(Request->ExpectedSize) < HeaderSize) {
-                            KAFKA_LOG_ERROR("message is small. Size: " << Request->ExpectedSize);
+                            YDB_LOG_ERROR("Message is small",
+                                {LogPrefix()},
+                                {"size", Request->ExpectedSize});
                             PassAway();
                             return false;
                         }
 
-                        Step = INFLIGTH_CHECK;
+                        Step = INFLIGHT_CHECK;
 
                         [[fallthrough]];
 
-                    case INFLIGTH_CHECK:
+                    case INFLIGHT_CHECK:
                         if (!Context->Authenticated() && !PendingRequestsQueue.empty()) {
                             // Allow only one message to be processed at a time for non-authenticated users
-                            KAFKA_LOG_ERROR("DoRead: failed inflight check: there are " << PendingRequestsQueue.size() << " pending requests and user is not authnicated.  Only one paraller request is allowed for a non-authenticated user.");
+                            YDB_LOG_ERROR("DoRead: failed inflight check: there are pending requests and user is not authnicated. Only one paraller request is allowed for a non-authenticated user",
+                                {LogPrefix()},
+                                {"pendingRequestsQueue", PendingRequestsQueue.size()});
                             return true;
                         }
                         if (InflightSize + Request->ExpectedSize > Context->Config.GetMaxInflightSize()) {
                             // We limit the size of processed messages so as not to exceed the size of available memory
-                            KAFKA_LOG_ERROR("DoRead: failed inflight check: InflightSize + Request->ExpectedSize=" << InflightSize + Request->ExpectedSize << " > Context->Config.GetMaxInflightSize=" << Context->Config.GetMaxInflightSize());
+                            YDB_LOG_ERROR("DoRead: failed inflight check: InflightSize + >",
+                                {LogPrefix()},
+                                {"expectedSize", InflightSize + Request->ExpectedSize},
+                                {"getMaxInflightSize", Context->Config.GetMaxInflightSize()});
                             return true;
                         }
                         InflightSize += Request->ExpectedSize;
@@ -731,7 +907,9 @@ protected:
                         [[fallthrough]];
 
                     case HEADER_READ:
-                        KAFKA_LOG_T("start read header. ExpectedSize=" << Request->ExpectedSize);
+                        YDB_LOG_TRACE("Start read header",
+                            {LogPrefix()},
+                            {"expectedSize", Request->ExpectedSize});
 
                         Request->Buffer->Resize(HeaderSize);
                         Demand = TReadDemand(Request->Buffer->Data(), HeaderSize);
@@ -749,12 +927,16 @@ protected:
                         NormalizeNumber(Request->CorrelationId);
 
                         if (PendingRequests.contains(Request->CorrelationId)) {
-                            KAFKA_LOG_ERROR("CorrelationId " << Request->CorrelationId << " already processing");
+                            YDB_LOG_ERROR("CorrelationId already processing",
+                                {LogPrefix()},
+                                {"correlationId", Request->CorrelationId});
                             PassAway();
                             return false;
                         }
                         if (!Context->Authenticated() && RequireAuthentication(static_cast<EApiKey>(Request->ApiKey))) {
-                            KAFKA_LOG_ERROR("unauthenticated request: ApiKey=" << Request->ApiKey);
+                            YDB_LOG_ERROR("Unauthenticated request",
+                                {LogPrefix()},
+                                {"apiKey", Request->ApiKey});
                             PassAway();
                             return false;
                         }
@@ -764,7 +946,9 @@ protected:
                         [[fallthrough]];
 
                     case MESSAGE_READ:
-                        KAFKA_LOG_T("start read new message. ExpectedSize=" << Request->ExpectedSize);
+                        YDB_LOG_TRACE("Start read new message",
+                            {LogPrefix()},
+                            {"expectedSize", Request->ExpectedSize});
 
                         Request->Buffer->Resize(Request->ExpectedSize);
                         Demand = TReadDemand(Request->Buffer->Data() + HeaderSize, Request->ExpectedSize - HeaderSize);
@@ -774,25 +958,52 @@ protected:
 
                     case MESSAGE_PROCESS:
                         Request->StartTime = TInstant::Now();
-                        KAFKA_LOG_D("received message. ApiKey=" << Request->ApiKey << ", Version=" << Request->ApiVersion << ", CorrelationId=" << Request->CorrelationId);
+                        if constexpr (DEBUG_ENABLED) {
+                            YDB_LOG_DEBUG("Received message",
+                                {LogPrefix()},
+                                {"apiKey", Request->ApiKey},
+                                {"version", Request->ApiVersion},
+                                {"correlationId", Request->CorrelationId},
+                                {"data", Hex(Request->Buffer->Begin(), Request->Buffer->End())});
+                        } else {
+                            YDB_LOG_DEBUG("Received message",
+                                {LogPrefix()},
+                                {"apiKey", Request->ApiKey},
+                                {"version", Request->ApiVersion},
+                                {"correlationId", Request->CorrelationId});
+                        }
 
                         TKafkaReadable readable(*Request->Buffer);
+                        readable.SetAllowCompressed(AppData()->FeatureFlags.GetEnableTopicMessagesBatching());
+                        readable.SetMaxArrayBytes(static_cast<size_t>(Context->Config.GetMaxMessageSize()));
 
                         try {
                             Request->Message = CreateRequest(Request->ApiKey);
 
                             Request->Header.Read(readable, RequestHeaderVersion(Request->ApiKey, Request->ApiVersion));
-                            Request->Message->Read(readable, Request->ApiVersion);
+                            // KIP-511: an ApiVersions version the parser does not know is not a fatal error.
+                            // Skip the body (Kafka treats it as v0) and let the actor return UNSUPPORTED_VERSION.
+                            if (!(Request->ApiKey == API_VERSIONS && !IsApiVersionsRequestVersionSupported(Request->ApiVersion))) {
+                                Request->Message->Read(readable, Request->ApiVersion);
+                            }
                         } catch(const yexception& e) {
-                            KAFKA_LOG_ERROR("error on processing message: ApiKey=" << Request->ApiKey
-                                                                    << ", Version=" << Request->ApiVersion
-                                                                    << ", CorrelationId=" << Request->CorrelationId
-                                                                    << ", Error=" <<  e.what());
+                            YDB_LOG_ERROR("Error on processing message",
+                                {LogPrefix()},
+                                {"apiKey", Request->ApiKey},
+                                {"version", Request->ApiVersion},
+                                {"correlationId", Request->CorrelationId},
+                                {"error", e.what()});
                             PassAway();
                             return false;
                         }
 
                         Step = SIZE_READ;
+
+                        if (IsSslActive && NKikimr::AppData()->KafkaProxyConfig.GetMtlsEnable() && MtlsAuthStage != MtlsAuthStages::AUTH_SUCCESSFUL) {
+                            YDB_LOG_DEBUG("Mtls authentication was not successful",
+                                {LogPrefix()});
+                            return false;
+                        }
 
                         if (!ProcessRequest(ctx)) {
                             return false;
@@ -810,10 +1021,42 @@ protected:
                 EApiKey::SASL_AUTHENTICATE == apiKey);
     }
 
-
     void HandleConnected(TEvPollerReady::TPtr event, const TActorContext& ctx) {
         if (event->Get()->Read) {
             if (!CloseConnection) {
+                if (IsSslActive && NKikimr::AppData()->KafkaProxyConfig.GetMtlsEnable() && MtlsAuthStage == NO_CERT_YET) {
+                    int sslHandshakeResult = Socket->GetSslHandshakeResult();
+                    if (sslHandshakeResult != SslHandshakeErrors::ERROR_WANT_READ &&
+                        sslHandshakeResult != SslHandshakeErrors::ERROR_WANT_WRITE &&
+                        sslHandshakeResult != SslHandshakeErrors::ERROR_NONE) {
+                        YDB_LOG_DEBUG("Error in ssl handshake, ssl",
+                            {LogPrefix()},
+                            {"errorCode", sslHandshakeResult});
+                        PassAway();
+                        return;
+                    }
+                    if (sslHandshakeResult == SslHandshakeErrors::ERROR_NONE) {
+                        TSslHelpers::TSslHolder<X509> cert = Socket->GetSslClientCert();
+                        if (!cert) {
+                            YDB_LOG_ERROR("No cert was received from client during ssl handshake for mTLS authentication",
+                                {LogPrefix()});
+                            PassAway();
+                            return;
+                        }
+
+                        TString clientCert = Socket->GetStringClientCert(cert.get());
+                        MtlsAuthStage = PROCESSING_CERT;
+                        PollerEventSaved = event;
+
+                        EnsureKafkaSaslAuthActor();
+                        Context->AuthenticationStep = EAuthSteps::WAIT_AUTH;
+                        Context->SaslMechanism = "MTLS";
+                        Context->RequireAuthentication = true;
+                        Send(AuthActorId, new TEvKafka::TEvMtlsAuthRequest(clientCert));
+                        return;
+                    }
+
+                }
                 if (!DoRead(ctx)) {
                     return;
                 }
@@ -822,24 +1065,53 @@ protected:
             if (event->Get() == InactivityEvent) {
                 const TDuration passed = TDuration::Seconds(std::abs(InactivityTimer.Passed()));
                 if (passed >= InactivityTimeout) {
-                    KAFKA_LOG_D("connection closed by inactivity timeout");
+                    YDB_LOG_DEBUG("Connection closed by inactivity timeout",
+                        {LogPrefix()});
                     return PassAway(); // timeout
                 } else {
                     Schedule(InactivityTimeout - passed, InactivityEvent = new TEvPollerReady(nullptr, false, false));
                 }
             }
         }
-        if (event->Get()->Write) {
-            ssize_t res = Buffer.flush();
-            if (res < 0) {
-                KAFKA_LOG_ERROR("connection closed - error in FlushOutput: " << strerror(-res));
+        if (event->Get()->Write && !BufferedWriter.Empty()) {
+            YDB_LOG_DEBUG("Retrying flush. Buffer queue",
+                {LogPrefix()},
+                {"size", BufferedWriter.GetBuffersDeque().size()});
+            ssize_t res = BufferedWriter.flush();
+            if (res == -EAGAIN || res == -EWOULDBLOCK) {
+                YDB_LOG_DEBUG("Socket is busy during retry. Buffer queue Waiting for PollerReady event",
+                    {LogPrefix()},
+                    {"size", BufferedWriter.GetBuffersDeque().size()});
+                RequestPoller();
+                return;
+            } else if (res < 0) {
+                YDB_LOG_ERROR("Connection closed - error Buffer queue",
+                    {LogPrefix()},
+                    {"flushOutput", strerror(-res)},
+                    {"size", BufferedWriter.GetBuffersDeque().size()});
                 PassAway();
                 return;
+            } else if (res > 0 && BufferedWriter.Empty()) { // we successfuly retried sending the response
+                RetryingWriteToSocket = false;
+                auto& request = PendingRequestsQueue.front();
+                auto& header = request->Header;
+                YDB_LOG_DEBUG("Sent reply (after retry)",
+                    {LogPrefix()},
+                    {"apiKey", header.RequestApiKey},
+                    {"version", header.RequestApiVersion},
+                    {"correlation", header.CorrelationId});
+                OnRequestProcessed(request);
+                ProcessReplyQueue(ctx);
+
+                if (!CloseConnection && Step == INFLIGHT_CHECK) {
+                    DoRead(ctx);
+                }
             }
         }
 
-        if (CloseConnection && Buffer.Empty()) {
-            KAFKA_LOG_D("connection closed");
+        if (CloseConnection && BufferedWriter.Empty()) {
+            YDB_LOG_DEBUG("Connection closed",
+                {LogPrefix()});
             return PassAway();
         }
 
@@ -866,7 +1138,9 @@ protected:
             sFunc(TEvKafka::TEvKillReadSession, HandleKillReadSession);
             sFunc(NActors::TEvents::TEvPoison, PassAway);
             default:
-                KAFKA_LOG_ERROR("TKafkaConnection: Unexpected " << ev.Get()->GetTypeName());
+                YDB_LOG_ERROR("TKafkaConnection: Unexpected",
+                    {LogPrefix()},
+                    {"typeName", ev.Get()->GetTypeName()});
         }
     }
 };
@@ -874,8 +1148,9 @@ protected:
 NActors::IActor* CreateKafkaConnection(const TActorId& listenerActorId,
                                        TIntrusivePtr<TSocketDescriptor> socket,
                                        TNetworkConfig::TSocketAddressType address,
-                                       const NKikimrConfig::TKafkaProxyConfig& config) {
-    return new TKafkaConnection(listenerActorId, std::move(socket), std::move(address), config);
+                                       const NKikimrConfig::TKafkaProxyConfig& config,
+                                       std::shared_ptr<NKafka::TInet64SecureStreamSocket::TServerMtlsCreds> serverCreds) {
+    return new TKafkaConnection(listenerActorId, std::move(socket), std::move(address), config, serverCreds);
 }
 
 } // namespace NKafka

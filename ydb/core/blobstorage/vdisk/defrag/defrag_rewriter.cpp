@@ -2,6 +2,8 @@
 #include <ydb/core/blobstorage/vdisk/scrub/restore_corrupted_blob_actor.h>
 #include <ydb/core/blobstorage/vdisk/skeleton/blobstorage_takedbsnap.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_VDISK_DEFRAG
+
 namespace NKikimr {
 
     ////////////////////////////////////////////////////////////////////////////
@@ -86,6 +88,7 @@ namespace NKikimr {
                     const TDiskPart& p = rec.OldDiskPart;
                     auto msg = std::make_unique<NPDisk::TEvChunkRead>(DCtx->PDiskCtx->Dsk->Owner,
                         DCtx->PDiskCtx->Dsk->OwnerRound, p.ChunkIdx, p.Offset, p.Size, NPriRead::HullComp, nullptr);
+                    msg->BlobId = id;
                     DCtx->VCtx->CountDefragCost(*msg);
                     ctx.Send(DCtx->PDiskCtx->PDiskId, msg.release());
                     DCtx->DefragMonGroup.DefragBytesRewritten() += p.Size;
@@ -105,8 +108,9 @@ namespace NKikimr {
             const TDefragRecord &rec = Recs[RecToReadIdx++];
 
             if (msg->Status == NKikimrProto::CORRUPTED || (msg->Status == NKikimrProto::OK && !msg->Data.IsReadable())) {
-                LOG_WARN_S(ctx, NKikimrServices::BS_VDISK_DEFRAG,
-                        "Defrag skipping corrupted blob #" << rec.LogoBlobId << " on " << rec.OldDiskPart.ToString());
+                YDB_LOG_WARN_CTX(ctx, "Defrag skipping corrupted blob",
+                    {"logoBlobId", rec.LogoBlobId},
+                    {"oldDiskPart", rec.OldDiskPart});
                 const TBlobStorageGroupType gtype = DCtx->VCtx->Top->GType;
                 Send(DCtx->SkeletonId,
                      new TEvRestoreCorruptedBlob(
@@ -128,34 +132,52 @@ namespace NKikimr {
             Y_VERIFY_S(partId, DCtx->VCtx->VDiskLogPrefix);
 
             TRcBuf data = msg->Data.ToString();
-            Y_VERIFY_S(data.size() == TDiskBlob::HeaderSize + gtype.PartSize(rec.LogoBlobId) ||
-                data.size() == gtype.PartSize(rec.LogoBlobId), DCtx->VCtx->VDiskLogPrefix);
+            ui32 offset = 0;
+            const ui32 partSize = gtype.PartSize(rec.LogoBlobId);
+            const EBlobHeaderMode blobHeaderMode = TDiskBlob::DeriveBlobHeaderMode(partSize, data.size(), &offset);
 
-            ui32 trim = 0;
-            if (data.size() == TDiskBlob::HeaderSize + gtype.PartSize(rec.LogoBlobId)) {
-                const char *header = data.data();
-                ui32 fullDataSize;
-                memcpy(&fullDataSize, header, sizeof(fullDataSize));
-                header += sizeof(fullDataSize);
-                Y_VERIFY_S(fullDataSize == rec.LogoBlobId.BlobSize(), DCtx->VCtx->VDiskLogPrefix);
-                Y_VERIFY_S(NMatrix::TVectorType::MakeOneHot(partId - 1, gtype.TotalPartCount()).Raw() == static_cast<ui8>(*header),
-                    DCtx->VCtx->VDiskLogPrefix);
-                trim += TDiskBlob::HeaderSize;
+            switch (blobHeaderMode) {
+                case EBlobHeaderMode::OLD_HEADER: {
+                    const char *header = data.data();
+                    ui32 fullDataSize;
+                    memcpy(&fullDataSize, header, sizeof(fullDataSize));
+                    header += sizeof(fullDataSize);
+                    Y_VERIFY_S(fullDataSize == rec.LogoBlobId.BlobSize(), DCtx->VCtx->VDiskLogPrefix);
+                    Y_VERIFY_S(NMatrix::TVectorType::MakeOneHot(partId - 1, gtype.TotalPartCount()).Raw() == static_cast<ui8>(*header),
+                        DCtx->VCtx->VDiskLogPrefix);
+                    break;
+                }
+
+                case EBlobHeaderMode::NO_HEADER:
+                    break;
+
+                case EBlobHeaderMode::XXH3_64BIT_HEADER:
+                    Y_ABORT_UNLESS(!offset);
+                    Y_ABORT_UNLESS(TDiskBlob::ValidateChecksum(data));
+                    break;
             }
 
             TRope rope(std::move(data));
-            if (trim) {
-                rope.EraseFront(trim);
+            if (offset) {
+                rope.EraseFront(offset);
+            }
+            if (partSize < rope.size()) {
+                rope.EraseBack(rope.size() - partSize);
             }
             Y_VERIFY_S(rope.size() == gtype.PartSize(rec.LogoBlobId), DCtx->VCtx->VDiskLogPrefix);
 
-            LOG_DEBUG_S(ctx, NKikimrServices::BS_VDISK_DEFRAG, DCtx->VCtx->VDiskLogPrefix << "rewriting BlobId# "
-                << rec.LogoBlobId << " from Location# " << rec.OldDiskPart);
+            YDB_LOG_DEBUG_CTX(ctx, "Rewriting",
+                {"VDiskLogPrefix", DCtx->VCtx->VDiskLogPrefix},
+                {"blobId", rec.LogoBlobId},
+                {"fromLocation", rec.OldDiskPart});
 
+            auto msgSize = rope.size();
             auto writeEvent = std::make_unique<TEvBlobStorage::TEvVPut>(rec.LogoBlobId, std::move(rope),
-                    SelfVDiskId, true, nullptr, TInstant::Max(), NKikimrBlobStorage::EPutHandleClass::AsyncBlob);
+                SelfVDiskId, true, nullptr, TInstant::Max(), NKikimrBlobStorage::EPutHandleClass::AsyncBlob,
+                DCtx->VCfg->BlobHeaderMode == EBlobHeaderMode::XXH3_64BIT_HEADER, TWriteSource::DefragRewrite);
             writeEvent->RewriteBlob = true;
-            Send(DCtx->SkeletonId, writeEvent.release());
+            TEventsQuoter::QuoteMessage(DCtx->Throttler, std::make_unique<IEventHandle>(DCtx->SkeletonId, SelfId(), writeEvent.release()),
+                msgSize, DCtx->VCfg->DefragThrottlerBytesRate);
         }
 
         void Handle(TEvBlobStorage::TEvVPutResult::TPtr& ev, const TActorContext& ctx) {
@@ -163,11 +185,15 @@ namespace NKikimr {
             // FIXME: Handle NotOK, in case of RACE just cancel the job
 
             if (auto& record = ev->Get()->Record; record.GetStatus() != NKikimrProto::OK) {
-                LOG_WARN_S(ctx, NKikimrServices::BS_VDISK_DEFRAG, DCtx->VCtx->VDiskLogPrefix << "rewrite failed BlobId# "
-                    << LogoBlobIDFromLogoBlobID(record.GetBlobID()) << " Record# " << SingleLineProto(record));
+                YDB_LOG_WARN_CTX(ctx, "Rewrite failed",
+                    {"VDiskLogPrefix", DCtx->VCtx->VDiskLogPrefix},
+                    {"blobId", LogoBlobIDFromLogoBlobID(record.GetBlobID())},
+                    {"record", SingleLineProto(record)});
             } else {
-                LOG_DEBUG_S(ctx, NKikimrServices::BS_VDISK_DEFRAG, DCtx->VCtx->VDiskLogPrefix << "rewritten BlobId# "
-                    << LogoBlobIDFromLogoBlobID(record.GetBlobID()) << " to Location# " << ev->Get()->WrittenLocation);
+                YDB_LOG_DEBUG_CTX(ctx, "Rewritten",
+                    {"VDiskLogPrefix", DCtx->VCtx->VDiskLogPrefix},
+                    {"blobId", LogoBlobIDFromLogoBlobID(record.GetBlobID())},
+                    {"toLocation", ev->Get()->WrittenLocation});
 
                 ++RewrittenRecsCounter;
             }

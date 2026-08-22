@@ -1,8 +1,10 @@
 #pragma once
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/accessor/accessor.h>
-#include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
+#include <ydb/core/tx/columnshard/columnshard.h>
+
+#include <ydb/library/accessor/accessor.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
 
 namespace NKikimr::NOlap::NDataReader {
 
@@ -18,6 +20,7 @@ private:
 
 public:
     virtual bool IsActive() const = 0;
+    virtual TString GetErrorMessage() const = 0;
     virtual TDuration GetTimeout() const = 0;
 
     TConclusionStatus OnDataChunk(const std::shared_ptr<arrow::Table>& data) {
@@ -42,7 +45,6 @@ public:
         , TabletId(tabletId)
         , TabletActorId(tabletActorId)
     {
-
     }
 
     virtual ~IRestoreTask() = default;
@@ -64,15 +66,18 @@ private:
 
     EStage Stage = EStage::Initialization;
     static inline const ui64 FreeSpace = ((ui64)8) << 20;
+
     void SwitchStage(const std::optional<EStage> from, const EStage to) {
         if (from) {
             AFL_VERIFY(Stage == *from)("from", (ui32)*from)("real", (ui32)Stage)("to", (ui32)to);
         }
         Stage = to;
     }
+
     std::optional<TMonotonic> LastAck;
     bool AbortedFlag = false;
     bool CheckActivity();
+    void AbortScanIfKnown();
 
 protected:
     void HandleExecute(NKqp::TEvKqpCompute::TEvScanInitActor::TPtr& ev);
@@ -89,8 +94,12 @@ public:
     }
 
     STATEFN(StateFunc) {
-        NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("tablet_id", RestoreTask->GetTabletId())("tablet_actor_id",
-            RestoreTask->GetTabletActorId())("this", (ui64)this)("activity", RestoreTask->IsActive())("task_id", RestoreTask->GetTaskId());
+        YDB_LOG_CREATE_CONTEXT(
+            {"tabletId", RestoreTask->GetTabletId()},
+            {"tabletActorId", RestoreTask->GetTabletActorId()},
+            {"this", (ui64)this},
+            {"activity", RestoreTask->IsActive()},
+            {"taskId", RestoreTask->GetTaskId()});
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(NKqp::TEvKqpCompute::TEvScanInitActor, HandleExecute);
@@ -109,4 +118,4 @@ public:
     void Bootstrap(const TActorContext& ctx);
 };
 
-}   // namespace NKikimr::NOlap::NExport
+}   // namespace NKikimr::NOlap::NDataReader

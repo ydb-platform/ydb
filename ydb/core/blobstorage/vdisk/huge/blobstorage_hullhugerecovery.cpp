@@ -2,6 +2,7 @@
 #include "blobstorage_hullhugeheap.h"
 #include <library/cpp/random_provider/random_provider.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT BS_HULLHUGE
 
 using namespace NKikimrServices;
 
@@ -35,10 +36,6 @@ namespace NKikimr {
             return str.Str();
         }
 
-        void THullHugeRecoveryLogPos::ParseFromString(const TString& prefix, const TString &serialized) {
-            ParseFromArray(prefix, serialized.data(), serialized.size());
-        }
-
         void THullHugeRecoveryLogPos::ParseFromArray(const TString& prefix, const char* data, size_t size) {
             const char *cur = data;
             const char *end = data + size;
@@ -51,14 +48,27 @@ namespace NKikimr {
             Y_VERIFY_S(cur == end, prefix);
         }
 
-        bool THullHugeRecoveryLogPos::CheckEntryPoint(const TString &serialized) {
-            return serialized.size() == SerializedSize;
+        void THullHugeRecoveryLogPos::SaveToProto(NKikimrVDiskData::THullHugeRecoveryLogPos& logPos) const {
+            logPos.SetChunkAllocationLsn(ChunkAllocationLsn);
+            logPos.SetChunkFreeingLsn(ChunkFreeingLsn);
+            logPos.SetHugeBlobLoggedLsn(HugeBlobLoggedLsn);
+            logPos.SetLogoBlobsDbSlotDelLsn(LogoBlobsDbSlotDelLsn);
+            logPos.SetEntryPointLsn(EntryPointLsn);
+        }
+
+        void THullHugeRecoveryLogPos::LoadFromProto(const NKikimrVDiskData::THullHugeRecoveryLogPos& logPos) {
+            ChunkAllocationLsn = logPos.GetChunkAllocationLsn();
+            ChunkFreeingLsn = logPos.GetChunkFreeingLsn();
+            HugeBlobLoggedLsn = logPos.GetHugeBlobLoggedLsn();
+            LogoBlobsDbSlotDelLsn = logPos.GetLogoBlobsDbSlotDelLsn();
+            EntryPointLsn = logPos.GetEntryPointLsn();
         }
 
         ////////////////////////////////////////////////////////////////////////////
         // THullHugeKeeperPersState
         ////////////////////////////////////////////////////////////////////////////
         const ui32 THullHugeKeeperPersState::Signature = 0x18A0CE62;
+        const ui32 THullHugeKeeperPersState::SignatureV2 = 0x18A0CE63;
 
         THullHugeKeeperPersState::THullHugeKeeperPersState(TIntrusivePtr<TVDiskContext> vctx,
                                                            const ui32 chunkSize,
@@ -67,14 +77,19 @@ namespace NKikimr {
                                                            const ui32 milestoneHugeBlobInBytes,
                                                            const ui32 maxBlobInBytes,
                                                            const ui32 overhead,
+                                                           const ui32 stepsBetweenPowersOf2,
+                                                           const bool enableTinyDisks,
                                                            const ui32 freeChunksReservation,
+                                                           TControlWrapper chunksSoftLocking,
                                                            std::function<void(const TString&)> logFunc)
             : VCtx(std::move(vctx))
-            , LogPos(THullHugeRecoveryLogPos::Default())
             , Heap(new NHuge::THeap(VCtx->VDiskLogPrefix, chunkSize, appendBlockSize,
                                     minHugeBlobInBytes, milestoneHugeBlobInBytes,
-                                    maxBlobInBytes, overhead, freeChunksReservation))
+                                    maxBlobInBytes, overhead, stepsBetweenPowersOf2,
+                                    enableTinyDisks, freeChunksReservation, chunksSoftLocking))
             , Guid(TAppData::RandomProvider->GenRand64())
+            , EnableTinyDisks(enableTinyDisks)
+            , ChunksSoftLocking(chunksSoftLocking)
         {
             Heap->FinishRecovery();
             logFunc(VDISKP(VCtx->VDiskLogPrefix,
@@ -89,44 +104,22 @@ namespace NKikimr {
                                                            const ui32 milestoneHugeBlobInBytes,
                                                            const ui32 maxBlobInBytes,
                                                            const ui32 overhead,
-                                                           const ui32 freeChunksReservation,
-                                                           const ui64 entryPointLsn,
-                                                           const TString &entryPointData,
-                                                           std::function<void(const TString&)> logFunc)
-            : VCtx(std::move(vctx))
-            , LogPos(THullHugeRecoveryLogPos::Default())
-            , Heap(new NHuge::THeap(VCtx->VDiskLogPrefix, chunkSize, appendBlockSize,
-                                    minHugeBlobInBytes, milestoneHugeBlobInBytes,
-                                    maxBlobInBytes, overhead, freeChunksReservation))
-            , Guid(TAppData::RandomProvider->GenRand64())
-            , PersistentLsn(entryPointLsn)
-        {
-            ParseFromString(entryPointData);
-            Heap->FinishRecovery();
-            Y_VERIFY_S(entryPointLsn == LogPos.EntryPointLsn, VCtx->VDiskLogPrefix);
-            logFunc(VDISKP(VCtx->VDiskLogPrefix,
-                "Recovery started (guid# %" PRIu64 " entryLsn# %" PRIu64 "): State# %s",
-                Guid, entryPointLsn, ToString().data()));
-        }
-
-        THullHugeKeeperPersState::THullHugeKeeperPersState(TIntrusivePtr<TVDiskContext> vctx,
-                                                           const ui32 chunkSize,
-                                                           const ui32 appendBlockSize,
-                                                           const ui32 minHugeBlobInBytes,
-                                                           const ui32 milestoneHugeBlobInBytes,
-                                                           const ui32 maxBlobInBytes,
-                                                           const ui32 overhead,
+                                                           const ui32 stepsBetweenPowersOf2,
+                                                           const bool enableTinyDisks,
                                                            const ui32 freeChunksReservation,
                                                            const ui64 entryPointLsn,
                                                            const TContiguousSpan &entryPointData,
+                                                           TControlWrapper chunksSoftLocking,
                                                            std::function<void(const TString&)> logFunc)
             : VCtx(std::move(vctx))
-            , LogPos(THullHugeRecoveryLogPos::Default())
             , Heap(new NHuge::THeap(VCtx->VDiskLogPrefix, chunkSize, appendBlockSize,
                                     minHugeBlobInBytes, milestoneHugeBlobInBytes,
-                                    maxBlobInBytes, overhead, freeChunksReservation))
+                                    maxBlobInBytes, overhead, stepsBetweenPowersOf2,
+                                    false, freeChunksReservation, chunksSoftLocking))
             , Guid(TAppData::RandomProvider->GenRand64())
             , PersistentLsn(entryPointLsn)
+            , EnableTinyDisks(enableTinyDisks)
+            , ChunksSoftLocking(chunksSoftLocking)
         {
             ParseFromArray(entryPointData.GetData(), entryPointData.GetSize());
             Heap->FinishRecovery();
@@ -140,6 +133,10 @@ namespace NKikimr {
         }
 
         TString THullHugeKeeperPersState::Serialize() const {
+            if (EnableTinyDisks || LoadedFromProto) {
+                return SaveToProto();
+            }
+
             TStringStream str;
             // signature
             str.Write(&Signature, sizeof(ui32));
@@ -178,19 +175,21 @@ namespace NKikimr {
             return str.Str();
         }
 
-        void THullHugeKeeperPersState::ParseFromString(const TString &data) {
-            ParseFromArray(data.data(), data.size());
-        }
-
         void THullHugeKeeperPersState::ParseFromArray(const char* data, size_t size) {
             Y_UNUSED(size);
             SlotsInFlight.clear();
 
             const char *cur = data;
-            cur += sizeof(ui32); // signature
+
+            ui32 signature = ReadUnaligned<ui32>(cur);
+            cur += sizeof(ui32);
+            if (signature == SignatureV2) {
+                LoadFromProto(cur, size - sizeof(ui32));
+                return;
+            }
 
             // log pos
-            LogPos.ParseFromString(VCtx->VDiskLogPrefix, TString(cur, cur + THullHugeRecoveryLogPos::SerializedSize));
+            LogPos.ParseFromArray(VCtx->VDiskLogPrefix, cur, THullHugeRecoveryLogPos::SerializedSize);
             cur += THullHugeRecoveryLogPos::SerializedSize; // log pos
 
             // heap
@@ -216,39 +215,66 @@ namespace NKikimr {
             }
         }
 
-        TString THullHugeKeeperPersState::ExtractLogPosition(const TString &data) {
-            const char *cur = data.data();
-            cur += sizeof(ui32); // signature
-            return TString(cur, cur + THullHugeRecoveryLogPos::SerializedSize);
+        TString THullHugeKeeperPersState::SaveToProto() const {
+            NKikimrVDiskData::THugeKeeperEntryPoint entryPoint;
+            LogPos.SaveToProto(*entryPoint.MutableLogPos());
+
+            std::vector<bool> inLockedChunks;
+            inLockedChunks.reserve(SlotsInFlight.size());
+            for (const THugeSlot& slot : SlotsInFlight) {
+                inLockedChunks.push_back(Heap->ReleaseSlot(slot));
+            }
+
+            Heap->SaveToProto(*entryPoint.MutableHeap());
+
+            size_t index = 0;
+            for (const THugeSlot& slot : SlotsInFlight) {
+                Y_VERIFY_DEBUG_S(index < inLockedChunks.size(), VCtx->VDiskLogPrefix);
+                Heap->OccupySlot(slot, inLockedChunks[index++]);
+            }
+            Y_VERIFY_DEBUG_S(index == inLockedChunks.size(), VCtx->VDiskLogPrefix);
+
+            TString result;
+            TStringOutput str(result);
+            str.Write(&SignatureV2, sizeof(ui32));
+
+            auto size = entryPoint.ByteSize();
+            result.resize(sizeof(ui32) + size);
+            bool success = entryPoint.SerializeToArray(result.begin() + sizeof(ui32), size);
+            Y_VERIFY_S(success, VCtx->VDiskLogPrefix);
+
+            return result;
         }
 
-        TContiguousSpan THullHugeKeeperPersState::ExtractLogPosition(TContiguousSpan data) {
-            const char *cur = data.data();
-            cur += sizeof(ui32); // signature
-            return TContiguousSpan(cur, THullHugeRecoveryLogPos::SerializedSize);
-        }
+        void THullHugeKeeperPersState::LoadFromProto(const char* data, size_t size) {
+            NKikimrVDiskData::THugeKeeperEntryPoint entryPoint;
+            bool success = entryPoint.ParseFromArray(data, size);
+            Y_VERIFY_S(success, VCtx->VDiskLogPrefix);
 
-        bool THullHugeKeeperPersState::CheckEntryPoint(const TString &data) {
-            return CheckEntryPoint(TContiguousSpan(data));
+            LogPos.LoadFromProto(entryPoint.GetLogPos());
+            Heap.reset(new NHuge::THeap(VCtx->VDiskLogPrefix, entryPoint.GetHeap(), ChunksSoftLocking));
+
+            LoadedFromProto = true;
         }
 
         bool THullHugeKeeperPersState::CheckEntryPoint(TContiguousSpan data) {
             const char *cur = data.data();
             const char *end = cur + data.size();
 
-            if (size_t(end - cur) < sizeof(ui32) + THullHugeRecoveryLogPos::SerializedSize + sizeof(ui32))
+            if (size_t(end - cur) < sizeof(ui32))
                 return false;
 
             // signature
             ui32 signature = ReadUnaligned<ui32>(cur);
             cur += sizeof(ui32); // signature
+            if (signature == SignatureV2)
+                return true;
             if (signature != Signature)
                 return false;
 
-            // log pos
-            if (!THullHugeRecoveryLogPos::CheckEntryPoint(TString(cur, cur + THullHugeRecoveryLogPos::SerializedSize))) //FIXME(innokentii) unnecessary copy
+            if (size_t(end - cur) < THullHugeRecoveryLogPos::SerializedSize + sizeof(ui32))
                 return false;
-            cur += THullHugeRecoveryLogPos::SerializedSize; // log pos
+            cur += THullHugeRecoveryLogPos::SerializedSize;
 
             // heap
             ui32 heapSize = ReadUnaligned<ui32>(cur);
@@ -349,7 +375,7 @@ namespace NKikimr {
 
         bool THullHugeKeeperPersState::WouldNewEntryPointAdvanceLog(ui64 freeUpToLsn, ui64 minInFlightLsn,
                 ui32 itemsAfterCommit) const {
-            return freeUpToLsn < minInFlightLsn && (PersistentLsn <= freeUpToLsn || itemsAfterCommit > 10000);
+            return freeUpToLsn <= minInFlightLsn && (!PersistentLsn || PersistentLsn < freeUpToLsn || itemsAfterCommit > 10000);
         }
 
         // initiate commit
@@ -375,22 +401,14 @@ namespace NKikimr {
                 const NHuge::TAllocChunkRecoveryLogRec &rec)
         {
             if (lsn > LogPos.ChunkAllocationLsn) {
-                LOG_DEBUG(ctx, BS_HULLHUGE,
-                          VDISKP(VCtx->VDiskLogPrefix,
-                                "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): "
-                                "AllocChunk apply: %s",
-                                Guid, lsn, LogPos.EntryPointLsn, rec.ToString().data()));
+                YDB_LOG_DEBUG_CTX(ctx, VDISKP(VCtx->VDiskLogPrefix, "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): " "AllocChunk apply: %s", Guid, lsn, LogPos.EntryPointLsn, rec.ToString().data()));
                 Heap->RecoveryModeAddChunk(rec.ChunkId);
                 LogPos.ChunkAllocationLsn = lsn;
                 PersistentLsn = Min(PersistentLsn, lsn);
                 return TRlas(true, false);
             } else {
                 // skip
-                LOG_DEBUG(ctx, BS_HULLHUGE,
-                          VDISKP(VCtx->VDiskLogPrefix,
-                                "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): "
-                                "AllocChunk skip: %s",
-                                Guid, lsn, LogPos.EntryPointLsn, rec.ToString().data()));
+                YDB_LOG_DEBUG_CTX(ctx, VDISKP(VCtx->VDiskLogPrefix, "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): " "AllocChunk skip: %s", Guid, lsn, LogPos.EntryPointLsn, rec.ToString().data()));
                 return TRlas(true, true);
             }
         }
@@ -403,22 +421,14 @@ namespace NKikimr {
         {
             if (lsn > LogPos.ChunkFreeingLsn) {
                 // apply
-                LOG_DEBUG(ctx, BS_HULLHUGE,
-                          VDISKP(VCtx->VDiskLogPrefix,
-                                "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): "
-                                "FreeChunk apply(remove): %s",
-                                Guid, lsn, LogPos.EntryPointLsn, rec.ToString().data()));
+                YDB_LOG_DEBUG_CTX(ctx, VDISKP(VCtx->VDiskLogPrefix, "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): " "FreeChunk apply(remove): %s", Guid, lsn, LogPos.EntryPointLsn, rec.ToString().data()));
                 Heap->RecoveryModeRemoveChunks(rec.ChunkIds);
                 LogPos.ChunkFreeingLsn = lsn;
                 PersistentLsn = Min(PersistentLsn, lsn);
                 return TRlas(true, false);
             } else {
                 // skip
-                LOG_DEBUG(ctx, BS_HULLHUGE,
-                          VDISKP(VCtx->VDiskLogPrefix,
-                                "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): "
-                                "FreeChunk skip: %s",
-                                Guid, lsn, LogPos.EntryPointLsn, rec.ToString().data()));
+                YDB_LOG_DEBUG_CTX(ctx, VDISKP(VCtx->VDiskLogPrefix, "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): " "FreeChunk skip: %s", Guid, lsn, LogPos.EntryPointLsn, rec.ToString().data()));
                 return TRlas(true, true);
             }
         }
@@ -447,9 +457,7 @@ namespace NKikimr {
             }
             if (lsn > *logPosDelLsn) {
                 // apply
-                LOG_DEBUG(ctx, BS_HULLHUGE, VDISKP(VCtx->VDiskLogPrefix, "Recovery(guid# %" PRIu64 " lsn# %" PRIu64
-                    " entryLsn# %" PRIu64 "): " "RmHugeBlobs apply: %s", Guid, lsn, LogPos.EntryPointLsn,
-                    rec.ToString().data()));
+                YDB_LOG_DEBUG_CTX(ctx, VDISKP(VCtx->VDiskLogPrefix, "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): " "RmHugeBlobs apply: %s", Guid, lsn, LogPos.EntryPointLsn, rec.ToString().data()));
                 for (const auto &x : rec) {
                     Heap->RecoveryModeFree(x);
                 }
@@ -462,9 +470,7 @@ namespace NKikimr {
                 return TRlas(true, false);
             } else {
                 // skip
-                LOG_DEBUG(ctx, BS_HULLHUGE, VDISKP(VCtx->VDiskLogPrefix, "Recovery(guid# %" PRIu64 " lsn# %" PRIu64
-                    " entryLsn# %" PRIu64 "): " "RmHugeBlobs skip: %s", Guid, lsn, LogPos.EntryPointLsn,
-                    rec.ToString().data()));
+                YDB_LOG_DEBUG_CTX(ctx, VDISKP(VCtx->VDiskLogPrefix, "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): " "RmHugeBlobs skip: %s", Guid, lsn, LogPos.EntryPointLsn, rec.ToString().data()));
                 return TRlas(true, true);
             }
         }
@@ -489,17 +495,9 @@ namespace NKikimr {
             if (lsn > LogPos.HugeBlobLoggedLsn) {
                 // apply
                 if (DeleteSlotInFlight(hugeSlot)) {
-                    LOG_DEBUG(ctx, BS_HULLHUGE,
-                              VDISKP(VCtx->VDiskLogPrefix,
-                                    "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): "
-                                    "HugeBlob apply(1): rec# %s hugeSlot# %s",
-                                    Guid, lsn, LogPos.EntryPointLsn, rec.ToString().data(), hugeSlot.ToString().data()));
+                    YDB_LOG_DEBUG_CTX(ctx, VDISKP(VCtx->VDiskLogPrefix, "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): " "HugeBlob apply(1): rec# %s hugeSlot# %s", Guid, lsn, LogPos.EntryPointLsn, rec.ToString().data(), hugeSlot.ToString().data()));
                 } else {
-                    LOG_DEBUG(ctx, BS_HULLHUGE,
-                              VDISKP(VCtx->VDiskLogPrefix,
-                                    "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): "
-                                    "HugeBlob apply(2): rec# %s hugeSlot# %s",
-                                    Guid, lsn, LogPos.EntryPointLsn, rec.ToString().data(), hugeSlot.ToString().data()));
+                    YDB_LOG_DEBUG_CTX(ctx, VDISKP(VCtx->VDiskLogPrefix, "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): " "HugeBlob apply(2): rec# %s hugeSlot# %s", Guid, lsn, LogPos.EntryPointLsn, rec.ToString().data(), hugeSlot.ToString().data()));
                     Heap->RecoveryModeAllocate(rec.DiskAddr);
                 }
                 LogPos.HugeBlobLoggedLsn = lsn;
@@ -507,35 +505,9 @@ namespace NKikimr {
                 return TRlas(true, false);
             } else {
                 // skip
-                LOG_DEBUG(ctx, BS_HULLHUGE,
-                          VDISKP(VCtx->VDiskLogPrefix,
-                                "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): "
-                                "HugeBlob skip: rec# %s hugeSlot# %s",
-                                Guid, lsn, LogPos.EntryPointLsn, rec.ToString().data(), hugeSlot.ToString().data()));
+                YDB_LOG_DEBUG_CTX(ctx, VDISKP(VCtx->VDiskLogPrefix, "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): " "HugeBlob skip: rec# %s hugeSlot# %s", Guid, lsn, LogPos.EntryPointLsn, rec.ToString().data(), hugeSlot.ToString().data()));
                 return TRlas(true, true);
             }
-        }
-
-        TRlas THullHugeKeeperPersState::ApplyEntryPoint(
-                const TActorContext &ctx,
-                ui64 lsn,
-                const TString &data)
-        {
-            if (!CheckEntryPoint(data))
-                return TRlas(false, true);
-
-            TString logPosSerialized = ExtractLogPosition(data);
-            auto logPos = THullHugeRecoveryLogPos::Default();
-            logPos.ParseFromString(VCtx->VDiskLogPrefix, logPosSerialized);
-            Y_VERIFY_S(logPos.EntryPointLsn == lsn, VCtx->VDiskLogPrefix);
-
-            LOG_DEBUG(ctx, BS_HULLHUGE,
-                    VDISKP(VCtx->VDiskLogPrefix,
-                        "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): "
-                        "EntryPoint: logPos# %s",
-                        Guid, lsn, LogPos.EntryPointLsn, logPos.ToString().data()));
-
-            return TRlas(true, false);
         }
 
         TRlas THullHugeKeeperPersState::ApplyEntryPoint(
@@ -546,16 +518,25 @@ namespace NKikimr {
             if (!CheckEntryPoint(data))
                 return TRlas(false, true);
 
-            TContiguousSpan logPosSerialized = ExtractLogPosition(data);
-            auto logPos = THullHugeRecoveryLogPos::Default();
-            logPos.ParseFromArray(VCtx->VDiskLogPrefix, logPosSerialized.GetData(), logPosSerialized.GetSize());
+            THullHugeRecoveryLogPos logPos;
+
+            const char *cur = data.data();
+            ui32 signature = ReadUnaligned<ui32>(cur);
+            cur += sizeof(ui32);
+
+            if (signature == SignatureV2) {
+                NKikimrVDiskData::THugeKeeperEntryPoint entryPoint;
+                bool success = entryPoint.ParseFromArray(cur, data.size() - sizeof(ui32));
+                Y_VERIFY_S(success, VCtx->VDiskLogPrefix);
+                logPos.LoadFromProto(entryPoint.GetLogPos());
+
+            } else if (signature == Signature) {
+                logPos.ParseFromArray(VCtx->VDiskLogPrefix, cur, THullHugeRecoveryLogPos::SerializedSize);
+            }
+
             Y_VERIFY_S(logPos.EntryPointLsn == lsn, VCtx->VDiskLogPrefix);
 
-            LOG_DEBUG(ctx, BS_HULLHUGE,
-                    VDISKP(VCtx->VDiskLogPrefix,
-                        "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): "
-                        "EntryPoint: logPos# %s",
-                        Guid, lsn, LogPos.EntryPointLsn, logPos.ToString().data()));
+            YDB_LOG_DEBUG_CTX(ctx, VDISKP(VCtx->VDiskLogPrefix, "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): " "EntryPoint: logPos# %s", Guid, lsn, LogPos.EntryPointLsn, logPos.ToString().data()));
 
             return TRlas(true, false);
         }
@@ -568,8 +549,7 @@ namespace NKikimr {
             SlotsInFlight.clear();
 
             Recovered = true;
-            LOG_DEBUG(ctx, BS_HULLHUGE,
-                VDISKP(VCtx->VDiskLogPrefix, "Recovery(guid# %" PRIu64 ") finished", Guid));
+            YDB_LOG_DEBUG_CTX(ctx, VDISKP(VCtx->VDiskLogPrefix, "Recovery(guid# %" PRIu64 ") finished", Guid));
         }
 
         void THullHugeKeeperPersState::GetOwnedChunks(TSet<TChunkIdx>& chunks) const {
@@ -597,8 +577,10 @@ namespace NKikimr {
             Y_VERIFY_DEBUG_S(size == hugeSlot.GetSize(), VCtx->VDiskLogPrefix << "HugeSlot# " << hugeSlot.ToString()
                 << " Expected# " << size);
             if (size != hugeSlot.GetSize() && TlsActivationContext) {
-                LOG_CRIT_S(*TlsActivationContext, NKikimrServices::BS_HULLHUGE, VCtx->VDiskLogPrefix
-                    << "HugeSlot# " << hugeSlot.ToString() << " size is not as Expected# " << size);
+                YDB_LOG_CRIT("Size is not as",
+                    {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
+                    {"hugeSlot", hugeSlot},
+                    {"expected", size});
             }
             ++refcount;
         }
@@ -610,8 +592,10 @@ namespace NKikimr {
             Y_VERIFY_DEBUG_S(size == hugeSlot.GetSize(), VCtx->VDiskLogPrefix << "HugeSlot# " << hugeSlot.ToString()
                 << " Expected# " << size);
             if (size != hugeSlot.GetSize() && TlsActivationContext) {
-                LOG_CRIT_S(*TlsActivationContext, NKikimrServices::BS_HULLHUGE, VCtx->VDiskLogPrefix
-                    << "HugeSlot# " << hugeSlot.ToString() << " size is not as Expected# " << size);
+                YDB_LOG_CRIT("Size is not as",
+                    {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
+                    {"hugeSlot", hugeSlot},
+                    {"expected", size});
             }
             if (!--refcount) {
                 ChunkToSlotSize.erase(jt);

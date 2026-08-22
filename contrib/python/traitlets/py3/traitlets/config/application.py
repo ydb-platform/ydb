@@ -215,7 +215,8 @@ class Application(SingletonConfigurable):
     _log_formatter_cls = LevelFormatter
 
     log_datefmt = Unicode(
-        "%Y-%m-%d %H:%M:%S", help="The date format used by logging formatters for %(asctime)s"
+        "%Y-%m-%d %H:%M:%S",
+        help="The date format used by logging formatters for `logging.Formatter` ``datefmt`` parameter",
     ).tag(config=True)
 
     log_format = Unicode(
@@ -899,6 +900,8 @@ class Application(SingletonConfigurable):
 
         yield each config object in turn.
         """
+        if os.path.isabs(basefilename):
+            path = [None]
         if isinstance(path, str) or path is None:
             path = [path]
         for current in reversed(path):
@@ -1062,7 +1065,11 @@ class Application(SingletonConfigurable):
         sys.exit(exit_status)
 
     def __del__(self) -> None:
-        self.close_handlers()
+        # __del__ may be called during process teardown,
+        # at which point any fraction of attributes and modules may have been cleared,
+        # e.g. even _accessing_ self.log may fail.
+        with suppress(Exception):
+            self.close_handlers()
 
     @classmethod
     def launch_instance(cls, argv: ArgvType = None, **kwargs: t.Any) -> None:

@@ -2,9 +2,9 @@
 
 LIBRARY()
 
-VERSION(2022.1.0)
+VERSION(2023.1.0)
 
-ORIGINAL_SOURCE(https://github.com/uxlfoundation/oneTBB/archive/v2022.1.0.tar.gz)
+ORIGINAL_SOURCE(https://github.com/uxlfoundation/oneTBB/archive/v2023.1.0.tar.gz)
 
 LICENSE(Apache-2.0)
 
@@ -21,6 +21,8 @@ NO_UTIL()
 CFLAGS(
     -D__TBB_BUILD
     -D__TBB_GNU_ASM_VERSION=2041
+    -D__TBB_SKIP_DEPENDENCY_SIGNATURE_VERIFICATION=1
+    -D__TBB_DYNAMIC_LOAD_ENABLED=0
 )
 
 SRCS(
@@ -37,6 +39,7 @@ SRCS(
     src/tbb/market.cpp
     src/tbb/misc.cpp
     src/tbb/misc_ex.cpp
+    src/tbb/numa_allocation.cpp
     src/tbb/observer_proxy.cpp
     src/tbb/parallel_pipeline.cpp
     src/tbb/private_server.cpp

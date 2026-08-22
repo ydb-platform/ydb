@@ -9,6 +9,7 @@ SRCS(
     audit_log.cpp
     audit_logins.cpp
     db_metadata_cache.h
+    fs_path_validation.cpp
     grpc_endpoint_publish_actor.cpp
     grpc_helper.cpp
     grpc_mon.cpp
@@ -28,6 +29,7 @@ SRCS(
     rpc_cms.cpp
     rpc_commit_transaction.cpp
     rpc_config.cpp
+    rpc_cluster_state.cpp
     rpc_copy_table.cpp
     rpc_copy_tables.cpp
     rpc_create_coordination_node.cpp
@@ -36,9 +38,12 @@ SRCS(
     rpc_describe_external_data_source.cpp
     rpc_describe_external_table.cpp
     rpc_describe_path.cpp
+    rpc_describe_secret.cpp
+    rpc_describe_system_view.cpp
     rpc_describe_table.cpp
     rpc_describe_table_options.cpp
     rpc_discovery.cpp
+    rpc_distributed_storage.cpp
     rpc_drop_coordination_node.cpp
     rpc_drop_table.cpp
     rpc_dynamic_config.cpp
@@ -85,11 +90,15 @@ SRCS(
     rpc_scheme_base.cpp
     rpc_stream_execute_scan_query.cpp
     rpc_stream_execute_yql_script.cpp
+    rpc_test_shard.cpp
+    rpc_topic_deferred_publish.cpp
     rpc_view.cpp
     rpc_whoami.cpp
     table_settings.cpp
 
     rpc_common/rpc_common_kqp_session.cpp
+
+    legacy/rpc_legacy.cpp
 
     query/rpc_execute_query.cpp
     query/rpc_execute_script.cpp
@@ -113,8 +122,10 @@ PEERDIR(
     ydb/core/actorlib_impl
     ydb/core/audit
     ydb/core/backup/common
+    ydb/core/backup/regexp
     ydb/core/base
     ydb/core/control/lib
+    ydb/core/counters_info
     ydb/core/discovery
     ydb/core/engine
     ydb/core/formats
@@ -128,8 +139,11 @@ PEERDIR(
     ydb/core/io_formats/ydb_dump
     ydb/core/kesus/tablet
     ydb/core/kqp/common
-    ydb/core/kqp/session_actor
+    ydb/core/kqp/opt
+    ydb/core/local_indexes/bloom
+    ydb/core/persqueue/deferred_publish
     ydb/core/protos
+    ydb/core/statistics
     ydb/core/scheme
     ydb/core/sys_view
     ydb/core/tx
@@ -141,12 +155,15 @@ PEERDIR(
     ydb/core/ydb_convert
     ydb/core/security
     ydb/core/security/ldap_auth_provider
+    ydb/core/security/sasl
     ydb/library/aclib
     yql/essentials/types/binary_json
     yql/essentials/types/dynumber
     ydb/library/mkql_proto
     ydb/library/persqueue/topic_parser
+    ydb/library/protobuf_printer
     ydb/library/yaml_config
+    ydb/library/cloud_permissions
     yql/essentials/parser/pg_wrapper/interface
     yql/essentials/public/types
     yql/essentials/public/issue
@@ -156,8 +173,27 @@ PEERDIR(
     ydb/public/lib/fq
     ydb/public/sdk/cpp/src/library/operation_id
     ydb/public/sdk/cpp/src/client/resources
-    ydb/services/ext_index/common
 )
+
+
+DEFAULT(YDB_EMBEDDED_NBS_ENABLED yes)
+
+IF (OS_LINUX AND YDB_EMBEDDED_NBS_ENABLED)
+    CFLAGS(
+        -DYDB_EMBEDDED_NBS_ENABLED
+    )
+    SRCS(
+        rpc_nbs.cpp
+        rpc_nbs_io.cpp
+    )
+    PEERDIR(
+        ydb/core/nbs/cloud/blockstore/libs/service
+        ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct
+        ydb/core/nbs/cloud/blockstore/libs/storage/ss_proxy
+        ydb/core/nbs/cloud/blockstore/public/api/protos
+        ydb/core/nbs/cloud/storage/core/libs/common
+    )
+ENDIF()
 
 YQL_LAST_ABI_VERSION()
 
@@ -172,4 +208,6 @@ RECURSE(
 
 RECURSE_FOR_TESTS(
     ut
+    grpc_request_check_actor_ut
+    grpc_request_tracing_ut
 )

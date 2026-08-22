@@ -9,6 +9,8 @@
 #include <util/network/socket.h>
 #include <util/string/cast.h>
 #include <util/generic/strbuf.h>
+#include <util/generic/hash_set.h>
+#include <util/generic/yexception.h>
 
 namespace NYql {
 
@@ -23,9 +25,19 @@ THttpURL ParseURL(const TStringBuf addr, NUri::TParseFlags features) {
     return url;
 }
 
+const THashSet<TStringBuf> ValidMethods = {
+    "GET",
+    "POST",
+    "PUT",
+    "DELETE",
+    "HEAD",
+    "OPTIONS",
+};
+
 class TFetchResultImpl: public IFetchResult {
 public:
-    TFetchResultImpl(const THttpURL& url, const THttpHeaders& additionalHeaders, TDuration timeout) {
+    TFetchResultImpl(const THttpURL& url, TStringBuf method, TStringBuf body, const THttpHeaders& additionalHeaders, TDuration timeout) {
+        Y_ENSURE(ValidMethods.contains(method), "Unsupported method: " << method);
         TString host = url.Get(THttpURL::FieldHost);
         TString path = url.PrintS(THttpURL::FlagPath | THttpURL::FlagQuery);
         const char* p = url.Get(THttpURL::FieldPort);
@@ -46,8 +58,9 @@ public:
             TStringOutput rqs(req);
             TStringBuf userAgent = "User-Agent: Mozilla/5.0 (compatible; YQL/1.0)";
 
-            IOutputStream::TPart request[] = {
-                IOutputStream::TPart("GET ", 4),
+            auto request = std::to_array<IOutputStream::TPart>({
+                IOutputStream::TPart(method),
+                IOutputStream::TPart(" ", 1),
                 IOutputStream::TPart(path.data(), path.size()),
                 IOutputStream::TPart(" HTTP/1.1", 9),
                 IOutputStream::TPart::CrLf(),
@@ -56,12 +69,21 @@ public:
                 IOutputStream::TPart::CrLf(),
                 IOutputStream::TPart(userAgent.data(), userAgent.size()),
                 IOutputStream::TPart::CrLf(),
-            };
-            rqs.Write(request, Y_ARRAY_SIZE(request));
+            });
+
+            rqs.Write(request.data(), request.size());
             if (!additionalHeaders.Empty()) {
                 additionalHeaders.OutTo(&rqs);
             }
-            rqs << "\r\n";
+            if (body) {
+                THttpHeaders bodyHeaders;
+                bodyHeaders.AddHeader("Content-Length", ToString(body.size()));
+                bodyHeaders.OutTo(&rqs);
+                rqs << "\r\n"
+                    << body;
+            } else {
+                rqs << "\r\n";
+            }
         }
 
         Socket_.Reset(new TSocket(TNetworkAddress(host, port), timeout));
@@ -102,8 +124,8 @@ public:
         ythrow yexception() << "Unknown redirect location from " << baseUrl.PrintS();
     }
 
-    static TFetchResultPtr Fetch(const THttpURL& url, const THttpHeaders& additionalHeaders, const TDuration& timeout) {
-        return new TFetchResultImpl(url, additionalHeaders, timeout);
+    static TFetchResultPtr Fetch(const THttpURL& url, TStringBuf method, TStringBuf body, const THttpHeaders& additionalHeaders, const TDuration& timeout) {
+        return new TFetchResultImpl(url, method, body, additionalHeaders, timeout);
     }
 
 private:
@@ -121,38 +143,78 @@ inline bool IsRedirectCode(unsigned code) {
         case HTTP_SEE_OTHER:
         case HTTP_TEMPORARY_REDIRECT:
             return true;
+        default:
+            return false;
     }
-    return false;
 }
 
-inline bool IsRetryCode(unsigned code) {
+} // namespace
+
+ERetryErrorClass DefaultClassifyHttpCode(unsigned code) {
     switch (code) {
-        case HTTP_REQUEST_TIME_OUT:
-        case HTTP_AUTHENTICATION_TIMEOUT:
-        case HTTP_TOO_MANY_REQUESTS:
-        case HTTP_GATEWAY_TIME_OUT:
-        case HTTP_SERVICE_UNAVAILABLE:
-            return true;
+        case HTTP_REQUEST_TIME_OUT:       // 408
+        case HTTP_AUTHENTICATION_TIMEOUT: // 419
+            return ERetryErrorClass::ShortRetry;
+        case HTTP_TOO_MANY_REQUESTS:   // 429
+        case HTTP_SERVICE_UNAVAILABLE: // 503
+            return ERetryErrorClass::LongRetry;
+        default:
+            return IsServerError(code)
+                       ? ERetryErrorClass::ShortRetry // 5xx
+                       : ERetryErrorClass::NoRetry;
     }
-    return false;
 }
 
-} // unnamed
+IRetryPolicy<unsigned>::TPtr GetDefaultPolicy() {
+    static const auto Policy = IRetryPolicy<unsigned>::GetExponentialBackoffPolicy(
+        /*retryClassFunction=*/DefaultClassifyHttpCode,
+        /*minDelay=*/TDuration::Seconds(1),
+        /*minLongRetryDelay:*/ TDuration::Seconds(5),
+        /*maxDelay=*/TDuration::Minutes(1),
+        /*maxRetries=*/3,
+        /*maxTime=*/TDuration::Minutes(3),
+        /*scaleFactor=*/2);
+    return Policy;
+}
 
 THttpURL ParseURL(const TStringBuf addr) {
     return ParseURL(addr, THttpURL::FeaturesAll | NUri::TFeature::FeatureConvertHostIDN | NUri::TFeature::FeatureNoRelPath);
 }
 
-TFetchResultPtr Fetch(const THttpURL& url, const THttpHeaders& additionalHeaders, const TDuration& timeout, size_t retries, size_t redirects) {
+TFetchResultPtr Fetch(const THttpURL& url, const THttpHeaders& additionalHeaders, const TDuration& timeout, size_t redirects, const IRetryPolicy<unsigned>::TPtr& policy) {
+    return FetchEx(url, "GET"_sb, TStringBuf{}, additionalHeaders, timeout, redirects, policy);
+}
+
+TFetchResultPtr FetchEx(const THttpURL& url, TStringBuf method, TStringBuf body, const THttpHeaders& additionalHeaders, const TDuration& timeout, size_t redirects, const IRetryPolicy<unsigned>::TPtr& policy) {
+    const auto& actualPolicy = policy ? policy : GetDefaultPolicy();
     THttpURL currentUrl = url;
     for (size_t fetchNum = 0; fetchNum < redirects; ++fetchNum) {
+        IRetryPolicy<unsigned>::IRetryState::TPtr state = actualPolicy->CreateRetryState();
         unsigned responseCode = 0;
         TFetchResultPtr fr;
-        size_t fetchTry = 0;
-        do {
-            fr = TFetchResultImpl::Fetch(currentUrl, additionalHeaders, timeout);
-            responseCode = fr->GetRetCode();
-        } while (IsRetryCode(responseCode) && ++fetchTry < retries);
+        while (true) {
+            std::exception_ptr eptr;
+            try {
+                fr = TFetchResultImpl::Fetch(currentUrl, method, body, additionalHeaders, timeout);
+                responseCode = fr->GetRetCode();
+            } catch (const TSystemError& ex) {
+                if (ex.Status() != ETIMEDOUT) {
+                    throw;
+                }
+
+                responseCode = HTTP_REQUEST_TIME_OUT;
+                eptr = std::current_exception();
+            }
+
+            if (auto delay = state->GetNextRetryDelay(responseCode)) {
+                YQL_LOG(DEBUG) << "Connection failed. Retry delay: " << *delay;
+                Sleep(*delay);
+            } else if (eptr != nullptr) {
+                std::rethrow_exception(eptr);
+            } else {
+                break;
+            }
+        }
 
         if (responseCode >= 200 && responseCode < 300) {
             return fr;
@@ -179,4 +241,20 @@ TFetchResultPtr Fetch(const THttpURL& url, const THttpHeaders& additionalHeaders
     ythrow yexception() << "Failed to fetch url '" << currentUrl.PrintS() << "': too many redirects";
 }
 
-} // NYql
+THttpURL AppendUrlPath(const THttpURL& url, const TString& part) {
+    THttpURL resultUrl;
+    if (resultUrl.Parse(part, THttpURL::FeaturesDefault | THttpURL::FeatureSchemeKnown) != THttpURL::ParsedOK) {
+        throw yexception() << "url.Parse finished with not ParsedOK. Tried to parse `" << part << "`";
+    }
+    auto path = TString(url.Get(NUri::TField::FieldPath));
+    if (!path.EndsWith('/')) {
+        auto copy = url;
+        copy.Set(NUri::TField::FieldPath, path + "/");
+        resultUrl.Merge(copy);
+        return resultUrl;
+    }
+    resultUrl.Merge(url);
+    return resultUrl;
+}
+
+} // namespace NYql

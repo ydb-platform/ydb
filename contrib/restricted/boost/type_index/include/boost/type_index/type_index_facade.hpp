@@ -1,5 +1,5 @@
 //
-// Copyright 2013-2025 Antony Polukhin.
+// Copyright 2013-2026 Antony Polukhin.
 //
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
@@ -9,18 +9,27 @@
 #ifndef BOOST_TYPE_INDEX_TYPE_INDEX_FACADE_HPP
 #define BOOST_TYPE_INDEX_TYPE_INDEX_FACADE_HPP
 
-#include <boost/config.hpp>
-#include <boost/container_hash/hash_fwd.hpp>
+#include <boost/type_index/detail/config.hpp>
+
+#if !defined(BOOST_USE_MODULES) || defined(BOOST_TYPE_INDEX_INTERFACE_UNIT)
+
+#if !defined(BOOST_TYPE_INDEX_INTERFACE_UNIT)
 #include <string>
 #include <cstring>
 #include <type_traits>
 #include <iosfwd>               // for std::basic_ostream
+
+#include <boost/config.hpp>
+#include <boost/container_hash/hash_fwd.hpp>
+#endif
 
 #ifdef BOOST_HAS_PRAGMA_ONCE
 # pragma once
 #endif
 
 namespace boost { namespace typeindex {
+
+BOOST_TYPE_INDEX_BEGIN_MODULE_EXPORT
 
 /// \class type_index_facade
 ///
@@ -33,7 +42,7 @@ namespace boost { namespace typeindex {
 /// class stl_type_index: public type_index_facade<stl_type_index, std::type_info> 
 /// {
 /// public:
-///     typedef std::type_info type_info_t;
+///     using type_info_t = std::type_info;
 /// private:
 ///     const type_info_t* data_;
 ///
@@ -61,7 +70,7 @@ private:
     }
     /// @endcond
 public:
-    typedef TypeInfo                                type_info_t;
+    using type_info_t = TypeInfo;
 
     /// \b Override: This function \b may be redefined in Derived class. Overrides \b must not throw.
     /// \return Name of a type. By default returns Derived::raw_name().
@@ -274,7 +283,11 @@ inline std::size_t hash_value(const type_index_facade<Derived, TypeInfo>& lhs) n
     return static_cast<Derived const&>(lhs).hash_code();
 }
 
+BOOST_TYPE_INDEX_END_MODULE_EXPORT
+
 }} // namespace boost::typeindex
+
+#endif  // #if !defined(BOOST_USE_MODULES) || defined(BOOST_TYPE_INDEX_INTERFACE_UNIT)
 
 #endif // BOOST_TYPE_INDEX_TYPE_INDEX_FACADE_HPP
 

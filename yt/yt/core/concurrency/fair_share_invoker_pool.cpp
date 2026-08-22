@@ -1,11 +1,10 @@
 #include "fair_share_invoker_pool.h"
-#include "profiling_helpers.h"
+#include "helpers.h"
 
 #include <yt/yt/core/actions/current_invoker.h>
 #include <yt/yt/core/actions/invoker_detail.h>
 
 #include <yt/yt/core/misc/finally.h>
-#include <yt/yt/core/misc/ring_queue.h>
 
 #include <yt/yt/core/profiling/public.h>
 #include <yt/yt/core/profiling/timing.h>
@@ -14,12 +13,16 @@
 
 #include <yt/yt/library/ytprof/api/api.h>
 
+#include <library/cpp/yt/containers/ring_queue.h>
+
 #include <library/cpp/yt/misc/port.h>
 
 #include <library/cpp/yt/memory/weak_ptr.h>
 
 #include <library/cpp/yt/threading/rw_spin_lock.h>
 #include <library/cpp/yt/threading/spin_lock.h>
+
+#include <util/system/compiler.h>
 
 #include <optional>
 #include <utility>
@@ -469,7 +472,7 @@ private:
         i64 DequeuedActionCount_ = 0;
         i64 ExecutedActionCount_ = 0;
 
-        YT_ATTRIBUTE_NO_UNIQUE_ADDRESS THandle ProfilerHandle_;
+        Y_NO_UNIQUE_ADDRESS THandle ProfilerHandle_;
 
         TDuration GetTotalTimeEstimate(TInstant now) const
         {
@@ -496,7 +499,7 @@ private:
 
     IFairShareCallbackQueuePtr Queue_;
 
-    YT_ATTRIBUTE_NO_UNIQUE_ADDRESS TPoolProfilerObject Profiler_;
+    Y_NO_UNIQUE_ADDRESS TPoolProfilerObject Profiler_;
 
     class TCpuTimeAccounter
     {

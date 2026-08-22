@@ -1,8 +1,7 @@
 #pragma once
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 IComputationNode* WrapWideFilter(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 IComputationNode* WrapWideTakeWhile(TCallable& callable, const TComputationNodeFactoryContext& ctx);
@@ -10,6 +9,4 @@ IComputationNode* WrapWideSkipWhile(TCallable& callable, const TComputationNodeF
 IComputationNode* WrapWideTakeWhileInclusive(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 IComputationNode* WrapWideSkipWhileInclusive(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
-}
-}
-
+} // namespace NKikimr::NMiniKQL

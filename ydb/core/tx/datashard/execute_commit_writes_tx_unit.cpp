@@ -34,7 +34,7 @@ public:
         TSetupSysLocks guardLocks(op, DataShard, &locksDb);
 
         const auto& commitTx = tx->GetCommitWritesTx()->GetBody();
-        const auto versions = DataShard.GetReadWriteVersions(op.Get());
+        const auto mvccVersion = DataShard.GetMvccVersion(op.Get());
 
         const auto& tableId = commitTx.GetTableId();
         const auto& tableInfo = *DataShard.GetUserTables().at(tableId.GetTableId());
@@ -44,7 +44,7 @@ public:
 
         // FIXME: temporary break all locks, but we want to be smarter about which locks we break
         DataShard.SysLocksTable().BreakAllLocks(fullTableId);
-        txc.DB.CommitTx(tableInfo.LocalTid, writeTxId, versions.WriteVersion);
+        txc.DB.CommitTx(tableInfo.LocalTid, writeTxId, mvccVersion);
         DataShard.GetConflictsCache().GetTableCache(tableInfo.LocalTid).RemoveUncommittedWrites(writeTxId, txc.DB);
 
         if (Pipeline.AddLockDependencies(op, guardLocks)) {

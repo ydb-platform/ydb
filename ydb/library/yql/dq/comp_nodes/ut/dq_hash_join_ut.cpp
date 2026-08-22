@@ -1,0 +1,1540 @@
+#include "utils/dq_factories.h"
+#include "utils/dq_setup.h"
+#include "utils/utils.h"
+#include <type_utils.h>
+#include <ydb/library/yql/dq/comp_nodes/ut/join_perf/construct_join_graph.h>
+#include <ydb/library/yql/dq/comp_nodes/dq_block_hash_join.h>
+#include <yql/essentials/minikql/comp_nodes/ut/mkql_computation_node_ut.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
+
+namespace NKikimr::NMiniKQL {
+
+namespace {
+struct TJoinTestData {
+    TJoinTestData() {
+        Setup->Alloc.SetLimit(1);
+        Setup->Alloc.Ref().SetIncreaseMemoryLimitCallback([&](ui64 limit, ui64 required) {
+            auto newLimit = std::max(required, limit);
+            Setup->Alloc.SetLimit(newLimit);
+        });
+    }
+
+    auto MakeHardLimitIncreaseMemCallback(ui64 hardLimit) {
+        return [hardLimit, this](ui64 limit, ui64 required) {
+            auto newLimit = std::min(std::max(limit, required), hardLimit);
+            Cout << std::format("hard limit: {}, limit: {}, required: {}, alloc limit {} -> {}, TotalAllocated_: {}",
+                                hardLimit, limit, required, Setup->Alloc.GetLimit(), newLimit,
+                                Setup->Alloc.GetAllocated())
+                 << Endl;
+            Setup->Alloc.SetLimit(std::min(std::max(limit, required), hardLimit));
+        };
+    }
+
+    void SetHardLimitIncreaseMemCallback(ui64 hardLimit) {
+        Setup->Alloc.SetMaximumLimitValueReached(true);
+        Cout << std::format("finished sides prep. allocated: {}, used: {}, new limit: {}", Setup->Alloc.GetAllocated(),
+                            Setup->Alloc.GetUsed(), hardLimit)
+             << Endl;
+
+        Setup->Alloc.Ref().SetIncreaseMemoryLimitCallback(MakeHardLimitIncreaseMemCallback(hardLimit));
+    }
+
+    std::unique_ptr<TDqSetup<false, true>> Setup = std::make_unique<TDqSetup<false, true>>();
+    EJoinKind Kind;
+    TypeAndValue Left;
+    TVector<ui32> LeftKeyColmns = {0};
+    TypeAndValue Right;
+    TVector<ui32> RightKeyColmns = {0};
+    TDqUserRenames Renames = {{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}, {0, EJoinSide::kRight},
+                              {1, EJoinSide::kRight}};
+    TypeAndValue Result;
+    std::optional<ui64> JoinMemoryConstraint = std::nullopt;
+    int BlockSize = 128;
+    bool SliceBlocks = false;
+    TVector<int> ScalarizeLeftColumns;
+    TVector<int> ScalarizeRightColumns;
+    TBlockHashJoinSettings JoinSettings;
+    TDqProgramBuilder::TJoinFilterLambda LeftFilter;
+    TDqProgramBuilder::TJoinFilterLambda RightFilter;
+    TDqProgramBuilder::TJoinCommonFilterLambda CommonFilter;
+};
+
+void FilterRenamesForSemiAndOnlyJoins(TJoinTestData& td) {
+    std::erase_if(td.Renames, [&](const auto& indexAndSide) {
+        return RightSemiOrOnly(td.Kind) && indexAndSide.Side == EJoinSide::kLeft ||
+               LeftSemiOrOnly(td.Kind) && indexAndSide.Side == EJoinSide::kRight;
+    });
+}
+
+TJoinTestData BasicInnerJoinTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    TVector<ui64> leftKeys = {1, 2, 3, 4, 5};
+    TVector<TString> leftValues = {"a1", "b1", "c1", "d1", "e1"};
+
+    TVector<ui64> rightKeys = {2, 3, 4, 5, 6};
+    TVector<TString> rightValues = {"b2", "c2", "d2", "e2", "f2"};
+
+    TVector<ui64> expectedKeysLeft = {2, 3, 4, 5};
+    TVector<TString> expectedValuesLeft = {"b1", "c1", "d1", "e1"};
+    TVector<ui64> expectedKeysRight = {2, 3, 4, 5};
+    TVector<TString> expectedValuesRight = {"b2", "c2", "d2", "e2"};
+
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+    td.Result =
+        ConvertVectorsToTuples(setup, expectedKeysLeft, expectedValuesLeft, expectedKeysRight, expectedValuesRight);
+    td.Kind = EJoinKind::Inner;
+    return td;
+}
+
+TJoinTestData EmptyInnerJoinTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    TVector<ui64> emptyKeys = {};
+    TVector<TString> emptyValues = {};
+
+    td.Left = ConvertVectorsToTuples(setup, emptyKeys, emptyValues);
+    td.Right = ConvertVectorsToTuples(setup, emptyKeys, emptyValues);
+    td.Result = ConvertVectorsToTuples(setup, emptyKeys, emptyValues, emptyKeys, emptyValues);
+
+    td.Kind = EJoinKind::Inner;
+    return td;
+}
+
+TJoinTestData CrossJoinTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    TVector<ui64> leftKeys = {1, 1, 1, 1, 1};
+    TVector<TString> leftValues = {"a1", "b1", "c1", "d1", "e1"};
+
+    TVector<ui64> rightKeys = {1, 1, 1, 1, 1};
+    TVector<TString> rightValues = {"a2", "b2", "c2", "d2", "e2"};
+
+    TVector<ui64> expectedKeysLeft(25, ui64{1});
+
+    TVector<TString> expectedValuesLeft = {"a1", "b1", "c1", "d1", "e1", "a1", "b1", "c1", "d1", "e1", "a1", "b1", "c1",
+                                           "d1", "e1", "a1", "b1", "c1", "d1", "e1", "a1", "b1", "c1", "d1", "e1"};
+    TVector<ui64> expectedKeysRight(25, ui64{1});
+
+    TVector<TString> expectedValuesRight = {"a2", "a2", "a2", "a2", "a2", "b2", "b2", "b2", "b2",
+                                            "b2", "c2", "c2", "c2", "c2", "c2", "d2", "d2", "d2",
+                                            "d2", "d2", "e2", "e2", "e2", "e2", "e2"};
+
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+    td.Result =
+        ConvertVectorsToTuples(setup, expectedKeysLeft, expectedValuesLeft, expectedKeysRight, expectedValuesRight);
+    td.Kind = EJoinKind::Inner;
+    return td;
+}
+
+TJoinTestData MixedKeysInnerTestData() {
+
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    TVector<ui64> leftKeys = {1, 1, 2, 3, 4};
+    TVector<TString> leftValues = {"a1", "b1", "c1", "d1", "e1"};
+
+    TVector<ui64> rightKeys = {1, 2, 2, 4, 5};
+    TVector<TString> rightValues = {"a2", "b2", "c2", "d2", "e2"};
+
+    TVector<ui64> expectedKeysLeft = {1, 1, 2, 2, 4};
+    TVector<TString> expectedValuesLeft = {
+        "a1",
+        "b1",
+        "c1",
+        "c1",
+        "e1",
+    };
+    TVector<ui64> expectedKeysRight = {1, 1, 2, 2, 4};
+    TVector<TString> expectedValuesRight = {
+        "a2",
+        "a2",
+        "b2",
+        "c2",
+        "d2",
+    };
+
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+    td.Result =
+        ConvertVectorsToTuples(setup, expectedKeysLeft, expectedValuesLeft, expectedKeysRight, expectedValuesRight);
+    td.Kind = EJoinKind::Inner;
+    return td;
+}
+
+TJoinTestData EmptyLeftInnerTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    TVector<ui64> leftKeys;
+    TVector<TString> leftValues;
+
+    TVector<ui64> rightKeys = {1, 2, 3};
+    TVector<TString> rightValues = {"x", "y", "z"};
+
+    TVector<ui64> expectedKeysLeft;
+    TVector<TString> expectedValuesLeft;
+    TVector<ui64> expectedKeysRight;
+    TVector<TString> expectedValuesRight;
+
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+    td.Result =
+        ConvertVectorsToTuples(setup, expectedKeysLeft, expectedValuesLeft, expectedKeysRight, expectedValuesRight);
+    td.Kind = EJoinKind::Inner;
+    return td;
+}
+
+TJoinTestData EmptyRightInnerTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    TVector<ui64> leftKeys = {1, 2, 3};
+    TVector<TString> leftValues = {"a", "b", "c"};
+
+    TVector<ui64> rightKeys;
+    TVector<TString> rightValues;
+
+    TVector<ui64> expectedKeysLeft;
+    TVector<TString> expectedValuesLeft;
+    TVector<ui64> expectedKeysRight;
+    TVector<TString> expectedValuesRight;
+
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+    td.Result =
+        ConvertVectorsToTuples(setup, expectedKeysLeft, expectedValuesLeft, expectedKeysRight, expectedValuesRight);
+    td.Kind = EJoinKind::Inner;
+    return td;
+}
+
+[[maybe_unused]] TJoinTestData LeftJoinTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    TVector<ui64> leftKeys = {1, 2, 3};
+    TVector<TString> leftValues = {"a", "b", "c"};
+
+    TVector<ui64> rightKeys;
+    TVector<TString> rightValues;
+
+    TVector<ui64> expectedKeysLeft = leftKeys;
+    TVector<TString> expectedValuesLeft = leftValues;
+    TVector<std::optional<ui64>> expectedKeysRight(3, std::nullopt);
+    TVector<std::optional<TString>> expectedValuesRight(3, std::nullopt);
+
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+    td.Result =
+        ConvertVectorsToTuples(setup, expectedKeysLeft, expectedValuesLeft, expectedKeysRight, expectedValuesRight);
+
+    td.Kind = EJoinKind::Left;
+    return td;
+}
+
+[[maybe_unused]] TJoinTestData LeftJoinWithMatchesTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    TVector<ui64> leftKeys = {1, 2, 3, 4, 5};
+    TVector<TString> leftValues = {"a1", "b1", "c1", "d1", "e1"};
+
+    TVector<ui64> rightKeys = {2, 3, 4, 5, 6};
+    TVector<TString> rightValues = {"b2", "c2", "d2", "e2", "f2"};
+
+    TVector<ui64> expectedKeysLeft = {1, 2, 3, 4, 5};
+    TVector<TString> expectedValuesLeft = {"a1", "b1", "c1", "d1", "e1"};
+    TVector<std::optional<ui64>> expectedKeysRight = {std::nullopt, 2, 3, 4, 5};
+    TVector<std::optional<TString>> expectedValuesRight = {std::nullopt, "b2", "c2", "d2", "e2"};
+
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+    td.Result =
+        ConvertVectorsToTuples(setup, expectedKeysLeft, expectedValuesLeft, expectedKeysRight, expectedValuesRight);
+
+    td.Kind = EJoinKind::Left;
+    return td;
+}
+
+[[maybe_unused]] TJoinTestData LeftJoinTestDataLeftIsBuild() {
+    auto td = LeftJoinTestData();
+    td.JoinSettings.BuildSide = NMiniKQL::EBuildSide::Left;
+    return td;
+}
+
+[[maybe_unused]] TJoinTestData LeftJoinWithMatchesTestDataLeftIsBuild() {
+    auto td = LeftJoinWithMatchesTestData();
+    td.JoinSettings.BuildSide = NMiniKQL::EBuildSide::Left;
+    return td;
+}
+
+[[maybe_unused]] TJoinTestData LeftJoinSpillingTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    TVector<ui64> leftKeys = {1, 2, 3, 4, 5};
+    TVector<ui64> leftValues = {13, 14, 15, 16, 17};
+
+    constexpr int rightSize = 200000;
+    TVector<ui64> rightKeys(rightSize);
+    TVector<ui64> rightValues(rightSize);
+    for (int index = 0; index < rightSize; ++index) {
+        rightKeys[index] = 2 * index + 3;
+        rightValues[index] = index;
+    }
+
+    TVector<ui64> expectedKeysLeft = {1, 2, 3, 4, 5};
+    TVector<ui64> expectedValuesLeft = {13, 14, 15, 16, 17};
+    TVector<std::optional<ui64>> expectedKeysRight = {std::nullopt, std::nullopt, 3, std::nullopt, 5};
+    TVector<std::optional<ui64>> expectedValuesRight = {std::nullopt, std::nullopt, 0, std::nullopt, 1};
+
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+    td.Result =
+        ConvertVectorsToTuples(setup, expectedKeysLeft, expectedValuesLeft, expectedKeysRight, expectedValuesRight);
+
+    constexpr int packedTupleSize = 2 * 8 + 5;
+    constexpr ui64 joinMemory = packedTupleSize * (0.5 * rightSize);
+    td.JoinMemoryConstraint = joinMemory;
+    td.Kind = EJoinKind::Left;
+    return td;
+}
+
+[[maybe_unused]] TJoinTestData LeftJoinSpillingMultiKeyTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    TVector<ui64> leftCol0 = {100, 200, 300, 400, 500};                              
+    TVector<std::optional<ui64>> leftCol1 = {10, std::nullopt, 30, std::nullopt, 50};
+    TVector<ui64> leftCol2 = {1, 2, 3, 4, 5};                                        
+    TVector<ui64> leftCol3 = {11, 22, 33, 44, 55};                                   
+    TVector<ui64> leftCol4 = {1000, 2000, 3000, 4000, 5000};                         
+
+    constexpr int rightSize = 200000;
+    TVector<ui64> rightCol0(rightSize);
+    TVector<ui64> rightCol1(rightSize);
+    for (int i = 0; i < rightSize; ++i) {
+        rightCol0[i] = 2 * i + 3;
+        rightCol1[i] = 20 * i + 33;
+    }
+    // expected: left row 2 matches, rest dont
+    TVector<ui64> expLeftCol0 = {100, 200, 300, 400, 500};
+    TVector<std::optional<ui64>> expLeftCol1 = {10, std::nullopt, 30, std::nullopt, 50};
+    TVector<ui64> expLeftCol2 = {1, 2, 3, 4, 5};
+    TVector<ui64> expLeftCol3 = {11, 22, 33, 44, 55};
+    TVector<ui64> expLeftCol4 = {1000, 2000, 3000, 4000, 5000};
+    TVector<std::optional<ui64>> expRightCol0 = {std::nullopt, std::nullopt, 3, std::nullopt, std::nullopt};
+    TVector<std::optional<ui64>> expRightCol1 = {std::nullopt, std::nullopt, 33, std::nullopt, std::nullopt};
+
+    td.Left = ConvertVectorsToTuples(setup, leftCol0, leftCol1, leftCol2, leftCol3, leftCol4);
+    td.Right = ConvertVectorsToTuples(setup, rightCol0, rightCol1);
+    td.Result = ConvertVectorsToTuples(setup, expLeftCol0, expLeftCol1, expLeftCol2, expLeftCol3, expLeftCol4,
+                                       expRightCol0, expRightCol1);
+
+    td.LeftKeyColmns = {2, 3};
+    td.RightKeyColmns = {0, 1};
+    td.Renames = {{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}, {2, EJoinSide::kLeft},
+                  {3, EJoinSide::kLeft}, {4, EJoinSide::kLeft},
+                  {0, EJoinSide::kRight}, {1, EJoinSide::kRight}};
+
+    constexpr int packedTupleSize = 2 * 8 + 5;
+    constexpr ui64 joinMemory = packedTupleSize * (0.5 * rightSize);
+    td.JoinMemoryConstraint = joinMemory;
+    td.Kind = EJoinKind::Left;
+    return td;
+}
+
+[[maybe_unused]] TJoinTestData LeftJoinSpillingTwoKeysTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    TVector<ui64> leftKey1 = {1, 2, 3, 4, 5};
+    TVector<ui64> leftKey2 = {10, 20, 30, 40, 50};
+
+    constexpr int rightSize = 200000;
+    TVector<ui64> rightKey1(rightSize);
+    TVector<ui64> rightKey2(rightSize);
+    for (int i = 0; i < rightSize; ++i) {
+        rightKey1[i] = 2 * i + 3;
+        rightKey2[i] = 20 * i + 30;
+    }
+
+    TVector<ui64> expLeftKey1 = {1, 2, 3, 4, 5};
+    TVector<ui64> expLeftKey2 = {10, 20, 30, 40, 50};
+    TVector<std::optional<ui64>> expRightKey1 = {std::nullopt, std::nullopt, 3, std::nullopt, 5};
+    TVector<std::optional<ui64>> expRightKey2 = {std::nullopt, std::nullopt, 30, std::nullopt, 50};
+
+    td.Left = ConvertVectorsToTuples(setup, leftKey1, leftKey2);
+    td.Right = ConvertVectorsToTuples(setup, rightKey1, rightKey2);
+    td.Result = ConvertVectorsToTuples(setup, expLeftKey1, expLeftKey2, expRightKey1, expRightKey2);
+
+    td.LeftKeyColmns = {0, 1};
+    td.RightKeyColmns = {0, 1};
+    td.Renames = {{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft},
+                  {0, EJoinSide::kRight}, {1, EJoinSide::kRight}};
+
+    constexpr int packedTupleSize = 2 * 8 + 5;
+    constexpr ui64 joinMemory = packedTupleSize * (0.5 * rightSize);
+    td.JoinMemoryConstraint = joinMemory;
+    td.Kind = EJoinKind::Left;
+    return td;
+}
+
+[[maybe_unused]] TJoinTestData LeftJoinSpillingTestDataLeftIsBuild() {
+    auto td = LeftJoinSpillingTestData();
+    td.JoinSettings.BuildSide = NMiniKQL::EBuildSide::Left;
+    return td;
+}
+
+[[maybe_unused]] TJoinTestData LeftJoinSpillingTwoKeysTestDataLeftIsBuild() {
+    auto td = LeftJoinSpillingTwoKeysTestData();
+    td.JoinSettings.BuildSide = NMiniKQL::EBuildSide::Left;
+    return td;
+}
+
+[[maybe_unused]] TJoinTestData LeftJoinSpillingMultiKeyTestDataLeftIsBuild() {
+    auto td = LeftJoinSpillingMultiKeyTestData();
+    td.JoinSettings.BuildSide = NMiniKQL::EBuildSide::Left;
+    return td;
+}
+
+[[maybe_unused]] TJoinTestData LargeBothSidesInnerSpillingTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    constexpr int leftSize = 200000;
+    constexpr int rightSize = 200000;
+    constexpr int keyOffset = 100000;
+
+    TVector<ui64> leftCol0(leftSize);
+    TVector<ui64> leftCol1(leftSize);
+    for (int i = 0; i < leftSize; ++i) {
+        leftCol0[i] = i;
+        leftCol1[i] = i * 10;
+    }
+
+    TVector<ui64> rightCol0(rightSize);
+    TVector<std::optional<ui64>> rightCol1(rightSize);
+    for (int i = 0; i < rightSize; ++i) {
+        rightCol0[i] = i + keyOffset;
+        rightCol1[i] = (i % 5 == 0) ? std::nullopt : std::optional<ui64>(i * 7);
+    }
+
+    constexpr int matchCount = leftSize - keyOffset;
+    TVector<ui64> expLeftCol0(matchCount);
+    TVector<ui64> expLeftCol1(matchCount);
+    TVector<ui64> expRightCol0(matchCount);
+    TVector<std::optional<ui64>> expRightCol1(matchCount);
+    for (int i = 0; i < matchCount; ++i) {
+        int leftKey = i + keyOffset;
+        int rightIdx = i;
+        expLeftCol0[i] = leftKey;
+        expLeftCol1[i] = leftKey * 10;
+        expRightCol0[i] = leftKey;
+        expRightCol1[i] = (rightIdx % 5 == 0) ? std::nullopt : std::optional<ui64>(rightIdx * 7);
+    }
+
+    td.Left = ConvertVectorsToTuples(setup, leftCol0, leftCol1);
+    td.Right = ConvertVectorsToTuples(setup, rightCol0, rightCol1);
+    td.Result = ConvertVectorsToTuples(setup, expLeftCol0, expLeftCol1, expRightCol0, expRightCol1);
+
+    td.LeftKeyColmns = {0};
+    td.RightKeyColmns = {0};
+    td.Renames = {{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft},
+                  {0, EJoinSide::kRight}, {1, EJoinSide::kRight}};
+
+    constexpr int packedTupleSize = 2 * 8 + 5;
+    constexpr ui64 joinMemory = packedTupleSize * static_cast<ui64>(0.3 * rightSize);
+    td.JoinMemoryConstraint = joinMemory;
+    td.Kind = EJoinKind::Inner;
+    return td;
+}
+
+[[maybe_unused]] TJoinTestData LargeBothSidesLeftSpillingTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    constexpr int leftSize = 200000;
+    constexpr int rightSize = 200000;
+    constexpr int keyOffset = 100000;
+
+    TVector<ui64> leftCol0(leftSize);
+    TVector<ui64> leftCol1(leftSize);
+    TVector<std::optional<ui64>> leftCol2(leftSize);
+    for (int i = 0; i < leftSize; ++i) {
+        leftCol0[i] = i;
+        leftCol1[i] = i * 3;
+        leftCol2[i] = (i % 4 == 0) ? std::nullopt : std::optional<ui64>(i * 100);
+    }
+
+    TVector<ui64> rightCol0(rightSize);
+    TVector<ui64> rightCol1(rightSize);
+    for (int i = 0; i < rightSize; ++i) {
+        rightCol0[i] = i + keyOffset;
+        rightCol1[i] = (i + keyOffset) * 3;
+    }
+
+    TVector<ui64> expLeftCol0(leftSize);
+    TVector<ui64> expLeftCol1(leftSize);
+    TVector<std::optional<ui64>> expLeftCol2(leftSize);
+    TVector<std::optional<ui64>> expRightCol0(leftSize);
+    TVector<std::optional<ui64>> expRightCol1(leftSize);
+    for (int i = 0; i < leftSize; ++i) {
+        expLeftCol0[i] = i;
+        expLeftCol1[i] = i * 3;
+        expLeftCol2[i] = (i % 4 == 0) ? std::nullopt : std::optional<ui64>(i * 100);
+        if (i >= keyOffset) {
+            expRightCol0[i] = static_cast<ui64>(i);
+            expRightCol1[i] = static_cast<ui64>(i * 3);
+        }
+    }
+
+    td.Left = ConvertVectorsToTuples(setup, leftCol0, leftCol1, leftCol2);
+    td.Right = ConvertVectorsToTuples(setup, rightCol0, rightCol1);
+    td.Result = ConvertVectorsToTuples(setup, expLeftCol0, expLeftCol1, expLeftCol2,
+                                       expRightCol0, expRightCol1);
+
+    td.LeftKeyColmns = {0, 1};
+    td.RightKeyColmns = {0, 1};
+    td.Renames = {{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}, {2, EJoinSide::kLeft},
+                  {0, EJoinSide::kRight}, {1, EJoinSide::kRight}};
+
+    constexpr int packedTupleSize = 2 * 8 + 5;
+    constexpr ui64 joinMemory = packedTupleSize * static_cast<ui64>(0.3 * rightSize);
+    td.JoinMemoryConstraint = joinMemory;
+    td.Kind = EJoinKind::Left;
+    return td;
+}
+
+[[maybe_unused]] TJoinTestData LargeBothSidesLeftSpillingTestDataLeftIsBuild() {
+    auto td = LargeBothSidesLeftSpillingTestData();
+    td.JoinSettings.BuildSide = NMiniKQL::EBuildSide::Left;
+    return td;
+}
+
+[[maybe_unused]] TJoinTestData SlicedBlocksInnerSpillingTestData() {
+    auto td = LargeBothSidesInnerSpillingTestData();
+    td.SliceBlocks = true;
+    return td;
+}
+
+[[maybe_unused]] TJoinTestData SlicedBlocksLeftSpillingTestData() {
+    auto td = LargeBothSidesLeftSpillingTestData();
+    td.SliceBlocks = true;
+    return td;
+}
+
+[[maybe_unused]] TJoinTestData SlicedBlocksLeftSpillingTestDataLeftIsBuild() {
+    auto td = LargeBothSidesLeftSpillingTestData();
+    td.SliceBlocks = true;
+    td.JoinSettings.BuildSide = NMiniKQL::EBuildSide::Left;
+    return td;
+}
+
+[[maybe_unused]] TJoinTestData FullBehavesAsLeftIfRightEmptyTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    TVector<ui64> leftKeys = {1, 2, 3};
+    TVector<TString> leftValues = {"a", "b", "c"};
+
+    TVector<ui64> rightKeys;
+    TVector<TString> rightValues;
+
+    TVector<ui64> expectedKeysLeft = leftKeys;
+    TVector<TString> expectedValuesLeft = leftValues;
+    TVector<std::optional<ui64>> expectedKeysRight(3, std::nullopt);
+    TVector<std::optional<TString>> expectedValuesRight(3, std::nullopt);
+
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+    td.Result =
+        ConvertVectorsToTuples(setup, expectedKeysLeft, expectedValuesLeft, expectedKeysRight, expectedValuesRight);
+    td.Kind = EJoinKind::Full;
+    return td;
+}
+
+[[maybe_unused]] TJoinTestData RightJoinTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    TVector<ui64> leftKeys;
+    TVector<TString> leftValues;
+
+    TVector<ui64> rightKeys = {1, 2, 3};
+    TVector<TString> rightValues = {"a", "b", "c"};
+
+    TVector<std::optional<ui64>> expectedKeysLeft(3, std::nullopt);
+    TVector<std::optional<TString>> expectedValuesLeft(3, std::nullopt);
+    TVector<ui64> expectedKeysRight = rightKeys;
+    TVector<TString> expectedValuesRight = rightValues;
+
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+    td.Result =
+        ConvertVectorsToTuples(setup, expectedKeysLeft, expectedValuesLeft, expectedKeysRight, expectedValuesRight);
+    td.Kind = EJoinKind::Right;
+    return td;
+}
+
+[[maybe_unused]] TJoinTestData FullBehavesAsRightIfLeftEmptyTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    TVector<ui64> leftKeys;
+    TVector<TString> leftValues;
+
+    TVector<ui64> rightKeys = {1, 2, 3};
+    TVector<TString> rightValues = {"a", "b", "c"};
+
+    TVector<std::optional<ui64>> expectedKeysLeft(3, std::nullopt);
+    TVector<std::optional<TString>> expectedValuesLeft(3, std::nullopt);
+    TVector<ui64> expectedKeysRight = rightKeys;
+    TVector<TString> expectedValuesRight = rightValues;
+
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+    td.Result =
+        ConvertVectorsToTuples(setup, expectedKeysLeft, expectedValuesLeft, expectedKeysRight, expectedValuesRight);
+    td.Kind = EJoinKind::Full;
+    return td;
+}
+
+[[maybe_unused]] TJoinTestData FullTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    TVector<ui64> leftKeys = {2, 3, 4};
+    TVector<TString> leftValues = {"b1", "c1", "d1"};
+
+    TVector<ui64> rightKeys = {1, 2, 3};
+    TVector<TString> rightValues = {"a2", "b2", "c2"};
+
+    TVector<std::optional<ui64>> expectedKeysLeft = {std::nullopt, 2, 3, 4};
+    TVector<std::optional<TString>> expectedValuesLeft = {std::nullopt, "b1", "c1", "d1"};
+    TVector<std::optional<ui64>> expectedKeysRight = {1, 2, 3, std::nullopt};
+    TVector<std::optional<TString>> expectedValuesRight = {"a2", "b2", "c2", std::nullopt};
+
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+    td.Result =
+        ConvertVectorsToTuples(setup, expectedKeysLeft, expectedValuesLeft, expectedKeysRight, expectedValuesRight);
+    td.Kind = EJoinKind::Full;
+    return td;
+}
+
+[[maybe_unused]] TJoinTestData ExclusionTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    TVector<ui64> leftKeys = {2, 3, 4};
+    TVector<TString> leftValues = {"b1", "c1", "d1"};
+
+    TVector<ui64> rightKeys = {1, 2, 3};
+    TVector<TString> rightValues = {"a2", "b2", "c2"};
+
+    TVector<std::optional<ui64>> expectedKeysLeft = {std::nullopt, 4};
+    TVector<std::optional<TString>> expectedValuesLeft = {std::nullopt, "d1"};
+    TVector<std::optional<ui64>> expectedKeysRight = {1, std::nullopt};
+    TVector<std::optional<TString>> expectedValuesRight = {"a2", std::nullopt};
+
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+    td.Result =
+        ConvertVectorsToTuples(setup, expectedKeysLeft, expectedValuesLeft, expectedKeysRight, expectedValuesRight);
+    td.Kind = EJoinKind::Exclusion;
+    return td;
+}
+
+[[maybe_unused]] TJoinTestData LeftSemiTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    TVector<ui64> leftKeys = {2, 3, 4};
+    TVector<TString> leftValues = {"b1", "c1", "d1"};
+
+    TVector<ui64> rightKeys = {1, 2, 3};
+    TVector<TString> rightValues = {"a2", "b2", "c2"};
+
+    TVector<ui64> expectedKeys = {2, 3};
+    TVector<TString> expectedValues = {"b1", "c1"};
+
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+    td.Result = ConvertVectorsToTuples(setup, expectedKeys, expectedValues);
+    td.Kind = EJoinKind::LeftSemi;
+    td.Renames = TDqUserRenames{{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft} };
+    return td;
+}
+
+[[maybe_unused]] TJoinTestData RightSemiTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    TVector<ui64> leftKeys = {2, 3, 4};
+    TVector<TString> leftValues = {"b1", "c1", "d1"};
+
+    TVector<ui64> rightKeys = {1, 2, 3};
+    TVector<TString> rightValues = {"a2", "b2", "c2"};
+
+    TVector<ui64> expectedKeys = {2, 3};
+    TVector<TString> expectedValues = {"b2", "c2"};
+
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+    td.Result = ConvertVectorsToTuples(setup, expectedKeys, expectedValues);
+    td.Kind = EJoinKind::RightSemi;
+    td.Renames = TDqUserRenames{{0, EJoinSide::kRight}, {1, EJoinSide::kRight} };
+    return td;
+}
+
+[[maybe_unused]] TJoinTestData LeftOnlyTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    TVector<ui64> leftKeys = {2, 3, 4};
+    TVector<TString> leftValues = {"b1", "c1", "d1"};
+
+    TVector<ui64> rightKeys = {1, 2, 3};
+    TVector<TString> rightValues = {"a2", "b2", "c2"};
+
+    TVector<ui64> expectedKeys = {4};
+    TVector<TString> expectedValues = {"d1"};
+
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+    td.Result = ConvertVectorsToTuples(setup, expectedKeys, expectedValues);
+    td.Kind = EJoinKind::LeftOnly;
+    td.Renames = TDqUserRenames{{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft} };
+
+    return td;
+}
+
+[[maybe_unused]] TJoinTestData RightOnlyTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    TVector<ui64> leftKeys = {2, 3, 4};
+    TVector<TString> leftValues = {"b1", "c1", "d1"};
+
+    TVector<ui64> rightKeys = {1, 2, 3};
+    TVector<TString> rightValues = {"a2", "b2", "c2"};
+
+    TVector<ui64> expectedKeys = {1};
+    TVector<TString> expectedValues = {"a2"};
+
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+    td.Result = ConvertVectorsToTuples(setup, expectedKeys, expectedValues);
+    td.Kind = EJoinKind::RightOnly;
+    td.Renames = TDqUserRenames{{0, EJoinSide::kRight}, {1, EJoinSide::kRight} };
+    return td;
+}
+
+TJoinTestData InnerJoinRenamesTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    TVector<ui64> leftKeys = {1, 2, 3, 4, 5};
+    TVector<TString> leftValues = {"a1", "b1", "c1", "d1", "e1"};
+
+    TVector<ui64> rightKeys = {2, 3, 4, 5, 6};
+    TVector<TString> rightValues = {"b2", "c2", "d2", "e2", "f2"};
+
+    TVector<ui64> expectedKeysLeft = {2, 3, 4, 5};
+    TVector<TString> expectedValuesLeft = {"b1", "c1", "d1", "e1"};
+    TVector<ui64> expectedKeysRight = {2, 3, 4, 5};
+    TVector<TString> expectedValuesRight = {"b2", "c2", "d2", "e2"};
+    td.Renames = {{1, EJoinSide::kRight}, {1, EJoinSide::kLeft}, {0, EJoinSide::kRight}, {0, EJoinSide::kLeft},
+                  {0, EJoinSide::kLeft}};
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+    td.Result = ConvertVectorsToTuples(setup, expectedValuesRight, expectedValuesLeft, expectedKeysRight,
+                                       expectedKeysLeft, expectedKeysLeft);
+    td.Kind = EJoinKind::Inner;
+    return td;
+}
+
+// INNER on join column: left key is Uint64, right key is Optional<Uint64>. A NULL on the right must not match
+// a non-null left key (same row position does not imply match).
+TJoinTestData InnerJoinIntAndOptionalIntKeyTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    TVector<ui64> leftIds = {1, 2, 3};
+    TVector<ui64> leftKeys = {10, 20, 30};
+
+    TVector<ui64> rightIds = {1, 2, 3};
+    TVector<std::optional<ui64>> rightKeys = {10, std::nullopt, 30};
+
+    TVector<ui64> expLeftIds = {1, 3};
+    TVector<ui64> expLeftKeys = {10, 30};
+    TVector<ui64> expRightIds = {1, 3};
+    TVector<std::optional<ui64>> expRightKeys = {10, 30};
+
+    td.Left = ConvertVectorsToTuples(setup, leftIds, leftKeys);
+    td.Right = ConvertVectorsToTuples(setup, rightIds, rightKeys);
+    td.Result = ConvertVectorsToTuples(setup, expLeftIds, expLeftKeys, expRightIds, expRightKeys);
+
+    td.LeftKeyColmns = {1};
+    td.RightKeyColmns = {1};
+    td.Renames = {{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}, {0, EJoinSide::kRight}, {1, EJoinSide::kRight}};
+    td.Kind = EJoinKind::Inner;
+    return td;
+}
+
+TJoinTestData SwappedKeyColumnsInnerTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    TVector<ui64> leftCol0 = {10, 20, 30};
+    TVector<ui64> leftCol1 = {100, 200, 300};
+    TVector<TString> leftCol2 = {"a", "b", "c"};
+
+    TVector<ui64> rightCol0 = {100, 200, 999};
+    TVector<ui64> rightCol1 = {10, 20, 99};
+    TVector<TString> rightCol2 = {"x", "y", "z"};
+
+    TVector<ui64> expLeftCol0 = {10, 20};
+    TVector<ui64> expLeftCol1 = {100, 200};
+    TVector<TString> expLeftCol2 = {"a", "b"};
+    TVector<ui64> expRightCol0 = {100, 200};
+    TVector<ui64> expRightCol1 = {10, 20};
+    TVector<TString> expRightCol2 = {"x", "y"};
+
+    td.Left = ConvertVectorsToTuples(setup, leftCol0, leftCol1, leftCol2);
+    td.Right = ConvertVectorsToTuples(setup, rightCol0, rightCol1, rightCol2);
+    td.Result = ConvertVectorsToTuples(setup, expLeftCol0, expLeftCol1, expLeftCol2,
+                                       expRightCol0, expRightCol1, expRightCol2);
+
+    td.LeftKeyColmns = {0, 1};
+    td.RightKeyColmns = {1, 0};
+    td.Renames = {{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}, {2, EJoinSide::kLeft},
+                  {0, EJoinSide::kRight}, {1, EJoinSide::kRight}, {2, EJoinSide::kRight}};
+    td.Kind = EJoinKind::Inner;
+    return td;
+}
+
+TJoinTestData SwappedKeyColumnsLeftSemiTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    TVector<ui64> leftCol0 = {10, 20, 30};
+    TVector<ui64> leftCol1 = {100, 200, 300};
+    TVector<TString> leftCol2 = {"a", "b", "c"};
+
+    TVector<ui64> rightCol0 = {100, 200, 999};
+    TVector<ui64> rightCol1 = {10, 20, 99};
+
+    TVector<ui64> expLeftCol0 = {10, 20};
+    TVector<ui64> expLeftCol1 = {100, 200};
+    TVector<TString> expLeftCol2 = {"a", "b"};
+
+    td.Left = ConvertVectorsToTuples(setup, leftCol0, leftCol1, leftCol2);
+    td.Right = ConvertVectorsToTuples(setup, rightCol0, rightCol1);
+    td.Result = ConvertVectorsToTuples(setup, expLeftCol0, expLeftCol1, expLeftCol2);
+
+    td.LeftKeyColmns = {0, 1};
+    td.RightKeyColmns = {1, 0};
+    td.Renames = {{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}, {2, EJoinSide::kLeft}};
+    td.Kind = EJoinKind::LeftSemi;
+    return td;
+}
+
+TJoinTestData SpillingTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    TVector<ui64> leftKeys = {1, 2, 3, 4, 5};
+    TVector<ui64> leftValues = {13, 14, 15, 16, 17};
+    constexpr int rightSize = 200000;
+    TVector<ui64> rightKeys(rightSize);
+    TVector<ui64> rightValues(rightSize);
+    for (int index = 0; index < rightSize; ++index) {
+        rightKeys[index] = 2 * index + 3;
+        rightValues[index] = index;
+    }
+
+    TVector<ui64> expectedKeysLeft = {3, 5};
+    TVector<ui64> expectedValuesLeft = {15, 17};
+    TVector<ui64> expectedKeysRight = {3, 5};
+    TVector<ui64> expectedValuesRight = {0, 1};
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+    td.Result =
+        ConvertVectorsToTuples(setup, expectedKeysLeft, expectedValuesLeft, expectedKeysRight, expectedValuesRight);
+
+    constexpr int packedTupleSize = 2 * 8 + 5;
+    constexpr ui64 joinMemory = packedTupleSize * (0.5 * rightSize);
+    [[maybe_unused]] constexpr ui64 rightSizeBytes = rightSize * packedTupleSize;
+    td.JoinMemoryConstraint = joinMemory;
+    td.Kind = EJoinKind::Inner;
+    return td;
+}
+
+TJoinTestData SmallStringsTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    TVector<TString> leftKeys{"foobarbazfoobarbazfoobarbaz", "foobarbazfoobarbazfoobarbazfoo", "foobarbazfoobarbazfoobarbazfoobar"};
+    TVector<TString> leftValues{"a1", "b1", "c1"};
+
+    TVector<TString> rightKeys{"foobarbazfoobarbazfoobarbaz", "foobarbazfoobarbazfoobarbazfoo", "foobarbazfoobarbazfoobarbazfoobar"};
+    TVector<TString> rightValues{"a2", "b2", "c2"};
+
+    TVector<TString> expectedKeysLeft = leftKeys;
+    TVector<TString> expectedValuesLeft = leftValues;
+    TVector<TString> expectedKeysRight = rightKeys;
+    TVector<TString> expectedValuesRight = rightValues;
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+    td.Result =
+        ConvertVectorsToTuples(setup, expectedKeysLeft, expectedValuesLeft, expectedKeysRight, expectedValuesRight);
+
+    td.Kind = EJoinKind::Inner;
+    return td;
+}
+
+TJoinTestData BigStringsTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    constexpr int leftSize = 2000;
+    TVector<ui64> leftKeys(leftSize);
+    TVector<TString> leftValues(leftSize);
+    for (int index = 0; index < leftSize; ++index) {
+        leftKeys[index] = 2 * index + 3;
+        leftValues[index] = TString(std::min(400 + index / 1000, index+1), static_cast<char>((index+1)%10+'a'));
+    }
+    constexpr int rightSize = 200;
+    TVector<ui64> rightKeys(rightSize);
+    TVector<TString> rightValues(rightSize);
+    for (int index = 0; index < rightSize; ++index) {
+        rightKeys[index] = 2 * index + 3;
+        rightValues[index] = TString(std::min(400 + index / 1000, index+1), static_cast<char>((index+1)%10+'a'));
+    }
+
+    TVector<ui64> expectedKeysLeft = rightKeys;
+    TVector<TString> expectedValuesLeft = rightValues;
+    TVector<ui64> expectedKeysRight = rightKeys;
+    TVector<TString> expectedValuesRight = rightValues;
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+    td.Result =
+        ConvertVectorsToTuples(setup, expectedKeysLeft, expectedValuesLeft, expectedKeysRight, expectedValuesRight);
+
+    td.Kind = EJoinKind::Inner;
+    return td;
+}
+
+TJoinTestData OutputBufferBoundedTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    constexpr int leftSize = 200;
+    constexpr int rightSize = 200;
+    constexpr int valueSize = 512;
+
+    TVector<ui64> leftKeys(leftSize, 1);
+    TVector<TString> leftValues(leftSize);
+    for (int i = 0; i < leftSize; ++i) {
+        leftValues[i] = TString(valueSize, 'A' + (i % 26));
+    }
+
+    TVector<ui64> rightKeys(rightSize, 1);
+    TVector<TString> rightValues(rightSize);
+    for (int i = 0; i < rightSize; ++i) {
+        rightValues[i] = TString(valueSize, 'a' + (i % 26));
+    }
+
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+    td.Kind = EJoinKind::Inner;
+    return td;
+}
+
+TJoinTestData ScalarPayloadInnerJoinTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    TVector<ui64> leftKeys = {1, 2, 3, 4, 5};
+    TVector<ui64> leftValues = {100, 100, 100, 100, 100};
+
+    TVector<ui64> rightKeys = {2, 3, 4, 5, 6};
+    TVector<ui64> rightValues = {20, 30, 40, 50, 60};
+
+    TVector<ui64> expectedKeysLeft = {2, 3, 4, 5};
+    TVector<ui64> expectedValuesLeft = {100, 100, 100, 100};
+    TVector<ui64> expectedKeysRight = {2, 3, 4, 5};
+    TVector<ui64> expectedValuesRight = {20, 30, 40, 50};
+
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+    td.Result =
+        ConvertVectorsToTuples(setup, expectedKeysLeft, expectedValuesLeft, expectedKeysRight, expectedValuesRight);
+
+    td.Kind = EJoinKind::Inner;
+    td.ScalarizeLeftColumns = {1};
+    return td;
+}
+
+TDqProgramBuilder::TJoinFilterLambda GreaterThanConstFilter(TDqSetup<false, true>* setup, ui32 column,
+                                                                  ui64 value) {
+    return [setup, column, value](TRuntimeNode::TList row) -> TRuntimeNode {
+        auto& pb = setup->GetDqProgramBuilder();
+        return pb.Coalesce(pb.Greater(row[column], pb.NewDataLiteral<ui64>(value)), pb.NewDataLiteral<bool>(false));
+    };
+}
+
+TDqProgramBuilder::TJoinFilterLambda LessThanConstFilter(TDqSetup<false, true>* setup, ui32 column, ui64 value) {
+    return [setup, column, value](TRuntimeNode::TList row) -> TRuntimeNode {
+        auto& pb = setup->GetDqProgramBuilder();
+        return pb.Coalesce(pb.Less(row[column], pb.NewDataLiteral<ui64>(value)), pb.NewDataLiteral<bool>(false));
+    };
+}
+
+// right[column] > left[column]
+TDqProgramBuilder::TJoinCommonFilterLambda RightGreaterThanLeftFilter(TDqSetup<false, true>* setup, ui32 column) {
+    return [setup, column](TRuntimeNode::TList left, TRuntimeNode::TList right) -> TRuntimeNode {
+        auto& pb = setup->GetDqProgramBuilder();
+        return pb.Coalesce(pb.Greater(right[column], left[column]), pb.NewDataLiteral<bool>(false));
+    };
+}
+
+// left[column] > right[column]
+TDqProgramBuilder::TJoinCommonFilterLambda LeftGreaterThanRightFilter(TDqSetup<false, true>* setup, ui32 column) {
+    return [setup, column](TRuntimeNode::TList left, TRuntimeNode::TList right) -> TRuntimeNode {
+        auto& pb = setup->GetDqProgramBuilder();
+        return pb.Coalesce(pb.Greater(left[column], right[column]), pb.NewDataLiteral<bool>(false));
+    };
+}
+
+TJoinTestData FilterBaseInnerData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    TVector<ui64> leftKeys = {1, 2, 3};
+    TVector<ui64> leftVals = {5, 20, 30};
+    TVector<ui64> rightKeys = {1, 2, 3};
+    TVector<ui64> rightVals = {100, 50, 60};
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftVals);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightVals);
+    td.Kind = EJoinKind::Inner;
+    return td;
+}
+
+TJoinTestData LeftFilterInnerTestData() {
+    auto td = FilterBaseInnerData();
+    auto& setup = *td.Setup;
+    TVector<ui64> expLeftKeys = {2, 3};
+    TVector<ui64> expLeftVals = {20, 30};
+    TVector<ui64> expRightKeys = {2, 3};
+    TVector<ui64> expRightVals = {50, 60};
+    td.Result = ConvertVectorsToTuples(setup, expLeftKeys, expLeftVals, expRightKeys, expRightVals);
+    // left[1] > 10 (drop 5)
+    td.LeftFilter = GreaterThanConstFilter(td.Setup.get(), 1, 10);
+    return td;
+}
+
+TJoinTestData RightFilterInnerTestData() {
+    auto td = FilterBaseInnerData();
+    auto& setup = *td.Setup;
+    TVector<ui64> expLeftKeys = {2, 3};
+    TVector<ui64> expLeftVals = {20, 30};
+    TVector<ui64> expRightKeys = {2, 3};
+    TVector<ui64> expRightVals = {50, 60};
+    td.Result = ConvertVectorsToTuples(setup, expLeftKeys, expLeftVals, expRightKeys, expRightVals);
+    // right[1] < 80 (drop 100)
+    td.RightFilter = LessThanConstFilter(td.Setup.get(), 1, 80);
+    return td;
+}
+
+TJoinTestData CommonFilterInnerTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    TVector<ui64> leftKeys = {1, 2, 3};
+    TVector<ui64> leftVals = {5, 60, 30};
+    TVector<ui64> rightKeys = {1, 2, 3};
+    TVector<ui64> rightVals = {100, 50, 60};
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftVals);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightVals);
+    td.Kind = EJoinKind::Inner;
+    TVector<ui64> expLeftKeys = {1, 3};
+    TVector<ui64> expLeftVals = {5, 30};
+    TVector<ui64> expRightKeys = {1, 3};
+    TVector<ui64> expRightVals = {100, 60};
+    td.Result = ConvertVectorsToTuples(setup, expLeftKeys, expLeftVals, expRightKeys, expRightVals);
+    // right[1] > left[1]
+    td.CommonFilter = RightGreaterThanLeftFilter(td.Setup.get(), 1);
+    return td;
+}
+
+TJoinTestData CommonFilterReversedInnerTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    TVector<ui64> leftKeys = {1, 2, 3};
+    TVector<ui64> leftVals = {5, 60, 30};
+    TVector<ui64> rightKeys = {1, 2, 3};
+    TVector<ui64> rightVals = {100, 50, 60};
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftVals);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightVals);
+    td.Kind = EJoinKind::Inner;
+    TVector<ui64> expLeftKeys = {2};
+    TVector<ui64> expLeftVals = {60};
+    TVector<ui64> expRightKeys = {2};
+    TVector<ui64> expRightVals = {50};
+    td.Result = ConvertVectorsToTuples(setup, expLeftKeys, expLeftVals, expRightKeys, expRightVals);
+    // left[1] > right[1]
+    td.CommonFilter = LeftGreaterThanRightFilter(td.Setup.get(), 1);
+    return td;
+}
+
+TJoinTestData AllFiltersInnerTestData() {
+    auto td = FilterBaseInnerData();
+    auto& setup = *td.Setup;
+    TVector<ui64> expLeftKeys = {2, 3};
+    TVector<ui64> expLeftVals = {20, 30};
+    TVector<ui64> expRightKeys = {2, 3};
+    TVector<ui64> expRightVals = {50, 60};
+    td.Result = ConvertVectorsToTuples(setup, expLeftKeys, expLeftVals, expRightKeys, expRightVals);
+    // left[1] > 10
+    td.LeftFilter = GreaterThanConstFilter(td.Setup.get(), 1, 10);
+    // right[1] < 80
+    td.RightFilter = LessThanConstFilter(td.Setup.get(), 1, 80);
+    // right[1] > left[1]
+    td.CommonFilter = RightGreaterThanLeftFilter(td.Setup.get(), 1);
+    return td;
+}
+
+TJoinTestData LeftJoinLeftFilterTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    TVector<ui64> leftKeys = {1, 2, 3};
+    TVector<ui64> leftVals = {5, 20, 30};
+    TVector<ui64> rightKeys = {1, 2, 3};
+    TVector<ui64> rightVals = {100, 50, 60};
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftVals);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightVals);
+
+    TVector<ui64> expLeftKeys = {1, 2, 3};
+    TVector<ui64> expLeftVals = {5, 20, 30};
+    TVector<std::optional<ui64>> expRightKeys = {std::nullopt, 2, 3};
+    TVector<std::optional<ui64>> expRightVals = {std::nullopt, 50, 60};
+    td.Result = ConvertVectorsToTuples(setup, expLeftKeys, expLeftVals, expRightKeys, expRightVals);
+
+    td.Kind = EJoinKind::Left;
+    td.LeftFilter = GreaterThanConstFilter(td.Setup.get(), 1, 10);
+    return td;
+}
+
+TJoinTestData LeftJoinCommonFilterTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    TVector<ui64> leftKeys = {1, 2, 3, 4};
+    TVector<ui64> leftVals = {5, 60, 30, 7};
+    TVector<ui64> rightKeys = {1, 2, 3};
+    TVector<ui64> rightVals = {100, 50, 60};
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftVals);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightVals);
+
+    TVector<ui64> expLeftKeys = {1, 2, 3, 4};
+    TVector<ui64> expLeftVals = {5, 60, 30, 7};
+    TVector<std::optional<ui64>> expRightKeys = {1, std::nullopt, 3, std::nullopt};
+    TVector<std::optional<ui64>> expRightVals = {100, std::nullopt, 60, std::nullopt};
+    td.Result = ConvertVectorsToTuples(setup, expLeftKeys, expLeftVals, expRightKeys, expRightVals);
+
+    td.Kind = EJoinKind::Left;
+    td.CommonFilter = RightGreaterThanLeftFilter(td.Setup.get(), 1);
+    return td;
+}
+
+// The same inputs as LeftJoinCommonFilterTestData: keys 1 and 3 have a match that passes
+// right[1] > left[1], key 2 has a match that the filter rejects, key 4 has no match at all.
+TJoinTestData SemiOrOnlyCommonFilterBaseData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    TVector<ui64> leftKeys = {1, 2, 3, 4};
+    TVector<ui64> leftVals = {5, 60, 30, 7};
+    TVector<ui64> rightKeys = {1, 2, 3};
+    TVector<ui64> rightVals = {100, 50, 60};
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftVals);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightVals);
+    td.Renames = TDqUserRenames{{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}};
+    td.CommonFilter = RightGreaterThanLeftFilter(td.Setup.get(), 1);
+    return td;
+}
+
+TJoinTestData LeftSemiCommonFilterTestData() {
+    auto td = SemiOrOnlyCommonFilterBaseData();
+    auto& setup = *td.Setup;
+    TVector<ui64> expKeys = {1, 3};
+    TVector<ui64> expVals = {5, 30};
+    td.Result = ConvertVectorsToTuples(setup, expKeys, expVals);
+    td.Kind = EJoinKind::LeftSemi;
+    return td;
+}
+
+TJoinTestData LeftOnlyCommonFilterTestData() {
+    auto td = SemiOrOnlyCommonFilterBaseData();
+    auto& setup = *td.Setup;
+    // Key 2 is emitted even though it has a match on the key: the filter rejects the only pair it
+    // takes part in, so the row counts as unmatched.
+    TVector<ui64> expKeys = {2, 4};
+    TVector<ui64> expVals = {60, 7};
+    td.Result = ConvertVectorsToTuples(setup, expKeys, expVals);
+    td.Kind = EJoinKind::LeftOnly;
+    return td;
+}
+
+// Key 1 has a match on the key, but the left row itself does not pass left[1] > 10.
+TJoinTestData SemiOrOnlyLeftFilterBaseData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    TVector<ui64> leftKeys = {1, 2, 3, 4};
+    TVector<ui64> leftVals = {5, 20, 30, 40};
+    TVector<ui64> rightKeys = {1, 2, 3};
+    TVector<ui64> rightVals = {100, 50, 60};
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftVals);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightVals);
+    td.Renames = TDqUserRenames{{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}};
+    td.LeftFilter = GreaterThanConstFilter(td.Setup.get(), 1, 10);
+    return td;
+}
+
+TJoinTestData LeftSemiLeftFilterTestData() {
+    auto td = SemiOrOnlyLeftFilterBaseData();
+    auto& setup = *td.Setup;
+    TVector<ui64> expKeys = {2, 3};
+    TVector<ui64> expVals = {20, 30};
+    td.Result = ConvertVectorsToTuples(setup, expKeys, expVals);
+    td.Kind = EJoinKind::LeftSemi;
+    return td;
+}
+
+TJoinTestData LeftOnlyLeftFilterTestData() {
+    auto td = SemiOrOnlyLeftFilterBaseData();
+    auto& setup = *td.Setup;
+    TVector<ui64> expKeys = {1, 4};
+    TVector<ui64> expVals = {5, 40};
+    td.Result = ConvertVectorsToTuples(setup, expKeys, expVals);
+    td.Kind = EJoinKind::LeftOnly;
+    return td;
+}
+
+// Shape of a probe side produced by a chain of LEFT JOINs in the new optimizer:
+// several 4-byte payload columns interleaved with 1-byte flag columns, with the
+// join key sitting in the middle. Such a row is short enough for the small-tuple
+// SIMD packing path and has more packable columns than it can dispatch.
+TJoinTestData LeftJoinNarrowRowWithFlagsTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    TVector<ui32> leftFirst = {10, 11, 12, 13};
+    TVector<bool> leftFlag0 = {true, false, true, false};
+    TVector<ui32> leftSecond = {20, 21, 22, 23};
+    TVector<bool> leftFlag1 = {false, true, false, true};
+    TVector<ui32> leftKeys = {1, 2, 3, 4};
+    TVector<bool> leftFlag2 = {true, true, false, false};
+
+    TVector<ui32> rightKeys = {2, 3, 5};
+    TVector<ui32> rightVals = {200, 300, 500};
+
+    TVector<std::optional<ui32>> expRightKeys = {std::nullopt, 2, 3, std::nullopt};
+    TVector<std::optional<ui32>> expRightVals = {std::nullopt, 200, 300, std::nullopt};
+
+    td.Left = ConvertVectorsToTuples(setup, leftFirst, leftFlag0, leftSecond, leftFlag1, leftKeys, leftFlag2);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightVals);
+    td.Result = ConvertVectorsToTuples(setup, leftFirst, leftFlag0, leftSecond, leftFlag1, leftKeys, leftFlag2,
+                                       expRightKeys, expRightVals);
+
+    td.LeftKeyColmns = {4};
+    td.RightKeyColmns = {0};
+    td.Renames = TDqUserRenames{{0, EJoinSide::kLeft},  {1, EJoinSide::kLeft}, {2, EJoinSide::kLeft},
+                                {3, EJoinSide::kLeft},  {4, EJoinSide::kLeft}, {5, EJoinSide::kLeft},
+                                {0, EJoinSide::kRight}, {1, EJoinSide::kRight}};
+    td.Kind = EJoinKind::Left;
+    return td;
+}
+
+TJoinDescription MakeJoinDescription(TJoinTestData& td) {
+    FilterRenamesForSemiAndOnlyJoins(td);
+    TJoinDescription descr;
+    descr.CustomRenames = td.Renames;
+    descr.Setup = td.Setup.get();
+    descr.LeftSource.KeyColumnIndexes = td.LeftKeyColmns;
+    descr.LeftSource.ColumnTypes =
+        AS_TYPE(TTupleType, AS_TYPE(TListType, td.Left.Type)->GetItemType())->GetElements();
+    descr.LeftSource.ValuesList = td.Left.Value;
+    descr.RightSource.KeyColumnIndexes = td.RightKeyColmns;
+    descr.RightSource.ColumnTypes =
+        AS_TYPE(TTupleType, AS_TYPE(TListType, td.Right.Type)->GetItemType())->GetElements();
+    descr.RightSource.ValuesList = td.Right.Value;
+    descr.BlockSize = td.BlockSize;
+    descr.SliceBlocks = td.SliceBlocks;
+    descr.ScalarizeLeftColumns = td.ScalarizeLeftColumns;
+    descr.ScalarizeRightColumns = td.ScalarizeRightColumns;
+    descr.LeftFilter = td.LeftFilter;
+    descr.RightFilter = td.RightFilter;
+    descr.CommonFilter = td.CommonFilter;
+    return descr;
+}
+
+void Test(TJoinTestData testData, bool blockJoin, bool withSpiller = true) {
+    auto descr = MakeJoinDescription(testData);
+    if (testData.JoinMemoryConstraint){
+        descr.Setup->Alloc.Ref().ForcefullySetMemoryYellowZone(true);
+    } else {
+        descr.Setup->Alloc.Ref().ForcefullySetMemoryYellowZone(false);
+    }
+    THolder<IComputationGraph> got = ConstructJoinGraphStream(
+        testData.Kind, blockJoin ? ETestedJoinAlgo::kBlockHash : ETestedJoinAlgo::kScalarHash, descr, withSpiller,
+        testData.JoinSettings);
+    if (testData.JoinMemoryConstraint) {
+        testData.SetHardLimitIncreaseMemCallback(*testData.JoinMemoryConstraint + 3000_MB +
+                                                 testData.Setup->Alloc.GetUsed());
+    }
+
+    if (blockJoin) {
+        CompareListAndBlockStreamIgnoringOrder(testData.Result, *got);
+    } else {
+        CompareListAndStreamIgnoringOrder(testData.Result, *got);
+    }
+}
+
+} // namespace
+
+Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
+    Y_UNIT_TEST_TWIN(TestBasicPassthrough, BlockJoin) {
+        Test(BasicInnerJoinTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestCrossPassthrough, BlockJoin) {
+        Test(CrossJoinTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestMixedKeysPassthrough, BlockJoin) {
+        Test(MixedKeysInnerTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestInnerJoinIntAndOptionalIntKey, BlockJoin) {
+        Test(InnerJoinIntAndOptionalIntKeyTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestEmptyFlows, BlockJoin) {
+        Test(EmptyInnerJoinTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestEmptyLeft, BlockJoin) {
+        Test(EmptyLeftInnerTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestEmptyRight, BlockJoin) {
+        Test(EmptyRightInnerTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestLeftKind, BlockJoin) {
+        Test(LeftJoinTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestLeftJoinNarrowRowWithFlags, BlockJoin) {
+        Test(LeftJoinNarrowRowWithFlagsTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestLeftJoinWithMatches, BlockJoin) {
+        Test(LeftJoinWithMatchesTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestLeftJoinSpilling, BlockJoin) {
+        Test(LeftJoinSpillingTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestLeftJoinSpillingTwoKeys, BlockJoin) {
+        Test(LeftJoinSpillingTwoKeysTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestLeftJoinSpillingMultiKey, BlockJoin) {
+        Test(LeftJoinSpillingMultiKeyTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST(TestLeftKindLeftIsBuild) {
+        Test(LeftJoinTestDataLeftIsBuild(), true);
+    }
+
+    Y_UNIT_TEST(TestLeftJoinWithMatchesLeftIsBuild) {
+        Test(LeftJoinWithMatchesTestDataLeftIsBuild(), true);
+    }
+
+    Y_UNIT_TEST(TestLeftJoinSpillingLeftIsBuild) {
+        Test(LeftJoinSpillingTestDataLeftIsBuild(), true);
+    }
+
+    Y_UNIT_TEST(TestLeftJoinSpillingTwoKeysLeftIsBuild) {
+        Test(LeftJoinSpillingTwoKeysTestDataLeftIsBuild(), true);
+    }
+
+    Y_UNIT_TEST(TestLeftJoinSpillingMultiKeyLeftIsBuild) {
+        Test(LeftJoinSpillingMultiKeyTestDataLeftIsBuild(), true);
+    }
+
+    Y_UNIT_TEST(TestLargeBothSidesLeftSpillingLeftIsBuild) {
+        Test(LargeBothSidesLeftSpillingTestDataLeftIsBuild(), true);
+    }
+
+    Y_UNIT_TEST(TestSlicedBlocksLeftSpillingLeftIsBuild) {
+        Test(SlicedBlocksLeftSpillingTestDataLeftIsBuild(), true);
+    }
+
+    Y_UNIT_TEST(TestLargeBothSidesInnerSpilling) {
+        Test(LargeBothSidesInnerSpillingTestData(), true);
+    }
+
+    Y_UNIT_TEST_TWIN(TestLargeBothSidesLeftSpilling, BlockJoin) {
+        Test(LargeBothSidesLeftSpillingTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST(TestSlicedBlocksInnerSpilling) {
+        Test(SlicedBlocksInnerSpillingTestData(), true);
+    }
+
+    Y_UNIT_TEST(TestSlicedBlocksLeftSpilling) {
+        Test(SlicedBlocksLeftSpillingTestData(), true);
+    }
+
+    // Y_UNIT_TEST_TWIN(FullBehavesAsLeftIfRightEmpty, BlockJoin) {
+    //     Test(FullBehavesAsLeftIfRightEmptyTestData(), BlockJoin);
+    // }
+
+    // Y_UNIT_TEST_TWIN(TestRightKind, BlockJoin) {
+    //     Test(RightJoinTestData(), BlockJoin);
+    // }
+
+    // Y_UNIT_TEST_TWIN(TestFullKindBehavesAsRightIfLeftIsEmpty, BlockJoin) {
+    //     Test(FullBehavesAsRightIfLeftEmptyTestData(), BlockJoin);
+    // }
+
+    // Y_UNIT_TEST_TWIN(TestFullKind, BlockJoin) {
+    //     Test(FullTestData(), BlockJoin);
+    // }
+
+    // Y_UNIT_TEST_TWIN(TestExclusionKind, BlockJoin) {
+    //     Test(ExclusionTestData(), BlockJoin);
+    // }
+
+    Y_UNIT_TEST_TWIN(TestLeftSemiKind, BlockJoin) {
+        Test(LeftSemiTestData(), BlockJoin);
+    }
+
+    // Y_UNIT_TEST_TWIN(TestRightSemiKind, BlockJoin) {
+    //     Test(RightSemiTestData(), BlockJoin);
+    // }
+
+    Y_UNIT_TEST_TWIN(TestLeftOnlyKind, BlockJoin) {
+        Test(LeftOnlyTestData(), BlockJoin);
+    }
+
+    // Y_UNIT_TEST_TWIN(TestRightOnlyKind, BlockJoin) {
+    //     Test(RightOnlyTestData(), BlockJoin);
+    // }
+    Y_UNIT_TEST_TWIN(TestInnerRenamesKind, BlockJoin) {
+        Test(InnerJoinRenamesTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestSwappedKeyColumnsInner, BlockJoin) {
+        Test(SwappedKeyColumnsInnerTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestSwappedKeyColumnsLeftSemi, BlockJoin) {
+        Test(SwappedKeyColumnsLeftSemiTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST(TestBlockJoinScalarColumn) {
+        Test(ScalarPayloadInnerJoinTestData(), true);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashLeftFilter, BlockJoin) {
+        Test(LeftFilterInnerTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashRightFilter, BlockJoin) {
+        Test(RightFilterInnerTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashCommonFilter, BlockJoin) {
+        Test(CommonFilterInnerTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashCommonFilterReversed, BlockJoin) {
+        Test(CommonFilterReversedInnerTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashAllFilters, BlockJoin) {
+        Test(AllFiltersInnerTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashLeftJoinLeftFilter, BlockJoin) {
+        Test(LeftJoinLeftFilterTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashLeftJoinCommonFilter, BlockJoin) {
+        Test(LeftJoinCommonFilterTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashLeftSemiJoinLeftFilter, BlockJoin) {
+        Test(LeftSemiLeftFilterTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashLeftSemiJoinCommonFilter, BlockJoin) {
+        Test(LeftSemiCommonFilterTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashLeftOnlyJoinLeftFilter, BlockJoin) {
+        Test(LeftOnlyLeftFilterTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashLeftOnlyJoinCommonFilter, BlockJoin) {
+        Test(LeftOnlyCommonFilterTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST(TestBlockSpilling) { 
+        Test(SpillingTestData(), true);
+    }
+
+    Y_UNIT_TEST(TestBlockJoinWithoutSpilling) {
+        Test(BasicInnerJoinTestData(), true, false);
+    }
+    Y_UNIT_TEST(TestBigStrings) { 
+        Test(BigStringsTestData(), true);
+    }
+    Y_UNIT_TEST(TestSmallStrings) { 
+        Test(SmallStringsTestData(), true);
+    }
+    Y_UNIT_TEST(TestOutputBufferBounded) {
+        auto td = OutputBufferBoundedTestData();
+        auto descr = MakeJoinDescription(td);
+
+        THolder<IComputationGraph> graph = ConstructJoinGraphStream(
+            td.Kind, ETestedJoinAlgo::kBlockHash, descr, true, td.JoinSettings);
+
+        const size_t tupleWidth = td.Renames.size() + 1;
+        std::vector<NUdf::TUnboxedValue> buff(tupleWidth);
+        auto stream = graph->GetValue();
+
+        i64 totalRows = 0;
+        i64 maxBlockRows = 0;
+        int blockCount = 0;
+
+        while (true) {
+            auto status = stream.WideFetch(buff.data(), tupleWidth);
+            if (status == NYql::NUdf::EFetchStatus::Finish) {
+                break;
+            }
+            if (status == NYql::NUdf::EFetchStatus::Yield) {
+                continue;
+            }
+            int rows = ArrowScalarAsInt(TArrowBlock::From(buff[tupleWidth - 1]));
+            totalRows += rows;
+            maxBlockRows = std::max(maxBlockRows, static_cast<i64>(rows));
+            ++blockCount;
+        }
+
+        constexpr i64 expectedTotal = 200 * 200;
+        constexpr i64 maxOutputRows = 10000;
+        UNIT_ASSERT_VALUES_EQUAL(totalRows, expectedTotal);
+        UNIT_ASSERT_C(blockCount > 1,
+            TStringBuilder() << "Expected multiple output blocks but got " << blockCount
+                             << " (all " << totalRows << " rows in one block)");
+        UNIT_ASSERT_C(maxBlockRows <= maxOutputRows,
+            TStringBuilder() << "Max block size " << maxBlockRows
+                             << " should be at most " << maxOutputRows);
+    }
+}
+} // namespace NKikimr::NMiniKQL

@@ -10,6 +10,8 @@ PY_SRCS(
     _dart_fields.py
     _requirements.py
     bundle.py
+    check_clang_warnings.py
+    cmake_export.py
     coverage.py
     cp.py
     create_init_py.py

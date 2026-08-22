@@ -1,0 +1,168 @@
+#include "partition_scale_request.h"
+#include "read_balancer_log.h"
+
+#include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/library/actors/core/events.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PERSQUEUE_READ_BALANCER
+
+namespace NKikimr {
+namespace NPQ {
+
+TPartitionScaleRequest::TPartitionScaleRequest(
+    const TString& topicName,
+    const TString& topicPath,
+    const TString& databasePath,
+    ui64 pathId,
+    ui64 pathVersion,
+    std::vector<NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionSplit> splits,
+    std::vector<NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionMerge> merges,
+    std::vector<NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionBoundary> setBoundaries,
+    const NActors::TActorId& parentActorId
+)
+    : Topic(topicName)
+    , TopicPath(topicPath)
+    , DatabasePath(databasePath)
+    , PathId(pathId)
+    , PathVersion(pathVersion)
+    , Splits(std::move(splits))
+    , Merges(std::move(merges))
+    , SetBoundaries(std::move(setBoundaries))
+    , ParentActorId(parentActorId) {
+
+    }
+
+void TPartitionScaleRequest::Bootstrap(const NActors::TActorContext &ctx) {
+    SendProposeRequest(ctx);
+    Become(&TPartitionScaleRequest::StateWork);
+}
+
+void TPartitionScaleRequest::SendProposeRequest(const NActors::TActorContext &ctx) {
+    auto proposal = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
+    proposal->Record.SetDatabaseName(CanonizePath(DatabasePath));
+    FillProposeRequest(*proposal, ctx);
+    ctx.Send(MakeTxProxyID(), proposal.release());
+}
+
+void TPartitionScaleRequest::FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, const NActors::TActorContext&) {
+    auto workingDir = TopicPath.substr(0, TopicPath.size() - Topic.size());
+
+    auto& modifyScheme = *proposal.Record.MutableTransaction()->MutableModifyScheme();
+    modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterPersQueueGroup);
+    modifyScheme.SetWorkingDir(workingDir);
+    modifyScheme.SetInternal(true);
+
+    auto applyIf = modifyScheme.AddApplyIf();
+    applyIf->SetPathId(PathId);
+    applyIf->SetPathVersion(PathVersion == 0 ? 1 : PathVersion);
+    applyIf->SetCheckEntityVersion(true);
+
+    NKikimrSchemeOp::TPersQueueGroupDescription groupDescription;
+    groupDescription.SetName(Topic);
+    TStringBuilder logMessage;
+    logMessage << "TPartitionScaleRequest::FillProposeRequest trying to scale partitions of '" << workingDir << "/" << Topic << "'.";
+    if (!Splits.empty()) {
+        logMessage << " Spilts:";
+        for(const auto& split: Splits) {
+            auto* newSplit = groupDescription.AddSplit();
+            logMessage << " partition: " << split.GetPartition() << " boundary: " << split.GetSplitBoundary().Quote();
+            *newSplit = split;
+        }
+        logMessage << ".";
+    }
+    if (!SetBoundaries.empty()) {
+        logMessage << " Sets:";
+        for(const auto& set: SetBoundaries) {
+            auto* newSet = groupDescription.AddRootPartitionBoundaries();
+            logMessage << " partition: " << set.GetPartition() << " boundary: " << set.GetKeyRange().GetFromBound().Quote() << '-' << set.GetKeyRange().GetToBound().Quote();
+            *newSet = set;
+        }
+        logMessage << ".";
+    }
+    YDB_LOG_DEBUG(logMessage,
+        {"logPrefix", LogPrefix()});
+
+    for(const auto& merge: Merges) {
+        auto* newMerge = groupDescription.AddMerge();
+        *newMerge = merge;
+    }
+
+    modifyScheme.MutableAlterPersQueueGroup()->CopyFrom(groupDescription);
+}
+
+void TPartitionScaleRequest::PassAway() {
+    if (SchemePipeActorId) {
+        NTabletPipe::CloseClient(this->SelfId(), SchemePipeActorId);
+        SchemePipeActorId = {};
+    }
+
+    TBase::PassAway();
+}
+
+bool TPartitionScaleRequest::IsOurPipe(const TActorId& clientId) const {
+    return SchemePipeActorId && clientId == SchemePipeActorId;
+}
+
+void TPartitionScaleRequest::ReplyAndDie(
+    TEvTxUserProxy::TEvProposeTransactionStatus::EStatus status,
+    const TActorContext& ctx)
+{
+    if (!ReplySent) {
+        ReplySent = true;
+        Send(ParentActorId, new TEvPartitionScaleRequestDone(status));
+    }
+    Die(ctx);
+}
+
+void TPartitionScaleRequest::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx) {
+    ReplySent = true;
+    Die(ctx);
+}
+
+void TPartitionScaleRequest::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx) {
+    if (!IsOurPipe(ev->Get()->ClientId)) {
+        return;
+    }
+    if (ev->Get()->Status != NKikimrProto::OK) {
+        ReplyAndDie(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardNotAvailable, ctx);
+    }
+}
+
+void TPartitionScaleRequest::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext &ctx) {
+    if (!IsOurPipe(ev->Get()->ClientId)) {
+        return;
+    }
+    ReplyAndDie(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardNotAvailable, ctx);
+}
+
+void TPartitionScaleRequest::Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& /*ev*/, const TActorContext& ctx) {
+    ReplyAndDie(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete, ctx);
+}
+
+void TPartitionScaleRequest::Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev, const NActors::TActorContext& ctx) {
+    auto msg = ev->Get();
+
+    auto status = static_cast<TEvTxUserProxy::TEvProposeTransactionStatus::EStatus>(msg->Record.GetStatus());
+    if (status != TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress) {
+        TStringBuilder issues;
+        for (auto& issue : ev->Get()->Record.GetIssues()) {
+            issues << issue.ShortDebugString() + ", ";
+        }
+        YDB_LOG_ERROR("TPartitionScaleRequest SchemaShard error when trying to execute a split",
+            {"logPrefix", LogPrefix()},
+            {"request", issues});
+        ReplyAndDie(status, ctx);
+    } else {
+        NTabletPipe::TClientConfig clientConfig;
+        clientConfig.RetryPolicy = {.RetryLimitCount = 3};
+        if (!SchemePipeActorId) {
+            SchemePipeActorId = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, msg->Record.GetSchemeShardTabletId(), clientConfig));
+        }
+
+        auto request = std::make_unique<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>(msg->Record.GetTxId());
+        NTabletPipe::SendData(this->SelfId(), SchemePipeActorId, request.release());
+    }
+}
+
+} // namespace NPQ
+} // namespace NKikimr

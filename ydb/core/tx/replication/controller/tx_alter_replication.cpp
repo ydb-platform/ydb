@@ -40,13 +40,14 @@ public:
         bool alter = false;
 
         const auto& oldConfig = Replication->GetConfig();
-        const auto& newConfig = record.GetConfig();
+        auto newConfig = std::move(*record.MutableConfig());
 
         if (oldConfig.HasTransferSpecific()) {
             auto& oldSpecific = oldConfig.GetTransferSpecific();
             auto& newSpecific = newConfig.GetTransferSpecific();
 
             alter = oldSpecific.GetTarget().GetTransformLambda() != newSpecific.GetTarget().GetTransformLambda()
+                || oldSpecific.GetTarget().GetDirectoryPath() != newSpecific.GetTarget().GetDirectoryPath()
                 || oldSpecific.GetBatching().GetBatchSizeBytes() != newSpecific.GetBatching().GetBatchSizeBytes()
                 || oldSpecific.GetBatching().GetFlushIntervalMilliSeconds() != newSpecific.GetBatching().GetFlushIntervalMilliSeconds();
         }
@@ -68,18 +69,36 @@ public:
                     break;
                 default:
                     Y_ABORT("Invalid state");
-                }
+            }
         }
 
+        if (alter && Replication->GetState() == TReplication::EState::Error) {
+            Replication->SetState(TReplication::EState::Ready);
+            if (desiredState == TReplication::EState::Error) {
+                desiredState = TReplication::EState::Ready;
+            }
+        }
+
+        auto issue = Replication->GetIssue();
         if (alter) {
             Replication->SetDesiredState(desiredState);
+            if (desiredState == TReplication::EState::Ready) {
+                issue = "";
+            }
         }
 
-        Replication->SetConfig(std::move(*record.MutableConfig()));
+        Replication->SetConfig(std::move(newConfig));
+        Replication->ResetCredentials(ctx);
+
+        if (record.HasLocation()) {
+            Replication->SetLocation(record.GetLocation());
+        }
+
         NIceDb::TNiceDb db(txc.DB);
         db.Table<Schema::Replications>().Key(Replication->GetId()).Update(
-            NIceDb::TUpdate<Schema::Replications::Config>(record.GetConfig().SerializeAsString()),
-            NIceDb::TUpdate<Schema::Replications::DesiredState>(desiredState)
+            NIceDb::TUpdate<Schema::Replications::Config>(Replication->GetConfig().SerializeAsString()),
+            NIceDb::TUpdate<Schema::Replications::DesiredState>(desiredState),
+            NIceDb::TUpdate<Schema::Replications::Issue>(issue)
         );
 
         if (!alter) {
@@ -97,6 +116,9 @@ public:
 
             target->Shutdown(ctx);
             target->SetDstState(TReplication::EDstState::Alter);
+            if (target->GetStreamState() == TReplication::EStreamState::Error && desiredState == TReplication::EState::Ready) {
+                target->SetStreamState(TReplication::EStreamState::Creating);
+            }
             db.Table<Schema::Targets>().Key(Replication->GetId(), tid).Update(
                 NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState())
             );

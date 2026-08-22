@@ -64,7 +64,7 @@ class TopicReaderSync:
     def __del__(self):
         if not self._closed:
             try:
-                logger.warning("Topic reader was not closed properly. Consider using method close().")
+                logger.debug("Topic reader was not closed properly. Consider using method close().")
                 self.close(flush=False)
             except BaseException:
                 logger.warning("Something went wrong during reader close in __del__")
@@ -120,6 +120,7 @@ class TopicReaderSync:
         return self._caller.safe_call_with_result(
             self._async_reader.receive_batch(
                 max_messages=max_messages,
+                max_bytes=max_bytes,
             ),
             timeout,
         )
@@ -145,6 +146,7 @@ class TopicReaderSync:
             self._async_reader.receive_batch_with_tx(
                 tx=tx,
                 max_messages=max_messages,
+                max_bytes=max_bytes,
             ),
             timeout,
         )

@@ -137,32 +137,32 @@ public:
         case EPrimitiveType::Date32: {
             TInstant date;
             if (TInstant::TryParseIso8601(token, date)) {
-                Builder.Date32(date.Days());
+                Builder.Date32(std::chrono::sys_time<TWideDays>(TWideDays(date.Days())));
             } else {
-                Builder.Date32(GetArithmetic<i32>(token));
+                Builder.Date32(std::chrono::sys_time<TWideDays>(TWideDays(GetArithmetic<int32_t>(token))));
             }
             break;
         }
         case EPrimitiveType::Datetime64: {
             TInstant date;
             if (TInstant::TryParseIso8601(token, date)) {
-                Builder.Datetime64(date.Seconds());
+                Builder.Datetime64(std::chrono::sys_time<TWideSeconds>(TWideSeconds(date.Seconds())));
             } else {
-                Builder.Datetime64(GetArithmetic<i64>(token));
+                Builder.Datetime64(std::chrono::sys_time<TWideSeconds>(TWideSeconds(GetArithmetic<int64_t>(token))));
             }
             break;
         }
         case EPrimitiveType::Timestamp64: {
             TInstant date;
             if (TInstant::TryParseIso8601(token, date)) {
-                Builder.Timestamp64(date.MicroSeconds());
+                Builder.Timestamp64(std::chrono::sys_time<TWideMicroseconds>(TWideMicroseconds(date.MicroSeconds())));
             } else {
-                Builder.Timestamp64(GetArithmetic<i64>(token));
+                Builder.Timestamp64(std::chrono::sys_time<TWideMicroseconds>(TWideMicroseconds(GetArithmetic<int64_t>(token))));
             }
             break;
         }
         case EPrimitiveType::Interval64:
-            Builder.Interval64(GetArithmetic<i64>(token));
+            Builder.Interval64(TWideMicroseconds(GetArithmetic<int64_t>(token)));
             break;
         case EPrimitiveType::TzDate:
             Builder.TzDate(token);
@@ -271,10 +271,11 @@ public:
     }
 
     bool GetBool(const TString& token) const {
-        if (token == "true") {
+        TString tokenLowerCase = to_lower(token);
+        if (tokenLowerCase == "true") {
             return true;
         }
-        if (token == "false") {
+        if (tokenLowerCase == "false") {
             return false;
         }
         throw TCsvParseException() << "Expected bool value: \"true\" or \"false\", received: \"" << token << "\".";

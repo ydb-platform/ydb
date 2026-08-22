@@ -352,23 +352,41 @@ void TCMallocPreFork() {
     Static::cpu_cache().AcquireInternalLocks();
   }
   Static::transfer_cache().AcquireInternalLocks();
+  Static::sharded_transfer_cache().AcquireInternalLocks();
   Static::guardedpage_allocator().AcquireInternalLocks();
   release_lock.Lock();
   pageheap_lock.Lock();
-  Static::system_allocator().AcquireInternalLocks();
   ThreadCache::AcquireInternalLocks();
+  Static::system_allocator().AcquireInternalLocks();
   Static::sampled_allocation_recorder().AcquireInternalLocks();
+  Static::span_allocator().AcquireInternalLocks();
+
+  /*
+  Locking order: we have to acquire locks in some order which is consistent with the rest of TCMalloc code.
+  Chosen order considers the following:
+  1. ThreadCache::CreateCacheIfNecessary calls ThreadCache::NewHeap, which calls SystemAllocator
+     Consequence: we should lock ThreadCache before SystemAllocator
+  2. GuardedPageAllocator::MapPages calls Arena::Alloc, which calls SystemAllocator
+     Consequence: we should lock GuardedPageAllocator before SystemAllocator
+  3. MallocExtension_Internal_ReleaseMemoryToSystem calls ConstantRatePageAllocatorReleaser::Release which creates PageHeapSpinLockHolder
+     Consequence: we should lock release_lock before pageheap_lock
+  4. StaticForwarder::Alloc calls Arena::Alloc, which calls SystemAllocator
+     Consequence: we should lock pageheap_lock before SystemAllocator
+  (List will grow when we run into more deadlocks ¯\_(ツ)_/¯).
+  */
 }
 
 void TCMallocPostFork() {
   if (!Static::ForkSupportEnabled()) {
     return;
   }
+  Static::span_allocator().ReleaseInternalLocks();
   Static::system_allocator().ReleaseInternalLocks();
   pageheap_lock.Unlock();
   Static::guardedpage_allocator().ReleaseInternalLocks();
   release_lock.Unlock();
   Static::transfer_cache().ReleaseInternalLocks();
+  Static::sharded_transfer_cache().ReleaseInternalLocks();
   if (Static::CpuCacheActive()) {
     Static::cpu_cache().ReleaseInternalLocks();
   }

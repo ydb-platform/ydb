@@ -2,7 +2,7 @@
 
 ## Introduction {#introduction}
 
-One specific case of [vector search](../../../../concepts/vector_search.md) is the [k-NN](https://en.wikipedia.org/wiki/K-nearest_neighbors_algorithm) problem, where it is required to find the `k` nearest points to the query point. This can be useful in various applications such as image classification, recommendation systems, etc.
+One specific case of [vector search](../../../../concepts/query_execution/vector_search.md) is the [k-NN](https://en.wikipedia.org/wiki/K-nearest_neighbors_algorithm) problem, where it is required to find the `k` nearest points to the query point. This can be useful in various applications such as image classification, recommendation systems, etc.
 
 The k-NN problem solution is divided into two major subclasses of methods: exact and approximate.
 
@@ -65,6 +65,20 @@ Knn::ToBinaryStringBit(List<Uint8>{Flags:AutoMap})->Tagged<String, "BitVector">
 Knn::ToBinaryStringBit(List<Int8>{Flags:AutoMap})->Tagged<String, "BitVector">
 Knn::FloatFromBinaryString(String{Flags:AutoMap})->List<Float>?
 ```
+
+#### Convert format {#functions-convert-format}
+
+Conversion functions for vector data convert an array of elements into a byte string with the following format:
+
+- **Main part** — a contiguous array of elements ([knn-serializer.h](https://github.com/ydb-platform/ydb/blob/0b506f56e399e0b4e6a6a4267799da68a3164bf7/ydb/library/yql/udfs/common/knn/knn-serializer.h#L19))
+- **Type** — 1 byte at the end of the string that specifies the data type ([knn-defines.h](https://github.com/ydb-platform/ydb/blob/24026648dd7463d58e1470aa8981b17677116e7c/ydb/library/yql/udfs/common/knn/knn-defines.h#L5)):  
+  `1` — `Float` (4 bytes per element)
+  `2` — `Uint8` (1 byte per element)
+  `3` — `Int8` (1 byte per element)
+  `10` — `Bit` (1 bit per element)
+
+For example, a vector of 5 elements of type `Float` will be serialized into a 21-byte string:  
+4 bytes × 5 elements (main part) + 1 byte (type) = 21 bytes.
 
 #### Implementation details {#functions-convert-details}
 

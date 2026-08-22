@@ -1,6 +1,6 @@
 #################### View.MemoryView ####################
 
-# cython: language_level=3str
+# cython: language_level=3
 # cython: binding=False
 
 # This utility provides cython.array and cython.view.memoryview
@@ -27,8 +27,9 @@ cdef extern from "<string.h>":
 
 cdef extern from *:
     bint __PYX_CYTHON_ATOMICS_ENABLED()
-    int __Pyx_GetBuffer(object, Py_buffer *, int) except -1
-    void __Pyx_ReleaseBuffer(Py_buffer *)
+    bint __PYX_GET_CYTHON_COMPILING_IN_CPYTHON_FREETHREADING()
+    int PyObject_GetBuffer(object, Py_buffer *, int) except -1
+    void PyBuffer_Release(Py_buffer *)
 
     ctypedef struct PyObject
     ctypedef Py_ssize_t Py_intptr_t
@@ -43,7 +44,7 @@ cdef extern from *:
     cdef struct __pyx_memoryview "__pyx_memoryview_obj":
         Py_buffer view
         PyObject *obj
-        __Pyx_TypeInfo *typeinfo
+        const __Pyx_TypeInfo *typeinfo
 
     ctypedef struct {{memviewslice_name}}:
         __pyx_memoryview *memview
@@ -78,8 +79,8 @@ cdef extern from *:
 cdef extern from *:
     ctypedef int __pyx_atomic_int_type
     {{memviewslice_name}} slice_copy_contig "__pyx_memoryview_copy_new_contig"(
-                                 __Pyx_memviewslice *from_mvs,
-                                 char *mode, int ndim,
+                                 {{memviewslice_name}} *from_mvs,
+                                 const char *mode, int ndim,
                                  size_t sizeof_dtype, int contig_flag,
                                  bint dtype_is_object) except * nogil
     bint slice_is_contig "__pyx_memviewslice_is_contig" (
@@ -87,6 +88,14 @@ cdef extern from *:
     bint slices_overlap "__pyx_slices_overlap" ({{memviewslice_name}} *slice1,
                                                 {{memviewslice_name}} *slice2,
                                                 int ndim, size_t itemsize) nogil
+
+    int slice_memviewslice "__pyx_memoryview_slice_memviewslice" (
+        {{memviewslice_name}} *dst,
+        Py_ssize_t shape, Py_ssize_t stride, Py_ssize_t suboffset,
+        int dim, int new_ndim, int *suboffset_dim,
+        Py_ssize_t start, Py_ssize_t stop, Py_ssize_t step,
+        int have_start, int have_stop, int have_step,
+        bint is_slice) except -1 nogil
 
 
 cdef extern from "<stdlib.h>":
@@ -97,10 +106,7 @@ cdef extern from "<stdlib.h>":
 # the sequence abstract base class
 cdef object __pyx_collections_abc_Sequence "__pyx_collections_abc_Sequence"
 try:
-    if __import__("sys").version_info >= (3, 3):
-        __pyx_collections_abc_Sequence = __import__("collections.abc").abc.Sequence
-    else:
-        __pyx_collections_abc_Sequence = __import__("collections").Sequence
+    __pyx_collections_abc_Sequence = __import__("collections.abc").abc.Sequence
 except:
     # it isn't a big problem if this fails
     __pyx_collections_abc_Sequence = None
@@ -265,7 +271,7 @@ cdef int _allocate_buffer(array self) except -1:
 
 
 @cname("__pyx_array_new")
-cdef array array_cwrapper(tuple shape, Py_ssize_t itemsize, char *format, char *c_mode, char *buf):
+cdef array array_cwrapper(tuple shape, Py_ssize_t itemsize, char *format, const char *c_mode, char *buf):
     cdef array result
     cdef str mode = "fortran" if c_mode[0] == b'f' else "c"  # this often comes from a constant C string.
 
@@ -333,26 +339,29 @@ cdef class memoryview:
 
     cdef object obj
     cdef object _size
-    cdef object _array_interface
+    # This comes before acquisition_count so can't be removed without breaking ABI compatibility
+    cdef void* _unused
     cdef PyThread_type_lock lock
     cdef __pyx_atomic_int_type acquisition_count
     cdef Py_buffer view
     cdef int flags
     cdef bint dtype_is_object
-    cdef __Pyx_TypeInfo *typeinfo
+    cdef const __Pyx_TypeInfo *typeinfo
 
     def __cinit__(memoryview self, object obj, int flags, bint dtype_is_object=False):
         self.obj = obj
         self.flags = flags
         if type(self) is memoryview or obj is not None:
-            __Pyx_GetBuffer(obj, &self.view, flags)
+            PyObject_GetBuffer(obj, &self.view, flags)
             if <PyObject *> self.view.obj == NULL:
                 (<__pyx_buffer *> &self.view).obj = Py_None
                 Py_INCREF(Py_None)
 
         if not __PYX_CYTHON_ATOMICS_ENABLED():
             global __pyx_memoryview_thread_locks_used
-            if __pyx_memoryview_thread_locks_used < {{THREAD_LOCKS_PREALLOCATED}}:
+            if (__pyx_memoryview_thread_locks_used < {{THREAD_LOCKS_PREALLOCATED}} and
+                    # preallocated locks cannot be made thread-safe in freethreading
+                    not __PYX_GET_CYTHON_COMPILING_IN_CPYTHON_FREETHREADING()):
                 self.lock = __pyx_memoryview_thread_locks[__pyx_memoryview_thread_locks_used]
                 __pyx_memoryview_thread_locks_used += 1
             if self.lock is NULL:
@@ -365,12 +374,13 @@ cdef class memoryview:
         else:
             self.dtype_is_object = dtype_is_object
 
-        assert <Py_intptr_t><void*>(&self.acquisition_count) % sizeof(__pyx_atomic_int_type) == 0
+        with cython.cdivision(True):
+            assert <Py_intptr_t>(&self.acquisition_count) % sizeof(__pyx_atomic_int_type) == 0
         self.typeinfo = NULL
 
     def __dealloc__(memoryview self):
         if self.obj is not None:
-            __Pyx_ReleaseBuffer(&self.view)
+            PyBuffer_Release(&self.view)
         elif (<__pyx_buffer *> &self.view).obj == Py_None:
             # Undo the incref in __cinit__() above.
             (<__pyx_buffer *> &self.view).obj = NULL
@@ -379,7 +389,7 @@ cdef class memoryview:
         cdef int i
         global __pyx_memoryview_thread_locks_used
         if self.lock != NULL:
-            for i in range(__pyx_memoryview_thread_locks_used):
+            for i in range(0 if __PYX_GET_CYTHON_COMPILING_IN_CPYTHON_FREETHREADING() else __pyx_memoryview_thread_locks_used):
                 if __pyx_memoryview_thread_locks[i] is self.lock:
                     __pyx_memoryview_thread_locks_used -= 1
                     if i != __pyx_memoryview_thread_locks_used:
@@ -654,7 +664,7 @@ cdef class memoryview:
 
 
 @cname('__pyx_memoryview_new')
-cdef memoryview_cwrapper(object o, int flags, bint dtype_is_object, __Pyx_TypeInfo *typeinfo):
+cdef memoryview_cwrapper(object o, int flags, bint dtype_is_object, const __Pyx_TypeInfo *typeinfo):
     cdef memoryview result = memoryview(o, flags, dtype_is_object)
     result.typeinfo = typeinfo
     return result
@@ -779,110 +789,6 @@ cdef memoryview memview_slice(memoryview memview, object indices):
         return memoryview_fromslice(dst, new_ndim, NULL, NULL,
                                     memview.dtype_is_object)
 
-
-#
-### Slicing in a single dimension of a memoryviewslice
-#
-
-@cname('__pyx_memoryview_slice_memviewslice')
-cdef int slice_memviewslice(
-        {{memviewslice_name}} *dst,
-        Py_ssize_t shape, Py_ssize_t stride, Py_ssize_t suboffset,
-        int dim, int new_ndim, int *suboffset_dim,
-        Py_ssize_t start, Py_ssize_t stop, Py_ssize_t step,
-        int have_start, int have_stop, int have_step,
-        bint is_slice) except -1 nogil:
-    """
-    Create a new slice dst given slice src.
-
-    dim             - the current src dimension (indexing will make dimensions
-                                                 disappear)
-    new_dim         - the new dst dimension
-    suboffset_dim   - pointer to a single int initialized to -1 to keep track of
-                      where slicing offsets should be added
-    """
-
-    cdef Py_ssize_t new_shape
-    cdef bint negative_step
-
-    if not is_slice:
-        # index is a normal integer-like index
-        if start < 0:
-            start += shape
-        if not 0 <= start < shape:
-            _err_dim(PyExc_IndexError, "Index out of bounds (axis %d)", dim)
-    else:
-        # index is a slice
-        if have_step:
-            negative_step = step < 0
-            if step == 0:
-                _err_dim(PyExc_ValueError, "Step may not be zero (axis %d)", dim)
-        else:
-            negative_step = False
-            step = 1
-
-        # check our bounds and set defaults
-        if have_start:
-            if start < 0:
-                start += shape
-                if start < 0:
-                    start = 0
-            elif start >= shape:
-                if negative_step:
-                    start = shape - 1
-                else:
-                    start = shape
-        else:
-            if negative_step:
-                start = shape - 1
-            else:
-                start = 0
-
-        if have_stop:
-            if stop < 0:
-                stop += shape
-                if stop < 0:
-                    stop = 0
-            elif stop > shape:
-                stop = shape
-        else:
-            if negative_step:
-                stop = -1
-            else:
-                stop = shape
-
-        # len = ceil( (stop - start) / step )
-        with cython.cdivision(True):
-            new_shape = (stop - start) // step
-
-            if (stop - start) - step * new_shape:
-                new_shape += 1
-
-        if new_shape < 0:
-            new_shape = 0
-
-        # shape/strides/suboffsets
-        dst.strides[new_ndim] = stride * step
-        dst.shape[new_ndim] = new_shape
-        dst.suboffsets[new_ndim] = suboffset
-
-    # Add the slicing or indexing offsets to the right suboffset or base data *
-    if suboffset_dim[0] < 0:
-        dst.data += start * stride
-    else:
-        dst.suboffsets[suboffset_dim[0]] += start * stride
-
-    if suboffset >= 0:
-        if not is_slice:
-            if new_ndim == 0:
-                dst.data = (<char **> dst.data)[0] + suboffset
-            else:
-                _err_dim(PyExc_IndexError, "All dimensions preceding dimension %d "
-                                     "must be indexed and not sliced", dim)
-        else:
-            suboffset_dim[0] = new_ndim
-
-    return 0
 
 #
 ### Index a memoryview
@@ -1143,7 +1049,7 @@ cdef void _copy_strided_to_strided(char *src_data, Py_ssize_t *src_strides,
 
     if ndim == 1:
         if (src_stride > 0 and dst_stride > 0 and
-            <size_t> src_stride == itemsize == <size_t> dst_stride):
+                <size_t> src_stride == itemsize == <size_t> dst_stride):
             memcpy(dst_data, src_data, itemsize * dst_extent)
         else:
             for i in range(dst_extent):
@@ -1419,7 +1325,7 @@ cdef extern from *:
 
     ctypedef struct __Pyx_TypeInfo:
         char* name
-        __Pyx_StructField* fields
+        const __Pyx_StructField* fields
         size_t size
         size_t arraysize[8]
         int ndim
@@ -1428,12 +1334,12 @@ cdef extern from *:
         int flags
 
     ctypedef struct __Pyx_StructField:
-        __Pyx_TypeInfo* type
+        const __Pyx_TypeInfo* type
         char* name
         size_t offset
 
     ctypedef struct __Pyx_BufFmt_StackElem:
-        __Pyx_StructField* field
+        const __Pyx_StructField* field
         size_t parent_offset
 
     #ctypedef struct __Pyx_BufFmt_Context:
@@ -1443,12 +1349,12 @@ cdef extern from *:
     struct __pyx_typeinfo_string:
         char string[3]
 
-    __pyx_typeinfo_string __Pyx_TypeInfoToFormat(__Pyx_TypeInfo *)
+    __pyx_typeinfo_string __Pyx_TypeInfoToFormat(const __Pyx_TypeInfo *)
 
 
 @cname('__pyx_format_from_typeinfo')
-cdef bytes format_from_typeinfo(__Pyx_TypeInfo *type):
-    cdef __Pyx_StructField *field
+cdef bytes format_from_typeinfo(const __Pyx_TypeInfo *type):
+    cdef const __Pyx_StructField *field
     cdef __pyx_typeinfo_string fmt
     cdef bytes part, result
     cdef Py_ssize_t i

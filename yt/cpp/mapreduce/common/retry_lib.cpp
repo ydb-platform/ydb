@@ -123,6 +123,12 @@ public:
         return Wrap(MakeIntrusive<TAttemptLimitedRetryPolicy>(static_cast<ui32>(Config_->ReadRetryCount), Config_));
     }
 
+    IRequestRetryPolicyPtr CreatePolicyForCheckClusterLiveness() override
+    {
+        return Wrap(MakeIntrusive<TAttemptLimitedRetryPolicy>(static_cast<ui32>(Config_->CheckLivenessRetryCount), Config_));
+    }
+
+
     IRequestRetryPolicyPtr Wrap(IRequestRetryPolicyPtr basePolicy)
     {
         auto config = RetryConfigProvider_->CreateRetryConfig();
@@ -226,6 +232,7 @@ static TMaybe<TDuration> TryGetBackoffDuration(const TErrorResponse& errorRespon
         NRpc::Unavailable,
         NApi::RetriableArchiveError,
         NRpc::TransientFailure,
+        NScheduler::MasterDisconnected,
         Canceled,
         Timeout,
     }) {
@@ -233,6 +240,12 @@ static TMaybe<TDuration> TryGetBackoffDuration(const TErrorResponse& errorRespon
             return config->RetryInterval;
         }
     }
+
+    // Temporary workaround
+    if (errorResponse.GetError().ContainsText("Cannot resolve multiproxy target cluster")) {
+        return TDuration::Seconds(60);
+    }
+
     return Nothing();
 }
 
@@ -250,6 +263,8 @@ bool IsRetriable(const TErrorResponse& errorResponse)
 bool IsRetriable(const std::exception& ex)
 {
     if (dynamic_cast<const TRequestRetriesTimeout*>(&ex)) {
+        return false;
+    } else if (dynamic_cast<const TInputStreamAbortedError*>(&ex)) {
         return false;
     }
     return true;

@@ -1,6 +1,9 @@
 #pragma once
 #include "constructor.h"
 
+#include <ydb/core/formats/arrow/accessor/common/additional_data.h>
+#include <ydb/core/formats/arrow/accessor/common/chunk_data.h>
+
 namespace NKikimr::NOlap::NReader::NCommon {
 
 class TDefaultFetchLogic: public IKernelFetchLogic {
@@ -21,11 +24,15 @@ private:
         std::optional<TBlobRange> BlobRange;
         std::optional<TPortionDataAccessor::TAssembleBlobInfo> Data;
         const ui32 RecordsCount;
+        std::shared_ptr<NArrow::NAccessor::IAdditionalAccessorData> AdditionalAccessorData;
 
     public:
-        TChunkRestoreInfo(const ui32 recordsCount, const TBlobRange& range)
+        TChunkRestoreInfo(const ui32 recordsCount, const TBlobRange& range,
+            std::shared_ptr<NArrow::NAccessor::IAdditionalAccessorData> additionalAccessorData = nullptr)
             : BlobRange(range)
-            , RecordsCount(recordsCount) {
+            , RecordsCount(recordsCount)
+            , AdditionalAccessorData(std::move(additionalAccessorData))
+        {
         }
 
         const std::optional<TBlobRange>& GetBlobRangeOptional() const {
@@ -34,7 +41,8 @@ private:
 
         TChunkRestoreInfo(const ui32 recordsCount, const TPortionDataAccessor::TAssembleBlobInfo& defaultData)
             : Data(defaultData)
-            , RecordsCount(recordsCount) {
+            , RecordsCount(recordsCount)
+        {
         }
 
         TPortionDataAccessor::TAssembleBlobInfo ExtractDataVerified() {
@@ -47,11 +55,15 @@ private:
             AFL_VERIFY(!Data);
             BlobRange.reset();
             Data.emplace(data);
+            if (AdditionalAccessorData) {
+                Data->SetAdditionalAccessorData(AdditionalAccessorData);
+            }
         }
     };
 
     std::vector<TChunkRestoreInfo> ColumnChunks;
     std::optional<TString> StorageId;
+
     virtual void DoOnDataCollected(TFetchingResultContext& context) override {
         AFL_VERIFY(!IIndexInfo::IsSpecialColumn(GetEntityId()));
         std::vector<TPortionDataAccessor::TAssembleBlobInfo> chunks;
@@ -72,13 +84,13 @@ private:
                 continue;
             }
             AFL_VERIFY(!!StorageId);
-            i.SetBlobData(blobs.Extract(*StorageId, *i.GetBlobRangeOptional()));
+            i.SetBlobData(blobs.ExtractVerified(*StorageId, *i.GetBlobRangeOptional()));
         }
     }
 
     virtual void DoStart(TReadActionsCollection& nextRead, TFetchingResultContext& context) override {
         auto source = context.GetSource();
-        auto columnChunks = source->GetStageData().GetPortionAccessor().GetColumnChunksPointers(GetEntityId());
+        auto columnChunks = source->GetPortionAccessor().GetColumnChunksPointers(GetEntityId());
         IsEmptyChunks.emplace(columnChunks.empty());
         if (columnChunks.empty()) {
             ColumnChunks.emplace_back(source->GetRecordsCount(),
@@ -88,7 +100,7 @@ private:
         StorageId = source->GetColumnStorageId(GetEntityId());
         TBlobsAction blobsAction(source->GetContext()->GetCommonContext()->GetStoragesManager(), NBlobOperations::EConsumer::SCAN);
         auto reading = blobsAction.GetReading(*StorageId);
-        auto filterPtr = source->GetStageData().GetAppliedFilter();
+        auto filterPtr = context.GetAppliedFilter();
         const NArrow::TColumnFilter& cFilter = filterPtr ? *filterPtr : NArrow::TColumnFilter::BuildAllowFilter();
         auto itFilter = cFilter.GetBegin(false, source->GetRecordsCount());
         bool itFinished = false;
@@ -97,7 +109,8 @@ private:
             if (!itFilter.IsBatchForSkip(c->GetMeta().GetRecordsCount())) {
                 reading->SetIsBackgroundProcess(false);
                 reading->AddRange(source->RestoreBlobRange(c->BlobRange));
-                ColumnChunks.emplace_back(c->GetMeta().GetRecordsCount(), source->RestoreBlobRange(c->BlobRange));
+                ColumnChunks.emplace_back(
+                    c->GetMeta().GetRecordsCount(), source->RestoreBlobRange(c->BlobRange), c->GetMeta().GetAdditionalAccessorData());
             } else {
                 ColumnChunks.emplace_back(
                     c->GetMeta().GetRecordsCount(), TPortionDataAccessor::TAssembleBlobInfo(c->GetMeta().GetRecordsCount(),
@@ -113,7 +126,8 @@ private:
 
 public:
     TDefaultFetchLogic(const ui32 entityId, const std::shared_ptr<IStoragesManager>& storagesManager)
-        : TBase(entityId, storagesManager) {
+        : TBase(entityId, storagesManager)
+    {
     }
 };
 

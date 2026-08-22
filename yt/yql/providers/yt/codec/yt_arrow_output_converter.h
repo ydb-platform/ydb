@@ -13,8 +13,8 @@ public:
 
     virtual ~IYtOutputColumnConverter() = default;
 
+    virtual std::shared_ptr<arrow::Field> BuildSchemaField(std::string name) = 0;
     virtual std::shared_ptr<arrow::ArrayData> Convert(std::shared_ptr<arrow::ArrayData> block) = 0;
-    virtual std::shared_ptr<arrow::DataType> GetOutputType() = 0;
 };
 
 IYtOutputColumnConverter::TPtr MakeYtOutputColumnConverter(NKikimr::NMiniKQL::TType* type, arrow::MemoryPool* pool);

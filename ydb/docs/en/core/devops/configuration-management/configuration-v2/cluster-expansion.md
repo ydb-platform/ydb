@@ -6,20 +6,20 @@ Expanding a {{ ydb-short-name }} cluster does not require suspending user access
 
 ## Preparing New Servers {#add-host}
 
-When placing new static or dynamic cluster nodes on new servers that were not previously part of the expanded {{ ydb-short-name }} cluster, each new server must install {{ ydb-short-name }} software according to the procedures described in the [cluster deployment instructions](../../deployment-options/manual/initial-deployment.md). In particular, it is necessary to:
+When placing new static or dynamic cluster nodes on new servers that were not previously part of the expanded {{ ydb-short-name }} cluster, each new server must install {{ ydb-short-name }} software according to the procedures described in the [cluster deployment instructions](../../deployment-options/manual/initial-deployment/index.md). In particular, it is necessary to:
 
 1. create an account and group in the operating system for the {{ ydb-short-name }} service
 2. install {{ ydb-short-name }} software
 3. prepare and place the corresponding TLS key and certificate on the server
 4. copy the current {{ ydb-short-name }} cluster configuration file to the server
 
-TLS certificates used on new servers must comply with [field filling requirements](../../deployment-options/manual/initial-deployment.md#tls-certificates), and be signed by a trusted certificate authority used on existing servers of the expanded {{ ydb-short-name }} cluster.
+TLS certificates used on new servers must comply with [field filling requirements](../../deployment-options/manual/initial-deployment/deployment-preparation.md#tls-certificates), and be signed by a trusted certificate authority used on existing servers of the expanded {{ ydb-short-name }} cluster.
 
 ## Adding Dynamic Nodes {#add-dynamic-node}
 
 Adding dynamic nodes allows increasing available computing resources (processor cores and RAM) for executing user queries by the {{ ydb-short-name }} cluster.
 
-To add a dynamic node to the cluster, it is sufficient to start the process serving this node, passing it the path to the cluster configuration folder, the name of the served database, and addresses of any three static cluster nodes in the command line parameters, as shown in the [cluster deployment instructions](../../deployment-options/manual/initial-deployment.md#start-dynnode).
+To add a dynamic node to the cluster, it is sufficient to start the process serving this node, passing it the path to the cluster configuration folder, the name of the served database, and addresses of any three static cluster nodes in the command line parameters, as shown in the [cluster deployment instructions](../../deployment-options/manual/initial-deployment/deployment-configuration-v2.md#start-dynnode).
 
 After successfully adding a dynamic node to the cluster, information about it will be available on the [cluster monitoring page in the embedded UI](../../../reference/embedded-ui/ydb-monitoring.md).
 
@@ -31,7 +31,7 @@ Adding static nodes allows increasing throughput when performing input-output op
 
 To add static nodes to the cluster, you need to perform the following sequence of actions:
 
-1. Format disks that will be used for storing {{ ydb-short-name }} data using the [procedure described for the cluster deployment stage](../../deployment-options/manual/initial-deployment.md#prepare-disks).
+1. Format disks that will be used for storing {{ ydb-short-name }} data using the [procedure described for the cluster deployment stage](../../deployment-options/manual/initial-deployment/deployment-preparation.md#prepare-disks).
 
 2. Obtain an authentication token for executing administrative commands using {{ ydb-short-name }} CLI, for example:
 
@@ -57,7 +57,7 @@ To add static nodes to the cluster, you need to perform the following sequence o
         admin cluster config fetch > config.yaml
     ```
 
-4. Correct the [cluster configuration file](../../deployment-options/manual/initial-deployment.md#config), including in the configuration a description of the added nodes (in the `hosts` section) and disks used on them (in the `host_configs` section).
+4. Correct the [cluster configuration file](../../deployment-options/manual/initial-deployment/deployment-configuration-v2.md#config), including in the configuration a description of the added nodes (in the `hosts` section) and disks used on them (in the `host_configs` section).
 
 5. Allow the {{ ydb-short-name }} cluster to use disks on new static nodes for data storage by executing the following command on any cluster node:
 

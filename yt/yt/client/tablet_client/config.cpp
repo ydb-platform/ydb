@@ -10,6 +10,12 @@ void TTableMountCacheConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("reject_if_entry_is_requested_but_not_ready", &TThis::RejectIfEntryIsRequestedButNotReady)
         .Default(false);
+
+    registrar.Preprocessor([] (TThis* config) {
+        config->ExpireAfterAccessTime = TDuration::Minutes(30);
+        config->ExpireAfterSuccessfulUpdateTime = TDuration::Minutes(30);
+        config->RefreshTime = TDuration::Seconds(30);
+    });
 }
 
 TTableMountCacheConfigPtr TTableMountCacheConfig::ApplyDynamic(
@@ -42,6 +48,9 @@ void TRemoteDynamicStoreReaderConfig::Register(TRegistrar registrar)
         .Default(TDuration::Seconds(20));
     registrar.Parameter("server_write_timeout", &TThis::ServerWriteTimeout)
         .Default(TDuration::Seconds(20));
+    // Typical time for store flush is 15 minutes.
+    registrar.Parameter("request_timeout", &TThis::RequestTimeout)
+        .Default(TDuration::Minutes(20));
     registrar.Parameter("max_rows_per_server_read", &TThis::MaxRowsPerServerRead)
         .GreaterThan(0)
         .Default(1024);

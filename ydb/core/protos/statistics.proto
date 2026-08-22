@@ -1,4 +1,7 @@
 import "ydb/core/scheme/protos/pathid.proto";
+import "ydb/core/scheme/protos/type_info.proto";
+import "ydb/public/api/protos/ydb_issue_message.proto";
+import "ydb/public/api/protos/ydb_value.proto";
 
 package NKikimrStat;
 
@@ -11,6 +14,8 @@ message TEvConfigureAggregator {
 message TPathEntry {
     optional NKikimrProto.TPathID PathId = 1;
     optional uint64 RowCount = 2;
+    optional uint64 RowUpdates = 6;
+    optional uint64 RowDeletes = 7;
     optional uint64 BytesSize = 3;
     optional bool IsColumnTable = 4;
     optional bool AreStatsFull = 5;
@@ -78,6 +83,7 @@ enum EColumnStatisticType {
 message TTable {
     optional NKikimrProto.TPathID PathId = 1; // table path
     repeated uint32 ColumnTags = 2; // list of columns to gather statistics from. Empty means asking for every column.
+    optional string Path = 3; // full table path string, used for operation metadata
 }
 
 // KQP -> SA
@@ -85,6 +91,7 @@ message TEvAnalyze {
     optional bytes OperationId = 1; // unique identifier to match response item
     repeated TTable Tables = 2; // list of analyzed tables and columns
     repeated EColumnStatisticType Types = 3; // list of statistics types requested. Empty means asking for all available.
+    optional string Database = 4; // database name the tables belong to
 }
 
 // SA -> KQP
@@ -95,8 +102,10 @@ message TEvAnalyzeResponse {
         STATUS_UNSPECIFIED = 0;
         STATUS_SUCCESS = 1;
         STATUS_ERROR = 2;
+        STATUS_CANCELLED = 3;
     }
-    optional EStatus Status = 2;    
+    optional EStatus Status = 2;
+    repeated Ydb.Issue.IssueMessage Issues = 3;
 }
 
 // KQP -> SA
@@ -117,83 +126,22 @@ message TEvAnalyzeStatusResponse {
     optional EStatus Status = 2;
 }
 
-// SA -> Shard
-message TEvAnalyzeTable {
-    optional bytes OperationId = 1; // unique identifier to match response item
-    optional TTable Table = 2;  // analyzed table
-    repeated EColumnStatisticType Types = 3; // list of statistics types requested. Empty means asking for all available.
-}
-
-// Shard -> SA
-message TEvAnalyzeTableResponse {
+// KQP -> SA
+message TEvAnalyzeCancel {
     optional bytes OperationId = 1;
-    optional NKikimrProto.TPathID PathId = 2;
-    optional fixed64 ShardTabletId = 3;
 }
 
+message TSimpleColumnStatistics {
+    optional uint64 Count = 1;
+    optional uint64 CountDistinct = 2;
 
-message TEvStatisticsRequest {
-    optional TTable Table = 1;
+    optional uint32 TypeId = 3;
+    optional NKikimrProto.TTypeInfo TypeInfo = 4;
 
-    optional bytes StartKey = 2;
+    optional Ydb.Value Min = 5;
+    optional Ydb.Value Max = 6;
+};
 
-    repeated EColumnStatisticType Types = 3;
-}
-
-message TStatistic {
-    optional uint32 Type = 1;
-    optional bytes Data = 2;
-}
-
-message TColumnStatistics {
-    optional uint32 Tag = 1;
-    repeated TStatistic Statistics = 2;
-}
-
-message TEvStatisticsResponse {
-    repeated TColumnStatistics Columns = 1;
-
-    enum EStatus {
-        STATUS_UNSPECIFIED = 0;
-        STATUS_SUCCESS = 1;
-        STATUS_ABORTED = 2;
-        STATUS_ERROR = 3;
-    }
-    optional EStatus Status = 2;
-    optional fixed64 ShardTabletId = 3;
-}
-
-message TEvAggregateStatistics {
-    optional uint64 Round = 1;
-    message TNodeMap {
-        optional uint32 NodeId = 1;
-        repeated fixed64 TabletIds = 2;
-    }
-    repeated TNodeMap Nodes = 2;
-    optional NKikimrProto.TPathID PathId = 3;
-    repeated uint32 ColumnTags = 4;
-}
-
-message TEvAggregateKeepAlive {
-    optional uint64 Round = 1;
-}
-
-message TEvAggregateKeepAliveAck {
-    optional uint64 Round = 1;
-}
-
-message TEvAggregateStatisticsResponse {
-    optional uint64 Round = 1;
-    repeated TColumnStatistics Columns = 2;
-    enum EErrorType {
-        TYPE_UNSPECIFIED = 0;
-        TYPE_UNAVAILABLE_NODE = 1;
-        TYPE_NON_LOCAL_TABLET = 2;
-    }
-    message TFailedTablet {
-        optional EErrorType Error = 1;
-        optional fixed64 TabletId = 2;
-        optional uint32 NodeId = 3;
-    }
-    repeated TFailedTablet FailedTablets = 3;
-}
+message TTableSummaryStatistics {
+    optional uint64 RowCount = 1;
+};

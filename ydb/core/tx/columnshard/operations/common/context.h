@@ -6,10 +6,39 @@
 
 namespace NKikimr::NOlap {
 
+class TActivityChecker {
+private:
+    TAtomicCounter ActiveFlag;
+    TString ErrorMessage;
+    TMutex Mutex;
+
+public:
+    TActivityChecker()
+        : ActiveFlag(1)
+    {
+    }
+
+    void StopWriting(const TString& errorMessage) {
+        {
+            TGuard<TMutex> guard(Mutex);
+            ErrorMessage = errorMessage;
+        }
+        ActiveFlag = 0;
+    }
+
+    const TString GetErrorMessage() const {
+        TGuard<TMutex> guard(Mutex);
+        return ErrorMessage;
+    }
+
+    bool IsActive() const {
+        return ActiveFlag.Val();
+    }
+};
+
 class TWritingContext {
 private:
     YDB_READONLY(ui64, TabletId, 0);
-    YDB_READONLY(NActors::TActorId, BufferizationInsertionActorId, NActors::TActorId());
     YDB_READONLY(NActors::TActorId, BufferizationPortionsActorId, NActors::TActorId());
     YDB_READONLY(NActors::TActorId, TabletActorId, NActors::TActorId());
     YDB_READONLY_DEF(std::shared_ptr<ISnapshotSchema>, ActualSchema);
@@ -17,8 +46,11 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<NColumnShard::TSplitterCounters>, SplitterCounters);
     YDB_READONLY_DEF(std::shared_ptr<NColumnShard::TWriteCounters>, WritingCounters);
     YDB_READONLY(TSnapshot, ApplyToSnapshot, TSnapshot::Zero());
-    const std::shared_ptr<const TAtomicCounter> ActivityChecker;
+    YDB_READONLY_DEF(std::optional<ui64>, LockId);
+    YDB_READONLY_DEF(std::optional<NKikimrDataEvents::ELockMode>, LockMode);
+    const std::shared_ptr<TActivityChecker> ActivityChecker;
     YDB_READONLY(bool, NoTxWrite, false);
+    YDB_READONLY(bool, IsBulk, false);
 
 public:
     void MergeFrom(const TWritingContext& newContext) {
@@ -31,16 +63,24 @@ public:
     }
 
     bool IsActive() const {
-        return ActivityChecker->Val();
+        return ActivityChecker->IsActive();
+    }
+
+    bool IsSnapshotIsolated() const {
+        return LockId.has_value() && LockMode.value_or(NKikimrDataEvents::OPTIMISTIC) == NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION;
+    }
+
+    TString GetErrorMessage() const {
+        return ActivityChecker->GetErrorMessage();
     }
 
     TWritingContext(const ui64 tabletId, const NActors::TActorId& tabletActorId, const std::shared_ptr<ISnapshotSchema>& actualSchema,
         const std::shared_ptr<IStoragesManager>& operators, const std::shared_ptr<NColumnShard::TSplitterCounters>& splitterCounters,
         const std::shared_ptr<NColumnShard::TWriteCounters>& writingCounters, const TSnapshot& applyToSnapshot,
-        const std::shared_ptr<const TAtomicCounter>& activityChecker, const bool noTxWrite,
-        const NActors::TActorId& bufferizationInsertionActorId, const NActors::TActorId& bufferizationPortionsActorId)
+        const std::optional<ui64>& lockId, const std::optional<NKikimrDataEvents::ELockMode>& lockMode,
+        const std::shared_ptr<TActivityChecker>& activityChecker, const bool noTxWrite, const NActors::TActorId& bufferizationPortionsActorId,
+        const bool isBulk)
         : TabletId(tabletId)
-        , BufferizationInsertionActorId(bufferizationInsertionActorId)
         , BufferizationPortionsActorId(bufferizationPortionsActorId)
         , TabletActorId(tabletActorId)
         , ActualSchema(actualSchema)
@@ -48,8 +88,11 @@ public:
         , SplitterCounters(splitterCounters)
         , WritingCounters(writingCounters)
         , ApplyToSnapshot(applyToSnapshot)
+        , LockId(lockId)
+        , LockMode(lockMode)
         , ActivityChecker(activityChecker)
         , NoTxWrite(noTxWrite)
+        , IsBulk(isBulk)
     {
         AFL_VERIFY(ActivityChecker);
     }

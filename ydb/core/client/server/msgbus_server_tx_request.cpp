@@ -62,6 +62,7 @@ public:
             HFunc(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionRegistered, Handle);
             HFunc(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
+            CFunc(TEvents::TSystem::PoisonPill, Cancel);
         }
     }
 };

@@ -3,7 +3,7 @@
 #include <ydb/public/sdk/cpp/src/client/topic/common/log_lazy.h>
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/logger/log.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/logger/log.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/string_utils/helpers/helpers.h>
@@ -59,7 +59,28 @@ TReadSession::~TReadSession() {
     }
 
     Abort();
+
+    std::vector<TSingleClusterReadSessionImpl::TPtr> sessions;
+    {
+        std::lock_guard guard(Lock);
+        sessions.reserve(ClusterSessions.size());
+        for (auto& [_, sessionInfo] : ClusterSessions) {
+            if (sessionInfo.Session) {
+                sessions.push_back(sessionInfo.Session);
+            }
+        }
+    }
+
+    const TInstant closeDeadline = TInstant::Now() + TDuration::Seconds(5);
+    for (const auto& session : sessions) {
+        if (!session->WaitAllDecompressionTasks(closeDeadline)) {
+            LOG_LAZY(Log, TLOG_WARNING, GetLogPrefix() << "Some decompression tasks are still running after read session destroy timeout");
+        }
+    }
     ClearAllEvents();
+    for (const auto& session : sessions) {
+        session->ClearAllPartitionStreamEvents();
+    }
 
     for (const auto& ctx : CbContexts) {
         ctx->Cancel();
@@ -147,7 +168,7 @@ void TReadSession::StartClusterDiscovery() {
     };
 
     auto rpcSettings = TRpcRequestSettings::Make(Settings);
-    rpcSettings.ClientTimeout = TDuration::Seconds(5); // TODO: make client timeout setting
+    rpcSettings.Deadline = TDeadline::AfterDuration(std::chrono::seconds(5)); // TODO: make client timeout setting
     Connections->RunDeferred<Ydb::PersQueue::V1::ClusterDiscoveryService,
                              Ydb::PersQueue::ClusterDiscovery::DiscoverClustersRequest,
                              Ydb::PersQueue::ClusterDiscovery::DiscoverClustersResponse>(
@@ -352,6 +373,12 @@ bool TReadSession::Close(TDuration timeout) {
         // Log final counters.
         CountersLogger->Stop();
     }
+    {
+        std::lock_guard guard(Lock);
+        if (DumpCountersContext) {
+            DumpCountersContext->Cancel();
+        }
+    }
 
     std::vector<TSingleClusterReadSessionImpl::TPtr> sessions;
     NThreading::TPromise<bool> promise = NThreading::NewPromise<bool>();
@@ -362,6 +389,8 @@ bool TReadSession::Close(TDuration timeout) {
         }
     };
 
+    std::vector<TCallbackContextPtr> cbContextsToCancel;
+    std::shared_ptr<TCallbackContext<TCountersLogger>> dumpCountersContextToCancel;
     TDeferredActions deferred;
     {
         std::lock_guard guard(Lock);
@@ -395,9 +424,11 @@ bool TReadSession::Close(TDuration timeout) {
 
     auto timeoutContext = Connections->CreateContext();
     if (!timeoutContext) {
+        std::lock_guard guard(Lock);
         AbortImpl(EStatus::ABORTED, DRIVER_IS_STOPPING_DESCRIPTION, deferred);
         return false;
     }
+    const TInstant closeDeadline = TInstant::Now() + timeout;
     Connections->ScheduleCallback(timeout,
                                   std::move(timeoutCallback),
                                   timeoutContext);
@@ -422,8 +453,30 @@ bool TReadSession::Close(TDuration timeout) {
         EventsQueue->Close(TSessionClosedEvent(EStatus::TIMEOUT, std::move(issues)), deferred);
     }
 
-    std::lock_guard guard(Lock);
-    Aborting = true; // Set abort flag for doing nothing on destructor.
+    {
+        std::lock_guard guard(Lock);
+        Aborting = true; // Set abort flag for doing nothing on destructor.
+        cbContextsToCancel = CbContexts;
+        dumpCountersContextToCancel = DumpCountersContext;
+    }
+
+    for (const auto& session : sessions) {
+        if (!session->WaitAllDecompressionTasks(closeDeadline)) {
+            LOG_LAZY(Log, TLOG_WARNING, GetLogPrefix() << "Some decompression tasks are still running after read session close timeout");
+        }
+    }
+    ClearAllEvents();
+    for (const auto& session : sessions) {
+        session->ClearAllPartitionStreamEvents();
+    }
+
+    for (const auto& ctx : cbContextsToCancel) {
+        ctx->Cancel();
+    }
+    if (dumpCountersContextToCancel) {
+        dumpCountersContextToCancel->Cancel();
+    }
+
     return result;
 }
 
@@ -557,7 +610,7 @@ TReadSessionEvent::TCreatePartitionStreamEvent::TCreatePartitionStreamEvent(TPar
 
 void TReadSessionEvent::TCreatePartitionStreamEvent::Confirm(std::optional<ui64> readOffset, std::optional<ui64> commitOffset) {
     if (PartitionStream) {
-        static_cast<TPartitionStreamImpl*>(PartitionStream.Get())->ConfirmCreate(readOffset, commitOffset);
+        static_cast<TPartitionStreamImpl*>(PartitionStream.Get())->ConfirmCreate(readOffset, commitOffset, {});
     }
 }
 
@@ -741,7 +794,7 @@ public:
             PartitionStreamToUncommittedOffsets.erase(partitionStreamId);
             event.Confirm();
         } else {
-            UnconfirmedDestroys.emplace(partitionStreamId, std::move(event));
+            UnconfirmedDestroys.emplace(partitionStreamId, event);
         }
     }
 

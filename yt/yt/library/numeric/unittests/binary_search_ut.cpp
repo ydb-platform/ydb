@@ -17,7 +17,7 @@ TEST_F(TBinarySearchTest, TestDoubleToBitset)
 {
     struct TTestCase
     {
-        TString name;
+        std::string name;
         double value;
         uint64_t bitset;
     };
@@ -26,7 +26,7 @@ TEST_F(TBinarySearchTest, TestDoubleToBitset)
         {
             /* name */ "positive_zero",
             /* value */ 0.0,
-            /* bitset */ 0x8000000000000000
+            /* bitset */ 0x8000000000000000,
         },
         {
             /* name */ "negative_zero",
@@ -36,7 +36,7 @@ TEST_F(TBinarySearchTest, TestDoubleToBitset)
         {
             /* name */ "positive_infinity",
             /* value */ std::numeric_limits<double>::infinity(),
-            /* bitset */ 0xFFF0000000000000
+            /* bitset */ 0xFFF0000000000000,
         },
         {
             /* name */ "negative_infinity",
@@ -46,7 +46,7 @@ TEST_F(TBinarySearchTest, TestDoubleToBitset)
         {
             /* name */ "lowest_finite_value",
             /* value */ std::numeric_limits<double>::lowest(),
-            /* bitset */ 0x0010000000000000
+            /* bitset */ 0x0010000000000000,
         },
         {
             /* name */ "max_finite_value",
@@ -76,7 +76,7 @@ TEST_F(TBinarySearchTest, TestFloatingPointLowerBound)
 {
     struct TTestCase
     {
-        TString name;
+        std::string name;
         double lo;
         double hi;
         std::function<bool(double)> predicate;
@@ -89,14 +89,14 @@ TEST_F(TBinarySearchTest, TestFloatingPointLowerBound)
             /* lo */ 0,
             /* hi */ 2,
             /* predicate */ [] (double x) { return x * x >= 2; },
-            /* expectedResult */ std::nullopt
+            /* expectedResult */ std::nullopt,
         },
         {
             /* name */ "sqrt0.1",
             /* lo */ 0,
             /* hi */ 1,
             /* predicate */ [] (double x) { return x * x >= 0.1; },
-            /* expectedResult */ std::nullopt
+            /* expectedResult */ std::nullopt,
         },
         {
             /* name */ "positive_infinity",
@@ -131,28 +131,28 @@ TEST_F(TBinarySearchTest, TestFloatingPointLowerBound)
             /* lo */ -std::numeric_limits<double>::infinity(),
             /* hi */ std::numeric_limits<double>::infinity(),
             /* predicate */ [] (double x) { return x >= -3.14159265358979323846264338327950288419716939937510582097494459230781640628620899863; },
-            /* expectedResult */ -3.14159265358979323846264338327950288419716939937510582097494459230781640628620899863
+            /* expectedResult */ -3.14159265358979323846264338327950288419716939937510582097494459230781640628620899863,
         },
         {
             /* name */ "minus_zero",
             /* lo */ std::numeric_limits<double>::lowest(),
             /* hi */ std::numeric_limits<double>::max(),
             /* predicate */ [] (double x) { return x >= 0; }, // Notice that |-0.0 >= 0|.
-            /* expectedResult */ -0.0
+            /* expectedResult */ -0.0,
         },
         {
             /* name */ "plus_zero",
             /* lo */ std::numeric_limits<double>::lowest(),
             /* hi */ std::numeric_limits<double>::max(),
             /* predicate */ [] (double x) { return x >= 0 && !signbit(x); },
-            /* expectedResult */ 0.0
+            /* expectedResult */ 0.0,
         },
         {
             /* name */ "predicate_always_true",
             /* lo */ -17,
             /* hi */ 1000,
             /* predicate */ [] (double /*x*/) { return true; },
-            /* expectedResult */ -17
+            /* expectedResult */ -17,
         },
         {
             /* name */ "min_positive_number_1",
@@ -203,7 +203,7 @@ TEST_F(TBinarySearchTest, TestFloatingPointInverseLowerBound)
 {
     struct TTestCase
     {
-        TString name;
+        std::string name;
         double lo;
         double hi;
         std::function<bool(double)> predicate;
@@ -216,14 +216,14 @@ TEST_F(TBinarySearchTest, TestFloatingPointInverseLowerBound)
             /* lo */ 0,
             /* hi */ 2,
             /* predicate */ [] (double x) { return x * x <= 2; },
-            /* expectedResult */ std::nullopt
+            /* expectedResult */ std::nullopt,
         },
         {
             /* name */ "sqrt0.1",
             /* lo */ 0,
             /* hi */ 1,
             /* predicate */ [] (double x) { return x * x <= 0.1; },
-            /* expectedResult */ std::nullopt
+            /* expectedResult */ std::nullopt,
         },
         {
             /* name */ "positive_infinity",
@@ -258,28 +258,28 @@ TEST_F(TBinarySearchTest, TestFloatingPointInverseLowerBound)
             /* lo */ -std::numeric_limits<double>::infinity(),
             /* hi */ std::numeric_limits<double>::infinity(),
             /* predicate */ [] (double x) { return x <= -3.14159265358979323846264338327950288419716939937510582097494459230781640628620899863; },
-            /* expectedResult */ -3.14159265358979323846264338327950288419716939937510582097494459230781640628620899863
+            /* expectedResult */ -3.14159265358979323846264338327950288419716939937510582097494459230781640628620899863,
         },
         {
             /* name */ "minus_zero",
             /* lo */ std::numeric_limits<double>::lowest(),
             /* hi */ std::numeric_limits<double>::max(),
             /* predicate */ [] (double x) { return x <= 0 && signbit(x); },
-            /* expectedResult */ -0.0
+            /* expectedResult */ -0.0,
         },
         {
             /* name */ "plus_zero",
             /* lo */ std::numeric_limits<double>::lowest(),
             /* hi */ std::numeric_limits<double>::max(),
             /* predicate */ [] (double x) { return x <= 0; },
-            /* expectedResult */ 0.0
+            /* expectedResult */ 0.0,
         },
         {
             /* name */ "predicate_always_true",
             /* lo */ -17,
             /* hi */ 1000,
             /* predicate */ [] (double /*x*/) { return true; },
-            /* expectedResult */ 1000
+            /* expectedResult */ 1000,
         },
         {
             /* name */ "min_positive_number_1",

@@ -413,20 +413,24 @@ heap2_decode(LogicalDecodingContext *ctx, XLogRecordBuffer *buf)
 
 	/*
 	 * If we don't have snapshot or we are just fast-forwarding, there is no
-	 * point in decoding changes.
+	 * point in decoding data changes. However, it's crucial to build the base
+	 * snapshot during fast-forward mode (as is done in
+	 * SnapBuildProcessChange()) because we require the snapshot's xmin when
+	 * determining the candidate catalog_xmin for the replication slot. See
+	 * SnapBuildProcessRunningXacts().
 	 */
-	if (SnapBuildCurrentState(builder) < SNAPBUILD_FULL_SNAPSHOT ||
-		ctx->fast_forward)
+	if (SnapBuildCurrentState(builder) < SNAPBUILD_FULL_SNAPSHOT)
 		return;
 
 	switch (info)
 	{
 		case XLOG_HEAP2_MULTI_INSERT:
-			if (!ctx->fast_forward &&
-				SnapBuildProcessChange(builder, xid, buf->origptr))
+			if (SnapBuildProcessChange(builder, xid, buf->origptr) &&
+				!ctx->fast_forward)
 				DecodeMultiInsert(ctx, buf);
 			break;
 		case XLOG_HEAP2_NEW_CID:
+			if (!ctx->fast_forward)
 			{
 				xl_heap_new_cid *xlrec;
 
@@ -473,16 +477,20 @@ heap_decode(LogicalDecodingContext *ctx, XLogRecordBuffer *buf)
 
 	/*
 	 * If we don't have snapshot or we are just fast-forwarding, there is no
-	 * point in decoding data changes.
+	 * point in decoding data changes. However, it's crucial to build the base
+	 * snapshot during fast-forward mode (as is done in
+	 * SnapBuildProcessChange()) because we require the snapshot's xmin when
+	 * determining the candidate catalog_xmin for the replication slot. See
+	 * SnapBuildProcessRunningXacts().
 	 */
-	if (SnapBuildCurrentState(builder) < SNAPBUILD_FULL_SNAPSHOT ||
-		ctx->fast_forward)
+	if (SnapBuildCurrentState(builder) < SNAPBUILD_FULL_SNAPSHOT)
 		return;
 
 	switch (info)
 	{
 		case XLOG_HEAP_INSERT:
-			if (SnapBuildProcessChange(builder, xid, buf->origptr))
+			if (SnapBuildProcessChange(builder, xid, buf->origptr) &&
+				!ctx->fast_forward)
 				DecodeInsert(ctx, buf);
 			break;
 
@@ -493,17 +501,20 @@ heap_decode(LogicalDecodingContext *ctx, XLogRecordBuffer *buf)
 			 */
 		case XLOG_HEAP_HOT_UPDATE:
 		case XLOG_HEAP_UPDATE:
-			if (SnapBuildProcessChange(builder, xid, buf->origptr))
+			if (SnapBuildProcessChange(builder, xid, buf->origptr) &&
+				!ctx->fast_forward)
 				DecodeUpdate(ctx, buf);
 			break;
 
 		case XLOG_HEAP_DELETE:
-			if (SnapBuildProcessChange(builder, xid, buf->origptr))
+			if (SnapBuildProcessChange(builder, xid, buf->origptr) &&
+				!ctx->fast_forward)
 				DecodeDelete(ctx, buf);
 			break;
 
 		case XLOG_HEAP_TRUNCATE:
-			if (SnapBuildProcessChange(builder, xid, buf->origptr))
+			if (SnapBuildProcessChange(builder, xid, buf->origptr) &&
+				!ctx->fast_forward)
 				DecodeTruncate(ctx, buf);
 			break;
 
@@ -512,26 +523,20 @@ heap_decode(LogicalDecodingContext *ctx, XLogRecordBuffer *buf)
 			/*
 			 * Inplace updates are only ever performed on catalog tuples and
 			 * can, per definition, not change tuple visibility.  Since we
-			 * don't decode catalog tuples, we're not interested in the
+			 * also don't decode catalog tuples, we're not interested in the
 			 * record's contents.
-			 *
-			 * In-place updates can be used either by XID-bearing transactions
-			 * (e.g.  in CREATE INDEX CONCURRENTLY) or by XID-less
-			 * transactions (e.g.  VACUUM).  In the former case, the commit
-			 * record will include cache invalidations, so we mark the
-			 * transaction as catalog modifying here. Currently that's
-			 * redundant because the commit will do that as well, but once we
-			 * support decoding in-progress relations, this will be important.
 			 */
 			if (!TransactionIdIsValid(xid))
 				break;
 
+			/* PostgreSQL 13 was the last to need these actions. */
 			(void) SnapBuildProcessChange(builder, xid, buf->origptr);
 			ReorderBufferXidSetCatalogChanges(ctx->reorder, xid, buf->origptr);
 			break;
 
 		case XLOG_HEAP_CONFIRM:
-			if (SnapBuildProcessChange(builder, xid, buf->origptr))
+			if (SnapBuildProcessChange(builder, xid, buf->origptr) &&
+				!ctx->fast_forward)
 				DecodeSpecConfirm(ctx, buf);
 			break;
 

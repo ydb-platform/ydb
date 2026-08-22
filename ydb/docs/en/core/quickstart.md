@@ -2,7 +2,7 @@
 
 In this guide, you will install a single-node local [{{ ydb-short-name }} cluster](concepts/glossary.md#cluster) and execute simple queries against your [database](concepts/glossary.md#database).
 
-Normally, {{ ydb-short-name }} stores data on multiple SSD/NVMe or HDD raw disk devices without any filesystem. However, for simplicity, this guide emulates disks in RAM or using a file in a regular filesystem. Thus, this setup is unsuitable for any production usage or even benchmarks. See the [documentation for DevOps Engineers](devops/index.md) to learn how to run {{ ydb-short-name }} in a production environment.
+Normally, {{ ydb-short-name }} stores data on multiple SSD/NVMe or HDD raw disk devices without any filesystem. However, for simplicity, this guide emulates disks in RAM or using a file in a regular filesystem. Thus, this setup is unsuitable for any production usage or even benchmarks. See the [Cluster Administration](devops/index.md) documentation to learn how to run {{ ydb-short-name }} in a production environment.
 
 ## Install and start {{ ydb-short-name }} {#install}
 
@@ -73,6 +73,8 @@ Normally, {{ ydb-short-name }} stores data on multiple SSD/NVMe or HDD raw disk 
 
 - Docker x86_64
 
+   {% include [index.md](reference/docker/_includes/rosetta.md) %}
+
    1. Create a directory for {{ ydb-short-name }} and use it as the current working directory:
 
       ```bash
@@ -94,8 +96,6 @@ Normally, {{ ydb-short-name }} stores data on multiple SSD/NVMe or HDD raw disk 
       ```
 
       If the container starts successfully, you'll see the container ID. The container might take a few seconds to initialize. The database will not be available until container initialization is complete.
-
-      {% include [index.md](reference/docker/_includes/rosetta.md) %}
 
 - Minikube
 

@@ -1,15 +1,53 @@
 #pragma once
 
+#include <ydb/core/raw_socket/sock_impl.h>
 #include <ydb/core/base/path.h>
-#include <ydb/core/persqueue/pq_rl_helpers.h>
+#include <ydb/core/kafka_proxy/kafka_messages.h>
+#include <ydb/core/persqueue/public/pq_rl_helpers.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/library/aclib/aclib.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/events.h>
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/services/services.pb.h>
 #include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
 #include <ydb/public/api/protos/draft/persqueue_error_codes.pb.h> // strange
 
-#include <ydb/core/kafka_proxy/kafka_messages.h>
+#include <util/system/backtrace.h>
+#include <util/system/type_name.h>
 
 namespace NKafka {
+
+template <typename TDerived>
+class TKafkaExceptionHandler: public NActors::IActorExceptionHandler {
+public:
+    bool OnUnhandledException(const std::exception& exc) override {
+        auto* self = static_cast<TDerived*>(this);
+        const auto& ctx = self->ActorContext();
+        YDB_LOG_CRIT_CTX_COMP(ctx, NKikimrServices::KAFKA_PROXY, "Unhandled exception in kafka actor",
+            {"actor", TypeName<TDerived>()},
+            {"typeName", TypeName(exc)},
+            {"exception", exc.what()},
+            {"backTrace", TBackTrace::FromCurrentException().PrintToString()});
+        self->OnKafkaUnhandledException(exc, ctx);
+        return true;
+    }
+
+    // Default: tear down the TCP connection when available so the client reconnects.
+    // Override GetKafkaConnectionId() in actors that own a TContext.
+    NActors::TActorId GetKafkaConnectionId() const {
+        return {};
+    }
+
+    void OnKafkaUnhandledException(const std::exception&, const NActors::TActorContext& ctx) {
+        auto* self = static_cast<TDerived*>(this);
+        if (const auto connectionId = self->GetKafkaConnectionId()) {
+            ctx.Send(connectionId, new NActors::TEvents::TEvPoison);
+            return;
+        }
+        ctx.Send(self->SelfId(), new NActors::TEvents::TEvPoison);
+    }
+};
 
 static constexpr int ProxyNodeId = 1;
 static constexpr char UnderlayPrefix[] = "u-";
@@ -23,6 +61,17 @@ enum EAuthSteps {
     FAILED
 };
 
+enum class EBalancingMode {
+    Server,
+    Native,
+};
+
+struct TReadSession {
+    EBalancingMode BalancingMode = EBalancingMode::Native;
+    std::optional<EBalancingMode> PendingBalancingMode;
+    NActors::TActorId ProxyActorId;
+};
+
 struct TContext {
     using TPtr = std::shared_ptr<TContext>;
 
@@ -30,9 +79,14 @@ struct TContext {
         : Config(config) {
     }
 
+    TContext(const TContext& other)
+        : Config(other.Config)
+    {
+    }
+
     const NKikimrConfig::TKafkaProxyConfig& Config;
 
-    TActorId ConnectionId;
+    NActors::TActorId ConnectionId;
     TString KafkaClient;
 
 
@@ -44,17 +98,24 @@ struct TContext {
     TString FolderId;
     TString CloudId;
     TString DatabaseId;
+    TString ResourceDatabasePath;
+    std::optional<bool> InitialServerlessTransactionsFlagValue;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TString ClientDC;
     bool IsServerless = false;
     bool RequireAuthentication = false;
+    TReadSession ReadSession;
 
     NKikimr::NPQ::TRlContext RlContext;
 
+
     bool Authenticated() {
-
         return !RequireAuthentication || AuthenticationStep == SUCCESS;
+    }
 
+    bool KafkaTableFeatureFlagChanged(bool serverlessTransactionsEnabledNow) const {
+        return InitialServerlessTransactionsFlagValue.has_value() &&
+               *InitialServerlessTransactionsFlagValue != serverlessTransactionsEnabledNow;
     }
 };
 
@@ -74,6 +135,10 @@ public:
 
     T* operator->() const {
         return Ptr;
+    }
+
+    T& operator*() const {
+        return *Ptr;
     }
 
     operator bool() const {
@@ -96,6 +161,8 @@ inline EKafkaErrors ConvertErrorCode(Ydb::StatusIds::StatusCode status) {
             return EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION;
         case Ydb::StatusIds::UNAUTHORIZED:
             return EKafkaErrors::TOPIC_AUTHORIZATION_FAILED;
+        case Ydb::StatusIds::TIMEOUT:
+            return EKafkaErrors::REQUEST_TIMED_OUT;
         default:
             return EKafkaErrors::UNKNOWN_SERVER_ERROR;
     }
@@ -119,6 +186,10 @@ inline EKafkaErrors ConvertErrorCode(NPersQueue::NErrorCode::EErrorCode code) {
             return EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION;
         case NPersQueue::NErrorCode::EErrorCode::READ_TIMEOUT:
             return EKafkaErrors::REQUEST_TIMED_OUT;
+        case NPersQueue::NErrorCode::EErrorCode::READ_NOT_DONE:
+            return EKafkaErrors::NONE_ERROR;
+        case NPersQueue::NErrorCode::EErrorCode::TABLET_PIPE_DISCONNECTED:
+            return EKafkaErrors::NOT_LEADER_OR_FOLLOWER;
         default:
             return EKafkaErrors::UNKNOWN_SERVER_ERROR;
     }
@@ -146,11 +217,8 @@ inline EKafkaErrors ConvertErrorCode(Ydb::PersQueue::ErrorCode::ErrorCode code) 
     }
 }
 
-inline TString NormalizePath(const TString& database, const TString& topic) {
-    if (topic.size() > database.size() && topic.at(database.size()) == '/' && topic.StartsWith(database)) {
-        return topic;
-    }
-    return NKikimr::CanonizePath(database + "/" + topic);
+inline TString NormalizePath(const TString& database, const TString& path) {
+    return NKikimr::NormalizePath(database, path);
 }
 
 inline TString GetTopicNameWithoutDb(const TString& database, TString topic) {
@@ -167,17 +235,21 @@ inline TString GetUserSerializedToken(std::shared_ptr<TContext> context) {
     return context->RequireAuthentication ? context->UserToken->GetSerializedToken() : "";
 }
 
-NActors::IActor* CreateKafkaApiVersionsActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TApiVersionsRequestData>& message);
+NActors::IActor* CreateKafkaApiVersionsActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TApiVersionsRequestData>& message,
+                                            TKafkaVersion requestApiVersion);
 NActors::IActor* CreateKafkaInitProducerIdActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TInitProducerIdRequestData>& message);
 NActors::IActor* CreateKafkaMetadataActor(const TContext::TPtr context, const ui64 correlationId,
                                           const TMessagePtr<TMetadataRequestData>& message,
-                                          const TActorId& discoveryCacheActor);
+                                          const NActors::TActorId& discoveryCacheActor);
 NActors::IActor* CreateKafkaProduceActor(const TContext::TPtr context);
+NActors::IActor* CreateKafkaReadSessionProxyActor(const TContext::TPtr context, ui64 cookie);
 NActors::IActor* CreateKafkaReadSessionActor(const TContext::TPtr context, ui64 cookie);
 NActors::IActor* CreateKafkaBalancerActor(const TContext::TPtr context, ui64 cookie);
 NActors::IActor* CreateKafkaSaslHandshakeActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TSaslHandshakeRequestData>& message);
-NActors::IActor* CreateKafkaSaslAuthActor(const TContext::TPtr context, const ui64 correlationId, const NKikimr::NRawSocket::TSocketDescriptor::TSocketAddressType address, const TMessagePtr<TSaslAuthenticateRequestData>& message);
+NActors::IActor* CreateKafkaSaslAuthActor(const TContext::TPtr context, const NKikimr::NRawSocket::TSocketDescriptor::TSocketAddressType address);
 NActors::IActor* CreateKafkaListOffsetsActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TListOffsetsRequestData>& message);
+NActors::IActor* CreateKafkaListGroupsActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TListGroupsRequestData>& message);
+NActors::IActor* CreateKafkaDescribeGroupsActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TDescribeGroupsRequestData>& message);
 NActors::IActor* CreateKafkaFetchActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TFetchRequestData>& message);
 NActors::IActor* CreateKafkaFindCoordinatorActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TFindCoordinatorRequestData>& message);
 NActors::IActor* CreateKafkaOffsetCommitActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TOffsetCommitRequestData>& message);

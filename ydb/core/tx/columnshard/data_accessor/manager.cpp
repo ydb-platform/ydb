@@ -4,6 +4,4 @@
 
 #include <ydb/library/accessor/positive_integer.h>
 
-namespace NKikimr::NOlap::NDataAccessorControl {
-
-}   // namespace NKikimr::NOlap::NDataAccessorControl
+namespace NKikimr::NOlap::NDataAccessorControl {}   // namespace NKikimr::NOlap::NDataAccessorControl

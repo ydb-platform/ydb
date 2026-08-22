@@ -1,8 +1,6 @@
 # Configuration V1
 
-{% include [deprecated](_includes/deprecated.md) %}
-
-This section of the {{ ydb-short-name }} documentation describes Configuration V1, which is the main way to configure {{ ydb-short-name }} clusters deployed using {{ ydb-short-name }} versions below v25.1.
+This section of the {{ ydb-short-name }} documentation describes Configuration V1, which is the main way to configure {{ ydb-short-name }} clusters deployed using {{ ydb-short-name }}.
 
 Configuration V1 is a two-level {{ ydb-short-name }} cluster configuration system consisting of [static configuration](../configuration-v1/static-config.md) and [dynamic configuration](../configuration-v1/dynamic-config.md):
 

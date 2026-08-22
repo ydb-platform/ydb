@@ -24,39 +24,39 @@ namespace {
 } // namespace
 
 Y_UNIT_TEST_SUITE(TMiniKQLPGSortTest) {
-    Y_UNIT_TEST_LLVM(TestListSort) {
-        const std::array<TString, 3U> values = {{"2000-01-01","1979-12-12","2010-12-01"}};
-        const std::array<TString, 3U> sortedValues = {{"1979-12-12","2000-01-01","2010-12-01"} };
+Y_UNIT_TEST_LLVM(TestListSort) {
+    const std::array<TString, 3U> values = {{"2000-01-01", "1979-12-12", "2010-12-01"}};
+    const std::array<TString, 3U> sortedValues = {{"1979-12-12", "2000-01-01", "2010-12-01"}};
 
-        TSetup<LLVM> setup(GetTestFactory(GetPgFactory()));
-        TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
+    TSetup<LLVM> setup(GetTestFactory(GetPgFactory()));
+    TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
 
-        auto pgDateType = static_cast<TPgType*>(pgmBuilder.NewPgType(NPg::LookupType("date").TypeId));
-        auto pgTextType = static_cast<TPgType*>(pgmBuilder.NewPgType(NPg::LookupType("text").TypeId));
-        auto utf8Type = pgmBuilder.NewDataType(NUdf::TDataType<NUdf::TUtf8>::Id);
+    auto pgDateType = static_cast<TPgType*>(pgmBuilder.NewPgType(NPg::LookupType("date").TypeId));
+    auto pgTextType = static_cast<TPgType*>(pgmBuilder.NewPgType(NPg::LookupType("text").TypeId));
+    auto utf8Type = pgmBuilder.NewDataType(NUdf::TDataType<NUdf::TUtf8>::Id);
 
-        std::vector<TRuntimeNode> data;
-        for (const auto& x : values) {
-            data.push_back(pgmBuilder.PgConst(pgDateType, x));
-        }
+    std::vector<TRuntimeNode> data;
+    for (const auto& x : values) {
+        data.push_back(pgmBuilder.PgConst(pgDateType, x));
+    }
 
-        const auto list = pgmBuilder.NewList(pgDateType, data);
+    const auto list = pgmBuilder.NewList(pgDateType, data);
 
-        const auto pgmReturn = pgmBuilder.Map(pgmBuilder.Sort(list, pgmBuilder.NewDataLiteral<bool>(true),
-            [&](TRuntimeNode item) { return item; }),
-            [&](TRuntimeNode item) {
-                return pgmBuilder.FromPg(pgmBuilder.PgCast(item, pgTextType), utf8Type);
-            });
+    const auto pgmReturn = pgmBuilder.Map(pgmBuilder.Sort(list, pgmBuilder.NewDataLiteral<bool>(true),
+                                                          [&](TRuntimeNode item) { return item; }),
+                                          [&](TRuntimeNode item) {
+                                              return pgmBuilder.FromPg(pgmBuilder.PgCast(item, pgTextType), utf8Type);
+                                          });
 
-        const auto graph = setup.BuildGraph(pgmReturn);
-        const auto& result = graph->GetValue();
+    const auto graph = setup.BuildGraph(pgmReturn);
+    const auto& result = graph->GetValue();
 
-        UNIT_ASSERT_VALUES_EQUAL(result.GetListLength(), sortedValues.size());
-        for (ui32 i = 0; i < sortedValues.size(); ++i) {
-            auto elem = result.GetElement(i);
-            UNIT_ASSERT_VALUES_EQUAL(TStringBuf(elem.AsStringRef()), sortedValues[i]);
-        }
+    UNIT_ASSERT_VALUES_EQUAL(result.GetListLength(), sortedValues.size());
+    for (ui32 i = 0; i < sortedValues.size(); ++i) {
+        auto elem = result.GetElement(i);
+        UNIT_ASSERT_VALUES_EQUAL(TStringBuf(elem.AsStringRef()), sortedValues[i]);
     }
 }
-} // NMiniKQL
-} // NKikimr
+} // Y_UNIT_TEST_SUITE(TMiniKQLPGSortTest)
+} // namespace NMiniKQL
+} // namespace NKikimr

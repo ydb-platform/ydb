@@ -6,6 +6,7 @@
 #include <yql/essentials/minikql/mkql_node_serialization.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
+#include <yql/essentials/minikql/runtime_settings/runtime_settings_serialization.h>
 #include <yql/essentials/minikql/aligned_page_pool.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/backtrace/backtrace.h>
@@ -284,7 +285,8 @@ protected:
         }
 
         if (execve(ExeName.c_str(), ExecArgs.data(), ExecEnv.data()) == -1) {
-            ythrow TSystemError() << "Cannot execl";
+            YQL_CLOG(ERROR, ProviderDq) << "Cannot execve: " << ExeName << ", args: " << JoinSeq(',', Args);
+            ythrow TSystemError() << "Cannot execve: " << ExeName;
         }
     }
 };
@@ -520,7 +522,8 @@ private:
         }
 
         if (execvp(PortoCtl.c_str(), ExecArgs.data()) == -1) {
-            ythrow TSystemError() << "Cannot execl";
+            YQL_CLOG(ERROR, ProviderDq) << "Cannot execvp: " << PortoCtl << ", args: " << JoinSeq(',', ArgsElems);
+            ythrow TSystemError() << "Cannot execvp: " << PortoCtl;
         }
     }
 
@@ -714,9 +717,15 @@ public:
         }
     }
 
+    void Push(TInstant watermark) override {
+        Y_UNUSED(watermark);
+        ythrow yexception() << "unimplemented";
+    }
+
     [[nodiscard]]
-    bool Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch) override {
+    bool Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMaybe<TInstant>& watermark) override {
         Y_UNUSED(batch);
+        Y_UNUSED(watermark);
         ythrow yexception() << "unimplemented";
     }
 
@@ -728,6 +737,15 @@ public:
         }
     }
 
+    void Bind(NActors::TActorId outputActorId, NActors::TActorId inputActorId) override { // noop
+        Y_UNUSED(outputActorId);
+        Y_UNUSED(inputActorId);
+    }
+
+    bool IsLocal() const override {
+        return false;;
+    }
+
     bool IsFinished() const override {
         ythrow yexception() << "unimplemented";
     }
@@ -736,15 +754,15 @@ public:
         ythrow yexception() << "unimplemented";
     }
 
-    void Pause() override {
+    void PauseByCheckpoint() override {
         Y_ABORT("Checkpoints are not supported");
     }
 
-    void Resume() override {
+    void ResumeByCheckpoint() override {
         Y_ABORT("Checkpoints are not supported");
     }
 
-    bool IsPaused() const override {
+    bool IsPausedByCheckpoint() const override {
         return false;
     }
 
@@ -772,7 +790,7 @@ private:
 
 class TDqSource: public IDqAsyncInputBuffer {
 public:
-    TDqSource(ui64 taskId, ui64 inputIndex, TType* inputType, i64 channelBufferSize, IPipeTaskRunner* taskRunner)
+    TDqSource(ui64 taskId, ui64 inputIndex, TType* inputType, i64 channelBufferSize, IPipeTaskRunner* taskRunner, NKikimr::NMiniKQL::EValuePackerVersion packerVersion, NYql::EDatumValidationMode datumValidationMode)
         : TaskId(taskId)
         , TaskRunner(taskRunner)
         , Input(TaskRunner->GetInput())
@@ -780,6 +798,8 @@ public:
         , InputType(inputType)
         , BufferSize(channelBufferSize)
         , FreeSpace(channelBufferSize)
+        , PackerVersion(packerVersion)
+        , DatumValidationMode(datumValidationMode)
     {
         PushStats.InputIndex = inputIndex;
     }
@@ -859,13 +879,18 @@ public:
 
     void Push(NKikimr::NMiniKQL::TUnboxedValueBatch&& batch, i64 space) override {
         auto inputType = GetInputType();
-        TDqDataSerializer dataSerializer(TaskRunner->GetTypeEnv(), TaskRunner->GetHolderFactory(), NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0);
+        TDqDataSerializer dataSerializer(TaskRunner->GetTypeEnv(), TaskRunner->GetHolderFactory(), NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0, PackerVersion, DatumValidationMode);
         TDqSerializedBatch serialized = dataSerializer.Serialize(batch, inputType);
         Push(std::move(serialized), space);
     }
 
+    void Push(TInstant watermark) override {
+        Y_UNUSED(watermark);
+        ythrow yexception() << "unimplemented";
+    }
+
     [[nodiscard]]
-    bool Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch) override {
+    bool Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMaybe<TInstant>& /* watermark */) override {
         Y_UNUSED(batch);
         ythrow yexception() << "unimplemented";
     }
@@ -891,15 +916,15 @@ public:
         return InputType;
     }
 
-    void Pause() override {
+    void PauseByCheckpoint() override {
         Y_ABORT("Checkpoints are not supported");
     }
 
-    void Resume() override {
+    void ResumeByCheckpoint() override {
         Y_ABORT("Checkpoints are not supported");
     }
 
-    bool IsPaused() const override {
+    bool IsPausedByCheckpoint() const override {
         return false;
     }
 
@@ -923,6 +948,8 @@ private:
     TDqInputStats PopStats;
     i64 BufferSize;
     i64 FreeSpace;
+    NKikimr::NMiniKQL::EValuePackerVersion PackerVersion;
+    NYql::EDatumValidationMode DatumValidationMode;
 };
 
 /*______________________________________________________________________________________________*/
@@ -1012,10 +1039,17 @@ public:
     }
 
     // <| producer methods
-    [[nodiscard]]
-    bool IsFull() const override {
+    EDqFillLevel GetFillLevel() const override {
+        Y_ABORT("Unimplemented");
+    }
+
+    EDqFillLevel UpdateFillLevel() override {
         ythrow yexception() << "unimplemented";
     };
+
+    void SetFillAggregator(std::shared_ptr<TDqFillAggregator>) override {
+        Y_ABORT("Unimplemented");
+    }
 
     // can throw TDqChannelStorageException
     void Push(NUdf::TUnboxedValue&& value) override {
@@ -1051,6 +1085,9 @@ public:
             TaskRunner->RaiseException();
         }
     }
+
+    void Flush() override {
+    }
     // |>
 
     // <| consumer methods
@@ -1066,6 +1103,11 @@ public:
             TaskRunner->RaiseException();
         }
     }
+
+    bool IsEarlyFinished() const override {
+        return false;
+    }
+
     // can throw TDqChannelStorageException
     [[nodiscard]]
     bool Pop(TDqSerializedBatch& data) override {
@@ -1133,8 +1175,13 @@ public:
         }
     }
 
-    void UpdateSettings(const TDqOutputChannelSettings::TMutable& settings) override {
-        Y_UNUSED(settings);
+    void Bind(NActors::TActorId outputActorId, NActors::TActorId inputActorId) override { // noop
+        Y_UNUSED(outputActorId);
+        Y_UNUSED(inputActorId);
+    }
+
+    bool IsLocal() const override {
+        return false;;
     }
 
     template<typename T>
@@ -1231,12 +1278,19 @@ public:
         }
     }
 
+    bool IsEarlyFinished() const override {
+        return false;
+    }
+
     NKikimr::NMiniKQL::TType* GetOutputType() const override {
         return OutputType;
     }
 
     void Finish() override {
         Y_ABORT("Unimplemented");
+    }
+
+    void Flush() override {
     }
 
     bool Pop(NDqProto::TWatermark& watermark) override {
@@ -1249,7 +1303,15 @@ public:
         Y_ABORT("Checkpoints are not supported");
     }
 
-    bool IsFull() const override {
+    EDqFillLevel GetFillLevel() const override {
+        Y_ABORT("Unimplemented");
+    }
+
+    EDqFillLevel UpdateFillLevel() override {
+        Y_ABORT("Unimplemented");
+    }
+
+    void SetFillAggregator(std::shared_ptr<TDqFillAggregator>) override {
         Y_ABORT("Unimplemented");
     }
 
@@ -1314,6 +1376,7 @@ public:
         const TString& traceId)
         : TraceId(traceId)
         , Task(task)
+        , RuntimeSettings(DeserializeRuntimeSettingsFromProto(Task.GetProgram().GetRuntimeSettings()))
         , FilesHolder(std::move(filesHolder))
         , Alloc(alloc)
         , AllocatedHolder(std::make_optional<TAllocatedHolder>(*Alloc, "TDqTaskRunnerProxy"))
@@ -1602,7 +1665,13 @@ private:
         for (ui32 i = 0; i < Task.InputsSize(); ++i) {
             auto& inputDesc = Task.GetInputs(i);
             if (inputDesc.HasSource()) {
-                Sources[i] = new TDqSource(Task.GetId(), i, InputTypes.at(i), ChannelBufferSize, this);
+                Sources[i] = new TDqSource(Task.GetId(),
+                                           i,
+                                           InputTypes.at(i),
+                                           ChannelBufferSize,
+                                           this,
+                                           NDq::FromProto(Task.GetValuePackerVersion()),
+                                           RuntimeSettings->DatumValidation.Get());
             } else {
                 for (auto& inputChannelDesc : inputDesc.GetChannels()) {
                     ui64 channelId = inputChannelDesc.GetId();
@@ -1615,6 +1684,7 @@ private:
 private:
     const TString TraceId;
     NDqProto::TDqTask Task;
+    TRuntimeSettings::TConstPtr RuntimeSettings;
     TFilesHolder::TPtr FilesHolder;
     THashMap<TString, TString> SecureParams;
     THashMap<TString, TString> TaskParams;
@@ -1675,10 +1745,20 @@ public:
     void SetSpillerFactory(std::shared_ptr<ISpillerFactory>) override {
     }
 
-    void Prepare(const TDqTaskSettings& task, const TDqTaskRunnerMemoryLimits& memoryLimits,
-        const IDqTaskRunnerExecutionContext& execCtx) override
-    {
+    TString GetOutputDebugString() override {
+        return "";
+    }
+
+    void Prepare(
+        const TDqTaskSettings& task,
+        const TDqTaskRunnerMemoryLimits& memoryLimits,
+        const IDqTaskRunnerExecutionContext& execCtx,
+        TDqComputeActorWatermarks* watermarksTracker,
+        TDqWatermarkGeneratorTracker* sourceWatermarksTracker
+    ) override {
         Y_UNUSED(execCtx);
+        Y_UNUSED(watermarksTracker);
+        Y_UNUSED(sourceWatermarksTracker);
         Y_ABORT_UNLESS(Task.GetId() == task.GetId());
         try {
             auto result = Delegate->Prepare(memoryLimits);
@@ -1747,6 +1827,10 @@ public:
 
     std::optional<std::pair<NUdf::TUnboxedValue, IDqAsyncInputBuffer::TPtr>> GetInputTransform(ui64 /*inputIndex*/) override {
         return {};
+    }
+
+    TDqComputeActorWatermarks *GetInputTransformWatermarksTracker(ui64 /*inputId*/) override {
+        return nullptr;
     }
 
     std::pair<IDqAsyncOutputBuffer::TPtr, IDqOutputConsumer::TPtr> GetOutputTransform(ui64 /*outputIndex*/) override {
@@ -1842,6 +1926,14 @@ public:
             // Stats.CodeGenFullTime = f.GetCodeGenFullTime();
             // Stats.CodeGenFinalizeTime = f.GetCodeGenFinalizeTime();
             // Stats.CodeGenModulePassTime = f.GetCodeGenModulePassTime();
+
+            Stats.MkqlStats.clear();
+            for (const auto& stat : protoStats.GetMkqlStats()) {
+                Stats.MkqlStats.emplace_back(TMkqlStat{
+                    TStatKey(stat.GetName(), stat.GetDeriv()),
+                    stat.GetValue()
+                });
+            }
 
             for (const auto& input : protoStats.GetInputChannels()) {
                 InputChannels[input.GetChannelId()]->FromProto(input);
@@ -2007,20 +2099,20 @@ private:
         task.GetMeta().UnpackTo(&taskMeta);
 
         auto* files = taskMeta.MutableFiles();
-
+        YQL_CLOG(TRACE, ProviderDq) << "PrepareTask: files " << files->size();
         for (auto& file : *files) {
             if (file.GetObjectType() != Yql::DqsProto::TFile::EEXE_FILE) {
                 auto maybeFile = FileCache->AcquireFile(file.GetObjectId());
                 if (!maybeFile) {
-                    throw std::runtime_error("Cannot find object `" + file.GetObjectId() + "' in cache");
+                    throw std::runtime_error("Cannot find object `" + file.GetObjectId() + "` in cache");
                 }
                 filesHolder->Add(file.GetObjectId());
                 auto name = file.GetName();
-
                 switch (file.GetObjectType()) {
                     case Yql::DqsProto::TFile::EUDF_FILE:
                     case Yql::DqsProto::TFile::EUSER_FILE:
                         file.SetLocalPath(InitializeLocalFile(result->ExternalWorkDir(), *maybeFile, name));
+                        YQL_CLOG(TRACE, ProviderDq) << "PrepareTask: Add file.SetLocalPath: " << name << ", local path: " << file.GetLocalPath();
                         break;
                     default:
                         Y_ABORT_UNLESS(false);

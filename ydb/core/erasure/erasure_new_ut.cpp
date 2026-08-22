@@ -30,7 +30,8 @@ Y_UNIT_TEST_SUITE(ErasureBrandNew) {
         TDuration period1 = TDuration::Seconds(timer.PassedReset());
 
         for (const auto& buffer : buffers) {
-            ErasureSplit(TErasureType::CrcModeNone, TErasureType::Erasure4Plus2Block, TRope(buffer), parts2.emplace_back());
+            ErasureSplit(TErasureType::CrcModeNone, TErasureType::Erasure4Plus2Block, TRope(buffer), parts2.emplace_back(),
+                nullptr, GetDefaultRcBufAllocator());
         }
         TDuration period2 = TDuration::Seconds(timer.PassedReset());
 
@@ -78,11 +79,12 @@ Y_UNIT_TEST_SUITE(ErasureBrandNew) {
             erasure.SplitData(TErasureType::CrcModeNone, buffer, p1);
 
             std::array<TRope, 6> p2;
-            ErasureSplit(TErasureType::CrcModeNone, TErasureType::Erasure4Plus2Block, rope, p2);
+            ErasureSplit(TErasureType::CrcModeNone, TErasureType::Erasure4Plus2Block, rope, p2,
+                nullptr, GetDefaultRcBufAllocator());
 
             std::array<TRope, 6> p3;
             TErasureSplitContext ctx = TErasureSplitContext::Init(32 * (1 + RandomNumber(1000u)));
-            while (!ErasureSplit(TErasureType::CrcModeNone, TErasureType::Erasure4Plus2Block, rope, p3, &ctx)) {}
+            while (!ErasureSplit(TErasureType::CrcModeNone, TErasureType::Erasure4Plus2Block, rope, p3, &ctx, GetDefaultRcBufAllocator())) {}
 
             for (ui32 i = 0; i < 6; ++i) {
                 UNIT_ASSERT_VALUES_EQUAL(p1.Parts[i].OwnedString.size(), p2[i].size());
@@ -99,7 +101,8 @@ Y_UNIT_TEST_SUITE(ErasureBrandNew) {
             TString buffer = FastGenDataForLZ4(length, length);
             
             std::array<TRope, 6> parts;
-            ErasureSplit(TErasureType::CrcModeNone, TErasureType::Erasure4Plus2Block, TRope(buffer), parts);
+            ErasureSplit(TErasureType::CrcModeNone, TErasureType::Erasure4Plus2Block, TRope(buffer), parts,
+                nullptr, GetDefaultRcBufAllocator());
 
             for (i32 i = -1; i < 6; ++i) {
                 for (i32 j = -1; j < 6; ++j) {
@@ -224,7 +227,8 @@ Y_UNIT_TEST_SUITE(ErasureBrandNew) {
             const ui32 length = 1 + RandomNumber(100000u);
             TString buffer = FastGenDataForLZ4(length, iter);
             std::array<TRope, 6> p;
-            ErasureSplit(TErasureType::CrcModeNone, TErasureType::Erasure4Plus2Block, TRope(buffer), p);
+            ErasureSplit(TErasureType::CrcModeNone, TErasureType::Erasure4Plus2Block, TRope(buffer), p,
+                nullptr, GetDefaultRcBufAllocator());
             for (TRope& r : p) {
                 r.Compact();
             }

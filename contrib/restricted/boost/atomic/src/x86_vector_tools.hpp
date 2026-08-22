@@ -20,7 +20,7 @@
 #if BOOST_ARCH_X86 && defined(BOOST_ATOMIC_DETAIL_SIZEOF_POINTER) && (BOOST_ATOMIC_DETAIL_SIZEOF_POINTER == 8)
 
 #include <emmintrin.h>
-#include <boost/cstdint.hpp>
+#include <cstdint>
 #include <boost/atomic/detail/intptr.hpp>
 #include <boost/atomic/detail/config.hpp>
 
@@ -36,7 +36,7 @@ BOOST_FORCEINLINE __m128i mm_set1_epiptr(uintptr_t ptr)
     return _mm_set1_epi64x(ptr);
 #else
     // MSVC up until 14.0 update 3 doesn't provide _mm_set1_epi64x
-    uint32_t lo = static_cast< uint32_t >(ptr), hi = static_cast< uint32_t >(ptr >> 32);
+    std::uint32_t lo = static_cast< std::uint32_t >(ptr), hi = static_cast< std::uint32_t >(ptr >> 32);
     return _mm_set_epi32(hi, lo, hi, lo);
 #endif
 }

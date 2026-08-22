@@ -8,6 +8,8 @@
 #include <ydb/public/api/protos/ydb_persqueue_v1.pb.h>
 #include <ydb/public/lib/base/msgbus_status.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PQ_READ_PROXY
+
 namespace NKikimr::NGRpcProxy::V1 {
 
 using namespace PersQueue::V1;
@@ -38,7 +40,7 @@ void TReadInfoActor::Bootstrap(const TActorContext& ctx) {
     Become(&TThis::StateFunc);
 
     auto request = dynamic_cast<const ReadInfoRequest*>(GetProtoRequest());
-    Y_ABORT_UNLESS(request);
+    AFL_ENSURE(request);
     ClientId = NPersQueue::ConvertNewConsumerName(request->consumer().path(), ctx);
 
     bool readOnlyLocal = request->get_only_original();
@@ -79,6 +81,18 @@ void TReadInfoActor::Bootstrap(const TActorContext& ctx) {
 }
 
 
+bool TReadInfoActor::OnUnhandledException(const std::exception& exc) {
+    auto ctx = *NActors::TlsActivationContext;
+    YDB_LOG_CRIT_CTX(ctx, "Unhandled exception",
+        {"typeName", TypeName(exc)},
+        {"exception", exc.what()},
+        {"backTrace", TBackTrace::FromCurrentException().PrintToString()});
+
+    AnswerError( "Internal error", PersQueue::ErrorCode::ERROR, ctx.AsActorContext());
+
+    return true;
+}
+
 void TReadInfoActor::Die(const TActorContext& ctx) {
 
     ctx.Send(AuthInitActor, new TEvents::TEvPoisonPill());
@@ -89,7 +103,8 @@ void TReadInfoActor::Die(const TActorContext& ctx) {
 
 void TReadInfoActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TActorContext& ctx) {
 
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "GetReadInfo auth ok fo read info, got " << ev->Get()->TopicAndTablets.size() << " topics");
+    YDB_LOG_DEBUG_CTX(ctx, "GetReadInfo auth ok fo read info, got topics",
+        {"topicAndTabletsSize", ev->Get()->TopicAndTablets.size()});
     TopicAndTablets = std::move(ev->Get()->TopicAndTablets);
     if (TopicAndTablets.empty()) {
         AnswerError("empty list of topics", PersQueue::ErrorCode::UNKNOWN_TOPIC, ctx);
@@ -122,9 +137,9 @@ void TReadInfoActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCon
     ReadInfoResult result;
 
     const auto& resp = ev->Get()->Record;
-    Y_ABORT_UNLESS(resp.HasMetaResponse());
+    AFL_ENSURE(resp.HasMetaResponse());
 
-    Y_ABORT_UNLESS(resp.GetMetaResponse().GetCmdGetReadSessionsInfoResult().TopicResultSize() == TopicAndTablets.size());
+    AFL_ENSURE(resp.GetMetaResponse().GetCmdGetReadSessionsInfoResult().TopicResultSize() == TopicAndTablets.size());
     TMap<std::pair<TString, ui64>, ReadInfoResult::TopicInfo::PartitionInfo*> partResultMap;
     for (auto& tt : resp.GetMetaResponse().GetCmdGetReadSessionsInfoResult().GetTopicResult()) {
         auto topicRes = result.add_topics();

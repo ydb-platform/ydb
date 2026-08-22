@@ -10,6 +10,8 @@
 #include <yt/yt/core/rpc/private.h>
 
 #include <yt/yt/core/bus/bus.h>
+#include <yt/yt/core/bus/helpers.h>
+#include <yt/yt/core/bus/message_handler.h>
 
 #include <yt/yt/core/bus/tcp/config.h>
 #include <yt/yt/core/bus/tcp/client.h>
@@ -183,7 +185,7 @@ private:
     TSessionPtr GetOrCreateSession(const TSendOptions& options)
     {
         auto& bucket = Buckets_[options.MultiplexingBand];
-        auto parallelism = TTcpDispatcher::Get()->GetMultiplexingParallelism(
+        auto parallelism = NBus::NTcp::TDispatcher::Get()->GetMultiplexingParallelism(
             options.MultiplexingBand,
             options.MultiplexingParallelism);
         auto index = parallelism <= 1 ? 0 : bucket.CurrentSessionIndex++ % parallelism;
@@ -222,14 +224,17 @@ private:
                 auto bus = Client_->CreateBus(
                     messageHandler,
                     {
-                        .MultiplexingBand = options.MultiplexingBand
+                        .MultiplexingBand = options.MultiplexingBand,
                     });
 
                 const auto& attrs = bus->GetEndpointAttributes();
-                YT_LOG_DEBUG("Created bus (ConnectionType: Client, VerificationMode: %v, EncryptionMode: %v, Endpoint: %v)",
-                    attrs.Get<EVerificationMode>("verification_mode"),
-                    attrs.Get<EEncryptionMode>("encryption_mode"),
-                    attrs.Get<std::string>("address"));
+                // NB: Some bus backends (e.g. UCX) do not expose verification/encryption
+                // attributes, so read them optionally to avoid throwing here.
+                YT_TLOG_DEBUG("Created bus")
+                    .With("ConnectionType", "Client")
+                    .With("VerificationMode", attrs.Find<EVerificationMode>("verification_mode"))
+                    .With("EncryptionMode", attrs.Find<EEncryptionMode>("encryption_mode"))
+                    .With("Endpoint", attrs.Find<std::string>("address"));
 
                 session->Initialize(bus);
                 bucket.Sessions.push_back(session);
@@ -282,10 +287,14 @@ private:
             : Session_(std::move(session))
         { }
 
-        void HandleMessage(TSharedRefArray message, IBusPtr replyBus) noexcept override
+        void HandleMessage(
+            TSharedRefArray message,
+            IBusPtr replyBus,
+            NYT::NBus::IDirectPlacementTransferPtr transfer,
+            NYT::NBus::TPacketId packetId) noexcept override
         {
             if (auto session_ = Session_.Lock()) {
-                session_->HandleMessage(std::move(message), std::move(replyBus));
+                session_->HandleMessage(std::move(message), std::move(replyBus), std::move(transfer), packetId);
             }
         }
 
@@ -302,7 +311,7 @@ private:
         TSession(
             EMultiplexingBand band,
             IMemoryUsageTrackerPtr memoryUsageTracker)
-            : TosLevel_(TTcpDispatcher::Get()->GetTosLevelForBand(band))
+            : TosLevel_(NBus::NTcp::TDispatcher::Get()->GetTosLevelForBand(band))
             , MemoryUsageTracker_(std::move(memoryUsageTracker))
         {
             YT_VERIFY(MemoryUsageTracker_);
@@ -371,28 +380,26 @@ private:
             {
                 // NB: Requests without timeout are rare but may occur.
                 // For these requests we still need to register a timeout cookie with TDelayedExecutor
-                // since this also provides proper cleanup and cancelation when global shutdown happens.
-                if (TDispatcher::Get()->ShouldAlertOnUnsetRequestTimeout() && !options.Timeout.has_value()) {
-                    YT_LOG_ALERT("Request without timeout (RequestId: %v, Method: %v.%v, Endpoint: %v)",
-                        requestControl->GetRequestId(),
-                        requestControl->GetService(),
-                        requestControl->GetMethod(),
-                        Bus_->GetEndpointDescription());
+                // since this also provides proper cleanup and cancellation when global shutdown happens.
+                if (NRpc::TDispatcher::Get()->ShouldAlertOnUnsetRequestTimeout() && !options.Timeout.has_value()) {
+                    YT_TLOG_ALERT("Request without timeout")
+                        .With("RequestId", requestControl->GetRequestId())
+                        .WithFormat("Method", "%v.%v", requestControl->GetService(), requestControl->GetMethod())
+                        .With("Endpoint", Bus_->GetEndpointDescription());
                 }
-                auto effectiveTimeout = options.Timeout.value_or(TDispatcher::Get()->GetDefaultRequestTimeout());
+                auto effectiveTimeout = options.Timeout.value_or(NRpc::TDispatcher::Get()->GetDefaultRequestTimeout());
                 auto timeoutCookie = TDelayedExecutor::Submit(
                     BIND(&TSession::HandleTimeout, MakeWeak(this), requestControl),
                     effectiveTimeout,
-                    TDispatcher::Get()->GetHeavyInvoker());
+                    NRpc::TDispatcher::Get()->GetHeavyInvoker());
                 requestControl->SetTimeoutCookie(std::move(timeoutCookie));
             }
 
             if (auto readyFuture = GetBusReadyFuture()) {
-                YT_LOG_DEBUG("Waiting for bus to become ready (RequestId: %v, Method: %v.%v, Endpoint: %v)",
-                    requestControl->GetRequestId(),
-                    requestControl->GetService(),
-                    requestControl->GetMethod(),
-                    Bus_->GetEndpointDescription());
+                YT_TLOG_DEBUG("Waiting for bus to become ready")
+                    .With("RequestId", requestControl->GetRequestId())
+                    .WithFormat("Method", "%v.%v", requestControl->GetService(), requestControl->GetMethod())
+                    .With("Endpoint", Bus_->GetEndpointDescription());
 
                 readyFuture.Subscribe(BIND(
                     [
@@ -402,15 +409,16 @@ private:
                         request = std::move(request)
                     ] (const TError& error) {
                         if (!BusReady_.exchange(true)) {
-                            YT_LOG_DEBUG(error, "Bus has become ready (Endpoint: %v)",
-                                Bus_->GetEndpointDescription());
+                            YT_TLOG_DEBUG("Bus has become ready")
+                                .With("Endpoint", Bus_->GetEndpointDescription())
+                                .With(error);
                         }
                         DoSendRequest(
                             std::move(request),
                             requestControl,
                             options);
                     })
-                    .Via(TDispatcher::Get()->GetHeavyInvoker()));
+                    .Via(NRpc::TDispatcher::Get()->GetHeavyInvoker()));
             } else {
                 DoSendRequest(
                     std::move(request),
@@ -434,14 +442,14 @@ private:
 
                 auto it = bucket->ActiveRequestMap.find(requestId);
                 if (it == bucket->ActiveRequestMap.end()) {
-                    YT_LOG_DEBUG("Attempt to cancel an unknown request, ignored (RequestId: %v)",
-                        requestId);
+                    YT_TLOG_DEBUG("Attempt to cancel an unknown request, ignored")
+                        .With("RequestId", requestId);
                     return;
                 }
 
                 if (requestControl != it->second) {
-                    YT_LOG_DEBUG("Attempt to cancel a resent request, ignored (RequestId: %v)",
-                        requestId);
+                    YT_TLOG_DEBUG("Attempt to cancel a resent request, ignored")
+                        .With("RequestId", requestId);
                     return;
                 }
 
@@ -462,7 +470,7 @@ private:
                     TError(NYT::EErrorCode::Canceled, "Request canceled"));
                 --Depth;
             } else {
-                TDispatcher::Get()->GetHeavyInvoker()->Invoke(BIND(
+                NRpc::TDispatcher::Get()->GetHeavyInvoker()->Invoke(BIND(
                     &TSession::NotifyError,
                     MakeStrong(this),
                     requestControl,
@@ -557,8 +565,8 @@ private:
                 if (it != bucket->ActiveRequestMap.end() && requestControl == it->second) {
                     bucket->ActiveRequestMap.erase(it);
                 } else {
-                    YT_LOG_DEBUG("Timeout occurred for an unknown or resent request (RequestId: %v)",
-                        requestId);
+                    YT_TLOG_DEBUG("Timeout occurred for an unknown or resent request")
+                        .With("RequestId", requestId);
                 }
 
                 requestControl->ProfileTimeout();
@@ -597,8 +605,8 @@ private:
                 if (it != bucket->ActiveRequestMap.end() && requestControl == it->second) {
                     bucket->ActiveRequestMap.erase(it);
                 } else {
-                    YT_LOG_DEBUG("Acknowledgement timeout occurred for an unknown or resent request (RequestId: %v)",
-                        requestId);
+                    YT_TLOG_DEBUG("Acknowledgement timeout occurred for an unknown or resent request")
+                        .With("RequestId", requestId);
                 }
 
                 requestControl->ProfileTimeout();
@@ -620,14 +628,33 @@ private:
             Bus_->Terminate(error);
         }
 
-        void HandleMessage(TSharedRefArray message, IBusPtr /*replyBus*/) noexcept override
+        void HandleMessage(
+            TSharedRefArray message,
+            IBusPtr replyBus,
+            NYT::NBus::IDirectPlacementTransferPtr transfer,
+            NYT::NBus::TPacketId packetId) noexcept override
         {
             YT_ASSERT_THREAD_AFFINITY_ANY();
 
             auto messageType = GetMessageType(message);
+
+            // Only response attachments may arrive via direct placement transfer; the
+            // transfer is handed to the response handler, which exposes it lazily. Any
+            // other message type carrying a transfer is unexpected; fall back to
+            // materializing it inline.
+            if (transfer && messageType != EMessageType::Response) {
+                MaterializeTransferAndReinvoke(
+                    MakeStrong(this),
+                    std::move(message),
+                    std::move(replyBus),
+                    std::move(transfer),
+                    packetId);
+                return;
+            }
+
             switch (messageType) {
                 case EMessageType::Response:
-                    OnResponseMessage(std::move(message));
+                    OnResponseMessage(std::move(message), std::move(transfer), packetId);
                     break;
 
                 case EMessageType::StreamingPayload:
@@ -639,8 +666,8 @@ private:
                     break;
 
                 default:
-                    YT_LOG_ERROR("Incoming message has invalid type, ignored (Type: %x)",
-                        static_cast<ui32>(messageType));
+                    YT_TLOG_ERROR("Incoming message has invalid type, ignored")
+                        .WithFormat("Type", "%x", static_cast<ui32>(messageType));
                     break;
             }
         }
@@ -700,7 +727,7 @@ private:
 
         TFuture<void> GetBusReadyFuture()
         {
-            if (Y_LIKELY(BusReady_.load(std::memory_order::relaxed))) {
+            if (BusReady_.load(std::memory_order::relaxed)) [[likely]] {
                 return {};
             }
 
@@ -726,9 +753,9 @@ private:
                 header.clear_timeout();
             }
 
-            if (options.RequestHeavy || request->IsAttachmentCompressionEnabled()) {
+            if (options.RequestHeavy || (request->IsAttachmentCompressionEnabled() && request->HasAttachments())) {
                 BIND(&IClientRequest::Serialize, request)
-                    .AsyncVia(TDispatcher::Get()->GetHeavyInvoker())
+                    .AsyncVia(NRpc::TDispatcher::Get()->GetHeavyInvoker())
                     .Run()
                     .Subscribe(BIND(
                         &TSession::OnRequestSerialized,
@@ -814,7 +841,7 @@ private:
                         responseHandler,
                         TStringBuf("Request serialization failed"),
                         TError(NRpc::EErrorCode::TransportError, "Request serialization failed")
-                            << requestMessageOrError);
+                            .With(requestMessageOrError));
                     return;
                 }
 
@@ -843,7 +870,7 @@ private:
                     auto timeoutCookie = TDelayedExecutor::Submit(
                         BIND(&TSession::HandleAcknowledgementTimeout, MakeWeak(this), requestControl),
                         *options.AcknowledgementTimeout,
-                        TDispatcher::Get()->GetHeavyInvoker());
+                        NRpc::TDispatcher::Get()->GetHeavyInvoker());
                     requestControl->SetAcknowledgementTimeoutCookie(std::move(timeoutCookie));
                 }
             }
@@ -869,6 +896,15 @@ private:
             busOptions.ChecksummedPartCount = options.GenerateAttachmentChecksums
                 ? NBus::TSendOptions::AllParts
                 : 2; // RPC header + request body
+            if (request->RequestAttachmentsDptParameters().Enabled) {
+                // The request's attachments are the trailing parts of the message;
+                // deliver them via direct placement transfer.
+                busOptions.DirectPlacementTransferPartCount = GetMessageAttachmentCount(requestMessage);
+            }
+
+            // Pass RequestId to Bus layer so that RPC-level and Bus-level log entries
+            // can be correlated on both sender and receiver sides.
+            busOptions.RequestId = requestId;
             Bus_->Send(requestMessage, busOptions).Subscribe(BIND(
                 &TSession::OnAcknowledgement,
                 MakeStrong(this),
@@ -877,6 +913,8 @@ private:
 
             requestControl->ProfileRequest(requestMessage);
 
+            // NB: The trailing request info is a caller-supplied, pre-formatted tag list
+            // (see SetRequestInfo), so it has to be spliced into the message text as-is.
             YT_LOG_DEBUG("Request sent (RequestId: %v, Method: %v.%v, Timeout: %v, TrackingLevel: %v, "
                 "ChecksummedPartCount: %v, MultiplexingBand: %v, Endpoint: %v, BodySize: %v, AttachmentsSize: %v%v)",
                 requestId,
@@ -893,11 +931,12 @@ private:
         }
 
 
-        void OnResponseMessage(TSharedRefArray message)
+        void OnResponseMessage(TSharedRefArray message, NYT::NBus::IDirectPlacementTransferPtr transfer, NYT::NBus::TPacketId packetId)
         {
             NProto::TResponseHeader header;
             if (!TryParseResponseHeader(message, &header)) {
-                YT_LOG_ERROR("Error parsing response header");
+                YT_TLOG_ERROR("Error parsing response header")
+                    .With("PacketId", packetId);
                 return;
             }
 
@@ -910,13 +949,13 @@ private:
                 auto guard = Guard(*bucket);
 
                 if (bucket->Terminated) {
-                    YT_LOG_WARNING("Response received via a terminated channel "
-                        "(RequestId: %v, Service: %v, Method: %v, BodySize: %v, AttachmentSize: %v)",
-                        requestId,
-                        header.service(),
-                        header.method(),
-                        GetMessageBodySize(message),
-                        GetTotalMessageAttachmentSize(message));
+                    YT_TLOG_WARNING("Response received via a terminated channel")
+                        .With("RequestId", requestId)
+                        .With("PacketId", packetId)
+                        .With("Service", header.service())
+                        .With("Method", header.method())
+                        .With("BodySize", GetMessageBodySize(message))
+                        .With("AttachmentSize", GetTotalMessageAttachmentSize(message));
 
                     return;
                 }
@@ -924,13 +963,13 @@ private:
                 auto it = bucket->ActiveRequestMap.find(requestId);
                 if (it == bucket->ActiveRequestMap.end()) {
                     // This may happen when the other party responds to an already timed-out request.
-                    YT_LOG_DEBUG("Response for an incorrect or obsolete request received "
-                        "(RequestId: %v, Service: %v, Method: %v, BodySize: %v, AttachmentSize: %v)",
-                        requestId,
-                        header.service(),
-                        header.method(),
-                        GetMessageBodySize(message),
-                        GetTotalMessageAttachmentSize(message));
+                    YT_TLOG_DEBUG("Response for an incorrect or obsolete request received")
+                        .With("RequestId", requestId)
+                        .With("PacketId", packetId)
+                        .With("Service", header.service())
+                        .With("Method", header.method())
+                        .With("BodySize", GetMessageBodySize(message))
+                        .With("AttachmentSize", GetTotalMessageAttachmentSize(message));
 
                     if (header.has_service()) {
                         const auto* counters = TClientRequestPerformanceProfiler::FindPerformanceCounters(
@@ -962,27 +1001,17 @@ private:
                 }
                 if (error.IsOK()) {
                     message = TrackMemory(MemoryUsageTracker_, std::move(message));
-                    if (MemoryUsageTracker_->IsExceeded()) {
-                        auto error = TError(
-                            NRpc::EErrorCode::ResponseMemoryPressure,
-                            "Response is dropped due to high memory pressure");
-                        requestControl->ProfileError(error);
-                        NotifyError(
-                            requestControl,
-                            responseHandler,
-                            TStringBuf("Response is dropped due to high memory pressure"),
-                            error);
-                    } else {
-                        NotifyResponse(
-                            requestId,
-                            requestControl,
-                            responseHandler,
-                            std::move(message));
-                    }
+                    NotifyResponse(
+                        requestId,
+                        requestControl,
+                        responseHandler,
+                        std::move(message),
+                        std::move(transfer));
                 } else {
                     requestControl->ProfileError(error);
                     if (error.GetCode() == EErrorCode::PoisonPill) {
-                        YT_LOG_FATAL(error, "Poison pill received");
+                        YT_TLOG_FATAL("Poison pill received")
+                            .With(error);
                     }
                     NotifyError(
                         requestControl,
@@ -997,7 +1026,7 @@ private:
         {
             NProto::TStreamingPayloadHeader header;
             if (!TryParseStreamingPayloadHeader(message, &header)) {
-                YT_LOG_ERROR("Error parsing streaming payload header");
+                YT_TLOG_ERROR("Error parsing streaming payload header");
                 return;
             }
 
@@ -1008,15 +1037,16 @@ private:
             auto [responseHandler, traceContextGuard] = FindResponseHandlerAndTraceContextGuard(requestId);
 
             if (!responseHandler) {
-                YT_LOG_ERROR("Received streaming payload for an unknown request; ignored (RequestId: %v)",
-                    requestId);
+                YT_TLOG_ERROR("Received streaming payload for an unknown request; ignored")
+                    .With("RequestId", requestId);
                 return;
             }
 
             if (attachments.empty()) {
                 responseHandler->HandleError(TError(
                     NRpc::EErrorCode::ProtocolError,
-                    "Streaming payload without attachments"));
+                    "Streaming payload without attachments"),
+                    Bus_->GetEndpointAddress());
                 return;
             }
 
@@ -1025,19 +1055,19 @@ private:
                 responseHandler->HandleError(TError(
                     NRpc::EErrorCode::ProtocolError,
                     "Streaming payload codec %v is not supported",
-                    header.codec()));
+                    header.codec()),
+                    Bus_->GetEndpointAddress());
                 return;
             }
 
-            YT_LOG_DEBUG("Response streaming payload received (RequestId: %v, SequenceNumber: %v, Sizes: %v, "
-                "Codec: %v, Closed: %v)",
-                requestId,
-                sequenceNumber,
-                MakeFormattableView(attachments, [] (auto* builder, const auto& attachment) {
+            YT_TLOG_DEBUG("Response streaming payload received")
+                .With("RequestId", requestId)
+                .With("SequenceNumber", sequenceNumber)
+                .With("Sizes", MakeFormattableView(attachments, [] (auto* builder, const auto& attachment) {
                     builder->AppendFormat("%v", GetStreamingAttachmentSize(attachment));
-                }),
-                *codecId,
-                !attachments.back());
+                }))
+                .With("Codec", *codecId)
+                .With("Closed", !attachments.back());
 
             TStreamingPayload payload{
                 *codecId,
@@ -1051,7 +1081,7 @@ private:
         {
             NProto::TStreamingFeedbackHeader header;
             if (!TryParseStreamingFeedbackHeader(message, &header)) {
-                YT_LOG_ERROR("Error parsing streaming feedback header");
+                YT_TLOG_ERROR("Error parsing streaming feedback header");
                 return;
             }
 
@@ -1061,14 +1091,14 @@ private:
             auto [responseHandler, traceContextGuard] = FindResponseHandlerAndTraceContextGuard(requestId);
 
             if (!responseHandler) {
-                YT_LOG_DEBUG("Received streaming feedback for an unknown request; ignored (RequestId: %v)",
-                    requestId);
+                YT_TLOG_DEBUG("Received streaming feedback for an unknown request; ignored")
+                    .With("RequestId", requestId);
                 return;
             }
 
-            YT_LOG_DEBUG("Response streaming feedback received (RequestId: %v, ReadPosition: %v)",
-                requestId,
-                readPosition);
+            YT_TLOG_DEBUG("Response streaming feedback received")
+                .With("RequestId", requestId)
+                .With("ReadPosition", readPosition);
 
             TStreamingFeedback feedback{
                 readPosition
@@ -1094,8 +1124,9 @@ private:
                 auto it = bucket->ActiveRequestMap.find(requestId);
                 if (it == bucket->ActiveRequestMap.end()) {
                     // This one may easily get the actual response before the acknowledgment.
-                    YT_LOG_DEBUG(error, "Acknowledgment received for an unknown request, ignored (RequestId: %v)",
-                        requestId);
+                    YT_TLOG_DEBUG("Acknowledgment received for an unknown request, ignored")
+                        .With("RequestId", requestId)
+                        .With(error);
                     return;
                 }
 
@@ -1119,7 +1150,7 @@ private:
                     responseHandler,
                     TStringBuf("Request acknowledgment failed"),
                     TError(NRpc::EErrorCode::TransportError, "Request acknowledgment failed")
-                        << error);
+                        .With(error));
             }
         }
 
@@ -1140,7 +1171,7 @@ private:
 
             if (requestControl->GetTimeout()) {
                 detailedError = detailedError
-                    << TErrorAttribute("timeout", *requestControl->GetTimeout());
+                    .With("timeout", *requestControl->GetTimeout());
             }
 
             if (!HasTracingAttributes(detailedError)) {
@@ -1153,14 +1184,15 @@ private:
                 reason,
                 requestControl->GetRequestId());
 
-            responseHandler->HandleError(std::move(detailedError));
+            responseHandler->HandleError(std::move(detailedError), Bus_->GetEndpointAddress());
         }
 
         void NotifyAcknowledgement(
             TRequestId requestId,
             const IClientResponseHandlerPtr& responseHandler) noexcept
         {
-            YT_LOG_DEBUG("Request acknowledged (RequestId: %v)", requestId);
+            YT_TLOG_DEBUG("Request acknowledged")
+                .With("RequestId", requestId);
 
             responseHandler->HandleAcknowledgement();
         }
@@ -1169,16 +1201,19 @@ private:
             TRequestId requestId,
             const TClientRequestControlPtr& requestControl,
             const IClientResponseHandlerPtr& responseHandler,
-            TSharedRefArray message) noexcept
+            TSharedRefArray message,
+            NYT::NBus::IDirectPlacementTransferPtr transfer) noexcept
         {
-            YT_LOG_DEBUG("Response received (RequestId: %v, Method: %v.%v, TotalTime: %v, AttachmentsSize: %v)",
-                requestId,
-                requestControl->GetService(),
-                requestControl->GetMethod(),
-                requestControl->GetTotalTime(),
-                GetTotalMessageAttachmentSize(message));
+            YT_TLOG_DEBUG("Response received")
+                .With("RequestId", requestId)
+                .WithFormat("Method", "%v.%v", requestControl->GetService(), requestControl->GetMethod())
+                .With("TotalTime", requestControl->GetTotalTime())
+                .With("AttachmentsSize", GetTotalMessageAttachmentSize(message));
 
-            responseHandler->HandleResponse(std::move(message), Bus_->GetEndpointAddress());
+            responseHandler->HandleResponse(
+                std::move(message),
+                Bus_->GetEndpointAddress(),
+                std::move(transfer));
         }
     };
 
@@ -1340,7 +1375,7 @@ class TTcpBusChannelFactory
 {
 public:
     TTcpBusChannelFactory(
-        TBusConfigPtr config,
+        NTcp::TBusConfigPtr config,
         IMemoryUsageTrackerPtr memoryUsageTracker)
         : Config_(ConvertToNode(std::move(config)))
         , MemoryUsageTracker_(std::move(memoryUsageTracker))
@@ -1350,11 +1385,11 @@ public:
 
     IChannelPtr CreateChannel(const std::string& address) override
     {
-        auto config = TBusClientConfig::CreateTcp(address);
+        auto config = NTcp::TBusClientConfig::CreateTcp(address);
         config->Load(Config_, /*postprocess*/ true, /*setDefaults*/ false);
-        auto client = CreateBusClient(
+        auto client = NTcp::CreateBusClient(
             std::move(config),
-            GetYTPacketTranscoderFactory(),
+            NTcp::GetYTPacketTranscoderFactory(),
             MemoryUsageTracker_);
         return CreateBusChannel(
             std::move(client),
@@ -1367,7 +1402,7 @@ private:
 };
 
 IChannelFactoryPtr CreateTcpBusChannelFactory(
-    TBusConfigPtr config,
+    NTcp::TBusConfigPtr config,
     IMemoryUsageTrackerPtr memoryUsageTracker)
 {
     return New<TTcpBusChannelFactory>(
@@ -1382,7 +1417,7 @@ class TUdsBusChannelFactory
 {
 public:
     TUdsBusChannelFactory(
-        TBusConfigPtr config,
+        NTcp::TBusConfigPtr config,
         IMemoryUsageTrackerPtr memoryUsageTracker)
         : Config_(ConvertToNode(std::move(config)))
         , MemoryUsageTracker_(std::move(memoryUsageTracker))
@@ -1392,11 +1427,11 @@ public:
 
     IChannelPtr CreateChannel(const std::string& address) override
     {
-        auto config = TBusClientConfig::CreateUds(address);
+        auto config = NTcp::TBusClientConfig::CreateUds(address);
         config->Load(Config_, /*postprocess*/ true, /*setDefaults*/ false);
-        auto client = CreateBusClient(
+        auto client = NTcp::CreateBusClient(
             std::move(config),
-            GetYTPacketTranscoderFactory(),
+            NTcp::GetYTPacketTranscoderFactory(),
             MemoryUsageTracker_);
         return CreateBusChannel(
             std::move(client),
@@ -1409,7 +1444,7 @@ private:
 };
 
 IChannelFactoryPtr CreateUdsBusChannelFactory(
-    TBusConfigPtr config,
+    NTcp::TBusConfigPtr config,
     IMemoryUsageTrackerPtr memoryUsageTracker)
 {
     return New<TUdsBusChannelFactory>(

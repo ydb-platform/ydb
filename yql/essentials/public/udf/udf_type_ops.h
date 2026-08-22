@@ -6,8 +6,7 @@
 #include <util/generic/hash.h>
 #include <util/digest/numeric.h>
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 using THashType = ui64;
 
@@ -235,7 +234,7 @@ inline THashType GetValueHash(EDataSlot type, const TUnboxedValuePod& value) {
         return GetValueHash<EDataSlot::slot>(value);
 
     switch (type) {
-    UDF_TYPE_ID_MAP(HASH_TYPE)
+        UDF_TYPE_ID_MAP(HASH_TYPE)
     }
 
 #undef HASH_TYPE
@@ -259,7 +258,8 @@ inline int CompareFloats(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rh
     if (std::isunordered(x, y)) {
         const auto xn = std::isnan(x);
         const auto yn = std::isnan(y);
-        return (xn == yn) ? 0 : xn ? 1 : -1;
+        return (xn == yn) ? 0 : xn ? 1
+                                   : -1;
     }
     return (x == y) ? 0 : (x < y ? -1 : 1);
 }
@@ -462,7 +462,7 @@ inline int CompareValues(EDataSlot type, const TUnboxedValuePod& lhs, const TUnb
         return CompareValues<EDataSlot::slot>(lhs, rhs);
 
     switch (type) {
-    UDF_TYPE_ID_MAP(COMPARE_TYPE)
+        UDF_TYPE_ID_MAP(COMPARE_TYPE)
     }
 
 #undef COMPARE_TYPE
@@ -665,12 +665,11 @@ inline bool EquateValues(EDataSlot type, const TUnboxedValuePod& lhs, const TUnb
         return EquateValues<EDataSlot::slot>(lhs, rhs);
 
     switch (type) {
-    UDF_TYPE_ID_MAP(EQUATE_TYPE)
+        UDF_TYPE_ID_MAP(EQUATE_TYPE)
     }
 
 #undef EQUATE_TYPE
     Y_ENSURE(false, "Incorrect data slot: " << (ui32)type);
 }
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

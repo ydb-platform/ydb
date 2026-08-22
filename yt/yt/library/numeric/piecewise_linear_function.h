@@ -86,7 +86,7 @@ private:
 };
 
 template <class TValue>
-bool operator ==(const TPiecewiseSegment<TValue>& lhs, const TPiecewiseSegment<TValue>& rhs);
+bool operator==(const TPiecewiseSegment<TValue>& lhs, const TPiecewiseSegment<TValue>& rhs);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -381,7 +381,7 @@ public:
     class TLeftToRightTraverser
     {
     public:
-        TLeftToRightTraverser(const TPiecewiseLinearFunction& function, int segmentIndex = 0);
+        explicit TLeftToRightTraverser(const TPiecewiseLinearFunction& function, int segmentIndex = 0);
 
         // See: |TPiecewiseLinearFunction::LeftSegmentAt|.
         // If |y > x|, |LeftSegmentAt(x)| cannot be called after |LeftSegmentAt(y)|.

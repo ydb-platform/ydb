@@ -9,6 +9,10 @@ IF (ARCH_X86_64)
     CFLAGS(-mpclmul)
 ENDIF()
 
+IF (YT_ENRICH_PROMISE_ABANDONED_WITH_BACKTRACE)
+    CXXFLAGS(-DYT_ENRICH_PROMISE_ABANDONED_WITH_BACKTRACE)
+ENDIF()
+
 NO_LTO()
 
 SRCS(
@@ -22,6 +26,7 @@ SRCS(
     actions/invoker_util.cpp
 
     bus/public.cpp
+    bus/helpers.cpp
 
     bus/tcp/connection.cpp
     bus/tcp/dispatcher.cpp
@@ -50,23 +55,25 @@ SRCS(
     concurrency/async_looper.cpp
     concurrency/async_rw_lock.cpp
     concurrency/async_semaphore.cpp
+    concurrency/async_stream_helpers.cpp
     concurrency/async_stream_pipe.cpp
-    concurrency/async_stream.cpp
+    concurrency/bounded_concurrency_invoker.cpp
     concurrency/config.cpp
     GLOBAL concurrency/configure_fiber_manager.cpp
     concurrency/coroutine.cpp
     concurrency/delayed_executor.cpp
-    concurrency/execution_stack.cpp
     concurrency/fair_share_action_queue.cpp
     concurrency/fair_share_invoker_pool.cpp
     concurrency/fair_share_invoker_queue.cpp
     concurrency/fair_share_queue_scheduler_thread.cpp
     concurrency/fair_share_thread_pool.cpp
     concurrency/fair_throttler.cpp
+    concurrency/fair_throttler_ipc.cpp
     concurrency/fiber_scheduler_thread.cpp
     concurrency/fiber.cpp
     concurrency/fiber_manager.cpp
     concurrency/fls.cpp
+    concurrency/helpers.cpp
     concurrency/invoker_alarm.cpp
     concurrency/invoker_queue.cpp
     concurrency/lease_manager.cpp
@@ -74,13 +81,16 @@ SRCS(
     concurrency/notify_manager.cpp
     concurrency/periodic_executor.cpp
     concurrency/periodic_yielder.cpp
+    concurrency/pooled_execution_stack.cpp
     concurrency/pollable_detail.cpp
-    concurrency/profiling_helpers.cpp
+    concurrency/prioritized_invoker.cpp
     concurrency/propagating_storage.cpp
     concurrency/quantized_executor.cpp
     concurrency/scheduler_thread.cpp
+    concurrency/serialized_invoker.cpp
     concurrency/single_queue_scheduler_thread.cpp
     concurrency/suspendable_action_queue.cpp
+    concurrency/suspendable_invoker.cpp
     concurrency/system_invokers.cpp
     concurrency/thread_affinity.cpp
     concurrency/thread_pool_detail.cpp
@@ -88,6 +98,7 @@ SRCS(
     concurrency/thread_pool.cpp
     concurrency/throughput_throttler.cpp
     concurrency/two_level_fair_share_thread_pool.cpp
+    concurrency/watchdog_invoker.cpp
     concurrency/retrying_periodic_executor.cpp
     concurrency/scheduled_executor.cpp
 
@@ -95,7 +106,7 @@ SRCS(
     crypto/crypto.cpp
     crypto/tls.cpp
 
-    logging/compression.cpp
+    logging/appendable_compressed_file.cpp
     logging/config.cpp
     GLOBAL logging/configure_log_manager.cpp
     logging/formatter.cpp
@@ -110,9 +121,11 @@ SRCS(
     logging/stream_log_writer.cpp
     logging/system_log_event_provider.cpp
     logging/random_access_gzip.cpp
-    logging/zstd_compression.cpp
+    logging/zstd_log_codec.cpp
 
+    misc/absolute_normalized_path.cpp
     misc/arithmetic_formula.cpp
+    misc/backtrace.cpp
     misc/backoff_strategy.cpp
     misc/bitmap.cpp
     misc/bit_packed_unsigned_vector.cpp
@@ -131,10 +144,12 @@ SRCS(
     # REGISTER_INTERMEDIATE_PROTO_INTEROP_REPRESENTATION macros for TGuid.
     GLOBAL misc/guid.cpp
     misc/hazard_ptr.cpp
-    misc/hedging_manager.cpp
+    misc/adaptive_hedging_manager.cpp
     misc/histogram.cpp
     misc/adjusted_exponential_moving_average.cpp
+    misc/duration_moving_average.cpp
     misc/id_generator.cpp
+    misc/inotify.cpp
     misc/fair_share_hierarchical_queue.cpp
     misc/linear_probe.cpp
     misc/relaxed_mpsc_queue.cpp
@@ -188,6 +203,7 @@ SRCS(
 
     rpc/authentication_identity.cpp
     rpc/authenticator.cpp
+    rpc/backend.cpp
     rpc/balancing_channel.cpp
     rpc/caching_channel_factory.cpp
     rpc/channel_detail.cpp
@@ -196,6 +212,8 @@ SRCS(
     GLOBAL rpc/configure_dispatcher.cpp
     rpc/dispatcher.cpp
     rpc/dynamic_channel_pool.cpp
+    rpc/dynamic_channel_pool_provider.cpp
+    rpc/endpoint_address.cpp
     rpc/hedging_channel.cpp
     rpc/helpers.cpp
     rpc/local_channel.cpp
@@ -206,6 +224,7 @@ SRCS(
     rpc/overload_controller.cpp
     rpc/overload_controlling_service_base.cpp
     rpc/peer_discovery.cpp
+    rpc/peer_priority_provider.cpp
     rpc/per_key_request_queue_provider.cpp
     rpc/protocol_version.cpp
     rpc/public.cpp
@@ -221,9 +240,13 @@ SRCS(
     rpc/stream.cpp
     rpc/throttling_channel.cpp
     rpc/viable_peer_registry.cpp
+    rpc/multi_protocol_channel_factory.cpp
+    rpc/multi_protocol_server.cpp
 
     rpc/bus/server.cpp
     rpc/bus/channel.cpp
+    GLOBAL rpc/bus/tcp_backend.cpp
+    GLOBAL rpc/bus/uds_backend.cpp
 
     service_discovery/service_discovery.cpp
 
@@ -236,10 +259,11 @@ SRCS(
 
     utilex/random.cpp
 
+    ypath/helpers.cpp
     ypath/stack.cpp
     ypath/token.cpp
     ypath/tokenizer.cpp
-    ypath/helpers.cpp
+    ypath/trie.cpp
 
     yson/async_consumer.cpp
     yson/async_writer.cpp
@@ -276,6 +300,7 @@ SRCS(
     yson/attributes_stripper.cpp
 
     ytree/attribute_consumer.cpp
+    ytree/composite_map.cpp
     ytree/helpers.cpp
     ytree/attributes.cpp
     ytree/attribute_filter.cpp
@@ -287,6 +312,7 @@ SRCS(
     ytree/node.cpp
     ytree/node_detail.cpp
     ytree/permission.cpp
+    ytree/precise_time.cpp
     ytree/request_complexity_limiter.cpp
     ytree/request_complexity_limits.cpp
     ytree/serialize.cpp
@@ -310,10 +336,6 @@ SRCS(
     json/helpers.cpp
     json/json_parser.cpp
     json/json_writer.cpp
-
-    ytalloc/bindings.cpp
-    ytalloc/config.cpp
-    ytalloc/statistics_producer.cpp
 )
 
 IF (OS_LINUX)
@@ -349,11 +371,11 @@ PEERDIR(
     library/cpp/yt/logging
     library/cpp/yt/logging/plain_text_formatter
     library/cpp/yt/misc
+    library/cpp/yt/mpl
     library/cpp/yt/memory
     library/cpp/yt/string
     library/cpp/yt/yson
     library/cpp/yt/yson_string
-    library/cpp/ytalloc/api
 
     yt/yt/build
 
@@ -361,6 +383,7 @@ PEERDIR(
 
     yt/yt_proto/yt/core
 
+    library/cpp/containers/concurrent_hash
     library/cpp/yt/assert
     library/cpp/yt/backtrace
     library/cpp/yt/coding
@@ -382,6 +405,12 @@ PEERDIR(
     yt/yt/library/numeric
 )
 
+IF (YT_CUSTOM_INTERNAL_BUILD)
+    PEERDIR(
+        yt/yt/core/yt_custom_internal_specific
+    )
+ENDIF()
+
 IF (OS_WINDOWS)
     PEERDIR(
         library/cpp/yt/backtrace/cursors/dummy
@@ -397,13 +426,31 @@ END()
 RECURSE(
     http
     test_framework
+    yaml
 )
 
 IF (NOT OPENSOURCE AND OS_LINUX)
     RECURSE(
         benchmarks
+        actions/benchmarks
+        concurrency/benchmarks
         bus/benchmarks
+        logging/benchmark
+        rpc/benchmark
+        ypath/benchmarks
         yson/benchmark
+        ytree/benchmarks
+    )
+ENDIF()
+
+IF (NOT OPENSOURCE AND OS_LINUX)
+    RECURSE(
+        bus/ucx
+        rpc/ucx
+    )
+
+    RECURSE_FOR_TESTS(
+        bus/ucx/unittests
     )
 ENDIF()
 
@@ -426,13 +473,16 @@ IF (NOT OS_WINDOWS)
     )
 
     RECURSE_FOR_TESTS(
-        bus/unittests
+        bus/tcp/unittests
+        rpc/bus/unittests
         compression/unittests
         crypto/unittests
         json/unittests
         logging/unittests
         phoenix/unittests
         profiling/unittests
+        rpc/grpc/unittests
+        rpc/http/unittests
         rpc/unittests
         ypath/unittests
         ytree/unittests

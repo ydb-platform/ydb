@@ -11,11 +11,9 @@ namespace NSchemeShard {
 
 struct TSchemeShard::TTxLogin : TSchemeShard::TRwTxBase {
     TEvSchemeShard::TEvLogin::TPtr Request;
-    NLogin::TLoginProvider::TLoginUserResponse Response;
     TPathId SubDomainPathId;
     bool NeedPublishOnComplete = false;
-    bool SendFinalizeEvent = false;
-    TString ErrMessage;
+    THolder<TEvSchemeShard::TEvLoginResult> Result = MakeHolder<TEvSchemeShard::TEvLoginResult>();
 
     TTxLogin(TSelf *self, TEvSchemeShard::TEvLogin::TPtr &ev)
         : TRwTxBase(self)
@@ -26,16 +24,29 @@ struct TSchemeShard::TTxLogin : TSchemeShard::TRwTxBase {
 
     NLogin::TLoginProvider::TLoginUserRequest GetLoginRequest() const {
         const auto& record(Request->Get()->Record);
-        return {
+        NLogin::TLoginProvider::TLoginUserRequest request {
             .User = record.GetUser(),
-            .Password = record.GetPassword(),
             .Options = {
                 .ExpiresAfter = record.HasExpiresAfterMs()
                     ? std::chrono::milliseconds(record.GetExpiresAfterMs())
                     : std::chrono::system_clock::duration::zero()
                 },
-            .ExternalAuth = record.GetExternalAuth(),
+        };
+
+        if (record.HasExternalAuth()) {
+            request.ExternalAuth = record.GetExternalAuth();
+        } else if (record.HasHashToValidate()) {
+            NLogin::TLoginProvider::THashToValidate hashToValidate {
+                .AuthMech = record.GetHashToValidate().GetAuthMech(),
+                .HashType = record.GetHashToValidate().GetHashType(),
+                .Hash = record.GetHashToValidate().GetHash(),
+                .AuthMessage = record.GetHashToValidate().GetAuthMessage(),
             };
+
+            request.HashToValidate = std::move(hashToValidate);
+        }
+
+        return request;
     }
 
     void DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
@@ -49,30 +60,21 @@ struct TSchemeShard::TTxLogin : TSchemeShard::TRwTxBase {
         }
 
         const auto& loginRequest = GetLoginRequest();
-        if (!loginRequest.ExternalAuth) {
+        if (!loginRequest.ExternalAuth.has_value()) {
             if (!AppData(ctx)->AuthConfig.GetEnableLoginAuthentication()) {
-                ErrMessage = "Login authentication is disabled";
-            } else {
-                CheckLockOutUserAndSetErrorIfAny(loginRequest.User, db);
+                Result->Record.SetError("Login authentication is disabled");
+                return;
+            }
+            if (CheckLockOutUserAndSetErrorIfAny(loginRequest.User, db)) {
+                return;
             }
         }
 
-        if (ErrMessage) {
-            SendError();
-            return;
+        const auto response = Self->LoginProvider.LoginUser(loginRequest);
+        if (!loginRequest.ExternalAuth.has_value()) {
+            UpdateLoginSidsStats(response, db);
         }
-
-        TString passwordHash;
-        if (Self->LoginProvider.NeedVerifyHash(loginRequest, &Response, &passwordHash)) {
-            ctx.Send(
-                Self->LoginHelper,
-                MakeHolder<TEvPrivate::TEvVerifyPassword>(loginRequest, Response, Request->Sender, passwordHash),
-                0,
-                Request->Cookie
-            );
-        } else {
-            SendFinalizeEvent = true;
-        }
+        FillResult(response);
     }
 
     void DoComplete(const TActorContext &ctx) override {
@@ -80,23 +82,22 @@ struct TSchemeShard::TTxLogin : TSchemeShard::TRwTxBase {
             Self->PublishToSchemeBoard(TTxId(), {SubDomainPathId}, ctx);
         }
 
-        if (SendFinalizeEvent) {
-            auto event = MakeHolder<TEvPrivate::TEvLoginFinalize>(
-                GetLoginRequest(), Response, Request->Sender, "", /*needUpdateCache*/ false
-            );
-            TEvPrivate::TEvLoginFinalize::TPtr eventPtr = (TEventHandle<TEvPrivate::TEvLoginFinalize>*) new IEventHandle(
-                Self->SelfId(), Self->SelfId(), event.Release()
-            );
-            Self->Execute(Self->CreateTxLoginFinalize(eventPtr), ctx);
-        }
-
+        const TString& error = Result->Record.GetError();
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "TTxLogin Complete"
-                    << ", with " << (ErrMessage ? "error: " + ErrMessage : "no errors")
+                    << ", with " << (error ? "error: " + error : "no errors")
                     << ", at schemeshard: " << Self->TabletID());
-}
+
+        Self->Send(Request->Sender, std::move(Result), 0, Request->Cookie);
+    }
 
 private:
+    bool IsAdmin() const {
+        const auto& user = Request->Get()->Record.GetUser();
+        const auto userToken = NKikimr::BuildLocalUserToken(Self->LoginProvider, user);
+        return IsAdministrator(AppData(), &userToken);
+    }
+
     void RotateKeys(const TActorContext& ctx, NIceDb::TNiceDb& db) {
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxLogin RotateKeys at schemeshard: " << Self->TabletID());
         std::vector<ui64> keysExpired;
@@ -123,14 +124,15 @@ private:
         }
     }
 
-    void CheckLockOutUserAndSetErrorIfAny(const TString& user, NIceDb::TNiceDb& db) {
+    // Returns true if the user is locked out and an error has been set into the result.
+    bool CheckLockOutUserAndSetErrorIfAny(const TString& user, NIceDb::TNiceDb& db) {
         using namespace NLogin;
         const TLoginProvider::TCheckLockOutResponse checkLockOutResponse = Self->LoginProvider.CheckLockOutUser({.User = user});
         switch (checkLockOutResponse.Status) {
             case TLoginProvider::TCheckLockOutResponse::EStatus::SUCCESS:
             case TLoginProvider::TCheckLockOutResponse::EStatus::INVALID_USER: {
-                ErrMessage = checkLockOutResponse.Error;
-                return;
+                Result->Record.SetError(checkLockOutResponse.Error);
+                return true;
             }
             case TLoginProvider::TCheckLockOutResponse::EStatus::RESET: {
                 const auto& sid = Self->LoginProvider.Sids[user];
@@ -142,17 +144,55 @@ private:
                 break;
             }
         }
+        return false;
     }
 
-    void SendError() {
-        THolder<TEvSchemeShard::TEvLoginResult> result = MakeHolder<TEvSchemeShard::TEvLoginResult>();
-        result->Record.SetError(ErrMessage);
-        Self->Send(
-            Request->Sender,
-            std::move(result),
-            0,
-            Request->Cookie
-        );
+    void FillResult(const NLogin::TLoginProvider::TLoginUserResponse& response) {
+        switch (response.Status) {
+        case NLogin::TLoginProvider::TLoginUserResponse::EStatus::SUCCESS: {
+            if (response.ServerSignature.has_value()) {
+                Result->Record.SetServerSignature(*response.ServerSignature);
+            }
+            Result->Record.SetToken(response.Token);
+            Result->Record.SetSanitizedToken(response.SanitizedToken);
+            Result->Record.SetIsAdmin(IsAdmin());
+            break;
+        }
+        case NLogin::TLoginProvider::TLoginUserResponse::EStatus::INVALID_PASSWORD:
+        case NLogin::TLoginProvider::TLoginUserResponse::EStatus::INVALID_USER:
+        case NLogin::TLoginProvider::TLoginUserResponse::EStatus::UNAVAILABLE_KEY:
+        case NLogin::TLoginProvider::TLoginUserResponse::EStatus::INVALID_HASH_TYPE:
+        case NLogin::TLoginProvider::TLoginUserResponse::EStatus::UNSUPPORTED_SASL_MECHANISM:
+        case NLogin::TLoginProvider::TLoginUserResponse::EStatus::UNSPECIFIED: {
+            Result->Record.SetError(response.Error);
+            break;
+        }
+        }
+    }
+
+    void UpdateLoginSidsStats(const NLogin::TLoginProvider::TLoginUserResponse& response, NIceDb::TNiceDb& db) {
+        const TString& user = Request->Get()->Record.GetUser();
+        switch (response.Status) {
+        case NLogin::TLoginProvider::TLoginUserResponse::EStatus::SUCCESS: {
+            const auto& sid = Self->LoginProvider.Sids[user];
+            db.Table<Schema::LoginSids>()
+                .Key(user)
+                .Update<Schema::LoginSids::LastSuccessfulAttempt, Schema::LoginSids::FailedAttemptCount>(
+                    ToMicroSeconds(sid.LastSuccessfulLogin), sid.FailedLoginAttemptCount
+                );
+            break;
+        }
+        case NLogin::TLoginProvider::TLoginUserResponse::EStatus::INVALID_PASSWORD: {
+            const auto& sid = Self->LoginProvider.Sids[user];
+            db.Table<Schema::LoginSids>()
+                .Key(user)
+                .Update<Schema::LoginSids::LastFailedAttempt, Schema::LoginSids::FailedAttemptCount>(
+                    ToMicroSeconds(sid.LastFailedLogin), sid.FailedLoginAttemptCount
+                );
+        }
+        default:
+            break;
+        }
     }
 };
 

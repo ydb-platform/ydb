@@ -14,14 +14,18 @@ PEERDIR(
     ydb/library/actors/core
     ydb/library/actors/http
     ydb/library/grpc/actor_client
+    library/cpp/html/pcdata
     library/cpp/monlib/service/pages
     library/cpp/openssl/io
     ydb/core/audit
     ydb/core/base
     ydb/core/protos
+    ydb/core/security/external_idp
+    ydb/core/security/util
     ydb/library/aclib
     ydb/library/aclib/protos
     ydb/library/login
+    ydb/library/login/protos
     ydb/library/ncloud/impl
     ydb/library/security
     ydb/library/ycloud/api
@@ -36,5 +40,8 @@ RECURSE_FOR_TESTS(
 
 RECURSE(
     certificate_check
+    external_idp
     ldap_auth_provider
+    sasl
+    util
 )

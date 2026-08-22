@@ -9,9 +9,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(20250512.1)
+VERSION(20260526.0)
 
-ORIGINAL_SOURCE(https://github.com/abseil/abseil-cpp/archive/20250512.1.tar.gz)
+ORIGINAL_SOURCE(https://github.com/abseil/abseil-cpp/archive/20260526.0.tar.gz)
 
 PEERDIR(
     library/cpp/sanitizer/include
@@ -32,6 +32,7 @@ NO_COMPILER_WARNINGS()
 NO_UTIL()
 
 SRCS(
+    absl/base/casts.cc
     absl/base/internal/cycleclock.cc
     absl/base/internal/low_level_alloc.cc
     absl/base/internal/poison.cc
@@ -42,10 +43,10 @@ SRCS(
     absl/base/internal/strerror.cc
     absl/base/internal/sysinfo.cc
     absl/base/internal/thread_identity.cc
-    absl/base/internal/throw_delegate.cc
     absl/base/internal/tracing.cc
     absl/base/internal/unscaledcycleclock.cc
     absl/base/log_severity.cc
+    absl/base/throw_delegate.cc
     absl/container/internal/hashtablez_sampler.cc
     absl/container/internal/hashtablez_sampler_force_weak_definition.cc
     absl/container/internal/raw_hash_set.cc
@@ -57,7 +58,6 @@ SRCS(
     absl/crc/internal/crc_memcpy_x86_arm_combined.cc
     absl/crc/internal/crc_non_temporal_memcpy.cc
     absl/crc/internal/crc_x86_arm_combined.cc
-    absl/debugging/failure_signal_handler.cc
     absl/debugging/internal/address_is_readable.cc
     absl/debugging/internal/decode_rust_punycode.cc
     absl/debugging/internal/demangle.cc
@@ -82,7 +82,6 @@ SRCS(
     absl/flags/usage_config.cc
     absl/hash/internal/city.cc
     absl/hash/internal/hash.cc
-    absl/hash/internal/low_level_hash.cc
     absl/log/die_if_null.cc
     absl/log/flags.cc
     absl/log/globals.cc
@@ -98,10 +97,13 @@ SRCS(
     absl/log/internal/proto.cc
     absl/log/internal/structured_proto.cc
     absl/log/internal/vlog_config.cc
+    absl/log/log_entry.cc
     absl/log/log_sink.cc
     absl/numeric/int128.cc
+    absl/profiling/hashtable.cc
     absl/profiling/internal/exponential_biased.cc
     absl/profiling/internal/periodic_sampler.cc
+    absl/profiling/internal/profile_builder.cc
     absl/random/discrete_distribution.cc
     absl/random/gaussian_distribution.cc
     absl/random/internal/chi_square.cc
@@ -117,6 +119,7 @@ SRCS(
     absl/random/seed_sequences.cc
     absl/status/internal/status_internal.cc
     absl/status/status.cc
+    absl/status/status_builder.cc
     absl/status/status_payload_printer.cc
     absl/status/statusor.cc
     absl/strings/ascii.cc
@@ -138,6 +141,7 @@ SRCS(
     absl/strings/internal/cordz_sample_token.cc
     absl/strings/internal/damerau_levenshtein_distance.cc
     absl/strings/internal/escaping.cc
+    absl/strings/internal/generic_printer.cc
     absl/strings/internal/memutil.cc
     absl/strings/internal/ostringstream.cc
     absl/strings/internal/str_format/arg.cc
@@ -153,7 +157,6 @@ SRCS(
     absl/strings/str_cat.cc
     absl/strings/str_replace.cc
     absl/strings/str_split.cc
-    absl/strings/string_view.cc
     absl/strings/substitute.cc
     absl/synchronization/barrier.cc
     absl/synchronization/blocking_counter.cc
@@ -171,6 +174,7 @@ SRCS(
     absl/synchronization/notification.cc
     absl/time/civil_time.cc
     absl/time/clock.cc
+    absl/time/clock_interface.cc
     absl/time/duration.cc
     absl/time/format.cc
     absl/time/internal/cctz/src/civil_time_detail.cc
@@ -184,6 +188,23 @@ SRCS(
     absl/time/internal/cctz/src/time_zone_posix.cc
     absl/time/internal/cctz/src/zone_info_source.cc
     absl/time/time.cc
+    absl/types/source_location.cc
 )
+
+IF (OS_WINDOWS)
+    SRCS(
+        absl/time/internal/cctz/src/time_zone_name_win.cc
+    )
+ENDIF()
+
+IF (OS_FREERTOS OR OS_ZEPHYR)
+    SRCS(
+        stubs/failure_signal_handler.cc
+    )
+ELSE()
+    SRCS(
+        absl/debugging/failure_signal_handler.cc
+    )
+ENDIF()
 
 END()

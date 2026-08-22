@@ -1,5 +1,5 @@
 #pragma once
-#include "defs.h"
+#include <ydb/core/ymq/actor/cfg/defs.h>
 
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
 #include <ydb/public/lib/value/value.h>

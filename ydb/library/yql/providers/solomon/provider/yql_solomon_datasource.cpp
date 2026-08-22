@@ -7,7 +7,7 @@
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
-#include <yql/essentials/providers/common/config/yql_configuration_transformer.h>
+#include <yql/essentials/providers/common/config/transformer/yql_configuration_transformer.h>
 
 #include <yql/essentials/utils/log/log.h>
 
@@ -75,6 +75,10 @@ public:
         return &State_->Configuration->Tokens;
     }
 
+    const THashSet<TString>& GetValidClusters() override {
+        return State_->Configuration->GetValidClusters();
+    }
+
     IGraphTransformer& GetConfigurationTransformer() override {
         return *ConfigurationTransformer_;
     }
@@ -100,7 +104,7 @@ public:
         if (node.IsCallable(TCoDataSource::CallableName())) {
             if (node.Child(0)->Content() == SolomonProviderName) {
                 auto clusterName = node.Child(1)->Content();
-                if (!State_->Gateway->HasCluster(clusterName)) {
+                if (clusterName != NCommon::ALL_CLUSTERS && !State_->Gateway->HasCluster(clusterName)) {
                     ctx.AddError(TIssue(ctx.GetPosition(node.Child(1)->Pos()), TStringBuilder() <<
                         "Unknown cluster name: " << clusterName));
                     return false;

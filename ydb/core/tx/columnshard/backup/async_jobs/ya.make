@@ -1,0 +1,28 @@
+LIBRARY()
+
+IF (OS_WINDOWS)
+    CFLAGS(
+        -DKIKIMR_DISABLE_S3_OPS
+    )
+ENDIF()
+
+SRCS(
+    import_downloader.cpp
+)
+
+PEERDIR(
+    ydb/core/formats/arrow
+    ydb/core/tx/columnshard/engines/protos  # stopgap: columnshard_private_events.h transitively requires engines/protos; direct columnshard dep would create a cycle
+    ydb/library/actors/core
+    ydb/library/signals
+    ydb/core/tx/datashard
+)
+
+YQL_LAST_ABI_VERSION()
+
+
+END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

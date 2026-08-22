@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: argcomplete
-Version: 3.6.2
+Version: 3.7.0
 Summary: Bash tab completion for argparse
 Project-URL: Homepage, https://github.com/kislyuk/argcomplete
 Project-URL: Documentation, https://kislyuk.github.io/argcomplete
@@ -22,12 +22,12 @@ Classifier: Operating System :: MacOS :: MacOS X
 Classifier: Operating System :: POSIX
 Classifier: Programming Language :: Python
 Classifier: Programming Language :: Python :: 3
-Classifier: Programming Language :: Python :: 3.8
 Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
 Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
 Classifier: Programming Language :: Python :: Implementation :: CPython
 Classifier: Programming Language :: Python :: Implementation :: PyPy
 Classifier: Topic :: Software Development
@@ -51,7 +51,7 @@ Argcomplete provides easy, extensible command line tab completion of arguments f
 
 It makes two assumptions:
 
-* You're using bash or zsh as your shell
+* You're using bash or zsh as your shell (limited support exists for other shells - see below)
 * You're using `argparse <http://docs.python.org/3/library/argparse.html>`_ to manage your command line arguments/options
 
 Argcomplete is particularly useful if your program has lots of options or subparsers, and if your program can

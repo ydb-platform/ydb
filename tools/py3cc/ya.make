@@ -1,4 +1,4 @@
-IF (USE_PREBUILT_TOOLS)
+IF (USE_PREBUILT_TOOLS AND NOT USE_PYTHON3_PREV)
     INCLUDE(ya.make.prebuilt)
 ENDIF()
 
@@ -8,4 +8,5 @@ ENDIF()
 
 RECURSE(
     bin
+    slow
 )

@@ -83,6 +83,7 @@ message TPopulatorResponse {
     optional uint64 Generation = 2;
     optional uint64 DescriptionsCount = 3;
     optional TPathId MaxPathId = 4;
+    optional TPathId MaxRequestedPathId = 8;
     optional uint64 DelayedUpdatesCount = 5;
     repeated NActorsProto.TActorId ReplicaPopulators = 6;
     repeated TUpdateAckInfo UpdateAcks = 7;

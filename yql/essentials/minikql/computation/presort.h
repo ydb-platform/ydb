@@ -6,8 +6,7 @@
 
 #include <util/generic/vector.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 class TPresortCodec {
 public:
@@ -26,7 +25,7 @@ protected:
     TVector<TTypeInfo> Types_;
 };
 
-class TPresortEncoder : public TPresortCodec {
+class TPresortEncoder: public TPresortCodec {
 public:
     TPresortEncoder() = default;
 
@@ -39,7 +38,7 @@ private:
     TVector<ui8> Output_;
 };
 
-class TPresortDecoder : public TPresortCodec {
+class TPresortDecoder: public TPresortCodec {
 public:
     TPresortDecoder() = default;
 
@@ -56,14 +55,14 @@ class THolderFactory;
 
 class TGenericPresortEncoder {
 public:
-    TGenericPresortEncoder(TType* type);
+    explicit TGenericPresortEncoder(TType* type);
     TStringBuf Encode(const NUdf::TUnboxedValue& value, bool desc); // user must copy
     NUdf::TUnboxedValue Decode(TStringBuf buf, bool desc, const THolderFactory& factory);
+
 private:
     TType* Type_;
     TVector<ui8> Output_;
     TVector<ui8> Buffer_;
 };
 
-} // NMiniKQL
-} // NKikimr
+} // namespace NKikimr::NMiniKQL

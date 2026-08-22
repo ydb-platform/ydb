@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import argparse
+import logging
 import shutil
 import signal
 import os
@@ -8,6 +9,7 @@ import random
 import string
 import typing  # noqa: F401
 import sys
+import types
 from six.moves.urllib.parse import urlparse
 
 import yatest
@@ -21,6 +23,8 @@ from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.library.harness.kikimr_port_allocator import KikimrFixedPortAllocator
 from library.python.testing.recipe import set_env
 
+logger = logging.getLogger(__name__)
+
 
 class EmptyArguments(object):
     def __init__(self):
@@ -31,6 +35,7 @@ class EmptyArguments(object):
         self.suppress_version_check = False
         self.ydb_udfs_dir = None
         self.fq_config_path = None
+        self.config_path = None
         self.auth_config_path = None
         self.debug_logging = []
         self.fixed_ports = False
@@ -216,6 +221,9 @@ class Recipe(object):
     def write_mon_port(self, mon_port):
         self.setenv('YDB_MON_PORT', str(mon_port))
 
+    def write_kafka_api_port(self, kafka_api_port):
+        self.setenv('YDB_KAFKA_PROXY_PORT', str(kafka_api_port))
+
     def read_metafile(self):
         return json.loads(self.read(self.metafile_path()))
 
@@ -255,6 +263,10 @@ def default_users():
 
 def enable_tls():
     return os.getenv('YDB_GRPC_ENABLE_TLS') == 'true'
+
+
+def is_tiny_mode():
+    return os.getenv('YDB_TINY_MODE') == 'true'
 
 
 def report_monitoring_info():
@@ -313,6 +325,29 @@ def enable_pqcd(arguments):
     return (getattr(arguments, 'enable_pqcd', False) or os.getenv('YDB_ENABLE_PQCD') == 'true')
 
 
+def same_config_path(left, right):
+    return os.path.realpath(left) == os.path.realpath(right)
+
+
+def should_preserve_existing_config(target_config):
+    """Return True when an existing non-empty config.yaml should be kept.
+
+    On the first deploy (before the recipe metafile exists), a non-empty
+    target config is preserved to support bind-mounted configs in Docker.
+    If the metafile is removed while the data directory is kept, the existing
+    config is also preserved instead of being regenerated.
+    """
+    return os.path.isfile(target_config) and os.path.getsize(target_config) > 0
+
+
+def resolve_deploy_config_action(config_path, target_config):
+    if config_path and not same_config_path(config_path, target_config):
+        return 'copy'
+    if should_preserve_existing_config(target_config):
+        return 'preserve'
+    return 'generate'
+
+
 def deploy(arguments):
     initialize_working_dir(arguments)
     recipe = Recipe(arguments)
@@ -323,6 +358,8 @@ def deploy(arguments):
     if getattr(arguments, 'use_packages', None) is not None:
         arguments.ydb_binary_path = driver_path_packages(arguments.use_packages)
         arguments.ydb_udfs_dir = None
+    elif arguments.ydb_udfs_dir is None:
+        arguments.ydb_udfs_dir = _get_build_path("yql/udfs")
 
     additional_log_configs = {}
     if getattr(arguments, 'debug_logging', []):
@@ -349,10 +386,9 @@ def deploy(arguments):
         for flag_name in flags:
             enable_feature_flags.append(flag_name)
 
-    if 'YDB_EXPERIMENTAL_PG' in os.environ:
-        optionals['pg_compatible_expirement'] = True
-
-    kafka_api_port = int(os.environ.get("YDB_KAFKA_PROXY_PORT", "0"))
+    kafka_api_port = os.environ.get("YDB_KAFKA_PROXY_PORT", "auto")
+    if kafka_api_port != 'auto':
+        kafka_api_port = int(kafka_api_port)
     if kafka_api_port != 0:
         optionals['kafka_api_port'] = kafka_api_port
 
@@ -361,6 +397,12 @@ def deploy(arguments):
         services = os.environ['YDB_GRPC_SERVICES'].split(",")
         for service in services:
             enabled_grpc_services.append(service)
+
+    if is_tiny_mode():
+        optionals['tiny_mode'] = True
+
+    enforce_user_token_requirement = os.getenv('YDB_ENFORCE_USER_TOKEN_REQUIREMENT') == 'true'
+    default_clusteradmin = os.getenv('YDB_DEFAULT_CLUSTERADMIN')
 
     configuration = KikimrConfigGenerator(
         erasure=parse_erasure(arguments),
@@ -371,7 +413,7 @@ def deploy(arguments):
         pq_client_service_types=pq_client_service_types(arguments),
         enable_pqcd=enable_pqcd(arguments),
         suppress_version_check=arguments.suppress_version_check,
-        udfs_path=arguments.ydb_udfs_dir or _get_build_path("yql/udfs"),
+        udfs_path=arguments.ydb_udfs_dir,
         additional_log_configs=additional_log_configs,
         port_allocator=port_allocator,
         use_in_memory_pdisks=use_in_memory_pdisks_flag(arguments.ydb_working_dir),
@@ -384,8 +426,31 @@ def deploy(arguments):
         extra_grpc_services=enabled_grpc_services,
         generic_connector_config=generic_connector_config(),
         verbose_memory_limit_exception=True,
+        enforce_user_token_requirement=enforce_user_token_requirement,
+        default_clusteradmin=default_clusteradmin,
         **optionals
     )
+
+    config_path = getattr(arguments, 'config_path', None)
+    original_write_proto_configs = configuration.write_proto_configs
+
+    def _write_proto_configs(self, configs_path):
+        # This override only triggers on the very first deploy before the recipe metafile exists.
+        # Subsequent deploy invocations reuse the saved config directory and skip calling this hook.
+        target_config = os.path.join(configs_path, "config.yaml")
+        action = resolve_deploy_config_action(config_path, target_config)
+        if action == 'copy':
+            self.write_tls_data()
+            shutil.copyfile(config_path, target_config)
+            return
+        if action == 'preserve':
+            logger.info('Preserving existing config at %s', target_config)
+            self.write_tls_data()
+            return
+
+        original_write_proto_configs(configs_path)
+
+    configuration.write_proto_configs = types.MethodType(_write_proto_configs, configuration)
 
     cluster = KiKiMR(configuration)
     cluster.start()
@@ -393,6 +458,7 @@ def deploy(arguments):
     info = {'nodes': {}}
     endpoints = []
     mon_port = None
+    kafka_api_port = None
     for node_id, node in cluster.nodes.items():
         info['nodes'][node_id] = {
             'pid': node.pid,
@@ -400,6 +466,7 @@ def deploy(arguments):
             'sqs_port': node.sqs_port,
             'grpc_port': node.port,
             'mon_port': node.mon_port,
+            'kafka_api_port': node.kafka_api_port,
             'command': node.command,
             'cwd': node.cwd,
             'stderr_file': node.stderr_file_name,
@@ -413,6 +480,9 @@ def deploy(arguments):
         if mon_port is None:
             mon_port = node.mon_port
 
+        if kafka_api_port is None:
+            kafka_api_port = node.kafka_api_port
+
         endpoints.append("localhost:%d" % node.grpc_port)
 
     endpoint = endpoints[0]
@@ -425,6 +495,8 @@ def deploy(arguments):
         recipe.write_mon_port(mon_port)
     if enable_tls():
         recipe.write_certificates_path(configuration.grpc_tls_ca.decode("utf-8"))
+    if kafka_api_port is not None:
+        recipe.write_kafka_api_port(kafka_api_port)
     return endpoint, database
 
 
@@ -533,6 +605,7 @@ def produce_arguments(args):
     parser.add_argument("--base-port-offset", action="store", type=int, default=0)
     parser.add_argument("--pq-client-service-type", action='append', default=[])
     parser.add_argument("--enable-pqcd", action='store_true', default=False)
+    parser.add_argument("--config-path", action="store")
     parsed, _ = parser.parse_known_args(args)
     arguments = EmptyArguments()
     arguments.suppress_version_check = parsed.suppress_version_check
@@ -546,6 +619,7 @@ def produce_arguments(args):
     arguments.enable_pq = parsed.enable_pq
     arguments.pq_client_service_types = parsed.pq_client_service_type
     arguments.enable_pqcd = parsed.enable_pqcd
+    arguments.config_path = parsed.config_path
     return arguments
 
 

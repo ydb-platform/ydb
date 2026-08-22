@@ -89,7 +89,7 @@ TString TIcebergTestData::CreateAuthSection() {
             return fmt::format(R"(
                 AUTH_METHOD="BASIC",
                 LOGIN="{login}",
-                PASSWORD_SECRET_NAME="{data_source_name}_p"
+                PASSWORD_SECRET_PATH="{data_source_name}_p"
             )",
                 "data_source_name"_a = DataSourceName_,
                 "login"_a            = Auth_.Id,
@@ -98,7 +98,7 @@ TString TIcebergTestData::CreateAuthSection() {
         case TIcebergTestData::AuthToken:
             return fmt::format(R"(
                 AUTH_METHOD="TOKEN",
-                TOKEN_SECRET_NAME="{data_source_name}_p"
+                TOKEN_SECRET_PATH="{data_source_name}_p"
             )",
                 "data_source_name"_a = DataSourceName_
             );
@@ -106,7 +106,7 @@ TString TIcebergTestData::CreateAuthSection() {
             return fmt::format(R"(
                 AUTH_METHOD="SERVICE_ACCOUNT",
                 SERVICE_ACCOUNT_ID="my_sa",
-                SERVICE_ACCOUNT_SECRET_NAME="{data_source_name}_p"
+                SERVICE_ACCOUNT_SECRET_PATH="{data_source_name}_p"
             )",
                 "data_source_name"_a = DataSourceName_
             );
@@ -118,7 +118,7 @@ TString TIcebergTestData::CreateQuery(const TString& catalogSection) {
 
     return fmt::format(
         R"(
-        CREATE OBJECT {data_source_name}_p (TYPE SECRET) WITH (value={secret});
+        CREATE SECRET {data_source_name}_p WITH (value="{secret}");
 
         CREATE EXTERNAL DATA SOURCE {data_source_name} WITH (
             SOURCE_TYPE="{source_type}",
@@ -182,51 +182,6 @@ void TIcebergTestData::ExecuteCreateHadoopExternalDataSource(const std::shared_p
     ExecuteQuery(kikimr, CreateQuery(hadoopCatalog));
 }
 
-class TStaticCredentialsProvider : public NYdb::ICredentialsProvider {
-public:
-    TStaticCredentialsProvider(const TString& yqlToken)
-        : YqlToken_(yqlToken)
-    {}
-
-    std::string GetAuthInfo() const override {
-        return YqlToken_;
-    }
-
-    bool IsValid() const override {
-        return true;
-    }
-
-private:
-    std::string YqlToken_;
-};
-
-class TStaticCredentialsProviderFactory : public NYdb::ICredentialsProviderFactory {
-public:
-    TStaticCredentialsProviderFactory(const TString& yqlToken)
-        : YqlToken_(yqlToken)
-    {}
-
-    std::shared_ptr<NYdb::ICredentialsProvider> CreateProvider() const override {
-        return std::make_shared<TStaticCredentialsProvider>(YqlToken_);
-    }
-
-private:
-    TString YqlToken_;
-};
-
-class TStaticSecuredCredentialsFactory : public NYql::ISecuredServiceAccountCredentialsFactory {
-public:
-    TStaticSecuredCredentialsFactory(const TString& yqlToken)
-        : YqlToken_(yqlToken)
-    {}
-
-    std::shared_ptr<NYdb::ICredentialsProviderFactory> Create(const TString&, const TString&) override {
-        return std::make_shared<TStaticCredentialsProviderFactory>(YqlToken_);
-    }
-
-private:
-    TString YqlToken_;
-};
 
 TIcebergTestData CreateIcebergBasic(const TString& dataSourceName, const TString& database, const TString& userName, const TString& password){
     return TIcebergTestData({TIcebergTestData::EAuthType::AuthBasic, userName, password}, dataSourceName, database, false);
@@ -238,10 +193,6 @@ TIcebergTestData CreateIcebergToken(const TString& dataSourceName, const TString
 
 TIcebergTestData CreateIcebergSa(const TString& dataSourceName, const TString& database, const TString& token) {
     return TIcebergTestData({TIcebergTestData::EAuthType::AuthSa,VALUE_IAM, token}, dataSourceName, database, false);
-}
-
-std::shared_ptr<NYql::ISecuredServiceAccountCredentialsFactory> CreateCredentialProvider(const TString& token) {
-    return std::make_shared<TStaticSecuredCredentialsFactory>(token);
 }
 
 } // NTestUtils

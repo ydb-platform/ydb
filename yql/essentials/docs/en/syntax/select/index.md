@@ -76,6 +76,66 @@ is interpreted as
 (query1 UNION query2) UNION ALL query3
 ```
 
+Intersection of several `SELECT` statements (or subqueries) can be computed using `INTERSECT` and `INTERSECT ALL` keywords.
+
+```yql
+query1 INTERSECT query2
+```
+
+Intersection of more than two queries is interpreted as a left-associative operation, that is
+
+```yql
+query1 INTERSECT query2 INTERSECT query3
+```
+
+is interpreted as
+
+```yql
+(query1 INTERSECT query2) INTERSECT query3
+```
+
+Difference between several `SELECT` statements (or subqueries) can be computed using `EXCEPT` and `EXCEPT ALL` keywords.
+
+```yql
+query1 EXCEPT query2
+```
+
+Difference between more than two queries is interpreted as a left-associative operation, that is
+
+```yql
+query1 EXCEPT query2 EXCEPT query3
+```
+
+is interpreted as
+
+```yql
+(query1 EXCEPT query2) EXCEPT query3
+```
+
+Different operators (`UNION`, `INTERSECT`, and `EXCEPT`) can be used together in a single query. In such cases, `UNION` and `EXCEPT` have equal, but lower precedence than `INTERSECT`.
+
+For example, the following queries:
+
+```yql
+query1 UNION query2 INTERSECT query3
+
+query1 UNION query2 EXCEPT query3
+
+query1 EXCEPT query2 UNION query3
+```
+
+are interpreted as:
+
+```yql
+query1 UNION (query2 INTERSECT query3)
+
+(query1 UNION query2) EXCEPT query3
+
+(query1 EXCEPT query2) UNION query3
+```
+
+respectively.
+
 If the underlying queries have one of the `ORDER BY/LIMIT/DISCARD/INTO RESULT` operators, the following rules apply:
 
 * `ORDER BY/LIMIT/INTO RESULT` is only allowed after the last query

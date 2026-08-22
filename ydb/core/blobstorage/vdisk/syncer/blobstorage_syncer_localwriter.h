@@ -12,31 +12,41 @@ namespace NKikimr {
 
     ////////////////////////////////////////////////////////////////////////////
     // TEvLocalSyncData
-    // Apply data to hull.
+    // Apply data to hull or write directly to SST
     ////////////////////////////////////////////////////////////////////////////
     struct TEvLocalSyncData :
         public TEventLocal<TEvLocalSyncData, TEvBlobStorage::EvLocalSyncData>
     {
         // NOTES on Extracted field:
         // The Data field of TEvLocalSyncDatafield contains sync data that we got from another VDisk.
-        // TExtracted has this data prepared for being applied to the Hull database. Preparation
-        // takes time and CPU, so it's better to this async
+        // Extracted has this data prepared for being applied to the Hull database. Preparation
+        // takes time and CPU, so it's better to do this async
 
         TVDiskID VDiskID;           // data obtained from this vdisk
         TSyncState SyncState;       // current sync state
         TString Data;               // data from other node to apply
+
         TFreshBatch Extracted;      // upacked Data that is ready to be applied to Hull
+
+        ui64 LogoBlobsSize = 0;
+        ui64 BlocksSize = 0;
+        ui64 BarriersSize = 0;
 
         TEvLocalSyncData(const TVDiskID &vdisk, const TSyncState &syncState, const TString &data);
         TEvLocalSyncData() = default;
+
         TString Serialize() const;
         void Serialize(IOutputStream &s) const;
         bool Deserialize(IInputStream &s);
+
         // prepare data from the field Data for inserting into Hull database
         void UnpackData(const TIntrusivePtr<TVDiskContext> &vctx);
+
         size_t ByteSize() const {
             return sizeof(TVDiskID) + sizeof(TSyncState) + sizeof(ui32) + Data.size();
         }
+
+        void CalculateSizesFromData();
 
     protected:
         // for every key leave only one merged memRec
@@ -44,6 +54,14 @@ namespace NKikimr {
         static void Squeeze(TFreshAppendixBlocks::TVec &vec);
         static void Squeeze(TFreshAppendixBarriers::TVec &vec);
     };
+
+    struct TEvLocalSyncFinished :
+        public TEventLocal<TEvLocalSyncFinished, TEvBlobStorage::EvLocalSyncFinished>
+    {};
+
+    struct TEvFullSyncFinished :
+        public TEventLocal<TEvFullSyncFinished, TEvBlobStorage::EvFullSyncFinished>
+    {};
 
     ////////////////////////////////////////////////////////////////////////////
     // TEvLocalSyncDataResult
@@ -73,6 +91,7 @@ namespace NKikimr {
     // CreateLocalSyncDataCutter
     ///////////////////////////////////////////////////////////////////////////////////////////////
     IActor* CreateLocalSyncDataCutter(const TIntrusivePtr<TVDiskConfig>& vconfig, const TIntrusivePtr<TVDiskContext>& vctx,
-        const TActorId& skeletonId, const TActorId& parentId, std::unique_ptr<TEvLocalSyncData> ev);
+        const TActorId& skeletonId, const TActorId& parentId, std::unique_ptr<TEvLocalSyncData> ev,
+        const TSyncState& oldSyncState);
 
 } // NKikimr

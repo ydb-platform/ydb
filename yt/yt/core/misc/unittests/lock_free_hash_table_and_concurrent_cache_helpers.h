@@ -19,7 +19,7 @@ struct TRandomCharGenerator
         , Uniform(0, 'z' - 'a' + '9' - '0' + 1)
     { }
 
-    char operator() ()
+    char operator()()
     {
         char symbol = Uniform(Engine);
         auto result = symbol >= 10 ? symbol - 10 + 'a' : symbol + '0';

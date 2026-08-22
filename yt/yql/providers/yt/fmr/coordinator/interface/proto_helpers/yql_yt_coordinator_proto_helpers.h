@@ -42,4 +42,60 @@ NProto::TClearSessionRequest ClearSessionRequestToProto(const TClearSessionReque
 
 TClearSessionRequest ClearSessionRequestFromProto(const NProto::TClearSessionRequest& protoRequest);
 
+NProto::TDropTablesRequest DropTablesRequestToProto(const TDropTablesRequest& request);
+
+TDropTablesRequest DropTablesRequestFromProto(const NProto::TDropTablesRequest& protoRequest);
+
+NProto::TDropTablesResponse DropTablesResponseToProto(const TDropTablesResponse& response);
+
+TDropTablesResponse DropTablesResponseFromProto(const NProto::TDropTablesResponse& protoResponse);
+
+NProto::TOpenSessionRequest OpenSessionRequestToProto(const TOpenSessionRequest& request);
+
+TOpenSessionRequest OpenSessionRequestFromProto(const NProto::TOpenSessionRequest& protoRequest);
+
+NProto::TOpenSessionResponse OpenSessionResponseToProto(const TOpenSessionResponse& response);
+
+TOpenSessionResponse OpenSessionResponseFromProto(const NProto::TOpenSessionResponse& protoResponse);
+
+NProto::TPingSessionRequest PingSessionRequestToProto(const TPingSessionRequest& request);
+
+TPingSessionRequest PingSessionRequestFromProto(const NProto::TPingSessionRequest& protoRequest);
+
+NProto::TPingSessionResponse PingSessionResponseToProto(const TPingSessionResponse& response);
+
+TPingSessionResponse PingSessionResponseFromProto(const NProto::TPingSessionResponse& protoResponse);
+
+NProto::TListSessionsRequest ListSessionsRequestToProto(const TListSessionsRequest& request);
+
+TListSessionsRequest ListSessionsRequestFromProto(const NProto::TListSessionsRequest& protoRequest);
+
+NProto::TListSessionsResponse ListSessionsResponseToProto(const TListSessionsResponse& response);
+
+TListSessionsResponse ListSessionsResponseFromProto(const NProto::TListSessionsResponse& protoResponse);
+
+NProto::TPrepareOperationRequest PrepareOperationRequestToProto(const TPrepareOperationRequest& request);
+
+TPrepareOperationRequest PrepareOperationRequestFromProto(const NProto::TPrepareOperationRequest& protoRequest);
+
+NProto::TPrepareOperationResponse PrepareOperationResponseToProto(const TPrepareOperationResponse& response);
+
+TPrepareOperationResponse PrepareOperationResponseFromProto(const NProto::TPrepareOperationResponse& protoResponse);
+
+NProto::TWaitForOperationsRequest WaitForOperationsRequestToProto(const TWaitForOperationsRequest& request);
+
+TWaitForOperationsRequest WaitForOperationsRequestFromProto(const NProto::TWaitForOperationsRequest& protoRequest);
+
+NProto::TWaitForOperationsResponse WaitForOperationsResponseToProto(const TWaitForOperationsResponse& response);
+
+TWaitForOperationsResponse WaitForOperationsResponseFromProto(const NProto::TWaitForOperationsResponse& protoResponse);
+
+NProto::TWaitForTasksRequest WaitForTasksRequestToProto(const TWaitForTasksRequest& request);
+
+TWaitForTasksRequest WaitForTasksRequestFromProto(const NProto::TWaitForTasksRequest& protoRequest);
+
+NProto::TWaitForTasksResponse WaitForTasksResponseToProto(const TWaitForTasksResponse& response);
+
+TWaitForTasksResponse WaitForTasksResponseFromProto(const NProto::TWaitForTasksResponse& protoResponse);
+
 } // namespace NYql::NFmr

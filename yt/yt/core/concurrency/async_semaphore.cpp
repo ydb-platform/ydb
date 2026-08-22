@@ -163,12 +163,19 @@ i64 TAsyncSemaphore::GetFree() const
     return FreeSlots_;
 }
 
+int TAsyncSemaphore::GetWaiterCount() const
+{
+    auto guard = ReaderGuard(SpinLock_);
+
+    return std::ssize(Waiters_);
+}
+
 TFuture<void> TAsyncSemaphore::GetReadyEvent()
 {
     auto guard = WriterGuard(SpinLock_);
 
     if (FreeSlots_ > 0) {
-        return VoidFuture;
+        return OKFuture;
     } else if (!ReadyEvent_) {
         ReadyEvent_ = NewPromise<void>();
     }
@@ -233,7 +240,7 @@ TAsyncSemaphoreGuard::~TAsyncSemaphoreGuard()
     Release();
 }
 
-TAsyncSemaphoreGuard& TAsyncSemaphoreGuard::operator=(TAsyncSemaphoreGuard&& other)
+TAsyncSemaphoreGuard& TAsyncSemaphoreGuard::operator=(TAsyncSemaphoreGuard&& other) noexcept
 {
     if (this != &other) {
         Release();
@@ -242,7 +249,7 @@ TAsyncSemaphoreGuard& TAsyncSemaphoreGuard::operator=(TAsyncSemaphoreGuard&& oth
     return *this;
 }
 
-void TAsyncSemaphoreGuard::MoveFrom(TAsyncSemaphoreGuard&& other)
+void TAsyncSemaphoreGuard::MoveFrom(TAsyncSemaphoreGuard&& other) noexcept
 {
     Semaphore_ = other.Semaphore_;
     Slots_ = other.Slots_;
@@ -251,7 +258,7 @@ void TAsyncSemaphoreGuard::MoveFrom(TAsyncSemaphoreGuard&& other)
     other.Slots_ = 0;
 }
 
-void swap(TAsyncSemaphoreGuard& lhs, TAsyncSemaphoreGuard& rhs)
+void swap(TAsyncSemaphoreGuard& lhs, TAsyncSemaphoreGuard& rhs) noexcept
 {
     std::swap(lhs.Semaphore_, rhs.Semaphore_);
     std::swap(lhs.Slots_, rhs.Slots_);
@@ -291,7 +298,7 @@ TAsyncSemaphoreGuard TAsyncSemaphoreGuard::TransferSlots(i64 slotsToTransfer)
     return spawnedGuard;
 }
 
-void TAsyncSemaphoreGuard::Release()
+void TAsyncSemaphoreGuard::Release() noexcept
 {
     if (Semaphore_) {
         Semaphore_->Release(Slots_);

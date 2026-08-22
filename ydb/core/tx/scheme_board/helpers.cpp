@@ -72,7 +72,7 @@ TDomainId GetDomainId(const NKikimrScheme::TEvDescribeSchemeResult &record) {
 
     const auto& domainKey = pathDescription.GetDomainDescription().GetDomainKey();
 
-    return TDomainId(domainKey.GetSchemeShard(), domainKey.GetPathId());
+    return TDomainId::FromDomainKey(domainKey);
 }
 
 TSet<ui64> GetAbandonedSchemeShardIds(const NKikimrScheme::TEvDescribeSchemeResult &record) {
@@ -124,7 +124,7 @@ TSet<ui64> GetAbandonedSchemeShardIds(const NKikimrSchemeBoard::TEvNotify& recor
 TIntrusivePtr<TEventSerializedData> SerializeEvent(IEventBase* ev) {
     TAllocChunkSerializer serializer;
     Y_ABORT_UNLESS(ev->SerializeToArcadiaStream(&serializer));
-    return serializer.Release(ev->CreateSerializationInfo());
+    return serializer.Release(ev->CreateSerializationInfo(false));
 }
 
 void MultiSend(const TVector<const TActorId*>& recipients, const TActorId& sender, TAutoPtr<IEventBase> ev, ui32 flags, ui64 cookie) {
@@ -176,8 +176,32 @@ TString JsonFromDescribeSchemeResult(const TString& serialized) {
     return json;
 }
 
-bool ShouldIgnore(const TStateStorageInfo::TRingGroup& ringGroup) {
-    return ringGroup.WriteOnly || ringGroup.State == ERingGroupState::DISCONNECTED;
+TClusterState::TClusterState(const NKikimrSchemeBoard::TClusterState& proto)
+    : Generation(proto.GetGeneration())
+    , Guid(proto.GetGuid())
+{}
+
+TClusterState::TClusterState(const TStateStorageInfo* info)
+    : Generation(info ? info->ClusterStateGeneration : 0)
+    , Guid(info ? info->ClusterStateGuid : 0)
+{}
+
+void TClusterState::ToProto(NKikimrSchemeBoard::TClusterState& proto) const {
+    proto.SetGeneration(Generation);
+    proto.SetGuid(Guid);
+}
+
+TClusterState::operator bool() const {
+    return Generation || Guid;
+}
+
+void TClusterState::Out(IOutputStream& out) const {
+    out << std::format("{{Generation: {}, GUID: {}}}", Generation, Guid);
+}
+
+bool TClusterState::operator==(const TClusterState& other) const {
+    return Generation == other.Generation
+        && Guid == other.Guid;
 }
 
 } // NSchemeBoard

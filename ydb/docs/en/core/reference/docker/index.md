@@ -8,4 +8,5 @@ The {{ ydb-short-name }} Docker container reference documentation includes the f
 * [{#T}](prerequisites.md)
 * [{#T}](start.md)
 * [{#T}](configuration.md)
+* [{#T}](init-scripts.md)
 * [{#T}](cleanup.md)

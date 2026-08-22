@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <cstdlib>
 #include <cstddef>
 #include <cstring>
 #include <stlfwd>
@@ -28,6 +29,10 @@
     #include "hide_ptr.h"
 #endif
 
+extern "C" {
+    extern const int TStringUseCow;
+}
+
 template <class TCharType, class TCharTraits, class TAllocator>
 void ResizeUninitialized(std::basic_string<TCharType, TCharTraits, TAllocator>& s, size_t len) {
 #if defined(_YNDX_LIBCXX_ENABLE_STRING_RESIZE_UNINITIALIZED)
@@ -36,6 +41,42 @@ void ResizeUninitialized(std::basic_string<TCharType, TCharTraits, TAllocator>& 
     s.resize(len);
 #endif
 }
+
+template <typename TCharType, typename TTraits>
+struct TStringJoinHelper {
+    // Used to convert args like const char* into TStringBuf only once
+    template <typename T>
+    using TJoinParam = std::conditional_t<std::is_same_v<T, TCharType>, TCharType, TBasicStringBuf<TCharType, TTraits>>;
+
+    template <typename... R>
+    static size_t SumLength(const TBasicStringBuf<TCharType, TTraits> s1, const R&... r) noexcept {
+        return s1.size() + SumLength(r...);
+    }
+
+    template <typename... R>
+    static size_t SumLength(const TCharType /*s1*/, const R&... r) noexcept {
+        return 1 + SumLength(r...);
+    }
+
+    static constexpr size_t SumLength() noexcept {
+        return 0;
+    }
+
+    template <typename... R>
+    static void CopyAll(TCharType* p, const TBasicStringBuf<TCharType, TTraits> s, const R&... r) {
+        TTraits::copy(p, s.data(), s.size());
+        CopyAll(p + s.size(), r...);
+    }
+
+    template <typename... R, class TNextCharType, typename = std::enable_if_t<std::is_same<TCharType, TNextCharType>::value>>
+    static void CopyAll(TCharType* p, const TNextCharType s, const R&... r) {
+        p[0] = s;
+        CopyAll(p + 1, r...);
+    }
+
+    static void CopyAll(TCharType*) noexcept {
+    }
+};
 
 #define Y_NOEXCEPT
 
@@ -158,7 +199,8 @@ private:
 };
 
 template <typename TCharType, typename TTraits>
-class TBasicString: public TStringBase<TBasicString<TCharType, TTraits>, TCharType, TTraits> {
+class Y_EMPTY_BASES TBasicString: public TStringBase<TBasicString<TCharType, TTraits>, TCharType, TTraits>,
+                                  public TStdStringCompatibilityBase<TBasicString<TCharType, TTraits>, TCharType, TTraits> {
 public:
     // TODO: Move to private section
     using TBase = TStringBase<TBasicString, TCharType, TTraits>;
@@ -411,6 +453,16 @@ public:
         reserve(rt.Capacity);
     }
 
+#if 0
+    inline ~TBasicString() {
+        if (!TStringUseCow) {
+            if (S_.RefCount() > 1) {
+                abort();
+            }
+        }
+    }
+#endif
+
     inline TBasicString(const TBasicString& s)
 #ifdef TSTRING_IS_STD_STRING
         : Storage_(s.Storage_)
@@ -418,6 +470,11 @@ public:
         : S_(s.S_)
 #endif
     {
+#ifndef TSTRING_IS_STD_STRING
+        if (!TStringUseCow) {
+            Detach();
+        }
+#endif
     }
 
     inline TBasicString(TBasicString&& s) noexcept
@@ -555,44 +612,12 @@ public:
     }
 
 private:
-    template <typename T>
-    using TJoinParam = std::conditional_t<std::is_same_v<T, TCharType>, TCharType, TBasicStringBuf<TCharType, TTraits>>;
-
-    template <typename... R>
-    static size_t SumLength(const TBasicStringBuf<TCharType, TTraits> s1, const R&... r) noexcept {
-        return s1.size() + SumLength(r...);
-    }
-
-    template <typename... R>
-    static size_t SumLength(const TCharType /*s1*/, const R&... r) noexcept {
-        return 1 + SumLength(r...);
-    }
-
-    static constexpr size_t SumLength() noexcept {
-        return 0;
-    }
-
-    template <typename... R>
-    static void CopyAll(TCharType* p, const TBasicStringBuf<TCharType, TTraits> s, const R&... r) {
-        TTraits::copy(p, s.data(), s.size());
-        CopyAll(p + s.size(), r...);
-    }
-
-    template <typename... R, class TNextCharType, typename = std::enable_if_t<std::is_same<TCharType, TNextCharType>::value>>
-    static void CopyAll(TCharType* p, const TNextCharType s, const R&... r) {
-        p[0] = s;
-        CopyAll(p + 1, r...);
-    }
-
-    static void CopyAll(TCharType*) noexcept {
-    }
+    using TJoinHelper = TStringJoinHelper<TCharType, TTraits>;
 
     template <typename... R>
     static inline TBasicString JoinImpl(const R&... r) {
-        TBasicString s{TUninitialized{SumLength(r...)}};
-
-        TBasicString::CopyAll((TCharType*)s.data(), r...);
-
+        TBasicString s{TUninitialized{TJoinHelper::SumLength(r...)}};
+        TJoinHelper::CopyAll((TCharType*)s.data(), r...);
         return s;
     }
 
@@ -613,7 +638,7 @@ public:
 
     template <typename... R>
     static inline TBasicString Join(const R&... r) {
-        return JoinImpl(TJoinParam<R>(r)...);
+        return JoinImpl(typename TJoinHelper::template TJoinParam<R>(r)...);
     }
 
     // ~~~ Assignment ~~~ : FAMILY0(TBasicString&, assign);
@@ -882,10 +907,12 @@ public:
         return this->ConstRef();
     }
 
-    template <typename T, typename = std::enable_if_t<std::is_same_v<T, TStringType>>>
-        operator T&() & Y_LIFETIME_BOUND {
-        return this->MutRef();
-    }
+    /*
+     * We have operator casting TString to `const std::string&` but we explicitly don't support
+     * casting TString to `std::string&` since such casting requires detaching TString and therefore
+     * modifies TString object. Sometimes compiler might call `operator std::string&`
+     * implicitly and it might lead to problems. Check IGNIETFERRO-2155 for details.
+     */
 
     /*
      * Following overloads of "operator+" aim to choose the cheapest implementation depending on
@@ -1339,3 +1366,9 @@ template <class TCharType, class TTraits>
 void ResizeUninitialized(TBasicString<TCharType, TTraits>& s, size_t len) {
     s.ReserveAndResize(len);
 }
+
+#ifdef __cpp_lib_format
+template <typename TCharType, typename TTraits>
+struct std::formatter<TBasicString<TCharType, TTraits>, TCharType>
+    : std::formatter<std::basic_string_view<TCharType>, TCharType> {};
+#endif

@@ -1,6 +1,8 @@
 #pragma once
 #include "portion_info.h"
 
+#include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
+
 namespace NKikimr::NOlap {
 
 class TWrittenPortionInfoConstructor;
@@ -9,7 +11,7 @@ class IDbWrapper;
 class TWrittenPortionInfo: public TPortionInfo {
 private:
     using TBase = TPortionInfo;
-    std::optional<TSnapshot> CommitSnapshot;
+    TThreadSafeOptional<TSnapshot> CommitSnapshot;
     std::optional<TInsertWriteId> InsertWriteId;
     friend class TWrittenPortionInfoConstructor;
 
@@ -27,17 +29,13 @@ private:
 
     virtual TString DoDebugString(const bool /*withDetails*/) const override {
         TStringBuilder sb;
-        if (CommitSnapshot) {
-            sb << "cs:" << CommitSnapshot->DebugString() << ";";
+        if (CommitSnapshot.Has()) {
+            sb << "cs:" << CommitSnapshot.Get().DebugString() << ";";
         }
         if (InsertWriteId) {
             sb << "wi:" << (ui64)*InsertWriteId << ";";
         }
         return sb;
-    }
-
-    virtual bool IsCommitted() const override {
-        return !!CommitSnapshot;
     }
 
 public:
@@ -46,54 +44,79 @@ public:
     void CommitToDatabase(IDbWrapper& wrapper);
 
     virtual NSplitter::TEntityGroups GetEntityGroupsByStorageId(
-        const TString& /*specialTier*/, const IStoragesManager& storages, const TIndexInfo& /*indexInfo*/) const override {
-        NSplitter::TEntityGroups groups(storages.GetDefaultOperator()->GetBlobSplitSettings(), IStoragesManager::DefaultStorageId);
+        const TString& specialTier, const IStoragesManager& storages, const TIndexInfo& /*indexInfo*/) const override {
+        const TString& storageId = [&]() {
+            if (specialTier && specialTier != IStoragesManager::DefaultStorageId) {
+                return specialTier;
+            }
+            return IStoragesManager::DefaultStorageId;
+        }();
+        NSplitter::TEntityGroups groups(storages.GetOperatorVerified(storageId)->GetBlobSplitSettings(), storageId);
         return groups;
     }
 
     virtual const TString& GetColumnStorageId(const ui32 /*columnId*/, const TIndexInfo& /*indexInfo*/) const override {
-        return { NBlobOperations::TGlobal::DefaultStorageId };
+        if (GetMeta().GetTierName()) {
+            return GetMeta().GetTierName();
+        }
+        return NBlobOperations::TGlobal::DefaultStorageId;
     }
 
-    virtual const TString& GetEntityStorageId(const ui32 /*columnId*/, const TIndexInfo& /*indexInfo*/) const override {
-        return { NBlobOperations::TGlobal::DefaultStorageId };
+    virtual const TString& GetEntityStorageId(const ui32 columnId, const TIndexInfo& indexInfo) const override {
+        if (indexInfo.GetIndexOptional(columnId)) {
+            return GetIndexStorageId(columnId, indexInfo);
+        }
+        return GetColumnStorageId(columnId, indexInfo);
     }
 
-    virtual const TString& GetIndexStorageId(const ui32 /*indexId*/, const TIndexInfo& /*indexInfo*/) const override {
-        return { NBlobOperations::TGlobal::DefaultStorageId };
+    virtual const TString& GetIndexStorageId(const ui32 indexId, const TIndexInfo& indexInfo) const override {
+        if (indexInfo.GetIndexVerified(indexId)->GetInheritPortionStorage()) {
+            return GetColumnStorageId(0, indexInfo);
+        } else {
+            return IStoragesManager::DefaultStorageId;
+        }
     }
 
     virtual std::unique_ptr<TPortionInfoConstructor> BuildConstructor(const bool withMetadata) const override;
 
     TWrittenPortionInfo(TPortionMeta&& meta)
-        : TBase(std::move(meta)) {
-//        AFL_VERIFY(!GetMeta().GetTierName());
+        : TBase(std::move(meta))
+    {
+        //        AFL_VERIFY(!GetMeta().GetTierName());
     }
 
     bool HasCommitSnapshot() const {
-        return !!CommitSnapshot;
+        return CommitSnapshot.Has();
     }
+
+    virtual bool IsCommitted() const override {
+        return CommitSnapshot.Has();
+    }
+
     const TSnapshot& GetCommitSnapshotVerified() const {
-        AFL_VERIFY(!!CommitSnapshot);
-        return *CommitSnapshot;
+        AFL_VERIFY(HasCommitSnapshot());
+        return CommitSnapshot.Get();
     }
-    const std::optional<TSnapshot>& GetCommitSnapshotOptional() const {
-        return CommitSnapshot;
+
+    std::optional<TSnapshot> GetCommitSnapshotOptional() const {
+        return CommitSnapshot.GetOptional();
     }
+
     TInsertWriteId GetInsertWriteId() const {
         AFL_VERIFY(!!InsertWriteId);
         return *InsertWriteId;
     }
+
     void SetCommitSnapshot(const TSnapshot& value) {
         AFL_VERIFY(!!InsertWriteId);
-        AFL_VERIFY(!CommitSnapshot);
+        AFL_VERIFY(!HasCommitSnapshot());
         AFL_VERIFY(value.Valid());
-        CommitSnapshot = value;
+        CommitSnapshot.Set(value);
     }
 
     virtual const TSnapshot& RecordSnapshotMin(const std::optional<TSnapshot>& snapshotDefault = std::nullopt) const override {
-        if (CommitSnapshot) {
-            return *CommitSnapshot;
+        if (CommitSnapshot.Has()) {
+            return CommitSnapshot.Get();
         } else {
             AFL_VERIFY(snapshotDefault);
             return *snapshotDefault;
@@ -101,13 +124,15 @@ public:
     }
 
     virtual const TSnapshot& RecordSnapshotMax(const std::optional<TSnapshot>& snapshotDefault = std::nullopt) const override {
-        if (CommitSnapshot) {
-            return *CommitSnapshot;
+        if (CommitSnapshot.Has()) {
+            return CommitSnapshot.Get();
         } else {
             AFL_VERIFY(snapshotDefault);
             return *snapshotDefault;
         }
     }
+
+    bool MayGetForScanAt(const TSnapshot& snapshot) const override;
 };
 
 /// Ensure that TWrittenPortionInfo can be effectively assigned by moving the value.

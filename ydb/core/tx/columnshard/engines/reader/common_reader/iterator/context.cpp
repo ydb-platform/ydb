@@ -1,16 +1,21 @@
 #include "context.h"
 
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/common/limits.h>
+#include <ydb/core/tx/columnshard/engines/portions/written.h>
+#include <ydb/core/tx/columnshard/engines/reader/common/scan_memory_limiter.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/constructor/read_metadata.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
-#include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_SCAN
 
 namespace NKikimr::NOlap::NReader::NCommon {
 
 TSpecialReadContext::TSpecialReadContext(const std::shared_ptr<TReadContext>& commonContext)
-    : CommonContext(commonContext) {
+    : CommonContext(commonContext)
+    , GroupedMemoryLimiterOperator(commonContext->GetReadMetadataPtrVerifiedAs<TReadMetadata>()->GetGroupedMemoryLimiterOperator())
+{
     ReadMetadata = CommonContext->GetReadMetadataPtrVerifiedAs<TReadMetadata>();
-    Y_ABORT_UNLESS(ReadMetadata->SelectInfo);
 
     double kffAccessors = 0.01;
     double kffFilter = 0.45;
@@ -31,18 +36,22 @@ TSpecialReadContext::TSpecialReadContext(const std::shared_ptr<TReadContext>& co
         kffAccessors = 0.01;
     }
 
+    auto scanMemoryLimit = TGlobalLimits::ScanMemoryLimit;
+
+    if (HasAppData()) {
+        if (AppData()->ColumnShardConfig.HasScanMemoryLimit()) {
+            scanMemoryLimit = AppData()->ColumnShardConfig.GetScanMemoryLimit();
+        }
+    }
+
     std::vector<std::shared_ptr<NGroupedMemoryManager::TStageFeatures>> stages = {
-        NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildStageFeatures(
-            stagePrefix + "::ACCESSORS", kffAccessors * TGlobalLimits::ScanMemoryLimit),
-        NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildStageFeatures(
-            stagePrefix + "::FILTER", kffFilter * TGlobalLimits::ScanMemoryLimit),
-        NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildStageFeatures(
-            stagePrefix + "::FETCHING", kffFetching * TGlobalLimits::ScanMemoryLimit),
-        NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildStageFeatures(stagePrefix + "::MERGE", kffMerge * TGlobalLimits::ScanMemoryLimit)
+        BuildScanStageFeatures(GroupedMemoryLimiterOperator, stagePrefix + "::ACCESSORS", kffAccessors * scanMemoryLimit),
+        BuildScanStageFeatures(GroupedMemoryLimiterOperator, stagePrefix + "::FILTER", kffFilter * scanMemoryLimit),
+        BuildScanStageFeatures(GroupedMemoryLimiterOperator, stagePrefix + "::FETCHING", kffFetching * scanMemoryLimit),
+        BuildScanStageFeatures(GroupedMemoryLimiterOperator, stagePrefix + "::MERGE", kffMerge * scanMemoryLimit)
     };
-    ProcessMemoryGuard = NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildProcessGuard(ReadMetadata->GetTxId(), stages);
-    ProcessScopeGuard =
-        NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildScopeGuard(ReadMetadata->GetTxId(), GetCommonContext()->GetScanId());
+    ProcessMemoryGuard = BuildScanProcessGuard(GroupedMemoryLimiterOperator, ReadMetadata->GetTxId(), stages);
+    ProcessScopeGuard = ProcessMemoryGuard->BuildScopeGuard(GetCommonContext()->GetScanId());
 
     auto readSchema = ReadMetadata->GetResultSchema();
     SpecColumns = std::make_shared<TColumnsSet>(TIndexInfo::GetSnapshotColumnIdsSet(), readSchema);
@@ -78,10 +87,12 @@ TSpecialReadContext::TSpecialReadContext(const std::shared_ptr<TReadContext>& co
         FFColumns = std::make_shared<TColumnsSet>(ReadMetadata->GetProcessingColumnIds(), readSchema);
         if (SpecColumns->Contains(*FFColumns) && !EFColumns->IsEmpty()) {
             FFColumns = std::make_shared<TColumnsSet>(*EFColumns + *SpecColumns);
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("ff_modified", FFColumns->DebugString());
+            YDB_LOG_DEBUG("",
+                {"ffModified", FFColumns->DebugString()});
         } else {
-//            AFL_VERIFY(!FFColumns->Contains(*SpecColumns))("info", FFColumns->DebugString());
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("ff_first", FFColumns->DebugString());
+            //            AFL_VERIFY(!FFColumns->Contains(*SpecColumns))("info", FFColumns->DebugString());
+            YDB_LOG_DEBUG("",
+                {"ffFirst", FFColumns->DebugString()});
         }
     } else {
         FFColumns = EFColumns;
@@ -96,7 +107,8 @@ TSpecialReadContext::TSpecialReadContext(const std::shared_ptr<TReadContext>& co
     PKColumns = std::make_shared<TColumnsSet>(ReadMetadata->GetPKColumnIds(), readSchema);
     MergeColumns = std::make_shared<TColumnsSet>(*PKColumns + *SpecColumns);
 
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("columns_context_info", DebugString());
+    YDB_LOG_DEBUG("",
+        {"columnsContextInfo", DebugString()});
 }
 
 TString TSpecialReadContext::DebugString() const {
@@ -107,6 +119,53 @@ TString TSpecialReadContext::DebugString() const {
        << "ff=" << FFColumns->DebugString() << ";"
        << "program_input=" << ProgramInputColumns->DebugString() << ";";
     return sb;
+}
+
+/*
+Returns the portion state at the moment of the scan planning on the column shard.
+
+Scan reads portions in separate actors from the column shard, so the portions state may
+be changed during the scan. To avoid anomalies caused by the fact that scan may see different
+portion states, we need a way to get a stable portion state during the whole scan. Here it is.
+*/
+TPortionStateAtScanStart TSpecialReadContext::GetPortionStateAtScanStart(const TPortionInfo& portionInfo) const {
+    bool committed = false;
+    bool conflicting = false;
+    TSnapshot maxRecordSnapshot = TSnapshot::Zero();
+    if (portionInfo.GetPortionType() == EPortionType::Compacted) {
+        // compacted portions are stable and not conflicting,
+        // they have max snapshot less or equal to the request snapshot
+        AFL_VERIFY(portionInfo.RecordSnapshotMax() <= GetReadMetadata()->GetRequestSnapshot())("portion_info", portionInfo.DebugString(true))(
+                                                        "request_snapshot", GetReadMetadata()->GetRequestSnapshot().DebugString());
+        committed = true;
+        conflicting = false;
+        maxRecordSnapshot = portionInfo.RecordSnapshotMax();
+    } else {
+        const auto& wPortionInfo = static_cast<const TWrittenPortionInfo&>(portionInfo);
+        auto maybeConflicting = GetReadMetadata()->MayWriteBeConflicting(wPortionInfo.GetInsertWriteId());
+        if (maybeConflicting) {
+            // uncommitted portions by other txs
+            committed = false;
+            conflicting = true;
+        } else if (!wPortionInfo.IsCommitted()) {
+            // uncommitted portions by the current tx
+            committed = false;
+            conflicting = false;
+        } else if (wPortionInfo.RecordSnapshotMax() > GetReadMetadata()->GetRequestSnapshot()) {
+            // portions that were committed at the moment of the scan start
+            // but have snapshot greater than the request snapshot, so the current tx
+            // does not see them and may conflict with them
+            committed = true;
+            conflicting = true;
+            maxRecordSnapshot = wPortionInfo.RecordSnapshotMax();
+        } else {
+            // committed, not yet compacted portions, visible to the current tx
+            committed = true;
+            conflicting = false;
+            maxRecordSnapshot = wPortionInfo.RecordSnapshotMax();
+        }
+    }
+    return TPortionStateAtScanStart{ .Committed = committed, .Conflicting = conflicting, .MaxRecordSnapshot = maxRecordSnapshot };
 }
 
 }   // namespace NKikimr::NOlap::NReader::NCommon

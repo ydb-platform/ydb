@@ -1,4 +1,78 @@
-{%- include "[generator]/common_vars.jinja" -%}
+{%- set all_targets = [] -%}
+{%- if target is defined -%}
+{%-     set all_targets = all_targets + [target] -%}
+{%- endif -%}
+{%- if extra_targets|length -%}
+{%-     set all_targets = all_targets + extra_targets -%}
+{%- endif -%}
+
+{%- if not output_root -%}
+{%-     set output_root = arcadia_root -%}
+{%- endif -%}
+
+{#- Kotlin -#}
+{%- set with_kotlin = all_targets|selectattr('with_kotlin', 'eq', true)|length -%}
+{%- if with_kotlin -%}
+{%-     set kotlin_version = all_targets|selectattr('kotlin_version')|map(attribute='kotlin_version')|first -%}
+{%-     set with_kotlinc_plugin_allopen = all_targets|selectattr('with_kotlinc_plugin_allopen')|map(attribute='with_kotlinc_plugin_allopen')|sum -%}
+{%-     set with_kotlinc_plugin_noarg = all_targets|selectattr('with_kotlinc_plugin_noarg')|map(attribute='with_kotlinc_plugin_noarg')|sum -%}
+{%-     set with_kotlinc_plugin_serialization = all_targets|selectattr('with_kotlinc_plugin_serialization')|map(attribute='with_kotlinc_plugin_serialization')|sum -%}
+{%-     set with_kotlinc_plugin_lombok = all_targets|selectattr('with_kotlinc_plugin_lombok')|map(attribute='with_kotlinc_plugin_lombok')|sum -%}
+{#-     KAPT -#}
+{%-     set with_kapt = target.with_kapt and target.kapt.kapts|length -%}
+{%-     set with_test_kapt = extra_targets|selectattr('with_kapt', 'eq', true)|selectattr('kapt')|map(attribute='kapt')|selectattr('kapts')|map(attribute='kapts')|sum|length -%}
+{#-     Options kapt.kotlin.generated autocreated by kapt plugin, skip it -#}
+{%-     set all_kapt_ap_opts = all_targets|selectattr('kapt')|map(attribute='kapt')|selectattr('ap_opts')|map(attribute='ap_opts')|sum|reject('startsWith', 'kapt.kotlin.generated=') -%}
+{%- endif -%}
+
+{#- ErrorProne -#}
+{%- if disable_errorprone -%}
+{%-     set with_errorprone = false -%}
+{%-     set with_test_errorprones = [] -%}
+{%- else -%}
+{%-     set with_errorprone = target.use_errorprone -%}
+{%-     set with_test_errorprones = extra_targets|selectattr('use_errorprone')|map(attribute='use_errorprone') -%}
+{%-     if with_test_errorprones|length -%}
+{%-         set with_test_errorprones = with_test_errorprones|unique -%}
+{%-     else -%}
+{%-         set with_test_errorprones = [] -%}
+{%-     endif -%}
+{%- endif -%}
+
+{#- Lombok -#}
+{%- set LOMBOK_PATH = 'contrib/java/org/projectlombok/lombok' -%}
+{%- set with_lombok_plugin = not(disable_lombok_plugin) and all_targets|selectattr('use_annotation_processors')|map(attribute='use_annotation_processors')|sum|map(attribute='jar')|select('startsWith', LOMBOK_PATH)|length -%}
+
+{#- JNI -#}
+{%- set jnis = all_targets|selectattr('consumer')|map(attribute='consumer')|sum|selectattr('type', 'eq', 'dll')|selectattr('jar')|map(attribute='jar')|unique -%}
+
+{#- Flags -#}
+{%- set hasResources = all_targets|selectattr('resource_sets')|map(attribute='resource_sets')|sum|length -%}
+{%- if auto_resource_sets and not hasResources -%}
+{%-    set all_source_dirs = all_targets|selectattr('source_sets')|map(attribute='source_sets')|sum|selectattr('dir')|map(attribute='dir') -%}
+{%-    if 'resources' in all_source_dirs|join('|') -%}
+{%-        set hasResources = true -%}
+{%-    endif -%}
+{%- endif -%}
 
 {%- set mainClass = target.app_main_class -%}
-{%- set has_junit5_test = extra_targets|selectattr('junit5_test') -%}
+{%- if not(extra_targets is defined) -%}
+{%-    set extra_targets = [] -%}
+{%- endif -%}
+{%- if named_tests -%}
+{%-     set test_fixtures = extra_targets|rejectattr('extra_depends')|selectattr('extra_usages') -%}
+{%-     set test_generals = extra_targets|rejectattr('extra_depends')|rejectattr('extra_usages') -%}
+{%-     set test_integrations = extra_targets|selectattr('extra_depends') -%}
+{%-     set ordered_extra_targets = test_fixtures + test_generals + test_integrations -%}
+{%-     set test_extra_targets = extra_targets|rejectattr('test_reldir') + extra_targets|selectattr('test_reldir', 'in', [NS_TEST, NS_SRC_TEST]) -%}
+{%- endif -%}
+{%- if proto_template -%}
+{%-     set prepareProtosTask = target.proto_files|length or target.runs|length or target.custom_runs|length -%}
+{%-     set libraries = target.consumer|selectattr('type', 'eq', 'library') -%}
+{%-     set extractLibrariesProtosTask = libraries|length -%}
+{%- endif -%}
+
+{%- set MAIN_VARPREFIX = "codegen" -%}
+{%- set CODEGENS_DIRNAME = "gradle.codegens" -%}
+
+{%- include "[generator]/jdk.jinja" -%}

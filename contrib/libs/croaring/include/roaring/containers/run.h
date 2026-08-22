@@ -1,6 +1,14 @@
 /*
  * run.h
  *
+ * Run containers store a set of 16-bit integers as a sorted array of
+ * non-overlapping runs. Each run is represented by a starting value and a
+ * length, encoding one contiguous interval of present integers.
+ *
+ * This representation is effective when the data contains long consecutive
+ * ranges because it compresses many adjacent values into a small number of
+ * run records while still supporting search and set operations over the
+ * interval list.
  */
 
 #ifndef INCLUDE_CONTAINERS_RUN_H_
@@ -480,7 +488,7 @@ int32_t run_container_read(int32_t cardinality, run_container_t *container,
  * Return the serialized size in bytes of a container (see run_container_write).
  * This is meant to be compatible with the Java and Go versions of Roaring.
  */
-ALLOW_UNALIGNED
+CROARING_ALLOW_UNALIGNED
 static inline int32_t run_container_size_in_bytes(
     const run_container_t *container) {
     return run_container_serialized_size_in_bytes(container->n_runs);
@@ -489,7 +497,7 @@ static inline int32_t run_container_size_in_bytes(
 /**
  * Return true if the two containers have the same content.
  */
-ALLOW_UNALIGNED
+CROARING_ALLOW_UNALIGNED
 static inline bool run_container_equals(const run_container_t *container1,
                                         const run_container_t *container2) {
     if (container1->n_runs != container2->n_runs) {

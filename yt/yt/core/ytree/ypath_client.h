@@ -4,8 +4,6 @@
 #include "ypath_service.h"
 #include "attribute_filter.h"
 
-#include <yt/yt/core/misc/property.h>
-
 #include <yt/yt/core/rpc/client.h>
 
 #include <yt/yt_proto/yt/core/ytree/proto/ypath.pb.h>
@@ -13,6 +11,8 @@
 #include <library/cpp/yt/memory/ref.h>
 
 #include <library/cpp/yt/logging/logger.h>
+
+#include <library/cpp/yt/misc/property.h>
 
 namespace NYT::NYTree {
 
@@ -63,6 +63,8 @@ public:
 
     bool IsAttachmentCompressionEnabled() const override;
 
+    bool HasAttachments() const override;
+
     bool IsStreamingEnabled() const override;
 
     const NRpc::TStreamingParameters& ClientAttachmentsStreamingParameters() const override;
@@ -70,6 +72,12 @@ public:
 
     const NRpc::TStreamingParameters& ServerAttachmentsStreamingParameters() const override;
     NRpc::TStreamingParameters& ServerAttachmentsStreamingParameters() override;
+
+    const NRpc::TDirectPlacementTransferParameters& RequestAttachmentsDptParameters() const override;
+    NRpc::TDirectPlacementTransferParameters& RequestAttachmentsDptParameters() override;
+
+    const NRpc::TDirectPlacementTransferParameters& ResponseAttachmentsDptParameters() const override;
+    NRpc::TDirectPlacementTransferParameters& ResponseAttachmentsDptParameters() override;
 
     NConcurrency::IAsyncZeroCopyOutputStreamPtr GetRequestAttachmentsStream() const override;
     NConcurrency::IAsyncZeroCopyInputStreamPtr GetResponseAttachmentsStream() const override;
@@ -86,6 +94,8 @@ protected:
         std::string method,
         NYPath::TYPath path,
         bool mutating);
+
+    TYPathRequest(const TYPathRequest& other);
 
     NRpc::NProto::TRequestHeader Header_;
 
@@ -120,10 +130,20 @@ public:
             mutating)
     { }
 
+    TTypedYPathRequest(const TTypedYPathRequest& other)
+        : TYPathRequest(other)
+        , TRequestMessage(other)
+    { }
+
+    NRpc::IClientRequestPtr Clone() const override
+    {
+        return New<TTypedYPathRequest>(*this);
+    }
+
 protected:
     TSharedRef SerializeBody() const override
     {
-        // COPMAT(danilalexeev): legacy RPC codecs
+        // COMPAT(danilalexeev): legacy RPC codecs
         if (Header_.has_request_codec()) {
             YT_VERIFY(Header_.request_codec() == NYT::ToProto(NCompression::ECodec::None));
             return SerializeProtoToRefWithCompression(*this);
@@ -203,8 +223,8 @@ protected:
 // TODO(gritukan): It's not easy to find a proper return type for these functions
 // that is suitable both for vanilla and patched protobufs. In an ideal world,
 // it would be TYPathBuf, but for now it breaks the advantages for CoW of the
-// TString. Rethink it if and when YT will try to use std::string or non-CoW
-// TString everywhere.
+// std::string. Rethink it if and when YT will try to use std::string or non-CoW
+// std::string everywhere.
 using TYPathMaybeRef = std::conditional_t<IsArcadiaProtobuf, const TYPath&, TYPath>;
 
 TYPathMaybeRef GetRequestTargetYPath(const NRpc::NProto::TRequestHeader& header);
@@ -214,6 +234,7 @@ const google::protobuf::RepeatedPtrField<TProtobufString>& GetRequestAdditionalP
 const google::protobuf::RepeatedPtrField<TProtobufString>& GetOriginalRequestAdditionalPaths(const NRpc::NProto::TRequestHeader& header);
 
 void SetRequestTargetYPath(NRpc::NProto::TRequestHeader* header, TYPathBuf path);
+bool MaybeRewriteRequestTargetYPath(NRpc::NProto::TRequestHeader* header, TYPathBuf path);
 
 bool IsRequestMutating(const NRpc::NProto::TRequestHeader& header);
 
@@ -258,7 +279,7 @@ SyncExecuteVerb(
     NLogging::ELogLevel logLevel = NLogging::ELogLevel::Debug);
 
 //! Executes |GetKey| verb assuming #service handles requests synchronously. Throws if an error has occurred.
-TString SyncYPathGetKey(
+std::string SyncYPathGetKey(
     const IYPathServicePtr& service,
     const TYPath& path);
 
@@ -315,13 +336,13 @@ void SyncYPathRemove(
     bool force = false);
 
 //! Executes |List| verb assuming #service handles requests synchronously. Throws if an error has occurred.
-std::vector<TString> SyncYPathList(
+std::vector<std::string> SyncYPathList(
     const IYPathServicePtr& service,
     const TYPath& path,
     std::optional<i64> limit = std::nullopt);
 
 //! Asynchronously executes |List| verb.
-TFuture<std::vector<TString>> AsyncYPathList(
+TFuture<std::vector<std::string>> AsyncYPathList(
     const IYPathServicePtr& service,
     const TYPath& path,
     std::optional<i64> limit = std::nullopt);
@@ -332,7 +353,7 @@ TFuture<std::vector<TString>> AsyncYPathList(
  *  nested maps |a| and |b| get created. Note that the final key (i.e. |c|)
  *  is not forced (since we have no idea of its type anyway).
  */
-void ForceYPath(const INodePtr& root, const TYPath& path);
+void ForceYPath(const INodePtr& root, TYPathBuf path);
 
 //! Constructs an ephemeral deep copy of #node.
 INodePtr CloneNode(const INodePtr& node);
@@ -356,8 +377,8 @@ bool AreNodesEqual(
 
 struct TNodeWalkOptions
 {
-    std::function<INodePtr(const TString&)> MissingAttributeHandler;
-    std::function<INodePtr(const IMapNodePtr&, const TString&)> MissingChildKeyHandler;
+    std::function<INodePtr(const std::string&)> MissingAttributeHandler;
+    std::function<INodePtr(const IMapNodePtr&, const std::string&)> MissingChildKeyHandler;
     std::function<INodePtr(const IListNodePtr&, int)> MissingChildIndexHandler;
     std::function<INodePtr(const INodePtr&)> NodeCannotHaveChildrenHandler;
 };
@@ -369,43 +390,35 @@ extern TNodeWalkOptions FindNodeByYPathNoThrowOptions;
 //! Generic function walking down the node according to given ypath.
 INodePtr WalkNodeByYPath(
     const INodePtr& root,
-    const TYPath& path,
+    TYPathBuf path,
     const TNodeWalkOptions& options);
 
 /*!
  *  Throws exception if the specified node does not exist.
  */
-INodePtr GetNodeByYPath(
-    const INodePtr& root,
-    const TYPath& path);
+INodePtr GetNodeByYPath(const INodePtr& root, TYPathBuf path);
 
 /*!
  *  Does not throw exception if the specified node does not exist, but still throws on attempt of
  *  moving to the child of a non-composite node.
  */
-INodePtr FindNodeByYPath(
-    const INodePtr& root,
-    const TYPath& path);
+INodePtr FindNodeByYPath(const INodePtr& root, TYPathBuf path);
 
 /*!
  *  A version of #FindNodeByYPath that never throws.
  */
-INodePtr FindNodeByYPathNoThrow(
-    const INodePtr& root,
-    const TYPath& path);
+INodePtr FindNodeByYPathNoThrow(const INodePtr& root, TYPathBuf path);
 
 void SetNodeByYPath(
     const INodePtr& root,
-    const TYPath& path,
+    TYPathBuf path,
     const INodePtr& value,
     bool force = false);
 
 /*!
  *  Returns |false| if the specified node does not exists.
  */
-bool RemoveNodeByYPath(
-    const INodePtr& root,
-    const TYPath& path);
+bool RemoveNodeByYPath(const INodePtr& root, TYPathBuf path);
 
 ////////////////////////////////////////////////////////////////////////////////
 

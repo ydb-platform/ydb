@@ -1,24 +1,23 @@
 #pragma once
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/grpc_services/local_grpc/local_grpc.h>
-
-#include <ydb/core/base/appdata.h>
 
 #include <ydb/library/actors/wilson/wilson_span.h>
 #include <ydb/library/wilson_ids/wilson.h>
 
 #include <library/cpp/threading/future/future.h>
 
-namespace NKikimr {
+namespace NKikimr::NRpcService {
 
-namespace NRpcService {
+Ydb::StatusIds::StatusCode GrpcStatusToYdbStatus(grpc::StatusCode status);
 
 template<typename TResponse>
 class TPromiseWrapper {
 public:
-    TPromiseWrapper(NThreading::TPromise<TResponse> promise)
-        : Promise(promise)
+    explicit TPromiseWrapper(NThreading::TPromise<TResponse> promise)
+        : Promise(std::move(promise))
     {}
 
     void operator()(const TResponse& resp) {
@@ -65,9 +64,9 @@ protected:
     using TBase = TLocalRpcCtxImplData<TRpc, TCbWrapper>;
 
     template<typename TCb>
-    TLocalRpcCtxImpl(TCb&& cb, NWilson::TTraceId traceId = {})
+    explicit TLocalRpcCtxImpl(TCb&& cb, NWilson::TTraceId wilsonTraceId = {})
         : TBase(std::forward<TCb>(cb))
-        , Span(TWilsonGrpc::RequestProxy, std::move(traceId), "LocalRpc")
+        , Span(TWilsonGrpc::RequestProxy, std::move(wilsonTraceId), "LocalRpc")
     {}
 
 public:
@@ -130,37 +129,55 @@ public:
     using TResp = typename TRpc::TResponse;
     using EStreamCtrl = NYdbGrpc::IRequestContextBase::EStreamCtrl;
 
+    struct TSettings {
+        TString DatabaseName;
+        TMaybe<TString> Token;
+        TMaybe<TString> RequestType;
+        bool InternalCall = false;
+        NWilson::TTraceId WilsonTraceId;
+        TString PeerName = "localhost";
+        TString TraceId;
+        TInstant Deadline = TInstant::Max();
+        std::shared_ptr<std::atomic_bool> ClientLostStatus;
+    };
+
     template<typename TProto, typename TCb>
-    TLocalRpcCtx(TProto&& req, TCb&& cb,
-            const TString& databaseName,
-            const TMaybe<TString>& token,
-            const TMaybe<TString>& requestType,
-            bool internalCall,
-            NWilson::TTraceId traceId = {})
-        : TBase(std::forward<TCb>(cb), std::move(traceId))
+    TLocalRpcCtx(TProto&& req, TCb&& cb, TSettings settings)
+        : TBase(std::forward<TCb>(cb), std::move(settings.WilsonTraceId))
+        , Request(std::forward<TProto>(req))
+        , DatabaseName(std::move(settings.DatabaseName))
+        , RequestType(std::move(settings.RequestType))
+        , InternalCall(settings.InternalCall)
+        , PeerName(std::move(settings.PeerName))
+        , TraceId(std::move(settings.TraceId))
+        , Deadline(settings.Deadline)
+        , ClientLostStatus(std::move(settings.ClientLostStatus))
+    {
+        SetupTokenAndSpan(settings.Token);
+    }
+
+    template<typename TProto, typename TCb>
+    TLocalRpcCtx(TProto&& req, TCb&& cb, const TString& databaseName, const TMaybe<TString>& token, const TMaybe<TString>& requestType,
+        bool internalCall, NWilson::TTraceId wilsonTraceId = {})
+        : TBase(std::forward<TCb>(cb), std::move(wilsonTraceId))
         , Request(std::forward<TProto>(req))
         , DatabaseName(databaseName)
         , RequestType(requestType)
         , InternalCall(internalCall)
     {
-        if (token && !token->empty()) {
-            InternalToken = new NACLib::TUserToken(*token);
-        }
-
-        if (DatabaseName) {
-            this->Span.Attribute("database", DatabaseName);
-        }
-        this->Span.Attribute("request_type", GetRequestName());
+        SetupTokenAndSpan(token);
     }
 
-    bool HasClientCapability(const TString&) const override {
+    bool HasClientCapability(const TString& capability) const override {
+        Y_UNUSED(capability);
         return false;
     }
 
     const TMaybe<TString> GetDatabaseName() const override {
-        if (DatabaseName.empty())
-            return Nothing();
-        return DatabaseName;
+        if (DatabaseName) {
+            return DatabaseName;
+        }
+        return Nothing();
     }
 
     const TIntrusiveConstPtr<NACLib::TUserToken>& GetInternalToken() const override {
@@ -171,12 +188,21 @@ public:
         if (InternalToken) {
             return InternalToken->GetSerializedToken();
         }
-        return EmptySerializedTokenMessage_;
+        return EmptySerializedTokenMessage;
     }
 
     const TMaybe<TString> GetPeerMetaValues(const TString& key) const override {
         if (key == NYdb::YDB_DATABASE_HEADER) {
             return GetDatabaseName();
+        }
+        if (key == NYdb::YDB_AUTH_TICKET_HEADER) {
+            return GetSerializedToken();
+        }
+        if (key == NYdb::YDB_TRACE_ID_HEADER) {
+            return GetTraceId();
+        }
+        if (key == NYdb::YDB_REQUEST_TYPE_HEADER) {
+            return GetRequestType();
         }
         auto valueIt = PeerMeta.find(key);
         return valueIt == PeerMeta.end() ? Nothing() : TMaybe<TString>(valueIt->second);
@@ -198,7 +224,7 @@ public:
     }
 
     TString GetPeerName() const override {
-        return "localhost";
+        return PeerName;
     }
 
     const TString& GetRequestName() const override {
@@ -221,19 +247,35 @@ public:
         return &Request;
     }
 
-    void SetFinishAction(std::function<void()>&&) override {}
-
-    bool IsClientLost() const override { return false; }
-
-    void AddServerHint(const TString&) override {}
-
-    void SetRuHeader(ui64) override {}
-
-    // Unimplemented methods
-    void ReplyWithRpcStatus(grpc::StatusCode, const TString&, const TString&) override {
-        ReplyWithYdbStatus(Ydb::StatusIds::GENERIC_ERROR);
+    void SetFinishAction(std::function<void()>&&) override {
     }
 
+    bool IsClientLost() const override {
+        if (ClientLostStatus) {
+            return ClientLostStatus->load();
+        }
+        return false;
+    }
+
+    void AddServerHint(const TString&) override {
+    }
+
+    void SetRuHeader(ui64) override {
+    }
+
+    void ReplyWithRpcStatus(grpc::StatusCode status, const TString& reason, const TString& details) override {
+        if (reason) {
+            TBase::IssueManager.RaiseIssue(NYql::TIssue(reason));
+        }
+
+        if (details) {
+            TBase::IssueManager.RaiseIssue(NYql::TIssue(TStringBuilder() << "gRPC Details: " << details));
+        }
+
+        ReplyWithYdbStatus(GrpcStatusToYdbStatus(status));
+    }
+
+    // Unimplemented methods
     void SetStreamingNotify(NYdbGrpc::IRequestContextBase::TOnNextReply&&) override {
         Y_ABORT("Unimplemented for local rpc");
     }
@@ -247,6 +289,9 @@ public:
     }
 
     TMaybe<TString> GetTraceId() const override {
+        if (TraceId) {
+            return TraceId;
+        }
         return Nothing();
     }
 
@@ -255,7 +300,7 @@ public:
     }
 
     TInstant GetDeadline() const override {
-        return TInstant::Max();
+        return Deadline;
     }
 
     const TMaybe<TString> GetRequestType() const override {
@@ -281,13 +326,22 @@ public:
 
     // IRequestCtx
     //
-    void FinishRequest() override {}
+    void FinishRequest() override {
+    }
 
     // IRequestCtxBase
     //
-    void AddAuditLogPart(const TStringBuf&, const TString&) override {}
+    void AddAuditLogPart(const TStringBuf& name, const TString& value) override {
+        Y_UNUSED(name, value);
+    }
+
     const NGRpcService::TAuditLogParts& GetAuditLogParts() const override {
-        Y_ABORT("unimplemented for local rpc");
+        Y_ABORT("Unimplemented for local rpc");
+    }
+
+    TString GetRpcMethodName() const override {
+        // We have no grpc method, but the closest analog is protobuf name
+        return TRpc::TRequest::descriptor()->name();
     }
 
 private:
@@ -297,13 +351,28 @@ private:
         TBase::CbWrapper(*resp);
     }
 
+    void SetupTokenAndSpan(const TMaybe<TString>& token) {
+        if (token && !token->empty()) {
+            InternalToken = MakeIntrusive<NACLib::TUserToken>(*token);
+        }
+
+        if (DatabaseName) {
+            this->Span.Attribute("database", DatabaseName);
+        }
+        this->Span.Attribute("request_type", GetRequestName());
+    }
+
 private:
     typename TRpc::TRequest Request;
     const TString DatabaseName;
     const TMaybe<TString> RequestType;
     const bool InternalCall;
+    const TString PeerName = "localhost";
+    const TString TraceId;
+    const TInstant Deadline = TInstant::Max();
+    const std::shared_ptr<std::atomic_bool> ClientLostStatus;
     TIntrusiveConstPtr<NACLib::TUserToken> InternalToken;
-    const TString EmptySerializedTokenMessage_;
+    const TString EmptySerializedTokenMessage;
     TMap<TString, TString> PeerMeta;
     google::protobuf::Arena Arena;
 };
@@ -493,6 +562,14 @@ protected:
         DoPushResponse(std::move(response), ctrl);
     }
 
+    TString GetRpcMethodName() const override {
+        // We have no grpc method, but the closest analog is protobuf name
+        if (const NProtoBuf::Message* req = GetRequest()) {
+            return req->GetDescriptor()->name();
+        }
+        return {};
+    }
+
 private:
     TResponsePart DoPopResponse() {
         Y_ABORT_UNLESS(!ResponseQueue.empty(), "Try to pop response from empty queue");
@@ -541,6 +618,10 @@ TStreamReadProcessorPtr<typename TRpc::TResponse> DoLocalRpcStreamSameMailbox(ty
     auto localRpcCtx = std::make_shared<TLocalRpcCtx<TRpc, TCbWrapper>>(std::move(proto), [](const typename TRpc::TResponse&) {}, database, token, requestType, internalCall);
     auto localRpcStreamCtx = MakeIntrusive<TLocalRpcStreamCtx>(std::move(localRpcCtx));
     auto localRpcRequest = std::make_unique<TRpc>(localRpcStreamCtx.Get(), [](std::unique_ptr<NGRpcService::IRequestNoOpCtx>, const NGRpcService::IFacilityProvider&) {});
+    // The stream wrapper drops the base request's token (unlike DoLocalRpc), so set it here — system-user stream calls like the warmup sysview fetch must pass the KqpProxy warmup gate.
+    if (token && !token->empty()) {
+        localRpcRequest->SetInternalToken(MakeIntrusive<NACLib::TUserToken>(*token));
+    }
     auto actor = TRpc::CreateRpcActor(localRpcRequest.release(), args...);
     ctx.RegisterWithSameMailbox(actor);
 
@@ -555,5 +636,4 @@ TStreamReadProcessorPtr<typename TRpc::TResponse> DoLocalRpcStreamSameMailbox(ty
     return DoLocalRpcStreamSameMailbox<TRpc>(std::move(proto), database, token, Nothing(), ctx, internalCall, args...);
 }
 
-} // namespace NRpcService
-} // namespace NKikimr
+} // namespace NKikimr::NRpcService

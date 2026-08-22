@@ -2,4 +2,3 @@
 
   - `--password-file <filename>` : The password is read from the specified file.
   - `--no-password` : Defines an empty password. The password will be requested interactively if none of the password identification options listed above are specified in the command line parameters.
-

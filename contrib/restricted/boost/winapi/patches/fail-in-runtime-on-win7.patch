@@ -1,0 +1,18 @@
+--- contrib/restricted/boost/winapi/include/boost/winapi/wait_on_address.hpp	(index)
++++ contrib/restricted/boost/winapi/include/boost/winapi/wait_on_address.hpp	(working tree)
+@@ -10,8 +10,6 @@
+ 
+ #include <boost/winapi/config.hpp>
+ 
+-#if BOOST_USE_WINAPI_VERSION >= BOOST_WINAPI_VERSION_WIN8 && (BOOST_WINAPI_PARTITION_APP || BOOST_WINAPI_PARTITION_SYSTEM)
+-
+ #include <boost/winapi/basic_types.hpp>
+ #include <boost/winapi/detail/header.hpp>
+ 
+@@ -51,6 +49,4 @@ using ::WakeByAddressAll;
+ 
+ #include <boost/winapi/detail/footer.hpp>
+ 
+-#endif // BOOST_USE_WINAPI_VERSION >= BOOST_WINAPI_VERSION_WIN8 && (BOOST_WINAPI_PARTITION_APP || BOOST_WINAPI_PARTITION_SYSTEM)
+-
+ #endif // BOOST_WINAPI_WAIT_ON_ADDRESS_HPP_INCLUDED_

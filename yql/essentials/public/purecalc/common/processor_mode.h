@@ -1,11 +1,9 @@
 #pragma once
 
-namespace NYql {
-    namespace NPureCalc {
-        enum class EProcessorMode {
-            PullList,
-            PullStream,
-            PushStream
-        };
-    }
-}
+namespace NYql::NPureCalc {
+enum class EProcessorMode {
+    PullList,
+    PullStream,
+    PushStream
+};
+} // namespace NYql::NPureCalc

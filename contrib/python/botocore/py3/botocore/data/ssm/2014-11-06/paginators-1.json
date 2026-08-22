@@ -281,6 +281,24 @@
       "limit_key": "MaxResults",
       "output_token": "NextToken",
       "result_key": "Policies"
+    },
+    "DescribeInstanceProperties": {
+      "input_token": "NextToken",
+      "limit_key": "MaxResults",
+      "output_token": "NextToken",
+      "result_key": "InstanceProperties"
+    },
+    "ListNodes": {
+      "input_token": "NextToken",
+      "limit_key": "MaxResults",
+      "output_token": "NextToken",
+      "result_key": "Nodes"
+    },
+    "ListNodesSummary": {
+      "input_token": "NextToken",
+      "limit_key": "MaxResults",
+      "output_token": "NextToken",
+      "result_key": "Summary"
     }
   }
 }

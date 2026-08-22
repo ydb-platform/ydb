@@ -12,15 +12,17 @@
 
 #include <yql/essentials/public/issue/yql_issue.h>
 
+#include <ydb/library/aclib/user_context.h>
+
 namespace NKikimr {
 namespace NDataShard {
 
 class TValidatedWriteTxOperation: TMoveOnly {
 public:
-    std::tuple<NKikimrTxDataShard::TError::EKind, TString> ParseOperation(const NEvents::TDataEvents::TEvWrite& ev, const NKikimrDataEvents::TEvWrite::TOperation& recordOperation, const TUserTable::TTableInfos& tableInfos, ui64 tabletId, TKeyValidator& keyValidator);
+    std::tuple<NKikimrTxDataShard::TError::EKind, TString> ParseOperation(const NEvents::TDataEvents::TEvWrite& ev, const NKikimrDataEvents::TEvWrite::TOperation& recordOperation, const TUserTable::TTableInfos& tableInfos, ui64 tabletId, TKeyValidator& keyValidator, const NWilson::TTraceId& traceId);
     TVector<TKeyValidator::TColumnWriteMeta> GetColumnWrites() const;
     void SetTxKeys(const TUserTable& tableInfo, ui64 tabletId, TKeyValidator& keyValidator);
-    
+
     ui64 ComputeTxSize() const;
 private:
     YDB_READONLY_DEF(NKikimrDataEvents::TEvWrite::TOperation::EOperationType, OperationType);
@@ -28,6 +30,7 @@ private:
     YDB_READONLY_DEF(std::vector<ui32>, ColumnIds);
     YDB_READONLY_DEF(ui32, DefaultFilledColumnCount);
     YDB_READONLY_DEF(TSerializedCellMatrix, Matrix);
+    YDB_READONLY_DEF(TIntrusivePtr<NACLib::TUserContext>, UserCtx);
 };
 
 class TValidatedWriteTx: TNonCopyable, public TValidatedTx {
@@ -35,11 +38,11 @@ public:
     using TPtr = std::shared_ptr<TValidatedWriteTx>;
 
     TValidatedWriteTx(TDataShard* self, ui64 globalTxId, TInstant receivedAt, const NEvents::TDataEvents::TEvWrite& ev,
-            bool mvccSnapshotRead);
+            const NWilson::TTraceId& traceId, bool mvccSnapshotRead);
     ~TValidatedWriteTx();
 
-    EType GetType() const override { 
-        return EType::WriteTx; 
+    EType GetType() const override {
+        return EType::WriteTx;
     };
 
     static constexpr ui64 MaxReorderTxKeys() {
@@ -132,6 +135,8 @@ private:
     YDB_READONLY_DEF(TInstant, ReceivedAt);
     YDB_READONLY_DEF(std::optional<ui64>, OverloadSubscribe);
     YDB_READONLY_DEF(bool, MvccSnapshotRead);
+    YDB_READONLY_DEF(std::optional<TRowVersion>, MvccSnapshot);
+    YDB_READONLY(TDataShardUserDb::ELockMode, LockMode, TDataShardUserDb::ELockMode::Optimistic);
 
     YDB_READONLY_DEF(ui64, TxSize);
 
@@ -149,7 +154,7 @@ public:
     static TWriteOperation* TryCastWriteOperation(TOperation::TPtr op);
 
     explicit TWriteOperation(const TBasicOpInfo& op, ui64 tabletId);
-    explicit TWriteOperation(const TBasicOpInfo& op, NEvents::TDataEvents::TEvWrite::TPtr&& ev, TDataShard* self);
+    explicit TWriteOperation(const TBasicOpInfo& op, NEvents::TDataEvents::TEvWrite::TPtr&& ev, TDataShard* self, const NWilson::TTraceId& traceId);
     ~TWriteOperation();
 
     void FillTxData(TValidatedWriteTx::TPtr dataTx);
@@ -157,6 +162,7 @@ public:
     void FillVolatileTxData(TDataShard* self);
 
     TString GetTxBody() const;
+    bool TrySetTxBody(const TString& txBody);
     void SetTxBody(const TString& txBody);
     void ClearTxBody();
 
@@ -251,16 +257,16 @@ public:
         return ++PageFaultCount;
     }
 
-    const TValidatedWriteTx::TPtr& GetWriteTx() const { 
-        return WriteTx; 
+    const TValidatedWriteTx::TPtr& GetWriteTx() const {
+        return WriteTx;
     }
     TValidatedWriteTx::TPtr& GetWriteTx() {
         return WriteTx;
     }
-    TValidatedWriteTx::TPtr BuildWriteTx(TDataShard* self);
+    bool BuildWriteTx(TDataShard* self);
 
-    void ClearWriteTx() { 
-        WriteTx = nullptr; 
+    void ClearWriteTx() {
+        WriteTx = nullptr;
     }
 
     const std::unique_ptr<NEvents::TDataEvents::TEvWriteResult>& GetWriteResult() const {
@@ -273,6 +279,9 @@ public:
     void SetError(const NKikimrDataEvents::TEvWriteResult::EStatus& status, const TString& errorMsg);
     void SetWriteResult(std::unique_ptr<NEvents::TDataEvents::TEvWriteResult>&& writeResult);
 
+    std::optional<TString> OnMigration(TDataShard& self, const TActorContext& ctx) override;
+    bool OnRestoreMigrated(TDataShard& self, const TString& body) override;
+    bool OnFinishMigration(TDataShard& self, const NTable::TScheme& scheme) override;
     bool OnStopping(TDataShard& self, const TActorContext& ctx) override;
     void OnCleanup(TDataShard& self, std::vector<std::unique_ptr<IEventHandle>>& replies) override;
 
@@ -282,6 +291,7 @@ private:
 
 private:
     std::unique_ptr<NEvents::TDataEvents::TEvWrite> WriteRequest;
+    NWilson::TTraceId WriteRequestTraceId;
     std::unique_ptr<NEvents::TDataEvents::TEvWriteResult> WriteResult;
 
     TValidatedWriteTx::TPtr WriteTx;
@@ -295,7 +305,7 @@ private:
     YDB_ACCESSOR_DEF(ui64, SchemeShardId);
     YDB_ACCESSOR_DEF(ui64, SubDomainPathId);
     YDB_ACCESSOR_DEF(NKikimrSubDomains::TProcessingParams, ProcessingParams);
-    
+
     ui64 PageFaultCount = 0;
 };
 

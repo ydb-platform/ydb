@@ -8,11 +8,11 @@
 
 #include <yt/yt/core/concurrency/public.h>
 
-#include <yt/yt/core/misc/property.h>
-
 #include <yt/yt/core/yson/public.h>
 
 #include <yt/yt/core/ytree/attributes.h>
+
+#include <library/cpp/yt/misc/property.h>
 
 namespace NYT::NFormats {
 
@@ -25,15 +25,9 @@ struct ISchemalessFormatWriter
 
     virtual i64 GetWrittenSize() const = 0;
 
-    virtual i64 GetEncodedRowBatchCount() const
-    {
-        return 0;
-    }
+    virtual i64 GetEncodedRowBatchCount() const = 0;
 
-    virtual i64 GetEncodedColumnarBatchCount() const
-    {
-        return 0;
-    }
+    virtual i64 GetEncodedColumnarBatchCount() const = 0;
 
     [[nodiscard]] virtual TFuture<void> Flush() = 0;
 

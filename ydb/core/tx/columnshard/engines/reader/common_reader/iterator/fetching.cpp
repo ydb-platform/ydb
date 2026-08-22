@@ -5,42 +5,68 @@
 #include "source.h"
 #include "sub_columns_fetching.h"
 
+#include <ydb/core/formats/arrow/accessor/sparsed/accessor.h>
+#include <ydb/core/formats/arrow/program/index.h>
+#include <ydb/core/formats/arrow/program/original.h>
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
+#include <ydb/core/tx/columnshard/engines/reader/tracing/data_source_probes.h>
+#include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/skip_index/meta.h>
 
 #include <util/string/builder.h>
 #include <yql/essentials/minikql/mkql_terminator.h>
 
 namespace NKikimr::NOlap::NReader::NCommon {
 
-bool TStepAction::DoApply(IDataReader& owner) const {
-    if (FinishedFlag) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "apply");
-        Source->StartSyncSection();
-        Source->OnSourceFetchingFinishedSafe(owner, Source);
-    }
+LWTRACE_USING(YDB_CS_DATA_SOURCE);
+
+bool TStepAction::DoApply(IDataReader& owner) {
+    AFL_VERIFY(FinishedFlag);
+    YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+        {"event", "apply"});
+    Source->StartSyncSection();
+    Source->OnSourceFetchingFinishedSafe(owner, Source);
     return true;
 }
 
-TConclusionStatus TStepAction::DoExecuteImpl() {
+TConclusion<bool> TStepAction::DoExecuteImpl() {
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, Source->AddEvent("step_action"));
     if (Source->GetContext()->IsAborted()) {
-        return TConclusionStatus::Success();
+        AFL_VERIFY(!FinishedFlag);
+        FinishedFlag = true;
+        CacheSourceStats();
+        return true;
     }
     auto executeResult = Cursor.Execute(Source);
     if (executeResult.IsFail()) {
+        AFL_VERIFY(!FinishedFlag);
+        FinishedFlag = true;
+        CacheSourceStats();
         return executeResult;
     }
     if (*executeResult) {
+        AFL_VERIFY(!FinishedFlag);
         FinishedFlag = true;
+        CacheSourceStats();
     }
-    return TConclusionStatus::Success();
+    return FinishedFlag;
 }
 
-TStepAction::TStepAction(const std::shared_ptr<IDataSource>& source, TFetchingScriptCursor&& cursor, const NActors::TActorId& ownerActorId,
-    const bool changeSyncSection)
+void TStepAction::CacheSourceStats() {
+    CachedBlobBytes = Source->ExtractTotalBytesRead();
+    CachedRawBytes = Source->GetUsedRawBytesOptional();
+    CachedFilteredRows = Source->GetFilteredRowsCount();
+    CachedTotalRows = Source->GetRecordsCountOptional().value_or(0);
+    CachedTotalReservedBytes = Source->GetReservedMemory();
+}
+
+TStepAction::TStepAction(
+    std::shared_ptr<IDataSource>&& source, TFetchingScriptCursor&& cursor, const NActors::TActorId& ownerActorId, const bool changeSyncSection)
     : TBase(ownerActorId, source->GetContext()->GetCommonContext()->GetCounters().GetAssembleTasksGuard())
-    , Source(source)
-    , Cursor(std::move(cursor)) {
+    , Source(std::move(source))
+    , Cursor(std::move(cursor))
+    , CachedSourceId(Source->GetDeprecatedPortionId())
+{
     if (changeSyncSection) {
         Source->StartAsyncSection();
     } else {
@@ -48,170 +74,190 @@ TStepAction::TStepAction(const std::shared_ptr<IDataSource>& source, TFetchingSc
     }
 }
 
-TConclusion<bool> TFetchingScriptCursor::Execute(const std::shared_ptr<IDataSource>& source) {
-    AFL_VERIFY(source);
-    NMiniKQL::TThrowingBindTerminator bind;
-    Script->OnExecute();
-    AFL_VERIFY(!Script->IsFinished(CurrentStepIdx));
-    while (!Script->IsFinished(CurrentStepIdx)) {
-        if (source->HasStageData() && source->GetStageData().IsEmptyWithData()) {
-            source->OnEmptyStageData(source);
-            break;
-        } else if (source->HasStageResult() && source->GetStageResult().IsEmpty()) {
-            break;
-        }
-        auto step = Script->GetStep(CurrentStepIdx);
-        TMemoryProfileGuard mGuard("SCAN_PROFILE::FETCHING::" + step->GetName() + "::" + Script->GetBranchName(),
-            IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("scan_step", step->DebugString())("scan_step_idx", CurrentStepIdx)("source_id", source->GetSourceId());
+NO_SANITIZE_THREAD
+void TProgramStep::ReportTracing(const std::shared_ptr<IDataSource>& source, const TDuration executionDurationMs,
+    const TString& currentExecutionResult, const ui32 nodeId, const TString& currentCategoryName,
+    const std::shared_ptr<NArrow::NSSA::IResourceProcessor>& processor, const ui64 reservedMemory) const {
+    if (!processor) {
+        return;
+    }
+    const auto& scanOrbit = source->GetContext()->GetCommonContext()->GetScanOrbit();
+    if (!NLWTrace::HasShuttles(source->GetDataSourceOrbit()) && !(scanOrbit && NLWTrace::HasShuttles(*scanOrbit)) &&
+        !LWPROBE_ENABLED(ProgramConst) && !LWPROBE_ENABLED(ProgramCalculation) && !LWPROBE_ENABLED(ProgramProjection) &&
+        !LWPROBE_ENABLED(ProgramFilter) && !LWPROBE_ENABLED(ProgramAggregation) && !LWPROBE_ENABLED(ProgramFetchOriginalData) &&
+        !LWPROBE_ENABLED(ProgramAssembleOriginalData) && !LWPROBE_ENABLED(ProgramCheckIndexData) && !LWPROBE_ENABLED(ProgramCheckHeaderData) &&
+        !LWPROBE_ENABLED(ProgramStreamLogic) && !LWPROBE_ENABLED(ProgramReserveMemory)) {
+        return;
+    }
+    const auto& step = source->GetExecutionContext().GetCursorStep();
+    const auto prevTracing = source->GetExecutionContext().GetPrevNodeTracing();
+    const TString tracingName = prevTracing.CategoryName + " - " + currentCategoryName;
+    const TString tracingExecutionResult = prevTracing.ExecutionResult + " - " + currentExecutionResult;
+    const TDuration finishDurationMs = source->GetAndResetWaitDuration();
+    const auto processorType = processor->GetProcessorType();
+    const TString details = processor->DebugJson().GetStringRobust();
 
-        const TMonotonic startInstant = TMonotonic::Now();
-        const TConclusion<bool> resultStep = step->ExecuteInplace(source, *this);
-        FlushDuration(TMonotonic::Now() - startInstant);
-        if (!resultStep) {
-            return resultStep;
-        }
-        if (!*resultStep) {
-            return false;
-        }
-        ++CurrentStepIdx;
+    // Pin the visitor for the duration of this function so Stop() on ExecutionContext cannot free it under us.
+    // Snapshot scalars only — do not keep references into Resources across further work.
+    // Never call GetReservedMemory() here: Execute() may have started a concurrent continuation that
+    // mutates ResourceGuards (RegisterAllocationGuard / ClearMemoryGuards) on another worker.
+    const auto visitor = source->GetExecutionContext().GetExecutionVisitorOptional();
+    ui32 filteredRows = source->GetRecordsCount();
+    TString indexStatus = "Unknown";
+    ui32 indexFilteredRows = source->GetRecordsCount();
+    if (const auto* resources = visitor ? visitor->MutableContext().GetResourcesOptional() : nullptr) {
+        filteredRows = resources->GetRecordsCountActualOptional().value_or(source->GetRecordsCount());
     }
-    FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, source->AddEvent("fcursor"));
-    return true;
-}
-
-TString TFetchingScript::DebugString() const {
-    TStringBuilder sb;
-    TStringBuilder sbBranch;
-    for (auto&& i : Steps) {
-        sbBranch << "{" << i->DebugString() << "};";
-    }
-    if (!sbBranch) {
-        return "";
-    }
-    sb << "{branch:" << BranchName << ";steps:[" << sbBranch << "]}";
-    return sb;
-}
-
-TString TFetchingScript::ProfileDebugString() const {
-    TStringBuilder sb;
-    TStringBuilder sbBranch;
-    for (auto&& i : Steps) {
-        if (i->GetSumDuration() > TDuration::MilliSeconds(10)) {
-            sbBranch << "{" << i->DebugString(true) << "};";
-        }
-    }
-    if (!sbBranch) {
-        return "";
-    }
-    sb << "{branch:" << BranchName << ";";
-    if (AtomicGet(FinishInstant) && AtomicGet(StartInstant)) {
-        sb << "duration:" << AtomicGet(FinishInstant) - AtomicGet(StartInstant) << ";";
-    }
-
-    sb << "steps_10Ms:[" << sbBranch << "]}";
-    return sb;
-}
-
-void TFetchingScriptBuilder::AddAllocation(
-    const std::set<ui32>& entityIds, const NArrow::NSSA::IMemoryCalculationPolicy::EStage stage, const EMemType mType) {
-    if (Steps.size() == 0) {
-        AddStep(std::make_shared<TAllocateMemoryStep>(entityIds, mType, stage));
-    } else {
-        std::optional<ui32> addIndex;
-        for (i32 i = Steps.size() - 1; i >= 0; --i) {
-            if (auto allocation = std::dynamic_pointer_cast<TAllocateMemoryStep>(Steps[i])) {
-                if (allocation->GetStage() == stage) {
-                    allocation->AddAllocation(entityIds, mType);
-                    return;
-                } else {
-                    addIndex = i + 1;
+    if (processorType == NArrow::NSSA::EProcessorType::CheckIndexData) {
+        auto* indexProcessor = dynamic_cast<const NArrow::NSSA::TIndexCheckerProcessor*>(processor.get());
+        if (indexProcessor && source->GetSourceSchemaOptional()) {
+            const auto& idxCtx = indexProcessor->GetIndexContext();
+            NIndexes::NRequest::TOriginalDataAddress addr(idxCtx.GetColumnId(), idxCtx.GetSubColumnName());
+            auto skipIndexes = source->GetSourceSchemaOptional()->GetIndexInfo().FindSkipIndexes(addr, idxCtx.GetOperation());
+            bool hasActualIndexData = false;
+            if (!skipIndexes.empty() && source->HasPortionAccessor()) {
+                std::set<ui32> indexEntityIds;
+                for (auto&& skipIdx : skipIndexes) {
+                    indexEntityIds.insert(skipIdx->GetIndexId());
                 }
-                break;
-            } else if (std::dynamic_pointer_cast<TAssemblerStep>(Steps[i])) {
-                continue;
-            } else if (std::dynamic_pointer_cast<TColumnBlobsFetchingStep>(Steps[i])) {
-                continue;
-            } else {
-                addIndex = i + 1;
-                break;
+                hasActualIndexData = source->GetPortionAccessor().GetIndexBlobBytes(indexEntityIds, false) > 0;
+            }
+            if (skipIndexes.empty() || !hasActualIndexData) {
+                indexStatus = "NoIndex";
+                indexFilteredRows = source->GetRecordsCount();
+            } else if (const auto* resources = visitor ? visitor->MutableContext().GetResourcesOptional() : nullptr) {
+                // Re-read resources after non-resource work — concurrent ExtractResources may have cleared them.
+                const ui32 outputColumnId = indexProcessor->GetOutputColumnIdOnce();
+                const auto& outputAccessor = resources->GetAccessorOptional(outputColumnId);
+                if (outputAccessor) {
+                    auto* sparsed = dynamic_cast<const NArrow::NAccessor::TSparsedArray*>(outputAccessor.get());
+                    if (sparsed && sparsed->GetDefaultValue() && sparsed->GetDefaultValue()->is_valid) {
+                        auto* uint8Scalar = dynamic_cast<const arrow::UInt8Scalar*>(sparsed->GetDefaultValue().get());
+                        if (uint8Scalar && uint8Scalar->value == 0) {
+                            indexStatus = "AllDenied";
+                            indexFilteredRows = 0;
+                        } else {
+                            indexStatus = "AllAccepted";
+                            indexFilteredRows = source->GetRecordsCount();
+                        }
+                    } else {
+                        indexStatus = "AllAccepted";
+                        indexFilteredRows = source->GetRecordsCount();
+                    }
+                } else {
+                    indexStatus = "Partial";
+                    indexFilteredRows = resources->GetFilter().GetFilteredCount().value_or(source->GetRecordsCount());
+                }
             }
         }
-        AFL_VERIFY(addIndex);
-        InsertStep<TAllocateMemoryStep>(*addIndex, entityIds, mType, stage);
     }
+
+#define PROGRAM_PROBE_ARGS                                                                                                            \
+    source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(), source->GetTxId(), source->GetDeprecatedPortionId(), \
+        step.GetStepIndex(), tracingName, nodeId, finishDurationMs, executionDurationMs, filteredRows
+#define PROGRAM_PROBE_RESERVED reservedMemory
+#define PROGRAM_PROBE_TAIL tracingExecutionResult, details
+    switch (processorType) {
+        case NArrow::NSSA::EProcessorType::Const:
+            LWTRACK(ProgramConst, PROGRAM_PROBE_ARGS, PROGRAM_PROBE_RESERVED, PROGRAM_PROBE_TAIL);
+            break;
+        case NArrow::NSSA::EProcessorType::Calculation:
+            LWTRACK(ProgramCalculation, PROGRAM_PROBE_ARGS, PROGRAM_PROBE_RESERVED, PROGRAM_PROBE_TAIL);
+            break;
+        case NArrow::NSSA::EProcessorType::Projection:
+            LWTRACK(ProgramProjection, PROGRAM_PROBE_ARGS, PROGRAM_PROBE_RESERVED, PROGRAM_PROBE_TAIL);
+            break;
+        case NArrow::NSSA::EProcessorType::Filter:
+            LWTRACK(ProgramFilter, PROGRAM_PROBE_ARGS, PROGRAM_PROBE_RESERVED, PROGRAM_PROBE_TAIL);
+            break;
+        case NArrow::NSSA::EProcessorType::Aggregation:
+            LWTRACK(ProgramAggregation, PROGRAM_PROBE_ARGS, PROGRAM_PROBE_RESERVED, PROGRAM_PROBE_TAIL);
+            break;
+        case NArrow::NSSA::EProcessorType::FetchOriginalData: {
+            ui64 blobBytes = 0;
+            ui64 rawBytes = 0;
+            auto* fetchProcessor = dynamic_cast<const NArrow::NSSA::TOriginalColumnDataProcessor*>(processor.get());
+            if (fetchProcessor) {
+                std::set<ui32> dataColumnIds;
+                for (auto&& [colId, addr] : fetchProcessor->GetDataAddresses()) {
+                    dataColumnIds.insert(colId);
+                }
+                if (!dataColumnIds.empty()) {
+                    blobBytes += source->GetColumnBlobBytes(dataColumnIds);
+                    rawBytes += source->GetColumnRawBytes(dataColumnIds);
+                }
+                if (!fetchProcessor->GetIndexContext().empty() && source->HasPortionAccessor() && source->GetSourceSchemaOptional()) {
+                    const auto& accessor = source->GetPortionAccessor();
+                    std::set<ui32> indexEntityIds;
+                    const auto& indexInfo = source->GetSourceSchemaOptional()->GetIndexInfo();
+                    for (auto&& [colId, idxCtx] : fetchProcessor->GetIndexContext()) {
+                        for (auto&& [subCol, ops] : idxCtx.GetOperationsBySubColumn().GetData()) {
+                            NIndexes::NRequest::TOriginalDataAddress addr(colId, subCol);
+                            for (auto&& op : ops) {
+                                for (auto&& skipIdx : indexInfo.FindSkipIndexes(addr, op)) {
+                                    indexEntityIds.insert(skipIdx->GetIndexId());
+                                }
+                            }
+                        }
+                    }
+                    if (!indexEntityIds.empty()) {
+                        blobBytes += accessor.GetIndexBlobBytes(indexEntityIds, false);
+                        rawBytes += accessor.GetIndexRawBytes(indexEntityIds, false);
+                    }
+                }
+            }
+            bool hasSubColumns = false;
+            // After ADD COLUMN the portion source schema may not contain the column yet.
+            if (fetchProcessor && source->GetSourceSchemaOptional()) {
+                for (auto&& [colId, addr] : fetchProcessor->GetDataAddresses()) {
+                    if (auto loader = source->GetSourceSchemaOptional()->GetColumnLoaderOptional(colId)) {
+                        if (loader->GetAccessorConstructor()->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray) {
+                            hasSubColumns = true;
+                            break;
+                        }
+                    }
+                }
+                if (!hasSubColumns) {
+                    source->AddBytesRead(blobBytes);
+                }
+            }
+            LWTRACK(ProgramFetchOriginalData, PROGRAM_PROBE_ARGS, blobBytes, rawBytes, PROGRAM_PROBE_RESERVED, PROGRAM_PROBE_TAIL);
+        } break;
+        case NArrow::NSSA::EProcessorType::AssembleOriginalData:
+            LWTRACK(ProgramAssembleOriginalData, PROGRAM_PROBE_ARGS, PROGRAM_PROBE_RESERVED, PROGRAM_PROBE_TAIL);
+            break;
+        case NArrow::NSSA::EProcessorType::CheckIndexData:
+            LWTRACK(ProgramCheckIndexData, PROGRAM_PROBE_ARGS, indexFilteredRows, indexStatus, PROGRAM_PROBE_RESERVED, PROGRAM_PROBE_TAIL);
+            break;
+        case NArrow::NSSA::EProcessorType::CheckHeaderData:
+            LWTRACK(ProgramCheckHeaderData, PROGRAM_PROBE_ARGS, PROGRAM_PROBE_RESERVED, PROGRAM_PROBE_TAIL);
+            break;
+        case NArrow::NSSA::EProcessorType::StreamLogic:
+            LWTRACK(ProgramStreamLogic, PROGRAM_PROBE_ARGS, PROGRAM_PROBE_RESERVED, PROGRAM_PROBE_TAIL);
+            break;
+        case NArrow::NSSA::EProcessorType::ReserveMemory:
+            LWTRACK(ProgramReserveMemory, PROGRAM_PROBE_ARGS, reservedMemory, PROGRAM_PROBE_RESERVED, PROGRAM_PROBE_TAIL);
+            break;
+        case NArrow::NSSA::EProcessorType::Unknown:
+            break;
+    }
+#undef PROGRAM_PROBE_ARGS
+#undef PROGRAM_PROBE_RESERVED
+#undef PROGRAM_PROBE_TAIL
 }
 
-TString IFetchingStep::DebugString(const bool stats) const {
-    TStringBuilder sb;
-    sb << "name=" << Name;
-    if (stats) {
-        sb << ";duration=" << GetSumDuration() << ";"
-           << "size=" << 1e-9 * GetSumSize();
-    }
-    sb << ";details={" << DoDebugString() << "};";
-    return sb;
-}
-
-TFetchingScriptBuilder::TFetchingScriptBuilder(const TSpecialReadContext& context)
-    : TFetchingScriptBuilder(context.GetReadMetadata()->GetResultSchema(), context.GetMergeColumns()) {
-}
-
-void TFetchingScriptBuilder::AddFetchingStep(const TColumnsSetIds& columns, const NArrow::NSSA::IMemoryCalculationPolicy::EStage stage) {
-    auto actualColumns = columns - AddedFetchingColumns;
-    AddedFetchingColumns += columns;
-    if (actualColumns.IsEmpty()) {
-        return;
-    }
-    if (Steps.size() && std::dynamic_pointer_cast<TColumnBlobsFetchingStep>(Steps.back())) {
-        TColumnsSetIds fetchingColumns = actualColumns + std::dynamic_pointer_cast<TColumnBlobsFetchingStep>(Steps.back())->GetColumns();
-        Steps.pop_back();
-        AddAllocation(actualColumns.GetColumnIds(), stage, EMemType::Blob);
-        AddStep(std::make_shared<TColumnBlobsFetchingStep>(fetchingColumns));
-    } else {
-        AddAllocation(actualColumns.GetColumnIds(), stage, EMemType::Blob);
-        AddStep(std::make_shared<TColumnBlobsFetchingStep>(actualColumns));
-    }
-}
-
-void TFetchingScriptBuilder::AddAssembleStep(
-    const TColumnsSetIds& columns, const TString& purposeId, const NArrow::NSSA::IMemoryCalculationPolicy::EStage stage, const bool sequential) {
-    auto actualColumns = columns - AddedAssembleColumns;
-    AddedAssembleColumns += columns;
-    if (actualColumns.IsEmpty()) {
-        return;
-    }
-    auto actualSet = std::make_shared<TColumnsSet>(actualColumns.GetColumnIds(), FullSchema);
-    if (sequential) {
-        const auto notSequentialColumnIds = GuaranteeNotOptional->Intersect(*actualSet);
-        if (notSequentialColumnIds.size()) {
-            AddAllocation(notSequentialColumnIds, stage, EMemType::Raw);
-            std::shared_ptr<TColumnsSet> cross = actualSet->BuildSamePtr(notSequentialColumnIds);
-            AddStep(std::make_shared<TAssemblerStep>(cross, purposeId));
-            *actualSet = *actualSet - *cross;
-        }
-        if (!actualSet->IsEmpty()) {
-            AddAllocation(actualSet->GetColumnIds(), stage, EMemType::RawSequential);
-            AddStep(std::make_shared<TOptionalAssemblerStep>(actualSet, purposeId));
-        }
-    } else {
-        AddAllocation(actualColumns.GetColumnIds(), stage, EMemType::Raw);
-        AddStep(std::make_shared<TAssemblerStep>(actualSet, purposeId));
-    }
-}
-
+NO_SANITIZE_THREAD
 TConclusion<bool> TProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
     const bool started = !source->GetExecutionContext().HasProgramIterator();
     if (!source->GetExecutionContext().HasProgramIterator()) {
         source->MutableExecutionContext().Start(source, Program, step);
     }
     auto iterator = source->GetExecutionContext().GetProgramIteratorVerified();
-    const auto& resources = source->GetStageData().GetTable();
     if (!started) {
         iterator->Next();
         source->MutableExecutionContext().OnFinishProgramStepExecution();
     }
-    for (; iterator->IsValid();) {
+    while (iterator->IsValid()) {
         {
             auto conclusion = iterator->Next();
             if (conclusion.IsFail()) {
@@ -226,29 +272,59 @@ TConclusion<bool> TProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSour
             continue;
         }
         AFL_VERIFY(source->GetExecutionContext().GetExecutionVisitorVerified()->GetExecutionNode()->GetIdentifier() == iterator->GetCurrentNodeId());
-        source->MutableExecutionContext().OnStartProgramStepExecution(iterator->GetCurrentNodeId(), GetSignals(iterator->GetCurrentNodeId()));
-        auto signals = GetSignals(iterator->GetCurrentNodeId());
+        const ui32 tracingNodeId = iterator->GetCurrentNodeId();
+        const TString tracingCategoryName = iterator->GetCurrentNode().GetSignalCategoryName();
+        const auto tracingProcessor = iterator->GetProcessorVerified();
+        source->MutableExecutionContext().OnStartProgramStepExecution(tracingNodeId, GetSignals(tracingNodeId));
+        auto signals = GetSignals(tracingNodeId);
+
+        // Snapshot before Execute(): allocation callbacks may mutate ResourceGuards concurrently afterwards.
+        const ui64 reservedMemoryBeforeExecute = source->GetReservedMemory();
         const TMonotonic start = TMonotonic::Now();
         auto conclusion = source->GetExecutionContext().GetExecutionVisitorVerified()->Execute();
-        source->GetContext()->GetCommonContext()->GetCounters().AddExecutionDuration(TMonotonic::Now() - start);
-        signals->AddExecutionDuration(TMonotonic::Now() - start);
+        const TDuration executionDurationMs = TMonotonic::Now() - start;
+        source->GetContext()->GetCommonContext()->GetCounters().AddExecutionDuration(executionDurationMs);
+        signals->AddExecutionDuration(executionDurationMs);
+        source->AddExecutionDuration(executionDurationMs);
+
+        const TString currentExecutionResult = conclusion.IsFail() ? "Fail" : ToString(*conclusion);
+        ReportTracing(source, executionDurationMs, currentExecutionResult, tracingNodeId, tracingCategoryName, tracingProcessor,
+            reservedMemoryBeforeExecute);
+        source->MutableExecutionContext().SetPrevNodeTracing(tracingNodeId, conclusion);
         if (conclusion.IsFail()) {
             source->MutableExecutionContext().OnFailedProgramStepExecution();
             return conclusion;
-        } else if (*conclusion == NArrow::NSSA::IResourceProcessor::EExecutionResult::InBackground) {
+        }
+
+        // A nested continuation may have finished the shared program (extracted resources / stopped visitor)
+        // while Execute() was in progress. Do not keep mutating that shared state from this frame.
+        // Pin visitor once — HasExecutionVisitor + GetExecutionVisitorVerified is a TOCTOU with Stop().
+        const auto visitor = source->GetExecutionContext().GetExecutionVisitorOptional();
+        if (!visitor || !visitor->MutableContext().HasResources()) {
+            return false;
+        }
+
+        if (*conclusion == NArrow::NSSA::IResourceProcessor::EExecutionResult::InBackground) {
             return false;
         }
         source->MutableExecutionContext().OnFinishProgramStepExecution();
         GetSignals(iterator->GetCurrentNodeId())->OnExecuteGraphNode(source->GetRecordsCount());
         source->GetContext()->GetCommonContext()->GetCounters().OnExecuteGraphNode(iterator->GetCurrentNode().GetIdentifier());
-        if (resources->GetRecordsCountActualOptional() == 0) {
-            resources->Clear();
+        if (const auto* resources = visitor->MutableContext().GetResourcesOptional();
+            resources && resources->GetRecordsCountActualOptional() == 0) {
+            visitor->MutableContext().MutableResources().Clear();
             break;
         }
     }
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, source->AddEvent("fgraph"));
-    AFL_DEBUG(NKikimrServices::SSA_GRAPH_EXECUTION)(
-        "graph_constructed", Program->DebugDOT(source->GetExecutionContext().GetExecutionVisitorVerified()->GetExecutedIds()));
+    const auto visitor = source->GetExecutionContext().GetExecutionVisitorOptional();
+    if (!visitor || !visitor->MutableContext().HasResources()) {
+        // Nested continuation already took ownership of progress — do not advance this cursor.
+        return false;
+    }
+    YDB_LOG_DEBUG_COMP(NKikimrServices::SSA_GRAPH_EXECUTION, "",
+        {"graphConstructed", Program->DebugDOT(visitor->GetExecutedIds())});
+    source->MutableStageData().ReturnTable(visitor->MutableContext().ExtractResources());
 
     return true;
 }

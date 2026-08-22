@@ -105,6 +105,7 @@ public:
     THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
+        const auto acceptExisting = !Transaction.GetFailOnExist();
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const auto& sysViewDescription = Transaction.GetCreateSysView();
 
@@ -133,7 +134,7 @@ public:
                 .NotDeleted()
                 .NotUnderDeleting()
                 .IsCommonSensePath()
-                .IsSysViewDirectory();
+                .IsSystemDirectory();
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -150,7 +151,7 @@ public:
             if (dstPath.IsResolved()) {
                 checks
                     .NotUnderDeleting()
-                    .FailOnExist(TPathElement::EPathType::EPathTypeSysView, /* acceptAlreadyExist */ false);
+                    .FailOnExist(TPathElement::EPathType::EPathTypeSysView, acceptExisting);
             } else {
                 checks
                     .NotEmpty();
@@ -160,7 +161,6 @@ public:
                 checks
                     .IsValidLeafName(context.UserToken.Get())
                     .DepthLimit()
-                    .PathsLimit()
                     .DirChildrenLimit()
                     .IsValidACL(acl);
             }
@@ -201,7 +201,7 @@ public:
         context.DbChanges.PersistTxState(OperationId);
 
         dstPath.MaterializeLeaf(owner, sysViewPathId);
-        dstPath.DomainInfo()->IncPathsInside(context.SS);
+        dstPath.DomainInfo()->IncPathsInside(context.SS, 1, EPathCategory::System);
         IncAliveChildrenSafeWithUndo(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
 
         result->SetPathId(sysViewPathId.LocalPathId);

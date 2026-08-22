@@ -7,19 +7,21 @@
 #include <yt/yt/core/misc/proc.h>
 #include <yt/yt/core/misc/mpsc_stack.h>
 
-#include <yt/yt/core/profiling/tscp.h>
+#include <library/cpp/yt/system/tscp.h>
 
 #include <yt/yt/core/threading/thread.h>
 
 #include <library/cpp/yt/threading/notification_handle.h>
 
-#include <library/cpp/yt/memory/ref_tracked.h>
+#include <library/cpp/yt/memory/atomic_intrusive_ptr.h>
 
 #include <util/system/thread.h>
 
 #include <util/thread/lfqueue.h>
 
 #include <util/network/pollerimpl.h>
+
+#include <absl/container/flat_hash_set.h>
 
 #include <array>
 
@@ -35,6 +37,7 @@ static constexpr int MaxEventsPerPoll = 1024;
 ////////////////////////////////////////////////////////////////////////////////
 
 class TThreadPoolPollerImpl;
+using TThreadPoolPollerImplPtr = TIntrusivePtr<TThreadPoolPollerImpl>;
 
 namespace {
 
@@ -123,12 +126,12 @@ struct TPollableCookie
     , public TCookieState
 {
     const TPromise<void> UnregisterPromise = NewPromise<void>();
+    const TThreadPoolPollerImplPtr PollerThread;
 
-    TIntrusivePtr<TThreadPoolPollerImpl> PollerThread;
-    IInvokerPtr Invoker;
+    TAtomicIntrusivePtr<IInvoker> Invoker;
 
-    explicit TPollableCookie(TThreadPoolPollerImpl* pollerThread)
-        : PollerThread(pollerThread)
+    explicit TPollableCookie(TThreadPoolPollerImplPtr pollerThread)
+        : PollerThread(std::move(pollerThread))
     { }
 
     static TPollableCookie* TryFromPollable(IPollable* pollable)
@@ -141,6 +144,11 @@ struct TPollableCookie
         auto* cookie = TryFromPollable(pollable);
         YT_VERIFY(cookie);
         return cookie;
+    }
+
+    ~TPollableCookie()
+    {
+        Invoker.Reset();
     }
 };
 
@@ -190,10 +198,10 @@ class TThreadPoolPollerImpl
 public:
     TThreadPoolPollerImpl(
         int threadCount,
-        const TString& threadNamePrefix,
+        TStringBuf threadNamePrefix,
         TDuration pollingPeriod)
         : TThread(Format("%v:%v", threadNamePrefix, "Poll"))
-        , Logger(ConcurrencyLogger().WithTag("ThreadNamePrefix: %v", threadNamePrefix))
+        , Logger(ConcurrencyLogger().WithTag("ThreadNamePrefix", threadNamePrefix))
     {
         // Register auxilary notifictation handle to wake up poller thread when deregistering
         // pollables and on shutdown.
@@ -201,7 +209,7 @@ public:
 
         FairShareThreadPool_ = CreateTwoLevelFairShareThreadPool(
             threadCount,
-            threadNamePrefix + "FS",
+            std::string(threadNamePrefix) + "FS",
             {
                 .PollingPeriod = pollingPeriod,
                 .PoolRetentionTime = TDuration::Zero()
@@ -219,7 +227,7 @@ public:
         FairShareThreadPool_->SetPollingPeriod(pollingPeriod);
     }
 
-    bool TryRegister(const IPollablePtr& pollable, TString poolName) override
+    bool TryRegister(const IPollablePtr& pollable, const std::string& poolName) override
     {
         // FIXME(lukyan): Enqueueing in register queue may happen after stopping.
         // Create cookie when dequeueing from register queue?
@@ -229,24 +237,20 @@ public:
         }
 
         auto cookie = New<TPollableCookie>(this);
-        cookie->Invoker = FairShareThreadPool_->GetInvoker(
-            poolName,
-            Format("%v", pollable.Get()));
         pollable->SetCookie(std::move(cookie));
+        SetPollableInvoker(pollable, poolName);
+
         RegisterQueue_.Enqueue(pollable);
 
-        YT_LOG_DEBUG("Pollable registered (%v)",
-            pollable->GetLoggingTag());
+        YT_TLOG_DEBUG("Pollable registered")
+            .With(pollable->GetLoggingTags());
 
         return true;
     }
 
-    void SetExecutionPool(const IPollablePtr& pollable, TString poolName) override
+    void SetExecutionPool(const IPollablePtr& pollable, const std::string& poolName) override
     {
-        auto* cookie = TPollableCookie::FromPollable(pollable.Get());
-        cookie->Invoker = FairShareThreadPool_->GetInvoker(
-            poolName,
-            Format("%v", pollable.Get()));
+        SetPollableInvoker(pollable, poolName);
     }
 
     // TODO(lukyan): Method OnShutdown in the interface and returned future are redundant.
@@ -256,7 +260,7 @@ public:
         auto* cookie = TPollableCookie::TryFromPollable(pollable.Get());
         if (!cookie) {
             // Pollable was not registered.
-            return VoidFuture;
+            return OKFuture;
         }
 
         DoUnregister(pollable);
@@ -265,18 +269,18 @@ public:
 
     void Arm(TFileDescriptor fd, const IPollablePtr& pollable, EPollControl control) override
     {
-        YT_LOG_TRACE("Arming poller (FD: %v, Control: %v, %v)",
-            fd,
-            control,
-            pollable->GetLoggingTag());
+        YT_TLOG_TRACE("Arming poller")
+            .With("FD", fd)
+            .With("Control", control)
+            .With(pollable->GetLoggingTags());
 
         PollerImpl_.Set(pollable.Get(), fd, ToImplControl(control));
     }
 
     void Unarm(TFileDescriptor fd, const IPollablePtr&) override
     {
-        YT_LOG_TRACE("Unarming poller (FD: %v)",
-            fd);
+        YT_TLOG_TRACE("Unarming poller")
+            .With("FD", fd);
         PollerImpl_.Remove(fd);
     }
 
@@ -288,6 +292,11 @@ public:
     IInvokerPtr GetInvoker() const override
     {
         return AuxInvoker_;
+    }
+
+    ITwoLevelFairShareThreadPoolPtr GetFairShareThreadPool() const override
+    {
+        return FairShareThreadPool_;
     }
 
     void Shutdown() override
@@ -305,7 +314,7 @@ private:
             : Pollable_(pollable)
         { }
 
-        explicit TRunEventGuard(TRunEventGuard&& other)
+        explicit TRunEventGuard(TRunEventGuard&& other) noexcept
             : Pollable_(std::move(other.Pollable_))
         {
             other.Pollable_ = nullptr;
@@ -351,7 +360,7 @@ private:
                     DoShutdownPollable(cookie, pollable);
                     break;
                 case EFinishResult::Repeat:
-                    cookie->Invoker->Invoke(BIND(TRunEventGuard(pollable)));
+                    InvokeEventHandler(pollable, cookie);
                     break;
                 case EFinishResult::None:
                     break;
@@ -376,17 +385,31 @@ private:
     TNotificationHandle WakeupHandle_;
     TMpscStack<IPollablePtr> RegisterQueue_;
     TMpscStack<IPollablePtr> UnregisterQueue_;
-    THashSet<IPollablePtr> Pollables_;
+
+    // NB: Both THash and TEqualTo must be supplied here to enable heterogeneous lookup.
+    absl::flat_hash_set<IPollablePtr, THash<IPollablePtr>, TEqualTo<IPollablePtr>> Pollables_;
 
     std::array<TPollerImpl::TEvent, MaxEventsPerPoll> PooledImplEvents_;
+
+    static void InvokeEventHandler(IPollable* pollable, TPollableCookie* cookie)
+    {
+        cookie->Invoker.Acquire()->Invoke(BIND(TRunEventGuard(pollable)));
+    }
+
+    void SetPollableInvoker(const IPollablePtr& pollable, const std::string& poolName)
+    {
+        auto invoker = FairShareThreadPool_->GetInvoker(poolName, Format("%v", pollable.Get()));
+        auto* cookie = TPollableCookie::FromPollable(pollable.Get());
+        cookie->Invoker.Store(std::move(invoker));
+    }
 
     // TODO(lukyan): Move static functions in Cookie?
     static void ScheduleEvent(const IPollablePtr& pollable, EPollControl control)
     {
-        // Can safely dereference pollable because even unregistered pollables are hold in Pollables_.
+        // Can safely dereference pollable because even unregistered pollables are held in Pollables_.
         auto* cookie = TPollableCookie::FromPollable(pollable.Get());
         if (cookie->AquireControl(ToUnderlying(control))) {
-            cookie->Invoker->Invoke(BIND(TRunEventGuard(pollable.Get())));
+            InvokeEventHandler(pollable.Get(), cookie);
         }
     }
 
@@ -400,6 +423,7 @@ private:
 
         cookie->UnregisterPromise.Set();
         cookie->Invoker.Reset();
+
         auto pollerThread = std::move(cookie->PollerThread);
         pollerThread->UnregisterQueue_.Enqueue(pollable);
         pollerThread->WakeupHandle_.Raise();
@@ -407,8 +431,8 @@ private:
 
     void DoUnregister(const IPollablePtr& pollable)
     {
-        YT_LOG_DEBUG("Requesting pollable unregistration (%v)",
-            pollable->GetLoggingTag());
+        YT_TLOG_DEBUG("Requesting pollable unregistration")
+            .With(pollable->GetLoggingTags());
 
         auto* cookie = TPollableCookie::TryFromPollable(pollable.Get());
         YT_VERIFY(cookie);
@@ -431,11 +455,14 @@ private:
                 continue;
             }
 
-            YT_LOG_TRACE("Got pollable event (Pollable: %v, Control: %v)",
-                pollable->GetLoggingTag(),
-                control);
+            if (!Pollables_.contains(pollable)) [[unlikely]] {
+                // A stranded event from an unregistered pollable.
+                continue;
+            }
 
-            YT_VERIFY(pollable->GetRefCount() > 0);
+            YT_TLOG_TRACE("Got pollable event")
+                .With(pollable->GetLoggingTags())
+                .With("Control", control);
 
             ScheduleEvent(pollable, control);
         }
@@ -449,8 +476,8 @@ private:
         std::vector<IPollablePtr> unregisterItems;
 
         try {
-            YT_LOG_DEBUG("Thread started (Name: %v)",
-                GetThreadName());
+            YT_TLOG_DEBUG("Thread started")
+                .With("Name", GetThreadName());
 
             while (true) {
                 int eventCount = PollerImpl_.Wait(PooledImplEvents_.data(), PooledImplEvents_.size(), PollerThreadQuantum.MicroSeconds());
@@ -487,11 +514,12 @@ private:
                 }
             }
 
-            YT_LOG_DEBUG("Thread stopped (Name: %v)",
-                GetThreadName());
+            YT_TLOG_DEBUG("Thread stopped")
+                .With("Name", GetThreadName());
         } catch (const std::exception& ex) {
-            YT_LOG_FATAL(ex, "Unhandled exception in executor thread (Name: %v)",
-                GetThreadName());
+            YT_TLOG_FATAL("Unhandled exception in executor thread")
+                .With("Name", GetThreadName())
+                .With(TError(ex));
         }
 
         RegisterQueue_.DequeueAll(false, [&] (const auto&) { });
@@ -513,7 +541,7 @@ class TThreadPoolPoller
     : public IThreadPoolPoller
 {
 public:
-    TThreadPoolPoller(int threadCount, const TString& threadNamePrefix, TDuration pollingPeriod)
+    TThreadPoolPoller(int threadCount, TStringBuf threadNamePrefix, TDuration pollingPeriod)
         : Poller_(New<TThreadPoolPollerImpl>(threadCount, threadNamePrefix, pollingPeriod))
     { }
 
@@ -542,12 +570,12 @@ public:
         Poller_->Shutdown();
     }
 
-    bool TryRegister(const IPollablePtr& pollable, TString poolName = "default") override
+    bool TryRegister(const IPollablePtr& pollable, const std::string& poolName = "default") override
     {
-        return Poller_->TryRegister(pollable, std::move(poolName));
+        return Poller_->TryRegister(pollable, poolName);
     }
 
-    void SetExecutionPool(const IPollablePtr& pollable, TString poolName) override
+    void SetExecutionPool(const IPollablePtr& pollable, const std::string& poolName) override
     {
         Poller_->SetExecutionPool(pollable, std::move(poolName));
     }
@@ -577,15 +605,20 @@ public:
         return Poller_->GetInvoker();
     }
 
+    ITwoLevelFairShareThreadPoolPtr GetFairShareThreadPool() const override
+    {
+        return Poller_->GetFairShareThreadPool();
+    }
+
 private:
-    TIntrusivePtr<TThreadPoolPollerImpl> Poller_;
+    const TThreadPoolPollerImplPtr Poller_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
 IThreadPoolPollerPtr CreateThreadPoolPoller(
     int threadCount,
-    const TString& threadNamePrefix,
+    TStringBuf threadNamePrefix,
     TDuration pollingPeriod)
 {
     auto poller = New<TThreadPoolPoller>(threadCount, threadNamePrefix, pollingPeriod);

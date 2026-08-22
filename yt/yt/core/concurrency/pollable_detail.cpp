@@ -6,6 +6,7 @@ namespace NYT::NConcurrency {
 
 void TPollableBase::SetCookie(TCookiePtr cookie)
 {
+    YT_VERIFY(!Cookie_);
     Cookie_ = std::move(cookie);
 }
 

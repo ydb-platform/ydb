@@ -1,0 +1,58 @@
+PY3TEST()
+
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.inc)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/fq/streaming_common/vm_metadata_emulator/recipe/recipe.inc)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/fq/streaming_common/iam_grpc_emulator/recipe/recipe.inc)
+
+TEST_SRCS(
+    test_iam.py
+    test_scalar_topic_write.py
+    test_streaming.py
+    test_watermarks.py
+)
+
+IF (OS_LINUX)
+    TEST_SRCS(
+        test_udfs.py
+    )
+ENDIF()
+
+PY_SRCS(
+    conftest.py
+)
+
+REQUIREMENTS(cpu:4)
+REQUIREMENTS(ram:16)
+IF (SANITIZER_TYPE)
+    SIZE(LARGE)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+    REQUIREMENTS(ram:20)
+ELSE()
+    SIZE(MEDIUM)
+    FORK_SUBTESTS()
+    SPLIT_FACTOR(20)
+ENDIF()
+
+PEERDIR(
+    ydb/tests/library
+    ydb/tests/library/test_meta
+    ydb/public/sdk/python
+    ydb/public/sdk/python/enable_v3_new_behavior
+    library/recipes/common
+    ydb/tests/olap/common
+    ydb/tests/tools/datastreams_helpers
+    ydb/tests/fq/streaming_common
+)
+
+DEPENDS(
+    ydb/apps/ydb
+    ydb/tests/tools/pq_read
+    yql/essentials/udfs/common/python/python3_small
+)
+
+END()
+
+RECURSE_FOR_TESTS(
+    streaming_large
+    generic
+)

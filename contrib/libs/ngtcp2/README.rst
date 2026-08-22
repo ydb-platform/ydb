@@ -30,9 +30,9 @@ Requirements
 ------------
 
 The libngtcp2 C library itself does not depend on any external
-libraries.  The example client, and server are written in C++20, and
-should compile with the modern C++ compilers (e.g., clang >= 11.0, or
-gcc >= 11.0).
+libraries.  The example client, and server are written in C++23, and
+should compile with the modern C++ compilers (e.g., clang >= 19, or
+gcc >= 15).
 
 The following packages are required to configure the build system:
 
@@ -60,10 +60,11 @@ directory require at least one of the following TLS backends:
 
 - `quictls
   <https://github.com/quictls/openssl/tree/OpenSSL_1_1_1w+quic>`_
+  (deprecated)
 - GnuTLS >= 3.7.5
-- BoringSSL (commit 9295969e1dad2c31d0d99481734c1c68dcbc6403);
+- BoringSSL (commit 3c6315e00ab02d7bc9b8922aff1f85d8f81ee130);
   or aws-lc >= 1.39.0
-- Picotls (commit bbcdbe6dc31ec5d4b72a7beece4daf58098bad42)
+- Picotls (commit 44bc503943f47ec59f49ca7a157238fb81a91ac0)
 - wolfSSL >= 5.5.0
 - LibreSSL >= v3.9.2
 - OpenSSL >= 3.5.0 (experimental)
@@ -82,13 +83,13 @@ Build with wolfSSL
 
 .. code-block:: shell
 
-   $ git clone --depth 1 -b v5.8.0-stable https://github.com/wolfSSL/wolfssl
+   $ git clone --depth 1 -b v5.9.2-stable https://github.com/wolfSSL/wolfssl
    $ cd wolfssl
    $ autoreconf -i
    $ # For wolfSSL < v5.6.6, append --enable-quic.
    $ ./configure --prefix=$PWD/build \
        --enable-all --enable-aesni --enable-harden --enable-keylog-export \
-       --disable-ech
+       --disable-ech --enable-mlkem
    $ make -j$(nproc)
    $ make install
    $ cd ..
@@ -115,7 +116,7 @@ Build with BoringSSL
 
    $ git clone https://boringssl.googlesource.com/boringssl
    $ cd boringssl
-   $ git checkout 9295969e1dad2c31d0d99481734c1c68dcbc6403
+   $ git checkout 3c6315e00ab02d7bc9b8922aff1f85d8f81ee130
    $ cmake -B build -DCMAKE_POSITION_INDEPENDENT_CODE=ON
    $ make -j$(nproc) -C build
    $ cd ..
@@ -142,7 +143,7 @@ Build with aws-lc
 
 .. code-block:: shell
 
-   $ git clone --depth 1 -b v1.52.0 https://github.com/aws/aws-lc
+   $ git clone --depth 1 -b v5.1.0 https://github.com/aws/aws-lc
    $ cd aws-lc
    $ cmake -B build -DDISABLE_GO=ON
    $ make -j$(nproc) -C build
@@ -170,10 +171,11 @@ Build with libressl
 
 .. code-block:: shell
 
-   $ git clone --depth 1 -b v4.1.0 https://github.com/libressl/portable.git libressl
+   $ LIBRESSL_VERSION=v4.3.2
+   $ git clone --depth 1 -b $LIBRESSL_VERSION https://github.com/libressl/portable.git libressl
    $ cd libressl
    $ # Workaround autogen.sh failure
-   $ export LIBRESSL_GIT_OPTIONS="-b libressl-v4.1.0"
+   $ export LIBRESSL_GIT_OPTIONS="-b libressl-$LIBRESSL_VERSION"
    $ ./autogen.sh
    $ ./configure --prefix=$PWD/build
    $ make -j$(nproc) install
@@ -222,15 +224,15 @@ The notable options are:
 
 - ``-V``, ``--validate-addr``: Enforce stateless address validation.
 
-H09wsslclient/H09wsslserver
----------------------------
+wsslhqclient/wsslhqserver
+-------------------------
 
-There are h09wsslclient and h09wsslserver which speak HTTP/0.9.  They
-are written just for `quic-interop-runner
+There are wsslhqclient and wsslhqserver which speak HQ protocol, which
+is specifically tailored for `quic-interop-runner
 <https://github.com/marten-seemann/quic-interop-runner>`_.  They share
 the basic functionalities with HTTP/3 client and server but have less
-functions (e.g., h09wsslclient does not have a capability to send
-request body, and h09wsslserver does not understand numeric request
+functions (e.g., wsslhqclient does not have a capability to send
+request body, and wsslhqserver does not understand numeric request
 path, like /1000).
 
 Resumption and 0-RTT
@@ -272,7 +274,8 @@ The header file exists under crypto/includes/ngtcp2 directory.
 Each library file is built for a particular TLS backend.  The
 available crypto helper libraries are:
 
-- libngtcp2_crypto_quictls: Use quictls and libressl as TLS backend
+- libngtcp2_crypto_quictls: Use quictls as TLS backend (deprecated)
+- libngtcp2_crypto_libressl: Use libressl as TLS backend
 - libngtcp2_crypto_gnutls: Use GnuTLS as TLS backend
 - libngtcp2_crypto_boringssl: Use BoringSSL and aws-lc as TLS backend
 - libngtcp2_crypto_picotls: Use Picotls as TLS backend
@@ -299,8 +302,12 @@ OpenSSL backend, your application must make sure that:
 If you cannot make sure neither of them, it is a good time to migrate
 your application to the other alternative (e.g., wolfSSL, aws-lc).
 
-libngtcp2_crypto_quictls and libngtcp2_crypto_ossl cannot be built at
-the same time.
+libngtcp2_crypto_quictls, libngtcp2_crypto_libressl and
+libngtcp2_crypto_ossl cannot be built at the same time.
+
+Although libressl has its own library libngtcp2_crypto_libressl, an
+application should include `ngtcp2/ngtcp2_crypto_quictls.h`.  There is
+no `ngtcp2/ngtcp2_crypto_libressl.h`.
 
 The examples directory contains client and server that are linked to
 those crypto helper libraries and TLS backends.  They are only built

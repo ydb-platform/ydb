@@ -1,12 +1,12 @@
 #include "serialize.h"
 
-#include "size.h"
 #include "tree_visitor.h"
 
-#include <yt/yt/core/misc/blob.h>
 #include <yt/yt/core/misc/protobuf_helpers.h>
 
 #include <library/cpp/yt/misc/cast.h>
+
+#include <library/cpp/yt/memory/blob.h>
 
 #include <google/protobuf/io/zero_copy_stream_impl_lite.h>
 
@@ -44,8 +44,8 @@ TInstant ConvertRawValueToUnixTime(ui64 value)
     } else if (value < UnixTimeNanosecondUpperBoundary) {
         return TInstant::MicroSeconds(value / 1'000);
     } else {
-        THROW_ERROR_EXCEPTION("Value %Qv does not represent valid UNIX time",
-            value);
+        THROW_ERROR_EXCEPTION("Uint64 value does not represent valid UNIX time")
+            .With("uint64_value", value);
     }
 }
 
@@ -174,13 +174,6 @@ void Serialize(IInputStream& input, IYsonConsumer* consumer)
     Serialize(TYsonInput(&input), consumer);
 }
 
-// TSize
-void Serialize(const TSize& value, NYson::IYsonConsumer* consumer)
-{
-    Serialize(value.Underlying(), consumer);
-}
-
-
 // TStatisticPath.
 void Serialize(const NStatisticPath::TStatisticPath& path, IYsonConsumer* consumer)
 {
@@ -201,9 +194,15 @@ void SerializeProtobufMessage(
     ParseProtobuf(consumer, &inputStream, type);
 }
 
+// std::filesystem::path
+void Serialize(const std::filesystem::path& path, IYsonConsumer* consumer)
+{
+    consumer->OnStringScalar(path.string());
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
-// signed integers
+// integers
 #define DESERIALIZE(type) \
     void Deserialize(type& value, INodePtr node) \
     { \
@@ -212,8 +211,8 @@ void SerializeProtobufMessage(
         } else if (node->GetType() == ENodeType::Uint64) { \
             value = CheckedIntegralCast<type>(node->AsUint64()->GetValue()); \
         } else { \
-            THROW_ERROR_EXCEPTION("Cannot parse \"" #type "\" value from %Qlv", \
-                node->GetType()); \
+            THROW_ERROR_EXCEPTION("\"" #type "\" cannot be parsed from not integer") \
+                .With("value_type", node->GetType()); \
         } \
     }
 
@@ -266,13 +265,15 @@ void Deserialize(bool& value, INodePtr node)
     } else if (node->GetType() == ENodeType::Int64) {
         auto intValue = node->AsInt64()->GetValue();
         if (intValue != 0 && intValue != 1) {
-            THROW_ERROR_EXCEPTION("Expected 0 or 1 but found %v", intValue);
+            THROW_ERROR_EXCEPTION("Bool cannot be parsed from integer other than 0 or 1")
+                .With("integer_value", intValue);
         }
         value = static_cast<bool>(intValue);
     } else if (node->GetType() == ENodeType::Uint64) {
         auto uintValue = node->AsUint64()->GetValue();
         if (uintValue != 0 && uintValue != 1) {
-            THROW_ERROR_EXCEPTION("Expected 0 or 1 but found %v", uintValue);
+            THROW_ERROR_EXCEPTION("Bool cannot be parsed from integer other than 0 or 1")
+                .With("integer_value", uintValue);
         }
         value = static_cast<bool>(uintValue);
     } else {
@@ -284,9 +285,10 @@ void Deserialize(bool& value, INodePtr node)
 // char
 void Deserialize(char& value, INodePtr node)
 {
-    TString stringValue = node->AsString()->GetValue();
+    std::string stringValue = node->AsString()->GetValue();
     if (stringValue.size() != 1) {
-        THROW_ERROR_EXCEPTION("Expected string of length 1 but found of length %v", stringValue.size());
+        THROW_ERROR_EXCEPTION("Char cannot be parsed from string whose length is not equal to 1")
+            .With("string_length", stringValue.size());
     }
     value = stringValue[0];
 }
@@ -298,22 +300,26 @@ void Deserialize(TDuration& value, INodePtr node)
         case ENodeType::Int64: {
             auto ms = node->AsInt64()->GetValue();
             if (ms < 0) {
-                THROW_ERROR_EXCEPTION("Duration cannot be negative");
+                THROW_ERROR_EXCEPTION("Duration value cannot be negative")
+                    .With("duration_value", ms);
             }
             value = TDuration::MilliSeconds(static_cast<ui64>(ms));
             break;
         }
 
-        case ENodeType::Uint64:
+        case ENodeType::Uint64: {
             value = TDuration::MilliSeconds(node->AsUint64()->GetValue());
             break;
+        }
 
         case ENodeType::Double: {
             auto ms = node->AsDouble()->GetValue();
+            THROW_ERROR_EXCEPTION_IF(!std::isfinite(ms), "Duration must be finite");
             if (ms < 0) {
-                THROW_ERROR_EXCEPTION("Duration cannot be negative");
+                THROW_ERROR_EXCEPTION("Duration value cannot be negative")
+                    .With("duration_value", ms);
             }
-            value = TDuration::MicroSeconds(static_cast<ui64>(ms * 1'000.0));
+            value = TDuration::MilliSeconds(ms);
             break;
         }
 
@@ -322,8 +328,8 @@ void Deserialize(TDuration& value, INodePtr node)
             break;
 
         default:
-            THROW_ERROR_EXCEPTION("Cannot parse duration from %Qlv",
-                node->GetType());
+            THROW_ERROR_EXCEPTION("Duration cannot be parsed from value of type other than Int64, Uint64, Double or String")
+                .With("value_type", node->GetType());
     }
 }
 
@@ -333,6 +339,10 @@ void Deserialize(TInstant& value, INodePtr node)
     switch (node->GetType()) {
         case ENodeType::Int64: {
             auto ms = CheckedIntegralCast<ui64>(node->AsInt64()->GetValue());
+            if (ms < 0) {
+                THROW_ERROR_EXCEPTION("Instant value cannot be negative")
+                    .With("instant_value", ms);
+            }
             value = ConvertRawValueToUnixTime(ms);
             break;
         }
@@ -345,8 +355,10 @@ void Deserialize(TInstant& value, INodePtr node)
 
         case ENodeType::Double: {
             auto ms = node->AsDouble()->GetValue();
+            THROW_ERROR_EXCEPTION_IF(!std::isfinite(ms), "Instant must be finite");
             if (ms < 0) {
-                THROW_ERROR_EXCEPTION("Instant cannot be negative");
+                THROW_ERROR_EXCEPTION("Instant value cannot be negative")
+                    .With("instant_value", ms);
             }
             value = ConvertRawValueToUnixTime(ms);
             break;
@@ -357,8 +369,8 @@ void Deserialize(TInstant& value, INodePtr node)
             break;
 
         default:
-            THROW_ERROR_EXCEPTION("Cannot parse instant from %Qlv",
-                node->GetType());
+            THROW_ERROR_EXCEPTION("Instant cannot be parsed from value of type other than Int64, Uint64, Double or String")
+                .With("value_type", node->GetType());
     }
 }
 
@@ -368,28 +380,13 @@ void Deserialize(TGuid& value, INodePtr node)
     value = TGuid::FromString(node->AsString()->GetValue());
 }
 
-// TSize
-void Deserialize(TSize& value, INodePtr node)
-{
-    if (node->GetType() == ENodeType::Int64) {
-        value = TSize(node->AsInt64()->GetValue());
-    } else if (node->GetType() == ENodeType::Uint64) {
-        value = TSize(CheckedIntegralCast<i64>(node->AsUint64()->GetValue()));
-    } else if (node->GetType() == ENodeType::String) {
-        value = TSize::FromString(node->AsString()->GetValue());
-    } else {
-        THROW_ERROR_EXCEPTION("Cannot parse TSize value from %Qlv",
-            node->GetType());
-    }
-}
-
 // TStatisticPath.
 void Deserialize(NStatisticPath::TStatisticPath& value, INodePtr node)
 {
-    const TString& path = node->AsString()->GetValue();
+    const std::string& path = node->AsString()->GetValue();
 
     // Try to parse slashed paths.
-    if (!path.empty() && path.StartsWith('/')) {
+    if (!path.empty() && path.starts_with('/')) {
         value = NStatisticPath::SlashedStatisticPath(path).ValueOrThrow();
     } else {
         value = NStatisticPath::ParseStatisticPath(path).ValueOrThrow();
@@ -408,9 +405,15 @@ void DeserializeProtobufMessage(
     auto protobufWriter = CreateProtobufWriter(&outputStream, type, options);
     VisitTree(node, protobufWriter.get(), true);
     if (!message.ParseFromArray(wireBytes.data(), wireBytes.size())) {
-        THROW_ERROR_EXCEPTION("Error parsing %v from wire bytes",
-            message.GetTypeName());
+        THROW_ERROR_EXCEPTION("Error parsing protobuf message from wire bytes")
+            .With("protobuf_type", message.GetTypeName());
     }
+}
+// std::filesystem::path
+void Deserialize(std::filesystem::path& path, INodePtr node)
+{
+    std::string stringPath = node->AsString()->GetValue();
+    path = std::move(stringPath);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

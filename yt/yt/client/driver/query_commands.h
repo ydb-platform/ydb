@@ -20,7 +20,7 @@ public:
 
 private:
     NQueryTrackerClient::EQueryEngine Engine;
-    TString Query;
+    std::string Query;
 
     void DoExecute(ICommandContextPtr context) override;
 };
@@ -128,6 +128,20 @@ class TGetQueryTrackerInfoCommand
 {
 public:
     REGISTER_YSON_STRUCT_LITE(TGetQueryTrackerInfoCommand);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TGetQueryDeclaredParametersInfoCommand
+    : public TTypedCommand<NApi::TGetQueryDeclaredParametersInfoOptions>
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TGetQueryDeclaredParametersInfoCommand);
 
     static void Register(TRegistrar registrar);
 

@@ -96,13 +96,15 @@ def build_tzinfo(zone, fp):
                 dst = inf[0] - prev_inf[0]  # dst offset
 
                 # Bad dst? Look further. DST > 24 hours happens when
-                # a timzone has moved across the international dateline.
+                # a timezone has moved across the international dateline.
+                # DST <= 0 can be a zone realignment (e.g. Vilnius MSK->CEST); 
+                # or legitimate negative DST (e.g. Morocco, Ireland).
                 if dst <= 0 or dst > 3600 * 3:
                     for j in range(i + 1, len(transitions)):
                         stdinf = ttinfo[lindexes[j]]
                         if not stdinf[1]:
                             dst = inf[0] - stdinf[0]
-                            if dst > 0:
+                            if 0 < abs(dst) <= 3600 * 3:
                                 break  # Found a useful std time.
 
             tzname = inf[2]

@@ -1,6 +1,7 @@
 #include "yql_yt_op_tracker.h"
 
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <yt/cpp/mapreduce/interface/operation.h>
 #include <yt/cpp/mapreduce/interface/job_statistics.h>
@@ -82,7 +83,8 @@ void TOperationTracker::Stop() {
 }
 
 TFuture<void> TOperationTracker::MakeOperationWaiter(const NYT::IOperationPtr& operation, TMaybe<ui32> publicId,
-    const TString& ytServer, const TString& ytClusterName, const TOperationProgressWriter& progressWriter, const TStatWriter& statWriter)
+    const TString& ytServer, const TString& ytClusterName, const TOperationProgressWriter& progressWriter,
+    const TStatWriter& statWriter, std::function<void(NYT::TOperationId)> onOperationStarted, bool isExternalProgress)
 {
     auto future = operation->GetStartedFuture().Apply([operation](const auto& f) {
         f.GetValue();
@@ -91,25 +93,89 @@ TFuture<void> TOperationTracker::MakeOperationWaiter(const NYT::IOperationPtr& o
     if (!publicId) {
         return future;
     }
+    YQL_CLOG(INFO, ProviderYt) << "Tracking progress for publicId=" << *publicId;
+
 
     TOperationProgress progress(TString(YtProviderName), *publicId,
         TOperationProgress::EState::InProgress);
 
-    auto filter = NYT::TOperationAttributeFilter();
-    filter.Add(NYT::EOperationAttribute::State);
+    std::shared_ptr<TString> lastRetriableErrorStatus = std::make_shared<TString>();
 
-    auto checker = [future, operation, ytServer, progress, progressWriter, filter, ytClusterName] () mutable {
+    operation->GetStartedFuture().Subscribe([operation, onOperationStarted](const TFuture<void> &){
+        auto id = operation->GetId();
+        onOperationStarted(id);
+    });
+
+    auto checker = [
+        future, operation, ytServer, progress, progressWriter, ytClusterName,
+        jobStatisticsUpdateTimer = TInstant::Now(), lastRetriableErrorStatus, isExternalProgress
+    ] () mutable {
         bool done = future.Wait(TDuration::Zero());
 
         if (!done) {
             TString stage;
             bool writeProgress = true;
+            progress.Alerts.clear();
             if (operation->IsStarted()) {
-                if (!progress.RemoteId) {
-                    progress.RemoteId = ytServer + "/" + GetGuidAsString(operation->GetId());
+                if (isExternalProgress) {
+                    if (!progress.WaitingRemoteId) {
+                        progress.WaitingRemoteId = ytServer + "/" + GetGuidAsString(operation->GetId());
+                    }
+                } else {
+                    if (!progress.RemoteId) {
+                        progress.RemoteId = ytServer + "/" + GetGuidAsString(operation->GetId());
+                    }
                 }
+
+                auto attributes = operation->GetAttributes(
+                                                NYT::TGetOperationOptions()
+                                                    .AttributeFilter(
+                                                        NYT::TOperationAttributeFilter()
+                                                            .Add(NYT::EOperationAttribute::Alerts)
+                                                            .Add(NYT::EOperationAttribute::State)
+                                                            .Add(NYT::EOperationAttribute::BriefProgress)
+                                            ));
+
+                if (auto alerts = attributes.Alerts) {
+                    for (const auto& [alertType, ytError] : *alerts) {
+                        progress.Alerts.push_back(
+                            TOperationProgress::TAlert{alertType, ytError.GetMessage()}
+                        );
+                    }
+                }
+
+                if (!lastRetriableErrorStatus->empty()) {
+                    progress.Alerts.push_back(TOperationProgress::TAlert{"start_error", *lastRetriableErrorStatus});
+                }
+
+                if (TInstant::Now() - jobStatisticsUpdateTimer >= TDuration::Minutes(1)) {
+                    auto operationStatistic = operation->GetJobStatistics();
+
+                    if (operationStatistic.HasStatistics("data/input/data_weight") && operationStatistic.HasStatistics("data/output/0/data_weight")) {
+                        if (auto inputOperationStatisticSum = operationStatistic.GetStatistics("data/input/data_weight").Sum()) {
+                            auto inputSize = *inputOperationStatisticSum;
+                            auto outputSize = 0;
+                            size_t i = 0;
+                            while (true) {
+                                TStringBuilder key;
+                                key << "data/output/" << i << "/data_weight";
+                                if (!operationStatistic.HasStatistics(key)) break;
+                                outputSize += operationStatistic.GetStatistics(key).Sum().GetOrElse(0);
+                                i++;
+                            }
+
+                            if (inputSize != 0 && outputSize / inputSize >= 20) {
+                                progress.Alerts.push_back(
+                                    TOperationProgress::TAlert{"data_explosion", TStringBuilder() << "Total output/input ratio: " << outputSize / inputSize << "x"}
+                                );
+                            }
+                        }
+                    }
+                    jobStatisticsUpdateTimer = TInstant::Now();
+                }
+
                 progress.RemoteData["cluster_name"] = ytClusterName;
-                if (auto briefProgress = operation->GetBriefProgress()) {
+                if (auto briefProgress = attributes.BriefProgress) {
                     progress.Counters.ConstructInPlace();
                     progress.Counters->Completed = briefProgress->Completed;
                     progress.Counters->Running = briefProgress->Running;
@@ -120,7 +186,7 @@ TFuture<void> TOperationTracker::MakeOperationWaiter(const NYT::IOperationPtr& o
                     progress.Counters->Pending = briefProgress->Pending;
                     stage = "Running";
                 } else {
-                    auto state = operation->GetAttributes(NYT::TGetOperationOptions().AttributeFilter(filter)).State;
+                    auto state = attributes.State;
                     if (state) {
                         stage = *state;
                         stage.to_upper(0, 1);
@@ -129,10 +195,21 @@ TFuture<void> TOperationTracker::MakeOperationWaiter(const NYT::IOperationPtr& o
             } else {
                 // Not started yet
                 writeProgress = false;
-                stage = operation->GetStatus();
+                TString status = operation->GetStatus();
+                if (status.StartsWith("Retriable error")) {
+                    progress.Alerts.push_back(
+                        TOperationProgress::TAlert{"start_error", status}
+                    );
+                    *lastRetriableErrorStatus = status;
+                } else {
+                    if (!lastRetriableErrorStatus->empty()) {
+                        progress.Alerts.push_back(TOperationProgress::TAlert{"start_error", *lastRetriableErrorStatus});
+                    }
+                }
+                stage = status;
             }
-            if (!stage.empty() && stage != progress.Stage.first) {
-                progress.Stage = TOperationProgress::TStage(stage, TInstant::Now());
+            if (!stage.empty() && stage != progress.Stage.first && !isExternalProgress) {
+                progress.Stage = TOperationProgress::TStage{stage, TInstant::Now()};
                 writeProgress = true;
             }
             if (writeProgress) {
@@ -148,9 +225,30 @@ TFuture<void> TOperationTracker::MakeOperationWaiter(const NYT::IOperationPtr& o
     }
 
     // Make a final progress write
-    return future.Apply([operation, progress, progressWriter, statWriter, ytServer, ytClusterName] (const TFuture<void>& f) mutable {
+    return future.Apply([operation, progress, progressWriter, statWriter, ytServer, ytClusterName, lastRetriableErrorStatus] (const TFuture<void>& f) mutable {
         f.GetValue();
-        if (auto briefProgress = operation->GetBriefProgress()) {
+
+        auto attributes = operation->GetAttributes(
+                                NYT::TGetOperationOptions()
+                                    .AttributeFilter(
+                                        NYT::TOperationAttributeFilter()
+                                            .Add(NYT::EOperationAttribute::Alerts)
+                                            .Add(NYT::EOperationAttribute::BriefProgress)
+                            ));
+
+        if (auto alerts = attributes.Alerts) {
+            for (const auto& [alertType, ytError] : *alerts) {
+                progress.Alerts.push_back(
+                    TOperationProgress::TAlert{alertType, ytError.GetMessage()}
+                );
+            }
+        }
+
+        if (!lastRetriableErrorStatus->empty()) {
+            progress.Alerts.push_back(TOperationProgress::TAlert{"start_error", *lastRetriableErrorStatus});
+        }
+
+        if (auto briefProgress = attributes.BriefProgress) {
             progress.Counters.ConstructInPlace();
             progress.Counters->Completed = briefProgress->Completed;
             progress.Counters->Running = briefProgress->Running;
@@ -205,6 +303,7 @@ void TOperationTracker::Tracker() {
                     activeOps.push_back(op);
                 }
             } catch (...) {
+                YQL_CLOG(ERROR, ProviderYt) << "Operation tracker failed: " << CurrentExceptionMessage();
             }
             if (!Running_) {
                 break;

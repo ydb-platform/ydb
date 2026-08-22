@@ -5,7 +5,7 @@
 #include "datashard_active_transaction.h"
 #include <ydb/core/tx/locks/range_treap.h>
 
-#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
+#include <library/cpp/containers/absl/flat_hash_map.h>
 
 namespace NKikimr {
 namespace NDataShard {
@@ -17,7 +17,7 @@ class TDependencyTracker {
 private:
     using TKeys = TVector<TOperationKey>;
 
-    struct TOperationPtrTraits {
+    struct TOperationPtrTraits: NRangeTreap::TDefaultValueTraits<TOperation::TPtr> {
         static bool Less(const TOperation::TPtr& a, const TOperation::TPtr& b) noexcept {
             return a.Get() < b.Get();
         }

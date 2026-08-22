@@ -1,0 +1,12 @@
+--- contrib/tools/python3/Python/codecs.c	(index)
++++ contrib/tools/python3/Python/codecs.c	(working tree)
+@@ -138,6 +138,9 @@ PyObject *_PyCodec_Lookup(const char *encoding)
+     }
+ 
+     PyInterpreterState *interp = _PyInterpreterState_GET();
++    if (!interp->codecs.initialized) {
++        return NULL;
++    }
+     assert(interp->codecs.initialized);
+ 
+     /* Convert the encoding to a normalized Python string: all

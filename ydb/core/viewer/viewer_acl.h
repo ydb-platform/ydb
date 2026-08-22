@@ -287,8 +287,9 @@ public:
             }
         }
         aceObj.SetAccessRight(accessRights);
-        ui32 inheritanceType = NACLib::EInheritanceType::InheritObject + NACLib::EInheritanceType::InheritContainer;
+        ui32 inheritanceType;
         if (ace.Has("InheritanceType")) {
+            inheritanceType = NACLib::EInheritanceType::InheritNone;
             const auto& jsonInheritanceType = ace["InheritanceType"].GetArraySafe();
             for (const auto& inherit : jsonInheritanceType) {
                 auto inheritance = Dialect->AccessMap.find(inherit.GetStringRobust());
@@ -298,6 +299,8 @@ public:
                     throw yexception() << "Invalid inheritance type \"" << inherit.GetStringRobust() << "\"";
                 }
             }
+        } else {
+            inheritanceType = NACLib::EInheritanceType::InheritObject + NACLib::EInheritanceType::InheritContainer;
         }
         aceObj.SetInheritanceType(inheritanceType);
         return aceObj;
@@ -354,6 +357,12 @@ public:
                         return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Invalid path"));
                     }
                 }
+            } else {
+                if (CacheResult.GetError() == "AccessDenied") {
+                    ReplyAndPassAway(GETHTTPACCESSDENIED("text/plain", "Forbidden"), CacheResult.GetError());
+                } else {
+                    ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", CacheResult.GetError()), CacheResult.GetError());
+                }
             }
             RequestDone();
         }
@@ -367,6 +376,12 @@ public:
                 ui64 schemeShardTabletId = record.GetSchemeShardTabletId();
                 auto request = std::make_unique<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>(record.GetTxId());
                 NotifyTxCompletionResult = MakeRequestToTablet<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult>(schemeShardTabletId, request.release());
+            }
+        } else {
+            if (ProposeStatus.GetError() == "AccessDenied") {
+                return ReplyAndPassAway(GETHTTPACCESSDENIED("text/plain", "Forbidden"), ProposeStatus.GetError());
+            } else {
+                return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", ProposeStatus.GetError()), ProposeStatus.GetError());
             }
         }
         RequestDone();

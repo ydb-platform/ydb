@@ -1,0 +1,401 @@
+<script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+<script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+<link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+
+<div id="app" class="p-4">
+  <div class="flex justify-between items-center mb-4">
+    <h1 class="text-2xl font-bold">{{ message }}</h1>
+  </div>
+
+  <div class="toast toast-top toast-end z-50">
+    <div v-for="error in errors" :key="error.id" class="alert alert-error">
+      <span>{{ error.message }}</span>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-12 gap-6">
+    <div class="col-span-7">
+      <nemesis-group-accordion
+        v-for="(groupData, groupName) in groupedProcessTypes"
+        :key="groupName"
+        :group-name="groupName"
+        :group-description="groupData.description"
+        :nemesis-list="groupData.nemesis"
+        :hosts="hosts"
+        :processes="processes"
+        :schedule-status="scheduleStatus"
+        :process-types="processTypes"
+        :inventory="inventory"
+      ></nemesis-group-accordion>
+    </div>
+
+    <!-- Right Column: Scheduler, Hosts Status, Warden Checks & Schedule History (5 cols) -->
+    <div class="col-span-5">
+      <div class="sticky top-4 space-y-6">
+        <!-- Nemesis Scheduler (boundary-walking): state, failure budget, problems -->
+        <scheduler-card
+          :scheduler="scheduler"
+          :problems="problems"
+          :is-busy="schedulerBusy"
+          @start="startScheduler"
+          @stop="stopScheduler">
+        </scheduler-card>
+
+        <!-- Hosts Status -->
+        <div>
+          <h2 class="text-xl font-bold mb-4">Hosts Status</h2>
+          <div class="badge badge-sm badge-error" v-show="hostsFetchError != null">Host fetch error</div>
+          <div class="overflow-x-auto bg-base-100 rounded-box shadow-md">
+            <table class="table table-xs w-full">
+              <thead>
+                <tr>
+                  <th>Host</th>
+                  <th>Agent</th>
+                  <th>YDB HC</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr is="vue:host-status-item" v-for="(host_data, host) in hosts" :host_data="host_data" :host="host"
+                  :healthcheck="healthcheck[host]" :key="host"></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Warden Checks -->
+        <warden-checks-card
+          :warden-results="wardenResults"
+          :is-loading="wardenLoading"
+          @run-checks="runWardenChecks">
+        </warden-checks-card>
+
+        <!-- Schedule History -->
+        <div>
+          <h2 class="text-xl font-bold mb-4">Recent Scheduled Runs</h2>
+          <div class="overflow-x-auto bg-base-100 rounded-box shadow-md">
+            <table class="table table-xs w-full">
+              <thead>
+                <tr>
+                  <th>Type</th>
+                  <th>Action</th>
+                  <th>Target</th>
+                  <th>Time</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(entry, index) in scheduleHistory" :key="index">
+                  <td class="font-mono text-xs">{{ entry.type }}</td>
+                  <td>
+                    <span class="badge badge-xs" :class="entry.action === 'inject' ? 'badge-warning' : 'badge-info'">
+                      {{ entry.action }}
+                    </span>
+                  </td>
+                  <td class="font-mono text-xs">{{ formatTarget(entry) }}</td>
+                  <td class="text-xs opacity-70">{{ new Date(entry.timestamp).toLocaleTimeString() }}</td>
+                </tr>
+                <tr v-if="scheduleHistory.length === 0">
+                  <td colspan="4" class="text-center opacity-50">No scheduled runs yet</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  import HostStatusItem from './HostStatusItem.js'
+  import ProcessTypeGroup from './ProcessTypeGroup.js'
+  import WardenChecksCard from './WardenChecksCard.js'
+  import NemesisGroupAccordion from './NemesisGroupAccordion.js'
+  import SchedulerCard from './SchedulerCard.js'
+
+  const { createApp, ref, computed } = Vue
+
+  createApp({
+    components: {
+      HostStatusItem,
+      ProcessTypeGroup,
+      WardenChecksCard,
+      NemesisGroupAccordion,
+      SchedulerCard
+    },
+    setup() {
+      const message = ref('Nemesis')
+      const hosts = ref({})
+      const healthcheck = ref({})
+      const hostsFetchError = ref(null)
+      const processTypes = ref([]) // Array of {name, description}
+      const groupedProcessTypes = ref({}) // { groupName: { description, nemesis: [...] } }
+      const processes = ref({}) // { host: [ProcessInfo, ...] }
+      const errors = ref([])
+      const scheduleHistory = ref([]) // Array of scheduled execution history
+      const scheduleStatus = ref({}) // Schedule status for all nemesis types
+      const wardenResults = ref({}) // Warden check results per host
+      const wardenLoading = ref(false)
+      const inventory = ref({ hosts: [], nodes: [], slots: [] })
+      const scheduler = ref({ available: false })
+      const problems = ref({ count: 0, problems: [], by_kind: {} })
+      const schedulerBusy = ref(false)
+
+      // Axios interceptor for global error handling
+      axios.interceptors.response.use(
+        response => response,
+        error => {
+          const endpoint = error.config.url
+          const status = error.response ? error.response.status : 'Network Error'
+          const message = `Error at ${endpoint}: ${status}`
+          
+          const errorObj = { id: Date.now(), message }
+          errors.value.push(errorObj)
+          
+          setTimeout(() => {
+            errors.value = errors.value.filter(e => e.id !== errorObj.id)
+          }, 5000)
+          
+          return Promise.reject(error)
+        }
+      )
+
+      function formatTarget(entry) {
+        const t = entry && entry.target
+        if (!t) {
+          return entry.host || ''
+        }
+        const kind = t.kind || 'host'
+        if (kind === 'node') {
+          const id = t.node_id != null ? `node=${t.node_id}` : ''
+          const port = t.ic_port != null ? `ic=${t.ic_port}` : ''
+          return [kind, entry.host || t.host, id, port].filter(Boolean).join(' ')
+        }
+        if (kind === 'slot') {
+          const id = t.slot_idx != null ? `slot=${t.slot_idx}` : ''
+          const port = t.ic_port != null ? `ic=${t.ic_port}` : ''
+          return [kind, entry.host || t.host, id, port].filter(Boolean).join(' ')
+        }
+        if (kind === 'disk') {
+          const id = t.node_id != null ? `node=${t.node_id}` : ''
+          const path = t.disk_path ? t.disk_path : ''
+          return [kind, entry.host || t.host, id, path].filter(Boolean).join(' ')
+        }
+        if (kind === 'tablet') {
+          return t.tablet_id != null ? `tablet=${t.tablet_id}` : `tablet @${t.host || entry.host}`
+        }
+        if (kind === 'datacenter' || kind === 'pile') {
+          return `${kind}=${t.group_id || '?'} @${t.host || entry.host}`
+        }
+        return `${kind} ${t.host || entry.host || ''}`
+      }
+
+      function get_hosts_health() {
+        return axios
+          .get('/api/hosts/health')
+          .then(response => {
+            hosts.value = response.data
+            hostsFetchError.value = null
+          })
+          .catch(err => {
+            hostsFetchError.value = err
+          })
+      }
+
+      // Inventory is built once at orchestrator startup, so it is fetched once, not polled.
+      function get_inventory() {
+        axios.get('/api/inventory')
+          .then(response => {
+            inventory.value = response.data
+          })
+          .catch(err => {
+            console.error('Failed to fetch inventory', err)
+          })
+      }
+
+      function get_scheduler() {
+        return axios.get('/api/scheduler')
+          .then(response => {
+            scheduler.value = response.data
+          })
+          .catch(err => {
+            console.error('Failed to fetch scheduler state', err)
+          })
+      }
+
+      function get_problems() {
+        return axios.get('/api/problems')
+          .then(response => {
+            problems.value = response.data
+          })
+          .catch(err => {
+            console.error('Failed to fetch nemesis problems', err)
+          })
+      }
+
+      function post_scheduler(action) {
+        schedulerBusy.value = true
+        return axios.post(`/api/scheduler/${action}`, {})
+          .then(response => {
+            if (response.data && response.data.scheduler) {
+              scheduler.value = response.data.scheduler
+            }
+          })
+          .catch(err => {
+            console.error(`Failed to ${action} scheduler`, err)
+          })
+          .finally(() => {
+            schedulerBusy.value = false
+            get_problems()
+          })
+      }
+
+      function startScheduler() {
+        return post_scheduler('start')
+      }
+
+      function stopScheduler() {
+        return post_scheduler('stop')
+      }
+
+      function get_process_types() {
+        axios.get('/api/process_types')
+          .then(response => {
+            processTypes.value = response.data
+          })
+      }
+
+      function get_grouped_process_types() {
+        axios.get('/api/process_types/grouped')
+          .then(response => {
+            groupedProcessTypes.value = response.data
+          })
+      }
+
+      function getProcessesByType(type) {
+        const result = {}
+        for (const host in processes.value) {
+          result[host] = (processes.value[host] || []).filter(p => p.type === type)
+        }
+        return result
+      }
+
+      function get_all_processes() {
+        axios.get('/api/hosts/processes')
+          .then(response => {
+            processes.value = response.data
+          })
+          .catch(err => {
+            console.error('Failed to fetch processes', err)
+          })
+      }
+
+      function get_healthcheck() {
+        axios.get('/api/healthcheck')
+          .then(response => {
+            healthcheck.value = response.data
+          })
+          .catch(err => {
+            console.error('Failed to fetch healthcheck', err)
+          })
+      }
+
+      function get_schedule_history() {
+        axios.get('/api/schedule/history')
+          .then(response => {
+            scheduleHistory.value = response.data
+          })
+          .catch(err => {
+            console.error('Failed to fetch schedule history', err)
+          })
+      }
+
+      function get_schedule_status() {
+        axios.get('/api/schedule')
+          .then(response => {
+            scheduleStatus.value = response.data
+          })
+          .catch(err => {
+            console.error('Failed to fetch schedule status', err)
+          })
+      }
+
+      function get_warden_results() {
+        axios.get('/api/hosts/warden/results')
+          .then(response => {
+            wardenResults.value = response.data
+          })
+          .catch(err => {
+            console.error('Failed to fetch warden results', err)
+          })
+      }
+
+      function runWardenChecks() {
+        wardenLoading.value = true
+        axios.post('/api/hosts/warden/start')
+          .then(response => {
+            console.log('Warden checks started', response.data)
+            // Start polling for results
+            setTimeout(() => {
+              get_warden_results()
+              wardenLoading.value = false
+            }, 2000)
+          })
+          .catch(err => {
+            console.error('Failed to start warden checks', err)
+            wardenLoading.value = false
+          })
+      }
+
+
+      // Initial load
+      get_hosts_health()
+      get_inventory()
+      get_process_types()
+      get_grouped_process_types()
+      get_all_processes()
+      get_healthcheck()
+      get_schedule_history()
+      get_schedule_status()
+      get_warden_results()
+      get_scheduler()
+      get_problems()
+
+      // Poll every 5 seconds (inventory is static — fetched once above)
+      setInterval(() => {
+        get_hosts_health()
+        get_all_processes()
+        get_healthcheck()
+        get_schedule_history()
+        get_schedule_status()
+        get_warden_results()
+        get_scheduler()
+        get_problems()
+      }, 5000)
+
+      return {
+        message,
+        hosts,
+        healthcheck,
+        hostsFetchError,
+        processTypes,
+        groupedProcessTypes,
+        processes,
+        errors,
+        scheduleHistory,
+        scheduleStatus,
+        wardenResults,
+        wardenLoading,
+        inventory,
+        scheduler,
+        problems,
+        schedulerBusy,
+        startScheduler,
+        stopScheduler,
+        formatTarget,
+        getProcessesByType,
+        runWardenChecks
+      }
+    }
+  }).mount('#app')
+</script>

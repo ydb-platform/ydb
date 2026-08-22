@@ -34,4 +34,35 @@ namespace numpy
 } // namespace numpy
 PYTHONIC_NS_END
 
+#ifdef ENABLE_PYTHON_MODULE
+
+#include "numpy/arrayscalars.h"
+#include "pythonic/python/core.hpp"
+
+PYTHONIC_NS_BEGIN
+
+inline PyObject *to_python<numpy::functor::uint>::convert(numpy::functor::uint const &c)
+{
+  return (PyObject *)&PyUIntArrType_Type;
+}
+
+inline bool from_python<numpy::functor::uint>::is_convertible(PyObject *obj)
+{
+  return obj == (PyObject *)&PyUIntArrType_Type ||
+#if NPY_SIZEOF_INTP == NPY_SIZEOF_LONG
+         obj == (PyObject *)&PyUInt64ArrType_Type
+#else
+         obj == (PyObject *)&PyUInt32ArrType_Type
+#endif
+      ;
+}
+
+inline numpy::functor::uint from_python<numpy::functor::uint>::convert(PyObject *obj)
+{
+  return {};
+}
+
+PYTHONIC_NS_END
+#endif
+
 #endif

@@ -16,6 +16,7 @@
 
 #include <util/generic/size_literals.h>
 
+#include <ranges>
 #include <type_traits>
 
 namespace NYT {
@@ -65,15 +66,29 @@ concept CErrorNestable = requires (TError& error, TValue&& operand)
     { error <<= std::forward<TValue>(operand) } -> std::same_as<TError&>;
 };
 
+template <class TRange>
+concept CErrorAttributeRange =
+    std::ranges::input_range<TRange> &&
+    std::same_as<
+        std::remove_cv_t<std::ranges::range_value_t<TRange>>,
+        TErrorAttribute>;
+
+template <class TRange>
+concept CErrorRange =
+    std::ranges::input_range<TRange> &&
+    std::same_as<
+        std::remove_cv_t<std::ranges::range_value_t<TRange>>,
+        TError>;
+
 template <>
 class [[nodiscard]] TErrorOr<void>
 {
 public:
-    TErrorOr();
+    constexpr TErrorOr() = default;
     ~TErrorOr();
 
     TErrorOr(const TError& other);
-    TErrorOr(TError&& other) noexcept;
+    TErrorOr(TError&& other) noexcept = default;
 
     TErrorOr(const TErrorException& errorEx) noexcept;
 
@@ -98,7 +113,7 @@ public:
         TArgs&&... args);
 
     TError& operator = (const TError& other);
-    TError& operator = (TError&& other) noexcept;
+    TError& operator = (TError&& other) noexcept = default;
 
     static TError FromSystem();
     static TError FromSystem(int error);
@@ -133,13 +148,15 @@ public:
     TOriginAttributes* MutableOriginAttributes() const noexcept;
     void UpdateOriginAttributes();
 
+    static constexpr i64 DefaultTruncateStringLimit = 32_KBs;
+
     TError Truncate(
         int maxInnerErrorCount = 2,
-        i64 stringLimit = 16_KB,
+        i64 stringLimit = DefaultTruncateStringLimit,
         const THashSet<TStringBuf>& attributeWhitelist = {}) const &;
     TError Truncate(
         int maxInnerErrorCount = 2,
-        i64 stringLimit = 16_KB,
+        i64 stringLimit = DefaultTruncateStringLimit,
         const THashSet<TStringBuf>& attributeWhitelist = {}) &&;
 
     bool IsOK() const;
@@ -162,9 +179,9 @@ public:
     void ThrowOnError(TErrorCode code, TFormatString<TArgs...> format, TArgs&&... args) &&;
     inline void ThrowOnError() &&;
 
-    template <CInvocable<bool(const TError&)> TFilter>
+    template <NMpl::CInvocable<bool(const TError&)> TFilter>
     std::optional<TError> FindMatching(const TFilter& filter) const;
-    template <CInvocable<bool(TErrorCode)> TFilter>
+    template <NMpl::CInvocable<bool(TErrorCode)> TFilter>
     std::optional<TError> FindMatching(const TFilter& filter) const;
     std::optional<TError> FindMatching(TErrorCode code) const;
     std::optional<TError> FindMatching(const THashSet<TErrorCode>& codes) const;
@@ -198,6 +215,29 @@ public:
     //! yt/yt/library/error_skeleton. Calling this method without PEERDIR'ing implementation
     //! results in an exception.
     std::string GetSkeleton() const;
+
+    template <CConvertibleToAttributeValue TValue>
+    [[nodiscard]] TError With(const TErrorAttribute::TKey& key, const TValue& value) const &;
+    template <CConvertibleToAttributeValue TValue>
+    [[nodiscard]] TError&& With(const TErrorAttribute::TKey& key, const TValue& value) &&;
+
+    [[nodiscard]] TError With(const TErrorAttribute& attribute) const &;
+    [[nodiscard]] TError&& With(const TErrorAttribute& attribute) &&;
+
+    template <CErrorAttributeRange TRange>
+    [[nodiscard]] TError With(TRange&& attributes) const &;
+    template <CErrorAttributeRange TRange>
+    [[nodiscard]] TError&& With(TRange&& attributes) &&;
+
+    [[nodiscard]] TError With(const TError& innerError) const &;
+    [[nodiscard]] TError&& With(const TError& innerError) &&;
+    [[nodiscard]] TError With(TError&& innerError) const &;
+    [[nodiscard]] TError&& With(TError&& innerError) &&;
+
+    template <CErrorRange TRange>
+    [[nodiscard]] TError With(TRange&& innerErrors) const &;
+    template <CErrorRange TRange>
+    [[nodiscard]] TError&& With(TRange&& innerErrors) &&;
 
     TError& operator <<= (const TErrorAttribute& attribute) &;
     TError& operator <<= (const std::vector<TErrorAttribute>& attributes) &;
@@ -235,7 +275,14 @@ public:
 
 private:
     class TImpl;
-    std::unique_ptr<TImpl> Impl_;
+
+    // Since TImpl is incomplete, we must provide a custom explicit deleter.
+    struct TImplDeleter
+    {
+        void operator()(TImpl* impl) const;
+    };
+
+    std::unique_ptr<TImpl, TImplDeleter> Impl_;
 
     explicit TErrorOr(std::unique_ptr<TImpl> impl);
 
@@ -243,10 +290,18 @@ private:
     void Enrich();
     void EnrichFromException(const std::exception& exception);
 
-    friend class TErrorAttributes;
+    void AddAttribute(const TErrorAttribute& attribute);
 
-    static TEnricher Enricher_;
-    static TFromExceptionEnricher FromExceptionEnricher_;
+    template <CErrorAttributeRange TRange>
+    void AddAttributes(TRange&& attributes);
+
+    void AddInnerError(const TError& innerError);
+    void AddInnerError(TError&& innerError);
+
+    template <CErrorRange TRange>
+    void AddInnerErrors(TRange&& innerErrors);
+
+    friend class TErrorAttributes;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -329,6 +384,7 @@ struct TErrorAdaptor
 };
 
 // Make these to correctly forward TError to Wrap call.
+// NB(pavook): TErrorLike is intentionally always stolen (even if the caller passes it as an lvalue).
 template <class TErrorLike, class U>
     requires
         std::derived_from<std::remove_cvref_t<TErrorLike>, TError> &&
@@ -360,13 +416,11 @@ void ThrowErrorExceptionIfFailed(TErrorLike&& error);
 // NB: When given an error and a string as arguments, this macro automatically wraps
 // new error around the initial one.
 #define THROW_ERROR_EXCEPTION_IF_FAILED(error, ...) \
-    ::NYT::NDetail::ThrowErrorExceptionIfFailed((error) __VA_OPT__(,) __VA_ARGS__); \
+    ::NYT::NDetail::ThrowErrorExceptionIfFailed((error) __VA_OPT__(,) __VA_ARGS__) \
 
 #define THROW_ERROR_EXCEPTION_UNLESS(condition, head, ...) \
-    if ((condition)) {\
-    } else { \
-        THROW_ERROR ::NYT::TError(head __VA_OPT__(,) __VA_ARGS__); \
-    }
+    if ((condition)) {} else \
+        THROW_ERROR ::NYT::TError(head __VA_OPT__(,) __VA_ARGS__)
 
 #define THROW_ERROR_EXCEPTION_IF(condition, head, ...) \
     THROW_ERROR_EXCEPTION_UNLESS(!(condition), head, __VA_ARGS__)
@@ -378,25 +432,38 @@ class [[nodiscard]] TErrorOr
     : public TError
 {
 public:
-    TErrorOr();
+    TErrorOr()
+        requires std::is_default_constructible_v<T>;
 
-    TErrorOr(const T& value);
-    TErrorOr(T&& value) noexcept;
+    TErrorOr(const T& value)
+        requires std::is_copy_constructible_v<T>;
+    TErrorOr(T&& value) noexcept
+        requires std::is_move_constructible_v<T>;
 
-    TErrorOr(const TErrorOr<T>& other);
-    TErrorOr(TErrorOr<T>&& other) noexcept;
+    TErrorOr(const TErrorOr<T>& other)
+        requires std::is_copy_constructible_v<T>;
 
-    TErrorOr(const TError& other);
-    TErrorOr(TError&& other) noexcept;
+    TErrorOr(TErrorOr<T>&& other) noexcept(std::is_nothrow_move_constructible_v<T>)
+        requires std::is_move_constructible_v<T>;
+
+    template <class TErrorLike>
+    TErrorOr(const TErrorLike& other)
+        requires std::is_same_v<TErrorLike, TError>;
+
+    template <class TErrorLike>
+    TErrorOr(TErrorLike&& other) noexcept
+        requires std::is_same_v<TErrorLike, TError>;
 
     TErrorOr(const TErrorException& errorEx) noexcept;
 
     TErrorOr(const std::exception& ex);
 
     template <class U>
-    TErrorOr(const TErrorOr<U>& other);
+    TErrorOr(const TErrorOr<U>& other)
+         requires std::is_constructible_v<T, const U&>;
     template <class U>
-    TErrorOr(TErrorOr<U>&& other) noexcept;
+    TErrorOr(TErrorOr<U>&& other) noexcept
+        requires std::is_constructible_v<T, U&&>;
 
     TErrorOr<T>& operator = (const TErrorOr<T>& other)
         requires std::is_copy_assignable_v<T>;
@@ -406,6 +473,10 @@ public:
     const T& Value() const & Y_LIFETIME_BOUND;
     T& Value() & Y_LIFETIME_BOUND;
     T&& Value() && Y_LIFETIME_BOUND;
+
+    const T& ValueOrCrash() const & Y_LIFETIME_BOUND;
+    T& ValueOrCrash() & Y_LIFETIME_BOUND;
+    T&& ValueOrCrash() && Y_LIFETIME_BOUND;
 
     template <class U>
         requires (!CStringLiteral<std::remove_cvref_t<U>>)
@@ -451,10 +522,15 @@ void FormatValue(TStringBuilderBase* builder, const TErrorOr<T>& error, TStringB
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class F, class... As>
-auto RunNoExcept(F&& functor, As&&... args) noexcept -> decltype(functor(std::forward<As>(args)...))
-{
-    return functor(std::forward<As>(args)...);
-}
+auto RunNoExcept(F&& functor, As&&... args) noexcept -> decltype(functor(std::forward<As>(args)...));
+
+////////////////////////////////////////////////////////////////////////////////
+
+//! Registers errors as a well-known logging tag (ADL customization point for
+//! library/cpp/yt/logging), so that |YT_TLOG_*(...).With(error)| attaches them under
+//! the "Error" key, rendered after the message in plain text.
+TStringBuf GetWellKnownLoggingTag(const std::exception&);
+TStringBuf GetWellKnownLoggingTag(const TError&);
 
 ////////////////////////////////////////////////////////////////////////////////
 

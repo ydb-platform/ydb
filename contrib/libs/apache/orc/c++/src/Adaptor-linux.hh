@@ -22,8 +22,8 @@
 #define HAS_PREAD
 #define HAS_STRPTIME
 #define HAS_DIAGNOSTIC_PUSH
-/* #undef HAS_DOUBLE_TO_STRING */
-/* #undef HAS_INT64_TO_STRING */
+#define HAS_DOUBLE_TO_STRING
+#define HAS_INT64_TO_STRING
 #define HAS_PRE_1970
 #define HAS_POST_2038
 #define HAS_STD_ISNAN
@@ -47,6 +47,12 @@ typedef SSIZE_T ssize_t;
 
 #ifndef HAS_PREAD
   ssize_t pread(int fd, void* buf, size_t count, off_t offset);
+#endif
+
+#if defined(__GNUC__) || defined(__clang__)
+  #define NO_SANITIZE_ATTR __attribute__((no_sanitize("signed-integer-overflow", "shift")))
+#else
+  #define NO_SANITIZE_ATTR
 #endif
 
 #ifdef HAS_DIAGNOSTIC_PUSH

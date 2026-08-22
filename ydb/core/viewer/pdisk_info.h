@@ -6,6 +6,7 @@
 namespace NKikimr::NViewer {
 
 using namespace NActors;
+using namespace NNodeWhiteboard;
 
 class TPDiskInfo : public TViewerPipeClient {
     enum EEv {
@@ -43,8 +44,8 @@ public:
     void Bootstrap() override {
         TString pDiskId = Params.Get("pdisk_id");
         if (pDiskId.Contains('-')) {
-            PDiskId = FromStringWithDefault<ui32>(TStringBuf(pDiskId).Before('-'), Max<ui32>());
-            NodeId = FromStringWithDefault<ui32>(TStringBuf(pDiskId).After('-'), 0);
+            NodeId = FromStringWithDefault<ui32>(TStringBuf(pDiskId).Before('-'), 0);
+            PDiskId = FromStringWithDefault<ui32>(TStringBuf(pDiskId).After('-'), Max<ui32>());
         } else {
             NodeId = FromStringWithDefault<ui32>(Params.Get("node_id"), 0);
             PDiskId = FromStringWithDefault<ui32>(Params.Get("pdisk_id"), Max<ui32>());
@@ -63,7 +64,7 @@ public:
         Retries = FromStringWithDefault<ui32>(Params.Get("retries"), 3);
         RetryPeriod = TDuration::MilliSeconds(FromStringWithDefault<ui32>(Params.Get("retry_period"), RetryPeriod.MilliSeconds()));
 
-        SendWhiteboardRequest();
+        SendWhiteboardRequests();
         SendBSCRequest();
 
         TBase::Become(&TThis::StateWork, Timeout, new TEvents::TEvWakeup());
@@ -83,16 +84,20 @@ public:
         }
     }
 
-    void SendWhiteboardRequest() {
+    void SendWhiteboardRequests() {
         TActorId whiteboardServiceId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(NodeId);
+        auto pdiskRequest = new NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateRequest();
+        pdiskRequest->Record.AddFieldsRequired(-1);
         WhiteboardPDisk = TBase::MakeRequest<NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateResponse>(
             whiteboardServiceId,
-            new NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateRequest,
+            pdiskRequest,
             IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, // we only need it once because we are sending to the same node
             NodeId);
+        auto vdiskRequest = new NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateRequest();
+        vdiskRequest->Record.AddFieldsRequired(-1);
         WhiteboardVDisk = TBase::MakeRequest<NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateResponse>(
             whiteboardServiceId,
-            new NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateRequest,
+            vdiskRequest,
             0,
             NodeId);
     }
@@ -104,7 +109,7 @@ public:
 
     bool RetryRequest() {
         if (Retries) {
-            if (++ActualRetries <= Retries) {
+            if (++ActualRetries < Retries) {
                 TBase::Schedule(RetryPeriod, new TEvRetryNodeRequest());
                 return true;
             }
@@ -174,12 +179,17 @@ public:
     }
 
     void HandleRetry() {
-        SendWhiteboardRequest();
+        SendWhiteboardRequests();
+        TBase::RequestDone(2); // complete previous requests
     }
 
     void PassAway() override {
         TBase::Send(TActivationContext::InterconnectProxy(NodeId), new TEvents::TEvUnsubscribe());
         TBase::PassAway();
+    }
+
+    void HandleTimeout() {
+        ReplyAndPassAway(); // try to respond with what we have
     }
 
     void ReplyAndPassAway() override {

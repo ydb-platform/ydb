@@ -14,6 +14,7 @@
 #include <yt/yt/client/table_client/row_batch.h>
 
 #include <yt/yt/core/concurrency/async_stream.h>
+#include <yt/yt/core/concurrency/async_stream_helpers.h>
 
 #include <yt/yt/core/yson/format.h>
 
@@ -363,12 +364,15 @@ private:
     std::vector<TUnversionedValueToYqlConverter> Converters_;
     std::vector<TLogicalTypePtr> Types_;
     std::vector<std::vector<int>> TableIndexToColumnIdToTypeIndex_;
-    THashMap<std::pair<int, TString>, int> TableIndexAndColumnNameToTypeIndex_;
+    THashMap<std::pair<int, std::string>, int> TableIndexAndColumnNameToTypeIndex_;
     TEnumIndexedArray<EValueType, int> ValueTypeToTypeIndex_;
 
 private:
     int GetTypeIndex(int tableIndex, ui16 columnId, TStringBuf columnName, EValueType valueType)
     {
+        if (std::ssize(TableIndexToColumnIdToTypeIndex_) == 1 && tableIndex != 0) {
+            THROW_ERROR_EXCEPTION("You are probably trying to read intermediate data of a MapReduce operation with multiple intermediate streams, which is not supported yet");
+        }
         YT_VERIFY(0 <= tableIndex && tableIndex < std::ssize(TableIndexToColumnIdToTypeIndex_));
         auto& columnIdToTypeIndex = TableIndexToColumnIdToTypeIndex_[tableIndex];
         if (columnId >= columnIdToTypeIndex.size()) {
@@ -379,7 +383,7 @@ private:
         if (typeIndex == UnschematizedTypeIndex) {
             typeIndex = ValueTypeToTypeIndex_[valueType];
         } else if (typeIndex == UnknownTypeIndex) {
-            auto it = TableIndexAndColumnNameToTypeIndex_.find(std::pair(tableIndex, columnName));
+            auto it = TableIndexAndColumnNameToTypeIndex_.find(std::pair<int, std::string>(tableIndex, columnName));
             if (it == TableIndexAndColumnNameToTypeIndex_.end()) {
                 typeIndex = ValueTypeToTypeIndex_[valueType];
                 columnIdToTypeIndex[columnId] = UnschematizedTypeIndex;
@@ -513,22 +517,24 @@ public:
     TFuture<void> GetReadyEvent() override;
     TBlob GetContext() const override;
     i64 GetWrittenSize() const override;
+    i64 GetEncodedRowBatchCount() const override;
+    i64 GetEncodedColumnarBatchCount() const override;
     TFuture<void> Close() override;
     TFuture<void> Flush() override;
-    std::optional<TMD5Hash> GetDigest() const override;
+    std::optional<TRowsDigest> GetDigest() const override;
 
 private:
     const TWebJsonFormatConfigPtr Config_;
     const TNameTablePtr NameTable_;
     const TNameTableReader NameTableReader_;
 
-    std::unique_ptr<IOutputStream> UnderlyingOutput_;
+    const std::unique_ptr<IOutputStream> UnderlyingOutput_;
     TCountingOutput Output_;
 
-    std::unique_ptr<IJsonWriter> ResponseBuilder_;
+    const std::unique_ptr<IJsonWriter> ResponseBuilder_;
 
     TWebJsonColumnFilter ColumnFilter_;
-    THashMap<ui16, TString> AllColumnIdToName_;
+    THashMap<ui16, std::string> AllColumnIdToName_;
 
     TValueWriter ValueWriter_;
 
@@ -559,9 +565,11 @@ TWriterForWebJson<TValueWriter>::TWriterForWebJson(
     : Config_(std::move(config))
     , NameTable_(std::move(nameTable))
     , NameTableReader_(NameTable_)
+    // XXX(babenko): this leads to unexpected context switches and must be
+    // completely reworked.
     , UnderlyingOutput_(CreateBufferedSyncAdapter(
         std::move(output),
-        EWaitForStrategy::WaitFor,
+        EWaitForStrategy::SuspendFiber,
         ContextBufferCapacity))
     , Output_(UnderlyingOutput_.get())
     , ResponseBuilder_(CreateJsonWriter(&Output_))
@@ -613,6 +621,18 @@ template <typename TValueWriter>
 i64 TWriterForWebJson<TValueWriter>::GetWrittenSize() const
 {
     return static_cast<i64>(Output_.Counter());
+}
+
+template <typename TValueWriter>
+i64 TWriterForWebJson<TValueWriter>::GetEncodedRowBatchCount() const
+{
+    return 0;
+}
+
+template <typename TValueWriter>
+i64 TWriterForWebJson<TValueWriter>::GetEncodedColumnarBatchCount() const
+{
+    return 0;
 }
 
 template <typename TValueWriter>
@@ -760,7 +780,7 @@ void TWriterForWebJson<TValueWriter>::DoClose()
 }
 
 template <typename TValueWriter>
-std::optional<TMD5Hash> TWriterForWebJson<TValueWriter>::GetDigest() const
+std::optional<TRowsDigest> TWriterForWebJson<TValueWriter>::GetDigest() const
 {
     return std::nullopt;
 }
@@ -781,6 +801,7 @@ ISchemalessFormatWriterPtr CreateWriterForWebJson(
                 CreateWebJsonColumnFilter(config),
                 schemas,
                 std::move(config));
+
         case EWebJsonValueFormat::Yql:
             return New<TWriterForWebJson<TYqlValueWriter>>(
                 std::move(nameTable),
@@ -789,8 +810,9 @@ ISchemalessFormatWriterPtr CreateWriterForWebJson(
                 schemas,
                 std::move(config));
 
+        default:
+            YT_ABORT();
     }
-    YT_ABORT();
 }
 
 ISchemalessFormatWriterPtr CreateWriterForWebJson(
@@ -806,7 +828,7 @@ ISchemalessFormatWriterPtr CreateWriterForWebJson(
             schemas,
             std::move(output));
     } catch (const std::exception& ex) {
-        THROW_ERROR_EXCEPTION(NFormats::EErrorCode::InvalidFormat, "Failed to parse config for web JSON format") << ex;
+        THROW_ERROR_EXCEPTION(NFormats::EErrorCode::InvalidFormat, "Failed to parse config for web JSON format").With(ex);
     }
 }
 

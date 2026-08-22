@@ -17,8 +17,7 @@ namespace builtins
     types::str lower(types::str const &s)
     {
       types::str copy = s;
-      std::transform(s.chars().begin(), s.chars().end(), copy.chars().begin(),
-                     ::tolower);
+      std::transform(s.chars().begin(), s.chars().end(), copy.chars().begin(), ::tolower);
       return copy;
     }
   } // namespace str

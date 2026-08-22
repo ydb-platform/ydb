@@ -1,6 +1,9 @@
 #pragma once
 
-#include <ydb/public/api/client/nc_private/accessservice/access_service.grpc.pb.h>
+#include "ydb/library/testlib/service_mocks/common.h"
+
+#include <util/system/mutex.h>
+#include <ydb/public/api/client/nc_private/iam/v1/access_service.grpc.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -17,6 +20,9 @@ public:
 
     THashMap<TString, TResponse<nebius::iam::v1::AuthenticateResponse>> AuthenticateData;
     THashMap<TString, TResponse<nebius::iam::v1::AuthorizeResponse>> AuthorizeData;
+
+    TMutex UserIPMutex;
+    TString CapturedXUserIP;
 
     template <class TResonseProto>
     void CheckRequestId(grpc::ServerContext* ctx, const TResponse<TResonseProto>& resp, const TString& token) {
@@ -48,6 +54,12 @@ public:
             grpc::ServerContext* ctx,
             const nebius::iam::v1::AuthorizeRequest* request,
             nebius::iam::v1::AuthorizeResponse* response) override {
+
+        {
+            std::lock_guard guard(UserIPMutex);
+            CapturedXUserIP = NTestUtils::CaptureXUserIP(ctx);
+        }
+
         UNIT_ASSERT_VALUES_EQUAL_C(request->checks_size(), 1, "Nebius access service mock does not support multiple checks yet");
         const auto checkIt = request->checks().find(0);
         UNIT_ASSERT(checkIt != request->checks().end());
@@ -74,6 +86,41 @@ public:
     THashSet<TString> UnavailableTokens;
     THashSet<TString> AllowedUserTokens = {"user1"};
     THashMap<TString, TString> AllowedServiceTokens = {{"service1", "root1/folder1"}};
+
+    nebius::iam::v1::ImpersonationInfo ImpersonationInfo;
+
+    struct TImpersonationChainBuilder {
+        TImpersonationChainBuilder(nebius::iam::v1::ImpersonationInfo* info)
+            : Info(info)
+        {}
+
+        TImpersonationChainBuilder& ChainLink() {
+            Info->add_chain();
+            return *this;
+        }
+
+        TImpersonationChainBuilder& UserAccount(const TString& id) {
+            if (Info->chain_size() == 0) {
+                Info->add_chain();
+            }
+            Info->mutable_chain(Info->chain_size() - 1)->add_account()->mutable_user_account()->set_id(id);
+            return *this;
+        }
+
+        TImpersonationChainBuilder& ServiceAccount(const TString& id) {
+            if (Info->chain_size() == 0) {
+                Info->add_chain();
+            }
+            Info->mutable_chain(Info->chain_size() - 1)->add_account()->mutable_service_account()->set_id(id);
+            return *this;
+        }
+
+        nebius::iam::v1::ImpersonationInfo* Info = nullptr;
+    };
+
+    TImpersonationChainBuilder BuildImpersonationChain() {
+        return TImpersonationChainBuilder(&ImpersonationInfo);
+    }
 
     bool ShouldGenerateRetryableError = false;
     bool ShouldGenerateOneRetryableError = false;
@@ -156,13 +203,21 @@ public:
     THashSet<TString> UnavailableUserPermissions;
     TString ContainerId;
 
+    TMutex UserIPMutex;
+    TString CapturedXUserIP;
+
     grpc::Status Authorize(
-            grpc::ServerContext*,
+            grpc::ServerContext* ctx,
             const nebius::iam::v1::AuthorizeRequest* request,
             nebius::iam::v1::AuthorizeResponse* response) override {
         Cerr << "NebiusAccessService::Authorize request\n"
              << request->Utf8DebugString()
              << Endl;
+
+        {
+            std::lock_guard guard(UserIPMutex);
+            CapturedXUserIP = NTestUtils::CaptureXUserIP(ctx);
+        }
 
         ++AuthorizeCount;
 
@@ -203,8 +258,9 @@ public:
 
             auto& result = (*response->mutable_results())[checkId];
             result.set_resultcode(nebius::iam::v1::AuthorizeResult::PERMISSION_DENIED);
+            *result.mutable_impersonation_info() = ImpersonationInfo;
 
-            if (ContainerId && check.container_id() != ContainerId) {
+            if (ContainerId && check.managed_resource_id() != ContainerId) {
                 result.set_resultcode(nebius::iam::v1::AuthorizeResult::PERMISSION_DENIED);
                 continue;
             }
@@ -212,7 +268,7 @@ public:
             bool allowedResource = true;
             if (!AllowedResourceIds.empty()) {
                 allowedResource = false;
-                if (IsIn(AllowedResourceIds, check.container_id())) {
+                if (IsIn(AllowedResourceIds, check.managed_resource_id())) {
                     allowedResource = true;
                 }
                 for (const auto& resourcePath : check.resource_path().path()) {

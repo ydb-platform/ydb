@@ -89,6 +89,43 @@ static void SerializeSuppressableAccessTrackingOptions(TNode* node, const TSuppr
     }
 }
 
+template <typename T>
+static void SerializePrerequisiteTransactionsOptions(TNode* node, const TPrerequisiteTransactionsOptions<T>& options)
+{
+    if (!options.PrerequisiteTransactionIds_.empty()) {
+        auto& txIds = (*node)["prerequisite_transaction_ids"] = TNode::CreateList();
+        for (const auto& txId : options.PrerequisiteTransactionIds_) {
+            txIds.Add(GetGuidAsString(txId));
+        }
+    }
+}
+
+template <typename T>
+static void SerializePrerequisiteRevisionsOptions(TNode* node, const TPrerequisiteRevisionsOptions<T>& options)
+{
+    if (!options.PrerequisiteRevisions_.empty()) {
+        auto& revisions = (*node)["prerequisite_revisions"] = TNode::CreateList();
+        for (const auto& revisionConfig : options.PrerequisiteRevisions_) {
+            if (!revisionConfig.Path_) {
+                ythrow TApiUsageError() << "Path for TPrerequisiteRevision must be explicitly specified";
+            }
+            if (!revisionConfig.Revision_) {
+                ythrow TApiUsageError() << "Revision for TPrerequisiteRevision must be explicitly specified";
+            }
+            revisions.Add(TNode()
+                ("path", *revisionConfig.Path_)
+                ("revision", *revisionConfig.Revision_));
+        }
+    }
+}
+
+template <typename T>
+static void SerializePrerequisiteOptions(TNode* node, const TPrerequisiteOptions<T>& options)
+{
+    SerializePrerequisiteTransactionsOptions(node, options);
+    SerializePrerequisiteRevisionsOptions(node, options);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TNode SerializeParamsForCreate(
@@ -101,9 +138,11 @@ TNode SerializeParamsForCreate(
     TNode result;
     SetTransactionIdParam(&result, transactionId);
     SetPathParam(&result, pathPrefix, path);
+    SerializePrerequisiteOptions(&result, options);
     result["recursive"] = options.Recursive_;
     result["type"] = ToString(type);
     result["ignore_existing"] = options.IgnoreExisting_;
+    result["ignore_type_mismatch"] = options.IgnoreTypeMismatch_;
     result["force"] = options.Force_;
     if (options.Attributes_) {
         result["attributes"] = *options.Attributes_;
@@ -120,6 +159,7 @@ TNode SerializeParamsForRemove(
     TNode result;
     SetTransactionIdParam(&result, transactionId);
     SetPathParam(&result, pathPrefix, path);
+    SerializePrerequisiteOptions(&result, options);
     result["recursive"] = options.Recursive_;
     result["force"] = options.Force_;
     return result;
@@ -136,6 +176,7 @@ TNode SerializeParamsForExists(
     SetPathParam(&result, pathPrefix, path);
     SerializeMasterReadOptions(&result, options);
     SerializeSuppressableAccessTrackingOptions(&result, options);
+    SerializePrerequisiteOptions(&result, options);
     return result;
 }
 
@@ -150,6 +191,7 @@ TNode SerializeParamsForGet(
     SetPathParam(&result, pathPrefix, path);
     SerializeMasterReadOptions(&result, options);
     SerializeSuppressableAccessTrackingOptions(&result, options);
+    SerializePrerequisiteOptions(&result, options);
     if (options.AttributeFilter_) {
         result["attributes"] = SerializeAttributeFilter(*options.AttributeFilter_);
     }
@@ -169,6 +211,7 @@ TNode SerializeParamsForSet(
     SetTransactionIdParam(&result, transactionId);
     SetPathParam(&result, pathPrefix, path);
     SerializeSuppressableAccessTrackingOptions(&result, options);
+    SerializePrerequisiteOptions(&result, options);
     result["recursive"] = options.Recursive_;
     if (options.Force_) {
         result["force"] = *options.Force_;
@@ -186,6 +229,7 @@ TNode SerializeParamsForMultisetAttributes(
     SetTransactionIdParam(&result, transactionId);
     SetPathParam(&result, pathPrefix, path);
     SerializeSuppressableAccessTrackingOptions(&result, options);
+    SerializePrerequisiteOptions(&result, options);
     if (options.Force_) {
         result["force"] = *options.Force_;
     }
@@ -203,6 +247,7 @@ TNode SerializeParamsForList(
     SetPathParam(&result, pathPrefix, path);
     SerializeMasterReadOptions(&result, options);
     SerializeSuppressableAccessTrackingOptions(&result, options);
+    SerializePrerequisiteOptions(&result, options);
     if (options.MaxSize_) {
         result["max_size"] = *options.MaxSize_;
     }
@@ -221,6 +266,7 @@ TNode SerializeParamsForCopy(
 {
     TNode result;
     SetTransactionIdParam(&result, transactionId);
+    SerializePrerequisiteOptions(&result, options);
     result["source_path"] = AddPathPrefix(sourcePath, pathPrefix);
     result["destination_path"] = AddPathPrefix(destinationPath, pathPrefix);
     result["recursive"] = options.Recursive_;
@@ -241,6 +287,7 @@ TNode SerializeParamsForMove(
 {
     TNode result;
     SetTransactionIdParam(&result, transactionId);
+    SerializePrerequisiteOptions(&result, options);
     result["source_path"] = AddPathPrefix(sourcePath, pathPrefix);
     result["destination_path"] = AddPathPrefix(destinationPath, pathPrefix);
     result["recursive"] = options.Recursive_;
@@ -261,6 +308,7 @@ TNode SerializeParamsForLink(
 {
     TNode result;
     SetTransactionIdParam(&result, transactionId);
+    SerializePrerequisiteOptions(&result, options);
     result["target_path"] = AddPathPrefix(targetPath, pathPrefix);
     result["link_path"] = AddPathPrefix(linkPath, pathPrefix);
     result["recursive"] = options.Recursive_;
@@ -282,6 +330,7 @@ TNode SerializeParamsForLock(
     TNode result;
     SetTransactionIdParam(&result, transactionId);
     SetPathParam(&result, pathPrefix, path);
+    SerializePrerequisiteOptions(&result, options);
     result["mode"] = ToString(mode);
     result["waitable"] = options.Waitable_;
     if (options.AttributeKey_) {
@@ -297,11 +346,12 @@ TNode SerializeParamsForUnlock(
     const TTransactionId& transactionId,
     const TString& pathPrefix,
     const TYPath& path,
-    const TUnlockOptions& /*options*/)
+    const TUnlockOptions& options)
 {
     TNode result;
     SetTransactionIdParam(&result, transactionId);
     SetPathParam(&result, pathPrefix, path);
+    SerializePrerequisiteOptions(&result, options);
     return result;
 }
 
@@ -534,10 +584,18 @@ TNode SerializeParamsForGetJob(
 
 TNode SerializeParamsForGetJobTrace(
     const TOperationId& operationId,
-    const TGetJobTraceOptions& /* options */)
+    const TJobId& jobId,
+    const TGetJobTraceOptions& options)
 {
     TNode result;
     SetOperationIdParam(&result, operationId);
+    result["job_id"] = GetGuidAsString(jobId);
+    if (options.FromTime_) {
+        result["from_time"] = ToString(options.FromTime_);
+    }
+    if (options.ToTime_) {
+        result["to_time"] = ToString(options.ToTime_);
+    }
     return result;
 }
 
@@ -574,6 +632,9 @@ TNode SerializeParamsForListJobs(
     }
     if (options.OperationIncarnation_) {
         result["operation_incarnation"] = *options.OperationIncarnation_;
+    }
+    if (options.MonitoringDescriptor_) {
+        result["monitoring_descriptor"] = *options.MonitoringDescriptor_;
     }
     if (options.FromTime_) {
         result["from_time"] = ToString(options.FromTime_);
@@ -659,6 +720,9 @@ TNode SerializeParametersForInsertRows(
     if (options.RequireSyncReplica_) {
         result["require_sync_replica"] = *options.RequireSyncReplica_;
     }
+    if (options.LockType_) {
+        result["lock_type"] = ToString(*options.LockType_);
+    }
     return result;
 }
 
@@ -698,6 +762,7 @@ TNode SerializeParamsForReadTable(
     TNode result;
     SetTransactionIdParam(&result, transactionId);
     SerializeSuppressableAccessTrackingOptions(&result, options);
+    result["omit_inaccessible_rows"] = options.OmitInaccessibleRows_;
     result["control_attributes"] = BuildYsonNodeFluently()
         .BeginMap()
             .Item("enable_row_index").Value(options.ControlAttributes_.EnableRowIndex_)
@@ -711,6 +776,11 @@ TNode SerializeParamsForReadTablePartition(const TString& cookie, const TTablePa
     TNode node;
     node["cookie"] = cookie;
     SerializeSuppressableAccessTrackingOptions(&node, options);
+    node["control_attributes"] = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("enable_row_index").Value(options.ControlAttributes_.EnableRowIndex_)
+            .Item("enable_range_index").Value(options.ControlAttributes_.EnableRangeIndex_)
+        .EndMap();
     return node;
 }
 
@@ -830,6 +900,50 @@ TNode SerializeParamsForAlterTable(
     return result;
 }
 
+void SetBasicDistributedStartParams(
+    TNode& result,
+    const TTransactionId& transactionId,
+    const TRichYPath& richPath,
+    i64 cookieCount)
+{
+    SetTransactionIdParam(&result, transactionId);
+
+    result["path"] = PathToNode(richPath);
+    result["cookie_count"] = cookieCount;
+}
+
+TNode SerializeParamsForStartDistributedFileSession(
+    const TTransactionId& transactionId,
+    const TRichYPath& richPath,
+    i64 cookieCount,
+    const TStartDistributedWriteFileOptions& options)
+{
+    TNode result;
+    SetBasicDistributedStartParams(result, transactionId, richPath, cookieCount);
+
+    if (options.SessionTimeout_) {
+        result["session_timeout"] = static_cast<i64>(options.SessionTimeout_->MilliSeconds());
+    }
+
+    return result;
+}
+
+TNode SerializeParamsForStartDistributedTableSession(
+    const TTransactionId& transactionId,
+    const TRichYPath& richPath,
+    i64 cookieCount,
+    const TStartDistributedWriteTableOptions& options)
+{
+    TNode result;
+    SetBasicDistributedStartParams(result, transactionId, richPath, cookieCount);
+
+    if (options.SessionTimeout_) {
+        result["session_timeout"] = static_cast<i64>(options.SessionTimeout_->MilliSeconds());
+    }
+
+    return result;
+}
+
 TNode SerializeParamsForGetTableColumnarStatistics(
     const TTransactionId& transactionId,
     const TVector<TRichYPath>& paths,
@@ -863,6 +977,18 @@ TNode SerializeParamsForGetTablePartitions(
     }
     result["adjust_data_weight_per_partition"] = options.AdjustDataWeightPerPartition_;
     result["enable_cookies"] = options.EnableCookies_;
+    result["fetch_cookie_node_descriptors"] = options.FetchCookieNodeDescriptors_;
+    return result;
+}
+
+TNode SerializeParamsForCheckClusterLiveness(const TCheckClusterLivenessOptions& options)
+{
+    TNode result;
+    result["check_cypress_root"] = options.CheckCypressRoot_;
+    result["check_secondary_master_cells"] = options.CheckSecondaryMasterCells_;
+    if (options.CheckTabletCellBundle_) {
+        result["check_tablet_cell_bundle"] = *options.CheckTabletCellBundle_;
+    }
     return result;
 }
 
@@ -991,10 +1117,13 @@ TNode SerializeParamsForAbortTransaction(const TTransactionId& transactionId)
     return result;
 }
 
-TNode SerializeParamsForCommitTransaction(const TTransactionId& transactionId)
+TNode SerializeParamsForCommitTransaction(
+    const TTransactionId& transactionId,
+    const TCommitTransactionOptions& options)
 {
     TNode result;
     SetTransactionIdParam(&result, transactionId);
+    SerializePrerequisiteOptions(&result, options);
     return result;
 }
 
@@ -1006,6 +1135,7 @@ TNode SerializeParamsForStartTransaction(
     TNode result;
 
     SetTransactionIdParam(&result, parentTransactionId);
+    SerializePrerequisiteTransactionsOptions(&result, options);
     result["timeout"] = static_cast<i64>((options.Timeout_.GetOrElse(txTimeout).MilliSeconds()));
     if (options.Deadline_) {
         result["deadline"] = ToString(options.Deadline_);

@@ -5,6 +5,8 @@
 #include <library/cpp/yt/error/error_attributes.h>
 #include <library/cpp/yt/error/origin_attributes.h>
 
+#include <library/cpp/yt/memory/leaky_singleton.h>
+
 #include <library/cpp/yt/string/string.h>
 
 #include <library/cpp/yt/system/proc.h>
@@ -29,8 +31,20 @@ void FormatValue(TStringBuilderBase* builder, TErrorCode code, TStringBuf spec)
 
 constexpr TStringBuf ErrorMessageTruncatedSuffix = "...<message truncated>";
 
-TError::TEnricher TError::Enricher_;
-TError::TFromExceptionEnricher TError::FromExceptionEnricher_;
+namespace {
+
+struct TEnricherStorage
+{
+    static TEnricherStorage* Get()
+    {
+        return LeakySingleton<TEnricherStorage>();
+    }
+
+    TError::TEnricher Enricher;
+    TError::TFromExceptionEnricher FromExceptionEnricher;
+};
+
+} // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -230,19 +244,17 @@ std::vector<TError>& ApplyWhitelist(std::vector<TError>& errors, const THashSet<
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TError::TErrorOr() = default;
+void TError::TImplDeleter::operator()(TImpl* impl) const
+{
+    delete impl;
+}
+
+////////////////////////////////////////////////////////////////////////////////
 
 TError::~TErrorOr() = default;
 
 TError::TErrorOr(const TError& other)
-{
-    if (!other.IsOK()) {
-        Impl_ = std::make_unique<TImpl>(*other.Impl_);
-    }
-}
-
-TError::TErrorOr(TError&& other) noexcept
-    : Impl_(std::move(other.Impl_))
+    : Impl_(other.IsOK() ? nullptr : new TImpl(*other.Impl_))
 { }
 
 TError::TErrorOr(const TErrorException& errorEx) noexcept
@@ -254,7 +266,7 @@ TError::TErrorOr(const TErrorException& errorEx) noexcept
 
 TError::TErrorOr(const std::exception& ex)
 {
-    if (auto simpleException = dynamic_cast<const TSimpleException*>(&ex)) {
+    if (auto* simpleException = dynamic_cast<const TSimpleException*>(&ex)) {
         *this = TError(NYT::EErrorCode::Generic, TRuntimeFormat{simpleException->GetMessage()});
         // NB: clang-14 is incapable of capturing structured binding variables
         //  so we force materialize them via this function call.
@@ -275,6 +287,8 @@ TError::TErrorOr(const std::exception& ex)
         }
     } else if (const auto* errorEx = dynamic_cast<const TErrorException*>(&ex)) {
         *this = errorEx->Error();
+    } else if (const auto* sysError = dynamic_cast<const ::TSystemError*>(&ex)) {
+        *this = TError::FromSystem(*sysError);
     } else {
         *this = TError(NYT::EErrorCode::Generic, TRuntimeFormat{ex.what()});
         *this <<= TErrorAttribute("exception_type", TypeName(ex));
@@ -284,30 +298,20 @@ TError::TErrorOr(const std::exception& ex)
 }
 
 TError::TErrorOr(std::string message, TDisableFormat)
-    : Impl_(std::make_unique<TImpl>(std::move(message)))
+    : TError(std::make_unique<TImpl>(std::move(message)))
 {
     Enrich();
 }
 
 TError::TErrorOr(TErrorCode code, std::string message, TDisableFormat)
-    : Impl_(std::make_unique<TImpl>(code, std::move(message)))
+    : TError(std::make_unique<TImpl>(code, std::move(message)))
 {
     Enrich();
 }
 
 TError& TError::operator = (const TError& other)
 {
-    if (other.IsOK()) {
-        Impl_.reset();
-    } else {
-        Impl_ = std::make_unique<TImpl>(*other.Impl_);
-    }
-    return *this;
-}
-
-TError& TError::operator = (TError&& other) noexcept
-{
-    Impl_ = std::move(other.Impl_);
+    *this = TError(other);
     return *this;
 }
 
@@ -646,11 +650,12 @@ void TError::RegisterEnricher(TEnricher enricher)
 {
     // NB: This daisy-chaining strategy is optimal when there's O(1) callbacks. Convert to a vector
     // if the number grows.
-    if (!Enricher_) {
-        Enricher_ = std::move(enricher);
+    auto* storage = TEnricherStorage::Get();
+    if (!storage->Enricher) {
+        storage->Enricher = std::move(enricher);
         return;
     }
-    Enricher_ = [first = std::move(Enricher_), second = std::move(enricher)] (TError* error) {
+    storage->Enricher = [first = std::move(storage->Enricher), second = std::move(enricher)] (TError* error) {
         first(error);
         second(error);
     };
@@ -660,12 +665,13 @@ void TError::RegisterFromExceptionEnricher(TFromExceptionEnricher enricher)
 {
     // NB: This daisy-chaining strategy is optimal when there's O(1) callbacks. Convert to a vector
     // if the number grows.
-    if (!FromExceptionEnricher_) {
-        FromExceptionEnricher_ = std::move(enricher);
+    auto* storage = TEnricherStorage::Get();
+    if (!storage->FromExceptionEnricher) {
+        storage->FromExceptionEnricher = std::move(enricher);
         return;
     }
-    FromExceptionEnricher_ = [
-        first = std::move(FromExceptionEnricher_),
+    storage->FromExceptionEnricher = [
+        first = std::move(storage->FromExceptionEnricher),
         second = std::move(enricher)
     ] (TError* error, const std::exception& exception) {
         first(error, exception);
@@ -674,73 +680,130 @@ void TError::RegisterFromExceptionEnricher(TFromExceptionEnricher enricher)
 }
 
 TError::TErrorOr(std::unique_ptr<TImpl> impl)
-    : Impl_(std::move(impl))
+    : Impl_(impl.release())
 { }
 
 void TError::MakeMutable()
 {
     if (!Impl_) {
-        Impl_ = std::make_unique<TImpl>();
+        Impl_.reset(new TImpl());
     }
 }
 
 void TError::Enrich()
 {
-    if (Enricher_) {
-        Enricher_(this);
+    if (const auto& enricher = TEnricherStorage::Get()->Enricher) {
+        enricher(this);
     }
 }
 
 void TError::EnrichFromException(const std::exception& exception)
 {
-    if (FromExceptionEnricher_) {
-        FromExceptionEnricher_(this, exception);
+    if (const auto& enricher = TEnricherStorage::Get()->FromExceptionEnricher) {
+        enricher(this, exception);
     }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TError& TError::operator <<= (const TErrorAttribute& attribute) &
+void TError::AddAttribute(const TErrorAttribute& attribute)
 {
     MutableAttributes()->SetAttribute(attribute);
+}
+
+void TError::AddInnerError(const TError& innerError)
+{
+    if (innerError.IsOK()) {
+        return;
+    }
+    MutableInnerErrors()->push_back(innerError);
+}
+
+void TError::AddInnerError(TError&& innerError)
+{
+    if (innerError.IsOK()) {
+        return;
+    }
+    MutableInnerErrors()->push_back(std::move(innerError));
+}
+
+TError TError::With(const TErrorAttribute& attribute) const &
+{
+    auto result = TError(*this);
+    result.AddAttribute(attribute);
+    return result;
+}
+
+TError&& TError::With(const TErrorAttribute& attribute) &&
+{
+    AddAttribute(attribute);
+    return std::move(*this);
+}
+
+TError TError::With(const TError& innerError) const &
+{
+    auto result = TError(*this);
+    result.AddInnerError(innerError);
+    return result;
+}
+
+TError&& TError::With(const TError& innerError) &&
+{
+    AddInnerError(innerError);
+    return std::move(*this);
+}
+
+TError TError::With(TError&& innerError) const &
+{
+    auto result = TError(*this);
+    result.AddInnerError(std::move(innerError));
+    return result;
+}
+
+TError&& TError::With(TError&& innerError) &&
+{
+    AddInnerError(std::move(innerError));
+    return std::move(*this);
+}
+
+TError& TError::operator <<= (const TErrorAttribute& attribute) &
+{
+    AddAttribute(attribute);
     return *this;
 }
 
 TError& TError::operator <<= (const std::vector<TErrorAttribute>& attributes) &
 {
-    for (const auto& attribute : attributes) {
-        MutableAttributes()->SetAttribute(attribute);
-    }
+    AddAttributes(attributes);
     return *this;
 }
 
 TError& TError::operator <<= (const TError& innerError) &
 {
-    MutableInnerErrors()->push_back(innerError);
+    if (!innerError.IsOK()) {
+        MutableInnerErrors()->push_back(innerError);
+    }
     return *this;
 }
 
 TError& TError::operator <<= (TError&& innerError) &
 {
-    MutableInnerErrors()->push_back(std::move(innerError));
+    if (!innerError.IsOK()) {
+        MutableInnerErrors()->push_back(std::move(innerError));
+    }
     return *this;
 }
 
 TError& TError::operator <<= (const std::vector<TError>& innerErrors) &
 {
-    MutableInnerErrors()->insert(
-        MutableInnerErrors()->end(),
-        innerErrors.begin(),
-        innerErrors.end());
+    std::ranges::copy_if(innerErrors, std::back_inserter(*MutableInnerErrors()), std::not_fn(&TError::IsOK));
     return *this;
 }
 
 TError& TError::operator <<= (std::vector<TError>&& innerErrors) &
 {
-    MutableInnerErrors()->insert(
-        MutableInnerErrors()->end(),
-        std::make_move_iterator(innerErrors.begin()),
-        std::make_move_iterator(innerErrors.end()));
+    auto filteredErrors = std::views::filter(innerErrors, std::not_fn(&TError::IsOK));
+    std::ranges::move(filteredErrors, std::back_inserter(*MutableInnerErrors()));
     return *this;
 }
 

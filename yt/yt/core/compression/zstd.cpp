@@ -3,12 +3,14 @@
 #include "dictionary_codec.h"
 #include "private.h"
 
-#include <yt/yt/core/misc/blob.h>
 #include <yt/yt/core/misc/finally.h>
 
 #include <library/cpp/yt/system/exit.h>
 
+#include <library/cpp/yt/memory/blob.h>
 #include <library/cpp/yt/memory/chunked_memory_pool.h>
+
+#include <util/system/unaligned_mem.h>
 
 #include <contrib/libs/zstd/lib/zstd_errors.h>
 #define ZSTD_STATIC_LINKING_ONLY
@@ -41,8 +43,8 @@ void VerifyError(size_t result)
             "Zstd codec failed with memory allocation error");
     }
 
-    YT_LOG_FATAL("Zstd compression failed (Error: %v)",
-        ZSTD_getErrorName(result));
+    YT_TLOG_FATAL("Zstd compression failed")
+        .With("Error", ZSTD_getErrorName(result));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -184,13 +186,83 @@ void ZstdDecompress(TSource* source, TBlob* output)
     size_t decompressedSize = ZSTD_decompress(outputPtr, outputSize, inputPtr, inputSize);
     if (ZSTD_isError(decompressedSize)) {
         THROW_ERROR_EXCEPTION("Zstd decompression failed: ZSTD_decompress returned an error")
-            << TErrorAttribute("error", ZSTD_getErrorName(decompressedSize));
+            .With("error", ZSTD_getErrorName(decompressedSize));
     }
     if (decompressedSize != outputSize) {
         THROW_ERROR_EXCEPTION("Zstd decompression failed: output size mismatch")
-            << TErrorAttribute("expected_size", outputSize)
-            << TErrorAttribute("actual_size", decompressedSize);
+            .With("expected_size", outputSize)
+            .With("actual_size", decompressedSize);
     }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+// ZstdSyncTagPrefix + 64-bit offset
+static_assert(ZstdSyncTagPrefixSize + sizeof(ui64) == ZstdSyncTagSize);
+
+EZstdFrameType DetectZstdFrameType(TRef buffer)
+{
+    YT_VERIFY(buffer.Size() >= ZstdFrameSignatureSize);
+    auto signatureStr = TStringBuf(buffer.begin(), ZstdFrameSignatureSize);
+    if (signatureStr == ZstdSyncFrameSignature) {
+        return EZstdFrameType::Sync;
+    }
+    if (signatureStr == ZstdDataFrameSignature) {
+        return EZstdFrameType::Data;
+    }
+    return EZstdFrameType::Unknown;
+}
+
+namespace {
+
+std::optional<i64> FindZstdSyncTagOffsetImpl(
+    TRef buffer,
+    i64 bufferStartOffset,
+    bool breakOnFound)
+{
+    std::optional<i64> result;
+    auto currentBufferStr = TStringBuf(buffer.data(), buffer.size());
+    while (true) {
+        size_t tagPos = currentBufferStr.find(ZstdSyncTagPrefix);
+        if (tagPos == TStringBuf::npos) {
+            break;
+        }
+
+        const char* tag = currentBufferStr.data() + tagPos;
+        if (currentBufferStr.end() - tag < ZstdSyncTagSize) {
+            break;
+        }
+
+        ui64 tagOffset = ReadUnaligned<ui64>(tag + ZstdSyncTagPrefix.size());
+        ui64 tagOffsetExpected = bufferStartOffset + (tag - buffer.data());
+        if (tagOffset == tagOffsetExpected) {
+            result = tagOffset;
+            if (breakOnFound) {
+                break;
+            }
+        }
+
+        currentBufferStr.remove_prefix(tagPos + ZstdSyncTagPrefix.size());
+    }
+    return result;
+}
+
+} // namespace
+
+std::optional<i64> FindFirstZstdSyncTagOffset(TRef buffer, i64 bufferStartOffset)
+{
+    return FindZstdSyncTagOffsetImpl(
+        buffer,
+        bufferStartOffset,
+        /*breakOnFound*/ true);
+}
+
+std::optional<i64> FindLastZstdSyncTagOffset(TRef buffer, i64 bufferStartOffset)
+{
+    return FindZstdSyncTagOffsetImpl(
+        buffer,
+        bufferStartOffset,
+        /*breakOnFound*/ false);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -222,9 +294,9 @@ TDictionaryCompressionFrameInfo ZstdGetFrameInfo(TRef input)
         ZSTD_f_zstd1_magicless);
     if (result != 0) {
         THROW_ERROR_EXCEPTION("Failed to get frame header")
-            << TErrorAttribute("code", result)
-            << TErrorAttribute("is_error", ZSTD_isError(result))
-            << TErrorAttribute("error", ZSTD_getErrorName(result));
+            .With("code", result)
+            .With("is_error", ZSTD_isError(result))
+            .With("error", ZSTD_getErrorName(result));
     }
 
     return {
@@ -318,13 +390,13 @@ public:
         : Context_(ZSTD_createCCtx())
     { }
 
-    TDictionaryCompressionContextGuard(TDictionaryCompressionContextGuard&& other)
+    TDictionaryCompressionContextGuard(TDictionaryCompressionContextGuard&& other) noexcept
         : Context_(other.Context_)
     {
         other.Context_ = nullptr;
     }
 
-    TDictionaryCompressionContextGuard& operator = (TDictionaryCompressionContextGuard&& other) = delete;
+    TDictionaryCompressionContextGuard& operator=(TDictionaryCompressionContextGuard&& other) = delete;
 
     ~TDictionaryCompressionContextGuard()
     {
@@ -352,13 +424,13 @@ public:
         : Context_(ZSTD_createDCtx())
     { }
 
-    TDictionaryDecompressionContextGuard(TDictionaryDecompressionContextGuard&& other)
+    TDictionaryDecompressionContextGuard(TDictionaryDecompressionContextGuard&& other) noexcept
         : Context_(other.Context_)
     {
         other.Context_ = nullptr;
     }
 
-    TDictionaryDecompressionContextGuard& operator = (TDictionaryDecompressionContextGuard&& other) = delete;
+    TDictionaryDecompressionContextGuard& operator=(TDictionaryDecompressionContextGuard&& other) = delete;
 
     ~TDictionaryDecompressionContextGuard()
     {
@@ -480,8 +552,8 @@ TErrorOr<TSharedRef> ZstdTrainCompressionDictionary(i64 dictionarySize, const st
         sampleSizes.size());
     if (ZSTD_isError(resultDictionarySize)) {
         return TError("Compression dictionary training failed")
-            << TErrorAttribute("zstd_error_code", static_cast<int>(ZSTD_getErrorCode(resultDictionarySize)))
-            << TErrorAttribute("zstd_error_name", ZSTD_getErrorName(resultDictionarySize));
+            .With("zstd_error_code", static_cast<int>(ZSTD_getErrorCode(resultDictionarySize)))
+            .With("zstd_error_name", ZSTD_getErrorName(resultDictionarySize));
     }
 
     YT_VERIFY(resultDictionarySize <= dictionary.Size());
@@ -532,9 +604,9 @@ IDigestedCompressionDictionaryPtr ZstdConstructDigestedCompressionDictionary(
 
     if (!digestedDictionary) {
         THROW_ERROR_EXCEPTION("Failed to create digested compression dictionary")
-            << TErrorAttribute("compression_level", compressionLevel)
-            << TErrorAttribute("dictionary_size", compressionDictionary.Size())
-            << TErrorAttribute("storage_size", storage.Size());
+            .With("compression_level", compressionLevel)
+            .With("dictionary_size", compressionDictionary.Size())
+            .With("storage_size", storage.Size());
     }
 
     return New<TDigestedCompressionDictionary>(std::move(storage), digestedDictionary);
@@ -557,8 +629,8 @@ IDigestedDecompressionDictionaryPtr ZstdConstructDigestedDecompressionDictionary
 
     if (!digestedDictionary) {
         THROW_ERROR_EXCEPTION("Failed to create digested decompression dictionary")
-            << TErrorAttribute("dictionary_size", decompressionDictionary.Size())
-            << TErrorAttribute("storage_size", storage.Size());
+            .With("dictionary_size", decompressionDictionary.Size())
+            .With("storage_size", storage.Size());
     }
 
     return New<TDigestedDecompressionDictionary>(std::move(storage), digestedDictionary);

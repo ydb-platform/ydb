@@ -2,6 +2,7 @@
 #include <ydb/core/formats/arrow/converter.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
+#include <ydb/core/tx/columnshard/column_fetching/manager.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/counters/scan.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/abstract.h>
@@ -14,34 +15,43 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/chunks_limiter/chunks_limiter.h>
 
+#include <library/cpp/lwtrace/all.h>
+
 namespace NKikimr::NOlap::NReader {
 
-class TColumnShardScan: public TActorBootstrapped<TColumnShardScan>,
-                        NArrow::IRowWriter,
-                        NColumnShard::TMonitoringObjectsCounter<TColumnShardScan> {
+class TColumnShardScan: public TActorBootstrapped<TColumnShardScan>, NArrow::IRowWriter,
+                        public NColumnShard::TMonitoringObjectsCounter<TColumnShardScan> {
 private:
     TActorId ResourceSubscribeActorId;
-    TActorId ReadCoordinatorActorId;
     const std::shared_ptr<IStoragesManager> StoragesManager;
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager> DataAccessorsManager;
+    const std::shared_ptr<NColumnFetching::TColumnDataManager> ColumnDataManager;
     std::optional<TMonotonic> StartInstant;
     std::optional<TMonotonic> FinishInstant;
+    std::shared_ptr<NLWTrace::TOrbit> ScanOrbit;
+    const ui64 PathId;
 
 public:
     virtual void PassAway() override;
 
-    TColumnShardScan(const TActorId& columnShardActorId, const TActorId& scanComputeActorId,
+    const std::shared_ptr<NLWTrace::TOrbit>& GetScanOrbit() const {
+        return ScanOrbit;
+    }
+
+    TColumnShardScan(const TActorId& columnShardActorId, const TActorId& scanComputeActorId, const TActorId& scanDiagnosticsActorId,
         const std::shared_ptr<IStoragesManager>& storagesManager,
         const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
-        const TComputeShardingPolicy& computeShardingPolicy, ui32 scanId, ui64 txId, ui32 scanGen, ui64 requestCookie, ui64 tabletId,
-        TDuration timeout, const TReadMetadataBase::TConstPtr& readMetadataRange, NKikimrDataEvents::EDataFormat dataFormat,
-        const NColumnShard::TScanCounters& scanCountersPool, const NConveyorComposite::TCPULimitsConfig& cpuLimits);
+        const std::shared_ptr<NColumnFetching::TColumnDataManager>& columnDataManager, const TComputeShardingPolicy& computeShardingPolicy,
+        ui32 scanId, ui64 txId, ui32 scanGen, ui64 requestCookie, ui64 tabletId, TDuration timeout,
+        const TReadMetadataBase::TConstPtr& readMetadataRange, NKikimrDataEvents::EDataFormat dataFormat,
+        const NColumnShard::TScanCounters& scanCountersPool, const NConveyorComposite::TCPULimitsConfig& cpuLimits,
+        std::shared_ptr<NLWTrace::TOrbit> orbit, ui64 pathId = 0);
 
     void Bootstrap(const TActorContext& ctx);
 
 private:
     STATEFN(StateScan) {
-        auto g = Stats->MakeGuard("processing");
+        auto g = Stats->MakeGuard("processing", IS_INFO_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN));
         TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_SCAN) ("SelfId", SelfId())("TabletId",
             TabletId)("ScanId", ScanId)("TxId", TxId)("ScanGen", ScanGen)("task_identifier", ReadMetadataRange->GetScanIdentifier()));
         switch (ev->GetTypeRewrite()) {
@@ -82,6 +92,8 @@ private:
 
     void AddRow(const TConstArrayRef<TCell>& row) override;
 
+    NKqp::TScanStatistics GetScanStats();
+
     TOwnedCellVec ConvertLastKey(const std::shared_ptr<arrow::RecordBatch>& lastReadKey);
 
     class TScanStatsOwner: public NKqp::TEvKqpCompute::IShardScanStats {
@@ -90,7 +102,8 @@ private:
 
     public:
         TScanStatsOwner(const TReadStats& stats)
-            : Stats(stats) {
+            : Stats(stats)
+        {
         }
 
         virtual THashMap<TString, ui64> GetMetrics() const override {
@@ -102,7 +115,7 @@ private:
         }
     };
 
-    bool SendResult(bool pageFault, bool lastBatch);
+    bool SendResult(bool pageFault, bool lastBatch, ui64 sourceId = 0);
 
     void SendScanError(const TString& reason);
 
@@ -121,6 +134,7 @@ private:
     const TActorId ColumnShardActorId;
     const TActorId ReadBlobsActorId;
     const TActorId ScanComputeActorId;
+    const TActorId ScanDiagnosticsActorId;
     std::optional<TMonotonic> AckReceivedInstant;
     TActorId ScanActorId;
     TActorId BlobCacheActorId;
@@ -147,7 +161,9 @@ private:
     THolder<NKqp::TEvKqpCompute::TEvScanData> Result;
     std::shared_ptr<IScanCursor> CurrentLastReadKey;
     bool Finished = false;
+    ui32 BuildResultCounter = 0;
     std::optional<TMonotonic> LastResultInstant;
+    THashMap<TString, ui64> PreviousPerStepBytesMeasurement;
 
     class TBlobStats {
     private:
@@ -161,8 +177,10 @@ private:
     public:
         TBlobStats(const NMonitoring::THistogramPtr blobDurationsCounter, const NMonitoring::THistogramPtr byteDurationsCounter)
             : BlobDurationsCounter(blobDurationsCounter)
-            , ByteDurationsCounter(byteDurationsCounter) {
+            , ByteDurationsCounter(byteDurationsCounter)
+        {
         }
+
         void Received(const TBlobRange& br, const TDuration d) {
             ReadingDurationSum += d;
             ReadingDurationMax = Max(ReadingDurationMax, d);
@@ -171,6 +189,7 @@ private:
             BlobDurationsCounter->Collect(d.MilliSeconds());
             ByteDurationsCounter->Collect((i64)d.MilliSeconds(), br.Size);
         }
+
         TString DebugString() const {
             TStringBuilder sb;
             if (PartsCount) {
@@ -192,7 +211,14 @@ private:
     ui64 RowsSum = 0;
     ui64 PacksSum = 0;
     ui64 Bytes = 0;
+    ui64 TotalPartialSourcesCount = 0;
+    ui64 TotalBlobBytes = 0;
+    ui64 TotalRawBytes = 0;
+    ui64 TotalRowsCount = 0;
     ui32 PageFaults = 0;
+    TInstant StartWaitTime;
+    TDuration WaitTime;
+    TInstant LastSend = TInstant::Now();
 };
 
 }   // namespace NKikimr::NOlap::NReader

@@ -1,9 +1,12 @@
 # -*- coding: utf-8 -*-
 import flask
 import copy
-
 from library.python.monlib.metric_registry import MetricRegistry
 from library.python.monlib import encoder
+import threading
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 CONTENT_TYPE_SPACK = 'application/x-solomon-spack'
@@ -21,13 +24,13 @@ class Monitor(object):
 
     def int_gauge(self, sensor, labels):
         all_labels = copy.deepcopy(labels)
-        all_labels.update({'sensor': sensor})
+        all_labels.update({'name': sensor})
         return self._registry.int_gauge(all_labels)
 
-    def rate(self, sensor, labels):
+    def counter(self, sensor, labels):
         all_labels = copy.deepcopy(labels)
-        all_labels.update({'sensor': sensor})
-        return self._registry.rate(all_labels)
+        all_labels.update({'name': sensor})
+        return self._registry.counter(all_labels)
 
 
 _MONITOR = Monitor()
@@ -35,7 +38,8 @@ _MONITOR = Monitor()
 
 @app.route('/sensors')
 def sensors():
-    if flask.request.headers['accept'] == CONTENT_TYPE_SPACK:
+    accept_header = flask.request.headers.get('accept', CONTENT_TYPE_JSON)
+    if accept_header == CONTENT_TYPE_SPACK:
         return flask.Response(encoder.dumps(monitor().registry), mimetype=CONTENT_TYPE_SPACK)
     return flask.Response(encoder.dumps(monitor().registry, format='json'), mimetype=CONTENT_TYPE_JSON)
 
@@ -45,4 +49,19 @@ def monitor():
 
 
 def setup_page(host, port):
-    app.run(host, port)
+    logger.info("Setting up monitoring page on %s:%d", host, port)
+
+    def run_flask():
+        try:
+            logger.info("Starting Flask app on %s:%d", host, port)
+            app.run(host, port, debug=False, use_reloader=False)
+            logger.info("Flask app started successfully")
+        except Exception as e:
+            logger.error("Failed to start Flask app: %s", e)
+            raise
+
+    flask_thread = threading.Thread(target=run_flask, daemon=True)
+    flask_thread.start()
+    logger.info("Flask thread started")
+
+    return flask_thread

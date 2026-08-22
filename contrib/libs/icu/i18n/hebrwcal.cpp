@@ -164,7 +164,6 @@ HebrewCalendar::HebrewCalendar(const Locale& aLocale, UErrorCode& success)
 :   Calendar(TimeZone::forLocaleOrDefault(aLocale), aLocale, success)
 
 {
-    setTimeInMillis(getNow(), success); // Call this again now that the vtable is set up properly.
 }
 
 
@@ -447,8 +446,7 @@ int32_t startOfYear(int32_t year, UErrorCode &status)
             // If the 1st is on Sun, Wed, or Fri, postpone to the next day
             day += 1;
             wd = (day % 7);
-        }
-        if (wd == 1 && frac > 15*HOUR_PARTS+204 && !HebrewCalendar::isLeapYear(year) ) {
+        } else if (wd == 1 && frac > 15*HOUR_PARTS+204 && !HebrewCalendar::isLeapYear(year) ) {
             // If the new moon falls after 3:11:20am (15h204p from the previous noon)
             // on a Tuesday and it is not a leap year, postpone by 2 days.
             // This prevents 356-day years.
@@ -479,7 +477,7 @@ int32_t daysInYear(int32_t eyear, UErrorCode& status) {
 }
 
 /**
-* Returns the the type of a given year.
+* Returns the type of a given year.
 *  0   "Deficient" year with 353 or 383 days
 *  1   "Normal"    year with 354 or 384 days
 *  2   "Complete"  year with 355 or 385 days
@@ -591,13 +589,8 @@ int32_t HebrewCalendar::handleGetMonthLength(int32_t extendedYear, int32_t month
 * Returns the number of days in the given Hebrew year
 * @internal
 */
-int32_t HebrewCalendar::handleGetYearLength(int32_t eyear) const {
-    UErrorCode status = U_ZERO_ERROR;
-    int32_t len = daysInYear(eyear, status);
-    if (U_FAILURE(status)) {
-        return 12;
-    }
-    return len;
+int32_t HebrewCalendar::handleGetYearLength(int32_t eyear, UErrorCode& status) const {
+    return daysInYear(eyear, status);
 }
 
 void HebrewCalendar::validateField(UCalendarDateFields field, UErrorCode &status) {
@@ -797,23 +790,6 @@ int64_t HebrewCalendar::handleComputeMonthStart(
     return day + 347997LL;
 }
 
-constexpr uint32_t kHebrewRelatedYearDiff = -3760;
-
-int32_t HebrewCalendar::getRelatedYear(UErrorCode &status) const
-{
-    int32_t year = get(UCAL_EXTENDED_YEAR, status);
-    if (U_FAILURE(status)) {
-        return 0;
-    }
-    return year + kHebrewRelatedYearDiff;
-}
-
-void HebrewCalendar::setRelatedYear(int32_t year)
-{
-    // set extended year
-    set(UCAL_EXTENDED_YEAR, year - kHebrewRelatedYearDiff);
-}
-
 IMPL_SYSTEM_DEFAULT_CENTURY(HebrewCalendar, "@calendar=hebrew")
 
 bool HebrewCalendar::inTemporalLeapYear(UErrorCode& status) const {
@@ -877,6 +853,11 @@ int32_t HebrewCalendar::internalGetMonth(UErrorCode& status) const {
         }
     }
     return Calendar::internalGetMonth(status);
+}
+
+int32_t HebrewCalendar::getRelatedYearDifference() const {
+    constexpr int32_t kHebrewCalendarRelatedYearDifference = -3760;
+    return kHebrewCalendarRelatedYearDifference;
 }
 
 UOBJECT_DEFINE_RTTI_IMPLEMENTATION(HebrewCalendar)

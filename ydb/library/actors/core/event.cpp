@@ -33,7 +33,7 @@ namespace NActors {
         if (Event) {
             TAllocChunkSerializer serializer;
             Event->SerializeToArcadiaStream(&serializer);
-            auto chainBuf = serializer.Release(Event->CreateSerializationInfo());
+            auto chainBuf = serializer.Release(Event->CreateSerializationInfo(false));
             Event.Reset();
             return chainBuf;
         }
@@ -47,10 +47,19 @@ namespace NActors {
         if (Event) {
             TAllocChunkSerializer serializer;
             Event->SerializeToArcadiaStream(&serializer);
-            Buffer = serializer.Release(Event->CreateSerializationInfo());
+            Buffer = serializer.Release(Event->CreateSerializationInfo(false));
             return Buffer;
         }
         return new TEventSerializedData;
+    }
+
+    void IEventHandle::Preserialize() {
+        if (Event && !Buffer) {
+            TAllocChunkSerializer serializer;
+            Event->SerializeToArcadiaStream(&serializer);
+            Buffer = serializer.Release(Event->CreateSerializationInfo(false));
+            Event.Reset();
+        }
     }
 
 #ifndef NDEBUG

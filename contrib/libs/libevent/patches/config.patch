@@ -1,0 +1,8 @@
+--- contrib/libs/libevent/include/event2/event-config-linux.h	(index)
++++ contrib/libs/libevent/include/event2/event-config-linux.h	(index)
+@@ -1,1 +1,1 @@
+-#define EVENT__HAVE_ARC4RANDOM 1
++/* #undefine EVENT__HAVE_ARC4RANDOM */
+@@ -1,1 +1,1 @@
+-#define EVENT__HAVE_ARC4RANDOM_BUF 1
++/* #undef EVENT__HAVE_ARC4RANDOM_BUF */

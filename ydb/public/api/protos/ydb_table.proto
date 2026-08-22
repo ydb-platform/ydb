@@ -1,6 +1,7 @@
 syntax = "proto3";
 option cc_enable_arenas = true;
 
+import "ydb/public/api/protos/annotations/sensitive.proto";
 import "ydb/public/api/protos/annotations/validation.proto";
 import "ydb/public/api/protos/ydb_common.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
@@ -59,6 +60,11 @@ message GlobalIndexSettings {
     // Partitioning settings for the table that implements the index.
     PartitioningSettings partitioning_settings = 3;
     ReadReplicasSettings read_replicas_settings = 4;
+
+    /**
+     * The metrics configuration for the given index.
+     */
+    optional MetricsSettings metrics_settings = 5;
 }
 
 message VectorIndexSettings {
@@ -79,19 +85,25 @@ message VectorIndexSettings {
         VECTOR_TYPE_BIT = 4;
     }
 
-    Metric metric = 1;
+    optional Metric metric = 1;
 
-    VectorType vector_type = 2;
+    optional VectorType vector_type = 2;
 
-    uint32 vector_dimension = 3;
+    optional uint32 vector_dimension = 3;
 }
 
 message KMeansTreeSettings {
     VectorIndexSettings settings = 1;
-    // average count of clusters on each level of tree, 0 -- means auto
-    uint32 clusters = 2;
-    // average count of levels in the tree, 0 -- means auto
-    uint32 levels = 3;
+
+    optional uint32 clusters = 2;
+
+    optional uint32 levels = 3;
+
+    optional uint32 overlap_clusters = 4;
+
+    optional double overlap_ratio = 5;
+
+    optional bool adaptive_clusters = 6;
 }
 
 message GlobalIndex {
@@ -113,7 +125,264 @@ message GlobalVectorKMeansTreeIndex {
     KMeansTreeSettings vector_settings = 3;
 }
 
-// Represent secondary index
+message FulltextIndexSettings {
+    // Specifies how text is tokenized during indexing
+    enum Tokenizer {
+        TOKENIZER_UNSPECIFIED = 0;
+
+        // Splits text only by whitespace
+        // Does not split on punctuation
+        // Example:
+        //   Text: "foo-bar baz_lorem ipsum"
+        //   Tokens: ["foo-bar", "baz_lorem", "ipsum"]
+        WHITESPACE = 1;
+
+        // Splits text into sequences of alphabetic and numeric characters
+        // Example:
+        //   Text: "foo-bar baz_lorem ipsum"
+        //   Tokens: ["foo", "bar", "baz", "lorem", "ipsum"]
+        ALPHANUMERIC = 2;
+
+        // Treats the entire input as a single token
+        // No splitting is performed
+        // Example:
+        //   Text: "Hello World!"
+        //   Tokens: ["Hello World!"]
+        KEYWORD = 3;
+
+        // Applies general language-aware tokenization
+        // According to a simplified Unicode UAX#29 standard
+        // Example:
+        //   Text: "The 24.18 Brown-Foxes jumped over the lazy dog's bone!"
+        //   Tokens: ["The", "24.18", "Brown", "Foxes", "jumped", "over", "the", "lazy", "dog's", "bone"]
+        STANDARD = 4;
+    }
+
+    // Represents text analyzers settings
+    message Analyzers {
+        // See Tokenizer enum
+        optional Tokenizer tokenizer = 1;
+
+        // Language used for language-sensitive operations like stopword filtering and stemming
+        // Example: language = "english"
+        // By default is not specified and no language-specific logic is applied
+        optional string language = 2;
+
+        // Whether to convert tokens to lowercase
+        // Example:
+        //   Token: "Quick"
+        //   Output: "quick"
+        optional bool use_filter_lowercase = 100;
+
+        // Whether to remove common stopwords like "the", "a", "is"
+        // Example: language = "english"
+        //   Tokens: ["the", "quick", "brown"]
+        //   Output: ["quick", "brown"]
+        optional bool use_filter_stopwords = 110;
+
+        // Whether to apply character n-gram indexing to each token
+        // Must be used with filter_ngram_min_length and filter_ngram_max_length
+        // Example: filter_ngram_min_length = 3, filter_ngram_max_length = 4
+        //   Token: "search"
+        //   Output: ["sea", "ear", "arc", "rch", "sear", "earc", "arch"]
+        optional bool use_filter_ngram = 120;
+
+        // Whether to apply edge n-gram indexing (prefix-based) to each token
+        // Used with filter_ngram_min_length and filter_ngram_max_length
+        // Example: filter_ngram_min_length = 3, filter_ngram_max_length = 4
+        //   Token: "search"
+        //   Output: ["sea", "sear"]
+        optional bool use_filter_edge_ngram = 121;
+
+        // Minimum length of n-grams to generate (inclusive)
+        // Must be used with use_filter_ngram or use_filter_edge_ngram
+        // Default value is 3
+        optional int32 filter_ngram_min_length = 122 [(Ydb.value) = ">= 0"];
+
+        // Maximum length of n-grams to generate (inclusive)
+        // Must be used with use_filter_ngram or use_filter_edge_ngram
+        // Default value is 4
+        optional int32 filter_ngram_max_length = 123 [(Ydb.value) = ">= 0"];
+
+        // Whether to filter tokens by their length
+        // Must be used with filter_length_min or filter_length_max
+        // Example: filter_length_min = 4, filter_length_max = 6
+        //   Tokens: ["foo", "fooba", "foobar", "foobarbaz"]
+        //   Output: ["fooba", "foobar"]
+        optional bool use_filter_length = 130;
+
+        // Minimum token length to keep (inclusive)
+        // Must be used with use_filter_length
+        optional int32 filter_length_min = 131 [(Ydb.value) = ">= 0"];
+
+        // Maximum token length to keep (inclusive)
+        // Must be used with use_filter_length
+        optional int32 filter_length_max = 132 [(Ydb.value) = ">= 0"];
+
+        // Whether to apply snowball stemming to each token
+        // Must be used with language option
+        // Example: language = "english"
+        //   Tokens: ["cars", "beautifully", "conspired"]
+        //   Output: ["car", "beauti", "conspir"]
+        optional bool use_filter_snowball = 140;
+    }
+
+    // Represents text analyzers settings for a specific column
+    message ColumnAnalyzers {
+        // Name of the column to be indexed
+        optional string column = 1;
+
+        // Analyzer settings specific to this column
+        Analyzers analyzers = 2;
+    }
+
+    // Removed Layout field
+    reserved 1;
+
+    // List of columns and their fulltext settings
+    // Currently, this list should contain a single entry with specified analyzers
+    // Later, some columns may not use analyzers and will be indexed as-is
+    // This list must always match TableIndex.index_columns
+    repeated ColumnAnalyzers columns = 2;
+}
+
+// Without EnableCompactFulltextIndex feature flag (old version):
+// Simplest possible layout without support for relevance.
+// Uses a single flat inverted index table (indexImplTable).
+// Supports a single column only.
+// Example source table:
+//     ┌────┬────────────────────────────┐
+//     │ id │ text                       │
+//     ├────┼────────────────────────────┤
+//     │ 1  │ "The quick brown fox"      │
+//     │ 2  │ "The quick blue hare"      │
+//     └────┴────────────────────────────┘
+// Example inverted index table (indexImplTable):
+//     ┌──────────────┬────┐
+//     │ __ydb_token  │ id │
+//     ├──────────────┼────┤
+//     │ "The"        │ 1  │
+//     │ "The"        │ 2  │
+//     │ "blue"       │ 2  │
+//     │ "brown"      │ 1  │
+//     │ "fox"        │ 1  │
+//     │ "hare"       │ 2  │
+//     │ "quick"      │ 1  │
+//     │ "quick"      │ 2  │
+//     └──────────────┴────┘
+//
+// With EnableCompactFulltextIndex feature flag (new version):
+// Compact fulltext index format with segmented storage.
+// Index table stores varint+delta-compressed binary segments (document ID lists)
+// instead of individual document IDs.
+// Example inverted index table (indexImplTable):
+//     ┌──────────────┬──────────────┬──────────────────┬─────────────┬───────────────┐
+//     │ __ydb_token  │ __ydb_max_id │ __ydb_generation | __ydb_added | __ydb_segment │
+//     ├──────────────┼──────────────┼──────────────────┼─────────────┼───────────────┤
+//     │ "The"        │ 2^64-1       │ 2^64-1           │ true        │ 1 2           │
+//     │ "blue"       │ 2^64-1       │ 2^64-1           │ true        │ 2             │
+//     │ "brown"      │ 2^64-1       │ 2^64-1           │ true        │ 1             │
+//     │ "fox"        │ 2^64-1       │ 2^64-1           │ true        │ 1             │
+//     │ "hare"       │ 2^64-1       │ 2^64-1           │ true        │ 2             │
+//     │ "quick"      │ 2^64-1       │ 2^64-1           │ true        │ 1 2           │
+//     └──────────────┴──────────────┴──────────────────┴─────────────┴───────────────┘
+
+message GlobalFulltextPlainIndex {
+    GlobalIndexSettings settings = 1;
+    FulltextIndexSettings fulltext_settings = 2;
+}
+
+// Simple layout like Plain, but with support for relevance.
+// Uses multiple index tables. Supports a single column only.
+// Example source table:
+//     ┌────┬───────────────────────────────────────┐
+//     │ id │ text                                  │
+//     ├────┼───────────────────────────────────────┤
+//     │ 1  │ "A quick fox catches quick hare"      │
+//     │ 2  │ "The quick blue hare"                 │
+//     └────┴───────────────────────────────────────┘
+// Without EnableCompactFulltextIndex feature flag (old version):
+// Example inverted index table with term frequencies (indexImplTable):
+//     ┌──────────────┬────┬────────────┐
+//     │ __ydb_token  │ id │ __ydb_freq │
+//     ├──────────────┼────┼────────────┤
+//     │ "A"          │ 1  │ 1          │
+//     │ "The"        │ 2  │ 1          │
+//     │ "blue"       │ 2  │ 1          │
+//     │ "catches"    │ 1  │ 1          │
+//     │ "fox"        │ 1  │ 1          │
+//     │ "hare"       │ 1  │ 1          │
+//     │ "hare"       │ 2  │ 1          │
+//     │ "quick"      │ 1  │ 2          │
+//     │ "quick"      │ 2  │ 1          │
+//     └──────────────┴────┴────────────┘
+// With EnableCompactFulltextIndex feature flag (new version):
+//     ┌──────────────┬──────────────┬──────────────────┬─────────────┬───────────────┐
+//     │ __ydb_token  │ __ydb_max_id │ __ydb_generation | __ydb_added | __ydb_segment │
+//     ├──────────────┼──────────────┼──────────────────┼─────────────┼───────────────┤
+//     │ "A"          │ 2^64-1       │ 2^64-1           │ true        │ 1:1           │
+//     │ "The"        │ 2^64-1       │ 2^64-1           │ true        │ 2:1           │
+//     │ "blue"       │ 2^64-1       │ 2^64-1           │ true        │ 2:1           │
+//     │ "catches"    │ 2^64-1       │ 2^64-1           │ true        │ 1:1           │
+//     │ "fox"        │ 2^64-1       │ 2^64-1           │ true        │ 1:1           │
+//     │ "hare"       │ 2^64-1       │ 2^64-1           │ true        │ 1:1 2:1       │
+//     │ "quick"      │ 2^64-1       │ 2^64-1           │ true        │ 1:2 2:1       │
+//     └──────────────┴──────────────┴──────────────────┴─────────────┴───────────────┘
+//
+// Other tables are the same for both compressed and uncompressed formats:
+// Term dictionary table (indexImplDictTable):
+//     ┌──────────────┬────────────┐
+//     │ __ydb_token  │ __ydb_freq │
+//     ├──────────────┼────────────┤
+//     │ "A"          │ 1          │
+//     │ "The"        │ 1          │
+//     │ "blue"       │ 1          │
+//     │ "catches"    │ 1          │
+//     │ "fox"        │ 1          │
+//     │ "hare"       │ 2          │
+//     │ "quick"      │ 2          │
+//     └──────────────┴────────────┘
+// Document statistics table (indexImplDocsTable):
+//     ┌────┬──────────────┐
+//     │ id │ __ydb_length │
+//     ├────┼──────────────┤
+//     │ 1  │ 6            │
+//     │ 2  │ 4            │
+//     └────┴──────────────┘
+// Global statistics table (indexImplStatsTable):
+//     ┌──────────┬─────────────────┬────────────────────┐
+//     │ __ydb_id │ __ydb_doc_count │ __ydb_total_length │
+//     ├──────────┼─────────────────┼────────────────────┤
+//     │ 1        │ 2               │ 10                 │
+//     └──────────┴─────────────────┴────────────────────┘
+message GlobalFulltextRelevanceIndex {
+    GlobalIndexSettings posting_table_settings = 1;
+    FulltextIndexSettings fulltext_settings = 2;
+    GlobalIndexSettings dict_table_settings = 3;
+    GlobalIndexSettings docs_table_settings = 4;
+    GlobalIndexSettings stats_table_settings = 5;
+}
+
+message LocalBloomFilterIndex {
+    optional double false_positive_probability = 1;
+}
+
+message LocalBloomNgramFilterIndex {
+    uint32 ngram_size = 1;
+    uint32 hashes_count = 2;
+    uint32 filter_size_bytes = 3;
+    uint32 records_count = 4;
+    optional bool case_sensitive = 5;
+    optional double false_positive_probability = 6;
+}
+
+message LocalMinMaxIndex {}
+
+message GlobalJsonIndex {
+    GlobalIndexSettings settings = 1;
+}
+
+// Represent table index
 message TableIndex {
     // Name of index
     string name = 1;
@@ -125,12 +394,20 @@ message TableIndex {
        GlobalAsyncIndex global_async_index = 4;
        GlobalUniqueIndex global_unique_index = 6;
        GlobalVectorKMeansTreeIndex global_vector_kmeans_tree_index = 7;
+       GlobalFulltextPlainIndex global_fulltext_plain_index = 8;
+       GlobalFulltextRelevanceIndex global_fulltext_relevance_index = 9;
+       LocalBloomFilterIndex local_bloom_filter_index = 10;
+       LocalBloomNgramFilterIndex local_bloom_ngram_filter_index = 11;
+       GlobalJsonIndex global_json_index = 12;
+       LocalMinMaxIndex local_min_max_index = 14;
     }
     // list of columns content to be copied in to index table
     repeated string data_columns = 5;
+    // maximum level of parallelism for index build operation
+    optional uint32 parallel = 13;
 }
 
-// Represent secondary index with index state
+// Represent table index with index state
 message TableIndexDescription {
     enum Status {
         STATUS_UNSPECIFIED = 0;
@@ -149,12 +426,42 @@ message TableIndexDescription {
        GlobalAsyncIndex global_async_index = 5;
        GlobalUniqueIndex global_unique_index = 8;
        GlobalVectorKMeansTreeIndex global_vector_kmeans_tree_index = 9;
+       GlobalFulltextPlainIndex global_fulltext_plain_index = 10;
+       GlobalFulltextRelevanceIndex global_fulltext_relevance_index = 11;
+       LocalBloomFilterIndex local_bloom_filter_index = 12;
+       LocalBloomNgramFilterIndex local_bloom_ngram_filter_index = 13;
+       GlobalJsonIndex global_json_index = 14;
+       LocalMinMaxIndex local_min_max_index = 15;
     }
     Status status = 4;
     // list of columns content to be copied in to index table
     repeated string data_columns = 6;
     // Size of index data in bytes
     uint64 size_bytes = 7;
+}
+
+// Represent multi-column table statistics
+message TableMultiColumnStatistics {
+    enum MultiColumnStatisticsType {
+        STATISTIC_TYPE_UNSPECIFIED = 0;
+        COUNT_MIN_SKETCH = 1;
+    }
+    // Name of statistics
+    string name = 1;
+    // List of columns the statistics is built on
+    repeated string columns = 2;
+    // Types of statistics to build
+    repeated MultiColumnStatisticsType types = 3;
+}
+
+// Represent multi-column table statistics description
+message TableMultiColumnStatisticsDescription {
+    // Name of statistics
+    string name = 1;
+    // List of columns the statistics is built on
+    repeated string columns = 2;
+    // Types of statistics to build
+    repeated TableMultiColumnStatistics.MultiColumnStatisticsType types = 3;
 }
 
 // State of index building operation
@@ -170,6 +477,30 @@ message IndexBuildState {
         STATE_REJECTION = 7;
         STATE_REJECTED = 8;
     }
+}
+
+// State of set not null operation
+message SetNotNullState {
+    enum State {
+        STATE_UNSPECIFIED = 0;
+        STATE_PREPARING = 1;
+        STATE_VALIDATING = 2;
+        STATE_APPLYING = 3;
+        STATE_DONE = 4;
+        STATE_CANCELLED = 5;
+        STATE_REJECTED = 6;
+    }
+}
+
+message SetNotNullItem {
+    optional string column_name = 1;
+}
+
+message SetNotNullMetadata {
+    string path = 1;
+    repeated string columns = 2;
+    SetNotNullState.State state = 3;
+    float progress = 4;
 }
 
 // Description of index building operation
@@ -235,6 +566,10 @@ message Changefeed {
     Topic.PartitioningSettings topic_partitioning_settings = 10;
     // Emit schema change events or not
     bool schema_changes = 11;
+    // Emit user security identifier (SID) or not.
+    bool user_sids = 12;
+    // Emit user trace identifier (trace_id) or not.
+    bool trace_ids = 13;
 }
 
 message ChangefeedDescription {
@@ -278,6 +613,10 @@ message ChangefeedDescription {
     InitialScanProgress initial_scan_progress = 9;
     // State of emitting of schema change events
     bool schema_changes = 10;
+    // State of emitting of user security identifier (SID)
+    bool user_sids = 11;
+    // State of emitting of user trace identifier (trace_id) or not.
+    bool trace_ids = 12;
 }
 
 message StoragePool {
@@ -301,6 +640,12 @@ message ColumnFamilyPolicy {
         COMPRESSED = 2;
     }
 
+    enum CacheMode {
+        CACHE_MODE_UNSPECIFIED = 0;
+        CACHE_MODE_REGULAR = 1;
+        CACHE_MODE_IN_MEMORY = 2;
+    }
+
     // Name of the column family, the name "default" must be used for the
     // primary column family that contains as least primary key columns
     string name = 1;
@@ -315,6 +660,9 @@ message ColumnFamilyPolicy {
 
     // Optionally specify whether data should be compressed
     Compression compression = 5;
+
+    // When IN_MEMORY tries to keep the colums of the family in memory (default is REGULAR)
+    CacheMode cache_mode = 6;
 }
 
 message CompactionPolicy {
@@ -422,6 +770,35 @@ message SequenceDescription {
     optional Type data_type = 9; // data type of the sequence
 }
 
+// TODO: merge it with Column Family Compression
+message ColumnCompression {
+    enum Algorithm {
+        ALGORITHM_UNSPECIFIED = 0;
+        ALGORITHM_OFF = 1;
+        ALGORITHM_LZ4 = 2;
+        ALGORITHM_ZSTD = 3;
+    }
+
+    optional Algorithm algorithm = 1;
+
+    // Set the compression level for selected compression type. If no value is specified, default value will be chosen.
+    // For ZSTD compression level must be in range [-131072:22]
+    optional int32 compression_level = 2;
+}
+
+message ColumnEncoding {
+    message Off {
+    }
+
+    message Dictionary {
+    }
+
+    oneof encoding_settings {
+        Off off = 1;
+        Dictionary dictionary = 2;
+    }
+}
+
 message ColumnMeta {
     // Name of column
     string name = 1;
@@ -437,6 +814,8 @@ message ColumnMeta {
         SequenceDescription from_sequence = 6;
         google.protobuf.NullValue empty_default = 7;
     }
+    optional ColumnCompression compression = 8;
+    repeated ColumnEncoding encoding = 9;
 }
 
 message EvictionToExternalStorageSettings {
@@ -539,6 +918,10 @@ message StorageSettings {
     // * Table cannot be copied or backed up when this is enabled
     // * This feature cannot be disabled once enabled for a table
     Ydb.FeatureFlag.Status store_external_blobs = 5;
+
+    // This works when store_external_blobs is enabled
+    // and specifies the number of data channels to store "external blobs"
+    optional uint32 external_data_channels_count = 6;
 }
 
 message ColumnFamily {
@@ -547,6 +930,12 @@ message ColumnFamily {
         COMPRESSION_NONE = 1;
         COMPRESSION_LZ4 = 2;
         COMPRESSION_ZSTD = 3;
+    }
+
+    enum CacheMode {
+        CACHE_MODE_UNSPECIFIED = 0;
+        CACHE_MODE_REGULAR = 1;
+        CACHE_MODE_IN_MEMORY = 2;
     }
 
     // Name of the column family
@@ -566,6 +955,8 @@ message ColumnFamily {
     // For ZSTD compression level must be in range [-131072:22]
     // For other compression types compression level must be empty
     optional int32 compression_level = 5;
+
+    CacheMode cache_mode = 6;
 }
 
 message PartitioningSettings {
@@ -609,6 +1000,48 @@ message ReadReplicasSettings {
     reserved 3; // cluster_replicas_settings (part of oneof settings)
 }
 
+/**
+ * The parameters for the detailed metrics for the given table.
+ */
+message MetricsSettings {
+    /**
+     * The level at which metrics are aggregated and reported.
+     */
+    enum MetricsLevel {
+        /**
+         * The metrics level is not specified.
+         */
+        METRICS_LEVEL_UNSPECIFIED = 0;
+
+        /**
+         * All metrics are disabled.
+         */
+        METRICS_LEVEL_DISABLED = 1;
+
+        /**
+         * Metrics are aggregated and reported for the entire database.
+         */
+        METRICS_LEVEL_DATABASE = 2;
+
+        /**
+         * Metrics are aggregated and reported for individual tables.
+         */
+        METRICS_LEVEL_TABLE = 3;
+
+        /**
+         * Metrics are aggregated and reported for individual partitions.
+         */
+        METRICS_LEVEL_PARTITION = 4;
+    }
+
+    /**
+     * The level at which metrics are aggregated and reported.
+     *
+     * @note If this value is not set, METRICS_LEVEL_DATABASE is assumed.
+     */
+    MetricsLevel metrics_level = 1;
+}
+
 enum StoreType {
     STORE_TYPE_UNSPECIFIED = 0;
     STORE_TYPE_ROW = 1;
@@ -627,7 +1060,7 @@ message CreateTableRequest {
     // Table profile
     TableProfile profile = 5;
     Ydb.Operations.OperationParams operation_params = 6;
-    // List of secondary indexes
+    // List of table indexes
     repeated TableIndex indexes = 7;
     // Table rows time to live settings
     TtlSettings ttl_settings = 8;
@@ -658,6 +1091,13 @@ message CreateTableRequest {
     bool temporary = 19;
     // Is table column or row oriented
     StoreType store_type = 20;
+
+    /**
+     * The metrics configuration for the given table.
+     */
+    optional MetricsSettings metrics_settings = 21;
+    // List of multi-column table statistics
+    repeated TableMultiColumnStatistics statistics = 22;
 }
 
 message CreateTableResponse {
@@ -687,6 +1127,54 @@ message RenameIndexItem {
     bool replace_destination = 3;
 }
 
+// State of compact operation
+message CompactState {
+    enum State {
+        STATE_UNSPECIFIED = 0;
+        STATE_IN_PROGRESS = 1;
+        STATE_DONE = 2;
+        STATE_CANCELLED = 3;
+    }
+}
+
+message CompactItem {
+    // Compact table with all indices
+    optional bool cascade = 1;
+    // Max shards in flight per operation
+    optional uint32 max_shards_in_flight = 2;
+}
+
+message CompactMetadata {
+    optional string path = 1;
+    optional bool cascade = 2;
+    optional uint32 max_shards_in_flight = 3;
+    optional CompactState.State state = 4;
+    optional float progress = 5;
+    optional uint32 shards_total = 6;
+    optional uint32 shards_done = 7;
+}
+
+// State of an analyze operation
+message AnalyzeState {
+    enum State {
+        STATE_UNSPECIFIED = 0;
+        STATE_ENQUEUED = 1;
+        STATE_IN_PROGRESS = 2;
+        STATE_DONE = 3;
+        STATE_CANCELLED = 4;
+        STATE_FAILED = 5;
+    }
+}
+
+message AnalyzeMetadata {
+
+    repeated string paths = 1;             // All table paths covered by this analyze operation.
+    repeated string in_progress_paths = 2; // Tables currently being traversed
+    repeated string done_paths = 3;        // Tables for which analysis is complete
+    optional AnalyzeState.State state = 4;
+    optional float progress = 5;
+}
+
 // Alter table with given path
 message AlterTableRequest {
     // Session identifier
@@ -705,9 +1193,9 @@ message AlterTableRequest {
         TtlSettings set_ttl_settings = 7;
         google.protobuf.Empty drop_ttl_settings = 8;
     }
-    // Add secondary indexes
+    // Add table indexes
     repeated TableIndex add_indexes = 9;
-    // Remove secondary indexes
+    // Remove table indexes
     repeated string drop_indexes = 10;
     // Change table storage settings
     StorageSettings alter_storage_settings = 11;
@@ -733,6 +1221,23 @@ message AlterTableRequest {
     // Rename existed index
     repeated RenameIndexItem rename_indexes = 21;
     reserved 22, 23;
+    // Start compaction for table
+    CompactItem compact = 24;
+
+    /**
+     * Set, update or remove the metrics configuration for the given table.
+     */
+    oneof metrics_settings_action {
+        MetricsSettings set_metrics_settings = 25;
+        google.protobuf.Empty drop_metrics_settings = 26;
+    }
+
+    // Start set not null for table
+    repeated SetNotNullItem set_not_null = 27;
+    // Add multi-column table statistics
+    repeated TableMultiColumnStatistics add_statistics = 28;
+    // Remove multi-column table statistics (by its names)
+    repeated string drop_statistics = 29;
 }
 
 message AlterTableResponse {
@@ -859,6 +1364,13 @@ message DescribeTableResult {
     bool temporary = 17;
     // Is table column or row oriented
     StoreType store_type = 18;
+
+    /**
+     * The metrics configuration for the given table.
+     */
+    optional MetricsSettings metrics_settings = 19;
+    // List of multi-column table statistics
+    repeated TableMultiColumnStatisticsDescription statistics = 20;
 }
 
 message Query {
@@ -888,6 +1400,12 @@ message SnapshotModeSettings {
 message SnapshotRWModeSettings {
 }
 
+message ReadCommittedRWModeSettings {
+}
+
+message StrictSerializableRWModeSettings {
+}
+
 message TransactionSettings {
     oneof tx_mode {
         SerializableModeSettings serializable_read_write = 1;
@@ -895,6 +1413,8 @@ message TransactionSettings {
         StaleModeSettings stale_read_only = 3;
         SnapshotModeSettings snapshot_read_only = 4;
         SnapshotRWModeSettings snapshot_read_write = 5;
+        ReadCommittedRWModeSettings read_committed_read_write = 6;
+        StrictSerializableRWModeSettings strict_serializable_read_write = 7;
     }
 }
 
@@ -928,7 +1448,7 @@ message ExecuteDataQueryRequest {
     TransactionControl tx_control = 2;
     Query query = 3;
     // Map of query parameters (optional)
-    map<string, TypedValue> parameters = 4;
+    map<string, TypedValue> parameters = 4 [(Ydb.sensitive) = true];
     QueryCachePolicy query_cache_policy = 5;
     Ydb.Operations.OperationParams operation_params = 6;
     QueryStatsCollection.Mode collect_stats = 7;
@@ -1273,7 +1793,7 @@ message ExecuteScanQueryRequest {
     reserved 1; // session_id
     reserved 2; // tx_control
     Query query = 3;
-    map<string, TypedValue> parameters = 4;
+    map<string, TypedValue> parameters = 4 [(Ydb.sensitive) = true];
     reserved 5; // query_cache_policy
     Mode mode = 6;
     reserved 7; // report_progress
@@ -1341,4 +1861,30 @@ message DescribeExternalTableResult {
     optional string location = 4;
     repeated ColumnMeta columns = 5;
     map<string, string> content = 6;
+}
+
+// Returns information about a system view with a given path.
+message DescribeSystemViewRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    string path = 2;
+}
+
+message DescribeSystemViewResponse {
+    // Holds DescribeSystemViewResult in case of a successful call.
+    Ydb.Operations.Operation operation = 1;
+}
+
+message DescribeSystemViewResult {
+    // Description of scheme object
+    Ydb.Scheme.Entry self = 1;
+    // Id of system view (Enum value from NKikimrSysView.ESysViewType)
+    uint64 sys_view_id = 2;
+    // NameId of system view
+    string sys_view_name = 3;
+    // List of columns
+    repeated ColumnMeta columns = 4;
+    // List of primary key columns
+    repeated string primary_key = 5;
+    // Attributes
+    map<string, string> attributes = 6;
 }

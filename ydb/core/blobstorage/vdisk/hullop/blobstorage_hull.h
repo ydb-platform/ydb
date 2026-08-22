@@ -5,7 +5,7 @@
 #include <ydb/core/blobstorage/vdisk/hulldb/cache_block/cache_block.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/recovery/hulldb_recovery.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/bulksst_add/hulldb_bulksst_add.h>
-#include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog_public_events.h>
+#include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog_context.h>
 
 namespace NKikimr {
 
@@ -41,7 +41,12 @@ namespace NKikimr {
         struct TFields;
         std::unique_ptr<TFields> Fields;
 
-        void ValidateWriteQuery(const TActorContext &ctx, const TLogoBlobID &id, bool *writtenBeyondBarrier);
+        ui64 LogoBlobSyncDataSizeInFlight = 0;
+        ui64 BlockSyncDataSizeInFlight = 0;
+        ui64 BarrierSyncDataSizeInFlight = 0;
+
+        void ValidateWriteQuery(const TActorContext &ctx, const TLogoBlobID &id, bool issueKeepFlag,
+            bool *writtenBeyondBarrier);
 
         // validate GC barrier command against existing barriers metabase (ensure that keys are
         // coming in ascending order, CollectGen/CollectStep pairs do not decrease and that keys
@@ -97,6 +102,7 @@ namespace NKikimr {
                 const TActorContext &ctx,
                 const TLogoBlobID &id,
                 bool ignoreBlock,
+                bool issueKeepFlag,
                 const NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck>& extraBlockChecks,
                 bool *writtenBeyondBarrier);
 
@@ -106,6 +112,7 @@ namespace NKikimr {
                 ui8 partId,
                 const TIngress &ingress,
                 TRope buffer,
+                std::optional<ui64> checksum,
                 ui64 lsn);
 
         void AddHugeLogoBlob(
@@ -201,6 +208,13 @@ namespace NKikimr {
                 TFreshBatch &&freshBatch,
                 const TLsnSeg &seg,
                 const TReplySender &replySender);
+
+        void AddLocalSyncDataInFlight(ui64 logoBlobsSize, ui64 blocksSize, ui64 barriersSize);
+        void RemoveLocalSyncDataInFlight(ui64 logoBlobsSize, ui64 blocksSize, ui64 barriersSize);
+
+        ui64 GetLogoBlobSyncDataSizeInFlight() const { return LogoBlobSyncDataSizeInFlight; }
+        ui64 GetBlockSyncDataSizeInFlight() const { return BlockSyncDataSizeInFlight; }
+        ui64 GetBarrierSyncDataSizeInFlight() const { return BarrierSyncDataSizeInFlight; }
 
         ///////////////// STATUS REQUEST ////////////////////////////////////////////
         void StatusRequest(const TActorContext &ctx, TEvLocalStatusResult *result);

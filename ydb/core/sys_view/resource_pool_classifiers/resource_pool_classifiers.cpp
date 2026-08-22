@@ -1,12 +1,12 @@
 #include "resource_pool_classifiers.h"
 
-#include <ydb/core/kqp/gateway/behaviour/resource_pool_classifier/fetcher.h>
-#include <ydb/core/kqp/gateway/behaviour/resource_pool_classifier/snapshot.h>
-#include <ydb/core/kqp/workload_service/actors/actors.h>
+#include <ydb/services/workload_manager/metadata_subscription/resource_pool_classifier/fetcher.h>
+#include <ydb/services/workload_manager/metadata_subscription/resource_pool_classifier/snapshot.h>
+#include <ydb/services/workload_manager/actors/actors.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/sys_view/common/events.h>
+#include <ydb/core/sys_view/common/registry.h>
 #include <ydb/core/sys_view/common/scan_actor_base_impl.h>
-#include <ydb/core/sys_view/common/schema.h>
 #include <ydb/services/metadata/service.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
@@ -24,30 +24,29 @@ namespace NSysView {
 using namespace NActors;
 using namespace NNodeWhiteboard;
 
-class TResourcePoolClassifiersScan : public TScanActorBase<TResourcePoolClassifiersScan> {
+class TResourcePoolClassifiersScan : public TScanActorWithoutBackPressure<TResourcePoolClassifiersScan> {
 public:
-    using TBase  = TScanActorBase<TResourcePoolClassifiersScan>;
+    using TBase = TScanActorWithoutBackPressure<TResourcePoolClassifiersScan>;
 
     static constexpr auto ActorActivityType() {
         return NKikimrServices::TActivity::KQP_SYSTEM_VIEW_SCAN;
     }
 
     TResourcePoolClassifiersScan(const NActors::TActorId& ownerId, ui32 scanId,
-        const NKikimrSysView::TSysViewDescription& sysViewInfo,
+        const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
         const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
-        TIntrusiveConstPtr<NACLib::TUserToken> userToken, const TString& database, bool reverse)
-        : TBase(ownerId, scanId, sysViewInfo, tableRange, columns)
+        TIntrusiveConstPtr<NACLib::TUserToken> userToken, bool reverse)
+        : TBase(ownerId, scanId, database, sysViewInfo, tableRange, columns)
         , UserToken(std::move(userToken))
-        , Database(database)
         , Reverse(reverse)
     {}
 
     STFUNC(StateScan) {
         try {
             switch (ev->GetTypeRewrite()) {
-                hFunc(NKqp::TEvKqpCompute::TEvScanDataAck, Handle);
+                sFunc(NKqp::TEvKqpCompute::TEvScanDataAck, HandleAck);
                 hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle)
-                hFunc(NKqp::NWorkload::TEvFetchDatabaseResponse, Handle);
+                hFunc(NWorkloadManager::TEvFetchDatabaseResponse, Handle);
                 hFunc(NKqp::TEvKqp::TEvAbortExecution, HandleAbortExecution);
                 cFunc(TEvents::TEvWakeup::EventType, HandleTimeout);
                 cFunc(TEvents::TEvPoison::EventType, PassAway);
@@ -63,61 +62,99 @@ public:
     }
 
 private:
-    void ProceedToScan() override {
-        Become(&TResourcePoolClassifiersScan::StateScan);
-        if (AckReceived) {
-            StartScan();
-        }
-    }
-
-    void StartScan() {
+    void StartScan() final {
         if (!NMetadata::NProvider::TServiceOperator::IsEnabled()) {
             ReplyEmptyAndDie();
         }
-        Register(NKqp::NWorkload::CreateDatabaseFetcherActor(SelfId(), Database, UserToken, NACLib::EAccessRights::GenericFull));
+        Register(NWorkloadManager::CreateDatabaseFetcherActor(SelfId(), TenantName, UserToken, NACLib::EAccessRights::GenericUse));
     }
 
-    void Handle(NKqp::TEvKqpCompute::TEvScanDataAck::TPtr&) {
-        StartScan();
-    }
-
-    void Handle(NKqp::NWorkload::TEvFetchDatabaseResponse::TPtr& ev) {
+    void Handle(NWorkloadManager::TEvFetchDatabaseResponse::TPtr& ev) {
         auto& event = *ev->Get();
         if (event.Status != Ydb::StatusIds::SUCCESS) {
             ReplyErrorAndDie(event.Status, event.Issues.ToOneLineString());
             return;
         }
-        Database = event.DatabaseId;
-        Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()), new NMetadata::NProvider::TEvAskSnapshot(std::make_shared<NKqp::TResourcePoolClassifierSnapshotsFetcher>()));
+        DatabaseId = event.DatabaseId;
+        Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()), new NMetadata::NProvider::TEvAskSnapshot(std::make_shared<NWorkloadManager::TResourcePoolClassifierSnapshotsFetcher>()));
     }
 
     void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
-        using TExtractor = std::function<TCell(const NKqp::TResourcePoolClassifierConfig&)>;
+        using TExtractor = std::function<TCell(const NWorkloadManager::TResourcePoolClassifierConfig&)>;
         using TSchema = Schema::ResourcePoolClassifiers;
 
         struct TExtractorsMap : public THashMap<NTable::TTag, TExtractor> {
             TExtractorsMap() {
-                insert({TSchema::Name::ColumnId, [] (const NKqp::TResourcePoolClassifierConfig& config) {
+                insert({TSchema::Name::ColumnId, [] (const NWorkloadManager::TResourcePoolClassifierConfig& config) {
                     return TCell(config.GetName().data(), config.GetName().size());
                 }});
-                insert({TSchema::Rank::ColumnId, [] (const NKqp::TResourcePoolClassifierConfig& config) {
+                insert({TSchema::Rank::ColumnId, [] (const NWorkloadManager::TResourcePoolClassifierConfig& config) {
                     return TCell::Make<i64>(config.GetRank());
                 }});
-                insert({TSchema::MemberName::ColumnId, [] (const NKqp::TResourcePoolClassifierConfig& config) {
-                    const auto& memberName = config.GetConfigJson()["member_name"].GetString();
-                    return TCell(memberName.data(), memberName.size());
+                insert({TSchema::MemberName::ColumnId, [] (const NWorkloadManager::TResourcePoolClassifierConfig& config) {
+                    const auto& settings = config.GetClassifierSettings();
+                    if (settings.MemberName.has_value()) {
+                        const auto& memberName = settings.MemberName.value();
+                        return TCell(memberName.data(), memberName.size());
+                    }
+                    return TCell();
                 }});
-                insert({TSchema::ResourcePool::ColumnId, [] (const NKqp::TResourcePoolClassifierConfig& config) {
-                    const auto& memberName = config.GetConfigJson()["resource_pool"].GetString();
-                    return TCell(memberName.data(), memberName.size());
+                insert({TSchema::ResourcePool::ColumnId, [] (const NWorkloadManager::TResourcePoolClassifierConfig& config) {
+                    const auto& settings = config.GetClassifierSettings();
+                    if (settings.ResourcePool.has_value()) {
+                        const auto& resourcePool = settings.ResourcePool.value();
+                        return TCell(resourcePool.data(), resourcePool.size());
+                    }
+                    return TCell();
+                }});
+                insert({TSchema::HasAppName::ColumnId, [] (const NWorkloadManager::TResourcePoolClassifierConfig& config) {
+                    const auto& settings = config.GetClassifierSettings();
+                    if (settings.HasAppName.has_value()) {
+                        const auto& hasAppName = settings.HasAppName.value();
+                        return TCell(hasAppName.data(), hasAppName.size());
+                    }
+                    return TCell();
+                }});
+                insert({TSchema::Action::ColumnId, [] (const NWorkloadManager::TResourcePoolClassifierConfig& config) {
+                    const auto& settings = config.GetClassifierSettings();
+                    if (settings.Action.has_value()
+                        && *settings.Action == NResourcePool::EClassifierAction::Reject)
+                    {
+                        return TCell(ToString(NResourcePool::EClassifierAction::Reject));
+                    }
+                    return TCell();
+                }});
+                insert({TSchema::HasFullScan::ColumnId, [] (const NWorkloadManager::TResourcePoolClassifierConfig& config) {
+                    const auto& settings = config.GetClassifierSettings();
+                    if (settings.HasFullScan.has_value()) {
+                        const auto& hasFullScan = settings.HasFullScan->Pattern;
+                        return TCell(hasFullScan.data(), hasFullScan.size());
+                    }
+                    return TCell();
+                }});
+                insert({TSchema::HasPath::ColumnId, [] (const NWorkloadManager::TResourcePoolClassifierConfig& config) {
+                    const auto& settings = config.GetClassifierSettings();
+                    if (settings.HasPath.has_value()) {
+                        const auto& hasPath = settings.HasPath->Pattern;
+                        return TCell(hasPath.data(), hasPath.size());
+                    }
+                    return TCell();
+                }});
+                insert({TSchema::HasStream::ColumnId, [] (const NWorkloadManager::TResourcePoolClassifierConfig& config) {
+                    const auto& settings = config.GetClassifierSettings();
+                    if (settings.HasStream.has_value()) {
+                        return TCell::Make<bool>(settings.HasStream.value());
+                    } else {
+                        return TCell();
+                    }
                 }});
             }
         };
         static TExtractorsMap extractors;
 
-        const auto& snapshot = ev->Get()->GetSnapshotAs<NKqp::TResourcePoolClassifierSnapshot>();
+        const auto& snapshot = ev->Get()->GetSnapshotAs<NWorkloadManager::TResourcePoolClassifierSnapshot>();
         const auto& config = snapshot->GetResourcePoolClassifierConfigs();
-        auto resourcePoolsIt = config.find(Database);
+        auto resourcePoolsIt = config.find(DatabaseId);
         if (resourcePoolsIt == config.end()) {
             ReplyEmptyAndDie();
             return;
@@ -126,7 +163,7 @@ private:
         auto batch = MakeHolder<NKqp::TEvKqpCompute::TEvScanData>(ScanId);
         batch->Finished = true;
         // It's a mandatory condition to keep sorted PK here
-        for (const auto& [name, config] : std::map(resourcePoolsIt->second.begin(), resourcePoolsIt->second.end())) {
+        for (const auto& [name, config] : std::map(resourcePoolsIt->second.ByName.begin(), resourcePoolsIt->second.ByName.end())) {
             if (!StringKeyIsInTableRange({name})) {
                 continue;
             }
@@ -150,17 +187,17 @@ private:
 
 private:
     const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
-    TString Database;
     const bool Reverse;
+    TString DatabaseId;
 };
 
 THolder<NActors::IActor> CreateResourcePoolClassifiersScan(const NActors::TActorId& ownerId, ui32 scanId,
-    const NKikimrSysView::TSysViewDescription& sysViewInfo,
+    const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
     const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
-    TIntrusiveConstPtr<NACLib::TUserToken> userToken, const TString& database, bool reverse)
+    TIntrusiveConstPtr<NACLib::TUserToken> userToken, bool reverse)
 {
-    return MakeHolder<TResourcePoolClassifiersScan>(ownerId, scanId, sysViewInfo, tableRange, columns,
-        std::move(userToken), database, reverse);
+    return MakeHolder<TResourcePoolClassifiersScan>(ownerId, scanId, database, sysViewInfo, tableRange, columns,
+        std::move(userToken), reverse);
 }
 
 } // NSysView

@@ -34,7 +34,8 @@ protected:
         , PortionId(portion.GetPortionId())
         , RemoveSnapshot(portion.GetRemoveSnapshotOptional())
         , SchemaVersion(portion.GetSchemaVersionVerified())
-        , ShardingVersion(portion.GetShardingVersionOptional()) {
+        , ShardingVersion(portion.GetShardingVersionOptional())
+    {
         MetaConstructor = TPortionMetaConstructor(std::move(portion.Meta));
     }
 
@@ -55,7 +56,8 @@ public:
         , PortionId(portion.GetPortionId())
         , RemoveSnapshot(portion.GetRemoveSnapshotOptional())
         , SchemaVersion(portion.GetSchemaVersionVerified())
-        , ShardingVersion(portion.GetShardingVersionOptional()) {
+        , ShardingVersion(portion.GetShardingVersionOptional())
+    {
         if (withMetadata) {
             MetaConstructor = TPortionMetaConstructor(portion.Meta);
         }
@@ -95,13 +97,15 @@ public:
 
     TPortionInfoConstructor(const TInternalPathId pathId, const ui64 portionId)
         : PathId(pathId)
-        , PortionId(portionId) {
+        , PortionId(portionId)
+    {
         AFL_VERIFY(PathId);
         AFL_VERIFY(PortionId);
     }
 
     TPortionInfoConstructor(const TInternalPathId pathId)
-        : PathId(pathId) {
+        : PathId(pathId)
+    {
         AFL_VERIFY(PathId);
     }
 
@@ -145,11 +149,20 @@ public:
 class TCompactedPortionInfoConstructor: public TPortionInfoConstructor {
 private:
     using TBase = TPortionInfoConstructor;
+    YDB_READONLY_DEF(std::optional<TSnapshot>, AppearanceSnapshot);
+
 public:
     using TBase::TBase;
 
+    void SetAppearanceSnapshot(const TSnapshot snapshot) {
+        AFL_VERIFY(!AppearanceSnapshot);
+        AppearanceSnapshot = snapshot;
+    }
+
     TCompactedPortionInfoConstructor(const TCompactedPortionInfo& portion, const bool withMetadata)
-        : TBase(portion, withMetadata) {
+        : TBase(portion, withMetadata)
+        , AppearanceSnapshot(portion.AppearanceSnapshot)
+    {
     }
 
     virtual EPortionType GetType() const override {
@@ -177,7 +190,8 @@ public:
     TWrittenPortionInfoConstructor(const TWrittenPortionInfo& portion, const bool withMetadata)
         : TBase(portion, withMetadata)
         , CommitSnapshot(portion.GetCommitSnapshotOptional())
-        , InsertWriteId(portion.GetInsertWriteId()) {
+        , InsertWriteId(portion.GetInsertWriteId())
+    {
     }
 
     TInsertWriteId GetInsertWriteIdVerified() const {

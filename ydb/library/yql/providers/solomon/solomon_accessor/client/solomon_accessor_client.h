@@ -16,14 +16,16 @@ public:
 
     static TPtr Make(
         NYql::NSo::NProto::TDqSolomonSource source,
-        std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider);
+        std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider,
+        const TSolomonReadActorConfig& cfg);
     
 public:
-    virtual NThreading::TFuture<TGetLabelsResponse> GetLabelNames(const std::map<TString, TString>& selectors) const = 0;
-    virtual NThreading::TFuture<TListMetricsResponse> ListMetrics(const std::map<TString, TString>& selectors, int pageSize, int page) const = 0;
-    virtual NThreading::TFuture<TGetPointsCountResponse> GetPointsCount(const std::map<TString, TString>& selectors) const = 0;
-    virtual NThreading::TFuture<TGetDataResponse> GetData(const std::map<TString, TString>& selectors, TInstant from, TInstant to) const = 0;
-    virtual NThreading::TFuture<TGetDataResponse> GetData(TString selectors, TInstant from, TInstant to) const = 0;
+    virtual NThreading::TFuture<TGetLabelsResponse> GetLabelNames(const TSelectors& selectors, TInstant from, TInstant to) const = 0;
+    virtual NThreading::TFuture<TListMetricsResponse> ListMetrics(const TSelectors& selectors, TInstant from, TInstant to) const = 0;
+    virtual NThreading::TFuture<TListMetricsLabelsResponse> ListMetricsLabels(const TSelectors& selectors, TInstant from, TInstant to) const = 0;
+    virtual NThreading::TFuture<TGetPointsCountResponse> GetPointsCount(const TSelectors& selectors, TInstant from, TInstant to) const = 0;
+    virtual NThreading::TFuture<TGetDataResponse> GetData(const TSelectors& selectors, TInstant from, TInstant to) const = 0;
+    virtual NThreading::TFuture<TGetDataResponse> GetData(const TString& program, TInstant from, TInstant to) const = 0;
 };
 
 } // namespace NYql::NSo

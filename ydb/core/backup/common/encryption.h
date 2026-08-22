@@ -4,11 +4,16 @@
 
 #include <util/generic/buffer.h>
 #include <util/generic/maybe.h>
+#include <util/generic/size_literals.h>
 #include <util/generic/string.h>
 
 #include <vector>
 
 namespace NKikimr::NBackup {
+
+// Max block size must always be at least size of table row (~8 MB) serialized into text csv format.
+// Default export batch size is 32 MB (data_shard_config.backup_bytes_batch_size / ScanSettings.BytesBatchSize).
+static constexpr size_t MAX_BLOCK_SIZE = 50_MB;
 
 TString NormalizeEncryptionAlgorithmName(const TString& name);
 
@@ -58,11 +63,17 @@ enum class EBackupFileType : unsigned char {
     // Replication
     AsyncReplicationCreate = 10,
 
+    // Transfer
+    TransferCreate = 10,
+
     // External data source
     ExternalDataSourceCreate = 10,
 
     // External table
     ExternalTableCreate = 10,
+
+    // System view
+    SysViewDescription = 10,
 };
 
 struct TEncryptionIV {
@@ -177,7 +188,8 @@ struct TEncryptionKey {
 // Has streaming interface
 class TEncryptedFileSerializer {
 public:
-    TEncryptedFileSerializer(TEncryptedFileSerializer&&) = default;
+    TEncryptedFileSerializer(TEncryptedFileSerializer&&) noexcept;
+    TEncryptedFileSerializer& operator=(TEncryptedFileSerializer&&) noexcept;
     TEncryptedFileSerializer(TString algorithm, TEncryptionKey key, TEncryptionIV iv);
     ~TEncryptedFileSerializer();
 

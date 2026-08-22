@@ -1,5 +1,5 @@
 #pragma once
-#include "defs.h"
+#include <ydb/core/ymq/actor/cfg/defs.h>
 
 #include <ydb/core/protos/msgbus.pb.h>
 #include <ydb/library/actors/core/actor.h>
@@ -11,6 +11,7 @@ public:
     virtual ~IReplyCallback() = default;
 
     virtual void DoSendReply(const NKikimrClient::TSqsResponse& resp) = 0;
+    virtual void OnIamAuthSuccess() {}
 };
 
 class IPingReplyCallback {

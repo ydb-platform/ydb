@@ -93,7 +93,7 @@ ELockType GetStrongestLock(ELockType lhs, ELockType rhs)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool operator == (const TLockMask& lhs, const TLockMask& rhs)
+bool operator==(const TLockMask& lhs, const TLockMask& rhs)
 {
     int lockCount = std::max(lhs.GetSize(), rhs.GetSize());
     for (int index = 0; index < lockCount; ++index) {
@@ -334,14 +334,8 @@ std::string TColumnSchema::GetDiagnosticNameString() const
 ////////////////////////////////////////////////////////////////////////////////
 
 TDeletedColumn::TDeletedColumn(TColumnStableName stableName)
-    : StableName_(stableName)
+    : StableName_(std::move(stableName))
 { }
-
-TDeletedColumn& TDeletedColumn::SetStableName(TColumnStableName value)
-{
-    StableName_ = std::move(value);
-    return *this;
-}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -470,7 +464,7 @@ void FromProto(TColumnSchema* schema, const NProto::TColumnSchema& protoSchema)
 
 void FromProto(TDeletedColumn* schema, const NProto::TDeletedColumn& protoSchema)
 {
-    schema->SetStableName(TColumnStableName{protoSchema.stable_name()});
+    schema->StableName() = TColumnStableName{protoSchema.stable_name()};
 }
 
 void PrintTo(const TColumnSchema& columnSchema, std::ostream* os)
@@ -766,14 +760,20 @@ bool TTableSchema::IsEmpty() const
     return Columns().empty();
 }
 
-bool TTableSchema::IsCGComparatorApplicable() const
+bool TTableSchema::IsCGComparatorApplicable(std::optional<int> keyColumnCount) const
 {
-    if (GetKeyColumnCount() > MaxKeyColumnCountInDynamicTable) {
+    auto keyTypes = GetKeyColumnTypes();
+    auto checkCount = keyColumnCount.value_or(std::ssize(keyTypes));
+
+    if (checkCount > std::ssize(keyTypes)) {
         return false;
     }
 
-    auto keyTypes = GetKeyColumnTypes();
-    return std::none_of(keyTypes.begin(), keyTypes.end(), [] (auto type) {
+    if (checkCount > MaxKeyColumnCountInDynamicTable) {
+        return false;
+    }
+
+    return std::none_of(keyTypes.begin(), keyTypes.begin() + checkCount, [](const auto& type) {
         return type == EValueType::Any || type == EValueType::Null;
     });
 }
@@ -1275,7 +1275,7 @@ TTableSchemaPtr TTableSchema::ToSorted(const TKeyColumns& keyColumns) const
     for (const auto& keyColumn : keyColumns) {
         sortColumns.push_back(TColumnSortSchema{
             .Name = keyColumn,
-            .SortOrder = ESortOrder::Ascending
+            .SortOrder = ESortOrder::Ascending,
         });
     }
 
@@ -1300,8 +1300,8 @@ TTableSchemaPtr TTableSchema::ToSorted(const TSortColumns& sortColumns) const
                     EErrorCode::IncompatibleKeyColumns,
                     "Column %Qv is not found in strict schema",
                     sortColumns[index].Name)
-                    << TErrorAttribute("schema", *this)
-                    << TErrorAttribute("sort_columns", sortColumns);
+                    .With("schema", *this)
+                    .With("sort_columns", sortColumns);
             } else {
                 columns.push_back(TColumnSchema(sortColumns[index].Name, EValueType::Any));
                 it = columns.end();
@@ -1417,8 +1417,8 @@ TTableSchemaPtr TTableSchema::ToModifiedSchema(ETableSchemaModification schemaMo
 {
     if (HasNontrivialSchemaModification()) {
         THROW_ERROR_EXCEPTION("Cannot apply schema modification because schema is already modified")
-            << TErrorAttribute("existing_modification", GetSchemaModification())
-            << TErrorAttribute("requested_modification", schemaModification);
+            .With("existing_modification", GetSchemaModification())
+            .With("requested_modification", schemaModification);
     }
     YT_VERIFY(GetSchemaModification() == ETableSchemaModification::None);
 
@@ -1761,8 +1761,8 @@ std::optional<TNestedColumn> TryParseNestedAggregate(TStringBuf description)
         int location = ptr - description.data();
 
         THROW_ERROR_EXCEPTION("Error while parsing nested aggregate description: %v", message)
-            << TErrorAttribute("position", Format("%v", location))
-            << TErrorAttribute("description", description);
+            .With("position", Format("%v", location))
+            .With("description", description);
     };
 
     auto nestedFunction = parseName();
@@ -1817,7 +1817,7 @@ std::optional<TNestedColumn> TryParseNestedAggregate(TStringBuf description)
         throwError("expected \")\" or \",\" ");
     }
 
-    THROW_ERROR_EXCEPTION("Error while parsing nested aggregate description. Expected nested_key or nested_value");
+    THROW_ERROR_EXCEPTION("Error while parsing nested aggregate description: expected \"nested_key\" or \"nested_value\"");
 }
 
 EValueType GetNestedColumnElementType(const TLogicalType* logicalType)
@@ -1898,8 +1898,8 @@ void ValidateSystemColumnSchema(
 
     if (columnSchema.IsRenamed()) {
         THROW_ERROR_EXCEPTION("System column schema must have equal name and stable name")
-            << TErrorAttribute("name", name)
-            << TErrorAttribute("stable_name", columnSchema.StableName().Underlying());
+            .With("name", name)
+            .With("stable_name", columnSchema.StableName().Underlying());
     }
 
     const auto& allowedSystemColumns = isTableSorted
@@ -1973,14 +1973,17 @@ void ValidateColumnSchema(
         "max",
         "first",
         "xdelta",
+        "dict_sum",
+        // YT internals
         "_yt_stored_replica_set",
         "_yt_last_seen_replica_set",
-        "dict_sum",
+        // Inferrum internals
+        "_inferrum_kv_cache_replica_set",
     };
 
     static const auto allowedNestedAggregates = THashSet<std::string, THash<TStringBuf>, TEqualTo<>>{
         "sum",
-        "max"
+        "max",
     };
 
     try {
@@ -1997,10 +2000,11 @@ void ValidateColumnSchema(
                 options);
         }
 
-        {
-            TComplexTypeFieldDescriptor descriptor(name, columnSchema.LogicalType());
-            ValidateLogicalType(descriptor, MaxSchemaDepth);
-        }
+        ValidateLogicalType(
+            TComplexTypeFieldDescriptor(name, columnSchema.LogicalType()),
+            TLogicalTypeValidationOptions{
+                .DepthLimit = MaxSchemaDepth,
+            });
 
         if (!IsComparable(columnSchema.LogicalType()) &&
             columnSchema.SortOrder() &&
@@ -2100,7 +2104,7 @@ void ValidateColumnSchema(
     } catch (const std::exception& ex) {
         THROW_ERROR_EXCEPTION("Error validating schema of column %v",
             columnSchema.GetDiagnosticNameString())
-            << ex;
+            .With(ex);
     }
 }
 
@@ -2133,7 +2137,7 @@ void ValidateDynamicTableConstraints(const TTableSchema& schema)
         } catch (const std::exception& ex) {
             THROW_ERROR_EXCEPTION("Error validating column %v in dynamic table schema",
                 column.GetDiagnosticNameString())
-                << ex;
+                .With(ex);
         }
     }
 }
@@ -2407,7 +2411,7 @@ void ValidateNoDescendingSortOrder(const TTableSchema& schema)
             THROW_ERROR_EXCEPTION(
                 NTableClient::EErrorCode::InvalidSchemaValue,
                 "Descending sort order is not available in this context yet")
-                << TErrorAttribute("column_name", column.Name());
+                .With("column_name", column.Name());
         }
     }
 }
@@ -2425,7 +2429,7 @@ void ValidateNoDescendingSortOrder(
             THROW_ERROR_EXCEPTION(
                 NTableClient::EErrorCode::InvalidSchemaValue,
                 "Descending sort order is not available in this context yet")
-                << TErrorAttribute("column_name", column);
+                .With("column_name", column);
         }
     }
 }
@@ -2437,7 +2441,7 @@ void ValidateNoRenamedColumns(const TTableSchema& schema)
             THROW_ERROR_EXCEPTION(
                 NTableClient::EErrorCode::InvalidSchemaValue,
                 "Table column renaming is not available yet")
-                << TErrorAttribute("renamed_column", column.GetDiagnosticNameString());
+                .With("renamed_column", column.GetDiagnosticNameString());
         }
     }
 }
@@ -2542,22 +2546,6 @@ void FromProto(NTableClient::TColumnFilter* columnFilter, const TColumnFilter& p
 }
 
 } // namespace NProto
-
-////////////////////////////////////////////////////////////////////////////////
-
-TCellTaggedTableSchema::TCellTaggedTableSchema(TTableSchema tableSchema, TCellTag cellTag)
-    : TableSchema(std::move(tableSchema))
-    , CellTag(cellTag)
-{ }
-
-////////////////////////////////////////////////////////////////////////////////
-
-TCellTaggedTableSchemaPtr::TCellTaggedTableSchemaPtr(TTableSchemaPtr tableSchema, TCellTag cellTag)
-    : TableSchema(std::move(tableSchema))
-    , CellTag(cellTag)
-{
-    YT_VERIFY(TableSchema);
-}
 
 ////////////////////////////////////////////////////////////////////////////////
 

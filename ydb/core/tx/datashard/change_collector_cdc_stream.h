@@ -3,22 +3,28 @@
 #include "change_collector_base.h"
 #include "datashard_user_table.h"
 
+namespace NACLib {
+    class TUserContext;
+}
+
 namespace NKikimr {
 namespace NDataShard {
 
 class TCdcStreamChangeCollector: public TBaseChangeCollector {
     TMaybe<NTable::TRowState> GetState(const TTableId& tableId, TArrayRef<const TRawTypeValue> key,
-        TArrayRef<const NTable::TTag> valueTags, NTable::TSelectStats& stats, const TMaybe<TRowVersion>& readVersion = {});
+        TArrayRef<const NTable::TTag> valueTags, NTable::TSelectStats& stats, const TMaybe<TRowVersion>& snapshot = {});
     TMaybe<NTable::TRowState> GetState(const TTableId& tableId, TArrayRef<const TRawTypeValue> key,
-        TArrayRef<const NTable::TTag> valueTags, const TMaybe<TRowVersion>& readVersion = {});
+        TArrayRef<const NTable::TTag> valueTags, const TMaybe<TRowVersion>& snapshot = {});
     static NTable::TRowState PatchState(const NTable::TRowState& oldState, NTable::ERowOp rop,
         const THashMap<NTable::TTag, NTable::TPos>& tagToPos, const THashMap<NTable::TTag, NTable::TUpdateOp>& updates);
 
     void Persist(const TTableId& tableId, const TPathId& pathId, NTable::ERowOp rop,
-        TArrayRef<const TRawTypeValue> key, TArrayRef<const NTable::TTag> keyTags, TArrayRef<const NTable::TUpdateOp> updates);
+        TArrayRef<const TRawTypeValue> key, TArrayRef<const NTable::TTag> keyTags, TArrayRef<const NTable::TUpdateOp> updates,
+        TIntrusivePtr<NACLib::TUserContext> userCtx);
     void Persist(const TTableId& tableId, const TPathId& pathId, NTable::ERowOp rop,
         TArrayRef<const TRawTypeValue> key, TArrayRef<const NTable::TTag> keyTags,
-        const NTable::TRowState* oldState, const NTable::TRowState* newState, TArrayRef<const NTable::TTag> valueTags);
+        const NTable::TRowState* oldState, const NTable::TRowState* newState, TArrayRef<const NTable::TTag> valueTags,
+        TIntrusivePtr<NACLib::TUserContext> userCtx);
 
 public:
     using TBaseChangeCollector::TBaseChangeCollector;
@@ -27,7 +33,8 @@ public:
     bool NeedToReadKeys() const override;
 
     bool Collect(const TTableId& tableId, NTable::ERowOp rop,
-        TArrayRef<const TRawTypeValue> key, TArrayRef<const NTable::TUpdateOp> updates) override;
+        TArrayRef<const TRawTypeValue> key, TArrayRef<const NTable::TUpdateOp> updates,
+        TIntrusivePtr<NACLib::TUserContext> userCtx) override;
 
 private:
     mutable TMaybe<bool> CachedNeedToReadKeys;

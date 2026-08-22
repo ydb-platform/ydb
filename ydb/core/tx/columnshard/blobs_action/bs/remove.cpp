@@ -1,5 +1,3 @@
 #include "remove.h"
 
-namespace NKikimr::NOlap::NBlobOperations::NBlobStorage {
-
-}
+namespace NKikimr::NOlap::NBlobOperations::NBlobStorage {}

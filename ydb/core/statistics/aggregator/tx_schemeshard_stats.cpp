@@ -1,9 +1,12 @@
 #include "aggregator_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::STATISTICS
+
 namespace NKikimr::NStat {
 
 struct TStatisticsAggregator::TTxSchemeShardStats : public TTxBase {
     NKikimrStat::TEvSchemeShardStats Record;
+    std::shared_ptr<TString> UpdatedStats;
 
     TTxSchemeShardStats(TSelf* self, NKikimrStat::TEvSchemeShardStats&& record)
         : TTxBase(self)
@@ -16,33 +19,39 @@ struct TStatisticsAggregator::TTxSchemeShardStats : public TTxBase {
         ui64 schemeShardId = Record.GetSchemeShardId();
         const auto& stats = Record.GetStats();
 
-        SA_LOG_D("[" << Self->TabletID() << "] TTxSchemeShardStats::Execute: "
-            << "schemeshard id# " << schemeShardId
-            << ", stats size# " << stats.size());
-
-        NIceDb::TNiceDb db(txc.DB);
-
         NKikimrStat::TSchemeShardStats statRecord;
         Y_PROTOBUF_SUPPRESS_NODISCARD statRecord.ParseFromString(stats);
 
-        // if statistics is sent from schemeshard for the first time or
-        // AreAllStatsFull field is not set (schemeshard is working on previous code version) or
-        // statistics is full for all tables
-        // then persist incoming statistics without changes
-        if (!Self->BaseStatistics.contains(schemeShardId) ||
-            !statRecord.HasAreAllStatsFull() || statRecord.GetAreAllStatsFull())
-        {
-            db.Table<Schema::BaseStatistics>().Key(schemeShardId).Update(
-                NIceDb::TUpdate<Schema::BaseStatistics::Stats>(stats));
-            Self->BaseStatistics[schemeShardId] = stats;
+        YDB_LOG_DEBUG("TTxSchemeShardStats::Execute",
+            {"tabletId", Self->TabletID()},
+            {"schemeShardId", schemeShardId},
+            {"statsByteSize", stats.size()},
+            {"entriesCount", statRecord.GetEntries().size()},
+            {"areAllStatsFull", statRecord.GetAreAllStatsFull()});
 
-        } else {
+        NIceDb::TNiceDb db(txc.DB);
+
+        TSerializedBaseStats& existingStats = Self->BaseStatistics[schemeShardId];
+
+        // Persist incoming statistics without changes when:
+        //  - AreAllStatsFull is unset (old schemeshard) or true, or
+        //  - this is the first report AND it is already full.
+        // Never bootstrap BaseStatistics from an incomplete (zeroed) snapshot:
+        // FinishTraversal would baseline LastAnalyze at 0 and the next full
+        // report would look like a huge change ratio. Path discovery below
+        // still runs so never-analyzed tables can be scheduled.
+        const bool areAllStatsFull =
+            !statRecord.HasAreAllStatsFull() || statRecord.GetAreAllStatsFull();
+        if (areAllStatsFull) {
+            UpdatedStats = std::make_shared<TString>(stats);
+        } else if (existingStats.Latest) {
             NKikimrStat::TSchemeShardStats oldStatRecord;
-            const auto& oldStats = Self->BaseStatistics[schemeShardId];
-            Y_PROTOBUF_SUPPRESS_NODISCARD oldStatRecord.ParseFromString(oldStats);
+            Y_PROTOBUF_SUPPRESS_NODISCARD oldStatRecord.ParseFromString(*existingStats.Latest);
 
             struct TOldStats {
                 ui64 RowCount = 0;
+                ui64 RowUpdates = 0;
+                ui64 RowDeletes = 0;
                 ui64 BytesSize = 0;
             };
             THashMap<TPathId, TOldStats> oldStatsMap;
@@ -50,6 +59,8 @@ struct TStatisticsAggregator::TTxSchemeShardStats : public TTxBase {
             for (const auto& entry : oldStatRecord.GetEntries()) {
                 auto& oldEntry = oldStatsMap[TPathId::FromProto(entry.GetPathId())];
                 oldEntry.RowCount = entry.GetRowCount();
+                oldEntry.RowUpdates = entry.GetRowUpdates();
+                oldEntry.RowDeletes = entry.GetRowDeletes();
                 oldEntry.BytesSize = entry.GetBytesSize();
             }
 
@@ -62,25 +73,33 @@ struct TStatisticsAggregator::TTxSchemeShardStats : public TTxBase {
 
                 if (entry.GetAreStatsFull()) {
                     newEntry->SetRowCount(entry.GetRowCount());
+                    newEntry->SetRowUpdates(entry.GetRowUpdates());
+                    newEntry->SetRowDeletes(entry.GetRowDeletes());
                     newEntry->SetBytesSize(entry.GetBytesSize());
                 } else {
                     auto oldIter = oldStatsMap.find(TPathId::FromProto(entry.GetPathId()));
                     if (oldIter != oldStatsMap.end()) {
                         newEntry->SetRowCount(oldIter->second.RowCount);
+                        newEntry->SetRowUpdates(oldIter->second.RowUpdates);
+                        newEntry->SetRowDeletes(oldIter->second.RowDeletes);
                         newEntry->SetBytesSize(oldIter->second.BytesSize);
                     } else {
                         newEntry->SetRowCount(0);
+                        newEntry->SetRowUpdates(0);
+                        newEntry->SetRowDeletes(0);
                         newEntry->SetBytesSize(0);
                     }
                 }
             }
 
-            TString newStats;
-            Y_PROTOBUF_SUPPRESS_NODISCARD newStatRecord.SerializeToString(&newStats);
+            UpdatedStats = std::make_shared<TString>();
+            Y_PROTOBUF_SUPPRESS_NODISCARD newStatRecord.SerializeToString(UpdatedStats.get());
+        }
 
+        if (UpdatedStats) {
             db.Table<Schema::BaseStatistics>().Key(schemeShardId).Update(
-                NIceDb::TUpdate<Schema::BaseStatistics::Stats>(newStats));
-            Self->BaseStatistics[schemeShardId] = newStats;
+                NIceDb::TUpdate<Schema::BaseStatistics::Stats>(*UpdatedStats));
+            existingStats.Latest = UpdatedStats;
         }
 
         if (!Self->EnableColumnStatistics) {
@@ -99,6 +118,8 @@ struct TStatisticsAggregator::TTxSchemeShardStats : public TTxBase {
                 traversalTable.SchemeShardId = schemeShardId;
                 traversalTable.LastUpdateTime = TInstant::MicroSeconds(0);
                 traversalTable.IsColumnTable = entry.GetIsColumnTable();
+                traversalTable.LastAnalyzeRowUpdates = Max<ui64>();
+                traversalTable.LastAnalyzeRowDeletes = Max<ui64>();
                 auto [it, _] = Self->ScheduleTraversals.emplace(pathId, traversalTable);
                 if (!Self->ScheduleTraversalsByTime.Has(&it->second)) {
                     Self->ScheduleTraversalsByTime.Add(&it->second);
@@ -106,7 +127,9 @@ struct TStatisticsAggregator::TTxSchemeShardStats : public TTxBase {
                 db.Table<Schema::ScheduleTraversals>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
                     NIceDb::TUpdate<Schema::ScheduleTraversals::SchemeShardId>(schemeShardId),
                     NIceDb::TUpdate<Schema::ScheduleTraversals::LastUpdateTime>(0),
-                    NIceDb::TUpdate<Schema::ScheduleTraversals::IsColumnTable>(entry.GetIsColumnTable()));
+                    NIceDb::TUpdate<Schema::ScheduleTraversals::IsColumnTable>(entry.GetIsColumnTable()),
+                    NIceDb::TUpdate<Schema::ScheduleTraversals::LastAnalyzeRowUpdates>(Max<ui64>()),
+                    NIceDb::TUpdate<Schema::ScheduleTraversals::LastAnalyzeRowDeletes>(Max<ui64>()));
             }
         }
 
@@ -129,7 +152,15 @@ struct TStatisticsAggregator::TTxSchemeShardStats : public TTxBase {
     }
 
     void Complete(const TActorContext&) override {
-        SA_LOG_D("[" << Self->TabletID() << "] TTxSchemeShardStats::Complete");
+        YDB_LOG_DEBUG("TTxSchemeShardStats::Complete",
+            {"tabletId", Self->TabletID()});
+        if (UpdatedStats) {
+            Self->BaseStatistics[Record.GetSchemeShardId()].Committed = UpdatedStats;
+        }
+
+        Self->InvalidateCachedChangeCounters();
+        Self->ReportBaseStatisticsCounters();
+        Self->ReportAnalyzeCounters();
     }
 };
 

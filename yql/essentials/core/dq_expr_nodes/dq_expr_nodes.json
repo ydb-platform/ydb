@@ -59,6 +59,29 @@
         ]
     },
     {
+        "Name": "TDqPhyBlockHashJoin",
+        "Base": "TDqJoinBase",
+        "Match": {"Type": "Callable", "Name": "DqPhyBlockHashJoin"},
+        "Children": [
+            {"Index": 8, "Name": "Settings", "Type": "TCoNameValueTupleList"}
+        ]
+    },
+    {
+        "Name": "TDqBlockHashJoinCore",
+        "Base": "TCallable",
+        "Match": {"Type": "Callable", "Name": "BlockHashJoinCore"},
+        "Children": [
+            {"Index": 0, "Name": "LeftInput", "Type": "TExprBase"},
+            {"Index": 1, "Name": "RightInput", "Type": "TExprBase"},
+            {"Index": 2, "Name": "JoinKind", "Type": "TCoAtom"},
+            {"Index": 3, "Name": "LeftKeyColumns", "Type": "TCoAtomList"},
+            {"Index": 4, "Name": "RightKeyColumns", "Type": "TCoAtomList"},
+            {"Index": 5, "Name": "LeftKeysColumnNames", "Type": "TCoAtomList"},
+            {"Index": 6, "Name": "RightKeysColumnNames", "Type": "TCoAtomList"},
+            {"Index": 7, "Name": "Settings", "Type": "TCoNameValueTupleList"}
+        ]
+    },
+    {
         "Name": "TDqPhyMapJoin",
         "Base": "TDqJoinBase",
         "Match": {"Type": "Callable", "Name": "DqPhyMapJoin"}
@@ -169,7 +192,8 @@
         "Match": {"Type": "Callable", "Name": "DqCnHashShuffle"},
         "Children": [
             {"Index": 1, "Name": "KeyColumns", "Type": "TCoAtomList"},
-            {"Index": 2, "Name": "UseSpilling", "Type": "TCoAtom", "Optional": true}
+            {"Index": 2, "Name": "UseSpilling", "Type": "TCoAtom", "Optional": true},
+            {"Index": 3, "Name": "HashFunc", "Type": "TCoAtom", "Optional": true}
         ]
     },
     {
@@ -181,6 +205,11 @@
         "Name": "TDqCnUnionAll",
         "Base": "TDqConnection",
         "Match": {"Type": "Callable", "Name": "DqCnUnionAll"}
+    },
+    {
+        "Name": "TDqCnParallelUnionAll",
+        "Base": "TDqConnection",
+        "Match": {"Type": "Callable", "Name": "DqCnParallelUnionAll"}
     },
     {
         "Name": "TDqCnMap",
@@ -202,7 +231,9 @@
             {"Index": 8, "Name": "TTL", "Type": "TCoAtom"},
             {"Index": 9, "Name": "MaxDelayedRows", "Type": "TCoAtom"},
             {"Index": 10, "Name": "MaxCachedRows", "Type": "TCoAtom"},
-            {"Index": 11, "Name": "IsMultiget", "Type": "TCoAtom", "Optional": true}
+            {"Index": 11, "Name": "IsMultiget", "Type": "TCoAtom", "Optional": true},
+            {"Index": 12, "Name": "IsMultiMatches", "Type": "TCoAtom", "Optional": true},
+            {"Index": 13, "Name": "FullscanLimit", "Type": "TExprBase", "Optional": true}
         ]
     },
     {
@@ -316,6 +347,32 @@
       "Name": "TDqReadBlockWideWrap",
       "Base": "TDqReadWrapBase",
       "Match": {"Type": "Callable", "Name": "DqReadBlockWideWrap"}
+    },
+    {
+      "Name": "TDqPhyHashCombine",
+      "Base": "TCallable",
+      "Match": {"Type": "Callable", "Name": "DqPhyHashCombine"},
+      "Children": [
+        {"Index": 0, "Name": "Input",         "Type": "TExprBase"},
+        {"Index": 1, "Name": "MemLimit",      "Type": "TCoAtom"},
+        {"Index": 2, "Name": "KeyExtractor",  "Type": "TCoLambda"},
+        {"Index": 3, "Name": "InitHandler",   "Type": "TCoLambda"},
+        {"Index": 4, "Name": "UpdateHandler", "Type": "TCoLambda"},
+        {"Index": 5, "Name": "FinishHandler", "Type": "TCoLambda"}
+      ]
+    },
+    {
+      "Name": "TDqPhyWatermarkGenerator",
+      "Base": "TCallable",
+      "Match": {"Type": "Callable", "Name": "DqPhyWatermarkGenerator"},
+      "Children": [
+        {"Index": 0, "Name": "Input",                 "Type": "TExprBase"},
+        {"Index": 1, "Name": "WatermarkExtractor",    "Type": "TCoLambda"},
+        {"Index": 2, "Name": "PartitionKeyExtractor", "Type": "TCoLambda"},
+        {"Index": 3, "Name": "WriteTimeExtractor",    "Type": "TCoLambda"},
+        {"Index": 4, "Name": "WatermarkSettings",     "Type": "TCoNameValueTupleList"},
+        {"Index": 5, "Name": "PartitionKeys",         "Type": "TExprBase"}
+      ]
     }
     ]
 }

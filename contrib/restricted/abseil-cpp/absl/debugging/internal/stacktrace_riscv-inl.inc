@@ -142,6 +142,10 @@ static int UnwindImpl(void **result, uintptr_t *frames, int *sizes,
   void *return_address = nullptr;
   while (frame_pointer && n < max_depth) {
     return_address = frame_pointer[-1];
+    // Follow x86 and stop if the return address is null (end of stack).
+    if (return_address == nullptr) {
+      break;
+    }
 
     // The absl::GetStackFrames routine is called when we are in some
     // informational context (the failure signal handler for example).  Use the
@@ -162,7 +166,8 @@ static int UnwindImpl(void **result, uintptr_t *frames, int *sizes,
               absl::debugging_internal::StripPointerMetadata(frame_pointer);
         }
         if (sizes != nullptr) {
-          sizes[n] = ComputeStackFrameSize(frame_pointer, next_frame_pointer);
+          sizes[n] = static_cast<int>(
+              ComputeStackFrameSize(frame_pointer, next_frame_pointer));
         }
       }
       n++;

@@ -1,5 +1,5 @@
 /* backtrace-supported.h.in -- Whether stack backtrace is supported.
-   Copyright (C) 2012-2024 Free Software Foundation, Inc.
+   Copyright (C) 2012-2026 Free Software Foundation, Inc.
    Written by Ian Lance Taylor, Google.
 
 Redistribution and use in source and binary forms, with or without
@@ -35,7 +35,6 @@ POSSIBILITY OF SUCH DAMAGE.  */
    be #include'd to see whether the backtrace library will be able to
    get a backtrace and produce symbolic information.  */
 
-
 /* BACKTRACE_SUPPORTED will be #define'd as 1 if the backtrace library
    should work, 0 if it will not.  Libraries may #include this to make
    other arrangements.  */
@@ -60,7 +59,12 @@ POSSIBILITY OF SUCH DAMAGE.  */
 
 #define BACKTRACE_SUPPORTS_THREADS 1
 
-/* BACKTRACE_SUPPORTS_DATA will be #defined'd as 1 if the backtrace_syminfo
+/* BACKTRACE_SUPPORTS_DATA will be #define'd as 1 if the backtrace_syminfo
    will work for variables.  It will always work for functions.  */
 
 #define BACKTRACE_SUPPORTS_DATA 1
+
+/* BACKTRACE_SUPPORTS_MOREDATA will be #define'd as 1 if
+   backtrace_create_state supports setting the MOREDATA flag.  */
+
+#define BACKTRACE_SUPPORTS_MOREDATA 1

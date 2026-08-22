@@ -32,6 +32,7 @@ __all__ = (
     'FastChildWatcher', 'PidfdChildWatcher',
     'MultiLoopChildWatcher', 'ThreadedChildWatcher',
     'DefaultEventLoopPolicy',
+    'EventLoop',
 )
 
 
@@ -57,12 +58,14 @@ def waitstatus_to_exitcode(status):
 class _UnixSelectorEventLoop(selector_events.BaseSelectorEventLoop):
     """Unix event loop.
 
-    Adds signal handling and UNIX Domain Socket support to SelectorEventLoop.
+    Adds signal handling and UNIX Domain Socket support to
+    SelectorEventLoop.
     """
 
     def __init__(self, selector=None):
         super().__init__(selector)
         self._signal_handlers = {}
+        self._unix_server_sockets = {}
 
     def close(self):
         super().close()
@@ -283,7 +286,7 @@ class _UnixSelectorEventLoop(selector_events.BaseSelectorEventLoop):
             sock=None, backlog=100, ssl=None,
             ssl_handshake_timeout=None,
             ssl_shutdown_timeout=None,
-            start_serving=True):
+            start_serving=True, cleanup_socket=True):
         if isinstance(ssl, bool):
             raise TypeError('ssl argument must be an SSLContext or None')
 
@@ -339,6 +342,15 @@ class _UnixSelectorEventLoop(selector_events.BaseSelectorEventLoop):
                 raise ValueError(
                     f'A UNIX Domain Stream Socket was expected, got {sock!r}')
 
+        if cleanup_socket:
+            path = sock.getsockname()
+            # Check for abstract socket. `str` and `bytes` paths are supported.
+            if path[0] not in (0, '\x00'):
+                try:
+                    self._unix_server_sockets[sock] = os.stat(path).st_ino
+                except FileNotFoundError:
+                    pass
+
         sock.setblocking(False)
         server = base_events.Server(self, [sock], protocol_factory,
                                     ssl, backlog, ssl_handshake_timeout,
@@ -384,14 +396,17 @@ class _UnixSelectorEventLoop(selector_events.BaseSelectorEventLoop):
             # order to simplify the common case.
             self.remove_writer(registered_fd)
         if fut.cancelled():
-            self._sock_sendfile_update_filepos(fileno, offset, total_sent)
+            self._sock_sendfile_update_filepos(fileno, offset)
             return
         if count:
             blocksize = count - total_sent
             if blocksize <= 0:
-                self._sock_sendfile_update_filepos(fileno, offset, total_sent)
+                self._sock_sendfile_update_filepos(fileno, offset)
                 fut.set_result(total_sent)
                 return
+
+        # On 32-bit architectures truncate to 1GiB to avoid OverflowError
+        blocksize = min(blocksize, sys.maxsize//2 + 1)
 
         try:
             sent = os.sendfile(fd, fileno, offset, blocksize)
@@ -420,20 +435,20 @@ class _UnixSelectorEventLoop(selector_events.BaseSelectorEventLoop):
                 # plain send().
                 err = exceptions.SendfileNotAvailableError(
                     "os.sendfile call failed")
-                self._sock_sendfile_update_filepos(fileno, offset, total_sent)
+                self._sock_sendfile_update_filepos(fileno, offset)
                 fut.set_exception(err)
             else:
-                self._sock_sendfile_update_filepos(fileno, offset, total_sent)
+                self._sock_sendfile_update_filepos(fileno, offset)
                 fut.set_exception(exc)
         except (SystemExit, KeyboardInterrupt):
             raise
         except BaseException as exc:
-            self._sock_sendfile_update_filepos(fileno, offset, total_sent)
+            self._sock_sendfile_update_filepos(fileno, offset)
             fut.set_exception(exc)
         else:
             if sent == 0:
                 # EOF
-                self._sock_sendfile_update_filepos(fileno, offset, total_sent)
+                self._sock_sendfile_update_filepos(fileno, offset)
                 fut.set_result(total_sent)
             else:
                 offset += sent
@@ -444,9 +459,9 @@ class _UnixSelectorEventLoop(selector_events.BaseSelectorEventLoop):
                                 fd, sock, fileno,
                                 offset, count, blocksize, total_sent)
 
-    def _sock_sendfile_update_filepos(self, fileno, offset, total_sent):
-        if total_sent > 0:
-            os.lseek(fileno, offset, os.SEEK_SET)
+    def _sock_sendfile_update_filepos(self, fileno, offset):
+        # After this helper runs, the source fd's lseek pointer is at offset."
+        os.lseek(fileno, offset, os.SEEK_SET)
 
     def _sock_add_cancellation_callback(self, fut, sock):
         def cb(fut):
@@ -455,6 +470,27 @@ class _UnixSelectorEventLoop(selector_events.BaseSelectorEventLoop):
                 if fd != -1:
                     self.remove_writer(fd)
         fut.add_done_callback(cb)
+
+    def _stop_serving(self, sock):
+        # Is this a unix socket that needs cleanup?
+        if sock in self._unix_server_sockets:
+            path = sock.getsockname()
+        else:
+            path = None
+
+        super()._stop_serving(sock)
+
+        if path is not None:
+            prev_ino = self._unix_server_sockets[sock]
+            del self._unix_server_sockets[sock]
+            try:
+                if os.stat(path).st_ino == prev_ino:
+                    os.unlink(path)
+            except FileNotFoundError:
+                pass
+            except OSError as err:
+                logger.error('Unable to clean up listening UNIX socket '
+                             '%r: %r', path, err)
 
 
 class _UnixReadPipeTransport(transports.ReadTransport):
@@ -614,7 +650,8 @@ class _UnixWritePipeTransport(transports._FlowControlMixin,
         self._conn_lost = 0
         self._closing = False  # Set when close() or write_eof() called.
 
-        mode = os.fstat(self._fileno).st_mode
+        pipe_stat = os.fstat(self._fileno)
+        mode = pipe_stat.st_mode
         is_char = stat.S_ISCHR(mode)
         is_fifo = stat.S_ISFIFO(mode)
         is_socket = stat.S_ISSOCK(mode)
@@ -631,7 +668,19 @@ class _UnixWritePipeTransport(transports._FlowControlMixin,
         # On AIX, the reader trick (to be notified when the read end of the
         # socket is closed) only works for sockets. On other platforms it
         # works for pipes and sockets. (Exception: OS X 10.4?  Issue #19294.)
-        if is_socket or (is_fifo and not sys.platform.startswith("aix")):
+        # On macOS and Solaris, the trick misfires for named FIFOs (but not for
+        # pipes created with os.pipe(), which have st_nlink == 0): the write
+        # end polls as readable whenever unread data sits in the FIFO, and no
+        # event is delivered when the read end is closed, so it can only
+        # ever report a false disconnection (gh-145030). The same XNU
+        # behaviour applies on iOS/tvOS/watchOS (sys.platform is not
+        # "darwin" there).
+        is_named_fifo_without_close_event = (
+            sys.platform in {"darwin", "ios", "tvos", "watchos", "sunos5"}
+            and is_fifo and pipe_stat.st_nlink > 0)
+        if is_socket or (is_fifo
+                         and not sys.platform.startswith("aix")
+                         and not is_named_fifo_without_close_event):
             # only start reading when connection_made() has been called
             self._loop.call_soon(self._loop._add_reader,
                                  self._fileno, self._read_ready)
@@ -1498,3 +1547,4 @@ class _UnixDefaultEventLoopPolicy(events.BaseDefaultEventLoopPolicy):
 
 SelectorEventLoop = _UnixSelectorEventLoop
 DefaultEventLoopPolicy = _UnixDefaultEventLoopPolicy
+EventLoop = SelectorEventLoop

@@ -47,3 +47,4 @@ if [ $retVal -ne 0 ]; then
 fi
 
 echo $(date +"%T.%6N") "SUCCESS"
+echo "ydb is started" > /tmp/start

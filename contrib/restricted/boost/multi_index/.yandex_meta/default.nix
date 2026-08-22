@@ -1,13 +1,13 @@
 self: super: with self; {
   boost_multi_index = stdenv.mkDerivation rec {
     pname = "boost_multi_index";
-    version = "1.88.0";
+    version = "1.90.0";
 
     src = fetchFromGitHub {
       owner = "boostorg";
       repo = "multi_index";
       rev = "boost-${version}";
-      hash = "sha256-VC2QL0YBsaYfS9DH5lMG8f9Ui236bsv1Dz+ScyqKFBU=";
+      hash = "sha256-qJ9m7Ak1kI+obRGhYbSqHGjPR7eyq0iL3ndRIqZA1E8=";
     };
   };
 }

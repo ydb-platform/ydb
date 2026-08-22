@@ -10,7 +10,7 @@ This guide outlines the process of deploying a {{ ydb-short-name }} cluster on a
 
 The recommended setup to get started is 3 servers with 3 disk drives for user data each. For reliability purposes, each server should have as independent infrastructure as possible: they'd better be each in a separate datacenter or availability zone, or at least in different server racks.
 
-For large-scale setups, it is recommended to use at least 9 servers for highly available clusters (`mirror-3-dc`) or 8 servers for single-datacenter clusters (`block-4-2`). In these cases, servers can have only one disk drive for user data each, but they'd better have an additional small drive for the operating system. You can learn about redundancy models available in {{ ydb-short-name }} from the [{#T}](../../../concepts/topology.md) article. During operation, the cluster can be [expanded](../../../maintenance/manual/cluster_expansion.md) without suspending user access to the databases.
+For large-scale setups, it is recommended to use at least 9 servers for highly available clusters (`mirror-3-dc`) or 8 servers for single-datacenter clusters (`block-4-2`). In these cases, servers can have only one disk drive for user data each, but they'd better have an additional small drive for the operating system. You can learn about redundancy models available in {{ ydb-short-name }} from the [{#T}](../../../concepts/topology.md) article. During operation, the cluster can be [expanded](../../configuration-management/configuration-v2/cluster-expansion.md) without suspending user access to the databases.
 
 {% note info %}
 
@@ -87,7 +87,7 @@ Refer to [Ansible Installation Guide](https://docs.ansible.com/ansible/latest/in
   collections:
     - name: git+https://github.com/ydb-platform/ydb-ansible
       type: git
-      version: main
+      version: latest
   EOF
   $ ansible-galaxy install -r requirements.yaml
   ```
@@ -95,7 +95,7 @@ Refer to [Ansible Installation Guide](https://docs.ansible.com/ansible/latest/in
 - One-time
 
   ```bash
-  $ ansible-galaxy collection install git+https://github.com/ydb-platform/ydb-ansible.git
+  $ ansible-galaxy collection install git+https://github.com/ydb-platform/ydb-ansible.git,latest
   ```
 
 {% endlist %}
@@ -116,7 +116,6 @@ inventory = ./inventory
 pipelining = True
 private_role_vars = True
 timeout = 5
-vault_password_file = ./ansible_vault_password_file
 verbosity = 1
 log_path = ./ydb.log
 
@@ -356,7 +355,7 @@ There are multiple options to specify which exactly {{ ydb-short-name }} executa
 * `ydb_archive`: a local filesystem path for a {{ ydb-short-name }} distribution archive [downloaded](../../../downloads/index.md#ydb-server) or otherwise prepared in advance.
 * `ydbd_binary` and `ydb_cli_binary`: local filesystem paths for {{ ydb-short-name }} server and client executables, [downloaded](../../../downloads/index.md#ydb-server) or otherwise prepared in advance.
 
-Installing a [connector](../../../concepts/federated_query/architecture.md#connectors) may be necessary for using [federated queries](../../../concepts/federated_query/index.md). The playbook can deploy the [fq-connector-go](../manual/federated-queries/connector-deployment.md#fq-connector-go) to the hosts with dynamic nodes. Use the following settings:
+Installing a [connector](../../../concepts/query_execution/federated_query/architecture.md#connectors) may be necessary for using [federated queries](../../../concepts/query_execution/federated_query/index.md). The playbook can deploy the [fq-connector-go](../manual/federated-queries/connector-deployment.md#fq-connector-go) to the hosts with dynamic nodes. Use the following settings:
 
 * `ydb_install_fq_connector` - set to `true` for installing the connector.
 * Choose one of the available options for deploying fq-connector-go executables:
@@ -420,9 +419,9 @@ all:
         ydb_password: <password>
 ```
 
-Encrypt this file using the command `ansible-vault encrypt inventory/99-inventory-vault.yaml`. This would require you to either manually enter the encryption password (which can be different) or have `vault_password_file` Ansible setting configured. See [Ansible Vault documentation](https://docs.ansible.com/ansible/latest/vault_guide/index.html) for more details on how this works.
+Encrypt this file using the command `ansible-vault encrypt inventory/99-inventory-vault.yaml`. It would require you to manually enter the encryption password, which is independent from the `ydb_password` setting value and better be different. Alternatively, you can save the encryption password to a separate file and configure the `vault_password_file` Ansible setting with the file path. See [Ansible Vault documentation](https://docs.ansible.com/ansible/latest/vault_guide/index.html) for more details on how this works.
 
-### Prepare the YDB Configuration File {#ydb-config-prepare}
+### Prepare the {{ ydb-short-name }} Configuration File {#ydb-config-prepare}
 
 ## Deploying the {{ ydb-short-name }} Cluster
 
@@ -432,7 +431,7 @@ After all the preparations explained above are complete, the actual initial clus
 ansible-playbook ydb_platform.ydb.initial_setup
 ```
 
-Shortly after start, you'll be asked to confirm full wipe of the configured disk drives. Then, it can take tens of minutes to finish deployment depending on the environment and settings. Under the hood, this playbook follows roughly the same steps as explained in instructions for [manual {{ ydb-short-name }} cluster deployment](../manual/initial-deployment.md).
+Shortly after start, you'll be asked to confirm full wipe of the configured disk drives. Then, it can take tens of minutes to finish deployment depending on the environment and settings. Under the hood, this playbook follows roughly the same steps as explained in instructions for [manual {{ ydb-short-name }} cluster deployment](../manual/initial-deployment/index.md).
 
 ### Checking the Cluster State {#cluster-state}
 

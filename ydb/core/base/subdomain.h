@@ -41,6 +41,15 @@ struct THash<NKikimr::TSubDomainKey> {
     }
 };
 
+namespace std {
+    template <>
+    struct hash<NKikimr::TSubDomainKey> {
+        std::size_t operator()(const NKikimr::TSubDomainKey& key) const {
+            return key.Hash();
+        }
+    };
+}
+
 template<>
 inline void Out<NKikimr::TSubDomainKey>(IOutputStream &o, const NKikimr::TSubDomainKey &x) {
     o << x.GetSchemeShard() << ":" << x.GetPathId();

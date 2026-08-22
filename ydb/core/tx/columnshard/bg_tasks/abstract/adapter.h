@@ -1,10 +1,11 @@
 #pragma once
 #include "session.h"
+
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 #include <ydb/core/tx/columnshard/common/tablet_id.h>
 
-#include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/conclusion/status.h>
 
 namespace NKikimr::NTabletFlatExecutor {
@@ -22,7 +23,9 @@ private:
     virtual void DoSaveProgressToLocalDatabase(NTabletFlatExecutor::TTransactionContext& txc, const TSessionRecord& container) = 0;
     virtual void DoSaveStateToLocalDatabase(NTabletFlatExecutor::TTransactionContext& txc, const TSessionRecord& container) = 0;
     virtual void DoSaveSessionToLocalDatabase(NTabletFlatExecutor::TTransactionContext& txc, const TSessionRecord& container) = 0;
-    virtual void DoRemoveSessionFromLocalDatabase(NTabletFlatExecutor::TTransactionContext& txc, const TString& className, const TString& identifier) = 0;
+    virtual void DoRemoveSessionFromLocalDatabase(
+        NTabletFlatExecutor::TTransactionContext& txc, const TString& className, const TString& identifier) = 0;
+
 public:
     ITabletAdapter(const NActors::TActorId& tabletActorId, const TTabletId tabletId, NTabletFlatExecutor::TTabletExecutedFlat& tabletExecutor)
         : TabletActorId(tabletActorId)
@@ -32,6 +35,7 @@ public:
         AFL_VERIFY(!!TabletActorId);
         AFL_VERIFY(!!(ui64)TabletId);
     }
+
     virtual ~ITabletAdapter() = default;
 
     template <class T>
@@ -62,4 +66,4 @@ public:
     }
 };
 
-}
+}   // namespace NKikimr::NOlap::NBackground

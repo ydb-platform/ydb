@@ -1,0 +1,6 @@
+$cluster = "pla" || "to";
+$name = "In" || "put";
+
+SELECT
+    count(*)
+FROM yt:$cluster.$name;

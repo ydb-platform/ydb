@@ -1,0 +1,3 @@
+The {{ ydb-short-name }} federated query processing system is capable of delegating the execution of certain parts of a query to the system acting as the data source. Query fragments are passed through {{ ydb-short-name }} directly to the external system and processed by them. This optimization, known as "predicate pushdown", significantly reduces the amount of data transferred from the source to the federated query processing engine. This reduces network load and saves computational resources for the federated {{ ydb-short-name }}.
+
+A specific case of predicate pushdown, when the filtering expressions are specified after the `WHERE` keyword, are passed to the data source, is called "filter pushdown". Filter pushdown is possible when using:

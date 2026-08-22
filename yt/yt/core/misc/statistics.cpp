@@ -81,7 +81,7 @@ void Serialize(const TSummary& summary, IYsonConsumer* consumer)
         .EndMap();
 }
 
-bool TSummary::operator ==(const TSummary& other) const
+bool TSummary::operator==(const TSummary& other) const
 {
     return
         Sum_ == other.Sum_ &&
@@ -139,7 +139,7 @@ void TStatistics::ProcessNodeWithCallback(const TStatisticPath& path, const NYTr
 
         case ENodeType::Map:
             for (const auto& [key, child] : sample->AsMap()->GetChildren()) {
-                callback(path / TStatisticPathLiteral(TString(key)), child);
+                callback(path / TStatisticPathLiteral(std::string(key)), child);
             }
             break;
 
@@ -147,7 +147,7 @@ void TStatistics::ProcessNodeWithCallback(const TStatisticPath& path, const NYTr
             THROW_ERROR_EXCEPTION(
                 "Invalid statistics type: expected map or integral type but found sample of type %Qlv",
                 sample->GetType())
-                << TErrorAttribute("sample", sample);
+                .With("sample", sample);
     }
 }
 
@@ -170,7 +170,7 @@ TStatistics::TSummaryRange TStatistics::GetRangeByPrefix(const TStatisticPath& p
     // lower_bound is equivalent to upper_bound in this case, but upper_bound is semantically better.
     auto begin = Data().upper_bound(prefix);
     // This will effectively return an iterator to the first path not starting with "`prefix`/".
-    auto end = Data().lower_bound(ParseStatisticPath(prefix.Path() + TString(TChar(Delimiter + 1))).ValueOrThrow());
+    auto end = Data().lower_bound(ParseStatisticPath(prefix.Path() + std::string(1, TChar(Delimiter + 1))).ValueOrThrow());
     return TSummaryRange(begin, end);
 }
 
@@ -217,7 +217,7 @@ i64 GetNumericValue(const TStatistics& statistics, const TStatisticPath& path)
     auto value = FindNumericValue(statistics, path);
     if (!value) {
         THROW_ERROR_EXCEPTION("Statistics is not present")
-            << TErrorAttribute("requested_path", path);
+            .With("requested_path", path);
     } else {
         return *value;
     }
@@ -236,8 +236,8 @@ std::optional<TSummary> FindSummary(const TStatistics& statistics, const TStatis
     if (iterator != data.end() && iterator->first != path &&
         iterator->first.StartsWith(path))
     {
-        THROW_ERROR_EXCEPTION("Invalid statistics type: cannot get summary since it is a map") <<
-            TErrorAttribute("requested_path", path);
+        THROW_ERROR_EXCEPTION("Invalid statistics type: cannot get summary since it is a map")
+            .With("requested_path", path);
     } else if (iterator == data.end() || iterator->first != path) {
         return std::nullopt;
     } else {
@@ -405,7 +405,7 @@ private:
     i64 FilledSummaryFields_ = 0;
     bool LastFound_ = false;
 
-    TString LastKey_;
+    std::string LastKey_;
 
     bool FirstMapOpen_ = false;
     bool AtSummaryMap_ = false;

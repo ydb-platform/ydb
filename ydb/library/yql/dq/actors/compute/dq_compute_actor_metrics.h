@@ -14,24 +14,14 @@ public:
 
     void ReportEvent(ui32 type, TAutoPtr<NActors::IEventHandle>& ev);
     void ReportAsyncInputData(ui32 id, ui64 rows, ui64 bytes, TMaybe<TInstant> watermark);
-    void ReportInputChannelWatermark(ui32 id, ui64 dataSize, TMaybe<TInstant> watermark);
-    void ReportInjectedToTaskRunnerWatermark(TInstant watermark);
-    void ReportInjectedToOutputsWatermark(TInstant watermark);
-
 private:
     NMonitoring::TDynamicCounterPtr GetAsyncInputCounters(ui32 id);
-    NMonitoring::TDynamicCounterPtr GetInputChannelCounters(ui32 id);
     void ReportInputWatermarkMetrics(NMonitoring::TDynamicCounterPtr& counters, TInstant watermark);
 
 private:
     bool Enable = false;
     NMonitoring::TDynamicCounterPtr ComputeActorSubgroup;
     THashMap<ui32, NMonitoring::TDynamicCounterPtr> AsyncInputsCounters;
-    THashMap<ui32, NMonitoring::TDynamicCounterPtr> InputChannelsCounters;
-    NMonitoring::TDynamicCounters::TCounterPtr WatermarkCt;
-    NMonitoring::TDynamicCounters::TCounterPtr InjectedToTaskRunnerWatermark;
-    NMonitoring::TDynamicCounters::TCounterPtr InjectedToOutputsWatermark;
-    NMonitoring::THistogramPtr WatermarkCollectLatency;
     NMonitoring::THistogramPtr InputRows;
     NMonitoring::THistogramPtr InputBytes;
 
@@ -54,8 +44,6 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr NewAsyncInputDataArrived;
     NMonitoring::TDynamicCounters::TCounterPtr AsyncInputError;
     NMonitoring::TDynamicCounters::TCounterPtr OtherEvent;
-
-    THashMap<TInstant, TInstant> WatermarkStartedAt;
 };
 
 }

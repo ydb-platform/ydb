@@ -1,0 +1,57 @@
+pragma config.flags("OptimizerFlags", "OptimizeXNotX");
+pragma warning("disable","4510");
+
+SELECT
+
+    (k1 AND NOT k1),
+    (k1 AND NOT k1 AND k2),
+    (k1 AND NOT k1 AND k2opt),
+
+    (k1opt AND NOT k1opt),
+    (k1opt AND NOT k1opt AND k2),
+    (k1opt AND NOT k1opt AND k2opt),
+
+    (k1 OR NOT k1),
+    (k1 OR NOT k1 OR k2),
+    (k1 OR NOT k1 OR k2opt),
+
+    (k1opt OR NOT k1opt),
+    (k1opt OR NOT k1opt OR k2),
+    (k1opt OR NOT k1opt OR k2opt),
+
+    (YQL::Unessential(k1, TRUE) AND NOT k1),
+    (k1 AND NOT YQL::Unessential(k1, TRUE)),
+    (k1 AND YQL::Unessential(NOT k1, TRUE)),
+
+    (YQL::Unessential(k1, TRUE) OR NOT k1),
+    (k1 OR NOT YQL::Unessential(k1, TRUE)),
+    (k1 OR YQL::Unessential(NOT k1, TRUE)),
+
+    (k1opt AND     k1 AND     k2 AND NOT k1 AND k2opt),
+    (k1opt AND NOT k1 AND     k2 AND     k1 AND k2opt),
+    (k1opt AND     k1 AND NOT k1 AND     k2 AND k2opt),
+    (k1opt AND NOT k1 AND     k1 AND     k2 AND k2opt),
+
+    (k1opt OR     k1 OR     k2 OR NOT k1 OR k2opt),
+    (k1opt OR NOT k1 OR     k2 OR     k1 OR k2opt),
+    (k1opt OR     k1 OR NOT k1 OR     k2 OR k2opt),
+    (k1opt OR NOT k1 OR     k1 OR     k2 OR k2opt),
+
+    k1 AND NOT k1 AND ENSURE(k2, FALSE, "wont_fail"),
+    k1 AND ENSURE(k2, FALSE, "wont_fail") AND NOT k1,
+    ENSURE(k2, FALSE, "wont_fail") AND k1 AND NOT k1,
+    ENSURE(k1, FALSE, "wont_fail") AND NOT ENSURE(k1, FALSE, "wont_fail"),
+
+FROM
+    AS_TABLE([
+        <|k1: TRUE,  k1opt: TRUE,  k2: TRUE,  k2opt: TRUE|>,
+        <|k1: TRUE,  k1opt: TRUE,  k2: FALSE, k2opt: FALSE|>,
+        <|k1: TRUE,  k1opt: TRUE,  k2: FALSE, k2opt: NULL|>,
+        <|k1: FALSE, k1opt: FALSE, k2: TRUE,  k2opt: TRUE|>,
+        <|k1: FALSE, k1opt: FALSE, k2: FALSE, k2opt: FALSE|>,
+        <|k1: FALSE, k1opt: FALSE, k2: FALSE, k2opt: NULL|>,
+        <|k1: FALSE, k1opt: NULL,  k2: TRUE,  k2opt: TRUE|>,
+        <|k1: FALSE, k1opt: NULL,  k2: FALSE, k2opt: FALSE|>,
+        <|k1: FALSE, k1opt: NULL,  k2: FALSE, k2opt: NULL|>,
+    ])
+;

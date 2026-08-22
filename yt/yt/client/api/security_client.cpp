@@ -1,8 +1,23 @@
 #include "security_client.h"
+#include "private.h"
 
 namespace NYT::NApi {
 
 using namespace NYTree;
+
+////////////////////////////////////////////////////////////////////////////////
+
+constinit const auto Logger = ApiLogger;
+
+////////////////////////////////////////////////////////////////////////////////
+
+void Serialize(const TGetCurrentUserResult& result, NYson::IYsonConsumer* consumer)
+{
+    BuildYsonFluently(consumer)
+        .BeginMap()
+            .Item("user").Value(result.User)
+        .EndMap();
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -46,8 +61,16 @@ TError TCheckPermissionResult::ToError(
             return error;
         }
 
-        default:
-            YT_ABORT();
+        default: {
+            auto error = TError(
+                NSecurityClient::EErrorCode::AuthorizationError,
+                "Unexpected security action %Qlv in permission check result for user %Qv",
+                Action,
+                user);
+            YT_TLOG_ALERT("Unexpected security action in permission check result")
+                .With(error);
+            return error;
+        }
     }
 }
 
@@ -84,11 +107,6 @@ TError TCheckPermissionByAclResult::ToError(const std::string& user, EPermission
         default:
             YT_ABORT();
     }
-}
-
-void TGetCurrentUserResult::Register(TRegistrar registrar)
-{
-    registrar.Parameter("user", &TThis::User);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

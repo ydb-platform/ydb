@@ -1,7 +1,7 @@
 #include "interconnect.h"
 #include "interconnect_impl.h"
-#include "interconnect_address.h"
 #include "interconnect_nameserver_base.h"
+#include "interconnect_stream.h"
 #include "events_local.h"
 
 #include <ydb/library/actors/core/hfunc.h>

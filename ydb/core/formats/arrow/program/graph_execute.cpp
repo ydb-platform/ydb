@@ -66,14 +66,14 @@ TCompiledGraph::TCompiledGraph(const NOptimization::TGraph& original, const ICol
         THashMap<ui32, ui64> weightByNode;
         THashSet<ui32> nextNodeIds;
         for (auto&& i : currentNodes) {
-            for (auto&& near : i->GetOutputEdges()) {
-                if (!nextNodeIds.emplace(near->GetIdentifier()).second) {
+            for (auto&& neighbor : i->GetOutputEdges()) {
+                if (!nextNodeIds.emplace(neighbor->GetIdentifier()).second) {
                     continue;
                 }
-                AFL_VERIFY(!near->HasWeight());
+                AFL_VERIFY(!neighbor->HasWeight());
                 bool hasWeight = true;
                 ui64 sumWeight = 0;
-                for (auto&& test : near->GetInputEdges()) {
+                for (auto&& test : neighbor->GetInputEdges()) {
                     if (!test->HasWeight()) {
                         hasWeight = false;
                         break;
@@ -81,8 +81,8 @@ TCompiledGraph::TCompiledGraph(const NOptimization::TGraph& original, const ICol
                     sumWeight += test->GetWeight();
                 }
                 if (hasWeight) {
-                    weightByNode[near->GetIdentifier()] = sumWeight;
-                    nextNodes.emplace_back(near);
+                    weightByNode[neighbor->GetIdentifier()] = sumWeight;
+                    nextNodes.emplace_back(neighbor);
                 }
             }
         }
@@ -160,14 +160,14 @@ TCompiledGraph::TCompiledGraph(const NOptimization::TGraph& original, const ICol
         }
     }
     AFL_TRACE(NKikimrServices::SSA_GRAPH_EXECUTION)("graph_constructed", DebugDOT());
-    //    Cerr << DebugDOT() << Endl;
+//    Cerr << DebugDOT() << Endl;
 }
 
-TConclusionStatus TCompiledGraph::Apply(
-    const std::shared_ptr<IDataSource>& source, const std::shared_ptr<TAccessorsCollection>& resources) const {
-    TProcessorContext context(source, resources, std::nullopt, false);
+TConclusion<std::unique_ptr<TAccessorsCollection>> TCompiledGraph::Apply(
+    const std::shared_ptr<IDataSource>& source, std::unique_ptr<TAccessorsCollection>&& resources) const {
+    TProcessorContext context(source, std::move(resources), std::nullopt, false);
     NMiniKQL::TThrowingBindTerminator bind;
-    std::shared_ptr<TExecutionVisitor> visitor = std::make_shared<TExecutionVisitor>(context);
+    std::shared_ptr<TExecutionVisitor> visitor = std::make_shared<TExecutionVisitor>(std::move(context));
     for (auto it = BuildIterator(visitor); it->IsValid();) {
         {
             auto conclusion = visitor->Execute();
@@ -177,9 +177,9 @@ TConclusionStatus TCompiledGraph::Apply(
                 AFL_VERIFY(*conclusion != IResourceProcessor::EExecutionResult::InBackground);
             }
         }
-        if (resources->HasDataAndResultIsEmpty()) {
-            resources->Clear();
-            return TConclusionStatus::Success();
+        if (visitor->MutableContext().GetResources().HasDataAndResultIsEmpty()) {
+            visitor->MutableContext().MutableResources().Clear();
+            return visitor->MutableContext().ExtractResources();
         }
         {
             auto conclusion = it->Next();
@@ -188,7 +188,7 @@ TConclusionStatus TCompiledGraph::Apply(
             }
         }
     }
-    return TConclusionStatus::Success();
+    return visitor->MutableContext().ExtractResources();
 }
 
 NJson::TJsonValue TCompiledGraph::DebugJson() const {
@@ -268,7 +268,7 @@ std::shared_ptr<TCompiledGraph::TIterator> TCompiledGraph::BuildIterator(const s
     auto result = std::make_shared<TIterator>(visitor);
     auto rootNodes = FilterRoot;
     rootNodes.emplace_back(ResultRoot);
-    result->Reset(rootNodes).DetachResult();
+    result->Reset(std::move(rootNodes)).DetachResult();
     return result;
 }
 
@@ -362,8 +362,8 @@ TConclusion<bool> TCompiledGraph::TIterator::GlobalInitialize() {
     return IsValid();
 }
 
-TConclusion<bool> TCompiledGraph::TIterator::Reset(const std::vector<std::shared_ptr<TCompiledGraph::TNode>>& graphNodes) {
-    GraphNodes = graphNodes;
+TConclusion<bool> TCompiledGraph::TIterator::Reset(std::vector<std::shared_ptr<TCompiledGraph::TNode>>&& graphNodes) {
+    GraphNodes = std::move(graphNodes);
     GraphNodes.erase(std::remove_if(GraphNodes.begin(), GraphNodes.end(),
                          [](const std::shared_ptr<TCompiledGraph::TNode>& item) {
                              return !item;

@@ -41,13 +41,19 @@ public:
         const TString fingerprint = f->ToString(true);
         auto it = Fields.find(fingerprint);
         if (it == Fields.end()) {
-            AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "get_field_miss")("fp", fingerprint)("count", Fields.size())(
-                "acc", AcceptionFieldsCount);
+            YDB_LOG_TRACE_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+                {"event", "get_field_miss"},
+                {"fp", fingerprint},
+                {"count", Fields.size()},
+                {"acc", AcceptionFieldsCount});
             it = Fields.emplace(fingerprint, f).first;
         }
         if (++AcceptionFieldsCount % 1000 == 0) {
-            AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "get_field_accept")("fp", fingerprint)("count", Fields.size())(
-                "acc", AcceptionFieldsCount);
+            YDB_LOG_TRACE_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+                {"event", "get_field_accept"},
+                {"fp", fingerprint},
+                {"count", Fields.size()},
+                {"acc", AcceptionFieldsCount});
         }
         return it->second;
     }
@@ -57,8 +63,11 @@ public:
         TGuard lock(FeaturesMutex);
         auto it = ColumnFeatures.find(fingerprint);
         if (it == ColumnFeatures.end()) {
-            AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "get_column_features_miss")("fp", UrlEscapeRet(fingerprint))(
-                "count", ColumnFeatures.size())("acc", AcceptionFeaturesCount);
+            YDB_LOG_TRACE_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+                {"event", "get_column_features_miss"},
+                {"fp", UrlEscapeRet(fingerprint)},
+                {"count", ColumnFeatures.size()},
+                {"acc", AcceptionFeaturesCount});
             TConclusion<std::shared_ptr<TColumnFeatures>> resultConclusion = constructor();
             if (resultConclusion.IsFail()) {
                 return resultConclusion;
@@ -67,14 +76,17 @@ public:
             AFL_VERIFY(it->second);
         } else {
             if (++AcceptionFeaturesCount % 1000 == 0) {
-                AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "get_column_features_accept")("fp", UrlEscapeRet(fingerprint))(
-                    "count", ColumnFeatures.size())("acc", AcceptionFeaturesCount);
+                YDB_LOG_TRACE_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+                    {"event", "get_column_features_accept"},
+                    {"fp", UrlEscapeRet(fingerprint)},
+                    {"count", ColumnFeatures.size()},
+                    {"acc", AcceptionFeaturesCount});
             }
         }
         return it->second;
     }
 
-    TSchemasCache::TEntryGuard UpsertIndexInfo(const ui64 presetId, TIndexInfo&& indexInfo);
+    TSchemasCache::TEntryGuard UpsertIndexInfo(TIndexInfo&& indexInfo);
 };
 
 class TSchemaCachesManager {
@@ -82,18 +94,21 @@ private:
     class TColumnOwnerId {
     private:
         TPathId Tenant;
-        TLocalPathId Owner;
+        //Use SS path id here because two shards from different tables on a node may have the same internal path id
+        NColumnShard::TSchemeShardLocalPathId Owner;
 
     public:
-        TColumnOwnerId(const TPathId& tenant, const TLocalPathId owner)
+        TColumnOwnerId(const TPathId& tenant, const NColumnShard::TSchemeShardLocalPathId& owner)
             : Tenant(tenant)
-            , Owner(owner) {
+            , Owner(owner)
+        {
             AFL_VERIFY(!!Owner);
         }
 
-        operator size_t() const {
-            return CombineHashes(Owner, Tenant.Hash());
+        explicit operator size_t() const {
+            return CombineHashes(Owner.GetRawValue(), Tenant.Hash());
         }
+
         bool operator==(const TColumnOwnerId& other) const {
             return Tenant == other.Tenant && Owner == other.Owner;
         }
@@ -116,9 +131,18 @@ private:
         CacheByTableOwner.clear();
     }
 
+    size_t GetCachedOwnersCountImpl() {
+        TGuard lock(Mutex);
+        return CacheByTableOwner.size();
+    }
+
 public:
-    static std::shared_ptr<TSchemaObjectsCache> GetCache(const ui64 ownerPathId, const TPathId& tenantPathId) {
+    static std::shared_ptr<TSchemaObjectsCache> GetCache(const NColumnShard::TSchemeShardLocalPathId& ownerPathId, const TPathId& tenantPathId) {
         return Singleton<TSchemaCachesManager>()->GetCacheImpl(TColumnOwnerId(tenantPathId, ownerPathId));
+    }
+
+    static size_t GetCachedOwnersCount() {
+        return Singleton<TSchemaCachesManager>()->GetCachedOwnersCountImpl();
     }
 
     static void DropCaches() {

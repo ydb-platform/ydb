@@ -4,14 +4,14 @@
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/reader/position.h>
-#include <ydb/library/signals/object_counter.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/long_tx_service/public/types.h>
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/monotonic.h>
 #include <ydb/library/conclusion/result.h>
 #include <ydb/library/formats/arrow/modifier/subset.h>
-#include <ydb/core/tx/columnshard/common/path_id.h>
+#include <ydb/library/signals/object_counter.h>
 
 #include <util/generic/guid.h>
 
@@ -49,32 +49,20 @@ private:
 
     YDB_ACCESSOR(EModificationType, ModificationType, EModificationType::Replace);
     YDB_READONLY(TMonotonic, WriteStartInstant, TMonotonic::Now());
-    std::optional<ui64> LockId;
     const std::shared_ptr<TWriteFlowCounters> Counters;
-    mutable TMonotonic LastStageInstant = TMonotonic::Now();
-    mutable EWriteStage CurrentStage = EWriteStage::Created;
+    mutable NOlap::NCounters::TStateSignalsOperator<NEvWrite::EWriteStage>::TGuard StateGuard;
+
+    YDB_FLAG_ACCESSOR(Bulk, false);
 
 public:
     void OnStage(const EWriteStage stage) const;
 
     ~TWriteMeta() {
-        if (CurrentStage != EWriteStage::Replied) {
+        if (StateGuard.GetStage() != EWriteStage::Finished) {
             OnStage(EWriteStage::Aborted);
         }
     }
 
-    void SetLockId(const ui64 lockId) {
-        LockId = lockId;
-    }
-
-    ui64 GetLockIdVerified() const {
-        AFL_VERIFY(LockId);
-        return *LockId;
-    }
-
-    std::optional<ui64> GetLockIdOptional() const {
-        return LockId;
-    }
 
     bool IsGuaranteeWriter() const {
         switch (ModificationType) {
@@ -85,19 +73,20 @@ public:
             case EModificationType::Update:
             case EModificationType::Replace:
             case EModificationType::Increment:
+            case EModificationType::UpsertIncrement:
                 return false;
         }
     }
 
-    TWriteMeta(const ui64 writeId, const NColumnShard::TUnifiedPathId& pathId, const NActors::TActorId& source, const std::optional<ui32> granuleShardingVersion,
-        const TString& writingIdentifier, const std::shared_ptr<TWriteFlowCounters>& counters)
+    TWriteMeta(const ui64 writeId, const NColumnShard::TUnifiedPathId& pathId, const NActors::TActorId& source,
+        const std::optional<ui32> granuleShardingVersion, const TString& writingIdentifier, const std::shared_ptr<TWriteFlowCounters>& counters)
         : WriteId(writeId)
         , PathId(pathId)
         , Source(source)
         , GranuleShardingVersion(granuleShardingVersion)
         , Id(writingIdentifier)
-        , Counters(counters) {
-        Counters->OnWritingStart(CurrentStage);
+        , Counters(counters)
+        , StateGuard(Counters->MutableTracing().BuildGuard(NEvWrite::EWriteStage::Created)) {
     }
 };
 

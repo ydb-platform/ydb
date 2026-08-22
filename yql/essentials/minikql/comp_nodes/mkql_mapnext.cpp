@@ -1,29 +1,30 @@
 #include "mkql_mapnext.h"
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
-struct TState : public TComputationValue<TState> {
+struct TState: public TComputationValue<TState> {
     using TComputationValue::TComputationValue;
 
     std::optional<NUdf::TUnboxedValue> Prev;
     bool Finish = false;
 };
 
-class TFlowMapNextWrapper : public TStatefulFlowComputationNode<TFlowMapNextWrapper> {
-    typedef TStatefulFlowComputationNode<TFlowMapNextWrapper> TBaseComputation;
+class TFlowMapNextWrapper: public TStatefulFlowComputationNode<TFlowMapNextWrapper> {
+    using TBaseComputation = TStatefulFlowComputationNode<TFlowMapNextWrapper>;
+
 public:
     TFlowMapNextWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* flow,
                         IComputationExternalNode* item, IComputationExternalNode* nextItem, IComputationNode* newItem)
         : TBaseComputation(mutables, flow, kind, EValueRepresentation::Any)
-        , Flow(flow)
-        , Item(item)
-        , NextItem(nextItem)
-        , NewItem(newItem)
-    {}
+        , Flow_(flow)
+        , Item_(item)
+        , NextItem_(nextItem)
+        , NewItem_(newItem)
+    {
+    }
 
     NUdf::TUnboxedValue DoCalculate(NUdf::TUnboxedValue& stateValue, TComputationContext& ctx) const {
         if (!stateValue.HasValue()) {
@@ -37,13 +38,13 @@ public:
                 if (!state.Prev) {
                     return NUdf::TUnboxedValuePod::MakeFinish();
                 }
-                Item->SetValue(ctx, std::move(*state.Prev));
+                Item_->SetValue(ctx, std::move(*state.Prev));
                 state.Prev.reset();
-                NextItem->SetValue(ctx, NUdf::TUnboxedValuePod());
-                return NewItem->GetValue(ctx);
+                NextItem_->SetValue(ctx, NUdf::TUnboxedValuePod());
+                return NewItem_->GetValue(ctx);
             }
 
-            auto item = Flow->GetValue(ctx);
+            auto item = Flow_->GetValue(ctx);
             if (item.IsYield()) {
                 return item;
             }
@@ -58,10 +59,10 @@ public:
                 continue;
             }
 
-            Item->SetValue(ctx, std::move(*state.Prev));
+            Item_->SetValue(ctx, std::move(*state.Prev));
             state.Prev = item;
-            NextItem->SetValue(ctx, std::move(item));
-            result = NewItem->GetValue(ctx);
+            NextItem_->SetValue(ctx, std::move(item));
+            result = NewItem_->GetValue(ctx);
             break;
         }
 
@@ -70,57 +71,59 @@ public:
 
 private:
     void RegisterDependencies() const final {
-        if (const auto flow = FlowDependsOn(Flow)) {
-            Own(flow, Item);
-            Own(flow, NextItem);
-            DependsOn(flow, NewItem);
+        if (const auto flow = FlowDependsOn(Flow_)) {
+            Own(flow, Item_);
+            Own(flow, NextItem_);
+            DependsOn(flow, NewItem_);
         }
     }
 
-    IComputationNode* const Flow;
-    IComputationExternalNode* const Item;
-    IComputationExternalNode* const NextItem;
-    IComputationNode* const NewItem;
+    IComputationNode* const Flow_;
+    IComputationExternalNode* const Item_;
+    IComputationExternalNode* const NextItem_;
+    IComputationNode* const NewItem_;
 };
 
-class TStreamMapNextWrapper : public TMutableComputationNode<TStreamMapNextWrapper> {
-    typedef TMutableComputationNode<TStreamMapNextWrapper> TBaseComputation;
+class TStreamMapNextWrapper: public TMutableComputationNode<TStreamMapNextWrapper> {
+    using TBaseComputation = TMutableComputationNode<TStreamMapNextWrapper>;
+
 public:
     TStreamMapNextWrapper(TComputationMutables& mutables, IComputationNode* stream,
                           IComputationExternalNode* item, IComputationExternalNode* nextItem, IComputationNode* newItem)
         : TBaseComputation(mutables)
-        , Stream(stream)
-        , Item(item)
-        , NextItem(nextItem)
-        , NewItem(newItem)
-        , StateIndex(mutables.CurValueIndex++)
-    {}
+        , Stream_(stream)
+        , Item_(item)
+        , NextItem_(nextItem)
+        , NewItem_(newItem)
+        , StateIndex_(mutables.CurValueIndex++)
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        return ctx.HolderFactory.Create<TStreamValue>(ctx, Stream->GetValue(ctx), Item, NextItem, NewItem, StateIndex);
+        return ctx.HolderFactory.Create<TStreamValue>(ctx, Stream_->GetValue(ctx), Item_, NextItem_, NewItem_, StateIndex_);
     }
 
 private:
     void RegisterDependencies() const final {
-        DependsOn(Stream);
-        Own(Item);
-        Own(NextItem);
-        DependsOn(NewItem);
+        DependsOn(Stream_);
+        Own(Item_);
+        Own(NextItem_);
+        DependsOn(NewItem_);
     }
 
-    class TStreamValue : public TComputationValue<TStreamValue> {
+    class TStreamValue: public TComputationValue<TStreamValue> {
     public:
         using TBase = TComputationValue<TStreamValue>;
 
         TStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, NUdf::TUnboxedValue&& stream,
                      IComputationExternalNode* item, IComputationExternalNode* nextItem, IComputationNode* newItem, ui32 stateIndex)
             : TBase(memInfo)
-            , CompCtx(compCtx)
-            , Stream(std::move(stream))
-            , Item(item)
-            , NextItem(nextItem)
-            , NewItem(newItem)
-            , StateIndex(stateIndex)
+            , CompCtx_(compCtx)
+            , Stream_(std::move(stream))
+            , Item_(item)
+            , NextItem_(nextItem)
+            , NewItem_(newItem)
+            , StateIndex_(stateIndex)
         {
         }
 
@@ -130,14 +133,15 @@ private:
         }
 
         NUdf::TUnboxedValue GetTraverseItem(ui32) const final {
-            return Stream;
+            return Stream_;
         }
 
         NUdf::TUnboxedValue Save() const final {
             return NUdf::TUnboxedValuePod::Zero();
         }
 
-        void Load(const NUdf::TStringRef&) final {}
+        void Load(const NUdf::TStringRef&) final {
+        }
 
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) final {
             auto& state = GetState();
@@ -146,16 +150,16 @@ private:
                     if (!state.Prev) {
                         return NUdf::EFetchStatus::Finish;
                     }
-                    Item->SetValue(CompCtx, std::move(*state.Prev));
+                    Item_->SetValue(CompCtx_, std::move(*state.Prev));
                     state.Prev.reset();
-                    NextItem->SetValue(CompCtx, NUdf::TUnboxedValuePod());
+                    NextItem_->SetValue(CompCtx_, NUdf::TUnboxedValuePod());
 
-                    result = NewItem->GetValue(CompCtx);
+                    result = NewItem_->GetValue(CompCtx_);
                     return NUdf::EFetchStatus::Ok;
                 }
 
                 NUdf::TUnboxedValue item;
-                const auto status = Stream.Fetch(item);
+                const auto status = Stream_.Fetch(item);
                 if (status == NUdf::EFetchStatus::Yield) {
                     return status;
                 }
@@ -170,39 +174,39 @@ private:
                     continue;
                 }
 
-                Item->SetValue(CompCtx, std::move(*state.Prev));
+                Item_->SetValue(CompCtx_, std::move(*state.Prev));
                 state.Prev = item;
-                NextItem->SetValue(CompCtx, std::move(item));
-                result = NewItem->GetValue(CompCtx);
+                NextItem_->SetValue(CompCtx_, std::move(item));
+                result = NewItem_->GetValue(CompCtx_);
                 break;
             }
             return NUdf::EFetchStatus::Ok;
         }
 
         TState& GetState() const {
-            auto& result = CompCtx.MutableValues[StateIndex];
+            auto& result = CompCtx_.MutableValues[StateIndex_];
             if (!result.HasValue()) {
-                result = CompCtx.HolderFactory.Create<TState>();
+                result = CompCtx_.HolderFactory.Create<TState>();
             }
             return *static_cast<TState*>(result.AsBoxed().Get());
         }
 
-        TComputationContext& CompCtx;
-        const NUdf::TUnboxedValue Stream;
-        IComputationExternalNode* const Item;
-        IComputationExternalNode* const NextItem;
-        IComputationNode* const NewItem;
-        const ui32 StateIndex;
+        TComputationContext& CompCtx_;
+        const NUdf::TUnboxedValue Stream_;
+        IComputationExternalNode* const Item_;
+        IComputationExternalNode* const NextItem_;
+        IComputationNode* const NewItem_;
+        const ui32 StateIndex_;
     };
 
-    IComputationNode* const Stream;
-    IComputationExternalNode* const Item;
-    IComputationExternalNode* const NextItem;
-    IComputationNode* const NewItem;
-    const ui32 StateIndex;
+    IComputationNode* const Stream_;
+    IComputationExternalNode* const Item_;
+    IComputationExternalNode* const NextItem_;
+    IComputationNode* const NewItem_;
+    const ui32 StateIndex_;
 };
 
-}
+} // namespace
 
 IComputationNode* WrapMapNext(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 4, "Expected 4 args, got " << callable.GetInputsCount());
@@ -222,5 +226,4 @@ IComputationNode* WrapMapNext(TCallable& callable, const TComputationNodeFactory
     THROW yexception() << "Expected flow or stream.";
 }
 
-}
-}
+} // namespace NKikimr::NMiniKQL

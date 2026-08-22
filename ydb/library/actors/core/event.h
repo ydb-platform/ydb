@@ -12,6 +12,10 @@
 #include <util/system/hp_timer.h>
 #include <util/generic/maybe.h>
 
+namespace NInterconnect::NRdma {
+    class IMemPool;
+}
+
 namespace NActors {
     class TChunkSerializer;
     class IActor;
@@ -33,11 +37,14 @@ namespace NActors {
         }
         virtual ui32 Type() const = 0;
         virtual bool SerializeToArcadiaStream(TChunkSerializer*) const = 0;
+        virtual std::optional<TRope> SerializeToRope(IRcBufAllocator*) const {
+            return std::nullopt;
+        }
         virtual bool IsSerializable() const = 0;
         virtual ui32 CalculateSerializedSizeCached() const {
             return CalculateSerializedSize();
         }
-        virtual TEventSerializationInfo CreateSerializationInfo() const { return {}; }
+        virtual TEventSerializationInfo CreateSerializationInfo(bool /*allowExternalDataChannel*/) const { return {}; }
     };
 
     template <typename TEventType>
@@ -126,6 +133,7 @@ namespace NActors {
             return x;
         }
 
+        // Note that ChannelBits bits in Flags are reserved for channel
         enum EFlags: ui32 {
             FlagTrackDelivery = 1 << 0,
             FlagForwardOnNondelivery = 1 << 1,
@@ -134,6 +142,11 @@ namespace NActors {
             FlagGenerateUnsureUndelivered = 1 << 4,
             FlagExtendedFormat = 1 << 5,
             FlagDebugTrackReceive = 1 << 6,
+            FlagFailFastWhenDisconnected = 1 << 7,
+            FlagDisablePayloadChecksums = 1 << 8, // When set, IC will not calculate or check XDC/RDMA checksums
+            // System messages are handled by the actor runtime and must never
+            // reach actor awaiters or the user state function.
+            FlagSystemMessage = 1 << 9,
         };
         using TEventFlags = ui32;
 
@@ -303,6 +316,7 @@ namespace NActors {
 
         TIntrusivePtr<TEventSerializedData> GetChainBuffer();
         TIntrusivePtr<TEventSerializedData> ReleaseChainBuffer();
+        void Preserialize();
 
         ui32 GetSize() const {
             if (Buffer) {

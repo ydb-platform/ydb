@@ -73,3 +73,13 @@ scrape_configs:
       - source_labels: ["__name__"]
         target_label: "__name__"
         replacement: "interconnect_$1"
+  - job_name: "yq_dynamic"
+    metrics_path: "/counters/counters=yq/prometheus"
+    static_configs:
+      - targets: ["localhost:${TARGET_PORT}"]
+        labels:
+          container: ydb-dynamic
+    metric_relabel_configs:
+      - source_labels: ["__name__"]
+        target_label: "__name__"
+        replacement: "yq_$1"

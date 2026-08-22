@@ -18,13 +18,13 @@ import of Hypothesis itself from each subprocess which must import the worker fu
 
 import importlib
 import sys
-from typing import TYPE_CHECKING, Callable, Optional, Set, Tuple
+from collections.abc import Callable
+from typing import TYPE_CHECKING, TypeAlias
 
 if TYPE_CHECKING:
     from multiprocessing import Queue
-    from typing import TypeAlias
 
-FTZCulprits: "TypeAlias" = Tuple[Optional[bool], Set[str]]
+FTZCulprits: TypeAlias = tuple[bool | None, set[str]]
 
 
 KNOWN_EVER_CULPRITS = (
@@ -52,7 +52,7 @@ def run_in_process(fn: Callable[..., FTZCulprits], *args: object) -> FTZCulprits
     import multiprocessing as mp
 
     mp.set_start_method("spawn", force=True)
-    q: "Queue[FTZCulprits]" = mp.Queue()
+    q: Queue[FTZCulprits] = mp.Queue()
     p = mp.Process(target=target, args=(q, fn, *args))
     p.start()
     retval = q.get()
@@ -83,8 +83,8 @@ def modules_imported_by(mod: str) -> FTZCulprits:
 
 # We don't want to redo all the expensive process-spawning checks when we've already
 # done them, so we cache known-good packages and a known-FTZ result if we have one.
-KNOWN_FTZ = None
-CHECKED_CACHE = set()
+KNOWN_FTZ: str | None = None
+CHECKED_CACHE: set[str] = set()
 
 
 def identify_ftz_culprits() -> str:
@@ -104,7 +104,7 @@ def identify_ftz_culprits() -> str:
     # that importing them in a new process sets the FTZ state.  As a heuristic, we'll
     # start with packages known to have ever enabled FTZ, then top-level packages as
     # a way to eliminate large fractions of the search space relatively quickly.
-    def key(name: str) -> Tuple[bool, int, str]:
+    def key(name: str) -> tuple[bool, int, str]:
         """Prefer known-FTZ modules, then top-level packages, then alphabetical."""
         return (name not in KNOWN_EVER_CULPRITS, name.count("."), name)
 
@@ -156,4 +156,4 @@ if __name__ == "__main__":
     # change the last element of key from `name` to `-len(name)` so that we check
     # grequests before gevent.
     # KNOWN_EVER_CULPRITS = [c for c in KNOWN_EVER_CULPRITS if c != "gevent"]
-    print(identify_ftz_culprits())
+    print(identify_ftz_culprits())  # noqa: T201

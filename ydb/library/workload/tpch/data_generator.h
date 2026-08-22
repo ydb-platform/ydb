@@ -9,7 +9,7 @@ class TTpchWorkloadDataInitializerGenerator: public TWorkloadDataInitializerBase
 public:
     TTpchWorkloadDataInitializerGenerator(const TTpchWorkloadParams& params);
     void ConfigureOpts(NLastGetopt::TOpts& opts) override;
-    YDB_READONLY(ui64, Scale, 1);
+    YDB_READONLY(double, Scale, 1);
     YDB_READONLY_DEF(TSet<TString>, Tables);
     YDB_READONLY(ui32, ProcessIndex, 0);
     YDB_READONLY(ui32, ProcessCount, 1);

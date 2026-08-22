@@ -25,13 +25,15 @@ private:
 
     static void OnInternalResult(const NThreading::TFuture<TResponse>& f, typename IExternalController<TDialogPolicy>::TPtr externalController) {
         if (!f.HasValue() || f.HasException()) {
-            ALS_ERROR(NKikimrServices::METADATA_PROVIDER) << "cannot receive result on initialization";
+            YDB_LOG_ERROR_COMP(NKikimrServices::METADATA_PROVIDER, "Cannot receive result on initialization");
             externalController->OnRequestFailed(Ydb::StatusIds::INTERNAL_ERROR, "cannot receive result from future");
             return;
         }
         TResponse response = f.GetValue();
         if (!TOperatorChecker<TResponse>::IsSuccess(response)) {
-            AFL_ERROR(NKikimrServices::METADATA_PROVIDER)("event", "unexpected reply")("response", response.DebugString());
+            YDB_LOG_ERROR_COMP(NKikimrServices::METADATA_PROVIDER, "",
+                {"event", "unexpected reply"},
+                {"response", response.DebugString()});
             NYql::TIssues issues;
             NYql::IssuesFromMessage(response.operation().issues(), issues);
             externalController->OnRequestFailed(response.operation().status(), issues.ToString());
@@ -43,7 +45,7 @@ public:
     void Start() const {
         auto request = ProtoRequest;
         using TRpcRequest = NGRpcService::TGrpcRequestOperationCall<TRequest, TResponse>;
-        auto result = NRpcService::DoLocalRpc<TRpcRequest>(std::move(request), AppData()->TenantName, UserToken.SerializeAsString(), TActivationContext::ActorSystem());
+        auto result = NRpcService::DoLocalRpc<TRpcRequest>(std::move(request), AppData()->TenantName, UserToken.SerializeAsString(), TActivationContext::ActorSystem(), /*internalCall*/ true);
         auto extController = ExternalController;
         const auto replyCallback = [extController](const NThreading::TFuture<TResponse>& f) {
             TYDBOneRequestSender<TDialogPolicy>::OnInternalResult(f, extController);
@@ -169,7 +171,9 @@ public:
     }
 
     virtual void OnRequestFailed(Ydb::StatusIds::StatusCode /*status*/, const TString& errorMessage) override {
-        ALS_ERROR(NKikimrServices::METADATA_PROVIDER) << "cannot close session with id: " << SessionContext->GetSessionId() << ", reason: " << errorMessage;
+        YDB_LOG_ERROR_COMP(NKikimrServices::METADATA_PROVIDER, "Cannot close session with",
+            {"id", SessionContext->GetSessionId()},
+            {"reason", errorMessage});
     }
 };
 
@@ -214,6 +218,7 @@ class TYQLRequestExecutor {
 private:
     static TDialogYQLRequest::TRequest BuildRequest(const TString& request, const bool readOnly) {
         TDialogYQLRequest::TRequest pRequest;
+        pRequest.mutable_query_cache_policy()->set_keep_in_cache(true);
         pRequest.mutable_query()->set_yql_text(request);
         if (readOnly) {
             pRequest.mutable_tx_control()->mutable_begin_tx()->mutable_snapshot_read_only();

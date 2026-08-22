@@ -1,15 +1,20 @@
 #include "metrics_actor.h"
-#include "events.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
-#include <library/cpp/cache/cache.h>
 
+#include <library/cpp/cache/cache.h>
 #include <library/cpp/monlib/metrics/histogram_collector.h>
 
 namespace NKikimr::NHttpProxy {
+
+    namespace {
+
+        const NMonitoring::TBucketBounds HISTOGRAM_BUCKETS_BOUNDS = {10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 30000};
+
+    } // namespace
 
     using namespace NActors;
 
@@ -67,7 +72,7 @@ namespace NKikimr::NHttpProxy {
             group = group->GetSubgroup(ev->Get()->Labels[i].first, ev->Get()->Labels[i].second);
         }
         auto counter = group->GetNamedHistogram(ev->Get()->Labels.back().first, ev->Get()->Labels.back().second,
-                                                    NMonitoring::ExplicitHistogram({100, 200, 500, 1000, 2000, 5000, 10000, 30000}));
+                                                    NMonitoring::ExplicitHistogram(HISTOGRAM_BUCKETS_BOUNDS));
         counter->Collect(ev->Get()->Value, ev->Get()->Count);
     }
 
@@ -76,4 +81,4 @@ namespace NKikimr::NHttpProxy {
         return new TMetricsActor(settings);
     }
 
-}
+} // namespace NKikimr::NHttpProxy

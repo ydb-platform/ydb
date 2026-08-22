@@ -76,6 +76,8 @@ bool ValidateAuth(const NKikimrSchemeOp::TAuth& auth,
             return CheckAuth("AWS", availableAuthMethods, errStr);
         case NKikimrSchemeOp::TAuth::kToken:
             return CheckAuth("TOKEN", availableAuthMethods, errStr);
+        case NKikimrSchemeOp::TAuth::kIam:
+            return CheckAuth("IAM", availableAuthMethods, errStr);
         case NKikimrSchemeOp::TAuth::kNone:
             return CheckAuth("NONE", availableAuthMethods, errStr);
     }
@@ -85,6 +87,12 @@ bool ValidateAuth(const NKikimrSchemeOp::TAuth& auth,
 bool Validate(const NKikimrSchemeOp::TExternalDataSourceDescription& desc,
               const NExternalSource::IExternalSourceFactory::TPtr& factory,
               TString& errStr) {
+
+    if (!factory) {
+        errStr = "Internal error. External source factory is not set, please contact internal support";
+        return false;
+    }
+
     try {
         const auto source = factory->GetOrCreate(desc.GetSourceType());
         source->ValidateExternalDataSource(desc.SerializeAsString());
@@ -99,16 +107,15 @@ bool Validate(const NKikimrSchemeOp::TExternalDataSourceDescription& desc,
     }
 }
 
-TExternalDataSourceInfo::TPtr CreateExternalDataSource(
-    const NKikimrSchemeOp::TExternalDataSourceDescription& desc, ui64 alterVersion) {
-    TExternalDataSourceInfo::TPtr externalDataSoureInfo = new TExternalDataSourceInfo;
-    externalDataSoureInfo->SourceType                   = desc.GetSourceType();
-    externalDataSoureInfo->Location                     = desc.GetLocation();
-    externalDataSoureInfo->Installation                 = desc.GetInstallation();
-    externalDataSoureInfo->AlterVersion                 = alterVersion;
-    externalDataSoureInfo->Auth.CopyFrom(desc.GetAuth());
-    externalDataSoureInfo->Properties.CopyFrom(desc.GetProperties());
-    return externalDataSoureInfo;
+TExternalDataSourceInfo::TPtr CreateExternalDataSource(const NKikimrSchemeOp::TExternalDataSourceDescription& desc, ui64 alterVersion) {
+    auto externalDataSourceInfo = MakeIntrusive<TExternalDataSourceInfo>();
+    externalDataSourceInfo->SourceType = desc.GetSourceType();
+    externalDataSourceInfo->Location = desc.GetLocation();
+    externalDataSourceInfo->Installation = desc.GetInstallation();
+    externalDataSourceInfo->AlterVersion = alterVersion;
+    externalDataSourceInfo->Auth = desc.GetAuth();
+    externalDataSourceInfo->Properties = desc.GetProperties();
+    return externalDataSourceInfo;
 }
 
 } // namespace NKikimr::NSchemeShard::NExternalDataSource

@@ -1,0 +1,15 @@
+package NYql;
+option java_package = "ru.yandex.yql.proto";
+
+import "yt/yql/providers/yt/proto/http_config.proto";
+
+message TYtIdmConfig {
+    required string Host = 1;
+    required uint32 Port = 2;
+    required string TvmAlias = 3;
+    optional TYtHttpClientConfig HttpClientConfig = 4;
+}
+
+message TYtAccessProviderConfig {
+    optional TYtIdmConfig Idm = 1;
+}

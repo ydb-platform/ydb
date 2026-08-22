@@ -78,6 +78,20 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TResetDynamicallyPropagatedMasterCellsCommand
+    : public TTypedCommand<NApi::TResetDynamicallyPropagatedMasterCellsOptions>
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TResetDynamicallyPropagatedMasterCellsCommand);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TDiscombobulateNonvotingPeersCommand
     : public TTypedCommand<NApi::TDiscombobulateNonvotingPeersOptions>
 {
@@ -267,7 +281,7 @@ private:
     NApi::EMaintenanceComponent Component_;
     std::string Address_;
     NApi::EMaintenanceType Type_;
-    TString Comment_;
+    std::string Comment_;
     // COMPAT(kvk1920): Compatibility with pre-24.2 HTTP clients.
     bool SupportsPerTargetResponse_;
 

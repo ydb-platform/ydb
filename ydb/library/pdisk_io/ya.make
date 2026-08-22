@@ -1,6 +1,7 @@
 LIBRARY()
 
 GENERATE_ENUM_SERIALIZATION(aio.h)
+GENERATE_ENUM_SERIALIZATION(uring_router.h)
 
 IF (OS_LINUX)
     PEERDIR(
@@ -10,6 +11,7 @@ IF (OS_LINUX)
     SRCS(
         aio_linux.cpp
         file_params_linux.cpp
+        uring_router.cpp
     )
 ELSE(OS_LINUX)
     SRCS(
@@ -32,6 +34,7 @@ ENDIF(OS_WINDOWS)
 PEERDIR(
     ydb/library/actors/core
     ydb/library/actors/wilson
+    library/cpp/containers/stack_vector
     library/cpp/monlib/dynamic_counters
     ydb/core/debug
     ydb/library/pdisk_io/protos
@@ -49,8 +52,14 @@ SRCS(
     drivedata.h
     sector_map.cpp
     sector_map.h
+    uring_operation.h
+    uring_operation.cpp
     wcache.cpp
     wcache.h
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

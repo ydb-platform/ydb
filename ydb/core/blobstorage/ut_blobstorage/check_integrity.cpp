@@ -299,7 +299,7 @@ Y_UNIT_TEST_SUITE(CheckIntegrityBlock42) {
         UNIT_ASSERT(result->PlacementStatus == TEvBlobStorage::TEvCheckIntegrityResult::PS_OK);
         UNIT_ASSERT(result->DataStatus == TEvBlobStorage::TEvCheckIntegrityResult::DS_OK);
 
-        Cerr << result->DataErrorInfo << Endl;
+        Cerr << result->DataInfo << Endl;
     }
 
     Y_UNIT_TEST(DataOkAdditionalEqualParts) {
@@ -316,7 +316,7 @@ Y_UNIT_TEST_SUITE(CheckIntegrityBlock42) {
         UNIT_ASSERT(result->PlacementStatus == TEvBlobStorage::TEvCheckIntegrityResult::PS_OK);
         UNIT_ASSERT(result->DataStatus == TEvBlobStorage::TEvCheckIntegrityResult::DS_OK);
 
-        Cerr << result->DataErrorInfo << Endl;
+        Cerr << result->DataInfo << Endl;
     }
 
     Y_UNIT_TEST(DataErrorAdditionalUnequalParts) {
@@ -333,7 +333,7 @@ Y_UNIT_TEST_SUITE(CheckIntegrityBlock42) {
         UNIT_ASSERT(result->PlacementStatus == TEvBlobStorage::TEvCheckIntegrityResult::PS_OK);
         UNIT_ASSERT(result->DataStatus == TEvBlobStorage::TEvCheckIntegrityResult::DS_ERROR);
 
-        Cerr << result->DataErrorInfo << Endl;
+        Cerr << result->DataInfo << Endl;
     }
 
     Y_UNIT_TEST(DataErrorSixPartsOneBroken) {
@@ -349,7 +349,7 @@ Y_UNIT_TEST_SUITE(CheckIntegrityBlock42) {
         UNIT_ASSERT(result->PlacementStatus == TEvBlobStorage::TEvCheckIntegrityResult::PS_OK);
         UNIT_ASSERT(result->DataStatus == TEvBlobStorage::TEvCheckIntegrityResult::DS_ERROR);
 
-        Cerr << result->DataErrorInfo << Endl;
+        Cerr << result->DataInfo << Endl;
     }
 
     Y_UNIT_TEST(DataErrorSixPartsTwoBroken) {
@@ -366,7 +366,7 @@ Y_UNIT_TEST_SUITE(CheckIntegrityBlock42) {
         UNIT_ASSERT(result->PlacementStatus == TEvBlobStorage::TEvCheckIntegrityResult::PS_OK);
         UNIT_ASSERT(result->DataStatus == TEvBlobStorage::TEvCheckIntegrityResult::DS_ERROR);
 
-        Cerr << result->DataErrorInfo << Endl;
+        Cerr << result->DataInfo << Endl;
     }
 
     Y_UNIT_TEST(DataOkErasureFiveParts) {
@@ -381,7 +381,7 @@ Y_UNIT_TEST_SUITE(CheckIntegrityBlock42) {
         UNIT_ASSERT(result->PlacementStatus == TEvBlobStorage::TEvCheckIntegrityResult::PS_BLOB_IS_RECOVERABLE);
         UNIT_ASSERT(result->DataStatus == TEvBlobStorage::TEvCheckIntegrityResult::DS_OK);
 
-        Cerr << result->DataErrorInfo << Endl;
+        Cerr << result->DataInfo << Endl;
     }
 
     Y_UNIT_TEST(DataErrorFivePartsOneBroken) {
@@ -397,7 +397,7 @@ Y_UNIT_TEST_SUITE(CheckIntegrityBlock42) {
         UNIT_ASSERT(result->PlacementStatus == TEvBlobStorage::TEvCheckIntegrityResult::PS_BLOB_IS_RECOVERABLE);
         UNIT_ASSERT(result->DataStatus == TEvBlobStorage::TEvCheckIntegrityResult::DS_ERROR);
 
-        Cerr << result->DataErrorInfo << Endl;
+        Cerr << result->DataInfo << Endl;
     }
 
     Y_UNIT_TEST(DataErrorHeavySixPartsWithManyBroken) {
@@ -415,7 +415,7 @@ Y_UNIT_TEST_SUITE(CheckIntegrityBlock42) {
         UNIT_ASSERT(result->PlacementStatus == TEvBlobStorage::TEvCheckIntegrityResult::PS_OK);
         UNIT_ASSERT(result->DataStatus == TEvBlobStorage::TEvCheckIntegrityResult::DS_ERROR);
 
-        Cerr << result->DataErrorInfo << Endl;
+        Cerr << result->DataInfo << Endl;
     }
 
     Y_UNIT_TEST(DataStatusUnknown) {
@@ -438,7 +438,7 @@ Y_UNIT_TEST_SUITE(CheckIntegrityBlock42) {
         UNIT_ASSERT(result->PlacementStatus == TEvBlobStorage::TEvCheckIntegrityResult::PS_UNKNOWN);
         UNIT_ASSERT(result->DataStatus == TEvBlobStorage::TEvCheckIntegrityResult::DS_UNKNOWN);
 
-        Cerr << result->DataErrorInfo << Endl;
+        Cerr << result->DataInfo << Endl;
     }
 }
 
@@ -560,7 +560,7 @@ Y_UNIT_TEST_SUITE(CheckIntegrityMirror3dc) {
         UNIT_ASSERT(result->PlacementStatus == TEvBlobStorage::TEvCheckIntegrityResult::PS_OK);
         UNIT_ASSERT(result->DataStatus == TEvBlobStorage::TEvCheckIntegrityResult::DS_OK);
 
-        Cerr << result->DataErrorInfo << Endl;
+        Cerr << result->DataInfo << Endl;
     }
 
     Y_UNIT_TEST(DataErrorOneCopy) {
@@ -576,7 +576,7 @@ Y_UNIT_TEST_SUITE(CheckIntegrityMirror3dc) {
         UNIT_ASSERT(result->PlacementStatus == TEvBlobStorage::TEvCheckIntegrityResult::PS_OK);
         UNIT_ASSERT(result->DataStatus == TEvBlobStorage::TEvCheckIntegrityResult::DS_ERROR);
 
-        Cerr << result->DataErrorInfo << Endl;
+        Cerr << result->DataInfo << Endl;
     }
 
     Y_UNIT_TEST(DataErrorManyCopies) {
@@ -594,7 +594,7 @@ Y_UNIT_TEST_SUITE(CheckIntegrityMirror3dc) {
         UNIT_ASSERT(result->PlacementStatus == TEvBlobStorage::TEvCheckIntegrityResult::PS_OK);
         UNIT_ASSERT(result->DataStatus == TEvBlobStorage::TEvCheckIntegrityResult::DS_ERROR);
 
-        Cerr << result->DataErrorInfo << Endl;
+        Cerr << result->DataInfo << Endl;
     }
 }
 

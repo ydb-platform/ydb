@@ -26,9 +26,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(6.6.7)
+VERSION(6.16)
 
-ORIGINAL_SOURCE(mirror://kernel/linux/kernel/v6.x/linux-6.6.7.tar.xz)
+ORIGINAL_SOURCE(mirror://kernel/linux/kernel/v6.x/linux-6.16.tar.xz)
 
 IF (OPENSOURCE_REPLACE_LINUX_HEADERS AND EXPORT_CMAKE)
     OPENSOURCE_EXPORT_REPLACEMENT_BY_OS(
@@ -51,6 +51,8 @@ ENDIF()
 DISABLE(NEED_PLATFORM_PEERDIRS)
 
 DISABLE(WITH_VALGRIND)
+
+NO_CLANG_COVERAGE()
 
 NO_PLATFORM()
 

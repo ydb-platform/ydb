@@ -20,7 +20,7 @@ namespace NTable {
 
 using namespace NTest;
 using TPageCollectionProtoHelper = NTabletFlatExecutor::TPageCollectionProtoHelper;
-using TCache = NTabletFlatExecutor::TPrivatePageCache::TInfo;
+using TPageCollection = NTabletFlatExecutor::TPrivatePageCache::TPageCollection;
 
 namespace {
     NPage::TConf PageConf()
@@ -144,22 +144,21 @@ namespace {
         TCheckResult result;
 
         TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection = new TTestPartPageCollection(part, 0);
-        NTable::TLoader::TLoaderEnv env(new TCache(pageCollection));
+        NTable::TLoader::TLoaderEnv env(new TPageCollection(pageCollection));
         env.ProvidePart(part.Get());
         TKeysLoader loader(part.Get(), &env);
 
         while (!(result.Run = loader.Do(screen))) {
             if (auto fetch = env.GetFetch()) {
-                UNIT_ASSERT_C(fetch->PageCollection.Get() == pageCollection.Get(),
+                UNIT_ASSERT_C(fetch.PageCollection.Get() == pageCollection.Get(),
                     "TLoader wants to fetch from an unexpected pageCollection");
-                UNIT_ASSERT_C(fetch->Pages, "TLoader wants a fetch, but there are no pages");
-                result.Pages += fetch->Pages.size();
+                UNIT_ASSERT_C(fetch.Pages, "TLoader wants a fetch, but there are no pages");
+                result.Pages += fetch.Pages.size();
 
-                for (auto pageId : fetch->Pages) {
+                for (auto pageId : fetch.Pages) {
                     auto* page = part->Store->GetPage(0, pageId);
                     UNIT_ASSERT_C(page, "TLoader wants a missing page " << pageId);
-
-                    env.Save(fetch->Cookie, { pageId, NSharedCache::TSharedPageRef::MakePrivate(*page) });
+                    env.Save({ pageId, NSharedCache::TSharedPageRef::MakePrivate(*page) });
                 }
             } else {
                 UNIT_ASSERT_C(false, "TKeysLoader was stalled");

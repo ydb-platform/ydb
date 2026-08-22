@@ -1,0 +1,6 @@
+/* custom error: The linear value has already been used */
+select Block(($parent)->{
+        $list = Opaque([ToDynamicLinear(ToMutDict({"a":1},$parent))]);
+        $a, $b = (Unwrap(ListHead($list)), Unwrap(ListLast($list)));
+        return (FromMutDict(FromDynamicLinear($a)), FromMutDict(FromDynamicLinear($b)));
+});

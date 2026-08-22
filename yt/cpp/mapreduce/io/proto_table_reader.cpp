@@ -206,6 +206,16 @@ bool TProtoTableReader::IsRawReaderExhausted() const
     return NodeReader_->IsRawReaderExhausted();
 }
 
+void TProtoTableReader::Abort()
+{
+    NodeReader_->Abort();
+}
+
+bool TProtoTableReader::IsAborted() const
+{
+    return NodeReader_->IsAborted();
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TLenvalProtoTableReader::TLenvalProtoTableReader(
@@ -289,6 +299,16 @@ bool TLenvalProtoTableReader::IsEndOfStream() const
 bool TLenvalProtoTableReader::IsRawReaderExhausted() const
 {
     return TLenvalTableReader::IsRawReaderExhausted();
+}
+
+void TLenvalProtoTableReader::Abort()
+{
+    Input_.Abort();
+}
+
+bool TLenvalProtoTableReader::IsAborted() const
+{
+    return Input_.IsAborted();
 }
 
 void TLenvalProtoTableReader::SkipRow()

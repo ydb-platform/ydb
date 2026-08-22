@@ -1,16 +1,16 @@
 #pragma once
 
+#include <ydb/core/kqp/opt/cbo/cbo_optimizer_new.h>
+#include <ydb/core/protos/feature_flags.pb.h>
+#include <ydb/core/protos/kqp_physical.pb.h>
+#include <ydb/core/protos/table_service_config.pb.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
+
 #include <yql/essentials/providers/common/config/yql_dispatch.h>
 #include <yql/essentials/providers/common/config/yql_setting.h>
 #include <yql/essentials/sql/settings/translation_settings.h>
-#include <ydb/core/protos/feature_flags.pb.h>
-#include <yql/essentials/core/cbo/cbo_optimizer_new.h>
 
-namespace NKikimrConfig {
-    enum TTableServiceConfig_EIndexAutoChooseMode : int;
-    enum TTableServiceConfig_EBlockChannelsMode : int;
-}
+#include <memory>
 
 namespace NYql {
 
@@ -43,9 +43,12 @@ public:
     NCommon::TConfSetting<bool, Static> _KqpEnableSpilling;
     NCommon::TConfSetting<bool, Static> _KqpDisableLlvmForUdfStages;
     NCommon::TConfSetting<ui64, Static> _KqpYqlCombinerMemoryLimit;
+    NCommon::TConfSetting<bool, Static> _KqpYqlConstraintsTransformerEnabled;
 
     /* No op just to avoid errors in Cloud Logging until they remove this from their queries */
     NCommon::TConfSetting<bool, Static> KqpPushOlapProcess;
+
+    NCommon::TConfSetting<bool, Static> KqpForceImmediateEffectsExecution;
 
     /* Compile time */
     NCommon::TConfSetting<ui64, Static> _CommitPerShardKeysSizeLimitBytes;
@@ -58,35 +61,104 @@ public:
     NCommon::TConfSetting<ui64, Static> EnableSpillingNodes;
     NCommon::TConfSetting<TString, Static> OverridePlanner;
     NCommon::TConfSetting<bool, Static> UseGraceJoinCoreForMap;
+    NCommon::TConfSetting<bool, Static> UseBlockHashJoin;
+    NCommon::TConfSetting<bool, Static> BlockHashJoinSwapLeftJoinSides;
     NCommon::TConfSetting<bool, Static> EnableOrderPreservingLookupJoin;
+    NCommon::TConfSetting<bool, Static> OptEnableParallelUnionAllConnectionsForExtend;
+    NCommon::TConfSetting<ui32, Static> DqChannelVersion;
+
+    NCommon::TConfSetting<bool, Static> DisableBlockExecution;
+    NCommon::TConfSetting<bool, Static> UseDqHashCombine;
+    NCommon::TConfSetting<bool, Static> UseDqHashAggregate;
+    NCommon::TConfSetting<bool, Static> DqHashOperatorsUseBlocks;
+    NCommon::TConfSetting<bool, Static> DqHashCombineExportTypeInfo;
 
     NCommon::TConfSetting<TString, Static> OptOverrideStatistics;
-    NCommon::TConfSetting<NYql::TOptimizerHints, Static> OptimizerHints;
+    NCommon::TConfSetting<NKikimr::NKqp::TOptimizerHints, Static> OptimizerHints;
 
     /* Disable optimizer rules */
     NCommon::TConfSetting<bool, Static> OptDisableTopSort;
+    NCommon::TConfSetting<bool, Static> OptDisableAutoIndexSelection;
+    NCommon::TConfSetting<bool, Static> EnableAutoIndexSelectionForIndexLookupJoin;
     NCommon::TConfSetting<bool, Static> OptDisableSqlInToJoin;
     NCommon::TConfSetting<bool, Static> OptEnableInplaceUpdate;
     NCommon::TConfSetting<bool, Static> OptEnablePredicateExtract;
     NCommon::TConfSetting<bool, Static> OptEnableOlapPushdown;
+    NCommon::TConfSetting<bool, Static> OptEnableOlapPushdownAggregate;
+    NCommon::TConfSetting<TString, Static> OptForceOlapPushdownDistinct;
+    NCommon::TConfSetting<ui64, Static> OptForceOlapPushdownDistinctLimit;
     NCommon::TConfSetting<bool, Static> OptEnableOlapPushdownProjections;
+    NCommon::TConfSetting<bool, Static> OptEnableOlapPushdownRegexp;
     NCommon::TConfSetting<bool, Static> OptEnableOlapProvideComputeSharding;
     NCommon::TConfSetting<bool, Static> OptUseFinalizeByKey;
     NCommon::TConfSetting<bool, Static> OptShuffleElimination;
     NCommon::TConfSetting<bool, Static> OptShuffleEliminationWithMap;
+    NCommon::TConfSetting<bool, Static> OptShuffleEliminationForAggregation;
+    NCommon::TConfSetting<bool, Static> WindowFunctionsV2;
     NCommon::TConfSetting<ui32, Static> CostBasedOptimizationLevel;
+    NCommon::TConfSetting<bool, Static> OptDisallowFuseJoins;
+    NCommon::TConfSetting<bool, Static> OptCreateStageForAggregation;
+    NCommon::TConfSetting<bool, Static> OptValidateStreamingConstraints;
+    NCommon::TConfSetting<bool, Static> OptFallbackToLegacyOptimizer;
+
+    // Use CostBasedOptimizationLevel for internal usage. This is a dummy flag that is mapped to the optimization level during parsing.
+    NCommon::TConfSetting<TString, Static> CostBasedOptimization;
+
     NCommon::TConfSetting<bool, Static> UseBlockReader;
 
     NCommon::TConfSetting<NDq::EHashShuffleFuncType , Static> HashShuffleFuncType;
     NCommon::TConfSetting<NDq::EHashShuffleFuncType , Static> ColumnShardHashShuffleFuncType;
 
-    NCommon::TConfSetting<ui32, Static> MaxDPHypDPTableSize;
+    NCommon::TConfSetting<ui32, Static> CBOTimeout;
+    NCommon::TConfSetting<ui32, Static> CBOHardTimeout;
+    NCommon::TConfSetting<ui32, Static> ShuffleEliminationJoinNumCutoff;
 
     NCommon::TConfSetting<ui32, Static> MaxTasksPerStage;
     NCommon::TConfSetting<ui64, Static> DataSizePerPartition;
     NCommon::TConfSetting<ui32, Static> MaxSequentialReadsInFlight;
 
     NCommon::TConfSetting<ui32, Static> KMeansTreeSearchTopSize;
+    NCommon::TConfSetting<ui64, Static> HybridSearchFactor;
+    NCommon::TConfSetting<double, Static> HybridSearchK;
+    NCommon::TConfSetting<bool, Static> DisableCheckpoints;
+
+    NCommon::TConfSetting<NKqpProto::EIsolationLevel, Static> DefaultTxMode;
+    NCommon::TConfSetting<bool, Static> UseKqpTasksGraphV2;
+
+    /* Internal CBO constants for tuning */
+    NCommon::TConfSetting<ui32, Static> OptCBOConstsMaxDepth;
+
+    NCommon::TConfSetting<double, Static> OptCBOConstsCrossJoinMult;
+    NCommon::TConfSetting<double, Static> OptCBOConstsCrossJoinPow;
+
+    NCommon::TConfSetting<double, Static> OptCBOConstsSelMult;
+    NCommon::TConfSetting<double, Static> OptCBOConstsSelPow;
+
+    NCommon::TConfSetting<double, Static> OptCBOConstsShuffleLeftSideMult;
+    NCommon::TConfSetting<double, Static> OptCBOConstsShuffleLeftSidePow;
+    NCommon::TConfSetting<double, Static> OptCBOConstsShuffleRightSideMult;
+    NCommon::TConfSetting<double, Static> OptCBOConstsShuffleRightSidePow;
+
+    NCommon::TConfSetting<double, Static> OptCBOConstsRightSideCostMult;
+    NCommon::TConfSetting<double, Static> OptCBOConstsByteSizeMult;
+
+    NCommon::TConfSetting<double, Static> OptCBOConstsLeftSideByteSizeFactor;
+    NCommon::TConfSetting<double, Static> OptCBOConstsRightSideByteSizeFactor;
+    NCommon::TConfSetting<double, Static> OptCBOConstsOutputSideByteSizeFactor;
+
+    NCommon::TConfSetting<double, Static> OptCBOConstsMapJoinLeftSideMult;
+    NCommon::TConfSetting<double, Static> OptCBOConstsMapJoinLeftSidePow;
+    NCommon::TConfSetting<double, Static> OptCBOConstsMapJoinRightSideMult;
+    NCommon::TConfSetting<double, Static> OptCBOConstsMapJoinRightSidePow;
+    NCommon::TConfSetting<double, Static> OptCBOConstsMapJoinOutputMult;
+    NCommon::TConfSetting<double, Static> OptCBOConstsMapJoinOutputPow;
+
+    NCommon::TConfSetting<double, Static> OptCBOConstsGraceJoinLeftSideMult;
+    NCommon::TConfSetting<double, Static> OptCBOConstsGraceJoinLeftSidePow;
+    NCommon::TConfSetting<double, Static> OptCBOConstsGraceJoinRightSideMult;
+    NCommon::TConfSetting<double, Static> OptCBOConstsGraceJoinRightSidePow;
+    NCommon::TConfSetting<double, Static> OptCBOConstsGraceJoinOutputMult;
+    NCommon::TConfSetting<double, Static> OptCBOConstsGraceJoinOutputPow;
 
     /* Runtime */
     NCommon::TConfSetting<bool, Dynamic> ScanQuery;
@@ -101,6 +173,7 @@ public:
     bool HasOptDisableTopSort() const;
     bool HasOptDisableSqlInToJoin() const;
     bool HasOptEnableOlapPushdown() const;
+    bool HasOptEnableOlapPushdownAggregate() const;
     bool HasOptEnableOlapPushdownProjections() const;
     bool HasOptEnableOlapProvideComputeSharding() const;
     bool HasOptUseFinalizeByKey() const;
@@ -114,7 +187,7 @@ public:
     bool HasOptEnableInplaceUpdate() const;
 };
 
-struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDispatcher {
+struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDispatcher, public NKikimrConfig::TTableServiceConfig {
     using TPtr = TIntrusivePtr<TKikimrConfiguration>;
 
     TKikimrConfiguration();
@@ -161,51 +234,29 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
         }
     }
 
+    void ApplyServiceConfig(const TTableServiceConfig& serviceConfig);
+
     TKikimrSettings::TConstPtr Snapshot() const;
 
     NKikimrConfig::TFeatureFlags FeatureFlags;
 
-    bool EnableKqpScanQuerySourceRead = false;
-    bool EnableKqpScanQueryStreamIdxLookupJoin = false;
-    bool EnableKqpDataQueryStreamIdxLookupJoin = false;
-    NSQLTranslation::EBindingsMode BindingsMode = NSQLTranslation::EBindingsMode::ENABLED;
-    NKikimrConfig::TTableServiceConfig_EIndexAutoChooseMode IndexAutoChooserMode;
-    bool EnableAstCache = false;
-    bool EnablePgConstsToParams = false;
-    ui64 ExtractPredicateRangesLimit = 0;
-    bool EnablePerStatementQueryExecution = false;
-    bool EnableCreateTableAs = false;
-    ui64 IdxLookupJoinsPrefixPointLimit = 1;
-    bool AllowOlapDataQuery = false;
-    bool EnableOlapSink = false;
-    bool EnableOltpSink = false;
-    bool EnableHtapTx = false;
-    bool EnableStreamWrite = false;
-    NKikimrConfig::TTableServiceConfig_EBlockChannelsMode BlockChannelsMode;
-    bool EnableSpilling = true;
-    ui32 DefaultCostBasedOptimizationLevel = 4;
-    bool EnableConstantFolding = true;
-    bool EnableFoldUdfs = true;
-    ui64 DefaultEnableSpillingNodes = 0;
-    bool EnableAntlr4Parser = false;
-    bool EnableSnapshotIsolationRW = false;
-    bool AllowMultiBroadcasts = false;
-    bool DefaultEnableShuffleElimination = false;
-    bool FilterPushdownOverJoinOptionalSide = false;
-    THashSet<TString> YqlCoreOptimizerFlags;
-    bool EnableNewRBO = false;
-    bool EnableSpillingInHashJoinShuffleConnections = false;
-    bool EnableOlapScalarApply = false;
-    bool EnableOlapSubstringPushdown = false;
-    bool EnableIndexStreamWrite = false;
-    bool EnableOlapPushdownProjections = false;
+    NYql::EBackportCompatibleFeaturesMode GetYqlBackportMode() const;
+    NSQLTranslation::EBindingsMode GetYqlBindingsMode() const;
+    NDq::EHashShuffleFuncType GetDqDefaultHashShuffleFuncType() const;
 
-    NDq::EHashShuffleFuncType DefaultHashShuffleFuncType = NDq::EHashShuffleFuncType::HashV1;
-    NDq::EHashShuffleFuncType DefaultColumnShardHashShuffleFuncType = NDq::EHashShuffleFuncType::ColumnShardHashV1;
-
-    void SetDefaultEnabledSpillingNodes(const TString& node);
     ui64 GetEnabledSpillingNodes() const;
     bool GetEnableOlapPushdownProjections() const;
+    bool GetEnableParallelUnionAllConnectionsForExtend() const;
+    bool GetEnableOlapPushdownAggregate() const;
+    bool GetEnableOlapPushdownRegexp() const;
+    bool GetUseDqHashCombine() const;
+    bool GetUseDqHashAggregate() const;
+    bool GetDqHashOperatorsUseBlocks() const;
+    bool GetDqHashCombineExportTypeInfo() const;
+    bool GetUseBlockHashJoin() const;
+    bool GetUseKqpTasksGraphV2() const;
+    bool IsAutoIndexSelectionDisabled() const;
+    bool IsAutoIndexSelectionForIndexLookupJoinEnabled() const;
 };
 
-}
+} // namespace NYql

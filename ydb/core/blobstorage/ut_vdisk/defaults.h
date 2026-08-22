@@ -11,7 +11,7 @@ constexpr ui32 DefChunkSize = 512u << 10u;
 constexpr ui64 DefDiskSize = 16ull << 30ull;
 constexpr ui32 DefDomainsNum = 4u;
 constexpr ui32 DefDisksInDomain = 2u;
-constexpr NKikimr::TErasureType::EErasureSpecies DefErasure = NKikimr::TBlobStorageGroupType::ErasureMirror3;
+constexpr NKikimr::TErasureType::EErasureSpecies DefErasure = NKikimr::TBlobStorageGroupType::Erasure4Plus2Block;
 
 constexpr NKikimrBlobStorage::EPutHandleClass UNK = NKikimrBlobStorage::EPutHandleClass::TabletLog;
 constexpr NKikimrBlobStorage::EPutHandleClass HUGEB = NKikimrBlobStorage::EPutHandleClass::AsyncBlob;

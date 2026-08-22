@@ -51,14 +51,10 @@
                                                         "Name": "TableFullScan",
                                                         "Path": "/Root/postgres_jointest/join2.test_plan/x",
                                                         "ReadColumns": [
-                                                            "x1",
-                                                            "x2"
-                                                        ],
-                                                        "ReadLimit": "1001",
-                                                        "ReadRanges": [
                                                             "x1 (-\u221e, +\u221e)",
                                                             "x2 (-\u221e, +\u221e)"
                                                         ],
+                                                        "ReadLimit": "1001",
                                                         "ReadRangesPointPrefixLen": "0",
                                                         "Reverse": false,
                                                         "Scan": "Sequential",

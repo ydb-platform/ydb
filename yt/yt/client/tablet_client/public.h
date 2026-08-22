@@ -95,6 +95,15 @@ YT_DEFINE_ERROR_ENUM(
     ((UniqueIndexConflict)                    (1741))
     ((TabletReplicationEraMismatch)           (1742))
     ((OrderedDynamicStoreRotateEpochMismatch) (1743))
+    ((TabletIsInIntermediateState)            (1744))
+    ((HunkTabletStoreToggleConflict)          (1745))
+    ((HunkStoreAllocationFailed)              (1746))
+    ((TabletResharded)                        (1747))
+    ((ReadOnlySmoothMovementStage)            (1748))
+
+    // Test error codes.
+    ((TestingFailureBeforeWrite)              (1798))
+    ((TestingFailureAfterWrite)               (1799))
 );
 
 DEFINE_ENUM(EInMemoryMode,
@@ -201,6 +210,8 @@ DEFINE_ENUM(ETabletActionKind,
 
 DEFINE_ENUM(ETabletActionState,
     ((Preparing)                (0))
+    ((ProvisionallyFlushing)   (14))
+    ((ProvisionallyFlushed)    (15))
     ((Freezing)                 (1))
     ((Frozen)                   (2))
     ((Unmounting)               (3))
@@ -240,6 +251,7 @@ DEFINE_ENUM(ESecondaryIndexKind,
     ((Unique)                   (2))
 );
 
+struct TUnfoldedColumns;
 struct TIndexInfo;
 
 DEFINE_ENUM(ETableToIndexCorrespondence,
@@ -262,6 +274,7 @@ DECLARE_REFCOUNTED_STRUCT(TTableMountInfo)
 DECLARE_REFCOUNTED_STRUCT(TTabletInfo)
 DECLARE_REFCOUNTED_STRUCT(TTableReplicaInfo)
 DECLARE_REFCOUNTED_STRUCT(ITableMountCache)
+DECLARE_REFCOUNTED_STRUCT(TReshardRedirectionHint)
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -3,10 +3,10 @@ preserve
 [clinic start generated code]*/
 
 #if defined(Py_BUILD_CORE) && !defined(Py_BUILD_CORE_MODULE)
-#  include "pycore_gc.h"            // PyGC_Head
-#  include "pycore_runtime.h"       // _Py_ID()
+#  include "pycore_gc.h"          // PyGC_Head
+#  include "pycore_runtime.h"     // _Py_ID()
 #endif
-
+#include "pycore_modsupport.h"    // _PyArg_UnpackKeywords()
 
 PyDoc_STRVAR(memoryview__doc__,
 "memoryview(object)\n"
@@ -112,7 +112,7 @@ memoryview__from_flags(PyTypeObject *type, PyObject *const *args, Py_ssize_t nar
         goto exit;
     }
     object = args[0];
-    flags = _PyLong_AsInt(args[1]);
+    flags = PyLong_AsInt(args[1]);
     if (flags == -1 && PyErr_Occurred()) {
         goto exit;
     }
@@ -195,9 +195,6 @@ memoryview_cast(PyMemoryViewObject *self, PyObject *const *args, Py_ssize_t narg
         _PyArg_BadArgument("cast", "argument 'format'", "str", args[0]);
         goto exit;
     }
-    if (PyUnicode_READY(args[0]) == -1) {
-        goto exit;
-    }
     format = args[0];
     if (!noptargs) {
         goto skip_optional_pos;
@@ -252,11 +249,12 @@ PyDoc_STRVAR(memoryview_tobytes__doc__,
 "\n"
 "Return the data in the buffer as a byte string.\n"
 "\n"
-"Order can be {\'C\', \'F\', \'A\'}. When order is \'C\' or \'F\', the data of the\n"
-"original array is converted to C or Fortran order. For contiguous views,\n"
-"\'A\' returns an exact copy of the physical memory. In particular, in-memory\n"
-"Fortran order is preserved. For non-contiguous views, the data is converted\n"
-"to C first. order=None is the same as order=\'C\'.");
+"Order can be {\'C\', \'F\', \'A\'}.  When order is \'C\' or \'F\', the data of\n"
+"the original array is converted to C or Fortran order.  For\n"
+"contiguous views, \'A\' returns an exact copy of the physical memory.\n"
+"In particular, in-memory Fortran order is preserved.  For\n"
+"non-contiguous views, the data is converted to C first.  order=None\n"
+"is the same as order=\'C\'.");
 
 #define MEMORYVIEW_TOBYTES_METHODDEF    \
     {"tobytes", _PyCFunction_CAST(memoryview_tobytes), METH_FASTCALL|METH_KEYWORDS, memoryview_tobytes__doc__},
@@ -338,8 +336,8 @@ PyDoc_STRVAR(memoryview_hex__doc__,
 "  sep\n"
 "    An optional single character or byte to separate hex bytes.\n"
 "  bytes_per_sep\n"
-"    How many bytes between separators.  Positive values count from the\n"
-"    right, negative values count from the left.\n"
+"    How many bytes between separators.  Positive values count from\n"
+"    the right, negative values count from the left.\n"
 "\n"
 "Example:\n"
 ">>> value = memoryview(b\'\\xb9\\x01\\xef\')\n"
@@ -406,7 +404,7 @@ memoryview_hex(PyMemoryViewObject *self, PyObject *const *args, Py_ssize_t nargs
             goto skip_optional_pos;
         }
     }
-    bytes_per_sep = _PyLong_AsInt(args[1]);
+    bytes_per_sep = PyLong_AsInt(args[1]);
     if (bytes_per_sep == -1 && PyErr_Occurred()) {
         goto exit;
     }
@@ -416,4 +414,4 @@ skip_optional_pos:
 exit:
     return return_value;
 }
-/*[clinic end generated code: output=01613814112cedd7 input=a9049054013a1b77]*/
+/*[clinic end generated code: output=5e6eb7b47a172cf6 input=a9049054013a1b77]*/

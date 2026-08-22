@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(25.1.1)
+VERSION(26.2)
 
 LICENSE(MIT)
 
@@ -21,7 +21,12 @@ PY_SRCS(
     pip/__main__.py
     pip/__pip-runner__.py
     pip/_internal/__init__.py
-    pip/_internal/build_env.py
+    pip/_internal/build_env/__init__.py
+    pip/_internal/build_env/base.py
+    pip/_internal/build_env/installer.py
+    pip/_internal/build_env/noop.py
+    pip/_internal/build_env/venv.py
+    pip/_internal/build_env/virtual.py
     pip/_internal/cache.py
     pip/_internal/cli/__init__.py
     pip/_internal/cli/autocompletion.py
@@ -86,7 +91,7 @@ PY_SRCS(
     pip/_internal/models/index.py
     pip/_internal/models/installation_report.py
     pip/_internal/models/link.py
-    pip/_internal/models/pylock.py
+    pip/_internal/models/release_control.py
     pip/_internal/models/scheme.py
     pip/_internal/models/search_scope.py
     pip/_internal/models/selection_prefs.py
@@ -105,19 +110,17 @@ PY_SRCS(
     pip/_internal/operations/build/build_tracker.py
     pip/_internal/operations/build/metadata.py
     pip/_internal/operations/build/metadata_editable.py
-    pip/_internal/operations/build/metadata_legacy.py
     pip/_internal/operations/build/wheel.py
     pip/_internal/operations/build/wheel_editable.py
-    pip/_internal/operations/build/wheel_legacy.py
     pip/_internal/operations/check.py
     pip/_internal/operations/freeze.py
     pip/_internal/operations/install/__init__.py
-    pip/_internal/operations/install/editable_legacy.py
     pip/_internal/operations/install/wheel.py
     pip/_internal/operations/prepare.py
     pip/_internal/pyproject.py
     pip/_internal/req/__init__.py
     pip/_internal/req/constructors.py
+    pip/_internal/req/pep723.py
     pip/_internal/req/req_dependency_group.py
     pip/_internal/req/req_file.py
     pip/_internal/req/req_install.py
@@ -155,8 +158,8 @@ PY_SRCS(
     pip/_internal/utils/logging.py
     pip/_internal/utils/misc.py
     pip/_internal/utils/packaging.py
+    pip/_internal/utils/pylock.py
     pip/_internal/utils/retry.py
-    pip/_internal/utils/setuptools_build.py
     pip/_internal/utils/subprocess.py
     pip/_internal/utils/temp_dir.py
     pip/_internal/utils/unpacking.py
@@ -186,29 +189,17 @@ PY_SRCS(
     pip/_vendor/certifi/__init__.py
     pip/_vendor/certifi/__main__.py
     pip/_vendor/certifi/core.py
-    pip/_vendor/dependency_groups/__init__.py
-    pip/_vendor/dependency_groups/__main__.py
-    pip/_vendor/dependency_groups/_implementation.py
-    pip/_vendor/dependency_groups/_lint_dependency_groups.py
-    pip/_vendor/dependency_groups/_pip_wrapper.py
-    pip/_vendor/dependency_groups/_toml_compat.py
     pip/_vendor/distlib/__init__.py
     pip/_vendor/distlib/compat.py
-    pip/_vendor/distlib/database.py
-    pip/_vendor/distlib/index.py
-    pip/_vendor/distlib/locators.py
-    pip/_vendor/distlib/manifest.py
-    pip/_vendor/distlib/markers.py
-    pip/_vendor/distlib/metadata.py
     pip/_vendor/distlib/resources.py
     pip/_vendor/distlib/scripts.py
     pip/_vendor/distlib/util.py
-    pip/_vendor/distlib/version.py
-    pip/_vendor/distlib/wheel.py
     pip/_vendor/distro/__init__.py
     pip/_vendor/distro/__main__.py
     pip/_vendor/distro/distro.py
     pip/_vendor/idna/__init__.py
+    pip/_vendor/idna/__main__.py
+    pip/_vendor/idna/cli.py
     pip/_vendor/idna/codec.py
     pip/_vendor/idna/compat.py
     pip/_vendor/idna/core.py
@@ -227,10 +218,14 @@ PY_SRCS(
     pip/_vendor/packaging/_parser.py
     pip/_vendor/packaging/_structures.py
     pip/_vendor/packaging/_tokenizer.py
+    pip/_vendor/packaging/dependency_groups.py
+    pip/_vendor/packaging/direct_url.py
+    pip/_vendor/packaging/errors.py
     pip/_vendor/packaging/licenses/__init__.py
     pip/_vendor/packaging/licenses/_spdx.py
     pip/_vendor/packaging/markers.py
     pip/_vendor/packaging/metadata.py
+    pip/_vendor/packaging/pylock.py
     pip/_vendor/packaging/requirements.py
     pip/_vendor/packaging/specifiers.py
     pip/_vendor/packaging/tags.py
@@ -239,6 +234,7 @@ PY_SRCS(
     pip/_vendor/pkg_resources/__init__.py
     pip/_vendor/platformdirs/__init__.py
     pip/_vendor/platformdirs/__main__.py
+    pip/_vendor/platformdirs/_xdg.py
     pip/_vendor/platformdirs/android.py
     pip/_vendor/platformdirs/api.py
     pip/_vendor/platformdirs/macos.py
@@ -275,6 +271,7 @@ PY_SRCS(
     pip/_vendor/requests/__init__.py
     pip/_vendor/requests/__version__.py
     pip/_vendor/requests/_internal_utils.py
+    pip/_vendor/requests/_types.py
     pip/_vendor/requests/adapters.py
     pip/_vendor/requests/api.py
     pip/_vendor/requests/auth.py
@@ -388,37 +385,32 @@ PY_SRCS(
     pip/_vendor/truststore/_openssl.py
     pip/_vendor/truststore/_ssl_constants.py
     pip/_vendor/truststore/_windows.py
-    pip/_vendor/typing_extensions.py
     pip/_vendor/urllib3/__init__.py
+    pip/_vendor/urllib3/_base_connection.py
     pip/_vendor/urllib3/_collections.py
+    pip/_vendor/urllib3/_request_methods.py
     pip/_vendor/urllib3/_version.py
     pip/_vendor/urllib3/connection.py
     pip/_vendor/urllib3/connectionpool.py
     pip/_vendor/urllib3/contrib/__init__.py
-    pip/_vendor/urllib3/contrib/_appengine_environ.py
-    pip/_vendor/urllib3/contrib/_securetransport/__init__.py
-    pip/_vendor/urllib3/contrib/_securetransport/bindings.py
-    pip/_vendor/urllib3/contrib/_securetransport/low_level.py
-    pip/_vendor/urllib3/contrib/appengine.py
-    pip/_vendor/urllib3/contrib/ntlmpool.py
+    pip/_vendor/urllib3/contrib/emscripten/__init__.py
+    pip/_vendor/urllib3/contrib/emscripten/connection.py
+    pip/_vendor/urllib3/contrib/emscripten/fetch.py
+    pip/_vendor/urllib3/contrib/emscripten/request.py
+    pip/_vendor/urllib3/contrib/emscripten/response.py
     pip/_vendor/urllib3/contrib/pyopenssl.py
-    pip/_vendor/urllib3/contrib/securetransport.py
     pip/_vendor/urllib3/contrib/socks.py
     pip/_vendor/urllib3/exceptions.py
     pip/_vendor/urllib3/fields.py
     pip/_vendor/urllib3/filepost.py
-    pip/_vendor/urllib3/packages/__init__.py
-    pip/_vendor/urllib3/packages/backports/__init__.py
-    pip/_vendor/urllib3/packages/backports/makefile.py
-    pip/_vendor/urllib3/packages/backports/weakref_finalize.py
-    pip/_vendor/urllib3/packages/six.py
+    pip/_vendor/urllib3/http2/__init__.py
+    pip/_vendor/urllib3/http2/connection.py
+    pip/_vendor/urllib3/http2/probe.py
     pip/_vendor/urllib3/poolmanager.py
-    pip/_vendor/urllib3/request.py
     pip/_vendor/urllib3/response.py
     pip/_vendor/urllib3/util/__init__.py
     pip/_vendor/urllib3/util/connection.py
     pip/_vendor/urllib3/util/proxy.py
-    pip/_vendor/urllib3/util/queue.py
     pip/_vendor/urllib3/util/request.py
     pip/_vendor/urllib3/util/response.py
     pip/_vendor/urllib3/util/retry.py
@@ -427,6 +419,7 @@ PY_SRCS(
     pip/_vendor/urllib3/util/ssltransport.py
     pip/_vendor/urllib3/util/timeout.py
     pip/_vendor/urllib3/util/url.py
+    pip/_vendor/urllib3/util/util.py
     pip/_vendor/urllib3/util/wait.py
 )
 
@@ -435,20 +428,44 @@ RESOURCE_FILES(
     .dist-info/METADATA
     .dist-info/entry_points.txt
     .dist-info/top_level.txt
+    pip/_vendor/README.rst
+    pip/_vendor/bom.cdx.json
+    pip/_vendor/cachecontrol/LICENSE.txt
     pip/_vendor/cachecontrol/py.typed
+    pip/_vendor/certifi/LICENSE
     pip/_vendor/certifi/cacert.pem
     pip/_vendor/certifi/py.typed
-    pip/_vendor/dependency_groups/py.typed
+    pip/_vendor/distlib/LICENSE.txt
+    pip/_vendor/distro/LICENSE
     pip/_vendor/distro/py.typed
+    pip/_vendor/idna/LICENSE.md
     pip/_vendor/idna/py.typed
+    pip/_vendor/msgpack/COPYING
+    pip/_vendor/packaging/LICENSE
+    pip/_vendor/packaging/LICENSE.APACHE
+    pip/_vendor/packaging/LICENSE.BSD
     pip/_vendor/packaging/py.typed
+    pip/_vendor/pkg_resources/LICENSE
+    pip/_vendor/platformdirs/LICENSE
     pip/_vendor/platformdirs/py.typed
+    pip/_vendor/pygments/LICENSE
+    pip/_vendor/pyproject_hooks/LICENSE
     pip/_vendor/pyproject_hooks/py.typed
+    pip/_vendor/requests/LICENSE
+    pip/_vendor/requests/py.typed
+    pip/_vendor/resolvelib/LICENSE
     pip/_vendor/resolvelib/py.typed
+    pip/_vendor/rich/LICENSE
     pip/_vendor/rich/py.typed
+    pip/_vendor/tomli/LICENSE
     pip/_vendor/tomli/py.typed
+    pip/_vendor/tomli_w/LICENSE
     pip/_vendor/tomli_w/py.typed
+    pip/_vendor/truststore/LICENSE
     pip/_vendor/truststore/py.typed
+    pip/_vendor/urllib3/LICENSE.txt
+    pip/_vendor/urllib3/contrib/emscripten/emscripten_fetch_worker.js
+    pip/_vendor/urllib3/py.typed
     pip/_vendor/vendor.txt
     pip/py.typed
 )

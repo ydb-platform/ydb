@@ -1,5 +1,6 @@
 #pragma once
 
+#include <yt/cpp/mapreduce/interface/abortable_stream.h>
 #include <yt/cpp/mapreduce/interface/io.h>
 
 namespace NYT {
@@ -11,9 +12,7 @@ class TInputStreamProxy
     : public TRawTableReader
 {
 public:
-    TInputStreamProxy(IInputStream* stream)
-        : Stream_(stream)
-    { }
+    explicit TInputStreamProxy(IInputStream* stream);
 
     bool Retry(
         const TMaybe<ui32>& /*rangeIndex*/,
@@ -31,6 +30,16 @@ public:
         return false;
     }
 
+    void Abort() override
+    {
+        Stream_->Abort();
+    }
+
+    bool IsAborted() const override
+    {
+        return Stream_->IsAborted();
+    }
+
 protected:
     size_t DoRead(void* buf, size_t len) override
     {
@@ -38,7 +47,7 @@ protected:
     }
 
 private:
-    IInputStream* Stream_;
+    std::unique_ptr<IAbortableInputStream> Stream_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

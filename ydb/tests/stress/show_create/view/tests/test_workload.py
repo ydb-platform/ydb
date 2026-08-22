@@ -9,11 +9,7 @@ from ydb.tests.library.stress.fixtures import StressFixture
 class TestYdbWorkload(StressFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
-        yield from self.setup_cluster(
-            extra_feature_flags={
-                "enable_show_create": True,
-            }
-        )
+        yield from self.setup_cluster()
 
     @pytest.mark.parametrize(
         "duration, path_prefix",
@@ -25,8 +21,8 @@ class TestYdbWorkload(StressFixture):
     def test_show_create_view_workload(self, duration, path_prefix):
         cmd = [
             yatest.common.binary_path(os.getenv("STRESS_TEST_UTILITY")),
-            "--endpoint", f"grpc://localhost:{self.cluster.nodes[1].grpc_port}",
-            "--database", "/Root",
+            "--endpoint", self.endpoint,
+            "--database", self.database,
             "--duration", str(duration),
         ]
 

@@ -17,12 +17,6 @@
 - includes:
   - _cgo_export.h
 
-# Resolve Python.h from swig/Lib/python/pyruntime.swg when building non-python .swg
-# since they do not peerdir contrib/libs/python.
-- source_filter: "[.]swg([.](h|c(c|pp|xx)?))?$"
-  includes:
-  - Python.h:        contrib/libs/python/Include/Python.h
-
 # Another sysincl/addincl clash. Here we also have GLOBAL ADDINCL that will
 # produce sysincl/addincl mismatch configure errors when someone writes
 # #include <math.h> and enables USE_ARCADIA_LIBM. Now we have no instances of this.
@@ -87,11 +81,6 @@
     - inet_ntop.h:   contrib/libs/curl/lib/inet_ntop.h
     - share.h:       contrib/libs/curl/lib/share.h
 
-- source_filter: "^contrib/libs/zeromq"
-  includes:
-    - atomic.h:      contrib/libs/zeromq/missing_includes/atomic.h
-    - Mstcpip.h:     contrib/libs/zeromq/missing_includes/Mstcpip.h
-
 - source_filter: "^contrib/restricted/openal-soft"
   includes:
     - atomic.h: contrib/restricted/openal-soft/common/atomic.h
@@ -127,6 +116,10 @@
   includes:
     - numpy/random.pxd
     - alloc.h: contrib/python/numpy/include/numpy/core/src/multiarray/alloc.h
+
+- source_filter: "^contrib/python/memray"
+  includes:
+    - alloc.h: contrib/python/memray/memray/_memray/alloc.h
 
 - source_filter: "^contrib/tools/python/src/Objects/exceptions.c"
   includes:
@@ -289,12 +282,6 @@
   includes:
     - io.h: contrib/libs/gdal/ogr/ogrsf_frmts/cad/libopencad/dwg/io.h
 
-# disable checks for Python 3.11-specific files
-# needed to allow to use Arcadia's Cython with non-Arcadia python in open source builds
-- source_filter: "^contrib/tools/cython/Cython/Utility"
-  includes:
-    - internal/pycore_frame.h: contrib/libs/python/Include/internal/pycore_frame.h
-
 - source_filter: "^contrib/libs/connectedhomeip"
   includes:
     - freertos/FreeRTOS.h
@@ -390,7 +377,7 @@
     - signal.h: contrib/libs/glibcasm/glibc/include/signal.h
     - stdint.h:
         - contrib/libs/glibcasm/glibc/include/stdint.h
-        - contrib/libs/cxxsupp/libcxx/include/stdint.h
+        - ""
     - stdlib.h: contrib/libs/glibcasm/glibc/include/stdlib.h
     - stackinfo.h:
         - contrib/libs/glibcasm/glibc/include/stackinfo.h
@@ -424,24 +411,13 @@
   includes:
     - stdint.h:
         - contrib/libs/glibcasm/glibc/include/stdint.h
-        - contrib/libs/cxxsupp/libcxx/include/stdint.h
+        - ""
 
 - source_filter: "^contrib/libs/cxxsupp/libcxx/include/inttypes.h"
   includes:
     - stdint.h:
         - contrib/libs/glibcasm/glibc/include/stdint.h
-        - contrib/libs/cxxsupp/libcxx/include/stdint.h
-
-# protoc uses raw string literals with #include statements, which drive our include parser crazy
-- source_filter: "^contrib/libs/protoc"
-  includes:
-    - "$base$google/protobuf/$path$"
-    - "google/protobuf/$path$"
-    - "$fwd_to$.$fwd_to_suffix$.h"
-    - "$fwd_to$.proto.h"
-    - "$name$.proto.h"
-    - "$path$"
-    - "$h_include$"
+        - ""
 
 - source_filter: "^contrib/tools/bison/data"
   includes:
@@ -471,3 +447,28 @@
   includes:
     - thread.h: contrib/restricted/ffmpeg/libavcodec/thread.h
     - jni.h: contrib/restricted/ffmpeg/libavcodec/jni.h
+
+- source_filter: "^contrib/libs/kvazaar"
+  includes:
+    - getopt.h: contrib/libs/kvazaar/src/extras/getopt.h
+
+# libgpg-error has its own thread.h
+- source_filter: "^contrib/restricted/libgpg-error"
+  includes:
+  - thread.h: contrib/restricted/libgpg-error/src/thread.h
+
+# libgcrypt has its own types.h
+- source_filter: "^contrib/restricted/libgcrypt"
+  includes:
+  - types.h: contrib/restricted/libgcrypt/src/types.h
+
+# libgcrypt has its own gcrypt.h and types.h
+- source_filter: "^contrib/restricted/libgcrypt|^contrib/libs/audiowmark"
+  includes:
+  - gcrypt.h: contrib/restricted/libgcrypt/src/gcrypt.h
+  - types.h: contrib/restricted/libgcrypt/src/types.h
+
+# fftw3 has its own fftw3.h
+- source_filter: "^contrib/restricted/fftw3|^contrib/libs/audiowmark"
+  includes:
+  - fftw3.h: contrib/restricted/fftw3/api/fftw3.h

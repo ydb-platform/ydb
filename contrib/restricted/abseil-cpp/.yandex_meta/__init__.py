@@ -1,6 +1,12 @@
 from devtools.yamaker.modules import Linkable, Switch, Words
 from devtools.yamaker.project import CMakeNinjaNixProject
 
+_FAILURE_SIGNAL_RECURSE = "absl/debugging"
+
+_SOURCE_TO_STUB = {
+    "absl/debugging/failure_signal_handler.cc": "failure_signal_handler.cc",
+}
+
 
 def post_install(self):
     with self.yamakes["."] as absl:
@@ -11,6 +17,28 @@ def post_install(self):
                 {
                     "OS_DARWIN OR OS_IOS": Linkable(EXTRALIBS=[Words("-framework CoreFoundation")]),
                     "OS_ANDROID": Linkable(LDFLAGS=["-llog"]),
+                }
+            ),
+        )
+        absl.after(
+            "SRCS",
+            """
+            IF (OS_WINDOWS)
+                SRCS(
+                    absl/time/internal/cctz/src/time_zone_name_win.cc
+                )
+            ENDIF()
+            """,
+        )
+
+        src_to_stub = {s: f"stubs/{st}" for s, st in _SOURCE_TO_STUB.items() if s in absl.SRCS}
+        absl.SRCS -= src_to_stub.keys()
+        absl.after(
+            "SRCS",
+            Switch(
+                {
+                    "OS_FREERTOS OR OS_ZEPHYR": Linkable(SRCS=list(src_to_stub.values())),
+                    "default": Linkable(SRCS=list(src_to_stub.keys())),
                 }
             ),
         )
@@ -40,14 +68,16 @@ abseil_cpp = CMakeNinjaNixProject(
         "absl/strings/internal/stl_type_traits.h",
         "absl/time/internal/*.inc",
         "absl/**/*.h",
+        "absl/time/internal/cctz/src/time_zone_name_win.cc",
+    ],
+    copy_sources_except=[
+        "absl/status/status_matchers.h",
+        "absl/time/internal/cctz/src/test_time_zone_names.h",
     ],
     ignore_targets=[
         # these depend on gtest, ignore it.
         "absl_scoped_mock_log",
         "absl_status_matchers",
-    ],
-    copy_sources_except=[
-        "absl/status/status_matchers.h",
     ],
     put={
         "absl_base": ".",
@@ -56,6 +86,7 @@ abseil_cpp = CMakeNinjaNixProject(
         "absl_base": [
             "absl_city",
             "absl_civil_time",
+            "absl_clock_interface",
             "absl_cord",
             "absl_cord_internal",
             "absl_cordz_functions",
@@ -85,12 +116,15 @@ abseil_cpp = CMakeNinjaNixProject(
             "absl_flags_reflection",
             "absl_flags_usage",
             "absl_flags_usage_internal",
+            "absl_generic_printer_internal",
             "absl_graphcycles_internal",
             "absl_hash",
+            "absl_hashtable_profiler",
             "absl_hashtablez_sampler",
             "absl_int128",
             "absl_kernel_timeout_internal",
             "absl_leak_check",
+            "absl_log_entry",
             "absl_log_flags",
             "absl_log_globals",
             "absl_log_initialize",
@@ -106,10 +140,10 @@ abseil_cpp = CMakeNinjaNixProject(
             "absl_log_internal_structured_proto",
             "absl_log_severity",
             "absl_log_sink",
-            "absl_low_level_hash",
             "absl_malloc_internal",
             "absl_periodic_sampler",
             "absl_poison",
+            "absl_profile_builder",
             "absl_random_distributions",
             "absl_random_internal_distribution_test_util",
             "absl_random_internal_entropy_pool",
@@ -124,13 +158,14 @@ abseil_cpp = CMakeNinjaNixProject(
             "absl_raw_hash_set",
             "absl_raw_logging_internal",
             "absl_scoped_set_env",
+            "absl_source_location",
             "absl_spinlock_wait",
             "absl_stacktrace",
             "absl_status",
+            "absl_status_builder",
             "absl_statusor",
             "absl_str_format_internal",
             "absl_strerror",
-            "absl_string_view",
             "absl_strings",
             "absl_strings_internal",
             "absl_symbolize",
@@ -143,5 +178,8 @@ abseil_cpp = CMakeNinjaNixProject(
             "absl_vlog_config_internal",
         ],
     },
+    keep_paths=[
+        "stubs",
+    ],
     post_install=post_install,
 )

@@ -48,8 +48,9 @@ namespace NBoot {
 
         void Execute()
         {
-            for (; Queue; Queue.pop_front()) {
+            while (Queue) {
                 auto order = std::move(Queue.front());
+                Queue.pop_front();
 
                 switch (order.Op) {
                     case EOp::Start: {

@@ -11,16 +11,19 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/formats/arrow
+    ydb/core/formats/arrow/container
+    ydb/core/formats/arrow/filter
+    ydb/core/protos
+    ydb/core/tablet_flat
     ydb/core/tx/columnshard/common
     ydb/core/tx/columnshard/engines/changes/abstract
+    ydb/core/tx/columnshard/engines/changes/actualization
     ydb/core/tx/columnshard/engines/changes/compaction
     ydb/core/tx/columnshard/engines/changes/counters
-    ydb/core/tx/columnshard/engines/changes/actualization
+    ydb/core/tx/columnshard/engines/portions
+    ydb/core/tx/columnshard/engines/storage/granule
     ydb/core/tx/columnshard/splitter
-    ydb/core/tablet_flat
     ydb/core/tx/tiering
-    ydb/core/protos
 )
 
 END()

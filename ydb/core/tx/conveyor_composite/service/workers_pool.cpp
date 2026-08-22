@@ -5,8 +5,9 @@
 namespace NKikimr::NConveyorComposite {
 TWorkersPool::TWorkersPool(const TString& poolName, const NActors::TActorId& distributorId, const NConfig::TWorkersPool& config,
     const std::shared_ptr<TWorkersPoolCounters>& counters, const std::vector<std::shared_ptr<TProcessCategory>>& categories)
-    : WorkersCount(config.GetWorkersCountInfo().GetThreadsCount(NKqp::TStagePredictor::GetUsableThreads()))
-    , Counters(counters) {
+    : WorkersCount(config.GetWorkersCountInfo().GetThreadsCount(NKqp::TStagePredictor::GetPossibleMaxLimitThreads()))
+    , Counters(counters)
+    , MaxBatchSize(config.GetMaxBatchSize()) {
     Workers.reserve(WorkersCount);
     for (auto&& i : config.GetLinks()) {
         AFL_VERIFY((ui64)i.GetCategory() < categories.size());
@@ -15,7 +16,7 @@ TWorkersPool::TWorkersPool(const TString& poolName, const NActors::TActorId& dis
     AFL_VERIFY(Processes.size());
     for (ui32 i = 0; i < WorkersCount; ++i) {
         Workers.emplace_back(std::make_unique<TWorker>(
-            poolName, config.GetWorkerCPUUsage(i, NKqp::TStagePredictor::GetUsableThreads()), distributorId, i, config.GetWorkersPoolId()));
+            poolName, config.GetWorkerCPUUsage(i, NKqp::TStagePredictor::GetPossibleMaxLimitThreads()), distributorId, i, config.GetWorkersPoolId()));
         ActiveWorkersIdx.emplace_back(i);
     }
     AFL_VERIFY(WorkersCount)("name", poolName)("action", "conveyor_registered")("config", config.DebugString())("actor_id", distributorId)(
@@ -71,7 +72,7 @@ bool TWorkersPool::DrainTasks() {
         TDuration predicted = TDuration::Zero();
         std::vector<TWorkerTask> tasks;
         THashSet<TString> scopes;
-        while (procLocal.size() && (tasks.empty() || predicted < DeliveringDuration.GetValue() * 10) &&
+        while (procLocal.size() && (tasks.empty() || (predicted < DeliveringDuration.GetValue() * 10 && tasks.size() < MaxBatchSize)) &&
                procLocal.front().GetCategory()->HasTasks()) {
             std::pop_heap(procLocal.begin(), procLocal.end(), predHeap);
             auto task = procLocal.back().GetCategory()->ExtractTaskWithPrediction(procLocal.back().GetCounters(), scopes);
@@ -97,8 +98,7 @@ bool TWorkersPool::DrainTasks() {
     return newTask;
 }
 
-void TWorkersPool::PutTaskResults(std::vector<TWorkerTaskResult>&& result) {
-    //        const ui32 catIdx = (ui32)result.GetCategory();
+void TWorkersPool::PutTaskResults(std::vector<TWorkerTaskResult>&& result, const ui64 workersPoolId, const ui64 workerIdx) {
     THashSet<TString> scopeIds;
     for (auto&& t : result) {
         bool found = false;
@@ -113,7 +113,16 @@ void TWorkersPool::PutTaskResults(std::vector<TWorkerTaskResult>&& result) {
                 break;
             }
         }
-        AFL_VERIFY(found);
+        if (!found) {
+            TStringBuilder linkedCategories;
+            for (auto&& i : Processes) {
+                linkedCategories << (ui64)i.GetCategory()->GetCategory() << "(" << ::ToString(i.GetCategory()->GetCategory()) << "),";
+            }
+            AFL_VERIFY(false)("result_category", (ui64)t.GetCategory())("result_category_name", ::ToString(t.GetCategory()))(
+                "process_id", t.GetProcessId())("batch_size", result.size())("linked_categories", linkedCategories)(
+                "processes_count", Processes.size())("workers_pool_id", workersPoolId)("worker_idx", workerIdx)(
+                "workers_count", WorkersCount);
+        }
     }
 }
 

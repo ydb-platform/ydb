@@ -12,6 +12,7 @@
 #include <util/stream/file.h>
 #include <util/stream/format.h>
 #include <util/system/hostname.h>
+#include <util/folder/path.h>
 #include <util/string/printf.h>
 
 #include <library/cpp/string_utils/parse_size/parse_size.h>
@@ -68,6 +69,7 @@ void TRunCommandConfigParser::SetupLastGetOptForConfigFiles(NLastGetopt::TOpts& 
     opts.AddLongOption("grpc-port", "enable gRPC server on port").RequiredArgument("PORT");
     opts.AddLongOption("grpcs-port", "enable gRPC SSL server on port").RequiredArgument("PORT");
     opts.AddLongOption("kafka-port", "enable kafka proxy server on port").OptionalArgument("PORT");
+    opts.AddLongOption("kafka-address", "set kafka proxy listen address").RequiredArgument("ADDR");
     opts.AddLongOption("grpc-public-host", "set public gRPC host for discovery").RequiredArgument("HOST");
     opts.AddLongOption("grpc-public-port", "set public gRPC port for discovery").RequiredArgument("PORT");
     opts.AddLongOption("grpcs-public-port", "set public gRPC SSL port for discovery").RequiredArgument("PORT");
@@ -168,6 +170,11 @@ void TRunCommandConfigParser::ParseConfigFiles(const NLastGetopt::TOptsParseResu
         conf.SetListeningPort(FromString<ui16>(res.Get("kafka-port")));
     }
 
+    if (res.Has("kafka-address")) {
+        auto& conf = *Config.AppConfig.MutableKafkaProxyConfig();
+        conf.SetListeningAddress(res.Get("kafka-address"));
+    }
+
     if (res.Has("grpc-public-host")) {
         auto& conf = *Config.AppConfig.MutableGRpcConfig();
         conf.SetPublicHost(res.Get("grpc-public-host"));
@@ -265,7 +272,9 @@ void TRunCommandConfigParser::ParseRunOpts(int argc, char **argv) {
     opts.AddLongOption("proxy", "Bind to proxy(-ies)").RequiredArgument("ADDR").AppendTo(&RunOpts.ProxyBindToProxy);
     opts.AddLongOption("mon-port", "Monitoring port").OptionalArgument("NUM").StoreResult(&RunOpts.MonitoringPort);
     opts.AddLongOption("mon-address", "Monitoring address").OptionalArgument("ADDR").StoreResult(&RunOpts.MonitoringAddress);
-    opts.AddLongOption("mon-cert", "Monitoring certificate (https)").OptionalArgument("PATH").StoreResult(&RunOpts.MonitoringCertificateFile);
+    opts.AddLongOption("mon-cert", "Path to monitoring certificate file (https)").OptionalArgument("PATH").StoreResult(&RunOpts.MonitoringCertificateFile);
+    opts.AddLongOption("mon-key", "Path to monitoring private key file (https)").OptionalArgument("PATH").StoreResult(&RunOpts.MonitoringPrivateKeyFile);
+    opts.AddLongOption("mon-ca", "Path to CA certificate file for verifying client certificates (mTLS)").OptionalArgument("PATH").StoreResult(&RunOpts.MonitoringCaFile);
     opts.AddLongOption("mon-threads", "Monitoring http server threads").RequiredArgument("NUM").StoreResult(&RunOpts.MonitoringThreads);
 
     SetupLastGetOptForConfigFiles(opts);
@@ -304,6 +313,21 @@ void TRunCommandConfigParser::ParseRunOpts(int argc, char **argv) {
 }
 
 void TRunCommandConfigParser::ApplyParsedOptions() {
+    auto ensureFileExistsIfSet = [](const TString& path, TStringBuf optName) {
+        if (path.empty()) {
+            return;
+        }
+        TFsPath fspath(path);
+        TFileStat filestat;
+        if (!fspath.Stat(filestat) || !filestat.IsFile()) {
+            ythrow yexception() << "File passed to --" << optName << " does not exist: " << path;
+        }
+    };
+
+    ensureFileExistsIfSet(RunOpts.MonitoringCertificateFile, "mon-cert");
+    ensureFileExistsIfSet(RunOpts.MonitoringPrivateKeyFile, "mon-key");
+    ensureFileExistsIfSet(RunOpts.MonitoringCaFile, "mon-ca");
+
     // apply global options
     Config.AppConfig.MutableInterconnectConfig()->SetStartTcp(GlobalOpts.StartTcp);
     auto logConfig = Config.AppConfig.MutableLogConfig();
@@ -371,7 +395,9 @@ void TRunCommandConfigParser::ApplyParsedOptions() {
     Config.AppConfig.MutableMonitoringConfig()->SetMonitoringThreads(RunOpts.MonitoringThreads);
     Config.AppConfig.MutableMonitoringConfig()->SetMaxRequestsPerSecond(RunOpts.MonitoringMaxRequestsPerSecond);
     Config.AppConfig.MutableMonitoringConfig()->SetInactivityTimeout(ToString(RunOpts.MonitoringInactivityTimeout.Seconds()));
-    Config.AppConfig.MutableMonitoringConfig()->SetMonitoringCertificate(TUnbufferedFileInput(RunOpts.MonitoringCertificateFile).ReadAll());
+    Config.AppConfig.MutableMonitoringConfig()->SetMonitoringCertificateFile(RunOpts.MonitoringCertificateFile);
+    Config.AppConfig.MutableMonitoringConfig()->SetMonitoringPrivateKeyFile(RunOpts.MonitoringPrivateKeyFile);
+    Config.AppConfig.MutableMonitoringConfig()->SetMonitoringCaFile(RunOpts.MonitoringCaFile);
     Config.AppConfig.MutableRestartsCountConfig()->SetRestartsCountFile(RunOpts.RestartsCountFile);
 }
 

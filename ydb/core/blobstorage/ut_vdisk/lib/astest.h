@@ -6,7 +6,7 @@
 #include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/executor_pool_io.h>
 #include <ydb/library/actors/core/scheduler_basic.h>
-#include <ydb/library/actors/interconnect/poller_actor.h>
+#include <ydb/library/actors/interconnect/poller/poller_actor.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/library/actors/protos/services_common.pb.h>
@@ -103,7 +103,8 @@ inline void TTestWithActorSystem::Run(NActors::IActor *testActor) {
     }
     Monitoring.reset(new NActors::TMon({
         .Port = MonPort,
-        .Title = "at"
+        .Title = "at",
+        .Authorizer = nullptr  // Disable authorization in test environment
     }));
     NMonitoring::TIndexMonPage *actorsMonPage = Monitoring->RegisterIndexPage("actors", "Actors");
     Y_UNUSED(actorsMonPage);
@@ -121,7 +122,7 @@ inline void TTestWithActorSystem::Run(NActors::IActor *testActor) {
     loggerActor->Log(Now(), NKikimr::NLog::PRI_NOTICE, NActorsServices::TEST, "Actor system created");
 
     ActorSystem1->Start();
-    LOG_NOTICE(*ActorSystem1, NActorsServices::TEST, "Actor system started");
+    YDB_LOG_NOTICE_CTX_COMP(*ActorSystem1, NActorsServices::TEST, "Actor system started");
 
     Monitoring->Start(ActorSystem1.get()).wait();
 

@@ -1,6 +1,3 @@
 #pragma once
 
-namespace NKikimr::NColumnShard {
-
-    
-}
+namespace NKikimr::NColumnShard {}

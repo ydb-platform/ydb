@@ -10,6 +10,8 @@
 #include <ydb/services/metadata/service.h>
 #include <ydb/services/metadata/initializer/behaviour.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::METADATA_PROVIDER
+
 namespace NKikimr::NMetadata::NProvider {
 
 IActor* CreateService(const TConfig& config) {
@@ -93,12 +95,21 @@ void TService::Handle(TEvRefreshSubscriberData::TPtr& ev) {
     RegistrationData->SetInitializationSnapshot(ev->Get()->GetSnapshot());
 }
 
+void TService::Handle(TEvResetManagerRegistration::TPtr& ev) {
+    const auto manager = ev->Get()->GetManager();
+    const auto& typeId = manager->GetTypeId();
+    if (const auto it = RegistrationData->Registered.find(typeId); it != RegistrationData->Registered.end()) {
+        RegistrationData->Registered.erase(it);
+    } else if (const auto it = RegistrationData->InRegistration.find(typeId); it != RegistrationData->InRegistration.end()) {
+        PrepareManagers({manager}, ev->ReleaseBase(), ev->Sender);
+    }
+}
+
 void TService::Bootstrap(const NActors::TActorContext& /*ctx*/) {
     RegistrationData->EventsWaiting = std::make_shared<TEventsCollector>(SelfId());
-    ALS_INFO(NKikimrServices::METADATA_PROVIDER) << "metadata service started" << Endl;
+    YDB_LOG_INFO("Metadata service started");
     Become(&TService::StateMain);
     Send(SelfId(), new TEvSubscribeExternal(RegistrationData->GetInitializationFetcher()));
 }
 
-
-}
+} // namespace NKikimr::NMetadata::NProvider

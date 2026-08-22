@@ -1,9 +1,10 @@
 YQL_UDF_CONTRIB(datetime2_udf)
     YQL_ABI_VERSION(
         2
-        40
+        47
         0
     )
+
     SRCS(
         datetime_udf.cpp
     )
@@ -11,6 +12,8 @@ YQL_UDF_CONTRIB(datetime2_udf)
         util/draft
         library/cpp/type_info/tz
         yql/essentials/public/udf/arrow
+        yql/essentials/public/langver
+        yql/essentials/core/langver
         yql/essentials/minikql
         yql/essentials/minikql/datetime
     )

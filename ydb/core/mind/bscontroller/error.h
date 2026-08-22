@@ -4,6 +4,9 @@
 #include "scheme.h"
 #include "types.h"
 
+#include <ydb/core/blobstorage/base/blobstorage_vdiskid.h>
+#include <ydb/core/protos/blobstorage_config.pb.h>
+
 namespace NKikimr::NBsController {
 
     template<typename Traits>
@@ -37,6 +40,8 @@ namespace NKikimr::NBsController {
         P(GroupId, ui32)
         P(StoragePoolName, TString)
         P(DiskSerialNumber, TString)
+        P(GroupGenerationProvided, ui32)
+        P(GroupGenerationExpected, ui32)
 
         struct TVDiskIdTraits {
             using Type = TVDiskID;
@@ -232,6 +237,25 @@ namespace NKikimr::NBsController {
     struct TExAlready : TExError {
         NKikimrBlobStorage::TConfigResponse::TStatus::EFailReason GetFailReason() const override {
             return NKikimrBlobStorage::TConfigResponse::TStatus::kAlready;
+        }
+    };
+
+    struct TExReassignNotViable : TExError {
+        NKikimrBlobStorage::TConfigResponse::TStatus::EFailReason GetFailReason() const override {
+            return NKikimrBlobStorage::TConfigResponse::TStatus::kReassignNotViable;
+        }
+    };
+
+    struct TExGroupGenerationMismatch : TExError {
+        TExGroupGenerationMismatch(ui32 groupId, ui32 provided, ui32 expected) {
+            *this << "Group generation mismatch"
+                << TErrorParams::GroupId(groupId)
+                << TErrorParams::GroupGenerationProvided(provided)
+                << TErrorParams::GroupGenerationExpected(expected);
+        }
+
+        NKikimrBlobStorage::TConfigResponse::TStatus::EFailReason GetFailReason() const override {
+            return NKikimrBlobStorage::TConfigResponse::TStatus::kGroupGenerationMismatch;
         }
     };
 

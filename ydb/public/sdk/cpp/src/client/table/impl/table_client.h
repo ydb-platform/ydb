@@ -1,11 +1,12 @@
 #pragma once
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/session_client/session_client.h>
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/scheme_helpers/helpers.h>
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/table_helpers/helpers.h>
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/make_request/make.h>
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/session_pool/session_pool.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/scheme_helpers/helpers.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/table_helpers/helpers.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/make_request/make.h>
+#include <ydb/public/sdk/cpp/src/client/impl/observability/observation.h>
+#include <ydb/public/sdk/cpp/src/client/impl/session/session_client.h>
+#include <ydb/public/sdk/cpp/src/client/impl/session/session_pool.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
@@ -20,13 +21,15 @@
 
 #include <library/cpp/threading/future/core/coroutine_traits.h>
 
-
 namespace NYdb::inline Dev {
 namespace NTable {
 
 //How ofter run host scan to perform session balancing
-constexpr TDuration HOSTSCAN_PERIODIC_ACTION_INTERVAL = TDuration::Seconds(2);
+constexpr TDeadline::Duration HOSTSCAN_PERIODIC_ACTION_INTERVAL = std::chrono::seconds(2);
 constexpr TDuration KEEP_ALIVE_CLIENT_TIMEOUT = TDuration::Seconds(5);
+// Max wait time for Drain() to complete. Sessions are being closed with 2 seconds
+// timeout each (in parallel), plus up to 10 seconds for discovery if needed.
+constexpr TDuration DRAIN_TIMEOUT = TDuration::Seconds(30);
 
 TDuration GetMinTimeToTouch(const TSessionPoolSettings& settings);
 TDuration GetMaxTimeToTouch(const TSessionPoolSettings& settings);
@@ -43,7 +46,7 @@ public:
     void InitStopper();
     NThreading::TFuture<void> Drain();
     NThreading::TFuture<void> Stop();
-    void ScheduleTaskUnsafe(std::function<void()>&& fn, TDuration timeout);
+    void ScheduleTaskUnsafe(std::function<void()>&& fn, TDeadline::Duration timeout);
     void StartPeriodicSessionPoolTask();
     static ui64 ScanForeignLocations(std::shared_ptr<TTableClient::TImpl> client);
     static std::pair<ui64, size_t> ScanLocation(std::shared_ptr<TTableClient::TImpl> client,
@@ -55,21 +58,23 @@ public:
     i64 GetActiveSessionCount() const;
     i64 GetActiveSessionsLimit() const;
     i64 GetCurrentPoolSize() const;
-    TAsyncCreateSessionResult CreateSession(const TCreateSessionSettings& settings, bool standalone,
-        std::string preferredLocation = std::string());
+    TAsyncCreateSessionResult CreateSession(const TCreateSessionSettings& settings,
+                                            const TRpcRequestSettings& rpcSettings,
+                                            bool standalone);
     TAsyncKeepAliveResult KeepAlive(const TSession::TImpl* session, const TKeepAliveSettings& settings);
 
-    TFuture<TStatus> CreateTable(Ydb::Table::CreateTableRequest&& request, const TCreateTableSettings& settings);
-    TFuture<TStatus> AlterTable(Ydb::Table::AlterTableRequest&& request, const TAlterTableSettings& settings);
-    TAsyncOperation AlterTableLong(Ydb::Table::AlterTableRequest&& request, const TAlterTableSettings& settings);
-    TFuture<TStatus> CopyTable(const std::string& sessionId, const std::string& src, const std::string& dst,
-        const TCopyTableSettings& settings);
-    TFuture<TStatus> CopyTables(Ydb::Table::CopyTablesRequest&& request, const TCopyTablesSettings& settings);
-    TFuture<TStatus> RenameTables(Ydb::Table::RenameTablesRequest&& request, const TRenameTablesSettings& settings);
-    TFuture<TStatus> DropTable(const std::string& sessionId, const std::string& path, const TDropTableSettings& settings);
-    TAsyncDescribeTableResult DescribeTable(const std::string& sessionId, const std::string& path, const TDescribeTableSettings& settings);
-    TAsyncDescribeExternalDataSourceResult DescribeExternalDataSource(const std::string& path, const TDescribeExternalDataSourceSettings& settings);
-    TAsyncDescribeExternalTableResult DescribeExternalTable(const std::string& path, const TDescribeExternalTableSettings& settings);
+    TFuture<TStatus> CreateTable(Ydb::Table::CreateTableRequest&& request, const TRpcRequestSettings& rpcSettings);
+    TFuture<TStatus> AlterTable(Ydb::Table::AlterTableRequest&& request, const TRpcRequestSettings& rpcSettings);
+    TAsyncOperation AlterTableLong(Ydb::Table::AlterTableRequest&& request, const TRpcRequestSettings& rpcSettings);
+
+    TFuture<TStatus> CopyTable(const TSession& session, const std::string& src, const std::string& dst, const TCopyTableSettings& settings);
+    TFuture<TStatus> CopyTables(const TSession& session, const std::vector<TCopyItem>& copyItems, const TCopyTablesSettings& settings);
+    TFuture<TStatus> RenameTables(const TSession& session, const std::vector<TRenameItem>& renameItems, const TRenameTablesSettings& settings);
+    TFuture<TStatus> DropTable(const TSession& session, const std::string& path, const TDropTableSettings& settings);
+    TAsyncDescribeTableResult DescribeTable(const TSession& session, const std::string& path, const TDescribeTableSettings& settings);
+    TAsyncDescribeExternalDataSourceResult DescribeExternalDataSource(const TSession& session, const std::string& path, const TDescribeExternalDataSourceSettings& settings);
+    TAsyncDescribeExternalTableResult DescribeExternalTable(const TSession& session, const std::string& path, const TDescribeExternalTableSettings& settings);
+    TAsyncDescribeSystemViewResult DescribeSystemView(const TSession& session, const std::string& path, const TDescribeSystemViewSettings& settings);
 
     template<typename TParamsType>
     TAsyncDataQueryResult ExecuteDataQuery(TSession& session, const std::string& query, const TTxControl& txControl,
@@ -108,7 +113,7 @@ public:
 
     TAsyncPrepareQueryResult PrepareDataQuery(const TSession& session, const std::string& query,
         const TPrepareDataQuerySettings& settings);
-    TAsyncStatus ExecuteSchemeQuery(const std::string& sessionId, const std::string& query,
+    TAsyncStatus ExecuteSchemeQuery(const TSession& session, const std::string& query,
         const TExecSchemeQuerySettings& settings);
 
     TAsyncBeginTransactionResult BeginTransaction(const TSession& session, const TTxSettings& txSettings,
@@ -124,7 +129,7 @@ public:
     static void SetTypedValue(Ydb::TypedValue* protoValue, const TValue& value);
 
     NThreading::TFuture<std::pair<TPlainStatus, TReadTableStreamProcessorPtr>> ReadTable(
-        const std::string& sessionId,
+        const TSession& session,
         const std::string& path,
         const TReadTableSettings& settings);
     TAsyncReadRowsResult ReadRows(const std::string& path, TValue&& keys, const std::vector<std::string>& columns, const TReadRowsSettings& settings);
@@ -134,11 +139,12 @@ public:
 
     bool ReturnSession(TKqpSessionCommon* sessionImpl) override;
     void DeleteSession(TKqpSessionCommon* sessionImpl) override;
+    void PessimizeNode(std::uint64_t nodeId) override;
     ui32 GetSessionRetryLimit() const;
 
     void SetStatCollector(const NSdkStats::TStatCollector::TClientStatCollector& collector);
 
-    TAsyncBulkUpsertResult BulkUpsert(const std::string& table, TValue&& rows, const TBulkUpsertSettings& settings, bool canMove);
+    TAsyncBulkUpsertResult BulkUpsert(const std::string& table, TValue&& rows, const TBulkUpsertSettings& settings);
     TAsyncBulkUpsertResult BulkUpsert(const std::string& table, EDataFormat format,
         const std::string& data, const std::string& schema, const TBulkUpsertSettings& settings);
 
@@ -151,7 +157,12 @@ public:
     void CollectRetryStatAsync(EStatus status);
     void CollectRetryStatSync(EStatus status);
 
-public:
+    std::shared_ptr<NObservability::TRequestSpan> CreateRetryRootSpan();
+    std::shared_ptr<NObservability::TRequestSpan> CreateRetryAttemptSpan(std::uint32_t attempt
+        , std::int64_t backoffMs
+        , const std::shared_ptr<NObservability::TRequestSpan>& parent = nullptr
+    );
+
     TClientSettings Settings_;
 
 private:
@@ -235,6 +246,8 @@ private:
         auto promise = NewPromise<TDataQueryResult>();
         bool keepInCache = settings.KeepInQueryCache_ && settings.KeepInQueryCache_.value();
 
+        auto obs = MakeObservation("ExecuteDataQuery");
+
         // We don't want to delay call of TSession dtor, so we can't capture it by copy
         // otherwise we break session pool and other clients logic.
         // Same problem with TDataQuery and TTransaction
@@ -244,7 +257,7 @@ private:
         // - capture pointer
         // - call free just before SetValue call
         auto sessionPtr = new TSession(session);
-        auto extractor = [promise, sessionPtr, query, fromCache, keepInCache]
+        auto extractor = [promise, sessionPtr, query, fromCache, keepInCache, obs]
             (google::protobuf::Any* any, TPlainStatus status) mutable {
                 std::vector<TResultSet> res;
                 std::optional<TTransaction> tx;
@@ -280,6 +293,7 @@ private:
                     sessionPtr->SessionImpl_->AddQueryToCache(*dataQuery);
                 }
 
+                obs->End(status.Status, status.Endpoint);
                 TDataQueryResult dataQueryResult(TStatus(std::move(status)),
                     std::move(res), tx, dataQuery, fromCache, queryStats);
 
@@ -325,9 +339,21 @@ public:
     NSdkStats::TAtomicCounter<::NMonitoring::TRate> SessionRemovedDueBalancing;
 
 private:
+    std::shared_ptr<NTrace::ITracer> Tracer_;
+    NSdkStats::TStatCollector::TClientOperationStatCollector OperationStatCollector_;
     NSessionPool::TSessionPool SessionPool_;
     TRequestMigrator RequestMigrator_;
     static const TKeepAliveSettings KeepAliveSettings;
+
+    std::shared_ptr<NObservability::TRequestObservation> MakeObservation(const std::string& operationName) {
+        return std::make_shared<NObservability::TRequestObservation>(
+            "Table",
+            &OperationStatCollector_,
+            Tracer_,
+            operationName,
+            DbDriverState_
+        );
+    }
 };
 
 }

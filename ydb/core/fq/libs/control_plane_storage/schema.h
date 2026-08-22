@@ -84,6 +84,7 @@ namespace NFq {
 #define USAGE_UPDATED_AT_COLUMN_NAME "usage_updated_at"
 
 #define VTENANT_COLUMN_NAME "vtenant"
+#define NODE_COLUMN_NAME "node"
 #define COMMON_COLUMN_NAME "common"
 #define STATE_COLUMN_NAME "state"
 #define STATE_TIME_COLUMN_NAME "state_time"

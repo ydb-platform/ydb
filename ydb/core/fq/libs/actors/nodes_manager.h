@@ -10,7 +10,6 @@
 #include <ydb/library/yql/providers/dq/actors/proto_builder.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 
-#include <ydb/library/actors/core/actorsystem.h>
 #include <library/cpp/time_provider/time_provider.h>
 #include <library/cpp/random_provider/random_provider.h>
 

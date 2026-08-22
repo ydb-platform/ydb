@@ -14,13 +14,13 @@
  * Interesting ordering is an ordering which is produced by a query or tested in the query
  * At this moment, we process only shuffles, but in future there will be groupings and sortings
  * For details of the algorithms and examples look at the white papers -
- * - "An efficient framework for order optimization" / "A Combined Framework for Grouping and Order Optimization"
+ * - "An efficient framework for order optimization" / "A Combined Framework for Grouping and Order Optimization" by T. Neumann, G. Moerkotte
  */
 
 namespace NYql::NDq {
 
 struct TOrdering {
-    enum EType : uint32_t {
+    enum EType: uint32_t {
         EShuffle = 0,
         ESorting = 1
     };
@@ -29,7 +29,7 @@ struct TOrdering {
     TString ToString() const;
 
     struct TItem {
-        enum EDirection : uint32_t {
+        enum EDirection: uint32_t {
             ENone = 0,
             EAscending = 1,
             EDescending = 2
@@ -40,8 +40,7 @@ struct TOrdering {
         std::vector<std::size_t> items,
         std::vector<TItem::EDirection> directions,
         EType type,
-        bool isNatural = false
-    )
+        bool isNatural = false)
         : Items(std::move(items))
         , Directions(std::move(directions))
         , Type(type)
@@ -49,20 +48,19 @@ struct TOrdering {
     {
         Y_ENSURE(
             Directions.empty() && type == TOrdering::EShuffle ||
-            Directions.size() == Items.size() && type == TOrdering::ESorting
-        );
+            Directions.size() == Items.size() && type == TOrdering::ESorting);
     }
 
     TOrdering(
         std::vector<std::size_t> items,
-        EType type
-    )
+        EType type)
         : TOrdering(
-            std::move(items),
-            std::vector<TItem::EDirection>{},
-            type
-        )
-    {}
+              std::move(items),
+              std::vector<TItem::EDirection>{},
+              type,
+              /*isNatural=*/false)
+    {
+    }
 
     TOrdering() = default;
 
@@ -72,7 +70,12 @@ struct TOrdering {
     std::vector<TItem::EDirection> Directions;
 
     EType Type;
-    /* Definition was taken from 'Complex Ordering Requirements' section. Not natural orderings are complex join predicates or grouping. */
+    /*
+     * Definition was taken from 'Complex Ordering Requirements' section. Not natural orderings are complex join predicates or grouping.
+     * There can occure a problem when we have a natural ordering - shuffling (a, b) of the table and we must aggregate by (b, a, c) - non natural ordering
+     * So for this case (b, a, c) suits for us as well and we must reorder (b, a, c) to (a, b, c). In the section from the white papper this is
+     * described more detailed.
+     */
     bool IsNatural = false;
 };
 
@@ -85,7 +88,7 @@ struct TOrdering {
  *      a = const : {} -> a
  */
 struct TFunctionalDependency {
-    enum EType : uint32_t {
+    enum EType: uint32_t {
         /* default fd: a -> b */
         EImplication = 0,
         /* equivalence: a = b */
@@ -110,28 +113,29 @@ struct TFunctionalDependency {
 bool operator==(const TFunctionalDependency& lhs, const TFunctionalDependency& rhs);
 
 // Map of table aliases to their original table names
-struct TTableAliasMap : public TSimpleRefCount<TTableAliasMap> {
+struct TTableAliasMap: public TSimpleRefCount<TTableAliasMap> {
 public:
     struct TBaseColumn {
         TBaseColumn() = default;
 
         TBaseColumn(
             TString relation,
-            TString column
-        )
+            TString column)
             : Relation(std::move(relation))
             , Column(std::move(column))
-        {}
+        {
+        }
 
         TBaseColumn(const TBaseColumn& other)
             : Relation(other.Relation)
             , Column(other.Column)
-        {}
+        {
+        }
 
         TBaseColumn& operator=(const TBaseColumn& other);
 
         NDq::TJoinColumn ToJoinColumn();
-        operator bool();
+        explicit operator bool();
 
         TString Relation;
         TString Column;
@@ -145,7 +149,9 @@ public:
     TBaseColumn GetBaseColumnByRename(const NDq::TJoinColumn& renamedColumn);
     TString ToString() const;
     void Merge(const TTableAliasMap& other);
-    bool Empty() const { return TableByAlias_.empty() && BaseColumnByRename_.empty(); }
+    bool Empty() const {
+        return TableByAlias_.empty() && BaseColumnByRename_.empty();
+    }
 
 private:
     TString GetBaseTableByAlias(const TString& alias);
@@ -158,14 +164,24 @@ private:
 struct TSorting {
     TSorting(
         std::vector<TJoinColumn> ordering,
-        std::vector<TOrdering::TItem::EDirection> directions
-    )
+        std::vector<TOrdering::TItem::EDirection> directions)
         : Ordering(std::move(ordering))
         , Directions(std::move(directions))
-    {}
+    {
+    }
 
     std::vector<TJoinColumn> Ordering;
     std::vector<TOrdering::TItem::EDirection> Directions;
+};
+
+struct TShuffling {
+    explicit TShuffling(
+        std::vector<TJoinColumn> ordering)
+        : Ordering(std::move(ordering))
+    {
+    }
+
+    std::vector<TJoinColumn> Ordering;
 };
 
 /*
@@ -177,8 +193,7 @@ public:
         const TJoinColumn& antecedentColumn,
         const TJoinColumn& consequentColumn,
         TFunctionalDependency::EType type,
-        TTableAliasMap* tableAliases = nullptr
-    );
+        TTableAliasMap* tableAliases = nullptr);
 
 public: // deprecated section, use the section below instead of this
     std::size_t AddFD(
@@ -186,29 +201,25 @@ public: // deprecated section, use the section below instead of this
         const TJoinColumn& consequentColumn,
         TFunctionalDependency::EType type,
         bool alwaysActive = false,
-        TTableAliasMap* tableAliases = nullptr
-    );
+        TTableAliasMap* tableAliases = nullptr);
 
 public:
     std::size_t AddConstant(
         const TJoinColumn& constantColumn,
         bool alwaysActive,
-        TTableAliasMap* tableAliases = nullptr
-    );
+        TTableAliasMap* tableAliases = nullptr);
 
     std::size_t AddImplication(
         const TVector<TJoinColumn>& antecedentColumns,
         const TJoinColumn& consequentColumn,
         bool alwaysActive,
-        TTableAliasMap* tableAliases = nullptr
-    );
+        TTableAliasMap* tableAliases = nullptr);
 
     std::size_t AddEquivalence(
         const TJoinColumn& lhs,
         const TJoinColumn& rhs,
         bool alwaysActive,
-        TTableAliasMap* tableAliases = nullptr
-    );
+        TTableAliasMap* tableAliases = nullptr);
 
 private:
     std::size_t AddFDImpl(TFunctionalDependency fd);
@@ -217,41 +228,38 @@ public: // deprecated section, use the section below instead of this
     i64 FindInterestingOrderingIdx(
         const std::vector<TJoinColumn>& interestingOrdering,
         TOrdering::EType type,
-        TTableAliasMap* tableAliases = nullptr
-    );
+        TTableAliasMap* tableAliases = nullptr);
 
     std::size_t AddInterestingOrdering(
         const std::vector<TJoinColumn>& interestingOrdering,
         TOrdering::EType type,
-        TTableAliasMap* tableAliases = nullptr
-    );
+        TTableAliasMap* tableAliases = nullptr);
 
 public:
     std::size_t FindSorting(
-        const TSorting& sorting,
-        TTableAliasMap* tableAliases = nullptr
-    );
+        const TSorting&,
+        TTableAliasMap* tableAliases = nullptr);
 
     std::size_t AddSorting(
-        const TSorting& sortings,
-        TTableAliasMap* tableAliases = nullptr
-    );
+        const TSorting&,
+        TTableAliasMap* tableAliases = nullptr);
 
     std::size_t FindShuffling(
-        const std::vector<TJoinColumn>& interestingOrdering,
-        TTableAliasMap* tableAliases = nullptr
-    );
+        const TShuffling&,
+        TTableAliasMap* tableAliases = nullptr);
 
     std::size_t AddShuffling(
-        const std::vector<TJoinColumn>& interestingOrdering,
-        TTableAliasMap* tableAliases = nullptr
-    );
+        const TShuffling&,
+        TTableAliasMap* tableAliases = nullptr);
 
 public:
     TVector<TJoinColumn> GetInterestingOrderingsColumnNamesByIdx(std::size_t interestingOrderingIdx) const;
 
     TSorting GetInterestingSortingByOrderingIdx(std::size_t interestingOrderingIdx) const;
     TString ToString() const;
+
+    // look at the IsNatural field at the Ordering struct
+    void ApplyNaturalOrderings();
 
 public:
     std::vector<TFunctionalDependency> FDs;
@@ -263,27 +271,25 @@ private:
         const std::vector<TOrdering::TItem::EDirection>& directions,
         TOrdering::EType type,
         bool createIfNotExists,
-        TTableAliasMap* tableAliases = nullptr
-    );
+        bool isNatural,
+        TTableAliasMap* tableAliases);
 
     std::vector<std::size_t> ConvertColumnIntoIndexes(
         const std::vector<TJoinColumn>& ordering,
         bool createIfNotExists,
-        TTableAliasMap* tableAliases = nullptr
-    );
+        TTableAliasMap* tableAliases);
 
     std::size_t GetIdxByColumn(
         const TJoinColumn& column,
         bool createIfNotExists,
-        TTableAliasMap* tableAliases = nullptr
-    );
+        TTableAliasMap* tableAliases);
 
     std::size_t AddInterestingOrdering(
         const std::vector<TJoinColumn>& interestingOrdering,
         TOrdering::EType type,
         const std::vector<TOrdering::TItem::EDirection>& directions,
-        TTableAliasMap* tableAliases
-    );
+        bool isNatural,
+        TTableAliasMap* tableAliases);
 
 private:
     THashMap<TString, std::size_t> IdxByColumn_;
@@ -292,30 +298,40 @@ private:
 };
 
 /*
- * This class represents Finite-State Machine (FSM). The state in this machine is all available logical orderings.
- * The steps of building the FSM:
- *      1) Construct nodes of the NFSM (Non-Determenistic FSM)
- *      2) Prune functional dependencies which won't lead us to the interestng orderings
- *      3) Construct edges of the NFSM
- *      4) It is inconvenient to work with NFSM, because it contains many states at the moment, so
- *         we will convert NFSM to DFSM (Determenistic FSM) and precompute values for it for O(1) switch state operations.
+ * This class represents Finite-State Machine (FSM) for tracking ordering transformations.
+ * Each state represents a set of available logical orderings that can be derived from functional dependencies.
+ *
+ * The FSM construction follows these steps:
+ *      1) Build NFSM (Non-Deterministic FSM): Create nodes for each interesting ordering and apply
+ *         functional dependencies to generate all possible ordering transformations. This creates
+ *         a graph where nodes are orderings and edges represent FD applications.
+ *
+ *      2) Prune FDs: Remove functional dependencies that cannot lead to any interesting orderings
+ *         to reduce the state space and improve performance.
+ *
+ *      3) Add NFSM edges: Connect orderings through epsilon transitions (prefix relationships)
+ *         and FD transitions (functional dependency applications).
+ *
+ *      4) Convert to DFSM (Deterministic FSM): Since NFSM can have exponential states and is
+ *         hard to work with, we convert it to DFSM using subset construction. Each DFSM state
+ *         represents a set of NFSM states reachable through epsilon transitions and always-active FDs.
+ *         This allows O(1) state transitions and efficient ordering containment checks.
  */
 class TOrderingsStateMachine {
 private:
     class TDFSM;
-    enum _ : std::uint32_t {
-        EMaxFDCount = 64,
-        EMaxNFSMStates = 256,
-        EMaxDFSMStates = 512,
-    };
+
+    static constexpr std::uint32_t MaxFDCount = 64;
+    static constexpr std::uint32_t MaxNFSMStates = 256;
+    static constexpr std::uint32_t MaxDFSMStates = 512;
 
     struct TItemInfo {
-        bool UsedInAscOrdering  = false;
+        bool UsedInAscOrdering = false;
         bool UsedInDescOrdering = false;
     };
 
 public:
-    using TFDSet = std::bitset<EMaxFDCount>;
+    using TFDSet = std::bitset<MaxFDCount>;
 
     /*
      * This class represents a state of the FSM (node idx in the DFSM and some metadata).
@@ -324,11 +340,12 @@ public:
     public:
         TLogicalOrderings() = default;
         TLogicalOrderings(const TLogicalOrderings&) = default;
-        TLogicalOrderings& operator= (const TLogicalOrderings&) = default;
+        TLogicalOrderings& operator=(const TLogicalOrderings&) = default;
 
-        TLogicalOrderings(TDFSM* dfsm)
+        explicit TLogicalOrderings(TDFSM* dfsm)
             : Dfsm_(dfsm)
-        {}
+        {
+        }
 
     public: // API
         bool ContainsShuffle(i64 orderingIdx);
@@ -350,7 +367,7 @@ public:
         bool IsInitialized() const;
 
     private:
-        bool IsSubset(const std::bitset<EMaxNFSMStates>& lhs, const std::bitset<EMaxNFSMStates>& rhs);
+        bool IsSubset(const std::bitset<MaxNFSMStates>& lhs, const std::bitset<MaxNFSMStates>& rhs);
 
     private:
         TDFSM* Dfsm_ = nullptr;
@@ -364,26 +381,25 @@ public:
         TFDSet AppliedFDs_{};
     };
 
-    TLogicalOrderings CreateState();
-    TLogicalOrderings CreateState(i64 orderingIdx);
+    TLogicalOrderings CreateState() const;
+    TLogicalOrderings CreateState(i64 orderingIdx) const;
 
 public:
     TOrderingsStateMachine() = default;
 
-    TOrderingsStateMachine(
+    explicit TOrderingsStateMachine(
         TFDStorage fdStorage,
-        TOrdering::EType machineType = TOrdering::EShuffle
-    )
+        TOrdering::EType machineType = TOrdering::EShuffle)
         : FDStorage(std::move(fdStorage))
     {
-        EraseIf(FDStorage.InterestingOrderings, [machineType](const TOrdering& ordering){ return ordering.Type != machineType; });
+        EraseIf(FDStorage.InterestingOrderings, [machineType](const TOrdering& ordering) { return ordering.Type != machineType; });
+        FDStorage.ApplyNaturalOrderings();
         Build(FDStorage.FDs, FDStorage.InterestingOrderings);
     }
 
     TOrderingsStateMachine(
         const std::vector<TFunctionalDependency>& fds,
-        const std::vector<TOrdering>& interestingOrderings
-    ) {
+        const std::vector<TOrdering>& interestingOrderings) {
         Build(fds, interestingOrderings);
     }
 
@@ -397,16 +413,22 @@ public:
 private:
     void Build(
         const std::vector<TFunctionalDependency>& fds,
-        const std::vector<TOrdering>& interestingOrderings
-    );
+        const std::vector<TOrdering>& interestingOrderings);
 
 private:
+    /*
+     * Non-Deterministic Finite State Machine (NFSM) for ordering transformations.
+     *
+     * The NFSM represents all possible ordering transformations that can be achieved
+     * through functional dependencies. Each node represents a specific ordering (either
+     * interesting or artificially generated), and edges represent transformations via FDs.
+     */
     class TNFSM {
     public:
         friend class TDFSM;
 
         struct TNode {
-            enum EType : uint32_t {
+            enum EType: uint32_t {
                 EArtificial,
                 EInteresting
             };
@@ -415,7 +437,8 @@ private:
                 : Type(type)
                 , Ordering(std::move(ordering))
                 , InterestingOrderingIdx(interestingOrderingIdx)
-            {}
+            {
+            }
 
             EType Type;
             std::vector<std::size_t> OutgoingEdges;
@@ -431,9 +454,7 @@ private:
             std::size_t DstNodeIdx;
             i64 FdIdx;
 
-            enum _ : i64 {
-                EPSILON = -1 // eps edges with give us nodes without applying any FDs.
-            };
+            static constexpr i64 Epsilon = -1; // eps edges with give us nodes without applying any FDs.
 
             bool operator==(const TEdge& other) const;
 
@@ -445,8 +466,7 @@ private:
         void Build(
             const std::vector<TFunctionalDependency>& fds,
             const std::vector<TOrdering>& interesting,
-            const std::vector<TItemInfo>& itemInfo
-        );
+            const std::vector<TItemInfo>& itemInfo);
 
     private:
         std::size_t AddNode(const TOrdering& ordering, TNode::EType type, i64 interestingOrderingIdx = -1);
@@ -455,14 +475,29 @@ private:
         void ApplyFDs(
             const std::vector<TFunctionalDependency>& fds,
             const std::vector<TOrdering>& interesting,
-            const std::vector<TItemInfo>& itemInfo
-        );
+            const std::vector<TItemInfo>& itemInfo);
 
     private:
         std::vector<TNode> Nodes_;
         std::vector<TEdge> Edges_;
     };
 
+    /*
+     * Deterministic Finite State Machine (DFSM) for efficient ordering operations.
+     *
+     * The DFSM is constructed from NFSM using subset construction algorithm. Each DFSM state
+     * represents a set of NFSM states that are reachable through epsilon transitions and
+     * always-active functional dependencies.
+     *
+     * Key benefits over NFSM:
+     * - Deterministic: Exactly one transition per FD from each state
+     * - Efficient: O(1) state transitions using precomputed transition matrix
+     * - Compact: Significantly fewer states than NFSM through state merging
+     * - Fast containment checks: Bitset operations for ordering membership tests
+     *
+     * The DFSM enables efficient runtime queries like "does current state contain ordering X?"
+     * and "what orderings become available after applying FD set Y?".
+     */
     class TDFSM {
     public:
         friend class TLogicalOrderings;
@@ -470,9 +505,9 @@ private:
 
         struct TNode {
             std::vector<std::size_t> NFSMNodes;
-            std::bitset<EMaxFDCount> OutgoingFDs;
-            std::bitset<EMaxNFSMStates> NFSMNodesBitset;
-            std::bitset<EMaxNFSMStates> InterestingOrderings;
+            std::bitset<MaxFDCount> OutgoingFDs;
+            std::bitset<MaxNFSMStates> NFSMNodesBitset;
+            std::bitset<MaxNFSMStates> InterestingOrderings;
 
             TString ToString() const;
         };
@@ -490,8 +525,7 @@ private:
         void Build(
             const TNFSM& nfsm,
             const std::vector<TFunctionalDependency>& fds,
-            const std::vector<TOrdering>& interestingOrderings
-        );
+            const std::vector<TOrdering>& interestingOrderings);
 
     private:
         std::size_t AddNode(const std::vector<std::size_t>& nfsmNodes);
@@ -500,12 +534,10 @@ private:
             const TNFSM& nfsm,
             const std::vector<std::size_t>& startNFSMNodes,
             const std::vector<TFunctionalDependency>& fds,
-            i64 fdIdx = TNFSM::TEdge::EPSILON
-        );
+            i64 fdIdx = TNFSM::TEdge::Epsilon);
         void Precompute(
             const TNFSM& nfsm,
-            const std::vector<TFunctionalDependency>& fds
-        );
+            const std::vector<TFunctionalDependency>& fds);
 
     private:
         std::vector<TNode> Nodes_;
@@ -527,13 +559,11 @@ private:
      */
     std::vector<TFunctionalDependency> PruneFDs(
         const std::vector<TFunctionalDependency>& fds,
-        const std::vector<TOrdering>& interestingOrderings
-    );
+        const std::vector<TOrdering>& interestingOrderings);
 
     void CollectItemInfo(
         const std::vector<TFunctionalDependency>& fds,
-        const std::vector<TOrdering>& interestingOrderings
-    );
+        const std::vector<TOrdering>& interestingOrderings);
 
 private:
     TNFSM Nfsm_;
@@ -544,4 +574,4 @@ private:
     bool Built_ = false;
 };
 
-}
+} // namespace NYql::NDq

@@ -1,0 +1,21 @@
+$g1 = String::AsciiToUpper;
+$g1 = Udf($g1, "2147483648" as ExtraMem);
+
+$g2 = String::AsciiToUpper;
+$g2 = Udf($g2, "1G" as ExtraMem);
+
+$g3 = String::AsciiToUpper;
+$g3 = Udf($g3, "512M" as ExtraMem);
+
+$g4 = String::AsciiToUpper;
+$g4 = Udf($g4, "1T" as ExtraMem);
+
+$g5 = String::AsciiToUpper;
+$g5 = Udf($g5, "512K" as ExtraMem);
+
+SELECT
+    $g1('test1') as r1,
+    $g2('test2') as r2,
+    $g3('test3') as r3,
+    $g4('test4') as r4,
+    $g5('test5') as r5

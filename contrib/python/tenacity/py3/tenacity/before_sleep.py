@@ -19,8 +19,6 @@ import typing
 from tenacity import _utils
 
 if typing.TYPE_CHECKING:
-    import logging
-
     from tenacity import RetryCallState
 
 
@@ -29,9 +27,10 @@ def before_sleep_nothing(retry_state: "RetryCallState") -> None:
 
 
 def before_sleep_log(
-    logger: "logging.Logger",
+    logger: _utils.LoggerProtocol,
     log_level: int,
     exc_info: bool = False,
+    sec_format: str = "%.3g",
 ) -> typing.Callable[["RetryCallState"], None]:
     """Before sleep strategy that logs to some logger the attempt."""
 
@@ -65,7 +64,7 @@ def before_sleep_log(
         logger.log(
             log_level,
             f"Retrying {fn_name} "
-            f"in {retry_state.next_action.sleep} seconds as it {verb} {value}.",
+            f"in {sec_format % retry_state.next_action.sleep} seconds as it {verb} {value}.",
             exc_info=local_exc_info,
         )
 

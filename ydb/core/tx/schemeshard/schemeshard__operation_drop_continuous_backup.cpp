@@ -5,7 +5,6 @@
 
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
-#include <ydb/core/tx/schemeshard/backup/constants.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -16,29 +15,60 @@ TVector<ISubOperation::TPtr> CreateDropContinuousBackup(TOperationId opId, const
     const auto& cbOp = tx.GetDropContinuousBackup();
     const auto& tableName = cbOp.GetTableName();
 
-    const auto checksResult = NCdc::DoDropStreamPathChecks(opId, workingDirPath, tableName, NBackup::CB_CDC_STREAM_NAME);
-    if (std::holds_alternative<ISubOperation::TPtr>(checksResult)) {
-        return {std::get<ISubOperation::TPtr>(checksResult)};
-    }
+    const auto tablePath = workingDirPath.Child(tableName);
+    {
+        const auto checks = tablePath.Check();
+        checks
+            .NotEmpty()
+            .NotUnderDomainUpgrade()
+            .IsAtLocalSchemeShard()
+            .IsResolved()
+            .NotDeleted()
+            .IsTable()
+            .NotAsyncReplicaTable()
+            .NotUnderDeleting()
+            .NotUnderOperation();
 
-    const auto [tablePath, streamPath] = std::get<NCdc::TStreamPaths>(checksResult);
+        if (checks && !tablePath.IsInsideTableIndexPath()) {
+            checks.IsCommonSensePath();
+        }
 
-    TString errStr;
-    if (!context.SS->CheckApplyIf(tx, errStr)) {
-        return {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, errStr)};
-    }
-
-    if (const auto reject = NCdc::DoDropStreamChecks(opId, tablePath, InvalidTxId, context); reject) {
-        return {reject};
+        if (!checks) {
+            return {CreateReject(opId, checks.GetStatus(), checks.GetError())};
+        }
     }
 
     NKikimrSchemeOp::TDropCdcStream dropCdcStreamOp;
     dropCdcStreamOp.SetTableName(tableName);
-    dropCdcStreamOp.SetStreamName(NBackup::CB_CDC_STREAM_NAME);
+    TVector<TPath> streamPaths;
+
+    for (auto& [child, _] : tablePath.Base()->GetChildren()) {
+        if (child.EndsWith("_continuousBackupImpl")) {
+            const auto checksResult = NCdc::DoDropStreamPathChecks(opId, workingDirPath, tableName, child);
+            if (std::holds_alternative<ISubOperation::TPtr>(checksResult)) {
+                return {std::get<ISubOperation::TPtr>(checksResult)};
+            }
+
+            const auto [_, streamPath] = std::get<NCdc::TStreamPaths>(checksResult);
+
+            TString errStr;
+            if (!context.SS->CheckApplyIf(tx, errStr)) {
+                return {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, errStr)};
+            }
+
+            if (const auto reject = NCdc::DoDropStreamChecks(opId, tablePath, InvalidTxId, context); reject) {
+                return {reject};
+            }
+
+            dropCdcStreamOp.AddStreamName(child);
+            streamPaths.push_back(streamPath);
+        }
+    }
 
     TVector<ISubOperation::TPtr> result;
-
-    NCdc::DoDropStream(result, dropCdcStreamOp, opId, workingDirPath, tablePath, streamPath, InvalidTxId, context);
+    if (!streamPaths.empty()) {
+        NCdc::DoDropStream(result, dropCdcStreamOp, opId, workingDirPath, tablePath, streamPaths, InvalidTxId, context);
+    }
 
     return result;
 }

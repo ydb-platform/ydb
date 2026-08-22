@@ -10,44 +10,47 @@ class TReadMetadata;
 class TReadyResults {
 private:
     const NColumnShard::TConcreteScanCounters Counters;
-    std::deque<std::shared_ptr<TPartialReadResult>> Data;
+    std::deque<std::unique_ptr<TPartialReadResult>> Data;
     i64 RecordsCount = 0;
+
 public:
     TString DebugString() const {
         TStringBuilder sb;
-        sb
-            << "count:" << Data.size() << ";"
-            << "records_count:" << RecordsCount << ";"
-            ;
+        sb << "count:" << Data.size() << ";"
+           << "records_count:" << RecordsCount << ";";
         if (Data.size()) {
-            sb << "schema=" << Data.front()->GetResultBatch().schema()->ToString() << ";";
+            sb << "schema=" << Data.front()->GetResultSchema()->ToString() << ";";
         }
         return sb;
     }
+
     TReadyResults(const NColumnShard::TConcreteScanCounters& counters)
         : Counters(counters)
     {
-
     }
-    const std::shared_ptr<TPartialReadResult>& emplace_back(std::shared_ptr<TPartialReadResult>&& v) {
+
+    const std::unique_ptr<TPartialReadResult>& emplace_back(std::unique_ptr<TPartialReadResult>&& v) {
         AFL_VERIFY(!!v);
-        RecordsCount += v->GetResultBatch().num_rows();
+        RecordsCount += v->GetRecordsCount();
         Data.emplace_back(std::move(v));
         return Data.back();
     }
-    std::shared_ptr<TPartialReadResult> pop_front() {
+
+    std::unique_ptr<TPartialReadResult> pop_front() {
         if (Data.empty()) {
             return {};
         }
         auto result = std::move(Data.front());
-        AFL_VERIFY(RecordsCount >= result->GetResultBatch().num_rows());
-        RecordsCount -= result->GetResultBatch().num_rows();
+        RecordsCount -= result->GetRecordsCount();
+        AFL_VERIFY(RecordsCount >= 0);
         Data.pop_front();
-        return result;
+        return std::move(result);
     }
+
     bool empty() const {
         return Data.empty();
     }
+
     size_t size() const {
         return Data.size();
     }
@@ -80,20 +83,15 @@ public:
 
     virtual const TReadStats& GetStats() const override;
 
-    virtual TString DebugString(const bool verbose) const override {
-        return TStringBuilder()
-            << "ready_results:(" << ReadyResults.DebugString() << ");"
-            << "indexed_data:(" << IndexedData->DebugString(verbose) << ")"
-            ;
-    }
+    virtual TString DebugString(const bool verbose) const override;
 
     virtual void Apply(const std::shared_ptr<IApplyAction>& task) override;
 
-    bool Finished() const  override {
+    bool Finished() const override {
         return IndexedData->IsFinished() && ReadyResults.empty();
     }
 
-    virtual TConclusion<std::shared_ptr<TPartialReadResult>> GetBatch() override;
+    virtual TConclusion<std::unique_ptr<TPartialReadResult>> GetBatch() override;
     virtual void PrepareResults() override;
 
     virtual TConclusion<bool> ReadNextInterval() override;
@@ -102,4 +100,4 @@ private:
     virtual void FillReadyResults() = 0;
 };
 
-}
+}   // namespace NKikimr::NOlap::NReader::NCommon

@@ -8,6 +8,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/params/params.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/retry/retry.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/virtual_timestamp.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/tx/tx.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/request_settings.h>
 
@@ -22,12 +23,18 @@ namespace NYdb::inline Dev {
         template <typename TClient, typename TStatusType>
         class TRetryContext;
     } // namespace NRetry::Sync
+    namespace NRetry {
+        template <typename TClient>
+        class TRetryDeadlineHelper;
+    } // namespace NRetry
 }
 
 namespace NYdb::inline Dev::NQuery {
 
 struct TCreateSessionSettings : public TSimpleRequestSettings<TCreateSessionSettings> {
-    TCreateSessionSettings();
+    TCreateSessionSettings() {
+        ClientTimeout(TDuration::Seconds(5));
+    }
 };
 
 using TAsyncCreateSessionResult = NThreading::TFuture<TCreateSessionResult>;
@@ -45,22 +52,31 @@ struct TSessionPoolSettings {
     // Min number of session in session pool.
     // Sessions will not be closed by CloseIdleThreshold if the number of sessions less then this limit.
     FLUENT_SETTING_DEFAULT(uint32_t, MinPoolSize, 10);
+
+    // Create session in the background even after client timeout.
+    // This is useful for applications with short session timeouts.
+    FLUENT_SETTING_DEFAULT(bool, UseDeferredSessionCreation, false);
 };
 
 struct TClientSettings : public TCommonClientSettingsBase<TClientSettings> {
     using TSessionPoolSettings = TSessionPoolSettings;
     using TSelf = TClientSettings;
     FLUENT_SETTING(TSessionPoolSettings, SessionPoolSettings);
+
+    // Optional pool name surfaced through the OTel tag
+    // ydb.query.session.pool.name. When empty the default
+    // "<database>@<endpoint>" is used.
+    FLUENT_SETTING(std::string, PoolName);
+
+    FLUENT_SETTING_DEFAULT(TRetryOperationSettings, RetrySettings, TRetryOperationSettings());
 };
 
-// ! WARNING: Experimental API
-// ! This API is currently in experimental state and is a subject for changes.
-// ! No backward and/or forward compatibility guarantees are provided.
-// ! DO NOT USE for production workloads.
 class TQueryClient {
     friend class TSession;
     friend class NRetry::Async::TRetryContext<TQueryClient, TAsyncExecuteQueryResult>;
     friend class NRetry::Async::TRetryContext<TQueryClient, TAsyncStatus>;
+    friend class NRetry::Async::TRetryContext<TQueryClient, NThreading::TFuture<TScriptExecutionOperation>>;
+    friend class NRetry::Async::TRetryContext<TQueryClient, TAsyncFetchScriptResultsResult>;
     friend class NRetry::Sync::TRetryContext<TQueryClient, TStatus>;
 
 public:
@@ -103,15 +119,20 @@ public:
         TDuration timeout, bool isIndempotent);
 
     NThreading::TFuture<TScriptExecutionOperation> ExecuteScript(const std::string& script,
-        const TExecuteScriptSettings& settings = TExecuteScriptSettings());
+        const TExecuteScriptSettings& settings = TExecuteScriptSettings(),
+        const std::optional<TRetryOperationSettings>& retrySettings = std::nullopt);
 
     NThreading::TFuture<TScriptExecutionOperation> ExecuteScript(const std::string& script,
-        const TParams& params, const TExecuteScriptSettings& settings = TExecuteScriptSettings());
+        const TParams& params, const TExecuteScriptSettings& settings = TExecuteScriptSettings(),
+        const std::optional<TRetryOperationSettings>& retrySettings = std::nullopt);
 
     TAsyncFetchScriptResultsResult FetchScriptResults(const NKikimr::NOperationId::TOperationId& operationId, int64_t resultSetIndex,
-        const TFetchScriptResultsSettings& settings = TFetchScriptResultsSettings());
+        const TFetchScriptResultsSettings& settings = TFetchScriptResultsSettings(),
+        const std::optional<TRetryOperationSettings>& retrySettings = std::nullopt);
 
     TAsyncCreateSessionResult GetSession(const TCreateSessionSettings& settings = TCreateSessionSettings());
+
+    TAsyncStatus DeleteSession(const std::string& sessionId, const TDeleteSessionSettings& settings = TDeleteSessionSettings());
 
     //! Returns number of active sessions given via session pool
     int64_t GetActiveSessionCount() const;
@@ -122,6 +143,10 @@ public:
     //! Returns the size of session pool
     int64_t GetCurrentPoolSize() const;
 
+    // Internal: used by retry wrappers to suppress nested retries.
+    bool GetInRetryOperationContext() const;
+    void SetInRetryOperationContext(bool value);
+
 private:
     class TImpl;
     std::shared_ptr<TImpl> Impl_;
@@ -131,8 +156,11 @@ class TSession {
     friend class TQueryClient;
     friend class TTransaction;
     friend class TExecuteQueryIterator;
+    friend class NRetry::TRetryDeadlineHelper<TQueryClient>;
 public:
     const std::string& GetId() const;
+
+    const std::optional<TDeadline>& GetPropagatedDeadline() const;
 
     TAsyncExecuteQueryResult ExecuteQuery(const std::string& query, const TTxControl& txControl,
         const TExecuteQuerySettings& settings = TExecuteQuerySettings());
@@ -154,6 +182,8 @@ private:
     TSession();
     TSession(std::shared_ptr<TQueryClient::TImpl> client); // Create broken session
     TSession(std::shared_ptr<TQueryClient::TImpl> client, TSession::TImpl* sessionImpl);
+
+    void SetPropagatedDeadline(const TDeadline& deadline);
 
     std::shared_ptr<TQueryClient::TImpl> Client_;
     std::shared_ptr<TSession::TImpl> SessionImpl_;
@@ -217,6 +247,7 @@ public:
         return TTxControl(settings);
     }
 
+    // Do not explicitly set the transaction mode. YDB determines the behavior automatically
     static TTxControl NoTx() {
         return TTxControl();
     }
@@ -263,19 +294,25 @@ public:
     
     const std::optional<TTransaction>& GetTransaction() const { return Transaction_; }
 
-    TExecuteQueryPart(TStatus&& status, std::optional<TExecStats>&& queryStats, std::optional<TTransaction>&& tx)
+    const std::optional<NScheme::TVirtualTimestamp>& GetCommitTimestamp() const { return CommitTimestamp_; }
+
+    TExecuteQueryPart(TStatus&& status, std::optional<TExecStats>&& queryStats, std::optional<TTransaction>&& tx,
+        std::optional<NScheme::TVirtualTimestamp>&& commitTimestamp = {})
         : TStreamPartStatus(std::move(status))
         , Stats_(std::move(queryStats))
         , Transaction_(std::move(tx))
+        , CommitTimestamp_(std::move(commitTimestamp))
     {}
 
     TExecuteQueryPart(TStatus&& status, TResultSet&& resultSet, int64_t resultSetIndex,
-        std::optional<TExecStats>&& queryStats, std::optional<TTransaction>&& tx)
+        std::optional<TExecStats>&& queryStats, std::optional<TTransaction>&& tx,
+        std::optional<NScheme::TVirtualTimestamp>&& commitTimestamp = {})
         : TStreamPartStatus(std::move(status))
         , ResultSet_(std::move(resultSet))
         , ResultSetIndex_(resultSetIndex)
         , Stats_(std::move(queryStats))
         , Transaction_(std::move(tx))
+        , CommitTimestamp_(std::move(commitTimestamp))
     {}
 
 private:
@@ -283,6 +320,7 @@ private:
     int64_t ResultSetIndex_ = 0;
     std::optional<TExecStats> Stats_;
     std::optional<TTransaction> Transaction_;
+    std::optional<NScheme::TVirtualTimestamp> CommitTimestamp_;
 };
 
 class TExecuteQueryResult : public TStatus {
@@ -295,22 +333,27 @@ public:
 
     std::optional<TTransaction> GetTransaction() const {return Transaction_; }
 
+    const std::optional<NScheme::TVirtualTimestamp>& GetCommitTimestamp() const { return CommitTimestamp_; }
+
     TExecuteQueryResult(TStatus&& status)
         : TStatus(std::move(status))
     {}
 
     TExecuteQueryResult(TStatus&& status, std::vector<TResultSet>&& resultSets,
-        std::optional<TExecStats>&& stats, std::optional<TTransaction>&& tx)
+        std::optional<TExecStats>&& stats, std::optional<TTransaction>&& tx,
+        std::optional<NScheme::TVirtualTimestamp>&& commitTimestamp = {})
         : TStatus(std::move(status))
         , ResultSets_(std::move(resultSets))
         , Stats_(std::move(stats))
         , Transaction_(std::move(tx))
+        , CommitTimestamp_(std::move(commitTimestamp))
     {}
 
 private:
     std::vector<TResultSet> ResultSets_;
     std::optional<TExecStats> Stats_;
     std::optional<TTransaction> Transaction_;
+    std::optional<NScheme::TVirtualTimestamp> CommitTimestamp_;
 };
 
 } // namespace NYdb::NQuery

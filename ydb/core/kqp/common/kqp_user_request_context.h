@@ -5,9 +5,14 @@
 #include <contrib/libs/protobuf/src/google/protobuf/map.h>
 
 #include <ydb/core/resource_pools/resource_pool_settings.h>
+#include <ydb/library/actors/core/actorid.h>
+
+namespace NYql::NPq::NProto {
+    class StreamingDisposition;
+} // namespace NYql::NPq::NProto
 
 namespace NKikimr::NKqp {
-    
+
     struct TUserRequestContext : public TAtomicRefCount<TUserRequestContext> {
         TString TraceId;
         TString Database;
@@ -15,8 +20,15 @@ namespace NKikimr::NKqp {
         TString SessionId;
         TString CurrentExecutionId;
         TString CustomerSuppliedId;
+        NActors::TActorId RunScriptActorId;
         TString PoolId;
         std::optional<NResourcePool::TPoolSettings> PoolConfig;
+        bool IsStreamingQuery = false;
+        bool UseBatchPool = false;
+        TString CheckpointId;
+        TString StreamingQueryPath;
+        TString WatermarkLateEventsPolicy;
+        std::shared_ptr<NYql::NPq::NProto::StreamingDisposition> StreamingDisposition;
 
         TUserRequestContext() = default;
 
@@ -25,12 +37,13 @@ namespace NKikimr::NKqp {
             , Database(database)
             , SessionId(sessionId) {}
 
-        TUserRequestContext(const TString& traceId, const TString& database, const TString& sessionId, const TString& currentExecutionId, const TString& customerSuppliedId)
+        TUserRequestContext(const TString& traceId, const TString& database, const TString& sessionId, const TString& currentExecutionId, const TString& customerSuppliedId, NActors::TActorId runScriptActorId)
             : TraceId(traceId)
             , Database(database)
             , SessionId(sessionId)
             , CurrentExecutionId(currentExecutionId)
-            , CustomerSuppliedId(customerSuppliedId) {}
+            , CustomerSuppliedId(customerSuppliedId)
+            , RunScriptActorId(runScriptActorId) {}
 
         void Out(IOutputStream& o) const;
     };

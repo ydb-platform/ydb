@@ -1,5 +1,6 @@
 /*
     Copyright (c) 2005-2025 Intel Corporation
+    Copyright (c) 2025 UXL Foundation Contributors
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -19,6 +20,8 @@ global:
 
 /* Assertions (assert.cpp) */
 _ZN3tbb6detail2r117assertion_failureEPKciS3_S3_;
+_ZN3tbb6detail2r121set_assertion_handlerEPFvPKciS3_S3_E;
+_ZN3tbb6detail2r121get_assertion_handlerEv;
 
 /* ITT (profiling.cpp) */
 _ZN3tbb6detail2r112itt_task_endENS0_2d115itt_domain_enumE;
@@ -78,6 +81,7 @@ _ZN3tbb6detail2r16resumeEPNS1_18suspend_point_typeE;
 _ZN3tbb6detail2r121current_suspend_pointEv;
 _ZN3tbb6detail2r114notify_waitersEm;
 _ZN3tbb6detail2r127get_thread_reference_vertexEPNS0_2d126wait_tree_vertex_interfaceE;
+_ZN3tbb6detail2r116current_task_ptrEv;
 
 /* Task dispatcher (task_dispatcher.cpp) */
 _ZN3tbb6detail2r114execution_slotEPKNS0_2d114execution_dataE;
@@ -118,6 +122,10 @@ _ZN3tbb6detail2r122fill_core_type_indicesEPil;
 _ZN3tbb6detail2r131constraints_default_concurrencyERKNS0_2d111constraintsEl;
 _ZN3tbb6detail2r128constraints_threads_per_coreERKNS0_2d111constraintsEl;
 _ZN3tbb6detail2r124numa_default_concurrencyEi;
+
+/* Interleaved memory allocation (numa_allocation.cpp) */
+_ZN3tbb6detail2r120allocate_interleavedEmPKimm;
+_ZN3tbb6detail2r122deallocate_interleavedEPvm;
 
 /* Observer (observer_proxy.cpp) */
 _ZN3tbb6detail2r17observeERNS0_2d123task_scheduler_observerEb;

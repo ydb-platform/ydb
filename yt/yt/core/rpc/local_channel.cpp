@@ -99,11 +99,10 @@ public:
             std::move(responseHandler),
             options.Timeout);
 
-        YT_LOG_DEBUG("Local request sent (RequestId: %v, Method: %v.%v, Timeout: %v)",
-            request->GetRequestId(),
-            request->GetService(),
-            request->GetMethod(),
-            options.Timeout);
+        YT_TLOG_DEBUG("Local request sent")
+            .With("RequestId", request->GetRequestId())
+            .WithFormat("Method", "%v.%v", request->GetService(), request->GetMethod())
+            .With("Timeout", options.Timeout);
 
         service->HandleRequest(
             std::make_unique<NProto::TRequestHeader>(request->Header()),
@@ -203,7 +202,7 @@ private:
 
         TFuture<void> GetReadyFuture() const override
         {
-            return VoidFuture;
+            return OKFuture;
         }
 
         TFuture<void> Send(TSharedRefArray message, const NBus::TSendOptions& /*options*/) override
@@ -227,7 +226,7 @@ private:
                 default:
                     YT_ABORT();
             }
-            return VoidFuture;
+            return OKFuture;
         }
 
         void SetTosLevel(TTosLevel /*tosLevel*/) override
@@ -255,8 +254,8 @@ private:
             if (AcquireLock()) {
                 auto error = FromProto<TError>(header.error());
                 if (error.IsOK()) {
-                    YT_LOG_DEBUG("Local response received (RequestId: %v)",
-                        RequestId_);
+                    YT_TLOG_DEBUG("Local response received")
+                        .With("RequestId", RequestId_);
                     Handler_->HandleResponse(std::move(message), /*address*/ {});
                 } else {
                     ReportError(error);
@@ -277,15 +276,14 @@ private:
             auto codecId = TryCheckedEnumCast<NCompression::ECodec>(header.codec());
             YT_VERIFY(codecId);
 
-            YT_LOG_DEBUG("Response streaming payload received (RequestId: %v, SequenceNumber: %v, Sizes: %v, "
-                "Codec: %v, Closed: %v)",
-                RequestId_,
-                sequenceNumber,
-                MakeFormattableView(attachments, [] (auto* builder, const auto& attachment) {
+            YT_TLOG_DEBUG("Response streaming payload received")
+                .With("RequestId", RequestId_)
+                .With("SequenceNumber", sequenceNumber)
+                .With("Sizes", MakeFormattableView(attachments, [] (auto* builder, const auto& attachment) {
                     builder->AppendFormat("%v", GetStreamingAttachmentSize(attachment));
-                }),
-                *codecId,
-                !attachments.back());
+                }))
+                .With("Codec", *codecId)
+                .With("Closed", !attachments.back());
 
             TStreamingPayload payload{
                 *codecId,
@@ -301,9 +299,9 @@ private:
             YT_VERIFY(TryParseStreamingFeedbackHeader(message, &header));
             auto readPosition = header.read_position();
 
-            YT_LOG_DEBUG("Response streaming feedback received (RequestId: %v, ReadPosition: %v)",
-                RequestId_,
-                readPosition);
+            YT_TLOG_DEBUG("Response streaming feedback received")
+                .With("RequestId", RequestId_)
+                .With("ReadPosition", readPosition);
 
             TStreamingFeedback feedback{
                 readPosition
@@ -333,8 +331,9 @@ private:
                 << TErrorAttribute("request_id", RequestId_)
                 << GetEndpointAttributes();
 
-            YT_LOG_DEBUG(detailedError, "Local request failed (RequestId: %v)",
-                RequestId_);
+            YT_TLOG_DEBUG("Local request failed")
+                .With("RequestId", RequestId_)
+                .With(detailedError);
 
             Handler_->HandleError(std::move(detailedError));
         }
@@ -357,13 +356,13 @@ private:
         TFuture<void> SendStreamingPayload(const TStreamingPayload& payload) override
         {
             Service_->HandleStreamingPayload(RequestId_, payload);
-            return VoidFuture;
+            return OKFuture;
         }
 
         TFuture<void> SendStreamingFeedback(const TStreamingFeedback& feedback) override
         {
             Service_->HandleStreamingFeedback(RequestId_, feedback);
-            return VoidFuture;
+            return OKFuture;
         }
 
     private:

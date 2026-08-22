@@ -1,5 +1,3 @@
 #include "gc_info.h"
 
-namespace NKikimr::NOlap::NBlobOperations::NTier {
-
-}
+namespace NKikimr::NOlap::NBlobOperations::NTier {}

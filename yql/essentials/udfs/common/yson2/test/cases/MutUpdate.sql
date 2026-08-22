@@ -1,0 +1,13 @@
+SELECT 
+    Block(($x)->{
+        $m = Udf(Yson::MutCreate, $x as Depends)();
+        $m = Yson::MutUpsert($m, '1'y);
+        $m = Yson::MutUpdate($m, '2'y);
+        return Yson::MutFreeze($m);
+    }),
+    Block(($x)->{
+        $m = Udf(Yson::MutCreate, $x as Depends)();
+        $m = Yson::MutUpdate($m, '1'y);
+        $m = Yson::MutInsert($m, '2'y);
+        return Yson::MutFreeze($m);
+    });

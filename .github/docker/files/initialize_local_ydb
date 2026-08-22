@@ -1,19 +1,246 @@
 #!/bin/bash
-set -x
-
-INIT_YDB_SCRIPT=/init_ydb
-
-export YDB_GRPC_ENABLE_TLS="true"
-export GRPC_TLS_PORT=${GRPC_TLS_PORT:-2135}
 export GRPC_PORT=${GRPC_PORT:-2136}
-export YDB_GRPC_TLS_DATA_PATH="/ydb_certs"
+export GRPC_TLS_PORT=${GRPC_TLS_PORT:-2135}
 export YDB_KAFKA_PROXY_PORT=${YDB_KAFKA_PROXY_PORT:-9092}
 
-# Start local_ydb tool. Pass additional arguments for local_ydb
-/local_ydb deploy --ydb-working-dir /ydb_data --ydb-binary-path /ydbd --fixed-ports --dont-use-log-files "$@";
+export YDB_TINY_MODE=${YDB_TINY_MODE:-true}
+export YDB_WORKING_DIR="${YDB_WORKING_DIR:-/ydb_data}"
 
-if [ -f "$INIT_YDB_SCRIPT" ]; then
-  sh "$INIT_YDB_SCRIPT";
+export YDB_GRPC_ENABLE_TLS=${YDB_GRPC_ENABLE_TLS:-true}
+export YDB_GRPC_TLS_DATA_PATH="${YDB_GRPC_TLS_DATA_PATH:-/ydb_certs}"
+
+export PYTHONWARNINGS=ignore
+export YDB_INITSCRIPTS_DIR="${YDB_INITSCRIPTS_DIR:-/init.d}"
+export YDB_PREINITSCRIPTS_DIR="${YDB_PREINITSCRIPTS_DIR:-/preinit.d}"
+
+export YDB_PDISKS_DIRECTORY="${YDB_WORKING_DIR}/pdisks"
+
+# Disable checking newest versions of YDB CLI
+/ydb version --disable-checks >/dev/null 2>&1
+
+log() {
+    local channel="$1"
+    shift
+    printf '[ydb|%s] %s\n' "$channel" "$*" >&2
+}
+
+log_stream() {
+    local channel="$1"
+    while IFS= read -r line || [ -n "$line" ]; do
+        log "$channel" "$line"
+    done
+}
+
+log_stream_file() {
+    local node="$1"
+    local channel="$2"
+    local file="$3"
+    local is_stderr="${4:-false}"
+
+    if [ "$is_stderr" = "true" ]; then
+        (
+            tail -n +1 -F "$file" 2>/dev/null | while IFS= read -r line || [ -n "$line" ]; do
+                printf '[ydb|%s|%s] %s\n' "$node" "$channel" "$line" >&2
+            done
+        ) &
+    else
+        (
+            tail -n +1 -F "$file" 2>/dev/null | while IFS= read -r line || [ -n "$line" ]; do
+                printf '[ydb|%s|%s] %s\n' "$node" "$channel" "$line"
+            done
+        ) &
+    fi
+}
+
+ydb_wait_ready() {
+    local max_tries=10
+    local wait_seconds=6
+    local try=0
+
+    while [ $try -lt $max_tries ]; do
+        if /health_check >/dev/null 2>&1; then
+            log init "YDB is ready"
+            return 0
+        fi
+
+        try=$((try + 1))
+        log init "Waiting for YDB... ($try/$max_tries)"
+        sleep $wait_seconds
+    done
+
+    log init "ERROR: YDB did not become ready in time"
+    return 1
+}
+
+ydb_stream_logs() {
+    find "${YDB_WORKING_DIR}" -type f \( -name stdout -o -name stderr -o -name "logfile_*" \) 2>/dev/null | sort | while read -r log_file; do
+        if [ -n "$log_file" ]; then
+            # Extract node ID from path (e.g., /ydb_data/cluster/node_1/logfile_* -> node_1)
+            node_id=$(echo "$log_file" | awk -F'/' '{for(i=1;i<=NF;i++) if($i ~ /^node_/) print $i}')
+            case "$log_file" in
+            *logfile_*)
+                log_stream_file "${node_id:-unknown}" "log" "$log_file" "false"
+                ;;
+            *stderr)
+                log_stream_file "${node_id:-unknown}" "stderr" "$log_file" "true"
+                ;;
+            *stdout)
+                log_stream_file "${node_id:-unknown}" "stdout" "$log_file" "false"
+                ;;
+            esac
+        fi
+    done
+}
+
+ydb_truncate_logs() {
+    find "${YDB_WORKING_DIR}" -type f \( -name stdout -o -name stderr -o -name "logfile_*" \) 2>/dev/null | sort | while read -r log_file; do
+        if [ -n "$log_file" ]; then
+            > "$log_file"
+        fi
+    done
+}
+
+ydb_monitor_process() {
+    local attempts=60
+    local ydb_pid=""
+
+    while [ $attempts -gt 0 ]; do
+        ydb_pid=$(pgrep -f '/ydbd server' | head -n 1)
+        if [ -n "$ydb_pid" ]; then
+            break
+        fi
+        sleep 1
+        attempts=$((attempts - 1))
+    done
+
+    if [ -z "$ydb_pid" ]; then
+        exit 1
+    fi
+
+    trap 'kill -TERM "$ydb_pid" 2>/dev/null; wait "$ydb_pid"; exit $?' TERM INT
+
+    while kill -0 "$ydb_pid" 2>/dev/null; do
+        sleep 5
+    done
+
+    wait "$ydb_pid"
+    exit $? # Exit with the same status as YDB
+}
+
+ydb_custom_pre_init_scripts() {
+    if [ -d "$YDB_PREINITSCRIPTS_DIR" ] && [ -n "$(find "$YDB_PREINITSCRIPTS_DIR/" -type f -name "*.sh")" ]; then
+        local fail_marker="${YDB_WORKING_DIR}/.pre_init_failed"
+        rm -f "$fail_marker"
+        find "$YDB_PREINITSCRIPTS_DIR/" -type f -name "*.sh" | sort | while read -r f; do
+            local status
+            # Non-executable scripts are sourced to allow them to modify the environment for subsequent scripts.
+            if [ -x "$f" ]; then
+                log preinit "Running $f"
+                "$f" 1> >(log_stream preinit_script_stdout) 2> >(log_stream preinit_script_stderr)
+                status=$?
+            else
+                log preinit "Sourcing $f"
+                { . "$f"; } 1> >(log_stream preinit_script_stdout) 2> >(log_stream preinit_script_stderr)
+                status=$?
+            fi
+
+            if [ $status -ne 0 ]; then
+                log preinit "ERROR: $f failed with exit code $status"
+                touch "$fail_marker"
+                break
+            fi
+        done
+
+        if [ -f "$fail_marker" ]; then
+            rm -f "$fail_marker"
+            log preinit "ERROR: Pre-init scripts failed"
+            exit 1
+        fi
+    fi
+}
+
+ydb_custom_init_scripts() {
+    local user_scripts_initialized_file="${YDB_WORKING_DIR}/.user_scripts_initialized"
+    if [ -d "$YDB_INITSCRIPTS_DIR" ] && [ -n "$(find "$YDB_INITSCRIPTS_DIR/" -type f -regex ".*\.\(sh\|sql\|sql\.gz\)")" ] && [ ! -f "$user_scripts_initialized_file" ]; then
+        # YDB is started in the background by a separate process,
+        # so we need to wait for it to become ready before running init scripts.
+        if ! ydb_wait_ready; then
+            log init "ERROR: Cannot run init files, YDB did not become ready in time"
+            exit 1
+        fi
+
+        local fail_marker="${YDB_WORKING_DIR}/.init_failed"
+        rm -f "$fail_marker"
+        find "$YDB_INITSCRIPTS_DIR/" -type f -regex ".*\.\(sh\|sql\|sql\.gz\)" | sort | while read -r f; do
+            local status
+            case "$f" in
+            *.sh)
+                # Non-executable scripts are sourced to allow them to modify the environment for subsequent scripts.
+                if [ -x "$f" ]; then
+                    log init "Running $f"
+                    "$f" 1> >(log_stream init_script_stdout) 2> >(log_stream init_script_stderr)
+                    status=$?
+                else
+                    log init "Sourcing $f"
+                    { . "$f"; } 1> >(log_stream init_script_stdout) 2> >(log_stream init_script_stderr)
+                    status=$?
+                fi
+                ;;
+            *.sql)
+                log init "Executing queries from $f"
+                /ydb --endpoint grpc://localhost:${GRPC_PORT} --database /local --no-discovery sql -f "$f" < /dev/null 1> >(log_stream init_sql_stdout) 2> >(log_stream init_sql_stderr)
+                status=$?
+                ;;
+            *.sql.gz)
+                log init "Executing compressed queries from $f"
+                gunzip -c "$f" | /ydb --endpoint grpc://localhost:${GRPC_PORT} --database /local --no-discovery sql -f - 1> >(log_stream init_sql_stdout) 2> >(log_stream init_sql_stderr)
+                status=$?
+                ;;
+            *)
+                log init "Ignoring $f"
+                continue
+                ;;
+            esac
+
+            if [ $status -ne 0 ]; then
+                log init "ERROR: $f failed with exit code $status"
+                touch "$fail_marker"
+                break
+            fi
+        done
+
+        if [ -f "$fail_marker" ]; then
+            rm -f "$fail_marker"
+            log init "ERROR: Init scripts failed, marker file not created"
+            exit 1
+        fi
+
+        touch "$user_scripts_initialized_file"
+    fi
+}
+
+# Clear any existing log files to prevent duplicate output on restarts
+ydb_truncate_logs
+
+# Run pre-initialization scripts
+ydb_custom_pre_init_scripts
+
+# Start YDB in a background process
+log init "Starting YDB..."
+mkdir -p "${YDB_PDISKS_DIRECTORY}"
+/local_ydb deploy --ydb-working-dir "${YDB_WORKING_DIR}" --ydb-binary-path /ydbd --fixed-ports "$@" 1> >(log_stream "deploy|stdout") 2> >(log_stream "deploy|stderr")
+deploy_exit_code=$?
+
+if [ $deploy_exit_code -ne 0 ]; then
+    log init "ERROR: local_ydb deploy failed with exit code $deploy_exit_code"
+    exit $deploy_exit_code
 fi
 
-tail -f /dev/null
+# Stream logs
+ydb_stream_logs
+
+# Run initialization scripts after YDB is ready
+ydb_custom_init_scripts
+
+# Monitor YDB process and exit container when it stops
+ydb_monitor_process

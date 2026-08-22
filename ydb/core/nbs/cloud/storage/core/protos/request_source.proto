@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package NYdb.NBS.NProto;
+
+option go_package = "github.com/ydb-platform/ydb/core/nbs/cloud/storage/core/protos";
+
+////////////////////////////////////////////////////////////////////////////////
+
+enum ERequestSource
+{
+    SOURCE_INSECURE_CONTROL_CHANNEL = 0;
+    SOURCE_SECURE_CONTROL_CHANNEL = 1;
+    SOURCE_TCP_DATA_CHANNEL = 2;
+    SOURCE_FD_DATA_CHANNEL = 3;
+    SOURCE_FD_CONTROL_CHANNEL = 4;
+}

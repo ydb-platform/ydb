@@ -18,6 +18,7 @@ struct TSqsHttpResponse {
     TString FolderId;
     TString ResourceId;
     bool    IsFifo = false;
+    bool    SkipMetering = false;
 
     NSc::TValue QueueTags;
 

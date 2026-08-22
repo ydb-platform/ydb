@@ -1,0 +1,2 @@
+use plato;
+select WeakField(value1, "List<Int32>", "epic type!") as ll_i32 from Input1

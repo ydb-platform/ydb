@@ -16,10 +16,10 @@ namespace operator_
     return std::forward<A>(a) + std::forward<B>(b);
   }
 
-  DEFINE_ALL_OPERATOR_OVERLOADS_IMPL(
-      add, +,
-      (((b >= 0) ? (a <= std::numeric_limits<decltype(b)>::max() - b)
-                 : (std::numeric_limits<decltype(b)>::min() - b <= a))))
+  DEFINE_ALL_OPERATOR_OVERLOADS_IMPL(add, +,
+                                     (((b >= 0)
+                                           ? (a <= std::numeric_limits<decltype(b)>::max() - b)
+                                           : (std::numeric_limits<decltype(b)>::min() - b <= a))))
 } // namespace operator_
 PYTHONIC_NS_END
 

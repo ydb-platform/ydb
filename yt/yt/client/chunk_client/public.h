@@ -1,11 +1,13 @@
 #pragma once
 
-#include <yt/yt/core/misc/public.h>
-
 #include <yt/yt/client/object_client/public.h>
 
-#include <library/cpp/yt/compact_containers/compact_vector.h>
+#include <yt/yt/core/misc/public.h>
+
+#include <library/cpp/yt/containers/non_empty.h>
+
 #include <library/cpp/yt/compact_containers/compact_flat_map.h>
+#include <library/cpp/yt/compact_containers/compact_vector.h>
 
 namespace NYT::NChunkClient {
 
@@ -14,6 +16,7 @@ namespace NYT::NChunkClient {
 namespace NProto {
 
 class TChunkInfo;
+class TChunkReplicaSpec;
 class TChunkSpec;
 class TChunkMeta;
 class TBlocksExt;
@@ -89,6 +92,7 @@ YT_DEFINE_ERROR_ENUM(
     ((TotalMemoryLimitExceeded)              (761))
     ((ForbiddenErasureCodec)                 (762))
     ((ReadMetaTimeout)                       (763))
+    ((ReaderRetryCountLimitExceeded)         (764))
 );
 
 DEFINE_ENUM_WITH_UNDERLYING_TYPE(EUpdateMode, i8,
@@ -158,6 +162,8 @@ class TChunkReplica;
 using TChunkReplicaList = TCompactVector<TChunkReplica, TypicalReplicaCount>;
 using TChunkReplicaSlimList = TCompactVector<TChunkReplica, SlimTypicalReplicaCount>;
 
+using TPartitionTags = TNonEmpty<TCompactVector<int, 1>>;
+
 extern const std::string DefaultStoreAccountName;
 extern const std::string DefaultStoreMediumName;
 extern const std::string DefaultCacheMediumName;
@@ -215,9 +221,18 @@ DEFINE_ENUM_WITH_UNDERLYING_TYPE(EChunkFormat, i8,
 
     // Journal chunks.
     ((JournalDefault)                       (0))
+    ((JournalDistributed)                  (11))
 
     // Hunk chunks.
     ((HunkDefault)                          (7))
+    ((HunkJournal)                         (10))
+);
+
+DEFINE_ENUM_WITH_UNDERLYING_TYPE(EChunkReplicaState, i8,
+    ((Generic)               (0))
+    ((Active)                (1))
+    ((Unsealed)              (2))
+    ((Sealed)                (3))
 );
 
 ////////////////////////////////////////////////////////////////////////////////

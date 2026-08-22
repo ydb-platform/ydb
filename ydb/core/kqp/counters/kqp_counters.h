@@ -90,6 +90,8 @@ protected:
 
     void ReportTxCreated();
     void ReportTxAborted(ui32 abortedCount);
+    void ReportOnlineRO();
+    void ReportOnlineROWithInconsistentReads();
 
     void ReportQueryCacheHit(bool hit);
     void ReportCompileStart();
@@ -101,6 +103,10 @@ protected:
     void ReportCompileRequestRejected();
     void ReportCompileRequestTimeout();
     void ReportCompileDurations(TDuration duration, TDuration cpuTime);
+    void ReportCompileEnforceConfigSuccess();
+    void ReportCompileEnforceConfigFailed();
+    void ReportCompileNewRBOSuccess();
+    void ReportCompileNewRBOFailed();
     void ReportRecompileRequestGet();
     ::NMonitoring::TDynamicCounterPtr GetQueryReplayCounters() const;
 
@@ -190,6 +196,8 @@ protected:
     ::NMonitoring::TDynamicCounters::TCounterPtr TxAborted;
     ::NMonitoring::TDynamicCounters::TCounterPtr TxCommited;
     ::NMonitoring::TDynamicCounters::TCounterPtr TxEvicted;
+    ::NMonitoring::TDynamicCounters::TCounterPtr OnlineRORequests;
+    ::NMonitoring::TDynamicCounters::TCounterPtr OnlineROWithInconsistentReadsRequests;
     NMonitoring::THistogramPtr TxActivePerSession;
     NMonitoring::THistogramPtr TxAbortedPerSession;
     THashMap<TKqpTransactionInfo::EKind, TYdbTxByKindCounters> YdbTxByKind;
@@ -206,6 +214,10 @@ protected:
     ::NMonitoring::TDynamicCounters::TCounterPtr CompileTotal;
     ::NMonitoring::TDynamicCounters::TCounterPtr CompileErrors;
     ::NMonitoring::TDynamicCounters::TCounterPtr CompileActive;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CompileEnforceConfigSuccess;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CompileEnforceConfigFailed;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CompileNewRBOSuccess;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CompileNewRBOFailed;
     NMonitoring::THistogramPtr CompileCpuTime;
     NMonitoring::THistogramPtr YdbCompileDuration;
 };
@@ -320,6 +332,8 @@ public:
 
     void ReportTxCreated(TKqpDbCountersPtr dbCounters);
     void ReportTxAborted(TKqpDbCountersPtr dbCounters, ui32 abortedCount);
+    void ReportOnlineRO(TKqpDbCountersPtr dbCounters);
+    void ReportOnlineROWithInconsistentReads(TKqpDbCountersPtr dbCounters);
 
     void ReportQueryCacheHit(TKqpDbCountersPtr dbCounters, bool hit);
     void ReportCompileStart(TKqpDbCountersPtr dbCounters);
@@ -331,12 +345,19 @@ public:
     void ReportCompileRequestRejected(TKqpDbCountersPtr dbCounters);
     void ReportCompileRequestTimeout(TKqpDbCountersPtr dbCounters);
     void ReportCompileDurations(TKqpDbCountersPtr dbCounters, TDuration duration, TDuration cpuTime);
+    void ReportCompileEnforceConfigSuccess(TKqpDbCountersPtr dbCounters);
+    void ReportCompileEnforceConfigFailed(TKqpDbCountersPtr dbCounters);
+    void ReportCompileNewRBOSuccess(TKqpDbCountersPtr dbCounters);
+    void ReportCompileNewRBOFailed(TKqpDbCountersPtr dbCounters);
     void ReportRecompileRequestGet(TKqpDbCountersPtr dbCounters);
+    void ReportCompileQueueWaitTime(const TDuration& duration);
 
     const ::NMonitoring::TDynamicCounters::TCounterPtr RecompileRequestGet() const;
+    ::NMonitoring::TDynamicCounterPtr GetRootCounters() const;
     ::NMonitoring::TDynamicCounterPtr GetKqpCounters() const;
     ::NMonitoring::TDynamicCounterPtr GetQueryReplayCounters() const;
     ::NMonitoring::TDynamicCounterPtr GetWorkloadManagerCounters() const;
+    ::NMonitoring::TDynamicCounterPtr GetChannelCounters() const;
     const ::NMonitoring::TDynamicCounters::TCounterPtr GetActiveSessionActors() const;
     const ::NMonitoring::TDynamicCounters::TCounterPtr GetTxReplySizeExceededError() const;
     const ::NMonitoring::TDynamicCounters::TCounterPtr GetDataShardTxReplySizeExceededError() const;
@@ -348,6 +369,9 @@ public:
 
 public:
     ::NMonitoring::TDynamicCounterPtr WorkloadManagerGroup;
+    ::NMonitoring::TDynamicCounterPtr ChannelGroup;
+
+    TIntrusivePtr<NTxProxy::TTxProxyMon> TxProxyMon;
 
     ::NMonitoring::TDynamicCounters::TCounterPtr FullScansExecuted;
 
@@ -365,6 +389,21 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr CompileQueryCacheBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr CompileQueryCacheEvicted;
     ::NMonitoring::TDynamicCounters::TCounterPtr CompileQueueSize;
+    ::NMonitoring::THistogramPtr CompileQueueWaitTime;
+
+    // Warmup
+    ::NMonitoring::TDynamicCounters::TCounterPtr WarmupQueriesFetched;
+    ::NMonitoring::TDynamicCounters::TCounterPtr WarmupQueriesCompiled;
+    ::NMonitoring::TDynamicCounters::TCounterPtr WarmupQueriesTruncated;
+    ::NMonitoring::TDynamicCounters::TCounterPtr WarmupQueriesEmptyQueryType;
+
+    ::NMonitoring::TDynamicCounters::TCounterPtr CompileCacheViewPeerScanWarnings;
+
+    // Accumulate only during a short window after first non-warmup client
+    // compile -- attribute warmup impact on cold-start traffic.
+    ::NMonitoring::TDynamicCounters::TCounterPtr WarmupHitsInWindow;
+    ::NMonitoring::TDynamicCounters::TCounterPtr WarmupMissesInWindow;
+    ::NMonitoring::TDynamicCounters::TCounterPtr WarmupSavedCompileMs;
 
     // Compile computation pattern service
     ::NMonitoring::TDynamicCounters::TCounterPtr CompiledComputationPatterns;
@@ -407,7 +446,18 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr ReadActorRetries;
     ::NMonitoring::TDynamicCounters::TCounterPtr DataShardIteratorFails;
     ::NMonitoring::TDynamicCounters::TCounterPtr DataShardIteratorMessages;
+    ::NMonitoring::TDynamicCounters::TCounterPtr StreamLookupIteratorTotalQuotaBytesInFlight;
+    ::NMonitoring::TDynamicCounters::TCounterPtr StreamLookupIteratorTotalQuotaBytesExceeded;
     ::NMonitoring::TDynamicCounters::TCounterPtr IteratorDeliveryProblems;
+
+    // Lock counters
+    ::NMonitoring::TDynamicCounters::TCounterPtr SentLocks;
+    NMonitoring::THistogramPtr LockLatencyHistogram;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ModifiedRowsCount;
+    ::NMonitoring::TDynamicCounters::TCounterPtr LockedRowsCount;
+    NMonitoring::THistogramPtr MaxInFlightLockTimeOnExit;
+    ::NMonitoring::TDynamicCounters::TCounterPtr StreamLookupLockTotalQuotaBytesInFlight;
+    ::NMonitoring::TDynamicCounters::TCounterPtr StreamLookupLockTotalQuotaBytesExceeded;
 
     // Sink write counters
     ::NMonitoring::TDynamicCounters::TCounterPtr WriteActorsShardResolve;
@@ -434,6 +484,7 @@ public:
     NMonitoring::THistogramPtr BufferActorPrepareLatencyHistogram;
     NMonitoring::THistogramPtr BufferActorCommitLatencyHistogram;
     NMonitoring::THistogramPtr BufferActorFlushLatencyHistogram;
+    NMonitoring::THistogramPtr BufferActorRollbackLatencyHistogram;
 
     NMonitoring::THistogramPtr ForwardActorWritesSizeHistogram;
     NMonitoring::THistogramPtr ForwardActorWritesLatencyHistogram;
@@ -459,6 +510,7 @@ public:
     NMonitoring::THistogramPtr ScanTxTotalTimeHistogram;
 
     NMonitoring::TDynamicCounters::TCounterPtr RowsDuplicationsFound;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ForcedImmediateEffectsExecution;
 
     // Locality metrics for request
     NMonitoring::TDynamicCounters::TCounterPtr TotalSingleNodeReqCount;
@@ -484,9 +536,7 @@ public:
 
     // Statistics batch operations
     ::NMonitoring::TDynamicCounters::TCounterPtr BatchOperationUpdateRows;
-    ::NMonitoring::TDynamicCounters::TCounterPtr BatchOperationUpdateBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr BatchOperationDeleteRows;
-    ::NMonitoring::TDynamicCounters::TCounterPtr BatchOperationDeleteBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr BatchOperationRetries;
 };
 

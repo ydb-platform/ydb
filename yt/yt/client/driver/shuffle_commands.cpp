@@ -40,6 +40,18 @@ void TStartShuffleCommand::Register(TRegistrar registrar)
             return command->Options.ReplicationFactor;
         })
         .Default();
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "use_push_based_shuffle",
+        [] (TThis* command) -> auto& {
+            return command->Options.UsePushBasedShuffle;
+        })
+        .Default(false);
+    registrar.ParameterWithUniversalAccessor<TTableSchemaPtr>(
+        "schema",
+        [] (TThis* command) -> auto& {
+            return command->Options.Schema;
+        })
+        .Default();
 }
 
 void TStartShuffleCommand::DoExecute(ICommandContextPtr context)
@@ -65,8 +77,8 @@ void TReadShuffleDataCommand::Register(TRegistrar registrar)
     registrar.Postprocessor([] (TThis* config) {
         if (config->WriterIndexBegin.has_value() != config->WriterIndexEnd.has_value()) {
             THROW_ERROR_EXCEPTION("Request has only one writer range limit")
-                << TErrorAttribute("writer_index_begin", config->WriterIndexBegin)
-                << TErrorAttribute("writer_index_end", config->WriterIndexEnd);
+                .With("writer_index_begin", config->WriterIndexBegin)
+                .With("writer_index_end", config->WriterIndexEnd);
         }
 
         if (config->WriterIndexBegin.has_value() && *config->WriterIndexBegin > *config->WriterIndexEnd) {
@@ -88,10 +100,10 @@ void TReadShuffleDataCommand::DoExecute(ICommandContextPtr context)
     if (!validationSuccessful) {
         auto shuffleHandle = ConvertTo<TShuffleHandlePtr>(TYsonStringBuf(SignedShuffleHandle.Underlying()->Payload()));
         THROW_ERROR_EXCEPTION("Signature validation failed for shuffle handle")
-            << TErrorAttribute("shuffle_handle", shuffleHandle);
+            .With("shuffle_handle", shuffleHandle);
     }
 
-    std::optional<std::pair<int, int>> writerIndexRange;
+    std::optional<IShuffleClient::TIndexRange> writerIndexRange;
     if (WriterIndexBegin.has_value()) {
         writerIndexRange = std::pair(*WriterIndexBegin, *WriterIndexEnd);
     }
@@ -115,15 +127,15 @@ void TReadShuffleDataCommand::DoExecute(ICommandContextPtr context)
         New<TControlAttributesConfig>(),
         /*keyColumnCount*/ 0);
 
-    TRowBatchReadOptions options{
-        .MaxRowsPerRead = context->GetConfig()->ReadBufferRowCount,
-        .Columnar = (format.GetType() == EFormatType::Arrow),
-    };
-
     PipeReaderToWriterByBatches(
         reader,
         writer,
-        options);
+        TPipeReaderToWriterByBatchesOptions{
+            .StartingOptions = {
+                .MaxRowsPerRead = context->GetConfig()->ReadBufferRowCount,
+                .Columnar = (format.GetType() == EFormatType::Arrow),
+            },
+        });
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -157,7 +169,7 @@ void TWriteShuffleDataCommand::DoExecute(ICommandContextPtr context)
     if (!validationSuccessful) {
         auto shuffleHandle = ConvertTo<TShuffleHandlePtr>(TYsonStringBuf(SignedShuffleHandle.Underlying()->Payload()));
         THROW_ERROR_EXCEPTION("Signature validation failed for shuffle handle")
-            << TErrorAttribute("shuffle_handle", shuffleHandle);
+            .With("shuffle_handle", shuffleHandle);
     }
 
     Options.OverwriteExistingWriterData = OverwriteExistingWriterData;

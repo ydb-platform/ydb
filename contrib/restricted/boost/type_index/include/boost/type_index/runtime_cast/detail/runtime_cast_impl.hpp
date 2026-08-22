@@ -19,7 +19,9 @@
 
 #include <boost/type_index.hpp>
 
+#if !defined(BOOST_TYPE_INDEX_INTERFACE_UNIT)
 #include <type_traits>
+#endif
 
 #ifdef BOOST_HAS_PRAGMA_ONCE
 # pragma once

@@ -172,6 +172,7 @@ protected:
     NMonitoring::TPercentileTrackerLg<3, 4, 3> GetResponseTime; // Used by witheboard
 
     NMonitoring::TPercentileTrackerLg<3, 4, 3> BlockResponseTime;
+    NMonitoring::TPercentileTrackerLg<3, 4, 3> GetBlockResponseTime;
     NMonitoring::TPercentileTrackerLg<3, 4, 3> DiscoverResponseTime;
     NMonitoring::TPercentileTrackerLg<3, 4, 3> IndexRestoreGetResponseTime;
     NMonitoring::TPercentileTrackerLg<3, 4, 3> RangeResponseTime;
@@ -267,6 +268,10 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr VPatchPartPlacementVerifyFailed;
     ::NMonitoring::TDynamicCounters::TCounterPtr PatchesWithFallback;
 
+    // cancellation
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> CancellationGroup;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CancelledEvents;
+
     TRequestMonGroup& GetRequestMonGroup(ERequestType request) {
         switch (request) {
             case ERequestType::Get: return GetGroup;
@@ -359,6 +364,11 @@ public:
     void CountBlockResponseTime(TDuration duration) {
         BlockResponseTime.Increment(duration.MilliSeconds());
         NodeMon->BlockResponseTime.Increment(duration.MilliSeconds());
+    }
+
+    void CountGetBlockResponseTime(NPDisk::EDeviceType type, TDuration duration) {
+        GetBlockResponseTime.Increment(duration.MilliSeconds());
+        NodeMon->CountGetBlockResponseTime(type, duration);
     }
 
     void CountDiscoverResponseTime(TDuration duration) {

@@ -64,9 +64,9 @@ ABSL_NAMESPACE_BEGIN
 namespace flags_internal {
 namespace {
 
-absl::Mutex* ProcessingChecksMutex() {
+absl::Mutex& ProcessingChecksMutex() {
   static absl::NoDestructor<absl::Mutex> mutex;
-  return mutex.get();
+  return *mutex;
 }
 
 ABSL_CONST_INIT bool flagfile_needs_processing
@@ -76,9 +76,9 @@ ABSL_CONST_INIT bool fromenv_needs_processing
 ABSL_CONST_INIT bool tryfromenv_needs_processing
     ABSL_GUARDED_BY(ProcessingChecksMutex()) = false;
 
-absl::Mutex* SpecifiedFlagsMutex() {
+absl::Mutex& SpecifiedFlagsMutex() {
   static absl::NoDestructor<absl::Mutex> mutex;
-  return mutex.get();
+  return *mutex;
 }
 
 ABSL_CONST_INIT std::vector<const CommandLineFlag*>* specified_flags
@@ -206,8 +206,10 @@ bool ArgsList::ReadFromFlagfile(const std::string& flag_file_name) {
 
   std::string line;
   bool success = true;
+  int line_number = 0;
 
   while (std::getline(flag_file, line)) {
+    line_number++;
     absl::string_view stripped = absl::StripLeadingAsciiWhitespace(line);
 
     if (stripped.empty() || stripped[0] == '#') {
@@ -229,8 +231,8 @@ bool ArgsList::ReadFromFlagfile(const std::string& flag_file_name) {
     }
 
     flags_internal::ReportUsageError(
-        absl::StrCat("Unexpected line in the flagfile ", flag_file_name, ": ",
-                     line),
+        absl::StrCat("Unexpected line ", line_number, " in the flagfile ",
+                     flag_file_name),
         true);
 
     success = false;

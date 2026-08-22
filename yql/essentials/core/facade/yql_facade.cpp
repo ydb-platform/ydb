@@ -12,11 +12,11 @@
 #include <yql/essentials/core/services/yql_eval_params.h>
 #include <yql/essentials/core/langver/yql_core_langver.h>
 #include <yql/essentials/sql/sql.h>
-#include <yql/essentials/sql/v1/sql.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
+#include <yql/essentials/sql/v1/translation/sql.h>
 #include <yql/essentials/parser/pg_wrapper/interface/parser.h>
 #include <yql/essentials/utils/log/context.h>
 #include <yql/essentials/utils/log/profile.h>
@@ -32,7 +32,9 @@
 #include <yql/essentials/providers/common/udf_resolve/yql_udf_resolver_logger.h>
 #include <yql/essentials/providers/common/arrow_resolve/yql_simple_arrow_resolver.h>
 #include <yql/essentials/providers/common/config/yql_setting.h>
+#include <yql/essentials/providers/common/activation/yql_activation.h>
 #include <yql/essentials/core/qplayer/udf_resolver/yql_qplayer_udf_resolver.h>
+#include <yql/essentials/core/qplayer/url_lister/qplayer_url_lister_manager.h>
 
 #include <library/cpp/yson/node/node_io.h>
 #include <library/cpp/deprecated/split/split_iterator.h>
@@ -48,6 +50,7 @@
 #include <util/system/rusage.h>
 #include <util/generic/yexception.h>
 
+#include <utility>
 
 using namespace NThreading;
 
@@ -67,12 +70,17 @@ const TString StaticUserFilesLabel = "UserFiles";
 const TString DynamicUserFilesLabel = "DynamicUserFiles";
 const TString StaticCredentialsLabel = "Credentials";
 const TString DynamicCredentialsLabel = "DynamicCredentials";
+const TString FullCaptureLabel = "FullCapture";
 
-class TUrlLoader : public IUrlLoader {
+const TString GeneralInfoComponent = "GeneralInfo";
+const TString StartTimeLabel = "StartTime";
+
+class TUrlLoader: public IUrlLoader {
 public:
-    TUrlLoader(TFileStoragePtr storage)
-        : Storage_(storage)
-    {}
+    explicit TUrlLoader(TFileStoragePtr storage)
+        : Storage_(std::move(storage))
+    {
+    }
 
     TString Load(const TString& url, const TString& token) override {
         auto file = Storage_->PutUrl(url, token);
@@ -85,28 +93,13 @@ private:
 
 template <typename... Params1, typename... Params2>
 TProgram::TStatus SyncExecution(
-        TProgram* program,
-        TProgram::TFutureStatus (TProgram::*method)(Params1...),
-        Params2&&... params) {
+    TProgram* program,
+    TProgram::TFutureStatus (TProgram::*method)(Params1...),
+    Params2&&... params) {
     TProgram::TFutureStatus future =
-            (program->*method)(std::forward<Params2>(params)...);
-    YQL_ENSURE(future.Initialized());
-    future.Wait();
-    HandleFutureException(future);
+        (program->*method)(std::forward<Params2>(params)...);
 
-    TProgram::TStatus status = future.GetValue();
-    while (status == TProgram::TStatus::Async) {
-        auto continueFuture = program->ContinueAsync();
-        continueFuture.Wait();
-        HandleFutureException(continueFuture);
-        status = continueFuture.GetValue();
-    }
-
-    if (status == TProgram::TStatus::Error) {
-        program->Print(program->ExprStream(), program->PlanStream());
-    }
-
-    return status;
+    return WaitExecution(TIntrusivePtr<TProgram>(program), future);
 }
 
 std::function<TString(const TString&, const TString&)> BuildDefaultTokenResolver(TCredentials::TPtr credentials) {
@@ -140,7 +133,89 @@ std::function<TString(const TString&, const TString&)> BuildCompositeTokenResolv
     };
 }
 
-} // namspace
+TGatewaySQLFlags SQLFlagsFromYson(const NYT::TNode& node) {
+    TGatewaySQLFlags flags;
+
+    for (const auto& f : node["SqlFlags"].AsList()) {
+        if (f.IsString()) {
+            flags.Set(f.AsString());
+            continue;
+        }
+
+        const auto& name = f["name"].AsString();
+
+        const auto& argList = f["args"].AsList();
+        TVector<TString> args(Reserve(argList.size()));
+        for (const auto& arg : argList) {
+            args.emplace_back(arg.AsString());
+        }
+
+        flags.Set(name, std::move(args));
+    }
+
+    return flags;
+}
+
+void WriteEvaluationStatistics(NYson::TYsonWriter& writer, const TEvaluationStats& stats) {
+    writer.OnKeyedItem("Evaluation");
+    writer.OnBeginMap();
+
+    writer.OnKeyedItem("Count");
+    writer.OnBeginMap();
+    writer.OnKeyedItem("count");
+    writer.OnInt64Scalar(stats.Count);
+    writer.OnEndMap();
+
+    writer.OnKeyedItem("CacheHits");
+    writer.OnBeginMap();
+    writer.OnKeyedItem("count");
+    writer.OnInt64Scalar(stats.CacheHits);
+    writer.OnEndMap();
+
+    writer.OnKeyedItem("CalcProviderCalls");
+    writer.OnBeginMap();
+    writer.OnKeyedItem("count");
+    writer.OnInt64Scalar(stats.CalcProviderCalls);
+    writer.OnEndMap();
+
+    writer.OnKeyedItem("CalcProviderDurationUs");
+    writer.OnBeginMap();
+    writer.OnKeyedItem("sum");
+    writer.OnInt64Scalar(stats.CalcProviderDurationSum.MicroSeconds());
+    writer.OnEndMap();
+
+    writer.OnEndMap();
+}
+
+} // namespace
+
+TGatewaySQLFlags SQLFlagsFromQContext(const TQContext& context) {
+    YQL_ENSURE(context.CanRead());
+
+    TMaybe<NYql::TQItem> loaded =
+        context
+            .GetReader()
+            ->Get({.Component = FacadeComponent, .Label = TranslationLabel})
+            .GetValueSync();
+    YQL_ENSURE(loaded);
+
+    return SQLFlagsFromYson(NYT::NodeFromYsonString(loaded->Value));
+}
+
+THolder<TGatewaysConfig> GatewaysConfigFromQContext(const TQContext& context) {
+    YQL_ENSURE(context.CanRead());
+
+    TMaybe<NYql::TQItem> loaded =
+        context
+            .GetReader()
+            ->Get({.Component = FacadeComponent, .Label = GatewaysLabel})
+            .GetValueSync();
+    YQL_ENSURE(loaded);
+
+    auto config = MakeHolder<TGatewaysConfig>();
+    YQL_ENSURE(config->ParseFromString(loaded->Value));
+    return config;
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 // TProgramFactory
@@ -150,14 +225,14 @@ TProgramFactory::TProgramFactory(
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     ui64 nextUniqueId,
     const TVector<TDataProviderInitializer>& dataProvidersInit,
-    const TString& runner)
+    TString runner)
     : UseRepeatableRandomAndTimeProviders_(useRepeatableRandomAndTimeProviders)
     , FunctionRegistry_(functionRegistry)
     , NextUniqueId_(nextUniqueId)
     , DataProvidersInit_(dataProvidersInit)
     , Credentials_(MakeIntrusive<TCredentials>())
     , GatewaysConfig_(nullptr)
-    , Runner_(runner)
+    , Runner_(std::move(runner))
     , ArrowResolver_(MakeSimpleArrowResolver(*functionRegistry))
 {
 }
@@ -168,6 +243,14 @@ void TProgramFactory::UnrepeatableRandom() {
 
 void TProgramFactory::EnableRangeComputeFor() {
     EnableRangeComputeFor_ = true;
+}
+
+void TProgramFactory::EnableAutoUseYqlLibs() {
+    AutoUseYqlLibs_ = true;
+}
+
+void TProgramFactory::SetIssueReportTarget(const TString& reportTarget) {
+    IssueReportTarget_ = reportTarget;
 }
 
 void TProgramFactory::SetLanguageVersion(TLangVersion version) {
@@ -192,6 +275,10 @@ void TProgramFactory::AddUserDataTable(const TUserDataTable& userDataTable) {
 
 void TProgramFactory::SetCredentials(TCredentials::TPtr credentials) {
     Credentials_ = std::move(credentials);
+}
+
+void TProgramFactory::AddRemoteLayersProvider(const TString& alias, NLayers::IRemoteLayerProviderPtr provider) {
+    RemoteLayersProviders_.emplace(alias, std::move(provider));
 }
 
 void TProgramFactory::SetGatewaysConfig(const TGatewaysConfig* gatewaysConfig) {
@@ -232,27 +319,23 @@ void TProgramFactory::SetUrlListerManager(IUrlListerManagerPtr urlListerManager)
 }
 
 TProgramPtr TProgramFactory::Create(
-        const TFile& file,
-        const TString& sessionId,
-        const TQContext& qContext,
-        TMaybe<TString> gatewaysForMerge)
+    const TFile& file,
+    const TString& sessionId,
+    const TQContext& qContext)
 {
     TString sourceCode = TFileInput(file).ReadAll();
-    return Create(file.GetName(), sourceCode, sessionId, EHiddenMode::Disable, qContext, gatewaysForMerge);
+    return Create(file.GetName(), sourceCode, sessionId, EHiddenMode::Disable, qContext);
 }
 
 TProgramPtr TProgramFactory::Create(
-        const TString& filename,
-        const TString& sourceCode,
-        const TString& sessionId,
-        EHiddenMode hiddenMode,
-        const TQContext& qContext,
-        TMaybe<TString> gatewaysForMerge)
+    const TString& filename,
+    const TString& sourceCode,
+    const TString& sessionId,
+    EHiddenMode hiddenMode,
+    const TQContext& qContext)
 {
-    auto randomProvider = UseRepeatableRandomAndTimeProviders_ && !UseUnrepeatableRandom_ && hiddenMode == EHiddenMode::Disable ?
-        CreateDeterministicRandomProvider(1) : CreateDefaultRandomProvider();
-    auto timeProvider = UseRepeatableRandomAndTimeProviders_ ?
-        CreateDeterministicTimeProvider(10000000) : CreateDefaultTimeProvider();
+    auto randomProvider = UseRepeatableRandomAndTimeProviders_ && !UseUnrepeatableRandom_ && hiddenMode == EHiddenMode::Disable ? CreateDeterministicRandomProvider(1) : CreateDefaultRandomProvider();
+    auto timeProvider = UseRepeatableRandomAndTimeProviders_ ? CreateDeterministicTimeProvider(10000000) : CreateDefaultTimeProvider();
 
     TUdfIndex::TPtr udfIndex = UdfIndex_ ? UdfIndex_->Clone() : nullptr;
     TUdfIndexPackageSet::TPtr udfIndexPackageSet = (UdfIndexPackageSet_ && hiddenMode == EHiddenMode::Disable) ? UdfIndexPackageSet_->Clone() : nullptr;
@@ -265,112 +348,107 @@ TProgramPtr TProgramFactory::Create(
         udfResolver = NCommon::CreateUdfResolverDecoratorWithLogger(FunctionRegistry_, udfResolver, *UdfResolverLogfile_, sessionId);
     }
 
-    if (udfIndex) {
-        udfResolver = NCommon::CreateUdfResolverWithIndex(udfIndex, udfResolver, FileStorage_);
-    }
-
     // make UserDataTable_ copy here
-    return new TProgram(FunctionRegistry_, randomProvider, timeProvider, NextUniqueId_, DataProvidersInit_,
-        LangVer_, MaxLangVer_, VolatileResults_, UserDataTable_, Credentials_, moduleResolver, urlListerManager,
-        udfResolver, udfIndex, udfIndexPackageSet, FileStorage_, UrlPreprocessing_,
-        GatewaysConfig_, filename, sourceCode, sessionId, Runner_, EnableRangeComputeFor_, ArrowResolver_, hiddenMode,
-        qContext, gatewaysForMerge);
+    return new TProgram(IssueReportTarget_, FunctionRegistry_, randomProvider, timeProvider, NextUniqueId_, DataProvidersInit_,
+                        LangVer_, MaxLangVer_, VolatileResults_, UserDataTable_, Credentials_, moduleResolver, urlListerManager,
+                        udfResolver, udfIndex, udfIndexPackageSet, FileStorage_, UrlPreprocessing_,
+                        GatewaysConfig_, filename, sourceCode, sessionId, Runner_, EnableRangeComputeFor_, AutoUseYqlLibs_, ArrowResolver_, hiddenMode,
+                        qContext, RemoteLayersProviders_);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 // TProgram
 ///////////////////////////////////////////////////////////////////////////////
 TProgram::TProgram(
-        const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
-        const TIntrusivePtr<IRandomProvider> randomProvider,
-        const TIntrusivePtr<ITimeProvider> timeProvider,
-        ui64 nextUniqueId,
-        const TVector<TDataProviderInitializer>& dataProvidersInit,
-        TLangVersion langVer,
-        TLangVersion maxLangVer,
-        bool volatileResults,
-        const TUserDataTable& userDataTable,
-        const TCredentials::TPtr& credentials,
-        const IModuleResolver::TPtr& modules,
-        const IUrlListerManagerPtr& urlListerManager,
-        const IUdfResolver::TPtr& udfResolver,
-        const TUdfIndex::TPtr& udfIndex,
-        const TUdfIndexPackageSet::TPtr& udfIndexPackageSet,
-        const TFileStoragePtr& fileStorage,
-        const IUrlPreprocessing::TPtr& urlPreprocessing,
-        const TGatewaysConfig* gatewaysConfig,
-        const TString& filename,
-        const TString& sourceCode,
-        const TString& sessionId,
-        const TString& runner,
-        bool enableRangeComputeFor,
-        const IArrowResolver::TPtr& arrowResolver,
-        EHiddenMode hiddenMode,
-        const TQContext& qContext,
-        TMaybe<TString> gatewaysForMerge
-    )
-    : FunctionRegistry_(functionRegistry)
-    , RandomProvider_(randomProvider)
-    , TimeProvider_(timeProvider)
+    TString issueReportTarget,
+    const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
+    TIntrusivePtr<IRandomProvider> randomProvider,
+    TIntrusivePtr<ITimeProvider> timeProvider,
+    ui64 nextUniqueId,
+    const TVector<TDataProviderInitializer>& dataProvidersInit,
+    TLangVersion langVer,
+    TLangVersion maxLangVer,
+    bool volatileResults,
+    TUserDataTable userDataTable,
+    const TCredentials::TPtr& credentials,
+    IModuleResolver::TPtr modules,
+    IUrlListerManagerPtr urlListerManager,
+    const IUdfResolver::TPtr& udfResolver,
+    const TUdfIndex::TPtr& udfIndex,
+    TUdfIndexPackageSet::TPtr udfIndexPackageSet,
+    const TFileStoragePtr& fileStorage,
+    const IUrlPreprocessing::TPtr& urlPreprocessing,
+    const TGatewaysConfig* gatewaysConfig,
+    TString filename,
+    TString sourceCode,
+    TString sessionId,
+    const TString& runner,
+    bool enableRangeComputeFor,
+    bool autoUseYqlLibs,
+    IArrowResolver::TPtr arrowResolver,
+    EHiddenMode hiddenMode,
+    const TQContext& qContext,
+    THashMap<TString, NLayers::IRemoteLayerProviderPtr> remoteLayersProviders)
+    : IssueReportTarget_(std::move(issueReportTarget))
+    , FunctionRegistry_(functionRegistry)
+    , RandomProvider_(std::move(randomProvider))
+    , TimeProvider_(std::move(timeProvider))
     , NextUniqueId_(nextUniqueId)
     , AstRoot_(nullptr)
-    , Modules_(modules)
+    , Modules_(std::move(modules))
     , DataProvidersInit_(dataProvidersInit)
     , LangVer_(langVer)
     , MaxLangVer_(maxLangVer)
     , VolatileResults_(volatileResults)
     , Credentials_(MakeIntrusive<NYql::TCredentials>(*credentials))
-    , UrlListerManager_(urlListerManager)
+    , UrlListerManager_(std::move(urlListerManager))
     , UdfResolver_(udfResolver)
     , UdfIndex_(udfIndex)
-    , UdfIndexPackageSet_(udfIndexPackageSet)
+    , UdfIndexPackageSet_(std::move(udfIndexPackageSet))
     , FileStorage_(fileStorage)
-    , SavedUserDataTable_(userDataTable)
+    , UrlPreprocessing_(urlPreprocessing)
+    , SavedUserDataTable_(std::move(userDataTable))
     , GatewaysConfig_(gatewaysConfig)
-    , Filename_(filename)
-    , SourceCode_(sourceCode)
+    , Filename_(std::move(filename))
+    , SourceCode_(std::move(sourceCode))
     , SourceSyntax_(ESourceSyntax::Unknown)
     , SyntaxVersion_(0)
     , ExprRoot_(nullptr)
-    , SessionId_(sessionId)
+    , SessionId_(std::move(sessionId))
     , ResultType_(IDataProvider::EResultFormat::Yson)
     , ResultFormat_(NYson::EYsonFormat::Binary)
     , OutputFormat_(NYson::EYsonFormat::Pretty)
     , EnableRangeComputeFor_(enableRangeComputeFor)
-    , ArrowResolver_(arrowResolver)
+    , ArrowResolver_(std::move(arrowResolver))
     , HiddenMode_(hiddenMode)
     , QContext_(qContext)
-    , GatewaysForMerge_(gatewaysForMerge)
+    , RemoteLayersProviders_(std::move(remoteLayersProviders))
 {
     if (SessionId_.empty()) {
         SessionId_ = CreateGuidAsString();
     }
 
     if (QContext_.CanWrite()) {
+        QContext_.GetWriter()->Put({.Component = GeneralInfoComponent, .Label = StartTimeLabel}, TInstant::Now().ToStringLocalUpToSeconds()).GetValueSync();
         NYT::TNode credListNode = NYT::TNode::CreateList();
         Credentials_->ForEach([&](const TString name, const TCredential& cred) {
-            credListNode.Add(NYT::TNode()
-                ("Name", name)
-                ("Category", cred.Category)
-                ("Subcategory", cred.Subcategory));
+            credListNode.Add(NYT::TNode()("Name", name)("Category", cred.Category)("Subcategory", cred.Subcategory));
         });
 
         auto credList = NYT::NodeToYsonString(credListNode, NYT::NYson::EYsonFormat::Binary);
-        QContext_.GetWriter()->Put({FacadeComponent, StaticCredentialsLabel}, credList).GetValueSync();
-    } else if (QContext_.CanRead()) {
+        QContext_.GetWriter()->Put({.Component = FacadeComponent, .Label = StaticCredentialsLabel}, credList).GetValueSync();
+    } else if (QContext_.CaptureMode() == EQPlayerCaptureMode::MetaOnly) {
         Credentials_ = MakeIntrusive<TCredentials>();
-        Credentials_->SetUserCredentials({
-            .OauthToken = "REPLAY_OAUTH",
-            .BlackboxSessionIdCookie = "REPLAY_SESSIONID"
-        });
+        Credentials_->SetUserCredentials({.OauthToken = "REPLAY_OAUTH",
+                                          .BlackboxSessionIdCookie = "REPLAY_SESSIONID"});
 
         for (const auto& label : {StaticCredentialsLabel, DynamicCredentialsLabel}) {
-            auto item = QContext_.GetReader()->Get({FacadeComponent, label}).GetValueSync();
+            auto item = QContext_.GetReader()->Get({.Component = FacadeComponent, .Label = label}).GetValueSync();
             if (item) {
                 auto node = NYT::NodeFromYsonString(item->Value);
                 for (const auto& c : node.AsList()) {
                     Credentials_->AddCredential(c["Name"].AsString(), TCredential(
-                        c["Category"].AsString(),c["Subcategory"].AsString(),"REPLAY"));
+                                                                          c["Category"].AsString(), c["Subcategory"].AsString(), "REPLAY"));
                 }
             }
         }
@@ -383,11 +461,11 @@ TProgram::TProgram(
         }
 
         auto userFiles = NYT::NodeToYsonString(userFilesNode, NYT::NYson::EYsonFormat::Binary);
-        QContext_.GetWriter()->Put({FacadeComponent, StaticUserFilesLabel}, userFiles).GetValueSync();
+        QContext_.GetWriter()->Put({.Component = FacadeComponent, .Label = StaticUserFilesLabel}, userFiles).GetValueSync();
     } else if (QContext_.CanRead()) {
         SavedUserDataTable_.clear();
         for (const auto& label : {StaticUserFilesLabel, DynamicUserFilesLabel}) {
-            auto item = QContext_.GetReader()->Get({FacadeComponent, label}).GetValueSync();
+            auto item = QContext_.GetReader()->Get({.Component = FacadeComponent, .Label = label}).GetValueSync();
             if (item) {
                 auto node = NYT::NodeFromYsonString(item->Value);
                 for (const auto& alias : node.AsList()) {
@@ -396,6 +474,12 @@ TProgram::TProgram(
                     YQL_ENSURE(SavedUserDataTable_.emplace(TUserDataKey::File(alias.AsString()), block).second);
                 }
             }
+        }
+    }
+
+    for (auto& [key, block] : SavedUserDataTable_) {
+        if (autoUseYqlLibs && key.Alias().StartsWith(NYql::GetDefaultFilePrefix() + "yql_libs/")) {
+            block.Usage.Set(EUserDataBlockUsage::Library, /*val=*/true); // See YQL-21401
         }
     }
 
@@ -418,52 +502,16 @@ TProgram::TProgram(
     UserDataStorage_->SetUrlPreprocessor(urlPreprocessing);
 
     if (QContext_) {
-        UdfResolver_ = NCommon::WrapUdfResolverWithQContext(UdfResolver_, QContext_);
-        if (QContext_.CanRead()) {
-            auto item = QContext_.GetReader()->Get({FacadeComponent, GatewaysLabel}).GetValueSync();
-            if (item) {
-                YQL_ENSURE(LoadedGatewaysConfig_.ParseFromString(item->Value));
-                if (GatewaysForMerge_) {
-                    YQL_ENSURE(NProtoBuf::TextFormat::MergeFromString(*GatewaysForMerge_, &LoadedGatewaysConfig_));
-                }
-                THashMap<TString, TString> clusterMapping;
-                GetClusterMappingFromGateways(LoadedGatewaysConfig_, clusterMapping);
-                auto sqlFlags = ExtractSqlFlags(LoadedGatewaysConfig_);
-                if (auto modules = dynamic_cast<TModuleResolver*>(Modules_.get())) {
-                    modules->SetClusterMapping(clusterMapping);
-                    modules->SetSqlFlags(sqlFlags);
-                }
-
-                GatewaysConfig_ = &LoadedGatewaysConfig_;
-            }
-        } else if (QContext_.CanWrite() && GatewaysConfig_) {
-            TGatewaysConfig cleaned;
-            if (GatewaysConfig_->HasYt()) {
-                cleaned.MutableYt()->CopyFrom(GatewaysConfig_->GetYt());
-            }
-
-            if (GatewaysConfig_->HasFs()) {
-                cleaned.MutableFs()->CopyFrom(GatewaysConfig_->GetFs());
-            }
-
-            if (GatewaysConfig_->HasYqlCore()) {
-                cleaned.MutableYqlCore()->CopyFrom(GatewaysConfig_->GetYqlCore());
-            }
-
-            if (GatewaysConfig_->HasSqlCore()) {
-                cleaned.MutableSqlCore()->CopyFrom(GatewaysConfig_->GetSqlCore());
-            }
-
-            if (GatewaysConfig_->HasDq()) {
-                cleaned.MutableDq()->CopyFrom(GatewaysConfig_->GetDq());
-            }
-
-            auto data = cleaned.SerializeAsString();
-            QContext_.GetWriter()->Put({FacadeComponent, GatewaysLabel}, data).GetValueSync();
+        if (UrlListerManager_) {
+            UrlListerManager_ = NCommon::WrapUrlListerManagerWithQContext(UrlListerManager_, qContext);
+        }
+        if (QContext_.CanWrite() && GatewaysConfig_) {
+            auto data = GatewaysConfig_->SerializeAsString();
+            QContext_.GetWriter()->Put({.Component = FacadeComponent, .Label = GatewaysLabel}, data).GetValueSync();
         }
 
         if (QContext_.CanRead()) {
-            auto item = QContext_.GetReader()->Get({FacadeComponent, ParametersLabel}).GetValueSync();
+            auto item = QContext_.GetReader()->Get({.Component = FacadeComponent, .Label = ParametersLabel}).GetValueSync();
             if (item) {
                 SetParametersYson(item->Value);
             }
@@ -474,12 +522,8 @@ TProgram::TProgram(
 TProgram::~TProgram() {
     try {
         CloseLastSession().GetValueSync();
-        // stop all non complete execution before deleting TExprCtx
-        with_lock (DataProvidersLock_) {
-            DataProviders_.clear();
-        }
     } catch (...) {
-        Cerr << CurrentExceptionMessage() << Endl;
+        Cerr << "CloseLastSession failed when destroying TProgram: " << CurrentExceptionMessage() << Endl;
     }
 }
 
@@ -528,6 +572,34 @@ IPlanBuilder& TProgram::GetPlanBuilder() {
     return *PlanBuilder_;
 }
 
+TString TProgram::GetSourceCode() const {
+    return SourceCode_;
+}
+
+bool TProgram::IsFullCaptureReady() const {
+    if (!TypeCtx_ || !QContext_.CanWrite() || QContext_.CaptureMode() != EQPlayerCaptureMode::Full) {
+        return false;
+    }
+
+    for (auto& source : TypeCtx_->DataSources) {
+        if (!source->IsFullCaptureReady()) {
+            return false;
+        }
+    }
+    for (auto& sink : TypeCtx_->DataSinks) {
+        if (!sink->IsFullCaptureReady()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void TProgram::CommitFullCapture() const {
+    if (IsFullCaptureReady()) {
+        QContext_.GetWriter()->Put({.Component = FacadeComponent, .Label = FullCaptureLabel}, "").GetValueSync();
+    }
+}
+
 void TProgram::SetParametersYson(const TString& parameters) {
     Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
     NYT::TNode node;
@@ -570,7 +642,7 @@ void TProgram::SetParametersYson(const TString& parameters) {
     }
 
     if (QContext_.CanWrite()) {
-        QContext_.GetWriter()->Put({FacadeComponent, ParametersLabel}, parameters).GetValueSync();
+        QContext_.GetWriter()->Put({.Component = FacadeComponent, .Label = ParametersLabel}, parameters).GetValueSync();
     }
 }
 
@@ -593,7 +665,7 @@ bool TProgram::FillParseResult(NYql::TAstParseResult&& astRes, NYql::TWarningRul
         }
         auto& iManager = ExprCtx_->IssueManager;
         if (warningRules) {
-            for (auto warningRule: *warningRules) {
+            for (auto warningRule : *warningRules) {
                 iManager.AddWarningRule(warningRule);
             }
         }
@@ -603,7 +675,7 @@ bool TProgram::FillParseResult(NYql::TAstParseResult&& astRes, NYql::TWarningRul
             issueHolder->Severity = TSeverityIds::S_INFO;
             return issueHolder;
         });
-        for (auto issue: astRes.Issues) {
+        for (auto issue : astRes.Issues) {
             iManager.RaiseWarning(issue);
         }
         iManager.LeaveScope();
@@ -617,7 +689,7 @@ bool TProgram::FillParseResult(NYql::TAstParseResult&& astRes, NYql::TWarningRul
 }
 
 TString TProgram::GetSessionId() const {
-    with_lock(SessionIdLock_) {
+    with_lock (SessionIdLock_) {
         return SessionId_;
     }
 }
@@ -640,14 +712,11 @@ void TProgram::AddCredentials(const TVector<std::pair<TString, TCredential>>& cr
     if (QContext_.CanWrite()) {
         NYT::TNode credListNode = NYT::TNode::CreateList();
         for (const auto& c : credentials) {
-            credListNode.Add(NYT::TNode()
-                ("Name", c.first)
-                ("Category", c.second.Category)
-                ("Subcategory", c.second.Subcategory));
+            credListNode.Add(NYT::TNode()("Name", c.first)("Category", c.second.Category)("Subcategory", c.second.Subcategory));
         }
 
         auto credList = NYT::NodeToYsonString(credListNode, NYT::NYson::EYsonFormat::Binary);
-        QContext_.GetWriter()->Put({FacadeComponent, DynamicCredentialsLabel}, credList).GetValueSync();
+        QContext_.GetWriter()->Put({.Component = FacadeComponent, .Label = DynamicCredentialsLabel}, credList).GetValueSync();
     }
 
     for (const auto& credential : credentials) {
@@ -690,87 +759,67 @@ void TProgram::AddUserDataTable(const TUserDataTable& userDataTable) {
         }
 
         auto userFiles = NYT::NodeToYsonString(userFilesNode, NYT::NYson::EYsonFormat::Binary);
-        QContext_.GetWriter()->Put({FacadeComponent, DynamicUserFilesLabel}, userFiles).GetValueSync();
+        QContext_.GetWriter()->Put({.Component = FacadeComponent, .Label = DynamicUserFilesLabel}, userFiles).GetValueSync();
     }
 }
 
-void TProgram::HandleSourceCode(TString& sourceCode) {
+void TProgram::HandleSourceCode() {
     if (QContext_.CanWrite()) {
-        QContext_.GetWriter()->Put({FacadeComponent, SourceCodeLabel}, sourceCode).GetValueSync();
+        QContext_.GetWriter()->Put({.Component = FacadeComponent, .Label = SourceCodeLabel}, SourceCode_).GetValueSync();
     } else if (QContext_.CanRead()) {
-        auto loaded = QContext_.GetReader()->Get({FacadeComponent, SourceCodeLabel}).GetValueSync();
+        auto loaded = QContext_.GetReader()->Get({.Component = FacadeComponent, .Label = SourceCodeLabel}).GetValueSync();
         Y_ENSURE(loaded.Defined(), "No source code");
-        sourceCode = loaded->Value;
+        SourceCode_ = loaded->Value;
     }
 }
 
-namespace {
-
-THashSet<TString> ExtractSqlFlags(const NYT::TNode& dataNode) {
-    THashSet<TString> result;
-    for (const auto& f : dataNode["SqlFlags"].AsList()) {
-        result.insert(f.AsString());
-    }
-    return result;
+bool HasFullCapture(const IQReaderPtr& reader) {
+    auto fullCaptureItem = reader->Get({.Component = FacadeComponent, .Label = FullCaptureLabel}).GetValueSync();
+    return fullCaptureItem.Defined();
 }
 
-} // namespace
-
-void UpdateSqlFlagsFromQContext(const TQContext& qContext, THashSet<TString>& flags) {
-    if (qContext.CanRead()) {
-        auto loaded = qContext.GetReader()->Get({FacadeComponent, TranslationLabel}).GetValueSync();
-        if (!loaded) {
-            return;
-        }
-
-        auto dataNode = NYT::NodeFromYsonString(loaded->Value);
-        flags = ExtractSqlFlags(dataNode);
-    }
-}
-
-void TProgram::HandleTranslationSettings(NSQLTranslation::TTranslationSettings& loadedSettings,
-    NSQLTranslation::TTranslationSettings*& currentSettings)
+void TProgram::HandleTranslationSettings(NSQLTranslation::TTranslationSettings& settings)
 {
     if (QContext_.CanWrite()) {
         auto clusterMappingsNode = NYT::TNode::CreateMap();
-        for (const auto& c : currentSettings->ClusterMapping) {
+        for (const auto& c : settings.ClusterMapping) {
             clusterMappingsNode(c.first, c.second);
         }
 
         auto sqlFlagsNode = NYT::TNode::CreateList();
-        for (const auto& f : currentSettings->Flags) {
+        for (const auto& f : settings.Flags) {
             sqlFlagsNode.Add(f);
         }
 
+        // clang-format off
         auto dataNode = NYT::TNode()
             ("ClusterMapping", clusterMappingsNode)
-            ("V0Behavior", ui64(currentSettings->V0Behavior))
-            ("V0WarnAsError", currentSettings->V0WarnAsError->Allow())
-            ("DqDefaultAuto", currentSettings->DqDefaultAuto->Allow())
-            ("BlockDefaultAuto", currentSettings->BlockDefaultAuto->Allow())
+            ("V0Behavior", ui64(settings.V0Behavior))
+            ("V0WarnAsError", settings.V0WarnAsError->Allow())
+            ("DqDefaultAuto", settings.DqDefaultAuto->Allow())
+            ("BlockDefaultAuto", settings.BlockDefaultAuto->Allow())
             ("SqlFlags", sqlFlagsNode);
+        // clang-format on
 
         auto data = NYT::NodeToYsonString(dataNode, NYT::NYson::EYsonFormat::Binary);
-        QContext_.GetWriter()->Put({FacadeComponent, TranslationLabel}, data).GetValueSync();
+        QContext_.GetWriter()->Put({.Component = FacadeComponent, .Label = TranslationLabel}, data).GetValueSync();
     } else if (QContext_.CanRead()) {
-        auto loaded = QContext_.GetReader()->Get({FacadeComponent, TranslationLabel}).GetValueSync();
+        auto loaded = QContext_.GetReader()->Get({.Component = FacadeComponent, .Label = TranslationLabel}).GetValueSync();
         if (!loaded) {
             return;
         }
 
         auto dataNode = NYT::NodeFromYsonString(loaded->Value);
-        loadedSettings.ClusterMapping.clear();
+        settings.ClusterMapping.clear();
         for (const auto& c : dataNode["ClusterMapping"].AsMap()) {
-            loadedSettings.ClusterMapping[c.first] = c.second.AsString();
+            settings.ClusterMapping[c.first] = c.second.AsString();
         }
 
-        loadedSettings.Flags = ExtractSqlFlags(dataNode);
-        loadedSettings.V0Behavior = (NSQLTranslation::EV0Behavior)dataNode["V0Behavior"].AsUint64();
-        loadedSettings.V0WarnAsError = NSQLTranslation::ISqlFeaturePolicy::Make(dataNode["V0WarnAsError"].AsBool());
-        loadedSettings.DqDefaultAuto = NSQLTranslation::ISqlFeaturePolicy::Make(dataNode["DqDefaultAuto"].AsBool());
-        loadedSettings.BlockDefaultAuto = NSQLTranslation::ISqlFeaturePolicy::Make(dataNode["BlockDefaultAuto"].AsBool());
-        loadedSettings.IsReplay = true;
-        currentSettings = &loadedSettings;
+        settings.V0Behavior = (NSQLTranslation::EV0Behavior)dataNode["V0Behavior"].AsUint64();
+        settings.V0WarnAsError = NSQLTranslation::ISqlFeaturePolicy::Make(dataNode["V0WarnAsError"].AsBool());
+        settings.DqDefaultAuto = NSQLTranslation::ISqlFeaturePolicy::Make(dataNode["DqDefaultAuto"].AsBool());
+        settings.BlockDefaultAuto = NSQLTranslation::ISqlFeaturePolicy::Make(dataNode["BlockDefaultAuto"].AsBool());
+        settings.IsReplay = true;
     }
 }
 
@@ -789,7 +838,7 @@ bool TProgram::CheckParameters() {
 
 bool TProgram::ValidateLangVersion() {
     if (QContext_.CanRead()) {
-        auto loaded = QContext_.GetReader()->Get({FacadeComponent, LangVerLabel}).GetValueSync();
+        auto loaded = QContext_.GetReader()->Get({.Component = FacadeComponent, .Label = LangVerLabel}).GetValueSync();
         if (loaded.Defined()) {
             LangVer_ = FromString<TLangVersion>(loaded->Value);
         } else {
@@ -800,7 +849,7 @@ bool TProgram::ValidateLangVersion() {
     }
 
     if (QContext_.CanWrite()) {
-        QContext_.GetWriter()->Put({FacadeComponent, LangVerLabel}, ToString(LangVer_)).GetValueSync();
+        QContext_.GetWriter()->Put({.Component = FacadeComponent, .Label = LangVerLabel}, ToString(LangVer_)).GetValueSync();
     }
 
     TMaybe<TIssue> issue;
@@ -829,20 +878,18 @@ bool TProgram::ParseYql() {
     YQL_ENSURE(SourceSyntax_ == ESourceSyntax::Unknown);
     SourceSyntax_ = ESourceSyntax::Yql;
     SyntaxVersion_ = 1;
-    auto sourceCode = SourceCode_;
-    HandleSourceCode(sourceCode);
-    return FillParseResult(ParseAst(sourceCode));
+    HandleSourceCode();
+    return FillParseResult(ParseAst(SourceCode_));
 }
 
 bool TProgram::ParseSql() {
     YQL_PROFILE_FUNC(TRACE);
 
-    static const THashMap<TString, TString> clusters = {
-        { "plato", TString(YtProviderName) }
-    };
+    static const THashMap<TString, TString> Clusters = {
+        {"plato", TString(YtProviderName)}};
 
     NSQLTranslation::TTranslationSettings settings;
-    settings.ClusterMapping = clusters;
+    settings.ClusterMapping = Clusters;
     return ParseSql(settings);
 }
 
@@ -861,33 +908,50 @@ bool TProgram::ParseSql(const NSQLTranslation::TTranslationSettings& settings)
     SourceSyntax_ = ESourceSyntax::Sql;
     SyntaxVersion_ = settings.SyntaxVersion;
     NYql::TWarningRules warningRules;
-    auto sourceCode = SourceCode_;
-    HandleSourceCode(sourceCode);
-    NSQLTranslation::TTranslationSettings outerSettings = settings;
-    NSQLTranslation::TTranslationSettings* currentSettings = &outerSettings;
-    NSQLTranslation::TTranslationSettings loadedSettings;
-    loadedSettings.PgParser = settings.PgParser;
+    HandleSourceCode();
+    NSQLTranslation::TTranslationSettings currentSettings = settings;
     if (QContext_) {
-        HandleTranslationSettings(loadedSettings, currentSettings);
+        HandleTranslationSettings(currentSettings);
     }
 
-    currentSettings->EmitReadsForExists = true;
-    currentSettings->LangVer = LangVer_;
+    SqlFlags_ = currentSettings.Flags;
+    currentSettings.LangVer = LangVer_;
 
     NSQLTranslationV1::TLexers lexers;
     lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
     lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
     NSQLTranslationV1::TParsers parsers;
-    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
-    parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
+    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(
+        /*isAmbiguityError=*/false,
+        /*isAmbiguityDebugging=*/false,
+        currentSettings.MaxParseTreeDepth);
+    parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory(
+        /*isAmbiguityError=*/false,
+        /*isAmbiguityDebugging=*/false,
+        currentSettings.MaxParseTreeDepth);
 
     NSQLTranslation::TTranslators translators(
         nullptr,
         NSQLTranslationV1::MakeTranslator(lexers, parsers),
-        NSQLTranslationPG::MakeTranslator()
-    );
+        NSQLTranslationPG::MakeTranslator());
 
-    return FillParseResult(SqlToYql(translators, sourceCode, *currentSettings, &warningRules), &warningRules);
+    return FillParseResult(SqlToYql(translators, SourceCode_, currentSettings, &warningRules), &warningRules);
+}
+
+TProgram::TStatus TProgram::TestPartialTypecheck() {
+    YQL_PROFILE_FUNC(TRACE);
+
+    Y_ENSURE(AstRoot_ || ExprCtx_, "Program not parsed or compiled yet");
+
+    TIssues issues;
+    auto ret = PartialAnnonateTypes(AstRoot_, /*isLibrary=*/false, LangVer_, /*udfMeta=*/nullptr, issues, [&](TTypeAnnotationContext& newTypeCtx) {
+        return CreateConfigProvider(newTypeCtx, /*config=*/nullptr, "", {}, /*forPartialTypeCheck=*/true);
+    },
+                                    /*typeParser=*/{}, /*typeWriter=*/{})
+                   ? TProgram::TStatus::Ok
+                   : TProgram::TStatus::Error;
+    ExprCtx_->IssueManager.AddIssues(issues);
+    return ret;
 }
 
 bool TProgram::Compile(const TString& username, bool skipLibraries) {
@@ -912,10 +976,9 @@ bool TProgram::Compile(const TString& username, bool skipLibraries) {
     }
 
     if (!CompileExpr(
-        *AstRoot_, ExprRoot_, *ExprCtx_,
-        skipLibraries ? nullptr : Modules_.get(),
-        skipLibraries ? nullptr : UrlListerManager_.Get(), 0, SyntaxVersion_
-    )) {
+            *AstRoot_, ExprRoot_, *ExprCtx_,
+            skipLibraries ? nullptr : Modules_.get(),
+            skipLibraries ? nullptr : UrlListerManager_.Get(), 0, SyntaxVersion_)) {
         return false;
     }
 
@@ -996,12 +1059,12 @@ TProgram::TFutureStatus TProgram::DiscoverAsync(const TString& username) {
     Y_ENSURE(ExprRoot_, "Program not compiled yet");
 
     Transformer_ = TTransformationPipeline(TypeCtx_)
-            .AddServiceTransformers()
-            .AddParametersEvaluation(*FunctionRegistry_)
-            .AddPreTypeAnnotation()
-            .AddExpressionEvaluation(*FunctionRegistry_)
-            .AddPreIOAnnotation()
-            .Build();
+                       .AddServiceTransformers()
+                       .AddParametersEvaluation(*FunctionRegistry_)
+                       .AddPreTypeAnnotation()
+                       .AddExpressionEvaluation(*FunctionRegistry_)
+                       .AddPreIOAnnotation()
+                       .Build();
 
     TFuture<void> openSession = OpenSession(username);
     if (!openSession.Initialized()) {
@@ -1017,7 +1080,7 @@ TProgram::TFutureStatus TProgram::DiscoverAsync(const TString& username) {
             ExprCtx_->IssueManager.RaiseIssue(ExceptionToIssue(e));
             return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
         }
-        return AsyncTransform(*Transformer_, ExprRoot_, *ExprCtx_, false);
+        return AsyncTransform(*Transformer_, ExprRoot_, *ExprCtx_, /*applyAsyncChanges=*/false);
     });
 }
 
@@ -1037,21 +1100,22 @@ TProgram::TFutureStatus TProgram::LineageAsync(const TString& username, IOutputS
 
     ExprStream_ = exprOut;
     Transformer_ = TTransformationPipeline(TypeCtx_)
-        .AddServiceTransformers()
-        .AddParametersEvaluation(*FunctionRegistry_)
-        .AddPreTypeAnnotation()
-        .AddExpressionEvaluation(*FunctionRegistry_)
-        .AddIOAnnotation()
-        .AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, true)
-        .AddPostTypeAnnotation()
-        .Add(TExprOutputTransformer::Sync(ExprRoot_, traceOut), "ExprOutput")
-        .AddLineageOptimization(LineageStr_)
-        .Add(TExprOutputTransformer::Sync(ExprRoot_, exprOut, withTypes), "AstOutput")
-        .Build();
+                       .AddServiceTransformers()
+                       .AddParametersEvaluation(*FunctionRegistry_)
+                       .AddPreTypeAnnotation()
+                       .AddExpressionEvaluation(*FunctionRegistry_)
+                       .AddIOAnnotation()
+                       .AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, /*twoStages=*/true)
+                       .AddPostTypeAnnotation()
+                       .Add(TExprOutputTransformer::Sync(ExprRoot_, traceOut), "ExprOutput")
+                       .AddLineageOptimization(LineageStr_)
+                       .Add(TExprOutputTransformer::Sync(ExprRoot_, exprOut, withTypes), "AstOutput")
+                       .Build();
 
     TFuture<void> openSession = OpenSession(username);
-    if (!openSession.Initialized())
+    if (!openSession.Initialized()) {
         return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
+    }
 
     SaveExprRoot();
 
@@ -1099,14 +1163,14 @@ TProgram::TFutureStatus TProgram::ValidateAsync(const TString& username, IOutput
 
     ExprStream_ = exprOut;
     Transformer_ = TTransformationPipeline(TypeCtx_)
-            .AddServiceTransformers()
-            .AddParametersEvaluation(*FunctionRegistry_)
-            .AddPreTypeAnnotation()
-            .AddExpressionEvaluation(*FunctionRegistry_)
-            .AddIOAnnotation()
-            .AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, true)
-            .Add(TExprOutputTransformer::Sync(ExprRoot_, exprOut, withTypes), "AstOutput")
-            .Build();
+                       .AddServiceTransformers()
+                       .AddParametersEvaluation(*FunctionRegistry_)
+                       .AddPreTypeAnnotation()
+                       .AddExpressionEvaluation(*FunctionRegistry_)
+                       .AddIOAnnotation()
+                       .AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, /*twoStages=*/true)
+                       .Add(TExprOutputTransformer::Sync(ExprRoot_, exprOut, withTypes), "AstOutput")
+                       .Build();
 
     TFuture<void> openSession = OpenSession(username);
     if (!openSession.Initialized()) {
@@ -1129,11 +1193,11 @@ TProgram::TFutureStatus TProgram::ValidateAsync(const TString& username, IOutput
 }
 
 TProgram::TStatus TProgram::Optimize(
-        const TString& username,
-        IOutputStream* traceOut,
-        IOutputStream* tracePlan,
-        IOutputStream* exprOut,
-        bool withTypes)
+    const TString& username,
+    IOutputStream* traceOut,
+    IOutputStream* tracePlan,
+    IOutputStream* exprOut,
+    bool withTypes)
 {
     YQL_PROFILE_FUNC(TRACE);
     auto m = &TProgram::OptimizeAsync;
@@ -1141,11 +1205,11 @@ TProgram::TStatus TProgram::Optimize(
 }
 
 TProgram::TFutureStatus TProgram::OptimizeAsync(
-        const TString& username,
-        IOutputStream* traceOut,
-        IOutputStream* tracePlan,
-        IOutputStream* exprOut,
-        bool withTypes)
+    const TString& username,
+    IOutputStream* traceOut,
+    IOutputStream* tracePlan,
+    IOutputStream* exprOut,
+    bool withTypes)
 {
     if (!ProvideAnnotationContext(username)->Initialize(*ExprCtx_) || !CollectUsedClusters()) {
         return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
@@ -1164,8 +1228,8 @@ TProgram::TFutureStatus TProgram::OptimizeAsync(
 
         if (auto cluster = dp.RemoteClusterProvider(UsedClusters_, UsedProviders_, SourceSyntax_)) {
             return dp.RemoteOptimize(*cluster,
-                SourceSyntax_, SourceCode_, nullptr,
-                TypeCtx_, ExprRoot_, *ExprCtx_, ExternalQueryAst_, ExternalQueryPlan_);
+                                     SourceSyntax_, SourceCode_, nullptr,
+                                     TypeCtx_, ExprRoot_, *ExprCtx_, ExternalQueryAst_, ExternalQueryPlan_);
         }
     }
 
@@ -1174,21 +1238,22 @@ TProgram::TFutureStatus TProgram::OptimizeAsync(
     ExprStream_ = exprOut;
     PlanStream_ = tracePlan;
     Transformer_ = TTransformationPipeline(TypeCtx_)
-        .AddServiceTransformers()
-        .AddParametersEvaluation(*FunctionRegistry_)
-        .AddPreTypeAnnotation()
-        .AddExpressionEvaluation(*FunctionRegistry_)
-        .AddIOAnnotation()
-        .AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, true)
-        .AddPostTypeAnnotation()
-        .Add(TExprOutputTransformer::Sync(ExprRoot_, traceOut), "ExprOutput")
-        .AddOptimization()
-        .Add(TExprOutputTransformer::Sync(ExprRoot_, exprOut, withTypes), "AstOutput")
-        .Build();
+                       .AddServiceTransformers()
+                       .AddParametersEvaluation(*FunctionRegistry_)
+                       .AddPreTypeAnnotation()
+                       .AddExpressionEvaluation(*FunctionRegistry_)
+                       .AddIOAnnotation()
+                       .AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, /*twoStages=*/true)
+                       .AddPostTypeAnnotation()
+                       .Add(TExprOutputTransformer::Sync(ExprRoot_, traceOut), "ExprOutput")
+                       .AddOptimizationWithLineage(EnableLineage_)
+                       .Add(TExprOutputTransformer::Sync(ExprRoot_, exprOut, withTypes), "AstOutput")
+                       .Build();
 
     TFuture<void> openSession = OpenSession(username);
-    if (!openSession.Initialized())
+    if (!openSession.Initialized()) {
         return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
+    }
 
     SaveExprRoot();
 
@@ -1206,7 +1271,7 @@ TProgram::TFutureStatus TProgram::OptimizeAsync(
 }
 
 TProgram::TStatus TProgram::OptimizeWithConfig(
-        const TString& username, const IPipelineConfigurator& pipelineConf)
+    const TString& username, const IPipelineConfigurator& pipelineConf)
 {
     YQL_PROFILE_FUNC(TRACE);
     auto m = &TProgram::OptimizeAsyncWithConfig;
@@ -1214,7 +1279,7 @@ TProgram::TStatus TProgram::OptimizeWithConfig(
 }
 
 TProgram::TFutureStatus TProgram::OptimizeAsyncWithConfig(
-        const TString& username, const IPipelineConfigurator& pipelineConf)
+    const TString& username, const IPipelineConfigurator& pipelineConf)
 {
     if (!ProvideAnnotationContext(username)->Initialize(*ExprCtx_) || !CollectUsedClusters()) {
         return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
@@ -1233,8 +1298,8 @@ TProgram::TFutureStatus TProgram::OptimizeAsyncWithConfig(
 
         if (auto cluster = dp.RemoteClusterProvider(UsedClusters_, UsedProviders_, SourceSyntax_)) {
             return dp.RemoteOptimize(*cluster,
-                SourceSyntax_, SourceCode_, &pipelineConf,
-                TypeCtx_, ExprRoot_, *ExprCtx_, ExternalQueryAst_, ExternalQueryPlan_);
+                                     SourceSyntax_, SourceCode_, &pipelineConf,
+                                     TypeCtx_, ExprRoot_, *ExprCtx_, ExternalQueryAst_, ExternalQueryPlan_);
         }
     }
 
@@ -1247,11 +1312,11 @@ TProgram::TFutureStatus TProgram::OptimizeAsyncWithConfig(
     pipeline.AddPreTypeAnnotation();
     pipeline.AddExpressionEvaluation(*FunctionRegistry_);
     pipeline.AddIOAnnotation();
-    pipeline.AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, true);
+    pipeline.AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, /*twoStages=*/true);
     pipeline.AddPostTypeAnnotation();
     pipelineConf.AfterTypeAnnotation(&pipeline);
 
-    pipeline.AddOptimization();
+    pipeline.AddOptimizationWithLineage(EnableLineage_);
     if (EnableRangeComputeFor_) {
         pipeline.Add(MakeExpandRangeComputeForTransformer(pipeline.GetTypeAnnotationContext()),
                      "ExpandRangeComputeFor", TIssuesIds::CORE_EXEC);
@@ -1263,8 +1328,9 @@ TProgram::TFutureStatus TProgram::OptimizeAsyncWithConfig(
     Transformer_ = pipeline.Build();
 
     TFuture<void> openSession = OpenSession(username);
-    if (!openSession.Initialized())
+    if (!openSession.Initialized()) {
         return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
+    }
 
     SaveExprRoot();
 
@@ -1282,7 +1348,7 @@ TProgram::TFutureStatus TProgram::OptimizeAsyncWithConfig(
 }
 
 TProgram::TStatus TProgram::LineageWithConfig(
-        const TString& username, const IPipelineConfigurator& pipelineConf)
+    const TString& username, const IPipelineConfigurator& pipelineConf)
 {
     YQL_PROFILE_FUNC(TRACE);
     auto m = &TProgram::LineageAsyncWithConfig;
@@ -1290,7 +1356,7 @@ TProgram::TStatus TProgram::LineageWithConfig(
 }
 
 TProgram::TFutureStatus TProgram::LineageAsyncWithConfig(
-        const TString& username, const IPipelineConfigurator& pipelineConf)
+    const TString& username, const IPipelineConfigurator& pipelineConf)
 {
     if (!ProvideAnnotationContext(username)->Initialize(*ExprCtx_) || !CollectUsedClusters()) {
         return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
@@ -1306,7 +1372,7 @@ TProgram::TFutureStatus TProgram::LineageAsyncWithConfig(
     pipeline.AddPreTypeAnnotation();
     pipeline.AddExpressionEvaluation(*FunctionRegistry_);
     pipeline.AddIOAnnotation();
-    pipeline.AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, true);
+    pipeline.AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, /*twoStages=*/true);
     pipeline.AddPostTypeAnnotation();
     pipelineConf.AfterTypeAnnotation(&pipeline);
 
@@ -1315,8 +1381,9 @@ TProgram::TFutureStatus TProgram::LineageAsyncWithConfig(
     Transformer_ = pipeline.Build();
 
     TFuture<void> openSession = OpenSession(username);
-    if (!openSession.Initialized())
+    if (!openSession.Initialized()) {
         return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
+    }
 
     SaveExprRoot();
 
@@ -1334,11 +1401,11 @@ TProgram::TFutureStatus TProgram::LineageAsyncWithConfig(
 }
 
 TProgram::TStatus TProgram::Run(
-        const TString& username,
-        IOutputStream* traceOut,
-        IOutputStream* tracePlan,
-        IOutputStream* exprOut,
-        bool withTypes)
+    const TString& username,
+    IOutputStream* traceOut,
+    IOutputStream* tracePlan,
+    IOutputStream* exprOut,
+    bool withTypes)
 {
     YQL_PROFILE_FUNC(TRACE);
     auto m = &TProgram::RunAsync;
@@ -1346,16 +1413,16 @@ TProgram::TStatus TProgram::Run(
 }
 
 TProgram::TFutureStatus TProgram::RunAsync(
-        const TString& username,
-        IOutputStream* traceOut,
-        IOutputStream* tracePlan,
-        IOutputStream* exprOut,
-        bool withTypes)
+    const TString& username,
+    IOutputStream* traceOut,
+    IOutputStream* tracePlan,
+    IOutputStream* exprOut,
+    bool withTypes)
 {
     if (!ProvideAnnotationContext(username)->Initialize(*ExprCtx_) || !CollectUsedClusters()) {
         return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
     }
-    TypeCtx_->IsReadOnly = (HiddenMode_ != EHiddenMode::Disable);
+    TypeCtx_->IsReadOnly = (HiddenMode_ != EHiddenMode::Disable) || QContext_.CanRead();
 
     TVector<TDataProviderInfo> dataProviders;
     with_lock (DataProvidersLock_) {
@@ -1369,9 +1436,9 @@ TProgram::TFutureStatus TProgram::RunAsync(
 
         if (auto cluster = dp.RemoteClusterProvider(UsedClusters_, UsedProviders_, SourceSyntax_)) {
             return dp.RemoteRun(*cluster, SourceSyntax_, SourceCode_,
-                OutputFormat_, ResultFormat_, nullptr,
-                TypeCtx_, ExprRoot_, *ExprCtx_, ExternalQueryAst_, ExternalQueryPlan_, ExternalDiagnostics_,
-                ResultProviderConfig_);
+                                OutputFormat_, ResultFormat_, nullptr,
+                                TypeCtx_, ExprRoot_, *ExprCtx_, ExternalQueryAst_, ExternalQueryPlan_, ExternalDiagnostics_,
+                                ResultProviderConfig_);
         }
     }
 
@@ -1386,10 +1453,10 @@ TProgram::TFutureStatus TProgram::RunAsync(
     pipeline.AddPreTypeAnnotation();
     pipeline.AddExpressionEvaluation(*FunctionRegistry_);
     pipeline.AddIOAnnotation();
-    pipeline.AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, true);
+    pipeline.AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, /*twoStages=*/true);
     pipeline.AddPostTypeAnnotation();
     pipeline.Add(TExprOutputTransformer::Sync(ExprRoot_, traceOut), "ExprOutput");
-    pipeline.AddOptimization();
+    pipeline.AddOptimizationWithLineage(EnableLineage_);
     if (EnableRangeComputeFor_) {
         pipeline.Add(MakeExpandRangeComputeForTransformer(pipeline.GetTypeAnnotationContext()),
                      "ExpandRangeComputeFor", TIssuesIds::CORE_EXEC);
@@ -1421,7 +1488,7 @@ TProgram::TFutureStatus TProgram::RunAsync(
 }
 
 TProgram::TStatus TProgram::RunWithConfig(
-        const TString& username, const IPipelineConfigurator& pipelineConf)
+    const TString& username, const IPipelineConfigurator& pipelineConf)
 {
     YQL_PROFILE_FUNC(TRACE);
     auto m = &TProgram::RunAsyncWithConfig;
@@ -1429,12 +1496,12 @@ TProgram::TStatus TProgram::RunWithConfig(
 }
 
 TProgram::TFutureStatus TProgram::RunAsyncWithConfig(
-        const TString& username, const IPipelineConfigurator& pipelineConf)
+    const TString& username, const IPipelineConfigurator& pipelineConf)
 {
     if (!ProvideAnnotationContext(username)->Initialize(*ExprCtx_) || !CollectUsedClusters()) {
         return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
     }
-    TypeCtx_->IsReadOnly = (HiddenMode_ != EHiddenMode::Disable);
+    TypeCtx_->IsReadOnly = (HiddenMode_ != EHiddenMode::Disable) || QContext_.CanRead();
 
     TVector<TDataProviderInfo> dataProviders;
     with_lock (DataProvidersLock_) {
@@ -1448,9 +1515,9 @@ TProgram::TFutureStatus TProgram::RunAsyncWithConfig(
 
         if (auto cluster = dp.RemoteClusterProvider(UsedClusters_, UsedProviders_, SourceSyntax_)) {
             return dp.RemoteRun(*cluster, SourceSyntax_, SourceCode_,
-                OutputFormat_, ResultFormat_, &pipelineConf,
-                TypeCtx_, ExprRoot_, *ExprCtx_, ExternalQueryAst_, ExternalQueryPlan_, ExternalDiagnostics_,
-                ResultProviderConfig_);
+                                OutputFormat_, ResultFormat_, &pipelineConf,
+                                TypeCtx_, ExprRoot_, *ExprCtx_, ExternalQueryAst_, ExternalQueryPlan_, ExternalDiagnostics_,
+                                ResultProviderConfig_);
         }
     }
 
@@ -1463,14 +1530,14 @@ TProgram::TFutureStatus TProgram::RunAsyncWithConfig(
     pipeline.AddPreTypeAnnotation();
     pipeline.AddExpressionEvaluation(*FunctionRegistry_);
     pipeline.AddIOAnnotation();
-    pipeline.AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, true);
+    pipeline.AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, /*twoStages=*/true);
     pipeline.AddPostTypeAnnotation();
     pipelineConf.AfterTypeAnnotation(&pipeline);
 
-    pipeline.AddOptimization();
+    pipeline.AddOptimizationWithLineage(EnableLineage_);
     if (EnableRangeComputeFor_) {
         pipeline.Add(MakeExpandRangeComputeForTransformer(pipeline.GetTypeAnnotationContext()),
-            "ExpandRangeComputeFor", TIssuesIds::CORE_EXEC);
+                     "ExpandRangeComputeFor", TIssuesIds::CORE_EXEC);
     }
     pipelineConf.AfterOptimize(&pipeline);
     pipeline.AddRun(ProgressWriter_);
@@ -1499,7 +1566,7 @@ TProgram::TFutureStatus TProgram::RunAsyncWithConfig(
 
 void TProgram::SaveExprRoot() {
     TNodeOnNodeOwnedMap deepClones;
-    SavedExprRoot_ = ExprCtx_->DeepCopy(*ExprRoot_, *ExprCtx_, deepClones, /*internStrings*/false, /*copyTypes*/true, /*copyResult*/false, {});
+    SavedExprRoot_ = ExprCtx_->DeepCopy(*ExprRoot_, *ExprCtx_, deepClones, /*internStrings*/ false, /*copyTypes*/ true, /*copyResult*/ false, {});
 }
 
 std::optional<bool> TProgram::CheckFallbackIssues(const TIssues& issues) {
@@ -1516,8 +1583,8 @@ std::optional<bool> TProgram::CheckFallbackIssues(const TIssues& issues) {
             isFallback = true;
         } else if (issue.GetCode() >= TIssuesIds::YT_ACCESS_DENIED &&
                    issue.GetCode() <= TIssuesIds::YT_FOLDER_INPUT_IS_NOT_A_FOLDER &&
-                  (issue.GetSeverity() == TSeverityIds::S_ERROR ||
-                   issue.GetSeverity() == TSeverityIds::S_FATAL)) {
+                   (issue.GetSeverity() == TSeverityIds::S_ERROR ||
+                    issue.GetSeverity() == TSeverityIds::S_FATAL)) {
             YQL_LOG(DEBUG) << "Yt Error " << issue;
             isFallback = false;
         }
@@ -1544,11 +1611,7 @@ TFuture<IGraphTransformer::TStatus> TProgram::AsyncTransformWithFallback(bool ap
 {
     return AsyncTransform(*Transformer_, ExprRoot_, *ExprCtx_, applyAsyncChanges).Apply([this](const TFuture<IGraphTransformer::TStatus>& res) {
         auto status = res.GetValueSync();
-        if (status == IGraphTransformer::TStatus::Error
-            && !TypeCtx_->ForceDq
-            && SavedExprRoot_
-            && TypeCtx_->DqCaptured
-            && TypeCtx_->DqFallbackPolicy != EFallbackPolicy::Never)
+        if (status == IGraphTransformer::TStatus::Error && !TypeCtx_->ForceDq && SavedExprRoot_ && TypeCtx_->DqCaptured && TypeCtx_->DqFallbackPolicy != EFallbackPolicy::Never)
         {
             auto issues = ExprCtx_->IssueManager.GetIssues();
             bool isFallback = CheckFallbackIssues(issues).value_or(true);
@@ -1583,9 +1646,7 @@ TFuture<IGraphTransformer::TStatus> TProgram::AsyncTransformWithFallback(bool ap
             }
 
             std::function<void(const TIssuePtr& issue)> toInfo = [&](const TIssuePtr& issue) {
-                if (issue->Severity == TSeverityIds::S_ERROR
-                    || issue->Severity == TSeverityIds::S_FATAL
-                    || issue->Severity == TSeverityIds::S_WARNING)
+                if (issue->Severity == TSeverityIds::S_ERROR || issue->Severity == TSeverityIds::S_FATAL || issue->Severity == TSeverityIds::S_WARNING)
                 {
                     issue->Severity = TSeverityIds::S_INFO;
                 }
@@ -1599,9 +1660,7 @@ TFuture<IGraphTransformer::TStatus> TProgram::AsyncTransformWithFallback(bool ap
 
             for (auto& issue : issues) {
                 TIssuePtr newIssue = new TIssue(issue);
-                if (newIssue->Severity == TSeverityIds::S_ERROR
-                    || issue.Severity == TSeverityIds::S_FATAL
-                    || issue.Severity == TSeverityIds::S_WARNING)
+                if (newIssue->Severity == TSeverityIds::S_ERROR || issue.Severity == TSeverityIds::S_FATAL || issue.Severity == TSeverityIds::S_WARNING)
                 {
                     newIssue->Severity = TSeverityIds::S_INFO;
                 }
@@ -1684,6 +1743,10 @@ TMaybe<TString> TProgram::GetDiagnostics() {
     }
 
     if (!Transformer_) {
+        return Nothing();
+    }
+
+    if (VolatileResults_) {
         return Nothing();
     }
 
@@ -1794,39 +1857,93 @@ TMaybe<TString> TProgram::GetStatistics(bool totalOnly, THashMap<TString, TStrin
 
     auto rusage = TRusage::Get();
     // System stats
+    // clang-format off
     writer.OnKeyedItem("system");
     writer.OnBeginMap();
         writer.OnKeyedItem("MaxRSS");
         writer.OnBeginMap();
-            writer.OnKeyedItem("max");
-            writer.OnInt64Scalar(rusage.MaxRss);
+        writer.OnKeyedItem("max");
+        writer.OnInt64Scalar(rusage.MaxRss);
         writer.OnEndMap();
 
-        writer.OnKeyedItem("MajorPageFaults");
+    writer.OnKeyedItem("MajorPageFaults");
         writer.OnBeginMap();
-            writer.OnKeyedItem("count");
-            writer.OnInt64Scalar(rusage.MajorPageFaults);
+        writer.OnKeyedItem("count");
+        writer.OnInt64Scalar(rusage.MajorPageFaults);
         writer.OnEndMap();
 
-        if (FallbackCounter_) {
-            writer.OnKeyedItem("Fallback");
+    if (FallbackCounter_) {
+        writer.OnKeyedItem("Fallback");
             writer.OnBeginMap();
-                writer.OnKeyedItem("count");
-                writer.OnInt64Scalar(FallbackCounter_);
+            writer.OnKeyedItem("count");
+            writer.OnInt64Scalar(FallbackCounter_);
             writer.OnEndMap();
-        }
+    }
 
     writer.OnEndMap(); // system
 
+    if (TypeCtx_->EvaluationStats.Count > 0) {
+        WriteEvaluationStatistics(writer, TypeCtx_->EvaluationStats);
+    }
+
     if (TypeCtx_->Modules) {
         writer.OnKeyedItem("moduleResolver");
+            writer.OnBeginMap();
+            TypeCtx_->Modules->WriteStatistics(writer);
+            writer.OnEndMap();
+    }
+
+    // lineage
+    if (TypeCtx_->LineageStats.Correct || TypeCtx_->LineageStats.CorrectStandalone) {
+        writer.OnKeyedItem("Lineage");
         writer.OnBeginMap();
-        TypeCtx_->Modules->WriteStatistics(writer);
+            if (TypeCtx_->LineageStats.Correct) {
+                writer.OnKeyedItem("Correct");
+                writer.OnBeginMap();
+                writer.OnKeyedItem("count");
+                writer.OnInt64Scalar(*TypeCtx_->LineageStats.Correct);
+                writer.OnEndMap();
+            }
+            if (TypeCtx_->LineageStats.CorrectStandalone) {
+                writer.OnKeyedItem("CorrectStandalone");
+                writer.OnBeginMap();
+                writer.OnKeyedItem("count");
+                writer.OnInt64Scalar(*TypeCtx_->LineageStats.CorrectStandalone);
+                writer.OnEndMap();
+            }
+            if (TypeCtx_->LineageStats.Size > 0) {
+                writer.OnKeyedItem("Size");
+                writer.OnBeginMap();
+                writer.OnKeyedItem("count");
+                writer.OnInt64Scalar(TypeCtx_->LineageStats.Size);
+                writer.OnEndMap();
+            }
+            if (TypeCtx_->LineageStats.Memory > 0) {
+                writer.OnKeyedItem("Memory");
+                writer.OnBeginMap();
+                writer.OnKeyedItem("count");
+                writer.OnInt64Scalar(TypeCtx_->LineageStats.Memory);
+                writer.OnEndMap();
+            }
+            if (TypeCtx_->LineageStats.Duration > 0) {
+                writer.OnKeyedItem("DurationUs");
+                writer.OnBeginMap();
+                writer.OnKeyedItem("count");
+                writer.OnInt64Scalar(TypeCtx_->LineageStats.Duration);
+                writer.OnEndMap();
+            }
+            if (TypeCtx_->LineageStats.Version > 0) {
+                writer.OnKeyedItem("Version");
+                writer.OnBeginMap();
+                writer.OnKeyedItem("count");
+                writer.OnInt64Scalar(TypeCtx_->LineageStats.Version);
+                writer.OnEndMap();
+            }
         writer.OnEndMap();
     }
 
     // extra
-    for (const auto &[k, extraYson] : extraYsons) {
+    for (const auto& [k, extraYson] : extraYsons) {
         writer.OnKeyedItem(k);
         writer.OnRaw(extraYson);
     }
@@ -1834,6 +1951,7 @@ TMaybe<TString> TProgram::GetStatistics(bool totalOnly, THashMap<TString, TStrin
     // Footer
     writer.OnEndMap();
     writer.OnEndMap();
+    // clang-format on
     return out.Str();
 }
 
@@ -1845,7 +1963,7 @@ TMaybe<TString> TProgram::GetDiscoveredData() {
     TStringStream out;
     NYson::TYsonWriter writer(&out, OutputFormat_);
     writer.OnBeginMap();
-    for (auto& datasource: TypeCtx_->DataSources) {
+    for (auto& datasource : TypeCtx_->DataSources) {
         TStringStream providerOut;
         NYson::TYsonWriter providerWriter(&providerOut);
         if (datasource->CollectDiscoveredData(providerWriter)) {
@@ -1877,7 +1995,7 @@ TIssues TProgram::Issues() const {
         result.AddIssues(ExprCtx_->IssueManager.GetIssues());
     }
     result.AddIssues(FinalIssues_);
-    CheckFatalIssues(result);
+    CheckFatalIssues(result, IssueReportTarget_);
     return result;
 }
 
@@ -1887,7 +2005,7 @@ TIssues TProgram::CompletedIssues() const {
         result.AddIssues(ExprCtx_->IssueManager.GetCompletedIssues());
     }
     result.AddIssues(FinalIssues_);
-    CheckFatalIssues(result);
+    CheckFatalIssues(result, IssueReportTarget_);
     return result;
 }
 
@@ -1903,14 +2021,14 @@ TIssue MakeNoBlocksInfoIssue(const TVector<TString>& names, bool isTypes) {
 void TProgram::FinalizeIssues() {
     FinalIssues_.Clear();
     if (TypeCtx_) {
-        static const size_t topCount = 10;
-        auto noBlockTypes = TypeCtx_->GetTopNoBlocksTypes(topCount);
+        constexpr size_t TopCount = 10;
+        auto noBlockTypes = TypeCtx_->GetTopNoBlocksTypes(TopCount);
         if (!noBlockTypes.empty()) {
-            FinalIssues_.AddIssue(MakeNoBlocksInfoIssue(noBlockTypes, true));
+            FinalIssues_.AddIssue(MakeNoBlocksInfoIssue(noBlockTypes, /*isTypes=*/true));
         }
-        auto noBlockCallables = TypeCtx_->GetTopNoBlocksCallables(topCount);
+        auto noBlockCallables = TypeCtx_->GetTopNoBlocksCallables(TopCount);
         if (!noBlockCallables.empty()) {
-            FinalIssues_.AddIssue(MakeNoBlocksInfoIssue(noBlockCallables, false));
+            FinalIssues_.AddIssue(MakeNoBlocksInfoIssue(noBlockCallables, /*isTypes=*/false));
         }
     }
 }
@@ -1953,7 +2071,7 @@ NThreading::TFuture<void> TProgram::CloseLastSession() {
     auto promise = NThreading::NewPromise<void>();
 
     TString sessionId;
-    with_lock(SessionIdLock_) {
+    with_lock (SessionIdLock_) {
         // post-condition: SessionId_ will be empty
         sessionId = std::move(SessionId_);
         if (sessionId.empty()) {
@@ -1974,20 +2092,31 @@ NThreading::TFuture<void> TProgram::CloseLastSession() {
         }
     }
 
-    return NThreading::WaitExceptionOrAll(closeFutures)
-        .Apply([promise = std::move(promise)](const NThreading::TFuture<void>&) mutable {
-            promise.SetValue();
+    // TODO: should be WaitAll()
+    NThreading::WaitExceptionOrAll(closeFutures)
+        .Subscribe([promise = std::move(promise), sessionId = std::move(sessionId)](const NThreading::TFuture<void>& f) mutable {
+            try {
+                f.TryRethrow();
+                promise.SetValue();
+            } catch (...) {
+                YQL_LOG_CTX_ROOT_SESSION_SCOPE(sessionId);
+                YQL_LOG(ERROR) << "CloseSession failed: " << CurrentExceptionMessage();
+                promise.SetException(std::current_exception());
+            }
         });
+
+    return CloseLastSessionFuture_;
 }
 
 TString TProgram::ResultsAsString() const {
-    if (!ResultProviderConfig_)
+    if (!ResultProviderConfig_) {
         return "";
+    }
 
     TStringStream resultOut;
     NYson::TYsonWriter yson(&resultOut, OutputFormat_);
     yson.OnBeginList();
-    for (const auto& result: Results()) {
+    for (const auto& result : Results()) {
         yson.OnListItem();
         yson.OnRaw(result);
     }
@@ -2016,7 +2145,12 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
     typeAnnotationContext->FileStorage = FileStorage_;
     typeAnnotationContext->QContext = QContext_;
     typeAnnotationContext->HiddenMode = HiddenMode_;
-
+    typeAnnotationContext->SqlFlags = SqlFlags_;
+    typeAnnotationContext->FuzzUntypedLambda = FuzzUntypedLambda_;
+    typeAnnotationContext->FuzzUniversal = FuzzUniversal_;
+    for (auto& [alias, provider] : RemoteLayersProviders_) {
+        typeAnnotationContext->AddRemoteLayersProvider(alias, provider);
+    }
     if (UdfIndex_ && UdfIndexPackageSet_) {
         // setup default versions at the beginning
         // could be overridden by pragma later
@@ -2038,8 +2172,7 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
             ProgressWriter_,
             OperationOptions_,
             AbortHidden_,
-            QContext_
-        );
+            QContext_);
         if (HiddenMode_ != EHiddenMode::Disable && !dp.SupportsHidden) {
             continue;
         }
@@ -2093,12 +2226,12 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
     if (!resultProviderDataSources.empty())
     {
         auto resultFormat = ResultFormat_;
-        auto writerFactory = [resultFormat] () { return CreateYsonResultWriter(resultFormat); };
+        auto writerFactory = [resultFormat]() { return CreateYsonResultWriter(resultFormat); };
         ResultProviderConfig_ = MakeIntrusive<TResultProviderConfig>(*typeAnnotationContext,
-            *FunctionRegistry_, ResultType_, ToString((ui32)resultFormat), writerFactory);
+                                                                     *FunctionRegistry_, ResultType_, ToString((ui32)resultFormat), writerFactory);
         ResultProviderConfig_->SupportsResultPosition = SupportsResultPosition_;
         if (VolatileResults_) {
-            constexpr ui64 BytesLimitForVolatileResults = 10*1024*1024;
+            constexpr ui64 BytesLimitForVolatileResults = 10 * 1024 * 1024;
             ResultProviderConfig_->FillSettings.AllResultsBytesLimit = BytesLimitForVolatileResults;
             ResultProviderConfig_->FillSettings.RowsLimitPerWrite.Clear();
         }
@@ -2118,7 +2251,26 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
     }
 
     tokenResolvers.push_back(BuildDefaultTokenResolver(typeAnnotationContext->Credentials));
-    typeAnnotationContext->UserDataStorage->SetTokenResolver(BuildCompositeTokenResolver(std::move(tokenResolvers)));
+    auto tokenResolver = BuildCompositeTokenResolver(std::move(tokenResolvers));
+
+    typeAnnotationContext->UserDataStorage->SetTokenResolver(tokenResolver);
+
+    if (UdfIndex_) {
+        typeAnnotationContext->UdfResolver = NCommon::CreateUdfResolverWithIndex(
+            UdfIndex_,
+            typeAnnotationContext->UdfResolver,
+            FileStorage_,
+            UrlPreprocessing_,
+            tokenResolver);
+    }
+
+    if (QContext_) {
+        typeAnnotationContext->UdfResolver = NCommon::WrapUdfResolverWithQContext(typeAnnotationContext->UdfResolver, QContext_);
+    }
+
+    if (auto* urlListerManager = typeAnnotationContext->UrlListerManager.Get()) {
+        urlListerManager->SetTokenResolver(std::move(tokenResolver));
+    }
 
     return typeAnnotationContext;
 }
@@ -2130,7 +2282,7 @@ TFuture<void> TProgram::OpenSession(const TString& username)
         for (const auto& dp : DataProviders_) {
             if (dp.OpenSession) {
                 auto future = dp.OpenSession(SessionId_, username, ProgressWriter_, OperationOptions_,
-                    RandomProvider_, TimeProvider_);
+                                             RandomProvider_, TimeProvider_);
                 openFutures.push_back(future);
             }
         }
@@ -2158,7 +2310,7 @@ void TProgram::Print(IOutputStream* exprOut, IOutputStream* planOut, bool cleanP
             issueCode));
     }
 
-    auto compositeTransformer = CreateCompositeGraphTransformer(printTransformers, false);
+    auto compositeTransformer = CreateCompositeGraphTransformer(printTransformers, /*useIssueScopes=*/false);
     InstantTransform(*compositeTransformer, ExprRoot_, *ExprCtx_);
 }
 
@@ -2184,6 +2336,27 @@ bool TProgram::NeedWaitForActiveProcesses() {
     }
 
     return false;
+}
+
+TProgram::TStatus WaitExecution(TProgramPtr program, TProgram::TFutureStatus futureStatus) {
+    YQL_ENSURE(program);
+    YQL_ENSURE(futureStatus.Initialized());
+    futureStatus.Wait();
+    HandleFutureException(futureStatus);
+
+    TProgram::TStatus status = futureStatus.GetValue();
+    while (status == TProgram::TStatus::Async) {
+        auto continueFuture = program->ContinueAsync();
+        continueFuture.Wait();
+        HandleFutureException(continueFuture);
+        status = continueFuture.GetValue();
+    }
+
+    if (status == TProgram::TStatus::Error) {
+        program->Print(program->ExprStream(), program->PlanStream());
+    }
+
+    return status;
 }
 
 } // namespace NYql

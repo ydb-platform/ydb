@@ -10,6 +10,19 @@ namespace NYT::NConcurrency {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+//! Determines from which point the inter-invocation delay is measured.
+DEFINE_ENUM(EPeriodicExecutorDelayMode,
+    //! The delay is counted from the end of the previous invocation to the start
+    //! of the next one (i.e. the gap between invocations is fixed).
+    (FromPreviousEnd)
+    //! The delay is counted from the start of the previous invocation to the start
+    //! of the next one (i.e. the start-to-start period is fixed). If an invocation
+    //! takes longer than the period, the next one starts immediately.
+    (FromPreviousStart)
+);
+
+////////////////////////////////////////////////////////////////////////////////
+
 struct TPeriodicExecutorOptions
 {
     static constexpr double DefaultJitter = 0.2;
@@ -19,6 +32,7 @@ struct TPeriodicExecutorOptions
     std::optional<TDuration> Period;
     TDuration Splay;
     double Jitter = 0.0;
+    EPeriodicExecutorDelayMode DelayMode = EPeriodicExecutorDelayMode::FromPreviousEnd;
 
     bool operator==(const TPeriodicExecutorOptions& other) const = default;
 
@@ -133,12 +147,6 @@ struct TPrefetchingThrottlerConfig
 
     //! Time window for the RPS estimation.
     TDuration Window;
-
-    //! Enable the prefetching throttler.
-    //! If disabled #CreatePrefetchingThrottler() will not create #TPrefetchingThrottler
-    //! and will return the underlying throttler instead.
-    //! #TPrefetchingThrottler itself does not check this field.
-    bool Enable;
 
     REGISTER_YSON_STRUCT(TPrefetchingThrottlerConfig);
 

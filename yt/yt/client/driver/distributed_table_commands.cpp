@@ -45,6 +45,12 @@ void TStartDistributedWriteSessionCommand::Register(TRegistrar registrar)
             return command->Options.CookieCount;
         })
         .Default();
+    registrar.ParameterWithUniversalAccessor<std::optional<TDuration>>(
+        "session_timeout",
+        [] (TThis* command) -> auto& {
+            return command->Options.SessionTimeout;
+        })
+        .Default();
 }
 
 // -> DistributedWriteSession
@@ -58,6 +64,21 @@ void TStartDistributedWriteSessionCommand::DoExecute(ICommandContextPtr context)
     ProduceOutput(context, [sessionAndCookies = std::move(sessionAndCookies)] (IYsonConsumer* consumer) {
         Serialize(sessionAndCookies, consumer);
     });
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TPingDistributedWriteSessionCommand::Register(TRegistrar registrar)
+{
+    registrar.Parameter("session", &TThis::Session);
+}
+
+// -> Nothing
+void TPingDistributedWriteSessionCommand::DoExecute(ICommandContextPtr context)
+{
+    auto session = ConvertTo<TSignedDistributedWriteSessionPtr>(Session);
+    WaitFor(context->GetClient()->PingDistributedWriteSession(session, Options))
+        .ThrowOnError();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -102,6 +123,8 @@ void TFinishDistributedWriteSessionCommand::DoExecute(ICommandContextPtr context
 void TWriteTableFragmentCommand::Register(TRegistrar registrar)
 {
     registrar.Parameter("cookie", &TThis::Cookie);
+    registrar.Parameter("table_writer", &TThis::TableWriter)
+        .Default();
     registrar.Parameter("max_row_buffer_size", &TThis::MaxRowBufferSize)
         .Default(1_MB);
 }
@@ -120,9 +143,13 @@ ITableFragmentWriterPtr TWriteTableFragmentCommand::CreateTableWriter(
 
         THROW_ERROR_EXCEPTION(
             "Signature validation failed for write table fragment")
-                << TErrorAttribute("session_id", concreteCookie.SessionId)
-                << TErrorAttribute("cookie_id", concreteCookie.CookieId);
+                .With("session_id", concreteCookie.SessionId)
+                .With("cookie_id", concreteCookie.CookieId);
     }
+
+    Options.Config = UpdateYsonStruct(
+        context->GetConfig()->TableWriter,
+        TableWriter);
 
     return WaitFor(context
         ->GetClient()

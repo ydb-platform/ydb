@@ -9,6 +9,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/colorizer
+    library/cpp/protobuf/interop
     library/cpp/testing/unittest
     ydb/core/fq/libs/config/protos
     ydb/core/fq/libs/control_plane_proxy/events
@@ -19,6 +20,7 @@ PEERDIR(
     ydb/library/folder_service/mock
     ydb/library/grpc/server/actors
     ydb/library/security
+    ydb/library/yql/providers/pq/gateway/abstract
     ydb/library/yql/providers/pq/provider
     ydb/library/yql/providers/s3/actors
     ydb/tests/tools/kqprun/runlib

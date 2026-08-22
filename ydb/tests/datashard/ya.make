@@ -1,15 +1,18 @@
 RECURSE(
+    add_column
     async_replication
     dml
     dump_restore
     copy_table
+    knn
     lib
     partitioning
     parametrized_queries
     select
-    split_merge
     secondary_index
     s3
-    vector_index
+    set_column_constraint
+    truncate
     ttl
+    vector_index
 )

@@ -173,7 +173,28 @@ TKqpReadTableSettings ParseInternal(const TCoNameValueTupleList& node) {
         } else if (name == TKqpReadTableSettings::TabletIdName) {
             YQL_ENSURE(tuple.Ref().ChildrenSize() == 2);
             settings.TabletId = FromString<ui64>(tuple.Value().Cast<TCoAtom>().Value());
-        }else {
+        } else if (name == TKqpReadTableSettings::PointPrefixLenSettingName) {
+            YQL_ENSURE(tuple.Ref().ChildrenSize() == 2);
+            settings.PointPrefixLen = FromString<ui64>(tuple.Value().Cast<TCoAtom>().Value());
+        } else if (name == TKqpReadTableSettings::IndexSelectionDebugInfoSettingName) {
+            YQL_ENSURE(tuple.Ref().ChildrenSize() == 2);
+            auto lv = tuple.Value().Cast<TCoNameValueTupleList>();
+            for(const auto& kv: lv) {
+                settings.IndexSelectionInfo.emplace(kv.Name().Value(), kv.Value().Cast<TCoAtom>().Value());
+            }
+        } else if (name == TKqpReadTableSettings::VectorTopKColumnSettingName) {
+            YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
+            settings.VectorTopKColumn = tuple.Value().Cast<TCoAtom>().Value();
+        } else if (name == TKqpReadTableSettings::VectorTopKMetricSettingName) {
+            YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
+            settings.VectorTopKMetric = tuple.Value().Cast<TCoAtom>().Value();
+        } else if (name == TKqpReadTableSettings::VectorTopKTargetSettingName) {
+            YQL_ENSURE(tuple.Value().IsValid());
+            settings.VectorTopKTarget = tuple.Value().Cast().Ptr();
+        } else if (name == TKqpReadTableSettings::VectorTopKLimitSettingName) {
+            YQL_ENSURE(tuple.Value().IsValid());
+            settings.VectorTopKLimit = tuple.Value().Cast().Ptr();
+        } else {
             YQL_ENSURE(false, "Unknown KqpReadTable setting name '" << name << "'");
         }
     }
@@ -182,6 +203,126 @@ TKqpReadTableSettings ParseInternal(const TCoNameValueTupleList& node) {
 }
 
 } // anonymous namespace end
+
+TKqpReadTableFullTextIndexSettings TKqpReadTableFullTextIndexSettings::Parse(const NNodes::TCoNameValueTupleList& node) {
+
+    TKqpReadTableFullTextIndexSettings settings;
+
+    for (const auto& tuple : node) {
+        TStringBuf name = tuple.Name().Value();
+
+        if (name == TKqpReadTableFullTextIndexSettings::ItemsLimitSettingName) {
+            YQL_ENSURE(tuple.Value().IsValid());
+            settings.ItemsLimit = tuple.Value().Cast().Ptr();
+        } else if (name == TKqpReadTableFullTextIndexSettings::SkipLimitSettingName) {
+            YQL_ENSURE(tuple.Value().IsValid());
+            settings.SkipLimit = tuple.Value().Cast().Ptr();
+        } else if (name == TKqpReadTableFullTextIndexSettings::BFactorSettingName) {
+            YQL_ENSURE(tuple.Value().IsValid());
+            settings.BFactor = tuple.Value().Cast().Ptr();
+        } else if (name == TKqpReadTableFullTextIndexSettings::K1FactorSettingName) {
+            YQL_ENSURE(tuple.Value().IsValid());
+            settings.K1Factor = tuple.Value().Cast().Ptr();
+        } else if (name == TKqpReadTableFullTextIndexSettings::DefaultOperatorSettingName) {
+            YQL_ENSURE(tuple.Value().IsValid());
+            settings.DefaultOperator = tuple.Value().Cast().Ptr();
+        } else if (name == TKqpReadTableFullTextIndexSettings::MinimumShouldMatchSettingName) {
+            YQL_ENSURE(tuple.Value().IsValid());
+            settings.MinimumShouldMatch = tuple.Value().Cast().Ptr();
+        } else if (name == TKqpReadTableFullTextIndexSettings::ModeSettingName) {
+            YQL_ENSURE(tuple.Value().IsValid());
+            settings.Mode = tuple.Value().Cast().Ptr();
+        } else if (name == TKqpReadTableFullTextIndexSettings::TokensSettingName) {
+            YQL_ENSURE(tuple.Value().IsValid());
+            settings.Tokens = tuple.Value().Cast().Ptr();
+        } else if (name == TKqpReadTableFullTextIndexSettings::PrefixColumnSettingName) {
+            // Value is a 2-element list: [Atom(columnName), valueExpr].
+            YQL_ENSURE(tuple.Value().IsValid());
+            auto list = tuple.Value().Cast<TExprList>();
+            YQL_ENSURE(list.Size() == 2);
+            settings.AddPrefixColumn(TString(list.Item(0).Cast<TCoAtom>().Value()), list.Item(1).Ptr());
+        } else {
+            YQL_ENSURE(false, "Unknown KqpReadTableFullTextIndex setting name '" << name << "'");
+        }
+    }
+
+    return settings;
+}
+
+NNodes::TCoNameValueTupleList TKqpReadTableFullTextIndexSettings::BuildNode(TExprContext& ctx, TPositionHandle pos) const {
+    TVector<TCoNameValueTuple> settings;
+    settings.reserve(2);
+
+    if (ItemsLimit) {
+        settings.emplace_back(Build<TCoNameValueTuple>(ctx, pos)
+            .Name().Build(ItemsLimitSettingName)
+            .Value(ItemsLimit)
+            .Done());
+    }
+
+    if (SkipLimit) {
+        settings.emplace_back(Build<TCoNameValueTuple>(ctx, pos)
+            .Name().Build(SkipLimitSettingName)
+            .Value(SkipLimit)
+            .Done());
+    }
+
+    if (BFactor) {
+        settings.emplace_back(Build<TCoNameValueTuple>(ctx, pos)
+            .Name().Build(BFactorSettingName)
+            .Value(BFactor)
+            .Done());
+    }
+
+    if (K1Factor) {
+        settings.emplace_back(Build<TCoNameValueTuple>(ctx, pos)
+            .Name().Build(K1FactorSettingName)
+            .Value(K1Factor)
+            .Done());
+    }
+
+    if (DefaultOperator) {
+        settings.emplace_back(Build<TCoNameValueTuple>(ctx, pos)
+            .Name().Build(DefaultOperatorSettingName)
+            .Value(DefaultOperator)
+            .Done());
+    }
+
+    if (MinimumShouldMatch) {
+        settings.emplace_back(Build<TCoNameValueTuple>(ctx, pos)
+            .Name().Build(MinimumShouldMatchSettingName)
+            .Value(MinimumShouldMatch)
+            .Done());
+    }
+
+    if (Mode) {
+        settings.emplace_back(Build<TCoNameValueTuple>(ctx, pos)
+        .Name().Build(ModeSettingName)
+        .Value(Mode)
+        .Done());
+    }
+
+    if (Tokens) {
+        settings.emplace_back(Build<TCoNameValueTuple>(ctx, pos)
+            .Name().Build(TokensSettingName)
+            .Value(Tokens)
+            .Done());
+    }
+
+    for (const auto& [name, value] : PrefixColumns) {
+        settings.emplace_back(Build<TCoNameValueTuple>(ctx, pos)
+            .Name().Build(PrefixColumnSettingName)
+            .Value<TExprList>()
+                .Add<TCoAtom>().Build(name)
+                .Add(value)
+            .Build()
+            .Done());
+    }
+
+    return Build<TCoNameValueTupleList>(ctx, pos)
+        .Add(settings)
+        .Done();
+}
 
 TKqpReadTableSettings TKqpReadTableSettings::Parse(const NNodes::TCoNameValueTupleList& node) {
     return ParseInternal(node);
@@ -271,6 +412,74 @@ NNodes::TCoNameValueTupleList TKqpReadTableSettings::BuildNode(TExprContext& ctx
                 .Done());
     }
 
+    if (PointPrefixLen) {
+        settings.emplace_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name()
+                    .Build(PointPrefixLenSettingName)
+                .Value<TCoAtom>()
+                    .Value(ToString(PointPrefixLen))
+                    .Build()
+                .Done());
+    }
+
+    if (!IndexSelectionInfo.empty()) {
+        TVector<TCoNameValueTuple> isi;
+
+        for(auto& [indexName, indexInfo]: IndexSelectionInfo) {
+            isi.emplace_back(
+                Build<TCoNameValueTuple>(ctx, pos)
+                    .Name()
+                        .Build(indexName)
+                    .Value<TCoAtom>()
+                        .Value(ToString(indexInfo))
+                        .Build()
+                    .Done()
+            );
+        }
+
+        settings.emplace_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name()
+                    .Build(IndexSelectionDebugInfoSettingName)
+                .Value<TCoNameValueTupleList>()
+                    .Add(isi)
+                    .Build()
+                .Done());
+    }
+
+    if (VectorTopKColumn) {
+        settings.emplace_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name().Build(VectorTopKColumnSettingName)
+                .Value<TCoAtom>().Build(VectorTopKColumn)
+                .Done());
+    }
+
+    if (VectorTopKMetric) {
+        settings.emplace_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name().Build(VectorTopKMetricSettingName)
+                .Value<TCoAtom>().Build(VectorTopKMetric)
+                .Done());
+    }
+
+    if (VectorTopKTarget) {
+        settings.emplace_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name().Build(VectorTopKTargetSettingName)
+                .Value(VectorTopKTarget)
+                .Done());
+    }
+
+    if (VectorTopKLimit) {
+        settings.emplace_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name().Build(VectorTopKLimitSettingName)
+                .Value(VectorTopKLimit)
+                .Done());
+    }
+
     return Build<TCoNameValueTupleList>(ctx, pos)
         .Add(settings)
         .Done();
@@ -290,13 +499,13 @@ TKqpUpsertRowsSettings TKqpUpsertRowsSettings::Parse(const TCoNameValueTupleList
 
     for (const auto& tuple : settingsList) {
         TStringBuf name = tuple.Name().Value();
-        
+
         if (name == TKqpUpsertRowsSettings::InplaceSettingName) {
             YQL_ENSURE(tuple.Ref().ChildrenSize() == 1);
             settings.Inplace = true;
         } else if (name == TKqpUpsertRowsSettings::IsUpdateSettingName) {
             YQL_ENSURE(tuple.Ref().ChildrenSize() == 1);
-            settings.IsUpdate = true; 
+            settings.IsUpdate = true;
         } else if (name == TKqpUpsertRowsSettings::AllowInconsistentWritesSettingName) {
             YQL_ENSURE(tuple.Ref().ChildrenSize() == 1);
             settings.AllowInconsistentWrites = true;
@@ -312,10 +521,6 @@ TKqpUpsertRowsSettings TKqpUpsertRowsSettings::Parse(const TCoNameValueTupleList
     }
 
     return settings;
-}
-
-TKqpUpsertRowsSettings TKqpUpsertRowsSettings::Parse(const NNodes::TKqpUpsertRows& node) {
-    return TKqpUpsertRowsSettings::Parse(node.Settings());
 }
 
 NNodes::TCoNameValueTupleList TKqpUpsertRowsSettings::BuildNode(TExprContext& ctx, TPositionHandle pos) const {
@@ -365,7 +570,7 @@ TKqpDeleteRowsSettings TKqpDeleteRowsSettings::Parse(const NNodes::TCoNameValueT
 
     for (const auto& tuple : settingsList) {
         TStringBuf name = tuple.Name().Value();
-        
+
         if (name == TKqpDeleteRowsSettings::IsConditionalDeleteSettingName) {
             YQL_ENSURE(tuple.Ref().ChildrenSize() == 1);
             settings.IsConditionalDelete = true;
@@ -425,6 +630,32 @@ TCoNameValueTupleList TKqpReadTableExplainPrompt::BuildNode(TExprContext& ctx, T
         );
     }
 
+
+    if (!IndexSelectionInfo.empty()) {
+        TVector<TCoNameValueTuple> isi;
+
+        for(auto& [indexName, indexInfo]: IndexSelectionInfo) {
+            isi.emplace_back(
+                Build<TCoNameValueTuple>(ctx, pos)
+                    .Name()
+                        .Build(indexName)
+                    .Value<TCoAtom>()
+                        .Value(ToString(indexInfo))
+                        .Build()
+                    .Done()
+            );
+        }
+
+        prompt.emplace_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name()
+                    .Build(IndexSelectionDebugInfoSettingName)
+                .Value<TCoNameValueTupleList>()
+                    .Add(isi)
+                    .Build()
+                .Done());
+    }
+
     prompt.emplace_back(
         Build<TCoNameValueTuple>(ctx, pos)
             .Name()
@@ -456,6 +687,15 @@ TKqpReadTableExplainPrompt TKqpReadTableExplainPrompt::Parse(const NNodes::TCoNa
             continue;
         }
 
+        if (name == TKqpReadTableExplainPrompt::IndexSelectionDebugInfoSettingName) {
+            YQL_ENSURE(tuple.Ref().ChildrenSize() == 2);
+            auto lv = tuple.Value().Cast<TCoNameValueTupleList>();
+            for(const auto& kv: lv) {
+                prompt.IndexSelectionInfo.emplace(kv.Name().Value(), kv.Value().Cast<TCoAtom>().Value());
+            }
+            continue;
+        }
+
         if (name == TKqpReadTableExplainPrompt::ExpectedMaxRangesName) {
             prompt.ExpectedMaxRanges = FromString<ui64>(TString(tuple.Value().template Cast<TCoAtom>()));
             continue;
@@ -475,6 +715,7 @@ TKqpReadTableExplainPrompt TKqpReadTableExplainPrompt::Parse(const NNodes::TCoNa
 TString KqpExprToPrettyString(const TExprNode& expr, TExprContext& ctx) {
     try {
         TConvertToAstSettings settings;
+        settings.AllowFreeArgs = true;
         settings.NoInlineFunc = [] (const TExprNode& exprNode) {
             TExprBase node(&exprNode);
 
@@ -550,10 +791,14 @@ NNodes::TCoNameValueTupleList TKqpStreamLookupSettings::BuildNode(TExprContext& 
                 break;
             case EStreamLookupStrategyType::LookupRows:
                 return LookupStrategyName;
+            case EStreamLookupStrategyType::LookupUniqueRows:
+                return LookupUniqueStrategyName;
             case EStreamLookupStrategyType::LookupJoinRows:
                 return LookupJoinStrategyName;
             case EStreamLookupStrategyType::LookupSemiJoinRows:
                 return LookupSemiJoinStrategyName;
+            case EStreamLookupStrategyType::LockAndLookupRows:
+                return LockAndLookupStrategyName;
         }
 
         YQL_ENSURE(false, "Unspecified stream lookup startegy type: " << type);
@@ -575,9 +820,66 @@ NNodes::TCoNameValueTupleList TKqpStreamLookupSettings::BuildNode(TExprContext& 
         );
     }
 
+    if (VectorTopColumn) {
+        settings.emplace_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name().Build(VectorTopColumnSettingName)
+                .Value<TCoAtom>().Build(VectorTopColumn)
+            .Done()
+        );
+    }
+
+    if (VectorTopIndex) {
+        settings.emplace_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name().Build(VectorTopIndexSettingName)
+                .Value<TCoAtom>().Build(VectorTopIndex)
+            .Done()
+        );
+    }
+
+    if (VectorTopTarget) {
+        settings.emplace_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name()
+                    .Build(VectorTopTargetSettingName)
+                .Value(VectorTopTarget)
+                .Done());
+    }
+
+    if (VectorTopLimit) {
+        settings.emplace_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name()
+                    .Build(VectorTopLimitSettingName)
+                .Value(VectorTopLimit)
+                .Done());
+    }
+
+    if (VectorTopDistinct) {
+        settings.emplace_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name().Build(VectorTopDistinctSettingName)
+                .Done());
+    }
+
     return Build<TCoNameValueTupleList>(ctx, pos)
         .Add(settings)
         .Done();
+}
+
+bool TKqpStreamLookupSettings::HasVectorTopColumn(const NNodes::TCoNameValueTupleList& list) {
+    for (const auto& tuple : list) {
+        auto name = tuple.Name().Value();
+        if (name == VectorTopColumnSettingName) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool TKqpStreamLookupSettings::HasVectorTopColumn(const NNodes::TKqlStreamLookupTable& node) {
+    return TKqpStreamLookupSettings::HasVectorTopColumn(node.Settings());
 }
 
 TKqpStreamLookupSettings TKqpStreamLookupSettings::Parse(const NNodes::TCoNameValueTupleList& list) {
@@ -586,10 +888,14 @@ TKqpStreamLookupSettings TKqpStreamLookupSettings::Parse(const NNodes::TCoNameVa
     auto getLookupStrategyType = [](const TStringBuf& type) {
         if (type == LookupStrategyName) {
             return EStreamLookupStrategyType::LookupRows;
+        } else if (type == LookupUniqueStrategyName) {
+            return EStreamLookupStrategyType::LookupUniqueRows;
         } else if (type == LookupJoinStrategyName) {
             return EStreamLookupStrategyType::LookupJoinRows;
         } else if (type == LookupSemiJoinStrategyName) {
             return EStreamLookupStrategyType::LookupSemiJoinRows;
+        } else if (type == LockAndLookupStrategyName) {
+            return EStreamLookupStrategyType::LockAndLookupRows;
         } else {
             YQL_ENSURE(false, "Unknown stream lookup startegy type: " << type);
         }
@@ -603,6 +909,20 @@ TKqpStreamLookupSettings TKqpStreamLookupSettings::Parse(const NNodes::TCoNameVa
         } else if (name == AllowNullKeysSettingName) {
             YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
             settings.AllowNullKeysPrefixSize = FromString<ui32>(tuple.Value().Cast<TCoAtom>().Value());
+        } else if (name == VectorTopColumnSettingName) {
+            YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
+            settings.VectorTopColumn = tuple.Value().Cast<TCoAtom>().Value();
+        } else if (name == VectorTopIndexSettingName) {
+            YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
+            settings.VectorTopIndex = tuple.Value().Cast<TCoAtom>().Value();
+        } else if (name == VectorTopTargetSettingName) {
+            YQL_ENSURE(tuple.Value().IsValid());
+            settings.VectorTopTarget = tuple.Value().Cast().Ptr();
+        } else if (name == VectorTopLimitSettingName) {
+            YQL_ENSURE(tuple.Value().IsValid());
+            settings.VectorTopLimit = tuple.Value().Cast().Ptr();
+        } else if (name == VectorTopDistinctSettingName) {
+            settings.VectorTopDistinct = true;
         } else {
             YQL_ENSURE(false, "Unknown KqpStreamLookup setting name '" << name << "'");
         }
@@ -621,6 +941,35 @@ TKqpStreamLookupSettings TKqpStreamLookupSettings::Parse(const NNodes::TKqlStrea
 
 TKqpStreamLookupSettings TKqpStreamLookupSettings::Parse(const NNodes::TKqpCnStreamLookup& node) {
     return TKqpStreamLookupSettings::Parse(node.Settings());
+}
+
+NNodes::TCoNameValueTupleList TKqpDeleteRowsIndexSettings::BuildNode(TExprContext& ctx, TPositionHandle pos) const {
+    TVector<TCoNameValueTuple> settings;
+
+    if (SkipLookup) {
+        settings.emplace_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name().Build(SkipLookupSettingName)
+            .Done()
+        );
+    }
+
+    return Build<TCoNameValueTupleList>(ctx, pos)
+        .Add(settings)
+        .Done();
+}
+
+TKqpDeleteRowsIndexSettings TKqpDeleteRowsIndexSettings::Parse(const NNodes::TKqlDeleteRowsIndex& del) {
+    TKqpDeleteRowsIndexSettings settings;
+    if (del.Settings()) {
+        for (const auto& tuple: del.Settings().Cast()) {
+            auto name = tuple.Name().Value();
+            if (name == SkipLookupSettingName) {
+                settings.SkipLookup = true;
+            }
+        }
+    }
+    return settings;
 }
 
 } // namespace NYql

@@ -1,37 +1,37 @@
 from enum import Enum
 
-ALLURE_UNIQUE_LABELS = ['severity', 'thread', 'host']
+ALLURE_UNIQUE_LABELS = ["severity", "thread", "host"]
 
 
 class Severity(str, Enum):
-    BLOCKER = 'blocker'
-    CRITICAL = 'critical'
-    NORMAL = 'normal'
-    MINOR = 'minor'
-    TRIVIAL = 'trivial'
+    BLOCKER = "blocker"
+    CRITICAL = "critical"
+    NORMAL = "normal"
+    MINOR = "minor"
+    TRIVIAL = "trivial"
 
 
 class LinkType:
-    LINK = 'link'
-    ISSUE = 'issue'
-    TEST_CASE = 'tms'
+    LINK = "link"
+    ISSUE = "issue"
+    TEST_CASE = "tms"
 
 
 class LabelType(str):
-    EPIC = 'epic'
-    FEATURE = 'feature'
-    STORY = 'story'
-    PARENT_SUITE = 'parentSuite'
-    SUITE = 'suite'
-    SUB_SUITE = 'subSuite'
-    SEVERITY = 'severity'
-    THREAD = 'thread'
-    HOST = 'host'
-    TAG = 'tag'
-    ID = 'as_id'
-    FRAMEWORK = 'framework'
-    LANGUAGE = 'language'
-    MANUAL = 'ALLURE_MANUAL'
+    EPIC = "epic"
+    FEATURE = "feature"
+    STORY = "story"
+    PARENT_SUITE = "parentSuite"
+    SUITE = "suite"
+    SUB_SUITE = "subSuite"
+    SEVERITY = "severity"
+    THREAD = "thread"
+    HOST = "host"
+    TAG = "tag"
+    ID = "as_id"
+    FRAMEWORK = "framework"
+    LANGUAGE = "language"
+    MANUAL = "ALLURE_MANUAL"
 
 
 class AttachmentType(Enum):
@@ -50,6 +50,7 @@ class AttachmentType(Enum):
     JSON = ("application/json", "json")
     YAML = ("application/yaml", "yaml")
     PCAP = ("application/vnd.tcpdump.pcap", "pcap")
+    ZIP = ("application/zip", "zip")
 
     PNG = ("image/png", "png")
     JPG = ("image/jpg", "jpg")
@@ -66,6 +67,6 @@ class AttachmentType(Enum):
 
 
 class ParameterMode(Enum):
-    HIDDEN = 'hidden'
-    MASKED = 'masked'
+    HIDDEN = "hidden"
+    MASKED = "masked"
     DEFAULT = None

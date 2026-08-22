@@ -11,6 +11,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/query
     ydb/public/sdk/cpp/src/client/params
     ydb/public/sdk/cpp/src/client/driver
+    ydb/public/sdk/cpp/src/client/row_ranges
 )
 
 END()

@@ -11,10 +11,13 @@ std::optional<TYPath> TryComputeYPathSuffix(const TYPath& path, const TYPath& pr
 //! Split path into dirname part and basename part (a-la corresponding bash commands).
 //! BaseName part is considered to be the last non-empty YPath token.
 //! DirName part is stripped off trailing slash (if any).
-std::pair<TYPath, TString> DirNameAndBaseName(const TYPath& path);
+std::pair<TYPath, std::string> DirNameAndBaseName(const TYPath& path);
 
 //! Check if path contains attribute designation by looking for @ token in it.
 bool IsPathPointingToAttributes(const TYPath& path);
+
+//! Returns an error if path points to attributes (as determined by IsPathPointingToAttributes).
+TError CheckPathDoesNotPointToAttributes(const TYPath& path);
 
 //! Eliminates path suffix after the @ token, if it exists.
 TYPath StripAttributes(const TYPath& path);

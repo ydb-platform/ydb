@@ -24,13 +24,14 @@
 #ifndef Y_ABSL_RANDOM_BIT_GEN_REF_H_
 #define Y_ABSL_RANDOM_BIT_GEN_REF_H_
 
+#include <cstdint>
 #include <limits>
 #include <type_traits>
 #include <utility>
 
 #include "y_absl/base/attributes.h"
+#include "y_absl/base/config.h"
 #include "y_absl/base/internal/fast_type_id.h"
-#include "y_absl/base/macros.h"
 #include "y_absl/meta/type_traits.h"
 #include "y_absl/random/internal/distribution_caller.h"
 #include "y_absl/random/internal/fast_uniform_bits.h"

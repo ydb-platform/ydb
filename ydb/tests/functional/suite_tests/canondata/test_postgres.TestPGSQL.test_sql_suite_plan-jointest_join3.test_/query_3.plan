@@ -29,8 +29,18 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "LeftJoin (MapJoin)",
+                                        "Node Type": "TopSort-LeftJoin (Map)",
                                         "Operators": [
+                                            {
+                                                "Inputs": [
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    }
+                                                ],
+                                                "Limit": "1001",
+                                                "Name": "TopSort",
+                                                "TopSortBy": "argument.p.k"
+                                            },
                                             {
                                                 "Condition": "p.k = ss.k",
                                                 "Inputs": [
@@ -41,7 +51,7 @@
                                                         "ExternalPlanNodeId": 3
                                                     }
                                                 ],
-                                                "Name": "LeftJoin (MapJoin)"
+                                                "Name": "LeftJoin (Map)"
                                             }
                                         ],
                                         "PlanNodeId": 5,
@@ -54,11 +64,8 @@
                                                         "Name": "TableFullScan",
                                                         "Path": "/Root/postgres_jointest/join3.test_plan/parent",
                                                         "ReadColumns": [
-                                                            "k",
+                                                            "k (-\u221e, +\u221e)",
                                                             "pd"
-                                                        ],
-                                                        "ReadRanges": [
-                                                            "k (-\u221e, +\u221e)"
                                                         ],
                                                         "ReadRangesPointPrefixLen": "0",
                                                         "Scan": "Parallel",
@@ -87,9 +94,6 @@
                                                                         "Name": "TableFullScan",
                                                                         "Path": "/Root/postgres_jointest/join3.test_plan/child",
                                                                         "ReadColumns": [
-                                                                            "k"
-                                                                        ],
-                                                                        "ReadRanges": [
                                                                             "k (-\u221e, +\u221e)"
                                                                         ],
                                                                         "ReadRangesPointPrefixLen": "0",

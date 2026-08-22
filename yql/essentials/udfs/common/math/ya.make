@@ -1,11 +1,11 @@
 YQL_UDF_CONTRIB(math_udf)
-    
+
     YQL_ABI_VERSION(
         2
-        28
+        46
         0
     )
-    
+
     SRCS(
         math_udf.cpp
     )
@@ -14,7 +14,7 @@ YQL_UDF_CONTRIB(math_udf)
         CFLAGS(-DDISABLE_IR)
     ELSE()
         USE_LLVM_BC16()
-        
+
         LLVM_BC(
             math_ir.cpp
             lib/erfinv.cpp
@@ -72,12 +72,12 @@ YQL_UDF_CONTRIB(math_udf)
         )
 
     ENDIF()
-    
-    
+
     PEERDIR(
+        yql/essentials/core/langver
         yql/essentials/udfs/common/math/lib
     )
-    
+
     END()
 
 RECURSE(
@@ -87,5 +87,3 @@ RECURSE(
 RECURSE_FOR_TESTS(
    test
 )
-
-

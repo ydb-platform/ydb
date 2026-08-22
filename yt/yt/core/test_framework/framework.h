@@ -14,11 +14,12 @@ namespace NYT {
 ////////////////////////////////////////////////////////////////////////////////
 
 //! A tiny helper function to generate random file names.
+// TODO(babenko): migrate to std::string
 TString GenerateRandomFileName(const char* prefix);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// NB. EXPECT_THROW_* are macros not functions so when failure occurres
+// NB. EXPECT_THROW_* are macros not functions so when failure occurs
 // gtest framework points to source code of test not the source code
 // of EXPECT_THROW_* function.
 #define EXPECT_THROW_THAT(expr, matcher) \
@@ -46,12 +47,33 @@ TString GenerateRandomFileName(const char* prefix);
 
 ////////////////////////////////////////////////////////////////////////////////
 
+#define _TEST_PI(TBaseClass, TestName, ParamValues) \
+    class TBaseClass##_##TestName \
+        : public TBaseClass \
+        , public ::testing::WithParamInterface<decltype(ParamValues)::iterator::value_type> \
+    { }; \
+    INSTANTIATE_TEST_SUITE_P(, TBaseClass##_##TestName, ParamValues); \
+    TEST_P(TBaseClass##_##TestName, Test)
+
+#define _TEST_PI_MANUAL(TBaseClass, TestName, ParamValues, ...) \
+    class TBaseClass##_##TestName \
+        : public TBaseClass \
+        , public ::testing::WithParamInterface<__VA_ARGS__> \
+    { }; \
+    INSTANTIATE_TEST_SUITE_P(, TBaseClass##_##TestName, ParamValues); \
+    TEST_P(TBaseClass##_##TestName, Test)
+
+#define TEST_PI(TBaseClass, TestName, ParamValues, ...) \
+    _TEST_PI##__VA_OPT__(_MANUAL) (TBaseClass, TestName, ParamValues __VA_OPT__(,) __VA_ARGS__)
+
+////////////////////////////////////////////////////////////////////////////////
+
 struct TWaitForPredicateOptions
 {
     int IterationCount = 300;
     TDuration Period = TDuration::MilliSeconds(100);
     bool IgnoreExceptions = false;
-    TString Message = "<no-message>";
+    std::string Message = "<no-message>";
     TSourceLocation SourceLocation = YT_CURRENT_SOURCE_LOCATION;
 };
 
@@ -61,7 +83,7 @@ void WaitForPredicate(
 
 void WaitForPredicate(
     std::function<bool()> predicate,
-    const TString& message,
+    const std::string& message,
     TSourceLocation = YT_CURRENT_SOURCE_LOCATION);
 
 void WaitForPredicate(
@@ -196,7 +218,7 @@ class GTEST_TEST_CLASS_NAME_(test_case_name, test_name) : public parent_class {\
 public:\
   GTEST_TEST_CLASS_NAME_(test_case_name, test_name)() {}\
   GTEST_TEST_CLASS_NAME_(test_case_name, test_name)(const GTEST_TEST_CLASS_NAME_(test_case_name, test_name)&) = delete;\
-  GTEST_TEST_CLASS_NAME_(test_case_name, test_name)& operator= (const GTEST_TEST_CLASS_NAME_(test_case_name, test_name)&) = delete;\
+  GTEST_TEST_CLASS_NAME_(test_case_name, test_name)& operator=(const GTEST_TEST_CLASS_NAME_(test_case_name, test_name)&) = delete;\
 private:\
   virtual void TestBody();\
   void TestInnerBody();\

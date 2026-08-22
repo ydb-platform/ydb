@@ -67,9 +67,6 @@ TConvertedColumnRange TColumnConverters::ConvertRowsToColumns(
     const THashMap<int, TColumnSchema>& columnSchemas)
 {
     TConvertedColumnRange convertedColumnsRange;
-    if (rows.size() == 0) {
-        return convertedColumnsRange;
-    }
 
     if (IsFirstBatch_) {
         // Initialize mapping column ids to indexes.
@@ -89,7 +86,7 @@ TConvertedColumnRange TColumnConverters::ConvertRowsToColumns(
         TUnversionedRowValues rowValues(ColumnIds_.size(), nullptr);
         for (const auto* item = row.Begin(); item != row.End(); ++item) {
             auto iter = IdsToIndexes_.find(item->Id);
-            if(iter == IdsToIndexes_.end()) {
+            if (iter == IdsToIndexes_.end()) {
                 THROW_ERROR_EXCEPTION("Column with Id %v has no schema", item->Id);
             }
             rowValues[iter->second] = item;

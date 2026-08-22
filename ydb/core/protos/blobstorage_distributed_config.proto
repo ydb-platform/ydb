@@ -1,9 +1,12 @@
 syntax = "proto3";
 
 import "ydb/core/protos/config.proto";
+import "ydb/core/protos/blobstorage_base.proto";
 import "ydb/core/protos/blobstorage_disk.proto";
 import "ydb/core/protos/bridge.proto";
+import "ydb/library/actors/protos/actors.proto";
 import "ydb/library/actors/protos/interconnect.proto";
+import "ydb/public/api/protos/annotations/sensitive.proto";
 
 package NKikimrBlobStorage;
 
@@ -12,7 +15,6 @@ message TNodeIdentifier {
     uint32 Port = 2;
     uint32 NodeId = 3;
     NActorsInterconnect.TNodeLocation Location = 4;
-    optional uint32 BridgePileId = 5;
 }
 
 message TStorageConfigMeta {
@@ -24,9 +26,9 @@ message TStorageConfig { // contents of storage metadata
     uint64 Generation = 1; // stored generation
     bytes Fingerprint = 2; // hash for config validation (must be the same for all nodes with the same Generation)
     NKikimrConfig.TBlobStorageConfig BlobStorageConfig = 3; // NodeWardenServiceSet for static group is inside
-    NKikimrConfig.TDomainsConfig.TStateStorage StateStorageConfig = 9;
-    NKikimrConfig.TDomainsConfig.TStateStorage StateStorageBoardConfig = 10;
-    NKikimrConfig.TDomainsConfig.TStateStorage SchemeBoardConfig = 11;
+    NKikimrConfig.TStateStorageConfig StateStorageConfig = 9;
+    NKikimrConfig.TStateStorageConfig StateStorageBoardConfig = 10;
+    NKikimrConfig.TStateStorageConfig SchemeBoardConfig = 11;
     repeated TNodeIdentifier AllNodes = 5; // set of all known nodes
     string ClusterUUID = 6; // cluster GUID as provided in nameservice config
     string SelfAssemblyUUID = 7; // self-assembly UUID generated when config is first created
@@ -36,25 +38,12 @@ message TStorageConfig { // contents of storage metadata
     optional bytes CompressedStorageYaml = 14; // compressed storage YAML config (if dual-config is enabled)
     optional uint64 ExpectedStorageYamlVersion = 15;
     NKikimrBridge.TClusterState ClusterState = 16; // for bridged clusters; not set for ordinary ones
-    NKikimrBridge.TClusterStateHistory ClusterStateHistory = 17; // history of unsynced state changes
+    NKikimrBridge.TClusterStateDetails ClusterStateDetails = 17; // history of unsynced state changes
 }
 
 message TPDiskMetadataRecord {
     TStorageConfig CommittedStorageConfig = 1; // currently active storage config
     TStorageConfig ProposedStorageConfig = 2; // proposed storage config
-}
-
-message TStorageFileContent {
-    message TRecord {
-        string Path = 1;
-        fixed64 PDiskGuid = 2;
-        uint64 Timestamp = 3;
-        fixed64 Key = 4;
-        TPDiskMetadataRecord Meta = 5;
-        bool Unformatted = 6;
-    }
-
-    repeated TRecord Record = 1;
 }
 
 message TCacheUpdate {
@@ -78,6 +67,7 @@ message TEvNodeConfigPush {
     repeated TBoundNode BoundNodes = 2; // a list of bound node updates (including itself)
     repeated TNodeIdentifier DeletedBoundNodeIds = 3; // a list of detached nodes
     TCacheUpdate CacheUpdate = 4;
+    reserved 5;
 }
 
 // Used to reverse-propagate configuration and to confirm/reject initial TEvNodePushBinding query.
@@ -85,8 +75,9 @@ message TEvNodeConfigReversePush {
     uint32 RootNodeId = 1; // current tree root as known by the sender, always nonzero
     bool Rejected = 2; // is the request rejected due to cyclic graph?
     TStorageConfig CommittedStorageConfig = 3; // last known committed storage configuration
-    bool RecurseConfigUpdate = 4;
+    reserved 4;
     TCacheUpdate CacheUpdate = 5;
+    reserved 6;
 }
 
 // Remove node from bound list.
@@ -102,12 +93,18 @@ message TEvNodeConfigScatter {
         TStorageConfig Config = 1;
     }
 
+    message TDemandRetroTrace {
+        repeated NActorsProto.TTraceId TraceId = 1;
+    }
+
     optional uint64 Cookie = 1;
     optional fixed64 TaskId = 4; // random (and not necessarily unique) identifier
+    optional bool Targeted = 5; // set when issuing updates to newly added nodes
 
     oneof Request {
         TCollectConfigs CollectConfigs = 2;
         TProposeStorageConfig ProposeStorageConfig = 3;
+        TDemandRetroTrace DemandRetroTrace = 6;
     }
 }
 
@@ -158,19 +155,29 @@ message TEvNodeConfigGather {
         repeated TStatus Status = 1;
     }
 
+    message TDemandRetroTrace {
+    }
+
     optional uint64 Cookie = 1;
     optional bool Aborted = 4;
 
     oneof Response {
         TCollectConfigs CollectConfigs = 2;
         TProposeStorageConfig ProposeStorageConfig = 3;
+        TDemandRetroTrace DemandRetroTrace = 5;
     }
 }
 
 message TStateStorageConfig {
-    optional NKikimrConfig.TDomainsConfig.TStateStorage StateStorageConfig = 1;
-    optional NKikimrConfig.TDomainsConfig.TStateStorage StateStorageBoardConfig = 2;
-    optional NKikimrConfig.TDomainsConfig.TStateStorage SchemeBoardConfig = 3;
+    message TNodeState {
+        optional uint32 NodeId = 1;
+        optional uint32 State = 2;
+        optional string Location = 3;
+    }
+    optional NKikimrConfig.TStateStorageConfig StateStorageConfig = 1;
+    optional NKikimrConfig.TStateStorageConfig StateStorageBoardConfig = 2;
+    optional NKikimrConfig.TStateStorageConfig SchemeBoardConfig = 3;
+    repeated TNodeState NodesState = 4;
 }
 
 // Some kind of RPC -- this event can be sent to any NW, it will forward the request to root node.
@@ -191,6 +198,13 @@ message TEvNodeConfigInvokeOnRoot {
         bool IgnoreVSlotQuotaCheck = 6;
         bool IsSelfHealReasonDecommit = 7;
         bool FromSelfHeal = 8;
+        bool AllowUnusableDisks = 9;
+        bool SettleOnlyOnOperationalDisks = 10;
+        // Placement policies forwarded to the static-group allocator.
+        bool PreferLessOccupiedRack = 11;
+        bool WithAttentionToReplication = 12;
+        bool UseSelfHealLocalPolicy = 13;
+        bool TryToRelocateBrokenDisksLocallyFirst = 14;
     }
 
     // Regenerate configuration so the slain VDisk is no more reported as DESTROY one in the list.
@@ -210,10 +224,40 @@ message TEvNodeConfigInvokeOnRoot {
         bool StateStorage = 3;
         bool StateStorageBoard = 4;
         bool SchemeBoard = 5;
+        optional bool DisableRing = 6;
     }
 
     message TGetStateStorageConfig {
-    } 
+        optional bool Recommended = 1;
+        optional bool PileupReplicas = 2;
+        optional bool NodesState = 3;
+        optional uint32 OverrideReplicasInRingCount = 4;
+        optional uint32 OverrideRingsCount = 5;
+        optional uint32 ReplicasSpecificVolume = 6;
+    }
+
+    message TSelfHealStateStorage {
+        optional uint32 WaitForConfigStep = 1;
+        optional bool ForceHeal = 2;
+        optional bool PileupReplicas = 3;
+        optional uint32 OverrideReplicasInRingCount = 4;
+        optional uint32 OverrideRingsCount = 5;
+        optional uint32 ReplicasSpecificVolume = 6;
+    }
+
+    message TSelfHealNodesStateUpdate {
+        message TNodeState {
+            optional uint32 NodeId = 1;
+            optional uint32 State = 2;
+        }
+        optional bool EnableSelfHealStateStorage = 1;
+        optional uint32 WaitForConfigStep = 2;
+        repeated TNodeState NodesState = 3;
+        optional bool PileupReplicas = 4;
+        optional uint32 OverrideReplicasInRingCount = 5;
+        optional uint32 OverrideRingsCount = 6;
+        optional uint32 ReplicasSpecificVolume = 7;
+    }
 
     message TAdvanceGeneration
     {}
@@ -224,6 +268,8 @@ message TEvNodeConfigInvokeOnRoot {
         bool StorageConfig = 3;
         bool AddSectionsForMigrationToV1 = 5; // add sections so this config becomes suitable for migration to v1
         bool AddExplicitConfigs = 4; // add explicit settings for all managed entities
+        repeated string RequestorHost = 6;
+        uint32 RequestorPort = 7;
     }
 
     message TReplaceStorageConfig {
@@ -232,8 +278,9 @@ message TEvNodeConfigInvokeOnRoot {
         optional bool SwitchDedicatedStorageSection = 4;
         bool DedicatedStorageSectionConfigMode = 5;
         bool SkipConsoleValidation = 2;
-        optional bytes UserToken = 6;
+        optional bytes UserToken = 6 [(Ydb.sensitive) = true];
         optional string PeerName = 7;
+        bool DryRun = 8;
     }
 
     message TBootstrapCluster {
@@ -242,6 +289,34 @@ message TEvNodeConfigInvokeOnRoot {
 
     message TSwitchBridgeClusterState {
         NKikimrBridge.TClusterState NewClusterState = 1;
+        repeated uint32 SpecificBridgePileIds = 2; // obtain quorum only for specific pile set
+    }
+
+    message TNotifyBridgeSyncFinished {
+        uint64 Generation = 1; // generation matching ClusterState's one
+        uint32 BridgePileId = 2; // which bridge pile is marked synchronized
+        oneof Entity {
+            bool BSC = 3;
+        }
+    }
+
+    message TUpdateBridgeGroupInfo {
+        uint32 GroupId = 1;
+        uint32 GroupGeneration = 2;
+        NKikimrBlobStorage.TGroupInfo BridgeGroupInfo = 3;
+    }
+
+    message TNotifyBridgeSuspended {
+        uint64 Generation = 1; // generation matching ClusterState's one
+        uint32 PileId = 2; // pile to convert from SUSPENDED to DISCONNECTED
+    }
+
+    message TDescendCommittedStorageConfig {
+        TStorageConfig CommittedStorageConfig = 1;
+    }
+
+    message TDemandRetroTrace {
+        repeated NActorsProto.TTraceId TraceId = 1;
     }
 
     oneof Request {
@@ -258,6 +333,13 @@ message TEvNodeConfigInvokeOnRoot {
         TSwitchBridgeClusterState SwitchBridgeClusterState = 11;
         TStateStorageConfig ReconfigStateStorage = 12;
         TGetStateStorageConfig GetStateStorageConfig = 13;
+        TNotifyBridgeSyncFinished NotifyBridgeSyncFinished = 14;
+        TSelfHealStateStorage SelfHealStateStorage = 15;
+        TSelfHealNodesStateUpdate SelfHealNodesStateUpdate = 19;
+        TUpdateBridgeGroupInfo UpdateBridgeGroupInfo = 20;
+        TNotifyBridgeSuspended NotifyBridgeSuspended = 21;
+        TDescendCommittedStorageConfig DescendCommittedStorageConfig = 22;
+        TDemandRetroTrace DemandRetroTrace = 23;
     }
 }
 
@@ -278,16 +360,21 @@ message TEvNodeConfigInvokeOnRootResult {
 
     message TQueryConfig {
         TStorageConfig Config = 1;
-        TStorageConfig CurrentProposedStorageConfig = 2;
     }
 
     message TFetchStorageConfig {
         optional string YAML = 1;
         optional string StorageYAML = 2;
+        bool Transient = 3;
     }
 
     message TReplaceStorageConfig {
         optional bool AllowEnablingDistconf = 1;
+    }
+
+    message TReassignGroupDisk {
+        NKikimrBlobStorage.TVSlotId SourceSlotId = 1;
+        NKikimrBlobStorage.TVSlotId TargetSlotId = 2;
     }
 
     EStatus Status = 1;
@@ -295,12 +382,13 @@ message TEvNodeConfigInvokeOnRootResult {
     TScepter Scepter = 3;
 
     reserved 4, 6, 7, 8, 9;
-    
+
     oneof Response {
         TQueryConfig QueryConfig = 5;
         TFetchStorageConfig FetchStorageConfig = 10;
         TReplaceStorageConfig ReplaceStorageConfig = 11;
         TStateStorageConfig StateStorageConfig = 12;
+        TReassignGroupDisk ReassignGroupDisk = 13;
     }
 }
 
@@ -308,4 +396,10 @@ message TEvNodeWardenDynamicConfigPush {
     TStorageConfig Config = 1;
     bool NoQuorum = 2;
     TCacheUpdate CacheUpdate = 3;
+}
+
+message TConnectivityPayload {
+    TStorageConfig StorageConfig = 1; // storage config of a sender
+    optional uint32 BridgePileId = 2; // bridge pile id of a sender
+    TStorageConfig CommittedStorageConfig = 3; // committed version of storage config
 }

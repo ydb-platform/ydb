@@ -2,19 +2,17 @@ UNITTEST_FOR(ydb/core/kqp)
 
 FORK_SUBTESTS()
 SPLIT_FACTOR(50)
+REQUIREMENTS(cpu:4)
 
-IF (WITH_VALGRIND)
-    SIZE(LARGE)
-    TAG(ya:fat)
-ELSE()
-    SIZE(MEDIUM)
-ENDIF()
+SIZE(MEDIUM)
 
 SRCS(
     kqp_document_api_ut.cpp
     kqp_qs_queries_ut.cpp
     kqp_qs_scripts_ut.cpp
     kqp_service_ut.cpp
+    kqp_snapshot_readonly.cpp
+    kqp_warmup_ut.cpp
 )
 
 PEERDIR(

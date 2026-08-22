@@ -16,7 +16,7 @@ namespace NYT::NAuth {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(Auth, ValidateToken)
+TEST(TAuthTest, ValidateToken)
 {
     EXPECT_NO_THROW(ValidateToken("ABACABA-3289-ABCDEF"));
     EXPECT_NO_THROW(ValidateToken("\x21-ohh-\x7e"));
@@ -27,7 +27,7 @@ TEST(Auth, ValidateToken)
     EXPECT_THROW_THAT(ValidateToken("ABACABA-\x7f"), ::testing::HasSubstr("Incorrect token character"));
 }
 
-TEST(Auth, LoadTokenFromFile)
+TEST(TAuthTest, LoadTokenFromFile)
 {
     TTempFileHandle tempFile;
     {
@@ -46,7 +46,7 @@ TEST(Auth, LoadTokenFromFile)
     EXPECT_THROW_THAT(LoadTokenFromFile(tempFile.Name()), ::testing::HasSubstr("Incorrect token character"));
 }
 
-TEST(Auth, LoadToken)
+TEST(TAuthTest, LoadToken)
 {
     auto oldYtToken = GetEnv("YT_TOKEN");
     auto oldYtSecureVaultToken = GetEnv("YT_SECURE_VAULT_YT_TOKEN");

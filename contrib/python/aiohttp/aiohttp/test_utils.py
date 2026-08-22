@@ -11,17 +11,7 @@ import sys
 import warnings
 from abc import ABC, abstractmethod
 from types import TracebackType
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Callable,
-    Iterator,
-    List,
-    Optional,
-    Type,
-    Union,
-    cast,
-)
+from typing import TYPE_CHECKING, Any, Callable, Iterator, List, Optional, Type, cast
 from unittest import IsolatedAsyncioTestCase, mock
 
 from aiosignal import Signal
@@ -29,7 +19,11 @@ from multidict import CIMultiDict, CIMultiDictProxy
 from yarl import URL
 
 import aiohttp
-from aiohttp.client import _RequestContextManager, _WSRequestContextManager
+from aiohttp.client import (
+    _RequestContextManager,
+    _RequestOptions,
+    _WSRequestContextManager,
+)
 
 from . import ClientSession, hdrs
 from .abc import AbstractCookieJar
@@ -37,6 +31,7 @@ from .client_reqrep import ClientResponse
 from .client_ws import ClientWebSocketResponse
 from .helpers import sentinel
 from .http import HttpVersion, RawRequestMessage
+from .streams import EMPTY_PAYLOAD, StreamReader
 from .typedefs import StrOrURL
 from .web import (
     Application,
@@ -54,6 +49,9 @@ if TYPE_CHECKING:
     from ssl import SSLContext
 else:
     SSLContext = None
+
+if sys.version_info >= (3, 11) and TYPE_CHECKING:
+    from typing import Unpack
 
 REUSE_ADDRESS = os.name == "posix" and sys.platform != "cygwin"
 
@@ -90,7 +88,7 @@ class BaseTestServer(ABC):
     def __init__(
         self,
         *,
-        scheme: Union[str, object] = sentinel,
+        scheme: str = "",
         loop: Optional[asyncio.AbstractEventLoop] = None,
         host: str = "127.0.0.1",
         port: Optional[int] = None,
@@ -121,10 +119,13 @@ class BaseTestServer(ABC):
         await self.runner.setup()
         if not self.port:
             self.port = 0
+        absolute_host = self.host
         try:
             version = ipaddress.ip_address(self.host).version
         except ValueError:
             version = 4
+        if version == 6:
+            absolute_host = f"[{self.host}]"
         family = socket.AF_INET6 if version == 6 else socket.AF_INET
         _sock = self.socket_factory(self.host, self.port, family)
         self.host, self.port = _sock.getsockname()[:2]
@@ -135,13 +136,9 @@ class BaseTestServer(ABC):
         sockets = server.sockets  # type: ignore[attr-defined]
         assert sockets is not None
         self.port = sockets[0].getsockname()[1]
-        if self.scheme is sentinel:
-            if self._ssl:
-                scheme = "https"
-            else:
-                scheme = "http"
-            self.scheme = scheme
-        self._root = URL(f"{self.scheme}://{self.host}:{self.port}")
+        if not self.scheme:
+            self.scheme = "https" if self._ssl else "http"
+        self._root = URL(f"{self.scheme}://{absolute_host}:{self.port}")
 
     @abstractmethod  # pragma: no cover
     async def _make_runner(self, **kwargs: Any) -> BaseRunner:
@@ -151,7 +148,7 @@ class BaseTestServer(ABC):
         assert self._root is not None
         url = URL(path)
         if not self.skip_url_asserts:
-            assert not url.is_absolute()
+            assert not url.absolute
             return self._root.join(url)
         else:
             return URL(str(self._root) + str(path))
@@ -222,7 +219,7 @@ class TestServer(BaseTestServer):
         self,
         app: Application,
         *,
-        scheme: Union[str, object] = sentinel,
+        scheme: str = "",
         host: str = "127.0.0.1",
         port: Optional[int] = None,
         **kwargs: Any,
@@ -239,7 +236,7 @@ class RawTestServer(BaseTestServer):
         self,
         handler: _RequestHandler,
         *,
-        scheme: Union[str, object] = sentinel,
+        scheme: str = "",
         host: str = "127.0.0.1",
         port: Optional[int] = None,
         **kwargs: Any,
@@ -324,45 +321,101 @@ class TestClient:
         self._responses.append(resp)
         return resp
 
-    def request(
-        self, method: str, path: StrOrURL, **kwargs: Any
-    ) -> _RequestContextManager:
-        """Routes a request to tested http server.
+    if sys.version_info >= (3, 11) and TYPE_CHECKING:
 
-        The interface is identical to aiohttp.ClientSession.request,
-        except the loop kwarg is overridden by the instance used by the
-        test server.
+        def request(
+            self, method: str, path: StrOrURL, **kwargs: Unpack[_RequestOptions]
+        ) -> _RequestContextManager: ...
 
-        """
-        return _RequestContextManager(self._request(method, path, **kwargs))
+        def get(
+            self,
+            path: StrOrURL,
+            **kwargs: Unpack[_RequestOptions],
+        ) -> _RequestContextManager: ...
 
-    def get(self, path: StrOrURL, **kwargs: Any) -> _RequestContextManager:
-        """Perform an HTTP GET request."""
-        return _RequestContextManager(self._request(hdrs.METH_GET, path, **kwargs))
+        def options(
+            self,
+            path: StrOrURL,
+            **kwargs: Unpack[_RequestOptions],
+        ) -> _RequestContextManager: ...
 
-    def post(self, path: StrOrURL, **kwargs: Any) -> _RequestContextManager:
-        """Perform an HTTP POST request."""
-        return _RequestContextManager(self._request(hdrs.METH_POST, path, **kwargs))
+        def head(
+            self,
+            path: StrOrURL,
+            **kwargs: Unpack[_RequestOptions],
+        ) -> _RequestContextManager: ...
 
-    def options(self, path: StrOrURL, **kwargs: Any) -> _RequestContextManager:
-        """Perform an HTTP OPTIONS request."""
-        return _RequestContextManager(self._request(hdrs.METH_OPTIONS, path, **kwargs))
+        def post(
+            self,
+            path: StrOrURL,
+            **kwargs: Unpack[_RequestOptions],
+        ) -> _RequestContextManager: ...
 
-    def head(self, path: StrOrURL, **kwargs: Any) -> _RequestContextManager:
-        """Perform an HTTP HEAD request."""
-        return _RequestContextManager(self._request(hdrs.METH_HEAD, path, **kwargs))
+        def put(
+            self,
+            path: StrOrURL,
+            **kwargs: Unpack[_RequestOptions],
+        ) -> _RequestContextManager: ...
 
-    def put(self, path: StrOrURL, **kwargs: Any) -> _RequestContextManager:
-        """Perform an HTTP PUT request."""
-        return _RequestContextManager(self._request(hdrs.METH_PUT, path, **kwargs))
+        def patch(
+            self,
+            path: StrOrURL,
+            **kwargs: Unpack[_RequestOptions],
+        ) -> _RequestContextManager: ...
 
-    def patch(self, path: StrOrURL, **kwargs: Any) -> _RequestContextManager:
-        """Perform an HTTP PATCH request."""
-        return _RequestContextManager(self._request(hdrs.METH_PATCH, path, **kwargs))
+        def delete(
+            self,
+            path: StrOrURL,
+            **kwargs: Unpack[_RequestOptions],
+        ) -> _RequestContextManager: ...
 
-    def delete(self, path: StrOrURL, **kwargs: Any) -> _RequestContextManager:
-        """Perform an HTTP PATCH request."""
-        return _RequestContextManager(self._request(hdrs.METH_DELETE, path, **kwargs))
+    else:
+
+        def request(
+            self, method: str, path: StrOrURL, **kwargs: Any
+        ) -> _RequestContextManager:
+            """Routes a request to tested http server.
+
+            The interface is identical to aiohttp.ClientSession.request,
+            except the loop kwarg is overridden by the instance used by the
+            test server.
+
+            """
+            return _RequestContextManager(self._request(method, path, **kwargs))
+
+        def get(self, path: StrOrURL, **kwargs: Any) -> _RequestContextManager:
+            """Perform an HTTP GET request."""
+            return _RequestContextManager(self._request(hdrs.METH_GET, path, **kwargs))
+
+        def post(self, path: StrOrURL, **kwargs: Any) -> _RequestContextManager:
+            """Perform an HTTP POST request."""
+            return _RequestContextManager(self._request(hdrs.METH_POST, path, **kwargs))
+
+        def options(self, path: StrOrURL, **kwargs: Any) -> _RequestContextManager:
+            """Perform an HTTP OPTIONS request."""
+            return _RequestContextManager(
+                self._request(hdrs.METH_OPTIONS, path, **kwargs)
+            )
+
+        def head(self, path: StrOrURL, **kwargs: Any) -> _RequestContextManager:
+            """Perform an HTTP HEAD request."""
+            return _RequestContextManager(self._request(hdrs.METH_HEAD, path, **kwargs))
+
+        def put(self, path: StrOrURL, **kwargs: Any) -> _RequestContextManager:
+            """Perform an HTTP PUT request."""
+            return _RequestContextManager(self._request(hdrs.METH_PUT, path, **kwargs))
+
+        def patch(self, path: StrOrURL, **kwargs: Any) -> _RequestContextManager:
+            """Perform an HTTP PATCH request."""
+            return _RequestContextManager(
+                self._request(hdrs.METH_PATCH, path, **kwargs)
+            )
+
+        def delete(self, path: StrOrURL, **kwargs: Any) -> _RequestContextManager:
+            """Perform an HTTP PATCH request."""
+            return _RequestContextManager(
+                self._request(hdrs.METH_DELETE, path, **kwargs)
+            )
 
     def ws_connect(self, path: StrOrURL, **kwargs: Any) -> _WSRequestContextManager:
         """Initiate websocket connection.
@@ -582,7 +635,7 @@ def make_mocked_request(
     writer: Any = sentinel,
     protocol: Any = sentinel,
     transport: Any = sentinel,
-    payload: Any = sentinel,
+    payload: StreamReader = EMPTY_PAYLOAD,
     sslcontext: Optional[SSLContext] = None,
     client_max_size: int = 1024**2,
     loop: Any = ...,
@@ -650,9 +703,6 @@ def make_mocked_request(
 
     protocol.transport = transport
     protocol.writer = writer
-
-    if payload is sentinel:
-        payload = mock.Mock()
 
     req = Request(
         message, payload, protocol, writer, task, loop, client_max_size=client_max_size

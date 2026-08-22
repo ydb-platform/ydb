@@ -19,6 +19,28 @@ void TDispatcherConfig::Register(TRegistrar registrar)
     registrar.Parameter("grpc_event_engine_thread_count", &TThis::GrpcEventEngineThreadCount)
         .GreaterThan(0)
         .Default(4);
+
+    registrar.Parameter("grpc_internal_min_log_level", &TThis::GrpcInternalMinLogLevel)
+        .Default(NLogging::ELogLevel::Error);
+}
+
+TDispatcherConfigPtr TDispatcherConfig::ApplyDynamic(
+    const TDispatcherDynamicConfigPtr& dynamicConfig) const
+{
+    auto mergedConfig = CloneYsonStruct(MakeStrong(this));
+
+    NYTree::UpdateYsonStructField(mergedConfig->GrpcInternalMinLogLevel, dynamicConfig->GrpcInternalMinLogLevel);
+
+    mergedConfig->Postprocess();
+    return mergedConfig;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TDispatcherDynamicConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("grpc_internal_min_log_level", &TThis::GrpcInternalMinLogLevel)
+        .Default();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -76,7 +98,7 @@ void TChannelCredentialsConfig::Register(TRegistrar registrar)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TChannelConfigTemplate::Register(TRegistrar registrar)
+void TChannelFactoryConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("credentials", &TThis::Credentials)
         .Optional();

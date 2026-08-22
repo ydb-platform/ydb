@@ -4,6 +4,7 @@
 
 #include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/scheduler_basic.h>
+#include <ydb/library/testlib/common/test_utils.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <ydb/core/testlib/basics/runtime.h>
@@ -12,7 +13,6 @@
 #include <ydb/core/fq/libs/control_plane_storage/events/events.h>
 #include <ydb/core/fq/libs/ydb/util.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
-#include <ydb/core/fq/libs/actors/logging/log.h>
 
 #include <ydb/tests/tools/fqrun/src/fq_setup.h>
 
@@ -35,11 +35,10 @@ public:
     void SetUp(NUnitTest::TTestContext& ctx) override {
         TBase::SetUp(ctx);
 
-        SetupSignalActions();
-        EnableYDBBacktraceFormat();
+        NTestUtils::SetupSignalHandlers();
 
         TFqSetupSettings settings;
-        settings.VerboseLevel = TFqSetupSettings::EVerbose::Max;
+        settings.VerbosityLevel = TFqSetupSettings::EVerbosity::InitLogs;
         settings.EnableYdbCompute = true;
 
         auto& logConfig = *settings.AppConfig.MutableLogConfig();

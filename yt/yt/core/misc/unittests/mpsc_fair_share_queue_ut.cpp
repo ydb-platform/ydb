@@ -26,7 +26,7 @@ using TMockTaskPtr = TIntrusivePtr<TMockTask>;
 
 using TTestFairShareQueue = TMpscFairShareQueue<int, TMockTaskPtr, std::string>;
 
-template<typename TPoolId, typename TItem, typename TFairShareTag>
+template <typename TPoolId, typename TItem, typename TFairShareTag>
 std::vector<TItem> DequeueMany(int count, TMpscFairShareQueue<TPoolId, TItem, TFairShareTag>& queue)
 {
     std::vector<TItem> result;
@@ -45,7 +45,7 @@ std::vector<TItem> DequeueMany(int count, TMpscFairShareQueue<TPoolId, TItem, TF
     return result;
 }
 
-template<typename TPoolId, typename TItem, typename TFairShareTag>
+template <typename TPoolId, typename TItem, typename TFairShareTag>
 void MarkFinishedMany(TMpscFairShareQueue<TPoolId, TItem, TFairShareTag>& queue, const std::vector<TItem>& requests)
 {
     auto now = GetCpuInstant();

@@ -38,7 +38,8 @@ NOperationQueue::EStartStatus TSchemeShard::StartBackgroundCompaction(const TSha
     PipeClientCache->Send(
         ctx,
         ui64(datashardId),
-        request.release());
+        request.release(),
+        static_cast<ui64>(ECompactionType::Background));
 
     return NOperationQueue::EStartStatus::EOperationRunning;
 }
@@ -72,7 +73,7 @@ void TSchemeShard::OnBackgroundCompactionTimeout(const TShardCompactionInfo& inf
         << " at schemeshard " << TabletID());
 }
 
-void TSchemeShard::Handle(TEvDataShard::TEvCompactTableResult::TPtr &ev, const TActorContext &ctx) {
+void TSchemeShard::HandleBackgroundCompactionResult(TEvDataShard::TEvCompactTableResult::TPtr &ev, const TActorContext &ctx) {
     const auto& record = ev->Get()->Record;
 
     const TTabletId tabletId(record.GetTabletId());
@@ -254,14 +255,14 @@ void TSchemeShard::UpdateBackgroundCompactionQueueMetrics() {
     if (!BackgroundCompactionQueue)
         return;
 
-    TabletCounters->Simple()[COUNTER_COMPACTION_QUEUE_SIZE].Set(BackgroundCompactionQueue->Size());
-    TabletCounters->Simple()[COUNTER_COMPACTION_QUEUE_RUNNING].Set(BackgroundCompactionQueue->RunningSize());
-    TabletCounters->Simple()[COUNTER_COMPACTION_QUEUE_WAITING_REPEAT].Set(BackgroundCompactionQueue->WaitingSize());
+    TabletCounters->Simple()[COUNTER_BACKGROUND_COMPACTION_QUEUE_SIZE].Set(BackgroundCompactionQueue->Size());
+    TabletCounters->Simple()[COUNTER_BACKGROUND_COMPACTION_QUEUE_RUNNING].Set(BackgroundCompactionQueue->RunningSize());
+    TabletCounters->Simple()[COUNTER_BACKGROUND_COMPACTION_QUEUE_WAITING_REPEAT].Set(BackgroundCompactionQueue->WaitingSize());
 
     const auto& queue = BackgroundCompactionQueue->GetReadyQueue();
 
-    TabletCounters->Simple()[COUNTER_COMPACTION_QUEUE_SIZE_SH].Set(queue.SizeBySearchHeight());
-    TabletCounters->Simple()[COUNTER_COMPACTION_QUEUE_SIZE_DELETES].Set(queue.SizeByRowDeletes());
+    TabletCounters->Simple()[COUNTER_BACKGROUND_COMPACTION_QUEUE_SIZE_SH].Set(queue.SizeBySearchHeight());
+    TabletCounters->Simple()[COUNTER_BACKGROUND_COMPACTION_QUEUE_SIZE_DELETES].Set(queue.SizeByRowDeletes());
 }
 
 }

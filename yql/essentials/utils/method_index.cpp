@@ -42,4 +42,4 @@ size_t GetMethodPtrIndex(uintptr_t ptr) {
 #endif
 }
 
-}
+} // namespace NYql

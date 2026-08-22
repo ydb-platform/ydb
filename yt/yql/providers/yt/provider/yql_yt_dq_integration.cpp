@@ -35,7 +35,7 @@
 
 namespace NYql {
 
-static const THashSet<TStringBuf> UNSUPPORTED_YT_PRAGMAS = {"maxrowweight",  "layerpaths", "dockerimage", "operationspec", "networkproject"};
+static const THashSet<TStringBuf> UNSUPPORTED_YT_PRAGMAS = {"maxrowweight",  "layerpaths", "dockerimage", "operationspec", "networkproject", "staticnetworkproject"};
 static const THashSet<TStringBuf> POOL_TREES_WHITELIST = {"physical",  "cloud", "cloud_default"};
 
 using namespace NNodes;
@@ -152,7 +152,7 @@ namespace {
 
 class TYtDqIntegration: public TDqIntegrationBase {
 public:
-    TYtDqIntegration(TYtState* state)
+    TYtDqIntegration(TYtState::TWeakPtr state)
         : State_(state)
     {
     }
@@ -175,7 +175,11 @@ public:
                 flattenPaths.push_back(pathInfo);
             }
         }
-        auto result = EstimateDataSize(flattenPaths, Nothing(), *State_, ctx);
+
+        auto ytState = State_.lock();
+        YQL_ENSURE(ytState);
+
+        auto result = EstimateDataSize(flattenPaths, Nothing(), *ytState, ctx);
         size_t statIdx = 0;
         size_t pathIdx = 0;
         for (const auto& [idx, pathInfos]: Enumerate(groupIdPathInfos)) {
@@ -228,12 +232,15 @@ public:
             groupIdPathInfos.push_back(pathInfos);
         }
 
-        if (auto maxChunks = State_->Configuration->MaxChunksForDqRead.Get().GetOrElse(DEFAULT_MAX_CHUNKS_FOR_DQ_READ); settings.CanFallback && chunksCount > maxChunks) {
+        auto ytState = State_.lock();
+        YQL_ENSURE(ytState);
+
+        if (auto maxChunks = ytState->Configuration->MaxChunksForDqRead.Get().GetOrElse(DEFAULT_MAX_CHUNKS_FOR_DQ_READ); settings.CanFallback && chunksCount > maxChunks) {
             throw TFallbackError() << DqFallbackErrorMessageWrap( TStringBuilder() << "table with too many chunks: " << chunksCount << " > " << maxChunks);
         }
 
         if (hasErasure) {
-            if (auto codecCpu = State_->Configuration->ErasureCodecCpuForDq.Get(cluster)) {
+            if (auto codecCpu = ytState->Configuration->ErasureCodecCpuForDq.Get(cluster)) {
                 dataSizePerJob = Max(ui64(dataSizePerJob / *codecCpu), 10_KB);
             } else {
                 hasErasure = false;
@@ -242,7 +249,7 @@ public:
 
         auto maxTasks = settings.MaxPartitions;
         ui64 maxDataSizePerJob = 0;
-        if (State_->Configuration->_EnableYtPartitioning.Get(cluster).GetOrElse(false)) {
+        if (ytState->Configuration->_EnableYtPartitioning.Get(cluster).GetOrElse(false)) {
             TVector<TYtPathInfo::TPtr> paths;
             TVector<TString> keys;
             TMaybe<double> sample;
@@ -253,11 +260,13 @@ public:
                 for (const auto& [pathId, pathInfo] : Enumerate(pathInfos)) {
                     auto tableName = pathInfo->Table->Name;
                     if (pathInfo->Table->IsAnonymous && !TYtTableInfo::HasSubstAnonymousLabel(pathInfo->Table->FromNode.Cast())) {
-                        tableName = State_->AnonymousLabels.Value(std::make_pair(cluster, tableName), TString());
+                        tableName = ytState->AnonymousLabels.Value(std::make_pair(cluster, tableName), TString());
                         YQL_ENSURE(tableName, "Unaccounted anonymous table: " << pathInfo->Table->Name);
                         pathInfo->Table->Name = tableName;
                     }
-
+                    if (pathInfo->Table->Meta && pathInfo->Table->Meta->Attrs.Value("optimize_for", "scan") != "scan") {
+                        pathInfo->Columns = nullptr;
+                    }
                     paths.push_back(pathInfo);
                     keys.emplace_back(TStringBuilder() << groupId << "/" << pathId);
                 }
@@ -266,12 +275,12 @@ public:
                 dataSizePerJob /= *sample;
             }
 
-            auto res = State_->Gateway->GetTablePartitions(NYql::IYtGateway::TGetTablePartitionsOptions(State_->SessionId)
+            auto res = ytState->Gateway->GetTablePartitions(NYql::IYtGateway::TGetTablePartitionsOptions(ytState->SessionId)
                 .Cluster(cluster)
                 .MaxPartitions(maxTasks)
                 .DataSizePerJob(dataSizePerJob)
                 .AdjustDataWeightPerPartition(!settings.CanFallback)
-                .Config(State_->Configuration->Snapshot())
+                .Config(ytState->Configuration->Snapshot())
                 .Paths(std::move(paths)));
             if (!res.Success()) {
                 const auto message = DqFallbackErrorMessageWrap("failed to partition table");
@@ -375,11 +384,14 @@ public:
     }
 
     bool CheckPragmas(const TExprNode& node, TExprContext& ctx, bool skipIssues) override {
+        auto ytState = State_.lock();
+        YQL_ENSURE(ytState);
+
         if (TYtConfigure::Match(&node)) {
             if (node.ChildrenSize() >= 5) {
                 if (node.Child(2)->Content() == "Attr" && node.Child(3)->Content() == "maxrowweight") {
                     if (FromString<NSize::TSize>(node.Child(4)->Content()).GetValue()>NSize::FromMegaBytes(128)) {
-                        State_->OnlyNativeExecution = true;
+                        ytState->OnlyNativeExecution = true;
                         return false;
                     } else {
                         return true;
@@ -391,16 +403,16 @@ public:
                 auto pragma = node.Child(3)->Content();
                 if (UNSUPPORTED_YT_PRAGMAS.contains(pragma)) {
                     AddInfo(ctx, TStringBuilder() << "unsupported yt pragma: " << pragma, skipIssues);
-                    State_->OnlyNativeExecution = true;
+                    ytState->OnlyNativeExecution = true;
                     return false;
                 }
 
                 if (pragma == "pooltrees" && node.ChildrenSize() >= 5) {
-                    auto pools = NPrivate::GetDefaultParser<TVector<TString>>()(TString{node.Child(4)->Content()});
+                    auto pools = NCommon::NPrivate::GetDefaultParser<TVector<TString>>()(TString{node.Child(4)->Content()});
                     for (const auto& pool : pools) {
                         if (!POOL_TREES_WHITELIST.contains(pool)) {
                             AddInfo(ctx, TStringBuilder() << "unsupported pool tree: " << pool, skipIssues);
-                            State_->OnlyNativeExecution = true;
+                            ytState->OnlyNativeExecution = true;
                             return false;
                         }
                     }
@@ -411,65 +423,74 @@ public:
     }
 
     bool CanRead(const TExprNode& node, TExprContext& ctx, bool skipIssues) override {
+        auto ytState = State_.lock();
+        YQL_ENSURE(ytState);
+
         if (TYtConfigure::Match(&node)) {
             return CheckPragmas(node, ctx, skipIssues);
         } else if (auto maybeRead = TMaybeNode<TYtReadTable>(&node)) {
             auto cluster = maybeRead.Cast().DataSource().Cluster().StringValue();
-            if (!State_->Configuration->_EnableDq.Get(cluster).GetOrElse(true)) {
-                AddMessage(ctx, TStringBuilder() << "disabled for cluster " << cluster, skipIssues, State_->PassiveExecution);
+            if (!ytState->Configuration->_EnableDq.Get(cluster).GetOrElse(true)) {
+                AddMessage(ctx, TStringBuilder() << "disabled for cluster " << cluster, skipIssues, ytState->PassiveExecution);
                 return false;
             }
-            const auto canUseYtPartitioningApi = State_->Configuration->_EnableYtPartitioning.Get(cluster).GetOrElse(false);
-            const auto enableDynamicStoreRead = State_->Configuration->EnableDynamicStoreReadInDQ.Get().GetOrElse(false);
+            const auto canUseYtPartitioningApi = ytState->Configuration->_EnableYtPartitioning.Get(cluster).GetOrElse(false);
+            const auto enableDynamicStoreRead = ytState->Configuration->EnableDynamicStoreReadInDQ.Get().GetOrElse(false);
             ui64 chunksCount = 0ull;
             for (auto section: maybeRead.Cast().Input()) {
-                if (HasSettingsExcept(maybeRead.Cast().Input().Item(0).Settings().Ref(), DqReadSupportedSettings) || HasNonEmptyKeyFilter(maybeRead.Cast().Input().Item(0))) {
+                if (HasSettingsExcept(section.Settings().Ref(), DqReadSupportedSettings) || HasNonEmptyKeyFilter(section)) {
                     TStringBuilder info;
                     info << "unsupported path settings: ";
-                    if (maybeRead.Cast().Input().Item(0).Settings().Size() > 0) {
-                        for (auto& setting : maybeRead.Cast().Input().Item(0).Settings().Ref().Children()) {
+                    if (section.Settings().Size() > 0) {
+                        for (auto& setting : section.Settings().Ref().Children()) {
                             if (setting->ChildrenSize() != 0) {
                                 info << setting->Child(0)->Content() << ",";
                             }
                         }
                     }
-                    AddMessage(ctx, info, skipIssues, State_->PassiveExecution);
+                    AddMessage(ctx, info, skipIssues, ytState->PassiveExecution);
                     return false;
                 }
                 for (auto path: section.Paths()) {
                     if (!path.Table().Maybe<TYtTable>()) {
-                        AddMessage(ctx, "non-table path", skipIssues, State_->PassiveExecution);
+                        AddMessage(ctx, "non-table path", skipIssues, ytState->PassiveExecution);
                         return false;
                     } else {
                         auto pathInfo = TYtPathInfo(path);
                         auto tableInfo = pathInfo.Table;
                         auto epoch = TEpochInfo::Parse(path.Table().Maybe<TYtTable>().CommitEpoch().Ref());
                         if (!tableInfo->Stat) {
-                            AddMessage(ctx, "table without statistics", skipIssues, State_->PassiveExecution);
+                            AddMessage(ctx, "table without statistics", skipIssues, ytState->PassiveExecution);
                             return false;
                         } else if (!tableInfo->RowSpec) {
-                            AddMessage(ctx, "table without row spec", skipIssues, State_->PassiveExecution);
+                            AddMessage(ctx, "table without row spec", skipIssues, ytState->PassiveExecution);
                             return false;
                         } else if (!tableInfo->Meta) {
-                            AddMessage(ctx, "table without meta", skipIssues, State_->PassiveExecution);
+                            AddMessage(ctx, "table without meta", skipIssues, ytState->PassiveExecution);
                             return false;
                         } else if (tableInfo->IsAnonymous) {
-                            AddMessage(ctx, "anonymous table", skipIssues, State_->PassiveExecution);
+                            AddMessage(ctx, "anonymous table", skipIssues, ytState->PassiveExecution);
                             return false;
                         } else if ((!epoch.Empty() && *epoch.Get() > 0)) {
-                            AddMessage(ctx, "table with non-empty epoch", skipIssues, State_->PassiveExecution);
+                            AddMessage(ctx, "table with non-empty epoch", skipIssues, ytState->PassiveExecution);
                             return false;
                         } else if (NYql::HasSetting(tableInfo->Settings.Ref(), EYtSettingType::WithQB)) {
-                            AddMessage(ctx, "table with QB2 premapper", skipIssues, State_->PassiveExecution);
+                            AddMessage(ctx, "table with QB2 premapper", skipIssues, ytState->PassiveExecution);
                             return false;
                         } else if (pathInfo.Ranges && !canUseYtPartitioningApi) {
-                            AddMessage(ctx, "table with ranges", skipIssues, State_->PassiveExecution);
+                            AddMessage(ctx, "table with ranges", skipIssues, ytState->PassiveExecution);
+                            return false;
+                        } else if (pathInfo.QLFilter && !canUseYtPartitioningApi) {
+                            AddMessage(ctx, "table with QLFilter", skipIssues, ytState->PassiveExecution);
                             return false;
                         } else if (tableInfo->Meta->IsDynamic && !canUseYtPartitioningApi) {
-                            AddMessage(ctx, "dynamic table", skipIssues, State_->PassiveExecution);
+                            AddMessage(ctx, "dynamic table", skipIssues, ytState->PassiveExecution);
                             return false;
                         } else if (tableInfo->Meta->IsDynamic && tableInfo->Meta->Attrs.contains("enable_dynamic_store_read") && !enableDynamicStoreRead) {
-                            AddMessage(ctx, "dynamic store read", skipIssues, State_->PassiveExecution);
+                            AddMessage(ctx, "dynamic store read", skipIssues, ytState->PassiveExecution);
+                            return false;
+                        } else if (tableInfo->Meta->HasRLS) {
+                            AddMessage(ctx, "rls table", skipIssues, ytState->PassiveExecution);
                             return false;
                         }
 
@@ -477,8 +498,8 @@ public:
                     }
                 }
             }
-            if (auto maxChunks = State_->Configuration->MaxChunksForDqRead.Get().GetOrElse(DEFAULT_MAX_CHUNKS_FOR_DQ_READ); chunksCount > maxChunks) {
-                AddMessage(ctx,  TStringBuilder() << "table with too many chunks: " << chunksCount << " > " << maxChunks, skipIssues, State_->PassiveExecution);
+            if (auto maxChunks = ytState->Configuration->MaxChunksForDqRead.Get().GetOrElse(DEFAULT_MAX_CHUNKS_FOR_DQ_READ); chunksCount > maxChunks) {
+                AddMessage(ctx,  TStringBuilder() << "table with too many chunks: " << chunksCount << " > " << maxChunks, skipIssues, ytState->PassiveExecution);
                 return false;
             }
             return true;
@@ -488,18 +509,21 @@ public:
     }
 
     bool CanBlockRead(const NNodes::TExprBase& node, TExprContext& ctx, TTypeAnnotationContext&) override {
+        auto ytState = State_.lock();
+        YQL_ENSURE(ytState);
+
         auto wrap = node.Cast<TDqReadWideWrap>();
         auto maybeRead = wrap.Input().Maybe<TYtReadTable>();
         if (!maybeRead) {
             return false;
         }
 
-        if (!State_->Configuration->UseRPCReaderInDQ.Get(maybeRead.Cast().DataSource().Cluster().StringValue()).GetOrElse(DEFAULT_USE_RPC_READER_IN_DQ)) {
+        if (!ytState->Configuration->UseRPCReaderInDQ.Get(maybeRead.Cast().DataSource().Cluster().StringValue()).GetOrElse(DEFAULT_USE_RPC_READER_IN_DQ)) {
             return false;
         }
 
-        auto supportedTypes = State_->Configuration->BlockReaderSupportedTypes.Get(maybeRead.Cast().DataSource().Cluster().StringValue()).GetOrElse(DEFAULT_BLOCK_READER_SUPPORTED_TYPES);
-        auto supportedDataTypes = State_->Configuration->BlockReaderSupportedDataTypes.Get(maybeRead.Cast().DataSource().Cluster().StringValue()).GetOrElse(DEFAULT_BLOCK_READER_SUPPORTED_DATA_TYPES);
+        auto supportedTypes = ytState->Configuration->BlockReaderSupportedTypes.Get(maybeRead.Cast().DataSource().Cluster().StringValue()).GetOrElse(DEFAULT_BLOCK_READER_SUPPORTED_TYPES);
+        auto supportedDataTypes = ytState->Configuration->BlockReaderSupportedDataTypes.Get(maybeRead.Cast().DataSource().Cluster().StringValue()).GetOrElse(DEFAULT_BLOCK_READER_SUPPORTED_DATA_TYPES);
         const auto structType = GetSeqItemType(maybeRead.Raw()->GetTypeAnn()->Cast<TTupleExprType>()->GetItems().back())->Cast<TStructExprType>();
         if (!CheckBlockReaderSupportedTypes(supportedTypes, supportedDataTypes, structType, ctx, ctx.GetPosition(node.Pos()))) {
             return false;
@@ -510,12 +534,12 @@ public:
             subTypeAnn.emplace_back(type->GetItemType());
         }
 
-        if (!State_->Types->ArrowResolver) {
+        if (!ytState->Types->ArrowResolver) {
             BlockReaderAddInfo(ctx, ctx.GetPosition(node.Pos()), "no arrow resolver provided");
             return false;
         }
 
-        if (State_->Types->ArrowResolver->AreTypesSupported(ctx.GetPosition(node.Pos()), subTypeAnn, ctx) != IArrowResolver::EStatus::OK) {
+        if (ytState->Types->ArrowResolver->AreTypesSupported(ctx.GetPosition(node.Pos()), subTypeAnn, ctx) != IArrowResolver::EStatus::OK) {
             BlockReaderAddInfo(ctx, ctx.GetPosition(node.Pos()), "arrow resolver don't support these types");
             return false;
         }
@@ -575,12 +599,15 @@ public:
     }
 
     TMaybe<ui64> EstimateReadSize(ui64 dataSizePerJob, ui32 maxTasksPerStage, const TVector<const TExprNode*>& nodes, TExprContext& ctx) override {
+        auto ytState = State_.lock();
+        YQL_ENSURE(ytState);
+
         TVector<bool> hasErasurePerNode;
         hasErasurePerNode.reserve(nodes.size());
         TVector<ui64> dataSizes(nodes.size());
         THashMap<TString, TVector<std::pair<const TExprNode*, bool>>> clusterToNodesAndErasure;
         THashMap<TString, TVector<TVector<TYtPathInfo::TPtr>>> clusterToGroups;
-        const auto maxChunks = State_->Configuration->MaxChunksForDqRead.Get().GetOrElse(DEFAULT_MAX_CHUNKS_FOR_DQ_READ);
+        const auto maxChunks = ytState->Configuration->MaxChunksForDqRead.Get().GetOrElse(DEFAULT_MAX_CHUNKS_FOR_DQ_READ);
         ui64 chunksCount = 0u;
 
         for (const auto &node_: nodes) {
@@ -590,8 +617,8 @@ public:
                 auto cluster = maybeRead.Cast().DataSource().Cluster().StringValue();
                 auto& groupIdPathInfo = clusterToGroups[cluster];
 
-                const auto canUseYtPartitioningApi = State_->Configuration->_EnableYtPartitioning.Get(cluster).GetOrElse(false);
-                const auto enableDynamicStoreRead = State_->Configuration->EnableDynamicStoreReadInDQ.Get().GetOrElse(false);
+                const auto canUseYtPartitioningApi = ytState->Configuration->_EnableYtPartitioning.Get(cluster).GetOrElse(false);
+                const auto enableDynamicStoreRead = ytState->Configuration->EnableDynamicStoreReadInDQ.Get().GetOrElse(false);
 
                 auto input = maybeRead.Cast().Input();
                 for (auto section: input) {
@@ -605,11 +632,17 @@ public:
                         if (pathInfo->Ranges && !canUseYtPartitioningApi) {
                             AddErrorWrap(ctx, node_->Pos(), "table with ranges");
                             return Nothing();
+                        } else if (pathInfo->QLFilter && !canUseYtPartitioningApi) {
+                            AddErrorWrap(ctx, node_->Pos(), "table with QLFilter");
+                            return Nothing();
                         } else if (tableInfo->Meta->IsDynamic && !canUseYtPartitioningApi) {
                             AddErrorWrap(ctx, node_->Pos(), "dynamic table");
                             return Nothing();
                         } else if (tableInfo->Meta->IsDynamic && tableInfo->Meta->Attrs.contains("enable_dynamic_store_read") && !enableDynamicStoreRead) {
                             AddErrorWrap(ctx, node_->Pos(), "dynamic store read");
+                            return Nothing();
+                        } else if (tableInfo->Meta->HasRLS) {
+                            AddErrorWrap(ctx, node_->Pos(), "rls table");
                             return Nothing();
                         } else { //
                             if (tableInfo->Meta->Attrs.Value("erasure_codec", "none") != "none") {
@@ -635,20 +668,21 @@ public:
         ui64 dataSize = 0;
         for (auto& [cluster, info]: clusterToNodesAndErasure) {
             auto res = EstimateColumnStats(ctx, clusterToGroups[cluster], dataSize);
-            auto codecCpu = State_->Configuration->ErasureCodecCpuForDq.Get(cluster);
+            // TODO(aneporada): set ErasureCodecCpuForDq in configs and/or take ErasureCodecCpu as a default
+            auto codecCpu = ytState->Configuration->ErasureCodecCpuForDq.Get(cluster);
             if (!codecCpu) {
                 continue;
             }
             size_t idx = 0;
+            const ui64 effectiveDataSizePerJob = Max(ui64(dataSizePerJob / *codecCpu), 10_KB);
             for (auto& [node, hasErasure]: info) {
                 if (!hasErasure) {
                     ++idx;
                     continue;
                 }
-                ui64 readSize = std::accumulate(res[idx].begin(), res[idx].end(), 0);
+                ui64 readSize = std::accumulate(res[idx].begin(), res[idx].end(), 0ull);
                 ++idx;
-                dataSizePerJob = Max(ui64(dataSizePerJob / *codecCpu), 10_KB);
-                const ui64 parts = (readSize + dataSizePerJob - 1) / dataSizePerJob;
+                const ui64 parts = (readSize + effectiveDataSizePerJob - 1) / effectiveDataSizePerJob;
                 if (parts > maxTasksPerStage) {
                     AddErrorWrap(ctx, node->Pos(), "too big table with erasure codec");
                     return Nothing();
@@ -663,10 +697,17 @@ public:
     }
 
     TExprNode::TPtr WrapRead(const TExprNode::TPtr& read, TExprContext& ctx, const TWrapReadSettings&) override {
+        auto ytState = State_.lock();
+        YQL_ENSURE(ytState);
+
         if (auto maybeYtReadTable = TMaybeNode<TYtReadTable>(read)) {
+            const auto cluster = maybeYtReadTable.Cast().DataSource().Cluster().StringValue();
+            if (!ytState->Configuration->_EnableDq.Get(cluster).GetOrElse(true)) {
+                AddErrorWrap(ctx, read->Pos(), TStringBuilder() << "disabled for cluster " << cluster);
+                return nullptr;
+            }
             TMaybeNode<TCoSecureParam> secParams;
-            const auto cluster = maybeYtReadTable.Cast().DataSource().Cluster();
-            if (State_->Configuration->Auth.Get().GetOrElse(TString()) || State_->Configuration->Tokens.Value(cluster, "")) {
+            if (ytState->ResolveClusterToken(cluster)) {
                 secParams = Build<TCoSecureParam>(ctx, read->Pos()).Name().Build(TString("cluster:default_").append(cluster)).Done();
             }
             return Build<TDqReadWrap>(ctx, read->Pos())
@@ -679,10 +720,19 @@ public:
     }
 
     TExprNode::TPtr RecaptureWrite(const TExprNode::TPtr& write, TExprContext& ctx) override {
+        auto ytState = State_.lock();
+        YQL_ENSURE(ytState);
+
         if (auto maybeWrite = TMaybeNode<TYtWriteTable>(write)) {
-            if (State_->Configuration->_EnableYtDqProcessWriteConstraints.Get().GetOrElse(DEFAULT_ENABLE_DQ_WRITE_CONSTRAINTS)) {
+            if (ytState->Configuration->_EnableYtDqProcessWriteConstraints.Get().GetOrElse(DEFAULT_ENABLE_DQ_WRITE_CONSTRAINTS)) {
+                const auto cluster = maybeWrite.Cast().DataSink().Cluster().StringValue();
+                if (!ytState->Configuration->_EnableDq.Get(cluster).GetOrElse(true)) {
+                    AddErrorWrap(ctx, write->Pos(), TStringBuilder() << "disabled for cluster " << cluster);
+                    return nullptr;
+                }
                 const auto& content = maybeWrite.Cast().Content();
-                if (TYtMaterialize::Match(&SkipCallables(content.Ref(), {TCoSort::CallableName(), TCoTopSort::CallableName(), TCoAssumeSorted::CallableName(), TCoAssumeConstraints::CallableName()}))) {
+                const auto& clearContent = SkipCallables(content.Ref(), {TCoSort::CallableName(), TCoTopSort::CallableName(), TCoAssumeSorted::CallableName(), TCoAssumeConstraints::CallableName()});
+                if (TMaybeNode<TCoRight>(&clearContent).Input().Maybe<TYtMaterialize>()) {
                     return write;
                 }
                 TExprNode::TPtr newContent;
@@ -691,39 +741,72 @@ public:
                     // Duplicate AssumeSorted before YtMaterialize, because DQ cannot keep sort and so optimizes AssumeSorted as complete Sort
                     // Before: YtWrite -> AssumeSorted -> ...
                     // After: YtWrite -> AssumeConstraints -> YtMaterialize -> AssumeSorted -> ...
-                    newContent = Build<TYtMaterialize>(ctx, content.Pos())
-                        .World(materializeWorld)
-                        .DataSink(maybeWrite.Cast().DataSink())
-                        .Input(content)
-                        .Settings().Build()
+                    newContent = Build<TCoRight>(ctx, content.Pos())
+                        .Input<TYtMaterialize>()
+                            .World(materializeWorld)
+                            .DataSink(maybeWrite.Cast().DataSink())
+                            .Input(content)
+                            .Settings()
+                                .Add()
+                                    .Name().Value(ToString(EYtSettingType::Transparent), TNodeFlags::Default).Build()
+                                .Build()
+                                .Add()
+                                    .Name().Value(ToString(EYtSettingType::PruneUnusedColumns), TNodeFlags::Default).Build()
+                                .Build()
+                            .Build()
+                        .Build()
                         .Done().Ptr();
                 } else if (content.Raw()->IsCallable({TCoSort::CallableName(), TCoTopSort::CallableName()}) && !content.Raw()->GetConstraint<TSortedConstraintNode>()) {
                     // For Sorts by non members lambdas do it on YT side because of aux columns
                     // Before: YtWrite -> Sort/TopSort -> ...
                     // After: YtWrite -> Sort/TopSort -> YtMaterialize -> ...
-                    auto materialize = Build<TYtMaterialize>(ctx, content.Pos())
-                        .World(materializeWorld)
-                        .DataSink(maybeWrite.Cast().DataSink())
-                        .Input(content.Cast<TCoInputBase>().Input())
-                        .Settings().Build()
-                        .Done();
-                    newContent = ctx.ChangeChild(content.Ref(), TCoInputBase::idx_Input, materialize.Ptr());
+                    TExprNode::TPtr materialize = Build<TCoRight>(ctx, content.Pos())
+                        .Input<TYtMaterialize>()
+                            .World(materializeWorld)
+                            .DataSink(maybeWrite.Cast().DataSink())
+                            .Input(content.Cast<TCoInputBase>().Input())
+                            .Settings()
+                                .Add()
+                                    .Name().Value(ToString(EYtSettingType::Transparent), TNodeFlags::Default).Build()
+                                .Build()
+                                .Add()
+                                    .Name().Value(ToString(EYtSettingType::PruneUnusedColumns), TNodeFlags::Default).Build()
+                                .Build()
+                            .Build()
+                        .Build()
+                        .Done().Ptr();
+                    newContent = ctx.ChangeChild(content.Ref(), TCoInputBase::idx_Input, std::move(materialize));
                 } else {
                     // Materialize dq graph to yt table before YtWrite:
                     // Before: YtWrite -> Some callables ...
                     // After: YtWrite -> YtMaterialize -> Some callables ...
-                    newContent = Build<TYtMaterialize>(ctx, content.Pos())
-                        .World(materializeWorld)
-                        .DataSink(maybeWrite.Cast().DataSink())
-                        .Input(content)
-                        .Settings().Build()
+                    newContent = Build<TCoRight>(ctx, content.Pos())
+                        .Input<TYtMaterialize>()
+                            .World(materializeWorld)
+                            .DataSink(maybeWrite.Cast().DataSink())
+                            .Input(content)
+                            .Settings()
+                                .Add()
+                                    .Name().Value(ToString(EYtSettingType::Transparent), TNodeFlags::Default).Build()
+                                .Build()
+                                .Add()
+                                    .Name().Value(ToString(EYtSettingType::PruneUnusedColumns), TNodeFlags::Default).Build()
+                                .Build()
+                            .Build()
+                        .Build()
                         .Done().Ptr();
                 }
-                if (content.Raw()->GetConstraint<TSortedConstraintNode>() || content.Raw()->GetConstraint<TDistinctConstraintNode>() || content.Raw()->GetConstraint<TUniqueConstraintNode>()) {
+                auto constraintSet = content.Raw()->GetConstraintSet();
+                constraintSet.FilterConstraints([](const std::string_view& name) {
+                    return name == TSortedConstraintNode::Name()
+                        || name == TUniqueConstraintNode::Name()
+                        || name == TDistinctConstraintNode::Name();
+                });
+                if (constraintSet) {
                     newContent = Build<TCoAssumeConstraints>(ctx, content.Pos())
                         .Input(newContent)
                         .Value()
-                            .Value(NYT::NodeToYsonString(content.Raw()->GetConstraintSet().ToYson(), NYson::EYsonFormat::Text), TNodeFlags::MultilineContent)
+                            .Value(NYT::NodeToYsonString(constraintSet.ToYson(), NYson::EYsonFormat::Text), TNodeFlags::MultilineContent)
                         .Build()
                         .Done().Ptr();
                 }
@@ -758,14 +841,17 @@ public:
     }
 
     TMaybe<bool> CanWrite(const TExprNode& node, TExprContext& ctx) override {
+        auto ytState = State_.lock();
+        YQL_ENSURE(ytState);
+
         if (auto maybeWrite = TMaybeNode<TYtWriteTable>(&node)) {
             auto cluster = TString{maybeWrite.Cast().DataSink().Cluster().Value()};
             auto tableName = TString{TYtTableInfo::GetTableLabel(maybeWrite.Cast().Table())};
             auto epoch = TEpochInfo::Parse(maybeWrite.Cast().Table().CommitEpoch().Ref());
 
-            auto tableDesc = State_->TablesData->GetTable(cluster, tableName, epoch);
+            auto tableDesc = ytState->TablesData->GetTable(cluster, tableName, epoch);
 
-            if (!State_->Configuration->_EnableDq.Get(cluster).GetOrElse(true)) {
+            if (!ytState->Configuration->_EnableDq.Get(cluster).GetOrElse(true)) {
                 AddInfo(ctx, TStringBuilder() << "disabled for cluster " << cluster, false);
                 return false;
             }
@@ -779,7 +865,7 @@ public:
                 return false;
             }
 
-            if (!State_->Configuration->_EnableYtDqProcessWriteConstraints.Get().GetOrElse(DEFAULT_ENABLE_DQ_WRITE_CONSTRAINTS)) {
+            if (!ytState->Configuration->_EnableYtDqProcessWriteConstraints.Get().GetOrElse(DEFAULT_ENABLE_DQ_WRITE_CONSTRAINTS)) {
                 const auto content = maybeWrite.Cast().Content().Raw();
                 if (const auto sorted = content->GetConstraint<TSortedConstraintNode>()) {
                     if (const auto distinct = content->GetConstraint<TDistinctConstraintNode>()) {
@@ -801,8 +887,11 @@ public:
     }
 
     void RegisterMkqlCompiler(NCommon::TMkqlCallableCompilerBase& compiler) override {
-        RegisterDqYtMkqlCompilers(compiler, State_);
-        State_->Gateway->RegisterMkqlCompiler(compiler);
+        auto ytState = State_.lock();
+        YQL_ENSURE(ytState);
+
+        RegisterDqYtMkqlCompilers(compiler, ytState);
+        ytState->Gateway->RegisterMkqlCompiler(compiler);
     }
 
     bool CanFallback() override {
@@ -864,9 +953,13 @@ public:
             }
             return true;
         });
+
+        auto ytState = State_.lock();
+        YQL_ENSURE(ytState);
+
         TString cluster;
         if (usedClusters.empty()) {
-            cluster = State_->Configuration->DefaultCluster.Get().GetOrElse(State_->Gateway->GetDefaultClusterName());
+            cluster = ytState->Configuration->DefaultCluster.Get().GetOrElse(ytState->Gateway->GetDefaultClusterName());
         } else {
             cluster = TString{*usedClusters.begin()};
         }
@@ -874,12 +967,12 @@ public:
         const auto type = GetSequenceItemType(input->Pos(), input->GetTypeAnn(), false, ctx);
 
         YQL_ENSURE(type);
-        TYtOutTableInfo outTableInfo(type->Cast<TStructExprType>(), State_->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE, order);
+        TYtOutTableInfo outTableInfo(type->Cast<TStructExprType>(), GetNativeYtTypeCompatibility(cluster, *ytState->Configuration), order);
 
-        const auto res = State_->Gateway->PrepareFullResultTable(
-            IYtGateway::TFullResultTableOptions(State_->SessionId)
+        const auto res = ytState->Gateway->PrepareFullResultTable(
+            IYtGateway::TFullResultTableOptions(ytState->SessionId)
                 .Cluster(cluster)
-                .Config(State_->Configuration->GetSettingsForNode(resOrPull.Origin().Ref()))
+                .Config(ytState->Configuration->GetSettingsForNode(resOrPull.Origin().Ref()))
                 .OutTable(outTableInfo)
         );
 
@@ -889,14 +982,14 @@ public:
             if (res.ExternalTransactionId) {
                 param("external_tx", *res.ExternalTransactionId);
             }
-        } else if (auto externalTx = State_->Configuration->ExternalTx.Get(cluster).GetOrElse(TGUID())) {
+        } else if (auto externalTx = ytState->Configuration->ExternalTx.Get(cluster).GetOrElse(TGUID())) {
             param("external_tx", GetGuidAsString(externalTx));
         }
         TString tokenName;
-        if (auto auth = State_->Configuration->Auth.Get().GetOrElse(TString())) {
+        if (auto token = ytState->ResolveClusterToken(cluster)) {
             tokenName = TString("cluster:default_").append(cluster);
             if (!secureParams.contains(tokenName)) {
-                secureParams[tokenName] = auth;
+                secureParams[tokenName] = *token;
             }
         }
         param("token", tokenName);
@@ -951,15 +1044,18 @@ public:
     }
 
     virtual void NotifyDqTimeout() override {
-        State_->IsDqTimeout = true;
+        auto ytState = State_.lock();
+        YQL_ENSURE(ytState);
+
+        ytState->IsDqTimeout = true;
     }
 
 private:
-    TYtState* State_;
+    TYtState::TWeakPtr State_;
 };
 
-THolder<IDqIntegration> CreateYtDqIntegration(TYtState* state) {
-    Y_ABORT_UNLESS(state);
+THolder<IDqIntegration> CreateYtDqIntegration(TYtState::TWeakPtr state) {
+    YQL_ENSURE(!state.expired());
     return MakeHolder<TYtDqIntegration>(state);
 }
 

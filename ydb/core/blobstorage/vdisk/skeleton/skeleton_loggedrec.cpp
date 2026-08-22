@@ -24,34 +24,44 @@ namespace NKikimr {
             const TLogoBlobID &id,
             const TIngress &ingress,
             TRope &&buffer,
+            std::optional<ui64> checksum,
             std::unique_ptr<TEvBlobStorage::TEvVPutResult> result,
             const TActorId &recipient,
             ui64 recipientCookie,
             NWilson::TTraceId traceId,
-            NKikimrBlobStorage::EPutHandleClass handleClass)
+            NKikimrBlobStorage::EPutHandleClass handleClass,
+            const TVDiskID& vdiskId,
+            const TIntrusivePtr<TVDiskConfig>& config,
+            const TVDiskContextPtr& vctx)
         : ILoggedRec(seg, confirmSyncLogAlso)
         , Id(id)
         , Ingress(ingress)
         , Buffer(std::move(buffer))
+        , Checksum(checksum)
         , Result(std::move(result))
         , Recipient(recipient)
         , RecipientCookie(recipientCookie)
         , Span(TWilson::VDiskInternals, std::move(traceId), "VDisk.Log.Put")
         , HandleClass(handleClass)
     {
-        if (Span) {
-            Span.Attribute("blob_id", id.ToString());
+        if (NWilson::TSpan* wilsonSpan = Span.GetWilsonSpanPtr()) {
+            wilsonSpan->Attribute("blob_id", id.ToString());
+            wilsonSpan->Attribute("group_id", vctx->GroupId.GetRawId());
+            wilsonSpan->Attribute("vdisk_id", vdiskId.ToString());
+            wilsonSpan->Attribute("storage_pool", config->BaseInfo.StoragePoolName);
+            wilsonSpan->Attribute("handle_class", NKikimrBlobStorage::EPutHandleClass_Name(handleClass));
         }
     }
 
     void TLoggedRecVPut::Replay(THull &hull, const TActorContext &ctx) {
         TLogoBlobID genId(Id, 0);
-        hull.AddLogoBlob(ctx, genId, Id.PartId(), Ingress, Buffer, Seg.Point());
+        hull.AddLogoBlob(ctx, genId, Id.PartId(), Ingress, Buffer, Checksum, Seg.Point());
 
-        LOG_DEBUG_S(ctx, NKikimrServices::BS_VDISK_PUT, hull.GetHullCtx()->VCtx->VDiskLogPrefix << "TEvVPut: reply;"
-                << " id# " << Id
-                << " msg# " << Result->ToString()
-                << " Marker# BSVSLR01");
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_VDISK_PUT, "TEvVPut: reply;",
+            {"VDiskLogPrefix", hull.GetHullCtx()->VCtx->VDiskLogPrefix},
+            {"id", Id},
+            {"msg", Result->ToString()},
+            {"marker", "BSVSLR01"});
 
         Span.EndOk();
         const auto& vCtx = hull.GetHullCtx()->VCtx;
@@ -71,34 +81,43 @@ namespace NKikimr {
             const TLogoBlobID &id,
             const TIngress &ingress,
             TRope &&buffer,
+            std::optional<ui64> checksum,
             std::unique_ptr<TEvVMultiPutItemResult> result,
             const TActorId &recipient,
             ui64 recipientCookie,
             NWilson::TTraceId traceId,
-            NKikimrBlobStorage::EPutHandleClass)
+            NKikimrBlobStorage::EPutHandleClass handleClass,
+            const TVDiskID& vdiskId,
+            const TIntrusivePtr<TVDiskConfig>& config,
+            const TVDiskContextPtr& vctx)
         : ILoggedRec(seg, confirmSyncLogAlso)
         , Id(id)
         , Ingress(ingress)
         , Buffer(std::move(buffer))
+        , Checksum(checksum)
         , Result(std::move(result))
         , Recipient(recipient)
         , RecipientCookie(recipientCookie)
         , Span(TWilson::VDiskInternals, std::move(traceId), "VDisk.Log.MultiPutItem")
     {
-        if (Span) {
-            Span.Attribute("blob_id", Id.ToString());
+        if (NWilson::TSpan* wilsonSpan = Span.GetWilsonSpanPtr()) {
+            wilsonSpan->Attribute("blob_id", Id.ToString());
+            wilsonSpan->Attribute("group_id", vctx->GroupId.GetRawId());
+            wilsonSpan->Attribute("vdisk_id", vdiskId.ToString());
+            wilsonSpan->Attribute("storage_pool", config->BaseInfo.StoragePoolName);
+            wilsonSpan->Attribute("handle_class", NKikimrBlobStorage::EPutHandleClass_Name(handleClass));
         }
     }
 
     void TLoggedRecVMultiPutItem::Replay(THull &hull, const TActorContext &ctx) {
         TLogoBlobID genId(Id, 0);
-        hull.AddLogoBlob(ctx, genId, Id.PartId(), Ingress, Buffer, Seg.Point());
+        hull.AddLogoBlob(ctx, genId, Id.PartId(), Ingress, Buffer, Checksum, Seg.Point());
 
-        LOG_DEBUG_S(ctx, NKikimrServices::BS_VDISK_PUT, hull.GetHullCtx()->VCtx->VDiskLogPrefix
-                << "TEvVMultiPut: item reply;"
-                << " id# " << Id
-                << " msg# " << Result->ToString()
-                << " Marker# BSVSLR02");
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_VDISK_PUT, "TEvVMultiPut: item reply;",
+            {"VDiskLogPrefix", hull.GetHullCtx()->VCtx->VDiskLogPrefix},
+            {"id", Id},
+            {"msg", Result->ToString()},
+            {"marker", "BSVSLR02"});
 
         Span.EndOk();
         ctx.Send(Recipient, Result.release(), 0, RecipientCookie);
@@ -115,14 +134,22 @@ namespace NKikimr {
             TLsnSeg seg,
             bool confirmSyncLogAlso,
             const TActorId &hugeKeeperId,
-            TEvHullLogHugeBlob::TPtr ev)
+            TEvHullLogHugeBlob::TPtr ev,
+            const TVDiskID& vdiskId,
+            const TIntrusivePtr<TVDiskConfig>& config,
+            const TVDiskContextPtr& vctx)
         : ILoggedRec(seg, confirmSyncLogAlso)
         , HugeKeeperId(hugeKeeperId)
         , Ev(ev)
         , Span(TWilson::VDiskInternals, std::move(Ev->TraceId), "VDisk.Log.PutHuge")
     {
-        if (Span) {
-            Span.Attribute("blob_id", Ev->Get()->LogoBlobID.ToString());
+        if (NWilson::TSpan* wilsonSpan = Span.GetWilsonSpanPtr()) {
+            wilsonSpan->Attribute("blob_id", Ev->Get()->LogoBlobID.ToString());
+            wilsonSpan->Attribute("group_id", vctx->GroupId.GetRawId());
+            wilsonSpan->Attribute("vdisk_id", vdiskId.ToString());
+            wilsonSpan->Attribute("storage_pool", config->BaseInfo.StoragePoolName);
+            wilsonSpan->Attribute("handle_class", NKikimrBlobStorage::EPutHandleClass_Name(
+                    Ev->Get()->HandleClass));
         }
     }
 
@@ -136,9 +163,10 @@ namespace NKikimr {
             ctx.Send(HugeKeeperId, new TEvHullHugeBlobLogged(msg->WriteId, msg->HugeBlob, Seg.Point(), true));
         }
 
-        LOG_DEBUG_S(ctx, NKikimrServices::BS_VDISK_PUT, hull.GetHullCtx()->VCtx->VDiskLogPrefix
-                << "TEvVPut: realtime# false result# " << msg->Result->ToString()
-                << " Marker# BSVSLR03");
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_VDISK_PUT, "TEvVPut: false",
+            {"VDiskLogPrefix", hull.GetHullCtx()->VCtx->VDiskLogPrefix},
+            {"result", msg->Result->ToString()},
+            {"marker", "BSVSLR03"});
         Span.EndOk();
         const auto& vCtx = hull.GetHullCtx()->VCtx;
         SendVDiskResponse(ctx, msg->OrigClient, msg->Result.release(), msg->OrigCookie, vCtx, msg->HandleClass);
@@ -173,9 +201,10 @@ namespace NKikimr {
 
         hull.AddBlockCmd(ctx, TabletId, Gen, IssuerGuid, Seg.Point(), replySender);
 
-        LOG_DEBUG_S(ctx, NKikimrServices::BS_VDISK_BLOCK, hull.GetHullCtx()->VCtx->VDiskLogPrefix
-                << "TEvVBlock: result# " << Result->ToString()
-                << " Marker# BSVSLR04");
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_VDISK_BLOCK, "TEvVBlock",
+            {"VDiskLogPrefix", hull.GetHullCtx()->VCtx->VDiskLogPrefix},
+            {"result", Result->ToString()},
+            {"marker", "BSVSLR04"});
         SendVDiskResponse(ctx, Recipient, Result.release(), RecipientCookie, vCtx, {});
     }
 
@@ -199,9 +228,10 @@ namespace NKikimr {
         NKikimrBlobStorage::TEvVCollectGarbage &record = OrigEv->Get()->Record;
         hull.AddGCCmd(ctx, record, Ingress, Seg);
 
-        LOG_DEBUG_S(ctx, NKikimrServices::BS_VDISK_GC, hull.GetHullCtx()->VCtx->VDiskLogPrefix
-                << "TEvVCollectGarbage: result# " << Result->ToString()
-                << " Marker# BSVSLR05");
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_VDISK_GC, "TEvVCollectGarbage",
+            {"VDiskLogPrefix", hull.GetHullCtx()->VCtx->VDiskLogPrefix},
+            {"result", Result->ToString()},
+            {"marker", "BSVSLR05"});
         Span.EndOk();
         const auto& vCtx = hull.GetHullCtx()->VCtx;
         SendVDiskResponse(ctx, OrigEv->Sender, Result.release(), OrigEv->Cookie, vCtx, {});
@@ -214,11 +244,13 @@ namespace NKikimr {
             TLsnSeg seg,
             bool confirmSyncLogAlso,
             std::unique_ptr<TEvLocalSyncDataResult> result,
-            TEvLocalSyncData::TPtr origEv)
+            TEvLocalSyncData::TPtr origEv,
+            TActorId syncLogActorId)
         : ILoggedRec(seg, confirmSyncLogAlso)
         , Result(std::move(result))
         , OrigEv(origEv)
         , Span(TWilson::VDiskInternals, std::move(OrigEv->TraceId), "VDisk.LoggedRecLocalSyncData")
+        , SyncLogActorId(syncLogActorId)
     {}
 
     void TLoggedRecLocalSyncData::Replay(THull &hull, const TActorContext &ctx) {
@@ -227,13 +259,17 @@ namespace NKikimr {
             SendVDiskResponse(ctx, id, msg, cookie, vCtx, {});
         };
 
+        hull.RemoveLocalSyncDataInFlight(
+            OrigEv->Get()->LogoBlobsSize, OrigEv->Get()->BlocksSize, OrigEv->Get()->BarriersSize);
+
 #ifdef UNPACK_LOCALSYNCDATA
         hull.AddSyncDataCmd(ctx, std::move(OrigEv->Get()->Extracted), Seg, replySender);
 #else
         hull.AddSyncDataCmd(ctx, OrigEv->Get()->Data, Seg, replySender);
 #endif
-        Span.EndOk();        
+        Span.EndOk();
         SendVDiskResponse(ctx, OrigEv->Sender, Result.release(), OrigEv->Cookie, vCtx, {});
+        TActivationContext::Send(std::unique_ptr<IEventHandle>(OrigEv->Forward(SyncLogActorId).Release()));
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////

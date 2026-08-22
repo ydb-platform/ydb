@@ -11,7 +11,7 @@ IF (SANITIZER_TYPE)
     )
 ELSE()
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
     SPLIT_FACTOR(20)
 ENDIF()
 
@@ -20,9 +20,8 @@ PEERDIR(
     ydb/library/actors/core
 )
 
-SRCS(
-    actor_benchmark.cpp
-    waiting_benchs.cpp
-)
+INCLUDE(sources.inc)
 
 END()
+
+RECURSE_FOR_TESTS(bundle)

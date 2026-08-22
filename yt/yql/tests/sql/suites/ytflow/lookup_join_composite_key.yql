@@ -1,0 +1,34 @@
+/* sort outputs */
+
+use plato;
+
+pragma Engine = "ytflow";
+
+pragma Ytflow.Cluster = "plato";
+pragma Ytflow.PipelinePath = "pipelines/test";
+
+$input_stream = 
+    select 
+        key_b,
+        key_a,
+        value
+    from Input
+    where value > 10;
+
+$joined_stream =
+    select 
+        left_arg.key_b as key_b,
+        left_arg.key_a as key_a,
+        left_arg.value as value,
+        right_arg.kv_value
+    from $input_stream as left_arg
+    inner join InputKeyValueTable as right_arg
+    using (key_b, key_a);
+
+insert into Output
+select 
+    key_b,
+    key_a,
+    value,
+    value + `right_arg.kv_value` as sum_value
+from $joined_stream;

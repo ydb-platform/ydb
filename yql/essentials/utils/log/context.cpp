@@ -3,16 +3,37 @@
 
 #include <util/thread/singleton.h>
 
-
-namespace NYql {
-namespace NLog {
+namespace NYql::NLog {
 namespace {
 
 struct TThrowedLogContext {
     TString LocationWithLogContext; // separated with ': '
 };
 
-} // namspace
+} // namespace
+
+TStringBuf ToStringBuf(EContextKey key) {
+    switch (key) {
+        case EContextKey::DateTime:
+            return "datetime";
+        case EContextKey::Level:
+            return "level";
+        case EContextKey::ProcessName:
+            return "procname";
+        case EContextKey::ProcessID:
+            return "pid";
+        case EContextKey::ThreadID:
+            return "tid";
+        case EContextKey::Component:
+            return "component";
+        case EContextKey::FileName:
+            return "filename";
+        case EContextKey::Line:
+            return "line";
+        case EContextKey::Path:
+            return "path";
+    }
+}
 
 void OutputLogCtx(IOutputStream* out, bool withBraces, bool skipSessionId) {
     const NImpl::TLogContextListItem* ctxList = NImpl::GetLogContextList();
@@ -27,7 +48,7 @@ void OutputLogCtx(IOutputStream* out, bool withBraces, bool skipSessionId) {
 
         bool isFirst = true;
         while (ctxItem != ctxList) {
-            for (const TString& name: *ctxItem) {
+            for (const TString& name : *ctxItem) {
                 if (!skipSessionId && !name.empty()) {
                     if (!isFirst) {
                         (*out) << '/';
@@ -60,7 +81,7 @@ std::pair<TString, TString> CurrentLogContextPath() {
     }
 
     TStringStream ss;
-    OutputLogCtx(&ss, false, !sessionId.empty());
+    OutputLogCtx(&ss, /*withBraces=*/false, !sessionId.empty());
     return std::make_pair(sessionId, ss.Str());
 }
 
@@ -69,21 +90,24 @@ TString ThrowedLogContextPath() {
     return std::move(tlc->LocationWithLogContext);
 }
 
-
-TAutoPtr<TLogElement> TContextPreprocessor::Preprocess(
-        TAutoPtr<TLogElement> element)
+TAutoPtr<TLogElement> TContextPreprocessor::Preprocess(TAutoPtr<TLogElement> element)
 {
-    OutputLogCtx(element.Get(), true);
+    TStringStream out;
+    OutputLogCtx(&out, /*withBraces=*/false);
+
+    if (!out.Empty()) {
+        element->With(ToStringBuf(EContextKey::Path), std::move(out.Str()));
+    }
+
     return element;
 }
 
 void TYqlLogContextLocation::SetThrowedLogContextPath() const {
     TStringStream ss;
     ss << Location_ << TStringBuf(": ");
-    OutputLogCtx(&ss, true);
+    OutputLogCtx(&ss, /*withBraces=*/true);
     TThrowedLogContext* tlc = FastTlsSingleton<TThrowedLogContext>();
     tlc->LocationWithLogContext = ss.Str();
 }
 
-} // namespace NLog
-} // namespace NYql
+} // namespace NYql::NLog

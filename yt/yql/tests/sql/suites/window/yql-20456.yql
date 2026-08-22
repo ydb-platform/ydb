@@ -1,0 +1,16 @@
+USE plato;
+
+PRAGMA warning("disable", "1101");
+PRAGMA config.flags("NormalizeDependsOn");
+PRAGMA config.flags("OptimizerFlags", "CheckWindowFramesFieldSubset");
+PRAGMA DisableDirectRowDependsOn;
+
+$input = AsList(
+    AsStruct(1 AS yandexuid, "aaa" AS host, '123' AS timestamp)
+);
+
+select
+    LEAD(host) over (partition by input.yandexuid order by timestamp) as next_host,
+    MAX(TableName()) over w as `max_date`,
+from AS_TABLE($input) as input
+window w as (partition by input.yandexuid);

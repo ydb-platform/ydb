@@ -1,15 +1,18 @@
 #pragma once
 
 #include <ydb/core/base/logoblob.h>
+
 #include <ydb/library/conclusion/result.h>
 
 #include <util/generic/string.h>
+
+#include <tuple>
 
 namespace NKikimrColumnShardProto {
 class TBlobRange;
 class TBlobRangeLink16;
 class TUnifiedBlobId;
-}
+}   // namespace NKikimrColumnShardProto
 
 namespace NKikimr::NOlap {
 
@@ -34,12 +37,12 @@ class TUnifiedBlobId {
         TLogoBlobID BlobId;
         ui32 DsGroup;
 
-        bool operator == (const TDsBlobId& other) const {
-             return BlobId == other.BlobId && DsGroup == other.DsGroup;
+        bool operator==(const TDsBlobId& other) const {
+            return BlobId == other.BlobId && DsGroup == other.DsGroup;
         }
 
         TString ToStringNew() const {
-            return Sprintf( "DS:%" PRIu32 ":%s", DsGroup, BlobId.ToString().c_str());
+            return Sprintf("DS:%" PRIu32 ":%s", DsGroup, BlobId.ToString().c_str());
         }
 
         TString ToStringLegacy() const {
@@ -58,18 +61,20 @@ public:
 
     // Initialize as DS blob Id
     TUnifiedBlobId(ui32 dsGroup, const TLogoBlobID& logoBlobId)
-        : Id(TDsBlobId{logoBlobId, dsGroup})
-    {}
+        : Id(TDsBlobId{ logoBlobId, dsGroup })
+    {
+    }
 
     // Initialize as Small blob Id
     TUnifiedBlobId(ui64 tabletId, ui32 gen, ui32 step, ui32 cookie, ui32 channel, const ui32 groupId, ui32 size)
-        : Id(TDsBlobId{TLogoBlobID(tabletId, gen, step, channel, size, cookie), groupId})
-    {}
+        : Id(TDsBlobId{ TLogoBlobID(tabletId, gen, step, channel, size, cookie), groupId })
+    {
+    }
 
     TUnifiedBlobId(const TUnifiedBlobId& other) = default;
-    TUnifiedBlobId& operator = (const TUnifiedBlobId& logoBlobId) = default;
+    TUnifiedBlobId& operator=(const TUnifiedBlobId& logoBlobId) = default;
     TUnifiedBlobId(TUnifiedBlobId&& other) = default;
-    TUnifiedBlobId& operator = (TUnifiedBlobId&& logoBlobId) = default;
+    TUnifiedBlobId& operator=(TUnifiedBlobId&& logoBlobId) = default;
 
     static TUnifiedBlobId BuildRaw(const ui32 groupId, const ui64 tabletId, const ui64 r1, const ui64 r2) {
         return TUnifiedBlobId(groupId, TLogoBlobID(tabletId, r1, r2));
@@ -90,10 +95,9 @@ public:
         return result;
     }
 
-    static TUnifiedBlobId ParseFromString(const TString& str,
-        const IBlobGroupSelector* dsGroupSelector, TString& error);
+    static TUnifiedBlobId ParseFromString(const TString& str, const IBlobGroupSelector* dsGroupSelector, TString& error);
 
-    bool operator == (const TUnifiedBlobId& other) const {
+    bool operator==(const TUnifiedBlobId& other) const {
         return Id == other.Id;
     }
 
@@ -140,9 +144,9 @@ public:
     }
 };
 
-
 // Describes a range of bytes in a blob. It is used for read requests and for caching.
 struct TBlobRange;
+
 class TBlobRangeLink16 {
 public:
     using TLinkId = ui16;
@@ -163,13 +167,15 @@ public:
 
     explicit TBlobRangeLink16(ui32 offset, ui32 size)
         : Offset(offset)
-        , Size(size) {
+        , Size(size)
+    {
     }
 
     explicit TBlobRangeLink16(const ui16 blobIdx, ui32 offset, ui32 size)
         : BlobIdx(blobIdx)
         , Offset(offset)
-        , Size(size) {
+        , Size(size)
+    {
     }
 
     ui16 GetBlobIdxVerified() const;
@@ -181,6 +187,7 @@ public:
     NKikimrColumnShardProto::TBlobRangeLink16 SerializeToProto() const;
     TConclusionStatus DeserializeFromProto(const NKikimrColumnShardProto::TBlobRangeLink16& proto);
     static TConclusion<TBlobRangeLink16> BuildFromProto(const NKikimrColumnShardProto::TBlobRangeLink16& proto);
+
     TString ToString() const {
         TStringBuilder result;
         result << "[";
@@ -219,13 +226,14 @@ struct TBlobRange {
     TBlobRange BuildSubset(const ui32 offset, const ui32 size) const;
 
     bool operator<(const TBlobRange& br) const {
-        if (BlobId != br.BlobId) {
-            return BlobId.GetLogoBlobId().Compare(br.BlobId.GetLogoBlobId()) < 0;
-        } else if (Offset != br.Offset) {
-            return Offset < br.Offset;
-        } else {
-            return Size < br.Size;
-        }
+        // Must be consistent with operator== (LogoBlobId + DsGroup). Ordering by LogoBlobId
+        // only when BlobId differs breaks strict weak ordering for std::sort when the same
+        // LogoBlobId appears with different DsGroup values (see #47871).
+        const TLogoBlobID logo = BlobId.GetLogoBlobId();
+        const TLogoBlobID otherLogo = br.BlobId.GetLogoBlobId();
+        const ui32 dsGroup = BlobId.GetDsGroup();
+        const ui32 otherDsGroup = br.BlobId.GetDsGroup();
+        return std::tie(logo, dsGroup, Offset, Size) < std::tie(otherLogo, otherDsGroup, br.Offset, br.Size);
     }
 
     const TUnifiedBlobId& GetBlobId() const {
@@ -240,13 +248,13 @@ struct TBlobRange {
         if (GetBlobId() != br.GetBlobId()) {
             return false;
         }
-        const ui32 right = std::max<ui32>(Offset + Size, br.Offset + br.Size);
+        const ui64 right = std::max<ui64>(static_cast<ui64>(Offset) + Size, static_cast<ui64>(br.Offset) + br.Size);
         const ui32 offset = std::min<ui32>(Offset, br.Offset);
-        const ui32 size = right - offset;
+        const ui64 size = right - offset;
         if (size > limit) {
             return false;
         }
-        Size = size;
+        Size = static_cast<ui32>(size);
         Offset = offset;
         return true;
     }
@@ -307,11 +315,8 @@ struct TBlobRange {
         return TBlobRange(blobId, 0, blobId.BlobSize());
     }
 
-    bool operator == (const TBlobRange& other) const {
-        return
-            BlobId == other.BlobId &&
-            Offset == other.Offset &&
-            Size == other.Size;
+    bool operator==(const TBlobRange& other) const {
+        return BlobId == other.BlobId && Offset == other.Offset && Size == other.Size;
     }
 
     ui64 Hash() const noexcept {
@@ -322,8 +327,7 @@ struct TBlobRange {
     }
 
     TString ToString() const {
-        return Sprintf("{ Blob: %s Offset: %" PRIu32 " Size: %" PRIu32 " }",
-                       BlobId.ToStringNew().c_str(), Offset, Size);
+        return Sprintf("{ Blob: %s Offset: %" PRIu32 " Size: %" PRIu32 " }", BlobId.ToStringNew().c_str(), Offset, Size);
     }
 
     NKikimrColumnShardProto::TBlobRange SerializeToProto() const;
@@ -336,12 +340,14 @@ class IBlobInUseTracker {
 private:
     virtual bool DoFreeBlob(const NOlap::TUnifiedBlobId& blobId) = 0;
     virtual bool DoUseBlob(const NOlap::TUnifiedBlobId& blobId) = 0;
+
 public:
     virtual ~IBlobInUseTracker() = default;
 
     bool FreeBlob(const NOlap::TUnifiedBlobId& blobId) {
         return DoFreeBlob(blobId);
     }
+
     bool UseBlob(const NOlap::TUnifiedBlobId& blobId) {
         return DoUseBlob(blobId);
     }
@@ -350,31 +356,26 @@ public:
 };
 
 // Expected blob lifecycle: EVICTING -> SELF_CACHED -> EXTERN <-> CACHED
-enum class EEvictState : ui8 {
+enum class EEvictState: ui8 {
     UNKNOWN = 0,
-    EVICTING = 1,       // source, extern, cached blobs: 1--
-    SELF_CACHED = 2,    // source, extern, cached blobs: 11-
-    EXTERN = 3,         // source, extern, cached blobs: -1-
-    CACHED = 4,         // source, extern, cached blobs: -11
-    ERASING = 5,        // source, extern, cached blobs: -??
+    EVICTING = 1,   // source, extern, cached blobs: 1--
+    SELF_CACHED = 2,   // source, extern, cached blobs: 11-
+    EXTERN = 3,   // source, extern, cached blobs: -1-
+    CACHED = 4,   // source, extern, cached blobs: -11
+    ERASING = 5,   // source, extern, cached blobs: -??
     //ERASED = 6,       // source, extern, cached blobs: ---
 };
 
 inline bool IsExported(EEvictState state) {
-    return state == EEvictState::SELF_CACHED ||
-        state == EEvictState::EXTERN ||
-        state == EEvictState::CACHED;
+    return state == EEvictState::SELF_CACHED || state == EEvictState::EXTERN || state == EEvictState::CACHED;
 }
 
 inline bool CouldBeExported(EEvictState state) {
-    return state == EEvictState::SELF_CACHED ||
-        state == EEvictState::EXTERN ||
-        state == EEvictState::CACHED ||
-        state == EEvictState::ERASING;
+    return state == EEvictState::SELF_CACHED || state == EEvictState::EXTERN || state == EEvictState::CACHED || state == EEvictState::ERASING;
 }
 
 inline bool IsDeleted(EEvictState state) {
-    return ui8(state) >= ui8(EEvictState::EXTERN); // !EVICTING and !SELF_CACHED
+    return ui8(state) >= ui8(EEvictState::EXTERN);   // !EVICTING and !SELF_CACHED
 }
 
 struct TEvictedBlob {
@@ -383,7 +384,7 @@ struct TEvictedBlob {
     TUnifiedBlobId ExternBlob;
     TUnifiedBlobId CachedBlob;
 
-    bool operator == (const TEvictedBlob& other) const {
+    bool operator==(const TEvictedBlob& other) const {
         return Blob == other.Blob;
     }
 
@@ -404,27 +405,23 @@ struct TEvictedBlob {
     }
 
     TString ToString() const {
-        return TStringBuilder() << "state: " << (ui32)State
-            << " blob: " << Blob.ToStringNew()
-            << " extern: " << ExternBlob.ToStringNew()
-            << " cached: " << CachedBlob.ToStringNew();
+        return TStringBuilder() << "state: " << (ui32)State << " blob: " << Blob.ToStringNew() << " extern: " << ExternBlob.ToStringNew()
+                                << " cached: " << CachedBlob.ToStringNew();
     }
 };
 
-}
+}   // namespace NKikimr::NOlap
 
-inline
-IOutputStream& operator <<(IOutputStream& out, const NKikimr::NOlap::TUnifiedBlobId& blobId) {
+inline IOutputStream& operator<<(IOutputStream& out, const NKikimr::NOlap::TUnifiedBlobId& blobId) {
     return out << blobId.ToStringNew();
 }
 
-inline
-IOutputStream& operator <<(IOutputStream& out, const NKikimr::NOlap::TBlobRange& blobRange) {
+inline IOutputStream& operator<<(IOutputStream& out, const NKikimr::NOlap::TBlobRange& blobRange) {
     return out << blobRange.ToString();
 }
 
-template<>
-struct ::THash<NKikimr::NOlap::TUnifiedBlobId> {
+template <>
+struct THash<NKikimr::NOlap::TUnifiedBlobId> {
     inline ui64 operator()(const NKikimr::NOlap::TUnifiedBlobId& a) const {
         return a.Hash();
     }
@@ -432,14 +429,14 @@ struct ::THash<NKikimr::NOlap::TUnifiedBlobId> {
 
 template <>
 struct THash<NKikimr::NOlap::TBlobRange> {
-    inline size_t operator() (const NKikimr::NOlap::TBlobRange& key) const {
+    inline size_t operator()(const NKikimr::NOlap::TBlobRange& key) const {
         return key.Hash();
     }
 };
 
 template <>
 struct THash<NKikimr::NOlap::TEvictedBlob> {
-    inline size_t operator() (const NKikimr::NOlap::TEvictedBlob& key) const {
+    inline size_t operator()(const NKikimr::NOlap::TEvictedBlob& key) const {
         return key.Hash();
     }
 };

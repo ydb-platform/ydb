@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/public/lib/ydb_cli/common/command.h>
+#include <ydb/public/lib/ydb_cli/common/scoped_driver.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/fwd.h>
@@ -41,9 +42,15 @@ public:
 
     void EnsurePercentileIsValid() const;
     void EnsureWarmupSecIsValid() const;
+    void EnsureRatesIsValid() const;
+    void EnsureCodecOptionsAreValid() const;
 
     TString GetReadOnlyTableName() const;
     TString GetWriteOnlyTableName() const;
+
+    ui32 GetTopicMaxPartitionCount() const;
+
+    void ConfigMetadataMonitoringOptions(TClientCommand::TConfig& config);
 
     TDuration TotalSec;
     TDuration WindowSec;
@@ -54,7 +61,7 @@ public:
     TString TopicName;
     ui32 TopicPartitionCount = 1;
     bool TopicAutoscaling = false;
-    ui32 TopicMaxPartitionCount = 100;
+    ui32 TopicMaxPartitionCount = 1;
     ui32 StabilizationWindowSeconds = 15;
     ui32 UpUtilizationPercent = 90;
     ui32 DownUtilizationPercent = 30;
@@ -64,20 +71,41 @@ public:
     bool Direct = false;
     TString ConsumerPrefix;
     size_t MessageSizeBytes;
-    size_t MessagesPerSec;
-    size_t BytesPerSec;
+    double MessagesPerSec;
+    double BytesPerSec;
     ui32 Codec;
     TString TableName;
     ui32 TablePartitionCount = 1;
     bool UseTransactions = false;
+    bool NoTrackProducerIdInTx = false;
     size_t CommitPeriodSeconds = 1;
     size_t TxCommitIntervalMs = 0;
     size_t CommitMessages = 1'000'000;
     bool OnlyTopicInTx = true;
     bool OnlyTableInTx = false;
     bool UseTableSelect = false;
+    TDuration RestartInterval = TDuration::Max();
+    bool ReadWithoutCommit = false;
     bool ReadWithoutConsumer = false;
     bool UseCpuTimestamp = false;
+    TMaybe<TString> KeyPrefix;
+    ui32 KeyCount = 0;
+    bool CleanupPolicyCompact = false;
+    std::optional<size_t> ConsumerMaxMemoryUsageBytes;
+    size_t PartitionMaxInflightBytes = 0; // zero means no limit
+    bool DirectRead = false;
+    std::optional<size_t> ProducerMaxMemoryUsageBytes;
+    TDuration BatchFlushInterval = TDuration::Seconds(1);
+    std::optional<ui64> BatchFlushSizeBytes;
+    ui32 BatchFlushMessageCount = 1;
+    bool SdkProducerAsyncExecutionMode = false;
+    TString BatchInnerCodecStr;
+    size_t ProducerKeysCount = 0;
+    bool KeyedWrites = false;
+    size_t ConfigConsumerCount = 0;
+    bool NeedDescribeTopic = false;
+    TString DescribeConsumerName;
+    TMaybe<ui32> PartitionsPerTablet;
 
 protected:
     void CreateTopic(const TString& database,
@@ -88,7 +116,8 @@ protected:
                      ui32 maxPartitionCount = 100,
                      ui32 stabilizationWindowSeconds = 15,
                      ui32 upUtilizationPercent = 90,
-                     ui32 downUtilizationPercent = 30);
+                     ui32 downUtilizationPercent = 30,
+                     bool cleanupPolicyCompact = false);
     void DropTopic(const TString& database,
                    const TString& topic);
 
@@ -104,13 +133,17 @@ protected:
                               ui32 partitionSeed,
                               const std::vector<TString>& generatedMessages,
                               const TString& database);
+    void StartConfiguratorThread(std::vector<std::future<void>>& threads,
+                                 const TString& database);
+    void StartDescriberThread(std::vector<std::future<void>>& threads,
+                              const TString& database);
     void JoinThreads(const std::vector<std::future<void>>& threads);
 
     bool AnyErrors() const;
     bool AnyIncomingMessages() const;
     bool AnyOutgoingMessages() const;
 
-    std::unique_ptr<TDriver> Driver;
+    std::unique_ptr<TScopedDriver> Driver;
     std::shared_ptr<TLog> Log;
     std::shared_ptr<std::atomic_bool> ErrorFlag;
     std::shared_ptr<TTopicWorkloadStatsCollector> StatsCollector;
@@ -126,11 +159,12 @@ private:
                      ui32 maxPartitionCount,
                      ui32 stabilizationWindowSeconds,
                      ui32 upUtilizationPercent,
-                     ui32 downUtilizationPercent);
+                     ui32 downUtilizationPercent,
+                     bool cleanupPolicyCompact);
 
     static NTable::TSession GetSession(NTable::TTableClient& client);
 
-    static THolder<TLogBackend> MakeLogBackend(TClientCommand::TConfig::EVerbosityLevel level);
+    static THolder<TLogBackend> MakeLogBackend(ui32 level);
 
     void InitLog(TClientCommand::TConfig& config);
     void InitDriver(TClientCommand::TConfig& config);

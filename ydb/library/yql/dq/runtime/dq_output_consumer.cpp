@@ -21,89 +21,116 @@
 
 namespace NYql::NDq {
 
+TString FillLevelToString(EDqFillLevel level) {
+    switch(level) {
+        case NoLimit : return "No";
+        case SoftLimit : return "Soft";
+        case HardLimit : return "Hard";
+        default: return "-";
+    }
+}
+
 namespace {
 
 using namespace NKikimr;
 using namespace NMiniKQL;
 using namespace NUdf;
 
+///////////////////////////////////
+// Hash Function implementations //
+///////////////////////////////////
 
-class TDqOutputMultiConsumer : public IDqOutputConsumer {
-public:
-    explicit TDqOutputMultiConsumer(TVector<IDqOutputConsumer::TPtr>&& consumers)
-        : Consumers(std::move(consumers))
-    {
-        YQL_ENSURE(!Consumers.empty());
+// TODO: maybe use common interface without templates?
+
+struct THashBase {
+    void Start() {
+        Hash = 0;
     }
 
-    bool IsFull() const override {
-        return AnyOf(Consumers, [](const auto& consumer) { return consumer->IsFull(); });
+    template <class TValue>
+    void Update(const TValue& value, size_t keyIdx) {
+        Hash = CombineHashes(Hash, value.HasValue() ? Hashers.at(keyIdx)->Hash(value) : 0);
     }
+protected:
+    THashBase() = default;
 
-    void WideConsume(TUnboxedValue* values, ui32 count) override {
-        Y_UNUSED(values);
-        Y_UNUSED(count);
-        YQL_ENSURE(false, "WideConsume is not supported");
-    }
-
-    void Consume(TUnboxedValue&& value) override {
-        if (Consumers.size() == 1) {
-            Consumers[0]->Consume(std::move(value));
-            return;
-        }
-
-        auto index = value.GetVariantIndex();
-        YQL_ENSURE(index < Consumers.size());
-        auto variantItem = value.GetVariantItem();
-        Consumers[index]->Consume(std::move(variantItem));
-    }
-
-    void Consume(NDqProto::TCheckpoint&& checkpoint) override {
-        for (auto& consumer : Consumers) {
-            consumer->Consume(NDqProto::TCheckpoint(checkpoint));
-        }
-    }
-
-    void Finish() override {
-        for (auto& consumer : Consumers) {
-            consumer->Finish();
-        }
-    }
-
-private:
-    TVector<IDqOutputConsumer::TPtr> Consumers;
+    TVector<NUdf::IHash::TPtr> Hashers;
+    ui64 Hash;
 };
 
-class TDqOutputMapConsumer : public IDqOutputConsumer {
-public:
-    TDqOutputMapConsumer(IDqOutput::TPtr output)
-        : Output(output) {}
-
-    bool IsFull() const override {
-        return Output->IsFull();
+struct THashV1 : public THashBase {
+    explicit THashV1(const TVector<TColumnInfo>& keyColumns) {
+        for (const auto& column : keyColumns) {
+            Hashers.emplace_back(MakeHashImpl(column.DataType));
+        }
     }
 
-    void Consume(TUnboxedValue&& value) override {
-        Output->Push(std::move(value));
+    ui64 Finish(ui64 outputsSize) {
+        return Hash % outputsSize;
     }
-
-    void WideConsume(TUnboxedValue* values, ui32 count) override {
-        Output->WidePush(values, count);
-    }
-
-    void Consume(NDqProto::TCheckpoint&& checkpoint) override {
-        Output->Push(std::move(checkpoint));
-    }
-
-    void Finish() override {
-        Output->Finish();
-    }
-
-private:
-    IDqOutput::TPtr Output;
 };
 
-struct THashV1 {
+struct THashV2 : public THashV1 {
+    explicit THashV2(const TVector<TColumnInfo>& keyColumns)
+        : THashV1(keyColumns)
+    {}
+
+    static inline ui64 SpreadHash(ui64 hash) {
+        // https://probablydance.com/2018/06/16/fibonacci-hashing-the-optimization-that-the-world-forgot-or-a-better-alternative-to-integer-modulo/
+        return ((unsigned __int128)hash * 11400714819323198485llu) >> 64;
+    }
+
+    ui64 Finish(ui64 outputsSize) {
+        return SpreadHash(Hash) % outputsSize;
+    }
+};
+
+struct TBlockHashBase {
+    void Start() {
+        Hash = 0;
+    }
+
+protected:
+    TBlockHashBase() = default;
+
+    TVector<NUdf::IBlockItemHasher::TPtr> Hashers;
+    ui64 Hash;
+};
+
+struct TBlockHashV1 : public TBlockHashBase {
+    explicit TBlockHashV1(const TVector<TColumnInfo>& keyColumns) {
+        TBlockTypeHelper helper;
+        for (const auto& column : keyColumns) {
+            Hashers.emplace_back(helper.MakeHasher(column.OriginalType));
+        }
+    }
+
+    template <class TValue>
+    void Update(const TValue& item, size_t keyIdx) {
+        Hash = CombineHashes(Hash, Hashers.at(keyIdx)->Hash(item));
+    }
+
+    ui64 Finish(ui64 outputsSize) {
+        return Hash % outputsSize;
+    }
+};
+
+struct TBlockHashV2 : public TBlockHashBase {
+    explicit TBlockHashV2(const TVector<TColumnInfo>& keyColumns) {
+        TBlockTypeHelper helper;
+        for (const auto& column : keyColumns) {
+            Hashers.emplace_back(helper.MakeHasher(column.DataType));
+        }
+    }
+
+    template <class TValue>
+    void Update(const TValue& item, size_t keyIdx) {
+        Hash = CombineHashes(Hash, item.HasValue() ? Hashers.at(keyIdx)->Hash(item) : 0);
+    }
+
+    ui64 Finish(ui64 outputsSize) {
+        return THashV2::SpreadHash(Hash) % outputsSize;
+    }
 };
 
 struct TColumnShardHashV1 {
@@ -138,19 +165,18 @@ struct TColumnShardHashV1 {
         UpdateImpl(uv, keyIdx);
     }
 
-    ui64 Finish() {
+    ui64 Finish(ui64 outputsSize) {
         ui64 hash = HashCalcer.Finish();
         hash = std::min<ui32>(hash / (Max<ui64>() / ShardCount), ShardCount - 1);
-        return TaskIndexByHash[hash];
+        auto result = TaskIndexByHash.at(hash);
+        Y_ENSURE(result < outputsSize);
+        return result;
     }
 
-    std::size_t ShardCount;
-    TVector<ui64> TaskIndexByHash;
-    TVector<NYql::NProto::TypeIds> KeyColumnTypes;
 private:
     template <typename TValue>
     void UpdateImpl(const TValue& uv, size_t keyIdx) {
-        switch (KeyColumnTypes[keyIdx]) {
+        switch (KeyColumnTypes.at(keyIdx)) {
             case NYql::NProto::Bool: {
                 auto value = uv.template Get<bool>();
                 HashCalcer.Update(reinterpret_cast<const ui8*>(&value), sizeof(value));
@@ -250,36 +276,167 @@ private:
     }
 
 private:
+    const std::size_t ShardCount;
+    const TVector<ui64> TaskIndexByHash;
+    const TVector<NYql::NProto::TypeIds> KeyColumnTypes;
     NArrow::NHash::NXX64::TStreamStringHashCalcer HashCalcer;
+};
+
+//////////////////////////////////
+
+class TDqOutputMultiConsumer : public IDqOutputConsumer {
+public:
+    explicit TDqOutputMultiConsumer(TVector<IDqOutputConsumer::TPtr>&& consumers)
+        : Consumers(std::move(consumers))
+    {
+        YQL_ENSURE(!Consumers.empty());
+    }
+
+    EDqFillLevel GetFillLevel() const override {
+        EDqFillLevel result = SoftLimit;
+        for (auto consumer : Consumers) {
+            switch(consumer->GetFillLevel()) {
+                case HardLimit:
+                    return HardLimit;
+                case SoftLimit:
+                    break;
+                case NoLimit:
+                    result = NoLimit;
+                    break;
+            }
+        }
+        return result;
+    }
+
+    void WideConsume(TUnboxedValue* values, ui32 count) override {
+        Y_UNUSED(values);
+        Y_UNUSED(count);
+        YQL_ENSURE(false, "WideConsume is not supported");
+    }
+
+    void Consume(TUnboxedValue&& value) override {
+        if (Consumers.size() == 1) {
+            Consumers[0]->Consume(std::move(value));
+            return;
+        }
+
+        auto index = value.GetVariantIndex();
+        YQL_ENSURE(index < Consumers.size());
+        auto variantItem = value.GetVariantItem();
+        Consumers[index]->Consume(std::move(variantItem));
+    }
+
+    void Consume(NDqProto::TCheckpoint&& checkpoint) override {
+        for (auto& consumer : Consumers) {
+            consumer->Consume(NDqProto::TCheckpoint(checkpoint));
+        }
+    }
+
+    void Consume(NDqProto::TWatermark&& watermark) override {
+        for (auto& consumer : Consumers) {
+            consumer->Consume(NDqProto::TWatermark(watermark));
+        }
+    }
+
+    void Finish() override {
+        for (auto& consumer : Consumers) {
+            consumer->Finish();
+        }
+    }
+
+    void Flush() override {
+        for (auto& consumer : Consumers) {
+            consumer->Flush();
+        }
+    }
+
+    bool IsFinished() const override {
+        for (auto consumer : Consumers) {
+            if (!consumer->IsFinished()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    bool IsEarlyFinished() const override {
+        for (auto consumer : Consumers) {
+            if (!consumer->IsEarlyFinished()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    TString DebugString() override {
+        TStringBuilder builder;
+        builder << "TDqOutputMultiConsumer [";
+        for (auto consumer : Consumers) {
+            builder << consumer->DebugString();
+        }
+        builder << ']';
+        return builder;
+    }
+
+private:
+    TVector<IDqOutputConsumer::TPtr> Consumers;
+};
+
+class TDqOutputMapConsumer : public IDqOutputConsumer {
+public:
+    TDqOutputMapConsumer(IDqOutput::TPtr output)
+        : Output(output) {}
+
+    EDqFillLevel GetFillLevel() const override {
+        return Output->UpdateFillLevel();
+    }
+
+    void Consume(TUnboxedValue&& value) override {
+        Output->Push(std::move(value));
+    }
+
+    void WideConsume(TUnboxedValue* values, ui32 count) override {
+        Output->WidePush(values, count);
+    }
+
+    void Consume(NDqProto::TCheckpoint&& checkpoint) override {
+        Output->Push(std::move(checkpoint));
+    }
+
+    void Consume(NDqProto::TWatermark&& watermark) override {
+        Output->Push(std::move(watermark));
+    }
+
+    void Finish() override {
+        Output->Finish();
+    }
+
+    void Flush() override {
+        Output->Flush();
+    }
+
+    bool IsFinished() const override {
+        return Output->IsFinished();
+    }
+
+    bool IsEarlyFinished() const override {
+        return Output->IsEarlyFinished();
+    }
+
+    TString DebugString() override {
+        return "TDqOutputMapConsumer";
+    }
+
+private:
+    IDqOutput::TPtr Output;
 };
 
 template <typename THashFunc>
 class TDqOutputHashPartitionConsumer : public IDqOutputConsumer {
 private:
-    mutable bool IsWaitingFlag = false;
     mutable TUnboxedValue WaitingValue;
     mutable TUnboxedValueVector WideWaitingValues;
     mutable IDqOutput::TPtr OutputWaiting;
-protected:
-    void DrainWaiting() const {
-        if (Y_UNLIKELY(IsWaitingFlag)) {
-            if (OutputWaiting->IsFull()) {
-                return;
-            }
-            if (OutputWidth.Defined()) {
-                YQL_ENSURE(OutputWidth == WideWaitingValues.size());
-                OutputWaiting->WidePush(WideWaitingValues.data(), *OutputWidth);
-            } else {
-                OutputWaiting->Push(std::move(WaitingValue));
-            }
-            IsWaitingFlag = false;
-        }
-    }
-
-    virtual bool DoTryFinish() override {
-        DrainWaiting();
-        return !IsWaitingFlag;
-    }
 public:
     TDqOutputHashPartitionConsumer(
         TVector<IDqOutput::TPtr>&& outputs,
@@ -292,49 +449,63 @@ public:
         , OutputWidth(outputWidth)
         , HashFunc(std::move(hashFunc))
     {
-        for (auto& column : KeyColumns) {
-            ValueHashers.emplace_back(MakeHashImpl(column.Type));
-        }
-
         if (outputWidth.Defined()) {
             WideWaitingValues.resize(*outputWidth);
         }
+
+        Aggregator = std::make_shared<TDqFillAggregator>();
+        for (auto output : Outputs) {
+            output->SetFillAggregator(Aggregator);
+        }
     }
 
-    bool IsFull() const override {
-        DrainWaiting();
-        return IsWaitingFlag;
+    EDqFillLevel GetFillLevel() const override {
+        auto result = Aggregator->GetFillLevel();
+        if (result == HardLimit) {
+            for (auto output : Outputs) {
+                output->UpdateFillLevel();
+            }
+            result = Aggregator->GetFillLevel();
+        }
+        return result;
+    }
+
+    TString DebugString() override {
+        TStringBuilder builder;
+        builder << "TDqOutputHashPartitionConsumer " << Aggregator->DebugString() << " Channels {";
+        ui32 i = 0;
+        for (auto output : Outputs) {
+            builder << " C" << i++ << ":" << FillLevelToString(output->UpdateFillLevel());
+            if (i >= 20) {
+                builder << "...";
+                break;
+            }
+        }
+        builder << " }";
+        return builder;
     }
 
     void Consume(TUnboxedValue&& value) final {
         YQL_ENSURE(!OutputWidth.Defined());
         ui32 partitionIndex = GetHashPartitionIndex(value);
-        if (Outputs[partitionIndex]->IsFull()) {
-            YQL_ENSURE(!IsWaitingFlag);
-            IsWaitingFlag = true;
-            OutputWaiting = Outputs[partitionIndex];
-            WaitingValue = std::move(value);
-        } else {
-            Outputs[partitionIndex]->Push(std::move(value));
-        }
+        Outputs[partitionIndex]->Push(std::move(value));
     }
 
     void WideConsume(TUnboxedValue* values, ui32 count) final {
         YQL_ENSURE(OutputWidth.Defined() && count == OutputWidth);
         ui32 partitionIndex = GetHashPartitionIndex(values);
-        if (Outputs[partitionIndex]->IsFull()) {
-            YQL_ENSURE(!IsWaitingFlag);
-            IsWaitingFlag = true;
-            OutputWaiting = Outputs[partitionIndex];
-            std::move(values, values + count, WideWaitingValues.data());
-        } else {
-            Outputs[partitionIndex]->WidePush(values, count);
-        }
+        Outputs[partitionIndex]->WidePush(values, count);
     }
 
     void Consume(NDqProto::TCheckpoint&& checkpoint) override {
         for (auto& output : Outputs) {
             output->Push(NDqProto::TCheckpoint(checkpoint));
+        }
+    }
+
+    void Consume(NDqProto::TWatermark&& watermark) override {
+        for (auto& output : Outputs) {
+            output->Push(NDqProto::TWatermark(watermark));
         }
     }
 
@@ -344,47 +515,30 @@ public:
         }
     }
 
+    void Flush() final {
+        for (auto& output : Outputs) {
+            output->Flush();
+        }
+    }
+
+    bool IsFinished() const override {
+        return Aggregator->IsFinished();
+    }
+
+    bool IsEarlyFinished() const override {
+        return Aggregator->IsEarlyFinished();
+    }
+
 private:
-    // HashV1
-    ////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    template<typename T = THashFunc, typename std::enable_if<std::is_same<T, THashV1>::value, int>::type = 0>
-    size_t GetHashPartitionIndex(const TUnboxedValue& value) {
-        ui64 hash = 0;
-
-        for (size_t keyId = 0; keyId < KeyColumns.size(); keyId++) {
-            auto columnValue = value.GetElement(KeyColumns[keyId].Index);
-            hash = CombineHashes(hash, HashColumn(keyId, columnValue));
-        }
-
-        return hash % Outputs.size();
-    }
-
-    template<typename T = THashFunc, typename std::enable_if<std::is_same<T, THashV1>::value, int>::type = 0>
-    size_t GetHashPartitionIndex(const TUnboxedValue* values) {
-        ui64 hash = 0;
-
-        for (size_t keyId = 0; keyId < KeyColumns.size(); keyId++) {
-            MKQL_ENSURE_S(KeyColumns[keyId].Index < OutputWidth);
-            hash = CombineHashes(hash, HashColumn(keyId, values[KeyColumns[keyId].Index]));
-        }
-
-        return hash % Outputs.size();
-    }
-    ////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-    // ColumnShardHashV1
-    ////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    template<typename T = THashFunc, typename std::enable_if<std::is_same<T, TColumnShardHashV1>::value, int>::type = 0>
     size_t GetHashPartitionIndex(const TUnboxedValue& value) {
         HashFunc.Start();
         for (std::size_t keyIdx = 0; keyIdx < KeyColumns.size(); ++keyIdx) {
             const auto& keyColumn = KeyColumns[keyIdx];
             HashFunc.Update(value.GetElement(keyColumn.Index), keyIdx);
         }
-        return HashFunc.Finish();
+        return HashFunc.Finish(Outputs.size());
     }
 
-    template<typename T = THashFunc, typename std::enable_if<std::is_same<T, TColumnShardHashV1>::value, int>::type = 0>
     size_t GetHashPartitionIndex(const TUnboxedValue* values) {
         HashFunc.Start();
         for (std::size_t keyIdx = 0; keyIdx < KeyColumns.size(); ++keyIdx) {
@@ -392,23 +546,15 @@ private:
             MKQL_ENSURE_S(keyColumn.Index < OutputWidth);
             HashFunc.Update(values[keyColumn.Index], keyIdx);
         }
-        return HashFunc.Finish();
-    }
-    ////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-    ui64 HashColumn(size_t keyId, const TUnboxedValue& value) const {
-        if (!value.HasValue()) {
-            return 0;
-        }
-        return ValueHashers[keyId]->Hash(value);
+        return HashFunc.Finish(Outputs.size());
     }
 
 private:
     const TVector<IDqOutput::TPtr> Outputs;
     const TVector<TColumnInfo> KeyColumns;
-    TVector<NUdf::IHash::TPtr> ValueHashers;
     const TMaybe<ui32> OutputWidth;
     THashFunc HashFunc;
+    std::shared_ptr<TDqFillAggregator> Aggregator;
 };
 
 template <typename THashFunc>
@@ -417,7 +563,7 @@ public:
     TDqOutputHashPartitionConsumerScalar(
         TVector<IDqOutput::TPtr>&& outputs,
         TVector<TColumnInfo>&& keyColumns,
-        const  NKikimr::NMiniKQL::TType* outputType,
+        const NKikimr::NMiniKQL::TType* outputType,
         THashFunc hashFunc
     )
         : Outputs_(std::move(outputs))
@@ -427,20 +573,44 @@ public:
         , HashFunc(std::move(hashFunc))
     {
         auto multiType = static_cast<const NMiniKQL::TMultiType*>(outputType);
-        TBlockTypeHelper helper;
         for (auto& column : KeyColumns_) {
             auto columnType = multiType->GetElementType(column.Index);
             YQL_ENSURE(columnType->IsBlock());
             auto blockType = static_cast<const NMiniKQL::TBlockType*>(columnType);
             YQL_ENSURE(blockType->GetShape() == NMiniKQL::TBlockType::EShape::Scalar);
             Readers_.emplace_back(MakeBlockReader(TTypeInfoHelper(), blockType->GetItemType()));
-            Hashers_.emplace_back(helper.MakeHasher(blockType->GetItemType()));
+        }
+
+        Aggregator = std::make_shared<TDqFillAggregator>();
+        for (auto output : Outputs_) {
+            output->SetFillAggregator(Aggregator);
         }
     }
 private:
-    bool IsFull() const final {
-        DrainWaiting();
-        return IsWaitingFlag_;
+    EDqFillLevel GetFillLevel() const override {
+        auto result = Aggregator->GetFillLevel();
+        if (result == HardLimit) {
+            for (auto output : Outputs_) {
+                output->UpdateFillLevel();
+            }
+            result = Aggregator->GetFillLevel();
+        }
+        return result;
+    }
+
+    TString DebugString() override {
+        TStringBuilder builder;
+        builder << "TDqOutputHashPartitionConsumerScalar " << Aggregator->DebugString() << " Channels {";
+        ui32 i = 0;
+        for (auto output : Outputs_) {
+            builder << " C" << i++ << ":" << FillLevelToString(output->UpdateFillLevel());
+            if (i >= 20) {
+                builder << "...";
+                break;
+            }
+        }
+        builder << " }";
+        return builder;
     }
 
     void Consume(TUnboxedValue&& value) final {
@@ -454,22 +624,18 @@ private:
         if (!inputBlockLen) {
             return;
         }
-
-        if (!Output_) {
-            Output_ = Outputs_[GetHashPartitionIndex(values)];
-        }
-        if (Output_->IsFull()) {
-            YQL_ENSURE(!IsWaitingFlag_);
-            IsWaitingFlag_ = true;
-            std::move(values, values + count, WaitingValues_.data());
-        } else {
-            Output_->WidePush(values, count);
-        }
+        Outputs_[GetHashPartitionIndex(values)]->WidePush(values, count);
     }
 
     void Consume(NDqProto::TCheckpoint&& checkpoint) override {
         for (auto& output : Outputs_) {
             output->Push(NDqProto::TCheckpoint(checkpoint));
+        }
+    }
+
+    void Consume(NDqProto::TWatermark&& watermark) override {
+        for (auto& output : Outputs_) {
+            output->Push(NDqProto::TWatermark(watermark));
         }
     }
 
@@ -479,36 +645,20 @@ private:
         }
     }
 
-    void DrainWaiting() const {
-        if (Y_UNLIKELY(IsWaitingFlag_)) {
-            YQL_ENSURE(Output_);
-            if (Output_->IsFull()) {
-                return;
-            }
-            YQL_ENSURE(OutputWidth_ == WaitingValues_.size());
-            Output_->WidePush(WaitingValues_.data(), OutputWidth_);
-            IsWaitingFlag_ = false;
+    void Flush() final {
+        for (auto& output : Outputs_) {
+            output->Flush();
         }
     }
 
-    bool DoTryFinish() final {
-        DrainWaiting();
-        return !IsWaitingFlag_;
+    bool IsFinished() const override {
+        return Aggregator->IsFinished();
     }
 
-    template<typename T = THashFunc, typename std::enable_if<std::is_same<T, THashV1>::value, int>::type = 0>
-    size_t GetHashPartitionIndex(const TUnboxedValue* values) {
-        ui64 hash = 0;
-
-        for (size_t keyId = 0; keyId < KeyColumns_.size(); keyId++) {
-            YQL_ENSURE(KeyColumns_[keyId].Index < OutputWidth_);
-            hash = CombineHashes(hash, HashColumn(keyId, values[KeyColumns_[keyId].Index]));
-        }
-
-        return hash % Outputs_.size();
+    bool IsEarlyFinished() const override {
+        return Aggregator->IsEarlyFinished();
     }
 
-    template<typename T = THashFunc, typename std::enable_if<std::is_same<T, TColumnShardHashV1>::value, int>::type = 0>
     size_t GetHashPartitionIndex(const TUnboxedValue* values) {
         HashFunc.Start();
         for (size_t keyId = 0; keyId < KeyColumns_.size(); keyId++) {
@@ -517,24 +667,17 @@ private:
             TBlockItem item = Readers_[keyId]->GetScalarItem(*TArrowBlock::From(value).GetDatum().scalar());
             HashFunc.Update(item, keyId);
         }
-        return HashFunc.Finish();
-    }
-
-    ui64 HashColumn(size_t keyId, const TUnboxedValue& value) const {
-        TBlockItem item = Readers_[keyId]->GetScalarItem(*TArrowBlock::From(value).GetDatum().scalar());
-        return Hashers_[keyId]->Hash(item);
+        return HashFunc.Finish(Outputs_.size());
     }
 
 private:
     const TVector<IDqOutput::TPtr> Outputs_;
     const TVector<TColumnInfo> KeyColumns_;
     const ui32 OutputWidth_;
-    TVector<NUdf::IBlockItemHasher::TPtr> Hashers_;
     TVector<std::unique_ptr<IBlockReader>> Readers_;
-    IDqOutput::TPtr Output_;
-    mutable bool IsWaitingFlag_ = false;
     mutable TUnboxedValueVector WaitingValues_;
     THashFunc HashFunc;
+    std::shared_ptr<TDqFillAggregator> Aggregator;
 };
 
 template <typename THashFunc>
@@ -551,14 +694,12 @@ public:
         , HolderFactory_(holderFactory)
         , Outputs_(std::move(outputs))
         , KeyColumns_(std::move(keyColumns))
-        , ScalarColumnHashes_(KeyColumns_.size())
         , OutputWidth_(OutputType_->GetElementsCount())
         , MinFillPercentage_(minFillPercentage)
         , PgBuilder_(pgBuilder)
         , HashFunc(std::move(hashFunc))
     {
         TTypeInfoHelper helper;
-        YQL_ENSURE(OutputWidth_ > KeyColumns_.size());
 
         TVector<const NMiniKQL::TType*> blockTypes;
         for (auto& columnType : OutputType_->GetElements()) {
@@ -569,20 +710,44 @@ public:
             }
         }
 
-        TBlockTypeHelper blockHelper;
         for (auto& column : KeyColumns_) {
             auto columnType = OutputType_->GetElementType(column.Index);
             YQL_ENSURE(columnType->IsBlock());
             auto blockType = static_cast<const NMiniKQL::TBlockType*>(columnType);
             Readers_.emplace_back(MakeBlockReader(helper, blockType->GetItemType()));
-            Hashers_.emplace_back(blockHelper.MakeHasher(blockType->GetItemType()));
+        }
+
+        Aggregator = std::make_shared<TDqFillAggregator>();
+        for (auto output : Outputs_) {
+            output->SetFillAggregator(Aggregator);
         }
     }
 
 private:
-    bool IsFull() const final {
-        DrainWaiting();
-        return IsWaitingFlag_;
+    EDqFillLevel GetFillLevel() const override {
+        auto result = Aggregator->GetFillLevel();
+        if (result == HardLimit) {
+            for (auto output : Outputs_) {
+                output->UpdateFillLevel();
+            }
+            result = Aggregator->GetFillLevel();
+        }
+        return result;
+    }
+
+    TString DebugString() override {
+        TStringBuilder builder;
+        builder << "TDqOutputHashPartitionConsumerBlock " << Aggregator->DebugString() << " Channels {";
+        ui32 i = 0;
+        for (auto output : Outputs_) {
+            builder << " C" << i++ << ":" << FillLevelToString(output->UpdateFillLevel());
+            if (i >= 20) {
+                builder << "...";
+                break;
+            }
+        }
+        builder << " }";
+        return builder;
     }
 
     void Consume(TUnboxedValue&& value) final {
@@ -591,7 +756,6 @@ private:
     }
 
     void WideConsume(TUnboxedValue values[], ui32 count) final {
-        YQL_ENSURE(!IsWaitingFlag_);
         YQL_ENSURE(count == OutputWidth_);
 
         const ui64 inputBlockLen = TArrowBlock::From(values[count - 1]).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
@@ -647,13 +811,6 @@ private:
         while (!outputData.empty()) {
             bool hasData = false;
             for (size_t i = 0; i < Outputs_.size(); ++i) {
-                if (Outputs_[i]->IsFull()) {
-                    IsWaitingFlag_ = true;
-                    Y_ENSURE(OutputData_.empty());
-                    OutputData_ = std::move(outputData);
-                    return;
-                }
-
                 std::vector<arrow::Datum> chunk;
                 ui64 blockLen = 0;
                 if (outputData[i] && outputData[i]->Next(chunk, blockLen)) {
@@ -661,9 +818,9 @@ private:
                     hasData = true;
                     TUnboxedValueVector outputValues;
                     for (auto& datum : chunk) {
-                        outputValues.emplace_back(HolderFactory_.CreateArrowBlock(std::move(datum)));
+                        outputValues.emplace_back(HolderFactory_.CreateArrowBlock(std::move(datum), NYql::DefaultDatumValidationMode));
                     }
-                    outputValues.emplace_back(HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(blockLen))));
+                    outputValues.emplace_back(HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(blockLen)), NYql::DefaultDatumValidationMode));
                     Outputs_[i]->WidePush(outputValues.data(), outputValues.size());
                 }
             }
@@ -679,55 +836,39 @@ private:
         }
     }
 
+    void Consume(NDqProto::TWatermark&& watermark) override {
+        for (auto& output : Outputs_) {
+            output->Push(NDqProto::TWatermark(watermark));
+        }
+    }
+
     void Finish() final {
         for (auto& output : Outputs_) {
             output->Finish();
         }
     }
 
-    void DrainWaiting() const {
-        if (Y_UNLIKELY(IsWaitingFlag_)) {
-            TVector<std::unique_ptr<TArgsDechunker>> outputData;
-            outputData.swap(OutputData_);
-            DoConsume(std::move(outputData));
-            if (OutputData_.empty()) {
-                IsWaitingFlag_ = false;
-            }
+    void Flush() final {
+        for (auto& output : Outputs_) {
+            output->Flush();
         }
     }
 
-    bool DoTryFinish() final {
-        DrainWaiting();
-        return !IsWaitingFlag_;
+    bool IsFinished() const override {
+        return Aggregator->IsFinished();
     }
 
-    template<typename T = THashFunc, typename std::enable_if<std::is_same<T, THashV1>::value, int>::type = 0>
-    size_t GetHashPartitionIndex(const arrow::Datum* values[], ui64 blockIndex) {
-        ui64 hash = 0;
-        for (size_t keyId = 0; keyId < KeyColumns_.size(); keyId++) {
-            const ui32 columnIndex = KeyColumns_[keyId].Index;
-            Y_DEBUG_ABORT_UNLESS(columnIndex < OutputWidth_);
-            ui64 keyHash;
-            if (*KeyColumns_[keyId].IsScalar) {
-                if (!ScalarColumnHashes_[keyId].Defined()) {
-                    ScalarColumnHashes_[keyId] = HashScalarColumn(keyId, *values[columnIndex]->scalar());
-                }
-                keyHash = *ScalarColumnHashes_[keyId];
-            } else {
-                keyHash = HashBlockColumn(keyId, *values[columnIndex]->array(), blockIndex);
-            }
-            hash = CombineHashes(hash, keyHash);
-        }
-        return hash % Outputs_.size();
+    bool IsEarlyFinished() const override {
+        return Aggregator->IsEarlyFinished();
     }
 
-    template<typename T = THashFunc, typename std::enable_if<std::is_same<T, TColumnShardHashV1>::value, int>::type = 0>
     size_t GetHashPartitionIndex(const arrow::Datum* values[], ui64 blockIndex) {
         HashFunc.Start();
 
         for (size_t keyId = 0; keyId < KeyColumns_.size(); keyId++) {
             const ui32 columnIndex = KeyColumns_[keyId].Index;
             Y_DEBUG_ABORT_UNLESS(columnIndex < OutputWidth_);
+
             if (*KeyColumns_[keyId].IsScalar) {
                 TBlockItem item = Readers_[keyId]->GetScalarItem(*values[columnIndex]->scalar());
                 HashFunc.Update(item, keyId);
@@ -737,17 +878,7 @@ private:
             }
         }
 
-        return HashFunc.Finish();
-    }
-
-    inline ui64 HashScalarColumn(size_t keyId, const arrow::Scalar& value) const {
-        TBlockItem item = Readers_[keyId]->GetScalarItem(value);
-        return Hashers_[keyId]->Hash(item);
-    }
-
-    inline ui64 HashBlockColumn(size_t keyId, const arrow::ArrayData& value, ui64 index) const {
-        TBlockItem item = Readers_[keyId]->GetItem(value, index);
-        return Hashers_[keyId]->Hash(item);
+        return HashFunc.Finish(Outputs_.size());
     }
 
     void MakeBuilders(ui64 maxBlockLen) {
@@ -773,18 +904,15 @@ private:
     mutable TVector<std::unique_ptr<TArgsDechunker>> OutputData_;
 
     const TVector<TColumnInfo> KeyColumns_;
-    TVector<TMaybe<ui64>> ScalarColumnHashes_;
     const ui32 OutputWidth_;
     const TMaybe<ui8> MinFillPercentage_;
 
-    TVector<NUdf::IBlockItemHasher::TPtr> Hashers_;
     TVector<std::unique_ptr<IBlockReader>> Readers_;
     TVector<std::unique_ptr<IArrayBuilder>> Builders_;
 
-    mutable bool IsWaitingFlag_ = false;
-
     NUdf::IPgBuilder* PgBuilder_;
     THashFunc HashFunc;
+    std::shared_ptr<TDqFillAggregator> Aggregator;
 };
 
 class TDqOutputBroadcastConsumer : public IDqOutputConsumer {
@@ -794,10 +922,36 @@ public:
         , OutputWidth(outputWidth)
         , Tmp(outputWidth.Defined() ? *outputWidth : 0u)
     {
+        Aggregator = std::make_shared<TDqFillAggregator>();
+        for (auto output : Outputs) {
+            output->SetFillAggregator(Aggregator);
+        }
     }
 
-    bool IsFull() const override {
-        return AnyOf(Outputs, [](const auto& output) { return output->IsFull(); });
+    EDqFillLevel GetFillLevel() const override {
+        auto result = Aggregator->GetFillLevel();
+        if (result == HardLimit) {
+            for (auto output : Outputs) {
+                output->UpdateFillLevel();
+            }
+            result = Aggregator->GetFillLevel();
+        }
+        return result;
+    }
+
+    TString DebugString() override {
+        TStringBuilder builder;
+        builder << "TDqOutputBroadcastConsumer " << Aggregator->DebugString() << " Channels {";
+        ui32 i = 0;
+        for (auto output : Outputs) {
+            builder << " C" << i++ << ":" << FillLevelToString(output->UpdateFillLevel());
+            if (i >= 20) {
+                builder << "...";
+                break;
+            }
+        }
+        builder << " }";
+        return builder;
     }
 
     void Consume(TUnboxedValue&& value) final {
@@ -822,16 +976,37 @@ public:
         }
     }
 
+    void Consume(NDqProto::TWatermark&& watermark) override {
+        for (auto& output : Outputs) {
+            output->Push(NDqProto::TWatermark(watermark));
+        }
+    }
+
     void Finish() override {
         for (auto& output : Outputs) {
             output->Finish();
         }
     }
 
+    void Flush() override {
+        for (auto& output : Outputs) {
+            output->Flush();
+        }
+    }
+
+    bool IsFinished() const override {
+        return Aggregator->IsFinished();
+    }
+
+    bool IsEarlyFinished() const override {
+        return Aggregator->IsEarlyFinished();
+    }
+
 private:
     TVector<IDqOutput::TPtr> Outputs;
     const TMaybe<ui32> OutputWidth;
     TUnboxedValueVector Tmp;
+    std::shared_ptr<TDqFillAggregator> Aggregator;
 };
 
 } // namespace
@@ -842,33 +1017,6 @@ IDqOutputConsumer::TPtr CreateOutputMultiConsumer(TVector<IDqOutputConsumer::TPt
 
 IDqOutputConsumer::TPtr CreateOutputMapConsumer(IDqOutput::TPtr output) {
     return MakeIntrusive<TDqOutputMapConsumer>(output);
-}
-
-template<typename THashFunc>
-IDqOutputConsumer::TPtr CreateOutputPartitionConsumerImpl(
-    TVector<IDqOutput::TPtr>&& outputs,
-    TVector<TColumnInfo>&& keyColumns, const  NKikimr::NMiniKQL::TType* outputType,
-    const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-    TMaybe<ui8> minFillPercentage,
-    const THashFunc& hashFunc,
-    NUdf::IPgBuilder* pgBuilder
-) {
-    TMaybe<ui32> outputWidth;
-    if (outputType->IsMulti()) {
-        outputWidth = static_cast<const NMiniKQL::TMultiType*>(outputType)->GetElementsCount();
-    }
-
-    if (AnyOf(keyColumns, [](const auto& info) { return !info.IsBlockOrScalar(); })) {
-        return MakeIntrusive<TDqOutputHashPartitionConsumer<THashFunc>>(std::move(outputs), std::move(keyColumns), outputWidth, std::move(hashFunc));
-    }
-
-    YQL_ENSURE(outputWidth.Defined(), "Expecting wide stream for block data");
-    if (AllOf(keyColumns, [](const auto& info) { return *info.IsScalar; })) {
-        // all key columns are scalars - all data will go to single output
-        return MakeIntrusive<TDqOutputHashPartitionConsumerScalar<THashFunc>>(std::move(outputs), std::move(keyColumns), outputType, std::move(hashFunc));
-    }
-
-    return MakeIntrusive<TDqOutputHashPartitionConsumerBlock<THashFunc>>(std::move(outputs), std::move(keyColumns), outputType, holderFactory, minFillPercentage, std::move(hashFunc), pgBuilder);
 }
 
 IDqOutputConsumer::TPtr CreateOutputHashPartitionConsumer(
@@ -883,7 +1031,12 @@ IDqOutputConsumer::TPtr CreateOutputHashPartitionConsumer(
     YQL_ENSURE(!outputs.empty());
     YQL_ENSURE(!keyColumns.empty());
 
-    switch (hashPartition.GetTHashKindCase()) {
+    TMaybe<ui32> outputWidth;
+    if (outputType->IsMulti()) {
+        outputWidth = static_cast<const NMiniKQL::TMultiType*>(outputType)->GetElementsCount();
+    }
+
+    switch (hashPartition.GetHashKindCase()) {
         case NDqProto::TTaskOutputHashPartition::kColumnShardHashV1: {
             auto& columnShardHashV1Proto = hashPartition.GetColumnShardHashV1();
 
@@ -920,13 +1073,51 @@ IDqOutputConsumer::TPtr CreateOutputHashPartitionConsumer(
                 << keyTypesToString(keyColumnTypes) << " for the columns: " << keyColumnsToString(keyColumns)
             );
 
-            TColumnShardHashV1 columnShardHashV1 = TColumnShardHashV1(shardCount, std::move(taskIndexByHash), std::move(keyColumnTypes));
-            return CreateOutputPartitionConsumerImpl<TColumnShardHashV1>(std::move(outputs), std::move(keyColumns), outputType, holderFactory, minFillPercentage, std::move(columnShardHashV1), pgBuilder);
+            TColumnShardHashV1 hashFunc(shardCount, std::move(taskIndexByHash), std::move(keyColumnTypes));
+
+            if (AnyOf(keyColumns, [](const auto& info) { return !info.IsBlockOrScalar(); })) {
+                return MakeIntrusive<TDqOutputHashPartitionConsumer<TColumnShardHashV1>>(std::move(outputs), std::move(keyColumns), outputWidth, std::move(hashFunc));
+            }
+
+            YQL_ENSURE(outputWidth.Defined(), "Expecting wide stream for block data");
+            if (AllOf(keyColumns, [](const auto& info) { return *info.IsScalar; })) {
+                // all key columns are scalars - all data will go to single output
+                return MakeIntrusive<TDqOutputHashPartitionConsumerScalar<TColumnShardHashV1>>(std::move(outputs), std::move(keyColumns), outputType, std::move(hashFunc));
+            }
+
+            return MakeIntrusive<TDqOutputHashPartitionConsumerBlock<TColumnShardHashV1>>(std::move(outputs), std::move(keyColumns), outputType, holderFactory, minFillPercentage, std::move(hashFunc), pgBuilder);
+        }
+        case NDqProto::TTaskOutputHashPartition::kHashV2: {
+            if (AnyOf(keyColumns, [](const auto& info) { return !info.IsBlockOrScalar(); })) {
+                THashV2 hashFunc(keyColumns);
+                return MakeIntrusive<TDqOutputHashPartitionConsumer<THashV2>>(std::move(outputs), std::move(keyColumns), outputWidth, std::move(hashFunc));
+            }
+
+            TBlockHashV2 hashFunc(keyColumns);
+            YQL_ENSURE(outputWidth.Defined(), "Expecting wide stream for block data");
+            if (AllOf(keyColumns, [](const auto& info) { return *info.IsScalar; })) {
+                // all key columns are scalars - all data will go to single output
+                return MakeIntrusive<TDqOutputHashPartitionConsumerScalar<TBlockHashV2>>(std::move(outputs), std::move(keyColumns), outputType, std::move(hashFunc));
+            }
+
+            return MakeIntrusive<TDqOutputHashPartitionConsumerBlock<TBlockHashV2>>(std::move(outputs), std::move(keyColumns), outputType, holderFactory, minFillPercentage, std::move(hashFunc), pgBuilder);
         }
         case NDqProto::TTaskOutputHashPartition::kHashV1:
         default: {
-            THashV1 hashV1{};
-            return CreateOutputPartitionConsumerImpl<THashV1>(std::move(outputs), std::move(keyColumns), outputType, holderFactory, minFillPercentage, hashV1, pgBuilder);
+            // TODO: `NUdf::IHash` and `NUdf::IBlockItemHasher` have different interfaces, we need 2 different classes! Refactor this.
+            if (AnyOf(keyColumns, [](const auto& info) { return !info.IsBlockOrScalar(); })) {
+                THashV1 hashFunc(keyColumns);
+                return MakeIntrusive<TDqOutputHashPartitionConsumer<THashV1>>(std::move(outputs), std::move(keyColumns), outputWidth, std::move(hashFunc));
+            }
+
+            TBlockHashV1 hashFunc(keyColumns);
+            YQL_ENSURE(outputWidth.Defined(), "Expecting wide stream for block data");
+            if (AllOf(keyColumns, [](const auto& info) { return *info.IsScalar; })) {
+                // all key columns are scalars - all data will go to single output
+                return MakeIntrusive<TDqOutputHashPartitionConsumerScalar<TBlockHashV1>>(std::move(outputs), std::move(keyColumns), outputType, std::move(hashFunc));
+            }
+
+            return MakeIntrusive<TDqOutputHashPartitionConsumerBlock<TBlockHashV1>>(std::move(outputs), std::move(keyColumns), outputType, holderFactory, minFillPercentage, std::move(hashFunc), pgBuilder);
         }
     }
 }

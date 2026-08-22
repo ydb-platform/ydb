@@ -236,6 +236,10 @@ public:
             PP_FOR_EACH(CASE, (1)(2)(3)(4)(5)(6)(7)(8)(9)(10)(11)(12)(13)(14)(15)(16)(17)(18)(19)(20)(21))
 #undef CASE
 
+#define CASE(level) case -level: return PP_CONCAT(ECodec::ZstdFast_, level);
+            PP_FOR_EACH(CASE, (1)(2)(3)(4)(5)(6)(7))
+#undef CASE
+
             default:
                 YT_ABORT();
         }
@@ -404,6 +408,35 @@ ICodec* GetCodec(ECodec id)
 #undef CODEC
 
 #undef CASE
+
+        case ECodec::ZstdFast_1: {
+            static TZstdCodec result(-1);
+            return &result;
+        }
+        case ECodec::ZstdFast_2: {
+            static TZstdCodec result(-2);
+            return &result;
+        }
+        case ECodec::ZstdFast_3: {
+            static TZstdCodec result(-3);
+            return &result;
+        }
+        case ECodec::ZstdFast_4: {
+            static TZstdCodec result(-4);
+            return &result;
+        }
+        case ECodec::ZstdFast_5: {
+            static TZstdCodec result(-5);
+            return &result;
+        }
+        case ECodec::ZstdFast_6: {
+            static TZstdCodec result(-6);
+            return &result;
+        }
+        case ECodec::ZstdFast_7: {
+            static TZstdCodec result(-7);
+            return &result;
+        }
 
         default:
             THROW_ERROR_EXCEPTION("Unsupported compression codec %Qlv",

@@ -1,12 +1,13 @@
 #pragma once
 #include "events.h"
 
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/engines/writer/indexed_blob_constructor.h>
 #include <ydb/core/tx/columnshard/operations/slice_builder/pack_builder.h>
 #include <ydb/core/tx/columnshard/operations/write.h>
-#include <ydb/core/tx/columnshard/common/path_id.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
 
 #include <util/digest/numeric.h>
 #include <util/generic/string_hash.h>
@@ -18,20 +19,25 @@ private:
     const TInternalPathId PathId;
     const ui64 SchemaVersion;
     const NEvWrite::EModificationType ModificationType;
+    const bool IsBulk;
 
 public:
-    TAggregationId(const TInternalPathId pathId, const ui64 schemaVersion, const NEvWrite::EModificationType mType)
+    TAggregationId(const TInternalPathId pathId, const ui64 schemaVersion, const NEvWrite::EModificationType mType, bool isBulk)
         : PathId(pathId)
         , SchemaVersion(schemaVersion)
-        , ModificationType(mType) {
+        , ModificationType(mType)
+        , IsBulk(isBulk)
+    {
     }
 
     bool operator==(const TAggregationId& item) const {
-        return PathId == item.PathId && SchemaVersion == item.SchemaVersion && ModificationType == item.ModificationType;
+        return PathId == item.PathId && SchemaVersion == item.SchemaVersion && ModificationType == item.ModificationType &&
+               IsBulk == item.IsBulk;
     }
 
-    operator size_t() const {
-        return CombineHashes<ui64>(CombineHashes<ui64>(PathId.GetRawValue(), SchemaVersion), (ui64)ModificationType);
+    explicit operator size_t() const {
+        return CombineHashes<ui64>(
+            CombineHashes<ui64>(CombineHashes<ui64>(PathId.GetRawValue(), SchemaVersion), (ui64)ModificationType), ui64(IsBulk));
     }
 };
 
@@ -47,7 +53,8 @@ public:
     TWriteAggregation(const NOlap::TWritingContext& context, const TInternalPathId pathId, const NEvWrite::EModificationType modificationType)
         : PathId(pathId)
         , ModificationType(modificationType)
-        , Context(context) {
+        , Context(context)
+    {
     }
 
     void MergeContext(const NOlap::TWritingContext& newContext) {
@@ -84,8 +91,9 @@ public:
     void Bootstrap();
 
     STFUNC(StateWait) {
-        TLogContextGuard gLogging(
-            NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletId)("parent", ParentActorId));
+        YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+            {"tabletId", TabletId},
+            {"parent", ParentActorId});
         switch (ev->GetTypeRewrite()) {
             cFunc(NActors::TEvents::TEvPoison::EventType, PassAway);
             hFunc(TEvAddInsertedDataToBuffer, Handle);

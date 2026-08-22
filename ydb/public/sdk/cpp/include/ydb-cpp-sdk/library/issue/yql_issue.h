@@ -3,7 +3,6 @@
 #include <util/generic/ptr.h>
 #include <util/generic/yexception.h>
 #include <util/stream/output.h>
-#include <util/stream/str.h>
 #include <util/system/types.h>
 #include <util/str_stl.h>
 
@@ -21,6 +20,9 @@ namespace NIssue {
 using TIssueCode = uint32_t;
 constexpr TIssueCode DEFAULT_ERROR = 0;
 constexpr TIssueCode UNEXPECTED_ERROR = 1;
+
+//! NYql.TIssuesIds.KIKIMR_CONSTRAINT_VIOLATION — primary key / unique index conflicts and other constraint failures.
+constexpr TIssueCode CONSTRAINT_VIOLATION = 2012;
 
 enum class ESeverity : uint32_t {
     Fatal = 0,
@@ -183,11 +185,7 @@ public:
 
     void PrintTo(IOutputStream& out, bool oneLine = false) const;
 
-    std::string ToString(bool oneLine = false) const {
-        TStringStream out;
-        PrintTo(out, oneLine);
-        return out.Str();
-    }
+    std::string ToString(bool oneLine = false) const;
 
     // Unsafe method. Doesn't call SanitizeNonAscii(Message)
     std::string* MutableMessage() {
@@ -205,6 +203,10 @@ public:
 };
 
 void WalkThroughIssues(const TIssue& topIssue, bool leafOnly, std::function<void(const TIssue&, uint16_t level)> fn, std::function<void(const TIssue&, uint16_t level)> afterChildrenFn = {});
+
+//! Same as WalkThroughIssues, but @p fn returns bool: return false to stop iteration early, true to continue.
+//! Returns false if iteration was stopped early, true if all issues were visited.
+bool WalkThroughIssues(const TIssue& topIssue, bool leafOnly, std::function<bool(const TIssue&, uint16_t level)> fn);
 
 ///////////////////////////////////////////////////////////////////////////////
 // TIssues
@@ -295,11 +297,7 @@ public:
             const std::string& programFilename,
             const std::string& programText) const;
 
-    inline std::string ToString(bool oneLine = false) const {
-        TStringStream out;
-        PrintTo(out, oneLine);
-        return out.Str();
-    }
+    std::string ToString(bool oneLine = false) const;
 
     std::string ToOneLineString() const {
         return ToString(true);

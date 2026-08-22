@@ -92,7 +92,8 @@ namespace NKikimr {
         ui64 LogRecAnubisOsirisPut = 0;
         ui64 LogRecAddBulkSst = 0;
         ui64 LogRecScrub = 0;
-
+        ui64 LogRecMetadata = 0;
+        ui64 LogRecChunkKeeper = 0;
 
         // statistics for record dispatching
         NLocRecovery::TRecordDispatcherStat RecDispatcherStat;
@@ -103,6 +104,8 @@ namespace NKikimr {
         TVector<NLocRecovery::TReadLogReply> ReadLogReplies;
         // lsn we starting with after local recovery and lsn shift
         ui64 RecoveredLogStartLsn = 0;
+        // last replayed SignatureLocalSyncData recovery-log record lsn, if any
+        ui64 RecoveredLocalSyncDataLsn = 0;
         // found starting points
         using TSignatureToLsn = TMap<TLogSignature, ui64>;
         TSignatureToLsn StartingPoints;
@@ -140,6 +143,8 @@ namespace NKikimr {
         DISPATCH_SIGNATURE_FUNC_GEN(AnubisOsirisPut, LogRecAnubisOsirisPut)
         DISPATCH_SIGNATURE_FUNC_GEN(AddBulkSst, LogRecAddBulkSst)
         DISPATCH_SIGNATURE_FUNC_GEN(Scrub, LogRecScrub)
+        DISPATCH_SIGNATURE_FUNC_GEN(Metadata, LogRecMetadata)
+        DISPATCH_SIGNATURE_FUNC_GEN(ChunkKeeper, LogRecChunkKeeper)
 
         ///////////////////////////////////////////////////////////////////////////////
         // Log Applied/Skipped items
@@ -272,6 +277,8 @@ namespace NKikimr {
         void SetStartingPoint(TLogSignature signature, ui64 lsn);
         void HandleReadLogResult(const NPDisk::TEvReadLogResult::TResults &results);
         void SetRecoveredLogStartLsn(ui64 lsn);
+        void SetRecoveredLocalSyncDataLsn(ui64 lsn);
+        ui64 GetRecoveredLocalSyncDataLsn() const;
         void CheckConsistency();
         // finish dispatching
         void FinishDispatching();

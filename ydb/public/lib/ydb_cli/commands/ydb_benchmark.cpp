@@ -1,18 +1,26 @@
 #include "ydb_benchmark.h"
 #include "benchmark_utils.h"
+
 #include <ydb/public/lib/ydb_cli/common/format.h>
 #include <ydb/public/lib/ydb_cli/common/plan2svg.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
+#include <ydb/public/lib/ydb_cli/common/duration.h>
+#include <ydb/public/lib/ydb_cli/common/query_stats.h>
+
 #include <library/cpp/json/json_writer.h>
+
+#include <util/folder/path.h>
+#include <util/generic/serialized_enum.h>
+#include <util/random/shuffle.h>
 #include <util/stream/null.h>
 #include <util/string/printf.h>
-#include <util/folder/path.h>
-#include <util/random/shuffle.h>
+#include <util/thread/pool.h>
 
 namespace NYdb::NConsoleClient {
     TWorkloadCommandBenchmark::TWorkloadCommandBenchmark(NYdbWorkload::TWorkloadParams& params, const NYdbWorkload::IWorkloadQueryGenerator::TWorkloadType& workload)
         : TWorkloadCommandBase(workload.CommandName, params, NYdbWorkload::TWorkloadParams::ECommandType::Run, workload.Description, workload.Type)
     {
+        Aliases = workload.Aliases;
         RetrySettings.MaxRetries(0);
     }
 
@@ -90,33 +98,50 @@ void TWorkloadCommandBenchmark::Config(TConfig& config) {
 
     config.Opts->AddLongOption('v', "verbose", "Verbose output").NoArgument().StoreValue(&VerboseLevel, 1);
 
-    config.Opts->AddLongOption("global-timeout", "Global timeout for all requests")
-        .StoreResult(&GlobalTimeout);
+    config.Opts->AddLongOption("global-timeout", "Global timeout for all requests. Supports time units (e.g., '5s', '1m'). Plain number interpreted as milliseconds.")
+        .StoreMappedResult(&GlobalTimeout, &ParseDurationMilliseconds);
 
-    config.Opts->AddLongOption("request-timeout", "Timeout for each iteration of each request")
-        .StoreResult(&RequestTimeout);
+    config.Opts->AddLongOption("request-timeout", "Timeout for each iteration of each request. Supports time units (e.g., '5s', '1m'). Plain number interpreted as milliseconds.")
+        .StoreMappedResult(&RequestTimeout, &ParseDurationMilliseconds);
 
     config.Opts->AddLongOption('t', "threads", "Number of parallel threads in workload")
         .StoreResult(&Threads).DefaultValue(Threads).RequiredArgument("COUNT");
+
+    config.Opts->AddLongOption("tx-mode", TStringBuilder() << "Transaction mode (" << GetEnumAllNames<BenchmarkUtils::ETxMode>() << ")")
+        .RequiredArgument("VAL").StoreResult(&TxMode).DefaultValue(TxMode);
+
+    config.Opts->AddLongOption("stats", TStringBuilder() << "Collect statistics mode")
+        .RequiredArgument("VAL").Handler([&](const TStringBuf option) {
+            StatsMode = ParseQueryStatsModeOrThrow(TString(option), StatsMode);
+            if (StatsMode < NQuery::EStatsMode::Full) {
+                throw TMisuseException() << "Stats collection mode can't be less than [full] in benchmark mode";
+            }
+        })
+        .ChoicesWithCompletion({
+            {"full", "Full"},
+            {"profile", "Profile"},
+        });
 }
 
 TString TWorkloadCommandBenchmark::PatchQuery(const TStringBuf& original) const {
-    TString result(original);
-
-    if (!QuerySettings.empty()) {
-        result = JoinSeq("\n", QuerySettings) + "\n" + result;
-    }
-
     std::vector<TStringBuf> lines;
-    for (auto& line : StringSplitter(result).Split('\n').SkipEmpty()) {
-        if (line.StartsWith("--") && !line.StartsWith("--!")) {
+    for (auto& line : StringSplitter(original).Split('\n').SkipEmpty()) {
+        if (line.StartsWith("--") && !line.StartsWith("--!") && !line.StartsWith("--#")) {
             continue;
         }
 
         lines.push_back(line);
     }
 
-    return JoinSeq('\n', lines);
+    if (lines.empty()) {
+        return "";
+    }
+
+    TString result = JoinSeq('\n', lines);
+    if (!QuerySettings.empty()) {
+        result = JoinSeq("\n", QuerySettings) + "\n" + result;
+    }
+    return result;
 }
 
 bool TWorkloadCommandBenchmark::NeedRun(const TString& queryName) const {
@@ -143,6 +168,11 @@ TVector<TString> ColumnNames {
     "RttMin",
     "RttMax",
     "RttAvg",
+    "CompilationMin",
+    "CompilationMax",
+    "CompilationAvg",
+    "CompilationCPUTime",
+    "ProcessCPUTime",
     "GrossTime",
     "SuccessCount",
     "FailsCount",
@@ -156,11 +186,16 @@ struct TTestInfoProduct {
     double RttMin = 1;
     double RttMax = 1;
     double RttMean = 1;
+    double CompilationMin = 1;
+    double CompilationMax = 1;
+    double CompilationMean = 1;
     double Mean = 1;
     double Median = 1;
     double UnixBench = 1;
     double Std = 0;
-    std::vector<TDuration> ClientTimings;
+    double CompilationCPUTime = 1;
+    double ProcessCPUTime = 1;
+    std::vector<BenchmarkUtils::TTiming> Timings;
 
     void operator *=(const BenchmarkUtils::TTestInfo& other) {
         ColdTime *= other.ColdTime.MillisecondsFloat();
@@ -168,9 +203,13 @@ struct TTestInfoProduct {
         Max *= other.Max.MillisecondsFloat();
         RttMin *= other.RttMin.MillisecondsFloat();
         RttMax *= other.RttMax.MillisecondsFloat();
+        CompilationMin *= other.CompilationMin.MillisecondsFloat();
+        CompilationMax *= other.CompilationMax.MillisecondsFloat();
         Mean *= other.Mean;
         Median *= other.Median;
         UnixBench *= other.UnixBench.MillisecondsFloat();
+        CompilationCPUTime *= other.CompilationCPUTime.MillisecondsFloat();
+        ProcessCPUTime *= other.ProcessCPUTime.MillisecondsFloat();
     }
     void operator ^= (ui32 count) {
         ColdTime = pow(ColdTime, 1./count);
@@ -182,6 +221,10 @@ struct TTestInfoProduct {
         Mean = pow(Mean, 1./count);
         Median = pow(Median, 1./count);
         UnixBench = pow(UnixBench, 1./count);
+        CompilationMin = pow(CompilationMin, 1./count);
+        CompilationMax = pow(CompilationMax, 1./count);
+        CompilationCPUTime = pow(CompilationCPUTime, 1./count);
+        ProcessCPUTime = pow(ProcessCPUTime, 1./count);
     }
 };
 
@@ -283,9 +326,14 @@ void CollectStats(TPrettyTable& table, IOutputStream* csv, NJson::TJsonValue* js
     CollectField<true>(row, index++, csv, json, name, testInfo.RttMin);
     CollectField<true>(row, index++, csv, json, name, testInfo.RttMax);
     CollectField<true>(row, index++, csv, json, name, testInfo.RttMean);
+    CollectField<true>(row, index++, csv, json, name, testInfo.CompilationMin);
+    CollectField<true>(row, index++, csv, json, name, testInfo.CompilationMax);
+    CollectField<true>(row, index++, csv, json, name, testInfo.CompilationMean);
+    CollectField<true>(row, index++, csv, json, name, testInfo.CompilationCPUTime);
+    CollectField<true>(row, index++, csv, json, name, testInfo.ProcessCPUTime);
     auto grossTime = TDuration::Zero();
-    for (const auto& clientTime: testInfo.ClientTimings) {
-        grossTime += clientTime;
+    for (const auto& timing: testInfo.Timings) {
+        grossTime += timing.Total;
     }
     CollectField<true>(row, index++, csv, json, name, grossTime);
     CollectField(row, index++, csv, json, name, sCount);
@@ -317,7 +365,9 @@ public:
         }
         auto t1 = TInstant::Now();
         if (t1 >= Owner.GlobalDeadline) {
-            Cerr << "Global timeout (" << Owner.GlobalTimeout << ") expiried, global deadline was " << Owner.GlobalDeadline << Endl;
+            TStringBuilder msg;
+            msg  << "Global timeout (" << Owner.GlobalTimeout << ") expiried, global deadline was " << Owner.GlobalDeadline << Endl;
+            Result = TQueryBenchmarkResult::Error(msg, "", "", "");
             return;
         }
         try {
@@ -327,18 +377,21 @@ public:
                     if (Owner.PlanFileName) {
                         settings.PlanFileName = TStringBuilder() << Owner.PlanFileName << "." << QueryName << "." << ToString(Iteration) << ".in_progress";
                     }
+                    // Store max(DefaultMaxRowsPerResultIndex, lines in expected) rows per result index
+                    settings.MaxRowsPerResultIndex = std::max<size_t>(StringSplitter(Expected.c_str()).Split('\n').Count(), BenchmarkUtils::DefaultMaxRowsPerResultIndex);
+
                     Result = Execute(Query, Expected, *Owner.QueryClient, settings);
                 } else {
                     Result = Explain(Query, *Owner.QueryClient, settings);
                 }
             } else {
-                Result = TQueryBenchmarkResult::Result(TQueryBenchmarkResult::TRawResults(), TDuration::Zero(), "", "", "");
+                Result = TQueryBenchmarkResult::Result(TQueryBenchmarkResult::TRawResults(), TTiming(), TTiming(), "", "", "", "");
             }
         } catch (...) {
             const auto msg = CurrentExceptionMessage();
-            Result = TQueryBenchmarkResult::Error(CurrentExceptionMessage(), "", "");
+            Result = TQueryBenchmarkResult::Error(CurrentExceptionMessage(), "", "", "");
         }
-        ClientDuration = TInstant::Now() - t1;
+        Result.MutableTiming().Total = TInstant::Now() - t1;
         Owner.SavePlans(Result, QueryName, execute ? ToString(Iteration) : "explain");
         if (Owner.Threads == 0) {
             PrintResult();
@@ -362,13 +415,13 @@ public:
 
         Cout << "\titeration " << Iteration << ":\t";
         if (Result) {
-            Cout << "ok\t" << ClientDuration << " seconds" << Endl;
+            Cout << "ok\t" << Result.GetTiming().Total << " seconds" << Endl;
             if (Result.GetDiffErrors()) {
                 Cerr << Result.GetDiffWarrnings() << Endl;
                 Cerr << Result.GetDiffErrors() << Endl;
             }
         } else {
-            Cout << "failed\t" << ClientDuration << " seconds" << Endl;
+            Cout << "failed\t" << Result.GetTiming().Total << " seconds" << Endl;
             Cerr << QueryName << ":" << Endl
                 << "iteration " << Iteration << Endl
                 << Result.GetErrorInfo() << Endl;
@@ -377,11 +430,10 @@ public:
         }
     }
 
-    YDB_READONLY(TQueryBenchmarkResult, Result, TQueryBenchmarkResult::Error("undefined", "undefined", "undefined"));
+    YDB_READONLY(TQueryBenchmarkResult, Result, TQueryBenchmarkResult::Error("undefined", "undefined", "undefined", ""));
     YDB_READONLY_DEF(TString, QueryName);
     YDB_READONLY_DEF(TString, Query);
     YDB_READONLY_DEF(TString, Expected);
-    YDB_READONLY_DEF(TDuration, ClientDuration);
     YDB_ACCESSOR(i32, Iteration, 0);
 
 private:
@@ -448,10 +500,9 @@ int TWorkloadCommandBenchmark::RunBench(NYdbWorkload::IWorkloadQueryGenerator& w
     }
 
     for (const auto& [queryName, queryExec]: queryExecByName) {
-        std::vector<TDuration> clientTimings;
-        std::vector<TDuration> serverTimings;
-        clientTimings.reserve(IterationsCount);
-        serverTimings.reserve(IterationsCount);
+        std::vector<BenchmarkUtils::TTiming> timings, cpuTime;
+        timings.reserve(IterationsCount);
+        cpuTime.reserve(IterationsCount);
 
         ui32 successIteration = 0;
         ui32 failsCount = 0;
@@ -481,12 +532,12 @@ int TWorkloadCommandBenchmark::RunBench(NYdbWorkload::IWorkloadQueryGenerator& w
                 continue;
             }
             if (iterExec->GetResult()) {
-                clientTimings.emplace_back(iterExec->GetClientDuration());
-                serverTimings.emplace_back(iterExec->GetResult().GetServerTiming());
+                timings.emplace_back(iterExec->GetResult().GetTiming());
+                cpuTime.emplace_back(iterExec->GetResult().GetCPUTime());
                 ++successIteration;
                 if (successIteration == 1) {
                     outFStream << iterExec->GetQueryName() << ": " << Endl;
-                    PrintResult(iterExec->GetResult(), outFStream, iterExec->GetExpected());
+                    PrintResult(iterExec->GetResult(), outFStream);
                 }
                 const auto resHash = iterExec->GetResult().CalcHash();
                 if ((!prevResult || *prevResult != resHash) && iterExec->GetResult().GetDiffErrors()) {
@@ -495,7 +546,7 @@ int TWorkloadCommandBenchmark::RunBench(NYdbWorkload::IWorkloadQueryGenerator& w
                             << iterExec->GetQuery() << Endl << Endl <<
                             "UNEXPECTED DIFF: " << Endl
                             << "RESULT: " << Endl;
-                    PrintResult(iterExec->GetResult(), outFStream, iterExec->GetExpected());
+                    PrintResult(iterExec->GetResult(), outFStream);
                     outFStream << Endl
                             << "EXPECTATION: " << Endl << iterExec->GetExpected() << Endl;
                     prevResult = resHash;
@@ -509,14 +560,14 @@ int TWorkloadCommandBenchmark::RunBench(NYdbWorkload::IWorkloadQueryGenerator& w
                     *miniStatReport << ",";
                 }
                 if (iterExec->GetResult()) {
-                    *miniStatReport << iterExec->GetResult().GetServerTiming().MilliSeconds();
+                    *miniStatReport << iterExec->GetResult().GetTiming().Server.MilliSeconds();
                 }
             }
         }
         if (miniStatReport) {
             *miniStatReport << Endl;
         }
-        TTestInfo testInfo(std::move(clientTimings), std::move(serverTimings));
+        TTestInfo testInfo(std::move(timings), std::move(cpuTime));
         CollectStats(statTable, csvReport.Get(), jsonReport.Get(), queryName, successIteration, failsCount, diffsCount, testInfo);
         if (successIteration != IterationsCount) {
             ++queriesWithSomeFails;
@@ -531,10 +582,11 @@ int TWorkloadCommandBenchmark::RunBench(NYdbWorkload::IWorkloadQueryGenerator& w
     }
 
     if (queriesWithAllSuccess) {
-        sumInfo.ClientTimings.push_back(grossTime);
+        sumInfo.Timings.push_back(BenchmarkUtils::TTiming());
+        sumInfo.Timings.back().Total = grossTime;
         CollectStats(statTable, csvReport.Get(), jsonReport.Get(), "Sum", queriesWithAllSuccess, queriesWithSomeFails, queriesWithDiff, sumInfo);
         sumInfo /= queriesWithAllSuccess;
-        sumInfo.ClientTimings.back() = grossTime / queriesWithAllSuccess;
+        sumInfo.Timings.back().Total = grossTime / queriesWithAllSuccess;
         CollectStats(statTable, csvReport.Get(), jsonReport.Get(), "Avg", queriesWithAllSuccess, queriesWithSomeFails, queriesWithDiff, sumInfo);
         productInfo ^= queriesWithAllSuccess;
         CollectStats(statTable, csvReport.Get(), jsonReport.Get(), "GAvg", queriesWithAllSuccess, queriesWithSomeFails, queriesWithDiff, productInfo);
@@ -560,16 +612,22 @@ int TWorkloadCommandBenchmark::RunBench(NYdbWorkload::IWorkloadQueryGenerator& w
     return (queriesWithSomeFails || queriesWithDiff) ? EXIT_FAILURE : EXIT_SUCCESS;
 }
 
-void TWorkloadCommandBenchmark::PrintResult(const BenchmarkUtils::TQueryBenchmarkResult& res, IOutputStream& out, const std::string& expected) const {
-    TResultSetPrinter printer(TResultSetPrinter::TSettings()
-        .SetOutput(&out)
-        .SetMaxRowsCount(std::max(StringSplitter(expected.c_str()).Split('\n').Count(), (size_t)100))
-        .SetFormat(EDataFormat::Pretty).SetMaxWidth(120)
-    );
-    for (const auto& [i, rr]: res.GetRawResults()) {
-        for(const auto& r: rr) {
+void TWorkloadCommandBenchmark::PrintResult(const BenchmarkUtils::TQueryBenchmarkResult& res, IOutputStream& out) const {
+    for (const auto& [i, resultData]: res.GetRawResults()) {
+        TResultSetPrinter printer(TResultSetPrinter::TSettings()
+            .SetOutput(&out)
+            .SetFormat(EDataFormat::Pretty)
+            .SetMaxWidth(GetBenchmarkTableWidth())
+        );
+        size_t printedRows = 0;
+        for (const auto& r: resultData.ResultSets) {
             printer.Print(r);
+            printedRows += r.RowsCount();
             printer.Reset();
+        }
+        // Show message if there are more rows than printed
+        if (printedRows < resultData.TotalRowsRead) {
+            out << "And " << (resultData.TotalRowsRead - printedRows) << " more lines, total " << resultData.TotalRowsRead << Endl;
         }
     }
     out << Endl << Endl;
@@ -584,7 +642,7 @@ void TWorkloadCommandBenchmark::SavePlans(const BenchmarkUtils::TQueryBenchmarkR
     if (res.GetQueryPlan()) {
         {
             TFileOutput out(planFName + "table");
-            TQueryPlanPrinter queryPlanPrinter(EDataFormat::PrettyTable, true, out);
+            TQueryPlanPrinter queryPlanPrinter(EDataFormat::PrettyTable, true, out, GetBenchmarkTableWidth());
             queryPlanPrinter.Print(res.GetQueryPlan());
         }
         {
@@ -607,11 +665,17 @@ void TWorkloadCommandBenchmark::SavePlans(const BenchmarkUtils::TQueryBenchmarkR
         TFileOutput out(planFName + "ast");
         out << res.GetPlanAst();
     }
+    if (res.GetExecStats()) {
+        TFileOutput out(planFName + "stats");
+        out << res.GetExecStats();
+    }
 }
 
 BenchmarkUtils::TQueryBenchmarkSettings TWorkloadCommandBenchmark::GetBenchmarkSettings(bool withProgress) const {
     BenchmarkUtils::TQueryBenchmarkSettings result;
     result.WithProgress = withProgress;
+    result.TxMode = TxMode;
+    result.StatsMode = StatsMode;
     result.RetrySettings = RetrySettings;
     if (GlobalDeadline != TInstant::Max()) {
         result.Deadline.Deadline = GlobalDeadline;

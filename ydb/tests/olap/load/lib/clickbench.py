@@ -61,10 +61,12 @@ class ClickbenchParallelBase(LoadSuiteParallel):
     workload_type: WorkloadType = WorkloadType.Clickbench
     iterations: int = 5
 
-    def get_query_list() -> list[str]:
+    @classmethod
+    def get_query_list(cls) -> list[str]:
         return QUERY_NAMES
 
-    def get_path() -> str:
+    @classmethod
+    def get_path(cls) -> str:
         return get_external_param('table-path-clickbench', 'clickbench/hits')
 
     @classmethod

@@ -1,11 +1,14 @@
 syntax = "proto3";
 
+import "ydb/core/protos/blobstorage_base.proto";
 import "ydb/core/protos/blobstorage_base3.proto";
+import "ydb/core/protos/blobstorage_ddisk.proto";
 import "ydb/core/protos/blobstorage_disk.proto";
 import "ydb/core/protos/blobstorage_disk_color.proto";
 import "ydb/core/protos/blobstorage_pdisk_config.proto";
 import "ydb/core/protos/blob_depot_config.proto";
 import "ydb/library/actors/protos/interconnect.proto";
+import "google/protobuf/any.proto";
 
 package NKikimrBlobStorage;
 
@@ -23,6 +26,10 @@ message THostConfigDrive {
 
     // optional PDisk config for these drives; if not set, default configuration is applied; overrides host-wide default
     NKikimrBlobStorage.TPDiskConfig PDiskConfig = 6;
+    reserved 7; // uint64 InferPDiskSlotCountFromUnitSize, deprecated in favor of BlobStorageConfig.InferPDiskSlotCount
+    reserved 8; // uint32 InferPDiskSlotCountMax, deprecated in favor of BlobStorageConfig.InferPDiskSlotCount
+
+    optional string DiskScope = 9; // when set allows for finer domain mapping
 }
 
 // Command used to define typical host configuration. It it used while defining new typical host configurations and as
@@ -142,7 +149,7 @@ message TDefineStoragePool {
         repeated uint32 GroupId = 1;
     }
 
-    uint64 BoxId = 1; // the box in which we are creating this storage pool
+    optional uint64 BoxId = 1; // the box in which we are creating this storage pool
     uint64 StoragePoolId = 2; // integer key unique to the box; if set to zero, Name is used for lookup
     string Name = 3; // user-friendly name
     string ErasureSpecies = 4; // name for erasure species of contained groups
@@ -169,7 +176,7 @@ message TDefineStoragePool {
 }
 
 message TReadStoragePool {
-    uint64 BoxId = 1; // use Max<ui64> to query all the pools
+    optional uint64 BoxId = 1; // use Max<ui64> to query all the pools
 
     // calculates intersection of names and ids
     repeated uint64 StoragePoolId = 2; // when empty, then query all the boxes
@@ -184,57 +191,37 @@ message TDeleteStoragePool {
     uint64 ItemConfigGeneration = 100;
 }
 
-enum EDriveStatus {
-    UNKNOWN = 0; // value of status is unknown (default)
-    ACTIVE = 1; // working as expected
-    INACTIVE = 2; // new groups are not created over this drive, but existing ones continue to work as expected
-    BROKEN = 3; // drive is not working, groups are automatically moved out of this drive upon reception of this status
-    reserved 4;
-    FAULTY = 5; // drive is expected to become BROKEN soon, new groups are not created, old groups are asynchronously moved out from this drive
-    TO_BE_REMOVED = 6; // same as INACTIVE, but drive is counted in fault model as not working
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// Defining DDisk pool. This command allocated NumDDiskGroups groups, each one containing Geometry.NumFailDomainsPerFailRealm
+// DDisks placed in fail domains according to DomainLevelBegin/DomainLevelEnd. There should be only one realm (more than
+// one is not supported). NumVDisksPerFailDomain should be one too. During Direct Block Group allocation resulting DDisks
+// may (but not necessarily) contain mix of different groups allocated here, but according to the pool placement model.
+
+message TDefineDDiskPool {
+    uint64 BoxId = 1; // the box in which we allocate new DDisks
+    string Name = 2; // cluster-unique name of the DDisk pool within the box
+    TGroupGeometry Geometry = 3; // group geometry to map realms/domains
+    repeated TPDiskFilter PDiskFilter = 4; // PDisk filter used for mapping
+    uint32 NumDDiskGroups = 5; // number of DDisk groups of selected geometry
+    uint64 ItemConfigGeneration = 100;
 }
 
-enum EDecommitStatus {
-    DECOMMIT_UNSET = 0; // unset status -- missing optional field
-    DECOMMIT_NONE = 1; // no decomission
-    DECOMMIT_PENDING = 2; // drive is going to be removed soon, but SelfHeal logic would not remove it automatically
-    DECOMMIT_IMMINENT = 3; // drive is going to be settled automatically
-    DECOMMIT_REJECTED = 4; // drive is working as usual, but decommitted slots are not placed here
+message TReadDDiskPool {
+    uint64 BoxId = 1; // use Max<ui64> to query all the DDisk pools
+    repeated string Name = 2; // if not empty, read only specified DDisk pools
 }
 
-message TGroupStatus {
-    enum E {
-        UNKNOWN = 0; // group status is unknown (default value)
-        FULL = 1; // all VDisks of the group are READY for specific period of time
-        PARTIAL = 2; // some of VDisks are operational, but group is not yet DEGRADED
-        DEGRADED = 3; // group is DEGRADED -- one random failure may lead to group loss (but may not lead too)
-        DISINTEGRATED = 4; // group is not available for operation
-    }
+message TDeleteDDiskPool {
+    uint64 BoxId = 1;
+    string Name = 2;
 }
 
-message TDriveLifeStage {
-    enum E {
-        FREE = 0; // disk drive has been seen on a node, but is not added to BSC yet
-        ADDED_BY_DSTOOL = 1; // disk drive has been added to BSC
-        REMOVED_BY_DSTOOL = 2; // disk drive has been removed from BSC
-    }
-}
-
-message TSerialManagementStage {
-    enum E {
-        DISCOVER_SERIAL = 0;
-        CHECK_SERIAL = 1;
-        ONLY_SERIAL = 2;
-    }
-}
-
-// set by CMS
-message TMaintenanceStatus {
-    enum E {
-        NOT_SET = 0;                        // unset status, default value
-        NO_REQUEST = 1;                     // no active maintenance request
-        LONG_TERM_MAINTENANCE_PLANNED = 2;  // maintence requested, VDisks should be moved asynchronously from PDisk
-    }
+message TMoveDDisk {
+    uint64 BoxId = 1;
+    string Name = 2;
+    NKikimrBlobStorage.NDDisk.TDDiskId DDiskId = 3;
+    NKikimrBlobStorage.TPDiskId TargetPDiskId = 4;
 }
 
 message TUpdateDriveStatus {
@@ -259,6 +246,10 @@ message TProposeStoragePools {
 message TQueryBaseConfig {
     bool RetrieveDevices = 1;
     bool VirtualGroupsOnly = 2;
+    bool SuppressPDisks = 3;
+    bool SuppressVSlots = 4;
+    bool SuppressGroups = 5;
+    bool SuppressNodes = 6;
 }
 
 message TReadSettings {
@@ -273,6 +264,9 @@ message TReassignGroupDisk {
     NKikimrBlobStorage.TPDiskId TargetPDiskId = 6; // optional; when not specified, selected automatically
     bool SuppressDonorMode = 7; // when set, donor mode is not used even if it is enabled through BSC
     reserved 8;
+    bool OnlyToLessOccupiedPDisk = 9; // when set, reassignment will only commence if new pdisk is less occupied than the old one
+    bool PreferLessOccupiedRack = 10; // when set, pick rack with more free slots
+    bool WithAttentionToReplication = 11; // when set, pick pdisk with less replicating vdisks (both per-pdisk and per-node)
 }
 
 message TSanitizeGroup {
@@ -450,6 +444,33 @@ message TStopPDisk {
     }
 }
 
+message TMovePDisk {
+    message TPDisk {
+        NKikimrBlobStorage.TPDiskId TargetPDiskId = 1;
+        TPDiskLocation TargetPDiskLocation = 2;
+    }
+    TPDisk SourcePDisk = 1;
+    TPDisk DestinationPDisk = 2;
+}
+
+// Populate target PDisk with selected VDisks in a single atomic config transaction.
+// If any VDisk cannot be moved, no changes are applied.
+message TPopulatePDisk {
+    message TPDisk {
+        oneof PDisk {
+            NKikimrBlobStorage.TPDiskId TargetPDiskId = 1;
+            TPDiskLocation TargetPDiskLocation = 2;
+        }
+    }
+
+    TPDisk DestinationPDisk = 1;
+
+    // Explicit VDisks to process first.
+    repeated NKikimrBlobStorage.TVDiskID VDiskId = 2;
+
+    bool SuppressDonorMode = 3;
+}
+
 message TSetScrubPeriodicity {
     uint32 ScrubPeriodicity = 1; // in seconds; 0 = disable
 }
@@ -480,10 +501,43 @@ message TSetPDiskSpaceMarginPromille {
     uint32 PDiskSpaceMarginPromille = 1;
 }
 
+message TClusterBalancingSettings {
+    optional bool Enable = 1;
+    optional uint64 IterationIntervalMs = 2;
+    optional uint32 MaxReplicatingPDisks = 3;
+    optional uint32 MaxReplicatingVDisks = 4;
+    optional bool PreferLessOccupiedRack = 5;
+    optional bool WithAttentionToReplication = 6;
+    optional uint32 MaxReassignAttemptsPerBucketPerIteration = 7;
+}
+
+message TSelfHealSettings {
+    optional bool PreferLessOccupiedRack = 1;
+    optional bool WithAttentionToReplication = 2;
+}
+
 message TUpdateSettings {
-    // each value may be specified either one time, or zero times; when it is specified, its value is written to State
-    // and applied immediately; when no value specified, setting kept unchanged; if value is specified more than one
-    // time, then last value is applied
+    // when value is specified, its value is written to State
+    // and applied immediately; when no value specified, setting kept unchanged
+    repeated uint32 DefaultMaxSlots = 1;
+    repeated bool EnableSelfHeal = 2;
+    repeated bool EnableDonorMode = 3;
+    repeated uint64 ScrubPeriodicitySeconds = 4;
+    repeated uint32 PDiskSpaceMarginPromille = 5;
+    repeated uint32 GroupReserveMin = 6;
+    repeated uint32 GroupReservePartPPM = 7;
+    repeated uint32 MaxScrubbedDisksAtOnce = 8;
+    repeated NKikimrBlobStorage.TPDiskSpaceColor.E PDiskSpaceColorBorder = 9;
+    repeated bool EnableGroupLayoutSanitizer = 10;
+    // TODO
+    // repeated TSerialManagementStage.E SerialManagementStage = 11;
+    repeated bool AllowMultipleRealmsOccupation = 12;
+    repeated bool UseSelfHealLocalPolicy = 13;
+    repeated bool TryToRelocateBrokenDisksLocallyFirst = 14;
+    repeated uint64 BlobCheckerPeriodicitySeconds = 15;
+}
+
+message TBscConfig {
     optional uint32 DefaultMaxSlots = 1;
     optional bool EnableSelfHeal = 2;
     optional bool EnableDonorMode = 3;
@@ -499,6 +553,9 @@ message TUpdateSettings {
     optional bool AllowMultipleRealmsOccupation = 12;
     optional bool UseSelfHealLocalPolicy = 13;
     optional bool TryToRelocateBrokenDisksLocallyFirst = 14;
+    optional TClusterBalancingSettings ClusterBalancingSettings = 15;
+    optional TSelfHealSettings SelfHealSettings = 16;
+    optional uint64 BlobCheckerPeriodicitySeconds = 17;
 }
 
 message TBoxStoragePoolId {
@@ -542,6 +599,43 @@ message TSetVDiskReadOnly {
 
 message TGetInterfaceVersion
 {}
+
+message TUpdateBridgeGroupInfo {
+    uint32 GroupId = 1; // group we are updating (must be the bridge proxy group)
+    uint32 GroupGeneration = 2; // its generation
+    NKikimrBlobStorage.TGroupInfo BridgeGroupInfo = 3; // new value for bridge group info
+}
+
+message TReconfigureVirtualGroup {
+    string Name = 1;
+    optional NKikimrBlobDepot.TS3BackendSettings S3BackendSettings = 2;
+}
+
+message TRecommissionGroups {
+    repeated uint32 GroupIds = 1;
+}
+
+message TInferPDiskSlotCountForDriveTypeSettings {
+    // NodeWarden infers PDiskConfig ExpectedSlotCount and SlotSizeInUnits by the formula
+    // ExpectedSlotCount = TotalSize / (UnitSize * SlotSizeInUnits)
+    // where SlotSizeInUnits = 2^N is chosen to meet ExpectedSlotCount <= MaxSlots
+    optional uint64 UnitSize = 1; // in bytes
+    optional uint32 MaxSlots = 2;
+    // Unless true, explicit PDisk slot settings override inferred settings.
+    optional bool PreferInferredSettingsOverExplicit = 3;
+    // SlotSize is used as PDiskConfig ExpectedSlotSize for this drive type.
+    // It is mutually exclusive with UnitSize and requires MaxSlots as slot-count cap.
+    optional uint64 SlotSize = 4; // in bytes
+}
+
+message TInferPDiskSlotCountSettings {
+    optional TInferPDiskSlotCountForDriveTypeSettings Rot = 1;
+    optional TInferPDiskSlotCountForDriveTypeSettings Ssd = 2;
+}
+
+message TDeleteSpecificGroups {
+    repeated uint32 GroupIds = 1;
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // INTERFACE PART
@@ -591,6 +685,16 @@ message TConfigRequest {
             TStopPDisk StopPDisk = 50;
             TGetInterfaceVersion GetInterfaceVersion = 51;
             TChangeGroupSizeInUnits ChangeGroupSizeInUnits = 52;
+            TMovePDisk MovePDisk = 53;
+            TUpdateBridgeGroupInfo UpdateBridgeGroupInfo = 54;
+            TReconfigureVirtualGroup ReconfigureVirtualGroup = 55;
+            TRecommissionGroups RecommissionGroups = 56;
+            TDefineDDiskPool DefineDDiskPool = 57;
+            TReadDDiskPool ReadDDiskPool = 58;
+            TDeleteDDiskPool DeleteDDiskPool = 59;
+            TMoveDDisk MoveDDisk = 60;
+            TPopulatePDisk PopulatePDisk = 61;
+            TDeleteSpecificGroups DeleteSpecificGroups = 62;
 
             // commands intended for internal use
             TReassignGroupDisk ReassignGroupDisk = 19;
@@ -637,6 +741,9 @@ message TConfigRequest {
 
     // requesting user identifier
     string UserSID = 13;
+
+    // current TStorageConfig against which we are processing this request
+    google.protobuf.Any StorageConfig = 14;
 }
 
 enum ETriStateBool {
@@ -673,6 +780,10 @@ message TBaseConfig {
         string LastSeenSerial = 18;
         bool ReadOnly = 19;
         TMaintenanceStatus.E MaintenanceStatus = 20;
+        reserved 21; // uint64 InferPDiskSlotCountFromUnitSize = 21
+        reserved 22; // uint32 InferPDiskSlotCountMax = 22
+        optional string DiskScope = 23; // when set allows for finer domain mapping
+        uint64 ExpectedSlotSize = 24;
     }
     message TVSlot {
         message TDonorDisk {
@@ -725,6 +836,7 @@ message TBaseConfig {
         uint64 LastDisconnectTimestamp = 6; // TInstant
         uint64 LastSeenTimestamp = 7; // when seen working for the last time
         ENodeType Type = 8;
+        bool Connected = 9;
     }
     message TDevice {
         string SerialNumber = 1;
@@ -743,6 +855,7 @@ message TBaseConfig {
     repeated TNode Node = 4;
     repeated TDevice Device = 5;
     TUpdateSettings Settings = 6;
+    TInferPDiskSlotCountSettings InferPDiskSlotCountSettings = 7;
 }
 
 message TMoveCommand {
@@ -773,6 +886,25 @@ message TReassignedItem {
     string ToPath = 7;
 }
 
+message TGroupMapperError {
+    message TStats {
+        string Domain = 1;
+        uint32 AllSlotsAreOccupied = 2;
+        uint32 NotEnoughSpace = 3;
+        uint32 NotAcceptingNewSlots = 4;
+        uint32 NotOperational = 5;
+        uint32 Decommission = 6;
+    }
+    TStats TotalStats = 1;
+    repeated TStats MatchingDomainsStats = 2;
+    uint32 MissingFailRealmsCount = 3;
+    uint32 FailRealmsWithMissingDomainsCount = 4;
+    uint32 DomainsWithMissingDisksCount = 5;
+    uint32 OkDisksCount = 6;
+    string RealmLocationKey = 7;
+    string DomainLocationKey = 8;
+}
+
 message TConfigResponse {
     message TStatus {
         enum EFailReason {
@@ -788,6 +920,8 @@ message TConfigResponse {
             kAlready = 9;
             kMayGetDegraded = 10;
             kGroupNotFound = 11;
+            kReassignNotViable = 12;
+            kGroupGenerationMismatch = 13;
         }
 
         message TFailParam {
@@ -807,6 +941,9 @@ message TConfigResponse {
                 NKikimrBlobStorage.TVSlotId VSlotId = 13;
                 string StoragePoolName = 14;
                 string DiskSerialNumber = 15;
+                uint32 GroupGenerationProvided = 16;
+                uint32 GroupGenerationExpected = 17;
+                TGroupMapperError GroupMapperError = 18;
             }
         }
 
@@ -838,4 +975,5 @@ message TConfigResponse {
     repeated uint32 GroupsGetDegraded = 5;
     repeated uint32 GroupsGetDisintegrated = 6;
     repeated uint32 GroupsGetDisintegratedByExpectedStatus = 7;
+    bool RollbackSuccess = 8;
 }

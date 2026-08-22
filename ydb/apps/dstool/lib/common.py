@@ -18,12 +18,19 @@ from inspect import signature
 from operator import attrgetter, itemgetter
 from collections import defaultdict
 from itertools import cycle, islice
+from types import SimpleNamespace
 import ydb.core.protos.grpc_pb2_grpc as kikimr_grpc
 import ydb.core.protos.msgbus_pb2 as kikimr_msgbus
 import ydb.core.protos.blobstorage_config_pb2 as kikimr_bsconfig
 import ydb.core.protos.blobstorage_base3_pb2 as kikimr_bs3
+import ydb.core.protos.whiteboard_disk_states_pb2 as whiteboard_disk_states
 import ydb.core.protos.cms_pb2 as kikimr_cms
+import ydb.public.api.protos.draft.ydb_bridge_pb2 as ydb_bridge
+from ydb.public.api.grpc.draft import ydb_bridge_v1_pb2_grpc as bridge_grpc_server
+from ydb.public.api.grpc.draft import ydb_nbs_v1_pb2_grpc as nbs_grpc_server
+from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 from ydb.apps.dstool.lib.arg_parser import print_error_with_usage
+import ydb.apps.dstool.lib.table as table
 import typing
 
 
@@ -152,26 +159,63 @@ class ConnectionParams:
             location = endpoint.host_with_port
         return urllib.parse.urlunsplit((endpoint.protocol, location, path, urllib.parse.urlencode(params), ''))
 
-    def parse_token(self, token_file):
-        if token_file:
-            self.token = token_file.readline().rstrip('\r\n')
-            token_file.close()
-        if self.token is None:
-            self.token = os.getenv('YDB_TOKEN')
-            if self.token is not None:
-                self.token = self.token.strip()
-        if self.token is None:
-            try:
-                path = os.path.expanduser(os.path.join('~', '.ydb', 'token'))
-                with open(path) as f:
-                    self.token = f.readline().strip('\r\n')
-            except Exception:
-                pass
+    def assign_token(self, typed_token):
+        self.token_type, self.token = typed_token
+        if self.token and self.token.endswith('@builtin'):
+            self.token_type = None
 
-        if self.token is not None and len(self.token.split(' ')) == 2:
-            self.token_type, self.token = self.token.split(' ')
+    def parse_token(self, token_file, iam_token_file=None):
+        if token_file:
+            self.assign_token(self.read_token_from_file(token_file, 'OAuth'))
+            token_file.close()
+            return
+
+        if iam_token_file:
+            self.assign_token(self.read_token_from_file(iam_token_file, 'Bearer'))
+            iam_token_file.close()
+            return
+
+        token_value = os.getenv('YDB_TOKEN')
+        if token_value is not None:
+            self.assign_token(self.parse_token_value(token_value, 'OAuth'))
+            return
+
+        token_value = os.getenv('IAM_TOKEN')
+        if token_value is not None:
+            self.assign_token(self.parse_token_value(token_value, 'Bearer'))
+            return
+
+        default_token_paths = [
+            ('OAuth', os.path.expanduser(os.path.join('~', '.ydb', 'token'))),
+            ('Bearer', os.path.expanduser(os.path.join('~', '.ydb', 'iam_token'))),
+        ]
+        for token_type, token_file_path in default_token_paths:
+            self.assign_token(self.read_token_file(token_file_path, token_type))
+            if self.token is not None:
+                return
+
+    def read_token_from_file(self, token_file, default_token_type):
+        if token_file is None:
+            return default_token_type, None
+        token_value = token_file.readline().rstrip('\r\n')
+        return self.parse_token_value(token_value, default_token_type)
+
+    def read_token_file(self, token_file_path, default_token_type):
+        if token_file_path is None:
+            return default_token_type, None
+        try:
+            return self.read_token_from_file_and_close(open(token_file_path, 'r'), default_token_type)
+        except Exception:
+            return default_token_type, None
+
+    def parse_token_value(self, token_value, default_token_type):
+        if token_value is None:
+            return default_token_type, None
+        splitted = token_value.strip().split(' ')
+        if len(splitted) == 2:
+            return splitted
         else:
-            self.token_type = 'OAuth'
+            return default_token_type, token_value
 
     def apply_args(self, args, with_localhost=True):
         self.args = args
@@ -199,7 +243,7 @@ class ConnectionParams:
         if 'http' not in protocols and 'https' in protocols:
             self.mon_protocol = 'https'
 
-        self.parse_token(args.token_file)
+        self.parse_token(args.token_file, args.iam_token_file)
         self.domain = 1
         self.verbose = args.verbose or args.debug
         self.debug = args.debug
@@ -218,7 +262,9 @@ class ConnectionParams:
             g.add_argument('--endpoint', '-e', metavar='[PROTOCOL://]HOST[:PORT]', type=str, required=True, action='append', help=ConnectionParams.ENDPOINT_HELP)
         g.add_argument('--grpc-port', type=int, default=2135, metavar='PORT', help='GRPC port to use for procedure invocation')
         g.add_argument('--mon-port', type=int, default=8765, metavar='PORT', help='HTTP monitoring port for viewer JSON access')
-        g.add_argument('--token-file', type=FileType(encoding='ascii'), metavar='PATH', help='Path to token file')
+        token_group = g.add_mutually_exclusive_group()
+        token_group.add_argument('--token-file', type=FileType(encoding='ascii'), metavar='PATH', help='Path to token file')
+        token_group.add_argument('--iam-token-file', type=FileType(encoding='ascii'), metavar='PATH', help='Path to IAM token file')
         g.add_argument('--ca-file', metavar='PATH', dest='cafile', type=str, help='File containing PEM encoded root certificates for SSL/TLS connections. '
                                                                                   'If this parameter is empty, the default roots will be used.')
         g.add_argument('--http-timeout', type=int, default=5, help='Timeout for blocking socket I/O operations during HTTP(s) queries')
@@ -244,6 +290,20 @@ get_vdisk_id_short = attrgetter('FailRealmIdx', 'FailDomainIdx', 'VDiskIdx')
 
 def get_vslot_extended_id(vslot):
     return *get_vslot_id(vslot.VSlotId), *get_vdisk_id(vslot)
+
+
+def get_pdisk_inferred_settings(pdisk):
+    if (pdisk.PDiskMetrics.HasField('SlotCount')):
+        return pdisk.PDiskMetrics.SlotCount, pdisk.PDiskMetrics.SlotSizeInUnits
+    else:
+        return pdisk.ExpectedSlotCount, pdisk.PDiskConfig.SlotSizeInUnits
+
+
+def get_vslot_owner_weight(group_size_in_units, pdisk_slot_size_in_units):
+    # Identical to blobstorage/pdisk/blobstorage_pdisk_config.h GetOwnerWeight()
+    vu = group_size_in_units if group_size_in_units else 1
+    pu = pdisk_slot_size_in_units if pdisk_slot_size_in_units else 1
+    return int(vu / pu) + (1 if (vu % pu) else 0)
 
 
 class Location(typing.NamedTuple):
@@ -344,7 +404,7 @@ def retry_query_with_endpoints(query, endpoints, request_type, query_name, max_r
             if isinstance(e, urllib.error.URLError):
                 bad_hosts.add(endpoint.host_with_port)
             if not connection_params.quiet:
-                print(f'WARNING: failed to fetch data from host {endpoint.host_with_port} in {query_name}: {e}', file=sys.stderr)
+                print(f'WARNING: failed to fetch data from host {endpoint.host_with_port} in {query_name}: {e} ({type(e).__module__}.{type(e).__name__})', file=sys.stderr)
                 if request_type == 'http' and try_index == max_retries:
                     print('HINT: consider trying different protocol for endpoints when experiencing massive fetch failures from different hosts', file=sys.stderr)
             if try_index == max_retries:
@@ -362,6 +422,7 @@ def query_random_host_with_retry(retries=5, request_type=None):
             explicit_host = binded.arguments.pop('explicit_host', None)
             host = binded.arguments.pop('host', None)
             endpoint = binded.arguments.pop('endpoint', None)
+            endpoints = binded.arguments.pop('endpoints', None)
 
             if endpoint is not None or host is not None:
                 return func(*args, **kwargs)
@@ -381,6 +442,10 @@ def query_random_host_with_retry(retries=5, request_type=None):
             result = None
             if explicit_endpoint:
                 try_index, result = retry_query_with_endpoints(send_query, [explicit_endpoint] * retries, request_type, func.__name__, retries)
+                return result
+
+            if endpoints:
+                try_index, result = retry_query_with_endpoints(send_query, endpoints, request_type, func.__name__, retries)
                 return result
 
             if result is not None:
@@ -437,7 +502,7 @@ def query_random_host_with_retry(retries=5, request_type=None):
 
 @inmemcache('fetch', ['path', 'params', 'explicit_host', 'fmt'], 'cache')
 @query_random_host_with_retry(request_type='http')
-def fetch(path, params={}, explicit_host=None, fmt='json', host=None, cache=True, method=None, data=None, content_type=None, accept=None, endpoint=None):
+def fetch(path, params={}, explicit_host=None, fmt='json', host=None, cache=True, method=None, data=None, content_type=None, accept=None, endpoint=None, endpoints=None):
     if endpoint is None and host is not None:
         endpoint = connection_params.make_endpoint_info(f'{connection_params.mon_protocol}://{host}')
     if endpoint.protocol not in ('http', 'https'):
@@ -447,7 +512,11 @@ def fetch(path, params={}, explicit_host=None, fmt='json', host=None, cache=True
         print('INFO: fetching %s' % url, file=sys.stderr)
     request = urllib.request.Request(url, data=data, method=method)
     if connection_params.token and url.startswith('http'):
-        request.add_header('Authorization', '%s %s' % (connection_params.token_type, connection_params.token))
+        if connection_params.token_type:
+            authorization = '%s %s' % (connection_params.token_type, connection_params.token)
+        else:
+            authorization = connection_params.token
+        request.add_header('Authorization', authorization)
     if content_type is not None:
         request.add_header('Content-Type', content_type)
     if accept is not None:
@@ -466,7 +535,7 @@ def fetch(path, params={}, explicit_host=None, fmt='json', host=None, cache=True
 
 
 @query_random_host_with_retry(request_type='grpc')
-def invoke_grpc(func, *params, explicit_host=None, endpoint=None):
+def invoke_grpc(func, *params, explicit_host=None, endpoint=None, stub_factory=kikimr_grpc.TGRpcServerStub, endpoints=None):
     options = [
         ('grpc.max_receive_message_length', 256 << 20),  # 256 MiB
     ]
@@ -477,7 +546,7 @@ def invoke_grpc(func, *params, explicit_host=None, endpoint=None):
 
     def work(channel):
         try:
-            stub = kikimr_grpc.TGRpcServerStub(channel)
+            stub = stub_factory(channel)
             res = getattr(stub, func)(*params)
             if connection_params.debug:
                 print('INFO: result <<< %s >>>' % text_format.MessageToString(res, as_one_line=True), file=sys.stderr)
@@ -551,6 +620,73 @@ def cms_host_restart_request(user, host, reason, duration_usec, max_avail):
         return '%s: %s' % (kikimr_cms.TStatus.ECode.Name(response.Status.Code), response.Status.Reason)
 
 
+def get_piles_info():
+    request = ydb_bridge.GetClusterStateRequest()
+    response = invoke_grpc('GetClusterState', request, stub_factory=bridge_grpc_server.BridgeServiceStub)
+    result = ydb_bridge.GetClusterStateResult()
+    response.operation.result.Unpack(result)
+    return result
+
+
+def promote_pile(pile_id):
+    request = ydb_bridge.UpdateClusterStateRequest()
+    request.updates.add().CopyFrom(ydb_bridge.PileStateUpdate(
+        pile_id=pile_id,
+        state=ydb_bridge.PileState.PROMOTED
+    ))
+    invoke_grpc('UpdateClusterState', request, stub_factory=bridge_grpc_server.BridgeServiceStub)
+
+
+def set_primary_pile(primary_pile_id, synchronized_piles):
+    request = ydb_bridge.UpdateClusterStateRequest()
+    request.updates.add().CopyFrom(ydb_bridge.PileStateUpdate(
+        pile_id=primary_pile_id,
+        state=ydb_bridge.PileState.PRIMARY
+    ))
+    for pile_id in synchronized_piles:
+        request.updates.add().CopyFrom(ydb_bridge.PileStateUpdate(
+            pile_id=pile_id,
+            state=ydb_bridge.PileState.SYNCHRONIZED
+        ))
+    invoke_grpc('UpdateClusterState', request, stub_factory=bridge_grpc_server.BridgeServiceStub)
+
+
+def disconnect_pile(pile_id, pile_to_endpoints):
+    request = ydb_bridge.UpdateClusterStateRequest()
+    request.updates.add().CopyFrom(ydb_bridge.PileStateUpdate(
+        pile_id=pile_id,
+        state=ydb_bridge.PileState.DISCONNECTED
+    ))
+    request.specific_pile_ids.append(pile_id)
+    invoke_grpc('UpdateClusterState', request, stub_factory=bridge_grpc_server.BridgeServiceStub, endpoints=pile_to_endpoints[pile_id])
+    other_pile_ids = [x for x in pile_to_endpoints.keys() if x != pile_id]
+    request = ydb_bridge.UpdateClusterStateRequest()
+    request.updates.add().CopyFrom(ydb_bridge.PileStateUpdate(
+        pile_id=pile_id,
+        state=ydb_bridge.PileState.DISCONNECTED,
+    ))
+    request.specific_pile_ids.extend(other_pile_ids)
+    invoke_grpc('UpdateClusterState', request, stub_factory=bridge_grpc_server.BridgeServiceStub, endpoints=pile_to_endpoints[other_pile_ids[0]])
+
+
+def connect_pile(pile_id, pile_to_endpoints):
+    request = ydb_bridge.UpdateClusterStateRequest()
+    request.updates.add().CopyFrom(ydb_bridge.PileStateUpdate(
+        pile_id=pile_id,
+        state=ydb_bridge.PileState.NOT_SYNCHRONIZED,
+    ))
+    request.specific_pile_ids.append(pile_id)
+    invoke_grpc('UpdateClusterState', request, stub_factory=bridge_grpc_server.BridgeServiceStub, endpoints=pile_to_endpoints[pile_id])
+    other_pile_ids = [x for x in pile_to_endpoints.keys() if x != pile_id]
+    request = ydb_bridge.UpdateClusterStateRequest()
+    request.updates.add().CopyFrom(ydb_bridge.PileStateUpdate(
+        pile_id=pile_id,
+        state=ydb_bridge.PileState.NOT_SYNCHRONIZED,
+    ))
+    request.specific_pile_ids.extend(other_pile_ids)
+    invoke_grpc('UpdateClusterState', request, stub_factory=bridge_grpc_server.BridgeServiceStub, endpoints=pile_to_endpoints[other_pile_ids[0]])
+
+
 def create_bsc_request(args):
     request = kikimr_bsconfig.TConfigRequest(Rollback=args.dry_run)
 
@@ -601,6 +737,26 @@ def create_readonly_request(args, vslot, value):
 
 def invoke_wipe_request(request):
     return invoke_bsc_request(request)
+
+
+def invoke_nbs_request(request_type, request):
+    return invoke_grpc(request_type, request, stub_factory=nbs_grpc_server.NbsServiceStub)
+
+
+def get_status(response):
+    return response.operation.ready and response.operation.status == StatusIds.SUCCESS
+
+
+def get_status_str(response):
+    success = get_status(response)
+
+    return 'success' if success else 'failure'
+
+
+def print_nbs_request_result(args, request, response):
+    status = get_status(response)
+    error_reason = 'Request has failed: \n{0}\n{1}\n'.format(request, response)
+    print_status(args, status, error_reason)
 
 
 @inmemcache('base_config_and_storage_pools', cache_enable_param='cache')
@@ -690,21 +846,21 @@ def bytes_to_string(num, round, suffix):
     return f'{res}{right}{suffix}'
 
 
-def gib_string(num):
-    return bytes_to_string(num, 1024 ** 3, '')
+def gb_string(num):
+    return bytes_to_string(num, 1000 ** 3, ' GB')
 
 
 def bytes_string(num):
-    if num > 1024 ** 5:
-        return bytes_to_string(num, 1024 ** 5, ' PiB')
-    if num > 1024 ** 4:
-        return bytes_to_string(num, 1024 ** 4, ' TiB')
-    if num > 1024 ** 3:
-        return bytes_to_string(num, 1024 ** 3, ' GiB')
-    if num > 1024 ** 2:
-        return bytes_to_string(num, 1024 ** 2, ' MiB')
-    if num > 1024:
-        return bytes_to_string(num, 1024, ' kiB')
+    if num > 1000 ** 5:
+        return bytes_to_string(num, 1000 ** 5, ' PB')
+    if num > 1000 ** 4:
+        return bytes_to_string(num, 1000 ** 4, ' TB')
+    if num > 1000 ** 3:
+        return bytes_to_string(num, 1000 ** 3, ' GB')
+    if num > 1000 ** 2:
+        return bytes_to_string(num, 1000 ** 2, ' MB')
+    if num > 1000:
+        return bytes_to_string(num, 1000, ' kB')
     return bytes_to_string(num, 1, '')
 
 
@@ -829,6 +985,13 @@ def build_node_fqdn_maps(base_config):
     return node_id_to_host, host_to_node_id
 
 
+def build_pile_to_node_id_map(base_config):
+    pile_to_node_id_map = defaultdict(list)
+    for node in base_config.Node:
+        pile_to_node_id_map[node.Location.BridgePileName].append(node.NodeId)
+    return pile_to_node_id_map
+
+
 def build_pdisk_map(base_config):
     pdisk_map = {
         get_pdisk_id(pdisk): pdisk
@@ -857,11 +1020,16 @@ def build_pdisk_static_slots_map(base_config):
 def build_pdisk_usage_map(base_config, count_donors=False, storage_pool=None):
     pdisk_usage_map = {}
 
+    group_size_map = {group.GroupId: group.GroupSizeInUnits for group in base_config.Group}
+
+    pdisk_slot_size_in_units_map = {}
     for pdisk in base_config.PDisk:
         if storage_pool is not None and not pdisk_matches_storage_pool(pdisk, storage_pool):
             continue
         pdisk_id = get_pdisk_id(pdisk)
         pdisk_usage_map[pdisk_id] = pdisk.NumStaticSlots
+        _, slot_size_in_units = get_pdisk_inferred_settings(pdisk)
+        pdisk_slot_size_in_units_map[pdisk_id] = slot_size_in_units
 
     for vslot in base_config.VSlot:
         if not (vslot.GroupId & 0x80000000):  # don't count vslots from static groups twice
@@ -869,10 +1037,13 @@ def build_pdisk_usage_map(base_config, count_donors=False, storage_pool=None):
         pdisk_id = get_pdisk_id(vslot.VSlotId)
         if pdisk_id not in pdisk_usage_map:
             continue
-        pdisk_usage_map[pdisk_id] += 1
+        group_size_in_units = group_size_map.get(vslot.GroupId, 0)
+        weight = get_vslot_owner_weight(group_size_in_units, pdisk_slot_size_in_units_map.get(pdisk_id, 0))
+        pdisk_usage_map[pdisk_id] += weight
         for donor in vslot.Donors if count_donors else []:
             donor_pdisk_id = get_pdisk_id(donor.VSlotId)
-            pdisk_usage_map[donor_pdisk_id] += 1
+            donor_weight = get_vslot_owner_weight(group_size_in_units, pdisk_slot_size_in_units_map.get(donor_pdisk_id, 0))
+            pdisk_usage_map[donor_pdisk_id] += donor_weight
 
     return pdisk_usage_map
 
@@ -1038,11 +1209,26 @@ def fetch_node_mon_map(nodes=None):
     }
 
 
+def fetch_node_to_endpoint_map(nodes=None):
+    res = {}
+    for node_id, sysinfo in fetch_json_info('sysinfo', nodes).items():
+        grpc_port = None
+        mon_port = None
+        for ep in sysinfo.get('Endpoints', []):
+            if ep['Name'] == 'grpc':
+                grpc_port = int(ep['Address'][1:])
+            elif ep['Name'] == 'http-mon':
+                mon_port = int(ep['Address'][1:])
+        res[node_id] = EndpointInfo('grpc', sysinfo['Host'], grpc_port, mon_port)
+    return res
+
+
 def get_vslots_by_vdisk_ids(base_config, vdisk_ids):
     vdisk_vslot_map = {}
     for v in base_config.VSlot:
         vdisk_vslot_map['[%08x:_:%u:%u:%u]' % (v.GroupId, v.FailRealmIdx, v.FailDomainIdx, v.VDiskIdx)] = v
         vdisk_vslot_map['[%08x:%u:%u:%u:%u]' % (v.GroupId, v.GroupGeneration, v.FailRealmIdx, v.FailDomainIdx, v.VDiskIdx)] = v
+        vdisk_vslot_map['(%d-%u-%u-%u-%u)' % (v.GroupId, v.GroupGeneration, v.FailRealmIdx, v.FailDomainIdx, v.VDiskIdx)] = v
 
     res = []
     for string in vdisk_ids:
@@ -1054,25 +1240,28 @@ def get_vslots_by_vdisk_ids(base_config, vdisk_ids):
     return res
 
 
-def filter_healthy_groups(groups, node_mon_map, base_config, vslot_map):
-    res = {
-        group.GroupId: len(group.VSlotId)
-        for group in base_config.Group
-        if group.GroupId in groups
-        if all(vslot.Status == 'READY' for vslot in vslots_of_group(group, vslot_map))
-    }
-    check_set = {
-        (*vslot_id, *attrgetter('GroupId', 'FailRealmIdx', 'FailDomainIdx', 'VDiskIdx')(vslot))
-        for vslot_id, vslot in vslot_map.items()
-        if vslot.GroupId in res
-    }
-    for vdisk_id, j in fetch_json_info('vdiskinfo', {node_id for node_id, _, _, _, _, _, _ in check_set}).items():
-        if j.get('Replicated') and j.get('VDiskState') == 'OK':
-            check_item = *vdisk_id, *itemgetter('GroupID', 'Ring', 'Domain', 'VDisk')(j['VDiskId'])
-            if check_item in check_set:
-                check_set.remove(check_item)
-                res[j['VDiskId']['GroupID']] -= 1
-    return {group_id for group_id, count in res.items() if not count}
+def vdisk_is_ok(vslot):
+    metrics = vslot.VDiskMetrics
+    return metrics.Replicated and metrics.State == whiteboard_disk_states.EVDiskState.OK
+
+
+def vslot_is_bsc_ready(vslot):
+    # BSC treats a VDisk as ready only after Status=READY is stable for ReadyStablePeriod.
+    # Degraded/fail-model checks use IsReady (BaseConfig.TVSlot.Ready), not Status alone.
+    return vslot.Status == 'READY' and vslot.Ready and vdisk_is_ok(vslot)
+
+
+def filter_healthy_groups(groups, base_config, vslot_map):
+    healthy = set()
+    for group in base_config.Group:
+        if group.GroupId not in groups:
+            continue
+        vslots = list(vslots_of_group(group, vslot_map))
+        if not vslots:
+            continue
+        if all(vslot_is_bsc_ready(vslot) for vslot in vslots):
+            healthy.add(group.GroupId)
+    return healthy
 
 
 def add_host_access_options(parser):
@@ -1080,11 +1269,18 @@ def add_host_access_options(parser):
 
 
 def add_vdisk_ids_option(g, required=False):
-    g.add_argument('--vdisk-ids', type=str, nargs='+', required=required, help='Space separated list of vdisk ids in format [GroupId:_:FailRealm:FailDomain:VDiskIdx]')
+    help_text = (
+        'Space separated list of vdisk ids in formats: '
+        '[GroupId(hex):_:FailRealm:FailDomain:VDiskIdx], '
+        '[GroupId(hex):GroupGen:FailRealm:FailDomain:VDiskIdx], '
+        'or (GroupId(dec)-GroupGen-FailRealm-FailDomain-VDiskIdx)'
+    )
+    g.add_argument('--vdisk-ids', type=str, nargs='+', required=required, help=help_text)
 
 
 def add_pdisk_ids_option(p, required=False):
-    p.add_argument('--pdisk-ids', type=str, nargs='+', required=required, help='Space separated list of pdisk ids in format [NodeId:PDiskId]')
+    p.add_argument('--pdisk-ids', type=str, nargs='+', required=required,
+                   help='Space separated list of pdisk ids in format [NodeId:PDiskId] (brackets optional)')
 
 
 def add_group_ids_option(p, required=False):
@@ -1119,14 +1315,18 @@ def flush_cache():
     cache.clear()
 
 
-def print_json_result(status: str, description: str = None, file=sys.stdout):
+def print_json_result(status: str, description: str = None, file=None):
+    if file is None:
+        file = sys.stdout
     d = {'status': status}
     if description is not None:
         d['description'] = description
     print(json.dumps(d), file=file)
 
 
-def print_result(format: str, status: str, description: str = None, file=sys.stderr):
+def print_result(format: str, status: str, description: str = None, file=None):
+    if file is None:
+        file = sys.stderr
     if format == 'json':
         print_json_result(status, description)
     else:
@@ -1139,19 +1339,7 @@ def print_result(format: str, status: str, description: str = None, file=sys.std
 def print_request_result(args, request, response):
     success = is_successful_bsc_response(response)
     error_reason = 'Request has failed: \n{0}\n{1}\n'.format(request, response)
-    print_status_if_verbose(args, success, error_reason)
-
-
-def print_status_if_verbose(args, success, error_reason):
-    format = getattr(args, 'format', 'pretty')
-    verbose = getattr(args, 'verbose', False)
-    if success:
-        print_result(format, 'success')
-    else:
-        if verbose:
-            print_result(format, 'error', error_reason)
-        else:
-            print_result(format, 'error', 'add --verbose for more info')
+    print_status(args, success, error_reason)
 
 
 def print_status_if_not_quiet(args, success, error_reason):
@@ -1188,3 +1376,58 @@ def is_dynamic_group(groupId):
 
 def is_successful_bsc_response(response):
     return response.Success or 'transaction rollback' in response.ErrorDescription
+
+
+def dump_group_mapper_error(response: kikimr_bsconfig.TConfigResponse, args):
+    verbose = getattr(args, 'verbose', False)
+    err: kikimr_bsconfig.TGroupMapperError | None = None
+
+    if (len(response.Status) == 1) and verbose:
+        for fail_param in response.Status[0].FailParam:
+            if fail_param.HasField("GroupMapperError"):
+                err = fail_param.GroupMapperError
+
+    if err is None:
+        return
+
+    table_args = SimpleNamespace(sort_by=None, columns=None, format=args.format, no_header=None)
+
+    def table_generator(data: typing.Iterable[kikimr_bsconfig.TGroupMapperError.TStats], print_domain: bool = True):
+        all_columns = []
+        if print_domain:
+            all_columns += ['Domain']
+        all_columns += [
+            'All slots are occupied',
+            'Not enough space',
+            'Not accepting new slots',
+            'Not operational',
+            'Decommission',
+        ]
+        table_output = table.TableOutput(all_columns)
+        rows = []
+        for st in data:
+            row = {}
+            if print_domain:
+                row['Domain'] = f"{st.Domain}"
+            row['All slots are occupied'] = str(st.AllSlotsAreOccupied)
+            row['Not enough space'] = str(st.NotEnoughSpace)
+            row['Not accepting new slots'] = str(st.NotAcceptingNewSlots)
+            row['Not operational'] = str(st.NotOperational)
+            row['Decommission'] = str(st.Decommission)
+            rows.append(row)
+
+        table_output.dump(rows, table_args)
+
+    print("Total stats")
+    table_generator([err.TotalStats], print_domain=False)
+    if len(err.MatchingDomainsStats) > 0:
+        print("Matching domains")
+        table_generator(err.MatchingDomainsStats)
+    else:
+        print("No matching domains")
+    print(f"OK Discs Count: {err.OkDisksCount}")
+    print(
+        f"Missing {err.RealmLocationKey}s Count: {err.MissingFailRealmsCount}\n"
+        f"{err.RealmLocationKey}s With Missing {err.DomainLocationKey}s Count: {err.FailRealmsWithMissingDomainsCount}\n"
+        f"{err.DomainLocationKey}s With Missing Disks Count: {err.DomainsWithMissingDisksCount}"
+    )

@@ -1,15 +1,16 @@
 PY3TEST()
-INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 ENV(YDB_USE_IN_MEMORY_PDISKS=true)
 
 TEST_SRCS(
     test_leader_start_inflight.py
 )
 
+REQUIREMENTS(cpu:4)
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
-    REQUIREMENTS(ram:32 cpu:4)
+    REQUIREMENTS(ram:32)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()

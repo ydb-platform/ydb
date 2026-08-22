@@ -1,19 +1,22 @@
 #pragma once
 
-#include "private.h"
+#include "public.h"
 
 #include <yt/yt/library/tracing/tracer.h>
 
 #include <yt/yt/library/profiling/sensor.h>
 
-#include <yt/yt/library/tvm/service/config.h>
 #include <yt/yt/library/tvm/service/public.h>
+
+#include <yt/yt/core/actions/future.h>
+
+#include <yt/yt/core/concurrency/public.h>
 
 #include <yt/yt/core/misc/mpsc_stack.h>
 
-#include <yt/yt/core/rpc/grpc/config.h>
+#include <yt/yt/core/rpc/grpc/public.h>
 
-#include <yt/yt/core/ytree/yson_struct.h>
+#include <yt/yt/core/rpc/public.h>
 
 #include <library/cpp/yt/threading/atomic_object.h>
 #include <library/cpp/yt/threading/spin_lock.h>
@@ -21,78 +24,6 @@
 #include <library/cpp/yt/memory/atomic_intrusive_ptr.h>
 
 namespace NYT::NTracing {
-
-////////////////////////////////////////////////////////////////////////////////
-
-struct TJaegerTracerDynamicConfig
-    : public NYTree::TYsonStruct
-{
-    NRpc::NGrpc::TChannelConfigPtr CollectorChannel;
-
-    std::optional<i64> MaxRequestSize;
-
-    std::optional<i64> MaxMemory;
-
-    std::optional<double> SubsamplingRate;
-
-    std::optional<TDuration> FlushPeriod;
-
-    REGISTER_YSON_STRUCT(TJaegerTracerDynamicConfig);
-
-    static void Register(TRegistrar registrar);
-};
-
-DEFINE_REFCOUNTED_TYPE(TJaegerTracerDynamicConfig)
-
-////////////////////////////////////////////////////////////////////////////////
-
-struct TJaegerTracerConfig
-    : public NYTree::TYsonStruct
-{
-    NRpc::NGrpc::TChannelConfigPtr CollectorChannelConfig;
-
-    TDuration FlushPeriod;
-
-    TDuration StopTimeout;
-
-    TDuration RpcTimeout;
-
-    TDuration EndpointChannelTimeout;
-
-    TDuration QueueStallTimeout;
-
-    TDuration ReconnectPeriod;
-
-    i64 MaxRequestSize;
-
-    i64 MaxBatchSize;
-
-    i64 MaxMemory;
-
-    std::optional<double> SubsamplingRate;
-
-    // ServiceName is required by jaeger. When ServiceName is missing, tracer is disabled.
-    std::optional<TString> ServiceName;
-
-    THashMap<TString, TString> ProcessTags;
-
-    bool EnablePidTag;
-
-    NAuth::TTvmServiceConfigPtr TvmService;
-
-    // Does not send spans to a collector, but just drops them instead. Logs batch and span count.
-    bool TestDropSpans;
-
-    TJaegerTracerConfigPtr ApplyDynamic(const TJaegerTracerDynamicConfigPtr& dynamicConfig) const;
-
-    bool IsEnabled() const;
-
-    REGISTER_YSON_STRUCT(TJaegerTracerConfig);
-
-    static void Register(TRegistrar registrar);
-};
-
-DEFINE_REFCOUNTED_TYPE(TJaegerTracerConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -129,7 +60,7 @@ public:
     TJaegerChannelManager();
     TJaegerChannelManager(
         const TJaegerTracerConfigPtr& config,
-        const TString& endpoint,
+        const std::string& endpoint,
         const NAuth::ITvmServicePtr& tvmService);
 
     bool Push(const std::vector<TSharedRef>& batches, int spanCount);
@@ -140,7 +71,7 @@ public:
 
 private:
     const NAuth::ITvmServicePtr TvmService_;
-    const TString Endpoint_;
+    const std::string Endpoint_;
 
     const TInstant ReopenTime_;
     const TDuration RpcTimeout_;
@@ -182,13 +113,13 @@ private:
 
     TInstant LastSuccessfulFlushTime_ = TInstant::Now();
 
-    THashMap<TString, TBatchInfo> BatchInfo_;
+    THashMap<std::string, TBatchInfo> BatchInfo_;
     i64 TotalMemory_ = 0;
     i64 TotalSize_ = 0;
 
     NThreading::TAtomicObject<TPromise<void>> QueueEmptyPromise_ = NewPromise<void>();
 
-    THashMap<TString, TJaegerChannelManagerPtr> CollectorChannels_;
+    THashMap<std::string, TJaegerChannelManagerPtr> CollectorChannels_;
     NRpc::NGrpc::TChannelConfigPtr OpenChannelConfig_;
 
 
@@ -196,8 +127,8 @@ private:
     void DequeueAll(const TJaegerTracerConfigPtr& config);
     void NotifyEmptyQueue();
 
-    std::tuple<std::vector<TSharedRef>, int, int> PeekQueue(const TJaegerTracerConfigPtr& config, const TString& endpoint);
-    void DropQueue(int batchCount, const TString& endpoint);
+    std::tuple<std::vector<TSharedRef>, int, int> PeekQueue(const TJaegerTracerConfigPtr& config, const std::string& endpoint);
+    void DropQueue(int batchCount, const std::string& endpoint);
     void DropFullQueue();
 
     TSharedRef GetProcessInfo(const TJaegerTracerConfigPtr& config);

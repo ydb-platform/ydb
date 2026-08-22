@@ -1,26 +1,37 @@
 #pragma once
 
-#include "global.h"
+#include "events.h"
 
 #include <ydb/core/base/row_version.h>
+#include <ydb/core/persqueue/pqtablet/blob/blob.h>
 #include <ydb/core/protos/pqconfig.pb.h>
-#include <ydb/core/persqueue/blob.h>
-#include <ydb/core/persqueue/blob_refcounter.h>
-#include <ydb/core/persqueue/key.h>
-#include <ydb/core/persqueue/metering_sink.h>
-#include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
-#include <ydb/core/persqueue/percentile_counter.h>
-#include <ydb/core/persqueue/sourceid_info.h>
-#include <ydb/core/persqueue/write_id.h>
+#include <ydb/core/persqueue/common/blob_refcounter.h>
+#include <ydb/core/persqueue/common/key.h>
+#include <ydb/core/persqueue/common/write_stats.h>
+#include <ydb/core/persqueue/common/partitioning_keys_manager.h>
+#include <ydb/core/persqueue/common/metering.h>
+#include <ydb/core/persqueue/common/sourceid_info.h>
+#include <ydb/core/persqueue/public/partition_key_range/partition_key_range.h>
+#include <ydb/core/persqueue/public/counters/percentile_counter.h>
+#include <ydb/core/persqueue/public/write_id.h>
+#include <ydb/core/protos/msgbus.pb.h>
+#include <ydb/core/protos/msgbus_pq.pb.h>
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
 #include <ydb/library/actors/core/event.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/actorid.h>
-#include <ydb/core/grpc_services/rpc_calls.h>
+#include <ydb/library/actors/wilson/wilson_span.h>
+#include <ydb/public/api/protos/draft/persqueue_error_codes.pb.h>
 #include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/control_plane.h>
+
+#include <ydb/core/persqueue/events/internal/protos/events.pb.h>
+
 #include <util/generic/maybe.h>
+#include <expected>
 
 namespace NYdb::inline Dev {
     class ICredentialsProviderFactory;
@@ -49,28 +60,23 @@ namespace NPQ {
     };
 
     struct TRequestedBlob {
+        mutable TKey Key;
+        mutable TString RawValue;
         ui64 Offset;
         ui16 PartNo;
         ui32 Count;
         ui16 InternalPartsCount;
         ui32 Size;
-        TString Value;
         bool Cached;
-        TKey Key;
-        ui64 CreationUnixTime = 0;
+        ui64 CreationUnixTime;
+        mutable std::shared_ptr<TVector<TBatch>> Batches;
 
         TRequestedBlob() = delete;
+        TRequestedBlob(ui64 offset, ui16 partNo, ui32 count, ui16 internalPartsCount, ui32 size, TString value, const TKey& key, ui64 creationUnixTime);
 
-        TRequestedBlob(ui64 offset, ui16 partNo, ui32 count, ui16 internalPartsCount, ui32 size, TString value, const TKey& key)
-            : Offset(offset)
-            , PartNo(partNo)
-            , Count(count)
-            , InternalPartsCount(internalPartsCount)
-            , Size(size)
-            , Value(value)
-            , Cached(false)
-            , Key(key)
-        {}
+        bool Empty() const;
+        void Clear();
+        std::shared_ptr<TVector<TBatch>> GetBatches() const;
     };
 
     struct TDataKey {
@@ -107,7 +113,7 @@ namespace NPQ {
 
 struct TEvPQ {
     enum EEv {
-        EvWrite = TEvPersQueue::EvInternalEvents,
+        EvWrite = InternalEventSpaceBegin(NPQ::NEvents::EServices::INTERNAL),
         EvRead,
         EvDie,
         EvMonRequest,
@@ -200,8 +206,47 @@ struct TEvPQ {
         EvDeletePartitionDone,
         EvTransactionCompleted,
         EvListAllTopicsResponse,
+        EvAcquireExclusiveLock,
+        EvExclusiveLockAcquired,
+        EvReleaseExclusiveLock,
         EvRunCompaction,
-        EvEnd
+        EvMirrorTopicDescription,
+        EvBroadcastPartitionError,
+        EvForceCompaction,
+        EvMLPGetPartitionRequest,
+        EvMLPGetPartitionResponse,
+        EvMLPErrorResponse,
+        EvMLPReadRequest,
+        EvMLPReadResponse,
+        EvMLPCommitRequest,
+        EvMLPCommitResponse,
+        EvMLPUnlockRequest,
+        EvMLPUnlockResponse,
+        EvMLPChangeMessageDeadlineRequest,
+        EvMLPChangeMessageDeadlineResponse,
+        EvGetMLPConsumerStateRequest,
+        EvGetMLPConsumerStateResponse,
+        EvMLPConsumerUpdateConfig,
+        EvMLPDLQMoverResponse,
+        EvEndOffsetChanged,
+        EvMLPConsumerState,
+        EvTxDone,
+        EvMLPConsumerMonRequest,
+        EvMLPPurgeRequest,
+        EvMLPPurgeResponse,
+        EvMLPConsumerStatus,
+        EvUpdateReadMetrics,
+        EvMLPUpdateExternalLockedMessageGroupsId,
+        EvMLPGetRuntimeAttributesRequest,
+        EvMLPGetRuntimeAttributesResponse,
+        EvRewindCommitResult,
+        EvConsumerBatchProcessorMetrics,
+        EvProcessBatchRead,
+        EvProcessBatchReadResult,
+        EvTopicSqsActionMetrics,
+        EvProcessBatchKeys,
+        EvProcessBatchKeysResult,
+        EvEnd,
     };
 
     struct TEvHandleWriteResponse : TEventLocal<TEvHandleWriteResponse, EvHandleWriteResponse> {
@@ -214,9 +259,32 @@ struct TEvPQ {
     };
 
     struct TEvWrite : public TEventLocal<TEvWrite, EvWrite> {
+        enum class EWriteExternalDeduplicationStatus: i8 {
+            Unchecked,
+            Checked,
+            Error,
+        };
+
+        enum class EMessageExternalDeduplicationStatus: i8 {
+            Unchecked,
+            Duplicate,
+            Unique,
+            Error,
+        };
+
+        struct TMessageExternalDeduplicationInfo {
+            struct TPartitonAndOffset {
+                ui32 Partition;
+                ui64 Offset;
+            };
+            EMessageExternalDeduplicationStatus Status = EMessageExternalDeduplicationStatus::Unchecked;
+            std::optional<TPartitonAndOffset> OriginalPartitionAndOffset;
+        };
+
         struct TMsg {
             TString SourceId;
             ui64 SeqNo;
+            std::optional<ui64> MaxSeqNo; // for batch msgs
             ui16 PartNo;
             ui16 TotalParts;
             ui32 TotalSize;
@@ -228,6 +296,7 @@ struct TEvPQ {
             ui32 UncompressedSize;
             TString PartitionKey;
             TString ExplicitHashKey;
+            TString ChoosePartitionKey;
             bool External;
             bool IgnoreQuotaDeadline;
             // If specified, Data will contain heartbeat's data
@@ -236,9 +305,15 @@ struct TEvPQ {
             // For Kafka deduplication:
             bool EnableKafkaDeduplication = false;
             TMaybe<i16> ProducerEpoch;
+
+            std::optional<TString> MessageDeduplicationId;
+            TMessageExternalDeduplicationInfo ExternalDeduplicationInfo;
+            ui32 LogicalMessageCount = 1;
+            bool IsBatch = false;
+            std::vector<std::pair<TString, ui64>> PartitionKeys;
         };
 
-        TEvWrite(const ui64 cookie, const ui64 messageNo, const TString& ownerCookie, const TMaybe<ui64> offset, TVector<TMsg> &&msgs, bool isDirectWrite, std::optional<ui64> initialSeqNo)
+        TEvWrite(const ui64 cookie, const ui64 messageNo, const TString& ownerCookie, const TMaybe<ui64> offset, TVector<TMsg> &&msgs, bool isDirectWrite, std::optional<ui64> initialSeqNo, EWriteExternalDeduplicationStatus externalDeduplicationStatus)
         : Cookie(cookie)
         , MessageNo(messageNo)
         , OwnerCookie(ownerCookie)
@@ -246,7 +321,9 @@ struct TEvPQ {
         , Msgs(std::move(msgs))
         , IsDirectWrite(isDirectWrite)
         , InitialSeqNo(initialSeqNo)
-        {}
+        , ExternalDeduplicationStatus(externalDeduplicationStatus)
+        {
+        }
 
         ui64 Cookie;
         ui64 MessageNo;
@@ -255,7 +332,7 @@ struct TEvPQ {
         TVector<TMsg> Msgs;
         bool IsDirectWrite;
         std::optional<ui64> InitialSeqNo;
-
+        EWriteExternalDeduplicationStatus ExternalDeduplicationStatus;
     };
 
     struct TEvReadTimeout : public TEventLocal<TEvReadTimeout, EvReadTimeout> {
@@ -268,9 +345,9 @@ struct TEvPQ {
 
     struct TEvRead : public TEventLocal<TEvRead, EvRead> {
         TEvRead(const ui64 cookie, const ui64 offset, ui64 lastOffset, const ui16 partNo, const ui32 count,
-                const TString& sessionId, const TString& clientId, const ui32 timeout, const ui32 size,
+                const TString& sessionId, const TString& clientId, const ui32 timeout, const ui32 size, const bool readToBlobEnd,
                 const ui32 maxTimeLagMs, const ui64 readTimestampMs, const TString& clientDC,
-                bool externalOperation, const TActorId& pipeClient)
+                bool externalOperation, const TActorId& pipeClient, const TActorId& replyTo = {})
             : Cookie(cookie)
             , Offset(offset)
             , PartNo(partNo)
@@ -279,12 +356,14 @@ struct TEvPQ {
             , ClientId(clientId)
             , Timeout(timeout)
             , Size(size)
+            , ReadToBlobEnd(readToBlobEnd)
             , MaxTimeLagMs(maxTimeLagMs)
             , ReadTimestampMs(readTimestampMs)
             , ClientDC(clientDC)
             , ExternalOperation(externalOperation)
             , PipeClient(pipeClient)
             , LastOffset(lastOffset)
+            , ReplyTo(replyTo)
         {}
 
         ui64 Cookie;
@@ -295,12 +374,18 @@ struct TEvPQ {
         TString ClientId;
         ui32 Timeout;
         ui32 Size;
+        bool ReadToBlobEnd;
         ui32 MaxTimeLagMs;
         ui64 ReadTimestampMs;
         TString ClientDC;
         bool ExternalOperation;
         TActorId PipeClient;
         ui64 LastOffset;
+        TActorId ReplyTo;
+
+        bool IsInternal() {
+            return !!ReplyTo;
+        }
     };
 
     struct TMessageGroup {
@@ -369,7 +454,9 @@ struct TEvPQ {
         TEvSetClientInfo(const ui64 cookie, const TString& clientId, const ui64 offset, const TString& sessionId, const ui64 partitionSessionId,
                             const ui32 generation, const ui32 step, const TActorId& pipeClient,
                             ESetClientInfoType type = ESCI_OFFSET, ui64 readRuleGeneration = 0, bool strict = false,
-                            const std::optional<TString>& сommittedMetadata = std::nullopt)
+                            const std::optional<TString>& сommittedMetadata = std::nullopt,
+                            bool mlpRequest = false
+                        )
         : Cookie(cookie)
         , ClientId(clientId)
         , Offset(offset)
@@ -380,6 +467,7 @@ struct TEvPQ {
         , Type(type)
         , ReadRuleGeneration(readRuleGeneration)
         , Strict(strict)
+        , MLPRequest(mlpRequest)
         , PipeClient(pipeClient)
         , CommittedMetadata(сommittedMetadata)
         {
@@ -395,8 +483,10 @@ struct TEvPQ {
         ESetClientInfoType Type;
         ui64 ReadRuleGeneration;
         bool Strict;
+        bool MLPRequest;
         TActorId PipeClient;
         std::optional<TString> CommittedMetadata;
+        bool IsInternal = false;
     };
 
 
@@ -472,11 +562,13 @@ struct TEvPQ {
 
 
     struct TEvProxyResponse : public TEventLocal<TEvProxyResponse, EvProxyResponse> {
-        TEvProxyResponse(ui64 cookie)
+        TEvProxyResponse(ui64 cookie, bool isInternal)
             : Cookie(cookie)
+            , IsInternal(isInternal)
             , Response(std::make_shared<NKikimrClient::TResponse>())
         {}
         ui64 Cookie;
+        bool IsInternal;
         std::shared_ptr<NKikimrClient::TResponse> Response;
     };
 
@@ -489,15 +581,17 @@ struct TEvPQ {
     };
 
     struct TEvError : public TEventLocal<TEvError, EvError> {
-        TEvError(const NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error, ui64 cookie)
+        TEvError(const NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error, ui64 cookie, bool internal = false)
         : ErrorCode(errorCode)
         , Error(error)
         , Cookie(cookie)
+        , IsInternal(internal)
         {}
 
         NPersQueue::NErrorCode::EErrorCode ErrorCode;
         TString Error;
         ui64 Cookie;
+        bool IsInternal = false;
     };
 
     struct TEvBlobRequest : public TEventLocal<TEvBlobRequest, EvBlobRequest> {
@@ -536,8 +630,8 @@ struct TEvPQ {
         void Check() const
         {
             //error or empty response(all from cache) or not empty response at all
-            Y_ABORT_UNLESS(Error.HasError() || Blobs.empty() || !Blobs[0].Value.empty(),
-                "Cookie %" PRIu64 " Error code: %" PRIu32 ", blobs count: %" PRIu64, Cookie, Error.ErrorCode, Blobs.size());
+            AFL_ENSURE(Error.HasError() || Blobs.empty() || (!Blobs[0].Empty()))
+                ("Cookie", Cookie)("Error code", NPersQueue::NErrorCode::EErrorCode_Name(Error.ErrorCode))("blobs count", Blobs.size());
         }
 
     private:
@@ -587,6 +681,7 @@ struct TEvPQ {
         TString OwnerCookie;
         ui64 MessageNo;
         bool LastRequest;
+        bool FromDeduplicatedQueue = false;
     };
 
     struct TEvChangePartitionConfig : public TEventLocal<TEvChangePartitionConfig, EvChangePartitionConfig> {
@@ -678,6 +773,33 @@ struct TEvPQ {
         TActorId Sender;
     };
 
+    struct TEvUpdateReadMetrics : TEventLocal<TEvUpdateReadMetrics, EvUpdateReadMetrics> {
+        TEvUpdateReadMetrics(const TString& clientId, TDuration inFlightLimitReachedDuration)
+            : ClientId(clientId)
+            , InFlightLimitReachedDuration(inFlightLimitReachedDuration)
+        {}
+
+        TString ClientId;
+        TDuration InFlightLimitReachedDuration;
+    };
+
+    struct TEvConsumerBatchProcessorMetrics : TEventLocal<TEvConsumerBatchProcessorMetrics, EvConsumerBatchProcessorMetrics> {
+        TEvConsumerBatchProcessorMetrics(ui32 partitionId, const TString& user, ui64 cpuUsage)
+            : PartitionId(partitionId)
+            , User(user)
+            , CPUUsage(cpuUsage)
+        {
+        }
+
+        ui32 GetPartitionId() const {
+            return PartitionId;
+        }
+
+        ui32 PartitionId;
+        TString User;
+        ui64 CPUUsage;
+    };
+
     struct TEvUpdateAvailableSize : TEventLocal<TEvUpdateAvailableSize, EvUpdateAvailableSize> {
         TEvUpdateAvailableSize()
         {}
@@ -761,6 +883,21 @@ struct TEvPQ {
         NKikimr::TTabletCountersBase Counters;
     };
 
+    struct TEvMirrorTopicDescription : public TEventLocal<TEvMirrorTopicDescription, EvMirrorTopicDescription> {
+        TEvMirrorTopicDescription(NYdb::NTopic::TDescribeTopicResult description)
+            : Description(std::move(description))
+        {
+        }
+
+        TEvMirrorTopicDescription(TString error)
+            : Description(std::unexpected(std::move(error)))
+        {
+        }
+
+        std::expected<NYdb::NTopic::TDescribeTopicResult, TString> Description;
+    };
+
+
     struct TEvRetryWrite : public TEventLocal<TEvRetryWrite, EvRetryWrite> {
         TEvRetryWrite()
         {}
@@ -841,19 +978,33 @@ struct TEvPQ {
             Operations.push_back(std::move(operation));
         }
 
+        bool GetSkipSrcIdInfo() const { return SkipSrcIdInfo; }
+        void SetSkipSrcIdInfo(bool value) { SkipSrcIdInfo = value; }
+
         ui64 Step;
         ui64 TxId;
         TVector<NKikimrPQ::TPartitionOperation> Operations;
         TActorId SupportivePartitionActor;
         bool ForcePredicateFalse = false;
+        NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi::EOp DeferredFinalizeOp =
+            NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi::Unspecified;
+
+        NWilson::TSpan Span;
+
+    private:
+        bool SkipSrcIdInfo = false;
     };
 
     struct TEvTxCalcPredicateResult : public TEventLocal<TEvTxCalcPredicateResult, EvTxCalcPredicateResult> {
-        TEvTxCalcPredicateResult(ui64 step, ui64 txId, const NPQ::TPartitionId& partition, TMaybe<bool> predicate) :
+        TEvTxCalcPredicateResult(ui64 step, ui64 txId,
+                                 const NPQ::TPartitionId& partition,
+                                 TMaybe<bool> predicate,
+                                 const TString& issueMsg) :
             Step(step),
             TxId(txId),
             Partition(partition),
-            Predicate(predicate)
+            Predicate(predicate),
+            IssueMsg(issueMsg)
         {
         }
 
@@ -861,6 +1012,7 @@ struct TEvPQ {
         ui64 TxId;
         NPQ::TPartitionId Partition;
         TMaybe<bool> Predicate;
+        TString IssueMsg;
     };
 
     struct TEvProposePartitionConfig : public TEventLocal<TEvProposePartitionConfig, EvProposePartitionConfig> {
@@ -903,19 +1055,12 @@ struct TEvPQ {
         ui64 TxId;
 
         TMessageGroupsPtr ExplicitMessageGroups;
-    };
+        TMaybe<NKikimrPQ::TTransaction> SerializedTx;
+        TMaybe<NKikimrPQ::TPQTabletConfig> TabletConfig;
+        TMaybe<NKikimrPQ::TBootstrapConfig> BootstrapConfig;
+        TMaybe<NKikimrPQ::TPartitions> PartitionsData;
 
-    struct TEvTxCommitDone : public TEventLocal<TEvTxCommitDone, EvTxCommitDone> {
-        TEvTxCommitDone(ui64 step, ui64 txId, const NPQ::TPartitionId& partition) :
-            Step(step),
-            TxId(txId),
-            Partition(partition)
-        {
-        }
-
-        ui64 Step;
-        ui64 TxId;
-        NPQ::TPartitionId Partition;
+        NWilson::TSpan Span;
     };
 
     struct TEvTxRollback : public TEventLocal<TEvTxRollback, EvTxRollback> {
@@ -927,6 +1072,24 @@ struct TEvPQ {
 
         ui64 Step;
         ui64 TxId;
+        TMaybe<NKikimrPQ::TTransaction> SerializedTx;
+
+        NWilson::TSpan Span;
+    };
+
+    struct TEvTxDone : public TEventLocal<TEvTxDone, EvTxDone> {
+        TEvTxDone(ui64 step, ui64 txId, const NPQ::TPartitionId& partition) :
+            Step(step),
+            TxId(txId),
+            Partition(partition)
+        {
+        }
+
+        ui64 Step;
+        ui64 TxId;
+        NPQ::TPartitionId Partition;
+
+        NWilson::TSpan Span;
     };
 
     struct TEvSubDomainStatus : public TEventPB<TEvSubDomainStatus, NKikimrPQ::TEvSubDomainStatus, EvSubDomainStatus> {
@@ -981,10 +1144,11 @@ struct TEvPQ {
     };
 
     struct TEvConsumed : public TEventLocal<TEvConsumed, EvConsumed> {
-        TEvConsumed(ui64 consumedBytes, ui64 requestCookie, const TString& consumer)
-            : ConsumedBytes(consumedBytes),
-              RequestCookie(requestCookie),
-              Consumer(consumer)
+        TEvConsumed(ui64 consumedBytes, ui64 consumedMessages, ui64 requestCookie, const TString& consumer)
+            : ConsumedBytes(consumedBytes)
+            , ConsumedMessages(consumedMessages)
+            , RequestCookie(requestCookie)
+            , Consumer(consumer)
         {}
 
         TEvConsumed(ui64 consumedBytes)
@@ -992,8 +1156,9 @@ struct TEvPQ {
             , IsOverhead(true)
         {}
 
-        ui64 ConsumedBytes;
-        ui64 RequestCookie;
+        ui64 ConsumedBytes = 0;
+        ui64 ConsumedMessages = 0;
+        ui64 RequestCookie = 0;
         TString Consumer;
         bool IsOverhead = false;
     };
@@ -1090,7 +1255,23 @@ struct TEvPQ {
     };
 
     struct TEvGetWriteInfoRequest : public TEventLocal<TEvGetWriteInfoRequest, EvGetWriteInfoRequest> {
+        explicit TEvGetWriteInfoRequest(bool skipSrcIdInfo = false) :
+            SkipSrcIdInfo(skipSrcIdInfo)
+        {
+        }
+
+        bool GetSkipSrcIdInfo() const { return SkipSrcIdInfo; }
+        void SetSkipSrcIdInfo(bool value) { SkipSrcIdInfo = value; }
+
+        bool GetDiscard() const { return Discard; }
+        void SetDiscard(bool value) { Discard = value; }
+
         TActorId OriginalPartition;
+        NWilson::TSpan Span;
+
+    private:
+        bool SkipSrcIdInfo = false;
+        bool Discard = false;
     };
 
     struct TEvGetWriteInfoResponse : public TEventLocal<TEvGetWriteInfoResponse, EvGetWriteInfoResponse> {
@@ -1109,6 +1290,8 @@ struct TEvPQ {
 
         NPQ::TSourceIdMap SrcIdInfo;
         std::deque<NPQ::TDataKey> BodyKeys;
+        // Tag -> (SourceId -> metric value) + Keys stats
+        NPQ::TWriteStats WriteStats;
 
         ui64 BytesWrittenTotal;
         ui64 BytesWrittenGrpc;
@@ -1117,6 +1300,7 @@ struct TEvPQ {
         ui64 MessagesWrittenGrpc;
         TVector<ui64> MessagesSizes;
         THolder<NPQ::TMultiBucketCounter> InputLags;
+        bool Discard = false;
     };
 
     struct TEvGetWriteInfoError : public TEventLocal<TEvGetWriteInfoError, EvGetWriteInfoError> {
@@ -1173,6 +1357,19 @@ struct TEvPQ {
         }
     };
 
+    struct TBroadcastPartitionError : public TEventPB<TBroadcastPartitionError,
+            NKikimrPQ::TBroadcastPartitionError, EvBroadcastPartitionError> {
+        TBroadcastPartitionError() = default;
+
+        explicit TBroadcastPartitionError(TString message, NKikimrServices::EServiceKikimr service, TInstant timestamp) {
+            auto* defaultGroup = Record.AddMessageGroups();
+            auto* error = defaultGroup->AddErrors();
+            error->SetMessage(std::move(message));
+            error->SetService(service);
+            error->SetTimestamp(timestamp.Seconds());
+        }
+    };
+
     struct TEvBalanceConsumer : TEventLocal<TEvBalanceConsumer, EvBalanceConsumer> {
         TEvBalanceConsumer(const TString& consumerName)
             : ConsumerName(consumerName)
@@ -1212,15 +1409,499 @@ struct TEvPQ {
         TString Error;
     };
 
+    struct TEvAcquireExclusiveLock : public TEventLocal<TEvAcquireExclusiveLock, EvAcquireExclusiveLock> {
+    };
+
+    struct TEvExclusiveLockAcquired : public TEventLocal<TEvExclusiveLockAcquired, EvExclusiveLockAcquired> {
+    };
+
+    struct TEvReleaseExclusiveLock : public TEventLocal<TEvReleaseExclusiveLock, EvReleaseExclusiveLock> {
+    };
+
     struct TEvRunCompaction : TEventLocal<TEvRunCompaction, EvRunCompaction> {
-        TEvRunCompaction(ui64 maxBlobSize, ui64 cumulativeSize) :
-            MaxBlobSize(maxBlobSize),
-            CumulativeSize(cumulativeSize)
+        explicit TEvRunCompaction(const ui64 blobsCount) :
+            BlobsCount(blobsCount)
         {
         }
 
-        ui64 MaxBlobSize = 0;
-        ui64 CumulativeSize = 0;
+        ui64 BlobsCount = 0;
+    };
+
+    struct TEvForceCompaction : TEventLocal<TEvForceCompaction, EvForceCompaction> {
+        explicit TEvForceCompaction(const ui32 partitionId) :
+            PartitionId(partitionId)
+        {
+        }
+
+        ui32 PartitionId = 0;
+    };
+
+    //
+    // Request to the PQRB. It asks him which partition is ready for reading.
+    //
+    struct TEvMLPGetPartitionRequest : TEventPB<TEvMLPGetPartitionRequest, NKikimrPQ::TEvMLPGetPartitionRequest, EvMLPGetPartitionRequest> {
+        TEvMLPGetPartitionRequest() = default;
+
+        TEvMLPGetPartitionRequest(const TString& topic, const TString& consumer, const TString& receiveAttemptId = {}) {
+            Record.SetTopic(topic);
+            Record.SetConsumer(consumer);
+            if (!receiveAttemptId.empty()) {
+                Record.SetReceiveAttemptId(receiveAttemptId);
+            }
+        }
+
+        const TString& GetTopic() const {
+            return Record.GetTopic();
+        }
+
+        const TString& GetConsumer() const {
+            return Record.GetConsumer();
+        }
+
+        const TString& GetReceiveAttemptId() const {
+            return Record.GetReceiveAttemptId();
+        }
+    };
+
+    //
+    // Response from the PQRB. It tells us which partition is ready for reading.
+    //
+    struct TEvMLPGetPartitionResponse : TEventPB<TEvMLPGetPartitionResponse, NKikimrPQ::TEvMLPGetPartitionResponse, EvMLPGetPartitionResponse> {
+        TEvMLPGetPartitionResponse() = default;
+
+        TEvMLPGetPartitionResponse(ui32 partitionId, ui64 tabletId) {
+            Record.SetStatus(Ydb::StatusIds::SUCCESS);
+            Record.SetPartitionId(partitionId);
+            Record.SetTabletId(tabletId);
+        }
+
+        TEvMLPGetPartitionResponse(Ydb::StatusIds::StatusCode errorCode) {
+            Record.SetStatus(errorCode);
+        }
+
+       Ydb::StatusIds::StatusCode GetStatus() const {
+            return Record.GetStatus();
+        }
+
+        // The partition which is ready for reading.
+        ui32 GetPartitionId() const {
+            return Record.GetPartitionId();
+        }
+
+        // The tablet of the partition which is ready for reading. Return it because partition may not exist yet in local scheme cache.
+        ui64 GetTabletId() const {
+            return Record.GetTabletId();
+        }
+    };
+
+    struct TEvMLPErrorResponse : TEventPB<TEvMLPErrorResponse, NKikimrPQ::TEvMLPErrorResponse, EvMLPErrorResponse> {
+        TEvMLPErrorResponse() = default;
+
+        TEvMLPErrorResponse(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage) {
+            Record.SetStatus(errorCode);
+            Record.SetErrorMessage(errorMessage);
+        }
+
+        TEvMLPErrorResponse(ui32 partitionId, Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage) {
+            Record.SetPartitionId(partitionId);
+            Record.SetStatus(errorCode);
+            Record.SetErrorMessage(errorMessage);
+        }
+
+        ui32 GetPartitionId() const {
+            return Record.GetPartitionId();
+        }
+
+        Ydb::StatusIds::StatusCode GetStatus() const {
+            return Record.GetStatus();
+        }
+
+        TString& GetErrorMessage() {
+            return *Record.MutableErrorMessage();
+        }
+    };
+
+    //
+    // Request to the PQ-tablet.
+    //
+    struct TEvMLPReadRequest : TEventPB<TEvMLPReadRequest, NKikimrPQ::TEvMLPReadRequest, EvMLPReadRequest> {
+        TEvMLPReadRequest() = default;
+
+        TEvMLPReadRequest(const TString& topic, const TString& consumer, ui32 partitionId, TInstant waitDeadline, TDuration processingTimeout, ui32 maxNumberOfMessages, const std::vector<TString>& skipMessageGroups, const TString& receiveAttemptId = {}) {
+            Record.SetTopic(topic);
+            Record.SetConsumer(consumer);
+            Record.SetPartitionId(partitionId);
+            Record.SetWaitDeadlineMilliseconds(waitDeadline.MilliSeconds());
+            Record.SetProcessingTimeoutMilliseconds(processingTimeout.MilliSeconds());
+            Record.SetMaxNumberOfMessages(maxNumberOfMessages);
+            for (auto& messageGroup : skipMessageGroups) {
+                Record.AddSkipMessageGroup(messageGroup);
+            }
+            if (receiveAttemptId) {
+                Record.SetReceiveAttemptId(receiveAttemptId);
+            }
+        }
+
+        const TString& GetTopic() const {
+            return Record.GetTopic();
+        }
+
+        const TString& GetConsumer() const {
+            return Record.GetConsumer();
+        }
+
+        ui32 GetPartitionId() const {
+            return Record.GetPartitionId();
+        }
+
+        TInstant GetWaitDeadline() const {
+            return TInstant::MilliSeconds(Record.GetWaitDeadlineMilliseconds());
+        }
+
+        TDuration GetProcessingTimeout() const {
+            return TDuration::MilliSeconds(Record.GetProcessingTimeoutMilliseconds());
+        }
+
+        // The maximum number of messages to return.
+        ui32 GetMaxNumberOfMessages() const {
+            return Record.GetMaxNumberOfMessages();
+        }
+
+        const TString& GetReceiveAttemptId() const {
+            return Record.GetReceiveAttemptId();
+        }
+    };
+
+    //
+    // Response from the PQ-tablet.
+    //
+    struct TEvMLPReadResponse : TEventPB<TEvMLPReadResponse, NKikimrPQ::TEvMLPReadResponse, EvMLPReadResponse> {
+        TEvMLPReadResponse() = default;
+    };
+
+    //
+    // Request to the PQ-tablet. It is SQS DeleteMessageBatch request.
+    //
+    struct TEvMLPCommitRequest : TEventPB<TEvMLPCommitRequest, NKikimrPQ::TEvMLPCommitRequest, EvMLPCommitRequest> {
+        TEvMLPCommitRequest() = default;
+
+        TEvMLPCommitRequest(const TString& topic, const TString& consumer, ui32 partitionId, const std::vector<ui64>& offsets) {
+            Record.SetTopic(topic);
+            Record.SetConsumer(consumer);
+            Record.SetPartitionId(partitionId);
+            for (auto offset : offsets) {
+                Record.AddOffset(offset);
+            }
+        }
+
+        void AddMessage(ui64 offset) {
+            Record.AddOffset(offset);
+        }
+
+        const TString& GetTopic() const {
+            return Record.GetTopic();
+        }
+
+        const TString& GetConsumer() const {
+            return Record.GetConsumer();
+        }
+
+        ui32 GetPartitionId() const {
+            return Record.GetPartitionId();
+        }
+    };
+
+    //
+    // Response from the PQ-tablet.
+    //
+    struct TEvMLPCommitResponse : TEventPB<TEvMLPCommitResponse, NKikimrPQ::TEvMLPCommitResponse, EvMLPCommitResponse> {
+        TEvMLPCommitResponse() = default;
+    };
+
+    //
+    // Request to the PQ-tablet.
+    //
+    struct TEvMLPUnlockRequest : TEventPB<TEvMLPUnlockRequest, NKikimrPQ::TEvMLPUnlockRequest, EvMLPUnlockRequest> {
+        TEvMLPUnlockRequest() = default;
+
+        TEvMLPUnlockRequest(const TString& topic, const TString& consumer, ui32 partitionId, const std::vector<ui64>& offsets) {
+            Record.SetTopic(topic);
+            Record.SetConsumer(consumer);
+            Record.SetPartitionId(partitionId);
+            for (auto offset : offsets) {
+                Record.AddOffset(offset);
+            }
+        }
+
+        void AddMessage(ui64 offset) {
+            Record.AddOffset(offset);
+        }
+
+        const TString& GetTopic() const {
+            return Record.GetTopic();
+        }
+
+        const TString& GetConsumer() const {
+            return Record.GetConsumer();
+        }
+
+        ui32 GetPartitionId() const {
+            return Record.GetPartitionId();
+        }
+    };
+
+    //
+    // Response from the PQ-tablet.
+    //
+    struct TEvMLPUnlockResponse : TEventPB<TEvMLPUnlockResponse, NKikimrPQ::TEvMLPUnlockResponse, EvMLPUnlockResponse> {
+        TEvMLPUnlockResponse() = default;
+    };
+
+    //
+    // Request to the PQ-tablet.
+    //
+    struct TEvMLPChangeMessageDeadlineRequest : TEventPB<TEvMLPChangeMessageDeadlineRequest, NKikimrPQ::TEvMLPChangeMessageDeadlineRequest, EvMLPChangeMessageDeadlineRequest> {
+        TEvMLPChangeMessageDeadlineRequest() = default;
+
+        TEvMLPChangeMessageDeadlineRequest(const TString& topic, const TString& consumer, ui32 partitionId, const std::span<const ui64> offsets, const std::span<const TInstant> deadlineTimestamps);
+
+        const TString& GetTopic() const {
+            return Record.GetTopic();
+        }
+
+        const TString& GetConsumer() const {
+            return Record.GetConsumer();
+        }
+
+        ui32 GetPartitionId() const {
+            return Record.GetPartitionId();
+        }
+    };
+
+    //
+    // Response from the PQ-tablet.
+    //
+    struct TEvMLPChangeMessageDeadlineResponse : TEventPB<TEvMLPChangeMessageDeadlineResponse, NKikimrPQ::TEvMLPChangeMessageDeadlineResponse, EvMLPChangeMessageDeadlineResponse> {
+        TEvMLPChangeMessageDeadlineResponse() = default;
+    };
+
+    //
+    // Request to the PQ-tablet. Only for testing purposes.
+    //
+    struct TEvGetMLPConsumerStateRequest : TEventLocal<TEvGetMLPConsumerStateRequest, EvGetMLPConsumerStateRequest> {
+        TEvGetMLPConsumerStateRequest(const TString& topic, const TString& consumer, ui32 partitionId)
+            : Topic(topic)
+            , Consumer(consumer)
+            , PartitionId(partitionId) {
+        }
+
+        ui32 GetPartitionId() const {
+            return PartitionId;
+        }
+
+        const TString Topic;
+        const TString Consumer;
+        const ui32 PartitionId;
+    };
+
+    //
+    // Response from the MLP consumer. Only for testing purposes.
+    //
+    struct TEvGetMLPConsumerStateResponse : TEventLocal<TEvGetMLPConsumerStateResponse, EvGetMLPConsumerStateResponse> {
+
+        NKikimrPQ::TPQTabletConfig::TConsumer Config;
+        std::optional<TDuration> RetentionPeriod;
+
+        struct TMessage {
+            ui64 Offset;
+            ui32 Status;
+            ui32 ProcessingCount;
+            TInstant ProcessingDeadline;
+            TInstant WriteTimestamp;
+        };
+
+        std::vector<TMessage> Messages;
+    };
+
+    struct TEvMLPConsumerUpdateConfig : TEventLocal<TEvMLPConsumerUpdateConfig, EvMLPConsumerUpdateConfig> {
+
+        TEvMLPConsumerUpdateConfig(
+            const NKikimrPQ::TPQTabletConfig& topicConfig,
+            const NKikimrPQ::TPQTabletConfig::TConsumer& config,
+            std::optional<TDuration> retentionPeriod,
+            NMonitoring::TDynamicCounterPtr detailedMetricsRoot
+        )
+            : TopicConfig(topicConfig)
+            , Config(config)
+            , RetentionPeriod(retentionPeriod)
+            , DetailedMetricsRoot(std::move(detailedMetricsRoot))
+        {
+        }
+
+        NKikimrPQ::TPQTabletConfig TopicConfig;
+        NKikimrPQ::TPQTabletConfig::TConsumer Config;
+        std::optional<TDuration> RetentionPeriod;
+        NMonitoring::TDynamicCounterPtr DetailedMetricsRoot;
+    };
+
+    struct TEvMLPDLQMoverResponse : TEventLocal<TEvMLPDLQMoverResponse, EvMLPDLQMoverResponse> {
+
+        TEvMLPDLQMoverResponse(Ydb::StatusIds::StatusCode status,
+             std::vector<std::pair<ui64, ui64>>&& movedMessages, TString&& errorDescription = "")
+            : Status(status)
+            , MovedMessages(std::move(movedMessages))
+            , ErrorDescription(std::move(errorDescription))
+        {
+        }
+
+        Ydb::StatusIds::StatusCode Status;
+        // offset->seqNo
+        std::vector<std::pair<ui64, ui64>> MovedMessages;
+        TString ErrorDescription;
+    };
+
+    struct TEvEndOffsetChanged : TEventLocal<TEvEndOffsetChanged, EvEndOffsetChanged> {
+        TEvEndOffsetChanged(ui64 offset)
+            : Offset(offset)
+        {
+        }
+
+        ui64 Offset;
+    };
+
+    struct TEvMLPConsumerState : TEventLocal<TEvMLPConsumerState, EvMLPConsumerState> {
+        TEvMLPConsumerState(bool useForReading, NKikimrPQ::TAggregatedCounters::TMLPConsumerCounters&& metrics)
+            : UseForReading(useForReading)
+            , Metrics(std::move(metrics))
+        {
+        }
+
+        bool UseForReading;
+        NKikimrPQ::TAggregatedCounters::TMLPConsumerCounters Metrics;
+    };
+
+    struct TEvMLPConsumerMonRequest : TEventLocal<TEvMLPConsumerMonRequest, EvMLPConsumerMonRequest> {
+        TEvMLPConsumerMonRequest(TActorId replyTo, ui32 partitionId, const TString& consumer)
+            : ReplyTo(replyTo)
+            , PartitionId(partitionId)
+            , Consumer(consumer)
+        {
+        }
+
+        TActorId ReplyTo;
+        ui32 PartitionId;
+        TString Consumer;
+    };
+
+    struct TEvMLPPurgeRequest : TEventPB<TEvMLPPurgeRequest, NKikimrPQ::TEvMLPPurgeRequest, EvMLPPurgeRequest> {
+        TEvMLPPurgeRequest() = default;
+
+        TEvMLPPurgeRequest(const TString& topic, const TString& consumer, ui32 partitionId)
+        {
+            Record.SetTopic(topic);
+            Record.SetConsumer(consumer);
+            Record.SetPartitionId(partitionId);
+        }
+
+        const TString& GetTopic() const {
+            return Record.GetTopic();
+        }
+
+        const TString& GetConsumer() const {
+            return Record.GetConsumer();
+        }
+
+        ui32 GetPartitionId() const {
+            return Record.GetPartitionId();
+        }
+    };
+
+    struct TEvMLPPurgeResponse : TEventPB<TEvMLPPurgeResponse, NKikimrPQ::TEvMLPPurgeResponse, EvMLPPurgeResponse> {
+        TEvMLPPurgeResponse() = default;
+
+        TEvMLPPurgeResponse(ui32 partitionId) {
+            Record.SetPartitionId(partitionId);
+        }
+
+        ui32 GetPartitionId() const {
+            return Record.GetPartitionId();
+        }
+    };
+
+    struct TEvMLPConsumerStatus : TEventPB<TEvMLPConsumerStatus, NKikimrPQ::TEvMLPConsumerStatus, EvMLPConsumerStatus> {
+        TEvMLPConsumerStatus() = default;
+
+        TEvMLPConsumerStatus(const TString& consumer, ui32 partitionId, bool useForReading) {
+            Record.SetConsumer(consumer);
+            Record.SetPartitionId(partitionId);
+            Record.SetUseForReading(useForReading);
+        }
+    };
+
+    struct TEvMLPUpdateExternalLockedMessageGroupsId : TEventPB<TEvMLPUpdateExternalLockedMessageGroupsId, NKikimrPQ::TEvMLPUpdateExternalLockedMessageGroupsId, EvMLPUpdateExternalLockedMessageGroupsId> {
+        TEvMLPUpdateExternalLockedMessageGroupsId() = default;
+
+        const TString& GetConsumer() const {
+            return Record.GetConsumer();
+        }
+
+        ui32 GetPartitionId() const {
+            return Record.GetPartitionId();
+        }
+    };
+
+    struct TEvMLPGetRuntimeAttributesRequest : TEventPB<TEvMLPGetRuntimeAttributesRequest, NKikimrPQ::TEvMLPGetRuntimeAttributesRequest, EvMLPGetRuntimeAttributesRequest> {
+        TEvMLPGetRuntimeAttributesRequest() = default;
+
+        TEvMLPGetRuntimeAttributesRequest(const TString& topic, const TString& consumer) {
+            Record.SetTopic(topic);
+            Record.SetConsumer(consumer);
+        }
+
+        const TString& GetTopic() const {
+            return Record.GetTopic();
+        }
+
+        const TString& GetConsumer() const {
+            return Record.GetConsumer();
+        }
+    };
+
+    struct TEvMLPGetRuntimeAttributesResponse : TEventPB<TEvMLPGetRuntimeAttributesResponse, NKikimrPQ::TEvMLPGetRuntimeAttributesResponse, EvMLPGetRuntimeAttributesResponse> {
+        TEvMLPGetRuntimeAttributesResponse() = default;
+
+        TEvMLPGetRuntimeAttributesResponse(ui64 messageCount, ui64 delayedMessageCount, ui64 lockedMessageCount) {
+            Record.SetApproximateMessageCount(messageCount);
+            Record.SetApproximateDelayedMessageCount(delayedMessageCount);
+            Record.SetApproximateLockedMessageCount(lockedMessageCount);
+        }
+
+        ui64 GetApproximateMessageCount() const {
+            return Record.GetApproximateMessageCount();
+        }
+
+        ui64 GetApproximateDelayedMessageCount() const {
+            return Record.GetApproximateDelayedMessageCount();
+        }
+
+        ui64 GetApproximateLockedMessageCount() const {
+            return Record.GetApproximateLockedMessageCount();
+        }
+    };
+
+    struct TEvRewindCommitResult: public TEventLocal<TEvRewindCommitResult, EvRewindCommitResult> {
+        explicit TEvRewindCommitResult(NYdb::TStatus status, ui64 endOffset)
+            : Status(std::move(status))
+            , EndOffset(endOffset)
+        {
+        }
+
+        NYdb::TStatus Status;
+        ui64 EndOffset;
+    };
+
+    struct TEvTopicSqsActionMetrics : TEventPB<TEvTopicSqsActionMetrics, NKikimrPQ::TEvTopicSqsActionMetrics, EvTopicSqsActionMetrics> {
+        TEvTopicSqsActionMetrics() = default;
     };
 };
 

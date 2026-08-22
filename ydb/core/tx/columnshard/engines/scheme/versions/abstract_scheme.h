@@ -1,14 +1,14 @@
 #pragma once
-#include <ydb/core/formats/arrow/common/container.h>
+#include <ydb/core/formats/arrow/container/container.h>
 #include <ydb/core/formats/arrow/process_columns.h>
 #include <ydb/core/formats/arrow/save_load/loader.h>
 #include <ydb/core/formats/arrow/save_load/saver.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/counters/splitter.h>
 #include <ydb/core/tx/columnshard/engines/scheme/abstract/column_ids.h>
 #include <ydb/core/tx/data_events/common/modification_type.h>
-#include <ydb/core/tx/columnshard/common/path_id.h>
 
 #include <string>
 
@@ -25,6 +25,7 @@ class TWritePortionInfoWithBlobsResult;
 class ISnapshotSchema {
 protected:
     virtual TString DoDebugString() const = 0;
+    virtual NJson::TJsonValue DoDebugJson() const = 0;
 
 public:
     using TPtr = std::shared_ptr<ISnapshotSchema>;
@@ -41,9 +42,11 @@ public:
     virtual TColumnIdsView GetColumnIds() const = 0;
 
     virtual NArrow::NAccessor::TColumnSaver GetColumnSaver(const ui32 columnId) const = 0;
+
     NArrow::NAccessor::TColumnSaver GetColumnSaver(const TString& columnName) const {
         return GetColumnSaver(GetColumnId(columnName));
     }
+
     NArrow::NAccessor::TColumnSaver GetColumnSaver(const std::string& columnName) const {
         return GetColumnSaver(TString(columnName.data(), columnName.size()));
     }
@@ -62,6 +65,7 @@ public:
     virtual std::optional<ui32> GetColumnIdOptional(const std::string& columnName) const = 0;
     virtual ui32 GetColumnIdVerified(const std::string& columnName) const = 0;
     virtual int GetFieldIndex(const ui32 columnId) const = 0;
+
     bool HasColumnId(const ui32 columnId) const {
         return GetFieldIndex(columnId) >= 0;
     }
@@ -72,9 +76,14 @@ public:
     std::shared_ptr<arrow::Field> GetFieldByColumnIdOptional(const ui32 columnId) const;
     std::shared_ptr<arrow::Field> GetFieldByColumnIdVerified(const ui32 columnId) const;
 
+    NJson::TJsonValue DebugJson() const {
+        return DoDebugJson();
+    }
+
     TString DebugString() const {
         return DoDebugString();
     }
+
     virtual const std::shared_ptr<NArrow::TSchemaLite>& GetSchema() const = 0;
     virtual const TIndexInfo& GetIndexInfo() const = 0;
     virtual const TSnapshot& GetSnapshot() const = 0;
@@ -91,8 +100,8 @@ public:
         const std::shared_ptr<NArrow::TGeneralContainer>& batch, const std::set<ui32>& restoreColumnIds) const;
     [[nodiscard]] TConclusion<NArrow::TContainerWithIndexes<arrow::RecordBatch>> PrepareForModification(
         const std::shared_ptr<arrow::RecordBatch>& incomingBatch, const NEvWrite::EModificationType mType) const;
-    [[nodiscard]] TConclusion<TWritePortionInfoWithBlobsResult> PrepareForWrite(const ISnapshotSchema::TPtr& selfPtr, const TInternalPathId pathId,
-        const std::shared_ptr<arrow::RecordBatch>& incomingBatch, const NEvWrite::EModificationType mType,
+    [[nodiscard]] TConclusion<TWritePortionInfoWithBlobsResult> PrepareForWrite(const ISnapshotSchema::TPtr& selfPtr,
+        const TInternalPathId pathId, const std::shared_ptr<arrow::RecordBatch>& incomingBatch, const NEvWrite::EModificationType mType,
         const std::shared_ptr<IStoragesManager>& storagesManager,
         const std::shared_ptr<NColumnShard::TSplitterCounters>& splitterCounters) const;
     void AdaptBatchToSchema(NArrow::TGeneralContainer& batch, const ISnapshotSchema::TPtr& targetSchema) const;

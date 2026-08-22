@@ -1,15 +1,23 @@
 #include "yql_kikimr_provider_impl.h"
 
-#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
-#include <ydb/core/base/path.h>
-#include <ydb/core/scheme/scheme_tabledefs.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 
-#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
-#include <yql/essentials/providers/result/provider/yql_result_provider.h>
-#include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
+#include <array>
+#include <ydb/core/base/path.h>
+#include <ydb/core/base/table_index.h>
+#include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+#include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
-#include <ydb/core/protos/pqconfig.pb.h>
+#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
+#include <yql/essentials/providers/common/transform/yql_visit.h>
+#include <yql/essentials/providers/result/provider/yql_result_provider.h>
 
 namespace NYql {
 
@@ -48,6 +56,7 @@ struct TKikimrData {
         DataSinkNames.insert(TKiCreateTable::CallableName());
         DataSinkNames.insert(TKiAlterTable::CallableName());
         DataSinkNames.insert(TKiDropTable::CallableName());
+        DataSinkNames.insert(TKiTruncateTable::CallableName());
         DataSinkNames.insert(TKiCreateTopic::CallableName());
         DataSinkNames.insert(TKiAlterTopic::CallableName());
         DataSinkNames.insert(TKiDropTopic::CallableName());
@@ -85,6 +94,9 @@ struct TKikimrData {
         DataSinkNames.insert(TKiBackup::CallableName());
         DataSinkNames.insert(TKiBackupIncremental::CallableName());
         DataSinkNames.insert(TKiRestore::CallableName());
+        DataSinkNames.insert(TKiCreateSecret::CallableName());
+        DataSinkNames.insert(TKiAlterSecret::CallableName());
+        DataSinkNames.insert(TKiDropSecret::CallableName());
 
         CommitModes.insert(CommitModeFlush);
         CommitModes.insert(CommitModeRollback);
@@ -141,15 +153,46 @@ struct TKikimrData {
             TYdbOperation::DropBackupCollection |
             TYdbOperation::Backup |
             TYdbOperation::BackupIncremental |
-            TYdbOperation::Restore;
+            TYdbOperation::Restore |
+            TYdbOperation::CreateSecret |
+            TYdbOperation::AlterSecret |
+            TYdbOperation::DropSecret |
+            TYdbOperation::TruncateTable;
 
         SystemColumns = {
-            {"_yql_partition_id", NKikimr::NUdf::EDataSlot::Uint64}
+            {NKikimr::YqlPartitionColumnName, NKikimr::NUdf::EDataSlot::Uint64}
         };
     }
 };
 
-} // namespace
+} // anonymous namespace
+
+TKikimrQueryContext::TKikimrQueryContext(const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
+    TIntrusivePtr<ITimeProvider> timeProvider, TIntrusivePtr<IRandomProvider> randomProvider)
+    : QueryData(std::make_shared<NKikimr::NKqp::TQueryData>(functionRegistry, timeProvider, randomProvider))
+{}
+
+void TKikimrQueryContext::Reset() {
+    PrepareOnly = false;
+    SuppressDdlChecks = false;
+    StatsMode = EKikimrStatsMode::None;
+    Type = EKikimrQueryType::Unspecified;
+    IsolateEffects = false;
+    Deadlines = {};
+    Limits = {};
+
+    PreparingQuery.reset();
+    PreparedQuery.reset();
+    QueryData->Clear();
+
+    Results.clear();
+    InProgress.clear();
+    ExecutionOrder.clear();
+
+    RlPath.Clear();
+    RpcCtx.reset();
+    TranslationSettings = NSQLTranslation::TTranslationSettings();
+}
 
 const TKikimrTableDescription* TKikimrTablesData::EnsureTableExists(const TString& cluster,
     const TString& table, TPositionHandle pos, TExprContext& ctx) const
@@ -204,8 +247,6 @@ TKikimrTableDescription& TKikimrTablesData::GetOrAddTable(const TString& cluster
     return Tables[std::make_pair(cluster, tablePath)];
 }
 
-
-
 TKikimrTableDescription& TKikimrTablesData::GetTable(const TString& cluster, const TString& table) {
     auto tablePath = table;
     if (TempTablesState) {
@@ -225,20 +266,17 @@ TKikimrTableDescription& TKikimrTablesData::GetTable(const TString& cluster, con
 bool TKikimrTablesData::IsTableImmutable(const TStringBuf& cluster, const TStringBuf& path) {
     auto mainTableImpl = GetMainTableIfTableIsImplTableOfIndex(cluster, path);
     if (mainTableImpl) {
-
-        for(const auto& index: mainTableImpl->Metadata->Indexes) {
-            if (index.Type != TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
-                continue;
-            }
-
-            for(const auto& implTable: index.GetImplTables()) {
-                TString implTablePath = TStringBuilder() << mainTableImpl->Metadata->Name << "/" << index.Name << "/" << implTable;
-                if (path == implTablePath)
+        for (const auto& index: mainTableImpl->Metadata->Indexes) {
+            if (index.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+                const auto levelTablePath = TStringBuilder() << mainTableImpl->Metadata->Name << "/" << index.Name << "/" << NKikimr::NTableIndex::NKMeans::LevelTable;
+                const auto postingTablePath = TStringBuilder() << mainTableImpl->Metadata->Name << "/" << index.Name << "/" << NKikimr::NTableIndex::NKMeans::PostingTable;
+                const auto prefixTablePath = TStringBuilder() << mainTableImpl->Metadata->Name << "/" << index.Name << "/" << NKikimr::NTableIndex::NKMeans::PrefixTable;
+                if (path == levelTablePath || path == postingTablePath || path == prefixTablePath) {
                     return true;
+                }
             }
         }
     }
-
     return false;
 }
 
@@ -261,6 +299,13 @@ const TKikimrTableDescription& TKikimrTablesData::ExistingTable(const TStringBuf
     return *desc;
 }
 
+void TKikimrTablesData::AddIndexImplTableToMainTableMapping(const TString& mainTable, const TString& indexTable) {
+    auto [it, success] = IndexTableToMainTable.emplace(indexTable, mainTable);
+    if (!success) {
+        YQL_ENSURE(it->second == mainTable);
+    }
+}
+
 std::optional<TString> TKikimrTablesData::GetTempTablePath(const TStringBuf& table) const {
     if (!TempTablesState) {
         return std::nullopt;
@@ -269,7 +314,7 @@ std::optional<TString> TKikimrTablesData::GetTempTablePath(const TStringBuf& tab
     auto tempTableInfoIt = TempTablesState->FindInfo(table, false);
 
     if (tempTableInfoIt != TempTablesState->TempTables.end()) {
-        return NKikimr::NKqp::GetTempTablePath(TempTablesState->Database, TempTablesState->SessionId, tempTableInfoIt->first);
+        return NKikimr::NKqp::GetTempTablePath(TempTablesState->Database, TempTablesState->TempDirName, tempTableInfoIt->first);
     }
     return std::nullopt;
 }
@@ -509,6 +554,14 @@ bool TKikimrKey::Extract(const TExprNode& key) {
     } else if (tagName == "databasePath") {
         KeyType = Type::Database;
         Target = key.Child(0)->Child(1)->Child(0)->Content();
+    } else if (tagName == "secret") {
+        KeyType = Type::Secret;
+        const TExprNode* nameNode = key.Child(0)->Child(1);
+        if (!nameNode->IsCallable("String")) {
+            Ctx.AddError(TIssue(Ctx.GetPosition(key.Pos()), "Expected String as secret key."));
+            return false;
+        }
+        Target = nameNode->Child(0)->Content();
     } else {
         Ctx.AddError(TIssue(Ctx.GetPosition(key.Child(0)->Pos()), TString("Unexpected tag for kikimr key: ") + tagName));
         return false;
@@ -628,114 +681,21 @@ TVector<NKqpProto::TKqpTableOp> TableOperationsToProto(const TKiOperationList& o
     return protoOps;
 }
 
-// Is used only for key types now
-template<typename TProto>
-void FillLiteralProtoImpl(const NNodes::TCoDataCtor& literal, TProto& proto) {
-    auto type = literal.Ref().GetTypeAnn();
-
-    YQL_ENSURE(type->GetKind() == ETypeAnnotationKind::Data, "unexpected type: " << type->GetKind());
-
-    auto slot = type->Cast<TDataExprType>()->GetSlot();
-    auto typeId = NKikimr::NUdf::GetDataTypeInfo(slot).TypeId;
-
-    YQL_ENSURE(NKikimr::NScheme::NTypeIds::IsYqlType(typeId));
-    YQL_ENSURE(typeId == NKikimr::NScheme::NTypeIds::Decimal || NKikimr::IsAllowedKeyType(NKikimr::NScheme::TTypeInfo(typeId)));
-
-    auto& protoType = *proto.MutableType();
-    auto& protoValue = *proto.MutableValue();
-
-    protoType.SetKind(NKikimrMiniKQL::ETypeKind::Data);
-    protoType.MutableData()->SetScheme(typeId);
-
-    auto value = literal.Literal().Value();
-
-    switch (slot) {
-        case EDataSlot::Bool:
-            protoValue.SetBool(FromString<bool>(value));
-            break;
-        case EDataSlot::Uint8:
-        case EDataSlot::Uint32:
-        case EDataSlot::Date:
-        case EDataSlot::Datetime:
-            protoValue.SetUint32(FromString<ui32>(value));
-            break;
-        case EDataSlot::Int8:
-        case EDataSlot::Int32:
-        case EDataSlot::Date32:
-            protoValue.SetInt32(FromString<i32>(value));
-            break;
-        case EDataSlot::Int64:
-        case EDataSlot::Interval:
-        case EDataSlot::Datetime64:
-        case EDataSlot::Timestamp64:
-        case EDataSlot::Interval64:
-            protoValue.SetInt64(FromString<i64>(value));
-            break;
-        case EDataSlot::Uint64:
-        case EDataSlot::Timestamp:
-            protoValue.SetUint64(FromString<ui64>(value));
-            break;
-        case EDataSlot::String:
-        case EDataSlot::DyNumber:
-            protoValue.SetBytes(value.data(), value.size());
-            break;
-        case EDataSlot::Utf8:
-        case EDataSlot::Json:
-            protoValue.SetText(ToString(value));
-            break;
-        case EDataSlot::Double:
-            protoValue.SetDouble(FromString<double>(value));
-            break;
-        case EDataSlot::Float:
-            protoValue.SetFloat(FromString<float>(value));
-            break;
-        case EDataSlot::Yson:
-            protoValue.SetBytes(ToString(value));
-            break;
-        case EDataSlot::Decimal: {
-            const auto paramsDataType = type->Cast<TDataExprParamsType>();
-            auto precision = FromString<ui8>(paramsDataType->GetParamOne());
-            auto scale = FromString<ui8>(paramsDataType->GetParamTwo());
-            protoType.MutableData()->MutableDecimalParams()->SetPrecision(precision);
-            protoType.MutableData()->MutableDecimalParams()->SetScale(scale);
-
-            auto v = NDecimal::FromString(literal.Cast<TCoDecimal>().Literal().Value(), precision, scale);
-            const auto p = reinterpret_cast<ui8*>(&v);
-            protoValue.SetLow128(*reinterpret_cast<ui64*>(p));
-            protoValue.SetHi128(*reinterpret_cast<ui64*>(p + 8));
-            break;
-        }
-        case EDataSlot::Uuid: {
-            const ui64* uuidData = reinterpret_cast<const ui64*>(value.data());
-            protoValue.SetLow128(uuidData[0]);
-            protoValue.SetHi128(uuidData[1]);
-            break;
-        }
-
-        default:
-            YQL_ENSURE(false, "Unexpected type slot " << slot);
-    }
-}
-
-void FillLiteralProto(const NNodes::TCoDataCtor& literal, NKqpProto::TKqpPhyLiteralValue& proto) {
-    FillLiteralProtoImpl(literal, proto);
-}
-
-void FillLiteralProto(const NNodes::TCoPgConst& pgLiteral, NKqpProto::TKqpPhyLiteralValue& proto) {
+void FillLiteralProto(const NNodes::TCoPgConst& pgLiteral, Ydb::TypedValue& proto) {
     auto type = pgLiteral.Ref().GetTypeAnn();
     auto actualPgType = type->Cast<TPgExprType>();
     auto typeDesc = NKikimr::NPg::TypeDescFromPgTypeId(actualPgType->GetId());
 
-    auto& protoType = *proto.MutableType();
-    auto& protoValue = *proto.MutableValue();
+    auto& protoType = *proto.mutable_type();
+    auto& protoValue = *proto.mutable_value();
 
-    protoType.SetKind(NKikimrMiniKQL::ETypeKind::Pg);
-    protoType.MutablePg()->Setoid(actualPgType->GetId());
+    protoType.mutable_pg_type()->set_type_name(NKikimr::NPg::PgTypeNameFromTypeDesc(typeDesc));
+    protoType.mutable_pg_type()->set_oid(NKikimr::NPg::PgTypeIdFromTypeDesc(typeDesc));
 
     TString content = TString(pgLiteral.Value().Value());
     auto parseResult = NKikimr::NPg::PgNativeBinaryFromNativeText(content, typeDesc);
 
-    protoValue.SetBytes(parseResult.Str.data(), parseResult.Str.size());
+    protoValue.set_bytes_value(parseResult.Str.data(), parseResult.Str.size());
 }
 
 bool IsPgNullExprNode(const NNodes::TExprBase& maybeLiteral) {
@@ -813,12 +773,14 @@ void FillLiteralProto(const NNodes::TCoDataCtor& literal, Ydb::TypedValue& proto
             protoValue.set_bool_value(FromString<bool>(value));
             break;
         case EDataSlot::Uint8:
+        case EDataSlot::Uint16:
         case EDataSlot::Uint32:
         case EDataSlot::Date:
         case EDataSlot::Datetime:
             protoValue.set_uint32_value(FromString<ui32>(value));
             break;
         case EDataSlot::Int8:
+        case EDataSlot::Int16:
         case EDataSlot::Int32:
         case EDataSlot::Date32:
             protoValue.set_int32_value(FromString<i32>(value));
@@ -835,11 +797,12 @@ void FillLiteralProto(const NNodes::TCoDataCtor& literal, Ydb::TypedValue& proto
             protoValue.set_uint64_value(FromString<ui64>(value));
             break;
         case EDataSlot::String:
-        case EDataSlot::DyNumber:
             protoValue.set_bytes_value(value.data(), value.size());
             break;
         case EDataSlot::Utf8:
         case EDataSlot::Json:
+        case EDataSlot::DyNumber:
+        case EDataSlot::JsonDocument:
             protoValue.set_text_value(ToString(value));
             break;
         case EDataSlot::Double:
@@ -901,17 +864,16 @@ void TableDescriptionToTableInfoImpl(const TKikimrTableDescription& desc, TYdbOp
                 continue;
             }
 
-            const auto& implTable = *desc.Metadata->ImplTables[idxNo];
-            YQL_ENSURE(!implTable.Next);
+            for (auto implTable = desc.Metadata->ImplTables[idxNo]; implTable; implTable = implTable->Next) {
+                auto info = NKqpProto::TKqpTableInfo();
+                info.SetTableName(implTable->Name);
+                info.MutableTableId()->SetOwnerId(implTable->PathId.OwnerId());
+                info.MutableTableId()->SetTableId(implTable->PathId.TableId());
+                info.SetSchemaVersion(implTable->SchemaVersion);
 
-            auto info = NKqpProto::TKqpTableInfo();
-            info.SetTableName(implTable.Name);
-            info.MutableTableId()->SetOwnerId(implTable.PathId.OwnerId());
-            info.MutableTableId()->SetTableId(implTable.PathId.TableId());
-            info.SetSchemaVersion(implTable.SchemaVersion);
-
-            back_inserter = std::move(info);
-            ++back_inserter;
+                back_inserter = std::move(info);
+                ++back_inserter;
+            }
         }
     }
 }
@@ -923,39 +885,6 @@ void TableDescriptionToTableInfo(const TKikimrTableDescription& desc, TYdbOperat
 void TableDescriptionToTableInfo(const TKikimrTableDescription& desc, TYdbOperation op, TVector<NKqpProto::TKqpTableInfo>& infos) {
     TableDescriptionToTableInfoImpl(desc, op, std::back_inserter(infos));
 }
-
-Ydb::Table::VectorIndexSettings_Metric VectorIndexSettingsParseDistance(std::string_view distance) {
-    if (distance == "cosine")
-        return Ydb::Table::VectorIndexSettings::DISTANCE_COSINE;
-    else if (distance == "manhattan")
-        return Ydb::Table::VectorIndexSettings::DISTANCE_MANHATTAN;
-    else if (distance == "euclidean")
-        return Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN;
-    else
-        YQL_ENSURE(false, "Wrong index setting distance: " << distance);
-};
-
-Ydb::Table::VectorIndexSettings_Metric VectorIndexSettingsParseSimilarity(std::string_view similarity) {
-    if (similarity == "cosine")
-        return Ydb::Table::VectorIndexSettings::SIMILARITY_COSINE;
-    else if (similarity == "inner_product")
-        return Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT;
-    else
-        YQL_ENSURE(false, "Wrong index setting similarity: " << similarity);
-};
-
-Ydb::Table::VectorIndexSettings_VectorType VectorIndexSettingsParseVectorType(std::string_view vectorType) {
-    if (vectorType == "float")
-        return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT;
-    else if (vectorType == "uint8")
-        return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8;
-    else if (vectorType == "int8")
-        return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT8;
-    else if (vectorType == "bit")
-        return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BIT;
-    else
-        YQL_ENSURE(false, "Wrong index setting vector_type: " << vectorType);
-};
 
 const THashSet<TStringBuf>& KikimrDataSourceFunctions() {
     return Singleton<TKikimrData>()->DataSourceNames;
@@ -1001,12 +930,92 @@ const TYdbOperations& KikimrReadOps() {
     return Singleton<TKikimrData>()->ReadOps;
 }
 
+TKikimrSessionContext::TKikimrSessionContext(const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
+    TIntrusivePtr<TKikimrConfiguration> config,
+    TIntrusivePtr<ITimeProvider> timeProvider,
+    TIntrusivePtr<IRandomProvider> randomProvider,
+    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
+    TIntrusivePtr<TKikimrTransactionContextBase> txCtx,
+    const TIntrusivePtr<NKikimr::NKqp::TUserRequestContext>& userRequestContext)
+    : Configuration(config)
+    , TablesData(MakeIntrusive<TKikimrTablesData>())
+    , QueryCtx(MakeIntrusive<TKikimrQueryContext>(functionRegistry, timeProvider, randomProvider))
+    , TxCtx(txCtx)
+    , UserToken(userToken)
+    , UserRequestContext(userRequestContext)
+{}
+
+TIntrusivePtr<TKikimrConfiguration> TKikimrSessionContext::ConfigPtr() {
+    return Configuration;
+}
+
+TIntrusiveConstPtr<TKikimrConfiguration> TKikimrSessionContext::ConfigConstPtr() {
+    return Configuration;
+}
+
+void TKikimrSessionContext::SetInternalTypeAnnTransformer(THolder<TVisitorTransformerBase>&& transformer) {
+    InternalTypeAnnTransformer = std::move(transformer);
+}
+
+void TKikimrSessionContext::Reset(bool keepConfigChanges) {
+    TablesData->Reset();
+    QueryCtx->Reset();
+    ClearTx();
+
+    if (!keepConfigChanges) {
+        Configuration->Restore();
+    }
+}
+
 const TMap<TString, NKikimr::NUdf::EDataSlot>& KikimrSystemColumns() {
     return Singleton<TKikimrData>()->SystemColumns;
 }
 
 bool IsKikimrSystemColumn(const TStringBuf columnName) {
     return KikimrSystemColumns().FindPtr(columnName);
+}
+
+namespace {
+
+struct TShowCreateSettingMapping {
+    TStringBuf SettingName;
+    TStringBuf PathType;
+};
+
+constexpr auto ShowCreateSettingsMap = std::to_array<TShowCreateSettingMapping>({
+    {"showCreateTable", "Table"},
+    {"showCreateView", "View"},
+    {"showCreateExternalDataSource", "ExternalDataSource"},
+    {"showCreateExternalTable", "ExternalTable"},
+});
+
+} // anonymous namespace
+
+bool IsShowCreateSettingName(TStringBuf name) {
+    for (const auto& entry : ShowCreateSettingsMap) {
+        if (name == entry.SettingName) {
+            return true;
+        }
+    }
+    return false;
+}
+
+TStringBuf ShowCreateSettingToPathType(TStringBuf name) {
+    for (const auto& entry : ShowCreateSettingsMap) {
+        if (name == entry.SettingName) {
+            return entry.PathType;
+        }
+    }
+    return {};
+}
+
+TStringBuf GetShowCreateSetting(const TExprNode& settings) {
+    for (const auto& entry : ShowCreateSettingsMap) {
+        if (HasSetting(settings, entry.SettingName)) {
+            return entry.SettingName;
+        }
+    }
+    return {};
 }
 
 bool ValidateTableHasIndex(TKikimrTableMetadataPtr metadata, TExprContext& ctx, const TPositionHandle& pos) {
@@ -1017,22 +1026,6 @@ bool ValidateTableHasIndex(TKikimrTableMetadataPtr metadata, TExprContext& ctx, 
     }
     return true;
 }
-
-bool AddDmlIssue(const TIssue& issue, TExprContext& ctx) {
-    auto newIssue = AddDmlIssue(issue);
-    ctx.AddError(newIssue);
-    return false;
-}
-
-TIssue AddDmlIssue(const TIssue& issue) {
-    TIssue newIssue;
-    newIssue.SetCode(issue.GetCode(), ESeverity::TSeverityIds_ESeverityId_S_ERROR);
-    newIssue.SetMessage("Detected violation of logical DML constraints. YDB transactions don't see their own"
-        " changes, make sure you perform all table reads before any modifications.");
-    newIssue.AddSubIssue(new TIssue(issue));
-    return newIssue;
-}
-
 TKiDataQueryBlockSettings TKiDataQueryBlockSettings::Parse(const NNodes::TKiDataQueryBlock& node) {
     TKiDataQueryBlockSettings settings;
 
@@ -1123,4 +1116,4 @@ void Deserialize(const NYql::NProto::TTranslationSettings& serializedSettings, T
     settings.Flags.insert(serializedSettings.GetPragmas().begin(), serializedSettings.GetPragmas().end());
 }
 
-}
+} // namespace NSQLTranslation

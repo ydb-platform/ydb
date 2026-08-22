@@ -20,26 +20,26 @@ template <typename T>
 TPyObjectPtr ToPyUnicode(const T& value);
 
 TPyObjectPtr ToPyObject(
-        const TPyCastContext::TPtr& ctx,
-        const NKikimr::NUdf::TType* type,
-        const NKikimr::NUdf::TUnboxedValuePod& value);
+    const TPyCastContext::TPtr& ctx,
+    const NKikimr::NUdf::TType* type,
+    const NKikimr::NUdf::TUnboxedValuePod& value);
 
 NKikimr::NUdf::TUnboxedValue FromPyObject(
-        const TPyCastContext::TPtr& ctx,
-        const NKikimr::NUdf::TType* type,
-        PyObject* value);
+    const TPyCastContext::TPtr& ctx,
+    const NKikimr::NUdf::TType* type,
+    PyObject* value);
 
 TPyObjectPtr ToPyArgs(
-        const TPyCastContext::TPtr& ctx,
-        const NKikimr::NUdf::TType* type,
-        const NKikimr::NUdf::TUnboxedValuePod* args,
-        const NKikimr::NUdf::TCallableTypeInspector& inspector);
+    const TPyCastContext::TPtr& ctx,
+    const NKikimr::NUdf::TType* type,
+    const NKikimr::NUdf::TUnboxedValuePod* args,
+    const NKikimr::NUdf::TCallableTypeInspector& inspector);
 
 void FromPyArgs(
-        const TPyCastContext::TPtr& ctx,
-        const NKikimr::NUdf::TType* type,
-        PyObject* pyArgs,
-        NKikimr::NUdf::TUnboxedValue* cArgs,
-        const NKikimr::NUdf::TCallableTypeInspector& inspector);
+    const TPyCastContext::TPtr& ctx,
+    const NKikimr::NUdf::TType* type,
+    PyObject* pyArgs,
+    NKikimr::NUdf::TUnboxedValue* cArgs,
+    const NKikimr::NUdf::TCallableTypeInspector& inspector);
 
-} // namspace NPython
+} // namespace NPython

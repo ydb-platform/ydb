@@ -3,7 +3,7 @@
 
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/core/sys_view/common/events.h>
-#include <ydb/core/sys_view/common/schema.h>
+#include <ydb/core/sys_view/common/registry.h>
 #include <ydb/core/sys_view/common/scan_actor_base_impl.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/kqp/common/simple/services.h>
@@ -89,13 +89,33 @@ public:
             insert({TSchema::UserSID::ColumnId, [] (const TNodeInfo& info, ui32) {   // 14
                 return TCell(info.GetUserSID().data(), info.GetUserSID().size());
             }});
+
+            insert({TSchema::WmPoolId::ColumnId, [] (const TNodeInfo& info, ui32) {   // 17
+                return TCell(info.GetWmPoolId().data(), info.GetWmPoolId().size());
+            }});
+
+            insert({TSchema::WmState::ColumnId, [] (const TNodeInfo& info, ui32) {   // 18
+                return TCell(info.GetWmState().data(), info.GetWmState().size());
+            }});
+
+            insert({TSchema::WmEnterTime::ColumnId, [] (const TNodeInfo& info, ui32) {  // 19
+                return info.GetWmEnterTime() ? TCell::Make<ui64>(info.GetWmEnterTime()) : TCell();
+            }});
+
+            insert({TSchema::WmExitTime::ColumnId, [] (const TNodeInfo& info, ui32) {  // 20
+                return info.GetWmExitTime() ? TCell::Make<ui64>(info.GetWmExitTime()) : TCell();
+            }});
+
+            insert({TSchema::TraceId::ColumnId, [] (const TNodeInfo& info, ui32) {  // 21
+                return info.HasTraceId() ? TCell(info.GetTraceId().data(), info.GetTraceId().size()) : TCell();
+            }});
         }
     };
 
     TSessionsScan(const NActors::TActorId& ownerId, ui32 scanId,
-        const NKikimrSysView::TSysViewDescription& sysViewInfo,
+        const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
         const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
-        : TBase(ownerId, scanId, sysViewInfo, tableRange, columns)
+        : TBase(ownerId, scanId, database, sysViewInfo, tableRange, columns)
     {
         const auto& cellsFrom = TableRange.From.GetCells();
         if (cellsFrom.size() == 1 && !cellsFrom[0].IsNull()) {
@@ -170,12 +190,13 @@ private:
             return;
         }
 
-        if (!PendingNodesInitialized) {
+        if (!PendingNodesInitialized && !PendingRequest) {
+            PendingRequest = true;
             Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKikimr::NKqp::TEvKqp::TEvListProxyNodesRequest());
             return;
         }
 
-        if (!PendingNodes.empty() && !PendingRequest)  {
+        if (!PendingNodes.empty() && !PendingRequest) {
             const auto& nodeId = PendingNodes.front();
             auto kqpProxyId = NKqp::MakeKqpProxyID(nodeId);
             auto req = std::make_unique<NKikimr::NKqp::TEvKqp::TEvListSessionsRequest>();
@@ -206,6 +227,7 @@ private:
     }
 
     void Handle(NKqp::TEvKqp::TEvListProxyNodesResponse::TPtr& ev) {
+        PendingRequest = false;
         auto& proxies = ev->Get()->ProxyNodes;
         std::sort(proxies.begin(), proxies.end());
         PendingNodes = std::deque<ui32>(proxies.begin(), proxies.end());
@@ -296,10 +318,10 @@ private:
 };
 
 THolder<NActors::IActor> CreateSessionsScan(const NActors::TActorId& ownerId, ui32 scanId,
-    const NKikimrSysView::TSysViewDescription& sysViewInfo,
+    const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
     const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
 {
-    return MakeHolder<TSessionsScan>(ownerId, scanId, sysViewInfo, tableRange, columns);
+    return MakeHolder<TSessionsScan>(ownerId, scanId, database, sysViewInfo, tableRange, columns);
 }
 
 } // NKikimr::NSysView

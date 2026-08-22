@@ -1,11 +1,13 @@
 #include "yql_facade_run.h"
 
+#include <yql/essentials/providers/common/gateways_utils/gateways_utils.h>
 #include <yql/essentials/providers/pg/provider/yql_pg_provider.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <yql/essentials/providers/common/udf_resolve/yql_outproc_udf_resolver.h>
 #include <yql/essentials/providers/common/udf_resolve/yql_simple_udf_resolver.h>
 #include <yql/essentials/providers/common/udf_resolve/yql_udf_resolver_with_index.h>
+#include <yql/essentials/providers/common/udf_resolve/yql_udf_resolver_logger.h>
 #include <yql/essentials/core/yql_user_data_storage.h>
 #include <yql/essentials/core/yql_udf_resolver.h>
 #include <yql/essentials/core/yql_udf_index.h>
@@ -35,14 +37,14 @@
 #include <yql/essentials/public/result_format/yql_result_format_data.h>
 #include <yql/essentials/utils/failure_injector/failure_injector.h>
 #include <yql/essentials/utils/backtrace/backtrace.h>
-#include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/mem_limit.h>
 #include <yql/essentials/protos/yql_mount.pb.h>
 #include <yql/essentials/protos/pg_ext.pb.h>
 #include <yql/essentials/sql/settings/translation_settings.h>
-#include <yql/essentials/sql/v1/complete/check/check_complete.h>
+#include <yql/essentials/sql/v1/ide/completion/check/check_complete.h>
 #include <yql/essentials/sql/v1/format/sql_format.h>
-#include <yql/essentials/sql/v1/sql.h>
+#include <yql/essentials/sql/v1/format/check/check_format.h>
+#include <yql/essentials/sql/v1/translation/sql.h>
 #include <yql/essentials/sql/sql.h>
 #include <yql/essentials/sql/v1/lexer/check/check_lexers.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
@@ -74,7 +76,7 @@
 namespace {
 
 const ui32 PRETTY_FLAGS = NYql::TAstPrintFlags::PerLine | NYql::TAstPrintFlags::ShortQuote |
-        NYql::TAstPrintFlags::AdaptArbitraryContent;
+                          NYql::TAstPrintFlags::AdaptArbitraryContent;
 
 template <typename TMessage>
 THolder<TMessage> ParseProtoFromResource(TStringBuf resourceName) {
@@ -91,7 +93,7 @@ THolder<TMessage> ParseProtoFromResource(TStringBuf resourceName) {
     return config;
 }
 
-class TOptPipelineConfigurator : public NYql::IPipelineConfigurator {
+class TOptPipelineConfigurator: public NYql::IPipelineConfigurator {
 public:
     TOptPipelineConfigurator(NYql::TProgramPtr prg, IOutputStream* planStream, IOutputStream* exprStream, bool withTypes)
         : Program_(std::move(prg))
@@ -107,7 +109,7 @@ public:
 
     void AfterTypeAnnotation(NYql::TTransformationPipeline* pipeline) const final {
         pipeline->Add(NYql::TExprLogTransformer::Sync("OptimizedExpr", NYql::NLog::EComponent::Core, NYql::NLog::ELevel::TRACE),
-            "OptTrace", NYql::TIssuesIds::CORE, "OptTrace");
+                      "OptTrace", NYql::TIssuesIds::CORE, "OptTrace");
     }
 
     void AfterOptimize(NYql::TTransformationPipeline* pipeline) const final {
@@ -118,6 +120,7 @@ public:
             pipeline->Add(NYql::TPlanOutputTransformer::Sync(PlanStream_, Program_->GetPlanBuilder(), Program_->GetOutputFormat()), "PlanOutput");
         }
     }
+
 private:
     NYql::TProgramPtr Program_;
     IOutputStream* PlanStream_;
@@ -125,7 +128,7 @@ private:
     bool WithTypes_;
 };
 
-class TPeepHolePipelineConfigurator : public NYql::IPipelineConfigurator {
+class TPeepHolePipelineConfigurator: public NYql::IPipelineConfigurator {
 public:
     TPeepHolePipelineConfigurator() {
     }
@@ -136,7 +139,7 @@ public:
 
     void AfterTypeAnnotation(NYql::TTransformationPipeline* pipeline) const final {
         pipeline->Add(NYql::TExprLogTransformer::Sync("OptimizedExpr", NYql::NLog::EComponent::Core, NYql::NLog::ELevel::TRACE),
-            "OptTrace", NYql::TIssuesIds::CORE, "OptTrace");
+                      "OptTrace", NYql::TIssuesIds::CORE, "OptTrace");
     }
 
     void AfterOptimize(NYql::TTransformationPipeline* pipeline) const final {
@@ -144,8 +147,7 @@ public:
     }
 };
 
-} // unnamed
-
+} // namespace
 
 namespace NYql {
 
@@ -157,11 +159,11 @@ TFacadeRunOptions::~TFacadeRunOptions() {
 
 void TFacadeRunOptions::InitLogger() {
     if (Verbosity != LOG_DEF_PRIORITY || ShowLog) {
-        NLog::ELevel level = NLog::ELevelHelpers::FromInt(Verbosity);
+        NLog::ELevel level = NLog::TLevelHelpers::FromInt(Verbosity);
         if (ShowLog) {
             level = Max(level, NLog::ELevel::DEBUG);
         }
-        NLog::EComponentHelpers::ForEach([level](NLog::EComponent c) {
+        NLog::TComponentHelpers::ForEach([level](NLog::EComponent c) {
             NYql::NLog::YqlLogger().SetComponentLevel(c, level);
         });
     }
@@ -188,8 +190,8 @@ void TFacadeRunOptions::ParseProtoConfig(const TString& cfgFile, google::protobu
     }
 }
 
-void TFacadeRunOptions::Parse(int argc, const char *argv[]) {
-    User = GetUsername();
+void TFacadeRunOptions::Parse(int argc, const char** argv) {
+    User = GetEnv("YQL_DETERMINISTIC_MODE") ? "test-user" : GetUsername();
 
     if (EnableCredentials) {
         Token = GetEnv("YQL_TOKEN");
@@ -202,83 +204,76 @@ void TFacadeRunOptions::Parse(int argc, const char *argv[]) {
         }
     }
 
+    THashSet<TString> sqlFlags;
+
     NLastGetopt::TOpts opts = NLastGetopt::TOpts::Default();
 
     opts.AddHelpOption();
-    opts.AddLongOption('p', "program", "Program file (use - to read from stdin)").Optional().RequiredArgument("FILE")
-        .Handler1T<TString>([this](const TString& file) {
-            ProgramFile = file;
-            if (ProgramFile == "-") {
-                ProgramFile = "-stdin-";
-                ProgramText = Cin.ReadAll();
-            } else {
-                ProgramText = TFileInput(ProgramFile).ReadAll();
-            }
-        });
+    opts.AddLongOption('p', "program", "Program file (use - to read from stdin)").Optional().RequiredArgument("FILE").Handler1T<TString>([this](const TString& file) {
+        ProgramFile = file;
+        if (ProgramFile == "-") {
+            ProgramFile = "-stdin-";
+            ProgramText = Cin.ReadAll();
+        } else {
+            ProgramText = TFileInput(ProgramFile).ReadAll();
+        }
+    });
     opts.AddLongOption('s', "sql", "Program is SQL query").NoArgument().StoreValue(&ProgramType, EProgramType::Sql);
     if (PgSupport) {
         opts.AddLongOption("pg", "Program has PG syntax").NoArgument().StoreValue(&ProgramType, EProgramType::Pg);
-        opts.AddLongOption("pg-ext", "Pg extensions config file").Optional().RequiredArgument("FILE")
-            .Handler1T<TString>([this](const TString& file) {
-                PgExtConfig = TFacadeRunOptions::ParseProtoConfig<NProto::TPgExtensions>(file);
-            });
+        opts.AddLongOption("pg-ext", "Pg extensions config file").Optional().RequiredArgument("FILE").Handler1T<TString>([this](const TString& file) {
+            PgExtConfig = TFacadeRunOptions::ParseProtoConfig<NProto::TPgExtensions>(file);
+        });
     }
-    opts.AddLongOption('f', "file", "Additional files").RequiredArgument("name@path")
-        .KVHandler([this](TString name, TString path) {
-            if (name.empty() || path.empty()) {
-                throw yexception() << "Incorrect file mapping, expected form name@path, e.g. MyFile@file.txt";
-            }
+    opts.AddLongOption('f', "file", "Additional files").RequiredArgument("name@path").KVHandler([this](TString name, TString path) {
+        if (name.empty() || path.empty()) {
+            throw yexception() << "Incorrect file mapping, expected form name@path, e.g. MyFile@file.txt";
+        }
 
-            auto& entry = DataTable[NYql::TUserDataKey::File(NYql::GetDefaultFilePrefix() + name)];
-            entry.Type = NYql::EUserDataType::PATH;
-            entry.Data = path;
-        }, '@');
+        auto& entry = DataTable[NYql::TUserDataKey::File(NYql::GetDefaultFilePrefix() + name)];
+        entry.Type = NYql::EUserDataType::PATH;
+        entry.Data = path;
+    }, '@');
 
-    opts.AddLongOption('U', "url", "Additional urls").RequiredArgument("name@path")
-        .KVHandler([this](TString name, TString url) {
-            if (name.empty() || url.empty()) {
-                throw yexception() << "url mapping, expected form name@url, e.g. MyUrl@http://example.com/file";
-            }
+    opts.AddLongOption('U', "url", "Additional urls").RequiredArgument("name@path").KVHandler([this](TString name, TString url) {
+        if (name.empty() || url.empty()) {
+            throw yexception() << "url mapping, expected form name@url, e.g. MyUrl@http://example.com/file";
+        }
 
-            auto& entry = DataTable[NYql::TUserDataKey::File(NYql::GetDefaultFilePrefix() + name)];
-            entry.Type = NYql::EUserDataType::URL;
-            entry.Data = url;
-        }, '@');
+        auto& entry = DataTable[NYql::TUserDataKey::File(NYql::GetDefaultFilePrefix() + name)];
+        entry.Type = NYql::EUserDataType::URL;
+        entry.Data = url;
+    }, '@');
 
-    opts.AddLongOption('m', "mounts", "Mount points config file.").Optional().RequiredArgument("FILE")
-        .Handler1T<TString>([this](const TString& file) {
-            MountConfig = TFacadeRunOptions::ParseProtoConfig<NYqlMountConfig::TMountConfig>(file);
-        });
-    opts.AddLongOption("params-file", "Query parameters values in YSON format").Optional().RequiredArgument("FILE")
-        .Handler1T<TString>([this](const TString& file) {
-            Params = TFileInput(file).ReadAll();
-        });
+    opts.AddLongOption('m', "mounts", "Mount points config file.").Optional().RequiredArgument("FILE").Handler1T<TString>([this](const TString& file) {
+        MountConfig = TFacadeRunOptions::ParseProtoConfig<NYqlMountConfig::TMountConfig>(file);
+    });
+    opts.AddLongOption("params-file", "Query parameters values in YSON format").Optional().RequiredArgument("FILE").Handler1T<TString>([this](const TString& file) {
+        Params = TFileInput(file).ReadAll();
+    });
     opts.AddLongOption("yson-attrs", "Provide operation yson attribues").Optional().RequiredArgument("VALUE").StoreResult(&YsonAttrs);
-    opts.AddLongOption('G', "gateways", TStringBuilder() << "Used gateways, available: " << JoinSeq(",", SupportedGateways_)).DefaultValue(JoinSeq(",", GatewayTypes))
-        .Handler1T<TString>([this](const TString& gateways) {
-            GatewayTypes.clear();
-            ::StringSplitter(gateways).Split(',').Consume([&](const TStringBuf& val) {
-                if (!SupportedGateways_.contains(val)) {
-                    throw yexception() << "Unsupported gateway \"" << val << '"';
-                }
-                GatewayTypes.emplace(val);
-            });
+    opts.AddLongOption('G', "gateways", TStringBuilder() << "Used gateways, available: " << JoinSeq(",", SupportedGateways_)).DefaultValue(JoinSeq(",", GatewayTypes)).Handler1T<TString>([this](const TString& gateways) {
+        GatewayTypes.clear();
+        ::StringSplitter(gateways).Split(',').Consume([&](const TStringBuf& val) {
+            if (!SupportedGateways_.contains(val)) {
+                throw yexception() << "Unsupported gateway \"" << val << '"';
+            }
+            GatewayTypes.emplace(val);
         });
-    opts.AddLongOption("gateways-cfg", "Gateways configuration file").Optional().RequiredArgument("FILE")
-        .Handler1T<TString>([this](const TString& file) {
-            GatewaysConfig = TFacadeRunOptions::ParseProtoConfig<TGatewaysConfig>(file);
-        });
-    opts.AddLongOption("fs-cfg", "Fs configuration file").Optional().RequiredArgument("FILE")
-        .Handler1T<TString>([this](const TString& file) {
-            FsConfig = MakeHolder<TFileStorageConfig>();
-            LoadFsConfigFromFile(file, *FsConfig);
-        });
+    });
+    opts.AddLongOption("gateways-cfg", "Gateways configuration file").Optional().RequiredArgument("FILE").Handler1T<TString>([this](const TString& file) {
+        GatewaysConfig = TFacadeRunOptions::ParseProtoConfig<TGatewaysConfig>(file);
+    });
+    opts.AddLongOption("fs-cfg", "Fs configuration file").Optional().RequiredArgument("FILE").Handler1T<TString>([this](const TString& file) {
+        FsConfig = MakeHolder<TFileStorageConfig>();
+        LoadFsConfigFromFile(file, *FsConfig);
+    });
     opts.AddLongOption('u', "udf", "Load shared library with UDF by given path").RequiredArgument("PATH").AppendTo(&UdfsPaths);
-    opts.AddLongOption("udfs-dir", "Load all shared libraries with UDFs found in given directory").RequiredArgument("DIR")
-        .Handler1T<TString>([this](const TString& dir) {
-            NKikimr::NMiniKQL::FindUdfsInDir(dir, &UdfsPaths);
-        });
+    opts.AddLongOption("udfs-dir", "Load all shared libraries with UDFs found in given directory").RequiredArgument("DIR").Handler1T<TString>([this](const TString& dir) {
+        NKikimr::NMiniKQL::FindUdfsInDir(dir, &UdfsPaths);
+    });
     opts.AddLongOption("udf-resolver", "Path to udf-resolver").Optional().RequiredArgument("PATH").StoreResult(&UdfResolverPath);
+    opts.AddLongOption("udf-resolver-log", "Path to udf resolver log").Optional().RequiredArgument("PATH").StoreResult(&UdfResolverLog);
     opts.AddLongOption("udf-resolver-filter-syscalls", "Filter syscalls in udf resolver").Optional().NoArgument().SetFlag(&UdfResolverFilterSyscalls);
     opts.AddLongOption("scan-udfs", "Scan specified udfs with external udf-resolver to use static function registry").NoArgument().SetFlag(&ScanUdfs);
 
@@ -286,36 +281,32 @@ void TFacadeRunOptions::Parse(int argc, const char *argv[]) {
     opts.AddLongOption("compile-only", "Compile program and exit").NoArgument().StoreValue(&Mode, ERunMode::Compile);
     opts.AddLongOption("validate", "Validate program and exit").NoArgument().StoreValue(&Mode, ERunMode::Validate);
     opts.AddLongOption("lineage", "Calculate program lineage and exit").NoArgument().StoreValue(&Mode, ERunMode::Lineage);
-    opts.AddLongOption('O',"optimize", "Optimize program and exit").NoArgument().StoreValue(&Mode, ERunMode::Optimize);
+    opts.AddLongOption('O', "optimize", "Optimize program and exit").NoArgument().StoreValue(&Mode, ERunMode::Optimize);
     opts.AddLongOption('D', "discover", "Discover tables in the program and exit").NoArgument().StoreValue(&Mode, ERunMode::Discover);
     opts.AddLongOption("peephole", "Perform peephole program optimization and exit").NoArgument().StoreValue(&Mode, ERunMode::Peephole);
-    opts.AddLongOption('R',"run", "Run program (use by default)").NoArgument().StoreValue(&Mode, ERunMode::Run);
+    opts.AddLongOption('R', "run", "Run program (use by default)").NoArgument().StoreValue(&Mode, ERunMode::Run);
 
     opts.AddLongOption('L', "show-log", "Show transformation log").Optional().NoArgument().SetFlag(&ShowLog);
     opts.AddLongOption('v', "verbosity", "Log verbosity level").Optional().RequiredArgument("LEVEL").StoreResult(&Verbosity);
     opts.AddLongOption("print-ast", "Print AST after loading").NoArgument().SetFlag(&PrintAst);
-    opts.AddLongOption("print-expr", "Print rebuild AST before execution").NoArgument()
-        .Handler0([this]() {
-            if (!ExprStream) {
-                ExprStream = &Cout;
-            }
-        });
+    opts.AddLongOption("print-expr", "Print rebuild AST before execution").NoArgument().Handler0([this]() {
+        if (!ExprStream) {
+            ExprStream = &Cout;
+        }
+    });
     opts.AddLongOption("with-types", "Print types annotation").NoArgument().SetFlag(&WithTypes);
-    opts.AddLongOption("trace-opt", "Print AST in the begin of each transformation").NoArgument()
-        .Handler0([this]() {
-            TraceOptStream = &Cerr;
-        });
-    opts.AddLongOption("expr-file", "Print AST to that file instead of stdout").Optional().RequiredArgument("FILE")
-        .Handler1T<TString>([this](const TString& file) {
-            ExprStreamHolder_ = MakeHolder<TFixedBufferFileOutput>(file);
-            ExprStream = ExprStreamHolder_.Get();
-        });
-    opts.AddLongOption("print-result", "Print program execution result to stdout").NoArgument()
-        .Handler0([this]() {
-            if (!ResultStream) {
-                ResultStream = &Cout;
-            }
-        });
+    opts.AddLongOption("trace-opt", "Print AST in the begin of each transformation").NoArgument().Handler0([this]() {
+        TraceOptStream = &Cerr;
+    });
+    opts.AddLongOption("expr-file", "Print AST to that file instead of stdout").Optional().RequiredArgument("FILE").Handler1T<TString>([this](const TString& file) {
+        ExprStreamHolder_ = MakeHolder<TFixedBufferFileOutput>(file);
+        ExprStream = ExprStreamHolder_.Get();
+    });
+    opts.AddLongOption("print-result", "Print program execution result to stdout").NoArgument().Handler0([this]() {
+        if (!ResultStream) {
+            ResultStream = &Cout;
+        }
+    });
     opts.AddLongOption("format", "Results format")
         .Optional()
         .RequiredArgument("STR")
@@ -332,22 +323,19 @@ void TFacadeRunOptions::Parse(int argc, const char *argv[]) {
             }
         });
 
-    opts.AddLongOption("result-file", "Print program execution result to file").Optional().RequiredArgument("FILE")
-        .Handler1T<TString>([this](const TString& file) {
-            ResultStreamHolder_ = MakeHolder<TFixedBufferFileOutput>(file);
-            ResultStream = ResultStreamHolder_.Get();
-        });
-    opts.AddLongOption('P',"trace-plan", "Print plan before execution").NoArgument()
-        .Handler0([this]() {
-            if (!PlanStream) {
-                PlanStream = &Cerr;
-            }
-        });
-    opts.AddLongOption("plan-file", "Print program plan to file").Optional().RequiredArgument("FILE")
-        .Handler1T<TString>([this](const TString& file) {
-            PlanStreamHolder_ = MakeHolder<TFixedBufferFileOutput>(file);
-            PlanStream = PlanStreamHolder_.Get();
-        });
+    opts.AddLongOption("result-file", "Print program execution result to file").Optional().RequiredArgument("FILE").Handler1T<TString>([this](const TString& file) {
+        ResultStreamHolder_ = MakeHolder<TFixedBufferFileOutput>(file);
+        ResultStream = ResultStreamHolder_.Get();
+    });
+    opts.AddLongOption('P', "trace-plan", "Print plan before execution").NoArgument().Handler0([this]() {
+        if (!PlanStream) {
+            PlanStream = &Cerr;
+        }
+    });
+    opts.AddLongOption("plan-file", "Print program plan to file").Optional().RequiredArgument("FILE").Handler1T<TString>([this](const TString& file) {
+        PlanStreamHolder_ = MakeHolder<TFixedBufferFileOutput>(file);
+        PlanStream = PlanStreamHolder_.Get();
+    });
     opts.AddLongOption("err-file", "Print validate/optimize/runtime errors to file")
         .Handler1T<TString>([this](const TString& file) {
             ErrStreamHolder_ = MakeHolder<TFixedBufferFileOutput>(file);
@@ -362,20 +350,21 @@ void TFacadeRunOptions::Parse(int argc, const char *argv[]) {
         .Handler1T<TString>([this](const TString& mode) {
             ValidateMode = NUdf::ValidateModeByStr(mode);
         });
-    opts.AddLongOption("stat", "Print execution statistics").Optional().OptionalArgument("FILE")
-        .Handler1T<TString>([this](const TString& file) {
-            if (file) {
-                StatStreamHolder_ = MakeHolder<TFileOutput>(file);
-                StatStream = StatStreamHolder_.Get();
-            } else {
-                StatStream = &Cerr;
-            }
-        });
+    opts.AddLongOption("stat", "Print execution statistics").Optional().OptionalArgument("FILE").Handler1T<TString>([this](const TString& file) {
+        if (file) {
+            StatStreamHolder_ = MakeHolder<TFileOutput>(file);
+            StatStream = StatStreamHolder_.Get();
+        } else {
+            StatStream = &Cerr;
+        }
+    });
     opts.AddLongOption("full-stat", "Output full execution statistics").Optional().NoArgument().SetFlag(&FullStatistics);
+    opts.AddLongOption("diagnostics", "Output diagnostics").Optional().NoArgument().SetFlag(&PrintDiagnostics);
 
-    opts.AddLongOption("sql-flags", "SQL translator pragma flags").SplitHandler(&SqlFlags, ',');
+    opts.AddLongOption("sql-flags", "SQL translator pragma flags").SplitHandler(&sqlFlags, ',');
     opts.AddLongOption("syntax-version", "SQL syntax version").StoreResult(&SyntaxVersion).DefaultValue(1);
     opts.AddLongOption("ansi-lexer", "Use ansi lexer").NoArgument().SetFlag(&AnsiLexer);
+    opts.AddLongOption("auto-use-yql-libs", "Implicitly mark yql_libs/* files as libraries").NoArgument().SetFlag(&AutoUseYqlLibs);
     opts.AddLongOption("assume-ydb-on-slash", "Assume YDB provider if cluster name starts with '/'").NoArgument().SetFlag(&AssumeYdbOnClusterWithSlash);
 
     opts.AddLongOption("with-final-issues", "Include some final messages (like statistic) in issues").NoArgument().SetFlag(&WithFinalIssues);
@@ -410,58 +399,65 @@ void TFacadeRunOptions::Parse(int argc, const char *argv[]) {
             });
     }
     if (EnableQPlayer) {
-        opts.AddLongOption("qstorage-dir", "Directory for QStorage").RequiredArgument("DIR")
-            .Handler1T<TString>([this](const TString& dir) {
-                QPlayerStorage_ = MakeFileQStorage(dir);
-            });
+        opts.AddLongOption("qstorage-dir", "Directory for QStorage").RequiredArgument("DIR").Handler1T<TString>([this](const TString& dir) {
+            QPlayerStorage_ = MakeFileQStorage(dir);
+        });
         opts.AddLongOption("op-id", "QStorage operation id").StoreResult(&OperationId).DefaultValue("dummy_op");
-        opts.AddLongOption("capture", "Write query metadata to QStorage").NoArgument()
-            .Handler0([this]() {
-                if (EQPlayerMode::Replay == QPlayerMode) {
-                    throw yexception() << "replay and capture options can't be used simultaneously";
-                }
-                QPlayerMode = EQPlayerMode::Capture;
-            });
-        opts.AddLongOption("replay", "Read query metadata from QStorage").NoArgument()
-            .Handler0([this]() {
-                if (EQPlayerMode::Capture == QPlayerMode) {
-                    throw yexception() << "replay and capture options can't be used simultaneously";
-                }
-                QPlayerMode = EQPlayerMode::Replay;
-            });
-        opts.AddLongOption("gateways-patch", "QPlayer patch for gateways conf").Optional().RequiredArgument("FILE")
-            .Handler1T<TString>([this](const TString& file) {
-                GatewaysPatch = TFileInput(file).ReadAll();
-            });
+        opts.AddLongOption("capture", "Write query metadata to QStorage").NoArgument().Handler0([this]() {
+            if (EQPlayerMode::None != QPlayerMode) {
+                throw yexception() << "QPlayer mode options (capture/capture-full/replay) can't be used simultaneously";
+            }
+            QPlayerMode = EQPlayerMode::Capture;
+            QPlayerCaptureMode = EQPlayerCaptureMode::MetaOnly;
+        });
+        opts.AddLongOption("capture-full", "Keep actual data needed for query run (input tables & attached files)").NoArgument().Handler0([this]() {
+            if (EQPlayerMode::None != QPlayerMode) {
+                throw yexception() << "QPlayer mode options (capture/capture-full/replay) can't be used simultaneously";
+            }
+            QPlayerMode = EQPlayerMode::Capture;
+            QPlayerCaptureMode = EQPlayerCaptureMode::Full;
+        });
+        opts.AddLongOption("replay", "Read query metadata from QStorage").NoArgument().Handler0([this]() {
+            if (EQPlayerMode::None != QPlayerMode) {
+                throw yexception() << "QPlayer mode options (capture/capture-full/replay) can't be used simultaneously";
+            }
+            QPlayerMode = EQPlayerMode::Replay;
+            QPlayerCaptureMode = EQPlayerCaptureMode::MetaOnly;
+        });
+        opts.AddLongOption("gateways-patch", "QPlayer patch for gateways conf").Optional().RequiredArgument("FILE").Handler1T<TString>([this](const TString& file) {
+            GatewaysPatch = TFacadeRunOptions::ParseProtoConfig<TGatewaysConfig>(file);
+        });
     }
 
     if (CustomTests) {
         opts.AddLongOption("test-antlr4", "Check antlr4 parser").NoArgument().SetFlag(&TestAntlr4);
         opts.AddLongOption("test-format", "Compare formatted query's AST with the original query's AST (only syntaxVersion=1 is supported)").NoArgument().SetFlag(&TestSqlFormat);
         opts.AddLongOption("test-lexers", "Compare lexers").NoArgument().SetFlag(&TestLexers);
-        opts.AddLongOption("test-complete", "check completion engine").NoArgument().SetFlag(&TestComplete);
+        opts.AddLongOption("test-complete", "Check completion engine").NoArgument().SetFlag(&TestComplete);
+        opts.AddLongOption("test-syntax-ambiguity", "Check syntax ambiguities").NoArgument().SetFlag(&TestSyntaxAmbiguities);
         opts.AddLongOption("validate-result-format", "Check that result-format can parse Result").NoArgument().SetFlag(&ValidateResultFormat);
+        opts.AddLongOption("test-partial-typecheck", "Check partial AST typecheck").NoArgument().SetFlag(&TestPartialTypecheck);
+        opts.AddLongOption("fuzz-untyped-lambda", "Enable fuzzing by substituting untyped lambdas for callable children").NoArgument().SetFlag(&FuzzUntypedLambda);
+        opts.AddLongOption("fuzz-universal", "Enable fuzzing by substituting universal for callable children").NoArgument().SetFlag(&FuzzUniversal);
     }
 
-    opts.AddLongOption("langver", "Set current language version").Optional().RequiredArgument("VER")
-        .Handler1T<TString>([this](const TString& str) {
-            if (str == "unknown") {
-                LangVer = UnknownLangVersion;
-            } else if (!ParseLangVersion(str, LangVer)) {
-                throw yexception() << "Failed to parse language version: " << str;
-            }
-        });
+    opts.AddLongOption("langver", "Set current language version").Optional().RequiredArgument("VER").Handler1T<TString>([this](const TString& str) {
+        if (str == "unknown") {
+            LangVer = UnknownLangVersion;
+        } else if (!ParseLangVersion(str, LangVer)) {
+            throw yexception() << "Failed to parse language version: " << str;
+        }
+    });
 
-    opts.AddLongOption("max-langver", "Set maximum language version").Optional().RequiredArgument("VER")
-        .Handler1T<TString>([this](const TString& str) {
-            if (!ParseLangVersion(str, MaxLangVer)) {
-                throw yexception() << "Failed to parse language version: " << str;
-            }
-        });
+    opts.AddLongOption("max-langver", "Set maximum language version").Optional().RequiredArgument("VER").Handler1T<TString>([this](const TString& str) {
+        if (!ParseLangVersion(str, MaxLangVer)) {
+            throw yexception() << "Failed to parse language version: " << str;
+        }
+    });
 
     opts.SetFreeArgsMax(0);
 
-    for (auto& ext: OptExtenders_) {
+    for (auto& ext : OptExtenders_) {
         ext(opts);
     }
 
@@ -473,14 +469,22 @@ void TFacadeRunOptions::Parse(int argc, const char *argv[]) {
         }
         if (EQPlayerMode::Replay == QPlayerMode) {
             try {
-                QPlayerContext = TQContext(QPlayerStorage_->MakeReader(OperationId, {}));
+                auto reader = QPlayerStorage_->MakeReader(OperationId, {});
+                if (Mode == ERunMode::Run) {
+                    // Check replay data to contain full capture
+                    if (HasFullCapture(reader)) {
+                        QPlayerCaptureMode = EQPlayerCaptureMode::Full;
+                    }
+                }
+
+                QPlayerContext = TQContext(std::move(reader), QPlayerCaptureMode);
             } catch (...) {
                 throw yexception() << "QPlayer replay is probably broken. Exception: " << CurrentExceptionMessage();
             }
             ProgramFile = "-replay-";
             ProgramText = "";
-        } else if (EQPlayerMode::Capture == QPlayerMode) {
-            QPlayerContext = TQContext(QPlayerStorage_->MakeWriter(OperationId, {}));
+        } else {
+            QPlayerContext = TQContext(QPlayerStorage_->MakeWriter(OperationId, {}), QPlayerCaptureMode);
         }
     }
     if (EQPlayerMode::Replay != QPlayerMode && !ProgramText) {
@@ -494,14 +498,32 @@ void TFacadeRunOptions::Parse(int argc, const char *argv[]) {
         throw yexception() << "At least one gateway from the list " << JoinSeq(",", SupportedGateways_).Quote() << " must be specified";
     }
 
-    if (!GatewaysConfig) {
+    if (Mode == ERunMode::Run && QPlayerMode == EQPlayerMode::Replay && QPlayerCaptureMode != EQPlayerCaptureMode::Full) {
+        throw yexception() << "Simultaneous usage of run and replay options requires replay data to contain full capture";
+    }
+
+    if (QPlayerContext.CanRead()) {
+        GatewaysConfig = GatewaysConfigFromQContext(QPlayerContext);
+        if (GatewaysPatch) {
+            GatewaysConfig->MergeFrom(*GatewaysPatch);
+        }
+    } else if (!GatewaysConfig) {
         GatewaysConfig = ParseProtoFromResource<TGatewaysConfig>("gateways.conf");
     }
 
-    if (GatewaysConfig && GatewaysConfig->HasSqlCore()) {
-        SqlFlags.insert(GatewaysConfig->GetSqlCore().GetTranslationFlags().begin(), GatewaysConfig->GetSqlCore().GetTranslationFlags().end());
+    {
+        TGatewaySQLFlags gatewaySqlFlags;
+        for (const auto& flag : sqlFlags) {
+            gatewaySqlFlags.Set(flag);
+        }
+        if (QPlayerContext.CanRead()) {
+            gatewaySqlFlags.ExtendWith(SQLFlagsFromQContext(QPlayerContext));
+        }
+        if (GatewaysConfig) {
+            gatewaySqlFlags.ExtendWith(TGatewaySQLFlags::FromTesting(*GatewaysConfig));
+        }
+        SqlFlags = std::move(gatewaySqlFlags).ToMap();
     }
-    UpdateSqlFlagsFromQContext(QPlayerContext, SqlFlags);
 
     if (!FsConfig) {
         FsConfig = MakeHolder<TFileStorageConfig>();
@@ -511,18 +533,19 @@ void TFacadeRunOptions::Parse(int argc, const char *argv[]) {
     }
 
     if (EnableCredentials && Token) {
-        for (auto name: SupportedGateways_) {
+        for (auto name : SupportedGateways_) {
             Credentials->AddCredential(TStringBuilder() << "default_" << name, TCredential(name, "", Token));
         }
     }
 
-    for (auto& handle: OptHandlers_) {
+    for (auto& handle : OptHandlers_) {
         handle(res);
     }
 }
 
 TFacadeRunner::TFacadeRunner(TString name)
     : Name_(std::move(name))
+    , YqlLogger_(std::make_unique<NYql::NLog::YqlLoggerScope>(&Cerr))
 {
 }
 
@@ -533,22 +556,20 @@ TIntrusivePtr<NKikimr::NMiniKQL::IFunctionRegistry> TFacadeRunner::GetFuncRegist
     return FuncRegistry_;
 }
 
-int TFacadeRunner::Main(int argc, const char *argv[]) {
+int TFacadeRunner::Main(int argc, const char** argv) {
     NYql::NBacktrace::RegisterKikimrFatalActions();
     NYql::NBacktrace::EnableKikimrSymbolize();
     EnableKikimrBacktraceFormat();
 
-    NYql::NLog::YqlLoggerScope logger(&Cerr);
     try {
         return DoMain(argc, argv);
-    }
-    catch (...) {
+    } catch (...) {
         Cerr << CurrentExceptionMessage() << Endl;
         return 1;
     }
 }
 
-int TFacadeRunner::DoMain(int argc, const char *argv[]) {
+int TFacadeRunner::DoMain(int argc, const char** argv) {
     Y_UNUSED(NUdf::GetStaticSymbols());
 
     RunOptions_.Parse(argc, argv);
@@ -569,44 +590,61 @@ int TFacadeRunner::DoMain(int argc, const char *argv[]) {
             TVector<NPg::TExtensionDesc> extensions;
             PgExtensionsFromProto(*RunOptions_.PgExtConfig, extensions);
             NPg::RegisterExtensions(extensions, RunOptions_.QPlayerContext.CanRead(),
-                *NSQLTranslationPG::CreateExtensionSqlParser(),
-                NKikimr::NMiniKQL::CreateExtensionLoader().get());
+                                    *NSQLTranslationPG::CreateExtensionSqlParser(),
+                                    NKikimr::NMiniKQL::CreateExtensionLoader().get());
         }
 
         NPg::GetSqlLanguageParser()->Freeze();
     }
 
     auto funcRegistry = NKikimr::NMiniKQL::CreateFunctionRegistry(&NYql::NBacktrace::KikimrBackTrace,
-        NKikimr::NMiniKQL::CreateBuiltinRegistry(), true, RunOptions_.UdfsPaths)->Clone();
+                                                                  NKikimr::NMiniKQL::CreateBuiltinRegistry(), /*allowUdfPatch=*/true, RunOptions_.UdfsPaths)
+                            ->Clone();
     NKikimr::NMiniKQL::FillStaticModules(*funcRegistry);
     FuncRegistry_ = funcRegistry;
 
-    NSQLTranslationV1::TLexers lexers;
-    lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
-    lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
-    NSQLTranslationV1::TParsers parsers;
-    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
-    parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
+    NSQLTranslation::TTranslationSettings settings;
+    NSQLTranslation::ParseTranslationSettings(RunOptions_.SqlFlags, settings);
+
+    NSQLTranslationV1::TLexers lexers = {
+        .Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory(),
+        .Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory(),
+    };
+
+    NSQLTranslationV1::TParsers parsers = {
+        .Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(
+            /*isAmbiguityError=*/RunOptions_.TestSyntaxAmbiguities,
+            /*isAmbiguityDebugging=*/false,
+            /*maxParseTreeDepth=*/settings.MaxParseTreeDepth),
+        .Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory(
+            /*isAmbiguityError=*/RunOptions_.TestSyntaxAmbiguities,
+            /*isAmbiguityDebugging=*/false,
+            /*maxParseTreeDepth=*/settings.MaxParseTreeDepth),
+    };
 
     NSQLTranslation::TTranslators translators(
         nullptr,
         NSQLTranslationV1::MakeTranslator(lexers, parsers),
-        NSQLTranslationPG::MakeTranslator()
-    );
+        NSQLTranslationPG::MakeTranslator());
 
     TExprContext ctx;
     if (RunOptions_.PgSupport) {
         ctx.NextUniqueId = NPg::GetSqlLanguageParser()->GetContext().NextUniqueId;
     }
+
     IModuleResolver::TPtr moduleResolver;
     TModuleResolver::TModuleChecker moduleChecker;
-    if (RunOptions_.TestLexers || RunOptions_.TestComplete) {
-        moduleChecker = [
-            lexers, parsers,
-            testLexers = RunOptions_.TestLexers,
-            testComplete = RunOptions_.TestComplete,
-            clusters = ClusterMapping_](const TString& query, const TString& fileName, TExprContext& ctx) {
-
+    if (RunOptions_.TestLexers ||
+        RunOptions_.TestSqlFormat ||
+        RunOptions_.TestComplete ||
+        RunOptions_.TestSyntaxAmbiguities)
+    {
+        moduleChecker = [lexers, parsers,
+                         testLexers = RunOptions_.TestLexers,
+                         testFormat = RunOptions_.TestSqlFormat,
+                         testComplete = RunOptions_.TestComplete,
+                         testSyntaxAmbiguities = RunOptions_.TestSyntaxAmbiguities,
+                         clusters = ClusterMapping_](const TString& query, const TString& fileName, TExprContext& ctx) {
             if (testLexers) {
                 TIssues issues;
                 if (!NSQLTranslationV1::CheckLexers(TPosition(0, 0, fileName), query, issues)) {
@@ -620,22 +658,40 @@ int TFacadeRunner::DoMain(int argc, const char *argv[]) {
                 }
             }
 
-            if (testComplete) {
+            if (testComplete || testSyntaxAmbiguities || testFormat) {
                 google::protobuf::Arena arena;
 
                 NSQLTranslation::TTranslationSettings settings;
                 settings.Arena = &arena;
                 settings.ClusterMapping = clusters;
                 settings.SyntaxVersion = 1;
+                settings.AlwaysAllowExports = true;
+                settings.MaxParseTreeDepth = NSQLTranslation::SQL_MAX_PARSE_TREE_DEPTH;
 
                 auto ast = NSQLTranslationV1::SqlToYql(lexers, parsers, query, settings);
                 if (!ast.IsOk()) {
-                    return true;
+                    auto issue = TIssue(TPosition(0, 0, fileName), "Translation failed");
+                    for (const auto& i : ast.Issues) {
+                        issue.AddSubIssue(MakeIntrusive<TIssue>(i));
+                    }
+
+                    ctx.AddError(issue);
+                    return false;
                 }
 
-                TIssues issues;
-                if (!NSQLComplete::CheckComplete(query, *ast.Root, issues)) {
+                if (TIssues issues; testComplete && !NSQLComplete::CheckComplete(query, *ast.Root, issues)) {
                     auto issue = TIssue(TPosition(0, 0, fileName), "Completion failed");
+                    for (const auto& i : issues) {
+                        issue.AddSubIssue(MakeIntrusive<TIssue>(i));
+                    }
+
+                    ctx.AddError(issue);
+                    return false;
+                }
+
+                constexpr auto convergence = NSQLFormat::EConvergenceRequirement::Double;
+                if (TIssues issues; testFormat && !NSQLFormat::CheckedFormat(query, ast.Root, settings, issues, convergence)) {
+                    auto issue = TIssue(TPosition(0, 0, fileName), "Format failed");
                     for (const auto& i : issues) {
                         issue.AddSubIssue(MakeIntrusive<TIssue>(i));
                     }
@@ -660,10 +716,9 @@ int TFacadeRunner::DoMain(int argc, const char *argv[]) {
         }
 
         moduleResolver = std::make_shared<TModuleResolver>(translators, std::move(modules), ctx.NextUniqueId,
-            ClusterMapping_, RunOptions_.SqlFlags, RunOptions_.Mode >= ERunMode::Validate, THolder<TExprContext>(), moduleChecker);
+                                                           ClusterMapping_, RunOptions_.SqlFlags, RunOptions_.Mode >= ERunMode::Validate, THolder<TExprContext>(), moduleChecker);
     } else {
-        if (!GetYqlDefaultModuleResolver(ctx, moduleResolver, ClusterMapping_,
-            RunOptions_.OptimizeLibs && RunOptions_.Mode >= ERunMode::Validate, moduleChecker)) {
+        if (GetYqlModuleResolver(ctx, moduleResolver, {}, ClusterMapping_, RunOptions_.SqlFlags, RunOptions_.Mode >= ERunMode::Validate, moduleChecker).empty()) {
             *RunOptions_.ErrStream << "Errors loading default YQL libraries:" << Endl;
             ctx.IssueManager.GetIssues().PrintTo(*RunOptions_.ErrStream);
             return -1;
@@ -672,9 +727,9 @@ int TFacadeRunner::DoMain(int argc, const char *argv[]) {
 
     TExprContext::TFreezeGuard freezeGuard(ctx);
 
-    if (RunOptions_.Mode >= ERunMode::Validate) {
+    if (RunOptions_.Mode >= ERunMode::Compile) {
         std::vector<NFS::IDownloaderPtr> downloaders;
-        for (auto& factory: FsDownloadFactories_) {
+        for (auto& factory : FsDownloadFactories_) {
             if (auto download = factory()) {
                 downloaders.push_back(std::move(download));
             }
@@ -696,30 +751,37 @@ int TFacadeRunner::DoMain(int argc, const char *argv[]) {
         if (EQPlayerMode::Replay != RunOptions_.QPlayerMode) {
             THoldingFileStorage storage(FileStorage_);
             RunOptions_.PrintInfo(TStringBuilder() << TInstant::Now().ToStringLocalUpToSeconds() << " Udf scanning started for " << RunOptions_.UdfsPaths.size() << " udfs ...");
-            LoadRichMetadataToUdfIndex(*udfResolver, RunOptions_.UdfsPaths, false, TUdfIndex::EOverrideMode::RaiseError, *udfIndex, storage);
+            LoadRichMetadataToUdfIndex(*udfResolver, RunOptions_.UdfsPaths, /*isTrusted=*/false, TUdfIndex::EOverrideMode::RaiseError, *udfIndex, storage);
             RunOptions_.PrintInfo(TStringBuilder() << TInstant::Now().ToStringLocalUpToSeconds() << " UdfIndex done.");
+        }
+
+        if (RunOptions_.UdfResolverLog) {
+            udfResolver = NCommon::CreateUdfResolverDecoratorWithLogger(FuncRegistry_.Get(), udfResolver, RunOptions_.UdfResolverLog, RunOptions_.OperationId);
         }
 
         udfResolver = NCommon::CreateUdfResolverWithIndex(udfIndex, udfResolver, FileStorage_);
         RunOptions_.PrintInfo(TStringBuilder() << TInstant::Now().ToStringLocalUpToSeconds() << " Udfs scanned");
     } else {
         udfResolver = FileStorage_ && RunOptions_.UdfResolverPath
-            ? NCommon::CreateOutProcUdfResolver(FuncRegistry_.Get(), FileStorage_, RunOptions_.UdfResolverPath, {}, {}, RunOptions_.UdfResolverFilterSyscalls, {})
-            : NCommon::CreateSimpleUdfResolver(FuncRegistry_.Get(), FileStorage_, true);
+                          ? NCommon::CreateOutProcUdfResolver(FuncRegistry_.Get(), FileStorage_, RunOptions_.UdfResolverPath, {}, {}, RunOptions_.UdfResolverFilterSyscalls, {})
+                          : NCommon::CreateSimpleUdfResolver(FuncRegistry_.Get(), FileStorage_, /*useFakeMD5=*/true);
+        if (RunOptions_.UdfResolverLog) {
+            udfResolver = NCommon::CreateUdfResolverDecoratorWithLogger(FuncRegistry_.Get(), udfResolver, RunOptions_.UdfResolverLog, RunOptions_.OperationId);
+        }
     }
 
     TVector<TDataProviderInitializer> dataProvidersInit;
     if (RunOptions_.PgSupport) {
         dataProvidersInit.push_back(GetPgDataProviderInitializer());
     }
-    for (auto& factory: ProviderFactories_) {
+    for (auto& factory : ProviderFactories_) {
         if (auto init = factory()) {
             dataProvidersInit.push_back(std::move(init));
         }
     }
 
     TVector<IUrlListerPtr> urlListers;
-    for (auto& factory: UrlListerFactories_) {
+    for (auto& factory : UrlListerFactories_) {
         if (auto listener = factory()) {
             urlListers.push_back(std::move(listener));
         }
@@ -737,8 +799,18 @@ int TFacadeRunner::DoMain(int argc, const char *argv[]) {
     factory.SetGatewaysConfig(RunOptions_.GatewaysConfig.Get());
     factory.SetCredentials(RunOptions_.Credentials);
     factory.EnableRangeComputeFor();
+
+    if (RunOptions_.AutoUseYqlLibs) {
+        factory.EnableAutoUseYqlLibs();
+    }
+
     if (!urlListers.empty()) {
         factory.SetUrlListerManager(MakeUrlListerManager(urlListers));
+    }
+
+    for (auto& factoryFn : RemoteLayersFactories_) {
+        auto result = factoryFn();
+        factory.AddRemoteLayersProvider(result.first, result.second);
     }
 
     int result = DoRun(factory);
@@ -749,8 +821,7 @@ int TFacadeRunner::DoMain(int argc, const char *argv[]) {
 }
 
 int TFacadeRunner::DoRun(TProgramFactory& factory) {
-
-    TProgramPtr program = factory.Create(RunOptions_.ProgramFile, RunOptions_.ProgramText, RunOptions_.OperationId, EHiddenMode::Disable, RunOptions_.QPlayerContext, RunOptions_.GatewaysPatch);
+    TProgramPtr program = factory.Create(RunOptions_.ProgramFile, RunOptions_.ProgramText, RunOptions_.OperationId, EHiddenMode::Disable, RunOptions_.QPlayerContext);
     program->SetLanguageVersion(RunOptions_.LangVer);
     program->SetMaxLanguageVersion(RunOptions_.MaxLangVer);
     if (RunOptions_.Params) {
@@ -770,6 +841,20 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
     }
     program->SetUseTableMetaFromGraph(RunOptions_.UseMetaFromGrpah);
     program->SetValidateOptions(RunOptions_.ValidateMode);
+    if (RunOptions_.EnableLineage) {
+        program->SetEnableLineage();
+    }
+
+    if (RunOptions_.FuzzUntypedLambda) {
+        program->SetFuzzUntypedLambda();
+    }
+
+    if (RunOptions_.FuzzUniversal) {
+        program->SetFuzzUniversal();
+    }
+
+    program->SetAuthenticatedUser(RunOptions_.User);
+    program->SetOperationId(RunOptions_.OperationId);
 
     bool fail = false;
     if (RunOptions_.ProgramType != EProgramType::SExpr) {
@@ -779,7 +864,7 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
         settings.Arena = &arena;
         settings.PgParser = EProgramType::Pg == RunOptions_.ProgramType;
         settings.ClusterMapping = ClusterMapping_;
-        settings.Flags = RunOptions_.SqlFlags;
+        ParseTranslationSettings(RunOptions_.SqlFlags, settings);
         settings.SyntaxVersion = RunOptions_.SyntaxVersion;
         settings.AnsiLexer = RunOptions_.AnsiLexer;
         settings.TestAntlr4 = RunOptions_.TestAntlr4;
@@ -794,39 +879,17 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
             fail = true;
         }
         if (!fail && RunOptions_.TestSqlFormat && 1 == RunOptions_.SyntaxVersion) {
-            TString formattedProgramText;
-            NYql::TIssues issues;
-            NSQLTranslationV1::TLexers lexers;
-            lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
-            lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
-            NSQLTranslationV1::TParsers parsers;
-            parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
-            parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
-            auto formatter = NSQLFormat::MakeSqlFormatter(lexers, parsers, settings);
-            if (!formatter->Format(RunOptions_.ProgramText, formattedProgramText, issues)) {
+            TIssues issues;
+            constexpr auto convergence = NSQLFormat::EConvergenceRequirement::Double;
+            if (!NSQLFormat::CheckedFormat(program->GetSourceCode(), program->AstRoot(), settings, issues, convergence)) {
                 *RunOptions_.ErrStream << "Format failed" << Endl;
                 issues.PrintTo(*RunOptions_.ErrStream);
                 return -1;
             }
-
-            auto frmProgram = factory.Create("formatted SQL", formattedProgramText);
-            if (!frmProgram->ParseSql(settings)) {
-                frmProgram->PrintErrorsTo(*RunOptions_.ErrStream);
-                return -1;
-            }
-
-            TStringStream srcQuery, frmQuery;
-
-            program->AstRoot()->PrettyPrintTo(srcQuery, PRETTY_FLAGS);
-            frmProgram->AstRoot()->PrettyPrintTo(frmQuery, PRETTY_FLAGS);
-            if (srcQuery.Str() != frmQuery.Str()) {
-                *RunOptions_.ErrStream << "source query's AST and formatted query's AST are not same" << Endl;
-                return -1;
-            }
         }
-        if (!fail && RunOptions_.TestLexers && 1 == RunOptions_.SyntaxVersion) {
+        if (!fail && RunOptions_.TestLexers && 1 == RunOptions_.SyntaxVersion && !settings.PgParser) {
             TIssues issues;
-            if (!NSQLTranslationV1::CheckLexers({}, RunOptions_.ProgramText, issues)) {
+            if (!NSQLTranslationV1::CheckLexers({}, program->GetSourceCode(), issues)) {
                 *RunOptions_.ErrStream << "Lexers mismatched" << Endl;
                 issues.PrintTo(*RunOptions_.ErrStream);
                 return -1;
@@ -834,12 +897,45 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
         }
         if (!fail && RunOptions_.TestComplete && 1 == RunOptions_.SyntaxVersion) {
             TIssues issues;
-            if (!NSQLComplete::CheckComplete(
-                    RunOptions_.ProgramText,
-                    program->ExprRoot(),
-                    program->ExprCtx(),
-                    issues)) {
+            if (!NSQLComplete::CheckComplete(program->GetSourceCode(), *program->AstRoot(), issues)) {
                 *RunOptions_.ErrStream << "Completion failed" << Endl;
+                issues.PrintTo(*RunOptions_.ErrStream);
+                return -1;
+            }
+        }
+        if (!fail && RunOptions_.TestSyntaxAmbiguities && 1 == RunOptions_.SyntaxVersion) {
+            NSQLTranslationV1::TLexers lexers = {
+                .Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory(),
+                .Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory(),
+            };
+
+            NSQLTranslationV1::TParsers parsers = {
+                .Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(
+                    /*isAmbiguityError=*/true,
+                    /*isAmbiguityDebugging=*/false,
+                    /*maxParseTreeDepth=*/settings.MaxParseTreeDepth),
+                .Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory(
+                    /*isAmbiguityError=*/true,
+                    /*isAmbiguityDebugging=*/false,
+                    /*maxParseTreeDepth=*/settings.MaxParseTreeDepth),
+            };
+
+            NSQLTranslation::TTranslators translators(
+                /* v0 = */ nullptr,
+                NSQLTranslationV1::MakeTranslator(lexers, parsers),
+                /* pg = */ nullptr);
+
+            NYql::TIssues issues;
+            google::protobuf::Message* message = NSQLTranslation::SqlAST(
+                translators,
+                program->GetSourceCode(),
+                RunOptions_.ProgramFile,
+                issues,
+                NSQLTranslation::SQL_MAX_PARSER_ERRORS,
+                settings);
+
+            if (!message) {
+                *RunOptions_.ErrStream << "Syntax ambiguity was detected" << Endl;
                 issues.PrintTo(*RunOptions_.ErrStream);
                 return -1;
             }
@@ -870,13 +966,14 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
     }
 
     RunOptions_.PrintInfo("Compile program...");
-    if (!program->Compile(RunOptions_.User)) {
+    if (!program->Compile(RunOptions_.User,
+                          /*skipLibraries=*/ERunMode::Compile == RunOptions_.Mode && RunOptions_.TestPartialTypecheck)) {
         program->PrintErrorsTo(*RunOptions_.ErrStream);
         fail = true;
     }
 
     if (RunOptions_.TraceOptStream) {
-        program->Print(RunOptions_.TraceOptStream, nullptr);
+        program->Print(RunOptions_.TraceOptStream, /*planOut=*/nullptr);
     }
     if (fail) {
         return -1;
@@ -884,16 +981,25 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
 
     if (ERunMode::Compile == RunOptions_.Mode) {
         if (RunOptions_.ExprStream) {
-            auto baseAst = ConvertToAst(*program->ExprRoot(), program->ExprCtx(), NYql::TExprAnnotationFlags::None, true);
+            auto baseAst = ConvertToAst(*program->ExprRoot(), program->ExprCtx(), NYql::TExprAnnotationFlags::None, /*refAtoms=*/true);
             baseAst.Root->PrettyPrintTo(*RunOptions_.ExprStream, PRETTY_FLAGS);
         }
+
+        if (RunOptions_.TestPartialTypecheck) {
+            auto status = program->TestPartialTypecheck();
+            if (status == TProgram::TStatus::Error) {
+                program->PrintErrorsTo(*RunOptions_.ErrStream);
+                return -1;
+            }
+        }
+
         return 0;
     }
 
     TProgram::TStatus status = DoRunProgram(program);
 
     if (ERunMode::Peephole == RunOptions_.Mode && RunOptions_.ExprStream && program->ExprRoot()) {
-        auto ast = ConvertToAst(*program->ExprRoot(), program->ExprCtx(), RunOptions_.WithTypes ? TExprAnnotationFlags::Types : TExprAnnotationFlags::None, true);
+        auto ast = ConvertToAst(*program->ExprRoot(), program->ExprCtx(), RunOptions_.WithTypes ? TExprAnnotationFlags::Types : TExprAnnotationFlags::None, /*refAtoms=*/true);
         ui32 prettyFlags = TAstPrintFlags::ShortQuote;
         if (!RunOptions_.WithTypes) {
             prettyFlags |= TAstPrintFlags::PerLine;
@@ -901,19 +1007,24 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
         ast.Root->PrettyPrintTo(*RunOptions_.ExprStream, prettyFlags);
     }
 
+    if (status == TProgram::TStatus::Ok && RunOptions_.TestPartialTypecheck) {
+        status = program->TestPartialTypecheck();
+    }
+
     if (RunOptions_.WithFinalIssues) {
         program->FinalizeIssues();
     }
+
     program->PrintErrorsTo(*RunOptions_.ErrStream);
     if (status == TProgram::TStatus::Error) {
         if (RunOptions_.TraceOptStream) {
-            program->Print(RunOptions_.TraceOptStream, nullptr);
+            program->Print(RunOptions_.TraceOptStream, /*planOut=*/nullptr);
         }
         return -1;
     }
 
     if (!RunOptions_.FullExpr && ERunMode::Peephole != RunOptions_.Mode) {
-        program->Print(RunOptions_.ExprStream, RunOptions_.PlanStream, /*cleanPlan*/true);
+        program->Print(RunOptions_.ExprStream, RunOptions_.PlanStream, /*cleanPlan*/ true);
     }
 
     program->ConfigureYsonResultFormat(RunOptions_.ResultsFormat);
@@ -962,8 +1073,18 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
         }
     }
 
+    if (RunOptions_.PrintDiagnostics) {
+        if (auto diag = program->GetDiagnostics()) {
+            RunOptions_.PrintInfo("Diagnostics:");
+            TStringInput diagStream(*diag);
+            NYson::ReformatYsonStream(&diagStream, &Cerr, NYT::NYson::EYsonFormat::Pretty);
+        }
+    }
+
     RunOptions_.PrintInfo("");
     RunOptions_.PrintInfo("Done");
+
+    program->CommitFullCapture();
 
     return 0;
 }
@@ -972,12 +1093,12 @@ TProgram::TStatus TFacadeRunner::DoRunProgram(TProgramPtr program) {
     TProgram::TStatus status = TProgram::TStatus::Ok;
 
     auto defOptConfig = TOptPipelineConfigurator(program, RunOptions_.FullExpr ? RunOptions_.PlanStream : nullptr, RunOptions_.FullExpr ? RunOptions_.ExprStream : nullptr, RunOptions_.WithTypes);
-    IPipelineConfigurator* optConfig = OptPipelineConfigurator_ ? OptPipelineConfigurator_  : &defOptConfig;
+    IPipelineConfigurator* optConfig = OptPipelineConfigurator_ ? OptPipelineConfigurator_ : &defOptConfig;
 
     if (ERunMode::Peephole == RunOptions_.Mode) {
         RunOptions_.PrintInfo("Peephole...");
         auto defConfig = TPeepHolePipelineConfigurator();
-        IPipelineConfigurator* config = PeepholePipelineConfigurator_ ? PeepholePipelineConfigurator_  : &defConfig;
+        IPipelineConfigurator* config = PeepholePipelineConfigurator_ ? PeepholePipelineConfigurator_ : &defConfig;
         status = program->OptimizeWithConfig(RunOptions_.User, *config);
     } else if (ERunMode::Run == RunOptions_.Mode) {
         RunOptions_.PrintInfo("Run program...");
@@ -999,4 +1120,4 @@ TProgram::TStatus TFacadeRunner::DoRunProgram(TProgramPtr program) {
     return status;
 }
 
-} // NYql
+} // namespace NYql

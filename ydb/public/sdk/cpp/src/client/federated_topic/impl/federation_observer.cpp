@@ -13,9 +13,9 @@ TFederatedDbObserverImpl::TFederatedDbObserverImpl(std::shared_ptr<TGRpcConnecti
     , PromiseToInitState(NThreading::NewPromise())
     , FederationDiscoveryRetryPolicy(settings.RetryPolicy_)
 {
-    RpcSettings.ClientTimeout = settings.ConnectionTimeout_;
     RpcSettings.EndpointPolicy = TRpcRequestSettings::TEndpointPolicy::UseDiscoveryEndpoint;
     RpcSettings.UseAuth = true;
+    ConnectionTimeout = TDeadline::SafeDurationCast(settings.ConnectionTimeout_);
 }
 
 TFederatedDbObserverImpl::~TFederatedDbObserverImpl() {
@@ -62,14 +62,30 @@ Ydb::FederationDiscovery::ListFederationDatabasesRequest TFederatedDbObserverImp
 }
 
 void TFederatedDbObserverImpl::RunFederationDiscoveryImpl() {
-    Y_ABORT_UNLESS(Lock.IsLocked());
+    // NOTE: must be called WITHOUT Lock held.
+    // RunDeferred may invoke the response callback synchronously (e.g. when the
+    // IAM token is not ready yet), which in turn calls OnFederationDiscovery that
+    // tries to acquire Lock.  Holding Lock here would cause a spin-deadlock on
+    // the single gRPC event-loop thread.
+    Y_ABORT_UNLESS(!Lock.IsLocked());
 
-    FederationDiscoveryDelayContext = Connections_->CreateContext();
-    if (!FederationDiscoveryDelayContext) {
-        Stopping = true;
-        // TODO log DRIVER_IS_STOPPING_DESCRIPTION
-        return;
+    NYdbGrpc::IQueueClientContextPtr ctx;
+    {
+        std::lock_guard guard(Lock);
+        if (Stopping) {
+            return;
+        }
+        ctx = Connections_->CreateContext();
+        if (!ctx) {
+            Stopping = true;
+            FederationDiscoveryDelayContext = nullptr;  // release any previously-held context
+            // TODO log DRIVER_IS_STOPPING_DESCRIPTION
+            return;
+        }
+        FederationDiscoveryDelayContext = ctx;
     }
+    // Lock is released here — before RunDeferred — to prevent the deadlock
+    // described above.
 
     auto extractor = [selfCtx = SelfContext]
         (google::protobuf::Any* any, TPlainStatus status) mutable {
@@ -82,6 +98,9 @@ void TFederatedDbObserverImpl::RunFederationDiscoveryImpl() {
         }
     };
 
+    TRpcRequestSettings settings = RpcSettings;
+    settings.Deadline = TDeadline::AfterDuration(ConnectionTimeout);
+
     Connections_->RunDeferred<Ydb::FederationDiscovery::V1::FederationDiscoveryService,
                              Ydb::FederationDiscovery::ListFederationDatabasesRequest,
                              Ydb::FederationDiscovery::ListFederationDatabasesResponse>(
@@ -90,8 +109,8 @@ void TFederatedDbObserverImpl::RunFederationDiscoveryImpl() {
         &Ydb::FederationDiscovery::V1::FederationDiscoveryService::Stub::AsyncListFederationDatabases,
         DbDriverState_,
         {},  // no polling unready operations, so no need in delay parameter
-        RpcSettings,
-        FederationDiscoveryDelayContext);
+        settings,
+        std::move(ctx));
 }
 
 void TFederatedDbObserverImpl::ScheduleFederationDiscoveryImpl(TDuration delay) {
@@ -99,10 +118,17 @@ void TFederatedDbObserverImpl::ScheduleFederationDiscoveryImpl(TDuration delay) 
     auto cb = [selfCtx = SelfContext](bool ok) {
         if (ok) {
             if (auto self = selfCtx->LockShared()) {
-                std::lock_guard guard(self->Lock);
-                if (self->Stopping) {
-                    return;
+                {
+                    std::lock_guard guard(self->Lock);
+                    if (self->Stopping) {
+                        return;
+                    }
                 }
+                // Lock is intentionally released before RunFederationDiscoveryImpl:
+                // that function must not be called with Lock held because RunDeferred
+                // can invoke its callback synchronously (e.g. on auth errors), which
+                // would call OnFederationDiscovery → try to re-acquire the same
+                // non-recursive TSpinLock → spin-deadlock.
                 self->RunFederationDiscoveryImpl();
             }
         }
@@ -136,8 +162,6 @@ void TFederatedDbObserverImpl::OnFederationDiscovery(TStatus&& status, Ydb::Fede
                 << "OnFederationDiscovery fall back to single mode, database=" << DbDriverState_->Database);
             FederatedDbState->Status = TPlainStatus{};  // SUCCESS
             FederatedDbState->ControlPlaneEndpoint = DbDriverState_->DiscoveryEndpoint;
-            auto dbState = Connections_->GetDriverState(std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt);
-            FederatedDbState->ControlPlaneEndpoint = dbState->DiscoveryEndpoint;
             // FederatedDbState->SelfLocation = ???;
             auto db = std::make_shared<Ydb::FederationDiscovery::DatabaseInfo>();
             db->set_path(TStringType{DbDriverState_->Database});
@@ -145,7 +169,6 @@ void TFederatedDbObserverImpl::OnFederationDiscovery(TStatus&& status, Ydb::Fede
             db->set_status(Ydb::FederationDiscovery::DatabaseInfo_Status_AVAILABLE);
             db->set_weight(100);
             FederatedDbState->DbInfos.emplace_back(std::move(db));
-
         } else {
             if (status.IsSuccess()) {
                 ScheduleFederationDiscoveryImpl(REDISCOVERY_DELAY);

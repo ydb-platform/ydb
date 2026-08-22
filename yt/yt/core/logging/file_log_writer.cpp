@@ -1,5 +1,6 @@
 #include "file_log_writer.h"
 
+#include "appendable_compressed_file.h"
 #include "log_writer_detail.h"
 #include "config.h"
 #include "private.h"
@@ -7,12 +8,15 @@
 #include "random_access_gzip.h"
 #include "stream_output.h"
 #include "system_log_event_provider.h"
-#include "compression.h"
 #include "log_writer_factory.h"
-#include "zstd_compression.h"
+#include "zstd_log_codec.h"
 #include "formatter.h"
 
+#include <yt/yt/core/misc/pattern_formatter.h>
+#include <yt/yt/core/misc/proc.h>
 #include <yt/yt/core/misc/fs.h>
+
+#include <library/cpp/yt/system/process_id.h>
 
 #include <library/cpp/yt/memory/leaky_ref_counted_singleton.h>
 
@@ -22,9 +26,38 @@ using namespace NProfiling;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, SystemLoggingCategoryName);
+namespace {
+
+YT_DEFINE_LEAKY_GLOBAL(const NLogging::TLogger, Logger, SystemLoggingCategoryName);
+
 constexpr size_t BufferSize = 64_KB;
-const char* LogrotateTimestampSuffixFormat = ".%Y%m%d-%H%M%S";
+constexpr TStringBuf LogrotateTimestampSuffixFormat = ".%Y%m%d-%H%M%S";
+
+std::string SanitizeFileName(TStringBuf fileName)
+{
+    std::string result;
+    result.reserve(fileName.size());
+    for (auto ch : fileName) {
+        if (ch == '/') {
+            result.push_back('_');
+        } else {
+            result.push_back(ch);
+        }
+    }
+    return result;
+}
+
+std::string FormatFileName(TStringBuf fileNamePattern)
+{
+    TPatternFormatter formatter;
+    formatter
+        .SetProperty("process_id", ToString(GetProcessId()))
+        .SetProperty("process_name", SanitizeFileName(GetCurrentProcessName()))
+        .SetProperty("process_command_line", SanitizeFileName(GetCurrentProcessCommandLine()));
+    return formatter.Format(fileNamePattern);
+}
+
+} // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -36,7 +69,7 @@ public:
     TFileLogWriter(
         std::unique_ptr<ILogFormatter> formatter,
         std::unique_ptr<ISystemLogEventProvider> systemEventProvider,
-        TString name,
+        std::string name,
         const TFileLogWriterConfigPtr& config,
         ILogWriterHost* host)
         : TStreamLogWriterBase(
@@ -46,8 +79,9 @@ public:
             config)
         , Config_(config)
         , Host_(host)
-        , DirectoryName_(NFS::GetDirectoryName(Config_->FileName))
-        , FileNamePrefix_(NFS::GetFileName(Config_->FileName))
+        , BaseFileName_(FormatFileName(Config_->FileName))
+        , DirectoryName_(NFS::GetDirectoryName(BaseFileName_))
+        , FileNamePrefix_(NFS::GetFileName(BaseFileName_))
         , LastRotationTimestamp_(TInstant::Now())
     {
         Open();
@@ -59,7 +93,7 @@ public:
         Open();
     }
 
-    const TString& GetFileName() const override
+    const std::string& GetFileName() const override
     {
         return FileName_;
     }
@@ -69,7 +103,7 @@ public:
         const auto& rotationPolicy = Config_->RotationPolicy;
         auto now = TInstant::Now();
         if ((!rotationPolicy->RotationPeriod || LastRotationTimestamp_ + *rotationPolicy->RotationPeriod > now) &&
-            ((!rotationPolicy->MaxSegmentSize || File_->GetLength() < *rotationPolicy->MaxSegmentSize)))
+            ((!rotationPolicy->MaxSegmentSize || !File_ || File_->GetLength() < *rotationPolicy->MaxSegmentSize)))
         {
             return;
         }
@@ -86,26 +120,33 @@ public:
             if (statistics.AvailableSpace < minSpace) {
                 if (!Disabled_.load(std::memory_order::acquire)) {
                     Disabled_ = true;
-                    YT_LOG_ERROR("Log file disabled: not enough space available (FileName: %v, AvailableSpace: %v, MinSpace: %v)",
-                        DirectoryName_,
-                        statistics.AvailableSpace,
-                        minSpace);
+                    YT_TLOG_ERROR("Log file disabled: not enough space available")
+                        .With("FileName", DirectoryName_)
+                        .With("AvailableSpace", statistics.AvailableSpace)
+                        .With("MinSpace", minSpace);
 
                     Close();
                 }
             } else {
                 if (Disabled_.load(std::memory_order::acquire)) {
-                    Reload(); // Reinitialize all descriptors.
-
-                    YT_LOG_INFO("Log file enabled: space check passed (FileName: %v)",
-                        Config_->FileName);
-                    Disabled_ = false;
+                    try {
+                        // Reinitialize all descriptors.
+                        Reload();
+                        YT_TLOG_INFO("Log file enabled: space check passed")
+                            .With("FileName", BaseFileName_);
+                        Disabled_ = false;
+                    } catch (const std::exception& ex) {
+                        YT_TLOG_ERROR("Log file disabled: reload failed")
+                            .With("FileName", BaseFileName_)
+                            .With(TError(ex));
+                    }
                 }
             }
         } catch (const std::exception& ex) {
             Disabled_ = true;
-            YT_LOG_ERROR(ex, "Log file disabled: space check failed (FileName: %v)",
-                Config_->FileName);
+            YT_TLOG_ERROR("Log file disabled: space check failed")
+                .With("FileName", BaseFileName_)
+                .With(TError(ex));
 
             Close();
         }
@@ -114,7 +155,7 @@ public:
 protected:
     IOutputStream* GetOutputStream() const noexcept override
     {
-        if (Y_UNLIKELY(Disabled_.load(std::memory_order::acquire))) {
+        if (Disabled_.load(std::memory_order::acquire)) [[unlikely]] {
             return nullptr;
         }
         return OutputStream_.Get();
@@ -123,8 +164,9 @@ protected:
     void OnException(const std::exception& ex) override
     {
         Disabled_ = true;
-        YT_LOG_ERROR(ex, "Disabled log file (FileName: %v)",
-            Config_->FileName);
+        YT_TLOG_ERROR("Disabled log file")
+            .With("FileName", BaseFileName_)
+            .With(TError(ex));
 
         Close();
     }
@@ -133,9 +175,11 @@ private:
     const TFileLogWriterConfigPtr Config_;
     ILogWriterHost* const Host_;
 
-    const TString DirectoryName_;
-    const TString FileNamePrefix_;
-    TString FileName_;
+    const std::string BaseFileName_;
+    const std::string DirectoryName_;
+    const std::string FileNamePrefix_;
+
+    std::string FileName_;
 
     std::atomic<bool> Disabled_ = false;
     TInstant LastRotationTimestamp_;
@@ -176,7 +220,7 @@ private:
             }
 
             // Generate filename.
-            FileName_ = Config_->FileName;
+            FileName_ = BaseFileName_;
             if (Config_->UseTimestampSuffix) {
                 FileName_ += "." + LastRotationTimestamp_.ToStringLocalUpToSeconds();
             }
@@ -186,11 +230,13 @@ private:
             if (Config_->EnableCompression) {
                 switch (Config_->CompressionMethod) {
                     case ECompressionMethod::Zstd:
-                        OutputStream_ = New<TAppendableCompressedFile>(
+                        OutputStream_ = CreateAppendableCompressedFile(
                             *File_,
-                            CreateZstdCompressionCodec(Config_->CompressionLevel),
+                            CreateZstdLogCodec(Config_->CompressionLevel),
                             Host_->GetCompressionInvoker(),
-                            /*writeTruncateMessage*/ true);
+                            {
+                                .WriteTruncateMessage = true,
+                            });
                         break;
 
                     case ECompressionMethod::Gzip:
@@ -220,8 +266,9 @@ private:
             ResetSegmentSize(File_->GetLength());
         } catch (const std::exception& ex) {
             Disabled_ = true;
-            YT_LOG_ERROR(ex, "Failed to open log file (FileName: %v)",
-                FileName_);
+            YT_TLOG_ERROR("Failed to open log file")
+                .With("FileName", FileName_)
+                .With(TError(ex));
 
             Close();
         } catch (...) {
@@ -242,8 +289,9 @@ private:
                 File_.reset();
             }
         } catch (const std::exception& ex) {
-            YT_LOG_ERROR(ex, "Failed to close log file; ignored (FileName: %v)",
-                FileName_);
+            YT_TLOG_ERROR("Failed to close log file; ignored")
+                .With("FileName", FileName_)
+                .With(TError(ex));
         } catch (...) {
             YT_ABORT();
         }
@@ -256,24 +304,26 @@ private:
             auto count = GetFileCountToKeep(fileNames);
             for (int index = count; index < ssize(fileNames); ++index) {
                 auto filePath = NFS::CombinePaths(DirectoryName_, fileNames[index]);
-                YT_LOG_DEBUG("Remove log segment (FilePath: %v)", filePath);
+                YT_TLOG_DEBUG("Remove log segment")
+                    .With("FilePath", filePath);
                 NFS::Remove(filePath);
             }
             fileNames.resize(count);
 
             RenameFiles(fileNames);
         } catch (const std::exception& ex) {
-            YT_LOG_ERROR(ex, "Failed to rotate log files");
+            YT_TLOG_ERROR("Failed to rotate log files")
+                .With(TError(ex));
         } catch (...) {
             YT_ABORT();
         }
     }
 
-    std::vector<TString> ListFiles() const
+    std::vector<std::string> ListFiles() const
     {
         auto files = NFS::EnumerateFiles(DirectoryName_, /*depth*/ 1, /*sortByName*/ true);
-        std::erase_if(files, [&] (const TString& s) {
-            return !s.StartsWith(FileNamePrefix_);
+        std::erase_if(files, [&] (const std::string& s) {
+            return !s.starts_with(FileNamePrefix_);
         });
         if (Config_->UseTimestampSuffix) {
             // Rotated files are suffixed with the date, decreasing with the age of file.
@@ -285,7 +335,7 @@ private:
         return files;
     }
 
-    int GetFileCountToKeep(const std::vector<TString>& fileNames) const
+    int GetFileCountToKeep(const std::vector<std::string>& fileNames) const
     {
         const auto& rotationPolicy = Config_->RotationPolicy;
         int filesToKeep = 0;
@@ -303,13 +353,13 @@ private:
         return fileNames.size();
     }
 
-    void RenameFiles(const std::vector<TString>& fileNames)
+    void RenameFiles(const std::vector<std::string>& fileNames)
     {
         if (Config_->UseTimestampSuffix || fileNames.empty()) {
             return;
         }
         if (Config_->UseLogrotateCompatibleTimestampSuffix) {
-            auto newFileName = FileNamePrefix_ + TInstant::Now().FormatLocalTime(LogrotateTimestampSuffixFormat);
+            auto newFileName = FileNamePrefix_ + TInstant::Now().FormatLocalTime(LogrotateTimestampSuffixFormat.data());
             auto oldPath = NFS::CombinePaths(DirectoryName_, fileNames[0]);
             auto newPath = NFS::CombinePaths(DirectoryName_, newFileName);
             NFS::Rename(oldPath, newPath);
@@ -317,12 +367,14 @@ private:
         }
 
         int width = ToString(ssize(fileNames)).length();
-        TString formatString = "%v.%0" + ToString(width) + "d";
+        std::string formatString = "%v.%0" + ToString(width) + "d";
         for (int index = ssize(fileNames); index > 0; --index) {
             auto newFileName = Format(TRuntimeFormat{formatString}, FileNamePrefix_, index);
             auto oldPath = NFS::CombinePaths(DirectoryName_, fileNames[index - 1]);
             auto newPath = NFS::CombinePaths(DirectoryName_, newFileName);
-            YT_LOG_DEBUG("Rename log segment (OldFilePath: %v, NewFilePath: %v)", oldPath, newPath);
+            YT_TLOG_DEBUG("Rename log segment")
+                .With("OldFilePath", oldPath)
+                .With("NewFilePath", newPath);
             NFS::Rename(oldPath, newPath);
         }
     }
@@ -333,7 +385,7 @@ private:
 IFileLogWriterPtr CreateFileLogWriter(
     std::unique_ptr<ILogFormatter> formatter,
     std::unique_ptr<ISystemLogEventProvider> systemEventProvider,
-    TString name,
+    std::string name,
     TFileLogWriterConfigPtr config,
     ILogWriterHost* host)
 {
@@ -359,7 +411,7 @@ public:
 
     ILogWriterPtr CreateWriter(
         std::unique_ptr<ILogFormatter> formatter,
-        TString name,
+        std::string name,
         const NYTree::IMapNodePtr& configNode,
         ILogWriterHost* host) noexcept override
     {

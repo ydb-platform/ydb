@@ -152,13 +152,13 @@ Y_UNIT_TEST_SUITE(KqpFederatedSchemeTest) {
         // Create external table
         {
             const TString sql = TStringBuilder() << R"(
-                UPSERT OBJECT mysasignature (TYPE SECRET) WITH (value = "mysasignaturevalue");
+                CREATE SECRET mysasignature WITH (value = "mysasignaturevalue");
                 CREATE EXTERNAL DATA SOURCE `)" << externalDataSourceName << R"(` WITH (
                     SOURCE_TYPE="ObjectStorage",
                     LOCATION="my-bucket",
                     AUTH_METHOD="SERVICE_ACCOUNT",
                     SERVICE_ACCOUNT_ID="mysa",
-                    SERVICE_ACCOUNT_SECRET_NAME="mysasignature"
+                    SERVICE_ACCOUNT_SECRET_PATH="mysasignature"
                 );
                 CREATE EXTERNAL TABLE `)" << externalTableName << R"(` (
                     Key Uint64
@@ -173,7 +173,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedSchemeTest) {
 
         // Drop secret object
         {
-            const TString sql = "DROP OBJECT mysasignature (TYPE SECRET)";
+            const TString sql = "DROP SECRET mysasignature";
             const auto& [success, issues] = queryExecuter(sql);
             UNIT_ASSERT_C(success, issues);
         }

@@ -9,6 +9,6 @@
 
 namespace NYql {
 
-THolder<IYtflowOptimization> CreateYtYtflowOptimization(TYtState* state);
+THolder<IYtflowOptimization> CreateYtYtflowOptimization(TYtState::TWeakPtr state);
 
 } // namespace NYql

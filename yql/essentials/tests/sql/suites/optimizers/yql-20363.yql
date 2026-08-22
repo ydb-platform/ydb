@@ -1,0 +1,16 @@
+PRAGMA config.flags('OptimizerFlags', 'ExtractCommonPredicatesFromLogicalOps');
+
+$a = ((2 / 1) > 1) ?? false; -- true
+$b = ((3 / 1) > 1) ?? false; -- true
+$c = ((4 / 1) < 1) ?? false; -- false
+
+$d = ((5 / 1) > 1); -- true
+$e = ((6 / 1) > 1); -- true
+$f = ((7 / 1) < 1); -- false
+
+-- abc + ba -> ab(c + true) -> ab
+select $a and $b and $c or $b and $a;
+
+-- ed + abc + def + ba -> ed(true + f) + ab(c + true) -> ed + ab
+select $e and $d or $a and $b and $c or $d and $e and $f or $b and $a;
+

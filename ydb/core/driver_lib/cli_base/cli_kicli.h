@@ -48,24 +48,24 @@ std::optional<TString> AcquireSecurityToken(TClientCommand::TConfig& config);
 int InvokeThroughKikimr(TClientCommand::TConfig& config, std::function<int(NClient::TKikimr&)> handler);
 
 template <typename RequestType>
-void PrepareRequest(TClientCommand::TConfig&, TAutoPtr<RequestType>&) {}
+void SetToken(TClientCommand::TConfig& config, TAutoPtr<RequestType>& request) {
+    if (!config.SecurityToken.empty()) {
+        request->Record.SetSecurityToken(config.SecurityToken);
+    }
+}
 
-void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBusRequest>& request);
-void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBusSchemeInitRoot>& request);
-void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBusSchemeOperation>& request);
-void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBusSchemeDescribe>& request);
-void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBusCmsRequest>& request);
-void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBusConsoleRequest>& request);
-void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBusFillNode>& request);
-void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBusDrainNode>& request);
+template <typename RequestType>
+void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<RequestType>& request) {
+    SetToken(config, request);
+}
 
 template <typename ResponseType>
 int OnMessageBus(const TClientCommand::TConfig& config, const ResponseType& response);
 
 template <typename RequestType, typename ResponseType>
 int MessageBusCall(TClientCommand::TConfig& config, TAutoPtr<RequestType> request, std::function<int(const ResponseType&)> callback) {
-    PrepareRequest(config, request);
     auto handler = [&](NClient::TKikimr& kikimr) {
+        PrepareRequest(config, request);
         NThreading::TFuture<NClient::TResult> future(kikimr.ExecuteRequest(request.Release()));
         return HandleResponse<NClient::TResult>(future, [&](const NClient::TResult& result) -> int {
             if (!result.HaveResponse<ResponseType>()) {

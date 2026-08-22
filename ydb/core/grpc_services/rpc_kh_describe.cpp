@@ -21,6 +21,8 @@
 #include <util/string/vector.h>
 #include <util/generic/hash.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::RPC_REQUEST
+
 namespace NKikimr {
 namespace NGRpcService {
 
@@ -106,6 +108,8 @@ private:
             WaitingResolveReply = true;
         } else {
             TAutoPtr<NSchemeCache::TSchemeCacheNavigate> request(new NSchemeCache::TSchemeCacheNavigate());
+            request->DatabaseName = Request->GetDatabaseName().GetOrElse("");
+
             NSchemeCache::TSchemeCacheNavigate::TEntry entry;
             entry.Path = std::move(path);
             if (entry.Path.empty()) {
@@ -124,8 +128,9 @@ private:
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev,  const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, "Got TEvDeliveryProblem, TabletId: " << ev->Get()->TabletId
-                << ", NotDelivered: " << ev->Get()->NotDelivered);
+        YDB_LOG_DEBUG_CTX(ctx, "Got TEvDeliveryProblem",
+            {"tabletId", ev->Get()->TabletId},
+            {"notDelivered", ev->Get()->NotDelivered});
         return ReplyWithError(Ydb::StatusIds::UNAVAILABLE, "Invalid table path specified", ctx);
     }
 
@@ -259,7 +264,7 @@ private:
         KeyRange.Reset(new TKeyDesc(entry.TableId, range, TKeyDesc::ERowOperation::Read, KeyColumnTypes, columns));
 
         TAutoPtr<NSchemeCache::TSchemeCacheRequest> request(new NSchemeCache::TSchemeCacheRequest());
-
+        request->DatabaseName = Request->GetDatabaseName().GetOrElse("");
         request->ResultSet.emplace_back(std::move(KeyRange));
 
         TAutoPtr<TEvTxProxySchemeCache::TEvResolveKeySet> resolveReq(new TEvTxProxySchemeCache::TEvResolveKeySet(request));
@@ -304,9 +309,9 @@ private:
             return JoinVectorIntoString(shards, ", ");
         };
 
-        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, "Table ["
-                    << TEvKikhouseDescribeTableRequest::GetProtoRequest(Request)->path()
-                    << "] shards: " << getShardsString(KeyRange->GetPartitions()));
+        YDB_LOG_DEBUG_CTX(ctx, "Table",
+            {"path", TEvKikhouseDescribeTableRequest::GetProtoRequest(Request)->path()},
+            {"shards", getShardsString(KeyRange->GetPartitions())});
 
         for (const TKeyDesc::TPartitionInfo& partition : KeyRange->GetPartitions()) {
             auto* p = Result.add_partitions();

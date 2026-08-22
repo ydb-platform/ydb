@@ -24,7 +24,7 @@ namespace TEvKeyValue {
         EvReportWriteLatency,
         EvUpdateWeights,
         EvCompleteGC,
-        EvCleanUpDataRequest,
+        EvVacuumRequest,
 
         EvRead = EvRequest + 16,
         EvReadRange,
@@ -33,14 +33,18 @@ namespace TEvKeyValue {
         EvAcquireLock,
 
         EvResponse = EvRequest + 512,
-        EvForceTabletDataCleanup,
-        EvCleanUpDataResponse,
+        EvForceTabletVacuum,
+        EvVacuumResponse,
 
         EvReadResponse = EvResponse + 16,
         EvReadRangeResponse,
         EvExecuteTransactionResponse,
         EvGetStorageChannelStatusResponse,
         EvAcquireLockResponse,
+
+        EvAdvanceMoveDataResult = EvResponse + 512,
+        EvBlobCopied,
+        EvCheckTrash,
 
         EvEnd
     };
@@ -61,6 +65,19 @@ namespace TEvKeyValue {
     struct TEvReadResponse : public TEventPB<TEvReadResponse,
             NKikimrKeyValue::ReadResult, EvReadResponse> {
         TEvReadResponse() { }
+
+        void SetBuffer(TRope&& buffer) {
+            ui32 id = AddPayload(std::move(buffer));
+            Record.set_payload_id(id);
+        }
+
+        bool IsPayload() const {
+            return Record.has_payload_id();
+        }
+
+        TRope GetBuffer() const {
+            return GetPayload(Record.payload_id());
+        }
     };
 
     struct TEvReadRangeResponse;
@@ -75,6 +92,19 @@ namespace TEvKeyValue {
     struct TEvReadRangeResponse : public TEventPB<TEvReadRangeResponse,
             NKikimrKeyValue::ReadRangeResult, EvReadRangeResponse> {
         TEvReadRangeResponse() { }
+
+        void SetBuffer(TRope&& buffer, ui32 itemIdx) {
+            ui32 id = AddPayload(std::move(buffer));
+            Record.mutable_pair(itemIdx)->set_payload_id(id);
+        }
+
+        bool IsPayload(ui32 itemIdx) const {
+            return Record.pair(itemIdx).has_payload_id();
+        }
+
+        TRope GetBuffer(ui32 itemIdx) const {
+            return GetPayload(Record.pair(itemIdx).payload_id());
+        }
     };
 
     struct TEvExecuteTransactionResponse;
@@ -145,27 +175,32 @@ namespace TEvKeyValue {
         ui64 Step;
         NKeyValue::TRequestStat Stat;
         NMsgBusProxy::EResponseStatus Status;
+        TVector<ui32> AcquiredChannels;
         std::deque<std::pair<TLogoBlobID, bool>> RefCountsIncr;
 
         TEvNotify() { }
 
         TEvNotify(ui64 requestUid, ui64 generation, ui64 step, const NKeyValue::TRequestStat &stat,
-                NMsgBusProxy::EResponseStatus status, std::deque<std::pair<TLogoBlobID, bool>>&& refCountsIncr)
+                NMsgBusProxy::EResponseStatus status, TVector<ui32> acquiredChannels,
+                std::deque<std::pair<TLogoBlobID, bool>>&& refCountsIncr)
             : RequestUid(requestUid)
             , Generation(generation)
             , Step(step)
             , Stat(stat)
             , Status(status)
+            , AcquiredChannels(std::move(acquiredChannels))
             , RefCountsIncr(std::move(refCountsIncr))
         {}
 
         TEvNotify(ui64 requestUid, ui64 generation, ui64 step, const NKeyValue::TRequestStat &stat,
-                NKikimrKeyValue::Statuses::ReplyStatus status, std::deque<std::pair<TLogoBlobID, bool>>&& refCountsIncr)
+                NKikimrKeyValue::Statuses::ReplyStatus status, TVector<ui32> acquiredChannels,
+                std::deque<std::pair<TLogoBlobID, bool>>&& refCountsIncr)
             : RequestUid(requestUid)
             , Generation(generation)
             , Step(step)
             , Stat(stat)
             , Status(ConvertStatus(status))
+            , AcquiredChannels(std::move(acquiredChannels))
             , RefCountsIncr(std::move(refCountsIncr))
         {}
 
@@ -179,6 +214,8 @@ namespace TEvKeyValue {
                 return NMsgBusProxy::MSTATUS_TIMEOUT;
             case NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR:
                 return NMsgBusProxy::MSTATUS_INTERNALERROR;
+            case NKikimrKeyValue::Statuses::RSTATUS_BLOCKED:
+                return NMsgBusProxy::MSTATUS_ERROR;
             default:
                 return NMsgBusProxy::MSTATUS_INTERNALERROR;
             }
@@ -201,27 +238,27 @@ namespace TEvKeyValue {
         {}
     };
 
-    struct TEvCleanUpDataResponse;
+    struct TEvVacuumResponse;
 
-    struct TEvCleanUpDataRequest : public TEventPB<TEvCleanUpDataRequest,
-            NKikimrKeyValue::CleanUpDataRequest, EvCleanUpDataRequest> {
-        using TResponse = TEvCleanUpDataResponse;
+    struct TEvVacuumRequest : public TEventPB<TEvVacuumRequest,
+            NKikimrKeyValue::VacuumRequest, EvVacuumRequest> {
+        using TResponse = TEvVacuumResponse;
 
-        TEvCleanUpDataRequest() = default;
+        TEvVacuumRequest() = default;
 
-        TEvCleanUpDataRequest(ui64 generation, bool reset=false) {
+        TEvVacuumRequest(ui64 generation, bool reset=false) {
             Record.set_generation(generation);
             Record.set_reset_actual_generation(reset);
         }
     };
 
-    struct TEvCleanUpDataResponse : public TEventPB<TEvCleanUpDataResponse,
-            NKikimrKeyValue::CleanUpDataResponse, EvCleanUpDataResponse> {
-        using TRequest = TEvCleanUpDataRequest;
+    struct TEvVacuumResponse : public TEventPB<TEvVacuumResponse,
+            NKikimrKeyValue::VacuumResponse, EvVacuumResponse> {
+        using TRequest = TEvVacuumRequest;
 
-        TEvCleanUpDataResponse() = default;
+        TEvVacuumResponse() = default;
 
-        TEvCleanUpDataResponse(ui64 generation, NKikimrKeyValue::CleanUpDataResponse::Status status, const TString& errorReason, ui64 actualGeneration, ui64 tabletId) {
+        TEvVacuumResponse(ui64 generation, NKikimrKeyValue::VacuumResponse::Status status, const TString& errorReason, ui64 actualGeneration, ui64 tabletId) {
             Record.set_generation(generation);
             Record.set_status(status);
             Record.set_error_reason(errorReason);
@@ -229,31 +266,104 @@ namespace TEvKeyValue {
             Record.set_tablet_id(tabletId);
         }
 
-        static std::unique_ptr<TEvCleanUpDataResponse> MakeSuccess(ui64 generation, ui64 tabletId) {
-            return std::make_unique<TEvCleanUpDataResponse>(generation, NKikimrKeyValue::CleanUpDataResponse::STATUS_SUCCESS, "", generation, tabletId);
+        static std::unique_ptr<TEvVacuumResponse> MakeSuccess(ui64 generation, ui64 tabletId) {
+            return std::make_unique<TEvVacuumResponse>(generation, NKikimrKeyValue::VacuumResponse::STATUS_SUCCESS, "", generation, tabletId);
         }
 
-        static std::unique_ptr<TEvCleanUpDataResponse> MakeAborted(ui64 generation, const TString& errorReason, ui64 actualGeneration, ui64 tabletId) {
-            return std::make_unique<TEvCleanUpDataResponse>(generation, NKikimrKeyValue::CleanUpDataResponse::STATUS_ABORTED, errorReason, actualGeneration, tabletId);
+        static std::unique_ptr<TEvVacuumResponse> MakeAborted(ui64 generation, const TString& errorReason, ui64 actualGeneration, ui64 tabletId) {
+            return std::make_unique<TEvVacuumResponse>(generation, NKikimrKeyValue::VacuumResponse::STATUS_ABORTED, errorReason, actualGeneration, tabletId);
         }
 
-        static std::unique_ptr<TEvCleanUpDataResponse> MakeAlreadyCompleted(ui64 generation, ui64 actualGeneration, ui64 tabletId) {
-            return std::make_unique<TEvCleanUpDataResponse>(generation, NKikimrKeyValue::CleanUpDataResponse::STATUS_ALREADY_COMPLETED, "", actualGeneration, tabletId);
+        static std::unique_ptr<TEvVacuumResponse> MakeAlreadyCompleted(ui64 generation, ui64 actualGeneration, ui64 tabletId) {
+            return std::make_unique<TEvVacuumResponse>(generation, NKikimrKeyValue::VacuumResponse::STATUS_ALREADY_COMPLETED, "", actualGeneration, tabletId);
         }
 
-        static std::unique_ptr<TEvCleanUpDataResponse> MakeError(ui64 generation, const TString& errorReason, ui64 actualGeneration, ui64 tabletId) {
-            return std::make_unique<TEvCleanUpDataResponse>(generation, NKikimrKeyValue::CleanUpDataResponse::STATUS_ERROR, errorReason, actualGeneration, tabletId);
+        static std::unique_ptr<TEvVacuumResponse> MakeError(ui64 generation, const TString& errorReason, ui64 actualGeneration, ui64 tabletId) {
+            return std::make_unique<TEvVacuumResponse>(generation, NKikimrKeyValue::VacuumResponse::STATUS_ERROR, errorReason, actualGeneration, tabletId);
         }
     };
 
-    struct TEvForceTabletDataCleanup : public TEventLocal<TEvForceTabletDataCleanup, EvForceTabletDataCleanup> {
+    struct TEvForceTabletVacuum : public TEventLocal<TEvForceTabletVacuum, EvForceTabletVacuum> {
         ui64 Generation;
 
-        TEvForceTabletDataCleanup(ui64 generation)
+        TEvForceTabletVacuum(ui64 generation)
             : Generation(generation)
         {}
     };
 
+    struct TEvAdvanceMoveDataResult : public TEventLocal<TEvAdvanceMoveDataResult, EvAdvanceMoveDataResult> {
+        enum class EResult {
+            COPY_BLOB,
+            YIELD,
+            REPEAT,
+            CHECK_TRASH,
+            WAIT_FOR_GC,
+            SUCCESS,
+            ERROR,
+        };
+        EResult Result;
+        const TLogoBlobID BlobId;
+        ui64 RequestUid = 0;
+
+        explicit TEvAdvanceMoveDataResult(EResult result)
+            : Result(result)
+        {}
+
+        explicit TEvAdvanceMoveDataResult(const TLogoBlobID& blobId, ui64 requestUid)
+            : Result(EResult::COPY_BLOB)
+            , BlobId(blobId)
+            , RequestUid(requestUid)
+        {}
+
+        static std::unique_ptr<TEvAdvanceMoveDataResult> CopyBlob(const TLogoBlobID& blobId, ui64 requestUid) {
+            return std::make_unique<TEvAdvanceMoveDataResult>(blobId, requestUid);
+        }
+
+        static std::unique_ptr<TEvAdvanceMoveDataResult> Yield() {
+            return std::make_unique<TEvAdvanceMoveDataResult>(EResult::YIELD);
+        }
+
+        static std::unique_ptr<TEvAdvanceMoveDataResult> Repeat() {
+            return std::make_unique<TEvAdvanceMoveDataResult>(EResult::REPEAT);
+        }
+
+        static std::unique_ptr<TEvAdvanceMoveDataResult> CheckTrash() {
+            return std::make_unique<TEvAdvanceMoveDataResult>(EResult::CHECK_TRASH);
+        }
+
+        static std::unique_ptr<TEvAdvanceMoveDataResult> WaitForGC() {
+            return std::make_unique<TEvAdvanceMoveDataResult>(EResult::WAIT_FOR_GC);
+        }
+
+        static std::unique_ptr<TEvAdvanceMoveDataResult> Success() {
+            return std::make_unique<TEvAdvanceMoveDataResult>(EResult::SUCCESS);
+        }
+
+        static std::unique_ptr<TEvAdvanceMoveDataResult> Error() {
+            return std::make_unique<TEvAdvanceMoveDataResult>(EResult::ERROR);
+        }
+    };
+
+    struct TEvBlobCopied : public TEventLocal<TEvBlobCopied, EvBlobCopied> {
+        enum class EResult {
+            OK,
+            NODATA,
+            ERROR,
+        };
+        EResult Result;
+        const TLogoBlobID BlobId;
+        const TLogoBlobID NewBlobId;
+        const ui64 RequestUid;
+
+        TEvBlobCopied(EResult result, const TLogoBlobID& blobId, const TLogoBlobID& newBlobId, ui64 requestUid)
+            : Result(result)
+            , BlobId(blobId)
+            , NewBlobId(newBlobId)
+            , RequestUid(requestUid)
+        {}
+    };
+
+    struct TEvCheckTrash : public TEventLocal<TEvCheckTrash, EvCheckTrash> {};
 }
 
 } // NKikimr

@@ -1,17 +1,14 @@
-import sys
-from typing import Any, Dict, Iterable, Iterator, List, Tuple
+from collections.abc import Iterable, Iterator
+from typing import Any
 
-if sys.version_info >= (3, 11):
-    import tomllib
-else:
-    from pip._vendor import tomli as tomllib
-
-from pip._vendor.dependency_groups import DependencyGroupResolver
+from pip._vendor.packaging.dependency_groups import DependencyGroupResolver
+from pip._vendor.packaging.errors import ExceptionGroup
 
 from pip._internal.exceptions import InstallationError
+from pip._internal.utils.compat import tomllib
 
 
-def parse_dependency_groups(groups: List[Tuple[str, str]]) -> List[str]:
+def parse_dependency_groups(groups: list[tuple[str, str]]) -> list[str]:
     """
     Parse dependency groups data as provided via the CLI, in a `[path:]group` syntax.
 
@@ -22,7 +19,7 @@ def parse_dependency_groups(groups: List[Tuple[str, str]]) -> List[str]:
 
 
 def _resolve_all_groups(
-    resolvers: Dict[str, DependencyGroupResolver], groups: List[Tuple[str, str]]
+    resolvers: dict[str, DependencyGroupResolver], groups: list[tuple[str, str]]
 ) -> Iterator[str]:
     """
     Run all resolution, converting any error from `DependencyGroupResolver` into
@@ -32,14 +29,16 @@ def _resolve_all_groups(
         resolver = resolvers[path]
         try:
             yield from (str(req) for req in resolver.resolve(groupname))
-        except (ValueError, TypeError, LookupError) as e:
+        except ExceptionGroup as eg:
+            # Convert ExceptionGroup to a single InstallationError with all messages
+            messages = [str(e) for e in eg.exceptions]
             raise InstallationError(
                 f"[dependency-groups] resolution failed for '{groupname}' "
-                f"from '{path}': {e}"
-            ) from e
+                f"from '{path}': {'; '.join(messages)}"
+            ) from eg
 
 
-def _build_resolvers(paths: Iterable[str]) -> Dict[str, Any]:
+def _build_resolvers(paths: Iterable[str]) -> dict[str, Any]:
     resolvers = {}
     for path in paths:
         if path in resolvers:
@@ -58,11 +57,19 @@ def _build_resolvers(paths: Iterable[str]) -> Dict[str, Any]:
                 "Cannot resolve '--group' option."
             )
 
-        resolvers[path] = DependencyGroupResolver(raw_dependency_groups)
+        try:
+            resolvers[path] = DependencyGroupResolver(raw_dependency_groups)
+        except ExceptionGroup as eg:
+            # Handle ExceptionGroup from resolver initialization
+            messages = [str(e) for e in eg.exceptions]
+            raise InstallationError(
+                f"[dependency-groups] data was invalid in {path}: {'; '.join(messages)}"
+            ) from eg
+
     return resolvers
 
 
-def _load_pyproject(path: str) -> Dict[str, Any]:
+def _load_pyproject(path: str) -> dict[str, Any]:
     """
     This helper loads a pyproject.toml as TOML.
 

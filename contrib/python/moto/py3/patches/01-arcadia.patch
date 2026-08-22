@@ -1,57 +1,59 @@
---- contrib/python/moto/py3/moto/cognitoidp/responses.py	(index)
-+++ contrib/python/moto/py3/moto/cognitoidp/responses.py	(working tree)
-@@ -615,10 +615,8 @@ class CognitoIdpResponse(BaseResponse):
- 
+--- contrib/python/moto/py3/moto/cognitoidp/responses.py	(429ee27027cab3a12c3104baed4b6f1095b595e4)
++++ contrib/python/moto/py3/moto/cognitoidp/responses.py	(index)
+@@ -646,10 +646,8 @@ class CognitoIdpResponse(BaseResponse):
+
  class CognitoIdpJsonWebKeyResponse(BaseResponse):
-     def __init__(self):
+     def __init__(self) -> None:
 -        with open(
 -            os.path.join(os.path.dirname(__file__), "resources/jwks-public.json")
 -        ) as f:
 -            self.json_web_key = f.read()
 +        import pkgutil
 +        self.json_web_key = pkgutil.get_data(__package__, 'resources/jwks-public.json')
- 
+
      def serve_json_web_key(
-         self, request, full_url, headers
---- contrib/python/moto/py3/moto/ec2/models/amis.py	(index)
-+++ contrib/python/moto/py3/moto/ec2/models/amis.py	(working tree)
-@@ -21,7 +21,7 @@ if "MOTO_AMIS_PATH" in environ:
-     with open(environ.get("MOTO_AMIS_PATH"), "r", encoding="utf-8") as f:
-         AMIS = json.load(f)
+         self,
+--- contrib/python/moto/py3/moto/ec2/models/amis.py	(429ee27027cab3a12c3104baed4b6f1095b595e4)
++++ contrib/python/moto/py3/moto/ec2/models/amis.py	(index)
+@@ -25,7 +25,7 @@ if "MOTO_AMIS_PATH" in environ:
+     with open(environ["MOTO_AMIS_PATH"], "r", encoding="utf-8") as f:
+         AMIS: List[Dict[str, Any]] = json.load(f)
  else:
 -    AMIS = load_resource(__name__, "../resources/amis.json")
 +    AMIS = load_resource("moto.ec2", "resources/amis.json")
- 
- 
+
+
  class Ami(TaggedEC2Resource):
-@@ -156,7 +156,7 @@ class AmiBackend:
-             self.amis[ami_id] = Ami(self, **ami)
-         try:
-             latest_amis = load_resource(
--                __name__, f"../resources/latest_amis/{self.region_name}.json"
-+                "moto.ec2", f"resources/latest_amis/{self.region_name}.json"
-             )
-             for ami in latest_amis:
-                 ami_id = ami["ami_id"]
---- contrib/python/moto/py3/moto/ec2/models/instance_types.py	(index)
-+++ contrib/python/moto/py3/moto/ec2/models/instance_types.py	(working tree)
-@@ -6,19 +6,27 @@ from ..utils import generic_filter
+@@ -172,7 +172,7 @@ class AmiBackend:
+                     latest_amis = cast(
+                         List[Dict[str, Any]],
+                         load_resource(
+-                            __name__, f"../resources/{path}/{self.region_name}.json"  # type: ignore[attr-defined]
++                           "moto.ec2", f"resources/latest_amis/{self.region_name}.json"
+                         ),
+                     )
+                     for ami in latest_amis:
+--- contrib/python/moto/py3/moto/ec2/models/instance_types.py	(429ee27027cab3a12c3104baed4b6f1095b595e4)
++++ contrib/python/moto/py3/moto/ec2/models/instance_types.py	(index)
+@@ -6,21 +6,27 @@ from ..utils import generic_filter
  from moto.utilities.utils import load_resource
  from ..exceptions import InvalidFilter, InvalidInstanceTypeError
- 
--INSTANCE_TYPES = load_resource(__name__, "../resources/instance_types.json")
+
+-INSTANCE_TYPES: Dict[str, Any] = load_resource(
+-    __name__, "../resources/instance_types.json"
+-)
 +import library.python.resource as _ya_res
 +import os
 +import json
 +
 +INSTANCE_TYPES = load_resource("moto.ec2", "resources/instance_types.json")
  INSTANCE_FAMILIES = list(set([i.split(".")[0] for i in INSTANCE_TYPES.keys()]))
- 
+
 -root = pathlib.Path(__file__).parent
 -offerings_path = "../resources/instance_type_offerings"
 +root = pathlib.Path(__file__).parent.parent
 +offerings_path = "resources/instance_type_offerings"
- INSTANCE_TYPE_OFFERINGS = {}
+ INSTANCE_TYPE_OFFERINGS: Dict[str, Any] = {}
 -for _location_type in listdir(root / offerings_path):
 -    INSTANCE_TYPE_OFFERINGS[_location_type] = {}
 -    for _region in listdir(root / offerings_path / _location_type):
@@ -71,16 +73,16 @@
 +    for instance in res:
 +        instance["LocationType"] = _location_type
          INSTANCE_TYPE_OFFERINGS[_location_type][_region.replace(".json", "")] = res
- 
- 
---- contrib/python/moto/py3/moto/s3/responses.py	(index)
-+++ contrib/python/moto/py3/moto/s3/responses.py	(working tree)
-@@ -283,6 +283,8 @@ class S3Response(BaseResponse):
+
+
+--- contrib/python/moto/py3/moto/s3/responses.py        (fcae26817966a2af4a8c4fa6b5dcfef1e0b31e0d)
++++ contrib/python/moto/py3/moto/s3/responses.py        (index)
+@@ -313,6 +313,8 @@ class S3Response(BaseResponse):
                  request.headers.get("Authorization", "")
              )
              region_name = region_name or DEFAULT_REGION_NAME
 +            if region_name == "yandex":
 +                region_name = DEFAULT_REGION_NAME
- 
+
          bucket_name = self.parse_bucket_name_from_url(request, full_url)
          if not bucket_name:

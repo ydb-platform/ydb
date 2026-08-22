@@ -54,7 +54,7 @@ EExecutionStatus TPrepareWriteTxInRSUnit::Execute(TOperation::TPtr op, TTransact
         return EExecutionStatus::Executed;
     }
 
-    KqpPrepareInReadsets(op->InReadSets(), writeTx->GetKqpLocks() ? writeTx->GetKqpLocks().value() : NKikimrDataEvents::TKqpLocks{}, nullptr, DataShard.TabletID());
+    KqpPrepareInReadsets(op->InReadSets(), writeTx->GetKqpLocks() ? writeTx->GetKqpLocks().value() : NKikimrDataEvents::TKqpLocks{}, DataShard.TabletID());
 
     return EExecutionStatus::Executed;
 }

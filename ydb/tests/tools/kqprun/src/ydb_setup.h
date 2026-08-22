@@ -10,6 +10,11 @@
 
 namespace NKqpRun {
 
+struct TScriptRequest {
+    TRequestOptions Options;
+    std::vector<NKikimrKqp::TScriptExecutionRetryState::TMapping> RetryMapping;
+};
+
 struct TSchemeMeta {
     TString Ast;
 };
@@ -40,19 +45,21 @@ public:
 
     TRequestResult SchemeQueryRequest(const TRequestOptions& query, TSchemeMeta& meta) const;
 
-    TRequestResult ScriptRequest(const TRequestOptions& script, TString& operation) const;
+    TRequestResult ScriptRequest(const TScriptRequest& script, TString& operation) const;
 
     TRequestResult QueryRequest(const TRequestOptions& query, TQueryMeta& meta, std::vector<Ydb::ResultSet>& resultSets, TProgressCallback progressCallback) const;
 
+    TRequestResult QueryRequest(const TRequestOptions& query) const;
+
     TRequestResult YqlScriptRequest(const TRequestOptions& query, TQueryMeta& meta, std::vector<Ydb::ResultSet>& resultSets) const;
 
-    TRequestResult GetScriptExecutionOperationRequest(const TString& database, const TString& operation, TExecutionMeta& meta) const;
+    TRequestResult GetScriptExecutionOperationRequest(const TString& database, const TString& operation, const TString& userSID, TExecutionMeta& meta) const;
 
-    TRequestResult FetchScriptExecutionResultsRequest(const TString& database, const TString& operation, i32 resultSetId, Ydb::ResultSet& resultSet) const;
+    TRequestResult FetchScriptExecutionResultsRequest(const TString& database, const TString& operation, const TString& userSID, i32 resultSetId, Ydb::ResultSet& resultSet) const;
 
-    TRequestResult ForgetScriptExecutionOperationRequest(const TString& database, const TString& operation) const;
+    TRequestResult ForgetScriptExecutionOperationRequest(const TString& database, const TString& operation, const TString& userSID) const;
 
-    TRequestResult CancelScriptExecutionOperationRequest(const TString& database, const TString& operation) const;
+    TRequestResult CancelScriptExecutionOperationRequest(const TString& database, const TString& operation, const TString& userSID) const;
 
     void QueryRequestAsync(const TRequestOptions& query) const;
 
@@ -63,6 +70,8 @@ public:
     void StartTraceOpt() const;
 
     static void StopTraceOpt();
+
+    TString GetDefaultDatabase() const;
 
 private:
     class TImpl;

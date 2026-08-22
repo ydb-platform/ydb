@@ -1,29 +1,18 @@
 #pragma once
 
-#include <ydb/library/yql/udfs/common/clickhouse/client/src/IO/ReadBuffer.h>
-#include <zlib.h>
 #include "output_queue.h"
 
-namespace NYql {
+namespace NDB {
 
-namespace NGz {
+// forward declaration for <ydb/library/yql/udfs/common/clickhouse/client/src/IO/ReadBuffer.h>
+class ReadBuffer;
 
-class TReadBuffer : public NDB::ReadBuffer {
-public:
-    TReadBuffer(NDB::ReadBuffer& source);
-    ~TReadBuffer();
-private:
-    bool nextImpl() final;
+} // namespace NDB
 
-    NDB::ReadBuffer& Source_;
-    std::vector<char> InBuffer, OutBuffer;
+namespace NYql::NGz {
 
-    z_stream Z_;
-};
+std::unique_ptr<NDB::ReadBuffer> MakeDecompressor(NDB::ReadBuffer& source);
 
 IOutputQueue::TPtr MakeCompressor(std::optional<int> cLevel = {});
 
-}
-
-}
-
+} // namespace NYql::NGz

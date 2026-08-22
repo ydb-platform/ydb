@@ -11,6 +11,7 @@ private:
     static inline auto Registrator = TFactory::TRegistrator<TSparsedMerger>(NArrow::NAccessor::TGlobalConst::SparsedDataAccessorName);
 
     using TBase = IColumnMerger;
+
     class TWriter: public TColumnPortionResult {
     private:
         using TBase = TColumnPortionResult;
@@ -21,6 +22,7 @@ private:
         const TColumnMergeContext& Context;
         ui32 UsefulRecordsCount = 0;
         std::optional<ui32> LastRecordIdx;
+
     public:
         bool AddRecord(const arrow::Array& colValue, const ui32 idx, const ui32 globalRecordIdx) {
             AFL_VERIFY(NArrow::Append(*ValueBuilder, colValue, idx));
@@ -59,6 +61,7 @@ private:
                << ";pos=" << GetGlobalResultIndexImpl().value_or(Max<i64>()) << "}";
             return sb;
         }
+
         [[nodiscard]] std::optional<i64> GetGlobalResultIndexImpl() const;
 
         struct THeapComparator {
@@ -83,7 +86,9 @@ private:
         }
 
         bool AddIndexTo(TWriter& writer);
-        TSparsedChunkCursor(const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& input, const std::shared_ptr<TColumnLoader>& loader, const ui32 cursorIdx)
+
+        TSparsedChunkCursor(
+            const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& input, const std::shared_ptr<TColumnLoader>& loader, const ui32 cursorIdx)
             : TBase(input, loader)
             , CursorIdx(cursorIdx)
         {

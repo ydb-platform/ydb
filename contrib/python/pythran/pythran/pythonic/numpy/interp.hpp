@@ -21,8 +21,8 @@ PYTHONIC_NS_BEGIN
 namespace numpy
 {
   template <class T1, class T2, class T3, typename t1, typename t2, typename t3>
-  types::ndarray<interp_out_type<T3>, types::pshape<long>>
-  interp(T1 x, T2 xp, T3 fp, t1 _left, t2 _right, t3 _period)
+  types::ndarray<interp_out_type<T3>, types::pshape<long>> interp(T1 x, T2 xp, T3 fp, t1 _left,
+                                                                  t2 _right, t3 _period)
   {
     interp_out_type<T3> left = _left;
     interp_out_type<T3> right = _right;
@@ -32,8 +32,8 @@ namespace numpy
     assert(xp.template shape<0>() == fp.template shape<0>());
     interp_out_type<T3> outVal(0);
 
-    types::ndarray<interp_out_type<T3>, types::pshape<long>> out = {
-        (long)(x.template shape<0>()), outVal};
+    types::ndarray<interp_out_type<T3>, types::pshape<long>> out = {(long)(x.template shape<0>()),
+                                                                    outVal};
 
     if (period) {
       auto x_rem = pythonic::numpy::functor::remainder{}(x, period);
@@ -42,21 +42,17 @@ namespace numpy
       auto xp_sorted = xp_rem[idx];
       auto fp_sorted = fp[idx];
 
-      auto left_pad_xp =
-          types::ndarray<typename T2::dtype, types::pshape<long>>(
-              types::pshape<long>(1), xp_sorted[-1] - period);
-      auto right_pad_xp =
-          types::ndarray<typename T2::dtype, types::pshape<long>>(
-              types::pshape<long>(1), xp_sorted[0] + period);
+      auto left_pad_xp = types::ndarray<typename T2::dtype, types::pshape<long>>(
+          types::pshape<long>(1), xp_sorted[-1] - period);
+      auto right_pad_xp = types::ndarray<typename T2::dtype, types::pshape<long>>(
+          types::pshape<long>(1), xp_sorted[0] + period);
       auto new_xp = pythonic::numpy::functor::concatenate{}(
           pythonic::types::make_tuple(left_pad_xp, xp_sorted, right_pad_xp));
 
-      auto left_pad_fp =
-          types::ndarray<interp_out_type<T3>, types::pshape<long>>(
-              types::pshape<long>(1), fp_sorted[-1]);
-      auto right_pad_fp =
-          types::ndarray<interp_out_type<T3>, types::pshape<long>>(
-              types::pshape<long>(1), fp_sorted[0]);
+      auto left_pad_fp = types::ndarray<interp_out_type<T3>, types::pshape<long>>(
+          types::pshape<long>(1), fp_sorted[-1]);
+      auto right_pad_fp = types::ndarray<interp_out_type<T3>, types::pshape<long>>(
+          types::pshape<long>(1), fp_sorted[0]);
       auto new_fp = pythonic::numpy::functor::concatenate{}(
           pythonic::types::make_tuple(left_pad_fp, fp_sorted, right_pad_fp));
 
@@ -74,11 +70,9 @@ namespace numpy
 
   // No parameter specified
   template <class T1, class T2, class T3>
-  typename std::enable_if<
-      !std::is_arithmetic<T1>::value,
-      types::ndarray<interp_out_type<T3>, types::pshape<long>>>::type
-  interp(T1 x, T2 xp, T3 fp, types::none_type left, types::none_type right,
-         types::none_type period)
+  std::enable_if_t<!std::is_arithmetic<T1>::value,
+                   types::ndarray<interp_out_type<T3>, types::pshape<long>>>
+  interp(T1 x, T2 xp, T3 fp, types::none_type left, types::none_type right, types::none_type period)
   {
     auto _left = fp[0];
     auto _right = fp[-1];
@@ -87,33 +81,27 @@ namespace numpy
 
   // left specified
   template <class T1, class T2, class T3, typename t1>
-  typename std::enable_if<
-      !std::is_arithmetic<T1>::value,
-      types::ndarray<interp_out_type<T3>, types::pshape<long>>>::type
-  interp(T1 x, T2 xp, T3 fp, t1 left, types::none_type right,
-         types::none_type period)
+  std::enable_if_t<!std::is_arithmetic<T1>::value,
+                   types::ndarray<interp_out_type<T3>, types::pshape<long>>>
+  interp(T1 x, T2 xp, T3 fp, t1 left, types::none_type right, types::none_type period)
   {
     auto _right = fp[-1];
     return interp(x, xp, fp, left, _right, 0.);
   }
   // right specified
   template <class T1, class T2, class T3, typename t1>
-  typename std::enable_if<
-      !std::is_arithmetic<T1>::value,
-      types::ndarray<interp_out_type<T3>, types::pshape<long>>>::type
-  interp(T1 x, T2 xp, T3 fp, types::none_type left, t1 right,
-         types::none_type period)
+  std::enable_if_t<!std::is_arithmetic<T1>::value,
+                   types::ndarray<interp_out_type<T3>, types::pshape<long>>>
+  interp(T1 x, T2 xp, T3 fp, types::none_type left, t1 right, types::none_type period)
   {
     auto _left = fp[0];
     return interp(x, xp, fp, _left, right, 0.);
   }
   // period specified
   template <class T1, class T2, class T3, typename t1>
-  typename std::enable_if<
-      !std::is_arithmetic<T1>::value,
-      types::ndarray<interp_out_type<T3>, types::pshape<long>>>::type
-  interp(T1 x, T2 xp, T3 fp, types::none_type left, types::none_type right,
-         t1 period)
+  std::enable_if_t<!std::is_arithmetic<T1>::value,
+                   types::ndarray<interp_out_type<T3>, types::pshape<long>>>
+  interp(T1 x, T2 xp, T3 fp, types::none_type left, types::none_type right, t1 period)
   {
     assert(period != 0);
     return interp(x, xp, fp, 0., 0., period);
@@ -121,9 +109,8 @@ namespace numpy
 
   // left and right specified
   template <class T1, class T2, class T3, typename t1, typename t2>
-  typename std::enable_if<
-      !std::is_arithmetic<T1>::value,
-      types::ndarray<interp_out_type<T3>, types::pshape<long>>>::type
+  std::enable_if_t<!std::is_arithmetic<T1>::value,
+                   types::ndarray<interp_out_type<T3>, types::pshape<long>>>
   interp(T1 x, T2 xp, T3 fp, t1 left, t2 right, types::none_type period)
   {
     return interp(x, xp, fp, left, right, 0.);
@@ -131,63 +118,49 @@ namespace numpy
 
   // No parameter specified
   template <class T1, class T2, class T3>
-  typename std::enable_if<std::is_arithmetic<T1>::value,
-                          interp_out_type<T3>>::type
-  interp(T1 x, T2 xp, T3 fp, types::none_type left, types::none_type right,
-         types::none_type period)
+  std::enable_if_t<std::is_arithmetic<T1>::value, interp_out_type<T3>>
+  interp(T1 x, T2 xp, T3 fp, types::none_type left, types::none_type right, types::none_type period)
   {
     auto _left = fp[0];
     auto _right = fp[-1];
-    auto temp_array =
-        types::ndarray<double, types::pshape<long>>(types::pshape<long>(1), x);
+    auto temp_array = types::ndarray<double, types::pshape<long>>(types::pshape<long>(1), x);
     return interp(temp_array, xp, fp, _left, _right, 0.)[0];
   }
 
   // left specified
   template <class T1, class T2, class T3, typename t1>
-  typename std::enable_if<std::is_arithmetic<T1>::value,
-                          interp_out_type<T3>>::type
-  interp(T1 x, T2 xp, T3 fp, t1 left, types::none_type right,
-         types::none_type period)
+  std::enable_if_t<std::is_arithmetic<T1>::value, interp_out_type<T3>>
+  interp(T1 x, T2 xp, T3 fp, t1 left, types::none_type right, types::none_type period)
   {
     auto _right = fp[-1];
-    auto temp_array =
-        types::ndarray<double, types::pshape<long>>(types::pshape<long>(1), x);
+    auto temp_array = types::ndarray<double, types::pshape<long>>(types::pshape<long>(1), x);
     return interp(temp_array, xp, fp, left, _right, 0.)[0];
   }
   // right specified
   template <class T1, class T2, class T3, typename t1>
-  typename std::enable_if<std::is_arithmetic<T1>::value,
-                          interp_out_type<T3>>::type
-  interp(T1 x, T2 xp, T3 fp, types::none_type left, t1 right,
-         types::none_type period)
+  std::enable_if_t<std::is_arithmetic<T1>::value, interp_out_type<T3>>
+  interp(T1 x, T2 xp, T3 fp, types::none_type left, t1 right, types::none_type period)
   {
     auto _left = fp[0];
-    auto temp_array =
-        types::ndarray<double, types::pshape<long>>(types::pshape<long>(1), x);
+    auto temp_array = types::ndarray<double, types::pshape<long>>(types::pshape<long>(1), x);
     return interp(temp_array, xp, fp, _left, right, 0.)[0];
   }
   // period specified
   template <class T1, class T2, class T3, typename t1>
-  typename std::enable_if<std::is_arithmetic<T1>::value,
-                          interp_out_type<T3>>::type
-  interp(T1 x, T2 xp, T3 fp, types::none_type left, types::none_type right,
-         t1 period)
+  std::enable_if_t<std::is_arithmetic<T1>::value, interp_out_type<T3>>
+  interp(T1 x, T2 xp, T3 fp, types::none_type left, types::none_type right, t1 period)
   {
     assert(period != 0);
-    auto temp_array =
-        types::ndarray<double, types::pshape<long>>(types::pshape<long>(1), x);
+    auto temp_array = types::ndarray<double, types::pshape<long>>(types::pshape<long>(1), x);
     return interp(temp_array, xp, fp, 0., 0., period)[0];
   }
 
   // left and right specified,
   template <class T1, class T2, class T3, typename t1, typename t2>
-  typename std::enable_if<std::is_arithmetic<T1>::value,
-                          interp_out_type<T3>>::type
+  std::enable_if_t<std::is_arithmetic<T1>::value, interp_out_type<T3>>
   interp(T1 x, T2 xp, T3 fp, t1 left, t2 right, types::none_type period)
   {
-    auto temp_array =
-        types::ndarray<double, types::pshape<long>>(types::pshape<long>(1), x);
+    auto temp_array = types::ndarray<double, types::pshape<long>>(types::pshape<long>(1), x);
     return interp(temp_array, xp, fp, left, right, 0.)[0];
   }
 

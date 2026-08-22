@@ -1,7 +1,11 @@
 #pragma once
+
+#include "statestorage.h"
+
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/protos/base.pb.h>
-#include "statestorage.h"
+
+#include <util/string/join.h>
 
 namespace NKikimr {
 
@@ -12,7 +16,7 @@ inline TActorId MakeStateStorageReplicaID(ui32 node, ui32 replicaIndex) {
     return TActorId(node, TStringBuf(x, 12));
 }
 
-struct TEvStateStorage::TEvReplicaInfo : public TEventPB<TEvStateStorage::TEvReplicaInfo, NKikimrStateStorage::TEvInfo, TEvStateStorage::EvReplicaInfo> {
+struct TEvStateStorage::TEvReplicaInfo : public TEventPBWithArena<TEvStateStorage::TEvReplicaInfo, NKikimrStateStorage::TEvInfo, TEvStateStorage::EvReplicaInfo> {
     TEvReplicaInfo()
     {}
 
@@ -87,6 +91,16 @@ struct TEvStateStorage::TEvUpdateGroupConfig : public TEventLocal<TEvUpdateGroup
         , BoardConfig(board)
         , SchemeBoardConfig(scheme)
     {}
+
+    TString ToString() const override {
+        TStringStream str;
+        str << "{EvUpdateGroupConfig"
+            << " GroupConfig: " << (GroupConfig ? GroupConfig->ToString() : "empty")
+            << " BoardConfig: " << (BoardConfig ? BoardConfig->ToString() : "empty")
+            << " SchemeBoardConfig: " << (SchemeBoardConfig ? SchemeBoardConfig->ToString() : "empty")
+            << "}";
+        return str.Str();
+    }
 };
 
 struct TEvStateStorage::TEvResolveReplicas : public TEventLocal<TEvResolveReplicas, EvResolveReplicas> {
@@ -139,8 +153,17 @@ struct TEvStateStorage::TEvResolveReplicasList : public TEventLocal<TEvResolveRe
         TVector<TActorId> Replicas;
         bool WriteOnly;
         ERingGroupState State;
+
+        TString ToString() const {
+            TStringStream str;
+            str << "{Replicas: [" << JoinSeq(", ", Replicas) << "]"
+                << " WriteOnly: " << WriteOnly
+                << " State: " << static_cast<int>(State)
+                << "}";
+            return str.Str();
+        }
     };
-    
+
     TVector<TReplicaGroup> ReplicaGroups;
     ui32 ConfigContentHash = Max<ui32>();
     ui64 ClusterStateGeneration;
@@ -157,6 +180,14 @@ struct TEvStateStorage::TEvResolveReplicasList : public TEventLocal<TEvResolveRe
             result.insert(result.end(), r.Replicas.begin(), r.Replicas.end());
         }
         return result;
+    }
+
+    TString ToString() const override {
+        TStringStream str;
+        str << "{EvResolveReplicasList"
+            << " ReplicaGroups: [" << JoinSeq(", ", ReplicaGroups) << "]"
+            << "}";
+        return str.Str();
     }
 };
 
@@ -183,6 +214,17 @@ struct TEvStateStorage::TEvListStateStorageResult : public TEventLocal<TEvListSt
     TIntrusiveConstPtr<TStateStorageInfo> Info;
 
     TEvListStateStorageResult(const TIntrusiveConstPtr<TStateStorageInfo> &info)
+        : Info(info)
+    {}
+};
+
+struct TEvStateStorage::TEvListBoard : public TEventLocal<TEvListBoard, EvListBoard> {
+};
+
+struct TEvStateStorage::TEvListBoardResult : public TEventLocal<TEvListBoardResult, EvListBoardResult> {
+    TIntrusiveConstPtr<TStateStorageInfo> Info;
+
+    TEvListBoardResult(const TIntrusiveConstPtr<TStateStorageInfo> &info)
         : Info(info)
     {}
 };
@@ -388,4 +430,8 @@ struct TEvStateStorage::TEvReplicaBoardInfoUpdate : public TEventPB<TEvStateStor
     }
 };
 
+}
+
+Y_DECLARE_OUT_SPEC(inline, NKikimr::TEvStateStorage::TEvResolveReplicasList::TReplicaGroup, o, x) {
+    o << x.ToString();
 }

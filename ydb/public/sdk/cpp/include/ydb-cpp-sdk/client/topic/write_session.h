@@ -2,6 +2,7 @@
 
 #include "codecs.h"
 #include "counters.h"
+#include "deferred_publication_limits.h"
 #include "executor.h"
 #include "retry_policy.h"
 #include "write_events.h"
@@ -12,7 +13,49 @@
 
 #include <util/generic/size_literals.h>
 
+#include <memory>
+#include <optional>
+#include <string>
+
 namespace NYdb::inline Dev::NTopic {
+
+//! Result of close operation.
+//! If close was successful, returns Success. This status means that all messages in buffer were persistently written to the server.
+//! If close was not successful because of timeout, returns Timeout.
+//! If close was not successful because of error, returns Error.
+enum class ECloseStatus {
+    Success = 0,
+    Timeout = 1,
+    Error = 2,
+    AlreadyClosed = 3,
+};
+
+//! Description why session was closed.
+struct TCloseDescription : public TSessionClosedEvent {};
+
+//! Result of close operation.
+struct TCloseResult {
+    //! Status of close operation.
+    ECloseStatus Status;
+    //! Description why session was closed.
+    std::optional<TCloseDescription> ClosedDescription;
+
+    bool IsSuccess() const {
+        return Status == ECloseStatus::Success;
+    }
+
+    bool IsTimeout() const {
+        return Status == ECloseStatus::Timeout;
+    }
+
+    bool IsError() const {
+        return Status == ECloseStatus::Error;
+    }
+
+    bool IsAlreadyClosed() const {
+        return Status == ECloseStatus::AlreadyClosed;
+    }
+};
 
 //! Settings for write session.
 struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
@@ -60,6 +103,10 @@ struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
     FLUENT_SETTING_DEFAULT(ECodec, Codec, ECodec::GZIP);
     FLUENT_SETTING_DEFAULT(int32_t, CompressionLevel, 4);
 
+    //! Inner compression for Kafka record batch payload when Codec is KAFKA_BATCH.
+    //! Allowed values: not set (no inner compression), GZIP, ZSTD.
+    FLUENT_SETTING_OPTIONAL(ECodec, BatchInnerCodec);
+
     //! Writer will not accept new messages if memory usage exceeds this limit.
     //! Memory usage consists of raw data pending compression and compressed messages being sent.
     FLUENT_SETTING_DEFAULT(uint64_t, MaxMemoryUsage, 20_MB);
@@ -84,10 +131,13 @@ struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
     //! but for no longer than BatchFlushInterval.
     //! Upon reaching FlushInterval or FlushSize limit, all messages will be written with one batch.
     //! Greatly increases performance for small messages.
-    //! Setting either value to zero means immediate write with no batching. (Unrecommended, especially for clients
-    //! sending small messages at high rate).
-    FLUENT_SETTING_OPTIONAL(TDuration, BatchFlushInterval);
+    //! Zero BatchFlushInterval or BatchFlushSizeBytes disables the corresponding limit (immediate flush).
+    FLUENT_SETTING_DEFAULT(TDuration, BatchFlushInterval, TDuration::Seconds(1));
     FLUENT_SETTING_OPTIONAL(uint64_t, BatchFlushSizeBytes);
+
+    //! Max number of logical messages packed into a single write block.
+    //! Values greater than 1 are sent as a single batch block.
+    FLUENT_SETTING_DEFAULT(uint32_t, BatchFlushMessageCount, 1);
 
     FLUENT_SETTING_DEFAULT(TDuration, ConnectTimeout, TDuration::Seconds(30));
 
@@ -110,6 +160,7 @@ struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
         //! Function to handle ReadyToAccept event.
         //! If this handler is set, write these events will be handled by handler,
         //! otherwise sent to TWriteSession::GetEvent().
+        //! NOTE: DO NOT USE THIS HANDLER IN IProducer INTERFACE.
         FLUENT_SETTING(TReadyToAcceptHandler, ReadyToAcceptHandler);
 
         //! Function to handle close session events.
@@ -142,16 +193,162 @@ struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
 
     //! Enables validation of SeqNo. If enabled, then writer will check writing with seqNo and without it and throws exception.
     FLUENT_SETTING_DEFAULT(bool, ValidateSeqNo, true);
+
+    TWriteSessionSettings& SetTrackProducerIdInTx(bool value);
+};
+
+template<class T>
+concept Serializable =
+    requires(const T& t) {
+        { Serialize(t) } -> std::convertible_to<std::string>;
+    };
+
+class TDeferredPublicationAckState;
+
+//! Deferred publication for StreamWrite and deferred-publish control RPCs.
+//! Each handle owns ack-tracking state (shared on copy, transferred on move).
+//! Publish/Cancel wait for acks only when this handle's state recorded writes.
+//! Move leaves the source with IntPublicationId=0, no ExtPublicationId, and no ack state;
+//! a fresh empty ack state is created lazily on the first TAccess::AckState call.
+//! Copies of a moved-from handle do not share that lazily created state with each other.
+//! On Write, ExtPublicationId is optional and informational (omit / "" / any string); only the
+//! MaxExtPublicationIdLength cap applies. BeginPublication still requires a non-empty ext id.
+struct TDeferredPublication {
+    //! SDK-internal hatch to private AckState_. Not part of the public contract:
+    //! keeps AckState_ hidden from users while write-session / Publish / Cancel can reach it
+    //! without a public getter (and without friending every call site).
+    //! Creates an empty ack state if the handle has none (e.g. after move).
+    struct TAccess;
+
+    static constexpr size_t MaxExtPublicationIdLength = MaxDeferredPublishExtIdLength;
+
+    uint64_t IntPublicationId = 0;
+    std::optional<std::string> ExtPublicationId;
+
+    TDeferredPublication();
+
+    explicit TDeferredPublication(uint64_t intPublicationId);
+
+    TDeferredPublication(uint64_t intPublicationId, std::string extPublicationId);
+
+    TDeferredPublication(const TDeferredPublication& other);
+
+    TDeferredPublication(TDeferredPublication&& other) noexcept;
+
+    TDeferredPublication& operator=(const TDeferredPublication& other);
+
+    TDeferredPublication& operator=(TDeferredPublication&& other) noexcept;
+
+    bool operator==(const TDeferredPublication& other) const {
+        return IntPublicationId == other.IntPublicationId
+            && ExtPublicationId == other.ExtPublicationId;
+    }
+
+    bool operator!=(const TDeferredPublication& other) const {
+        return !(*this == other);
+    }
+
+private:
+    // mutable: TAccess::AckState may lazy-create through a const handle (Publish/Cancel).
+    mutable std::shared_ptr<TDeferredPublicationAckState> AckState_;
 };
 
 //! Contains the message to write and all the options.
 struct TWriteMessage {
     using TSelf = TWriteMessage;
     using TMessageMeta = std::vector<std::pair<std::string, std::string>>;
+private:
+    //! This field is used to store serialized data.
+    std::optional<std::string> DataHolder;
+
 public:
     TWriteMessage() = delete;
     TWriteMessage(std::string_view data)
         : Data(data)
+    {}
+
+    TWriteMessage(const std::string& key, std::string_view data)
+        : Data(data)
+        , Key(key)
+    {}
+
+    TWriteMessage(uint32_t partition, std::string_view data)
+        : Data(data)
+        , Partition(partition)
+    {}
+
+    TWriteMessage(const TWriteMessage& other)
+        : DataHolder(other.DataHolder)
+        , Data(other.DataHolder ? std::string_view(*DataHolder) : other.Data)
+        , Codec(other.Codec)
+        , OriginalSize(other.OriginalSize)
+        , SeqNo_(other.SeqNo_)
+        , CreateTimestamp_(other.CreateTimestamp_)
+        , MessageMeta_(other.MessageMeta_)
+        , Tx_(other.Tx_)
+        , DeferredPublication_(other.DeferredPublication_)
+        , Key(other.Key)
+        , Partition(other.Partition)
+    {}
+
+    TWriteMessage(TWriteMessage&& other) noexcept
+        : DataHolder(std::move(other.DataHolder))
+        , Data(DataHolder ? std::string_view(*DataHolder) : other.Data)
+        , Codec(std::move(other.Codec))
+        , OriginalSize(other.OriginalSize)
+        , SeqNo_(std::move(other.SeqNo_))
+        , CreateTimestamp_(std::move(other.CreateTimestamp_))
+        , MessageMeta_(std::move(other.MessageMeta_))
+        , Tx_(std::move(other.Tx_))
+        , DeferredPublication_(std::move(other.DeferredPublication_))
+        , Key(std::move(other.Key))
+        , Partition(std::move(other.Partition))
+    {}
+
+    TWriteMessage& operator=(const TWriteMessage& other) {
+        if (this == &other) {
+            return *this;
+        }
+
+        DataHolder = other.DataHolder;
+        Data = DataHolder ? std::string_view(*DataHolder) : other.Data;
+        Codec = other.Codec;
+        OriginalSize = other.OriginalSize;
+        SeqNo_ = other.SeqNo_;
+        CreateTimestamp_ = other.CreateTimestamp_;
+        MessageMeta_ = other.MessageMeta_;
+        Key = other.Key;
+        Partition = other.Partition;
+        Tx_ = other.Tx_;
+        DeferredPublication_ = other.DeferredPublication_;
+
+        return *this;
+    }
+
+    TWriteMessage& operator=(TWriteMessage&& other) noexcept {
+        if (this == &other) {
+            return *this;
+        }
+
+        DataHolder = std::move(other.DataHolder);
+        Data = DataHolder ? std::string_view(*DataHolder) : other.Data;
+        Codec = std::move(other.Codec);
+        OriginalSize = other.OriginalSize;
+        SeqNo_ = std::move(other.SeqNo_);
+        CreateTimestamp_ = std::move(other.CreateTimestamp_);
+        MessageMeta_ = std::move(other.MessageMeta_);
+        Key = std::move(other.Key);
+        Partition = std::move(other.Partition);
+        Tx_ = std::move(other.Tx_);
+        DeferredPublication_ = std::move(other.DeferredPublication_);
+
+        return *this;
+    }
+
+    template<Serializable T>
+    TWriteMessage(const T& data)
+        : DataHolder(Serialize(data))
+        , Data(*DataHolder)
     {}
 
     //! A message that is already compressed by codec. Codec from WriteSessionSettings does not apply to this message.
@@ -166,7 +363,6 @@ public:
     bool Compressed() const {
         return Codec.has_value();
     }
-
     //! Message body.
     std::string_view Data;
 
@@ -189,14 +385,29 @@ public:
     //! Transaction id
     FLUENT_SETTING_OPTIONAL(std::reference_wrapper<TTransactionBase>, Tx);
 
+    //! Deferred publication identity. Incompatible with Tx.
+    FLUENT_SETTING_OPTIONAL(TDeferredPublication, DeferredPublication);
+
     TTransactionBase* GetTxPtr() const
     {
         return Tx_ ? &Tx_->get() : nullptr;
     }
+
+    const std::optional<std::string>& GetKey() const {
+        return Key;
+    }
+
+    const std::optional<uint32_t>& GetPartition() const {
+        return Partition;
+    }
+
+private:
+    std::optional<std::string> Key;
+    std::optional<uint32_t> Partition;
 };
 
 //! Simple write session. Does not need event handlers. Does not provide Events, ContinuationTokens, write Acks.
-class ISimpleBlockingWriteSession : public TThrRefBase {
+class ISimpleBlockingWriteSession {
 public:
     //! Write single message. Blocks for up to blockTimeout if inflight is full or memoryUsage is exceeded;
     //! return - true if write succeeded, false if message was not enqueued for write within blockTimeout.
@@ -219,7 +430,7 @@ public:
 
     virtual bool Close(TDuration closeTimeout = TDuration::Max()) = 0;
 
-    //! Returns true if write session is alive and acitve. False if session was closed.
+    //! Returns true if write session is alive and active. False if session was closed.
     virtual bool IsAlive() const = 0;
 
     virtual TWriterCounters::TPtr GetCounters() = 0;
@@ -264,16 +475,20 @@ public:
     virtual void WriteEncoded(TContinuationToken&& continuationToken, std::string_view data, ECodec codec, uint32_t originalSize,
                               std::optional<uint64_t> seqNo = std::nullopt, std::optional<TInstant> createTimestamp = std::nullopt) = 0;
 
+    //! Wait asynchronously until all writes accepted before this call are acknowledged.
+    [[nodiscard]] virtual NThreading::TFuture<bool> Flush() {
+        return NThreading::MakeFuture(false);
+    }
 
     //! Wait for all writes to complete (no more that closeTimeout()), then close.
     //! Return true if all writes were completed and acked, false if timeout was reached and some writes were aborted.
     virtual bool Close(TDuration closeTimeout = TDuration::Max()) = 0;
 
-    //! Writer counters with different stats (see TWriterConuters).
+    //! Writer counters with different stats (see TWriterCounters).
     virtual TWriterCounters::TPtr GetCounters() = 0;
 
     //! Close() with timeout = 0 and destroy everything instantly.
     virtual ~IWriteSession() = default;
 };
 
-}
+} // namespace NYdb::NTopic

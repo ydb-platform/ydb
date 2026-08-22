@@ -1,37 +1,40 @@
 # Sensors owner
 
-Это персистентный слой для NYT::NProfiling. TSensorsOwner содержит внутри себя TProfiler и в дополнение
-владеет множеством объектов метрик с точки зрения времени их жизни.
-TSensorsOwner может владеть другими TSensorsOwner. Имеет апи для получения "дочерних" объектов с метриками.
+This is a persistent layer for NYT::NProfiling. `TSensorsOwner` contains a `TProfiler` object and additionally owns metric objects and managed their lifetimes.
 
-## Примеры использования
+`TSensorsOwner` can own other `TSensorsOwner` instances. It has an API for obtaining "child" objects with metrics.
 
-* Простейший пример использования:
+## Usage examples
+
+* Simplest usage example:
+
 ```cpp
 sensorsOwner.Increment("/my_simple_counter", 1);
 ```
-Когда в конкретном месте нужно проинкрементить всего один счетчик.
-Объект счетчика в этом случае создатся один раз и будет храниться внутри sensorsOwner.
-Не рекомендуется для более сложных случаев.
 
-* Инкремент метрик в функции:
+In this example just one counter is incremented. Thid counter object will be created once and stored inside sensorsOwner.  
+
+This approach is not recommended for more complex cases.
+
+* Incrementing metrics inside a function:
+
 ```cpp
 void DoSmth(/*... , */ const TSensorsOwner& sensorsOwner)
 {
-    // В функции можно прям по месту объявлять структуру с метриками и пользоваться.
+    // You can declare a structure with metrics inline in the function and use it.
     struct TSensors
     {
         NYT::NProfiling::TProfiler Profiler;
         NYT::NProfiling::TCounter TotalCount = Profiler.Counter("/total_count");
         NYT::NProfiling::TCounter FailedCount = Profiler.Counter("/failed_count");
     };
-    // Тут одна и та же ссылка на объект метрик при условии, что в функцию передается один и тот же sensorsOwner.
-    // Метод `.Get` достаточно эффективен, но всё же лучше не вызывать лишний раз.
+    // Here is the same reference to the metric object assuming the same sensorsOwner is passed to the function.
+    // The `.Get` method is quite efficient but it's better not to call it unnecessarily.
     const auto& sensors = sensorsOwner.Get<TSensors>();
 
-    //...
+    // ...
     bool failed = false;
-    //...
+    // ...
 
     sensors.TotalCount.Increment(1);
     if (failed) {
@@ -40,7 +43,7 @@ void DoSmth(/*... , */ const TSensorsOwner& sensorsOwner)
 }
 ```
 
-* Когда очень хочется конструировать дочерние метрики не только от профайлера и ключа:
+* When you need to construct child metrics not by specifying not only the profiler and key:
 ```cpp
 struct THistogramSensors
 {
@@ -53,7 +56,7 @@ struct THistogramSensors
 owner.Get<THistogramSensors>(/*Key*/ 132, /*Buckets*/ std::vector<TDuration>{5s, 10min}).Histogram.Record(6s);
 ```
 
-* Можно и явно написать конструктор для структурки с метриками:
+* It is allowed to explicitly imlement a constructor for the structure with metrics:
 ```cpp
 struct TChildSensors
 {
@@ -65,7 +68,7 @@ struct TChildSensors
 };
 ```
 
-* Если структурку с метриками хочется куда-то дальше передавать и не беспокоиться о времени жизни:
+* If you want to pass a metrics structure somewhere else and not worry about its lifetime:
 ```cpp
 struct TSharedSensors final
 {
@@ -77,19 +80,21 @@ using TSharedSensorsPtr = NYT::TIntrusivePtr<TSharedSensors>;
 owner.Get<TSharedSensorsPtr>()->Counter.Increment(1);
 ```
 
-* TSensorsOwner мимикрирует под TProfiler в ряде моментов:
+* `TSensorsOwner` mimics `TProfiler` in a number of ways:
 ```cpp
 auto subOwner = owner.WithPrefix("/prefix").WithTags(NYT::NProfiling::TTagSet().WithTag({"key", "value2"}));
 ```
 
-## Когда использовать?
+## When to use?
 
-* При реализации логики на функциях и отсутствии необходимости иметь объекты метрик
-(счетчиков и гистограмм как правило) вне функции.
+* When implementing logic inside functions and there is no need to have metric objects (counters and histograms usually) outside the function.
 
-* В случаях, когда время жизни метрик должно превышать время жизни основного использующего эти метрики класса.
-Например, если при возникновении ошибки, вы хотите репортить метрику и разрушать класс,
-то вам важно, чтобы объект метрики ошибки не умер сразу - иначе апдейт метрики скорее всего не успеет отрепортиться мониторингу.
+* In cases where the lifetime of the metrics must exceed the lifetime of the main class using these metrics.  
 
-* Когда вы просто не хотите, чтобы объекты метрик когда-либо разрушались.
-В этом случае можно подвешивать все к GetRootSensorsOwner().
+For example, if you want to report a metric upon an error and destroy the class,  
+it is important that the error metric object does not die immediately. Otherwies the metric update will likely not have time to be reported to monitoring.
+
+* When you simply do not want metric objects to be destroyed.  
+
+In this case, you can attach everything to `GetRootSensorsOwner()`.
+

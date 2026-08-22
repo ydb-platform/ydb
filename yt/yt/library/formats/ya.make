@@ -3,8 +3,10 @@ LIBRARY()
 INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 
 SRCS(
+    arrow_helpers.cpp
     arrow_parser.cpp
     arrow_writer.cpp
+    blob_writer.cpp
     dsv_parser.cpp
     dsv_writer.cpp
     escape.cpp
@@ -22,9 +24,6 @@ SRCS(
     skiff_yson_converter.cpp
     unversioned_value_yson_writer.cpp
     web_json_writer.cpp
-    yaml_helpers.cpp
-    yaml_parser.cpp
-    yaml_writer.cpp
     yamred_dsv_parser.cpp
     yamred_dsv_writer.cpp
     yamr_parser_base.cpp
@@ -39,11 +38,10 @@ SRCS(
 PEERDIR(
     yt/yt/client
     yt/yt/client/formats
-    yt/yt/client/arrow/fbs
+    yt/yt/core/yaml
     yt/yt/library/column_converters
 
-    contrib/libs/apache/arrow
-    contrib/libs/yaml
+    contrib/libs/apache/arrow_next
 )
 
 END()

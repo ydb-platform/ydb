@@ -15,12 +15,12 @@ namespace {
 
 struct TFirst
 {
-    TString Value;
+    std::string Value;
 };
 
 struct TSecond
 {
-    TString Value;
+    std::string Value;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

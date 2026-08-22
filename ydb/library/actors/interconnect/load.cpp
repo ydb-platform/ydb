@@ -8,6 +8,8 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <util/generic/queue.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NActorsServices::INTERCONNECT_SPEED_TEST
+
 namespace NInterconnect {
     using namespace NActors;
 
@@ -132,16 +134,17 @@ namespace NInterconnect {
         struct TEvPublishResults : TEventLocal<TEvPublishResults, EvPublishResults> {};
 
         struct TMessageInfo {
-            TInstant SendTimestamp;
+            TMonotonic SendTimestamp;
 
-            TMessageInfo(const TInstant& sendTimestamp)
+            TMessageInfo(const TMonotonic& sendTimestamp)
                 : SendTimestamp(sendTimestamp)
             {
             }
         };
 
         const TLoadParams Params;
-        TInstant NextMessageTimestamp;
+        const TFinishCallback FinishCallback;
+        TMonotonic NextMessageTimestamp;
         THashMap<TString, TMessageInfo> InFly;
         ui64 NextId = 1;
         TVector<TActorId> Hops;
@@ -149,13 +152,22 @@ namespace NInterconnect {
         ui64 NumDropped = 0;
         std::shared_ptr<std::atomic_uint64_t> Traffic;
 
+        // Warm-up: samples generated before MeasurementStartTime are excluded from
+        // the reported throughput/RTT statistics (see Params.DelayBeforeMeasurements).
+        TMonotonic MeasurementStartTime = TMonotonic::Zero();
+
+        bool IsMeasuring(TMonotonic when) const {
+            return when >= MeasurementStartTime;
+        }
+
+
     public:
         static constexpr IActor::EActivityType ActorActivityType() {
             return IActor::EActivityType::INTERCONNECT_LOAD_ACTOR;
         }
 
-        TLoadActor(const TLoadParams& params)
-            : Params(params)
+        TLoadActor(const TLoadParams& params, const TFinishCallback& finishCallback)
+            : Params(params), FinishCallback(finishCallback)
         {}
 
         void Bootstrap(const TActorContext& ctx) {
@@ -178,7 +190,8 @@ namespace NInterconnect {
             Hops.push_back(ctx.SelfID);
 
             Become(&TLoadActor::StateFunc);
-            NextMessageTimestamp = ctx.Now();
+            NextMessageTimestamp = ctx.Monotonic();
+            MeasurementStartTime = NextMessageTimestamp + Params.DelayBeforeMeasurements;
             ResetThroughput(NextMessageTimestamp, *Traffic);
             GenerateMessages(ctx);
             ctx.Schedule(Params.Duration, new TEvents::TEvPoisonPill);
@@ -186,7 +199,7 @@ namespace NInterconnect {
         }
 
         void GenerateMessages(const TActorContext& ctx) {
-            while (InFly.size() < Params.InFlyMax && ctx.Now() >= NextMessageTimestamp) {
+            while (InFly.size() < Params.InFlyMax && ctx.Monotonic() >= NextMessageTimestamp) {
                 // generate payload
                 const ui32 size = Params.SizeMin + RandomNumber(Params.SizeMax - Params.SizeMin + 1);
 
@@ -197,9 +210,11 @@ namespace NInterconnect {
                 // create message and send it to the first hop
                 THolder<TEvLoadMessage> ev;
                 if (Params.UseProtobufWithPayload && size) {
-                    auto buffer = TRopeAlignedBuffer::Allocate(size);
-                    memset(buffer->GetBuffer(), '*', size);
-                    ev.Reset(new TEvLoadMessage(Hops, id, TRope(buffer)));
+                    TRcBuf buffer = Params.RdmaMode
+                        ? ctx.ActorSystem()->GetRcBufAllocator()->AllocRcBuf(size, 0, 0)
+                        : TRcBuf(TRopeAlignedBuffer::Allocate(size));
+                    memset(buffer.GetDataMut(), '*', size);
+                    ev.Reset(new TEvLoadMessage(Hops, id, TRope(std::move(buffer))));
                 } else {
                     TString payload;
                     if (size) {
@@ -208,11 +223,13 @@ namespace NInterconnect {
                     }
                     ev.Reset(new TEvLoadMessage(Hops, id, payload ? &payload : nullptr));
                 }
-                UpdateThroughput(ev->CalculateSerializedSizeCached());
+                if (IsMeasuring(ctx.Monotonic())) {
+                    UpdateThroughput(ev->CalculateSerializedSizeCached());
+                }
                 ctx.Send(FirstHop, ev.Release(), IEventHandle::MakeFlags(Params.Channel, 0), cookie);
 
                 // register in the map
-                InFly.emplace(id, TMessageInfo(ctx.Now()));
+                InFly.emplace(id, TMessageInfo(ctx.Monotonic()));
 
                 // put item into timeout queue
                 PutTimeoutQueueItem(ctx, id);
@@ -222,13 +239,13 @@ namespace NInterconnect {
                 if (Params.SoftLoad) {
                     NextMessageTimestamp += duration;
                 } else {
-                    NextMessageTimestamp = ctx.Now() + duration;
+                    NextMessageTimestamp = ctx.Monotonic() + duration;
                 }
             }
 
             // schedule next generate messages call
-            if (NextMessageTimestamp > ctx.Now() && InFly.size() < Params.InFlyMax) {
-                ctx.Schedule(NextMessageTimestamp - ctx.Now(), new TEvGenerateMessages);
+            if (NextMessageTimestamp > ctx.Monotonic() && InFly.size() < Params.InFlyMax) {
+                ctx.Schedule(NextMessageTimestamp - ctx.Monotonic(), new TEvGenerateMessages);
             }
         }
 
@@ -236,12 +253,15 @@ namespace NInterconnect {
             const auto& record = ev->Get()->Record;
             auto it = InFly.find(record.GetId());
             if (it != InFly.end()) {
-                // record message rtt
-                const TDuration rtt = ctx.Now() - it->second.SendTimestamp;
-                UpdateHistogram(ctx.Now(), rtt);
+                const TMonotonic now = ctx.Monotonic();
+                if (IsMeasuring(now)) {
+                    // record message rtt
+                    const TDuration rtt = now - it->second.SendTimestamp;
+                    UpdateHistogram(now, rtt);
 
-                // update throughput
-                UpdateThroughput(ev->Get()->CalculateSerializedSizeCached());
+                    // update throughput
+                    UpdateThroughput(ev->Get()->CalculateSerializedSizeCached());
+                }
 
                 // remove message from the in fly map
                 InFly.erase(it);
@@ -256,12 +276,12 @@ namespace NInterconnect {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
         const TDuration AggregationPeriod = TDuration::Seconds(20);
-        TDeque<std::pair<TInstant, TDuration>> Histogram;
+        TDeque<std::pair<TMonotonic, TDuration>> Histogram;
 
-        void UpdateHistogram(TInstant when, TDuration rtt) {
+        void UpdateHistogram(TMonotonic when, TDuration rtt) {
             Histogram.emplace_back(when, rtt);
 
-            const TInstant barrier = when - AggregationPeriod;
+            const TMonotonic barrier = when - AggregationPeriod;
             while (Histogram && Histogram.front().first < barrier) {
                 Histogram.pop_front();
             }
@@ -271,7 +291,7 @@ namespace NInterconnect {
         // THROUGHPUT
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-        TInstant ThroughputFirstSample = TInstant::Zero();
+        TMonotonic ThroughputFirstSample = TMonotonic::Zero();
         ui64 ThroughputSamples = 0;
         ui64 ThroughputBytes = 0;
         ui64 TrafficAtBegin = 0;
@@ -281,7 +301,7 @@ namespace NInterconnect {
             ++ThroughputSamples;
         }
 
-        void ResetThroughput(TInstant when, ui64 traffic) {
+        void ResetThroughput(TMonotonic when, ui64 traffic) {
             ThroughputFirstSample = when;
             ThroughputSamples = 0;
             ThroughputBytes = 0;
@@ -292,23 +312,23 @@ namespace NInterconnect {
         // TIMEOUT QUEUE OPERATIONS
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-        TQueue<std::pair<TInstant, TString>> TimeoutQueue;
+        TQueue<std::pair<TMonotonic, TString>> TimeoutQueue;
 
         void PutTimeoutQueueItem(const TActorContext& ctx, TString id) {
-            TimeoutQueue.emplace(ctx.Now() + TDuration::Minutes(1), std::move(id));
+            TimeoutQueue.emplace(ctx.Monotonic() + TDuration::Minutes(1), std::move(id));
             if (TimeoutQueue.size() == 1) {
                 ScheduleWakeup(ctx);
             }
         }
 
         void ScheduleWakeup(const TActorContext& ctx) {
-            ctx.Schedule(TimeoutQueue.front().first - ctx.Now(), new TEvents::TEvWakeup);
+            ctx.Schedule(TimeoutQueue.front().first - ctx.Monotonic(), new TEvents::TEvWakeup);
         }
 
         void HandleWakeup(const TActorContext& ctx) {
             // ui32 numDropped = 0;
 
-            while (TimeoutQueue && TimeoutQueue.front().first <= ctx.Now()) {
+            while (TimeoutQueue && TimeoutQueue.front().first <= ctx.Monotonic()) {
                 /*numDropped += */InFly.erase(TimeoutQueue.front().second);
                 TimeoutQueue.pop();
             }
@@ -326,12 +346,19 @@ namespace NInterconnect {
 
         const TDuration ResultPublishPeriod = TDuration::Seconds(15);
 
+        // Full-run accumulators (independent of the rolling ThroughputBytes/Samples
+        // window that gets reset on every PublishResults() call), used to compute the
+        // average throughput reported to the finish callback.
+        ui64 TotalThroughputBytes = 0;
+        ui64 TotalThroughputSamples = 0;
+        TMonotonic RunFirstSample = TMonotonic::Zero();
+
         void SchedulePublishResults(const TActorContext& ctx) {
             ctx.Schedule(ResultPublishPeriod, new TEvPublishResults);
         }
 
         void PublishResults(const TActorContext& ctx, bool schedule = true) {
-            const TInstant now = ctx.Now();
+            const TMonotonic now = ctx.Monotonic();
 
             TStringStream msg;
 
@@ -339,13 +366,21 @@ namespace NInterconnect {
 
             msg << " Throughput# ";
             const TDuration duration = now - ThroughputFirstSample;
+            const ui64 durationUs = duration.MicroSeconds();
             const ui64 traffic = *Traffic;
             msg << "{window# " << duration
                 << " bytes# " << ThroughputBytes
                 << " samples# " << ThroughputSamples
-                << " b/s# " << ui64(ThroughputBytes * 1000000 / duration.MicroSeconds())
-                << " common# " << ui64((traffic - TrafficAtBegin) * 1000000 / duration.MicroSeconds())
+                << " b/s# " << (durationUs ? ui64(ThroughputBytes * 1000000 / durationUs) : ui64(0))
+                << " common# " << (durationUs ? ui64((traffic - TrafficAtBegin) * 1000000 / durationUs) : ui64(0))
                 << "}";
+
+            if (RunFirstSample == TMonotonic::Zero()) {
+                RunFirstSample = ThroughputFirstSample;
+            }
+            TotalThroughputBytes += ThroughputBytes;
+            TotalThroughputSamples += ThroughputSamples;
+
             ResetThroughput(now, traffic);
 
             msg << " RTT# ";
@@ -373,11 +408,49 @@ namespace NInterconnect {
                 msg << " final";
             }
 
-            LOG_NOTICE(ctx, NActorsServices::INTERCONNECT_SPEED_TEST, "%s", msg.Str().data());
+            YDB_LOG_NOTICE_CTX(ctx, msg.Str());
 
             if (schedule) {
                 SchedulePublishResults(ctx);
             }
+        }
+
+        // Computes the aggregated run statistics directly from the actor's internal
+        // counters (no log parsing). Called once, right before the finish callback,
+        // after the final PublishResults(ctx, /* schedule */ false) has folded the
+        // last window into the full-run accumulators.
+        TLoadActorStats ComputeStats(const TActorContext& ctx) const {
+            TLoadActorStats stats;
+
+            const TMonotonic now = ctx.Monotonic();
+            const TMonotonic firstSample = RunFirstSample != TMonotonic::Zero() ? RunFirstSample : ThroughputFirstSample;
+            stats.ThroughputWindow = now - firstSample;
+            stats.ThroughputBytes = TotalThroughputBytes;
+            stats.ThroughputSamples = TotalThroughputSamples;
+            if (stats.ThroughputWindow != TDuration::Zero()) {
+                stats.BytesPerSecond = stats.ThroughputBytes * 1000000 / stats.ThroughputWindow.MicroSeconds();
+            }
+
+            if (Histogram) {
+                stats.RttWindow = Histogram.back().first - Histogram.front().first;
+                stats.RttSamples = Histogram.size();
+
+                TVector<TDuration> v;
+                v.reserve(Histogram.size());
+                for (const auto& item : Histogram) {
+                    v.push_back(item.second);
+                }
+                std::sort(v.begin(), v.end());
+                stats.LatencyPercentilesUs.reserve(6);
+                for (double q : {0.5, 0.9, 0.99, 0.999, 0.9999, 1.0}) {
+                    const size_t pos = q * (v.size() - 1);
+                    stats.LatencyPercentilesUs.emplace_back(q, v[pos].MicroSeconds());
+                }
+            }
+
+            stats.NumDropped = NumDropped;
+
+            return stats;
         }
 
         STRICT_STFUNC(QueryTrafficCounter,
@@ -390,16 +463,94 @@ namespace NInterconnect {
             CFunc(EvPublishResults, PublishResults);
             CFunc(EvGenerateMessages, GenerateMessages);
             HFunc(TEvLoadMessage, Handle);
+            HFunc(NMon::TEvHttpInfo, Handle);
         )
+
+        void Handle(NMon::TEvHttpInfo::TPtr& ev, const TActorContext& ctx) {
+            ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(RenderHTML(false, ctx), ev->Get()->SubRequestId));
+        }
 
         void Die(const TActorContext& ctx) override {
             PublishResults(ctx, false);
+            if (FinishCallback) {
+                const TLoadActorStats stats = ComputeStats(ctx);
+                FinishCallback(ctx, RenderHTML(true, ctx), stats);
+            }
             TActorBootstrapped::Die(ctx);
+        }
+
+        TString RenderHTML(bool finished, const TActorContext& ctx) {
+            const auto duration = ctx.Monotonic() - ThroughputFirstSample;
+            const ui64 durationUs = duration.MicroSeconds();
+
+            TStringStream msg;
+
+            TStringStream str;
+            HTML(str) {
+                TABLE_CLASS("table table-condensed") {
+                    TABLEHEAD() {
+                        TABLER() {
+                            TABLEH() { str << "Window"; }
+                            TABLEH() { str << "Bytes";  }
+                            TABLEH() { str << "Samples"; }
+                            TABLEH() { str << "b/s";  }
+                            TABLEH() { str << "Common"; }
+                        }
+                    }
+                    TABLEBODY() {
+                        TABLER() {
+                            TABLED() { str << duration; }
+                            TABLED() { str << ThroughputBytes; }
+                            TABLED() { str << ThroughputSamples; }
+                            TABLED() { str << (durationUs ? ui64(ThroughputBytes * 1000000 / durationUs) : ui64(0)); }
+                            TABLED() { str << (durationUs ? ui64((*Traffic - TrafficAtBegin) * 1000000 / durationUs) : ui64(0)); }
+                        }
+                    }
+                }
+                if (Histogram) {
+                    TABLE_CLASS("table table-condensed") {
+                        TABLEHEAD() {
+                            TABLER() {
+                                TABLEH() { str << "Window"; }
+                                TABLEH() { str << "Samples"; }
+                                TABLEH() { str << "0.5";  }
+                                TABLEH() { str << "0.9"; }
+                                TABLEH() { str << "0.99";  }
+                                TABLEH() { str << "0.999"; }
+                                TABLEH() { str << "0.9999";  }
+                                TABLEH() { str << "1.0"; }
+                            }
+                        }
+
+                        const auto duration = Histogram.back().first - Histogram.front().first;
+                        std::vector<TDuration> v;
+                        v.reserve(Histogram.size());
+                        for (const auto& item : Histogram) {
+                            v.push_back(item.second);
+                        }
+                        std::sort(v.begin(), v.end());
+
+                        TABLEBODY() {
+                            TABLER() {
+                                TABLED() { str << duration; }
+                                TABLED() { str << Histogram.size(); }
+                                for (const auto q : {0.5, 0.9, 0.99, 0.999, 0.9999, 1.0}) {
+                                    TABLED() { str << Sprintf(" %.4f# ", q) << v[q * (v.size() - 1U)].ToString().c_str(); }
+                                }
+                            }
+                        }
+                    }
+                }
+                str << "Dropped:" << NumDropped << "</br>";
+                if (finished) {
+                    str << "Finished." << "</br>";
+                }
+            }
+            return str.Str();
         }
     };
 
-    IActor* CreateLoadActor(const TLoadParams& params) {
-        return new TLoadActor(params);
+    IActor* CreateLoadActor(const TLoadParams& params, const TFinishCallback& finishCallback) {
+        return new TLoadActor(params, finishCallback);
     }
-
 }

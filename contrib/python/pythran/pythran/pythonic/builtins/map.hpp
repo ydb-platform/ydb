@@ -24,19 +24,17 @@ namespace builtins
 
     template <typename Operator, typename... Iters>
     template <size_t... I>
-    map_iterator<Operator, Iters...>::map_iterator(Operator const &op,
-                                                   std::tuple<Iters...> &_iters,
-                                                   utils::index_sequence<I...>)
+    map_iterator<Operator, Iters...>::map_iterator(Operator const &op, std::tuple<Iters...> &_iters,
+                                                   std::index_sequence<I...>)
         : it(std::get<I>(_iters).begin()...), _op(op)
     {
     }
 
     template <typename Operator, typename... Iters>
     template <size_t... I>
-    map_iterator<Operator, Iters...>::map_iterator(itertools::npos,
-                                                   Operator const &op,
+    map_iterator<Operator, Iters...>::map_iterator(itertools::npos, Operator const &op,
                                                    std::tuple<Iters...> &_iters,
-                                                   utils::index_sequence<I...>)
+                                                   std::index_sequence<I...>)
         : it(std::get<I>(_iters).end()...), _op(op)
     {
     }
@@ -44,8 +42,7 @@ namespace builtins
     template <typename Operator, typename... Iters>
     template <size_t... I>
     typename map_res<Operator, Iters...>::type
-    map_iterator<Operator, Iters...>::get_value(utils::index_sequence<I...>,
-                                                std::false_type) const
+    map_iterator<Operator, Iters...>::get_value(std::index_sequence<I...>, std::false_type) const
     {
       return _op(*std::get<I>(it)...);
     }
@@ -53,32 +50,29 @@ namespace builtins
     template <typename Operator, typename... Iters>
     template <size_t... I>
     typename map_res<Operator, Iters...>::type
-    map_iterator<Operator, Iters...>::get_value(utils::index_sequence<I...>,
-                                                std::true_type) const
+    map_iterator<Operator, Iters...>::get_value(std::index_sequence<I...>, std::true_type) const
     {
       return types::make_tuple(*std::get<I>(it)...);
     }
 
     template <typename Operator, typename... Iters>
-    typename map_res<Operator, Iters...>::type
-    map_iterator<Operator, Iters...>::operator*() const
+    typename map_res<Operator, Iters...>::type map_iterator<Operator, Iters...>::operator*() const
     {
-      return get_value(utils::make_index_sequence<sizeof...(Iters)>{},
+      return get_value(std::make_index_sequence<sizeof...(Iters)>{},
                        std::is_same<Operator, types::none_type>());
     }
 
     template <typename Operator, typename... Iters>
     template <size_t... I>
-    void map_iterator<Operator, Iters...>::next(utils::index_sequence<I...>)
+    void map_iterator<Operator, Iters...>::next(std::index_sequence<I...>)
     {
       utils::fwd(++std::get<I>(it)...);
     }
 
     template <typename Operator, typename... Iters>
-    map_iterator<Operator, Iters...> &
-    map_iterator<Operator, Iters...>::operator++()
+    map_iterator<Operator, Iters...> &map_iterator<Operator, Iters...>::operator++()
     {
-      next(utils::make_index_sequence<sizeof...(Iters)>{});
+      next(std::make_index_sequence<sizeof...(Iters)>{});
       return *this;
     }
 
@@ -97,16 +91,14 @@ namespace builtins
     }
 
     template <typename Operator, typename... Iters>
-    map_iterator<Operator, Iters...> &
-    map_iterator<Operator, Iters...>::operator+=(long i)
+    map_iterator<Operator, Iters...> &map_iterator<Operator, Iters...>::operator+=(long i)
     {
       advance(i, utils::int_<sizeof...(Iters) - 1>());
       return *this;
     }
 
     template <typename Operator, typename... Iters>
-    map_iterator<Operator, Iters...>
-    map_iterator<Operator, Iters...>::operator+(long i) const
+    map_iterator<Operator, Iters...> map_iterator<Operator, Iters...>::operator+(long i) const
     {
       map_iterator<Operator, Iters...> other(*this);
       other += i;
@@ -115,16 +107,15 @@ namespace builtins
 
     template <typename Operator, typename... Iters>
     template <size_t N>
-    bool map_iterator<Operator, Iters...>::equal(
-        map_iterator<Operator, Iters...> const &other, utils::int_<N>) const
+    bool map_iterator<Operator, Iters...>::equal(map_iterator<Operator, Iters...> const &other,
+                                                 utils::int_<N>) const
     {
-      return std::get<N>(other.it) == std::get<N>(it) ||
-             equal(other, utils::int_<N - 1>());
+      return std::get<N>(other.it) == std::get<N>(it) || equal(other, utils::int_<N - 1>());
     }
 
     template <typename Operator, typename... Iters>
-    bool map_iterator<Operator, Iters...>::equal(
-        map_iterator<Operator, Iters...> const &other, utils::int_<0>) const
+    bool map_iterator<Operator, Iters...>::equal(map_iterator<Operator, Iters...> const &other,
+                                                 utils::int_<0>) const
     {
       return std::get<0>(other.it) == std::get<0>(it);
     }
@@ -144,31 +135,54 @@ namespace builtins
     }
 
     template <typename Operator, typename... Iters>
-    bool map_iterator<Operator, Iters...>::operator<(
+    template <size_t N>
+    bool map_iterator<Operator, Iters...>::lt(map_iterator<Operator, Iters...> const &other,
+                                              utils::int_<N>) const
+    {
+      return std::get<N>(it) < std::get<N>(other.it) ||
+             ((std::get<N>(it) == std::get<N>(other.it)) && lt(other, utils::int_<N - 1>()));
+    }
+
+    template <typename Operator, typename... Iters>
+    bool map_iterator<Operator, Iters...>::lt(map_iterator<Operator, Iters...> const &other,
+                                              utils::int_<0>) const
+    {
+      return std::get<0>(it) < std::get<0>(other.it);
+    }
+
+    template <typename Operator, typename... Iters>
+    bool
+    map_iterator<Operator, Iters...>::operator<(map_iterator<Operator, Iters...> const &other) const
+    {
+      return lt(other, utils::int_<sizeof...(Iters) - 1>());
+    }
+
+    template <typename Operator, typename... Iters>
+    bool map_iterator<Operator, Iters...>::operator<=(
         map_iterator<Operator, Iters...> const &other) const
     {
-      return !(*this == other);
+      return (*this == other) || (*this < other);
     }
 
     template <typename Operator, typename... Iters>
     template <size_t N>
-    long map_iterator<Operator, Iters...>::min_len(
-        map_iterator<Operator, Iters...> const &other, utils::int_<N>) const
+    long map_iterator<Operator, Iters...>::min_len(map_iterator<Operator, Iters...> const &other,
+                                                   utils::int_<N>) const
     {
       return std::min((long)(std::get<N>(it) - std::get<N>(other.it)),
                       min_len(other, utils::int_<N - 1>()));
     }
 
     template <typename Operator, typename... Iters>
-    long map_iterator<Operator, Iters...>::min_len(
-        map_iterator<Operator, Iters...> const &other, utils::int_<0>) const
+    long map_iterator<Operator, Iters...>::min_len(map_iterator<Operator, Iters...> const &other,
+                                                   utils::int_<0>) const
     {
       return std::get<0>(it) - std::get<0>(other.it);
     }
 
     template <typename Operator, typename... Iters>
-    long map_iterator<Operator, Iters...>::operator-(
-        map_iterator<Operator, Iters...> const &other) const
+    long
+    map_iterator<Operator, Iters...>::operator-(map_iterator<Operator, Iters...> const &other) const
     {
       return min_len(other, utils::int_<sizeof...(Iters) - 1>());
     }
@@ -176,13 +190,11 @@ namespace builtins
     template <typename Operator, typename... Iters>
     template <class... Types>
     map<Operator, Iters...>::map(Operator const &_op, Types &&..._iters)
-        : utils::iterator_reminder<true, Iters...>(
-              std::forward<Types>(_iters)...),
-          map_iterator<Operator, Iters...>(
-              _op, this->values,
-              utils::make_index_sequence<sizeof...(Iters)>{}),
+        : utils::iterator_reminder<true, Iters...>(std::forward<Types>(_iters)...),
+          map_iterator<Operator, Iters...>(_op, this->values,
+                                           std::make_index_sequence<sizeof...(Iters)>{}),
           end_iter(itertools::npos(), _op, this->values,
-                   utils::make_index_sequence<sizeof...(Iters)>{})
+                   std::make_index_sequence<sizeof...(Iters)>{})
     {
     }
 
@@ -193,27 +205,22 @@ namespace builtins
     }
 
     template <typename Operator, typename... Iters>
-    typename map<Operator, Iters...>::iterator const &
-    map<Operator, Iters...>::begin() const
+    typename map<Operator, Iters...>::iterator const &map<Operator, Iters...>::begin() const
     {
       return *this;
     }
 
     template <typename Operator, typename... Iters>
-    typename map<Operator, Iters...>::iterator const &
-    map<Operator, Iters...>::end() const
+    typename map<Operator, Iters...>::iterator const &map<Operator, Iters...>::end() const
     {
       return end_iter;
     }
   } // namespace details
 
   template <typename Operator, typename... Iter>
-  auto map(Operator &&_op, Iter &&...iters)
-      -> details::map<
-          typename std::remove_cv<
-              typename std::remove_reference<Operator>::type>::type,
-          typename types::iterator<typename std::remove_cv<
-              typename std::remove_reference<Iter>::type>::type>::type...>
+  details::map<std::remove_cv_t<std::remove_reference_t<Operator>>,
+               typename types::iterator<std::remove_cv_t<std::remove_reference_t<Iter>>>::type...>
+  map(Operator &&_op, Iter &&...iters)
   {
     return {std::forward<Operator>(_op), std::forward<Iter>(iters)...};
   }

@@ -6,12 +6,14 @@
     "jsonVersion":"1.1",
     "protocol":"rest-json",
     "protocolSettings":{"h2":"eventstream"},
+    "protocols":["rest-json"],
     "serviceAbbreviation":"Lex Runtime V2",
     "serviceFullName":"Amazon Lex Runtime V2",
     "serviceId":"Lex Runtime V2",
     "signatureVersion":"v4",
     "signingName":"lex",
-    "uid":"runtime.lex.v2-2020-08-07"
+    "uid":"runtime.lex.v2-2020-08-07",
+    "auth":["aws.auth#sigv4"]
   },
   "operations":{
     "DeleteSession":{
@@ -108,7 +110,8 @@
         {"shape":"BadGatewayException"}
       ],
       "documentation":"<p>Sends user input to Amazon Lex V2. You can send text or speech. Clients use this API to send text and audio requests to Amazon Lex V2 at runtime. Amazon Lex V2 interprets the user input using the machine learning model built for the bot.</p> <p>The following request fields must be compressed with gzip and then base64 encoded before you send them to Amazon Lex V2. </p> <ul> <li> <p>requestAttributes</p> </li> <li> <p>sessionState</p> </li> </ul> <p>The following response fields are compressed using gzip and then base64 encoded by Amazon Lex V2. Before you can use these fields, you must decode and decompress them. </p> <ul> <li> <p>inputTranscript</p> </li> <li> <p>interpretations</p> </li> <li> <p>messages</p> </li> <li> <p>requestAttributes</p> </li> <li> <p>sessionState</p> </li> </ul> <p>The example contains a Java application that compresses and encodes a Java object to send to Amazon Lex V2, and a second that decodes and decompresses a response from Amazon Lex V2.</p> <p>If the optional post-fulfillment response is specified, the messages are returned as follows. For more information, see <a href=\"https://docs.aws.amazon.com/lexv2/latest/dg/API_PostFulfillmentStatusSpecification.html\">PostFulfillmentStatusSpecification</a>.</p> <ul> <li> <p> <b>Success message</b> - Returned if the Lambda function completes successfully and the intent state is fulfilled or ready fulfillment if the message is present.</p> </li> <li> <p> <b>Failed message</b> - The failed message is returned if the Lambda function throws an exception or if the Lambda function returns a failed intent state without a message.</p> </li> <li> <p> <b>Timeout message</b> - If you don't configure a timeout message and a timeout, and the Lambda function doesn't return within 30 seconds, the timeout message is returned. If you configure a timeout, the timeout message is returned when the period times out. </p> </li> </ul> <p>For more information, see <a href=\"https://docs.aws.amazon.com/lexv2/latest/dg/streaming-progress.html#progress-complete.html\">Completion message</a>.</p>",
-      "authtype":"v4-unsigned-body"
+      "authtype":"v4-unsigned-body",
+      "unsignedPayload":true
     },
     "StartConversation":{
       "name":"StartConversation",
@@ -165,7 +168,7 @@
       "type":"string",
       "max":100,
       "min":1,
-      "pattern":"^([A-Za-z]_?)+$"
+      "pattern":"^([A-Za-z0-9]_?)+$"
     },
     "ActiveContextParametersMap":{
       "type":"map",
@@ -485,7 +488,7 @@
       "members":{
         "type":{
           "shape":"DialogActionType",
-          "documentation":"<p>The next action that the bot should take in its interaction with the user. The possible values are:</p> <ul> <li> <p> <code>Close</code> - Indicates that there will not be a response from the user. For example, the statement \"Your order has been placed\" does not require a response.</p> </li> <li> <p> <code>ConfirmIntent</code> - The next action is asking the user if the intent is complete and ready to be fulfilled. This is a yes/no question such as \"Place the order?\"</p> </li> <li> <p> <code>Delegate</code> - The next action is determined by Amazon Lex V2.</p> </li> <li> <p> <code>ElicitIntent</code> - The next action is to elicit an intent from the user.</p> </li> <li> <p> <code>ElicitSlot</code> - The next action is to elicit a slot value from the user.</p> </li> </ul>"
+          "documentation":"<p>The next action that the bot should take in its interaction with the user. The following values are possible:</p> <ul> <li> <p> <code>Close</code> – Indicates that there will not be a response from the user. For example, the statement \"Your order has been placed\" does not require a response.</p> </li> <li> <p> <code>ConfirmIntent</code> – The next action is asking the user if the intent is complete and ready to be fulfilled. This is a yes/no question such as \"Place the order?\"</p> </li> <li> <p> <code>Delegate</code> – The next action is determined by Amazon Lex V2.</p> </li> <li> <p> <code>ElicitIntent</code> – The next action is to elicit an intent from the user.</p> </li> <li> <p> <code>ElicitSlot</code> – The next action is to elicit a slot value from the user.</p> </li> </ul>"
         },
         "slotToElicit":{
           "shape":"NonEmptyString",
@@ -493,7 +496,7 @@
         },
         "slotElicitationStyle":{
           "shape":"StyleType",
-          "documentation":"<p>Configures the slot to use spell-by-letter or spell-by-word style. When you use a style on a slot, users can spell out their input to make it clear to your bot.</p> <ul> <li> <p>Spell by letter - \"b\" \"o\" \"b\"</p> </li> <li> <p>Spell by word - \"b as in boy\" \"o as in oscar\" \"b as in boy\"</p> </li> </ul> <p>For more information, see <a href=\"https://docs.aws.amazon.com/lexv2/latest/dg/using-spelling.html\"> Using spelling to enter slot values </a>.</p>"
+          "documentation":"<p>Configures the slot to use spell-by-letter or spell-by-word style. When you use a style on a slot, users can spell out their input to make it clear to your bot.</p> <ul> <li> <p>Spell by letter - \"b\" \"o\" \"b\"</p> </li> <li> <p>Spell by word - \"b as in boy\" \"o as in oscar\" \"b as in boy\"</p> </li> </ul> <p>For more information, see <a href=\"https://docs.aws.amazon.com/lexv2/latest/dg/spelling-styles.html\"> Using spelling to enter slot values </a>.</p>"
         },
         "subSlotToElicit":{
           "shape":"ElicitSubSlot",
@@ -663,11 +666,11 @@
         },
         "state":{
           "shape":"IntentState",
-          "documentation":"<p>Contains fulfillment information for the intent. </p>"
+          "documentation":"<p>Indicates the fulfillment state for the intent. The meanings of each value are as follows:</p> <ul> <li> <p> <code>Failed</code> – The bot failed to fulfill the intent.</p> </li> <li> <p> <code>Fulfilled</code> – The bot has completed fulfillment of the intent.</p> </li> <li> <p> <code>FulfillmentInProgress</code> – The bot is in the middle of fulfilling the intent.</p> </li> <li> <p> <code>InProgress</code> – The bot is in the middle of eliciting the slot values that are necessary to fulfill the intent.</p> </li> <li> <p> <code>ReadyForFulfillment</code> – The bot has elicited all the slot values for the intent and is ready to fulfill the intent.</p> </li> <li> <p> <code>Waiting</code> – The bot is waiting for a response from the user (limited to streaming conversations).</p> </li> </ul>"
         },
         "confirmationState":{
           "shape":"ConfirmationState",
-          "documentation":"<p>Contains information about whether fulfillment of the intent has been confirmed.</p>"
+          "documentation":"<p>Indicates whether the intent has been <code>Confirmed</code>, <code>Denied</code>, or <code>None</code> if the confirmation stage has not yet been reached.</p>"
         }
       },
       "documentation":"<p>The current intent that Amazon Lex V2 is attempting to fulfill.</p>"
@@ -677,7 +680,7 @@
       "members":{
         "inputMode":{
           "shape":"InputMode",
-          "documentation":"<p>Indicates whether the input to the operation was text or speech.</p>"
+          "documentation":"<p>Indicates whether the input to the operation was text, speech, or from a touch-tone keypad.</p>"
         },
         "interpretations":{
           "shape":"Interpretations",
@@ -740,9 +743,20 @@
         "intent":{
           "shape":"Intent",
           "documentation":"<p>A list of intents that might satisfy the user's utterance. The intents are ordered by the confidence score.</p>"
+        },
+        "interpretationSource":{
+          "shape":"InterpretationSource",
+          "documentation":"<p>Specifies the service that interpreted the input.</p>"
         }
       },
-      "documentation":"<p>An intent that Amazon Lex V2 determined might satisfy the user's utterance. The intents are ordered by the confidence score. </p>"
+      "documentation":"<p>An object containing information about an intent that Amazon Lex V2 determined might satisfy the user's utterance. The intents are ordered by the confidence score. </p>"
+    },
+    "InterpretationSource":{
+      "type":"string",
+      "enum":[
+        "Bedrock",
+        "Lex"
+      ]
     },
     "Interpretations":{
       "type":"list",
@@ -911,13 +925,13 @@
         },
         "sessionState":{
           "shape":"NonEmptyString",
-          "documentation":"<p>Represents the current state of the dialog between the user and the bot.</p> <p>Use this to determine the progress of the conversation and what the next action may be.</p>",
+          "documentation":"<p>A base-64-encoded gzipped field that represents the current state of the dialog between the user and the bot. Use this to determine the progress of the conversation and what the next action may be.</p>",
           "location":"header",
           "locationName":"x-amz-lex-session-state"
         },
         "requestAttributes":{
           "shape":"NonEmptyString",
-          "documentation":"<p>Request-specific information passed between the client application and Amazon Lex V2. These are the same as the <code>requestAttribute</code> parameter in the call to the <code>PutSession</code> operation.</p>",
+          "documentation":"<p>A base-64-encoded gzipped field that provides request-specific information passed between the client application and Amazon Lex V2. These are the same as the <code>requestAttribute</code> parameter in the call to the <code>PutSession</code> operation.</p>",
           "location":"header",
           "locationName":"x-amz-lex-request-attributes"
         },
@@ -1081,7 +1095,7 @@
       "members":{
         "inputMode":{
           "shape":"NonEmptyString",
-          "documentation":"<p>Indicates whether the input mode to the operation was text or speech. </p>",
+          "documentation":"<p>Indicates whether the input mode to the operation was text, speech, or from a touch-tone keypad. </p>",
           "location":"header",
           "locationName":"x-amz-lex-input-mode"
         },
@@ -1568,18 +1582,18 @@
       "members":{
         "originalValue":{
           "shape":"NonEmptyString",
-          "documentation":"<p>The text of the utterance from the user that was entered for the slot.</p>"
+          "documentation":"<p>The part of the user's response to the slot elicitation that Amazon Lex V2 determines is relevant to the slot value.</p>"
         },
         "interpretedValue":{
           "shape":"NonEmptyString",
-          "documentation":"<p>The value that Amazon Lex V2 determines for the slot. The actual value depends on the setting of the value selection strategy for the bot. You can choose to use the value entered by the user, or you can have Amazon Lex V2 choose the first value in the <code>resolvedValues</code> list.</p>"
+          "documentation":"<p>The value that Amazon Lex V2 determines for the slot, given the user input. The actual value depends on the setting of the value selection strategy for the bot. You can choose to use the value entered by the user, or you can have Amazon Lex V2 choose the first value in the <code>resolvedValues</code> list.</p>"
         },
         "resolvedValues":{
           "shape":"StringList",
-          "documentation":"<p>A list of additional values that have been recognized for the slot.</p>"
+          "documentation":"<p>A list of values that Amazon Lex V2 determines are possible resolutions for the user input. The first value matches the <code>interpretedValue</code>.</p>"
         }
       },
-      "documentation":"<p>The value of a slot.</p>"
+      "documentation":"<p>Information about the value provided for a slot and Amazon Lex V2's interpretation.</p>"
     },
     "Values":{
       "type":"list",

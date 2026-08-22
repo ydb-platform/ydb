@@ -13,38 +13,39 @@ class NetworkClient(object):
     def __init__(self, host, port=19001, ssh_username=None, ipv6=True):
         super(NetworkClient, self).__init__()
         if ipv6:
-            self.__iptables_bin = '/sbin/ip6tables'
-            self.__iptables_save_bin = '/sbin/ip6tables-save'
+            self._iptables_bin = '/sbin/ip6tables'
+            self._iptables_save_bin = '/sbin/ip6tables-save'
         else:
-            self.__iptables_bin = '/sbin/iptables'
-            self.__iptables_save_bin = '/sbin/iptables-save'
+            self._iptables_bin = '/sbin/iptables'
+            self._iptables_save_bin = '/sbin/iptables-save'
 
-        self.__port = str(port)
-        self.__host = host
-        self.__ssh_username = ssh_username
+        self._port = str(port)
+        self._host = host
+        self._ssh_username = ssh_username
 
     def drop_incoming_packets(self, probability=0.01):
         drop_incoming_command = [
-            'sudo', self.__iptables_bin, '-A', 'INPUT', '-p', 'tcp', '--sport', self.__port,
+            'sudo', self._iptables_bin, '-A', 'YDB_FW', '-p', 'tcp', '--sport', self._port,
             '-m', 'statistic', '--mode', 'random', '--probability', str(probability), '-j', 'DROP'
         ]
-        return self.__exec_command(drop_incoming_command)
+        return self._exec_command(drop_incoming_command)
 
     def drop_outgoing_packets(self, probability=0.01):
         drop_outgoing_command = [
-            'sudo', self.__iptables_bin, '-A', 'INPUT', '-p', 'tcp', '--dport', self.__port,
+            'sudo', self._iptables_bin, '-A', 'YDB_FW', '-p', 'tcp', '--dport', self._port,
             '-m', 'statistic', '--mode', 'random', '--probability', str(probability), '-j', 'DROP'
         ]
-        return self.__exec_command(drop_outgoing_command)
+        return self._exec_command(drop_outgoing_command)
 
     def isolate_dns(self, probability=1.0):
+        # Must stay on YDB_FW: cluster machinery reverts iptables changes outside that chain.
         drop_input = [
-            'sudo', self.__iptables_bin, '-A', 'INPUT', '-p', 'udp', '--sport', '53',
+            'sudo', self._iptables_bin, '-A', 'YDB_FW', '-p', 'udp', '--sport', '53',
             '-m', 'statistic', '--mode', 'random', '--probability', str(probability), '-j', 'DROP'
         ]
 
         drop_outout = [
-            'sudo', self.__iptables_bin, '-A', 'OUTPUT', '-p', 'udp', '--sport', '1024:65535', '--dport', '53',
+            'sudo', self._iptables_bin, '-A', 'YDB_FW', '-p', 'udp', '--sport', '1024:65535', '--dport', '53',
             '-m', 'statistic', '--mode', 'random', '--probability', str(probability), '-j', 'DROP'
         ]
 
@@ -53,7 +54,7 @@ class NetworkClient(object):
         ]
 
         for cmd in [drop_input, drop_outout, reset_cache]:
-            retcode = self.__exec_command(cmd)
+            retcode = self._exec_command(cmd)
             if retcode:
                 logger.error("retcode %s for command %s", retcode, cmd)
                 return retcode
@@ -66,22 +67,26 @@ class NetworkClient(object):
         self.drop_outgoing_packets(probability)
         return
 
-    def clear_all_drops(self):
+    def clear_all_drops(self, match=None):
         """
-        $IP6TABLES_SAVE | grep -e statistic -e probability | sed -e "s/-A/-D/g" | while read line; do
-            $IP6TABLES $line
-        done
+        $IP6TABLES_SAVE | grep -e statistic -e probability [| grep -F match] | sed ... | while ...
+
+        Pass ``match`` (e.g. port or ``dport 53``) so Network extract does not wipe Dns rules.
         """
         clear_all_drops_command = [
-            'sudo', self.__iptables_save_bin,
+            'sudo', self._iptables_save_bin,
             '|', 'grep', '-e', 'statistic', '-e', 'probability',
+        ]
+        if match:
+            clear_all_drops_command += ['|', 'grep', '-F', '--', str(match)]
+        clear_all_drops_command += [
             '|', 'sed', '-e', '"s/-A/-D/g"',
             '|', 'while', 'read', 'line', ';',
             'do',
-            'sudo', self.__iptables_bin, '$line', ';',
+            'sudo', self._iptables_bin, '$line', ';',
             'done'
         ]
-        return self.__exec_command(clear_all_drops_command)
+        return self._exec_command(clear_all_drops_command)
 
     def __enter__(self):
         return self
@@ -90,11 +95,11 @@ class NetworkClient(object):
         self.clear_all_drops()
         return False
 
-    def __exec_command(self, command):
+    def _exec_command(self, command):
         retcode, output = execute_command_with_output_single_host(
-            self.__host, command, username=self.__ssh_username
+            self._host, command, username=self._ssh_username
         )
         return retcode
 
     def __str__(self):
-        return 'NetworkClient[{host}:{port}]'.format(host=self.__host, port=self.__port)
+        return 'NetworkClient[{host}:{port}]'.format(host=self._host, port=self._port)

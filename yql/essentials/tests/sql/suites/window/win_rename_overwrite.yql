@@ -1,0 +1,23 @@
+$src = [
+    <|key: 1, subkey:2, value:3|>,
+    <|key: 1, subkey:3, value:1|>,
+    <|key: 1, subkey:1, value:2|>,
+    <|key: 2, subkey:20, value:30|>,
+    <|key: 2, subkey:30, value:10|>,
+    <|key: 2, subkey:10, value:20|>,
+];
+
+SELECT
+   key, subkey,
+   row_number() over (partition by key order by subkey) as row,
+   value
+FROM (
+SELECT
+    key as key,
+    subkey,
+    row_number() over (partition by key order by subkey desc) as row,
+    min(value) over (partition by key) as minvalue,
+    value
+FROM as_table($src)
+)
+

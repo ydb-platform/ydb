@@ -1,7 +1,5 @@
 PROGRAM()
 
-SUBSCRIBER(g:yql)
-
 ALLOCATOR(J)
 
 SRCS(
@@ -31,6 +29,7 @@ RESOURCE(
     yql/essentials/cfg/tests/gateways.conf gateways.conf
     yql/essentials/cfg/tests/fs.conf fs.conf
     yql/essentials/cfg/tests/fs_arc.conf fs_arc.conf
+    yql/essentials/cfg/tests/fs_http.conf fs_http.conf
 )
 
 END()

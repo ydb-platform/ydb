@@ -1,11 +1,19 @@
 #include "yql_s3_provider.h"
+
+#include <ydb/library/yql/providers/common/http_gateway/yql_http_default_retry_policy.h>
+
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 
 namespace NYql {
 
-TDataProviderInitializer GetS3DataProviderInitializer(IHTTPGateway::TPtr gateway, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, NActors::TActorSystem* actorSystem) {
-    return [gateway, credentialsFactory, actorSystem] (
+TS3State::TS3State()
+    : Configuration(MakeIntrusive<TS3Configuration>())
+    , GatewayRetryPolicy(GetHTTPDefaultRetryPolicy())
+{}
+
+TDataProviderInitializer GetS3DataProviderInitializer(IHTTPGateway::TPtr gateway, IStructuredTokenCredentialsFactory::TPtr credentialsFactory, NActors::TActorSystem* actorSystem, TS3Configuration::TSetupper configurationInit) {
+    return [gateway, credentialsFactory, actorSystem, configurationInit] (
         const TString& userName,
         const TString& sessionId,
         const TGatewaysConfig* gatewaysConfig,
@@ -15,11 +23,9 @@ TDataProviderInitializer GetS3DataProviderInitializer(IHTTPGateway::TPtr gateway
         const TOperationProgressWriter& progressWriter,
         const TYqlOperationOptions& operationOptions,
         THiddenQueryAborter hiddenAborter,
-        const TQContext& qContext)
-    {
+        const TQContext& qContext) {
         Y_UNUSED(sessionId);
         Y_UNUSED(userName);
-        Y_UNUSED(functionRegistry);
         Y_UNUSED(randomProvider);
         Y_UNUSED(progressWriter);
         Y_UNUSED(operationOptions);
@@ -32,9 +38,15 @@ TDataProviderInitializer GetS3DataProviderInitializer(IHTTPGateway::TPtr gateway
         state->FunctionRegistry = functionRegistry;
         state->CredentialsFactory = credentialsFactory;
         state->ActorSystem = actorSystem;
+
+        if (configurationInit) {
+            configurationInit(*state->Configuration);
+        }
+
         if (gatewaysConfig) {
             state->Configuration->Init(gatewaysConfig->GetS3(), typeCtx);
         }
+
         state->Gateway = gateway;
 
         TDataProviderInfo info;

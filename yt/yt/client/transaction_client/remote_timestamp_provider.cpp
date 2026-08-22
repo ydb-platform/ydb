@@ -30,7 +30,7 @@ IChannelPtr CreateTimestampProviderChannel(
     TRemoteTimestampProviderConfigPtr config,
     IChannelFactoryPtr channelFactory)
 {
-    auto endpointDescription = TString("TimestampProvider");
+    auto endpointDescription = std::string("TimestampProvider");
     auto endpointAttributes = ConvertToAttributes(BuildYsonStringFluently()
         .BeginMap()
             .Item("timestamp_provider").Value(true)
@@ -106,8 +106,8 @@ private:
                 clockClusterTag != responseClockClusterTag)
             {
                 THROW_ERROR_EXCEPTION(NTransactionClient::EErrorCode::ClockClusterTagMismatch, "Clock cluster tag mismatch")
-                    << TErrorAttribute("request_clock_cluster_tag", clockClusterTag)
-                    << TErrorAttribute("response_clock_cluster_tag", responseClockClusterTag);
+                    .With("request_clock_cluster_tag", clockClusterTag)
+                    .With("response_clock_cluster_tag", responseClockClusterTag);
             }
 
             return responseTimestamp;
@@ -149,7 +149,7 @@ ITimestampProviderPtr CreateBatchingRemoteTimestampProvider(
         allowOldClocks);
     return CreateBatchingTimestampProvider(
         std::move(underlying),
-        config->BatchPeriod);
+        config);
 }
 
 ITimestampProviderPtr CreateBatchingRemoteTimestampProvider(
@@ -204,8 +204,8 @@ TAlienRemoteTimestampProvidersMap CreateAlienTimestampProvidersMap(
         auto alienClockCellTag = foreignProviderConfig->ClockClusterTag;
 
         if (alienProvidersMap.contains(alienClockCellTag)) {
-            YT_LOG_ALERT("Duplicate entry for alien clock clusters (ClockClusterTag: %v)",
-                alienClockCellTag);
+            YT_TLOG_ALERT("Duplicate entry for alien clock clusters")
+                .With("ClockClusterTag", alienClockCellTag);
             continue;
         }
 

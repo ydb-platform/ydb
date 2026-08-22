@@ -6,4 +6,4 @@ namespace NYql::NCommon {
 
 IUdfResolver::TPtr WrapUdfResolverWithQContext(IUdfResolver::TPtr inner, const TQContext& qContext);
 
-}
+} // namespace NYql::NCommon

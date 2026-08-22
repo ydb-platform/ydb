@@ -8,13 +8,12 @@
 #include <util/generic/map.h>
 #include <util/generic/string.h>
 
-namespace NYql {
-namespace NCommon {
+namespace NYql::NCommon {
 
 void LoadSystemModulePaths(
-        const TString& resolverPath,
-        const TString& dir,
-        NKikimr::NMiniKQL::TUdfModulePathsMap* paths);
+    const TString& resolverPath,
+    const TString& dir,
+    NKikimr::NMiniKQL::TUdfModulePathsMap* paths);
 
 IUdfResolver::TPtr CreateOutProcUdfResolver(
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
@@ -26,5 +25,4 @@ IUdfResolver::TPtr CreateOutProcUdfResolver(
     const TString& udfDependencyStubPath,
     const TMap<TString, TString>& path2md5 = {});
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon

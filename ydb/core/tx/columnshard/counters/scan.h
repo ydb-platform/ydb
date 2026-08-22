@@ -1,13 +1,16 @@
 #pragma once
 #include "sub_columns.h"
 
-#include <ydb/library/signals/histogram.h>
-#include <ydb/library/signals/owner.h>
-
+#include <ydb/core/kqp/compute_actor/kqp_compute_events_stats.h>
 #include <ydb/core/protos/table_stats.pb.h>
+#include <ydb/core/tx/columnshard/counters/duplicate_filtering.h>
+#include <ydb/core/tx/columnshard/counters/thread_safe_value.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/counters.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 #include <ydb/core/tx/columnshard/resources/memory.h>
+
+#include <ydb/library/signals/histogram.h>
+#include <ydb/library/signals/owner.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
@@ -31,7 +34,8 @@ public:
         , ResultsReady(std::make_shared<NOlap::TMemoryAggregation>(moduleId, "InFlight/Results/Ready"))
         , RequestedResourcesMemory(std::make_shared<NOlap::TMemoryAggregation>(moduleId, "InFlight/Resources/Requested"))
         , ScanDuration(TBase::GetValueAutoAggregationsClient("ScanDuration"))
-        , BlobsWaitingDuration(TBase::GetValueAutoAggregationsClient("BlobsWaitingDuration")) {
+        , BlobsWaitingDuration(TBase::GetValueAutoAggregationsClient("BlobsWaitingDuration"))
+    {
     }
 
     std::shared_ptr<NOlap::TMemoryAggregation> GetRequestedResourcesMemory() const {
@@ -89,10 +93,12 @@ public:
                 ValuesByStatus[(ui32)i] = counters.CreateSubGroup("status", ::ToString(i)).GetValue("Intervals/Count");
             }
         }
+
         void Add(const EIntervalStatus status) const {
             AFL_VERIFY((ui32)status < ValuesByStatus.size());
             ValuesByStatus[(ui32)status]->Add(1);
         }
+
         void Remove(const EIntervalStatus status) const {
             AFL_VERIFY((ui32)status < ValuesByStatus.size());
             ValuesByStatus[(ui32)status]->Sub(1);
@@ -106,7 +112,8 @@ public:
 
     public:
         TScanIntervalStateGuard(const std::shared_ptr<TScanIntervalState>& baseCounters)
-            : BaseCounters(baseCounters) {
+            : BaseCounters(baseCounters)
+        {
             BaseCounters->Add(Status);
         }
 
@@ -155,9 +162,17 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr RecordsDeniedByIndex;
     NMonitoring::TDynamicCounters::TCounterPtr RecordsAcceptedByHeader;
     NMonitoring::TDynamicCounters::TCounterPtr RecordsDeniedByHeader;
+    NMonitoring::TDynamicCounters::TCounterPtr DictionaryOnlyOptimizationCount;
+    NMonitoring::TDynamicCounters::TCounterPtr DistinctLimitSyncPointInvocations;
+    NMonitoring::TDynamicCounters::TCounterPtr PredicateFilterInvocations;
+    NMonitoring::TDynamicCounters::TCounterPtr EarlyInFlightReleaseCount;
     std::shared_ptr<TSubColumnCounters> SubColumnCounters;
+    std::shared_ptr<TDuplicateFilteringCounters> DuplicateFilteringCounters;
+    std::shared_ptr<TSimpleDuplicateFilteringCounters> SimpleDuplicateFilteringCounters;
 
     NMonitoring::TDynamicCounters::TCounterPtr HangingRequests;
+
+    NMonitoring::THistogramPtr HistogramReadMetadataDurationMs;
 
 public:
     const std::shared_ptr<TSubColumnCounters>& GetSubColumns() const {
@@ -165,24 +180,56 @@ public:
         return SubColumnCounters;
     }
 
+    const std::shared_ptr<TDuplicateFilteringCounters>& GetDuplicateFilteringCounters() const {
+        AFL_VERIFY(DuplicateFilteringCounters);
+        return DuplicateFilteringCounters;
+    }
+
+    const std::shared_ptr<TSimpleDuplicateFilteringCounters>& GetSimpleDuplicateFilteringCounters() const {
+        AFL_VERIFY(SimpleDuplicateFilteringCounters);
+        return SimpleDuplicateFilteringCounters;
+    }
+
     void OnNoIndexBlobs(const ui32 recordsCount) const {
         NoIndexBlobs->Add(recordsCount);
     }
+
     void OnNoIndex(const ui32 recordsCount) const {
         NoIndex->Add(recordsCount);
     }
+
     void OnAcceptedByIndex(const ui32 recordsCount) const {
         RecordsAcceptedByIndex->Add(recordsCount);
     }
+
     void OnDeniedByIndex(const ui32 recordsCount) const {
         RecordsDeniedByIndex->Add(recordsCount);
     }
+
     void OnAcceptedByHeader(const ui32 recordsCount) const {
         RecordsAcceptedByHeader->Add(recordsCount);
     }
+
     void OnDeniedByHeader(const ui32 recordsCount) const {
         RecordsDeniedByHeader->Add(recordsCount);
     }
+
+    void OnDictionaryOnlyOptimization() const {
+        DictionaryOnlyOptimizationCount->Add(1);
+    }
+
+    void OnDistinctLimitSyncPointInvocation() const {
+        DistinctLimitSyncPointInvocations->Add(1);
+    }
+
+    void OnPredicateFilterInvocation() const {
+        PredicateFilterInvocations->Add(1);
+    }
+
+    void OnEarlyInFlightRelease() const {
+        EarlyInFlightReleaseCount->Add(1);
+    }
+
     NMonitoring::TDynamicCounters::TCounterPtr AcceptedByIndex;
     NMonitoring::TDynamicCounters::TCounterPtr DeniedByIndex;
 
@@ -314,6 +361,7 @@ public:
     void OnProcessingOverloaded() const {
         ProcessingOverload->Add(1);
     }
+
     void OnReadingOverloaded() const {
         ReadingOverload->Add(1);
     }
@@ -325,6 +373,10 @@ public:
     TScanAggregations BuildAggregations();
 
     void FillStats(::NKikimrTableStats::TTableStats& output) const;
+
+    void OnReadMetadata(const TDuration d) const {
+        HistogramReadMetadataDurationMs->Collect(d.MilliSeconds());
+    }
 };
 
 class TCounterGuard: TMoveOnly {
@@ -338,10 +390,12 @@ public:
     }
 
     TCounterGuard(const std::shared_ptr<TAtomicCounter>& counter)
-        : Counter(counter) {
+        : Counter(counter)
+    {
         AFL_VERIFY(Counter);
         Counter->Inc();
     }
+
     ~TCounterGuard() {
         if (Counter) {
             AFL_VERIFY(Counter->Dec() >= 0);
@@ -350,6 +404,22 @@ public:
 };
 
 class TConcreteScanCounters: public TScanCounters {
+public:
+    struct TPerStepAtomicCounters {
+        std::shared_ptr<TAtomicCounter> ExecutionDurationMicroSeconds =
+            std::make_shared<TAtomicCounter>();   // time step was executing in conveyor
+        std::shared_ptr<TAtomicCounter> WaitDurationMicroSeconds =
+            std::make_shared<TAtomicCounter>();   // time spent not in same step before next step(for example in deduplication)
+        std::shared_ptr<TAtomicCounter> RawBytesRead = std::make_shared<TAtomicCounter>();   // From BS, S3, previous step
+    };
+
+    struct TPerStepCounters {
+        TDuration ExecutionDuration;
+        TDuration WaitDuration;
+        ui64 RawBytesRead = 0;
+        TString DebugString() const;
+    };
+
 private:
     using TBase = TScanCounters;
     std::shared_ptr<TAtomicCounter> FetchAccessorsCount = std::make_shared<TAtomicCounter>();
@@ -363,8 +433,11 @@ private:
     std::shared_ptr<TAtomicCounter> FilterFetchingGuard = std::make_shared<TAtomicCounter>();
     std::shared_ptr<TAtomicCounter> AbortsGuard = std::make_shared<TAtomicCounter>();
     std::shared_ptr<TAtomicCounter> TotalExecutionDurationUs = std::make_shared<TAtomicCounter>();
+    std::shared_ptr<TAtomicCounter> TotalRawBytes = std::make_shared<TAtomicCounter>();
+    std::shared_ptr<TAtomicCounter> AccessorsForConstructionGuard = std::make_shared<TAtomicCounter>();
     THashMap<ui32, std::shared_ptr<TAtomicCounter>> SkipNodesCount;
     THashMap<ui32, std::shared_ptr<TAtomicCounter>> ExecuteNodesCount;
+    NColumnShard::TThreadSafeValue<THashMap<TString, TPerStepAtomicCounters>> AtomicStepCounters;
 
 public:
     TScanAggregations Aggregations;
@@ -385,12 +458,26 @@ public:
         }
     }
 
+    THashMap<TString, TPerStepCounters> ReadStepsCounters() const;
+
+    TString StepsCountersDebugString() const;
+
+    TPerStepAtomicCounters CountersForStep(TStringBuf stepName) const;
+
     void AddExecutionDuration(const TDuration d) const {
         TotalExecutionDurationUs->Add(d.MicroSeconds());
     }
 
     TDuration GetExecutionDuration() const {
         return TDuration::MicroSeconds(TotalExecutionDurationUs->Val());
+    }
+
+    void AddRawBytes(const ui64 bytes) const {
+        TotalRawBytes->Add(bytes);
+    }
+
+    ui64 GetRawBytes() const {
+        return TotalRawBytes->Val();
     }
 
     TString DebugString() const {
@@ -403,7 +490,12 @@ public:
                                 << "ResultsForSourceCount:" << ResultsForSourceCount->Val() << ";"
                                 << "ResultsForReplyGuard:" << ResultsForReplyGuard->Val() << ";"
                                 << "FilterFetchingGuard:" << FilterFetchingGuard->Val() << ";"
+                                << "AccessorsGuard:" << AccessorsForConstructionGuard->Val() << ";"
                                 << "AbortsGuard:" << AbortsGuard->Val() << ";";
+    }
+
+    TCounterGuard GetAccessorsForConstructionGuard() const {
+        return TCounterGuard(AccessorsForConstructionGuard);
     }
 
     TCounterGuard GetResultsForReplyGuard() const {
@@ -449,7 +541,7 @@ public:
     bool InWaiting() const {
         return MergeTasksCount->Val() || AssembleTasksCount->Val() || ReadTasksCount->Val() || ResourcesAllocationTasksCount->Val() ||
                FetchAccessorsCount->Val() || ResultsForSourceCount->Val() || FetchBlobsCount->Val() || ResultsForReplyGuard->Val() ||
-               FilterFetchingGuard->Val() || AbortsGuard->Val();
+               FilterFetchingGuard->Val() || AbortsGuard->Val() || AccessorsForConstructionGuard->Val();
     }
 
     const THashMap<ui32, std::shared_ptr<TAtomicCounter>>& GetSkipStats() const {

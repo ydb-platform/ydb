@@ -17,18 +17,18 @@
 #pragma once
 #endif
 
-#if !defined( BOOST_USE_WINDOWS_H )
+#if !defined(BOOST_USE_WINDOWS_H)
 
 extern "C" {
-#if !defined( BOOST_WINAPI_IS_MINGW )
+#if !defined(BOOST_WINAPI_IS_MINGW)
 
 // Windows CE uses a different name for the structure
-#if defined (_WIN32_WCE)
+#if defined(_WIN32_WCE)
 struct CRITICAL_SECTION;
 namespace boost {
 namespace winapi {
 namespace detail {
-    typedef CRITICAL_SECTION winsdk_critical_section;
+typedef ::CRITICAL_SECTION winsdk_critical_section;
 }
 }
 }
@@ -37,26 +37,27 @@ struct _RTL_CRITICAL_SECTION;
 namespace boost {
 namespace winapi {
 namespace detail {
-    typedef _RTL_CRITICAL_SECTION winsdk_critical_section;
+typedef ::_RTL_CRITICAL_SECTION winsdk_critical_section;
 }
 }
 }
 #endif
 
-#else
+#else // !defined(BOOST_WINAPI_IS_MINGW)
+
 // MinGW uses a different name for the structure
 struct _CRITICAL_SECTION;
-
 namespace boost {
 namespace winapi {
 namespace detail {
-    typedef _CRITICAL_SECTION winapi_critical_section;
+typedef ::_CRITICAL_SECTION winapi_critical_section;
 }
 }
 }
-#endif
 
-#if !defined( BOOST_WINAPI_IS_MINGW )
+#endif // !defined(BOOST_WINAPI_IS_MINGW)
+
+#if !defined(BOOST_WINAPI_IS_MINGW)
 
 #if BOOST_WINAPI_PARTITION_APP_SYSTEM
 BOOST_WINAPI_IMPORT_EXCEPT_WM boost::winapi::VOID_ BOOST_WINAPI_WINAPI_CC
@@ -99,7 +100,7 @@ TryEnterCriticalSection(boost::winapi::detail::winsdk_critical_section* lpCritic
 BOOST_WINAPI_IMPORT_EXCEPT_WM boost::winapi::VOID_ BOOST_WINAPI_WINAPI_CC
 DeleteCriticalSection(boost::winapi::detail::winsdk_critical_section* lpCriticalSection);
 
-#else // defined( BOOST_WINAPI_IS_MINGW )
+#else // !defined(BOOST_WINAPI_IS_MINGW)
 
 BOOST_WINAPI_IMPORT_EXCEPT_WM boost::winapi::VOID_ BOOST_WINAPI_WINAPI_CC
 InitializeCriticalSection(boost::winapi::detail::winapi_critical_section* lpCriticalSection);
@@ -122,14 +123,6 @@ SetCriticalSectionSpinCount(
     boost::winapi::DWORD_ dwSpinCount);
 #endif
 
-#if BOOST_USE_WINAPI_VERSION >= BOOST_WINAPI_VERSION_WIN6
-BOOST_WINAPI_IMPORT boost::winapi::BOOL_ BOOST_WINAPI_WINAPI_CC
-InitializeCriticalSectionEx(
-    boost::winapi::detail::winapi_critical_section* lpCriticalSection,
-    boost::winapi::DWORD_ dwSpinCount,
-    boost::winapi::DWORD_ Flags);
-#endif
-
 #if BOOST_USE_WINAPI_VERSION >= BOOST_WINAPI_VERSION_NT4
 BOOST_WINAPI_IMPORT_EXCEPT_WM boost::winapi::BOOL_ BOOST_WINAPI_WINAPI_CC
 TryEnterCriticalSection(boost::winapi::detail::winapi_critical_section* lpCriticalSection);
@@ -138,13 +131,23 @@ TryEnterCriticalSection(boost::winapi::detail::winapi_critical_section* lpCritic
 BOOST_WINAPI_IMPORT_EXCEPT_WM boost::winapi::VOID_ BOOST_WINAPI_WINAPI_CC
 DeleteCriticalSection(boost::winapi::detail::winapi_critical_section* lpCriticalSection);
 
-#endif // defined( BOOST_WINAPI_IS_MINGW )
+#endif // !defined(BOOST_WINAPI_IS_MINGW)
 } // extern "C"
-#endif
+#endif // !defined(BOOST_USE_WINDOWS_H)
+
+#if defined(BOOST_WINAPI_IS_MINGW) && BOOST_USE_WINAPI_VERSION >= BOOST_WINAPI_VERSION_WIN6
+// MinGW is missing declaration for InitializeCriticalSectionEx in Windows SDK headers
+extern "C" {
+BOOST_WINAPI_IMPORT boost::winapi::BOOL_ BOOST_WINAPI_WINAPI_CC
+InitializeCriticalSectionEx(
+    _CRITICAL_SECTION* lpCriticalSection,
+    boost::winapi::DWORD_ dwSpinCount,
+    boost::winapi::DWORD_ Flags);
+} // extern "C"
+#endif // defined(BOOST_WINAPI_IS_MINGW) && BOOST_USE_WINAPI_VERSION >= BOOST_WINAPI_VERSION_WIN6
 
 namespace boost {
 namespace winapi {
-
 
 #pragma pack(push, 8)
 

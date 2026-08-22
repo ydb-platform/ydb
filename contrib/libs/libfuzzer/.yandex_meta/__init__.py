@@ -2,7 +2,6 @@ from devtools.yamaker.modules import Linkable, Switch
 from devtools.yamaker.platform_macros import LLVM_VERSION
 from devtools.yamaker.project import CMakeNinjaNixProject
 
-
 # as of 15.0.x, libfuzzer makes use of
 #
 # ATTRIBUTE_NO_SANITIZE_ALL
@@ -42,7 +41,6 @@ def post_install(self):
 
     with self.yamakes["lib/fuzzer/afl"] as m:
         m.NO_SANITIZE = True
-        m.PEERDIR = ["contrib/libs/afl/llvm_mode"]
 
 
 llvm_libfuzzer = CMakeNinjaNixProject(

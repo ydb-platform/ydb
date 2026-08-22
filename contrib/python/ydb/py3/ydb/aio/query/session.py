@@ -1,7 +1,12 @@
 import asyncio
+import json
 
 from typing import (
     Optional,
+    Dict,
+    Any,
+    Union,
+    TYPE_CHECKING,
 )
 
 from .base import AsyncResponseContextIterator
@@ -9,102 +14,111 @@ from .transaction import QueryTxContext
 from .. import _utilities
 from ... import issues
 from ...settings import BaseRequestSettings
-from ..._grpc.grpcwrapper import common_utils
 from ..._grpc.grpcwrapper import ydb_query_public_types as _ydb_query_public
 
 from ...query import base
-from ...query.session import (
-    BaseQuerySession,
-    DEFAULT_ATTACH_FIRST_RESP_TIMEOUT,
-    QuerySessionStateEnum,
-)
+from ...query.session import BaseQuerySession
+from ...observability.tracing import SpanName, create_ydb_span, set_peer_attributes, span_finish_callback
+
+from ..._constants import DEFAULT_INITIAL_RESPONSE_TIMEOUT
+
+import logging
+
+if TYPE_CHECKING:
+    from ...aio.driver import Driver as AsyncDriver
+
+logger = logging.getLogger(__name__)
 
 
-class QuerySession(BaseQuerySession):
+class QuerySession(BaseQuerySession["AsyncDriver"]):
     """Session object for Query Service. It is not recommended to control
-    session's lifecycle manually - use a QuerySessionPool is always a better choise.
+    session's lifecycle manually - use a QuerySessionPool is always a better choice.
     """
 
     _loop: asyncio.AbstractEventLoop
-    _status_stream: _utilities.AsyncResponseIterator = None
+    _status_stream: Optional[_utilities.AsyncResponseIterator]
 
     def __init__(
         self,
-        driver: common_utils.SupportedDriverType,
+        driver: "AsyncDriver",
         settings: Optional[base.QueryClientSettings] = None,
-        loop: asyncio.AbstractEventLoop = None,
+        loop: Optional[asyncio.AbstractEventLoop] = None,
     ):
         super(QuerySession, self).__init__(driver, settings)
         self._loop = loop if loop is not None else asyncio.get_running_loop()
+        self._status_stream = None
 
     async def _attach(self) -> None:
         self._stream = await self._attach_call()
         self._status_stream = _utilities.AsyncResponseIterator(
             self._stream,
-            lambda response: common_utils.ServerStatus.from_proto(response),
+            self._attach_stream_wrapper,
         )
 
         try:
             first_response = await _utilities.get_first_message_with_timeout(
                 self._status_stream,
-                DEFAULT_ATTACH_FIRST_RESP_TIMEOUT,
+                DEFAULT_INITIAL_RESPONSE_TIMEOUT,
             )
-            if first_response.status != issues.StatusCode.SUCCESS:
-                raise RuntimeError("Failed to attach session")
+            issues._process_response(first_response)
         except Exception as e:
-            self._state.reset()
-            self._status_stream.cancel()
+            self._close_session(invalidate=True)
             raise e
-
-        self._state.set_attached(True)
-        self._state._change_state(QuerySessionStateEnum.CREATED)
 
         self._loop.create_task(self._check_session_status_loop(), name="check session status task")
 
     async def _check_session_status_loop(self) -> None:
+        if self._status_stream is None:
+            return
         try:
             async for status in self._status_stream:
-                if status.status != issues.StatusCode.SUCCESS:
-                    self._state.reset()
-                    self._state._change_state(QuerySessionStateEnum.CLOSED)
-        except Exception:
-            if not self._state._already_in(QuerySessionStateEnum.CLOSED):
-                self._state.reset()
-                self._state._change_state(QuerySessionStateEnum.CLOSED)
+                issues._process_response(status)
+            logger.debug("Attach stream closed, session_id: %s", self._session_id)
+        except Exception as e:
+            logger.debug("Attach stream error: %s, session_id: %s", e, self._session_id)
+            self._close_session(invalidate=True)
 
     async def delete(self, settings: Optional[BaseRequestSettings] = None) -> None:
         """Deletes a Session of Query Service on server side and releases resources.
 
         :return: None
         """
-        if self._state._already_in(QuerySessionStateEnum.CLOSED):
+        if self._closed:
             return
 
-        self._state._check_invalid_transition(QuerySessionStateEnum.CLOSED)
-        await self._delete_call(settings=settings)
-        self._stream.cancel()
+        if self._session_id:
+            try:
+                await self._delete_call(settings=settings)
+            except Exception:
+                pass
+
+        self._close_session()
 
     async def create(self, settings: Optional[BaseRequestSettings] = None) -> "QuerySession":
         """Creates a Session of Query Service on server side and attaches it.
 
         :return: QuerySession object.
         """
-        if self._state._already_in(QuerySessionStateEnum.CREATED):
-            return
+        if self.is_active:
+            return self
 
-        self._state._check_invalid_transition(QuerySessionStateEnum.CREATED)
-        await self._create_call(settings=settings)
-        await self._attach()
+        if self._closed:
+            raise RuntimeError("Session is already closed")
+
+        with create_ydb_span(SpanName.CREATE_SESSION, self._driver_config).attach_context() as span:
+            await self._create_call(settings=settings)
+            set_peer_attributes(span, self._peer)
+            await self._attach()
+            self._session_metrics.count_open()
 
         return self
 
     def transaction(self, tx_mode=None) -> QueryTxContext:
-        self._state._check_session_ready_to_use()
+        self._check_session_ready_to_use()
         tx_mode = tx_mode if tx_mode else _ydb_query_public.QuerySerializableReadWrite()
 
         return QueryTxContext(
             self._driver,
-            self._state,
             self,
             tx_mode,
         )
@@ -119,6 +133,10 @@ class QuerySession(BaseQuerySession):
         settings: Optional[BaseRequestSettings] = None,
         *,
         stats_mode: Optional[base.QueryStatsMode] = None,
+        schema_inclusion_mode: Optional[base.QuerySchemaInclusionMode] = None,
+        result_set_format: Optional[base.QueryResultSetFormat] = None,
+        arrow_format_settings: Optional[base.ArrowFormatSettings] = None,
+        pool_id: Optional[str] = None,
     ) -> AsyncResponseContextIterator:
         """Sends a query to Query Service
 
@@ -133,29 +151,75 @@ class QuerySession(BaseQuerySession):
          2) QueryStatsMode.BASIC;
          3) QueryStatsMode.FULL;
          4) QueryStatsMode.PROFILE;
+        :param schema_inclusion_mode: Schema inclusion mode for result sets:
+         1) QuerySchemaInclusionMode.ALWAYS, which is default;
+         2) QuerySchemaInclusionMode.FIRST_ONLY.
+        :param result_set_format: Format of the result sets:
+         1) QueryResultSetFormat.VALUE, which is default;
+         2) QueryResultSetFormat.ARROW.
+        :param arrow_format_settings: Settings for Arrow format when result_set_format is ARROW.
+        :param pool_id: Optional resource pool ID for routing the query to a specific resource pool.
 
         :return: Iterator with result sets
         """
-        self._state._check_session_ready_to_use()
+        self._check_session_ready_to_use()
 
-        stream_it = await self._execute_call(
-            query=query,
-            parameters=parameters,
-            commit_tx=True,
-            syntax=syntax,
-            exec_mode=exec_mode,
-            stats_mode=stats_mode,
-            concurrent_result_sets=concurrent_result_sets,
-            settings=settings,
+        span = create_ydb_span(
+            SpanName.EXECUTE_QUERY,
+            self._driver_config,
+            node_id=self._node_id,
+            peer=self._peer,
         )
 
+        with span.attach_context(end_on_exit=False):
+            stream_it = await self._execute_call(
+                query=query,
+                parameters=parameters,
+                commit_tx=True,
+                syntax=syntax,
+                exec_mode=exec_mode,
+                stats_mode=stats_mode,
+                schema_inclusion_mode=schema_inclusion_mode,
+                result_set_format=result_set_format,
+                arrow_format_settings=arrow_format_settings,
+                concurrent_result_sets=concurrent_result_sets,
+                settings=settings,
+                pool_id=pool_id,
+            )
         return AsyncResponseContextIterator(
-            stream_it,
-            lambda resp: base.wrap_execute_query_response(
+            it=stream_it,
+            wrapper=lambda resp: base.wrap_execute_query_response(
                 rpc_state=None,
                 response_pb=resp,
-                session_state=self._state,
                 session=self,
                 settings=self._settings,
             ),
+            on_error=self._on_execute_stream_error,
+            on_finish=span_finish_callback(span),
         )
+
+    async def explain(
+        self,
+        query: str,
+        parameters: Optional[dict] = None,
+        result_format: base.QueryExplainResultFormat = base.QueryExplainResultFormat.STR,
+    ) -> Union[str, Dict[str, Any]]:
+        """Explains query result
+        :param query: YQL or SQL query.
+        :param parameters: dict with parameters and YDB types;
+        :param result_format: Return format: string or dict.
+        :return: Parsed query plan.
+        """
+
+        res = await self.execute(query, parameters, exec_mode=base.QueryExecMode.EXPLAIN)
+
+        # it needs to read result sets for set last_query_stats as sideeffect
+        async for _ in res:
+            pass
+
+        plan = self.last_query_stats.query_plan
+
+        if result_format == base.QueryExplainResultFormat.DICT:
+            plan = json.loads(plan)
+
+        return plan

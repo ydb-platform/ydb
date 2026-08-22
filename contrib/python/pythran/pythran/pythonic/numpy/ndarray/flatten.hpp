@@ -14,8 +14,7 @@ namespace numpy
   namespace ndarray
   {
     template <class T, class pS>
-    types::ndarray<T, types::pshape<long>>
-    flatten(types::ndarray<T, pS> const &a)
+    types::ndarray<T, types::pshape<long>> flatten(types::ndarray<T, pS> const &a)
     {
       return {a.mem, types::pshape<long>{a.flat_size()}};
     }

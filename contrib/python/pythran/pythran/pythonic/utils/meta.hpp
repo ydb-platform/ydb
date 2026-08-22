@@ -9,7 +9,7 @@ struct static_assert_check {
   static constexpr bool value = C;
 };
 
-#define pythran_static_assert(value, str, ...)                                 \
+#define pythran_static_assert(value, str, ...)                                                     \
   static_assert(static_assert_check<value, __VA_ARGS__>::value, str)
 
 #endif

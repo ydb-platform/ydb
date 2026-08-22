@@ -2,12 +2,14 @@
 
 #include "stats.h"
 
-#include <ydb/core/formats/arrow/common/container.h>
+#include <ydb/core/formats/arrow/container/container.h>
 
 #include <ydb/library/accessor/accessor.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_binary.h>
+#include <ydb/core/formats/arrow/accessor/common/json_value_view.h>
 #include <ydb/core/formats/arrow/accessor/sparsed/accessor.h>
+#include <ydb/core/formats/arrow/accessor/sub_columns/json_value_path.h>
 
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
@@ -17,13 +19,13 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<TGeneralContainer>, Records);
 
 public:
-    std::shared_ptr<IChunkedArray> GetPathAccessor(const std::string_view path) const {
-        auto idx = Stats.GetKeyIndexOptional(path);
-        if (!idx) {
-            return nullptr;
-        } else {
-            return Records->GetColumnVerified(*idx);
+    TConclusion<std::shared_ptr<TJsonPathAccessor>> GetPathAccessor(const std::string_view path) const {
+        auto jsonPathAccessorTrie = std::make_shared<NKikimr::NArrow::NAccessor::NSubColumns::TJsonPathAccessorTrie>();
+        for (ui32 i = 0; i < Stats.GetColumnsCount(); ++i) {
+            auto insertResult = jsonPathAccessorTrie->Insert(ToJsonPath(Stats.GetColumnName(i)), Records->GetColumnVerified(i), Stats.GetValueType(i));
+            AFL_VERIFY(insertResult.IsSuccess())("error", insertResult.GetErrorMessage());
         }
+        return jsonPathAccessorTrie->GetAccessor(path);
     }
 
     NJson::TJsonValue DebugJson() const {
@@ -48,8 +50,9 @@ public:
     class TIterator {
     private:
         ui32 KeyIndex;
+        EValueType ValueType;
         std::shared_ptr<IChunkedArray> GlobalChunkedArray;
-        const arrow::StringArray* CurrentArrayData;
+        const arrow::Array* CurrentArrayData;
         std::optional<IChunkedArray::TFullChunkedArrayAddress> FullArrayAddress;
         std::optional<IChunkedArray::TFullDataAddress> ChunkAddress;
         ui32 CurrentIndex = 0;
@@ -57,8 +60,9 @@ public:
         void InitArrays();
 
     public:
-        TIterator(const ui32 keyIndex, const std::shared_ptr<IChunkedArray>& chunkedArray)
+        TIterator(const ui32 keyIndex, const EValueType valueType, const std::shared_ptr<IChunkedArray>& chunkedArray)
             : KeyIndex(keyIndex)
+            , ValueType(valueType)
             , GlobalChunkedArray(chunkedArray) {
             InitArrays();
         }
@@ -71,9 +75,17 @@ public:
             return KeyIndex;
         }
 
-        std::string_view GetValue() const {
-            auto view = CurrentArrayData->GetView(ChunkAddress->GetAddress().GetLocalIndex(CurrentIndex));
-            return std::string_view(view.data(), view.size());
+        // Current value is exposed as (array, local index); the reader interprets it per the
+        // column's value type.
+        const arrow::Array& GetArray() const {
+            return *CurrentArrayData;
+        }
+        ui32 GetLocalIndex() const {
+            return ChunkAddress->GetAddress().GetLocalIndex(CurrentIndex);
+        }
+
+        NArrow::NAccessor::TJsonValueView GetValue() const {
+            return ArrayElementToJsonValueView(*CurrentArrayData, GetLocalIndex(), ValueType);
         }
 
         bool HasValue() const {
@@ -117,7 +129,7 @@ public:
     };
 
     TIterator BuildIterator(const ui32 keyIndex) const {
-        return TIterator(keyIndex, Records->GetColumnVerified(keyIndex));
+        return TIterator(keyIndex, Stats.GetValueType(keyIndex), Records->GetColumnVerified(keyIndex));
     }
 
     const TDictStats& GetStats() const {
@@ -128,8 +140,9 @@ public:
         : Stats(dict)
         , Records(data) {
         AFL_VERIFY(Records->num_columns() == Stats.GetColumnsCount())("records", Records->num_columns())("stats", Stats.GetColumnsCount());
-        for (auto&& i : Records->GetColumns()) {
-            AFL_VERIFY(i->GetDataType()->id() == arrow::utf8()->id());
+        for (ui32 i = 0; i < (ui32)Records->num_columns(); ++i) {
+            AFL_VERIFY(Records->GetColumnVerified(i)->GetDataType()->id() == Stats.GetField(i)->type()->id())(
+                "column", Records->GetColumnVerified(i)->GetDataType()->ToString())("stats", Stats.GetField(i)->type()->ToString());
         }
     }
 };

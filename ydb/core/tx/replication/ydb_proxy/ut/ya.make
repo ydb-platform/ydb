@@ -3,6 +3,11 @@ UNITTEST_FOR(ydb/core/tx/replication/ydb_proxy)
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(cpu:2)
+ELSE()
+    REQUIREMENTS(cpu:2)
+ENDIF()
 
 PEERDIR(
     ydb/core/tx/replication/ut_helpers

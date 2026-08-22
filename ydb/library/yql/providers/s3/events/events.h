@@ -10,9 +10,14 @@
 #include <yql/essentials/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 
-#include <ydb/library/yql/udfs/common/clickhouse/client/src/Core/Block.h>
-
 #include <arrow/api.h>
+
+namespace NDB {
+
+// forward declaration for <ydb/library/yql/udfs/common/clickhouse/client/src/Core/Block.h>
+class Block;
+
+} // namespace NDB
 
 namespace NYql::NDq {
 
@@ -171,16 +176,17 @@ struct TEvS3Provider {
     };
 
     struct TEvRetryEventFunc : public NActors::TEventLocal<TEvRetryEventFunc, EvRetry> {
-        explicit TEvRetryEventFunc(std::function<void()> functor) : Functor(std::move(functor)) {}
+        explicit TEvRetryEventFunc(std::function<void()> functor)
+            : Functor(std::move(functor))
+        {}
+
         const std::function<void()> Functor;
     };
 
     struct TEvNextBlock : public NActors::TEventLocal<TEvNextBlock, EvNextBlock> {
-        TEvNextBlock(NDB::Block& block, size_t pathInd, ui64 ingressDelta, TDuration cpuTimeDelta, ui64 ingressDecompressedDelta = 0)
-            : PathIndex(pathInd), IngressDelta(ingressDelta), CpuTimeDelta(cpuTimeDelta), IngressDecompressedDelta(ingressDecompressedDelta) {
-            Block.swap(block);
-        }
-        NDB::Block Block;
+        TEvNextBlock(NDB::Block& block, size_t pathInd, ui64 ingressDelta, TDuration cpuTimeDelta, ui64 ingressDecompressedDelta = 0);
+
+        std::unique_ptr<NDB::Block> Block;
         const size_t PathIndex;
         const ui64 IngressDelta;
         const TDuration CpuTimeDelta;
@@ -201,7 +207,10 @@ struct TEvS3Provider {
     };
 
     struct TEvDecompressDataRequest : public NActors::TEventLocal<TEvDecompressDataRequest, EvDecompressDataRequest> {
-        TEvDecompressDataRequest(TString&& data) : Data(std::move(data)) {}
+        explicit TEvDecompressDataRequest(TString&& data)
+            : Data(std::move(data))
+        {}
+
         TString Data;
     };
 
@@ -212,7 +221,7 @@ struct TEvS3Provider {
         {}
 
         TEvDecompressDataResult(std::exception_ptr exception, const TDuration& cpuTime) 
-            : Exception(exception)
+            : Exception(std::move(exception))
             , CpuTime(cpuTime)
         {}
 
@@ -235,8 +244,19 @@ struct TEvS3Provider {
     };
 
     struct TEvReadResult2 : public NActors::TEventLocal<TEvReadResult2, EvReadResult2> {
-        TEvReadResult2(TReadRange readRange, IHTTPGateway::TContent&& result) : ReadRange(readRange), Failure(false), Result(std::move(result)) { }
-        TEvReadResult2(TReadRange readRange, TIssues&& issues) : ReadRange(readRange), Failure(true), Result(""), Issues(std::move(issues)) { }
+        TEvReadResult2(TReadRange readRange, IHTTPGateway::TContent&& result)
+            : ReadRange(readRange)
+            , Failure(false)
+            , Result(std::move(result))
+        {}
+
+        TEvReadResult2(TReadRange readRange, TIssues&& issues)
+            : ReadRange(readRange)
+            , Failure(true)
+            , Result("")
+            , Issues(std::move(issues))
+        {}
+
         const TReadRange ReadRange;
         const bool Failure;
         IHTTPGateway::TContent Result;

@@ -9,6 +9,8 @@
 #include <ydb/public/lib/ydb_cli/common/parseable_struct.h>
 #include <ydb/public/lib/ydb_cli/import/import.h>
 
+#include <library/cpp/regex/pcre/regexp.h>
+
 namespace NYdb::NConsoleClient {
 
 class TCommandImport : public TClientCommandTree {
@@ -16,32 +18,88 @@ public:
     TCommandImport();
 };
 
-class TCommandImportFromS3 : public TYdbOperationCommand,
-                           public TCommandWithAwsCredentials,
+class TCommandImportBase : public TYdbOperationCommand,
                            public TCommandWithOutput {
 public:
-    TCommandImportFromS3();
-    void Config(TConfig& config) override;
-    void Parse(TConfig& config) override;
-    void ExtractParams(TConfig& config) override;
-    int Run(TConfig& config) override;
+    TCommandImportBase(const TString& name, const TString& description);
+    virtual void Config(TConfig& config) override;
+    virtual void Parse(TConfig& config) override;
+    virtual void ExtractParams(TConfig& config) override;
 
-private:
+    template <typename TSettings>
+    void FillItems(TSettings& settings) const;
+    template <typename TSettings>
+    void FillItemsFromItemParam(TSettings& settings) const;
+    template <typename TSettings>
+    void FillItemsFromIncludeParam(TSettings& settings) const;
+
+protected:
     struct TItemFields {
         TString Source;
         TString Destination;
     };
     DEFINE_PARSEABLE_STRUCT(TItem, TItemFields, Source, Destination);
 
+    template <typename TSettings>
+    void FillCommonImportSettings(TSettings& settings);
+
+    TVector<TItem> Items;
+    TVector<TRegExMatch> ExclusionPatterns;
+    TVector<TString> IncludePaths;
+    TString Description;
+    ui32 NumberOfRetries = 10;
+    NImport::EIndexPopulationMode IndexPopulationMode = NImport::EIndexPopulationMode::Build;
+    bool NoACL = false;
+    bool SkipChecksumValidation = false;
+    TString CommonSourcePrefix;
+    TString CommonDestinationPath;
+    bool ListObjectsInExistingExport = false;
+
+    // Encryption params
+    TString EncryptionKey;
+    TString EncryptionKeyFile;
+
+private:
+    template <typename TSettings>
+    void ApplyItems(TSettings& settings) const;
+};
+
+class TCommandImportFromS3 : public TCommandImportBase,
+                             public TCommandWithAwsCredentials {
+public:
+    TCommandImportFromS3();
+    virtual void Config(TConfig& config) override;
+    virtual void Parse(TConfig& config) override;
+    virtual void ExtractParams(TConfig& config) override;
+    virtual int Run(TConfig& config) override;
+
+    NImport::TImportFromS3Settings MakeImportSettings();
+    NImport::TListObjectsInS3ExportSettings MakeListObjectsSettings();
+
+private:
+    DEFINE_PARSEABLE_STRUCT(TItemS3, TItemFields, Source, Destination);
+
+    template <typename TSettings>
+    void FillS3Settings(TSettings& settings);
+
     TString AwsEndpoint;
     ES3Scheme AwsScheme = ES3Scheme::HTTPS;
     TString AwsBucket;
-    TVector<TItem> Items;
-    TString Description;
-    ui32 NumberOfRetries = 10;
     bool UseVirtualAddressing = true;
-    bool NoACL = false;
-    bool SkipChecksumValidation = false;
+};
+
+class TCommandImportFromNfs : public TCommandImportBase {
+public:
+    TCommandImportFromNfs();
+    virtual void Config(TConfig& config) override;
+    virtual void Parse(TConfig& config) override;
+    virtual void ExtractParams(TConfig& config) override;
+    virtual int Run(TConfig& config) override;
+
+    NImport::TImportFromFsSettings MakeImportSettings();
+
+private:
+    DEFINE_PARSEABLE_STRUCT(TItemNfs, TItemFields, Source, Destination);
 };
 
 class TCommandImportFromFile : public TClientCommandTree {
@@ -61,7 +119,12 @@ public:
     void ExtractParams(TConfig& config) override;
     void Parse(TConfig& config) override;
 
+private:
+    // Returns file extension (without dot) for current InputFormat
+    TString GetFileExtension() const;
+
 protected:
+
     TVector<TString> FilePaths;
     TString BytesPerRequest;
     ui64 MaxInFlightRequests = 1;
@@ -71,12 +134,7 @@ protected:
 
 class TCommandImportFromCsv : public TCommandImportFileBase {
 public:
-    TCommandImportFromCsv(const TString& cmd = "csv", const TString& cmdDescription = "Import data from CSV file")
-        : TCommandImportFileBase(cmd, cmdDescription)
-    {
-        InputFormat = EDataFormat::Csv;
-        Delimiter = ",";
-    }
+    TCommandImportFromCsv(const TString& cmd = "csv", const TString& cmdDescription = "Import data from CSV file into existing table. To create a new table for csv import use 'ydb tools infer csv' command.");
     void Config(TConfig& config) override;
     int Run(TConfig& config) override;
 
@@ -123,4 +181,4 @@ public:
     int Run(TConfig& config) override;
 };
 
-}
+} // namespace NYdb::NConsoleClient

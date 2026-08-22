@@ -1333,6 +1333,7 @@ BOOST_CHARCONV_SAFEBUFFERS to_chars_result floff(const double x, int precision, 
 
     auto buffer_size = static_cast<std::size_t>(last - first);
     auto buffer = first;
+    bool trailing_zeros_removed = false;
 
     BOOST_CHARCONV_ASSERT(precision >= 0);
     using namespace detail;
@@ -1525,13 +1526,13 @@ BOOST_CHARCONV_SAFEBUFFERS to_chars_result floff(const double x, int precision, 
         if (fmt == boost::charconv::chars_format::scientific)
         {
             remaining_digits = precision + 1;
-            int exponent_print_length =
-                decimal_exponent_normalized >= 100 ? 5 :
-                decimal_exponent_normalized <= -100 ? 6 :
-                decimal_exponent_normalized >= 0 ? 4 : 5;
+
+            // e+XX or e+XXX since we always print at least two characters e.g. e+02
+            const int exponent_print_length =
+                decimal_exponent_normalized > -100 && decimal_exponent_normalized < 100 ? 4 : 5;
 
             // No trailing decimal dot.
-            auto minimum_required_buffer_size =
+            const auto minimum_required_buffer_size =
                 static_cast<std::size_t>(remaining_digits + exponent_print_length + (precision != 0 ? 1 : 0));
             if (buffer_size < minimum_required_buffer_size)
             {
@@ -3849,6 +3850,7 @@ insert_decimal_dot:
         }
 
         // Remove trailing zeros.
+        trailing_zeros_removed = true;
         while (true)
         {
             auto prev = buffer - 1;
@@ -3903,7 +3905,16 @@ insert_decimal_dot:
             print_2_digits(static_cast<std::uint32_t>(decimal_exponent_normalized), buffer);
             buffer += 2;
         }
-    }    
+    }
+    else if (!trailing_zeros_removed && buffer - (decimal_dot_pos + 1) < precision)
+    {
+        // If we have fixed precision, and we don't have enough digits after the decimal yet
+        // insert a sufficient amount of zeros
+        const auto remaining_zeros = precision - (buffer - (decimal_dot_pos + 1));
+        BOOST_CHARCONV_ASSERT(remaining_zeros > 0);
+        std::memset(buffer, '0', static_cast<std::size_t>(remaining_zeros));
+        buffer += remaining_zeros;
+    }
 
     return {buffer, std::errc()};
 
@@ -4018,9 +4029,10 @@ round_up_all_9s:
                 ++decimal_dot_pos;
             }
         }
-        else if (decimal_exponent_normalized == 0)
+        else if (decimal_exponent_normalized == 0 || remaining_digits == 1)
         {
             // For the case 0.99...9 -> 1.00...0, the rounded digit is one before the first digit written.
+            // This same case applies for 0.099 -> 0.10 in the precision = 2 instance
             // Note: decimal_exponent_normalized was negative before the increment (++decimal_exponent_normalized),
             //       so we already have printed "00" onto the buffer.
             //       Hence, --digit_starting_pos doesn't go more than the starting position of the buffer.

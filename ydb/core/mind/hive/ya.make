@@ -10,6 +10,7 @@ SRCS(
     domain_info.cpp
     domain_info.h
     drain.cpp
+    drain.h
     fill.cpp
     hive.cpp
     hive.h
@@ -28,9 +29,12 @@ SRCS(
     metrics.h
     monitoring.cpp
     monitoring.h
+    move_data_actor.cpp
     node_info.cpp
     node_info.h
     object_distribution.h
+    outgoing_requests.h
+    reassign_actor.cpp
     sequencer.cpp
     sequencer.h
     follower_group.h
@@ -60,6 +64,7 @@ SRCS(
     tx__load_everything.cpp
     tx__lock_tablet.cpp
     tx__process_boot_queue.cpp
+    tx__process_metrics.cpp
     tx__process_pending_operations.cpp
     tx__reassign_groups.cpp
     tx__reassign_groups_on_decommit.cpp
@@ -72,6 +77,8 @@ SRCS(
     tx__restart_tablet.cpp
     tx__seize_tablets.cpp
     tx__seize_tablets_reply.cpp
+    tx__set_down.cpp
+    tx__shrink_pool.cpp
     tx__resume_tablet.cpp
     tx__start_tablet.cpp
     tx__status.cpp
@@ -94,6 +101,7 @@ PEERDIR(
     ydb/library/actors/core
     ydb/library/actors/interconnect
     library/cpp/containers/ring_buffer
+    library/cpp/html/pcdata
     library/cpp/json
     library/cpp/monlib/dynamic_counters
     ydb/core/base
@@ -112,4 +120,5 @@ END()
 
 RECURSE_FOR_TESTS(
     ut
+    ut_manual
 )

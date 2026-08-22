@@ -77,6 +77,19 @@ void TTableConflictsCache::RemoveUncommittedWrites(ui64 txId, NTable::TDatabase&
     }
 }
 
+void TTableConflictsCache::RemoveAllUncommittedWrites(NTable::TDatabase& db) {
+    std::vector<ui64> txIds;
+    txIds.reserve(UncommittedWrites.size());
+
+    for (auto& [txId, p] : UncommittedWrites) {
+        txIds.push_back(txId);
+    }
+
+    for (auto txId : txIds) {
+        RemoveUncommittedWrites(txId, db);
+    }
+}
+
 class TTableConflictsCache::TTxObserver : public NTable::ITransactionObserver {
 public:
     TTxObserver() {}
@@ -138,6 +151,10 @@ bool TTableConflictsCache::RegisterDistributedWrite(ui64 txId, const TOwnedCellV
             } else {
                 ++itTxIds;
             }
+        }
+
+        if (res.LockTxId != 0) {
+            txIds.insert(res.LockTxId);
         }
     }
 

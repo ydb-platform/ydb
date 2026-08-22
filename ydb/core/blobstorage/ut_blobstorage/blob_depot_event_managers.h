@@ -81,3 +81,10 @@ TAutoPtr<TEventHandle<TEvBlobStorage::TEvBlockResult>> CaptureTEvBlockResult(TEn
         bool termOnCapture = true, bool withDeadline = true);
 void VerifyTEvBlockResult(TAutoPtr<TEventHandle<TEvBlobStorage::TEvBlockResult>> res, ui64 tabletId, ui32 generation, TBSState& state);
 void VerifiedBlock(TEnvironmentSetup& env, ui32 nodeId, ui32 groupId, ui64 tabletId, ui32 generation, TBSState& state, bool withDeadline = true);
+
+/* --------------------------------- CHECK INTEGRITY --------------------------------- */
+void SendTEvCheckIntegrity(TEnvironmentSetup& env, TActorId sender, ui32 groupId, TLogoBlobID id, ui64 cookie = 0);
+TAutoPtr<TEventHandle<TEvBlobStorage::TEvCheckIntegrityResult>> CaptureTEvCheckIntegrityResult(TEnvironmentSetup& env, TActorId sender,
+        bool termOnCapture = true, bool withDeadline = true);
+void VerifyTEvCheckIntegrityResult(TAutoPtr<TEventHandle<TEvBlobStorage::TEvCheckIntegrityResult>> res, TBlobInfo& blob, TBSState& state);
+void VerifiedCheckIntegrity(TEnvironmentSetup& env, ui32 nodeId, ui32 groupId, TBlobInfo& blob, TBSState& state, bool withDeadline = true);

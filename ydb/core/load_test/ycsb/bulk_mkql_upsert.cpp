@@ -307,7 +307,7 @@ private:
     }
 
     void HandlePoison(const TActorContext& ctx) {
-        LOG_INFO_S(ctx, NKikimrServices::DS_LOAD_TEST, "Load tablet recieved PoisonPill, going to die");
+        LOG_INFO_S(ctx, NKikimrServices::DS_LOAD_TEST, "Load tablet received PoisonPill, going to die");
         NTabletPipe::CloseClient(SelfId(), Pipe);
         Die(ctx);
     }

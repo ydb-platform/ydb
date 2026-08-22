@@ -5,6 +5,8 @@
 #include "stats.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/retry/retry.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/virtual_timestamp.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/fluent_settings_helpers.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/operation/operation.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/request_settings.h>
@@ -13,6 +15,8 @@
 #include <library/cpp/threading/future/future.h>
 
 namespace NYdb::inline Dev::NQuery {
+
+using TRetryOperationSettings = NYdb::NRetry::TRetryOperationSettings;
 
 enum class ESyntax {
     Unspecified = 0,
@@ -36,6 +40,12 @@ enum class EStatsMode {
     Profile = 40,
 };
 
+enum class ESchemaInclusionMode {
+    Unspecified = 0,
+    Always = 1,
+    FirstOnly = 2,
+};
+
 std::optional<EStatsMode> ParseStatsMode(std::string_view statsMode);
 std::string_view StatsModeToString(const EStatsMode statsMode);
 
@@ -47,6 +57,26 @@ enum class EExecStatus {
     Canceled = 30,
     Completed = 40,
     Failed = 50,
+};
+
+struct TArrowFormatSettings {
+    using TSelf = TArrowFormatSettings;
+
+    struct TCompressionCodec {
+        using TSelf = TCompressionCodec;
+
+        enum class EType {
+            Unspecified = 0,
+            None = 1,
+            Zstd = 2,
+            Lz4Frame = 3,
+        };
+
+        FLUENT_SETTING_DEFAULT(EType, Type, EType::Unspecified);
+        FLUENT_SETTING_OPTIONAL(int32_t, Level);
+    };
+
+    FLUENT_SETTING_OPTIONAL(TCompressionCodec, CompressionCodec);
 };
 
 using TAsyncExecuteQueryPart = NThreading::TFuture<TExecuteQueryPart>;
@@ -84,17 +114,30 @@ struct TExecuteQuerySettings : public TRequestSettings<TExecuteQuerySettings> {
     FLUENT_SETTING_OPTIONAL(bool, ConcurrentResultSets);
     FLUENT_SETTING(std::string, ResourcePool);
     FLUENT_SETTING_OPTIONAL(std::chrono::milliseconds, StatsCollectPeriod);
+    FLUENT_SETTING_DEFAULT(ESchemaInclusionMode, SchemaInclusionMode, ESchemaInclusionMode::Unspecified);
+    FLUENT_SETTING_DEFAULT(TResultSet::EFormat, Format, TResultSet::EFormat::Unspecified);
+    FLUENT_SETTING_OPTIONAL(TArrowFormatSettings, ArrowFormatSettings);
+    FLUENT_SETTING_OPTIONAL(TRetryOperationSettings, RetrySettings);
 };
 
 struct TBeginTxSettings : public TRequestSettings<TBeginTxSettings> {};
 struct TCommitTxSettings : public TRequestSettings<TCommitTxSettings> {};
 struct TRollbackTxSettings : public TRequestSettings<TRollbackTxSettings> {};
+struct TDeleteSessionSettings : public TRequestSettings<TDeleteSessionSettings> {
+    FLUENT_SETTING_OPTIONAL(TRetryOperationSettings, RetrySettings);
+};
 
 
 
 class TCommitTransactionResult : public TStatus {
 public:
     TCommitTransactionResult(TStatus&& status);
+    TCommitTransactionResult(TStatus&& status, std::optional<NScheme::TVirtualTimestamp>&& commitTimestamp);
+
+    const std::optional<NScheme::TVirtualTimestamp>& GetCommitTimestamp() const { return CommitTimestamp_; }
+
+private:
+    std::optional<NScheme::TVirtualTimestamp> CommitTimestamp_;
 };
 
 using TAsyncBeginTransactionResult = NThreading::TFuture<TBeginTransactionResult>;
@@ -106,6 +149,7 @@ struct TExecuteScriptSettings : public TOperationRequestSettings<TExecuteScriptS
     FLUENT_SETTING_DEFAULT(EStatsMode, StatsMode, EStatsMode::None);
     FLUENT_SETTING(TDuration, ResultsTtl);
     FLUENT_SETTING(std::string, ResourcePool);
+    FLUENT_SETTING_OPTIONAL(TRetryOperationSettings, RetrySettings);
 };
 
 class TQueryContent {
@@ -168,6 +212,7 @@ private:
 struct TFetchScriptResultsSettings : public TRequestSettings<TFetchScriptResultsSettings> {
     FLUENT_SETTING(std::string, FetchToken);
     FLUENT_SETTING_DEFAULT(uint64_t, RowsLimit, 1000);
+    FLUENT_SETTING_OPTIONAL(TRetryOperationSettings, RetrySettings);
 };
 
 class TFetchScriptResultsResult : public TStatus {

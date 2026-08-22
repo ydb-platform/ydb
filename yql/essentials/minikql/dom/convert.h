@@ -9,69 +9,79 @@
 #include <util/string/builder.h>
 
 #include <functional>
+#include <utility>
 
 namespace NYql::NDom {
 
-template<bool Strict, bool AutoConvert>
+template <bool Strict, bool AutoConvert>
 TUnboxedValuePod ConvertToBool(TUnboxedValuePod x, const IValueBuilder* valueBuilder, const TSourcePosition& pos) {
     switch (GetNodeType(x)) {
         case ENodeType::Bool:
             return TUnboxedValuePod(x.Get<bool>());
-        case ENodeType::String:
-            if (const std::string_view str = x.AsStringRef(); str == "true")
+        case ENodeType::String: {
+            x = ClearUtf8Mark(x);
+            if (const std::string_view str = x.AsStringRef(); str == "true") {
                 return TUnboxedValuePod(true);
-            else if (str == "false")
+            } else if (str == "false") {
                 return TUnboxedValuePod(false);
-            else if constexpr (AutoConvert)
+            } else if constexpr (AutoConvert) {
                 return TUnboxedValuePod(x.AsStringRef().Size() > 0U);
-            else if constexpr (Strict)
+            } else if constexpr (Strict) {
                 break;
-            else
+            } else {
                 return {};
+            }
+        }
         case ENodeType::Uint64:
-            if constexpr (AutoConvert)
+            if constexpr (AutoConvert) {
                 return TUnboxedValuePod(x.Get<ui64>() != 0ULL);
-            else if constexpr (Strict)
+            } else if constexpr (Strict) {
                 break;
-            else
+            } else {
                 return {};
+            }
         case ENodeType::Int64:
-            if constexpr (AutoConvert)
+            if constexpr (AutoConvert) {
                 return TUnboxedValuePod(x.Get<i64>() != 0LL);
-            else if constexpr (Strict)
+            } else if constexpr (Strict) {
                 break;
-            else
+            } else {
                 return {};
+            }
         case ENodeType::Double:
-            if constexpr (AutoConvert)
+            if constexpr (AutoConvert) {
                 return TUnboxedValuePod(x.Get<double>() != 0.);
-            else if constexpr (Strict)
+            } else if constexpr (Strict) {
                 break;
-            else
+            } else {
                 return {};
+            }
         case ENodeType::Entity:
-            if constexpr (AutoConvert)
+            if constexpr (AutoConvert) {
                 return TUnboxedValuePod(false);
-            else if constexpr (Strict)
+            } else if constexpr (Strict) {
                 break;
-            else if constexpr (AutoConvert)
+            } else if constexpr (AutoConvert) {
                 return TUnboxedValuePod(false);
-            else
+            } else {
                 return {};
+            }
         case ENodeType::List:
-            if constexpr (AutoConvert)
+            if constexpr (AutoConvert) {
                 return TUnboxedValuePod(x.IsBoxed() && x.HasListItems());
-            else if constexpr (Strict)
+            } else if constexpr (Strict) {
                 break;
-            else
+            } else {
                 return {};
+            }
         case ENodeType::Dict:
-            if constexpr (AutoConvert)
+            if constexpr (AutoConvert) {
                 return TUnboxedValuePod(x.IsBoxed() && x.HasDictItems());
-            else if constexpr (Strict)
+            } else if constexpr (Strict) {
                 break;
-            else
+            } else {
                 return {};
+            }
         case ENodeType::Attr:
             return ConvertToBool<Strict, AutoConvert>(x.GetVariantItem().Release(), valueBuilder, pos);
     }
@@ -79,90 +89,101 @@ TUnboxedValuePod ConvertToBool(TUnboxedValuePod x, const IValueBuilder* valueBui
     UdfTerminate((::TStringBuilder() << valueBuilder->WithCalleePosition(pos) << " Cannot parse boolean value from " << TDebugPrinter(x)).c_str());
 }
 
-template<typename TDst, typename TSrc>
+template <typename TDst, typename TSrc>
 constexpr inline bool InBounds(const TSrc v) {
-    if constexpr (std::is_same<TSrc, TDst>())
+    if constexpr (std::is_same<TSrc, TDst>()) {
         return true;
-    if constexpr (sizeof(TSrc) > sizeof(TDst))
-        if constexpr (std::is_signed<TSrc>())
+    }
+    if constexpr (sizeof(TSrc) > sizeof(TDst)) {
+        if constexpr (std::is_signed<TSrc>()) {
             return v <= TSrc(std::numeric_limits<TDst>::max()) && v >= TSrc(std::numeric_limits<TDst>::min());
-        else
+        } else {
             return v <= TSrc(std::numeric_limits<TDst>::max());
-    else
-        if constexpr (std::is_signed<TSrc>())
-            return v >= TSrc(std::numeric_limits<TDst>::min());
-        else
-            return v <= TSrc(std::numeric_limits<TDst>::max());
+        }
+    } else if constexpr (std::is_signed<TSrc>()) {
+        return v >= TSrc(std::numeric_limits<TDst>::min());
+    } else {
+        return v <= TSrc(std::numeric_limits<TDst>::max());
+    }
     static_assert(sizeof(TSrc) >= sizeof(TDst), "Expects wide to short.");
 }
 
-template<bool Strict, bool AutoConvert, typename TargetType>
+template <bool Strict, bool AutoConvert, typename TargetType>
 TUnboxedValuePod ConvertToIntegral(TUnboxedValuePod x, const IValueBuilder* valueBuilder, const TSourcePosition& pos) {
     switch (GetNodeType(x)) {
         case ENodeType::Int64: {
             const auto s = x.Get<i64>();
-            if constexpr (AutoConvert)
+            if constexpr (AutoConvert) {
                 return TUnboxedValuePod(TargetType(s));
-            else if (InBounds<TargetType>(s))
+            } else if (InBounds<TargetType>(s)) {
                 return TUnboxedValuePod(TargetType(s));
-            else if constexpr (Strict)
+            } else if constexpr (Strict) {
                 break;
-            else
+            } else {
                 return {};
+            }
         }
         case ENodeType::Uint64: {
             const auto u = x.Get<ui64>();
-            if constexpr (AutoConvert)
+            if constexpr (AutoConvert) {
                 return TUnboxedValuePod(TargetType(u));
-            else if (InBounds<TargetType>(u))
+            } else if (InBounds<TargetType>(u)) {
                 return TUnboxedValuePod(TargetType(u));
-            else if constexpr (Strict)
+            } else if constexpr (Strict) {
                 break;
-            else
+            } else {
                 return {};
+            }
         }
         case ENodeType::Bool:
-            if constexpr (AutoConvert)
+            if constexpr (AutoConvert) {
                 return TUnboxedValuePod(TargetType(x.Get<bool>() ? 1 : 0));
-            else if constexpr (Strict)
+            } else if constexpr (Strict) {
                 break;
-            else
+            } else {
                 return {};
+            }
         case ENodeType::Double:
-            if constexpr (AutoConvert)
+            if constexpr (AutoConvert) {
                 return TUnboxedValuePod(TargetType(x.Get<double>()));
-            else if constexpr (Strict)
+            } else if constexpr (Strict) {
                 break;
-            else
+            } else {
                 return {};
+            }
         case ENodeType::String:
-            if constexpr (AutoConvert)
+            if constexpr (AutoConvert) {
+                x = ClearUtf8Mark(x);
                 return TUnboxedValuePod(FromStringWithDefault(std::string_view(x.AsStringRef()), TargetType(0)));
-            else if constexpr (Strict)
+            } else if constexpr (Strict) {
                 break;
-            else
+            } else {
                 return {};
+            }
         case ENodeType::Entity:
-            if constexpr (AutoConvert)
+            if constexpr (AutoConvert) {
                 return TUnboxedValuePod::Zero();
-            else if constexpr (Strict)
+            } else if constexpr (Strict) {
                 break;
-            else
+            } else {
                 return {};
+            }
         case ENodeType::List:
-            if constexpr (AutoConvert)
+            if constexpr (AutoConvert) {
                 return TUnboxedValuePod::Zero();
-            else if constexpr (Strict)
+            } else if constexpr (Strict) {
                 break;
-            else
+            } else {
                 return {};
+            }
         case ENodeType::Dict:
-            if constexpr (AutoConvert)
+            if constexpr (AutoConvert) {
                 return TUnboxedValuePod::Zero();
-            else if constexpr (Strict)
+            } else if constexpr (Strict) {
                 break;
-            else
+            } else {
                 return {};
+            }
         case ENodeType::Attr:
             return ConvertToIntegral<Strict, AutoConvert, TargetType>(x.GetVariantItem().Release(), valueBuilder, pos);
     }
@@ -171,7 +192,7 @@ TUnboxedValuePod ConvertToIntegral(TUnboxedValuePod x, const IValueBuilder* valu
     static_assert(std::is_integral<TargetType>(), "Expect integral.");
 }
 
-template<bool Strict, bool AutoConvert, typename TargetType>
+template <bool Strict, bool AutoConvert, typename TargetType>
 TUnboxedValuePod ConvertToFloat(TUnboxedValuePod x, const IValueBuilder* valueBuilder, const TSourcePosition& pos) {
     switch (GetNodeType(x)) {
         case ENodeType::Double:
@@ -181,40 +202,46 @@ TUnboxedValuePod ConvertToFloat(TUnboxedValuePod x, const IValueBuilder* valueBu
         case ENodeType::Int64:
             return TUnboxedValuePod(TargetType(x.Get<i64>()));
         case ENodeType::Bool:
-            if constexpr (AutoConvert)
+            if constexpr (AutoConvert) {
                 return TUnboxedValuePod(x.Get<bool>() ? TargetType(1) : TargetType(0));
-            else if constexpr (Strict)
+            } else if constexpr (Strict) {
                 break;
-            else
+            } else {
                 return {};
+            }
         case ENodeType::String:
-            if constexpr (AutoConvert)
+            if constexpr (AutoConvert) {
+                x = ClearUtf8Mark(x);
                 return TUnboxedValuePod(FromStringWithDefault(std::string_view(x.AsStringRef()), TargetType(0)));
-            else if constexpr (Strict)
+            } else if constexpr (Strict) {
                 break;
-            else
+            } else {
                 return {};
+            }
         case ENodeType::Entity:
-            if constexpr (AutoConvert)
+            if constexpr (AutoConvert) {
                 return TUnboxedValuePod(TargetType(0));
-            else if constexpr (Strict)
+            } else if constexpr (Strict) {
                 break;
-            else
+            } else {
                 return {};
+            }
         case ENodeType::List:
-            if constexpr (AutoConvert)
+            if constexpr (AutoConvert) {
                 return TUnboxedValuePod(TargetType(0));
-            else if constexpr (Strict)
+            } else if constexpr (Strict) {
                 break;
-            else
+            } else {
                 return {};
+            }
         case ENodeType::Dict:
-            if constexpr (AutoConvert)
+            if constexpr (AutoConvert) {
                 return TUnboxedValuePod(TargetType(0));
-            else if constexpr (Strict)
+            } else if constexpr (Strict) {
                 break;
-            else
+            } else {
                 return {};
+            }
         case ENodeType::Attr:
             return ConvertToFloat<Strict, AutoConvert, TargetType>(x.GetVariantItem().Release(), valueBuilder, pos);
     }
@@ -223,59 +250,67 @@ TUnboxedValuePod ConvertToFloat(TUnboxedValuePod x, const IValueBuilder* valueBu
     static_assert(std::is_floating_point<TargetType>(), "Expect float.");
 }
 
-template<bool Strict, bool AutoConvert, bool Utf8>
+template <bool Strict, bool AutoConvert, bool Utf8>
 TUnboxedValuePod ConvertToString(TUnboxedValuePod x, const IValueBuilder* valueBuilder, const TSourcePosition& pos) {
     switch (GetNodeType(x)) {
-        case ENodeType::String:
-            if constexpr (Utf8)
-                if (IsUtf8(x.AsStringRef()))
-                    return x;
-                else
-                    if (AutoConvert)
-                        return valueBuilder->NewString(EscapeC(TStringBuf(x.AsStringRef()))).Release();
-                    else if constexpr (Strict)
-                        break;
-                    else
-                        return {};
-            else
-                return x;
+        case ENodeType::String: {
+            auto y = ClearUtf8Mark(x);
+            if constexpr (Utf8) {
+                if (IsUtf8Node(x) || IsUtf8(y.AsStringRef())) {
+                    return y;
+                } else if (AutoConvert) {
+                    return valueBuilder->NewString(EscapeC(TStringBuf(y.AsStringRef()))).Release();
+                } else if constexpr (Strict) {
+                    break;
+                } else {
+                    return {};
+                }
+            } else {
+                return y;
+            }
+        }
         case ENodeType::Uint64:
-            if constexpr (AutoConvert)
+            if constexpr (AutoConvert) {
                 return valueBuilder->NewString(ToString(x.Get<ui64>())).Release();
-            else if constexpr (Strict)
+            } else if constexpr (Strict) {
                 break;
-            else
+            } else {
                 return {};
+            }
         case ENodeType::Int64:
-            if constexpr (AutoConvert)
+            if constexpr (AutoConvert) {
                 return valueBuilder->NewString(ToString(x.Get<i64>())).Release();
-            else if constexpr (Strict)
+            } else if constexpr (Strict) {
                 break;
-            else
+            } else {
                 return {};
+            }
         case ENodeType::Bool:
-            if constexpr (AutoConvert)
+            if constexpr (AutoConvert) {
                 return x.Get<bool>() ? TUnboxedValuePod::Embedded("true") : TUnboxedValuePod::Embedded("false");
-            else if constexpr (Strict)
+            } else if constexpr (Strict) {
                 break;
-            else
+            } else {
                 return {};
+            }
         case ENodeType::Double:
-            if constexpr (AutoConvert)
+            if constexpr (AutoConvert) {
                 return valueBuilder->NewString(::FloatToString(x.Get<double>())).Release();
-            else if constexpr (Strict)
+            } else if constexpr (Strict) {
                 break;
-            else
+            } else {
                 return {};
+            }
         case ENodeType::Entity:
         case ENodeType::List:
         case ENodeType::Dict:
-            if constexpr (AutoConvert)
+            if constexpr (AutoConvert) {
                 return TUnboxedValuePod::Embedded("");
-            else if constexpr (Strict)
+            } else if constexpr (Strict) {
                 break;
-            else
+            } else {
                 return {};
+            }
         case ENodeType::Attr:
             return ConvertToString<Strict, AutoConvert, Utf8>(x.GetVariantItem().Release(), valueBuilder, pos);
     }
@@ -283,20 +318,25 @@ TUnboxedValuePod ConvertToString(TUnboxedValuePod x, const IValueBuilder* valueB
     UdfTerminate((::TStringBuilder() << valueBuilder->WithCalleePosition(pos) << " Cannot parse string value from " << TDebugPrinter(x)).c_str());
 }
 
-class TLazyConveter : public TManagedBoxedValue {
+class TLazyConveter: public TManagedBoxedValue {
 public:
     using TConverter = std::function<TUnboxedValuePod(TUnboxedValuePod)>;
 
     TLazyConveter(TUnboxedValue&& original, TConverter&& converter)
-        : Original_(std::move(original)), Converter_(std::move(converter))
-    {}
+        : Original_(std::move(original))
+        , Converter_(std::move(converter))
+    {
+    }
+
 private:
     template <bool NoSwap>
     class TIterator: public TManagedBoxedValue {
     public:
-        TIterator(TUnboxedValue&& original, const TConverter& converter)
-            : Original_(std::move(original)), Converter_(converter)
-        {}
+        TIterator(TUnboxedValue&& original, TConverter converter)
+            : Original_(std::move(original))
+            , Converter_(std::move(converter))
+        {
+        }
 
     private:
         bool Skip() final {
@@ -361,7 +401,7 @@ private:
         return TUnboxedValuePod(new TIterator<true>(Original_.GetKeysIterator(), Converter_));
     }
 
-    TUnboxedValue GetPayloadsIterator() const {
+    TUnboxedValue GetPayloadsIterator() const override {
         return TUnboxedValuePod(new TIterator<false>(Original_.GetPayloadsIterator(), Converter_));
     }
 
@@ -385,4 +425,101 @@ private:
     const TConverter Converter_;
 };
 
+template <ENodeType NodeType, bool IsStrict>
+TUnboxedValuePod AsScalar(TUnboxedValuePod value, TStringBuf name) {
+    if (IsNodeType<ENodeType::Attr>(value)) {
+        value = value.GetVariantItem().Release();
+    }
+
+    if (IsNodeType<NodeType>(value)) {
+        static_assert(NodeType == ENodeType::Bool || NodeType == ENodeType::Int64 || NodeType == ENodeType::Uint64 || NodeType == ENodeType::Double, "Expected bool, int64, uint64 or double");
+        switch (NodeType) {
+            case ENodeType::Bool:
+                return NUdf::TUnboxedValuePod(value.Get<bool>());
+            case ENodeType::Int64:
+                return NUdf::TUnboxedValuePod(value.Get<i64>());
+            case ENodeType::Uint64:
+                return NUdf::TUnboxedValuePod(value.Get<ui64>());
+            case ENodeType::Double:
+                return NUdf::TUnboxedValuePod(value.Get<double>());
+        }
+        throw yexception() << "Expected " << name << ", but got: " << TDebugPrinter(value);
+    } else if constexpr (IsStrict) {
+        throw yexception() << "Expected " << name << ", but got: " << TDebugPrinter(value);
+    } else {
+        return {};
+    }
 }
+
+template <bool IsStrict>
+TUnboxedValuePod AsString(TUnboxedValuePod value) {
+    if (IsNodeType<ENodeType::Attr>(value)) {
+        value = value.GetVariantItem().Release();
+    }
+
+    if (IsNodeType(value, ENodeType::String)) {
+        // should clear upper bits in the length byte for embedded strings
+        return ClearUtf8Mark(value);
+    } else if constexpr (IsStrict) {
+        throw yexception() << "Expected string, but got: " << TDebugPrinter(value);
+    } else {
+        return {};
+    }
+}
+
+template <bool IsStrict>
+TUnboxedValuePod AsUtf8(TUnboxedValuePod value) {
+    if (IsNodeType<ENodeType::Attr>(value)) {
+        value = value.GetVariantItem().Release();
+    }
+
+    if (IsUtf8Node(value)) {
+        // should clear upper bits in the length byte for embedded strings
+        return ClearUtf8Mark(value);
+    } else if constexpr (IsStrict) {
+        throw yexception() << "Expected utf8, but got: " << TDebugPrinter(value);
+    } else {
+        return {};
+    }
+}
+
+template <bool IsStrict>
+TUnboxedValuePod AsList(TUnboxedValuePod value, const IValueBuilder* valueBuilder) {
+    if (IsNodeType<ENodeType::Attr>(value)) {
+        value = value.GetVariantItem().Release();
+    }
+
+    if (IsNodeType<ENodeType::List>(value)) {
+        if (!value.IsBoxed()) {
+            return valueBuilder->NewEmptyList().Release();
+        }
+
+        return value;
+    } else if constexpr (IsStrict) {
+        throw yexception() << "Expected list, but got: " << TDebugPrinter(value);
+    } else {
+        return {};
+    }
+}
+
+template <bool IsStrict>
+TUnboxedValuePod AsDict(TUnboxedValuePod value, const IValueBuilder* valueBuilder) {
+    if (IsNodeType<ENodeType::Attr>(value)) {
+        value = value.GetVariantItem().Release();
+    }
+
+    if (IsNodeType<ENodeType::Dict>(value)) {
+        if (!value.IsBoxed()) {
+            // it implements empty dict protocol too
+            return valueBuilder->NewEmptyList().Release();
+        }
+
+        return value;
+    } else if constexpr (IsStrict) {
+        throw yexception() << "Expected dict, but got: " << TDebugPrinter(value);
+    } else {
+        return {};
+    }
+}
+
+} // namespace NYql::NDom

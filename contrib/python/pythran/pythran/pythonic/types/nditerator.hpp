@@ -98,6 +98,24 @@ namespace types
   }
 
   template <class E>
+  bool nditerator<E>::operator>(nditerator<E> const &other) const
+  {
+    return index > other.index;
+  }
+
+  template <class E>
+  bool nditerator<E>::operator<=(nditerator<E> const &other) const
+  {
+    return !(index > other.index);
+  }
+
+  template <class E>
+  bool nditerator<E>::operator>=(nditerator<E> const &other) const
+  {
+    return !(index < other.index);
+  }
+
+  template <class E>
   nditerator<E> &nditerator<E>::operator=(nditerator<E> const &other)
   {
     assert(&data == &other.data);
@@ -109,8 +127,7 @@ namespace types
    * element
    */
   template <class E>
-  const_nditerator<E>::const_nditerator(E const &data, long index)
-      : data(data), index(index)
+  const_nditerator<E>::const_nditerator(E const &data, long index) : data(data), index(index)
   {
   }
 
@@ -189,29 +206,43 @@ namespace types
   }
 
   template <class E>
-  const_nditerator<E> &
-  const_nditerator<E>::operator=(const_nditerator const &other)
+  bool const_nditerator<E>::operator>(const_nditerator<E> const &other) const
+  {
+    return index > other.index;
+  }
+
+  template <class E>
+  bool const_nditerator<E>::operator<=(const_nditerator<E> const &other) const
+  {
+    return !(index > other.index);
+  }
+
+  template <class E>
+  bool const_nditerator<E>::operator>=(const_nditerator<E> const &other) const
+  {
+    return !(index < other.index);
+  }
+
+  template <class E>
+  const_nditerator<E> &const_nditerator<E>::operator=(const_nditerator const &other)
   {
     index = other.index;
     return *this;
   }
 #ifdef USE_XSIMD
   template <class E>
-  const_simd_nditerator<E>::const_simd_nditerator(typename E::dtype const *data)
-      : data(data)
+  const_simd_nditerator<E>::const_simd_nditerator(typename E::dtype const *data) : data(data)
   {
   }
 
   template <class E>
-  auto const_simd_nditerator<E>::operator*() const
-      -> decltype(xsimd::load_unaligned(data))
+  auto const_simd_nditerator<E>::operator*() const -> decltype(xsimd::load_unaligned(data))
   {
     return xsimd::load_unaligned(data);
   }
 
   template <class E>
-  void
-  const_simd_nditerator<E>::store(xsimd::batch<typename E::dtype> const &val)
+  void const_simd_nditerator<E>::store(xsimd::batch<typename E::dtype> const &val)
   {
     val.store_unaligned(const_cast<typename E::dtype *>(data));
   }
@@ -244,36 +275,49 @@ namespace types
   }
 
   template <class E>
-  long const_simd_nditerator<E>::operator-(
-      const_simd_nditerator<E> const &other) const
+  long const_simd_nditerator<E>::operator-(const_simd_nditerator<E> const &other) const
   {
     return (data - other.data) / vector_size;
   }
 
   template <class E>
-  bool const_simd_nditerator<E>::operator!=(
-      const_simd_nditerator<E> const &other) const
+  bool const_simd_nditerator<E>::operator!=(const_simd_nditerator<E> const &other) const
   {
     return data != other.data;
   }
 
   template <class E>
-  bool const_simd_nditerator<E>::operator==(
-      const_simd_nditerator<E> const &other) const
+  bool const_simd_nditerator<E>::operator==(const_simd_nditerator<E> const &other) const
   {
     return data == other.data;
   }
 
   template <class E>
-  bool const_simd_nditerator<E>::operator<(
-      const_simd_nditerator<E> const &other) const
+  bool const_simd_nditerator<E>::operator<(const_simd_nditerator<E> const &other) const
   {
     return data < other.data;
   }
 
   template <class E>
-  const_simd_nditerator<E> &
-  const_simd_nditerator<E>::operator=(const_simd_nditerator const &other)
+  bool const_simd_nditerator<E>::operator>(const_simd_nditerator<E> const &other) const
+  {
+    return data > other.data;
+  }
+
+  template <class E>
+  bool const_simd_nditerator<E>::operator<=(const_simd_nditerator<E> const &other) const
+  {
+    return !(data > other.data);
+  }
+
+  template <class E>
+  bool const_simd_nditerator<E>::operator>=(const_simd_nditerator<E> const &other) const
+  {
+    return !(data < other.data);
+  }
+
+  template <class E>
+  const_simd_nditerator<E> &const_simd_nditerator<E>::operator=(const_simd_nditerator const &other)
   {
     data = other.data;
     return *this;
@@ -304,8 +348,7 @@ namespace types
   }
 
   template <class T>
-  typename T::dtype const *
-  make_const_nditerator<false>::operator()(T const &self, long i) const
+  typename T::dtype const *make_const_nditerator<false>::operator()(T const &self, long i) const
   {
     return self.buffer + i;
   }

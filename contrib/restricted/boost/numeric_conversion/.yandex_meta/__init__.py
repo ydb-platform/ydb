@@ -9,7 +9,7 @@ def post_install(self):
 boost_numeric_conversion = NixSourceProject(
     nixattr="boost_numeric_conversion",
     arcdir=boost.make_arcdir("numeric_conversion"),
-    owners=["g:cpp-contrib", "g:taxi-common"],
+    owners=["g:cpp-contrib"],
     copy_sources=[
         "include/boost/",
     ],

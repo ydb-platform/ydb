@@ -4,9 +4,22 @@
 #include "client_method_options.h"
 #include "operation.h"
 
+#include <yt/cpp/mapreduce/interface/abortable_stream.h>
+
 #include <yt/cpp/mapreduce/http/context.h>
 
 namespace NYT {
+
+////////////////////////////////////////////////////////////////////////////////
+
+/// @brief Interface for HTTP/RPC output streams that provide a response after the stream is closed.
+class IOutputStreamWithResponse
+    : public TThrRefBase
+    , public IOutputStream
+{
+public:
+    virtual TString GetResponse() const = 0;
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -130,7 +143,8 @@ public:
 
     virtual void CommitTransaction(
         TMutationId& mutationId,
-        const TTransactionId& transactionId) = 0;
+        const TTransactionId& transactionId,
+        const TCommitTransactionOptions& options = {}) = 0;
 
     // Operations
 
@@ -195,16 +209,22 @@ public:
         const TJobId& jobId,
         const TGetJobStderrOptions& options = {}) = 0;
 
-    virtual std::vector<TJobTraceEvent> GetJobTrace(
+    virtual IFileReaderPtr GetJobTrace(
         const TOperationId& operationId,
+        const TJobId& jobId,
         const TGetJobTraceOptions& options = {}) = 0;
 
     // Files
 
-    virtual std::unique_ptr<IInputStream> ReadFile(
+    virtual std::unique_ptr<IAbortableInputStream> ReadFile(
         const TTransactionId& transactionId,
         const TRichYPath& path,
         const TFileReaderOptions& options = {}) = 0;
+
+    virtual std::unique_ptr<IOutputStream> WriteFile(
+        const TTransactionId& transactionId,
+        const TRichYPath& path,
+        const TFileWriterOptions& options = {}) = 0;
 
     // File cache
 
@@ -276,18 +296,24 @@ public:
         const TYPath& path,
         const TAlterTableOptions& options = {}) = 0;
 
-    virtual std::unique_ptr<IInputStream> ReadTable(
-        const TTransactionId& transactionId,
+    virtual std::unique_ptr<IOutputStream> WriteTable(
+        const TTransactionId& transcationId,
         const TRichYPath& path,
         const TMaybe<TFormat>& format,
+        const TTableWriterOptions& options = {}) = 0;
+
+    virtual std::unique_ptr<IAbortableInputStream> ReadTable(
+        const TTransactionId& transactionId,
+        const TRichYPath& path,
+        const TFormat& format,
         const TTableReaderOptions& options = {}) = 0;
 
-    virtual std::unique_ptr<IInputStream> ReadTablePartition(
+    virtual std::unique_ptr<IAbortableInputStream> ReadTablePartition(
         const TString& cookie,
-        const TMaybe<TFormat>& format,
+        const TFormat& format,
         const TTablePartitionReaderOptions& options = {}) = 0;
 
-    virtual std::unique_ptr<IInputStream> ReadBlobTable(
+    virtual std::unique_ptr<IAbortableInputStream> ReadBlobTable(
         const TTransactionId& transactionId,
         const TRichYPath& path,
         const TKey& key,
@@ -311,6 +337,51 @@ public:
         const TYPath& path,
         const TUnfreezeTableOptions& options = {}) = 0;
 
+    // Distributed API
+
+    virtual TDistributedWriteTableSessionWithCookies StartDistributedWriteTableSession(
+        TMutationId& mutationId,
+        const TTransactionId& transactionId,
+        const TRichYPath& richPath,
+        i64 cookieCount,
+        const TStartDistributedWriteTableOptions& options = {}) = 0;
+
+    virtual void PingDistributedWriteTableSession(
+        const TDistributedWriteTableSession& session,
+        const TPingDistributedWriteTableOptions& options = {}) = 0;
+
+    virtual void FinishDistributedWriteTableSession(
+        TMutationId& mutationId,
+        const TDistributedWriteTableSession& session,
+        const TVector<TWriteTableFragmentResult>& results,
+        const TFinishDistributedWriteTableOptions& options = {}) = 0;
+
+    virtual std::unique_ptr<IOutputStreamWithResponse> WriteTableFragment(
+        const TDistributedWriteTableCookie& cookie,
+        const TMaybe<TFormat>& format,
+        const TTableFragmentWriterOptions& options = {}) = 0;
+
+    virtual TDistributedWriteFileSessionWithCookies StartDistributedWriteFileSession(
+        TMutationId& mutationId,
+        const TTransactionId& transactionId,
+        const TRichYPath& richPath,
+        i64 cookieCount,
+        const TStartDistributedWriteFileOptions& options = {}) = 0;
+
+    virtual void PingDistributedWriteFileSession(
+        const TDistributedWriteFileSession& session,
+        const TPingDistributedWriteFileOptions& options = {}) = 0;
+
+    virtual void FinishDistributedWriteFileSession(
+        TMutationId& mutationId,
+        const TDistributedWriteFileSession& session,
+        const TVector<TWriteFileFragmentResult>& results,
+        const TFinishDistributedWriteFileOptions& options = {}) = 0;
+
+    virtual std::unique_ptr<IOutputStreamWithResponse> WriteFileFragment(
+        const TDistributedWriteFileCookie& cookie,
+        const TFileFragmentWriterOptions& options = {}) = 0;
+
     // Misc
 
     virtual TCheckPermissionResponse CheckPermission(
@@ -333,6 +404,8 @@ public:
         const TTransactionId& transactionId,
         const TVector<TRichYPath>& paths,
         const TGetTablePartitionsOptions& options = {}) = 0;
+
+    virtual void CheckClusterLiveness(const TCheckClusterLivenessOptions& options = {}) = 0;
 
     virtual ui64 GenerateTimestamp() = 0;
 

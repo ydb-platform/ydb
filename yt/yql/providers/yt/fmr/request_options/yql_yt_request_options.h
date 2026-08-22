@@ -7,7 +7,9 @@
 #include <util/string/builder.h>
 #include <vector>
 
-#include <yt/cpp/mapreduce/interface/common.h>
+#include <yt/cpp/mapreduce/interface/distributed_session.h>
+#include <yt/yql/providers/yt/fmr/tvm/interface/yql_yt_fmr_tvm_interface.h>
+#include <yt/yql/providers/yt/fmr/utils/comparator/yql_yt_binary_yson_comparator.h>
 
 namespace NYql::NFmr {
 
@@ -29,25 +31,52 @@ enum class ETaskStatus {
     Completed
 };
 
+enum EOperationType {
+    Unknown = 0,
+    Download = 1,
+    Upload = 2,
+    Merge = 3,
+    Map = 4,
+    SortedUpload = 5,
+    SortedMerge = 6,
+    Sort = 7,
+    Reduce = 8,
+    Pull = 9,
+    Fill = 10,
+    MapReduce = 11,
+    Touch = 12
+};
+
 enum class ETaskType {
-    Unknown,
-    Download,
-    Upload,
-    Merge,
-    Map
+    Unknown = 0,
+    Download = 1,
+    Upload = 2,
+    Merge = 3,
+    Map = 4,
+    SortedUpload = 5,
+    SortedMerge = 6,
+    LocalSort = 7,
+    Reduce = 8,
+    Pull = 9,
+    Fill = 10,
+    MapReduceMap = 11
 };
 
 enum class EFmrComponent {
     Unknown,
     Coordinator,
     Worker,
+    Gateway,
     Job
 };
 
 enum class EFmrErrorReason {
-    ReasonUnknown,
-    UserError
-    // TODO - return FallbackQuery or FallbackOperation instead of UserError, pass info to gateway.
+    Unknown,
+    RestartOperation,
+    RestartQuery,
+    FallbackOperation,
+    UdfTerminate,
+    WorkerOOM
 };
 
 struct TFmrError {
@@ -60,26 +89,104 @@ struct TFmrError {
     TMaybe<TString> JobId;
 };
 
-struct TError {
-    TString ErrorMessage;
+static constexpr TStringBuf FmrNonRetryableJobExceptionMarker = "[FmrNonRetryableJobException] ";
+
+class TFmrNonRetryableJobException: public yexception {
+public:
+    TFmrNonRetryableJobException() : yexception()
+{
+    *this << ToString(FmrNonRetryableJobExceptionMarker);
+}
+};
+
+EFmrErrorReason ParseFmrReasonFromErrorMessage(const TString& errorMessage);
+
+struct TFmrWriterSettings {
+    ui64 ChunkSize = 1024 * 1024;
+    ui64 MaxInflightChunks = 4;
+    ui64 MaxRowWeight = 1024 * 1024 * 16;
+    bool SkipSortedCheck = false;
+
+    void Save(IOutputStream* buffer) const;
+    void Load(IInputStream* buffer);
+    bool operator==(const TFmrWriterSettings&) const = default;
+};
+
+struct TFmrUserJobSettings {
+    ui64 ThreadPoolSize = 3;
+    ui64 QueueSizeLimit = 100;
+    TFmrWriterSettings WriterSettings;
+
+    void Save(IOutputStream* buffer) const;
+    void Load(IInputStream* buffer);
+    bool operator==(const TFmrUserJobSettings&) const = default;
+};
+
+struct TFmrTvmJobSettings {
+    TString WorkerTvmAlias;
+    TTvmId TableDataServiceTvmId = 0;
+    TMaybe<ui32> TvmPort;
+    TMaybe<TString> TvmSecret;
+
+    void Save(IOutputStream* buffer) const;
+    void Load(IInputStream* buffer);
+};
+
+struct TFmrTvmGatewaySettings {
+    TTvmId CoordinatorTvmId;
+    TTvmId GatewayTvmId;
+    TString GatewayTvmSecret;
+    TString TvmDiskCacheDir;
+};
+
+struct TFmrTvmSpec {
+    TString WorkerTvmAlias;
+    TString CoordinatorTvmAlias;
+    TString TableDataServiceTvmAlias;
+    TTvmId WorkerTvmId;
+    TTvmId CoordinatorTvmId;
+    TTvmId TableDataServiceTvmId;
 };
 
 struct TYtTableRef {
-    TString Path;
-    TString Cluster;
-    TMaybe<TString> FilePath = Nothing();
+    NYT::TRichYPath RichPath; // Path to yt table
+    TMaybe<TString> FilePath; // Path to file corresponding to yt table, filled for file gateway
+    // 0-based position of this table among ALL of the operation's original Map/PROCESS inputs, in
+    // the same order used to build the job's TableNames/InputSpec (see TInputInfo::Group, which
+    // drives InputGroups directly from execCtx->InputTables_ and is unrelated to this field). Always
+    // unique per original input position — needed for TableName() to resolve correctly even when two
+    // inputs share a RichPath (self-reference, e.g. PROCESS Input1, Input1 USING ...).
+    ui32 TableIndex = 0;
 
-    // TODO - maybe just use TRichYPath here also instead of Path and Cluster?
+    TString GetPath() const;
+    TString GetCluster() const;
 
-    bool operator == (const TYtTableRef&) const = default;
+    TYtTableRef();
+    TYtTableRef(const NYT::TRichYPath& richPath, const TMaybe<TString>& filePath = Nothing());
+    TYtTableRef(const TString& cluster, const TString& path, const TMaybe<TString>& filePath = Nothing());
+
+    bool operator==(const TYtTableRef&) const = default;
 };
 
 struct TYtTableTaskRef {
     std::vector<NYT::TRichYPath> RichPaths;
     std::vector<TString> FilePaths;
+    // Parallel to RichPaths/FilePaths: TableIndices[i] is the original TYtTableRef::TableIndex that
+    // RichPaths[i]/FilePaths[i] came from, since a single task ref can bundle physical paths from
+    // several original tables.
+    std::vector<ui32> TableIndices;
 
-    bool operator == (const TYtTableTaskRef&) const = default;
+    void Save(IOutputStream* buffer) const;
+    void Load(IInputStream* buffer);
+
+    bool operator==(const TYtTableTaskRef&) const = default;
 }; // corresponds to a partition of several yt input tables.
+
+void SaveRichPath(IOutputStream* buffer, const NYT::TRichYPath& path);
+void LoadRichPath(IInputStream* buffer, NYT::TRichYPath& path);
+
+TString SerializeRichPath(const NYT::TRichYPath& richPath);
+NYT::TRichYPath DeserializeRichPath(const TString& serializedRichPath);
 
 struct TFmrTableId {
     TString Id;
@@ -90,51 +197,108 @@ struct TFmrTableId {
 
     TFmrTableId(const TString& cluster, const TString& path);
 
-    bool operator == (const TFmrTableId&) const = default;
+    TFmrTableId(const NYT::TRichYPath& richPath);
+
+    void Save(IOutputStream* buffer) const;
+    void Load(IInputStream* buffer);
+
+    bool operator==(const TFmrTableId&) const = default;
 };
 
 struct TFmrTableRef {
     TFmrTableId FmrTableId;
-    bool operator == (const TFmrTableRef&) const = default;
+    std::vector<TString> Columns = {};
+    TString SerializedColumnGroups = TString();
+    std::vector<ESortOrder> SortOrder = {};
+    std::vector<TString> SortColumns = {};
+    // 0-based position of this table among ALL of the operation's original Map/PROCESS inputs (see
+    // TYtTableRef::TableIndex) — unique per original input position.
+    ui32 TableIndex = 0;
+
+    bool operator==(const TFmrTableRef&) const = default;
 };
 
 struct TTableRange {
     TString PartId;
     ui64 MinChunk = 0;
     ui64 MaxChunk = 1;
-    bool operator == (const TTableRange&) const = default;
+
+    void Save(IOutputStream* buffer) const;
+    void Load(IInputStream* buffer);
+
+    bool operator==(const TTableRange&) const = default;
 }; // Corresnponds to range [MinChunk, MaxChunk)
 
 struct TFmrTableInputRef {
     TString TableId;
     std::vector<TTableRange> TableRanges;
-    bool operator == (const TFmrTableInputRef&) const = default;
+    std::vector<TString> Columns = {};
+    TString SerializedColumnGroups = TString();
+
+    TMaybe<bool> IsFirstRowInclusive;
+    TMaybe<bool> IsLastRowInclusive;
+    TMaybe<TString> FirstRowKeys; // Binary YSON MAP
+    TMaybe<TString> LastRowKeys;  // Binary YSON MAP
+
+    // The original input position (see TFmrTableRef::TableIndex) this ref's TableId came from. A
+    // single TFmrTableInputRef always covers ranges of one physical table at one original input
+    // position, so one value suffices.
+    ui32 TableIndex = 0;
+
+    void Save(IOutputStream* buffer) const;
+    void Load(IInputStream* buffer);
+
+    bool operator==(const TFmrTableInputRef&) const = default;
 }; // Corresponds to part of table with fixed TableId but several PartIds, Empty TablesRanges means that this table is not present in task.
 
 struct TFmrTableOutputRef {
     TString TableId;
     TString PartId;
+    TString SerializedColumnGroups = TString(); // Serialized TNode of columnGroupSpec, empty if column groups is not set
 
-    bool operator == (const TFmrTableOutputRef&) const = default;
+    TSortingColumns SortingColumns;
+
+    TFmrTableOutputRef() = default;
+
+    TFmrTableOutputRef(const TString& tableId, const TMaybe<TString>& partId = Nothing());
+
+    TFmrTableOutputRef(const TFmrTableRef& fmrTableRef);
+
+    void Save(IOutputStream* buffer) const;
+    void Load(IInputStream* buffer);
+
+    bool operator==(const TFmrTableOutputRef&) const = default;
 };
 
 struct TTableStats {
     ui64 Chunks = 0;
     ui64 Rows = 0;
     ui64 DataWeight = 0;
-    bool operator == (const TTableStats&) const = default;
+    bool operator==(const TTableStats&) const = default;
+};
+
+struct TSortedChunkStats {
+    bool IsSorted = false;
+    NYT::TNode FirstRowKeys;
+    NYT::TNode LastRowKeys;
+
+    void Save(IOutputStream* buffer) const;
+    void Load(IInputStream* buffer);
+
+    bool operator==(const TSortedChunkStats&) const = default;
 };
 
 struct TChunkStats {
     ui64 Rows = 0;
     ui64 DataWeight = 0;
-    bool operator == (const TChunkStats&) const = default;
+    TSortedChunkStats SortedChunkStats = TSortedChunkStats();
+    bool operator==(const TChunkStats&) const = default;
 };
 
 struct TTableChunkStats {
     TString PartId;
     std::vector<TChunkStats> PartIdChunkStats;
-    bool operator == (const TTableChunkStats&) const = default;
+    bool operator==(const TTableChunkStats&) const = default;
 }; // detailed statistics for all chunks in partition
 
 } // namespace NYql::NFmr
@@ -151,36 +315,113 @@ namespace std {
     template<>
     struct hash<NYql::NFmr::TFmrTableOutputRef> {
         size_t operator()(const NYql::NFmr::TFmrTableOutputRef& ref) const {
-            return CombineHashes(hash<TString>()(ref.TableId), hash<TString>()(ref.PartId));
-        }
-    };
-
-    template<>
-    struct hash<NYql::NFmr::TYtTableRef> {
-        size_t operator()(const NYql::NFmr::TYtTableRef& ref) const {
-            return CombineHashes(hash<TString>()(ref.Cluster), hash<TString>()(ref.Path));
+            return CombineHashes(hash<TString>()(ref.TableId),
+                CombineHashes(hash<TString>()(ref.PartId), hash<TString>()(ref.SerializedColumnGroups)));
         }
     };
 }
 
 namespace NYql::NFmr {
 
+struct TTaskUploadResult {};
+
+struct TTaskDownloadResult {};
+
+struct TTaskMergeResult {};
+
+struct TTaskMapResult {};
+
+struct TTaskFillResult {};
+
+
+struct TTaskSortedUploadResult {
+    TString FragmentResultYson;
+    ui64 FragmentOrder;
+};
+
+struct TTaskPullResult {
+    TString Data; // YSON rows concatenated
+};
+
+using TTaskResult = std::variant<TTaskUploadResult, TTaskDownloadResult, TTaskMergeResult, TTaskMapResult, TTaskSortedUploadResult, TTaskPullResult, TTaskFillResult>;
+
 struct TStatistics {
     std::unordered_map<TFmrTableOutputRef, TTableChunkStats> OutputTables;
+    TTaskResult TaskResult;
 };
 
 using TOperationTableRef = std::variant<TYtTableRef, TFmrTableRef>;
 
 using TTaskTableRef = std::variant<TYtTableTaskRef, TFmrTableInputRef>;
 
+// TODO - TYtTableTaskRef может быть из нескольких входных таблиц, но TFmrTableInputRef - часть одной таблицы, подумать как лучше
+
+struct TClusterConnection {
+    TString TransactionId;
+    TString YtServerName;
+    TMaybe<TString> Token;
+
+    void Save(IOutputStream* buffer) const;
+    void Load(IInputStream* buffer);
+};
+
+struct TYtReaderSettings {
+    bool WithAttributes = false; // Enable RowIndex and RangeIndex, for now only mode = false is supported.
+};
+
+struct TYtWriterSettings {
+    TMaybe<ui64> MaxRowWeight = Nothing();
+};
+
+struct TStartDistributedWriteOptions {
+    TDuration Timeout = TDuration::Minutes(5);
+    TDuration PingInterval = TDuration::Seconds(1);
+    ui64 RetriesBeforeThrow = 5;
+    static TStartDistributedWriteOptions FromSpec(const TMaybe<NYT::TNode>& fmrOperationSpec) {
+        TStartDistributedWriteOptions options;
+        if (fmrOperationSpec.Defined() && fmrOperationSpec->IsMap() && fmrOperationSpec->HasKey("distributed_write_session")) {
+            auto& node = (*fmrOperationSpec)["distributed_write_session"];
+            if (node.HasKey("timeout_sec")) {
+                options.Timeout = TDuration::Seconds(node["timeout_sec"].AsInt64());
+            }
+            if (node.HasKey("ping_interval_sec")) {
+                options.PingInterval = TDuration::Seconds(node["ping_interval_sec"].AsInt64());
+            }
+            if (node.HasKey("retries_before_throw")) {
+                options.RetriesBeforeThrow = node["retries_before_throw"].AsInt64();
+            }
+        }
+        return options;
+    }
+};
+
 struct TUploadOperationParams {
     TFmrTableRef Input;
     TYtTableRef Output;
 };
 
+struct TSortedUploadOperationParams {
+    void UpdateAfterPreparation(std::vector<TString> cookies, TString PartitionId);
+
+    TFmrTableRef Input;
+    TYtTableRef Output;
+    TString SessionId;
+    std::vector<TString> Cookies;
+    TString PartitionId;
+    bool IsOrdered = true;
+};
+
 struct TUploadTaskParams {
     TFmrTableInputRef Input;
     TYtTableRef Output;
+};
+
+struct TSortedUploadTaskParams {
+    TFmrTableInputRef Input;
+    TYtTableRef Output;
+    TString CookieYson;
+    ui64 Order;
+    TSortingColumns SortingColumns;
 };
 
 struct TDownloadOperationParams {
@@ -198,8 +439,18 @@ struct TMergeOperationParams {
     TFmrTableRef Output;
 };
 
+struct TSortedMergeOperationParams {
+    void UpdateAfterPreparation(std::vector<TString> cookies, TString PartitionId);
+
+    std::vector<TOperationTableRef> Input;
+    TFmrTableRef Output;
+};
+
 struct TTaskTableInputRef {
     std::vector<TTaskTableRef> Inputs;
+
+    void Save(IOutputStream* buffer) const;
+    void Load(IInputStream* buffer);
 }; // Corresponds to task input tables, which can consist parts of either fmr or yt input tables.
 
 struct TMergeTaskParams {
@@ -207,42 +458,176 @@ struct TMergeTaskParams {
     TFmrTableOutputRef Output;
 };
 
+struct TSortedMergeTaskParams {
+    TTaskTableInputRef Input;
+    TFmrTableOutputRef Output;
+};
+
+enum class EFmrJobType {
+    Map,
+    OrderedMap,
+    Reduce
+};
+
 struct TMapOperationParams {
     std::vector<TOperationTableRef> Input;
     std::vector<TFmrTableRef> Output;
-    TString Executable;
+    TString SerializedMapJobState;
+    EFmrJobType MapJobType;
+    bool ForceSingleTask = false;
 };
 
 struct TMapTaskParams {
     TTaskTableInputRef Input;
     std::vector<TFmrTableOutputRef> Output;
-    TString Executable;
+    TString SerializedMapJobState;
+    EFmrJobType MapJobType;
 };
 
-using TOperationParams = std::variant<TUploadOperationParams, TDownloadOperationParams, TMergeOperationParams, TMapOperationParams>;
+struct TFillOperationParams {
+    std::vector<TFmrTableRef> Output;
+    TString SerializedFillJobState;
+};
 
-using TTaskParams = std::variant<TUploadTaskParams, TDownloadTaskParams, TMergeTaskParams, TMapTaskParams>;
+struct TFillTaskParams {
+    std::vector<TFmrTableOutputRef> Output;
+    TString SerializedFillJobState;
+};
 
-struct TClusterConnection {
-    TString TransactionId;
+// Touch has no job/lambda and produces no tasks — the coordinator registers its
+// (empty) output tables synchronously inside StartOperation.
+struct TTouchOperationParams {
+    std::vector<TFmrTableRef> Output;
+};
+
+struct TSortOperationParams {
+    std::vector<TOperationTableRef> Input;
+    TFmrTableRef Output;
+};
+
+struct TLocalSortTaskParams {
+    TTaskTableInputRef Input;
+    TFmrTableOutputRef Output;
+};
+
+enum EReduceType {
+    SortedReduce,
+    JoinReduce
+};
+
+struct TReduceOperationSpec {
+    TSortingColumns ReduceBy;
+    TSortingColumns SortBy;
+    EReduceType ReduceType;
+
+    void Save(IOutputStream* buffer) const;
+    void Load(IInputStream* buffer);
+};
+
+struct TReduceOperationParams {
+    std::vector<TOperationTableRef> Input;
+    std::vector<TFmrTableRef> Output;
+    TString SerializedReduceJobState;
+    TReduceOperationSpec ReduceOperationSpec;
+};
+
+struct TPullOperationParams {
+    std::vector<TOperationTableRef> Input;
+};
+
+struct TPullTaskParams {
+    TTaskTableInputRef Input;
+};
+
+struct TReduceTaskParams {
+    //std::vector<TFmrTableInputRef> Input; // all reduce inputs should be in fmr.
+    TTaskTableInputRef Input;
+    std::vector<TFmrTableOutputRef> Output;
+    TString SerializedReduceJobState;
+    TReduceOperationSpec ReduceOperationSpec;
+    // Whether Input's rows are sorted by [_yql_key_hash, ...ReduceOperationSpec.SortBy] (true for
+    // a MapReduce operation's reduce stage, which shuffles via a synthetic hash column) or by
+    // ReduceOperationSpec.SortBy alone (a plain Reduce operation, which reads real YT-sorted
+    // input with no hash column at all).
+    bool SortByHasKeyHashPrefix = false;
+};
+
+// Service column added by map stage to hash-route rows to the correct reducer.
+static constexpr TStringBuf YqlKeyHashColumn = "_yql_key_hash";
+
+// Build sort columns for the MapReduceMap intermediate table:
+// _yql_key_hash first (integer comparison for routing), then the actual reduce-by columns.
+TSortingColumns MakeMapReduceIntermediateSortColumns(const TSortingColumns& reduceBy);
+
+struct TMapReduceOperationParams {
+    std::vector<TOperationTableRef> Input;
+    std::vector<TFmrTableRef> Output;
+    // Extra tables written directly by the map stage, bypassing reduce. Corresponds to mapper
+    // Variant<Tuple<T0..TK>> tuple items 1..K (item 0 feeds the shuffle/reduce stage).
+    std::vector<TFmrTableRef> DirectMapOutput;
+    TString SerializedMapJobState;
+    TString SerializedReduceJobState;
+    TReduceOperationSpec ReduceOperationSpec;
+};
+
+// Task for the map stage: apply mapper, compute _yql_key_hash, local-sort by hash+keys.
+struct TMapReduceMapTaskParams {
+    TTaskTableInputRef Input;
+    TFmrTableOutputRef Output;           // intermediate FMR table (one per map task)
+    // Per-task refs for TMapReduceOperationParams::DirectMapOutput. Each direct output receives
+    // its own distinct PartId (generated by the coordinator) to prevent chunk stats collision,
+    // even though all outputs are written by the same job run.
+    std::vector<TFmrTableOutputRef> DirectOutputs;
+    TString SerializedMapJobState;
+    TReduceOperationSpec ReduceOperationSpec; // tells worker which columns to hash and sort by
+};
+
+using TOperationParams = std::variant<TUploadOperationParams, TDownloadOperationParams, TMergeOperationParams, TSortedMergeOperationParams, TMapOperationParams, TSortedUploadOperationParams, TSortOperationParams, TReduceOperationParams, TPullOperationParams, TFillOperationParams, TMapReduceOperationParams, TTouchOperationParams>;
+
+using TTaskParams = std::variant<TUploadTaskParams, TDownloadTaskParams, TMergeTaskParams, TSortedMergeTaskParams, TMapTaskParams, TSortedUploadTaskParams, TLocalSortTaskParams, TReduceTaskParams, TPullTaskParams, TFillTaskParams, TMapReduceMapTaskParams>;
+
+struct TFileInfo {
+    TString LocalPath; // Path to local file, filled in worker.
+    TString Md5Key; // hash of file content, used key in dist cache.
+    TString Alias;
+};
+
+struct TYtResourceInfo {
+    NYT::TRichYPath RichPath; // Path to resource in cypress, can be either file, or table which we need to download as file (MapJoin)
     TString YtServerName;
-    TMaybe<TString> Token;
+    TString Token;
+    TString LocalPath; // Path to local file, filled in worker.
+};
+
+struct TFmrResourceOperationInfo {
+    TFmrTableRef FmrTable;
+    TString Alias;
+};
+
+struct TFmrResourceTaskInfo {
+    std::vector<TFmrTableInputRef> FmrResourceTasks; // List of tasks corresponding to single fmr table which we want to download as files for MapJoin.
+    TString LocalPath; // Path to local file, filled in worker.
+    TString Alias;
 };
 
 struct TTask: public TThrRefBase {
     TTask() = default;
 
-    TTask(ETaskType taskType, const TString& taskId, const TTaskParams& taskParams, const TString& sessionId, const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections, const TMaybe<NYT::TNode> & jobSettings = Nothing(), ui32 numRetries = 1)
-        : TaskType(taskType), TaskId(taskId), TaskParams(taskParams), SessionId(sessionId), ClusterConnections(clusterConnections), JobSettings(jobSettings), NumRetries(numRetries)
+    TTask(ETaskType taskType, const TString& taskId, const TTaskParams& taskParams, const TString& sessionId, const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections, const std::vector<TFileInfo>& files, const std::vector<TYtResourceInfo>& ytResources, const std::vector<TFmrResourceTaskInfo>& fmrResources, const TMaybe<NYT::TNode> & jobSettings = Nothing(), ui32 numRetries = 1)
+        : TaskType(taskType), TaskId(taskId), TaskParams(taskParams), SessionId(sessionId), ClusterConnections(clusterConnections), Files(files), YtResources(ytResources), FmrResources(fmrResources), JobSettings(jobSettings), NumRetries(numRetries)
     {
     }
 
     ETaskType TaskType;
     TString TaskId;
-    TTaskParams TaskParams = {};
+    TTaskParams TaskParams;
     TString SessionId;
-    std::unordered_map<TFmrTableId, TClusterConnection> ClusterConnections = {};
-    TMaybe<NYT::TNode> JobSettings = {};
+    std::unordered_map<TFmrTableId, TClusterConnection> ClusterConnections;
+    std::vector<TFileInfo> Files; // Udfs and user files from distributed cache.
+    std::vector<TYtResourceInfo> YtResources; // Yt tables and files to download.
+    std::vector<TFmrResourceTaskInfo> FmrResources; // Fmr tables (passed as tasks) which we want to download as files for MapJoin.
+    TMaybe<TString> JobEnvironmentDir;
+    TMaybe<NYT::TNode> JobSettings;
     ui32 NumRetries; // Not supported yet
 
     using TPtr = TIntrusivePtr<TTask>;
@@ -263,8 +648,13 @@ struct TTaskState: public TThrRefBase {
 
     using TPtr = TIntrusivePtr<TTaskState>;
 };
-TTask::TPtr MakeTask(ETaskType taskType, const TString& taskId, const TTaskParams& taskParams, const TString& sessionId, const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections = {}, const TMaybe<NYT::TNode>& jobSettings = Nothing());
+TTask::TPtr MakeTask(ETaskType taskType, const TString& taskId, const TTaskParams& taskParams, const TString& sessionId, const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections = {}, const std::vector<TFileInfo>& files = {}, const std::vector<TYtResourceInfo>& ytResources = {}, const std::vector<TFmrResourceTaskInfo>& fmrResources = {}, const TMaybe<NYT::TNode>& jobSettings = Nothing());
 
 TTaskState::TPtr MakeTaskState(ETaskStatus taskStatus, const TString& taskId, const TMaybe<TFmrError>& taskErrorMessage = Nothing(), const TStatistics& stats = TStatistics());
+
+struct TPartitionResult {
+    std::vector<TTaskTableInputRef> TaskInputs;
+    TMaybe<TFmrError> Error;
+};
 
 } // namespace NYql::NFmr

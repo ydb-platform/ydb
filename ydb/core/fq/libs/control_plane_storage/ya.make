@@ -12,6 +12,7 @@ SRCS(
     ydb_control_plane_storage_bindings.cpp
     ydb_control_plane_storage_compute_database.cpp
     ydb_control_plane_storage_connections.cpp
+    ydb_control_plane_storage_folder.cpp
     ydb_control_plane_storage_queries.cpp
     ydb_control_plane_storage_quotas.cpp
 )
@@ -21,7 +22,6 @@ PEERDIR(
     library/cpp/protobuf/interop
     ydb/core/base
     ydb/core/external_sources
-    ydb/core/fq/libs/actors/logging
     ydb/core/fq/libs/common
     ydb/core/fq/libs/config
     ydb/core/fq/libs/config/protos
@@ -33,17 +33,18 @@ PEERDIR(
     ydb/core/fq/libs/quota_manager/events
     ydb/core/fq/libs/shared_resources
     ydb/core/fq/libs/ydb
+    ydb/core/kqp/opt
+    ydb/core/kqp/proxy_service/script_executions_utils
     ydb/core/mon
+    ydb/core/util
     ydb/library/db_pool
     ydb/library/security
     ydb/library/yql/providers/s3/path_generator
-    yql/essentials/public/issue
     ydb/public/api/protos
     ydb/public/sdk/cpp/adapters/issue
     ydb/public/sdk/cpp/src/client/scheme
     ydb/public/sdk/cpp/src/client/table
-    ydb/library/db_pool
-    ydb/library/yql/providers/s3/path_generator
+    yql/essentials/public/issue
 )
 
 YQL_LAST_ABI_VERSION()

@@ -136,6 +136,14 @@ void Deserialize(EValueType& valueType, const TNode& node)
         {"interval64", VT_INTERVAL64},
 
         {"uuid", VT_UUID},
+
+        {"tz_date", VT_TZ_DATE},
+        {"tz_datetime", VT_TZ_DATETIME},
+        {"tz_timestamp", VT_TZ_TIMESTAMP},
+
+        {"tz_date32", VT_TZ_DATE32},
+        {"tz_datetime64", VT_TZ_DATETIME64},
+        {"tz_timestamp64", VT_TZ_TIMESTAMP64},
     };
 
     auto it = str2ValueType.find(nodeStr);
@@ -262,9 +270,6 @@ void Serialize(const TColumnSchema& columnSchema, NYson::IYsonConsumer* consumer
         .DoIf(columnSchema.StableName().Defined(), [&] (TFluentMap fluent) {
             fluent.Item("stable_name").Value(*columnSchema.StableName());
         })
-        .DoIf(columnSchema.Deleted().Defined(), [&] (TFluentMap fluent) {
-            fluent.Item("deleted").Value(*columnSchema.Deleted());
-        })
     .EndMap();
 }
 
@@ -279,7 +284,6 @@ void Deserialize(TColumnSchema& columnSchema, const TNode& node)
     DESERIALIZE_ITEM("aggregate", columnSchema.Aggregate_);
     DESERIALIZE_ITEM("group", columnSchema.Group_);
     DESERIALIZE_ITEM("stable_name", columnSchema.StableName_);
-    DESERIALIZE_ITEM("deleted", columnSchema.Deleted_);
 
     if (nodeMap.contains("type_v3")) {
         NTi::TTypePtr type;
@@ -294,11 +298,29 @@ void Deserialize(TColumnSchema& columnSchema, const TNode& node)
     }
 }
 
+void Serialize(const TDeletedColumnSchema& columnSchema, NYson::IYsonConsumer* consumer)
+{
+    BuildYsonFluently(consumer).BeginMap()
+        .Item("stable_name").Value(*columnSchema.StableName())
+    .EndMap();
+}
+
+void Deserialize(TDeletedColumnSchema& columnSchema, const TNode& node)
+{
+    const auto& nodeMap = node.AsMap();
+    DESERIALIZE_ITEM("stable_name", columnSchema.StableName_);
+}
+
 void Serialize(const TTableSchema& tableSchema, NYson::IYsonConsumer* consumer)
 {
+    const auto& deletedColumns = tableSchema.DeletedColumns();
+
     BuildYsonFluently(consumer).BeginAttributes()
         .Item("strict").Value(tableSchema.Strict())
         .Item("unique_keys").Value(tableSchema.UniqueKeys())
+        .DoIf(!deletedColumns.empty(), [&] (auto fluent) {
+            fluent.Item("deleted_columns").List(deletedColumns);
+        })
     .EndAttributes()
     .List(tableSchema.Columns());
 }
@@ -308,6 +330,7 @@ void Deserialize(TTableSchema& tableSchema, const TNode& node)
     const auto& attributesMap = node.GetAttributes().AsMap();
     DESERIALIZE_ATTR("strict", tableSchema.Strict_);
     DESERIALIZE_ATTR("unique_keys", tableSchema.UniqueKeys_);
+    DESERIALIZE_ATTR("deleted_columns", tableSchema.DeletedColumns_);
     Deserialize(tableSchema.Columns_, node);
 }
 
@@ -474,6 +497,9 @@ void Serialize(const TRichYPath& path, NYson::IYsonConsumer* consumer)
         .DoIf(path.Create_.Defined(), [&] (TFluentAttributes fluent) {
             fluent.Item("create").Value(*path.Create_);
         })
+        .DoIf(path.InputQuery_.Defined(), [&] (TFluentAttributes fluent) {
+            fluent.Item("input_query").Value(*path.InputQuery_);
+        })
     .EndAttributes()
     .Value(path.Path_);
 }
@@ -507,6 +533,7 @@ void Deserialize(TRichYPath& path, const TNode& node)
     DESERIALIZE_ATTR("bypass_artifact_cache", path.BypassArtifactCache_);
     DESERIALIZE_ATTR("cluster", path.Cluster_);
     DESERIALIZE_ATTR("create", path.Create_);
+    DESERIALIZE_ATTR("input_query", path.InputQuery_);
     Deserialize(path.Path_, node);
 }
 

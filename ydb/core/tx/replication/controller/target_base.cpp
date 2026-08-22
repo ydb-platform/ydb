@@ -5,6 +5,7 @@
 #include "target_base.h"
 #include "util.h"
 
+#include <ydb/core/protos/replication.pb.h>
 #include <ydb/library/actors/core/events.h>
 
 namespace NKikimr::NReplication::NController {
@@ -32,11 +33,14 @@ const TString& TTargetBase::TConfigBase::GetDstPath() const {
     return DstPath;
 }
 
-TTargetBase::TTargetBase(TReplication* replication, ETargetKind kind,
-        ui64 id, const IConfig::TPtr& config)
+TTargetBase::TTargetBase(
+        TReplication* replication,
+        ETargetKind kind,
+        ui64 id,
+        const IConfig::TPtr& config)
     : Replication(replication)
-    , Id(id)
     , Kind(kind)
+    , Id(id)
     , Config(config)
 {
     Y_ABORT_UNLESS(kind == config->GetKind());
@@ -144,8 +148,24 @@ void TTargetBase::RemoveWorker(ui64 id) {
     Workers.erase(id);
 }
 
-const THashMap<ui64, TTargetBase::TWorker>& TTargetBase::GetWorkers() const {
-    return Workers;
+const NKikimrReplication::TReplicationLocationConfig& TTargetBase::GetLocation() const {
+    return Replication->GetLocation();
+}
+
+TVector<ui64> TTargetBase::GetWorkers() const {
+    TVector<ui64> result(::Reserve(Workers.size()));
+    for (const auto& [id, _] : Workers) {
+        result.push_back(id);
+    }
+    return result;
+}
+
+bool TTargetBase::HasWorkers() const {
+    return !Workers.empty();
+}
+
+bool TTargetBase::HasWorker(ui64 id) const {
+    return Workers.contains(id);
 }
 
 void TTargetBase::RemoveWorkers(const TActorContext& ctx) {
@@ -164,11 +184,11 @@ void TTargetBase::UpdateLag(ui64 workerId, TDuration lag) {
     }
 
     if (TLagProvider::UpdateLag(it->second, workerId, lag)) {
-        Replication->UpdateLag(GetId(), TLagProvider::GetLag().GetRef());
+        Replication->UpdateLag(GetId(), TLagProvider::GetLag().value());
     }
 }
 
-const TMaybe<TDuration> TTargetBase::GetLag() const {
+const std::optional<TDuration> TTargetBase::GetLag() const {
     return TLagProvider::GetLag();
 }
 
@@ -187,6 +207,8 @@ void TTargetBase::Progress(const TActorContext& ctx) {
     case EDstState::Alter:
         if (Workers) {
             RemoveWorkers(ctx);
+        } else if (!DstCreator && !DstPathId) {
+            DstCreator = ctx.Register(CreateDstCreator(Replication, Id, ctx));
         } else if (!DstAlterer) {
             DstAlterer = ctx.Register(CreateDstAlterer(Replication, Id, ctx));
         }

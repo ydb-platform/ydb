@@ -1,5 +1,6 @@
 #include "skiff_row_table_reader.h"
 
+#include <yt/cpp/mapreduce/interface/errors.h>
 #include <yt/cpp/mapreduce/interface/logging/yt_log.h>
 
 #include <yt/cpp/mapreduce/interface/skiff_row.h>
@@ -100,6 +101,9 @@ void TSkiffRowTableReader::SkipRow()
 }
 
 void TSkiffRowTableReader::CheckValidity() const {
+    if (IsAborted()) {
+        ythrow TInputStreamAbortedError() << "Stream was aborted";
+    }
     if (!IsValid()) {
         ythrow yexception() << "Iterator is not valid";
     }
@@ -113,7 +117,7 @@ void TSkiffRowTableReader::Next()
 
     CheckValidity();
 
-    if (Y_UNLIKELY(Finished_ || !Parser_->HasMoreData())) {
+    if (Finished_ || !Parser_->HasMoreData()) [[unlikely]] {
         Finished_ = true;
         Valid_ = false;
         return;
@@ -228,6 +232,16 @@ bool TSkiffRowTableReader::IsEndOfStream() const {
 
 bool TSkiffRowTableReader::IsRawReaderExhausted() const {
     return Finished_;
+}
+
+void TSkiffRowTableReader::Abort()
+{
+    Input_.Abort();
+}
+
+bool TSkiffRowTableReader::IsAborted() const
+{
+    return Input_.IsAborted();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

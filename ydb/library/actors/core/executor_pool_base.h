@@ -6,10 +6,9 @@
 #include "scheduler_queue.h"
 #include <ydb/library/actors/queues/activation_queue.h>
 #include <ydb/library/actors/util/affinity.h>
-#include <ydb/library/actors/util/unordered_cache.h>
 #include <ydb/library/actors/util/threadparkpad.h>
 
-//#define RING_ACTIVATION_QUEUE 
+//#define RING_ACTIVATION_QUEUE
 
 namespace NActors {
     class TActorSystem;
@@ -27,7 +26,6 @@ namespace NActors {
         // Stuck actor monitoring
         TMutex StuckObserverMutex;
         std::vector<IActor*> Actors;
-        mutable std::vector<std::tuple<ui32, double>> DeadActorsUsage;
         friend class TExecutorThread;
         friend class TSharedExecutorThread;
         void RecalculateStuckActors(TExecutorThreadStats& stats) const;
@@ -38,8 +36,8 @@ namespace NActors {
         explicit TExecutorPoolBaseMailboxed(ui32 poolId);
         ~TExecutorPoolBaseMailboxed();
         TMailbox* ResolveMailbox(ui32 hint) override;
-        bool Send(TAutoPtr<IEventHandle>& ev) override;
-        bool SpecificSend(TAutoPtr<IEventHandle>& ev) override;
+        bool Send(std::unique_ptr<IEventHandle>& ev) override;
+        bool SpecificSend(std::unique_ptr<IEventHandle>& ev) override;
         TActorId Register(IActor* actor, TMailboxType::EType mailboxType, ui64 revolvingWriteCounter, const TActorId& parentId) override;
         TActorId Register(IActor* actor, TMailboxCache& cache, ui64 revolvingWriteCounter, const TActorId& parentId) override;
         TActorId Register(IActor* actor, TMailbox* mailbox, const TActorId& parentId) override;
@@ -51,23 +49,18 @@ namespace NActors {
 
     class TExecutorPoolBase: public TExecutorPoolBaseMailboxed {
     protected:
-        using TUnorderedCacheActivationQueue = TUnorderedCache<ui32, 512, 4>;
-
         const i16 PoolThreads;
-        const bool UseRingQueueValue;
         alignas(64) TIntrusivePtr<TAffinity> ThreadsAffinity;
         alignas(64) TAtomic Semaphore = 0;
-        alignas(64) std::variant<TUnorderedCacheActivationQueue, TRingActivationQueue> Activations;
-        TAtomic ActivationsRevolvingCounter = 0;
+        alignas(64) TRingActivationQueueV4 Activations;
         std::atomic_bool StopFlag = false;
     public:
-        TExecutorPoolBase(ui32 poolId, ui32 threads, TAffinity* affinity, bool useRingQueue);
+        TExecutorPoolBase(ui32 poolId, ui32 threads, TAffinity* affinity);
         ~TExecutorPoolBase();
         void ScheduleActivation(TMailbox* mailbox) override;
         void SpecificScheduleActivation(TMailbox* mailbox) override;
         TAffinity* Affinity() const override;
         ui32 GetThreads() const override;
-        bool UseRingQueue() const;
     };
 
     void DoActorInit(TActorSystem*, IActor*, const TActorId&, const TActorId&);

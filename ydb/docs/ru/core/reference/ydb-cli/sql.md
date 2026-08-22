@@ -46,16 +46,32 @@
 
 {% include [ydb-cli-profile](../../_includes/ydb-cli-profile.md) %}
 
-Запрос создания строковой таблицы, заполнения её данными, и получения выборки из этой таблицы:
+Совместное выполнение DDL + DML в одном запросе не поддерживается.
 
 ```bash
+# Создание таблицы
 {{ ydb-cli }} -p quickstart sql -s '
-    CREATE TABLE series (series_id Uint64, title Utf8, series_info Utf8, release_date Date, PRIMARY KEY (series_id));
-    COMMIT;
-    UPSERT INTO series (series_id, title, series_info, release_date) values (1, "Title1", "Info1", Cast("2023-04-20" as Date));
-    COMMIT;
-    SELECT * from series;
-  '
+  CREATE TABLE series (
+    series_id Uint64,
+    title Utf8,
+    series_info Utf8,
+    release_date Date,
+    PRIMARY KEY (series_id)
+  );
+'
+
+# Заполнение данными и получение выборки
+{{ ydb-cli }} -p quickstart sql -s '
+    UPSERT INTO series (series_id, title, series_info, release_date) 
+    VALUES (1, "Title1", "Info1", Cast("2023-04-20" as Date));
+    SELECT * FROM series;
+'
+
+# Добавление индекса
+{{ ydb-cli }} -p quickstart sql -s '
+    ALTER TABLE series 
+    ADD INDEX title_idx GLOBAL ON (title);
+'
 ```
 
 Вывод команды:
@@ -68,7 +84,7 @@
 └──────────────┴───────────┴─────────────┴──────────┘
 ```
 
-Выполнение запроса из примера выше, записанного в файле `script1.yql`, с выводом результатов в формате `JSON`:
+Для выполнения запроса из файла (например, script1.yql) с выводом в формате JSON
 
 ```bash
 {{ ydb-cli }} -p quickstart sql -f script1.yql --format json-unicode

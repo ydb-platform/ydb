@@ -1,9 +1,27 @@
-{% include [concepts/index/intro.md](_includes/index/intro.md) %}
+# Concepts {{ ydb-short-name }}
 
-{% include [concepts/index/when_use.md](_includes/index/when_use.md) %}
+This documentation section covers the fundamental concepts and architectural principles of {{ ydb-short-name }}. This information will help you better understand what happens when you study more practical content that can be found in [other sections designed for specific roles](#see-also).
 
-{% include [concepts/index/how_it_works.md](_includes/index/how_it_works.md) %}
+The following topics provide comprehensive coverage of the core functionality of {{ ydb-short-name }}, from high-level architecture and data model to advanced capabilities such as transactions, indexing, and federated queries.
 
-## What's Next?
+- [Glossary](glossary.md)
+- [Analytical capabilities](./analytics/index.md)
+- [Stream processing](./streaming-query/index.md)
+- [Architecture](architecture/index.md)
+- [Database connection](connect.md)
+- [Schema objects](datamodel/index.md)
+- [Cluster topology](topology.md)
+- [Query execution](query_execution/index.md)
+- [Transactions](transactions.md)
+- [Change Data Capture (CDC)](cdc.md)
+- [Time to Live (TTL) and data eviction to external storage](ttl.md)
+- [Database limitations](limits-ydb.md)
+- [Asynchronous replication](async-replication.md)
+- [Bridge mode](./bridge.md)
+- [Data transfer](./transfer.md)
 
-If you are interested in more specifics about various aspects of YDB, check out neighboring articles in this documentation section. If you are ready to jump into more practical content, you can continue to the [quick start](../quickstart.md) or [YQL](../dev/yql-tutorial/index.md) tutorials.
+## See also {#see-also}
+
+- [{#T}](../devops/index.md)
+- [{#T}](../dev/index.md)
+- [{#T}](../security/index.md)

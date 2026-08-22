@@ -4,12 +4,15 @@
 #include "event_load.h"
 
 #include <google/protobuf/io/zero_copy_stream.h>
+#include <google/protobuf/io/coded_stream.h>
 #include <google/protobuf/arena.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
+#include <util/generic/bitops.h>
 #include <util/generic/deque.h>
 #include <util/system/context.h>
 #include <util/system/filemap.h>
 #include <util/string/builder.h>
+#include <util/string/hex.h>
 #include <util/thread/lfstack.h>
 #include <array>
 #include <span>
@@ -17,6 +20,10 @@
 namespace NActorsProto {
     class TActorId;
 } // NActorsProto
+
+namespace NInterconnect::NRdma {
+    class TMemRegion;
+}
 
 namespace NActors {
     TString EventPBBaseToString(const TString& header, const TString& dbgStr);
@@ -49,6 +56,7 @@ namespace NActors {
 
         virtual bool WriteRope(const TRope *rope) = 0;
         virtual bool WriteString(const TString *s) = 0;
+        virtual NProtoBuf::io::CodedOutputStream *GetCodedOutputStream() = 0;
     };
 
     class TAllocChunkSerializer final : public TChunkSerializer {
@@ -64,6 +72,10 @@ namespace NActors {
         bool WriteRope(const TRope *rope) override;
         bool WriteString(const TString *s) override;
 
+        NProtoBuf::io::CodedOutputStream *GetCodedOutputStream() override {
+            return nullptr;
+        }
+
         inline TIntrusivePtr<TEventSerializedData> Release(TEventSerializationInfo&& serializationInfo) {
             Buffers->SetSerializationInfo(std::move(serializationInfo));
             return std::move(Buffers);
@@ -76,14 +88,27 @@ namespace NActors {
 
     class TCoroutineChunkSerializer final : public TChunkSerializer, protected ITrampoLine {
     public:
-        using TChunk = std::pair<const char*, size_t>;
+        struct TChunk {
+            const char* Buf;
+            size_t Size;
+            const NInterconnect::NRdma::TMemRegion* MemRegion;
+        };
+
+        enum class EAliasedMode {
+            PassThrough,
+            CopyToBuffer,
+        };
 
         TCoroutineChunkSerializer();
         ~TCoroutineChunkSerializer();
 
-        void SetSerializingEvent(const IEventBase *event);
+        void SetSerializingEvent(const IEventBase *event, bool withCachedSizes, bool withCord);
+        void DiscardEvent() { Event = nullptr; };
         void Abort();
-        std::span<TChunk> FeedBuf(void* data, size_t size);
+        std::span<TChunk> FeedBuf(void* data, size_t size,
+            EAliasedMode aliasedMode = EAliasedMode::PassThrough);
+        std::span<TChunk> FeedBuf(TMutableContiguousSpan *buffer, size_t totalSize,
+            EAliasedMode aliasedMode = EAliasedMode::PassThrough);
         bool IsComplete() const {
             return !Event;
         }
@@ -104,25 +129,49 @@ namespace NActors {
 
         bool WriteRope(const TRope *rope) override;
         bool WriteString(const TString *s) override;
+        bool WriteCord(const y_absl::Cord& cord) override;
+
+        NProtoBuf::io::CodedOutputStream *GetCodedOutputStream() override {
+            if (!WithCachedSizes) {
+                return nullptr;
+            }
+            if (!CodedOutputStream) {
+                CodedOutputStream.reset(new NProtoBuf::io::CodedOutputStream(this, false));
+            }
+            return CodedOutputStream.get();
+        }
+
+        std::vector<y_absl::Cord>& GetCords() {
+            return Cords;
+        }
 
     protected:
         void DoRun() override;
         void Resume();
-        void Produce(const void *data, size_t size);
+        void Produce(const void* data, ssize_t size,
+            const NInterconnect::NRdma::TMemRegion* memRegion);
+        bool WriteAliasedRawImpl(const void* data, int size,
+            const NInterconnect::NRdma::TMemRegion* memRegion);
 
         i64 TotalSerializedDataSize;
         TMappedAllocation Stack;
         TContClosure SelfClosure;
         TContMachineContext InnerContext;
         TContMachineContext *BufFeedContext = nullptr;
-        char *BufferPtr;
-        size_t SizeRemain;
+        TMutableContiguousSpan Buffer;
+        size_t TotalSizeRemain;
         std::vector<TChunk> Chunks;
+        TChunk LastChunk{nullptr, 0, nullptr};
+        EAliasedMode AliasedMode = EAliasedMode::PassThrough;
         const IEventBase *Event = nullptr;
         bool CancelFlag = false;
         bool AbortFlag;
         bool SerializationSuccess;
         bool Finished = false;
+        bool WithCachedSizes = false;
+        bool WithCord = false;
+        std::unique_ptr<NProtoBuf::io::CodedOutputStream> CodedOutputStream;
+        std::vector<y_absl::Cord> Cords;
     };
 
     struct TProtoArenaHolder : public TAtomicRefCount<TProtoArenaHolder> {
@@ -150,8 +199,10 @@ namespace NActors {
 
     void ParseExtendedFormatPayload(TRope::TConstIterator &iter, size_t &size, TVector<TRope> &payload, size_t &totalPayloadSize);
     bool SerializeToArcadiaStreamImpl(TChunkSerializer* chunker, const TVector<TRope> &payload);
+    ui32 CalculateSerializedHeaderSizeImpl(const TVector<TRope> &payload);
+    std::optional<TRope> SerializeToRopeImpl(const google::protobuf::MessageLite& msg, const TVector<TRope>& payload, IRcBufAllocator* allocator);
     ui32 CalculateSerializedSizeImpl(const TVector<TRope> &payload, ssize_t recordSize);
-    TEventSerializationInfo CreateSerializationInfoImpl(size_t preserializedSize, bool allowExternalDataChannel, const TVector<TRope> &payload, ssize_t recordSize);
+    TEventSerializationInfo CreateSerializationInfoImpl(size_t preserializedSize, bool allowExternalDataChannel, const TVector<TRope> &payload, ssize_t recordSize, size_t payloadAlignment = 0, size_t payloadHeaderSize = 0);
 
     template <typename TEv, typename TRecord /*protobuf record*/, ui32 TEventType, typename TRecHolder>
     class TEventPBBase: public TEventBase<TEv, TEventType> , public TRecHolder {
@@ -195,11 +246,21 @@ namespace NActors {
             if (!SerializeToArcadiaStreamImpl(chunker, Payload)) {
                 return false;
             }
-            return Record.SerializeToZeroCopyStream(chunker);
+            if (auto *stream = chunker->GetCodedOutputStream()) {
+                Record.SerializeWithCachedSizes(stream);
+                stream->Trim();
+                return !stream->HadError();
+            } else {
+                return Record.SerializeToZeroCopyStream(chunker);
+            }
         }
 
         ui32 CalculateSerializedSize() const override {
             return CalculateSerializedSizeImpl(Payload, Record.ByteSize());
+        }
+
+        std::optional<TRope> SerializeToRope(IRcBufAllocator* allocator) const override {
+            return NActors::SerializeToRopeImpl(Record, Payload, allocator);
         }
 
         static TEv* Load(const TEventSerializedData *input) {
@@ -219,10 +280,10 @@ namespace NActors {
                 // parse the protobuf
                 TRopeStream stream(iter, size);
                 if (!ev->Record.ParseFromZeroCopyStream(&stream)) {
-                    Y_ENSURE(false, "Failed to parse protobuf event type " << TEventType << " class " << TypeName(ev->Record));
+                    Y_ENSURE(false, "Failed to parse protobuf event type " << TEventType << " class " << TypeName(ev->Record) <<
+                            " size# " << size << " hexDump# " << HexEncode(input->GetString()));
                 }
             }
-            ev->CachedByteSize = input->GetSize();
             return holder.Release();
         }
 
@@ -241,12 +302,31 @@ namespace NActors {
             CachedByteSize = 0;
         }
 
-        TEventSerializationInfo CreateSerializationInfo() const override {
-            return CreateSerializationInfoImpl(0, static_cast<const TEv&>(*this).AllowExternalDataChannel(), GetPayload(), Record.ByteSize());
+        TEventSerializationInfo CreateSerializationInfo(bool allowExternalDataChannel) const override {
+            constexpr size_t payloadAlignment = TEv::GetPayloadAlignment();
+            constexpr size_t payloadHeaderSize = TEv::GetPayloadHeaderSize();
+            static_assert(payloadAlignment == 0 || IsPowerOf2(payloadAlignment),
+                "GetPayloadAlignment() must be zero or a power of two");
+            static_assert(payloadAlignment == 0 || payloadHeaderSize % payloadAlignment == 0,
+                "GetPayloadHeaderSize() must be a multiple of GetPayloadAlignment()");
+            allowExternalDataChannel = allowExternalDataChannel && static_cast<const TEv&>(*this).AllowExternalDataChannel();
+            return CreateSerializationInfoImpl(0, allowExternalDataChannel, GetPayload(),
+                allowExternalDataChannel ? Record.ByteSize() : 0,
+                payloadAlignment, payloadHeaderSize);
         }
 
         bool AllowExternalDataChannel() const {
             return TotalPayloadSize >= 4096;
+        }
+
+        static constexpr size_t GetPayloadAlignment() {
+            return 0;
+        }
+
+        // Size of an optional header reserved in the payload buffer right before each payload (see GetPayloadWithHeader).
+        // Must be a multiple of GetPayloadAlignment() when alignment is requested.
+        static constexpr size_t GetPayloadHeaderSize() {
+            return 0;
         }
 
     public:
@@ -263,6 +343,47 @@ namespace NActors {
             return Payload[id];
         }
 
+        // Returns an owning TRcBuf covering [header | payload] in contiguous memory, where the leading
+        // GetPayloadHeaderSize() bytes are reserved (uninitialized) header space, immediately followed by the
+        // payload bytes. When alignment is requested, the header start is aligned to GetPayloadAlignment().
+        // GetPayload(id) keeps returning the payload-only rope.
+        //
+        // Fast (zero-copy) path: taken when the payload is a single contiguous chunk that still has enough safe
+        // headroom in front (>= GetPayloadHeaderSize()) at the required alignment - the case for an
+        // interconnect-received payload (see CreateSerializationInfo). Safe headroom means the chunk either
+        // privately owns the space or, for cookie-bearing backends, currently owns its front edge, so a
+        // shared-but-front buffer can also take this path. Otherwise an aligned buffer is allocated and the
+        // payload is copied after the header. Intended to be called at most once per payload id: the fast path
+        // consumes the reserved headroom (via cookies); a second call on the same id takes the fallback path.
+        // Write the header through the returned buffer's
+        // UnsafeGetContiguousSpanMut()/UnsafeGetDataMut() (these bypass copy-on-write; the header region lies
+        // outside every payload's bytes, so this is safe even when the backend is shared).
+        TRcBuf GetPayloadWithHeader(ui32 id) {
+            Y_ENSURE(id < Payload.size());
+            constexpr size_t headerSize = TEv::GetPayloadHeaderSize();
+            constexpr size_t alignment = TEv::GetPayloadAlignment();
+            TRope& rope = Payload[id];
+            const size_t payloadSize = rope.GetSize();
+
+            if (payloadSize && rope.IsContiguous()) {
+                const TRcBuf& chunk = rope.Begin().GetChunk();
+                if (chunk.Headroom() >= headerSize) {
+                    const char* headerStart = chunk.GetData() - headerSize;
+                    const bool aligned = alignment == 0 ||
+                        (reinterpret_cast<uintptr_t>(headerStart) & (alignment - 1)) == 0;
+                    if (aligned) {
+                        return chunk.ExpandFront(headerSize);
+                    }
+                }
+            }
+
+            TRcBuf buffer = TRcBuf::UninitializedAligned(headerSize + payloadSize, alignment);
+            if (payloadSize) {
+                rope.Begin().ExtractPlainDataAndAdvance(buffer.UnsafeGetDataMut() + headerSize, payloadSize);
+            }
+            return buffer;
+        }
+
         const TVector<TRope>& GetPayload() const {
             return Payload;
         }
@@ -274,6 +395,7 @@ namespace NActors {
         void StripPayload() {
             Payload.clear();
             TotalPayloadSize = 0;
+            InvalidateCachedByteSize();
         }
 
     protected:
@@ -388,6 +510,7 @@ namespace NActors {
                 copy.MergeFrom(base);
                 base.Swap(&copy);
                 PreSerializedData.clear();
+                TBase::InvalidateCachedByteSize(); // cached size may be incorrect now
             }
             return TBase::Record;
         }
@@ -414,24 +537,30 @@ namespace NActors {
                 return false;
             }
 
-            return Record.SerializeToZeroCopyStream(chunker);
-            
+            if (auto *stream = chunker->GetCodedOutputStream()) {
+                Record.SerializeWithCachedSizes(stream);
+                stream->Trim();
+                return !stream->HadError();
+            } else {
+                return Record.SerializeToZeroCopyStream(chunker);
+            }
         }
 
         ui32 CalculateSerializedSize() const override {
             return PreSerializedData.size() + TBase::CalculateSerializedSize();
         }
 
-        size_t GetCachedByteSize() const {
-            return PreSerializedData.size() + TBase::GetCachedByteSize();
-        }
-
-        ui32 CalculateSerializedSizeCached() const override {
-            return GetCachedByteSize();
-        }
-
-        TEventSerializationInfo CreateSerializationInfo() const override {
-            return CreateSerializationInfoImpl(PreSerializedData.size(), static_cast<const TEv&>(*this).AllowExternalDataChannel(), TBase::GetPayload(), Record.ByteSize());
+        TEventSerializationInfo CreateSerializationInfo(bool allowExternalDataChannel) const override {
+            constexpr size_t payloadAlignment = TEv::GetPayloadAlignment();
+            constexpr size_t payloadHeaderSize = TEv::GetPayloadHeaderSize();
+            static_assert(payloadAlignment == 0 || IsPowerOf2(payloadAlignment),
+                "GetPayloadAlignment() must be zero or a power of two");
+            static_assert(payloadAlignment == 0 || payloadHeaderSize % payloadAlignment == 0,
+                "GetPayloadHeaderSize() must be a multiple of GetPayloadAlignment()");
+            allowExternalDataChannel = allowExternalDataChannel && static_cast<const TEv&>(*this).AllowExternalDataChannel();
+            return CreateSerializationInfoImpl(PreSerializedData.size(), allowExternalDataChannel, TBase::GetPayload(),
+                allowExternalDataChannel ? Record.ByteSize() : 0,
+                payloadAlignment, payloadHeaderSize);
         }
     };
 

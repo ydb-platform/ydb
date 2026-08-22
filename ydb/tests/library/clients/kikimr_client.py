@@ -11,6 +11,7 @@ import six
 import functools
 
 from google.protobuf.text_format import Parse
+from ydb.core.protos import blobstorage_base3_pb2
 from ydb.core.protos import blobstorage_config_pb2
 import ydb.core.protos.msgbus_pb2 as msgbus
 import ydb.core.protos.grpc_pb2_grpc as grpc_server
@@ -30,10 +31,10 @@ class FlatTxId(namedtuple('FlatTxId', ['tx_id', 'schemeshard_tablet_id'])):
         )
 
 
-def kikimr_client_factory(server, port, cluster=None, retry_count=1):
+def kikimr_client_factory(server, port, cluster=None, retry_count=1, timeout=10):
     return KiKiMRMessageBusClient(
         server, port, cluster=cluster,
-        retry_count=retry_count
+        retry_count=retry_count, timeout=timeout
     )
 
 
@@ -54,19 +55,23 @@ def to_bytes(v):
 
 
 class StubWithRetries(object):
-    __slots__ = ('_stub', '_retry_count', '_retry_min_sleep', '_retry_max_sleep', '__dict__')
+    __slots__ = ('_stub', '_retry_count', '_retry_min_sleep', '_retry_max_sleep', '_timeout', '__dict__')
 
-    def __init__(self, stub, retry_count=4, retry_min_sleep=0.1, retry_max_sleep=5):
+    def __init__(self, stub, retry_count=4, retry_min_sleep=0.1, retry_max_sleep=3, timeout=10):
         self._stub = stub
         self._retry_count = retry_count
         self._retry_min_sleep = retry_min_sleep
         self._retry_max_sleep = retry_max_sleep
+        self._timeout = timeout
 
     def __getattr__(self, method):
         target = getattr(self._stub, method)
 
         @functools.wraps(target)
         def wrapper(*args, **kwargs):
+            if 'timeout' not in kwargs:
+                kwargs['timeout'] = self._timeout
+
             retries = self._retry_count
             next_sleep = self._retry_min_sleep
             while True:
@@ -84,20 +89,21 @@ class StubWithRetries(object):
 
 
 class KiKiMRMessageBusClient(object):
-    def __init__(self, server, port, cluster=None, retry_count=1):
+    def __init__(self, server, port, cluster=None, retry_count=1, timeout=10):
         self.server = server
         self.port = port
         self._cluster = cluster
         self.__domain_id = 1
         self.__retry_count = retry_count
         self.__retry_sleep_seconds = 10
+        self.__timeout = timeout
         self._options = [
             ('grpc.max_receive_message_length', 64 * 10 ** 6),
             ('grpc.max_send_message_length', 64 * 10 ** 6)
         ]
         self._channel = grpc.insecure_channel("%s:%s" % (self.server, self.port), options=self._options)
         self._stub = grpc_server.TGRpcServerStub(self._channel)
-        self.tablet_service = StubWithRetries(grpc_tablet_service.TabletServiceStub(self._channel))
+        self.tablet_service = StubWithRetries(grpc_tablet_service.TabletServiceStub(self._channel), timeout=self.__timeout)
 
     def describe(self, path, token):
         request = msgbus.TSchemeDescribe()
@@ -114,7 +120,7 @@ class KiKiMRMessageBusClient(object):
         while True:
             try:
                 callee = self._get_invoke_callee(method)
-                return callee(request)
+                return callee(request, timeout=self.__timeout)
             except (RuntimeError, grpc.RpcError):
                 retry -= 1
 
@@ -159,22 +165,26 @@ class KiKiMRMessageBusClient(object):
 
     def send_and_poll_request(self, protobuf_request, method='SchemeOperation'):
         response = self.send_request(protobuf_request, method)
-        return self.__poll(response)
+        return self.__poll(response, protobuf_request.SecurityToken)
 
-    def __poll(self, flat_transaction_response):
+    def __poll(self, flat_transaction_response, token):
         if not MessageBusStatus.is_ok_status(flat_transaction_response.Status):
             return flat_transaction_response
 
-        return self.send_request(
-            TSchemeOperationStatus(
-                flat_transaction_response.FlatTxId.TxId,
-                flat_transaction_response.FlatTxId.SchemeShardTabletId
-            ).protobuf,
-            'SchemeOperationStatus'
-        )
+        request = TSchemeOperationStatus(
+            flat_transaction_response.FlatTxId.TxId,
+            flat_transaction_response.FlatTxId.SchemeShardTabletId
+        ).protobuf
 
-    def bind_storage_pools(self, domain_name, spools):
+        if token:
+            request.SecurityToken = token
+
+        return self.send_request(request, 'SchemeOperationStatus')
+
+    def bind_storage_pools(self, domain_name, spools, token=None):
         request = msgbus.TSchemeOperation()
+        if token:
+            request.SecurityToken = token
         scheme_transaction = request.Transaction
         scheme_operation = scheme_transaction.ModifyScheme
         scheme_operation.WorkingDir = '/'
@@ -188,21 +198,24 @@ class KiKiMRMessageBusClient(object):
                 self.invoke(
                     request, 'SchemeOperation'
                 )
-            )
+            ),
+            token
         )
 
-    def flat_transaction_status(self, tx_id, tablet_id, timeout=120):
+    def flat_transaction_status(self, tx_id, tablet_id, timeout=120, token=None):
         request = msgbus.TSchemeOperationStatus()
         request.FlatTxId.TxId = tx_id
         request.FlatTxId.SchemeShardTabletId = tablet_id
         request.PollOptions.Timeout = timeout * 1000
+        if token:
+            request.SecurityToken = token
         return self.invoke(request, 'SchemeOperationStatus')
 
     def send(self, request, method):
         return self.invoke(request, method)
 
-    def ddl_exec_status(self, flat_tx_id):
-        return self.flat_transaction_status(flat_tx_id.tx_id, flat_tx_id.schemeshard_tablet_id)
+    def ddl_exec_status(self, flat_tx_id, token=None):
+        return self.flat_transaction_status(flat_tx_id.tx_id, flat_tx_id.schemeshard_tablet_id, token=token)
 
     def add_attr(self, working_dir, name, attributes, token=None):
         request = msgbus.TSchemeOperation()
@@ -286,6 +299,90 @@ class KiKiMRMessageBusClient(object):
             request.TabletIDs.extend(tablet_ids)
         request.Alive = True
         return self.invoke(request, 'TabletStateRequest')
+
+    def read_host_configs(self, domain=1):
+        request = msgbus.TBlobStorageConfigRequest()
+        request.Domain = domain
+        request.Request.Command.add().ReadHostConfig.SetInParent()
+
+        response = self.send(request, 'BlobStorageConfig').BlobStorageConfigResponse
+        if not response.Success:
+            raise RuntimeError('read_host_config request failed: %s' % response.ErrorDescription)
+        status = response.Status[0]
+        if not status.Success:
+            raise RuntimeError('read_host_config has failed status: %s' % status.ErrorDescription)
+
+        return status.HostConfig
+
+    def define_host_configs(self, host_configs, domain=1):
+        request = msgbus.TBlobStorageConfigRequest()
+        request.Domain = domain
+        for host_config in host_configs:
+            request.Request.Command.add().DefineHostConfig.MergeFrom(host_config)
+
+        response = self.send(request, 'BlobStorageConfig').BlobStorageConfigResponse
+        if not response.Success:
+            raise RuntimeError('define_host_config request failed: %s' % response.ErrorDescription)
+        for i, status in enumerate(response.Status):
+            if not status.Success:
+                raise RuntimeError('define_host_config has failed status[%d]: %s' % (i, status))
+
+    def read_storage_pools(self, domain=1):
+        request = msgbus.TBlobStorageConfigRequest()
+        request.Domain = domain
+        cmd = request.Request.Command.add().ReadStoragePool
+        cmd.BoxId = 0xFFFFFFFFFFFFFFFF
+
+        response = self.send(request, 'BlobStorageConfig').BlobStorageConfigResponse
+        if not response.Success:
+            raise RuntimeError('read_storage_pools request failed: %s' % response.ErrorDescription)
+
+        status = response.Status[0]
+        if not status.Success:
+            raise RuntimeError('read_storage_pools has failed status: %s' % status.ErrorDescription)
+
+        return status.StoragePool
+
+    def pdisk_set_all_active(self, pdisk_path=None, domain=1):
+        """Equivalent to `dstool pdisk set --status=ACTIVE --pdisk-ids <pdisks>`"""
+        base_config = self.query_base_config(domain=domain)
+
+        request = msgbus.TBlobStorageConfigRequest()
+        request.Domain = domain
+
+        for pdisk in base_config.BaseConfig.PDisk:
+            if pdisk_path is not None and pdisk.Path != pdisk_path:
+                continue
+            cmd = request.Request.Command.add().UpdateDriveStatus
+            cmd.HostKey.NodeId = pdisk.NodeId
+            cmd.PDiskId = pdisk.PDiskId
+            cmd.Status = blobstorage_base3_pb2.EDriveStatus.ACTIVE
+
+        response = self.send(request, 'BlobStorageConfig').BlobStorageConfigResponse
+
+        if not response.Success:
+            raise RuntimeError('update_all_drive_status_active request failed: %s' % response.ErrorDescription)
+        for i, status in enumerate(response.Status):
+            if not status.Success:
+                raise RuntimeError('update_all_drive_status_active has failed status[%d]: %s' % (i, status))
+
+    def query_base_config(self, domain=1):
+        request = msgbus.TBlobStorageConfigRequest()
+        request.Domain = domain
+
+        command = request.Request.Command.add()
+        command.QueryBaseConfig.RetrieveDevices = True
+        command.QueryBaseConfig.VirtualGroupsOnly = False
+
+        response = self.send(request, 'BlobStorageConfig').BlobStorageConfigResponse
+        if not response.Success:
+            raise RuntimeError('query_base_config failed: %s' % response.ErrorDescription)
+
+        status = response.Status[0]
+        if not status.Success:
+            raise RuntimeError('query_base_config failed: %s' % status.ErrorDescription)
+
+        return status
 
     def __del__(self):
         self.close()

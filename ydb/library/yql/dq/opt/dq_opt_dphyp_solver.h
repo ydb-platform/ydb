@@ -111,6 +111,7 @@ protected:
         THashMap<std::pair<TNodeSet, TNodeSet>, bool, TPairHash> CheckTable_;
     #endif
 protected:
+    THashMap<TNodeSet, TCardinalityHints::TCardinalityHint*, std::hash<TNodeSet>> BytesHintsTable_;
     THashMap<TNodeSet, TCardinalityHints::TCardinalityHint*, std::hash<TNodeSet>> CardHintsTable_;
     THashMap<TNodeSet, TJoinAlgoHints::TJoinAlgoHint*, std::hash<TNodeSet>> JoinAlgoHintsTable_;
 };
@@ -170,47 +171,53 @@ public:
         const TJoinHypergraph<TNodeSet>::TEdge& edge,
         bool shuffleLeftSide,
         bool shuffleRightSide,
-        TCardinalityHints::TCardinalityHint*,
-        TJoinAlgoHints::TJoinAlgoHint*
+        TCardinalityHints::TCardinalityHint* maybeCardHint,
+        TJoinAlgoHints::TJoinAlgoHint* maybeJoinAlgoHint,
+        TCardinalityHints::TCardinalityHint* maybeBytesHint
     );
 
     std::shared_ptr<IBaseOptimizerNode> PickBestJoinBothSidesShuffled(
         const std::shared_ptr<IBaseOptimizerNode>& left,
         const std::shared_ptr<IBaseOptimizerNode>& right,
         const TJoinHypergraph<TNodeSet>::TEdge& edge,
-        TCardinalityHints::TCardinalityHint*,
-        TJoinAlgoHints::TJoinAlgoHint*
+        TCardinalityHints::TCardinalityHint* maybeCardHint,
+        TJoinAlgoHints::TJoinAlgoHint* maybeJoinAlgoHint,
+        TCardinalityHints::TCardinalityHint* maybeBytesHint
     );
 
     std::array<std::shared_ptr<IBaseOptimizerNode>, 2> PickBestJoinRightSideShuffled(
         const std::shared_ptr<IBaseOptimizerNode>& left,
         const std::shared_ptr<IBaseOptimizerNode>& right,
         const TJoinHypergraph<TNodeSet>::TEdge& edge,
-        TCardinalityHints::TCardinalityHint*,
-        TJoinAlgoHints::TJoinAlgoHint*
+        TCardinalityHints::TCardinalityHint* maybeCardHint,
+        TJoinAlgoHints::TJoinAlgoHint* maybeJoinAlgoHint,
+        TCardinalityHints::TCardinalityHint* maybeBytesHint
     );
 
     std::array<std::shared_ptr<IBaseOptimizerNode>, 2> PickBestJoinLeftSideShuffled(
         const std::shared_ptr<IBaseOptimizerNode>& left,
         const std::shared_ptr<IBaseOptimizerNode>& right,
         const TJoinHypergraph<TNodeSet>::TEdge& edge,
-        TCardinalityHints::TCardinalityHint*,
-        TJoinAlgoHints::TJoinAlgoHint*
+        TCardinalityHints::TCardinalityHint* maybeCardHint,
+        TJoinAlgoHints::TJoinAlgoHint* maybeJoinAlgoHint,
+        TCardinalityHints::TCardinalityHint* maybeBytesHint
     );
 
     std::array<std::shared_ptr<IBaseOptimizerNode>, 3> PickBestJoinNoSidesShuffled(
         const std::shared_ptr<IBaseOptimizerNode>& left,
         const std::shared_ptr<IBaseOptimizerNode>& right,
         const TJoinHypergraph<TNodeSet>::TEdge& edge,
-        TCardinalityHints::TCardinalityHint*,
-        TJoinAlgoHints::TJoinAlgoHint*
+        TCardinalityHints::TCardinalityHint* maybeCardHint,
+        TJoinAlgoHints::TJoinAlgoHint* maybeJoinAlgoHint,
+        TCardinalityHints::TCardinalityHint* maybeBytesHint
     );
 
     std::array<std::shared_ptr<IBaseOptimizerNode>, 2> PickCrossJoinTrees(
         const std::shared_ptr<IBaseOptimizerNode>& left,
         const std::shared_ptr<IBaseOptimizerNode>& right,
         const TJoinHypergraph<TNodeSet>::TEdge& edge,
-        TCardinalityHints::TCardinalityHint*
+        TCardinalityHints::TCardinalityHint* maybeCardHint,
+        TCardinalityHints::TCardinalityHint* maybeBytesHint
     );
 
     THashMap<TNodeSet, std::vector<std::shared_ptr<IBaseOptimizerNode>>, std::hash<TNodeSet>> DpTable_;
@@ -258,6 +265,7 @@ private:
         const TVector<TJoinColumn>& rightJoinKeys,
         IProviderContext& ctx,
         TCardinalityHints::TCardinalityHint* maybeCardHint,
+        TCardinalityHints::TCardinalityHint* maybeBytesHint,
         TJoinAlgoHints::TJoinAlgoHint* maybeJoinAlgoHint
     );
 
@@ -289,6 +297,7 @@ private:
     TNodeSet joined = s1 | s2;
 
     auto maybeCardHint = this->CardHintsTable_.contains(joined) ? this->CardHintsTable_[joined] : nullptr;
+    auto maybeBytesHint = this->BytesHintsTable_.contains(joined) ? this->BytesHintsTable_[joined] : nullptr;
     auto maybeJoinAlgoHint = this->JoinAlgoHintsTable_.contains(joined) ? this->JoinAlgoHintsTable_[joined] : nullptr;
 
     auto bestJoin = PickBestJoin(
@@ -300,6 +309,7 @@ private:
         csgCmpEdge->RightJoinKeys,
         this->Pctx_,
         maybeCardHint,
+        maybeBytesHint,
         maybeJoinAlgoHint
     );
 
@@ -326,11 +336,12 @@ template <typename TNodeSet> TBestJoin TDPHypSolverClassic<TNodeSet>::PickBestJo
     const TVector<TJoinColumn>& rightJoinKeys,
     IProviderContext& ctx,
     TCardinalityHints::TCardinalityHint* maybeCardHint,
+    TCardinalityHints::TCardinalityHint* maybeBytesHint,
     TJoinAlgoHints::TJoinAlgoHint* maybeJoinAlgoHint
 ) {
     if (maybeJoinAlgoHint) {
         maybeJoinAlgoHint->Applied = true;
-        auto stats = ctx.ComputeJoinStatsV1(left->Stats, right->Stats, leftJoinKeys, rightJoinKeys, maybeJoinAlgoHint->Algo, joinKind, maybeCardHint, false, false);
+        auto stats = ctx.ComputeJoinStatsV2(left->Stats, right->Stats, leftJoinKeys, rightJoinKeys, maybeJoinAlgoHint->Algo, joinKind, maybeCardHint, false, false, maybeBytesHint);
         return TBestJoin{.Stats = std::move(stats), .Algo = maybeJoinAlgoHint->Algo, .IsReversed = false};
     }
 
@@ -341,7 +352,7 @@ template <typename TNodeSet> TBestJoin TDPHypSolverClassic<TNodeSet>::PickBestJo
 
     for (auto joinAlgo : AllJoinAlgos) {
         if (ctx.IsJoinApplicable(left, right, leftJoinKeys, rightJoinKeys, joinAlgo, joinKind)){
-            auto stats = ctx.ComputeJoinStatsV1(left->Stats, right->Stats, leftJoinKeys, rightJoinKeys, joinAlgo, joinKind, maybeCardHint, false, false);
+            auto stats = ctx.ComputeJoinStatsV2(left->Stats, right->Stats, leftJoinKeys, rightJoinKeys, joinAlgo, joinKind, maybeCardHint, false, false, maybeBytesHint);
             if (stats.Cost < bestCost) {
                 bestCost = stats.Cost;
                 bestAlgo = joinAlgo;
@@ -352,7 +363,7 @@ template <typename TNodeSet> TBestJoin TDPHypSolverClassic<TNodeSet>::PickBestJo
 
         if (isCommutative) {
             if (ctx.IsJoinApplicable(right, left, rightJoinKeys, leftJoinKeys, joinAlgo, joinKind)){
-                auto stats = ctx.ComputeJoinStatsV1(right->Stats, left->Stats,  rightJoinKeys, leftJoinKeys, joinAlgo, joinKind, maybeCardHint, false, false);
+                auto stats = ctx.ComputeJoinStatsV2(right->Stats, left->Stats,  rightJoinKeys, leftJoinKeys, joinAlgo, joinKind, maybeCardHint, false, false, maybeBytesHint);
                 if (stats.Cost < bestCost) {
                     bestCost = stats.Cost;
                     bestAlgo = joinAlgo;
@@ -496,6 +507,11 @@ template<typename TNodeSet,  typename TDerived> std::shared_ptr<TJoinOptimizerNo
         JoinAlgoHintsTable_[hintSet] = &h;
     }
 
+    for (auto& h : hints.BytesHints->Hints) {
+        TNodeSet hintSet = Graph_.GetNodesByRelNames(h.JoinLabels);
+        BytesHintsTable_[hintSet] = &h;
+    }
+
     auto& nodes = Graph_.GetNodes();
     for (int i = NNodes_ - 1; i >= 0; --i) {
         TNodeSet s{};
@@ -506,6 +522,11 @@ template<typename TNodeSet,  typename TDerived> std::shared_ptr<TJoinOptimizerNo
         if (CardHintsTable_.contains(s)){
             double& nRows = nodes[i].RelationOptimizerNode->Stats.Nrows;
             nRows = CardHintsTable_.at(s)->ApplyHint(nRows);
+        }
+
+        if (BytesHintsTable_.contains(s)){
+            double& nBytes = nodes[i].RelationOptimizerNode->Stats.ByteSize;
+            nBytes = BytesHintsTable_.at(s)->ApplyHint(nBytes);
         }
     }
 
@@ -675,15 +696,16 @@ template <typename TNodeSet> TBestJoin TDPHypSolverShuffleElimination<TNodeSet>:
     bool shuffleLeftSide,
     bool shuffleRightSide,
     TCardinalityHints::TCardinalityHint* maybeCardHint,
-    TJoinAlgoHints::TJoinAlgoHint* maybeJoinAlgoHint
+    TJoinAlgoHints::TJoinAlgoHint* maybeJoinAlgoHint,
+    TCardinalityHints::TCardinalityHint* maybeBytesHint
 ) {
     if (maybeJoinAlgoHint) {
-        auto stats = this->Pctx_.ComputeJoinStatsV1(left->Stats, right->Stats, edge.LeftJoinKeys, edge.RightJoinKeys, maybeJoinAlgoHint->Algo, edge.JoinKind, maybeCardHint, shuffleLeftSide, shuffleRightSide);
+        auto stats = this->Pctx_.ComputeJoinStatsV2(left->Stats, right->Stats, edge.LeftJoinKeys, edge.RightJoinKeys, maybeJoinAlgoHint->Algo, edge.JoinKind, maybeCardHint, shuffleLeftSide, shuffleRightSide, maybeBytesHint);
         if (!edge.IsCommutative) {
             return {.Stats = std::move(stats), .Algo = maybeJoinAlgoHint->Algo, .IsReversed = false};
         }
 
-        auto reversedStats = this->Pctx_.ComputeJoinStatsV1(right->Stats, left->Stats,  edge.RightJoinKeys, edge.LeftJoinKeys, maybeJoinAlgoHint->Algo, edge.JoinKind, maybeCardHint, shuffleRightSide, shuffleLeftSide);
+        auto reversedStats = this->Pctx_.ComputeJoinStatsV2(right->Stats, left->Stats,  edge.RightJoinKeys, edge.LeftJoinKeys, maybeJoinAlgoHint->Algo, edge.JoinKind, maybeCardHint, shuffleRightSide, shuffleLeftSide, maybeBytesHint);
         if (stats.Cost < reversedStats.Cost) {
             return {.Stats = std::move(stats), .Algo = maybeJoinAlgoHint->Algo, .IsReversed = false};
         } else {
@@ -692,11 +714,35 @@ template <typename TNodeSet> TBestJoin TDPHypSolverShuffleElimination<TNodeSet>:
     }
 
     if (shuffleLeftSide || shuffleRightSide) { // we don't have rules to put shuffles into not grace join yet.
-        auto stats = this->Pctx_.ComputeJoinStatsV1(left->Stats, right->Stats, edge.LeftJoinKeys, edge.RightJoinKeys, EJoinAlgoType::GraceJoin, edge.JoinKind, maybeCardHint, shuffleLeftSide, shuffleRightSide);
+        auto joinAlgo = EJoinAlgoType::GraceJoin;
+        auto stats = this->Pctx_.ComputeJoinStatsV2(left->Stats, right->Stats, edge.LeftJoinKeys, edge.RightJoinKeys, EJoinAlgoType::GraceJoin, edge.JoinKind, maybeCardHint, shuffleLeftSide, shuffleRightSide, maybeBytesHint);
+        if(this->Pctx_.IsJoinApplicable(left, right, edge.LeftJoinKeys, edge.RightJoinKeys, EJoinAlgoType::ReverseBlockJoin, edge.JoinKind)) {
+            auto revStats = this->Pctx_.ComputeJoinStatsV2(left->Stats, right->Stats, edge.LeftJoinKeys, edge.RightJoinKeys, EJoinAlgoType::ReverseBlockJoin, edge.JoinKind, maybeCardHint, shuffleLeftSide, shuffleRightSide, maybeBytesHint);
+            if (revStats.Cost < stats.Cost) {
+                stats = revStats;
+                joinAlgo = EJoinAlgoType::ReverseBlockJoin;
+            }
+        }
+        
+        if (!edge.IsCommutative) {
+            return TBestJoin {
+                .Stats = std::move(stats),
+                .Algo = joinAlgo,
+                .IsReversed = false
+            };
+        }
+        auto reversedStats = this->Pctx_.ComputeJoinStatsV2(right->Stats, left->Stats, edge.RightJoinKeys, edge.LeftJoinKeys, EJoinAlgoType::GraceJoin, edge.JoinKind, maybeCardHint, shuffleRightSide, shuffleLeftSide, maybeBytesHint);
+        if (stats.Cost <= reversedStats.Cost) {
+            return TBestJoin {
+                .Stats = std::move(stats),
+                .Algo = EJoinAlgoType::GraceJoin,
+                .IsReversed = false
+            };
+        }
         return TBestJoin {
-            .Stats = std::move(stats),
+            .Stats = std::move(reversedStats),
             .Algo = EJoinAlgoType::GraceJoin,
-            .IsReversed = false
+            .IsReversed = true
         };
     }
 
@@ -707,7 +753,7 @@ template <typename TNodeSet> TBestJoin TDPHypSolverShuffleElimination<TNodeSet>:
 
     for (auto joinAlgo : AllJoinAlgos) {
         if (this->Pctx_.IsJoinApplicable(left, right, edge.LeftJoinKeys, edge.RightJoinKeys, joinAlgo, edge.JoinKind)){
-            auto stats = this->Pctx_.ComputeJoinStatsV1(left->Stats, right->Stats, edge.LeftJoinKeys, edge.RightJoinKeys, joinAlgo, edge.JoinKind, maybeCardHint, shuffleLeftSide, shuffleRightSide);
+            auto stats = this->Pctx_.ComputeJoinStatsV2(left->Stats, right->Stats, edge.LeftJoinKeys, edge.RightJoinKeys, joinAlgo, edge.JoinKind, maybeCardHint, shuffleLeftSide, shuffleRightSide, maybeBytesHint);
             if (stats.Cost < bestCost) {
                 bestCost = stats.Cost;
                 bestAlgo = joinAlgo;
@@ -719,7 +765,7 @@ template <typename TNodeSet> TBestJoin TDPHypSolverShuffleElimination<TNodeSet>:
 
         if (edge.IsCommutative) {
             if (this->Pctx_.IsJoinApplicable(right, left, edge.RightJoinKeys, edge.LeftJoinKeys, joinAlgo, edge.JoinKind)){
-                auto stats = this->Pctx_.ComputeJoinStatsV1(right->Stats, left->Stats,  edge.RightJoinKeys, edge.LeftJoinKeys, joinAlgo, edge.JoinKind, maybeCardHint, shuffleRightSide, shuffleLeftSide);
+                auto stats = this->Pctx_.ComputeJoinStatsV2(right->Stats, left->Stats,  edge.RightJoinKeys, edge.LeftJoinKeys, joinAlgo, edge.JoinKind, maybeCardHint, shuffleRightSide, shuffleLeftSide, maybeBytesHint);
                 if (stats.Cost < bestCost) {
                     bestCost = stats.Cost;
                     bestAlgo = joinAlgo;
@@ -735,22 +781,27 @@ template <typename TNodeSet> TBestJoin TDPHypSolverShuffleElimination<TNodeSet>:
     return {.Stats = std::move(bestJoinStats), .Algo = bestAlgo, .IsReversed = bestJoinIsReversed };
 }
 
+// TODO: this isn't used as of now (runtime needs to shuffle at least one side)
+//       i.e. beware, this is completely untested
 template <typename TNodeSet> std::shared_ptr<IBaseOptimizerNode> TDPHypSolverShuffleElimination<TNodeSet>::PickBestJoinBothSidesShuffled(
     const std::shared_ptr<IBaseOptimizerNode>& left,
     const std::shared_ptr<IBaseOptimizerNode>& right,
     const TJoinHypergraph<TNodeSet>::TEdge& edge,
     TCardinalityHints::TCardinalityHint* maybeCardHint,
-    TJoinAlgoHints::TJoinAlgoHint* maybeJoinAlgoHint
+    TJoinAlgoHints::TJoinAlgoHint* maybeJoinAlgoHint,
+    TCardinalityHints::TCardinalityHint* maybeBytesHint
 ) {
-    auto bestJoin = PickBestJoin(left, right, edge, false, false, maybeCardHint, maybeJoinAlgoHint);
+    auto bestJoin = PickBestJoin(left, right, edge, false, false, maybeCardHint, maybeJoinAlgoHint, maybeBytesHint);
 
+    // NOTE: Seems like there should be no difference between starting with left ordering and inducing right FDs
+    // or doing it the other way around in either case, so we just do it like in LeftSideShuffled
     if (!bestJoin.IsReversed) {
         auto tree = MakeJoinInternal(std::move(bestJoin.Stats), left, right, edge.LeftJoinKeys, edge.RightJoinKeys, edge.JoinKind, bestJoin.Algo, edge.LeftAny, edge.RightAny, left->Stats.LogicalOrderings);
         tree->Stats.LogicalOrderings.InduceNewOrderings(edge.FDs | right->Stats.LogicalOrderings.GetFDs());
         return tree;
     } else {
-        auto tree = MakeJoinInternal(std::move(bestJoin.Stats), right, left, edge.RightJoinKeys, edge.LeftJoinKeys, edge.JoinKind, bestJoin.Algo, edge.RightAny, edge.LeftAny, right->Stats.LogicalOrderings);
-        tree->Stats.LogicalOrderings.InduceNewOrderings(edge.FDs | left->Stats.LogicalOrderings.GetFDs());
+        auto tree = MakeJoinInternal(std::move(bestJoin.Stats), right, left, edge.RightJoinKeys, edge.LeftJoinKeys, edge.JoinKind, bestJoin.Algo, edge.RightAny, edge.LeftAny, left->Stats.LogicalOrderings);
+        tree->Stats.LogicalOrderings.InduceNewOrderings(edge.FDs | right->Stats.LogicalOrderings.GetFDs());
         return tree;
     }
 }
@@ -760,13 +811,14 @@ template <typename TNodeSet> std::array<std::shared_ptr<IBaseOptimizerNode>, 2> 
     const std::shared_ptr<IBaseOptimizerNode>& right,
     const TJoinHypergraph<TNodeSet>::TEdge& edge,
     TCardinalityHints::TCardinalityHint* maybeCardHint,
-    TJoinAlgoHints::TJoinAlgoHint* maybeAlgoHint
+    TJoinAlgoHints::TJoinAlgoHint* maybeAlgoHint,
+    TCardinalityHints::TCardinalityHint* maybeBytesHint
 ) {
     std::array<std::shared_ptr<IBaseOptimizerNode>, 2> trees = { nullptr, nullptr };
     std::size_t treeCount = 0;
 
     if ((this->Pctx_.IsJoinApplicable(left, right, edge.LeftJoinKeys, edge.RightJoinKeys, EJoinAlgoType::MapJoin, edge.JoinKind) && !maybeAlgoHint) || (maybeAlgoHint && maybeAlgoHint->Algo == EJoinAlgoType::MapJoin)) {
-        auto stats = this->Pctx_.ComputeJoinStatsV1(left->Stats, right->Stats, edge.LeftJoinKeys, edge.RightJoinKeys, EJoinAlgoType::MapJoin, edge.JoinKind, maybeCardHint, false, false);
+        auto stats = this->Pctx_.ComputeJoinStatsV2(left->Stats, right->Stats, edge.LeftJoinKeys, edge.RightJoinKeys, EJoinAlgoType::MapJoin, edge.JoinKind, maybeCardHint, false, false, maybeBytesHint);
         auto tree = MakeJoinInternal(std::move(stats), left, right, edge.LeftJoinKeys, edge.RightJoinKeys, edge.JoinKind, EJoinAlgoType::MapJoin, edge.LeftAny, edge.RightAny, left->Stats.LogicalOrderings);
         tree->Stats.LogicalOrderings.InduceNewOrderings(edge.FDs | right->Stats.LogicalOrderings.GetFDs());
         trees[treeCount++] = std::move(tree);
@@ -775,12 +827,12 @@ template <typename TNodeSet> std::array<std::shared_ptr<IBaseOptimizerNode>, 2> 
     TOptimizerStatistics reversedMapJoinStatistics;
     reversedMapJoinStatistics.Cost = std::numeric_limits<double>::max();
     if ((edge.IsCommutative && this->Pctx_.IsJoinApplicable(right, left, edge.RightJoinKeys, edge.LeftJoinKeys, EJoinAlgoType::MapJoin, edge.JoinKind) && !maybeAlgoHint) || (edge.IsCommutative && maybeAlgoHint && maybeAlgoHint->Algo == EJoinAlgoType::MapJoin)) {
-        reversedMapJoinStatistics = this->Pctx_.ComputeJoinStatsV1(right->Stats, left->Stats, edge.RightJoinKeys, edge.LeftJoinKeys, EJoinAlgoType::MapJoin, edge.JoinKind, maybeCardHint, false, false);
+        reversedMapJoinStatistics = this->Pctx_.ComputeJoinStatsV2(right->Stats, left->Stats, edge.RightJoinKeys, edge.LeftJoinKeys, EJoinAlgoType::MapJoin, edge.JoinKind, maybeCardHint, false, false, maybeBytesHint);
     }
 
     std::shared_ptr<TJoinOptimizerNodeInternal> tree;
-    auto shuffleLeftSideBestJoin = PickBestJoin(left, right, edge, true, false, maybeCardHint, maybeAlgoHint);
-    if (reversedMapJoinStatistics.Cost < shuffleLeftSideBestJoin.Stats.Cost) {
+    auto shuffleLeftSideBestJoin = PickBestJoin(left, right, edge, true, false, maybeCardHint, maybeAlgoHint, maybeBytesHint);
+    if (reversedMapJoinStatistics.Cost <= shuffleLeftSideBestJoin.Stats.Cost) {
         tree = MakeJoinInternal(std::move(reversedMapJoinStatistics), right, left, edge.RightJoinKeys, edge.LeftJoinKeys, edge.JoinKind, EJoinAlgoType::MapJoin, edge.RightAny, edge.LeftAny, right->Stats.LogicalOrderings);
         tree->Stats.LogicalOrderings.InduceNewOrderings(edge.FDs | left->Stats.LogicalOrderings.GetFDs());
     } else {
@@ -789,8 +841,8 @@ template <typename TNodeSet> std::array<std::shared_ptr<IBaseOptimizerNode>, 2> 
             tree->Stats.LogicalOrderings.InduceNewOrderings(edge.FDs | left->Stats.LogicalOrderings.GetFDs());
             tree->ShuffleLeftSideByOrderingIdx = edge.LeftJoinKeysShuffleOrderingIdx;
         } else {
-            tree = MakeJoinInternal(std::move(shuffleLeftSideBestJoin.Stats), right, left, edge.RightJoinKeys, edge.LeftJoinKeys, edge.JoinKind, shuffleLeftSideBestJoin.Algo, edge.RightAny, edge.LeftAny, left->Stats.LogicalOrderings);
-            tree->Stats.LogicalOrderings.InduceNewOrderings(edge.FDs | right->Stats.LogicalOrderings.GetFDs());
+            tree = MakeJoinInternal(std::move(shuffleLeftSideBestJoin.Stats), right, left, edge.RightJoinKeys, edge.LeftJoinKeys, edge.JoinKind, shuffleLeftSideBestJoin.Algo, edge.RightAny, edge.LeftAny, right->Stats.LogicalOrderings);
+            tree->Stats.LogicalOrderings.InduceNewOrderings(edge.FDs | left->Stats.LogicalOrderings.GetFDs());
             tree->ShuffleRightSideByOrderingIdx = edge.LeftJoinKeysShuffleOrderingIdx;
         }
     }
@@ -804,13 +856,14 @@ template <typename TNodeSet> std::array<std::shared_ptr<IBaseOptimizerNode>, 2> 
     const std::shared_ptr<IBaseOptimizerNode>& right,
     const TJoinHypergraph<TNodeSet>::TEdge& edge,
     TCardinalityHints::TCardinalityHint* maybeCardHint,
-    TJoinAlgoHints::TJoinAlgoHint* maybeAlgoHint
+    TJoinAlgoHints::TJoinAlgoHint* maybeAlgoHint,
+    TCardinalityHints::TCardinalityHint* maybeBytesHint
 ) {
     std::array<std::shared_ptr<IBaseOptimizerNode>, 2> trees = { nullptr, nullptr };
     std::size_t treeCount = 0;
 
     if ((edge.IsCommutative && this->Pctx_.IsJoinApplicable(right, left, edge.RightJoinKeys, edge.LeftJoinKeys, EJoinAlgoType::MapJoin, edge.JoinKind) && !maybeAlgoHint) || (edge.IsCommutative && maybeAlgoHint && maybeAlgoHint->Algo == EJoinAlgoType::MapJoin)) {
-        auto stats = this->Pctx_.ComputeJoinStatsV1(right->Stats, left->Stats, edge.RightJoinKeys, edge.LeftJoinKeys, EJoinAlgoType::MapJoin, edge.JoinKind, maybeCardHint, false, false);
+        auto stats = this->Pctx_.ComputeJoinStatsV2(right->Stats, left->Stats, edge.RightJoinKeys, edge.LeftJoinKeys, EJoinAlgoType::MapJoin, edge.JoinKind, maybeCardHint, false, false, maybeBytesHint);
         auto tree = MakeJoinInternal(std::move(stats), right, left, edge.RightJoinKeys, edge.LeftJoinKeys, edge.JoinKind, EJoinAlgoType::MapJoin, edge.RightAny, edge.LeftAny, right->Stats.LogicalOrderings);
         tree->Stats.LogicalOrderings.InduceNewOrderings(edge.FDs | left->Stats.LogicalOrderings.GetFDs());
         trees[treeCount++] = std::move(tree);
@@ -819,22 +872,22 @@ template <typename TNodeSet> std::array<std::shared_ptr<IBaseOptimizerNode>, 2> 
     TOptimizerStatistics mapJoinStatistics;
     mapJoinStatistics.Cost = std::numeric_limits<double>::max();
     if ((this->Pctx_.IsJoinApplicable(left, right, edge.LeftJoinKeys, edge.RightJoinKeys, EJoinAlgoType::MapJoin, edge.JoinKind) && !maybeAlgoHint) || (maybeAlgoHint && maybeAlgoHint->Algo == EJoinAlgoType::MapJoin)) {
-        mapJoinStatistics = this->Pctx_.ComputeJoinStatsV1(left->Stats, right->Stats, edge.LeftJoinKeys, edge.RightJoinKeys, EJoinAlgoType::MapJoin, edge.JoinKind, maybeCardHint, false, false);
+        mapJoinStatistics = this->Pctx_.ComputeJoinStatsV2(left->Stats, right->Stats, edge.LeftJoinKeys, edge.RightJoinKeys, EJoinAlgoType::MapJoin, edge.JoinKind, maybeCardHint, false, false, maybeBytesHint);
     }
 
     std::shared_ptr<TJoinOptimizerNodeInternal> tree;
-    auto shuffleRightSideBestJoin = PickBestJoin(left, right, edge, false, true, maybeCardHint, maybeAlgoHint);
-    if (mapJoinStatistics.Cost < shuffleRightSideBestJoin.Stats.Cost) {
+    auto shuffleRightSideBestJoin = PickBestJoin(left, right, edge, false, true, maybeCardHint, maybeAlgoHint, maybeBytesHint);
+    if (mapJoinStatistics.Cost <= shuffleRightSideBestJoin.Stats.Cost) {
         tree = MakeJoinInternal(std::move(mapJoinStatistics), left, right, edge.LeftJoinKeys, edge.RightJoinKeys, edge.JoinKind, EJoinAlgoType::MapJoin, edge.LeftAny, edge.RightAny, left->Stats.LogicalOrderings);
-        tree->Stats.LogicalOrderings.InduceNewOrderings(edge.FDs | left->Stats.LogicalOrderings.GetFDs());
+        tree->Stats.LogicalOrderings.InduceNewOrderings(edge.FDs | right->Stats.LogicalOrderings.GetFDs());
     } else {
         if (!shuffleRightSideBestJoin.IsReversed) {
             tree = MakeJoinInternal(std::move(shuffleRightSideBestJoin.Stats), left, right, edge.LeftJoinKeys, edge.RightJoinKeys, edge.JoinKind, shuffleRightSideBestJoin.Algo, edge.LeftAny, edge.RightAny, left->Stats.LogicalOrderings);
             tree->Stats.LogicalOrderings.InduceNewOrderings(edge.FDs | right->Stats.LogicalOrderings.GetFDs());
             tree->ShuffleRightSideByOrderingIdx = edge.RightJoinKeysShuffleOrderingIdx;
         } else {
-            tree = MakeJoinInternal(std::move(shuffleRightSideBestJoin.Stats), right, left, edge.RightJoinKeys, edge.LeftJoinKeys, edge.JoinKind, shuffleRightSideBestJoin.Algo, edge.RightAny, edge.LeftAny, right->Stats.LogicalOrderings);
-            tree->Stats.LogicalOrderings.InduceNewOrderings(edge.FDs | left->Stats.LogicalOrderings.GetFDs());
+            tree = MakeJoinInternal(std::move(shuffleRightSideBestJoin.Stats), right, left, edge.RightJoinKeys, edge.LeftJoinKeys, edge.JoinKind, shuffleRightSideBestJoin.Algo, edge.RightAny, edge.LeftAny, left->Stats.LogicalOrderings);
+            tree->Stats.LogicalOrderings.InduceNewOrderings(edge.FDs | right->Stats.LogicalOrderings.GetFDs());
             tree->ShuffleLeftSideByOrderingIdx = edge.RightJoinKeysShuffleOrderingIdx;
         }
     }
@@ -848,13 +901,14 @@ template <typename TNodeSet> std::array<std::shared_ptr<IBaseOptimizerNode>, 3> 
     const std::shared_ptr<IBaseOptimizerNode>& right,
     const TJoinHypergraph<TNodeSet>::TEdge& edge,
     TCardinalityHints::TCardinalityHint* maybeCardHint,
-    TJoinAlgoHints::TJoinAlgoHint* maybeAlgoHint
+    TJoinAlgoHints::TJoinAlgoHint* maybeAlgoHint,
+    TCardinalityHints::TCardinalityHint* maybeBytesHint
 ) {
     std::array<std::shared_ptr<IBaseOptimizerNode>, 3> trees = { nullptr, nullptr, nullptr };
     std::size_t treeCount = 0;
 
     if ((this->Pctx_.IsJoinApplicable(left, right, edge.LeftJoinKeys, edge.RightJoinKeys, EJoinAlgoType::MapJoin, edge.JoinKind) && !maybeAlgoHint) || (maybeAlgoHint && maybeAlgoHint->Algo == EJoinAlgoType::MapJoin)) {
-        auto stats = this->Pctx_.ComputeJoinStatsV1(left->Stats, right->Stats, edge.LeftJoinKeys, edge.RightJoinKeys, EJoinAlgoType::MapJoin, edge.JoinKind, maybeCardHint, false, false);
+        auto stats = this->Pctx_.ComputeJoinStatsV2(left->Stats, right->Stats, edge.LeftJoinKeys, edge.RightJoinKeys, EJoinAlgoType::MapJoin, edge.JoinKind, maybeCardHint, false, false, maybeBytesHint);
         auto tree = MakeJoinInternal(std::move(stats), left, right, edge.LeftJoinKeys, edge.RightJoinKeys, edge.JoinKind, EJoinAlgoType::MapJoin, edge.LeftAny, edge.RightAny, left->Stats.LogicalOrderings);
         tree->Stats.LogicalOrderings.InduceNewOrderings(edge.FDs | right->Stats.LogicalOrderings.GetFDs());
         trees[treeCount++] = std::move(tree);
@@ -862,7 +916,7 @@ template <typename TNodeSet> std::array<std::shared_ptr<IBaseOptimizerNode>, 3> 
 
 
     if ((edge.IsCommutative && this->Pctx_.IsJoinApplicable(right, left, edge.RightJoinKeys, edge.LeftJoinKeys, EJoinAlgoType::MapJoin, edge.JoinKind) && !maybeAlgoHint) || (edge.IsCommutative && maybeAlgoHint && maybeAlgoHint->Algo == EJoinAlgoType::MapJoin)) {
-        auto stats = this->Pctx_.ComputeJoinStatsV1(right->Stats, left->Stats, edge.RightJoinKeys, edge.LeftJoinKeys, EJoinAlgoType::MapJoin, edge.JoinKind, maybeCardHint, false, false);
+        auto stats = this->Pctx_.ComputeJoinStatsV2(right->Stats, left->Stats, edge.RightJoinKeys, edge.LeftJoinKeys, EJoinAlgoType::MapJoin, edge.JoinKind, maybeCardHint, false, false, maybeBytesHint);
         auto tree = MakeJoinInternal(std::move(stats), right, left, edge.RightJoinKeys, edge.LeftJoinKeys, edge.JoinKind, EJoinAlgoType::MapJoin, edge.RightAny, edge.LeftAny, right->Stats.LogicalOrderings);
         tree->Stats.LogicalOrderings.InduceNewOrderings(edge.FDs | left->Stats.LogicalOrderings.GetFDs());
         trees[treeCount++] = std::move(tree);
@@ -896,7 +950,7 @@ template <typename TNodeSet> std::array<std::shared_ptr<IBaseOptimizerNode>, 3> 
     //     }
     // }
 
-    TBestJoin shuffleBothSidesBestJoin = PickBestJoin(left, right, edge, true, true, maybeCardHint, maybeAlgoHint);
+    TBestJoin shuffleBothSidesBestJoin = PickBestJoin(left, right, edge, true, true, maybeCardHint, maybeAlgoHint, maybeBytesHint);
     if (shuffleBothSidesBestJoin.Stats.Cost < minCost) {
         minCost = shuffleBothSidesBestJoin.Stats.Cost;
         minCostTree = EShuffleBothSides;
@@ -919,6 +973,8 @@ template <typename TNodeSet> std::array<std::shared_ptr<IBaseOptimizerNode>, 3> 
         //     break;
         // }
         // case EMinCostTree::EShuffleBothSides: {
+            // NOTE: in theory, it doesn't matter which state we start with in this case,
+            // but for consistency let's start from left ordering.
             if (!shuffleBothSidesBestJoin.IsReversed) {
                 tree = MakeJoinInternal(std::move(shuffleBothSidesBestJoin.Stats), left, right, edge.LeftJoinKeys, edge.RightJoinKeys, edge.JoinKind, shuffleBothSidesBestJoin.Algo, edge.LeftAny, edge.RightAny, OrderingsFSM.CreateState());
                 tree->Stats.LogicalOrderings.SetOrdering(edge.LeftJoinKeysShuffleOrderingIdx);
@@ -945,14 +1001,15 @@ template <typename TNodeSet>  std::array<std::shared_ptr<IBaseOptimizerNode>, 2>
     const std::shared_ptr<IBaseOptimizerNode>& left,
     const std::shared_ptr<IBaseOptimizerNode>& right,
     const TJoinHypergraph<TNodeSet>::TEdge& edge,
-    TCardinalityHints::TCardinalityHint* maybeCardHint
+    TCardinalityHints::TCardinalityHint* maybeCardHint,
+    TCardinalityHints::TCardinalityHint* maybeBytesHint
 ) {
     std::array<std::shared_ptr<IBaseOptimizerNode>, 2> trees = { nullptr, nullptr };
 
-    auto stats = this->Pctx_.ComputeJoinStatsV1(left->Stats, right->Stats, edge.LeftJoinKeys, edge.RightJoinKeys, EJoinAlgoType::Undefined, edge.JoinKind, maybeCardHint, false, false);
+    auto stats = this->Pctx_.ComputeJoinStatsV2(left->Stats, right->Stats, edge.LeftJoinKeys, edge.RightJoinKeys, EJoinAlgoType::Undefined, edge.JoinKind, maybeCardHint, false, false, maybeBytesHint);
     trees[0] = MakeJoinInternal(std::move(stats), left, right, edge.LeftJoinKeys, edge.RightJoinKeys, edge.JoinKind, EJoinAlgoType::Undefined, edge.LeftAny, edge.RightAny, left->Stats.LogicalOrderings);
 
-    auto reversedStats = this->Pctx_.ComputeJoinStatsV1(right->Stats, left->Stats, edge.RightJoinKeys, edge.LeftJoinKeys, EJoinAlgoType::Undefined, edge.JoinKind, maybeCardHint, false, false);
+    auto reversedStats = this->Pctx_.ComputeJoinStatsV2(right->Stats, left->Stats, edge.RightJoinKeys, edge.LeftJoinKeys, EJoinAlgoType::Undefined, edge.JoinKind, maybeCardHint, false, false, maybeBytesHint);
     trees[1] = MakeJoinInternal(std::move(reversedStats), right, left, edge.RightJoinKeys, edge.LeftJoinKeys, edge.JoinKind, EJoinAlgoType::Undefined, edge.RightAny, edge.LeftAny, right->Stats.LogicalOrderings);
 
     return trees;
@@ -1005,12 +1062,13 @@ template<typename TNodeSet> void TDPHypSolverShuffleElimination<TNodeSet>::EmitC
     TNodeSet joined = s1 | s2;
 
     auto maybeCardHint = this->CardHintsTable_.contains(joined) ? this->CardHintsTable_[joined] : nullptr;
+    auto maybeBytesHint = this->BytesHintsTable_.contains(joined) ? this->BytesHintsTable_[joined] : nullptr;
     auto maybeJoinAlgoHint = this->JoinAlgoHintsTable_.contains(joined) ? this->JoinAlgoHintsTable_[joined] : nullptr;
 
     for (const auto& leftNode: *leftNodes) {
         for (const auto& rightNode: *rightNodes) {
             if (csgCmpEdge->JoinKind == EJoinKind::Cross) {
-                for (auto&& tree: PickCrossJoinTrees(leftNode, rightNode, *csgCmpEdge, maybeCardHint)) {
+                for (auto&& tree: PickCrossJoinTrees(leftNode, rightNode, *csgCmpEdge, maybeCardHint, maybeBytesHint)) {
                     AddNodeToDpTableEntries(std::move(tree), this->DpTable_[joined]);
                 }
                 continue;
@@ -1042,17 +1100,17 @@ template<typename TNodeSet> void TDPHypSolverShuffleElimination<TNodeSet>::EmitC
                 auto bestJoin = PickBestJoinBothSidesShuffled(leftNode, rightNode, *csgCmpEdge, maybeCardHint, maybeJoinAlgoHint);
                 AddNodeToDpTableEntries(std::move(bestJoin), DpTable_[joined]);
             }  else */ if (!lhsShuffled && !rhsShuffled) {
-                auto trees = PickBestJoinNoSidesShuffled(leftNode, rightNode, *csgCmpEdge, maybeCardHint, maybeJoinAlgoHint);
+                auto trees = PickBestJoinNoSidesShuffled(leftNode, rightNode, *csgCmpEdge, maybeCardHint, maybeJoinAlgoHint, maybeBytesHint);
                 for (std::size_t i = 0; i < trees.size() && trees[i] != nullptr; ++i) {
                     AddNodeToDpTableEntries(std::move(trees[i]), this->DpTable_[joined]);
                 }
             } else if (!lhsShuffled && rhsShuffled) {
-                auto trees = PickBestJoinRightSideShuffled(leftNode, rightNode, *csgCmpEdge, maybeCardHint, maybeJoinAlgoHint);
+                auto trees = PickBestJoinRightSideShuffled(leftNode, rightNode, *csgCmpEdge, maybeCardHint, maybeJoinAlgoHint, maybeBytesHint);
                 for (std::size_t i = 0; i < trees.size() && trees[i] != nullptr; ++i) {
                     AddNodeToDpTableEntries(std::move(trees[i]), this->DpTable_[joined]);
                 }
             } else  {
-                auto trees = PickBestJoinLeftSideShuffled(leftNode, rightNode, *csgCmpEdge, maybeCardHint, maybeJoinAlgoHint);
+                auto trees = PickBestJoinLeftSideShuffled(leftNode, rightNode, *csgCmpEdge, maybeCardHint, maybeJoinAlgoHint, maybeBytesHint);
                 for (std::size_t i = 0; i < trees.size() && trees[i] != nullptr; ++i) {
                     AddNodeToDpTableEntries(std::move(trees[i]), this->DpTable_[joined]);
                 }

@@ -3,8 +3,7 @@
 #include <util/system/yassert.h> // Y_ASSERT
 #include "udf_type_size_check.h"
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 namespace NDetails {
 struct TDelete {
@@ -13,15 +12,16 @@ struct TDelete {
         delete ptr;
     }
 };
-}
+} // namespace NDetails
 
 ///////////////////////////////////////////////////////////////////////////////
 // TUniquePtr
 ///////////////////////////////////////////////////////////////////////////////
 template <typename T, typename D = NDetails::TDelete>
-class TUniquePtr
-{
+class TUniquePtr {
 public:
+    // Implicit ownership capturing is okay for smart pointers
+    // NOLINTNEXTLINE(google-explicit-constructor)
     inline TUniquePtr(T* ptr = nullptr)
         : Ptr_(ptr)
     {
@@ -66,15 +66,24 @@ public:
         rhs.Ptr_ = tmp;
     }
 
-    inline T* Get() const { return Ptr_; }
-    inline T& operator*() const { return *Ptr_; }
-    inline T* operator->() const { return Ptr_; }
-    inline explicit operator bool() const { return Ptr_ != nullptr; }
+    inline T* Get() const {
+        return Ptr_;
+    }
+    inline T& operator*() const {
+        return *Ptr_;
+    }
+    inline T* operator->() const {
+        return Ptr_;
+    }
+    inline explicit operator bool() const {
+        return Ptr_ != nullptr;
+    }
 
 private:
     inline void DoDestroy() {
-        if (Ptr_)
+        if (Ptr_) {
             D::DoDelete(Ptr_);
+        }
     }
 
 private:
@@ -85,8 +94,7 @@ private:
 // TRefCountedPtr
 ///////////////////////////////////////////////////////////////////////////////
 template <class T>
-class TDefaultRefCountedPtrOps
-{
+class TDefaultRefCountedPtrOps {
 public:
     static inline void Ref(T* t) {
         Y_ASSERT(t);
@@ -105,20 +113,26 @@ public:
 };
 
 template <typename T, typename Ops = TDefaultRefCountedPtrOps<T>>
-class TRefCountedPtr
-{
+class TRefCountedPtr {
 public:
-    enum AddRef { ADD_REF };
-    enum StealRef { STEAL_REF };
+    enum EAddRef {
+        ADD_REF
+    };
+
+    enum EStealRef {
+        STEAL_REF
+    };
 
 public:
+    // Implicit ownership capturing is okay for smart pointers
+    // NOLINTNEXTLINE(google-explicit-constructor)
     inline TRefCountedPtr(T* ptr = nullptr)
         : Ptr_(ptr)
     {
         Ref();
     }
 
-    inline TRefCountedPtr(T* ptr, StealRef)
+    inline TRefCountedPtr(T* ptr, EStealRef)
         : Ptr_(ptr)
     {
         // do not call Ref() on new pointer
@@ -168,7 +182,7 @@ public:
         }
     }
 
-    inline void Reset(T* ptr, StealRef) {
+    inline void Reset(T* ptr, EStealRef) {
         if (Ptr_ != ptr) {
             UnRef();
             Ptr_ = ptr;
@@ -188,10 +202,18 @@ public:
         return tmp;
     }
 
-    inline T* Get() const { return Ptr_; }
-    inline T& operator*() const { return *Ptr_; }
-    inline T* operator->() const { return Ptr_; }
-    inline explicit operator bool() const { return Ptr_ != nullptr; }
+    inline T* Get() const {
+        return Ptr_;
+    }
+    inline T& operator*() const {
+        return *Ptr_;
+    }
+    inline T* operator->() const {
+        return Ptr_;
+    }
+    inline explicit operator bool() const {
+        return Ptr_ != nullptr;
+    }
 
     inline ui32 RefCount() const {
         return Ptr_ ? Ops::RefCount(Ptr_) : 0;
@@ -199,7 +221,7 @@ public:
 
 private:
     inline void Ref() {
-        if (Ptr_){
+        if (Ptr_) {
             Ops::Ref(Ptr_);
         }
     }
@@ -244,5 +266,4 @@ private:
 
 UDF_ASSERT_TYPE_SIZE(IRefCounted, 16);
 
-} // namspace NUdf
-} // namspace NYql
+} // namespace NYql::NUdf

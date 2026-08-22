@@ -2,7 +2,7 @@
 
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
-#include <ydb/core/tx/schemeshard/schemeshard__data_erasure_manager.h>
+#include <ydb/core/tx/schemeshard/schemeshard__tenant_shred_manager.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -10,23 +10,25 @@ namespace NSchemeShard {
 using namespace NTabletFlatExecutor;
 
 struct TSchemeShard::TTxDeleteTabletReply : public TSchemeShard::TRwTxBase {
-    TEvHive::TEvDeleteTabletReply::TPtr Ev;
+    NKikimrProto::EReplyStatus Status = NKikimrProto::EReplyStatus::UNKNOWN;
+    TShardIdx ShardIdx = InvalidShardIdx;
+    TTabletId TabletId = InvalidTabletId;
+    TTabletId HiveId = InvalidTabletId;
+    TTabletId ForwardToHiveId = InvalidTabletId;
 
     TTxDeleteTabletReply(TSelf* self, TEvHive::TEvDeleteTabletReply::TPtr& ev)
         : TRwTxBase(self)
-        , Ev(ev)
-        , ShardIdx(self->MakeLocalId(TLocalShardIdx(Ev->Get()->Record.GetTxId_Deprecated()))) // We use TxId field as a cookie where we store shardIdx
-        , TabletId(InvalidTabletId)
-        , Status(Ev->Get()->Record.GetStatus())
-        , HiveId(Ev->Get()->Record.GetOrigin())
     {
-        if (Ev->Get()->Record.HasShardOwnerId()) {
-            Y_ABORT_UNLESS(Ev->Get()->Record.ShardLocalIdxSize() == 1);
-            ShardIdx = TShardIdx(Ev->Get()->Record.GetShardOwnerId(),
-                                 Ev->Get()->Record.GetShardLocalIdx(0));
-        }
-        if (Ev->Get()->Record.HasForwardRequest()) {
-            ForwardToHiveId = TTabletId(Ev->Get()->Record.GetForwardRequest().GetHiveTabletId());
+        const auto& record = ev->Get()->Record;
+        Status = record.GetStatus();
+        HiveId = TTabletId(record.GetOrigin());
+
+        Y_ABORT_UNLESS(record.HasShardOwnerId());
+        Y_ABORT_UNLESS(record.ShardLocalIdxSize() == 1);
+        ShardIdx = TShardIdx(record.GetShardOwnerId(), record.GetShardLocalIdx(0));
+
+        if (record.HasForwardRequest()) {
+            ForwardToHiveId = TTabletId(record.GetForwardRequest().GetHiveTabletId());
         }
     }
 
@@ -75,6 +77,12 @@ struct TSchemeShard::TTxDeleteTabletReply : public TSchemeShard::TRwTxBase {
             case ETabletType::BlockStorePartition2:
                 Self->TabletCounters->Simple()[COUNTER_BLOCKSTORE_PARTITION2_SHARD_COUNT].Sub(1);
                 break;
+            case ETabletType::BlockStoreVolumeDirect:
+                Self->TabletCounters->Simple()[COUNTER_BLOCKSTORE_VOLUME_DIRECT_SHARD_COUNT].Sub(1);
+                break;
+            case ETabletType::BlockStorePartitionDirect:
+                Self->TabletCounters->Simple()[COUNTER_BLOCKSTORE_PARTITION_DIRECT_SHARD_COUNT].Sub(1);
+                break;
             case ETabletType::FileStore:
                 Self->TabletCounters->Simple()[COUNTER_FILESTORE_SHARD_COUNT].Sub(1);
                 break;
@@ -113,6 +121,9 @@ struct TSchemeShard::TTxDeleteTabletReply : public TSchemeShard::TRwTxBase {
                 break;
             case ETabletType::BackupController:
                 Self->TabletCounters->Simple()[COUNTER_BACKUP_CONTROLLER_TABLET_COUNT].Sub(1);
+                break;
+            case ETabletType::TestShard:
+                Self->TabletCounters->Simple()[COUNTER_TEST_SHARD_COUNT].Sub(1);
                 break;
             default:
                 Y_FAIL_S("Unknown TabletType"
@@ -180,18 +191,11 @@ struct TSchemeShard::TTxDeleteTabletReply : public TSchemeShard::TRwTxBase {
                             "Close pipe to deleted shardIdx " << ShardIdx << " tabletId " << TabletId);
                 Self->PipeClientCache->ForceClose(ctx, ui64(TabletId));
             }
-            if (Self->EnableDataErasure && Self->DataErasureManager->GetStatus() == EDataErasureStatus::IN_PROGRESS) {
-                Self->Execute(Self->CreateTxCancelDataErasureShards({ShardIdx}));
+            if (Self->EnableShred && Self->TenantShredManager->GetStatus() == EShredStatus::IN_PROGRESS) {
+                Self->Execute(Self->CreateTxCancelShredShards({ShardIdx}));
             }
         }
     }
-
-private:
-    TShardIdx ShardIdx;
-    TTabletId TabletId;
-    NKikimrProto::EReplyStatus Status;
-    TTabletId HiveId;
-    TTabletId ForwardToHiveId = {};
 };
 
 NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxDeleteTabletReply(TEvHive::TEvDeleteTabletReply::TPtr& ev) {

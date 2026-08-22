@@ -1,30 +1,36 @@
+from typing import Any, Mapping, TypeVar, Union
+
 from hamcrest.core.base_matcher import BaseMatcher
+from hamcrest.core.description import Description
 from hamcrest.core.helpers.hasmethod import hasmethod
 from hamcrest.core.helpers.wrap_matcher import wrap_matcher
+from hamcrest.core.matcher import Matcher
 
 __author__ = "Jon Reid"
 __copyright__ = "Copyright 2011 hamcrest.org"
 __license__ = "BSD, see License.txt"
 
+V = TypeVar("V")
 
-class IsDictContainingValue(BaseMatcher):
 
-    def __init__(self, value_matcher):
+class IsDictContainingValue(BaseMatcher[Mapping[Any, V]]):
+    def __init__(self, value_matcher: Matcher[V]) -> None:
         self.value_matcher = value_matcher
 
-    def _matches(self, dictionary):
-        if hasmethod(dictionary, 'values'):
-            for value in dictionary.values():
+    def _matches(self, item: Mapping[Any, V]) -> bool:
+        if hasmethod(item, "values"):
+            for value in item.values():
                 if self.value_matcher.matches(value):
                     return True
         return False
 
-    def describe_to(self, description):
-        description.append_text('a dictionary containing value ')   \
-                    .append_description_of(self.value_matcher)
+    def describe_to(self, description: Description) -> None:
+        description.append_text("a dictionary containing value ").append_description_of(
+            self.value_matcher
+        )
 
 
-def has_value(value):
+def has_value(value: Union[V, Matcher[V]]) -> Matcher[Mapping[Any, V]]:
     """Matches if dictionary contains an entry whose value satisfies a given
     matcher.
 

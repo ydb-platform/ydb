@@ -1,13 +1,7 @@
 UNITTEST_FOR(ydb/core/blobstorage/vdisk/query)
 
-IF (WITH_VALGRIND)
-    FORK_SUBTESTS()
-    SIZE(LARGE)
-    TAG(ya:fat)
-ELSE()
-    FORK_SUBTESTS()
-    SIZE(MEDIUM)
-ENDIF()
+FORK_SUBTESTS()
+SIZE(MEDIUM)
 
 PEERDIR(
     ydb/core/blobstorage/vdisk/huge
@@ -16,6 +10,8 @@ PEERDIR(
 
 SRCS(
     query_spacetracker_ut.cpp
+    query_statalgo_ut.cpp
+    query_stat_yield_ut.cpp
 )
 
 END()

@@ -3,7 +3,6 @@
 // For the sake of sane code completion.
 #include "recursive_spin_lock.h"
 #endif
-#undef RECURSIVE_SPIN_LOCK_INL_H_
 
 #include "spin_wait.h"
 
@@ -32,7 +31,7 @@ inline bool TRecursiveSpinLock::TryAcquire() noexcept
     auto newValue = (oldRecursionDepth + 1) | (static_cast<TValue>(currentThreadId) << ThreadIdShift);
 
     bool acquired = Value_.compare_exchange_weak(oldValue, newValue);
-    NDetail::RecordSpinLockAcquired(acquired);
+    NDetail::MaybeRecordSpinLockAcquired(acquired);
     return acquired;
 }
 

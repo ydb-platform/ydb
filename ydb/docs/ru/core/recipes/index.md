@@ -5,4 +5,6 @@
 * [{#T}](ydb-sdk/index.md)
 * [{#T}](ydb-cli/index.md)
 * [{#T}](../yql/reference/recipes/index.md)
-* [{#T}](../olap/index.md)
+* [{#T}](transfer/index.md)
+* [{#T}](./import-export-column-tables.md)
+* [{#T}](./streaming_queries/index.md)

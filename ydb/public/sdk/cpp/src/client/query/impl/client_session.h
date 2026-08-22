@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/kqp_session_common/kqp_session_common.h>
+#include <ydb/public/sdk/cpp/src/client/impl/session/kqp_session_common.h>
 
 #include <ydb/public/api/grpc/ydb_query_v1.grpc.pb.h>
 
@@ -18,8 +18,8 @@ public:
             std::shared_ptr<TQueryClient::TImpl> client,
             std::weak_ptr<ISessionClient> sessionClient)
             : Promise(promise)
-            , SessionId(sessionId)
-            , Endpoint(endpoint)
+            , SessionId(std::move(sessionId))
+            , Endpoint(std::move(endpoint))
             , Client(client)
             , SessionClient(sessionClient)
         { }
@@ -32,6 +32,7 @@ public:
 
     using TResponse = Ydb::Query::SessionState;
     using TStreamProcessorPtr = NYdbGrpc::IStreamRequestReadProcessor<TResponse>::TPtr;
+
     TImpl(TStreamProcessorPtr ptr, const std::string& id, const std::string& endpoint, std::weak_ptr<ISessionClient> client);
     ~TImpl();
 

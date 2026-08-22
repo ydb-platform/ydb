@@ -34,17 +34,24 @@ namespace NKikimr {
         HugeBlobsFreeChunkReservation = 1;
         SetupHugeBytes();
         HugeBlobOverhead = 8u;
+        HugeBlobStepsBetweenPowersOf2 = 6u;
         HullCompLevel0MaxSstsAtOnce = 8u;
         HullCompSortedPartsNum = 8u;
         HullCompLevelRateThreshold = 1.0;
-        HullCompFreeSpaceThreshold = 2.0;
+        HullCompFreeSpaceThresholdPerMille = 2000; // default ratio is 2x
+        HullCompEmergencyMaxSsts = 8; // 0 disables Emergency
+        HullCompEmergencyChunkReserve = 1;
+        HullCompEmergencyEnableAtColor = 15; // LIGHT_YELLOW
         FreshCompMaxInFlightWrites = 10;
         FreshCompMaxInFlightReads = 10; // when moving huge blobs
         HullCompMaxInFlightWrites = 10;
         HullCompMaxInFlightReads = 20;
+        HullCompFullCompPeriodSec = 0;
+        HullCompThrottlerBytesRate = 0;
+        DefragThrottlerBytesRate = 0;
         HullCompReadBatchEfficiencyThreshold = 0.5;  // don't issue reads if there are more gaps than the useful data
         AnubisOsirisMaxInFly = 1000;
-        AddHeader = true;
+        BlobHeaderMode = EBlobHeaderMode::OLD_HEADER;
 
         RecoveryLogCutterFirstDuration = TDuration::Seconds(10);
         RecoveryLogCutterRegularDuration = TDuration::Seconds(30);
@@ -63,7 +70,7 @@ namespace NKikimr {
         SyncLogAdvisedIndexedBlockSize = ui32(1) << ui32(20);       // 1 MB
         SyncLogMaxMemAmount = ui64(64) << ui64(20);                 // 64 MB
 
-        MaxSyncLogChunkSize = ui32(16) << ui32(10);                 // 32 Kb
+        MaxSyncDataCutterChunkSize = ui32(256) << ui32(10);         // 256 Kb
 
         ReplTimeInterval = TDuration::Seconds(60);                  // 60 seconds
         ReplRequestTimeout = TDuration::Seconds(10);                // 10 seconds
@@ -84,7 +91,11 @@ namespace NKikimr {
         HandoffTimeout = TDuration::Seconds(10);
         RunRepl = !baseInfo.ReadOnly;
 
-        ReplMaxTimeToMakeProgress = VDiskPerformance.at(baseInfo.DeviceType).ReplMaxTimeToMakeProgress;
+        if (const auto& perf = VDiskPerformance.find(baseInfo.DeviceType); perf != VDiskPerformance.end()) {
+            ReplMaxTimeToMakeProgress = perf->second.ReplMaxTimeToMakeProgress;
+        } else {
+            ReplMaxTimeToMakeProgress = TDuration::Minutes(180);
+        }
 
         SkeletonFrontGets_MaxInFlightCount = 24;
         SkeletonFrontGets_MaxInFlightCost = 200000000;              // 200ms
@@ -117,7 +128,7 @@ namespace NKikimr {
 
         MaxResponseSize = ui32(8) << ui32(20);                      // 8 MB
         DskTrackerInterval = TDuration::Seconds(1);
-        WhiteboardUpdateInterval = TDuration::Seconds(1);
+        StatsUpdateInterval = TDuration::Seconds(1);
         EnableVDiskCooldownTimeout = false;
 
 #ifdef NDEBUG
@@ -127,6 +138,10 @@ namespace NKikimr {
 #endif
 
     }
+
+    const ui32 TVDiskConfig::TinyDiskHugeBlobStepsBetweenPowersOf2 = 3u;
+    const ui32 TVDiskConfig::TinyDiskHullCompLevel0MaxSstsAtOnce = 2u;
+    const ui32 TVDiskConfig::TinyDiskHullCompSortedPartsNum = 2u;
 
     void TVDiskConfig::SetupHugeBytes() {
         switch (BaseInfo.DeviceType) {

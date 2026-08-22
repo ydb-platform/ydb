@@ -40,6 +40,10 @@ private:
         return ExtractDatabaseName(Ctx_->GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER));
     }
 
+    TString GetRpcMethodName() const override {
+        return Ctx_->GetRpcMethodName();
+    }
+
     void UpdateAuthState(NYdbGrpc::TAuthState::EAuthState state) override {
         Ctx_->GetAuthState().State = state;
     }
@@ -161,20 +165,12 @@ private:
     }
 
     void SendSerializedResult(TString&& in, Ydb::StatusIds::StatusCode status, IRequestCtx::EStreamCtrl flag = IRequestCtx::EStreamCtrl::CONT) override {
-        // res->data() pointer is used inside grpc code.
-        // So this object should be destroyed during grpc_slice destroying routine
-        auto res = new TString;
-        res->swap(in);
+        auto data = MakeByteBufferFromSerializedResult(std::move(in));
+        Ctx_->Reply(&data, status, flag);
+    }
 
-        static auto freeResult = [](void* p) -> void {
-            TString* toDelete = reinterpret_cast<TString*>(p);
-            delete toDelete;
-        };
-
-        grpc_slice slice = grpc_slice_new_with_user_data(
-                    (void*)(res->data()), res->size(), freeResult, res);
-        grpc::Slice sl = grpc::Slice(slice, grpc::Slice::STEAL_REF);
-        auto data = grpc::ByteBuffer(&sl, 1);
+    void SendSerializedResult(TRope&& in, Ydb::StatusIds::StatusCode status, IRequestCtx::EStreamCtrl flag = IRequestCtx::EStreamCtrl::CONT) override {
+        auto data = MakeByteBufferFromSerializedResult(std::move(in));
         Ctx_->Reply(&data, status, flag);
     }
 
@@ -337,10 +333,10 @@ void TEtcdKVService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                 etcdserverpb::Y_CAT(secondName, Response)>>(reqCtx),                             \
             Stuff));                                                                              \
         },                                                                                         \
-        &etcdserverpb::KV::AsyncService::Y_CAT(Request, methodName),                               \
-        "KV/" Y_STRINGIZE(methodName),                                                             \
-        logger,                                                                                    \
-        getCounterBlock("etcd", Y_STRINGIZE(methodName))                                           \
+        &etcdserverpb::KV::AsyncService::Y_CAT(Request, methodName),                                \
+        Y_STRINGIZE(methodName),                                                                     \
+        logger,                                                                                       \
+        getCounterBlock("etcd", Y_STRINGIZE(methodName))                                               \
     )->Run()
 
     SETUP_ETCD_KV_METHOD(Range,Range);
@@ -366,9 +362,9 @@ void TEtcdWatchService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr) {
 
     TStreamGRpcRequest::Start(this, this->GetService(), CQ, &etcdserverpb::Watch::AsyncService::RequestWatch,
         [this](TIntrusivePtr<TStreamGRpcRequest::IContext> context) {
-            ActorSystem->Send(this->Watchtower, new TEvWatchRequest(context.Release()));
+            ActorSystem->Send(this->ServiceActor, new TEvWatchRequest(context.Release()));
         },
-        *ActorSystem, "Lease/LeaseKeepAlive", getCounterBlock("etcd", "LeaseKeepAlive", true), nullptr
+        *ActorSystem, "Watch", getCounterBlock("etcd", "Watch", true), nullptr
     );
 }
 
@@ -391,11 +387,11 @@ void TEtcdLeaseService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                 etcdserverpb::Y_CAT(methodName, Request),                                       \
                 etcdserverpb::Y_CAT(methodName, Response)>>(reqCtx),                             \
             Stuff));                                                                              \
-        },                                                                                        \
-        &etcdserverpb::Lease::AsyncService::Y_CAT(Request, methodName),                           \
-        "Lease/" Y_STRINGIZE(methodName),                                                         \
-        logger,                                                                                   \
-        getCounterBlock("etcd", Y_STRINGIZE(methodName))                                          \
+        },                                                                                         \
+        &etcdserverpb::Lease::AsyncService::Y_CAT(Request, methodName),                             \
+        Y_STRINGIZE(methodName),                                                                     \
+        logger,                                                                                       \
+        getCounterBlock("etcd", Y_STRINGIZE(methodName))                                               \
     )->Run()
 
     SETUP_ETCD_LEASE_METHOD(LeaseGrant);
@@ -413,9 +409,9 @@ void TEtcdLeaseService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 
     TStreamGRpcRequest::Start(this, this->GetService(), CQ, &etcdserverpb::Lease::AsyncService::RequestLeaseKeepAlive,
         [this](TIntrusivePtr<TStreamGRpcRequest::IContext> context) {
-            ActorSystem->Send(this->Watchtower, new TEvLeaseKeepAliveRequest(context.Release()));
+            ActorSystem->Send(this->ServiceActor, new TEvLeaseKeepAliveRequest(context.Release()));
         },
-        *ActorSystem, "Lease", getCounterBlock("etcd", "Watch", true), nullptr
+        *ActorSystem, "Lease/LeaseKeepAlive", getCounterBlock("etcd", "LeaseKeepAlive", true), nullptr
     );
 }
 

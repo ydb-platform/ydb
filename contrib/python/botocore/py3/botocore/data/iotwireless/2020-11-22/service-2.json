@@ -4,11 +4,13 @@
     "apiVersion":"2020-11-22",
     "endpointPrefix":"api.iotwireless",
     "protocol":"rest-json",
+    "protocols":["rest-json"],
     "serviceFullName":"AWS IoT Wireless",
     "serviceId":"IoT Wireless",
     "signatureVersion":"v4",
     "signingName":"iotwireless",
-    "uid":"iotwireless-2020-11-22"
+    "uid":"iotwireless-2020-11-22",
+    "auth":["aws.auth#sigv4"]
   },
   "operations":{
     "AssociateAwsAccountWithPartnerAccount":{
@@ -308,7 +310,7 @@
         {"shape":"InternalServerException"},
         {"shape":"ThrottlingException"}
       ],
-      "documentation":"<p>Provisions a wireless gateway.</p>"
+      "documentation":"<p>Provisions a wireless gateway.</p> <note> <p>When provisioning a wireless gateway, you might run into duplication errors for the following reasons.</p> <ul> <li> <p>If you specify a <code>GatewayEui</code> value that already exists.</p> </li> <li> <p>If you used a <code>ClientRequestToken</code> with the same parameters within the last 10 minutes.</p> </li> </ul> <p>To avoid this error, make sure that you use unique identifiers and parameters for each request within the specified time period.</p> </note>"
     },
     "CreateWirelessGatewayTask":{
       "name":"CreateWirelessGatewayTask",
@@ -421,7 +423,7 @@
         {"shape":"InternalServerException"},
         {"shape":"ThrottlingException"}
       ],
-      "documentation":"<p>Deletes a multicast group if it is not in use by a fuota task.</p>"
+      "documentation":"<p>Deletes a multicast group if it is not in use by a FUOTA task.</p>"
     },
     "DeleteNetworkAnalyzerConfiguration":{
       "name":"DeleteNetworkAnalyzerConfiguration",
@@ -532,7 +534,7 @@
         {"shape":"InternalServerException"},
         {"shape":"ThrottlingException"}
       ],
-      "documentation":"<p>Deletes a wireless gateway.</p>"
+      "documentation":"<p>Deletes a wireless gateway.</p> <note> <p>When deleting a wireless gateway, you might run into duplication errors for the following reasons.</p> <ul> <li> <p>If you specify a <code>GatewayEui</code> value that already exists.</p> </li> <li> <p>If you used a <code>ClientRequestToken</code> with the same parameters within the last 10 minutes.</p> </li> </ul> <p>To avoid this error, make sure that you use unique identifiers and parameters for each request within the specified time period.</p> </note>"
     },
     "DeleteWirelessGatewayTask":{
       "name":"DeleteWirelessGatewayTask",
@@ -619,7 +621,7 @@
         {"shape":"ConflictException"},
         {"shape":"InternalServerException"}
       ],
-      "documentation":"<p>Disassociates a multicast group from a fuota task.</p>"
+      "documentation":"<p>Disassociates a multicast group from a FUOTA task.</p>"
     },
     "DisassociateWirelessDeviceFromFuotaTask":{
       "name":"DisassociateWirelessDeviceFromFuotaTask",
@@ -796,7 +798,44 @@
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"}
       ],
-      "documentation":"<p>Returns current default log levels or log levels by resource types. Based on resource types, log levels can be for wireless device log options or wireless gateway log options.</p>"
+      "documentation":"<p>Returns current default log levels or log levels by resource types. Based on the resource type, log levels can be returned for wireless device, wireless gateway, or FUOTA task log options.</p>"
+    },
+    "GetMetricConfiguration":{
+      "name":"GetMetricConfiguration",
+      "http":{
+        "method":"GET",
+        "requestUri":"/metric-configuration",
+        "responseCode":200
+      },
+      "input":{"shape":"GetMetricConfigurationRequest"},
+      "output":{"shape":"GetMetricConfigurationResponse"},
+      "errors":[
+        {"shape":"ValidationException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"ConflictException"},
+        {"shape":"InternalServerException"},
+        {"shape":"ThrottlingException"}
+      ],
+      "documentation":"<p>Get the metric configuration status for this AWS account.</p>"
+    },
+    "GetMetrics":{
+      "name":"GetMetrics",
+      "http":{
+        "method":"POST",
+        "requestUri":"/metrics"
+      },
+      "input":{"shape":"GetMetricsRequest"},
+      "output":{"shape":"GetMetricsResponse"},
+      "errors":[
+        {"shape":"ValidationException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"ConflictException"},
+        {"shape":"InternalServerException"},
+        {"shape":"ThrottlingException"}
+      ],
+      "documentation":"<p>Get the summary metrics for this AWS account.</p>"
     },
     "GetMulticastGroup":{
       "name":"GetMulticastGroup",
@@ -881,7 +920,7 @@
         {"shape":"ThrottlingException"},
         {"shape":"InternalServerException"}
       ],
-      "documentation":"<p>Get the position information for a given resource.</p> <important> <p>This action is no longer supported. Calls to retrieve the position information should use the <a href=\"https://docs.aws.amazon.com/iot-wireless/2020-11-22/apireference/API_GetResourcePosition.html\">GetResourcePosition</a> API operation instead.</p> </important>",
+      "documentation":"<p>Get the position information for a given resource.</p> <important> <p>This action is no longer supported. Calls to retrieve the position information should use the <a href=\"https://docs.aws.amazon.com/iot-wireless/latest/apireference/API_GetResourcePosition.html\">GetResourcePosition</a> API operation instead.</p> </important>",
       "deprecated":true,
       "deprecatedMessage":"This operation is no longer supported."
     },
@@ -901,7 +940,7 @@
         {"shape":"ThrottlingException"},
         {"shape":"InternalServerException"}
       ],
-      "documentation":"<p>Get position configuration for a given resource.</p> <important> <p>This action is no longer supported. Calls to retrieve the position configuration should use the <a href=\"https://docs.aws.amazon.com/iot-wireless/2020-11-22/apireference/API_GetResourcePosition.html\">GetResourcePosition</a> API operation instead.</p> </important>",
+      "documentation":"<p>Get position configuration for a given resource.</p> <important> <p>This action is no longer supported. Calls to retrieve the position configuration should use the <a href=\"https://docs.aws.amazon.com/iot-wireless/latest/apireference/API_GetResourcePosition.html\">GetResourcePosition</a> API operation instead.</p> </important>",
       "deprecated":true,
       "deprecatedMessage":"This operation is no longer supported."
     },
@@ -955,7 +994,7 @@
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"}
       ],
-      "documentation":"<p>Fetches the log-level override, if any, for a given resource-ID and resource-type. It can be used for a wireless device or a wireless gateway.</p>"
+      "documentation":"<p>Fetches the log-level override, if any, for a given resource ID and resource type..</p>"
     },
     "GetResourcePosition":{
       "name":"GetResourcePosition",
@@ -1276,7 +1315,7 @@
         {"shape":"ResourceNotFoundException"},
         {"shape":"ThrottlingException"}
       ],
-      "documentation":"<p>List all multicast groups associated with a fuota task.</p>"
+      "documentation":"<p>List all multicast groups associated with a FUOTA task.</p>"
     },
     "ListNetworkAnalyzerConfigurations":{
       "name":"ListNetworkAnalyzerConfigurations",
@@ -1325,7 +1364,7 @@
         {"shape":"ThrottlingException"},
         {"shape":"InternalServerException"}
       ],
-      "documentation":"<p>List position configurations for a given resource, such as positioning solvers.</p> <important> <p>This action is no longer supported. Calls to retrieve position information should use the <a href=\"https://docs.aws.amazon.com/iot-wireless/2020-11-22/apireference/API_GetResourcePosition.html\">GetResourcePosition</a> API operation instead.</p> </important>",
+      "documentation":"<p>List position configurations for a given resource, such as positioning solvers.</p> <important> <p>This action is no longer supported. Calls to retrieve position information should use the <a href=\"https://docs.aws.amazon.com/iot-wireless/latest/apireference/API_GetResourcePosition.html\">GetResourcePosition</a> API operation instead.</p> </important>",
       "deprecated":true,
       "deprecatedMessage":"This operation is no longer supported."
     },
@@ -1395,7 +1434,7 @@
         {"shape":"ConflictException"},
         {"shape":"ThrottlingException"}
       ],
-      "documentation":"<p>List wireless devices that have been added to an import task.</p>"
+      "documentation":"<p>List of import tasks and summary information of onboarding status of devices in each import task.</p>"
     },
     "ListWirelessDevices":{
       "name":"ListWirelessDevices",
@@ -1461,7 +1500,7 @@
         {"shape":"ThrottlingException"},
         {"shape":"InternalServerException"}
       ],
-      "documentation":"<p>Put position configuration for a given resource.</p> <important> <p>This action is no longer supported. Calls to update the position configuration should use the <a href=\"https://docs.aws.amazon.com/iot-wireless/2020-11-22/apireference/API_UpdateResourcePosition.html\">UpdateResourcePosition</a> API operation instead.</p> </important>",
+      "documentation":"<p>Put position configuration for a given resource.</p> <important> <p>This action is no longer supported. Calls to update the position configuration should use the <a href=\"https://docs.aws.amazon.com/iot-wireless/latest/apireference/API_UpdateResourcePosition.html\">UpdateResourcePosition</a> API operation instead.</p> </important>",
       "deprecated":true,
       "deprecatedMessage":"This operation is no longer supported."
     },
@@ -1481,7 +1520,7 @@
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"}
       ],
-      "documentation":"<p>Sets the log-level override for a resource-ID and resource-type. This option can be specified for a wireless gateway or a wireless device. A limit of 200 log level override can be set per account.</p>"
+      "documentation":"<p>Sets the log-level override for a resource ID and resource type. A limit of 200 log level override can be set per account.</p>"
     },
     "ResetAllResourceLogLevels":{
       "name":"ResetAllResourceLogLevels",
@@ -1499,7 +1538,7 @@
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"}
       ],
-      "documentation":"<p>Removes the log-level overrides for all resources; both wireless devices and wireless gateways.</p>"
+      "documentation":"<p>Removes the log-level overrides for all resources; wireless devices, wireless gateways, and FUOTA tasks.</p>"
     },
     "ResetResourceLogLevel":{
       "name":"ResetResourceLogLevel",
@@ -1517,7 +1556,7 @@
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"}
       ],
-      "documentation":"<p>Removes the log-level override, if any, for a specific resource-ID and resource-type. It can be used for a wireless device or a wireless gateway.</p>"
+      "documentation":"<p>Removes the log-level override, if any, for a specific resource ID and resource type. It can be used for a wireless device, a wireless gateway, or a FUOTA task.</p>"
     },
     "SendDataToMulticastGroup":{
       "name":"SendDataToMulticastGroup",
@@ -1792,7 +1831,27 @@
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"}
       ],
-      "documentation":"<p>Set default log level, or log levels by resource types. This can be for wireless device log options or wireless gateways log options and is used to control the log messages that'll be displayed in CloudWatch.</p>"
+      "documentation":"<p>Set default log level, or log levels by resource types. This can be for wireless device, wireless gateway, or FUOTA task log options, and is used to control the log messages that'll be displayed in CloudWatch.</p>"
+    },
+    "UpdateMetricConfiguration":{
+      "name":"UpdateMetricConfiguration",
+      "http":{
+        "method":"PUT",
+        "requestUri":"/metric-configuration",
+        "responseCode":204
+      },
+      "input":{"shape":"UpdateMetricConfigurationRequest"},
+      "output":{"shape":"UpdateMetricConfigurationResponse"},
+      "errors":[
+        {"shape":"ValidationException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"ConflictException"},
+        {"shape":"InternalServerException"},
+        {"shape":"ThrottlingException"}
+      ],
+      "documentation":"<p>Update the summary metric configuration.</p>",
+      "idempotent":true
     },
     "UpdateMulticastGroup":{
       "name":"UpdateMulticastGroup",
@@ -1864,7 +1923,7 @@
         {"shape":"ThrottlingException"},
         {"shape":"InternalServerException"}
       ],
-      "documentation":"<p>Update the position information of a resource.</p> <important> <p>This action is no longer supported. Calls to update the position information should use the <a href=\"https://docs.aws.amazon.com/iot-wireless/2020-11-22/apireference/API_UpdateResourcePosition.html\">UpdateResourcePosition</a> API operation instead.</p> </important>",
+      "documentation":"<p>Update the position information of a resource.</p> <important> <p>This action is no longer supported. Calls to update the position information should use the <a href=\"https://docs.aws.amazon.com/iot-wireless/latest/apireference/API_UpdateResourcePosition.html\">UpdateResourcePosition</a> API operation instead.</p> </important>",
       "deprecated":true,
       "deprecatedMessage":"This operation is no longer supported."
     },
@@ -2028,6 +2087,14 @@
       "min":0
     },
     "AddGwMetadata":{"type":"boolean"},
+    "AggregationPeriod":{
+      "type":"string",
+      "enum":[
+        "OneHour",
+        "OneDay",
+        "OneWeek"
+      ]
+    },
     "AmazonId":{
       "type":"string",
       "documentation":"<p>The Sidewalk Amazon ID.</p>",
@@ -2107,7 +2174,7 @@
         },
         "ClientRequestToken":{
           "shape":"ClientRequestToken",
-          "documentation":"<p>Each resource must have a unique client request token. If you try to create a new resource with the same token as a resource that already exists, an exception occurs. If you omit this value, AWS SDKs will automatically generate a unique client request. </p>",
+          "documentation":"<p>Each resource must have a unique client request token. The client token is used to implement idempotency. It ensures that the request completes no more than one time. If you retry a request with the same token and the same parameters, the request will complete successfully. However, if you try to create a new resource using the same token but different parameters, an HTTP 409 conflict occurs. If you omit this value, AWS SDKs will automatically generate a unique client request. For more information about idempotency, see <a href=\"https://docs.aws.amazon.com/ec2/latest/devguide/ec2-api-idempotency.html\">Ensuring idempotency in Amazon EC2 API requests</a>.</p>",
           "idempotencyToken":true
         },
         "Tags":{
@@ -2146,8 +2213,7 @@
     },
     "AssociateMulticastGroupWithFuotaTaskResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "AssociateWirelessDeviceWithFuotaTaskRequest":{
       "type":"structure",
@@ -2166,8 +2232,7 @@
     },
     "AssociateWirelessDeviceWithFuotaTaskResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "AssociateWirelessDeviceWithMulticastGroupRequest":{
       "type":"structure",
@@ -2186,8 +2251,7 @@
     },
     "AssociateWirelessDeviceWithMulticastGroupResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "AssociateWirelessDeviceWithThingRequest":{
       "type":"structure",
@@ -2210,8 +2274,7 @@
     },
     "AssociateWirelessDeviceWithThingResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "AssociateWirelessGatewayWithCertificateRequest":{
       "type":"structure",
@@ -2262,10 +2325,10 @@
     },
     "AssociateWirelessGatewayWithThingResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "AutoCreateTasks":{"type":"boolean"},
+    "Avg":{"type":"double"},
     "BCCH":{
       "type":"integer",
       "max":1023,
@@ -2343,8 +2406,7 @@
     },
     "CancelMulticastGroupSessionResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "CaptureTimeAccuracy":{"type":"float"},
     "CdmaChannel":{
@@ -2532,7 +2594,7 @@
     },
     "ClientRequestToken":{
       "type":"string",
-      "documentation":"<p>Each resource must have a unique client request token. If you try to create a new resource with the same token as a resource that already exists, an exception occurs. If you omit this value, AWS SDKs will automatically generate a unique client request.</p>",
+      "documentation":"<p>Each resource must have a unique client request token. The client token is used to implement idempotency. It ensures that the request completes no more than one time. If you retry a request with the same token and the same parameters, the request will complete successfully. However, if you try to create a new resource using the same token but different parameters, an HTTP 409 conflict occurs. If you omit this value, AWS SDKs will automatically generate a unique client request. For more information about idempotency, see <a href=\"https://docs.aws.amazon.com/ec2/latest/devguide/ec2-api-idempotency.html\">Ensuring idempotency in Amazon EC2 API requests</a>.</p>",
       "max":64,
       "min":1,
       "pattern":"^[a-zA-Z0-9-_]+$"
@@ -2626,7 +2688,7 @@
         },
         "ClientRequestToken":{
           "shape":"ClientRequestToken",
-          "documentation":"<p>Each resource must have a unique client request token. If you try to create a new resource with the same token as a resource that already exists, an exception occurs. If you omit this value, AWS SDKs will automatically generate a unique client request. </p>",
+          "documentation":"<p>Each resource must have a unique client request token. The client token is used to implement idempotency. It ensures that the request completes no more than one time. If you retry a request with the same token and the same parameters, the request will complete successfully. However, if you try to create a new resource using the same token but different parameters, an HTTP 409 conflict occurs. If you omit this value, AWS SDKs will automatically generate a unique client request. For more information about idempotency, see <a href=\"https://docs.aws.amazon.com/ec2/latest/devguide/ec2-api-idempotency.html\">Ensuring idempotency in Amazon EC2 API requests</a>.</p>",
           "idempotencyToken":true
         }
       }
@@ -2649,7 +2711,7 @@
       "members":{
         "Name":{
           "shape":"DeviceProfileName",
-          "documentation":"<p>The name of the new resource.</p>"
+          "documentation":"<p>The name of the new resource.</p> <note> <p>The following special characters aren't accepted: <code>&lt;&gt;^#~$</code> </p> </note>"
         },
         "LoRaWAN":{
           "shape":"LoRaWANDeviceProfile",
@@ -2661,7 +2723,7 @@
         },
         "ClientRequestToken":{
           "shape":"ClientRequestToken",
-          "documentation":"<p>Each resource must have a unique client request token. If you try to create a new resource with the same token as a resource that already exists, an exception occurs. If you omit this value, AWS SDKs will automatically generate a unique client request. </p>",
+          "documentation":"<p>Each resource must have a unique client request token. The client token is used to implement idempotency. It ensures that the request completes no more than one time. If you retry a request with the same token and the same parameters, the request will complete successfully. However, if you try to create a new resource using the same token but different parameters, an HTTP 409 conflict occurs. If you omit this value, AWS SDKs will automatically generate a unique client request. For more information about idempotency, see <a href=\"https://docs.aws.amazon.com/ec2/latest/devguide/ec2-api-idempotency.html\">Ensuring idempotency in Amazon EC2 API requests</a>.</p>",
           "idempotencyToken":true
         },
         "Sidewalk":{
@@ -2702,7 +2764,8 @@
         "Tags":{"shape":"TagList"},
         "RedundancyPercent":{"shape":"RedundancyPercent"},
         "FragmentSizeBytes":{"shape":"FragmentSizeBytes"},
-        "FragmentIntervalMS":{"shape":"FragmentIntervalMS"}
+        "FragmentIntervalMS":{"shape":"FragmentIntervalMS"},
+        "Descriptor":{"shape":"FileDescriptor"}
       }
     },
     "CreateFuotaTaskResponse":{
@@ -2723,7 +2786,7 @@
         },
         "ClientRequestToken":{
           "shape":"ClientRequestToken",
-          "documentation":"<p>Each resource must have a unique client request token. If you try to create a new resource with the same token as a resource that already exists, an exception occurs. If you omit this value, AWS SDKs will automatically generate a unique client request. </p>",
+          "documentation":"<p>Each resource must have a unique client request token. The client token is used to implement idempotency. It ensures that the request completes no more than one time. If you retry a request with the same token and the same parameters, the request will complete successfully. However, if you try to create a new resource using the same token but different parameters, an HTTP 409 conflict occurs. If you omit this value, AWS SDKs will automatically generate a unique client request. For more information about idempotency, see <a href=\"https://docs.aws.amazon.com/ec2/latest/devguide/ec2-api-idempotency.html\">Ensuring idempotency in Amazon EC2 API requests</a>.</p>",
           "idempotencyToken":true
         },
         "LoRaWAN":{"shape":"LoRaWANMulticast"},
@@ -2778,7 +2841,7 @@
       "members":{
         "Name":{
           "shape":"ServiceProfileName",
-          "documentation":"<p>The name of the new resource.</p>"
+          "documentation":"<p>The name of the new resource.</p> <note> <p>The following special characters aren't accepted: <code>&lt;&gt;^#~$</code> </p> </note>"
         },
         "LoRaWAN":{
           "shape":"LoRaWANServiceProfile",
@@ -2790,7 +2853,7 @@
         },
         "ClientRequestToken":{
           "shape":"ClientRequestToken",
-          "documentation":"<p>Each resource must have a unique client request token. If you try to create a new resource with the same token as a resource that already exists, an exception occurs. If you omit this value, AWS SDKs will automatically generate a unique client request. </p>",
+          "documentation":"<p>Each resource must have a unique client request token. The client token is used to implement idempotency. It ensures that the request completes no more than one time. If you retry a request with the same token and the same parameters, the request will complete successfully. However, if you try to create a new resource using the same token but different parameters, an HTTP 409 conflict occurs. If you omit this value, AWS SDKs will automatically generate a unique client request. For more information about idempotency, see <a href=\"https://docs.aws.amazon.com/ec2/latest/devguide/ec2-api-idempotency.html\">Ensuring idempotency in Amazon EC2 API requests</a>.</p>",
           "idempotencyToken":true
         }
       }
@@ -2821,7 +2884,7 @@
         },
         "Name":{
           "shape":"WirelessDeviceName",
-          "documentation":"<p>The name of the new resource.</p>"
+          "documentation":"<p>The name of the new resource.</p> <note> <p>The following special characters aren't accepted: <code>&lt;&gt;^#~$</code> </p> </note>"
         },
         "Description":{
           "shape":"Description",
@@ -2833,7 +2896,7 @@
         },
         "ClientRequestToken":{
           "shape":"ClientRequestToken",
-          "documentation":"<p>Each resource must have a unique client request token. If you try to create a new resource with the same token as a resource that already exists, an exception occurs. If you omit this value, AWS SDKs will automatically generate a unique client request. </p>",
+          "documentation":"<p>Each resource must have a unique client request token. The client token is used to implement idempotency. It ensures that the request completes no more than one time. If you retry a request with the same token and the same parameters, the request will complete successfully. However, if you try to create a new resource using the same token but different parameters, an HTTP 409 conflict occurs. If you omit this value, AWS SDKs will automatically generate a unique client request. For more information about idempotency, see <a href=\"https://docs.aws.amazon.com/ec2/latest/devguide/ec2-api-idempotency.html\">Ensuring idempotency in Amazon EC2 API requests</a>.</p>",
           "idempotencyToken":true
         },
         "LoRaWAN":{
@@ -2846,7 +2909,7 @@
         },
         "Positioning":{
           "shape":"PositioningConfigStatus",
-          "documentation":"<p>FPort values for the GNSS, stream, and ClockSync functions of the positioning information.</p>"
+          "documentation":"<p>The integration status of the Device Location feature for LoRaWAN and Sidewalk devices.</p>"
         },
         "Sidewalk":{
           "shape":"SidewalkCreateWirelessDevice",
@@ -2873,7 +2936,7 @@
       "members":{
         "Name":{
           "shape":"WirelessGatewayName",
-          "documentation":"<p>The name of the new resource.</p>"
+          "documentation":"<p>The name of the new resource.</p> <note> <p>The following special characters aren't accepted: <code>&lt;&gt;^#~$</code> </p> </note>"
         },
         "Description":{
           "shape":"Description",
@@ -2889,7 +2952,7 @@
         },
         "ClientRequestToken":{
           "shape":"ClientRequestToken",
-          "documentation":"<p>Each resource must have a unique client request token. If you try to create a new resource with the same token as a resource that already exists, an exception occurs. If you omit this value, AWS SDKs will automatically generate a unique client request. </p>",
+          "documentation":"<p>Each resource must have a unique client request token. The client token is used to implement idempotency. It ensures that the request completes no more than one time. If you retry a request with the same token and the same parameters, the request will complete successfully. However, if you try to create a new resource using the same token but different parameters, an HTTP 409 conflict occurs. If you omit this value, AWS SDKs will automatically generate a unique client request. For more information about idempotency, see <a href=\"https://docs.aws.amazon.com/ec2/latest/devguide/ec2-api-idempotency.html\">Ensuring idempotency in Amazon EC2 API requests</a>.</p>",
           "idempotencyToken":true
         }
       }
@@ -2925,7 +2988,7 @@
         },
         "ClientRequestToken":{
           "shape":"ClientRequestToken",
-          "documentation":"<p>Each resource must have a unique client request token. If you try to create a new resource with the same token as a resource that already exists, an exception occurs. If you omit this value, AWS SDKs will automatically generate a unique client request. </p>",
+          "documentation":"<p>Each resource must have a unique client request token. The client token is used to implement idempotency. It ensures that the request completes no more than one time. If you retry a request with the same token and the same parameters, the request will complete successfully. However, if you try to create a new resource using the same token but different parameters, an HTTP 409 conflict occurs. If you omit this value, AWS SDKs will automatically generate a unique client request. For more information about idempotency, see <a href=\"https://docs.aws.amazon.com/ec2/latest/devguide/ec2-api-idempotency.html\">Ensuring idempotency in Amazon EC2 API requests</a>.</p>",
           "idempotencyToken":true
         },
         "Tags":{
@@ -3037,8 +3100,7 @@
     },
     "DeleteDestinationResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteDeviceProfileRequest":{
       "type":"structure",
@@ -3054,8 +3116,7 @@
     },
     "DeleteDeviceProfileResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteFuotaTaskRequest":{
       "type":"structure",
@@ -3070,8 +3131,7 @@
     },
     "DeleteFuotaTaskResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteMulticastGroupRequest":{
       "type":"structure",
@@ -3086,8 +3146,7 @@
     },
     "DeleteMulticastGroupResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteNetworkAnalyzerConfigurationRequest":{
       "type":"structure",
@@ -3102,8 +3161,7 @@
     },
     "DeleteNetworkAnalyzerConfigurationResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteQueuedMessagesRequest":{
       "type":"structure",
@@ -3134,8 +3192,7 @@
     },
     "DeleteQueuedMessagesResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteServiceProfileRequest":{
       "type":"structure",
@@ -3151,8 +3208,7 @@
     },
     "DeleteServiceProfileResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteWirelessDeviceImportTaskRequest":{
       "type":"structure",
@@ -3168,8 +3224,7 @@
     },
     "DeleteWirelessDeviceImportTaskResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteWirelessDeviceRequest":{
       "type":"structure",
@@ -3185,8 +3240,7 @@
     },
     "DeleteWirelessDeviceResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteWirelessGatewayRequest":{
       "type":"structure",
@@ -3202,8 +3256,7 @@
     },
     "DeleteWirelessGatewayResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteWirelessGatewayTaskDefinitionRequest":{
       "type":"structure",
@@ -3219,8 +3272,7 @@
     },
     "DeleteWirelessGatewayTaskDefinitionResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteWirelessGatewayTaskRequest":{
       "type":"structure",
@@ -3236,8 +3288,7 @@
     },
     "DeleteWirelessGatewayTaskResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeregisterWirelessDeviceRequest":{
       "type":"structure",
@@ -3259,8 +3310,7 @@
     },
     "DeregisterWirelessDeviceResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "Description":{
       "type":"string",
@@ -3410,6 +3460,36 @@
       "type":"string",
       "max":2048
     },
+    "Dimension":{
+      "type":"structure",
+      "members":{
+        "name":{
+          "shape":"DimensionName",
+          "documentation":"<p>The name of the dimension.</p>"
+        },
+        "value":{
+          "shape":"DimensionValue",
+          "documentation":"<p>The dimension's value.</p>"
+        }
+      },
+      "documentation":"<p>The required list of dimensions for the metric.</p>"
+    },
+    "DimensionName":{
+      "type":"string",
+      "enum":[
+        "DeviceId",
+        "GatewayId"
+      ],
+      "max":256
+    },
+    "DimensionValue":{
+      "type":"string",
+      "max":256
+    },
+    "Dimensions":{
+      "type":"list",
+      "member":{"shape":"Dimension"}
+    },
     "DisassociateAwsAccountFromPartnerAccountRequest":{
       "type":"structure",
       "required":[
@@ -3433,8 +3513,7 @@
     },
     "DisassociateAwsAccountFromPartnerAccountResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DisassociateMulticastGroupFromFuotaTaskRequest":{
       "type":"structure",
@@ -3457,8 +3536,7 @@
     },
     "DisassociateMulticastGroupFromFuotaTaskResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DisassociateWirelessDeviceFromFuotaTaskRequest":{
       "type":"structure",
@@ -3481,8 +3559,7 @@
     },
     "DisassociateWirelessDeviceFromFuotaTaskResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DisassociateWirelessDeviceFromMulticastGroupRequest":{
       "type":"structure",
@@ -3505,8 +3582,7 @@
     },
     "DisassociateWirelessDeviceFromMulticastGroupResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DisassociateWirelessDeviceFromThingRequest":{
       "type":"structure",
@@ -3522,8 +3598,7 @@
     },
     "DisassociateWirelessDeviceFromThingResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DisassociateWirelessGatewayFromCertificateRequest":{
       "type":"structure",
@@ -3539,8 +3614,7 @@
     },
     "DisassociateWirelessGatewayFromCertificateResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DisassociateWirelessGatewayFromThingRequest":{
       "type":"structure",
@@ -3556,9 +3630,9 @@
     },
     "DisassociateWirelessGatewayFromThingResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
+    "DlAllowed":{"type":"boolean"},
     "DlBucketSize":{
       "type":"integer",
       "max":2147483647,
@@ -3796,6 +3870,12 @@
       "min":0
     },
     "FactorySupport":{"type":"boolean"},
+    "FileDescriptor":{
+      "type":"string",
+      "documentation":"<p>The descriptor is the metadata about the file that is transferred to the device using FUOTA, such as the software version. It is a binary field encoded in base64.</p>",
+      "max":332,
+      "pattern":"^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"
+    },
     "Fingerprint":{
       "type":"string",
       "max":64,
@@ -3839,7 +3919,8 @@
         "MissingFrag",
         "MemoryError",
         "MICError",
-        "Successful"
+        "Successful",
+        "Device_exist_in_conflict_fuota_task"
       ]
     },
     "FuotaTask":{
@@ -3856,6 +3937,28 @@
       "documentation":"<p>The arn of a FUOTA task.</p>",
       "max":128
     },
+    "FuotaTaskEvent":{
+      "type":"string",
+      "documentation":"<p>The event for a log message, if the log message is tied to a FUOTA task.</p>",
+      "enum":["Fuota"]
+    },
+    "FuotaTaskEventLogOption":{
+      "type":"structure",
+      "required":[
+        "Event",
+        "LogLevel"
+      ],
+      "members":{
+        "Event":{"shape":"FuotaTaskEvent"},
+        "LogLevel":{"shape":"LogLevel"}
+      },
+      "documentation":"<p>The log options for a FUOTA task event and can be used to set log levels for a specific FUOTA task event.</p> <p>For a LoRaWAN FUOTA task, the only possible event for a log message is <code>Fuota</code>.</p>"
+    },
+    "FuotaTaskEventLogOptionList":{
+      "type":"list",
+      "member":{"shape":"FuotaTaskEventLogOption"},
+      "documentation":"<p>The list of FUOTA task event log options.</p>"
+    },
     "FuotaTaskId":{
       "type":"string",
       "documentation":"<p>The ID of a FUOTA task.</p>",
@@ -3865,6 +3968,27 @@
       "type":"list",
       "member":{"shape":"FuotaTask"},
       "documentation":"<p>Lists the FUOTA tasks registered to your AWS account.</p>"
+    },
+    "FuotaTaskLogOption":{
+      "type":"structure",
+      "required":[
+        "Type",
+        "LogLevel"
+      ],
+      "members":{
+        "Type":{
+          "shape":"FuotaTaskType",
+          "documentation":"<p>The FUOTA task type.</p>"
+        },
+        "LogLevel":{"shape":"LogLevel"},
+        "Events":{"shape":"FuotaTaskEventLogOptionList"}
+      },
+      "documentation":"<p>The log options for FUOTA tasks and can be used to set log levels for a specific type of FUOTA task.</p>"
+    },
+    "FuotaTaskLogOptionList":{
+      "type":"list",
+      "member":{"shape":"FuotaTaskLogOption"},
+      "documentation":"<p>The list of FUOTA task log options.</p>"
     },
     "FuotaTaskName":{
       "type":"string",
@@ -3881,6 +4005,11 @@
         "FuotaDone",
         "Delete_Waiting"
       ]
+    },
+    "FuotaTaskType":{
+      "type":"string",
+      "documentation":"<p>The FUOTA task type.</p>",
+      "enum":["LoRaWAN"]
     },
     "GPST":{"type":"float"},
     "GatewayEui":{
@@ -3908,6 +4037,11 @@
         }
       },
       "documentation":"<p>Gateway list item object that specifies the frequency and list of gateways for which the downlink message should be sent.</p>"
+    },
+    "GatewayListMulticast":{
+      "type":"list",
+      "member":{"shape":"WirelessGatewayId"},
+      "max":20
     },
     "GatewayMaxEirp":{
       "type":"float",
@@ -4004,8 +4138,7 @@
     },
     "GetEventConfigurationByResourceTypesRequest":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "GetEventConfigurationByResourceTypesResponse":{
       "type":"structure",
@@ -4057,20 +4190,52 @@
         "CreatedAt":{"shape":"CreatedAt"},
         "RedundancyPercent":{"shape":"RedundancyPercent"},
         "FragmentSizeBytes":{"shape":"FragmentSizeBytes"},
-        "FragmentIntervalMS":{"shape":"FragmentIntervalMS"}
+        "FragmentIntervalMS":{"shape":"FragmentIntervalMS"},
+        "Descriptor":{"shape":"FileDescriptor"}
       }
     },
     "GetLogLevelsByResourceTypesRequest":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "GetLogLevelsByResourceTypesResponse":{
       "type":"structure",
       "members":{
         "DefaultLogLevel":{"shape":"LogLevel"},
         "WirelessGatewayLogOptions":{"shape":"WirelessGatewayLogOptionList"},
-        "WirelessDeviceLogOptions":{"shape":"WirelessDeviceLogOptionList"}
+        "WirelessDeviceLogOptions":{"shape":"WirelessDeviceLogOptionList"},
+        "FuotaTaskLogOptions":{"shape":"FuotaTaskLogOptionList"}
+      }
+    },
+    "GetMetricConfigurationRequest":{
+      "type":"structure",
+      "members":{}
+    },
+    "GetMetricConfigurationResponse":{
+      "type":"structure",
+      "members":{
+        "SummaryMetric":{
+          "shape":"SummaryMetricConfiguration",
+          "documentation":"<p>The configuration status of the AWS account for summary metric aggregation.</p>"
+        }
+      }
+    },
+    "GetMetricsRequest":{
+      "type":"structure",
+      "members":{
+        "SummaryMetricQueries":{
+          "shape":"SummaryMetricQueries",
+          "documentation":"<p>The list of queries to retrieve the summary metrics.</p>"
+        }
+      }
+    },
+    "GetMetricsResponse":{
+      "type":"structure",
+      "members":{
+        "SummaryMetricQueryResults":{
+          "shape":"SummaryMetricQueryResults",
+          "documentation":"<p>The list of summary metrics that were retrieved.</p>"
+        }
       }
     },
     "GetMulticastGroupRequest":{
@@ -4375,7 +4540,7 @@
         },
         "ResourceType":{
           "shape":"ResourceType",
-          "documentation":"<p>The type of the resource, which can be <code>WirelessDevice</code> or <code>WirelessGateway</code>.</p>",
+          "documentation":"<p>The type of resource, which can be <code>WirelessDevice</code>, <code>WirelessGateway</code>, or <code>FuotaTask</code>.</p>",
           "location":"querystring",
           "locationName":"resourceType"
         }
@@ -4423,7 +4588,7 @@
       "members":{
         "ServiceType":{
           "shape":"WirelessGatewayServiceType",
-          "documentation":"<p>The service type for which to get endpoint information about. Can be <code>CUPS</code> for the Configuration and Update Server endpoint, or <code>LNS</code> for the LoRaWAN Network Server endpoint or <code>CLAIM</code> for the global endpoint.</p>",
+          "documentation":"<p>The service type for which to get endpoint information about. Can be <code>CUPS</code> for the Configuration and Update Server endpoint, or <code>LNS</code> for the LoRaWAN Network Server endpoint.</p>",
           "location":"querystring",
           "locationName":"serviceType"
         }
@@ -4505,6 +4670,10 @@
         "DestinationName":{
           "shape":"DestinationName",
           "documentation":"<p>The name of the destination that's assigned to the wireless devices in the import task.</p>"
+        },
+        "Positioning":{
+          "shape":"PositioningConfigStatus",
+          "documentation":"<p>The integration status of the Device Location feature for LoRaWAN and Sidewalk devices.</p>"
         },
         "Sidewalk":{
           "shape":"SidewalkGetStartImportInfo",
@@ -4606,7 +4775,7 @@
         },
         "Positioning":{
           "shape":"PositioningConfigStatus",
-          "documentation":"<p>FPort values for the GNSS, stream, and ClockSync functions of the positioning information.</p>"
+          "documentation":"<p>The integration status of the Device Location feature for LoRaWAN and Sidewalk devices.</p>"
         }
       }
     },
@@ -5010,6 +5179,10 @@
       "type":"string",
       "pattern":"^([\\+-]?\\d{4}(?!\\d{2}\\b))((-?)((0[1-9]|1[0-2])(\\3([12]\\d|0[1-9]|3[01]))?|W([0-4]\\d|5[0-2])(-?[1-7])?|(00[1-9]|0[1-9]\\d|[12]\\d{2}|3([0-5]\\d|6[1-6])))([T\\s]((([01]\\d|2[0-3])((:?)[0-5]\\d)?|24\\:?00)([\\.,]\\d+(?!:))?)?(\\17[0-5]\\d([\\.,]\\d+)?)?([zZ]|([\\+-])([01]\\d|2[0-3]):?([0-5]\\d)?)?)?)?$"
     },
+    "Id":{
+      "type":"string",
+      "max":256
+    },
     "Identifier":{
       "type":"string",
       "max":256
@@ -5262,6 +5435,14 @@
         "DestinationName":{
           "shape":"DestinationName",
           "documentation":"<p>The name of the Sidewalk destination that describes the IoT rule to route messages received from devices in an import task that are onboarded to AWS IoT Wireless.</p>"
+        },
+        "Positioning":{
+          "shape":"PositioningConfigStatus",
+          "documentation":"<p>The integration status of the Device Location feature for Sidewalk devices.</p>"
+        },
+        "Sidewalk":{
+          "shape":"SidewalkListDevicesForImportInfo",
+          "documentation":"<p>The Sidewalk object containing Sidewalk-related device information.</p>"
         },
         "ImportedWirelessDeviceList":{
           "shape":"ImportedWirelessDeviceList",
@@ -5627,7 +5808,7 @@
         },
         "DestinationName":{
           "shape":"DestinationName",
-          "documentation":"<p>A filter to list only the wireless devices that use this destination.</p>",
+          "documentation":"<p>A filter to list only the wireless devices that use as uplink destination.</p>",
           "location":"querystring",
           "locationName":"destinationName"
         },
@@ -5821,6 +6002,10 @@
         "Gateways":{
           "shape":"LoRaWANGatewayMetadataList",
           "documentation":"<p>Information about the gateways accessed by the device.</p>"
+        },
+        "PublicGateways":{
+          "shape":"LoRaWANPublicGatewayMetadataList",
+          "documentation":"<p>Information about the LoRaWAN public network accessed by the device.</p>"
         }
       },
       "documentation":"<p>LoRaWAN device metatdata.</p>"
@@ -6075,6 +6260,22 @@
         "MinGwDiversity":{
           "shape":"MinGwDiversity",
           "documentation":"<p>The MinGwDiversity value.</p>"
+        },
+        "TxPowerIndexMin":{
+          "shape":"TxPowerIndexMin",
+          "documentation":"<p>The Transmit Power Index minimum value.</p> <p>Default: <code>0</code> </p>"
+        },
+        "TxPowerIndexMax":{
+          "shape":"TxPowerIndexMax",
+          "documentation":"<p>The Transmit Power Index maximum value.</p> <p>Default: <code>15</code> </p>"
+        },
+        "NbTransMin":{
+          "shape":"NbTransMin",
+          "documentation":"<p>The minimum number of transmissions.</p> <p>Default: <code>0</code> </p>"
+        },
+        "NbTransMax":{
+          "shape":"NbTransMax",
+          "documentation":"<p>The maximum number of transmissions.</p> <p>Default: <code>3</code> </p>"
         }
       },
       "documentation":"<p>LoRaWANGetServiceProfileInfo object.</p>"
@@ -6113,7 +6314,8 @@
       "type":"structure",
       "members":{
         "RfRegion":{"shape":"SupportedRfRegion"},
-        "DlClass":{"shape":"DlClass"}
+        "DlClass":{"shape":"DlClass"},
+        "ParticipatingGateways":{"shape":"ParticipatingGatewaysMulticast"}
       },
       "documentation":"<p>The LoRaWAN information that is to be used with the multicast group.</p>"
     },
@@ -6123,7 +6325,8 @@
         "RfRegion":{"shape":"SupportedRfRegion"},
         "DlClass":{"shape":"DlClass"},
         "NumberOfDevicesRequested":{"shape":"NumberOfDevicesRequested"},
-        "NumberOfDevicesInGroup":{"shape":"NumberOfDevicesInGroup"}
+        "NumberOfDevicesInGroup":{"shape":"NumberOfDevicesInGroup"},
+        "ParticipatingGateways":{"shape":"ParticipatingGatewaysMulticast"}
       },
       "documentation":"<p>The LoRaWAN information that is to be returned from getting multicast group information.</p>"
     },
@@ -6147,6 +6350,37 @@
         }
       },
       "documentation":"<p>The LoRaWAN information used with the multicast session.</p>"
+    },
+    "LoRaWANPublicGatewayMetadata":{
+      "type":"structure",
+      "members":{
+        "ProviderNetId":{
+          "shape":"ProviderNetId",
+          "documentation":"<p>The ID of the LoRaWAN public network provider.</p>"
+        },
+        "Id":{
+          "shape":"Id",
+          "documentation":"<p>The ID of the gateways that are operated by the network provider.</p>"
+        },
+        "Rssi":{
+          "shape":"Double",
+          "documentation":"<p>The RSSI (received signal strength indicator) value.</p>"
+        },
+        "Snr":{
+          "shape":"Double",
+          "documentation":"<p>The SNR (signal to noise ratio) value.</p>"
+        },
+        "RfRegion":{"shape":"RfRegion"},
+        "DlAllowed":{
+          "shape":"DlAllowed",
+          "documentation":"<p>Boolean that indicates whether downlink is allowed using the network.</p>"
+        }
+      },
+      "documentation":"<p>LoRaWAN public gateway metadata.</p>"
+    },
+    "LoRaWANPublicGatewayMetadataList":{
+      "type":"list",
+      "member":{"shape":"LoRaWANPublicGatewayMetadata"}
     },
     "LoRaWANSendDataToDevice":{
       "type":"structure",
@@ -6181,6 +6415,22 @@
         "RaAllowed":{
           "shape":"RaAllowed",
           "documentation":"<p>The RAAllowed value that describes whether roaming activation is allowed.</p>"
+        },
+        "TxPowerIndexMin":{
+          "shape":"TxPowerIndexMin",
+          "documentation":"<p>The Transmit Power Index minimum.</p> <p>Default: <code>0</code> </p>"
+        },
+        "TxPowerIndexMax":{
+          "shape":"TxPowerIndexMax",
+          "documentation":"<p>The Transmit Power Index maximum.</p> <p>Default: <code>15</code> </p>"
+        },
+        "NbTransMin":{
+          "shape":"NbTransMin",
+          "documentation":"<p>The minimum number of transmissions.</p> <p>Default: <code>0</code> </p>"
+        },
+        "NbTransMax":{
+          "shape":"NbTransMax",
+          "documentation":"<p>The maximum number of transmissions.</p> <p>Default: <code>3</code> </p>"
         }
       },
       "documentation":"<p>LoRaWANServiceProfile object.</p>"
@@ -6297,8 +6547,7 @@
       "type":"structure",
       "required":[
         "Pci",
-        "Earfcn",
-        "EutranCid"
+        "Earfcn"
       ],
       "members":{
         "Pci":{
@@ -6400,6 +6649,7 @@
       "type":"string",
       "max":64
     },
+    "Max":{"type":"double"},
     "MaxAllowedSignature":{"type":"integer"},
     "MaxDutyCycle":{
       "type":"integer",
@@ -6456,6 +6706,105 @@
         "CUSTOM_COMMAND_ID_RESP"
       ]
     },
+    "MetricName":{
+      "type":"string",
+      "enum":[
+        "DeviceRSSI",
+        "DeviceSNR",
+        "DeviceRoamingRSSI",
+        "DeviceRoamingSNR",
+        "DeviceUplinkCount",
+        "DeviceDownlinkCount",
+        "DeviceUplinkLostCount",
+        "DeviceUplinkLostRate",
+        "DeviceJoinRequestCount",
+        "DeviceJoinAcceptCount",
+        "DeviceRoamingUplinkCount",
+        "DeviceRoamingDownlinkCount",
+        "GatewayUpTime",
+        "GatewayDownTime",
+        "GatewayRSSI",
+        "GatewaySNR",
+        "GatewayUplinkCount",
+        "GatewayDownlinkCount",
+        "GatewayJoinRequestCount",
+        "GatewayJoinAcceptCount",
+        "AwsAccountUplinkCount",
+        "AwsAccountDownlinkCount",
+        "AwsAccountUplinkLostCount",
+        "AwsAccountUplinkLostRate",
+        "AwsAccountJoinRequestCount",
+        "AwsAccountJoinAcceptCount",
+        "AwsAccountRoamingUplinkCount",
+        "AwsAccountRoamingDownlinkCount",
+        "AwsAccountDeviceCount",
+        "AwsAccountGatewayCount",
+        "AwsAccountActiveDeviceCount",
+        "AwsAccountActiveGatewayCount"
+      ],
+      "max":256
+    },
+    "MetricQueryEndTimestamp":{"type":"timestamp"},
+    "MetricQueryError":{
+      "type":"string",
+      "max":256
+    },
+    "MetricQueryId":{
+      "type":"string",
+      "max":256
+    },
+    "MetricQueryStartTimestamp":{"type":"timestamp"},
+    "MetricQueryStatus":{
+      "type":"string",
+      "enum":[
+        "Succeeded",
+        "Failed"
+      ]
+    },
+    "MetricQueryTimestamp":{"type":"timestamp"},
+    "MetricQueryTimestamps":{
+      "type":"list",
+      "member":{"shape":"MetricQueryTimestamp"}
+    },
+    "MetricQueryValue":{
+      "type":"structure",
+      "members":{
+        "Min":{
+          "shape":"Min",
+          "documentation":"<p>The minimum of the values of all data points collected during the aggregation period.</p>"
+        },
+        "Max":{
+          "shape":"Max",
+          "documentation":"<p>The maximum of the values of all the data points collected during the aggregation period.</p>"
+        },
+        "Sum":{
+          "shape":"Sum",
+          "documentation":"<p>The sum of the values of all data points collected during the aggregation period.</p>"
+        },
+        "Avg":{
+          "shape":"Avg",
+          "documentation":"<p>The average of the values of all data points collected during the aggregation period.</p>"
+        },
+        "Std":{
+          "shape":"Std",
+          "documentation":"<p>The standard deviation of the values of all data points collected during the aggregation period.</p>"
+        },
+        "P90":{
+          "shape":"P90",
+          "documentation":"<p>The 90th percentile of the values of all data points collected during the aggregation period.</p>"
+        }
+      },
+      "documentation":"<p>The aggregated values of the metric.</p>"
+    },
+    "MetricQueryValues":{
+      "type":"list",
+      "member":{"shape":"MetricQueryValue"}
+    },
+    "MetricUnit":{
+      "type":"string",
+      "max":256
+    },
+    "Min":{"type":"double"},
     "MinGwDiversity":{
       "type":"integer",
       "max":100,
@@ -6537,6 +6886,16 @@
       "documentation":"<p>Wireless metadata that is to be sent to multicast group.</p>"
     },
     "NRCapable":{"type":"boolean"},
+    "NbTransMax":{
+      "type":"integer",
+      "max":15,
+      "min":0
+    },
+    "NbTransMin":{
+      "type":"integer",
+      "max":15,
+      "min":0
+    },
     "NetId":{
       "type":"string",
       "documentation":"<p>LoRaWAN network ID.</p>",
@@ -6630,11 +6989,11 @@
         },
         "AppEui":{
           "shape":"AppEui",
-          "documentation":"<p>The AppEUI value.</p>"
+          "documentation":"<p>The AppEUI value. You specify this value when using LoRaWAN versions v1.0.2 or v1.0.3.</p>"
         },
         "JoinEui":{
           "shape":"JoinEui",
-          "documentation":"<p>The JoinEUI value.</p>"
+          "documentation":"<p>The JoinEUI value. You specify this value instead of the AppEUI when using LoRaWAN version v1.0.4.</p>"
         },
         "GenAppKey":{
           "shape":"GenAppKey",
@@ -6661,6 +7020,7 @@
       },
       "documentation":"<p>OTAA device object for v1.1</p>"
     },
+    "P90":{"type":"double"},
     "PCI":{
       "type":"integer",
       "max":503,
@@ -6698,6 +7058,20 @@
         }
       },
       "documentation":"<p>Specify the list of gateways to which you want to send downlink data traffic when the wireless device is running in class B or class C mode.</p>"
+    },
+    "ParticipatingGatewaysMulticast":{
+      "type":"structure",
+      "members":{
+        "GatewayList":{
+          "shape":"GatewayListMulticast",
+          "documentation":"<p>The list of gateways that you want to use for sending the multicast downlink message. Each downlink message will be sent to all the gateways in the list in the order that you provided. If the gateway list is empty, then AWS IoT Core for LoRaWAN chooses the gateways that were most recently used by the devices to send an uplink message.</p>"
+        },
+        "TransmissionInterval":{
+          "shape":"TransmissionIntervalMulticast",
+          "documentation":"<p>The duration of time in milliseconds for which AWS IoT Core for LoRaWAN will wait before transmitting the multicast payload to the next gateway in the list.</p>"
+        }
+      },
+      "documentation":"<p>Specify the list of gateways to which you want to send the multicast downlink messages. The multicast message will be sent to each gateway in the list, with the transmission interval as the time interval between each message.</p>"
     },
     "PartnerAccountArn":{"type":"string"},
     "PartnerAccountId":{
@@ -6859,6 +7233,10 @@
       "type":"list",
       "member":{"shape":"CertificateList"}
     },
+    "ProviderNetId":{
+      "type":"string",
+      "max":256
+    },
     "ProximityEventConfiguration":{
       "type":"structure",
       "members":{
@@ -6916,8 +7294,7 @@
     },
     "PutPositionConfigurationResponse":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "deprecated":true,
       "deprecatedMessage":"This operation is no longer supported."
     },
@@ -6936,7 +7313,7 @@
         },
         "ResourceType":{
           "shape":"ResourceType",
-          "documentation":"<p>The type of the resource, which can be <code>WirelessDevice</code> or <code>WirelessGateway</code>.</p>",
+          "documentation":"<p>The type of resource, which can be <code>WirelessDevice</code>, <code>WirelessGateway</code>, or <code>FuotaTask</code>.</p>",
           "location":"querystring",
           "locationName":"resourceType"
         },
@@ -6945,8 +7322,7 @@
     },
     "PutResourceLogLevelResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "QualificationStatus":{"type":"boolean"},
     "QueryString":{
@@ -6994,13 +7370,11 @@
     "ReportDevStatusMargin":{"type":"boolean"},
     "ResetAllResourceLogLevelsRequest":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "ResetAllResourceLogLevelsResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "ResetResourceLogLevelRequest":{
       "type":"structure",
@@ -7016,7 +7390,7 @@
         },
         "ResourceType":{
           "shape":"ResourceType",
-          "documentation":"<p>The type of the resource, which can be <code>WirelessDevice</code> or <code>WirelessGateway</code>.</p>",
+          "documentation":"<p>The type of resource, which can be <code>WirelessDevice</code>, <code>WirelessGateway</code>, or <code>FuotaTask</code>.</p>",
           "location":"querystring",
           "locationName":"resourceType"
         }
@@ -7024,13 +7398,12 @@
     },
     "ResetResourceLogLevelResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "ResourceId":{"type":"string"},
     "ResourceIdentifier":{
       "type":"string",
-      "documentation":"<p>The identifier of the resource. For a Wireless Device, it is the wireless device ID. For a wireless gateway, it is the wireless gateway ID.</p>",
+      "documentation":"<p>The unique identifier of the resource, which can be the wireless gateway ID, the wireless device ID, or the FUOTA task ID.</p>",
       "max":256
     },
     "ResourceNotFoundException":{
@@ -7274,7 +7647,7 @@
     },
     "SessionTimeout":{
       "type":"integer",
-      "documentation":"<p>How long before a multicast group session is to timeout.</p>",
+      "documentation":"<p>How long before a multicast group session is to timeout.</p> <note> <p>We recommend that you provide a timeout value that is a power-of-two (such as 64, 128, 256). If a non-power-of-two value is provided, it will automatically be rounded up to the next supported power-of-two within the allowed range.</p> </note>",
       "max":172800,
       "min":60
     },
@@ -7316,8 +7689,7 @@
     },
     "SidewalkCreateDeviceProfile":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>Sidewalk object for creating a device profile.</p>"
     },
     "SidewalkCreateWirelessDevice":{
@@ -7326,6 +7698,14 @@
         "DeviceProfileId":{
           "shape":"DeviceProfileId",
           "documentation":"<p>The ID of the Sidewalk device profile.</p>"
+        },
+        "Positioning":{
+          "shape":"SidewalkPositioning",
+          "documentation":"<p>The Positioning object of the Sidewalk device.</p>"
+        },
+        "SidewalkManufacturingSn":{
+          "shape":"SidewalkManufacturingSn",
+          "documentation":"<p>The Sidewalk manufacturing serial number.</p>"
         }
       },
       "documentation":"<p>Sidewalk object for creating a wireless device.</p>"
@@ -7361,6 +7741,10 @@
         "Status":{
           "shape":"WirelessDeviceSidewalkStatus",
           "documentation":"<p>The Sidewalk device status, such as provisioned or registered.</p>"
+        },
+        "Positioning":{
+          "shape":"SidewalkPositioning",
+          "documentation":"<p>The Positioning object of the Sidewalk device.</p>"
         }
       },
       "documentation":"<p>Sidewalk device object.</p>"
@@ -7425,6 +7809,10 @@
         "Role":{
           "shape":"Role",
           "documentation":"<p>The IAM role that allows AWS IoT Wireless to access the CSV file in the S3 bucket.</p>"
+        },
+        "Positioning":{
+          "shape":"SidewalkPositioning",
+          "documentation":"<p>The Positioning object of the Sidewalk device.</p>"
         }
       },
       "documentation":"<p>Sidewalk-related information for devices in an import task that are being onboarded.</p>"
@@ -7460,13 +7848,37 @@
         "Status":{
           "shape":"WirelessDeviceSidewalkStatus",
           "documentation":"<p>The status of the Sidewalk devices, such as provisioned or registered.</p>"
+        },
+        "Positioning":{
+          "shape":"SidewalkPositioning",
+          "documentation":"<p>The Positioning object of the Sidewalk device.</p>"
         }
       },
       "documentation":"<p>Sidewalk object used by list functions.</p>"
     },
+    "SidewalkListDevicesForImportInfo":{
+      "type":"structure",
+      "members":{
+        "Positioning":{
+          "shape":"SidewalkPositioning",
+          "documentation":"<p>The Positioning object of the Sidewalk device.</p>"
+        }
+      },
+      "documentation":"<p>The Sidewalk-related object containing positioning information used to configure Sidewalk devices during import.</p>"
+    },
     "SidewalkManufacturingSn":{
       "type":"string",
       "max":64
+    },
+    "SidewalkPositioning":{
+      "type":"structure",
+      "members":{
+        "DestinationName":{
+          "shape":"DestinationName",
+          "documentation":"<p>The location destination name of the Sidewalk device.</p>"
+        }
+      },
+      "documentation":"<p>The Positioning object of the Sidewalk device.</p>"
     },
     "SidewalkResourceTypeEventConfiguration":{
       "type":"structure",
@@ -7499,6 +7911,10 @@
         "SidewalkManufacturingSn":{
           "shape":"SidewalkManufacturingSn",
           "documentation":"<p>The Sidewalk manufacturing serial number (SMSN) of the device added to the import task.</p>"
+        },
+        "Positioning":{
+          "shape":"SidewalkPositioning",
+          "documentation":"<p>The Positioning object of the Sidewalk device.</p>"
         }
       },
       "documentation":"<p>Information about an import task created for an individual Sidewalk device.</p>"
@@ -7513,6 +7929,10 @@
         "Role":{
           "shape":"Role",
           "documentation":"<p>The IAM role that allows AWS IoT Wireless to access the CSV file in the S3 bucket.</p>"
+        },
+        "Positioning":{
+          "shape":"SidewalkPositioning",
+          "documentation":"<p>The Positioning object of the Sidewalk device.</p>"
         }
       },
       "documentation":"<p>Information about an import task created for bulk provisioning.</p>"
@@ -7537,6 +7957,16 @@
       },
       "documentation":"<p>Sidewalk object information for updating an import task.</p>"
     },
+    "SidewalkUpdateWirelessDevice":{
+      "type":"structure",
+      "members":{
+        "Positioning":{
+          "shape":"SidewalkPositioning",
+          "documentation":"<p>The Positioning object of the Sidewalk device.</p>"
+        }
+      },
+      "documentation":"<p>Sidewalk object for updating a wireless device.</p>"
+    },
     "SigningAlg":{
       "type":"string",
       "documentation":"<p>The certificate chain algorithm provided by sidewalk.</p>",
@@ -7560,8 +7990,7 @@
     },
     "StartBulkAssociateWirelessDeviceWithMulticastGroupResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "StartBulkDisassociateWirelessDeviceFromMulticastGroupRequest":{
       "type":"structure",
@@ -7578,8 +8007,7 @@
     },
     "StartBulkDisassociateWirelessDeviceFromMulticastGroupResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "StartFuotaTaskRequest":{
       "type":"structure",
@@ -7595,8 +8023,7 @@
     },
     "StartFuotaTaskResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "StartMulticastGroupSessionRequest":{
       "type":"structure",
@@ -7615,8 +8042,7 @@
     },
     "StartMulticastGroupSessionResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "StartSingleWirelessDeviceImportTaskRequest":{
       "type":"structure",
@@ -7638,6 +8064,10 @@
           "documentation":"<p>The name of the wireless device for which an import task is being started.</p>"
         },
         "Tags":{"shape":"TagList"},
+        "Positioning":{
+          "shape":"PositioningConfigStatus",
+          "documentation":"<p>The integration status of the Device Location feature for Sidewalk devices.</p>"
+        },
         "Sidewalk":{
           "shape":"SidewalkSingleStartImportInfo",
           "documentation":"<p>The Sidewalk-related parameters for importing a single wireless device.</p>"
@@ -7678,6 +8108,10 @@
           "idempotencyToken":true
         },
         "Tags":{"shape":"TagList"},
+        "Positioning":{
+          "shape":"PositioningConfigStatus",
+          "documentation":"<p>The integration status of the Device Location feature for Sidewalk devices.</p>"
+        },
         "Sidewalk":{
           "shape":"SidewalkStartImportInfo",
           "documentation":"<p>The Sidewalk-related parameters for importing wireless devices that need to be provisioned in bulk.</p>"
@@ -7703,6 +8137,7 @@
       "min":1
     },
     "StatusReason":{"type":"string"},
+    "Std":{"type":"double"},
     "SubBand":{
       "type":"integer",
       "documentation":"<p>A subset of supported frequency channels in a certain RFRegion.</p>",
@@ -7715,6 +8150,112 @@
       "documentation":"<p>A list of integer indicating which sub bands are supported by LoRa gateway.</p>",
       "max":8,
       "min":0
+    },
+    "Sum":{"type":"double"},
+    "SummaryMetricConfiguration":{
+      "type":"structure",
+      "members":{
+        "Status":{
+          "shape":"SummaryMetricConfigurationStatus",
+          "documentation":"<p>The status of the configuration of summary metrics.</p>"
+        }
+      },
+      "documentation":"<p>The configuration of summary metrics.</p>"
+    },
+    "SummaryMetricConfigurationStatus":{
+      "type":"string",
+      "enum":[
+        "Enabled",
+        "Disabled"
+      ]
+    },
+    "SummaryMetricQueries":{
+      "type":"list",
+      "member":{"shape":"SummaryMetricQuery"}
+    },
+    "SummaryMetricQuery":{
+      "type":"structure",
+      "members":{
+        "QueryId":{
+          "shape":"MetricQueryId",
+          "documentation":"<p>The id of the summary metric query.</p>"
+        },
+        "MetricName":{
+          "shape":"MetricName",
+          "documentation":"<p>The name of the metric.</p>"
+        },
+        "Dimensions":{
+          "shape":"Dimensions",
+          "documentation":"<p>The dimensions of the summary metric.</p>"
+        },
+        "AggregationPeriod":{
+          "shape":"AggregationPeriod",
+          "documentation":"<p>The aggregation period of the summary metric.</p>"
+        },
+        "StartTimestamp":{
+          "shape":"MetricQueryStartTimestamp",
+          "documentation":"<p>The start timestamp for the summary metric query.</p>"
+        },
+        "EndTimestamp":{
+          "shape":"MetricQueryEndTimestamp",
+          "documentation":"<p>The end timestamp for the summary metric query.</p>"
+        }
+      },
+      "documentation":"<p>The summary metric query object.</p>"
+    },
+    "SummaryMetricQueryResult":{
+      "type":"structure",
+      "members":{
+        "QueryId":{
+          "shape":"MetricQueryId",
+          "documentation":"<p>The ID of the summary metric results query operation.</p>"
+        },
+        "QueryStatus":{
+          "shape":"MetricQueryStatus",
+          "documentation":"<p>The status of the summary metric query result.</p>"
+        },
+        "Error":{
+          "shape":"MetricQueryError",
+          "documentation":"<p>The error message for the summary metric query result.</p>"
+        },
+        "MetricName":{
+          "shape":"MetricName",
+          "documentation":"<p>The name of the summary metric query result.</p>"
+        },
+        "Dimensions":{
+          "shape":"Dimensions",
+          "documentation":"<p>The dimensions of the metric.</p>"
+        },
+        "AggregationPeriod":{
+          "shape":"AggregationPeriod",
+          "documentation":"<p>The aggregation period of the metric.</p>"
+        },
+        "StartTimestamp":{
+          "shape":"MetricQueryStartTimestamp",
+          "documentation":"<p>The start timestamp for the summary metric query.</p>"
+        },
+        "EndTimestamp":{
+          "shape":"MetricQueryEndTimestamp",
+          "documentation":"<p>The end timestamp for the summary metric query.</p>"
+        },
+        "Timestamps":{
+          "shape":"MetricQueryTimestamps",
+          "documentation":"<p>The timestamp of each aggregation result.</p>"
+        },
+        "Values":{
+          "shape":"MetricQueryValues",
+          "documentation":"<p>The list of aggregated summary metric query results.</p>"
+        },
+        "Unit":{
+          "shape":"MetricUnit",
+          "documentation":"<p>The units of measurement to be used for interpreting the aggregation result.</p>"
+        }
+      },
+      "documentation":"<p>The result of the summary metrics aggregation operation.</p>"
+    },
+    "SummaryMetricQueryResults":{
+      "type":"list",
+      "member":{"shape":"SummaryMetricQueryResult"}
     },
     "SupportedRfRegion":{
       "type":"string",
@@ -7806,8 +8347,7 @@
     },
     "TagResourceResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "TagValue":{
       "type":"string",
@@ -7990,9 +8530,24 @@
       "max":604800,
       "min":1
     },
+    "TransmissionIntervalMulticast":{
+      "type":"integer",
+      "max":60000,
+      "min":0
+    },
     "TransmitMode":{
       "type":"integer",
       "max":1,
+      "min":0
+    },
+    "TxPowerIndexMax":{
+      "type":"integer",
+      "max":15,
+      "min":0
+    },
+    "TxPowerIndexMin":{
+      "type":"integer",
+      "max":15,
       "min":0
     },
     "UARFCN":{
@@ -8042,8 +8597,7 @@
     },
     "UntagResourceResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateAbpV1_0_x":{
       "type":"structure",
@@ -8100,8 +8654,7 @@
     },
     "UpdateDestinationResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateEventConfigurationByResourceTypesRequest":{
       "type":"structure",
@@ -8130,8 +8683,7 @@
     },
     "UpdateEventConfigurationByResourceTypesResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateFPorts":{
       "type":"structure",
@@ -8163,26 +8715,39 @@
         "FirmwareUpdateRole":{"shape":"FirmwareUpdateRole"},
         "RedundancyPercent":{"shape":"RedundancyPercent"},
         "FragmentSizeBytes":{"shape":"FragmentSizeBytes"},
-        "FragmentIntervalMS":{"shape":"FragmentIntervalMS"}
+        "FragmentIntervalMS":{"shape":"FragmentIntervalMS"},
+        "Descriptor":{"shape":"FileDescriptor"}
       }
     },
     "UpdateFuotaTaskResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateLogLevelsByResourceTypesRequest":{
       "type":"structure",
       "members":{
         "DefaultLogLevel":{"shape":"LogLevel"},
+        "FuotaTaskLogOptions":{"shape":"FuotaTaskLogOptionList"},
         "WirelessDeviceLogOptions":{"shape":"WirelessDeviceLogOptionList"},
         "WirelessGatewayLogOptions":{"shape":"WirelessGatewayLogOptionList"}
       }
     },
     "UpdateLogLevelsByResourceTypesResponse":{
       "type":"structure",
+      "members":{}
+    },
+    "UpdateMetricConfigurationRequest":{
+      "type":"structure",
       "members":{
+        "SummaryMetric":{
+          "shape":"SummaryMetricConfiguration",
+          "documentation":"<p>The value to be used to set summary metric configuration.</p>"
+        }
       }
+    },
+    "UpdateMetricConfigurationResponse":{
+      "type":"structure",
+      "members":{}
     },
     "UpdateMulticastGroupRequest":{
       "type":"structure",
@@ -8200,8 +8765,7 @@
     },
     "UpdateMulticastGroupResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateNetworkAnalyzerConfigurationRequest":{
       "type":"structure",
@@ -8242,8 +8806,7 @@
     },
     "UpdateNetworkAnalyzerConfigurationResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdatePartnerAccountRequest":{
       "type":"structure",
@@ -8273,8 +8836,7 @@
     },
     "UpdatePartnerAccountResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdatePositionRequest":{
       "type":"structure",
@@ -8306,8 +8868,7 @@
     },
     "UpdatePositionResponse":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "deprecated":true,
       "deprecatedMessage":"This operation is no longer supported."
     },
@@ -8360,8 +8921,7 @@
     },
     "UpdateResourceEventConfigurationResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateResourcePositionRequest":{
       "type":"structure",
@@ -8391,8 +8951,7 @@
     },
     "UpdateResourcePositionResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateSignature":{
       "type":"string",
@@ -8420,8 +8979,7 @@
     },
     "UpdateWirelessDeviceImportTaskResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateWirelessDeviceRequest":{
       "type":"structure",
@@ -8439,7 +8997,7 @@
         },
         "Name":{
           "shape":"WirelessDeviceName",
-          "documentation":"<p>The new name of the resource.</p>"
+          "documentation":"<p>The new name of the resource.</p> <note> <p>The following special characters aren't accepted: <code>&lt;&gt;^#~$</code> </p> </note>"
         },
         "Description":{
           "shape":"Description",
@@ -8451,14 +9009,17 @@
         },
         "Positioning":{
           "shape":"PositioningConfigStatus",
-          "documentation":"<p>FPort values for the GNSS, stream, and ClockSync functions of the positioning information.</p>"
+          "documentation":"<p>The integration status of the Device Location feature for LoRaWAN and Sidewalk devices.</p>"
+        },
+        "Sidewalk":{
+          "shape":"SidewalkUpdateWirelessDevice",
+          "documentation":"<p>The updated sidewalk properties.</p>"
         }
       }
     },
     "UpdateWirelessDeviceResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateWirelessGatewayRequest":{
       "type":"structure",
@@ -8472,7 +9033,7 @@
         },
         "Name":{
           "shape":"WirelessGatewayName",
-          "documentation":"<p>The new name of the resource.</p>"
+          "documentation":"<p>The new name of the resource.</p> <note> <p>The following special characters aren't accepted: <code>&lt;&gt;^#~$</code> </p> </note>"
         },
         "Description":{
           "shape":"Description",
@@ -8488,8 +9049,7 @@
     },
     "UpdateWirelessGatewayResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateWirelessGatewayTaskCreate":{
       "type":"structure",
@@ -8738,6 +9298,10 @@
           "shape":"DestinationName",
           "documentation":"<p>The name of the Sidewalk destination that that describes the IoT rule to route messages from the device in the import task that will be onboarded to AWS IoT Wireless</p>"
         },
+        "Positioning":{
+          "shape":"PositioningConfigStatus",
+          "documentation":"<p>The integration status of the Device Location feature for Sidewalk devices.</p>"
+        },
         "Sidewalk":{
           "shape":"SidewalkGetStartImportInfo",
           "documentation":"<p>The Sidewalk-related information of the wireless device import task.</p>"
@@ -8857,7 +9421,11 @@
           "shape":"MulticastDeviceStatus",
           "documentation":"<p>The status of the wireless device in the multicast group.</p>"
         },
-        "McGroupId":{"shape":"McGroupId"}
+        "McGroupId":{"shape":"McGroupId"},
+        "Positioning":{
+          "shape":"PositioningConfigStatus",
+          "documentation":"<p>The integration status of the Device Location feature for LoRaWAN and Amazon Sidewalk enabled devices.</p>"
+        }
       },
       "documentation":"<p>Information about a wireless device's operation.</p>"
     },
@@ -9027,5 +9595,5 @@
       "documentation":"<p>WirelessMetadata object.</p>"
     }
   },
-  "documentation":"<p>AWS IoT Wireless provides bi-directional communication between internet-connected wireless devices and the AWS Cloud. To onboard both LoRaWAN and Sidewalk devices to AWS IoT, use the IoT Wireless API. These wireless devices use the Low Power Wide Area Networking (LPWAN) communication protocol to communicate with AWS IoT.</p> <p>Using the API, you can perform create, read, update, and delete operations for your wireless devices, gateways, destinations, and profiles. After onboarding your devices, you can use the API operations to set log levels and monitor your devices with CloudWatch.</p> <p>You can also use the API operations to create multicast groups and schedule a multicast session for sending a downlink message to devices in the group. By using Firmware Updates Over-The-Air (FUOTA) API operations, you can create a FUOTA task and schedule a session to update the firmware of individual devices or an entire group of devices in a multicast group.</p>"
+  "documentation":"<p>AWS IoT Wireless provides bi-directional communication between internet-connected wireless devices and the AWS Cloud. To onboard both <a href=\"https://docs.aws.amazon.com/iot-wireless/latest/developerguide/iot-lorawan.html\">LoRaWAN</a> and <a href=\"https://docs.aws.amazon.com/iot-wireless/latest/developerguide/iot-sidewalk.html\">Sidewalk</a> devices to AWS IoT, use the IoT Wireless API. These wireless devices use the Low Power Wide Area Networking (LPWAN) communication protocol to communicate with AWS IoT. </p> <p>Using the API, you can perform create, read, update, and delete operations for your wireless devices, gateways, destinations, and profiles. After onboarding your devices, you can use the API operations to set log levels and monitor your devices with CloudWatch.</p> <p>You can also use the API operations to create multicast groups and schedule a multicast session for sending a downlink message to devices in the group. By using Firmware Updates Over-The-Air (FUOTA) API operations, you can create a FUOTA task and schedule a session to update the firmware of individual devices or an entire group of devices in a multicast group.</p> <p>To connect to the AWS IoT Wireless Service, use the Service endpoints as described in <a href=\"https://docs.aws.amazon.com/general/latest/gr/iot-lorawan.html#iot-wireless_region\">IoT Wireless Service endpoints</a>. You can use both IPv4 and IPv6 protocols to connect to the endpoints and send requests to the AWS IoT Wireless service. For more information, see <a href=\"https://docs.aws.amazon.com/iot-wireless/latest/developerguide/wireless-ipv6-access.html\">Using IPv6 with AWS IoT Wireless</a>.</p>"
 }

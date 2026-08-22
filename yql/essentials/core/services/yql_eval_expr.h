@@ -5,18 +5,18 @@
 
 #include <yql/essentials/ast/yql_expr.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 class IFunctionRegistry;
 
-}
-}
+} // namespace NKikimr::NMiniKQL
 
 namespace NYql {
 
-IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExprNode::TPtr& output, TTypeAnnotationContext& types, TExprContext& ctx,
+THolder<IGraphTransformer> CreateEvaluateExpressionTransformer(
+    TTypeAnnotationContext& types,
     const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,
-    IGraphTransformer* calcTransfomer = nullptr, TTypeAnnCallableFactory typeAnnCallableFactory = {});
+    IGraphTransformer* calcTransformer = nullptr,
+    TTypeAnnCallableFactory typeAnnCallableFactory = {});
 
-}
+} // namespace NYql

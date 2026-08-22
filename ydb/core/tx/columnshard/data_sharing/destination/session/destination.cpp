@@ -19,7 +19,7 @@ NKikimr::TConclusionStatus TDestinationSession::DataReceived(
         auto it = PathIds.find(i.first);
         AFL_VERIFY(it != PathIds.end())("path_id_undefined", i.first);
         for (auto&& portion : i.second.DetachPortions()) {
-            portion.MutablePortionInfo().SetPathId(it->second);
+            portion->MutablePortionInfo().SetPathId(it->second);
             index.AppendPortion(portion);
         }
     }
@@ -69,13 +69,14 @@ void TDestinationSession::SendCurrentCursorAck(const NColumnShard::TColumnShard&
 }
 
 NKikimr::TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> TDestinationSession::ReceiveData(NColumnShard::TColumnShard* self,
-    THashMap<TInternalPathId, NEvents::TPathIdData>&& data, std::vector<NOlap::TSchemaPresetVersionInfo>&& schemas, const ui32 receivedPackIdx, const TTabletId sourceTabletId,
-    const std::shared_ptr<TDestinationSession>& selfPtr) {
+    THashMap<TInternalPathId, NEvents::TPathIdData>&& data, std::vector<NOlap::TSchemaPresetVersionInfo>&& schemas, const ui32 receivedPackIdx,
+    const TTabletId sourceTabletId, const std::shared_ptr<TDestinationSession>& selfPtr) {
     auto result = GetCursorVerified(sourceTabletId).ReceiveData(receivedPackIdx);
     if (!result) {
         return result;
     }
-    return std::unique_ptr<NTabletFlatExecutor::ITransaction>(new TTxDataFromSource(self, selfPtr, std::move(data), std::move(schemas), sourceTabletId));
+    return std::unique_ptr<NTabletFlatExecutor::ITransaction>(
+        new TTxDataFromSource(self, selfPtr, std::move(data), std::move(schemas), sourceTabletId));
 }
 
 NKikimr::TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> TDestinationSession::ReceiveFinished(
@@ -161,13 +162,13 @@ NKikimr::TConclusionStatus TDestinationSession::DeserializeCursorFromProto(
 }
 
 TConclusionStatus TDestinationSession::DoStart(
-    NColumnShard::TColumnShard& shard, THashMap<TInternalPathId, std::vector<TPortionDataAccessor>>&& portions) {
+    NColumnShard::TColumnShard& shard, THashMap<TInternalPathId, std::vector<std::shared_ptr<TPortionDataAccessor>>>&& portions) {
     AFL_VERIFY(IsConfirmed());
     NYDBTest::TControllers::GetColumnShardController()->OnDataSharingStarted(shard.TabletID(), GetSessionId());
     THashMap<TString, THashSet<TUnifiedBlobId>> local;
     for (auto&& i : portions) {
         for (auto&& p : i.second) {
-            p.FillBlobIdsByStorage(local, shard.GetIndexAs<TColumnEngineForLogs>().GetVersionedIndex());
+            p->FillBlobIdsByStorage(local, shard.GetIndexAs<TColumnEngineForLogs>().GetVersionedIndex());
         }
     }
     std::swap(CurrentBlobIds, local);
@@ -194,4 +195,4 @@ bool TDestinationSession::TryTakePortionBlobs(const TVersionedIndex& vIndex, con
     return newCounter;
 }
 
-} // namespace NKikimr::NOlap::NDataSharing
+}   // namespace NKikimr::NOlap::NDataSharing

@@ -33,7 +33,7 @@ public:
         for (int i = 0; i < descriptor->field_count(); ++i) {
             const google::protobuf::FieldDescriptor* field = descriptor->field(i);
             if (field->cpp_type() == google::protobuf::FieldDescriptor::CPPTYPE_BOOL) {
-                if (FilterFeatures.empty() || FilterFeatures.count(field->name())) {
+                if (FilterFeatures.empty() || FilterFeatures.contains(field->name())) {
                     bool hasField = reflection->HasField(featureFlags, field);
                     if (ChangedOnly && !hasField) {
                         continue;

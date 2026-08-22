@@ -3,14 +3,19 @@
 #include "udf_type_size_check.h"
 #include <library/cpp/deprecated/atomic/atomic.h>
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 class TCounter {
 public:
-    TCounter(i64* ptr = nullptr)
+    TCounter()
+        : TCounter(nullptr)
+    {
+    }
+
+    explicit TCounter(i64* ptr)
         : Ptr_(ptr)
-    {}
+    {
+    }
 
     void Inc() {
         if (Ptr_) {
@@ -66,10 +71,11 @@ UDF_ASSERT_TYPE_SIZE(IScopedProbeHost, 8);
 
 class TScopedProbe {
 public:
-    TScopedProbe(IScopedProbeHost* host = nullptr, void* cookie = nullptr)
+    explicit TScopedProbe(IScopedProbeHost* host = nullptr, void* cookie = nullptr)
         : Host_(host ? host : &NullHost_)
         , Cookie_(cookie)
-    {}
+    {
+    }
 
     void Acquire() {
         Host_->Acquire(Cookie_);
@@ -80,7 +86,7 @@ public:
     }
 
 private:
-    class TNullHost : public IScopedProbeHost {
+    class TNullHost: public IScopedProbeHost {
     public:
         void Acquire(void* cookie) override {
             Y_UNUSED(cookie);
@@ -109,5 +115,4 @@ public:
 
 UDF_ASSERT_TYPE_SIZE(ICountersProvider, 8);
 
-} // namspace NUdf
-} // namspace NYql
+} // namespace NYql::NUdf

@@ -1,6 +1,6 @@
 RECURSE(
     clickhouse/client
-    datetime
+    hybrid_search
     knn
     roaring
 )

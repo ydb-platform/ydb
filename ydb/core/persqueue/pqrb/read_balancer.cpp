@@ -1,0 +1,1228 @@
+#include "read_balancer.h"
+#include "read_balancer__balancing.h"
+#include "read_balancer__metrics.h"
+#include "read_balancer__mlp_balancing.h"
+#include "read_balancer__txpreinit.h"
+#include "read_balancer__txwrite.h"
+#include "read_balancer__txwrite_receive_attempt.h"
+#include "read_balancer_log.h"
+#include "mirror_describer_factory.h"
+
+#include <ydb/core/base/feature_flags.h>
+#include <ydb/core/protos/counters_pq.pb.h>
+#include <ydb/core/tablet/tablet_exception.h>
+
+#include <library/cpp/monlib/service/pages/templates.h>
+#include <library/cpp/string_utils/base64/base64.h>
+#include <library/cpp/random_provider/random_provider.h>
+#include <ydb/library/actors/core/log.h>
+
+#include <library/cpp/containers/absl/btree_map.h>
+#include <library/cpp/containers/absl/flat_hash_set.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PERSQUEUE_READ_BALANCER
+
+#define PQ_ENSURE(condition) AFL_ENSURE(condition)("tablet_id", TabletID())("path", Path)("topic", Topic)
+
+namespace NKikimr {
+namespace NPQ {
+
+using namespace NBalancing;
+
+
+TString EncodeAnchor(const TString& v) {
+    auto r = Base64Encode(v);
+    while (r.EndsWith('=')) {
+        r.resize(r.size() - 1);
+    }
+    return r;
+}
+
+TPersQueueReadBalancer::TPersQueueReadBalancer(const TActorId &tablet, TTabletStorageInfo *info)
+        : TActor(&TThis::StateInit)
+        , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
+        , Inited(false)
+        , PathId(0)
+        , Generation(0)
+        , Version(-1)
+        , MaxPartsPerTablet(0)
+        , SchemeShardId(0)
+        , TxId(0)
+        , NumActiveParts(0)
+        , MaxIdx(0)
+        , NextPartitionId(0)
+        , NextPartitionIdForWrite(0)
+        , StartPartitionIdForWrite(0)
+        , TotalGroups(0)
+        , ResourceMetrics(nullptr)
+        , TopicMetricsHandler(std::make_unique<TTopicMetricsHandler>())
+        , StatsReportRound(0)
+    {
+        Balancer = std::make_unique<TBalancer>(*this);
+        MLPBalancer = std::make_unique<TMLPBalancer>(*this);
+    }
+
+struct TPersQueueReadBalancer::TTxWritePartitionStats : public ITransaction {
+    TPersQueueReadBalancer * const Self;
+
+    TTxWritePartitionStats(TPersQueueReadBalancer *self)
+        : Self(self)
+    {}
+
+    bool Execute(TTransactionContext& txc, const TActorContext&) override {
+        Self->TTxWritePartitionStatsScheduled = false;
+
+        auto& metrics = Self->TopicMetricsHandler->GetPartitionMetrics();
+
+        NIceDb::TNiceDb db(txc.DB);
+        for (auto& [partition, stats] : metrics) {
+            auto it = Self->PartitionsInfo.find(partition);
+            if (it == Self->PartitionsInfo.end()) {
+                continue;
+            }
+
+            db.Table<Schema::Partitions>().Key(partition).Update(
+                NIceDb::TUpdate<Schema::Partitions::DataSize>(stats.DataSize),
+                NIceDb::TUpdate<Schema::Partitions::UsedReserveSize>(stats.UsedReserveSize)
+            );
+        }
+
+        return true;
+    }
+
+    void Complete(const TActorContext&) override {};
+};
+
+void TPersQueueReadBalancer::Die(const TActorContext& ctx) {
+    StopFindSubDomainPathId();
+    StopWatchingSubDomainPathId();
+
+    for (auto& pipe : TabletPipes) {
+        NTabletPipe::CloseClient(ctx, pipe.second.PipeActor);
+    }
+    TabletPipes.clear();
+    PipesRequested.clear();
+    ReadyPartitionTablets = 0;
+    while (!PartitionsLocationQueue.empty()) {
+        SendPartitionsLocationError(PartitionsLocationQueue.front().Sender, ctx);
+        PartitionsLocationQueue.pop_front();
+    }
+    if (PartitionsScaleManager) {
+        PartitionsScaleManager->Die(ctx);
+    }
+    if (MirrorTopicDescriberActorId) {
+        ctx.Send(MirrorTopicDescriberActorId, new TEvents::TEvPoisonPill());
+    }
+    TActor<TPersQueueReadBalancer>::Die(ctx);
+}
+
+void TPersQueueReadBalancer::OnActivateExecutor(const TActorContext &ctx) {
+    ResourceMetrics = Executor()->GetResourceMetrics();
+    Become(&TThis::StateWork);
+    if (Executor()->GetStats().IsFollower())
+        PQ_ENSURE(false)("reason", "is follower works well with Balancer?");
+    else
+        Execute(new TTxPreInit(this), ctx);
+}
+
+void TPersQueueReadBalancer::OnDetach(const TActorContext &ctx) {
+    Die(ctx);
+}
+
+void TPersQueueReadBalancer::OnTabletDead(TEvTablet::TEvTabletDead::TPtr&, const TActorContext &ctx) {
+    Die(ctx);
+}
+
+void TPersQueueReadBalancer::DefaultSignalTabletActive(const TActorContext &) {
+    // must be empty
+}
+
+void TPersQueueReadBalancer::InitDone(const TActorContext &ctx) {
+    if (SubDomainPathId) {
+        StartWatchingSubDomainPathId();
+    } else {
+        StartFindSubDomainPathId(true);
+    }
+
+    StartPartitionIdForWrite = NextPartitionIdForWrite = TotalGroups ? rand() % TotalGroups : 0;
+
+    auto getInitLog = [&]() {
+        TStringBuilder s;
+        s << "BALANCER INIT DONE for " << Topic << ": ";
+        for (auto& p : PartitionsInfo) {
+            s << "(" << p.first << ", " << p.second.TabletId << ") ";
+        }
+        return s;
+    };
+    YDB_LOG_DEBUG("BALANCER INIT DONE dump logPrefix, getInitLog",
+        {"logPrefix", LogPrefix()},
+        {"getInitLog", getInitLog()});
+
+    for (auto &ev : UpdateEvents) {
+        ctx.Send(ctx.SelfID, ev.Release());
+    }
+    UpdateEvents.clear();
+
+    for (auto &ev : RegisterEvents) {
+        ctx.Send(ctx.SelfID, ev.Release());
+    }
+    RegisterEvents.clear();
+
+    GetStat(ctx);
+
+    auto wakeupInterval = std::max<ui64>(AppData(ctx)->PQConfig.GetBalancerWakeupIntervalSec(), 1);
+    ctx.Schedule(TDuration::Seconds(wakeupInterval), new TEvents::TEvWakeup());
+
+    ProcessPartitionsLocationQueue(ctx);
+    ProcessMLPGetPartitionRequests(ctx);
+}
+
+void TPersQueueReadBalancer::HandleWakeup(TEvents::TEvWakeup::TPtr& ev, const TActorContext &ctx) {
+    YDB_LOG_DEBUG("TPersQueueReadBalancer::HandleWakeup",
+        {"logPrefix", LogPrefix()});
+
+    switch (ev->Get()->Tag) {
+        case TPartitionScaleManager::TRY_SCALE_REQUEST_WAKE_UP_TAG: {
+            if (PartitionsScaleManager && SplitMergeEnabled(TabletConfig)) {
+                PartitionsScaleManager->TrySendScaleRequest(ctx);
+            }
+            break;
+        }
+        case PARTITIONS_LOCATION_WAKEUP_TAG: {
+            PartitionsLocationWakeupScheduled = false;
+            ProcessPartitionsLocationQueue(ctx);
+            break;
+        }
+        default: {
+            ProcessPartitionsLocationQueue(ctx);
+            GetStat(ctx); //TODO: do it only on signals from outerspace right now
+            CleanupReceiveAttemptPartitions(ctx);
+            auto wakeupInterval = std::max<ui64>(AppData(ctx)->PQConfig.GetBalancerWakeupIntervalSec(), 1);
+            ctx.Schedule(TDuration::Seconds(wakeupInterval), new TEvents::TEvWakeup());
+        }
+    }
+}
+
+void TPersQueueReadBalancer::HandleOnInit(TEvPersQueue::TEvUpdateBalancerConfig::TPtr &ev, const TActorContext&) {
+
+    UpdateEvents.push_back(ev->Release().Release());
+}
+
+void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvGetPartitionIdForWrite::TPtr &ev, const TActorContext &ctx) {
+    THolder<TEvPersQueue::TEvGetPartitionIdForWriteResponse> response = MakeHolder<TEvPersQueue::TEvGetPartitionIdForWriteResponse>();
+    if (TotalGroups == 0) {
+        response->Record.SetPartitionId(0);
+        ctx.Send(ev->Sender, response.Release());
+        return;
+    }
+
+    NextPartitionIdForWrite = (NextPartitionIdForWrite + 1) % TotalGroups; //TODO: change here when there will be more than 1 partition in partition_group.
+    response->Record.SetPartitionId(NextPartitionIdForWrite);
+    ctx.Send(ev->Sender, response.Release());
+    if (NextPartitionIdForWrite == StartPartitionIdForWrite) { // randomize next cycle
+        StartPartitionIdForWrite = NextPartitionIdForWrite = rand() % TotalGroups;
+    }
+}
+
+void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr &ev, const TActorContext& ctx) {
+    auto& record = ev->Get()->Record;
+    if ((int)record.GetVersion() < Version && Inited) {
+        THolder<TEvPersQueue::TEvUpdateConfigResponse> res{new TEvPersQueue::TEvUpdateConfigResponse};
+        res->Record.SetStatus(NKikimrPQ::ERROR_BAD_VERSION);
+        res->Record.SetTxId(record.GetTxId());
+        res->Record.SetOrigin(TabletID());
+        ctx.Send(ev->Sender, res.Release());
+        return;
+    }
+
+    if ((int)record.GetVersion() == Version) {
+        if (!WaitingResponse.empty()) { //got transaction infly
+            WaitingResponse.push_back(ev->Sender);
+        } else { //version already applied
+            YDB_LOG_DEBUG("BALANCER Topic Tablet Config already applied version actor txId",
+                {"logPrefix", LogPrefix()},
+                {"topic", Topic},
+                {"tabletID", TabletID()},
+                {"version", record.GetVersion()},
+                {"sender", ev->Sender},
+                {"txId", record.GetTxId()});
+            THolder<TEvPersQueue::TEvUpdateConfigResponse> res{new TEvPersQueue::TEvUpdateConfigResponse};
+            res->Record.SetStatus(NKikimrPQ::OK);
+            res->Record.SetTxId(record.GetTxId());
+            res->Record.SetOrigin(TabletID());
+            ctx.Send(ev->Sender, res.Release());
+        }
+        return;
+    }
+
+    if ((int)record.GetVersion() > Version && !WaitingResponse.empty()) { //old transaction is not done yet
+        THolder<TEvPersQueue::TEvUpdateConfigResponse> res{new TEvPersQueue::TEvUpdateConfigResponse};
+        res->Record.SetStatus(NKikimrPQ::ERROR_UPDATE_IN_PROGRESS);
+        res->Record.SetTxId(ev->Get()->Record.GetTxId());
+        res->Record.SetOrigin(TabletID());
+        ctx.Send(ev->Sender, res.Release());
+        return;
+    }
+    WaitingResponse.push_back(ev->Sender);
+
+    Version = record.GetVersion();
+    MaxPartsPerTablet = record.GetPartitionPerTablet();
+    PathId = record.GetPathId();
+    Topic = std::move(record.GetTopicName());
+    Path = std::move(record.GetPath());
+    TxId = record.GetTxId();
+    TabletConfig = std::move(record.GetTabletConfig());
+
+    if (!TabletConfig.GetAllPartitions().size()) {
+        for (auto& p : record.GetPartitions()) {
+            auto* ap = TabletConfig.AddAllPartitions();
+            ap->SetPartitionId(p.GetPartition());
+            ap->SetTabletId(p.GetTabletId());
+            ap->SetCreateVersion(p.GetCreateVersion());
+            if (p.HasKeyRange()) {
+                ap->MutableKeyRange()->CopyFrom(p.GetKeyRange());
+            }
+            ap->SetStatus(p.GetStatus());
+            ap->MutableParentPartitionIds()->Reserve(p.GetParentPartitionIds().size());
+            for (const auto parent : p.GetParentPartitionIds()) {
+                ap->MutableParentPartitionIds()->AddAlreadyReserved(parent);
+            }
+            ap->MutableChildPartitionIds()->Reserve(p.GetChildPartitionIds().size());
+            for (const auto children : p.GetChildPartitionIds()) {
+                ap->MutableChildPartitionIds()->AddAlreadyReserved(children);
+            }
+            if (p.HasCreationTimestampSeconds()) {
+                ap->SetCreationTimestampSeconds(p.GetCreationTimestampSeconds());
+            }
+        }
+    }
+
+    Migrate(TabletConfig);
+
+    SchemeShardId = record.GetSchemeShardId();
+    TotalGroups = record.HasTotalGroupCount() ? record.GetTotalGroupCount() : 0;
+
+    ui32 prevNextPartitionId = NextPartitionId;
+    NextPartitionId = record.HasNextPartitionId() ? record.GetNextPartitionId() : 0;
+
+    if (record.HasSubDomainPathId()) {
+        SubDomainPathId.emplace(record.GetSchemeShardId(), record.GetSubDomainPathId());
+    }
+
+    PartitionGraph = MakePartitionGraph(record);
+    UpdateActivePartitions();
+
+    std::vector<std::pair<ui64, TTabletInfo>> newTablets;
+    std::vector<std::pair<ui32, ui32>> newGroups;
+    std::vector<std::pair<ui64, TTabletInfo>> reallocatedTablets;
+
+    if (SplitMergeEnabled(TabletConfig)) {
+        if (!PartitionsScaleManager) {
+            PartitionsScaleManager = std::make_unique<TPartitionScaleManager>(Topic, Path, DatabaseInfo.DatabasePath, PathId, Version, TabletConfig, PartitionGraph);
+        } else {
+            PartitionsScaleManager->UpdateBalancerConfig(PathId, Version, TabletConfig);
+        }
+    }
+    if (SplitMergeEnabled(TabletConfig) && MirroringEnabled(TabletConfig) && AppData(ctx)->FeatureFlags.GetEnableMirroredTopicSplitMerge()) {
+        if (MirrorTopicDescriberActorId) {
+            ctx.Send(MirrorTopicDescriberActorId, new TEvPQ::TEvChangePartitionConfig(nullptr, TabletConfig));
+        } else {
+            MirrorTopicDescriberActorId = ctx.Register(CreateMirrorDescriber(TabletID(), SelfId(), Topic, TabletConfig.GetPartitionConfig().GetMirrorFrom()));
+        }
+    } else {
+        if (MirrorTopicDescriberActorId) {
+            ctx.Send(MirrorTopicDescriberActorId, new TEvents::TEvPoisonPill());
+            MirrorTopicDescriberActorId = TActorId();
+        }
+    }
+
+    absl::flat_hash_set<ui64> liveTabletIds;
+    liveTabletIds.reserve(record.TabletsSize());
+    newTablets.reserve(record.TabletsSize());
+    reallocatedTablets.reserve(record.TabletsSize());
+    for (auto& p : record.GetTablets()) {
+        liveTabletIds.insert(p.GetTabletId());
+        auto it = TabletsInfo.find(p.GetTabletId());
+        if (it == TabletsInfo.end()) {
+            TTabletInfo info{p.GetOwner(), p.GetIdx()};
+            TabletsInfo[p.GetTabletId()] = info;
+            newTablets.emplace_back(p.GetTabletId(), info);
+        } else {
+            if (it->second.Owner != p.GetOwner() || it->second.Idx != p.GetIdx()) {
+                TTabletInfo info{p.GetOwner(), p.GetIdx()};
+                TabletsInfo[p.GetTabletId()] = info;
+                reallocatedTablets.emplace_back(p.GetTabletId(), info);
+            }
+        }
+
+    }
+
+    if (record.TabletsSize() > 0) {
+        for (auto it = TabletsInfo.begin(); it != TabletsInfo.end();) {
+            if (!liveTabletIds.contains(it->first)) {
+                ClosePipe(it->first, ctx);
+                TabletsInfo.erase(it++);
+            } else {
+                ++it;
+            }
+        }
+    }
+
+    absl::btree_map<ui32, TPartitionInfo> partitionsInfo;
+    std::vector<TPartInfo> newPartitions;
+    std::vector<ui32> newPartitionsIds;
+    newPartitions.reserve(record.PartitionsSize());
+    newPartitionsIds.reserve(record.PartitionsSize());
+    newGroups.reserve(record.PartitionsSize());
+    for (auto& p : record.GetPartitions()) {
+        auto it = PartitionsInfo.find(p.GetPartition());
+        if (it == PartitionsInfo.end()) {
+            PQ_ENSURE((p.GetPartition() >= prevNextPartitionId && p.GetPartition() < NextPartitionId) || NextPartitionId == 0);
+
+            partitionsInfo[p.GetPartition()] = {p.GetTabletId()};
+
+            newPartitionsIds.push_back(p.GetPartition());
+            newPartitions.push_back(TPartInfo{p.GetPartition(), p.GetTabletId(), 0, p.GetKeyRange()});
+
+            ++NumActiveParts;
+
+            // for back compatibility. Remove it after 24-3
+            newGroups.push_back({p.GetGroup(), p.GetPartition()});
+        } else { //group is already defined
+            partitionsInfo[p.GetPartition()] = it->second;
+        }
+    }
+
+    if (TotalGroups == 0) {
+        NextPartitionId = TotalGroups = partitionsInfo.size(); // this will not work when we support the deletion of the partition
+    }
+
+    std::vector<ui32> deletedPartitions;
+    for (auto& p : PartitionsInfo) {
+        if (partitionsInfo.find(p.first) == partitionsInfo.end()) {
+            PQ_ENSURE(false)("reason", "deleting of partitions is not fully supported yet")("partition_id", p.first);
+            deletedPartitions.push_back(p.first);
+        }
+    }
+    PartitionsInfo = absl::flat_hash_map<ui32, TPartitionInfo>(partitionsInfo.begin(), partitionsInfo.end());
+
+    Balancer->UpdateConfig(newPartitionsIds, deletedPartitions, ctx);
+    auto receiveAttemptDeletes = MLPBalancer->UpdateConfig(newPartitionsIds);
+    if (!receiveAttemptDeletes.empty()) {
+        TReceiveAttemptPartitionsWriteBatch batch;
+        batch.Deletes = std::move(receiveAttemptDeletes);
+        PendingReceiveAttemptPartitionsWrites.push_back(std::move(batch));
+        TryStartNextReceiveAttemptPartitionsWrite(ctx);
+    }
+
+    Execute(new TTxWrite(this, std::move(deletedPartitions), std::move(newPartitions), std::move(newTablets), std::move(newGroups), std::move(reallocatedTablets)), ctx);
+
+    if (SubDomainPathId && (!WatchingSubDomainPathId || *WatchingSubDomainPathId != *SubDomainPathId)) {
+        StartWatchingSubDomainPathId();
+    }
+
+    UpdateConfigCounters();
+}
+
+
+TStringBuilder TPersQueueReadBalancer::LogPrefix() const {
+    return TStringBuilder() << "[" << TabletID() << "][" << Topic << "] ";
+}
+
+
+void TPersQueueReadBalancer::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx)
+{
+    auto tabletId = ev->Get()->TabletId;
+    auto it = TabletPipes.find(tabletId);
+    if (it == TabletPipes.end() || it->second.PipeActor != ev->Get()->ClientId) {
+        YDB_LOG_DEBUG("TEvClientDestroyed for stale pipe",
+            {"logPrefix", LogPrefix()},
+            {"tabletId", tabletId},
+            {"clientId", ev->Get()->ClientId});
+        return;
+    }
+
+    YDB_LOG_DEBUG("TEvClientDestroyed",
+        {"logPrefix", LogPrefix()},
+        {"tabletId", tabletId});
+
+    ClosePipe(tabletId, ctx);
+    RequestTabletIfNeeded(tabletId, ctx, true);
+}
+
+
+void TPersQueueReadBalancer::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx)
+{
+    auto tabletId = ev->Get()->TabletId;
+    auto it = TabletPipes.find(tabletId);
+    if (it == TabletPipes.end() || it->second.PipeActor != ev->Get()->ClientId) {
+        YDB_LOG_DEBUG("TEvClientConnected for stale pipe",
+            {"logPrefix", LogPrefix()},
+            {"tabletId", tabletId},
+            {"clientId", ev->Get()->ClientId});
+        return;
+    }
+
+    PipesRequested.erase(tabletId);
+
+    if (ev->Get()->Status != NKikimrProto::OK) {
+        ClosePipe(ev->Get()->TabletId, ctx);
+        RequestTabletIfNeeded(ev->Get()->TabletId, ctx, true);
+
+        YDB_LOG_ERROR("TEvClientConnected Status TabletId",
+            {"logPrefix", LogPrefix()},
+            {"status", ev->Get()->Status},
+            {"tabletId", tabletId});
+        return;
+    }
+
+    Y_VERIFY_DEBUG_S(ev->Get()->Generation, "Tablet generation should be greater than 0");
+
+    it->second.Generation = ev->Get()->Generation;
+    it->second.NodeId = ev->Get()->ServerId.NodeId();
+
+    if (!it->second.Ready && TabletsInfo.contains(tabletId)) {
+        it->second.Ready = true;
+        ++ReadyPartitionTablets;
+    }
+
+    YDB_LOG_DEBUG("TEvClientConnected TabletId NodeId Generation",
+        {"logPrefix", LogPrefix()},
+        {"tabletId", tabletId},
+        {"nodeId", ev->Get()->ServerId.NodeId()},
+        {"generation", ev->Get()->Generation});
+
+    ProcessPartitionsLocationQueue(ctx);
+}
+
+void TPersQueueReadBalancer::ClosePipe(const ui64 tabletId, const TActorContext& ctx)
+{
+    auto it = TabletPipes.find(tabletId);
+    if (it != TabletPipes.end()) {
+        if (it->second.Ready) {
+            PQ_ENSURE(ReadyPartitionTablets > 0);
+            --ReadyPartitionTablets;
+            it->second.Ready = false;
+        }
+        NTabletPipe::CloseClient(ctx, it->second.PipeActor);
+        TabletPipes.erase(it);
+        PipesRequested.erase(tabletId);
+    }
+}
+
+TActorId TPersQueueReadBalancer::GetPipeClient(const ui64 tabletId, const TActorContext& ctx) {
+    TActorId pipeClient;
+
+    auto it = TabletPipes.find(tabletId);
+    if (it == TabletPipes.end()) {
+        NTabletPipe::TClientConfig clientConfig(NTabletPipe::TClientRetryPolicy::WithRetries());
+        pipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, tabletId, clientConfig));
+        TabletPipes[tabletId].PipeActor = pipeClient;
+        auto res = PipesRequested.insert(tabletId);
+        PQ_ENSURE(res.second);
+    } else {
+        pipeClient = it->second.PipeActor;
+    }
+
+    return pipeClient;
+}
+
+void TPersQueueReadBalancer::RequestTabletIfNeeded(const ui64 tabletId, const TActorContext& ctx, bool pipeReconnected)
+{
+    TActorId pipeClient = GetPipeClient(tabletId, ctx);
+
+    if (SchemeShardId != tabletId) {
+        NTabletPipe::SendData(ctx, pipeClient, new TEvPQ::TEvSubDomainStatus(SubDomainOutOfSpace));
+    }
+
+    auto it = StatsRequestTracker.Cookies.find(tabletId);
+    if (!pipeReconnected || it != StatsRequestTracker.Cookies.end()) {
+        ui64 cookie;
+        if (pipeReconnected) {
+            cookie = it->second;
+        } else {
+            cookie = ++StatsRequestTracker.NextCookie;
+            StatsRequestTracker.Cookies[tabletId] = cookie;
+        }
+
+        YDB_LOG_DEBUG("Send TEvPersQueue::TEvStatus",
+            {"logPrefix", LogPrefix()},
+            {"tabletId", tabletId},
+            {"cookie", cookie});
+        NTabletPipe::SendData(ctx, pipeClient, new TEvPersQueue::TEvStatus("", true), cookie);
+    }
+}
+
+
+void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& ctx) {
+    auto& record = ev->Get()->Record;
+    ui64 tabletId = record.GetTabletId();
+    ui64 cookie = ev->Cookie;
+
+    if ((0 != cookie && cookie != StatsRequestTracker.Cookies[tabletId]) || (0 == cookie && !StatsRequestTracker.Cookies.contains(tabletId))) {
+        return;
+    }
+
+    StatsRequestTracker.Cookies.erase(tabletId);
+
+    Balancer->Handle(ev, ctx);
+    MLPBalancer->Handle(ev, ctx);
+
+    for (auto& partRes : *record.MutablePartResult()) {
+        ui32 partitionId = partRes.GetPartition();
+        if (!PartitionsInfo.contains(partitionId)) {
+            continue;
+        }
+
+        if (SplitMergeEnabled(TabletConfig) && PartitionsScaleManager) {
+            PartitionsScaleManager->HandleScaleStatusChange(
+                partitionId,
+                partRes.GetScaleStatus(),
+                partRes.HasScaleParticipatingPartitions() ? MakeMaybe(partRes.GetScaleParticipatingPartitions()) : Nothing(),
+                partRes.HasSplitBoundary() ? MakeMaybe(partRes.GetSplitBoundary()) : Nothing(),
+                ctx
+            );
+        }
+
+        TopicMetricsHandler->Handle(std::move(partRes));
+    }
+
+    if (StatsRequestTracker.Cookies.empty()) {
+        StatsRequestTracker.StatsReceived = true;
+
+        CheckStat(ctx);
+        Balancer->ProcessPendingStats(ctx);
+        ProcessPendingMLPRequests(ctx);
+    }
+}
+
+void TPersQueueReadBalancer::Handle(TEvPQ::TEvStatsWakeup::TPtr& ev, const TActorContext& ctx) {
+    if (StatsRequestTracker.Round != ev->Get()->Round) {
+        // old message
+        return;
+    }
+
+    if (StatsRequestTracker.Cookies.empty()) {
+        return;
+    }
+
+    CheckStat(ctx);
+}
+
+void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvStatus::TPtr& ev, const TActorContext&) {
+    Send(ev.Get()->Sender, GetStatsEvent());
+}
+
+void TPersQueueReadBalancer::CheckStat(const TActorContext& ctx) {
+    Y_UNUSED(ctx);
+    //TODO: Decide about changing number of partitions and send request to SchemeShard
+    //TODO: make AlterTopic request via TX_PROXY
+
+    // Also required on the TEvStatsWakeup timeout path, which calls CheckStat without the response handler.
+    StatsRequestTracker.StatsReceived = true;
+
+    if (!TTxWritePartitionStatsScheduled) {
+        TTxWritePartitionStatsScheduled = true;
+        Execute(new TTxWritePartitionStats(this));
+    }
+
+    UpdateCounters(ctx);
+
+    TEvPersQueue::TEvPeriodicTopicStats* ev = GetStatsEvent();
+    YDB_LOG_DEBUG("Send TEvPeriodicTopicStats",
+        {"logPrefix", LogPrefix()},
+        {"pathId", PathId},
+        {"generation", Generation},
+        {"statsReportRound", StatsReportRound},
+        {"dataSize", TopicMetricsHandler->GetTopicMetrics().TotalDataSize},
+        {"usedReserveSize", TopicMetricsHandler->GetTopicMetrics().TotalUsedReserveSize});
+
+    NTabletPipe::SendData(ctx, GetPipeClient(SchemeShardId, ctx), ev);
+
+    ProcessPendingMLPRequests(ctx);
+}
+
+void TPersQueueReadBalancer::InitCounters(const TActorContext& ctx) {
+    if (DatabaseInfo.DatabasePath.empty()) {
+        return;
+    }
+
+    TopicMetricsHandler->Initialize(TabletConfig, DatabaseInfo, Path, ctx);
+}
+
+void TPersQueueReadBalancer::UpdateConfigCounters() {
+    TopicMetricsHandler->UpdateConfig(TabletConfig, DatabaseInfo, Path, ActorContext());
+}
+
+void TPersQueueReadBalancer::UpdateCounters(const TActorContext&) {
+    TopicMetricsHandler->UpdateMetrics();
+}
+
+TEvPersQueue::TEvPeriodicTopicStats* TPersQueueReadBalancer::GetStatsEvent() {
+    auto& metrics = TopicMetricsHandler->GetTopicMetrics();
+
+    TEvPersQueue::TEvPeriodicTopicStats* ev = new TEvPersQueue::TEvPeriodicTopicStats();
+    auto& rec = ev->Record;
+    rec.SetPathId(PathId);
+    rec.SetGeneration(Generation);
+
+    rec.SetRound(++StatsReportRound);
+    rec.SetDataSize(metrics.TotalDataSize);
+    rec.SetUsedReserveSize(metrics.TotalUsedReserveSize);
+    rec.SetSubDomainOutOfSpace(SubDomainOutOfSpace);
+
+    return ev;
+}
+
+void TPersQueueReadBalancer::GetStat(const TActorContext& ctx) {
+    if (!StatsRequestTracker.Cookies.empty()) {
+        StatsRequestTracker.Cookies.clear();
+        CheckStat(ctx);
+    }
+
+    for (auto& p : PartitionsInfo) {
+        const ui64& tabletId = p.second.TabletId;
+        if (StatsRequestTracker.Cookies.contains(tabletId)) { //already asked stat
+            continue;
+        }
+        RequestTabletIfNeeded(tabletId, ctx);
+    }
+
+    // TEvStatsWakeup must processed before next TEvWakeup, which send next status request to TPersQueue
+    const auto& config = AppData(ctx)->PQConfig;
+    auto wakeupInterval = std::max<ui64>(config.GetBalancerWakeupIntervalSec(), 1);
+    auto stateWakeupInterval = std::max<ui64>(config.GetBalancerStatsWakeupIntervalSec(), 1);
+    ui64 delayMs = std::min(stateWakeupInterval * 1000, wakeupInterval * 500);
+    if (0 < delayMs) {
+        Schedule(TDuration::MilliSeconds(delayMs), new TEvPQ::TEvStatsWakeup(++StatsRequestTracker.Round));
+    }
+}
+
+
+
+//
+// Watching PQConfig
+//
+
+struct TTxWriteSubDomainPathId : public ITransaction {
+    TPersQueueReadBalancer* const Self;
+
+    TTxWriteSubDomainPathId(TPersQueueReadBalancer* self)
+        : Self(self)
+    {}
+
+    bool Execute(TTransactionContext& txc, const TActorContext&) {
+        NIceDb::TNiceDb db(txc.DB);
+        db.Table<Schema::Data>().Key(1).Update(
+            NIceDb::TUpdate<Schema::Data::SubDomainPathId>(Self->SubDomainPathId->LocalPathId));
+        return true;
+    }
+
+    void Complete(const TActorContext&) {
+    }
+};
+
+static constexpr TDuration MaxFindSubDomainPathIdDelay = TDuration::Minutes(1);
+
+void TPersQueueReadBalancer::StopFindSubDomainPathId() {
+    if (FindSubDomainPathIdActor) {
+        Send(FindSubDomainPathIdActor, new TEvents::TEvPoison);
+        FindSubDomainPathIdActor = { };
+    }
+}
+
+void TPersQueueReadBalancer::StartFindSubDomainPathId(bool delayFirstRequest) {
+    if (!FindSubDomainPathIdActor &&
+        SchemeShardId != 0 &&
+        (!SubDomainPathId || SubDomainPathId->OwnerId != SchemeShardId))
+    {
+        FindSubDomainPathIdActor = Register(CreateFindSubDomainPathIdActor(SelfId(), TabletID(), SchemeShardId, delayFirstRequest, MaxFindSubDomainPathIdDelay));
+    }
+}
+
+void TPersQueueReadBalancer::Handle(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound::TPtr& ev, const TActorContext& ctx) {
+    const auto* msg = ev->Get();
+
+    if (FindSubDomainPathIdActor == ev->Sender) {
+        FindSubDomainPathIdActor = { };
+    }
+
+    if (SchemeShardId == msg->SchemeShardId &&
+       (!SubDomainPathId || SubDomainPathId->OwnerId != msg->SchemeShardId))
+    {
+        YDB_LOG_DEBUG("Discovered subdomain at RB",
+            {"logPrefix", LogPrefix()},
+            {"localPathId", msg->LocalPathId},
+            {"tabletID", TabletID()});
+
+        SubDomainPathId.emplace(msg->SchemeShardId, msg->LocalPathId);
+        Execute(new TTxWriteSubDomainPathId(this), ctx);
+        StartWatchingSubDomainPathId();
+    }
+}
+
+void TPersQueueReadBalancer::StopWatchingSubDomainPathId() {
+    if (WatchingSubDomainPathId) {
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvWatchRemove());
+        WatchingSubDomainPathId.reset();
+    }
+}
+
+void TPersQueueReadBalancer::StartWatchingSubDomainPathId() {
+    if (!SubDomainPathId || SubDomainPathId->OwnerId != SchemeShardId) {
+        return;
+    }
+
+    if (WatchingSubDomainPathId && *WatchingSubDomainPathId != *SubDomainPathId) {
+        StopWatchingSubDomainPathId();
+    }
+
+    if (!WatchingSubDomainPathId) {
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvWatchPathId(*SubDomainPathId));
+        WatchingSubDomainPathId = *SubDomainPathId;
+    }
+}
+
+void TPersQueueReadBalancer::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx) {
+    const auto* msg = ev->Get();
+    if (DatabaseInfo.DatabasePath.empty()) {
+        DatabaseInfo.DatabasePath = !msg->Path.empty() ? msg->Path : msg->Result->GetPath();
+        for (const auto& attr : msg->Result->GetPathDescription().GetUserAttributes()) {
+            if (attr.GetKey() == "folder_id") DatabaseInfo.FolderId = attr.GetValue();
+            if (attr.GetKey() == "cloud_id") DatabaseInfo.CloudId = attr.GetValue();
+            if (attr.GetKey() == "database_id") DatabaseInfo.DatabaseId = attr.GetValue();
+        }
+
+        InitCounters(ctx);
+        UpdateConfigCounters();
+    }
+
+    if (PartitionsScaleManager) {
+        PartitionsScaleManager->UpdateDatabasePath(DatabaseInfo.DatabasePath, ctx);
+    }
+
+    if (SubDomainPathId && msg->PathId == *SubDomainPathId) {
+        const bool outOfSpace = msg->Result->GetPathDescription()
+            .GetDomainDescription()
+            .GetDomainState()
+            .GetDiskQuotaExceeded();
+
+        YDB_LOG_DEBUG("Discovered subdomain state, at RB",
+            {"logPrefix", LogPrefix()},
+            {"pathId", msg->PathId},
+            {"outOfSpace", outOfSpace},
+            {"tabletID", TabletID()});
+
+        SubDomainOutOfSpace = outOfSpace;
+
+        for (auto& p : PartitionsInfo) {
+            const ui64& tabletId = p.second.TabletId;
+            TActorId pipeClient = GetPipeClient(tabletId, ctx);
+            NTabletPipe::SendData(ctx, pipeClient, new TEvPQ::TEvSubDomainStatus(outOfSpace));
+        }
+    }
+}
+
+void TPersQueueReadBalancer::UpdateActivePartitions() {
+    ActivePartitions.clear();
+    for (const auto& partition : TabletConfig.GetAllPartitions()) {
+        if (partition.GetStatus() == NKikimrPQ::ETopicPartitionStatus::Active) {
+            ActivePartitions.push_back(partition.GetPartitionId());
+        }
+    }
+}
+
+
+//
+// Balancing
+//
+
+void TPersQueueReadBalancer::Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPtr& ev, const TActorContext& ctx) {
+    Balancer->Handle(ev, ctx);
+    MLPBalancer->Handle(ev, ctx);
+}
+
+void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvReadingPartitionStartedRequest::TPtr& ev, const TActorContext& ctx) {
+    Balancer->Handle(ev, ctx);
+}
+
+void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvReadingPartitionFinishedRequest::TPtr& ev, const TActorContext& ctx) {
+    Balancer->Handle(ev, ctx);
+}
+
+void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvPartitionReleased::TPtr& ev, const TActorContext& ctx) {
+    Balancer->Handle(ev, ctx);
+}
+
+void TPersQueueReadBalancer::Handle(TEvPQ::TEvWakeupReleasePartition::TPtr &ev, const TActorContext& ctx) {
+    Balancer->Handle(ev, ctx);
+}
+
+void TPersQueueReadBalancer::Handle(TEvPQ::TEvBalanceConsumer::TPtr& ev, const TActorContext& ctx) {
+    Balancer->Handle(ev, ctx);
+}
+
+void TPersQueueReadBalancer::Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev, const TActorContext& ctx)
+{
+    Balancer->Handle(ev, ctx);
+}
+
+void TPersQueueReadBalancer::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TActorContext& ctx)
+{
+    Balancer->Handle(ev, ctx);
+}
+
+void TPersQueueReadBalancer::HandleOnInit(TEvPersQueue::TEvRegisterReadSession::TPtr& ev, const TActorContext&)
+{
+    RegisterEvents.push_back(ev->Release().Release());
+}
+
+void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvRegisterReadSession::TPtr& ev, const TActorContext& ctx)
+{
+    Balancer->Handle(ev, ctx);
+}
+
+void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvGetReadSessionsInfo::TPtr& ev, const TActorContext& ctx)
+{
+    Balancer->Handle(ev, ctx);
+}
+
+void TPersQueueReadBalancer::Handle(TEvPQ::TEvMLPConsumerStatus::TPtr& ev, const TActorContext& ctx)
+{
+    Y_UNUSED(ctx);
+    YDB_LOG_DEBUG("Handle TEvPQ::TEvMLPConsumerStatus",
+        {"logPrefix", LogPrefix()},
+        {"ev", ev->Get()->Record.ShortDebugString()});
+    MLPBalancer->Handle(ev);
+}
+
+
+//
+// Kafka integration
+//
+
+void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvBalancingSubscribe::TPtr& ev, const TActorContext& ctx)
+{
+    Balancer->Handle(ev, ctx);
+}
+
+void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvBalancingUnsubscribe::TPtr& ev, const TActorContext& ctx)
+{
+    Balancer->Handle(ev, ctx);
+}
+
+
+
+//
+// Autoscaling
+//
+
+void TPersQueueReadBalancer::Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr& ev, const TActorContext& ctx) {
+    if (!SplitMergeEnabled(TabletConfig)) {
+        YDB_LOG_DEBUG("Skip TEvPartitionScaleStatusChanged: autopartitioning disabled",
+            {"logPrefix", LogPrefix()});
+        return;
+    }
+    auto& record = ev->Get()->Record;
+    auto* node = PartitionGraph.GetPartition(record.GetPartitionId());
+    if (!node) {
+        YDB_LOG_DEBUG("Skip TEvPartitionScaleStatusChanged: partition not found",
+            {"logPrefix", LogPrefix()},
+            {"partitionId", record.GetPartitionId()});
+        return;
+    }
+
+    if (PartitionsScaleManager) {
+        PartitionsScaleManager->HandleScaleStatusChange(
+            record.GetPartitionId(),
+            record.GetScaleStatus(),
+            record.HasParticipatingPartitions() ? MakeMaybe(record.GetParticipatingPartitions()) : Nothing(),
+            record.HasSplitBoundary() ? MakeMaybe(record.GetSplitBoundary()) : Nothing(),
+            ctx
+        );
+    } else {
+        YDB_LOG_NOTICE("Skip TEvPartitionScaleStatusChanged: scale manager isn`t initialized",
+            {"logPrefix", LogPrefix()});
+    }
+}
+
+void TPersQueueReadBalancer::Handle(TPartitionScaleRequest::TEvPartitionScaleRequestDone::TPtr& ev, const TActorContext& ctx) {
+    if (!PartitionsScaleManager) {
+        return;
+    }
+    if (SplitMergeEnabled(TabletConfig)) {
+        PartitionsScaleManager->HandleScaleRequestResult(ev, ctx);
+    } else {
+        PartitionsScaleManager->AbortInflightScaleRequest(ctx);
+    }
+}
+
+void TPersQueueReadBalancer::Handle(TEvPQ::TEvMirrorTopicDescription::TPtr& ev, const TActorContext& ctx) {
+    YDB_LOG_DEBUG("Received TEvMirrorTopicDescription",
+        {"logPrefix", LogPrefix()});
+    if (!MirroringEnabled(TabletConfig)) {
+        return;
+    }
+    if (PartitionsScaleManager) {
+        auto result = PartitionsScaleManager->HandleMirrorTopicDescriptionResult(ev, ctx);
+        if (!result.has_value()) {
+            BroadcastPartitionError(std::move(result).error(), NKikimrServices::EServiceKikimr::PQ_MIRROR_DESCRIBER, ctx);
+        }
+    }
+}
+
+void TPersQueueReadBalancer::BroadcastPartitionError(const TString& message, const NKikimrServices::EServiceKikimr service, const TActorContext& ctx) {
+    const TInstant now = TAppData::TimeProvider->Now();
+    for (const auto& [_, pipeLocation] : TabletPipes) {
+        THolder<TEvPQ::TBroadcastPartitionError> ev{new TEvPQ::TBroadcastPartitionError(message, service, now)};
+        NTabletPipe::SendData(ctx, pipeLocation.PipeActor, ev.Release());
+    }
+}
+
+void TPersQueueReadBalancer::Handle(TEvPQ::TEvMLPGetPartitionRequest::TPtr& ev) {
+    YDB_LOG_DEBUG("Handle TEvPQ::TEvMLPGetPartitionRequest",
+        {"logPrefix", LogPrefix()},
+        {"ev", ev->Get()->Record.ShortDebugString()});
+    PendingMLPGetPartitionRequests.push_back(std::move(ev));
+    if (!Inited) {
+        return;
+    }
+    ProcessMLPGetPartitionRequests(ActorContext());
+}
+
+void TPersQueueReadBalancer::Handle(TEvPQ::TEvMLPGetRuntimeAttributesRequest::TPtr& ev) {
+    YDB_LOG_DEBUG("Handle",
+        {"logPrefix", LogPrefix()},
+        {"mlpGetRuntimeAttributesRequest", ev->Get()->Record.ShortDebugString()});
+    if (StatsRequestTracker.StatsReceived) {
+        return MLPBalancer->Handle(ev);
+    }
+
+    PendingMLPRequests.push_back(std::move(ev));
+}
+
+void TPersQueueReadBalancer::SendMLPGetPartitionResponses(
+    const std::vector<TMLPGetPartitionPendingResponse>& responses,
+    const TActorContext& ctx
+) {
+    for (const auto& response : responses) {
+        if (response.IsError) {
+            Send(response.Sender, new TEvPQ::TEvMLPErrorResponse(response.ErrorStatus, TString(response.ErrorMessage)), 0, response.Cookie);
+        } else {
+            Send(response.Sender, new TEvPQ::TEvMLPGetPartitionResponse(response.PartitionId, response.TabletId), 0, response.Cookie);
+        }
+    }
+    Y_UNUSED(ctx);
+}
+
+namespace {
+
+void AppendPersistChanges(
+    TReceiveAttemptPartitionsWriteBatch& batch,
+    const NBalancing::TNextPartitionPersistChanges& changes
+) {
+    if (changes.Upsert) {
+        batch.Upserts.push_back(*changes.Upsert);
+    }
+    batch.Deletes.insert(batch.Deletes.end(), changes.Deletes.begin(), changes.Deletes.end());
+}
+
+} // namespace
+
+void TPersQueueReadBalancer::ProcessMLPGetPartitionRequests(const TActorContext& ctx) {
+    if (ReceiveAttemptPartitionsWriteInProgress) {
+        return;
+    }
+    if (PendingMLPGetPartitionRequests.empty()) {
+        return;
+    }
+
+    TReceiveAttemptPartitionsWriteBatch batch;
+    batch.Responses.reserve(PendingMLPGetPartitionRequests.size());
+    const auto now = TAppData::TimeProvider->Now();
+
+    while (!PendingMLPGetPartitionRequests.empty()) {
+        auto ev = std::move(PendingMLPGetPartitionRequests.front());
+        PendingMLPGetPartitionRequests.pop_front();
+
+        TMLPGetPartitionPendingResponse response{
+            .Sender = ev->Sender,
+            .Cookie = ev->Cookie,
+        };
+
+        const auto prepared = MLPBalancer->PrepareGetPartitionResponse(
+            ev->Get()->GetConsumer(),
+            ev->Get()->GetReceiveAttemptId(),
+            now
+        );
+        if (prepared.IsError || !prepared.Node) {
+            response.IsError = true;
+            response.ErrorStatus = prepared.IsError ? prepared.ErrorStatus : Ydb::StatusIds::SCHEME_ERROR;
+            response.ErrorMessage = prepared.IsError ? prepared.ErrorMessage : TString("No partitions for balancing");
+        } else {
+            response.PartitionId = prepared.Node->Id;
+            response.TabletId = prepared.Node->TabletId;
+            AppendPersistChanges(batch, prepared.PersistChanges);
+        }
+
+        batch.Responses.push_back(std::move(response));
+    }
+
+    if (batch.Upserts.empty() && batch.Deletes.empty()) {
+        SendMLPGetPartitionResponses(batch.Responses, ctx);
+        if (!PendingMLPGetPartitionRequests.empty()) {
+            ProcessMLPGetPartitionRequests(ctx);
+        }
+        return;
+    }
+
+    PendingReceiveAttemptPartitionsWrites.push_back(std::move(batch));
+    TryStartNextReceiveAttemptPartitionsWrite(ctx);
+}
+
+void TPersQueueReadBalancer::TryStartNextReceiveAttemptPartitionsWrite(const TActorContext& ctx) {
+    if (ReceiveAttemptPartitionsWriteInProgress || PendingReceiveAttemptPartitionsWrites.empty()) {
+        return;
+    }
+
+    ReceiveAttemptPartitionsWriteInProgress = true;
+    Execute(new TTxWriteReceiveAttemptPartitions(this, std::move(PendingReceiveAttemptPartitionsWrites.front())), ctx);
+}
+
+void TPersQueueReadBalancer::OnReceiveAttemptPartitionsWriteComplete(
+    TReceiveAttemptPartitionsWriteBatch batch,
+    const TActorContext& ctx
+) {
+    AFL_ENSURE(ReceiveAttemptPartitionsWriteInProgress);
+    AFL_ENSURE(!PendingReceiveAttemptPartitionsWrites.empty());
+
+    PendingReceiveAttemptPartitionsWrites.pop_front();
+    ReceiveAttemptPartitionsWriteInProgress = false;
+
+    SendMLPGetPartitionResponses(batch.Responses, ctx);
+    ProcessMLPGetPartitionRequests(ctx);
+    TryStartNextReceiveAttemptPartitionsWrite(ctx);
+}
+
+void TPersQueueReadBalancer::CleanupReceiveAttemptPartitions(const TActorContext& ctx) {
+    if (!Inited) {
+        return;
+    }
+
+    auto deletes = MLPBalancer->CollectExpiredReceiveAttemptPartitions(TAppData::TimeProvider->Now());
+    if (deletes.empty()) {
+        return;
+    }
+
+    TReceiveAttemptPartitionsWriteBatch batch;
+    batch.Deletes = std::move(deletes);
+    PendingReceiveAttemptPartitionsWrites.push_back(std::move(batch));
+    TryStartNextReceiveAttemptPartitionsWrite(ctx);
+}
+
+void TPersQueueReadBalancer::ProcessPendingMLPRequests(const TActorContext& ctx) {
+    if (!StatsRequestTracker.StatsReceived) {
+        return;
+    }
+
+    while (!PendingMLPRequests.empty()) {
+        auto ev = std::move(PendingMLPRequests.front());
+        std::visit([&](auto& request) {
+            return MLPBalancer->Handle(request);
+        }, ev);
+        PendingMLPRequests.pop_front();
+    }
+
+    ProcessMLPGetPartitionRequests(ctx);
+}
+
+void TPersQueueReadBalancer::Handle(TEvPQ::TEvTopicSqsActionMetrics::TPtr& ev, const TActorContext& ctx) {
+    Y_UNUSED(ctx);
+    TopicMetricsHandler->AddSqsActionMetrics(ev->Get()->Record);
+}
+
+STFUNC(TPersQueueReadBalancer::StateInit) {
+    auto ctx(ActorContext());
+    TMetricsTimeKeeper keeper(ResourceMetrics, ctx);
+
+    switch (ev->GetTypeRewrite()) {
+        HFunc(TEvPersQueue::TEvUpdateBalancerConfig, HandleOnInit);
+        HFunc(TEvPersQueue::TEvRegisterReadSession, HandleOnInit);
+        HFunc(TEvPersQueue::TEvGetReadSessionsInfo, Handle);
+        HFunc(TEvTabletPipe::TEvServerConnected, Handle);
+        HFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
+        HFunc(TEvPersQueue::TEvGetPartitionIdForWrite, Handle);
+        HFunc(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound, Handle);
+        HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
+        HFunc(TEvPersQueue::TEvGetPartitionsLocation, HandleOnInit);
+        HFunc(TEvents::TEvWakeup, HandleWakeup);
+        // MLP
+        hFunc(TEvPQ::TEvMLPGetPartitionRequest, Handle);
+        HFunc(TEvPQ::TEvMLPConsumerStatus, Handle);
+        hFunc(TEvPQ::TEvMLPGetRuntimeAttributesRequest, Handle);
+        HFunc(TEvPQ::TEvTopicSqsActionMetrics, Handle);
+        // From kafka
+        HFunc(TEvPersQueue::TEvBalancingSubscribe, Handle);
+        HFunc(TEvPersQueue::TEvBalancingUnsubscribe, Handle);
+        default:
+            StateInitImpl(ev, SelfId());
+            break;
+    }
+}
+
+STFUNC(TPersQueueReadBalancer::StateWork) {
+    auto ctx(ActorContext());
+    TMetricsTimeKeeper keeper(ResourceMetrics, ctx);
+
+    switch (ev->GetTypeRewrite()) {
+        HFunc(TEvents::TEvWakeup, HandleWakeup);
+        HFunc(TEvPersQueue::TEvGetPartitionIdForWrite, Handle);
+        HFunc(TEvPersQueue::TEvUpdateBalancerConfig, Handle);
+        HFunc(TEvPersQueue::TEvRegisterReadSession, Handle);
+        HFunc(TEvPersQueue::TEvGetReadSessionsInfo, Handle);
+        HFunc(TEvPersQueue::TEvPartitionReleased, Handle);
+        HFunc(TEvTabletPipe::TEvServerConnected, Handle);
+        HFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
+        HFunc(TEvTabletPipe::TEvClientConnected, Handle);
+        HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
+        HFunc(TEvPersQueue::TEvStatusResponse, Handle);
+        HFunc(TEvPQ::TEvStatsWakeup, Handle);
+        HFunc(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound, Handle);
+        HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
+        HFunc(TEvPersQueue::TEvStatus, Handle);
+        HFunc(TEvPersQueue::TEvGetPartitionsLocation, Handle);
+        HFunc(TEvPQ::TEvReadingPartitionStatusRequest, Handle);
+        HFunc(TEvPersQueue::TEvReadingPartitionStartedRequest, Handle);
+        HFunc(TEvPersQueue::TEvReadingPartitionFinishedRequest, Handle);
+        HFunc(TEvPQ::TEvWakeupReleasePartition, Handle);
+        HFunc(TEvPQ::TEvBalanceConsumer, Handle);
+        // From kafka
+        HFunc(TEvPersQueue::TEvBalancingSubscribe, Handle);
+        HFunc(TEvPersQueue::TEvBalancingUnsubscribe, Handle);
+        // from PQ
+        HFunc(TEvPQ::TEvPartitionScaleStatusChanged, Handle);
+        // from TPartitionScaleRequest
+        HFunc(TPartitionScaleRequest::TEvPartitionScaleRequestDone, Handle);
+        // from MirrorDescriber
+        HFunc(TEvPQ::TEvMirrorTopicDescription, Handle);
+        // MLP
+        hFunc(TEvPQ::TEvMLPGetPartitionRequest, Handle);
+        hFunc(TEvPQ::TEvMLPGetRuntimeAttributesRequest, Handle);
+        HFunc(TEvPQ::TEvMLPConsumerStatus, Handle);
+        HFunc(TEvPQ::TEvTopicSqsActionMetrics, Handle);
+        default:
+            HandleDefaultEvents(ev, SelfId());
+            break;
+    }
+}
+
+} // NPQ
+} // NKikimr
+
+namespace NKikimr {
+
+IActor* CreatePersQueueReadBalancer(const TActorId& tablet, TTabletStorageInfo *info) {
+    return new NPQ::TPersQueueReadBalancer(tablet, info);
+}
+
+} // NKikimr

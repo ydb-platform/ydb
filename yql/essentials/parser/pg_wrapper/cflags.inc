@@ -36,6 +36,12 @@ CFLAGS(
 ENDIF()
 
 CFLAGS(
+    -Dadd_size=yql_add_size
+    -Dmul_size=yql_mul_size
+    -Dpalloc_mul=yql_palloc_mul
+    -Dpalloc0_mul=yql_palloc0_mul
+    -Drepalloc_mul=yql_repalloc_mul
+    -Dpalloc_mul_extended=yql_palloc_mul_extended
     -Dmonths=yql_months
     -Dpg_popcount32=yql_pg_popcount32
     -Dpg_popcount64=yql_pg_popcount64
@@ -139,4 +145,17 @@ CFLAGS(
     -Dpg_prng_seed=yql_pg_prng_seed
     -Dpg_prng_double_normal=yql_pg_prng_double_normal
     -Djson_errdetail=yql_json_errdetail
+    -DappendBinaryStringInfoNT=yql_appendBinaryStringInfoNT
+    -DappendStringInfoSpaces=yql_appendStringInfoSpaces
+    -DappendStringInfoChar=yql_appendStringInfoChar
+    -DappendBinaryStringInfo=yql_appendBinaryStringInfo
+    -DappendStringInfoString=yql_appendStringInfoString
+    -DappendStringInfoVA=yql_appendStringInfoVA
+    -DenlargeStringInfo=yql_enlargeStringInfo
+    -DappendStringInfo=yql_appendStringInfo
+    -DresetStringInfo=yql_resetStringInfo
+    -DinitStringInfo=yql_initStringInfo
+    -DmakeStringInfo=yql_makeStringInfo
+    -Dpg_encoding_set_invalid=yql_pg_encoding_set_invalid
+    -Dpg_encoding_mblen_or_incomplete=yql_pg_encoding_mblen_or_incomplete
 )

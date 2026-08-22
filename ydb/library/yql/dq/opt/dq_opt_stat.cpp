@@ -16,14 +16,14 @@ namespace {
      * We maintain a white list of callables that we consider part of constant expressions
      * All other callables will not be evaluated
      */
-    THashSet<TString> ConstantFoldingWhiteList = {
-        "Concat", "Just", "Optional", "SafeCast", "AsList",
-        "+", "-", "*", "/", "%"};
+    const THashSet<TString> ConstantFoldingWhiteList = {
+        "Concat", "Just", "Optional", "SafeCast", "AsList", "Size",
+        "+", "-", "*", "/", "%", ">", "<", ">=", "<=", "=="};
 
-    THashSet<TString> PgConstantFoldingWhiteList = {
+    const THashSet<TString> PgConstantFoldingWhiteList = {
         "PgResolvedOp", "PgResolvedCall", "PgCast", "PgConst", "PgArray", "PgType"};
 
-    TVector<TString> UdfBlackList = {
+    const TVector<TString> UdfBlackList = {
         "RandomNumber",
         "Random",
         "RandomUuid",
@@ -45,7 +45,7 @@ namespace {
             auto udf = TCoUdf(input->Child(0));
             auto udfName = udf.MethodName().StringValue();
 
-            for (auto blck : UdfBlackList) {
+            for (const auto& blck : UdfBlackList) {
                 if (udfName.find(blck) != TString::npos) {
                     return false;
                 }
@@ -103,33 +103,6 @@ namespace {
         return res;
     }
 
-    std::shared_ptr<TOptimizerStatistics> ApplyCardinalityHints(
-        std::shared_ptr<TOptimizerStatistics>& inputStats,
-        TVector<TString>& labels,
-        TCardinalityHints hints) {
-
-            if (labels.size() != 1) {
-                return inputStats;
-            }
-
-            for (auto h : hints.Hints) {
-                if (h.JoinLabels.size() == 1 && h.JoinLabels == labels) {
-                    auto outputStats = std::make_shared<TOptimizerStatistics>(
-                        inputStats->Type,
-                        h.ApplyHint(inputStats->Nrows),
-                        inputStats->Ncols,
-                        inputStats->ByteSize,
-                        inputStats->Cost,
-                        inputStats->KeyColumns,
-                        inputStats->ColumnStatistics,
-                        inputStats->StorageType);
-                    outputStats->Labels = inputStats->Labels;
-                    return outputStats;
-                }
-            }
-            return inputStats;
-    }
-
     TVector<TString> UnionLabels(TVector<TString>& leftLabels, TVector<TString>& rightLabels) {
         auto res = TVector<TString>();
         res.insert(res.begin(), leftLabels.begin(), leftLabels.end());
@@ -137,21 +110,92 @@ namespace {
         return res;
     }
 
-    TCardinalityHints::TCardinalityHint* FindCardHint(TVector<TString>& labels, TCardinalityHints& hints) {
-        THashSet<TString> labelsSet;
-        labelsSet.insert(labels.begin(), labels.end());
+}
 
-        for (auto & h: hints.Hints ) {
-            THashSet<TString> hintLabels;
-            hintLabels.insert(h.JoinLabels.begin(), h.JoinLabels.end());
-            if (labelsSet == hintLabels) {
-                return &h;
-            }
+std::shared_ptr<TOptimizerStatistics> ApplyRowsHints(
+    std::shared_ptr<TOptimizerStatistics>& inputStats,
+    TVector<TString>& labels,
+    TCardinalityHints hints
+) {
+
+        if (labels.size() != 1) {
+            return inputStats;
         }
 
-        return nullptr;
+        for (auto h : hints.Hints) {
+            if (h.JoinLabels.size() == 1 && h.JoinLabels == labels) {
+                auto outputStats = std::make_shared<TOptimizerStatistics>(
+                    inputStats->Type,
+                    h.ApplyHint(inputStats->Nrows),
+                    inputStats->Ncols,
+                    inputStats->ByteSize,
+                    inputStats->Cost,
+                    inputStats->KeyColumns,
+                    inputStats->ColumnStatistics,
+                    inputStats->StorageType);
+                outputStats->Labels = inputStats->Labels;
+                return outputStats;
+            }
+        }
+        return inputStats;
+}
+
+std::shared_ptr<TOptimizerStatistics> ApplyBytesHints(
+    std::shared_ptr<TOptimizerStatistics>& inputStats,
+    TVector<TString>& labels,
+    TCardinalityHints hints
+) {
+
+        if (labels.size() != 1) {
+            return inputStats;
+        }
+
+        for (auto h : hints.Hints) {
+            if (h.JoinLabels.size() == 1 && h.JoinLabels == labels) {
+                auto outputStats = std::make_shared<TOptimizerStatistics>(
+                    inputStats->Type,
+                    inputStats->Nrows,
+                    inputStats->Ncols,
+                    h.ApplyHint(inputStats->ByteSize),
+                    inputStats->Cost,
+                    inputStats->KeyColumns,
+                    inputStats->ColumnStatistics,
+                    inputStats->StorageType);
+                outputStats->Labels = inputStats->Labels;
+                return outputStats;
+            }
+        }
+        return inputStats;
+}
+
+TCardinalityHints::TCardinalityHint* FindCardHint(TVector<TString>& labels, TCardinalityHints& hints) {
+    THashSet<TString> labelsSet;
+    labelsSet.insert(labels.begin(), labels.end());
+
+    for (auto & h: hints.Hints ) {
+        THashSet<TString> hintLabels;
+        hintLabels.insert(h.JoinLabels.begin(), h.JoinLabels.end());
+        if (labelsSet == hintLabels) {
+            return &h;
+        }
     }
 
+    return nullptr;
+}
+
+TCardinalityHints::TCardinalityHint* FindBytesHint(TVector<TString>& labels, TCardinalityHints& hints) {
+    THashSet<TString> labelsSet;
+    labelsSet.insert(labels.begin(), labels.end());
+
+    for (auto & h: hints.Hints ) {
+        THashSet<TString> hintLabels;
+        hintLabels.insert(h.JoinLabels.begin(), h.JoinLabels.end());
+        if (labelsSet == hintLabels) {
+            return &h;
+        }
+    }
+
+    return nullptr;
 }
 
 bool NeedCalc(NNodes::TExprBase node) {
@@ -194,6 +238,26 @@ bool NeedCalc(NNodes::TExprBase node) {
     return !node.Maybe<TCoDataCtor>();
 }
 
+bool IsLiteralDataExpr(NNodes::TExprBase node) {
+    auto type = node.Ref().GetTypeAnn();
+    if (type->IsSingleton()) {
+        return false;
+    }
+    if (node.Maybe<TCoDataCtor>()) {
+        return true;
+    }
+    if (node.Maybe<TCoNothing>()) {
+        return true;
+    }
+    if (auto maybeJust = node.Maybe<TCoJust>()) {
+        return IsLiteralDataExpr(maybeJust.Cast().Input());
+    }
+    if (node.Maybe<TCoPgConst>()) {
+        return true;
+    }
+    return false;
+}
+
 bool IsConstantExprPg(const TExprNode::TPtr& input) {
     if (input->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Pg) {
         if (input->IsCallable("PgConst")) {
@@ -226,9 +290,12 @@ bool IsSuitableToFoldFlatMap(const TExprNode::TPtr& input) {
         return false;
     }
 
-    if (auto maybeApply = TMaybeNode<TCoApply>(input->Child(0))) {
-        auto apply = maybeApply.Cast();
-        return IsConstantUdf(apply.Callable().Ptr());
+    if (TCoApply::Match(input->Child(0))) {
+        auto apply = input->Child(0);
+        if (apply->ChildrenSize() != 2)  {
+            return false;
+        }
+        return IsConstantUdf(apply->Child(0)) && IsConstantExpr(apply->Child(1));
     }
 
     return false;
@@ -309,7 +376,7 @@ bool IsConstantExprWithParams(const TExprNode::TPtr& input) {
  * Compute statistics for map join
  * FIX: Currently we treat all join the same from the cost perspective, need to refine cost function
  */
-void InferStatisticsForMapJoin(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx, const IProviderContext& ctx, TCardinalityHints hints) {
+void InferStatisticsForMapJoin(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx, const IProviderContext& ctx, TOptimizerHints hints) {
 
     auto inputNode = TExprBase(input);
     auto join = inputNode.Cast<TCoMapJoinCore>();
@@ -327,8 +394,11 @@ void InferStatisticsForMapJoin(const TExprNode::TPtr& input, TTypeAnnotationCont
     auto leftLabels = InferLabels(leftStats, join.LeftKeysColumnNames());
     auto rightLabels = InferLabels(rightStats, join.RightKeysColumnNames());
 
-    leftStats = ApplyCardinalityHints(leftStats, leftLabels, hints);
-    rightStats = ApplyCardinalityHints(rightStats, rightLabels, hints);
+    leftStats = ApplyRowsHints(leftStats, leftLabels, *hints.CardinalityHints);
+    rightStats = ApplyRowsHints(rightStats, rightLabels, *hints.CardinalityHints);
+
+    leftStats = ApplyBytesHints(leftStats, leftLabels, *hints.BytesHints);
+    rightStats = ApplyBytesHints(rightStats, rightLabels, *hints.BytesHints);
 
     TVector<TJoinColumn> leftJoinKeys;
     TVector<TJoinColumn> rightJoinKeys;
@@ -346,16 +416,17 @@ void InferStatisticsForMapJoin(const TExprNode::TPtr& input, TTypeAnnotationCont
 
     auto unionOfLabels = UnionLabels(leftLabels, rightLabels);
     auto resStats = std::make_shared<TOptimizerStatistics>(
-        ctx.ComputeJoinStatsV1(
+        ctx.ComputeJoinStatsV2(
             *leftStats,
             *rightStats,
             leftJoinKeys,
             rightJoinKeys,
             EJoinAlgoType::MapJoin,
             ConvertToJoinKind(join.JoinKind().StringValue()),
-            FindCardHint(unionOfLabels, hints),
+            FindCardHint(unionOfLabels, *hints.CardinalityHints),
             false,
-            false
+            false,
+            FindBytesHint(unionOfLabels, *hints.BytesHints)
         )
     );
     resStats->Labels = std::make_shared<TVector<TString>>();
@@ -368,7 +439,13 @@ void InferStatisticsForMapJoin(const TExprNode::TPtr& input, TTypeAnnotationCont
  * Compute statistics for grace join
  * FIX: Currently we treat all join the same from the cost perspective, need to refine cost function
  */
-void InferStatisticsForGraceJoin(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx, const IProviderContext& ctx, TCardinalityHints hints) {
+void InferStatisticsForGraceJoin(
+    const TExprNode::TPtr& input,
+    TTypeAnnotationContext* typeCtx,
+    const IProviderContext& ctx,
+    TOptimizerHints hints,
+    TShufflingOrderingsByJoinLabels* shufflingOrderingsByJoinLabels
+) {
     auto inputNode = TExprBase(input);
     auto join = inputNode.Cast<TCoGraceJoinCore>();
 
@@ -385,8 +462,11 @@ void InferStatisticsForGraceJoin(const TExprNode::TPtr& input, TTypeAnnotationCo
     auto leftLabels = InferLabels(leftStats, join.LeftKeysColumnNames());
     auto rightLabels = InferLabels(rightStats, join.RightKeysColumnNames());
 
-    leftStats = ApplyCardinalityHints(leftStats, leftLabels, hints);
-    rightStats = ApplyCardinalityHints(rightStats, rightLabels, hints);
+    leftStats = ApplyRowsHints(leftStats, leftLabels, *hints.CardinalityHints);
+    rightStats = ApplyRowsHints(rightStats, rightLabels, *hints.CardinalityHints);
+
+    leftStats = ApplyBytesHints(leftStats, leftLabels, *hints.BytesHints);
+    rightStats = ApplyBytesHints(rightStats, rightLabels, *hints.BytesHints);
 
     TVector<TJoinColumn> leftJoinKeys;
     TVector<TJoinColumn> rightJoinKeys;
@@ -413,36 +493,42 @@ void InferStatisticsForGraceJoin(const TExprNode::TPtr& input, TTypeAnnotationCo
     }
 
     auto resStats = std::make_shared<TOptimizerStatistics>(
-            ctx.ComputeJoinStatsV1(
+            ctx.ComputeJoinStatsV2(
                 *leftStats,
                 *rightStats,
                 leftJoinKeys,
                 rightJoinKeys,
                 joinAlgo,
                 ConvertToJoinKind(join.JoinKind().StringValue()),
-                FindCardHint(unionOfLabels, hints),
-                false,
-                false
+                FindCardHint(unionOfLabels, *hints.CardinalityHints),
+                join.LeftInput().Maybe<TDqCnHashShuffle>().IsValid(),
+                join.RightInput().Maybe<TDqCnHashShuffle>().IsValid(),
+                FindBytesHint(unionOfLabels, *hints.BytesHints)
             )
         );
 
     resStats->Labels = std::make_shared<TVector<TString>>();
     resStats->Labels->insert(resStats->Labels->begin(), unionOfLabels.begin(), unionOfLabels.end());
-    typeCtx->SetStats(join.Raw(), resStats);
-    YQL_CLOG(TRACE, CoreDq) << "Infer statistics for GraceJoin: " << resStats->ToString();
-}
 
-/**
- * Infer statistics for DqJoin
- * DqJoin is an intermediary join representantation in Dq
- */
-void InferStatisticsForDqJoin(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx, const IProviderContext& ctx, TCardinalityHints hints) {
-    if (auto stats = typeCtx->GetStats(TExprBase(input).Raw())) {
-        return;
+    if (shufflingOrderingsByJoinLabels) {
+        auto maybeShufflingOrdering = shufflingOrderingsByJoinLabels->GetShufflingOrderigsByJoinLabels(unionOfLabels);
+        if (maybeShufflingOrdering) {
+            resStats->LogicalOrderings = *maybeShufflingOrdering;
+        }
     }
 
+    YQL_CLOG(TRACE, CoreDq) << "Infer statistics for GraceJoin with labels: " << "[" << JoinSeq(", ", unionOfLabels) << "]" << ", stats: " << resStats->ToString();
+    typeCtx->SetStats(join.Raw(), std::move(resStats));
+}
+
+void InferStatisticsForBlockHashJoin(
+    const TExprNode::TPtr& input,
+    TTypeAnnotationContext* typeCtx,
+    const IProviderContext& ctx,
+    TOptimizerHints hints
+) {
     auto inputNode = TExprBase(input);
-    auto join = inputNode.Cast<TDqJoin>();
+    auto join = inputNode.Cast<TDqBlockHashJoinCore>();
 
     auto leftArg = join.LeftInput();
     auto rightArg = join.RightInput();
@@ -454,16 +540,91 @@ void InferStatisticsForDqJoin(const TExprNode::TPtr& input, TTypeAnnotationConte
         return;
     }
 
-    auto joinAlgo = FromString<EJoinAlgoType>(join.JoinAlgo().StringValue());
-    if (joinAlgo == EJoinAlgoType::Undefined && join.JoinType().StringValue() != "Cross" /* we don't set any join algo to cross join */) {
+    auto leftLabels = InferLabels(leftStats, join.LeftKeysColumnNames());
+    auto rightLabels = InferLabels(rightStats, join.RightKeysColumnNames());
+
+    leftStats = ApplyRowsHints(leftStats, leftLabels, *hints.CardinalityHints);
+    rightStats = ApplyRowsHints(rightStats, rightLabels, *hints.CardinalityHints);
+
+    leftStats = ApplyBytesHints(leftStats, leftLabels, *hints.BytesHints);
+    rightStats = ApplyBytesHints(rightStats, rightLabels, *hints.BytesHints);
+
+    TVector<TJoinColumn> leftJoinKeys;
+    TVector<TJoinColumn> rightJoinKeys;
+
+    for (size_t i = 0; i < join.LeftKeysColumnNames().Size(); i++) {
+        auto alias = ExtractAlias(join.LeftKeysColumnNames().Item(i).StringValue());
+        auto attrName = RemoveAliases(join.LeftKeysColumnNames().Item(i).StringValue());
+        leftJoinKeys.push_back(TJoinColumn(alias, attrName));
+    }
+    for (size_t i = 0; i < join.RightKeysColumnNames().Size(); i++) {
+        auto alias = ExtractAlias(join.RightKeysColumnNames().Item(i).StringValue());
+        auto attrName = RemoveAliases(join.RightKeysColumnNames().Item(i).StringValue());
+        rightJoinKeys.push_back(TJoinColumn(alias, attrName));
+    }
+
+    auto unionOfLabels = UnionLabels(leftLabels, rightLabels);
+
+    auto resStats = std::make_shared<TOptimizerStatistics>(
+        ctx.ComputeJoinStatsV2(
+            *leftStats,
+            *rightStats,
+            leftJoinKeys,
+            rightJoinKeys,
+            EJoinAlgoType::GraceJoin,
+            ConvertToJoinKind(join.JoinKind().StringValue()),
+            FindCardHint(unionOfLabels, *hints.CardinalityHints),
+            join.LeftInput().Maybe<TDqCnHashShuffle>().IsValid(),
+            join.RightInput().Maybe<TDqCnHashShuffle>().IsValid(),
+            FindBytesHint(unionOfLabels, *hints.BytesHints)
+        )
+    );
+
+    resStats->Labels = std::make_shared<TVector<TString>>();
+    resStats->Labels->insert(resStats->Labels->begin(), unionOfLabels.begin(), unionOfLabels.end());
+
+    YQL_CLOG(TRACE, CoreDq) << "Infer statistics for BlockHashJoin with labels: " << "[" << JoinSeq(", ", unionOfLabels) << "]" << ", stats: " << resStats->ToString();
+    typeCtx->SetStats(join.Raw(), std::move(resStats));
+}
+
+/**
+ * Infer statistics for DqJoin
+ * DqJoin is an intermediary join representantation in Dq
+ */
+void InferStatisticsForDqJoinBase(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx, const IProviderContext& ctx, TOptimizerHints hints) {
+    if (auto stats = typeCtx->GetStats(TExprBase(input).Raw())) {
         return;
+    }
+
+    auto inputNode = TExprBase(input);
+    auto join = inputNode.Cast<TDqJoinBase>();
+
+    auto leftArg = join.LeftInput();
+    auto rightArg = join.RightInput();
+
+    auto leftStats = typeCtx->GetStats(leftArg.Raw());
+    auto rightStats = typeCtx->GetStats(rightArg.Raw());
+
+    if (!leftStats || !rightStats) {
+        return;
+    }
+
+    EJoinAlgoType joinAlgo = EJoinAlgoType::Undefined;
+    if (auto dqJoin = TMaybeNode<TDqJoin>(input)) {
+        joinAlgo = FromString<EJoinAlgoType>(dqJoin.Cast().JoinAlgo().StringValue());
+        if (joinAlgo == EJoinAlgoType::Undefined && join.JoinType().StringValue() != "Cross" /* we don't set any join algo to cross join */) {
+            return;
+        }
     }
 
     auto leftLabels = InferLabels(leftStats, join.LeftJoinKeyNames());
     auto rightLabels = InferLabels(rightStats, join.RightJoinKeyNames());
 
-    leftStats = ApplyCardinalityHints(leftStats, leftLabels, hints);
-    rightStats = ApplyCardinalityHints(rightStats, rightLabels, hints);
+    leftStats = ApplyRowsHints(leftStats, leftLabels, *hints.CardinalityHints);
+    rightStats = ApplyRowsHints(rightStats, rightLabels, *hints.CardinalityHints);
+
+    leftStats = ApplyBytesHints(leftStats, leftLabels, *hints.BytesHints);
+    rightStats = ApplyBytesHints(rightStats, rightLabels, *hints.BytesHints);
 
     TVector<TJoinColumn> leftJoinKeys;
     TVector<TJoinColumn> rightJoinKeys;
@@ -482,21 +643,27 @@ void InferStatisticsForDqJoin(const TExprNode::TPtr& input, TTypeAnnotationConte
     auto unionOfLabels = UnionLabels(leftLabels, rightLabels);
 
     auto resStats = std::make_shared<TOptimizerStatistics>(
-            ctx.ComputeJoinStatsV1(
+            ctx.ComputeJoinStatsV2(
                 *leftStats,
                 *rightStats,
                 leftJoinKeys,
                 rightJoinKeys,
                 joinAlgo,
                 ConvertToJoinKind(join.JoinType().StringValue()),
-                FindCardHint(unionOfLabels, hints),
+                FindCardHint(unionOfLabels, *hints.CardinalityHints),
                 false,
-                false
+                false,
+                FindBytesHint(unionOfLabels, *hints.BytesHints)
             )
         );
 
     resStats->Labels = std::make_shared<TVector<TString>>();
     resStats->Labels->insert(resStats->Labels->begin(), unionOfLabels.begin(), unionOfLabels.end());
+
+    if (auto maybeMapJoin = TMaybeNode<TDqPhyMapJoin>(inputNode.Raw())) {
+        resStats->SortingOrderings = leftStats->SortingOrderings;
+    }
+
     typeCtx->SetStats(join.Raw(), resStats);
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for DqJoin: " << resStats->ToString();
 }
@@ -650,6 +817,8 @@ void InferStatisticsForExtendBase(const TExprNode::TPtr& input, TTypeAnnotationC
     for (const auto& input: input->Children()) {
         if (auto inputStats = typeCtx->GetStats(input.Get())) {
             stats->Nrows += inputStats->Nrows;
+            stats->ByteSize += inputStats->ByteSize;
+            stats->Cost += inputStats->Cost;
         }
     }
 
@@ -680,7 +849,7 @@ void InferStatisticsForAggregateBase(const TExprNode::TPtr& input, TTypeAnnotati
     aggStats->Aliases = inputStats->Aliases;
 
     auto orderingInfo = GetAggregationBaseShuffleOrderingInfo(agg, typeCtx->OrderingsFSM, inputStats->TableAliases.Get());
-    aggStats->ShuffleOrderingIdx = orderingInfo.OrderingIdx;
+    aggStats->ShufflingOrderingIdx = orderingInfo.OrderingIdx;
     if (typeCtx->OrderingsFSM) {
         aggStats->LogicalOrderings = typeCtx->OrderingsFSM->CreateState(orderingInfo.OrderingIdx);
     }
@@ -849,6 +1018,22 @@ void InferStatisticsForDqMerge(const TExprNode::TPtr& input, TTypeAnnotationCont
     typeCtx->SetStats(merge.Raw(), newStats);
 }
 
+void InferStatisticsForUnionAll(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
+    auto inputNode = TExprBase(input);
+    auto unionAll = inputNode.Cast<TCoUnionAll>();
+
+    auto stats = std::make_shared<TOptimizerStatistics>();
+    for (const auto& input: input->Children()) {
+        if (auto inputStats = typeCtx->GetStats(input.Get())) {
+            stats->Nrows += inputStats->Nrows;
+            stats->ByteSize += inputStats->ByteSize;
+            stats->Cost += inputStats->Cost;
+        }
+    }
+
+    typeCtx->SetStats(inputNode.Raw(), std::move(stats));
+}
+
 /**
  * Just update the sorted order with alias
  */
@@ -865,8 +1050,6 @@ void InferStatisticsForDqPhyCrossJoin(const TExprNode::TPtr& input, TTypeAnnotat
     typeCtx->SetStats(cross.Raw(), outputStats);
 }
 
-
-
 std::shared_ptr<TOptimizerStatistics> RemoveSorting(const std::shared_ptr<TOptimizerStatistics>& stats) {
     if (stats->SortingOrderings.HasState()) {
         auto newStats = *stats;
@@ -879,8 +1062,6 @@ std::shared_ptr<TOptimizerStatistics> RemoveSorting(const std::shared_ptr<TOptim
 
 std::shared_ptr<TOptimizerStatistics> RemoveSorting(const std::shared_ptr<TOptimizerStatistics>& stats, const TExprNode::TPtr& input) {
     if (
-        TCoTopBase::Match(input.Get()) ||
-        TCoSortBase::Match(input.Get()) ||
         TDqCnHashShuffle::Match(input.Get()) ||
         TDqCnBroadcast::Match(input.Get()) ||
         TDqCnUnionAll::Match(input.Get())
@@ -889,6 +1070,32 @@ std::shared_ptr<TOptimizerStatistics> RemoveSorting(const std::shared_ptr<TOptim
     } else {
         return stats;
     }
+}
+
+std::shared_ptr<TOptimizerStatistics> RemoveShuffling(const std::shared_ptr<TOptimizerStatistics>& stats) {
+    if (stats->LogicalOrderings.HasState()) {
+        auto newStats = *stats;
+        newStats.LogicalOrderings.RemoveState();
+        return std::make_shared<TOptimizerStatistics>(std::move(newStats));
+    } else {
+        return stats;
+    }
+}
+
+std::shared_ptr<TOptimizerStatistics> RemoveShuffling(const std::shared_ptr<TOptimizerStatistics>& stats, const TExprNode::TPtr& input) {
+    if (
+        TDqCnMerge::Match(input.Get()) ||
+        TDqCnBroadcast::Match(input.Get()) ||
+        TDqCnUnionAll::Match(input.Get())
+    ) {
+        return RemoveShuffling(stats);
+    } else {
+        return stats;
+    }
+}
+
+std::shared_ptr<TOptimizerStatistics> RemoveOrderings(const std::shared_ptr<TOptimizerStatistics>& stats, const TExprNode::TPtr& input) {
+    return RemoveSorting(RemoveShuffling(stats, input), input);
 }
 
 void InferStatisticsForAsStruct(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
@@ -1002,6 +1209,34 @@ void InferStatisticsForSortBase(const TExprNode::TPtr& input, TTypeAnnotationCon
     typeCtx->SetStats(inputNode.Raw(), std::move(topStats));
 }
 
+template <typename TAggregationCallable>
+void InferStatisticsForAggregationCallable(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
+    auto inputNode = TExprBase(input);
+    auto aggr = inputNode.Cast<TAggregationCallable>();
+
+    auto inputStats = typeCtx->GetStats(aggr.Input().Raw());
+    if (!inputStats) {
+        return;
+    }
+
+    TOptimizerStatistics aggStats = *inputStats;
+
+    auto& shufflingsFSM = typeCtx->OrderingsFSM;
+    if (shufflingsFSM) {
+        auto shuffling = TShuffling(GetKeySelectorOrdering(aggr.KeySelectorLambda()));
+        std::int64_t orderingIdx = shufflingsFSM->FDStorage.FindShuffling(shuffling, inputStats->TableAliases.Get());
+        if (!inputStats->LogicalOrderings.ContainsShuffle(orderingIdx)) {
+            aggStats.LogicalOrderings = shufflingsFSM->CreateState(orderingIdx);
+        }
+        aggStats.ShufflingOrderingIdx = orderingIdx;
+    }
+
+    YQL_CLOG(TRACE, CoreDq) << "Infer statistics for " << input->Content() << " with stats: " << aggStats.ToString();
+    typeCtx->SetStats(aggr.Raw(), std::make_shared<TOptimizerStatistics>(std::move(aggStats)));
+}
+
+template void InferStatisticsForAggregationCallable<TCoShuffleByKeys>(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
+
 void InferStatisticsForEquiJoin(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
     auto equiJoin = TExprBase(input).Cast<TCoEquiJoin>();
 
@@ -1061,42 +1296,38 @@ TOrderingInfo GetAggregationBaseShuffleOrderingInfo(
     const TSimpleSharedPtr<TOrderingsStateMachine>& shufflingsFSM,
     TTableAliasMap* tableAlias
 ) {
-    TVector<TJoinColumn> shuffling;
-    shuffling.reserve(aggregationBase.Keys().Size());
+    TVector<TJoinColumn> ordering;
+    ordering.reserve(aggregationBase.Keys().Size());
     for (const auto& key: aggregationBase.Keys()) {
         TString aggregationKey = key.StringValue();
-        shuffling.emplace_back(TJoinColumn::FromString(aggregationKey));
+        ordering.emplace_back(TJoinColumn::FromString(aggregationKey));
     }
 
     std::int64_t orderingIdx = -1;
     if (shufflingsFSM) {
-        orderingIdx = shufflingsFSM->FDStorage.FindInterestingOrderingIdx(shuffling, TOrdering::EShuffle, tableAlias);
+        auto shuffling = TShuffling(ordering);
+        orderingIdx = shufflingsFSM->FDStorage.FindShuffling(shuffling, tableAlias);
     }
 
     return TOrderingInfo{
         .OrderingIdx = orderingIdx,
-        .Ordering = std::move(shuffling)
+        .Ordering = std::move(ordering)
     };
 }
 
-
-template <typename TSortCallable>
-TOrderingInfo GetSortingOrderingInfoImpl(
-    const TSortCallable& sortCallable,
-     const TSimpleSharedPtr<TOrderingsStateMachine>& sortingsFSM,
-    TTableAliasMap* tableAlias
+TVector<TJoinColumn> GetKeySelectorOrdering(
+    const NNodes::TCoLambda& keySelector
 ) {
-    const auto& keySelector = sortCallable.KeySelectorLambda();
-    TVector<TJoinColumn> sorting;
+    TVector<TJoinColumn> ordering;
     if (auto body = keySelector.Body().template Maybe<TCoMember>()) {
-        sorting.push_back(TJoinColumn::FromString(body.Cast().Name().StringValue()));
+        ordering.push_back(TJoinColumn::FromString(body.Cast().Name().StringValue()));
     } else if (auto body = keySelector.Body().template Maybe<TExprList>()) {
         for (size_t i = 0; i < body.Cast().Size(); ++i) {
             auto item = body.Cast().Item(i);
 
-            auto collectMember = [&sorting](auto&& self, const TExprBase& item) -> void {
+            auto collectMember = [&ordering](auto&& self, const TExprBase& item) -> void {
                 if (auto member = item.Maybe<TCoMember>()) {
-                    sorting.push_back(TJoinColumn::FromString(member.Cast().Name().StringValue()));
+                    ordering.push_back(TJoinColumn::FromString(member.Cast().Name().StringValue()));
                 }
 
                 if (auto coalesce = item.Maybe<TCoCoalesce>()) {
@@ -1107,6 +1338,18 @@ TOrderingInfo GetSortingOrderingInfoImpl(
             collectMember(collectMember, item);
         }
     }
+
+    return ordering;
+}
+
+template <typename TSortCallable>
+TOrderingInfo GetSortingOrderingInfoImpl(
+    const TSortCallable& sortCallable,
+     const TSimpleSharedPtr<TOrderingsStateMachine>& sortingsFSM,
+    TTableAliasMap* tableAlias
+) {
+    const auto& keySelector = sortCallable.KeySelectorLambda();
+    TVector<TJoinColumn> sorting = GetKeySelectorOrdering(keySelector);
 
     auto getDirection = [] (TExprBase expr) {
         if (!expr.Maybe<TCoBool>()) {

@@ -29,6 +29,10 @@
 
 #include "src/core/lib/slice/slice.h"
 
+// Copy the first n bytes of src into memory pointed to by dst.
+void grpc_slice_buffer_copy_first_into_buffer(grpc_slice_buffer* src, size_t n,
+                                              void* dst);
+
 namespace grpc_core {
 
 /// A slice buffer holds the memory for a collection of slices.
@@ -68,6 +72,9 @@ class SliceBuffer {
   /// Appends a SliceBuffer into the SliceBuffer and makes an attempt to merge
   /// this slice with the last slice in the SliceBuffer.
   void Append(const SliceBuffer& other);
+  void TakeAndAppend(SliceBuffer& other) {
+    grpc_slice_buffer_move_into(&other.slice_buffer_, &slice_buffer_);
+  }
 
   /// Adds a new slice into the SliceBuffer at the next available index.
   /// Returns the index at which the new slice is added.
@@ -75,6 +82,12 @@ class SliceBuffer {
 
   /// Returns the number of slices held by the SliceBuffer.
   size_t Count() const { return slice_buffer_.count; }
+
+  /// Copy the entire contents to a memory buffer.
+  void CopyToBuffer(uint8_t* dst) {
+    grpc_slice_buffer_copy_first_into_buffer(&slice_buffer_,
+                                             slice_buffer_.length, dst);
+  }
 
   /// Removes/deletes the last n bytes in the SliceBuffer.
   void RemoveLastNBytes(size_t n) {
@@ -126,6 +139,9 @@ class SliceBuffer {
   /// Concatenate all slices and return the resulting string.
   TString JoinIntoString() const;
 
+  /// Concatenate all slices and return the resulting slice.
+  Slice JoinIntoSlice() const;
+
   // Return a copy of the slice buffer
   SliceBuffer Copy() const {
     SliceBuffer copy;
@@ -161,9 +177,5 @@ class SliceBuffer {
 };
 
 }  // namespace grpc_core
-
-// Copy the first n bytes of src into memory pointed to by dst.
-void grpc_slice_buffer_copy_first_into_buffer(grpc_slice_buffer* src, size_t n,
-                                              void* dst);
 
 #endif  // GRPC_SRC_CORE_LIB_SLICE_SLICE_BUFFER_H

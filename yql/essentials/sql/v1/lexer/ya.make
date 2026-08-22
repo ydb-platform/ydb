@@ -1,7 +1,7 @@
 LIBRARY()
 
 PEERDIR(
-    yql/essentials/core/issue/protos
+    yql/essentials/public/issue/protos
     yql/essentials/sql/settings
 )
 
@@ -16,8 +16,6 @@ SUPPRESSIONS(
 END()
 
 RECURSE(
-    antlr3
-    antlr3_ansi
     antlr4
     antlr4_ansi
     antlr4_pure

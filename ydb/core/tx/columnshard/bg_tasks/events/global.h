@@ -1,7 +1,8 @@
 #pragma once
 #include "common.h"
-#include <ydb/core/tx/columnshard/bg_tasks/protos/data.pb.h>
+
 #include <ydb/core/tx/columnshard/bg_tasks/abstract/control.h>
+#include <ydb/core/tx/columnshard/bg_tasks/protos/data.pb.h>
 
 namespace NKikimr::NOlap::NBackground {
 
@@ -13,4 +14,4 @@ struct TEvSessionControl: public TEventPB<TEvSessionControl, NKikimrTxBackground
     }
 };
 
-}
+}   // namespace NKikimr::NOlap::NBackground

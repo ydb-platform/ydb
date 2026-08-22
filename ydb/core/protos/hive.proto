@@ -5,6 +5,8 @@ import "ydb/core/protos/subdomains.proto";
 import "ydb/core/protos/bind_channel_storage_pool.proto";
 import "ydb/core/protos/follower_group.proto";
 
+import "google/protobuf/empty.proto";
+
 package NKikimrHive;
 option java_package = "ru.yandex.kikimr.proto";
 
@@ -117,6 +119,7 @@ message TEvCreateTablet {
     optional TDataCentersPreference DataCentersPreference = 24;
     repeated string AllowedDataCenters = 25;
     optional EBalancerPolicy BalancerPolicy = 26;
+    optional bool IsBackup = 27 [default = false];
 
     optional uint32 ChannelsProfile = 5 [deprecated = true]; // DEPRECATED
     optional uint32 Flags = 6 [deprecated = true]; // DEPRECATED
@@ -269,8 +272,9 @@ message TEvReassignTablet {
 
     optional fixed64 TabletID = 1;
     repeated uint32 Channels = 2;
-    repeated uint32 ForcedGroupIDs = 3;
+    repeated uint32 ForcedGroupIDs = 3; // should not be used with async
     optional EHiveReassignReason ReassignReason = 4;
+    optional bool Async = 5;
 }
 
 message TForwardRequest {
@@ -284,6 +288,7 @@ message TEvRequestHiveInfo {
     optional uint32 FollowerID = 4;
     optional bool ReturnMetrics = 5;
     optional bool ReturnChannelHistory = 6;
+    optional NKikimrSubDomains.TDomainKey FilterTabletsByObjectDomain = 7;
 }
 
 message TEvResponseHiveInfo {
@@ -355,6 +360,7 @@ message THiveStorageGroupStats {
     optional uint64 MaximumSize = 9;
     optional uint64 AllocatedSize = 10;
     optional uint64 AvailableSize = 11;
+    optional uint32 GroupSizeInUnits = 12;
 }
 
 message THiveStoragePoolStats {
@@ -383,6 +389,10 @@ message TEvDrainNode {
 message TEvDrainNodeResult {
     optional NKikimrProto.EReplyStatus Status = 1;
     optional uint32 Movements = 2;
+}
+
+message TEvDrainNodeAck {
+    optional uint64 SeqNo = 1;
 }
 
 message TEvFillNode {
@@ -509,6 +519,7 @@ message TTabletInfo {
     optional uint64 LastAliveTimestamp = 23;
     optional EBalancerPolicy BalancerPolicy = 24;
     optional bool InWaitQueue = 25;
+    optional bool IsBackup = 26 [default = false];
 }
 
 message TEvSeizeTabletsReply {
@@ -636,4 +647,51 @@ message TEvConfigureScaleRecommender {
 
 message TEvConfigureScaleRecommenderReply {
     optional NKikimrProto.EReplyStatus Status = 1;
+}
+
+message TEvRequestDrainInfo {
+    optional uint32 NodeId = 1;
+}
+
+message TEvResponseDrainInfo {
+    message TDrainInProgress {
+        optional float Progress = 1;
+    }
+
+    optional uint32 NodeId = 1;
+    optional uint64 DrainSeqNo = 2;
+    oneof DrainStatus {
+        TDrainInProgress DrainInProgress = 3;
+        google.protobuf.Empty NotRunning = 4;
+    }
+}
+
+message TEvSetDown {
+    optional uint32 NodeId = 1;
+    optional bool Down = 2;
+}
+
+message TEvSetDownReply {
+    optional NKikimrProto.EReplyStatus Status = 1;
+}
+
+message TEvShrinkStoragePool {
+    optional NKikimrSubDomains.TDomainKey SubDomain = 1;
+    optional string StoragePool = 2;
+    optional uint64 NewSize = 3;
+    optional uint64 Version = 4;
+}
+
+message TEvShrinkStoragePoolReply {
+    optional NKikimrSubDomains.TDomainKey SubDomain = 1;
+    optional string StoragePool = 2;
+    optional uint64 Version = 3;
+    optional NKikimrProto.EReplyStatus Status = 4;
+    optional string Error = 5;
+    repeated uint32 GroupsToRemove = 6;
+}
+
+message TEvShrinkStoragePoolDone {
+    optional string StoragePool = 1;
+    repeated uint32 GroupsToRemove = 2;
 }

@@ -8,3 +8,13 @@
  #include "absl/synchronization/mutex.h"
  #include "google/protobuf/arena_allocation_policy.h"
  #include "google/protobuf/arenaz_sampler.h"
+--- a/src/google/protobuf/io/printer.h	(index)
++++ b/src/google/protobuf/io/printer.h	(working tree)
+@@ -50,6 +50,7 @@
+ #include "absl/functional/function_ref.h"
+ #include "absl/log/absl_check.h"
+ #include "absl/meta/type_traits.h"
++#include "absl/strings/str_cat.h"
+ #include "absl/strings/str_format.h"
+ #include "absl/strings/string_view.h"
+ #include "absl/types/optional.h"

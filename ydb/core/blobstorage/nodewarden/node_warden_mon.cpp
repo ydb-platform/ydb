@@ -2,6 +2,10 @@
 
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 
+#include <ydb/core/blobstorage/bridge/syncer/syncer.h>
+
+#include <ydb/core/util/format.h>
+
 #include <ydb/library/pdisk_io/file_params.h>
 #include <library/cpp/json/json_writer.h>
 
@@ -16,6 +20,12 @@ void TNodeWarden::Handle(NMon::TEvHttpInfo::TPtr &ev) {
 
     if (cgi.Get("page") == "distconf") {
         TActivationContext::Send(ev->Forward(DistributedConfigKeeperId));
+        return;
+    } else if (cgi.Get("page") == "localrecoverybroker") {
+        TActivationContext::Send(ev->Forward(MakeBlobStorageLocalRecoveryBrokerID()));
+        return;
+    } else if (cgi.Get("page") == "startupdatasyncbroker") {
+        TActivationContext::Send(ev->Forward(MakeBlobStorageStartupDataSyncBrokerID()));
         return;
     }
 
@@ -103,6 +113,12 @@ void TNodeWarden::RenderWholePage(IOutputStream& out) {
             }
         }
 
+        TAG(TH3) { out << "VDisk Brokers"; }
+        DIV() {
+            out << "<a href=\"?page=localrecoverybroker\">VDisk Local Recovery Broker</a><br>";
+            out << "<a href=\"?page=startupdatasyncbroker\">VDisk Startup Data Sync Broker</a>";
+        }
+
         TAG(TH3) { out << "StorageConfig"; }
         DIV() {
             out << "<p>Self-management enabled: " << (SelfManagementEnabled ? "yes" : "no") << "</p>";
@@ -137,6 +153,7 @@ void TNodeWarden::RenderWholePage(IOutputStream& out) {
                     TABLEH() { out << "Category"; }
                     TABLEH() { out << "Temporary"; }
                     TABLEH() { out << "Pending"; }
+                    TABLEH() { out << "PDiskConfig warning"; }
                 }
             }
             TABLEBODY() {
@@ -159,6 +176,7 @@ void TNodeWarden::RenderWholePage(IOutputStream& out) {
                         TABLED() { out << value.Record.GetPDiskCategory(); }
                         TABLED() { out << value.Temporary; }
                         TABLED() { out << pending; }
+                        TABLED() { out << value.PDiskConfigWarning; }
                     }
                 }
             }
@@ -210,6 +228,77 @@ void TNodeWarden::RenderWholePage(IOutputStream& out) {
                             }
                         }
                     }
+                }
+            }
+        }
+
+        TAG(TH3) { out << "Bridge syncers"; }
+        TABLE_CLASS("table oddgray") {
+            TABLEHEAD() {
+                TABLER() {
+                    TABLEH() { out << "Group"; }
+                    TABLEH() { out << "Finished"; }
+                    TABLEH() { out << "ErrorReason"; }
+                    TABLEH() { out << "Start/Stop/OK/Error"; }
+                    TABLEH() { out << "LastErrorReason"; }
+                    TABLEH() { out << "Percent"; }
+                    TABLEH() { out << "Bytes"; }
+                    TABLEH() { out << "Blobs"; }
+                }
+            }
+            TABLEBODY() {
+                for (const auto& syncer : WorkingSyncers) {
+                    out << "<a name='syncer-" << syncer.TargetGroupId << "'>";
+                    TABLER() {
+                        TABLED() {
+                            out << "proxy: " << syncer.BridgeProxyGroupId << ':' << syncer.BridgeProxyGroupGeneration << "<br/>";
+                            out << "from: " << syncer.SourceGroupId << "<br/>";
+                            out << "to: " << syncer.TargetGroupId;
+                        }
+                        TABLED() { out << syncer.Finished; }
+                        TABLED() { out << syncer.ErrorReason; }
+                        TABLED() {
+                            out << syncer.NumStart << '/' << syncer.NumStop << '/' << syncer.NumFinishOK << '/'
+                                << syncer.NumFinishError;
+                        }
+                        TABLED() { out << syncer.LastErrorReason; }
+
+                        auto& stats = *syncer.SyncerDataStats;
+                        const ui64 bytesTotal = stats.BytesTotal;
+                        const ui64 bytesDone = stats.BytesDone;
+                        const ui64 bytesError = stats.BytesError;
+                        const ui64 blobsTotal = stats.BlobsTotal;
+                        const ui64 blobsDone = stats.BlobsDone;
+                        const ui64 blobsError = stats.BlobsError;
+
+                        TABLED() {
+                            if (bytesTotal) {
+                                const int percent = bytesDone * 10'000 / bytesTotal;
+                                out << Sprintf("%d.%02d%%", percent / 100, percent % 100);
+                            } else {
+                                out << "?";
+                            }
+                        }
+                        TABLED() {
+                            static const char *bytesSuffixes[] = {"B", "KiB", "MiB", "GiB", nullptr};
+                            FormatHumanReadable(out, bytesDone, 1024, 1, bytesSuffixes);
+                            out << '/';
+                            FormatHumanReadable(out, bytesTotal, 1024, 1, bytesSuffixes);
+                            out << '(';
+                            FormatHumanReadable(out, bytesError, 1024, 1, bytesSuffixes);
+                            out << ')';
+                        }
+                        TABLED() {
+                            static const char *blobsSuffixes[] = {"", "K", "M", nullptr};
+                            FormatHumanReadable(out, blobsDone, 1000, 1, blobsSuffixes);
+                            out << '/';
+                            FormatHumanReadable(out, blobsTotal, 1000, 1, blobsSuffixes);
+                            out << '(';
+                            FormatHumanReadable(out, blobsError, 1000, 1, blobsSuffixes);
+                            out << ')';
+                        }
+                    }
+                    out << "</a>";
                 }
             }
         }

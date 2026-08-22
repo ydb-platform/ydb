@@ -17,6 +17,7 @@ PEERDIR(
     library/cpp/deprecated/enum_codegen
     library/cpp/yson
     ydb/public/api/protos
+    ydb/core/protos
     ydb/core/scheme/protos
     ydb/core/scheme_types
     ydb/library/aclib
@@ -25,7 +26,7 @@ PEERDIR(
     # temporary.
     ydb/library/pretty_types_print/protobuf
     library/cpp/lwtrace/mon
-    library/cpp/containers/absl_flat_hash
+    library/cpp/containers/absl
 )
 
 END()

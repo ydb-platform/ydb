@@ -591,18 +591,17 @@ void TDataShard::HandleSafe(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorCont
 
     auto infoIt = TableInfos.find(request.GetLocalPathId());
 
-    auto reportError = [this, scanComputeActor, generation] (const TString& table, const TString& detailedReason) {
+    auto reportError = [this, scanComputeActor, generation] (const NYql::TIssuesIds_EIssueCode issueCode, const TString& detailedReason) {
         auto ev = MakeHolder<TEvKqpCompute::TEvScanError>(generation, TabletID());
         ev->Record.SetStatus(Ydb::StatusIds::ABORTED);
-        auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH, TStringBuilder() <<
-            "Table '" << table << "' scheme changed.");
+        auto issue = NYql::YqlIssue({}, issueCode, detailedReason);
         IssueToMessage(issue, ev->Record.MutableIssues()->Add());
         Send(scanComputeActor, ev.Release(), IEventHandle::FlagTrackDelivery);
         LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, detailedReason);
     };
 
     if (infoIt == TableInfos.end()) {
-        reportError(request.GetTablePath(), TStringBuilder() << "TxId: " << request.GetTxId() << "."
+        reportError(NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH, TStringBuilder() << "TxId: " << request.GetTxId() << "."
             << " Can not find table '" << request.GetTablePath() << "'"
             << " by LocalPathId " << request.GetLocalPathId() << " at " << TabletID());
         return;
@@ -615,7 +614,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorCont
     if (tableInfo->GetTableSchemaVersion() != 0 &&
         request.GetSchemaVersion() != tableInfo->GetTableSchemaVersion())
     {
-        reportError(request.GetTablePath(), TStringBuilder() << "TxId: " << request.GetTxId() << "."
+        reportError(NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH, TStringBuilder() << "TxId: " << request.GetTxId() << "."
             << " Table '" << request.GetTablePath() << "'"
             << " schema version changed at " << TabletID());
         return;
@@ -624,7 +623,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorCont
     for (int i = 0; i < request.GetColumnTags().size(); ++i) {
         auto* column = tableColumns.FindPtr(request.GetColumnTags(i));
         if (!column) {
-            reportError(request.GetTablePath(), TStringBuilder() << "TxId: " << request.GetTxId() << "."
+            reportError(NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH, TStringBuilder() << "TxId: " << request.GetTxId() << "."
                 << " Cant find table '" << request.GetTablePath() << "'"
                 << " column " << request.GetColumnTags(i)  << " at " << TabletID());
             return;
@@ -632,7 +631,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorCont
 
         const auto& typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(request.GetColumnTypes(i), &request.GetColumnTypeInfos(i));
         if (column->Type != typeInfoMod.TypeInfo || column->TypeMod != typeInfoMod.TypeMod) {
-            reportError(request.GetTablePath(), TStringBuilder() << "TxId: " << request.GetTxId() << "."
+            reportError(NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH, TStringBuilder() << "TxId: " << request.GetTxId() << "."
                 << " Table '" << request.GetTablePath() << "'"
                 << " column " << request.GetColumnTags(i)  << " type mismatch at " << TabletID());
             return;
@@ -656,13 +655,13 @@ void TDataShard::HandleSafe(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorCont
 
     auto snapshotKey = TSnapshotKey(PathOwnerId, request.GetLocalPathId(), snapshot.GetStep(), snapshot.GetTxId());
     if (!SnapshotManager.FindAvailable(snapshotKey)) {
-        reportError(request.GetTablePath(), TStringBuilder() << "TxId: " << request.GetTxId() << "."
+        reportError(NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED, TStringBuilder() << "TxId: " << request.GetTxId() << "."
             << " Snapshot is not valid, tabletId: " << TabletID() << ", step: " << snapshot.GetStep());
         return;
     }
 
     if (!IsStateActive()) {
-        reportError(request.GetTablePath(), TStringBuilder() << "TxId: " << request.GetTxId() << "."
+        reportError(NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH, TStringBuilder() << "TxId: " << request.GetTxId() << "."
             << " Shard " << TabletID() << " is not ready to process requests.");
         return;
     }

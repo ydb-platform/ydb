@@ -350,6 +350,7 @@ typedef struct ExprEvalStep
 			/* faster to access without additional indirection: */
 			PGFunction	fn_addr;	/* actual call address */
 			int			nargs;	/* number of arguments */
+			bool		make_ro;	/* make arg0 R/O (used only for NULLIF) */
 		}			func;
 
 		/* for EEOP_BOOL_*_STEP */
@@ -580,6 +581,10 @@ typedef struct ExprEvalStep
 		{
 			bool		has_nulls;
 			bool		inclause;	/* true for IN and false for NOT IN */
+			bool		null_lhs_result;	/* for non-strict lookups, we
+											 * cache what looking up NULL
+											 * returns. */
+			bool		null_lhs_isnull;
 			struct ScalarArrayOpExprHashTable *elements_tab;
 			FmgrInfo   *finfo;	/* function's lookup data */
 			FunctionCallInfo fcinfo_data;	/* arguments etc */

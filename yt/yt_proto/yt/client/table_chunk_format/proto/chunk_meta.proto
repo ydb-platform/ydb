@@ -1,5 +1,7 @@
 package NYT.NTableClient.NProto;
 
+option go_package = "a.yandex-team.ru/yt/go/proto/client/table_client";
+
 import "yt_proto/yt/client/table_chunk_format/proto/column_meta.proto";
 import "yt_proto/yt/core/misc/proto/guid.proto";
 
@@ -10,12 +12,20 @@ message TLogicalType
     message TStructField
     {
         optional string name = 1;
+        optional string stable_name = 3;
+
         optional TLogicalType type = 2;
     }
+
+    message TRemovedStructField
+    {
+        optional string stable_name = 1;
+    };
 
     message TStructLogicalType
     {
         repeated TStructField fields = 1;
+        repeated TRemovedStructField removed_fields = 2;
     }
 
     message TTupleLogicalType
@@ -194,6 +204,14 @@ message TXorFilterSystemBlockMeta
     optional int32 key_prefix_length = 2;
 }
 
+message TMinHashDigestSystemBlockMeta
+{
+    extend TSystemBlockMeta
+    {
+        optional TMinHashDigestSystemBlockMeta min_hash_digest_block_meta = 102;
+    }
+}
+
 message TSystemBlockMeta
 {
     extensions 100 to 199;
@@ -337,8 +355,11 @@ message TVersionedRowDigestExt
 {
     repeated int64 timestamp_count_log_histogram = 1;
     repeated uint64 earliest_nth_timestamp = 2;
+    repeated uint64 earliest_aggregate_or_delete_nth_timestamp = 6;
+
     optional bytes last_timestamp_digest = 3;
     optional bytes all_but_last_timestamp_digest = 4;
+    optional bytes first_timestamp_digest = 5;
 }
 
 // This extension is present in (hunk) chunks that store compression dictionaries.
@@ -356,6 +377,17 @@ message TCompressionDictionaryExt
     // References to fragments that store dictionaries used for compression
     // of values of a column corresponding to stable_name.
     repeated TColumnInfo column_infos = 1;
+}
+
+message TColumnNameToConstraintMap
+{
+    message TColumnNameToConstraintEntry
+    {
+        required string name = 1;
+        required string constraint = 2;
+    }
+
+    repeated TColumnNameToConstraintEntry entries = 3;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -23,7 +23,7 @@ IF (AUTOCHECK)
     )
 
     REQUIREMENTS(
-        cpu:all
+        cpu:4
         container:4467981730
         dns:dns64
     )
@@ -49,7 +49,7 @@ IF (OPENSOURCE)
     # otherwise CI system would be overloaded due to simultaneous launch of many Docker containers.
     # See DEVTOOLSSUPPORT-44103, YA-1759 for details.
     TAG(ya:not_autocheck)
-    REQUIREMENTS(cpu:all)
+    REQUIREMENTS(cpu:4)
 ENDIF()
 
 SRCS(
@@ -64,6 +64,7 @@ PEERDIR(
     yql/essentials/sql/pg_dummy
     ydb/public/sdk/cpp/src/client/types/operation
     ydb/library/actors/core
+    ydb/library/aws_init
 )
 
 DEPENDS(

@@ -66,12 +66,33 @@ void TChunkIdWithIndexes::Load(TStreamLoadContext& context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TChunkIdWithIndexAndState::Save(TStreamSaveContext& context) const
+{
+    using NYT::Save;
+
+    Save(context, Id);
+    Save(context, ReplicaIndex);
+    Save(context, State);
+}
+
+void TChunkIdWithIndexAndState::Load(TStreamLoadContext& context)
+{
+    using NYT::Load;
+
+    Load(context, Id);
+    Load(context, ReplicaIndex);
+    Load(context, State);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void ToProto(NProto::TConfirmChunkReplicaInfo* value, TChunkReplicaWithLocation replica)
 {
     using NYT::ToProto;
 
     value->set_replica(replica.Value_);
     ToProto(value->mutable_location_uuid(), replica.ChunkLocationUuid_);
+    value->set_location_index(ToProto<ui32>(replica.ChunkLocationIndex_));
 }
 
 void FromProto(TChunkReplicaWithLocation* replica, NProto::TConfirmChunkReplicaInfo value)
@@ -80,6 +101,12 @@ void FromProto(TChunkReplicaWithLocation* replica, NProto::TConfirmChunkReplicaI
 
     replica->Value_ = value.replica();
     replica->ChunkLocationUuid_ = FromProto<TChunkLocationUuid>(value.location_uuid());
+    // COMPAT(cherepashka)
+    if (value.has_location_index()) {
+        replica->ChunkLocationIndex_ = FromProto<TChunkLocationIndex>(value.location_index());
+    } else {
+        replica->ChunkLocationIndex_ = InvalidChunkLocationIndex;
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -91,6 +118,7 @@ void FormatValue(TStringBuilderBase* builder, TChunkReplicaWithLocation replica,
         builder->AppendFormat("/%v", replica.GetReplicaIndex());
     }
     builder->AppendFormat("@%v", replica.GetChunkLocationUuid());
+    builder->AppendFormat("(%v)", replica.GetChunkLocationIndex());
 }
 
 void FormatValue(TStringBuilderBase* builder, TChunkReplicaWithMedium replica, TStringBuf /*spec*/)
@@ -132,6 +160,17 @@ void FormatValue(TStringBuilderBase* builder, const TChunkIdWithIndexes& id, TSt
         builder->AppendString("@all");
     } else if (id.MediumIndex != GenericMediumIndex) {
         builder->AppendFormat("@%v", id.MediumIndex);
+    }
+}
+
+void FormatValue(TStringBuilderBase* builder, const TChunkIdWithIndexAndState& id, TStringBuf /*spec*/)
+{
+    builder->AppendFormat("%v", id.Id);
+    if (id.ReplicaIndex != GenericChunkReplicaIndex) {
+        builder->AppendFormat("/%v", id.ReplicaIndex);
+    }
+    if (id.State != EChunkReplicaState::Generic) {
+        builder->AppendFormat(":%v", id.State);
     }
 }
 

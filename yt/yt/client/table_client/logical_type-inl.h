@@ -3,7 +3,6 @@
 // For the sake of sane code completion.
 #include "logical_type.h"
 #endif
-#undef LOGICAL_TYPE_INL_H_
 
 namespace NYT::NTableClient {
 
@@ -118,6 +117,13 @@ const std::vector<TLogicalTypePtr>& TTupleLogicalTypeBase::GetElements() const
 
 ////////////////////////////////////////////////////////////////////////////////
 
+const std::vector<std::string>& TStructLogicalType::GetRemovedFieldStableNames() const
+{
+    return RemovedFieldStableNames_;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 const TLogicalTypePtr& TDictLogicalType::GetKey() const
 {
     return Key_;
@@ -130,7 +136,7 @@ const TLogicalTypePtr& TDictLogicalType::GetValue() const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const TString& TTaggedLogicalType::GetTag() const
+const std::string& TTaggedLogicalType::GetTag() const
 {
     return Tag_;
 }
@@ -164,7 +170,7 @@ const TLogicalTypePtr& TTaggedLogicalType::GetElement() const
 
 #undef XX
 
-template<ESimpleLogicalValueType type>
+template <ESimpleLogicalValueType type>
 constexpr ESimpleLogicalValueType GetUnderlyingDateType()
 {
     return TUnderlyingTzTypeImpl<type>::TValue;

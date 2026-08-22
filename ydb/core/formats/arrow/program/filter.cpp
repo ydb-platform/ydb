@@ -2,7 +2,7 @@
 #include "execution.h"
 #include "filter.h"
 
-#include <ydb/core/formats/arrow/arrow_filter.h>
+#include <ydb/core/formats/arrow/filter/filter.h>
 
 #include <ydb/library/formats/arrow/arrow_helpers.h>
 #include <ydb/library/formats/arrow/validation/validation.h>
@@ -69,9 +69,9 @@ TConclusion<IResourceProcessor::EExecutionResult> TFilterProcessor::DoExecute(
     const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const {
     std::vector<std::shared_ptr<IChunkedArray>> inputColumns;
     if (nodeContext.GetRemoveResourceIds().contains(GetInputColumnIdOnce())) {
-        inputColumns = context.GetResources()->ExtractAccessors(TColumnChainInfo::ExtractColumnIds(GetInput()));
+        inputColumns = context.MutableResources().ExtractAccessors(TColumnChainInfo::ExtractColumnIds(GetInput()));
     } else {
-        inputColumns = context.GetResources()->GetAccessors(TColumnChainInfo::ExtractColumnIds(GetInput()));
+        inputColumns = context.MutableResources().GetAccessors(TColumnChainInfo::ExtractColumnIds(GetInput()));
     }
     AFL_VERIFY(inputColumns.size() == 1);
     TFilterVisitor filterVisitor;
@@ -104,10 +104,10 @@ TConclusion<IResourceProcessor::EExecutionResult> TFilterProcessor::DoExecute(
     AFL_VERIFY(filter.GetRecordsCountVerified() == inputColumns.front()->GetRecordsCount())("filter", filter.GetRecordsCountVerified())(
                                                      "input", inputColumns.front()->GetRecordsCount());
     if (context.GetLimit()) {
-        context.GetResources()->AddFilter(
-            filter.Cut(context.GetResources()->GetRecordsCountRobustVerified(), *context.GetLimit(), context.GetReverse()));
+        context.MutableResources().AddFilter(filter);
+        context.MutableResources().CutFilter(context.GetResources().GetRecordsCountRobustVerified(), *context.GetLimit(), context.GetReverse());
     } else {
-        context.GetResources()->AddFilter(filter);
+        context.MutableResources().AddFilter(filter);
     }
     return EExecutionResult::Success;
 }

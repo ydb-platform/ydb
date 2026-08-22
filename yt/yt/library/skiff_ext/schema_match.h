@@ -2,11 +2,11 @@
 
 #include "public.h"
 
-#include <yt/yt/core/misc/property.h>
-
 #include <yt/yt/core/yson/public.h>
 
 #include <yt/yt/core/ytree/public.h>
+
+#include <library/cpp/yt/misc/property.h>
 
 #include <library/cpp/skiff/skiff_schema.h>
 
@@ -14,9 +14,10 @@ namespace NYT::NSkiffExt {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-extern const TString SparseColumnsName;
-extern const TString OtherColumnsName;
-extern const TString KeySwitchColumnName;
+extern const std::string SparseColumnsName;
+extern const std::string OtherColumnsName;
+extern const std::string KeySwitchColumnName;
+extern const std::string RemainingRowBytesColumnName;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -28,11 +29,11 @@ DEFINE_ENUM(ERowRangeIndexMode,
 class TFieldDescription
 {
 public:
-    DEFINE_BYREF_RO_PROPERTY(TString, Name);
+    DEFINE_BYREF_RO_PROPERTY(std::string, Name);
     DEFINE_BYREF_RO_PROPERTY(std::shared_ptr<NSkiff::TSkiffSchema>, Schema);
 
 public:
-    TFieldDescription(TString name, std::shared_ptr<NSkiff::TSkiffSchema> schema);
+    TFieldDescription(std::string name, std::shared_ptr<NSkiff::TSkiffSchema> schema);
 
     bool IsRequired() const;
     bool IsNullable() const;
@@ -56,6 +57,7 @@ struct TSkiffTableDescription
 
     std::optional<size_t> RowIndexFieldIndex;
     std::optional<size_t> RangeIndexFieldIndex;
+    std::optional<size_t> RemainingRowBytesFieldIndex;
 
     // $row_index/$range_index field can be written in several modes.
     ERowRangeIndexMode RowIndexMode = ERowRangeIndexMode::Incremental;

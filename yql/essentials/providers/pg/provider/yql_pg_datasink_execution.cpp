@@ -9,14 +9,16 @@
 
 #include <yql/essentials/utils/log/log.h>
 
+#include <utility>
+
 namespace NYql {
 
 using namespace NNodes;
 
-class TPgDataSinkExecTransformer : public TExecTransformerBase {
+class TPgDataSinkExecTransformer: public TExecTransformerBase {
 public:
-    TPgDataSinkExecTransformer(TPgState::TPtr state)
-        : State_(state)
+    explicit TPgDataSinkExecTransformer(TPgState::TPtr state)
+        : State_(std::move(state))
     {
         AddHandler({TCoCommit::CallableName()}, RequireFirst(), Pass());
     }

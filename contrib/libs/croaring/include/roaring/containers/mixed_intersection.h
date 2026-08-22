@@ -1,6 +1,15 @@
 /*
  * mixed_intersection.h
  *
+ * This header declares intersection operations between different Roaring
+ * container types, such as array, bitset, and run containers. These mixed
+ * routines are used when the input containers have different internal
+ * representations and the implementation must choose the appropriate result
+ * form based on the data.
+ *
+ * In addition to materializing intersections, the file also provides helpers
+ * for intersection cardinality, intersection predicates, and selected inplace
+ * variants.
  */
 
 #ifndef INCLUDE_CONTAINERS_MIXED_INTERSECTION_H_

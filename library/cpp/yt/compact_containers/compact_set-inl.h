@@ -35,7 +35,7 @@ private:
     { }
 
     template <typename TOther>
-    void ConstructFrom(TOther&& rhs)
+    void ConstructFrom(TOther&& rhs) noexcept
     {
         YT_ASSERT(Small == rhs.Small);
 
@@ -47,7 +47,7 @@ private:
     }
 
     template <typename TOther>
-    const_iterator& AssignFrom(TOther&& rhs)
+    const_iterator& AssignFrom(TOther&& rhs) noexcept
     {
         if (this == &rhs) {
             return *this;
@@ -102,7 +102,7 @@ public:
         ConstructFrom(rhs);
     }
 
-    const_iterator(const_iterator&& rhs)
+    const_iterator(const_iterator&& rhs) noexcept
         : Small(rhs.Small)
     {
         ConstructFrom(std::move(rhs));
@@ -122,7 +122,7 @@ public:
         return AssignFrom(rhs);
     }
 
-    const_iterator& operator=(const_iterator&& rhs)
+    const_iterator& operator=(const_iterator&& rhs) noexcept
     {
         return AssignFrom(std::move(rhs));
     }
@@ -206,6 +206,34 @@ template <typename T, size_t N,  typename C, typename A>
 TCompactSet<T, N, C, A>::TCompactSet(const A& allocator)
     : Set_(allocator)
 { }
+
+template <typename T, size_t N,  typename C, typename A>
+template <typename TIterator>
+TCompactSet<T, N, C, A>::TCompactSet(TIterator first, TIterator last)
+{
+    insert(first, last);
+}
+
+template <typename T, size_t N,  typename C, typename A>
+TCompactSet<T, N, C, A>::TCompactSet(std::initializer_list<key_type> values)
+{
+    insert(values.begin(), values.end());
+}
+
+template <typename T, size_t N,  typename C, typename A>
+bool TCompactSet<T, N, C, A>::operator==(const TCompactSet& rhs) const
+{
+    if (size() != rhs.size()) {
+        return false;
+    }
+
+    for (const auto& value : *this) {
+        if (!rhs.contains(value)) {
+            return false;
+        }
+    }
+    return true;
+}
 
 template <typename T, size_t N,  typename C, typename A>
 bool TCompactSet<T, N, C, A>::empty() const

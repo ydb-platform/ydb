@@ -61,13 +61,6 @@ EYsonType TYsonStringBuf::GetType() const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TYsonString::TYsonString()
-{
-    Begin_ = nullptr;
-    Size_ = 0;
-    Type_ = EYsonType::Node; // fake
-}
-
 TYsonString::TYsonString(const TYsonStringBuf& ysonStringBuf)
 {
     if (ysonStringBuf) {
@@ -91,35 +84,35 @@ TYsonString::TYsonString(
     : TYsonString(TYsonStringBuf(data, type))
 { }
 
-#ifdef TSTRING_IS_STD_STRING
 TYsonString::TYsonString(
     const TString& data,
     EYsonType type)
-    : TYsonString(TYsonStringBuf(data, type))
+    : TYsonString(TCowString(data), type)
 { }
-#else
+
 TYsonString::TYsonString(
-    const TString& data,
+    TCowString data,
     EYsonType type)
-{
-    // NOTE: CoW TString implementation is assumed
-    // Moving the payload MUST NOT invalidate its internal pointers
-    Payload_ = data;
-    Begin_ = data.data();
-    Size_ = data.length();
-    Type_ = type;
-}
-#endif
+    : Payload_(std::move(data))
+    , Begin_(std::get<TCowString>(Payload_).data())
+    , Size_(std::get<TCowString>(Payload_).length())
+    , Type_(type)
+{ }
+
+TYsonString::TYsonString(
+    std::string data,
+    EYsonType type)
+    : TYsonString(TCowString(std::move(data)), type)
+{ }
 
 TYsonString::TYsonString(
     const TSharedRef& data,
     EYsonType type)
-{
-    Payload_ = data.GetHolder();
-    Begin_ = data.Begin();
-    Size_ = data.Size();
-    Type_ = type;
-}
+    : Payload_(data.GetHolder())
+    , Begin_(data.Begin())
+    , Size_(data.Size())
+    , Type_(type)
+{ }
 
 TYsonString::operator bool() const
 {
@@ -148,8 +141,8 @@ TString TYsonString::ToString() const
         [&] (const TSharedRangeHolderPtr&) {
             return TString(AsStringBuf());
         },
-        [] (const TString& payload) {
-            return payload;
+        [] (const TCowString& payload) {
+            return TString(payload);
         });
 }
 
@@ -163,8 +156,8 @@ TSharedRef TYsonString::ToSharedRef() const
         [&] (const TSharedRangeHolderPtr& holder) {
             return TSharedRef(Begin_, Size_, holder);
         },
-        [] (const TString& payload) {
-            return TSharedRef::FromString(payload);
+        [&] (const TCowString& payload) {
+            return TSharedRef(Begin_, Size_, MakeSharedRangeHolder(payload));
         });
 }
 

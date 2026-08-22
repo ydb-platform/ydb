@@ -8,7 +8,7 @@ class MetaPluginManager(type):
     @staticmethod
     def get_plugin_manager():
         if not MetaPluginManager._plugin_manager:
-            MetaPluginManager._plugin_manager = PluginManager('allure')
+            MetaPluginManager._plugin_manager = PluginManager("allure")
             MetaPluginManager._plugin_manager.add_hookspecs(_hooks.AllureUserHooks)
             MetaPluginManager._plugin_manager.add_hookspecs(_hooks.AllureDeveloperHooks)
 

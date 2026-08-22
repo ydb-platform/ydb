@@ -1,0 +1,105 @@
+#include "kqp_column_statistics_utils.h"
+
+#include <yql/essentials/core/yql_type_annotation.h>
+
+namespace NKikimr::NKqp {
+
+using namespace NYql;
+using namespace NYql::NNodes;
+
+// This functions is moved from kqp_op_statistics_requester to be able to use it in other transformers.
+void AddStatRequest(TActorSystem* actorSystem, TVector<NThreading::TFuture<TColumnStatisticsResponse>>& futures, TKikimrTablesData& tables,
+                    const TString& cluster, const TString& database, TTypeAnnotationContext& typesCtx, const NKikimr::NStat::EStatType type,
+                    const THashMap<TString, THashSet<TString>>& columnsByTableName, std::function<bool(const NYql::TColumnStatistics&)> alreadyHasStatistics) {
+    struct TTableMeta {
+        TString TableName;
+        THashMap<ui32, TString> ColumnNameByTag;
+        THashMap<ui32, TString> ColumnTypeByTag;
+    };
+
+    THashMap<TPathId, TTableMeta> tableMetaByPathId;
+    std::vector<NKikimr::NStat::TRequest> statRequests;
+    for (const auto& [table, columns] : columnsByTableName) {
+        auto tableMeta = tables.GetTable(cluster, table).Metadata;
+        auto& columnsMeta = tableMeta->Columns;
+
+        auto pathId = TPathId(tableMeta->PathId.OwnerId(), tableMeta->PathId.TableId());
+
+        auto statsTableIt = typesCtx.ColumnStatisticsByTableName.find(table);
+        for (const auto& column : columns) {
+            if (statsTableIt != typesCtx.ColumnStatisticsByTableName.end()) {
+                auto statsColumnIt = statsTableIt->second->Data.find(column);
+                if (statsColumnIt != statsTableIt->second->Data.end()) {
+                    if (alreadyHasStatistics(statsColumnIt->second)) {
+                        continue;
+                    }
+                }
+            }
+
+            if (!columnsMeta.contains(column)) {
+                YQL_CLOG(DEBUG, ProviderKikimr) << "Table: " + table + " doesn't contain " + column + " to request for column statistics";
+                continue;
+            }
+
+            NKikimr::NStat::TRequest req;
+            const ui32 columnTag = columnsMeta[column].Id;
+            req.ColumnTags = columnTag;
+            req.PathId = pathId;
+            statRequests.push_back(req);
+
+            tableMetaByPathId[pathId].TableName = table;
+            tableMetaByPathId[pathId].ColumnNameByTag[columnTag] = column;
+            tableMetaByPathId[pathId].ColumnTypeByTag[columnTag] = columnsMeta[column].Type;
+        }
+    }
+
+    if (statRequests.empty()) {
+        return;
+    }
+
+    auto request = MakeHolder<NStat::TEvStatistics::TEvGetStatistics>();
+    request->Database = database;
+    request->StatType = type;
+    request->StatRequests = std::move(statRequests);
+
+    auto callback = [tableMetaByPathId = std::move(tableMetaByPathId)](NThreading::TPromise<TColumnStatisticsResponse> promise,
+                                                                       NStat::TEvStatistics::TEvGetStatisticsResult&& response) mutable {
+        if (!response.Success) {
+            promise.SetValue(NYql::NCommon::ResultFromError<TColumnStatisticsResponse>("can't get column statistics!"));
+            return;
+        }
+
+        THashMap<TString, NYql::TOptimizerStatistics::TColumnStatMap> columnStatisticsByTableName;
+
+        for (auto&& stat : response.StatResponses) {
+            auto meta = tableMetaByPathId[stat.Req.PathId];
+            const auto singleTag = stat.Req.ColumnTags.AsSingle();
+            Y_ENSURE(singleTag, "Expected single-column stat response");
+            const ui32 columnTag = *singleTag;
+            auto columnName = meta.ColumnNameByTag[columnTag];
+            auto& columnStatistics = columnStatisticsByTableName[meta.TableName].Data[columnName];
+            columnStatistics.Type = meta.ColumnTypeByTag[columnTag];
+            if (stat.CountMinSketch.CountMin) {
+                columnStatistics.CountMinSketch = std::move(stat.CountMinSketch.CountMin);
+            }
+            if (stat.EqWidthHistogram.Data) {
+                columnStatistics.EqWidthHistogramEstimator = std::make_shared<NKikimr::TEqWidthHistogramEstimator>(stat.EqWidthHistogram.Data);
+            }
+        }
+
+        promise.SetValue(TColumnStatisticsResponse{.ColumnStatisticsByTableName = std::move(columnStatisticsByTableName)});
+    };
+
+    using TRequest = NStat::TEvStatistics::TEvGetStatistics;
+    using TResponse = NStat::TEvStatistics::TEvGetStatisticsResult;
+
+    auto promise = NThreading::NewPromise<TColumnStatisticsResponse>();
+
+    auto statServiceId = NStat::MakeStatServiceID(actorSystem->NodeId);
+    IActor* requestHandler = new TActorRequestHandler<TRequest, TResponse, TColumnStatisticsResponse>(statServiceId, request.Release(), promise, callback);
+    actorSystem->Register(requestHandler, TMailboxType::HTSwap, actorSystem->AppData<TAppData>()->UserPoolId);
+
+    futures.push_back(promise.GetFuture());
+}
+
+} // namespace NKikimr::NKqp

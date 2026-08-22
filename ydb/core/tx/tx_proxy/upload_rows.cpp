@@ -2,6 +2,7 @@
 #include "upload_rows_common_impl.h"
 
 #include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/library/aclib/user_context.h>
 
 namespace NKikimr {
 namespace NTxProxy {
@@ -10,19 +11,27 @@ class TUploadRowsInternal : public TUploadRowsBase<NKikimrServices::TActivity::U
 public:
     TUploadRowsInternal(
         TActorId sender,
+        const TString& database,
         const TString& table,
-        std::shared_ptr<TVector<std::pair<TString, Ydb::Type>>> types,
-        std::shared_ptr<TVector<std::pair<TSerializedCellVec, TString>>> rows,
+        std::shared_ptr<const TVector<std::pair<TString, Ydb::Type>>> types,
+        std::shared_ptr<const TVector<std::pair<TSerializedCellVec, TString>>>&& rows,
+        TIntrusivePtr<NACLib::TUserContext> userCtx,
         EUploadRowsMode mode,
         bool writeToPrivateTable,
-        bool writeToIndexImplTable)
-        : Sender(sender)
+        bool writeToIndexImplTable,
+        bool disableChangeCollection,
+        ui64 cookie,
+        TBackoff backoff)
+        : TUploadRowsBase(std::move(rows), userCtx)
+        , Sender(sender)
+        , Database(database)
         , Table(table)
         , ColumnTypes(types)
-        , Rows(rows)
+        , Cookie(cookie)
     {
         AllowWriteToPrivateTable = writeToPrivateTable;
         AllowWriteToIndexImplTable = writeToIndexImplTable;
+        DisableChangeCollection = disableChangeCollection;
 
         switch (mode) {
             case EUploadRowsMode::Normal:
@@ -35,19 +44,17 @@ public:
                 UpsertIfExists = true;
                 break;
         }
+
+        Backoff = backoff;
     }
 
 private:
-    TString GetDatabase()override {
-        return TString();
+    const TString& GetDatabase() const override {
+        return Database;
     }
 
-    const TString& GetTable() override {
+    const TString& GetTable() const override {
         return Table;
-    }
-
-    const TVector<std::pair<TSerializedCellVec, TString>>& GetRows() const override {
-        return *Rows;
     }
 
     bool CheckAccess(TString&) override {
@@ -56,7 +63,15 @@ private:
 
     void SendResult(const NActors::TActorContext& ctx, const Ydb::StatusIds::StatusCode& status) override {
         auto ev = new TEvTxUserProxy::TEvUploadRowsResponse(status, Issues);
-        ctx.Send(Sender, ev);
+        ctx.Send(Sender, ev, 0, Cookie);
+    }
+
+    bool ValidateTable(TString& errorMessage) override {
+        if (GetTableKind() != NSchemeCache::TSchemeCacheNavigate::KindTable) {
+            errorMessage = "Only the OLTP table is supported";
+            return false;
+        }
+        return true;
     }
 
     void RaiseIssue(const NYql::TIssue& issue) override {
@@ -78,28 +93,38 @@ private:
 
 private:
     const TActorId Sender;
+    const TString Database;
     const TString Table;
-    const std::shared_ptr<TVector<std::pair<TString, Ydb::Type>>> ColumnTypes;
-    const std::shared_ptr<TVector<std::pair<TSerializedCellVec, TString>>> Rows;
+    const std::shared_ptr<const TVector<std::pair<TString, Ydb::Type>>> ColumnTypes;
+    const ui64 Cookie;
 
     NYql::TIssues Issues;
 };
 
 IActor* CreateUploadRowsInternal(const TActorId& sender,
+    const TString& database,
     const TString& table,
-    std::shared_ptr<TVector<std::pair<TString, Ydb::Type>>> types,
-    std::shared_ptr<TVector<std::pair<TSerializedCellVec, TString>>> rows,
+    std::shared_ptr<const TVector<std::pair<TString, Ydb::Type>>> types,
+    std::shared_ptr<const TVector<std::pair<TSerializedCellVec, TString>>> rows,
     EUploadRowsMode mode,
     bool writeToPrivateTable,
-    bool writeToIndexImplTable)
+    bool writeToIndexImplTable,
+    bool disableChangeCollection,
+    ui64 cookie,
+    TBackoff backoff)
 {
     return new TUploadRowsInternal(sender,
+        database,
         table,
         types,
-        rows,
+        std::move(rows),
+        NACLib::TUserContextBuilder().Build(),
         mode,
         writeToPrivateTable,
-        writeToIndexImplTable);
+        writeToIndexImplTable,
+        disableChangeCollection,
+        cookie,
+        backoff);
 }
 
 } // namespace NTxProxy

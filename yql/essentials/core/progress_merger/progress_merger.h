@@ -1,8 +1,9 @@
+#pragma once
+
 #include <yql/essentials/core/yql_execution.h>
 
 #include <util/generic/hash.h>
 #include <util/system/spinlock.h>
-
 
 namespace NYql::NProgressMerger {
 
@@ -45,4 +46,4 @@ struct ITaskProgressMerger {
     virtual void AbortAllUnfinishedNodes() = 0;
 };
 
-} // namespace NProgressMerger 
+} // namespace NYql::NProgressMerger

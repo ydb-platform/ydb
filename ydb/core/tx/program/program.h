@@ -2,6 +2,7 @@
 
 #include "registry.h"
 
+#include <ydb/core/formats/arrow/printer/printer.h>
 #include <ydb/core/formats/arrow/process_columns.h>
 #include <ydb/core/formats/arrow/program/custom_registry.h>
 #include <ydb/core/formats/arrow/program/graph_execute.h>
@@ -35,15 +36,39 @@ public:
     const THashSet<ui32>& GetProcessingColumns() const;
 
     TString ProtoDebugString() const {
-        return ProgramProto.DebugString();
+        return TStringBuilder{}
+            << "Proto:" << Endl
+            << ProgramProto.DebugString()
+            << "Pretty:" << Endl
+            << NKikimr::NArrow::NPrinter::SSAToPrettyString(ProgramProto);
     }
 
     TString DebugString() const {
         return Program ? Program->DebugString() : "NO_PROGRAM";
     }
 
-    bool HasOverridenProcessingColumnIds() const {
-        return !!OverrideProcessingColumnsVector;
+    bool HasDistinctCommand() const {
+        for (const auto& cmd : ProgramProto.GetCommand()) {
+            if (cmd.GetLineCase() == NKikimrSSA::TProgram::TCommand::kDistinct) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    std::optional<ui32> GetDistinctKeyColumnIdOptional() const {
+        for (const auto& cmd : ProgramProto.GetCommand()) {
+            if (cmd.GetLineCase() != NKikimrSSA::TProgram::TCommand::kDistinct) {
+                continue;
+            }
+            const auto& distinct = cmd.GetDistinct();
+            // Id is optional in proto; 0 is a valid column id when explicitly set (do not treat as "unset").
+            if (distinct.HasKeyColumn() && distinct.GetKeyColumn().HasId()) {
+                return static_cast<ui32>(distinct.GetKeyColumn().GetId());
+            }
+            return std::nullopt;
+        }
+        return std::nullopt;
     }
 
     bool HasProcessingColumnIds() const {
@@ -74,7 +99,8 @@ public:
 
     [[nodiscard]] TConclusionStatus Init(
         const NArrow::NSSA::IColumnResolver& columnResolver, NKikimrSchemeOp::EOlapProgramType programType, TString serializedProgram) noexcept;
-    [[nodiscard]] TConclusionStatus Init(const NArrow::NSSA::IColumnResolver& columnResolver, const NKikimrSSA::TOlapProgram& olapProgramProto) noexcept;
+    [[nodiscard]] TConclusionStatus Init(
+        const NArrow::NSSA::IColumnResolver& columnResolver, const NKikimrSSA::TOlapProgram& olapProgramProto) noexcept;
     [[nodiscard]] TConclusionStatus Init(const NArrow::NSSA::IColumnResolver& columnResolver, const NKikimrSSA::TProgram& programProto) noexcept;
 
     const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph>& GetChainVerified() const {
@@ -86,8 +112,8 @@ public:
         return Program;
     }
 
-    [[nodiscard]] TConclusionStatus ApplyProgram(const std::shared_ptr<NArrow::NAccessor::TAccessorsCollection>& collection,
-        const std::shared_ptr<NArrow::NSSA::IDataSource>& source) const;
+    [[nodiscard]] TConclusion<std::unique_ptr<NArrow::NAccessor::TAccessorsCollection>> ApplyProgram(
+        std::unique_ptr<NArrow::NAccessor::TAccessorsCollection>&& collection, const std::shared_ptr<NArrow::NSSA::IDataSource>& source) const;
     [[nodiscard]] TConclusion<std::shared_ptr<arrow::RecordBatch>> ApplyProgram(
         const std::shared_ptr<arrow::RecordBatch>& batch, const NArrow::NSSA::IColumnResolver& resolver) const;
 

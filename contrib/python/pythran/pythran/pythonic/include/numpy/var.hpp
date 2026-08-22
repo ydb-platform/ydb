@@ -15,14 +15,12 @@ PYTHONIC_NS_BEGIN
 namespace numpy
 {
   template <class E>
-  using var_type = typename std::conditional<
-      std::is_integral<typename E::dtype>::value, double,
-      decltype(std::real(std::declval<typename E::dtype>()))>::type;
+  using var_type = std::conditional_t<std::is_integral<typename E::dtype>::value, double,
+                                      decltype(std::real(std::declval<typename E::dtype>()))>;
 
   template <class E>
   auto var(E const &expr, types::none_type axis = builtins::None,
-           types::none_type dtype = builtins::None,
-           types::none_type out = builtins::None,
+           types::none_type dtype = builtins::None, types::none_type out = builtins::None,
            long ddof = 0) -> decltype(var_type<E>(std::real(mean(expr))));
 
   template <class E>

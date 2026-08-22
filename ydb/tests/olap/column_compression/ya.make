@@ -1,0 +1,5 @@
+RECURSE(
+    alter
+    create
+    fast
+)

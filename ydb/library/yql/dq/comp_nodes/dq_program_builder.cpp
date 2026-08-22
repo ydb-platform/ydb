@@ -7,20 +7,17 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-
 TDqProgramBuilder::TDqProgramBuilder(const TTypeEnvironment& env, const IFunctionRegistry& functionRegistry)
-    : TProgramBuilder(env, functionRegistry) {}
+    : TProgramBuilder(env, functionRegistry)
+{}
 
 TCallableBuilder TDqProgramBuilder::BuildCommonCombinerParams(
-    const TStringBuf operatorName,
-    const TRuntimeNode operatorParams,
-    const TRuntimeNode flow,
-    const TProgramBuilder::TWideLambda& keyExtractor,
-    const TProgramBuilder::TBinaryWideLambda& init,
-    const TProgramBuilder::TTernaryWideLambda& update,
-    const TProgramBuilder::TBinaryWideLambda& finish)
+    const TStringBuf operatorName, const TRuntimeNode operatorParams, const TRuntimeNode flowOrStream,
+    const TProgramBuilder::TWideLambda& keyExtractor, const TProgramBuilder::TBinaryWideLambda& init,
+    const TProgramBuilder::TTernaryWideLambda& update, const TProgramBuilder::TBinaryWideLambda& finish)
 {
-    const auto wideComponents = GetWideComponents(AS_TYPE(TFlowType, flow.GetStaticType()));
+    const auto wideComponents = GetWideComponents(flowOrStream.GetStaticType());
+    const bool isFlow = flowOrStream.GetStaticType()->IsFlow();
 
     std::vector<TType*> unblockedWideComponents;
     bool hasBlocks = UnwrapBlockTypes(wideComponents, unblockedWideComponents);
@@ -32,36 +29,42 @@ TCallableBuilder TDqProgramBuilder::BuildCommonCombinerParams(
     itemArgs.reserve(unblockedWideComponents.size());
 
     auto i = 0U;
-    std::generate_n(std::back_inserter(itemArgs), unblockedWideComponents.size(), [&](){ return Arg(unblockedWideComponents[i++]); });
+    std::generate_n(std::back_inserter(itemArgs), unblockedWideComponents.size(),
+                    [&]() { return Arg(unblockedWideComponents[i++]); });
 
     const auto keys = keyExtractor(itemArgs);
 
     TRuntimeNode::TList keyArgs;
     keyArgs.reserve(keys.size());
-    std::transform(keys.cbegin(), keys.cend(), std::back_inserter(keyArgs), [&](TRuntimeNode key){ return Arg(key.GetStaticType()); }  );
+    std::transform(keys.cbegin(), keys.cend(), std::back_inserter(keyArgs),
+                   [&](TRuntimeNode key) { return Arg(key.GetStaticType()); });
 
     const auto first = init(keyArgs, itemArgs);
 
     TRuntimeNode::TList stateArgs;
     stateArgs.reserve(first.size());
-    std::transform(first.cbegin(), first.cend(), std::back_inserter(stateArgs), [&](TRuntimeNode state){ return Arg(state.GetStaticType()); }  );
+    std::transform(first.cbegin(), first.cend(), std::back_inserter(stateArgs),
+                   [&](TRuntimeNode state) { return Arg(state.GetStaticType()); });
 
     const auto next = update(keyArgs, itemArgs, stateArgs);
     MKQL_ENSURE(next.size() == first.size(), "Mismatch init and update state size.");
 
     TRuntimeNode::TList finishKeyArgs;
     finishKeyArgs.reserve(keys.size());
-    std::transform(keys.cbegin(), keys.cend(), std::back_inserter(finishKeyArgs), [&](TRuntimeNode key){ return Arg(key.GetStaticType()); }  );
+    std::transform(keys.cbegin(), keys.cend(), std::back_inserter(finishKeyArgs),
+                   [&](TRuntimeNode key) { return Arg(key.GetStaticType()); });
 
     TRuntimeNode::TList finishStateArgs;
     finishStateArgs.reserve(next.size());
-    std::transform(next.cbegin(), next.cend(), std::back_inserter(finishStateArgs), [&](TRuntimeNode state){ return Arg(state.GetStaticType()); }  );
+    std::transform(next.cbegin(), next.cend(), std::back_inserter(finishStateArgs),
+                   [&](TRuntimeNode state) { return Arg(state.GetStaticType()); });
 
     const auto output = finish(finishKeyArgs, finishStateArgs);
 
     std::vector<TType*> outputWideComponents;
     outputWideComponents.reserve(output.size() + hasBlocks ? 1 : 0);
-    std::transform(output.cbegin(), output.cend(), std::back_inserter(outputWideComponents), std::bind(&TRuntimeNode::GetStaticType, std::placeholders::_1));
+    std::transform(output.cbegin(), output.cend(), std::back_inserter(outputWideComponents),
+                   std::bind(&TRuntimeNode::GetStaticType, std::placeholders::_1));
     if (hasBlocks) {
         WrapArrayBlockTypes(outputWideComponents, *this);
         auto blockSizeType = NewDataType(NUdf::TDataType<ui64>::Id);
@@ -69,9 +72,11 @@ TCallableBuilder TDqProgramBuilder::BuildCommonCombinerParams(
         outputWideComponents.push_back(blockSizeBlockType);
     }
 
-    TCallableBuilder callableBuilder(GetTypeEnvironment(), operatorName, NewFlowType(NewMultiType(outputWideComponents)));
+    TType* const returnWideType = NewMultiType(outputWideComponents);
+    TType* const returnType = isFlow ? NewFlowType(returnWideType) : NewStreamType(returnWideType);
+    TCallableBuilder callableBuilder(GetTypeEnvironment(), operatorName, returnType);
 
-    callableBuilder.Add(flow);
+    callableBuilder.Add(flowOrStream);
     callableBuilder.Add(operatorParams);
     callableBuilder.Add(NewTuple(keyArgs));
     callableBuilder.Add(NewTuple(stateArgs));
@@ -86,76 +91,186 @@ TCallableBuilder TDqProgramBuilder::BuildCommonCombinerParams(
     return callableBuilder;
 }
 
-TRuntimeNode TDqProgramBuilder::DqHashCombine(TRuntimeNode flow, ui64 memLimit, const TWideLambda& keyExtractor, const TBinaryWideLambda& init, const TTernaryWideLambda& update, const TBinaryWideLambda& finish)
+TRuntimeNode TDqProgramBuilder::DqHashCombine(TRuntimeNode flow, ui64 memLimit, const TWideLambda& keyExtractor,
+                                              const TBinaryWideLambda& init, const TTernaryWideLambda& update,
+                                              const TBinaryWideLambda& finish)
 {
     TRuntimeNode::TList operatorParamsList;
     operatorParamsList.push_back(NewDataLiteral<ui64>(memLimit));
     TRuntimeNode operatorParams = NewTuple(operatorParamsList);
 
-    TCallableBuilder callableBuilder = BuildCommonCombinerParams(
-        "DqHashCombine"sv,
-        operatorParams,
-        flow,
-        keyExtractor,
-        init,
-        update,
-        finish);
+    TCallableBuilder callableBuilder =
+        BuildCommonCombinerParams("DqHashCombine"sv, operatorParams, flow, keyExtractor, init, update, finish);
 
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
-TRuntimeNode TDqProgramBuilder::DqHashAggregate(TRuntimeNode flow, const bool spilling, const TWideLambda& keyExtractor, const TBinaryWideLambda& init, const TTernaryWideLambda& update, const TBinaryWideLambda& finish)
+TRuntimeNode TDqProgramBuilder::DqHashAggregate(TRuntimeNode flow, const bool spilling, const TWideLambda& keyExtractor,
+                                                const TBinaryWideLambda& init, const TTernaryWideLambda& update,
+                                                const TBinaryWideLambda& finish)
 {
     TRuntimeNode::TList operatorParamsList;
     operatorParamsList.push_back(NewDataLiteral<bool>(spilling));
     TRuntimeNode operatorParams = NewTuple(operatorParamsList);
 
-    TCallableBuilder callableBuilder = BuildCommonCombinerParams(
-        "DqHashAggregate"sv,
-        operatorParams,
-        flow,
-        keyExtractor,
-        init,
-        update,
-        finish);
+    TCallableBuilder callableBuilder =
+        BuildCommonCombinerParams("DqHashAggregate"sv, operatorParams, flow, keyExtractor, init, update, finish);
 
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
-TRuntimeNode TDqProgramBuilder::DqBlockHashJoin(TRuntimeNode leftStream, TRuntimeNode rightStream, EJoinKind joinKind,
-    const TArrayRef<const ui32>& leftKeyColumns, const TArrayRef<const ui32>& rightKeyColumns, TType* returnType) {
+TRuntimeNode TDqProgramBuilder::AsTuple(TArrayRef<const ui32> nums) {
+    TRuntimeNode::TList tupleNodes;
+    std::transform(nums.cbegin(), nums.cend(), std::back_inserter(tupleNodes), [this](const ui32 idx) {
+        return NewDataLiteral(idx);
+    });
+    return NewTuple(tupleNodes);
+}
 
-    MKQL_ENSURE(joinKind == EJoinKind::Inner, "Unsupported join kind");
+TRuntimeNode::TList TDqProgramBuilder::MakeRowArgs(TRuntimeNode input, bool forceOptional) {
+    std::vector<TType*> columns;
+    if (UnwrapBlockTypes(GetWideComponents(input.GetStaticType()), columns)) {
+        MKQL_ENSURE(!columns.empty(), "Expected a block length column in a block input");
+        columns.pop_back();
+    }
+
+    TRuntimeNode::TList args;
+    args.reserve(columns.size());
+    for (TType* column : columns) {
+        args.push_back(Arg(forceOptional && !column->IsOptional() ? NewOptionalType(column) : column));
+    }
+    return args;
+}
+
+void TDqProgramBuilder::AddJoinFilters(TCallableBuilder& callableBuilder, TRuntimeNode leftInput,
+                                       TRuntimeNode rightInput, EJoinKind joinKind,
+                                       const TJoinFilterLambda& leftFilter, const TJoinFilterLambda& rightFilter,
+                                       const TJoinCommonFilterLambda& commonFilter) {
+    if (!leftFilter && !rightFilter && !commonFilter) {
+        return;
+    }
+
+    TRuntimeNode::TList leftArgs;
+    if (leftFilter || commonFilter) {
+        leftArgs = MakeRowArgs(leftInput, /*forceOptional=*/false);
+    }
+    TRuntimeNode::TList rightArgs;
+    if (rightFilter || commonFilter) {
+        rightArgs = MakeRowArgs(rightInput, ForceRightOptional(joinKind));
+    }
+
+    const auto asPredicate = [this](TRuntimeNode body) {
+        TType* type = body.GetStaticType();
+        TType* item = type->IsOptional() ? AS_TYPE(TOptionalType, type)->GetItemType() : type;
+        MKQL_ENSURE(item->IsData() && AS_TYPE(TDataType, item)->GetSchemeType() == NUdf::TDataType<bool>::Id,
+                    "Join filter must return Bool or Optional<Bool>, got " << type->GetKindAsStr());
+        return NewTuple({body});
+    };
+
+    callableBuilder.Add(NewTuple(leftArgs));
+    callableBuilder.Add(NewTuple(rightArgs));
+    callableBuilder.Add(leftFilter ? asPredicate(leftFilter(leftArgs)) : NewEmptyTuple());
+    callableBuilder.Add(rightFilter ? asPredicate(rightFilter(rightArgs)) : NewEmptyTuple());
+    callableBuilder.Add(commonFilter ? asPredicate(commonFilter(leftArgs, rightArgs)) : NewEmptyTuple());
+}
+
+TRuntimeNode TDqProgramBuilder::DqBlockHashJoin(TRuntimeNode leftStream, TRuntimeNode rightStream, EJoinKind joinKind,
+                                                const TArrayRef<const ui32>& leftKeyColumns,
+                                                const TArrayRef<const ui32>& rightKeyColumns,
+                                                const TArrayRef<const ui32>& leftRenames,
+                                                const TArrayRef<const ui32>& rightRenames, TType* returnType,
+                                                TBlockHashJoinSettings settings,
+                                                const TJoinFilterLambda& leftFilter,
+                                                const TJoinFilterLambda& rightFilter,
+                                                const TJoinCommonFilterLambda& commonFilter) {
+
+    MKQL_ENSURE(joinKind != EJoinKind::Cross, "Unsupported join kind");
     MKQL_ENSURE(leftKeyColumns.size() == rightKeyColumns.size(), "Key column count mismatch");
     MKQL_ENSURE(!leftKeyColumns.empty(), "At least one key column must be specified");
 
-    // TODO (mfilitov): add validation like here:
-    // https://github.com/ydb-platform/ydb/blob/e8af538b05a1bd7bc4a3bcba2fdcbe430675f69c/yql/essentials/minikql/mkql_program_builder.cpp#L5849
-
-    TRuntimeNode::TList leftKeyColumnsNodes;
-    leftKeyColumnsNodes.reserve(leftKeyColumns.size());
-    std::transform(leftKeyColumns.cbegin(), leftKeyColumns.cend(),
-        std::back_inserter(leftKeyColumnsNodes), [this](const ui32 idx) {
-            return NewDataLiteral(idx);
-        });
-
-    TRuntimeNode::TList rightKeyColumnsNodes;
-    rightKeyColumnsNodes.reserve(rightKeyColumns.size());
-    std::transform(rightKeyColumns.cbegin(), rightKeyColumns.cend(),
-        std::back_inserter(rightKeyColumnsNodes), [this](const ui32 idx) {
-            return NewDataLiteral(idx);
-        });
-
+    // A hash table lookup marks the build side rows as matched before the filters run, so unmatched
+    // left rows of a LeftIsBuild join could no longer be told apart.
+    const bool hasFilters = leftFilter || rightFilter || commonFilter;
+    MKQL_ENSURE(!hasFilters || !settings.LeftIsBuild(), "Join filters are not supported with LeftIsBuild block join");
 
     TCallableBuilder callableBuilder(Env, __func__, returnType);
     callableBuilder.Add(leftStream);
     callableBuilder.Add(rightStream);
-    callableBuilder.Add(NewDataLiteral((ui32)joinKind));
-    callableBuilder.Add(NewTuple(leftKeyColumnsNodes));
-    callableBuilder.Add(NewTuple(rightKeyColumnsNodes));
+    callableBuilder.Add(NewDataLiteral(static_cast<ui32>(joinKind)));
+    callableBuilder.Add(AsTuple(leftKeyColumns));
+    callableBuilder.Add(AsTuple(rightKeyColumns));
+    callableBuilder.Add(AsTuple(leftRenames));
+    callableBuilder.Add(AsTuple(rightRenames));
+    callableBuilder.Add(NewTuple({NewDataLiteral(static_cast<ui32>(settings.BuildSide))}));
+    AddJoinFilters(callableBuilder, leftStream, rightStream, joinKind, leftFilter, rightFilter, commonFilter);
 
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
+TRuntimeNode TDqProgramBuilder::DqScalarHashJoin(TRuntimeNode leftFlow, TRuntimeNode rightFlow, EJoinKind joinKind,
+                                                 const TArrayRef<const ui32>& leftKeyColumns,
+                                                 const TArrayRef<const ui32>& rightKeyColumns,
+                                                 const TArrayRef<const ui32>& leftRenames,
+                                                 const TArrayRef<const ui32>& rightRenames, TType* returnType,
+                                                 const TJoinFilterLambda& leftFilter,
+                                                 const TJoinFilterLambda& rightFilter,
+                                                 const TJoinCommonFilterLambda& commonFilter) {
+
+    MKQL_ENSURE(joinKind != EJoinKind::Cross, "Unsupported join kind");
+    MKQL_ENSURE(leftKeyColumns.size() == rightKeyColumns.size(), "Key column count mismatch");
+    MKQL_ENSURE(!leftKeyColumns.empty(), "At least one key column must be specified");
+
+    TCallableBuilder callableBuilder(Env, __func__, returnType);
+    callableBuilder.Add(leftFlow);
+    callableBuilder.Add(rightFlow);
+    callableBuilder.Add(NewDataLiteral(static_cast<ui32>(joinKind)));
+    callableBuilder.Add(AsTuple(leftKeyColumns));
+    callableBuilder.Add(AsTuple(rightKeyColumns));
+    callableBuilder.Add(AsTuple(leftRenames));
+    callableBuilder.Add(AsTuple(rightRenames));
+    AddJoinFilters(callableBuilder, leftFlow, rightFlow, joinKind, leftFilter, rightFilter, commonFilter);
+
+    return TRuntimeNode(callableBuilder.Build(), false);
 }
+
+TRuntimeNode TDqProgramBuilder::DqWatermarkGenerator(
+    TRuntimeNode input,
+    const TUnaryLambda& watermarkExtractor,
+    const TUnaryLambda& partitionKeyExtractor,
+    const TUnaryLambda& writeTimeExtractor,
+    TConstArrayRef<std::pair<std::string, std::string>> watermarkSettings,
+    TRuntimeNode partitionKeys
+) {
+    auto returnType = AS_TYPE(TStreamType, input);
+    auto itemType = returnType->GetItemType();
+
+    const auto itemArg = Arg(itemType);
+    const auto watermark = watermarkExtractor(itemArg);
+    const auto partitionKey = partitionKeyExtractor(itemArg);
+    const auto writeTime = writeTimeExtractor(itemArg);
+
+    TRuntimeNode::TList watermarkSettingItems;
+    for (const auto& [name, value] : watermarkSettings) {
+        watermarkSettingItems.push_back(NewDataLiteral<NUdf::EDataSlot::String>(name));
+        watermarkSettingItems.push_back(NewDataLiteral<NUdf::EDataSlot::String>(value));
+    }
+    const auto watermarkSettingsNode = NewList(NewDataType(NUdf::EDataSlot::String), watermarkSettingItems);
+
+    TCallableBuilder callableBuilder(Env_, __func__, returnType);
+    callableBuilder.Add(input);
+    callableBuilder.Add(itemArg);
+    callableBuilder.Add(watermark);
+    callableBuilder.Add(partitionKey);
+    callableBuilder.Add(writeTime);
+    callableBuilder.Add(watermarkSettingsNode);
+    callableBuilder.Add(partitionKeys);
+
+    return TRuntimeNode(callableBuilder.Build(), false);
 }
+
+TType* TDqProgramBuilder::LastScalarIndexBlock() {
+    return NewBlockType(NewDataType(NUdf::TDataType<ui64>::Id), TBlockType::EShape::Scalar);
+}
+
+} // namespace NMiniKQL
+} // namespace NKikimr

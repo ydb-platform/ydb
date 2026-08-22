@@ -36,7 +36,7 @@ namespace NKikimr {
         }
     }
 
-    class TBufferedChunkWriter : public TThrRefBase {
+    class TBufferedChunkWriter {
     public:
         TBufferedChunkWriter(TMemoryConsumer&& consumer, ui8 owner, ui64 ownerRound, ui8 priority, ui32 chunkSize,
                              ui32 appendBlockSize, ui32 writeBlockSize, ui32 chunkIdx,
@@ -123,7 +123,8 @@ namespace NKikimr {
                 Y_ABORT_UNLESS(offsetInChunk % AppendBlockSize == 0);
                 Y_ABORT_UNLESS(ChunkIdx);
                 NPDisk::TEvChunkWrite::TPartsPtr parts(new NPDisk::TEvChunkWrite::TBufBackedUpParts(std::move(Buffer)));
-                auto ev = std::make_unique<NPDisk::TEvChunkWrite>(Owner, OwnerRound, ChunkIdx, offsetInChunk, parts, nullptr, true, Priority);
+                auto ev = std::make_unique<NPDisk::TEvChunkWrite>(Owner, OwnerRound, ChunkIdx, offsetInChunk, parts,
+                    nullptr, true, Priority, TWriteSource::HullWriteSst, true);
                 MsgQueue.push(std::move(ev));
                 HasBuffer = false;
             }
@@ -412,7 +413,7 @@ namespace NKikimr {
         static_assert((SuffixSize >> 2 << 2) == SuffixSize, "expect (SuffixSize >> 2 << 2) == SuffixSize");
         static_assert(sizeof(TIdxDiskLinker) <= sizeof(TIdxDiskPlaceHolder), "expect sizeof(TIdxDiskLinker) <= sizeof(TIdxDiskPlaceHolder)");
 
-        typedef TRecIndexBase<TKey, TMemRec>::TRec TRec;
+        typedef TIndexRecord<TKey, TMemRec> TRec;
 
     public:
         TIndexBuilder(TVDiskContextPtr vctx, EWriterDataType type, ui8 owner, ui64 ownerRound, ui32 chunkSize,
@@ -507,11 +508,11 @@ namespace NKikimr {
 
         void Push(const TKey &key, const TMemRec &memRec, const TDataMerger *dataMerger) {
             // check that keys are coming in strictly ascending order
-            Y_ABORT_UNLESS(Recs.empty() || Recs.back().Key < key);
+            Y_ABORT_UNLESS(Recs.empty() || Recs.back().GetKey() < key);
 
             TMemRec newMemRec(memRec);
 
-            switch (const TBlobType::EType type = memRec.GetType()) {
+            switch (memRec.GetType()) {
                 case TBlobType::DiskBlob:
                     InplaceDataTotalSize += memRec.DataSize();
                     ItemsWithInplacedData += !!memRec.DataSize();
@@ -681,7 +682,7 @@ namespace NKikimr {
             ratio->IndexBytesTotal = ratio->IndexBytesKeep = info.IdxTotalSize;
             ratio->InplacedDataTotal = ratio->InplacedDataKeep = info.InplaceDataTotalSize;
             ratio->HugeDataTotal = ratio->HugeDataKeep = info.HugeDataTotalSize;
-            LevelSegment->StorageRatio.Set(ratio);
+            LevelSegment->StorageRatio.Set(ratio, TInstant::Zero());
 
             // write out place holder
             TIdxDiskPlaceHolder placeHolder(SstId);
@@ -823,14 +824,14 @@ namespace NKikimr {
     public:
         TWriter(TVDiskContextPtr vctx, EWriterDataType type, ui32 chunksToUse, ui8 owner, ui64 ownerRound,
                 ui32 chunkSize, ui32 appendBlockSize, ui32 writeBlockSize, ui64 sstId, bool createdByRepl,
-                TDeque<TChunkIdx>& rchunks, TRopeArena& arena, bool addHeader)
+                TDeque<TChunkIdx>& rchunks, TRopeArena& arena, EBlobHeaderMode blobHeaderMode)
             : DataWriter(vctx, type, owner, ownerRound, chunkSize, appendBlockSize, writeBlockSize, MsgQueue, rchunks)
             , IndexBuilder(vctx, type, owner, ownerRound, chunkSize, appendBlockSize, writeBlockSize, sstId,
                     createdByRepl, MsgQueue, rchunks)
             , ChunksToUse(chunksToUse)
             , ChunkSize(chunkSize)
             , Arena(arena)
-            , AddHeader(addHeader)
+            , BlobHeaderMode(blobHeaderMode)
             , GType(vctx->Top->GType)
         {}
 
@@ -873,7 +874,7 @@ namespace NKikimr {
                     if constexpr (std::is_same_v<TKey, TKeyLogoBlob>) {
                         const NMatrix::TVectorType localParts = memRec.GetLocalParts(GType);
                         Y_ABORT_UNLESS(inplacedDataSize == (localParts.Empty() ? 0 : TDiskBlob::CalculateBlobSize(GType,
-                            key.LogoBlobID(), memRec.GetLocalParts(GType), AddHeader)));
+                            key.LogoBlobID(), memRec.GetLocalParts(GType), BlobHeaderMode)));
                     } else {
                         Y_ABORT_UNLESS(inplacedDataSize == 0);
                     }
@@ -928,7 +929,7 @@ namespace NKikimr {
         const ui32 ChunksToUse;
         const ui32 ChunkSize;
         TRopeArena& Arena;
-        const bool AddHeader;
+        const EBlobHeaderMode BlobHeaderMode;
         const TBlobStorageGroupType GType;
 
         // pending messages

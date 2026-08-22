@@ -196,7 +196,7 @@ public:
     TCallback(TIntrusivePtr<NYT::NDetail::TBindStateBase>&& bindState, TTypedInvokeFunction invokeFunction)
         : TCallbackBase(std::move(bindState))
     {
-        UntypedInvoke = reinterpret_cast<TUntypedInvokeFunction>(invokeFunction);
+        UntypedInvoke_ = reinterpret_cast<TUntypedInvokeFunction>(invokeFunction);
     }
 
     template <class R2, class... TArgs2>
@@ -222,7 +222,7 @@ public:
         return *this;
     }
 
-    TCallback& operator=(TCallback&& other)
+    TCallback& operator=(TCallback&& other) noexcept
     {
         TCallback(std::move(other)).Swap(*this);
         return *this;
@@ -230,8 +230,19 @@ public:
 
     R operator()(TArgs... args) const
     {
-        auto invokeFunction = reinterpret_cast<TTypedInvokeFunction>(UntypedInvoke);
-        return invokeFunction(std::forward<TArgs>(args)..., BindState.Get());
+        // Spill |BindState_.Get()| to the stack under a well-known name and a
+        // non-templated type so that devtools/gdb/yt_fibers_printer.py can
+        // locate the bind state in every callback invocation regardless of
+        // build mode, propagating-ness, or whether the bound callable is an
+        // unnamed lambda (whose mangled name contains gdb-synthesised tokens
+        // like |$_1| that gdb's expression parser and lookup_type can't
+        // resolve). The spill lives in the caller of TBindState::Run, so it
+        // doesn't constrain whether the non-propagating Run<false> tail-calls
+        // into |Functor_|. |volatile| forces a real store; the rest of this
+        // function still uses |BindState_| in registers.
+        [[maybe_unused]] NDetail::TBindStateBase* volatile fiberBindState = BindState_.Get();
+        auto invokeFunction = reinterpret_cast<TTypedInvokeFunction>(UntypedInvoke_);
+        return invokeFunction(std::forward<TArgs>(args)..., BindState_.Get());
     }
 
     R Run(TArgs... args) const
@@ -248,7 +259,7 @@ private:
         return TCallback<R2(TArgs2...)>(
             New<TBindState>(
 #ifdef YT_ENABLE_BIND_LOCATION_TRACKING
-                BindState->Location,
+                BindState_->Location,
 #endif
                 *this),
             &TBindState::Run);

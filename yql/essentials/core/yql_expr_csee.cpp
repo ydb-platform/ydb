@@ -11,7 +11,7 @@
 namespace NYql {
 
 namespace {
-    static constexpr bool UseDeterminsticHash = false;
+    constexpr bool UseDeterminsticHash = false;
 
     struct TLambdaFrame {
         TLambdaFrame(const TExprNode* lambda, const TLambdaFrame* prev)
@@ -121,6 +121,10 @@ namespace {
             break;
         }
         case TExprNode::Callable:
+            if (node.IsPosAware()) {
+                auto pos = node.Pos();
+                hash = CseeHash(&pos, sizeof(pos), hash);
+            }
             if constexpr (UseDeterminsticHash) {
                 hash = CseeHash(node.Content().data(), node.Content().size(), hash);
             } else {
@@ -192,6 +196,9 @@ namespace {
                 case EDependencyScope::None:
                 case EDependencyScope::Mixed:
                     Y_ABORT("Strange argument.");
+            }
+            if (node.GetTypeAnn()->GetKind() == ETypeAnnotationKind::World) {
+                hash = CseeHash(node.UniqueId(), hash);
             }
             break;
         case TExprNode::World:
@@ -266,6 +273,13 @@ namespace {
             return left.Content().data() == right.Content().data() && left.GetFlagsToCompare() == right.GetFlagsToCompare();
 
         case TExprNode::Callable:
+            if (left.IsPosAware() != right.IsPosAware()) {
+                return false;
+            }
+
+            if (left.IsPosAware() && left.Pos() != right.Pos()) {
+                return false;
+            }
             // compare pointers due to intern
             if (left.Content().data() != right.Content().data()) {
                 return false;
@@ -283,7 +297,8 @@ namespace {
                         || EqualNodes(left.Head(), currLeftFrame, right.Tail(), currRightFrame, visited, coStore)
                         && EqualNodes(left.Tail(), currLeftFrame, right.Head(), currRightFrame, visited, coStore);
                 } else {
-                    TSmallVec<const TExprNode*> lNodes, rNodes;
+                    TSmallVec<const TExprNode*> lNodes;
+                    TSmallVec<const TExprNode*> rNodes;
                     lNodes.reserve(left.ChildrenSize());
                     rNodes.reserve(right.ChildrenSize());
 
@@ -345,6 +360,9 @@ namespace {
             return true;
         }
         case TExprNode::Argument: {
+            if (left.GetTypeAnn()->GetKind() == ETypeAnnotationKind::World || right.GetTypeAnn()->GetKind() == ETypeAnnotationKind::World) {
+                return false;
+            }
             if (currLeftFrame.Lambda && currRightFrame.Lambda && IsArgInScope(currLeftFrame, left) && IsArgInScope(currRightFrame, right)) {
                 const ui16 leftRelativeLevel = GetDependencyLevel(left);
                 const ui16 rightRelativeLevel = GetDependencyLevel(right);
@@ -461,7 +479,7 @@ namespace {
         TNodeMap<TNodeSet>& visited, TNodeMap<TNodeSet>& visitedInsideDependsOn) {
         switch (node.Type()) {
             case TExprNode::Atom:
-                node.SetDependencyScope(nullptr, nullptr);
+                node.SetDependencyScope(/*outerLambda=*/nullptr, /*innerLambda=*/nullptr);
                 return;
             case TExprNode::Argument:
                 closures.emplace(node.GetDependencyScope()->first);
@@ -488,7 +506,7 @@ namespace {
             }
             internal.erase(&node);
         } else {
-            insideDependsOn = insideDependsOn || node.IsCallable("DependsOn");
+            insideDependsOn = insideDependsOn || NNodes::TCoDependsOnBase::Match(&node);
             node.ForEachChild(std::bind(&CalculateCompletness, std::placeholders::_1, insideDependsOn, level, std::ref(internal),
                 std::ref(visited), std::ref(visitedInsideDependsOn)));
         }
@@ -523,7 +541,7 @@ namespace {
         std::unordered_multimap<ui64, TExprNode*>& uniqueNodes,
         std::unordered_multimap<ui64, TExprNode*>& incompleteNodes,
         TNodeMap<TExprNode*>& renames, const TColumnOrderStorage& coStore,
-        const TNodeSet& reachable) {
+        TMaybe<TNodeSet>& reachable, const TExprNode& root) {
 
         if (node.Type() == TExprNode::Argument) {
             return nullptr;
@@ -538,19 +556,20 @@ namespace {
 
         if (node.Type() == TExprNode::Lambda) {
             for (ui32 i = 1U; i < node.ChildrenSize(); ++i) {
-                if (auto newNode = VisitNode(*node.Child(i), &node, level + 1U, uniqueNodes, incompleteNodes, renames, coStore, reachable)) {
+                if (auto newNode = VisitNode(*node.Child(i), &node, level + 1U, uniqueNodes, incompleteNodes, renames, coStore, reachable, root)) {
                     node.ChildRef(i) = std::move(newNode);
                 }
             }
         } else {
             for (ui32 i = 0; i < node.ChildrenSize(); ++i) {
-                if (auto newNode = VisitNode(*node.Child(i), currentLambda, level, uniqueNodes, incompleteNodes, renames, coStore, reachable)) {
+                if (auto newNode = VisitNode(*node.Child(i), currentLambda, level, uniqueNodes, incompleteNodes, renames, coStore, reachable, root)) {
                     node.ChildRef(i) = std::move(newNode);
                 }
             }
         }
 
-        if (const auto kind = node.GetTypeAnn()->GetKind(); ETypeAnnotationKind::Flow != kind && ETypeAnnotationKind::Stream != kind || node.IsLambda()) {
+        if (const auto kind = node.GetTypeAnn()->GetKind(); node.IsCseeSafe() &&
+            (ETypeAnnotationKind::Flow != kind && ETypeAnnotationKind::Stream != kind || node.IsLambda())) {
             auto& nodesSet = node.IsComplete() ? uniqueNodes : incompleteNodes;
 
             const auto pair = nodesSet.equal_range(hash);
@@ -562,10 +581,8 @@ namespace {
                     continue;
                 }
 
-                if (!reachable.contains(iter->second)) {
-                    iter = nodesSet.erase(iter);
-                    continue;
-                }
+                if (iter->second == &node)
+                    return nullptr;
 
                 if (!EqualNodes(node, *iter->second, coStore)) {
 #ifndef NDEBUG
@@ -578,8 +595,18 @@ namespace {
                     continue;
                 }
 
-                if (iter->second == &node)
-                    return nullptr;
+                if (!reachable) {
+                    reachable.ConstructInPlace();
+                    VisitExpr(root, [&](const TExprNode& node) {
+                        Y_UNUSED(node);
+                        return true;
+                    }, *reachable);
+                }
+
+                if (!reachable->contains(iter->second)) {
+                    iter = nodesSet.erase(iter);
+                    continue;
+                }
 
                 find.first->second = iter->second;
                 if (node.Type() == TExprNode::Atom) {
@@ -623,7 +650,7 @@ IGraphTransformer::TStatus UpdateCompletness(const TExprNode::TPtr& input, TExpr
     TNodeSet closures;
     TNodeMap<TNodeSet> visited;
     TNodeMap<TNodeSet> visitedInsideDependsOn;
-    CalculateCompletness(*input, false, 0, closures, visited, visitedInsideDependsOn);
+    CalculateCompletness(*input, /*insideDependsOn=*/false, 0, closures, visited, visitedInsideDependsOn);
     return IGraphTransformer::TStatus::Ok;
 }
 
@@ -632,16 +659,12 @@ IGraphTransformer::TStatus EliminateCommonSubExpressions(const TExprNode::TPtr& 
 {
     YQL_PROFILE_SCOPE(DEBUG, forSubGraph ? "EliminateCommonSubExpressionsForSubGraph" : "EliminateCommonSubExpressions");
     output = input;
-    TNodeSet reachable;
-    VisitExpr(*output, [&](const TExprNode& node) {
-        reachable.emplace(&node);
-        return true;
-    });
+    TMaybe<TNodeSet> reachable;
 
     TNodeMap<TExprNode*> renames;
     //Cerr << "INPUT\n" << output->Dump() << "\n";
     std::unordered_multimap<ui64, TExprNode*> incompleteNodes;
-    const auto newNode = VisitNode(*output, nullptr, 0, ctx.UniqueNodes, incompleteNodes, renames, coStore, reachable);
+    const auto newNode = VisitNode(*output, /*currentLambda=*/nullptr, 0, ctx.UniqueNodes, incompleteNodes, renames, coStore, reachable, *output);
     YQL_ENSURE(forSubGraph || !newNode);
     if (!renames.empty()) {
         TNodeSet visited;

@@ -35,6 +35,82 @@ std::optional<THashMap<TString, THashSet<TString>>> GetRequiredPaths<TTag>(
 
 } // namespace NOperation
 
+// Forward declarations
+bool CreateLongIncrementalRestoreOp(
+    TOperationId opId,
+    const TPath& bcPath,
+    TVector<ISubOperation::TPtr>& result);
+
+class TDoneWithIncrementalRestore: public TDone {
+public:
+    explicit TDoneWithIncrementalRestore(const TOperationId& id)
+        : TDone(id)
+    {
+        auto events = AllIncomingEvents();
+        events.erase(TEvPrivate::TEvCompleteBarrier::EventType);
+        IgnoreMessages(DebugHint(), events);
+    }
+
+    bool ProgressState(TOperationContext& context) override {
+        LOG_I(DebugHint() << "ProgressState");
+
+        context.OnComplete.Barrier(OperationId, "DoneBarrier");
+        return false;
+    }
+
+    bool HandleReply(TEvPrivate::TEvCompleteBarrier::TPtr&, TOperationContext& context) override {
+        LOG_I(DebugHint() << "HandleReply TEvCompleteBarrier");
+
+        if (!TDone::Process(context)) {
+            return false;
+        }
+
+        const auto* txState = context.SS->FindTx(OperationId);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateLongIncrementalRestoreOp);
+        const auto& targetPathId = txState->TargetPathId;
+
+        Y_ABORT_UNLESS(context.SS->PathsById.contains(targetPathId));
+        auto path = context.SS->PathsById.at(targetPathId);
+
+        // Find the backup collection path from the long incremental restore operation
+        auto itOp = context.SS->LongIncrementalRestoreOps.find(OperationId);
+        if (itOp == context.SS->LongIncrementalRestoreOps.end()) {
+            LOG_E(DebugHint() << "Failed to find long incremental restore operation");
+            return false;
+        }
+
+        const auto& op = itOp->second;
+        TPathId backupCollectionPathId;
+        backupCollectionPathId.OwnerId = op.GetBackupCollectionPathId().GetOwnerId();
+        backupCollectionPathId.LocalPathId = op.GetBackupCollectionPathId().GetLocalId();
+
+        if (AppData()->HasInjectedFailure(static_cast<ui64>(EInjectedFailureType::DisableIncrementalRestoreAutoSwitchingToReadyStateForTests))) {
+            return true;
+        }
+
+        // Extract incremental backup names from the operation
+        TVector<TString> incrementalBackupNames;
+        for (const auto& name : op.GetIncrementalBackupTrimmedNames()) {
+            incrementalBackupNames.push_back(name);
+        }
+
+        LOG_I(DebugHint() << " Found " << incrementalBackupNames.size() << " incremental backups to restore");
+
+        context.OnComplete.Send(context.SS->SelfId(), new TEvPrivate::TEvRunIncrementalRestore(backupCollectionPathId, OperationId, incrementalBackupNames));
+
+        return true;
+    }
+
+private:
+    TString DebugHint() const override {
+        return TStringBuilder()
+            << "TDoneWithIncrementalRestore"
+            << ", operationId: " << OperationId;
+    }
+
+}; // TDoneWithIncrementalRestore
+
 class TPropose: public TSubOperationState {
 private:
     const TOperationId OperationId;
@@ -109,29 +185,30 @@ class TCreateRestoreOpControlPlane: public TSubOperationWithContext {
         }
     }
 
-    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state, TOperationContext& context) override {
+    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch(state) {
         case TTxState::Waiting:
         case TTxState::Propose:
             return MakeHolder<TEmptyPropose>(OperationId);
         case TTxState::CopyTableBarrier:
             return MakeHolder<TWaitCopyTableBarrier>(OperationId, "TCreateRestoreOpControlPlane");
-        case TTxState::Done: {
-            const auto* txState = context.SS->FindTx(OperationId);
-            if (txState && txState->TargetPathTargetState.Defined()) {
-                auto targetState = static_cast<TPathElement::EPathState>(*txState->TargetPathTargetState);
-                return MakeHolder<TDone>(OperationId, targetState);
-            }
-            return MakeHolder<TDone>(OperationId);
-        }
+        case TTxState::Done:
+            return MakeHolder<TDoneWithIncrementalRestore>(OperationId);
         default:
             return nullptr;
         }
     }
 
 public:
-    using TSubOperationWithContext::TSubOperationWithContext;
-    using TSubOperationWithContext::SelectStateFunc;
+    TCreateRestoreOpControlPlane(TOperationId id, const TTxTransaction& tx)
+        : TSubOperationWithContext(id, tx)
+    {
+    }
+
+    TCreateRestoreOpControlPlane(TOperationId id, TTxState::ETxState state)
+        : TSubOperationWithContext(id, state)
+    {
+    }
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         if (AppData()->HasInjectedFailure(static_cast<ui64>(EInjectedFailureType::LateBackupCollectionNotFound))) {
@@ -156,7 +233,7 @@ public:
 
         // Create in-flight operation object
         Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
-        TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxCreateLongIncrementalRestoreOp, bcPath.GetPathIdForDomain()); // Fix PathId to backup collection PathId
+        TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxCreateLongIncrementalRestoreOp, bcPath.Base()->PathId);
 
         txState.TargetPathTargetState = static_cast<NKikimrSchemeOp::EPathState>(NKikimrSchemeOp::EPathStateOutgoingIncrementalRestore);
 
@@ -173,10 +250,10 @@ public:
         TVector<TString> incrBackupNames;
 
         for (auto& [child, _] : bcPath.Base()->GetChildren()) {
-            if (child.EndsWith("_full")) {
+            if (child.EndsWith(NBackup::FullBackupSuffix)) {
                 lastFullBackupName = child;
                 incrBackupNames.clear();
-            } else if (child.EndsWith("_incremental")) {
+            } else if (child.EndsWith(NBackup::IncrementalBackupSuffix)) {
                 incrBackupNames.push_back(child);
             }
         }
@@ -208,13 +285,13 @@ public:
         }
 
         TStringBuf fullBackupName = lastFullBackupName;
-        fullBackupName.ChopSuffix("_full"_sb);
+        fullBackupName.ChopSuffix(NBackup::FullBackupSuffix);
 
         op.SetFullBackupTrimmedName(TString(fullBackupName));
 
         for (const auto& backupName : incrBackupNames) {
             TStringBuf incrBackupName = backupName;
-            incrBackupName.ChopSuffix("_incremental"_sb);
+            incrBackupName.ChopSuffix(NBackup::IncrementalBackupSuffix);
 
             op.AddIncrementalBackupTrimmedNames(TString(incrBackupName));
         }
@@ -243,22 +320,6 @@ public:
         context.OnComplete.DoneOperation(OperationId);
     }
 };
-
-bool CreateLongIncrementalRestoreOp(
-    TOperationId opId,
-    const TPath& bcPath,
-    TVector<ISubOperation::TPtr>& result)
-{
-    TTxTransaction tx;
-    tx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateLongIncrementalRestoreOp);
-    tx.SetInternal(true);
-    
-    tx.SetWorkingDir(bcPath.PathString());
-    
-    result.push_back(CreateLongIncrementalRestoreOpControlPlane(NextPartId(opId, result), tx));
-    
-    return true;
-}
 
 ISubOperation::TPtr CreateLongIncrementalRestoreOpControlPlane(TOperationId opId, const TTxTransaction& tx) {
     return MakeSubOperation<TCreateRestoreOpControlPlane>(opId, tx);
@@ -332,10 +393,10 @@ TVector<ISubOperation::TPtr> CreateRestoreBackupCollection(TOperationId opId, co
             "Assume path children list is lexicographically sorted");
 
         for (auto& [child, _] : bcPath.Base()->GetChildren()) {
-            if (child.EndsWith("_full")) {
+            if (child.EndsWith(NBackup::FullBackupSuffix)) {
                 lastFullBackupName = child;
                 incrBackupNames.clear();
-            } else if (child.EndsWith("_incremental")) {
+            } else if (child.EndsWith(NBackup::IncrementalBackupSuffix)) {
                 incrBackupNames.push_back(child);
             }
         }
@@ -375,12 +436,29 @@ TVector<ISubOperation::TPtr> CreateRestoreBackupCollection(TOperationId opId, co
         if(!CreateIncrementalBackupPathStateOps(opId, tx, bc, bcPath, incrBackupNames, context, result)) {
             return result;
         }
-
-        // we don't need long op when we don't have incremental backups
-        CreateLongIncrementalRestoreOp(opId, bcPath, result);
     }
 
+    // Always create the long-op so full-only restores have a state row that Get/List
+    // can surface; the handler drives empty-incrementals straight to Completed.
+    CreateLongIncrementalRestoreOp(opId, bcPath, result);
+
     return result;
+}
+
+bool CreateLongIncrementalRestoreOp(
+    TOperationId opId,
+    const TPath& bcPath,
+    TVector<ISubOperation::TPtr>& result)
+{
+    TTxTransaction tx;
+    tx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateLongIncrementalRestoreOp);
+    tx.SetInternal(true);
+
+    tx.SetWorkingDir(bcPath.PathString());
+
+    result.push_back(CreateLongIncrementalRestoreOpControlPlane(NextPartId(opId, result), tx));
+
+    return true;
 }
 
 bool CreateIncrementalBackupPathStateOps(

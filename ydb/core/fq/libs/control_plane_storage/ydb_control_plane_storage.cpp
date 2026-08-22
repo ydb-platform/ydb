@@ -7,6 +7,8 @@
 
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT ::NKikimrServices::YQ_CONTROL_PLANE_STORAGE
+
 namespace NFq {
 
 namespace {
@@ -47,7 +49,8 @@ TControlPlaneStorageBase::TControlPlaneStorageBase(
 }
 
 void TYdbControlPlaneStorageActor::Bootstrap() {
-    CPS_LOG_I("Starting ydb control plane storage service. Actor id: " << SelfId());
+    YDB_LOG_INFO("Starting ydb control plane storage service. Actor",
+        {"id", SelfId()});
     NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(YQ_CONTROL_PLANE_STORAGE_PROVIDER));
 
     YdbConnection = NewYdbConnection(Config->Proto.GetStorage(), CredProviderFactory, YqSharedResources->CoreYdbDriver);
@@ -131,6 +134,7 @@ void TYdbControlPlaneStorageActor::CreatePendingSmallTable()
         .AddNullableColumn(TENANT_COLUMN_NAME, EPrimitiveType::String)
         .AddNullableColumn(ASSIGNED_UNTIL_COLUMN_NAME, EPrimitiveType::Timestamp)
         .AddNullableColumn(RETRY_RATE_COLUMN_NAME, EPrimitiveType::Double)
+        .AddNullableColumn(NODE_COLUMN_NAME, EPrimitiveType::String)
         .SetPrimaryKeyColumns({TENANT_COLUMN_NAME, SCOPE_COLUMN_NAME, QUERY_ID_COLUMN_NAME})
         .Build();
 
@@ -313,6 +317,7 @@ void TYdbControlPlaneStorageActor::CreateMappingsTable()
         .AddNullableColumn(SUBJECT_TYPE_COLUMN_NAME, EPrimitiveType::String)
         .AddNullableColumn(SUBJECT_ID_COLUMN_NAME, EPrimitiveType::String)
         .AddNullableColumn(VTENANT_COLUMN_NAME, EPrimitiveType::String)
+        .AddNullableColumn(NODE_COLUMN_NAME, EPrimitiveType::String)
         .SetPrimaryKeyColumns({SUBJECT_TYPE_COLUMN_NAME, SUBJECT_ID_COLUMN_NAME})
         .Build();
 
@@ -339,7 +344,12 @@ void TYdbControlPlaneStorageActor::AfterTablesCreated() {
 
 bool TControlPlaneStorageUtils::IsSuperUser(const TString& user) const
 {
-    return AnyOf(Config->Proto.GetSuperUsers(), [&user](const auto& superUser) {
+    return IsSuperUser(Config, user);
+}
+
+bool TControlPlaneStorageUtils::IsSuperUser(const std::shared_ptr<::NFq::TControlPlaneStorageConfig>& config, const TString& user)
+{
+    return AnyOf(config->Proto.GetSuperUsers(), [&user](const auto& superUser) {
         return superUser == user;
     });
 }
@@ -380,7 +390,7 @@ std::pair<TAsyncStatus, std::shared_ptr<std::vector<NYdb::TResultSet>>> TDbReque
     auto resultSet = std::make_shared<std::vector<NYdb::TResultSet>>();
 
     std::shared_ptr<int> retryCount = std::make_shared<int>();
-    auto handler = [=, requestCounters=requestCounters](TSession& session) mutable {
+    auto handler = [retryCount, query, params, debugInfo, transactionMode, retryOnTli, resultSet, actorSystem, requestCounters=requestCounters](TSession& session) mutable {
         if (*retryCount != 0) {
             requestCounters.IncRetry();
         }
@@ -395,7 +405,10 @@ std::pair<TAsyncStatus, std::shared_ptr<std::vector<NYdb::TResultSet>>> TDbReque
                 return TStatus{EStatus::UNAVAILABLE, NYdb::NIssue::TIssues{status.GetIssues()}};
             }
             if (!status.IsSuccess()) {
-                CPS_LOG_AS_W(*actorSystem, "DB Error, Status: " << status.GetStatus() << ", Issues: " << status.GetIssues().ToOneLineString() << ", Query: " << query);
+                YDB_LOG_WARN_CTX(*actorSystem, "DB Error",
+                    {"status", status.GetStatus()},
+                    {"issues", status.GetIssues().ToOneLineString()},
+                    {"query", query});
             }
             if (!retryOnTli && status.GetStatus() == EStatus::ABORTED) {
                 return TStatus{EStatus::GENERIC_ERROR, NYdb::NIssue::TIssues{status.GetIssues()}};
@@ -404,9 +417,7 @@ std::pair<TAsyncStatus, std::shared_ptr<std::vector<NYdb::TResultSet>>> TDbReque
         });
     };
 
-    TPromise<NYdb::TStatus> promise = NewPromise<NYdb::TStatus>();
-    TActivationContext::AsActorContext().Register(new TDbRequest(DbPool, promise, handler));
-    return {promise.GetFuture(), resultSet};
+    return {ExecDbRequest(DbPool, handler), resultSet};
 }
 
 TAsyncStatus TDbRequester::Validate(
@@ -426,7 +437,7 @@ TAsyncStatus TDbRequester::Validate(
     const TValidationQuery& validatonItem = validators[item];
     CollectDebugInfo(validatonItem.Query, validatonItem.Params, session, debugInfo);
     auto result = session.ExecuteDataQuery(validatonItem.Query, item == 0 ? TTxControl::BeginTx(transactionMode) : TTxControl::Tx(**transaction), validatonItem.Params, NYdb::NTable::TExecDataQuerySettings().KeepInQueryCache(true));
-    return result.Apply([=, this, validator=validatonItem.Validator, query=validatonItem.Query] (const TFuture<TDataQueryResult>& future) {
+    return result.Apply([transaction, actorSystem, successFinish, item, session, debugInfo, validator=validatonItem.Validator, query=validatonItem.Query, validators] (const TFuture<TDataQueryResult>& future) {
         NYdb::NTable::TDataQueryResult result = future.GetValue();
         *transaction = result.GetTransaction();
         auto status = static_cast<TStatus>(result);
@@ -434,7 +445,10 @@ TAsyncStatus TDbRequester::Validate(
             return MakeFuture(TStatus{EStatus::UNAVAILABLE, NYdb::NIssue::TIssues{status.GetIssues()}});
         }
         if (!status.IsSuccess()) {
-            CPS_LOG_AS_W(*actorSystem, "DB Error, Status: " << status.GetStatus() << ", Issues: " << status.GetIssues().ToOneLineString() << ", Query: " << query);
+            YDB_LOG_WARN_CTX(*actorSystem, "DB Error",
+                {"status", status.GetStatus()},
+                {"issues", status.GetIssues().ToOneLineString()},
+                {"query", query});
             return MakeFuture(status);
         }
         *successFinish = validator(result);
@@ -457,17 +471,20 @@ TAsyncStatus TDbRequester::Write(
     NActors::TActorSystem* const actorSystem = TActivationContext::ActorSystem();
     std::shared_ptr<int> retryCount = std::make_shared<int>();
     auto transaction = std::make_shared<std::optional<TTransaction>>();
-    auto writeHandler = [=, retryOnTli=retryOnTli] (TSession session) {
+    auto writeHandler = [query, transaction, params, debugInfo, hasValidators=!validators.empty(), transactionMode, actorSystem, retryOnTli=retryOnTli] (TSession session) {
         CollectDebugInfo(query, params, session, debugInfo);
-        auto result = session.ExecuteDataQuery(query, validators ? TTxControl::Tx(**transaction).CommitTx() : TTxControl::BeginTx(transactionMode).CommitTx(), params, NYdb::NTable::TExecDataQuerySettings().KeepInQueryCache(true));
-        return result.Apply([=] (const TFuture<TDataQueryResult>& future) {
+        auto result = session.ExecuteDataQuery(query, hasValidators ? TTxControl::Tx(**transaction).CommitTx() : TTxControl::BeginTx(transactionMode).CommitTx(), params, NYdb::NTable::TExecDataQuerySettings().KeepInQueryCache(true));
+        return result.Apply([query, actorSystem, retryOnTli] (const TFuture<TDataQueryResult>& future) {
             NYdb::NTable::TDataQueryResult result = future.GetValue();
             auto status = static_cast<TStatus>(result);
             if (status.GetStatus() == EStatus::SCHEME_ERROR) { // retry if table does not exist
                 return TStatus{EStatus::UNAVAILABLE, NYdb::NIssue::TIssues{status.GetIssues()}};
             }
             if (!status.IsSuccess()) {
-                CPS_LOG_AS_W(*actorSystem, "DB Error, Status: " << status.GetStatus() << ", Issues: " << status.GetIssues().ToOneLineString() << ", Query: " << query);
+                YDB_LOG_WARN_CTX(*actorSystem, "DB Error",
+                    {"status", status.GetStatus()},
+                    {"issues", status.GetIssues().ToOneLineString()},
+                    {"query", query});
             }
             if (!retryOnTli && status.GetStatus() == EStatus::ABORTED) {
                 return TStatus{EStatus::GENERIC_ERROR, NYdb::NIssue::TIssues{status.GetIssues()}};
@@ -476,13 +493,13 @@ TAsyncStatus TDbRequester::Write(
         });
     };
 
-    auto handler = [=, this, requestCounters=requestCounters] (TSession session) mutable {
+    auto handler = [actorSystem, writeHandler, validators, transaction, debugInfo, retryCount, requestCounters=requestCounters] (TSession session) mutable {
         if (*retryCount != 0) {
             requestCounters.IncRetry();
         }
         ++(*retryCount);
         std::shared_ptr<bool> successFinish = std::make_shared<bool>();
-        return Validate(actorSystem, transaction, 0, validators, session, successFinish, debugInfo).Apply([=](const auto& future) {
+        return Validate(actorSystem, transaction, 0, validators, session, successFinish, debugInfo).Apply([successFinish, writeHandler, session, actorSystem](const auto& future) {
             try {
                 auto status = future.GetValue();
                 if (!status.IsSuccess()) {
@@ -492,28 +509,31 @@ TAsyncStatus TDbRequester::Write(
                     return future;
                 }
                 return writeHandler(session);
-            } catch (const NYql::TCodeLineException& exception) {
+            } catch (const NKikimr::TCodeLineException& exception) {
                 if (exception.Code == TIssuesIds::INTERNAL_ERROR) {
-                    CPS_LOG_AS_E(*actorSystem, "Validation: " << CurrentExceptionMessage());
+                    YDB_LOG_ERROR_CTX(*actorSystem, "",
+                        {"validation", CurrentExceptionMessage()});
                 } else {
-                    CPS_LOG_AS_D(*actorSystem, "Validation: " << CurrentExceptionMessage());
+                    YDB_LOG_DEBUG_CTX(*actorSystem, "Dump validation",
+                        {"validation", CurrentExceptionMessage()});
                 }
                 return MakeFuture(TStatus{EStatus::GENERIC_ERROR, NYdb::NIssue::TIssues{NYdb::NAdapters::ToSdkIssue(MakeErrorIssue(exception.Code, exception.GetRawMessage()))}});
             } catch (const std::exception& exception) {
-                CPS_LOG_AS_D(*actorSystem, "Validation: " << CurrentExceptionMessage());
+                YDB_LOG_DEBUG_CTX(*actorSystem, "Dump validation",
+                    {"validation", CurrentExceptionMessage()});
                 return MakeFuture(TStatus{EStatus::GENERIC_ERROR, NYdb::NIssue::TIssues{NYdb::NIssue::TIssue{exception.what()}}});
             } catch (...) {
-                CPS_LOG_AS_D(*actorSystem, "Validation: " << CurrentExceptionMessage());
+                YDB_LOG_DEBUG_CTX(*actorSystem, "Dump validation",
+                    {"validation", CurrentExceptionMessage()});
                 return MakeFuture(TStatus{EStatus::GENERIC_ERROR, NYdb::NIssue::TIssues{NYdb::NIssue::TIssue{CurrentExceptionMessage()}}});
             }
         });
     };
-    TPromise<NYdb::TStatus> promise = NewPromise<NYdb::TStatus>();
-    TActivationContext::AsActorContext().Register(new TDbRequest(DbPool, promise, handler));
-    return promise.GetFuture();
+    return ExecDbRequest(DbPool, handler);
 }
 
 NThreading::TFuture<void> TYdbControlPlaneStorageActor::PickTask(
+    TDbPoolPtr dbPool,
     const TPickTaskParams& taskParams,
     const TRequestCounters& requestCounters,
     TDebugInfoPtr debugInfo,
@@ -521,17 +541,18 @@ NThreading::TFuture<void> TYdbControlPlaneStorageActor::PickTask(
     const TVector<TValidationQuery>& validators,
     TTxSettings transactionMode)
 {
-    return ReadModifyWrite(taskParams.ReadQuery, taskParams.ReadParams,
+    return ReadModifyWrite(dbPool, taskParams.ReadQuery, taskParams.ReadParams,
         taskParams.PrepareParams, requestCounters, debugInfo, validators, transactionMode, taskParams.RetryOnTli)
-            .Apply([=, responseTasks=responseTasks, queryId = taskParams.QueryId](const auto& future) {
+            .Apply([responseTasks=responseTasks, queryId=taskParams.QueryId](const auto& future) {
                 const auto status = future.GetValue();
-                if (responseTasks && status.GetStatus() == EStatus::GENERIC_ERROR) {
+                if (responseTasks && !status.IsSuccess()) {
                     responseTasks->SafeEraseTaskBlocking(queryId);
                 }
             });
 }
 
 TAsyncStatus TDbRequester::ReadModifyWrite(
+    TDbPoolPtr dbPool,
     const TString& readQuery,
     const NYdb::TParams& readParams,
     const std::function<std::pair<TString, NYdb::TParams>(const std::vector<NYdb::TResultSet>&)>& prepare,
@@ -546,7 +567,7 @@ TAsyncStatus TDbRequester::ReadModifyWrite(
     auto resultSets = std::make_shared<std::vector<NYdb::TResultSet>>();
     auto transaction = std::make_shared<std::optional<TTransaction>>();
 
-    auto readModifyWriteHandler = [=](TSession session) {
+    auto readModifyWriteHandler = [readQuery, readParams, debugInfo, resultSets, transaction, transactionMode, validators, actorSystem, retryCount, retryOnTli, prepare](TSession session) {
         CollectDebugInfo(readQuery, readParams, session, debugInfo);
         auto readResult = session.ExecuteDataQuery(readQuery, validators ? TTxControl::Tx(**transaction) : TTxControl::BeginTx(transactionMode), readParams, NYdb::NTable::TExecDataQuerySettings().KeepInQueryCache(true));
         auto readResultStatus = readResult.Apply([resultSets, transaction, actorSystem, readQuery] (const TFuture<TDataQueryResult>& future) {
@@ -558,16 +579,19 @@ TAsyncStatus TDbRequester::ReadModifyWrite(
                 return TStatus{EStatus::UNAVAILABLE, NYdb::NIssue::TIssues{status.GetIssues()}};
             }
             if (!status.IsSuccess()) {
-                CPS_LOG_AS_W(*actorSystem, "DB Error, Status: " << status.GetStatus() << ", Issues: " << status.GetIssues().ToOneLineString() << ", Query: " << readQuery);
+                YDB_LOG_WARN_CTX(*actorSystem, "DB Error",
+                    {"status", status.GetStatus()},
+                    {"issues", status.GetIssues().ToOneLineString()},
+                    {"query", readQuery});
             }
             return status;
         });
 
-        TFuture<std::pair<TString, NYdb::TParams>> resultPrepare = readResultStatus.Apply([=](const auto& future) {
+        TFuture<std::pair<TString, NYdb::TParams>> resultPrepare = readResultStatus.Apply([prepare, resultSets](const auto& future) {
             return future.GetValue().IsSuccess() ? prepare(*resultSets) : make_pair(TString(""), NYdb::TParamsBuilder{}.Build());
         });
 
-        return resultPrepare.Apply([=, actorSystem=actorSystem](const auto& future) mutable {
+        return resultPrepare.Apply([readResultStatus, transaction, session, debugInfo, retryOnTli, actorSystem=actorSystem](const auto& future) mutable {
             if (!readResultStatus.GetValue().IsSuccess()) {
                 return readResultStatus;
             }
@@ -582,7 +606,9 @@ TAsyncStatus TDbRequester::ReadModifyWrite(
                             return TStatus{EStatus::UNAVAILABLE, NYdb::NIssue::TIssues{status.GetIssues()}};
                         }
                         if (!status.IsSuccess()) {
-                            CPS_LOG_AS_W(*actorSystem, "DB Error, Status: " << status.GetStatus() << ", Issues: " << status.GetIssues().ToOneLineString() << ", COMMIT");
+                            YDB_LOG_WARN_CTX(*actorSystem, "DB Error, COMMIT",
+                                {"status", status.GetStatus()},
+                                {"issues", status.GetIssues().ToOneLineString()});
                         }
                         return status;
                     });
@@ -596,38 +622,45 @@ TAsyncStatus TDbRequester::ReadModifyWrite(
                         return TStatus{EStatus::UNAVAILABLE, NYdb::NIssue::TIssues{status.GetIssues()}};
                     }
                     if (!status.IsSuccess()) {
-                        CPS_LOG_AS_W(*actorSystem, "DB Error, Status: " << status.GetStatus() << ", Issues: " << status.GetIssues().ToOneLineString() << ", Query: " << writeQuery);
+                        YDB_LOG_WARN_CTX(*actorSystem, "DB Error",
+                            {"status", status.GetStatus()},
+                            {"issues", status.GetIssues().ToOneLineString()},
+                            {"query", writeQuery});
                     }
                     if (!retryOnTli && status.GetStatus() == EStatus::ABORTED) {
                         return TStatus{EStatus::GENERIC_ERROR, NYdb::NIssue::TIssues{status.GetIssues()}};
                     }
                     return status;
                 });
-            } catch (const NYql::TCodeLineException& exception) {
+            } catch (const NKikimr::TCodeLineException& exception) {
                 if (exception.Code == TIssuesIds::INTERNAL_ERROR) {
-                    CPS_LOG_AS_E(*actorSystem, "Validation: " << CurrentExceptionMessage());
+                    YDB_LOG_ERROR_CTX(*actorSystem, "",
+                        {"validation", CurrentExceptionMessage()});
                 } else {
-                    CPS_LOG_AS_D(*actorSystem, "Validation: " << CurrentExceptionMessage());
+                    YDB_LOG_DEBUG_CTX(*actorSystem, "Dump validation",
+                        {"validation", CurrentExceptionMessage()});
                 }
                 return MakeFuture(TStatus{EStatus::GENERIC_ERROR, NYdb::NIssue::TIssues{NYdb::NAdapters::ToSdkIssue(MakeErrorIssue(exception.Code, exception.GetRawMessage()))}});
             } catch (const std::exception& exception) {
-                CPS_LOG_AS_D(*actorSystem, "Validation: " << CurrentExceptionMessage());
+                YDB_LOG_DEBUG_CTX(*actorSystem, "Dump validation",
+                    {"validation", CurrentExceptionMessage()});
                 return MakeFuture(TStatus{EStatus::GENERIC_ERROR, NYdb::NIssue::TIssues{NYdb::NIssue::TIssue{exception.what()}}});
             } catch (...) {
-                CPS_LOG_AS_D(*actorSystem, "Validation: " << CurrentExceptionMessage());
+                YDB_LOG_DEBUG_CTX(*actorSystem, "Dump validation",
+                    {"validation", CurrentExceptionMessage()});
                 return MakeFuture(TStatus{EStatus::GENERIC_ERROR, NYdb::NIssue::TIssues{NYdb::NIssue::TIssue{CurrentExceptionMessage()}}});
             }
         });
     };
 
-    auto handler = [=, this, requestCounters=requestCounters] (TSession session) mutable {
+    auto handler = [actorSystem, transaction, validators, retryCount, debugInfo, requestCounters=requestCounters, readModifyWriteHandler] (TSession session) mutable {
         if (*retryCount != 0) {
             requestCounters.IncRetry();
         }
         ++(*retryCount);
 
         std::shared_ptr<bool> successFinish = std::make_shared<bool>();
-        return Validate(actorSystem, transaction, 0, validators, session, successFinish, debugInfo).Apply([=](const auto& future) {
+        return Validate(actorSystem, transaction, 0, validators, session, successFinish, debugInfo).Apply([actorSystem, successFinish, session, readModifyWriteHandler](const auto& future) {
             try {
                 auto status = future.GetValue();
                 if (!status.IsSuccess()) {
@@ -637,25 +670,27 @@ TAsyncStatus TDbRequester::ReadModifyWrite(
                     return future;
                 }
                 return readModifyWriteHandler(session);
-            } catch (const NYql::TCodeLineException& exception) {
+            } catch (const NKikimr::TCodeLineException& exception) {
                 if (exception.Code == TIssuesIds::INTERNAL_ERROR) {
-                    CPS_LOG_AS_E(*actorSystem, "Validation: " << CurrentExceptionMessage());
+                    YDB_LOG_ERROR_CTX(*actorSystem, "",
+                        {"validation", CurrentExceptionMessage()});
                 } else {
-                    CPS_LOG_AS_D(*actorSystem, "Validation: " << CurrentExceptionMessage());
+                    YDB_LOG_DEBUG_CTX(*actorSystem, "Dump validation",
+                        {"validation", CurrentExceptionMessage()});
                 }
                 return MakeFuture(TStatus{EStatus::GENERIC_ERROR, NYdb::NIssue::TIssues{NYdb::NAdapters::ToSdkIssue(MakeErrorIssue(exception.Code, exception.GetRawMessage()))}});
             } catch (const std::exception& exception) {
-                CPS_LOG_AS_D(*actorSystem, "Validation: " << CurrentExceptionMessage());
+                YDB_LOG_DEBUG_CTX(*actorSystem, "Dump validation",
+                    {"validation", CurrentExceptionMessage()});
                 return MakeFuture(TStatus{EStatus::GENERIC_ERROR, NYdb::NIssue::TIssues{NYdb::NIssue::TIssue{exception.what()}}});
             } catch (...) {
-                CPS_LOG_AS_D(*actorSystem, "Validation: " << CurrentExceptionMessage());
+                YDB_LOG_DEBUG_CTX(*actorSystem, "Dump validation",
+                    {"validation", CurrentExceptionMessage()});
                 return MakeFuture(TStatus{EStatus::GENERIC_ERROR, NYdb::NIssue::TIssues{NYdb::NIssue::TIssue{CurrentExceptionMessage()}}});
             }
         });
     };
-    TPromise<NYdb::TStatus> promise = NewPromise<NYdb::TStatus>();
-    TActivationContext::AsActorContext().Register(new TDbRequest(DbPool, promise, handler));
-    return promise.GetFuture();
+    return ExecDbRequest(dbPool, handler);
 }
 
 NActors::IActor* CreateYdbControlPlaneStorageServiceActor(

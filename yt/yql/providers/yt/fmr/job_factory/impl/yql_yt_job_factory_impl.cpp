@@ -1,13 +1,18 @@
-#include <util/system/mutex.h>
-#include <yql/essentials/utils/log/log.h>
 #include <yt/yql/providers/yt/fmr/job_factory/impl/yql_yt_job_factory_impl.h>
 
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/utils/yql_panic.h>
+
+#include <util/system/mutex.h>
+
 namespace NYql::NFmr {
+
+namespace {
 
 class TFmrJobFactory: public IFmrJobFactory {
 public:
     TFmrJobFactory(const TFmrJobFactorySettings& settings)
-        : NumThreads_(settings.NumThreads), Function_(settings.Function), RandomProvider_(settings.RandomProvider)
+        : NumThreads_(settings.NumThreads), MaxQueueSize_(settings.MaxQueueSize), Function_(settings.Function), RandomProvider_(settings.RandomProvider)
     {
         Start();
     }
@@ -32,9 +37,13 @@ public:
                 auto taskResult = Function_(task, cancelFlag);
                 finalTaskStatus = taskResult.TaskStatus;
                 finalTaskStatistics = taskResult.Stats;
+                auto error = taskResult.Error;
+                if (error.Defined()) {
+                    taskErrorMessage = TFmrError{.Component = EFmrComponent::Job, .Reason = error->Reason, .ErrorMessage = error->ErrorMessage, .TaskId = task->TaskId, .JobId = jobId};
+                }
             } catch (...) {
                 finalTaskStatus = ETaskStatus::Failed;
-                taskErrorMessage = TFmrError{.Component = EFmrComponent::Job, .ErrorMessage = CurrentExceptionMessage(), .TaskId = task->TaskId, .JobId = jobId};
+                taskErrorMessage = TFmrError{.Component = EFmrComponent::Job, .Reason = EFmrErrorReason::Unknown, .ErrorMessage = CurrentExceptionMessage(), .TaskId = task->TaskId, .JobId = jobId};
             }
             promise.SetValue(MakeTaskState(finalTaskStatus, task->TaskId, taskErrorMessage, finalTaskStatistics));
         };
@@ -47,7 +56,8 @@ public:
     }
 
     void Start() override {
-        ThreadPool_ = CreateThreadPool(NumThreads_);
+        ThreadPool_.Reset(new TThreadPool(TThreadPool::TParams().SetBlocking(true).SetCatching(true)));
+        ThreadPool_->Start(NumThreads_, MaxQueueSize_);
     }
 
     void Stop() override {
@@ -57,9 +67,12 @@ public:
 private:
     THolder<IThreadPool> ThreadPool_;
     ui64 NumThreads_;
+    ui64 MaxQueueSize_;
     std::function<TJobResult(TTask::TPtr, std::shared_ptr<std::atomic<bool>>)> Function_;
     const TIntrusivePtr<IRandomProvider> RandomProvider_;
 };
+
+} // namespace
 
 TFmrJobFactory::TPtr MakeFmrJobFactory(const TFmrJobFactorySettings& settings) {
     return MakeIntrusive<TFmrJobFactory>(settings);

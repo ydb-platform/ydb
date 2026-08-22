@@ -8,7 +8,7 @@
 namespace NYql::NDq {
 
     void RegisterGenericProviderFactories(TDqAsyncIoFactory& factory,
-                                          ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+                                          IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
                                           NYql::NConnector::IClient::TPtr genericClient) {
         auto readActorFactory = [credentialsFactory, genericClient](
                                     Generic::TSource&& settings,
@@ -24,7 +24,8 @@ namespace NYql::NDq {
                 args.ReadRanges,
                 args.ComputeActorId,
                 credentialsFactory,
-                args.HolderFactory);
+                args.HolderFactory,
+                std::move(args.Alloc));
         };
 
         auto lookupActorFactory = [credentialsFactory, genericClient](Generic::TLookupSource&& lookupSource, IDqAsyncIoFactory::TLookupSourceArguments&& args) {
@@ -40,7 +41,10 @@ namespace NYql::NDq {
                 args.PayloadType,
                 args.TypeEnv,
                 args.HolderFactory,
-                args.MaxKeysInRequest);
+                args.MaxKeysInRequest,
+                args.SecureParams,
+                args.IsMultiMatches
+            );
         };
 
         for (auto& name : {

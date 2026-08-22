@@ -11,6 +11,9 @@ void TServiceDiscoveryConfig::Register(TRegistrar registrar)
     registrar.Parameter("enable", &TThis::Enable)
         .Default(GetServiceDiscoveryEnableDefault());
 
+     registrar.Parameter("enable_metrics", &TThis::EnableMetrics)
+        .Default(false);
+
     registrar.Parameter("fqdn", &TThis::Fqdn)
         .Default("sd.yandex.net");
     registrar.Parameter("grpc_port", &TThis::GrpcPort)
@@ -29,6 +32,7 @@ void TServiceDiscoveryConfig::Register(TRegistrar registrar)
         config->ExpireAfterSuccessfulUpdateTime = TDuration::Days(1);
         config->ExpireAfterFailedUpdateTime = TDuration::Seconds(5);
         config->RefreshTime = TDuration::Seconds(5);
+        config->ExpirationPeriod = TDuration::Seconds(5);
     });
 }
 

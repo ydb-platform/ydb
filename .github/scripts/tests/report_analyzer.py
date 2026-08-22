@@ -5,7 +5,6 @@ The tool used to analyze file created by "ya make ... --build-results-report <fi
 """
 
 import argparse
-import sys
 import json 
 
 if __name__ == "__main__":

@@ -13,6 +13,128 @@
 #include <ydb/core/base/auth.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
+#include <ydb/library/services/services.pb.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::GRPC_SERVER
+
+namespace {
+
+TString DescribeConfigIdentity(const Ydb::DynamicConfig::ConfigIdentity& id)
+{
+    TStringBuilder descr;
+
+    switch (id.type_case()) {
+        case Ydb::DynamicConfig::ConfigIdentity::TypeCase::kCluster:
+            descr << "cluster=" << id.cluster();
+            break;
+        case Ydb::DynamicConfig::ConfigIdentity::TypeCase::kDatabase:
+            descr << "database=" << id.database();
+            break;
+        case Ydb::DynamicConfig::ConfigIdentity::TypeCase::TYPE_NOT_SET:
+            descr << "<TYPE_NOT_SET>";
+            break;
+        default:
+            descr << "<unknown-type:" << static_cast<int>(id.type_case()) << ">";
+            break;
+    }
+
+    descr << ";version=" << id.version();
+
+    return descr;
+}
+
+bool ConvertGetConfigToFetchConfigResult(
+    const Ydb::DynamicConfig::GetConfigResult &from,
+    Ydb::Config::FetchConfigResult &to,
+    TString& error)
+{
+    const auto identityCount = from.identity_size();
+    const auto configCount = from.config_size();
+
+    error.clear();
+
+    // Reject Ydb::DynamicConfig::GetConfigResult invariant violation
+    if (identityCount < configCount) {
+        TStringBuilder descr;
+        descr << (configCount - identityCount)
+              << " extra 'config' field(s) with no corresponding 'identity' field(s)";
+        error = descr;
+        return false;
+    }
+    if (identityCount > configCount) {
+        TStringBuilder descr;
+        descr << "no 'config' fields for 'identity' fields [";
+        for (int i = configCount; i < identityCount; i++) {
+            if (i > configCount) {
+                descr << ", ";
+            }
+            descr << "'" << DescribeConfigIdentity(from.identity(i)) << "'";
+        }
+        descr << "]";
+        error = descr;
+        return false;
+    }
+
+    // Reject TYPE_NOT_SET upfront so the error path leaves 'to' untouched
+    {
+        TStringBuilder descr;
+        int unsetCount = 0;
+
+        descr << "'identity' fields with no type set at indices [";
+        for (int i = 0; i < identityCount; i++) {
+            if (from.identity(i).type_case()
+                == Ydb::DynamicConfig::ConfigIdentity::TypeCase::TYPE_NOT_SET)
+            {
+                if (unsetCount > 0) {
+                    descr << ", ";
+                }
+                descr << "#" << i << " - " << "'" << DescribeConfigIdentity(from.identity(i)) << "'";
+                ++unsetCount;
+            }
+        }
+        descr << "]";
+
+        if (unsetCount > 0) {
+            error = descr;
+            return false;
+        }
+    }
+
+    for (int i = 0; i < identityCount; i++) {
+        const auto& srcIdentity = from.identity(i);
+        switch (srcIdentity.type_case()) {
+            case Ydb::DynamicConfig::ConfigIdentity::TypeCase::kCluster: {
+                auto dstEntry = to.add_config();
+                auto dstIdentity = dstEntry->mutable_identity();
+                dstIdentity->set_version(srcIdentity.version());
+                dstIdentity->set_cluster(srcIdentity.cluster());
+                dstIdentity->mutable_main();
+                dstEntry->set_config(from.config(i));
+                break;
+            }
+            case Ydb::DynamicConfig::ConfigIdentity::TypeCase::kDatabase: {
+                auto dstEntry = to.add_config();
+                auto dstIdentity = dstEntry->mutable_identity();
+                dstIdentity->set_version(srcIdentity.version());
+                dstIdentity->mutable_database()->set_database(srcIdentity.database());
+                dstEntry->set_config(from.config(i));
+                break;
+            }
+            case Ydb::DynamicConfig::ConfigIdentity::TypeCase::TYPE_NOT_SET:
+                // TYPE_NOT_SET is rejected with error by pre-validation above
+                break;
+            default:
+                // Any other value that comes from a newer Console is skipped with a warning
+                // so we don't fail on forward-compatible additions
+                YDB_LOG_NOTICE("Convert Ydb::DynamicConfig::ConfigIdentity to Ydb::Config::FetchConfigResult: skipped unknown config identity",
+                    {"srcIdentity", DescribeConfigIdentity(srcIdentity)});
+                break;
+        }
+    }
+    return true;
+}
+
+} // namespace
 
 namespace NKikimr::NGRpcService {
 
@@ -24,7 +146,8 @@ using TEvFetchStorageConfigRequest =
         Ydb::Config::FetchConfigResponse>;
 using TEvBootstrapClusterRequest =
     TGrpcRequestOperationCall<Ydb::Config::BootstrapClusterRequest,
-        Ydb::Config::BootstrapClusterResponse>;
+        Ydb::Config::BootstrapClusterResponse,
+        NRuntimeEvents::EType::BOOTSTRAP_CLUSTER>;
 
 using namespace NActors;
 using namespace Ydb;
@@ -105,7 +228,15 @@ void CopyFromConfigResponse(const NKikimrBlobStorage::TConfigResponse &from, Ydb
             newDrive->set_shared_with_os(drive.GetSharedWithOs());
             newDrive->set_read_centric(drive.GetReadCentric());
             newDrive->set_kind(drive.GetKind());
-            newDrive->set_expected_slot_count(hostConfig.GetDefaultHostPDiskConfig().GetExpectedSlotCount());
+            const auto& pdiskConfig = drive.HasPDiskConfig()
+                ? drive.GetPDiskConfig()
+                : hostConfig.GetDefaultHostPDiskConfig();
+            if (pdiskConfig.GetExpectedSlotSize()) {
+                newDrive->set_expected_slot_size(pdiskConfig.GetExpectedSlotSize());
+                newDrive->set_max_slots(pdiskConfig.GetMaxSlots());
+            } else {
+                newDrive->set_expected_slot_count(pdiskConfig.GetExpectedSlotCount());
+            }
         }
     }
     auto boxes = boxStatus.GetBox();
@@ -152,26 +283,24 @@ public:
         if (shim.MainConfig) {
             if (NYamlConfig::IsDatabaseConfig(*shim.MainConfig)) {
                 DatabaseConfig = shim.MainConfig;
-                CheckDatabaseAuthorization();
+                if (!ResolveTargetDatabase()) {
+                    return;
+                }
+                CheckDatabaseAuthorization(*TargetDatabase);
                 return;
             }
         }
-        if (!NKikimr::IsAdministrator(AppData(), Request_->GetSerializedToken())) {
+        if (!NKikimr::IsAdministrator(AppData(), Request_->GetInternalToken().Get())) {
             self->Reply(Ydb::StatusIds::UNAUTHORIZED, "User is not a cluster administrator.",
                   NKikimrIssues::TIssuesIds::ACCESS_DENIED, self->ActorContext());
             return;
         }
         self->Become(&TReplaceStorageConfigRequest::StateFunc);
-        self->Send(MakeBlobStorageNodeWardenID(ctx.SelfID.NodeId()), new TEvNodeWardenQueryStorageConfig(false)); 
+        self->Send(MakeBlobStorageNodeWardenID(ctx.SelfID.NodeId()), new TEvNodeWardenQueryStorageConfig(false));
     }
 
     bool ValidateRequest(Ydb::StatusIds::StatusCode& status, NYql::TIssues& issues) override {
         const auto& request = *GetProtoRequest();
-        if (request.dry_run()) {
-            status = Ydb::StatusIds::BAD_REQUEST;
-            issues.AddIssue("DryRun is not supported yet.");
-            return false;
-        }
 
         auto* csk = AppData()->ConfigSwissKnife;
 
@@ -189,7 +318,8 @@ public:
     void FillDistconfQuery(NStorage::TEvNodeConfigInvokeOnRoot& ev) {
         auto *cmd = ev.Record.MutableReplaceStorageConfig();
 
-        auto shim = ConvertConfigReplaceRequest(*GetProtoRequest());
+        auto *protoRequest = GetProtoRequest();
+        auto shim = ConvertConfigReplaceRequest(*protoRequest);
 
         if (shim.MainConfig) {
             cmd->SetYAML(*shim.MainConfig);
@@ -203,6 +333,7 @@ public:
         cmd->SetDedicatedStorageSectionConfigMode(shim.DedicatedConfigMode);
         cmd->SetUserToken(Request_->GetSerializedToken());
         cmd->SetPeerName(Request_->GetPeerName());
+        cmd->SetDryRun(protoRequest->dry_run());
     }
 
     void FillDistconfResult(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult& /*record*/,
@@ -231,55 +362,20 @@ public:
         const auto& ff = AppData()->FeatureFlags;
 
         return std::make_unique<TEvBlobStorage::TEvControllerReplaceConfigRequest>(
-            shim.MainConfig,
-            shim.StorageConfig,
-            shim.SwitchDedicatedStorageSection,
-            shim.DedicatedConfigMode,
-            request->allow_unknown_fields() || request->bypass_checks(),
-            request->bypass_checks(),
-            /*enableConfigV2=*/ ff.GetSwitchToConfigV2(),
-            /*disableConfigV2=*/ ff.GetSwitchToConfigV1(),
-            Request_->GetPeerName(),
-            Request_->GetSerializedToken());
-    }
-
-private:
-    std::optional<TString> DatabaseConfig;
-    std::optional<TString> TargetDatabase;
-
-    void CheckDatabaseAuthorization() {
-        const auto& metadata = NYamlConfig::GetDatabaseMetadata(*DatabaseConfig);
-
-        if (metadata.Database) {
-            TargetDatabase = metadata.Database;
-        }
-        else {
-            Reply(Ydb::StatusIds::BAD_REQUEST, "No database name found in metadata", 
-                    NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ActorContext());
-            return;
-        }
-
-        if (*TargetDatabase == ("/" + AppData()->DomainsInfo->Domain->Name) || 
-            *TargetDatabase == AppData()->DomainsInfo->Domain->Name) {
-            Reply(Ydb::StatusIds::BAD_REQUEST, "Provided database is a domain database.", 
-                    NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ActorContext());
-            return;
-        }
-        bool isAdministrator = NKikimr::IsAdministrator(AppData(), Request_->GetSerializedToken());
-        if (!isAdministrator) {
-            auto request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
-            request->DatabaseName = *TargetDatabase;
-
-            auto& entry = request->ResultSet.emplace_back();
-            entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
-            entry.Path = NKikimr::SplitPath(*TargetDatabase);
-
-            auto* self = Self();
-            self->Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.release()));
-            self->Become(&TReplaceStorageConfigRequest::StateWaitResolveDatabase);
-            return;
-        }
-        SendRequestToConsole();
+            TEvBlobStorage::TEvControllerReplaceConfigRequest::TArgs {
+                .ClusterYaml = shim.MainConfig,
+                .StorageYaml = shim.StorageConfig,
+                .SwitchDedicatedStorageSection = shim.SwitchDedicatedStorageSection,
+                .DedicatedConfigMode = shim.DedicatedConfigMode,
+                .AllowUnknownFields = request->allow_unknown_fields() || request->bypass_checks(),
+                .BypassMetadataChecks = request->bypass_checks(),
+                .DryRun = request->dry_run(),
+                .EnableConfigV2 = ff.GetSwitchToConfigV2(),
+                .DisableConfigV2 = ff.GetSwitchToConfigV1(),
+                .PeerName = Request_->GetPeerName(),
+                .UserToken = Request_->GetSerializedToken()
+            }
+        );
     }
 
     void SendRequestToConsole() {
@@ -289,14 +385,14 @@ private:
         };
         auto pipe = NTabletPipe::CreateClient(SelfId(), MakeConsoleID(), pipeConfig);
         ConsolePipe = RegisterWithSameMailbox(pipe);
-        
+
         auto PrepareAndSendRequest = [&](auto requestType) {
             using TRequestType = decltype(requestType);
             auto request = std::make_unique<TRequestType>();
             request->Record.SetUserToken(Request_->GetSerializedToken());
             request->Record.SetPeerName(Request_->GetPeerName());
             request->Record.SetIngressDatabase(*TargetDatabase);
-            
+
             auto& req = *request->Record.MutableRequest();
             req.set_config(*DatabaseConfig);
 
@@ -312,39 +408,39 @@ private:
         Self()->Become(&TReplaceStorageConfigRequest::StateConsoleReplaceFunc);
     }
 
-    STFUNC(StateWaitResolveDatabase) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleResolveDatabase);
-            default:
-                return TBase::StateFuncBase(ev);
-        }
-    }
+private:
+    std::optional<TString> DatabaseConfig;
+    std::optional<TString> TargetDatabase;
 
-    void HandleResolveDatabase(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-        const NSchemeCache::TSchemeCacheNavigate& request = *ev->Get()->Request.Get();
-        auto *self = Self();
-        if (request.ResultSet.empty() || request.ErrorCount > 0) {
-            self->Reply(Ydb::StatusIds::SCHEME_ERROR, "Error resolving database",
-                  NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, self->ActorContext());
-            return;
+    bool ResolveTargetDatabase() {
+        const auto& metadata = NYamlConfig::GetDatabaseMetadata(*DatabaseConfig);
+
+        if (metadata.Database) {
+            TargetDatabase = CanonizePath(*metadata.Database);
+        } else {
+            Reply(Ydb::StatusIds::BAD_REQUEST, "No database name found in metadata",
+                    NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ActorContext());
+            return false;
         }
 
-        const auto& entry = request.ResultSet.front();
-        const auto& databaseOwner = entry.Self->Info.GetOwner();
-
-        NACLibProto::TUserToken tokenPb;
-        if (!tokenPb.ParseFromString(Request_->GetSerializedToken())) {
-            tokenPb = NACLibProto::TUserToken();
+        if (*TargetDatabase == ("/" + AppData()->DomainsInfo->Domain->Name) ||
+            *TargetDatabase == AppData()->DomainsInfo->Domain->Name) {
+            Reply(Ydb::StatusIds::BAD_REQUEST, "Provided database is a domain database.",
+                    NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ActorContext());
+            return false;
         }
-        const auto& parsedToken = NACLib::TUserToken(tokenPb);
 
-        bool isDatabaseAdmin = NKikimr::IsDatabaseAdministrator(&parsedToken, databaseOwner);
-        if (!isDatabaseAdmin) {
-            self->Reply(Ydb::StatusIds::UNAUTHORIZED, "User is not a database administrator.",
-                  NKikimrIssues::TIssuesIds::ACCESS_DENIED, self->ActorContext());
-            return;
+        const auto& maybeDatabaseName = Request_->GetDatabaseName();
+        if (maybeDatabaseName && !maybeDatabaseName.GetRef().empty()) {
+            if (*TargetDatabase != CanonizePath(maybeDatabaseName.GetRef())) {
+                Reply(Ydb::StatusIds::BAD_REQUEST,
+                    "Database in config metadata does not match the requested database.",
+                    NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ActorContext());
+                return false;
+            }
         }
-        SendRequestToConsole();
+
+        return true;
     }
 
     STFUNC(StateConsoleReplaceFunc) {
@@ -409,8 +505,16 @@ public:
         auto *self = Self();
         self->OnBootstrap();
 
-        if (self->Request_->GetDatabaseName()) {
-            SendRequestToConsole();
+        if (const auto& databaseName = self->Request_->GetDatabaseName()) {
+            // Database YAML config (Ydb::DynamicConfig::ConfigIdentity::TypeCase::kDatabase)
+            // is requested directly from Console (like legacy API)
+            CheckDatabaseAuthorization(*databaseName);
+            return;
+        }
+
+        if (!NKikimr::IsAdministrator(AppData(), Request_->GetInternalToken().Get())) {
+            self->Reply(Ydb::StatusIds::UNAUTHORIZED, "User is not a cluster administrator.",
+                  NKikimrIssues::TIssuesIds::ACCESS_DENIED, self->ActorContext());
             return;
         }
 
@@ -436,6 +540,13 @@ public:
 
                     default:
                         break;
+                }
+                if (request.has_seed_node_fetch_requestor()) {
+                    auto& r = request.seed_node_fetch_requestor();
+                    for (const auto& host : r.host()) {
+                        record->AddRequestorHost(host);
+                    }
+                    record->SetRequestorPort(r.port());
                 }
                 break;
 
@@ -474,6 +585,9 @@ public:
             identity.mutable_storage();
             config.set_config(conf);
         }
+        if (res.GetTransient()) {
+            result.set_transient(true);
+        }
     }
 
     bool IsDistconfEnableQuery() const {
@@ -502,7 +616,6 @@ public:
         return ev;
     }
 
-private:
     void SendRequestToConsole() {
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = {
@@ -523,6 +636,7 @@ private:
         Self()->Become(&TFetchStorageConfigRequest::StateConsoleFetchFunc);
     }
 
+private:
     STFUNC(StateConsoleFetchFunc) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NConsole::TEvConsole::TEvGetAllConfigsResponse, Handle);
@@ -532,7 +646,19 @@ private:
     }
 
     void Handle(NConsole::TEvConsole::TEvGetAllConfigsResponse::TPtr& ev) {
-        ReplyWithResult(Ydb::StatusIds::SUCCESS, ev->Get()->Record.GetResponse(), ActorContext());
+        Ydb::Config::FetchConfigResult result;
+        TString error;
+
+        bool succeed = ConvertGetConfigToFetchConfigResult(ev->Get()->Record.GetResponse(), result, error);
+        if (succeed) {
+            ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ActorContext());
+        }
+        else {
+            // The malformed payload comes from the Console tablet (server-side),
+            // not from the gRPC client — so this is an internal-error condition.
+            Reply(Ydb::StatusIds::INTERNAL_ERROR, error,
+                NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ActorContext());
+        }
     }
 };
 
@@ -593,12 +719,8 @@ void DoBootstrapCluster(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvide
         }
 
         bool CheckAccess() {
-            if (Request().GetInternalToken()
-            && !(IsAdministrator(AppData(), Request().GetInternalToken().Get()) || IsTokenAllowed(Request().GetInternalToken().Get(), AppData()->BootstrapAllowedSIDs))) {
-                return false;
-            }
-
-            return true;
+            return IsAdministrator(AppData(), Request().GetInternalToken().Get())
+                || IsTokenAllowed(Request().GetInternalToken().Get(), AppData()->BootstrapAllowedSIDs);
         }
     };
 
@@ -606,4 +728,3 @@ void DoBootstrapCluster(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvide
 }
 
 } // namespace NKikimr::NGRpcService
-

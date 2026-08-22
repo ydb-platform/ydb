@@ -47,6 +47,10 @@ ENDIF()
 
 SRCS(JsonPathParser.proto)
 
+PEERDIR(
+    yql/essentials/public/issue/protos
+)
+
 EXCLUDE_TAGS(GO_PROTO JAVA_PROTO)
 
 END()

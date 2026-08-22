@@ -48,12 +48,17 @@ private:
             return op;
         }
 
-        if (!State_->Configuration->JobBlockInput.Get().GetOrElse(Types->UseBlocks)) {
+        auto cluster = op.DataSink().Cluster().StringValue();
+        if (cluster == YtUnspecifiedCluster) {
+            return op;
+        }
+
+        if (!State_->Configuration->JobBlockInput.Get(cluster).GetOrElse(Types->UseBlocks)) {
             return op;
         }
 
         auto settings = op.Settings().Ptr();
-        bool canUseBlockInput = CanUseBlockInputForMap(op);
+        bool canUseBlockInput = CanUseBlockInputForMap(op, cluster);
         bool hasSetting = HasSetting(*settings, EYtSettingType::BlockInputReady);
         if (canUseBlockInput && !hasSetting) {
             settings = AddSetting(*settings, EYtSettingType::BlockInputReady, TExprNode::TPtr(), ctx);
@@ -74,13 +79,18 @@ private:
             return map;
         }
 
-        auto mode = DetermineBlockOutputMode();
+        auto cluster = map.DataSink().Cluster().StringValue();
+        if (cluster == YtUnspecifiedCluster) {
+            return map;
+        }
+
+        auto mode = DetermineBlockOutputMode(cluster);
         if (mode == EBlockOutputMode::Disable) {
             return map;
         }
 
         auto settings = map.Settings().Ptr();
-        bool canUseBlockOutput = CanUseBlockOutputForMap(map);
+        bool canUseBlockOutput = CanUseBlockOutputForMap(map, cluster);
         bool hasSetting = HasSetting(*settings, EYtSettingType::BlockOutputReady);
         if (canUseBlockOutput && !hasSetting) {
             settings = AddSetting(
@@ -100,7 +110,7 @@ private:
             .Done();
     }
 
-    bool CanUseBlockInputForMap(const TYtWithUserJobsOpBase& op) const {
+    bool CanUseBlockInputForMap(const TYtWithUserJobsOpBase& op, const TString& cluster) const {
         auto mapLambda = GetMapLambda(op);
         if (!mapLambda) {
             return false;
@@ -121,8 +131,8 @@ private:
         }
 
         auto wideFlowLimit = State_->Configuration->WideFlowLimit.Get().GetOrElse(DEFAULT_WIDE_FLOW_LIMIT);
-        auto supportedTypes = State_->Configuration->JobBlockInputSupportedTypes.Get().GetOrElse(DEFAULT_BLOCK_INPUT_SUPPORTED_TYPES);
-        auto supportedDataTypes = State_->Configuration->JobBlockInputSupportedDataTypes.Get().GetOrElse(DEFAULT_BLOCK_INPUT_SUPPORTED_DATA_TYPES);
+        auto supportedTypes = State_->Configuration->JobBlockInputSupportedTypes.Get(cluster).GetOrElse(DEFAULT_BLOCK_INPUT_SUPPORTED_TYPES);
+        auto supportedDataTypes = State_->Configuration->JobBlockInputSupportedDataTypes.Get(cluster).GetOrElse(DEFAULT_BLOCK_INPUT_SUPPORTED_DATA_TYPES);
 
         auto lambdaInputType = mapLambda.Cast().Args().Arg(0).Ref().GetTypeAnn();
         if (!CheckBlockIOSupportedTypes(*lambdaInputType, supportedTypes, supportedDataTypes, [](const TString&) {}, wideFlowLimit)) {
@@ -132,14 +142,14 @@ private:
         return true;
     }
 
-    bool CanUseBlockOutputForMap(const TYtMap& map) const {
+    bool CanUseBlockOutputForMap(const TYtMap& map, const TString& cluster) const {
         if (!NYql::HasSetting(map.Settings().Ref(), EYtSettingType::Flow)) {
             return false;
         }
 
         auto wideFlowLimit = State_->Configuration->WideFlowLimit.Get().GetOrElse(DEFAULT_WIDE_FLOW_LIMIT);
-        auto supportedTypes = State_->Configuration->JobBlockOutputSupportedTypes.Get().GetOrElse(DEFAULT_BLOCK_OUTPUT_SUPPORTED_TYPES);
-        auto supportedDataTypes = State_->Configuration->JobBlockOutputSupportedDataTypes.Get().GetOrElse(DEFAULT_BLOCK_OUTPUT_SUPPORTED_DATA_TYPES);
+        auto supportedTypes = State_->Configuration->JobBlockOutputSupportedTypes.Get(cluster).GetOrElse(DEFAULT_BLOCK_OUTPUT_SUPPORTED_TYPES);
+        auto supportedDataTypes = State_->Configuration->JobBlockOutputSupportedDataTypes.Get(cluster).GetOrElse(DEFAULT_BLOCK_OUTPUT_SUPPORTED_DATA_TYPES);
 
         auto lambdaOutputType = map.Mapper().Ref().GetTypeAnn();
         if (!CheckBlockIOSupportedTypes(*lambdaOutputType, supportedTypes, supportedDataTypes, [](const TString&) {}, wideFlowLimit, false)) {
@@ -149,8 +159,8 @@ private:
         return true;
     }
 
-    EBlockOutputMode DetermineBlockOutputMode() const {
-        auto jobBlockOutput = State_->Configuration->JobBlockOutput.Get();
+    EBlockOutputMode DetermineBlockOutputMode(const TString& cluster) const {
+        auto jobBlockOutput = State_->Configuration->JobBlockOutput.Get(cluster);
         if (jobBlockOutput.Defined()) {
             return *jobBlockOutput;
         } else if (Types->UseBlocks) {
@@ -166,12 +176,25 @@ private:
             return tableContent;
         }
 
-        if (!State_->Configuration->JobBlockTableContent.Get().GetOrElse(Types->UseBlocks)) {
+        TString cluster;
+        if (auto readTable = tableContent.Input().Maybe<TYtReadTable>()) {
+            cluster = readTable.Cast().DataSource().Cluster().StringValue();
+        } else if (auto output = tableContent.Input().Maybe<TYtOutput>()) {
+            cluster = GetOutputOp(output.Cast()).DataSink().Cluster().StringValue();
+        } else {
+            YQL_ENSURE(false, "Expected " << TYtReadTable::CallableName() << " or " << TYtOutput::CallableName());
+        }
+
+        if (cluster == YtUnspecifiedCluster) {
+            return tableContent;
+        }
+
+        if (!State_->Configuration->JobBlockTableContent.Get(cluster).GetOrElse(Types->UseBlocks)) {
             return tableContent;
         }
 
         auto settings = tableContent.Settings().Ptr();
-        bool canUseBlockInput = CanUseBlockInputForTableContent(tableContent);
+        bool canUseBlockInput = CanUseBlockInputForTableContent(tableContent, cluster);
         bool hasSetting = HasSetting(*settings, EYtSettingType::BlockInputReady);
         if (canUseBlockInput && !hasSetting) {
             settings = AddSetting(*settings, EYtSettingType::BlockInputReady, TExprNode::TPtr(), ctx);
@@ -186,7 +209,7 @@ private:
             .Done();
     }
 
-    bool CanUseBlockInputForTableContent(const TYtTableContent& tableContent) const {
+    bool CanUseBlockInputForTableContent(const TYtTableContent& tableContent, const TString& cluster) const {
         if (auto readTable = tableContent.Input().Maybe<TYtReadTable>()) {
             if (readTable.Cast().Input().Size() > 1) {
                 return false;
@@ -209,8 +232,8 @@ private:
         }
 
         auto wideFlowLimit = State_->Configuration->WideFlowLimit.Get().GetOrElse(DEFAULT_WIDE_FLOW_LIMIT);
-        auto supportedTypes = State_->Configuration->JobBlockInputSupportedTypes.Get().GetOrElse(DEFAULT_BLOCK_INPUT_SUPPORTED_TYPES);
-        auto supportedDataTypes = State_->Configuration->JobBlockInputSupportedDataTypes.Get().GetOrElse(DEFAULT_BLOCK_INPUT_SUPPORTED_DATA_TYPES);
+        auto supportedTypes = State_->Configuration->JobBlockInputSupportedTypes.Get(cluster).GetOrElse(DEFAULT_BLOCK_INPUT_SUPPORTED_TYPES);
+        auto supportedDataTypes = State_->Configuration->JobBlockInputSupportedDataTypes.Get(cluster).GetOrElse(DEFAULT_BLOCK_INPUT_SUPPORTED_DATA_TYPES);
 
         auto inputType = tableContent.Ref().GetTypeAnn();
         if (!CheckBlockIOSupportedTypes(*inputType, supportedTypes, supportedDataTypes, [](const TString&) {}, wideFlowLimit)) {

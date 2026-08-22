@@ -218,6 +218,7 @@ newcolor(struct colormap *cm)
 		n = cm->ncds * 2;
 		if (n > MAX_COLOR + 1)
 			n = MAX_COLOR + 1;
+		/* the MAX_COLOR+1 limit ensures these alloc sizes can't overflow: */
 		if (cm->cd == cm->cdspace)
 		{
 			newCd = (struct colordesc *) MALLOC(n * sizeof(struct colordesc));
@@ -434,9 +435,8 @@ newhicolorrow(struct colormap *cm,
 			CERR(REG_ESPACE);
 			return 0;
 		}
-		newarray = (color *) REALLOC(cm->hicolormap,
-									 cm->maxarrayrows * 2 *
-									 cm->hiarraycols * sizeof(color));
+		newarray = REALLOC_ARRAY(cm->hicolormap, color,
+								 cm->maxarrayrows * 2 * cm->hiarraycols);
 		if (newarray == NULL)
 		{
 			CERR(REG_ESPACE);
@@ -477,9 +477,8 @@ newhicolorcols(struct colormap *cm)
 		CERR(REG_ESPACE);
 		return;
 	}
-	newarray = (color *) REALLOC(cm->hicolormap,
-								 cm->maxarrayrows *
-								 cm->hiarraycols * 2 * sizeof(color));
+	newarray = REALLOC_ARRAY(cm->hicolormap, color,
+							 cm->maxarrayrows * cm->hiarraycols * 2);
 	if (newarray == NULL)
 	{
 		CERR(REG_ESPACE);
@@ -652,8 +651,7 @@ subcoloronechr(struct vars *v,
 	 * Potentially, we could need two more colormapranges than we have now, if
 	 * the given chr is in the middle of some existing range.
 	 */
-	newranges = (colormaprange *)
-		MALLOC((cm->numcmranges + 2) * sizeof(colormaprange));
+	newranges = MALLOC_ARRAY(colormaprange, cm->numcmranges + 2);
 	if (newranges == NULL)
 	{
 		CERR(REG_ESPACE);
@@ -766,8 +764,7 @@ subcoloronerange(struct vars *v,
 	 * Potentially, if we have N non-adjacent ranges, we could need as many as
 	 * 2N+1 result ranges (consider case where new range spans 'em all).
 	 */
-	newranges = (colormaprange *)
-		MALLOC((cm->numcmranges * 2 + 1) * sizeof(colormaprange));
+	newranges = MALLOC_ARRAY(colormaprange, cm->numcmranges * 2 + 1);
 	if (newranges == NULL)
 	{
 		CERR(REG_ESPACE);
@@ -1075,9 +1072,19 @@ colorcomplement(struct nfa *nfa,
 
 	assert(of != from);
 
-	/* A RAINBOW arc matches all colors, making the complement empty */
+	/*
+	 * A RAINBOW arc matches all colors, making the complement empty.  But we
+	 * can't just return without making any arcs, because that would leave the
+	 * NFA disconnected which would break any future delsub().  Instead, make
+	 * a CANTMATCH arc.  Also set the HASCANTMATCH flag so we know we need to
+	 * clean that up at the start of NFA optimization.
+	 */
 	if (findarc(of, PLAIN, RAINBOW) != NULL)
+	{
+		newarc(nfa, CANTMATCH, 0, from, to);
+		nfa->flags |= HASCANTMATCH;
 		return;
+	}
 
 	/* Otherwise, transiently mark the colors that appear in of's out-arcs */
 	for (a = of->outs; a != NULL; a = a->outchain)
@@ -1089,6 +1096,12 @@ colorcomplement(struct nfa *nfa,
 			assert(!UNUSEDCOLOR(cd));
 			cd->flags |= COLMARK;
 		}
+
+		/*
+		 * There's no syntax for re-complementing a color set, so we cannot
+		 * see CANTMATCH arcs here.
+		 */
+		assert(a->type != CANTMATCH);
 	}
 
 	/* Scan colors, clear transient marks, add arcs for unmarked colors */

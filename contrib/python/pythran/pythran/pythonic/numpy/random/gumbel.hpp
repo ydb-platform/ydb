@@ -22,8 +22,7 @@ namespace numpy
     types::ndarray<double, pS> gumbel(double loc, double scale, pS const &shape)
     {
       types::ndarray<double, pS> result{shape, types::none_type()};
-      std::generate(result.fbegin(), result.fend(),
-                    [&]() { return gumbel(loc, scale); });
+      std::generate(result.fbegin(), result.fend(), [&]() { return gumbel(loc, scale); });
       return result;
     }
 
@@ -35,8 +34,7 @@ namespace numpy
 
     inline double gumbel(double loc, double scale, types::none_type d)
     {
-      double U =
-          std::uniform_real_distribution<double>{0., 1.}(details::generator);
+      double U = std::uniform_real_distribution<double>{0., 1.}(details::generator);
       if (U < 1.0) {
         return loc - scale * xsimd::log(-xsimd::log(U));
       }

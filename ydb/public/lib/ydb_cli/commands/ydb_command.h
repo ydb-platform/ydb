@@ -1,6 +1,8 @@
 #pragma once
 
 #include <ydb/public/lib/ydb_cli/common/command.h>
+#include <ydb/public/lib/ydb_cli/common/scoped_driver.h>
+#include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
@@ -25,12 +27,8 @@ public:
         const TString& description = TString()
     );
 
-    static TDriver CreateDriver(TConfig& config);
-    static TDriver CreateDriver(TConfig& config, std::unique_ptr<TLogBackend>&& loggingBackend);
-
-    static size_t GetNetworkThreadNum(TConfig& config);
-private:
-    static TDriverConfig CreateDriverConfig(TConfig& config);
+    static TScopedDriver CreateDriver(TConfig& config);
+    static TScopedDriver CreateDriver(TConfig& config, std::unique_ptr<TLogBackend>&& loggingBackend);
 };
 
 class TYdbReadOnlyCommand : public TYdbCommand {
@@ -53,7 +51,7 @@ protected:
     template<typename TSettingsType>
     TSettingsType&& FillSettings(TSettingsType&& settings) {
         if (ClientTimeout) {
-            settings.ClientTimeout(TDuration::MilliSeconds(FromString<ui64>(ClientTimeout)));
+            settings.ClientTimeout(ParseDurationMilliseconds(ClientTimeout));
         }
         return std::forward<TSettingsType>(settings);
     }
@@ -74,9 +72,9 @@ protected:
     template<typename TSettingsType>
     TSettingsType&& FillSettings(TSettingsType&& settings) {
         if (OperationTimeout) {
-            ui64 operationTimeout = FromString<ui64>(OperationTimeout);
-            settings.OperationTimeout(TDuration::MilliSeconds(operationTimeout));
-            settings.ClientTimeout(TDuration::MilliSeconds(operationTimeout + 200));
+            TDuration timeout = ParseDurationMilliseconds(OperationTimeout);
+            settings.OperationTimeout(timeout);
+            settings.ClientTimeout(timeout + TDuration::MilliSeconds(200));
         }
         return std::forward<TSettingsType>(settings);
     }

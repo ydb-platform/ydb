@@ -2,6 +2,8 @@
 
 #include "private.h"
 
+#include <yt/yt/client/table_client/public.h>
+
 #include <yt/yt/client/api/client.h>
 #include <yt/yt/client/api/transaction.h>
 
@@ -67,7 +69,7 @@ public:
                 *Options_.BackgroundFlushPeriod);
         } else {
             if (!Options_.BatchOptions.RowCount && !Options_.BatchOptions.ByteSize) {
-                YT_LOG_DEBUG("None of batch row count or batch byte size are specified, batch byte size will be equal to 16 MB");
+                YT_TLOG_DEBUG("None of batch row count or batch byte size are specified, batch byte size will be equal to 16 MB");
                 Options_.BatchOptions.ByteSize = 16_MB;
             }
         }
@@ -117,7 +119,7 @@ public:
     TFuture<void> GetReadyEvent() override
     {
         if (FlushExecutor_) {
-            return VoidFuture;
+            return OKFuture;
         }
 
         {
@@ -175,7 +177,7 @@ public:
             }));
     }
 
-    std::optional<TMD5Hash> GetDigest() const override
+    std::optional<TRowsDigest> GetDigest() const override
     {
         return std::nullopt;
     }
@@ -250,12 +252,12 @@ private:
         {
             auto guard = Guard(SpinLock_);
             if ((checkIfFlushNeeded && !IsFlushNeeded()) && !Closed_) {
-                return VoidFuture;
+                return OKFuture;
             }
             buffer = GetBufferToFlush();
         }
         if (!buffer) {
-            return VoidFuture;
+            return OKFuture;
         }
         return FlushImpl(std::move(*buffer))
             .Apply(BIND([this, this_ = MakeStrong(this), checkIfFlushNeeded] {
@@ -290,7 +292,7 @@ private:
             auto guard = Guard(SpinLock_);
 
             if (Canceled_) {
-                YT_LOG_DEBUG("Producer session was canceled, flush nothing");
+                YT_TLOG_DEBUG("Producer session was canceled, flush nothing");
                 StoppedPromise_.TrySet();
                 return;
             }
@@ -305,7 +307,7 @@ private:
             backoffStrategy.Restart();
             while (backoffStrategy.Next()) {
                 if (Canceled_) {
-                    YT_LOG_DEBUG("Producer session was canceled, flush nothing");
+                    YT_TLOG_DEBUG("Producer session was canceled, flush nothing");
                     StoppedPromise_.TrySet();
                     return;
                 }
@@ -319,7 +321,7 @@ private:
                 TDelayedExecutor::WaitForDuration(backoffStrategy.GetBackoff());
             }
         } else {
-            YT_LOG_DEBUG("No buffer to flush, do nothing");
+            YT_TLOG_DEBUG("No buffer to flush, do nothing");
         }
 
         bool isStopped = false;
@@ -337,7 +339,8 @@ private:
 
     TFuture<void> FlushImpl(TBuffer buffer)
     {
-        YT_LOG_DEBUG("Trying to flush %v rows", buffer.RowCount);
+        YT_TLOG_DEBUG("Trying to flush rows")
+            .With("RowCount", buffer.RowCount);
 
         return Client_->StartTransaction(ETransactionType::Tablet)
             .Apply(BIND([buffer = std::move(buffer), this, this_ = MakeStrong(this)] (const ITransactionPtr& transaction) {
@@ -380,8 +383,7 @@ public:
         const IInvokerPtr& invoker) override
     {
         return Client_->CreateQueueProducerSession(ProducerPath_, queuePath, sessionId)
-            .Apply(BIND([=, this, this_ = MakeStrong(this)]
-                        (const TCreateQueueProducerSessionResult& createSessionResult) -> IProducerSessionPtr {
+            .Apply(BIND([=, this, this_ = MakeStrong(this)] (const TCreateQueueProducerSessionResult& createSessionResult) -> IProducerSessionPtr {
                 return New<TProducerSession>(Client_, ProducerPath_, queuePath, nameTable, sessionId, createSessionResult, options, invoker);
             }));
     }

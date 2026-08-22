@@ -4,23 +4,45 @@ package NYT.NQueryClient.NProto;
 
 message TQueryStatistics
 {
-    required int64 rows_read = 1;
-    optional int64 data_weight_read = 11;
-    required int64 rows_written = 2;
-    required uint64 sync_time = 3;
-    required uint64 async_time = 4;
-    required uint64 execute_time = 5;
-    required uint64 read_time = 6;
-    required uint64 write_time = 7;
-    required uint64 codegen_time = 10;
-    optional uint64 wait_on_ready_event_time = 14 [ default = 0 ];
-    optional int64 total_grouped_row_count = 15;
-
     required bool incomplete_input = 8;
     required bool incomplete_output = 9;
+    optional int64 query_count = 16 [default = 1];
+
+    // COMPAT(sabdenovch)
+    optional int64 rows_read = 1;
+    optional int64 data_weight_read = 11;
+    optional int64 rows_written = 2;
+    optional uint64 sync_time = 3;
+    optional uint64 async_time = 4;
+    optional uint64 execute_time = 5;
+    optional uint64 read_time = 6;
+    optional uint64 write_time = 7;
+    optional uint64 codegen_time = 10;
+    optional uint64 wait_on_ready_event_time = 14 [ default = 0 ];
+    optional int64 grouped_row_count = 15;
     optional uint64 memory_usage = 13 [ default = 0 ];
+
+    message TAggregate
+    {
+        optional int64 total = 1;
+        optional int64 max = 2;
+        optional string argmax_node = 3;
+    };
+
+    optional TAggregate rows_read_aggr = 21;
+    optional TAggregate data_weight_read_aggr = 22;
+    optional TAggregate rows_written_aggr = 23;
+    optional TAggregate sync_time_aggr = 24;
+    optional TAggregate async_time_aggr = 25;
+    optional TAggregate execute_time_aggr = 26;
+    optional TAggregate read_time_aggr = 27;
+    optional TAggregate write_time_aggr = 28;
+    optional TAggregate codegen_time_aggr = 29;
+    optional TAggregate wait_on_ready_event_time_aggr = 30;
+    optional TAggregate memory_usage_aggr = 31;
+    optional TAggregate grouped_row_count_aggr = 32;
+
     repeated TQueryStatistics inner_statistics = 12;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-

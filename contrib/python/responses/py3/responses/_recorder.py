@@ -23,6 +23,7 @@ if TYPE_CHECKING:  # pragma: no cover
 
 import yaml
 
+from responses import _UNSET
 from responses import RequestsMock
 from responses import Response
 from responses import _real_send
@@ -51,11 +52,15 @@ def _remove_default_headers(data: "Any") -> "Any":
             "Connection",
             "Content-Encoding",
         ]
+        # HTTP header names are case-insensitive, and HTTP/2 servers send them
+        # lowercase, so match without regard to case.
+        keys_to_remove_lower = {key.lower() for key in keys_to_remove}
         for i, response in enumerate(data["responses"]):
-            for key in keys_to_remove:
-                if key in response["response"]["headers"]:
-                    del data["responses"][i]["response"]["headers"][key]
-            if not response["response"]["headers"]:
+            headers = data["responses"][i]["response"]["headers"]
+            for key in list(headers):
+                if key.lower() in keys_to_remove_lower:
+                    del headers[key]
+            if not headers:
                 del data["responses"][i]["response"]["headers"]
     return data
 
@@ -153,6 +158,7 @@ class Recorder(RequestsMock):
             status=requests_response.status_code,
             body=requests_response.text,
             headers=headers_values,
+            content_type=requests_response.headers.get("Content-Type", _UNSET),
         )
         self._registry.add(responses_response)
         return requests_response

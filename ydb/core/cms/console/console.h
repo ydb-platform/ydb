@@ -1,7 +1,6 @@
 #pragma once
 #include "defs.h"
 
-#include <ydb/core/base/blobstorage.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/console.pb.h>
 #include <ydb/core/protos/console_base.pb.h>
@@ -10,7 +9,24 @@
 #include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <ydb/public/api/protos/draft/ydb_dynamic_config.pb.h>
 
+#include <util/generic/strbuf.h>
+#include <util/generic/hash.h>
+
+#include <memory>
+
+namespace NKikimr {
+// Only used below as a pointer in a factory-function declaration; forward
+// declaration avoids pulling ydb/core/base/blobstorage.h into this header.
+class TTabletStorageInfo;
+}
+
 namespace NKikimr::NConsole {
+
+// Tenant UserAttribute that enables the usage of database YAML config selectors.
+// Values: (according to TryFromString<bool>() function logic - IsTrue()/IsFalse())
+//  - "true", "yes", "on", "1"            - enabled
+//  - "false", "no", "off", "0", (absent) - disabled
+constexpr TStringBuf TENANT_ATTR_ALLOW_DATABASE_CONFIG_SELECTORS = "allow_database_config_selectors";
 
 namespace TEvConsole {
     enum EEv {
@@ -300,6 +316,11 @@ namespace TEvConsole {
 
     struct TEvConfigNotificationRequest : public TEventShortDebugPB<TEvConfigNotificationRequest, NKikimrConsole::TConfigNotificationRequest, EvConfigNotificationRequest> {
         const NKikimrConfig::TAppConfig& GetConfig() const { return Record.GetConfig(); }
+
+        // Node-local only: parsed forms of opaque config sections (kind -> message),
+        // produced by the configs dispatcher via an injected OpaqueConfigParser.
+        // .second != nullptr - config either not empty and present or not added into map
+        THashMap<ui32, std::shared_ptr<const ::google::protobuf::Message>> OpaqueConfigs;
     };
 
     struct TEvConfigNotificationResponse : public TEventShortDebugPB<TEvConfigNotificationResponse, NKikimrConsole::TConfigNotificationResponse, EvConfigNotificationResponse> {

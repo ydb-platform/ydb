@@ -546,8 +546,8 @@ class _Pickler:
             return
 
         rv = NotImplemented
-        reduce = getattr(self, "reducer_override", None)
-        if reduce is not None:
+        reduce = getattr(self, "reducer_override", _NoValue)
+        if reduce is not _NoValue:
             rv = reduce(obj)
 
         if rv is NotImplemented:
@@ -560,8 +560,8 @@ class _Pickler:
 
             # Check private dispatch table if any, or else
             # copyreg.dispatch_table
-            reduce = getattr(self, 'dispatch_table', dispatch_table).get(t)
-            if reduce is not None:
+            reduce = getattr(self, 'dispatch_table', dispatch_table).get(t, _NoValue)
+            if reduce is not _NoValue:
                 rv = reduce(obj)
             else:
                 # Check for a class with a custom metaclass; treat as regular
@@ -571,12 +571,12 @@ class _Pickler:
                     return
 
                 # Check for a __reduce_ex__ method, fall back to __reduce__
-                reduce = getattr(obj, "__reduce_ex__", None)
-                if reduce is not None:
+                reduce = getattr(obj, "__reduce_ex__", _NoValue)
+                if reduce is not _NoValue:
                     rv = reduce(self.proto)
                 else:
-                    reduce = getattr(obj, "__reduce__", None)
-                    if reduce is not None:
+                    reduce = getattr(obj, "__reduce__", _NoValue)
+                    if reduce is not _NoValue:
                         rv = reduce()
                     else:
                         raise PicklingError("Can't pickle %r object: %r" %
@@ -847,17 +847,11 @@ class _Pickler:
                     # Write data in-band
                     # XXX The C implementation avoids a copy here
                     buf = m.tobytes()
-                    in_memo = id(buf) in self.memo
                     if m.readonly:
-                        if in_memo:
-                            self._save_bytes_no_memo(buf)
-                        else:
-                            self.save_bytes(buf)
+                        self._save_bytes_no_memo(buf)
                     else:
-                        if in_memo:
-                            self._save_bytearray_no_memo(buf)
-                        else:
-                            self.save_bytearray(buf)
+                        self._save_bytearray_no_memo(buf)
+                    self.memoize(obj)
                 else:
                     # Write data out-of-band
                     self.write(NEXT_BUFFER)
@@ -1755,8 +1749,8 @@ class _Unpickler:
         stack = self.stack
         state = stack.pop()
         inst = stack[-1]
-        setstate = getattr(inst, "__setstate__", None)
-        if setstate is not None:
+        setstate = getattr(inst, "__setstate__", _NoValue)
+        if setstate is not _NoValue:
             setstate(state)
             return
         slotstate = None

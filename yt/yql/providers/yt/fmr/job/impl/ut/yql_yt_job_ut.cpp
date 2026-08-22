@@ -1,11 +1,20 @@
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/tests_data.h>
+
 #include <yt/cpp/mapreduce/common/helpers.h>
+
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_job_impl.h>
-#include <yt/yql/providers/yt/fmr/table_data_service/local/impl/yql_yt_table_data_service_local.h>
+#include <yt/yql/providers/yt/fmr/test_tools/table_data_service/yql_yt_table_data_service_helpers.h>
+#include <yt/yql/providers/yt/fmr/test_tools/yson/yql_yt_yson_helpers.h>
 #include <yt/yql/providers/yt/fmr/utils/yql_yt_table_data_service_key.h>
-#include <yt/yql/providers/yt/fmr/yt_job_service/mock/yql_yt_job_service_mock.h>
+#include <yt/yql/providers/yt/fmr/yt_job_service/file/yql_yt_file_yt_job_service.h>
+
+#include <yt/yql/providers/yt/fmr/test_utils/yql_yt_file_test_utils.h>
+
+#include <util/stream/file.h>
 
 namespace NYql::NFmr {
+
 
 TString TableContent_1 = "{\"key\"=\"075\";\"subkey\"=\"1\";\"value\"=\"abc\"};\n"
                         "{\"key\"=\"800\";\"subkey\"=\"2\";\"value\"=\"ddd\"};\n"
@@ -20,38 +29,44 @@ TString TableContent_3 = "{\"key\"=\"9\";\"subkey\"=\"1\";\"value\"=\"abc\"};\n"
                         "{\"key\"=\"11\";\"subkey\"=\"3\";\"value\"=\"q\"};\n"
                         "{\"key\"=\"12\";\"subkey\"=\"4\";\"value\"=\"qzz\"};\n";
 
-TString GetBinaryYson(const TString& textYsonContent) {
-    TStringStream binaryYsonInputStream;
-    TStringStream textYsonInputStream(textYsonContent);
-    NYson::ReformatYsonStream(&textYsonInputStream, &binaryYsonInputStream, NYson::EYsonFormat::Binary, ::NYson::EYsonType::ListFragment);
-    return binaryYsonInputStream.ReadAll();
-}
+TString UnsortedTableContent_3 =
+                        "{\"key\"=\"12\";\"subkey\"=\"4\";\"value\"=\"qzz\"};\n"
+                        "{\"key\"=\"10\";\"subkey\"=\"2\";\"value\"=\"ddd\"};\n"
+                        "{\"key\"=\"9\";\"subkey\"=\"1\";\"value\"=\"abc\"};\n"
+                        "{\"key\"=\"11\";\"subkey\"=\"3\";\"value\"=\"q\"};\n";
 
-TString GetTextYson(const TString& binaryYsonContent) {
-    TStringStream binaryYsonInputStream(binaryYsonContent);
-    TStringStream textYsonInputStream;
-    NYson::ReformatYsonStream(&binaryYsonInputStream, &textYsonInputStream, NYson::EYsonFormat::Text, ::NYson::EYsonType::ListFragment);
-    return textYsonInputStream.ReadAll();
-}
+// TODO - refactor all of the tests in this file, create setup class.
 
 Y_UNIT_TEST_SUITE(FmrJobTests) {
     Y_UNIT_TEST(DownloadTable) {
-        ITableDataService::TPtr tableDataServicePtr = MakeLocalTableDataService();
-        auto richPath = NYT::TRichYPath("//test_path").Cluster("test_cluster");
-        TYtTableTaskRef input = TYtTableTaskRef{.RichPaths = {richPath}};
-        std::unordered_map<TString, TString> inputTables{{NYT::NodeToCanonicalYsonString(NYT::PathToNode(richPath)), TableContent_1}};
-        std::unordered_map<TYtTableRef, TString> outputTables;
-        NYql::NFmr::IYtJobService::TPtr ytJobService = MakeMockYtJobService(inputTables, outputTables);
+        auto richPath = NYT::TRichYPath("test_path").Cluster("test_cluster");
+        TTempFileHandle ytInputFile;
+        {
+            TFileOutput out(ytInputFile.Name());
+            out.Write(TableContent_1.data(), TableContent_1.size());
+        }
+
+        TYtTableTaskRef input = TYtTableTaskRef{.RichPaths = {richPath}, .FilePaths = {ytInputFile.Name()}};
+        NYql::NFmr::IYtJobService::TPtr ytJobService = MakeFileYtJobService();
         std::shared_ptr<std::atomic<bool>> cancelFlag = std::make_shared<std::atomic<bool>>(false);
-        IFmrJob::TPtr job = MakeFmrJob(tableDataServicePtr, ytJobService);
+
+        TPortManager pm;
+        const ui16 port = pm.GetPort();
+        TTempFileHandle file;
+        SetupTableDataServiceDiscovery(file, port);
+        auto tableDataServiceClient = MakeTableDataServiceClient(port);
+        auto tableDataServiceServer = MakeTableDataServiceServer(port);
+        auto jobLauncher = MakeIntrusive<TFmrUserJobLauncher>(TFmrUserJobLauncherOptions{.RunInSeparateProcess = false});
+        IFmrJob::TPtr job = MakeFmrJob(MakeFileTableDataServiceDiscovery({.Path = file.Name()}), {}, ytJobService, jobLauncher);
 
         TFmrTableOutputRef output = TFmrTableOutputRef("test_table_id", "test_part_id");
         TDownloadTaskParams params = TDownloadTaskParams(input, output);
-        auto tableDataServiceExpectedOutputKey = GetTableDataServiceKey(output.TableId, output.PartId, 0);
+        TString tableDataServiceExpectedOutputGroup = GetTableDataServiceGroup(output.TableId, output.PartId);
+        TString talblDataServiceExpectedOutputChunkId = "0";
 
         auto res = job->Download(params, {{TFmrTableId("test_cluster", "test_path"), TClusterConnection()}}, cancelFlag);
 
-        auto err = std::get_if<TError>(&res);
+        auto err = std::get_if<TFmrError>(&res);
         auto statistics = std::get_if<TStatistics>(&res);
 
         UNIT_ASSERT_C(!err, err->ErrorMessage);
@@ -59,50 +74,143 @@ Y_UNIT_TEST_SUITE(FmrJobTests) {
         UNIT_ASSERT_VALUES_EQUAL(detailedChunkStats.size(), 1); // coordinator settings taken from file with default values, so large chunk size
         UNIT_ASSERT_VALUES_EQUAL(detailedChunkStats[0].Rows, 4);
 
-        auto resultTableContent = tableDataServicePtr->Get(tableDataServiceExpectedOutputKey).GetValueSync();
+        auto resultTableContent = tableDataServiceClient->Get(tableDataServiceExpectedOutputGroup, talblDataServiceExpectedOutputChunkId).GetValueSync();
         UNIT_ASSERT_C(resultTableContent, "Result table content is empty");
-        UNIT_ASSERT_NO_DIFF(*resultTableContent, GetBinaryYson(TableContent_1));
+        UNIT_ASSERT_NO_DIFF(GetTextYson(*resultTableContent), TableContent_1);
     }
 
     Y_UNIT_TEST(UploadTable) {
-        ITableDataService::TPtr tableDataServicePtr = MakeLocalTableDataService();
-        std::unordered_map<TString, TString> inputTables;
-        std::unordered_map<TYtTableRef, TString> outputTables;
-        NYql::NFmr::IYtJobService::TPtr ytJobService = MakeMockYtJobService(inputTables, outputTables);
+        NYql::NFmr::IYtJobService::TPtr ytJobService = MakeFileYtJobService();
 
         std::shared_ptr<std::atomic<bool>> cancelFlag = std::make_shared<std::atomic<bool>>(false);
-        IFmrJob::TPtr job = MakeFmrJob(tableDataServicePtr, ytJobService);
+        TPortManager pm;
+        const ui16 port = pm.GetPort();
+        TTempFileHandle file;
+        SetupTableDataServiceDiscovery(file, port);
+        auto tableDataServiceClient = MakeTableDataServiceClient(port);
+        auto tableDataServiceServer = MakeTableDataServiceServer(port);
 
-        TYtTableRef output = TYtTableRef("test_cluster", "test_path");
+        auto jobLauncher = MakeIntrusive<TFmrUserJobLauncher>(TFmrUserJobLauncherOptions{.RunInSeparateProcess = false});
+        IFmrJob::TPtr job = MakeFmrJob(MakeFileTableDataServiceDiscovery({.Path = file.Name()}), {}, ytJobService, jobLauncher);
+
+        TTempFileHandle ytOutputFile;
+        TYtTableRef output = TYtTableRef("test_cluster", "test_path", ytOutputFile.Name());
         std::vector<TTableRange> ranges = {{"test_part_id"}};
         TFmrTableInputRef input = TFmrTableInputRef{.TableId = "test_table_id", .TableRanges = ranges};
         auto params = TUploadTaskParams(input, output);
 
-        auto key = GetTableDataServiceKey(input.TableId, "test_part_id", 0);
-        tableDataServicePtr->Put(key, GetBinaryYson(TableContent_1));
+        TString group = GetTableDataServiceGroup(input.TableId, "test_part_id");
+        TString chunkId = "0";
+        tableDataServiceClient->Put(group, chunkId, GetBinaryYson(TableContent_1));
 
         auto res = job->Upload(params, {{TFmrTableId("test_cluster", "test_path"), TClusterConnection()}}, cancelFlag);
 
-        auto err = std::get_if<TError>(&res);
+        auto err = std::get_if<TFmrError>(&res);
 
-        UNIT_ASSERT_C(!err,err->ErrorMessage);
-        UNIT_ASSERT(outputTables.contains(output));
-        UNIT_ASSERT_NO_DIFF(GetTextYson(outputTables[output]), TableContent_1);
+        UNIT_ASSERT_C(!err, err->ErrorMessage);
+        const TString resultFileContent = ReadFileWithSplittedSupport(ytOutputFile.Name());
+        TString expectedLine;
+        TStringStream expectedStream(TableContent_1);
+        while (expectedStream.ReadLine(expectedLine)) {
+            UNIT_ASSERT_C(resultFileContent.Contains(expectedLine), TStringBuilder() << "Missing line in output: " << expectedLine);
+        }
+    }
+
+    Y_UNIT_TEST(PullTable) {
+        NYql::NFmr::IYtJobService::TPtr ytJobService = MakeFileYtJobService();
+
+        std::shared_ptr<std::atomic<bool>> cancelFlag = std::make_shared<std::atomic<bool>>(false);
+        TPortManager pm;
+        const ui16 port = pm.GetPort();
+        TTempFileHandle file;
+        SetupTableDataServiceDiscovery(file, port);
+        auto tableDataServiceClient = MakeTableDataServiceClient(port);
+        auto tableDataServiceServer = MakeTableDataServiceServer(port);
+
+        auto jobLauncher = MakeIntrusive<TFmrUserJobLauncher>(TFmrUserJobLauncherOptions{.RunInSeparateProcess = false});
+        IFmrJob::TPtr job = MakeFmrJob(MakeFileTableDataServiceDiscovery({.Path = file.Name()}), {}, ytJobService, jobLauncher);
+
+        std::vector<TTableRange> ranges = {{"test_part_id"}};
+        TFmrTableInputRef fmrInput{.TableId = "test_table_id", .TableRanges = ranges};
+        TPullTaskParams params{.Input = TTaskTableInputRef{.Inputs = {TTaskTableRef{fmrInput}}}};
+
+        TString group = GetTableDataServiceGroup(fmrInput.TableId, "test_part_id");
+        tableDataServiceClient->Put(group, "0", GetBinaryYson(TableContent_1));
+
+        auto res = job->Pull(params, cancelFlag);
+
+        auto err = std::get_if<TFmrError>(&res);
+        UNIT_ASSERT_C(!err, err->ErrorMessage);
+
+        auto data = std::get_if<TString>(&res);
+        UNIT_ASSERT_C(data, "Expected TString YSON data in Pull result");
+        UNIT_ASSERT_NO_DIFF(GetTextYson(*data), TableContent_1);
+    }
+
+    Y_UNIT_TEST(SortedMergeFromSingleYtTable) {
+        auto richPath = NYT::TRichYPath("test_path").Cluster("test_cluster");
+        TTempFileHandle ytInputFile;
+        TString sortedContent =
+            "{\"key\"=\"1\";\"value\"=\"a\"};\n"
+            "{\"key\"=\"2\";\"value\"=\"b\"};\n"
+            "{\"key\"=\"3\";\"value\"=\"c\"};\n";
+        {
+            TFileOutput out(ytInputFile.Name());
+            out.Write(sortedContent.data(), sortedContent.size());
+        }
+        TYtTableTaskRef ytInput{.RichPaths = {richPath}, .FilePaths = {ytInputFile.Name()}};
+        NYql::NFmr::IYtJobService::TPtr ytJobService = MakeFileYtJobService();
+        auto cancelFlag = std::make_shared<std::atomic<bool>>(false);
+
+        TPortManager pm;
+        const ui16 port = pm.GetPort();
+        TTempFileHandle file;
+        SetupTableDataServiceDiscovery(file, port);
+        auto tableDataServiceClient = MakeTableDataServiceClient(port);
+        auto tableDataServiceServer = MakeTableDataServiceServer(port);
+        auto jobLauncher = MakeIntrusive<TFmrUserJobLauncher>(TFmrUserJobLauncherOptions{.RunInSeparateProcess = false});
+        IFmrJob::TPtr job = MakeFmrJob(MakeFileTableDataServiceDiscovery({.Path = file.Name()}), {}, ytJobService, jobLauncher);
+
+        TFmrTableOutputRef output("test_sorted_table_id", "test_part_id");
+        output.SortingColumns = TSortingColumns{.Columns = {"key"}, .SortOrders = {ESortOrder::Ascending}};
+
+        TSortedMergeTaskParams params{
+            .Input = TTaskTableInputRef{.Inputs = {TTaskTableRef{ytInput}}},
+            .Output = output
+        };
+
+        auto res = job->SortedMerge(params, {}, cancelFlag);
+        auto err = std::get_if<TFmrError>(&res);
+
+        UNIT_ASSERT_C(!err, err->ErrorMessage);
+        auto resultTableContentMaybe = tableDataServiceClient->Get(
+            GetTableDataServiceGroup(output.TableId, output.PartId), "0").GetValueSync();
+        UNIT_ASSERT_C(resultTableContentMaybe, "Result table content is empty");
+        UNIT_ASSERT_NO_DIFF(GetTextYson(*resultTableContentMaybe), sortedContent);
     }
 
     Y_UNIT_TEST(MergeMixedTables) {
-        ITableDataService::TPtr tableDataServicePtr = MakeLocalTableDataService();
-
         std::vector<TTableRange> ranges = {{"test_part_id"}};
         TFmrTableInputRef input_1 = TFmrTableInputRef{.TableId = "test_table_id_1", .TableRanges = ranges};
-        auto richPath = NYT::TRichYPath("//test_path").Cluster("test_cluster");
-        TYtTableTaskRef input_2 = TYtTableTaskRef{.RichPaths = {richPath}};
+        auto richPath = NYT::TRichYPath("test_path").Cluster("test_cluster");
+        TTempFileHandle ytInputFile;
+        {
+            TFileOutput out(ytInputFile.Name());
+            out.Write(TableContent_2.data(), TableContent_2.size());
+        }
+        TYtTableTaskRef input_2 = TYtTableTaskRef{.RichPaths = {richPath}, .FilePaths = {ytInputFile.Name()}};
         TFmrTableInputRef input_3 = TFmrTableInputRef{.TableId = "test_table_id_3", .TableRanges = ranges};
-        std::unordered_map<TString, TString> inputTables{{NYT::NodeToCanonicalYsonString(NYT::PathToNode(richPath)), TableContent_2}};
-        std::unordered_map<TYtTableRef, TString> outputTables;
-        NYql::NFmr::IYtJobService::TPtr ytJobService = MakeMockYtJobService(inputTables, outputTables);
+        NYql::NFmr::IYtJobService::TPtr ytJobService = MakeFileYtJobService();
         auto cancelFlag = std::make_shared<std::atomic<bool>>(false);
-        IFmrJob::TPtr job = MakeFmrJob(tableDataServicePtr, ytJobService);
+
+        TPortManager pm;
+        const ui16 port = pm.GetPort();
+        TTempFileHandle file;
+        SetupTableDataServiceDiscovery(file, port);
+        auto tableDataServiceClient = MakeTableDataServiceClient(port);
+        auto tableDataServiceServer = MakeTableDataServiceServer(port);
+        auto jobLauncher = MakeIntrusive<TFmrUserJobLauncher>(TFmrUserJobLauncherOptions{.RunInSeparateProcess = false});
+        IFmrJob::TPtr job = MakeFmrJob(MakeFileTableDataServiceDiscovery({.Path = file.Name()}), {}, ytJobService, jobLauncher);
 
         TTaskTableRef input_table_ref_1 = {input_1};
         TTaskTableRef input_table_ref_2 = {input_2};
@@ -110,18 +218,19 @@ Y_UNIT_TEST_SUITE(FmrJobTests) {
         TFmrTableOutputRef output = TFmrTableOutputRef("test_table_id_output", "test_part_id");
         std::vector<TTaskTableRef> inputs = {input_table_ref_1, input_table_ref_2, input_table_ref_3};
         auto params = TMergeTaskParams{.Input = TTaskTableInputRef{.Inputs = inputs}, .Output = output};
-        auto tableDataServiceExpectedOutputKey = GetTableDataServiceKey(output.TableId, output.PartId, 0);
+        auto tableDataServiceExpectedOutputGroup = GetTableDataServiceGroup(output.TableId, output.PartId);
 
-        auto key_1 = GetTableDataServiceKey(input_1.TableId, "test_part_id", 0);
-        auto key_3 = GetTableDataServiceKey(input_3.TableId, "test_part_id", 0);
-        tableDataServicePtr->Put(key_1, GetBinaryYson(TableContent_1));
-        tableDataServicePtr->Put(key_3, GetBinaryYson(TableContent_3));
+        auto group_1 = GetTableDataServiceGroup(input_1.TableId, "test_part_id");
+        auto group_3 = GetTableDataServiceGroup(input_3.TableId, "test_part_id");
+        auto chunkId = "0";
+        tableDataServiceClient->Put(group_1, chunkId, GetBinaryYson(TableContent_1));
+        tableDataServiceClient->Put(group_3, chunkId, GetBinaryYson(TableContent_3));
 
         auto res = job->Merge(params, {{TFmrTableId("test_cluster", "test_path"), TClusterConnection()}}, cancelFlag);
-        auto err = std::get_if<TError>(&res);
+        auto err = std::get_if<TFmrError>(&res);
 
         UNIT_ASSERT_C(!err, err->ErrorMessage);
-        auto resultTableContentMaybe = tableDataServicePtr->Get(tableDataServiceExpectedOutputKey).GetValueSync();
+        auto resultTableContentMaybe = tableDataServiceClient->Get(tableDataServiceExpectedOutputGroup, chunkId).GetValueSync();
         UNIT_ASSERT_C(resultTableContentMaybe, "Result table content is empty");
         TString resultTableContent = GetTextYson(*resultTableContentMaybe);
         TString expected = TableContent_1 + TableContent_2 + TableContent_3;
@@ -136,84 +245,119 @@ Y_UNIT_TEST_SUITE(FmrJobTests) {
 
 Y_UNIT_TEST_SUITE(TaskRunTests) {
     Y_UNIT_TEST(RunDownloadTask) {
-        ITableDataService::TPtr tableDataServicePtr = MakeLocalTableDataService();
-        auto richPath = NYT::TRichYPath("//test_path").Cluster("test_cluster");
-        TYtTableTaskRef input = TYtTableTaskRef{.RichPaths = {richPath}};
+        auto richPath = NYT::TRichYPath("test_path").Cluster("test_cluster");
+        TTempFileHandle ytInputFile;
+        {
+            TFileOutput out(ytInputFile.Name());
+            out.Write(TableContent_1.data(), TableContent_1.size());
+        }
+        TYtTableTaskRef input = TYtTableTaskRef{.RichPaths = {richPath}, .FilePaths = {ytInputFile.Name()}};
         TFmrTableId inputFmrId("test_cluster", "test_path");
-        std::unordered_map<TString, TString> inputTables{{NYT::NodeToCanonicalYsonString(NYT::PathToNode(richPath)), TableContent_1}};
-        std::unordered_map<TYtTableRef, TString> outputTables;
-        NYql::NFmr::IYtJobService::TPtr ytJobService = MakeMockYtJobService(inputTables, outputTables);
+        NYql::NFmr::IYtJobService::TPtr ytJobService = MakeFileYtJobService();
         std::shared_ptr<std::atomic<bool>> cancelFlag = std::make_shared<std::atomic<bool>>(false);
 
+        TPortManager pm;
+        const ui16 port = pm.GetPort();
+        TTempFileHandle file;
+        SetupTableDataServiceDiscovery(file, port);
+        auto tableDataServiceClient = MakeTableDataServiceClient(port);
+        auto tableDataServiceServer = MakeTableDataServiceServer(port);
+
         TFmrTableOutputRef output = TFmrTableOutputRef("test_table_id", "test_part_id");
-        auto tableDataServiceExpectedOutputKey = GetTableDataServiceKey(output.TableId, output.PartId, 0);
+        TString tableDataServiceExpectedOutputGroup = GetTableDataServiceGroup(output.TableId, output.PartId);
+        TString talblDataServiceExpectedOutputChunkId = "0";
         TDownloadTaskParams params = TDownloadTaskParams(input, output);
         TTask::TPtr task = MakeTask(ETaskType::Download, "test_task_id", params, "test_session_id", {{TFmrTableId("test_cluster", "test_path"), TClusterConnection()}});
-        ETaskStatus status = RunJob(task, tableDataServicePtr, ytJobService, cancelFlag).TaskStatus;
+        auto jobLauncher = MakeIntrusive<TFmrUserJobLauncher>(TFmrUserJobLauncherOptions{.RunInSeparateProcess = false});
+        ETaskStatus status = RunJob(task, MakeFileTableDataServiceDiscovery({.Path = file.Name()}), {}, ytJobService, jobLauncher, cancelFlag).TaskStatus;
 
         UNIT_ASSERT_EQUAL(status, ETaskStatus::Completed);
-        auto resultTableContent = tableDataServicePtr->Get(tableDataServiceExpectedOutputKey).GetValueSync();
+        auto resultTableContent = tableDataServiceClient->Get(tableDataServiceExpectedOutputGroup, talblDataServiceExpectedOutputChunkId).GetValueSync();
         UNIT_ASSERT_C(resultTableContent, "Result table content is empty");
         UNIT_ASSERT_NO_DIFF(GetTextYson(*resultTableContent), TableContent_1);
     }
 
     Y_UNIT_TEST(RunUploadTask) {
-
-        ITableDataService::TPtr tableDataServicePtr = MakeLocalTableDataService();
-        std::unordered_map<TString, TString> inputTables;
-        std::unordered_map<TYtTableRef, TString> outputTables;
-        NYql::NFmr::IYtJobService::TPtr ytJobService = MakeMockYtJobService(inputTables, outputTables);
+        NYql::NFmr::IYtJobService::TPtr ytJobService = MakeFileYtJobService();
         std::shared_ptr<std::atomic<bool>> cancelFlag = std::make_shared<std::atomic<bool>>(false);
 
         std::vector<TTableRange> ranges = {{"test_part_id"}};
         TFmrTableInputRef input = TFmrTableInputRef{.TableId = "test_table_id", .TableRanges = ranges};
-        TYtTableRef output = TYtTableRef("test_cluster", "test_path");
+        TTempFileHandle ytOutputFile;
+        TYtTableRef output = TYtTableRef("test_cluster", "test_path", ytOutputFile.Name());
+
+        TPortManager pm;
+        const ui16 port = pm.GetPort();
+        TTempFileHandle file;
+        SetupTableDataServiceDiscovery(file, port);
+        auto tableDataServiceClient = MakeTableDataServiceClient(port);
+        auto tableDataServiceServer = MakeTableDataServiceServer(port);
 
         TUploadTaskParams params = TUploadTaskParams(input, output);
         TTask::TPtr task = MakeTask(ETaskType::Upload, "test_task_id", params, "test_session_id", {{TFmrTableId("test_cluster", "test_path"), TClusterConnection()}});
-        auto key = GetTableDataServiceKey(input.TableId, "test_part_id", 0);
-        tableDataServicePtr->Put(key, GetBinaryYson(TableContent_1));
-        ETaskStatus status = RunJob(task, tableDataServicePtr, ytJobService, cancelFlag).TaskStatus;
+        auto group = GetTableDataServiceGroup(input.TableId, "test_part_id");
+        TString chunk = "0";
+        tableDataServiceClient->Put(group, chunk, GetBinaryYson(TableContent_1));
+        auto jobLauncher = MakeIntrusive<TFmrUserJobLauncher>(TFmrUserJobLauncherOptions{.RunInSeparateProcess = false});
+        ETaskStatus status = RunJob(task, MakeFileTableDataServiceDiscovery({.Path = file.Name()}), {}, ytJobService, jobLauncher, cancelFlag).TaskStatus;
 
         UNIT_ASSERT_EQUAL(status, ETaskStatus::Completed);
-        UNIT_ASSERT(outputTables.contains(output));
-        UNIT_ASSERT_NO_DIFF(GetTextYson(outputTables[output]), TableContent_1);
+        const TString resultFileContent = ReadFileWithSplittedSupport(ytOutputFile.Name());
+        TString expectedLine;
+        TStringStream expectedStream(TableContent_1);
+        while (expectedStream.ReadLine(expectedLine)) {
+            UNIT_ASSERT_C(resultFileContent.Contains(expectedLine), TStringBuilder() << "Missing line in output: " << expectedLine);
+        }
     }
 
     Y_UNIT_TEST(RunUploadTaskWithNoTable) {
-        ITableDataService::TPtr tableDataServicePtr = MakeLocalTableDataService();
-        std::unordered_map<TString, TString> inputTables;
-        std::unordered_map<TYtTableRef, TString> outputTables;
-        NYql::NFmr::IYtJobService::TPtr ytJobService = MakeMockYtJobService(inputTables, outputTables);
+        NYql::NFmr::IYtJobService::TPtr ytJobService = MakeFileYtJobService();
         std::shared_ptr<std::atomic<bool>> cancelFlag = std::make_shared<std::atomic<bool>>(false);
 
         std::vector<TTableRange> ranges = {{"test_part_id"}};
         TFmrTableInputRef input = TFmrTableInputRef{.TableId = "test_table_id", .TableRanges = ranges};
-        TYtTableRef output = TYtTableRef("test_cluster", "test_path");
+        TTempFileHandle ytOutputFile;
+        TYtTableRef output = TYtTableRef("test_cluster", "test_path", ytOutputFile.Name());
+
+        TPortManager pm;
+        const ui16 port = pm.GetPort();
+        TTempFileHandle file;
+        SetupTableDataServiceDiscovery(file, port);
+        auto tableDataServiceClient = MakeTableDataServiceClient(port);
+        auto tableDataServiceServer = MakeTableDataServiceServer(port);
 
         TUploadTaskParams params = TUploadTaskParams(input, output);
         TTask::TPtr task = MakeTask(ETaskType::Upload, "test_task_id", params, "test_session_id", {{TFmrTableId("test_cluster", "test_path"), TClusterConnection()}});
+        auto jobLauncher = MakeIntrusive<TFmrUserJobLauncher>(TFmrUserJobLauncherOptions{.RunInSeparateProcess = false});
 
-        // No tables in tableDataService
-        UNIT_ASSERT_EXCEPTION_CONTAINS(
-            RunJob(task, tableDataServicePtr, ytJobService, cancelFlag),
-            yexception,
-            "No data for chunk:test_table_id_test_part_id"
-        );
+        TJobResult jobResult = RunJob(task, MakeFileTableDataServiceDiscovery({.Path = file.Name()}), {}, ytJobService, jobLauncher, cancelFlag);
+        UNIT_ASSERT(jobResult.Error.Defined());
+        auto error = *jobResult.Error;
+        UNIT_ASSERT_EQUAL(error.Reason, EFmrErrorReason::RestartQuery);
+        UNIT_ASSERT(error.ErrorMessage.Contains("Failed to get group test_table_id_test_part_id and chunkId 0 from table data service"));
     }
 
     Y_UNIT_TEST(RunMergeTask) {
-        ITableDataService::TPtr tableDataServicePtr = MakeLocalTableDataService();
         std::vector<TTableRange> ranges = {{"test_part_id"}};
         TFmrTableInputRef input_1 = TFmrTableInputRef{.TableId = "test_table_id_1", .TableRanges = ranges};
-        auto richPath = NYT::TRichYPath("//test_path").Cluster("test_cluster");
-        TYtTableTaskRef input_2 = TYtTableTaskRef{.RichPaths = {richPath}};
+        auto richPath = NYT::TRichYPath("test_path").Cluster("test_cluster");
+        TTempFileHandle ytInputFile;
+        {
+            TFileOutput out(ytInputFile.Name());
+            out.Write(TableContent_2.data(), TableContent_2.size());
+        }
+        TYtTableTaskRef input_2 = TYtTableTaskRef{.RichPaths = {richPath}, .FilePaths = {ytInputFile.Name()}};
         TFmrTableId inputFmrId_2("test_cluster", "test_path");
         TFmrTableInputRef input_3 = TFmrTableInputRef{.TableId = "test_table_id_3", .TableRanges = ranges};
-        std::unordered_map<TString, TString> inputTables{{NYT::NodeToCanonicalYsonString(NYT::PathToNode(richPath)), TableContent_2}};
-        std::unordered_map<TYtTableRef, TString> outputTables;
-        NYql::NFmr::IYtJobService::TPtr ytJobService = MakeMockYtJobService(inputTables, outputTables);
+        NYql::NFmr::IYtJobService::TPtr ytJobService = MakeFileYtJobService();
         std::shared_ptr<std::atomic<bool>> cancelFlag = std::make_shared<std::atomic<bool>>(false);
+
+        TPortManager pm;
+        const ui16 port = pm.GetPort();
+        TTempFileHandle file;
+        SetupTableDataServiceDiscovery(file, port);
+        auto tableDataServiceClient = MakeTableDataServiceClient(port);
+        auto tableDataServiceServer = MakeTableDataServiceServer(port);
 
         TTaskTableRef input_table_ref_1 = {input_1};
         TTaskTableRef input_table_ref_2 = {input_2};
@@ -221,19 +365,20 @@ Y_UNIT_TEST_SUITE(TaskRunTests) {
         TFmrTableOutputRef output = TFmrTableOutputRef("test_table_id_output", "test_part_id");
         std::vector<TTaskTableRef> inputs = {input_table_ref_1, input_table_ref_2, input_table_ref_3};
         auto params = TMergeTaskParams{.Input = TTaskTableInputRef{.Inputs = inputs}, .Output = output};
-        auto tableDataServiceExpectedOutputKey = GetTableDataServiceKey(output.TableId, output.PartId, 0);
+        TString tableDataServiceExpectedOutputGroup = GetTableDataServiceGroup(output.TableId, output.PartId);
+        TString chunk = "0";
 
         TTask::TPtr task = MakeTask(ETaskType::Merge, "test_task_id", params, "test_session_id", {{TFmrTableId("test_cluster", "test_path"), TClusterConnection()}});
 
-        auto key_1 = GetTableDataServiceKey(input_1.TableId, "test_part_id", 0);
-        auto key_3 = GetTableDataServiceKey(input_3.TableId, "test_part_id", 0);
-        tableDataServicePtr->Put(key_1, GetBinaryYson(TableContent_1));
-        tableDataServicePtr->Put(key_3, GetBinaryYson(TableContent_3));
-
-        ETaskStatus status = RunJob(task, tableDataServicePtr, ytJobService, cancelFlag).TaskStatus;
+        auto group_1 = GetTableDataServiceGroup(input_1.TableId, "test_part_id");
+        auto group_3 = GetTableDataServiceGroup(input_3.TableId, "test_part_id");
+        tableDataServiceClient->Put(group_1, chunk, GetBinaryYson(TableContent_1));
+        tableDataServiceClient->Put(group_3, chunk, GetBinaryYson(TableContent_3));
+        auto jobLauncher = MakeIntrusive<TFmrUserJobLauncher>(TFmrUserJobLauncherOptions{.RunInSeparateProcess = false});
+        ETaskStatus status = RunJob(task, MakeFileTableDataServiceDiscovery({.Path = file.Name()}), {}, ytJobService, jobLauncher, cancelFlag).TaskStatus;
 
         UNIT_ASSERT_EQUAL(status, ETaskStatus::Completed);
-        auto resultTableContentMaybe = tableDataServicePtr->Get(tableDataServiceExpectedOutputKey).GetValueSync();
+        auto resultTableContentMaybe = tableDataServiceClient->Get(tableDataServiceExpectedOutputGroup, chunk).GetValueSync();
         UNIT_ASSERT_C(resultTableContentMaybe, "Result table content is empty");
 
         TString resultTableContent = GetTextYson(*resultTableContentMaybe);
@@ -243,6 +388,100 @@ Y_UNIT_TEST_SUITE(TaskRunTests) {
         TStringStream resultStream(resultTableContent);
         while (resultStream.ReadLine(line)) {
             UNIT_ASSERT(expected.Contains(line));
+        }
+    }
+    Y_UNIT_TEST(LocalSort) {
+        TPortManager pm;
+        const ui16 port = pm.GetPort();
+        TTempFileHandle file;
+        SetupTableDataServiceDiscovery(file, port);
+        auto tableDataServiceClient = MakeTableDataServiceClient(port);
+        auto tableDataServiceServer = MakeTableDataServiceServer(port);
+
+        NYql::NFmr::IYtJobService::TPtr ytJobService = MakeFileYtJobService();
+        std::shared_ptr<std::atomic<bool>> cancelFlag = std::make_shared<std::atomic<bool>>(false);
+
+        TString tableId = "test_table_id", partId = "test_part_id", outputTableId = "output_table_id";
+        std::vector<TTableRange> ranges = {{partId}};
+        TTaskTableRef input = TFmrTableInputRef{.TableId = tableId, .TableRanges = ranges};
+        TSortingColumns sortingColumns{
+            .Columns = {"key"},
+            .SortOrders = {ESortOrder::Ascending}
+        };
+        TFmrTableOutputRef output = TFmrTableOutputRef(outputTableId, partId);
+        output.SortingColumns = sortingColumns;
+
+        auto params = TLocalSortTaskParams{.Input = TTaskTableInputRef{.Inputs = {input}}, .Output = output};
+        TString tableDataServiceExpectedOutputGroup = GetTableDataServiceGroup(output.TableId, output.PartId);
+        TString chunk = "0";
+
+        TTask::TPtr task = MakeTask(ETaskType::LocalSort, "test_task_id", params, "test_session_id", {{TFmrTableId("test_cluster", "test_path"), TClusterConnection()}});
+
+        auto inputGroup = GetTableDataServiceGroup(tableId, partId);
+        tableDataServiceClient->Put(inputGroup, chunk, GetBinaryYson(UnsortedTableContent_3));
+        auto jobLauncher = MakeIntrusive<TFmrUserJobLauncher>(TFmrUserJobLauncherOptions{.RunInSeparateProcess = false});
+        ETaskStatus status = RunJob(task, MakeFileTableDataServiceDiscovery({.Path = file.Name()}), {}, ytJobService, jobLauncher, cancelFlag).TaskStatus;
+
+        UNIT_ASSERT_EQUAL(status, ETaskStatus::Completed);
+        auto resultTableContentMaybe = tableDataServiceClient->Get(tableDataServiceExpectedOutputGroup, chunk).GetValueSync();
+        UNIT_ASSERT_C(resultTableContentMaybe, "Result table content is empty");
+
+        TString resultTableContent = GetTextYson(*resultTableContentMaybe);
+        TString expected = TableContent_3;
+        UNIT_ASSERT_VALUES_EQUAL(resultTableContent.size(), expected.size());
+        TString line;
+        TStringStream resultStream(resultTableContent);
+        while (resultStream.ReadLine(line)) {
+            UNIT_ASSERT(expected.Contains(line));
+        }
+    }
+
+    Y_UNIT_TEST(MapReduceMap) {
+        TPortManager pm;
+        const ui16 port = pm.GetPort();
+        TTempFileHandle file;
+        SetupTableDataServiceDiscovery(file, port);
+        auto tableDataServiceClient = MakeTableDataServiceClient(port);
+        auto tableDataServiceServer = MakeTableDataServiceServer(port);
+
+        NYql::NFmr::IYtJobService::TPtr ytJobService = MakeFileYtJobService();
+        std::shared_ptr<std::atomic<bool>> cancelFlag = std::make_shared<std::atomic<bool>>(false);
+
+        TTempFileHandle ytInputFile;
+        {
+            TFileOutput out(ytInputFile.Name());
+            out.Write(TableContent_1.data(), TableContent_1.size());
+        }
+        auto richPath = NYT::TRichYPath("test_path").Cluster("test_cluster");
+        TYtTableTaskRef input = TYtTableTaskRef{.RichPaths = {richPath}, .FilePaths = {ytInputFile.Name()}};
+
+        TString outputTableId = "mr_output_table_id", partId = "test_part_id";
+        TSortingColumns reduceBy{.Columns = {"key"}, .SortOrders = {ESortOrder::Ascending}};
+        TFmrTableOutputRef output = TFmrTableOutputRef(outputTableId, partId);
+        output.SortingColumns = MakeMapReduceIntermediateSortColumns(reduceBy);
+
+        TMapReduceMapTaskParams params{
+            .Input = TTaskTableInputRef{.Inputs = {input}},
+            .Output = output,
+            .SerializedMapJobState = {},
+            .ReduceOperationSpec = TReduceOperationSpec{.ReduceBy = reduceBy, .SortBy = reduceBy}
+        };
+        TTask::TPtr task = MakeTask(ETaskType::MapReduceMap, "test_task_id", params, "test_session_id",
+                                    {{TFmrTableId("test_cluster", "test_path"), TClusterConnection()}});
+        auto jobLauncher = MakeIntrusive<TFmrUserJobLauncher>(TFmrUserJobLauncherOptions{.RunInSeparateProcess = false});
+        ETaskStatus status = RunJob(task, MakeFileTableDataServiceDiscovery({.Path = file.Name()}), {}, ytJobService, jobLauncher, cancelFlag).TaskStatus;
+
+        UNIT_ASSERT_EQUAL(status, ETaskStatus::Completed);
+
+        auto resultMaybe = tableDataServiceClient->Get(GetTableDataServiceGroup(outputTableId, partId), "0").GetValueSync();
+        UNIT_ASSERT_C(resultMaybe, "MapReduceMap output is empty");
+
+        TString resultText = GetTextYson(*resultMaybe);
+        auto resultNodes = NYT::NodeFromYsonString(resultText, NYT::NYson::EYsonType::ListFragment);
+        UNIT_ASSERT_EQUAL(resultNodes.AsList().size(), 4u);
+        for (const auto& node : resultNodes.AsList()) {
+            UNIT_ASSERT_C(node.HasKey(TString(YqlKeyHashColumn)),
+                          "Row missing _yql_key_hash: " << NYT::NodeToYsonString(node));
         }
     }
 }

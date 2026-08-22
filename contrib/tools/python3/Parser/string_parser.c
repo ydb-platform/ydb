@@ -1,6 +1,8 @@
 #include <Python.h>
+#include "pycore_bytesobject.h"   // _PyBytes_DecodeEscape()
+#include "pycore_unicodeobject.h" // _PyUnicode_DecodeUnicodeEscapeInternal()
 
-#include "tokenizer.h"
+#include "lexer/state.h"
 #include "pegen.h"
 #include "string_parser.h"
 
@@ -16,9 +18,10 @@ warn_invalid_escape_sequence(Parser *p, const char* buffer, const char *first_in
         // to avoid showing the warning twice.
         return 0;
     }
-    unsigned char c = *first_invalid_escape;
-    if ((t->type == FSTRING_MIDDLE || t->type == FSTRING_END) && (c == '{' || c == '}')) {  // in this case the tokenizer has already emitted a warning,
-                                                                                            // see tokenizer.c:warn_invalid_escape_sequence
+    unsigned char c = (unsigned char)*first_invalid_escape;
+    if ((t->type == FSTRING_MIDDLE || t->type == FSTRING_END) && (c == '{' || c == '}')) {
+        // in this case the tokenizer has already emitted a warning,
+        // see Parser/tokenizer/helpers.c:warn_invalid_escape_sequence
         return 0;
     }
 
@@ -126,12 +129,12 @@ decode_unicode_with_escapes(Parser *parser, const char *s, size_t len, Token *t)
     const char *end;
 
     /* check for integer overflow */
-    if (len > SIZE_MAX / 6) {
+    if (len > (size_t)PY_SSIZE_T_MAX / 6) {
         return NULL;
     }
     /* "ä" (2 bytes) may become "\U000000E4" (10 bytes), or 1:5
        "\ä" (3 bytes) may become "\u005c\U000000E4" (16 bytes), or ~1:6 */
-    u = PyBytes_FromStringAndSize((char *)NULL, len * 6);
+    u = PyBytes_FromStringAndSize((char *)NULL, (Py_ssize_t)len * 6);
     if (u == NULL) {
         return NULL;
     }
@@ -178,7 +181,7 @@ decode_unicode_with_escapes(Parser *parser, const char *s, size_t len, Token *t)
             *p++ = *s++;
         }
     }
-    len = p - buf;
+    len = (size_t)(p - buf);
     s = buf;
 
     int first_invalid_escape_char;
@@ -227,7 +230,7 @@ PyObject *
 _PyPegen_decode_string(Parser *p, int raw, const char *s, size_t len, Token *t)
 {
     if (raw) {
-        return PyUnicode_DecodeUTF8Stateful(s, len, NULL, NULL);
+        return PyUnicode_DecodeUTF8Stateful(s, (Py_ssize_t)len, NULL, NULL);
     }
     return decode_unicode_with_escapes(p, s, len, t);
 }
@@ -316,9 +319,9 @@ _PyPegen_parse_string(Parser *p, Token *t)
             }
         }
         if (rawmode) {
-            return PyBytes_FromStringAndSize(s, len);
+            return PyBytes_FromStringAndSize(s, (Py_ssize_t)len);
         }
-        return decode_bytes_with_escapes(p, s, len, t);
+        return decode_bytes_with_escapes(p, s, (Py_ssize_t)len, t);
     }
     return _PyPegen_decode_string(p, rawmode, s, len, t);
 }

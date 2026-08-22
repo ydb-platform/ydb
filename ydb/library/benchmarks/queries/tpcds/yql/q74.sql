@@ -56,8 +56,8 @@ $year_total = (
          and t_w_secyear.year = 2001+1
          and t_s_firstyear.year_total > 0
          and t_w_firstyear.year_total > 0
-         and case when t_w_firstyear.year_total > 0 then t_w_secyear.year_total / t_w_firstyear.year_total else null end
-           > case when t_s_firstyear.year_total > 0 then t_s_secyear.year_total / t_s_firstyear.year_total else null end
+         and case when t_w_firstyear.year_total > 0 then $upscale(t_w_secyear.year_total) / $upscale(t_w_firstyear.year_total) else null end
+           > case when t_s_firstyear.year_total > 0 then $upscale(t_s_secyear.year_total) / $upscale(t_s_firstyear.year_total) else null end
  order by t_s_secyear.customer_id,t_s_secyear.customer_id,t_s_secyear.customer_id
 limit 100;
 

@@ -1,4 +1,8 @@
 #include "kafka_read_session_actor.h"
+#include "kafka_read_session_utils.h"
+#include <ydb/library/actors/core/log.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KAFKA_PROXY
 
 namespace NKafka {
 static constexpr TDuration WAKEUP_INTERVAL = TDuration::Seconds(1);
@@ -14,14 +18,16 @@ void TKafkaReadSessionActor::Bootstrap(const NActors::TActorContext&) {
     Become(&TKafkaReadSessionActor::StateWork);
 }
 
-TString TKafkaReadSessionActor::LogPrefix() {
-    TStringBuilder sb;
-    sb << "TKafkaReadSessionActor " << (Session == "" ? SelfId().ToString() : Session) << ": ";
-    return sb;
+NStructuredLog::TStructuredMessage TKafkaReadSessionActor::LogPrefix() {
+    return YDB_LOG_CREATE_MESSAGE(
+        {"actorClassName", "TKafkaReadSessionActor"},
+        {"selfId", SelfId()},
+        {"session", Session});
 }
 
 void TKafkaReadSessionActor::Die(const TActorContext& ctx) {
-    KAFKA_LOG_D("PassAway");
+    YDB_LOG_DEBUG("PassAway",
+        {LogPrefix()});
     for (auto& [topicName, topicInfo] : TopicsInfo) {
         NTabletPipe::CloseClient(ctx, topicInfo.PipeClient);
     }
@@ -30,7 +36,8 @@ void TKafkaReadSessionActor::Die(const TActorContext& ctx) {
 
 void TKafkaReadSessionActor::HandleWakeup(TEvKafka::TEvWakeup::TPtr, const TActorContext& ctx) {
     if (CheckHeartbeatIsExpired()) {
-        KAFKA_LOG_D("Heartbeat expired");
+        YDB_LOG_DEBUG("Heartbeat expired",
+            {LogPrefix()});
         CloseReadSession(ctx);
         return;
     }
@@ -100,7 +107,7 @@ void TKafkaReadSessionActor::HandleJoinGroup(TEvKafka::TEvJoinGroupRequest::TPtr
                 << "_" << "kafka";
 
             if (!supportedProtocolFound) {
-                SendJoinGroupResponseFail(ctx, ev->Get()->CorrelationId, INCONSISTENT_GROUP_PROTOCOL, TStringBuilder() << "unsupported assign protocol. Must be " << SUPPORTED_ASSIGN_STRATEGY);
+                SendJoinGroupResponseFail(ctx, ev->Get()->CorrelationId, INCONSISTENT_GROUP_PROTOCOL, TStringBuilder() << "unsupported assign protocol. Must be " << ASSIGN_STRATEGY_ROUNDROBIN);
                 CloseReadSession(ctx);
                 return;
             }
@@ -231,7 +238,7 @@ void TKafkaReadSessionActor::SendJoinGroupResponseOk(const TActorContext&, ui64 
     TJoinGroupResponseData::TPtr response = std::make_shared<TJoinGroupResponseData>();
 
     response->ProtocolType = SUPPORTED_JOIN_GROUP_PROTOCOL;
-    response->ProtocolName = SUPPORTED_ASSIGN_STRATEGY;
+    response->ProtocolName = ASSIGN_STRATEGY_ROUNDROBIN;
     response->ErrorCode = EKafkaErrors::NONE_ERROR;
     response->GenerationId = GenerationId;
     response->MemberId = Session;
@@ -240,7 +247,9 @@ void TKafkaReadSessionActor::SendJoinGroupResponseOk(const TActorContext&, ui64 
 }
 
 void TKafkaReadSessionActor::SendJoinGroupResponseFail(const TActorContext&, ui64 corellationId, EKafkaErrors error, TString message) {
-    KAFKA_LOG_CRIT("JOIN_GROUP failed. reason# " << message);
+    YDB_LOG_CRIT("JOIN_GROUP failed",
+        {LogPrefix()},
+        {"reason", message});
     TJoinGroupResponseData::TPtr response = std::make_shared<TJoinGroupResponseData>();
 
     response->ErrorCode = error;
@@ -252,23 +261,25 @@ void TKafkaReadSessionActor::SendSyncGroupResponseOk(const TActorContext& ctx, u
     TSyncGroupResponseData::TPtr response = std::make_shared<TSyncGroupResponseData>();
 
     response->ProtocolType = SUPPORTED_JOIN_GROUP_PROTOCOL;
-    response->ProtocolName = SUPPORTED_ASSIGN_STRATEGY;
+    response->ProtocolName = ASSIGN_STRATEGY_ROUNDROBIN;
     response->ErrorCode = EKafkaErrors::NONE_ERROR;
 
     auto assignment = BuildAssignmentAndInformBalancerIfRelease(ctx);
 
-    TWritableBuf buf(nullptr, assignment.Size(ASSIGNMENT_VERSION) + sizeof(ASSIGNMENT_VERSION));
+    TKafkaWriteBuffer buf(Context->Config.GetPacketSize());
     TKafkaWritable writable(buf);
     writable << ASSIGNMENT_VERSION;
     assignment.Write(writable, ASSIGNMENT_VERSION);
-    response->AssignmentStr = TString(buf.GetBuffer().data(), buf.GetBuffer().size());
+    response->AssignmentStr = buf.AsString();
     response->Assignment = response->AssignmentStr;
 
     Send(Context->ConnectionId, new TEvKafka::TEvResponse(corellationId, response, EKafkaErrors::NONE_ERROR));
 }
 
 void TKafkaReadSessionActor::SendSyncGroupResponseFail(const TActorContext&, ui64 corellationId, EKafkaErrors error, TString message) {
-    KAFKA_LOG_CRIT("SYNC_GROUP failed. reason# " << message);
+    YDB_LOG_CRIT("SYNC_GROUP failed",
+        {LogPrefix()},
+        {"reason", message});
     TSyncGroupResponseData::TPtr response = std::make_shared<TSyncGroupResponseData>();
 
     response->ErrorCode = error;
@@ -286,7 +297,9 @@ void TKafkaReadSessionActor::SendLeaveGroupResponseOk(const TActorContext&, ui64
 }
 
 void TKafkaReadSessionActor::SendLeaveGroupResponseFail(const TActorContext&, ui64 corellationId, EKafkaErrors error, TString message) {
-    KAFKA_LOG_CRIT("LEAVE_GROUP failed. reason# " << message);
+    YDB_LOG_CRIT("LEAVE_GROUP failed",
+        {LogPrefix()},
+        {"reason", message});
     TLeaveGroupResponseData::TPtr response = std::make_shared<TLeaveGroupResponseData>();
 
     response->ErrorCode = error;
@@ -302,7 +315,9 @@ void TKafkaReadSessionActor::SendHeartbeatResponseOk(const TActorContext&, ui64 
 
 void TKafkaReadSessionActor::SendHeartbeatResponseFail(const TActorContext&, ui64 corellationId, EKafkaErrors error, TString message) {
     THeartbeatResponseData::TPtr response = std::make_shared<THeartbeatResponseData>();
-    KAFKA_LOG_CRIT("HEARTBEAT failed. reason# " << message);
+    YDB_LOG_CRIT("HEARTBEAT failed",
+        {LogPrefix()},
+        {"reason", message});
     response->ErrorCode = error;
     Send(Context->ConnectionId, new TEvKafka::TEvResponse(corellationId, response, error));
 }
@@ -323,26 +338,43 @@ bool TKafkaReadSessionActor::CheckHeartbeatIsExpired() {
     return now - LastHeartbeatTime > MaxHeartbeatTimeoutMs;
 }
 
-bool TKafkaReadSessionActor::TryFillTopicsToRead(const TMessagePtr<TJoinGroupRequestData> joinGroupRequestData, THashSet<TString>& topics) {
-    auto supportedProtocolFound = false;
-    for (auto protocol: joinGroupRequestData->Protocols) {
-        KAFKA_LOG_D("JOIN_GROUP assign protocol supported by client: " << protocol.Name);
-        if (protocol.Name == SUPPORTED_ASSIGN_STRATEGY) {
-            FillTopicsFromJoinGroupMetadata(protocol.Metadata, topics);
-            supportedProtocolFound = true;
-            break;
+bool TKafkaReadSessionActor::TryFillTopicsToRead(const TMessagePtr<TJoinGroupRequestData> request, THashSet<TString>& topics) {
+    auto validProtocol = request->ProtocolType == SUPPORTED_JOIN_GROUP_PROTOCOL
+        && AnyOf(request->Protocols, [](const TJoinGroupRequestData::TJoinGroupRequestProtocol& p) {
+            return p.Name == ASSIGN_STRATEGY_ROUNDROBIN || p.Name == ASSIGN_STRATEGY_SERVER;
+        });
+    if (!validProtocol) {
+        return false;
+    }
+
+    auto result = GetSubscriptions(*request);
+    if (result.has_value()) {
+        for (auto topic: result->Topics) {
+            if (topic.has_value()) {
+                YDB_LOG_DEBUG("JOIN_GROUP requested topic",
+                    {LogPrefix()},
+                    {"toRead", topic});
+
+                auto normalizedTopicName = NormalizePath(Context->DatabasePath, topic.value());
+                OriginalTopicNames[normalizedTopicName] = topic.value();
+                OriginalTopicNames[normalizedTopicName + "/streamImpl"] = topic.value();
+                topics.emplace(normalizedTopicName);
+            }
         }
     }
-    return supportedProtocolFound;
+
+    return true;
 }
 
 TConsumerProtocolAssignment TKafkaReadSessionActor::BuildAssignmentAndInformBalancerIfRelease(const TActorContext& ctx) {
     TConsumerProtocolAssignment assignment;
-    KAFKA_LOG_D("SYNC_GROUP topics to assign count: " << TopicPartitions.size());
+    YDB_LOG_DEBUG("SYNC_GROUP topics to assign",
+        {LogPrefix()},
+        {"count", TopicPartitions.size()});
     for (auto& [topicName, partitions] : TopicPartitions) {
         auto topicInfoIt = TopicsInfo.find(topicName);
 
-        Y_ABORT_UNLESS(topicInfoIt != TopicsInfo.end());
+        AFL_ENSURE(topicInfoIt != TopicsInfo.end())("topic", topicName)("session", Session)("group", GroupId)("database", Context->DatabasePath);
 
         THashSet<ui64> finalPartitionsToRead;
 
@@ -364,9 +396,13 @@ TConsumerProtocolAssignment TKafkaReadSessionActor::BuildAssignmentAndInformBala
         }
         partitions.ToRelease.clear();
 
-        KAFKA_LOG_D("SYNC_GROUP partitions assigned: " << finalPartitionsToRead.size());
+        YDB_LOG_DEBUG("SYNC_GROUP partitions",
+            {LogPrefix()},
+            {"assigned", finalPartitionsToRead.size()});
         for (auto part: finalPartitionsToRead) {
-            KAFKA_LOG_D("SYNC_GROUP assigned partition number: " << part);
+            YDB_LOG_DEBUG("SYNC_GROUP assigned partition",
+                {LogPrefix()},
+                {"number", part});
             topicPartition.Partitions.push_back(part);
             partitions.ReadingNow.emplace(part);
         }
@@ -374,26 +410,6 @@ TConsumerProtocolAssignment TKafkaReadSessionActor::BuildAssignmentAndInformBala
     }
 
     return assignment;
-}
-
-void TKafkaReadSessionActor::FillTopicsFromJoinGroupMetadata(TKafkaBytes& metadata, THashSet<TString>& topics) {
-    TKafkaVersion version = *(TKafkaVersion*)(metadata.value().data() + sizeof(TKafkaVersion));
-
-    TBuffer buffer(metadata.value().data() + sizeof(TKafkaVersion), metadata.value().size_bytes() - sizeof(TKafkaVersion));
-    TKafkaReadable readable(buffer);
-
-    TConsumerProtocolSubscription result;
-    result.Read(readable, version);
-
-    for (auto topic: result.Topics) {
-        if (topic.has_value()) {
-            auto normalizedTopicName = NormalizePath(Context->DatabasePath, topic.value());
-            OriginalTopicNames[normalizedTopicName] = topic.value();
-            OriginalTopicNames[normalizedTopicName + "/streamImpl"] = topic.value();
-            topics.emplace(normalizedTopicName);
-            KAFKA_LOG_D("JOIN_GROUP requested topic to read: " << topic);
-        }
-    }
 }
 
 void TKafkaReadSessionActor::HandlePipeConnected(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext&) {
@@ -472,11 +488,13 @@ void TKafkaReadSessionActor::HandleBalancerError(TEvPersQueue::TEvError::TPtr& e
 }
 
 void TKafkaReadSessionActor::HandleAuthOk(NGRpcProxy::V1::TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TActorContext& ctx) {
-    KAFKA_LOG_D("JOIN_GROUP auth success. Topics count: " << ev->Get()->TopicAndTablets.size());
+    YDB_LOG_DEBUG("JOIN_GROUP auth success. Topics",
+        {LogPrefix()},
+        {"count", ev->Get()->TopicAndTablets.size()});
 
     for (const auto& [name, t] : ev->Get()->TopicAndTablets) {
         auto internalName = t.TopicNameConverter->GetInternalName();
-        TopicsInfo[internalName] = NGRpcProxy::TTopicHolder::FromTopicInfo(t);
+        TopicsInfo.insert_or_assign(internalName, NGRpcProxy::TTopicHolderBase(t));
         FullPathToConverter[t.TopicNameConverter->GetPrimaryPath()] = t.TopicNameConverter;
         FullPathToConverter[t.TopicNameConverter->GetSecondaryPath()] = t.TopicNameConverter;
     }
@@ -512,7 +530,9 @@ TActorId TKafkaReadSessionActor::CreatePipeClient(ui64 tabletId, const TActorCon
 }
 
 void TKafkaReadSessionActor::RegisterBalancerSession(const TString& topic, const TActorId& pipe, const TVector<ui32>& groups, const TActorContext& ctx) {
-    KAFKA_LOG_I("register session: topic# " << topic );
+    YDB_LOG_INFO("Register session",
+        {LogPrefix()},
+        {"topic", topic});
     auto request = MakeHolder<TEvPersQueue::TEvRegisterReadSession>();
 
     auto& req = request->Record;
@@ -530,11 +550,14 @@ void TKafkaReadSessionActor::RegisterBalancerSession(const TString& topic, const
 
 void TKafkaReadSessionActor::HandleLockPartition(TEvPersQueue::TEvLockPartition::TPtr& ev, const TActorContext& ctx) {
     const auto& record = ev->Get()->Record;
-    KAFKA_LOG_D("partition lock is coming from PQRB topic# " << record.GetTopic() <<  ", partition# " << record.GetPartition());
+    YDB_LOG_DEBUG("Partition lock is coming from PQRB",
+        {LogPrefix()},
+        {"topic", record.GetTopic()},
+        {"partition", record.GetPartition()});
 
-    Y_ABORT_UNLESS(record.GetSession() == Session);
-    Y_ABORT_UNLESS(record.GetClientId() == GroupId);
-    Y_ABORT_UNLESS(record.GetGeneration() > 0);
+    AFL_ENSURE(record.GetSession() == Session)("expected", Session)("actual", record.GetSession())("topic", record.GetTopic())("database", Context->DatabasePath);
+    AFL_ENSURE(record.GetClientId() == GroupId)("expected", GroupId)("actual", record.GetClientId())("topic", record.GetTopic())("database", Context->DatabasePath);
+    AFL_ENSURE(record.GetGeneration() > 0)("topic", record.GetTopic())("partition", record.GetPartition())("database", Context->DatabasePath);
 
     auto path = record.GetPath();
     if (path.empty()) {
@@ -543,9 +566,10 @@ void TKafkaReadSessionActor::HandleLockPartition(TEvPersQueue::TEvLockPartition:
 
     auto converterIter = FullPathToConverter.find(NPersQueue::NormalizeFullPath(path));
     if (converterIter == FullPathToConverter.end()) {
-        KAFKA_LOG_I("ignored ev lock topic# " << record.GetTopic()
-                 << ", partition# " << record.GetPartition()
-                 << ", reason# path not recognized");
+        YDB_LOG_INFO("Ignored ev lock path not recognized",
+            {LogPrefix()},
+            {"topic", record.GetTopic()},
+            {"partition", record.GetPartition()});
         return;
     }
 
@@ -553,9 +577,10 @@ void TKafkaReadSessionActor::HandleLockPartition(TEvPersQueue::TEvLockPartition:
 
     auto topicInfoIt = TopicsInfo.find(topicName);
     if (topicInfoIt == TopicsInfo.end() || (topicInfoIt->second.PipeClient != ActorIdFromProto(record.GetPipeClient()))) {
-        KAFKA_LOG_I("ignored ev lock topic# " << record.GetTopic()
-                 << ", partition# " << record.GetPartition()
-                 << ", reason# topic is unknown");
+        YDB_LOG_INFO("Ignored ev lock topic is unknown",
+            {LogPrefix()},
+            {"topic", record.GetTopic()},
+            {"partition", record.GetPartition()});
         return;
     }
 
@@ -568,20 +593,24 @@ void TKafkaReadSessionActor::HandleLockPartition(TEvPersQueue::TEvLockPartition:
 void TKafkaReadSessionActor::HandleReleasePartition(TEvPersQueue::TEvReleasePartition::TPtr& ev, const TActorContext& ctx) {
     const auto& record = ev->Get()->Record;
     const ui32 group = record.HasGroup() ? record.GetGroup() : 0;
-    KAFKA_LOG_D("partition release is coming from PQRB topic# " << record.GetTopic() <<  ", group# " << group);
+    YDB_LOG_DEBUG("Partition release is coming from PQRB",
+        {LogPrefix()},
+        {"topic", record.GetTopic()},
+        {"group", group});
 
-    Y_ABORT_UNLESS(record.GetSession() == Session);
-    Y_ABORT_UNLESS(record.GetClientId() == GroupId);
+    AFL_ENSURE(record.GetSession() == Session)("expected", Session)("actual", record.GetSession())("topic", record.GetTopic())("database", Context->DatabasePath);
+    AFL_ENSURE(record.GetClientId() == GroupId)("expected", GroupId)("actual", record.GetClientId())("topic", record.GetTopic())("database", Context->DatabasePath);
 
     auto pathIt = FullPathToConverter.find(NPersQueue::NormalizeFullPath(record.GetPath()));
-    Y_ABORT_UNLESS(pathIt != FullPathToConverter.end());
+    AFL_ENSURE(pathIt != FullPathToConverter.end())("path", record.GetPath())("topic", record.GetTopic())("database", Context->DatabasePath);
 
     auto topicInfoIt = TopicsInfo.find(pathIt->second->GetInternalName());
-    Y_ABORT_UNLESS(topicInfoIt != TopicsInfo.end());
+    AFL_ENSURE(topicInfoIt != TopicsInfo.end())("topic", pathIt->second->GetInternalName())("path", record.GetPath())("database", Context->DatabasePath);
 
     if (topicInfoIt->second.PipeClient != ActorIdFromProto(record.GetPipeClient())) {
-        KAFKA_LOG_I("ignored ev release topic# " << record.GetTopic()
-                 << ", reason# topic is unknown");
+        YDB_LOG_INFO("Ignored ev release topic is unknown",
+            {LogPrefix()},
+            {"topic", record.GetTopic()});
         return;
     }
 
@@ -589,7 +618,7 @@ void TKafkaReadSessionActor::HandleReleasePartition(TEvPersQueue::TEvReleasePart
     auto newPartitionsToLockCount = newPartitionsToLockIt == NewPartitionsToLockOnTime.end() ? 0 : newPartitionsToLockIt->second.size();
 
     auto topicPartitionsIt = TopicPartitions.find(pathIt->second->GetInternalName());
-    Y_ABORT_UNLESS(1 <= (topicPartitionsIt.IsEnd() ? 0 : topicPartitionsIt->second.ToLock.size() + topicPartitionsIt->second.ReadingNow.size()) + newPartitionsToLockCount);
+    AFL_ENSURE(1 <= (topicPartitionsIt.IsEnd() ? 0 : topicPartitionsIt->second.ToLock.size() + topicPartitionsIt->second.ReadingNow.size()) + newPartitionsToLockCount)("topic", record.GetTopic())("path", record.GetPath())("database", Context->DatabasePath);
 
     auto partitionToRelease = record.GetGroup() - 1;
 
@@ -628,17 +657,21 @@ void TKafkaReadSessionActor::HandleReleasePartition(TEvPersQueue::TEvReleasePart
         }
     }
 
-    KAFKA_LOG_I("ignored ev release topic# " << record.GetTopic()
-             << ", reason# partition " << partitionToRelease << " isn`t locked");
+    YDB_LOG_INFO("Ignored ev release partition isn`t locked",
+        {LogPrefix()},
+        {"topic", record.GetTopic()},
+        {"partitionToRelease", partitionToRelease});
 }
 
 void TKafkaReadSessionActor::InformBalancerAboutPartitionRelease(const TString& topic, ui64 partition, const TActorContext& ctx) {
-    KAFKA_LOG_I("released topic# " << topic
-             << ", partition# " << partition);
+    YDB_LOG_INFO("Released",
+        {LogPrefix()},
+        {"topic", topic},
+        {"partition", partition});
     auto request = MakeHolder<TEvPersQueue::TEvPartitionReleased>();
 
     auto topicIt = TopicsInfo.find(topic);
-    Y_ABORT_UNLESS(topicIt != TopicsInfo.end());
+    AFL_ENSURE(topicIt != TopicsInfo.end())("topic", topic)("partition", partition)("session", Session)("database", Context->DatabasePath);
 
     auto& req = request->Record;
     req.SetSession(Session);

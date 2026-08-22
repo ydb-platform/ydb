@@ -1,6 +1,7 @@
 RECURSE(
     arrow_kernels_dump
     astdiff
+    langver_dump
     minirun
     pg_catalog_dump
     pg-make-test
@@ -16,5 +17,7 @@ RECURSE(
     yql_complete
     yql_facade_run
     yql_highlight
+    yql_language_server
     yql_linter
+    ysondiff
 )

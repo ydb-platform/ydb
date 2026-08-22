@@ -27,10 +27,13 @@ message TNodeLocation {
     optional uint32 BodyNum = 4 [deprecated=true];
     optional uint32 Body = 100500 [deprecated=true]; // for compatibility with WalleLocation
 
+    optional string BridgePileName = 5 [(PrintName) = "P"];
     optional string DataCenter = 10 [(PrintName) = "DC"];
     optional string Module = 20 [(PrintName) = "M"];
     optional string Rack = 30 [(PrintName) = "R"];
     optional string Unit = 40 [(PrintName) = "U"];
+    // value 50 is used for PDisk domain mapping
+    // optional string DiskScope = 50 [(PrintName) = "DS"];
 }
 
 message TClusterUUIDs {
@@ -41,6 +44,76 @@ message TClusterUUIDs {
 message TScopeId {
     optional fixed64 X1 = 1;
     optional fixed64 X2 = 2;
+}
+
+// Represent credential to perform RDMA transaction
+message TRdmaCred {
+    required fixed64 Address = 1;
+    required uint64 Size = 2;
+    required fixed32 Rkey = 3;
+}
+
+message TRdmaCreds {
+    repeated TRdmaCred Creds = 1;
+}
+
+message TRdmaHandshake {
+    required uint32 QpNum = 1; // Queie pair num
+    required fixed64 SubnetPrefix = 3;
+    required fixed64 InterfaceId = 4;
+    required uint32 MtuIndex = 5; // MTU index according to ibverbs specification
+    // Type of supported verbs
+    oneof Verb {
+        TRdmaCred Read = 6;
+    }
+    // Perform additional software checksum for rdma events
+    optional bool RdmaChecksum = 11;
+    optional uint32 SendReceiveVersion = 12;
+}
+
+message TRdmaHandshakeReadAck {
+    oneof Status {
+        fixed32 Digest = 1; // set in case of OK, contains checksum of read RDMA region
+        string Err = 2;     // set in case of error, contains explanation of remote read error
+    }
+}
+
+enum ERdmaSyncErrorCode {
+    SYNC_ERR_UNKNOWN = 0;
+    SYNC_ERR_UNSUPPORTED_VERSION = 1;
+    SYNC_ERR_UNEXPECTED_SESSION = 2;
+    SYNC_ERR_HASH_CHAIN_MISMATCH = 3;
+    SYNC_ERR_RDMA_FAILED = 4;
+    SYNC_ERR_TIMEOUT = 5;
+}
+
+// Send by TCP
+message TRdmaStartSync {
+    required uint32 Version = 1;         // The RdmaSync protocol version
+    required uint64 FeatureMask = 2;     // Requested feature mask
+    required uint64 SessionHash = 3;     // xxhash(SelfVirtualId) | xxhash(PeerVirtualId)
+    optional uint64 MaxRdmaRttNs = 4;    // If set the peer will accept rdma ACK only if it took less time
+}
+
+message TRdmaFinSync {
+    required uint64 HashChain = 1;       // xxhash(TRdmaAckSync)
+    required uint64 RdmaRtt = 2;         // rdma rtt seen by peer
+}
+
+// Send by RDMA
+message TRdmaDataSync {
+    required uint64 HashChain = 1;       // xxhash(TRdmaStartSync)
+    required uint64 FeatureMask = 2;     // Accepted feature mask
+    required bytes Payload = 3;          // Some data just to fill packet
+}
+
+message TRdmaAckSync {
+    required uint64 HashChain = 1;       // xxhash(TRdmaDataSync)
+}
+
+message TRdmaErrSync {
+    required ERdmaSyncErrorCode Code = 1;
+    required string Text = 2;
 }
 
 message THandshakeRequest {
@@ -75,6 +148,8 @@ message THandshakeRequest {
     optional bool RequestExternalDataChannel = 21;
     optional bool RequestXxhash = 24;
     optional bool RequestXdcShuffle = 25;
+    optional bool RequestAllowDisablingPayloadChecksums = 28; // Can be requested per event. Affects XDC and RDMA payloads.
+    optional bool RequestSessionV2 = 29; // request TInterconnectSessionTCPv2 (no continuation, no encryption)
 
     optional bytes CompatibilityInfo = 22;
 
@@ -85,6 +160,8 @@ message THandshakeRequest {
         optional bytes Value = 2;
     }
     repeated TKeyValuePair Params = 26; // extra params for connection validation
+
+    optional TRdmaHandshake RdmaHandshake = 27; // Perform outgoing RDMA handshake
 }
 
 message THandshakeSuccess {
@@ -110,6 +187,8 @@ message THandshakeSuccess {
     optional bool UseExternalDataChannel = 14;
     optional bool UseXxhash = 16;
     optional bool UseXdcShuffle = 17;
+    optional bool AllowDisablingPayloadChecksums = 21;
+    optional bool UseSessionV2 = 22; // negotiated TInterconnectSessionTCPv2 usage
 
     optional bytes CompatibilityInfo = 15;
 
@@ -118,12 +197,23 @@ message THandshakeSuccess {
         optional bytes Value = 2;
     }
     repeated TKeyValuePair Params = 18; // extra params for connection validation
+
+    oneof RdmaHandshake {
+        TRdmaHandshake QpPrepared = 19; // Set and contains QP of incoming handshaker
+        string RdmaErr = 20;
+    }
 }
 
 message THandshakeReply {
     optional THandshakeSuccess Success = 1;
     optional string ErrorExplaination = 2;
     optional bool CookieCheckResult = 3;
+
+    message TKeyValuePair {
+        optional string Key = 1;
+        optional bytes Value = 2;
+    }
+    repeated TKeyValuePair Params = 4;
 }
 
 message TEvLoadMessage {
@@ -142,4 +232,23 @@ message TContinuationParams {
 
 message TExternalDataChannelParams {
     optional bytes HandshakeId = 1;
+}
+
+message TSystemPayloadV2 {
+    message TPingRequest {
+    }
+    message TPingResponse {
+        optional uint64 WallClock = 1; // TInstant::GetValue() for the sending node
+    }
+    message TPingConfirm {
+        optional uint64 WallClock = 1; // TInstant::GetValue() for the sending node
+    }
+    message TRequest {
+        oneof Request {
+            TPingRequest PingRequest = 1;
+            TPingResponse PingResponse = 2;
+            TPingConfirm PingConfirm = 3;
+        }
+    }
+    repeated TRequest Requests = 1;
 }

@@ -1,5 +1,7 @@
 PY3TEST()
 
+SUBSCRIBER(g:python-contrib )
+
 SRCDIR(contrib/python/chardet/py3)
 
 TEST_SRCS(

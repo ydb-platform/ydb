@@ -69,20 +69,32 @@ import struct
 import sys
 import types
 import warnings
-from collections import defaultdict, deque
+from collections import Counter, OrderedDict, defaultdict, deque
+from collections.abc import Callable, Generator, Iterable, Sequence
 from contextlib import contextmanager, suppress
-from enum import Flag
-from io import StringIO
+from enum import Enum, Flag
+from functools import partial
+from io import StringIO, TextIOBase
 from math import copysign, isnan
+from typing import TYPE_CHECKING, Any, Optional, TypeAlias, TypeVar
+
+if TYPE_CHECKING:
+    from hypothesis.control import BuildContext
+
+T = TypeVar("T")
+PrettyPrintFunction: TypeAlias = Callable[[Any, "RepresentationPrinter", bool], None]
+ArgLabelsT: TypeAlias = dict[str, tuple[int, int]]
 
 __all__ = [
-    "pretty",
     "IDKey",
     "RepresentationPrinter",
+    "_fixeddict_pprinter",
+    "_tuple_pprinter",
+    "pretty",
 ]
 
 
-def _safe_getattr(obj, attr, default=None):
+def _safe_getattr(obj: object, attr: str, default: Any | None = None) -> Any:
     """Safe version of getattr.
 
     Same as getattr, but will return ``default`` on any Exception,
@@ -95,15 +107,15 @@ def _safe_getattr(obj, attr, default=None):
         return default
 
 
-def pretty(obj):
+def pretty(obj: object, *, cycle: bool = False) -> str:
     """Pretty print the object's representation."""
     printer = RepresentationPrinter()
-    printer.pretty(obj)
+    printer.pretty(obj, cycle=cycle)
     return printer.getvalue()
 
 
 class IDKey:
-    def __init__(self, value):
+    def __init__(self, value: object):
         self.value = value
 
     def __hash__(self) -> int:
@@ -111,6 +123,98 @@ class IDKey:
 
     def __eq__(self, __o: object) -> bool:
         return isinstance(__o, type(self)) and id(self.value) == id(__o.value)
+
+
+def _try_inline_lambda(
+    func_name: str,
+    args: Sequence[object],
+    kwargs: dict[str, object],
+    printer: "RepresentationPrinter",
+) -> bool:
+    """Try to inline single-use lambda arguments into the body expression.
+
+    Given e.g. func_name="lambda b: hashlib.sha256(b).hexdigest()" with
+    args=(b'',), returns the printer output for "hashlib.sha256(b'').hexdigest()"
+    by substituting the argument repr into the AST.
+
+    Returns True if inlining succeeded (the printer has been written to),
+    False if inlining is not possible (parse failure, multi-use params, etc).
+    """
+    try:
+        tree = ast.parse(func_name, mode="eval")
+    except Exception:
+        return False
+    lam = tree.body
+    if not isinstance(lam, ast.Lambda):
+        return False
+
+    # Build param name -> argument repr mapping, matching Python call semantics
+    params = lam.args
+    if params.vararg or params.kwonlyargs or params.kw_defaults or params.kwarg:
+        return False
+
+    param_names = [p.arg for p in params.args]
+    # params.defaults are right-aligned: if there are 3 params and 1 default,
+    # params.defaults applies to the last param only.
+    n_defaults = len(params.defaults)
+    has_default = (
+        set(param_names[len(param_names) - n_defaults :]) if n_defaults else set()
+    )
+
+    # Bail if there are more positional args than parameters, or if any
+    # kwarg doesn't match a parameter name — these can't be inlined.
+    if len(args) > len(param_names):
+        return False
+    if any(k not in param_names for k in kwargs):
+        return False
+
+    arg_reprs: dict[str, str] = {}
+    for i, name in enumerate(param_names):
+        if i < len(args):
+            arg_reprs[name] = pretty(args[i])
+        elif name in kwargs:
+            arg_reprs[name] = pretty(kwargs[name])
+        elif name in has_default:
+            pass  # not passed, will use its default — just skip
+        else:
+            return False
+
+    # Bail if any repr is not valid Python (e.g. "HypothesisRandom(generated data)")
+    for repr_str in arg_reprs.values():
+        try:
+            ast.parse(repr_str, mode="eval")
+        except Exception:
+            return False
+
+    use_counts = dict.fromkeys(param_names, 0)
+    for node in ast.walk(lam.body):
+        if isinstance(node, ast.Name) and node.id in use_counts:
+            use_counts[node.id] += 1
+
+    # Bail if any parameter is used more than once (avoid duplicating expressions)
+    if any(count > 1 for count in use_counts.values()):
+        return False
+
+    # Substitute argument reprs into the body AST
+    class _Inliner(ast.NodeTransformer):
+        def visit_Name(self, node: ast.Name) -> ast.AST:
+            if node.id in arg_reprs:
+                # Parse the repr as an expression and splice it in.
+                # Wrap in parens to preserve precedence in all contexts.
+                replacement = ast.parse(arg_reprs[node.id], mode="eval").body
+                return ast.copy_location(replacement, node)
+            return node
+
+    new_body = _Inliner().visit(lam.body)
+    ast.fix_missing_locations(new_body)
+
+    try:
+        result = ast.unparse(new_body)
+    except Exception:
+        return False
+
+    printer.text(result)
+    return True
 
 
 class RepresentationPrinter:
@@ -123,30 +227,35 @@ class RepresentationPrinter:
 
     """
 
-    def __init__(self, output=None, *, context=None):
-        """Pass the output stream, and optionally the current build context.
+    def __init__(
+        self,
+        output: TextIOBase | None = None,
+        *,
+        context: Optional["BuildContext"] = None,
+    ) -> None:
+        """Optionally pass the output stream and the current build context.
 
         We use the context to represent objects constructed by strategies by showing
         *how* they were constructed, and add annotations showing which parts of the
         minimal failing example can vary without changing the test result.
         """
-        self.broken = False
-        self.output = StringIO() if output is None else output
-        self.max_width = 79
-        self.max_seq_length = 1000
-        self.output_width = 0
-        self.buffer_width = 0
-        self.buffer = deque()
+        self.broken: bool = False
+        self.output: TextIOBase = StringIO() if output is None else output
+        self.max_width: int = 79
+        self.max_seq_length: int = 1000
+        self.output_width: int = 0
+        self.buffer_width: int = 0
+        self.buffer: deque[Breakable | Text] = deque()
 
         root_group = Group(0)
         self.group_stack = [root_group]
         self.group_queue = GroupQueue(root_group)
-        self.indentation = 0
+        self.indentation: int = 0
 
-        self.stack = []
-        self.singleton_pprinters = {}
-        self.type_pprinters = {}
-        self.deferred_pprinters = {}
+        self.stack: list[int] = []
+        self.singleton_pprinters: dict[int, PrettyPrintFunction] = {}
+        self.type_pprinters: dict[type, PrettyPrintFunction] = {}
+        self.deferred_pprinters: dict[tuple[str, str], PrettyPrintFunction] = {}
         # If IPython has been imported, load up their pretty-printer registry
         if "IPython.lib.pretty" in sys.modules:
             ipp = sys.modules["IPython.lib.pretty"]
@@ -163,6 +272,8 @@ class RepresentationPrinter:
         # but we report each separately so that's someone else's problem here.
         # Invocations of self.repr_call() can report the slice for each argument,
         # which will then be used to look up the relevant comment if any.
+        self.known_object_printers: dict[IDKey, list[PrettyPrintFunction]]
+        self.slice_comments: dict[tuple[int, int], str]
         if context is None:
             self.known_object_printers = defaultdict(list)
             self.slice_comments = {}
@@ -170,11 +281,15 @@ class RepresentationPrinter:
             self.known_object_printers = context.known_object_printers
             self.slice_comments = context.data.slice_comments
         assert all(isinstance(k, IDKey) for k in self.known_object_printers)
+        # Track which slices we've already printed comments for, to avoid
+        # duplicating comments when nested objects share the same slice range.
+        self._commented_slices: set[tuple[int, int]] = set()
 
-    def pretty(self, obj):
+    def pretty(self, obj: object, *, cycle: bool = False) -> None:
         """Pretty print the given object."""
+
         obj_id = id(obj)
-        cycle = obj_id in self.stack
+        cycle = cycle or obj_id in self.stack
         self.stack.append(obj_id)
         try:
             with self.group():
@@ -186,6 +301,35 @@ class RepresentationPrinter:
                     pass
                 else:
                     return printer(obj, self, cycle)
+
+                # Look for the _repr_pretty_ method which allows users
+                # to define custom pretty printing.
+                # Some objects automatically create any requested
+                # attribute. Try to ignore most of them by checking for
+                # callability.
+                pretty_method = _safe_getattr(obj, "_repr_pretty_", None)
+                if callable(pretty_method):
+                    return pretty_method(self, cycle)
+
+                # Check for object-specific printers which show how this
+                # object was constructed (a Hypothesis special feature).
+                # This must come before type_pprinters so that sub-argument
+                # comments are shown for tuples/dicts/etc.
+                printers = self.known_object_printers[IDKey(obj)]
+                if len(printers) == 1:
+                    return printers[0](obj, self, cycle)
+                if printers:
+                    # Multiple registered functions for the same object (due to
+                    # caching, small ints, etc). Use the first if all produce
+                    # the same string; otherwise pretend none were registered.
+                    strs = set()
+                    for f in printers:
+                        p = RepresentationPrinter()
+                        f(obj, p, cycle)
+                        strs.add(p.getvalue())
+                    if len(strs) == 1:
+                        return printers[0](obj, self, cycle)
+
                 # Next walk the mro and check for either:
                 #   1) a registered printer
                 #   2) a _repr_pretty_ method
@@ -206,41 +350,31 @@ class RepresentationPrinter:
                             self.type_pprinters[cls] = printer
                             return printer(obj, self, cycle)
                         else:
-                            # Finally look for special method names.
-                            # Some objects automatically create any requested
-                            # attribute. Try to ignore most of them by checking for
-                            # callability.
-                            if "_repr_pretty_" in cls.__dict__:
-                                meth = cls._repr_pretty_
-                                if callable(meth):
-                                    return meth(obj, self, cycle)
-                # Now check for object-specific printers which show how this
-                # object was constructed (a Hypothesis special feature).
-                printers = self.known_object_printers[IDKey(obj)]
-                if len(printers) == 1:
-                    return printers[0](obj, self, cycle)
-                elif printers:
-                    # We've ended up with multiple registered functions for the same
-                    # object, which must have been returned from multiple calls due to
-                    # e.g. memoization.  If they all return the same string, we'll use
-                    # the first; otherwise we'll pretend that *none* were registered.
-                    #
-                    # It's annoying, but still seems to be the best option for which-
-                    # parts-matter too, as unreportable results aren't very useful.
-                    strs = set()
-                    for f in printers:
-                        p = RepresentationPrinter()
-                        f(obj, p, cycle)
-                        strs.add(p.getvalue())
-                    if len(strs) == 1:
-                        return printers[0](obj, self, cycle)
+                            if hasattr(cls, "__attrs_attrs__"):  # pragma: no cover
+                                return pprint_fields(
+                                    obj,
+                                    self,
+                                    cycle,
+                                    [at.name for at in cls.__attrs_attrs__ if at.init],
+                                )
+                            if hasattr(cls, "__dataclass_fields__"):
+                                return pprint_fields(
+                                    obj,
+                                    self,
+                                    cycle,
+                                    [
+                                        k
+                                        for k, v in cls.__dataclass_fields__.items()
+                                        if v.init
+                                    ],
+                                )
 
                 # A user-provided repr. Find newlines and replace them with p.break_()
                 return _repr_pprint(obj, self, cycle)
         finally:
             self.stack.pop()
 
-    def _break_outer_groups(self):
+    def _break_outer_groups(self) -> None:
         while self.max_width < self.output_width + self.buffer_width:
             group = self.group_queue.deq()
             if not group:
@@ -254,7 +388,7 @@ class RepresentationPrinter:
                 self.output_width = x.output(self.output, self.output_width)
                 self.buffer_width -= x.width
 
-    def text(self, obj):
+    def text(self, obj: str) -> None:
         """Add literal text to the output."""
         width = len(obj)
         if self.buffer:
@@ -269,7 +403,7 @@ class RepresentationPrinter:
             self.output.write(obj)
             self.output_width += width
 
-    def breakable(self, sep=" "):
+    def breakable(self, sep: str = " ") -> None:
         """Add a breakable separator to the output.
 
         This does not mean that it will automatically break here.  If no
@@ -289,7 +423,7 @@ class RepresentationPrinter:
             self.buffer_width += width
             self._break_outer_groups()
 
-    def break_(self):
+    def break_(self) -> None:
         """Explicitly insert a newline into the output, maintaining correct
         indentation."""
         self.flush()
@@ -298,7 +432,7 @@ class RepresentationPrinter:
         self.buffer_width = 0
 
     @contextmanager
-    def indent(self, indent):
+    def indent(self, indent: int) -> Generator[None, None, None]:
         """`with`-statement support for indenting/dedenting."""
         self.indentation += indent
         try:
@@ -307,7 +441,9 @@ class RepresentationPrinter:
             self.indentation -= indent
 
     @contextmanager
-    def group(self, indent=0, open="", close=""):
+    def group(
+        self, indent: int = 0, open: str = "", close: str = ""
+    ) -> Generator[None, None, None]:
         """Context manager for an indented group.
 
             with p.group(1, '{', '}'):
@@ -322,7 +458,7 @@ class RepresentationPrinter:
         finally:
             self.end_group(dedent=indent, close=close)
 
-    def begin_group(self, indent=0, open=""):
+    def begin_group(self, indent: int = 0, open: str = "") -> None:
         """Use the `with group(...) context manager instead.
 
         The begin_group() and end_group() methods are for IPython compatibility only;
@@ -335,7 +471,7 @@ class RepresentationPrinter:
         self.group_queue.enq(group)
         self.indentation += indent
 
-    def end_group(self, dedent=0, close=""):
+    def end_group(self, dedent: int = 0, close: str = "") -> None:
         """See begin_group()."""
         self.indentation -= dedent
         group = self.group_stack.pop()
@@ -344,7 +480,7 @@ class RepresentationPrinter:
         if close:
             self.text(close)
 
-    def _enumerate(self, seq):
+    def _enumerate(self, seq: Iterable[T]) -> Generator[tuple[int, T], None, None]:
         """Like enumerate, but with an upper limit on the number of items."""
         for idx, x in enumerate(seq):
             if self.max_seq_length and idx >= self.max_seq_length:
@@ -354,51 +490,71 @@ class RepresentationPrinter:
                 return
             yield idx, x
 
-    def flush(self):
+    def flush(self) -> None:
         """Flush data that is left in the buffer."""
         for data in self.buffer:
             self.output_width += data.output(self.output, self.output_width)
         self.buffer.clear()
         self.buffer_width = 0
 
-    def getvalue(self):
+    def getvalue(self) -> str:
         assert isinstance(self.output, StringIO)
         self.flush()
         return self.output.getvalue()
 
-    def maybe_repr_known_object_as_call(self, obj, cycle, name, args, kwargs):
-        # pprint this object as a call, _unless_ the call would be invalid syntax
-        # and the repr would be valid and there are not comments on arguments.
+    def maybe_repr_known_object_as_call(
+        self,
+        obj: object,
+        cycle: bool,
+        name: str,
+        args: Sequence[object],
+        kwargs: dict[str, object],
+        arg_labels: ArgLabelsT | None = None,
+    ) -> None:
+        # pprint this object as a call if it seems like a good idea to do so,
+        # otherwise pprint as repr.
+        # Rules:
+        # 1. If there are comments, we *must* print as a call.
+        # 2. Prefer valid syntax to invalid syntax.
+        # 3. Prefer shorter expressions.
         if cycle:
             return self.text("<...>")
-        # Since we don't yet track comments for sub-argument parts, we omit the
-        # "if no comments" condition here for now.  Add it when we revive
-        # https://github.com/HypothesisWorks/hypothesis/pull/3624/
-        with suppress(Exception):
-            # Check whether the repr is valid syntax:
-            ast.parse(repr(obj))
-            # Given that the repr is valid syntax, check the call:
-            p = RepresentationPrinter()
-            p.stack = self.stack.copy()
-            p.known_object_printers = self.known_object_printers
-            p.repr_call(name, args, kwargs)
-            # If the call is not valid syntax, use the repr
-            try:
-                ast.parse(p.getvalue())
-            except Exception:
-                return _repr_pprint(obj, self, cycle)
-        return self.repr_call(name, args, kwargs)
+        # Look up comments from slice_comments if we have arg_labels
+        comments = {}
+        if arg_labels is not None:
+            for key, sr in arg_labels.items():
+                if sr in self.slice_comments:
+                    comments[key] = self.slice_comments[sr]
+        # If there are comments, we must use our call-style repr regardless of syntax
+        if not comments:
+            with suppress(Exception):
+                # Check whether the repr is valid syntax:
+                ast.parse(repr(obj))
+                # Given that the repr is valid syntax, check the call:
+                p = RepresentationPrinter()
+                p.stack = self.stack.copy()
+                p.known_object_printers = self.known_object_printers
+                p.repr_call(name, args, kwargs)
+                # If the call is not valid syntax, use the repr
+                if len(repr(obj)) < len(p.getvalue()):
+                    return _repr_pprint(obj, self, cycle)
+                try:
+                    ast.parse(p.getvalue())
+                except Exception:
+                    return _repr_pprint(obj, self, cycle)
+        return self.repr_call(name, args, kwargs, arg_slices=arg_labels)
 
     def repr_call(
         self,
-        func_name,
-        args,
-        kwargs,
+        func_name: str,
+        args: Sequence[object],
+        kwargs: dict[str, object],
         *,
-        force_split=None,
-        arg_slices=None,
-        leading_comment=None,
-    ):
+        force_split: bool | None = None,
+        arg_slices: ArgLabelsT | None = None,
+        leading_comment: str | None = None,
+        avoid_realization: bool = False,
+    ) -> None:
         """Helper function to represent a function call.
 
         - func_name, args, and kwargs should all be pretty obvious.
@@ -409,14 +565,30 @@ class RepresentationPrinter:
         """
         assert isinstance(func_name, str)
         if func_name.startswith(("lambda:", "lambda ")):
+            # Before wrapping the lambda in parens for a call, try to inline
+            # arguments that are used exactly once in the body. If all args
+            # get inlined, we can emit just the body expression with no call.
+            # Skip inlining only when there are actual comments on arguments,
+            # since comments need the call-style repr to attach to.
+            has_comments = arg_slices and any(
+                sr in self.slice_comments and sr not in self._commented_slices
+                for sr in arg_slices.values()
+            )
+            if not has_comments:
+                inlined = _try_inline_lambda(func_name, args, kwargs, self)
+                if inlined:
+                    return
             func_name = f"({func_name})"
         self.text(func_name)
-        all_args = [(None, v) for v in args] + list(kwargs.items())
-        comments = {
-            k: self.slice_comments[v]
-            for k, v in (arg_slices or {}).items()
-            if v in self.slice_comments
-        }
+        # Build list of (label, value) pairs. Labels are "arg[i]" for positional
+        # args, or the keyword name. Skip slices already commented at a higher level.
+        all_args = [(f"arg[{i}]", v) for i, v in enumerate(args)]
+        all_args += list(kwargs.items())
+        arg_slices = arg_slices or {}
+        comments: dict[str, tuple[str, tuple[int, int]]] = {}
+        for label, sr in arg_slices.items():
+            if sr in self.slice_comments and sr not in self._commented_slices:
+                comments[label] = (self.slice_comments[sr], sr)
 
         if leading_comment or any(k in comments for k, _ in all_args):
             # We have to split one arg per line in order to leave comments on them.
@@ -432,7 +604,7 @@ class RepresentationPrinter:
             force_split = "\n" in s
 
         with self.group(indent=4, open="(", close=""):
-            for i, (k, v) in enumerate(all_args):
+            for i, (label, v) in enumerate(all_args):
                 if force_split:
                     if i == 0 and leading_comment:
                         self.break_()
@@ -441,42 +613,47 @@ class RepresentationPrinter:
                 else:
                     assert leading_comment is None  # only passed by top-level report
                     self.breakable(" " if i else "")
-                if k:
-                    self.text(f"{k}=")
-                self.pretty(v)
+                if not label.startswith("arg["):
+                    self.text(f"{label}=")
+                # Mark slice as commented BEFORE printing value, so nested printers skip it
+                entry = comments.get(label)
+                if entry:
+                    self._commented_slices.add(entry[1])
+                if avoid_realization:
+                    self.text("<symbolic>")
+                else:
+                    self.pretty(v)
                 if force_split or i + 1 < len(all_args):
                     self.text(",")
-                # Optional comments are used to annotate which-parts-matter
-                comment = comments.get(i) or comments.get(k)
-                if comment:
-                    self.text(f"  # {comment}")
+                if entry:
+                    self.text(f"  # {entry[0]}")
         if all_args and force_split:
             self.break_()
         self.text(")")  # after dedent
 
 
 class Printable:
-    def output(self, stream, output_width):  # pragma: no cover
+    def output(self, stream: TextIOBase, output_width: int) -> int:  # pragma: no cover
         raise NotImplementedError
 
 
 class Text(Printable):
-    def __init__(self):
-        self.objs = []
-        self.width = 0
+    def __init__(self) -> None:
+        self.objs: list[str] = []
+        self.width: int = 0
 
-    def output(self, stream, output_width):
+    def output(self, stream: TextIOBase, output_width: int) -> int:
         for obj in self.objs:
             stream.write(obj)
         return output_width + self.width
 
-    def add(self, obj, width):
+    def add(self, obj: str, width: int) -> None:
         self.objs.append(obj)
         self.width += width
 
 
 class Breakable(Printable):
-    def __init__(self, seq, width, pretty):
+    def __init__(self, seq: str, width: int, pretty: RepresentationPrinter) -> None:
         self.obj = seq
         self.width = width
         self.pretty = pretty
@@ -484,7 +661,7 @@ class Breakable(Printable):
         self.group = pretty.group_stack[-1]
         self.group.breakables.append(self)
 
-    def output(self, stream, output_width):
+    def output(self, stream: TextIOBase, output_width: int) -> int:
         self.group.breakables.popleft()
         if self.group.want_break:
             stream.write("\n" + " " * self.indentation)
@@ -496,25 +673,25 @@ class Breakable(Printable):
 
 
 class Group(Printable):
-    def __init__(self, depth):
+    def __init__(self, depth: int) -> None:
         self.depth = depth
-        self.breakables = deque()
-        self.want_break = False
+        self.breakables: deque[Breakable] = deque()
+        self.want_break: bool = False
 
 
 class GroupQueue:
-    def __init__(self, *groups):
-        self.queue = []
+    def __init__(self, *groups: Group) -> None:
+        self.queue: list[list[Group]] = []
         for group in groups:
             self.enq(group)
 
-    def enq(self, group):
+    def enq(self, group: Group) -> None:
         depth = group.depth
         while depth > len(self.queue) - 1:
             self.queue.append([])
         self.queue[depth].append(group)
 
-    def deq(self):
+    def deq(self) -> Group | None:
         for stack in self.queue:
             for idx, group in enumerate(reversed(stack)):
                 if group.breakables:
@@ -524,26 +701,29 @@ class GroupQueue:
             for group in stack:
                 group.want_break = True
             del stack[:]
+        return None
 
-    def remove(self, group):
+    def remove(self, group: Group) -> None:
         try:
             self.queue[group.depth].remove(group)
         except ValueError:
             pass
 
 
-def _seq_pprinter_factory(start, end, basetype):
+def _seq_pprinter_factory(start: str, end: str, basetype: type) -> PrettyPrintFunction:
     """Factory that returns a pprint function useful for sequences.
 
     Used by the default pprint for tuples, dicts, and lists.
     """
 
-    def inner(obj, p, cycle):
+    def inner(
+        obj: tuple[object] | list[object], p: RepresentationPrinter, cycle: bool
+    ) -> None:
         typ = type(obj)
         if (
             basetype is not None
             and typ is not basetype
-            and typ.__repr__ != basetype.__repr__
+            and typ.__repr__ != basetype.__repr__  # type: ignore[comparison-overlap]
         ):
             # If the subclass provides its own repr, use it instead.
             return p.text(typ.__repr__(obj))
@@ -564,11 +744,23 @@ def _seq_pprinter_factory(start, end, basetype):
     return inner
 
 
-def _set_pprinter_factory(start, end, basetype):
+def get_class_name(cls: type[object]) -> str:
+    class_name = _safe_getattr(cls, "__qualname__", cls.__name__)
+    assert isinstance(class_name, str)
+    return class_name
+
+
+def _set_pprinter_factory(
+    start: str, end: str, basetype: type[object]
+) -> PrettyPrintFunction:
     """Factory that returns a pprint function useful for sets and
     frozensets."""
 
-    def inner(obj, p, cycle):
+    def inner(
+        obj: set[Any] | frozenset[Any],
+        p: RepresentationPrinter,
+        cycle: bool,
+    ) -> None:
         typ = type(obj)
         if (
             basetype is not None
@@ -582,12 +774,12 @@ def _set_pprinter_factory(start, end, basetype):
             return p.text(start + "..." + end)
         if not obj:
             # Special case.
-            p.text(basetype.__name__ + "()")
+            p.text(get_class_name(basetype) + "()")
         else:
             step = len(start)
             with p.group(step, start, end):
                 # Like dictionary keys, try to sort the items if there aren't too many
-                items = obj
+                items: Iterable[object] = obj
                 if not (p.max_seq_length and len(obj) >= p.max_seq_length):
                     try:
                         items = sorted(obj)
@@ -603,11 +795,13 @@ def _set_pprinter_factory(start, end, basetype):
     return inner
 
 
-def _dict_pprinter_factory(start, end, basetype=None):
+def _dict_pprinter_factory(
+    start: str, end: str, basetype: type[object] | None = None
+) -> PrettyPrintFunction:
     """Factory that returns a pprint function used by the default pprint of
     dicts and dict proxies."""
 
-    def inner(obj, p, cycle):
+    def inner(obj: dict[object, object], p: RepresentationPrinter, cycle: bool) -> None:
         typ = type(obj)
         if (
             basetype is not None
@@ -619,25 +813,27 @@ def _dict_pprinter_factory(start, end, basetype=None):
 
         if cycle:
             return p.text("{...}")
-        with p.group(1, start, end):
+        with (
+            p.group(1, start, end),
             # If the dict contains both "" and b"" (empty string and empty bytes), we
             # ignore the BytesWarning raised by `python -bb` mode.  We can't use
             # `.items()` because it might be a non-`dict` type of mapping.
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore", BytesWarning)
-                for idx, key in p._enumerate(obj):
-                    if idx:
-                        p.text(",")
-                        p.breakable()
-                    p.pretty(key)
-                    p.text(": ")
-                    p.pretty(obj[key])
+            warnings.catch_warnings(),
+        ):
+            warnings.simplefilter("ignore", BytesWarning)
+            for idx, key in p._enumerate(obj):
+                if idx:
+                    p.text(",")
+                    p.breakable()
+                p.pretty(key)
+                p.text(": ")
+                p.pretty(obj[key])
 
     inner.__name__ = f"_dict_pprinter_factory({start!r}, {end!r}, {basetype!r})"
     return inner
 
 
-def _super_pprint(obj, p, cycle):
+def _super_pprint(obj: Any, p: RepresentationPrinter, cycle: bool) -> None:
     """The pprint for the super type."""
     with p.group(8, "<super: ", ">"):
         p.pretty(obj.__thisclass__)
@@ -646,7 +842,7 @@ def _super_pprint(obj, p, cycle):
         p.pretty(obj.__self__)
 
 
-def _re_pattern_pprint(obj, p, cycle):
+def _re_pattern_pprint(obj: re.Pattern, p: RepresentationPrinter, cycle: bool) -> None:
     """The pprint function for regular expression patterns."""
     p.text("re.compile(")
     pattern = repr(obj.pattern)
@@ -679,24 +875,20 @@ def _re_pattern_pprint(obj, p, cycle):
     p.text(")")
 
 
-def _type_pprint(obj, p, cycle):
+def _type_pprint(obj: type[object], p: RepresentationPrinter, cycle: bool) -> None:
     """The pprint for classes and types."""
     # Heap allocated types might not have the module attribute,
     # and others may set it to None.
 
     # Checks for a __repr__ override in the metaclass
     # != rather than is not because pypy compatibility
-    if type(obj).__repr__ != type.__repr__:
+    if type(obj).__repr__ != type.__repr__:  # type: ignore[comparison-overlap]
         _repr_pprint(obj, p, cycle)
         return
 
     mod = _safe_getattr(obj, "__module__", None)
     try:
         name = obj.__qualname__
-        if not isinstance(name, str):  # pragma: no cover
-            # This can happen if the type implements __qualname__ as a property
-            # or other descriptor in Python 2.
-            raise Exception("Try __name__")
     except Exception:  # pragma: no cover
         name = obj.__name__
         if not isinstance(name, str):
@@ -708,7 +900,7 @@ def _type_pprint(obj, p, cycle):
         p.text(mod + "." + name)
 
 
-def _repr_pprint(obj, p, cycle):
+def _repr_pprint(obj: object, p: RepresentationPrinter, cycle: bool) -> None:
     """A pprint that just redirects to the normal repr function."""
     # Find newlines and replace them with p.break_()
     output = repr(obj)
@@ -718,14 +910,104 @@ def _repr_pprint(obj, p, cycle):
         p.text(output_line)
 
 
-def _function_pprint(obj, p, cycle):
+def pprint_fields(
+    obj: object, p: RepresentationPrinter, cycle: bool, fields: Iterable[str]
+) -> None:
+    name = get_class_name(obj.__class__)
+    if cycle:
+        return p.text(f"{name}(...)")
+    with p.group(1, name + "(", ")"):
+        for idx, field in enumerate(fields):
+            if idx:
+                p.text(",")
+                p.breakable()
+            p.text(field)
+            p.text("=")
+            p.pretty(getattr(obj, field))
+
+
+def _get_slice_comment(
+    p: RepresentationPrinter,
+    arg_labels: ArgLabelsT,
+    key: Any,
+) -> tuple[str, tuple[int, int]] | None:
+    """Look up a comment for a slice, if not already printed at a higher level."""
+    if (sr := arg_labels.get(key)) and sr in p.slice_comments:
+        if sr not in p._commented_slices:
+            return (p.slice_comments[sr], sr)
+    return None
+
+
+def _tuple_pprinter(arg_labels: ArgLabelsT) -> PrettyPrintFunction:
+    """Pretty printer for tuples that shows sub-argument comments."""
+
+    def inner(obj: tuple, p: RepresentationPrinter, cycle: bool) -> None:
+        if cycle:
+            return p.text("(...)")
+
+        get = lambda i: _get_slice_comment(p, arg_labels, f"arg[{i}]")
+        has_comments = any(get(i) for i in range(len(obj)))
+
+        with p.group(indent=4, open="(", close=""):
+            for idx, x in p._enumerate(obj):
+                p.break_() if has_comments else (p.breakable() if idx else None)
+                p.pretty(x)
+                if has_comments or idx + 1 < len(obj) or len(obj) == 1:
+                    p.text(",")
+                if entry := get(idx):
+                    p._commented_slices.add(entry[1])
+                    p.text(f"  # {entry[0]}")
+        if has_comments and obj:
+            p.break_()
+        p.text(")")
+
+    return inner
+
+
+def _fixeddict_pprinter(arg_labels: ArgLabelsT) -> PrettyPrintFunction:
+    """Pretty printer for fixed_dictionaries that shows sub-argument comments."""
+
+    def inner(obj: dict, p: RepresentationPrinter, cycle: bool) -> None:
+        if cycle:
+            return p.text("{...}")
+
+        get = lambda k: _get_slice_comment(p, arg_labels, k)
+        # Print in the dict's actual (possibly permuted) iteration order.
+        keys = list(obj)
+        has_comments = any(get(k) for k in keys)
+
+        with p.group(indent=4, open="{", close=""):
+            for idx, key in p._enumerate(keys):
+                p.break_() if has_comments else (p.breakable() if idx else None)
+                p.pretty(key)
+                p.text(": ")
+                p.pretty(obj[key])
+                if has_comments or idx + 1 < len(keys):
+                    p.text(",")
+                if entry := get(key):
+                    p._commented_slices.add(entry[1])
+                    p.text(f"  # {entry[0]}")
+        if has_comments and obj:
+            p.break_()
+        p.text("}")
+
+    return inner
+
+
+def _function_pprint(
+    obj: types.FunctionType | types.BuiltinFunctionType | types.MethodType,
+    p: RepresentationPrinter,
+    cycle: bool,
+) -> None:
     """Base pprint for all functions and builtin functions."""
     from hypothesis.internal.reflection import get_pretty_function_description
 
     p.text(get_pretty_function_description(obj))
 
 
-def _exception_pprint(obj, p, cycle):
+def _exception_pprint(
+    obj: BaseException, p: RepresentationPrinter, cycle: bool
+) -> None:
     """Base pprint for all exceptions."""
     name = getattr(obj.__class__, "__qualname__", obj.__class__.__name__)
     if obj.__class__.__module__ not in ("exceptions", "builtins"):
@@ -739,7 +1021,7 @@ def _exception_pprint(obj, p, cycle):
             p.pretty(arg)
 
 
-def _repr_integer(obj, p, cycle):
+def _repr_integer(obj: int, p: RepresentationPrinter, cycle: bool) -> None:
     if abs(obj) < 1_000_000_000:
         p.text(repr(obj))
     elif abs(obj) < 10**640:
@@ -751,7 +1033,9 @@ def _repr_integer(obj, p, cycle):
         p.text(f"{obj:#_x}")
 
 
-def _repr_float_counting_nans(obj, p, cycle):
+def _repr_float_counting_nans(
+    obj: float, p: RepresentationPrinter, cycle: bool
+) -> None:
     if isnan(obj):
         if struct.pack("!d", abs(obj)) != struct.pack("!d", float("nan")):
             show = hex(*struct.unpack("Q", struct.pack("d", obj)))
@@ -762,7 +1046,7 @@ def _repr_float_counting_nans(obj, p, cycle):
 
 
 #: printers for builtin types
-_type_pprinters = {
+_type_pprinters: dict[type, PrettyPrintFunction] = {
     int: _repr_integer,
     float: _repr_float_counting_nans,
     str: _repr_pprint,
@@ -786,10 +1070,12 @@ _type_pprinters = {
 }
 
 #: printers for types specified by name
-_deferred_type_pprinters = {}  # type: ignore
+_deferred_type_pprinters: dict[tuple[str, str], PrettyPrintFunction] = {}
 
 
-def for_type_by_name(type_module, type_name, func):
+def for_type_by_name(
+    type_module: str, type_name: str, func: PrettyPrintFunction
+) -> PrettyPrintFunction | None:
     """Add a pretty printer for a type specified by the module and name of a
     type rather than the type object itself."""
     key = (type_module, type_name)
@@ -799,12 +1085,14 @@ def for_type_by_name(type_module, type_name, func):
 
 
 #: printers for the default singletons
-_singleton_pprinters = dict.fromkeys(
+_singleton_pprinters: dict[int, PrettyPrintFunction] = dict.fromkeys(
     map(id, [None, True, False, Ellipsis, NotImplemented]), _repr_pprint
 )
 
 
-def _defaultdict_pprint(obj, p, cycle):
+def _defaultdict_pprint(
+    obj: defaultdict[object, object], p: RepresentationPrinter, cycle: bool
+) -> None:
     name = obj.__class__.__name__
     with p.group(len(name) + 1, name + "(", ")"):
         if cycle:
@@ -816,7 +1104,9 @@ def _defaultdict_pprint(obj, p, cycle):
             p.pretty(dict(obj))
 
 
-def _ordereddict_pprint(obj, p, cycle):
+def _ordereddict_pprint(
+    obj: OrderedDict[object, object], p: RepresentationPrinter, cycle: bool
+) -> None:
     name = obj.__class__.__name__
     with p.group(len(name) + 1, name + "(", ")"):
         if cycle:
@@ -825,7 +1115,7 @@ def _ordereddict_pprint(obj, p, cycle):
             p.pretty(list(obj.items()))
 
 
-def _deque_pprint(obj, p, cycle):
+def _deque_pprint(obj: deque[object], p: RepresentationPrinter, cycle: bool) -> None:
     name = obj.__class__.__name__
     with p.group(len(name) + 1, name + "(", ")"):
         if cycle:
@@ -834,7 +1124,9 @@ def _deque_pprint(obj, p, cycle):
             p.pretty(list(obj))
 
 
-def _counter_pprint(obj, p, cycle):
+def _counter_pprint(
+    obj: Counter[object], p: RepresentationPrinter, cycle: bool
+) -> None:
     name = obj.__class__.__name__
     with p.group(len(name) + 1, name + "(", ")"):
         if cycle:
@@ -843,15 +1135,17 @@ def _counter_pprint(obj, p, cycle):
             p.pretty(dict(obj))
 
 
-def _repr_dataframe(obj, p, cycle):  # pragma: no cover
+def _repr_dataframe(
+    obj: object, p: RepresentationPrinter, cycle: bool
+) -> None:  # pragma: no cover
     with p.indent(4):
         p.break_()
         _repr_pprint(obj, p, cycle)
     p.break_()
 
 
-def _repr_enum(obj, p, cycle):
-    tname = type(obj).__name__
+def _repr_enum(obj: Enum, p: RepresentationPrinter, cycle: bool) -> None:
+    tname = get_class_name(type(obj))
     if isinstance(obj, Flag):
         p.text(
             " | ".join(f"{tname}.{x.name}" for x in type(obj) if x & obj == x)
@@ -866,7 +1160,7 @@ class _ReprDots:
         return "..."
 
 
-def _repr_partial(obj, p, cycle):
+def _repr_partial(obj: partial[Any], p: RepresentationPrinter, cycle: bool) -> None:
     args, kw = obj.args, obj.keywords
     if cycle:
         args, kw = (_ReprDots(),), {}

@@ -3,10 +3,11 @@ preserve
 [clinic start generated code]*/
 
 #if defined(Py_BUILD_CORE) && !defined(Py_BUILD_CORE_MODULE)
-#  include "pycore_gc.h"            // PyGC_Head
-#  include "pycore_runtime.h"       // _Py_ID()
+#  include "pycore_gc.h"          // PyGC_Head
+#  include "pycore_runtime.h"     // _Py_ID()
 #endif
-
+#include "pycore_abstract.h"      // _PyNumber_Index()
+#include "pycore_modsupport.h"    // _PyArg_UnpackKeywords()
 
 PyDoc_STRVAR(_bisect_bisect_right__doc__,
 "bisect_right($module, /, a, x, lo=0, hi=None, *, key=None)\n"
@@ -15,8 +16,8 @@ PyDoc_STRVAR(_bisect_bisect_right__doc__,
 "Return the index where to insert item x in list a, assuming a is sorted.\n"
 "\n"
 "The return value i is such that all e in a[:i] have e <= x, and all e in\n"
-"a[i:] have e > x.  So if x already appears in the list, a.insert(i, x) will\n"
-"insert just after the rightmost x already there.\n"
+"a[i:] have e > x.  So if x already appears in the list, a.insert(i, x)\n"
+"will insert just after the rightmost x already there.\n"
 "\n"
 "Optional args lo (default 0) and hi (default len(a)) bound the\n"
 "slice of a to be searched.\n"
@@ -228,8 +229,8 @@ PyDoc_STRVAR(_bisect_bisect_left__doc__,
 "Return the index where to insert item x in list a, assuming a is sorted.\n"
 "\n"
 "The return value i is such that all e in a[:i] have e < x, and all e in\n"
-"a[i:] have e >= x.  So if x already appears in the list, a.insert(i, x) will\n"
-"insert just before the leftmost x already there.\n"
+"a[i:] have e >= x.  So if x already appears in the list, a.insert(i, x)\n"
+"will insert just before the leftmost x already there.\n"
 "\n"
 "Optional args lo (default 0) and hi (default len(a)) bound the\n"
 "slice of a to be searched.\n"
@@ -433,4 +434,4 @@ skip_optional_kwonly:
 exit:
     return return_value;
 }
-/*[clinic end generated code: output=57335e39ce2bf80e input=a9049054013a1b77]*/
+/*[clinic end generated code: output=97bfe6ec4565161a input=a9049054013a1b77]*/

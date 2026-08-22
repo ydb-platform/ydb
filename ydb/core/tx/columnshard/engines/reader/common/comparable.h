@@ -1,0 +1,89 @@
+#pragma once
+#include <ydb/core/formats/arrow/rows/view.h>
+
+#include <ydb/library/accessor/accessor.h>
+
+namespace NKikimr::NOlap {
+class TPortionInfo;
+
+namespace NReader {
+class TReadMetadataBase;
+}
+}   // namespace NKikimr::NOlap
+
+namespace NKikimr::NOlap::NReader::NCommon {
+
+class TReplaceKeyAdapter {
+private:
+    bool Reverse = false;
+    NArrow::TSimpleRow Value;
+
+public:
+    static TReplaceKeyAdapter BuildStart(const TPortionInfo& portion, const TReadMetadataBase& readMetadata);
+    static TReplaceKeyAdapter BuildFinish(const TPortionInfo& portion, const TReadMetadataBase& readMetadata);
+
+    const NArrow::TSimpleRow& GetValue() const {
+        return Value;
+    }
+
+    NArrow::TSimpleRow CopyValue() const {
+        return Value;
+    }
+
+    NArrow::TSimpleRow&& ExtractValue() && {
+        return std::move(Value);
+    }
+
+    explicit TReplaceKeyAdapter(NArrow::TSimpleRow&& rk, const bool reverse)
+        : Reverse(reverse)
+        , Value(std::move(rk))
+    {
+    }
+
+    std::partial_ordering Compare(const TReplaceKeyAdapter& item) const;
+
+    bool operator<(const TReplaceKeyAdapter& item) const {
+        return Compare(item) == std::partial_ordering::less;
+    }
+
+    bool operator<=(const TReplaceKeyAdapter& item) const {
+        auto compareResult = Compare(item);
+        return compareResult == std::partial_ordering::less || compareResult == std::partial_ordering::equivalent;
+    }
+
+    TString DebugString() const {
+        return TStringBuilder() << "point:{" << Value.DebugString() << "};reverse:" << Reverse << ";";
+    }
+};
+
+class TCompareKeyForScanSequence {
+private:
+    TReplaceKeyAdapter Key;
+    ui32 SourceIdx;
+
+public:
+    const TReplaceKeyAdapter GetKey() const {
+        return Key;
+    }
+
+    explicit TCompareKeyForScanSequence(const TReplaceKeyAdapter& key, const ui32 sourceIdx)
+        : Key(key)
+        , SourceIdx(sourceIdx)
+    {
+    }
+
+    static TCompareKeyForScanSequence BorderStart(const TReplaceKeyAdapter& key) {
+        return TCompareKeyForScanSequence(key, 0);
+    }
+
+    bool operator<(const TCompareKeyForScanSequence& item) const {
+        const std::partial_ordering compareResult = Key.Compare(item.Key);
+        if (compareResult == std::partial_ordering::equivalent) {
+            return SourceIdx < item.SourceIdx;
+        } else {
+            return compareResult == std::partial_ordering::less;
+        }
+    };
+};
+
+}   // namespace NKikimr::NOlap::NReader::NCommon

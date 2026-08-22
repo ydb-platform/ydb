@@ -39,7 +39,7 @@ from responses.registries import FirstMatchRegistry
 try:
     from typing_extensions import Literal
 except ImportError:  # pragma: no cover
-    from typing import Literal  # type: ignore  # pragma: no cover
+    from typing import Literal
 
 from io import BufferedReader
 from io import BytesIO
@@ -226,8 +226,8 @@ def get_wrapped(
                 responses._set_registry(registry)
 
             with assert_mock, responses:
-                # set 'assert_all_requests_are_fired' temporarily for a single run.
-                # Mock automatically unsets to avoid leakage to another decorated
+                # set 'assert_all_requests_are_fired' temporarily for a
+                # single run. Mock automatically unsets to avoid leakage to another decorated
                 # function since we still apply the value on 'responses.mock' object
                 return func(*args, **kwargs)
 
@@ -246,11 +246,13 @@ class CallList(Sequence[Any], Sized):
 
     @overload
     def __getitem__(self, idx: int) -> Call:
-        ...
+        """Overload for scenario when index is provided."""
 
     @overload
-    def __getitem__(self, idx: "slice[int, int, Optional[int]]") -> List[Call]:
-        ...
+    def __getitem__(
+        self, idx: "slice[Optional[int], Optional[int], Optional[int]]"
+    ) -> List[Call]:
+        """Overload for scenario when slice is provided."""
 
     def __getitem__(self, idx: Union[int, slice]) -> Union[Call, List[Call]]:
         return self._calls[idx]
@@ -856,12 +858,21 @@ class RequestsMock:
 
         for rsp in data["responses"]:
             rsp = rsp["response"]
+            headers = rsp["headers"] if "headers" in rsp else None
+
+            if headers is not None and "content_type" in rsp:
+                headers = {
+                    k: v for k, v in headers.items() if k.lower() != "content-type"
+                }
+                if not headers:
+                    headers = None
+
             self.add(
                 method=rsp["method"],
                 url=rsp["url"],
                 body=rsp["body"],
                 status=rsp["status"],
-                headers=rsp["headers"] if "headers" in rsp else None,
+                headers=headers,
                 content_type=rsp["content_type"],
                 auto_calculate_content_length=rsp["auto_calculate_content_length"],
             )
@@ -967,8 +978,8 @@ class RequestsMock:
         match_querystring: Union[bool, FalseBool] = FalseBool(),
         content_type: Optional[str] = "text/plain",
         match: "_MatcherIterable" = (),
-    ) -> None:
-        self._registry.add(
+    ) -> BaseResponse:
+        return self._registry.add(
             CallbackResponse(
                 url=url,
                 method=method,
@@ -990,27 +1001,24 @@ class RequestsMock:
         self.start()
         return self
 
-    def __exit__(self, type: Any, value: Any, traceback: Any) -> bool:
-        success = type is None
+    def __exit__(self, type: Any, value: Any, traceback: Any) -> None:
         try:
-            self.stop(allow_assert=success)
+            self.stop(allow_assert=True)
         finally:
             self.reset()
-        return success
 
     @overload
     def activate(self, func: "_F" = ...) -> "_F":
         """Overload for scenario when 'responses.activate' is used."""
 
     @overload
-    def activate(  # type: ignore[misc]
+    def activate(
         self,
         *,
         registry: Type[Any] = ...,
         assert_all_requests_are_fired: bool = ...,
     ) -> Callable[["_F"], "_F"]:
-        """Overload for scenario when
-        'responses.activate(registry=, assert_all_requests_are_fired=True)' is used.
+        """Overload for scenario when 'responses.activate(...)' is used.
         See https://github.com/getsentry/responses/pull/469 for more details
         """
 
@@ -1052,7 +1060,10 @@ class RequestsMock:
         self, url: str
     ) -> Dict[str, Union[str, int, float, List[Optional[Union[str, int, float]]]]]:
         params: Dict[str, Union[str, int, float, List[Any]]] = {}
-        for key, val in groupby(parse_qsl(urlsplit(url).query), lambda kv: kv[0]):
+        for key, val in groupby(
+            parse_qsl(urlsplit(url).query, keep_blank_values=True),
+            lambda kv: kv[0],
+        ):
             values = list(map(lambda x: x[1], val))
             if len(values) == 1:
                 values = values[0]  # type: ignore[assignment]
@@ -1152,7 +1163,9 @@ class RequestsMock:
         # first validate that current request is eligible to be retried.
         # See ``urllib3.util.retry.Retry`` documentation.
         if retries.is_retry(
-            method=response.request.method, status_code=response.status_code  # type: ignore[misc]
+            method=response.request.method,  # type: ignore[misc]
+            status_code=response.status_code,  # type: ignore[misc]
+            has_retry_after="Retry-After" in response.headers,  # type: ignore[misc]
         ):
             try:
                 retries = retries.increment(

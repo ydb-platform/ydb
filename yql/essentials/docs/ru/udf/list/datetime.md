@@ -172,7 +172,8 @@ SELECT
 * `DateTime::ToHours(Interval64{Flags:AutoMap}) -> Int64`
 * `DateTime::ToMinutes(Interval{Flags:AutoMap}) -> Int32`
 * `DateTime::ToMinutes(Interval64{Flags:AutoMap}) -> Int64`
-* `DateTime::ToSeconds(Interval{Flags:AutoMap}) -> Int32`
+* `DateTime::ToSeconds(Interval{Flags:AutoMap}) -> Int32` - до версии [2025.03](../../changelog/2025.03.md)
+* `DateTime::ToSeconds(Interval{Flags:AutoMap}) -> Int64` - с версии [2025.03](../../changelog/2025.03.md)
 * `DateTime::ToSeconds(Interval64{Flags:AutoMap}) -> Int64`
 * `DateTime::ToMilliseconds(Interval{Flags:AutoMap}) -> Int64`
 * `DateTime::ToMilliseconds(Interval64{Flags:AutoMap}) -> Int64`
@@ -184,7 +185,8 @@ SELECT
 * `DateTime::Interval64FromHours(Int64{Flags:AutoMap}) -> Interval64`
 * `DateTime::IntervalFromMinutes(Int32{Flags:AutoMap}) -> Interval`
 * `DateTime::Interval64FromMinutes(Int64{Flags:AutoMap}) -> Interval64`
-* `DateTime::IntervalFromSeconds(Int32{Flags:AutoMap}) -> Interval`
+* `DateTime::IntervalFromSeconds(Int32{Flags:AutoMap}) -> Interval` - до версии [2025.03](../../changelog/2025.03.md)
+* `DateTime::IntervalFromSeconds(Int64{Flags:AutoMap}) -> Interval` - с версии [2025.03](../../changelog/2025.03.md)
 * `DateTime::Interval64FromSeconds(Int64{Flags:AutoMap}) -> Interval64`
 * `DateTime::IntervalFromMilliseconds(Int64{Flags:AutoMap}) -> Interval`
 * `DateTime::Interval64FromMilliseconds(Int64{Flags:AutoMap}) -> Interval64`
@@ -193,7 +195,7 @@ SELECT
 
 {% note warning %}
 
-Функция `DateTime::ToSeconds` не поддерживает работу с интервалами с длительностью большей чем 68 лет, в этом случае можно использовать выражение `DateTime::ToMilliseconds(x) / 1000`
+Функция `DateTime::ToSeconds` до `2025.03` не поддерживает работу с интервалами с длительностью большей чем 68 лет, в этом случае можно использовать выражение `DateTime::ToMilliseconds(x) / 1000`
 
 {% endnote %}
 
@@ -322,7 +324,7 @@ SELECT
 
 #### Список функций
 
-* `DateTime::Format(String, alwaysWriteFractionalSeconds:Bool?) -> (Resource<TM64>{Flags:AutoMap}) -> String`
+* `DateTime::Format(String, [AlwaysWriteFractionalSeconds:Bool?, WriteOffsetWithColon:Bool?]) -> (Resource<TM64>{Flags:AutoMap}) -> String`
 
 Для строки форматирования реализовано множество спецификаторов:
 
@@ -332,8 +334,8 @@ SELECT
 * `%d` - день 2 цифры;
 * `%H` - час 2 цифры;
 * `%M` - минуты 2 цифры;
-* `%S` - секунды 2 цифры или `XX.XXXXXX` в случае непустых микросекунд (и только если флаг `alwaysWriteFractionalSeconds` не выставлен в `True`);
-* `%z` - +hhmm or -hhmm;
+* `%S` - секунды 2 цифры или `XX.XXXXXX` в случае непустых микросекунд (и только если флаг `AlwaysWriteFractionalSeconds` не выставлен в `True`);
+* `%z` - +hhmm или -hhmm по умолчанию; +hh:mm или -hh:mm, если флаг `WriteOffsetWithColon` (добавлен в версии [2025.05](../../changelog/2025.05.md#datetime-module)) выставлен в `True`;
 * `%Z` - IANA имя таймзоны;
 * `%b` - короткое трехбуквенное английское название месяца (Jan);
 * `%B` - полное английское название месяца (January).
@@ -368,6 +370,7 @@ SELECT
 * `%H` - час 2 цифры;
 * `%M` - минуты 2 цифры;
 * `%S` - секунды, может принимать и микросекунды в форматах от `XX` до `XX.XXXXXX`;
+* `%z` - смещение таймзоны в одном из следующих форматов: `±hh:mm`, `±hhmm`, `±hh`- добавлен в версии [2025.05](../../changelog/2025.05.md#datetime-module);
 * `%Z` - IANA имя таймзоны (GMT);
 * `%b` - короткое трехбуквенное регистронезависимое английское название месяца (Jan);
 * `%B` - полное регистронезависимое английское название месяца (January).

@@ -219,23 +219,12 @@ static int set_client_fd(struct sockaddr_in *addr)
 	ret = setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &val, sizeof(val));
 	assert(ret != -1);
 
-	int32_t flags = fcntl(fd, F_GETFL, 0);
-	assert(flags != -1);
-
-	flags |= O_NONBLOCK;
-	ret = fcntl(fd, F_SETFL, flags);
-	assert(ret != -1);
+	t_set_nonblock(fd);
 
 	ret = connect(fd, (struct sockaddr *)addr, sizeof(*addr));
 	assert(ret == -1);
 
-	flags = fcntl(fd, F_GETFL, 0);
-	assert(flags != -1);
-
-	flags &= ~O_NONBLOCK;
-	ret = fcntl(fd, F_SETFL, flags);
-	assert(ret != -1);
-
+	t_clear_nonblock(fd);
 	return fd;
 }
 

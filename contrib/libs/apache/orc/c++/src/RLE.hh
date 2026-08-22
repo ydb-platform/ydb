@@ -25,9 +25,8 @@
 #include <memory>
 
 namespace orc {
-
   inline int64_t zigZag(int64_t value) {
-    return (value << 1) ^ (value >> 63);
+    return ((static_cast<uint64_t>(value) << 1) ^ (value >> 63));
   }
 
   inline int64_t unZigZag(uint64_t value) {

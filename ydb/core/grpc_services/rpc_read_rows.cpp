@@ -25,6 +25,8 @@
 #include <util/string/vector.h>
 #include <util/generic/size_literals.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::RPC_REQUEST
+
 namespace NKikimr::NGRpcService {
 
 using namespace NActors;
@@ -266,7 +268,7 @@ public:
     }
 
     TString GetDatabase() {
-        return Request->GetDatabaseName().GetOrElse(DatabaseFromDomain(AppData()));
+        return Request->GetDatabaseName().GetOrElse("");
     }
 
     const TString& GetTable() {
@@ -338,7 +340,7 @@ public:
         TimeoutTimerActorId = CreateLongTimer(ctx, std::min(clientTimeout, DEFAULT_TIMEOUT), new IEventHandle(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup()));
         Become(&TThis::MainState);
 
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::RPC_REQUEST, "TReadRowsRPC bootstraped ");
+        YDB_LOG_DEBUG("TReadRowsRPC bootstrapped");
 
         auto selfId = ctx.SelfID;
         auto* actorSystem = ctx.ActorSystem();
@@ -360,6 +362,7 @@ public:
         entry.SyncVersion = false;
         entry.ShowPrivatePath = false;
         auto request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
+        request->DatabaseName = GetDatabase();
         request->ResultSet.emplace_back(entry);
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.release()), 0, 0, Span.GetTraceId());
         return true;
@@ -371,7 +374,9 @@ public:
         Y_ABORT_UNLESS(request.ResultSet.size() == 1);
         const auto& entry = request.ResultSet.front();
 
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::RPC_REQUEST, "TEvNavigateKeySetResult, " << " OwnerId: " << OwnerId << " TableId: " << TableId);
+        YDB_LOG_DEBUG("TEvNavigateKeySetResult",
+            {"ownerId", OwnerId},
+            {"tableId", TableId});
         switch (entry.Status) {
             case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok:
                 break;
@@ -401,8 +406,8 @@ public:
 
         auto& resolveNamesResult = ev->Get()->Request;
 
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::RPC_REQUEST,
-            "TReadRowsRPC going to create keys to read from proto: " << GetProto()->DebugString());
+        YDB_LOG_DEBUG("TReadRowsRPC going to create keys to read from proto",
+            {"proto", GetProto()->DebugString()});
 
         TString errorMessage;
         if (!CheckAccess(resolveNamesResult.Get(), errorMessage)) {
@@ -444,6 +449,7 @@ public:
         auto keyRange = MakeHolder<TKeyDesc>(entry.TableId, range, TKeyDesc::ERowOperation::Read, KeyColumnTypes, columns);
 
         auto request = std::make_unique<NSchemeCache::TSchemeCacheRequest>();
+        request->DatabaseName = GetDatabase();
         request->ResultSet.emplace_back(std::move(keyRange));
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request.release()), 0, 0, Span.GetTraceId());
     }
@@ -501,7 +507,9 @@ public:
             request->Keys.emplace_back(TSerializedCellVec::Serialize(keys[i]));
         }
 
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::RPC_REQUEST, "TReadRowsRPC send TEvRead shardId : " << shardId << " keys.size(): " << keys.size());
+        YDB_LOG_DEBUG("TReadRowsRPC send TEvRead shardId",
+            {"shardId", shardId},
+            {"keysSize", keys.size()});
         Send(PipeCache, new TEvPipeCache::TEvForward(request.release(), shardId, true), IEventHandle::FlagTrackDelivery, 0, Span.GetTraceId());
         ++ReadsInFlight;
     }
@@ -576,7 +584,8 @@ public:
                 it->second.Status = statusCode;
             }
         }
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::RPC_REQUEST, "TReadRowsRPC TEvReadResult RowsCount: " << msg->GetRowsCount());
+        YDB_LOG_DEBUG("TReadRowsRPC TEvReadResult",
+            {"rowsCount", msg->GetRowsCount()});
 
         EvReadResults.emplace_back(ev->Release().Release());
 
@@ -636,16 +645,16 @@ public:
                 for (size_t i = 0; i < RequestedColumnsMeta.size(); ++i) {
                     const auto& colMeta = RequestedColumnsMeta[i];
                     const auto type = getTypeFromColMeta(colMeta);
-                    LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::RPC_REQUEST, "TReadRowsRPC "
-                        << " name: " << colMeta.Name
-                    );
+                    YDB_LOG_DEBUG("TReadRowsRPC",
+                        {"name", colMeta.Name});
                     const auto& cell = row[i];
                     vb.AddMember(colMeta.Name);
                     switch (colMeta.Type.GetTypeId()) {
                     case NScheme::NTypeIds::Pg: {
                         const NPg::TConvertResult& pgResult = NPg::PgNativeTextFromNativeBinary(cell.AsBuf(), colMeta.Type.GetPgTypeDesc());
                         if (pgResult.Error) {
-                            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::RPC_REQUEST, "PgNativeTextFromNativeBinary error " << *pgResult.Error);
+                            YDB_LOG_DEBUG("PgNativeTextFromNativeBinary error",
+                                {"pgResult", *pgResult.Error});
                         }
                         const NYdb::TPgValue pgValue{cell.IsNull() ? NYdb::TPgValue::VK_NULL : NYdb::TPgValue::VK_TEXT, pgResult.Str, getPgTypeFromColMeta(colMeta)};
                         vb.Pg(pgValue);
@@ -702,7 +711,8 @@ public:
         }
 
         RuCost = NKqp::NRuCalc::CalcRequestUnit(stats);
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::RPC_REQUEST, "TReadRowsRPC created ReadRowsResponse " << response->DebugString());
+        YDB_LOG_DEBUG("TReadRowsRPC created ReadRowsResponse",
+            {"response", response->DebugString()});
     }
 
     void SendResult(const Ydb::StatusIds::StatusCode& status, const TString& errorMsg,
@@ -727,7 +737,7 @@ public:
             FillResultRows(resp);
         }
 
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::RPC_REQUEST, "TReadRowsRPC sent result");
+        YDB_LOG_DEBUG("TReadRowsRPC sent result");
         Request->Reply(resp, status);
         PassAway();
     }
@@ -754,13 +764,43 @@ public:
         ss << "]";
 
         if (hasActiveReads) {
-            LOG_WARN_S(TlsActivationContext->AsActorContext(), NKikimrServices::RPC_REQUEST, ss.Str());
+            YDB_LOG_WARN(ss.Str());
         }
     }
 
     void HandleTimeout(TEvents::TEvWakeup::TPtr&) {
-        ReplyWithError(Ydb::StatusIds::TIMEOUT, TStringBuilder() << "ReadRows from table " << GetTable()
-            << " timed out, duration: " << (TAppData::TimeProvider->Now() - StartTime).Seconds() << " sec");
+        TString errorMessage = TStringBuilder() << "ReadRows from table " << GetTable()
+            << " timed out, duration: " << (TAppData::TimeProvider->Now() - StartTime).Seconds() << " sec\n";
+
+        auto errorLog = TStringBuilder() << "ShardIdToReadState: {";
+        ui64 rowsRequested = 0;
+        bool first = true;
+        for (const auto& [shardId, readState] : ShardIdToReadState) {
+            if (!first) {
+                errorLog << ", ";
+            }
+            first = false;
+            errorLog << "{"
+                << " ShardId: " << shardId
+                << " Status: " << readState.Status
+                << " ContinuationToken: " << readState.FirstUnprocessedQuery
+            << " }";
+
+            rowsRequested += readState.Keys.size();
+        }
+        errorLog << "}\n";
+
+        ui64 rowsRead = 0;
+        for (auto& result : EvReadResults) {
+            rowsRead += result->GetRowsCount();
+        }
+
+        errorLog << "ReadsInFlight: " << ReadsInFlight << '\n';
+        errorLog << "Retries: " << Retries << '\n';
+        errorLog << "Rows requested: " << rowsRequested << '\n';
+        errorLog << "Rows read: " << rowsRead << '\n';
+        errorLog << "Estimated RuCost: " << RuCost << '\n';
+        ReplyWithError(Ydb::StatusIds::TIMEOUT, errorMessage, nullptr, &errorLog);
     }
 
     void HandleForget(TRpcServices::TEvForgetOperation::TPtr& ev) {
@@ -771,10 +811,14 @@ public:
     }
 
     void ReplyWithError(const Ydb::StatusIds::StatusCode& status, const TString& errorMsg,
-        const ::google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>* issues = nullptr)
+        const ::google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>* issues = nullptr, const TString* logAppendix = nullptr)
     {
         CancelReads();
-        LOG_ERROR_S(TlsActivationContext->AsActorContext(), NKikimrServices::RPC_REQUEST, "TReadRowsRPC ReplyWithError: " << errorMsg);
+        auto message = TStringBuilder() << "TReadRowsRPC ReplyWithError: " << errorMsg;
+        if (logAppendix) {
+            message << *logAppendix;
+        }
+        YDB_LOG_ERROR(message);
         SendResult(status, errorMsg, issues);
     }
 
@@ -796,7 +840,8 @@ public:
     }
 
     STFUNC(MainState) {
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::RPC_REQUEST, "TReadRowsRPC got: " << ev->GetTypeName());
+        YDB_LOG_DEBUG("TReadRowsRPC",
+            {"got", ev->GetTypeName()});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             hFunc(TEvTxProxySchemeCache::TEvResolveKeySetResult, Handle);

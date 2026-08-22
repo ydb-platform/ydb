@@ -11,10 +11,13 @@
 #include <yt/yt/build/build.h>
 
 #include <yt/yt/core/concurrency/scheduler.h>
+#include <yt/yt/core/concurrency/async_stream_helpers.h>
 
 #include <yt/yt/core/ytree/fluent.h>
 
 #include <yt/yt/core/yson/async_writer.h>
+
+#include <library/cpp/yt/string/stream.h>
 
 namespace NYT::NDriver {
 
@@ -31,10 +34,10 @@ using namespace NApi;
 
 void TGetCurrentUserCommand::DoExecute(ICommandContextPtr context)
 {
-    auto userInfo = WaitFor(context->GetClient()->GetCurrentUser())
+    auto result = WaitFor(context->GetClient()->GetCurrentUser())
         .ValueOrThrow();
 
-    context->ProduceOutputValue(ConvertToYsonString(userInfo));
+    context->ProduceOutputValue(ConvertToYsonString(result));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -87,8 +90,15 @@ void TGetVersionCommand::DoExecute(ICommandContextPtr context)
 
 // These features are guaranteed to be deployed before or with this code.
 constexpr auto StaticFeatures = std::to_array<std::pair<TStringBuf, bool>>({
+    {"structured_web_json", true},
     {"user_tokens_metadata", true},
 });
+
+#ifdef OPENSOURCE
+constexpr bool FlowPipelinesListEnabled = false;
+#else
+constexpr bool FlowPipelinesListEnabled = true;
+#endif
 
 void TGetSupportedFeaturesCommand::DoExecute(ICommandContextPtr context)
 {
@@ -104,8 +114,14 @@ void TGetSupportedFeaturesCommand::DoExecute(ICommandContextPtr context)
     }
     auto features = meta.Features;
     for (auto staticFeature : StaticFeatures) {
-        features->AddChild(TString(staticFeature.first), BuildYsonNodeFluently().Value(staticFeature.second));
+        features->AddChild(staticFeature.first, BuildYsonNodeFluently().Value(staticFeature.second));
     }
+    features->AddChild(
+        "flow_pipelines",
+        BuildYsonNodeFluently()
+            .BeginMap()
+                .Item("pipeline_list_enabled").Value(FlowPipelinesListEnabled)
+            .EndMap());
     features->AddChild(
         "require_password_in_authentication_commands",
         BuildYsonNodeFluently().Value(context->GetConfig()->RequirePasswordInAuthenticationCommands));
@@ -164,6 +180,26 @@ void TCheckPermissionCommand::DoExecute(ICommandContextPtr context)
                         fluent
                             .Item().BeginMap()
                                 .Do([&] (auto fluent) { produceResult(fluent, result); })
+                            .EndMap();
+                    });
+            })
+            .DoIf(response.RowLevelAcl.has_value(), [&] (auto fluent) {
+                fluent
+                    .Item("row_level_acl")
+                    .DoListFor(*response.RowLevelAcl, [&] (auto fluent, const auto& rowLevelAce) {
+                        fluent
+                            .Item().BeginMap()
+                                .Item(TSerializableAccessControlEntry::RowAccessPredicateKey).Value(rowLevelAce.RowAccessPredicate)
+                                // NB(coteeq): The DoIf will try to hide the whole inapplicable_row_access_predicate_mode
+                                // mechanism from too curious users.
+                                // EInapplicableRowAccessPredicateMode::Ignore is not a good choice in the common case
+                                // from security perspective, but it may be necessary to be able to have
+                                // tables with completely different schemas in one directory.
+                                .DoIf(rowLevelAce.InapplicableRowAccessPredicateMode != EInapplicableRowAccessPredicateMode::Fail, [&] (auto fluent) {
+                                    fluent
+                                        .Item(TSerializableAccessControlEntry::InapplicableRowAccessPredicateModeKey)
+                                        .Value(rowLevelAce.InapplicableRowAccessPredicateMode);
+                                })
                             .EndMap();
                     });
             })
@@ -234,6 +270,27 @@ void TTransferPoolResourcesCommand::DoExecute(ICommandContextPtr context)
         SourcePool,
         DestinationPool,
         PoolTree,
+        ResourceDelta,
+        Options))
+        .ThrowOnError();
+
+    ProduceEmptyOutput(context);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TTransferBundleResourcesCommand::Register(TRegistrar registrar)
+{
+    registrar.Parameter("source_bundle", &TThis::SourceBundle);
+    registrar.Parameter("destination_bundle", &TThis::DestinationBundle);
+    registrar.Parameter("resource_delta", &TThis::ResourceDelta);
+}
+
+void TTransferBundleResourcesCommand::DoExecute(ICommandContextPtr context)
+{
+    WaitFor(context->GetClient()->TransferBundleResources(
+        SourceBundle,
+        DestinationBundle,
         ResourceDelta,
         Options))
         .ThrowOnError();
@@ -332,7 +389,8 @@ public:
             driverRequest.Parameters = parameters->ToMap();
             driverRequest.AuthenticatedUser = Context_->Request().AuthenticatedUser;
             driverRequest.UserTag = Context_->Request().UserTag;
-            driverRequest.LoggingTags = Format("SubrequestIndex: %v", RequestIndex_);
+            driverRequest.LoggingTags = NLogging::TLoggingTagList()
+                .With("SubrequestIndex", RequestIndex_);
 
             return driver->Execute(driverRequest).Apply(
                 BIND(&TRequestExecutor::OnResponse, MakeStrong(this)));
@@ -354,8 +412,8 @@ private:
     TStringInput SyncInput_;
     IAsyncZeroCopyInputStreamPtr AsyncInput_;
 
-    TString Output_;
-    TStringOutput SyncOutput_;
+    std::string Output_;
+    TStdStringOutput SyncOutput_;
     IFlushableAsyncOutputStreamPtr AsyncOutput_;
 
     TYsonString OnResponse(const TError& error)
@@ -403,7 +461,7 @@ void TExecuteBatchCommand::DoExecute(ICommandContextPtr context)
         callbacks.push_back(BIND(&TRequestExecutor::Run, executor));
     }
 
-    auto results = WaitFor(RunWithBoundedConcurrency(std::move(callbacks), Options.Concurrency))
+    auto results = WaitFor(CancelableRunWithBoundedConcurrency(std::move(callbacks), Options.Concurrency))
         .ValueOrThrow();
 
     ProduceSingleOutput(context, "results", [&] (NYson::IYsonConsumer* consumer) {
@@ -429,27 +487,30 @@ void TDiscoverProxiesCommand::Register(TRegistrar registrar)
         .Default(NRpcProxy::DefaultNetworkName);
     registrar.Parameter("ignore_balancers", &TThis::IgnoreBalancers)
         .Default(false);
-
-    registrar.Postprocessor([] (TThis* config) {
-        if (config->Kind == EProxyKind::Http) {
-            config->Role = config->Role.value_or(DefaultHttpProxyRole);
-            config->AddressType = config->AddressType.value_or(NRpcProxy::EAddressType::Http);
-        } else {
-            config->Role = config->Role.value_or(DefaultRpcProxyRole);
-            config->AddressType = config->AddressType.value_or(NRpcProxy::DefaultAddressType);
-        }
-    });
 }
 
 void TDiscoverProxiesCommand::DoExecute(ICommandContextPtr context)
 {
     TProxyDiscoveryRequest request{
         .Kind = Kind,
-        .Role = Role.value_or(DefaultRpcProxyRole),
-        .AddressType = AddressType.value_or(NRpcProxy::DefaultAddressType),
         .NetworkName = NetworkName,
         .IgnoreBalancers = IgnoreBalancers,
     };
+
+    switch (request.Kind) {
+        case EProxyKind::Http:
+            request.Role = Role.value_or(DefaultHttpProxyRole);
+            request.AddressType = AddressType.value_or(NRpcProxy::EAddressType::Http);
+            break;
+        case EProxyKind::Rpc:
+            request.Role = Role.value_or(DefaultRpcProxyRole);
+            request.AddressType = AddressType.value_or(context->GetConfig()->DefaultRpcProxyAddressType);
+            break;
+        case EProxyKind::Grpc:
+            request.Role = Role.value_or(DefaultRpcProxyRole);
+            request.AddressType = AddressType.value_or(NRpcProxy::DefaultAddressType);
+            break;
+    }
 
     const auto& proxyDiscoveryCache = context->GetDriver()->GetProxyDiscoveryCache();
     auto response = WaitFor(proxyDiscoveryCache->Discover(request))
@@ -482,6 +543,33 @@ void TBalanceTabletCellsCommand::DoExecute(ICommandContextPtr context)
     auto tabletActions = WaitFor(asyncResult)
         .ValueOrThrow();
     context->ProduceOutputValue(BuildYsonStringFluently().List(tabletActions));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TCheckClusterLivenessCommand::Register(TRegistrar registrar)
+{
+    registrar.Parameter("check_cypress_root", &TThis::CheckCypressRoot)
+        .Default(false);
+    registrar.Parameter("check_secondary_master_cells", &TThis::CheckSecondaryMasterCells)
+        .Default(false);
+    registrar.ParameterWithUniversalAccessor<std::optional<std::string>>(
+        "check_tablet_cell_bundle",
+        [] (TThis* command) -> auto& {
+            return command->Options.CheckTabletCellBundle;
+        })
+        .Optional(/*init*/ false);
+}
+
+void TCheckClusterLivenessCommand::DoExecute(ICommandContextPtr context)
+{
+    Options.CheckCypressRoot = CheckCypressRoot;
+    Options.CheckSecondaryMasterCells = CheckSecondaryMasterCells;
+
+    WaitFor(context->GetClient()->CheckClusterLiveness(Options))
+        .ThrowOnError();
+
+    ProduceEmptyOutput(context);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

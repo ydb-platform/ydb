@@ -4,7 +4,7 @@
     These examples are taken from [ISO/IEC TR 19075-6:2017] standard (https://www.iso.org/standard/67367.html)
 */
 
-class TJsonPathExamplesTest : public TJsonPathTestBase {
+class TJsonPathExamplesTest: public TJsonPathTestBase {
 public:
     TJsonPathExamplesTest()
         : TJsonPathTestBase()
@@ -12,9 +12,9 @@ public:
     }
 
     UNIT_TEST_SUITE(TJsonPathExamplesTest);
-        UNIT_TEST(TestMemberAccessExamples);
-        UNIT_TEST(TestElementAccessExamples);
-        UNIT_TEST(TestFilterExamples);
+    UNIT_TEST(TestMemberAccessExamples);
+    UNIT_TEST(TestElementAccessExamples);
+    UNIT_TEST(TestFilterExamples);
     UNIT_TEST_SUITE_END();
 
     void TestMemberAccessExamples() {
@@ -42,13 +42,15 @@ public:
                 "FC": [20, 22, 24],
                 "SJ": [30, 33]
             }
-        })", "lax $.sensors.*[0, last, 2]", {"20", "24", "24", "10", "17", "12", "30", "33"});
+        })", "lax $.sensors.*[0, last, 2]",
+                    {"20", "24", "24", "10", "17", "12", "30", "33"});
 
         RunTestCase(R"({
             "x": [12, 30],
             "y": [8],
             "z": ["a", "b", "c"]
-        })", "lax $.*[1 to last]", {"30", "\"b\"", "\"c\""});
+        })", "lax $.*[1 to last]",
+                    {"30", "\"b\"", "\"c\""});
     }
 
     void TestFilterExamples() {
@@ -62,7 +64,8 @@ public:
         // and query will finish with error
         RunTestCase(R"({
             "x": [1, "one"]
-        })", "strict $.x ? (2 > @[*])", {});
+        })", "strict $.x ? (2 > @[*])",
+                    {});
 
         RunTestCase(R"({
             "name": {
@@ -70,11 +73,13 @@ public:
                 "last": "Moe"
             },
             "points": 123
-        })", "strict $ ? (exists (@.name)).name", {R"({"first":"Manny","last":"Moe"})"});
+        })", "strict $ ? (exists (@.name)).name",
+                    {R"({"first":"Manny","last":"Moe"})"});
 
         RunTestCase(R"({
             "points": 41
-        })", "strict $ ? (exists (@.name)).name", {});
+        })", "strict $ ? (exists (@.name)).name",
+                    {});
     }
 };
 

@@ -1,6 +1,6 @@
 #include "yql_generic_base_actor.h"
+#include "yql_generic_credentials_provider.h"
 #include "yql_generic_read_actor.h"
-#include "yql_generic_token_provider.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -9,6 +9,7 @@
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/yql/providers/generic/actors/yql_generic_helpers.h>
 #include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/error.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/utils.h>
@@ -24,30 +25,17 @@ namespace NYql::NDq {
 
     using namespace NActors;
 
-    namespace {
-
-        template <typename T>
-        T ExtractFromConstFuture(const NThreading::TFuture<T>& f) {
-            // We want to avoid making a copy of data stored in a future.
-            // But there is no direct way to extract data from a const future
-            // So, we make a copy of the future, that is cheap. Then, extract the value from this copy.
-            // It destructs the value in the original future, but this trick is legal and documented here:
-            // https://docs.yandex-team.ru/arcadia-cpp/cookbook/concurrency
-            return NThreading::TFuture<T>(f).ExtractValueSync();
-        }
-
-    } // namespace
-
     class TGenericReadActor: public TGenericBaseActor<TGenericReadActor>, public IDqComputeActorAsyncInput {
     public:
         TGenericReadActor(
             ui64 inputIndex,
             TCollectStatsLevel statsLevel,
             NConnector::IClient::TPtr client,
-            TGenericTokenProvider::TPtr tokenProvider,
+            TGenericCredentialsProvider::TPtr tokenProvider,
             Generic::TSource&& source,
             const NActors::TActorId& computeActorId,
             const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+            std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
             TVector<Generic::TPartition>&& partitions)
             : InputIndex_(inputIndex)
             , ComputeActorId_(computeActorId)
@@ -55,43 +43,62 @@ namespace NYql::NDq {
             , TokenProvider_(std::move(tokenProvider))
             , Partitions_(std::move(partitions))
             , HolderFactory_(holderFactory)
+            , Alloc_(std::move(alloc))
             , Source_(std::move(source))
         {
             IngressStats_.Level = statsLevel;
         }
 
+        ~TGenericReadActor() {
+            if (Alloc_) {
+                TGuard<NKikimr::NMiniKQL::TScopedAlloc> allocGuard(*Alloc_);
+                ClearMkqlData();
+            }
+        }
+
         void Bootstrap() {
             Become(&TGenericReadActor::StateFunc);
-            auto issue = InitSplitsReading();
-            if (issue) {
-                return NotifyComputeActorWithIssue(
-                    TActivationContext::ActorSystem(),
-                    ComputeActorId_,
-                    InputIndex_,
-                    std::move(*issue));
-            };
+            TokenProvider_->AsyncCredentials().Subscribe([
+                computeActorId = ComputeActorId_,
+                inputIndex = InputIndex_,
+                actorSystem = TActivationContext::ActorSystem(),
+                selfId = SelfId()
+            ](const NThreading::TFuture<TGenericCredentials>& future) {
+                try {
+                    actorSystem->Send(selfId, new TEvGotCredentials(ExtractFromConstFuture(future)));
+                } catch (std::exception& ex) {
+                    // GetAuthInfoAsync handles retries internally
+                    NConnector::NApi::TError error;
+                    error.set_status(Ydb::StatusIds::UNAUTHORIZED);
+                    error.set_message(ex.what());
+                    NotifyComputeActorWithError(actorSystem, computeActorId, inputIndex, error);
+                }
+            });
         }
 
         static constexpr char ActorName[] = "GENERIC_READ_ACTOR";
 
     private:
         // clang-format off
-        STRICT_STFUNC(StateFunc,
+        STRICT_STFUNC_EXC(StateFunc,
                       hFunc(TEvReadSplitsIterator, Handle);
                       hFunc(TEvReadSplitsPart, Handle);
                       hFunc(TEvReadSplitsFinished, Handle);
+                      hFunc(TEvGotCredentials, Handle);
+                      , ExceptionFunc(std::exception, HandleException)
         )
         // clang-format on
 
-        // ReadSplits
-        TMaybe<TIssue> InitSplitsReading() {
+        void Handle(TEvGotCredentials::TPtr& ev) {
+            const auto& credentials = ev->Get()->Credentials;
+
             YQL_CLOG(DEBUG, ProviderGeneric) << "Start splits reading";
 
             if (Partitions_.empty()) {
                 YQL_CLOG(WARN, ProviderGeneric) << "Got empty list of partitions";
                 ReadSplitsFinished_ = true;
                 NotifyComputeActorWithData();
-                return Nothing();
+                return;
             }
 
             // Prepare ReadSplits request. For the sake of simplicity,
@@ -114,10 +121,7 @@ namespace NYql::NDq {
                     dstSplit->set_description(srcSplit.description());
 
                     // Assign actual IAM token to a split
-                    auto error = TokenProvider_->MaybeFillToken(*dstSplit->mutable_select()->mutable_data_source_instance());
-                    if (error) {
-                        return TIssue(std::move(error));
-                    }
+                    *dstSplit->mutable_select()->mutable_data_source_instance()->mutable_credentials() = credentials;
                 }
             }
 
@@ -133,8 +137,6 @@ namespace NYql::NDq {
                         TEvReadSplitsIterator>(
                         actorSystem, selfId, computeActorId, inputIndex, future);
                 });
-
-            return Nothing();
         }
 
         void Handle(TEvReadSplitsIterator::TPtr& ev) {
@@ -158,7 +160,7 @@ namespace NYql::NDq {
                     response.error());
             }
 
-            YQL_ENSURE(response.arrow_ipc_streaming().size(), "empty data");
+            YQL_ENSURE(response.arrow_ipc_streaming().size(), "empty data from connector");
 
             // Preserve stream message to return it to ComputeActor later
             LastReadSplitsResponse_ = std::move(ev->Get()->Response);
@@ -240,6 +242,16 @@ namespace NYql::NDq {
             IngressStats_.Resume();
         }
 
+        void HandleException(const std::exception& e) {
+            YQL_CLOG(ERROR, ProviderGeneric) << "ActorId=" << SelfId() << " Got unexpected exception: " << e.what();
+
+            NotifyComputeActorWithIssue(
+                TActivationContext::ActorSystem(),
+                ComputeActorId_,
+                InputIndex_,
+                TIssue(TStringBuilder() << "Internal error. Got unexpected exception: " << e.what()));
+        }
+
         void NotifyComputeActorWithData() {
             Send(ComputeActorId_, new TEvNewAsyncInputDataArrived(InputIndex_));
         }
@@ -319,21 +331,17 @@ namespace NYql::NDq {
             for (int i = 0; i < batch->num_columns(); ++i) {
                 const auto& columnName = batch->schema()->field(i)->name();
                 const auto ix = fieldNameOrder[columnName];
-                structItems[ix] = HolderFactory_.CreateArrowBlock(arrow::Datum(batch->column(i)));
+                structItems[ix] = HolderFactory_.CreateArrowBlock(arrow::Datum(batch->column(i)), NYql::DefaultDatumValidationMode);
             }
 
             structItems[fieldNameOrder[BlockLengthColumnName]] = HolderFactory_.CreateArrowBlock(
-                arrow::Datum(std::make_shared<arrow::UInt64Scalar>(batch->num_rows())));
+                arrow::Datum(std::make_shared<arrow::UInt64Scalar>(batch->num_rows())), NYql::DefaultDatumValidationMode);
             value = structObj;
 
             buffer.emplace_back(std::move(value));
 
             // freeSpace -= size;
             LastReadSplitsResponse_ = std::nullopt;
-
-            // TODO: check it, because in S3 the generic cache clearing happens only when LastFileWasProcessed:
-            // https://a.yandex-team.ru/arcadia/ydb/library/yql/providers/s3/actors/yql_s3_read_actor.cpp?rev=r11543410#L2497
-            ArrowRowContainerCache_.Clear();
 
             // Request server for the next data block
             AwaitNextStreamItem<NConnector::IReadSplitsStreamIterator,
@@ -352,6 +360,7 @@ namespace NYql::NDq {
                                             << ": bytes " << IngressStats_.Bytes
                                             << ", rows " << IngressStats_.Rows
                                             << ", chunks " << IngressStats_.Chunks;
+            ClearMkqlData();
             TActorBootstrapped<TGenericReadActor>::PassAway();
         }
 
@@ -372,13 +381,18 @@ namespace NYql::NDq {
             return IngressStats_;
         }
 
+        // Should be called with bound MKQL alloc
+        void ClearMkqlData() {
+            ArrowRowContainerCache_.Clear();
+        }
+
     private:
         const ui64 InputIndex_;
         TDqAsyncStats IngressStats_;
         const NActors::TActorId ComputeActorId_;
 
         NConnector::IClient::TPtr Client_;
-        TGenericTokenProvider::TPtr TokenProvider_;
+        TGenericCredentialsProvider::TPtr TokenProvider_;
 
         TVector<Generic::TPartition> Partitions_;
 
@@ -388,6 +402,7 @@ namespace NYql::NDq {
 
         NKikimr::NMiniKQL::TPlainContainerCache ArrowRowContainerCache_;
         const NKikimr::NMiniKQL::THolderFactory& HolderFactory_;
+        const std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc_;
         Generic::TSource Source_;
     };
 
@@ -426,13 +441,14 @@ namespace NYql::NDq {
                            Generic::TSource&& source,
                            ui64 inputIndex,
                            TCollectStatsLevel statsLevel,
-                           const THashMap<TString, TString>& /*secureParams*/,
+                           const THashMap<TString, TString>& secureParams,
                            ui64 taskId,
                            const THashMap<TString, TString>& taskParams,
                            const TVector<TString>& readRanges,
                            const NActors::TActorId& computeActorId,
-                           ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
-                           const NKikimr::NMiniKQL::THolderFactory& holderFactory)
+                           IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
+                           const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+                           std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc)
     {
         TVector<Generic::TPartition> partitions;
         ExtractPartitionsFromParams(partitions, taskParams, readRanges);
@@ -447,21 +463,8 @@ namespace NYql::NDq {
                                         << ", task_id=" << taskId
                                         << ", partitions_count=" << partitions.size();
 
-        // FIXME: strange piece of logic - authToken is created but not used:
-        // https://a.yandex-team.ru/arcadia/ydb/library/yql/providers/clickhouse/actors/yql_ch_read_actor.cpp?rev=r11550199#L140
-        /*
-        const auto token = secureParams.Value(params.token(), TString{});
-        const auto credentialsProviderFactory =
-            CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token);
-        const auto authToken = credentialsProviderFactory->CreateProvider()->GetAuthInfo();
-        const auto one = token.find('#'), two = token.rfind('#');
-        YQL_ENSURE(one != TString::npos && two != TString::npos && one < two, "Bad token format:" << token);
-        */
-
-        auto tokenProvider = CreateGenericTokenProvider(
-            source.GetToken(),
-            source.GetServiceAccountId(),
-            source.GetServiceAccountIdSignature(),
+        auto tokenProvider = CreateGenericCredentialsProvider(
+            secureParams.Value(source.GetTokenName(), ""),
             credentialsFactory);
 
         const auto actor = new TGenericReadActor(
@@ -472,6 +475,7 @@ namespace NYql::NDq {
             std::move(source),
             computeActorId,
             holderFactory,
+            std::move(alloc),
             std::move(partitions));
 
         return {actor, actor};

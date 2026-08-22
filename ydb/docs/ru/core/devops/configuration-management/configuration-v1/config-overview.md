@@ -1,6 +1,5 @@
 # Обзор конфигурации V1
 
-{% include [deprecated](_includes/deprecated.md) %}
 
 Для запуска узла {{ ydb-short-name }} требуется конфигурация. Существуют два типа конфигурации:
 

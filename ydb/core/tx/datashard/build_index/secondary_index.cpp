@@ -1,3 +1,4 @@
+#include "build_index_scan_manager.h"
 #include "common_helper.h"
 #include "../datashard_impl.h"
 #include "../range_ops.h"
@@ -7,20 +8,27 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet_flat/flat_row_state.h>
-#include <ydb/core/kqp/common/kqp_types.h>
 
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/tx_proxy/upload_rows.h>
+#include <ydb/core/tx/sequenceproxy/public/events.h>
 
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <ydb/core/ydb_convert/ydb_convert.h>
-#include <util/generic/algorithm.h>
-#include <util/string/builder.h>
 #include <ydb/core/ydb_convert/table_description.h>
+
+#include <util/generic/algorithm.h>
+#include <util/generic/bitops.h>
+#include <util/string/builder.h>
+
+#include <deque>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BUILD_INDEX
 
 namespace NKikimr::NDataShard {
 
@@ -69,6 +77,13 @@ bool BuildExtraColumns(TVector<TCell>& cells, const NKikimrIndexBuilder::TColumn
     for (size_t i = 0; i < buildSettings.columnSize(); i++) {
         const auto& column = buildSettings.column(i);
 
+        auto& back = cells.emplace_back();
+
+        if (!column.default_from_sequence().empty()) {
+            // Sequence-default columns are filled per-row in Feed() from TEvNextValResult.
+            continue;
+        }
+
         NScheme::TTypeInfo typeInfo;
         i32 typeMod = -1;
         Ydb::StatusIds::StatusCode status;
@@ -82,7 +97,6 @@ bool BuildExtraColumns(TVector<TCell>& cells, const NKikimrIndexBuilder::TColumn
             return false;
         }
 
-        auto& back = cells.emplace_back();
         if (!CellFromProtoVal(typeInfo, typeMod, &column.default_from_literal().value(), false, back, err, valueDataPool)) {
             return false;
         }
@@ -100,6 +114,7 @@ protected:
     const TIndexBuildScanSettings ScanSettings;
 
     const ui64 BuildIndexId;
+    const TString DatabaseName;
     const TString TargetTable;
     const TScanRecord::TSeqNo SeqNo;
 
@@ -128,17 +143,22 @@ protected:
     TUploadMonStats Stats = TUploadMonStats("tablets", "build_index_upload");
     TUploadStatus UploadStatus;
 
+    const bool DisableChangeCollection;
+
     TBuildScanUpload(ui64 buildIndexId,
+                     const TString& databaseName,
                      const TString& target,
                      const TScanRecord::TSeqNo& seqNo,
                      ui64 dataShardId,
                      const TActorId& progressActorId,
                      const TSerializedTableRange& range,
                      const TUserTable& tableInfo,
-                     const TIndexBuildScanSettings& scanSettings)
+                     const TIndexBuildScanSettings& scanSettings,
+                     bool disableChangeCollection)
         : TBase(&TThis::StateWork)
         , ScanSettings(scanSettings)
         , BuildIndexId(buildIndexId)
+        , DatabaseName(databaseName)
         , TargetTable(target)
         , SeqNo(seqNo)
         , DataShardId(dataShardId)
@@ -146,13 +166,12 @@ protected:
         , KeyColumnIds(tableInfo.KeyColumnIds)
         , KeyTypes(tableInfo.KeyColumnTypes)
         , TableRange(tableInfo.Range)
-        , RequestedRange(range) {
+        , RequestedRange(range)
+        , DisableChangeCollection(disableChangeCollection) {
     }
 
     template <typename TAddRow>
     EScan FeedImpl([[maybe_unused]] TArrayRef<const TCell> key, const TRow& /*row*/, TAddRow&& addRow) {
-        // LOG_T("Feed key " << DebugPrintPoint(KeyTypes, key, *AppData()->TypeRegistry) << " " << Debug());
-
         addRow();
 
         if (!ReadBuf.HasReachedLimits(ScanSettings)) {
@@ -180,7 +199,8 @@ public:
     TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) override {
         TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
 
-        LOG_I("Prepare " << Debug());
+        YDB_LOG_INFO("Scan actor prepared",
+            {"debug", Debug()});
 
         Driver = driver;
 
@@ -188,7 +208,9 @@ public:
     }
 
     EScan Seek(TLead& lead, ui64 seq) override {
-        LOG_T("Seek no " << seq << " " << Debug());
+        YDB_LOG_TRACE("Seek",
+            {"seekSequence", seq},
+            {"debug", Debug()});
         if (seq) {
             if (!WriteBuf.IsEmpty()) {
                 return EScan::Sleep;
@@ -238,10 +260,7 @@ public:
         }
 
         TAutoPtr<TEvDataShard::TEvBuildIndexProgressResponse> progress = new TEvDataShard::TEvBuildIndexProgressResponse;
-        progress->Record.SetId(BuildIndexId);
-        progress->Record.SetTabletId(DataShardId);
-        progress->Record.SetRequestSeqNoGeneration(SeqNo.Generation);
-        progress->Record.SetRequestSeqNoRound(SeqNo.Round);
+        FillScanResponseCommonFields(*progress, BuildIndexId, DataShardId, SeqNo);
 
         if (status == EStatus::Exception) {
             progress->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
@@ -256,9 +275,13 @@ public:
         UploadStatusToMessage(progress->Record);
 
         if (progress->Record.GetStatus() == NKikimrIndexBuilder::DONE) {
-            LOG_N("Done " << Debug() << " " << progress->Record.ShortDebugString());
+            YDB_LOG_NOTICE("Scan completed successfully",
+                {"debug", Debug()},
+                {"progressRecord", progress->Record.ShortDebugString()});
         } else {
-            LOG_E("Failed " << Debug() << " " << progress->Record.ShortDebugString());
+            YDB_LOG_ERROR("Scan failed",
+                {"debug", Debug()},
+                {"progressRecord", progress->Record.ShortDebugString()});
         }
         this->Send(ProgressActorId, progress.Release());
 
@@ -293,10 +316,10 @@ public:
     }
 
     EScan PageFault() override {
-        LOG_T("Page fault"
-              << " ReadBuf empty: " << ReadBuf.IsEmpty()
-              << " WriteBuf empty: " << WriteBuf.IsEmpty()
-              << " " << Debug());
+        YDB_LOG_TRACE("Page fault, flushing read buffer to upload buffer",
+            {"readBufferEmpty", ReadBuf.IsEmpty()},
+            {"writeBufferEmpty", WriteBuf.IsEmpty()},
+            {"debug", Debug()});
 
         if (!ReadBuf.IsEmpty() && WriteBuf.IsEmpty()) {
             ReadBuf.FlushTo(WriteBuf);
@@ -306,18 +329,21 @@ public:
         return EScan::Feed;
     }
 
-private:
+protected:
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvTxUserProxy::TEvUploadRowsResponse, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             default:
-                LOG_E("TBuildIndexScan: StateWork unexpected event type: " << ev->GetTypeRewrite() << " event: " << ev->ToString());
+                YDB_LOG_ERROR("Unexpected event in scan actor",
+                    {"eventType", ev->GetTypeRewrite()},
+                    {"eventDetails", ev->ToString()});
         }
     }
 
     void HandleWakeup(const NActors::TActorContext& /*ctx*/) {
-        LOG_D("Retry upload " << Debug());
+        YDB_LOG_DEBUG("Retrying row upload",
+            {"debug", Debug()});
 
         if (!WriteBuf.IsEmpty()) {
             RetryUpload();
@@ -325,10 +351,10 @@ private:
     }
 
     void Handle(TEvTxUserProxy::TEvUploadRowsResponse::TPtr& ev, const TActorContext& ctx) {
-        LOG_D("Handle TEvUploadRowsResponse "
-              << Debug()
-              << " Uploader: " << Uploader.ToString()
-              << " ev->Sender: " << ev->Sender.ToString());
+        YDB_LOG_DEBUG("Received row upload response",
+            {"debug", Debug()},
+            {"uploaderActorId", Uploader},
+            {"senderActorId", ev->Sender});
 
         if (Uploader) {
             Y_ENSURE(Uploader == ev->Sender,
@@ -349,10 +375,7 @@ private:
 
             //send progress
             TAutoPtr<TEvDataShard::TEvBuildIndexProgressResponse> progress = new TEvDataShard::TEvBuildIndexProgressResponse;
-            progress->Record.SetId(BuildIndexId);
-            progress->Record.SetTabletId(DataShardId);
-            progress->Record.SetRequestSeqNoGeneration(SeqNo.Generation);
-            progress->Record.SetRequestSeqNoRound(SeqNo.Round);
+            FillScanResponseCommonFields(*progress, BuildIndexId, DataShardId, SeqNo);
 
             // TODO(mbkkt) ReleaseBuffer isn't possible, we use LastUploadedKey for logging
             progress->Record.SetLastKeyAck(LastUploadedKey.GetBuffer());
@@ -376,13 +399,15 @@ private:
         }
 
         if (RetryCount < ScanSettings.GetMaxBatchRetries() && UploadStatus.IsRetriable()) {
-            LOG_N("Got retriable error, " << Debug());
+            YDB_LOG_NOTICE("Row upload failed with retriable error",
+                {"debug", Debug()});
 
             ctx.Schedule(GetRetryWakeupTimeoutBackoff(RetryCount), new TEvents::TEvWakeup());
             return;
         }
 
-        LOG_N("Got error, abort scan, " << Debug());
+        YDB_LOG_NOTICE("Row upload failed, aborting scan",
+            {"debug", Debug()});
 
         Driver->Touch(EScan::Final);
     }
@@ -398,25 +423,31 @@ private:
             RetryCount = 0;
         }
 
-        LOG_D("Upload, last key " << DebugPrintPoint(KeyTypes, WriteBuf.GetLastKey().GetCells(), *AppData()->TypeRegistry) << " " << Debug());
+        YDB_LOG_DEBUG("Uploading row batch",
+            {"lastKey", DebugPrintPoint(KeyTypes, WriteBuf.GetLastKey().GetCells(), *AppData()->TypeRegistry)},
+            {"debug", Debug()});
 
         auto actor = NTxProxy::CreateUploadRowsInternal(
-            this->SelfId(), TargetTable,
+            this->SelfId(),
+            DatabaseName,
+            TargetTable,
             UploadColumnsTypes,
             WriteBuf.GetRowsData(),
             UploadMode,
             true /*writeToPrivateTable*/,
-            true /*writeToIndexImplTable*/);
+            true /*writeToIndexImplTable*/,
+            DisableChangeCollection);
 
-        Uploader = this->Register(actor);
+        Uploader = this->Register(actor, TMailboxType::HTSwap, AppData()->BatchPoolId);
     }
 };
 
 class TBuildIndexScan final: public TBuildScanUpload<NKikimrServices::TActivity::BUILD_INDEX_SCAN_ACTOR> {
-    const ui32 TargetDataColumnPos; // positon of first data column in target table
+    const NTable::TPos TargetDataColumnPos; // position of first data column in target table
 
 public:
     TBuildIndexScan(ui64 buildIndexId,
+                    const TString& databaseName,
                     const TString& target,
                     const TScanRecord::TSeqNo& seqNo,
                     ui64 dataShardId,
@@ -426,7 +457,7 @@ public:
                     TProtoColumnsCRef targetDataColumns,
                     const TUserTable& tableInfo,
                     const TIndexBuildScanSettings& scanSettings)
-        : TBuildScanUpload(buildIndexId, target, seqNo, dataShardId, progressActorId, range, tableInfo, scanSettings)
+        : TBuildScanUpload(buildIndexId, databaseName, target, seqNo, dataShardId, progressActorId, range, tableInfo, scanSettings, false)
         , TargetDataColumnPos(targetIndexColumns.size()) {
         ScanTags = BuildTags(tableInfo, targetIndexColumns, targetDataColumns);
         UploadColumnsTypes = BuildTypes(tableInfo, targetIndexColumns, targetDataColumns);
@@ -449,8 +480,39 @@ class TBuildColumnsScan final: public TBuildScanUpload<NKikimrServices::TActivit
     TVector<TCell> Value;
     TString ValueSerialized;
 
+    struct TSequenceColumn {
+        size_t ColumnIdx;
+        TString SequencePath;
+        bool BitReverse = false;
+        std::deque<ui64> Buffer;
+        ui32 InFlight = 0;
+        ui64 LastValue = 0; // stable storage for the TCell::Make pointer
+    };
+    TVector<TSequenceColumn> SequenceColumns;
+    bool ScanWaitingForSequences = false;
+
+    // When Feed cannot make progress because the sequence buffer is empty, we copy
+    // the current row's key here and return EScan::Sleep. The flat-scan framework
+    // calls Iter->Next() before each Feed, so on resume the iterator has already
+    // advanced past this row. We drain PendingKeys from HandleNextVal (or below in
+    // Feed if values are now available) so the row is not lost.
+    //
+    // Multiple keys can pile up if the scan is woken from a non-sequence source
+    // (e.g. TEvUploadRowsResponse) while the sequence buffer is still empty: every
+    // such wake-up advances Iter past another row, and each must be remembered.
+    std::deque<TSerializedCellVec> PendingKeys;
+
+    // True iff Exhausted() was called while PendingKeys was non-empty. We returned
+    // Sleep instead of Reset so the scan would not finalize before those rows had
+    // a chance to be written. Cleared and the driver re-touched once the queue is
+    // drained.
+    bool ExhaustedWaitingForDrain = false;
+
+    static constexpr ui32 SequenceBatchTarget = 256;
+
 public:
     TBuildColumnsScan(ui64 buildIndexId,
+                      const TString& databaseName,
                       const TString& target,
                       const TScanRecord::TSeqNo& seqNo,
                       ui64 dataShardId,
@@ -459,7 +521,7 @@ public:
                       const NKikimrIndexBuilder::TColumnBuildSettings& columnBuildSettings,
                       const TUserTable& tableInfo,
                       const TIndexBuildScanSettings& scanSettings)
-        : TBuildScanUpload(buildIndexId, target, seqNo, dataShardId, progressActorId, range, tableInfo, scanSettings) {
+        : TBuildScanUpload(buildIndexId, databaseName, target, seqNo, dataShardId, progressActorId, range, tableInfo, scanSettings, true) {
         Y_ENSURE(columnBuildSettings.columnSize() > 0);
         UploadColumnsTypes = BuildTypes(tableInfo, columnBuildSettings);
         UploadMode = NTxProxy::EUploadRowsMode::UpsertIfExists;
@@ -467,10 +529,77 @@ public:
         TMemoryPool valueDataPool(256);
         TString err;
         Y_ENSURE(BuildExtraColumns(Value, columnBuildSettings, err, valueDataPool));
-        ValueSerialized = TSerializedCellVec::Serialize(Value);
+
+        for (size_t i = 0; i < static_cast<size_t>(columnBuildSettings.columnSize()); ++i) {
+            const auto& column = columnBuildSettings.column(i);
+            if (!column.default_from_sequence().empty()) {
+                SequenceColumns.push_back({
+                    .ColumnIdx = i,
+                    .SequencePath = column.default_from_sequence(),
+                    .BitReverse = column.bit_reverse_sequence_value(),
+                });
+            }
+        }
+
+        if (SequenceColumns.empty()) {
+            ValueSerialized = TSerializedCellVec::Serialize(Value);
+        }
+    }
+
+    TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) override {
+        auto state = TBuildScanUpload::Prepare(driver, scheme);
+        if (SequenceColumns.empty()) {
+            return state;
+        }
+        // Switch to a StateWork that also handles TEvNextValResult.
+        this->Become(&TBuildColumnsScan::SequenceStateFunc);
+        ScanWaitingForSequences = true;
+        TopUpSequenceRequests();
+        return {EScan::Sleep, {}};
+    }
+
+    EScan Exhausted() override {
+        // If Feed had to defer rows because the sequence buffer was empty, the
+        // iterator may exhaust before those rows are written. Returning Reset
+        // here (the default) would land in Seek(seq > 0) → Final and lose them.
+        // Wait until HandleNextVal drains the queue.
+        if (!PendingKeys.empty()) {
+            ExhaustedWaitingForDrain = true;
+            ScanWaitingForSequences = true;
+            return EScan::Sleep;
+        }
+        return TBuildScanUpload<NKikimrServices::TActivity::BUILD_COLUMNS_SCAN_ACTOR>::Exhausted();
     }
 
     EScan Feed(TArrayRef<const TCell> key, const TRow& row) final {
+        if (!SequenceColumns.empty()) {
+            // Drain any keys deferred from earlier sleeps before processing this row.
+            DrainPendingIfReady();
+
+            for (auto& s : SequenceColumns) {
+                if (s.Buffer.empty()) {
+                    // Buffer is empty — Iter will advance past this row before
+                    // Feed is called again, so queue the key for later processing.
+                    PendingKeys.emplace_back(key);
+                    ScanWaitingForSequences = true;
+                    return EScan::Sleep;
+                }
+            }
+            for (auto& s : SequenceColumns) {
+                s.LastValue = s.Buffer.front();
+                s.Buffer.pop_front();
+                Value[s.ColumnIdx] = TCell::Make<ui64>(s.LastValue);
+            }
+            TopUpSequenceRequests();
+            TString valueSerialized = TSerializedCellVec::Serialize(Value);
+            return FeedImpl(key, row, [&] {
+                ReadBuf.AddRow(
+                    key,
+                    Value,
+                    std::move(valueSerialized),
+                    key);
+            });
+        }
         return FeedImpl(key, row, [&] {
             auto valueSerializedCopy = ValueSerialized;
             ReadBuf.AddRow(
@@ -480,11 +609,123 @@ public:
                 key);
         });
     }
+
+private:
+    STFUNC(SequenceStateFunc) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(NSequenceProxy::TEvSequenceProxy::TEvNextValResult, HandleNextVal);
+            default:
+                this->StateWork(ev);
+        }
+    }
+
+    // If rows were deferred via PendingKeys when Feed had to sleep, consume sequence
+    // values for them now and add them to ReadBuf. Drains greedily until either the
+    // queue is empty or any sequence column's buffer runs out.
+    void DrainPendingIfReady() {
+        while (!PendingKeys.empty()) {
+            for (auto& s : SequenceColumns) {
+                if (s.Buffer.empty()) {
+                    return;
+                }
+            }
+            for (auto& s : SequenceColumns) {
+                s.LastValue = s.Buffer.front();
+                s.Buffer.pop_front();
+                Value[s.ColumnIdx] = TCell::Make<ui64>(s.LastValue);
+            }
+            TopUpSequenceRequests();
+            auto pendingKey = std::move(PendingKeys.front());
+            PendingKeys.pop_front();
+            TConstArrayRef<TCell> pendingKeyCells = pendingKey.GetCells();
+            TString pendingSerialized = TSerializedCellVec::Serialize(Value);
+            ReadBuf.AddRow(
+                pendingKeyCells,
+                Value,
+                std::move(pendingSerialized),
+                pendingKeyCells);
+        }
+    }
+
+    void TopUpSequenceRequests() {
+        for (size_t i = 0; i < SequenceColumns.size(); ++i) {
+            auto& seqCol = SequenceColumns[i];
+            ui32 total = static_cast<ui32>(seqCol.Buffer.size()) + seqCol.InFlight;
+            while (total < SequenceBatchTarget) {
+                this->Send(NSequenceProxy::MakeSequenceProxyServiceID(),
+                    new NSequenceProxy::TEvSequenceProxy::TEvNextVal(DatabaseName, seqCol.SequencePath),
+                    0, i);
+                ++seqCol.InFlight;
+                ++total;
+            }
+        }
+    }
+
+    void HandleNextVal(NSequenceProxy::TEvSequenceProxy::TEvNextValResult::TPtr& ev) {
+        const size_t colIdx = ev->Cookie;
+        Y_ENSURE(colIdx < SequenceColumns.size());
+        auto& seqCol = SequenceColumns[colIdx];
+        if (seqCol.InFlight > 0) {
+            --seqCol.InFlight;
+        }
+
+        if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
+            UploadStatus.StatusCode = ev->Get()->Status;
+            UploadStatus.Issues.AddIssues(ev->Get()->Issues);
+            UploadStatus.Issues.AddIssue(NYql::TIssue(TStringBuilder()
+                << "Failed to allocate sequence value for build scan, sequence: " << seqCol.SequencePath));
+            if (Driver) {
+                Driver->Touch(EScan::Final);
+            }
+            return;
+        }
+
+        ui64 val = static_cast<ui64>(ev->Get()->Value);
+        if (seqCol.BitReverse) {
+            // The bit-reverse flag is set only for __ydb_row_id; apply the shared row-id layout (spread
+            // bucket in the high bits, dense counter in the low bits) so backfilled values match those
+            // produced by the online-insert sequencer (kqp_sequencer_actor.cpp). The spread keeps writes
+            // to the unique index / posting / docs tables distributed instead of hot-spotting on a tail.
+            val = NTableIndex::NFulltext::RowIdFromSeq(val);
+        }
+        seqCol.Buffer.push_back(val);
+
+        // Drain any pending row first so we don't lose it when the scan resumes
+        // (Iter will advance past it on the next Process iteration).
+        DrainPendingIfReady();
+
+        if (ScanWaitingForSequences) {
+            bool shouldWake = false;
+            if (ExhaustedWaitingForDrain && PendingKeys.empty()) {
+                // We held the scan in Exhausted-Sleep because rows were queued;
+                // now that the queue is empty, let the scan finalize via
+                // Seek(seq > 0) which will flush ReadBuf and upload.
+                ExhaustedWaitingForDrain = false;
+                shouldWake = true;
+            } else if (!ExhaustedWaitingForDrain) {
+                bool allReady = true;
+                for (auto& s : SequenceColumns) {
+                    if (s.Buffer.empty()) {
+                        allReady = false;
+                        break;
+                    }
+                }
+                shouldWake = allReady;
+            }
+            if (shouldWake) {
+                ScanWaitingForSequences = false;
+                if (Driver) {
+                    Driver->Touch(EScan::Feed);
+                }
+            }
+        }
+    }
 };
 
 TAutoPtr<NTable::IScan> CreateBuildIndexScan(
     ui64 buildIndexId,
-    TString target,
+    const TString& databaseName,
+    const TString& target,
     const TScanRecord::TSeqNo& seqNo,
     ui64 dataShardId,
     const TActorId& progressActorId,
@@ -496,10 +737,10 @@ TAutoPtr<NTable::IScan> CreateBuildIndexScan(
     const TIndexBuildScanSettings& scanSettings) {
     if (columnsToBuild.columnSize() > 0) {
         return new TBuildColumnsScan(
-            buildIndexId, target, seqNo, dataShardId, progressActorId, range, columnsToBuild, tableInfo, scanSettings);
+            buildIndexId, databaseName, target, seqNo, dataShardId, progressActorId, range, columnsToBuild, tableInfo, scanSettings);
     }
     return new TBuildIndexScan(
-        buildIndexId, target, seqNo, dataShardId, progressActorId, range, targetIndexColumns, targetDataColumns, tableInfo, scanSettings);
+        buildIndexId, databaseName, target, seqNo, dataShardId, progressActorId, range, targetIndexColumns, targetDataColumns, tableInfo, scanSettings);
 }
 
 class TDataShard::TTxHandleSafeBuildIndexScan: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
@@ -509,8 +750,31 @@ public:
         , Ev(std::move(ev)) {
     }
 
-    bool Execute(TTransactionContext&, const TActorContext& ctx) {
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) {
+        auto& request = Ev->Get()->Record;
+        const ui64 buildId = request.GetId();
+        const ui64 seqNoGeneration = request.GetSeqNoGeneration();
+        const ui64 seqNoRound = request.GetSeqNoRound();
+
+        NIceDb::TNiceDb db(txc.DB);
+
+        const auto& scans = Self->BuildIndexScanManager.GetScans();
+        if (const auto* old = scans.FindPtr(buildId)) {
+            if (old->SeqNoGeneration != seqNoGeneration || old->SeqNoRound != seqNoRound) {
+                Self->BuildIndexScanManager.PersistRemove(db, buildId, old->SeqNoGeneration, old->SeqNoRound);
+                Self->PendingBuildIndexFinalResponses.erase(buildId);
+            }
+        }
+
+        Self->BuildIndexScanManager.PersistAdd(db, buildId, seqNoGeneration, seqNoRound,
+            static_cast<ui32>(EBuildIndexEventType::SecondaryIndexProgressResponse));
+
         Self->HandleSafe(Ev, ctx);
+
+        if (Ev && !Self->GetScanManager().Get(buildId)) {
+            Self->BuildIndexScanManager.PersistRemove(db, buildId, seqNoGeneration, seqNoRound);
+        }
+
         return true;
     }
 
@@ -521,6 +785,64 @@ public:
 private:
     TEvDataShard::TEvBuildIndexCreateRequest::TPtr Ev;
 };
+
+class TDataShard::TTxHandleBuildIndexScanProgress: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+public:
+    TTxHandleBuildIndexScanProgress(TDataShard* self, TEvDataShard::TEvBuildIndexProgressResponse::TPtr&& ev)
+        : TTransactionBase(self)
+        , Ev(std::move(ev)) {
+    }
+
+    bool Execute(TTransactionContext& txc, const TActorContext&) {
+        auto& record = Ev->Get()->Record;
+        BuildId = record.GetId();
+        const ui64 seqNoGeneration = record.GetRequestSeqNoGeneration();
+        const ui64 seqNoRound = record.GetRequestSeqNoRound();
+
+        const auto& scans = Self->BuildIndexScanManager.GetScans();
+        if (const auto* info = scans.FindPtr(BuildId)) {
+            if (info->SeqNoGeneration == seqNoGeneration && info->SeqNoRound == seqNoRound) {
+                ShouldSkip = false;
+                NIceDb::TNiceDb db(txc.DB);
+                TString serialized;
+                Y_ENSURE(record.SerializeToString(&serialized));
+                Self->BuildIndexScanManager.PersistMarkFinalResponse(db, BuildId, seqNoGeneration, seqNoRound,
+                    serialized);
+            }
+        }
+
+        return true;
+    }
+
+    void Complete(const TActorContext& ctx) {
+        if (!ShouldSkip) {
+            auto copy = MakeHolder<TEvDataShard::TEvBuildIndexProgressResponse>();
+            copy->Record = Ev->Get()->Record;
+            Self->PendingBuildIndexFinalResponses[BuildId] = std::move(copy);
+            Self->SendPendingBuildIndexFinalResponses(ctx);
+        }
+    }
+
+private:
+    TEvDataShard::TEvBuildIndexProgressResponse::TPtr Ev;
+    ui64 BuildId = 0;
+    bool ShouldSkip = true;
+};
+
+void TDataShard::Handle(TEvDataShard::TEvBuildIndexProgressResponse::TPtr& ev, const TActorContext& ctx) {
+    const auto status = ev->Get()->Record.GetStatus();
+    if (status == NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS) {
+        if (!StateReportPipe) {
+            NTabletPipe::TClientConfig clientConfig;
+            clientConfig.RetryPolicy = SchemeShardPipeRetryPolicy;
+            StateReportPipe = ctx.Register(
+                NTabletPipe::CreateClient(ctx.SelfID, CurrentSchemeShardId, clientConfig));
+        }
+        NTabletPipe::SendData(ctx, StateReportPipe, ev->Release().Release());
+        return;
+    }
+    Execute(new TTxHandleBuildIndexScanProgress(this, std::move(ev)));
+}
 
 void TDataShard::Handle(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext&) {
     Execute(new TTxHandleSafeBuildIndexScan(this, std::move(ev)));
@@ -534,14 +856,12 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, 
 
     try {
         auto response = MakeHolder<TEvDataShard::TEvBuildIndexProgressResponse>();
-        response->Record.SetId(request.GetId());
-        response->Record.SetTabletId(TabletID());
-        response->Record.SetRequestSeqNoGeneration(seqNo.Generation);
-        response->Record.SetRequestSeqNoRound(seqNo.Round);
+        FillScanResponseCommonFields(*response, request.GetId(), TabletID(), seqNo);
 
-        LOG_N("Starting TBuildIndexScan TabletId: " << TabletID() 
-            << " " << request.ShortDebugString()
-            << " row version " << rowVersion);
+        YDB_LOG_NOTICE("Starting secondary index build scan",
+            {"tabletId", TabletID()},
+            {"request", request.ShortDebugString()},
+            {"rowVersion", rowVersion});
 
         // Note: it's very unlikely that we have volatile txs before this snapshot
         if (VolatileTxManager.HasVolatileTxsAtSnapshot(rowVersion)) {
@@ -557,9 +877,10 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, 
         };
         auto trySendBadRequest = [&] {
             if (response->Record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST) {
-                LOG_E("Rejecting TBuildIndexScan bad request TabletId: " << TabletID()
-                    << " " << request.ShortDebugString()
-                    << " with response " << response->Record.ShortDebugString());
+                YDB_LOG_ERROR("Rejecting invalid secondary index build scan request",
+                    {"tabletId", TabletID()},
+                    {"request", request.ShortDebugString()},
+                    {"responseRecord", response->Record.ShortDebugString()});
                 ctx.Send(ev->Sender, std::move(response));
                 return true;
             } else {
@@ -585,12 +906,13 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, 
 
         // 2. Validating request fields
         if (!request.HasSnapshotStep() || !request.HasSnapshotTxId()) {
-            badRequest(TStringBuilder() << "Empty snapshot");
-        }
-        const TSnapshotKey snapshotKey(tableId.PathId, rowVersion.Step, rowVersion.TxId);
-        if (!SnapshotManager.FindAvailable(snapshotKey)) {
-            badRequest(TStringBuilder() << "Unknown snapshot for path id " << tableId.PathId.OwnerId << ":" << tableId.PathId.LocalPathId
-                << ", snapshot step is " << snapshotKey.Step << ", snapshot tx is " << snapshotKey.TxId);
+            badRequest(TStringBuilder() << "Missing snapshot");
+        } else {
+            const TSnapshotKey snapshotKey(tableId.PathId, rowVersion.Step, rowVersion.TxId);
+            if (!SnapshotManager.FindAvailable(snapshotKey)) {
+                badRequest(TStringBuilder() << "Unknown snapshot for path id " << tableId.PathId.OwnerId << ":" << tableId.PathId.LocalPathId
+                    << ", snapshot step is " << snapshotKey.Step << ", snapshot tx is " << snapshotKey.TxId);
+            }
         }
 
         TSerializedTableRange requestedRange;
@@ -603,7 +925,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, 
                 << " scanRange: " << DebugPrintRange(userTable.KeyColumnTypes, scanRange, *AppData()->TypeRegistry));
         }
 
-        if (!request.HasTargetName()) {
+        if (!request.GetTargetName()) {
             badRequest(TStringBuilder() << "Empty target table name");
         }
 
@@ -625,10 +947,11 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, 
 
         // 3. Creating scan
         TAutoPtr<NTable::IScan> scan = CreateBuildIndexScan(id,
+            request.GetDatabaseName(),
             request.GetTargetName(),
             seqNo,
             request.GetTabletId(),
-            ev->Sender,
+            SelfId(),
             requestedRange,
             request.GetIndexColumns(),
             request.GetDataColumns(),

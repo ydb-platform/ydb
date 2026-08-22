@@ -4,7 +4,7 @@
 #include "sql.h"
 
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
-#include <yql/essentials/core/issue/protos/issue_id.pb.h>
+#include <yql/essentials/public/issue/protos/issue_id.pb.h>
 #include <yql/essentials/public/issue/yql_warning.h>
 #include <yql/essentials/sql/settings/translation_settings.h>
 #include <yql/essentials/sql/cluster_mapping.h>
@@ -18,7 +18,7 @@
 
 namespace NSQLTranslationV0 {
 
-    typedef TMap<TString, TNodePtr> TNamedNodesMap;
+    using TNamedNodesMap = TMap<TString, TNodePtr>;
 
     class TContext {
     public:
@@ -159,21 +159,22 @@ namespace NSQLTranslationV0 {
         TVector<TString> AllResults;
         TSet<TString> UsedClusters;
 
-        struct ShortcutStore {
+        struct TShortcutStore {
             THashMap<INode*, TString> BaseMap;
             TVector<std::pair<TString, TNodePtr>> Goal;
         };
-        THashMap<ui32, ShortcutStore> Shortcuts;
+
+        THashMap<ui32, TShortcutStore> Shortcuts;
         ui32 ShortcutCurrentLevel = 0;
 
     };
 
     class TTranslation {
     protected:
-        typedef TSet<ui32> TSetType;
+        using TSetType = TSet<ui32>;
 
     protected:
-        TTranslation(TContext& ctx);
+        explicit TTranslation(TContext& ctx);
 
     public:
         TContext& Context();

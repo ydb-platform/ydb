@@ -133,6 +133,8 @@ make_fcontext:
     ret /* return pointer to context-data */
 
 trampoline:
+    .cfi_startproc
+    .cfi_undefined rip
     /* store return address on stack */
     /* fix stack alignment */
     _CET_ENDBR
@@ -147,6 +149,7 @@ trampoline:
 #endif
     /* jump to context-function */
     jmp *%rbx
+    .cfi_endproc
 
 finish:
     _CET_ENDBR

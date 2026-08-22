@@ -10,7 +10,11 @@ public:
 
     virtual ~IFmrGcService() = default;
 
+    // clears specified groups from data service
     virtual NThreading::TFuture<void> ClearGarbage(const std::vector<TString>& groupsToDelete) = 0;
+
+    // totally clears data service
+    virtual NThreading::TFuture<void> ClearAll() = 0;
 };
 
 } // namespace NYql::NFmr

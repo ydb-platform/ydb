@@ -12,7 +12,7 @@
  #include <threads.h>
 
  _Unwind_Reason_Code __gxx_personality_wasm0(int version, _Unwind_Action actions,
-@@ -120,4 +121,18 @@ _Unwind_GetRegionStart(struct _Unwind_Context *context __attribute__((unused)))
+@@ -120,4 +121,12 @@ _Unwind_GetRegionStart(struct _Unwind_Context *context __attribute__((unused)))
    return 0;
  }
 
@@ -24,10 +24,4 @@
 +_Unwind_RaiseException(_Unwind_Exception *exception_object __attribute__((unused))) {
 +  abort();
 +}
-+
-+#if !defined(NDEBUG) && defined(STANDALONE_WASM)
-+void __throw_exception_with_stack_trace(_Unwind_Exception* ex) {
-+  _Unwind_RaiseException(ex);
-+}
-+#endif
  #endif // defined(__WASM_EXCEPTIONS__)

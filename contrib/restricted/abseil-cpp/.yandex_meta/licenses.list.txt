@@ -226,6 +226,21 @@ license. See [LICENSE](LICENSE) for more information.
 ====================Apache-2.0====================
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
+// You may
+// obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+
+====================Apache-2.0====================
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
 //      https://www.apache.org/licenses/LICENSE-2.0
@@ -271,6 +286,13 @@ license. See [LICENSE](LICENSE) for more information.
 
 
 ====================COPYRIGHT====================
+  //       including by reference (e.g. const Status&).
+  //     - Never pass the builder to any function which might convert the
+  //       builder to Status (i.e. this restriction is viral).
+  // (c) Return a StatusBuilder (usually the input parameter).
+
+
+====================COPYRIGHT====================
 // Copyright 2016 Google Inc. All Rights Reserved.
 
 
@@ -311,7 +333,15 @@ license. See [LICENSE](LICENSE) for more information.
 
 
 ====================COPYRIGHT====================
+// Copyright 2025 Google Inc. All Rights Reserved.
+
+
+====================COPYRIGHT====================
 // Copyright 2025 The Abseil Authors
+
+
+====================COPYRIGHT====================
+// Copyright 2026 The Abseil Authors.
 
 
 ====================COPYRIGHT====================

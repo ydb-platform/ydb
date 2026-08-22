@@ -1,5 +1,7 @@
 #include "agent_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT_AGENT
+
 namespace NKikimr::NBlobDepot {
 
     template<>
@@ -19,8 +21,10 @@ namespace NKikimr::NBlobDepot {
             }
 
             void OnUpdateBlock() override {
-                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA52, "OnUpdateBlock", (AgentId, Agent.LogId),
-                    (QueryId, GetQueryId()));
+                YDB_LOG_DEBUG("OnUpdateBlock",
+                    {"marker", "BDA52"},
+                    {"agentId", Agent.LogId},
+                    {"queryId", GetQueryId()});
                 Initiate();
             }
 
@@ -29,12 +33,27 @@ namespace NKikimr::NBlobDepot {
             }
 
             void EndWithError(NKikimrProto::EReplyStatus status, const TString& errorReason) {
-                BDEV_QUERY(BDEV23, "TEvGetBlock_end", (Status, status), (ErrorReason, errorReason));
+                YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "TEvGetBlock_end",
+                    {"marker", "BDEV23"},
+                    {"VG", Agent.VirtualGroupId},
+                    {"BDT", Agent.TabletId},
+                    {"G", Agent.BlobDepotGeneration},
+                    {"Q", QueryId},
+                    {"status", status},
+                    {"errorReason", errorReason});
                 TBlobStorageQuery::EndWithError(status, errorReason);
             }
 
             void EndWithSuccess(std::unique_ptr<TEvBlobStorage::TEvGetBlockResult> result) {
-                BDEV_QUERY(BDEV24, "TEvGetBlock_end", (Status, NKikimrProto::OK), (TabletId, Request.TabletId), (Generation, BlockedGeneration));
+                YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "TEvGetBlock_end",
+                    {"marker", "BDEV24"},
+                    {"VG", Agent.VirtualGroupId},
+                    {"BDT", Agent.TabletId},
+                    {"G", Agent.BlobDepotGeneration},
+                    {"Q", QueryId},
+                    {"status", NKikimrProto::OK},
+                    {"tabletId", Request.TabletId},
+                    {"generation", BlockedGeneration});
                 TBlobStorageQuery::EndWithSuccess(std::move(result));
             }
 

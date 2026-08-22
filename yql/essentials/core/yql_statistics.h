@@ -10,6 +10,8 @@
 #include <util/generic/vector.h>
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
+#include <util/generic/maybe.h>
+#include <util/string/builder.h>
 
 #include <util/generic/string.h>
 #include <optional>
@@ -29,9 +31,36 @@ enum EStorageType : ui32 {
     ColumnStorage
 };
 
+class TShufflingOrderingsByJoinLabels {
+public:
+    void Add(TVector<TString> joinLabels, NDq::TOrderingsStateMachine::TLogicalOrderings shufflings) {
+        std::sort(joinLabels.begin(), joinLabels.end());
+        ShufflingOrderingsByJoinLabels_.emplace_back(joinLabels, shufflings);
+    }
+
+    TMaybe<NDq::TOrderingsStateMachine::TLogicalOrderings> GetShufflingOrderigsByJoinLabels(
+        TVector<TString> searchingLabels
+    ) {
+        std::sort(searchingLabels.begin(), searchingLabels.end());
+        for (const auto& [joinLabels, shufflings]: ShufflingOrderingsByJoinLabels_) {
+            if (searchingLabels == joinLabels) {
+                return shufflings;
+            }
+        }
+
+        return Nothing();
+    }
+
+    TString ToString() const;
+
+private:
+    TVector<std::pair<TVector<TString>, NDq::TOrderingsStateMachine::TLogicalOrderings>> ShufflingOrderingsByJoinLabels_;
+};
+
 // Providers may subclass this struct to associate specific statistics, useful to
 // derive stats for higher-level operators in the plan.
-struct IProviderStatistics {
+class IProviderStatistics {
+public:
     virtual ~IProviderStatistics() {}
 };
 
@@ -55,13 +84,13 @@ struct TColumnStatistics {
 struct TOptimizerStatistics {
     struct TKeyColumns : public TSimpleRefCount<TKeyColumns> {
         TVector<TString> Data;
-        TKeyColumns(TVector<TString> data) : Data(std::move(data)) {}
+        explicit TKeyColumns(TVector<TString> data) : Data(std::move(data)) {}
 
         TVector<NDq::TJoinColumn> ToJoinColumns(const TString& alias) {
             TVector<NDq::TJoinColumn> columns;
             columns.reserve(Data.size());
-            for (std::size_t i = 0; i < Data.size(); ++i) {
-                columns.push_back(NDq::TJoinColumn(alias, Data[i]));
+            for (const auto& column : Data) {
+                columns.push_back(NDq::TJoinColumn(alias, column));
             }
 
             return columns;
@@ -81,12 +110,12 @@ struct TOptimizerStatistics {
     struct TColumnStatMap : public TSimpleRefCount<TColumnStatMap> {
         THashMap<TString,TColumnStatistics> Data;
         TColumnStatMap() {}
-        TColumnStatMap(THashMap<TString,TColumnStatistics> data) : Data(std::move(data)) {}
+        explicit TColumnStatMap(THashMap<TString,TColumnStatistics> data) : Data(std::move(data)) {}
     };
 
     struct TShuffledByColumns : public TSimpleRefCount<TShuffledByColumns> {
         TVector<NDq::TJoinColumn> Data;
-        TShuffledByColumns(TVector<NDq::TJoinColumn> data) : Data(std::move(data)) {}
+        explicit TShuffledByColumns(TVector<NDq::TJoinColumn> data) : Data(std::move(data)) {}
         TString ToString() {
             TString result;
 
@@ -129,6 +158,7 @@ struct TOptimizerStatistics {
 
     std::optional<std::size_t> ShuffleOrderingIdx;
     std::int64_t SortingOrderingIdx = -1;
+    std::int64_t ShufflingOrderingIdx = -1;
 
     // special flag for equijoin
     bool CBOFired = false;
@@ -139,7 +169,7 @@ struct TOptimizerStatistics {
     TOptimizerStatistics& operator=(const TOptimizerStatistics&) = default;
     TOptimizerStatistics() = default;
 
-    TOptimizerStatistics(
+    explicit TOptimizerStatistics(
         EStatisticsType type,
         double nrows = 0.0,
         int ncols = 0,

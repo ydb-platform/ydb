@@ -73,10 +73,12 @@ TValue TWallTimer::GetElapsedValue() const
     return DurationToValue(GetElapsedTime());
 }
 
-void TWallTimer::Start()
+bool TWallTimer::Start()
 {
+    auto wasActive = Active_;
     StartTime_ = GetCpuInstant();
     Active_ = true;
+    return !wasActive;
 }
 
 void TWallTimer::StartIfNotActive()
@@ -86,11 +88,13 @@ void TWallTimer::StartIfNotActive()
     }
 }
 
-void TWallTimer::Stop()
+bool TWallTimer::Stop()
 {
+    auto wasActive = Active_;
     Duration_ += GetCurrentCpuDuration();
     StartTime_ = 0;
     Active_ = false;
+    return wasActive;
 }
 
 void TWallTimer::Restart()

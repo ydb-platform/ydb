@@ -7,6 +7,10 @@
 
 #include <yt_proto/yt/client/api/rpc_proxy/proto/api_service.pb.h>
 
+#include <yt/yt/core/concurrency/async_stream_helpers.h>
+
+#include <yt/yt/core/rpc/dispatcher.h>
+
 namespace NYT::NApi::NRpcProxy {
 
 using namespace NConcurrency;
@@ -31,7 +35,7 @@ IUnversionedRowBatchPtr TRowBatchReader::Read(const TRowBatchReadOptions& option
 {
     StoredRows_.clear();
 
-    if (!ReadyEvent_.IsSet() || !ReadyEvent_.Get().IsOK()) {
+    if (!ReadyEvent_.IsSet() || !ReadyEvent_.GetOrCrash().IsOK()) {
         return CreateEmptyUnversionedRowBatch();
     }
 
@@ -45,12 +49,12 @@ IUnversionedRowBatchPtr TRowBatchReader::Read(const TRowBatchReadOptions& option
 
     while (RowsFuture_ &&
         RowsFuture_.IsSet() &&
-        RowsFuture_.Get().IsOK() &&
+        RowsFuture_.GetOrCrash().IsOK() &&
         !Finished_ &&
         std::ssize(rows) < options.MaxRowsPerRead &&
         dataWeight < options.MaxDataWeightPerRead)
     {
-        const auto& currentRows = RowsFuture_.Get().Value();
+        const auto& currentRows = RowsFuture_.GetOrCrash().Value();
 
         if (currentRows.Empty()) {
             ReadyEvent_.Set();
@@ -130,12 +134,12 @@ TFuture<TSharedRange<TUnversionedRow>> TRowBatchReader::GetRows()
             }
 
             if (rows.Empty()) {
-                return ExpectEndOfStream(Underlying_).Apply(BIND([=] {
+                return CheckEndOfStream(Underlying_).Apply(BIND([=] () mutable {
                     return std::move(rows);
                 }));
             }
             return MakeFuture(std::move(rows));
-        }));
+        }).AsyncVia(NRpc::TDispatcher::Get()->GetHeavyInvoker()));
 }
 
 void TRowBatchReader::ApplyStatistics(const NProto::TRowsetStatistics& /*statistics*/)

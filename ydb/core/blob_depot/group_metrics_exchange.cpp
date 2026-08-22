@@ -2,6 +2,8 @@
 #include "data.h"
 #include "space_monitor.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT
+
 namespace NKikimr::NBlobDepot {
 
     void TBlobDepot::DoGroupMetricsExchange() {
@@ -25,7 +27,10 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepot::Handle(TEvBlobStorage::TEvControllerGroupMetricsExchange::TPtr ev) {
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT58, "TEvControllerGroupMetricsExchange", (Id, GetLogId()), (Msg, ev->Get()->Record));
+        YDB_LOG_DEBUG("TEvControllerGroupMetricsExchange",
+            {"marker", "BDT58"},
+            {"id", GetLogId()},
+            {"msg", ev->Get()->Record});
 
         if (Config.HasVirtualGroupId()) {
             auto response = std::make_unique<TEvBlobStorage::TEvControllerGroupMetricsExchange>();
@@ -93,12 +98,14 @@ namespace NKikimr::NBlobDepot {
             }
 
             params->SetAllocatedSize(Data->GetTotalStoredDataSize());
-            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), response.release());
 
             // TODO(alexvru): use a better approach
-            const double approximateFreeSpaceShare = (double)params->GetAvailableSize() / (params->GetAvailableSize() +
-                params->GetAllocatedSize());
+            const double available = static_cast<double>(params->GetAvailableSize());
+            const double allocated = static_cast<double>(params->GetAllocatedSize());
+            const double denom = available + allocated;
+            const float approximateFreeSpaceShare = denom ? static_cast<float>(available / denom) : 0.0f;
 
+            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), response.release());
             SpaceMonitor->SetSpaceColor(dataColor, approximateFreeSpaceShare); // the best data channel space color works for the whole depot
         }
     }
@@ -111,6 +118,68 @@ namespace NKikimr::NBlobDepot {
             MetricsQ.emplace_back(TActivationContext::Monotonic(), BytesRead, BytesWritten);
         }
         UpdateThroughputs(false);
+    }
+
+    void TBlobDepot::Handle(TEvBlobDepot::TEvPushS3RouterMetrics::TPtr ev) {
+        const auto& record = ev->Get()->Record;
+
+        auto inc = [&](NKikimrBlobDepot::ECumulativeCounters counter, ui64 value) {
+            if (value) {
+                TabletCounters->Cumulative()[counter] += value;
+            }
+        };
+
+        inc(NKikimrBlobDepot::COUNTER_S3_ROUTER_BALANCER_REQUESTS, record.GetBalancerRequests());
+        inc(NKikimrBlobDepot::COUNTER_S3_ROUTER_BALANCER_ERRORS, record.GetBalancerErrors());
+        inc(NKikimrBlobDepot::COUNTER_S3_ROUTER_NON_BALANCER_REQUESTS, record.GetNonBalancerRequests());
+        inc(NKikimrBlobDepot::COUNTER_S3_ROUTER_NON_BALANCER_ERRORS, record.GetNonBalancerErrors());
+        inc(NKikimrBlobDepot::COUNTER_S3_ROUTER_NON_BALANCER_BYTES_READ, record.GetNonBalancerBytesRead());
+        inc(NKikimrBlobDepot::COUNTER_S3_ROUTER_NON_BALANCER_BYTES_WRITTEN, record.GetNonBalancerBytesWritten());
+        inc(NKikimrBlobDepot::COUNTER_S3_ROUTER_BALANCER_RESOLVE_REQUESTS, record.GetBalancerResolveRequests());
+        inc(NKikimrBlobDepot::COUNTER_S3_ROUTER_BALANCER_RESOLVE_SUCCESSES, record.GetBalancerResolveSuccesses());
+        inc(NKikimrBlobDepot::COUNTER_S3_ROUTER_BALANCER_RESOLVE_FAILURES, record.GetBalancerResolveFailures());
+        inc(NKikimrBlobDepot::COUNTER_S3_ROUTER_ENDPOINT_SWITCHES, record.GetEndpointSwitches());
+        inc(NKikimrBlobDepot::COUNTER_S3_ROUTER_FIVE_XX_REFRESH_TRIGGERS, record.GetFiveXxRefreshTriggers());
+
+        auto applyLatencyHistogram = [&](NKikimrBlobDepot::EPercentileCounters counter, const auto& buckets) {
+            if (buckets.empty()) {
+                return;
+            }
+
+            auto& hist = TabletCounters->Percentile()[counter];
+            const ui32 n = Min<ui32>(hist.GetRangeCount(), buckets.size());
+            for (ui32 i = 0; i < n; ++i) {
+                if (const ui64 count = buckets.Get(i)) {
+                    hist.AddFor(hist.GetRangeBound(i), count);
+                }
+            }
+        };
+
+        applyLatencyHistogram(NKikimrBlobDepot::COUNTER_S3_ROUTER_BALANCER_LATENCY_MS, record.GetBalancerLatencyHistogram());
+        applyLatencyHistogram(NKikimrBlobDepot::COUNTER_S3_ROUTER_NON_BALANCER_LATENCY_MS, record.GetNonBalancerLatencyHistogram());
+        applyLatencyHistogram(NKikimrBlobDepot::COUNTER_S3_ROUTER_BALANCER_RESOLVE_LATENCY_MS, record.GetBalancerResolveLatencyHistogram());
+
+        if (record.HasIsUsingProxy()) {
+            const ui32 nodeId = record.GetNodeId();
+            const bool isUsingProxyByNode = record.GetIsUsingProxy();
+            auto it = S3RouterIsUsingProxyByNode.find(nodeId);
+            if (it == S3RouterIsUsingProxyByNode.end()) {
+                ++S3RouterNodeCount;
+                it = S3RouterIsUsingProxyByNode.emplace(nodeId, false).first;
+            }
+            if (isUsingProxyByNode != it->second) {
+                if (isUsingProxyByNode) {
+                    ++S3RouterNodesWithUsingProxy;
+                } else if (S3RouterNodesWithUsingProxy) {
+                    --S3RouterNodesWithUsingProxy;
+                }
+
+                it->second = isUsingProxyByNode;
+            }
+
+            const bool isUsingProxy = S3RouterNodeCount && S3RouterNodesWithUsingProxy == S3RouterNodeCount;
+            TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_ROUTER_IS_USING_PROXY] = isUsingProxy ? 1 : 0;
+        }
     }
 
     void TBlobDepot::UpdateThroughputs(bool reschedule) {

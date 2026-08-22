@@ -19,7 +19,7 @@ import sys
 from .config_exception import ConfigException
 
 
-class ExecProvider(object):
+class ExecProvider:
     """
     Implementation of the proposal for out-of-tree client
     authentication providers as described here --
@@ -81,6 +81,11 @@ class ExecProvider(object):
             kubernetes_exec_info['spec']['response'] = previous_response
         if self.cluster:
             kubernetes_exec_info['spec']['cluster'] = self.cluster.value
+            if self.cluster.value.get("extensions"):
+                for extension in self.cluster.value["extensions"]:
+                    if extension["name"] == "client.authentication.k8s.io/exec":
+                        kubernetes_exec_info["spec"]["cluster"]["config"] = extension["extension"]
+                        break
 
         self.env['KUBERNETES_EXEC_INFO'] = json.dumps(kubernetes_exec_info)
         process = subprocess.Popen(

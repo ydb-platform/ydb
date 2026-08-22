@@ -1,6 +1,6 @@
 PY3TEST()
 
-INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 
 TEST_SRCS(
     conftest.py
@@ -13,11 +13,12 @@ TEST_SRCS(
     test_system_views.py
     test_auth_system_views.py
     test_publish_into_schemeboard_with_common_ssring.py
+    test_remove_storage_groups.py
     test_user_administration.py
     test_users_groups_with_acl.py
 )
 
-SPLIT_FACTOR(20)
+SPLIT_FACTOR(50)
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/library/flavours/flavours_deps.inc)
 
@@ -31,6 +32,8 @@ PEERDIR(
     ydb/tests/library/flavours
     ydb/tests/library/clients
     ydb/tests/oss/ydb_sdk_import
+    ydb/tests/stress/remove_storage_groups/workload
+    ydb/tests/stress/tpcc/workload
     ydb/public/sdk/python
 )
 
@@ -39,9 +42,10 @@ FORK_SUBTESTS()
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
-    REQUIREMENTS(ram:10 cpu:1)
+    REQUIREMENTS(ram:10 cpu:16)
 ELSE()
     SIZE(MEDIUM)
+    REQUIREMENTS(cpu:2)
 ENDIF()
 
 END()

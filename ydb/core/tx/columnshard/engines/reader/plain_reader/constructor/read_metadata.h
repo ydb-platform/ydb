@@ -11,17 +11,11 @@ namespace NKikimr::NOlap::NReader::NPlain {
 class TReadMetadata: public NCommon::TReadMetadata {
 private:
     using TBase = NCommon::TReadMetadata;
-    virtual TConclusionStatus DoInitCustom(
-        const NColumnShard::TColumnShard* owner, const TReadDescription& readDescription, const TDataStorageAccessor& dataAccessor) override;
+    virtual TConclusionStatus DoInitCustom(const NColumnShard::TColumnShard* owner, const TReadDescription& readDescription) override;
 
 public:
     using TConstPtr = std::shared_ptr<const TReadMetadata>;
     using TBase::TBase;
-
-    virtual bool Empty() const override {
-        Y_ABORT_UNLESS(SelectInfo);
-        return SelectInfo->Portions.empty();
-    }
 
     virtual std::shared_ptr<IDataReader> BuildReader(const std::shared_ptr<TReadContext>& context) const override;
     virtual std::unique_ptr<TScanIteratorBase> StartScan(const std::shared_ptr<TReadContext>& readContext) const override;

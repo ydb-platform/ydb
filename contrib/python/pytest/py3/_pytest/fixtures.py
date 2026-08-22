@@ -641,8 +641,12 @@ class FixtureRequest(abc.ABC):
             self, scope, param, param_index, fixturedef, _ispytest=True
         )
 
-        # Check if a higher-level scoped fixture accesses a lower level one.
-        subrequest._check_scope(argname, self._scope, scope)
+        # The parametrize invocation scope only controls caching behavior while
+        # allowing wider-scoped fixtures to keep depending on the parametrized
+        # fixture. Scope control is enforced for parametrized fixtures
+        # by recreating the whole fixture tree on parameter change.
+        # Hence `fixturedef._scope`, not `scope`.
+        subrequest._check_scope(argname, self._scope, fixturedef._scope)
         try:
             # Call the fixture function.
             fixturedef.execute(request=subrequest)
@@ -1534,6 +1538,7 @@ class FixtureManager:
         # (discovering matching fixtures for a given name/node is expensive).
 
         parentid = parentnode.nodeid
+        parentnodesids = set(nodes.iterparentnodeids(parentid))
         fixturenames_closure = list(initialnames)
 
         arg2fixturedefs: Dict[str, Sequence[FixtureDef[Any]]] = {}
@@ -1545,7 +1550,7 @@ class FixtureManager:
                     continue
                 if argname in arg2fixturedefs:
                     continue
-                fixturedefs = self.getfixturedefs(argname, parentid)
+                fixturedefs = self.getfixturedefs(argname, parentid, _parentnodeids=parentnodesids)
                 if fixturedefs:
                     arg2fixturedefs[argname] = fixturedefs
                     for arg in fixturedefs[-1].argnames:
@@ -1570,6 +1575,12 @@ class FixtureManager:
             args, _ = ParameterSet._parse_parametrize_args(*mark.args, **mark.kwargs)
             return args
 
+        parametrized_argnames = set(
+            argname 
+            for mark in metafunc.definition.iter_markers("parametrize") 
+            for argname in get_parametrize_mark_argnames(mark)
+        )
+
         for argname in metafunc.fixturenames:
             # Get the FixtureDefs for the argname.
             fixture_defs = metafunc._arg2fixturedefs.get(argname)
@@ -1580,10 +1591,7 @@ class FixtureManager:
 
             # If the test itself parametrizes using this argname, give it
             # precedence.
-            if any(
-                argname in get_parametrize_mark_argnames(mark)
-                for mark in metafunc.definition.iter_markers("parametrize")
-            ):
+            if argname in parametrized_argnames:
                 continue
 
             # In the common case we only look at the fixture def with the
@@ -1717,7 +1725,7 @@ class FixtureManager:
             self._nodeid_autousenames.setdefault(nodeid or "", []).extend(autousenames)
 
     def getfixturedefs(
-        self, argname: str, nodeid: str
+        self, argname: str, nodeid: str, /, _parentnodeids: Optional[set[str]] = None
     ) -> Optional[Sequence[FixtureDef[Any]]]:
         """Get FixtureDefs for a fixture name which are applicable
         to a given node.
@@ -1734,12 +1742,14 @@ class FixtureManager:
             fixturedefs = self._arg2fixturedefs[argname]
         except KeyError:
             return None
-        return tuple(self._matchfactories(fixturedefs, nodeid))
+
+        if not _parentnodeids:
+            _parentnodeids = set(nodes.iterparentnodeids(nodeid))
+        return tuple(self._matchfactories(fixturedefs, _parentnodeids))
 
     def _matchfactories(
-        self, fixturedefs: Iterable[FixtureDef[Any]], nodeid: str
+        self, fixturedefs: Iterable[FixtureDef[Any]], _parentnodeids: set[str]
     ) -> Iterator[FixtureDef[Any]]:
-        parentnodeids = set(nodes.iterparentnodeids(nodeid))
         for fixturedef in fixturedefs:
-            if fixturedef.baseid in parentnodeids:
+            if fixturedef.baseid in _parentnodeids:
                 yield fixturedef

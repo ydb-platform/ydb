@@ -6,6 +6,7 @@
 #include "dispatcher_impl.h"
 
 #include <yt/yt/core/bus/bus.h>
+#include <yt/yt/core/bus/message_handler.h>
 #include <yt/yt/core/bus/server.h>
 #include <yt/yt/core/bus/private.h>
 
@@ -19,28 +20,33 @@
 #include <yt/yt/core/ytree/convert.h>
 #include <yt/yt/core/ytree/fluent.h>
 
+#include <yt/yt/core/concurrency/periodic_executor.h>
 #include <yt/yt/core/concurrency/pollable_detail.h>
 
-#include <library/cpp/yt/threading/rw_spin_lock.h>
 #include <library/cpp/yt/threading/spin_lock.h>
 
 #include <library/cpp/yt/memory/atomic_intrusive_ptr.h>
 
+#include <openssl/pem.h>
+
 #include <cerrno>
 
-namespace NYT::NBus {
+namespace NYT::NBus::NTcp {
 
 using namespace NYTree;
 using namespace NConcurrency;
+using namespace NCrypto;
+using namespace NProfiling;
 using namespace NNet;
+using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TTcpBusServerBase
+class TBusServerBase
     : public TPollableBase
 {
 public:
-    TTcpBusServerBase(
+    TBusServerBase(
         TBusServerConfigPtr config,
         IPollerPtr poller,
         IMessageHandlerPtr handler,
@@ -59,7 +65,7 @@ public:
         YT_VERIFY(MemoryUsageTracker_);
     }
 
-    ~TTcpBusServerBase()
+    ~TBusServerBase()
     {
         CloseServerSocket();
     }
@@ -75,10 +81,10 @@ public:
 
         ArmPoller();
 
-        YT_LOG_INFO("Bus server started");
+        YT_TLOG_INFO("Bus server started");
     }
 
-    void OnDynamicConfigChanged(const NBus::TBusServerDynamicConfigPtr& config)
+    void Reconfigure(const NBus::NTcp::TBusServerDynamicConfigPtr& config)
     {
         YT_VERIFY(config);
 
@@ -87,19 +93,32 @@ public:
 
     TFuture<void> Stop()
     {
-        YT_LOG_INFO("Stopping Bus server");
+        YT_TLOG_INFO("Stopping Bus server");
 
         UnarmPoller();
 
         return Poller_->Unregister(this).Apply(BIND([this, this_ = MakeStrong(this)] {
-            YT_LOG_INFO("Bus server stopped");
+            {
+                auto guard = Guard(ConnectionsSpinLock_);
+                YT_VERIFY(!AllConnectionsTerminatedPromise_);
+                AllConnectionsTerminatedPromise_ = NewPromise<void>();
+
+                if (Connections_.empty()) {
+                    guard.Release();
+                    AllConnectionsTerminatedPromise_.Set();
+                }
+            }
+
+            return AllConnectionsTerminatedPromise_.ToFuture().Apply(BIND([this, this_ = MakeStrong(this)] {
+                YT_TLOG_INFO("Bus server stopped");
+            }));
         }));
     }
 
     // IPollable implementation.
-    const std::string& GetLoggingTag() const override
+    const NLogging::TLoggingTagList& GetLoggingTags() const override
     {
-        return Logger.GetTag();
+        return Logger.GetTags();
     }
 
     void OnEvent(EPollControl /*control*/) final
@@ -116,8 +135,8 @@ public:
 
         decltype(Connections_) connections;
         {
-            auto guard = WriterGuard(ConnectionsSpinLock_);
-            std::swap(connections, Connections_);
+            auto guard = Guard(ConnectionsSpinLock_);
+            connections = Connections_;
         }
 
         for (const auto& connection : connections) {
@@ -125,6 +144,61 @@ public:
                 NRpc::EErrorCode::TransportError,
                 "Bus server terminated"));
         }
+    }
+
+    THashMap<std::string, int> GetConnectionCountsByNetwork() const
+    {
+        decltype(Connections_) connections;
+        {
+            auto guard = Guard(ConnectionsSpinLock_);
+            connections = Connections_;
+        }
+        THashMap<std::string, int> result;
+        for (const auto& connection : connections) {
+            const auto& attributes = connection->GetEndpointAttributes();
+            auto network = attributes.Find<std::string>("network").value_or(DefaultNetworkName);
+            ++result[std::move(network)];
+        }
+        return result;
+    }
+
+    IYPathServicePtr GetOrchidService() const
+    {
+        return IYPathService::FromProducer(
+            BIND(&TBusServerBase::BuildOrchid, MakeStrong(this)));
+    }
+
+    void BuildOrchid(IYsonConsumer* consumer) const
+    {
+        BuildYsonFluently(consumer)
+            .BeginMap()
+                .Item("port").Value(Config_->Port)
+                .Item("unix_domain_socket_path").Value(Config_->UnixDomainSocketPath)
+                .Item("encryption_mode").Value(Config_->EncryptionMode)
+                .Item("verification_mode").Value(Config_->VerificationMode)
+                .Item("load_certs_from_bus_certs_directory").Value(Config_->LoadCertsFromBusCertsDirectory)
+                .Item("peer_alternative_host_name").Value(Config_->PeerAlternativeHostName)
+                .Item("connection_counts").Value(GetConnectionCountsByNetwork())
+                .DoIf(Config_->CertificateChain != nullptr, [&] (auto fluent) {
+                    try {
+                        auto cert = NCrypto::ReadCertFromPemBlob(Config_->CertificateChain);
+                        auto secondsToExpiry = NCrypto::GetCertTimeToExpiry(cert);
+                        fluent
+                            .Item("certificate_chain").BeginMap()
+                                .Item("environment_variable").Value(Config_->CertificateChain->EnvironmentVariable)
+                                .Item("file_name").Value(Config_->CertificateChain->FileName)
+                                .Item("signature_algorithm").Value(OBJ_nid2ln(X509_get_signature_nid(cert.get())))
+                                .Item("version").Value(X509_get_version(cert.get()))
+                                .Item("seconds_to_expiry").Value(secondsToExpiry)
+                            .EndMap();
+                    } catch (const std::exception& ex) {
+                        fluent
+                            .Item("certificate_chain").BeginMap()
+                                .Item("error").Value(TError(ex))
+                            .EndMap();
+                    }
+                })
+            .EndMap();
     }
 
 protected:
@@ -140,8 +214,9 @@ protected:
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, ControlSpinLock_);
     SOCKET ServerSocket_ = INVALID_SOCKET;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, ConnectionsSpinLock_);
-    THashSet<TTcpConnectionPtr> Connections_;
+    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, ConnectionsSpinLock_);
+    THashSet<TConnectionPtr> Connections_;
+    TPromise<void> AllConnectionsTerminatedPromise_;
 
     virtual void CreateServerSocket() = 0;
     virtual void InitClientSocket(SOCKET clientSocket) = 0;
@@ -150,26 +225,29 @@ protected:
     {
         auto logger = BusLogger();
         if (config->Port) {
-            logger.AddTag("ServerPort: %v", *config->Port);
+            logger.AddTag("ServerPort", *config->Port);
         }
         if (config->UnixDomainSocketPath) {
-            logger.AddTag("UnixDomainSocketPath: %v", *config->UnixDomainSocketPath);
+            logger.AddTag("UnixDomainSocketPath", *config->UnixDomainSocketPath);
         }
         return logger;
     }
 
-    void OnConnectionTerminated(const TTcpConnectionPtr& connection, const TError& /*error*/)
+    void OnConnectionTerminated(const TConnectionPtr& connection, const TError& /*error*/)
     {
-        auto guard = WriterGuard(ConnectionsSpinLock_);
-        // NB: Connection could be missing, see OnShutdown.
-        Connections_.erase(connection);
+        auto guard = Guard(ConnectionsSpinLock_);
+        EraseOrCrash(Connections_, connection);
+        if (Connections_.empty() && AllConnectionsTerminatedPromise_) {
+            guard.Release();
+            AllConnectionsTerminatedPromise_.Set();
+        }
     }
 
     void OpenServerSocket()
     {
         auto guard = Guard(ControlSpinLock_);
 
-        YT_LOG_DEBUG("Opening server socket");
+        YT_TLOG_DEBUG("Opening server socket");
 
         CreateServerSocket();
 
@@ -180,7 +258,7 @@ protected:
             throw;
         }
 
-        YT_LOG_DEBUG("Server socket opened");
+        YT_TLOG_DEBUG("Server socket opened");
     }
 
     void CloseServerSocket()
@@ -191,13 +269,13 @@ protected:
                 unlink(Config_->UnixDomainSocketPath->c_str());
             }
             ServerSocket_ = INVALID_SOCKET;
-            YT_LOG_DEBUG("Server socket closed");
+            YT_TLOG_DEBUG("Server socket closed");
         }
     }
 
     int GetTotalServerConnectionCount(const std::string& clientNetwork)
     {
-        const auto& dispatcher = TTcpDispatcher::TImpl::Get();
+        const auto& dispatcher = TDispatcher::TImpl::Get();
         int result = 0;
         for (auto encrypted : { false, true }) {
             const auto& counters = dispatcher->GetCounters(clientNetwork, encrypted);
@@ -216,7 +294,8 @@ protected:
             try {
                 clientSocket = AcceptSocket(ServerSocket_, &clientAddress);
             } catch (const std::exception& ex) {
-                YT_LOG_WARNING(ex, "Error accepting client connection");
+                YT_TLOG_WARNING("Error accepting client connection")
+                    .With(TError(ex));
                 break;
             }
 
@@ -230,26 +309,26 @@ protected:
 
             auto connectionId = TConnectionId::Create();
 
-            const auto& dispatcher = TTcpDispatcher::TImpl::Get();
+            const auto& dispatcher = TDispatcher::TImpl::Get();
             auto clientNetwork = dispatcher->GetNetworkNameForAddress(clientAddress);
             auto connectionCount = GetTotalServerConnectionCount(clientNetwork);
             auto connectionLimit = Config_->MaxSimultaneousConnections;
             auto formattedClientAddress = ToString(clientAddress, NNet::TNetworkAddressFormatOptions{.IncludePort = false});
             if (connectionCount >= connectionLimit) {
-                YT_LOG_WARNING("Connection dropped (Address: %v, ConnectionCount: %v, ConnectionLimit: %v)",
-                    formattedClientAddress,
-                    connectionCount,
-                    connectionLimit);
+                YT_TLOG_WARNING("Connection dropped")
+                    .With("Address", formattedClientAddress)
+                    .With("ConnectionCount", connectionCount)
+                    .With("ConnectionLimit", connectionLimit);
                 rejectConnection();
                 continue;
             }
 
-            YT_LOG_DEBUG("Connection accepted (ConnectionId: %v, Address: %v, Network: %v, ConnectionCount: %v, ConnectionLimit: %v)",
-                connectionId,
-                formattedClientAddress,
-                clientNetwork,
-                connectionCount,
-                connectionLimit);
+            YT_TLOG_DEBUG("Connection accepted")
+                .With("ConnectionId", connectionId)
+                .With("Address", formattedClientAddress)
+                .With("Network", clientNetwork)
+                .With("ConnectionCount", connectionCount)
+                .With("ConnectionLimit", connectionLimit);
 
             InitClientSocket(clientSocket);
 
@@ -261,8 +340,8 @@ protected:
                     .Item("network").Value(clientNetwork)
                 .EndMap());
 
-            auto poller = TTcpDispatcher::TImpl::Get()->GetXferPoller();
-            auto connection = New<TTcpConnection>(
+            auto poller = TDispatcher::TImpl::Get()->GetXferPoller();
+            auto connection = New<TConnection>(
                 Config_,
                 EConnectionType::Server,
                 connectionId,
@@ -280,12 +359,13 @@ protected:
                 DynamicConfig_.Acquire()->RejectConnectionOnMemoryOvercommit);
 
             {
-                auto guard = WriterGuard(ConnectionsSpinLock_);
+                auto guard = Guard(ConnectionsSpinLock_);
+                YT_VERIFY(!AllConnectionsTerminatedPromise_);
                 EmplaceOrCrash(Connections_, connection);
             }
 
             connection->SubscribeTerminated(BIND_NO_PROPAGATE(
-                &TTcpBusServerBase::OnConnectionTerminated,
+                &TBusServerBase::OnConnectionTerminated,
                 MakeWeak(this),
                 connection));
 
@@ -293,7 +373,7 @@ protected:
         }
     }
 
-    void BindSocket(const TNetworkAddress& address, const TString& errorMessage)
+    void BindSocket(const TNetworkAddress& address, const std::string& errorMessage)
     {
         for (int attempt = 1; attempt <= Config_->BindRetryCount; ++attempt) {
             try {
@@ -304,9 +384,11 @@ protected:
                     CloseServerSocket();
 
                     THROW_ERROR_EXCEPTION(NRpc::EErrorCode::TransportError, TRuntimeFormat(errorMessage))
-                        << ex;
+                        .With(ex);
                 } else {
-                    YT_LOG_WARNING(ex, "Error binding socket, starting %v retry", attempt + 1);
+                    YT_TLOG_WARNING("Error binding socket, starting retry")
+                        .With("Attempt", attempt + 1)
+                        .With(TError(ex));
                     Sleep(Config_->BindRetryBackoff);
                 }
             }
@@ -332,11 +414,11 @@ protected:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TRemoteTcpBusServer
-    : public TTcpBusServerBase
+class TRemoteBusServer
+    : public TBusServerBase
 {
 public:
-    using TTcpBusServerBase::TTcpBusServerBase;
+    using TBusServerBase::TBusServerBase;
 
 private:
     void CreateServerSocket() final
@@ -351,29 +433,29 @@ private:
     {
         if (Config_->EnableNoDelay) {
             if (!TrySetSocketNoDelay(clientSocket)) {
-                YT_LOG_DEBUG("Failed to set socket no delay option");
+                YT_TLOG_DEBUG("Failed to set socket no delay option");
             }
         }
 
         if (!TrySetSocketKeepAlive(clientSocket)) {
-            YT_LOG_DEBUG("Failed to set socket keep alive option");
+            YT_TLOG_DEBUG("Failed to set socket keep alive option");
         }
     }
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TLocalTcpBusServer
-    : public TTcpBusServerBase
+class TLocalBusServer
+    : public TBusServerBase
 {
 public:
-    TLocalTcpBusServer(
+    TLocalBusServer(
         TBusServerConfigPtr config,
         IPollerPtr poller,
         IMessageHandlerPtr handler,
         IPacketTranscoderFactory* packetTranscoderFactory,
         IMemoryUsageTrackerPtr memoryUsageTracker)
-        : TTcpBusServerBase(
+        : TBusServerBase(
             std::move(config),
             std::move(poller),
             std::move(handler),
@@ -390,8 +472,7 @@ private:
             TNetworkAddress netAddress;
             if (Config_->UnixDomainSocketPath) {
                 // NB(gritukan): Unix domain socket path cannot be longer than 108 symbols, so let's try to shorten it.
-                // TODO(babenko): switch to std::string
-                netAddress = TNetworkAddress::CreateUnixDomainSocketAddress(NFS::GetShortestPath(TString(*Config_->UnixDomainSocketPath)));
+                netAddress = TNetworkAddress::CreateUnixDomainSocketAddress(NFS::GetShortestPath(*Config_->UnixDomainSocketPath));
             } else {
                 netAddress = GetLocalBusAddress(*Config_->Port);
             }
@@ -411,23 +492,37 @@ private:
  *  server instance.
  */
 template <class TServer>
-class TTcpBusServerProxy
+class TBusServerProxy
     : public IBusServer
 {
 public:
-    explicit TTcpBusServerProxy(
+    TBusServerProxy(
         TBusServerConfigPtr config,
         IPacketTranscoderFactory* packetTranscoderFactory,
-        IMemoryUsageTrackerPtr memoryUsageTracker)
+        IMemoryUsageTrackerPtr memoryUsageTracker,
+        std::optional<TCertProfiler> certProfiler)
         : Config_(std::move(config))
         , PacketTranscoderFactory_(packetTranscoderFactory)
         , MemoryUsageTracker_(std::move(memoryUsageTracker))
+        , CertProfiler_(std::move(certProfiler))
     {
         YT_VERIFY(Config_);
         YT_VERIFY(MemoryUsageTracker_);
+
+        if (CertProfiler_ && Config_->CertificateChain) {
+            // There is certificate so update cert sensors periodically.
+            CertChainToExpiry_ = CertProfiler_->Profiler.Gauge("/cert_chain_to_expiry");
+            // Update expiry time ASAP after creation.
+            CertChainToExpiry_->Update(NCrypto::GetCertTimeToExpiry(Config_->CertificateChain));
+
+            UpdateCertSensorsExecutor_ = New<TPeriodicExecutor>(
+                CertProfiler_->Invoker,
+                BIND_NO_PROPAGATE(&TBusServerProxy::UpdateCertSensors, MakeWeak(this)),
+                TDuration::Minutes(5));
+        }
     }
 
-    ~TTcpBusServerProxy()
+    ~TBusServerProxy()
     {
         YT_UNUSED_FUTURE(Stop());
     }
@@ -436,34 +531,50 @@ public:
     {
         auto server = New<TServer>(
             Config_,
-            TTcpDispatcher::TImpl::Get()->GetAcceptorPoller(),
+            TDispatcher::TImpl::Get()->GetAcceptorPoller(),
             std::move(handler),
             PacketTranscoderFactory_,
             MemoryUsageTracker_);
 
         Server_.Store(server);
         server->Start();
-        server->OnDynamicConfigChanged(DynamicConfig_.Acquire());
+        server->Reconfigure(DynamicConfig_.Acquire());
+
+        if (UpdateCertSensorsExecutor_) {
+            UpdateCertSensorsExecutor_->Start();
+        }
     }
 
-    void OnDynamicConfigChanged(const NBus::TBusServerDynamicConfigPtr& config) final
+    void Reconfigure(const TBusServerDynamicConfigPtr& config) final
     {
         YT_VERIFY(config);
 
         DynamicConfig_.Store(config);
 
         if (auto server = Server_.Acquire()) {
-            server->OnDynamicConfigChanged(config);
+            server->Reconfigure(config);
         }
     }
 
     TFuture<void> Stop() final
     {
+        if (UpdateCertSensorsExecutor_) {
+            YT_UNUSED_FUTURE(UpdateCertSensorsExecutor_->Stop());
+        }
+
         if (auto server = Server_.Exchange(nullptr)) {
             return server->Stop();
         } else {
-            return VoidFuture;
+            return OKFuture;
         }
+    }
+
+    IYPathServicePtr GetOrchidService() const final
+    {
+        if (auto server = Server_.Acquire()) {
+            return server->GetOrchidService();
+        }
+        return GetEphemeralNodeFactory()->CreateMap();
     }
 
 private:
@@ -473,6 +584,21 @@ private:
     const IMemoryUsageTrackerPtr MemoryUsageTracker_;
 
     TAtomicIntrusivePtr<TServer> Server_;
+
+    const std::optional<TCertProfiler> CertProfiler_;
+    std::optional<TGauge> CertChainToExpiry_;
+    TPeriodicExecutorPtr UpdateCertSensorsExecutor_;
+
+    void UpdateCertSensors()
+    {
+        try {
+            CertChainToExpiry_->Update(NCrypto::GetCertTimeToExpiry(Config_->CertificateChain));
+        } catch (const std::exception& ex) {
+            const auto& Logger = BusLogger();
+            YT_TLOG_WARNING("Failed to update cert sensors")
+                .With(TError(ex));
+        }
+    }
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -487,9 +613,13 @@ public:
         : Underlying_(std::move(underlying))
     { }
 
-    void HandleMessage(TSharedRefArray message, IBusPtr replyBus) noexcept final
+    void HandleMessage(
+        TSharedRefArray message,
+        IBusPtr replyBus,
+        IDirectPlacementTransferPtr transfer,
+        TPacketId packetId) noexcept final
     {
-        Underlying_->HandleMessage(std::move(message), std::move(replyBus));
+        Underlying_->HandleMessage(std::move(message), std::move(replyBus), std::move(transfer), packetId);
     }
 
     void SubscribeTerminated(const TCallback<void(const TError&)>& callback) final
@@ -538,16 +668,16 @@ public:
 
         if (Config_->EnableLocalBypass && Config_->Port) {
             LocalHandler_ = New<TLocalMessageHandler>(std::move(handler));
-            TTcpDispatcher::TImpl::Get()->RegisterLocalMessageHandler(*Config_->Port, LocalHandler_);
+            TDispatcher::TImpl::Get()->RegisterLocalMessageHandler(*Config_->Port, LocalHandler_);
         }
     }
 
-    void OnDynamicConfigChanged(const NBus::TBusServerDynamicConfigPtr& config) final
+    void Reconfigure(const TBusServerDynamicConfigPtr& config) final
     {
         YT_VERIFY(config);
 
         for (const auto& server : Servers_) {
-            server->OnDynamicConfigChanged(config);
+            server->Reconfigure(config);
         }
     }
 
@@ -556,7 +686,7 @@ public:
         if (Config_->EnableLocalBypass && Config_->Port) {
             LocalHandler_->Terminate(TError(NRpc::EErrorCode::TransportError, "Local server stopped"));
             LocalHandler_.Reset();
-            TTcpDispatcher::TImpl::Get()->UnregisterLocalMessageHandler(*Config_->Port);
+            TDispatcher::TImpl::Get()->UnregisterLocalMessageHandler(*Config_->Port);
         }
 
         std::vector<TFuture<void>> futures;
@@ -566,38 +696,61 @@ public:
         return AllSucceeded(futures);
     }
 
+    IYPathServicePtr GetOrchidService() const final
+    {
+        if (!Servers_.empty()) {
+            // For now it's enough to simply return the orchid service of the first server.
+            return Servers_.front()->GetOrchidService();
+        }
+
+        auto producer = BIND(&TCompositeBusServer::BuildEmptyOrchid, MakeStrong(this));
+        return IYPathService::FromProducer(std::move(producer));
+    }
+
 private:
     const TBusServerConfigPtr Config_;
     const std::vector<IBusServerPtr> Servers_;
 
     TLocalMessageHandlerPtr LocalHandler_;
+
+    void BuildEmptyOrchid(IYsonConsumer* consumer) const
+    {
+        BuildYsonFluently(consumer)
+            .BeginMap()
+            .EndMap();
+    }
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
-IBusServerPtr CreatePublicTcpBusServer(
+IBusServerPtr CreateRemoteBusServer(
     TBusServerConfigPtr config,
     IPacketTranscoderFactory* packetTranscoderFactory,
-    IMemoryUsageTrackerPtr memoryUsageTracker)
+    IMemoryUsageTrackerPtr memoryUsageTracker,
+    std::optional<TCertProfiler> certProfiler)
 {
     YT_VERIFY(config->Port.has_value());
-    return New<TTcpBusServerProxy<TRemoteTcpBusServer>>(
+    return New<TBusServerProxy<TRemoteBusServer>>(
         config,
         packetTranscoderFactory,
-        memoryUsageTracker);
+        memoryUsageTracker,
+        std::move(certProfiler));
 }
 
-IBusServerPtr CreateLocalTcpBusServer(
+IBusServerPtr CreateLocalBusServer(
     TBusServerConfigPtr config,
     IPacketTranscoderFactory* packetTranscoderFactory,
-    IMemoryUsageTrackerPtr memoryUsageTracker)
+    IMemoryUsageTrackerPtr memoryUsageTracker,
+    std::optional<TCertProfiler> certProfiler)
 {
 #ifdef _linux_
-    return New<TTcpBusServerProxy<TLocalTcpBusServer>>(
+    return New<TBusServerProxy<TLocalBusServer>>(
         config,
         packetTranscoderFactory,
-        memoryUsageTracker);
+        memoryUsageTracker,
+        std::move(certProfiler));
 #else
+    Y_UNUSED(certProfiler);
     Y_UNUSED(config, packetTranscoderFactory, memoryUsageTracker);
     YT_ABORT();
 #endif
@@ -606,23 +759,34 @@ IBusServerPtr CreateLocalTcpBusServer(
 IBusServerPtr CreateBusServer(
     TBusServerConfigPtr config,
     IPacketTranscoderFactory* packetTranscoderFactory,
-    IMemoryUsageTrackerPtr memoryUsageTracker)
+    IMemoryUsageTrackerPtr memoryUsageTracker,
+    std::optional<TCertProfiler> certProfiler)
 {
     std::vector<IBusServerPtr> servers;
 
     if (config->Port) {
-        servers.push_back(CreatePublicTcpBusServer(
+        servers.push_back(CreateRemoteBusServer(
             config,
             packetTranscoderFactory,
-            memoryUsageTracker));
+            memoryUsageTracker,
+            certProfiler));
     }
 
 #ifdef _linux_
     // Abstract unix sockets are supported only on Linux.
-    servers.push_back(CreateLocalTcpBusServer(
+    if (servers.empty()) {
+        // Pass cert profiler only to the first server.
+        servers.push_back(CreateLocalBusServer(
+            config,
+            packetTranscoderFactory,
+            memoryUsageTracker,
+            std::move(certProfiler)));
+    } else {
+        servers.push_back(CreateLocalBusServer(
             config,
             packetTranscoderFactory,
             memoryUsageTracker));
+    }
 #endif
 
     return New<TCompositeBusServer>(
@@ -632,5 +796,4 @@ IBusServerPtr CreateBusServer(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NBus
-
+} // namespace NYT::NBus::NTcp

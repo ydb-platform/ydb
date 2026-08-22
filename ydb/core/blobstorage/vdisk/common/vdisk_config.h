@@ -2,9 +2,10 @@
 #include "defs.h"
 
 #include "vdisk_performance_params.h"
+#include "blob_header_mode.h"
+#include "vdisk_events_quoter.h"
 
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
-#include <ydb/core/blobstorage/vdisk/repl/repl_quoter.h>
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/protos/blobstorage_vdisk_config.pb.h>
 #include <ydb/core/protos/feature_flags.pb.h>
@@ -122,17 +123,29 @@ namespace NKikimr {
         ui32 MinHugeBlobInBytes;
         ui32 MilestoneHugeBlobInBytes;
         ui32 HugeBlobOverhead;
+        ui32 HugeBlobStepsBetweenPowersOf2;
         ui32 HullCompLevel0MaxSstsAtOnce;
         ui32 HullCompSortedPartsNum;
         double HullCompLevelRateThreshold;
-        double HullCompFreeSpaceThreshold;
-        ui32 FreshCompMaxInFlightWrites;
-        ui32 FreshCompMaxInFlightReads;
-        ui32 HullCompMaxInFlightWrites;
-        ui32 HullCompMaxInFlightReads;
+        TControlWrapper HullCompFreeSpaceThresholdPerMille;
+        TControlWrapper HullCompEmergencyMaxSsts;
+        TControlWrapper HullCompEmergencyChunkReserve;
+        TControlWrapper HullCompEmergencyEnableAtColor;
+        TControlWrapper FreshCompMaxInFlightWrites;
+        TControlWrapper FreshCompMaxInFlightReads;
+        TControlWrapper HullCompMaxInFlightWrites;
+        TControlWrapper HullCompMaxInFlightReads;
+        TControlWrapper HullCompFullCompPeriodSec;
+        TControlWrapper HullCompThrottlerBytesRate;
+        TControlWrapper DefragThrottlerBytesRate;
+        TControlWrapper MaxActiveCompactionsPerPDisk;
         double HullCompReadBatchEfficiencyThreshold;
         ui64 AnubisOsirisMaxInFly;
-        bool AddHeader;
+        EBlobHeaderMode BlobHeaderMode;
+
+        static const ui32 TinyDiskHugeBlobStepsBetweenPowersOf2;
+        static const ui32 TinyDiskHullCompLevel0MaxSstsAtOnce;
+        static const ui32 TinyDiskHullCompSortedPartsNum;
 
         //////////////// LOG CUTTER SETTINGS ////////////////
         TDuration RecoveryLogCutterFirstDuration;
@@ -161,7 +174,7 @@ namespace NKikimr {
         TControlWrapper EnableLocalSyncLogDataCutting;
         TControlWrapper EnableSyncLogChunkCompression;
         TControlWrapper MaxSyncLogChunksInFlight;
-        ui32 MaxSyncLogChunkSize;
+        ui32 MaxSyncDataCutterChunkSize;
 
         ///////////// REPL SETTINGS /////////////////////////
         TDuration ReplTimeInterval;
@@ -218,7 +231,7 @@ namespace NKikimr {
         ui32 MaxResponseSize;
         TDuration DskTrackerInterval;
         bool BarrierValidation;
-        TDuration WhiteboardUpdateInterval;
+        TDuration StatsUpdateInterval;
         bool EnableVDiskCooldownTimeout;
         TControlWrapper EnableVPatch = true;
         bool UseActorSystemTimeInBSQueue = false;
@@ -243,6 +256,7 @@ namespace NKikimr {
         TControlWrapper DefaultHugeGarbagePerMille = 300;
         TControlWrapper HugeDefragFreeSpaceBorderPerMille = 260;
         TControlWrapper MaxChunksToDefragInflight = 10;
+        TControlWrapper GarbageThresholdToRunFullCompactionPerMille = 0;
 
         ///////////// COST METRICS SETTINGS ////////////////
         bool UseCostTracker = true;
@@ -261,8 +275,21 @@ namespace NKikimr {
         TControlWrapper ThrottlingMinLogChunkCount;
         TControlWrapper ThrottlingMaxLogChunkCount;
 
+        ///////////// DEEP SCRUBBING ////////////////////////
+        TControlWrapper EnableDeepScrubbing;
+
         ///////////// SYNC SETTINGS //////////////////
         TControlWrapper MaxInProgressSyncCount;
+        TControlWrapper EnablePhantomFlagStorage;
+        bool EnablePersistentPhantomFlagStorage = false;
+        TControlWrapper PhantomFlagStorageLimit;
+        TControlWrapper VolatilePhantomFlagStorageBlobSizeLimit;
+        TControlWrapper EnableFreshSyncDataThrottling;
+        TControlWrapper EnableChecksumReadValidationOnVDisk;
+        TControlWrapper EnableChecksumWriteValidationOnVDisk;
+
+        ///////////// CHUNK Keeper //////////////////
+        TControlWrapper EnableChunkKeeper;
 
         ///////////// FEATURE FLAGS ////////////////////////
         NKikimrConfig::TFeatureFlags FeatureFlags;

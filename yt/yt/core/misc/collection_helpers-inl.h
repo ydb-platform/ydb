@@ -4,11 +4,13 @@
 #include "collection_helpers.h"
 #endif
 
+#include <library/cpp/yt/string/format.h>
+
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-namespace {
+namespace NDetail {
 
 template <bool IsSet>
 struct TKeyLess;
@@ -16,7 +18,7 @@ struct TKeyLess;
 template <>
 struct TKeyLess<true>
 {
-    template<typename T>
+    template <typename T>
     bool operator()(const T& lhs, const T& rhs) const
     {
         return lhs < rhs;
@@ -26,7 +28,7 @@ struct TKeyLess<true>
 template <>
 struct TKeyLess<false>
 {
-    template<typename T>
+    template <typename T>
     bool operator()(const T& lhs, const T& rhs) const
     {
         return lhs.first < rhs.first;
@@ -39,14 +41,15 @@ std::vector<TItem> GetIthsImpl(const T& collection, size_t sizeLimit, const TGet
     std::vector<TItem> result;
     result.reserve(std::min(collection.size(), sizeLimit));
     for (const auto& item : collection) {
-        if (result.size() >= sizeLimit)
+        if (result.size() >= sizeLimit) {
             break;
+        }
         result.push_back(getter(item));
     }
     return result;
 }
 
-} // namespace
+} // namespace NDetail
 
 template <class T, class C>
 std::vector<typename T::const_iterator> GetSortedIterators(const T& collection, C comp)
@@ -72,13 +75,13 @@ template <class T>
 std::vector<typename T::const_iterator> GetSortedIterators(const T& collection)
 {
     using TIsSet = std::is_same<typename T::key_type, typename T::value_type>;
-    return GetSortedIterators(collection, TKeyLess<TIsSet::value>());
+    return GetSortedIterators(collection, NDetail::TKeyLess<TIsSet::value>());
 }
 
 template <class T>
 std::vector<typename T::key_type> GetKeys(const T& collection, size_t sizeLimit)
 {
-    return GetIthsImpl<typename T::key_type>(
+    return NDetail::GetIthsImpl<typename T::key_type>(
         collection,
         sizeLimit,
         [] (const auto& item) {
@@ -96,7 +99,7 @@ THashSet<typename T::key_type> GetKeySet(const T& collection, size_t sizeLimit)
 template <class T>
 std::vector<typename T::mapped_type> GetValues(const T& collection, size_t sizeLimit)
 {
-    return GetIthsImpl<typename T::mapped_type>(
+    return NDetail::GetIthsImpl<typename T::mapped_type>(
         collection,
         sizeLimit,
         [] (const auto& item) {
@@ -107,18 +110,16 @@ std::vector<typename T::mapped_type> GetValues(const T& collection, size_t sizeL
 template <class T>
 std::vector<typename T::value_type> GetItems(const T& collection, size_t sizeLimit)
 {
-    return GetIthsImpl<typename T::value_type>(
+    return NDetail::GetIthsImpl<typename T::value_type>(
         collection,
         sizeLimit,
-        [] (const auto& item) {
-            return item;
-        });
+        /*getter*/ std::identity{});
 }
 
 template <size_t I, class T>
-std::vector<typename std::tuple_element<I, typename T::value_type>::type> GetIths(const T& collection, size_t sizeLimit)
+std::vector<std::tuple_element_t<I, typename T::value_type>> GetIths(const T& collection, size_t sizeLimit)
 {
-    return GetIthsImpl<typename std::tuple_element<I, typename T::value_type>::type>(
+    return NDetail::GetIthsImpl<std::tuple_element_t<I, typename T::value_type>>(
         collection,
         sizeLimit,
         [] (const auto& item) {
@@ -127,14 +128,13 @@ std::vector<typename std::tuple_element<I, typename T::value_type>::type> GetIth
 }
 
 template <class T>
-bool ShrinkHashTable(T&& collection)
+bool ShrinkHashTable(T& collection)
 {
     if (collection.bucket_count() <= 4 * collection.size() || collection.bucket_count() <= 16) {
         return false;
     }
 
-    typename std::decay_t<decltype(collection)> collectionCopy(collection.begin(), collection.end());
-    collectionCopy.swap(collection);
+    collection = T(collection.begin(), collection.end());
     return true;
 }
 
@@ -146,6 +146,8 @@ void MergeFrom(TTarget* target, const TSource& source)
     }
 }
 
+// NB: this and following functions take a forwarding reference instead of an lvalue reference
+// so that they work with rvalue mutable views.
 template <class TMap, class TKeySet>
 TKeySet DropAndReturnMissingKeys(TMap&& map, const TKeySet& set)
 {
@@ -162,65 +164,57 @@ TKeySet DropAndReturnMissingKeys(TMap&& map, const TKeySet& set)
 }
 
 template <class TMap, class TKeySet>
-void DropMissingKeys(TMap&& map, TKeySet&& set)
+void DropMissingKeys(TMap&& map, const TKeySet& set)
 {
-    for (auto it = map.begin(); it != map.end(); ) {
-        if (!set.contains(it->first)) {
-            map.erase(it++);
-        } else {
-            ++it;
-        }
-    }
+    EraseNodesIf(map, [&] (const auto& keyValue) { return !set.contains(keyValue.first); });
 }
 
 template <class TMap, class TKey>
 auto GetIteratorOrCrash(TMap&& map, const TKey& key)
 {
     auto it = map.find(key);
-    YT_VERIFY(it != map.end());
+    YT_VERIFY(it != map.end(), Format("GetIteratorOrCrash failed, key is not found in map (MapType: %v, KeyType: %v)",
+        TypeName<TMap>(), TypeName<TKey>()));
     return it;
-}
-
-template <class TMap, class TKey>
-const auto& GetOrCrash(const TMap& map, const TKey& key)
-{
-    return GetIteratorOrCrash(map, key)->second;
 }
 
 template <class TMap, class TKey>
 auto& GetOrCrash(TMap&& map, const TKey& key)
 {
-    return GetIteratorOrCrash(map, key)->second;
+    return GetIteratorOrCrash(std::forward<TMap>(map), key)->second;
 }
 
 template <class TMap, class TKey>
 void EraseOrCrash(TMap&& map, const TKey& key)
 {
-    YT_VERIFY(map.erase(key) > 0);
+    YT_VERIFY(std::forward<TMap>(map).erase(key) > 0, Format("EraseOrCrash failed, key is not found in map (MapType: %v, KeyType: %v)",
+        TypeName<TMap>(), TypeName<TKey>()));
 }
 
 template <class TContainer, class TArg>
 auto InsertOrCrash(TContainer&& container, TArg&& arg)
 {
-    auto [it, inserted] = container.insert(std::forward<TArg>(arg));
-    YT_VERIFY(inserted);
+    auto [it, inserted] = std::forward<TContainer>(container).insert(std::forward<TArg>(arg));
+    YT_VERIFY(inserted, Format("InsertOrCrash failed, item is already in container (ContainerType: %v, ItemArgType: %v)",
+        TypeName<TContainer>(), TypeName<TArg>()));
     return it;
 }
 
 template <class TContainer, class... TArgs>
 auto EmplaceOrCrash(TContainer&& container, TArgs&&... args)
 {
-    auto [it, emplaced] = container.emplace(std::forward<TArgs>(args)...);
-    YT_VERIFY(emplaced);
+    auto [it, emplaced] = std::forward<TContainer>(container).emplace(std::forward<TArgs>(args)...);
+    YT_VERIFY(emplaced, Format("EmplaceOrCrash failed, item is already in container (ContainerType: %v, ItemArgsTupleType: %v)",
+        TypeName<TContainer>(), TypeName<std::tuple<TArgs...>>()));
     return it;
 }
 
 template <class TMap, class TKey>
 auto EmplaceDefault(TMap&& map, TKey&& key)
 {
-    return map.emplace(
-        std::piecewise_construct_t{},
-        std::tuple<TKey&&>{std::forward<TKey>(key)},
+    return std::forward<TMap>(map).emplace(
+        std::piecewise_construct,
+        std::forward_as_tuple(std::forward<TKey>(key)),
         std::tuple{});
 }
 
@@ -228,7 +222,8 @@ template <class T, class... TVariantArgs>
 T& GetOrCrash(std::variant<TVariantArgs...>& variant)
 {
     auto* item = get_if<T>(&variant);
-    YT_VERIFY(item);
+    YT_VERIFY(item, Format("GetOrCrash failed, bad variant alternative (VariantType: %v, AlternativeType: %v)",
+        TypeName<std::variant<TVariantArgs...>>(), TypeName<T>()));
     return *item;
 }
 
@@ -236,12 +231,45 @@ template <class T, class... TVariantArgs>
 const T& GetOrCrash(const std::variant<TVariantArgs...>& variant)
 {
     const auto* item = get_if<T>(&variant);
-    YT_VERIFY(item);
+    YT_VERIFY(item, Format("GetOrCrash failed, bad variant alternative (VariantType: %v, AlternativeType: %v)",
+        TypeName<std::variant<TVariantArgs...>>(), TypeName<T>()));
     return *item;
 }
 
+template<typename T>
+T& GetOrCrash(std::optional<T>& opt)
+{
+    YT_VERIFY(opt.has_value(), "GetOrCrash failed, value is nullopt");
+    return *opt;
+}
+
+template<typename T>
+const T& GetOrCrash(const std::optional<T>& opt)
+{
+    YT_VERIFY(opt.has_value(), "GetOrCrash failed, value is nullopt");
+    return *opt;
+}
+
+template<typename T>
+T&& GetOrCrash(std::optional<T>&& opt)
+{
+    YT_VERIFY(opt.has_value(), "GetOrCrash failed, value is nullopt");
+    return *std::move(opt);
+}
+
+template <class TMap, class TKey, class TReturnType>
+TReturnType GetOrDefault(
+    const TMap& map,
+    const TKey& key,
+    const std::type_identity_t<TReturnType>& defaultValue)
+    requires (!TIsDefaultMap<TMap>::Value)
+{
+    auto it = map.find(key);
+    return it == map.end() ? defaultValue : TReturnType(it->second);
+}
+
 template <class TMap, class TKey>
-typename TMap::mapped_type GetOrDefault(
+const typename TMap::mapped_type& GetOrDefaultReference(
     const TMap& map,
     const TKey& key,
     const typename TMap::mapped_type& defaultValue)
@@ -258,13 +286,13 @@ auto& GetOrInsert(TMap&& map, const TKey& key, TCtor&& ctor)
         typename TMap::insert_ctx context;
         auto it = map.find(key, context);
         if (it == map.end()) {
-            it = map.emplace_direct(context, key, ctor()).first;
+            it = map.emplace_direct(context, key, std::forward<TCtor>(ctor)());
         }
         return it->second;
     } else {
         auto it = map.find(key);
         if (it == map.end()) {
-            it = map.emplace(key, ctor()).first;
+            it = map.emplace(key, std::forward<TCtor>(ctor)()).first;
         }
         return it->second;
     }
@@ -276,13 +304,6 @@ auto& GetOrInsert(TMap&& map, const TKey& key, TCtor&& ctor)
 namespace NDetail {
 
 ////////////////////////////////////////////////////////////////////////////////
-
-// Nice syntax to allow in-order expansion of parameter packs.
-struct TDoInOrder
-{
-    template <class T>
-    TDoInOrder(std::initializer_list<T>&&) { }
-};
 
 // const& version.
 template <class TVector>
@@ -310,13 +331,11 @@ TVector ConcatVectors(TVector first, TArgs&&... rest)
 {
     // We need to put results somewhere; that's why we accept first parameter by value and use it as a resulting vector.
     // First, calculate total size of the result.
-    std::size_t totalSize = first.size();
-    NDetail::TDoInOrder { totalSize += rest.size() ... };
-    first.reserve(totalSize);
+    first.reserve((first.size() + ... + rest.size()));
     // Then, append all remaining arguments to first. Note that depending on rvalue-ness of the argument,
     // suitable overload of AppendVector will be used.
-    NDetail::TDoInOrder { (NDetail::AppendVector(first, std::forward<TArgs>(rest)), 0)... };
-    // Not quite sure why, but in the original article result is explicitly moved.
+    (NDetail::AppendVector(first, std::forward<TArgs>(rest)), ...);
+    // Copy elison doesn't apply to function parameters, thus move.
     return std::move(first);
 }
 
@@ -358,18 +377,11 @@ void EnsureVectorIndex(std::vector<T>& vector, ssize_t index, const T& defaultVa
     EnsureVectorSize(vector, index + 1, defaultValue);
 }
 
-template <class T>
-void AssignVectorAt(std::vector<T>& vector, ssize_t index, const T& value, const T& defaultValue)
+template <class T, class TValue>
+void AssignVectorAt(std::vector<T>& vector, ssize_t index, TValue&& value, const T& defaultValue)
 {
     EnsureVectorIndex(vector, index, defaultValue);
-    vector[index] = value;
-}
-
-template <class T>
-void AssignVectorAt(std::vector<T>& vector, ssize_t index, T&& value, const T& defaultValue)
-{
-    EnsureVectorIndex(vector, index, defaultValue);
-    vector[index] = std::move(value);
+    vector[index] = std::forward<TValue>(value);
 }
 
 template <class T>
@@ -382,6 +394,12 @@ template <class T>
 i64 GetVectorMemoryUsage(const std::vector<T>& vector)
 {
     return vector.capacity() * sizeof(T);
+}
+
+template <class TRange, class T>
+bool Contains(TRange&& range, const T& value)
+{
+    return std::ranges::find(range, value) != std::ranges::end(range);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

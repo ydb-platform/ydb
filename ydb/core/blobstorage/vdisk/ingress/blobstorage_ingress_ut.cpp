@@ -13,7 +13,7 @@ namespace NKikimr {
     Y_UNIT_TEST_SUITE(TBlobStorageIngress) {
 
         Y_UNIT_TEST(Ingress) {
-            TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::ErasureMirror3, 2, 4);
+            TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::ErasureMirror3of4, 2, 8);
             using TGroupId = TGroupId;
             TVDiskID vdisk01 = TVDiskID(TGroupId::Zero(), 1, 0, 0, 1);
             TVDiskID vdisk10 = TVDiskID(TGroupId::Zero(), 1, 0, 1, 0);
@@ -55,52 +55,53 @@ namespace NKikimr {
             UNIT_ASSERT(parts == TVectorType(0x40, 3));
         }
 
-        Y_UNIT_TEST(IngressPartsWeMustHaveLocally) {
-            TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::ErasureMirror3, 2, 4);
-            TLogoBlobID lb1(78364, 2, 763, 0, 0, 0);
-            STR << "INFO: " << TIngress::PrintVDisksForLogoBlob(&groupInfo, lb1) << "\n";
-            using TGroupId = TGroupId;
-            // subgroup
-            TVDiskID vdisk01 = TVDiskID(TGroupId::Zero(), 1, 0, 0, 1);
-            TVDiskID vdisk10 = TVDiskID(TGroupId::Zero(), 1, 0, 1, 0);
-            TVDiskID vdisk21 = TVDiskID(TGroupId::Zero(), 1, 0, 2, 1);
-            TVDiskID vdisk30 = TVDiskID(TGroupId::Zero(), 1, 0, 3, 0);
+        // TODO: https://github.com/ydb-platform/ydb/issues/32548
+        // Y_UNIT_TEST(IngressPartsWeMustHaveLocally) {
+        //     TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::ErasureMirror3of4, 2, 8);
+        //     TLogoBlobID lb1(78364, 2, 763, 0, 0, 0);
+        //     STR << "INFO: " << TIngress::PrintVDisksForLogoBlob(&groupInfo, lb1) << "\n";
+        //     using TGroupId = TGroupId;
+        //     // subgroup
+        //     TVDiskID vdisk01 = TVDiskID(TGroupId::Zero(), 1, 0, 0, 1);
+        //     TVDiskID vdisk10 = TVDiskID(TGroupId::Zero(), 1, 0, 1, 0);
+        //     TVDiskID vdisk21 = TVDiskID(TGroupId::Zero(), 1, 0, 2, 1);
+        //     TVDiskID vdisk30 = TVDiskID(TGroupId::Zero(), 1, 0, 3, 0);
 
-            // correspondings parts
-            // main
-            TIngress i1 = *TIngress::CreateIngressWithLocal(&groupInfo.GetTopology(), vdisk01, TLogoBlobID(lb1, 1));
-            TIngress i2 = *TIngress::CreateIngressWithLocal(&groupInfo.GetTopology(), vdisk10, TLogoBlobID(lb1, 2));
-            TIngress i3 = *TIngress::CreateIngressWithLocal(&groupInfo.GetTopology(), vdisk21, TLogoBlobID(lb1, 3));
-            // handoff
-            TIngress i4 = *TIngress::CreateIngressWithLocal(&groupInfo.GetTopology(), vdisk30, TLogoBlobID(lb1, 3));
-            TIngress i5 = *TIngress::CreateIngressWithLocal(&groupInfo.GetTopology(), vdisk30, TLogoBlobID(lb1, 1));
-            TIngress i6 = i4;
-            i6.Merge(i5);
+        //     // correspondings parts
+        //     // main
+        //     TIngress i1 = *TIngress::CreateIngressWithLocal(&groupInfo.GetTopology(), vdisk01, TLogoBlobID(lb1, 1));
+        //     TIngress i2 = *TIngress::CreateIngressWithLocal(&groupInfo.GetTopology(), vdisk10, TLogoBlobID(lb1, 2));
+        //     TIngress i3 = *TIngress::CreateIngressWithLocal(&groupInfo.GetTopology(), vdisk21, TLogoBlobID(lb1, 3));
+        //     // handoff
+        //     TIngress i4 = *TIngress::CreateIngressWithLocal(&groupInfo.GetTopology(), vdisk30, TLogoBlobID(lb1, 3));
+        //     TIngress i5 = *TIngress::CreateIngressWithLocal(&groupInfo.GetTopology(), vdisk30, TLogoBlobID(lb1, 1));
+        //     TIngress i6 = i4;
+        //     i6.Merge(i5);
 
-            auto printLocalParts = [&] (const TIngress &i, const TVDiskID vd) {
-                auto v = i.PartsWeMustHaveLocally(&groupInfo.GetTopology(), vd, lb1);
-                STR << "vd=" << vd.ToString() << " v=" << v.ToString() << "\n";
-            };
+        //     auto printLocalParts = [&] (const TIngress &i, const TVDiskID vd) {
+        //         auto v = i.PartsWeMustHaveLocally(&groupInfo.GetTopology(), vd, lb1);
+        //         STR << "vd=" << vd.ToString() << " v=" << v.ToString() << "\n";
+        //     };
 
-            printLocalParts(i1, vdisk01);
-            printLocalParts(i2, vdisk10);
-            printLocalParts(i3, vdisk21);
-            printLocalParts(i4, vdisk30);
-            printLocalParts(i5, vdisk30);
-            printLocalParts(i6, vdisk30);
+        //     printLocalParts(i1, vdisk01);
+        //     printLocalParts(i2, vdisk10);
+        //     printLocalParts(i3, vdisk21);
+        //     printLocalParts(i4, vdisk30);
+        //     printLocalParts(i5, vdisk30);
+        //     printLocalParts(i6, vdisk30);
 
-            // main
-            UNIT_ASSERT(i1.PartsWeMustHaveLocally(&groupInfo.GetTopology(), vdisk01, lb1) == TVectorType(0b10000000, 3));
-            UNIT_ASSERT(i2.PartsWeMustHaveLocally(&groupInfo.GetTopology(), vdisk10, lb1) == TVectorType(0b01000000, 3));
-            UNIT_ASSERT(i3.PartsWeMustHaveLocally(&groupInfo.GetTopology(), vdisk21, lb1) == TVectorType(0b00100000, 3));
-            // handoff
-            UNIT_ASSERT(i4.PartsWeMustHaveLocally(&groupInfo.GetTopology(), vdisk30, lb1) == TVectorType(0b00100000, 3));
-            UNIT_ASSERT(i5.PartsWeMustHaveLocally(&groupInfo.GetTopology(), vdisk30, lb1) == TVectorType(0b10000000, 3));
-            UNIT_ASSERT(i6.PartsWeMustHaveLocally(&groupInfo.GetTopology(), vdisk30, lb1) == TVectorType(0b10100000, 3));
-        }
+        //     // main
+        //     UNIT_ASSERT(i1.PartsWeMustHaveLocally(&groupInfo.GetTopology(), vdisk01, lb1) == TVectorType(0b10000000, 3));
+        //     UNIT_ASSERT(i2.PartsWeMustHaveLocally(&groupInfo.GetTopology(), vdisk10, lb1) == TVectorType(0b01000000, 3));
+        //     UNIT_ASSERT(i3.PartsWeMustHaveLocally(&groupInfo.GetTopology(), vdisk21, lb1) == TVectorType(0b00100000, 3));
+        //     // handoff
+        //     UNIT_ASSERT(i4.PartsWeMustHaveLocally(&groupInfo.GetTopology(), vdisk30, lb1) == TVectorType(0b00100000, 3));
+        //     UNIT_ASSERT(i5.PartsWeMustHaveLocally(&groupInfo.GetTopology(), vdisk30, lb1) == TVectorType(0b10000000, 3));
+        //     UNIT_ASSERT(i6.PartsWeMustHaveLocally(&groupInfo.GetTopology(), vdisk30, lb1) == TVectorType(0b10100000, 3));
+        // }
 
         Y_UNIT_TEST(IngressLocalParts) {
-            TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::ErasureMirror3, 2, 4);
+            TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::ErasureMirror3of4, 2, 8);
             TLogoBlobID lb1(0, 1, 0, 0, 0, 0);
             TBlobStorageGroupInfo::TVDiskIds vDisks;
             TBlobStorageGroupInfo::TServiceIds serviceIds;
@@ -194,7 +195,7 @@ namespace NKikimr {
         }
 
         Y_UNIT_TEST(IngressGetMainReplica) {
-            TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::ErasureMirror3, 2, 4);
+            TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::Erasure4Plus2Block, 2, 4);
             TLogoBlobID lb1(0, 1, 0, 0, 0, 0);
             TBlobStorageGroupInfo::TVDiskIds vDisks;
             TBlobStorageGroupInfo::TServiceIds serviceIds;
@@ -214,92 +215,77 @@ namespace NKikimr {
             UNIT_ASSERT(TVDiskIdShort(vdiskM3) == TIngress::GetMainReplica(&groupInfo.GetTopology(), TLogoBlobID(lb1, 3)));
         }
 
-        Y_UNIT_TEST(IngressHandoffPartsDelete) {
-            TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::ErasureMirror3, 2, 4);
-            TLogoBlobID lb1(0, 1, 0, 0, 0, 0);
-            TBlobStorageGroupInfo::TVDiskIds vDisks;
-            TBlobStorageGroupInfo::TServiceIds serviceIds;
-            groupInfo.PickSubgroup(lb1.Hash(), &vDisks, &serviceIds);
-            TVDiskID vdiskM1 = vDisks[0];
-            TVDiskID vdiskM2 = vDisks[1];
-            TVDiskID vdiskM3 = vDisks[2];
-            TVDiskID vdisk00 = vDisks[3];
-            // replicas for this logoblob:
-            // main1
-            // main2
-            // main3
-            // handoff
+        // TODO: https://github.com/ydb-platform/ydb/issues/32548
+        // Y_UNIT_TEST(IngressHandoffPartsDelete) {
+        //     TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::ErasureMirror3of4, 2, 8);
+        //     TLogoBlobID lb1(0, 1, 0, 0, 0, 0);
+        //     TBlobStorageGroupInfo::TVDiskIds vDisks;
+        //     TBlobStorageGroupInfo::TServiceIds serviceIds;
+        //     groupInfo.PickSubgroup(lb1.Hash(), &vDisks, &serviceIds);
+        //     TVDiskID vdiskM1 = vDisks[0];
+        //     TVDiskID vdiskM2 = vDisks[1];
+        //     TVDiskID vdiskM3 = vDisks[2];
+        //     TVDiskID vdisk00 = vDisks[3];
+        //     // replicas for this logoblob:
+        //     // main1
+        //     // main2
+        //     // main3
+        //     // handoff
 
-            TVectorType emptyVec(0, 3);
+        //     TVectorType emptyVec(0, 3);
 
-            // for main disk 0
-            TIngress i1 = *TIngress::CreateIngressWithLocal(&groupInfo.GetTopology(), vdiskM1, TLogoBlobID(lb1, 1));
-            TIngress::TPairOfVectors res1 = i1.HandoffParts(&groupInfo.GetTopology(), vdiskM1, lb1);
-            UNIT_ASSERT(res1 == TIngress::TPairOfVectors(emptyVec, emptyVec));
-            TIngress i1woLocal = i1.CopyWithoutLocal(groupInfo.Type);
+        //     // for main disk 0
+        //     TIngress i1 = *TIngress::CreateIngressWithLocal(&groupInfo.GetTopology(), vdiskM1, TLogoBlobID(lb1, 1));
+        //     TIngress::TPairOfVectors res1 = i1.HandoffParts(&groupInfo.GetTopology(), vdiskM1, lb1);
+        //     UNIT_ASSERT(res1 == TIngress::TPairOfVectors(emptyVec, emptyVec));
+        //     TIngress i1woLocal = i1.CopyWithoutLocal(groupInfo.Type);
 
-            // for main disk 1
-            TIngress i2 = *TIngress::CreateIngressWithLocal(&groupInfo.GetTopology(), vdiskM2, TLogoBlobID(lb1, 2));
-            TIngress::TPairOfVectors res2 = i2.HandoffParts(&groupInfo.GetTopology(), vdiskM2, lb1);
-            UNIT_ASSERT(res2 == TIngress::TPairOfVectors(emptyVec, emptyVec));
-            TIngress i2woLocal = i2.CopyWithoutLocal(groupInfo.Type);
+        //     // for main disk 1
+        //     TIngress i2 = *TIngress::CreateIngressWithLocal(&groupInfo.GetTopology(), vdiskM2, TLogoBlobID(lb1, 2));
+        //     TIngress::TPairOfVectors res2 = i2.HandoffParts(&groupInfo.GetTopology(), vdiskM2, lb1);
+        //     UNIT_ASSERT(res2 == TIngress::TPairOfVectors(emptyVec, emptyVec));
+        //     TIngress i2woLocal = i2.CopyWithoutLocal(groupInfo.Type);
 
-            // for handoff
-            TIngress i3 = *TIngress::CreateIngressWithLocal(&groupInfo.GetTopology(), vdisk00, TLogoBlobID(lb1, 2));
-            TIngress i4 = *TIngress::CreateIngressWithLocal(&groupInfo.GetTopology(), vdisk00, TLogoBlobID(lb1, 3));
+        //     // for handoff
+        //     TIngress i3 = *TIngress::CreateIngressWithLocal(&groupInfo.GetTopology(), vdisk00, TLogoBlobID(lb1, 2));
+        //     TIngress i4 = *TIngress::CreateIngressWithLocal(&groupInfo.GetTopology(), vdisk00, TLogoBlobID(lb1, 3));
 
-            TIngress i5;
-            i5.Merge(i1woLocal);
-            i5.Merge(i2woLocal);
-            i5.Merge(i3);
-            i5.Merge(i4);
-            TIngress::TPairOfVectors res3 = i5.HandoffParts(&groupInfo.GetTopology(), vdisk00, lb1);
-            {
-                TVectorType moveVec(0, 3);
-                moveVec.Set(2);
-                TVectorType delVec(0, 3);
-                delVec.Set(1);
-                UNIT_ASSERT(res3 == TIngress::TPairOfVectors(moveVec, delVec));
-            }
+        //     TIngress i5;
+        //     i5.Merge(i1woLocal);
+        //     i5.Merge(i2woLocal);
+        //     i5.Merge(i3);
+        //     i5.Merge(i4);
+        //     TIngress::TPairOfVectors res3 = i5.HandoffParts(&groupInfo.GetTopology(), vdisk00, lb1);
+        //     {
+        //         TVectorType moveVec(0, 3);
+        //         moveVec.Set(2);
+        //         TVectorType delVec(0, 3);
+        //         delVec.Set(1);
+        //         UNIT_ASSERT(res3 == TIngress::TPairOfVectors(moveVec, delVec));
+        //     }
 
-            i5.DeleteHandoff(&groupInfo.GetTopology(), vdisk00, TLogoBlobID(lb1, 2));
-            TIngress::TPairOfVectors res4 = i5.HandoffParts(&groupInfo.GetTopology(), vdisk00, lb1);
-            {
-                TVectorType moveVec(0, 3);
-                moveVec.Set(2);
-                TVectorType delVec(0, 3);
-                UNIT_ASSERT(res4 == TIngress::TPairOfVectors(moveVec, delVec));
-            }
+        //     i5.DeleteHandoff(&groupInfo.GetTopology(), vdisk00, TLogoBlobID(lb1, 2));
+        //     TIngress::TPairOfVectors res4 = i5.HandoffParts(&groupInfo.GetTopology(), vdisk00, lb1);
+        //     {
+        //         TVectorType moveVec(0, 3);
+        //         moveVec.Set(2);
+        //         TVectorType delVec(0, 3);
+        //         UNIT_ASSERT(res4 == TIngress::TPairOfVectors(moveVec, delVec));
+        //     }
 
-            // for main disk 2
-            TIngress i6 = *TIngress::CreateIngressWithLocal(&groupInfo.GetTopology(), vdiskM3, TLogoBlobID(lb1, 3));
-            TIngress i6woLocal = i6.CopyWithoutLocal(groupInfo.Type);
+        //     // for main disk 2
+        //     TIngress i6 = *TIngress::CreateIngressWithLocal(&groupInfo.GetTopology(), vdiskM3, TLogoBlobID(lb1, 3));
+        //     TIngress i6woLocal = i6.CopyWithoutLocal(groupInfo.Type);
 
-            i5.Merge(i6woLocal);
-            TIngress::TPairOfVectors res5 = i5.HandoffParts(&groupInfo.GetTopology(), vdisk00, lb1);
-            {
-                TVectorType moveVec(0, 3);
-                TVectorType delVec(0, 3);
-                delVec.Set(2);
-                UNIT_ASSERT(res5 == TIngress::TPairOfVectors(moveVec, delVec));
-            }
-        }
-
-
-        Y_UNIT_TEST(IngressCacheMirror3) {
-            TBlobStorageGroupInfo info(TBlobStorageGroupType::ErasureMirror3, 2, 4);
-            TVDiskID vdisk(TGroupId::Zero(), 1, 0, 1 /*domain*/, 0 /*vdisk*/);
-            TIngressCachePtr cache = TIngressCache::Create(info.PickTopology(), vdisk);
-
-            UNIT_ASSERT(cache->VDiskOrderNum == 2);
-            UNIT_ASSERT(cache->TotalVDisks == 8);
-            UNIT_ASSERT(cache->DomainsNum == 4);
-            UNIT_ASSERT(cache->DisksInDomain == 2);
-            UNIT_ASSERT(cache->Handoff == 1);
-            UNIT_ASSERT(cache->BarrierIngressValueMask == 0xFF);
-            UNIT_ASSERT(cache->BarrierIngressDomainMask == 0x3);
-        }
-
+        //     i5.Merge(i6woLocal);
+        //     TIngress::TPairOfVectors res5 = i5.HandoffParts(&groupInfo.GetTopology(), vdisk00, lb1);
+        //     {
+        //         TVectorType moveVec(0, 3);
+        //         TVectorType delVec(0, 3);
+        //         delVec.Set(2);
+        //         UNIT_ASSERT(res5 == TIngress::TPairOfVectors(moveVec, delVec));
+        //     }
+        // }
 
         Y_UNIT_TEST(IngressCache4Plus2) {
             TBlobStorageGroupInfo info(TBlobStorageGroupType::Erasure4Plus2Block, 2, 8);
@@ -314,45 +300,6 @@ namespace NKikimr {
             UNIT_ASSERT(cache->BarrierIngressValueMask == 0xFFFF);
             UNIT_ASSERT(cache->BarrierIngressDomainMask == 0x3);
         }
-
-        Y_UNIT_TEST(BarrierIngressQuorumBasicMirror3_4_2) {
-            TBlobStorageGroupInfo info(TBlobStorageGroupType::ErasureMirror3, 2, 4);
-            TVDiskID vdisk(TGroupId::Zero(), 1, 0, 1 /*domain*/, 0 /*vdisk*/);
-            TIngressCachePtr cache = TIngressCache::Create(info.PickTopology(), vdisk);
-
-            TBarrierIngress i1(2);
-            TBarrierIngress i2(5);
-            TBarrierIngress i3(6);
-
-            TBarrierIngress merged;
-            TBarrierIngress::Merge(merged, i1);
-            TBarrierIngress::Merge(merged, i2);
-            TBarrierIngress::Merge(merged, i3);
-            UNIT_ASSERT(!merged.IsQuorum(cache.Get()));
-
-            TBarrierIngress i4(ui8(0));
-            TBarrierIngress::Merge(merged, i4);
-            UNIT_ASSERT(!merged.IsQuorum(cache.Get()));
-
-            TBarrierIngress::Merge(merged, i4);
-            TBarrierIngress::Merge(merged, i1);
-            TBarrierIngress::Merge(merged, i2);
-            TBarrierIngress::Merge(merged, i3);
-            UNIT_ASSERT(!merged.IsQuorum(cache.Get()));
-
-            TBarrierIngress i5(1);
-            TBarrierIngress::Merge(merged, i5);
-            UNIT_ASSERT(!merged.IsQuorum(cache.Get()));
-
-            TBarrierIngress i6(3);
-            TBarrierIngress::Merge(merged, i6);
-            UNIT_ASSERT(!merged.IsQuorum(cache.Get()));
-
-            TBarrierIngress i7(7);
-            TBarrierIngress::Merge(merged, i7);
-            UNIT_ASSERT(merged.IsQuorum(cache.Get()));
-        }
-
 
         Y_UNIT_TEST(BarrierIngressQuorumBasic4Plus2_8_1) {
             TBlobStorageGroupInfo info(TBlobStorageGroupType::Erasure4Plus2Block, 1, 8);
@@ -396,64 +343,8 @@ namespace NKikimr {
             UNIT_ASSERT(merged.IsQuorum(cache.Get()));
         }
 
-
-        Y_UNIT_TEST(BarrierIngressQuorumMirror3) {
-            TBlobStorageGroupInfo info(TBlobStorageGroupType::ErasureMirror3, 2, 4);
-            using TGroupId = TGroupId;
-            TVDiskID vdisk(TGroupId::Zero(), 1, 0, 1 /*domain*/, 0 /*vdisk*/);
-            TIngressCachePtr cache = TIngressCache::Create(info.PickTopology(), vdisk);
-
-            TVDiskID vdisk00 = TVDiskID(TGroupId::Zero(), 1, 0, 0, 0);
-            TVDiskID vdisk01 = TVDiskID(TGroupId::Zero(), 1, 0, 0, 1);
-            TVDiskID vdisk10 = TVDiskID(TGroupId::Zero(), 1, 0, 1, 0);
-            TVDiskID vdisk11 = TVDiskID(TGroupId::Zero(), 1, 0, 1, 1);
-            TVDiskID vdisk20 = TVDiskID(TGroupId::Zero(), 1, 0, 2, 0);
-            TVDiskID vdisk21 = TVDiskID(TGroupId::Zero(), 1, 0, 2, 1);
-            TVDiskID vdisk30 = TVDiskID(TGroupId::Zero(), 1, 0, 3, 0);
-            TVDiskID vdisk31 = TVDiskID(TGroupId::Zero(), 1, 0, 3, 1);
-
-            UNIT_ASSERT(info.GetOrderNumber(vdisk00) == 0);
-            UNIT_ASSERT(info.GetOrderNumber(vdisk01) == 1);
-            UNIT_ASSERT(info.GetOrderNumber(vdisk10) == 2);
-            UNIT_ASSERT(info.GetOrderNumber(vdisk11) == 3);
-            UNIT_ASSERT(info.GetOrderNumber(vdisk20) == 4);
-            UNIT_ASSERT(info.GetOrderNumber(vdisk21) == 5);
-            UNIT_ASSERT(info.GetOrderNumber(vdisk30) == 6);
-            UNIT_ASSERT(info.GetOrderNumber(vdisk31) == 7);
-
-            TBarrierIngress i0(info.GetOrderNumber(vdisk00));
-            TBarrierIngress i1(info.GetOrderNumber(vdisk01));
-            TBarrierIngress i2(info.GetOrderNumber(vdisk10));
-            TBarrierIngress i3(info.GetOrderNumber(vdisk11));
-            TBarrierIngress i4(info.GetOrderNumber(vdisk20));
-            TBarrierIngress i5(info.GetOrderNumber(vdisk21));
-            TBarrierIngress i6(info.GetOrderNumber(vdisk30));
-            TBarrierIngress i7(info.GetOrderNumber(vdisk31));
-
-
-            TBarrierIngress merged;
-            TBarrierIngress::Merge(merged, i1);
-            UNIT_ASSERT(!merged.IsQuorum(cache.Get()));
-            TBarrierIngress::Merge(merged, i2);
-            UNIT_ASSERT(!merged.IsQuorum(cache.Get()));
-            TBarrierIngress::Merge(merged, i5);
-            UNIT_ASSERT(!merged.IsQuorum(cache.Get()));
-            TBarrierIngress::Merge(merged, i6);
-            UNIT_ASSERT(!merged.IsQuorum(cache.Get()));
-
-            TBarrierIngress::Merge(merged, i7);
-            UNIT_ASSERT(!merged.IsQuorum(cache.Get()));
-            TBarrierIngress::Merge(merged, i3);
-            UNIT_ASSERT(!merged.IsQuorum(cache.Get()));
-            TBarrierIngress::Merge(merged, i0);
-            UNIT_ASSERT(merged.IsQuorum(cache.Get()));
-            TBarrierIngress::Merge(merged, i4);
-            UNIT_ASSERT(merged.IsQuorum(cache.Get()));
-        }
-
-
         Y_UNIT_TEST(IngressPrintDistribution) {
-            TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::ErasureMirror3, 2, 4);
+            TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::Erasure4Plus2Block, 2, 4);
 
             for (ui32 i = 0; i < 3000; i++) {
                 TLogoBlobID lb(0, 1, i, 0, 0, 0);

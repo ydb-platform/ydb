@@ -6,6 +6,7 @@ SRCS(
     distconf.cpp
     distconf.h
     distconf_binding.cpp
+    distconf_bridge.cpp
     distconf_cache.cpp
     distconf_connectivity.cpp
     distconf_console.cpp
@@ -20,10 +21,16 @@ SRCS(
     distconf_invoke_storage_config.cpp
     distconf_mon.cpp
     distconf_persistent_storage.cpp
+    distconf_quorum.cpp
     distconf_quorum.h
     distconf_scatter_gather.cpp
+    distconf_selfheal.h
+    distconf_selfheal.cpp
+    distconf_statestorage_config_generator.h
+    distconf_statestorage_config_generator.cpp
     distconf_validate.cpp
     node_warden.h
+    node_warden_blob_depot_s3.cpp
     node_warden_cache.cpp
     node_warden_events.h
     node_warden_group.cpp
@@ -41,19 +48,27 @@ SRCS(
 )
 
 PEERDIR(
+    contrib/libs/xxhash
     library/cpp/json
     library/cpp/openssl/crypto
     ydb/core/base
+    ydb/core/blob_depot
     ydb/core/blob_depot/agent
+    ydb/core/blobstorage/base
+    ydb/core/blobstorage/bridge/proxy
+    ydb/core/blobstorage/bridge/syncer
     ydb/core/blobstorage/common
     ydb/core/blobstorage/crypto
-    ydb/core/blobstorage/dsproxy/bridge
+    ydb/core/blobstorage/ddisk
     ydb/core/blobstorage/groupinfo
     ydb/core/blobstorage/pdisk
+    ydb/core/blobstorage/vdisk/localrecovery
+    ydb/core/blobstorage/vdisk
     ydb/core/control/lib
+    ydb/library/actors/retro_tracing
     ydb/library/pdisk_io
+    ydb/library/protobuf_printer
     ydb/library/yaml_config
-    ydb/core/util/actorsys_test
 )
 
 END()

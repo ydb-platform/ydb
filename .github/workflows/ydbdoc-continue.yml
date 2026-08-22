@@ -1,0 +1,62 @@
+# doc_continue на translation PR — follow-up с инструкцией `/ydbdoc continue …`.
+# Перед лейблом добавьте комментарий с командой, затем повесьте doc_continue.
+
+name: ydbdoc-review (doc_continue label)
+
+on:
+  pull_request_target:
+    types: [labeled]
+    paths:
+      - "ydb/docs/**"
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  ydbdoc-continue:
+    if: github.event.label.name == 'doc_continue'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: ydbdoc-continue-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          # Fork PRs + pull_request_target: required after 2026-07-20 checkout guard.
+          allow-unsafe-pr-checkout: true
+
+      - name: Fetch merge base ref
+        run: |
+          git fetch origin ${{ github.event.pull_request.base.ref }}:refs/remotes/origin/${{ github.event.pull_request.base.ref }}
+
+      - name: Write YDB SA key
+        env:
+          YDB_SA_KEY: ${{ secrets.YDB_SA_KEY }}
+        run: |
+          umask 077
+          printf '%s' "$YDB_SA_KEY" > "$RUNNER_TEMP/ydb-sa.json"
+          echo "YDBDOC_YDB_SA_KEY_FILE=$RUNNER_TEMP/ydb-sa.json" >> "$GITHUB_ENV"
+
+      - name: Continue translation with operator feedback
+        uses: ydb-platform/ydbdoc-review@v0.1.0
+        with:
+          mode: continue
+          repo: ${{ github.repository }}
+          pr: ${{ github.event.pull_request.number }}
+          merge_base_with: origin/${{ github.event.pull_request.base.ref }}
+        env:
+          YANDEX_CLOUD_FOLDER_DOC_REVIEW: ${{ secrets.YANDEX_CLOUD_FOLDER_DOC_REVIEW }}
+          YANDEX_CLOUD_API_KEY_DOC_REVIEW: ${{ secrets.YANDEX_CLOUD_API_KEY_DOC_REVIEW }}
+          YDBDOC_REPO_PATH: ${{ github.workspace }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_ACTOR: ${{ github.event.sender.login }}
+          YDBDOC_ALLOWED_ACTORS: ${{ vars.YDBDOC_ALLOWED_ACTORS }}
+          YDBDOC_DAILY_BUDGET_RUB: ${{ vars.YDBDOC_DAILY_BUDGET_RUB }}
+          YDBDOC_TRANSCRIPT_BACKEND: ydb
+          YDB_SA_KEY: ${{ secrets.YDB_SA_KEY }}
+          YDBDOC_YDB_SA_KEY_FILE: ${{ env.YDBDOC_YDB_SA_KEY_FILE }}

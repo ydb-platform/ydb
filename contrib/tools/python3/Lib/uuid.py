@@ -53,13 +53,16 @@ from enum import Enum, _simple_enum
 __author__ = 'Ka-Ping Yee <ping@zesty.ca>'
 
 # The recognized platforms - known behaviors
-if sys.platform in ('win32', 'darwin', 'emscripten', 'wasi'):
+if sys.platform in {'win32', 'darwin', 'emscripten', 'wasi'}:
     _AIX = _LINUX = False
+elif sys.platform == 'linux':
+    _LINUX = True
+    _AIX = False
 else:
     import platform
     _platform_system = platform.system()
     _AIX     = _platform_system == 'AIX'
-    _LINUX   = _platform_system == 'Linux'
+    _LINUX   = _platform_system in ('Linux', 'Android')
 
 _MAC_DELIM = b':'
 _MAC_OMITS_LEADING_ZEROES = False
@@ -564,60 +567,48 @@ def _netstat_getnode():
     # This works on AIX and might work on Tru64 UNIX.
     return _find_mac_under_heading('netstat', '-ian', b'Address')
 
-def _ipconfig_getnode():
-    """[DEPRECATED] Get the hardware address on Windows."""
-    # bpo-40501: UuidCreateSequential() is now the only supported approach
-    return _windll_getnode()
-
-def _netbios_getnode():
-    """[DEPRECATED] Get the hardware address on Windows."""
-    # bpo-40501: UuidCreateSequential() is now the only supported approach
-    return _windll_getnode()
-
 
 # Import optional C extension at toplevel, to help disabling it when testing
 try:
     import _uuid
     _generate_time_safe = getattr(_uuid, "generate_time_safe", None)
+    _has_stable_extractable_node = getattr(_uuid, "has_stable_extractable_node", False)
     _UuidCreate = getattr(_uuid, "UuidCreate", None)
-    _has_uuid_generate_time_safe = _uuid.has_uuid_generate_time_safe
 except ImportError:
     _uuid = None
     _generate_time_safe = None
+    _has_stable_extractable_node = False
     _UuidCreate = None
-    _has_uuid_generate_time_safe = None
-
-
-def _load_system_functions():
-    """[DEPRECATED] Platform-specific functions loaded at import time"""
 
 
 def _unix_getnode():
     """Get the hardware address on Unix using the _uuid extension module."""
-    if _generate_time_safe:
+    if _generate_time_safe and _has_stable_extractable_node:
         uuid_time, _ = _generate_time_safe()
         return UUID(bytes=uuid_time).node
 
 def _windll_getnode():
     """Get the hardware address on Windows using the _uuid extension module."""
-    if _UuidCreate:
+    if _UuidCreate and _has_stable_extractable_node:
         uuid_bytes = _UuidCreate()
         return UUID(bytes_le=uuid_bytes).node
 
 def _random_getnode():
     """Get a random node ID."""
-    # RFC 4122, $4.1.6 says "For systems with no IEEE address, a randomly or
-    # pseudo-randomly generated value may be used; see Section 4.5.  The
-    # multicast bit must be set in such addresses, in order that they will
-    # never conflict with addresses obtained from network cards."
+    # RFC 9562, §6.10-3 says that
+    #
+    #   Implementations MAY elect to obtain a 48-bit cryptographic-quality
+    #   random number as per Section 6.9 to use as the Node ID. [...] [and]
+    #   implementations MUST set the least significant bit of the first octet
+    #   of the Node ID to 1. This bit is the unicast or multicast bit, which
+    #   will never be set in IEEE 802 addresses obtained from network cards.
     #
     # The "multicast bit" of a MAC address is defined to be "the least
     # significant bit of the first octet".  This works out to be the 41st bit
     # counting from 1 being the least significant bit, or 1<<40.
     #
     # See https://en.wikipedia.org/w/index.php?title=MAC_address&oldid=1128764812#Universal_vs._local_(U/L_bit)
-    import random
-    return random.getrandbits(48) | (1 << 40)
+    return int.from_bytes(os.urandom(6)) | (1 << 40)
 
 
 # _OS_GETTERS, when known, are targeted for a specific OS or platform.

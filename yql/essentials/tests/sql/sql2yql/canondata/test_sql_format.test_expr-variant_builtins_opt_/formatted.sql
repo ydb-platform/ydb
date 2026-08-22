@@ -19,6 +19,7 @@ SELECT
 ;
 
 $vartype_t = Variant<Optional<String>, Optional<String>>;
+
 $var_1 = Variant('7', '0', $vartype_t);
 $var_2 = Variant('8', '1', $vartype_t);
 

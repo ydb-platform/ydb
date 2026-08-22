@@ -2,15 +2,13 @@
 
 #include <util/generic/fwd.h>
 
-namespace google {
-namespace protobuf {
-    class Message;
-} // namespace protobuf
-} // namespace google
+namespace google::protobuf { // NOLINT(readability-identifier-naming)
+class Message;
+} // namespace google::protobuf
 
 namespace NYql {
 
-void ProcTitleInit(int argc, const char* argv[]);
+void ProcTitleInit(int argc, const char** argv);
 void SetProcTitle(const char* title);
 void AddProcTitleSuffix(const char* suffix);
 const char* GetProcTitle();

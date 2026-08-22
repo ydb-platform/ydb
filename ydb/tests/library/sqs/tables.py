@@ -98,6 +98,7 @@ def create_queues_table(root, session):
         ('DlqName', ydb.PrimitiveType.Utf8),
         ('TablesFormat', ydb.PrimitiveType.Uint32),
         ('Tags', ydb.PrimitiveType.Utf8),
+        ('TopicCreated', ydb.PrimitiveType.Bool),
     ]
     _create_table(root, session, '.Queues', columns, keys_count=2)
 
@@ -110,12 +111,12 @@ def create_cloud_events_table(root, session):
         ('Type', ydb.PrimitiveType.Utf8),
         ('CloudId', ydb.PrimitiveType.Utf8),
         ('FolderId', ydb.PrimitiveType.Utf8),
+        ('ResourceId', ydb.PrimitiveType.Utf8),
         ('UserSID', ydb.PrimitiveType.Utf8),
         ('MaskedToken', ydb.PrimitiveType.Utf8),
         ('AuthType', ydb.PrimitiveType.Utf8),
         ('PeerName', ydb.PrimitiveType.Utf8),
         ('RequestId', ydb.PrimitiveType.Utf8),
-        ('IdempotencyId', ydb.PrimitiveType.Utf8),
         ('Labels', ydb.PrimitiveType.Utf8),
     ]
     _create_table(root, session, '.CloudEventsYmq', columns, keys_count=2)
@@ -179,6 +180,7 @@ def create_attibutes_table(root, session, queue_type, common_table=True):
         ('DlqArn', ydb.PrimitiveType.Utf8),
         ('MaxReceiveCount', ydb.PrimitiveType.Uint64),
         ('ShowDetailedCountersDeadline', ydb.PrimitiveType.Uint64),
+        ('TopicCreated', ydb.PrimitiveType.Bool),
     ]
     _create_table(root, session, 'Attributes', columns, len(queue_keys), common_table, queue_type)
 

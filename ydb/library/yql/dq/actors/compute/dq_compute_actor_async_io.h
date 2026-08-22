@@ -1,11 +1,13 @@
 #pragma once
 #include <ydb/library/yql/dq/actors/dq_events_ids.h>
+#include <ydb/library/yql/dq/actors/compute/events/events.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
 #include <ydb/library/yql/dq/runtime/dq_output_consumer.h>
 #include <ydb/library/yql/dq/runtime/dq_async_input.h>
 #include <ydb/library/yql/dq/runtime/dq_input_producer.h>
 #include <ydb/library/yql/dq/runtime/dq_async_output.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/runtime_settings/runtime_settings.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 
 #include <util/generic/ptr.h>
@@ -33,31 +35,6 @@ class TProgramBuilder;
 } // namespace NKikimr::NMiniKQL
 
 namespace NYql::NDq {
-
-enum class EResumeSource : ui32 {
-    Default,
-    ChannelsHandleWork,
-    ChannelsHandleUndeliveredData,
-    ChannelsHandleUndeliveredAck,
-    AsyncPopFinished,
-    CheckpointRegister,
-    CheckpointInject,
-    CABootstrap,
-    CABootstrapWakeup,
-    CAPendingInput,
-    CATakeInput,
-    CASinkFinished,
-    CATransformFinished,
-    CAStart,
-    CAPollAsync,
-    CAPollAsyncNoSpace,
-    CANewAsyncInput,
-    CADataSent,
-    CAPendingOutput,
-    CATaskRunnerCreated,
-
-    Last,
-};
 
 struct IMemoryQuotaManager {
     using TPtr = std::shared_ptr<IMemoryQuotaManager>;
@@ -136,12 +113,12 @@ struct IDqComputeActorAsyncInput {
     virtual void FillExtraStats(NDqProto::TDqTaskStats* /* stats */, bool /* finalized stats */, const NYql::NDq::TDqMeteringStats*) { }
 
     // The same signature as IActor::PassAway().
-    // It is guaranted that this method will be called with bound MKQL allocator.
+    // It is guaranteed that this method will be called with bound MKQL allocator.
     // So, it is the right place to destroy all internal UnboxedValues.
     virtual void PassAway() = 0;
 
-    // Do not destroy UnboxedValues inside destructor!!!
-    // It is called from actor system thread, and MKQL allocator is not bound in this case.
+    // You must also destroy all internal UnboxedValues inside destructor (same as in PassAway)
+    // But you should explicitly bind MKQL allocator here, because it is called from actor system thread.
     virtual ~IDqComputeActorAsyncInput() = default;
 };
 
@@ -185,7 +162,7 @@ struct IDqComputeActorAsyncOutput {
     virtual const TDqAsyncStats& GetEgressStats() const = 0;
 
     // Sends data.
-    // Method shoud be called under bound mkql allocator.
+    // Method should be called under bound mkql allocator.
     // Could throw YQL errors.
     // Checkpoint (if any) is supposed to be ordered after batch,
     // and finished flag is supposed to be ordered after checkpoint.
@@ -202,6 +179,13 @@ struct IDqComputeActorAsyncOutput {
 
     virtual void PassAway() = 0; // The same signature as IActor::PassAway()
 
+    // Called by compute actor when the output consumer (TransformOutput) has been
+    // drained and can accept more data. Only meaningful for output transforms that
+    // push data into an IDqOutputConsumer.
+    virtual void OnOutputConsumerReady() {}
+
+    // You must also destroy all internal UnboxedValues inside destructor (same as in PassAway)
+    // But you should explicitly bind MKQL allocator here, because it is called from actor system thread.
     virtual ~IDqComputeActorAsyncOutput() = default;
 };
 
@@ -215,26 +199,52 @@ struct IDqAsyncLookupSource {
             NKikimr::NMiniKQL::TMKQLAllocator<std::pair<const NUdf::TUnboxedValue, NUdf::TUnboxedValue>>
     >;
     struct TEvLookupRequest: NActors::TEventLocal<TEvLookupRequest, TDqComputeEvents::EvLookupRequest> {
-        TEvLookupRequest(std::weak_ptr<TUnboxedValueMap> request)
+        // For fullscan request, non-zero fullscanLimit must be specified
+        // and *request must be empty;
+        // Since fullscanLimit must not exceed GetMaxSupportedFullscanRequest(),
+        // if GetMaxSupportedFullscanRequest() is zero, fullscan requests must
+        // not be issued.
+        // For keyed request, fullscanLimit must be 0 (or omitted)
+        // and *request must be non-empty;
+        // Lookup implementation note: Request must never be lock()ed
+        // without bound mkql Alloc, and obtained shared_ptr must be released
+        // before leaving context.
+        explicit TEvLookupRequest(std::weak_ptr<TUnboxedValueMap> request, size_t fullscanLimit = 0)
             : Request(std::move(request))
+            , FullscanLimit(fullscanLimit)
         {
         }
         std::weak_ptr<TUnboxedValueMap> Request;
+        size_t FullscanLimit;
     };
 
+    // Result event for fullscan request must contain same non-zero fullscanLimit
+    // as requested,
     struct TEvLookupResult: NActors::TEventLocal<TEvLookupResult, TDqComputeEvents::EvLookupResult> {
-        TEvLookupResult(std::weak_ptr<TUnboxedValueMap> result)
+        explicit TEvLookupResult(std::weak_ptr<TUnboxedValueMap> result, size_t resultRows = 0, size_t fullscanLimit = 0)
             : Result(std::move(result))
+            , ResultRows(resultRows)
+            , FullscanLimit(fullscanLimit)
         {
+            Y_DEBUG_ABORT_UNLESS(fullscanLimit == 0 || resultRows <= fullscanLimit);
         }
         std::weak_ptr<TUnboxedValueMap> Result;
+        size_t ResultRows;
+        size_t FullscanLimit;
     };
 
     virtual size_t GetMaxSupportedKeysInRequest() const = 0;
+
     //Initiate lookup for requested keys
-    //Only one request at a time is allowed. Request must contain no more than GetMaxSupportedKeysInRequest() keys
+    //Request must contain no more than GetMaxSupportedKeysInRequest() keys
     //Upon completion, TEvLookupResult event is sent to the preconfigured actor
     virtual void AsyncLookup(std::weak_ptr<TUnboxedValueMap> request) = 0;
+
+    // Maximum supported fullscan request; fullscan request is not supported
+    // and request must not be issued if 0 was returned
+    virtual size_t GetMaxSupportedFullscanRequest() const {
+        return 0;
+    }
 protected:
     ~IDqAsyncLookupSource() {}
 };
@@ -262,6 +272,7 @@ public:
         const google::protobuf::Message* SourceSettings = nullptr;  // used only in case if we execute compute actor locally
         TIntrusivePtr<NActors::TProtoArenaHolder> Arena;  // Arena for SourceSettings
         NWilson::TTraceId TraceId;
+        NYql::EDatumValidationMode DatumValidationMode = DefaultDatumValidationMode;
     };
 
     struct TLookupSourceArguments {
@@ -274,7 +285,9 @@ public:
         const NKikimr::NMiniKQL::TStructType* PayloadType;
         const NKikimr::NMiniKQL::TTypeEnvironment& TypeEnv;
         const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
+        const THashMap<TString, TString>& SecureParams;
         size_t MaxKeysInRequest;
+        const bool IsMultiMatches;
     };
 
     struct TSinkArguments {
@@ -291,6 +304,7 @@ public:
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
         IRandomProvider *const RandomProvider;
         NWilson::TTraceId TraceId;
+        ::NMonitoring::TDynamicCounterPtr TaskCounters;
     };
 
     struct TInputTransformArguments {
@@ -307,6 +321,7 @@ public:
         const NKikimr::NMiniKQL::TTypeEnvironment& TypeEnv;
         const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
+        TDqComputeActorWatermarks* WatermarksTracker = nullptr;
         NWilson::TTraceId TraceId;
     };
 
@@ -322,6 +337,13 @@ public:
         const THashMap<TString, TString>& TaskParams;
         const NKikimr::NMiniKQL::TTypeEnvironment& TypeEnv;
         const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
+        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
+        NWilson::TTraceId TraceId;
+    };
+
+    struct TControlPlaneArguments {
+        TString Type;
+        TTxId TxId;
     };
 
     // Creates source.
@@ -348,6 +370,10 @@ public:
     // Could throw YQL errors.
     // IActor* and IDqComputeActorAsyncOutput* returned by method must point to the objects with consistent lifetime.
     virtual std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqOutputTransform(TOutputTransformArguments&& args) = 0;
+
+    // Creates generic control plane actor. Single actor on DQ stage / whole graph.
+    // Could throw YQL errors.
+    virtual NActors::IActor* CreateDqControlPlane(TControlPlaneArguments&& args) = 0;
 };
 
 } // namespace NYql::NDq

@@ -27,14 +27,12 @@ namespace NActors {
         i16 MaxThreadCount = 0;
         i16 DefaultThreadCount = 0;
         i16 Priority = 0;
+        ui8 HarmonizerNeedyCpuWindowSeconds = 1;
         i16 SharedExecutorsCount = 0;
         i16 SoftProcessingDurationTs = 0;
         EASProfile ActorSystemProfile = EASProfile::Default;
         bool HasSharedThread = false;
-        bool UseRingQueue = false;
-        ui16 MinLocalQueueSize = 0;
-        ui16 MaxLocalQueueSize = 0;
-
+        bool AllThreadsAreShared = false;
         // tiny-ydb configs
         std::vector<i16> AdjacentPools;
         i16 ForcedForeignSlotCount = 0;
@@ -47,6 +45,7 @@ namespace NActors {
         TDuration TimePerMailbox = TBasicExecutorPoolConfig::DEFAULT_TIME_PER_MAILBOX;
         ui32 EventsPerMailbox = TBasicExecutorPoolConfig::DEFAULT_EVENTS_PER_MAILBOX;
         i16 SoftProcessingDurationTs = Us2Ts(10'000);
+        bool United = false;
     };
 
     struct TIOExecutorPoolConfig {
@@ -54,7 +53,6 @@ namespace NActors {
         TString PoolName;
         ui32 Threads = 1;
         TCpuMask Affinity; // Executor thread affinity
-        bool UseRingQueue = false;
     };
 
     struct TSelfPingInfo {

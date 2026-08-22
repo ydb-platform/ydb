@@ -55,15 +55,15 @@ void TSensorSet::ValidateOptions(const TSensorOptions& options)
 {
     if (!Options_.IsCompatibleWith(options)) {
         OnError(TError("Conflicting sensor settings")
-            << TErrorAttribute("current", ToString(Options_))
-            << TErrorAttribute("provided", ToString(options)));
+            .With("current", ToString(Options_))
+            .With("provided", ToString(options)));
     }
 }
 
 void TSensorSet::AddCounter(TCounterStatePtr counter)
 {
     InitializeType(ESensorType::Counter);
-    CountersCube_.AddAll(counter->TagIds, counter->Projections);
+    CountersCube_.AddAll(counter->TagSet);
     Counters_.emplace(std::move(counter));
     CubeSize_.Update(GetCubeSize());
 }
@@ -71,7 +71,7 @@ void TSensorSet::AddCounter(TCounterStatePtr counter)
 void TSensorSet::AddGauge(TGaugeStatePtr gauge)
 {
     InitializeType(ESensorType::Gauge);
-    GaugesCube_.AddAll(gauge->TagIds, gauge->Projections);
+    GaugesCube_.AddAll(gauge->TagSet);
     Gauges_.emplace(std::move(gauge));
     CubeSize_.Update(GetCubeSize());
 }
@@ -79,7 +79,7 @@ void TSensorSet::AddGauge(TGaugeStatePtr gauge)
 void TSensorSet::AddSummary(TSummaryStatePtr summary)
 {
     InitializeType(ESensorType::Summary);
-    SummariesCube_.AddAll(summary->TagIds, summary->Projections);
+    SummariesCube_.AddAll(summary->TagSet);
     Summaries_.emplace(std::move(summary));
     CubeSize_.Update(GetCubeSize());
 }
@@ -87,7 +87,7 @@ void TSensorSet::AddSummary(TSummaryStatePtr summary)
 void TSensorSet::AddTimerSummary(TTimerSummaryStatePtr timer)
 {
     InitializeType(ESensorType::Timer);
-    TimersCube_.AddAll(timer->TagIds, timer->Projections);
+    TimersCube_.AddAll(timer->TagSet);
     Timers_.emplace(std::move(timer));
     CubeSize_.Update(GetCubeSize());
 }
@@ -95,7 +95,7 @@ void TSensorSet::AddTimerSummary(TTimerSummaryStatePtr timer)
 void TSensorSet::AddTimeCounter(TTimeCounterStatePtr counter)
 {
     InitializeType(ESensorType::TimeCounter);
-    TimeCountersCube_.AddAll(counter->TagIds, counter->Projections);
+    TimeCountersCube_.AddAll(counter->TagSet);
     TimeCounters_.emplace(std::move(counter));
     CubeSize_.Update(GetCubeSize());
 }
@@ -103,7 +103,7 @@ void TSensorSet::AddTimeCounter(TTimeCounterStatePtr counter)
 void TSensorSet::AddTimeHistogram(THistogramStatePtr histogram)
 {
     InitializeType(ESensorType::TimeHistogram);
-    TimeHistogramsCube_.AddAll(histogram->TagIds, histogram->Projections);
+    TimeHistogramsCube_.AddAll(histogram->TagSet);
     TimeHistograms_.emplace(std::move(histogram));
     CubeSize_.Update(GetCubeSize());
 }
@@ -111,7 +111,7 @@ void TSensorSet::AddTimeHistogram(THistogramStatePtr histogram)
 void TSensorSet::AddGaugeHistogram(THistogramStatePtr histogram)
 {
     InitializeType(ESensorType::GaugeHistogram);
-    GaugeHistogramsCube_.AddAll(histogram->TagIds, histogram->Projections);
+    GaugeHistogramsCube_.AddAll(histogram->TagSet);
     GaugeHistograms_.emplace(std::move(histogram));
     CubeSize_.Update(GetCubeSize());
 }
@@ -119,7 +119,7 @@ void TSensorSet::AddGaugeHistogram(THistogramStatePtr histogram)
 void TSensorSet::AddRateHistogram(THistogramStatePtr histogram)
 {
     InitializeType(ESensorType::RateHistogram);
-    RateHistogramsCube_.AddAll(histogram->TagIds, histogram->Projections);
+    RateHistogramsCube_.AddAll(histogram->TagSet);
     RateHistograms_.emplace(std::move(histogram));
     CubeSize_.Update(GetCubeSize());
 }
@@ -128,11 +128,11 @@ void TSensorSet::RenameDynamicTag(const TDynamicTagPtr& dynamicTag, TTagId newTa
 {
     auto doRename = [&] (auto& cube, const auto& sensors) {
         for (const auto& sensor : sensors) {
-            for (auto [tag, index] : sensor->Projections.DynamicTags()) {
+            for (auto [tag, index] : sensor->TagSet.DynamicTags()) {
                 if (tag == dynamicTag) {
-                    cube.RemoveAll(sensor->TagIds, sensor->Projections);
-                    sensor->TagIds[index] = newTag;
-                    cube.AddAll(sensor->TagIds, sensor->Projections);
+                    cube.RemoveAll(sensor->TagSet);
+                    sensor->TagSet.SetTagId(index, newTag);
+                    cube.AddAll(sensor->TagSet);
                 }
             }
         }
@@ -168,21 +168,21 @@ int TSensorSet::Collect()
                 continue;
             }
 
-            counter->Projections.Range(counter->TagIds, [&, value=value] (auto tags) {
+            counter->TagSet.Range([&, value = value] (auto tags) {
                 cube.Update(std::move(tags), value);
             });
         }
         cube.FinishIteration();
 
         for (const auto& removed : toRemove) {
-            cube.RemoveAll(removed->TagIds, removed->Projections);
+            cube.RemoveAll(removed->TagSet);
             set.erase(removed);
         }
 
         count += cube.GetProjections().size();
     };
 
-    collect(Counters_, CountersCube_, [] (auto counter) -> std::pair<i64, bool> {
+    collect(Counters_, CountersCube_, [] (const auto& counter) -> std::pair<i64, bool> {
         auto owner = counter->Owner.Lock();
         if (!owner) {
             return {0, false};
@@ -200,7 +200,7 @@ int TSensorSet::Collect()
         }
     });
 
-    collect(TimeCounters_, TimeCountersCube_, [] (auto counter) -> std::pair<TDuration, bool> {
+    collect(TimeCounters_, TimeCountersCube_, [] (const auto& counter) -> std::pair<TDuration, bool> {
         auto owner = counter->Owner.Lock();
         if (!owner) {
             return {TDuration::Zero(), false};
@@ -213,7 +213,7 @@ int TSensorSet::Collect()
         return {delta, true};
     });
 
-    collect(Gauges_, GaugesCube_, [] (auto counter) -> std::pair<double, bool> {
+    collect(Gauges_, GaugesCube_, [] (const auto& counter) -> std::pair<double, bool> {
         auto owner = counter->Owner.Lock();
         if (!owner) {
             return {0, false};
@@ -229,7 +229,7 @@ int TSensorSet::Collect()
         }
     });
 
-    collect(Summaries_, SummariesCube_, [] (auto counter) -> std::pair<TSummarySnapshot<double>, bool> {
+    collect(Summaries_, SummariesCube_, [] (const auto& counter) -> std::pair<TSummarySnapshot<double>, bool> {
         auto owner = counter->Owner.Lock();
         if (!owner) {
             return {{}, false};
@@ -239,7 +239,7 @@ int TSensorSet::Collect()
         return {value, true};
     });
 
-    collect(Timers_, TimersCube_, [] (auto counter) -> std::pair<TSummarySnapshot<TDuration>, bool> {
+    collect(Timers_, TimersCube_, [] (const auto& counter) -> std::pair<TSummarySnapshot<TDuration>, bool> {
         auto owner = counter->Owner.Lock();
         if (!owner) {
             return {{}, false};
@@ -249,41 +249,41 @@ int TSensorSet::Collect()
         return {value, true};
     });
 
-    collect(TimeHistograms_, TimeHistogramsCube_, [] (auto counter) -> std::pair<TTimeHistogramSnapshot, bool> {
+    collect(TimeHistograms_, TimeHistogramsCube_, [] (const auto& counter) -> std::pair<TTimeHistogramSnapshot, bool> {
         auto owner = counter->Owner.Lock();
         if (!owner) {
             return {{}, false};
         }
 
         auto value = owner->GetSnapshot(true);
-        return {value, true};
+        return {TTimeHistogramSnapshot(value), true};
     });
 
-    collect(GaugeHistograms_, GaugeHistogramsCube_, [] (auto counter) -> std::pair<TGaugeHistogramSnapshot, bool> {
+    collect(GaugeHistograms_, GaugeHistogramsCube_, [] (const auto& counter) -> std::pair<TGaugeHistogramSnapshot, bool> {
         auto owner = counter->Owner.Lock();
         if (!owner) {
             return {{}, false};
         }
 
         auto value = owner->GetSnapshot(false);
-        return {value, true};
+        return {TGaugeHistogramSnapshot(value), true};
     });
 
-    collect(RateHistograms_, RateHistogramsCube_, [] (auto counter) -> std::pair<TRateHistogramSnapshot, bool> {
+    collect(RateHistograms_, RateHistogramsCube_, [] (const auto& counter) -> std::pair<TRateHistogramSnapshot, bool> {
         auto owner = counter->Owner.Lock();
         if (!owner) {
             return {{}, false};
         }
 
         auto value = owner->GetSnapshot(true);
-        return {value, true};
+        return {TRateHistogramSnapshot(value), true};
     });
 
     return count;
 }
 
 void TSensorSet::ReadSensors(
-    const std::string& name,
+    TStringBuf name,
     TReadOptions readOptions,
     TTagWriter* tagWriter,
     ::NMonitoring::IMetricConsumer* consumer) const
@@ -294,9 +294,13 @@ void TSensorSet::ReadSensors(
 
     readOptions.Sparse = Options_.Sparse;
     readOptions.Global = Options_.Global;
-    readOptions.DisableSensorsRename = Options_.DisableSensorsRename;
+    if (Options_.DisableSensorsRename.has_value()) {
+        readOptions.DisableSensorsRename = Options_.DisableSensorsRename.value();
+    }
     readOptions.DisableDefault = Options_.DisableDefault;
+    readOptions.MemOnly = Options_.MemOnly;
     if (Options_.SummaryPolicy != ESummaryPolicy::Default) {
+        // Use summary option from sensor if specified.
         readOptions.SummaryPolicy = Options_.SummaryPolicy;
     }
 
@@ -323,11 +327,15 @@ int TSensorSet::ReadSensorValues(
 {
     if (!Error_.IsOK()) {
         THROW_ERROR_EXCEPTION("Broken sensor")
-            << Error_;
+            .With(Error_);
     }
 
     if (Options_.SummaryPolicy != ESummaryPolicy::Default) {
         readOptions.SummaryPolicy = Options_.SummaryPolicy;
+    }
+
+    if (Options_.DisableSensorsRename.has_value()) {
+        readOptions.DisableSensorsRename = Options_.DisableSensorsRename.value();
     }
 
     int valuesRead = 0;
@@ -397,8 +405,8 @@ void TSensorSet::InitializeType(ESensorType type)
 
     if (Type_ && *Type_ != type) {
         OnError(TError("Conflicting sensor types")
-            << TErrorAttribute("expected", *Type_)
-            << TErrorAttribute("provided", type));
+            .With("expected", *Type_)
+            .With("provided", type));
     }
 
     if (!Type_) {
@@ -406,22 +414,24 @@ void TSensorSet::InitializeType(ESensorType type)
     }
 }
 
-void TSensorSet::DumpCube(NProto::TCube *cube, const std::vector<TTagId>& extraTags) const
+void TSensorSet::DumpCube(NProto::TCube *cube, const std::vector<TTagIdList>& extraProjections) const
 {
     cube->set_sparse(Options_.Sparse);
     cube->set_global(Options_.Global);
     cube->set_disable_default(Options_.DisableDefault);
-    cube->set_disable_sensors_rename(Options_.DisableSensorsRename);
+    if (Options_.DisableSensorsRename.has_value()) {
+        cube->set_disable_sensors_rename(Options_.DisableSensorsRename.value());
+    }
     cube->set_summary_policy(ToProto(Options_.SummaryPolicy));
 
-    CountersCube_.DumpCube(cube, extraTags);
-    TimeCountersCube_.DumpCube(cube, extraTags);
-    GaugesCube_.DumpCube(cube, extraTags);
-    SummariesCube_.DumpCube(cube, extraTags);
-    TimersCube_.DumpCube(cube, extraTags);
-    TimeHistogramsCube_.DumpCube(cube, extraTags);
-    GaugeHistogramsCube_.DumpCube(cube, extraTags);
-    RateHistogramsCube_.DumpCube(cube, extraTags);
+    CountersCube_.DumpCube(cube, extraProjections);
+    TimeCountersCube_.DumpCube(cube, extraProjections);
+    GaugesCube_.DumpCube(cube, extraProjections);
+    SummariesCube_.DumpCube(cube, extraProjections);
+    TimersCube_.DumpCube(cube, extraProjections);
+    TimeHistogramsCube_.DumpCube(cube, extraProjections);
+    GaugeHistogramsCube_.DumpCube(cube, extraProjections);
+    RateHistogramsCube_.DumpCube(cube, extraProjections);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

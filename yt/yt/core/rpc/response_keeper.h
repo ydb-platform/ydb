@@ -30,7 +30,6 @@ namespace NYT::NRpc {
 struct IResponseKeeper
     : public TRefCounted
 {
-public:
     virtual void Start() = 0;
 
     //! Deactivates the keeper.
@@ -100,6 +99,13 @@ public:
      *  Thread affinity: any
      */
     virtual bool IsWarmingUp() const = 0;
+
+    //! Returns |true| if the keeper stores responses persistently.
+    /*!
+     *  \note
+     *  Thread affinity: any
+     */
+    virtual bool IsPersistent() const = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(IResponseKeeper)

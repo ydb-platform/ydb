@@ -1,6 +1,8 @@
 #include "hive_impl.h"
 #include "hive_log.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
+
 namespace NKikimr {
 namespace NHive {
 
@@ -21,7 +23,9 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_STOP_TABLET; }
 
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
-        BLOG_D("THive::TTxStopTablet::Execute Tablet: " << TabletId);
+        YDB_LOG_DEBUG("THive::TTxStopTablet::Execute stopping tablet",
+            {"logPrefix", GetLogPrefix()},
+            {"tabletId", TabletId});
         SideEffects.Reset(Self->SelfId());
         NKikimrProto::EReplyStatus status = NKikimrProto::UNKNOWN;
         TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
@@ -32,6 +36,11 @@ public:
                     return true;
                 }
             }
+            YDB_LOG_DEBUG("THive::TTxStopTablet::Execute processing tablet stop",
+                {"logPrefix", GetLogPrefix()},
+                {"tabletId", TabletId},
+                {"state", ETabletStateName(tablet->State)},
+                {"volatileState", TTabletInfo::EVolatileStateName(tablet->GetVolatileState())});
             ETabletState state = tablet->State;
             ETabletState newState = state;
             NIceDb::TNiceDb db(txc.DB);
@@ -59,6 +68,8 @@ public:
                 if (tablet->IsAlive()) {
                     tablet->InitiateStop(SideEffects);
                     db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::LeaderNode>(0);
+                } else {
+                    tablet->BecomeStopped();
                 }
                 status = NKikimrProto::OK;
                 break;
@@ -85,7 +96,9 @@ public:
                     SideEffects.Send(ActorToNotify, new TEvHive::TEvStopTabletResult(status, TabletId), 0, 0);
                 }
                 Self->ReportStoppedToWhiteboard(*tablet);
-                BLOG_D("Report tablet " << tablet->ToString() << " as stopped to Whiteboard");
+                YDB_LOG_DEBUG("THive::TTxStopTablet::Execute reported tablet as stopped to whiteboard",
+                    {"logPrefix", GetLogPrefix()},
+                    {"tabletInfo", tablet->ToString()});
             }
             Self->ProcessBootQueue();
         }
@@ -93,8 +106,10 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxStopTablet::Complete TabletId: " << TabletId);
-        SideEffects.Complete(ctx);
+        YDB_LOG_DEBUG("THive::TTxStopTablet::Complete",
+            {"logPrefix", GetLogPrefix()},
+            {"tabletId", TabletId});
+        SideEffects.Complete(ctx, Self->Requests);
         Self->ProcessPendingStopTablet();
     }
 };

@@ -7,8 +7,10 @@ option java_outer_classname = "QueryProtos";
 
 import "google/protobuf/duration.proto";
 
+import "ydb/public/api/protos/annotations/sensitive.proto";
 import "ydb/public/api/protos/annotations/validation.proto";
 import "ydb/public/api/protos/ydb_common.proto";
+import "ydb/public/api/protos/ydb_formats.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
 import "ydb/public/api/protos/ydb_operation.proto";
 import "ydb/public/api/protos/ydb_query_stats.proto";
@@ -44,9 +46,28 @@ message AttachSessionRequest {
     string session_id = 1 [(Ydb.length).le = 1024];
 }
 
+// Sent by server when this session is being gracefully terminated.
+// Server will attempt to complete in-flight requests within the soft deadline; 
+// requests still running at the hard deadline will be cancelled.
+// Client should not reuse the session after receiving this hint.
+message SessionShutdownHint {
+}
+
+// Sent by server when the node is being gracefully shut down.
+// Server will attempt to complete in-flight requests within the soft deadline;
+// requests still running at the hard deadline will be cancelled.
+// Client should not create new sessions on this node.
+message NodeShutdownHint {
+}
+
 message SessionState {
     StatusIds.StatusCode status = 1;
     repeated Ydb.Issue.IssueMessage issues = 2;
+
+    oneof session_hint {
+        SessionShutdownHint session_shutdown = 3;
+        NodeShutdownHint node_shutdown = 4;
+    }
 }
 
 message SerializableModeSettings {
@@ -66,6 +87,12 @@ message SnapshotModeSettings {
 message SnapshotRWModeSettings {
 }
 
+message ReadCommittedRWModeSettings {
+}
+
+message StrictSerializableRWModeSettings {
+}
+
 message TransactionSettings {
     oneof tx_mode {
         SerializableModeSettings serializable_read_write = 1;
@@ -73,6 +100,8 @@ message TransactionSettings {
         StaleModeSettings stale_read_only = 3;
         SnapshotModeSettings snapshot_read_only = 4;
         SnapshotRWModeSettings snapshot_read_write = 5;
+        ReadCommittedRWModeSettings read_committed_read_write = 6;
+        StrictSerializableRWModeSettings strict_serializable_read_write = 7;
     }
 }
 
@@ -113,6 +142,10 @@ message CommitTransactionRequest {
 message CommitTransactionResponse {
     StatusIds.StatusCode status = 1;
     repeated Ydb.Issue.IssueMessage issues = 2;
+
+    // Commit timestamp (PlanStep, TxId) for StrictSerializableRW write transactions.
+    // Present only on SUCCESS and when the transaction had write effects.
+    Ydb.VirtualTimestamp commit_timestamp = 3;
 }
 
 message RollbackTransactionRequest {
@@ -130,7 +163,7 @@ message RollbackTransactionResponse {
 enum Syntax {
     SYNTAX_UNSPECIFIED = 0;
     SYNTAX_YQL_V1 = 1; // YQL
-    SYNTAX_PG = 2; // PostgresQL
+    SYNTAX_PG = 2 [deprecated = true]; // Removed: PostgreSQL syntax is no longer supported
 }
 
 message QueryContent {
@@ -155,6 +188,17 @@ enum StatsMode {
     STATS_MODE_PROFILE = 40;    // Detailed execution stats including stats for individual tasks and channels
 }
 
+enum SchemaInclusionMode {
+    // Unspecified mode, corresponds to SCHEMA_INCLUSION_MODE_ALWAYS.
+    SCHEMA_INCLUSION_MODE_UNSPECIFIED = 0;
+
+    // Always include schema in every Ydb.ResultSet in the response stream.
+    SCHEMA_INCLUSION_MODE_ALWAYS = 1;
+
+    // Include schema only in the first Ydb.ResultSet per result_set_index of the response stream.
+    SCHEMA_INCLUSION_MODE_FIRST_ONLY = 2;
+}
+
 message ExecuteQueryRequest {
     // Session identifier (required)
     string session_id = 1 [(Ydb.length).le = 1024];
@@ -165,7 +209,7 @@ message ExecuteQueryRequest {
         QueryContent query_content = 4;
     }
 
-    map<string, TypedValue> parameters = 6;
+    map<string, TypedValue> parameters = 6 [(Ydb.sensitive) = true];
     StatsMode stats_mode = 7;
 
     // For queries with multiple result sets, some of them may be computed concurrently.
@@ -182,6 +226,17 @@ message ExecuteQueryRequest {
     // When query statistics are enabled (stats_mode != STATS_MODE_NONE), by default statistics will be sent only once after query execution is finished.
     // In case when stats_period_ms is specified and is non-zero, query statistics will be additionally sent every stats_period_ms milliseconds beginning from the start of query execution.
     int64 stats_period_ms = 11 [(Ydb.value) = ">= 0"];
+
+    // Schema inclusion mode for the result sets.
+    // If is not specified, SchemaInclusionMode.SCHEMA_INCLUSION_MODE_ALWAYS is used.
+    SchemaInclusionMode schema_inclusion_mode = 12;
+
+    // Format of the result sets.
+    // If is not specified, Ydb.ResultSet.Format.FORMAT_VALUE is used.
+    Ydb.ResultSet.Format result_set_format = 13;
+
+    // Format settings, only used for Ydb.ResultSet.Format.FORMAT_ARROW
+    Ydb.Formats.ArrowFormatSettings arrow_format_settings = 14;
 }
 
 message ResultSetMeta {
@@ -204,6 +259,10 @@ message ExecuteQueryResponsePart {
 
     TransactionMeta tx_meta = 6;
     VirtualTimestamp snapshot_timestamp = 7;
+
+    // Commit timestamp (PlanStep, TxId) for StrictSerializableRW write transactions.
+    // Present only in the final (trailing) part on SUCCESS and when the transaction had write effects.
+    VirtualTimestamp commit_timestamp = 8;
 }
 
 message ExecuteScriptRequest {
@@ -213,7 +272,7 @@ message ExecuteScriptRequest {
 
     QueryContent script_content = 3;
 
-    map<string, TypedValue> parameters = 4;
+    map<string, TypedValue> parameters = 4 [(Ydb.sensitive) = true];
 
     StatsMode stats_mode = 5;
 

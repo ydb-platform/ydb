@@ -2,6 +2,7 @@
 #include "worker.h"
 #include <ydb/core/tx/conveyor/usage/config.h>
 #include <ydb/core/tx/conveyor/usage/events.h>
+#include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/library/signals/owner.h>
 #include <ydb/library/accessor/positive_integer.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -279,7 +280,9 @@ public:
             hFunc(TEvExecution::TEvRegisterProcess, HandleMain);
             hFunc(TEvExecution::TEvUnregisterProcess, HandleMain);
             default:
-                AFL_ERROR(NKikimrServices::TX_CONVEYOR)("problem", "unexpected event for task executor")("ev_type", ev->GetTypeName());
+                YDB_LOG_ERROR_COMP(NKikimrServices::TX_CONVEYOR, "",
+                    {"problem", "unexpected event for task executor"},
+                    {"evType", ev->GetTypeName()});
                 break;
         }
     }
@@ -290,5 +293,12 @@ public:
 
     void Bootstrap();
 };
+
+template <class TConveyorPolicy>
+NActors::IActor* CreateService(const TConfig& config, TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorSignals) {
+    using TOperator = TServiceOperatorImpl<TConveyorPolicy>;
+    TOperator::Register(config);
+    return new TDistributor(config, TOperator::GetConveyorName(), TConveyorPolicy::EnableProcesses, conveyorSignals);
+}
 
 }

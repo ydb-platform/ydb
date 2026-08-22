@@ -1,3 +1,4 @@
+#include "helpers.h"
 #include "notify_manager.h"
 #include "private.h"
 
@@ -31,17 +32,17 @@ TNotifyManager::TNotifyManager(
 
 TCpuInstant TNotifyManager::GetMinEnqueuedAt() const
 {
-    return MinEnqueuedAt_.load(std::memory_order::acquire);
+    return MinEnqueuedAtInstant_.load(std::memory_order::acquire);
 }
 
 TCpuInstant TNotifyManager::UpdateMinEnqueuedAt(TCpuInstant newMinEnqueuedAt)
 {
-    auto minEnqueuedAt = MinEnqueuedAt_.load();
+    auto minEnqueuedAt = MinEnqueuedAtInstant_.load();
 
     while (newMinEnqueuedAt < minEnqueuedAt) {
-        if (MinEnqueuedAt_.compare_exchange_weak(minEnqueuedAt, newMinEnqueuedAt)) {
+        if (MinEnqueuedAtInstant_.compare_exchange_weak(minEnqueuedAt, newMinEnqueuedAt)) {
             minEnqueuedAt = newMinEnqueuedAt;
-            YT_VERIFY(minEnqueuedAt != SentinelMinEnqueuedAt);
+            YT_VERIFY(minEnqueuedAt != SentinelMinEnqueuedAtInstant);
             break;
         }
     }
@@ -53,25 +54,25 @@ TCpuInstant TNotifyManager::ResetMinEnqueuedAt()
 {
     // Disables notifies of already enqueued actions from invoke and
     // allows to set MinEnqueuedAt in NotifyFromInvoke for new actions.
-    return MinEnqueuedAt_.exchange(SentinelMinEnqueuedAt);
+    return MinEnqueuedAtInstant_.exchange(SentinelMinEnqueuedAtInstant);
 }
 
 void TNotifyManager::NotifyFromInvoke(TCpuInstant cpuInstant, bool force)
 {
     auto minEnqueuedAt = GetMinEnqueuedAt();
 
-    if (minEnqueuedAt == SentinelMinEnqueuedAt) {
-        MinEnqueuedAt_.compare_exchange_strong(minEnqueuedAt, cpuInstant);
+    if (minEnqueuedAt == SentinelMinEnqueuedAtInstant) {
+        MinEnqueuedAtInstant_.compare_exchange_strong(minEnqueuedAt, cpuInstant);
     }
 
     auto waitTime = CpuDurationToDuration(cpuInstant - minEnqueuedAt);
     bool needNotify = force || waitTime > WaitLimit;
 
-    YT_LOG_TRACE("Notify from invoke (Force: %v, Decision: %v, WaitTime: %v, MinEnqueuedAt: %v)",
-        force,
-        needNotify,
-        waitTime,
-        CpuInstantToInstant(minEnqueuedAt));
+    YT_TLOG_TRACE("Notify from invoke")
+        .With("Force", force)
+        .With("Decision", needNotify)
+        .With("WaitTime", waitTime)
+        .With("MinEnqueuedAt", CpuInstantToInstant(minEnqueuedAt));
 
     if (needNotify) {
         NotifyOne(cpuInstant);
@@ -86,15 +87,20 @@ void TNotifyManager::NotifyAfterFetch(TCpuInstant cpuInstant, TCpuInstant newMin
     auto waitTime = CpuDurationToDuration(cpuInstant - minEnqueuedAt);
 
     if (waitTime > WaitLimit) {
-        YT_LOG_TRACE("Notify after fetch (WaitTime: %v, MinEnqueuedAt: %v)",
-            waitTime,
-            CpuInstantToInstant(minEnqueuedAt));
+        YT_TLOG_TRACE("Notify after fetch")
+            .With("WaitTime", waitTime)
+            .With("MinEnqueuedAt", CpuInstantToInstant(minEnqueuedAt));
 
         NotifyOne(cpuInstant);
     }
 
-    // Reset LockedInstant to suppress action stuck warnings in case of progress.
-    LockedInstant_ = cpuInstant;
+    // Do not resurrect a concurrently unlocked notification.
+    auto notifyInstant = NotifyInstant_.load(std::memory_order::relaxed);
+    while (notifyInstant != UnlockedNotifyInstant && notifyInstant < cpuInstant) {
+        if (NotifyInstant_.compare_exchange_weak(notifyInstant, cpuInstant)) {
+            break;
+        }
+    }
 }
 
 void TNotifyManager::Wait(NThreading::TEventCount::TCookie cookie, std::function<bool()> isStopping)
@@ -105,25 +111,42 @@ void TNotifyManager::Wait(NThreading::TEventCount::TCookie cookie, std::function
         return;
     }
 
+    // Reclaim hazard pointers retired by this thread before parking. If some
+    // remain pending (they are currently protected and could not be reclaimed
+    // yet), the thread must not block indefinitely: it wakes up periodically and
+    // retries, otherwise such retired objects (and the memory they pin) could be
+    // stranded on this idle thread until it happens to run again.
+    bool hasPendingHazardPointers = ReclaimHazardPointersPeriodically(GetCpuInstant(), /*force*/ true);
+
 #ifdef PERIODIC_POLLING
     // One waiter makes periodic polling.
     bool firstWaiter = !PollingWaiterLock_.exchange(true);
     if (firstWaiter) {
         while (true) {
-            bool notified = EventCount_->Wait(cookie, PollingPeriod_.load());
+            auto pollingPeriod = PollingPeriod_.load(std::memory_order::relaxed);
+            if (hasPendingHazardPointers && HazardPointerReclaimPeriod < pollingPeriod) {
+                pollingPeriod = HazardPointerReclaimPeriod;
+            }
+
+            bool notified = EventCount_->Wait(cookie, pollingPeriod);
             if (notified) {
                 break;
             }
 
+            auto cpuInstant = GetCpuInstant();
+
+            // Periodically retry reclamation (throttled internally) so that the sole
+            // polling waiter never strands retired hazard pointers on this thread.
+            hasPendingHazardPointers = ReclaimHazardPointersPeriodically(cpuInstant, /*force*/ false);
+
             // Check wait time.
             auto minEnqueuedAt = GetMinEnqueuedAt();
-            auto cpuInstant = GetCpuInstant();
             auto waitTime = CpuDurationToDuration(cpuInstant - minEnqueuedAt);
 
             if (waitTime > WaitLimit) {
-                YT_LOG_DEBUG("Wake up by timeout (WaitTime: %v, MinEnqueuedAt: %v)",
-                    waitTime,
-                    CpuInstantToInstant(minEnqueuedAt));
+                YT_TLOG_DEBUG("Wake up by timeout")
+                    .With("WaitTime", waitTime)
+                    .With("MinEnqueuedAt", CpuInstantToInstant(minEnqueuedAt));
 
                 WakeupByTimeoutCounter_.Increment();
 
@@ -142,13 +165,22 @@ void TNotifyManager::Wait(NThreading::TEventCount::TCookie cookie, std::function
         }
 
         PollingWaiterLock_.store(false);
+    } else if (hasPendingHazardPointers) {
+        // A non-polling waiter with pending hazard pointers must also wake up by
+        // timeout to retry reclamation (via the surrounding execution loop) rather
+        // than blocking until the next notification.
+        EventCount_->Wait(cookie, HazardPointerReclaimPeriod);
     } else {
         EventCount_->Wait(cookie);
     }
 #else
     Y_UNUSED(isStopping);
     Y_UNUSED(PollingPeriod);
-    EventCount_->Wait(cookie);
+    if (hasPendingHazardPointers) {
+        EventCount_->Wait(cookie, HazardPointerReclaimPeriod);
+    } else {
+        EventCount_->Wait(cookie);
+    }
 #endif
 
     UnlockNotifies();
@@ -181,25 +213,24 @@ void TNotifyManager::SetPollingPeriod(TDuration pollingPeriod)
 
 bool TNotifyManager::UnlockNotifies()
 {
-    return NotifyLock_.exchange(false);
+    return NotifyInstant_.exchange(UnlockedNotifyInstant) != UnlockedNotifyInstant;
 }
 
 void TNotifyManager::NotifyOne(TCpuInstant cpuInstant)
 {
-    if (!NotifyLock_.exchange(true)) {
-        LockedInstant_ = cpuInstant;
-        YT_LOG_TRACE("Notify futex (MinEnqueuedAt: %v)",
-            CpuInstantToInstant(GetMinEnqueuedAt()));
+    auto notifyInstant = UnlockedNotifyInstant;
+    if (NotifyInstant_.compare_exchange_strong(notifyInstant, cpuInstant)) {
+        YT_TLOG_TRACE("Notify futex")
+            .With("MinEnqueuedAt", CpuInstantToInstant(GetMinEnqueuedAt()));
         EventCount_->NotifyOne();
     } else {
-        auto lockedInstant = LockedInstant_.load();
-        auto waitTime = CpuDurationToDuration(cpuInstant - lockedInstant);
+        auto waitTime = CpuDurationToDuration(cpuInstant - notifyInstant);
         if (waitTime > WaitTimeWarningThreshold) {
             // Notifications are locked during more than 30 seconds.
-            YT_LOG_WARNING("Action is probably stuck (MinEnqueuedAt: %v, LockedInstant: %v, WaitTime: %v)",
-                CpuInstantToInstant(GetMinEnqueuedAt()),
-                lockedInstant,
-                waitTime);
+            YT_TLOG_WARNING("Action is probably stuck")
+                .With("MinEnqueuedAt", CpuInstantToInstant(GetMinEnqueuedAt()))
+                .With("NotifyInstant", notifyInstant)
+                .With("WaitTime", waitTime);
         }
     }
 }

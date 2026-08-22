@@ -1,6 +1,8 @@
 #include "auth_helpers.h"
 #include "signature.h"
 
+#include <ydb/library/http_proxy/error/error.h>
+
 #include <library/cpp/http/io/stream.h>
 #include <library/cpp/http/misc/parsed_request.h>
 
@@ -11,6 +13,7 @@
 #include <util/generic/algorithm.h>
 #include <util/generic/map.h>
 #include <util/generic/vector.h>
+#include <util/stream/buffer.h>
 #include <util/stream/str.h>
 #include <util/string/builder.h>
 #include <library/cpp/cgiparam/cgiparam.h>
@@ -56,7 +59,7 @@ static const TString SIGNED_HEADERS_PARAM = "signedheaders";
 static const TString SIGNATURE_PARAM = "signature";
 static const TString CREDENTIAL_PARAM = "credential";
 
-TAwsRequestSignV4::TAwsRequestSignV4(const TString& request) {
+TAwsRequestSignV4::TAwsRequestSignV4(const TString& request) try {
     // special standalone ctor for tests
     TStringInput si(request);
     THttpInput input(&si);
@@ -67,14 +70,23 @@ TAwsRequestSignV4::TAwsRequestSignV4(const TString& request) {
     if (parsed.Method == "POST") {
         if (input.GetContentLength(contentLength)) {
             inputData.ConstructInPlace();
-            inputData->Resize(contentLength);
-            if (input.Load(inputData->Data(), (size_t)contentLength) != contentLength) {
-                Y_ABORT_UNLESS(false);
+            inputData->Reserve(contentLength);
+            TBufferOutput bufOut{*inputData};
+            try {
+                TransferData(&input, &bufOut);
+            } catch (const std::exception& e) {
+                throw NKikimr::NSQS::TSQSException(NKikimr::NSQS::NErrors::INTERNAL_FAILURE)
+                    << "Failed to decode POST body";
             }
         }
     }
 
     Process(input, parsed, inputData);
+} catch (const NKikimr::NSQS::TSQSException&) {
+    throw;
+} catch (const std::exception& e) {
+    throw NKikimr::NSQS::TSQSException(NKikimr::NSQS::NErrors::INTERNAL_FAILURE)
+        << "Failed to parse request: " << e.what();
 }
 
 TAwsRequestSignV4::TAwsRequestSignV4(const THttpInput& input, const TParsedHttpFull& parsed, const TMaybe<TBuffer>& inputData) {
@@ -121,6 +133,10 @@ TString TAwsRequestSignV4::CalcSignature(const TString& secretKey) const {
     return to_lower(HexEncode(signatureHmac.data(), signatureHmac.size()));
 }
 
+bool TAwsRequestSignV4::Empty() const {
+    return Empty_;
+}
+
 void TAwsRequestSignV4::ParseAuthorization(const THttpInput& input) {
     for (const auto& header : input.Headers()) {
         if (AsciiEqualsIgnoreCase(header.Name(), AUTHORIZATION_HEADER)) {
@@ -134,6 +150,8 @@ void TAwsRequestSignV4::ParseAuthorization(const THttpInput& input) {
             AwsDate_ = TString(credential.NextTok(pathDelim));
             AwsRegion_ = TString(credential.NextTok(pathDelim));
             AwsService_ = TString(credential.NextTok(pathDelim));
+
+            Empty_ = false;
             break;
         }
     }

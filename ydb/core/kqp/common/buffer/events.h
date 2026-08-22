@@ -9,6 +9,11 @@
 namespace NKikimr {
 namespace NKqp {
 
+struct TCommitTimestamp {
+    ui64 PlanStep = 0;
+    ui64 TxId = 0;
+};
+
 struct TEvKqpBuffer {
 
 // To BufferActor
@@ -34,15 +39,23 @@ struct TEvTerminate : public TEventLocal<TEvTerminate, TKqpBufferWriterEvents::E
 struct TEvResult : public TEventLocal<TEvResult, TKqpBufferWriterEvents::EvResult> {
     TEvResult() = default;
     TEvResult(NYql::NDqProto::TDqTaskStats&& stats) : Stats(std::move(stats)) {}
+    TEvResult(NYql::NDqProto::TDqTaskStats&& stats, std::optional<TCommitTimestamp>&& commitTimestamp)
+        : Stats(std::move(stats))
+        , CommitTimestamp(std::move(commitTimestamp)) {}
 
     std::optional<NYql::NDqProto::TDqTaskStats> Stats;
+    std::optional<TCommitTimestamp> CommitTimestamp;
 };
 
 struct TEvError : public TEventLocal<TEvError, TKqpBufferWriterEvents::EvError> {
     NYql::NDqProto::StatusIds::StatusCode StatusCode;
     NYql::TIssues Issues;
+    std::optional<NYql::NDqProto::TDqTaskStats> Stats;
 
-    TEvError(NYql::NDqProto::StatusIds::StatusCode statusCode, NYql::TIssues&& issues);
+    TEvError(
+        NYql::NDqProto::StatusIds::StatusCode statusCode,
+        NYql::TIssues&& issues,
+        std::optional<NYql::NDqProto::TDqTaskStats>&& stats);
 };
 
 };

@@ -1,5 +1,16 @@
 /*
  * An implementation of Roaring Bitmaps in C.
+ *
+ * This is the main public header for the 32-bit CRoaring API. A Roaring bitmap
+ * represents a set of unsigned 32-bit integers by partitioning the value space
+ * into 16-bit chunks and storing each chunk in a container chosen to match the
+ * local data density. Sparse chunks are typically kept as sorted arrays,
+ * denser chunks as bitsets, and long consecutive runs as run containers.
+ *
+ * This hybrid representation aims to keep bitmaps compact while still
+ * supporting fast membership tests, iteration, rank/select queries,
+ * serialization, and set operations such as union, intersection, difference,
+ * and symmetric difference.
  */
 
 #ifndef ROARING_H
@@ -13,8 +24,10 @@
 
 // Include other headers after roaring_types.h
 #include <roaring/bitset/bitset.h>
+#include <roaring/containers/containers.h>
 #include <roaring/memory.h>
 #include <roaring/portability.h>
+#include <roaring/roaring_array.h>
 #include <roaring/roaring_version.h>
 
 #ifdef __cplusplus
@@ -74,6 +87,18 @@ roaring_bitmap_t *roaring_bitmap_from_range(uint64_t min, uint64_t max,
  */
 roaring_bitmap_t *roaring_bitmap_of_ptr(size_t n_args, const uint32_t *vals);
 
+/**
+ * Check if the bitmap contains any shared containers.
+ */
+bool roaring_contains_shared(const roaring_bitmap_t *r);
+
+/**
+ * Unshare all shared containers.
+ * Returns true if any unsharing was performed, false if there were no shared
+ * containers.
+ */
+bool roaring_unshare_all(roaring_bitmap_t *r);
+
 /*
  * Whether you want to use copy-on-write.
  * Saves memory and avoids copies, but needs more care in a threaded context.
@@ -82,6 +107,9 @@ roaring_bitmap_t *roaring_bitmap_of_ptr(size_t n_args, const uint32_t *vals);
  * Note: If you do turn this flag to 'true', enabling COW, then ensure that you
  * do so for all of your bitmaps, since interactions between bitmaps with and
  * without COW is unsafe.
+ *
+ * When setting this flag to false, if any containers are shared, they
+ * are unshared (cloned) immediately.
  */
 inline bool roaring_bitmap_get_copy_on_write(const roaring_bitmap_t *r) {
     return r->high_low_container.flags & ROARING_FLAG_COW;
@@ -90,6 +118,9 @@ inline void roaring_bitmap_set_copy_on_write(roaring_bitmap_t *r, bool cow) {
     if (cow) {
         r->high_low_container.flags |= ROARING_FLAG_COW;
     } else {
+        if (roaring_bitmap_get_copy_on_write(r)) {
+            roaring_unshare_all(r);
+        }
         r->high_low_container.flags &= ~ROARING_FLAG_COW;
     }
 }
@@ -444,7 +475,27 @@ bool roaring_bitmap_remove_checked(roaring_bitmap_t *r, uint32_t x);
 /**
  * Check if value is present
  */
-bool roaring_bitmap_contains(const roaring_bitmap_t *r, uint32_t val);
+inline bool roaring_bitmap_contains(const roaring_bitmap_t *r, uint32_t val) {
+    // For performance reasons, this function is inline and uses internal
+    // functions directly.
+#ifdef __cplusplus
+    using namespace ::roaring::internal;
+#endif
+    const uint16_t hb = val >> 16;
+    /*
+     * the next function call involves a binary search and lots of branching.
+     */
+    int32_t i = ra_get_index(&r->high_low_container, hb);
+    if (i < 0) return false;
+
+    uint8_t typecode;
+    // next call ought to be cheap
+    container_t *container = ra_get_container_at_index(&r->high_low_container,
+                                                       (uint16_t)i, &typecode);
+    // rest might be a tad expensive, possibly involving another round of binary
+    // search
+    return container_contains(container, val & 0xFFFF, typecode);
+}
 
 /**
  * Check whether a range of values from range_start (included)
@@ -545,7 +596,11 @@ bool roaring_bitmap_to_bitset(const roaring_bitmap_t *r, bitset_t *bitset);
  *
  *     ans = malloc(roaring_bitmap_get_cardinality(limit) * sizeof(uint32_t));
  *
- * Return false in case of failure (e.g., insufficient memory)
+ * This function always returns `true`
+ *
+ * For more control, see `roaring_uint32_iterator_skip` and
+ * `roaring_uint32_iterator_read`, which can be used to e.g. tell how many
+ * values were actually read.
  */
 bool roaring_bitmap_range_uint32_array(const roaring_bitmap_t *r, size_t offset,
                                        size_t limit, uint32_t *ans);
@@ -581,10 +636,6 @@ size_t roaring_bitmap_shrink_to_fit(roaring_bitmap_t *r);
  *
  * Returns how many bytes written, should be `roaring_bitmap_size_in_bytes(r)`.
  *
- * This function is endian-sensitive. If you have a big-endian system (e.g., a
- * mainframe IBM s390x), the data format is going to be big-endian and not
- * compatible with little-endian systems.
- *
  * When serializing data to a file, we recommend that you also use
  * checksums so that, at deserialization, you can be confident
  * that you are recovering the correct data.
@@ -597,27 +648,34 @@ size_t roaring_bitmap_serialize(const roaring_bitmap_t *r, char *buf);
  * (See `roaring_bitmap_portable_deserialize()` if you want a format that's
  * compatible with Java and Go implementations).
  *
- * This function is endian-sensitive. If you have a big-endian system (e.g., a
- * mainframe IBM s390x), the data format is going to be big-endian and not
- * compatible with little-endian systems.
- *
  * The returned pointer may be NULL in case of errors.
  */
 roaring_bitmap_t *roaring_bitmap_deserialize(const void *buf);
 
 /**
+ * Load a bitmap from a serialized buffer safely (reading up to maxbytes).
+ *
  * Use with `roaring_bitmap_serialize()`.
  *
  * (See `roaring_bitmap_portable_deserialize_safe()` if you want a format that's
  * compatible with Java and Go implementations).
  *
- * This function is endian-sensitive. If you have a big-endian system (e.g., a
- * mainframe IBM s390x), the data format is going to be big-endian and not
- * compatible with little-endian systems.
- *
  * The difference with `roaring_bitmap_deserialize()` is that this function
- * checks that the input buffer is a valid bitmap.  If the buffer is too small,
- * NULL is returned.
+ * is guaranteed to not read beyond the provided buffer. If the buffer is too
+ * small, NULL is returned.
+ *
+ * The function itself is safe in the sense that it will not cause buffer
+ * overflows: it will not read beyond the scope of the provided buffer
+ * (buf,maxbytes).
+ *
+ * However, for correct operations, it is assumed that the bitmap
+ * read was once serialized from a valid bitmap (i.e., it follows the format
+ * specification). If you provided an incorrect input (garbage), then the bitmap
+ * read may not be in a valid state and following operations may not lead to
+ * sensible results (using it may cause crashes, or it may just give incoherent
+ * answers). You can call roaring_bitmap_internal_validate to check the validity
+ * of the bitmap if the source is untrusted. Only after calling
+ * roaring_bitmap_internal_validate is the bitmap considered safe for use.
  *
  * The returned pointer may be NULL in case of errors.
  */
@@ -636,14 +694,19 @@ size_t roaring_bitmap_size_in_bytes(const roaring_bitmap_t *r);
  *
  * This function is unsafe in the sense that if there is no valid serialized
  * bitmap at the pointer, then many bytes could be read, possibly causing a
- * buffer overflow.  See also roaring_bitmap_portable_deserialize_safe().
+ * buffer overflow. In other words, this routine assumes that `buf` points to a
+ * complete, correctly formatted serialized bitmap and does not take a buffer
+ * length argument that would let it enforce a read bound.
+ *
+ * Use this function only when the input buffer is already trusted, for example
+ * because it comes from memory that was previously filled by
+ * `roaring_bitmap_portable_serialize()` and whose size is known by some other
+ * means. If the source is untrusted, truncated, or otherwise not guaranteed to
+ * contain a valid serialized bitmap, prefer
+ * `roaring_bitmap_portable_deserialize_safe()`.
  *
  * This is meant to be compatible with the Java and Go versions:
  * https://github.com/RoaringBitmap/RoaringFormatSpec
- *
- * This function is endian-sensitive. If you have a big-endian system (e.g., a
- * mainframe IBM s390x), the data format is going to be big-endian and not
- * compatible with little-endian systems.
  *
  * The returned pointer may be NULL in case of errors.
  */
@@ -678,10 +741,6 @@ roaring_bitmap_t *roaring_bitmap_portable_deserialize(const char *buf);
  * corresponds to the serialized bitmap. The CRoaring library does not provide
  * checksumming.
  *
- * This function is endian-sensitive. If you have a big-endian system (e.g., a
- * mainframe IBM s390x), the data format is going to be big-endian and not
- * compatible with little-endian systems.
- *
  * The returned pointer may be NULL in case of errors.
  */
 roaring_bitmap_t *roaring_bitmap_portable_deserialize_safe(const char *buf,
@@ -705,7 +764,8 @@ roaring_bitmap_t *roaring_bitmap_portable_deserialize_safe(const char *buf,
  *
  * This function is endian-sensitive. If you have a big-endian system (e.g., a
  * mainframe IBM s390x), the data format is going to be big-endian and not
- * compatible with little-endian systems.
+ * compatible with little-endian systems. It is not a bug, it is by design,
+ * since the format imitates C memory layout of roaring_bitmap_t.
  *
  * The returned pointer may be NULL in case of errors.
  */
@@ -738,10 +798,6 @@ size_t roaring_bitmap_portable_size_in_bytes(const roaring_bitmap_t *r);
  *
  * This is meant to be compatible with the Java and Go versions:
  * https://github.com/RoaringBitmap/RoaringFormatSpec
- *
- * This function is endian-sensitive. If you have a big-endian system (e.g., a
- * mainframe IBM s390x), the data format is going to be big-endian and not
- * compatible with little-endian systems.
  *
  * When serializing data to a file, we recommend that you also use
  * checksums so that, at deserialization, you can be confident
@@ -779,7 +835,8 @@ size_t roaring_bitmap_frozen_size_in_bytes(const roaring_bitmap_t *r);
  *
  * This function is endian-sensitive. If you have a big-endian system (e.g., a
  * mainframe IBM s390x), the data format is going to be big-endian and not
- * compatible with little-endian systems.
+ * compatible with little-endian systems. This is not a bug, it is by design,
+ *since the format imitates C memory layout
  *
  * When serializing data to a file, we recommend that you also use
  * checksums so that, at deserialization, you can be confident
@@ -800,7 +857,8 @@ void roaring_bitmap_frozen_serialize(const roaring_bitmap_t *r, char *buf);
  *
  * This function is endian-sensitive. If you have a big-endian system (e.g., a
  * mainframe IBM s390x), the data format is going to be big-endian and not
- * compatible with little-endian systems.
+ * compatible with little-endian systems. This is not a bug, it is by design,
+ *since the format imitates C memory layout of roaring_bitmap_t.
  */
 const roaring_bitmap_t *roaring_bitmap_frozen_view(const char *buf,
                                                    size_t length);
@@ -821,6 +879,16 @@ const roaring_bitmap_t *roaring_bitmap_frozen_view(const char *buf,
 bool roaring_iterate(const roaring_bitmap_t *r, roaring_iterator iterator,
                      void *ptr);
 
+/**
+ * Like `roaring_iterate`, but the 32-bit values are widened to 64 bits by
+ * adding `high_bits` (shifted into the upper 32 bits) before being passed to
+ * the iterator. This is used to build 64-bit iteration on top of 32-bit
+ * bitmaps. `ptr` (can be NULL) is forwarded as the second argument of each
+ * call.
+ *
+ * Returns true if the iterator returned true throughout (so that all values
+ * were necessarily visited).
+ */
 bool roaring_iterate64(const roaring_bitmap_t *r, roaring_iterator64 iterator,
                        uint64_t high_bits, void *ptr);
 
@@ -1033,6 +1101,7 @@ while(i.has_value) {
   printf("value = %d\n", i.current_value);
   roaring_uint32_iterator_advance(&i);
 }
+roaring_uint32_iterator_free(&i);
 
 Obviously, if you modify the underlying bitmap, the iterator
 becomes invalid. So don't.
@@ -1085,7 +1154,7 @@ CROARING_DEPRECATED static inline void roaring_init_iterator_last(
 
 /**
  * Create an iterator object that can be used to iterate through the values.
- * Caller is responsible for calling `roaring_free_iterator()`.
+ * Caller is responsible for calling `roaring_uint32_iterator_free()`.
  *
  * The iterator is initialized (this function calls `roaring_iterator_init()`)
  * If there is a value, then this iterator points to the first value and
@@ -1172,7 +1241,7 @@ CROARING_DEPRECATED static inline void roaring_free_uint32_iterator(
     roaring_uint32_iterator_free(it);
 }
 
-/*
+/**
  * Reads next ${count} values from iterator into user-supplied ${buf}.
  * Returns the number of read elements.
  * This number can be smaller than ${count}, which means that iterator is
@@ -1191,6 +1260,101 @@ CROARING_DEPRECATED static inline uint32_t roaring_read_uint32_iterator(
     roaring_uint32_iterator_t *it, uint32_t *buf, uint32_t count) {
     return roaring_uint32_iterator_read(it, buf, count);
 }
+
+/**
+ * Reads previous ${count} values from iterator into user-supplied ${buf}.
+ * Returns the number of read elements.
+ * This number can be smaller than ${count}, which means that iterator is
+ * drained.
+ *
+ * Values are written in descending order: buf[0] is the highest (current)
+ * value, buf[ret-1] is the lowest value read.
+ *
+ * This function satisfies semantics of reverse iteration and can be used
+ * together with other iterator functions.
+ *  - first value is copied from ${it}->current_value
+ *  - after function returns, iterator is positioned at the previous element
+ */
+uint32_t roaring_uint32_iterator_read_backward(roaring_uint32_iterator_t *it,
+                                               uint32_t *buf, uint32_t count);
+
+/**
+ * Skip the next ${count} values from iterator.
+ * Returns the number of values actually skipped.
+ * The number can be smaller than ${count}, which means that iterator is
+ * drained.
+ *
+ * This function is equivalent to calling `roaring_uint32_iterator_advance()`
+ * ${count} times but is much more efficient.
+ */
+uint32_t roaring_uint32_iterator_skip(roaring_uint32_iterator_t *it,
+                                      uint32_t count);
+
+/**
+ * Skip the previous ${count} values from iterator (move backwards).
+ * Returns the number of values actually skipped backwards.
+ * The number can be smaller than ${count}, which means that iterator reached
+ * the beginning.
+ *
+ * This function is equivalent to calling `roaring_uint32_iterator_previous()`
+ * ${count} times but is much more efficient.
+ */
+uint32_t roaring_uint32_iterator_skip_backward(roaring_uint32_iterator_t *it,
+                                               uint32_t count);
+
+typedef struct roaring_uint32_range_closed_s {
+    uint32_t min;
+    uint32_t max;
+} roaring_uint32_range_closed_t;
+
+/**
+ * Reads next ${count} ranges from iterator into user-supplied ${buf}.
+ * A range is defined as a maximal interval of consecutive values.
+ * For example, the set {1,2,3,5,6} contains two ranges: [1..3] and [5..6].
+ * Each range is represented as a struct {min,max}, both endpoints included.
+ * Consecutive values that span internal container boundaries are merged into
+ * a single range.
+ *
+ * Returns the number of read ranges.
+ * This number can be smaller than ${count}, which means that the iterator is
+ * drained.
+ *
+ * This function satisfies the semantics of iteration and can be used together
+ * with other iterator functions.
+ *  - first range will start with ${it}->current_value
+ *  - after the function returns, the iterator is positioned at the next element
+ *    after the end of the last returned range, or ${it}->has_value is false if
+ *    the bitmap is exhausted.
+ */
+size_t roaring_uint32_iterator_read_ranges(roaring_uint32_iterator_t *it,
+                                           roaring_uint32_range_closed_t *buf,
+                                           size_t count);
+
+/**
+ * Reads previous ${count} ranges from iterator into user-supplied ${buf}.
+ * A range is defined as a maximal interval of consecutive values.
+ * For example, the set {1,2,3,5,6} contains two ranges: [1..3] and [5..6].
+ * Each range is represented as a struct {min,max}, both endpoints included.
+ * Consecutive values that span internal container boundaries are merged into
+ * a single range.
+ *
+ * Returns the number of read ranges.
+ * This number can be smaller than ${count}, which means that the iterator is
+ * drained.
+ *
+ * Ranges are returned in reverse order, e.g. the first range returned is the
+ * highest range (ending at the current value)
+ *
+ * This function satisfies the semantics of reverse iteration and can be used
+ * together with other iterator functions.
+ *  - first range will end with ${it}->current_value
+ *  - after the function returns, the iterator is positioned at the element
+ *    before the beginning of the last returned range, or ${it}->has_value is
+ *    false if the bitmap is exhausted.
+ */
+size_t roaring_uint32_iterator_read_prev_ranges(
+    roaring_uint32_iterator_t *it, roaring_uint32_range_closed_t *buf,
+    size_t count);
 
 #ifdef __cplusplus
 }

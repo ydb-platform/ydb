@@ -47,7 +47,7 @@ Y_UNIT_TEST_SUITE(DirectReadWithServer) {
         auto readerSettings = TReadSessionSettings()
             .ConsumerName(setup.GetConsumerName())
             .AppendTopics(setup.GetTopicPath())
-            // .DirectRead(true)
+            .DirectRead(true)
             ;
 
         TIntrusivePtr<TPartitionSession> partitionSession;
@@ -129,7 +129,7 @@ Y_UNIT_TEST_SUITE(DirectReadWithServer) {
         auto readerSettings = TReadSessionSettings()
             .ConsumerName(setup.GetConsumerName())
             .AppendTopics(setup.GetTopicPath())
-            // .DirectRead(true)
+            .DirectRead(true)
             ;
 
         TIntrusivePtr<TPartitionSession> partitionSession;
@@ -175,6 +175,7 @@ Y_UNIT_TEST_SUITE(DirectReadWithServer) {
 
         reader->Close();
     }
+
 } // Y_UNIT_TEST_SUITE_F(DirectReadWithServer)
 
 } // namespace NYdb::NTopic::NTests

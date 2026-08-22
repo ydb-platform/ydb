@@ -1,7 +1,9 @@
 from __future__ import annotations
+from collections import Counter, defaultdict
 import allure
 import json
 import logging
+import re as regex
 import os
 import pytest
 import yatest
@@ -12,7 +14,7 @@ from copy import deepcopy
 from datetime import datetime
 from pytz import timezone
 from time import time
-from typing import Optional, Union
+from typing import Optional, Union, Any
 from ydb.tests.olap.lib.ydb_cli import YdbCliHelper, WorkloadType, CheckCanonicalPolicy
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.allure_utils import allure_test_description, NodeErrors
@@ -29,6 +31,33 @@ class LoadSuiteBase:
             self.timeout = timeout
             self.query_prefix = query_prefix
 
+    class KeyMeasurement:
+        class Interval:
+            def __init__(self, color: str, min: Optional[float] = None, max: Optional[float] = None):
+                self.color = color
+                self.min = min
+                self.max = max
+
+            def get_color(self, value: float) -> str:
+                if self.min is not None and value < self.min:
+                    return ''
+                if self.max is not None and value > self.max:
+                    return ''
+                return self.color
+
+        def __init__(self, name: str, caption: Optional[str] = None, intervals: list[LoadSuiteBase.KeyMeasurement.Interval] = [], description: str = ''):
+            self.name = name
+            self.caption = caption if caption else name
+            self.intervals = intervals
+            self.description = description
+
+        def get_color(self, value: float) -> str:
+            for i in self.intervals:
+                c = i.get_color(value)
+                if c:
+                    return c
+            return ''
+
     iterations: int = 5
     workload_type: WorkloadType = None
     timeout: float = 1800.
@@ -38,7 +67,12 @@ class LoadSuiteBase:
     scale: Optional[int] = None
     query_prefix: str = get_external_param('query-prefix', '')
     verify_data: bool = True
+    float_mode: str = ''
     __nodes_state: Optional[dict[str, YdbCluster.Node]] = None
+
+    @classmethod
+    def get_users(cls) -> list[str]:
+        return ['']
 
     @classmethod
     def get_external_path(cls) -> str:
@@ -78,7 +112,12 @@ class LoadSuiteBase:
                 result.timeout = q.timeout
             if q.query_prefix is not None:
                 result.query_prefix = q.query_prefix
+        result.iterations = int(get_external_param('BENCHMARK_ITERATIONS', result.iterations))
         return result
+
+    @classmethod
+    def get_key_measurements(cls) -> tuple[list[LoadSuiteBase.KeyMeasurement], str]:
+        return [], ''
 
     @classmethod
     @allure.step('check tables size')
@@ -129,8 +168,14 @@ class LoadSuiteBase:
         return text.replace(query_text, '<Query text hided by sequrity reasons>')
 
     @classmethod
-    def __attach_logs(cls, start_time, attach_name, query_text):
-        hosts = [node.host for node in filter(lambda x: x.role == YdbCluster.Node.Role.STORAGE, YdbCluster.get_cluster_nodes())]
+    def __attach_logs(cls, start_time, attach_name, query_text, ignore_roles=False):
+        if ignore_roles:
+            # Получаем уникальные хосты кластера без фильтрации по роли
+            hosts = sorted(set(node.host for node in YdbCluster.get_cluster_nodes()))
+        else:
+            # Оригинальная логика - только STORAGE ноды
+            hosts = [node.host for node in filter(lambda x: x.role == YdbCluster.Node.Role.STORAGE, YdbCluster.get_cluster_nodes())]
+
         tz = timezone('Europe/Moscow')
         start = datetime.fromtimestamp(start_time, tz).isoformat()
         cmd = f"ulimit -n 100500;unified_agent select -S '{start}' -s {{storage}}{{container}}"
@@ -154,6 +199,14 @@ class LoadSuiteBase:
                         container=f' -m k8s_container:{c}' if c else ''))
                 except BaseException as e:
                     logging.error(e)
+
+        if not hosts:
+            allure.attach(
+                "No cluster hosts found, no kikimr logs collected.",
+                f"{attach_name} logs info",
+                allure.attachment_type.TEXT
+            )
+            return
 
         error_log = ''
         for c, execs in exec_start.items():
@@ -197,10 +250,152 @@ class LoadSuiteBase:
                 for core in json.loads(f'[{exec.stdout.strip(",")}]'):
                     slot = f"{core.get('slot', '')}@{h}"
                     core_hashes.setdefault(slot, [])
-                    core_hashes[slot].append((core.get('core_id', ''), core.get('core_hash', '')))
+                    v2_info = (core.get('core_id', ''), core.get('core_hash', ''))
+                    if v2_info[0] is None and v2_info[1] is None:
+                        v3_info = (core.get('core_uuid_v3', ''), core.get('core_hash_v3', ''))
+                        core_hashes[slot].append(v3_info)
+                    else:
+                        core_hashes[slot].append(v2_info)
             else:
                 logging.error(f'Error while search coredumps on host {h}: {exec.stderr}')
         return core_hashes
+
+    @classmethod
+    def __get_sanitizer_events(cls, hosts: set[str], start_time: float, end_time: float) -> dict[str, str]:
+        """Aggregates information about sanitizer errors across hosts.
+
+        Collects and analyzes sanitizer failures within specified time range.
+
+        Args:
+            hosts: Set of target hostnames to analyze
+            start_time: Beginning of analysis time interval (Unix timestamp)
+            end_time: End of analysis time interval (Unix timestamp)
+
+        Returns:
+            Dictionary with hosts as keys and number of occurances and sanitizer output (first 150 lines per error) as values:
+            {
+                "host1.example.com": (18, "First 150 lines of every ThreadSanitizer error"),
+            }
+        """
+        tz = timezone('Europe/Moscow')
+        start = datetime.fromtimestamp(start_time, tz).isoformat()
+        end = datetime.fromtimestamp(end_time + 10, tz).isoformat()
+
+        sanitizer_regex_params = r'(ERROR|WARNING): (AddressSanitizer|MemorySanitizer|ThreadSanitizer|LeakSanitizer|UndefinedBehaviorSanitizer)'
+
+        core_processes = {
+            h: cls.execute_ssh(h, f"ulimit -n 100500;unified_agent select -S '{start}' -U '{end}' -s kikimr-start | grep -P -A 150 '{sanitizer_regex_params}'")
+            for h in hosts
+        }
+
+        def count_regex_matches(pattern, text):
+            return sum(1 for _ in regex.finditer(pattern, text))
+
+        host_logs = {}
+        for h, exec in core_processes.items():
+            exec.wait(check_exit_code=False)
+            if exec.returncode != 0:
+                logging.error(f'Error while process sanitizers on host {h}: {exec.stderr}')
+            else:
+                host_logs[h] = (count_regex_matches(sanitizer_regex_params, exec.stdout), exec.stdout)
+        return host_logs
+
+    @classmethod
+    def __get_verify_fails(
+        cls,
+        hosts: set[str],
+        start_time: float,
+        end_time: float
+    ) -> dict[str, dict[str, str | dict[str, int]]]:
+        """Aggregates information about VERIFY failed errors across hosts.
+
+        Collects and analyzes verification failures within specified time range,
+        grouping errors by unique patterns and counting occurrences per host.
+
+        Args:
+            hosts: Set of target hostnames to analyze
+            start_time: Beginning of analysis time interval (Unix timestamp)
+            end_time: End of analysis time interval (Unix timestamp)
+
+        Returns:
+            Dictionary with verification failure patterns as keys and structured information as values:
+            {
+                "verify failed at example.cpp:123": {
+                    "full_trace": "Full VERIFY failed text",
+                    "hosts_count": {
+                        "host1.example.com": 3,
+                        "host2.example.com": 1
+                    }
+                }
+            }
+        """
+        tz = timezone('Europe/Moscow')
+        start = datetime.fromtimestamp(start_time, tz).isoformat()
+        end = datetime.fromtimestamp(end_time + 10, tz).isoformat()
+
+        # Matches VERIFY failed error blocks in logs.
+        # Capture groups:
+        #   1. The entire VERIFY failed block (full match).
+        #   2. The indented lines following the VERIFY failed header (typically stack trace or error details).
+        #   3. Lines starting with a digit and a dot (e.g., stack frame lines), possibly repeated.
+        verify_regex_params = r'(VERIFY failed \(.+\): .*\n(\s+.*\n\s+.*\n)(\d+\..*\n)*)'
+        verify_regex = regex.compile(verify_regex_params)
+
+        core_processes = {
+            h: cls.execute_ssh(h, fr"ulimit -n 100500;unified_agent select -S '{start}' -U '{end}' -s kikimr-start | grep -Pzo -i '{verify_regex_params}' | head -n 50000")
+            for h in hosts
+        }
+
+        host_matches = defaultdict(lambda: [])
+        for h, exec in core_processes.items():
+            exec.wait(check_exit_code=False)
+            if exec.returncode != 0:
+                logging.error(f'Error while process VERIFY fails on host {h}: {exec.stderr}')
+            else:
+                verifies_stdout = exec.stdout
+                matches = verify_regex.findall(verifies_stdout)
+                for m in matches:
+                    host_matches[h].append((m[0], m[1]))
+        verifies_info = defaultdict(lambda: {
+            'full_trace': None,
+            'hosts_count': defaultdict(0)
+        })
+        for host, verify_match in host_matches.items():
+            verifies_patterns = list(map(lambda m: m[1], verify_match))
+            unique_verify_patterns = set(verifies_patterns)
+            counters = Counter(verifies_patterns)
+            for pattern in unique_verify_patterns:
+                if pattern in verifies_info:
+                    verifies_info[pattern]['hosts_count'][host] = counters[pattern]
+                else:
+                    verifies_info[pattern] = {
+                        'full_trace': next(m for m in verify_match if m[1] == pattern),
+                        'hosts_count': {host: counters[pattern]}
+                    }
+        return verifies_info
+
+    @classmethod
+    def __count_verify_fails(cls, hosts: set[str], start_time: float, end_time: float) -> dict[str, int]:
+        tz = timezone('Europe/Moscow')
+        start = datetime.fromtimestamp(start_time, tz).isoformat()
+        end = datetime.fromtimestamp(end_time + 10, tz).isoformat()
+
+        verify_regex_params = r'VERIFY failed'
+
+        core_processes = {
+            h: cls.execute_ssh(h, fr"ulimit -n 100500;unified_agent select -S '{start}' -U '{end}' -s kikimr-start | grep -ic '{verify_regex_params}'")
+            for h in hosts
+        }
+
+        total_host_verify_fails = dict()
+        for h, exec in core_processes.items():
+            exec.wait(check_exit_code=False)
+            if exec.returncode != 0:
+                logging.error(f'Error while process VERIFY fails on host {h}: {exec.stderr}')
+            else:
+                total_host_verify_fails[h] = int(exec.stdout)
+
+        return total_host_verify_fails
 
     @classmethod
     def __get_hosts_with_omms(cls, hosts: set[str], start_time: float, end_time: float) -> set[str]:
@@ -218,6 +413,26 @@ class LoadSuiteBase:
             else:
                 logging.error(f'Error while search OOMs on host {h}: {exec.stderr}')
         return ooms
+
+    @classmethod
+    def __get_key_measurements_block(cls, result: YdbCliHelper.WorkloadRunResult, query_name: str) -> str:
+        stats = result.get_stats(query_name)
+        empty = True
+        result = '''<h3>Key Measurements</h3>
+        <table border='1' cellpadding='2px' style='border-collapse: collapse; font-size: 12px;'>
+        <tr style='background-color: #f0f0f0;'><th>Measurement</th><th>Value</th><th>Description</th></tr>'''
+        measurements, explanations = cls.get_key_measurements()
+        for m in measurements:
+            value = stats.get(m.name)
+            if value is None:
+                continue
+            empty = False
+            color = m.get_color(value)
+            result += f"<tr style='background-color: {color};'><td>{m.caption}</td><td>{value:.6g}</td><td>{m.description}</td></tr>"
+        result += '</table>'
+        if explanations:
+            result += f'<h4>Explanations</h4>{explanations}'
+        return '' if empty else result
 
     @classmethod
     def check_nodes(cls, result: YdbCliHelper.WorkloadRunResult, end_time: float) -> list[NodeErrors]:
@@ -250,7 +465,9 @@ class LoadSuiteBase:
         return node_errors
 
     @classmethod
-    def process_query_result(cls, result: YdbCliHelper.WorkloadRunResult, query_name: str, upload: bool):
+    def process_query_result(cls, result: YdbCliHelper.WorkloadRunResult, query_name: str, upload: bool,
+                             allure_table_strings: Optional[dict[str, Any]] = None,
+                             node_errors: Optional[list] = None, verify_errors: Optional[dict] = None):
         def _get_duraton(stats, field):
             r = stats.get(field)
             return float(r) / 1e3 if r is not None else None
@@ -312,10 +529,17 @@ class LoadSuiteBase:
         if result.stderr is not None:
             allure.attach(cls.__hide_query_text(result.stderr, query_text), 'Stderr', attachment_type=allure.attachment_type.TEXT)
         end_time = time()
+        if node_errors is None:
+            node_errors = cls.check_nodes(result, end_time)
         allure_test_description(
             cls.suite(), query_name,
-            start_time=result.start_time, end_time=end_time, node_errors=cls.check_nodes(result, end_time),
-            workload_result=result, workload_params=None
+            start_time=result.start_time, end_time=end_time, node_errors=node_errors,
+            verify_errors=verify_errors,
+            workload_result=result, workload_params=None,
+            addition_blocks=[
+                cls.__get_key_measurements_block(result, query_name)
+            ],
+            addition_table_strings=allure_table_strings
         )
         stats = result.get_stats(query_name)
         for p in ['Mean']:
@@ -346,7 +570,11 @@ class LoadSuiteBase:
             raise Exception(result.warning_message)
 
     @classmethod
-    def setup_class(cls) -> None:
+    def perform_verification(cls) -> None:
+        """
+        Выполняет _Verification проверку кластера.
+        Может быть переопределена в наследниках для изменения момента выполнения.
+        """
         cls._setup_start_time = time()
         result = YdbCliHelper.WorkloadRunResult()
         result.iterations[0] = YdbCliHelper.Iteration()
@@ -365,6 +593,11 @@ class LoadSuiteBase:
         first_node_start_time = min(nodes_start_time) if len(nodes_start_time) > 0 else 0
         result.start_time = max(cls._setup_start_time - 600, first_node_start_time)
         cls.process_query_result(result, query_name, True)
+
+    @classmethod
+    def setup_class(cls) -> None:
+        # Выполняем _Verification в setup_class по умолчанию (для обратной совместимости)
+        cls.perform_verification()
 
     @classmethod
     def teardown_class(cls) -> None:
@@ -451,6 +684,7 @@ class LoadSuiteBase:
             scale=self.scale,
             query_prefix=qparams.query_prefix,
             external_path=self.get_external_path(),
+            users=self.get_users(),
         )[query_name]
         self.process_query_result(result, query_name, True)
 
@@ -461,6 +695,35 @@ class LoadSuiteBase:
         Проверяет coredump'ы и OOM для всех нод из сохраненного состояния.
         """
         return cls.check_nodes_diagnostics_with_timing(result, result.start_time, end_time)
+
+    @classmethod
+    def check_nodes_verifies_with_timing(cls, start_time: float, end_time: float):
+        """Aggregates information about VERIFY failed errors across hosts.
+
+        Collects and analyzes verification failures within specified time range,
+        grouping errors by unique patterns and counting occurrences per host.
+
+        Args:
+            hosts: Set of target hostnames to analyze
+            start_time: Beginning of analysis time interval (Unix timestamp)
+            end_time: End of analysis time interval (Unix timestamp)
+
+        Returns:
+            Dictionary with verification failure patterns as keys and structured information as values:
+            {
+                "verify failed at example.cpp:123": {
+                    "full_trace": "Full VERIFY failed text",
+                    "hosts_count": {
+                        "host1.example.com": 3,
+                        "host2.example.com": 1
+                    }
+                }
+            }
+        """
+        if cls.__nodes_state is None:
+            return {}
+        all_hosts = {node.host for node in cls.__nodes_state.values()}
+        return cls.__get_verify_fails(all_hosts, start_time, end_time)
 
     @classmethod
     def check_nodes_diagnostics_with_timing(cls, result: YdbCliHelper.WorkloadRunResult, start_time: float, end_time: float) -> list[NodeErrors]:
@@ -482,6 +745,8 @@ class LoadSuiteBase:
         # Собираем диагностическую информацию для всех хостов
         core_hashes = cls.__get_core_hashes_by_pod(all_hosts, start_time, end_time)
         ooms = cls.__get_hosts_with_omms(all_hosts, start_time, end_time)
+        hosts_with_sanitizer = cls.__get_sanitizer_events(all_hosts, start_time, end_time)
+        hosts_with_verifies = cls.__count_verify_fails(all_hosts, start_time, end_time)
 
         # Создаем NodeErrors для каждой ноды с диагностической информацией
         node_errors = []
@@ -489,211 +754,149 @@ class LoadSuiteBase:
             # Создаем NodeErrors только если есть coredump'ы или OOM
             has_cores = bool(core_hashes.get(node.slot, []))
             has_oom = node.host in ooms
+            has_verifies = node.host in hosts_with_verifies
+            has_san_errors = node.host in hosts_with_sanitizer
 
-            if has_cores or has_oom:
+            if has_cores or has_oom or node.host in hosts_with_verifies or node.host in hosts_with_sanitizer:
                 node_error = NodeErrors(node, 'diagnostic info collected')
                 node_error.core_hashes = core_hashes.get(node.slot, [])
                 node_error.was_oom = has_oom
+                if node.host in hosts_with_verifies:
+                    node_error.verifies = hosts_with_verifies[node.host]
+                if node.host in hosts_with_sanitizer:
+                    node_error.sanitizer_errors = hosts_with_sanitizer[node.host][0]
+                    node_error.sanitizer_output = hosts_with_sanitizer[node.host][1]
                 node_errors.append(node_error)
 
                 # Добавляем ошибки в результат (cores и OOM - это errors)
+                if has_verifies:
+                    result.add_error(f'Node {node.host} had {hosts_with_verifies[node.host]} VERIFY fails')
                 if has_cores:
                     result.add_error(f'Node {node.slot} has {len(node_error.core_hashes)} coredump(s)')
                 if has_oom:
                     result.add_error(f'Node {node.slot} experienced OOM')
+                if has_san_errors:
+                    result.add_error(f'Node {node.host} has SAN errors')
 
         cls.__nodes_state = None
         return node_errors
 
-    @classmethod
-    def process_workload_result_with_diagnostics(cls, result: YdbCliHelper.WorkloadRunResult, workload_name: str, upload: bool):
+    def _collect_workload_params(self, result, workload_name):
         """
-        Обрабатывает результаты workload с диагностической информацией о нодах.
-        Упрощенная версия без query-специфичной функциональности.
+        Собирает параметры workload для отчёта.
+        1. Сначала добавляет ключевые параметры из params_to_include (гарантированно попадут в отчёт).
+        2. Затем добавляет все остальные параметры из статистики workload, кроме исключённых (служебных), чтобы не потерять новые или специфичные метрики.
         """
-        def _get_duraton(stats, field):
-            r = stats.get(field)
-            return float(r) / 1e3 if r is not None else None
-
-        def _duration_text(duration: float | int):
-            s = f'{int(duration)}s ' if duration >= 1 else ''
-            return f'{s}{int(duration * 1000) % 1000}ms'
-
-        # Обрабатываем только iterations для workload (без планов запросов)
-        for iter_num in sorted(result.iterations.keys()):
-            iter_res = result.iterations[iter_num]
-            s = allure.step(f'Workload Iteration {iter_num}')
-            if iter_res.time:
-                s.params['duration'] = _duration_text(iter_res.time)
-            try:
-                with s:
-                    if iter_res.error_message:
-                        pytest.fail(iter_res.error_message)
-            except BaseException:
-                pass
-
-        # Прикрепляем stdout/stderr если есть
-        if result.stdout is not None:
-            allure.attach(result.stdout, 'Workload stdout', attachment_type=allure.attachment_type.TEXT)
-
-        if result.stderr is not None:
-            allure.attach(result.stderr, 'Workload stderr', attachment_type=allure.attachment_type.TEXT)
-
-        end_time = time()
-
-        # Собираем диагностическую информацию о нодах
-        # Используем время начала workload (если доступно) для более точной диагностики
-        diagnostics_start_time = getattr(result, 'workload_start_time', result.start_time)
-        node_errors = cls.check_nodes_diagnostics_with_timing(result, diagnostics_start_time, end_time)
-
-        # Добавляем диагностическую информацию в статистику
-        if node_errors:
-            # Подсчитываем общую статистику по нодам
-            total_coredumps = sum(len(node_error.core_hashes) for node_error in node_errors)
-            nodes_with_oom = sum(1 for node_error in node_errors if node_error.was_oom)
-            nodes_with_cores = sum(1 for node_error in node_errors if node_error.core_hashes)
-
-            # Добавляем в статистику результата
-            result.add_stat(workload_name, "nodes_with_issues", len(node_errors))
-            result.add_stat(workload_name, "total_coredumps", total_coredumps)
-            result.add_stat(workload_name, "nodes_with_oom", nodes_with_oom)
-            result.add_stat(workload_name, "nodes_with_coredumps", nodes_with_cores)
-
-            # Детальная информация по каждой ноде
-            node_details = {}
-            for node_error in node_errors:
-                node_key = node_error.node.slot
-                node_details[node_key] = {
-                    "host": node_error.node.host,
-                    "coredumps_count": len(node_error.core_hashes),
-                    "has_oom": node_error.was_oom,
-                    "coredump_hashes": [core_hash for _, core_hash in node_error.core_hashes]
-                }
-
-            result.add_stat(workload_name, "node_diagnostics", node_details)
-        else:
-            # Если проблем не найдено, тоже добавляем в статистику
-            result.add_stat(workload_name, "nodes_with_issues", 0)
-            result.add_stat(workload_name, "total_coredumps", 0)
-            result.add_stat(workload_name, "nodes_with_oom", 0)
-            result.add_stat(workload_name, "nodes_with_coredumps", 0)
-
-        # Собираем параметры workload из статистики
-        stats = result.get_stats(workload_name)
         workload_params = {}
+        workload_stats = result.get_stats(workload_name)
+        if workload_stats:
+            # 1. Добавляем только самые важные параметры (гарантированно попадут в отчёт)
+            params_to_include = [
+                'total_runs', 'planned_duration', 'actual_duration',
+                'use_iterations', 'workload_type', 'table_type',
+                'total_iterations', 'total_threads'
+            ]
+            for param in params_to_include:
+                if param in workload_stats:
+                    workload_params[param] = workload_stats[param]
+            # 2. Добавляем все остальные параметры, кроме исключённых служебных
+            # Это позволяет автоматически включать новые/дополнительные метрики
+            for key, value in workload_stats.items():
+                if key not in workload_params and key not in ['success_rate', 'successful_runs', 'failed_runs']:
+                    workload_params[key] = value
+        return workload_params
 
-        # Извлекаем полезные параметры из статистики
-        if stats.get('total_runs'):
-            workload_params['Total Runs'] = stats['total_runs']
-        if stats.get('planned_duration'):
-            workload_params['Planned Duration'] = f"{stats['planned_duration']}s"
-        if stats.get('use_chunks'):
-            workload_params['Use Chunks'] = 'Yes' if stats['use_chunks'] else 'No'
-        if stats.get('workload_type'):
-            workload_params['Workload Type'] = stats['workload_type']
-        if stats.get('table_type'):
-            workload_params['Table Type'] = stats['table_type']
-        if stats.get('path'):
-            workload_params['Path'] = stats['path']
+    def _diagnose_nodes(self, result, workload_name):
+        """Проводит диагностику нод (cores/oom) и возвращает список ошибок"""
+        try:
+            end_time = time()
+            diagnostics_start_time = getattr(result, 'workload_start_time', result.start_time)
+            node_errors = type(self).check_nodes_diagnostics_with_timing(result, diagnostics_start_time, end_time)
+        except Exception as e:
+            logging.error(f"Error getting nodes state: {e}")
+            result.add_warning(f"Error getting nodes state: {e}")
+            node_errors = []
+        return node_errors
 
-        # Добавляем информацию в allure отчет с node_errors
+    def _create_allure_report(self, result, workload_name, workload_params, node_errors, use_node_subcols, verify_errors):
+        """Формирует allure-отчёт по результатам workload"""
+        end_time = time()
+        start_time = result.start_time if result.start_time else end_time - 1
+        additional_table_strings = {}
+        if workload_params.get('actual_duration') is not None:
+            actual_duration = workload_params['actual_duration']
+            planned_duration = workload_params.get('planned_duration', getattr(self, 'timeout', 0))
+            actual_minutes = int(actual_duration) // 60
+            actual_seconds = int(actual_duration) % 60
+            planned_minutes = int(planned_duration) // 60
+            planned_seconds = int(planned_duration) % 60
+            additional_table_strings['execution_time'] = f"Actual: {actual_minutes}m {actual_seconds}s (Planned: {planned_minutes}m {planned_seconds}s)"
+        if 'total_iterations' in workload_params and 'total_threads' in workload_params:
+            total_iterations = workload_params['total_iterations']
+            total_threads = workload_params['total_threads']
+            if total_iterations == 1 and total_threads > 1:
+                additional_table_strings['execution_mode'] = f"Single iteration with {total_threads} parallel threads"
+            elif total_iterations > 1:
+                avg_threads = workload_params.get('avg_threads_per_iteration', 1)
+                additional_table_strings['execution_mode'] = f"{total_iterations} iterations with avg {avg_threads:.1f} threads per iteration"
         allure_test_description(
-            cls.suite(), workload_name,
-            start_time=result.start_time, end_time=end_time, node_errors=node_errors,
-            workload_result=result, workload_params=workload_params
+            suite=type(self).suite(),
+            test=workload_name,
+            start_time=start_time,
+            end_time=end_time,
+            addition_table_strings=additional_table_strings,
+            node_errors=node_errors,
+            verify_errors=verify_errors,
+            workload_result=result,
+            workload_params=workload_params,
+            use_node_subcols=use_node_subcols,
         )
 
-        # Логируем статистику для отладки
-        logging.info(f"Workload {workload_name} statistics: {json.dumps(stats, indent=2)}")
+    def _handle_final_status(self, result, workload_name, node_errors):
+        """Обрабатывает финальный статус теста: fail, broken, etc."""
+        stats = result.get_stats(workload_name)
+        node_issues = stats.get("nodes_with_issues", 0) if stats else 0
+        workload_errors = []
+        if result.errors:
+            for err in result.errors:
+                if "coredump" not in err.lower() and "oom" not in err.lower():
+                    workload_errors.append(err)
 
-        for p in ['Mean']:
-            if p in stats:
-                allure.dynamic.parameter(p, _duration_text(stats[p] / 1000.))
+        # --- Переключатель: если cluster_log=all, то всегда прикладываем логи ---
+        cluster_log_mode = get_external_param('cluster_log', 'default')
+        attach_logs_method = getattr(type(self), "_LoadSuiteBase__attach_logs", None)
+        if attach_logs_method:
+            try:
+                if cluster_log_mode == 'all' or node_issues > 0 or workload_errors:
+                    attach_logs_method(
+                        start_time=getattr(result, "start_time", None),
+                        attach_name="kikimr",
+                        query_text="",
+                        ignore_roles=True  # Собираем логи со всех уникальных хостов
+                    )
+            except Exception as e:
+                logging.warning(f"Failed to attach kikimr logs: {e}")
 
-        # Прикрепляем логи только при неуспешном выполнении
-        if os.getenv('NO_KUBER_LOGS') is None and not result.success:
-            cls.__attach_logs(start_time=result.start_time, attach_name='cluser', query_text='')
-
-        # Прикрепляем статистику
-        allure.attach(json.dumps(stats, indent=2), 'Workload Stats', attachment_type=allure.attachment_type.JSON)
-
-        # Детальная информация об ошибках для диагностики
-        if stats.get('errors') and any(stats['errors'].values()):
-            error_details = []
-            error_details.append(f"Error Summary from stats: {stats['errors']}")
-
-            if result.error_message:
-                error_details.append(f"Error Message: {result.error_message}")
-            if result.warning_message:
-                error_details.append(f"Warning Message: {result.warning_message}")
-            if result.stderr:
-                error_details.append(f"Stderr: {result.stderr}")
-            if result.stdout and "error" in result.stdout.lower():
-                error_details.append(f"Stdout (errors): {result.stdout}")
-
-            # Информация из iterations
-            for iter_num, iteration in result.iterations.items():
-                if iteration.error_message:
-                    error_details.append(f"Iteration {iter_num} error: {iteration.error_message}")
-
-            error_report = "\n\n".join(error_details)
-            allure.attach(error_report, 'Detailed Error Information', attachment_type=allure.attachment_type.TEXT)
-            logging.warning(f"Workload {workload_name} completed with errors: {error_report}")
-
-        # Дополнительная информация о диагностике нод
-        if node_errors:
-            node_diagnostics_details = []
-            node_diagnostics_details.append(f"Found issues on {len(node_errors)} nodes:")
-
-            for node_error in node_errors:
-                node_info = [f"Node: {node_error.node.slot} (host: {node_error.node.host})"]
-                if node_error.core_hashes:
-                    node_info.append(f"  - Coredumps: {len(node_error.core_hashes)}")
-                    for core_id, core_hash in node_error.core_hashes:
-                        node_info.append(f"    * ID: {core_id}, Hash: {core_hash}")
-                if node_error.was_oom:
-                    node_info.append("  - OOM detected")
-                node_diagnostics_details.append("\n".join(node_info))
-
-            diagnostics_report = "\n\n".join(node_diagnostics_details)
-            allure.attach(diagnostics_report, 'Node Diagnostics Report', attachment_type=allure.attachment_type.TEXT)
-            logging.info(f"Node diagnostics for workload {workload_name}: {diagnostics_report}")
-        else:
-            allure.attach("No node issues detected during workload execution", 'Node Diagnostics Report', attachment_type=allure.attachment_type.TEXT)
-            logging.info(f"No node issues detected for workload {workload_name}")
-
-        # Загружаем результаты если нужно
-        if upload:
-            ResultsProcessor.upload_results(
-                kind='Load',
-                suite=cls.suite(),
-                test=workload_name,
-                timestamp=end_time,
-                is_successful=result.success,
-                min_duration=_get_duraton(stats, 'Min'),
-                max_duration=_get_duraton(stats, 'Max'),
-                mean_duration=_get_duraton(stats, 'Mean'),
-                median_duration=_get_duraton(stats, 'Median'),
-                statistics=stats,
-            )
+        # --- FAIL TEST IF CORES OR OOM FOUND ---
+        if node_issues > 0:
+            error_msg = f"Test failed: found {node_issues} node(s) with coredump(s), OOM(s), VERIFY fail(s) or SAN errors"
+            pytest.fail(error_msg)
+        # --- MARK TEST AS BROKEN IF WORKLOAD ERRORS (not cores/oom) ---
+        if workload_errors:
+            allure.dynamic.label("severity", "critical")
+            raise Exception("Test marked as broken due to workload errors: " + "; ".join(workload_errors))
 
         # В диагностическом режиме не падаем из-за предупреждений о coredump'ах/OOM
         if not result.success and result.error_message:
             # Создаем детальное сообщение об ошибке с контекстом
             error_details = []
-
-            # Основная ошибка
             error_details.append(f"WORKLOAD EXECUTION FAILED: {workload_name}")
             error_details.append(f"Main error: {result.error_message}")
-
-            # Информация о выполненных итерациях
             if result.iterations:
                 error_details.append("\nExecution details:")
                 error_details.append(f"Total iterations attempted: {len(result.iterations)}")
-
                 failed_iterations = []
                 successful_iterations = []
-
                 for iter_num, iteration in result.iterations.items():
                     if iteration.error_message:
                         failed_iterations.append({
@@ -706,35 +909,26 @@ class LoadSuiteBase:
                             'iteration': iter_num,
                             'time': iteration.time
                         })
-
                 if failed_iterations:
                     error_details.append(f"\nFAILED ITERATIONS ({len(failed_iterations)}):")
                     for fail_info in failed_iterations:
                         error_details.append(f"  - Iteration {fail_info['iteration']}: {fail_info['error']} (time: {fail_info['time']:.1f}s)")
-
                 if successful_iterations:
                     error_details.append(f"\nSuccessful iterations ({len(successful_iterations)}):")
                     for success_info in successful_iterations:
                         error_details.append(f"  - Iteration {success_info['iteration']}: OK (time: {success_info['time']:.1f}s)")
-
-            # Добавляем stderr/stdout если есть полезная информация
             if result.stderr and result.stderr.strip():
-                # Берем последние 500 символов stderr для контекста
                 stderr_preview = result.stderr.strip()
                 if len(stderr_preview) > 500:
                     stderr_preview = "..." + stderr_preview[-500:]
                 error_details.append(f"\nSTDERR (last 500 chars):\n{stderr_preview}")
-
             if result.stdout and "error" in result.stdout.lower():
-                # Ищем строки с "error" в stdout
                 stdout_lines = result.stdout.split('\n')
                 error_lines = [line for line in stdout_lines if 'error' in line.lower()]
                 if error_lines:
                     error_details.append("\nError lines from STDOUT:")
-                    for line in error_lines[:5]:  # Показываем максимум 5 строк
+                    for line in error_lines[:5]:
                         error_details.append(f"  {line.strip()}")
-
-            # Информация о статистике если есть
             stats = result.get_stats(workload_name)
             if stats:
                 if 'successful_runs' in stats and 'total_runs' in stats:
@@ -744,35 +938,45 @@ class LoadSuiteBase:
                         error_details.append(f"  Failed runs: {stats['failed_runs']}")
                     if 'success_rate' in stats:
                         error_details.append(f"  Success rate: {stats['success_rate']:.1%}")
-
-                # Показываем информацию о deployment если есть
                 if any(key.startswith('deployment_') for key in stats.keys()):
                     deployment_info = {k: v for k, v in stats.items() if k.startswith('deployment_')}
                     if deployment_info:
                         error_details.append("\nDEPLOYMENT INFO:")
                         for key, value in deployment_info.items():
                             error_details.append(f"  {key}: {value}")
-
-            # Финальное сообщение
             detailed_error_message = "\n".join(error_details)
-
             exc = pytest.fail.Exception(detailed_error_message)
             if result.traceback is not None:
                 exc = exc.with_traceback(result.traceback)
             raise exc
-
-        # Логируем предупреждения, но не падаем
         if result.warning_message:
             logging.warning(f"Workload completed with warnings: {result.warning_message}")
+
+    def _upload_results(self, result, workload_name):
+        stats = result.get_stats(workload_name)
+        if stats is not None:
+            stats["aggregation_level"] = "aggregate"
+            stats["run_id"] = ResultsProcessor.get_run_id()
+        end_time = time()
+        ResultsProcessor.upload_results(
+            kind='Load',
+            suite=type(self).suite(),
+            test=workload_name,
+            timestamp=end_time,
+            is_successful=result.success,
+            statistics=stats,
+        )
 
 
 class LoadSuiteParallel(LoadSuiteBase):
     threads: int = 0
 
-    def get_query_list() -> list[str]:
+    @classmethod
+    def get_query_list(cls) -> list[str]:
         return []
 
-    def get_path() -> str:
+    @classmethod
+    def get_path(cls) -> str:
         return ''
 
     __results: dict[str, YdbCliHelper.WorkloadRunResult] = {}
@@ -792,7 +996,8 @@ class LoadSuiteParallel(LoadSuiteBase):
             scale=cls.scale,
             query_prefix=qparams.query_prefix,
             external_path=cls.get_external_path(),
-            threads=cls.threads
+            threads=cls.threads,
+            users=cls.get_users(),
         )
 
     def test(self, query_name):

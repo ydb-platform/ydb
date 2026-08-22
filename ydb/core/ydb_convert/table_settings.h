@@ -14,6 +14,9 @@ void MEWarning(const TString& settingName, TList<TString>& warnings);
 bool FillCreateTableSettingsDesc(NKikimrSchemeOp::TTableDescription& out,
     const Ydb::Table::CreateTableRequest& in,
     Ydb::StatusIds::StatusCode& code, TString& error, TList<TString>& warnings, bool tableProfileSet);
+bool FillCreateTableSettingsDesc(NKikimrSchemeOp::TColumnTableDescription& out,
+    const Ydb::Table::CreateTableRequest& in,
+    Ydb::StatusIds::StatusCode& code, TString& error);
 
 bool FillAlterTableSettingsDesc(NKikimrSchemeOp::TTableDescription& out,
     const Ydb::Table::AlterTableRequest& in,

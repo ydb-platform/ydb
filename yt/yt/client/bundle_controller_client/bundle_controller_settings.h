@@ -8,8 +8,6 @@
 
 #include <yt/yt/core/ytree/yson_struct.h>
 
-#include <yt/yt_proto/yt/client/bundle_controller/proto/bundle_controller_service.pb.h>
-
 namespace NYT::NBundleControllerClient {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -62,7 +60,7 @@ struct TInstanceResources
     // Bytes per second.
     std::optional<i64> NetBytes;
 
-    TString Type;
+    std::string Type;
     int Vcpu;
 
     bool operator==(const TInstanceResources& resources) const;
@@ -102,7 +100,7 @@ struct TInstanceSize
     TInstanceResourcesPtr ResourceGuarantee;
     TDefaultInstanceConfigPtr DefaultConfig;
 
-    std::optional<TString> HostTagFilter;
+    std::optional<std::string> HostTagFilter;
 
     REGISTER_YSON_STRUCT(TInstanceSize);
 

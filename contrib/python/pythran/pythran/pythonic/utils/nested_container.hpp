@@ -15,11 +15,11 @@ namespace utils
   long nested_container_size<T>::flat_size(T const &t)
   {
     auto n = t.size();
-    return n ? n * nested_container_size<typename std::conditional<
+    return n ? n * nested_container_size<std::conditional_t<
                        // If we have a scalar or a complex, we want to stop
                        // recursion, and then dispatch to bool specialization
                        types::is_dtype<typename Type::value_type>::value, bool,
-                       typename Type::value_type>::type>::flat_size(*t.begin())
+                       typename Type::value_type>>::flat_size(*t.begin())
              : 0;
   }
 

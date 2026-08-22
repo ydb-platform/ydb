@@ -10,6 +10,8 @@
 
 #include <library/cpp/monlib/service/pages/templates.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_LOGCUTTER
+
 namespace NKikimr {
 
     ////////////////////////////////////////////////////////////////////////////
@@ -26,11 +28,15 @@ namespace NKikimr {
         ui64 SyncerLsnToKeep = 0;
         ui64 HugeKeeperLsnToKeep = 0;
         ui64 ScrubLsnToKeep = 0;
+        ui64 MetadataLsnToKeep = 0;
+        ui64 ChunkKeeperLsnToKeep = 0;
         TInstant HullLastTime;
         TInstant SyncLogLastTime;
         TInstant SyncerLastTime;
         TInstant HugeKeeperLastTime;
         TInstant ScrubLastTime;
+        TInstant MetadataLastTime;
+        TInstant ChunkKeeperLastTime;
 
         TInstant LastCutTime;
         TDeque<ui64> FreeUpToLsn;
@@ -54,6 +60,9 @@ namespace NKikimr {
             CHECK_PDISK_RESPONSE(LogCutterCtx.VCtx, ev, ctx);
 
             WriteInProgress = false;
+            if (LogCutterCtx.NotifyId) {
+                ctx.Send(LogCutterCtx.NotifyId, new TEvRecoveryLogCutDone(FirstLsnToKeepLastWritten));
+            }
             Process(ctx);
         }
 
@@ -62,19 +71,12 @@ namespace NKikimr {
 
             auto update = [&](ui64 &target, TInstant &time, const char *name) {
                 if (msg->LastKeepLsn < target) {
-                    LOG_CRIT(ctx, NKikimrServices::BS_LOGCUTTER,
-                             VDISKP(LogCutterCtx.VCtx->VDiskLogPrefix,
-                                "Log rollback component# %s current# %" PRIu64
-                                " new# %" PRIu64, name, target, msg->LastKeepLsn));
+                    YDB_LOG_CRIT_CTX(ctx, VDISKP(LogCutterCtx.VCtx->VDiskLogPrefix, "Log rollback component# %s current# %" PRIu64 " new# %" PRIu64, name, target, msg->LastKeepLsn));
                 } else {
                     target = msg->LastKeepLsn;
                     time = msg->GenerationTime;
 
-                    LOG_DEBUG(ctx, NKikimrServices::BS_LOGCUTTER,
-                            VDISKP(LogCutterCtx.VCtx->VDiskLogPrefix,
-                                "UPDATED: Component# %s Hull# %" PRIu64 " SyncLog# %" PRIu64
-                                " Syncer# %" PRIu64 " Huge# %" PRIu64 " Db# LogoBlobs Db# Barriers Db# Blocks",
-                                name, HullLsnToKeep, SyncLogLsnToKeep, SyncerLsnToKeep, HugeKeeperLsnToKeep));
+                    YDB_LOG_DEBUG_CTX(ctx, VDISKP(LogCutterCtx.VCtx->VDiskLogPrefix, "UPDATED: Component# %s Hull# %" PRIu64 " SyncLog# %" PRIu64 " Syncer# %" PRIu64 " Huge# %" PRIu64 " Db# LogoBlobs Db# Barriers Db# Blocks", name, HullLsnToKeep, SyncLogLsnToKeep, SyncerLsnToKeep, HugeKeeperLsnToKeep));
                 }
             };
 
@@ -93,6 +95,12 @@ namespace NKikimr {
                     break;
                 case TEvVDiskCutLog::Scrub:
                     update(ScrubLsnToKeep, ScrubLastTime, "Scrub");
+                    break;
+                case TEvVDiskCutLog::Metadata:
+                    update(MetadataLsnToKeep, MetadataLastTime, "Metadata");
+                    break;
+                case TEvVDiskCutLog::ChunkKeeper:
+                    update(ChunkKeeperLsnToKeep, ChunkKeeperLastTime, "ChunkKeeper");
                     break;
                 default:
                     Y_ABORT("Unexpected case: %d", msg->Component);
@@ -115,11 +123,16 @@ namespace NKikimr {
             if (WriteInProgress)
                 return;
 
-            const ui64 curLsn = Min(HullLsnToKeep, SyncLogLsnToKeep, SyncerLsnToKeep, HugeKeeperLsnToKeep, ScrubLsnToKeep);
+            ui64 curLsn = Min(HullLsnToKeep, SyncLogLsnToKeep, SyncerLsnToKeep,
+                HugeKeeperLsnToKeep, ScrubLsnToKeep, ChunkKeeperLsnToKeep);
+
+            if (LogCutterCtx.WriteMetadata) {
+                curLsn = Min(curLsn, MetadataLsnToKeep);
+            }
 
             // only issue command if there is a progress in FreeUpToLsn queue
             bool progress = false;
-            for (; FreeUpToLsn && FreeUpToLsn.front() < curLsn; FreeUpToLsn.pop_front()) {
+            for (; FreeUpToLsn && FreeUpToLsn.front() <= curLsn; FreeUpToLsn.pop_front()) {
                 progress = true;
             }
 
@@ -134,15 +147,13 @@ namespace NKikimr {
                 ui8 signature = TLogSignature::SignatureHullCutLog;
                 ctx.Send(LogCutterCtx.LoggerId,
                     new NPDisk::TEvLog(LogCutterCtx.PDiskCtx->Dsk->Owner,
-                        LogCutterCtx.PDiskCtx->Dsk->OwnerRound, signature, commitRec, TRcBuf(), seg, nullptr));
+                        LogCutterCtx.PDiskCtx->Dsk->OwnerRound, signature, commitRec, TRcBuf(), seg, nullptr,
+                        TWriteSource::LogCutterCutLog,
+                        NPDisk::TEvLog::TCallback()));
                 WriteInProgress = true;
                 FirstLsnToKeepLastWritten = curLsn;
 
-                LOG_DEBUG(ctx, NKikimrServices::BS_LOGCUTTER,
-                        VDISKP(LogCutterCtx.VCtx->VDiskLogPrefix,
-                            "CUT: Lsn# %" PRIu64 " Hull# %" PRIu64 " SyncLog# %" PRIu64
-                            " Syncer# %" PRIu64 " Huge# %" PRIu64 " Db# LogoBlobs Db# Barriers Db# Blocks",
-                            curLsn, HullLsnToKeep, SyncLogLsnToKeep, SyncerLsnToKeep, HugeKeeperLsnToKeep));
+                YDB_LOG_DEBUG_CTX(ctx, VDISKP(LogCutterCtx.VCtx->VDiskLogPrefix, "CUT: Lsn# %" PRIu64 " Hull# %" PRIu64 " SyncLog# %" PRIu64 " Syncer# %" PRIu64 " Huge# %" PRIu64 " Db# LogoBlobs Db# Barriers Db# Blocks", curLsn, HullLsnToKeep, SyncLogLsnToKeep, SyncerLsnToKeep, HugeKeeperLsnToKeep));
             }
         }
 

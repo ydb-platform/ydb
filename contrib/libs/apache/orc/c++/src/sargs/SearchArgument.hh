@@ -37,7 +37,7 @@ namespace orc {
    * accepted by the filter.
    *
    * This requires that the filter be normalized into conjunctive normal form
-   * (<a href="http://en.wikipedia.org/wiki/Conjunctive_normal_form">CNF</a>).
+   * (<a href="https://en.wikipedia.org/wiki/Conjunctive_normal_form">CNF</a>).
    */
   class SearchArgumentImpl : public SearchArgument {
    public:
@@ -274,6 +274,12 @@ namespace orc {
      * @return the new SearchArgument
      */
     std::unique_ptr<SearchArgument> build() override;
+
+    /**
+     * Add a maybe leaf to the current item on the stack.
+     * @return this
+     */
+    SearchArgumentBuilder& maybe() override;
 
    private:
     SearchArgumentBuilder& start(ExpressionTree::Operator op);

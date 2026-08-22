@@ -4,11 +4,16 @@
  * Written by Hye-Shik Chang <perky@FreeBSD.org>
  */
 
-#define PY_SSIZE_T_CLEAN
+#ifndef Py_BUILD_CORE_BUILTIN
+#  define Py_BUILD_CORE_MODULE 1
+#endif
+
 #include "Python.h"
-#include "structmember.h"         // PyMemberDef
+
 #include "multibytecodec.h"
 #include "clinic/multibytecodec.c.h"
+
+#include <stddef.h>               // offsetof()
 
 #define MODULE_NAME "_multibytecodec"
 
@@ -490,8 +495,6 @@ multibytecodec_encode(const MultibyteCodec *codec,
     int kind;
     const void *data;
 
-    if (PyUnicode_READY(text) < 0)
-        return NULL;
     datalen = PyUnicode_GET_LENGTH(text);
 
     if (datalen == 0 && !(flags & MBENC_RESET))
@@ -573,17 +576,18 @@ _multibytecodec.MultibyteCodec.encode
 
 Return an encoded string version of `input'.
 
-'errors' may be given to set a different error handling scheme. Default is
-'strict' meaning that encoding errors raise a UnicodeEncodeError. Other possible
-values are 'ignore', 'replace' and 'xmlcharrefreplace' as well as any other name
-registered with codecs.register_error that can handle UnicodeEncodeErrors.
+'errors' may be given to set a different error handling scheme.
+Default is 'strict' meaning that encoding errors raise
+a UnicodeEncodeError.  Other possible values are 'ignore', 'replace'
+and 'xmlcharrefreplace' as well as any other name registered with
+codecs.register_error that can handle UnicodeEncodeErrors.
 [clinic start generated code]*/
 
 static PyObject *
 _multibytecodec_MultibyteCodec_encode_impl(MultibyteCodecObject *self,
                                            PyObject *input,
                                            const char *errors)
-/*[clinic end generated code: output=7b26652045ba56a9 input=606d0e128a577bae]*/
+/*[clinic end generated code: output=7b26652045ba56a9 input=e047a75a21752801]*/
 {
     MultibyteCodec_State state;
     PyObject *errorcb, *r, *ucvt;
@@ -603,10 +607,6 @@ _multibytecodec_MultibyteCodec_encode_impl(MultibyteCodecObject *self,
         }
     }
 
-    if (PyUnicode_READY(input) < 0) {
-        Py_XDECREF(ucvt);
-        return NULL;
-    }
     datalen = PyUnicode_GET_LENGTH(input);
 
     errorcb = internal_error_callback(errors);
@@ -642,9 +642,10 @@ _multibytecodec.MultibyteCodec.decode
 
 Decodes 'input'.
 
-'errors' may be given to set a different error handling scheme. Default is
-'strict' meaning that encoding errors raise a UnicodeDecodeError. Other possible
-values are 'ignore' and 'replace' as well as any other name registered with
+'errors' may be given to set a different error handling scheme.
+Default is 'strict' meaning that encoding errors raise
+a UnicodeDecodeError.  Other possible values are 'ignore' and
+'replace' as well as any other name registered with
 codecs.register_error that is able to handle UnicodeDecodeErrors."
 [clinic start generated code]*/
 
@@ -652,7 +653,7 @@ static PyObject *
 _multibytecodec_MultibyteCodec_decode_impl(MultibyteCodecObject *self,
                                            Py_buffer *input,
                                            const char *errors)
-/*[clinic end generated code: output=ff419f65bad6cc77 input=e0c78fc7ab190def]*/
+/*[clinic end generated code: output=ff419f65bad6cc77 input=dbf93d8bb98ca440]*/
 {
     MultibyteCodec_State state;
     MultibyteDecodeBuffer buf;
@@ -809,8 +810,6 @@ encoder_encode_stateful(MultibyteStatefulEncoderContext *ctx,
 
         inbuf = Py_NewRef(unistr);
     }
-    if (PyUnicode_READY(inbuf) < 0)
-        goto errorexit;
     inpos = 0;
     datalen = PyUnicode_GET_LENGTH(inbuf);
 
@@ -828,8 +827,15 @@ encoder_encode_stateful(MultibyteStatefulEncoderContext *ctx,
     if (inpos < datalen) {
         if (datalen - inpos > MAXENCPENDING) {
             /* normal codecs can't reach here */
-            PyErr_SetString(PyExc_UnicodeError,
-                            "pending buffer overflow");
+            PyObject *excobj = PyObject_CallFunction(PyExc_UnicodeEncodeError,
+                                                     "sOnns",
+                                                     ctx->codec->encoding,
+                                                     inbuf,
+                                                     inpos, datalen,
+                                                     "pending buffer overflow");
+            if (excobj == NULL) goto errorexit;
+            PyErr_SetObject(PyExc_UnicodeEncodeError, excobj);
+            Py_DECREF(excobj);
             goto errorexit;
         }
         ctx->pending = PyUnicode_Substring(inbuf, inpos, datalen);
@@ -860,7 +866,16 @@ decoder_append_pending(MultibyteStatefulDecoderContext *ctx,
     npendings = (Py_ssize_t)(buf->inbuf_end - buf->inbuf);
     if (npendings + ctx->pendingsize > MAXDECPENDING ||
         npendings > PY_SSIZE_T_MAX - ctx->pendingsize) {
-            PyErr_SetString(PyExc_UnicodeError, "pending buffer overflow");
+            Py_ssize_t bufsize = (Py_ssize_t)(buf->inbuf_end - buf->inbuf_top);
+            PyObject *excobj = PyUnicodeDecodeError_Create(ctx->codec->encoding,
+                                                           (const char *)buf->inbuf_top,
+                                                           bufsize,
+                                                           0,
+                                                           bufsize,
+                                                           "pending buffer overflow");
+            if (excobj == NULL) return -1;
+            PyErr_SetObject(PyExc_UnicodeDecodeError, excobj);
+            Py_DECREF(excobj);
             return -1;
     }
     memcpy(ctx->pending + ctx->pendingsize, buf->inbuf, npendings);
@@ -941,7 +956,17 @@ _multibytecodec_MultibyteIncrementalEncoder_getstate_impl(MultibyteIncrementalEn
             return NULL;
         }
         if (pendingsize > MAXENCPENDING*4) {
-            PyErr_SetString(PyExc_UnicodeError, "pending buffer too large");
+            PyObject *excobj = PyObject_CallFunction(PyExc_UnicodeEncodeError,
+                                                     "sOnns",
+                                                     self->codec->encoding,
+                                                     self->pending,
+                                                     0, PyUnicode_GET_LENGTH(self->pending),
+                                                     "pending buffer too large");
+            if (excobj == NULL) {
+                return NULL;
+            }
+            PyErr_SetObject(PyExc_UnicodeEncodeError, excobj);
+            Py_DECREF(excobj);
             return NULL;
         }
         statebytes[0] = (unsigned char)pendingsize;
@@ -976,7 +1001,8 @@ _multibytecodec_MultibyteIncrementalEncoder_setstate_impl(MultibyteIncrementalEn
 
     if (_PyLong_AsByteArray(statelong, statebytes, sizeof(statebytes),
                             1 /* little-endian */ ,
-                            0 /* unsigned */ ) < 0) {
+                            0 /* unsigned */ ,
+                            1 /* with_exceptions */) < 0) {
         goto errorexit;
     }
 
@@ -1258,7 +1284,8 @@ _multibytecodec_MultibyteIncrementalDecoder_setstate_impl(MultibyteIncrementalDe
 
     if (_PyLong_AsByteArray(statelong, statebytes, sizeof(statebytes),
                             1 /* little-endian */ ,
-                            0 /* unsigned */ ) < 0) {
+                            0 /* unsigned */ ,
+                            1 /* with_exceptions */) < 0) {
         return NULL;
     }
 
@@ -1268,7 +1295,13 @@ _multibytecodec_MultibyteIncrementalDecoder_setstate_impl(MultibyteIncrementalDe
     }
 
     if (buffersize > MAXDECPENDING) {
-        PyErr_SetString(PyExc_UnicodeError, "pending buffer too large");
+        PyObject *excobj = PyUnicodeDecodeError_Create(self->codec->encoding,
+                                                       PyBytes_AS_STRING(buffer), buffersize,
+                                                       0, buffersize,
+                                                       "pending buffer too large");
+        if (excobj == NULL) return NULL;
+        PyErr_SetObject(PyExc_UnicodeDecodeError, excobj);
+        Py_DECREF(excobj);
         return NULL;
     }
 
@@ -1616,9 +1649,9 @@ static struct PyMethodDef mbstreamreader_methods[] = {
 };
 
 static PyMemberDef mbstreamreader_members[] = {
-    {"stream",          T_OBJECT,
+    {"stream",          _Py_T_OBJECT,
                     offsetof(MultibyteStreamReaderObject, stream),
-                    READONLY, NULL},
+                    Py_READONLY, NULL},
     {NULL,}
 };
 
@@ -1723,7 +1756,7 @@ mbstreamwriter_iwrite(MultibyteStreamWriterObject *self,
     if (str == NULL)
         return -1;
 
-    wr = _PyObject_CallMethodOneArg(self->stream, str_write, str);
+    wr = PyObject_CallMethodOneArg(self->stream, str_write, str);
     Py_DECREF(str);
     if (wr == NULL)
         return -1;
@@ -1834,7 +1867,7 @@ _multibytecodec_MultibyteStreamWriter_reset_impl(MultibyteStreamWriterObject *se
     if (PyBytes_Size(pwrt) > 0) {
         PyObject *wr;
 
-        wr = _PyObject_CallMethodOneArg(self->stream, state->str_write, pwrt);
+        wr = PyObject_CallMethodOneArg(self->stream, state->str_write, pwrt);
         if (wr == NULL) {
             Py_DECREF(pwrt);
             return NULL;
@@ -1924,9 +1957,9 @@ static struct PyMethodDef mbstreamwriter_methods[] = {
 };
 
 static PyMemberDef mbstreamwriter_members[] = {
-    {"stream",          T_OBJECT,
+    {"stream",          _Py_T_OBJECT,
                     offsetof(MultibyteStreamWriterObject, stream),
-                    READONLY, NULL},
+                    Py_READONLY, NULL},
     {NULL,}
 };
 
@@ -2063,6 +2096,7 @@ static struct PyMethodDef _multibytecodec_methods[] = {
 static PyModuleDef_Slot _multibytecodec_slots[] = {
     {Py_mod_exec, _multibytecodec_exec},
     {Py_mod_multiple_interpreters, Py_MOD_PER_INTERPRETER_GIL_SUPPORTED},
+    {Py_mod_gil, Py_MOD_GIL_NOT_USED},
     {0, NULL}
 };
 

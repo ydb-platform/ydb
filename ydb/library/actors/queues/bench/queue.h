@@ -114,7 +114,13 @@ namespace NActors::NQueueBench {
     using TMPMCRingQueueWithStats = TMPMCRingQueue<SizeBits, TStatsObserver>;
 
     template <ui32 SizeBits>
+    using TMPMCRingQueueV1WithStats = TMPMCRingQueueV1<SizeBits, TStatsObserver>;
+
+    template <ui32 SizeBits>
     using TMPMCRingQueueV2WithStats = TMPMCRingQueueV2<SizeBits, TStatsObserver>;
+
+    template <ui32 SizeBits>
+    using TMPMCRingQueueV3WithStats = TMPMCRingQueueV3<SizeBits, TStatsObserver>;
 
     template <template <ui32, typename> typename TAdaptor>
     struct TAdaptorWithStats {

@@ -1,0 +1,6 @@
+items:
+  - name: Data versioning (SCD)
+    href: scd/index.md
+    include:
+      mode: link
+      path: scd/toc_p.yaml

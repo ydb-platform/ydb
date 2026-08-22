@@ -6,9 +6,10 @@ Container for the layout.
 from __future__ import annotations
 
 from abc import ABCMeta, abstractmethod
+from collections.abc import Callable, Sequence
 from enum import Enum
 from functools import partial
-from typing import TYPE_CHECKING, Callable, Sequence, Union, cast
+from typing import TYPE_CHECKING, Union, cast
 
 from prompt_toolkit.application.current import get_app
 from prompt_toolkit.cache import SimpleCache
@@ -52,7 +53,7 @@ from .screen import _CHAR_CACHE, Screen, WritePosition
 from .utils import explode_text_fragments
 
 if TYPE_CHECKING:
-    from typing_extensions import Protocol, TypeGuard
+    from typing import Protocol, TypeGuard
 
     from prompt_toolkit.key_binding.key_bindings import NotImplementedOrNone
 
@@ -2603,8 +2604,18 @@ class ConditionalContainer(Container):
     :param filter: :class:`.Filter` instance.
     """
 
-    def __init__(self, content: AnyContainer, filter: FilterOrBool) -> None:
+    def __init__(
+        self,
+        content: AnyContainer,
+        filter: FilterOrBool,
+        alternative_content: AnyContainer | None = None,
+    ) -> None:
         self.content = to_container(content)
+        self.alternative_content = (
+            to_container(alternative_content)
+            if alternative_content is not None
+            else None
+        )
         self.filter = to_filter(filter)
 
     def __repr__(self) -> str:
@@ -2616,12 +2627,18 @@ class ConditionalContainer(Container):
     def preferred_width(self, max_available_width: int) -> Dimension:
         if self.filter():
             return self.content.preferred_width(max_available_width)
+        elif self.alternative_content is not None:
+            return self.alternative_content.preferred_width(max_available_width)
         else:
             return Dimension.zero()
 
     def preferred_height(self, width: int, max_available_height: int) -> Dimension:
         if self.filter():
             return self.content.preferred_height(width, max_available_height)
+        elif self.alternative_content is not None:
+            return self.alternative_content.preferred_height(
+                width, max_available_height
+            )
         else:
             return Dimension.zero()
 
@@ -2638,9 +2655,21 @@ class ConditionalContainer(Container):
             return self.content.write_to_screen(
                 screen, mouse_handlers, write_position, parent_style, erase_bg, z_index
             )
+        elif self.alternative_content is not None:
+            return self.alternative_content.write_to_screen(
+                screen,
+                mouse_handlers,
+                write_position,
+                parent_style,
+                erase_bg,
+                z_index,
+            )
 
     def get_children(self) -> list[Container]:
-        return [self.content]
+        result = [self.content]
+        if self.alternative_content is not None:
+            result.append(self.alternative_content)
+        return result
 
 
 class DynamicContainer(Container):

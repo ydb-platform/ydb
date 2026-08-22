@@ -118,14 +118,18 @@ protected:
                 Session->HaveWriteInflight = false;
                 if (Session->NeedFinish) {
                     lock.Release();
-                    Session->Stream.Finish(Status::OK, new TFinishDone(Session));
+                    if (!Session->IsShuttingDown()) {
+                        Session->Stream.Finish(Status::OK, new TFinishDone(Session));
+                    }
                 }
             } else {
                 auto resp = std::move(Session->Responses.front());
                 Session->Responses.pop();
                 lock.Release();
                 ui64 sz = resp.ByteSize();
-                Session->Stream.Write(resp, new TWriteDone(Session, sz));
+                if (!Session->IsShuttingDown()) {
+                    Session->Stream.Write(resp, new TWriteDone(Session, sz));
+                }
             }
 
             return false;
@@ -270,8 +274,9 @@ protected:
             }
             HaveWriteInflight = true;
         }
-
-        Stream.Finish(Status::OK, new TFinishDone(this));
+        if (!this->IsShuttingDown()) {
+            Stream.Finish(Status::OK, new TFinishDone(this));
+        }
     }
 
     /// Send reply to client.
@@ -289,7 +294,9 @@ protected:
         }
 
         ui64 size = resp.ByteSize();
-        Stream.Write(resp, new TWriteDone(this, size));
+        if (!this->IsShuttingDown()) {
+            Stream.Write(resp, new TWriteDone(this, size));
+        }
     }
 
     void ReadyForNextRead() override {
@@ -300,8 +307,10 @@ protected:
             }
         }
 
-        auto read = new TReadDone(this);
-        Stream.Read(&read->Request, read);
+        if (!this->IsShuttingDown()) {
+            auto read = new TReadDone(this);
+            Stream.Read(&read->Request, read);
+        }
     }
 
 protected:

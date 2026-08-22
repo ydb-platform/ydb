@@ -138,8 +138,9 @@ NYT::TNode RowSpecToInputSkiff(const NYT::TNode& attrs, const THashMap<TString, 
     }
 
     const bool dynamic = attrs.HasKey(YqlDynamicAttribute) && attrs[YqlDynamicAttribute].AsBool();
+    const bool rls = attrs.HasKey(YqlRLSAttribute) && attrs[YqlRLSAttribute].AsBool();
 
-    if (!dynamic && rowIndex) {
+    if (!dynamic && !rls && rowIndex) {
         tableColumns.Add(NYT::TNode()
             ("name", "$row_index")
             ("wire_type", "variant8")

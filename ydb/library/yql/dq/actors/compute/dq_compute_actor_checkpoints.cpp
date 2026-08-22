@@ -2,6 +2,7 @@
 #include "dq_checkpoints.h"
 #include "dq_compute_actor_impl.h"
 #include <ydb/library/services/services.pb.h>
+#include <ydb/library/yql/dq/common/dq_common.h>
 
 #include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
 
@@ -50,15 +51,6 @@ constexpr TDuration SLOW_CHECKPOINT_DURATION = TDuration::Minutes(1);
 
 TString MakeStringForLog(const NDqProto::TCheckpoint& checkpoint) {
     return TStringBuilder() << checkpoint.GetGeneration() << "." << checkpoint.GetId();
-}
-
-bool IsIngressTask(const TDqTaskSettings& task) {
-    for (const auto& input : task.GetInputs()) {
-        if (!input.HasSource()) {
-            return false;
-        }
-    }
-    return true;
 }
 
 std::vector<ui64> TaskIdsFromLoadPlan(const NDqProto::NDqStateLoadPlan::TTaskPlan& plan) {
@@ -131,7 +123,7 @@ TDqComputeActorCheckpoints::TDqComputeActorCheckpoints(const NActors::TActorId& 
     , Owner(owner)
     , TxId(txId)
     , Task(std::move(task))
-    , IngressTask(IsIngressTask(Task))
+    , IngressTask(IsIngress(Task))
     , CheckpointStorage(MakeCheckpointStorageID())
     , ComputeActor(computeActor)
     , PendingCheckpoint(Task)
@@ -333,7 +325,6 @@ void TDqComputeActorCheckpoints::Handle(TEvDqCompute::TEvGetTaskStateResult::TPt
     }
 
     if (ev->Get()->States.size() != taskIdsSize) {
-
         auto message = TStringBuilder() << "TEvGetTaskStateResult unexpected states count: " << ev->Get()->States.size() << ", expected: " << taskIdsSize;
         LOG_CP_E(checkpoint, message);
         NYql::TIssues issues;
@@ -360,7 +351,7 @@ void TDqComputeActorCheckpoints::Handle(TEvDqCompute::TEvGetTaskStateResult::TPt
 void TDqComputeActorCheckpoints::AfterStateLoading(const TMaybe<TString>& error) {
     auto& checkpoint = RestoringTaskRunnerForCheckpoint;
     if (error.Defined()) {
-        auto message = TStringBuilder() << "Failed to load state: " << error << ", ABORTED";        
+        auto message = TStringBuilder() << "Failed to load state: " << error << ", ABORTED";
         LOG_CP_E(checkpoint, message);
         NYql::TIssues issues;
         issues.AddIssue(message);
@@ -455,8 +446,9 @@ void TDqComputeActorCheckpoints::DoCheckpoint() {
 
     LOG_PCP_D("Performing task checkpoint");
     if (SaveState()) {
-        LOG_PCP_T("Injecting checkpoint barrier to outputs");
+        LOG_PCP_I("Injecting checkpoint barrier to outputs");
         ComputeActor->InjectBarrierToOutputs(*PendingCheckpoint.Checkpoint);
+        ComputeActor->ResumeInputsByCheckpoint();
         TryToSavePendingCheckpoint();
     }
 }
@@ -577,7 +569,7 @@ void TDqComputeActorCheckpoints::PassAway() {
 }
 
 static bool IsInfiniteSourceType(const TString& sourceType) {
-    return sourceType == "PqSource";
+    return sourceType == PqSource;
 }
 
 NDqProto::ECheckpointingMode GetTaskCheckpointingMode(const TDqTaskSettings& task) {
@@ -592,6 +584,48 @@ NDqProto::ECheckpointingMode GetTaskCheckpointingMode(const TDqTaskSettings& tas
         }
     }
     return NDqProto::CHECKPOINTING_MODE_DISABLED;
+}
+
+bool IsIngress(const TDqTaskSettings& task) {
+    // No inputs at all or there is no input channels with checkpoints.
+    // We don't want to inject checkpoint into tasks that has checkpointed input channels,
+    // otherwise task can be checkpointed twice;
+    // once checkpoint will arrive from channels, it will pause reading from sources too.
+
+    const auto& inputs = task.GetInputs();
+    if (inputs.empty()) {
+        return true;
+    }
+
+    bool hasSource = false;
+    for (const auto& input : inputs) {
+        if (input.HasSource()) {
+            hasSource = true;
+            continue;
+        }
+
+        for (const auto& channel : input.GetChannels()) {
+            if (channel.GetCheckpointingMode() != NDqProto::CHECKPOINTING_MODE_DISABLED) {
+                return false;
+            }
+        }
+    }
+
+    return hasSource;
+}
+
+bool IsEgress(const TDqTaskSettings& task) {
+    for (const auto& output : task.GetOutputs()) {
+        if (output.HasSink()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool HasState(const TDqTaskSettings& task) {
+    Y_UNUSED(task);
+    return true;
 }
 
 } // namespace NYql::NDq

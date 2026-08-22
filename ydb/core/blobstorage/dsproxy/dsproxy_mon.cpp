@@ -19,6 +19,7 @@ TBlobStorageGroupProxyMon::TBlobStorageGroupProxyMon(const TIntrusivePtr<::NMoni
     , EventGroup(Counters->GetSubgroup("subsystem", "event"))
     , HandoffGroup(Counters->GetSubgroup("subsystem", "handoff"))
     , ActiveRequestsGroup(Counters->GetSubgroup("subsystem", "requests"))
+    , CancellationGroup(Counters->GetSubgroup("subsystem", "cancellation"))
 {
     if (info) {
         const TBlobStorageGroupInfo::TDynamicInfo& dyn = info->GetDynamicInfo();
@@ -26,6 +27,7 @@ TBlobStorageGroupProxyMon::TBlobStorageGroupProxyMon(const TIntrusivePtr<::NMoni
     }
 
     BlockResponseTime.Initialize(ResponseGroup, "event", "block", "Response in millisec", Percentiles1);
+    GetBlockResponseTime.Initialize(ResponseGroup, "event", "getBlock", "Response in millisec", Percentiles1);
 
     if (!constructLimited) {
         BecomeFull();
@@ -96,6 +98,7 @@ TBlobStorageGroupProxyMon::TBlobStorageGroupProxyMon(const TIntrusivePtr<::NMoni
         StatusGroup.Init(group->GetSubgroup("request", "status"));
         AssimilateGroup.Init(group->GetSubgroup("request", "assimilate"));
         BlockGroup.Init(group->GetSubgroup("request", "block"));
+        GetBlockGroup.Init(group->GetSubgroup("request", "getBlock"));
         CheckIntegrityGroup.Init(group->GetSubgroup("request", "checkIntegrity"));
     }
 
@@ -115,6 +118,8 @@ TBlobStorageGroupProxyMon::TBlobStorageGroupProxyMon(const TIntrusivePtr<::NMoni
     RespStatPatch.emplace(respStatGroup->GetSubgroup("request", "patch"));
     RespStatAssimilate.emplace(respStatGroup->GetSubgroup("request", "assimilate"));
     RespStatCheckIntegrity.emplace(respStatGroup->GetSubgroup("request", "checkIntegrity"));
+
+    CancelledEvents = CancellationGroup->GetCounter("CancelledEvents", true);
 }
 
 void TBlobStorageGroupProxyMon::BecomeFull() {
@@ -208,6 +213,7 @@ void TBlobStorageGroupProxyMon::Update() {
     }
 
     BlockResponseTime.Update();
+    GetBlockResponseTime.Update();
 }
 
 void TBlobStorageGroupProxyMon::ThroughputUpdate() {

@@ -9,7 +9,7 @@ def post_install(self):
 boost_exception = NixSourceProject(
     nixattr="boost_exception",
     arcdir=boost.make_arcdir("exception"),
-    owners=["g:cpp-contrib", "g:taxi-common"],
+    owners=["g:cpp-contrib"],
     copy_sources=[
         "include/boost/",
         "src/",

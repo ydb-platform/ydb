@@ -329,7 +329,7 @@ public:
         , Vars({
             {"class", className},
             {"func", "validate_" + field->name()},
-            {"field", field->name()},
+            {"field", field->lowercase_name()},
             {"PascalName", PascalName(field->camelcase_name())},
         })
     {

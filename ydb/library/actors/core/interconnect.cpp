@@ -147,15 +147,19 @@ namespace NActors {
 
         for (const auto& [key, value] : Items) {
             switch (key) {
+                case TKeys::BridgePileName:
+                    // just ignore it
+                    break;
+
                 case TKeys::DataCenter:
                     memcpy(&dataCenterId, value.data(), Min<size_t>(sizeof(dataCenterId), value.length()));
                     break;
 
-                case TKeys::Module: {
-                    const bool success = TryFromString(value, moduleId);
-                    Y_ABORT_UNLESS(success);
+                case TKeys::Module:
+                    if (!TryFromString(value, moduleId)) {
+                        moduleId = MurmurHash<ui32>(value.data(), value.length());
+                    }
                     break;
-                }
 
                 case TKeys::Rack:
                     // hacky way to obtain numeric id by a rack name

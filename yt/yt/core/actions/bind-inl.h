@@ -3,7 +3,6 @@
 // For the sake of sane code completion.
 #include "bind.h"
 #endif
-#undef BIND_INL_H_
 
 #include <yt/yt/core/actions/invoker.h>
 #include <yt/yt/core/concurrency/propagating_storage.h>
@@ -75,7 +74,7 @@ public:
         other.IsValid_ = false;
     }
 
-    TPassedWrapper(TPassedWrapper&& other)
+    TPassedWrapper(TPassedWrapper&& other) noexcept
         : IsValid_(other.IsValid_)
         , T_(std::move(other.T_))
     {
@@ -533,7 +532,7 @@ public:
 #endif
     { }
 
-    NConcurrency::TPropagatingStorageGuard MakePropagatingStorageGuard()
+    Y_FORCE_INLINE NConcurrency::TPropagatingStorageGuard MakePropagatingStorageGuard()
     {
         return NConcurrency::TPropagatingStorageGuard(Storage_);
     }
@@ -599,12 +598,7 @@ public:
     template <class... TAs>
     static auto Run(TCallArg<TAs>... args, NDetail::TBindStateBase* base)
     {
-        auto* volatile state = static_cast<TBindState*>(base);
-
-        // Prevent optimizing |state| away for GDB printer.
-        // See devtools/gdb/yt_fibers_printer.py.
-        auto* volatile unoptimizedState = state;
-        Y_UNUSED(unoptimizedState);
+        auto* state = static_cast<TBindState*>(base);
 
         auto propagatingStorageGuard = state->MakePropagatingStorageGuard();
         Y_UNUSED(propagatingStorageGuard);
@@ -641,22 +635,14 @@ struct TBindHelper<TR(TAs...)>
 template <
     bool Propagate,
 #ifdef YT_ENABLE_BIND_LOCATION_TRACKING
-    class TTag,
-    int Counter,
+    auto LocationLite,
 #endif
     class TFunctor,
     class... TBs>
 auto Bind(
-#ifdef YT_ENABLE_BIND_LOCATION_TRACKING
-    const TSourceLocation& location,
-#endif
     TFunctor&& functor,
     TBs&&... bound)
 {
-#ifdef YT_ENABLE_BIND_LOCATION_TRACKING
-    Y_UNUSED(location);
-#endif
-
     using TTraits = NDetail::TFunctorTraits<typename std::decay_t<TFunctor>>;
     using TRunSignature = typename NDetail::TSplit<sizeof...(TBs), typename TTraits::TSignature>::TResult;
 
@@ -673,7 +659,7 @@ auto Bind(
 
     return TExtendedCallback<TRunSignature>{
 #ifdef YT_ENABLE_BIND_LOCATION_TRACKING
-        NewWithLocation<TState, TTag, Counter>(location, location, std::forward<TFunctor>(functor), std::forward<TBs>(bound)...),
+        NewWithLocation<TState, LocationLite>(TSourceLocation::FromLite<LocationLite>(), std::forward<TFunctor>(functor), std::forward<TBs>(bound)...),
 #else
         New<TState>(std::forward<TFunctor>(functor), std::forward<TBs>(bound)...),
 #endif
@@ -685,20 +671,13 @@ auto Bind(
 template <
     bool Propagate,
 #ifdef YT_ENABLE_BIND_LOCATION_TRACKING
-    class TTag,
-    int Counter,
+    auto LocationLite,
 #endif
     class T
 >
 auto Bind(
-#ifdef YT_ENABLE_BIND_LOCATION_TRACKING
-    const TSourceLocation& location,
-#endif
     const TCallback<T>& callback)
 {
-#ifdef YT_ENABLE_BIND_LOCATION_TRACKING
-    Y_UNUSED(location);
-#endif
     return TExtendedCallback<T>(callback);
 }
 

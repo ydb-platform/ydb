@@ -1,8 +1,20 @@
+#include "common/simple/services.h"
+
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/kqp/common/shutdown/state.h>
+#include <ydb/core/kqp/common/events/events.h>
+#include <ydb/core/kqp/common/shutdown/controller.h>
+#include <ydb/core/kqp/node_service/kqp_node_service.h>
 #include <ydb/core/base/counters.h>
 
 #include <library/cpp/threading/local_executor/local_executor.h>
+#include <library/cpp/iterator/functools.h>
+
+#include <util/system/sanitizers.h>
+
+#include <ydb/core/tx/datashard/datashard_failpoints.h>
+#include <ydb/core/grpc_services/cancelation/cancelation_event.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -10,6 +22,59 @@ namespace NKqp {
 using namespace NYdb;
 using namespace NYdb::NTable;
 
+
+namespace {
+    void TestShutdownNodeAndExecuteQuery(TKikimrRunner& kikimr, const TString& query, ui32 nodeIndexToShutdown, ui32 expectedMinShutdownEvents,
+        NYdb::EStatus expectedStatus, const TString& stageDescription)
+    {
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        auto queryClient = kikimr.RunCall([&] { return kikimr.GetQueryClient(); } );
+
+        auto nodeId = runtime.GetNodeId(nodeIndexToShutdown);
+        ui32 nodeShuttingDownCount = 0;
+
+        auto grab = [&](TAutoPtr<IEventHandle>& ev) -> auto {
+            if (ev->GetTypeRewrite() == TEvKqpNode::TEvStartKqpTasksResponse::EventType) {
+                auto& msg = ev->Get<TEvKqpNode::TEvStartKqpTasksResponse>()->Record;
+                if (msg.NotStartedTasksSize() > 0) {
+                    for (auto& task : msg.GetNotStartedTasks()) {
+                        if (task.GetReason() == NKikimrKqp::TEvStartKqpTasksResponse::NODE_SHUTTING_DOWN) {
+                            ++nodeShuttingDownCount;
+                        }
+                    }
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+
+        runtime.SetObserverFunc(grab);
+
+        auto shutdownState = new TKqpShutdownState();
+        runtime.Send(new IEventHandle(NKqp::MakeKqpNodeServiceID(nodeId), {}, 
+                     new TEvKqp::TEvInitiateShutdownRequest(shutdownState)), nodeIndexToShutdown);
+
+        auto future = kikimr.RunInThreadPool([&queryClient, &query](){
+            return queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        });
+
+        if (expectedMinShutdownEvents > 0) {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&nodeShuttingDownCount, expectedMinShutdownEvents](IEventHandle&) {
+                return nodeShuttingDownCount >= expectedMinShutdownEvents;
+            });
+            runtime.DispatchEvents(opts);
+        }
+
+        auto result = runtime.WaitFuture(future);
+
+        UNIT_ASSERT_C(nodeShuttingDownCount >= expectedMinShutdownEvents, 
+            stageDescription << ": Expected at least " << expectedMinShutdownEvents 
+            << " NODE_SHUTTING_DOWN responses, got: " << nodeShuttingDownCount);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expectedStatus, 
+            stageDescription << ": Unexpected result status. Got issues: " << result.GetIssues().ToString());
+    }
+} // anonymous namespace
 Y_UNIT_TEST_SUITE(KqpService) {
     Y_UNIT_TEST(Shutdown) {
         const ui32 Inflight = 50;
@@ -66,94 +131,344 @@ Y_UNIT_TEST_SUITE(KqpService) {
         driver.Stop(true);
     }
 
-    Y_UNIT_TEST(CloseSessionsWithLoad) {
-        auto kikimr = std::make_shared<TKikimrRunner>();
-        kikimr->GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_DEBUG);
-        kikimr->GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_SESSION, NLog::PRI_DEBUG);
-        kikimr->GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_ACTOR, NLog::PRI_DEBUG);
-        kikimr->GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NLog::PRI_DEBUG);
+    Y_UNIT_TEST(CloseSessionAbortQueryExecution) {
+        TKikimrSettings settings;
+        settings.SetUseRealThreads(false);
+        auto kikimr = TKikimrRunner(settings);
 
-        auto db = kikimr->GetTableClient();
+        auto runtime = kikimr.GetTestServer().GetRuntime();
 
-        const ui32 SessionsCount = 50;
-        const TDuration WaitDuration = TDuration::Seconds(1);
+        runtime->SetLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_DEBUG);
+        runtime->SetLogPriority(NKikimrServices::KQP_SESSION, NLog::PRI_DEBUG);
+        runtime->SetLogPriority(NKikimrServices::KQP_COMPILE_ACTOR, NLog::PRI_DEBUG);
+        runtime->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NLog::PRI_DEBUG);
 
-        TVector<TSession> sessions;
-        for (ui32 i = 0; i < SessionsCount; ++i) {
-            auto sessionResult = db.CreateSession().GetValueSync();
-            UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
+        auto db = kikimr.GetQueryClient();
 
-            sessions.push_back(sessionResult.GetSession());
+        {
+            auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); } );
+            auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); } );
+            kikimr.RunCall([&]() {CreateLargeTable(kikimr, 100, 2, 2, 10, 2);});
         }
 
-        NPar::LocalExecutor().RunAdditionalThreads(SessionsCount + 1);
-        NPar::LocalExecutor().ExecRange([&kikimr, sessions, WaitDuration](int id) mutable {
-            if (id == (i32)sessions.size()) {
-                Sleep(WaitDuration);
-                Cerr << "start sessions close....." << Endl;
-                for (ui32 i = 0; i < sessions.size(); ++i) {
-                    sessions[i].Close();
-                }
-
-                Cerr << "finished sessions close....." << Endl;
-                auto counters = GetServiceCounters(kikimr->GetTestServer().GetRuntime()->GetAppData(0).Counters,  "ydb");
-
-                ui64 pendingCompilations = 0;
-                do {
-                    Sleep(WaitDuration);
-                    pendingCompilations = counters->GetNamedCounter("name", "table.query.compilation.active_count", false)->Val();
-                    Cerr << "still compiling... " << pendingCompilations << Endl;
-                } while (pendingCompilations != 0);
-
-                ui64 pendingSessions = 0;
-                do {
-                    Sleep(WaitDuration);
-                    pendingSessions = counters->GetNamedCounter("name", "table.session.active_count", false)->Val();
-                    Cerr << "still active sessions ... " << pendingSessions << Endl;
-                } while (pendingSessions != 0);
-
-                Sleep(TDuration::Seconds(5));
-
-                return;
+        ui32 stateEvents = 0;
+        auto grab = [&stateEvents](TAutoPtr<IEventHandle>& ev) -> auto {
+            if (ev->GetTypeRewrite() == NYql::NDq::TEvDqCompute::TEvState::EventType) {
+                ++stateEvents;
             }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
 
-            auto session = sessions[id];
-            std::optional<TTransaction> tx;
+        runtime->SetObserverFunc(grab);
+        Y_DEFER {
+            runtime->SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
+        };
 
-            while (true) {
-                if (tx) {
-                    auto result = tx->Commit().GetValueSync();
-                    if (!result.IsSuccess()) {
-                        return;
+        NDataShard::gSkipReadIteratorResultFailPoint.Enable(-1);
+        Y_DEFER {
+            NDataShard::gSkipReadIteratorResultFailPoint.Disable();
+        };
+
+        auto session = kikimr.RunCall([&] { return db.GetSession().ExtractValueSync().GetSession(); } );
+
+        auto future = kikimr.RunInThreadPool([&] { return session.ExecuteQuery("select * from `/Root/LargeTable`", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync(); });
+
+        TDispatchOptions opts;
+        opts.FinalEvents.emplace_back([&stateEvents](IEventHandle&) {
+            return stateEvents > 0;
+        });
+        runtime->DispatchEvents(opts);
+
+        Cerr << "OK! Passed the test. Compute Actors are started" << Endl;
+
+        auto close = std::make_unique<TEvKqp::TEvCloseSessionRequest>();
+        close->Record.MutableRequest()->SetSessionId(TString(session.GetId()));
+        auto sender = kikimr.GetTestServer().GetRuntime()->AllocateEdgeActor();
+        runtime->Send(new IEventHandle(MakeKqpProxyID(kikimr.GetTestServer().GetRuntime()->GetNodeId(0)), sender, close.release()));
+
+        auto result = kikimr.GetTestServer().GetRuntime()->WaitFuture(future);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::CANCELLED, result.GetIssues().ToString());
+    }
+
+    // Verifies issue #39166: the executer must terminate every still-running compute actor
+    // when the query is aborted (e.g. session close, client lost), via TEvAbortExecution.
+    // Compute actors no longer arm their own timeout timer (the planner now passes an empty
+    // Deadline to the CA factory, matching kqp_query_control_plane.cpp), so the executer's
+    // broadcast is the sole mechanism that stops them on cancellation. This test asserts:
+    //   (a) every CA that registered with the executer received TEvAbortExecution, and
+    //   (b) no CA ever called Schedule(... TEvWakeup(TimeoutTag) ...) on itself.
+    // (b) is checked at schedule time via SetScheduledEventFilter, not at delivery time:
+    // the cancel arrives within seconds, while any plausible CA self-timeout would be far
+    // longer, so delivery-time observation would silently pass even on the old code.
+    Y_UNIT_TEST(CancelTerminatesAllComputeActors) {
+        TKikimrSettings settings;
+        settings.SetUseRealThreads(false);
+        auto kikimr = TKikimrRunner(settings);
+
+        auto runtime = kikimr.GetTestServer().GetRuntime();
+
+        runtime->SetLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_DEBUG);
+        runtime->SetLogPriority(NKikimrServices::KQP_SESSION, NLog::PRI_DEBUG);
+
+        auto db = kikimr.GetQueryClient();
+
+        {
+            auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
+            auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
+            kikimr.RunCall([&]() { CreateLargeTable(kikimr, 100, 2, 2, 10, 2); });
+        }
+
+        // Origin tracking: a KQP compute actor is uniquely characterised by being the sender
+        // of TEvDqCompute::TEvState whose recipient is the query's executer. We capture the
+        // executer from the first TEvState we see (only one query runs in this test), then
+        // accept further events only if they tie back to that exact executer:
+        //   - TEvState        : recipient must be `executerActor` (else: foreign CA, rejected)
+        //   - TEvAbortExecution: sender must be `executerActor` AND recipient a tracked CA
+        // The scheduled-event filter records every TimeoutTag wakeup as it is armed; we
+        // intersect that set with the CA set at the end of the test (Bootstrap schedules
+        // the timer before the "Hello" TEvState, so recipients are not yet known when the
+        // schedule happens). EEvWakeupTag::TimeoutTag = 1 in dq_compute_actor_impl.h.
+        constexpr ui64 timeoutWakeupTag = 1;
+        TActorId executerActor;
+        THashSet<TActorId> computeActors;
+        THashSet<TActorId> abortedComputeActors;
+        THashSet<TActorId> timeoutTagScheduleRecipients;
+        ui32 stateEvents = 0;
+        ui32 foreignStateEvents = 0;
+        ui32 foreignAbortEvents = 0;
+
+        runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            const auto type = ev->GetTypeRewrite();
+            if (type == NYql::NDq::TEvDqCompute::TEvState::EventType) {
+                const auto recipient = ev->GetRecipientRewrite();
+                if (!executerActor) {
+                    executerActor = recipient;
+                }
+                if (recipient == executerActor) {
+                    computeActors.insert(ev->Sender);
+                    ++stateEvents;
+                } else {
+                    ++foreignStateEvents;
+                }
+            } else if (type == TEvKqp::TEvAbortExecution::EventType) {
+                if (computeActors.contains(ev->GetRecipientRewrite())) {
+                    if (ev->Sender == executerActor) {
+                        abortedComputeActors.insert(ev->GetRecipientRewrite());
+                    } else {
+                        ++foreignAbortEvents;
                     }
-
-                    tx = {};
-                    continue;
                 }
-
-                auto query = Sprintf(R"(
-                    SELECT Key, Text, Data FROM `/Root/EightShard` WHERE Key=%1$d + 0;
-                    SELECT Key, Data, Text FROM `/Root/EightShard` WHERE Key=%1$d + 1;
-                    SELECT Text, Key, Data FROM `/Root/EightShard` WHERE Key=%1$d + 2;
-                    SELECT Text, Data, Key FROM `/Root/EightShard` WHERE Key=%1$d + 3;
-                    SELECT Data, Key, Text FROM `/Root/EightShard` WHERE Key=%1$d + 4;
-                    SELECT Data, Text, Key FROM `/Root/EightShard` WHERE Key=%1$d + 5;
-
-                    UPSERT INTO `/Root/EightShard` (Key, Text) VALUES
-                        (%2$dul, "New");
-                )", RandomNumber<ui32>(), RandomNumber<ui32>());
-
-                auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx()).GetValueSync();
-                if (!result.IsSuccess()) {
-                    Sleep(TDuration::Seconds(5));
-                    Cerr << "received non-success status for session " << id << Endl;
-                    return;
-                }
-
-                tx = result.GetTransaction();
             }
-        }, 0, SessionsCount + 1, NPar::TLocalExecutor::WAIT_COMPLETE | NPar::TLocalExecutor::MED_PRIORITY);
-        WaitForZeroReadIterators(kikimr->GetTestServer(), "/Root/EightShard");
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Y_DEFER { runtime->SetObserverFunc(TTestActorRuntime::DefaultObserverFunc); };
+
+        // Filter fires inside Schedule(...) before the event enters the queue. Returning
+        // false keeps the event scheduled (we observe, we don't drop). We can't yet tell
+        // whether the recipient is a CA at this point, so record all candidates and
+        // resolve against `computeActors` after the test completes.
+        auto prevScheduledFilter = runtime->SetScheduledEventFilter(
+            [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev, TDuration, TInstant&) {
+                if (ev->GetTypeRewrite() == NActors::TEvents::TEvWakeup::EventType) {
+                    if (auto* msg = ev->Get<NActors::TEvents::TEvWakeup>(); msg && msg->Tag == timeoutWakeupTag) {
+                        timeoutTagScheduleRecipients.insert(ev->GetRecipientRewrite());
+                    }
+                }
+                return false;
+            });
+        Y_DEFER { runtime->SetScheduledEventFilter(prevScheduledFilter); };
+
+        // Stall reads so the query hangs with all its compute actors alive.
+        NDataShard::gSkipReadIteratorResultFailPoint.Enable(-1);
+        Y_DEFER { NDataShard::gSkipReadIteratorResultFailPoint.Disable(); };
+
+        auto session = kikimr.RunCall([&] { return db.GetSession().ExtractValueSync().GetSession(); });
+
+        auto future = kikimr.RunInThreadPool([&] {
+            return session.ExecuteQuery("select * from `/Root/LargeTable`",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        });
+
+        // Wait until at least a few compute actors have come up.
+        {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&](IEventHandle&) { return stateEvents >= 3; });
+            runtime->DispatchEvents(opts);
+        }
+
+        const auto computeActorsBeforeCancel = computeActors;
+        UNIT_ASSERT_C(!computeActorsBeforeCancel.empty(),
+            "Expected at least one compute actor to register before cancel");
+        UNIT_ASSERT_C(executerActor, "Failed to capture executer actor id from TEvState recipient");
+        UNIT_ASSERT_VALUES_EQUAL_C(foreignStateEvents, 0u,
+            "Observed TEvDqCompute::TEvState events with recipient != executerActor "
+            "(unexpected second executer in test). executer=" << executerActor);
+
+        // Trigger cancellation: session close -> session actor -> executer ->
+        //   TerminateComputeActors -> TEvAbortExecution to every alive CA.
+        auto close = std::make_unique<TEvKqp::TEvCloseSessionRequest>();
+        close->Record.MutableRequest()->SetSessionId(TString(session.GetId()));
+        auto sender = runtime->AllocateEdgeActor();
+        runtime->Send(new IEventHandle(MakeKqpProxyID(runtime->GetNodeId(0)), sender, close.release()));
+
+        auto result = runtime->WaitFuture(future);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::CANCELLED, result.GetIssues().ToString());
+
+        // Every CA that registered before cancel must have received TEvAbortExecution.
+        TVector<TActorId> notAborted;
+        for (const auto& ca : computeActorsBeforeCancel) {
+            if (!abortedComputeActors.contains(ca)) {
+                notAborted.push_back(ca);
+            }
+        }
+        UNIT_ASSERT_C(notAborted.empty(),
+            "Compute actors not terminated by executer broadcast: "
+                << JoinSeq(", ", notAborted)
+                << " (registered=" << computeActorsBeforeCancel.size()
+                << ", aborted=" << abortedComputeActors.size()
+                << ", executer=" << executerActor << ")");
+        UNIT_ASSERT_VALUES_EQUAL_C(foreignAbortEvents, 0u,
+            "Observed TEvAbortExecution to a tracked CA from a sender other than executerActor "
+            "(" << executerActor << "); CAs must be terminated by their own executer.");
+
+        // Fix verification: no compute actor armed its own TimeoutTag timer. Checked at
+        // schedule time, not delivery time — see header comment.
+        TVector<TActorId> selfTimedCAs;
+        for (const auto& ca : computeActors) {
+            if (timeoutTagScheduleRecipients.contains(ca)) {
+                selfTimedCAs.push_back(ca);
+            }
+        }
+        UNIT_ASSERT_C(selfTimedCAs.empty(),
+            "Compute actors armed their own TimeoutTag timer (see issue #39166): "
+                << JoinSeq(", ", selfTimedCAs));
+    }
+
+    // Repro for the cross-node client-cancel "subscription race" (the Proxy/Forwarded
+    // path). When a query-service request is served by a session on a different node than
+    // the gRPC request actor, the session learns about client cancel only by subscribing
+    // (TEvSubscribeGrpcCancel) to that remote gRPC actor. If the gRPC actor already died on
+    // its own client-lost before the subscription is delivered, the subscription is
+    // silently dropped and the session never tears down -> the executer and all its compute
+    // actors leak until the query deadline.
+    //
+    // Reproduced deterministically on a single node: drive KqpProxy with a TEvQueryRequest
+    // that has no RequestCtx (so the session takes the remote CancelationActor cancel path,
+    // exactly as a forwarded request does) and a CancelationActor that is dead by the time
+    // the subscription is delivered. We hold the subscription until the compute actors are
+    // up (emulating cross-node latency), then deliver it to the dead actor. With the fix the
+    // FlagTrackDelivery bounce (TEvUndelivered) makes the session treat it as client-lost
+    // and abort every compute actor; without the fix nothing happens and they leak (this
+    // assertion fails).
+    Y_UNIT_TEST(RemoteClientLostSubscriptionRaceTerminatesComputeActors) {
+        TKikimrSettings settings;
+        settings.SetUseRealThreads(false);
+        auto kikimr = TKikimrRunner(settings);
+        auto runtime = kikimr.GetTestServer().GetRuntime();
+
+        runtime->SetLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_DEBUG);
+        runtime->SetLogPriority(NKikimrServices::KQP_SESSION, NLog::PRI_DEBUG);
+
+        {
+            auto tdb = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
+            kikimr.RunCall([&]() { CreateLargeTable(kikimr, 100, 2, 2, 10, 2); });
+        }
+
+        // The "remote gRPC request actor" the session subscribes to for client-cancel.
+        // It is never registered, so by the time the held subscription is delivered the
+        // actor is dead -> FlagTrackDelivery bounces TEvUndelivered back to the session.
+        const TActorId deadRpcActor(runtime->GetNodeId(0), 0, 0xDEAD, 0);
+
+        TActorId executerActor;
+        THashSet<TActorId> computeActors;
+        THashSet<TActorId> abortedComputeActors;
+        ui32 stateEvents = 0;
+        THolder<IEventHandle> heldSubscribe;
+
+        runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            const auto type = ev->GetTypeRewrite();
+            if (type == NGRpcService::TEvSubscribeGrpcCancel::EventType &&
+                ev->GetRecipientRewrite() == deadRpcActor && !heldSubscribe) {
+                // Emulate cross-node latency: hold the subscription until the compute
+                // actors are up, so any teardown happens with CAs still alive.
+                heldSubscribe.Reset(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            if (type == NYql::NDq::TEvDqCompute::TEvState::EventType) {
+                const auto recipient = ev->GetRecipientRewrite();
+                if (!executerActor) {
+                    executerActor = recipient;
+                }
+                if (recipient == executerActor) {
+                    computeActors.insert(ev->Sender);
+                    ++stateEvents;
+                }
+            } else if (type == TEvKqp::TEvAbortExecution::EventType) {
+                if (computeActors.contains(ev->GetRecipientRewrite()) && ev->Sender == executerActor) {
+                    abortedComputeActors.insert(ev->GetRecipientRewrite());
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Y_DEFER { runtime->SetObserverFunc(TTestActorRuntime::DefaultObserverFunc); };
+
+        // Stall reads so the query hangs with all its compute actors alive.
+        NDataShard::gSkipReadIteratorResultFailPoint.Enable(-1);
+        Y_DEFER { NDataShard::gSkipReadIteratorResultFailPoint.Disable(); };
+
+        // Drive KqpProxy directly with a request that looks forwarded from another node:
+        // no RequestCtx (so the session uses the remote CancelationActor cancel path) and a
+        // CancelationActor pointing at the already-dead gRPC request actor.
+        auto edge = runtime->AllocateEdgeActor();
+        auto ev = std::make_unique<TEvKqp::TEvQueryRequest>();
+        ActorIdToProto(edge, ev->Record.MutableRequestActorId());
+        ActorIdToProto(deadRpcActor, ev->Record.MutableCancelationActor());
+        auto& req = *ev->Record.MutableRequest();
+        req.SetDatabase("/Root");
+        req.SetQuery("SELECT * FROM `/Root/LargeTable`");
+        req.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+        req.SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
+        auto* txControl = req.MutableTxControl();
+        txControl->mutable_begin_tx()->mutable_serializable_read_write();
+        txControl->set_commit_tx(true);
+        runtime->Send(new IEventHandle(MakeKqpProxyID(runtime->GetNodeId(0)), edge, ev.release()));
+
+        // Wait until the compute actors are up AND the session has issued its cancel
+        // subscription (which we are holding).
+        {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&](IEventHandle&) { return stateEvents >= 3 && heldSubscribe; });
+            runtime->DispatchEvents(opts);
+        }
+        UNIT_ASSERT_C(!computeActors.empty(), "Expected compute actors to start");
+        UNIT_ASSERT_C(heldSubscribe, "Session did not issue a remote cancel subscription");
+        UNIT_ASSERT_C(abortedComputeActors.empty(), "Compute actors aborted before client-lost");
+
+        const auto computeActorsBeforeCancel = computeActors;
+
+        // The client "cancels": deliver the subscription to the now-dead gRPC actor.
+        runtime->Send(heldSubscribe.Release());
+
+        // The session must learn the client is gone and terminate every compute actor.
+        {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&](IEventHandle&) {
+                return abortedComputeActors.size() >= computeActorsBeforeCancel.size();
+            });
+            runtime->DispatchEvents(opts, TDuration::Seconds(10));
+        }
+
+        TVector<TActorId> notAborted;
+        for (const auto& ca : computeActorsBeforeCancel) {
+            if (!abortedComputeActors.contains(ca)) {
+                notAborted.push_back(ca);
+            }
+        }
+        UNIT_ASSERT_C(notAborted.empty(),
+            "Compute actors leaked after client-lost (subscription race): "
+                << JoinSeq(", ", notAborted)
+                << " (registered=" << computeActorsBeforeCancel.size()
+                << ", aborted=" << abortedComputeActors.size() << ")");
     }
 
     TVector<TAsyncDataQueryResult> simulateSessionBusy(ui32 count, TSession& session) {
@@ -304,13 +619,14 @@ Y_UNIT_TEST_SUITE(KqpService) {
             return false;
         };
 
-        size_t InFlight = 10;
+        size_t InFlight = NSan::PlainOrUnderSanitizer(10, 4);
+        const ui32 IterationCount = NSan::PlainOrUnderSanitizer(500u, 50u);
         NPar::LocalExecutor().RunAdditionalThreads(InFlight);
         NPar::LocalExecutor().ExecRange([&](int /*id*/) {
             NYdb::NTable::TTableClient db(driver);
             auto session = db.CreateSession().GetValueSync().GetSession();
 
-            for (ui32 i = 0; i < 500 || async_compilation_condition(); ++i) {
+            for (ui32 i = 0; i < IterationCount || async_compilation_condition(); ++i) {
                 ui32 value = useCache && useAsyncPatternCompilation ? i % AsyncPatternCompilationUniqueRequestsSize : i / 5;
                 ui64 total = 100500;
                 TString request = (TStringBuilder() << R"_(
@@ -569,7 +885,111 @@ struct TDictCase {
             }, 0, InFlight, NPar::TLocalExecutor::WAIT_COMPLETE | NPar::TLocalExecutor::MED_PRIORITY);
         }
     }
+
+    Y_UNIT_TEST(ThreeNodesGradualShutdown) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableShuttingDownNodeState(true);
+        
+        TKikimrRunner kikimr(TKikimrSettings()
+                                        .SetFeatureFlags(featureFlags)
+                                        .SetNodeCount(3)
+                                        .SetUseRealThreads(false));
+        kikimr.RunCall([&]() {CreateLargeTable(kikimr, 100, 2, 2, 10, 2);});
+
+        auto queries = std::vector<TString>({
+            R"(
+                SELECT Key, COUNT(*) AS cnt, SUM(Data) AS sum_data, MAX(DataText) AS max_text
+                FROM `/Root/LargeTable`
+                WHERE Data > 0
+                GROUP BY Key
+                ORDER BY cnt DESC
+                LIMIT 100
+            )",
+            R"(
+                SELECT Key, COUNT(*) AS cnt, MIN(Data) AS min_data, MAX(Data) AS max_data
+                FROM `/Root/LargeTable`
+                GROUP BY Key
+                ORDER BY cnt DESC
+                LIMIT 100
+            )",
+            R"(
+                SELECT Key, COUNT(*) AS cnt, SUM(Data) AS sum_data
+                FROM `/Root/EightShard`
+                WHERE Data > 0
+                GROUP BY Key
+                ORDER BY cnt DESC
+                LIMIT 100
+            )"
+        });
+        for (size_t i = 0; i < queries.size(); ++i) {
+            i32 nodeIndexToShutdown = queries.size() - (i + 1);
+            TestShutdownNodeAndExecuteQuery(kikimr, queries[i], nodeIndexToShutdown, i + 1, NYdb::EStatus::SUCCESS, "Stage " + ToString(i + 1));
+        }
+    }
+
+    Y_UNIT_TEST(RetryAfterShutdownThenDisconnect) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableShuttingDownNodeState(true);
+
+        TKikimrRunner kikimr(TKikimrSettings()
+                                    .SetFeatureFlags(featureFlags)
+                                    .SetNodeCount(2)
+                                    .SetUseRealThreads(false));
+        kikimr.RunCall([&]() { CreateLargeTable(kikimr, 100, 2, 2, 10, 2); });
+
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        auto queryClient = kikimr.RunCall([&] { return kikimr.GetQueryClient(); });
+
+        ui32 nodeToShutdown = 1;
+        auto shuttingDownNodeId = runtime.GetNodeId(nodeToShutdown);
+
+        bool nodeShuttingDownReceived = false;
+        bool retryStarted = false;
+        TActorId executerActorId;
+
+        auto observer = [&](TAutoPtr<IEventHandle>& ev) -> auto {
+            if (ev->GetTypeRewrite() == TEvKqpNode::TEvStartKqpTasksResponse::EventType) {
+                auto& msg = ev->Get<TEvKqpNode::TEvStartKqpTasksResponse>()->Record;
+                if (msg.NotStartedTasksSize() > 0) {
+                    for (auto& task : msg.GetNotStartedTasks()) {
+                        if (task.GetReason() == NKikimrKqp::TEvStartKqpTasksResponse::NODE_SHUTTING_DOWN) {
+                            nodeShuttingDownReceived = true;
+                            executerActorId = ev->Recipient;
+                        }
+                    }
+                }
+            }
+
+            if (ev->GetTypeRewrite() == TEvKqpNode::TEvStartKqpTasksRequest::EventType) {
+                if (nodeShuttingDownReceived && ev->Recipient.NodeId() != shuttingDownNodeId) {
+                    retryStarted = true;
+                    auto disconnectEv = new TEvInterconnect::TEvNodeDisconnected(shuttingDownNodeId);
+                    runtime.Send(new IEventHandle(executerActorId, TActorId(), disconnectEv), 0, true);
+                }
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+
+        runtime.SetObserverFunc(observer);
+
+        auto shutdownState = new TKqpShutdownState();
+        runtime.Send(new IEventHandle(NKqp::MakeKqpNodeServiceID(shuttingDownNodeId), {},
+                     new TEvKqp::TEvInitiateShutdownRequest(shutdownState)), nodeToShutdown);
+
+        auto result = kikimr.RunCall([&queryClient]() {
+            return queryClient.ExecuteQuery(R"(
+                SELECT COUNT(*) AS cnt, SUM(Data) AS sum_data
+                FROM `/Root/LargeTable`
+                LIMIT 100
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        });
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS,
+            "Expected SUCCESS because retry to another node was in progress, but got: " << result.GetIssues().ToString());
+    }
+
 }
 
-} // namspace NKqp
+} // namespace NKqp
 } // namespace NKikimr

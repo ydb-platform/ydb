@@ -16,11 +16,13 @@
 #include <ydb/library/actors/interconnect/interconnect_impl.h>
 
 #include <ydb/core/base/wilson_tracing_control.h>
+#include <ydb/core/persqueue/pqtablet/blob/header.h>
 #include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/protos/key.pb.h>
 #include <ydb/core/protos/netclassifier.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/core/protos/schemeshard_config.pb.h>
 #include <ydb/core/protos/stream.pb.h>
 #include <ydb/core/protos/workload_manager_config.pb.h>
 
@@ -69,9 +71,9 @@ namespace NActors {
         Initialize();
     }
 
-    TTestActorRuntime::TTestActorRuntime(ui32 nodeCount, ui32 dataCenterCount, bool useRealThreads)
+    TTestActorRuntime::TTestActorRuntime(ui32 nodeCount, ui32 dataCenterCount, bool useRealThreads, bool useRdmaAllocator)
         : TPortManager(false)
-        , TTestActorRuntimeBase{nodeCount, dataCenterCount, useRealThreads}
+        , TTestActorRuntimeBase{nodeCount, dataCenterCount, useRealThreads, useRdmaAllocator}
     {
         Initialize();
     }
@@ -99,11 +101,6 @@ namespace NActors {
     }
 
     TTestActorRuntime::~TTestActorRuntime() {
-        if (!UseRealThreads) {
-            NKikimr::TAppData::RandomProvider = CreateDefaultRandomProvider();
-            NKikimr::TAppData::TimeProvider = CreateDefaultTimeProvider();
-        }
-
         SetObserverFunc(&TTestActorRuntimeBase::DefaultObserverFunc);
         SetScheduledEventsSelectorFunc(&CollapsedTimeScheduledEventsSelector);
         SetEventFilter(&TTestActorRuntimeBase::DefaultFilterFunc);
@@ -111,6 +108,14 @@ namespace NActors {
         SetRegistrationObserverFunc(&TTestActorRuntimeBase::DefaultRegistrationObserver);
 
         CleanupNodes();
+
+        // Reset global providers only after actor system threads are fully stopped
+        // (CleanupNodes stops the actor system), to avoid a data race where actor
+        // threads still read AppData()->RandomProvider while the main thread resets it.
+        if (!UseRealThreads) {
+            NKikimr::TAppData::RandomProvider = CreateDefaultRandomProvider();
+            NKikimr::TAppData::TimeProvider = CreateDefaultTimeProvider();
+        }
 
         App0 = nullptr;
         NKikimr::NJaegerTracing::ClearTracingControl();
@@ -126,7 +131,7 @@ namespace NActors {
             AddLocalService(
                 NKikimr::NAudit::MakeAuditServiceID(),
                 TActorSetupCmd(
-                    NKikimr::NAudit::CreateAuditWriter(std::move(AuditLogBackends)).Release(),
+                    NKikimr::NAudit::CreateAuditWriter(std::move(AuditLogBackends)),
                     TMailboxType::HTSwap,
                     0
                 ),
@@ -193,6 +198,7 @@ namespace NActors {
             nodeAppData->NetClassifierConfig.CopyFrom(app0->NetClassifierConfig);
             nodeAppData->EnableKqpSpilling = app0->EnableKqpSpilling;
             nodeAppData->InitFeatureFlags(app0->FeatureFlags);
+            NKikimr::NPQ::InitMaxHeaderSize(nodeAppData->FeatureFlags);
             nodeAppData->CompactionConfig = app0->CompactionConfig;
             nodeAppData->HiveConfig.SetWarmUpBootWaitingPeriod(10);
             nodeAppData->HiveConfig.SetMaxNodeUsageToKick(100);
@@ -203,6 +209,7 @@ namespace NActors {
             nodeAppData->SchemeShardConfig = app0->SchemeShardConfig;
             nodeAppData->DataShardConfig = app0->DataShardConfig;
             nodeAppData->ColumnShardConfig = app0->ColumnShardConfig;
+            nodeAppData->SmallBlobsQuotaConfig = app0->SmallBlobsQuotaConfig;
             nodeAppData->MeteringConfig = app0->MeteringConfig;
             nodeAppData->AwsCompatibilityConfig = app0->AwsCompatibilityConfig;
             nodeAppData->S3ProxyResolverConfig = app0->S3ProxyResolverConfig;
@@ -215,7 +222,10 @@ namespace NActors {
             nodeAppData->TransferWriterFactory = std::make_shared<NKikimr::Tests::MockTransferWriterFactory>();
             if (nodeIndex < egg.Icb.size()) {
                 nodeAppData->Icb = std::move(egg.Icb[nodeIndex]);
-                nodeAppData->InFlightLimiterRegistry.Reset(new NKikimr::NGRpcService::TInFlightLimiterRegistry(nodeAppData->Icb));
+                nodeAppData->InFlightLimiterRegistry.Reset(new NKikimr::NGRpcService::TInFlightLimiterRegistry());
+            }
+            if (nodeIndex < egg.Dcb.size()) {
+                nodeAppData->Dcb = std::move(egg.Dcb[nodeIndex]);
             }
             if (KeyConfigGenerator) {
                 nodeAppData->KeyConfig = KeyConfigGenerator(nodeIndex);
@@ -243,7 +253,8 @@ namespace NActors {
                 MonPorts.push_back(port);
             }
 
-            node->ActorSystem->Start();
+            StartActorSystem(nodeIndex, node);
+
             if (nodeAppData->Mon) {
                 nodeAppData->Mon->Start(node->ActorSystem.Get());
             }
@@ -317,14 +328,6 @@ namespace NActors {
         }
 
         return true;
-    }
-
-    void TTestActorRuntime::SimulateSleep(TDuration duration) {
-        if (!SleepEdgeActor) {
-            SleepEdgeActor = AllocateEdgeActor();
-        }
-        Schedule(new IEventHandle(SleepEdgeActor, SleepEdgeActor, new TEvents::TEvWakeup()), duration);
-        GrabEdgeEventRethrow<TEvents::TEvWakeup>(SleepEdgeActor);
     }
 
     void TTestActorRuntime::SendToPipe(ui64 tabletId, const TActorId& sender, IEventBase* payload, ui32 nodeIndex, const NKikimr::NTabletPipe::TClientConfig& pipeConfig, TActorId clientId, ui64 cookie, NWilson::TTraceId traceId) {

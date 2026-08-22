@@ -36,6 +36,7 @@
 #define TABLED_ATTRS(...) TAG_ATTRS(TTableD, ##__VA_ARGS__)
 #define TABLEH() TAG(TTableH)
 #define TABLEH_CLASS(cls) TAG_CLASS(TTableH, cls)
+#define TABLEH_ATTRS(...) TAG_ATTRS(TTableH, ##__VA_ARGS__)
 #define FORM() TAG(TFormC)
 #define FORM_CLASS(cls) TAG_CLASS(TFormC, cls)
 #define LABEL() TAG(TLabelC)

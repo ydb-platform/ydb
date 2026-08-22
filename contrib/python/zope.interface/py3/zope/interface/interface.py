@@ -827,6 +827,8 @@ class InterfaceClass(_InterfaceClassBase):
                 '__firstlineno__',
                 # __classdictcell__: Python 3.14
                 '__classdictcell__',
+                # __annotate_func__: Python 3.14b1+
+                '__annotate_func__',
             ) and
             aval is not _decorator_non_return  # noqa W503
         }

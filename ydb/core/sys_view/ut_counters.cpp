@@ -32,37 +32,47 @@ void CreateDatabases(TTestEnv& env) {
 }
 
 void CreateTables(TTestEnv& env) {
-    TTableClient client(env.GetDriver());
-    auto session = client.CreateSession().GetValueSync().GetSession();
+    auto driverConfig = TDriverConfig()
+        .SetEndpoint(env.GetEndpoint())
+        .SetDiscoveryMode(EDiscoveryMode::Off);
+    auto driver = TDriver(driverConfig);
 
-    NKqp::AssertSuccessResult(session.ExecuteSchemeQuery(R"(
-        CREATE TABLE `Root/Database1/Table1` (
-            Key Uint64,
-            Value String,
-            PRIMARY KEY (Key)
-        );
-    )").GetValueSync());
+    {
+        TTableClient client(driver, TClientSettings().Database("/Root/Database1"));
+        auto session = client.CreateSession().GetValueSync().GetSession();
+        NKqp::AssertSuccessResult(session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/Database1/Table1` (
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+        )").GetValueSync());
 
-    NKqp::AssertSuccessResult(session.ExecuteDataQuery(R"(
-        REPLACE INTO `Root/Database1/Table1` (Key, Value) VALUES
-            (1u, "A"),
-            (2u, "B"),
-            (3u, "C");
-    )", TTxControl::BeginTx().CommitTx()).GetValueSync());
+        NKqp::AssertSuccessResult(session.ExecuteDataQuery(R"(
+            REPLACE INTO `/Root/Database1/Table1` (Key, Value) VALUES
+                (1u, "A"),
+                (2u, "B"),
+                (3u, "C");
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync());
+    }
 
-    NKqp::AssertSuccessResult(session.ExecuteSchemeQuery(R"(
-        CREATE TABLE `Root/Database2/Table2` (
-            Key Uint64,
-            Value String,
-            PRIMARY KEY (Key)
-        );
-    )").GetValueSync());
+    {
+        TTableClient client(driver, TClientSettings().Database("/Root/Database2"));
+        auto session = client.CreateSession().GetValueSync().GetSession();
+        NKqp::AssertSuccessResult(session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/Database2/Table2` (
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+        )").GetValueSync());
 
-    NKqp::AssertSuccessResult(session.ExecuteDataQuery(R"(
-        REPLACE INTO `Root/Database2/Table2` (Key, Value) VALUES
-            (4u, "D"),
-            (5u, "E");
-    )", TTxControl::BeginTx().CommitTx()).GetValueSync());
+        NKqp::AssertSuccessResult(session.ExecuteDataQuery(R"(
+            REPLACE INTO `/Root/Database2/Table2` (Key, Value) VALUES
+                (4u, "D"),
+                (5u, "E");
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync());
+    }
 }
 
 void CreateDatabasesAndTables(TTestEnv& env) {

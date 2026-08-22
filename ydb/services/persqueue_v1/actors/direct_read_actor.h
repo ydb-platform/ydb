@@ -7,7 +7,7 @@
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
 #include <ydb/core/persqueue/events/global.h>
 
-#include <ydb/core/persqueue/pq_rl_helpers.h>
+#include <ydb/core/persqueue/public/pq_rl_helpers.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
@@ -36,6 +36,7 @@ struct TFormedDirectReadResponse: public TSimpleRefCount<TFormedDirectReadRespon
 class TDirectReadSessionActor
     : public TActorBootstrapped<TDirectReadSessionActor>
     , private NPQ::TRlHelpers
+    , public NActors::IActorExceptionHandler
 {
     using TClientMessage = Topic::StreamDirectReadMessage::FromClient;
 
@@ -54,6 +55,7 @@ public:
 
     void Bootstrap(const TActorContext& ctx);
 
+    bool OnUnhandledException(const std::exception& exc) override;
     void Die(const TActorContext& ctx) override;
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -103,10 +105,8 @@ private:
     // proxy events
     void Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQProxy::TEvInitDirectRead::TPtr& ev,  const TActorContext& ctx);
-    //void Handle(typename TEvReadResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQProxy::TEvDone::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQProxy::TEvCloseSession::TPtr& ev, const TActorContext& ctx);
-    //void Handle(TEvPQProxy::TEvDieCommand::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQProxy::TEvStartDirectRead::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQProxy::TEvDirectReadDataSessionConnectedResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQProxy::TEvAuth::TPtr& ev, const TActorContext& ctx);
@@ -134,7 +134,6 @@ private:
     std::unique_ptr<TEvStreamReadRequest> Request;
     ui64 Cookie;
     const TString ClientDC;
-    const TInstant StartTimestamp;
 
     TActorId SchemeCache;
     TActorId NewSchemeCache;
@@ -148,6 +147,7 @@ private:
     TString PeerName;
 
     bool InitDone;
+    bool ReadWithoutConsumer;
 
     TString Auth;
 

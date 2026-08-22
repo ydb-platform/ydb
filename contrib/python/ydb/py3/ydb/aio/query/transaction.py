@@ -1,6 +1,7 @@
 import logging
 from typing import (
     Optional,
+    TYPE_CHECKING,
 )
 
 from .base import AsyncResponseContextIterator
@@ -11,12 +12,19 @@ from ...query.transaction import (
     BaseQueryTxContext,
     QueryTxStateEnum,
 )
+from ...observability.tracing import SpanName, create_ydb_span, span_finish_callback
+
+if TYPE_CHECKING:
+    from .session import QuerySession
+    from ...aio.driver import Driver as AsyncDriver
 
 logger = logging.getLogger(__name__)
 
 
-class QueryTxContext(BaseQueryTxContext):
-    def __init__(self, driver, session_state, session, tx_mode):
+class QueryTxContext(BaseQueryTxContext["AsyncDriver"]):
+    """Asynchronous transaction context."""
+
+    def __init__(self, driver: "AsyncDriver", session: "QuerySession", tx_mode: base.BaseQueryTxMode):
         """
         An object that provides a simple transaction context manager that allows statements execution
         in a transaction. You don't have to open transaction explicitly, because context manager encapsulates
@@ -28,14 +36,15 @@ class QueryTxContext(BaseQueryTxContext):
         This context manager is not thread-safe, so you should not manipulate on it concurrently.
 
         :param driver: A driver instance
-        :param session_state: A state of session
+        :param session: A session instance
         :param tx_mode: Transaction mode, which is a one from the following choices:
          1) QuerySerializableReadWrite() which is default mode;
          2) QueryOnlineReadOnly(allow_inconsistent_reads=False);
          3) QuerySnapshotReadOnly();
-         4) QueryStaleReadOnly().
+         4) QuerySnapshotReadWrite();
+         5) QueryStaleReadOnly().
         """
-        super().__init__(driver, session_state, session, tx_mode)
+        super().__init__(driver, session, tx_mode)
         self._init_callback_handler(base.CallbackHandlerMode.ASYNC)
 
     async def __aenter__(self) -> "QueryTxContext":
@@ -62,6 +71,9 @@ class QueryTxContext(BaseQueryTxContext):
                 await self.rollback()
             except issues.Error:
                 logger.warning("Failed to rollback leaked tx: %s", self._tx_state.tx_id)
+            except BaseException:
+                logger.warning("Failed to rollback leaked tx: %s", self._tx_state.tx_id)
+                self.session._close_session(invalidate=True)
 
     async def _ensure_prev_stream_finished(self) -> None:
         if self._prev_stream is not None:
@@ -76,7 +88,13 @@ class QueryTxContext(BaseQueryTxContext):
 
         :return: None or exception if begin is failed
         """
-        await self._begin_call(settings)
+        with create_ydb_span(
+            SpanName.BEGIN_TRANSACTION,
+            self._driver_config,
+            node_id=self.session.node_id,
+            peer=getattr(self.session, "_peer", None),
+        ).attach_context():
+            await self._begin_call(settings)
         return self
 
     async def commit(self, settings: Optional[BaseRequestSettings] = None) -> None:
@@ -98,13 +116,19 @@ class QueryTxContext(BaseQueryTxContext):
 
         await self._ensure_prev_stream_finished()
 
-        try:
-            await self._execute_callbacks_async(base.TxEvent.BEFORE_COMMIT)
-            await self._commit_call(settings)
-            await self._execute_callbacks_async(base.TxEvent.AFTER_COMMIT, exc=None)
-        except BaseException as e:
-            await self._execute_callbacks_async(base.TxEvent.AFTER_COMMIT, exc=e)
-            raise e
+        with create_ydb_span(
+            SpanName.COMMIT,
+            self._driver_config,
+            node_id=self.session.node_id,
+            peer=getattr(self.session, "_peer", None),
+        ).attach_context():
+            try:
+                await self._execute_callbacks_async(base.TxEvent.BEFORE_COMMIT)
+                await self._commit_call(settings)
+                await self._execute_callbacks_async(base.TxEvent.AFTER_COMMIT, exc=None)
+            except BaseException as e:
+                await self._execute_callbacks_async(base.TxEvent.AFTER_COMMIT, exc=e)
+                raise e
 
     async def rollback(self, settings: Optional[BaseRequestSettings] = None) -> None:
         """Calls rollback on a transaction if it is open otherwise is no-op. If transaction execution
@@ -125,13 +149,19 @@ class QueryTxContext(BaseQueryTxContext):
 
         await self._ensure_prev_stream_finished()
 
-        try:
-            await self._execute_callbacks_async(base.TxEvent.BEFORE_ROLLBACK)
-            await self._rollback_call(settings)
-            await self._execute_callbacks_async(base.TxEvent.AFTER_ROLLBACK, exc=None)
-        except BaseException as e:
-            await self._execute_callbacks_async(base.TxEvent.AFTER_ROLLBACK, exc=e)
-            raise e
+        with create_ydb_span(
+            SpanName.ROLLBACK,
+            self._driver_config,
+            node_id=self.session.node_id,
+            peer=getattr(self.session, "_peer", None),
+        ).attach_context():
+            try:
+                await self._execute_callbacks_async(base.TxEvent.BEFORE_ROLLBACK)
+                await self._rollback_call(settings)
+                await self._execute_callbacks_async(base.TxEvent.AFTER_ROLLBACK, exc=None)
+            except BaseException as e:
+                await self._execute_callbacks_async(base.TxEvent.AFTER_ROLLBACK, exc=e)
+                raise e
 
     async def execute(
         self,
@@ -144,6 +174,10 @@ class QueryTxContext(BaseQueryTxContext):
         settings: Optional[BaseRequestSettings] = None,
         *,
         stats_mode: Optional[base.QueryStatsMode] = None,
+        schema_inclusion_mode: Optional[base.QuerySchemaInclusionMode] = None,
+        result_set_format: Optional[base.QueryResultSetFormat] = None,
+        arrow_format_settings: Optional[base.ArrowFormatSettings] = None,
+        pool_id: Optional[str] = None,
     ) -> AsyncResponseContextIterator:
         """Sends a query to Query Service
 
@@ -164,31 +198,52 @@ class QueryTxContext(BaseQueryTxContext):
          2) QueryStatsMode.BASIC;
          3) QueryStatsMode.FULL;
          4) QueryStatsMode.PROFILE;
+        :param schema_inclusion_mode: Schema inclusion mode for result sets:
+         1) QuerySchemaInclusionMode.ALWAYS, which is default;
+         2) QuerySchemaInclusionMode.FIRST_ONLY.
+        :param result_set_format: Format of the result sets:
+         1) QueryResultSetFormat.VALUE, which is default;
+         2) QueryResultSetFormat.ARROW.
+        :param arrow_format_settings: Settings for Arrow format when result_set_format is ARROW.
+        :param pool_id: Optional resource pool ID for routing the query to a specific compute pool.
 
         :return: Iterator with result sets
         """
         await self._ensure_prev_stream_finished()
 
-        stream_it = await self._execute_call(
-            query=query,
-            parameters=parameters,
-            commit_tx=commit_tx,
-            syntax=syntax,
-            exec_mode=exec_mode,
-            stats_mode=stats_mode,
-            concurrent_result_sets=concurrent_result_sets,
-            settings=settings,
+        span = create_ydb_span(
+            SpanName.EXECUTE_QUERY,
+            self._driver_config,
+            node_id=self.session.node_id,
+            peer=getattr(self.session, "_peer", None),
         )
 
+        with span.attach_context(end_on_exit=False):
+            stream_it = await self._execute_call(
+                query=query,
+                parameters=parameters,
+                commit_tx=commit_tx,
+                syntax=syntax,
+                exec_mode=exec_mode,
+                stats_mode=stats_mode,
+                schema_inclusion_mode=schema_inclusion_mode,
+                result_set_format=result_set_format,
+                arrow_format_settings=arrow_format_settings,
+                concurrent_result_sets=concurrent_result_sets,
+                settings=settings,
+                pool_id=pool_id,
+            )
         self._prev_stream = AsyncResponseContextIterator(
-            stream_it,
-            lambda resp: base.wrap_execute_query_response(
+            it=stream_it,
+            wrapper=lambda resp: base.wrap_execute_query_response(
                 rpc_state=None,
                 response_pb=resp,
-                session_state=self._session_state,
+                session=self.session,
                 tx=self,
                 commit_tx=commit_tx,
                 settings=self.session._settings,
             ),
+            on_error=self.session._on_execute_stream_error,
+            on_finish=span_finish_callback(span),
         )
         return self._prev_stream

@@ -1,9 +1,11 @@
 #pragma once
 
 #include "defs.h"
+
 #include "config.h"
 #include "downtime.h"
 #include "node_checkers.h"
+#include "priority_lock.h"
 #include "services.h"
 
 #include <ydb/core/base/blobstorage.h>
@@ -12,11 +14,11 @@
 #include <ydb/core/blobstorage/base/blobstorage_vdiskid.h>
 #include <ydb/core/mind/tenant_pool.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
+#include <ydb/core/protos/blobstorage_config.pb.h>
+#include <ydb/core/protos/bootstrap.pb.h>
 #include <ydb/core/protos/cms.pb.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/console.pb.h>
-#include <ydb/core/protos/blobstorage_config.pb.h>
-#include <ydb/core/protos/bootstrap.pb.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
@@ -28,6 +30,10 @@
 #include <util/generic/ptr.h>
 #include <util/generic/set.h>
 #include <util/generic/vector.h>
+
+namespace Ydb::Maintenance {
+    class Node;
+}
 
 namespace NKikimr::NCms {
 
@@ -50,12 +56,13 @@ struct TPermissionInfo {
     TPermissionInfo(TPermissionInfo &&other) = default;
 
     TPermissionInfo(const NKikimrCms::TPermission &permission, const TString &requestId,
-                    const TString &owner)
+                    const TString &owner, i32 priority)
         : PermissionId(permission.GetId())
         , RequestId(requestId)
         , Owner(owner)
         , Action(permission.GetAction())
         , Deadline(TInstant::MicroSeconds(permission.GetDeadline()))
+        , Priority(priority)
     {
     }
 
@@ -73,6 +80,7 @@ struct TPermissionInfo {
     TString Owner;
     NKikimrCms::TAction Action;
     TInstant Deadline;
+    i32 Priority = 0;
 };
 
 /**
@@ -131,15 +139,17 @@ struct TNotificationInfo {
  * Base class for entity which can be locked by CMS user. There are three
  * types of locks used.
  *
- * TLock - lock by issued permission. Only one such lock is possible per item.
+ * TLock - lock by issued permission. Multiple locks are possible per item.
+ * Locks are ordered by priority and request cannot get permission for an item if
+ * it has a lock with higher or the same priority.
  *
  * TExternalLock - lock caused by some external activity (not permitted by CMS)
  * reported via CMS notifications. This lock may have delayed effect which allows
  * to notify about some actions in the future.
  *
  * TScheduledLock - lock by scheduled request. Multiple scheduled locks are allowed.
- * Scheduled locks are ordered and request cannot get permission for an item if
- * it has a scheduled lock with lower order.
+ * Scheduled locks are ordered by priority and request cannot get permission for an item if
+ * it has a scheduled lock with higher priority.
  *
  * TTemporaryLock - temporary lock used for action processing. Used to identify
  * conflicts within a single action and between actions in a single request.
@@ -170,6 +180,7 @@ public:
             PermissionId = permission.PermissionId;
             LockDeadline = permission.Deadline;
             ActionDeadline = LockDeadline + TDuration::MicroSeconds(Action.GetDuration());
+            Priority = permission.Priority;
         }
 
         TLock(const TLock &other) = default;
@@ -181,6 +192,7 @@ public:
         TString PermissionId;
         TInstant LockDeadline;
         TInstant ActionDeadline;
+        i32 Priority = 0;
     };
 
     struct TExternalLock : TBaseLock {
@@ -219,9 +231,10 @@ public:
     };
 
     struct TTemporaryLock : TBaseLock {
-        TTemporaryLock(ui64 point, const NKikimrCms::TAction &action)
+        TTemporaryLock(ui64 point, const NKikimrCms::TAction &action, const TString &requestId)
             : TBaseLock("", action)
             , RollbackPoint(point)
+            , RequestId(requestId)
         {
         }
 
@@ -232,6 +245,7 @@ public:
         TTemporaryLock &operator=(TTemporaryLock &&other) = default;
 
         ui64 RollbackPoint;
+        TString RequestId;
     };
 
     TLockableItem() = default;
@@ -250,13 +264,15 @@ public:
     }
 
     void AddLock(const TPermissionInfo &permission) {
-        Y_ABORT_UNLESS(Lock.Empty());
-        Lock.ConstructInPlace(permission);
+        AddLockByRequest(permission.RequestId);
+        AddPriorityLock(Locks, TLock(permission));
     }
 
     void AddExternalLock(const TNotificationInfo &notification,
             const NKikimrCms::TAction &action)
     {
+        AddLockByRequest(notification.NotificationId);
+
         TExternalLock lock(notification, action);
         auto pos = LowerBound(ExternalLocks.begin(), ExternalLocks.end(), lock, [](auto &l, auto &r) {
                 return l.LockStart < r.LockStart;
@@ -265,10 +281,17 @@ public:
     }
 
     void ScheduleLock(TScheduledLock &&lock) {
+        AddLockByRequest(lock.RequestId);
+
         auto pos = LowerBound(ScheduledLocks.begin(), ScheduledLocks.end(), lock, [](auto &l, auto &r) {
             return l.Priority < r.Priority;
         });
-        ScheduledLocks.insert(pos, lock);
+        ScheduledLocks.insert(pos, std::move(lock));
+    }
+
+    void AddTempLock(TTemporaryLock &&lock) {
+        AddLockByRequest(lock.RequestId);
+        TempLocks.push_back(std::move(lock));
     }
 
     bool IsLocked(TErrorInfo &error, TDuration defaultRetryTime, TInstant no, TDuration durationw) const;
@@ -276,9 +299,14 @@ public:
 
     void RollbackLocks(ui64 point);
 
-    void DeactivateScheduledLocks(i32 priority);
-    void ReactivateScheduledLocks();
+    void SetPriorityToCheck(i32 priority);
+    void ResetPriorityToCheck();
+
     void RemoveScheduledLocks(const TString &requestId);
+
+    void AddLockByRequest(const TString &requestId);
+    void RemoveLockByRequest(const TString &requestId);
+    bool IsLockedByRequest(const TString &requestId) const;
 
     // Fill some item info (e.g. Downtime) basing on previous item state.
     virtual void MigrateOldInfo(const TLockableItem &old);
@@ -290,11 +318,15 @@ public:
     // Recent item downtimes.
     TDowntime Downtime = TDowntime(TDuration::Zero());
 
-    TMaybe<TLock> Lock;
+    // Requests that have lock on this item
+    THashSet<TString> LockedByRequests;
+
+    std::list<TLock> Locks;
     std::list<TExternalLock> ExternalLocks;
     std::list<TScheduledLock> ScheduledLocks;
     TVector<TTemporaryLock> TempLocks;
-    i32 DeactivatedLocksPriority = Max<i32>();
+    // Used to check locks against priority of currently processed request
+    i32 PriorityToCheck = Max<i32>();
     THashSet<NKikimrCms::EMarker> Markers;
 };
 
@@ -345,7 +377,7 @@ public:
     TString PreviousTenant;
     TServices Services;
     TInstant StartTime;
-    ui32 PileId;
+    TMaybeFail<ui32> PileId;
 
     TVector<TSimpleSharedPtr<INodesChecker>> NodeGroups;
 };
@@ -482,25 +514,30 @@ struct TBSGroupInfo {
 class TStateStorageRingInfo : public TThrRefBase {
 public:
     /**
-     * Ok:          we can allow to restart nodes;
+     * Ok:                   we can allow to restart nodes;
      *
-     * Locked:      all nodes are up. We restarted some nodes before and waiting
-     *              some timeout to allow restart nodes from other ring.
-     *              But, we still can restart nodes from this ring;
+     * Locked:               all nodes are up. We restarted some nodes before and waiting
+     *                       some timeout to allow restart nodes from other ring.
+     *                       But, we still can restart nodes from this ring;
      *
-     * Disabled:    Disabled ring (see state storage config). The ring
-     *              affects permissions of other rings, but this ring
-     *              can be disabled without considering the others;
+     * Disabled:             Disabled ring (see state storage config). The ring
+     *                       affects permissions of other rings, but this ring
+     *                       can be disabled without considering the others;
      *
-     * Restart:     has some restarting or down nodes. We can still restart
-     *              nodes from this ring;
+     * Restart:              has some restarting or down nodes. We can still restart
+     *                       nodes from this ring;
+     *
+     * RestartByThisRequest: same as Restart, but provide additional info
+                             that nodes are restarted by this request;
     */
+
     enum RingState : ui8 {
         Unknown = 0,
         Ok,
         Locked,
         Disabled,
         Restart,
+        RestartByThisRequest,
     };
 
     TStateStorageRingInfo() = default;
@@ -524,6 +561,9 @@ public:
             case Restart:
                 return "Restart";
                 break;
+            case RestartByThisRequest:
+                return "Restart by this request";
+                break;
             default:
                 return "Unknown ring state";
                 break;
@@ -538,7 +578,7 @@ public:
         IsDisabled = true;
     }
 
-    RingState CountState(TInstant now, TDuration retryTime, TDuration duration) const;
+    RingState CountState(TInstant now, TDuration retryTime, TDuration duration, const TString &requestId) const;
 
     ui32 RingId = 0;
     bool IsDisabled = false;
@@ -574,14 +614,16 @@ public:
 class TLockNodeOperation : public TOperationBase {
 public:
     const ui32 NodeId;
+    const TNodeLockContext LockContext;
 
 private:
     TSimpleSharedPtr<INodesChecker> NodesState;
 
 public:
-    TLockNodeOperation(ui32 nodeId, TSimpleSharedPtr<INodesChecker> nodesState)
+    TLockNodeOperation(ui32 nodeId, const TNodeLockContext& ctx, TSimpleSharedPtr<INodesChecker> nodesState)
         : TOperationBase(OPERATION_TYPE_LOCK_NODE)
         , NodeId(nodeId)
+        , LockContext(ctx)
         , NodesState(nodesState)
     {
     }
@@ -589,11 +631,11 @@ public:
     ~TLockNodeOperation() = default;
 
     void Do() override final {
-        NodesState->LockNode(NodeId);
+        NodesState->LockNode(NodeId, LockContext);
     }
 
     void Undo() override final {
-        NodesState->UnlockNode(NodeId);
+        NodesState->UnlockNode(NodeId, LockContext);
     }
 };
 
@@ -621,8 +663,8 @@ public:
         Log.emplace_back(new TLogRollbackPoint());
     }
 
-    void AddNodeLockOperation(ui32 nodeId, TSimpleSharedPtr<INodesChecker> nodesState) {
-        Log.emplace_back(new TLockNodeOperation(nodeId, nodesState))->Do();
+    void AddNodeLockOperation(ui32 nodeId, const TNodeLockContext& ctx, TSimpleSharedPtr<INodesChecker> nodesState) {
+        Log.emplace_back(new TLockNodeOperation(nodeId, ctx, nodesState))->Do();
     }
 
     void RollbackOperations() {
@@ -636,7 +678,7 @@ public:
         }
     }
 
-    void ApplyAction(const NKikimrCms::TAction &action, TClusterInfoPtr clusterState);
+    void ApplyAction(const NKikimrCms::TAction &action, i32 priority, const TString &requestId, TClusterInfoPtr clusterState);
 };
 
 /**
@@ -655,18 +697,20 @@ public:
     using TPDisks = THashMap<TPDiskID, TPDiskInfoPtr, TPDiskIDHash>;
     using TVDisks = THashMap<TVDiskID, TVDiskInfoPtr>;
     using TBSGroups = THashMap<ui32, TBSGroupInfo>;
+    using TPileId = ui32;
 
-    using TenantNodesCheckers = THashMap<TString, TSimpleSharedPtr<TNodesLimitsCounterBase>>;
+    using TTenantNodesCheckers = THashMap<TString, TSimpleSharedPtr<TNodesLimitsCounterBase>>;
+    using TClusterPilesNodesCheckers = THashMap<TPileId, TSimpleSharedPtr<TClusterLimitsCounter>>;
 
     friend TOperationLogManager;
 
-    TenantNodesCheckers TenantNodesChecker;
-    TSimpleSharedPtr<TClusterLimitsCounter> ClusterNodes = MakeSimpleShared<TClusterLimitsCounter>(0u, 0u);
+    THashMap<TPileId, TTenantNodesCheckers> TenantNodesChecker;
+    TClusterPilesNodesCheckers ClusterNodes;
 
     TOperationLogManager LogManager;
     TOperationLogManager ScheduledLogManager;
 
-    void ApplyActionWithoutLog(const NKikimrCms::TAction &action);
+    void ApplyActionWithoutLog(const NKikimrCms::TAction &action, i32 priority, const TString &requestId);
     void ApplyNodeLimits(ui32 clusterLimit, ui32 clusterRatioLimit, ui32 tenantLimit, ui32 tenantRatioLimit);
 
     TClusterInfo() = default;
@@ -680,8 +724,9 @@ public:
 
     void GenerateTenantNodesCheckers();
     void GenerateSysTabletsNodesCheckers();
+    void GenerateClusterNodesCheckers();
 
-    bool IsStateStorageReplicaNode(ui32 nodeId) {
+    bool IsStateStorageReplicaNode(ui32 nodeId) const {
         return StateStorageReplicas.contains(nodeId);
     }
 
@@ -755,6 +800,21 @@ public:
 
     size_t NodesCount() const {
         return Nodes.size();
+    }
+
+    bool HostHasSysTablet(const TString &hostName) const {
+        ui32 nodeId;
+        if (TryFromString(hostName, nodeId)) {
+            return HasNode(nodeId) && NodeToTabletTypes.contains(nodeId);
+        }
+
+        auto pr = HostNameToNodeId.equal_range(hostName);
+        for (auto it = pr.first; it != pr.second; ++it) {
+            if (NodeToTabletTypes.contains(it->second)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     size_t NodesCount(const TString &hostName) const {
@@ -887,19 +947,21 @@ public:
     void AddBSGroup(const NKikimrBlobStorage::TBaseConfig::TGroup &info);
     void AddNodeTenants(ui32 nodeId, const NKikimrTenantPool::TTenantPoolStatus &info);
 
-    void AddNodeTempLock(ui32 nodeId, const NKikimrCms::TAction &action);
-    void AddPDiskTempLock(TPDiskID pdiskId, const NKikimrCms::TAction &action);
-    void AddVDiskTempLock(TVDiskID vdiskId, const NKikimrCms::TAction &action);
+    void AddNodeTempLock(ui32 nodeId, const NKikimrCms::TAction &action, const TString &requestId);
+    void AddPDiskTempLock(TPDiskID pdiskId, const NKikimrCms::TAction &action, const TString &requestId);
+    void AddVDiskTempLock(TVDiskID vdiskId, const NKikimrCms::TAction &action, const TString &requestId);
 
     ui64 AddLocks(const TPermissionInfo &permission, const TActorContext *ctx);
 
     ui64 AddLocks(const NKikimrCms::TPermission &permission, const TString &requestId,
-            const TString &owner, const TActorContext *ctx)
+            const TString &owner, i32 priority, const TActorContext *ctx)
     {
-        return AddLocks({permission, requestId, owner}, ctx);
+        return AddLocks({permission, requestId, owner, priority}, ctx);
     }
 
     ui64 AddExternalLocks(const TNotificationInfo &notification, const TActorContext *ctx);
+
+    TSet<TLockableItem *> FindLockedItems(const NKikimrCms::TAction &action, const TActorContext *ctx);
 
     void SetHostMarkers(const TString &hostName, const THashSet<NKikimrCms::EMarker> &markers);
     void ResetHostMarkers(const TString &hostName);
@@ -907,11 +969,12 @@ public:
     void ApplyDowntimes(const TDowntimes &downtimes);
     void UpdateDowntimes(TDowntimes &downtimes, const TActorContext &ctx);
 
-    ui64 AddTempLocks(const NKikimrCms::TAction &action, const TActorContext *ctx);
+    ui64 AddTempLocks(const NKikimrCms::TAction &action, i32 priority, const TString &requestId, const TActorContext *ctx);
     ui64 ScheduleActions(const TRequestInfo &request, const TActorContext *ctx);
     void UnscheduleActions(const TString &requestId);
-    void DeactivateScheduledLocks(i32 priority);
-    void ReactivateScheduledLocks();
+
+    void SetPriorityToCheck(i32 priority);
+    void ResetPriorityToCheck();
 
     void RollbackLocks(ui64 point);
     ui64 PushRollbackPoint() {
@@ -935,6 +998,10 @@ public:
 
     static bool IsStaticGroupVDisk(const TVDiskID &vdId) { return EGroupConfigurationType::Static == VDiskConfigurationType(vdId); }
     static bool IsDynamicGroupVDisk(const TVDiskID &vdId) { return EGroupConfigurationType::Dynamic == VDiskConfigurationType(vdId); }
+
+    // Computes cluster roles for the given node and appends them to the
+    // repeated `roles` field of the maintenance Node message.
+    void FillNodeRoles(const TNodeInfo &node, Ydb::Maintenance::Node &out) const;
 
 private:
     TNodeInfo &NodeRef(ui32 nodeId) const {
@@ -1015,8 +1082,6 @@ private:
         return TPDiskID();
     }
 
-    TSet<TLockableItem *> FindLockedItems(const NKikimrCms::TAction &action, const TActorContext *ctx);
-
     TNodes Nodes;
     TTablets Tablets;
     TPDisks PDisks;
@@ -1036,16 +1101,16 @@ private:
     THashMap<ui32, ui32> StateStorageNodeToRingId;
 
 public:
+    using TSysNodesCheckers = THashMap<NKikimrConfig::TBootstrap::ETabletType, TSimpleSharedPtr<TSysTabletsNodesCounter>>;
     bool IsLocalBootConfDiffersFromConsole = false;
     NKikimrConfig::TBootstrap BootstrapConfig;
     THashMap<ui32, TVector<NKikimrConfig::TBootstrap::ETabletType>> NodeToTabletTypes;
 
-    THashMap<NKikimrConfig::TBootstrap::ETabletType, TSimpleSharedPtr<TSysTabletsNodesCounter>> SysNodesCheckers;
+    THashMap<TPileId, TSysNodesCheckers> SysNodesCheckers;
 
     TIntrusiveConstPtr<TStateStorageInfo> StateStorageInfo;
     TVector<TVector<TStateStorageRingInfoPtr>> StateStorageRings;
 
-    std::vector<NKikimr::TBridgeInfo::TPile> Piles;
     THashMap<ui32, ui32> NodeIdToPileId;
     bool IsBridgeMode = false;
 };

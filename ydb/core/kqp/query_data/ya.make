@@ -4,6 +4,7 @@ SRCS(
     kqp_query_data.cpp
     kqp_prepared_query.cpp
     kqp_predictor.cpp
+    kqp_type_mismatch.cpp
 )
 
 PEERDIR(
@@ -17,6 +18,7 @@ PEERDIR(
     ydb/library/yql/dq/proto
     yql/essentials/providers/result/expr_nodes
     ydb/core/kqp/expr_nodes
+    ydb/core/kqp/common/result_set_format
 )
 
 YQL_LAST_ABI_VERSION()

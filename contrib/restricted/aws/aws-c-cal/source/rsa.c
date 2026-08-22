@@ -8,11 +8,11 @@
 #include <aws/cal/hash.h>
 #include <aws/cal/private/der.h>
 
-typedef struct aws_rsa_key_pair *(
-    aws_rsa_key_pair_new_from_public_pkcs1_fn)(struct aws_allocator *allocator, struct aws_byte_cursor public_key);
+typedef struct aws_rsa_key_pair *(aws_rsa_key_pair_new_from_public_pkcs1_fn)(struct aws_allocator *allocator,
+                                                                             struct aws_byte_cursor public_key);
 
-typedef struct aws_rsa_key_pair *(
-    aws_rsa_key_pair_new_from_private_pkcs1_fn)(struct aws_allocator *allocator, struct aws_byte_cursor private_key);
+typedef struct aws_rsa_key_pair *(aws_rsa_key_pair_new_from_private_pkcs1_fn)(struct aws_allocator *allocator,
+                                                                              struct aws_byte_cursor private_key);
 
 #ifndef BYO_CRYPTO
 
@@ -108,6 +108,7 @@ int aws_rsa_key_pair_encrypt(
     struct aws_byte_buf *out) {
     AWS_PRECONDITION(key_pair);
     AWS_PRECONDITION(out);
+    AWS_PRECONDITION(aws_byte_cursor_is_valid(&plaintext));
 
     if (AWS_UNLIKELY(aws_rsa_key_pair_max_encrypt_plaintext_size(key_pair, algorithm) < plaintext.len)) {
         AWS_LOGF_ERROR(AWS_LS_CAL_RSA, "Unexpected buffer size. For RSA, ciphertext must not exceed block size");
@@ -124,6 +125,7 @@ AWS_CAL_API int aws_rsa_key_pair_decrypt(
     struct aws_byte_buf *out) {
     AWS_PRECONDITION(key_pair);
     AWS_PRECONDITION(out);
+    AWS_PRECONDITION(aws_byte_cursor_is_valid(&ciphertext));
 
     if (AWS_UNLIKELY(ciphertext.len != (key_pair->key_size_in_bits / 8))) {
         AWS_LOGF_ERROR(AWS_LS_CAL_RSA, "Unexpected buffer size. For RSA, ciphertext is expected to match block size.");
@@ -140,6 +142,7 @@ int aws_rsa_key_pair_sign_message(
     struct aws_byte_buf *out) {
     AWS_PRECONDITION(key_pair);
     AWS_PRECONDITION(out);
+    AWS_PRECONDITION(aws_byte_cursor_is_valid(&digest));
 
     AWS_FATAL_ASSERT(
         algorithm == AWS_CAL_RSA_SIGNATURE_PKCS1_5_SHA256 || algorithm == AWS_CAL_RSA_SIGNATURE_PSS_SHA256);
@@ -159,6 +162,8 @@ int aws_rsa_key_pair_verify_signature(
     struct aws_byte_cursor digest,
     struct aws_byte_cursor signature) {
     AWS_PRECONDITION(key_pair);
+    AWS_PRECONDITION(aws_byte_cursor_is_valid(&digest));
+    AWS_PRECONDITION(aws_byte_cursor_is_valid(&signature));
 
     return key_pair->vtable->verify(key_pair, algorithm, digest, signature);
 }

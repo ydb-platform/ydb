@@ -26,6 +26,7 @@ PEERDIR(
     library/python/cores
     library/python/filelock
     library/python/fs
+    library/python/port_manager
     library/python/testing/yatest_lib
 )
 

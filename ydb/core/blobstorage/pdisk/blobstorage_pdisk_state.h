@@ -2,6 +2,7 @@
 #include "defs.h"
 
 #include "blobstorage_pdisk.h"
+#include "blobstorage_pdisk_defs.h"
 #include "blobstorage_pdisk_logreader_base.h"
 #include "blobstorage_pdisk_tools.h"
 
@@ -24,7 +25,7 @@ enum class EInitPhase {
 
 enum EOwner {
     OwnerSystem = 0, // Chunk0, SysLog chunks and CommonLog + just common log tracking, means "for dynamic" in requests
-    OwnerUnallocated = 1, // Unallocated chunks, Trim scheduling, Slay commands, common log records owned by OwnerUnallocated = padding 
+    OwnerUnallocated = 1, // Unallocated chunks, Trim scheduling, Slay commands, common log records owned by OwnerUnallocated = padding
     OwnerBeginUser = 2,
     OwnerEndUser = 241,
     OwnerMetadata = 250, // Metadata chunks, the real owner
@@ -110,10 +111,7 @@ struct TOwnerData {
     {}
 
     bool IsStaticGroupOwner() const {
-        if (VDiskId == TVDiskID::InvalidId) {
-            return false;
-        }
-        return TGroupID(VDiskId.GroupID).ConfigurationType() == EGroupConfigurationType::Static;
+        return IsStaticGroupVDisk(VDiskId);
     }
 
     bool IsNextLsnOk(const ui64 lsn) const {

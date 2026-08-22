@@ -1,0 +1,5 @@
+use plato;
+pragma OrderedColumns;
+
+select * from Input where key="150";
+

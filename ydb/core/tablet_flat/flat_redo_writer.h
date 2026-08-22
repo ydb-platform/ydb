@@ -195,6 +195,29 @@ namespace NRedo {
             return Flush(size);
         }
 
+        TWriter& EvLockRowTx(ui32 table, ELockMode mode, TRawVals key, ui64 txId)
+        {
+            if (key.size() > Max<ui16>()) {
+                Y_TABLET_ERROR("Key too large");
+            }
+
+            const ui32 size = sizeof(TEvLockRowTx) + CalcSize(key);
+            auto out = Begin(size);
+
+            TEvLockRowTx ev{
+                .Label = { ERedo::LockRowTx, 0, 0x8000, size },
+                .Table = table,
+                .Mode = mode,
+                .Pad0_ = 0,
+                .Keys = ui16(key.size()),
+                .TxId = txId };
+
+            Write(out, &ev, sizeof(ev));
+            Write(out, key);
+
+            return Flush(size);
+        }
+
         TWriter& Join(TWriter &&log)
         {
             TotalSize += std::exchange(log.TotalSize, 0);

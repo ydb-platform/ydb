@@ -12,6 +12,8 @@
 #include <util/digest/numeric.h>
 #include <google/protobuf/message.h>
 
+#include <utility>
+
 #include "yql_issue_id.h"
 
 namespace NYql {
@@ -28,10 +30,10 @@ struct TPosition {
 
     TPosition() = default;
 
-    TPosition(ui32 column, ui32 row, const TString& file = {})
+    TPosition(ui32 column, ui32 row, TString file = {})
         : Column(column)
         , Row(row)
-        , File(file)
+        , File(std::move(file))
     {
         SanitizeNonAscii(File);
     }
@@ -58,12 +60,10 @@ public:
     TTextWalker(TPosition& position, bool utf8Aware)
         : Position_(position)
         , Utf8Aware_(utf8Aware)
-        , HaveCr_(false)
-        , LfCount_(0)
     {
     }
 
-    template<typename T>
+    template <typename T>
     TTextWalker& Advance(const T& buf) {
         for (char c : buf) {
             Advance(c);
@@ -76,8 +76,6 @@ public:
 private:
     TPosition& Position_;
     const bool Utf8Aware_;
-    bool HaveCr_;
-    ui32 LfCount_;
 };
 
 struct TRange {
@@ -86,15 +84,15 @@ struct TRange {
 
     TRange() = default;
 
-    TRange(TPosition position)
+    explicit TRange(TPosition position)
         : Position(position)
         , EndPosition(position)
     {
     }
 
     TRange(TPosition position, TPosition endPosition)
-        : Position(position)
-        , EndPosition(endPosition)
+        : Position(std::move(position))
+        , EndPosition(std::move(endPosition))
     {
     }
 
@@ -112,6 +110,7 @@ using TIssuePtr = TIntrusivePtr<TIssue>;
 class TIssue: public TThrRefBase {
     TVector<TIntrusivePtr<TIssue>> Children_;
     TString Message_;
+
 public:
     TPosition Position;
     TPosition EndPosition;
@@ -120,7 +119,7 @@ public:
 
     TIssue() = default;
 
-    template <typename T>
+    template <typename T> // NOLINTNEXTLINE(modernize-pass-by-value)
     explicit TIssue(const T& message)
         : Message_(message)
         , Position(TPosition())
@@ -129,7 +128,7 @@ public:
         SanitizeNonAscii(Message_);
     }
 
-    template <typename T>
+    template <typename T> // NOLINTNEXTLINE(modernize-pass-by-value)
     TIssue(TPosition position, const T& message)
         : Message_(message)
         , Position(position)
@@ -139,29 +138,27 @@ public:
     }
 
     inline TRange Range() const {
-        return{ Position, EndPosition };
+        return {Position, EndPosition};
     }
 
-    template <typename T>
+    template <typename T> // NOLINTNEXTLINE(modernize-pass-by-value)
     TIssue(TPosition position, TPosition endPosition, const T& message)
         : Message_(message)
-        , Position(position)
-        , EndPosition(endPosition)
+        , Position(std::move(position))
+        , EndPosition(std::move(endPosition))
     {
         SanitizeNonAscii(Message_);
     }
 
     inline bool operator==(const TIssue& other) const {
-        return Position == other.Position && Message_ == other.Message_
-            && IssueCode == other.IssueCode;
+        return Position == other.Position && Message_ == other.Message_ && IssueCode == other.IssueCode;
     }
 
     ui64 Hash() const noexcept {
         return CombineHashes(
             CombineHashes(
                 (size_t)CombineHashes(IntHash(Position.Row), IntHash(Position.Column)),
-                ComputeHash(Position.File)
-            ),
+                ComputeHash(Position.File)),
             (size_t)CombineHashes((size_t)IntHash(static_cast<int>(IssueCode)), ComputeHash(Message_)));
     }
 
@@ -231,6 +228,8 @@ class TIssues {
 public:
     TIssues() = default;
 
+    // TODO(YQL-20095): there are YDB usages
+    // NOLINTNEXTLINE(google-explicit-constructor)
     inline TIssues(const TVector<TIssue>& issues)
         : Issues_(issues)
     {
@@ -251,7 +250,8 @@ public:
         return *this;
     }
 
-    inline TIssues(TIssues&& rhs) : Issues_(std::move(rhs.Issues_))
+    inline TIssues(TIssues&& rhs)
+        : Issues_(std::move(rhs.Issues_))
     {
     }
 
@@ -260,7 +260,8 @@ public:
         return *this;
     }
 
-    template <typename ... Args> void AddIssue(Args&& ... args) {
+    template <typename... Args>
+    void AddIssue(Args&&... args) {
         Issues_.emplace_back(std::forward<Args>(args)...);
     }
 
@@ -271,7 +272,7 @@ public:
 
     inline void AddIssues(const TPosition& pos, const TIssues& errors) {
         Issues_.reserve(Issues_.size() + errors.Size());
-        for (const auto& e: errors) {
+        for (const auto& e : errors) {
             TIssue& issue = Issues_.emplace_back();
             *issue.MutableMessage() = e.GetMessage(); // No need to sanitize message, it has already been sanitized.
             issue.Position = pos;
@@ -280,11 +281,11 @@ public:
     }
 
     inline const TIssue* begin() const {
-        return Issues_.begin();
+        return Issues_.data();
     }
 
     inline const TIssue* end() const {
-        return Issues_.end();
+        return Issues_.data() + Issues_.size();
     }
 
     inline TIssue& back() {
@@ -309,10 +310,10 @@ public:
 
     void PrintTo(IOutputStream& out, bool oneLine = false) const;
     void PrintWithProgramTo(
-            IOutputStream& out,
-            const TString& programFilename,
-            const TString& programText,
-            bool colorize = true) const;
+        IOutputStream& out,
+        const TString& programFilename,
+        const TString& programText,
+        bool colorize = true) const;
 
     inline TString ToString(bool oneLine = false) const {
         TStringStream out;
@@ -336,12 +337,14 @@ private:
     TVector<TIssue> Issues_;
 };
 
-class TErrorException : public yexception {
+class TErrorException: public yexception {
     const TIssueCode Code_;
+
 public:
     explicit TErrorException(TIssueCode code)
         : Code_(code)
-    {}
+    {
+    }
     TIssueCode GetCode() const {
         return Code_;
     }
@@ -353,13 +356,13 @@ TMaybe<TPosition> TryParseTerminationMessage(TStringBuf& message);
 } // namespace NYql
 
 template <>
-void Out<NYql::TPosition>(IOutputStream& out, const NYql::TPosition& pos);
+void Out<NYql::TPosition>(IOutputStream& out, const NYql::TPosition& value);
 
 template <>
-void Out<NYql::TRange>(IOutputStream& out, const NYql::TRange& pos);
+void Out<NYql::TRange>(IOutputStream& out, const NYql::TRange& value);
 
 template <>
-void Out<NYql::TIssue>(IOutputStream& out, const NYql::TIssue& error);
+void Out<NYql::TIssue>(IOutputStream& out, const NYql::TIssue& value);
 
 template <>
 struct THash<NYql::TIssue> {

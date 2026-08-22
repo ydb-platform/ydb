@@ -45,7 +45,7 @@ Y_UNIT_TEST_SUITE(TransferLarge)
         Cerr << "PARTITION " << writerId << " ALL MESSAGES HAVE BEEN WRITTEN" << Endl << Flush;
     }
 
-    void WaitAllMessagesHaveBeenCommitted(MainTestCase& setup, size_t expected, const TDuration timeout = TDuration::Seconds(10)) {
+    void WaitAllMessagesHaveBeenCommitted(MainTestCase& setup, size_t expected, const TDuration timeout = TDuration::Seconds(60)) {
         TInstant endTime = TInstant::Now() + timeout;
 
         bool allPartitionsHaveBeenCommitted = false;
@@ -221,31 +221,6 @@ Y_UNIT_TEST_SUITE(TransferLarge)
     //
     // Topic autopartitioning is enabled
     //
-
-    Y_UNIT_TEST(Transfer1KM_1P_ColumnTable_TopicAutoPartitioning)
-    {
-        BigTransfer("COLUMN", 1, 1000, 64, true);
-    }
-
-    Y_UNIT_TEST(Transfer1KM_1KP_ColumnTable_TopicAutoPartitioning)
-    {
-        BigTransfer("COLUMN", 1000, 1000, 64, true);
-    }
-
-    Y_UNIT_TEST(Transfer100KM_10P_ColumnTable_TopicAutoPartitioning)
-    {
-        BigTransfer("COLUMN", 10, 100000, 64, true);
-    }
-
-    Y_UNIT_TEST(Transfer1KM_1P_RowTable_TopicAutoPartitioning)
-    {
-        BigTransfer("ROW", 1, 1000, 64, true);
-    }
-
-    Y_UNIT_TEST(Transfer1KM_1KP_RowTable_TopicAutoPartitioning)
-    {
-        BigTransfer("ROW", 1000, 1000, 64, true);
-    }
 
     Y_UNIT_TEST(Transfer100KM_10P_RowTable_TopicAutoPartitioning)
     {

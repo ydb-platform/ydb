@@ -1,5 +1,5 @@
 #pragma once
-#include "defs.h"
+#include <ydb/core/ymq/actor/cfg/defs.h>
 
 #include <ydb/library/actors/core/actor.h>
 
@@ -33,7 +33,7 @@ inline TActorId MakeSqsMeteringServiceID() {
 
 IActor* CreateSqsService();
 IActor* CreateSqsProxyService();
-IActor* CreateSqsAccessService(const TString& address, const TString& pathToRootCA);
+IActor* CreateSqsAccessService(const TString& address, const TString& pathToRootCA, bool enableV2Interface);
 IActor* CreateSqsFolderService(const TString& address, const TString& pathToRootCA);
 IActor* CreateMockSqsFolderService();
 IActor* CreateSqsMeteringService();

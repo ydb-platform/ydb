@@ -9,14 +9,18 @@ from pythran.errors import PythranInternalError
 from pythran.passmanager import ModuleAnalysis
 from pythran.types.conversion import PYTYPE_TO_CTYPE_TABLE
 from pythran.utils import get_variable
-from pythran.typing import List, Set, Dict, NDArray, Tuple, Pointer, Fun
+from pythran.typing import List, Set, Dict, NDArray, Tuple, Pointer, Fun, Type
 from pythran.graph import DiGraph
 
 
 def pytype_to_deps_hpp(t):
     """python -> pythonic type hpp filename."""
-    if isinstance(t, List):
+    if t in (list, set, dict, tuple):
+        return {f"{t.__name__}.hpp"}
+    elif isinstance(t, List):
         return {'list.hpp'}.union(pytype_to_deps_hpp(t.__args__[0]))
+    elif isinstance(t, Type):
+        return {'type.hpp'}.union(pytype_to_deps_hpp(t.__args__[0]))
     elif isinstance(t, Set):
         return {'set.hpp'}.union(pytype_to_deps_hpp(t.__args__[0]))
     elif isinstance(t, Dict):

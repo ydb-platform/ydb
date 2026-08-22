@@ -3,14 +3,17 @@ from decimal import Decimal
 from doctest import DocTestSuite
 from fractions import Fraction
 from functools import reduce
-from itertools import combinations, count, groupby, permutations
+from itertools import combinations, count, groupby, permutations, islice
 from operator import mul
 from math import comb, prod, factorial
+from statistics import mean
 from sys import version_info
 from unittest import TestCase, skipIf
 from unittest.mock import patch
 
 import more_itertools as mi
+import statistics
+import random
 
 
 def load_tests(loader, tests, ignore):
@@ -1124,6 +1127,59 @@ class ReshapeTests(TestCase):
                 actual = list(mi.reshape(matrix, cols))
                 self.assertEqual(actual, expected)
 
+    def test_multidimensional(self):
+        reshape = mi.reshape
+
+        def shape(tensor):
+            if not hasattr(tensor, '__iter__'):
+                return ()
+            seq = list(tensor)
+            return (len(seq),) + shape(seq[0])
+
+        matrix = [(0, 1), (2, 3), (4, 5)]
+        self.assertEqual(shape(matrix), (3, 2))
+
+        for new_shape in [
+            (2, 3),
+            (6,),
+            (6, 1),
+            (1, 6),
+            (2, 1, 3, 1),
+            (1, 1, 3, 1, 2),
+        ]:
+            with self.subTest(new_shape=new_shape):
+                new_matrix = reshape(matrix, new_shape)
+                self.assertEqual(shape(new_matrix), new_shape)
+
+        # Truncation:  Input larger than the requested shape
+        self.assertEqual(list(reshape(matrix, [3])), [0, 1, 2])
+
+        # Incomplete structure: Input smaller than the requested shape
+        self.assertEqual(list(reshape(matrix, [8])), [0, 1, 2, 3, 4, 5])
+
+        # Str and bytes treated as scalars
+        word_matrix = [[['ab', b'de', 'gh', b'jk']]]  # Shape: 1 x 1 x 4
+        self.assertEqual(
+            list(reshape(word_matrix, (2, 2))),
+            [('ab', b'de'), ('gh', b'jk')],
+        )
+
+        # Empty input
+        self.assertEqual(list(reshape([[]], shape=(1,))), [])
+
+        # Non-uniform input: scalar where a tensor is expected
+        with self.assertRaises(TypeError):
+            list(mi.reshape([[10, 20, 30], 40], shape=(4,)))
+
+        # Non-integer indices
+        with self.assertRaises((TypeError, ValueError)):
+            matrix = [(0, 1), (2, 3), (4, 5)]
+            list(reshape(matrix, ('a', 'b', 'c')))
+
+        # Indices smaller than one
+        with self.assertRaises(ValueError):
+            list(reshape(matrix, (6, 0, 1)))
+
 
 class MatMulTests(TestCase):
     def test_n_by_n(self):
@@ -1438,3 +1494,79 @@ class MultinomialTests(TestCase):
             multinomial(5, 'x')  # No non-numeric inputs
         with self.assertRaises(TypeError):
             multinomial([5, 7])  # No sequence inputs
+
+
+class RunningMedianTests(TestCase):
+    def test_vs_statistics_median(self):
+        running_median = mi.running_median
+
+        for data in [
+            random.choices(range(-500, 500), k=500),
+            # Apply unary plus to force context rounding.
+            [+Decimal(random.uniform(-500, 500)) for _ in range(500)],
+            [
+                Fraction(random.randrange(-500, 500), random.randrange(1, 500))
+                for _ in range(500)
+            ],
+        ]:
+            with self.subTest(data=data):
+                for k, rm in enumerate(running_median(iter(data)), start=1):
+                    expected = statistics.median(data[:k])
+                    self.assertEqual(rm, expected)
+                    self.assertEqual(type(rm), type(expected))
+
+        self.assertEqual(list(running_median([])), [])  # Empty input
+
+    def test_vs_statistics_median_windowed(self):
+        running_median = mi.running_median
+        size = 10
+
+        for data in [
+            random.choices(range(-500, 500), k=500),
+            # Apply unary plus to force context rounding.
+            [+Decimal(random.uniform(-500, 500)) for _ in range(500)],
+            [
+                Fraction(random.randrange(-500, 500), random.randrange(1, 500))
+                for _ in range(500)
+            ],
+        ]:
+            with self.subTest(data=data):
+                iterator = running_median(iter(data), maxlen=size)
+                for k, rm in enumerate(iterator, start=1):
+                    expected = statistics.median(data[max(0, k - size) : k])
+                    self.assertEqual(rm, expected)
+                    self.assertEqual(type(rm), type(expected))
+
+        self.assertEqual(list(running_median([], maxlen=1)), [])  # Empty input
+
+        # Window size of 1 should return the original dataset unchanged
+        data = random.choices(range(-500, 500), k=500)
+        self.assertEqual(list(running_median(data, maxlen=1)), data)
+
+        # Window size of 2 is a moving average of pairs
+        data = random.choices(range(-500, 500), k=500)
+        expected = list(map(mean, mi.pairwise(data)))
+        actual = list(islice(running_median(data, maxlen=2), 1, None))
+        self.assertEqual(actual, expected)
+
+        # A window larger than the dataset should give the same
+        # result as an unbounded running median.
+        data = random.choices(range(-500, 500), k=500)
+        self.assertEqual(
+            list(running_median(data, maxlen=600)), list(running_median(data))
+        )
+
+    def test_error_cases(self):
+        running_median = mi.running_median
+        with self.assertRaises(TypeError):
+            running_median(1234)  # Non-iterable input
+        with self.assertRaises(TypeError):
+            running_median([], maxlen=3.0)  # Non-integer type for window size
+        with self.assertRaises(ValueError):
+            running_median([], maxlen=0)  # Invalid window size
+        with self.assertRaises(TypeError):
+            list(running_median([3 + 4j, 5 - 7j]))  # Unorderable input type
+        with self.assertRaises(TypeError):
+            list(
+                running_median(['abc', 'def', 'ghi'])
+            )  # Input type that doesn't support division

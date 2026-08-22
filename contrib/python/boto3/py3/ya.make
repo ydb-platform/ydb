@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(1.29.6)
+VERSION(1.42.97)
 
 LICENSE(Apache-2.0)
 
@@ -14,10 +14,15 @@ PEERDIR(
 
 NO_LINT()
 
+NO_CHECK_IMPORTS(
+    boto3.crt
+)
+
 PY_SRCS(
     TOP_LEVEL
     boto3/__init__.py
     boto3/compat.py
+    boto3/crt.py
     boto3/docs/__init__.py
     boto3/docs/action.py
     boto3/docs/attr.py
@@ -49,6 +54,7 @@ PY_SRCS(
     boto3/resources/params.py
     boto3/resources/response.py
     boto3/s3/__init__.py
+    boto3/s3/constants.py
     boto3/s3/inject.py
     boto3/s3/transfer.py
     boto3/session.py
@@ -71,7 +77,6 @@ RESOURCE_FILES(
     boto3/data/ec2/2016-11-15/resources-1.json
     boto3/data/glacier/2012-06-01/resources-1.json
     boto3/data/iam/2010-05-08/resources-1.json
-    boto3/data/opsworks/2013-02-18/resources-1.json
     boto3/data/s3/2006-03-01/resources-1.json
     boto3/data/sns/2010-03-31/resources-1.json
     boto3/data/sqs/2012-11-05/resources-1.json

@@ -1,5 +1,6 @@
 #pragma once
 #include <ydb/core/tx/columnshard/subscriber/abstract/events/event.h>
+
 #include <memory>
 #include <set>
 
@@ -18,4 +19,4 @@ public:
     virtual ~ISubscriber() = default;
 };
 
-}
+}   // namespace NKikimr::NColumnShard::NSubscriber

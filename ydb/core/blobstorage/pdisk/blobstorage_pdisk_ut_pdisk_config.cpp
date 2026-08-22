@@ -1,5 +1,6 @@
 #include "blobstorage_pdisk_chunk_tracker.h"
 #include "blobstorage_pdisk_color_limits.h"
+#include "blobstorage_pdisk_impl.h"
 
 #include "blobstorage_pdisk_ut.h"
 #include "blobstorage_pdisk_ut_actions.h"
@@ -44,11 +45,94 @@ Y_UNIT_TEST_SUITE(TPDiskConfig) {
         UNIT_ASSERT_VALUES_EQUAL(TPDiskConfig::GetOwnerWeight(99, 100), 1);
         UNIT_ASSERT_VALUES_EQUAL(TPDiskConfig::GetOwnerWeight(101, 100), 2);
 
+        UNIT_ASSERT_VALUES_EQUAL(TPDiskConfig::GetOwnerWeight(4, 1, 100ull << 30), 1);
+        UNIT_ASSERT_VALUES_EQUAL(TPDiskConfig::GetOwnerWeight(101, 100, 100ull << 30), 1);
+
         TPDiskConfig pdiskConfig3u(0, 0, 0);
         pdiskConfig3u.SlotSizeInUnits = 3;
         UNIT_ASSERT_VALUES_EQUAL(pdiskConfig3u.GetOwnerWeight(10), 4);
 
+        TPDiskConfig pdiskConfigFixedSize(0, 0, 0);
+        pdiskConfigFixedSize.SlotSizeInUnits = 3;
+        pdiskConfigFixedSize.ExpectedSlotSize = 100ull << 30;
+        UNIT_ASSERT_VALUES_EQUAL(pdiskConfigFixedSize.GetOwnerWeight(10), 1);
+
         // TODO(ydynnikov): test the case of groupSizeInUnits > UI8_MAX (255)
+    }
+
+    Y_UNIT_TEST(KeeperLogParamsEnabledForTinyDisk) {
+        TIntrusivePtr<TPDiskConfig> cfg = new TPDiskConfig(0, 0, TPDiskCategory(NPDisk::DEVICE_TYPE_ROT, 0).GetRaw());
+        cfg->FeatureFlags.SetEnablePDiskLogForSmallDisks(true);
+
+        alignas(16) NPDisk::TDiskFormat format = {};
+        format.DiskSize = 4ull << 30;
+
+        NPDisk::TKeeperParams params;
+        InitializeKeeperLogParams(params, cfg, format);
+
+        UNIT_ASSERT_VALUES_EQUAL(params.MaxCommonLogChunks, NPDisk::TinyDiskMaxCommonLogChunks);
+        UNIT_ASSERT_VALUES_EQUAL(params.CommonStaticLogChunks, NPDisk::TinyDiskCommonStaticLogChunks);
+        UNIT_ASSERT_VALUES_EQUAL(params.SeparateCommonLog, true);
+    }
+
+    Y_UNIT_TEST(KeeperLogParamsEnabledForSmallDisk) {
+        TIntrusivePtr<TPDiskConfig> cfg = new TPDiskConfig(0, 0, TPDiskCategory(NPDisk::DEVICE_TYPE_ROT, 0).GetRaw());
+        cfg->FeatureFlags.SetEnablePDiskLogForSmallDisks(true);
+
+        alignas(16) NPDisk::TDiskFormat format = {};
+        format.DiskSize = 100ull << 30;
+
+        NPDisk::TKeeperParams params;
+        InitializeKeeperLogParams(params, cfg, format);
+
+        UNIT_ASSERT_VALUES_EQUAL(params.MaxCommonLogChunks, 106ull);
+        UNIT_ASSERT_VALUES_EQUAL(params.CommonStaticLogChunks, 36ull);
+        UNIT_ASSERT_VALUES_EQUAL(params.SeparateCommonLog, true);
+    }
+
+    Y_UNIT_TEST(KeeperLogParamsEnabledForNormalDisk) {
+        TIntrusivePtr<TPDiskConfig> cfg = new TPDiskConfig(0, 0, TPDiskCategory(NPDisk::DEVICE_TYPE_ROT, 0).GetRaw());
+        cfg->FeatureFlags.SetEnablePDiskLogForSmallDisks(true);
+
+        alignas(16) NPDisk::TDiskFormat format = {};
+        format.DiskSize = 1000ull << 30;
+
+        NPDisk::TKeeperParams params;
+        InitializeKeeperLogParams(params, cfg, format);
+
+        UNIT_ASSERT_VALUES_EQUAL(params.MaxCommonLogChunks, 200ull);
+        UNIT_ASSERT_VALUES_EQUAL(params.CommonStaticLogChunks, 70ull);
+        UNIT_ASSERT_VALUES_EQUAL(params.SeparateCommonLog, true);
+    }
+
+    Y_UNIT_TEST(KeeperLogParamsDisabledForSmallDisk) {
+        TIntrusivePtr<TPDiskConfig> cfg = new TPDiskConfig(0, 0, TPDiskCategory(NPDisk::DEVICE_TYPE_ROT, 0).GetRaw());
+        cfg->FeatureFlags.SetEnablePDiskLogForSmallDisks(false);
+
+        alignas(16) NPDisk::TDiskFormat format = {};
+        format.DiskSize = 100ull << 30;
+
+        NPDisk::TKeeperParams params;
+        InitializeKeeperLogParams(params, cfg, format);
+
+        UNIT_ASSERT_VALUES_EQUAL(params.MaxCommonLogChunks, 200ull);
+        UNIT_ASSERT_VALUES_EQUAL(params.CommonStaticLogChunks, 70ull);
+        UNIT_ASSERT_VALUES_EQUAL(params.SeparateCommonLog, false);
+    }
+
+    Y_UNIT_TEST(KeeperLogParamsDisabledForNormalDisk) {
+        TIntrusivePtr<TPDiskConfig> cfg = new TPDiskConfig(0, 0, TPDiskCategory(NPDisk::DEVICE_TYPE_ROT, 0).GetRaw());
+        cfg->FeatureFlags.SetEnablePDiskLogForSmallDisks(false);
+
+        alignas(16) NPDisk::TDiskFormat format = {};
+        format.DiskSize = 100ull << 30;
+
+        NPDisk::TKeeperParams params;
+        InitializeKeeperLogParams(params, cfg, format);
+
+        UNIT_ASSERT_VALUES_EQUAL(params.MaxCommonLogChunks, 200ull);
+        UNIT_ASSERT_VALUES_EQUAL(params.CommonStaticLogChunks, 70ull);
+        UNIT_ASSERT_VALUES_EQUAL(params.SeparateCommonLog, false);
     }
 }
 } // namespace NKikimr

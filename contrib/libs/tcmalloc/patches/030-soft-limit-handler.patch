@@ -24,7 +24,7 @@ index 47008d0..40f2351 100644
      CreateSampleUserDataCallback create,
      CopySampleUserDataCallback copy,
 diff --git a/tcmalloc/malloc_extension.h b/tcmalloc/malloc_extension.h
-index 644731b..dab6ea7 100644
+index 3534226..345bf6a 100644
 --- a/tcmalloc/malloc_extension.h
 +++ b/tcmalloc/malloc_extension.h
 @@ -667,6 +667,10 @@ class MallocExtension final {

@@ -1,0 +1,8 @@
+--- a/expat_config-linux.h
++++ b/expat_config-linux.h
+@@ -14,1 +14,1 @@
+-#define HAVE_ARC4RANDOM 1
++/* #undef HAVE_ARC4RANDOM */
+@@ -14,1 +14,1 @@
+-#define HAVE_ARC4RANDOM_BUF 1
++/* #undef HAVE_ARC4RANDOM_BUF */

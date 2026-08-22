@@ -58,8 +58,7 @@ class rotate(Command):
             files = files[self.keep :]
             for t, f in files:
                 log.info("Deleting %s", f)
-                if not self.dry_run:
-                    if os.path.isdir(f):
-                        _shutil.rmtree(f)
-                    else:
-                        os.unlink(f)
+                if os.path.isdir(f):
+                    _shutil.rmtree(f)
+                else:
+                    os.unlink(f)

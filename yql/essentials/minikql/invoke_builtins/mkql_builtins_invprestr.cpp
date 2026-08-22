@@ -1,16 +1,15 @@
-#include "mkql_builtins_impl.h"  // Y_IGNORE
+#include "mkql_builtins_impl.h" // Y_IGNORE
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/minikql/computation/presort.h>
 #include <util/thread/singleton.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
-struct TStringDescEncoder : public TPresortEncoder {
+struct TStringDescEncoder: public TPresortEncoder {
     TStringDescEncoder() {
-        AddType(NUdf::EDataSlot::String, false, true);
+        AddType(NUdf::EDataSlot::String, /*isOptional=*/false, /*isDesc=*/true);
     }
 };
 
@@ -43,7 +42,7 @@ struct TInversePresortString {
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* arg, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        return CallUnaryUnboxedValueFunction<&Presort>(Type::getInt128Ty(ctx.Codegen.GetContext()), arg, ctx.Codegen, block);
+        return EmitFunctionCall<&Presort>(Type::getInt128Ty(ctx.Codegen.GetContext()), {arg}, ctx, block);
     }
 #endif
 };
@@ -58,12 +57,12 @@ struct TInverseString {
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* arg, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        return CallUnaryUnboxedValueFunction<&Inverse>(Type::getInt128Ty(ctx.Codegen.GetContext()), arg, ctx.Codegen, block);
+        return EmitFunctionCall<&Inverse>(Type::getInt128Ty(ctx.Codegen.GetContext()), {arg}, ctx, block);
     }
 #endif
 };
 
-}
+} // namespace
 
 void RegisterInversePresortString(IBuiltinFunctionRegistry& registry) {
     const auto name = "InversePresortString";
@@ -76,5 +75,4 @@ void RegisterInverseString(IBuiltinFunctionRegistry& registry) {
     RegisterFunction<NUdf::TDataType<char*>, NUdf::TDataType<char*>, TInverseString, TUnaryArgs>(registry, name);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

@@ -12,8 +12,8 @@ namespace NYT::NTableClient {
 
 struct TColumnRenameDescriptor
 {
-    TString OriginalName;
-    TString NewName;
+    std::string OriginalName;
+    std::string NewName;
 };
 
 void Deserialize(TColumnRenameDescriptors& value, NYTree::INodePtr node);

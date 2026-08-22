@@ -9,7 +9,7 @@ def post_install(self):
 boost_variant2 = NixSourceProject(
     nixattr="boost_variant2",
     arcdir="contrib/restricted/boost/variant2",
-    owners=["g:cpp-contrib", "g:taxi-common"],
+    owners=["g:cpp-contrib"],
     copy_sources=[
         "include/boost/",
     ],

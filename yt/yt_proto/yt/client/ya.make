@@ -11,6 +11,8 @@ PEERDIR(
 INCLUDE(${ARCADIA_ROOT}/yt/gradle.inc)
 
 SRCS(
+    api/common/proto/schema.proto
+
     api/rpc_proxy/proto/api_service.proto
     api/rpc_proxy/proto/discovery_service.proto
 
@@ -31,6 +33,8 @@ SRCS(
     hive/proto/timestamp_map.proto
     hive/proto/cluster_directory.proto
 
+    job_proxy/proto/job_api_service.proto
+
     node_tracker_client/proto/node.proto
     node_tracker_client/proto/node_directory.proto
 
@@ -41,6 +45,7 @@ SRCS(
     table_client/proto/versioned_io_options.proto
 
     tablet_client/proto/lock_mask.proto
+    tablet_client/proto/secondary_index.proto
 
     transaction_client/proto/timestamp_service.proto
 
@@ -53,5 +58,7 @@ SRCS(
 )
 
 EXCLUDE_TAGS(GO_PROTO)
+
+INCLUDE_TAGS(DOCS_PROTO)
 
 END()

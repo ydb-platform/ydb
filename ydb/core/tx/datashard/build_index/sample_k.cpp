@@ -5,7 +5,6 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
-#include <ydb/core/kqp/common/kqp_types.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/tablet_flat/flat_row_state.h>
 
@@ -17,6 +16,8 @@
 
 #include <util/generic/algorithm.h>
 #include <util/string/builder.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BUILD_INDEX
 
 namespace NKikimr::NDataShard {
 using namespace NKMeans;
@@ -49,12 +50,16 @@ protected:
     const TSerializedTableRange TableRange;
     const TSerializedTableRange RequestedRange;
     const ui64 K;
+    bool SkipForeign = false;
+    bool SkipEmptyColumns = false;
+    NTable::TPos IsForeignPos = 0;
 
     ui64 TabletId = 0;
     ui64 BuildId = 0;
 
     ui64 ReadRows = 0;
     ui64 ReadBytes = 0;
+    TString InvalidEmbeddingError;
 
     TSampler Sampler;
 
@@ -66,6 +71,8 @@ protected:
     const TAutoPtr<TEvDataShard::TEvSampleKResponse> Response;
     const TActorId ResponseActorId;
 
+    std::unique_ptr<IClusters> Clusters;
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::SAMPLE_K_SCAN_ACTOR;
@@ -73,20 +80,33 @@ public:
 
     TSampleKScan(ui64 tabletId, const TUserTable& table, NKikimrTxDataShard::TEvSampleKRequest& request,
                  const TActorId& responseActorId, TAutoPtr<TEvDataShard::TEvSampleKResponse>&& response,
-                 const TSerializedTableRange& range)
+                 const TSerializedTableRange& range, std::unique_ptr<IClusters>&& clusters)
         : TActor(&TThis::StateWork)
         , ScanTags(BuildTags(table, request.GetColumns()))
         , KeyTypes(table.KeyColumnTypes)
         , TableRange(table.Range)
         , RequestedRange(range)
         , K(request.GetK())
+        , SkipEmptyColumns(request.GetSkipEmptyColumns())
         , TabletId(tabletId)
         , BuildId(request.GetId())
         , Sampler(request.GetK(), request.GetSeed(), request.GetMaxProbability())
         , Response(std::move(response))
         , ResponseActorId(responseActorId)
+        , Clusters(std::move(clusters))
     {
-        LOG_I("Create " << Debug());
+        YDB_LOG_INFO("Scan actor created",
+            {"debug", Debug()});
+
+        NTable::TPos pos = 0;
+        for (const auto& col: request.GetColumns()) {
+            if (col == NTableIndex::NKMeans::IsForeignColumn) {
+                SkipForeign = true;
+                IsForeignPos = pos;
+                break;
+            }
+            pos++;
+        }
 
         auto scanRange = Intersect(KeyTypes, RequestedRange.ToTableRange(), TableRange.ToTableRange());
 
@@ -105,7 +125,8 @@ public:
     TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) final {
         TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
 
-        LOG_I("Prepare " << Debug());
+        YDB_LOG_INFO("Scan actor prepared",
+            {"debug", Debug()});
 
         Driver = driver;
 
@@ -113,7 +134,9 @@ public:
     }
 
     EScan Seek(TLead& lead, ui64 seq) final {
-        LOG_T("Seek " << seq << " " << Debug());
+        YDB_LOG_TRACE("Seek",
+            {"seekSequence", seq},
+            {"debug", Debug()});
 
         lead = Lead;
 
@@ -121,14 +144,44 @@ public:
     }
 
     EScan Feed(TArrayRef<const TCell> key, const TRow& row) final {
-        // LOG_T("Feed " << Debug());
-
         ++ReadRows;
         ReadBytes += CountRowCellBytes(key, *row);
 
-        Sampler.Add([&row](){
-            return TSerializedCellVec::Serialize(*row);
-        });
+        if ((Clusters || SkipEmptyColumns) && (row.Get(0).IsNull() || row.Get(0).Size() == 0)) {
+            return EScan::Feed;
+        }
+
+        if (Clusters && !Clusters->IsExpectedFormat(row.Get(0).AsRef())) {
+            if (!row.Get(0).AsRef().empty())
+            {
+                InvalidEmbeddingError = Clusters->FormatError(row.Get(0).AsRef());
+                return EScan::Final;
+            }
+            return EScan::Feed;
+        }
+
+        if (SkipForeign) {
+            bool foreign = row.Get(IsForeignPos).AsValue<bool>();
+            if (foreign) {
+                // Skip rows from "non-domestic" clusters to not affect K-means centroids
+                return EScan::Feed;
+            }
+            TVector<TCell> cells;
+            NTable::TPos pos = 0;
+            for (const auto& cell: *row) {
+                if (pos != IsForeignPos) {
+                    cells.push_back(cell);
+                }
+                pos++;
+            }
+            Sampler.Add([&cells](){
+                return TSerializedCellVec::Serialize(cells);
+            });
+        } else {
+            Sampler.Add([&row](){
+                return TSerializedCellVec::Serialize(*row);
+            });
+        }
 
         if (Sampler.GetMaxProbability() == 0) {
             return EScan::Final;
@@ -139,7 +192,8 @@ public:
 
     EScan Exhausted() final
     {
-        LOG_T("Exhausted " << Debug());
+        YDB_LOG_TRACE("Scan range exhausted",
+            {"debug", Debug()});
 
         return EScan::Final;
     }
@@ -155,6 +209,7 @@ public:
         auto& record = Response->Record;
         record.MutableMeteringStats()->SetReadRows(ReadRows);
         record.MutableMeteringStats()->SetReadBytes(ReadBytes);
+        record.MutableMeteringStats()->SetCpuTimeUs(Driver->GetTotalCpuTimeUs());
 
         if (status == EStatus::Exception) {
             record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
@@ -165,12 +220,21 @@ public:
             FillResponse();
         }
 
+        if (InvalidEmbeddingError) {
+            record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
+            Issues.AddIssue(NYql::TIssue(InvalidEmbeddingError)
+                .SetCode(NYql::DEFAULT_ERROR, NYql::TSeverityIds::S_ERROR));
+        }
         NYql::IssuesToMessage(Issues, record.MutableIssues());
 
         if (Response->Record.GetStatus() == NKikimrIndexBuilder::DONE) {
-            LOG_N("Done " << Debug() << " " << ToShortDebugString(Response->Record));
+            YDB_LOG_NOTICE("Scan completed successfully",
+                {"debug", Debug()},
+                {"responseRecord", ToShortDebugString(Response->Record)});
         } else {
-            LOG_E("Failed " << Debug() << " " << ToShortDebugString(Response->Record));
+            YDB_LOG_ERROR("Scan failed",
+                {"debug", Debug()},
+                {"responseRecord", ToShortDebugString(Response->Record)});
         }
         Send(ResponseActorId, Response.Release());
 
@@ -201,8 +265,10 @@ private:
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             default:
-                LOG_E("StateWork unexpected event type: " << ev->GetTypeRewrite() 
-                    << " event: " << ev->ToString() << " " << Debug());
+                YDB_LOG_ERROR("Unexpected event in scan actor",
+                    {"eventType", ev->GetTypeRewrite()},
+                    {"eventDetails", ev->ToString()},
+                    {"debug", Debug()});
         }
     }
 
@@ -253,14 +319,12 @@ void TDataShard::HandleSafe(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TAc
 
     try {
         auto response = MakeHolder<TEvDataShard::TEvSampleKResponse>();
-        response->Record.SetId(id);
-        response->Record.SetTabletId(TabletID());
-        response->Record.SetRequestSeqNoGeneration(seqNo.Generation);
-        response->Record.SetRequestSeqNoRound(seqNo.Round);
+        FillScanResponseCommonFields(*response, id, TabletID(), seqNo);
 
-        LOG_N("Starting TSampleKScan TabletId: " << TabletID()
-            << " " << request.ShortDebugString()
-            << " row version " << rowVersion);
+        YDB_LOG_NOTICE("Starting K-means sample scan",
+            {"tabletId", TabletID()},
+            {"request", request.ShortDebugString()},
+            {"rowVersion", rowVersion});
 
         // Note: it's very unlikely that we have volatile txs before this snapshot
         if (VolatileTxManager.HasVolatileTxsAtSnapshot(rowVersion)) {
@@ -276,9 +340,10 @@ void TDataShard::HandleSafe(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TAc
         };
         auto trySendBadRequest = [&] {
             if (response->Record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST) {
-                LOG_E("Rejecting TSampleKScan bad request TabletId: " << TabletID()
-                    << " " << request.ShortDebugString()
-                    << " with response " << ToShortDebugString(response->Record));
+                YDB_LOG_ERROR("Rejecting invalid K-means sample scan request",
+                    {"tabletId", TabletID()},
+                    {"request", request.ShortDebugString()},
+                    {"responseRecord", ToShortDebugString(response->Record)});
                 ctx.Send(ev->Sender, std::move(response));
                 return true;
             } else {
@@ -340,14 +405,23 @@ void TDataShard::HandleSafe(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TAc
             }
         }
 
+        // 3. Validating vector index settings
+        std::unique_ptr<IClusters> clusters;
+        if (request.HasSettings()) {
+            TString error;
+            clusters = NKikimr::NKMeans::CreateClusters(request.GetSettings(), 0, error);
+            if (!clusters) {
+                badRequest(error);
+            }
+        }
+
         if (trySendBadRequest()) {
             return;
         }
 
-        // 3. Creating scan
+        // 4. Creating scan
         TAutoPtr<NTable::IScan> scan = new TSampleKScan(TabletID(), userTable,
-            request, ev->Sender, std::move(response),
-            requestedRange);
+            request, ev->Sender, std::move(response), requestedRange, std::move(clusters));
 
         StartScan(this, std::move(scan), id, seqNo, rowVersion, userTable.LocalTid);
     } catch (const std::exception& exc) {

@@ -163,6 +163,10 @@ class YamlConfigurator(object):
         return [host['host'] for host in self.static_config_dict.get('hosts', [])]
 
     @property
+    def hosts_ports(self):
+        return [host.get('port', 19001) for host in self.static_config_dict.get('hosts', [])]
+
+    @property
     def static_config_dict(self):
         if self.v2:
             return self.static_dict.get('config', {})
@@ -174,7 +178,7 @@ class YamlConfigurator(object):
 
     @property
     def hosts_bridge_piles(self):
-        return {host.get('host'): host.get('bridge_pile_name') for host in self.static_config_dict.get('hosts', [])}
+        return {host.get('host'): host.get('location', {}).get('bridge_pile_name') for host in self.static_config_dict.get('hosts', [])}
 
     @property
     def group_hosts_by_datacenter(self):
@@ -212,9 +216,14 @@ class YamlConfigurator(object):
 
     @property
     def kikimr_cfg(self):
+        ports = set(self.hosts_ports)
+        if len(ports) > 1:
+            raise ValueError(f"Different IC ports are not supported for ydbd slice installation, found ports: {ports}")
+        ic_port = ports.pop() if ports else 19001
+
         if self.v2:
-            return kikimr_cfg_for_static_node_new_style_v2()
-        return kikimr_cfg_for_static_node_new_style()
+            return kikimr_cfg_for_static_node_new_style_v2(ic_port=ic_port)
+        return kikimr_cfg_for_static_node_new_style(ic_port=ic_port)
 
     @property
     def dynamic_cfg(self) -> str:

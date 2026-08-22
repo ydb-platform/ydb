@@ -209,7 +209,7 @@ class PersianCalendar : public Calendar {
    * Return the number of days in the given Persian year
    * @internal
    */
-  virtual int32_t handleGetYearLength(int32_t extendedYear) const override;
+  virtual int32_t handleGetYearLength(int32_t extendedYear, UErrorCode& status) const override;
     
   //-------------------------------------------------------------------------
   // Functions for converting from field values to milliseconds....
@@ -278,19 +278,11 @@ class PersianCalendar : public Calendar {
    */
   virtual const char * getType() const override;
 
+ protected:
   /**
-   * @return      The related Gregorian year; will be obtained by modifying the value
-   *              obtained by get from UCAL_EXTENDED_YEAR field
    * @internal
    */
-  virtual int32_t getRelatedYear(UErrorCode &status) const override;
-
-  /**
-   * @param year  The related Gregorian year to set; will be modified as necessary then
-   *              set in UCAL_EXTENDED_YEAR field
-   * @internal
-   */
-  virtual void setRelatedYear(int32_t year) override;
+  int32_t getRelatedYearDifference() const override;
 
  private:
   PersianCalendar(); // default constructor not implemented

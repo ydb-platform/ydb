@@ -166,6 +166,9 @@ __thread bool		data_sync_retry = false;
 /* How SyncDataDirectory() should do its job. */
 __thread int			recovery_init_sync_method = RECOVERY_INIT_SYNC_METHOD_FSYNC;
 
+/* How data files should be bulk-extended with zeros. */
+__thread int			file_extend_method = DEFAULT_FILE_EXTEND_METHOD;
+
 /* Which kinds of files should be opened with PG_O_DIRECT. */
 __thread int			io_direct_flags;
 
@@ -377,25 +380,22 @@ pg_fsync(int fd)
 	 * portable, even if it runs ok on the current system.
 	 *
 	 * We assert here that a descriptor for a file was opened with write
-	 * permissions (either O_RDWR or O_WRONLY) and for a directory without
-	 * write permissions (O_RDONLY).
+	 * permissions (i.e., not O_RDONLY) and for a directory without write
+	 * permissions (O_RDONLY).  Notice that the assertion check is made even
+	 * if fsync() is disabled.
 	 *
-	 * Ignore any fstat errors and let the follow-up fsync() do its work.
-	 * Doing this sanity check here counts for the case where fsync() is
-	 * disabled.
+	 * If fstat() fails, ignore it and let the follow-up fsync() complain.
 	 */
 	if (fstat(fd, &st) == 0)
 	{
 		int			desc_flags = fcntl(fd, F_GETFL);
 
-		/*
-		 * O_RDONLY is historically 0, so just make sure that for directories
-		 * no write flags are used.
-		 */
+		desc_flags &= O_ACCMODE;
+
 		if (S_ISDIR(st.st_mode))
-			Assert((desc_flags & (O_RDWR | O_WRONLY)) == 0);
+			Assert(desc_flags == O_RDONLY);
 		else
-			Assert((desc_flags & (O_RDWR | O_WRONLY)) != 0);
+			Assert(desc_flags != O_RDONLY);
 	}
 	errno = 0;
 #endif
@@ -522,7 +522,7 @@ retry:
 		{
 			int			elevel;
 
-			if (rc == EINTR)
+			if (errno == EINTR)
 				goto retry;
 
 			/*

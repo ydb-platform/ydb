@@ -4,13 +4,13 @@
 
 #include <library/cpp/yt/string/raw_formatter.h>
 
-namespace NYT::NBacktrace {
+namespace NYT::NBacktrace::NDetail {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void SymbolizeBacktrace(
+void SymbolizeBacktraceImpl(
     TBacktrace backtrace,
-    const std::function<void(TStringBuf)>& frameCallback)
+    const std::function<void(TStringBuf)>& writeCallback)
 {
     auto error = NDwarf::ResolveBacktrace({backtrace.begin(), backtrace.size()}, [&] (const NDwarf::TLineInfo& info) {
         TRawFormatter<1024> formatter;
@@ -37,7 +37,7 @@ void SymbolizeBacktrace(
             formatter.Revert(1);
         }
         formatter.AppendString("\n");
-        frameCallback(formatter.GetBuffer());
+        writeCallback(formatter.GetBuffer());
         // Call the callback exactly `frameCount` times,
         // even if there are inline functions and one frame resolved to several lines.
         // It needs for case when caller uses `frameCount` less than 100 for pretty formatting.
@@ -55,10 +55,10 @@ void SymbolizeBacktrace(
         formatter.AppendString("***   Message: ");
         formatter.AppendString(error->Message);
         formatter.AppendString("\n");
-        frameCallback(formatter.GetBuffer());
+        writeCallback(formatter.GetBuffer());
     }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NBacktrace
+} // namespace NYT::NBacktrace::NDetail

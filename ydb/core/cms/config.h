@@ -10,9 +10,50 @@
 #include <util/generic/map.h>
 #include <util/generic/maybe.h>
 
+#include <ydb/core/protos/blobstorage_base3.pb.h>
+
 namespace NKikimr::NCms {
 
 struct TCmsSentinelConfig {
+    struct TStateStorageSelfHealConfig {
+        bool Enable;
+        ui32 NodeBadStateLimit;
+        ui32 NodeGoodStateLimit;
+        ui32 NodePrettyGoodStateLimit;
+        TDuration WaitForConfigStep;
+        TDuration RelaxTime;
+        bool PileupReplicas;
+        ui32 OverrideReplicasInRingCount;
+        ui32 OverrideRingsCount;
+        ui32 ReplicasSpecificVolume;
+
+        void Serialize(NKikimrCms::TCmsConfig::TSentinelConfig::TStateStorageSelfHealConfig &config) const {
+            config.SetEnable(Enable);
+            config.SetNodeBadStateLimit(NodeBadStateLimit);
+            config.SetNodeGoodStateLimit(NodeGoodStateLimit);
+            config.SetNodePrettyGoodStateLimit(NodePrettyGoodStateLimit);
+            config.SetWaitForConfigStep(WaitForConfigStep.GetValue());
+            config.SetRelaxTime(RelaxTime.GetValue());
+            config.SetPileupReplicas(PileupReplicas);
+            config.SetOverrideReplicasInRingCount(OverrideReplicasInRingCount);
+            config.SetOverrideRingsCount(OverrideRingsCount);
+            config.SetReplicasSpecificVolume(ReplicasSpecificVolume);
+        }
+
+        void Deserialize(const NKikimrCms::TCmsConfig::TSentinelConfig::TStateStorageSelfHealConfig &config) {
+            Enable = config.GetEnable();
+            NodeBadStateLimit = config.GetNodeBadStateLimit();
+            NodeGoodStateLimit = config.GetNodeGoodStateLimit();
+            NodePrettyGoodStateLimit = config.GetNodePrettyGoodStateLimit();
+            WaitForConfigStep = TDuration::MicroSeconds(config.GetWaitForConfigStep());
+            RelaxTime = TDuration::MicroSeconds(config.GetRelaxTime());
+            PileupReplicas = config.GetPileupReplicas();
+            OverrideReplicasInRingCount = config.GetOverrideReplicasInRingCount();
+            OverrideRingsCount = config.GetOverrideRingsCount();
+            ReplicasSpecificVolume = config.GetReplicasSpecificVolume();
+        }
+    };
+
     bool Enable = true;
     bool DryRun = false;
 
@@ -32,9 +73,14 @@ struct TCmsSentinelConfig {
     ui32 DataCenterRatio;
     ui32 RoomRatio;
     ui32 RackRatio;
+    ui32 PileRatio;
     ui32 FaultyPDisksThresholdPerNode;
 
     TMaybeFail<EPDiskStatus> EvictVDisksStatus;
+
+    TStateStorageSelfHealConfig StateStorageSelfHealConfig;
+
+    TDuration InitialDeploymentGracePeriod;
 
     void Serialize(NKikimrCms::TCmsConfig::TSentinelConfig &config) const {
         config.SetEnable(Enable);
@@ -47,13 +93,19 @@ struct TCmsSentinelConfig {
         config.SetChangeStatusRetries(ChangeStatusRetries);
         config.SetDefaultStateLimit(DefaultStateLimit);
         config.SetGoodStateLimit(GoodStateLimit);
+
+        StateStorageSelfHealConfig.Serialize(*config.MutableStateStorageSelfHealConfig());
+
         config.SetDataCenterRatio(DataCenterRatio);
         config.SetRoomRatio(RoomRatio);
         config.SetRackRatio(RackRatio);
+        config.SetPileRatio(PileRatio);
         config.SetFaultyPDisksThresholdPerNode(FaultyPDisksThresholdPerNode);
 
         SaveStateLimits(config);
         SaveEvictVDisksStatus(config);
+
+        config.SetInitialDeploymentGracePeriod(InitialDeploymentGracePeriod.GetValue());
     }
 
     void Deserialize(const NKikimrCms::TCmsConfig::TSentinelConfig &config) {
@@ -70,12 +122,17 @@ struct TCmsSentinelConfig {
         DataCenterRatio = config.GetDataCenterRatio();
         RoomRatio = config.GetRoomRatio();
         RackRatio = config.GetRackRatio();
+        PileRatio = config.GetPileRatio();
         FaultyPDisksThresholdPerNode = config.GetFaultyPDisksThresholdPerNode();
+
+        StateStorageSelfHealConfig.Deserialize(config.GetStateStorageSelfHealConfig());
 
         auto newStateLimits = LoadStateLimits(config);
         StateLimits.swap(newStateLimits);
 
         EvictVDisksStatus = LoadEvictVDisksStatus(config);
+
+        InitialDeploymentGracePeriod = TDuration::MicroSeconds(config.GetInitialDeploymentGracePeriod());
     }
 
     void SaveStateLimits(NKikimrCms::TCmsConfig::TSentinelConfig &config) const {
@@ -208,6 +265,7 @@ struct TCmsLogConfig {
 };
 
 struct TCmsConfig {
+    bool DisableMaintenance = false;
     TDuration DefaultRetryTime;
     TDuration DefaultPermissionDuration;
     TDuration DefaultWalleCleanupPeriod = TDuration::Minutes(1);
@@ -226,6 +284,7 @@ struct TCmsConfig {
     }
 
     void Serialize(NKikimrCms::TCmsConfig &config) const {
+        config.SetDisableMaintenance(DisableMaintenance);
         config.SetDefaultRetryTime(DefaultRetryTime.GetValue());
         config.SetDefaultPermissionDuration(DefaultPermissionDuration.GetValue());
         config.SetInfoCollectionTimeout(InfoCollectionTimeout.GetValue());
@@ -236,6 +295,7 @@ struct TCmsConfig {
     }
 
     void Deserialize(const NKikimrCms::TCmsConfig &config) {
+        DisableMaintenance = config.GetDisableMaintenance();
         DefaultRetryTime = TDuration::MicroSeconds(config.GetDefaultRetryTime());
         DefaultPermissionDuration = TDuration::MicroSeconds(config.GetDefaultPermissionDuration());
         InfoCollectionTimeout = TDuration::MicroSeconds(config.GetInfoCollectionTimeout());

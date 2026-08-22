@@ -4,9 +4,9 @@
 #include "subprocess.h"
 #include "streams.h"
 #include "printout.h"
-#include "preallocated_spiller.h"
 #include "kqp_setup.h"
 
+#include <ydb/library/yql/dq/comp_nodes/ut/utils/preallocated_spiller.h>
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_computation_node_ut.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
@@ -54,7 +54,7 @@ THolder<IComputationGraph> BuildGraph(TKqpSetup<LLVM, Spilling>& setup, std::sha
     */
     const auto pgmReturn = pb.FromFlow(WideLastCombiner<Spilling>(
         pb,
-        pb.ToFlow(TRuntimeNode(streamCallable, false)),
+        pb.ToFlow(TRuntimeNode(streamCallable, false), {}),
         [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front()}; }, // extractor
         [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.back()}; }, // init
         [&](TRuntimeNode::TList, TRuntimeNode::TList items, TRuntimeNode::TList state) -> TRuntimeNode::TList {

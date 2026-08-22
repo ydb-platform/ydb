@@ -212,7 +212,7 @@ class TestProcessPoolDownloader(unittest.TestCase):
             )
         self.assertFalse(os.path.exists(self.filename))
         # Any tempfile should have been erased as well
-        possible_matches = glob.glob('%s*' % self.filename + os.extsep)
+        possible_matches = glob.glob(f'{self.filename}*' + os.extsep)
         self.assertEqual(possible_matches, [])
 
     def test_validates_extra_args(self):

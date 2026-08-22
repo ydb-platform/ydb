@@ -14,4 +14,4 @@ auto WithRetry(int attempts, TAction&& a, TExceptionHandler&& exceptionHandler) 
 
     return a();
 }
-}
+} // namespace NYql

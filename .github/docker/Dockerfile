@@ -39,13 +39,12 @@ RUN ./ya make -r -T \
 
 FROM ubuntu:22.04
 RUN apt-get update  \
-    && apt-get install --no-install-recommends -y libidn12 libaio1 \
+    && apt-get install --no-install-recommends -y libidn12 libaio1 jq \
     && rm -rf /var/lib/apt/lists/*
 
-RUN mkdir -p /root/ydb/bin/ \
-    && mkdir -p /ydb_data \
-    && mkdir -p ydb_certs \
-    && echo '{"check_version":false}' > root/ydb/bin/config.json
+RUN mkdir -p /ydb_data && mkdir -p /ydb_certs
+RUN mkdir -p /ydb_data/cluster/kikimr_configs \
+    && touch /ydb_data/cluster/kikimr_configs/config.yaml
 
 COPY main/.github/docker/files/ /
 COPY --from=builder \
@@ -60,6 +59,12 @@ EXPOSE ${GRPC_PORT:-2136}
 EXPOSE ${MON_PORT:-8765}
 EXPOSE ${YDB_KAFKA_PROXY_PORT:-9092}
 
-HEALTHCHECK --start-period=60s --interval=1s CMD /ydb -e grpcs://localhost:${GRPC_TLS_PORT:-2135} --ca-file /ydb_certs/ca.pem -d /local --no-discovery monitoring healthcheck | grep -q GOOD || exit 1
+# pass envs to container runtime
+ENV GRPC_PORT=${GRPC_PORT:-2136}
+ENV GRPC_TLS_PORT=${GRPC_TLS_PORT:-2135}
+ENV MON_PORT=${MON_PORT:-8765}
+ENV YDB_KAFKA_PROXY_PORT=${YDB_KAFKA_PROXY_PORT:-9092}
 
-CMD ["sh", "./initialize_local_ydb"]
+HEALTHCHECK --start-period=10s --interval=15s CMD sh /health_check
+
+ENTRYPOINT ["bash", "/initialize_local_ydb"]

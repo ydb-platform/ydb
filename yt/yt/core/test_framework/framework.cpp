@@ -32,6 +32,7 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// TODO(babenko): migrate to std::string
 TString GenerateRandomFileName(const char* prefix)
 {
     return Format("%s-%016" PRIx64 "-%016" PRIx64,
@@ -61,12 +62,12 @@ void WaitForPredicate(
         }
     }
     THROW_ERROR_EXCEPTION("Wait failed: %s", options.Message)
-        << TErrorAttribute("location", NYT::ToString(options.SourceLocation));
+        .With("location", NYT::ToString(options.SourceLocation));
 }
 
 void WaitForPredicate(
     std::function<bool()> predicate,
-    const TString& message,
+    const std::string& message,
     TSourceLocation location)
 {
     WaitForPredicate(
@@ -130,7 +131,7 @@ void RunAndTrackFiber(TClosure closure)
 
     // Do not silence errors thrown in tests.
     if (result.IsSet()) {
-        result.Get().ThrowOnError();
+        result.GetOrCrash().ThrowOnError();
     }
 
     SUCCEED();

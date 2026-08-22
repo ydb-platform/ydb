@@ -18,8 +18,11 @@
 #include <ydb/core/protos/tablet.pb.h>
 #include <library/cpp/json/writer/json.h>
 #include <library/cpp/protobuf/json/util.h>
+#include <library/cpp/json/json_writer.h>
 #include <ydb/library/yaml_json/yaml_to_json.h>
+#include <ydb/core/config/protos/marker.pb.h>
 
+#include <util/generic/hash_set.h>
 #include <util/generic/string.h>
 
 template <>
@@ -166,6 +169,45 @@ namespace NKikimr::NYaml {
         return config;
     }
 
+    // Tribool feature flags (VALUE_TRUE/VALUE_FALSE) are commonly written as YAML
+    // booleans; the json->proto merge cannot map a bool onto an enum, so rewrite
+    // such booleans to the enum value names before merging, guided by the schema.
+    void CoerceBoolEnumsToNames(NJson::TJsonValue& json, const google::protobuf::Descriptor* descriptor) {
+        using ::google::protobuf::FieldDescriptor;
+        if (!descriptor || !json.IsMap()) {
+            return;
+        }
+        auto& map = json.GetMapSafe();
+        for (int i = 0; i < descriptor->field_count(); ++i) {
+            const FieldDescriptor* field = descriptor->field(i);
+            TString key = field->name();
+            NProtobufJson::ToSnakeCaseDense(&key);
+            auto it = map.find(key);
+            if (it == map.end()) {
+                continue;
+            }
+            NJson::TJsonValue& value = it->second;
+            if (field->cpp_type() == FieldDescriptor::CPPTYPE_ENUM) {
+                if (value.IsBoolean()) {
+                    const char* name = value.GetBoolean() ? "VALUE_TRUE" : "VALUE_FALSE";
+                    if (field->enum_type()->FindValueByName(name)) {
+                        value = TString(name);
+                    }
+                }
+            } else if (field->cpp_type() == FieldDescriptor::CPPTYPE_MESSAGE) {
+                if (field->is_repeated()) {
+                    if (value.IsArray()) {
+                        for (auto& elem : value.GetArraySafe()) {
+                            CoerceBoolEnumsToNames(elem, field->message_type());
+                        }
+                    }
+                } else {
+                    CoerceBoolEnumsToNames(value, field->message_type());
+                }
+            }
+        }
+    }
+
     void ExtractExtraFields(NJson::TJsonValue& json, TTransformContext& ctx) {
         // for static group
         Iterate(json, COMBINED_DISK_INFO_PATH, [&ctx](const std::vector<ui32>& ids, const NJson::TJsonValue& node) {
@@ -182,30 +224,33 @@ namespace NKikimr::NYaml {
         });
         EraseMultipleByPath(json, COMBINED_DISK_INFO_PATH);
 
-        Iterate(json, POOL_CONFIG_PATH, [&ctx](const std::vector<ui32>& ids, const NJson::TJsonValue& node) {
-            Y_ENSURE_BT(ids.size() == 2);
-
-            TPoolConfigKey key{
-                .Domain = ids[0],
-                .StoragePoolType = ids[1],
-            };
-
-            bool currentHasErasureSpecies = false;
-            bool currentHasPoolConfigKind = false;
-            bool currentHasVDiskKind = false;
+        auto collectPoolConfigInfo = [&ctx](TPoolConfigKey key, const NJson::TJsonValue& node) {
+            bool hasErasureSpecies = false;
+            bool hasPoolConfigKind = false;
+            bool hasVDiskKind = false;
 
             const NJson::TJsonValue* poolConfigObject = nullptr;
             if (node.IsMap() && node.GetValuePointer("pool_config", &poolConfigObject) && poolConfigObject->IsMap()) {
-                currentHasErasureSpecies = poolConfigObject->Has("erasure_species");
-                currentHasPoolConfigKind = poolConfigObject->Has("kind");
-                currentHasVDiskKind = poolConfigObject->Has("vdisk_kind");
+                hasErasureSpecies = poolConfigObject->Has("erasure_species");
+                hasPoolConfigKind = poolConfigObject->Has("kind");
+                hasVDiskKind = poolConfigObject->Has("vdisk_kind");
             }
 
             ctx.PoolConfigInfo[key] = TPoolConfigInfo{
-                .HasErasureSpecies = currentHasErasureSpecies,
-                .HasKind = currentHasPoolConfigKind,
-                .HasVDiskKind = currentHasVDiskKind,
+                .HasErasureSpecies = hasErasureSpecies,
+                .HasKind = hasPoolConfigKind,
+                .HasVDiskKind = hasVDiskKind,
             };
+        };
+
+        Iterate(json, POOL_CONFIG_PATH, [&collectPoolConfigInfo](const std::vector<ui32>& ids, const NJson::TJsonValue& node) {
+            Y_ENSURE_BT(ids.size() == 2);
+            collectPoolConfigInfo({ids[0], ids[1]}, node);
+        });
+
+        Iterate(json, EPHEMERAL_POOL_CONFIG_PATH, [&collectPoolConfigInfo](const std::vector<ui32>& ids, const NJson::TJsonValue& node) {
+            Y_ENSURE_BT(ids.size() == 1);
+            collectPoolConfigInfo({0, ids[0]}, node);
         });
 
         Iterate(json, GROUP_PATH, [&ctx](const std::vector<ui32>& ids, const NJson::TJsonValue& node) {
@@ -229,25 +274,24 @@ namespace NKikimr::NYaml {
         }
     }
 
-    ui32 GetDefaultTabletCount(TString& type) {
-        const auto& defaults = DEFAULT_TABLETS;
-        for(const auto& [type_, cnt] : defaults) {
-            if (type == type_) {
-                return cnt;
+    const TDefaultTabletConfig& GetDefaultTabletConfig(const TString& type) {
+        for(const auto& cfg : DEFAULT_TABLETS) {
+            if (type == cfg.Type) {
+                return cfg;
             }
         }
         Y_ENSURE_BT(false, "unknown tablet " << type);
     }
 
-    bool isUnique(TString& type) {
-        return GetDefaultTabletCount(type) == 1;
+    bool isUnique(const TString& type) {
+        return GetDefaultTabletConfig(type).Count == 1;
     }
 
     std::vector<TString> GetTabletTypes() {
         const auto& defaults = DEFAULT_TABLETS;
         std::vector<TString> types;
-        for(const auto& [type, cnt] : defaults) {
-            types.push_back(TString(type));
+        for(const auto& [type, cnt, isOptional] : defaults) {
+            types.emplace_back(type);
         }
         return types;
     }
@@ -281,8 +325,8 @@ namespace NKikimr::NYaml {
         if (TryFromString(info, result)) {
             return result;
         }
-        TErasureType::EErasureSpecies species = TErasureType::ErasureSpeciesByName(info);
-        Y_ENSURE_BT(species != TErasureType::ErasureSpeciesCount, "unknown erasure " << info);
+        TErasureType::EErasureSpecies species;
+        Y_ENSURE_BT(TErasureType::ParseErasureName(species, info), "unknown erasure " << info);
         return species;
     }
 
@@ -351,14 +395,14 @@ namespace NKikimr::NYaml {
             }
             if (typesCount == 1) {
                 TString currentDiskType = hasRot ? "ROT" : (hasSsd ? "SSD" : "NVME");
-                if (diskType.empty()) { 
+                if (diskType.empty()) {
                     diskType = currentDiskType;
                 } else if (diskType != currentDiskType) {
                     return TString();
                 }
             }
         }
-        return diskType; 
+        return diskType;
     }
 
     void PrepareActorSystemConfig(NKikimrConfig::TAppConfig& config) {
@@ -555,7 +599,7 @@ namespace NKikimr::NYaml {
             securityConfig->AddDefaultAccess("+(DS|RA):METADATA-READERS"); // DescribeSchema | ReadAttributes
             securityConfig->AddDefaultAccess("+(SR):DATA-READERS"); // SelectRow
             securityConfig->AddDefaultAccess("+(UR|ER):DATA-WRITERS"); // UpdateRow | EraseRow
-            securityConfig->AddDefaultAccess("+(CD|CT|CQ|WA|AS|RS):DDL-ADMINS"); // CreateDirectory | CreateTable | CreateQueue | WriteAttributes | AlterSchema | RemoveSchema
+            securityConfig->AddDefaultAccess("+(CD|CT|CQ|WA|WUA|AS|RS):DDL-ADMINS"); // CreateDirectory | CreateTable | CreateQueue | WriteAttributes | WriteUserAttributes | AlterSchema | RemoveSchema
             securityConfig->AddDefaultAccess("+(GAR):ACCESS-ADMINS"); // GrantAccessRights
             securityConfig->AddDefaultAccess("+(CDB|DDB):DATABASE-ADMINS"); // CreateDatabase | DropDatabase
         }
@@ -634,11 +678,33 @@ namespace NKikimr::NYaml {
                         drive.SetPath(Sprintf("SectorMap:%d:64", sectorMapIndex));
                         drive.SetType("SSD");
                     }
+                    const bool hasExpectedSlotSize = drive.HasExpectedSlotSize() && drive.GetExpectedSlotSize();
+                    const bool hasMaxSlots = drive.HasMaxSlots() && drive.GetMaxSlots();
+                    if (hasExpectedSlotSize
+                            && (drive.GetExpectedSlotCount() || drive.GetSlotSizeInUnits())) {
+                        ythrow yexception() << "expected_slot_size is mutually exclusive with expected_slot_count"
+                            << " and slot_size_in_units"
+                            << " for drive with path '" << drive.GetPath() << "'";
+                    }
+                    if (hasExpectedSlotSize && !hasMaxSlots) {
+                        ythrow yexception() << "expected_slot_size requires max_slots"
+                            << " for drive with path '" << drive.GetPath() << "'";
+                    }
+                    if (hasMaxSlots && !hasExpectedSlotSize) {
+                        ythrow yexception() << "max_slots requires expected_slot_size"
+                            << " for drive with path '" << drive.GetPath() << "'";
+                    }
                     if (drive.HasExpectedSlotCount()) {
                         drive.MutablePDiskConfig()->SetExpectedSlotCount(drive.GetExpectedSlotCount());
                     }
                     if (drive.HasSlotSizeInUnits()) {
                         drive.MutablePDiskConfig()->SetSlotSizeInUnits(drive.GetSlotSizeInUnits());
+                    }
+                    if (drive.HasExpectedSlotSize()) {
+                        drive.MutablePDiskConfig()->SetExpectedSlotSize(drive.GetExpectedSlotSize());
+                    }
+                    if (drive.HasMaxSlots()) {
+                        drive.MutablePDiskConfig()->SetMaxSlots(drive.GetMaxSlots());
                     }
                 }
             }
@@ -728,7 +794,7 @@ namespace NKikimr::NYaml {
 
         if (!domainsConfig.DomainSize()) {
             auto& domain = *domainsConfig.AddDomain();
-            domain.SetName("Root"); // TODO: allow override
+            domain.SetName(ephemeralConfig.GetDomainName());
         }
 
         auto& domain = *domainsConfig.MutableDomain(0);
@@ -853,7 +919,7 @@ endDiskTypeCheck:   ;
         if (!config.HasDomainsConfig() || !config.GetDomainsConfig().DomainSize()) {
             auto& domainsConfig = *config.MutableDomainsConfig();
             auto& domain = *domainsConfig.AddDomain();
-            domain.SetName("Root");
+            domain.SetName(ephemeralConfig.GetDomainName());
         }
 
         auto& domainsConfig = *config.MutableDomainsConfig();
@@ -1007,10 +1073,6 @@ endDiskTypeCheck:   ;
                 node->SetInterconnectHost(host.GetInterconnectHost());
             } else {
                 node->SetInterconnectHost(host.GetHost());
-            }
-
-            if (host.HasBridgePileName()) {
-                node->SetBridgePileName(host.GetBridgePileName());
             }
         }
     }
@@ -1331,7 +1393,7 @@ endDiskTypeCheck:   ;
         enumName = to_upper(enumName);
 
         if (!systemTabletsConfig->TabletsSize(type)) {
-            for(ui32 idx = 0; idx < GetDefaultTabletCount(type); ++idx) {
+            for(ui32 idx = 0; idx < GetDefaultTabletConfig(type).Count; ++idx) {
                 auto* tablet = systemTabletsConfig->AddTablets(type);
                 NKikimrConfig::TBootstrap_ETabletType res;
                 Y_ENSURE_BT(TryFromString<NKikimrConfig::TBootstrap_ETabletType>(enumName, res), "incorrect enum: " << enumName);
@@ -1346,7 +1408,7 @@ endDiskTypeCheck:   ;
             auto* tabletInfo = tablet.MutableInfo();
 
             if (!tabletInfo->HasTabletID()) {
-                Y_ENSURE_BT(idx <= GetDefaultTabletCount(type));
+                Y_ENSURE_BT(idx <= GetDefaultTabletConfig(type).Count);
                 tabletInfo->SetTabletID(GetNextTabletID(type, idx));
             }
         }
@@ -1446,6 +1508,10 @@ endDiskTypeCheck:   ;
     }
 
 
+    bool TabletsEnabledFor(const NKikimrConfig::TEphemeralInputFields& ephemeralConfig, const TString& type) {
+        return !GetDefaultTabletConfig(type).IsOptional || ephemeralConfig.GetSystemTablets().TabletsSize(type);
+    }
+
     const NProtoBuf::RepeatedPtrField<NKikimrConfig::TBootstrap::TTablet>& GetTabletsFor(NKikimrConfig::TEphemeralInputFields& ephemeralConfig, TString type) {
         auto* systemTabletsConfig = ephemeralConfig.MutableSystemTablets();
         TString enumName = type;
@@ -1453,7 +1519,7 @@ endDiskTypeCheck:   ;
         enumName = to_upper(enumName);
 
         if (!systemTabletsConfig->TabletsSize(type)) {
-            for(ui32 idx = 0; idx < GetDefaultTabletCount(type); ++idx) {
+            for(ui32 idx = 0; idx < GetDefaultTabletConfig(type).Count; ++idx) {
                 auto* tablet = systemTabletsConfig->AddTablets(type);
                 NKikimrConfig::TBootstrap_ETabletType res;
                 Y_ENSURE_BT(TryFromString<NKikimrConfig::TBootstrap_ETabletType>(enumName, res), "incorrect enum: " << enumName);
@@ -1480,7 +1546,7 @@ endDiskTypeCheck:   ;
             auto* tabletInfo = tablet.MutableInfo();
 
             if (!tabletInfo->HasTabletID()) {
-                Y_ENSURE_BT(idx <= GetDefaultTabletCount(type));
+                Y_ENSURE_BT(idx <= GetDefaultTabletConfig(type).Count);
                 tabletInfo->SetTabletID(GetNextTabletID(type, idx));
             }
 
@@ -1497,12 +1563,15 @@ endDiskTypeCheck:   ;
             return;
         }
 
-        if (relaxed && (!ephemeralConfig.HasSystemTablets() || !ephemeralConfig.HasStaticErasure())) {
+        if (relaxed && !ephemeralConfig.HasSystemTablets()) {
             return;
         }
 
         auto* bootConfig = config.MutableBootstrapConfig();
         for(const auto& type : GetTabletTypes()) {
+            if (!TabletsEnabledFor(ephemeralConfig, type)) {
+                continue;
+            }
             for(const auto& tablet : GetTabletsFor(ephemeralConfig, type)) {
                 bootConfig->AddTablet()->CopyFrom(tablet);
             }
@@ -1529,10 +1598,39 @@ endDiskTypeCheck:   ;
         }
 
         if (ephemeralConfig.StoragePoolTypesSize() > 0) {
-            Y_ENSURE_BT(!config.HasDomainsConfig(), "domains_config is not allowed to be set with storage_pool_types");
+            // get domain name: priority is ephemeralConfig.DomainName > domains_config.domain.name > "Root"
+            TString domainName = ephemeralConfig.GetDomainName();
+
+            std::optional<NKikimrConfig::TDomainsConfig::TSecurityConfig> savedSecurityConfig;
+
+            if (config.HasDomainsConfig()) {
+                const auto& existingDomainsConfig = config.GetDomainsConfig();
+
+                if (existingDomainsConfig.HasSecurityConfig()) {
+                    savedSecurityConfig = existingDomainsConfig.GetSecurityConfig();
+                }
+
+                if (existingDomainsConfig.DomainSize() > 0) {
+                    const auto& existingDomain = existingDomainsConfig.GetDomain(0);
+                    Y_ENSURE_BT(
+                        existingDomain.StoragePoolTypesSize() == 0,
+                        "domains_config.domain.storage_pool_types is not allowed with top-level storage_pool_types"
+                    );
+                    if (!ephemeralConfig.HasDomainName() && existingDomain.HasName()) {
+                        domainName = existingDomain.GetName();
+                    }
+                }
+                config.ClearDomainsConfig();
+            }
+
             auto& domainsConfig = *config.MutableDomainsConfig();
+
+            if (savedSecurityConfig.has_value()) {
+                domainsConfig.MutableSecurityConfig()->CopyFrom(savedSecurityConfig.value());
+            }
+
             auto& domain = *domainsConfig.AddDomain();
-            domain.SetName("Root");
+            domain.SetName(domainName);
             for (const auto& storagePoolType : ephemeralConfig.GetStoragePoolTypes()) {
                 domain.AddStoragePoolTypes()->CopyFrom(storagePoolType);
             }
@@ -1609,33 +1707,89 @@ endDiskTypeCheck:   ;
         return replaceRequest;
     }
 
-    void Parse(const NJson::TJsonValue& json, NProtobufJson::TJson2ProtoConfig convertConfig, NKikimrConfig::TAppConfig& config, bool transform, bool relaxed) {
+    const TVector<TOpaqueField>& OpaqueConfigFields() {
+        static const TVector<TOpaqueField> fields = [] {
+            TVector<TOpaqueField> result;
+            const auto* desc = NKikimrConfig::TAppConfig::descriptor();
+            for (int i = 0; i < desc->field_count(); ++i) {
+                const auto* field = desc->field(i);
+                if (field->options().GetExtension(NKikimrConfig::NMarkers::OpaqueConfig)) {
+                    Y_ENSURE(field->cpp_type() == ::google::protobuf::FieldDescriptor::CPPTYPE_MESSAGE);
+                    TString name = field->name();
+                    NProtobufJson::ToSnakeCaseDense(&name);
+                    result.push_back({name});
+                }
+            }
+            return result;
+        }();
+        return fields;
+    }
+
+    void CaptureOpaqueConfigFields(NJson::TJsonValue& configJson) {
+        if (!configJson.IsMap()) {
+            return;
+        }
+        for (const auto& f : OpaqueConfigFields()) {
+            if (!configJson.Has(f.Name)) {
+                continue;
+            }
+            configJson[f.Name] = NJson::TJsonValue(NJson::JSON_MAP);
+        }
+    }
+
+    void Parse(const NJson::TJsonValue& json, NProtobufJson::TJson2ProtoConfig convertConfig, NKikimrConfig::TAppConfig& config,
+               bool transform, EParsePhase* phase, bool relaxed) {
+        auto runPhase = [phase](EParsePhase value, auto&& func) {
+            try {
+                func();
+            } catch (const yexception&) {
+                if (phase) {
+                    *phase = value;
+                }
+                throw;
+            }
+        };
+
         auto jsonNode = json;
         TTransformContext ctx;
         NKikimrConfig::TEphemeralInputFields ephemeralConfig;
 
-        if (json.Has("metadata")) {
-            ValidateMetadata(json["metadata"]);
+        runPhase(EParsePhase::Preprocess, [&] {
+            if (json.Has("metadata")) {
+                ValidateMetadata(json["metadata"]);
 
-            Y_ENSURE_BT(json.Has("config") && json["config"].IsMap(),
-                       "'config' must be an object when 'metadata' is present");
+                Y_ENSURE_BT(json.Has("config") && json["config"].IsMap(),
+                           "'config' must be an object when 'metadata' is present");
 
-            jsonNode = json["config"];
-        }
+                config.SetYamlConfigEnabled(true);
+
+                jsonNode = json["config"];
+            }
+
+            if (transform) {
+                ExtractExtraFields(jsonNode, ctx);
+            }
+        });
 
         if (transform) {
-            ExtractExtraFields(jsonNode, ctx);
-
             NJson::TJsonValue ephemeralJsonNode = jsonNode;
             ClearNonEphemeralFields(ephemeralJsonNode);
-            NProtobufJson::MergeJson2Proto(ephemeralJsonNode, ephemeralConfig, convertConfig);
+            runPhase(EParsePhase::JsonToProto, [&] {
+                NProtobufJson::MergeJson2Proto(ephemeralJsonNode, ephemeralConfig, convertConfig);
+            });
             ClearEphemeralFields(jsonNode);
         }
 
-        NProtobufJson::MergeJson2Proto(jsonNode, config, convertConfig);
+        CaptureOpaqueConfigFields(jsonNode);
+        CoerceBoolEnumsToNames(jsonNode, config.GetDescriptor());
+        runPhase(EParsePhase::JsonToProto, [&] {
+            NProtobufJson::MergeJson2Proto(jsonNode, config, convertConfig);
+        });
 
         if (transform) {
-            TransformProtoConfig(ctx, config, ephemeralConfig, relaxed);
+            runPhase(EParsePhase::Transform, [&] {
+                TransformProtoConfig(ctx, config, ephemeralConfig, relaxed);
+            });
         }
     }
 
@@ -1651,7 +1805,8 @@ endDiskTypeCheck:   ;
     }
 
     void ValidateMetadata(const NJson::TJsonValue& metadata) {
-        Y_ENSURE_BT(metadata.Has("cluster") && metadata["cluster"].IsString(), "Metadata must contain a string 'cluster' field");
+        Y_ENSURE_BT(metadata.Has("cluster") && (metadata["cluster"].IsString() || metadata["cluster"].IsUInteger()),
+                    "Metadata must contain a string or numeric 'cluster' field");
         Y_ENSURE_BT(metadata.Has("version") && metadata["version"].IsUInteger(), "Metadata must contain an unsigned int 'version' field");
     }
 

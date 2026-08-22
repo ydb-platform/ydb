@@ -55,6 +55,9 @@ void TDriverConfig::Register(TRegistrar registrar)
     registrar.Parameter("proxy_discovery_cache", &TThis::ProxyDiscoveryCache)
         .DefaultNew();
 
+    registrar.Parameter("default_rpc_proxy_address_type", &TThis::DefaultRpcProxyAddressType)
+        .Default(NApi::NRpcProxy::EAddressType::InternalRpc);
+
     registrar.Parameter("enable_internal_commands", &TThis::EnableInternalCommands)
         .Default(false);
 
@@ -64,9 +67,13 @@ void TDriverConfig::Register(TRegistrar registrar)
     registrar.Parameter("require_password_in_authentication_commands", &TThis::RequirePasswordInAuthenticationCommands)
         .Default(true);
 
+    registrar.Parameter("abandon_master_transactions_on_failed_commit", &TThis::AbandonMasterTransactionsOnFailedCommit)
+        .Default(false);
+
     registrar.Preprocessor([] (TThis* config) {
         config->ClientCache->Capacity = 1024_KB;
         config->ProxyDiscoveryCache->RefreshTime = TDuration::Seconds(15);
+        config->ProxyDiscoveryCache->ExpirationPeriod = TDuration::Seconds(15);
         config->ProxyDiscoveryCache->ExpireAfterSuccessfulUpdateTime = TDuration::Seconds(15);
         config->ProxyDiscoveryCache->ExpireAfterFailedUpdateTime = TDuration::Seconds(15);
     });

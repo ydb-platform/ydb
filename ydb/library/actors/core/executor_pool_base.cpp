@@ -14,7 +14,6 @@ namespace NActors {
 
     void DoActorInit(TActorSystem* sys, IActor* actor, const TActorId& self, const TActorId& owner) {
         actor->SelfActorId = self;
-        actor->DoActorInit();
         actor->Registered(sys, owner);
     }
 
@@ -37,17 +36,6 @@ namespace NActors {
 
         const TMonotonic now = ActorSystem->Monotonic();
 
-        for (auto& u : stats.UsageByActivity) {
-            u.fill(0);
-        }
-
-        auto accountUsage = [&](ui32 activityType, double usage) {
-            Y_ABORT_UNLESS(0 <= usage);
-            Y_ABORT_UNLESS(usage <= 1);
-            int bin = Min<int>(9, usage * 10);
-            ++stats.UsageByActivity[activityType][bin];
-        };
-
         std::fill(stats.StuckActorsByActivity.begin(), stats.StuckActorsByActivity.end(), 0);
 
         with_lock (StuckObserverMutex) {
@@ -58,31 +46,20 @@ namespace NActors {
                 if (delta > TDuration::Seconds(30)) {
                     ++stats.StuckActorsByActivity[actor->GetActivityType().GetIndex()];
                 }
-                accountUsage(actor->GetActivityType().GetIndex(), actor->GetUsage(GetCycleCountFast()));
             }
-            for (const auto& [activityType, usage] : DeadActorsUsage) {
-                accountUsage(activityType, usage);
-            }
-            DeadActorsUsage.clear();
         }
     }
 #endif
 
-    TExecutorPoolBase::TExecutorPoolBase(ui32 poolId, ui32 threads, TAffinity* affinity, bool useRingQueue)
+    TExecutorPoolBase::TExecutorPoolBase(ui32 poolId, ui32 threads, TAffinity* affinity)
         : TExecutorPoolBaseMailboxed(poolId)
         , PoolThreads(threads)
-        , UseRingQueueValue(useRingQueue)
         , ThreadsAffinity(affinity)
-    {
-        if (useRingQueue) {
-            Activations.emplace<TRingActivationQueue>(threads == 1);
-        } else {
-            Activations.emplace<TUnorderedCacheActivationQueue>();
-        }
-    }
+        , Activations(threads)
+    {}
 
     TExecutorPoolBase::~TExecutorPoolBase() {
-        while (std::visit([](auto &x){return x.Pop(0);}, Activations))
+        while (Activations.Pop(0))
             ;
     }
 
@@ -94,7 +71,7 @@ namespace NActors {
         return ActorSystem->AllocateIDSpace(1);
     }
 
-    bool TExecutorPoolBaseMailboxed::Send(TAutoPtr<IEventHandle>& ev) {
+    bool TExecutorPoolBaseMailboxed::Send(std::unique_ptr<IEventHandle>& ev) {
         Y_DEBUG_ABORT_UNLESS(ev->GetRecipientRewrite().PoolID() == PoolId);
 #ifdef ACTORSLIB_COLLECT_EXEC_STATS
         RelaxedStore(&ev->SendTime, (::NHPTimer::STime)GetCycleCountFast());
@@ -120,7 +97,7 @@ namespace NActors {
         return false;
     }
 
-    bool TExecutorPoolBaseMailboxed::SpecificSend(TAutoPtr<IEventHandle>& ev) {
+    bool TExecutorPoolBaseMailboxed::SpecificSend(std::unique_ptr<IEventHandle>& ev) {
         Y_DEBUG_ABORT_UNLESS(ev->GetRecipientRewrite().PoolID() == PoolId);
 #ifdef ACTORSLIB_COLLECT_EXEC_STATS
         RelaxedStore(&ev->SendTime, (::NHPTimer::STime)GetCycleCountFast());
@@ -147,11 +124,7 @@ namespace NActors {
     }
 
     void TExecutorPoolBase::ScheduleActivation(TMailbox* mailbox) {
-        if (UseRingQueue()) {
-            ScheduleActivationEx(mailbox, 0);
-        } else {
-            ScheduleActivationEx(mailbox, AtomicIncrement(ActivationsRevolvingCounter));
-        }
+        ScheduleActivationEx(mailbox, 0);
     }
 
     Y_FORCE_INLINE bool IsAllowedToCapture(IExecutorPool *self) {
@@ -172,11 +145,7 @@ namespace NActors {
         if (!mailbox) {
             return;
         }
-        if (UseRingQueueValue) {
-            ScheduleActivationEx(mailbox, 0);
-        } else {
-            ScheduleActivationEx(mailbox, AtomicIncrement(ActivationsRevolvingCounter));
-        }
+        ScheduleActivationEx(mailbox, 0);
     }
 
     TActorId TExecutorPoolBaseMailboxed::Register(IActor* actor, TMailboxType::EType, ui64 revolvingWriteCounter, const TActorId& parentId) {
@@ -306,7 +275,4 @@ namespace NActors {
         return MailboxTable;
     }
 
-    bool TExecutorPoolBase::UseRingQueue() const {
-        return UseRingQueueValue;
-    }
 }

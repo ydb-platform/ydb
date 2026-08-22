@@ -1,0 +1,261 @@
+# -*- coding: utf-8 -*-
+import ydb
+from ydb.tests.stress.common.instrumented_pools import InstrumentedQuerySessionPool
+import time
+import random
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+class Workload():
+    def __init__(self, endpoint: str, database: str, duration: int, partitions_count: int, prefix: str):
+        self.database = database
+        self.endpoint = endpoint
+        self.driver = ydb.Driver(ydb.DriverConfig(endpoint, database))
+        self.pool = InstrumentedQuerySessionPool(self.driver)
+        self.duration = duration
+        self.prefix = prefix
+        self.input_topic = f'{prefix}/input_topic'
+        self.output_topic = f'{prefix}/output_topic'
+        self.query_name = f'{prefix}/query_name'
+        self.consumer_name = 'consumer_name'
+        self.partitions_count = partitions_count
+        self.receive_message_timeout_sec = 1
+        logger.info("Workload::init")
+
+    def create_topics(self):
+        logger.info("Workload::create_topics")
+        self.pool.execute_with_retries(
+            f"""
+                CREATE TOPIC `{self.input_topic}` WITH (min_active_partitions = {self.partitions_count}, retention_period = Interval('PT1H'));
+                CREATE TOPIC `{self.output_topic}` (CONSUMER {self.consumer_name}) WITH (retention_period = Interval('PT12H'));
+            """
+        )
+
+    def drop_topics(self):
+        logger.info("Workload::drop_topics")
+
+        self.pool.execute_with_retries(
+            f"""
+                DROP TOPIC  `{self.input_topic}`;
+                DROP TOPIC  `{self.output_topic}`;
+            """
+        )
+
+    def create_external_data_source(self):
+        logger.info("Workload::create_external_data_source")
+        self.pool.execute_with_retries(
+            f"""
+                CREATE EXTERNAL DATA SOURCE `{self.prefix}/source_name` WITH (
+                    SOURCE_TYPE="Ydb",
+                    LOCATION="{self.endpoint}",
+                    DATABASE_NAME="{self.database}",
+                    AUTH_METHOD="NONE");
+            """
+        )
+
+    def create_table(self):
+        logger.info("Workload::create_table")
+        self.pool.execute_with_retries(
+            f"""
+                CREATE TABLE `{self.prefix}/table_name` (
+                    key Utf8,
+                    value Utf8,
+                    PRIMARY KEY (key)
+                );
+            """
+        )
+        self.pool.execute_with_retries(
+            f"""
+                UPSERT INTO `{self.prefix}/table_name` (key, value) VALUES ('key1', 'value1');
+            """
+        )
+
+    def create_join_tables(self):
+        logger.info("Workload::create_join_tables")
+        self.pool.execute_with_retries(
+            f"""
+                CREATE TABLE `{self.prefix}/join_row_table` (
+                    level Utf8,
+                    descr Utf8,
+                    PRIMARY KEY (level)
+                );
+                CREATE TABLE `{self.prefix}/join_column_table` (
+                    level Utf8 NOT NULL,
+                    descr Utf8,
+                    PRIMARY KEY (level)
+                ) WITH (
+                    STORE = COLUMN
+                );
+            """
+        )
+        self.pool.execute_with_retries(
+            f"""
+                UPSERT INTO `{self.prefix}/join_row_table` (level, descr) VALUES ('error', 'row-descr');
+            """
+        )
+        self.pool.execute_with_retries(
+            f"""
+                UPSERT INTO `{self.prefix}/join_column_table` (level, descr) VALUES ('error', 'col-descr');
+            """
+        )
+
+    def create_output_tables(self):
+        logger.info("Workload::create_output_tables")
+        for suffix in ('ext', 'loc'):
+            self.pool.execute_with_retries(
+                f"""
+                    CREATE TABLE `{self.prefix}/output_table_{suffix}` (
+                        ts Utf8 NOT NULL,
+                        error_count Uint64,
+                        PRIMARY KEY (ts)
+                    );
+                """
+            )
+
+    def create_streaming_query(self, external):
+        logger.info("Workload::create_streaming_query")
+        source = f"`{self.prefix}/source_name`." if external else ""
+        output_table = f"{self.prefix}/output_table_{'ext' if external else 'loc'}"
+        self.pool.execute_with_retries(
+            f"""
+                CREATE STREAMING QUERY `{self.prefix}/query_name_{'ext' if external else 'loc'}` AS DO BEGIN
+                $precompute_data = SELECT value FROM `{self.prefix}/table_name` LIMIT 1;
+
+                $input = (
+                    SELECT * FROM
+                        {source}`{self.input_topic}` WITH (
+                            FORMAT = 'json_each_row',
+                            SCHEMA (time Uint64 NOT NULL, level String NOT NULL),
+                            WATERMARK = __ydb_write_time - Interval('PT0S'),
+                            WATERMARK_GRANULARITY = "PT1S"
+                        )
+                );
+                $filtered = (SELECT * FROM $input WHERE level = 'error');
+
+                $joined = (
+                    SELECT f.time AS time, f.level AS level, jr.descr AS row_descr, jc.descr AS col_descr
+                    FROM $filtered AS f
+                    LEFT JOIN `{self.prefix}/join_row_table` AS jr ON f.level = jr.level
+                    LEFT JOIN `{self.prefix}/join_column_table` AS jc ON f.level = jc.level
+                );
+
+                $number_errors = (
+                    SELECT COUNT(*) AS error_count, CAST(HOP_START() AS String) AS ts, SOME(row_descr) AS row_descr, SOME(col_descr) AS col_descr
+                    FROM $joined
+                    GROUP BY
+                        HoppingWindow(CAST(time AS Timestamp), 'PT1S', 'PT1S')
+                );
+
+                $json = (SELECT ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow())))) || Unwrap($precompute_data)
+                    FROM $number_errors
+                );
+
+                INSERT INTO {source}`{self.output_topic}`
+                SELECT * FROM $json;
+
+                UPSERT INTO `{output_table}`
+                SELECT Unwrap(CAST(ts || "{'ext' if external else 'loc'}" AS Utf8)) AS ts, error_count FROM $number_errors;
+                END DO;
+            """
+        )
+
+    def check_status(self):
+        result_sets = self.pool.execute_with_retries(f"SELECT Status FROM `.sys/streaming_queries` WHERE Path LIKE '{self.database}/{self.prefix}/query_name%'")
+        assert len(result_sets) == 1
+        assert len(result_sets[0].rows) == 2
+
+        for row in result_sets[0].rows:
+            status = row.Status
+            if status != 'RUNNING':
+                raise Exception(f"Unexpected query status: expected 'RUNNING', got '{status}'")
+
+    def write_to_input_topic(self):
+        logger.info("Workload::write_to_input_topic")
+
+        writers = []
+        for i in range(self.partitions_count):
+            writers.append(self.driver.topic_client.writer(self.input_topic, partition_id=i))
+
+        finished_at = time.time() + self.duration
+        while time.time() < finished_at:
+            for writer in writers:
+                messages = []
+                for i in range(100):
+                    level = "error" if random.choice([True, False]) else "warn"
+                    messages.append(f'{{"time": {int(time.time() * 1000000)}, "level": "{level}"}}')
+                try:
+                    writer.write(messages, timeout=0.5)
+                    writer.flush()
+                except Exception:
+                    pass
+
+            direct_level = "error" if random.choice([True, False]) else "warn"
+            direct_message = f'{{"time": {int(time.time() * 1000000)}, "level": "{direct_level}"}}'
+            try:
+                self.pool.execute_with_retries(
+                    f"INSERT INTO `{self.input_topic}` SELECT @@{direct_message}@@;"
+                )
+            except Exception as e:
+                logger.error(f"Failed to write into local topic: {e}")
+
+            external_level = "error" if random.choice([True, False]) else "warn"
+            external_message = f'{{"time": {int(time.time() * 1000000)}, "level": "{external_level}"}}'
+            try:
+                self.pool.execute_with_retries(
+                    f"INSERT INTO `{self.prefix}/source_name`.`{self.input_topic}` SELECT @@{external_message}@@;"
+                )
+            except Exception as e:
+                logger.error(f"Failed to write into external topic: {e}")
+
+        for writer in writers:
+            writer.close(flush=False)
+
+        logger.info("Workload::write_to_input_topic end")
+
+    def read_from_output_topic(self):
+        logger.info("Workload::read_from_output_topic")
+        count = 0
+        with self.driver.topic_client.reader(self.output_topic, self.consumer_name) as reader:
+            while True:
+                try:
+                    reader.receive_message(timeout=self.receive_message_timeout_sec)
+                    count += 1
+                except TimeoutError:
+                    break
+        expected = 2 * self.duration  # Group by HOP 1s X two queries
+        if count < expected * 0.7:
+            raise Exception(f"Insufficient data in output topic: expected ~{expected} messages, got {count}")
+
+    def check_output_tables(self):
+        logger.info("Workload::check_output_tables")
+        for suffix in ('ext', 'loc'):
+            result_sets = self.pool.execute_with_retries(
+                f"SELECT COUNT(*) AS cnt FROM `{self.prefix}/output_table_{suffix}`"
+            )
+            count = result_sets[0].rows[0].cnt
+            expected = self.duration - 30  # Group by HOP 1s - checkpoint duration
+            if count < expected * 0.7:
+                raise Exception(f"Insufficient data in output table: expected ~{expected} messages, got {count}")
+
+    def loop(self):
+        self.create_topics()
+        self.create_external_data_source()
+        self.create_table()
+        self.create_join_tables()
+        self.create_output_tables()
+        self.create_streaming_query(external=True)
+        self.create_streaming_query(external=False)
+        self.check_status()
+        self.write_to_input_topic()
+        self.read_from_output_topic()
+        self.check_output_tables()
+        self.drop_topics()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.pool.stop()
+        self.driver.stop()

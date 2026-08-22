@@ -2,6 +2,8 @@
 #include "datashard_common_upload.h"
 #include "datashard_user_db.h"
 
+#include <ydb/library/aclib/user_context.h>
+
 namespace NKikimr::NDataShard {
 
 template <typename TEvRequest, typename TEvResponse>
@@ -14,7 +16,7 @@ TCommonUploadOps<TEvRequest, TEvResponse>::TCommonUploadOps(typename TEvRequest:
 
 template <typename TEvRequest, typename TEvResponse>
 bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTransactionContext& txc,
-        const TRowVersion& readVersion, const TRowVersion& writeVersion, ui64 globalTxId,
+        const TRowVersion& mvccVersion, ui64 globalTxId,
         absl::flat_hash_set<ui64>* volatileReadDependencies)
 {
     const auto& record = Ev->Get()->Record;
@@ -50,7 +52,7 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
     if (record.GetSchemaVersion() && tableInfo.GetTableSchemaVersion() &&
         record.GetSchemaVersion() != tableInfo.GetTableSchemaVersion())
     {
-        SetError(NKikimrTxDataShard::TError::SCHEME_ERROR, TStringBuilder()
+        SetError(NKikimrTxDataShard::TError::SCHEME_CHANGED, TStringBuilder()
             << "Schema version mismatch"
             << ": requested " << record.GetSchemaVersion()
             << ", expected " << tableInfo.GetTableSchemaVersion()
@@ -67,7 +69,6 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
 
     const bool upsertIfExists = record.GetUpsertIfExists();
     const bool writeToTableShadow = record.GetWriteToTableShadow();
-    const bool readForTableShadow = writeToTableShadow && !shadowTableId;
     const ui32 writeTableId = writeToTableShadow && shadowTableId ? shadowTableId : localTableId;
 
     const bool breakWriteConflicts = BreakLocks && (
@@ -75,7 +76,7 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
         self->GetVolatileTxManager().GetTxMap());
 
     NMiniKQL::TEngineHostCounters engineHostCounters;
-    TDataShardUserDb userDb(*self, txc.DB, globalTxId, readVersion, writeVersion, engineHostCounters, TAppData::TimeProvider->Now());
+    TDataShardUserDb userDb(*self, txc.DB, globalTxId, mvccVersion, engineHostCounters, TAppData::TimeProvider->Now());
     TDataShardChangeGroupProvider groupProvider(*self, txc.DB);
 
     if (CollectChanges) {
@@ -86,9 +87,6 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
     TVector<NTable::TTag> tagsForSelect;
     TVector<std::pair<ui32, NScheme::TTypeInfo>> valueCols;
     for (const auto& colId : record.GetRowScheme().GetValueColumnIds()) {
-        if (readForTableShadow) {
-            tagsForSelect.push_back(colId);
-        }
         auto* col = tableInfo.Columns.FindPtr(colId);
         if (!col) {
             SetError(NKikimrTxDataShard::TError::SCHEME_ERROR, Sprintf("Missing column with id=%" PRIu32, colId));
@@ -121,7 +119,7 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
             valueCells.GetCells().size() != valueCols.size())
         {
             SetError(NKikimrTxDataShard::TError::SCHEME_ERROR, TStringBuilder() << "Cell count doesn't match row scheme"
-                    << ": got keys " << keyCells.GetCells().size() << ", values " << valueCells.GetCells().size() 
+                    << ": got keys " << keyCells.GetCells().size() << ", values " << valueCells.GetCells().size()
                     << "; expected keys " << tableInfo.KeyColumnTypes.size() << ", values " << valueCols.size());
             return true;
         }
@@ -141,24 +139,6 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
                      Sprintf("Row key size of %" PRISZT " bytes is larger than the allowed threshold %" PRIu64,
                              keyBytes, NLimits::MaxWriteKeySize));
             return true;
-        }
-
-        if (readForTableShadow) {
-            rowState.Init(tagsForSelect.size());
-
-            auto ready = txc.DB.Select(localTableId, key, tagsForSelect, rowState, 0 /* readFlags */, readVersion);
-            if (ready == NTable::EReady::Page) {
-                pageFault = true;
-            }
-
-            if (pageFault) {
-                continue;
-            }
-
-            if (rowState == NTable::ERowOp::Erase || rowState == NTable::ERowOp::Reset) {
-                // Row has been erased in the past, ignore this upsert
-                continue;
-            }
         }
 
         if (upsertIfExists) {
@@ -188,51 +168,43 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
                 return true;
             }
 
-            bool allowUpdate = true;
-            if (readForTableShadow && rowState == NTable::ERowOp::Upsert && rowState.GetCellOp(vi) != NTable::ECellOp::Empty) {
-                // We don't want to overwrite columns that already has some value
-                allowUpdate = false;
-            }
-
-            if (allowUpdate) {
-                value.emplace_back(NTable::TUpdateOp(vt.first, NTable::ECellOp::Set, TRawTypeValue(valueCells.GetCells()[vi].AsRef(), vt.second.GetTypeId())));
-            }
+            value.emplace_back(NTable::TUpdateOp(vt.first, NTable::ECellOp::Set, TRawTypeValue(valueCells.GetCells()[vi].AsRef(), vt.second.GetTypeId())));
             ++vi;
-        }
-
-        if (readForTableShadow && rowState != NTable::ERowOp::Absent && value.empty()) {
-            // We don't want to issue an Upsert when key already exists and there are no updates
-            continue;
         }
 
         if (!writeToTableShadow) {
             // note, that for upsertIfExists mode we must break locks, because otherwise we can
             // produce inconsistency.
             if (BreakLocks) {
+                TConstArrayRef<TCell> uniqueKey = GetUniqueIndexKey(keyCells.GetCells(), tableInfo.UniqueIndexKeySize);
+
                 if (breakWriteConflicts) {
-                    if (!self->BreakWriteConflicts(txc.DB, fullTableId, keyCells.GetCells(), volatileDependencies)) {
+                    if (!self->BreakWriteConflicts(txc.DB, fullTableId, uniqueKey, volatileDependencies)) {
                         pageFault = true;
                     }
                 }
 
                 if (!pageFault) {
-                    self->SysLocksTable().BreakLocks(fullTableId, keyCells.GetCells());
+                    self->SysLocksTable().BreakLocks(fullTableId, uniqueKey);
                 }
             }
 
             if (ChangeCollector) {
                 Y_ENSURE(CollectChanges);
 
+                auto userCtx = NACLib::TUserContextBuilder()
+                    .DeserializeFromEventHandle(*Ev.Get())
+                    .Build();
                 if (!volatileDependencies.empty()) {
                     if (!globalTxId) {
                         throw TNeedGlobalTxId();
                     }
 
-                    if (!ChangeCollector->OnUpdateTx(fullTableId, writeTableId, NTable::ERowOp::Upsert, key, value, globalTxId)) {
+                    if (!ChangeCollector->OnUpdateTx(fullTableId, writeTableId, NTable::ERowOp::Upsert, key, value, globalTxId, userCtx)) {
                         pageFault = true;
                     }
                 } else {
-                    if (!ChangeCollector->OnUpdate(fullTableId, writeTableId, NTable::ERowOp::Upsert, key, value, writeVersion)) {
+                    if (!ChangeCollector->OnUpdate(fullTableId, writeTableId, NTable::ERowOp::Upsert, key, value, mvccVersion, userCtx)) {
                         pageFault = true;
                     }
                 }
@@ -251,11 +223,11 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
             self->GetConflictsCache().GetTableCache(writeTableId).AddUncommittedWrite(keyCells.GetCells(), globalTxId, txc.DB);
             if (!commitAdded) {
                 // Make sure we see our own changes on further iterations
-                userDb.AddCommitTxId(fullTableId, globalTxId, writeVersion);
+                userDb.AddCommitTxId(fullTableId, globalTxId);
                 commitAdded = true;
             }
         } else {
-            txc.DB.Update(writeTableId, NTable::ERowOp::Upsert, key, value, writeVersion);
+            txc.DB.Update(writeTableId, NTable::ERowOp::Upsert, key, value, mvccVersion);
             self->GetConflictsCache().GetTableCache(writeTableId).RemoveUncommittedWrites(keyCells.GetCells(), txc.DB);
         }
     }
@@ -277,13 +249,14 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
     if (!volatileDependencies.empty()) {
         self->GetVolatileTxManager().PersistAddVolatileTx(
             globalTxId,
-            writeVersion,
+            mvccVersion,
             /* commitTxIds */ { globalTxId },
             volatileDependencies,
             /* participants */ { },
             groupProvider.GetCurrentChangeGroup(),
             /* ordered */ false,
             /* arbiter */ false,
+            /* disable expectations */ false,
             txc);
         // Note: transaction is already committed, no additional waiting needed
     }

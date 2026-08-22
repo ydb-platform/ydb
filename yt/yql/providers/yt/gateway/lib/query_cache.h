@@ -1,5 +1,6 @@
 #pragma once
 
+#include <yt/yql/providers/yt/gateway/lib/op_tracker.h>
 #include <yt/yql/providers/yt/common/yql_yt_settings.h>
 #include <yt/yql/providers/yt/gateway/lib/transaction_cache.h>
 #include <yql/essentials/utils/threading/async_queue.h>
@@ -22,12 +23,12 @@ public:
     }
 
     // returns true if cache was used
-    bool Lookup(const TAsyncQueue::TPtr& queue) {
+    bool Lookup(const TAsyncQueue::TWeakPtr& queue) {
         return LookupAsync(queue).GetValueSync();
     }
 
     [[nodiscard]]
-    NThreading::TFuture<bool> LookupAsync(const TAsyncQueue::TPtr& queue) {
+    NThreading::TFuture<bool> LookupAsync(const TAsyncQueue::TWeakPtr& queue) {
         if (Mode == EQueryCacheMode::Disable || Mode == EQueryCacheMode::Refresh) {
             return NThreading::MakeFuture<bool>(false);
         }
@@ -64,10 +65,10 @@ public:
     TFsQueryCacheItem(const TYtSettings& config, const TString& cluster, const TString& tmpDir, const TString& hash,
         const TString& outputTablePath);
     TFsQueryCacheItem(const TYtSettings& config, const TString& cluster, const TString& tmpDir, const TString& hash,
-        const TVector<TString>& outputTablePaths);
+        const TVector<TString>& outputTablePaths, const TMaybe<TString>& singleOutputHash);
 
     // returns true if cache was used
-    NThreading::TFuture<bool> LookupImpl(const TAsyncQueue::TPtr& queue);
+    NThreading::TFuture<bool> LookupImpl(const TAsyncQueue::TWeakPtr& queue);
     void StoreImpl();
 
 private:
@@ -78,14 +79,20 @@ private:
 class TYtQueryCacheItem: public TQueryCacheItemBase<TYtQueryCacheItem> {
 public:
     TYtQueryCacheItem(EQueryCacheMode mode, const TTransactionCache::TEntry::TPtr& entry, const TString& hash,
+        const TMaybe<TString>& singleOutputHash,
         const TVector<TString>& dstTables, const TVector<NYT::TNode>& dstSpecs, const TString& userName,
         const TString& tmpFolder, const NYT::TNode& mergeSpec,
         const NYT::TNode& tableAttrs, ui64 chunkLimit, bool useExpirationTimeout, bool useMultiSet,
         const std::pair<TString, TString>& logCtx);
 
     // returns true if cache was used
-    NThreading::TFuture<bool> LookupImpl(const TAsyncQueue::TPtr& queue);
+    NThreading::TFuture<bool> LookupImpl(const TAsyncQueue::TWeakPtr& queue);
     void StoreImpl();
+
+    void SetOperationId(NYT::TOperationId operationId);
+
+    void SetProgressData(IOperationTracker::TPtr tracker, TMaybe<ui32> publicId,
+        const TOperationProgressWriter& progressWriter, const TStatWriter& statWriter);
 
 private:
     static TString GetCachePath(const TString& userName, const TString& tmpFolder);
@@ -94,6 +101,11 @@ private:
     void SetTableAttrs(const NYT::TNode& spec, const TString& cachedPath);
 
 private:
+    IOperationTracker::TPtr Tracker_;
+    TMaybe<ui32> PublicId_;
+    TOperationProgressWriter ProgressWriter_;
+    TStatWriter StatWriter_;
+
     const TTransactionCache::TEntry::TPtr Entry;
     const TVector<TString> DstTables;
     const TVector<NYT::TNode> DstSpecs;
@@ -107,6 +119,7 @@ private:
     const NYT::TNode MergeSpec;
     NYT::TNode TableAttrs;
     NYT::ITransactionPtr LockTx;
+    const bool FailOnRace;
 };
 
 } // NYql

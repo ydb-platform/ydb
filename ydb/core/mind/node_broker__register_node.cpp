@@ -4,6 +4,8 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/protos/counters_node_broker.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::NODE_BROKER
+
 namespace NKikimr {
 namespace NNodeBroker {
 
@@ -16,7 +18,6 @@ public:
         , Event(resolvedEv->Get()->Request)
         , ScopeId(resolvedEv->Get()->ScopeId)
         , ServicedSubDomain(resolvedEv->Get()->ServicedSubDomain)
-        , BridgePileId(resolvedEv->Get()->BridgePileId)
         , ResolveError(std::move(resolvedEv->Get()->Error))
         , NodeId(0)
         , ExtendLease(false)
@@ -37,8 +38,11 @@ public:
         const auto &rec = Event->Get()->Record;
         auto host = rec.GetHost();
         auto port = rec.GetPort();
-        LOG_ERROR_S(ctx, NKikimrServices::NODE_BROKER,
-                    "Cannot register node " << host << ":" << port << ": " << code << ": " << reason);
+        YDB_LOG_ERROR_CTX(ctx, "TTxRegisterNode: cannot register node",
+            {"host", host},
+            {"port", port},
+            {"statusCode", code},
+            {"reason", reason});
 
         Response->Record.MutableStatus()->SetCode(code);
         Response->Record.MutableStatus()->SetReason(reason);
@@ -56,8 +60,8 @@ public:
         if (Response->Record.GetStatus().GetCode() == TStatus::OK)
             Self->FillNodeInfo(Self->Committed.Nodes.at(NodeId), *Response->Record.MutableNode());
 
-        LOG_TRACE_S(ctx, NKikimrServices::NODE_BROKER,
-                    "TTxRegisterNode reply with: " << Response->Record.ShortDebugString());
+        YDB_LOG_INFO_CTX(ctx, "TTxRegisterNode: reply",
+            {"response", Response->Record.ShortDebugString()});
 
         if (ScopeId != NActors::TScopeId()) {
             auto& record = Response->Record;
@@ -74,13 +78,13 @@ public:
         auto host = rec.GetHost();
         ui16 port = (ui16)rec.GetPort();
         TString addr = rec.GetAddress();
-        auto expire = rec.GetFixedNodeId() ? TInstant::Max() : Self->Dirty.Epoch.NextEnd;
 
-        LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, "TTxRegisterNode Execute");
-        LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER,
-                    "Registration request from " << host << ":" << port << " "
-                    << (rec.GetFixedNodeId() ? "(fixed)" : "(not fixed)") << " "
-                    << "tenant: " << (rec.HasPath() ? rec.GetPath() : "<unspecified>"));
+        YDB_LOG_DEBUG_CTX(ctx, "TTxRegisterNode Execute");
+        YDB_LOG_INFO_CTX(ctx, "TTxRegisterNode: registration request",
+            {"host", host},
+            {"port", port},
+            {"fixedNodeIdNote", (rec.GetFixedNodeId() ? "(fixed)" : "(not fixed)")},
+            {"tenantName", (rec.HasPath() ? rec.GetPath() : "<unspecified>")});
 
         TNodeLocation loc(rec.GetLocation());
 
@@ -108,31 +112,35 @@ public:
             auto &node = Self->Dirty.Nodes.find(it->second)->second;
             NodeId = node.NodeId;
 
-            if (node.Address != rec.GetAddress()
-                || node.ResolveHost != rec.GetResolveHost())
-                return Error(TStatus::WRONG_REQUEST,
-                             TStringBuilder() << "Another address is registered for "
-                             << host << ":" << port,
-                             ctx);
+            if (node.Address != rec.GetAddress() || node.ResolveHost != rec.GetResolveHost()) {
+                auto errorText = TStringBuilder() << "Another address is registered for " << host << ":" << port
+                    << ", expected (address, resolve host) = (" << node.Address << ", " << node.ResolveHost << ")"
+                    << ", got (address, resolve host) = (" << rec.GetAddress() << ", " << rec.GetResolveHost() << ")";
+
+                YDB_LOG_WARN_CTX(ctx, errorText);
+                return Error(TStatus::WRONG_REQUEST, errorText, ctx);
+            }
 
             if (node.Location != loc && node.Location != TNodeLocation()) {
-                return Error(TStatus::WRONG_REQUEST,
-                             TStringBuilder() << "Another location is registered for "
-                             << host << ":" << port,
-                             ctx);
+                auto errorText = TStringBuilder() << "Another location is registered for " << host << ":" << port
+                    << ", expected = " << node.Location.ToString()
+                    << ", got = " << loc.ToString();
+
+                YDB_LOG_WARN_CTX(ctx, errorText);
+                return Error(TStatus::WRONG_REQUEST, errorText, ctx);
+            } else if (node.Location.GetBridgePileName() != loc.GetBridgePileName()) {
+                return Error(TStatus::WRONG_REQUEST, "Can't change bridge pile for the node", ctx);
             } else if (node.Location != loc) {
                 Self->Dirty.UpdateLocation(node, loc);
                 Self->Dirty.DbAddNode(node, txc);
                 SetLocation = true;
-            } else if (node.BridgePileId != node.BridgePileId) {
-                return Error(TStatus::WRONG_REQUEST, "Can't change bridge pile for the node", ctx);
             }
 
             if (!node.IsFixed() && rec.GetFixedNodeId()) {
                 Self->Dirty.FixNodeId(node);
                 Self->Dirty.DbAddNode(node, txc);
                 FixNodeId = true;
-            } else if (!node.IsFixed() && node.Expire < expire) {
+            } else if (Self->Dirty.IsLeaseExtendable(node)) {
                 Self->Dirty.ExtendLease(node);
                 Self->Dirty.DbAddNode(node, txc);
                 ExtendLease = true;
@@ -167,10 +175,18 @@ public:
             Node = MakeHolder<TNodeInfo>(NodeId, rec.GetAddress(), host, rec.GetResolveHost(), port, loc);
             Node->AuthorizedByCertificate = rec.GetAuthorizedByCertificate();
             Node->Lease = 1;
-            Node->Expire = expire;
+            if (rec.GetFixedNodeId()) {
+                Node->Expire = TInstant::Max();
+                Node->ExpireV2 = TInstant::Max();
+                Node->AliveUntil = TInstant::Max();
+            } else {
+                Node->Expire = Self->Dirty.Epoch.NextEnd;
+                Node->ExpireV2 = Self->Dirty.Epoch.NextEnd + Self->Dirty.LeaseDuration;
+                Node->AliveUntil = Self->Dirty.Epoch.NextEnd;
+            }
+            Node->Liveness = ENodeLiveness::Alive;
             Node->Version = Self->Dirty.Epoch.Version + 1;
             Node->State = ENodeState::Active;
-            Node->BridgePileId = BridgePileId;
 
             if (Self->EnableStableNodeNames) {
                 Node->ServicedSubDomain = ServicedSubDomain;
@@ -192,7 +208,7 @@ public:
 
     void Complete(const TActorContext &ctx) override
     {
-        LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, "TTxRegisterNode Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxRegisterNode Complete");
 
         if (Response->Record.GetStatus().GetCode() != TStatus::OK) {
             return Reply(ctx);
@@ -235,13 +251,14 @@ public:
         }
 
         Reply(ctx);
+
+        Self->UpdateCommittedStateCounters();
     }
 
 private:
     TEvNodeBroker::TEvRegistrationRequest::TPtr Event;
     const NActors::TScopeId ScopeId;
     const TSubDomainKey ServicedSubDomain;
-    const std::optional<TBridgePileId> BridgePileId;
     TString ResolveError;
     TAutoPtr<TEvNodeBroker::TEvRegistrationResponse> Response;
     THolder<TNodeInfo> Node;

@@ -13,6 +13,7 @@ bool NeedToSplit(
 
 bool CheckRewrite(
     const NYql::TExprNode::TPtr& root,
+    const bool enableDataShardCreateTableAs,
     NYql::TExprContext& exprCtx);
 
 struct TPrepareRewriteInfo {

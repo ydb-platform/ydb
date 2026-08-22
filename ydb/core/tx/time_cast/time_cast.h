@@ -43,6 +43,8 @@ public:
     ui64 GetFrozenStep() const noexcept;
     void SetFrozenStep(ui64 step) noexcept;
 
+    ui64 GetLatestStep() const noexcept;
+
 private:
     const TMediatorTimecastSharedEntry::TCPtr SafeStep;
     const TMediatorTimecastSharedEntry::TCPtr LatestStep;

@@ -346,6 +346,11 @@
                 "ColumnId": 20,
                 "ColumnName": "MaintenanceStatus",
                 "ColumnType": "Byte"
+            },
+            {
+                "ColumnId": 23,
+                "ColumnName": "DiskScope",
+                "ColumnType": "Utf8"
             }
         ],
         "ColumnsDropped": [],
@@ -369,7 +374,8 @@
                     17,
                     18,
                     19,
-                    20
+                    20,
+                    23
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -726,6 +732,11 @@
                 "ColumnId": 27,
                 "ColumnName": "BridgeMode",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 28,
+                "ColumnName": "DDisk",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -758,7 +769,8 @@
                     24,
                     25,
                     26,
-                    27
+                    27,
+                    28
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -857,6 +869,16 @@
                 "ColumnId": 14,
                 "ColumnName": "ReplicationTime",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 15,
+                "ColumnName": "DDiskNumVChunksClaimed",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 16,
+                "ColumnName": "PersistentBufferRefs",
+                "ColumnType": "Uint32"
             }
         ],
         "ColumnsDropped": [],
@@ -876,7 +898,9 @@
                     11,
                     12,
                     13,
-                    14
+                    14,
+                    15,
+                    16
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -1820,6 +1844,74 @@
         }
     },
     {
+        "TableId": 132,
+        "TableName": "BridgeSyncState",
+        "TableKey": [
+            1
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "TargetGroupId",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "Stage",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 3,
+                "ColumnName": "LastError",
+                "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 4,
+                "ColumnName": "LastErrorTimestamp",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 5,
+                "ColumnName": "FirstErrorTimestamp",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 6,
+                "ColumnName": "ErrorCount",
+                "ColumnType": "Uint32"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1,
+                    2,
+                    3,
+                    4,
+                    5,
+                    6
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
+            }
+        }
+    },
+    {
         "TableId": 103,
         "TableName": "HostConfigDrive",
         "TableKey": [
@@ -1827,11 +1919,6 @@
             2
         ],
         "ColumnsAdded": [
-            {
-                "ColumnId": 7,
-                "ColumnName": "PDiskConfig",
-                "ColumnType": "String"
-            },
             {
                 "ColumnId": 1,
                 "ColumnName": "HostConfigId",
@@ -1861,19 +1948,87 @@
                 "ColumnId": 6,
                 "ColumnName": "Kind",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 7,
+                "ColumnName": "PDiskConfig",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 10,
+                "ColumnName": "DiskScope",
+                "ColumnType": "Utf8"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
-                    7,
                     1,
                     2,
                     3,
                     4,
                     5,
-                    6
+                    6,
+                    7,
+                    10
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
+            }
+        }
+    },
+    {
+        "TableId": 134,
+        "TableName": "DirectBlockGroupClaims",
+        "TableKey": [
+            1,
+            2
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "TabletId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "DirectBlockGroupId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 3,
+                "ColumnName": "NumVChunksClaimed",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 4,
+                "ColumnName": "Allocation",
+                "ColumnType": "String"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1,
+                    2,
+                    3,
+                    4
                 ],
                 "RoomID": 0,
                 "Codec": 0,

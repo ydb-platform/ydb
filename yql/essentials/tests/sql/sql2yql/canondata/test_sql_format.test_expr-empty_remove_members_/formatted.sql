@@ -1,0 +1,4 @@
+/* custom error: Member not found: a */
+SELECT
+    RemoveMembers(<||>, ['a'])
+;

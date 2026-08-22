@@ -9,33 +9,49 @@
 
 namespace NSQLHighlight {
 
-    enum class EUnitKind {
-        Keyword,
-        Punctuation,
-        QuotedIdentifier,
-        BindParamterIdentifier,
-        TypeIdentifier,
-        FunctionIdentifier,
-        Identifier,
-        Literal,
-        StringLiteral,
-        Comment,
-        Whitespace,
-        Error,
-    };
+enum class EUnitKind {
+    Keyword,
+    Punctuation,
+    QuotedIdentifier,
+    BindParameterIdentifier,
+    OptionIdentifier,
+    TypeIdentifier,
+    FunctionIdentifier,
+    Identifier,
+    Literal,
+    StringLiteral,
+    Comment,
+    Whitespace,
+    Error,
+};
 
-    struct TUnit {
-        EUnitKind Kind;
-        TVector<NSQLTranslationV1::TRegexPattern> Patterns;
-        TMaybe<TVector<NSQLTranslationV1::TRegexPattern>> PatternsANSI;
-    };
+struct TRangePattern {
+    static constexpr const char* EmbeddedPythonBegin = "@@#py";
+    static constexpr const char* EmbeddedJavaScriptBegin = "@@//js";
 
-    struct THighlighting {
-        TVector<TUnit> Units;
-    };
+    TString BeginPlain;
+    TString EndPlain;
+    TMaybe<TString> EscapeRegex;
+};
 
-    THighlighting MakeHighlighting();
+// Range patterns are expected to be matched before others.
+struct TUnit {
+    EUnitKind Kind;
+    TVector<TRangePattern> RangePatterns;
+    TVector<NSQLTranslationV1::TRegexPattern> Patterns;
+    TMaybe<TVector<NSQLTranslationV1::TRegexPattern>> PatternsANSI;
+    bool IsPlain = true;
+    bool IsCodeGenExcluded = false;
+};
 
-    THighlighting MakeHighlighting(const NSQLReflect::TLexerGrammar& grammar);
+struct THighlighting {
+    TString Name = "YQL";
+    TString Extension = "yql";
+    TVector<TUnit> Units;
+};
+
+THighlighting MakeHighlighting();
+
+THighlighting MakeHighlighting(const NSQLReflect::TLexerGrammar& grammar);
 
 } // namespace NSQLHighlight

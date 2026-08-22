@@ -160,6 +160,7 @@ public:
 #define DEFINE_REQUEST(name, base) \
     struct TEv##name##Request: public base<TEv##name##Request, Ev##name##Request, Aws::S3::Model::name##Request> { \
         using TBase::TBase; \
+        static constexpr TStringBuf RequestName = Y_STRINGIZE(name); \
     }
 
 #define DEFINE_GENERIC_REQUEST(name) \
@@ -200,6 +201,9 @@ DEFINE_GENERIC_REQUEST_RESPONSE_K(DeleteObjects, false);
 DEFINE_GENERIC_REQUEST_RESPONSE(HeadObject);
 DEFINE_GENERIC_REQUEST_RESPONSE_K(ListObjects, false);
 DEFINE_GENERIC_REQUEST_RESPONSE(UploadPartCopy);
+
+DEFINE_GENERIC_REQUEST(GetObject);
+// Response is defined in get_object.h
 
 #undef DEFINE_REQUEST
 #undef DEFINE_GENERIC_REQUEST

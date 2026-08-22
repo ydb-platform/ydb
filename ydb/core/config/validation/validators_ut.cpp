@@ -1,11 +1,15 @@
 #include "validators.h"
 
 #include <ydb/core/protos/blobstorage.pb.h>
+#include <ydb/core/protos/blobstorage_base.pb.h>
+#include <ydb/core/protos/blobstorage_config.pb.h>
 #include <ydb/core/protos/blobstorage_disk.pb.h>
+#include <ydb/core/protos/blobstorage_pdisk_config.pb.h>
 #include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/protos/table_service_config.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <util/generic/xrange.h>
 
 using namespace NKikimr::NConfig;
 
@@ -412,7 +416,6 @@ Y_UNIT_TEST_SUITE(ConfigValidation) {
 Y_UNIT_TEST_SUITE(DatabaseConfigValidation) {
     Y_UNIT_TEST(AllowedFields) {
         NKikimrConfig::TAppConfig config;
-        config.MutableFeatureFlags()->SetEnablePgSyntax(true);
         config.MutableTableServiceConfig()->SetEnableStreamWrite(true);
 
         std::vector<TString> err;
@@ -429,5 +432,407 @@ Y_UNIT_TEST_SUITE(DatabaseConfigValidation) {
         UNIT_ASSERT_VALUES_EQUAL(err.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(err[0], "'blob_storage_config' is not allowed to be used in the database configuration");
         UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
+    }
+}
+
+Y_UNIT_TEST_SUITE(StateStorageConfigValidation) {
+
+    void FillRing(NKikimrConfig::TStateStorageConfig::TRing* ring, ui32 ringsCnt = 8) {
+        ring->SetNToSelect(5);
+        ui32 nodeId = 0;
+        for(ui32 _ : xrange(ringsCnt)) {
+            auto* r = ring->AddRing();
+            for (ui32 _ : xrange(5, 13)) {
+                r->AddNode(nodeId++);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(Empty) {
+        auto res = ValidateStateStorageConfig("StateStorage", {}, {});
+        UNIT_ASSERT_EQUAL(res, "New StateStorage configuration is not filled in");
+    }
+
+    Y_UNIT_TEST(Good) {
+        NKikimrConfig::TStateStorageConfig proposed;
+        FillRing(proposed.MutableRing());
+        auto res = ValidateStateStorageConfig("StateStorage", {}, proposed);
+        UNIT_ASSERT(res.empty());
+    }
+
+    Y_UNIT_TEST(NToSelect) {
+        NKikimrConfig::TStateStorageConfig proposed;
+        FillRing(proposed.MutableRing());
+        proposed.MutableRing()->SetNToSelect(0);
+        auto res = ValidateStateStorageConfig("StateStorage", {}, proposed);
+        UNIT_ASSERT_EQUAL(res, "New StateStorage configuration NToSelect has invalid value");
+        proposed.MutableRing()->SetNToSelect(10);
+        res = ValidateStateStorageConfig("StateStorage", {}, proposed);
+        UNIT_ASSERT_EQUAL(res, "New StateStorage configuration NToSelect has invalid value");
+    }
+
+    Y_UNIT_TEST(WriteOnly) {
+        NKikimrConfig::TStateStorageConfig proposed;
+        FillRing(proposed.AddRingGroups());
+        FillRing(proposed.AddRingGroups());
+        proposed.MutableRingGroups(0)->SetWriteOnly(true);
+        auto res = ValidateStateStorageConfig("StateStorage", {}, proposed);
+        UNIT_ASSERT_EQUAL(res, "New StateStorage configuration first ring group is WriteOnly");
+    }
+
+    Y_UNIT_TEST(Disabled) {
+        NKikimrConfig::TStateStorageConfig proposed;
+        FillRing(proposed.MutableRing(), 5);
+        proposed.MutableRing()->MutableRing(0)->SetIsDisabled(true);
+        proposed.MutableRing()->MutableRing(1)->SetIsDisabled(true);
+        auto res = ValidateStateStorageConfig("StateStorage", {}, proposed);
+        UNIT_ASSERT_EQUAL(res, "New StateStorage configuration disabled too many rings");
+    }
+
+    Y_UNIT_TEST(DisabledGood) {
+        NKikimrConfig::TStateStorageConfig proposed;
+        FillRing(proposed.MutableRing());
+        proposed.MutableRing()->MutableRing(0)->SetIsDisabled(true);
+        auto res = ValidateStateStorageConfig("StateStorage", {}, proposed);
+        UNIT_ASSERT(res.empty());
+    }
+
+    Y_UNIT_TEST(CanDisableAndChange) {
+        NKikimrConfig::TStateStorageConfig cur;
+        FillRing(cur.MutableRing());
+        NKikimrConfig::TStateStorageConfig proposed;
+        FillRing(proposed.MutableRing());
+        proposed.MutableRing()->MutableRing(0)->SetIsDisabled(true);
+        proposed.MutableRing()->MutableRing(0)->AddNode(100);
+        auto res = ValidateStateStorageConfig("StateStorage", cur, proposed);
+        UNIT_ASSERT(res.empty());
+    }
+
+    Y_UNIT_TEST(CanChangeDisabled) {
+        NKikimrConfig::TStateStorageConfig cur;
+        FillRing(cur.MutableRing());
+        cur.MutableRing()->MutableRing(0)->SetIsDisabled(true);
+        NKikimrConfig::TStateStorageConfig proposed;
+        FillRing(proposed.MutableRing());
+        proposed.MutableRing()->MutableRing(0)->AddNode(100);
+        auto res = ValidateStateStorageConfig("StateStorage", cur, proposed);
+        UNIT_ASSERT(res.empty());
+    }
+
+    Y_UNIT_TEST(ChangesNotAllowed) {
+        NKikimrConfig::TStateStorageConfig cur;
+        FillRing(cur.MutableRing());
+        NKikimrConfig::TStateStorageConfig proposed;
+        FillRing(proposed.MutableRing());
+        proposed.MutableRing()->MutableRing(0)->AddNode(100);
+        auto res = ValidateStateStorageConfig("StateStorage", cur, proposed);
+        UNIT_ASSERT(res.StartsWith("StateStorage ring #0differs from# Ring"));
+    }
+
+    Y_UNIT_TEST(ValidateConfigSelfManagement) {
+        NKikimrConfig::TAppConfig proposed;
+        proposed.MutableSelfManagementConfig()->SetEnabled(true);
+        std::vector<TString> err;
+        auto res = ValidateConfig(proposed, err);
+        UNIT_ASSERT_EQUAL(err.size(), 0);
+        UNIT_ASSERT_EQUAL(res, EValidationResult::Ok);
+    }
+
+    Y_UNIT_TEST(ValidateConfigInferPDiskSlotSizeSettings) {
+        NKikimrConfig::TAppConfig proposed;
+        auto* inferSettings = proposed.MutableBlobStorageConfig()->MutableInferPDiskSlotCountSettings();
+        inferSettings->MutableRot()->SetSlotSize(600ull << 30);
+        std::vector<TString> err;
+        auto res = ValidateConfig(proposed, err);
+        UNIT_ASSERT_VALUES_EQUAL(err.size(), 1);
+        UNIT_ASSERT_C(err[0].Contains("MaxSlots is mandatory with SlotSize or UnitSize"), err[0]);
+        UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
+
+        inferSettings->MutableRot()->SetMaxSlots(16);
+        err.clear();
+        res = ValidateConfig(proposed, err);
+        UNIT_ASSERT_VALUES_EQUAL(err.size(), 0);
+        UNIT_ASSERT_EQUAL(res, EValidationResult::Ok);
+
+        inferSettings->MutableRot()->SetUnitSize(100ull << 30);
+        err.clear();
+        res = ValidateConfig(proposed, err);
+        UNIT_ASSERT_VALUES_EQUAL(err.size(), 1);
+        UNIT_ASSERT_C(err[0].Contains("SlotSize is mutually exclusive with UnitSize"), err[0]);
+        UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
+    }
+
+    Y_UNIT_TEST(ValidateConfigExpectedSlotSizeRequiresMaxSlots) {
+        NKikimrConfig::TAppConfig proposed;
+        auto* pdiskConfig = proposed.MutableBlobStorageConfig()
+            ->AddDefineHostConfig()
+            ->AddDrive()
+            ->MutablePDiskConfig();
+        pdiskConfig->SetExpectedSlotSize(600ull << 30);
+
+        std::vector<TString> err;
+        auto res = ValidateConfig(proposed, err);
+        UNIT_ASSERT_VALUES_EQUAL(err.size(), 1);
+        UNIT_ASSERT_C(err[0].Contains("ExpectedSlotSize requires MaxSlots"), err[0]);
+        UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
+
+        pdiskConfig->SetMaxSlots(16);
+        err.clear();
+        res = ValidateConfig(proposed, err);
+        UNIT_ASSERT_VALUES_EQUAL(err.size(), 0);
+        UNIT_ASSERT_EQUAL(res, EValidationResult::Ok);
+
+        pdiskConfig->SetExpectedSlotCount(4);
+        err.clear();
+        res = ValidateConfig(proposed, err);
+        UNIT_ASSERT_VALUES_EQUAL(err.size(), 1);
+        UNIT_ASSERT_C(err[0].Contains("ExpectedSlotSize is mutually exclusive with ExpectedSlotCount"), err[0]);
+        UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
+    }
+
+    Y_UNIT_TEST(ValidateConfigMaxSlotsRequiresExpectedSlotSize) {
+        NKikimrConfig::TAppConfig proposed;
+        auto* pdiskConfig = proposed.MutableBlobStorageConfig()
+            ->AddDefineHostConfig()
+            ->AddDrive()
+            ->MutablePDiskConfig();
+        pdiskConfig->SetMaxSlots(16);
+
+        std::vector<TString> err;
+        auto res = ValidateConfig(proposed, err);
+        UNIT_ASSERT_VALUES_EQUAL(err.size(), 1);
+        UNIT_ASSERT_C(err[0].Contains("MaxSlots requires ExpectedSlotSize"), err[0]);
+        UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
+
+        pdiskConfig->SetExpectedSlotSize(600ull << 30);
+        err.clear();
+        res = ValidateConfig(proposed, err);
+        UNIT_ASSERT_VALUES_EQUAL(err.size(), 0);
+        UNIT_ASSERT_EQUAL(res, EValidationResult::Ok);
+    }
+
+    Y_UNIT_TEST(ValidateConfigDomainEmpty) {
+        NKikimrConfig::TAppConfig proposed;
+        auto* domains = proposed.MutableDomainsConfig();
+        domains->AddStateStorage();
+        std::vector<TString> err;
+        auto res = ValidateConfig(proposed, err);
+        UNIT_ASSERT_EQUAL(err.size(), 1);
+        UNIT_ASSERT_EQUAL(err[0], "Domains is not defined in DomainsConfig");
+        UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
+    }
+
+    Y_UNIT_TEST(ValidateConfigSSId) {
+        NKikimrConfig::TAppConfig proposed;
+        auto* domains = proposed.MutableDomainsConfig();
+        domains->AddDomain()->AddSSId(10);
+        auto* ss = domains->AddStateStorage();
+        ss->SetSSId(1);
+        std::vector<TString> err;
+        auto res = ValidateConfig(proposed, err);
+        UNIT_ASSERT_EQUAL(err.size(), 1);
+        UNIT_ASSERT_EQUAL(err[0], "State storage config is not defined in DomainsConfig section");
+        UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
+    }
+
+    Y_UNIT_TEST(ValidateConfigBad) {
+        NKikimrConfig::TAppConfig proposed;
+        auto* domains = proposed.MutableDomainsConfig();
+        domains->AddDomain()->AddSSId(1);
+        auto* ss = domains->AddStateStorage();
+        ss->SetSSId(1);
+        std::vector<TString> err;
+        auto res = ValidateConfig(proposed, err);
+        UNIT_ASSERT_EQUAL(err.size(), 1);
+        UNIT_ASSERT_EQUAL(err[0], "New StateStorage configuration is not filled in");
+        UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
+    }
+
+    Y_UNIT_TEST(ValidateConfigValidatesStateStorage) {
+        NKikimrConfig::TAppConfig proposed;
+        auto* domains = proposed.MutableDomainsConfig();
+        domains->AddDomain()->AddSSId(1);
+        auto* ss = domains->AddStateStorage();
+        ss->SetSSId(1);
+        FillRing(ss->MutableRing());
+        ss->MutableRing()->SetNToSelect(10);
+        std::vector<TString> err;
+        auto res = ValidateConfig(proposed, err);
+        UNIT_ASSERT_EQUAL(err.size(), 1);
+        UNIT_ASSERT_EQUAL(err[0], "New StateStorage configuration NToSelect has invalid value");
+        UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
+    }
+
+    Y_UNIT_TEST(ValidateConfigGood) {
+        NKikimrConfig::TAppConfig proposed;
+        auto* domains = proposed.MutableDomainsConfig();
+        domains->AddDomain()->AddSSId(1);
+        auto* ss = domains->AddStateStorage();
+        ss->SetSSId(1);
+        FillRing(ss->MutableRing());
+        std::vector<TString> err;
+        auto res = ValidateConfig(proposed, err);
+        UNIT_ASSERT_VALUES_EQUAL(err.size(), 0);
+        UNIT_ASSERT_EQUAL(res, EValidationResult::Ok);
+    }
+
+    Y_UNIT_TEST(ValidateConfigExplicitGood) {
+        NKikimrConfig::TAppConfig proposed;
+        auto* domains = proposed.MutableDomainsConfig();
+        FillRing(domains->MutableExplicitStateStorageConfig()->MutableRing());
+        FillRing(domains->MutableExplicitStateStorageBoardConfig()->MutableRing());
+        FillRing(domains->MutableExplicitSchemeBoardConfig()->MutableRing());
+        std::vector<TString> err;
+        auto res = ValidateConfig(proposed, err);
+        UNIT_ASSERT_VALUES_EQUAL(err.size(), 0);
+        UNIT_ASSERT_EQUAL(res, EValidationResult::Ok);
+    }
+
+    Y_UNIT_TEST(ValidateConfigExplicitBad) {
+        NKikimrConfig::TAppConfig proposed;
+        auto* domains = proposed.MutableDomainsConfig();
+        FillRing(domains->MutableExplicitStateStorageConfig()->MutableRing());
+        FillRing(domains->MutableExplicitSchemeBoardConfig()->MutableRing());
+        std::vector<TString> err;
+        auto res = ValidateConfig(proposed, err);
+        UNIT_ASSERT_EQUAL(err.size(), 1);
+        UNIT_ASSERT_EQUAL(err[0], "Domains is not defined in DomainsConfig");
+        UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
+    }
+}
+
+Y_UNIT_TEST_SUITE(MonitoringConfigValidation) {
+    Y_UNIT_TEST(RequireCountersAuthentication) {
+        { // Without security config
+            NKikimrConfig::TAppConfig config;
+            config.MutableMonitoringConfig()->SetRequireCountersAuthentication(true);
+            std::vector<TString> msg;
+            auto res = ValidateMonitoringConfig(config, msg);
+            UNIT_ASSERT_VALUES_EQUAL(msg.size(), 1);
+            UNIT_ASSERT_EQUAL(msg[0], "Setting EnforceUserTokenRequirement is disabled, but RequireCountersAuthentication is enabled");
+            UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
+        }
+        { // With EnforceUserTokenRequirement disabled
+            NKikimrConfig::TAppConfig config;
+            config.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(false);
+            config.MutableMonitoringConfig()->SetRequireCountersAuthentication(true);
+            std::vector<TString> msg;
+            auto res = ValidateMonitoringConfig(config, msg);
+            UNIT_ASSERT_VALUES_EQUAL(msg.size(), 1);
+            UNIT_ASSERT_EQUAL(msg[0], "Setting EnforceUserTokenRequirement is disabled, but RequireCountersAuthentication is enabled");
+            UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
+        }
+        { // With EnforceUserTokenRequirement enabled
+            NKikimrConfig::TAppConfig config;
+            config.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(true);
+            config.MutableMonitoringConfig()->SetRequireCountersAuthentication(true);
+            std::vector<TString> msg;
+            auto res = ValidateMonitoringConfig(config, msg);
+            UNIT_ASSERT_VALUES_EQUAL(msg.size(), 0);
+            UNIT_ASSERT_EQUAL(res, EValidationResult::Ok);
+        }
+    }
+
+    Y_UNIT_TEST(RequireHealthcheckAuthentication) {
+        { // Without security config
+            NKikimrConfig::TAppConfig config;
+            config.MutableMonitoringConfig()->SetRequireHealthcheckAuthentication(true);
+            std::vector<TString> msg;
+            auto res = ValidateMonitoringConfig(config, msg);
+            UNIT_ASSERT_VALUES_EQUAL(msg.size(), 1);
+            UNIT_ASSERT_EQUAL(msg[0], "Setting EnforceUserTokenRequirement is disabled, but RequireHealthcheckAuthentication is enabled");
+            UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
+        }
+        { // With EnforceUserTokenRequirement disabled
+            NKikimrConfig::TAppConfig config;
+            config.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(false);
+            config.MutableMonitoringConfig()->SetRequireHealthcheckAuthentication(true);
+            std::vector<TString> msg;
+            auto res = ValidateMonitoringConfig(config, msg);
+            UNIT_ASSERT_VALUES_EQUAL(msg.size(), 1);
+            UNIT_ASSERT_EQUAL(msg[0], "Setting EnforceUserTokenRequirement is disabled, but RequireHealthcheckAuthentication is enabled");
+            UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
+        }
+        { // With EnforceUserTokenRequirement enabled
+            NKikimrConfig::TAppConfig config;
+            config.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(true);
+            config.MutableMonitoringConfig()->SetRequireHealthcheckAuthentication(true);
+            std::vector<TString> msg;
+            auto res = ValidateMonitoringConfig(config, msg);
+            UNIT_ASSERT_VALUES_EQUAL(msg.size(), 0);
+            UNIT_ASSERT_EQUAL(res, EValidationResult::Ok);
+        }
+    }
+
+    Y_UNIT_TEST(ClientCertificateRequired) {
+        { // Without monitoring TLS certificate data
+            NKikimrConfig::TAppConfig config;
+            config.MutableMonitoringConfig()->SetClientCertificateRequired(true);
+            std::vector<TString> msg;
+            auto res = ValidateMonitoringConfig(config, msg);
+            UNIT_ASSERT_VALUES_EQUAL(msg.size(), 1);
+            UNIT_ASSERT_EQUAL(msg[0], "Monitoring server certificate is not set, but ClientCertificateRequired is enabled");
+            UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
+        }
+        { // With server certificate, but without CA
+            NKikimrConfig::TAppConfig config;
+            auto* monitoringConfig = config.MutableMonitoringConfig();
+            monitoringConfig->SetMonitoringCertificateFile("/path/to/cert.pem");
+            monitoringConfig->SetMonitoringPrivateKeyFile("/path/to/key.pem");
+            monitoringConfig->SetClientCertificateRequired(true);
+            std::vector<TString> msg;
+            auto res = ValidateMonitoringConfig(config, msg);
+            UNIT_ASSERT_VALUES_EQUAL(msg.size(), 1);
+            UNIT_ASSERT_EQUAL(msg[0], "MonitoringCaFile is not set, but ClientCertificateRequired is enabled");
+            UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
+        }
+        { // With server certificate and CA
+            NKikimrConfig::TAppConfig config;
+            auto* monitoringConfig = config.MutableMonitoringConfig();
+            monitoringConfig->SetMonitoringCertificateFile("/path/to/cert.pem");
+            monitoringConfig->SetMonitoringPrivateKeyFile("/path/to/key.pem");
+            monitoringConfig->SetMonitoringCaFile("/path/to/ca.pem");
+            monitoringConfig->SetClientCertificateRequired(true);
+            std::vector<TString> msg;
+            auto res = ValidateMonitoringConfig(config, msg);
+            UNIT_ASSERT_VALUES_EQUAL(msg.size(), 0);
+            UNIT_ASSERT_EQUAL(res, EValidationResult::Ok);
+        }
+    }
+}
+
+Y_UNIT_TEST_SUITE(ClientCertificateAuthorizationValidation) {
+    Y_UNIT_TEST(ClientCertificateRequired) {
+        { // Without RequestClientCertificate
+            NKikimrConfig::TAppConfig config;
+            config.MutableClientCertificateAuthorization()->SetClientCertificateRequired(true);
+            std::vector<TString> msg;
+            auto res = ValidateClientCertificateAuthorization(config, msg);
+            UNIT_ASSERT_VALUES_EQUAL(msg.size(), 1);
+            UNIT_ASSERT_EQUAL(msg[0], "RequestClientCertificate is disabled, but ClientCertificateRequired is enabled");
+            UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
+        }
+        { // With RequestClientCertificate, with CA file
+            NKikimrConfig::TAppConfig config;
+            auto* clientCertificateAuthorization = config.MutableClientCertificateAuthorization();
+            clientCertificateAuthorization->SetRequestClientCertificate(true);
+            clientCertificateAuthorization->SetClientCertificateRequired(true);
+            config.MutableGRpcConfig()->SetPathToCaFile("/path/to/ca.pem");
+            std::vector<TString> msg;
+            auto res = ValidateClientCertificateAuthorization(config, msg);
+            UNIT_ASSERT_VALUES_EQUAL(msg.size(), 0);
+            UNIT_ASSERT_EQUAL(res, EValidationResult::Ok);
+        }
+        { // With RequestClientCertificate, but without CA file
+            NKikimrConfig::TAppConfig config;
+            auto* clientCertificateAuthorization = config.MutableClientCertificateAuthorization();
+            clientCertificateAuthorization->SetRequestClientCertificate(true);
+            clientCertificateAuthorization->SetClientCertificateRequired(true);
+            std::vector<TString> msg;
+            auto res = ValidateClientCertificateAuthorization(config, msg);
+            UNIT_ASSERT_VALUES_EQUAL(msg.size(), 1);
+            UNIT_ASSERT_EQUAL(msg[0], "gRPC CA is not set, but ClientCertificateRequired is enabled");
+            UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
+        }
     }
 }

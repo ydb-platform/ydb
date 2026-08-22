@@ -16,10 +16,10 @@
 
 #if BOOST_ARCH_X86 && defined(BOOST_ATOMIC_DETAIL_SIZEOF_POINTER) && (BOOST_ATOMIC_DETAIL_SIZEOF_POINTER == 8 || BOOST_ATOMIC_DETAIL_SIZEOF_POINTER == 4)
 
-#include <cstddef>
 #include <emmintrin.h>
+#include <cstddef>
+#include <cstdint>
 
-#include <boost/cstdint.hpp>
 #include <boost/atomic/detail/config.hpp>
 #include <boost/atomic/detail/intptr.hpp>
 #include "find_address.hpp"
@@ -120,7 +120,7 @@ std::size_t find_address_sse2(const volatile void* addr, const volatile void* co
 
         mm_mask1_lo = _mm_packs_epi16(mm_mask1_lo, mm_mask3_lo);
 
-        uint32_t mask = _mm_movemask_epi8(mm_mask1_lo);
+        std::uint32_t mask = _mm_movemask_epi8(mm_mask1_lo);
         if (mask)
         {
             pos += atomics::detail::count_trailing_zeros(mask);
@@ -151,7 +151,7 @@ std::size_t find_address_sse2(const volatile void* addr, const volatile void* co
 
         mm_mask1_lo = _mm_packs_epi32(mm_mask1_lo, mm_mask2_lo);
 
-        uint32_t mask = _mm_movemask_epi8(mm_mask1_lo);
+        std::uint32_t mask = _mm_movemask_epi8(mm_mask1_lo);
         if (mask)
         {
             pos += atomics::detail::count_trailing_zeros(mask) / 2u;
@@ -174,7 +174,7 @@ std::size_t find_address_sse2(const volatile void* addr, const volatile void* co
 
         mm_mask1_lo = mm_pand_si128(mm_mask1_lo, mm_mask1_hi);
 
-        uint32_t mask = _mm_movemask_ps(_mm_castsi128_ps(mm_mask1_lo));
+        std::uint32_t mask = _mm_movemask_ps(_mm_castsi128_ps(mm_mask1_lo));
         if (mask)
         {
             pos += atomics::detail::count_trailing_zeros(mask);
@@ -192,7 +192,7 @@ std::size_t find_address_sse2(const volatile void* addr, const volatile void* co
         __m128i mm_mask = _mm_shuffle_epi32(mm1, _MM_SHUFFLE(2, 3, 0, 1));
         mm_mask = mm_pand_si128(mm_mask, mm1);
 
-        uint32_t mask = _mm_movemask_pd(_mm_castsi128_pd(mm_mask));
+        std::uint32_t mask = _mm_movemask_pd(_mm_castsi128_pd(mm_mask));
         if (mask)
         {
             pos += atomics::detail::count_trailing_zeros(mask);
@@ -230,7 +230,7 @@ done:
 
         mm1 = _mm_packs_epi16(mm1, mm3);
 
-        uint32_t mask = _mm_movemask_epi8(mm1);
+        std::uint32_t mask = _mm_movemask_epi8(mm1);
         if (mask)
         {
             pos += atomics::detail::count_trailing_zeros(mask);
@@ -248,7 +248,7 @@ done:
 
         mm1 = _mm_packs_epi32(mm1, mm2);
 
-        uint32_t mask = _mm_movemask_epi8(mm1);
+        std::uint32_t mask = _mm_movemask_epi8(mm1);
         if (mask)
         {
             pos += atomics::detail::count_trailing_zeros(mask) / 2u;
@@ -264,7 +264,7 @@ done:
 
         mm1 = _mm_cmpeq_epi32(mm1, mm_addr);
 
-        uint32_t mask = _mm_movemask_ps(_mm_castsi128_ps(mm1));
+        std::uint32_t mask = _mm_movemask_ps(_mm_castsi128_ps(mm1));
         if (mask)
         {
             pos += atomics::detail::count_trailing_zeros(mask);

@@ -6,7 +6,11 @@
 
 #include "signal_blocking.h"
 
+#include <yt/yt/library/backtrace_introspector/introspect.h>
+
 #include <yt/yt/library/procfs/procfs.h>
+
+#include <yt/yt/core/logging/log.h>
 
 #include <library/cpp/yt/system/exit.h>
 
@@ -18,7 +22,7 @@ namespace NYT::NSignals {
 
 namespace NDetail {
 
-template <CInvocable<void(bool ok, int threadCount)> TFunc>
+template <NMpl::CInvocable<void(bool ok, int threadCount)> TFunc>
 bool ValidateSingleRunningThread(const TFunc& func)
 {
 #ifdef _linux_
@@ -41,7 +45,7 @@ bool ValidateSingleRunningThread(const TFunc& func)
 #endif // _linux_
 }
 
-template <CInvocable<void(bool ok, int threadCount)> TFunc>
+template <NMpl::CInvocable<void(bool ok, int threadCount)> TFunc>
 void BlockSignalAtProcessStart(int signal, const TFunc& func)
 {
     try {
@@ -61,6 +65,23 @@ void BlockSignalAtProcessStart(int signal, const TFunc& func)
 
 } // namespace NDetail
 
+inline auto GetDefaultSignalBlockingCallback(const NLogging::TLogger& logger)
+{
+    return [Logger = logger] (bool ok, int threadCount) {
+        if (!ok) {
+            YT_LOG_WARNING( "Thread count is not 1, trying to get thread infos (ThreadCount: %v)", threadCount);
+            auto threadInfos = NBacktraceIntrospector::IntrospectThreads();
+            auto formattedThreadInfos = NBacktraceIntrospector::FormatIntrospectionInfos(threadInfos);
+            AbortProcessDramatically(
+                EProcessExitCode::GenericError,
+                Format(
+                    "Found too many running threads (ThreadCount: %v, ThreadInfos: %v)",
+                    threadCount,
+                    formattedThreadInfos));
+        }
+    };
+}
+
 inline void BlockSignal(int signal)
 {
 #ifndef _unix_
@@ -70,16 +91,16 @@ inline void BlockSignal(int signal)
     sigset_t mask;
     if (sigprocmask(SIG_BLOCK, nullptr, &mask) == -1) {
         THROW_ERROR_EXCEPTION(EErrorCode::SetBlockedSignalError, "Failed to get blocked signal mask while blocking signal")
-            << TErrorAttribute("signal_to_block", signal);
+            .With("signal_to_block", signal);
     }
     if (sigaddset(&mask, signal) == -1) {
         THROW_ERROR_EXCEPTION(EErrorCode::SetBlockedSignalError, "Failed to add signal to mask while blocking signal")
-            << TErrorAttribute("signal_to_block", signal);
+            .With("signal_to_block", signal);
     }
 
     if (sigprocmask(SIG_BLOCK, &mask, nullptr) == -1) {
         THROW_ERROR_EXCEPTION(EErrorCode::SetBlockedSignalError, "Failed to set blocked signal mask while blocking signal")
-            << TErrorAttribute("signal_to_block", signal);
+            .With("signal_to_block", signal);
     }
 #endif // _unix_
 }

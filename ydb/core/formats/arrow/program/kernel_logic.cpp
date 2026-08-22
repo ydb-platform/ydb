@@ -6,11 +6,12 @@
 #include <ydb/core/formats/arrow/accessor/sub_columns/partial.h>
 
 #include <yql/essentials/core/arrow_kernels/request/request.h>
+#include <yql/essentials/types/binary_json/read.h>
 
 namespace NKikimr::NArrow::NSSA {
 
-TConclusion<bool> TGetJsonPath::DoExecute(const std::vector<TColumnChainInfo>& input, const std::vector<TColumnChainInfo>& output,
-    const std::shared_ptr<TAccessorsCollection>& resources) const {
+TConclusion<bool> TGetJsonPath::DoExecute(
+    const std::vector<TColumnChainInfo>& input, const std::vector<TColumnChainInfo>& output, TAccessorsCollection& resources) const {
     auto description = BuildDescription(input, resources);
     if (description.IsFail()) {
         return description;
@@ -34,19 +35,44 @@ TConclusion<bool> TGetJsonPath::DoExecute(const std::vector<TColumnChainInfo>& i
     if (applied && !*applied) {
         return false;
     }
-    resources->AddVerified(output.front().GetColumnId(), builder.Finish(), false);
+    resources.AddVerified(output.front().GetColumnId(), builder.Finish(), false);
     return true;
 }
 
 std::shared_ptr<IChunkedArray> TGetJsonPath::ExtractArray(const std::shared_ptr<IChunkedArray>& jsonAcc, const std::string_view svPath) const {
+    std::shared_ptr<NAccessor::NSubColumns::TJsonPathAccessor> accessor;
+
     if (jsonAcc->GetType() == IChunkedArray::EType::SubColumnsArray) {
         auto accJsonArray = std::static_pointer_cast<NAccessor::TSubColumnsArray>(jsonAcc);
-        return accJsonArray->GetPathAccessor(svPath, jsonAcc->GetRecordsCount());
+        auto accessorResult = accJsonArray->GetPathAccessor(svPath, jsonAcc->GetRecordsCount());
+        AFL_VERIFY(accessorResult.IsSuccess());
+        accessor = accessorResult.DetachResult();
     } else {
         AFL_VERIFY(jsonAcc->GetType() == IChunkedArray::EType::SubColumnsPartialArray);
         auto accJsonArray = std::static_pointer_cast<NAccessor::TSubColumnsPartialArray>(jsonAcc);
-        return accJsonArray->GetPathAccessor(svPath, jsonAcc->GetRecordsCount());
+        auto accessorResult = accJsonArray->GetPathAccessor(svPath, jsonAcc->GetRecordsCount());
+        AFL_VERIFY(accessorResult.IsSuccess());
+        accessor = accessorResult.DetachResult();
     }
+
+    if (!accessor) {
+        return NAccessor::TTrivialArray::BuildEmpty(std::make_shared<arrow::StringType>());
+    }
+
+
+    ui32 recordIndex = 0;
+    auto builder = NAccessor::TTrivialArray::MakeBuilderUtf8(accessor->GetRecordsCount());
+    accessor->VisitValues([&](const std::optional<TStringBuf>& value) {
+        if (value.has_value()) {
+            builder.AddRecord(recordIndex, value.value());
+        } else {
+            builder.AddNull(recordIndex);
+        }
+
+        ++recordIndex;
+    });
+
+    return builder.Finish(recordIndex);
 }
 
 NAccessor::TCompositeChunkedArray::TBuilder TGetJsonPath::MakeCompositeBuilder() const {
@@ -71,16 +97,16 @@ NAccessor::TCompositeChunkedArray::TBuilder TExistsJsonPath::MakeCompositeBuilde
 }
 
 TString TSimpleKernelLogic::SignalDescription() const {
-    if (YqlOperationId) {
-        return ::ToString((NYql::TKernelRequestBuilder::EBinaryOp)*YqlOperationId);
+    if (GetYqlOperationId()) {
+        return ::ToString((NYql::TKernelRequestBuilder::EBinaryOp)*GetYqlOperationId());
     } else {
         return "UNKNOWN";
     }
 }
 
 bool TSimpleKernelLogic::IsBoolInResult() const {
-    if (YqlOperationId) {
-        switch ((NYql::TKernelRequestBuilder::EBinaryOp)*YqlOperationId) {
+    if (GetYqlOperationId()) {
+        switch ((NYql::TKernelRequestBuilder::EBinaryOp)*GetYqlOperationId()) {
             case NYql::TKernelRequestBuilder::EBinaryOp::And:
             case NYql::TKernelRequestBuilder::EBinaryOp::Or:
             case NYql::TKernelRequestBuilder::EBinaryOp::Xor:
@@ -111,11 +137,24 @@ bool TSimpleKernelLogic::IsBoolInResult() const {
 }
 
 NJson::TJsonValue TSimpleKernelLogic::DoDebugJson() const {
-    if (YqlOperationId) {
-        return ::ToString((NYql::TKernelRequestBuilder::EBinaryOp)*YqlOperationId);
+    if (GetYqlOperationId()) {
+        return ::ToString((NYql::TKernelRequestBuilder::EBinaryOp)*GetYqlOperationId());
     } else {
         return NJson::JSON_NULL;
     }
+}
+
+NJson::TJsonValue IKernelLogic::DebugJson() const {
+    NJson::TJsonValue result = NJson::JSON_MAP;
+    result.InsertValue("class_name", GetClassName());
+    if (YqlOperationId) {
+        result.InsertValue("operation_id", ::ToString((NYql::TKernelRequestBuilder::EBinaryOp)*YqlOperationId));
+    }
+    auto details = DoDebugJson();
+    if (details.IsDefined()) {
+        result.InsertValue("details", std::move(details));
+    }
+    return result;
 }
 
 }   // namespace NKikimr::NArrow::NSSA

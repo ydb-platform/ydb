@@ -14,13 +14,15 @@ namespace NYT::NThreading {
 class TForkAwareSpinLock
 {
 public:
+    static constexpr bool Traced = true;
+
     TForkAwareSpinLock(const TForkAwareSpinLock&) = delete;
     TForkAwareSpinLock& operator =(const TForkAwareSpinLock&) = delete;
 
     constexpr TForkAwareSpinLock() = default;
 
-    // TODO(babenko): make use of location.
-    explicit constexpr TForkAwareSpinLock(const ::TSourceLocation& /*location*/)
+    explicit constexpr TForkAwareSpinLock(const ::TSourceLocation& location)
+        : SpinLock_(location)
     { }
 
     void Acquire() noexcept;

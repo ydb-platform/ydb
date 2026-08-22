@@ -16,7 +16,10 @@
 
 #include <yt/yt/core/ytree/fluent.h>
 
+#include <library/cpp/yt/string/stream.h>
+
 #include <util/stream/buffer.h>
+#include <util/stream/mem.h>
 
 #include <util/generic/buffer.h>
 
@@ -37,30 +40,63 @@ using namespace NHeaders;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void FillYTError(const THeadersPtr& headers, const TError& error)
+void FillYTErrorResponse(
+    const THeadersPtr& headers,
+    const TError& error)
 {
-    TString errorJson;
-    TStringOutput errorJsonOutput(errorJson);
-    auto jsonWriter = CreateJsonConsumer(&errorJsonOutput);
-    Serialize(error, jsonWriter.get());
-    jsonWriter->Flush();
-
-    headers->Add(XYTErrorHeaderName, errorJson);
     headers->Add(XYTResponseCodeHeaderName, ToString(static_cast<int>(error.GetCode())));
     headers->Add(XYTResponseMessageHeaderName, EscapeHeaderValue(error.GetMessage()));
 }
 
-void FillYTErrorHeaders(const IResponseWriterPtr& rsp, const TError& error)
+void FillYTError(
+    const THeadersPtr& headers,
+    const TError& error)
+{
+    std::string errorString;
+    TStdStringOutput errorStringOutput(errorString);
+
+    auto consumer = CreateJsonConsumer(&errorStringOutput);
+
+    Serialize(error, consumer.get());
+    consumer->Flush();
+
+    headers->Add(XYTErrorHeaderName, errorString);
+    headers->Add(XYTErrorContentTypeHeaderName, ApplicationJsonContentType);
+
+    FillYTErrorResponse(headers, error);
+}
+
+void FillYTErrorHeaders(
+    const IResponseWriterPtr& rsp,
+    const TError& error)
 {
     FillYTError(rsp->GetHeaders(), error);
 }
 
-void FillYTErrorTrailers(const IResponseWriterPtr& rsp, const TError& error)
+void FillYTErrorTrailers(
+    const IResponseWriterPtr& rsp,
+    const TError& error)
 {
     FillYTError(rsp->GetTrailers(), error);
 }
 
-TError ParseYTError(const IResponsePtr& rsp, bool fromTrailers)
+void FillYTErrorResponseHeaders(
+    const IResponseWriterPtr& rsp,
+    const TError& error)
+{
+    FillYTErrorResponse(rsp->GetHeaders(), error);
+}
+
+void FillYTErrorResponseTrailers(
+    const IResponseWriterPtr& rsp,
+    const TError& error)
+{
+    FillYTErrorResponse(rsp->GetTrailers(), error);
+}
+
+TError ParseYTError(
+    const IResponsePtr& rsp,
+    bool fromTrailers)
 {
     std::string source;
     const std::string* errorHeader;
@@ -74,24 +110,26 @@ TError ParseYTError(const IResponsePtr& rsp, bool fromTrailers)
         errorHeader = rsp->GetHeaders()->Find(XYTErrorHeaderName);
     }
 
-    TString errorJson;
+    std::string errorString;
     if (errorHeader) {
-        errorJson = *errorHeader;
+        errorString = *errorHeader;
     } else {
         static const std::string BodySource("body");
         source = BodySource;
-        errorJson = ToString(rsp->ReadAll());
+        errorString = ToString(rsp->ReadAll());
     }
 
-    TStringInput errorJsonInput(errorJson);
+    TMemoryInput errorStringInput(errorString);
+
     std::unique_ptr<IBuildingYsonConsumer<TError>> buildingConsumer;
     CreateBuildingYsonConsumer(&buildingConsumer, EYsonType::Node);
+
     try {
-        ParseJson(&errorJsonInput, buildingConsumer.get());
+        ParseJson(&errorStringInput, buildingConsumer.get());
     } catch (const std::exception& ex) {
         return TError("Failed to parse error from response")
-            << TErrorAttribute("source", source)
-            << ex;
+            .With("source", source)
+            .With(ex);
     }
     return buildingConsumer->Finish();
 }
@@ -113,8 +151,9 @@ public:
         } catch(const std::exception& ex) {
             TError error(ex);
 
-            YT_LOG_DEBUG(error, "Error handling HTTP request (Path: %v)",
-                req->GetUrl().Path);
+            YT_TLOG_DEBUG("Error handling HTTP request")
+                .With("Path", req->GetUrl().Path)
+                .With(error);
 
             FillYTErrorHeaders(rsp, error);
             rsp->SetStatus(EStatusCode::InternalServerError);
@@ -128,7 +167,7 @@ private:
     const IHttpHandlerPtr Underlying_;
 };
 
-IHttpHandlerPtr WrapYTException(IHttpHandlerPtr underlying)
+IHttpHandlerPtr CreateErrorWrappingHttpHandler(IHttpHandlerPtr underlying)
 {
     return New<TErrorWrappingHttpHandler>(std::move(underlying));
 }
@@ -153,6 +192,7 @@ static const auto HeadersWhitelist = JoinSeq(", ", std::vector<std::string>{
     "X-YT-Output-Format",
     "X-YT-Output-Format0",
     "X-YT-Output-Format-0",
+    "X-YT-Error-Format",
     "X-YT-Header-Format",
     "X-YT-Suppress-Redirect",
     "X-YT-Omit-Trailers",
@@ -267,12 +307,12 @@ THashMap<std::string, std::string> ParseCookies(TStringBuf cookies)
 
         auto valueStartIndex = nameEndIndex + 1;
         auto valueEndIndex = cookies.find(';', valueStartIndex);
-        if (valueEndIndex == TString::npos) {
+        if (valueEndIndex == std::string::npos) {
             valueEndIndex = cookies.size();
         }
         auto value = StripString(cookies.substr(valueStartIndex, valueEndIndex - valueStartIndex));
 
-        map.emplace(TString(name), TString(value));
+        map.emplace(std::string(name), std::string(value));
 
         index = valueEndIndex + 1;
     }
@@ -299,7 +339,13 @@ std::optional<std::string> FindHeader(const IRequestPtr& req, TStringBuf headerN
 
 std::optional<std::string> FindBalancerRequestId(const IRequestPtr& req)
 {
-    return FindHeader(req, "X-Req-Id");
+    if (auto result = FindHeader(req, "X-Req-Id")) {
+        return *result;
+    }
+    if (auto result = FindHeader(req, "X-Request-Id")) {
+        return *result;
+    }
+    return std::nullopt;
 }
 
 std::optional<std::string> FindBalancerRealIP(const IRequestPtr& req)
@@ -329,7 +375,7 @@ void SetUserAgent(const THeadersPtr& headers, const std::string& value)
 
 void ReplyJson(const IResponseWriterPtr& rsp, std::function<void(NYson::IYsonConsumer*)> producer)
 {
-    rsp->GetHeaders()->Set(ContentTypeHeaderName, "application/json");
+    rsp->GetHeaders()->Set(ContentTypeHeaderName, ApplicationJsonContentType);
 
     TBufferOutput out;
 
@@ -337,7 +383,7 @@ void ReplyJson(const IResponseWriterPtr& rsp, std::function<void(NYson::IYsonCon
     producer(json.get());
     json->Flush();
 
-    TString body;
+    std::string body;
     out.Buffer().AsString(body);
     WaitFor(rsp->WriteBody(TSharedRef::FromString(body)))
         .ThrowOnError();
@@ -391,58 +437,13 @@ NTracing::TSpanId GetSpanId(const IRequestPtr& req)
     return IntFromString<NTracing::TSpanId, 16>(*id);
 }
 
-bool TryParseTraceParent(TStringBuf traceParent, NTracing::TSpanContext& spanContext)
-{
-    // An adaptation of https://github.com/census-instrumentation/opencensus-go/blob/ae11cd04b/plugin/ochttp/propagation/tracecontext/propagation.go#L49-L106
-
-    auto parts = StringSplitter(traceParent).Split('-').ToList<std::string>();
-    if (parts.size() < 3 || parts.size() > 4) {
-        return false;
-    }
-
-    // NB: We support three-part form in which version is assumed to be zero.
-    ui8 version = 0;
-    if (parts.size() == 4) {
-        if (parts[0].size() != 2) {
-            return false;
-        }
-        if (!TryIntFromString<10>(parts[0], version)) {
-            return false;
-        }
-        parts.erase(parts.begin());
-    }
-
-    // Now we have exactly three parts: traceId-spanId-options.
-
-    // Parse trace context.
-    if (!NTracing::TTraceId::FromStringHex32(parts[0], &spanContext.TraceId)) {
-        return false;
-    }
-
-    if (parts[1].size() != 16) {
-        return false;
-    }
-    if (!TryIntFromString<16>(parts[1], spanContext.SpanId)) {
-        return false;
-    }
-
-    ui8 options = 0;
-    if (!TryIntFromString<16>(parts[2], options)) {
-        return false;
-    }
-    spanContext.Sampled = static_cast<bool>(options & 1u);
-    spanContext.Debug = static_cast<bool>(options & 2u);
-
-    return true;
-}
-
 NTracing::TTraceContextPtr GetOrCreateTraceContext(const IRequestPtr& req)
 {
     const auto& headers = req->GetHeaders();
     NTracing::TTraceContextPtr traceContext;
     if (auto* traceParent = headers->Find("traceparent")) {
         NTracing::TSpanContext parentSpan;
-        if (TryParseTraceParent(*traceParent, parentSpan)) {
+        if (NTracing::TryParseTraceParent(*traceParent, parentSpan)) {
             traceContext = NTracing::TTraceContext::NewChildFromSpan(parentSpan, "HttpServer");
         }
     }
@@ -466,7 +467,7 @@ std::optional<std::pair<i64, i64>> FindBytesRange(const THeadersPtr& headers)
     const std::string bytesPrefix = "bytes=";
     if (!range->starts_with(bytesPrefix)) {
         THROW_ERROR_EXCEPTION("Invalid range header format")
-            << TErrorAttribute("range", *range);
+            .With("range", *range);
     }
 
     auto indices = range->substr(bytesPrefix.size());

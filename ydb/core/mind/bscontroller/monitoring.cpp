@@ -1,7 +1,13 @@
 #include "impl.h"
+#include "cluster_balancing.h"
+
+#include <ydb/core/util/format.h>
 
 #include <library/cpp/json/json_writer.h>
 #include <google/protobuf/util/json_util.h>
+#include <ydb/core/base/mon_auth.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT BS_CONTROLLER
 
 
 namespace NKikimr {
@@ -661,8 +667,12 @@ public:
     }
 
     void Complete(const TActorContext&) override {
-        STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXMO01, "TBlobStorageController::TTxMonEvent_SetDown",
-            (GroupId.GetRawId(), GroupId.GetRawId()), (Down, Down), (Persist, Persist), (Response, Response));
+        YDB_LOG_DEBUG("TBlobStorageController::TTxMonEvent_SetDown",
+            {"marker", "BSCTXMO01"},
+            {"groupId", GroupId.GetRawId()},
+            {"down", Down},
+            {"persist", Persist},
+            {"response", Response});
         TActivationContext::Send(new IEventHandle(Source, Self->SelfId(), new NMon::TEvRemoteJsonInfoRes(Response)));
     }
 };
@@ -712,8 +722,10 @@ public:
     }
 
     void Complete(const TActorContext&) override {
-        STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXMO02, "TBlobStorageController::TTxMonEvent_GetDown", (GroupId.GetRawId(), GroupId.GetRawId()),
-            (Response, Response));
+        YDB_LOG_DEBUG("TBlobStorageController::TTxMonEvent_GetDown",
+            {"marker", "BSCTXMO02"},
+            {"groupId", GroupId.GetRawId()},
+            {"response", Response});
         TActivationContext::Send(new IEventHandle(Source, Self->SelfId(), new NMon::TEvRemoteJsonInfoRes(Response)));
     }
 };
@@ -862,6 +874,17 @@ bool TBlobStorageController::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr e
     if (!ev) {
         return true;
     }
+    const TCgiParameters& cgi(ev->Get()->Cgi());
+    // BSController exposes no non-admin handlers.
+    if (!IsTabletDevUiAccessAllowed(
+            AppData(),
+            ev->Get()->PathInfo(),
+            ev->Get()->GetUserToken(),
+            /*isMonitoringDevUiRequest=*/false))
+    {
+        Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
+        return true;
+    }
     if (const auto& ext = ev->Get()->ExtendedQuery; ext && ext->GetMethod() == HTTP_METHOD_POST) {
         ProcessPostQuery(*ext, ev->Sender);
         return true;
@@ -869,7 +892,6 @@ bool TBlobStorageController::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr e
 
     THolder<TTransactionBase<TBlobStorageController>> tx;
     TStringStream str;
-    const TCgiParameters& cgi(ev->Get()->Cgi());
 
     if (!cgi.count("page")) {
         RenderMonPage(str);
@@ -961,6 +983,8 @@ bool TBlobStorageController::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr e
         } else if (page == "InternalTables") {
             const TString table = cgi.Has("table") ? cgi.Get("table") : "pdisks";
             RenderInternalTables(str, table);
+        } else if (page == "Bridge") {
+            RenderBridge(str);
         } else if (page == "VirtualGroups") {
             RenderVirtualGroups(str);
         } else if (page == "StopGivingGroups") {
@@ -1009,14 +1033,15 @@ void TBlobStorageController::RenderFooter(IOutputStream& out) {
 void TBlobStorageController::RenderMonPage(IOutputStream& out) {
     RenderHeader(out);
 
-    out << "<a href='app?TabletID=" << TabletID() << "&page=OperationLog'>Operation Log</a><br>";
-    out << "<a href='app?TabletID=" << TabletID() << "&page=SelfHeal'>Self Heal Status</a> (" <<
+    out << "<a href='?TabletID=" << TabletID() << "&page=OperationLog'>Operation Log</a><br>";
+    out << "<a href='?TabletID=" << TabletID() << "&page=SelfHeal'>Self Heal Status</a> (" <<
         (SelfHealEnable ? "enabled" : "disabled") << ")<br>";
-    out << "<a href='app?TabletID=" << TabletID() << "&page=HealthEvents'>Health events</a><br>";
-    out << "<a href='app?TabletID=" << TabletID() << "&page=Scrub'>Scrub state</a><br>";
-    out << "<a href='app?TabletID=" << TabletID() << "&page=Shred'>Shred state</a><br>";
-    out << "<a href='app?TabletID=" << TabletID() << "&page=VirtualGroups'>Virtual groups</a><br>";
-    out << "<a href='app?TabletID=" << TabletID() << "&page=InternalTables'>Internal tables</a><br>";
+    out << "<a href='?TabletID=" << TabletID() << "&page=HealthEvents'>Health events</a><br>";
+    out << "<a href='?TabletID=" << TabletID() << "&page=Scrub'>Scrub state</a><br>";
+    out << "<a href='?TabletID=" << TabletID() << "&page=Shred'>Shred state</a><br>";
+    out << "<a href='?TabletID=" << TabletID() << "&page=Bridge'>Bridge state</a><br>";
+    out << "<a href='?TabletID=" << TabletID() << "&page=VirtualGroups'>Virtual groups</a><br>";
+    out << "<a href='?TabletID=" << TabletID() << "&page=InternalTables'>Internal tables</a><br>";
 
     HTML(out) {
         DIV_CLASS("panel panel-info") {
@@ -1058,6 +1083,76 @@ void TBlobStorageController::RenderMonPage(IOutputStream& out) {
                         }
                     }
                 }
+
+                DIV_CLASS("panel panel-info") {
+                    DIV_CLASS("panel-heading") {
+                        out << "Self Heal Settings";
+                    }
+                    DIV_CLASS("panel-body") {
+                        TABLE_CLASS("table table-condensed") {
+                            TABLEHEAD() {
+                                TABLER() {
+                                    TABLEH() { out << "Parameter"; }
+                                    TABLEH() { out << "Value"; }
+                                }
+                            }
+
+                            TABLEBODY() {
+                                TABLER() {
+                                    TABLED() { out << "Prefer less occupied rack"; }
+                                    TABLED() { out << (SelfHealSettings.PreferLessOccupiedRack ? "enabled" : "disabled"); }
+                                }
+                                TABLER() {
+                                    TABLED() { out << "With attention to replication"; }
+                                    TABLED() { out << (SelfHealSettings.WithAttentionToReplication ? "enabled" : "disabled"); }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                DIV_CLASS("panel panel-info") {
+                    DIV_CLASS("panel-heading") {
+                        out << "Cluster Balancing Settings";
+                    }
+                    DIV_CLASS("panel-body") {
+                        TABLE_CLASS("table table-condensed") {
+                            TABLEHEAD() {
+                                TABLER() {
+                                    TABLEH() { out << "Parameter"; }
+                                    TABLEH() { out << "Value"; }
+                                }
+                            }
+
+                            TABLEBODY() {
+                                TABLER() {
+                                    TABLED() { out << "Status"; }
+                                    TABLED() { out << (ClusterBalancingSettings.Enable ? "enabled" : "disabled"); }
+                                }
+                                TABLER() {
+                                    TABLED() { out << "Iteration interval (ms)"; }
+                                    TABLED() { out << ClusterBalancingSettings.IterationIntervalMs; }
+                                }
+                                TABLER() {
+                                    TABLED() { out << "Max replicating PDisks"; }
+                                    TABLED() { out << ClusterBalancingSettings.MaxReplicatingPDisks; }
+                                }
+                                TABLER() {
+                                    TABLED() { out << "Max replicating VDisks"; }
+                                    TABLED() { out << ClusterBalancingSettings.MaxReplicatingVDisks; }
+                                }
+                                TABLER() {
+                                    TABLED() { out << "Prefer less occupied rack"; }
+                                    TABLED() { out << (ClusterBalancingSettings.PreferLessOccupiedRack ? "enabled" : "disabled"); }
+                                }
+                                TABLER() {
+                                    TABLED() { out << "With attention to replication"; }
+                                    TABLED() { out << (ClusterBalancingSettings.WithAttentionToReplication ? "enabled" : "disabled"); }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -1070,7 +1165,7 @@ void TBlobStorageController::RenderInternalTables(IOutputStream& out, const TStr
 
     auto gen_li = [&](const TString& component) {
         out << "<li" << (component == table ? " class='active'" : "") << ">";
-        out << "<a href='app?TabletID=" << TabletID() << "&page=InternalTables&table=" << component << "'>";
+        out << "<a href='?TabletID=" << TabletID() << "&page=InternalTables&table=" << component << "'>";
         out << component << "</a>";
         out << "</li>";
     };
@@ -1097,6 +1192,8 @@ void TBlobStorageController::RenderInternalTables(IOutputStream& out, const TStr
                         TABLEH() { out << "Total Size"; }
                         TABLEH() { out << "Status"; }
                         TABLEH() { out << "State"; }
+                        TABLEH() { out << "Decommit status"; }
+                        TABLEH() { out << "Maintenance status"; }
                         TABLEH() { out << "ExpectedSerial"; }
                         TABLEH() { out << "LastSeenSerial"; }
                         TABLEH() { out << "LastSeenPath"; }
@@ -1120,6 +1217,8 @@ void TBlobStorageController::RenderInternalTables(IOutputStream& out, const TStr
                                     out << NKikimrBlobStorage::TPDiskState::E_Name(m.GetState());
                                 }
                             }
+                            TABLED() { out << NKikimrBlobStorage::EDecommitStatus_Name(pdisk->DecommitStatus); }
+                            TABLED() { out << NKikimrBlobStorage::TMaintenanceStatus::E_Name(pdisk->MaintenanceStatus); }
                             TABLED() { out << pdisk->ExpectedSerial.Quote(); }
                             TABLED() {
                                 TString color = pdisk->ExpectedSerial == pdisk->LastSeenSerial ? "green" : "red";
@@ -1275,8 +1374,8 @@ void TBlobStorageController::RenderGroupsInStoragePool(IOutputStream &out, const
             out << "Groups in storage pool " << name << " (" << std::get<0>(id) << ", " << std::get<1>(id) << ")";
         }
         RenderGroupTable(out, [&] {
-            auto range = StoragePoolGroups.equal_range(id);
-            for (auto it = range.first; it != range.second; ++it) {
+            for (auto it = StoragePoolGroups.lower_bound({id, Min<TGroupId>()});
+                    it != StoragePoolGroups.end() && it->first == id; ++it) {
                 if (TGroupInfo *group = FindGroup(it->second)) {
                     RenderGroupRow(out, *group);
                 }
@@ -1392,6 +1491,7 @@ void TBlobStorageController::RenderGroupTable(IOutputStream& out, std::function<
                     TABLEH() { out << "Operating<br/>status"; }
                     TABLEH() { out << "Expected<br/>status"; }
                     TABLEH() { out << "Donors"; }
+                    TABLEH() { out << "Bridge"; }
                 }
             }
             TABLEBODY() {
@@ -1423,6 +1523,8 @@ void TBlobStorageController::RenderGroupRow(IOutputStream& out, const TGroupInfo
             }
         };
 
+        TGroupInfo::TGroupFinder finder = [this](TGroupId groupId) { return FindGroup(groupId); };
+
         TABLER() {
             TString storagePool = "<strong>none</strong>";
             if (auto it = StoragePools.find(group.StoragePoolId); it != StoragePools.end()) {
@@ -1449,9 +1551,9 @@ void TBlobStorageController::RenderGroupRow(IOutputStream& out, const TGroupInfo
             renderLatency(group.LatencyStats.PutUserData);
             renderLatency(group.LatencyStats.GetFast);
             TABLED() { out << (group.SeenOperational ? "YES" : ""); }
-            TABLED() { out << (group.LayoutCorrect ? "" : "NO"); }
+            TABLED() { out << (group.IsLayoutCorrect(finder) ? "" : "NO"); }
 
-            const auto& status = group.Status;
+            const auto& status = group.GetStatus(finder, BridgeInfo.get());
             TABLED() { out << NKikimrBlobStorage::TGroupStatus::E_Name(status.OperatingStatus); }
             TABLED() { out << NKikimrBlobStorage::TGroupStatus::E_Name(status.ExpectedStatus); }
             TABLED() {
@@ -1460,6 +1562,21 @@ void TBlobStorageController::RenderGroupRow(IOutputStream& out, const TGroupInfo
                     numDonors += vdisk->Donors.size();
                 }
                 out << numDonors;
+            }
+
+            TStringBuilder bridge;
+            if (group.BridgeGroupInfo) {
+                for (const auto& pile : group.BridgeGroupInfo->GetBridgeGroupState().GetPile()) {
+                    if (bridge) {
+                        bridge << ' ';
+                    }
+                    bridge << pile.GetGroupId() << ':' << pile.GetGroupGeneration()
+                        << '#' << NKikimrBridge::TGroupState::EStage_Name(pile.GetStage())
+                        << '@' << pile.GetBecameUnsyncedGeneration();
+                }
+            }
+            TABLED() {
+                out << bridge;
             }
         }
     }

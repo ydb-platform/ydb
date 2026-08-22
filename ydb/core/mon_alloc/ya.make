@@ -19,6 +19,7 @@ ENDIF()
 
 PEERDIR(
     contrib/libs/tcmalloc/malloc_extension
+    library/cpp/html/escape
     library/cpp/html/pcdata
     library/cpp/lfalloc/alloc_profiler
     library/cpp/lfalloc/dbg_info

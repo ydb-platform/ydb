@@ -6,8 +6,10 @@
 #include "util.h"
 
 #include <ydb/core/base/path.h>
+#include <ydb/core/protos/metrics_config.pb.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
+#include <ydb/core/util/backoff.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 
@@ -75,9 +77,10 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
             LOG_E("Describe path failed"
                 << ": path# " << path.first
                 << ", status# " << result.GetStatus()
-                << ", issues# " << result.GetIssues().ToOneLineString());
+                << ", issues# " << result.GetIssues().ToOneLineString()
+                << ", iteration# " << Backoff.GetIteration());
 
-            if (IsRetryableError(result)) {
+            if (IsRetryableError(result) && Backoff.HasMore()) {
                 return RetryDescribe(*it);
             } else {
                 Failed.emplace_back(path.first, result);
@@ -145,7 +148,7 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                 << ", status# " << result.GetStatus()
                 << ", issues# " << result.GetIssues().ToOneLineString());
 
-            if (IsRetryableError(result)) {
+            if (IsRetryableError(result) && Backoff.HasMore()) {
                 return RetryDescribe(*it);
             } else {
                 Failed.emplace_back(path.first, result);
@@ -180,11 +183,8 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
             LOG_D("Describe topic succeeded"
                 << ": path# " << path.first);
 
-            const auto& targetConf = Config.GetTransferSpecific().GetTarget();
-
             const auto& target = ToAdd.emplace_back(TReplication::ETargetKind::Transfer,
-                std::make_shared<TTargetTransfer::TTransferConfig>(path.first, path.second, targetConf.GetTransformLambda(),
-                    Config.GetTransferSpecific().GetRunAsUser()));
+                std::make_shared<TTargetTransfer::TTransferConfig>(path.first, path.second, Config));
             LOG_I("Add target"
                 << ": srcPath# " << target.Config->GetSrcPath()
                 << ", dstPath# " << target.Config->GetDstPath()
@@ -195,7 +195,7 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                 << ", status# " << result.GetStatus()
                 << ", issues# " << result.GetIssues().ToOneLineString());
 
-            if (IsRetryableError(result)) {
+            if (IsRetryableError(result) && Backoff.HasMore()) {
                 return RetryDescribe(*it);
             } else {
                 Failed.emplace_back(path.first, result);
@@ -239,6 +239,7 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
 
         return entry.Name.starts_with("~")
             || entry.Name.starts_with(".sys")
+            || entry.Name.starts_with(".tmp")
             || entry.Name.starts_with(".metadata")
             || entry.Name.starts_with("export-");
     }
@@ -285,7 +286,7 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                 << ", status# " << result.GetStatus()
                 << ", issues# " << result.GetIssues().ToOneLineString());
 
-            if (IsRetryableError(result)) {
+            if (IsRetryableError(result) && Backoff.HasMore()) {
                 return RetryListing(it->first);
             } else {
                 Failed.emplace_back(path.first, result);
@@ -298,7 +299,7 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
 
     void ScheduleRetry() {
         if (DescribeRetries.empty() && ListingRetries.empty()) {
-            Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup);
+            Schedule(Backoff.Next(), new TEvents::TEvWakeup);
         }
     }
 
@@ -345,6 +346,7 @@ public:
         , YdbProxy(proxy)
         , Config(config)
         , LogPrefix("TargetDiscoverer", ReplicationId)
+        , Backoff(5)
     {
         if (Config.HasSpecific()) {
             for (const auto& target : Config.GetSpecific().GetTargets()) {
@@ -393,6 +395,8 @@ private:
     THashSet<ui64> ListingRetries;
     TVector<TEvPrivate::TEvDiscoveryTargetsResult::TAddEntry> ToAdd;
     TVector<TEvPrivate::TEvDiscoveryTargetsResult::TFailedEntry> Failed;
+
+    TBackoff Backoff;
 
 }; // TTargetDiscoverer
 

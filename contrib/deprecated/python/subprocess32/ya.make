@@ -6,6 +6,8 @@ VERSION(3.5.4)
 
 COPY_FILE(subprocess32.py subprocess.py)
 
+ENABLE(USE_LIGHT_PY2CC)
+
 PY_SRCS(
     TOP_LEVEL
     subprocess32.py

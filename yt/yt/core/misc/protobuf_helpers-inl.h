@@ -42,6 +42,8 @@ DEFINE_TRIVIAL_PROTO_CONVERSIONS(ui32)
 DEFINE_TRIVIAL_PROTO_CONVERSIONS(i64)
 DEFINE_TRIVIAL_PROTO_CONVERSIONS(ui64)
 DEFINE_TRIVIAL_PROTO_CONVERSIONS(bool)
+DEFINE_TRIVIAL_PROTO_CONVERSIONS(float)
+DEFINE_TRIVIAL_PROTO_CONVERSIONS(double)
 
 #undef DEFINE_TRIVIAL_PROTO_CONVERSIONS
 
@@ -412,6 +414,19 @@ void FromProtoArrayImpl(
 }
 
 // Does not check for duplicates.
+template <class TOriginal, size_t N, class TSerializedArray>
+void FromProtoArrayImpl(
+    TCompactFlatSet<TOriginal, N>* originalArray,
+    const TSerializedArray& serializedArray)
+{
+    originalArray->clear();
+    originalArray->reserve(serializedArray.size());
+    for (int i = 0; i < serializedArray.size(); ++i) {
+        originalArray->insert(FromProto<TOriginal>(serializedArray.Get(i)));
+    }
+}
+
+// Does not check for duplicates.
 template <class TOriginalKey, class TOriginalValue, class TSerializedArray>
 void FromProtoArrayImpl(
     THashMap<TOriginalKey, TOriginalValue>* originalArray,
@@ -433,8 +448,8 @@ void CheckedFromProtoArrayImpl(
 
     if (std::ssize(*originalArray) != serializedArray.size()) {
         THROW_ERROR_EXCEPTION("Duplicate elements in a serialized hash set")
-            << TErrorAttribute("unique_element_count", originalArray->size())
-            << TErrorAttribute("total_element_count", serializedArray.size());
+            .With("unique_element_count", originalArray->size())
+            .With("total_element_count", serializedArray.size());
     }
 }
 
@@ -489,8 +504,8 @@ void ToProto(
         auto [_, emplaced] = serializedMap->emplace(ToProto<TSerializedKey>(key), ToProto<TSerializedValue>(value));
         if (!emplaced) {
             THROW_ERROR_EXCEPTION("Found duplicate key during protobuf map serialization")
-                << TErrorAttribute("key", key)
-                << TErrorAttribute("serialized_key", ToProto<TSerializedKey>(key));
+                .With("key", key)
+                .With("serialized_key", ToProto<TSerializedKey>(key));
         }
     }
 }
@@ -542,8 +557,8 @@ void FromProto(
         auto [_, emplaced] = originalMap->emplace(FromProto<TKey>(serializedKey), FromProto<TValue>(serializedValue));
         if (!emplaced) {
             THROW_ERROR_EXCEPTION("Found duplicate key during protobuf map deserialization")
-                << TErrorAttribute("serialized_key", serializedKey)
-                << TErrorAttribute("key", FromProto<TKey>(serializedKey));
+                .With("serialized_key", serializedKey)
+                .With("key", FromProto<TKey>(serializedKey));
         }
     }
 }
@@ -578,7 +593,7 @@ TRefCountedProto<TProto>::TRefCountedProto(const TRefCountedProto<TProto>& other
 }
 
 template <class TProto>
-TRefCountedProto<TProto>::TRefCountedProto(TRefCountedProto<TProto>&& other)
+TRefCountedProto<TProto>::TRefCountedProto(TRefCountedProto<TProto>&& other) noexcept
 {
     TProto::Swap(&other);
     RegisterExtraSpace();
@@ -592,7 +607,7 @@ TRefCountedProto<TProto>::TRefCountedProto(const TProto& other)
 }
 
 template <class TProto>
-TRefCountedProto<TProto>::TRefCountedProto(TProto&& other)
+TRefCountedProto<TProto>::TRefCountedProto(TProto&& other) noexcept
 {
     TProto::Swap(&other);
     RegisterExtraSpace();
@@ -610,7 +625,7 @@ void TRefCountedProto<TProto>::RegisterExtraSpace()
     auto spaceUsed = TProto::SpaceUsed();
     YT_ASSERT(static_cast<size_t>(spaceUsed) >= sizeof(TProto));
     YT_ASSERT(ExtraSpace_ == 0);
-    ExtraSpace_ = TProto::SpaceUsed() - sizeof(TProto);
+    ExtraSpace_ = spaceUsed - sizeof(TProto);
     auto cookie = GetRefCountedTypeCookie<TRefCountedProto<TProto>>();
     TRefCountedTrackerFacade::AllocateSpace(cookie, ExtraSpace_);
 }
@@ -632,14 +647,14 @@ i64 TRefCountedProto<TProto>::GetSize() const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <class TSerialized, class T, class TTag>
-void FromProto(TStrongTypedef<T, TTag>* original, const TSerialized& serialized)
+template <class TSerialized, class T, class TTag, TStrongTypedefOptions Options>
+void FromProto(TStrongTypedef<T, TTag, Options>* original, const TSerialized& serialized)
 {
     FromProto(&original->Underlying(), serialized);
 }
 
-template <class TSerialized, class T, class TTag>
-void ToProto(TSerialized* serialized, const TStrongTypedef<T, TTag>& original)
+template <class TSerialized, class T, class TTag, TStrongTypedefOptions Options>
+void ToProto(TSerialized* serialized, const TStrongTypedef<T, TTag, Options>& original)
 {
     ToProto(serialized, original.Underlying());
 }

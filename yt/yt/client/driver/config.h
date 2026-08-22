@@ -4,6 +4,8 @@
 
 #include <yt/yt/client/api/public.h>
 
+#include <yt/yt/client/api/rpc_proxy/public.h>
+
 #include <yt/yt/client/table_client/public.h>
 
 #include <yt/yt/client/chunk_client/public.h>
@@ -36,12 +38,14 @@ struct TDriverConfig
 
     TSlruCacheConfigPtr ClientCache;
 
-    std::optional<TString> Token;
+    std::optional<std::string> Token;
 
     //! Target cluster for multiproxy mode.
     std::optional<std::string> MultiproxyTargetCluster;
 
     TAsyncExpiringCacheConfigPtr ProxyDiscoveryCache;
+
+    NApi::NRpcProxy::EAddressType DefaultRpcProxyAddressType;
 
     bool EnableInternalCommands;
 
@@ -49,6 +53,10 @@ struct TDriverConfig
 
     //! Controls whether authentication commands (SetUserPassword, IssueToken, ListUserTokens, etc.) require a correct password to be used.
     bool RequirePasswordInAuthenticationCommands;
+
+    //! If set, a master transaction whose commit fails is abandoned (dropped locally, no
+    //! abort) instead of aborted, so a retrier can re-issue the commit. RPC proxy only.
+    bool AbandonMasterTransactionsOnFailedCommit;
 
     REGISTER_YSON_STRUCT(TDriverConfig);
 

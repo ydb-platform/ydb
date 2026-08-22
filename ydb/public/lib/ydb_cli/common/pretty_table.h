@@ -4,8 +4,7 @@
 #include <util/string/builder.h>
 #include <util/string/split.h>
 
-namespace NYdb {
-namespace NConsoleClient {
+namespace NYdb::NConsoleClient {
 
 struct TPrettyTableConfig {
     bool Header = true;
@@ -62,6 +61,12 @@ public:
             return *this;
         }
 
+        template <typename T>
+        TRow& WriteToLastColumn(const T& data) {
+            Y_ABORT_UNLESS(!Columns.empty());
+            return Column(Columns.size() - 1, data);
+        }
+
         inline TRow& FreeText(const TString& text) {
             Text = text;
             return *this;
@@ -107,8 +112,7 @@ private:
 
 };
 
-}
-}
+} // namespace NYdb::NConsoleClient
 
 Y_DECLARE_OUT_SPEC(inline, NYdb::NConsoleClient::TPrettyTable, o, x) {
     return x.Print(o);

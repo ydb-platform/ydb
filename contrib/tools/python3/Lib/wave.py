@@ -21,9 +21,9 @@ This returns an instance of a class with the following public methods:
       getparams()     -- returns a namedtuple consisting of all of the
                          above in the above order
       getmarkers()    -- returns None (for compatibility with the
-                         aifc module)
+                         old aifc module)
       getmark(id)     -- raises an error since the mark does not
-                         exist (for compatibility with the aifc module)
+                         exist (for compatibility with the old aifc module)
       readframes(n)   -- returns at most n frames of audio
       rewind()        -- rewind to the beginning of the audio stream
       setpos(pos)     -- seek to the specified position
@@ -342,9 +342,13 @@ class Wave_read:
                        self.getcomptype(), self.getcompname())
 
     def getmarkers(self):
+        import warnings
+        warnings._deprecated("Wave_read.getmarkers", remove=(3, 15))
         return None
 
     def getmark(self, id):
+        import warnings
+        warnings._deprecated("Wave_read.getmark", remove=(3, 15))
         raise Error('no marks')
 
     def setpos(self, pos):
@@ -436,6 +440,8 @@ class Wave_write:
     _nframeswritten -- the number of frames actually written
     _datawritten -- the size of the audio samples actually written
     """
+
+    _file = None
 
     def __init__(self, f):
         self._i_opened_the_file = None
@@ -548,12 +554,18 @@ class Wave_write:
               self._nframes, self._comptype, self._compname)
 
     def setmark(self, id, pos, name):
+        import warnings
+        warnings._deprecated("Wave_write.setmark", remove=(3, 15))
         raise Error('setmark() not supported')
 
     def getmark(self, id):
+        import warnings
+        warnings._deprecated("Wave_write.getmark", remove=(3, 15))
         raise Error('no marks')
 
     def getmarkers(self):
+        import warnings
+        warnings._deprecated("Wave_write.getmarkers", remove=(3, 15))
         return None
 
     def tell(self):

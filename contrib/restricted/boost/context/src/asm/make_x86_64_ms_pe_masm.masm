@@ -110,7 +110,7 @@ make_fcontext PROC BOOST_CONTEXT_EXPORT FRAME
     ; save top address of context stack as 'base'
     mov  [rax+0c8h], rcx
     ; second arg of make_fcontext() == size of context-stack
-    ; negate stack size for LEA instruction (== substraction)
+    ; negate stack size for LEA instruction (== subtraction)
     neg  rdx
     ; compute bottom address of context stack (limit)
     lea  rcx, [rcx+rdx]

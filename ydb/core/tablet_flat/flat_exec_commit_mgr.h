@@ -7,6 +7,7 @@
 #include "flat_sausage_slicer.h"
 #include "flat_executor_gclogic.h"
 #include "flat_executor_counters.h"
+#include "flat_executor_backup.h"
 #include "util_fmt_abort.h"
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/tablet.h>
@@ -56,6 +57,67 @@ namespace NTabletFlatExecutor {
         using TGcLogic = TExecutorGCLogic;
         using TEvCommit = TEvTablet::TEvCommit;
 
+        class TBackupLogic {
+        public:
+            TBackupLogic(TCommitManager* manager)
+                : Manager(manager)
+            {
+            }
+
+            void Start(TActorId owner, TActorId changelogWriter) {
+                Owner = owner;
+                Writer = changelogWriter;
+                Running = true;
+
+                Manager->MonCo->Simple()[TMonCo::BACKUP_RUNNING].Set(1);
+            }
+
+            void Stop(bool flush = false) {
+                if (Running) {
+                    Manager->Ops->Send(Writer, new NBackup::TEvStop(flush));
+
+                    Manager->MonCo->Simple()[TMonCo::BACKUP_RUNNING].Set(0);
+                    Manager->MonCo->Simple()[TMonCo::BACKUP_CHANGELOG_INFLIGHT_BYTES].Set(0);
+                }
+                *this = TBackupLogic(Manager);
+            }
+
+            bool IsRunning() const {
+                return Running;
+            }
+
+            bool ShouldBackupCommit(const TLogCommit &commit) const {
+                if (!Running) {
+                    return false;
+                }
+
+                return commit.Type == ECommit::Redo;
+            }
+
+            void BackupCommit(const TLogCommit &commit) {
+                if (!ShouldBackupCommit(commit)) {
+                    return;
+                }
+
+                auto ev = MakeHolder<NBackup::TEvWriteChangelog>(commit.Step, commit.Embedded, commit.Refs, TActivationContext::Monotonic());
+                Manager->Ops->Send(Writer, ev.Release());
+            }
+
+            void OnSnapshotCompleted(NBackup::TEvSnapshotCompleted::TPtr& ev) {
+                Manager->Ops->Send(Writer, ev->ReleaseBase().Release());
+            }
+
+            TActorId GetWriter() const {
+                return Writer;
+            }
+
+        private:
+            TCommitManager* Manager = nullptr;
+            TActorId Owner;
+            TActorId Writer;
+            bool Running = false;
+        };
+
         TCommitManager(NBoot::TSteppedCookieAllocatorFactory &steppedCookieAllocatorFactory, TIntrusivePtr<NSnap::TWaste> waste, TGcLogic *logic)
             : Tablet(steppedCookieAllocatorFactory.Tablet)
             , Gen(steppedCookieAllocatorFactory.Gen)
@@ -64,6 +126,7 @@ namespace NTabletFlatExecutor {
             , Turns_(steppedCookieAllocatorFactory.Sys(NBoot::TCookie::EIdx::TurnLz4))
             , Annex(steppedCookieAllocatorFactory.Data())
             , Turns(1, Turns_.Get(), NBlockIO::BlockSize)
+            , BackupLogic(this)
         {
 
         }
@@ -86,6 +149,12 @@ namespace NTabletFlatExecutor {
             MonCo = monCo;
 
             *Step0 = Head = Tail = 1;
+        }
+
+        void Stop()
+        {
+            Y_ENSURE(Ops, "Commit manager is not started");
+            BackupLogic.Stop();
         }
 
         void SetTactic(ETactic tactic) noexcept { Tactic = tactic; }
@@ -165,6 +234,8 @@ namespace NTabletFlatExecutor {
 
         void SendCommitEv(TLogCommit &commit)
         {
+            BackupLogic.BackupCommit(commit);
+
             const bool snap = (commit.Type == ECommit::Snap);
 
             auto *ev = new TEvCommit(Tablet, Gen, commit.Step, { commit.Step - 1 }, snap);
@@ -198,10 +269,10 @@ namespace NTabletFlatExecutor {
         TGcLogic * const GcLogic = nullptr;
         TMonCo * MonCo = nullptr;
         TAutoPtr<NPageCollection::TSteppedCookieAllocator> Turns_;
-
     public:
         TAutoPtr<NPageCollection::TSteppedCookieAllocator> Annex;
         NPageCollection::TSlicer Turns;
+        TBackupLogic BackupLogic;
     };
 
 }

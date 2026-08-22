@@ -49,6 +49,17 @@ public:
         return NTableState::CollectProposeTransactionResults(OperationId, ev, context);
     }
 
+    bool HandleReply(TEvColumnShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override {
+        auto ssId = context.SS->SelfTabletId();
+
+        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                 DebugHint() << " HandleReply TEvProposeTransactionResult"
+                 << " at tabletId# " << ssId
+                 << " message# " << ev->Get()->Record.ShortDebugString());
+
+        return NTableState::CollectProposeTransactionResults(OperationId, ev, context);
+    }
+
     bool ProgressState(TOperationContext& context) override {
         auto ssId = context.SS->SelfTabletId();
 
@@ -61,6 +72,16 @@ public:
         Y_ABORT_UNLESS(txState);
         Y_ABORT_UNLESS(txState->TxType == TxType);
         Y_ABORT_UNLESS(txState->State == TTxState::ConfigureParts);
+
+        // For column tables, backup propose is async (export actor must finish
+        // before columnshard replies). Handle cancel here to avoid waiting for
+        // that reply which may never come while export is blocked.
+        const TPath path = TPath::Init(txState->TargetPathId, context.SS);
+        if (txState->Cancel && path->IsColumnTable()) {
+            NIceDb::TNiceDb db(context.GetDB());
+            context.SS->ChangeTxState(db, OperationId, TTxState::Aborting);
+            return true;
+        }
 
         txState->ClearShardsInProgress();
         if constexpr (TKind::NeedSnapshotTime()) {
@@ -95,6 +116,7 @@ public:
         IgnoreMessages(DebugHint(),
             { TEvHive::TEvCreateTabletReply::EventType
             , TEvDataShard::TEvProposeTransactionResult::EventType
+            , TEvColumnShard::TEvProposeTransactionResult::EventType
             , TEvPrivate::TEvOperationPlan::EventType }
         );
     }
@@ -223,6 +245,65 @@ public:
         }
     }
 
+    static void CollectStats(TOperationId operationId, const TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& ev, TOperationContext& context) {
+        const auto& evRecord = ev->Get()->Record;
+        if (!evRecord.HasOpResult() || !evRecord.GetOpResult().HasSuccess()) {
+            return;
+        }
+        Y_ABORT_UNLESS(context.SS->FindTx(operationId));
+        TTxState& txState = *context.SS->FindTx(operationId);
+
+        auto tabletId = TTabletId(evRecord.GetOrigin());
+        auto shardIdx = context.SS->MustGetShardIdx(tabletId);
+        Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shardIdx));
+
+        if (!txState.SchemeChangeNotificationReceived.contains(shardIdx)) {
+            return;
+        }
+
+        NIceDb::TNiceDb db(context.GetDB());
+
+        if (!txState.ShardStatuses.contains(shardIdx)) {
+            auto& shardStatus = txState.ShardStatuses[shardIdx];
+            const auto& opResult = evRecord.GetOpResult();
+            shardStatus.Success = opResult.GetSuccess();
+            shardStatus.Error = opResult.GetExplain();
+            shardStatus.BytesProcessed = opResult.GetBytesProcessed();
+            shardStatus.RowsProcessed = opResult.GetRowsProcessed();
+            context.SS->PersistTxShardStatus(db, operationId, shardIdx, shardStatus);
+
+            const ui64 ru = TKind::RequestUnits(shardStatus.BytesProcessed, shardStatus.RowsProcessed);
+            Bill(operationId, txState.TargetPathId, shardIdx, ru, context);
+        }
+    }
+
+    bool HandleReply(TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& ev, TOperationContext& context) override {
+        auto ssId = context.SS->SelfTabletId();
+        const auto& evRecord = ev->Get()->Record;
+
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                     DebugHint() << " HandleReply TEvNotifyTxCompletionResult"
+                     << " at tablet# " << ssId
+                     << " message# " << evRecord.ShortDebugString());
+
+        bool allnotificationsReceived = NTableState::CollectSchemaChanged(OperationId, ev, context);
+        CollectStats(OperationId, ev, context);
+
+        if (!allnotificationsReceived) {
+            return false;
+        }
+
+        Y_ABORT_UNLESS(context.SS->FindTx(OperationId));
+        TTxState& txState = *context.SS->FindTx(OperationId);
+
+        if (!txState.ReadyForNotifications) {
+            return false;
+        }
+
+        TKind::Finish(OperationId, txState, context);
+        return true;
+    }
+
     bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
         auto ssId = context.SS->SelfTabletId();
         const auto& evRecord = ev->Get()->Record;
@@ -267,6 +348,13 @@ public:
                 shard.Operation = TTxState::ProposedWaitParts;
                 context.SS->PersistUpdateTxShard(db, OperationId, shard.Idx, shard.Operation);
             }
+
+            // Subscribe
+            if (shard.TabletType == TTabletTypes::ColumnShard) {
+                auto event = std::make_unique<TEvColumnShard::TEvNotifyTxCompletion>(ui64(OperationId.GetTxId()));
+                TTabletId tablet = context.SS->ShardInfos.at(shard.Idx).TabletID;
+                context.OnComplete.BindMsgToPipe(OperationId, tablet, shard.Idx, event.release());
+            }
             context.OnComplete.RouteByTablet(OperationId, context.SS->ShardInfos.at(shard.Idx).TabletID);
         }
         txState->UpdateShardsInProgress(TTxState::ProposedWaitParts);
@@ -277,9 +365,9 @@ public:
         }
 
         // Move all notifications that were already received
-        // NOTE: SchemeChangeNotification is sent form DS after it has got PlanStep from coordinator and the schema tx has completed
+        // NOTE: SchemeChangeNotification is sent form DS or NotifyTxCompletionResult is sent from CS after it has got PlanStep from coordinator and the schema tx has completed
         // At that moment the SS might not have received PlanStep from coordinator yet (this message might be still on its way to SS)
-        // So we are going to accumulate SchemeChangeNotification that are received before this Tx switches to WaitParts state
+        // So we are going to accumulate SchemeChangeNotification or NotifyTxCompletionResult that are received before this Tx switches to WaitParts state
         txState->AcceptPendingSchemeNotification();
 
         // Got notifications from all datashards?
@@ -312,6 +400,7 @@ public:
         this->IgnoreMessages(DebugHint(),
             { TEvHive::TEvCreateTabletReply::EventType
             , TEvDataShard::TEvProposeTransactionResult::EventType
+            , TEvColumnShard::TEvProposeTransactionResult::EventType
             , TEvPrivate::TEvOperationPlan::EventType }
         );
     }
@@ -386,7 +475,10 @@ public:
         : TxType(type)
         , OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {TEvDataShard::TEvProposeTransactionResult::EventType});
+        IgnoreMessages(DebugHint(),
+            { TEvDataShard::TEvProposeTransactionResult::EventType
+            , TEvColumnShard::TEvProposeTransactionResult::EventType }
+        );
     }
 
     bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
@@ -470,8 +562,22 @@ class TBackupRestoreOperationBase: public TSubOperation {
         case TTxState::Waiting:
         case TTxState::CreateParts:
             return TTxState::ConfigureParts;
-        case TTxState::ConfigureParts:
+        case TTxState::ConfigureParts: {
+            const TTxState* txState = context.SS->FindTx(OperationId);
+            Y_ABORT_UNLESS(txState);
+            Y_ABORT_UNLESS(txState->TxType == TxType);
+
+            const TPath path = TPath::Init(txState->TargetPathId, context.SS);
+            if (txState->Cancel && path->IsColumnTable()) {
+                if (txState->State == TTxState::Propose) {
+                    return TTxState::Propose;
+                }
+
+                Y_ABORT_UNLESS(txState->State == TTxState::Aborting);
+                return TTxState::Aborting;
+            }
             return TTxState::Propose;
+        }
         case TTxState::Propose:
             return TTxState::ProposedWaitParts;
         case TTxState::ProposedWaitParts: {
@@ -546,6 +652,38 @@ public:
     }
 
     void PrepareChanges(TPathElement::TPtr path, TOperationContext& context) {
+        if (path->IsColumnTable()) {
+            PrepareColumnTableChanges(path, context);
+        } else {
+            PrepareTableChanges(path, context);
+        }
+    }
+
+    void PrepareColumnTableChanges(TPathElement::TPtr path, TOperationContext& context) {
+        Y_ABORT_UNLESS(context.SS->ColumnTables.contains(path->PathId));
+        auto table = context.SS->ColumnTables.at(path->PathId);
+
+        path->LastTxId = OperationId.GetTxId();
+        path->PathState = Lock;
+
+        TTxState& txState = context.SS->CreateTx(OperationId, TxType, path->PathId);
+
+        txState.Shards.reserve(table->GetOwnedColumnShardsVerified().size());
+        for (const auto& shard : table->GetOwnedColumnShardsVerified()) {
+            TShardIdx shardIdx = TShardIdx::BuildFromProto(shard).DetachResult();
+            txState.Shards.emplace_back(shardIdx, ETabletType::ColumnShard, TTxState::ConfigureParts);
+        }
+
+        NIceDb::TNiceDb db(context.GetDB());
+        context.SS->PersistTxState(db, OperationId);
+
+        TKind::PersistTask(path->PathId, Transaction, context);
+
+        txState.State = TTxState::CreateParts;
+        context.OnComplete.ActivateTx(OperationId);
+    }
+
+    void PrepareTableChanges(TPathElement::TPtr path, TOperationContext& context) {
         Y_ABORT_UNLESS(context.SS->Tables.contains(path->PathId));
         TTableInfo::TPtr& table = context.SS->Tables.at(path->PathId);
 
@@ -555,9 +693,8 @@ public:
         TTxState& txState = context.SS->CreateTx(OperationId, TxType, path->PathId);
 
         txState.Shards.reserve(table->GetPartitions().size());
-        for (const auto& shard : table->GetPartitions()) {
-            auto shardIdx = shard.ShardIdx;
-            txState.Shards.emplace_back(shardIdx, ETabletType::DataShard, TTxState::ConfigureParts);
+        for (const auto* shard : table->GetPartitions()) {
+            txState.Shards.emplace_back(shard->ShardIdx, ETabletType::DataShard, TTxState::ConfigureParts);
         }
 
         NIceDb::TNiceDb db(context.GetDB());
@@ -578,6 +715,7 @@ public:
 
         const TString& parentPath = Transaction.GetWorkingDir();
         const TString name = TKind::GetTableName(Transaction);
+        const bool internal = Transaction.HasInternal() && Transaction.GetInternal();
 
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      TKind::Name() << " Propose"
@@ -615,16 +753,31 @@ public:
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
+                .Or(&TPath::TChecker::IsTable, &TPath::TChecker::IsColumnTable)
                 .NotDeleted()
-                .IsTable()
                 .NotAsyncReplicaTable()
-                .NotUnderOperation()
-                .IsCommonSensePath() //forbid alter impl index tables
-                .CanBackupTable(); //forbid backup table with indexes
+                .NotUnderOperation();
+
+            if (!internal) {
+                checks
+                    .IsCommonSensePath() // forbid alter impl index tables
+                    .CanBackupTable(); // forbid backup table with indexes
+            }
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
                 return result;
+            }
+        }
+
+        if (TxType == TTxState::TxBackup && context.SS->Tables.contains(path.Base()->PathId)) {
+            TTableInfo::TPtr table = context.SS->Tables.at(path.Base()->PathId);
+            for (const auto& [_, column] : table->Columns) {
+                if (column.DefaultKind == ETableColumnDefaultKind::FromExpression && !column.IsDropped()) {
+                    result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                        TStringBuilder() << "Cannot backup table with generated column '" << column.Name << "'");
+                    return result;
+                }
             }
         }
 

@@ -8,7 +8,7 @@ using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const TString& TFieldDescriptor::GetName() const
+const std::string& TFieldDescriptor::GetName() const
 {
     return Name_;
 }
@@ -32,7 +32,7 @@ const TFieldSchemaPtr& TFieldDescriptor::GetSchema() const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const TString& TTypeDescriptor::GetName() const
+const std::string& TTypeDescriptor::GetName() const
 {
     return Name_;
 }

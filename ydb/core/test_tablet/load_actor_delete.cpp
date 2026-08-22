@@ -1,5 +1,7 @@
 #include "load_actor_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT TEST_SHARD
+
 namespace NKikimr::NTestShard {
 
     void TLoadActor::IssueDelete() {
@@ -28,7 +30,10 @@ namespace NKikimr::NTestShard {
             r->SetTo(key);
             r->SetIncludeTo(true);
 
-            STLOG(PRI_INFO, TEST_SHARD, TS09, "deleting data", (TabletId, TabletId), (Key, key));
+            YDB_LOG_INFO("Deleting data",
+                {"marker", "TS09"},
+                {"tabletId", TabletId},
+                {"key", key});
 
             const auto it = Keys.find(key);
             Y_ABORT_UNLESS(it != Keys.end());
@@ -49,6 +54,7 @@ namespace NKikimr::NTestShard {
         if (const auto difIt = DeletesInFlight.find(cookie); difIt != DeletesInFlight.end()) {
             TDeleteInfo& info = difIt->second;
             Y_ABORT_UNLESS(info.KeysInQuery.size() == (size_t)results.size(), "%zu/%d", info.KeysInQuery.size(), results.size());
+            DeleteCounters.RecordOk(info.KeysInQuery.size());
             for (size_t i = 0; i < info.KeysInQuery.size(); ++i) {
                 // validate that delete was successful
                 const auto& res = results[i];

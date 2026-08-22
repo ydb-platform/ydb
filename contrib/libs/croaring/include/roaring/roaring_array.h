@@ -1,3 +1,17 @@
+/*
+ * roaring_array.h
+ *
+ * This file declares the roaring_array helper structure and the operations
+ * used to manage it. A roaring array is the top-level index used by a 32-bit
+ * Roaring bitmap: it stores sorted 16-bit high keys alongside the container
+ * pointers and type codes associated with each key.
+ *
+ * In effect, it is the directory that maps each populated 16-bit chunk of the
+ * 32-bit value space to the container holding that chunk's low 16-bit values.
+ * The functions in this header handle allocation, lookup, insertion,
+ * replacement, copying, serialization support, and structural updates on that
+ * directory.
+ */
 #ifndef INCLUDE_ROARING_ARRAY_H
 #define INCLUDE_ROARING_ARRAY_H
 
@@ -198,9 +212,6 @@ inline void ra_replace_key_and_container_at_index(roaring_array_t *ra,
 
 // write set bits to an array
 void ra_to_uint32_array(const roaring_array_t *ra, uint32_t *ans);
-
-bool ra_range_uint32_array(const roaring_array_t *ra, size_t offset,
-                           size_t limit, uint32_t *ans);
 
 /**
  * write a bitmap to a buffer. This is meant to be compatible with

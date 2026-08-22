@@ -1,0 +1,18 @@
+use plato;
+
+pragma config.flags('OptimizerFlags', 'EmitPruneKeys');
+
+select * from Input3
+where Input3.value in (
+    select a.value
+    from Input1 as a
+    join Input2 as b on a.value = b.value and a.key = b.key
+    join Input4 as c on a.value = c.value and a.key = c.key
+);
+
+select * from Input3
+where Input3.value not in (
+    select a.value
+    from Input1 as a
+    join Input2 as b on a.value = b.value and a.key = b.key
+);

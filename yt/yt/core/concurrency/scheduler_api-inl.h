@@ -3,83 +3,45 @@
 // For the sake of sane code completion.
 #include "scheduler_api.h"
 #endif
-#undef SCHEDULER_API_INL_H_
 
 namespace NYT::NConcurrency {
 
 ////////////////////////////////////////////////////////////////////////////////
+// NB: Please refer to YT-18899 before trying to pass future to
+// these functions by const-ref.
 
-template <class T>
-[[nodiscard]] TErrorOr<T> WaitFor(TFuture<T> future, IInvokerPtr invoker)
+template <CFuture TFuture>
+TErrorOr<typename TFuture::TValueType> WaitFor(TFuture future, IInvokerPtr invoker)
 {
     YT_ASSERT(future);
     YT_ASSERT(invoker);
 
-    WaitUntilSet(future.AsVoid(), std::move(invoker));
+    WaitUntilSet(future.AsVoid(), {.ResumingInvoker = std::move(invoker)});
 
-    return future.Get();
+    return future.GetOrCrash();
 }
 
-template <class T>
-[[nodiscard]] TErrorOr<T> WaitForFast(TFuture<T> future)
+template <CFuture TFuture>
+TErrorOr<typename TFuture::TValueType> WaitForFast(TFuture future)
 {
     YT_ASSERT(future);
+    YT_ASSERT(!IsContextSwitchForbidden());
 
-    if (!future.IsSet()) {
-        WaitUntilSet(future.AsVoid(), GetCurrentInvoker());
-    }
+    WaitUntilSet(future.AsVoid(), {.AlwaysYieldFiber = false});
 
-    return future.Get();
-}
-
-template <class T>
-[[nodiscard]] TErrorOr<T> WaitForUnique(const TFuture<T>& future, IInvokerPtr invoker)
-{
-    YT_ASSERT(future);
-    YT_ASSERT(invoker);
-
-    WaitUntilSet(future.AsVoid(), std::move(invoker));
-
-    return future.GetUnique();
-}
-
-template <class T>
-[[nodiscard]] TErrorOr<T> WaitForUniqueFast(const TFuture<T>& future)
-{
-    YT_ASSERT(future);
-
-    if (!future.IsSet()) {
-        WaitUntilSet(future.AsVoid(), GetCurrentInvoker());
-    }
-
-    return future.GetUnique();
-}
-
-template <class T>
-TErrorOr<T> WaitForWithStrategy(
-    TFuture<T> future,
-    EWaitForStrategy strategy)
-{
-    switch (strategy) {
-        case EWaitForStrategy::WaitFor:
-            return WaitFor(std::move(future));
-        case EWaitForStrategy::Get:
-            return future.Get();
-        default:
-            YT_ABORT();
-    }
+    return future.GetOrCrash();
 }
 
 inline void Yield()
 {
-    WaitUntilSet(VoidFuture);
+    WaitUntilSet(OKFuture);
 }
 
 inline void SwitchTo(IInvokerPtr invoker)
 {
-    WaitUntilSet(VoidFuture, std::move(invoker));
+    WaitUntilSet(OKFuture, {.ResumingInvoker = std::move(invoker)});
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} //namespace NYT::NConcurrency
+} // namespace NYT::NConcurrency

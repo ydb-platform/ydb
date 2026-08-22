@@ -10,9 +10,9 @@ namespace NTable {
         // fully identified by this LargeGlobId
         NPageCollection::TLargeGlobId LargeGlobId;
         // loaded meta page
-        TIntrusiveConstPtr<NPageCollection::TPageCollection> Packet;
+        TIntrusiveConstPtr<NPageCollection::TPageCollection> PageCollection;
 
-        void ParsePacket(TSharedData meta);
+        void ParsePageCollection(TSharedData meta);
     };
 
     struct TPartComponents {

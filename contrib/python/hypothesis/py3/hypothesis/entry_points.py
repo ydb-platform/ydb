@@ -19,19 +19,13 @@ import importlib.metadata
 import os
 
 
-def get_entry_points():
-    try:
-        eps = importlib.metadata.entry_points(group="hypothesis")
-    except TypeError:  # pragma: no cover
-        # Load-time selection requires Python >= 3.10.  See also
-        # https://importlib-metadata.readthedocs.io/en/latest/using.html
-        eps = importlib.metadata.entry_points().get("hypothesis", [])
-    yield from eps
+def run() -> None:
+    if os.environ.get("HYPOTHESIS_NO_PLUGINS"):
+        return
 
-
-def run():
-    if not os.environ.get("HYPOTHESIS_NO_PLUGINS"):
-        for entry in get_entry_points():  # pragma: no cover
-            hook = entry.load()
-            if callable(hook):
-                hook()
+    for entry in importlib.metadata.entry_points(
+        group="hypothesis"
+    ):  # pragma: no cover
+        hook = entry.load()
+        if callable(hook):
+            hook()

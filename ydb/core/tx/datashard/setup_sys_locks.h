@@ -26,6 +26,16 @@ struct TSetupSysLocks
         SysLocksTable.SetupUpdate(this, db);
     }
 
+    TSetupSysLocks(ui64 lockTxId, ui32 lockNodeId, ui64 querySpanId, TDataShard& self, ILocksDb* db)
+        : SysLocksTable(self.SysLocksTable())
+    {
+        LockTxId = lockTxId;
+        LockNodeId = lockNodeId;
+        QuerySpanId = querySpanId;
+
+        SysLocksTable.SetupUpdate(this, db);
+    }
+
     TSetupSysLocks(TOperation::TPtr op,
                    TDataShard &self,
                    ILocksDb* db)
@@ -34,17 +44,17 @@ struct TSetupSysLocks
         LockTxId = op->LockTxId();
         LockNodeId = op->LockNodeId();
 
-        auto [readVersion, writeVersion] = self.GetReadWriteVersions(op.Get());
+        auto mvccVersion = self.GetMvccVersion(op.Get());
 
         // check whether the current operation is a part of an out-of-order Tx
         bool outOfOrder = false;
         if (auto &activeOps = self.Pipeline.GetActivePlannedOps()) {
-            if (auto it = activeOps.begin(); writeVersion != TRowVersion(it->first.Step, it->first.TxId))
+            if (auto it = activeOps.begin(); mvccVersion != TRowVersion(it->first.Step, it->first.TxId))
                 outOfOrder = true;
         }
 
-        CheckVersion = readVersion;
-        BreakVersion = outOfOrder ? writeVersion : TRowVersion::Min();
+        CheckVersion = mvccVersion;
+        BreakVersion = outOfOrder ? mvccVersion : TRowVersion::Min();
 
         if (!op->LocksCache().Locks.empty())
             SysLocksTable.SetCache(&op->LocksCache());

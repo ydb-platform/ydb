@@ -11,6 +11,14 @@
 #include <ydb/library/actors/interconnect/interconnect_tcp_server.h>
 #include <ydb/library/actors/interconnect/interconnect_tcp_proxy.h>
 #include <ydb/library/actors/interconnect/interconnect_proxy_wrapper.h>
+#include <ydb/library/actors/interconnect/interconnect_uring_engine.h>
+#include <ydb/library/actors/interconnect/rdma/mem_pool.h>
+#include <ydb/library/actors/interconnect/rdma/cq_actor/cq_actor.h>
+
+#include <library/cpp/logger/backend.h>
+
+#include <util/string/cast.h>
+#include <util/system/env.h>
 
 #include "tls/tls.h"
 
@@ -19,8 +27,11 @@ using namespace NActors;
 class TNode {
     THolder<TActorSystem> ActorSystem;
     TString CaPath;
+    TInterconnectProxyCommon::TPtr Common;
 
 public:
+    using TLogBackendFactory = std::function<TAutoPtr<TLogBackend>()>;
+
     static constexpr ui32 DefaultInflight() { return 512 * 1024; }
     TNode(ui32 nodeId, ui32 numNodes, const THashMap<ui32, ui16>& nodeToPort, const TString& address,
           NMonitoring::TDynamicCounterPtr counters, TDuration deadPeerTimeout,
@@ -28,7 +39,11 @@ public:
           ui32 numDynamicNodes = 0, ui32 numThreads = 1,
           TIntrusivePtr<NLog::TSettings> loggerSettings = nullptr, ui32 inflight = DefaultInflight(),
           ESocketSendOptimization sendOpt = ESocketSendOptimization::DISABLED,
-          bool withTls = false, std::function<IActor*(ui32)> checkerFactory = {}) {
+          bool withTls = false, std::function<IActor*(ui32)> checkerFactory = {},
+          NInterconnect::NRdma::ECqMode rdmaCqMode = NInterconnect::NRdma::ECqMode::EVENT,
+          bool withRdma = true,
+          std::function<void(ui32, TInterconnectSettings&)> settingsCustomizer = {},
+          TLogBackendFactory logBackendFactory = {}) {
         TActorSystemSetup setup;
         setup.NodeId = nodeId;
         setup.ExecutorsCount = 2;
@@ -38,7 +53,8 @@ public:
         setup.Scheduler.Reset(new TBasicSchedulerThread());
         const ui32 interconnectPoolId = 0;
 
-        auto common = MakeIntrusive<TInterconnectProxyCommon>();
+        Common = MakeIntrusive<TInterconnectProxyCommon>();
+        auto& common = Common;
         common->NameserviceId = GetNameserviceActorId();
         common->MonCounters = counters->GetSubgroup("nodeId", ToString(nodeId));
         common->ChannelsConfig = channelsSettings;
@@ -53,6 +69,37 @@ public:
         common->Settings.TCPSocketBufferSize = 2048 * 1024;
         common->Settings.SocketSendOptimization = sendOpt;
         common->OutgoingHandshakeInflightLimit = 3;
+        if (settingsCustomizer) {
+            settingsCustomizer(nodeId, common->Settings);
+        }
+        setup.InterconnectCollectSubscriptionStackTrace = common->Settings.CollectSubscriptionStackTrace;
+
+        if (common->Settings.V2.Enable) {
+            // Mirror production: create the shared v2 io_uring engine up front and publish it in Common; the
+            // proxy binds it to the actor system on start (SetActorSystem). Shard count is overridable via
+            // YDB_IC_V2_SHARDS so tests can force many connections onto a single ring.
+            if (const TString s = GetEnv("YDB_IC_V2_SHARDS"); !s.empty()) {
+                common->Settings.V2.Threads = FromString<ui32>(s);
+            }
+            if (const TString s = GetEnv("YDB_IC_V2_RINGS_PER_SHARD"); !s.empty()) {
+                common->Settings.V2.RingsPerShard = FromString<ui32>(s);
+            }
+            common->UringEngineV2 = CreateUringEngine(common);
+            setup.OnActorSystemCreated.push_back([engine = common->UringEngineV2](TActorSystem *actorSystem) {
+                if (engine) {
+                    engine->SetActorSystem(actorSystem);
+                }
+            });
+        }
+
+        #if !defined(_msan_enabled_)
+        if (withRdma) {
+            common->RdmaMemPool = NInterconnect::NRdma::CreateSlotMemPool(nullptr, {});
+            setup.RcBufAllocator = std::make_shared<TRdmaAllocatorWithFallback>(common->RdmaMemPool);
+        }
+        #else
+            Y_UNUSED(withRdma);
+        #endif
 
         if (withTls) {
             common->Settings.Certificate = NInterconnect::GetCertificateForTest();
@@ -83,7 +130,11 @@ public:
             }
         }
 
-        setup.LocalServices.emplace_back(MakePollerActorId(), TActorSetupCmd(CreatePollerActor(),
+        setup.LocalServices.emplace_back(MakePollerActorId(), TActorSetupCmd(CreatePollerActor(counters),
+            TMailboxType::ReadAsFilled, 0));
+        setup.LocalServices.emplace_back(NInterconnect::NRdma::MakeCqActorId(),
+            TActorSetupCmd(NInterconnect::NRdma::CreateCqActor(
+                CreateRdmaRuntimeParams(1024, common->Settings.EnableRdmaSendReceive), rdmaCqMode, nullptr),
             TMailboxType::ReadAsFilled, 0));
 
         const TActorId loggerActorId = loggerSettings ? loggerSettings->LoggerActorId : TActorId(0, "logger");
@@ -127,8 +178,9 @@ public:
             interconnectPoolId));
 
         // register logger
+        TAutoPtr<TLogBackend> logBackend = logBackendFactory ? logBackendFactory() : CreateStderrBackend();
         setup.LocalServices.emplace_back(loggerActorId, TActorSetupCmd(new TLoggerActor(loggerSettings,
-            CreateStderrBackend(), counters->GetSubgroup("subsystem", "logger")),
+            logBackend, counters->GetSubgroup("subsystem", "logger")),
             TMailboxType::ReadAsFilled, 1));
 
         if (common->OutgoingHandshakeInflightLimit) {
@@ -141,11 +193,23 @@ public:
         auto sp = MakeHolder<TActorSystemSetup>(std::move(setup));
         ActorSystem.Reset(new TActorSystem(sp, nullptr, loggerSettings));
         ActorSystem->Start();
+        // The v2 io_uring engine (shared, off-actor, with its own reaper threads) was created above and
+        // published in Common; the interconnect proxy binds it to the actor system on start and it is
+        // stopped via the actor system's DeferPreStop hook.
     }
 
     ~TNode() {
-        ActorSystem->Stop();
+        Stop();
         unlink(CaPath.c_str());
+    }
+
+    void Stop() {
+        if (ActorSystem) {
+            // The v2 engine (if created) is stopped via the actor system's DeferPreStop hook during
+            // Stop(), so its reaper threads are joined before the executors shut down.
+            ActorSystem->Stop();
+            ActorSystem.Reset();
+        }
     }
 
     bool Send(const TActorId& recipient, IEventBase* ev) {
@@ -167,5 +231,13 @@ public:
 
     TActorSystem *GetActorSystem() const {
         return ActorSystem.Get();
+    }
+
+    TInterconnectSettings& MutableInterconnectSettings() {
+        return Common->Settings;
+    }
+
+    std::shared_ptr<NInterconnect::NRdma::IMemPool> GetRdmaMemPool() const {
+        return Common->RdmaMemPool;
     }
 };

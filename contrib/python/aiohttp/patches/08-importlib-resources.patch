@@ -1,0 +1,69 @@
+--- contrib/python/aiohttp/aiohttp/web_fileresponse.py	(4519f9a6f455df2a2d92670c1d43e4da2fdf57a0)
++++ contrib/python/aiohttp/aiohttp/web_fileresponse.py	(af2f4ddbeb99de10bbbd64a8995abf061fe8cc5c)
+@@ -3,6 +3,7 @@ import os
+ import pathlib
+ import sys
+ from contextlib import suppress
++from importlib.resources.abc import Traversable
+ from mimetypes import MimeTypes
+ from stat import S_ISREG
+ from types import MappingProxyType
+@@ -89,7 +90,7 @@ class FileResponse(StreamResponse):
+     ) -> None:
+         super().__init__(status=status, reason=reason, headers=headers)
+ 
+-        self._path = pathlib.Path(path)
++        self._path = pathlib.Path(path) if not isinstance(path, Traversable) else path
+         self._chunk_size = chunk_size
+ 
+     async def _sendfile_fallback(
+@@ -319,7 +320,7 @@ class FileResponse(StreamResponse):
+         #  can be ignored since the map was cleared above.
+         if hdrs.CONTENT_TYPE not in self.headers:
+             self.content_type = (
+-                CONTENT_TYPES.guess_type(self._path)[0] or FALLBACK_CONTENT_TYPE
++                CONTENT_TYPES.guess_type(self._path.name)[0] or FALLBACK_CONTENT_TYPE
+             )
+ 
+         if file_encoding:
+--- contrib/python/aiohttp/aiohttp/web_urldispatcher.py	(4519f9a6f455df2a2d92670c1d43e4da2fdf57a0)
++++ contrib/python/aiohttp/aiohttp/web_urldispatcher.py	(af2f4ddbeb99de10bbbd64a8995abf061fe8cc5c)
+@@ -11,6 +11,7 @@ import re
+ import sys
+ import warnings
+ from functools import wraps
++from importlib.resources.abc import Traversable, TraversalError
+ from pathlib import Path
+ from types import MappingProxyType
+ from typing import (
+@@ -559,7 +560,8 @@ class StaticResource(PrefixResource):
+     ) -> None:
+         super().__init__(prefix, name=name)
+         try:
+-            directory = Path(directory).expanduser().resolve(strict=True)
++            if not isinstance(directory, Traversable):
++                directory = Path(directory).expanduser().resolve(strict=True)
+         except FileNotFoundError as error:
+             raise ValueError(f"'{directory}' does not exist") from error
+         if not directory.is_dir():
+@@ -670,7 +672,10 @@ class StaticResource(PrefixResource):
+             # where the static dir is totally different
+             raise HTTPForbidden()
+ 
+-        unresolved_path = self._directory.joinpath(filename)
++        try:
++            unresolved_path = self._directory.joinpath(filename)
++        except (FileNotFoundError, TraversalError):
++            unresolved_path = None
+         loop = asyncio.get_running_loop()
+         return await loop.run_in_executor(
+             None, self._resolve_path_to_response, unresolved_path
+@@ -681,6 +686,8 @@ class StaticResource(PrefixResource):
+         # Check for access outside the root directory. For follow symlinks, URI
+         # cannot traverse out, but symlinks can. Otherwise, no access outside
+         # root is permitted.
++        if unresolved_path is None:
++            raise HTTPNotFound()
+         try:
+             if self._follow_symlinks:
+                 normalized_path = Path(os.path.normpath(unresolved_path))

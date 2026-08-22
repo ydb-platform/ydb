@@ -52,6 +52,7 @@ public:
     MOCK_METHOD(void, AddConnectionCloseHeader, (), (override));
     MOCK_METHOD(i64, GetWriteByteCount, (), (const, override));
     MOCK_METHOD(TFuture<void>, WriteBody, (const TSharedRef&), (override));
+    MOCK_METHOD(TFuture<void>, WriteBody, (TRange<TSharedRef>), (override));
 
     THeadersPtr Headers;
     THeadersPtr Trailers;
@@ -62,6 +63,7 @@ public:
 class TResponseMock
     : public IResponse
 {
+public:
     TResponseMock();
 
     MOCK_METHOD(EStatusCode, GetStatusCode, (), (override));

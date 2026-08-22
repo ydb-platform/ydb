@@ -1,4 +1,4 @@
-from yatest.common.network import PortManager
+from library.python.port_manager import PortManager
 import yql_utils
 
 port_manager = None
@@ -19,7 +19,6 @@ def release_yql_port(port):
     if port is None:
         return
 
-    global port_manager
     port_manager.release_port(port)
 
 
@@ -38,6 +37,5 @@ def release_yql_port_range(start_port, count):
     if start_port is None:
         return
 
-    global port_manager
     for port in range(start_port, start_port + count):
         port_manager.release_port(port)

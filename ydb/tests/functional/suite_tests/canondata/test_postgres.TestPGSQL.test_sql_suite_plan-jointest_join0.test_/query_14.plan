@@ -29,7 +29,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "Limit-LeftJoin (MapJoin)",
+                                        "Node Type": "Limit-LeftJoin (Map)",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -47,7 +47,7 @@
                                                         "ExternalPlanNodeId": 7
                                                     }
                                                 ],
-                                                "Name": "LeftJoin (MapJoin)"
+                                                "Name": "LeftJoin (Map)"
                                             }
                                         ],
                                         "PlanNodeId": 8,
@@ -58,7 +58,7 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "FullJoin (JoinDict)",
+                                                        "Node Type": "FullJoin (Dict)",
                                                         "Operators": [
                                                             {
                                                                 "Inputs": [
@@ -69,13 +69,13 @@
                                                                         "Other": "ConstantExpression"
                                                                     }
                                                                 ],
-                                                                "Name": "FullJoin (JoinDict)"
+                                                                "Name": "FullJoin (Dict)"
                                                             }
                                                         ],
                                                         "PlanNodeId": 6,
                                                         "Plans": [
                                                             {
-                                                                "HashFunc": "HashV1",
+                                                                "HashFunc": "HashV2",
                                                                 "KeyColumns": [
                                                                     "unique1"
                                                                 ],
@@ -104,6 +104,8 @@
                                                                                                         "Name": "TableFullScan",
                                                                                                         "Path": "/Root/postgres_jointest/join0.test_plan/tenk1",
                                                                                                         "ReadColumns": [
+                                                                                                            "unique1 (-\u221e, +\u221e)",
+                                                                                                            "unique2 (-\u221e, +\u221e)",
                                                                                                             "even",
                                                                                                             "fivethous",
                                                                                                             "four",
@@ -117,13 +119,7 @@
                                                                                                             "thousand",
                                                                                                             "twenty",
                                                                                                             "two",
-                                                                                                            "twothousand",
-                                                                                                            "unique1",
-                                                                                                            "unique2"
-                                                                                                        ],
-                                                                                                        "ReadRanges": [
-                                                                                                            "unique1 (-\u221e, +\u221e)",
-                                                                                                            "unique2 (-\u221e, +\u221e)"
+                                                                                                            "twothousand"
                                                                                                         ],
                                                                                                         "ReadRangesPointPrefixLen": "0",
                                                                                                         "Scan": "Parallel",

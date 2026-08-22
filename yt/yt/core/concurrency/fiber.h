@@ -78,7 +78,7 @@ private:
     std::atomic<TFiberId> FiberId_ = InvalidFiberId;
 
     // Guarded by State_.
-    TInstant WaitingSince_ = TInstant::Zero();
+    TCpuInstant WaitingSince_ = 0;
     TFls* Fls_ = nullptr;
 
     EFiberState TryLockAsIntrospector() noexcept;
@@ -112,7 +112,7 @@ class TFiber
 public:
     using TFiberList = TIntrusiveList<TFiberBase, NDetail::TFiberRegisterTag>;
 
-    static TFiber* CreateFiber(EExecutionStackKind stackKind = EExecutionStackKind::Small);
+    static TFiber* CreateFiber(EExecutionStackKind stackKind = DefaultExecutionStackKind);
 
     // Set this as AfterSwitch to release fiber's resources.
     static void ReleaseFiber(TFiber* fiber);
@@ -127,10 +127,10 @@ public:
     static void ReadFibers(TFunctionView<void(TFiberList&)> callback);
 
 private:
-    const std::shared_ptr<TExecutionStack> Stack_;
+    const std::shared_ptr<NThreading::TExecutionStack> Stack_;
     TExceptionSafeContext MachineContext_;
 
-    explicit TFiber(EExecutionStackKind stackKind = EExecutionStackKind::Small);
+    explicit TFiber(EExecutionStackKind stackKind = DefaultExecutionStackKind);
     ~TFiber();
 
     void DoRunNaked() override;

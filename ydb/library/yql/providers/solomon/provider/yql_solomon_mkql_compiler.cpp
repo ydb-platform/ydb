@@ -13,7 +13,7 @@ template <typename T>
 TRuntimeNode Wrap(T wrapper, NCommon::TMkqlBuildContext& ctx) {
     const auto input = MkqlBuildExpr(wrapper.Input().Ref(), ctx);
                 
-    return ctx.ProgramBuilder.ExpandMap(ctx.ProgramBuilder.ToFlow(input), [&](TRuntimeNode item) {
+    return ctx.ProgramBuilder.ExpandMap(ctx.ProgramBuilder.ToFlow(input, {}), [&](TRuntimeNode item) {
         TRuntimeNode::TList fields;
         bool isOptional = false;
         auto unpacked = UnpackOptional(item, isOptional);

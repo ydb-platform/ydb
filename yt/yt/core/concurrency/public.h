@@ -56,9 +56,15 @@ DECLARE_REFCOUNTED_STRUCT(IFairShareThreadPool)
 DECLARE_REFCOUNTED_CLASS(TAsyncStreamPipe)
 DECLARE_REFCOUNTED_CLASS(TBoundedAsyncStreamPipe)
 
+//! Waiting strategy for #WaitFor / #WaitUntilSet.
+/*!
+ *  SuspendFiber yields the current fiber; it is universal — outside a fiber context it
+ *  transparently falls back to a blocking wait on the current thread.
+ *  BlockThread always blocks the current thread.
+ */
 DEFINE_ENUM(EWaitForStrategy,
-    (WaitFor)
-    (Get)
+    (SuspendFiber)
+    (BlockThread)
 );
 
 class TAsyncSemaphore;
@@ -66,9 +72,10 @@ class TAsyncSemaphore;
 DEFINE_ENUM(EExecutionStackKind,
     (Small) // 256 Kb (default)
     (Large) //   8 Mb
+    (Huge)  //  64 Mb
 );
 
-class TExecutionStack;
+constexpr auto DefaultExecutionStackKind = EExecutionStackKind::Small;
 
 template <class TSignature>
 class TCoroutine;
@@ -120,17 +127,17 @@ DECLARE_REFCOUNTED_STRUCT(TFiberManagerDynamicConfig)
 DECLARE_REFCOUNTED_STRUCT(TFairThrottlerConfig)
 DECLARE_REFCOUNTED_STRUCT(TFairThrottlerBucketConfig)
 
-DECLARE_REFCOUNTED_STRUCT(IThrottlerIpc)
-DECLARE_REFCOUNTED_STRUCT(IIpcBucket)
-
-DECLARE_REFCOUNTED_CLASS(TFairThrottler)
-DECLARE_REFCOUNTED_CLASS(TBucketThrottler)
+DECLARE_REFCOUNTED_STRUCT(IFairThrottler)
 
 DECLARE_REFCOUNTED_STRUCT(ICallbackProvider)
 
 class TPropagatingStorage;
 
 YT_DECLARE_RECONFIGURABLE_SINGLETON(TFiberManagerConfig, TFiberManagerDynamicConfig);
+
+// UDFs importing core yt headers cannot compile if a dynamically initialized and
+// destroyed global object, such as inline const std::string, is present.
+extern const TFairShareThreadPoolTag DefaultExecutionTag;
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -17,12 +17,16 @@ namespace NTabletFlatExecutor {
     XX(300000000,    "10-30 s")
 
 #define FLAT_EXECUTOR_TOUCHED_BLOCKS(XX) \
-    XX(0,       "0")        \
-    XX(1,       "1")        \
-    XX(10,      "2-10")     \
-    XX(50,      "10-50")    \
-    XX(200,     "50-200")   \
-    XX(1000,    "200-1000")
+    XX(0ULL,                      "0")             \
+    XX(10*1024ULL,                "10240")         \
+    XX(100*1024ULL,               "102400")        \
+    XX(1024*1024ULL,              "1048576")       \
+    XX(10*1024*1024ULL,           "10485760")      \
+    XX(100*1024*1024ULL,          "104857600")     \
+    XX(1024*1024*1024ULL,         "1073741824")    \
+    XX(10*1024*1024*1024ULL,      "10737418240")   \
+    XX(100*1024*1024*1024ULL,     "107374182400")  \
+    XX(1024*1024*1024*1024ULL,    "1099511627776")
 
 #define FLAT_EXECUTOR_DATA_SIZE(XX) \
     XX(0ULL,                      "0")             \
@@ -48,6 +52,21 @@ namespace NTabletFlatExecutor {
     XX(100*1024*1024*1024ULL,     "107374182400")  \
     XX(1024*1024*1024*1024ULL,    "1099511627776")
 
+/**
+ * @warning The number and sequence of the bucket entries here must match
+ *          the number and the sequence of the bucket entries defined
+ *          for the "table.datashard.used_core_percents" detailed metric,
+ *          which is defined in COUNTER_DATASHARD_USED_CORE_PERCENTS.
+ *
+ *          The actual bucket boundaries do not need to match because the Executor
+ *          uses different units for measuring the CPU consumption. For example,
+ *          the Executor uses 500000 for the 50% CPU consumption.
+ *          To account for the difference in units, the code transfers bucket
+ *          values "as is" without any recalculation, for example, the "500000" bucket
+ *          of the "HIST(ConsumedCPU)" metric is transferred to the "50" bucket
+ *          of the "table.datashard.used_core_percents" metric. This achieves
+ *          the correct result as long as the buckets are defined in the same order.
+ */
 #define FLAT_EXECUTOR_CONSUMED_CPU_RANGES(XX) \
     XX(0,          "0%")  \
     XX(100000,     "10%") \
@@ -106,6 +125,8 @@ TExecutorCounters::TExecutorCounters()
     Percentile()[TX_PERCENTILE_CONSUMED_CPU].Initialize(txConsumedCpu, false);
     Percentile()[TX_PERCENTILE_FOLLOWERSYNC_LATENCY].Initialize(txLatencyConfig, false);
     Percentile()[TX_PERCENTILE_COMMIT_REDO_BYTES].Initialize(txCommitSize, false);
+    Percentile()[TX_PERCENTILE_BACKUP_CHANGELOG_FLUSH_LATENCY].Initialize(txLatencyConfig, false);
+    Percentile()[TX_PERCENTILE_BACKUP_CHANGELOG_LAG].Initialize(txLatencyConfig, false);
 }
 
 }}

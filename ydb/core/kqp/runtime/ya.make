@@ -2,9 +2,13 @@ LIBRARY()
 
 SRCS(
     kqp_arrow_memory_pool.cpp
+    kqp_buffer_lock_actor.cpp
+    kqp_buffer_lookup_actor.cpp
     kqp_compute.cpp
-    kqp_effects.cpp
-    kqp_output_stream.cpp
+    kqp_full_text_source.cpp
+    kqp_sys_view_source.cpp
+    kqp_fulltext_analyze.cpp
+    kqp_stream_enumerate.cpp
     kqp_program_builder.cpp
     kqp_read_actor.cpp
     kqp_read_iterator_common.cpp
@@ -14,38 +18,53 @@ SRCS(
     kqp_sequencer_actor.cpp
     kqp_sequencer_factory.cpp
     kqp_scan_data_meta.cpp
+    kqp_stream_lookup_join_helpers.cpp
     kqp_stream_lookup_actor.cpp
     kqp_stream_lookup_actor.h
     kqp_stream_lookup_factory.cpp
     kqp_stream_lookup_factory.h
     kqp_stream_lookup_worker.cpp
     kqp_stream_lookup_worker.h
-    kqp_tasks_runner.cpp
+    kqp_stream_lock_worker.cpp
+    kqp_stream_lock_worker.h
     kqp_transport.cpp
+    kqp_vector_index_levels_cache.cpp
+    kqp_vector_index_levels_cache.h
+    kqp_vector_actor.cpp
+    kqp_vector_search_actor.cpp
     kqp_write_actor_settings.cpp
     kqp_write_actor.cpp
     kqp_write_table.cpp
 
-    scheduler/new/kqp_compute_scheduler_service.cpp
-    scheduler/new/kqp_schedulable_actor.cpp
-    scheduler/new/tree/dynamic.cpp
-    scheduler/new/tree/snapshot.cpp
-    scheduler/old/kqp_compute_scheduler.cpp
+    scheduler/kqp_compute_scheduler_service.cpp
+    scheduler/kqp_schedulable_actor.cpp
+    scheduler/kqp_schedulable_read.cpp
+    scheduler/kqp_schedulable_task.cpp
+    scheduler/tree/dynamic.cpp
+    scheduler/tree/snapshot.cpp
 )
 
 PEERDIR(
     contrib/libs/apache/arrow
+    library/cpp/regex/pire
     library/cpp/threading/hot_swap
     ydb/core/actorlib_impl
     ydb/core/base
+    ydb/library/json_index
     ydb/core/engine
     ydb/core/engine/minikql
     ydb/core/formats
     ydb/core/kqp/common
     ydb/core/kqp/common/buffer
+    ydb/core/mon
+    ydb/core/persqueue/events
+    ydb/core/persqueue/public
     ydb/core/protos
     ydb/core/scheme
+    ydb/core/tx/scheme_board
     ydb/core/ydb_convert
+    ydb/library/aclib
+    ydb/library/yql/dq/actors
     ydb/library/yql/dq/actors/protos
     ydb/library/yql/dq/actors/spilling
     ydb/library/yql/dq/common
@@ -53,6 +72,7 @@ PEERDIR(
     yql/essentials/minikql/computation/llvm16
     yql/essentials/minikql/comp_nodes
     yql/essentials/utils
+    ydb/core/kqp/common/result_set_format
 )
 
 YQL_LAST_ABI_VERSION()
@@ -61,4 +81,5 @@ END()
 
 RECURSE_FOR_TESTS(
     ut
+    ut_vector_search
 )

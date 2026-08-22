@@ -1,0 +1,396 @@
+#include "exec_ctx.h"
+
+#include <library/cpp/yson/node/node_io.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yt/cpp/mapreduce/common/helpers.h>
+#include <yt/yql/providers/yt/common/yql_names.h>
+#include <yt/yql/providers/yt/gateway/lib/yt_helpers.h>
+#include <yt/yql/providers/yt/lib/schema/schema.h>
+
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+
+namespace NYql {
+
+using namespace NNodes;
+
+TInputInfo::TInputInfo(const TString& name, const NYT::TRichYPath& path, bool temp, bool strict, const TYtTableBaseInfo& info, const NYT::TNode& spec, ui32 group)
+    : Name(name)
+    , Path(path)
+    , Cluster(info.Cluster)
+    , Temp(temp)
+    , Dynamic(info.Meta->IsDynamic)
+    , RLS(info.Meta->HasRLS)
+    , Strict(strict)
+    , Records(info.Stat->RecordsCount)
+    , DataSize(info.Stat->DataSize)
+    , Spec(spec)
+    , Group(group)
+    , Lookup(info.Meta->Attrs.Value("optimize_for", "scan") != "scan")
+    , ErasureCodec(info.Meta->Attrs.Value("erasure_codec", "none"))
+    , CompressionCode(info.Meta->Attrs.Value("compression_codec", "none"))
+    , PrimaryMedium(info.Meta->Attrs.Value("primary_medium", "default"))
+    , Media(NYT::NodeFromYsonString(info.Meta->Attrs.Value("media", "#")))
+{
+}
+
+TExecContextBaseSimple::TExecContextBaseSimple(
+    const IYtGateway::TPtr& gateway,
+    const TYtBaseServices::TPtr& services,
+    const TConfigClusters::TPtr& clusters,
+    TIntrusivePtr<NCommon::TMkqlCommonCallableCompiler> mkqlCompiler,
+    std::shared_ptr<TYtUrlMapper> urlMapper,
+    const TString& cluster,
+    const TSessionBase::TPtr& session
+)
+    : Gateway(gateway)
+    , FunctionRegistry_(services->FunctionRegistry)
+    , Config_(services->Config)
+    , Clusters_(clusters)
+    , MkqlCompiler_(mkqlCompiler)
+    , UrlMapper_(urlMapper)
+    , FileStorage_(services->FileStorage)
+    , Cluster_(cluster)
+    , BaseSession_(session)
+    , NeedToTransformTmpTablePaths_(services->NeedToTransformTmpTablePaths)
+    , CheckSpecDoesntUseNativeYtTypes_(services->CheckSpecDoesntUseNativeYtTypes)
+{
+    if (Clusters_) {
+        YtServer_ = Clusters_->GetServer(Cluster_);
+    }
+    LogCtx_ = NYql::NLog::CurrentLogContextPath();
+}
+
+void TExecContextBaseSimple::MakeUserFiles(const TUserDataTable& userDataBlocks) {
+    const TString& activeYtCluster = Clusters_->GetYtName(Cluster_);
+    UserFiles_ = MakeIntrusive<TUserFiles>(*UrlMapper_, activeYtCluster);
+    for (const auto& file: userDataBlocks) {
+        auto block = file.second;
+        if (!Config_->GetMrJobUdfsDir().empty() && block.Usage.Test(EUserDataBlockUsage::Udf) && block.Type == EUserDataType::PATH) {
+            TFsPath path = block.Data;
+            TString fileName = path.Basename();
+#ifdef _win_
+            TStringBuf changedName(fileName);
+            changedName.ChopSuffix(".dll");
+            fileName = TString("lib") + changedName + ".so";
+#endif
+            block.Data = TFsPath(Config_->GetMrJobUdfsDir()) / fileName;
+            TString md5;
+            if (block.FrozenFile) {
+                md5 = block.FrozenFile->GetMd5();
+            }
+            block.FrozenFile = CreateFakeFileLink(block.Data, md5);
+        }
+
+        UserFiles_->AddFile(file.first, block);
+    }
+}
+
+void TExecContextBaseSimple::FillRichPathForPullCaseInput(NYT::TRichYPath& richYPath, TYtTableBaseInfo::TPtr tableInfo) {
+    if (tableInfo->Cluster != Cluster_) {
+        richYPath.Cluster(Clusters_->GetYtName(tableInfo->Cluster));
+    }
+}
+
+void TExecContextBaseSimple::FillRichPathForInput(NYT::TRichYPath& richYPath, const TYtPathInfo& pathInfo, const TString& newPath, bool localChainTest) {
+    if (localChainTest || (pathInfo.Table->IsTemp && !pathInfo.Table->IsAnonymous)) {
+        richYPath.Path(newPath);
+    }
+}
+
+void TExecContextBaseSimple::SetInput(TExprBase input, bool forcePathColumns, const THashSet<TString>& extraSysColumns, const TYtSettings::TConstPtr& settings) {
+    NYT::TNode extraSysColumnsNode;
+    for (auto sys: extraSysColumns) {
+        extraSysColumnsNode.Add(sys);
+    }
+
+    const bool allowRemoteClusters = settings->_AllowRemoteClusterInput.Get(Cluster_).GetOrElse(DEFAULT_ALLOW_REMOTE_CLUSTER_INPUT);
+    if (auto out = input.Maybe<TYtOutput>()) { // Pull case
+        auto tableInfo = TYtTableBaseInfo::Parse(out.Cast());
+        YQL_CLOG(INFO, ProviderYt) << "Runtime cluster: " << Cluster_ << ", Input: " << tableInfo->Cluster << '.' << tableInfo->Name;
+        if (tableInfo->Cluster != Cluster_ && !allowRemoteClusters) {
+            YQL_LOG_CTX_THROW TErrorException(TIssuesIds::DEFAULT_ERROR) <<
+                "Operation input from remote cluster " << tableInfo->Cluster.Quote() << " is not allowed on cluster " << Cluster_.Quote();
+        }
+        const TString transformedPath = GetTransformedPath(tableInfo->Name, tableInfo->Cluster, true, settings);
+        NYT::TRichYPath richYPath(transformedPath);
+        FillRichPathForPullCaseInput(richYPath, tableInfo);
+
+        auto spec = tableInfo->GetCodecSpecNode();
+        if (!extraSysColumnsNode.IsUndefined()) {
+            spec[YqlSysColumnPrefix] = extraSysColumnsNode;
+        }
+
+        InputTables_.emplace_back(
+            richYPath.Path_,
+            richYPath,
+            true,
+            true,
+            *tableInfo,
+            spec,
+            0
+        );
+    }
+    else {
+        TMaybe<bool> hasScheme;
+        size_t loggedTable = 0;
+        const bool localChainTest = IsLocalChainTest();
+        ui32 group = 0;
+        for (auto section: input.Cast<TYtSectionList>()) {
+            TVector<TStringBuf> columns;
+            auto sysColumnsSetting = NYql::GetSettingAsColumnList(section.Settings().Ref(), EYtSettingType::SysColumns);
+            if (forcePathColumns) {
+                for (auto& colType: section.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>()->GetItems()) {
+                    if (auto name = colType->GetName(); !name.SkipPrefix(YqlSysColumnPrefix) || Find(sysColumnsSetting, name) == sysColumnsSetting.cend()) {
+                        columns.push_back(colType->GetName());
+                    }
+                }
+            }
+            NYT::TNode sysColumns = extraSysColumnsNode;
+            for (auto sys: sysColumnsSetting) {
+                if (!extraSysColumns.contains(sys)) {
+                    sysColumns.Add(sys);
+                }
+            }
+
+            const bool enableQLFilter = settings->_EnableQLFilter.Get(Cluster_).GetOrElse(DEFAULT_ENABLE_QL_FILTER);
+            TNodeMap<TMaybe<TString>> inputQueries;
+
+            for (auto path: section.Paths()) {
+                TYtPathInfo pathInfo(path);
+                const TString pathCluster = pathInfo.Table->Cluster;
+                if (loggedTable++ < 10) {
+                    YQL_CLOG(INFO, ProviderYt) << "Runtime cluster: " << Cluster_ << ", Input: " << pathCluster << '.' << pathInfo.Table->Name << '[' << group << ']';
+                }
+                if (pathCluster != Cluster_ && !allowRemoteClusters) {
+                    YQL_LOG_CTX_THROW TErrorException(TIssuesIds::DEFAULT_ERROR) <<
+                        "Operation input from remote cluster " << pathCluster.Quote() << " is not allowed on cluster " << Cluster_.Quote();
+                }
+                // Table may have aux columns. Exclude them by specifying explicit columns from the type
+                if (forcePathColumns && pathInfo.Table->RowSpec && !pathInfo.HasColumns()) {
+                    pathInfo.SetColumns(columns);
+                }
+                TString name = GetTransformedPath(pathInfo.Table->Name, pathCluster, pathInfo.Table->IsTemp, settings);
+                NYT::TRichYPath richYPath;
+                FillRichPathForInput(richYPath, pathInfo, name, localChainTest);
+                if (pathCluster != Cluster_) {
+                    richYPath.Cluster(Clusters_->GetYtName(pathCluster));
+                }
+
+                pathInfo.FillRichYPath(richYPath);
+
+                auto spec = pathInfo.GetCodecSpecNode();
+                if (!sysColumns.IsUndefined()) {
+                    spec[YqlSysColumnPrefix] = sysColumns;
+                }
+
+                if (enableQLFilter && pathInfo.QLFilter) {
+                    auto queryIter = inputQueries.find(pathInfo.QLFilter.Get());
+                    if (queryIter == inputQueries.end()) {
+                        queryIter = inputQueries.insert({pathInfo.QLFilter.Get(), GenerateInputQuery(pathInfo.QLFilter)}).first;
+                    }
+                    if (queryIter->second) {
+                        richYPath.InputQuery(*queryIter->second);
+                    }
+                }
+
+                InputTables_.emplace_back(
+                    name,
+                    richYPath,
+                    pathInfo.Table->IsTemp,
+                    !pathInfo.Table->RowSpec || pathInfo.Table->RowSpec->StrictSchema,
+                    *pathInfo.Table,
+                    spec,
+                    group
+                );
+                if (NYql::HasSetting(pathInfo.Table->Settings.Ref(), EYtSettingType::WithQB)) {
+                    auto p = pathInfo.Table->Meta->Attrs.FindPtr(QB2Premapper);
+                    YQL_ENSURE(p, "Expect " << QB2Premapper << " in meta attrs");
+                    InputTables_.back().QB2Premapper = NYT::NodeFromYsonString(*p);
+                }
+                const bool tableHasScheme = InputTables_.back().Spec.HasKey(YqlRowSpecAttribute);
+                if (!hasScheme) {
+                    hasScheme = tableHasScheme;
+                } else {
+                    YQL_ENSURE(*hasScheme == tableHasScheme, "Mixed Yamr/Yson input table formats");
+                }
+            }
+            if (0 == group) {
+                Sampling = NYql::GetSampleParams(section.Settings().Ref());
+            } else {
+                YQL_ENSURE(NYql::GetSampleParams(section.Settings().Ref()) == Sampling, "Different sampling settings");
+            }
+            ++group;
+        }
+
+        if (hasScheme && !*hasScheme) {
+            YamrInput = true;
+        }
+        if (loggedTable > 10) {
+            YQL_CLOG(INFO, ProviderYt) << "...total input tables=" << loggedTable;
+        }
+    }
+}
+
+void TExecContextBaseSimple::SetOutput(TYtOutSection output, const TYtSettings::TConstPtr& settings, const TString& opHash, const TMaybe<TString>& outputHash) {
+    const TString tmpFolder = GetTablesTmpFolder(*settings, Cluster_, BaseSession_->UseSecureTmp_, BaseSession_->OperationOptions_);
+    const bool rowSpecCompactForm = settings->UseYqlRowSpecCompactForm.Get().GetOrElse(DEFAULT_ROW_SPEC_COMPACT_FORM);
+    const bool optimizeForScan = settings->OptimizeFor.Get(Cluster_).GetOrElse(NYT::EOptimizeForAttr::OF_LOOKUP_ATTR) != NYT::EOptimizeForAttr::OF_LOOKUP_ATTR;
+    size_t loggedTable = 0;
+    TVector<TString> outTablePaths;
+    TVector<NYT::TNode> outTableSpecs;
+    for (auto table: output) {
+        TYtOutTableInfo tableInfo(table);
+        YQL_ENSURE(!tableInfo.Cluster || tableInfo.Cluster == Cluster_);
+        TString outTableName = tableInfo.Name;
+        if (outTableName.empty()) {
+            outTableName = TStringBuilder() << "tmp/" << GetGuidAsString(BaseSession_->RandomProvider_->GenGuid());
+        }
+        TString outTablePath = GetTransformedPath(outTableName, Cluster_, true, settings);
+        auto attrSpec = tableInfo.GetAttrSpecNode(rowSpecCompactForm);
+        OutTables_.emplace_back(
+            outTableName,
+            outTablePath,
+            tableInfo.GetCodecSpecNode(),
+            attrSpec,
+            ToYTSortColumns(tableInfo.RowSpec->GetForeignSort()),
+            optimizeForScan ? tableInfo.GetColumnGroups() : NYT::TNode{}
+        );
+        outTablePaths.push_back(outTablePath);
+        outTableSpecs.push_back(std::move(attrSpec));
+        if (loggedTable++ < 10) {
+            YQL_CLOG(INFO, ProviderYt) << "Output: " << Cluster_ << '.' << outTableName;
+        }
+    }
+    if (loggedTable > 10) {
+        YQL_CLOG(INFO, ProviderYt) << "...total output tables=" << loggedTable;
+    }
+
+    SetCache(outTablePaths, outTableSpecs, tmpFolder, settings, opHash, outputHash);
+}
+
+void TExecContextBaseSimple::SetCache(const TVector<TString>&, const TVector<NYT::TNode>&, const TString&, const TYtSettings::TConstPtr&, const TString&, const TMaybe<TString>&) {
+    // Cache item should only be set for native gateway, not fmr
+    return;
+}
+
+void TExecContextBaseSimple::SetSingleOutput(const TYtOutTableInfo& outTable, const TYtSettings::TConstPtr& settings) {
+    const TString tmpFolder = GetTablesTmpFolder(*settings, Cluster_, BaseSession_->UseSecureTmp_, BaseSession_->OperationOptions_);
+    YQL_ENSURE(!outTable.Cluster || outTable.Cluster == Cluster_);
+    TString outTableName = TStringBuilder() << "tmp/" << GetGuidAsString(BaseSession_->RandomProvider_->GenGuid());
+    TString outTablePath = GetTransformedPath(outTableName, Cluster_, true, settings);
+
+    const bool rowSpecCompactForm = settings->UseYqlRowSpecCompactForm.Get().GetOrElse(DEFAULT_ROW_SPEC_COMPACT_FORM);
+    const bool optimizeForScan = settings->OptimizeFor.Get(Cluster_).GetOrElse(NYT::EOptimizeForAttr::OF_LOOKUP_ATTR) != NYT::EOptimizeForAttr::OF_LOOKUP_ATTR;
+
+    OutTables_.emplace_back(
+        outTableName,
+        outTablePath,
+        outTable.GetCodecSpecNode(),
+        outTable.GetAttrSpecNode(rowSpecCompactForm),
+        ToYTSortColumns(outTable.RowSpec->GetForeignSort()),
+        optimizeForScan ? outTable.GetColumnGroups() : NYT::TNode{}
+    );
+
+    YQL_CLOG(INFO, ProviderYt) << "Output: " << Cluster_ << '.' << outTableName;
+}
+
+TString TExecContextBaseSimple::GetInputSpec(bool ensureOldTypesOnly, bool intermediateInput) const {
+    return GetSpecImpl(InputTables_, 0, InputTables_.size(), {}, ensureOldTypesOnly && CheckSpecDoesntUseNativeYtTypes_, intermediateInput);
+}
+
+TString TExecContextBaseSimple::GetOutSpec(bool ensureOldTypesOnly) const {
+    return GetSpecImpl(OutTables_, 0, OutTables_.size(), {}, ensureOldTypesOnly && CheckSpecDoesntUseNativeYtTypes_, false);
+}
+
+TString TExecContextBaseSimple::GetOutSpec(size_t beginIdx, size_t endIdx, NYT::TNode initialOutSpec, bool ensureOldTypesOnly) const {
+    return GetSpecImpl(OutTables_, beginIdx, endIdx, initialOutSpec, ensureOldTypesOnly && CheckSpecDoesntUseNativeYtTypes_, false);
+}
+
+template <class TTableType>
+TString TExecContextBaseSimple::GetSpecImpl(const TVector<TTableType>& tables, size_t beginIdx, size_t endIdx, NYT::TNode initialSpec, bool ensureOldTypesOnly, bool intermediateInput) {
+    YQL_ENSURE(beginIdx <= endIdx);
+    YQL_ENSURE(endIdx <= tables.size());
+    NYT::TNode specNode = initialSpec;
+    if (initialSpec.IsUndefined()) {
+        specNode = NYT::TNode::CreateMap();
+    }
+    NYT::TNode& tablesNode = specNode[YqlIOSpecTables];
+
+    if (!intermediateInput && (endIdx - beginIdx) > 1) {
+        NYT::TNode& registryNode = specNode[YqlIOSpecRegistry];
+        THashMap<TString, TString> uniqSpecs;
+        for (size_t i = beginIdx; i < endIdx; ++i) {
+            auto& table = tables[i];
+            TString refName = TStringBuilder() << "$table" << uniqSpecs.size();
+            auto spec = table.Spec;
+            if (ensureOldTypesOnly) {
+                EnsureSpecDoesntUseNativeYtTypes(spec, table.Name, std::is_same<TTableType, TInputInfo>::value);
+            }
+            auto res = uniqSpecs.emplace(NYT::NodeToCanonicalYsonString(spec), refName);
+            if (res.second) {
+                registryNode[refName] = std::move(spec);
+            }
+            else {
+                refName = res.first->second;
+            }
+            tablesNode.Add(refName);
+        }
+    }
+    else {
+        auto& table = tables[beginIdx];
+        auto spec = table.Spec;
+        if (ensureOldTypesOnly) {
+            EnsureSpecDoesntUseNativeYtTypes(spec, table.Name, std::is_same<TTableType, TInputInfo>::value);
+        }
+
+        tablesNode.Add(std::move(spec));
+    }
+    return NYT::NodeToYsonString(specNode);
+}
+
+TString TExecContextBaseSimple::GetSessionId() const {
+    return BaseSession_->SessionId_;
+}
+
+bool TExecContextBaseSimple::IsLocalChainTest() const {
+    return false;
+}
+
+TString TExecContextBaseSimple::GetTransformedPath(const TString& path, const TString& cluster, bool isTemp, const TYtSettings::TConstPtr& settings) {
+    if (!NeedToTransformTmpTablePaths_) {
+        return path;
+    }
+    TString tmpFolder = GetTablesTmpFolder(*settings, cluster, BaseSession_->UseSecureTmp_, BaseSession_->OperationOptions_);
+    return NYql::TransformPath(tmpFolder, path, isTemp, BaseSession_->UserName_);
+}
+
+TString TExecContextBaseSimple::GetAuth(const TYtSettings::TConstPtr& config) const {
+    auto auth = config->Auth.Get();
+    if (!auth || auth->empty()) {
+         auth = Clusters_->GetAuth(Cluster_);
+    }
+
+    if (!auth || auth->empty()) {
+        if (auto ytTokenResolver = Gateway->GetYtTokenResolver()) {
+            auth = ytTokenResolver->ResolveClusterToken(Cluster_);
+        }
+    }
+
+    return auth.GetOrElse(TString());
+}
+
+TMaybe<TString> TExecContextBaseSimple::GetImpersonationUser(const TYtSettings::TConstPtr& config) const {
+    return config->_ImpersonationUser.Get();
+}
+
+NYT::IClientPtr TExecContextBaseSimple::CreateYtClient(const TYtSettings::TConstPtr& config) const {
+    TString token = GetAuth(config);
+    TMaybe<TString> impersonationUser = GetImpersonationUser(config);
+    auto createClientOptions = NYT::TCreateClientOptions().Token(token);
+    if (impersonationUser) {
+        createClientOptions = createClientOptions.ImpersonationUser(*impersonationUser);
+    }
+    return NYT::CreateClient(YtServer_, createClientOptions);
+}
+
+} // namespace NYql

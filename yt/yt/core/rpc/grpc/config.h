@@ -19,12 +19,30 @@ struct TDispatcherConfig
     int GrpcThreadCount;
     int GrpcEventEngineThreadCount;
 
+    NLogging::ELogLevel GrpcInternalMinLogLevel;
+
+    TDispatcherConfigPtr ApplyDynamic(const TDispatcherDynamicConfigPtr& dynamicConfig) const;
+
     REGISTER_YSON_STRUCT(TDispatcherConfig);
 
     static void Register(TRegistrar registrar);
 };
 
 DEFINE_REFCOUNTED_TYPE(TDispatcherConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TDispatcherDynamicConfig
+    : public NYTree::TYsonStruct
+{
+    std::optional<NLogging::ELogLevel> GrpcInternalMinLogLevel;
+
+    REGISTER_YSON_STRUCT(TDispatcherDynamicConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TDispatcherDynamicConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -117,23 +135,23 @@ DEFINE_REFCOUNTED_TYPE(TChannelCredentialsConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TChannelConfigTemplate
+struct TChannelFactoryConfig
     : public NYTree::TYsonStruct
 {
     TChannelCredentialsConfigPtr Credentials;
     THashMap<std::string, NYTree::INodePtr> GrpcArguments;
 
-    REGISTER_YSON_STRUCT(TChannelConfigTemplate);
+    REGISTER_YSON_STRUCT(TChannelFactoryConfig);
 
     static void Register(TRegistrar registrar);
 };
 
-DEFINE_REFCOUNTED_TYPE(TChannelConfigTemplate)
+DEFINE_REFCOUNTED_TYPE(TChannelFactoryConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TChannelConfig
-    : public TChannelConfigTemplate
+    : public TChannelFactoryConfig
 {
     std::string Address;
 

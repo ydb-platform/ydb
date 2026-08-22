@@ -4,13 +4,10 @@
 #include <memory>
 #include <mutex>
 
-#include <ydb/library/yql/udfs/common/clickhouse/client/src/Formats/FormatSettings.h>
-#include <ydb/library/yql/providers/s3/events/events.h>
-
 #include <ydb/library/actors/core/actorsystem.h>
-
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_default_retry_policy.h>
+#include <ydb/library/yql/providers/s3/events/events.h>
 
 namespace NYql::NDq {
 
@@ -47,8 +44,7 @@ struct TSourceContext {
         , HttpInflightSize(httpInflightSize)
         , HttpDataRps(httpDataRps)
         , DeferredQueueSize(deferredQueueSize)
-    {
-    }
+    {}
 
     ~TSourceContext();
 
@@ -93,6 +89,7 @@ struct TSourceContext {
     NMonitoring::TDynamicCounters::TCounterPtr HttpInflightSize;
     NMonitoring::TDynamicCounters::TCounterPtr HttpDataRps;
     NMonitoring::TDynamicCounters::TCounterPtr DeferredQueueSize;
+
 private:
     std::atomic_uint64_t Value;
     std::mutex Mutex;

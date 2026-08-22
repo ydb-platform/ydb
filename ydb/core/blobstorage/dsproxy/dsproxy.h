@@ -15,6 +15,7 @@
 #include <ydb/core/blobstorage/base/transparent.h>
 #include <ydb/core/blobstorage/backpressure/queue_backpressure_client.h>
 #include <ydb/core/blobstorage/common/immediate_control_defaults.h>
+#include <ydb/core/retro_tracing_impl/spans/lazy_retro_span.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 #include <ydb/core/base/appdata_fwd.h>
@@ -32,14 +33,13 @@ constexpr ui32 TypicalDisksInSubring = 8;
 
 constexpr ui32 MaxBatchedPutSize = 64 * 1024 - 512 - 5; // (MinHugeBlobInBytes - 1 - TDiskBlob::HugeBlobOverhead) for ssd and nvme
 
-const TDuration ProxyConfigurationTimeout = TDuration::Seconds(20);
-const ui32 ProxyRetryConfigurationInitialTimeout = 200;
-const ui32 ProxyRetryConfigurationMaxTimeout = 5000;
+const TDuration ProxyConfigurationTimeout = TDuration::Seconds(10);
 const ui64 UnconfiguredBufferSizeLimit = 32 << 20;
 
-const TDuration ProxyEstablishSessionsTimeout = TDuration::Seconds(100);
+const TDuration ProxyEstablishSessionsTimeout = TDuration::Seconds(5);
 
-const ui64 DsPutWakeupMs = 60000;
+const TDuration DsMinimumDelayBetweenPutWakeups = TDuration::Seconds(1);
+const TDuration DsMaximumDelayBetweenPutWakeups = TDuration::Seconds(60);
 
 const ui64 BufferSizeThreshold = 1 << 20;
 
@@ -194,6 +194,15 @@ public:
 
         bool LogAccEnabled = false;
         TMaybe<TGroupStat::EKind> LatencyQueueKind = {};
+
+        std::optional<ui32> ForceGroupGeneration; // work only with this specific group generation and nothing else
+        bool DoSendDeathNote = true; // unschedules DSProxy timeout on termination, be careful with disabling
+
+        bool EnableStorageRetroTraceGeneration = false;
+        bool EnableStorageRetroTraceCollectionSlowRequests = false;
+        bool EnableChecksumCalcAndValidationOnDsProxy = false;
+
+        std::optional<TMessageRelevanceWatcher> ExternalRelevanceWatcher = std::nullopt;
     };
 
     struct TTypeSpecificParameters {
@@ -217,24 +226,44 @@ public:
         , RequestStartTime(params.Common.Now)
         , Source(params.Common.Source)
         , Cookie(params.Common.Cookie)
+        , RelevanceOwner(std::make_shared<TMessageRelevanceTracker>())
+        , ExternalRelevanceWatcher(std::move(params.Common.ExternalRelevanceWatcher))
         , LatencyQueueKind(params.Common.LatencyQueueKind)
         , RacingDomains(&Info->GetTopology())
         , ExecutionRelay(std::move(params.Common.ExecutionRelay))
+        , ForceGroupGeneration(params.Common.ForceGroupGeneration)
+        , DoSendDeathNote(params.Common.DoSendDeathNote)
+        , EnableStorageRetroTraceCollectionSlowRequests(params.Common.EnableStorageRetroTraceCollectionSlowRequests)
     {
-        if (ParentSpan) {
+        if (NWilson::TSpan* parentWilsonSpan = ParentSpan.GetWilsonSpanPtr()) {
             const NWilson::TTraceId& parentTraceId = ParentSpan.GetTraceId();
             Span = NWilson::TSpan(TWilson::BlobStorage, NWilson::TTraceId::NewTraceId(parentTraceId.GetVerbosity(),
-                parentTraceId.GetTimeToLive()), ParentSpan.GetName());
-            ParentSpan.Link(Span.GetTraceId());
-            Span.Attribute("GroupId", Info->GroupID.GetRawId());
-            Span.Attribute("RestartCounter", RestartCounter);
-            params.Common.Event->ToSpan(Span);
+                    parentTraceId.GetTimeToLive()), params.TypeSpecific.Name);
+            parentWilsonSpan->Link(Span.GetTraceId());
+
+            // if for extra safety
+            if (NWilson::TSpan* wilsonSpan = Span.GetWilsonSpanPtr()) {
+                wilsonSpan->Attribute("GroupId", Info->GroupID.GetRawId());
+                wilsonSpan->Attribute("RestartCounter", RestartCounter);
+                wilsonSpan->Attribute("database", AppData()->TenantName);
+                wilsonSpan->Attribute("storagePool", Info->GetStoragePoolName());
+                params.Common.Event->ToSpan(*wilsonSpan);
+            }
+        } else if (ParentSpan.GetRetroSpanPtr()) {
+            const NWilson::TTraceId& parentTraceId = ParentSpan.GetTraceId();
+            Span = TLazyRetroSpan(TWilson::BlobStorage, NWilson::TTraceId::NewTraceId(TWilson::BlobStorage,
+                    parentTraceId.GetTimeToLive(), true), "DSProxy.Retro");
+        } else if (params.Common.EnableStorageRetroTraceGeneration) {
+            Span = TLazyRetroSpan(TWilson::BlobStorage, NWilson::TTraceId::NewTraceId(TWilson::BlobStorage, Max<ui32>(), true),
+                    "DSProxy.Retro");
         }
 
         Y_ABORT_UNLESS(CostModel);
     }
 
     virtual ~TBlobStorageGroupRequestActor() = default;
+
+    bool BootstrapCheck();
 
     virtual void Bootstrap() = 0;
     virtual void ReplyAndDie(NKikimrProto::EReplyStatus status) = 0;
@@ -283,6 +312,9 @@ public:
     static double GetTotalTimeMs(const NKikimrBlobStorage::TTimestamps& timestamps);
     static double GetVDiskTimeMs(const NKikimrBlobStorage::TTimestamps& timestamps);
 
+    bool CancelIfIrrelevant();
+    bool CheckForExternalCancellation() const;
+
 private:
     void CheckPostponedQueue();
 
@@ -292,8 +324,8 @@ protected:
     TIntrusivePtr<TBlobStorageGroupProxyMon> Mon;
     TIntrusivePtr<TStoragePoolCounters> PoolCounters;
     TLogContext LogCtx;
-    NWilson::TSpan ParentSpan;
-    NWilson::TSpan Span;
+    TLazyRetroSpan ParentSpan;
+    TLazyRetroSpan Span;
     TStackVec<std::pair<TDiskResponsivenessTracker::TDiskId, TDuration>, 16> Responsiveness;
     TString ErrorReason;
     TMaybe<TStoragePoolCounters::EHandleClass> RequestHandleClass;
@@ -304,11 +336,13 @@ protected:
     const ui32 RestartCounter = 0;
     std::shared_ptr<const TCostModel> CostModel;
     const TMonotonic RequestStartTime;
+    THashMap<ui32, TActorId> NodeSubscriptions;
 
 private:
     const TActorId Source;
     const ui64 Cookie;
-    std::shared_ptr<TMessageRelevanceTracker> MessageRelevanceTracker = std::make_shared<TMessageRelevanceTracker>();
+    TMessageRelevanceOwner RelevanceOwner;
+    std::optional<TMessageRelevanceWatcher> ExternalRelevanceWatcher;
     ui32 RequestsInFlight = 0;
     std::unique_ptr<IEventBase> Response;
     const TMaybe<TGroupStat::EKind> LatencyQueueKind;
@@ -319,6 +353,12 @@ private:
     std::shared_ptr<TEvBlobStorage::TExecutionRelay> ExecutionRelay;
     bool ExecutionRelayUsed = false;
     bool FirstResponse = true;
+    std::optional<ui32> ForceGroupGeneration;
+    ui32 RacingGeneration = 0;
+    bool DoSendDeathNote;
+
+protected:
+    const bool EnableStorageRetroTraceCollectionSlowRequests = false;
 };
 
 void Encrypt(char *destination, const char *source, size_t shift, size_t sizeBytes, const TLogoBlobID &id,
@@ -352,6 +392,7 @@ struct TBlobStorageGroupPutParameters {
     bool EnableRequestMod3x3ForMinLatency;
     TAccelerationParams AccelerationParams;
     TDuration LongRequestThreshold;
+    TDuration MaxTimeout = TDuration::Seconds(60);
 };
 IActor* CreateBlobStorageGroupPutRequest(TBlobStorageGroupPutParameters params);
 
@@ -371,6 +412,8 @@ struct TBlobStorageGroupMultiPutParameters {
     bool EnableRequestMod3x3ForMinLatency;
     TAccelerationParams AccelerationParams;
     TDuration LongRequestThreshold;
+    TDuration MaxTimeout = TDuration::Seconds(60);
+    bool ReduceInterpileTraffic;
 
     static ui32 CalculateRestartCounter(TBatchedVec<TEvBlobStorage::TEvPut::TPtr>& events) {
         ui32 maxRestarts = 0;
@@ -517,6 +560,13 @@ struct TBlobStorageProxyControlWrappers {
     TMemorizableControlWrapper EnableVPatch;
 
     TMemorizableControlWrapper LongRequestThresholdMs = LongRequestThresholdDefaultControl;
+    TMemorizableControlWrapper MaxPutTimeoutSeconds = MaxPutTimeoutDefaultControl;
+
+    TMemorizableControlWrapper EnableStorageRetroTraceGeneration = EnableStorageRetroTraceGenerationDefaultControl;
+    TMemorizableControlWrapper EnableStorageRetroTraceCollectionSlowRequests =
+            EnableStorageRetroTraceCollectionSlowRequestsDefaultControl;
+    TMemorizableControlWrapper EnableChecksumCalcAndValidationOnDsProxy =
+            EnableChecksumCalcAndValidationOnDsProxyDefaultControl;
 
 #define DEVICE_TYPE_SEPECIFIC_MEMORIZABLE_CONTROLS(prefix)              \
     TMemorizableControlWrapper prefix = prefix##DefaultControl;         \

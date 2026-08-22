@@ -100,6 +100,14 @@ NSkiff::EWireType ValueTypeToSkiffType(EValueType valueType)
         case VT_TIMESTAMP64:
         case VT_INTERVAL64:
             return EWireType::Int64;
+
+        case VT_TZ_DATE:
+        case VT_TZ_DATETIME:
+        case VT_TZ_TIMESTAMP:
+        case VT_TZ_DATE32:
+        case VT_TZ_DATETIME64:
+        case VT_TZ_TIMESTAMP64:
+            return EWireType::String32;
     };
     ythrow yexception() << "Cannot convert EValueType '" << valueType << "' to NSkiff::EWireType";
 }
@@ -114,9 +122,6 @@ NSkiff::TSkiffSchemaPtr CreateSkiffSchema(
     TVector<TSkiffSchemaPtr> skiffColumns;
     for (const auto& column: schema.Columns()) {
         TSkiffSchemaPtr skiffColumn;
-        if (column.Deleted().Defined() && *column.Deleted()) {
-            continue;
-        }
         if (column.Type() == VT_ANY && *column.TypeV3() != *NTi::Optional(NTi::Yson())) {
             // We ignore all complex types until YT-12717 is done.
             return nullptr;

@@ -30,6 +30,7 @@ enum EEvents {
     EvStartMetadataService,
     EvStartRegistration,
     EvRecheckExistence,
+    EvResetManagerRegistration,
     EvEnd
 };
 

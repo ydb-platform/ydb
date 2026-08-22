@@ -7,14 +7,19 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/kqp/workload_service/actors
+    library/cpp/protobuf/json
+    ydb/core/client/server
+    ydb/core/grpc_services
+    ydb/services/workload_manager/actors
     ydb/core/testlib
-
+    ydb/core/util
     ydb/library/aclib
-
+    ydb/library/aws_init
+    ydb/library/yql/providers/pq/gateway/abstract
+    ydb/services/keyvalue
+    ydb/services/persqueue_v1
     ydb/tests/tools/kqprun/runlib
     ydb/tests/tools/kqprun/src/proto
-
     yt/yql/providers/yt/mkql_dq
 )
 

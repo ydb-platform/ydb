@@ -73,7 +73,7 @@ private:
 
     static constexpr auto CachedStatisticsTtl = TDuration::Seconds(5);
 
-    NThreading::TSpinLock CachedStatisticsLock_;
+    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, CachedStatisticsLock_);
     TIntrusivePtr<TRefCountedTrackerStatistics> CachedStatistics_;
     TInstant CachedStatisticsUpdateTime_;
 

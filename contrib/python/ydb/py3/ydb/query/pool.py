@@ -1,14 +1,21 @@
+from __future__ import annotations
+
 import logging
+from concurrent import futures
 from typing import (
     Callable,
     Optional,
     List,
+    Dict,
+    Any,
+    Union,
+    TYPE_CHECKING,
 )
 import time
 import threading
 import queue
 
-from .base import BaseQueryTxMode
+from .base import BaseQueryTxMode, QueryExplainResultFormat
 from .base import QueryClientSettings
 from .session import (
     QuerySession,
@@ -20,9 +27,11 @@ from ..retries import (
 from .. import issues
 from .. import convert
 from ..settings import BaseRequestSettings
-from .._grpc.grpcwrapper import common_utils
+from ..observability.metrics import QuerySessionPoolMetrics
 from .._grpc.grpcwrapper import ydb_query_public_types as _ydb_query_public
 
+if TYPE_CHECKING:
+    from ..driver import Driver as SyncDriver
 
 logger = logging.getLogger(__name__)
 
@@ -30,37 +39,48 @@ logger = logging.getLogger(__name__)
 class QuerySessionPool:
     """QuerySessionPool is an object to simplify operations with sessions of Query Service."""
 
+    _driver: "SyncDriver"
+
     def __init__(
         self,
-        driver: common_utils.SupportedDriverType,
+        driver: "SyncDriver",
         size: int = 100,
         *,
         query_client_settings: Optional[QueryClientSettings] = None,
+        workers_threads_count: int = 4,
+        name: Optional[str] = None,
     ):
         """
         :param driver: A driver instance.
         :param size: Max size of Session Pool.
         :param query_client_settings: ydb.QueryClientSettings object to configure QueryService behavior
+        :param workers_threads_count: A number of threads in executor used for ``*_async`` methods
+        :param name: Optional session pool name for observability metrics.
         """
 
         self._driver = driver
-        self._queue = queue.Queue()
+        self._tp = futures.ThreadPoolExecutor(workers_threads_count)
+        self._queue: queue.Queue[QuerySession] = queue.Queue()
         self._current_size = 0
         self._size = size
         self._should_stop = threading.Event()
         self._lock = threading.RLock()
         self._query_client_settings = query_client_settings
+        self._metrics = QuerySessionPoolMetrics(name, driver, self._size)
 
     def _create_new_session(self, timeout: Optional[float]):
         session = QuerySession(self._driver, settings=self._query_client_settings)
-        session.create(settings=BaseRequestSettings().with_timeout(timeout))
-        logger.debug(f"New session was created for pool. Session id: {session._state.session_id}")
+        self._metrics.attach(session)
+        with self._metrics.measure_create():
+            session.create(settings=BaseRequestSettings().with_timeout(timeout))
+        logger.debug(f"New session was created for pool. Session id: {session.session_id}")
         return session
 
     def acquire(self, timeout: Optional[float] = None) -> QuerySession:
         """Acquire a session from Session Pool.
 
-        :param timeout: A timeout to wait in seconds.
+        :param timeout: Seconds to wait when pool is exhausted. Overrides the pool-level acquire_timeout.
+            None falls back to the pool-level default (which is also None — wait indefinitely).
 
         :return A QuerySession object.
         """
@@ -72,7 +92,7 @@ class QuerySessionPool:
         try:
             if self._should_stop.is_set():
                 logger.error("An attempt to take session from closed session pool.")
-                raise RuntimeError("An attempt to take session from closed session pool.")
+                raise issues.SessionPoolClosed()
 
             session = None
             try:
@@ -81,26 +101,29 @@ class QuerySessionPool:
                 pass
 
             finish = time.monotonic()
-            timeout = timeout - (finish - start) if timeout is not None else None
+            timeout = max(0, timeout - (finish - start)) if timeout is not None else None
 
             start = time.monotonic()
             if session is None and self._current_size == self._size:
-                try:
-                    session = self._queue.get(block=True, timeout=timeout)
-                except queue.Empty:
-                    raise issues.SessionPoolEmpty("Timeout on acquire session")
+                with self._metrics.track_pending():
+                    try:
+                        session = self._queue.get(block=True, timeout=timeout)
+                    except queue.Empty:
+                        self._metrics.on_timeout()
+                        raise issues.SessionPoolEmpty("Timeout on acquire session")
 
             if session is not None:
-                if session._state.attached:
-                    logger.debug(f"Acquired active session from queue: {session._state.session_id}")
+                if session.is_active:
+                    self._metrics.on_acquired(session)
+                    logger.debug(f"Acquired active session from queue: {session.session_id}")
                     return session
                 else:
                     self._current_size -= 1
-                    logger.debug(f"Acquired dead session from queue: {session._state.session_id}")
+                    logger.debug(f"Acquired dead session from queue: {session.session_id}")
 
             logger.debug(f"Session pool is not large enough: {self._current_size} < {self._size}, will create new one.")
             finish = time.monotonic()
-            time_left = timeout - (finish - start) if timeout is not None else None
+            time_left = max(0, timeout - (finish - start)) if timeout is not None else None
             session = self._create_new_session(time_left)
 
             self._current_size += 1
@@ -111,9 +134,9 @@ class QuerySessionPool:
 
     def release(self, session: QuerySession) -> None:
         """Release a session back to Session Pool."""
-
+        self._metrics.on_released(session)
         self._queue.put_nowait(session)
-        logger.debug("Session returned to queue: %s", session._state.session_id)
+        logger.debug("Session returned to queue: %s", session.session_id)
 
     def checkout(self, timeout: Optional[float] = None) -> "SimpleQuerySessionCheckout":
         """Return a Session context manager, that acquires session on enter and releases session on exit.
@@ -132,6 +155,9 @@ class QuerySessionPool:
         :return: Result sets or exception in case of execution errors.
         """
 
+        if self._should_stop.is_set():
+            raise issues.SessionPoolClosed()
+
         retry_settings = RetrySettings() if retry_settings is None else retry_settings
 
         def wrapped_callee():
@@ -139,6 +165,38 @@ class QuerySessionPool:
                 return callee(session, *args, **kwargs)
 
         return retry_operation_sync(wrapped_callee, retry_settings)
+
+    def retry_tx_async(
+        self,
+        callee: Callable,
+        tx_mode: Optional[BaseQueryTxMode] = None,
+        retry_settings: Optional[RetrySettings] = None,
+        *args,
+        **kwargs,
+    ) -> futures.Future:
+        """Asynchronously execute a transaction in a retriable way."""
+
+        if self._should_stop.is_set():
+            raise issues.SessionPoolClosed()
+
+        return self._tp.submit(
+            self.retry_tx_sync,
+            callee,
+            tx_mode,
+            retry_settings,
+            *args,
+            **kwargs,
+        )
+
+    def retry_operation_async(
+        self, callee: Callable, retry_settings: Optional[RetrySettings] = None, *args, **kwargs
+    ) -> futures.Future:
+        """Asynchronously execute a retryable operation."""
+
+        if self._should_stop.is_set():
+            raise issues.SessionPoolClosed()
+
+        return self._tp.submit(self.retry_operation_sync, callee, retry_settings, *args, **kwargs)
 
     def retry_tx_sync(
         self,
@@ -155,11 +213,15 @@ class QuerySessionPool:
           1) QuerySerializableReadWrite() which is default mode;
           2) QueryOnlineReadOnly(allow_inconsistent_reads=False);
           3) QuerySnapshotReadOnly();
-          4) QueryStaleReadOnly().
+          4) QuerySnapshotReadWrite();
+          5) QueryStaleReadOnly().
         :param retry_settings: RetrySettings object.
 
         :return: Result sets or exception in case of execution errors.
         """
+
+        if self._should_stop.is_set():
+            raise issues.SessionPoolClosed()
 
         tx_mode = tx_mode if tx_mode else _ydb_query_public.QuerySerializableReadWrite()
         retry_settings = RetrySettings() if retry_settings is None else retry_settings
@@ -181,6 +243,7 @@ class QuerySessionPool:
         parameters: Optional[dict] = None,
         retry_settings: Optional[RetrySettings] = None,
         *args,
+        pool_id: Optional[str] = None,
         **kwargs,
     ) -> List[convert.ResultSet]:
         """Special interface to execute a one-shot queries in a safe, retriable way.
@@ -190,24 +253,76 @@ class QuerySessionPool:
         :param query: A query, yql or sql text.
         :param parameters: dict with parameters and YDB types;
         :param retry_settings: RetrySettings object.
+        :param pool_id: Optional resource pool ID for routing the query to a specific compute pool.
 
         :return: Result sets or exception in case of execution errors.
         """
+
+        if self._should_stop.is_set():
+            raise issues.SessionPoolClosed()
 
         retry_settings = RetrySettings() if retry_settings is None else retry_settings
 
         def wrapped_callee():
             with self.checkout(timeout=retry_settings.max_session_acquire_timeout) as session:
-                it = session.execute(query, parameters, *args, **kwargs)
-                return [result_set for result_set in it]
+                it = session.execute(query, parameters, *args, pool_id=pool_id, **kwargs)
+                return convert.aggregate_result_sets_by_index(it)
 
         return retry_operation_sync(wrapped_callee, retry_settings)
+
+    def execute_with_retries_async(
+        self,
+        query: str,
+        parameters: Optional[dict] = None,
+        retry_settings: Optional[RetrySettings] = None,
+        *args,
+        pool_id: Optional[str] = None,
+        **kwargs,
+    ) -> futures.Future:
+        """Asynchronously execute a query with retries."""
+
+        if self._should_stop.is_set():
+            raise issues.SessionPoolClosed()
+
+        return self._tp.submit(
+            self.execute_with_retries,
+            query,
+            parameters,
+            retry_settings,
+            *args,
+            pool_id=pool_id,
+            **kwargs,
+        )
+
+    def explain_with_retries(
+        self,
+        query: str,
+        parameters: Optional[dict] = None,
+        *,
+        result_format: QueryExplainResultFormat = QueryExplainResultFormat.STR,
+        retry_settings: Optional[RetrySettings] = None,
+    ) -> Union[str, Dict[str, Any]]:
+        """
+        Explain a query in retriable way. No real query execution will happen.
+
+        :param query: A query, yql or sql text.
+        :param parameters: dict with parameters and YDB types;
+        :param result_format: Return format: string or dict.
+        :param retry_settings: RetrySettings object.
+        :return: Parsed query plan.
+        """
+
+        def callee(session: QuerySession):
+            return session.explain(query, parameters, result_format=result_format)
+
+        return self.retry_operation_sync(callee, retry_settings)
 
     def stop(self, timeout=None):
         acquire_timeout = timeout if timeout is not None else -1
         acquired = self._lock.acquire(timeout=acquire_timeout)
         try:
             self._should_stop.set()
+            self._tp.shutdown(wait=True)
             while True:
                 try:
                     session = self._queue.get_nowait()
@@ -216,6 +331,7 @@ class QuerySessionPool:
                     break
 
             logger.debug("All session were deleted.")
+            self._metrics.close()
         finally:
             if acquired:
                 self._lock.release()
@@ -228,6 +344,8 @@ class QuerySessionPool:
 
 
 class SimpleQuerySessionCheckout:
+    _session: Optional[QuerySession]
+
     def __init__(self, pool: QuerySessionPool, timeout: Optional[float]):
         self._pool = pool
         self._timeout = timeout
@@ -237,5 +355,6 @@ class SimpleQuerySessionCheckout:
         self._session = self._pool.acquire(self._timeout)
         return self._session
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self._pool.release(self._session)
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        if self._session is not None:
+            self._pool.release(self._session)

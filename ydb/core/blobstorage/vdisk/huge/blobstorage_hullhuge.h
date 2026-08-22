@@ -20,7 +20,9 @@ namespace NKikimr {
         const TIngress Ingress;
         TRope Data;
         const bool IgnoreBlock;
+        const bool IssueKeepFlag;
         const NKikimrBlobStorage::EPutHandleClass HandleClass;
+        const TWriteSource WriteSource;
         std::unique_ptr<TEvBlobStorage::TEvVPutResult> Result;
         NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck> ExtraBlockChecks;
         const bool RewriteBlob;
@@ -33,9 +35,11 @@ namespace NKikimr {
                              const TIngress &ingress,
                              TRope&& data,
                              bool ignoreBlock,
+                             bool issueKeepFlag,
                              NKikimrBlobStorage::EPutHandleClass handleClass,
                              std::unique_ptr<TEvBlobStorage::TEvVPutResult> result,
                              NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck> *extraBlockChecks,
+                             TWriteSource writeSource = UnknownWriteSource(),
                              bool rewriteBlob = false)
             : SenderId(senderId)
             , Cookie(cookie)
@@ -43,7 +47,9 @@ namespace NKikimr {
             , Ingress(ingress)
             , Data(std::move(data))
             , IgnoreBlock(ignoreBlock)
+            , IssueKeepFlag(issueKeepFlag)
             , HandleClass(handleClass)
+            , WriteSource(writeSource)
             , Result(std::move(result))
             , RewriteBlob(rewriteBlob)
         {
@@ -73,9 +79,11 @@ namespace NKikimr {
         const TIngress Ingress;
         const TDiskPart HugeBlob;
         const bool IgnoreBlock;
+        const bool IssueKeepFlag;
         const TActorId OrigClient;
         const ui64 OrigCookie;
         const NKikimrBlobStorage::EPutHandleClass HandleClass;
+        const TWriteSource WriteSource;
         std::unique_ptr<TEvBlobStorage::TEvVPutResult> Result;
         NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck> ExtraBlockChecks;
         const bool RewriteBlob;
@@ -85,20 +93,24 @@ namespace NKikimr {
                            const TIngress &ingress,
                            const TDiskPart &hugeBlob,
                            bool ignoreBlock,
+                           bool issueKeepFlag,
                            const TActorId &origClient,
                            ui64 origCookie,
                            NKikimrBlobStorage::EPutHandleClass handleClass,
                            std::unique_ptr<TEvBlobStorage::TEvVPutResult> result,
                            NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck> *extraBlockChecks,
+                           TWriteSource writeSource,
                            bool rewriteBlob = false)
             : WriteId(writeId)
             , LogoBlobID(logoBlobID)
             , Ingress(ingress)
             , HugeBlob(hugeBlob)
             , IgnoreBlock(ignoreBlock)
+            , IssueKeepFlag(issueKeepFlag)
             , OrigClient(origClient)
             , OrigCookie(origCookie)
             , HandleClass(handleClass)
+            , WriteSource(writeSource)
             , Result(std::move(result))
             , RewriteBlob(rewriteBlob)
         {

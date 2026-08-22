@@ -18,7 +18,7 @@
 #include "util_basics.h"
 
 #include <ydb/core/scheme/scheme_tablecell.h>
-#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
+#include <library/cpp/containers/absl/flat_hash_map.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 
 #include <util/generic/deque.h>
@@ -69,6 +69,7 @@ public:
     ~TTable();
 
     void PrepareRollback();
+    void PrepareTruncate();
     void RollbackChanges();
     void CommitChanges(TArrayRef<const TMemGlob> blobs);
     void CommitNewTable(TArrayRef<const TMemGlob> blobs);
@@ -141,6 +142,10 @@ public:
             TRowVersion snapshot,
             const ITransactionMapPtr& visible = nullptr,
             const ITransactionObserverPtr& observer = nullptr) const;
+    TAutoPtr<TTableIter> Iterate(const TCelled& key, TTagsRef tags, IPages* env, ESeek seek,
+            TRowVersion snapshot,
+            const ITransactionMapPtr& visible = nullptr,
+            const ITransactionObserverPtr& observer = nullptr) const;
     TAutoPtr<TTableReverseIter> IterateReverse(TRawVals key, TTagsRef tags, IPages* env, ESeek,
             TRowVersion snapshot,
             const ITransactionMapPtr& visible = nullptr,
@@ -162,8 +167,16 @@ public:
             const TCelled& key, IPages* env, ui64 readFlags,
             const ITransactionMapPtr& visible = nullptr,
             const ITransactionObserverPtr& observer = nullptr) const;
+    // Works in the same way as SelectRowVersion, but for a range specified
+    // by key prefix. Used to check row conflicts in unique indexes.
+    // Returns either the first locked row or any non-deleted committed row
+    // from the range if no rows are locked in range. Feeds uncommitted
+    // non-lock-only deltas to the specified observer.
+    TSelectRowVersionResult SelectRowVersionByKeyPrefix(
+            TArrayRef<const TCell> keyPrefix, IPages* env,
+            const ITransactionObserverPtr& observer) const;
 
-    EReady Precharge(TRawVals minKey, TRawVals maxKey, TTagsRef tags,
+    TPrechargeResult Precharge(TRawVals minKey, TRawVals maxKey, TTagsRef tags,
                      IPages* env, ui64 flg,
                      ui64 itemsLimit, ui64 bytesLimit,
                      EDirection direction, TRowVersion snapshot, TSelectStats& stats) const;
@@ -171,6 +184,7 @@ public:
     void Update(ERowOp, TRawVals key, TOpsRef, TArrayRef<const TMemGlob> apart, TRowVersion rowVersion);
 
     void UpdateTx(ERowOp, TRawVals key, TOpsRef, TArrayRef<const TMemGlob> apart, ui64 txId);
+    void LockRowTx(ELockMode, TRawVals key, ui64 txId);
     void CommitTx(ui64 txId, TRowVersion rowVersion);
     void RemoveTx(ui64 txId);
 
@@ -185,6 +199,7 @@ public:
     const absl::flat_hash_set<ui64>& GetOpenTxs() const;
     size_t GetOpenTxCount() const;
     size_t GetTxsWithDataCount() const;
+    size_t GetTxsWithStatusCount() const;
     size_t GetCommittedTxCount() const;
     size_t GetRemovedTxCount() const;
 
@@ -437,6 +452,7 @@ private:
         bool MutableExisted;
         bool MutableUpdated;
         bool DisableEraseCache;
+        bool Truncated;
 
         TRollbackState(TEpoch epoch)
             : Epoch(epoch)

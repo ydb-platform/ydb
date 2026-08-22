@@ -104,6 +104,12 @@ namespace orc {
     return combiner.coalesce(std::move(ranges));
   }
 
+  ReadRangeCache::~ReadRangeCache() {
+    for (auto& entry : entries_) {
+      entry.future.wait();
+    }
+  };
+
   void ReadRangeCache::cache(std::vector<ReadRange> ranges) {
     ranges = ReadRangeCombiner::coalesceReadRanges(std::move(ranges), options_.holeSizeLimit,
                                                    options_.rangeSizeLimit);
@@ -153,6 +159,9 @@ namespace orc {
                                [](const RangeCacheEntry& entry, uint64_t offset) {
                                  return entry.range.offset + entry.range.length <= offset;
                                });
+    for (auto iter = entries_.begin(); iter != it; ++iter) {
+      iter->future.wait();
+    }
     entries_.erase(entries_.begin(), it);
   }
 

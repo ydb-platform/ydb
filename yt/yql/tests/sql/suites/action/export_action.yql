@@ -1,0 +1,4 @@
+/* kikimr can not - range not supported */
+pragma library("lib1.sql");
+import lib1 symbols $action;
+do $action("Input");

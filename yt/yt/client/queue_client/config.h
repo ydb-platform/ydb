@@ -64,8 +64,19 @@ bool operator==(const TQueueAutoTrimConfig& lhs, const TQueueAutoTrimConfig& rhs
 struct TQueueStaticExportConfig
     : public NYTree::TYsonStruct
 {
-    //! Export will be performed at times that are multiple of this period.
-    TDuration ExportPeriod;
+    //! Export will be performed at times that are multiple of this period. Mutually exclusive
+    //! with ExportCronSchedule parameter.
+    std::optional<TDuration> ExportPeriod;
+
+    //! Export will be performed at schedule that is defined by this CRON expression. Mutually exclusive
+    //! with ExportPeriod parameter.
+    //! This CRON format supports features beyond the standard ones, allowing from 5 to 7 fields to be specified:
+    //!  - with 5 fields, it's a standard CRON
+    //!  - with 6 fields, the first field is interpreted as SECONDS
+    //!  - with 7 fields, the last field is interpreted as YEARS
+    //!
+    //! \note See library/cpp/cron_expression/readme.md.
+    std::optional<std::string> ExportCronSchedule;
 
     //! Path to directory that will contain resulting static tables with exported data.
     NYPath::TYPath ExportDirectory;
@@ -82,7 +93,7 @@ struct TQueueStaticExportConfig
     //! unix timestamps corresponding to the output tables are guaranteed to be unique by the export algorithm).
     //! An attempt to produce a table which already exists will lead to an error, in which case the data will be exported
     //! on the next iteration.
-    TString OutputTableNamePattern;
+    std::string OutputTableNamePattern;
     //! If true, the unix timestamp used in formatting the output table name will be the upper bound actually used in gathering chunks for this table.
     //! Otherwise, the unix timestamp used in the name formatting will be equal to the upper bound minus one export period.
     //! E.g. if hourly exports are set up, setting this value to true will mean that a table named 17:00 has data from 16:00 to 17:00,
@@ -91,6 +102,9 @@ struct TQueueStaticExportConfig
     //! data with timestamp <= T. In case of delays, some of the data can end up in latter tables. You should be especially careful with
     //! commit_ordering=%false queues, since commit timestamp monotonicty within a tablet is not guaranteed for them.
     bool UseUpperBoundForTableNames;
+
+    // COMPAT(akozhikhov)
+    bool EnableExportFromQueueWithHunks;
 
     REGISTER_YSON_STRUCT(TQueueStaticExportConfig);
 

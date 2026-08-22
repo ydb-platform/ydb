@@ -1,15 +1,16 @@
 #pragma once
 
 #include "actors.h"
-#include "../kafka_consumer_groups_metadata_initializers.h"
-#include "../kafka_consumer_members_metadata_initializers.h"
-#include "../kqp_helper.h"
+#include <ydb/core/kafka_proxy/kafka_constants.h>
+#include <ydb/core/kafka_proxy/kafka_consumer_groups_metadata_initializers.h>
+#include <ydb/core/kafka_proxy/kafka_consumer_members_metadata_initializers.h>
+#include <ydb/core/kafka_proxy/kqp_helper.h>
 
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/kafka_proxy/kafka_events.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/persqueue/events/internal.h>
-#include <ydb/core/persqueue/fetch_request_actor.h>
+#include <ydb/core/persqueue/public/fetcher/fetch_request_actor.h>
 #include <ydb/core/protos/kafka.pb.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -27,7 +28,6 @@ constexpr ui32 MAX_REBALANCE_TIMEOUT_MS = 300000;
 
 constexpr ui32 DEFAULT_SESSION_TIMEOUT_MS = 45000;
 constexpr ui32 MIN_SESSION_TIMEOUT_MS = 5000;
-constexpr ui32 MAX_SESSION_TIMEOUT_MS = 300000;
 
 constexpr ui32 MAX_GROUPS_COUNT = 1000;
 constexpr ui32 LIMIT_MEMBERS_PER_REQUEST = 999;
@@ -61,10 +61,10 @@ extern const TString UPDATE_GROUP_STATE;
 extern const TString CHECK_MASTER_ALIVE;
 
 struct TGroupStatus {
-    bool Exists;
-    ui64 Generation;
-    ui64 LastSuccessGeneration;
-    ui64 State;
+    bool Exists = false;
+    ui64 Generation = 0;
+    ui64 LastSuccessGeneration = std::numeric_limits<ui64>::max();
+    ui64 State = 0;
     TString MasterId;
     TInstant LastHeartbeat;
     TString ProtocolName;
@@ -143,7 +143,9 @@ public:
         InstanceId = JoinGroupRequestData->GroupInstanceId.value_or("");
         MemberId = JoinGroupRequestData->MemberId.value_or("");
 
-        KAFKA_LOG_D(TStringBuilder() << "JOIN_GROUP request. MemberId# " << MemberId);
+        YDB_LOG_DEBUG_COMP(NKikimrServices::KAFKA_PROXY, "JOIN_GROUP request",
+            {LogPrefix()},
+            {"memberId", MemberId});
 
         if (JoinGroupRequestData->SessionTimeoutMs) {
             SessionTimeoutMs = JoinGroupRequestData->SessionTimeoutMs;
@@ -308,7 +310,8 @@ private:
     void SendLeaveGroupResponseFail(const TActorContext&, ui64 corellationId,
                                     EKafkaErrors error, TString message = "");
 
-    TString LogPrefix();
+    NActors::NStructuredLog::TStructuredMessage LogPrefix();
+    TString GetMetadataDatabasePath() const;
     void SendResponseFail(const TActorContext& ctx, EKafkaErrors error, const TString& message);
 
     std::optional<TGroupStatus> ParseGroupState(NKqp::TEvKqp::TEvQueryResponse::TPtr ev);
@@ -383,7 +386,6 @@ private:
     TMessagePtr<TSyncGroupRequestData> SyncGroupRequestData;
     TMessagePtr<THeartbeatRequestData> HeartbeatGroupRequestData;
     TMessagePtr<TLeaveGroupRequestData> LeaveGroupRequestData;
-
 };
 
 } // namespace NKafka

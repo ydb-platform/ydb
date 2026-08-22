@@ -1,27 +1,27 @@
 #include "dq_solomon_write_actor.h"
 #include "dq_solomon_actors_util.h"
 
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
-#include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
-#include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
-
-#include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
-#include <yql/essentials/minikql/mkql_alloc.h>
-#include <yql/essentials/minikql/mkql_string_util.h>
-#include <ydb/library/yql/utils/actor_log/log.h>
-#include <ydb/library/yql/utils/actors/http_sender_actor.h>
-#include <yql/essentials/utils/log/log.h>
-#include <yql/essentials/utils/url_builder.h>
-#include <yql/essentials/utils/yql_panic.h>
-
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/http/http_proxy.h>
-#include <library/cpp/json/easy_parse/json_easy_parser.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
+#include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
+#include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
+#include <ydb/library/yql/utils/actor_log/log.h>
+#include <ydb/library/yql/utils/actors/http_sender_actor.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 
+#include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
+#include <yql/essentials/minikql/mkql_alloc.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/utils/url_builder.h>
+#include <yql/essentials/utils/yql_panic.h>
+
+#include <library/cpp/json/easy_parse/json_easy_parser.h>
 
 #include <util/generic/algorithm.h>
 #include <util/generic/hash.h>
@@ -58,7 +58,7 @@ namespace {
 const ui64 MaxMetricsPerRequest = 1000; // Max allowed count is 10000
 const ui64 MaxRequestsInflight = 3;
 
-auto RetryPolicy = NYql::NDq::THttpSenderRetryPolicy::GetExponentialBackoffPolicy(
+const auto RetryPolicy = NYql::NDq::THttpSenderRetryPolicy::GetExponentialBackoffPolicy(
     [](const NHttp::TEvHttpProxy::TEvHttpIncomingResponse* resp){
         if (!resp || !resp->Response) {
             // Connection wasn't established. Should retry.
@@ -70,7 +70,12 @@ auto RetryPolicy = NYql::NDq::THttpSenderRetryPolicy::GetExponentialBackoffPolic
         }
 
         return ERetryErrorClass::ShortRetry;
-    });
+    },
+    TDuration::MilliSeconds(10),
+    TDuration::MilliSeconds(200),
+    TDuration::Seconds(10),
+    std::numeric_limits<size_t>::max(),
+    TDuration::Seconds(60));
 
 struct TDqSolomonWriteParams {
     NSo::NProto::TDqSolomonShard Shard;
@@ -95,11 +100,13 @@ public:
         ui64 outputIndex,
         TCollectStatsLevel statsLevel,
         const TTxId& txId,
+        ui64 taskId,
         TDqSolomonWriteParams&& writeParams,
         NYql::NDq::IDqComputeActorAsyncOutput::ICallbacks* callbacks,
         const ::NMonitoring::TDynamicCounterPtr& counters,
         std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider,
-        i64 freeSpace)
+        i64 freeSpace,
+        bool enableStreamingQueriesCounters)
         : TActor<TDqSolomonWriteActor>(&TDqSolomonWriteActor::StateFunc)
         , OutputIndex(outputIndex)
         , TxId(txId)
@@ -107,7 +114,7 @@ public:
         , WriteParams(std::move(writeParams))
         , Url(GetUrl())
         , Callbacks(callbacks)
-        , Metrics(counters)
+        , Metrics(counters, TxId, taskId, enableStreamingQueriesCounters)
         , FreeSpace(freeSpace)
         , UserMetricsEncoder(
             WriteParams.Shard.GetScheme(),
@@ -140,7 +147,7 @@ public:
 
         ui64 metricsCount = 0;
         batch.ForEachRow([&](const auto& value) {
-            if (metricsCount + WriteParams.Shard.GetScheme().GetSensors().size() > MaxMetricsPerRequest) {
+            if (metricsCount && metricsCount + WriteParams.Shard.GetScheme().GetSensors().size() > MaxMetricsPerRequest) {
                 PushMetricsToBuffer(metricsCount);
             }
 
@@ -165,9 +172,12 @@ public:
         CheckFinished();
     };
 
-    void LoadState(const TSinkState&) override { }
-
-    void CommitState(const NDqProto::TCheckpoint&) override { }
+    // Checkpointing is not supported for the Solomon sink: writes are not
+    // idempotent and there is no way to roll back a partially-sent batch.
+    // Silently ignore checkpoint calls so the actor can coexist with
+    // checkpoint-enabled pipelines.
+    void LoadState(const TSinkState&) override {}
+    void CommitState(const NDqProto::TCheckpoint&) override {}
 
     i64 GetFreeSpace() const override {
         return FreeSpace;
@@ -183,22 +193,40 @@ public:
 
 private:
     struct TDqSolomonWriteActorMetrics {
-        explicit TDqSolomonWriteActorMetrics(const ::NMonitoring::TDynamicCounterPtr& counters) {
-            auto subgroup = counters->GetSubgroup("subsystem", "dq_solomon_write_actor");
+        explicit TDqSolomonWriteActorMetrics(
+            const ::NMonitoring::TDynamicCounterPtr& counters,
+            const TTxId& txId,
+            ui64 taskId,
+            bool enableStreamingQueriesCounters,
+            bool enableCountersPerTask = false)
+        : TxId(std::visit([](auto arg) { return ToString(arg); }, txId)) {
+
+            auto subgroup = counters->GetSubgroup("sink", "SolomonSink");;
+
+            if (enableStreamingQueriesCounters) {
+                subgroup = subgroup->GetSubgroup("tx_id", TxId);
+                if (enableCountersPerTask) {
+                    subgroup = subgroup->GetSubgroup("task_id", ToString(taskId));
+                }
+            }
+
             SendingBufferSize = subgroup->GetCounter("SendingBufferSize");
             WindowMinSendingBufferSize = subgroup->GetCounter("WindowMinSendingBufferSize");
             InflightRequests = subgroup->GetCounter("InflightRequests");
             WindowMinInflightRequests = subgroup->GetCounter("WindowMinInflightRequests");
             SentMetrics = subgroup->GetCounter("SentMetrics", true);
-            СonfirmedMetrics = subgroup->GetCounter("СonfirmedMetrics", true);
+            ConfirmedMetrics = subgroup->GetCounter("ConfirmedMetrics", true);
+            Errors = subgroup->GetCounter("Errors", true);
         }
 
+        TString TxId;
         ::NMonitoring::TDynamicCounters::TCounterPtr SendingBufferSize;
         ::NMonitoring::TDynamicCounters::TCounterPtr WindowMinSendingBufferSize;
         ::NMonitoring::TDynamicCounters::TCounterPtr InflightRequests;
         ::NMonitoring::TDynamicCounters::TCounterPtr WindowMinInflightRequests;
         ::NMonitoring::TDynamicCounters::TCounterPtr SentMetrics;
-        ::NMonitoring::TDynamicCounters::TCounterPtr СonfirmedMetrics;
+        ::NMonitoring::TDynamicCounters::TCounterPtr ConfirmedMetrics;
+        ::NMonitoring::TDynamicCounters::TCounterPtr Errors;
 
     public:
         void ReportSendingBufferSize(size_t size) {
@@ -251,6 +279,14 @@ private:
 
             TIssues issues { TIssue(errorBuilder) };
             SINK_LOG_W("Got " << (res->IsTerminal ? "terminal " : "") << "error response[" << ev->Cookie << "] from solomon: " << issues.ToOneLineString());
+            Metrics.Errors->Inc();
+
+            // Restore FreeSpace and remove the inflight entry so backpressure
+            // accounting stays consistent even when we report an error.
+            if (auto ptr = InflightBuffer.find(ev->Cookie); ptr != InflightBuffer.end() && res->IsTerminal) {
+                FreeSpace += ptr->second.BodySize;
+                InflightBuffer.erase(ptr);
+            }
 
             Callbacks->OnAsyncOutputError(OutputIndex, issues, res->IsTerminal ? NYql::NDqProto::StatusIds::EXTERNAL_ERROR : NYql::NDqProto::StatusIds::UNSPECIFIED);
             return;
@@ -301,18 +337,30 @@ private:
         metricsCount = 0;
     }
 
-    NHttp::THttpOutgoingRequestPtr BuildSolomonRequest(const TString& data) {
+    std::optional<NHttp::THttpOutgoingRequestPtr> BuildSolomonRequest(const TString& data) {
         NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestPost(Url);
-        FillAuth(httpRequest);
-        httpRequest->Set("x-client-id", "yql");
+        
+        if (!FillAuth(httpRequest)) {
+            return {};
+        }
+
+        httpRequest->Set("x-client-id", "yandex-query");
         httpRequest->Set<&NHttp::THttpRequest::ContentType>("application/json");
         httpRequest->Set<&NHttp::THttpRequest::Body>(data);
         return httpRequest;
     }
 
-    void FillAuth(NHttp::THttpOutgoingRequestPtr& httpRequest) {
+    bool FillAuth(NHttp::THttpOutgoingRequestPtr& httpRequest) {
         const TString authorizationHeader = "Authorization";
-        const TString authToken = CredentialsProvider->GetAuthInfo();
+
+        TString authToken;
+        try {
+            authToken = CredentialsProvider->GetAuthInfo();
+        } catch (const std::exception& ex) {
+            TIssues issues { TIssue(TStringBuilder() << "Failed to get auth token: " << ex.what()) };
+            Callbacks->OnAsyncOutputError(OutputIndex, issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR);
+            return false;
+        }
 
         switch (WriteParams.Shard.GetClusterType()) {
             case NSo::NProto::ESolomonClusterType::CT_SOLOMON:
@@ -322,8 +370,12 @@ private:
                 httpRequest->Set(authorizationHeader, "Bearer " + authToken);
                 break;
             default:
-                Y_ENSURE(false, "Invalid cluster type " << ToString<ui32>(WriteParams.Shard.GetClusterType()));
+                TIssues issues { TIssue(TStringBuilder() << "Invalid cluster type: " << ToString<ui32>(WriteParams.Shard.GetClusterType())) };
+                Callbacks->OnAsyncOutputError(OutputIndex, issues, NYql::NDqProto::StatusIds::INTERNAL_ERROR);
+                return false;
         }
+
+        return true;
     }
 
     bool TryToSendNextBatch() {
@@ -355,15 +407,23 @@ private:
             }
 
             const auto& metricsToSend = std::get<TMetricsToSend>(variant);
-            const NHttp::THttpOutgoingRequestPtr httpRequest = BuildSolomonRequest(metricsToSend.Data);
+            const auto httpRequest = BuildSolomonRequest(metricsToSend.Data);
+
+            if (!httpRequest) {
+                // BuildSolomonRequest failed (e.g. auth retrieval error).
+                // OnAsyncOutputError has already been called inside FillAuth.
+                // Restore FreeSpace so backpressure accounting stays consistent.
+                FreeSpace += metricsToSend.Data.size();
+                return false;
+            }
 
             const size_t bodySize = metricsToSend.Data.size();
             const TActorId httpSenderId = Register(CreateHttpSenderActor(SelfId(), HttpProxyId, RetryPolicy));
-            Send(httpSenderId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest), /*flags=*/0, Cookie);
+            Send(httpSenderId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(*httpRequest), /*flags=*/0, Cookie);
             SINK_LOG_T("Sent " << metricsToSend.MetricsCount << " metrics with size of " << metricsToSend.Data.size() << " bytes to solomon");
 
             *Metrics.SentMetrics += metricsToSend.MetricsCount;
-            InflightBuffer.emplace(Cookie++, TMetricsInflight { httpSenderId, metricsToSend.MetricsCount, bodySize });
+            Y_VALIDATE(InflightBuffer.emplace(Cookie++, TMetricsInflight { httpSenderId, metricsToSend.MetricsCount, bodySize }).second, "Duplicated inflight event");
             EgressStats.Bytes += bodySize;
             EgressStats.Chunks++;
             return true;
@@ -384,6 +444,28 @@ private:
 
     void HandleSuccessSolomonResponse(const NHttp::TEvHttpProxy::TEvHttpIncomingResponse& response, ui64 cookie) {
         SINK_LOG_T("Solomon response[" << cookie << "]: " << response.Response->GetObfuscatedData());
+
+        // Look up the inflight entry first so we can always restore FreeSpace
+        // before reporting an error — regardless of which parse step fails.
+        auto ptr = InflightBuffer.find(cookie);
+        if (ptr == InflightBuffer.end()) {
+            SINK_LOG_E("Solomon response[" << cookie << "] was not found in inflight");
+            TIssues issues { TIssue("Internal error in monitoring writer") };
+            Callbacks->OnAsyncOutputError(OutputIndex, issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR);
+            return;
+        }
+
+        // Helper: erase the inflight entry and restore FreeSpace, then report error.
+        auto reportError = [&](TIssues issues, NYql::NDqProto::StatusIds::StatusCode code) {
+            FreeSpace += ptr->second.BodySize;
+            if (ShouldNotifyNewFreeSpace && FreeSpace > 0) {
+                Callbacks->ResumeExecution();
+                ShouldNotifyNewFreeSpace = false;
+            }
+            InflightBuffer.erase(ptr);
+            Callbacks->OnAsyncOutputError(OutputIndex, issues, code);
+        };
+
         NJson::TJsonParser parser;
         switch (WriteParams.Shard.GetClusterType()) {
             case NSo::NProto::ESolomonClusterType::CT_SOLOMON:
@@ -401,21 +483,26 @@ private:
         if (!parser.Parse(TString(response.Response->Body), &res)) {
             TIssues issues { TIssue(TStringBuilder() << "Invalid monitoring response: " << response.Response->GetObfuscatedData()) };
             SINK_LOG_E("Failed to parse response[" << cookie << "] from solomon: " << issues.ToOneLineString());
-            Callbacks->OnAsyncOutputError(OutputIndex, issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR);
+            reportError(issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR);
             return;
         }
-        Y_ABORT_UNLESS(res.size() == 2);
-
-        auto ptr = InflightBuffer.find(cookie);
-        if (ptr == InflightBuffer.end()) {
-            SINK_LOG_E("Solomon response[" << cookie << "] was not found in inflight");
-            TIssues issues { TIssue(TStringBuilder() << "Internal error in monitoring writer") };
-            Callbacks->OnAsyncOutputError(OutputIndex, issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR);
+        if (res.size() != 2) {
+            TIssues issues { TIssue(TStringBuilder() << "Unexpected monitoring response format (fields=" << res.size() << "): " << response.Response->GetObfuscatedData()) };
+            SINK_LOG_E("Unexpected response size[" << cookie << "] from solomon: " << issues.ToOneLineString());
+            reportError(issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR);
             return;
         }
 
-        const ui64 writtenMetricsCount = std::stoul(res[0]);
-        *Metrics.СonfirmedMetrics += writtenMetricsCount;
+        ui64 writtenMetricsCount = 0;
+        try {
+            writtenMetricsCount = std::stoull(res[0]);
+        } catch (const std::exception& e) {
+            TIssues issues { TIssue(TStringBuilder() << "Failed to parse writtenMetricsCount from monitoring response: " << e.what()) };
+            SINK_LOG_E("Failed to parse writtenMetricsCount[" << cookie << "] from solomon: " << issues.ToOneLineString());
+            reportError(issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR);
+            return;
+        }
+        *Metrics.ConfirmedMetrics += writtenMetricsCount;
         if (writtenMetricsCount != ptr->second.MetricsCount) {
             // TODO: YQ-340
             // TIssues issues { TIssue(TStringBuilder() << ToString(ptr->second.MetricsCount - writtenMetricsCount) << " metrics were not written: " << res[1]) };
@@ -473,19 +560,20 @@ private:
     ui64 Cookie = 0;
 };
 
-
-} // namespace
+} // anonymous namespace
 
 std::pair<NYql::NDq::IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqSolomonWriteActor(
     NYql::NSo::NProto::TDqSolomonShard&& settings,
     ui64 outputIndex,
     TCollectStatsLevel statsLevel,
     const TTxId& txId,
+    ui64 taskId,
     const THashMap<TString, TString>& secureParams,
     NYql::NDq::IDqComputeActorAsyncOutput::ICallbacks* callbacks,
     const ::NMonitoring::TDynamicCounterPtr& counters,
-    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
-    i64 freeSpace)
+    IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
+    i64 freeSpace,
+    bool enableStreamingQueriesCounters)
 {
     const TString& tokenName = settings.GetToken().GetName();
     const TString token = secureParams.Value(tokenName, TString());
@@ -494,38 +582,47 @@ std::pair<NYql::NDq::IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqSolo
         .Shard = std::move(settings),
     };
 
-    auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token);
+    auto credentialsProviderFactory = credentialsFactory->Create(token);
     auto credentialsProvider = credentialsProviderFactory->CreateProvider();
 
     TDqSolomonWriteActor* actor = new TDqSolomonWriteActor(
         outputIndex,
         statsLevel,
         txId,
+        taskId,
         std::move(params),
         callbacks,
         counters,
         credentialsProvider,
-        freeSpace);
+        freeSpace,
+        enableStreamingQueriesCounters);
     return {actor, actor};
 }
 
-void RegisterDQSolomonWriteActorFactory(TDqAsyncIoFactory& factory, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory) {
+void RegisterDQSolomonWriteActorFactory(TDqAsyncIoFactory& factory, IStructuredTokenCredentialsFactory::TPtr credentialsFactory, const ::NMonitoring::TDynamicCounterPtr& counters, bool enableStreamingQueriesCounters) {
     factory.RegisterSink<NSo::NProto::TDqSolomonShard>("SolomonSink",
-        [credentialsFactory](
+        [credentialsFactory, counters, enableStreamingQueriesCounters](
             NYql::NSo::NProto::TDqSolomonShard&& settings,
             IDqAsyncIoFactory::TSinkArguments&& args)
         {
-            auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+            auto txId = args.TxId;
+            auto taskParamsIt = args.TaskParams.find("query_path");
+            if (taskParamsIt != args.TaskParams.end()) {
+                txId = taskParamsIt->second;
+            }
 
             return CreateDqSolomonWriteActor(
                 std::move(settings),
                 args.OutputIndex,
                 args.StatsLevel,
-                args.TxId,
+                txId,
+                args.TaskId,
                 args.SecureParams,
                 args.Callback,
                 counters,
-                credentialsFactory);
+                credentialsFactory,
+                DqSolomonDefaultFreeSpace,
+                enableStreamingQueriesCounters);
         });
 }
 

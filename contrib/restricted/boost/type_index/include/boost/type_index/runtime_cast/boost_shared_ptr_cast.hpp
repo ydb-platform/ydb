@@ -13,21 +13,25 @@
 /// \brief Contains the overload of boost::typeindex::runtime_pointer_cast for
 /// boost::shared_ptr types.
 
+#include <boost/type_index/detail/config.hpp>
+
+#if !defined(BOOST_USE_MODULES) || defined(BOOST_TYPE_INDEX_INTERFACE_UNIT)
+
 #include <boost/type_index/runtime_cast/detail/runtime_cast_impl.hpp>
 
+#if !defined(BOOST_TYPE_INDEX_INTERFACE_UNIT)
 #include <type_traits>
+#endif
 
 #ifdef BOOST_HAS_PRAGMA_ONCE
 # pragma once
 #endif
 
-namespace boost {
-    template<class T> class shared_ptr;
-}
-
 namespace boost { namespace typeindex {
 
-/// \brief Creates a new instance of std::shared_ptr whose stored pointer is obtained from u's
+BOOST_TYPE_INDEX_BEGIN_MODULE_EXPORT
+
+/// \brief Creates a new instance of smart pointer whose stored pointer is obtained from u's
 /// stored pointer using a runtime_cast.
 ///
 /// The new shared_ptr will share ownership with u, except that it is empty if the runtime_cast
@@ -37,14 +41,18 @@ namespace boost { namespace typeindex {
 /// \return If there exists a valid conversion from U* to T*, returns a boost::shared_ptr<T>
 /// that points to an address suitably offset from u.
 /// If no such conversion exists, returns boost::shared_ptr<T>();
-template<typename T, typename U>
-boost::shared_ptr<T> runtime_pointer_cast(boost::shared_ptr<U> const& u) {
+template<typename T, typename U,  template <class> class SmartPointer>
+auto runtime_pointer_cast(SmartPointer<U> const& u) -> decltype(u.use_count(), SmartPointer<T>()) {
     T* value = detail::runtime_cast_impl<T>(u.get(), std::is_base_of<T, U>());
     if(value)
-        return boost::shared_ptr<T>(u, value);
-    return boost::shared_ptr<T>();
+        return SmartPointer<T>(u, value);
+    return SmartPointer<T>();
 }
 
+BOOST_TYPE_INDEX_END_MODULE_EXPORT
+
 }} // namespace boost::typeindex
+
+#endif  // #if !defined(BOOST_USE_MODULES) || defined(BOOST_TYPE_INDEX_INTERFACE_UNIT)
 
 #endif // BOOST_TYPE_INDEX_RUNTIME_CAST_BOOST_SHARED_PTR_CAST_HPP

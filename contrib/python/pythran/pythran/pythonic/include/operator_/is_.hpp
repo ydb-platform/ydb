@@ -10,8 +10,8 @@ namespace operator_
 {
 
   template <class A, class B>
-  auto is_(A &&a, B &&b) -> decltype(builtins::id(std::forward<A>(a)) ==
-                                     builtins::id(std::forward<B>(b)));
+  auto is_(A &&a, B &&b)
+      -> decltype(builtins::id(std::forward<A>(a)) == builtins::id(std::forward<B>(b)));
 
   DEFINE_FUNCTOR(pythonic::operator_, is_);
 } // namespace operator_

@@ -172,7 +172,8 @@ Conversions between `Interval` and various time units.
 * `DateTime::ToHours(Interval64{Flags:AutoMap}) -> Int64`
 * `DateTime::ToMinutes(Interval{Flags:AutoMap}) -> Int32`
 * `DateTime::ToMinutes(Interval64{Flags:AutoMap}) -> Int64`
-* `DateTime::ToSeconds(Interval{Flags:AutoMap}) -> Int32`
+* `DateTime::ToSeconds(Interval{Flags:AutoMap}) -> Int32` Until [2025.03](../../changelog/2025.03.md)
+* `DateTime::ToSeconds(Interval{Flags:AutoMap}) -> Int64` Since [2025.03](../../changelog/2025.03.md)
 * `DateTime::ToSeconds(Interval64{Flags:AutoMap}) -> Int64`
 * `DateTime::ToMilliseconds(Interval{Flags:AutoMap}) -> Int64`
 * `DateTime::ToMilliseconds(Interval64{Flags:AutoMap}) -> Int64`
@@ -184,7 +185,8 @@ Conversions between `Interval` and various time units.
 * `DateTime::Interval64FromHours(Int64{Flags:AutoMap}) -> Interval64`
 * `DateTime::IntervalFromMinutes(Int32{Flags:AutoMap}) -> Interval`
 * `DateTime::Interval64FromMinutes(Int64{Flags:AutoMap}) -> Interval64`
-* `DateTime::IntervalFromSeconds(Int32{Flags:AutoMap}) -> Interval`
+* `DateTime::IntervalFromSeconds(Int32{Flags:AutoMap}) -> Interval` Until [2025.03](../../changelog/2025.03.md)
+* `DateTime::IntervalFromSeconds(Int64{Flags:AutoMap}) -> Interval` Since [2025.03](../../changelog/2025.03.md)
 * `DateTime::Interval64FromSeconds(Int64{Flags:AutoMap}) -> Interval64`
 * `DateTime::IntervalFromMilliseconds(Int64{Flags:AutoMap}) -> Interval`
 * `DateTime::Interval64FromMilliseconds(Int64{Flags:AutoMap}) -> Interval64`
@@ -316,7 +318,7 @@ Get a string representation of a time using an arbitrary formatting string.
 
 #### List of functions
 
-* `DateTime::Format(String, alwaysWriteFractionalSeconds:Bool?) -> (Resource<TM64>{Flags:AutoMap}) -> String`
+* `DateTime::Format(String, [AlwaysWriteFractionalSeconds:Bool?, WriteOffsetWithColon:Bool?]) -> (Resource<TM64>{Flags:AutoMap}) -> String`
 
 A set of specifiers is implemented for the formatting string:
 
@@ -326,8 +328,8 @@ A set of specifiers is implemented for the formatting string:
 * `%d`: 2-digit day;
 * `%H`: 2-digit hour;
 * `%M`: 2-digit minutes;
-* `%S`: 2-digit seconds or `XX.XXXXXX` in the case of non-empty microseconds (only if `alwaysWriteFractionalSeconds` is not set to `True`);
-* `%z`: +hhmm or -hhmm;
+* `%S`: 2-digit seconds or `XX.XXXXXX` in the case of non-empty microseconds (only if `AlwaysWriteFractionalSeconds` is not set to `True`);
+* `%z`: +hhmm or -hhmm by default; +hh:mm or -hh:mm if `WriteOffsetWithColon` (added in the version [2025.05](../../changelog/2025.05.md#datetime-module)) is set to `True`;
 * `%Z`: IANA name of the timezone (GMT);
 * `%b`: A short three-letter English name of the month (Jan);
 * `%B`: A full English name of the month (January).
@@ -362,6 +364,7 @@ Implemented specifiers:
 * `%H`: 2-digit hour;
 * `%M`: 2-digit minutes;
 * `%S`: Seconds, can also accept microseconds in the formats from `XX` up to `XX.XXXXXX`;
+* `%z`: Timezone offset in the one of the following format: `±hh:mm`, `±hhmm`, `±hh`- added in the version [2025.05](../../changelog/2025.05.md#datetime-module);
 * `%Z`: The IANA name of the timezone (GMT);
 * `%b`: A short three-letter case-insensitive English name of the month (Jan);
 * `%B`: A full case-insensitive English name of the month (January).

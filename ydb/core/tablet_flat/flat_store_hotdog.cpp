@@ -40,7 +40,7 @@ void TPageCollectionProtoHelper::Do(TBundle *bundle, const TPartComponents &pc)
     bundle->MutablePageCollections()->Reserve(pc.PageCollectionComponents.size());
 
     for (auto &one : pc.PageCollectionComponents)
-        Bundle(bundle->AddPageCollections(), one.LargeGlobId, one.Packet.Get());
+        Bundle(bundle->AddPageCollections(), one.LargeGlobId, one.PageCollection.Get());
 
     if (auto &legacy = pc.Legacy)
         bundle->SetLegacy(legacy);
@@ -102,11 +102,11 @@ void TPageCollectionProtoHelper::Do(TBundle *bundle, const TIntrusiveConstPtr<NT
     bundle->SetEpoch(partStore->Epoch.ToProto());
 }
 
-void TPageCollectionProtoHelper::Bundle(NKikimrExecutorFlat::TPageCollection *pageCollectionProto, const TPrivatePageCache::TInfo &cache)
+void TPageCollectionProtoHelper::Bundle(NKikimrExecutorFlat::TPageCollection *pageCollectionProto, const TPrivatePageCache::TPageCollection &pageCollection_)
 {
-    auto *pack = CheckedCast<const NPageCollection::TPageCollection*>(cache.PageCollection.Get());
+    auto *pageCollection = CheckedCast<const NPageCollection::TPageCollection*>(pageCollection_.PageCollection.Get());
 
-    return Bundle(pageCollectionProto, pack->LargeGlobId, pack);
+    return Bundle(pageCollectionProto, pageCollection->LargeGlobId, pageCollection);
 }
 
 
@@ -133,7 +133,7 @@ NTable::TPartComponents TPageCollectionProtoHelper::MakePageCollectionComponents
         auto& item = components.emplace_back();
         item.LargeGlobId = TLargeGlobIdProto::Get(pageCollection.GetLargeGlobId());
         if (pageCollection.HasMeta()) {
-            item.ParsePacket(TSharedData::Copy(pageCollection.GetMeta()));
+            item.ParsePageCollection(TSharedData::Copy(pageCollection.GetMeta()));
         }
     }
 

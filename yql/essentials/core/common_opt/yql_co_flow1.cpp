@@ -1240,7 +1240,7 @@ TExprNode::TPtr PropagateConstPremapIntoCombineByKey(const TExprNode& node, TExp
         .Lambda()
             .Param("item")
             .Apply(*children[2])
-                .With(0, std::move(constItem))
+                .With(0, constItem)
             .Seal()
         .Seal()
         .Build();
@@ -1408,6 +1408,11 @@ TExprNode::TPtr OptimizeFlatMap(const TExprNode::TPtr& node, TExprContext& ctx, 
     return node;
 }
 
+bool IsOptimizerToFlowOverIteratorWithDependsAllowed(const TTypeAnnotationContext& types) {
+    static const char Flag[] = "ToFlowOverIteratorWithDepends";
+    return IsOptimizerEnabled<Flag>(types) && !IsOptimizerDisabled<Flag>(types);
+}
+
 }
 
 void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
@@ -1431,7 +1436,15 @@ void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
 
             auto checkAllPruneExtractorPassthroughLambda = [&columns](const TCoLambda& lambda) {
                 TMaybe<THashSet<TStringBuf>> passthroughFields;
-                if (IsPassthroughLambda(lambda, &passthroughFields) && passthroughFields) {
+                /*
+                    PruneKeys can only be reordered with filtration if all filtration keys are PruneKeys keys.
+                    To simplify, we only support projections. Because of this, we shouldn't consider
+                    OptionalIf or ListIf as passthrough. Just is ok for PruneKeys.
+                */
+                if (IsJustOrSingleAsList(lambda.Body().Ref()) &&
+                    IsPassthroughLambda(lambda, &passthroughFields, /*analyzeJustMember*/true) &&
+                    passthroughFields) {
+
                     for (const auto& column : columns) {
                         if (!passthroughFields->contains(column)) {
                             return false;
@@ -1722,14 +1735,14 @@ void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
             if (const auto init = ExtractMemberFromLiteral(chain.InitHandler().Ref(), member), update = ExtractMemberFromLiteral(chain.UpdateHandler().Ref(), member);
                 init && update && init->IsCallable("Bool") && !FromString<bool>(init->Tail().Content())) {
                 if (std::map<std::string_view, TExprNode::TPtr> usedFields;
-                    HaveFieldsSubset(update, chain.UpdateHandler().Args().Arg(1).Ref(), usedFields, *optCtx.ParentsMap, false) && !usedFields.empty()
+                    HaveFieldsSubset(update, chain.UpdateHandler().Args().Arg(1).Ref(), usedFields, *optCtx.ParentsMap, /*allowDependsOn=*/false) && !usedFields.empty()
                     && IsPasstroughtFields(usedFields, self.InitHandler().Ref()) && IsPasstroughtFields(usedFields, self.UpdateHandler().Ref())) {
                     YQL_CLOG(DEBUG, Core) << "Fuse " << node->Content() << " with " << node->Head().Content();
                     auto lambda = ctx.Builder(chain.Pos())
                         .Lambda()
                             .Param("item")
                             .Param("state")
-                            .ApplyPartial(chain.UpdateHandler().Args().Ptr(), std::move(update))
+                            .ApplyPartial(chain.UpdateHandler().Args().Ptr(), update)
                                 .With(0, "item")
                                 .With(1, "state")
                             .Seal()
@@ -1738,7 +1751,7 @@ void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
                     return Build<TCoCondense1>(ctx, self.Pos())
                         .Input(chain.Input())
                         .InitHandler(ctx.DeepCopyLambda(self.InitHandler().Ref()))
-                        .SwitchHandler(std::move(lambda))
+                        .SwitchHandler(lambda)
                         .UpdateHandler(ctx.DeepCopyLambda(self.UpdateHandler().Ref()))
                         .Done().Ptr();
                 }
@@ -2068,12 +2081,30 @@ void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
         return node;
     };
 
-    map[TCoMember::CallableName()] = map[TCoNth::CallableName()] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
-        YQL_ENSURE(optCtx.Types);
-        static const char optName[] = "MemberNthOverFlatMap";
-        if (IsOptimizerDisabled<optName>(*optCtx.Types)) {
-            return node;
+    map["ToFlow"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+        if (IsOptimizerToFlowOverIteratorWithDependsAllowed(*optCtx.Types)) {
+            const auto head = node->HeadPtr();
+            if (head->IsCallable("Iterator") && optCtx.IsSingleUsage(*head)) {
+                YQL_CLOG(DEBUG, Core) << "ToFlow over Iterator with depends";
+                auto newChildren = node->ChildrenList();
+                const auto headChildren = head->ChildrenList();
+                newChildren.front() = headChildren.front();
+                for (size_t i = 1; i < headChildren.size(); i++) {
+                    newChildren.push_back(headChildren[i]);
+                }
+                return ctx.ChangeChildren(*node, std::move(newChildren));
+            }
         }
+        const auto head = node->HeadPtr();
+        if (head->IsCallable("Collect") && optCtx.IsSingleUsage(*head) &&
+            head->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow) {
+            YQL_CLOG(DEBUG, Core) << "Drop ToFlow over Collect";
+            return head->HeadPtr();
+        }
+        return node;
+    };
+
+    map[TCoMember::CallableName()] = map[TCoNth::CallableName()] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         if (!optCtx.IsSingleUsage(node->Head())) {
             return node;
         }
@@ -2099,6 +2130,20 @@ void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
                     .Build();
             }
         }
+        return node;
+    };
+
+    map["ToMutDict"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+        Y_UNUSED(ctx);
+        if (!optCtx.IsSingleUsage(node->Head())) {
+            return node;
+        }
+
+        if (node->Head().IsCallable("FromMutDict")) {
+            YQL_CLOG(DEBUG, Core) << "Skip " << node->Content() << " over " << node->Head().Content();
+            return node->Head().HeadPtr();
+        }
+
         return node;
     };
 }

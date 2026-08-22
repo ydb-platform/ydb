@@ -2,6 +2,8 @@
 
 #include <yt/yt/core/actions/future.h>
 
+#include <yt/yt/core/concurrency/scheduler_api.h>
+
 #include <yt/yt/core/misc/mpsc_queue.h>
 
 #include <thread>
@@ -9,6 +11,7 @@
 
 namespace NYT {
 namespace {
+using namespace NConcurrency;
 
 using ::testing::TProbeState;
 using ::testing::TProbe;
@@ -70,7 +73,7 @@ TEST(TMpscQueueTest, MultiThreaded)
     auto barrier = NewPromise<void>();
 
     auto producer = [&] {
-        barrier.ToFuture().Get();
+        WaitUntilSet(barrier.ToFuture());
         for (int i = 0; i < N; ++i) {
             queue.Enqueue(i);
         }
@@ -78,7 +81,7 @@ TEST(TMpscQueueTest, MultiThreaded)
 
     auto consumer = [&] {
         std::array<int, N> counts{};
-        barrier.ToFuture().Get();
+        WaitUntilSet(barrier.ToFuture());
         for (int i = 0; i < N * T; ++i) {
             int item;
             while (!queue.TryDequeue(&item));

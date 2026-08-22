@@ -14,12 +14,12 @@ public:
     TMoveCounter(const TMoveCounter&) = delete;
     TMoveCounter& operator=(const TMoveCounter&) = delete;
 
-    TMoveCounter(TMoveCounter&&)
+    TMoveCounter(TMoveCounter&&) noexcept
     {
         ++Moves_;
     }
 
-    TMoveCounter& operator=(TMoveCounter&&)
+    TMoveCounter& operator=(TMoveCounter&&) noexcept
     {
         ++Moves_;
         return *this;
@@ -35,6 +35,12 @@ TEST(TCollectionHelpersTest, EmplaceDefault)
     THashMap<int, TMoveCounter> map;
     EmplaceDefault(map, 0);
     EXPECT_EQ(map[0].Moves(), 0);
+}
+
+TEST(TCollectionHelpersTest, GetOrDefaultReferenceMoveOnly)
+{
+    THashMap<int, TMoveCounter> map;
+    EXPECT_EQ(GetOrDefaultReference(map, 0).Moves(), 0);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

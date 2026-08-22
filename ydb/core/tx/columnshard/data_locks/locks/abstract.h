@@ -16,31 +16,34 @@ class TGranuleMeta;
 
 namespace NKikimr::NOlap::NDataLocks {
 
-enum class ELockCategory : ui32 {
+enum class ELockCategory: ui32 {
     Compaction = 0,
-    Cleanup,
-    Sharing,
     Actualization,
     Tables,
+    Scan,
+    Cleanup,
+    Sharing,   // used only for TReshardColumnTable which is not supported yet
     Any,
     MAX
 };
 
 static const inline std::array<std::set<ELockCategory>, (ui32)ELockCategory::MAX> LockCategoriesInteraction = {
     //Compaction
-    std::set<ELockCategory>({ ELockCategory::Compaction, ELockCategory::Actualization, ELockCategory::Tables, ELockCategory::Any}),
-    //Cleanup
-    std::set<ELockCategory>({ ELockCategory::Cleanup, ELockCategory::Sharing, ELockCategory::Tables, ELockCategory::Any }),
-    //Sharing
-    std::set<ELockCategory>({ ELockCategory::Sharing, ELockCategory::Cleanup, ELockCategory::Tables, ELockCategory::Any }),
+    std::set<ELockCategory>({ ELockCategory::Compaction, ELockCategory::Actualization, ELockCategory::Tables, ELockCategory::Any }),
     //Actualization
-    std::set<ELockCategory>({ ELockCategory::Actualization, ELockCategory::Compaction, ELockCategory::Tables, ELockCategory::Any }),
+    std::set<ELockCategory>({ ELockCategory::Compaction, ELockCategory::Actualization, ELockCategory::Tables, ELockCategory::Any }),
     //Tables
-    std::set<ELockCategory>({ ELockCategory::Cleanup, ELockCategory::Sharing, ELockCategory::Actualization, ELockCategory::Compaction,
-        ELockCategory::Tables, ELockCategory::Any }),
+    std::set<ELockCategory>(
+        { ELockCategory::Compaction, ELockCategory::Actualization, ELockCategory::Tables, ELockCategory::Sharing, ELockCategory::Any }),
+    //Scan
+    std::set<ELockCategory>({ ELockCategory::Cleanup, ELockCategory::Any }),
+    //Cleanup
+    std::set<ELockCategory>({ ELockCategory::Scan, ELockCategory::Cleanup, ELockCategory::Sharing, ELockCategory::Any }),
+    //Sharing
+    std::set<ELockCategory>({ ELockCategory::Tables, ELockCategory::Cleanup, ELockCategory::Sharing, ELockCategory::Any }),
     //Any
-    std::set<ELockCategory>({ ELockCategory::Cleanup, ELockCategory::Sharing, ELockCategory::Actualization, ELockCategory::Compaction,
-        ELockCategory::Tables, ELockCategory::Any }),
+    std::set<ELockCategory>({ ELockCategory::Compaction, ELockCategory::Actualization, ELockCategory::Tables, ELockCategory::Scan,
+        ELockCategory::Cleanup, ELockCategory::Sharing, ELockCategory::Any }),
 };
 
 class ILock {
@@ -60,7 +63,8 @@ public:
     ILock(const TString& lockName, const ELockCategory category, const bool isReadOnly = false)
         : LockName(lockName)
         , ReadOnlyFlag(isReadOnly)
-        , Category(category) {
+        , Category(category)
+    {
     }
 
     virtual ~ILock() = default;
@@ -75,6 +79,7 @@ public:
         }
         return DoIsLocked(portion, portionForLock, excludedLocks);
     }
+
     std::optional<TString> IsLocked(const TGranuleMeta& g, const ELockCategory portionForLock, const THashSet<TString>& excludedLocks = {},
         const bool readOnly = false) const {
         if (IsReadOnly() && readOnly) {
@@ -85,6 +90,7 @@ public:
         }
         return DoIsLocked(g, portionForLock, excludedLocks);
     }
+
     bool IsEmpty() const {
         return DoIsEmpty();
     }

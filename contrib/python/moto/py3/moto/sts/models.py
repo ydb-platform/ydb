@@ -1,46 +1,47 @@
 from base64 import b64decode
+from typing import Any, Dict, List, Optional, Tuple
 import datetime
 import re
 import xmltodict
-from moto.core import BaseBackend, BaseModel
-from moto.core.utils import iso_8601_datetime_with_milliseconds, BackendDict
-from moto.iam import iam_backends
+
+from moto.core import BaseBackend, BaseModel, BackendDict
+from moto.core.utils import iso_8601_datetime_with_milliseconds, utcnow
+from moto.iam.models import iam_backends, AccessKey
 from moto.sts.utils import (
     random_session_token,
     DEFAULT_STS_SESSION_DURATION,
     random_assumed_role_id,
 )
-from typing import Mapping
 
 
 class Token(BaseModel):
-    def __init__(self, duration, name=None):
-        now = datetime.datetime.utcnow()
+    def __init__(self, duration: int, name: Optional[str] = None):
+        now = utcnow()
         self.expiration = now + datetime.timedelta(seconds=duration)
         self.name = name
         self.policy = None
 
     @property
-    def expiration_ISO8601(self):
+    def expiration_ISO8601(self) -> str:
         return iso_8601_datetime_with_milliseconds(self.expiration)
 
 
 class AssumedRole(BaseModel):
     def __init__(
         self,
-        account_id,
-        access_key,
-        role_session_name,
-        role_arn,
-        policy,
-        duration,
-        external_id,
+        account_id: str,
+        access_key: AccessKey,
+        role_session_name: str,
+        role_arn: str,
+        policy: str,
+        duration: int,
+        external_id: str,
     ):
         self.account_id = account_id
         self.session_name = role_session_name
         self.role_arn = role_arn
         self.policy = policy
-        now = datetime.datetime.utcnow()
+        now = utcnow()
         self.expiration = now + datetime.timedelta(seconds=duration)
         self.external_id = external_id
         self.access_key = access_key
@@ -49,11 +50,11 @@ class AssumedRole(BaseModel):
         self.session_token = random_session_token()
 
     @property
-    def expiration_ISO8601(self):
+    def expiration_ISO8601(self) -> str:
         return iso_8601_datetime_with_milliseconds(self.expiration)
 
     @property
-    def user_id(self):
+    def user_id(self) -> str:
         iam_backend = iam_backends[self.account_id]["global"]
         try:
             role_id = iam_backend.get_role_by_arn(arn=self.role_arn).id
@@ -62,37 +63,38 @@ class AssumedRole(BaseModel):
         return role_id + ":" + self.session_name
 
     @property
-    def arn(self):
-        return (
-            "arn:aws:sts::{account_id}:assumed-role/{role_name}/{session_name}".format(
-                account_id=self.account_id,
-                role_name=self.role_arn.split("/")[-1],
-                session_name=self.session_name,
-            )
-        )
+    def arn(self) -> str:
+        return f"arn:aws:sts::{self.account_id}:assumed-role/{self.role_arn.split('/')[-1]}/{self.session_name}"
 
 
 class STSBackend(BaseBackend):
-    def __init__(self, region_name, account_id):
+    def __init__(self, region_name: str, account_id: str):
         super().__init__(region_name, account_id)
-        self.assumed_roles = []
+        self.assumed_roles: List[AssumedRole] = []
 
     @staticmethod
-    def default_vpc_endpoint_service(service_region, zones):
+    def default_vpc_endpoint_service(
+        service_region: str, zones: List[str]
+    ) -> List[Dict[str, str]]:
         """Default VPC endpoint service."""
         return BaseBackend.default_vpc_endpoint_service_factory(
             service_region, zones, "sts"
         )
 
-    def get_session_token(self, duration):
-        token = Token(duration=duration)
-        return token
+    def get_session_token(self, duration: int) -> Token:
+        return Token(duration=duration)
 
-    def get_federation_token(self, name, duration):
-        token = Token(duration=duration, name=name)
-        return token
+    def get_federation_token(self, name: Optional[str], duration: int) -> Token:
+        return Token(duration=duration, name=name)
 
-    def assume_role(self, role_session_name, role_arn, policy, duration, external_id):
+    def assume_role(
+        self,
+        role_session_name: str,
+        role_arn: str,
+        policy: str,
+        duration: int,
+        external_id: str,
+    ) -> AssumedRole:
         """
         Assume an IAM Role. Note that the role does not need to exist. The ARN can point to another account, providing an opportunity to switch accounts.
         """
@@ -106,19 +108,23 @@ class STSBackend(BaseBackend):
             duration,
             external_id,
         )
-        self.assumed_roles.append(role)
+        access_key.role_arn = role_arn
+        account_backend = sts_backends[account_id]["global"]
+        account_backend.assumed_roles.append(role)
         return role
 
-    def get_assumed_role_from_access_key(self, access_key_id):
+    def get_assumed_role_from_access_key(
+        self, access_key_id: str
+    ) -> Optional[AssumedRole]:
         for assumed_role in self.assumed_roles:
             if assumed_role.access_key_id == access_key_id:
                 return assumed_role
         return None
 
-    def assume_role_with_web_identity(self, **kwargs):
+    def assume_role_with_web_identity(self, **kwargs: Any) -> AssumedRole:
         return self.assume_role(**kwargs)
 
-    def assume_role_with_saml(self, **kwargs):
+    def assume_role_with_saml(self, **kwargs: Any) -> AssumedRole:
         del kwargs["principal_arn"]
         saml_assertion_encoded = kwargs.pop("saml_assertion")
         saml_assertion_decoded = b64decode(saml_assertion_encoded)
@@ -156,7 +162,7 @@ class STSBackend(BaseBackend):
         if "duration" not in kwargs:
             kwargs["duration"] = DEFAULT_STS_SESSION_DURATION
 
-        account_id, access_key = self._create_access_key(role=target_role)
+        account_id, access_key = self._create_access_key(role=target_role)  # type: ignore
         kwargs["account_id"] = account_id
         kwargs["access_key"] = access_key
 
@@ -166,7 +172,7 @@ class STSBackend(BaseBackend):
         self.assumed_roles.append(role)
         return role
 
-    def get_caller_identity(self, access_key_id):
+    def get_caller_identity(self, access_key_id: str) -> Tuple[str, str, str]:
         assumed_role = self.get_assumed_role_from_access_key(access_key_id)
         if assumed_role:
             return assumed_role.user_id, assumed_role.arn, assumed_role.account_id
@@ -181,7 +187,7 @@ class STSBackend(BaseBackend):
         arn = f"arn:aws:sts::{self.account_id}:user/moto"
         return user_id, arn, self.account_id
 
-    def _create_access_key(self, role):
+    def _create_access_key(self, role: str) -> Tuple[str, AccessKey]:
         account_id_match = re.search(r"arn:aws:iam::([0-9]+).+", role)
         if account_id_match:
             account_id = account_id_match.group(1)
@@ -191,6 +197,6 @@ class STSBackend(BaseBackend):
         return account_id, iam_backend.create_temp_access_key()
 
 
-sts_backends: Mapping[str, STSBackend] = BackendDict(
+sts_backends = BackendDict(
     STSBackend, "sts", use_boto3_regions=False, additional_regions=["global"]
 )

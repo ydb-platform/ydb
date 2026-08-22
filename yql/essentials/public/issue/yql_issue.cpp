@@ -15,7 +15,6 @@
 #include <util/generic/stack.h>
 #include <cstdlib>
 
-
 namespace NYql {
 
 void SanitizeNonAscii(TString& s) {
@@ -42,14 +41,8 @@ void SanitizeNonAscii(TString& s) {
 
 TTextWalker& TTextWalker::Advance(char c) {
     if (c == '\n') {
-        HaveCr_ = false;
-        ++LfCount_;
-        return *this;
-    }
-
-
-    if (c == '\r' && !HaveCr_) {
-        HaveCr_ = true;
+        Position_.Row++;
+        Position_.Column = 0;
         return *this;
     }
 
@@ -58,15 +51,8 @@ TTextWalker& TTextWalker::Advance(char c) {
         charDistance = 0;
     }
 
-    // either not '\r' or second '\r'
-    if (LfCount_) {
-        Position_.Row += LfCount_;
-        Position_.Column = charDistance;
-        LfCount_ = 0;
-    } else {
-        Position_.Column += charDistance + (HaveCr_ && c != '\r');
-    }
-    HaveCr_ = (c == '\r');
+    Position_.Column += charDistance;
+
     return *this;
 }
 
@@ -130,13 +116,13 @@ Y_NO_INLINE void Indent(IOutputStream& out, ui32 indentation) {
 }
 
 void ProgramLinesWithErrors(
-        const TString& programText,
-        const TVector<TIssue>& errors,
-        TMap<ui32, TStringBuf>& lines)
+    const TString& programText,
+    const TVector<TIssue>& errors,
+    TMap<ui32, TStringBuf>& lines)
 {
     TVector<ui32> rows;
-    for (const auto& topIssue: errors) {
-        WalkThroughIssues(topIssue, false, [&](const TIssue& issue, ui16 /*level*/) {
+    for (const auto& topIssue : errors) {
+        WalkThroughIssues(topIssue, /*leafOnly=*/false, [&](const TIssue& issue, ui16 /*level*/) {
             for (ui32 row = issue.Position.Row; row <= issue.EndPosition.Row; row++) {
                 rows.push_back(row);
             }
@@ -145,10 +131,11 @@ void ProgramLinesWithErrors(
     std::sort(rows.begin(), rows.end());
 
     auto prog = StringSplitter(programText).Split('\n');
-    auto progIt = prog.begin(), progEnd = prog.end();
+    auto progIt = prog.begin();
+    auto progEnd = prog.end();
     ui32 progRow = 1;
 
-    for (ui32 row: rows) {
+    for (ui32 row : rows) {
         while (progRow < row && progIt != progEnd) {
             ++progRow;
             ++progIt;
@@ -159,35 +146,31 @@ void ProgramLinesWithErrors(
     }
 }
 
-} // namspace
+} // namespace
 
-void TIssues::PrintTo(IOutputStream& out, bool oneLine) const
-{
+void TIssues::PrintTo(IOutputStream& out, bool oneLine) const {
     if (oneLine) {
         bool printWithSpace = false;
         if (Issues_.size() > 1) {
             printWithSpace = true;
             out << "[";
         }
-        for (const auto& topIssue: Issues_) {
-            WalkThroughIssues(topIssue, false, [&](const TIssue& issue, ui16 level) {
+        for (const auto& topIssue : Issues_) {
+            WalkThroughIssues(topIssue, /*leafOnly=*/false, [&](const TIssue& issue, ui16 level) {
                 if (level > 0) {
                     out << " subissue: { ";
                 } else {
                     out << (printWithSpace ? " { " : "{ ");
                 }
-                issue.PrintTo(out, true);
-            },
-            [&](const TIssue&, ui16) {
-                out << " }";
-            });
+                issue.PrintTo(out, /*oneLine=*/true); },
+                              [&](const TIssue&, ui16) { out << " }"; });
         }
         if (Issues_.size() > 1) {
             out << " ]";
         }
     } else {
-        for (const auto& topIssue: Issues_) {
-            WalkThroughIssues(topIssue, false, [&](const TIssue& issue, ui16 level) {
+        for (const auto& topIssue : Issues_) {
+            WalkThroughIssues(topIssue, /*leafOnly=*/false, [&](const TIssue& issue, ui16 level) {
                 auto shift = level * 4;
                 Indent(out, shift);
                 out << issue << Endl;
@@ -197,18 +180,17 @@ void TIssues::PrintTo(IOutputStream& out, bool oneLine) const
 }
 
 void TIssues::PrintWithProgramTo(
-        IOutputStream& out,
-        const TString& programFilename,
-        const TString& programText,
-        bool colorize) const
-{
+    IOutputStream& out,
+    const TString& programFilename,
+    const TString& programText,
+    bool colorize) const {
     using namespace NColorizer;
 
     TMap<ui32, TStringBuf> lines;
     ProgramLinesWithErrors(programText, Issues_, lines);
 
-    for (const TIssue& topIssue: Issues_) {
-        WalkThroughIssues(topIssue, false, [&](const TIssue& issue, ui16 level) {
+    for (const TIssue& topIssue : Issues_) {
+        WalkThroughIssues(topIssue, /*leafOnly=*/false, [&](const TIssue& issue, ui16 level) {
             auto shift = level * 4;
             Indent(out, shift);
             if (colorize) {
@@ -240,7 +222,7 @@ void TIssues::PrintWithProgramTo(
                 }
             }
 
-            out << ": "<< severityName << ": " << issue.GetMessage();
+            out << ": " << severityName << ": " << issue.GetMessage();
             if (colorize) {
                 out << Old();
             }
@@ -283,7 +265,7 @@ TMaybe<TPosition> TryParseTerminationMessage(TStringBuf& message) {
         endPos = message.find(')', startPos + TerminationMessageMarker.size());
         if (endPos != TString::npos) {
             TStringBuf lenText = message.Tail(startPos + TerminationMessageMarker.size())
-                .Trunc(endPos - startPos - TerminationMessageMarker.size());
+                                     .Trunc(endPos - startPos - TerminationMessageMarker.size());
             try {
                 len = FromString<size_t>(lenText);
             } catch (const TFromStringException&) {
@@ -301,7 +283,8 @@ TMaybe<TPosition> TryParseTerminationMessage(TStringBuf& message) {
         GetNext(s, ':', file);
         GetNext(s, ':', row);
         GetNext(s, ':', column);
-        ui32 rowValue, columnValue;
+        ui32 rowValue;
+        ui32 columnValue;
         if (file && row && column && TryFromString(*row, rowValue) && TryFromString(*column, columnValue)) {
             message = StripStringLeft(s);
             return TPosition(columnValue, rowValue, TString(*file));
@@ -311,31 +294,31 @@ TMaybe<TPosition> TryParseTerminationMessage(TStringBuf& message) {
     return Nothing();
 }
 
-} // namspace NYql
+} // namespace NYql
 
 template <>
-void Out<NYql::TPosition>(IOutputStream& out, const NYql::TPosition& pos) {
-    out << (pos.File ? pos.File : "<main>");
-    if (pos) {
-        out << ":" << pos.Row << ':' << pos.Column;
+void Out<NYql::TPosition>(IOutputStream& out, const NYql::TPosition& value) {
+    out << (value.File ? value.File : "<main>");
+    if (value) {
+        out << ":" << value.Row << ':' << value.Column;
     }
 }
 
-template<>
-void Out<NYql::TRange>(IOutputStream & out, const NYql::TRange & range) {
-    if (range.IsRange()) {
-        out << '[' << range.Position << '-' << range.EndPosition << ']';
+template <>
+void Out<NYql::TRange>(IOutputStream& out, const NYql::TRange& value) {
+    if (value.IsRange()) {
+        out << '[' << value.Position << '-' << value.EndPosition << ']';
     } else {
-        out << range.Position;
+        out << value.Position;
     }
 }
 
 template <>
-void Out<NYql::TIssue>(IOutputStream& out, const NYql::TIssue& error) {
-    error.PrintTo(out);
+void Out<NYql::TIssue>(IOutputStream& out, const NYql::TIssue& value) {
+    value.PrintTo(out);
 }
 
 template <>
-void Out<NYql::TIssues>(IOutputStream& out, const NYql::TIssues& error) {
-    error.PrintTo(out);
+void Out<NYql::TIssues>(IOutputStream& out, const NYql::TIssues& value) {
+    value.PrintTo(out);
 }

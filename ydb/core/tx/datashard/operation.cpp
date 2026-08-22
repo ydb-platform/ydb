@@ -4,6 +4,8 @@
 
 #include <ydb/library/actors/core/monotonic_provider.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -62,19 +64,23 @@ void TOperation::AddInReadSet(const TReadSetKey &rsKey,
     auto it = CoverageBuilders().find(std::make_pair(rsKey.From, rsKey.To));
     if (it != CoverageBuilders().end()) {
         if (it->second->AddResult(btList)) {
-            LOG_TRACE_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
-                        "Filled readset for " << *this << " from=" << rsKey.From
-                        << " to=" << rsKey.To << "origin=" << rsKey.Origin);
-            InReadSets()[it->first].emplace_back(TRSData(readSet, rsKey.Origin));
+            YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "Filled readset",
+                {"operation", *this},
+                {"from", rsKey.From},
+                {"to", rsKey.To},
+                {"origin", rsKey.Origin});
+            InReadSets()[it->first].emplace_back(TRSData{ std::move(readSet), rsKey.Origin });
             if (it->second->IsComplete()) {
                 Y_ENSURE(InputDataRef().RemainReadSets > 0, "RemainReadSets counter underflow");
                 --InputDataRef().RemainReadSets;
             }
         }
     } else {
-        LOG_NOTICE_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
-                     "Discarded readset for " << *this << " from=" << rsKey.From
-                     << " to=" << rsKey.To << "origin=" << rsKey.Origin);
+        YDB_LOG_NOTICE_CTX(TActivationContext::AsActorContext(), "Discarded readset",
+            {"operation", *this},
+            {"from", rsKey.From},
+            {"to", rsKey.To},
+            {"origin", rsKey.Origin});
     }
 }
 
@@ -321,6 +327,24 @@ bool TOperation::HasRuntimeConflicts() const noexcept
 void TOperation::SetFinishProposeTs() noexcept
 {
     SetFinishProposeTs(AppData()->MonotonicTimeProvider->Now());
+}
+
+std::optional<TString> TOperation::OnMigration(TDataShard&, const TActorContext&)
+{
+    // By default operations cannot be migrated
+    return std::nullopt;
+}
+
+bool TOperation::OnRestoreMigrated(TDataShard&, const TString&)
+{
+    // By default operations cannot be restored
+    return false;
+}
+
+bool TOperation::OnFinishMigration(TDataShard&, const NTable::TScheme&)
+{
+    // By default operations cannot finish migration
+    return false;
 }
 
 bool TOperation::OnStopping(TDataShard&, const TActorContext&)

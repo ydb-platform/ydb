@@ -60,7 +60,7 @@
 #include "absl/base/attributes.h"
 #include "absl/base/config.h"
 #include "absl/base/nullability.h"
-#include "absl/strings/internal/resize_uninitialized.h"
+#include "absl/strings/resize_and_overwrite.h"
 #include "absl/strings/string_view.h"
 
 namespace absl {
@@ -130,7 +130,7 @@ inline bool ascii_iscntrl(unsigned char c) {
 // ascii_isxdigit()
 //
 // Determines whether the given character can be represented as a hexadecimal
-// digit character (i.e. {0-9} or {A-F}).
+// digit character (i.e. {0-9} or {A-F} or {a-f}).
 inline bool ascii_isxdigit(unsigned char c) {
   return (ascii_internal::kPropertyBits[c] & 0x80) != 0;
 }
@@ -190,8 +190,10 @@ void AsciiStrToLower(std::string* absl_nonnull s);
 // Creates a lowercase string from a given absl::string_view.
 [[nodiscard]] inline std::string AsciiStrToLower(absl::string_view s) {
   std::string result;
-  strings_internal::STLStringResizeUninitialized(&result, s.size());
-  ascii_internal::AsciiStrToLower(&result[0], s.data(), s.size());
+  StringResizeAndOverwrite(result, s.size(), [s](char* buf, size_t buf_size) {
+    ascii_internal::AsciiStrToLower(buf, s.data(), s.size());
+    return buf_size;
+  });
   return result;
 }
 
@@ -219,8 +221,10 @@ void AsciiStrToUpper(std::string* absl_nonnull s);
 // Creates an uppercase string from a given absl::string_view.
 [[nodiscard]] inline std::string AsciiStrToUpper(absl::string_view s) {
   std::string result;
-  strings_internal::STLStringResizeUninitialized(&result, s.size());
-  ascii_internal::AsciiStrToUpper(&result[0], s.data(), s.size());
+  StringResizeAndOverwrite(result, s.size(), [s](char* buf, size_t buf_size) {
+    ascii_internal::AsciiStrToUpper(buf, s.data(), s.size());
+    return buf_size;
+  });
   return result;
 }
 

@@ -6,11 +6,10 @@
 namespace NKikimr::NReplication {
 
 using namespace NActors;
-using namespace NSchemeCache;
 
-enum class EWakeupType : ui64 {
+enum class EWakeupType: ui64 {
     Describe,
-    InitOffset
+    InitOffset,
 };
 
 class ILocalTopicPartitionActor {
@@ -22,25 +21,25 @@ protected:
     virtual void OnError(const TString& error) = 0;
     virtual void OnFatalError(const TString& error) = 0;
     virtual STATEFN(OnInitEvent) = 0;
-    virtual TString MakeLogPrefix() = 0;
+    virtual NActors::NStructuredLog::TStructuredMessage MakeLogPrefix() = 0;
 };
 
 class TBaseLocalTopicPartitionActor
     : public TActorBootstrapped<TBaseLocalTopicPartitionActor>
     , public ILocalTopicPartitionActor
-    , private TSchemeCacheHelpers
+    , private NSchemeCache::TSchemeCacheHelpers
 {
     using TThis = TBaseLocalTopicPartitionActor;
     static constexpr size_t MaxAttempts = 5;
 
 public:
-    TBaseLocalTopicPartitionActor(const std::string& database, const std::string&& topicPath, const ui32 partitionId);
+    TBaseLocalTopicPartitionActor(const std::string& database, const std::string& topicPath, ui32 partitionId);
     void Bootstrap();
 
 protected:
-    void DoDescribe();
+    void DoDescribe(const TString& topicPath);
 
-    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
+    void Handle(TEvNavigateResult::TPtr& ev);
     void HandleOnDescribe(TEvents::TEvWakeup::TPtr& ev);
 
     TCheckFailFunc DoRetryDescribe();
@@ -60,6 +59,9 @@ protected:
 protected:
     void PassAway();
 
+private:
+    TString MakeAbsolutePath(TString path) const;
+
 protected:
     const std::string Database;
     const TString TopicPath;
@@ -69,7 +71,7 @@ protected:
     TActorId PartitionPipeClient;
 
     size_t Attempt = 0;
-    TString LogPrefix;
+    NActors::NStructuredLog::TStructuredMessage LogPrefix;
 };
 
 }

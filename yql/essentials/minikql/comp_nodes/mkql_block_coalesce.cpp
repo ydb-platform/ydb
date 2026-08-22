@@ -35,24 +35,24 @@ void DispatchCoalesceImpl(const arrow::Datum& left, const arrow::Datum& right, a
         if (right.is_scalar()) {
             out = left;
         } else {
-            MKQL_ENSURE(TDatumStorageView<TType>(right).bitMask(), "Right array must have a null mask");
+            MKQL_ENSURE(TDatumStorageView<const TType>(right).bitMask(), "Right array must have a null mask");
             BlendCoalesce<TType, /*isScalar=*/false, /*rightHasBitmask=*/true>(
-                TDatumStorageView<TType>(left),
-                TDatumStorageView<TType>(right),
+                TDatumStorageView<const TType>(left),
+                TDatumStorageView<const TType>(right),
                 TDatumStorageView<TType>(out),
                 left.array()->length);
         }
     } else {
         if (right.is_scalar()) {
             BlendCoalesce<TType, /*isScalar=*/true, /*rightHasBitmask=*/false>(
-                TDatumStorageView<TType>(left),
-                TDatumStorageView<TType>(right),
+                TDatumStorageView<const TType>(left),
+                TDatumStorageView<const TType>(right),
                 TDatumStorageView<TType>(out),
                 left.array()->length);
         } else {
             BlendCoalesce<TType, /*isScalar=*/false, /*rightHasBitmask=*/false>(
-                TDatumStorageView<TType>(left),
-                TDatumStorageView<TType>(right),
+                TDatumStorageView<const TType>(left),
+                TDatumStorageView<const TType>(right),
                 TDatumStorageView<TType>(out),
                 left.array()->length);
         }
@@ -112,13 +112,6 @@ bool DispatchBlendingCoalesce(const arrow::Datum& left, const arrow::Datum& righ
     }
 }
 
-std::shared_ptr<arrow::Scalar> UnwrapScalar(std::shared_ptr<arrow::Scalar> scalar, bool firstScalarIsExternalOptional) {
-    if (firstScalarIsExternalOptional) {
-        return dynamic_cast<arrow::StructScalar&>(*scalar).value.at(0);
-    }
-    return scalar;
-}
-
 class TCoalesceBlockExec {
 public:
     TCoalesceBlockExec(const std::shared_ptr<arrow::DataType>& returnArrowType, TType* firstItemType, TType* secondItemType, bool needUnwrapFirst)
@@ -126,7 +119,6 @@ public:
         , FirstItemType_(firstItemType)
         , SecondItemType_(secondItemType)
         , NeedUnwrapFirst_(needUnwrapFirst)
-        , FirstScalarIsExternalOptional_(NeedWrapWithExternalOptional(FirstItemType_))
     {
     }
 
@@ -136,7 +128,7 @@ public:
 
         if (first.is_scalar() && second.is_scalar()) {
             if (first.scalar()->is_valid) {
-                *res = NeedUnwrapFirst_ ? UnwrapScalar(first.scalar(), FirstScalarIsExternalOptional_) : first.scalar();
+                *res = NeedUnwrapFirst_ ? UnwrapScalar(first.scalar(), FirstItemType_) : first.scalar();
             } else {
                 *res = second.scalar();
             }
@@ -161,7 +153,7 @@ public:
             if (firstArray.GetNullCount() == 0) {
                 *res = NeedUnwrapFirst_ ? Unwrap(firstArray, FirstItemType_) : first;
             } else if ((size_t)firstArray.GetNullCount() == length) {
-                auto builder = NYql::NUdf::MakeArrayBuilder(TTypeInfoHelper(), SecondItemType_, *ctx->memory_pool(), length, nullptr);
+                auto builder = NYql::NUdf::MakeArrayBuilder(TTypeInfoHelper(), SecondItemType_, *ctx->memory_pool(), length, /*pgBuilder=*/nullptr);
                 auto secondValue = secondReader->GetScalarItem(*second.scalar());
                 builder->Add(secondValue, length);
                 *res = builder->Build(true);
@@ -170,7 +162,7 @@ public:
                     return arrow::Status::OK();
                 }
 
-                auto builder = NYql::NUdf::MakeArrayBuilder(TTypeInfoHelper(), SecondItemType_, *ctx->memory_pool(), length, nullptr);
+                auto builder = NYql::NUdf::MakeArrayBuilder(TTypeInfoHelper(), SecondItemType_, *ctx->memory_pool(), length, /*pgBuilder=*/nullptr);
                 auto secondValue = secondReader->GetScalarItem(*second.scalar());
                 for (size_t i = 0; i < length; ++i) {
                     auto firstItem = firstReader->GetItem(firstArray, i);
@@ -195,7 +187,7 @@ public:
                     return arrow::Status::OK();
                 }
 
-                auto builder = NYql::NUdf::MakeArrayBuilder(TTypeInfoHelper(), SecondItemType_, *ctx->memory_pool(), length, nullptr);
+                auto builder = NYql::NUdf::MakeArrayBuilder(TTypeInfoHelper(), SecondItemType_, *ctx->memory_pool(), length, /*pgBuilder=*/nullptr);
                 for (size_t i = 0; i < length; ++i) {
                     auto firstItem = firstReader->GetItem(firstArray, i);
                     if (firstItem) {
@@ -218,7 +210,6 @@ private:
     TType* const FirstItemType_;
     TType* const SecondItemType_;
     const bool NeedUnwrapFirst_;
-    const bool FirstScalarIsExternalOptional_;
 };
 
 std::shared_ptr<arrow::compute::ScalarKernel> MakeBlockCoalesceKernel(const TVector<TType*>& argTypes, TType* resultType, bool needUnwrapFirst) {
@@ -253,7 +244,7 @@ IComputationNode* WrapBlockCoalesce(TCallable& callable, const TComputationNodeF
 
     auto firstItemType = firstType->GetItemType();
     auto secondItemType = secondType->GetItemType();
-    MKQL_ENSURE(firstItemType->IsOptional() || firstItemType->IsPg(), "Expecting Optional or Pg type as first argument");
+    MKQL_ENSURE(firstItemType->IsOptional() || firstItemType->IsPg(), TStringBuilder() << "Expecting Optional or Pg type as first argument, but got: " << *firstItemType);
 
     bool needUnwrapFirst = false;
     if (!firstItemType->IsSameType(*secondItemType)) {
@@ -271,7 +262,7 @@ IComputationNode* WrapBlockCoalesce(TCallable& callable, const TComputationNodeF
     TVector<TType*> argsTypes = {firstType, secondType};
 
     auto kernel = MakeBlockCoalesceKernel(argsTypes, secondType, needUnwrapFirst);
-    return new TBlockFuncNode(ctx.Mutables, "Coalesce", std::move(argsNodes), argsTypes, *kernel, kernel);
+    return new TBlockFuncNode(ctx.Mutables, ctx.RuntimeSettings->DatumValidation.Get(), "Coalesce", std::move(argsNodes), argsTypes, callable.GetType()->GetReturnType(), *kernel, kernel);
 }
 
 } // namespace NKikimr::NMiniKQL

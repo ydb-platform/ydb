@@ -25,11 +25,11 @@ namespace NYT::NYTProf {
 struct TProfileLocation
 {
     size_t Tid = 0;
-    TString ThreadName;
+    std::string ThreadName;
     std::vector<std::pair<std::string, std::variant<std::string, i64>>> Tags;
     std::vector<ui64> Backtrace;
 
-    bool operator == (const TProfileLocation& other) const = default;
+    bool operator==(const TProfileLocation& other) const = default;
     operator size_t() const;
 };
 

@@ -16,6 +16,8 @@ items:
     href: general-schema.md
   - name: Распределённое хранилище
     href: distributed-storage.md
+  - name: Подсистемы распространения метаданных
+    href: metadata-distribution.md
   - name: LocalDB
     items:
     - name: Персистентные незакомиченные изменения
@@ -33,6 +35,10 @@ items:
       href: datashard-distributed-txs.md
   - name: Конфигурация V2
     href: configuration-v2.md
+  - name: Режим bridge
+    href: bridge.md
+  - name: Spilling Service
+    href: spilling-service.md
   - name: Тестирование с помощью нагружающих акторов
     href: load-actors-overview.md
     items:
@@ -54,3 +60,7 @@ items:
       href: load-actors-memory.md
     - name: Stop
       href: load-actors-stop.md
+- name: Тестирование
+  items:
+  - name: Хаос-тестирование
+    href: testing/chaos-testing.md

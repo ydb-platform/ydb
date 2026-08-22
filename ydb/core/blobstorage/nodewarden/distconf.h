@@ -4,28 +4,28 @@
 #include "node_warden.h"
 #include "node_warden_events.h"
 
+#include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/blobstorage/base/blobstorage_console_events.h>
+
+#include <ydb/core/protos/config.pb.h>
+
+#include <ydb/core/base/bridge.h>
+#include <ydb/core/util/backoff.h>
 #include <util/generic/hash_multi_map.h>
 #include <ydb/core/mind/bscontroller/group_mapper.h>
 
 namespace NKikimr::NStorage {
 
     struct TNodeIdentifier : std::tuple<TString, ui32, ui32> {
-        std::optional<TBridgePileId> BridgePileId;
-
         TNodeIdentifier() = default;
 
-        TNodeIdentifier(TString host, ui32 port, ui32 nodeId, std::optional<TBridgePileId> bridgePileId)
+        TNodeIdentifier(TString host, ui32 port, ui32 nodeId)
             : std::tuple<TString, ui32, ui32>(std::move(host), port, nodeId)
-            , BridgePileId(bridgePileId)
         {}
 
         TNodeIdentifier(const NKikimrBlobStorage::TNodeIdentifier& proto)
             : std::tuple<TString, ui32, ui32>(proto.GetHost(), proto.GetPort(), proto.GetNodeId())
-        {
-            if (proto.HasBridgePileId()) {
-                BridgePileId.emplace(TBridgePileId::FromProto(&proto, &NKikimrBlobStorage::TNodeIdentifier::GetBridgePileId));
-            }
-        }
+        {}
 
         ui32 NodeId() const {
             return std::get<2>(*this);
@@ -35,9 +35,6 @@ namespace NKikimr::NStorage {
             proto->SetHost(std::get<0>(*this));
             proto->SetPort(std::get<1>(*this));
             proto->SetNodeId(std::get<2>(*this));
-            if (BridgePileId) {
-                BridgePileId->CopyToProto(proto, &NKikimrBlobStorage::TNodeIdentifier::SetBridgePileId);
-            }
         }
     };
 
@@ -61,6 +58,8 @@ namespace NKikimr::NStorage {
         }
     };
 
+    using TStorageConfigPtr = std::shared_ptr<const NKikimrBlobStorage::TStorageConfig>;
+
 } // NKikimr::NStorage
 
 template<>
@@ -72,6 +71,12 @@ struct THash<NKikimr::NStorage::TStorageConfigMeta> {
         return MultiHash(m.GetGeneration(), m.GetFingerprint());
     }
 };
+
+namespace NKikimrConfig {
+
+    class TStateStorageConfig;
+
+} // NKikimrConfig
 
 namespace NKikimr::NStorage {
 
@@ -86,6 +91,13 @@ namespace NKikimr::NStorage {
                EvStorageConfigLoaded,
                EvStorageConfigStored,
                EvReconnect,
+               EvExecuteQuery,
+               EvAbortQuery,
+               EvQueryFinished,
+               EvConfigProposed,
+               EvRetryCollectConfigsAndPropose,
+               EvRetryPersistConfig,
+               EvFlushRetroTraceBatch,
             };
 
             struct TEvStorageConfigLoaded : TEventLocal<TEvStorageConfigLoaded, EvStorageConfigLoaded> {
@@ -96,6 +108,22 @@ namespace NKikimr::NStorage {
 
             struct TEvStorageConfigStored : TEventLocal<TEvStorageConfigStored, EvStorageConfigStored> {
                 std::vector<std::tuple<TString, bool, std::optional<ui64>>> StatusPerPath;
+            };
+
+            struct TEvAbortQuery : TEventLocal<TEvAbortQuery, EvAbortQuery> {
+                TString ErrorReason;
+
+                TEvAbortQuery(TString errorReason)
+                    : ErrorReason(std::move(errorReason))
+                {}
+            };
+
+            struct TEvConfigProposed : TEventLocal<TEvConfigProposed, EvConfigProposed> {
+                std::optional<TString> ErrorReason;
+
+                TEvConfigProposed(std::optional<TString> errorReason)
+                    : ErrorReason(std::move(errorReason))
+                {}
             };
         };
 
@@ -142,10 +170,12 @@ namespace NKikimr::NStorage {
             TActorId SessionId; // interconnect session for this peer
             THashSet<ui64> ScatterTasks; // unanswered scatter queries
             THashSet<TNodeIdentifier> BoundNodeIds; // a set of provided bound nodes by this peer (not including itself)
+            ui32 LastReportedRootNodeId;
 
-            TBoundNode(ui64 cookie, TActorId sessionId)
+            TBoundNode(ui64 cookie, TActorId sessionId, ui32 lastReportedRootNodeId)
                 : Cookie(cookie)
                 , SessionId(sessionId)
+                , LastReportedRootNodeId(lastReportedRootNodeId)
             {}
 
             bool Expected(IEventHandle& ev) const {
@@ -158,22 +188,41 @@ namespace NKikimr::NStorage {
             ui64 Id = RandomNumber<ui64>(); // unique id
         };
 
+        struct TScatterTaskOriginFsm {
+            TString ToString() const { return "fsm"; }
+        };
+
+        struct TScatterTaskOriginTargeted {
+            TActorId Sender;
+            ui64 Cookie;
+            TActorId InterconnectSessionId;
+
+            TString ToString() const { return TStringBuilder() << "{Sender# " << Sender << " Cookie# " << Cookie
+                << " InterconnectSessionId# " << InterconnectSessionId << '}'; }
+        };
+
+        using TScatterTaskOrigin = std::variant<
+            TBinding, // when scatter is received from root
+            TActorId, // locally generated by invoke processor
+            TScatterTaskOriginFsm, // locally generated by configuration change FSM
+            TScatterTaskOriginTargeted // when targeted scatter is issued by cluster leader to newly added nodes
+        >;
+
         struct TScatterTask {
-            const std::optional<TBinding> Origin;
+            const TScatterTaskOrigin Origin;
             const ui64 ScepterCounter;
-            const TActorId ActorId;
 
             THashSet<ui32> PendingNodes;
             ui32 AsyncOperationsPending = 0;
             TEvScatter Request;
             TEvGather Response;
             std::vector<TEvGather> CollectedResponses; // from bound nodes
+            TMonotonic StartTimestamp;
 
-            TScatterTask(const std::optional<TBinding>& origin, TEvScatter&& request,
-                    ui64 scepterCounter, TActorId actorId)
-                : Origin(origin)
+            TScatterTask(TScatterTaskOrigin&& origin, TEvScatter&& request, ui64 scepterCounter, TMonotonic startTimestamp)
+                : Origin(std::move(origin))
                 , ScepterCounter(scepterCounter)
-                , ActorId(actorId)
+                , StartTimestamp(startTimestamp)
             {
                 Request.Swap(&request);
                 if (Request.HasCookie()) {
@@ -186,9 +235,10 @@ namespace NKikimr::NStorage {
         TIntrusivePtr<TNodeWardenConfig> Cfg;
         bool SelfManagementEnabled = false;
         TBridgeInfo::TPtr BridgeInfo;
+        THashMap<TString, TBridgePileId> BridgePileNameMap;
 
         // currently active storage config
-        std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> StorageConfig;
+        TStorageConfigPtr StorageConfig;
         TString MainConfigYaml; // the part we have to push (unless this is storage-only) to console
         std::optional<ui64> MainConfigYamlVersion;
         TString MainConfigFetchYaml; // the part we would get is we fetch from console
@@ -196,26 +246,31 @@ namespace NKikimr::NStorage {
         std::optional<TString> StorageConfigYaml; // set if dedicated storage yaml is enabled; otherwise nullopt
 
         // base config from config file
-        std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> BaseConfig;
+        TStorageConfigPtr BaseConfig;
 
-        // initial config based on config file and stored committed configs
-        std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> InitialConfig;
-        std::vector<TString> DrivesToRead;
+        // newest committed storage config
+        TStorageConfigPtr CommittedStorageConfig;
+
+        // locally committed storage config
+        TStorageConfigPtr LocalCommittedStorageConfig;
+
+        // last reported storage config to NW
+        std::tuple<TStorageConfigPtr, bool, TBridgeInfo::TPtr, TStorageConfigPtr> LastReportedStorageConfig;
 
         // proposed storage configuration of the cluster
-        std::optional<NKikimrBlobStorage::TStorageConfig> ProposedStorageConfig; // proposed one
-        ui64 ProposedStorageConfigCookie; // if set, then this configuration is being written right now
-        ui32 ProposedStorageConfigCookieUsage = 0;
+        bool PersistProposedStorageConfigInFlight = false;
 
         // most relevant proposed config
         using TPersistCallback = std::function<void(TEvPrivate::TEvStorageConfigStored&)>;
         struct TPersistQueueItem {
             THPTimer Timer;
-            std::vector<TString> Drives;
-            NKikimrBlobStorage::TPDiskMetadataRecord Record; // what we are going to write
             TPersistCallback Callback; // what will be called upon completion
+            THashMap<TString, NKikimrBlobStorage::TPDiskMetadataRecord> MetadataByPath;
         };
         std::deque<TPersistQueueItem> PersistQ;
+        THashMap<TString, NKikimrBlobStorage::TPDiskMetadataRecord> MetadataByPath;
+        THashSet<TString> PathsToRetry;
+        std::vector<TString> PrevDrivesToRead;
 
         // initialization state
         bool NodeListObtained = false;
@@ -225,7 +280,13 @@ namespace NKikimr::NStorage {
         std::optional<TBinding> Binding;
         ui64 BindingCookie = RandomNumber<ui64>();
         TBindQueue BindQueue;
+        TBindQueue RevBindQueue;
+        TBindQueue OtherPilesBindQueue;
         bool Scheduled = false;
+
+        // unbound-state diagnostic
+        ui32 BindFailuresStreak = 0;
+        TInstant LastUnboundWarnAt = TInstant::Zero();
 
         // incoming bindings
         struct TIndirectBoundNode {
@@ -234,33 +295,53 @@ namespace NKikimr::NStorage {
         };
         THashMap<ui32, TBoundNode> DirectBoundNodes; // a set of nodes directly bound to this one
         THashMap<TNodeIdentifier, TIndirectBoundNode> AllBoundNodes; // a set of all bound nodes in tree, including this one
+        THashSet<TBridgePileId> ConnectedUnsyncedPiles;
 
         // pending event queue
         std::deque<TAutoPtr<IEventHandle>> PendingEvents;
-        std::vector<ui32> NodeIds;
-        THashSet<ui32> NodeIdsSet;
+        std::vector<ui32> NodeIdsForOutgoingBinding;
+        std::vector<ui32> NodeIdsForIncomingBinding;
+        std::vector<ui32> NodeIdsForOtherPilesOutgoingBinding;
+        THashMap<ui32, TNodeIdentifier> AllNodeIds;
+        THashSet<ui32> NodesFromSamePile;
         TNodeIdentifier SelfNode;
+        std::optional<TString> SelfNodeBridgePileName;
+        THashSet<std::tuple<TString, ui32>> Hosts;
 
         // scatter tasks
         ui64 NextScatterCookie = RandomNumber<ui64>();
         using TScatterTasks = THashMap<ui64, TScatterTask>;
         TScatterTasks ScatterTasks;
+        std::set<std::tuple<ui32, ui64>> AddedNodesScatterTasks;
+
+        std::optional<TActorId> StateStorageSelfHealActor;
 
         // root node operation
         enum class ERootState {
-            INITIAL,
-            ERROR_TIMEOUT,
-            IN_PROGRESS,
-            RELAX,
+            INITIAL,       // possible binding, no scepter, no operation in progress
+            ERROR_TIMEOUT, // possible binding, no scepter, no operation in progress
+            IN_PROGRESS,   // no binding, scepter, global quorum operation in progress
+            RELAX,         // no binding, scepter, no operation in progress
         };
         static constexpr TDuration ErrorTimeout = TDuration::Seconds(3);
         ERootState RootState = ERootState::INITIAL;
-        std::optional<NKikimrBlobStorage::TStorageConfig> CurrentProposedStorageConfig;
+        TBackoffTimer CollectConfigsBackoffTimer{10, 1000};
+
+        struct TProposition {
+            NKikimrBlobStorage::TStorageConfig StorageConfig; // storage config being proposed
+            TActorId ActorId; // actor id waiting for this operation to complete
+            bool MindPrev; // mind previous configuration quorum
+            std::vector<TNodeIdentifier> AddedOrChangedNodeIdentifiers; // identifiers of added nodes or changed endpoints
+        };
+        std::optional<TProposition> CurrentProposition;
+
         std::shared_ptr<TScepter> Scepter;
-        ui64 ScepterCounter = 0; // increased every time Scepter gets changed
-        bool ScepterlessOperationInProgress = false; // when a leader operation is running while no Scepter is acquired
+        ui64 ScepterCounter = 1; // increased every time Scepter gets changed
         TString ErrorReason;
         std::optional<TString> CurrentSelfAssemblyUUID;
+        bool MajorityOfNodesConnected = false;
+        bool GlobalQuorum = false;
+        bool QuorumValid = false;
 
         // subscribed IC sessions
         struct TSessionSubscription {
@@ -278,19 +359,23 @@ namespace NKikimr::NStorage {
         THashMap<ui64, ui32> SubscriptionCookieMap;
         THashSet<ui32> UnsubscribeQueue;
 
-        // child actors
-        THashSet<TActorId> ChildActors;
-
         // pipe to Console
         TActorId ConsolePipeId;
         bool ConsoleConnected = false;
-        bool ConfigCommittedToConsole = false;
         ui64 ValidateRequestCookie = 0;
         ui64 ProposeRequestCookie = 0;
         ui64 CommitRequestCookie = 0;
         bool ProposeRequestInFlight = false;
         std::optional<std::tuple<ui64, ui32>> ProposedConfigHashVersion;
         std::vector<std::tuple<TActorId, TString, ui64>> ConsoleConfigValidationQ;
+
+        // retro trace root-side batching
+        TControlWrapper RootRetroTraceBatchIntervalSec = TControlWrapper(10, 1, 3600);
+        std::vector<NWilson::TTraceId> PendingRetroTraceIds;
+        bool RetroTraceBatchFlushScheduled = false;
+
+        void HandleFlushRetroTraceBatch();
+        void FlushRetroTraceBatch();
 
         // cache subsystem
         struct TCacheItem {
@@ -303,30 +388,35 @@ namespace NKikimr::NStorage {
         friend void ::Out<ERootState>(IOutputStream&, ERootState);
 
     public:
+        class TDistconfBridgeConnectionCheckerActor;
+
+    public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::NODEWARDEN_DISTRIBUTED_CONFIG;
         }
 
-        TDistributedConfigKeeper(TIntrusivePtr<TNodeWardenConfig> cfg,
-            std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> baseConfig, bool isSelfStatic);
+        TDistributedConfigKeeper(TIntrusivePtr<TNodeWardenConfig> cfg, TStorageConfigPtr baseConfig, bool isSelfStatic);
 
         void Bootstrap();
         void PassAway() override;
-        void HandleGone(STATEFN_SIG);
         void Halt(); // cease any distconf activity, unbind and reject any bindings
         bool ApplyStorageConfig(const NKikimrBlobStorage::TStorageConfig& config);
-        void HandleConfigConfirm(STATEFN_SIG);
-        void ReportStorageConfigToNodeWarden(ui64 cookie);
+        void ApplyCommittedStorageConfig(const NKikimrBlobStorage::TStorageConfig& config);
         void Handle(TEvNodeWardenUpdateConfigFromPeer::TPtr ev);
+        void HandleConfigConfirm(STATEFN_SIG);
+        void ReportStorageConfigToNodeWarden();
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // PDisk configuration retrieval and storing
 
-        void ReadConfig(ui64 cookie = 0);
-        void WriteConfig(std::vector<TString> drives, NKikimrBlobStorage::TPDiskMetadataRecord record);
-        void PersistConfig(TPersistCallback callback);
+        void ReadConfig(std::vector<TString> paths, ui64 cookie = 0);
+        void WriteConfig(THashMap<TString, NKikimrBlobStorage::TPDiskMetadataRecord> records);
+        void PersistConfig(TPersistCallback callback, const std::vector<TString>& drives);
         void Handle(TEvPrivate::TEvStorageConfigStored::TPtr ev);
+        void HandleRetryPersistConfig();
         void Handle(TEvPrivate::TEvStorageConfigLoaded::TPtr ev);
+
+        std::vector<TString> GetDrives(const NKikimrBlobStorage::TStorageConfig& config) const;
 
         static TString CalculateFingerprint(const NKikimrBlobStorage::TStorageConfig& config);
         static void UpdateFingerprint(NKikimrBlobStorage::TStorageConfig *config);
@@ -337,25 +427,31 @@ namespace NKikimr::NStorage {
 
         void Handle(TEvInterconnect::TEvNodesInfo::TPtr ev);
 
+        void ApplyNewNodeList(std::span<std::tuple<TNodeIdentifier, TNodeLocation>> newNodeList);
+
+        TBridgePileId ResolveNodePileId(const TNodeLocation& location);
+
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Binding to peer nodes
 
         void IssueNextBindRequest();
+        void StartBinding(ui32 nodeId);
         void BindToSession(TActorId sessionId);
         void Handle(TEvInterconnect::TEvNodeConnected::TPtr ev);
         void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr ev);
         void HandleDisconnect(ui32 nodeId, TActorId sessionId);
         void UnsubscribeInterconnect(ui32 nodeId);
         TActorId SubscribeToPeerNode(ui32 nodeId, TActorId sessionId);
-        void AbortBinding(const char *reason, bool sendUnbindMessage = true);
+        void AbortBinding(const char *reason, bool sendUnbindMessage = true, bool sendUpdate = true);
+        void LogUnboundBindingWarning();
         void HandleWakeup();
         void Handle(TEvNodeConfigReversePush::TPtr ev);
-        void FanOutReversePush(const NKikimrBlobStorage::TStorageConfig *config, bool recurseConfigUpdate = false);
+        void FanOutReversePush(const NKikimrBlobStorage::TStorageConfig *committedStorageConfig);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Binding requests from peer nodes
 
-        void UpdateBound(ui32 refererNodeId, TNodeIdentifier nodeId, const TStorageConfigMeta& meta, TEvNodeConfigPush *msg);
+        bool UpdateBound(ui32 refererNodeId, TNodeIdentifier nodeId, const TStorageConfigMeta& meta, TEvNodeConfigPush *msg);
         void DeleteBound(ui32 refererNodeId, const TNodeIdentifier& nodeId, TEvNodeConfigPush *msg);
         void Handle(TEvNodeConfigPush::TPtr ev);
         void Handle(TEvNodeConfigUnbind::TPtr ev);
@@ -366,39 +462,72 @@ namespace NKikimr::NStorage {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Root node operation
 
+        void UpdateQuorums();
         void CheckRootNodeStatus();
+        void HandleRetryCollectConfigsAndPropose(STATEFN_SIG);
         void BecomeRoot();
         void UnbecomeRoot();
         void HandleErrorTimeout();
+        void UndoCurrentPropositionNodeChange(TProposition& proposition);
         void ProcessGather(TEvGather *res);
-        bool HasQuorum(const NKikimrBlobStorage::TStorageConfig& config) const;
-        void ProcessCollectConfigs(TEvGather::TCollectConfigs *res);
+        bool HasConnectedNodeQuorum(const NKikimrBlobStorage::TStorageConfig& config) const;
 
         struct TProcessCollectConfigsResult {
-            std::variant<std::monostate, TString, NKikimrBlobStorage::TStorageConfig> Outcome;
+            std::optional<TString> ErrorReason;
             bool IsDistconfDisabledQuorum = false;
+            std::optional<NKikimrBlobStorage::TStorageConfig> PropositionBase;
+            std::optional<NKikimrBlobStorage::TStorageConfig> ConfigToPropose;
+            bool AutomaticBootstrap = false;
         };
         TProcessCollectConfigsResult ProcessCollectConfigs(TEvGather::TCollectConfigs *res,
-            std::optional<TStringBuf> selfAssemblyUUID);
+            std::optional<TString> selfAssemblyUUID, bool dryRun = false);
 
-        std::optional<TString> ProcessProposeStorageConfig(TEvGather::TProposeStorageConfig *res);
+        void ProcessProposeStorageConfig(TEvGather::TProposeStorageConfig *res);
 
         struct TExConfigError : yexception {};
 
         std::optional<TString> GenerateFirstConfig(NKikimrBlobStorage::TStorageConfig *config, const TString& selfAssemblyUUID);
 
-        void AllocateStaticGroup(NKikimrBlobStorage::TStorageConfig *config, TGroupId groupId, ui32 groupGeneration,
-            TBlobStorageGroupType gtype, const NKikimrBlobStorage::TGroupGeometry& geometry,
-            const NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TPDiskFilter>& pdiskFilters,
-            std::optional<NKikimrBlobStorage::EPDiskType> pdiskType,
-            THashMap<TVDiskIdShort, NBsController::TPDiskId> replacedDisks,
-            const NBsController::TGroupMapper::TForbiddenPDisks& forbid,
-            i64 requiredSpace, NKikimrBlobStorage::TBaseConfig *baseConfig,
-            bool convertToDonor, bool ignoreVSlotQuotaCheck, bool isSelfHealReasonDecommit,
-            std::optional<TBridgePileId> bridgePileId);
+        struct TStaticGroupReassignment {
+            std::optional<NKikimrBlobStorage::TVSlotId> SourceSlotId;
+            std::optional<NKikimrBlobStorage::TVSlotId> TargetSlotId;
+        };
 
-        void GenerateStateStorageConfig(NKikimrConfig::TDomainsConfig::TStateStorage *ss,
-            const NKikimrBlobStorage::TStorageConfig& baseConfig);
+        using TStaticGroupReassignments = THashMap<TVDiskIdShort, TStaticGroupReassignment>;
+
+        struct TAllocateStaticGroupParams {
+            NKikimrBlobStorage::TStorageConfig *Config = nullptr;
+            TGroupId GroupId;
+            ui32 GroupGeneration = 0;
+            TBlobStorageGroupType GroupType;
+            THashMap<TVDiskIdShort, NBsController::TPDiskId> ReplacedDisks;
+            NBsController::TGroupMapper::TForbiddenPDisks ForbiddenPDisks;
+            std::optional<i64> RequiredSpace;
+            const NKikimrBlobStorage::TBaseConfig *BaseConfig = nullptr;
+            bool ConvertToDonor = false;
+            bool IgnoreVSlotQuotaCheck = false;
+            bool AllowUnusableDisks = false;
+            bool SettleOnlyOnOperationalDisks = false;
+            bool IsSelfHealReasonDecommit = false;
+            bool PreferLessOccupiedRack = false;
+            bool WithAttentionToReplication = false;
+            bool UseSelfHealLocalPolicy = false;
+            bool TryToRelocateBrokenDisksLocallyFirst = false;
+            TBridgePileId BridgePileId;
+            std::optional<TGroupId> BridgeProxyGroupId;
+            bool ApplySelfHealNodeAllowList = false;
+            TStaticGroupReassignments *Reassignments = nullptr;
+        };
+
+        static TAllocateStaticGroupParams BuildStaticGroupReassignParams(NKikimrBlobStorage::TStorageConfig *config,
+                                                                         const NKikimrBlobStorage::TBaseConfig *baseConfig,
+                                                                         const NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot::TReassignGroupDisk& command,
+                                                                         const NKikimrBlobStorage::TGroupInfo& group,
+                                                                         const NKikimrBlobStorage::TNodeWardenServiceSet& serviceSet,
+                                                                         TStaticGroupReassignments *reassignments);
+
+        void AllocateStaticGroup(TAllocateStaticGroupParams params);
+
         bool UpdateConfig(NKikimrBlobStorage::TStorageConfig *config);
 
         void PrepareScatterTask(ui64 cookie, TScatterTask& task);
@@ -406,13 +535,51 @@ namespace NKikimr::NStorage {
         void PerformScatterTask(TScatterTask& task);
         void Perform(TEvGather::TCollectConfigs *response, const TEvScatter::TCollectConfigs& request, TScatterTask& task);
         void Perform(TEvGather::TProposeStorageConfig *response, const TEvScatter::TProposeStorageConfig& request, TScatterTask& task);
+        void Perform(TEvGather::TDemandRetroTrace *response, const TEvScatter::TDemandRetroTrace& request, TScatterTask& task);
 
         void SwitchToError(const TString& reason);
+
+        std::optional<TString> StartProposition(NKikimrBlobStorage::TStorageConfig *configToPropose,
+            const NKikimrBlobStorage::TStorageConfig *propositionBase, TActorId actorId, bool mindPrev);
+
+        void CheckForConfigUpdate();
+
+        std::optional<TString> TransformConfigBeforeCommit(NKikimrBlobStorage::TStorageConfig *config);
+        std::optional<TString> CheckSynchronizedPiles(NKikimrBlobStorage::TStorageConfig *config);
+        std::optional<TString> UpdateClusterStateGeneration(NKikimrBlobStorage::TStorageConfig *config);
+        std::optional<TString> TrimHistoryEntries(NKikimrBlobStorage::TStorageConfig *config);
+        std::optional<TString> ExtractStateStorageConfig(NKikimrBlobStorage::TStorageConfig *config);
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Generate state storage config
+
+        std::unordered_map<ui32, ui32> SelfHealNodesState;
+
+        bool GenerateStateStorageConfig(NKikimrConfig::TStateStorageConfig *ss
+            , const NKikimrBlobStorage::TStorageConfig& baseConfig
+            , std::unordered_set<ui32>& usedNodes
+            , const std::unordered_set<ui32>& nodesToUse = {}
+            , const NKikimrConfig::TStateStorageConfig *oldConfig = nullptr
+            , bool automaticManagement = true
+            , ui32 overrideReplicasInRingCount = 0
+            , ui32 overrideRingsCount = 0
+            , ui32 replicasSpecificVolume = 200
+        );
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Bridge ops
+
+        bool UpdateBridgeConfig(NKikimrBlobStorage::TStorageConfig *config);
+
+        static void GenerateBridgeInitialState(const TNodeWardenConfig& cfg, NKikimrBlobStorage::TStorageConfig *config);
+
+        TBridgeInfo::TPtr GenerateBridgeInfo(const NKikimrBlobStorage::TStorageConfig& config);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Scatter/gather logic
 
-        void IssueScatterTask(std::optional<TActorId> actorId, TEvScatter&& request);
+        void IssueScatterTask(TScatterTaskOrigin&& origin, TEvScatter&& request, std::span<const TNodeIdentifier> targetedNodes = {});
+        void IssueAddedNodeScatterTask(ui32 nodeId, ui64 cookie, TScatterTask& task);
         void CheckCompleteScatterTask(TScatterTasks::iterator it);
         void FinishAsyncOperation(ui64 cookie);
         void IssueScatterTaskForNode(ui32 nodeId, TBoundNode& info, ui64 cookie, TScatterTask& task);
@@ -425,11 +592,47 @@ namespace NKikimr::NStorage {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // NodeWarden RPC
 
+        struct TInvokeExternalOperation {
+            NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot Command;
+            TActorId Sender;
+            TActorId SessionId;
+            ui64 Cookie;
+        };
+
+        struct TCollectConfigsAndPropose {
+        };
+
+        struct TProposeConfig {
+            NKikimrBlobStorage::TStorageConfig Config;
+        };
+
+        using TInvokeQuery = std::variant<
+            TInvokeExternalOperation,
+            TCollectConfigsAndPropose,
+            TProposeConfig
+        >;
+
+        struct TInvokeOperation {
+            TActorId ActorId; // originating actor id or empty if this was triggered by system
+        };
+        std::deque<TInvokeOperation> InvokeQ; // operations queue; first is always the being executed one
+        std::deque<TInvokeOperation> InvokePending; // collected while in ERROR_TIMEOUT state
+        std::deque<TEvNodeConfigInvokeOnRoot::TPtr> InvokeOnRootPending;
+        bool DeadActorWaitingForProposition = false;
+
         class TInvokeRequestHandlerActor;
         struct TLifetimeToken {};
         std::shared_ptr<TLifetimeToken> LifetimeToken = std::make_shared<TLifetimeToken>();
 
-        void Handle(TEvNodeConfigInvokeOnRoot::TPtr ev);
+        THashSet<TActorId> DetachedQueries;
+
+        ui64 InvokePipelineGeneration = 1;
+
+        void HandleInvokeOnRoot(TEvNodeConfigInvokeOnRoot::TPtr ev);
+        void Invoke(TInvokeQuery&& query);
+        void HandleQueryFinished(STFUNC_SIG);
+
+        void OpQueueOnError(const TString& errorReason);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Dynamic node interaction
@@ -440,13 +643,14 @@ namespace NKikimr::NStorage {
         TActorId StaticNodeSessionId;
         bool ReconnectScheduled = false;
         THashSet<ui32> ConnectedDynamicNodes;
+        ui64 StaticNodeSubscriptionCookie = 0;
 
         // these are used on the dynamic nodes
         void ApplyStaticNodeIds(const std::vector<ui32>& nodeIds);
         void ConnectToStaticNode();
         void HandleReconnect();
-        void OnStaticNodeConnected(ui32 nodeId, TActorId sessionId);
-        void OnStaticNodeDisconnected(ui32 nodeId, TActorId sessionId);
+        void OnStaticNodeConnected(ui32 nodeId, TActorId sessionId, ui64 cookie);
+        void OnStaticNodeDisconnected(ui32 nodeId, TActorId sessionId, ui64 cookie);
         void Handle(TEvNodeWardenDynamicConfigPush::TPtr ev);
 
         // these are used on the static nodes
@@ -584,10 +788,9 @@ namespace NKikimr::NStorage {
     std::optional<TString> DecomposeConfig(const TString& configComposite, TString *mainConfigYaml,
         ui64 *mainConfigVersion, TString *mainConfigFetchYaml);
 
-    std::optional<TString> UpdateClusterState(NKikimrBlobStorage::TStorageConfig *config);
+    std::optional<TString> GetStorageYaml(const NKikimrBlobStorage::TStorageConfig& config);
 
-    TBridgeInfo::TPtr GenerateBridgeInfo(const NKikimrBlobStorage::TStorageConfig& config,
-        const TNodeWardenConfig *cfg, ui32 selfNodeId);
+    void UpdateClusterStateGuid(NKikimrBridge::TClusterState *clusterState);
 
 } // NKikimr::NStorage
 

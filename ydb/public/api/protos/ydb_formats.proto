@@ -25,3 +25,45 @@ message CsvSettings {
     bool header = 4;
     Quoting quoting = 5;
 }
+
+/**
+ * ArrowFormatSettings is settings for Ydb.ResultSet.Format.FORMAT_ARROW in Ydb.Query.ExecuteQueryRequest.
+ * It is used to configure compression for record batches in Ydb.ResultSet.data field.
+ */
+message ArrowFormatSettings {
+    message CompressionCodec {
+        enum Type {
+            // Unspecified mode, corresponds to TYPE_NONE
+            TYPE_UNSPECIFIED = 0;
+
+            // Binary data without compression
+            TYPE_NONE = 1;
+
+            // Zstandard compression
+            TYPE_ZSTD = 2;
+
+            // LZ4 frame compression
+            TYPE_LZ4_FRAME = 3;
+        }
+
+        // Type of the compression codec
+        Type type = 1;
+
+        // Compression level for the codec.
+        // If is not specified, the default level of the codec type is used.
+        optional int32 level = 2;
+    }
+
+    // Codec for compressing binary data in Ydb.ResultSet.data field
+    CompressionCodec compression_codec = 1;
+}
+
+/**
+ * ArrowFormatMeta is a metadata for Ydb.ResultSet.Format.FORMAT_ARROW in Ydb.ResultSet.
+ * It is used to get the schema of the Arrow record batch.
+ */
+message ArrowFormatMeta {
+    // Schema of the arrow batch of the result.
+    // May be empty for custom Ydb.Query.SchemaInclusionMode
+    bytes schema = 1;
+}

@@ -2,6 +2,7 @@
 
 #include <util/generic/fwd.h>
 #include <util/generic/flags.h>
+#include <util/generic/strbuf.h>
 
 struct IBinSaver;
 
@@ -24,7 +25,7 @@ namespace NProtoBuf {
     void ParseFromBase64String(const TStringBuf dataBase64, Message& m, bool allowUneven = false);
     bool TryParseFromBase64String(const TStringBuf dataBase64, Message& m, bool allowUneven = false);
     template <typename T>
-    static T ParseFromBase64String(const TStringBuf& dataBase64, bool allowUneven = false) {
+    T ParseFromBase64String(const TStringBuf& dataBase64, bool allowUneven = false) {
         T m;
         ParseFromBase64String(dataBase64, m, allowUneven);
         return m;
@@ -82,8 +83,8 @@ bool TryParseFromTextFormat(IInputStream& in, NProtoBuf::Message& m,
 
 // @see `ParseFromTextFormat`
 template <typename T>
-static T ParseFromTextFormat(const TString& fileName,
-                             const EParseFromTextFormatOptions options = {}, IOutputStream* warningStream = nullptr) {
+T ParseFromTextFormat(const TString& fileName,
+                      const EParseFromTextFormatOptions options = {}, IOutputStream* warningStream = nullptr) {
     T message;
     ParseFromTextFormat(fileName, message, options, warningStream);
     return message;
@@ -92,12 +93,26 @@ static T ParseFromTextFormat(const TString& fileName,
 // @see `ParseFromTextFormat`
 // NOTE: will read `in` till the end.
 template <typename T>
-static T ParseFromTextFormat(IInputStream& in, const EParseFromTextFormatOptions options = {},
-                             IOutputStream* warningStream = nullptr) {
+T ParseFromTextFormat(IInputStream& in, const EParseFromTextFormatOptions options = {},
+                      IOutputStream* warningStream = nullptr) {
     T message;
     ParseFromTextFormat(in, message, options, warningStream);
     return message;
 }
+
+void ParseTextFormatFromString(TStringBuf in, NProtoBuf::Message& m,
+                               const EParseFromTextFormatOptions options = {}, IOutputStream* warningStream = nullptr);
+
+template <typename T>
+T ParseTextFormatFromString(TStringBuf in, const EParseFromTextFormatOptions options = {},
+                            IOutputStream* warningStream = nullptr) {
+    T message;
+    ParseTextFormatFromString(in, message, options, warningStream);
+    return message;
+}
+
+bool TryParseTextFormatFromString(TStringBuf in, NProtoBuf::Message& m, const EParseFromTextFormatOptions options = {},
+                                  IOutputStream* warningStream = nullptr);
 
 // Merge a text-format protocol message from the given file into message object.
 //
@@ -120,8 +135,8 @@ bool TryMergeFromTextFormat(IInputStream& in, NProtoBuf::Message& m,
 
 // @see `MergeFromTextFormat`
 template <typename T>
-static T MergeFromTextFormat(const TString& fileName,
-                             const EParseFromTextFormatOptions options = {}) {
+T MergeFromTextFormat(const TString& fileName,
+                      const EParseFromTextFormatOptions options = {}) {
     T message;
     MergeFromTextFormat(fileName, message, options);
     return message;
@@ -130,8 +145,8 @@ static T MergeFromTextFormat(const TString& fileName,
 // @see `MergeFromTextFormat`
 // NOTE: will read `in` till the end.
 template <typename T>
-static T MergeFromTextFormat(IInputStream& in,
-                             const EParseFromTextFormatOptions options = {}) {
+T MergeFromTextFormat(IInputStream& in,
+                      const EParseFromTextFormatOptions options = {}) {
     T message;
     MergeFromTextFormat(in, message, options);
     return message;

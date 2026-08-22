@@ -6,10 +6,12 @@ SRCS(
 
 PEERDIR(
     library/cpp/yson
+    yt/cpp/mapreduce/interface
     yt/yql/providers/yt/gateway/file
     yt/yql/providers/yt/fmr/yt_job_service/interface
     yt/yql/providers/yt/lib/yson_helpers
     yql/essentials/utils
+    yql/essentials/utils/log
 )
 
 YQL_LAST_ABI_VERSION()

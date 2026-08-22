@@ -7,7 +7,7 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TCube, GaugeProjections)
+TEST(TCubeTest, GaugeProjections)
 {
     TCube<double> cube(12, 0);
 
@@ -37,7 +37,7 @@ TEST(TCube, GaugeProjections)
     ASSERT_EQ(static_cast<size_t>(0), cube.GetProjections().size());
 }
 
-TEST(TCube, Rollup)
+TEST(TCubeTest, Rollup)
 {
     TCube<i64> cube(12, 0);
     cube.StartIteration();

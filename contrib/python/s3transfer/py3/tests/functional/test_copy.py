@@ -10,12 +10,15 @@
 # distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF
 # ANY KIND, either express or implied. See the License for the specific
 # language governing permissions and limitations under the License.
+import copy
+
 from botocore.exceptions import ClientError
 from botocore.stub import Stubber
 
+from s3transfer.exceptions import S3CopyFailedError
 from s3transfer.manager import TransferConfig, TransferManager
 from s3transfer.utils import MIN_UPLOAD_CHUNKSIZE
-from __tests__ import BaseGeneralInterfaceTest, FileSizeProvider
+from __tests__ import BaseGeneralInterfaceTest, ETagProvider, FileSizeProvider
 
 
 class BaseCopyTest(BaseGeneralInterfaceTest):
@@ -31,6 +34,7 @@ class BaseCopyTest(BaseGeneralInterfaceTest):
         # Initialize some default arguments
         self.bucket = 'mybucket'
         self.key = 'mykey'
+        self.etag = 'myetag'
         self.copy_source = {'Bucket': 'mysourcebucket', 'Key': 'mysourcekey'}
         self.extra_args = {}
         self.subscribers = []
@@ -84,7 +88,6 @@ class BaseCopyTest(BaseGeneralInterfaceTest):
         expected_create_mpu_params=None,
         expected_complete_mpu_params=None,
     ):
-
         # Add all responses needed to do the copy of the object.
         # Should account for both ranged and nonranged downloads.
         stubbed_responses = self.create_stubbed_responses()[1:]
@@ -97,9 +100,9 @@ class BaseCopyTest(BaseGeneralInterfaceTest):
 
         # Add the expected create multipart upload params.
         if expected_create_mpu_params:
-            stubbed_responses[0][
-                'expected_params'
-            ] = expected_create_mpu_params
+            stubbed_responses[0]['expected_params'] = (
+                expected_create_mpu_params
+            )
 
         # Add any expected copy parameters.
         if expected_copy_params:
@@ -111,9 +114,9 @@ class BaseCopyTest(BaseGeneralInterfaceTest):
 
         # Add the expected complete multipart upload params.
         if expected_complete_mpu_params:
-            stubbed_responses[-1][
-                'expected_params'
-            ] = expected_complete_mpu_params
+            stubbed_responses[-1]['expected_params'] = (
+                expected_complete_mpu_params
+            )
 
         # Add the responses to the stubber.
         for stubbed_response in stubbed_responses:
@@ -123,7 +126,10 @@ class BaseCopyTest(BaseGeneralInterfaceTest):
         self.add_successful_copy_responses()
 
         call_kwargs = self.create_call_kwargs()
-        call_kwargs['subscribers'] = [FileSizeProvider(len(self.content))]
+        call_kwargs['subscribers'] = [
+            FileSizeProvider(len(self.content)),
+            ETagProvider(self.etag),
+        ]
 
         future = self.manager.copy(**call_kwargs)
         future.result()
@@ -331,7 +337,10 @@ class TestMultipartCopy(BaseCopyTest):
         return [
             {
                 'method': 'head_object',
-                'service_response': {'ContentLength': len(self.content)},
+                'service_response': {
+                    'ContentLength': len(self.content),
+                    'ETag': self.etag,
+                },
             },
             {
                 'method': 'create_multipart_upload',
@@ -393,11 +402,12 @@ class TestMultipartCopy(BaseCopyTest):
                 'UploadId': self.multipart_id,
                 'PartNumber': i + 1,
                 'CopySourceRange': range_val,
+                'CopySourceIfMatch': self.etag,
             }
             if extra_expected_params:
                 if 'ChecksumAlgorithm' in extra_expected_params:
                     name = extra_expected_params['ChecksumAlgorithm']
-                    checksum_member = 'Checksum%s' % name.upper()
+                    checksum_member = f'Checksum{name.upper()}'
                     response = upload_part_response['service_response']
                     response['CopyPartResult'][checksum_member] = 'sum%s==' % (
                         i + 1
@@ -471,6 +481,7 @@ class TestMultipartCopy(BaseCopyTest):
                     'UploadId': self.multipart_id,
                     'PartNumber': i + 1,
                     'CopySourceRange': range_val,
+                    'CopySourceIfMatch': self.etag,
                 }
             )
 
@@ -497,7 +508,6 @@ class TestMultipartCopy(BaseCopyTest):
     def _add_params_to_expected_params(
         self, add_copy_kwargs, operation_types, new_params
     ):
-
         expected_params_to_update = []
         for operation_type in operation_types:
             add_copy_kwargs_key = 'expected_' + operation_type + '_params'
@@ -702,3 +712,41 @@ class TestMultipartCopy(BaseCopyTest):
         )
         future.result()
         self.stubber.assert_no_pending_responses()
+
+    def test_copy_fails_if_etag_validation_fails(self):
+        expected_params = {
+            'Bucket': 'mybucket',
+            'Key': 'mykey',
+            'CopySource': {'Bucket': 'mysourcebucket', 'Key': 'mysourcekey'},
+            'CopySourceIfMatch': self.etag,
+            'UploadId': self.multipart_id,
+        }
+        self.add_get_head_response_with_default_expected_params()
+        self.add_create_multipart_response_with_default_expected_params()
+        expected_ranges = ['bytes=0-5242879', 'bytes=5242880-10485759']
+        for i, stubbed_response in enumerate(
+            self.create_stubbed_responses()[2:4]
+        ):
+            stubbed_response['expected_params'] = copy.deepcopy(
+                expected_params
+            )
+            stubbed_response['expected_params']['CopySourceRange'] = (
+                expected_ranges[i]
+            )
+            stubbed_response['expected_params']['PartNumber'] = i + 1
+            self.stubber.add_response(**stubbed_response)
+        # Simulate ETag validation failure by adding a
+        # client error for the last UploadCopyPart request.
+        self.stubber.add_client_error(
+            method='upload_part_copy',
+            service_error_code='PreconditionFailed',
+            service_message=(
+                'At least one of the pre-conditions you specified did not hold'
+            ),
+            http_status_code=412,
+        )
+
+        future = self.manager.copy(**self.create_call_kwargs())
+        with self.assertRaises(S3CopyFailedError) as e:
+            future.result()
+        self.assertIn('did not match expected ETag', str(e.exception))

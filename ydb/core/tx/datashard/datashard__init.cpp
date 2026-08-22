@@ -1,6 +1,8 @@
 #include "datashard_txs.h"
 #include "datashard_locks_db.h"
 #include "memory_state_migration.h"
+#include "build_index/build_index_scan_manager.h"
+#include "build_index/common_helper.h"
 
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/tx_processing.h>
@@ -31,8 +33,9 @@ private:
 
 class TDataShard::TTxInitRestored : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
-    TTxInitRestored(TDataShard* self)
+    TTxInitRestored(TDataShard* self, THashMap<ui64, TOperation::TPtr> migratedTxs)
         : TTransactionBase(self)
+        , MigratedTxs(std::move(migratedTxs))
     {}
 
     TTxType GetTxType() const override { return TXTYPE_INIT_RESTORED; }
@@ -41,7 +44,9 @@ public:
     void Complete(const TActorContext& ctx) override;
 
 private:
+    THashMap<ui64, TOperation::TPtr> MigratedTxs;
     bool InMemoryStateActorStarted = false;
+    bool Rescheduled = false;
 };
 
 bool TDataShard::TTxInit::Execute(TTransactionContext& txc, const TActorContext& ctx) {
@@ -62,6 +67,8 @@ bool TDataShard::TTxInit::Execute(TTransactionContext& txc, const TActorContext&
         Self->S3Downloads.Reset();
         Self->CdcStreamScanManager.Reset();
         Self->CdcStreamHeartbeatManager.Reset();
+        Self->BuildIndexScanManager.Reset();
+        Self->PendingBuildIndexFinalResponses.clear();
 
         Self->KillChangeSender(ctx);
         Self->ChangesQueue.clear();
@@ -92,12 +99,53 @@ void TDataShard::TTxInit::Complete(const TActorContext &ctx) {
     LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::TTxInit::Complete");
 }
 
-void TDataShard::OnInMemoryStateRestored() {
-    Execute(CreateTxInitRestored());
+void TDataShard::OnInMemoryStateRestored(THashMap<ui64, TOperation::TPtr> migratedTxs) {
+    Execute(CreateTxInitRestored(std::move(migratedTxs)));
 }
 
 bool TDataShard::TTxInitRestored::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::TTxInitRestored::Execute");
+
+    TDataShardLocksDb locksDb(*Self, txc);
+    if (Self->SysLocks.RestorePersistentState(&locksDb)) {
+        // We may not be able to apply all persistent lock state updates in a
+        // single commit, e.g. removing locks with a large number of conflicts
+        // may result in large commits. Prefer starting a new transaction after
+        // every change, but without waiting for each commit to succeed.
+        LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::TTxInitRestored::Execute: persistent lock state updated, rescheduling transaction");
+        Self->OnInMemoryStateRestored(std::move(MigratedTxs));
+        Rescheduled = true;
+        return true;
+    }
+
+    if (!MigratedTxs.empty()) {
+        bool wasEmpty = Self->TransQueue.GetPlan().empty();
+
+        for (auto& [txId, op] : MigratedTxs) {
+            if (op->GetStep() && op->GetStep() > Self->Pipeline.GetLastPlannedTx().Step) {
+                // When op->GetStep() > LastPlannedTx.Step it means this tx was
+                // planned by the previous generation, but commit failed. We
+                // may have other non-volatile transactions which may need to
+                // be planned before this step, so change it to a predicted
+                // step instead.
+                op->SetPredictedStep(op->GetStep());
+                op->SetStep(0);
+            }
+            if (op->OnFinishMigration(*Self, txc.DB.GetScheme())) {
+                Self->TransQueue.AddTxInFly(op);
+                if (!op->IsExecutionPlanFinished()) {
+                    Self->Pipeline.GetExecutionUnit(op->GetCurrentUnit()).AddOperation(op);
+                }
+                if (op->GetPredictedStep() && !op->GetStep()) {
+                    Self->Pipeline.AddPredictedPlan(op->GetPredictedStep(), op->GetTxId(), ctx);
+                }
+            }
+        }
+
+        if (wasEmpty && Self->TransQueue.GetPlan().size()) {
+            Self->Pipeline.AddCandidateUnit(EExecutionUnitKind::PlanQueue);
+        }
+    }
 
     InMemoryStateActorStarted = Self->StartInMemoryStateActor();
 
@@ -117,14 +165,20 @@ bool TDataShard::TTxInitRestored::Execute(TTransactionContext& txc, const TActor
 }
 
 void TDataShard::TTxInitRestored::Complete(const TActorContext& ctx) {
+    if (Rescheduled) {
+        return;
+    }
+
     LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::TTxInitRestored::Complete");
 
     if (Self->InMemoryStateActor && InMemoryStateActorStarted) {
         Self->InMemoryStateActor->ConfirmPersistent();
     }
 
-    // Start MakeSnapshot() if we started in SplitSrcMakeSnapshot state
-    if (Self->State == TShardState::SplitSrcMakeSnapshot) {
+    // Resume split if we rebooted while waiting for in-flight txs to drain.
+    if (Self->State == TShardState::SplitSrcWaitForNoTxInFlight) {
+        Self->CheckSplitCanStart(ctx);
+    } else if (Self->State == TShardState::SplitSrcMakeSnapshot) {
         Self->Execute(Self->CreateTxStartSplit(), ctx);
     } else if (Self->State == TShardState::SplitSrcSendingSnapshot) {
         if (!Self->SplitSrcSnapshotSender.AllAcked()) {
@@ -140,6 +194,41 @@ void TDataShard::TTxInitRestored::Complete(const TActorContext& ctx) {
 
     Self->SwitchToWork(ctx);
     Self->SendRegistrationRequestTimeCast(ctx);
+
+    // Notify SchemeShard about any index build scans that were in progress before reboot.
+    // SchemeShard will move these shards back to ToUpload and retry.
+    // We send via a pipe to CurrentSchemeShardId because the original sender TActorId
+    // is a runtime value that is no longer valid after reboot.
+    if (!Self->BuildIndexScanManager.GetScans().empty()) {
+        for (const auto& [buildId, scanInfo] : Self->BuildIndexScanManager.GetScans()) {
+            auto response = MakeHolder<TEvDataShard::TEvBuildIndexProgressResponse>();
+
+            if (scanInfo.ResponseType == static_cast<ui32>(EBuildIndexEventType::SecondaryIndexResponseFinal)) {
+                response->Record.ParseFromStringOrThrow(scanInfo.FinalProgressRecordSerialized);
+                LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD,
+                    "TTxInitRestored: resending persisted final build index progress to SchemeShard"
+                    << ", buildId# " << buildId
+                    << ", tabletId# " << Self->TabletID()
+                    << ", schemeShardId# " << Self->CurrentSchemeShardId
+                    << ", responseType# " << scanInfo.ResponseType);
+            } else if (scanInfo.ResponseType == static_cast<ui32>(EBuildIndexEventType::SecondaryIndexProgressResponse)) {
+                TScanRecord::TSeqNo seqNo = {scanInfo.SeqNoGeneration, scanInfo.SeqNoRound};
+                FillScanResponseCommonFields(*response, buildId, Self->TabletID(), seqNo);
+                response->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);
+                LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD,
+                    "TTxInitRestored: notifying SchemeShard of aborted index build scan"
+                    << ", buildId# " << buildId
+                    << ", tabletId# " << Self->TabletID()
+                    << ", schemeShardId# " << Self->CurrentSchemeShardId
+                    << ", responseType# " << scanInfo.ResponseType);
+            } else {
+                Y_ENSURE(false, "Unknown ResponseType in IndexBuildScans: " << scanInfo.ResponseType);
+            }
+
+            Self->PendingBuildIndexFinalResponses[buildId] = std::move(response);
+        }
+        Self->SendPendingBuildIndexFinalResponses(ctx);
+    }
 
     // InReadSets table might have a lot of garbage due to old bug.
     // Run transaction to collect if shard is not going offline.
@@ -161,7 +250,7 @@ void TDataShard::TTxInitRestored::Complete(const TActorContext& ctx) {
     }
 
     // Find subdomain path id if needed
-    if (Self->State == TShardState::Ready) {
+    if (Self->NeedToWatchSubDomainPathId()) {
         if (Self->SubDomainPathId) {
             Self->StartWatchingSubDomainPathId();
         } else {
@@ -243,6 +332,9 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
         PRECHARGE_SYS_TABLE(Schema::TxVolatileParticipants);
         PRECHARGE_SYS_TABLE(Schema::CdcStreamScans);
         PRECHARGE_SYS_TABLE(Schema::CdcStreamHeartbeats);
+        PRECHARGE_SYS_TABLE(Schema::MultiTxIds);
+        PRECHARGE_SYS_TABLE(Schema::MultiTxIdGraph);
+        PRECHARGE_SYS_TABLE(Schema::IndexBuildScans);
 
         if (!ready)
             return false;
@@ -277,6 +369,13 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
         Self->SubDomainPathId.emplace(subDomainOwnerId, subDomainLocalPathId);
     }
     LOAD_SYS_BOOL(db, Schema::Sys_SubDomainOutOfSpace, Self->SubDomainOutOfSpace);
+
+    {
+        ui64 subDomainTablesMetricsLevel = NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelUnspecified;
+        LOAD_SYS_UI64(db, Schema::Sys_SubDomainTablesMetricsLevel, subDomainTablesMetricsLevel);
+        Self->SubDomainTablesMetricsLevel =
+            static_cast<NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel>(subDomainTablesMetricsLevel);
+    }
 
     {
         TString rawProcessingParams;
@@ -608,6 +707,17 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
         }
     }
 
+    if (Self->State != TShardState::Offline) {
+        if (!Self->MultiTxIdManager.Load(db)) {
+            return false;
+        }
+    }
+    if (Self->State != TShardState::Offline && txc.DB.GetScheme().GetTableInfo(Schema::IndexBuildScans::TableId)) {
+        if (!Self->BuildIndexScanManager.Load(db)) {
+            return false;
+        }
+    }
+
     Self->SubscribeNewLocks();
 
     Self->ScheduleRemoveAbandonedLockChanges();
@@ -728,8 +838,8 @@ ITransaction* TDataShard::CreateTxInit() {
     return new TTxInit(this);
 }
 
-ITransaction* TDataShard::CreateTxInitRestored() {
-    return new TTxInitRestored(this);
+ITransaction* TDataShard::CreateTxInitRestored(THashMap<ui64, TOperation::TPtr> migratedTxs) {
+    return new TTxInitRestored(this, std::move(migratedTxs));
 }
 
 ITransaction* TDataShard::CreateTxInitSchema() {

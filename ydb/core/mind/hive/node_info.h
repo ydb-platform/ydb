@@ -3,12 +3,15 @@
 #include "hive.h"
 #include "tablet_info.h"
 
+#include <util/generic/intrlist.h>
+
 namespace NKikimr {
 namespace NHive {
 
 struct TTabletInfo;
 
-struct TNodeInfo {
+struct TSegmentNodesTag {};
+struct TNodeInfo: public TIntrusiveListItem<TNodeInfo, TSegmentNodesTag> {
     enum class EVolatileState {
         Unknown,
         Disconnected,
@@ -100,6 +103,7 @@ public:
     ui64 DrainSeqNo = 0;
     std::optional<TLastScheduledTablet> LastScheduledTablet; // remembered for a limited time
     TBridgePileId BridgePileId;
+    THiveDrain* DrainActor = nullptr;
 
     TNodeInfo(TNodeId nodeId, THive& hive);
     TNodeInfo(const TNodeInfo&) = delete;
@@ -115,7 +119,7 @@ public:
 
     void ChangeVolatileState(EVolatileState state);
     bool OnTabletChangeVolatileState(TTabletInfo* tablet, TTabletInfo::EVolatileState newState);
-    void UpdateResourceValues(const TTabletInfo* tablet, const NKikimrTabletBase::TMetrics& before, const NKikimrTabletBase::TMetrics& after);
+    void UpdateResourceValues(const TTabletInfo* tablet, const TMetrics& before, const TMetrics& after);
 
     ui32 GetTabletsScheduled() const {
         auto it = Tablets.find(TTabletInfo::EVolatileState::TABLET_VOLATILE_STATE_STARTING);
@@ -162,6 +166,10 @@ public:
 
     bool IsRegistered() const {
         return VolatileState == EVolatileState::Connecting || VolatileState == EVolatileState::Connected;
+    }
+
+    TNodeId GetId() const {
+        return Id;
     }
 
     bool MatchesFilter(const TNodeFilter& filter, TTabletDebugState* debugState = nullptr) const;
@@ -274,8 +282,14 @@ public:
         return TStringBuilder() << ServicedDomains;
     }
 
-    TSubDomainKey GetServicedDomain() const {
-        return ServicedDomains.empty() ? TSubDomainKey() : ServicedDomains.front();
+    const TSubDomainKey& GetServicedDomain() const {
+        if (!ServicedDomains.empty()) {
+            return ServicedDomains.front();
+        }
+        if (!LastSeenServicedDomains.empty()) {
+            return LastSeenServicedDomains.front();
+        }
+        return InvalidSubDomainKey;
     }
 
     void UpdateResourceTotalUsage(const NKikimrHive::TEvTabletMetrics& metrics, NIceDb::TNiceDb& db);
@@ -284,6 +298,12 @@ public:
 
     TDataCenterId GetDataCenter() const {
         return Location.GetDataCenterId();
+    }
+
+    // For balancing, only nodes in the same "segment" are compared
+    // This function defines which parameters are used to define segments
+    TSegmentId GetSegment() const {
+        return std::forward_as_tuple(GetServicedDomain(), BridgePileId);
     }
 };
 

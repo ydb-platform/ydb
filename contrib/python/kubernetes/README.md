@@ -1,11 +1,11 @@
 # Kubernetes Python Client
 
-[![Build Status](https://travis-ci.org/kubernetes-client/python.svg?branch=master)](https://travis-ci.org/kubernetes-client/python)
+[![CI](https://github.com/kubernetes-client/python/workflows/Kubernetes%20Python%20Client%20-%20Validation/badge.svg)](https://github.com/kubernetes-client/python/actions/workflows/test.yaml)
 [![PyPI version](https://badge.fury.io/py/kubernetes.svg)](https://badge.fury.io/py/kubernetes)
 [![codecov](https://codecov.io/gh/kubernetes-client/python/branch/master/graph/badge.svg)](https://codecov.io/gh/kubernetes-client/python "Non-generated packages only")
 [![pypi supported versions](https://img.shields.io/pypi/pyversions/kubernetes.svg)](https://pypi.python.org/pypi/kubernetes)
-[![Client Capabilities](https://img.shields.io/badge/Kubernetes%20client-Silver-blue.svg?style=flat&colorB=C0C0C0&colorA=306CE8)](http://bit.ly/kubernetes-client-capabilities-badge)
-[![Client Support Level](https://img.shields.io/badge/kubernetes%20client-beta-green.svg?style=flat&colorA=306CE8)](http://bit.ly/kubernetes-client-support-badge)
+[![Client Capabilities](https://img.shields.io/badge/Kubernetes%20client-Silver-blue.svg?style=flat&colorB=C0C0C0&colorA=306CE8)](https://github.com/kubernetes/design-proposals-archive/blob/main/api-machinery/csi-new-client-library-procedure.md)
+[![Client Support Level](https://img.shields.io/badge/kubernetes%20client-beta-green.svg?style=flat&colorA=306CE8)](https://github.com/kubernetes/design-proposals-archive/blob/main/api-machinery/csi-new-client-library-procedure.md)
 
 Python client for the [kubernetes](http://kubernetes.io/) API.
 
@@ -16,7 +16,7 @@ From source:
 ```
 git clone --recursive https://github.com/kubernetes-client/python.git
 cd python
-python setup.py install
+python -m pip install --upgrade .
 ```
 
 From [PyPI](https://pypi.python.org/pypi/kubernetes/) directly:
@@ -40,6 +40,35 @@ print("Listing pods with their IPs:")
 ret = v1.list_pod_for_all_namespaces(watch=False)
 for i in ret.items:
     print("%s\t%s\t%s" % (i.status.pod_ip, i.metadata.namespace, i.metadata.name))
+```
+
+list all pods using asyncio:
+
+```python
+import asyncio
+from kubernetes.aio import client, config
+from kubernetes.aio.client.api_client import ApiClient
+
+
+async def main():
+    # Configs can be set in Configuration class directly or using helper
+    # utility. If no argument provided, the config will be loaded from
+    # default location.
+    await config.load_kube_config()
+
+    # use the context manager to close http sessions automatically
+    async with ApiClient() as api:
+
+        v1 = client.CoreV1Api(api)
+        print("Listing pods with their IPs:")
+        ret = await v1.list_pod_for_all_namespaces()
+
+        for i in ret.items:
+            print(i.status.pod_ip, i.metadata.namespace, i.metadata.name)
+
+
+if __name__ == '__main__':
+    asyncio.run(main())
 ```
 
 watch on namespace object:
@@ -102,6 +131,10 @@ supported versions of Kubernetes clusters.
 - [client 30.y.z](https://pypi.org/project/kubernetes/30.1.0/): Kubernetes 1.29 or below (+-), Kubernetes 1.30 (✓), Kubernetes 1.31 or above (+-)
 - [client 31.y.z](https://pypi.org/project/kubernetes/31.0.0/): Kubernetes 1.30 or below (+-), Kubernetes 1.31 (✓), Kubernetes 1.32 or above (+-)
 - [client 32.y.z](https://pypi.org/project/kubernetes/32.0.1/): Kubernetes 1.31 or below (+-), Kubernetes 1.32 (✓), Kubernetes 1.33 or above (+-)
+- [client 33.y.z](https://pypi.org/project/kubernetes/33.1.0/): Kubernetes 1.32 or below (+-), Kubernetes 1.33 (✓), Kubernetes 1.34 or above (+-)
+- [client 34.y.z](https://pypi.org/project/kubernetes/34.1.0/): Kubernetes 1.33 or below (+-), Kubernetes 1.34 (✓), Kubernetes 1.35 or above (+-)
+- [client 35.y.z](https://pypi.org/project/kubernetes/35.0.0/): Kubernetes 1.34 or below (+-), Kubernetes 1.35 (✓), Kubernetes 1.36 or above (+-)
+- [client 36.y.z](https://pypi.org/project/kubernetes/36.0.1/): Kubernetes 1.35 or below (+-), Kubernetes 1.36 (✓), Kubernetes 1.37 or above (+-)
 
 
 > See [here](#homogenizing-the-kubernetes-python-client-versions) for an explanation of why there is no v13-v16 release.
@@ -166,11 +199,19 @@ between client-python versions.
 | 29.0 Alpha/Beta | Kubernetes main repo, 1.29 branch    | ✗                             |
 | 29.0            | Kubernetes main repo, 1.29 branch    | ✗                             |
 | 30.0 Alpha/Beta | Kubernetes main repo, 1.30 branch    | ✗                             |
-| 30.0            | Kubernetes main repo, 1.30 branch    | ✓                             |
+| 30.0            | Kubernetes main repo, 1.30 branch    | ✗                             |
 | 31.0 Alpha/Beta | Kubernetes main repo, 1.31 branch    | ✗                             |
-| 31.0            | Kubernetes main repo, 1.31 branch    | ✓                             |
+| 31.0            | Kubernetes main repo, 1.31 branch    | ✗                             |
 | 32.0 Alpha/Beta | Kubernetes main repo, 1.32 branch    | ✗                             |
-| 32.1            | Kubernetes main repo, 1.32 branch    | ✓                             |
+| 32.1            | Kubernetes main repo, 1.32 branch    | ✗                             |
+| 33.1 Alpha/Beta | Kubernetes main repo, 1.33 branch    | ✗                             |
+| 33.1            | Kubernetes main repo, 1.33 branch    | ✗                             |
+| 34.1 Alpha/Beta | Kubernetes main repo, 1.34 branch    | ✗                             |
+| 34.1            | Kubernetes main repo, 1.34 branch    | ✓                             |
+| 35.0 Alpha/Beta | Kubernetes main repo, 1.35 branch    | ✗                             |
+| 35.0            | Kubernetes main repo, 1.35 branch    | ✓                             |
+| 36.0 Alpha/Beta | Kubernetes main repo, 1.36 branch    | ✗                             |
+| 36.0            | Kubernetes main repo, 1.36 branch    | ✓                             |
 
 > See [here](#homogenizing-the-kubernetes-python-client-versions) for an explanation of why there is no v13-v16 release.
 
@@ -189,7 +230,7 @@ Note: There would be no maintenance for alpha/beta releases except the latest on
 
 The client releases v12 and before following a versioning schema where the major version was 4 integer positions behind the Kubernetes minor on which the client is based on. For example, v12.0.0 is based on Kubernetes v1.16, v11.0.0 is based on Kubernetes v1.15 and so on.
 
-This created a lot of confusion tracking two different version numbers for each client release. It was decided to homogenize the version scheme starting from the Kubernetes Python client based on Kubernetes v1.17. The versioning scheme of the client from this release would be vY.Z.P where Y and Z are the Kubernetes minor and patch release numbers from Kubernets v1.Y.Z and P is the client specific patch release numbers to accommodate changes and fixes done specifically to the client. For more details, refer [this issue](https://github.com/kubernetes-client/python/issues/1244).
+This created a lot of confusion tracking two different version numbers for each client release. It was decided to homogenize the version scheme starting from the Kubernetes Python client based on Kubernetes v1.17. The versioning scheme of the client from this release would be vY.Z.P where Y and Z are the Kubernetes minor and patch release numbers from Kubernetes v1.Y.Z and P is the client specific patch release numbers to accommodate changes and fixes done specifically to the client. For more details, refer [this issue](https://github.com/kubernetes-client/python/issues/1244).
 
 ## Community, Support, Discussion
 
@@ -235,5 +276,21 @@ This will cause a failure in  non-exec/attach calls. If you reuse your api clien
 recreate it between api calls that use _stream_ and other api calls.
 
 See more at [exec example](examples/pod_exec.py).
+
+## Enabling Debug Logging
+
+To enable debug logging in the Kubernetes Python client, follow these steps:
+
+### 1. Import the `logging` module
+
+```python
+import logging
+
+# Set the logging level to DEBUG
+logging.basicConfig(level=logging.DEBUG)
+
+# To see the HTTP requests and responses sent to the Kubernetes API (for debugging network-related issues), configure the urllib3 logger:
+logging.getLogger("urllib3").setLevel(logging.DEBUG)
+```
 
 **[⬆ back to top](#Installation)**

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <yql/essentials/core/yql_type_annotation.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/providers/common/config/yql_dispatch.h>
 #include <yql/essentials/providers/common/config/yql_setting.h>
 
@@ -11,6 +13,8 @@
 
 #include <util/generic/size_literals.h>
 #include <util/random/random.h>
+
+#include <functional>
 
 namespace NYql {
 
@@ -29,6 +33,11 @@ struct TDqSettings {
         File        /* "file" */,
     };
 
+    enum class EValuePackerVersion {
+        V0,
+        V1,
+    };
+
     struct TDefault {
         static constexpr ui32 MaxTasksPerStage = 20U;
         static constexpr ui32 MaxTasksPerOperation = 70U;
@@ -45,6 +54,7 @@ struct TDqSettings {
         static constexpr ui64 OutputChunkMaxSize = 4_MB;
         static constexpr ui64 ChunkSizeLimit = 128_MB;
         static constexpr bool EnableDqReplicate = false;
+        static constexpr ui64 WatermarksIdleTimeoutMs = 5000;
         static constexpr ui64 WatermarksGranularityMs = 1000;
         static constexpr ui64 WatermarksLateArrivalDelayMs = 5000;
         static constexpr ui64 ParallelOperationsLimit = 16;
@@ -59,10 +69,12 @@ struct TDqSettings {
         static constexpr ESpillingEngine SpillingEngine = ESpillingEngine::Disable;
         static constexpr ui32 CostBasedOptimizationLevel = 4;
         static constexpr ui32 MaxDPHypDPTableSize = 95'000U;
+        static constexpr ui32 ShuffleEliminationJoinNumCutoff = 20;
         static constexpr ui64 MaxAttachmentsSize = 2_GB;
         static constexpr bool SplitStageOnDqReplicate = true;
         static constexpr ui64 EnableSpillingNodes = 0;
         static constexpr bool EnableSpillingInChannels = false;
+        static constexpr EValuePackerVersion ValuePackerVersion = EValuePackerVersion::V0;
     };
 
     using TPtr = std::shared_ptr<TDqSettings>;
@@ -116,6 +128,8 @@ public:
     NCommon::TConfSetting<bool, Static> EnableDqReplicate;
     NCommon::TConfSetting<TString, Static> WatermarksMode;
     NCommon::TConfSetting<bool, Static> WatermarksEnableIdlePartitions;
+
+    NCommon::TConfSetting<ui64, Static> WatermarksIdleTimeoutMs;
     NCommon::TConfSetting<ui64, Static> WatermarksGranularityMs;
     NCommon::TConfSetting<ui64, Static> WatermarksLateArrivalDelayMs;
     NCommon::TConfSetting<bool, Static> UseAggPhases;
@@ -143,11 +157,14 @@ public:
 
     NCommon::TConfSetting<ui64, Static> EnableSpillingNodes;
     NCommon::TConfSetting<bool, Static> EnableSpillingInChannels;
+    NCommon::TConfSetting<EValuePackerVersion, Static> ValuePackerVersion;
 
     NCommon::TConfSetting<ui64, Static> _MaxAttachmentsSize;
     NCommon::TConfSetting<bool, Static> DisableCheckpoints;
     NCommon::TConfSetting<bool, Static> UseGraceJoinCoreForMap;
     NCommon::TConfSetting<TString, Static> Scheduler;
+    // Target DQ clique for remote graph execution (pragma dq.Clique).
+    NCommon::TConfSetting<TString, Static> Clique;
 
     // This options will be passed to executor_actor and worker_actor
     template <typename TProtoConfig>
@@ -202,6 +219,7 @@ public:
         SAVE_SETTING(TaskRunnerStats);
         SAVE_SETTING(SpillingEngine);
         SAVE_SETTING(EnableSpillingInChannels);
+        SAVE_SETTING(ValuePackerVersion);
         SAVE_SETTING(DisableCheckpoints);
         SAVE_SETTING(Scheduler);
 #undef SAVE_SETTING
@@ -247,6 +265,15 @@ public:
         return EnableSpillingInChannels.Get().GetOrElse(TDqSettings::TDefault::EnableSpillingInChannels) != false;
     }
 
+    NYql::NDqProto::EValuePackerVersion GetValuePackerVersion() const {
+        switch (ValuePackerVersion.Get().GetOrElse(TDqSettings::TDefault::ValuePackerVersion)) {
+            case EValuePackerVersion::V0:
+                return NYql::NDqProto::EValuePackerVersion::VALUE_PACKER_VERSION_V0;
+            case EValuePackerVersion::V1:
+                return NYql::NDqProto::EValuePackerVersion::VALUE_PACKER_VERSION_V1;
+        }
+    }
+
     ui64 GetEnabledSpillingNodes() const {
         if (!IsSpillingEngineEnabled()) return 0;
         return EnableSpillingNodes.Get().GetOrElse(TDqSettings::TDefault::EnableSpillingNodes);
@@ -258,11 +285,15 @@ public:
     }
 };
 
+using TDqCliqueValidator = std::function<void(const TString& cliqueValue)>;
+
 struct TDqConfiguration: public TDqSettings, public NCommon::TSettingDispatcher {
     using TPtr = TIntrusivePtr<TDqConfiguration>;
 
     TDqConfiguration();
     TDqConfiguration(const TDqConfiguration&) = delete;
+
+    TDqCliqueValidator CliqueValidator;
 
     template <class TProtoConfig, typename TFilter>
     void Init(const TProtoConfig& config, const TFilter& filter) {

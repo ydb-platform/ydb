@@ -1,7 +1,9 @@
 #include "yql_join.h"
+#include "yql_expr_optimize.h"
 #include "yql_expr_type_annotation.h"
 #include "yql_opt_utils.h"
 
+#include <util/generic/typetraits.h>
 #include <util/string/cast.h>
 #include <util/string/join.h>
 #include <util/string/type.h>
@@ -106,11 +108,11 @@ namespace {
 
     IGraphTransformer::TStatus ParseJoins(const TJoinLabels& labels,
         TExprNode& joins, TVector<TJoinState>& joinsStates, THashSet<TStringBuf>& scope,
-        TGLobalJoinState& globalState, bool strictKeys, TExprContext& ctx, const TUniqueConstraintNode** unique = nullptr, const TDistinctConstraintNode** distinct = nullptr);
+        TGLobalJoinState& globalState, bool strictKeys, TExprContext& ctx, const TUniqueConstraintNode** unique = nullptr, const TDistinctConstraintNode** distinct = nullptr, const TStreamingConstraintNode** streaming = nullptr);
 
     IGraphTransformer::TStatus ParseJoinScope(const TJoinLabels& labels,
         TExprNode& side, TVector<TJoinState>& joinsStates, THashSet<TStringBuf>& scope,
-        TGLobalJoinState& globalState, bool strictKeys, const TUniqueConstraintNode*& unique, const TDistinctConstraintNode*& distinct, TExprContext& ctx) {
+        TGLobalJoinState& globalState, bool strictKeys, const TUniqueConstraintNode*& unique, const TDistinctConstraintNode*& distinct, const TStreamingConstraintNode*& streaming, TExprContext& ctx) {
         if (side.IsAtom()) {
             const auto label = side.Content();
             const auto input = labels.FindInput(label);
@@ -140,6 +142,10 @@ namespace {
                 distinct = d->RenameFields(ctx, rename);
             }
 
+            if (const auto s = (*input)->Streaming) {
+                streaming = s;
+            }
+
             return IGraphTransformer::TStatus::Ok;
         }
 
@@ -150,12 +156,12 @@ namespace {
         }
 
         ++globalState.NestedJoins;
-        return ParseJoins(labels, side, joinsStates, scope, globalState, strictKeys, ctx, &unique, &distinct);
+        return ParseJoins(labels, side, joinsStates, scope, globalState, strictKeys, ctx, &unique, &distinct, &streaming);
     }
 
     IGraphTransformer::TStatus ParseJoins(const TJoinLabels& labels,
         TExprNode& joins, TVector<TJoinState>& joinsStates, THashSet<TStringBuf>& scope,
-        TGLobalJoinState& globalState, bool strictKeys, TExprContext& ctx, const TUniqueConstraintNode** unique, const TDistinctConstraintNode** distinct) {
+        TGLobalJoinState& globalState, bool strictKeys, TExprContext& ctx, const TUniqueConstraintNode** unique, const TDistinctConstraintNode** distinct, const TStreamingConstraintNode** streaming) {
         if (!EnsureTupleSize(joins, 6, ctx)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -173,14 +179,16 @@ namespace {
         THashSet<TStringBuf> myLeftScope;
         const TUniqueConstraintNode* lUnique = nullptr;
         const TDistinctConstraintNode* lDistinct = nullptr;
-        if (const auto status = ParseJoinScope(labels, *joins.Child(1), joinsStates, myLeftScope, globalState, strictKeys, lUnique, lDistinct, ctx); status.Level != IGraphTransformer::TStatus::Ok) {
+        const TStreamingConstraintNode* lStreaming = nullptr;
+        if (const auto status = ParseJoinScope(labels, *joins.Child(1), joinsStates, myLeftScope, globalState, strictKeys, lUnique, lDistinct, lStreaming, ctx); status.Level != IGraphTransformer::TStatus::Ok) {
             return status;
         }
 
         THashSet<TStringBuf> myRightScope;
         const TUniqueConstraintNode* rUnique = nullptr;
         const TDistinctConstraintNode* rDistinct = nullptr;
-        if (const auto status = ParseJoinScope(labels, *joins.Child(2), joinsStates, myRightScope, globalState, strictKeys, rUnique, rDistinct, ctx); status.Level != IGraphTransformer::TStatus::Ok) {
+        const TStreamingConstraintNode* rStreaming = nullptr;
+        if (const auto status = ParseJoinScope(labels, *joins.Child(2), joinsStates, myRightScope, globalState, strictKeys, rUnique, rDistinct, rStreaming, ctx); status.Level != IGraphTransformer::TStatus::Ok) {
             return status;
         }
 
@@ -196,7 +204,8 @@ namespace {
             return IGraphTransformer::TStatus::Error;
         }
 
-        std::optional<std::unordered_set<std::string_view>> leftHints, rightHints;
+        std::optional<std::unordered_set<std::string_view>> leftHints;
+        std::optional<std::unordered_set<std::string_view>> rightHints;
         bool hasJoinStrategyHint = false;
         bool isMultiget = false;
         for (auto child : linkOptions->Children()) {
@@ -258,7 +267,16 @@ namespace {
                             }
                             continue;
                         }
-                        if (!name.IsAtom({"TTL", "MaxCachedRows", "MaxDelayedRows"})) {
+                        if (name.IsAtom("ShuffleMode")) {
+                            static const std::initializer_list<std::string_view> ShuffleModeValues = {"Default", "Off", "Map", "Hash"};
+                            if (!value.IsAtom(ShuffleModeValues)) {
+                                ctx.AddError(TIssue(ctx.GetPosition(name.Pos()),
+                                            TStringBuilder() << "streamlookup(" << name.Content() << "...): Expected one of " << JoinSeq(", ", ShuffleModeValues) << ", but got: " << value.Content()));
+                                return IGraphTransformer::TStatus::Error;
+                            }
+                            continue;
+                        }
+                        if (!name.IsAtom({"TTL", "MaxCachedRows", "MaxDelayedRows", "FullscanLimit"})) {
                             ctx.AddError(TIssue(ctx.GetPosition(name.Pos()), TStringBuilder() <<
                                         "streamlookup(): Unsupported option: " << name.Content()));
                             return IGraphTransformer::TStatus::Error;
@@ -284,7 +302,7 @@ namespace {
             else if (option.IsAtom("join_algo")) {
                 //do nothing
             }
-            else if (option.IsAtom("compact")) {
+            else if (option.IsAtom({"force_star", "compact"})) {
                 if (!EnsureTupleSize(*child, 1, ctx)) {
                     return IGraphTransformer::TStatus::Error;
                 }
@@ -373,7 +391,8 @@ namespace {
                 }
                 leftKeyType = leftKeyType->Cast<TListExprType>()->GetItemType();
             }
-            if (strictKeys && leftKeyType != rightKeyType) {
+            if (strictKeys && !IsSameAnnotation(*leftKeyType, *rightKeyType) &&
+                !leftKeyType->HasUniversal() && !rightKeyType->HasUniversal()) {
                 ctx.AddError(TIssue(ctx.GetPosition(joins.Pos()),
                     TStringBuilder() << "Strict key type match requested, but keys have different types: ("
                     << leftKeys[i].first << "." << leftKeys[i].second
@@ -460,6 +479,33 @@ namespace {
             }
         }
 
+        if (streaming) {
+            if (lStreaming && (joinType.IsAtom("Right") || joinType.IsAtom("RightOnly"))) {
+                ctx.AddError(TIssue(ctx.GetPosition(joins.Pos()), TStringBuilder()
+                    << "Streaming left input is not supported for RIGHT " << (joinType.IsAtom("RightOnly") ? "ONLY " : "") << "join"
+                ));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            if (rStreaming && (joinType.IsAtom("Left") || joinType.IsAtom("LeftOnly"))) {
+                ctx.AddError(TIssue(ctx.GetPosition(joins.Pos()), TStringBuilder()
+                    << "Streaming right input is not supported for LEFT " << (joinType.IsAtom("LeftOnly") ? "ONLY " : "") << "join"
+                ));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            if (lStreaming || rStreaming) {
+                if (joinType.IsAtom("Full") || joinType.IsAtom("Exclusion")) {
+                    ctx.AddError(TIssue(ctx.GetPosition(joins.Pos()), TStringBuilder()
+                        << "Streaming inputs are not supported for " << (joinType.IsAtom("Full") ? "FULL OUTER" : "EXCLUSION") << " join"
+                    ));
+                    return IGraphTransformer::TStatus::Error;
+                }
+
+                *streaming = lStreaming ? lStreaming : rStreaming;
+            }
+        }
+
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -468,16 +514,24 @@ namespace {
         TTypeAnnotationNode::TListType AllTypes;
     };
 
-    void CollectEquiJoinKeyColumnsFromLeaf(const TExprNode& columns, THashMap<TStringBuf, THashSet<TStringBuf>>& tableKeysMap) {
+    template <typename TContainer>
+    void CollectEquiJoinKeyColumnsFromLeaf(const TExprNode& columns, TContainer& tableKeysMap) {
         YQL_ENSURE(columns.ChildrenSize() % 2 == 0);
         for (ui32 i = 0; i < columns.ChildrenSize(); i += 2) {
             auto table = columns.Child(i)->Content();
             auto column = columns.Child(i + 1)->Content();
-            tableKeysMap[table].insert(column);
+            if constexpr (std::is_same_v<TContainer, THashMap<TStringBuf, THashSet<TStringBuf>>>) {
+                tableKeysMap[table].insert(column);
+            } else if constexpr (std::is_same_v<TContainer, THashMap<TStringBuf, TVector<TStringBuf>>>) {
+                tableKeysMap[table].push_back(column);
+            } else {
+                static_assert(TDependentFalse<TContainer>());
+            }
         }
     }
 
-    void CollectEquiJoinKeyColumns(const TExprNode& joinTree, THashMap<TStringBuf, THashSet<TStringBuf>>& tableKeysMap) {
+    template <typename TContainer>
+    void CollectEquiJoinKeyColumns(const TExprNode& joinTree, TContainer& tableKeysMap) {
         auto& left = *joinTree.Child(1);
         if (!left.IsAtom()) {
             CollectEquiJoinKeyColumns(left, tableKeysMap);
@@ -497,8 +551,8 @@ namespace {
 
     void CollectAdditiveInputLabels(const TCoEquiJoinTuple& joinTree, bool hasAny, THashMap<TStringBuf, bool>& isAdditiveByLabel) {
         auto settings = GetEquiJoinLinkSettings(joinTree.Options().Ref());
-        CollectAdditiveInputLabelsSide(joinTree, hasAny, isAdditiveByLabel, true, settings);
-        CollectAdditiveInputLabelsSide(joinTree, hasAny, isAdditiveByLabel, false, settings);
+        CollectAdditiveInputLabelsSide(joinTree, hasAny, isAdditiveByLabel, /*isLeft=*/true, settings);
+        CollectAdditiveInputLabelsSide(joinTree, hasAny, isAdditiveByLabel, /*isLeft=*/false, settings);
     }
 
     void CollectAdditiveInputLabelsSide(const TCoEquiJoinTuple& joinTree, bool hasAny, THashMap<TStringBuf, bool>& isAdditiveByLabel, bool isLeft, const TEquiJoinLinkSettings& settings) {
@@ -565,13 +619,15 @@ namespace {
 
         return true;
     }
-}
 
-TMaybe<TIssue> TJoinLabel::Parse(TExprContext& ctx, TExprNode& node, const TStructExprType* structType, const TUniqueConstraintNode* unique, const TDistinctConstraintNode* distinct) {
+} // namespace
+
+TMaybe<TIssue> TJoinLabel::Parse(TExprContext& ctx, TExprNode& node, const TStructExprType* structType, const TUniqueConstraintNode* unique, const TDistinctConstraintNode* distinct, const TStreamingConstraintNode* streaming) {
     Tables.clear();
     InputType = structType;
     Unique = unique;
     Distinct = distinct;
+    Streaming = streaming;
     if (auto atom = TMaybeNode<TCoAtom>(&node)) {
         if (auto err = ValidateLabel(ctx, atom.Cast())) {
             return err;
@@ -717,11 +773,11 @@ TVector<TString> TJoinLabel::EnumerateAllMembers() const {
     return result;
 }
 
-TMaybe<TIssue> TJoinLabels::Add(TExprContext& ctx, TExprNode& node, const TStructExprType* structType, const TUniqueConstraintNode* unique, const TDistinctConstraintNode* distinct) {
+TMaybe<TIssue> TJoinLabels::Add(TExprContext& ctx, TExprNode& node, const TStructExprType* structType, const TUniqueConstraintNode* unique, const TDistinctConstraintNode* distinct, const TStreamingConstraintNode* streaming) {
     ui32 index = Inputs.size();
     Inputs.emplace_back();
     TJoinLabel& label = Inputs.back();
-    if (auto err = label.Parse(ctx, node, structType, unique, distinct)) {
+    if (auto err = label.Parse(ctx, node, structType, unique, distinct, streaming)) {
         return err;
     }
 
@@ -904,7 +960,8 @@ IGraphTransformer::TStatus EquiJoinAnnotation(
     const TJoinLabels& labels,
     TExprNode& joins,
     const TJoinOptions& options,
-    TExprContext& ctx
+    TExprContext& ctx,
+    const TTypeAnnotationContext& typesCtx
 ) {
     auto position = ctx.GetPosition(positionHandle);
 
@@ -994,7 +1051,7 @@ IGraphTransformer::TStatus EquiJoinAnnotation(
 
     if (options.Flatten) {
         for (auto& x : flattenFields) {
-            if (const auto commonType = CommonType(positionHandle, x.second.AllTypes, ctx)) {
+            if (const auto commonType = CommonType(positionHandle, x.second.AllTypes, ctx, typesCtx)) {
                 const bool unwrap = ETypeAnnotationKind::Optional == commonType->GetKind() &&
                     std::any_of(x.second.AllTypes.cbegin(), x.second.AllTypes.cend(), [](const TTypeAnnotationNode* type) { return ETypeAnnotationKind::Optional != type->GetKind(); });
                 resultFields.emplace_back(ctx.MakeType<TItemExprType>(x.first, unwrap ? commonType->Cast<TOptionalExprType>()->GetItemType() : commonType));
@@ -1015,6 +1072,7 @@ IGraphTransformer::TStatus EquiJoinConstraints(
     TPositionHandle positionHandle,
     const TUniqueConstraintNode*& unique,
     const TDistinctConstraintNode*& distinct,
+    const TStreamingConstraintNode*& streaming,
     const TJoinLabels& labels,
     TExprNode& joins,
     TExprContext& ctx
@@ -1025,7 +1083,7 @@ IGraphTransformer::TStatus EquiJoinConstraints(
     TVector<TJoinState> joinsStates(labels.Inputs.size());
     TGLobalJoinState globalState;
     THashSet<TStringBuf> scope;
-    if (const auto parseStatus = ParseJoins(labels, joins, joinsStates, scope, globalState, false, ctx, &unique, &distinct); parseStatus.Level != IGraphTransformer::TStatus::Ok) {
+    if (const auto parseStatus = ParseJoins(labels, joins, joinsStates, scope, globalState, /*strictKeys=*/false, ctx, &unique, &distinct, &streaming); parseStatus.Level != IGraphTransformer::TStatus::Ok) {
         return parseStatus;
     }
     return IGraphTransformer::TStatus::Ok;
@@ -1037,30 +1095,41 @@ THashMap<TStringBuf, THashSet<TStringBuf>> CollectEquiJoinKeyColumnsByLabel(cons
     return result;
 };
 
-bool IsLeftJoinSideOptional(const TStringBuf& joinType) {
-    if (joinType == "Right" || joinType == "Full" || joinType == "Exclusion") {
-        return true;
-    }
+THashMap<TStringBuf, TVector<TStringBuf>> CollectOrderedEquiJoinKeyColumnsByLabel(const TExprNode& joinTree) {
+    THashMap<TStringBuf, TVector<TStringBuf>> result;
+    CollectEquiJoinKeyColumns(joinTree, result);
+    return result;
+};
 
-    return false;
+bool IsLeftJoinSideOptional(const TStringBuf& joinType) {
+    return joinType == "Right" || joinType == "Full" || joinType == "Exclusion";
 }
 
 bool IsRightJoinSideOptional(const TStringBuf& joinType) {
-    if (joinType == "Left" || joinType == "Full" || joinType == "Exclusion") {
-        return true;
-    }
-
-    return false;
+    return joinType == "Left" || joinType == "Full" || joinType == "Exclusion";
 }
 
 THashMap<TStringBuf, bool> CollectAdditiveInputLabels(const TCoEquiJoinTuple& joinTree) {
     THashMap<TStringBuf, bool> result;
-    CollectAdditiveInputLabels(joinTree, false, result);
+    CollectAdditiveInputLabels(joinTree, /*hasAny=*/false, result);
     return result;
 }
 
-TExprNode::TPtr FilterOutNullJoinColumns(TPositionHandle pos, const TExprNode::TPtr& input,
-    const TJoinLabel& label, const TSet<TString>& optionalKeyColumns, TExprContext& ctx) {
+bool IsSkipNullsUnessential(const TTypeAnnotationContext* types) {
+    YQL_ENSURE(types);
+    static const char Flag[] = "EmitSkipNullOnPushdownUsingUnessential";
+    return IsOptimizerEnabled<Flag>(*types) && !IsOptimizerDisabled<Flag>(*types);
+}
+
+TExprNode::TPtr FilterOutNullJoinColumns(
+    TPositionHandle pos,
+    const TExprNode::TPtr& input,
+    const TJoinLabel& label,
+    const TSet<TString>& optionalKeyColumns,
+    bool ordered,
+    const TTypeAnnotationContext* types,
+    TExprContext& ctx
+) {
     if (optionalKeyColumns.empty()) {
         return input;
     }
@@ -1072,6 +1141,36 @@ TExprNode::TPtr FilterOutNullJoinColumns(TPositionHandle pos, const TExprNode::T
         SplitTableName(fullColumnName, table, column);
         auto memberName = label.MemberName(table, column);
         optColumns.push_back(ctx.NewAtom(pos, memberName));
+    }
+
+    if (IsSkipNullsUnessential(types)) {
+        return ctx.Builder(pos)
+            .Callable(ordered ? "OrderedFilter" : "Filter")
+                .Add(0, input)
+                .Lambda(1)
+                    .Param("row")
+                    .Callable("Unessential")
+                        .Callable(0, "And")
+                            .Do([&optColumns] (TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                size_t i = 0;
+                                for (const auto& column : optColumns) {
+                                    parent.Callable(i++, "Not")
+                                        .Callable(0, "HasNull")
+                                            .Callable(0, "Member")
+                                                .Arg(0, "row")
+                                                .Add(1, column)
+                                            .Seal()
+                                        .Seal()
+                                    .Seal();
+                                }
+                                return parent;
+                            })
+                        .Seal()
+                        .Add(1, MakeBool<true>(pos, ctx))
+                    .Seal()
+                .Seal()
+            .Seal()
+            .Build();
     }
 
     return ctx.Builder(pos)
@@ -1431,7 +1530,7 @@ TMap<TStringBuf, TVector<TStringBuf>> UpdateUsedFieldsInRenameMap(
 TVector<TEquiJoinParent> CollectEquiJoinOnlyParents(const TCoFlatMapBase& flatMap, const TParentsMap& parents)
 {
     TVector<TEquiJoinParent> result;
-    if (!CollectEquiJoinOnlyParents(flatMap.Ref(), nullptr, 2, result, nullptr, parents)) {
+    if (!CollectEquiJoinOnlyParents(flatMap.Ref(), /*prev=*/nullptr, 2, result, /*extractMembersInScope=*/nullptr, parents)) {
         result.clear();
     }
 
@@ -1489,6 +1588,7 @@ TEquiJoinLinkSettings GetEquiJoinLinkSettings(const TExprNode& linkSettings) {
     }
 
     result.ForceSortedMerge = HasSetting(linkSettings, "forceSortedMerge");
+    result.ForceStar = HasSetting(linkSettings, "force_star");
 
     if (auto streamlookup = GetSetting(linkSettings, "forceStreamLookup")) {
         YQL_ENSURE(result.JoinAlgoOptions.empty());
@@ -1528,6 +1628,10 @@ TExprNode::TPtr BuildEquiJoinLinkSettings(const TEquiJoinLinkSettings& linkSetti
     if (linkSettings.ForceSortedMerge) {
         settings.push_back(ctx.NewList(linkSettings.Pos, { ctx.NewAtom(linkSettings.Pos, "forceSortedMerge", TNodeFlags::Default) }));
     }
+    if (linkSettings.ForceStar) {
+        settings.push_back(ctx.NewList(linkSettings.Pos, { ctx.NewAtom(linkSettings.Pos, "force_star", TNodeFlags::Default) }));
+    }
+
     if (linkSettings.LeftHints) {
         settings.push_back(builder("left"));
     }
@@ -1910,8 +2014,8 @@ TExprNode::TPtr PreparePredicate(TExprNode::TPtr predicate, TExprContext& ctx) {
 
     for (ui32 i = 1; i < andParts.size(); ++i) {
         THashSet<const TExprNode*> found;
-        for (ui32 j = 0; j < andParts[i].size(); ++j) {
-            found.insert(andParts[i][j].Get());
+        for (const auto& part : andParts[i]) {
+            found.insert(part.Get());
         }
 
         // remove
@@ -1924,7 +2028,7 @@ TExprNode::TPtr PreparePredicate(TExprNode::TPtr predicate, TExprContext& ctx) {
         }
     }
 
-    if (commonParts.size() == 0) {
+    if (commonParts.empty()) {
         return originalPredicate;
     }
 
@@ -1941,22 +2045,22 @@ TExprNode::TPtr PreparePredicate(TExprNode::TPtr predicate, TExprContext& ctx) {
     }
 
     TExprNode::TListType orArgs;
-    for (ui32 i = 0; i < andParts.size(); ++i) {
+    for (auto& andPart : andParts) {
         TExprNode::TListType restAndArgs;
-        for (ui32 j = 0; j < andParts[i].size(); ++j) {
-            if (commonParts.contains(andParts[i][j].Get())) {
+        for (const auto& part : andPart) {
+            if (commonParts.contains(part.Get())) {
                 continue;
             }
 
-            restAndArgs.push_back(andParts[i][j]);
+            restAndArgs.push_back(part);
         }
 
-        if (restAndArgs.size() >= 1) {
+        if (!restAndArgs.empty()) {
             orArgs.push_back(ctx.NewCallable(predicate->Pos(), "And", std::move(restAndArgs)));
         }
     }
 
-    if (orArgs.size() >= 1) {
+    if (!orArgs.empty()) {
         andArgs.push_back(ctx.NewCallable(predicate->Pos(), "Or", std::move(orArgs)));
     }
 
@@ -1991,22 +2095,26 @@ void GatherAndTerms(const TExprNode::TPtr& predicate, TExprNode::TListType& andT
     }
 }
 
-TExprNode::TPtr FuseAndTerms(TPositionHandle position, const TExprNode::TListType& andTerms, const TExprNode::TPtr& exclude, bool isPg, TExprContext& ctx) {
+TExprNode::TPtr FuseAndTerms(TPositionHandle position, const TExprNode::TListType& andTerms, const TExprNode::TPtr& exclude, TExprNode::TPtr&& replaceWith, bool isPg, TExprContext& ctx) {
     TExprNode::TPtr prevAndNode = nullptr;
     TNodeSet added;
-    for (const auto& otherAndTerm : andTerms) {
-        if (otherAndTerm == exclude) {
-            continue;
+    for (auto term : andTerms) {
+        if (term == exclude) {
+            if (!replaceWith) {
+                continue;
+            }
+            term = std::move(replaceWith);
+            replaceWith = nullptr;
         }
 
-        if (!added.insert(otherAndTerm.Get()).second) {
+        if (!added.insert(term.Get()).second) {
             continue;
         }
 
         if (!prevAndNode) {
-            prevAndNode = otherAndTerm;
+            prevAndNode = term;
         } else {
-            prevAndNode = ctx.NewCallable(position, "And", { prevAndNode, otherAndTerm });
+            prevAndNode = ctx.NewCallable(position, "And", { prevAndNode, term });
         }
     }
 
@@ -2046,12 +2154,22 @@ bool IsEquality(TExprNode::TPtr predicate, TExprNode::TPtr& left, TExprNode::TPt
     return false;
 }
 
+bool IsMemberEquality(const TExprNode::TPtr& predicate, const TExprNode& row, TExprNode::TPtr& leftMember, TExprNode::TPtr& rightMember) {
+    if (!IsEquality(predicate, leftMember, rightMember)) {
+        return false;
+    }
+
+    return
+        leftMember->IsCallable("Member") && &leftMember->Head() == &row &&
+        rightMember->IsCallable("Member") && &rightMember->Head() == &row;
+}
+
 void GatherJoinInputs(const TExprNode::TPtr& expr, const TExprNode& row,
     const TParentsMap& parentsMap, const THashMap<TString, TString>& backRenameMap,
     const TJoinLabels& labels, TSet<ui32>& inputs, TSet<TStringBuf>& usedFields) {
     usedFields.clear();
 
-    if (!HaveFieldsSubset(expr, row, usedFields, parentsMap, false)) {
+    if (!HaveFieldsSubset(expr, row, usedFields, parentsMap, /*allowDependsOn=*/false)) {
         const auto inputStructType = RemoveOptionalType(row.GetTypeAnn())->Cast<TStructExprType>();
         for (const auto& i : inputStructType->GetItems()) {
             usedFields.insert(i->GetName());
@@ -2074,6 +2192,52 @@ void GatherJoinInputs(const TExprNode::TPtr& expr, const TExprNode& row,
     }
 }
 
+bool GatherJoinInputsForAllNodes(const TExprNode::TPtr& expr, const TExprNode& row,
+    const THashMap<TString, TString>& backRenameMap, const TJoinLabels& labels, TNodeMap<TSet<ui32>>& inputs
+){
+    bool memberOnly = true;
+    VisitExpr(
+        expr,
+        [&](const TExprNode::TPtr& node) {
+            if (!memberOnly) {
+                return false;
+            } else if (node->IsCallable("Member") && node->HeadPtr().Get() == &row) {
+                return false;
+            }
+
+            return true;
+        },
+        [&](const TExprNode::TPtr& node) {
+            if (node->IsCallable("Member") && node->HeadPtr().Get() == &row) {
+                auto field = node->Tail().Content();
+                // rename used fields
+                if (auto renamed = backRenameMap.FindPtr(field)) {
+                    field = *renamed;
+                }
+
+                TStringBuf part1;
+                TStringBuf part2;
+                SplitTableName(field, part1, part2);
+                inputs[node.Get()] = {*labels.FindInputIndex(part1)};
+            } else if (node.Get() == &row) {
+                // non-Member usage of row struct
+                memberOnly = false;
+            } else {
+                TSet<ui32> usedInputs;
+                for (const auto& child : node->Children()) {
+                    auto& childUsedInputs = inputs[child.Get()];
+                    usedInputs.insert(childUsedInputs.begin(), childUsedInputs.end());
+                }
+                inputs[node.Get()] = std::move(usedInputs);
+            }
+
+            return true;
+        }
+    );
+
+    return memberOnly;
+}
+
 bool IsCachedJoinOption(TStringBuf name) {
     static THashSet<TStringBuf> CachedJoinOptions = {"preferred_sort", "cbo_passed", "multiple_joins", "prune_keys_added"};
     return CachedJoinOptions.contains(name);
@@ -2082,6 +2246,92 @@ bool IsCachedJoinOption(TStringBuf name) {
 bool IsCachedJoinLinkOption(TStringBuf name) {
     static THashSet<TStringBuf> CachedJoinLinkOptions = {"shuffle_lhs_by", "shuffle_rhs_by"};
     return CachedJoinLinkOptions.contains(name);
+}
+
+bool ParentKeysSubsetOfChildKeys(TExprNode::TPtr parent, TExprNode::TPtr left, TExprNode::TPtr right) {
+    YQL_ENSURE(left->ChildrenSize() == right->ChildrenSize());
+    YQL_ENSURE(parent->ChildrenSize() % 2 == 0);
+    if (parent->ChildrenSize() > left->ChildrenSize()) {
+        return false;
+    }
+
+    THashSet<TString> childColumns;
+    for (ui32 i = 0; i < left->ChildrenSize(); i += 2) {
+        childColumns.insert(FullColumnName(left->Child(i)->Content(), left->Child(i + 1)->Content()));
+        childColumns.insert(FullColumnName(right->Child(i)->Content(), right->Child(i + 1)->Content()));
+    }
+
+    for (ui32 i = 0; i < parent->ChildrenSize(); i += 2) {
+        auto parentColumn = FullColumnName(parent->Child(i)->Content(), parent->Child(i + 1)->Content());
+        if (!childColumns.contains(parentColumn)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+TExprNode::TPtr PushAnyInEquiJoin(TExprContext& ctx, const TCoEquiJoinTuple& joinTree, const TExprNode::TPtr keyColumnsFromParent) {
+    auto settings = GetEquiJoinLinkSettings(joinTree.Options().Ref());
+    bool settingsChanged = false;
+    TStringBuf joinKind = joinTree.Type().Value();
+    auto result = joinTree.Ptr();
+
+    auto updateHints = [&settingsChanged] (TSet<TString>& hints) {
+        if (!hints.contains("any")) {
+            hints.insert("any");
+            settingsChanged = true;
+        }
+    };
+    bool parentKeysSubsetOfChildKeys = keyColumnsFromParent && ParentKeysSubsetOfChildKeys(keyColumnsFromParent, joinTree.LeftKeys().Ptr(), joinTree.RightKeys().Ptr());
+    if (parentKeysSubsetOfChildKeys) {
+        updateHints(settings.LeftHints);
+        updateHints(settings.RightHints);
+    }
+
+    auto left = joinTree.LeftScope();
+    if (!left.Maybe<TCoAtom>()) {
+        auto leftJoinTuple = left.Cast<TCoEquiJoinTuple>();
+        auto leftResult = leftJoinTuple.Ptr();
+
+        if (joinKind == "RightSemi" || joinKind == "RightOnly" || settings.LeftHints.contains("any")) {
+            if (!settings.LeftHints.contains("unique")) {
+                leftResult = PushAnyInEquiJoin(ctx, leftJoinTuple, joinTree.LeftKeys().Ptr());
+            }
+        } else if (parentKeysSubsetOfChildKeys) {
+            leftResult = PushAnyInEquiJoin(ctx, leftJoinTuple, joinTree.LeftKeys().Ptr());
+        } else {
+            leftResult = PushAnyInEquiJoin(ctx, leftJoinTuple);
+        }
+        if (leftResult != leftJoinTuple.Ptr()) {
+            result = ctx.ChangeChild(*result, TCoEquiJoinTuple::idx_LeftScope, std::move(leftResult));
+        }
+    }
+
+    auto right = joinTree.RightScope();
+    if (!right.Maybe<TCoAtom>()) {
+        auto rightJoinTuple = right.Cast<TCoEquiJoinTuple>();
+        auto rightResult = rightJoinTuple.Ptr();
+
+        if (joinKind == "LeftSemi" || joinKind == "LeftOnly" || settings.RightHints.contains("any")) {
+            if (!settings.RightHints.contains("unique")) {
+                rightResult = PushAnyInEquiJoin(ctx, rightJoinTuple, joinTree.RightKeys().Ptr());
+            }
+        } else if (parentKeysSubsetOfChildKeys) {
+            rightResult = PushAnyInEquiJoin(ctx, rightJoinTuple, joinTree.RightKeys().Ptr());
+        } else {
+            rightResult = PushAnyInEquiJoin(ctx, rightJoinTuple);
+        }
+
+        if (rightResult != rightJoinTuple.Ptr()) {
+            result = ctx.ChangeChild(*result, TCoEquiJoinTuple::idx_RightScope, std::move(rightResult));
+        }
+    }
+
+    if (settingsChanged) {
+        result = ctx.ChangeChild(*result, TCoEquiJoinTuple::idx_Options, BuildEquiJoinLinkSettings(settings, ctx));
+    }
+    return result;
 }
 
 void GetPruneKeysColumnsForJoinLeaves(const TCoEquiJoinTuple& joinTree, THashMap<TStringBuf, THashSet<TStringBuf>>& columnsForPruneKeysExtractor) {
@@ -2174,6 +2424,16 @@ TExprNode::TPtr DropAnyOverJoinInputs(TExprNode::TPtr joinTree, const TJoinLabel
     }
 
     return joinTree;
+}
+
+bool IsNoPullColumn(TStringBuf columnName) {
+    if (columnName.Contains('.')) {
+        TStringBuf table;
+        TStringBuf column;
+        SplitTableName(columnName, table, column);
+        columnName = column;
+    }
+    return columnName.StartsWith(YqlCanaryColumnName) || columnName.StartsWith(YqlJoinKeyColumnName);
 }
 
 } // namespace NYql

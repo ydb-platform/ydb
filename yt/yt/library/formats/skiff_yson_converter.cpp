@@ -13,6 +13,8 @@
 #include <library/cpp/skiff/skiff.h>
 #include <library/cpp/skiff/skiff_schema.h>
 
+#include <library/cpp/yt/string/stream.h>
+
 #include <util/stream/zerocopy.h>
 #include <util/stream/mem.h>
 
@@ -76,11 +78,11 @@ std::shared_ptr<TSkiffSchema> GetOptionalChild(const std::shared_ptr<TSkiffSchem
 
 struct TSkiffStructField
 {
-    TString Name;
+    std::string Name;
     std::shared_ptr<TSkiffSchema> Type;
 };
 
-template<EWireType wireType>
+template <EWireType wireType>
 constexpr EYsonItemType WireTypeToYsonItemType()
 {
     if constexpr (
@@ -131,8 +133,8 @@ struct TOptionalTypesMatch
 {
     THROW_ERROR_EXCEPTION("Cannot match field %Qv to Skiff schema",
         descriptor.GetDescription())
-        << SkiffYsonErrorAttributes(descriptor, skiffSchema)
-        << ex;
+        .With(SkiffYsonErrorAttributes(descriptor, skiffSchema))
+        .With(ex);
 }
 
 template <typename... TArgs>
@@ -143,7 +145,7 @@ template <typename... TArgs>
 {
     THROW_ERROR_EXCEPTION("Yson to Skiff conversion error while converting %Qv field",
         descriptor.GetDescription())
-        << TError(format, std::forward<TArgs>(args)...);
+        .With(TError(format, std::forward<TArgs>(args)...));
 }
 
 [[noreturn]] void ThrowBadYsonToken(
@@ -151,7 +153,7 @@ template <typename... TArgs>
     const std::vector<EYsonItemType>& expected,
     const EYsonItemType actual)
 {
-    TStringStream expectationString;
+    TStdStringStream expectationString;
     if (expected.size() > 1) {
         expectationString << "one of ";
         bool first = true;
@@ -180,7 +182,7 @@ template <typename... TArgs>
 {
     THROW_ERROR_EXCEPTION("Skiff to Yson conversion error while converting %Qv field",
         descriptor.GetDescription())
-        << TError(format, std::forward<TArgs>(args)...);
+        .With(TError(format, std::forward<TArgs>(args)...));
 }
 
 TOptionalTypesMatch MatchOptionalTypes(
@@ -223,7 +225,6 @@ TOptionalTypesMatch MatchOptionalTypes(
     };
 
     try {
-
         // First of all we compute strict and relaxed depths of optional chain.
         // Strict depth is the depth of chain where each element is optional<T>.
         // Relaxed depth is the depth of chain where each element is optional<T> or variant<null, T>
@@ -317,7 +318,7 @@ std::vector<std::optional<TTypePair>> MatchStructTypes(
             ThrowBadWireType(EWireType::Tuple, skiffSchema->GetWireType());
         }
 
-        THashMap<TString, int> skiffNameToIndex;
+        THashMap<std::string, int> skiffNameToIndex;
         std::vector<TSkiffStructField> skiffFields;
         {
             const auto& children = skiffSchema->GetChildren();
@@ -351,7 +352,6 @@ std::vector<std::optional<TTypePair>> MatchStructTypes(
                     skiffFields[index].Name);
             }
             result.emplace_back(std::nullopt);
-
         };
 
         ssize_t nextSkiffFieldIndex = 0;
@@ -552,12 +552,12 @@ public:
         : Descriptor_(std::move(descriptor))
     { }
 
-    void operator () (TYsonPullParserCursor* cursor, TCheckedInDebugSkiffWriter* writer)
+    void operator()(TYsonPullParserCursor* cursor, TCheckedInDebugSkiffWriter* writer)
     {
         if constexpr (wireType == EWireType::Yson32) {
             TmpString_.clear();
             {
-                TStringOutput output(TmpString_);
+                TStdStringOutput output(TmpString_);
                 TBufferedBinaryYsonWriter ysonWriter(&output);
                 cursor->TransferComplexValue(&ysonWriter);
                 ysonWriter.Flush();
@@ -619,7 +619,7 @@ public:
 
 private:
     TComplexTypeFieldDescriptor Descriptor_;
-    TString TmpString_;
+    std::string TmpString_;
 };
 
 template <EYsonItemType ExpectedTokenType, typename TFunction>
@@ -665,8 +665,7 @@ TYsonToSkiffConverter CreateTzTypeYsonToSkiffConverter(
     switch (wireType) {
         case EWireType::String32:
             return CreatePrimitiveTypeYsonToSkiffConverter(descriptor, wireType);
-        case EWireType::Tuple:
-        {
+        case EWireType::Tuple: {
             const auto& children = skiffSchema->GetChildren();
             YT_VERIFY(children.size() == 2);
             const auto innerWireType = children[0]->GetWireType();
@@ -826,7 +825,7 @@ public:
         , InnerOptionalTranslate_(skiffOptionalLevel > 0)
     { }
 
-    void operator () (TYsonPullParserCursor* cursor, TCheckedInDebugSkiffWriter* writer)
+    void operator()(TYsonPullParserCursor* cursor, TCheckedInDebugSkiffWriter* writer)
     {
         auto throwValueExpectedToBeNonempty = [&] {
             ThrowYsonToSkiffConversionError(Descriptor_, "\"#\" found while value expected to be nonempty");
@@ -911,7 +910,7 @@ public:
         , OuterTranslateLevel_(ysonOptionalLevel)
     { }
 
-    void operator () (TYsonPullParserCursor* cursor, TCheckedInDebugSkiffWriter* writer)
+    void operator()(TYsonPullParserCursor* cursor, TCheckedInDebugSkiffWriter* writer)
     {
         auto throwValueExpectedToBeNonempty = [&] {
             ThrowYsonToSkiffConversionError(Descriptor_, "\"#\" found while value expected to be nonempty");
@@ -1192,7 +1191,7 @@ public:
         , Descriptor_(std::move(descriptor))
     { }
 
-    void operator () (TYsonPullParserCursor* cursor, TCheckedInDebugSkiffWriter* writer)
+    void operator()(TYsonPullParserCursor* cursor, TCheckedInDebugSkiffWriter* writer)
     {
         if (cursor->GetCurrent().GetType() != EYsonItemType::BeginList) {
             ThrowBadYsonToken(Descriptor_, {EYsonItemType::BeginList}, cursor->GetCurrent().GetType());
@@ -1336,7 +1335,7 @@ public:
         : Function_(std::move(function))
     { }
 
-    void operator() (TCheckedInDebugSkiffParser* parser, TCheckedInDebugYsonTokenWriter* writer)
+    void operator()(TCheckedInDebugSkiffParser* parser, TCheckedInDebugYsonTokenWriter* writer)
     {
         auto value = Function_(parser);
 
@@ -1376,7 +1375,7 @@ private:
 class TYson32SkiffToYsonConverter
 {
 public:
-    Y_FORCE_INLINE void operator () (TCheckedInDebugSkiffParser* parser, TCheckedInDebugYsonTokenWriter* writer)
+    Y_FORCE_INLINE void operator()(TCheckedInDebugSkiffParser* parser, TCheckedInDebugYsonTokenWriter* writer)
     {
         TMemoryInput inputStream(parser->ParseYson32());
         TYsonPullParser pullParser(&inputStream, EYsonType::Node);
@@ -1421,8 +1420,7 @@ TSkiffToYsonConverter CreateTzTypeSkiffToYsonConverter(const std::shared_ptr<TSk
     switch (wireType) {
         case EWireType::String32:
             return CreatePrimitiveTypeSkiffToYsonConverter(wireType);
-        case EWireType::Tuple:
-        {
+        case EWireType::Tuple: {
             const auto& children = skiffSchema->GetChildren();
             YT_VERIFY(children.size() == 2);
             const auto innerWireType = children[0]->GetWireType();
@@ -1556,7 +1554,7 @@ public:
         YT_VERIFY(ysonNesting <= skiffNesting + 1);
     }
 
-    void operator () (TCheckedInDebugSkiffParser* parser, TCheckedInDebugYsonTokenWriter* writer)
+    void operator()(TCheckedInDebugSkiffParser* parser, TCheckedInDebugYsonTokenWriter* writer)
     {
         for (int i = 0; i < OuterFill_; ++i) {
             writer->WriteBeginList();
@@ -1634,7 +1632,7 @@ public:
         YT_VERIFY(ysonNesting <= skiffNesting + 1);
     }
 
-    void operator () (TCheckedInDebugSkiffParser* parser, TCheckedInDebugYsonTokenWriter* writer)
+    void operator()(TCheckedInDebugSkiffParser* parser, TCheckedInDebugYsonTokenWriter* writer)
     {
         for (int i = 0; i < OuterFill_; ++i) {
             writer->WriteBeginList();
@@ -1718,7 +1716,7 @@ TSkiffToYsonConverter CreateListSkiffToYsonConverter(
     auto match = MatchListTypes(descriptor, skiffSchema);
     auto innerConverter = CreateSkiffToYsonConverterImpl(std::move(match.first), match.second, context, config);
 
-    return [innerConverter = innerConverter, descriptor=std::move(descriptor)] (TCheckedInDebugSkiffParser* parser, TCheckedInDebugYsonTokenWriter* writer) {
+    return [innerConverter = innerConverter, descriptor = std::move(descriptor)] (TCheckedInDebugSkiffParser* parser, TCheckedInDebugYsonTokenWriter* writer) {
         writer->WriteBeginList();
         while (true) {
             auto tag = parser->ParseVariant8Tag();
@@ -1806,7 +1804,7 @@ public:
         , Descriptor_(std::move(descriptor))
     { }
 
-    void operator () (TCheckedInDebugSkiffParser* parser, TCheckedInDebugYsonTokenWriter* writer)
+    void operator()(TCheckedInDebugSkiffParser* parser, TCheckedInDebugYsonTokenWriter* writer)
     {
         int tag;
         if constexpr (wireType == EWireType::Variant8) {
@@ -1875,7 +1873,7 @@ TSkiffToYsonConverter CreateDictSkiffToYsonConverter(
     return [
         keyConverter = std::move(keyConverter),
         valueConverter = std::move(valueConverter),
-        descriptor=std::move(descriptor)
+        descriptor = std::move(descriptor)
     ] (TCheckedInDebugSkiffParser* parser, TCheckedInDebugYsonTokenWriter* writer) {
         writer->WriteBeginList();
         while (true) {
@@ -2026,67 +2024,67 @@ void CheckWireType(EWireType wireType, const std::initializer_list<EWireType>& a
 
 void CheckTzType(const std::shared_ptr<TSkiffSchema>& skiffSchema, ESimpleLogicalValueType columnType)
 {
-    auto error = TError(
-        "TzType cannot be represented with Skiff schema %Qv",
-        GetShortDebugString(skiffSchema));
-
     auto wireType = skiffSchema->GetWireType();
     if (wireType == EWireType::String32 || wireType == EWireType::Yson32) {
         return;
     }
-    if (wireType == EWireType::Tuple) {
-        const auto& children = skiffSchema->GetChildren();
-        if (children.size() != 2) {
-            THROW_ERROR_EXCEPTION("Tuple is expected to have two fields for the TzType representation");
-        }
-        const auto innerTimeType = children[0]->GetWireType();
-        const auto innerTimezoneType = children[1]->GetWireType() ;
-        if (innerTimezoneType != EWireType::Uint16) {
-            THROW_ERROR_EXCEPTION("The second field in the tuple is expected to be a uint16");
-        }
-        try {
-            switch (columnType) {
-                case ESimpleLogicalValueType::TzDate32:
-                    CheckWireType(
-                        innerTimeType,
-                        {EWireType::Int32});
-                    break;
-                case ESimpleLogicalValueType::TzDatetime64:
-                    CheckWireType(
-                        innerTimeType,
-                        {EWireType::Int64});
-                    break;
-                case ESimpleLogicalValueType::TzTimestamp64:
-                    CheckWireType(
-                        innerTimeType,
-                        {EWireType::Int64,});
-                    break;
-                case ESimpleLogicalValueType::TzDate:
-                    CheckWireType(
-                        innerTimeType,
-                        {EWireType::Uint16});
-                    break;
-                case ESimpleLogicalValueType::TzDatetime:
-                    CheckWireType(
-                        innerTimeType,
-                        {EWireType::Uint32});
-                    break;
-                case ESimpleLogicalValueType::TzTimestamp:
-                    CheckWireType(
-                        innerTimeType,
-                        {EWireType::Uint64});
-                    break;
-                default:
-                    YT_ABORT();
-            }
-        } catch (const NYT::TErrorException& ex) {
-            error <<= ex.Error();
-            THROW_ERROR(error);
-        }
-        return;
+    if (wireType != EWireType::Tuple) {
+        THROW_ERROR_EXCEPTION(
+            "TzType cannot be represented with Skiff schema %Qv",
+            GetShortDebugString(skiffSchema));
+    }
+    const auto& children = skiffSchema->GetChildren();
+    if (children.size() != 2) {
+        THROW_ERROR_EXCEPTION("Tuple is expected to have two fields for the TzType representation");
+    }
+    const auto innerTimeType = children[0]->GetWireType();
+    const auto innerTimezoneType = children[1]->GetWireType();
+    if (innerTimezoneType != EWireType::Uint16) {
+        THROW_ERROR_EXCEPTION("The second field in the tuple is expected to be \"uint16\"");
     }
 
-    THROW_ERROR(error);
+    try {
+        switch (columnType) {
+            case ESimpleLogicalValueType::TzDate32:
+                CheckWireType(
+                    innerTimeType,
+                    {EWireType::Int32});
+                break;
+            case ESimpleLogicalValueType::TzDatetime64:
+                CheckWireType(
+                    innerTimeType,
+                    {EWireType::Int64});
+                break;
+            case ESimpleLogicalValueType::TzTimestamp64:
+                CheckWireType(
+                    innerTimeType,
+                    {EWireType::Int64,});
+                break;
+            case ESimpleLogicalValueType::TzDate:
+                CheckWireType(
+                    innerTimeType,
+                    {EWireType::Uint16});
+                break;
+            case ESimpleLogicalValueType::TzDatetime:
+                CheckWireType(
+                    innerTimeType,
+                    {EWireType::Uint32});
+                break;
+            case ESimpleLogicalValueType::TzTimestamp:
+                CheckWireType(
+                    innerTimeType,
+                    {EWireType::Uint64});
+                break;
+            default:
+                YT_ABORT();
+        }
+    } catch (const NYT::TErrorException& ex) {
+        auto error = TError(
+            "TzType cannot be represented with Skiff schema %Qv",
+            GetShortDebugString(skiffSchema));
+        error <<= ex.Error();
+        THROW_ERROR(error);
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

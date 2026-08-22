@@ -1,28 +1,31 @@
 import array
+import asyncio
+import logging
 import struct
 import sys
+from collections.abc import Callable, Generator, MutableSequence, Sequence
+from io import IOBase
+from typing import Any
 
-from typing import Sequence, MutableSequence, Dict, Optional, Union, Generator
-
-from clickhouse_connect.driver.exceptions import ProgrammingError, StreamClosedError, DataError
+from clickhouse_connect.driver.exceptions import DataError, ProgrammingError, StreamClosedError
 from clickhouse_connect.driver.types import Closable
 
+logger = logging.getLogger(__name__)
 
-# pylint: disable=invalid-name
-must_swap = sys.byteorder == 'big'
-int_size = array.array('i').itemsize
+must_swap = sys.byteorder == "big"
+int_size = array.array("i").itemsize
 low_card_version = 1
 
-array_map = {1: 'b', 2: 'h', 4: 'i', 8: 'q'}
+array_map = {1: "b", 2: "h", 4: "i", 8: "q"}
 decimal_prec = {32: 9, 64: 18, 128: 38, 256: 79}
 
 if int_size == 2:
-    array_map[4] = 'l'
+    array_map[4] = "l"
 
 array_sizes = {v: k for k, v in array_map.items()}
-array_sizes['f'] = 4
-array_sizes['d'] = 8
-np_date_types = {0: '[s]', 3: '[ms]', 6: '[us]', 9: '[ns]'}
+array_sizes["f"] = 4
+array_sizes["d"] = 8
+np_date_types = {0: "[s]", 3: "[ms]", 6: "[us]", 9: "[ns]"}
 
 
 def array_type(size: int, signed: bool):
@@ -39,7 +42,7 @@ def array_type(size: int, signed: bool):
     return code if signed else code.upper()
 
 
-def write_array(code: str, column: Sequence, dest: MutableSequence, col_name: Optional[str]=None):
+def write_array(code: str, column: Sequence, dest: MutableSequence, col_name: str | None = None):
     """
     Write a column of native Python data matching the array.array code
     :param code: Python array.array code matching the column data type
@@ -48,14 +51,17 @@ def write_array(code: str, column: Sequence, dest: MutableSequence, col_name: Op
     :param col_name: Optional column name for error tracking
     """
     try:
-        buff = struct.Struct(f'<{len(column)}{code}')
+        buff = struct.Struct(f"<{len(column)}{code}")
         dest += buff.pack(*column)
     except (TypeError, OverflowError, struct.error) as ex:
-        col_msg = ''
-        if col_name:
-            col_msg = f' for source column `{col_name}`'
-        raise DataError(f'Unable to create Python array{col_msg}.  This is usually caused by trying to insert None ' +
-                                  'values into a ClickHouse column that is not Nullable') from ex
+        col_msg = f" for column `{col_name}`" if col_name else ""
+        if isinstance(ex, OverflowError):
+            error_detail = "value out of range"
+        elif isinstance(ex, TypeError):
+            error_detail = "type mismatch (usually None in non-Nullable column)"
+        else:
+            error_detail = type(ex).__name__
+        raise DataError(f"Unable to create native array{col_msg}: {error_detail}") from ex
 
 
 def write_uint64(value: int, dest: MutableSequence):
@@ -64,7 +70,7 @@ def write_uint64(value: int, dest: MutableSequence):
     :param value: UInt64 value to write
     :param dest: Destination byte buffer
     """
-    dest.extend(value.to_bytes(8, 'little'))
+    dest.extend(value.to_bytes(8, "little"))
 
 
 def write_leb128(value: int, dest: MutableSequence):
@@ -74,7 +80,7 @@ def write_leb128(value: int, dest: MutableSequence):
     :param dest: Target buffer
     """
     while True:
-        b = value & 0x7f
+        b = value & 0x7F
         value >>= 7
         if value == 0:
             dest.append(b)
@@ -89,7 +95,7 @@ def decimal_size(prec: int):
     :return: Required bit size
     """
     if prec < 1 or prec > 79:
-        raise ArithmeticError(f'Invalid precision {prec} for ClickHouse Decimal type')
+        raise ArithmeticError(f"Invalid precision {prec} for ClickHouse Decimal type")
     if prec < 10:
         return 32
     if prec < 19:
@@ -100,19 +106,59 @@ def decimal_size(prec: int):
 
 
 def unescape_identifier(x: str) -> str:
-    if x.startswith('`') and x.endswith('`'):
-        return x[1:-1]
-    return x
+    """
+    Remove backtick quoting from a ClickHouse identifier, including compound
+    identifiers such as `directory`.`id` (the wire form of a Nested sub-column),
+    which normalizes to directory.id. Dots outside of backticks are treated as
+    separators between identifier parts, while dots inside backticks are kept.
+
+    Inside a quoted part the escapes produced by quote_identifier are reversed:
+    a doubled backtick and a backslash-escaped character each yield the single
+    literal character they encode, so both `a``b` and `a\\`b` normalize to a`b.
+    """
+    parts = []
+    buf = ""
+    in_quote = False
+    i = 0
+    length = len(x)
+    while i < length:
+        ch = x[i]
+        if in_quote:
+            if ch == "`":
+                # A doubled backtick is an escaped literal backtick; a lone
+                # backtick closes the quoted part.
+                if i + 1 < length and x[i + 1] == "`":
+                    buf += "`"
+                    i += 2
+                    continue
+                in_quote = False
+            elif ch == "\\" and i + 1 < length:
+                # A backslash escapes the next character (for example \` or \\).
+                buf += x[i + 1]
+                i += 2
+                continue
+            else:
+                buf += ch
+        elif ch == "`":
+            in_quote = True
+        elif ch == ".":
+            parts.append(buf)
+            buf = ""
+        else:
+            buf += ch
+        i += 1
+    parts.append(buf)
+    return ".".join(parts)
 
 
-def dict_copy(source: Dict = None, update: Optional[Dict] = None) -> Dict:
+def dict_copy(source: dict | None = None, update: dict | None = None) -> dict:
     copy = source.copy() if source else {}
     if update:
         copy.update(update)
     return copy
 
 
-def dict_add(source: Dict, key: str, value: any) -> Dict:
+def dict_add(source: dict, key: str, value: Any) -> dict:
     if value is not None:
         source[key] = value
     return source
@@ -122,19 +168,43 @@ def empty_gen():
     yield from ()
 
 
-def coerce_int(val: Optional[Union[str, int]]) -> int:
+def coerce_int(val: str | int | None) -> int:
     if not val:
         return 0
     return int(val)
 
 
-def coerce_bool(val: Optional[Union[str, bool]]):
+def coerce_bool(val: str | bool | None) -> bool:
     if not val:
         return False
-    return val is True or (isinstance(val, str) and val.lower() in ('true', '1', 'y', 'yes'))
+    return val is True or (isinstance(val, str) and val.lower() in ("true", "1", "y", "yes"))
 
 
-def first_value(column: Sequence, nullable:bool = True):
+def version_at_least(server_version: str | None, required_version: str) -> bool:
+    """
+    Determine whether server_version is at least required_version.
+    Non-numeric version parts are ignored so Altinity Stable versions
+    like 22.8.15.25.altinitystable compare correctly.
+    """
+    try:
+        server_parts = [int(x) for x in (server_version or "").split(".") if x.isnumeric()]
+        server_parts.extend([0] * (4 - len(server_parts)))
+        required_parts = [int(x) for x in required_version.split(".")]
+        required_parts.extend([0] * (4 - len(required_parts)))
+    except ValueError:
+        logger.warning(
+            "Server %s or requested version %s does not match format of numbers separated by dots", server_version, required_version
+        )
+        return False
+    for server_part, required_part in zip(server_parts, required_parts):
+        if server_part > required_part:
+            return True
+        if server_part < required_part:
+            return False
+    return True
+
+
+def first_value(column: Sequence, nullable: bool = True):
     if nullable:
         return next((x for x in column if x is not None), None)
     if len(column):
@@ -148,12 +218,16 @@ class SliceView(Sequence):
     https://gist.github.com/mathieucaroff/0cf094325fb5294fb54c6a577f05a2c1
     Also see the discussion on SO: https://stackoverflow.com/questions/3485475/can-i-create-a-view-on-a-python-list
     """
-    slots = ('_source', '_range')
 
-    def __init__(self, source: Sequence, source_slice: Optional[slice] = None):
+    slots = ("_source", "_range")
+
+    _source: Sequence
+    _range: range
+
+    def __init__(self, source: Sequence, source_slice: slice | None = None):
         if isinstance(source, SliceView):
             self._source = source._source
-            self._range = source._range[source_slice]
+            self._range = source._range if source_slice is None else source._range[source_slice]
         else:
             self._source = source
             if source_slice is None:
@@ -175,7 +249,7 @@ class SliceView(Sequence):
 
     def __repr__(self):
         r = self._range
-        return f'SliceView({self._source[slice(r.start, r.stop, r.step)]})'
+        return f"SliceView({self._source[slice(r.start, r.stop, r.step)]})"
 
     def __eq__(self, other):
         if self is other:
@@ -191,11 +265,13 @@ class SliceView(Sequence):
 class StreamContext:
     """
     Wraps a generator and its "source" in a Context.  This ensures that the source will be "closed" even if the
-    generator is not fully consumed or there is an exception during consumption
+    generator is not fully consumed or there is an exception during consumption. Supports both synchronous and
+    asynchronous usage.
     """
-    __slots__ = 'source', 'gen', '_in_context'
 
-    def __init__(self, source: Closable, gen: Generator):
+    __slots__ = "source", "gen", "_in_context"
+
+    def __init__(self, source: Closable | IOBase, gen: Generator):
         self.source = source
         self.gen = gen
         self._in_context = False
@@ -205,7 +281,7 @@ class StreamContext:
 
     def __next__(self):
         if not self._in_context:
-            raise ProgrammingError('Stream should be used within a context')
+            raise ProgrammingError("Stream should be used within a context")
         return next(self.gen)
 
     def __enter__(self):
@@ -218,3 +294,125 @@ class StreamContext:
         self._in_context = False
         self.source.close()
         self.gen = None
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        if not self._in_context:
+            raise ProgrammingError("Stream should be used within a context")
+        try:
+            if hasattr(self.gen, "__anext__"):
+                return await self.gen.__anext__()
+
+            def _next_wrapper():
+                try:
+                    return True, self.gen.__next__()
+                except StopIteration:
+                    return False, None
+
+            loop = asyncio.get_running_loop()
+            has_value, value = await loop.run_in_executor(None, _next_wrapper)
+            if not has_value:
+                raise StopAsyncIteration from None
+            return value
+        except (StopAsyncIteration, StopIteration):
+            raise StopAsyncIteration from None
+        except Exception as ex:
+            if not isinstance(ex, StreamClosedError):
+                self._in_context = False
+                if hasattr(self.source, "close"):
+                    if hasattr(self.source.close, "__await__"):
+                        await self.source.close()
+                    else:
+                        self.source.close()
+                self.gen = None
+            raise ex
+
+    async def __aenter__(self):
+        if not self.gen:
+            raise StreamClosedError
+        self._in_context = True
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        self._in_context = False
+        if hasattr(self.source, "aclose"):
+            await self.source.aclose()
+        elif hasattr(self.source, "close"):
+            if hasattr(self.source.close, "__await__"):
+                await self.source.close()
+            else:
+                self.source.close()
+        self.gen = None
+
+
+def get_rename_method(method: str | None) -> Callable[[str], str] | None:
+    def _to_camel(s: str) -> str:
+        if not s:
+            return ""
+        out, up = [], False
+        for ch in s:
+            if ch.isspace() or ch == "_":
+                up = True
+            elif up:
+                out.append(ch.upper())
+                up = False
+            else:
+                out.append(ch)
+        return "".join(out)
+
+    def _to_underscore(s: str) -> str:
+        if not s:
+            return ""
+        out, prev = [], 0
+        for ch in s:
+            if ch.isspace():
+                if prev == 0:
+                    out.append("_")
+                prev = 1
+            elif ch.isupper():
+                if prev == 0:
+                    out.append("_")
+                    out.append(ch.lower())
+                elif prev == 1:
+                    out.append(ch.lower())
+                else:
+                    out.append(ch)
+                prev = 2
+            else:
+                out.append(ch)
+                prev = 0
+        return "".join(out)[1:] if out and out[0] == "_" else "".join(out)
+
+    def _remove_prefix(s: str) -> str:
+        i = s.rfind(".")
+        return s[i + 1 :] if i >= 0 else s
+
+    if not method:
+        return None
+
+    name = method.strip().upper()
+
+    if name == "NONE":
+        return None
+    if name == "REMOVE_PREFIX":
+        return _remove_prefix
+    if name == "TO_CAMELCASE":
+        return _to_camel
+    if name == "TO_CAMELCASE_WITHOUT_PREFIX":
+        return lambda s: _to_camel(_remove_prefix(s))
+    if name == "TO_UNDERSCORE":
+        return _to_underscore
+    if name == "TO_UNDERSCORE_WITHOUT_PREFIX":
+        return lambda s: _to_underscore(_remove_prefix(s))
+
+    valid_options = [
+        "none",
+        "remove_prefix",
+        "to_camelcase",
+        "to_camelcase_without_prefix",
+        "to_underscore",
+        "to_underscore_without_prefix",
+    ]
+    raise ValueError(f"Invalid option '{name}'. Expected one of {valid_options}")

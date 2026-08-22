@@ -135,6 +135,8 @@ void TReplicationReaderConfig::Register(TRegistrar registrar)
         .Default(500);
     registrar.Parameter("fetch_from_peers", &TThis::FetchFromPeers)
         .Default(true);
+    registrar.Parameter("fetch_node_descriptors", &TThis::FetchNodeDescriptors)
+        .Default(false);
     registrar.Parameter("peer_expiration_timeout", &TThis::PeerExpirationTimeout)
         .Default(TDuration::Seconds(300));
     registrar.Parameter("populate_cache", &TThis::PopulateCache)
@@ -173,11 +175,19 @@ void TReplicationReaderConfig::Register(TRegistrar registrar)
         .Default(false);
     registrar.Parameter("chunk_meta_cache_failure_probability", &TThis::ChunkMetaCacheFailureProbability)
         .Default();
+    registrar.Parameter("fail_on_unresolved_node_id", &TThis::FailOnUnresolvedNodeId)
+        .Default(false);
     registrar.Parameter("use_chunk_prober", &TThis::UseChunkProber)
         .Default(false);
     registrar.Parameter("use_read_blocks_batcher", &TThis::UseReadBlocksBatcher)
         .Default(false);
     registrar.Parameter("block_set_subrequest_threshold", &TThis::BlockSetSubrequestThreshold)
+        .Default();
+    registrar.Parameter("partial_peer_probing_timeouts", &TThis::PartialPeerProbingTimeouts)
+        .Default();
+    registrar.Parameter("io_consumed_report_window", &TThis::IoConsumedReportWindow)
+        .Default(TDuration::Minutes(5));
+    registrar.Parameter("io_fair_share_weight", &TThis::IoFairShareWeight)
         .Default();
 
     registrar.Postprocessor([] (TThis* config) {
@@ -194,6 +204,50 @@ void TReplicationReaderConfig::Register(TRegistrar registrar)
         // These are supposed to be not greater than PassCount and RetryCount.
         config->LookupRequestPassCount = std::min(config->LookupRequestPassCount, config->PassCount);
         config->LookupRequestRetryCount = std::min(config->LookupRequestRetryCount, config->RetryCount);
+
+        if (config->PartialPeerProbingTimeouts.size() > 5) {
+            THROW_ERROR_EXCEPTION(
+                "List of \"partial_peer_probing_timeouts\" contains %v elements, maximum allowed amount is 5",
+                config->PartialPeerProbingTimeouts.size());
+        }
+
+        if (!config->PartialPeerProbingTimeouts.empty()) {
+            SortBy(config->PartialPeerProbingTimeouts, [] (const auto& peerCountAndTimeout) {
+                return peerCountAndTimeout.second;
+            });
+
+            int pairIndex = 1;
+            while (pairIndex < std::ssize(config->PartialPeerProbingTimeouts)) {
+                if (config->PartialPeerProbingTimeouts[pairIndex - 1].second ==
+                    config->PartialPeerProbingTimeouts[pairIndex].second)
+                {
+                    THROW_ERROR_EXCEPTION("List of \"partial_peer_probing_timeouts\" cannot contain equal timeouts");
+                }
+
+                if (config->PartialPeerProbingTimeouts[pairIndex - 1].first ==
+                    config->PartialPeerProbingTimeouts[pairIndex].first)
+                {
+                    THROW_ERROR_EXCEPTION(
+                        "In list of \"partial_peer_probing_timeouts\" timeout for %v peers encountered multiple times",
+                        config->PartialPeerProbingTimeouts[pairIndex].first);
+                }
+
+                if (config->PartialPeerProbingTimeouts[pairIndex - 1].first <
+                    config->PartialPeerProbingTimeouts[pairIndex].first)
+                {
+                    THROW_ERROR_EXCEPTION(
+                        "In list of \"partial_peer_probing_timeouts\" timeout for %v peers must be larger than for %v peers",
+                        config->PartialPeerProbingTimeouts[pairIndex - 1].first,
+                        config->PartialPeerProbingTimeouts[pairIndex].first);
+                }
+
+                ++pairIndex;
+            }
+
+            if (config->PartialPeerProbingTimeouts.back().first <= 0) {
+                THROW_ERROR_EXCEPTION("List of \"partial_peer_probing_timeouts\" can only contain peer counts larger than zero");
+            }
+        }
     });
 }
 
@@ -308,6 +362,16 @@ void TReplicationWriterConfig::Register(TRegistrar registrar)
     registrar.Parameter("use_probe_put_blocks", &TThis::UseProbePutBlocks)
         .Default(false);
 
+    registrar.Parameter("use_send_blocks", &TThis::UseSendBlocks)
+        .Default(true);
+
+    registrar.Parameter("preallocate_disk_space", &TThis::PreallocateDiskSpace)
+        .Default(false);
+    registrar.Parameter("io_consumed_report_window", &TThis::IoConsumedReportWindow)
+        .Default(TDuration::Minutes(1));
+    registrar.Parameter("io_fair_share_weight", &TThis::IoFairShareWeight)
+        .Default();
+
     registrar.Preprocessor([] (TThis* config) {
         config->NodeChannel->RetryBackoffTime = TDuration::Seconds(10);
         config->NodeChannel->RetryAttempts = 100;
@@ -333,11 +397,13 @@ void TReplicationWriterConfig::Register(TRegistrar registrar)
 int TReplicationWriterConfig::GetDirectUploadNodeCount()
 {
     auto replicationFactor = std::min(MinUploadReplicationFactor, UploadReplicationFactor);
-    if (DirectUploadNodeCount) {
+    if (!UseSendBlocks) {
+        return UploadReplicationFactor;
+    } else if (DirectUploadNodeCount) {
         return std::min(*DirectUploadNodeCount, replicationFactor);
+    } else {
+        return std::max(static_cast<int>(std::sqrt(replicationFactor)), 1);
     }
-
-    return std::max(static_cast<int>(std::sqrt(replicationFactor)), 1);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -393,7 +459,7 @@ void TMultiChunkWriterConfig::Register(TRegistrar registrar)
         .LessThanOrEqual(64_MB)
         .Default(30_MB);
 
-    registrar.Parameter("tesing_delay_before_chunk_close", &TThis::TestingDelayBeforeChunkClose)
+    registrar.Parameter("testing_delay_before_chunk_close", &TThis::TestingDelayBeforeChunkClose)
         .Default()
         .DontSerializeDefault();
 }
@@ -451,6 +517,19 @@ void TChunkFragmentReaderConfig::Register(TRegistrar registrar)
 
     registrar.Parameter("prefetch_whole_blocks", &TThis::PrefetchWholeBlocks)
         .Default(false);
+    registrar.Parameter("read_and_cache_whole_blocks", &TThis::ReadAndCacheWholeBlocks)
+        .Default(false)
+        .DontSerializeDefault();
+    registrar.Parameter("block_count_to_precache", &TThis::BlockCountToPrecache)
+        .Default(0)
+        .GreaterThanOrEqual(0)
+        .DontSerializeDefault();
+
+    registrar.Postprocessor([] (TThis* config) {
+        if (config->BlockCountToPrecache > 0 && !config->ReadAndCacheWholeBlocks) {
+            THROW_ERROR_EXCEPTION("\"block_count_to_precache\" must be zero if \"read_and_cache_whole_blocks\" is disabled");
+        }
+    });
 }
 
 ////////////////////////////////////////////////////////////////////////////////

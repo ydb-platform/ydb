@@ -7,6 +7,7 @@ SRCS(
     yt_codec_io.h
     yt_codec_job.cpp
     yt_codec_job.h
+    yt_codec_tz.h
     yt_codec.cpp
     yt_codec.h
 )

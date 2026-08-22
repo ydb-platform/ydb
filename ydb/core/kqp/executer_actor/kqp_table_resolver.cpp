@@ -4,8 +4,9 @@
 #include <ydb/core/base/cputime.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
-#include <ydb/core/sys_view/common/schema.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_EXECUTER
 
 namespace NKikimr::NKqp {
 
@@ -15,11 +16,6 @@ using namespace NYql::NDq;
 
 namespace {
 
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << stream)
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << stream)
-#define LOG_C(stream) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << stream)
-#define LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << stream)
-
 class TKqpTableResolver : public TActorBootstrapped<TKqpTableResolver> {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -28,12 +24,12 @@ public:
 
     TKqpTableResolver(const TActorId& owner, ui64 txId,
         const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
-        TKqpTasksGraph& tasksGraph)
+        TKqpTasksGraph& tasksGraph, bool skipUnresolvedNames)
         : Owner(owner)
         , TxId(txId)
         , UserToken(userToken)
-        , TasksGraph(tasksGraph)
-        , SystemViewRewrittenResolver(NSysView::CreateSystemViewRewrittenResolver()) {}
+        , SkipUnresolvedNames(skipUnresolvedNames)
+        , TasksGraph(tasksGraph) {}
 
     void Bootstrap() {
         ResolveKeys();
@@ -46,7 +42,9 @@ private:
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleResolveNames);
             hFunc(TEvents::TEvPoison, HandleResolveNames);
             default: {
-                LOG_C("ResolveKeysState: unexpected event " << ev->GetTypeRewrite());
+                YDB_LOG_CRIT("ResolveNamesState: unexpected event",
+                    {"txId", TxId},
+                    {"eventType", ev->GetTypeRewrite()});
                 GotUnexpectedEvent = ev->GetTypeRewrite();
             }
         }
@@ -58,7 +56,9 @@ private:
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleResolveKeys);
             hFunc(TEvents::TEvPoison, HandleResolveKeys);
             default: {
-                LOG_C("ResolveKeysState: unexpected event " << ev->GetTypeRewrite());
+                YDB_LOG_CRIT("ResolveKeysState: unexpected event",
+                    {"txId", TxId},
+                    {"eventType", ev->GetTypeRewrite()});
                 GotUnexpectedEvent = ev->GetTypeRewrite();
             }
         }
@@ -74,7 +74,9 @@ private:
             ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, TIssue(TStringBuilder() << "navigation problems for tables"));
             return;
         }
-        LOG_D("Navigated key sets: " << results.size());
+        YDB_LOG_DEBUG("Navigated key",
+            {"txId", TxId},
+            {"sets", results.size()});
         for (auto& entry : results) {
             if (entry.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
                 ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR,
@@ -106,13 +108,26 @@ private:
                         stageMeta.TableKind = ETableKind::Olap;
                     }
 
-                    auto& stage = stageMeta.GetStage(stageId);
-                    AFL_ENSURE(stage.GetSinks().size() == 1);
-                    const auto& sink = stage.GetSinks(0);
+                    const auto& stage = stageMeta.GetStage(stageId);
+                    const NKqpProto::TKqpInternalSink* intSinkPtr = nullptr;
 
-                    AFL_ENSURE(sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>());
+                    if (stage.GetSinks().size() == 1) {
+                        AFL_ENSURE(stage.OutputTransformsSize() == 0);
+                        const auto& sink = stage.GetSinks(0);
+                        AFL_ENSURE(sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink);
+                        intSinkPtr = &sink.GetInternalSink();
+                    } else if (stage.OutputTransformsSize() == 1) {
+                        AFL_ENSURE(stage.GetSinks().size() == 0);
+                        const auto& transform = stage.GetOutputTransforms(0);
+                        AFL_ENSURE(transform.GetTypeCase() == NKqpProto::TKqpOutputTransform::kInternalSink);
+                        intSinkPtr = &transform.GetInternalSink();
+                    } else {
+                        YQL_ENSURE(false);
+                    }
+
+                    AFL_ENSURE(intSinkPtr->GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>());
                     NKikimrKqp::TKqpTableSinkSettings settings;
-                    AFL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings));
+                    AFL_ENSURE(intSinkPtr->GetSettings().UnpackTo(&settings));
                     AFL_ENSURE(settings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_FILL);
                     settings.MutableTable()->SetOwnerId(entry.TableId.PathId.OwnerId);
                     settings.MutableTable()->SetTableId(entry.TableId.PathId.LocalPathId);
@@ -223,7 +238,9 @@ private:
             ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, TIssue(TStringBuilder() << "navigation problems for tables"));
             return;
         }
-        LOG_D("Navigated key sets: " << results.size());
+        YDB_LOG_DEBUG("Navigated key",
+            {"txId", TxId},
+            {"sets", results.size()});
         for (auto& entry : results) {
             if (entry.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
                 ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR,
@@ -268,11 +285,15 @@ private:
         auto timer = std::make_unique<NCpuTime::TCpuTimer>(CpuTime);
 
         auto& results = ev->Get()->Request->ResultSet;
-        LOG_D("Resolved key sets: " << results.size());
+        YDB_LOG_DEBUG("Resolved key",
+            {"txId", TxId},
+            {"sets", results.size()});
 
         for (auto& entry : results) {
             if (entry.Status != NSchemeCache::TSchemeCacheRequest::EStatus::OkData) {
-                LOG_E("Error resolving keys for entry: " << entry.ToString(*AppData()->TypeRegistry));
+                YDB_LOG_ERROR("Error resolving keys",
+                    {"txId", TxId},
+                    {"entry", entry.ToString(*AppData()->TypeRegistry)});
 
                 TStringBuilder path;
                 if (auto it = TablePathsById.find(entry.KeyDescription->TableId); it != TablePathsById.end()) {
@@ -292,7 +313,9 @@ private:
                 AFL_ENSURE(partition.Range);
             }
 
-            LOG_D("Resolved key: " << entry.ToString(*AppData()->TypeRegistry));
+            YDB_LOG_DEBUG("Resolved",
+                {"txId", TxId},
+                {"key", entry.ToString(*AppData()->TypeRegistry)});
 
             auto& stageInfo = DecodeStageInfo(entry.UserData);
 
@@ -326,6 +349,9 @@ private:
     void ResolveKeys() {
         auto requestNavigate = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
         auto request = MakeHolder<NSchemeCache::TSchemeCacheRequest>();
+        const auto& databaseName = TasksGraph.GetMeta().Database;
+        requestNavigate->DatabaseName = databaseName;
+        request->DatabaseName = databaseName;
         request->ResultSet.reserve(TasksGraph.GetStagesInfo().size());
         if (UserToken && !UserToken->GetSerializedToken().empty()) {
             request->UserToken = UserToken;
@@ -336,7 +362,7 @@ private:
             for (const auto& [_, stageInfo] : TasksGraph.GetStagesInfo()) {
                 if (!stageInfo.Meta.ShardOperations.empty()) {
                     const auto& tableInfo = stageInfo.Meta.TableConstInfo;
-                    if (!tableInfo) {
+                    if (!tableInfo && !SkipUnresolvedNames) {
                         AFL_ENSURE(!stageInfo.Meta.TableId);
                         AFL_ENSURE(stageInfo.Meta.TablePath);
                         needToResolveNames = true;
@@ -349,8 +375,10 @@ private:
         for (auto& pair : TasksGraph.GetStagesInfo()) {
             auto& stageInfo = pair.second;
 
-            if (!stageInfo.Meta.ShardOperations.empty()) {
-                for (const auto& operation : stageInfo.Meta.ShardOperations) {
+            if (!stageInfo.Meta.ShardOperations.empty() || !stageInfo.Meta.AccessCheckOperations.empty()) {
+                auto ops = stageInfo.Meta.ShardOperations;
+                ops.insert(stageInfo.Meta.AccessCheckOperations.begin(), stageInfo.Meta.AccessCheckOperations.end());
+                for (const auto& operation : ops) {
                     const auto& tableInfo = stageInfo.Meta.TableConstInfo;
                     if (tableInfo) {
                         if (ResolvingNamesFinished) {
@@ -360,7 +388,7 @@ private:
 
                             stageInfo.Meta.ShardKey = ExtractKey(stageInfo.Meta.TableId, stageInfo.Meta.TableConstInfo->KeyColumnTypes, operation);
 
-                            if (SystemViewRewrittenResolver->IsSystemView(stageInfo.Meta.TableId.SysViewInfo)) {
+                            if (stageInfo.Meta.TableConstInfo->SysViewInfo && !stageInfo.Meta.TableConstInfo->SysViewInfo->HasSourceObject()) {
                                 continue;
                             }
 
@@ -393,13 +421,13 @@ private:
                                 }
                             };
 
-                            addRequest(stageInfo.Meta.ShardKey);
+                            addRequest(std::move(stageInfo.Meta.ShardKey));
                             switch (operation) {
                                 case TKeyDesc::ERowOperation::Update:
                                 case TKeyDesc::ERowOperation::Erase:
                                     for (auto& indexMeta : stageInfo.Meta.IndexMetas) {
                                         indexMeta.ShardKey = ExtractKey(indexMeta.TableId, indexMeta.TableConstInfo->KeyColumnTypes, operation);
-                                        addRequest(indexMeta.ShardKey);
+                                        addRequest(std::move(indexMeta.ShardKey));
                                     }
                                     break;
                                 default:
@@ -407,7 +435,7 @@ private:
                             }
                         }
                     } else if (!ResolvingNamesFinished) {
-                        // CTAS 
+                        // CTAS
                         AFL_ENSURE(!stageInfo.Meta.TableId);
                         AFL_ENSURE(stageInfo.Meta.TablePath);
                         const auto splittedPath = SplitPath(stageInfo.Meta.TablePath);
@@ -423,7 +451,7 @@ private:
                         if (requestNavigate->DatabaseName.empty()) {
                             requestNavigate->DatabaseName = TasksGraph.GetMeta().Database;
                         }
-                    } else {
+                    } else if (!SkipUnresolvedNames) {
                         // CTAS
                         AFL_ENSURE(stageInfo.Meta.TableId);
                         AFL_ENSURE(stageInfo.Meta.TablePath);
@@ -477,7 +505,11 @@ private:
 
 private:
     void UnexpectedEvent(const TString& state, ui32 eventType) {
-        LOG_C("TKqpTableResolver, unexpected event: " << eventType << ", at state:" << state << ", self: " << SelfId());
+        YDB_LOG_CRIT("TKqpTableResolver received unexpected event",
+            {"txId", TxId},
+            {"eventType", eventType},
+            {"state", state},
+            {"selfId", SelfId()});
         auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::UNEXPECTED, "Internal error while executing transaction.");
         ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, std::move(issue));
     }
@@ -509,6 +541,7 @@ private:
     THashMap<TTableId, TVector<TStageId>> TableRequestIds;
     THashMap<TString, TVector<TStageId>> TableRequestPathes;
     THashMap<TTableId, TString> TablePathsById;
+    const bool SkipUnresolvedNames;
     bool ResolvingNamesFinished = false;
     bool NavigationFinished = false;
     bool ResolvingFinished = false;
@@ -519,15 +552,13 @@ private:
     bool ShouldTerminate = false;
     TMaybe<ui32> GotUnexpectedEvent;
     TDuration CpuTime;
-
-    THolder<NSysView::ISystemViewResolver> SystemViewRewrittenResolver;
 };
 
 } // anonymous namespace
 
 NActors::IActor* CreateKqpTableResolver(const TActorId& owner, ui64 txId,
-    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpTasksGraph& tasksGraph) {
-    return new TKqpTableResolver(owner, txId, userToken, tasksGraph);
+    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpTasksGraph& tasksGraph, bool skipUnknownNames) {
+    return new TKqpTableResolver(owner, txId, userToken, tasksGraph, skipUnknownNames);
 }
 
 } // namespace NKikimr::NKqp

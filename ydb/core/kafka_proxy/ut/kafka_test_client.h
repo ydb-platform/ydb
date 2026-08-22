@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/kafka_proxy/kafka_events.h>
+#include <ydb/core/kafka_proxy/kafka_consumer_protocol.h>
 #include <ydb/core/kafka_proxy/kafka_messages.h>
 #include <ydb/core/kafka_proxy/kafka_topic_partition.h>
 #include <ydb/core/kafka_proxy/actors/actors.h>
@@ -9,6 +10,7 @@
 
 using namespace NKafka;
 
+static constexpr ui32 EXPECTED_API_KEYS_COUNT = 25u;
 struct TTopicConfig {
     inline static const std::map<TString, TString> DummyMap;
 
@@ -18,13 +20,15 @@ struct TTopicConfig {
             std::optional<TString> retentionMs = std::nullopt,
             std::optional<TString> retentionBytes = std::nullopt,
             const std::map<TString, TString>& configs = DummyMap,
-            TKafkaInt16 replicationFactor = 1)
+            TKafkaInt16 replicationFactor = 1,
+            std::optional<TString> timestampType = std::nullopt)
         : Name(name)
         , PartitionsNumber(partionsNumber)
         , RetentionMs(retentionMs)
         , RetentionBytes(retentionBytes)
         , Configs(configs)
         , ReplicationFactor(replicationFactor)
+        , TimestampType(timestampType)
     {
     }
 
@@ -34,6 +38,7 @@ struct TTopicConfig {
     std::optional<TString> RetentionBytes;
     std::map<TString, TString> Configs;
     TKafkaInt16 ReplicationFactor;
+    std::optional<TString> TimestampType;
 };
 
 struct TReadInfo {
@@ -57,30 +62,46 @@ class TKafkaTestClient {
         }
 
         TMessagePtr<TApiVersionsResponseData> ApiVersions(bool silent = false);
+        TMessagePtr<TApiVersionsResponseData> ApiVersionsAtVersion(TKafkaVersion version, bool silent = false);
 
-        TMessagePtr<TMetadataResponseData> Metadata(const TVector<TString>& topics = {}, std::optional<bool> allowAutoTopicCreation = std::nullopt);
+        TMessagePtr<TMetadataResponseData> Metadata(const TVector<TString>& topics = {}, bool allowAutoTopicCreation = true);
 
         TMessagePtr<TSaslHandshakeResponseData> SaslHandshake(const TString& mechanism = "PLAIN");
 
-        TMessagePtr<TSaslAuthenticateResponseData> SaslAuthenticate(const TString& user, const TString& password);
+        TMessagePtr<TSaslAuthenticateResponseData> SaslPlainAuthenticate(const TString& user, const TString& password);
 
-        TMessagePtr<TInitProducerIdResponseData> InitProducerId(const std::optional<TString>& transactionalId = std::nullopt);
+        TMessagePtr<TSaslAuthenticateResponseData> SaslScramAuthenticateFirstMsg(const TString& user, const TString& clientNonce);
 
-        TMessagePtr<TOffsetCommitResponseData> OffsetCommit(TString groupId, std::unordered_map<TString, std::vector<NKafka::TEvKafka::PartitionConsumerOffset>> topicToConsumerOffsets);
+        TMessagePtr<TSaslAuthenticateResponseData> SaslScramAuthenticateFinalMsg(const TString& nonce, const TString& clientProof);
 
+        TMessagePtr<TInitProducerIdResponseData> InitProducerId(const std::optional<TString>& transactionalId = {}, ui64 txnTimeoutMs = 1000);
+
+        TMessagePtr<TOffsetCommitResponseData> OffsetCommit(TString groupId,
+                            std::unordered_map<TString, std::vector<NKafka::TEvKafka::PartitionConsumerOffset>> topicToConsumerOffsets,
+                            std::optional<i32> generationId = std::nullopt);
+        
         TMessagePtr<TProduceResponseData> Produce(const TString& topicName, ui32 partition, const TKafkaRecordBatch& batch);
 
         TMessagePtr<TProduceResponseData> Produce(const TString& topicName, const std::vector<std::pair<ui32, TKafkaRecordBatch>>& msgs, const std::optional<TString>& transactionalId = {});
-        
-        TMessagePtr<TProduceResponseData> Produce(const TTopicPartition& topicPartition, 
-                                                  const std::vector<std::pair<TString, TString>>& keyValueMessages, 
-                                                  ui32 baseSequence = 0, 
-                                                  const std::optional<TProducerInstanceId>& producerInstanceId = {}, 
+
+        TMessagePtr<TProduceResponseData> Produce(const TString& topicName, ui32 partition, const TKafkaBytes& records);
+
+        TMessagePtr<TProduceResponseData> Produce(const TTopicPartition& topicPartition,
+                                                  const std::vector<std::pair<TString, TString>>& keyValueMessages,
+                                                  ui32 baseSequence = 0,
+                                                  const std::optional<TProducerInstanceId>& producerInstanceId = {},
                                                   const std::optional<TString>& transactionalId = {});
+        void ProduceAsync(const TTopicPartition& topicPartition,
+                            const std::vector<std::pair<TString, TString>>& keyValueMessages,
+                            ui32 baseSequence,
+                            const std::optional<TProducerInstanceId>& producerInstanceId,
+                            const std::optional<TString>& transactionalId);
+
+        TMessagePtr<TProduceResponseData> ReadLastResult(i32 customCorrelationId = -1);
 
         TMessagePtr<TListOffsetsResponseData> ListOffsets(std::vector<std::pair<i32,i64>>& partitions, const TString& topic);
 
-        TMessagePtr<TJoinGroupResponseData> JoinGroup(std::vector<TString>& topics, TString& groupId, TString protocolName, i32 heartbeatTimeout = 1000000);
+        TMessagePtr<TJoinGroupResponseData> JoinGroup(std::vector<TString>& topics, TString& groupId, TString protocolName, i32 heartbeatTimeout = 1000000, bool emptyMetadata = false);
 
         TMessagePtr<TSyncGroupResponseData> SyncGroup(TString& memberId, ui64 generationId, TString& groupId, std::vector<NKafka::TSyncGroupRequestData::TSyncGroupRequestAssignment> assignments, TString& protocolName);
 
@@ -102,10 +123,19 @@ class TKafkaTestClient {
 
         TMessagePtr<TOffsetFetchResponseData> OffsetFetch(TString groupId, std::map<TString, std::vector<i32>> topicsToPartions);
 
-        TMessagePtr<TOffsetFetchResponseData> OffsetFetch(TOffsetFetchRequestData request);
+        TMessagePtr<TOffsetFetchResponseData> OffsetFetch(TOffsetFetchRequestData& request);
+
+        TMessagePtr<TListGroupsResponseData> ListGroups(TListGroupsRequestData request);
+
+        TMessagePtr<TListGroupsResponseData> ListGroups(const std::vector<std::optional<TString>>& statesFilter = {});
+
+        TMessagePtr<TDescribeGroupsResponseData> DescribeGroups(TDescribeGroupsRequestData& request);
+
+        TMessagePtr<TDescribeGroupsResponseData> DescribeGroups(const std::vector<std::optional<TString>>& groups);
 
         TMessagePtr<TFetchResponseData> Fetch(const std::vector<std::pair<TKafkaUuid, std::vector<i32>>>& topics, i64 offset = 0);
         TMessagePtr<TFetchResponseData> Fetch(const std::vector<std::pair<TString, std::vector<i32>>>& topics, i64 offset = 0);
+        void ValidateNoDataInTopics(const std::vector<std::pair<TString, std::vector<i32>>>& topics, i64 offset = 0);
 
         TMessagePtr<TCreateTopicsResponseData> CreateTopics(std::vector<TTopicConfig> topicsToCreate, bool validateOnly = false);
 
@@ -125,20 +155,26 @@ class TKafkaTestClient {
 
         void UnknownApiKey();
 
-        void AuthenticateToKafka();
+        void PlainAuthenticateToKafka();
 
-        TRequestHeaderData Header(NKafka::EApiKey apiKey, TKafkaVersion version);
+        void PlainAuthenticateToKafka(const TString& userName, const TString& userPassword);
+
+        void ScramAuthenticateToKafka();
+
+        void ScramAuthenticateToKafka(const TString& userName, const TString& userPassword);
+
+        TRequestHeaderData Header(NKafka::EApiKey apiKey, TKafkaVersion version,  i32 customCorrelationId = -1);
+
+        template <std::derived_from<TApiMessage> T>
+        TMessagePtr<T> WriteAndRead(TRequestHeaderData& header, TApiMessage& request, bool silent = false);
 
     protected:
         ui32 NextCorrelation();
-        template <std::derived_from<TApiMessage> T>
-        TMessagePtr<T> WriteAndRead(TRequestHeaderData& header, TApiMessage& request, bool silent = false);
         void Write(TSocketOutput& so, TApiMessage* request, TKafkaVersion version, bool silent = false);
         void Write(TSocketOutput& so, TRequestHeaderData* header, TApiMessage* request, bool silent = false);
         template <std::derived_from<TApiMessage> T>
         TMessagePtr<T> Read(TSocketInput& si, TRequestHeaderData* requestHeader);
         void Print(const TBuffer& buffer);
-        char Hex0(const unsigned char c);
         void FillTopicsFromJoinGroupMetadata(TKafkaBytes& metadata, THashSet<TString>& topics);
 
     private:

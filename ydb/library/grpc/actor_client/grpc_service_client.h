@@ -2,6 +2,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/protobuf_printer/security_printer.h>
 #include <library/cpp/digest/crc32c/crc32c.h>
 #include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 #include <ydb/library/services/services.pb.h>
@@ -44,7 +45,7 @@ class TGrpcServiceClient  {
     template <typename TProtoMessageType>
     static TString Trim(const TProtoMessageType& message) {
         TStringBuilder log;
-        log << message.GetDescriptor()->name() << " { " << Trim(message.ShortDebugString()) << " }";
+        log << message.GetDescriptor()->name() << " { " << Trim(NKikimr::SecureDebugString(message)) << " }";
         return log;
     }
 
@@ -76,15 +77,17 @@ public:
         using TResponseType = decltype(typename TCallType::TResponseEventType().Response);
         const auto& requestId = ev->Get()->RequestId;
         if (!Connection) {
-            BLOG_GRPC_D(Prefix(requestId) << "Connect to "
-                        << ((Config.EnableSsl || !Config.SslCredentials.pem_root_certs.empty()) ? "grpcs://" : "grpc://")
-                        << Config.Locator);
+            TString schema;
+            if (!Config.UseXds) {
+                schema = ((Config.EnableSsl || !Config.SslCredentials.pem_root_certs.empty()) ? "grpcs://" : "grpc://");
+            }
+            BLOG_GRPC_D(Prefix(requestId) << "Connect to " << schema << Config.Locator);
             Connection = Client.CreateGRpcServiceConnection<TGrpcService>(Config);
         }
 
         const TRequestType& request = ev->Get()->Request;
         NYdbGrpc::TCallMeta meta;
-        meta.Timeout = Config.Timeout;
+        meta.Timeout = Config.Timeout ? NYdb::TDeadline::SafeDurationCast(Config.Timeout) : NYdb::TDeadline::Duration::max();
         if (auto token = ev->Get()->Token) {
             if (!AsciiHasPrefixIgnoreCase(token, "Bearer "sv)) {
                 token = "Bearer " + token;
@@ -123,14 +126,18 @@ public:
 
     static NYdbGrpc::TGRpcClientConfig InitGrpcConfig(const NGrpcActorClient::TGrpcClientSettings& settings) {
         const TDuration requestTimeout = TDuration::MilliSeconds(settings.RequestTimeoutMs);
-        NYdbGrpc::TGRpcClientConfig config(settings.Endpoint, requestTimeout, NYdbGrpc::DEFAULT_GRPC_MESSAGE_SIZE_LIMIT, 0, settings.CertificateRootCA);
+        NYdbGrpc::TGRpcClientConfig config(settings.Endpoint, requestTimeout, NYdb::NGrpc::DEFAULT_GRPC_MESSAGE_SIZE_LIMIT, 0, settings.CertificateRootCA);
         config.EnableSsl = settings.EnableSsl;
+        config.UserAgentPrefix = settings.UserAgentPrefix;
         config.IntChannelParams[GRPC_ARG_KEEPALIVE_TIME_MS] = settings.GrpcKeepAliveTimeMs;
         config.IntChannelParams[GRPC_ARG_KEEPALIVE_TIMEOUT_MS] = settings.GrpcKeepAliveTimeoutMs;
         config.IntChannelParams[GRPC_ARG_KEEPALIVE_PERMIT_WITHOUT_CALLS] = 1;
         config.IntChannelParams[GRPC_ARG_HTTP2_MAX_PINGS_WITHOUT_DATA] = 0;
         config.IntChannelParams[GRPC_ARG_HTTP2_MIN_SENT_PING_INTERVAL_WITHOUT_DATA_MS] = settings.GrpcKeepAlivePingInterval;
         config.IntChannelParams[GRPC_ARG_HTTP2_MIN_RECV_PING_INTERVAL_WITHOUT_DATA_MS] = settings.GrpcKeepAlivePingInterval;
+        if (!settings.SslTargetNameOverride.empty()) {
+            config.SslTargetNameOverride = settings.SslTargetNameOverride;
+        }
         return config;
     }
 

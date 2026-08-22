@@ -17,62 +17,75 @@ namespace NYql {
 
 Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
-    static TExprNode::TPtr ParseAndAnnotate(const TStringBuf program, TExprContext& exprCtx) {
-        TAstParseResult astRes = ParseAst(program);
-        UNIT_ASSERT(astRes.IsOk());
-        TExprNode::TPtr exprRoot;
-        UNIT_ASSERT(CompileExpr(*astRes.Root, exprRoot, exprCtx, nullptr, nullptr));
+struct TParseAndAnnotateSettings {
+    bool EnableMatchRecognize = false;
+    TStringBuf ExpectedError;
+};
 
-        auto functionRegistry = NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry());
-        auto typeAnnotationContext = MakeIntrusive<TTypeAnnotationContext>();
-        typeAnnotationContext->RandomProvider = CreateDeterministicRandomProvider(1);
+TExprNode::TPtr ParseAndAnnotate(const TStringBuf program, TExprContext& exprCtx, const TParseAndAnnotateSettings& settings = {}) {
+    TAstParseResult astRes = ParseAst(program);
+    UNIT_ASSERT_C(astRes.IsOk(), astRes.Issues.ToString());
+    TExprNode::TPtr exprRoot;
+    UNIT_ASSERT_C(CompileExpr(*astRes.Root, exprRoot, exprCtx, nullptr, nullptr), exprCtx.IssueManager.GetIssues().ToString());
 
-        auto writerFactory = [](){ return CreateYsonResultWriter(NYson::EYsonFormat::Binary); };
-        auto resultProviderConfig = MakeIntrusive<TResultProviderConfig>(*typeAnnotationContext,
-            *functionRegistry, IDataProvider::EResultFormat::Yson, ToString((ui32)NYson::EYsonFormat::Binary), writerFactory);
-        resultProviderConfig->SupportsResultPosition = true;
-        auto resultProvider = CreateResultProvider(resultProviderConfig);
-        typeAnnotationContext->AddDataSink(ResultProviderName, resultProvider);
+    auto functionRegistry = NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry());
+    auto typeAnnotationContext = MakeIntrusive<TTypeAnnotationContext>();
+    typeAnnotationContext->RandomProvider = CreateDeterministicRandomProvider(1);
+    typeAnnotationContext->MatchRecognize = settings.EnableMatchRecognize;
 
-        auto transformer = TTransformationPipeline(typeAnnotationContext)
-            .AddServiceTransformers()
-            .AddPreTypeAnnotation()
-            .AddExpressionEvaluation(*functionRegistry)
-            .AddIOAnnotation()
-            .AddTypeAnnotation()
-            .AddPostTypeAnnotation()
-            .Build();
+    auto writerFactory = []() { return CreateYsonResultWriter(NYson::EYsonFormat::Binary); };
+    auto resultProviderConfig = MakeIntrusive<TResultProviderConfig>(*typeAnnotationContext,
+                                                                     *functionRegistry, IDataProvider::EResultFormat::Yson, ToString((ui32)NYson::EYsonFormat::Binary), writerFactory);
+    resultProviderConfig->SupportsResultPosition = true;
+    auto resultProvider = CreateResultProvider(resultProviderConfig);
+    typeAnnotationContext->AddDataSink(ResultProviderName, resultProvider);
 
-        const auto status = SyncTransform(*transformer, exprRoot, exprCtx);
-        if (status == IGraphTransformer::TStatus::Error)
-            Cerr << exprCtx.IssueManager.GetIssues().ToString() << Endl;
-        UNIT_ASSERT(status == IGraphTransformer::TStatus::Ok);
-        return exprRoot;
+    auto transformer = TTransformationPipeline(typeAnnotationContext)
+                           .AddServiceTransformers()
+                           .AddPreTypeAnnotation()
+                           .AddExpressionEvaluation(*functionRegistry)
+                           .AddIOAnnotation()
+                           .AddTypeAnnotation()
+                           .AddPostTypeAnnotation()
+                           .Build();
+
+    const auto status = SyncTransform(*transformer, exprRoot, exprCtx);
+
+    if (settings.ExpectedError) {
+        const auto issuesStr = exprCtx.IssueManager.GetIssues().ToString();
+        UNIT_ASSERT_VALUES_EQUAL_C(status, IGraphTransformer::TStatus::Error, issuesStr);
+        UNIT_ASSERT_STRING_CONTAINS(issuesStr, settings.ExpectedError);
+    } else {
+        UNIT_ASSERT_VALUES_EQUAL_C(status, IGraphTransformer::TStatus::Ok, exprCtx.IssueManager.GetIssues().ToString());
     }
 
-    template <class TConstraint>
-    static void CheckConstraint(const TExprNode::TPtr& exprRoot, const TStringBuf nodeName, const TStringBuf constrStr) {
-        TExprNode* nodeToCheck = nullptr;
-        VisitExpr(exprRoot, [nodeName, &nodeToCheck] (const TExprNode::TPtr& node) {
-            if (node->IsCallable(nodeName)) {
-                nodeToCheck = node.Get();
-            }
-            return !nodeToCheck;
-        });
-        UNIT_ASSERT(nodeToCheck);
-        UNIT_ASSERT(nodeToCheck->GetState() == TExprNode::EState::ConstrComplete);
-        const auto constr = nodeToCheck->GetConstraint<TConstraint>();
-        if (constrStr.empty()) {
-            UNIT_ASSERT(!constr);
-        } else {
-            UNIT_ASSERT(constr);
-            UNIT_ASSERT(constr->IsApplicableToType(*nodeToCheck->GetTypeAnn()));
-            UNIT_ASSERT_VALUES_EQUAL(ToString(*constr), constrStr);
+    return exprRoot;
+}
+
+template <class TConstraint>
+void CheckConstraint(const TExprNode::TPtr& exprRoot, const TStringBuf nodeName, const TStringBuf constrStr) {
+    TExprNode* nodeToCheck = nullptr;
+    VisitExpr(exprRoot, [nodeName, &nodeToCheck](const TExprNode::TPtr& node) {
+        if (node->IsCallable(nodeName)) {
+            nodeToCheck = node.Get();
         }
+        return !nodeToCheck;
+    });
+    UNIT_ASSERT_C(nodeToCheck, "Node " << nodeName << " not found, ast:\n"
+                                       << exprRoot->Dump());
+    UNIT_ASSERT(nodeToCheck->GetState() == TExprNode::EState::ConstrComplete);
+    const auto constr = nodeToCheck->GetConstraint<TConstraint>();
+    if (constrStr.empty()) {
+        UNIT_ASSERT_C(!constr, "Unexpected constraint " << constr->GetName() << " for " << nodeToCheck->Content());
+    } else {
+        UNIT_ASSERT_C(constr, "Missing constraint " << constrStr << " for " << nodeToCheck->Content());
+        UNIT_ASSERT_C(constr->IsApplicableToType(*nodeToCheck->GetTypeAnn()), "Constraint " << constr->GetName() << " is not applicable to " << nodeToCheck->Content());
+        UNIT_ASSERT_VALUES_EQUAL(ToString(*constr), constrStr);
     }
+}
 
-    Y_UNIT_TEST(PruneAdjacentKeysAddUniqueDistinct) {
-        const auto s = R"((
+Y_UNIT_TEST(PruneAdjacentKeysAddUniqueDistinct) {
+    const auto s = R"((
             (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('"a" (Nothing (OptionalType (DataType 'Int32)))) '('"b" (Int32 '"3")))
@@ -85,14 +98,14 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             (return world)
         ))";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "PruneAdjacentKeys", "Unique((a))");
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "PruneAdjacentKeys", "Distinct((a))");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "PruneAdjacentKeys", "Unique((a))");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "PruneAdjacentKeys", "Distinct((a))");
+}
 
-    Y_UNIT_TEST(PruneAdjacentKeysAddUniqueDistinctForAlreadyUniqueDistinct) {
-        const auto s = R"((
+Y_UNIT_TEST(PruneAdjacentKeysAddUniqueDistinctForAlreadyUniqueDistinct) {
+    const auto s = R"((
             (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('"a" (Nothing (OptionalType (DataType 'Int32)))) '('"b" (Int32 '"3")))
@@ -107,14 +120,14 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             (return world)
         ))";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "PruneAdjacentKeys", "Unique((a)(b))");
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "PruneAdjacentKeys", "Distinct((a)(b))");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "PruneAdjacentKeys", "Unique((a)(b))");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "PruneAdjacentKeys", "Distinct((a)(b))");
+}
 
-    Y_UNIT_TEST(PruneAdjacentKeysAddUniqueDistinctForAlreadyUniqueDistinctYetAnother) {
-        const auto s = R"((
+Y_UNIT_TEST(PruneAdjacentKeysAddUniqueDistinctForAlreadyUniqueDistinctYetAnother) {
+    const auto s = R"((
             (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('"a" (Nothing (OptionalType (DataType 'Int32)))) '('"b" (Int32 '"3")))
@@ -129,14 +142,14 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             (return world)
         ))";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "PruneAdjacentKeys", "Unique((a))");
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "PruneAdjacentKeys", "Distinct((a))");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "PruneAdjacentKeys", "Unique((a))");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "PruneAdjacentKeys", "Distinct((a))");
+}
 
-    Y_UNIT_TEST(PruneAdjacentKeysForTupleAddUniqueDistinct) {
-        const auto s = R"((
+Y_UNIT_TEST(PruneAdjacentKeysForTupleAddUniqueDistinct) {
+    const auto s = R"((
             (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('"a" (Nothing (OptionalType (DataType 'Int32)))) '('"b" (Int32 '"3")))
@@ -149,14 +162,14 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             (return world)
         ))";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "PruneAdjacentKeys", "Unique((a,b))");
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "PruneAdjacentKeys", "Distinct((a,b))");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "PruneAdjacentKeys", "Unique((a,b))");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "PruneAdjacentKeys", "Distinct((a,b))");
+}
 
-    Y_UNIT_TEST(PruneAdjacentKeysForTupleAddUniqueDistinctForAlreadyUniqueDistinct) {
-        const auto s = R"((
+Y_UNIT_TEST(PruneAdjacentKeysForTupleAddUniqueDistinctForAlreadyUniqueDistinct) {
+    const auto s = R"((
             (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('"a" (Nothing (OptionalType (DataType 'Int32)))) '('"b" (Int32 '"3")))
@@ -171,14 +184,14 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             (return world)
         ))";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "PruneAdjacentKeys", "Unique((b))");
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "PruneAdjacentKeys", "Distinct((b))");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "PruneAdjacentKeys", "Unique((b))");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "PruneAdjacentKeys", "Distinct((b))");
+}
 
-    Y_UNIT_TEST(PruneAdjacentKeysForTupleAddUniqueDistinctForAlreadyUniqueDistinctYetAnother) {
-        const auto s = R"((
+Y_UNIT_TEST(PruneAdjacentKeysForTupleAddUniqueDistinctForAlreadyUniqueDistinctYetAnother) {
+    const auto s = R"((
             (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('"a" (Nothing (OptionalType (DataType 'Int32)))) '('"b" (Int32 '"3")))
@@ -193,14 +206,14 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             (return world)
         ))";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "PruneAdjacentKeys", "Unique((a,b))");
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "PruneAdjacentKeys", "Distinct((a,b))");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "PruneAdjacentKeys", "Unique((a,b))");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "PruneAdjacentKeys", "Distinct((a,b))");
+}
 
-    Y_UNIT_TEST(Sort) {
-        const auto s = R"((
+Y_UNIT_TEST(Sort) {
+    const auto s = R"((
             (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
@@ -213,13 +226,13 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             (return world)
         ))";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TSortedConstraintNode>(exprRoot, "Sort", "Sorted(key[asc])");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TSortedConstraintNode>(exprRoot, "Sort", "Sorted(key[asc])");
+}
 
-    Y_UNIT_TEST(SortByStablePickle) {
-        const auto s = R"((
+Y_UNIT_TEST(SortByStablePickle) {
+    const auto s = R"((
             (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
@@ -232,13 +245,13 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             (return world)
         ))";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TSortedConstraintNode>(exprRoot, "Sort", "");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TSortedConstraintNode>(exprRoot, "Sort", "");
+}
 
-    Y_UNIT_TEST(SortByTranspentIfPresent) {
-        const auto s = R"((
+Y_UNIT_TEST(SortByTranspentIfPresent) {
+    const auto s = R"((
             (let res (DataSink 'result))
             (let list (AsList
                 (Just (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v))))
@@ -252,13 +265,13 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             (return world)
         ))";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TSortedConstraintNode>(exprRoot, "OrderedFlatMap", "Sorted(key[asc])");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TSortedConstraintNode>(exprRoot, "OrderedFlatMap", "Sorted(key[asc])");
+}
 
-    Y_UNIT_TEST(SortByDuplicateColumn) {
-        const auto s = R"((
+Y_UNIT_TEST(SortByDuplicateColumn) {
+    const auto s = R"((
             (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
@@ -271,13 +284,13 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             (return world)
         ))";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TSortedConstraintNode>(exprRoot, "Sort", "Sorted(key[asc];subkey[asc])");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TSortedConstraintNode>(exprRoot, "Sort", "Sorted(key[asc];subkey[asc])");
+}
 
-    Y_UNIT_TEST(SortByFullRow) {
-        const auto s = R"((
+Y_UNIT_TEST(SortByFullRow) {
+    const auto s = R"((
             (let res (DataSink 'result))
             (let list (AsList (Utf8 's) (Utf8 'o) (Utf8 'r) (Utf8 't)))
             (let sorted (Sort list (Bool 'True) (lambda '(item) item)))
@@ -287,14 +300,14 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             (return world)
         ))";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TSortedConstraintNode>(exprRoot, "Sort", "Sorted(/[asc])");
-        CheckConstraint<TSortedConstraintNode>(exprRoot, "OrderedMap", "Sorted(key[asc])");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TSortedConstraintNode>(exprRoot, "Sort", "Sorted(/[asc])");
+    CheckConstraint<TSortedConstraintNode>(exprRoot, "OrderedMap", "Sorted(key[asc])");
+}
 
-    Y_UNIT_TEST(SortByTuple) {
-        const auto s = R"((
+Y_UNIT_TEST(SortByTuple) {
+    const auto s = R"((
             (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
@@ -307,13 +320,13 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             (return world)
         ))";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TSortedConstraintNode>(exprRoot, "Sort", "Sorted(key[desc];subkey[desc])");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TSortedConstraintNode>(exprRoot, "Sort", "Sorted(key[desc];subkey[desc])");
+}
 
-    Y_UNIT_TEST(SortByTupleElements) {
-        const auto s = R"((
+Y_UNIT_TEST(SortByTupleElements) {
+    const auto s = R"((
             (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value '((String 'x) (String 'a) (String 'u))))
@@ -327,14 +340,14 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             (return world)
         ))";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TSortedConstraintNode>(exprRoot, "Sort", "Sorted(value/2[asc];key[desc];value/0[desc])");
-        CheckConstraint<TSortedConstraintNode>(exprRoot, "OrderedMap", "Sorted(tuple/1[asc];tuple/4[desc];tuple/2[desc])");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TSortedConstraintNode>(exprRoot, "Sort", "Sorted(value/2[asc];key[desc];value/0[desc])");
+    CheckConstraint<TSortedConstraintNode>(exprRoot, "OrderedMap", "Sorted(tuple/1[asc];tuple/4[desc];tuple/2[desc])");
+}
 
-    Y_UNIT_TEST(SortByAllTupleElementsInRightOrder) {
-        const auto s = R"((
+Y_UNIT_TEST(SortByAllTupleElementsInRightOrder) {
+    const auto s = R"((
             (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value '((String 'x) (String 'a) (String 'u))))
@@ -348,14 +361,14 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             (return world)
         ))";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TSortedConstraintNode>(exprRoot, "Sort", "Sorted(value[desc])");
-        CheckConstraint<TSortedConstraintNode>(exprRoot, "OrderedMap", "Sorted(tuple[desc])");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TSortedConstraintNode>(exprRoot, "Sort", "Sorted(value[desc])");
+    CheckConstraint<TSortedConstraintNode>(exprRoot, "OrderedMap", "Sorted(tuple[desc])");
+}
 
-    Y_UNIT_TEST(SortByAllTupleElementsInWrongOrder) {
-        const auto s = R"((
+Y_UNIT_TEST(SortByAllTupleElementsInWrongOrder) {
+    const auto s = R"((
             (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value '((String 'x) (String 'a) (String 'u))))
@@ -369,14 +382,14 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             (return world)
         ))";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TSortedConstraintNode>(exprRoot, "Sort", "Sorted(value/1[asc];value/0[asc];value/2[asc])");
-        CheckConstraint<TSortedConstraintNode>(exprRoot, "OrderedMap", "Sorted(tuple/1[asc];tuple/0[asc];tuple/2[asc])");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TSortedConstraintNode>(exprRoot, "Sort", "Sorted(value/1[asc];value/0[asc];value/2[asc])");
+    CheckConstraint<TSortedConstraintNode>(exprRoot, "OrderedMap", "Sorted(tuple/1[asc];tuple/0[asc];tuple/2[asc])");
+}
 
-    Y_UNIT_TEST(SortByTupleWithSingleElementAndCopyOfElement) {
-        const auto s = R"((
+Y_UNIT_TEST(SortByTupleWithSingleElementAndCopyOfElement) {
+    const auto s = R"((
             (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value '((String 'x))))
@@ -390,13 +403,13 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             (return world)
         ))";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TSortedConstraintNode>(exprRoot, "OrderedMap", "Sorted(element,tuple[desc])");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TSortedConstraintNode>(exprRoot, "OrderedMap", "Sorted(element,tuple[desc])");
+}
 
-    Y_UNIT_TEST(SortByFullTupleOnTop) {
-        const auto s = R"((
+Y_UNIT_TEST(SortByFullTupleOnTop) {
+    const auto s = R"((
             (let res (DataSink 'result))
             (let list (AsList
                 '((String 'x) (String 'a) (String 'u))
@@ -410,14 +423,14 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             (return world)
         ))";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TSortedConstraintNode>(exprRoot, "Sort", "Sorted(0[desc];1[desc];2[desc])");
-        CheckConstraint<TSortedConstraintNode>(exprRoot, "OrderedMap", "Sorted(one[desc];two[desc];three[desc])");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TSortedConstraintNode>(exprRoot, "Sort", "Sorted(0[desc];1[desc];2[desc])");
+    CheckConstraint<TSortedConstraintNode>(exprRoot, "OrderedMap", "Sorted(one[desc];two[desc];three[desc])");
+}
 
-    Y_UNIT_TEST(SortByColumnAndExpr) {
-        const auto s = R"((
+Y_UNIT_TEST(SortByColumnAndExpr) {
+    const auto s = R"((
             (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
@@ -430,13 +443,13 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             (return world)
         ))";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TSortedConstraintNode>(exprRoot, "Sort", "");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TSortedConstraintNode>(exprRoot, "Sort", "");
+}
 
-    Y_UNIT_TEST(SortDesc) {
-        const auto s = R"((
+Y_UNIT_TEST(SortDesc) {
+    const auto s = R"((
             (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
@@ -449,13 +462,32 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             (return world)
         ))";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TSortedConstraintNode>(exprRoot, "Sort", "Sorted(key[asc];subkey[desc])");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TSortedConstraintNode>(exprRoot, "Sort", "Sorted(key[asc];subkey[desc])");
+}
 
-    Y_UNIT_TEST(SortedOverWideMap) {
-        const auto s = R"((
+Y_UNIT_TEST(StreamingConstraintFailsOnSort) {
+    const TStringBuf s = R"((
+            (let res (DataSink 'result))
+            (let list (AsList
+                (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
+                (AsStruct '('key (String '1)) '('subkey (String 'd)) '('value (String 'v)))
+                (AsStruct '('key (String '3)) '('subkey (String 'b)) '('value (String 'v)))
+            ))
+            (let streamingList (AssumeConstraints list '"{\"Streaming\" = #}"))
+            (let sorted (Sort streamingList (Bool 'True) (lambda '(item) (Member item 'key))))
+            (let world (Write! world res (Key) sorted '()))
+            (let world (Commit! world res))
+            (return world)
+        ))";
+
+    TExprContext exprCtx;
+    ParseAndAnnotate(s, exprCtx, {.ExpectedError = "Sorting of streaming input is not supported"});
+}
+
+Y_UNIT_TEST(SortedOverWideMap) {
+    const auto s = R"((
             (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
@@ -471,13 +503,13 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             (return world)
         ))";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TSortedConstraintNode>(exprRoot, "Collect", "Sorted(z[asc];y[desc])");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TSortedConstraintNode>(exprRoot, "Collect", "Sorted(z[asc];y[desc])");
+}
 
-    Y_UNIT_TEST(SortedOverWideTopSort) {
-        const auto s = R"((
+Y_UNIT_TEST(SortedOverWideTopSort) {
+    const auto s = R"((
             (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
@@ -493,13 +525,13 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             (return world)
         ))";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TSortedConstraintNode>(exprRoot, "Collect", "Sorted(z[desc];x[asc])");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TSortedConstraintNode>(exprRoot, "Collect", "Sorted(z[desc];x[asc])");
+}
 
-    Y_UNIT_TEST(SortedOverOrderedMultiMap) {
-        const auto s = R"((
+Y_UNIT_TEST(SortedOverOrderedMultiMap) {
+    const auto s = R"((
             (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'u)))
@@ -516,13 +548,13 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             (return world)
         ))";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TSortedConstraintNode>(exprRoot, "OrderedMultiMap", "Sorted(x[asc];z[asc])");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TSortedConstraintNode>(exprRoot, "OrderedMultiMap", "Sorted(x[asc];z[asc])");
+}
 
-    Y_UNIT_TEST(SortedOverNestedFlatMap) {
-        const auto s = R"((
+Y_UNIT_TEST(SortedOverNestedFlatMap) {
+    const auto s = R"((
             (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'u)))
@@ -538,13 +570,13 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             (return world)
         ))";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TSortedConstraintNode>(exprRoot, "LazyList", "Sorted(x[asc];z[asc])");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TSortedConstraintNode>(exprRoot, "LazyList", "Sorted(x[asc];z[asc])");
+}
 
-    Y_UNIT_TEST(SortedOverNestedOrderedFlatMapWithSort) {
-        const auto s = R"((
+Y_UNIT_TEST(SortedOverNestedOrderedFlatMapWithSort) {
+    const auto s = R"((
             (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'u)))
@@ -560,13 +592,13 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             (return world)
         ))";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TSortedConstraintNode>(exprRoot, "LazyList", "Sorted(x[asc];z[asc])");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TSortedConstraintNode>(exprRoot, "LazyList", "Sorted(x[asc];z[asc])");
+}
 
-    Y_UNIT_TEST(ExtractSortedTuple) {
-        const auto s = R"((
+Y_UNIT_TEST(ExtractSortedTuple) {
+    const auto s = R"((
             (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('a (String '4)) '('b (String 'c)) '('c (String 'x)))
@@ -581,14 +613,34 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             (return world)
         ))";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TSortedConstraintNode>(exprRoot, "OrderedFlatMap", "Sorted(a,x/0[asc];b,x/1[asc])");
-        CheckConstraint<TSortedConstraintNode>(exprRoot, "ExtractMembers", "Sorted(x[asc])");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TSortedConstraintNode>(exprRoot, "OrderedFlatMap", "Sorted(a,x/0[asc];b,x/1[asc])");
+    CheckConstraint<TSortedConstraintNode>(exprRoot, "ExtractMembers", "Sorted(x[asc])");
+}
 
-    Y_UNIT_TEST(TopSort) {
-        const auto s = R"((
+Y_UNIT_TEST(ExtractMembersStreaming) {
+    const TStringBuf s = R"((
+            (let res (DataSink 'result))
+            (let list (AsList
+                (AsStruct '('a (String '4)) '('b (String 'c)) '('c (String 'x)))
+                (AsStruct '('a (String '1)) '('b (String 'd)) '('c (String 'y)))
+                (AsStruct '('a (String '3)) '('b (String 'b)) '('c (String 'z)))
+            ))
+            (let streamingList (AssumeConstraints list '"{\"Streaming\" = #}"))
+            (let extract (ExtractMembers streamingList '('a)))
+            (let world (Write! world res (Key) extract '()))
+            (let world (Commit! world res))
+            (return world)
+        ))";
+
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "ExtractMembers", "Streaming");
+}
+
+Y_UNIT_TEST(TopSort) {
+    const auto s = R"((
             (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
@@ -601,13 +653,13 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             (return world)
         ))";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TSortedConstraintNode>(exprRoot, "TopSort", "Sorted(key[asc];subkey[asc])");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TSortedConstraintNode>(exprRoot, "TopSort", "Sorted(key[asc];subkey[asc])");
+}
 
-    Y_UNIT_TEST(MergeWithFirstEmpty) {
-        const auto s = R"((
+Y_UNIT_TEST(MergeWithFirstEmpty) {
+    const auto s = R"((
             (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
@@ -622,13 +674,13 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             (return world)
         ))";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TSortedConstraintNode>(exprRoot, "Merge", "Sorted(key[asc])");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TSortedConstraintNode>(exprRoot, "Merge", "Sorted(key[asc])");
+}
 
-    Y_UNIT_TEST(MergeWithCloneColumns) {
-        const auto s = R"((
+Y_UNIT_TEST(MergeWithCloneColumns) {
+    const auto s = R"((
             (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
@@ -643,13 +695,13 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             (return world)
         ))";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TSortedConstraintNode>(exprRoot, "Merge", "Sorted(key[desc])");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TSortedConstraintNode>(exprRoot, "Merge", "Sorted(key[desc])");
+}
 
-    Y_UNIT_TEST(UnionMergeWithDiffTypes) {
-        const auto s = R"((
+Y_UNIT_TEST(UnionMergeWithDiffTypes) {
+    const auto s = R"((
             (let res (DataSink 'result))
             (let list1 (AsList
                 (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
@@ -669,13 +721,40 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             (return world)
         ))";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TSortedConstraintNode>(exprRoot, "UnionMerge", "Sorted(key[desc])");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TSortedConstraintNode>(exprRoot, "UnionMerge", "Sorted(key[desc])");
+}
 
-    Y_UNIT_TEST(ExtractMembersKey) {
-        const auto s = R"((
+Y_UNIT_TEST(UnionMergeWithEmptyDiffSort) {
+    const auto s = R"((
+            (let res (DataSink 'result))
+            (let list1 (AsList
+                (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
+                (AsStruct '('key (String '1)) '('subkey (String 'd)) '('value (String 'v)))
+                (AsStruct '('key (String '3)) '('subkey (String 'b)) '('value (String 'v)))
+            ))
+            (let list2 (AsList
+                (AsStruct '('key (String '4)) '('subkey (Utf8 'c)) '('value (String 'v)))
+                (AsStruct '('key (String '1)) '('subkey (Utf8 'd)) '('value (String 'v)))
+                (AsStruct '('key (String '3)) '('subkey (Utf8 'b)) '('value (String 'v)))
+            ))
+            (let sorted1 (Sort list1 (Bool 'True) (lambda '(item) (Member item 'key))))
+            (let sorted2 (Sort list2 (Bool 'True) (lambda '(item) (Member item 'value))))
+            (let sorted2 (Take sorted2 (Uint64 '0)))
+            (let merged (UnionMerge sorted1 sorted2))
+            (let world (Write! world res (Key) merged '()))
+            (let world (Commit! world res))
+            (return world)
+        ))";
+
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TSortedConstraintNode>(exprRoot, "UnionMerge", "Sorted(key[asc])");
+}
+
+Y_UNIT_TEST(ExtractMembersKey) {
+    const auto s = R"((
             (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
@@ -689,13 +768,13 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             (return world)
         ))";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TSortedConstraintNode>(exprRoot, "ExtractMembers", "Sorted(key[asc])");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TSortedConstraintNode>(exprRoot, "ExtractMembers", "Sorted(key[asc])");
+}
 
-    Y_UNIT_TEST(ExtractMembersNonKey) {
-        const auto s = R"((
+Y_UNIT_TEST(ExtractMembersNonKey) {
+    const auto s = R"((
             (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
@@ -709,13 +788,13 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             (return world)
         ))";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TSortedConstraintNode>(exprRoot, "ExtractMembers", "");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TSortedConstraintNode>(exprRoot, "ExtractMembers", "");
+}
 
-    Y_UNIT_TEST(OrderedLMap) {
-        const auto s = R"((
+Y_UNIT_TEST(OrderedLMap) {
+    const auto s = R"((
             (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
@@ -729,14 +808,14 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             (return world)
         ))";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TSortedConstraintNode>(exprRoot, "OrderedLMap", "Sorted(key[desc];subkey[desc])");
-        CheckConstraint<TSortedConstraintNode>(exprRoot, "OrderedFlatMap", "Sorted(key[desc];subkey[desc])");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TSortedConstraintNode>(exprRoot, "OrderedLMap", "Sorted(key[desc];subkey[desc])");
+    CheckConstraint<TSortedConstraintNode>(exprRoot, "OrderedFlatMap", "Sorted(key[desc];subkey[desc])");
+}
 
-    Y_UNIT_TEST(OrderedFlatMap) {
-        const auto s = R"((
+Y_UNIT_TEST(OrderedFlatMap) {
+    const auto s = R"((
             (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
@@ -752,15 +831,15 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             (return world)
         ))";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TSortedConstraintNode>(exprRoot, "OrderedFlatMap", "Sorted(k[asc])");
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "OrderedFlatMap", "Unique((k))");
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "OrderedFlatMap", "Distinct((v))");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TSortedConstraintNode>(exprRoot, "OrderedFlatMap", "Sorted(k[asc])");
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "OrderedFlatMap", "Unique((k))");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "OrderedFlatMap", "Distinct((v))");
+}
 
-    Y_UNIT_TEST(OrderedFlatMapWithEmptyFilter) {
-        const auto s = R"((
+Y_UNIT_TEST(OrderedFlatMapWithEmptyFilter) {
+    const auto s = R"((
             (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
@@ -776,15 +855,15 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             (return world)
         ))";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TSortedConstraintNode>(exprRoot, "OrderedFlatMap", "Sorted(k[asc])");
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "OrderedFlatMap", "Unique((k))");
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "OrderedFlatMap", "Distinct((v))");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TSortedConstraintNode>(exprRoot, "OrderedFlatMap", "Sorted(k[asc])");
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "OrderedFlatMap", "Unique((k))");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "OrderedFlatMap", "Distinct((v))");
+}
 
-    Y_UNIT_TEST(OrderedFlatMapNonKey) {
-        const auto s = R"((
+Y_UNIT_TEST(OrderedFlatMapNonKey) {
+    const auto s = R"((
             (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
@@ -798,13 +877,13 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             (return world)
         ))";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TSortedConstraintNode>(exprRoot, "OrderedFlatMap", "");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TSortedConstraintNode>(exprRoot, "OrderedFlatMap", "");
+}
 
-    Y_UNIT_TEST(OrderedFilter) {
-        const auto s = R"((
+Y_UNIT_TEST(OrderedFilter) {
+    const auto s = R"((
             (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
@@ -820,15 +899,15 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             (return world)
         ))";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TSortedConstraintNode>(exprRoot, "OrderedFilter", "Sorted(key[asc];subkey[asc])");
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "OrderedFilter", "Unique((key)(subkey,value))");
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "OrderedFilter", "Distinct((key,subkey)(value))");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TSortedConstraintNode>(exprRoot, "OrderedFilter", "Sorted(key[asc];subkey[asc])");
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "OrderedFilter", "Unique((key)(subkey,value))");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "OrderedFilter", "Distinct((key,subkey)(value))");
+}
 
-    Y_UNIT_TEST(OrderedMapNullifyOneColumn) {
-        const auto s = R"((
+Y_UNIT_TEST(OrderedMapNullifyOneColumn) {
+    const auto s = R"((
             (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
@@ -844,15 +923,15 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             (return world)
         ))";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TSortedConstraintNode>(exprRoot, "OrderedMap", "Sorted(k[desc])");
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "OrderedMap", "Unique((k)(s,v))");
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "OrderedMap", "Distinct((v))");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TSortedConstraintNode>(exprRoot, "OrderedMap", "Sorted(k[desc])");
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "OrderedMap", "Unique((k)(s,v))");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "OrderedMap", "Distinct((v))");
+}
 
-    Y_UNIT_TEST(NestedFlatMapByOptional) {
-        const auto s = R"((
+Y_UNIT_TEST(NestedFlatMapByOptional) {
+    const auto s = R"((
             (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
@@ -870,15 +949,15 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             (return world)
         ))";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TSortedConstraintNode>(exprRoot, "OrderedFlatMap", "Sorted(v[desc];s[asc])");
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "OrderedFlatMap", "Unique((k,s)(v))");
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "OrderedFlatMap", "Distinct((s,v))");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TSortedConstraintNode>(exprRoot, "OrderedFlatMap", "Sorted(v[desc];s[asc])");
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "OrderedFlatMap", "Unique((k,s)(v))");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "OrderedFlatMap", "Distinct((s,v))");
+}
 
-    Y_UNIT_TEST(FlattenMembers) {
-        const auto s = R"((
+Y_UNIT_TEST(FlattenMembers) {
+    const auto s = R"((
             (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
@@ -895,15 +974,15 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             (return world)
         ))";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TSortedConstraintNode>(exprRoot, "LazyList", "Sorted(onekey[asc];onesubkey,twosubkey[asc])");
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "LazyList", "Unique((onekey)({onesubkey,twosubkey},twovalue))");
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "LazyList", "Distinct((onekey,{onesubkey,twosubkey})(twovalue))");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TSortedConstraintNode>(exprRoot, "LazyList", "Sorted(onekey[asc];onesubkey,twosubkey[asc])");
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "LazyList", "Unique((onekey)({onesubkey,twosubkey},twovalue))");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "LazyList", "Distinct((onekey,{onesubkey,twosubkey})(twovalue))");
+}
 
-    Y_UNIT_TEST(Visit) {
-        const auto s = R"((
+Y_UNIT_TEST(Visit) {
+    const auto s = R"((
 (let res (DataSink 'result))
 
 (let list (AsList
@@ -933,18 +1012,18 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 (return world)
 ))";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TMultiConstraintNode>(exprRoot, "Extend", "Multi(0:{},1:{},2:{})");
-        CheckConstraint<TMultiConstraintNode>(exprRoot, "Visit", "Multi(1:{})");
-        CheckConstraint<TVarIndexConstraintNode>(exprRoot, "Visit", "VarIndex(1:0)");
-        CheckConstraint<TMultiConstraintNode>(exprRoot, "FlatMap", "Multi(1:{})");
-        CheckConstraint<TMultiConstraintNode>(exprRoot, "VariantItem", "");
-        CheckConstraint<TMultiConstraintNode>(exprRoot, "Map", "");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TMultiConstraintNode>(exprRoot, "Extend", "Multi(0:{},1:{},2:{})");
+    CheckConstraint<TMultiConstraintNode>(exprRoot, "Visit", "Multi(1:{})");
+    CheckConstraint<TVarIndexConstraintNode>(exprRoot, "Visit", "VarIndex(1:0)");
+    CheckConstraint<TMultiConstraintNode>(exprRoot, "FlatMap", "Multi(1:{})");
+    CheckConstraint<TMultiConstraintNode>(exprRoot, "VariantItem", "");
+    CheckConstraint<TMultiConstraintNode>(exprRoot, "Map", "");
+}
 
-    Y_UNIT_TEST(SwitchAsFilter) {
-        const auto s = R"((
+Y_UNIT_TEST(SwitchAsFilter) {
+    const auto s = R"((
 (let res (DataSink 'result))
 
 (let list (AsList
@@ -969,14 +1048,14 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 (return world)
 ))";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TMultiConstraintNode>(exprRoot, "Extend", "Multi(0:{},1:{},2:{})");
-        CheckConstraint<TMultiConstraintNode>(exprRoot, "Switch", "");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TMultiConstraintNode>(exprRoot, "Extend", "Multi(0:{},1:{},2:{})");
+    CheckConstraint<TMultiConstraintNode>(exprRoot, "Switch", "");
+}
 
-    Y_UNIT_TEST(EmptyForMissingMultiOut) {
-        const auto s = R"((
+Y_UNIT_TEST(EmptyForMissingMultiOut) {
+    const auto s = R"((
 (let res (DataSink 'result))
 
 (let list (AsList
@@ -1008,14 +1087,14 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 (return world)
 ))";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TMultiConstraintNode>(exprRoot, "Extend", "Multi(0:{},1:{})");
-        CheckConstraint<TMultiConstraintNode>(exprRoot, "FlatMap", "Multi(0:{})");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TMultiConstraintNode>(exprRoot, "Extend", "Multi(0:{},1:{})");
+    CheckConstraint<TMultiConstraintNode>(exprRoot, "FlatMap", "Multi(0:{})");
+}
 
-    Y_UNIT_TEST(SwitchWithReplicate) {
-        const auto s = R"((
+Y_UNIT_TEST(SwitchWithReplicate) {
+    const auto s = R"((
 (let res (DataSink 'result))
 
 (let list (AsList
@@ -1033,14 +1112,14 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 (return world)
 ))";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TMultiConstraintNode>(exprRoot, "Switch", "Multi(0:{},1:{})");
-        CheckConstraint<TMultiConstraintNode>(exprRoot, "Map", "");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TMultiConstraintNode>(exprRoot, "Switch", "Multi(0:{},1:{})");
+    CheckConstraint<TMultiConstraintNode>(exprRoot, "Map", "");
+}
 
-    Y_UNIT_TEST(SwitchWithMultiOut) {
-        const auto s = R"((
+Y_UNIT_TEST(SwitchWithMultiOut) {
+    const auto s = R"((
 (let res (DataSink 'result))
 
 (let list (AsList
@@ -1067,14 +1146,14 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 (return world)
 ))";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TMultiConstraintNode>(exprRoot, "Extend", "Multi(0:{},1:{},2:{})");
-        CheckConstraint<TMultiConstraintNode>(exprRoot, "Switch", "Multi(1:{},3:{})");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TMultiConstraintNode>(exprRoot, "Extend", "Multi(0:{},1:{},2:{})");
+    CheckConstraint<TMultiConstraintNode>(exprRoot, "Switch", "Multi(1:{},3:{})");
+}
 
-    Y_UNIT_TEST(MultiOutLMapWithEmptyInput) {
-        auto s = R"((
+Y_UNIT_TEST(MultiOutLMapWithEmptyInput) {
+    auto s = R"((
 (let res (DataSink 'result))
 
 (let structType (StructType '('key (DataType 'String)) '('value (DataType 'String))))
@@ -1096,16 +1175,16 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 (return world)
 ))";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TEmptyConstraintNode>(exprRoot, "LMap", "Empty");
-        CheckConstraint<TMultiConstraintNode>(exprRoot, "LMap", "");
-        CheckConstraint<TEmptyConstraintNode>(exprRoot, "Switch", "Empty");
-        CheckConstraint<TMultiConstraintNode>(exprRoot, "Switch", "");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TEmptyConstraintNode>(exprRoot, "LMap", "Empty");
+    CheckConstraint<TMultiConstraintNode>(exprRoot, "LMap", "");
+    CheckConstraint<TEmptyConstraintNode>(exprRoot, "Switch", "Empty");
+    CheckConstraint<TMultiConstraintNode>(exprRoot, "Switch", "");
+}
 
-    Y_UNIT_TEST(Unique) {
-        const auto s = R"((
+Y_UNIT_TEST(Unique) {
+    const auto s = R"((
     (let res (DataSink 'result))
     (let list (AsList
         (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'x)))
@@ -1137,13 +1216,13 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (return world)
 ))";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "Take", "Unique(({p.key1,p.key2},p.subkey)(value))");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "Take", "Unique(({p.key1,p.key2},p.subkey)(value))");
+}
 
-    Y_UNIT_TEST(UniqueOverTuple) {
-        const auto s = R"((
+Y_UNIT_TEST(UniqueOverTuple) {
+    const auto s = R"((
     (let res (DataSink 'result))
     (let list (AsList
         (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'm)))
@@ -1175,15 +1254,15 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (return world)
 ))";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TPartOfUniqueConstraintNode>(exprRoot, "Unwrap", "PartOfUnique(p.key1:key,p.key2:key,p.subkey:subkey,value:value)");
-        CheckConstraint<TPartOfUniqueConstraintNode>(exprRoot, "DivePrefixMembers", "PartOfUnique(key1:key,key2:key,subkey:subkey)");
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "FlatMap", "Unique(({key1,key2}))");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TPartOfUniqueConstraintNode>(exprRoot, "Unwrap", "PartOfUnique(p.key1:key,p.key2:key,p.subkey:subkey,value:value)");
+    CheckConstraint<TPartOfUniqueConstraintNode>(exprRoot, "DivePrefixMembers", "PartOfUnique(key1:key,key2:key,subkey:subkey)");
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "FlatMap", "Unique(({key1,key2}))");
+}
 
-    Y_UNIT_TEST(UniqueOverWideFlow) {
-        const auto s = R"((
+Y_UNIT_TEST(UniqueOverWideFlow) {
+    const auto s = R"((
     (let res (DataSink 'result))
     (let list (AsList
         (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'x)))
@@ -1214,15 +1293,15 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (return world)
 ))";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TPartOfUniqueConstraintNode>(exprRoot, "NarrowMap", "PartOfUnique(p.key1:key,p.key2:key,p.subkey:subkey,value:value)");
-        CheckConstraint<TPartOfUniqueConstraintNode>(exprRoot, "Map", "PartOfUnique(key1:key,key2:key,subkey:subkey)");
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "FlatMap", "Unique(({key1,key2},subkey))");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TPartOfUniqueConstraintNode>(exprRoot, "NarrowMap", "PartOfUnique(p.key1:key,p.key2:key,p.subkey:subkey,value:value)");
+    CheckConstraint<TPartOfUniqueConstraintNode>(exprRoot, "Map", "PartOfUnique(key1:key,key2:key,subkey:subkey)");
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "FlatMap", "Unique(({key1,key2},subkey))");
+}
 
-    Y_UNIT_TEST(UniqueExOverWideFlow) {
-        const auto s = R"((
+Y_UNIT_TEST(UniqueExOverWideFlow) {
+    const auto s = R"((
     (let res (DataSink 'result))
     (let list (AsList
         (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
@@ -1247,13 +1326,13 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (return world)
 ))";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "LazyList", "Unique((one,{two,xxx},yyy))");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "LazyList", "Unique((one,{two,xxx},yyy))");
+}
 
-    Y_UNIT_TEST(UniqueNarrowCast) {
-        const auto s = R"((
+Y_UNIT_TEST(UniqueNarrowCast) {
+    const auto s = R"((
             (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'x)))
@@ -1269,13 +1348,13 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             (return world)
         ))";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "Map", "");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "Map", "");
+}
 
-    Y_UNIT_TEST(Distinct) {
-        const auto s = R"((
+Y_UNIT_TEST(Distinct) {
+    const auto s = R"((
     (let res (DataSink 'result))
     (let list (AsList
         (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'x)))
@@ -1307,13 +1386,13 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (return world)
 ))";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "Take", "Distinct(({p.key1,p.key2},p.subkey)(value))");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "Take", "Distinct(({p.key1,p.key2},p.subkey)(value))");
+}
 
-    Y_UNIT_TEST(DistinctOverTuple) {
-        const auto s = R"((
+Y_UNIT_TEST(DistinctOverTuple) {
+    const auto s = R"((
     (let res (DataSink 'result))
     (let list (AsList
         (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'm)))
@@ -1345,15 +1424,15 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (return world)
 ))";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TPartOfDistinctConstraintNode>(exprRoot, "Unwrap", "PartOfDistinct(p.key1:key,p.key2:key,p.subkey:subkey,value:value)");
-        CheckConstraint<TPartOfDistinctConstraintNode>(exprRoot, "DivePrefixMembers", "PartOfDistinct(key1:key,key2:key,subkey:subkey)");
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "FlatMap", "Distinct(({key1,key2}))");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TPartOfDistinctConstraintNode>(exprRoot, "Unwrap", "PartOfDistinct(p.key1:key,p.key2:key,p.subkey:subkey,value:value)");
+    CheckConstraint<TPartOfDistinctConstraintNode>(exprRoot, "DivePrefixMembers", "PartOfDistinct(key1:key,key2:key,subkey:subkey)");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "FlatMap", "Distinct(({key1,key2}))");
+}
 
-    Y_UNIT_TEST(DistinctOverWideFlow) {
-        const auto s = R"((
+Y_UNIT_TEST(DistinctOverWideFlow) {
+    const auto s = R"((
     (let res (DataSink 'result))
     (let list (AsList
         (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'x)))
@@ -1384,15 +1463,15 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (return world)
 ))";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TPartOfDistinctConstraintNode>(exprRoot, "NarrowMap", "PartOfDistinct(p.key1:key,p.key2:key,p.subkey:subkey,value:value)");
-        CheckConstraint<TPartOfDistinctConstraintNode>(exprRoot, "Map", "PartOfDistinct(key1:key,key2:key,subkey:subkey)");
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "FlatMap", "Distinct(({key1,key2},subkey))");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TPartOfDistinctConstraintNode>(exprRoot, "NarrowMap", "PartOfDistinct(p.key1:key,p.key2:key,p.subkey:subkey,value:value)");
+    CheckConstraint<TPartOfDistinctConstraintNode>(exprRoot, "Map", "PartOfDistinct(key1:key,key2:key,subkey:subkey)");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "FlatMap", "Distinct(({key1,key2},subkey))");
+}
 
-    Y_UNIT_TEST(DistinctExOverWideFlow) {
-        const auto s = R"((
+Y_UNIT_TEST(DistinctExOverWideFlow) {
+    const auto s = R"((
     (let res (DataSink 'result))
     (let list (AsList
         (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
@@ -1417,13 +1496,13 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (return world)
 ))";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "LazyList", "Distinct((one,{two,xxx},yyy))");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "LazyList", "Distinct((one,{two,xxx},yyy))");
+}
 
-    Y_UNIT_TEST(PartitionsByKeysWithCondense1) {
-        const auto s = R"(
+Y_UNIT_TEST(PartitionsByKeysWithCondense1) {
+    const auto s = R"(
 (
     (let res (DataSink 'result))
     (let list (AsList
@@ -1444,14 +1523,14 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 )
     )";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "Skip", "Unique((key,subkey))");
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "Skip", "Distinct((key,subkey))");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "Skip", "Unique((key,subkey))");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "Skip", "Distinct((key,subkey))");
+}
 
-    Y_UNIT_TEST(PartitionsByKeysWithCondense1AndStablePickle) {
-        const auto s = R"(
+Y_UNIT_TEST(PartitionsByKeysWithCondense1AndStablePickle) {
+    const auto s = R"(
 (
     (let res (DataSink 'result))
     (let list (AsList
@@ -1472,14 +1551,14 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 )
     )";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "Skip", "Unique((key,subkey))");
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "Skip", "Distinct((key,subkey))");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "Skip", "Unique((key,subkey))");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "Skip", "Distinct((key,subkey))");
+}
 
-    Y_UNIT_TEST(PartitionsByKeysWithCondense1WithSingleItemTupleKey) {
-        const auto s = R"(
+Y_UNIT_TEST(PartitionsByKeysWithCondense1WithSingleItemTupleKey) {
+    const auto s = R"(
 (
     (let res (DataSink 'result))
     (let list (AsList
@@ -1502,14 +1581,14 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 )
     )";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "Skip", "Unique((key))");
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "Skip", "Distinct((key))");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "Skip", "Unique((key))");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "Skip", "Distinct((key))");
+}
 
-    Y_UNIT_TEST(PartitionsByKeysWithCondense1WithPairItemsTupleKeyAndDuplicateOut) {
-        const auto s = R"(
+Y_UNIT_TEST(PartitionsByKeysWithCondense1WithPairItemsTupleKeyAndDuplicateOut) {
+    const auto s = R"(
 (
     (let res (DataSink 'result))
     (let list (AsList
@@ -1532,14 +1611,14 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 )
     )";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "Skip", "Unique(({one,two}))");
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "Skip", "Distinct(({one,two}))");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "Skip", "Unique(({one,two}))");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "Skip", "Distinct(({one,two}))");
+}
 
-    Y_UNIT_TEST(ShuffleByKeysInputUnique) {
-        const auto s = R"(
+Y_UNIT_TEST(ShuffleByKeysInputUnique) {
+    const auto s = R"(
 (
     (let res (DataSink 'result))
     (let list (AsList
@@ -1559,14 +1638,14 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 )
     )";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "Skip", "Unique((key)(subkey))");
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "Skip", "Distinct((key,subkey))");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "Skip", "Unique((key)(subkey))");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "Skip", "Distinct((key,subkey))");
+}
 
-    Y_UNIT_TEST(ShuffleByKeysHandlerUnique) {
-        const auto s = R"(
+Y_UNIT_TEST(ShuffleByKeysHandlerUnique) {
+    const auto s = R"(
 (
     (let res (DataSink 'result))
     (let list (AsList
@@ -1586,14 +1665,14 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 )
     )";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "Skip", "Unique((key)(subkey))");
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "Skip", "Distinct((key,subkey))");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "Skip", "Unique((key)(subkey))");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "Skip", "Distinct((key,subkey))");
+}
 
-    Y_UNIT_TEST(Reverse) {
-        const auto s = R"(
+Y_UNIT_TEST(Reverse) {
+    const auto s = R"(
 (
     (let res (DataSink 'result))
     (let list (AsList
@@ -1611,15 +1690,15 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 )
     )";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "Reverse", "Unique((key)(subkey))");
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "Reverse", "Distinct((key,subkey))");
-        CheckConstraint<TSortedConstraintNode>(exprRoot, "Reverse", "Sorted(key[asc];subkey[desc])");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "Reverse", "Unique((key)(subkey))");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "Reverse", "Distinct((key,subkey))");
+    CheckConstraint<TSortedConstraintNode>(exprRoot, "Reverse", "Sorted(key[asc];subkey[desc])");
+}
 
-    Y_UNIT_TEST(DictItems) {
-        const auto s = R"(
+Y_UNIT_TEST(DictItems) {
+    const auto s = R"(
 (
     (let res (DataSink 'result))
     (let list (AsList
@@ -1637,14 +1716,14 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 )
     )";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "Map", "Unique((k)(s)(v))");
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "Map", "Distinct((k,s)(v))");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "Map", "Unique((k)(s)(v))");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "Map", "Distinct((k,s)(v))");
+}
 
-    Y_UNIT_TEST(DictKeys) {
-        const auto s = R"(
+Y_UNIT_TEST(DictKeys) {
+    const auto s = R"(
 (
     (let res (DataSink 'result))
     (let list (AsList
@@ -1660,14 +1739,14 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 )
     )";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "Map", "Unique((v))");
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "Map", "Distinct((v))");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "Map", "Unique((v))");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "Map", "Distinct((v))");
+}
 
-    Y_UNIT_TEST(DictPayloads) {
-        const auto s = R"(
+Y_UNIT_TEST(DictPayloads) {
+    const auto s = R"(
 (
     (let res (DataSink 'result))
     (let list (AsList
@@ -1685,14 +1764,14 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 )
     )";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "DictPayloads", "Unique((k)(s))");
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "DictPayloads", "Distinct((k,s))");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "DictPayloads", "Unique((k)(s))");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "DictPayloads", "Distinct((k,s))");
+}
 
-    Y_UNIT_TEST(GraceJoinInner) {
-        const auto s = R"(
+Y_UNIT_TEST(GraceJoinInner) {
+    const auto s = R"(
 (
     (let list1 (AsList
     (AsStruct '('key1 (Int32 '1)) '('subkey1 (Uint8 '0)) '('value1 (String 'A)))
@@ -1728,14 +1807,14 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (return world)
 )
         )";
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "Collect", "Unique((lv)(rk,rs)(rv))");
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "Collect", "Distinct((lv)(rk,rs)(rv))");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "Collect", "Unique((lv)(rk,rs)(rv))");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "Collect", "Distinct((lv)(rk,rs)(rv))");
+}
 
-    Y_UNIT_TEST(GraceJoinLeft) {
-        const auto s = R"(
+Y_UNIT_TEST(GraceJoinLeft) {
+    const auto s = R"(
 (
     (let list1 (AsList
     (AsStruct '('key1 (Int32 '1)) '('subkey1 (Uint8 '0)) '('value1 (String 'A)))
@@ -1771,14 +1850,14 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (return world)
 )
         )";
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "Collect", "Unique((lv)(rk,rs)(rv))");
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "Collect", "Distinct((lv))");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "Collect", "Unique((lv)(rk,rs)(rv))");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "Collect", "Distinct((lv))");
+}
 
-    Y_UNIT_TEST(GraceJoinFull) {
-        const auto s = R"(
+Y_UNIT_TEST(GraceJoinFull) {
+    const auto s = R"(
 (
     (let list1 (AsList
     (AsStruct '('key1 (Int32 '1)) '('subkey1 (Uint8 '0)) '('value1 (String 'A)))
@@ -1814,14 +1893,14 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (return world)
 )
         )";
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "Collect", "Unique((lv)(rk,rs)(rv))");
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "Collect", "");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "Collect", "Unique((lv)(rk,rs)(rv))");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "Collect", "");
+}
 
-    Y_UNIT_TEST(GraceJoinRight) {
-        const auto s = R"(
+Y_UNIT_TEST(GraceJoinRight) {
+    const auto s = R"(
 (
     (let list1 (AsList
     (AsStruct '('key1 (Int32 '1)) '('subkey1 (Uint8 '0)) '('value1 (String 'A)))
@@ -1857,14 +1936,14 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (return world)
 )
         )";
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "Collect", "Unique((lv)(rk,rs)(rv))");
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "Collect", "Distinct((rk,rs)(rv))");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "Collect", "Unique((lv)(rk,rs)(rv))");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "Collect", "Distinct((rk,rs)(rv))");
+}
 
-    Y_UNIT_TEST(GraceJoinExclusion) {
-        const auto s = R"(
+Y_UNIT_TEST(GraceJoinExclusion) {
+    const auto s = R"(
 (
     (let list1 (AsList
     (AsStruct '('key1 (Int32 '1)) '('subkey1 (Uint8 '0)) '('value1 (String 'A)))
@@ -1900,14 +1979,14 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (return world)
 )
         )";
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "Collect", "Unique((lv)(rk,rs)(rv))");
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "Collect", "");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "Collect", "Unique((lv)(rk,rs)(rv))");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "Collect", "");
+}
 
-    Y_UNIT_TEST(GraceJoinLeftSemi) {
-        const auto s = R"(
+Y_UNIT_TEST(GraceJoinLeftSemi) {
+    const auto s = R"(
 (
     (let list1 (AsList
     (AsStruct '('key1 (Int32 '1)) '('subkey1 (Uint8 '0)) '('value1 (String 'A)))
@@ -1943,14 +2022,14 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (return world)
 )
         )";
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "Collect", "Unique((lk,ls)(lv))");
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "Collect", "Distinct((lk,ls)(lv))");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "Collect", "Unique((lk,ls)(lv))");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "Collect", "Distinct((lk,ls)(lv))");
+}
 
-    Y_UNIT_TEST(GraceJoinLeftOnly) {
-        const auto s = R"(
+Y_UNIT_TEST(GraceJoinLeftOnly) {
+    const auto s = R"(
 (
     (let list1 (AsList
     (AsStruct '('key1 (Int32 '1)) '('subkey1 (Uint8 '0)) '('value1 (String 'A)))
@@ -1986,15 +2065,14 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (return world)
 )
         )";
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "Collect", "Unique((lv))");
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "Collect", "Distinct((lv))");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "Collect", "Unique((lv))");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "Collect", "Distinct((lv))");
+}
 
-
-    Y_UNIT_TEST(GraceJoinRightOnly) {
-        const auto s = R"(
+Y_UNIT_TEST(GraceJoinRightOnly) {
+    const auto s = R"(
 (
     (let list1 (AsList
     (AsStruct '('key1 (Int32 '1)) '('subkey1 (Uint8 '0)) '('value1 (String 'A)))
@@ -2030,14 +2108,14 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (return world)
 )
         )";
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "Collect", "Unique((rk,rs)(rv))");
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "Collect", "Distinct((rk,rs)(rv))");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "Collect", "Unique((rk,rs)(rv))");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "Collect", "Distinct((rk,rs)(rv))");
+}
 
-    Y_UNIT_TEST(GraceJoinRightSemi) {
-        const auto s = R"(
+Y_UNIT_TEST(GraceJoinRightSemi) {
+    const auto s = R"(
 (
     (let list1 (AsList
     (AsStruct '('key1 (Int32 '1)) '('subkey1 (Uint8 '0)) '('value1 (String 'A)))
@@ -2073,14 +2151,14 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (return world)
 )
         )";
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "Collect", "Unique((rv))");
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "Collect", "Distinct((rv))");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "Collect", "Unique((rv))");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "Collect", "Distinct((rv))");
+}
 
-    Y_UNIT_TEST(GraceJoinInnerBothAny) {
-        const auto s = R"(
+Y_UNIT_TEST(GraceJoinInnerBothAny) {
+    const auto s = R"(
 (
     (let list1 (AsList
     (AsStruct '('key1 (Int32 '1)) '('subkey1 (Uint8 '1)) '('value1 (String 'A)))
@@ -2117,14 +2195,14 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 )
         )";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "Collect", "Unique((lk)(lv)(rk,rv))");
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "Collect", "Distinct((ls)(lv)(rs,rv))");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "Collect", "Unique((lk)(lv)(rk,rv))");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "Collect", "Distinct((ls)(lv)(rs,rv))");
+}
 
-    Y_UNIT_TEST(MapJoinInnerOne) {
-        const auto s = R"(
+Y_UNIT_TEST(MapJoinInnerOne) {
+    const auto s = R"(
 (
     (let list1 (AsList
     (AsStruct '('key1 (Int32 '1)) '('subkey1 (Uint8 '0)) '('value1 (String 'A)))
@@ -2135,6 +2213,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     (let list1 (AssumeUnique list1 '('key1 'subkey1) '('value1)))
     (let list1 (AssumeDistinct list1 '('key1 'subkey1) '('value1)))
+    (let list1 (AssumeConstraints list1 '"{\"Streaming\" = #}"))
 
     (let list2 (AsList
     (AsStruct '('key2 (Int32 '9)) '('subkey2 (Uint8 '0)) '('value2 (String 'Z)))
@@ -2159,14 +2238,15 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (return world)
 )
         )";
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "Collect", "Unique((key,subkey)(v)(value))");
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "Collect", "Distinct((key,subkey)(v)(value))");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "Collect", "Unique((key,subkey)(v)(value))");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "Collect", "Distinct((key,subkey)(v)(value))");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "Collect", "Streaming");
+}
 
-    Y_UNIT_TEST(MapJoinInnerMany) {
-        const auto s = R"(
+Y_UNIT_TEST(MapJoinInnerMany) {
+    const auto s = R"(
 (
     (let list1 (AsList
     (AsStruct '('key1 (Int32 '1)) '('subkey1 (Uint8 '0)) '('value1 (String 'A)))
@@ -2177,6 +2257,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     (let list1 (AssumeUnique list1 '('key1 'subkey1) '('value1)))
     (let list1 (AssumeDistinct list1 '('key1 'subkey1) '('value1)))
+    (let list1 (AssumeConstraints list1 '"{\"Streaming\" = #}"))
 
     (let list2 (AsList
     (AsStruct '('key2 (Int32 '9)) '('subkey2 (Uint8 '0)) '('value2 (String 'Z)))
@@ -2201,14 +2282,15 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (return world)
 )
         )";
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "Collect", "");
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "Collect", "");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "Collect", "");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "Collect", "");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "Collect", "Streaming");
+}
 
-    Y_UNIT_TEST(MapJoinLeftOne) {
-        const auto s = R"(
+Y_UNIT_TEST(MapJoinLeftOne) {
+    const auto s = R"(
 (
     (let list1 (AsList
     (AsStruct '('key1 (Int32 '1)) '('subkey1 (Uint8 '0)) '('value1 (String 'A)))
@@ -2219,6 +2301,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     (let list1 (AssumeUnique list1 '('key1 'subkey1) '('value1)))
     (let list1 (AssumeDistinct list1 '('key1 'subkey1) '('value1)))
+    (let list1 (AssumeConstraints list1 '"{\"Streaming\" = #}"))
 
     (let list2 (AsList
     (AsStruct '('key2 (Int32 '9)) '('subkey2 (Uint8 '0)) '('value2 (String 'Z)))
@@ -2243,14 +2326,15 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (return world)
 )
         )";
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "Collect", "Unique((key,subkey)(v)(value))");
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "Collect", "Distinct((key,subkey)(value))");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "Collect", "Unique((key,subkey)(v)(value))");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "Collect", "Distinct((key,subkey)(value))");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "Collect", "Streaming");
+}
 
-    Y_UNIT_TEST(MapJoinLeftMany) {
-        const auto s = R"(
+Y_UNIT_TEST(MapJoinLeftMany) {
+    const auto s = R"(
 (
     (let list1 (AsList
     (AsStruct '('key1 (Int32 '1)) '('subkey1 (Uint8 '0)) '('value1 (String 'A)))
@@ -2261,6 +2345,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     (let list1 (AssumeUnique list1 '('key1 'subkey1) '('value1)))
     (let list1 (AssumeDistinct list1 '('key1 'subkey1) '('value1)))
+    (let list1 (AssumeConstraints list1 '"{\"Streaming\" = #}"))
 
     (let list2 (AsList
     (AsStruct '('key2 (Int32 '9)) '('subkey2 (Uint8 '0)) '('value2 (String 'Z)))
@@ -2285,14 +2370,15 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (return world)
 )
         )";
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "Collect", "");
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "Collect", "");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "Collect", "");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "Collect", "");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "Collect", "Streaming");
+}
 
-    Y_UNIT_TEST(MapJoinLeftSemi) {
-        const auto s = R"(
+Y_UNIT_TEST(MapJoinLeftSemi) {
+    const auto s = R"(
 (
     (let list1 (AsList
     (AsStruct '('key1 (Int32 '1)) '('subkey1 (Uint8 '0)) '('value1 (String 'A)))
@@ -2303,6 +2389,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     (let list1 (AssumeUnique list1 '('key1 'subkey1) '('value1)))
     (let list1 (AssumeDistinct list1 '('key1 'subkey1) '('value1)))
+    (let list1 (AssumeConstraints list1 '"{\"Streaming\" = #}"))
 
     (let list2 (AsList
     (AsStruct '('key2 (Int32 '9)) '('subkey2 (Uint8 '0)) '('value2 (String 'Z)))
@@ -2327,14 +2414,15 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (return world)
 )
         )";
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "Collect", "Unique((key,subkey)(value))");
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "Collect", "Distinct((key,subkey)(value))");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "Collect", "Unique((key,subkey)(value))");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "Collect", "Distinct((key,subkey)(value))");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "Collect", "Streaming");
+}
 
-    Y_UNIT_TEST(MapJoinLeftOnly) {
-        const auto s = R"(
+Y_UNIT_TEST(MapJoinLeftOnly) {
+    const auto s = R"(
 (
     (let list1 (AsList
     (AsStruct '('key1 (Int32 '1)) '('subkey1 (Uint8 '0)) '('value1 (String 'A)))
@@ -2345,6 +2433,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     (let list1 (AssumeUnique list1 '('key1 'subkey1) '('value1)))
     (let list1 (AssumeDistinct list1 '('key1 'subkey1) '('value1)))
+    (let list1 (AssumeConstraints list1 '"{\"Streaming\" = #}"))
 
     (let list2 (AsList
     (AsStruct '('key2 (Int32 '9)) '('subkey2 (Uint8 '0)) '('value2 (String 'Z)))
@@ -2369,14 +2458,15 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (return world)
 )
         )";
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "Collect", "Unique((value))");
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "Collect", "Distinct((value))");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "Collect", "Unique((value))");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "Collect", "Distinct((value))");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "Collect", "Streaming");
+}
 
-    Y_UNIT_TEST(EquiJoinWithRenames) {
-        const auto s = R"(
+Y_UNIT_TEST(EquiJoinWithRenames) {
+    const auto s = R"(
 (
     (let list1 (AsList
     (AsStruct '('key1 (Int32 '1)) '('subkey1 (Uint8 '0)) '('value1 (String 'A)))
@@ -2387,6 +2477,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     (let list1 (AssumeUnique list1 '('key1 'subkey1) '('value1)))
     (let list1 (AssumeDistinct list1 '('key1 'subkey1) '('value1)))
+    (let list1 (AssumeConstraints list1 '"{\"Streaming\" = #}"))
 
     (let list2 (AsList
     (AsStruct '('key2 (Int32 '9)) '('subkey2 (Uint8 '0)) '('value2 (String 'Z)))
@@ -2398,6 +2489,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     (let list2 (AssumeUnique list2 '('key2 'subkey2) '('value2)))
     (let list2 (AssumeDistinct list2 '('key2 'subkey2) '('value2)))
+    (let list2 (AssumeConstraints list2 '"{\"Streaming\" = #}"))
 
     (let join (EquiJoin '(list1 'a) '(list2 'b) '('Inner 'a 'b '('a 'key1 'a 'subkey1) '('b 'key2 'b 'subkey2) '()) '(
         '('rename 'a.key1 'key_1)
@@ -2418,14 +2510,15 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (return world)
 )
         )";
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "LazyList", "Unique(({key_1,key_2},{subkey_1,subkey_2})({value_1,value_2}))");
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "LazyList", "Distinct(({key_1,key_2},{subkey_1,subkey_2})({value_1,value_2}))");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "LazyList", "Unique(({key_1,key_2},{subkey_1,subkey_2})({value_1,value_2}))");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "LazyList", "Distinct(({key_1,key_2},{subkey_1,subkey_2})({value_1,value_2}))");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "LazyList", "Streaming");
+}
 
-    Y_UNIT_TEST(EquiJoinWithPartialRenames) {
-        const auto s = R"(
+Y_UNIT_TEST(EquiJoinWithPartialRenames) {
+    const auto s = R"(
 (
     (let list1 (AsList
     (AsStruct '('key1 (Int32 '1)) '('subkey1 (Uint8 '0)) '('value1 (String 'A)))
@@ -2436,6 +2529,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     (let list1 (AssumeUnique list1 '('key1 'subkey1) '('value1)))
     (let list1 (AssumeDistinct list1 '('key1 'subkey1) '('value1)))
+    (let list1 (AssumeConstraints list1 '"{\"Streaming\" = #}"))
 
     (let list2 (AsList
     (AsStruct '('key2 (Int32 '9)) '('subkey2 (Uint8 '0)) '('value2 (String 'Z)))
@@ -2464,14 +2558,15 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (return world)
 )
         )";
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "LazyList", "Unique((a.subkey1,{key_1,key_2})(value))");
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "LazyList", "Distinct((a.subkey1,{key_1,key_2}))");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "LazyList", "Unique((a.subkey1,{key_1,key_2})(value))");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "LazyList", "Distinct((a.subkey1,{key_1,key_2}))");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "LazyList", "Streaming");
+}
 
-    Y_UNIT_TEST(EquiJoinInnerInner) {
-        const auto s = R"(
+Y_UNIT_TEST(EquiJoinInnerInner) {
+    const auto s = R"(
 (
     (let list1 (AsList
     (AsStruct '('key1 (Int32 '1)) '('subkey1 (Uint8 '0)) '('value1 (String 'A)))
@@ -2482,6 +2577,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     (let list1 (AssumeUnique list1 '('key1 'subkey1) '('value1)))
     (let list1 (AssumeDistinct list1 '('key1 'subkey1) '('value1)))
+    (let list1 (AssumeConstraints list1 '"{\"Streaming\" = #}"))
 
     (let list2 (AsList
     (AsStruct '('key2 (Int32 '9)) '('subkey2 (Uint8 '0)) '('value2 (String 'Z)))
@@ -2493,6 +2589,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     (let list2 (AssumeUnique list2 '('key2 'subkey2) '('value2)))
     (let list2 (AssumeDistinct list2 '('key2 'subkey2) '('value2)))
+    (let list2 (AssumeConstraints list2 '"{\"Streaming\" = #}"))
 
     (let list3 (AsList
     (AsStruct '('key3 (Int32 '1)) '('subkey3 (Uint8 '0)) '('value3 (String 'G)))
@@ -2504,6 +2601,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     (let list3 (AssumeUnique list3 '('key3 'subkey3) '('value3)))
     (let list3 (AssumeDistinct list3 '('key3 'subkey3) '('value3)))
+    (let list3 (AssumeConstraints list3 '"{\"Streaming\" = #}"))
 
     (let join (EquiJoin '(list1 'a) '(list2 'b) '(list3 'c) '('Inner '('Inner 'a 'b '('a 'key1 'a 'subkey1) '('b 'key2 'b 'subkey2) '()) 'c '('b 'key2 'b 'subkey2) '('c 'key3 'c 'subkey3) '()) '()))
     (let lazy (LazyList join))
@@ -2515,14 +2613,15 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (return world)
 )
         )";
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "LazyList", "Unique((a.key1,a.subkey1)(a.value1)(b.key2,b.subkey2)(b.value2)(c.key3,c.subkey3)(c.value3))");
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "LazyList", "Distinct((a.key1,a.subkey1)(a.value1)(b.key2,b.subkey2)(b.value2)(c.key3,c.subkey3)(c.value3))");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "LazyList", "Unique((a.key1,a.subkey1)(a.value1)(b.key2,b.subkey2)(b.value2)(c.key3,c.subkey3)(c.value3))");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "LazyList", "Distinct((a.key1,a.subkey1)(a.value1)(b.key2,b.subkey2)(b.value2)(c.key3,c.subkey3)(c.value3))");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "LazyList", "Streaming");
+}
 
-    Y_UNIT_TEST(EquiJoinInnerLeft) {
-        const auto s = R"(
+Y_UNIT_TEST(EquiJoinInnerLeft) {
+    const auto s = R"(
 (
     (let list1 (AsList
     (AsStruct '('key1 (Int32 '1)) '('subkey1 (Uint8 '0)) '('value1 (String 'A)))
@@ -2533,6 +2632,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     (let list1 (AssumeUnique list1 '('key1 'subkey1) '('value1)))
     (let list1 (AssumeDistinct list1 '('key1 'subkey1) '('value1)))
+    (let list1 (AssumeConstraints list1 '"{\"Streaming\" = #}"))
 
     (let list2 (AsList
     (AsStruct '('key2 (Int32 '9)) '('subkey2 (Uint8 '0)) '('value2 (String 'Z)))
@@ -2555,6 +2655,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     (let list3 (AssumeUnique list3 '('key3 'subkey3) '('value3)))
     (let list3 (AssumeDistinct list3 '('key3 'subkey3) '('value3)))
+    (let list3 (AssumeConstraints list3 '"{\"Streaming\" = #}"))
 
     (let join (EquiJoin '(list1 'a) '(list2 'b) '(list3 'c) '('Inner '('Left 'a 'b '('a 'key1 'a 'subkey1) '('b 'key2 'b 'subkey2) '()) 'c '('b 'key2 'b 'subkey2) '('c 'key3 'c 'subkey3) '()) '()))
     (let lazy (LazyList join))
@@ -2566,14 +2667,15 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (return world)
 )
         )";
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "LazyList", "Unique((a.key1,a.subkey1)(a.value1)(b.key2,b.subkey2)(b.value2)(c.key3,c.subkey3)(c.value3))");
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "LazyList", "Distinct((a.key1,a.subkey1)(a.value1)(c.key3,c.subkey3)(c.value3))");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "LazyList", "Unique((a.key1,a.subkey1)(a.value1)(b.key2,b.subkey2)(b.value2)(c.key3,c.subkey3)(c.value3))");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "LazyList", "Distinct((a.key1,a.subkey1)(a.value1)(c.key3,c.subkey3)(c.value3))");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "LazyList", "Streaming");
+}
 
-    Y_UNIT_TEST(EquiJoinInnerRight) {
-        const auto s = R"(
+Y_UNIT_TEST(EquiJoinInnerRight) {
+    const auto s = R"(
 (
     (let list1 (AsList
     (AsStruct '('key1 (Int32 '1)) '('subkey1 (Uint8 '0)) '('value1 (String 'A)))
@@ -2595,6 +2697,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     (let list2 (AssumeUnique list2 '('key2 'subkey2) '('value2)))
     (let list2 (AssumeDistinct list2 '('key2 'subkey2) '('value2)))
+    (let list2 (AssumeConstraints list2 '"{\"Streaming\" = #}"))
 
     (let list3 (AsList
     (AsStruct '('key3 (Int32 '1)) '('subkey3 (Uint8 '0)) '('value3 (String 'G)))
@@ -2606,6 +2709,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     (let list3 (AssumeUnique list3 '('key3 'subkey3) '('value3)))
     (let list3 (AssumeDistinct list3 '('key3 'subkey3) '('value3)))
+    (let list3 (AssumeConstraints list3 '"{\"Streaming\" = #}"))
 
     (let join (EquiJoin '(list1 'a) '(list2 'b) '(list3 'c) '('Inner '('Right 'a 'b '('a 'key1 'a 'subkey1) '('b 'key2 'b 'subkey2) '()) 'c '('b 'key2 'b 'subkey2) '('c 'key3 'c 'subkey3) '()) '()))
     (let lazy (LazyList join))
@@ -2617,14 +2721,15 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (return world)
 )
         )";
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "LazyList", "Unique((a.key1,a.subkey1)(a.value1)(b.key2,b.subkey2)(b.value2)(c.key3,c.subkey3)(c.value3))");
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "LazyList", "Distinct((b.key2,b.subkey2)(b.value2)(c.key3,c.subkey3)(c.value3))");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "LazyList", "Unique((a.key1,a.subkey1)(a.value1)(b.key2,b.subkey2)(b.value2)(c.key3,c.subkey3)(c.value3))");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "LazyList", "Distinct((b.key2,b.subkey2)(b.value2)(c.key3,c.subkey3)(c.value3))");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "LazyList", "Streaming");
+}
 
-    Y_UNIT_TEST(EquiJoinInnerFull) {
-        const auto s = R"(
+Y_UNIT_TEST(EquiJoinInnerFull) {
+    const auto s = R"(
 (
     (let list1 (AsList
     (AsStruct '('key1 (Int32 '1)) '('subkey1 (Uint8 '0)) '('value1 (String 'A)))
@@ -2657,6 +2762,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     (let list3 (AssumeUnique list3 '('key3 'subkey3) '('value3)))
     (let list3 (AssumeDistinct list3 '('key3 'subkey3) '('value3)))
+    (let list3 (AssumeConstraints list3 '"{\"Streaming\" = #}"))
 
     (let join (EquiJoin '(list1 'a) '(list2 'b) '(list3 'c) '('Inner '('Full 'a 'b '('a 'key1 'a 'subkey1) '('b 'key2 'b 'subkey2) '()) 'c '('b 'key2 'b 'subkey2) '('c 'key3 'c 'subkey3) '()) '()))
     (let lazy (LazyList join))
@@ -2668,14 +2774,15 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (return world)
 )
         )";
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "LazyList", "Unique((a.key1,a.subkey1)(a.value1)(b.key2,b.subkey2)(b.value2)(c.key3,c.subkey3)(c.value3))");
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "LazyList", "Distinct((c.key3,c.subkey3)(c.value3))");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "LazyList", "Unique((a.key1,a.subkey1)(a.value1)(b.key2,b.subkey2)(b.value2)(c.key3,c.subkey3)(c.value3))");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "LazyList", "Distinct((c.key3,c.subkey3)(c.value3))");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "LazyList", "Streaming");
+}
 
-    Y_UNIT_TEST(EquiJoinInnerExclusion) {
-        const auto s = R"(
+Y_UNIT_TEST(EquiJoinInnerExclusion) {
+    const auto s = R"(
 (
     (let list1 (AsList
     (AsStruct '('key1 (Int32 '1)) '('subkey1 (Uint8 '0)) '('value1 (String 'A)))
@@ -2708,6 +2815,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     (let list3 (AssumeUnique list3 '('key3 'subkey3) '('value3)))
     (let list3 (AssumeDistinct list3 '('key3 'subkey3) '('value3)))
+    (let list3 (AssumeConstraints list3 '"{\"Streaming\" = #}"))
 
     (let join (EquiJoin '(list1 'a) '(list2 'b) '(list3 'c) '('Inner '('Exclusion 'a 'b '('a 'key1 'a 'subkey1) '('b 'key2 'b 'subkey2) '()) 'c '('b 'key2 'b 'subkey2) '('c 'key3 'c 'subkey3) '()) '()))
     (let lazy (LazyList join))
@@ -2719,14 +2827,15 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (return world)
 )
         )";
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "LazyList", "Unique((a.key1,a.subkey1)(a.value1)(b.key2,b.subkey2)(b.value2)(c.key3,c.subkey3)(c.value3))");
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "LazyList", "Distinct((c.key3,c.subkey3)(c.value3))");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "LazyList", "Unique((a.key1,a.subkey1)(a.value1)(b.key2,b.subkey2)(b.value2)(c.key3,c.subkey3)(c.value3))");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "LazyList", "Distinct((c.key3,c.subkey3)(c.value3))");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "LazyList", "Streaming");
+}
 
-    Y_UNIT_TEST(EquiJoinInnerLeftOnly) {
-        const auto s = R"(
+Y_UNIT_TEST(EquiJoinInnerLeftOnly) {
+    const auto s = R"(
 (
     (let list1 (AsList
     (AsStruct '('key1 (Int32 '1)) '('subkey1 (Uint8 '0)) '('value1 (String 'A)))
@@ -2737,6 +2846,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     (let list1 (AssumeUnique list1 '('key1 'subkey1) '('value1)))
     (let list1 (AssumeDistinct list1 '('key1 'subkey1) '('value1)))
+    (let list1 (AssumeConstraints list1 '"{\"Streaming\" = #}"))
 
     (let list2 (AsList
     (AsStruct '('key2 (Int32 '9)) '('subkey2 (Uint8 '0)) '('value2 (String 'Z)))
@@ -2759,6 +2869,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     (let list3 (AssumeUnique list3 '('key3 'subkey3) '('value3)))
     (let list3 (AssumeDistinct list3 '('key3 'subkey3) '('value3)))
+    (let list3 (AssumeConstraints list3 '"{\"Streaming\" = #}"))
 
     (let join (EquiJoin '(list1 'a) '(list2 'b) '(list3 'c) '('Inner '('LeftOnly 'a 'b '('a 'key1 'a 'subkey1) '('b 'key2 'b 'subkey2) '()) 'c '('a 'key1 'a 'subkey1) '('c 'key3 'c 'subkey3) '()) '()))
     (let lazy (LazyList join))
@@ -2770,14 +2881,15 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (return world)
 )
         )";
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "LazyList", "Unique((a.key1,a.subkey1)(a.value1)(c.key3,c.subkey3)(c.value3))");
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "LazyList", "Distinct((a.key1,a.subkey1)(a.value1)(c.key3,c.subkey3)(c.value3))");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "LazyList", "Unique((a.key1,a.subkey1)(a.value1)(c.key3,c.subkey3)(c.value3))");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "LazyList", "Distinct((a.key1,a.subkey1)(a.value1)(c.key3,c.subkey3)(c.value3))");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "LazyList", "Streaming");
+}
 
-    Y_UNIT_TEST(EquiJoinInnerLeftSemi) {
-        const auto s = R"(
+Y_UNIT_TEST(EquiJoinInnerLeftSemi) {
+    const auto s = R"(
 (
     (let list1 (AsList
     (AsStruct '('key1 (Int32 '1)) '('subkey1 (Uint8 '0)) '('value1 (String 'A)))
@@ -2788,6 +2900,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     (let list1 (AssumeUnique list1 '('key1 'subkey1) '('value1)))
     (let list1 (AssumeDistinct list1 '('key1 'subkey1) '('value1)))
+    (let list1 (AssumeConstraints list1 '"{\"Streaming\" = #}"))
 
     (let list2 (AsList
     (AsStruct '('key2 (Int32 '9)) '('subkey2 (Uint8 '0)) '('value2 (String 'Z)))
@@ -2799,6 +2912,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     (let list2 (AssumeUnique list2 '('key2 'subkey2) '('value2)))
     (let list2 (AssumeDistinct list2 '('key2 'subkey2) '('value2)))
+    (let list2 (AssumeConstraints list2 '"{\"Streaming\" = #}"))
 
     (let list3 (AsList
     (AsStruct '('key3 (Int32 '1)) '('subkey3 (Uint8 '0)) '('value3 (String 'G)))
@@ -2810,6 +2924,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     (let list3 (AssumeUnique list3 '('key3 'subkey3) '('value3)))
     (let list3 (AssumeDistinct list3 '('key3 'subkey3) '('value3)))
+    (let list3 (AssumeConstraints list3 '"{\"Streaming\" = #}"))
 
     (let join (EquiJoin '(list1 'a) '(list2 'b) '(list3 'c) '('Inner '('LeftSemi 'a 'b '('a 'key1 'a 'subkey1) '('b 'key2 'b 'subkey2) '()) 'c '('a 'key1 'a 'subkey1) '('c 'key3 'c 'subkey3) '()) '()))
     (let lazy (LazyList join))
@@ -2821,14 +2936,15 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (return world)
 )
         )";
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "LazyList", "Unique((a.key1,a.subkey1)(a.value1)(c.key3,c.subkey3)(c.value3))");
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "LazyList", "Distinct((a.key1,a.subkey1)(a.value1)(c.key3,c.subkey3)(c.value3))");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "LazyList", "Unique((a.key1,a.subkey1)(a.value1)(c.key3,c.subkey3)(c.value3))");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "LazyList", "Distinct((a.key1,a.subkey1)(a.value1)(c.key3,c.subkey3)(c.value3))");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "LazyList", "Streaming");
+}
 
-    Y_UNIT_TEST(EquiJoinInnerRightOnly) {
-        const auto s = R"(
+Y_UNIT_TEST(EquiJoinInnerRightOnly) {
+    const auto s = R"(
 (
     (let list1 (AsList
     (AsStruct '('key1 (Int32 '1)) '('subkey1 (Uint8 '0)) '('value1 (String 'A)))
@@ -2850,6 +2966,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     (let list2 (AssumeUnique list2 '('key2 'subkey2) '('value2)))
     (let list2 (AssumeDistinct list2 '('key2 'subkey2) '('value2)))
+    (let list2 (AssumeConstraints list2 '"{\"Streaming\" = #}"))
 
     (let list3 (AsList
     (AsStruct '('key3 (Int32 '1)) '('subkey3 (Uint8 '0)) '('value3 (String 'G)))
@@ -2861,6 +2978,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     (let list3 (AssumeUnique list3 '('key3 'subkey3) '('value3)))
     (let list3 (AssumeDistinct list3 '('key3 'subkey3) '('value3)))
+    (let list3 (AssumeConstraints list3 '"{\"Streaming\" = #}"))
 
     (let join (EquiJoin '(list1 'a) '(list2 'b) '(list3 'c) '('Inner '('RightOnly 'a 'b '('a 'key1 'a 'subkey1) '('b 'key2 'b 'subkey2) '()) 'c '('b 'key2 'b 'subkey2) '('c 'key3 'c 'subkey3) '()) '()))
     (let lazy (LazyList join))
@@ -2872,14 +2990,15 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (return world)
 )
         )";
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "LazyList", "Unique((b.key2,b.subkey2)(b.value2)(c.key3,c.subkey3)(c.value3))");
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "LazyList", "Distinct((b.key2,b.subkey2)(b.value2)(c.key3,c.subkey3)(c.value3))");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "LazyList", "Unique((b.key2,b.subkey2)(b.value2)(c.key3,c.subkey3)(c.value3))");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "LazyList", "Distinct((b.key2,b.subkey2)(b.value2)(c.key3,c.subkey3)(c.value3))");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "LazyList", "Streaming");
+}
 
-    Y_UNIT_TEST(EquiJoinInnerRightSemi) {
-        const auto s = R"(
+Y_UNIT_TEST(EquiJoinInnerRightSemi) {
+    const auto s = R"(
 (
     (let list1 (AsList
     (AsStruct '('key1 (Int32 '1)) '('subkey1 (Uint8 '0)) '('value1 (String 'A)))
@@ -2890,6 +3009,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     (let list1 (AssumeUnique list1 '('key1 'subkey1) '('value1)))
     (let list1 (AssumeDistinct list1 '('key1 'subkey1) '('value1)))
+    (let list1 (AssumeConstraints list1 '"{\"Streaming\" = #}"))
 
     (let list2 (AsList
     (AsStruct '('key2 (Int32 '9)) '('subkey2 (Uint8 '0)) '('value2 (String 'Z)))
@@ -2901,6 +3021,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     (let list2 (AssumeUnique list2 '('key2 'subkey2) '('value2)))
     (let list2 (AssumeDistinct list2 '('key2 'subkey2) '('value2)))
+    (let list2 (AssumeConstraints list2 '"{\"Streaming\" = #}"))
 
     (let list3 (AsList
     (AsStruct '('key3 (Int32 '1)) '('subkey3 (Uint8 '0)) '('value3 (String 'G)))
@@ -2912,6 +3033,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     (let list3 (AssumeUnique list3 '('key3 'subkey3) '('value3)))
     (let list3 (AssumeDistinct list3 '('key3 'subkey3) '('value3)))
+    (let list3 (AssumeConstraints list3 '"{\"Streaming\" = #}"))
 
     (let join (EquiJoin '(list1 'a) '(list2 'b) '(list3 'c) '('Inner '('RightSemi 'a 'b '('a 'key1 'a 'subkey1) '('b 'key2 'b 'subkey2) '()) 'c '('b 'key2 'b 'subkey2) '('c 'key3 'c 'subkey3) '()) '()))
     (let lazy (LazyList join))
@@ -2923,14 +3045,15 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (return world)
 )
         )";
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "LazyList", "Unique((b.key2,b.subkey2)(b.value2)(c.key3,c.subkey3)(c.value3))");
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "LazyList", "Distinct((b.key2,b.subkey2)(b.value2)(c.key3,c.subkey3)(c.value3))");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "LazyList", "Unique((b.key2,b.subkey2)(b.value2)(c.key3,c.subkey3)(c.value3))");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "LazyList", "Distinct((b.key2,b.subkey2)(b.value2)(c.key3,c.subkey3)(c.value3))");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "LazyList", "Streaming");
+}
 
-    Y_UNIT_TEST(EquiJoinLeftInner) {
-        const auto s = R"(
+Y_UNIT_TEST(EquiJoinLeftInner) {
+    const auto s = R"(
 (
     (let list1 (AsList
     (AsStruct '('key1 (Int32 '1)) '('subkey1 (Uint8 '0)) '('value1 (String 'A)))
@@ -2941,6 +3064,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     (let list1 (AssumeUnique list1 '('key1 'subkey1) '('value1)))
     (let list1 (AssumeDistinct list1 '('key1 'subkey1) '('value1)))
+    (let list1 (AssumeConstraints list1 '"{\"Streaming\" = #}"))
 
     (let list2 (AsList
     (AsStruct '('key2 (Int32 '9)) '('subkey2 (Uint8 '0)) '('value2 (String 'Z)))
@@ -2952,6 +3076,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     (let list2 (AssumeUnique list2 '('key2 'subkey2) '('value2)))
     (let list2 (AssumeDistinct list2 '('key2 'subkey2) '('value2)))
+    (let list2 (AssumeConstraints list2 '"{\"Streaming\" = #}"))
 
     (let list3 (AsList
     (AsStruct '('key3 (Int32 '1)) '('subkey3 (Uint8 '0)) '('value3 (String 'G)))
@@ -2974,13 +3099,14 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (return world)
 )
         )";
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "LazyList", "Distinct((a.key1,a.subkey1)(a.value1)(b.key2,b.subkey2)(b.value2))");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "LazyList", "Distinct((a.key1,a.subkey1)(a.value1)(b.key2,b.subkey2)(b.value2))");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "LazyList", "Streaming");
+}
 
-    Y_UNIT_TEST(EquiJoinLeftLeft) {
-        const auto s = R"(
+Y_UNIT_TEST(EquiJoinLeftLeft) {
+    const auto s = R"(
 (
     (let list1 (AsList
     (AsStruct '('key1 (Int32 '1)) '('subkey1 (Uint8 '0)) '('value1 (String 'A)))
@@ -2991,6 +3117,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     (let list1 (AssumeUnique list1 '('key1 'subkey1) '('value1)))
     (let list1 (AssumeDistinct list1 '('key1 'subkey1) '('value1)))
+    (let list1 (AssumeConstraints list1 '"{\"Streaming\" = #}"))
 
     (let list2 (AsList
     (AsStruct '('key2 (Int32 '9)) '('subkey2 (Uint8 '0)) '('value2 (String 'Z)))
@@ -3024,14 +3151,15 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (return world)
 )
         )";
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "LazyList", "Unique((a.key1,a.subkey1)(a.value1)(b.key2,b.subkey2)(b.value2)(c.key3,c.subkey3)(c.value3))");
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "LazyList", "Distinct((a.key1,a.subkey1)(a.value1))");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "LazyList", "Unique((a.key1,a.subkey1)(a.value1)(b.key2,b.subkey2)(b.value2)(c.key3,c.subkey3)(c.value3))");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "LazyList", "Distinct((a.key1,a.subkey1)(a.value1))");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "LazyList", "Streaming");
+}
 
-    Y_UNIT_TEST(EquiJoinLeftRight) {
-        const auto s = R"(
+Y_UNIT_TEST(EquiJoinLeftRight) {
+    const auto s = R"(
 (
     (let list1 (AsList
     (AsStruct '('key1 (Int32 '1)) '('subkey1 (Uint8 '0)) '('value1 (String 'A)))
@@ -3053,6 +3181,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     (let list2 (AssumeUnique list2 '('key2 'subkey2) '('value2)))
     (let list2 (AssumeDistinct list2 '('key2 'subkey2) '('value2)))
+    (let list2 (AssumeConstraints list2 '"{\"Streaming\" = #}"))
 
     (let list3 (AsList
     (AsStruct '('key3 (Int32 '1)) '('subkey3 (Uint8 '0)) '('value3 (String 'G)))
@@ -3075,14 +3204,15 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (return world)
 )
         )";
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "LazyList", "Unique((a.key1,a.subkey1)(a.value1)(b.key2,b.subkey2)(b.value2)(c.key3,c.subkey3)(c.value3))");
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "LazyList", "Distinct((b.key2,b.subkey2)(b.value2))");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "LazyList", "Unique((a.key1,a.subkey1)(a.value1)(b.key2,b.subkey2)(b.value2)(c.key3,c.subkey3)(c.value3))");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "LazyList", "Distinct((b.key2,b.subkey2)(b.value2))");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "LazyList", "Streaming");
+}
 
-    Y_UNIT_TEST(EquiJoinLeftFull) {
-        const auto s = R"(
+Y_UNIT_TEST(EquiJoinLeftFull) {
+    const auto s = R"(
 (
     (let list1 (AsList
     (AsStruct '('key1 (Int32 '1)) '('subkey1 (Uint8 '0)) '('value1 (String 'A)))
@@ -3126,14 +3256,14 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (return world)
 )
         )";
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "LazyList", "Unique((a.key1,a.subkey1)(a.value1)(b.key2,b.subkey2)(b.value2)(c.key3,c.subkey3)(c.value3))");
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "LazyList", "");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "LazyList", "Unique((a.key1,a.subkey1)(a.value1)(b.key2,b.subkey2)(b.value2)(c.key3,c.subkey3)(c.value3))");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "LazyList", "");
+}
 
-    Y_UNIT_TEST(EquiJoinLeftExclusion) {
-        const auto s = R"(
+Y_UNIT_TEST(EquiJoinLeftExclusion) {
+    const auto s = R"(
 (
     (let list1 (AsList
     (AsStruct '('key1 (Int32 '1)) '('subkey1 (Uint8 '0)) '('value1 (String 'A)))
@@ -3177,14 +3307,14 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (return world)
 )
         )";
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "LazyList", "Unique((a.key1,a.subkey1)(a.value1)(b.key2,b.subkey2)(b.value2)(c.key3,c.subkey3)(c.value3))");
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "LazyList", "");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "LazyList", "Unique((a.key1,a.subkey1)(a.value1)(b.key2,b.subkey2)(b.value2)(c.key3,c.subkey3)(c.value3))");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "LazyList", "");
+}
 
-    Y_UNIT_TEST(EquiJoinLeftLeftOnly) {
-        const auto s = R"(
+Y_UNIT_TEST(EquiJoinLeftLeftOnly) {
+    const auto s = R"(
 (
     (let list1 (AsList
     (AsStruct '('key1 (Int32 '1)) '('subkey1 (Uint8 '0)) '('value1 (String 'A)))
@@ -3195,6 +3325,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     (let list1 (AssumeUnique list1 '('key1 'subkey1) '('value1)))
     (let list1 (AssumeDistinct list1 '('key1 'subkey1) '('value1)))
+    (let list1 (AssumeConstraints list1 '"{\"Streaming\" = #}"))
 
     (let list2 (AsList
     (AsStruct '('key2 (Int32 '9)) '('subkey2 (Uint8 '0)) '('value2 (String 'Z)))
@@ -3228,14 +3359,15 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (return world)
 )
         )";
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "LazyList", "Unique((a.key1,a.subkey1)(a.value1)(c.key3,c.subkey3)(c.value3))");
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "LazyList", "Distinct((a.key1,a.subkey1)(a.value1))");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "LazyList", "Unique((a.key1,a.subkey1)(a.value1)(c.key3,c.subkey3)(c.value3))");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "LazyList", "Distinct((a.key1,a.subkey1)(a.value1))");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "LazyList", "Streaming");
+}
 
-    Y_UNIT_TEST(EquiJoinLeftLeftSemi) {
-        const auto s = R"(
+Y_UNIT_TEST(EquiJoinLeftLeftSemi) {
+    const auto s = R"(
 (
     (let list1 (AsList
     (AsStruct '('key1 (Int32 '1)) '('subkey1 (Uint8 '0)) '('value1 (String 'A)))
@@ -3246,6 +3378,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     (let list1 (AssumeUnique list1 '('key1 'subkey1) '('value1)))
     (let list1 (AssumeDistinct list1 '('key1 'subkey1) '('value1)))
+    (let list1 (AssumeConstraints list1 '"{\"Streaming\" = #}"))
 
     (let list2 (AsList
     (AsStruct '('key2 (Int32 '9)) '('subkey2 (Uint8 '0)) '('value2 (String 'Z)))
@@ -3257,6 +3390,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     (let list2 (AssumeUnique list2 '('key2 'subkey2) '('value2)))
     (let list2 (AssumeDistinct list2 '('key2 'subkey2) '('value2)))
+    (let list2 (AssumeConstraints list2 '"{\"Streaming\" = #}"))
 
     (let list3 (AsList
     (AsStruct '('key3 (Int32 '1)) '('subkey3 (Uint8 '0)) '('value3 (String 'G)))
@@ -3279,14 +3413,15 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (return world)
 )
         )";
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "LazyList", "Unique((a.key1,a.subkey1)(a.value1)(c.key3,c.subkey3)(c.value3))");
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "LazyList", "Distinct((a.key1,a.subkey1)(a.value1))");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "LazyList", "Unique((a.key1,a.subkey1)(a.value1)(c.key3,c.subkey3)(c.value3))");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "LazyList", "Distinct((a.key1,a.subkey1)(a.value1))");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "LazyList", "Streaming");
+}
 
-    Y_UNIT_TEST(EquiJoinLeftRightOnly) {
-        const auto s = R"(
+Y_UNIT_TEST(EquiJoinLeftRightOnly) {
+    const auto s = R"(
 (
     (let list1 (AsList
     (AsStruct '('key1 (Int32 '1)) '('subkey1 (Uint8 '0)) '('value1 (String 'A)))
@@ -3308,6 +3443,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     (let list2 (AssumeUnique list2 '('key2 'subkey2) '('value2)))
     (let list2 (AssumeDistinct list2 '('key2 'subkey2) '('value2)))
+    (let list2 (AssumeConstraints list2 '"{\"Streaming\" = #}"))
 
     (let list3 (AsList
     (AsStruct '('key3 (Int32 '1)) '('subkey3 (Uint8 '0)) '('value3 (String 'G)))
@@ -3330,14 +3466,15 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (return world)
 )
         )";
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "LazyList", "Unique((b.key2,b.subkey2)(b.value2)(c.key3,c.subkey3)(c.value3))");
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "LazyList", "Distinct((b.key2,b.subkey2)(b.value2))");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "LazyList", "Unique((b.key2,b.subkey2)(b.value2)(c.key3,c.subkey3)(c.value3))");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "LazyList", "Distinct((b.key2,b.subkey2)(b.value2))");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "LazyList", "Streaming");
+}
 
-    Y_UNIT_TEST(EquiJoinLeftRightSemi) {
-        const auto s = R"(
+Y_UNIT_TEST(EquiJoinLeftRightSemi) {
+    const auto s = R"(
 (
     (let list1 (AsList
     (AsStruct '('key1 (Int32 '1)) '('subkey1 (Uint8 '0)) '('value1 (String 'A)))
@@ -3348,6 +3485,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     (let list1 (AssumeUnique list1 '('key1 'subkey1) '('value1)))
     (let list1 (AssumeDistinct list1 '('key1 'subkey1) '('value1)))
+    (let list1 (AssumeConstraints list1 '"{\"Streaming\" = #}"))
 
     (let list2 (AsList
     (AsStruct '('key2 (Int32 '9)) '('subkey2 (Uint8 '0)) '('value2 (String 'Z)))
@@ -3359,6 +3497,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     (let list2 (AssumeUnique list2 '('key2 'subkey2) '('value2)))
     (let list2 (AssumeDistinct list2 '('key2 'subkey2) '('value2)))
+    (let list2 (AssumeConstraints list2 '"{\"Streaming\" = #}"))
 
     (let list3 (AsList
     (AsStruct '('key3 (Int32 '1)) '('subkey3 (Uint8 '0)) '('value3 (String 'G)))
@@ -3381,14 +3520,15 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (return world)
 )
         )";
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "LazyList", "Unique((b.key2,b.subkey2)(b.value2)(c.key3,c.subkey3)(c.value3))");
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "LazyList", "Distinct((b.key2,b.subkey2)(b.value2))");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "LazyList", "Unique((b.key2,b.subkey2)(b.value2)(c.key3,c.subkey3)(c.value3))");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "LazyList", "Distinct((b.key2,b.subkey2)(b.value2))");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "LazyList", "Streaming");
+}
 
-    Y_UNIT_TEST(EquiJoinFlatten) {
-        const auto s = R"(
+Y_UNIT_TEST(EquiJoinFlatten) {
+    const auto s = R"(
 (
     (let list1 (AsList
     (AsStruct '('key1 (Int32 '1)) '('subkey1 (Uint8 '0)) '('value1 (String 'A)))
@@ -3399,6 +3539,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     (let list1 (AssumeUnique list1 '('key1 'subkey1) '('value1)))
     (let list1 (AssumeDistinct list1 '('key1 'subkey1) '('value1)))
+    (let list1 (AssumeConstraints list1 '"{\"Streaming\" = #}"))
 
     (let list2 (AsList
     (AsStruct '('key2 (Int32 '9)) '('subkey2 (Uint8 '0)) '('value2 (String 'Z)))
@@ -3410,6 +3551,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     (let list2 (AssumeUnique list2 '('key2 'subkey2) '('value2)))
     (let list2 (AssumeDistinct list2 '('key2 'subkey2) '('value2)))
+    (let list2 (AssumeConstraints list2 '"{\"Streaming\" = #}"))
 
     (let list3 (AsList
     (AsStruct '('key3 (Int32 '1)) '('subkey3 (Uint8 '0)) '('value3 (String 'G)))
@@ -3421,6 +3563,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     (let list3 (AssumeUnique list3 '('key3 'subkey3) '('value3)))
     (let list3 (AssumeDistinct list3 '('key3 'subkey3) '('value3)))
+    (let list3 (AssumeConstraints list3 '"{\"Streaming\" = #}"))
 
     (let join (EquiJoin '(list1 'a) '(list2 'b) '(list3 'c) '('Inner '('Inner 'a 'b '('a 'key1 'a 'subkey1) '('b 'key2 'b 'subkey2) '()) 'c '('b 'key2 'b 'subkey2) '('c 'key3 'c 'subkey3) '()) '('('flatten))))
     (let lazy (LazyList join))
@@ -3432,14 +3575,15 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (return world)
 )
         )";
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "LazyList", "");
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "LazyList", "");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "LazyList", "");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "LazyList", "");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "LazyList", "");
+}
 
-    Y_UNIT_TEST(GroupByHop) {
-        const TStringBuf s = R"((
+Y_UNIT_TEST(HOP) {
+    const TStringBuf s = R"((
 (let list (AsList
     (AsStruct '('"time" (String '"2024-01-01T00:00:01Z")) '('"user" (Int32 '"1")) '('"data" (Null)))
     (AsStruct '('"time" (String '"2024-01-01T00:00:02Z")) '('"user" (Int32 '"1")) '('"data" (Null)))
@@ -3449,26 +3593,84 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 (let keySelector (lambda '(row) '((StablePickle (Member row '"data")) (StablePickle (Member row 'group0)))))
 (let sortKeySelector (lambda '(row) (SafeCast (Member row '"time") (OptionalType (DataType 'Timestamp)))))
 (let result (PartitionsByKeys input keySelector (Bool 'true) sortKeySelector (lambda '(row) (block '(
-  (let interval (Interval '1000000))
-  (let map (lambda '(item) (AsStruct)))
-  (let reduce (lambda '(lhs rhs) (AsStruct)))
-  (let hopping (MultiHoppingCore (Iterator row) keySelector sortKeySelector interval interval interval 'true map reduce map map reduce (lambda '(key state time) (AsStruct '('_yql_time time) '('"data" (Nth key '"0")) '('group0 (Nth key '"1")))) '"0"))
-  (return (ForwardList (FlatMap hopping (lambda '(row) (Just (AsStruct '('_yql_time (Member row '_yql_time)) '('"data" (Unpickle (NullType) (Member row '"data"))) '('group0 (Unpickle (ListType (DataType 'Int32)) (Member row 'group0)))))))))
+    (let interval (Interval '1000000))
+    (let map (lambda '(item) (AsStruct)))
+    (let reduce (lambda '(lhs rhs) (AsStruct)))
+    (let streamingRow (AssumeConstraints (Iterator row) '"{\"Streaming\" = #}"))
+    (let hopping (MultiHoppingCore streamingRow keySelector sortKeySelector interval interval interval 'true map reduce map map reduce (lambda '(key state time) (AsStruct '('_yql_time time) '('"data" (Nth key '"0")) '('group0 (Nth key '"1")))) '"0" '"_yql_time"))
+    (return (ForwardList (FlatMap hopping (lambda '(row) (Just (AsStruct '('_yql_time (Member row '_yql_time)) '('"data" (Unpickle (NullType) (Member row '"data"))) '('group0 (Unpickle (ListType (DataType 'Int32)) (Member row 'group0)))))))))
 )))))
 
 (let res (DataSink 'result))
 (let world (Write! world res (Key) result '()))
 (return (Commit! world res))
-        ))";
+    ))";
 
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "PartitionsByKeys", "Distinct((data,group0))");
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "PartitionsByKeys", "Unique((data,group0))");
-    }
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "MultiHoppingCore", "Distinct((data,group0))");
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "MultiHoppingCore", "Unique((data,group0))");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "MultiHoppingCore", "Streaming");
+}
 
-    Y_UNIT_TEST(StablePickleOfComplexUnique) {
-        const TStringBuf s = R"(
+Y_UNIT_TEST(HoppingWindow) {
+    const TStringBuf s = R"((
+(let list (AsList
+    (AsStruct '('"time" (String '"2024-01-01T00:00:01Z")) '('"user" (Int32 '"1")) '('"data" (Null)))
+    (AsStruct '('"time" (String '"2024-01-01T00:00:02Z")) '('"user" (Int32 '"1")) '('"data" (Null)))
+    (AsStruct '('"time" (String '"2024-01-01T00:00:03Z")) '('"user" (Int32 '"1")) '('"data" (Null)))
+))
+(let input (FlatMap list (lambda '(row) (Just (AsStruct '('"data" (Member row '"data")) '('group0 (AsList (Member row '"user"))) '('"time" (Member row '"time")) '('"user" (Member row '"user")))))))
+(let keySelector (lambda '(row) '((StablePickle (Member row '"data")) (StablePickle (Member row 'group0)))))
+(let sortKeySelector (lambda '(row) (SafeCast (Member row '"time") (OptionalType (DataType 'Timestamp)))))
+(let result (PartitionsByKeys input keySelector (Bool 'true) sortKeySelector (lambda '(row) (block '(
+    (let interval (Interval '1000000))
+    (let map (lambda '(item) (AsStruct)))
+    (let reduce (lambda '(lhs rhs) (AsStruct)))
+    (let streamingRow (AssumeConstraints (Iterator row) '"{\"Streaming\" = #}"))
+    (let hopping (MultiHoppingCore streamingRow keySelector sortKeySelector interval interval interval 'true map reduce map map reduce (lambda '(key state time) (AsStruct '('_yql_time time) '('"data" (Nth key '"0")) '('group0 (Nth key '"1")))) '"0" 'group0))
+    (return (ForwardList (FlatMap hopping (lambda '(row) (Just (AsStruct '('_yql_time (Member row '_yql_time)) '('"data" (Unpickle (NullType) (Member row '"data"))) '('group0 (Unpickle (ListType (DataType 'Int32)) (Member row 'group0)))))))))
+)))))
+
+(let res (DataSink 'result))
+(let world (Write! world res (Key) result '()))
+(return (Commit! world res))
+    ))";
+
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "MultiHoppingCore", "Distinct((data,group0))");
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "MultiHoppingCore", "Unique((data,group0))");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "MultiHoppingCore", "Streaming");
+}
+
+Y_UNIT_TEST(EmptyHoppingWindow) {
+    const TStringBuf s = R"((
+(let list (List
+    (ListType (StructType '('"time" (DataType 'String)) '('"user" (DataType 'Int32)) '('"data" (NullType))))
+))
+(let input (FlatMap list (lambda '(row) (Just (AsStruct '('"data" (Member row '"data")) '('group0 (AsList (Member row '"user"))) '('"time" (Member row '"time")) '('"user" (Member row '"user")))))))
+(let keySelector (lambda '(row) '((StablePickle (Member row '"data")) (StablePickle (Member row 'group0)))))
+(let sortKeySelector (lambda '(row) (SafeCast (Member row '"time") (OptionalType (DataType 'Timestamp)))))
+(let result (PartitionsByKeys input keySelector (Bool 'true) sortKeySelector (lambda '(row) (block '(
+    (let interval (Interval '1000000))
+    (let map (lambda '(item) (AsStruct)))
+    (let reduce (lambda '(lhs rhs) (AsStruct)))
+    (let hopping (MultiHoppingCore (Iterator row) keySelector sortKeySelector interval interval interval 'true map reduce map map reduce (lambda '(key state time) (AsStruct '('_yql_time time) '('"data" (Nth key '"0")) '('group0 (Nth key '"1")))) '"0" '"_yql_time"))
+    (return (ForwardList (FlatMap hopping (lambda '(row) (Just (AsStruct '('_yql_time (Member row '_yql_time)) '('"data" (Unpickle (NullType) (Member row '"data"))) '('group0 (Unpickle (ListType (DataType 'Int32)) (Member row 'group0)))))))))
+)))))
+(let res (DataSink 'result))
+(let world (Write! world res (Key) result '()))
+(return (Commit! world res))
+    ))";
+
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TEmptyConstraintNode>(exprRoot, "MultiHoppingCore", "Empty");
+}
+
+Y_UNIT_TEST(StablePickleOfComplexUnique) {
+    const TStringBuf s = R"(
 (
     (let config (DataSource 'config))
     (let res_sink (DataSink 'result))
@@ -3503,15 +3705,573 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 )
         )";
 
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "StablePickle", "");
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "StablePickle", "");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "Map", "Distinct(({composite/k,key},{composite/v,value}))");
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "Map", "Unique(({composite/k,key},{composite/v,value}))");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "FlatMap", "Distinct(({composite/k,key},{composite/v,value}))");
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "FlatMap", "Unique(({composite/k,key},{composite/v,value}))");
+}
+
+Y_UNIT_TEST(MultiWithEmpty) {
+    const TStringBuf s = R"(
+(
+#comment
+(let res_sink (DataSink 'result))
+
+(let list1 (AsList
+    (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
+    (AsStruct '('key (String '1)) '('subkey (String 'd)) '('value (String 'v)))
+    (AsStruct '('key (String '3)) '('subkey (String 'b)) '('value (String 'v)))
+))
+(let list2 (Take list1 (Uint64 '0)))
+
+(let data (Mux '(list2 list1)))
+
+(let data (LMap data (lambda '(stream)
+  (FlatMap stream (lambda '(v) (block '(
+    (let key (Visit v '0 (lambda '(item) (Member item 'key)) '1 (lambda '(item) (Member item 'key))))
+    (return (Just (AsStruct '('original_row v) '('key key))))
+  ))))
+)))
+
+(let world (Write! world res_sink (Key) data '('('type))))
+
+(let world (Commit! world res_sink))
+
+(return world)
+)
+        )";
+
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TEmptyConstraintNode>(exprRoot, "FlatMap", "");
+    CheckConstraint<TEmptyConstraintNode>(exprRoot, "Take", "Empty");
+    CheckConstraint<TVarIndexConstraintNode>(exprRoot, "Visit", "VarIndex(0:0,0:1)");
+    CheckConstraint<TVarIndexConstraintNode>(exprRoot, "Just", "VarIndex(0:0,0:1,1:1)");
+}
+
+Y_UNIT_TEST(VisitWithoutRowUsageInOneBranch) {
+    const TStringBuf s = R"(
+(
+#comment
+(let res_sink (DataSink 'result))
+
+(let list1 (AsList
+    (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
+    (AsStruct '('key (String '1)) '('subkey (String 'd)) '('value (String 'v)))
+    (AsStruct '('key (String '3)) '('subkey (String 'b)) '('value (String 'v)))
+))
+(let list2 (Take list1 (Uint64 '0)))
+
+(let data (Mux '(list1 list2)))
+
+(let data (LMap data (lambda '(stream)
+    (FlatMap stream (lambda '(v) (block '(
+        (return (Just
+            (Visit v
+                '0 (lambda '(item) (AsStruct '('key (String 'a)) '('subkey (String 'b))))
+                '1 (lambda '(item) (AsStruct '('key (Member item 'key)) '('subkey (Member item 'subkey))))
+            )
+        ))
+    ))))
+)))
+
+(let world (Write! world res_sink (Key) data '('('type))))
+
+(let world (Commit! world res_sink))
+
+(return world)
+)
+        )";
+
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TEmptyConstraintNode>(exprRoot, "FlatMap", "");
+    CheckConstraint<TEmptyConstraintNode>(exprRoot, "Take", "Empty");
+    CheckConstraint<TVarIndexConstraintNode>(exprRoot, "Visit", "VarIndex(0:1,0:4294967295)");
+}
+
+Y_UNIT_TEST(VisitWithoutRowUsageInAllBranches) {
+    const TStringBuf s = R"(
+(
+#comment
+(let res_sink (DataSink 'result))
+
+(let list1 (AsList
+    (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
+    (AsStruct '('key (String '1)) '('subkey (String 'd)) '('value (String 'v)))
+    (AsStruct '('key (String '3)) '('subkey (String 'b)) '('value (String 'v)))
+))
+
+(let list2 (AsList
+    (AsStruct '('key (String '2)) '('subkey (String 'c)) '('value (String 'v)))
+    (AsStruct '('key (String '5)) '('subkey (String 'd)) '('value (String 'v)))
+    (AsStruct '('key (String '4)) '('subkey (String 'b)) '('value (String 'v)))
+))
+
+(let data (Mux '(list1 list2)))
+
+(let data (LMap data (lambda '(stream)
+    (FlatMap stream (lambda '(v) (block '(
+        (let l (lambda '(item) (AsStruct '('key (Nothing (OptionalType (DataType 'String)))))))
+        (return (Just (Visit v '0 l '1 l)))
+    ))))
+)))
+
+(let world (Write! world res_sink (Key) data '('('type))))
+
+(let world (Commit! world res_sink))
+
+(return world)
+)
+        )";
+
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TEmptyConstraintNode>(exprRoot, "FlatMap", "");
+    CheckConstraint<TVarIndexConstraintNode>(exprRoot, "Visit", "");
+}
+
+Y_UNIT_TEST(StreamingConstraintPassing) {
+    const TStringBuf s = R"((
+        (let list (AsList (AsStruct '('key (Just (String '4))) '('subkey (String 'c)) '('value (String 'v)) '('"_yql_sys" (String 's)) '('"pref_col" (String 'p)))))
+        (let streamingList (AssumeConstraints list '"{\"Streaming\" = #}"))
+
+        (let unordered (Unordered streamingList))
+        (let unorderedSubquery (UnorderedSubquery unordered))
+        (let assumeUnique (AssumeUnique unorderedSubquery '('key)))
+        (let assumeChopped (AssumeChopped assumeUnique '('key)))
+        (let removePrefix (RemovePrefixMembers assumeChopped '('"pref_")))
+        (let filter (Filter removePrefix (lambda '(item) (Exists (Member item 'key)))))
+        (let orderedFilter (OrderedFilter filter (lambda '(item) (Exists (Member item 'key)))))
+        (let pruneKeys (PruneKeys orderedFilter (lambda '(item) (Member item 'key))))
+        (let skipNullMembers (SkipNullMembers pruneKeys '('key)))
+        (let filterNullMembers (FilterNullMembers skipNullMembers '('key)))
+
+        (let tupleList (AsList '((Just (String '4)) (String 'c) (String 'v))))
+        (let streamingTupleList (AssumeConstraints tupleList '"{\"Streaming\" = #}"))
+        (let skipNullElements (SkipNullElements streamingTupleList '('0)))
+        (let filterNullElements (FilterNullElements skipNullElements '('0)))
+
+        (let res (DataSink 'result))
+        (let world (Write! world res (Key) filterNullMembers '()))
+        (let world (Write! world res (Key) filterNullElements '()))
+        (return (Commit! world res))
+    ))";
+
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "Unordered", "Streaming");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "UnorderedSubquery", "Streaming");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "AssumeUnique", "Streaming");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "AssumeChopped", "Streaming");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "RemovePrefixMembers", "Streaming");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "Filter", "Streaming");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "OrderedFilter", "Streaming");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "PruneKeys", "Streaming");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "SkipNullMembers", "Streaming");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "FilterNullMembers", "Streaming");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "SkipNullElements", "Streaming");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "FilterNullElements", "Streaming");
+}
+
+Y_UNIT_TEST(StreamingConstraintPassingThroughMap) {
+    {
+        const TStringBuf s = R"((
+            (let regular (AsList (AsStruct '('key (String '1)))))
+            (let streamingList (AssumeConstraints regular '"{\"Streaming\" = #}"))
+            (let mapResult (Map streamingList (lambda '(item) (AddMember item 'extra (String 'x)))))
+            (let flatMapResult (FlatMap streamingList (lambda '(item) (Just (AddMember item 'extra (String 'x))))))
+            (let res (DataSink 'result))
+            (let world (Write! world res (Key) mapResult '()))
+            (let world (Write! world res (Key) flatMapResult '()))
+            (return (Commit! world res))
+        ))";
+
         TExprContext exprCtx;
         const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "StablePickle", "");
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "StablePickle", "");
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "Map", "Distinct(({composite/k,key},{composite/v,value}))");
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "Map", "Unique(({composite/k,key},{composite/v,value}))");
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "FlatMap", "Distinct(({composite/k,key},{composite/v,value}))");
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "FlatMap", "Unique(({composite/k,key},{composite/v,value}))");
+        CheckConstraint<TStreamingConstraintNode>(exprRoot, "Map", "Streaming");
+        CheckConstraint<TStreamingConstraintNode>(exprRoot, "FlatMap", "Streaming");
+    }
+
+    {
+        const TStringBuf s = R"((
+            (let regular (AsList (AsStruct '('key (String '1)))))
+            (let flatMapResult (FlatMap regular (lambda '(item) (AssumeConstraints (AsList item) '"{\"Streaming\" = #}"))))
+            (let res (DataSink 'result))
+            (let world (Write! world res (Key) flatMapResult '()))
+            (return (Commit! world res))
+        ))";
+
+        TExprContext exprCtx;
+        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+        CheckConstraint<TStreamingConstraintNode>(exprRoot, "FlatMap", "Streaming");
+    }
+
+    {
+        const TStringBuf s = R"((
+            (let regular (AsList (AsStruct '('key (String '1)))))
+            (let streamingList (AssumeConstraints regular '"{\"Streaming\" = #}"))
+            (let chained (Chain1Map streamingList
+                (lambda '(item) (Uint64 '1))
+                (lambda '(item state) (Inc state))))
+            (let res (DataSink 'result))
+            (let world (Write! world res (Key) chained '()))
+            (return (Commit! world res))
+        ))";
+
+        TExprContext exprCtx;
+        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+        CheckConstraint<TStreamingConstraintNode>(exprRoot, "Chain1Map", "Streaming");
     }
 }
+
+Y_UNIT_TEST(StreamingConstraintExtend) {
+    {
+        const TStringBuf s = R"((
+            (let regular (AsList (AsStruct '('key (String '1)))))
+            (let streamingList (AssumeConstraints regular '"{\"Streaming\" = #}"))
+            (let extended (Extend regular streamingList))
+            (let res (DataSink 'result))
+            (let world (Write! world res (Key) extended '()))
+            (return (Commit! world res))
+        ))";
+
+        TExprContext exprCtx;
+        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+        CheckConstraint<TStreamingConstraintNode>(exprRoot, "Extend", "Streaming");
+    }
+
+    {
+        const TStringBuf s = R"((
+            (let regular (AsList (AsStruct '('key (String '1)))))
+            (let streamingList (AssumeConstraints regular '"{\"Streaming\" = #}"))
+            (let extended (OrderedExtend regular streamingList))
+            (let res (DataSink 'result))
+            (let world (Write! world res (Key) extended '()))
+            (return (Commit! world res))
+        ))";
+
+        TExprContext exprCtx;
+        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+        CheckConstraint<TStreamingConstraintNode>(exprRoot, "OrderedExtend", "Streaming");
+    }
+
+    {
+        const TStringBuf s = R"((
+            (let regular (AsList (AsStruct '('key (String '1)))))
+            (let streamingList (AssumeConstraints regular '"{\"Streaming\" = #}"))
+            (let extended (OrderedExtend streamingList regular))
+            (let res (DataSink 'result))
+            (let world (Write! world res (Key) extended '()))
+            (return (Commit! world res))
+        ))";
+
+        TExprContext exprCtx;
+        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+        CheckConstraint<TStreamingConstraintNode>(exprRoot, "OrderedExtend", "Streaming");
+    }
+}
+
+Y_UNIT_TEST(StreamingConstraintFailsOnWindowFunctions) {
+    const TStringBuf calcOverWindow = R"((
+        (let optDate (OptionalType (DataType 'Date)))
+        (let data (AsList (AsStruct '('"a" (Just (Date '"17494"))) '('"b" (Int32 '1)))))
+        (let streamingData (AssumeConstraints data '"{\"Streaming\" = #}"))
+
+        (let rowType (StructType '('"a" optDate) '('"b" (DataType 'Int32))))
+        (let sortTraits (SortTraits (ListType rowType) (Bool 'true) (lambda '(row) (Member row '"a"))))
+        (let countTraits (WindowTraits rowType
+            (lambda '(row) (Uint64 '1))
+            (lambda '(row state) (Inc state))
+            (lambda '(row state) (Void))
+            (lambda '(state) state)
+            (Uint64 '0)
+        ))
+
+        (let result (CalcOverWindow streamingData '('"b") sortTraits '((WinOnRows '('('begin (Void)) '('end (Int32 '0)) '('sortSpec sortTraits)) '('Count0 countTraits)))))
+
+        (let res (DataSink 'result))
+        (let world (Write! world res (Key) result '()))
+        (return (Commit! world res))
+    ))";
+
+    const TStringBuf calcOverSessionWindow = R"((
+        (let optDate (OptionalType (DataType 'Date)))
+        (let data (AsList (AsStruct '('"a" (Just (Date '"17494"))) '('"b" (Int32 '1)))))
+        (let streamingData (AssumeConstraints data '"{\"Streaming\" = #}"))
+
+        (let rowType (StructType '('"a" optDate) '('"b" (DataType 'Int32))))
+        (let sortTraits (SortTraits (ListType rowType) (Bool 'true) (lambda '(row) (Member row '"a"))))
+        (let countTraits (WindowTraits rowType
+            (lambda '(row) (Uint64 '1))
+            (lambda '(row state) (Inc state))
+            (lambda '(row state) (Void))
+            (lambda '(state) state)
+            (Uint64 '0)
+        ))
+
+        (let result (CalcOverSessionWindow streamingData '('"b") sortTraits '((WinOnRows '('('begin (Void)) '('end (Int32 '0)) '('sortSpec sortTraits)) '('Count0 countTraits))) (Void) '()))
+
+        (let res (DataSink 'result))
+        (let world (Write! world res (Key) result '()))
+        (return (Commit! world res))
+    ))";
+
+    const TStringBuf calcOverWindowGroup = R"((
+        (let optDate (OptionalType (DataType 'Date)))
+        (let data (AsList (AsStruct '('"a" (Just (Date '"17494"))) '('"b" (Int32 '1)))))
+        (let streamingData (AssumeConstraints data '"{\"Streaming\" = #}"))
+
+        (let rowType (StructType '('"a" optDate) '('"b" (DataType 'Int32))))
+        (let sortTraits (SortTraits (ListType rowType) (Bool 'true) (lambda '(row) (Member row '"a"))))
+        (let countTraits (WindowTraits rowType
+            (lambda '(row) (Uint64 '1))
+            (lambda '(row state) (Inc state))
+            (lambda '(row state) (Void))
+            (lambda '(state) state)
+            (Uint64 '0)
+        ))
+
+        (let result (CalcOverWindowGroup streamingData '('('('"b") sortTraits '((WinOnRows '('('begin (Void)) '('end (Int32 '0)) '('sortSpec sortTraits)) '('Count0 countTraits)))))))
+
+        (let res (DataSink 'result))
+        (let world (Write! world res (Key) result '()))
+        (return (Commit! world res))
+    ))";
+
+    constexpr TStringBuf expectedError = "Window function over streaming input is not supported";
+    TExprContext exprCtx;
+    ParseAndAnnotate(calcOverWindow, exprCtx, {.ExpectedError = expectedError});
+    ParseAndAnnotate(calcOverSessionWindow, exprCtx, {.ExpectedError = expectedError});
+    ParseAndAnnotate(calcOverWindowGroup, exprCtx, {.ExpectedError = expectedError});
+}
+
+Y_UNIT_TEST(StreamingConstraintFailsOnEquiJoin) {
+    auto testEquiJoin = [](TStringBuf joinType, bool streamingLeft, bool streamingRight, TStringBuf expectedError) {
+        auto text = TStringBuilder() << R"((
+            (let list1 (AsList (AsStruct '('key (String '1)))))
+            )" << (streamingLeft ? R"((let list1 (AssumeConstraints list1 '"{\"Streaming\" = #}")))" : "")
+                                     << R"((let list2 (AsList (AsStruct '('key (String '2))))))"
+                                     << (streamingRight ? R"((let list2 (AssumeConstraints list2 '"{\"Streaming\" = #}")))" : "")
+                                     << R"((let join (EquiJoin '(list1 'a) '(list2 'b) '()" << joinType << R"( 'a 'b '('a 'key) '('b 'key) '()) '()))
+            (let res (DataSink 'result))
+            (let world (Write! world res (Key) (LazyList join) '()))
+            (return (Commit! world res))
+        ))";
+
+        TExprContext exprCtx;
+        ParseAndAnnotate(text, exprCtx, {.ExpectedError = expectedError});
+    };
+
+    TExprContext exprCtx;
+    testEquiJoin("'Right", /*sl=*/true, /*sr=*/false, "Streaming left input is not supported for RIGHT join");
+    testEquiJoin("'RightOnly", /*sl=*/true, /*sr=*/false, "Streaming left input is not supported for RIGHT ONLY join");
+    testEquiJoin("'Left", /*sl=*/false, /*sr=*/true, "Streaming right input is not supported for LEFT join");
+    testEquiJoin("'LeftOnly", /*sl=*/false, /*sr=*/true, "Streaming right input is not supported for LEFT ONLY join");
+    testEquiJoin("'Full", /*sl=*/true, /*sr=*/false, "Streaming inputs are not supported for FULL OUTER join");
+    testEquiJoin("'Full", /*sl=*/false, /*sr=*/true, "Streaming inputs are not supported for FULL OUTER join");
+    testEquiJoin("'Exclusion", /*sl=*/true, /*sr=*/false, "Streaming inputs are not supported for EXCLUSION join");
+    testEquiJoin("'Exclusion", /*sl=*/false, /*sr=*/true, "Streaming inputs are not supported for EXCLUSION join");
+}
+
+Y_UNIT_TEST(MatchRecognize) {
+    const TStringBuf s = R"((
+        (let list (AsList (AsStruct '('"dt" (Timestamp '1000)))))
+        (let streamingData (AssumeConstraints list '"{\"Streaming\" = #}"))
+
+        (let rowType (StructType '('"dt" (DataType 'Timestamp))))
+        (let rowTypeMarked (StructType '('"dt" (DataType 'Timestamp)) '('"_yql_OutOfOrder" (DataType 'Bool))))
+
+        (let measures (MatchRecognizeMeasuresCallables rowType '() '() '()))
+        (let defines (MatchRecognizeDefines rowType '() '()))
+        (let params (MatchRecognizeParams measures 'RowsPerMatch_OneRow '('"AfterMatchSkip_NextRow" '"") (MatchRecognizePattern) defines))
+        (let mr (MatchRecognize streamingData (lambda '(row) '()) '() (Void) params))
+
+        (let flowData (ToFlow streamingData))
+        (let timeOrder (TimeOrderRecover flowData
+            (lambda '(row) (Member row '"dt"))
+            (Interval '"-10000")
+            (Interval '"10000")
+            (Uint32 '1000)))
+        (let measuresCore (MatchRecognizeMeasuresCallables rowTypeMarked '() '() '()))
+        (let definesCore (MatchRecognizeDefines rowTypeMarked '() '()))
+        (let paramsCore (MatchRecognizeParams measuresCore 'RowsPerMatch_OneRow '('"AfterMatchSkip_NextRow" '"") (MatchRecognizePattern) definesCore))
+        (let mrCore (MatchRecognizeCore timeOrder (lambda '(row) '()) '() paramsCore '('('"Streaming" '"1"))))
+
+        (let res (DataSink 'result))
+        (let world (Write! world res (Key) mr '()))
+        (let world (Write! world res (Key) (ForwardList mrCore) '()))
+        (return (Commit! world res))
+    ))";
+
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx, {.EnableMatchRecognize = true});
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "MatchRecognize", "Streaming");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "TimeOrderRecover", "Streaming");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "MatchRecognizeCore", "Streaming");
+}
+
+Y_UNIT_TEST(StreamingConstraintAggregate) {
+    {
+        const TStringBuf s = R"((
+            (let list (AsList (AsStruct '('key (String '1)) '('time (Timestamp '1000)))))
+            (let streamingList (AssumeConstraints list '"{\"Streaming\" = #}"))
+            (let aggr (Aggregate streamingList '('key) '() '()))
+            (let res (DataSink 'result))
+            (let world (Write! world res (Key) aggr '()))
+            (return (Commit! world res))
+        ))";
+
+        TExprContext exprCtx;
+        ParseAndAnnotate(s, exprCtx, {.ExpectedError = "Aggregation of streaming input without windows is not supported"});
+    }
+
+    {
+        const TStringBuf s = R"((
+            (let list (AsList (AsStruct '('key (String '1)) '('time (Timestamp '1000)))))
+            (let streamingList (AssumeConstraints list '"{\"Streaming\" = #}"))
+            (let hoppingTraits (HoppingTraits (ListItemType (TypeOf streamingList))
+                (lambda '(row) (Member row 'time))
+                (Interval '1000)
+                (Interval '2000)
+                (Interval '500)
+                'true
+                'v1))
+            (let aggr (Aggregate streamingList '('key) '() '('('"hopping" hoppingTraits))))
+            (let res (DataSink 'result))
+            (let world (Write! world res (Key) aggr '()))
+            (return (Commit! world res))
+        ))";
+
+        TExprContext exprCtx;
+        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+        CheckConstraint<TStreamingConstraintNode>(exprRoot, "Aggregate", "Streaming");
+    }
+}
+
+Y_UNIT_TEST(StreamingConstraintShuffleByKeys) {
+    {
+        const TStringBuf s = R"((
+            (let res (DataSink 'result))
+            (let list (AsList
+                (AsStruct '('key (Just (String '4))) '('subkey (Just (String 'c))) '('value (Just (String 'x))))
+                (AsStruct '('key (Just (String '1))) '('subkey (Just (String 'b))) '('value (Just (String 'y))))
+            ))
+            (let streamingList (AssumeConstraints list '"{\"Streaming\" = #}"))
+            (let extractor (lambda '(item) '((Member item 'key) (Member item 'subkey))))
+            (let aggr (PartitionsByKeys streamingList extractor (Void) (Void)
+                (lambda '(stream) (Condense1 stream (lambda '(row) row)
+                    (lambda '(row state) (IsKeySwitch row state extractor extractor))
+                    (lambda '(row state) row)
+                ))
+            ))
+            (let world (Write! world res (Key) aggr '()))
+            (return (Commit! world res))
+        ))";
+
+        TExprContext exprCtx;
+        ParseAndAnnotate(s, exprCtx, {.ExpectedError = "Reducing by keys of streaming input is not supported"});
+    }
+
+    {
+        const TStringBuf s = R"((
+            (let res (DataSink 'result))
+            (let list (AsList
+                (AsStruct '('key (Just (String '4))) '('subkey (Just (String 'c))) '('value (Just (String 'x))))
+                (AsStruct '('key (Just (String '1))) '('subkey (Just (String 'b))) '('value (Just (String 'y))))
+            ))
+            (let streamingList (AssumeConstraints list '"{\"Streaming\" = #}"))
+            (let aggr (ShuffleByKeys streamingList
+                (lambda '(item) '((Member item 'key) (Member item 'subkey)))
+                (lambda '(stream) (Take stream (Uint64 '100)))
+            ))
+            (let world (Write! world res (Key) aggr '()))
+            (return (Commit! world res))
+        ))";
+
+        TExprContext exprCtx;
+        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+        CheckConstraint<TStreamingConstraintNode>(exprRoot, "ShuffleByKeys", "Streaming");
+    }
+}
+
+Y_UNIT_TEST(DirectStreamingConstraintWithSwitch) {
+    const auto s = R"((
+(let res (DataSink 'result))
+
+(let list1 (AsList
+    (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
+    (AsStruct '('key (String '1)) '('subkey (String 'd)) '('value (String 'v)))
+    (AsStruct '('key (String '3)) '('subkey (String 'b)) '('value (String 'v)))
+))
+
+(let list2 (AsList
+    (AsStruct '('key (String '2)) '('subkey (String 'c)) '('value (String 'v)))
+    (AsStruct '('key (String '5)) '('subkey (String 'd)) '('value (String 'v)))
+    (AsStruct '('key (String '4)) '('subkey (String 'b)) '('value (String 'v)))
+))
+
+(let data (Mux '(list1 list2)))
+(let data (AssumeConstraints data '"{\"Streaming\" = #}"))
+
+(let data (Switch (Iterator data) '0 '('0) (lambda '(s) (FlatMap s (lambda '(item) (Just item)))) '('1) (lambda '(s) s)))
+
+(let result (Nth (Demux data) '1))
+
+(let world (Write! world res (Key) (Collect result) '()))
+(let world (Commit! world res))
+(return world)
+))";
+
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "Switch", "Streaming");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "FlatMap", "Streaming");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "Demux", "Streaming");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "Nth", "Streaming");
+}
+
+Y_UNIT_TEST(MultiItemStreamingConstraintWithSwitch) {
+    const auto s = R"((
+(let res (DataSink 'result))
+
+(let list1 (AsList
+    (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
+    (AsStruct '('key (String '1)) '('subkey (String 'd)) '('value (String 'v)))
+    (AsStruct '('key (String '3)) '('subkey (String 'b)) '('value (String 'v)))
+))
+
+(let list2 (AsList
+    (AsStruct '('key (String '2)) '('subkey (String 'c)) '('value (String 'v)))
+    (AsStruct '('key (String '5)) '('subkey (String 'd)) '('value (String 'v)))
+    (AsStruct '('key (String '4)) '('subkey (String 'b)) '('value (String 'v)))
+))
+(let list2 (AssumeConstraints list2 '"{\"Streaming\" = #}"))
+
+(let data (Mux '(list1 list2)))
+
+(let data (Switch (Iterator data) '0 '('0) (lambda '(s) (FlatMap s (lambda '(item) (Just item)))) '('1) (lambda '(s) s)))
+
+(let result (Nth (Demux data) '1))
+
+(let world (Write! world res (Key) (Collect result) '()))
+(let world (Commit! world res))
+(return world)
+))";
+
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "Mux", "Streaming");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "Switch", "Streaming");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "FlatMap", "Streaming");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "Demux", "Streaming");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "Nth", "Streaming");
+}
+
+} // Y_UNIT_TEST_SUITE(TYqlExprConstraints)
 
 } // namespace NYql

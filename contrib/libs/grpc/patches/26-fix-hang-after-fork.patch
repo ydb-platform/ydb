@@ -1,10 +1,18 @@
 --- contrib/libs/grpc/src/core/lib/event_engine/forkable.cc	(index)
 +++ contrib/libs/grpc/src/core/lib/event_engine/forkable.cc	(working tree)
-@@ -60,6 +60,7 @@ void PostforkParent() {
- }
+@@ -25,6 +25,7 @@
+ #include <algorithm>
+ #include <utility>
+ #include <vector>
++#include <y_absl/synchronization/mutex.h>
  
- void PostforkChild() {
-+  y_absl::ResetDeadlockGraphMu();
-   grpc_core::MutexLock lock(g_mu.get());
-   for (auto* forkable : *g_forkables) {
-     forkable->PostforkChild();
+ #include "src/core/lib/config/config_vars.h"
+
+@@ -89,6 +89,7 @@ void ObjectGroupForkHandler::PostforkChild() {
+   if (IsForkEnabled()) {
+     GPR_ASSERT(is_forking_);
+     GRPC_FORK_TRACE_LOG_STRING("PostforkChild");
++    y_absl::ResetDeadlockGraphMu();
+     for (auto it = forkables_.begin(); it != forkables_.end();) {
+       auto shared = it->lock();
+       if (shared) {

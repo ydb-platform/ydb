@@ -28,6 +28,9 @@ NYPath::TYPath FromObjectId(TObjectId id);
 //! Checks if the given type is versioned, i.e. represents a Cypress node.
 bool IsVersionedType(EObjectType type);
 
+//! Checks if the given type is a chunk type.
+bool IsChunkType(EObjectType type);
+
 //! Checks if the given type is user, i.e. regular users are allowed to create its instances.
 bool IsUserType(EObjectType type);
 
@@ -206,6 +209,13 @@ int GetShardIndex(TObjectId id);
 //! Returns true if #cellId is uniquely identified by its tag component.
 //! Currently these are master and chaos cells.
 bool IsGlobalCellId(TCellId cellId);
+
+////////////////////////////////////////////////////////////////////////////////
+
+bool operator==(const TVersionedObjectId& lhs, const TVersionedObjectId& rhs);
+bool operator<(const TVersionedObjectId& lhs, const TVersionedObjectId& rhs);
+
+void FormatValue(TStringBuilderBase* builder, const TVersionedObjectId& id, TStringBuf spec);
 
 ////////////////////////////////////////////////////////////////////////////////
 

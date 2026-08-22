@@ -1,5 +1,6 @@
 #pragma once
 
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/providers/common/mkql/yql_provider_mkql.h>
 
 #include <yql/essentials/ast/yql_expr.h>
@@ -37,7 +38,8 @@ public:
         NKikimr::NUdf::ICountersProvider* counters = nullptr,
         const NKikimr::NUdf::ISecureParamsProvider *secureParamsProvider = nullptr,
         const NKikimr::NUdf::ILogProvider* logProvider = nullptr,
-        TLangVersion langver = UnknownLangVersion);
+        TLangVersion langver = UnknownLangVersion,
+        const TRuntimeSettings::TConstPtr runtimeSettings = MakeRuntimeSettings());
 
     ~TLambdaBuilder();
 
@@ -111,7 +113,7 @@ protected:
     const NKikimr::NUdf::ISecureParamsProvider* SecureParamsProvider;
     const NKikimr::NUdf::ILogProvider* LogProvider;
     const TLangVersion LangVer;
-
+    const TRuntimeSettings::TConstPtr RuntimeSettings;
     /// TODO: remove?
     void SetExternalEnv(const NKikimr::NMiniKQL::TTypeEnvironment* env);
 private:
@@ -121,4 +123,22 @@ private:
     mutable const NKikimr::NMiniKQL::TTypeEnvironment* Env;
 };
 
-}
+class TGatewayLambdaBuilder : public TLambdaBuilder {
+public:
+    TGatewayLambdaBuilder(const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
+        NKikimr::NMiniKQL::TScopedAlloc& alloc,
+        const NKikimr::NMiniKQL::TTypeEnvironment* env = nullptr,
+        const TIntrusivePtr<IRandomProvider>& randomProvider = {},
+        const TIntrusivePtr<ITimeProvider>& timeProvider = {},
+        NKikimr::NMiniKQL::IStatsRegistry* jobStats = nullptr,
+        NKikimr::NUdf::ICountersProvider* counters = nullptr,
+        const NKikimr::NUdf::ISecureParamsProvider* secureParamsProvider = nullptr,
+        const NKikimr::NUdf::ILogProvider* logProvider = nullptr,
+        TLangVersion langver = UnknownLangVersion,
+        TRuntimeSettings::TConstPtr runtimeSettings = MakeRuntimeSettings());
+
+    TString BuildLambdaWithIO(const NCommon::IMkqlCallableCompiler& compiler, NNodes::TCoLambda lambda,
+        TExprContext& exprCtx, bool withNativeBlockIO = true);
+};
+
+} // namespace NYql

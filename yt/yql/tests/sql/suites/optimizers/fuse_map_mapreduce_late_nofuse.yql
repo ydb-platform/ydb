@@ -1,0 +1,16 @@
+USE plato;
+
+pragma yt.FuseMapToMapReduce="late";
+
+SELECT
+    key,
+    max(subkey),
+FROM Input
+WHERE subkey != '8'
+GROUP BY key;
+
+SELECT
+    key,
+    max(subkey),
+FROM Input
+GROUP BY key;

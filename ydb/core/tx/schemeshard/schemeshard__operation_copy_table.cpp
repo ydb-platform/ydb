@@ -1,11 +1,10 @@
-#include "schemeshard__data_erasure_manager.h"
+#include "schemeshard__tenant_shred_manager.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_states.h"
 #include "schemeshard_cdc_stream_common.h"
 #include "schemeshard_impl.h"
 #include "schemeshard_tx_infly.h"
-#include "schemeshard_utils.h"  // for TransactionTemplate
 
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/mind/hive/hive.h>
@@ -85,10 +84,10 @@ public:
         const ui64 dstSchemaVersion = NEW_TABLE_ALTER_VERSION;
 
         for (ui32 i = 0; i < dstTableInfo->GetPartitions().size(); ++i) {
-            TShardIdx srcShardIdx = srcTableInfo->GetPartitions()[i].ShardIdx;
+            TShardIdx srcShardIdx = srcTableInfo->GetPartitions()[i]->ShardIdx;
             TTabletId srcDatashardId = context.SS->ShardInfos[srcShardIdx].TabletID;
 
-            TShardIdx dstShardIdx = dstTableInfo->GetPartitions()[i].ShardIdx;
+            TShardIdx dstShardIdx = dstTableInfo->GetPartitions()[i]->ShardIdx;
             TTabletId dstDatashardId = context.SS->ShardInfos[dstShardIdx].TabletID;
 
             auto seqNo = context.SS->StartRound(*txState);
@@ -120,14 +119,57 @@ public:
             // Send "SendParts" transaction to source datashard
             NKikimrTxDataShard::TFlatSchemeTransaction oldShardTx;
             context.SS->FillSeqNo(oldShardTx, seqNo);
-            if (txState->CdcPathId != InvalidPathId) {
+
+            TVector<TPathId> streamsToDrop;
+            TPath srcPath = TPath::Init(txState->SourcePathId, context.SS);
+            for (const auto& [name, id] : srcPath.Base()->GetChildren()) {
+                if (context.SS->PathsById.contains(id)) {
+                    auto childPath = context.SS->PathsById.at(id);
+                    if (childPath->IsCdcStream() &&
+                        childPath->PathState == TPathElement::EPathState::EPathStateDrop &&
+                        childPath->DropTxId == OperationId.GetTxId()) {
+                        streamsToDrop.push_back(id);
+                    }
+                }
+            }
+
+            bool hasDrop = !streamsToDrop.empty();
+            bool hasCreate = (txState->CdcPathId != InvalidPathId);
+
+            if (hasDrop || hasCreate) {
                 auto& combined = *oldShardTx.MutableCreateIncrementalBackupSrc();
                 FillSrcSnapshot(txState, ui64(dstDatashardId), *combined.MutableSendSnapshot());
-                NCdcStreamAtTable::FillNotice(txState->CdcPathId, context, *combined.MutableCreateCdcStreamNotice());
+
+                // Get coordinated version from source table's AlterData (shared across both drop and create)
+                // GrabTable is needed for proper rollback if operation fails
+                context.MemChanges.GrabTable(context.SS, txState->SourcePathId);
+                auto srcTable = context.SS->Tables.at(txState->SourcePathId);
+                srcTable->InitAlterData(OperationId);
+                ui64 coordVersion = srcTable->AlterData->CoordinatedSchemaVersion.GetOrElse(srcTable->AlterVersion + 1);
+
+                NIceDb::TNiceDb db(context.GetDB());
+                context.SS->PersistAddAlterTable(db, txState->SourcePathId, srcTable->AlterData);
+
+                if (hasDrop) {
+                    auto& dropNotice = *combined.MutableDropCdcStreamNotice();
+                    txState->SourcePathId.ToProto(dropNotice.MutablePathId());
+                    dropNotice.SetTableSchemaVersion(coordVersion);
+
+                    for (const auto& id : streamsToDrop) {
+                        id.ToProto(dropNotice.AddStreamPathId());
+                    }
+                }
+
+                if (hasCreate) {
+                    NCdcStreamAtTable::FillNotice(txState->CdcPathId, context, *combined.MutableCreateCdcStreamNotice());
+                    combined.MutableCreateCdcStreamNotice()->SetTableSchemaVersion(coordVersion);
+                }
+
             } else {
                 FillSrcSnapshot(txState, ui64(dstDatashardId), *oldShardTx.MutableSendSnapshot());
                 oldShardTx.SetReadOnly(true);
             }
+
             auto srcEvent = context.SS->MakeDataShardProposal(txState->TargetPathId, OperationId, oldShardTx.SerializeAsString(), context.Ctx);
             context.OnComplete.BindMsgToPipe(OperationId, srcDatashardId, srcShardIdx, srcEvent.Release());
         }
@@ -191,6 +233,23 @@ public:
         table->AlterVersion = NEW_TABLE_ALTER_VERSION;
         context.SS->PersistTableCreated(db, pathId);
 
+        if (path->ParentPathId && context.SS->PathsById.contains(path->ParentPathId)) {
+            auto dstParentPath = context.SS->PathsById.at(path->ParentPathId);
+            if (dstParentPath->IsTableIndex() && context.SS->Indexes.contains(path->ParentPathId)) {
+                auto dstIndex = context.SS->Indexes.at(path->ParentPathId);
+                if (dstIndex->AlterVersion < table->AlterVersion) {
+                    dstIndex->AlterVersion = table->AlterVersion;
+                    if (dstIndex->AlterData && dstIndex->AlterData->AlterVersion < table->AlterVersion) {
+                        dstIndex->AlterData->AlterVersion = table->AlterVersion;
+                        context.SS->PersistTableIndexAlterData(db, path->ParentPathId);
+                    }
+                    context.SS->PersistTableIndexAlterVersion(db, path->ParentPathId, dstIndex);
+                    context.SS->ClearDescribePathCaches(dstParentPath);
+                    context.OnComplete.PublishToSchemeBoard(OperationId, path->ParentPathId);
+                }
+            }
+        }
+
         context.SS->TabletCounters->Simple()[COUNTER_TABLE_COUNT].Add(1);
 
         if (table->IsTTLEnabled() && !context.SS->TTLEnabledTables.contains(pathId)) {
@@ -198,7 +257,7 @@ public:
             context.SS->TabletCounters->Simple()[COUNTER_TTL_ENABLED_TABLE_COUNT].Add(1);
 
             const auto now = context.Ctx.Now();
-            for (auto& shard : table->GetPartitions()) {
+            for (const auto& shard : table->GetPartitionStore() | std::views::values) {
                 auto& lag = shard.LastCondEraseLag;
                 Y_DEBUG_ABORT_UNLESS(!lag.Defined());
 
@@ -207,27 +266,149 @@ public:
             }
         }
 
-        auto parentDir = context.SS->PathsById.at(path->ParentPathId); // TargetPathId has been created
+        if (table->PartitionsInShardIdxFormat) {
+            context.SS->TabletCounters->Simple()[COUNTER_FORMAT_SHARDIDX_TABLE_COUNT].Add(1);
+        } else {
+            context.SS->TabletCounters->Simple()[COUNTER_FORMAT_POSITION_TABLE_COUNT].Add(1);
+        }
+
+        auto parentDir = context.SS->PathsById.at(path->ParentPathId);
         ++parentDir->DirAlterVersion;
         context.SS->PersistPathDirAlterVersion(db, parentDir);
         context.SS->ClearDescribePathCaches(parentDir);
         context.OnComplete.PublishToSchemeBoard(OperationId, parentDir->PathId);
 
-        if (txState->CdcPathId != InvalidPathId) {
-            TPathId srcPathId = txState->SourcePathId;
-
-            Y_ABORT_UNLESS(context.SS->PathsById.contains(srcPathId));
+        TPathId srcPathId = txState->SourcePathId;
+        if (srcPathId != InvalidPathId && context.SS->PathsById.contains(srcPathId)) {
             auto srcPath = context.SS->PathsById.at(srcPathId);
 
-            Y_ABORT_UNLESS(context.SS->Tables.contains(srcPathId));
-            auto srcTable = context.SS->Tables.at(srcPathId);
-
-            srcTable->AlterVersion += 1;
-
-            context.SS->PersistTableAlterVersion(db, srcPathId, table);
-
+            Y_VERIFY_S(!srcPath->Dropped(),
+                "TCopyTable TPropose::HandleReply: source path is dropped at plan step"
+                << ", srcPathId: " << srcPathId
+                << ", StepDropped: " << srcPath->StepDropped);
+            context.SS->PersistPath(db, srcPathId);
             context.SS->ClearDescribePathCaches(srcPath);
+
+            bool hasCdcChanges = (txState->CdcPathId != InvalidPathId);
+
+            if (!hasCdcChanges) {
+                for (const auto& [name, id] : srcPath->GetChildren()) {
+                    if (context.SS->CdcStreams.contains(id) && context.SS->PathsById.contains(id)) {
+                        auto streamPath = context.SS->PathsById.at(id);
+                        if (streamPath->IsCdcStream() &&
+                            streamPath->PathState == TPathElement::EPathState::EPathStateDrop &&
+                            streamPath->DropTxId == OperationId.GetTxId()) {
+                            hasCdcChanges = true;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (hasCdcChanges && context.SS->Tables.contains(srcPathId)) {
+                context.MemChanges.GrabTable(context.SS, srcPathId);
+                auto srcTable = context.SS->Tables.at(srcPathId);
+
+                // Don't call InitAlterData() here - it was already called in ConfigureParts,
+                // and calling it again after another subop's Done() updated AlterVersion
+                // would incorrectly create a new version.
+                Y_ABORT_UNLESS(srcTable->AlterData && srcTable->AlterData->CoordinatedSchemaVersion,
+                    "AlterData with CoordinatedSchemaVersion must be set in ConfigureParts before Done phase");
+                srcTable->AlterVersion = Max(srcTable->AlterVersion, *srcTable->AlterData->CoordinatedSchemaVersion);
+
+                // Persist updated AlterVersion so it survives restart
+                context.SS->PersistTableAlterVersion(db, srcPathId, srcTable);
+
+                // After successful completion, clear AlterTableFull if this was the last user
+                if (srcTable->ReleaseAlterData(OperationId)) {
+                    context.SS->PersistClearAlterTableFull(db, srcPathId);
+                }
+
+                TPathId parentPathId = srcPath->ParentPathId;
+                if (parentPathId && context.SS->PathsById.contains(parentPathId)) {
+                    auto parentPath = context.SS->PathsById.at(parentPathId);
+                    if (parentPath->IsTableIndex() && context.SS->Indexes.contains(parentPathId)) {
+                        context.MemChanges.GrabIndex(context.SS, parentPathId);
+                        auto index = context.SS->Indexes.at(parentPathId);
+                        if (index->AlterVersion < srcTable->AlterVersion) {
+                            index->AlterVersion = srcTable->AlterVersion;
+                            if (index->AlterData && index->AlterData->AlterVersion < srcTable->AlterVersion) {
+                                index->AlterData->AlterVersion = srcTable->AlterVersion;
+                                context.SS->PersistTableIndexAlterData(db, parentPathId);
+                            }
+                            context.SS->PersistTableIndexAlterVersion(db, parentPathId, index);
+                            context.SS->ClearDescribePathCaches(parentPath);
+                            context.OnComplete.PublishToSchemeBoard(OperationId, parentPathId);
+                        }
+                    }
+                }
+
+                for (const auto& [childName, childPathId] : srcPath->GetChildren()) {
+                    if (!context.SS->PathsById.contains(childPathId)) {
+                        continue;
+                    }
+                    auto childPath = context.SS->PathsById.at(childPathId);
+                    if (!childPath->IsTableIndex() || childPath->Dropped()) {
+                        continue;
+                    }
+                    if (context.SS->Indexes.contains(childPathId)) {
+                        context.MemChanges.GrabIndex(context.SS, childPathId);
+                        auto index = context.SS->Indexes.at(childPathId);
+                        if (index->AlterVersion < srcTable->AlterVersion) {
+                            index->AlterVersion = srcTable->AlterVersion;
+                            if (index->AlterData && index->AlterData->AlterVersion < srcTable->AlterVersion) {
+                                index->AlterData->AlterVersion = srcTable->AlterVersion;
+                                context.SS->PersistTableIndexAlterData(db, childPathId);
+                            }
+                            context.SS->PersistTableIndexAlterVersion(db, childPathId, index);
+                            context.SS->ClearDescribePathCaches(childPath);
+                            context.OnComplete.PublishToSchemeBoard(OperationId, childPathId);
+                        }
+                    }
+                }
+            }
+
             context.OnComplete.PublishToSchemeBoard(OperationId, srcPathId);
+
+            if (txState->CdcPathId != InvalidPathId && context.SS->CdcStreams.contains(txState->CdcPathId)) {
+                context.MemChanges.GrabCdcStream(context.SS, txState->CdcPathId);
+                auto stream = context.SS->CdcStreams.at(txState->CdcPathId);
+                if (stream->AlterData) {
+                    stream->FinishAlter();
+                    context.SS->PersistCdcStream(db, txState->CdcPathId);
+                }
+            }
+
+            for (const auto& [name, id] : srcPath->GetChildren()) {
+                if (id == txState->CdcPathId) continue;
+
+                if (context.SS->CdcStreams.contains(id)) {
+                    auto streamPath = context.SS->PathsById.at(id);
+
+                    if (streamPath->IsCdcStream() &&
+                        streamPath->PathState == TPathElement::EPathState::EPathStateDrop &&
+                        streamPath->DropTxId == OperationId.GetTxId()) {
+
+                        context.MemChanges.GrabCdcStream(context.SS, id);
+
+                        context.SS->PersistRemoveCdcStream(db, id);
+                        context.SS->CdcStreams.erase(id);
+
+                        Y_ABORT_UNLESS(!streamPath->Dropped());
+                        streamPath->SetDropped(step, OperationId.GetTxId());
+                        context.SS->PersistDropStep(db, id, step, OperationId);
+
+                        auto parent = srcPath;
+
+                        context.SS->ResolveDomainInfo(id)->DecPathsInside(context.SS);
+
+                        DecAliveChildrenDirect(OperationId, parent, context);
+
+                        context.SS->ClearDescribePathCaches(streamPath);
+                        context.OnComplete.PublishToSchemeBoard(OperationId, id);
+                    }
+                }
+            }
         }
 
         context.SS->ClearDescribePathCaches(path);
@@ -331,7 +512,6 @@ public:
 
     THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
-
         const TString& parentPath = Transaction.GetWorkingDir();
         const TString& name = Transaction.GetCreateTable().GetName();
         const auto acceptExisted = !Transaction.GetFailOnExist();
@@ -361,7 +541,7 @@ public:
                     checks
                         .IsInsideTableIndexPath()
                         .IsUnderCreating(NKikimrScheme::StatusNameConflict)
-                        .IsUnderTheSameOperation(OperationId.GetTxId()); //allow only as part of copying base table
+                        .IsUnderTheSameOperation(OperationId.GetTxId());
                 } else {
                     checks
                         .IsCommonSensePath()
@@ -386,6 +566,7 @@ public:
         }
 
         TPath srcPath = TPath::Resolve(Transaction.GetCreateTable().GetCopyFromTable(), context.SS);
+
         {
             TPath::TChecker checks = srcPath.Check();
             checks
@@ -393,17 +574,21 @@ public:
                 .IsResolved()
                 .NotDeleted()
                 .NotUnderDeleting()
-                .IsTable()
-                .NotUnderTheSameOperation(OperationId.GetTxId())
-                .NotUnderOperation();
+                .IsTable();
+
+            if (!Transaction.GetCreateTable().GetAllowUnderSameOperation()) {
+                checks
+                    .NotUnderTheSameOperation(OperationId.GetTxId())
+                    .NotUnderOperation();
+            }
 
             if (checks) {
                 if (parent.Base()->IsTableIndex()) {
-                    checks
-                        .IsInsideTableIndexPath() //copy imp index table as index index table, not a separate one
-                        .NotChildren(); //imp table doesn't have indexes
+                    checks.IsInsideTableIndexPath();
                 } else {
-                    checks.IsCommonSensePath();
+                    if (!srcPath.ShouldSkipCommonPathCheckForIndexImplTable()) {
+                        checks.IsCommonSensePath();
+                    }
                 }
             }
 
@@ -424,6 +609,7 @@ public:
 
         auto schema = Transaction.GetCreateTable();
         const bool isBackup = schema.GetIsBackup();
+        const EPathCategory pathCategory = isBackup ? EPathCategory::Backup : EPathCategory::Regular;
 
         TPath dstPath = parent.Child(name);
         {
@@ -447,7 +633,6 @@ public:
                 checks
                     .IsValidLeafName(context.UserToken.Get())
                     .IsTheSameDomain(srcPath)
-                    .PathShardsLimit(maxShardsToCreate)
                     .IsValidACL(acl);
             }
 
@@ -455,7 +640,9 @@ public:
                 checks
                     .PathsLimit()
                     .DirChildrenLimit()
-                    .ShardsLimit(maxShardsToCreate);
+                    .PathShardsLimit(maxShardsToCreate)
+                    .ShardsLimit(maxShardsToCreate)
+                ;
             }
 
             if (!checks) {
@@ -463,8 +650,6 @@ public:
                 return result;
             }
         }
-
-        // TODO: cdc checks
 
         auto domainInfo = parent.DomainInfo();
         bool transactionSupport = domainInfo->IsSupportTransactions();
@@ -482,7 +667,6 @@ public:
         }
 
         TString errStr;
-
         if (!context.SS->CheckApplyIf(Transaction, errStr)) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
             return result;
@@ -496,7 +680,6 @@ public:
         Y_ABORT_UNLESS(context.SS->Tables.contains(srcPath.Base()->PathId));
         TTableInfo::TPtr srcTableInfo = context.SS->Tables.at(srcPath.Base()->PathId);
 
-        // do not allow copy from table with enabled external blobs
         {
             const NKikimrSchemeOp::TPartitionConfig &srcPartitionConfig = srcTableInfo->PartitionConfig();
             if (PartitionConfigHasExternalBlobsEnabled(srcPartitionConfig)) {
@@ -511,6 +694,38 @@ public:
 
         const bool omitFollowers = schema.GetOmitFollowers();
 
+        if (Transaction.GetCreateTable().HasDropSrcCdcStream()) {
+            const auto& dropOp = Transaction.GetCreateTable().GetDropSrcCdcStream();
+            for (const auto& streamName : dropOp.GetStreamName()) {
+                TPath oldStreamPath = srcPath.Child(streamName);
+
+                auto checks = oldStreamPath.Check();
+                checks.NotEmpty().IsResolved().NotDeleted().IsCdcStream();
+
+                if (!checks) {
+                    result->SetError(checks.GetStatus(), checks.GetError());
+                    return result;
+                }
+
+                if (oldStreamPath.Base()->LastTxId != InvalidTxId && oldStreamPath.Base()->LastTxId != OperationId.GetTxId()) {
+                    LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        "TCopyTable Propose: Stream " << streamName
+                        << " was busy by txId " << oldStreamPath.Base()->LastTxId
+                        << ", overriding with current opId " << OperationId.GetTxId()
+                        << " because CopyTable owns the parent table.");
+                }
+
+                context.MemChanges.GrabPath(context.SS, oldStreamPath.Base()->PathId);
+                context.MemChanges.GrabCdcStream(context.SS, oldStreamPath.Base()->PathId);
+
+                oldStreamPath.Base()->PathState = TPathElement::EPathState::EPathStateDrop;
+                oldStreamPath.Base()->LastTxId = OperationId.GetTxId();
+                oldStreamPath.Base()->DropTxId = OperationId.GetTxId();
+
+                context.DbChanges.PersistPath(oldStreamPath.Base()->PathId);
+            }
+        }
+
         PrepareScheme(&schema, name, srcTableInfo, context);
         schema.SetIsBackup(isBackup);
 
@@ -522,14 +737,13 @@ public:
             schema.ClearTTLSettings();
         }
 
-        // replication config is not copied
         schema.ClearReplicationConfig();
-
-        // incr backup config is not copied
         schema.ClearIncrementalBackupConfig();
 
+        const bool isServerless = context.SS->IsServerlessDomain(TPath::Init(context.SS->RootPathId(), context.SS));
+
         NKikimrSchemeOp::TPartitionConfig compilationPartitionConfig;
-        if (!TPartitionConfigMerger::ApplyChanges(compilationPartitionConfig, srcTableInfo->PartitionConfig(), schema.GetPartitionConfig(), AppData(), errStr)
+        if (!TPartitionConfigMerger::ApplyChanges(compilationPartitionConfig, srcTableInfo->PartitionConfig(), schema.GetPartitionConfig(), schema.GetColumns(), AppData(), isServerless, errStr)
             || !TPartitionConfigMerger::VerifyCreateParams(compilationPartitionConfig, AppData(), IsShadowDataAllowed(), errStr)) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
             return result;
@@ -538,13 +752,16 @@ public:
 
         const NScheme::TTypeRegistry* typeRegistry = AppData()->TypeRegistry;
         const TSchemeLimits& limits = domainInfo->GetSchemeLimits();
-        // Copy table should not check feature flags for columns types.
-        // If the types in original table are created then they should be allowed in destination table.
+
         const TTableInfo::TCreateAlterDataFeatureFlags featureFlags = {
             .EnableTablePgTypes = true,
             .EnableTableDatetime64 = true,
             .EnableParameterizedDecimal = true,
-            };
+            .EnableDetailedMetrics = true,
+            .EnableColumnStatistics = AppData()->FeatureFlags.GetEnableColumnStatistics(),
+            .EnableGeneratedStored = AppData()->FeatureFlags.GetEnableGeneratedStored(),
+            .EnableGeneratedVirtual = AppData()->FeatureFlags.GetEnableGeneratedVirtual(),
+        };
         TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(nullptr, schema, *typeRegistry,
             limits, *domainInfo, featureFlags, errStr, LocalSequences);
         if (!alterData.Get()) {
@@ -555,8 +772,10 @@ public:
         TTableInfo::TPtr tableInfo = new TTableInfo(std::move(*alterData));
         alterData.Reset();
 
-        TChannelsBindings channelsBinding;
+        // Preserve table partitions storage format from source table.
+        tableInfo->PartitionsInShardIdxFormat = srcTableInfo->PartitionsInShardIdxFormat;
 
+        TChannelsBindings channelsBinding;
         bool storePerShardConfig = false;
         NKikimrSchemeOp::TPartitionConfig perShardConfig;
 
@@ -622,6 +841,7 @@ public:
         srcPath.Base()->LastTxId = OperationId.GetTxId();
 
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxCopyTable, newTable->PathId, srcPath.Base()->PathId);
+
         txState.State = TTxState::CreateParts;
         if (Transaction.HasCreateCdcStream()) {
             txState.CdcPathId = srcPath.Base()->PathId;
@@ -641,17 +861,17 @@ public:
             newShardsIdx.push_back(part.ShardIdx);
         }
         context.SS->SetPartitioning(newTable->PathId, tableInfo, std::move(newPartition));
-        if (context.SS->EnableDataErasure && context.SS->DataErasureManager->GetStatus() == EDataErasureStatus::IN_PROGRESS) {
-            context.OnComplete.Send(context.SS->SelfId(), new TEvPrivate::TEvAddNewShardToDataErasure(std::move(newShardsIdx)));
+        if (context.SS->EnableShred && context.SS->TenantShredManager->GetStatus() == EShredStatus::IN_PROGRESS) {
+            context.OnComplete.Send(context.SS->SelfId(), new TEvPrivate::TEvAddNewShardToShred(std::move(newShardsIdx)));
         }
-        for (const auto& shard : tableInfo->GetPartitions()) {
-            Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shard.ShardIdx), "shard info is set before");
+        for (const auto& shardIdx : tableInfo->GetPartitionStore() | std::views::keys) {
+            Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shardIdx), "shard info is set before");
             if (storePerShardConfig) {
-                tableInfo->PerShardPartitionConfig[shard.ShardIdx].CopyFrom(perShardConfig);
+                tableInfo->PerShardPartitionConfig[shardIdx].CopyFrom(perShardConfig);
             }
         }
 
-        Y_ABORT_UNLESS(tableInfo->GetPartitions().back().EndOfRange.empty(), "End of last range must be +INF");
+        Y_ABORT_UNLESS(tableInfo->GetPartitions().back()->EndOfRange.empty(), "End of last range must be +INF");
 
         context.SS->Tables[newTable->PathId] = tableInfo;
         context.SS->IncrementPathDbRefCount(newTable->PathId);
@@ -683,7 +903,7 @@ public:
         const ui32 shardsToCreate = tableInfo->GetPartitions().size();
         Y_VERIFY_S(shardsToCreate <= maxShardsToCreate, "shardsToCreate: " << shardsToCreate << " maxShardsToCreate: " << maxShardsToCreate);
 
-        dstPath.DomainInfo()->IncPathsInside(context.SS, 1, isBackup);
+        dstPath.DomainInfo()->IncPathsInside(context.SS, 1, pathCategory);
         dstPath.DomainInfo()->AddInternalShards(txState, context.SS, isBackup);
         dstPath.Base()->IncShardsInside(shardsToCreate);
         IncAliveChildrenSafeWithUndo(OperationId, parent, context, isBackup);
@@ -752,9 +972,11 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
 
     auto copying = tx.GetCreateTable();
     Y_ABORT_UNLESS(copying.HasCopyFromTable());
+
     auto cdcPeerOp = tx.HasCreateCdcStream() ? &tx.GetCreateCdcStream() : nullptr;
 
     TPath srcPath = TPath::Resolve(copying.GetCopyFromTable(), context.SS);
+
     {
         TPath::TChecker checks = srcPath.Check();
         checks.NotEmpty()
@@ -763,8 +985,12 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
             .IsResolved()
             .NotDeleted()
             .NotUnderDeleting()
-            .IsTable()
-            .IsCommonSensePath(); //forbid copy impl index tables directly
+            .IsTable();
+
+        // Allow copying index impl tables when feature flag is enabled
+        if (checks && !srcPath.ShouldSkipCommonPathCheckForIndexImplTable()) {
+            checks.IsCommonSensePath();
+        }
 
         if (!copying.GetAllowUnderSameOperation()) {
             checks.NotUnderOperation();
@@ -775,24 +1001,7 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
         }
     }
 
-    THashSet<TString> sequences;
-    for (auto& child: srcPath.Base()->GetChildren()) {
-        auto name = child.first;
-        auto pathId = child.second;
-
-        TPath childPath = srcPath.Child(name);
-        if (!childPath.IsSequence() || childPath.IsDeleted()) {
-            continue;
-        }
-
-        Y_ABORT_UNLESS(childPath.Base()->PathId == pathId);
-
-        TSequenceInfo::TPtr sequenceInfo = context.SS->Sequences.at(pathId);
-        const auto& sequenceDesc = sequenceInfo->Description;
-        const auto& sequenceName = sequenceDesc.GetName();
-
-        sequences.emplace(sequenceName);
-    }
+    THashSet<TString> sequences = GetLocalSequences(context, srcPath);
 
     TPath workDir = TPath::Resolve(tx.GetWorkingDir(), context.SS);
     TPath dstPath = workDir.Child(copying.GetName());
@@ -812,10 +1021,15 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
             schema.MutableCreateCdcStream()->CopyFrom(*cdcPeerOp);
         }
 
+        if (copying.HasDropSrcCdcStream()) {
+            operation->MutableDropSrcCdcStream()->CopyFrom(copying.GetDropSrcCdcStream());
+        }
+
         result.push_back(CreateCopyTable(NextPartId(nextId, result), schema, sequences));
     }
 
-    TVector<NKikimrSchemeOp::TSequenceDescription> sequenceDescriptions;
+    // Process indexes: always create index structure, but skip impl table copies if OmitIndexes is set
+    // (impl tables are handled separately by CreateConsistentCopyTables for incremental backups with CDC)
     for (auto& child: srcPath.Base()->GetChildren()) {
         auto name = child.first;
         auto pathId = child.second;
@@ -826,9 +1040,6 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
         }
 
         if (childPath.IsSequence()) {
-            TSequenceInfo::TPtr sequenceInfo = context.SS->Sequences.at(pathId);
-            const auto& sequenceDesc = sequenceInfo->Description;
-            sequenceDescriptions.push_back(sequenceDesc);
             continue;
         }
 
@@ -839,6 +1050,11 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
         Y_ABORT_UNLESS(childPath.Base()->PathId == pathId);
 
         TTableIndexInfo::TPtr indexInfo = context.SS->Indexes.at(pathId);
+
+        if (indexInfo->State != NKikimrSchemeOp::EIndexState::EIndexStateReady) {
+            continue;
+        }
+
         {
             auto schema = TransactionTemplate(dstPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateTableIndex);
             schema.SetFailOnExist(tx.GetFailOnExist());
@@ -846,25 +1062,78 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
             auto operation = schema.MutableCreateTableIndex();
             operation->SetName(name);
             operation->SetType(indexInfo->Type);
+            operation->SetState(indexInfo->State);
             for (const auto& keyName: indexInfo->IndexKeys) {
                 *operation->MutableKeyColumnNames()->Add() = keyName;
             }
             for (const auto& dataColumn: indexInfo->IndexDataColumns) {
                 *operation->MutableDataColumnNames()->Add() = dataColumn;
             }
-            if (indexInfo->Type == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
-                *operation->MutableVectorIndexKmeansTreeDescription() =
-                    std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(indexInfo->SpecializedIndexDescription);
-            } else if (!std::holds_alternative<std::monostate>(indexInfo->SpecializedIndexDescription)) {
-                return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter,
-                                     TStringBuilder{} << "Copy table doesn't support table with index type " << indexInfo->Type)};
+
+            switch (indexInfo->Type) {
+                case NKikimrSchemeOp::EIndexTypeGlobal:
+                case NKikimrSchemeOp::EIndexTypeGlobalAsync:
+                case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+                case NKikimrSchemeOp::EIndexTypeLocalMinMax:
+                case NKikimrSchemeOp::EIndexTypeLocalCountMinSketch:
+                    // no specialized index description
+                    Y_ASSERT(std::holds_alternative<std::monostate>(indexInfo->SpecializedIndexDescription));
+                    break;
+                case NKikimrSchemeOp::EIndexTypeGlobalJson:
+                case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
+                    // JSON indexes carry a fulltext description only in rowid mode (__ydb_row_id as doc_id).
+                    if (const auto* ft = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&indexInfo->SpecializedIndexDescription)) {
+                        *operation->MutableFulltextIndexDescription() = *ft;
+                    } else {
+                        Y_ASSERT(std::holds_alternative<std::monostate>(indexInfo->SpecializedIndexDescription));
+                    }
+                    break;
+                case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+                    *operation->MutableVectorIndexKmeansTreeDescription() =
+                        std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(indexInfo->SpecializedIndexDescription);
+                    break;
+                case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
+                case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
+                case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
+                case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
+                    *operation->MutableFulltextIndexDescription() =
+                        std::get<NKikimrSchemeOp::TFulltextIndexDescription>(indexInfo->SpecializedIndexDescription);
+                    break;
+                case NKikimrSchemeOp::EIndexTypeLocalBloomFilter:
+                    *operation->MutableBloomFilterDescription() =
+                        std::get<NKikimrSchemeOp::TBloomFilter>(indexInfo->SpecializedIndexDescription);
+                    break;
+                case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter:
+                    *operation->MutableBloomNGrammFilterDescription() =
+                        std::get<NKikimrSchemeOp::TBloomNGrammFilter>(indexInfo->SpecializedIndexDescription);
+                    break;
+                default:
+                    return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, InvalidIndexType(indexInfo->Type))};
             }
 
-            result.push_back(CreateNewTableIndex(NextPartId(nextId, result), schema));
+            if (TTableIndexInfo::IsLocalIndex(indexInfo->Type)) {
+                // Column tables use the OLAP local-index op; row tables use the generic one.
+                if (srcPath.Base()->IsColumnTable()) {
+                    result.push_back(CreateNewColumnTableLocalIndex(NextPartId(nextId, result), schema));
+                } else {
+                    result.push_back(CreateNewTableIndex(NextPartId(nextId, result), schema));
+                }
+                continue; // local indexes have no impl tables
+            } else {
+                result.push_back(CreateNewTableIndex(NextPartId(nextId, result), schema));
+            }
+        }
+
+        // Skip impl table copies if OmitIndexes is set (handled by CreateConsistentCopyTables for incremental backups)
+        if (copying.GetOmitIndexes()) {
+            continue;
         }
 
         for (const auto& [implTableName, implTablePathId] : childPath.Base()->GetChildren()) {
             TPath implTable = childPath.Child(implTableName);
+            if (implTable.IsDeleted()) {
+                continue;
+            }
             Y_ABORT_UNLESS(implTable.Base()->PathId == implTablePathId);
 
             NKikimrSchemeOp::TModifyScheme schema;
@@ -878,22 +1147,12 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
             operation->SetOmitFollowers(copying.GetOmitFollowers());
             operation->SetIsBackup(copying.GetIsBackup());
 
-            result.push_back(CreateCopyTable(NextPartId(nextId, result), schema));
+            result.push_back(CreateCopyTable(NextPartId(nextId, result), schema, GetLocalSequences(context, implTable)));
+            AddCopySequences(nextId, tx, context, result, implTable, JoinPath({dstPath.PathString(), name, implTableName}));
         }
     }
 
-    for (auto&& sequenceDescription : sequenceDescriptions) {
-        auto scheme = TransactionTemplate(
-            tx.GetWorkingDir() + "/" + copying.GetName(),
-            NKikimrSchemeOp::EOperationType::ESchemeOpCreateSequence);
-        scheme.SetFailOnExist(tx.GetFailOnExist());
-
-        auto* copySequence = scheme.MutableCopySequence();
-        copySequence->SetCopyFrom(copying.GetCopyFromTable() + "/" + sequenceDescription.GetName());
-        *scheme.MutableSequence() = std::move(sequenceDescription);
-
-        result.push_back(CreateCopySequence(NextPartId(nextId, result), scheme));
-    }
+    AddCopySequences(nextId, tx, context, result, srcPath, dstPath.PathString());
     return result;
 }
 

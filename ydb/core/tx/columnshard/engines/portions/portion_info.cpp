@@ -8,6 +8,8 @@
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/data.h>
 
+#include <util/generic/size_literals.h>
+
 namespace NKikimr::NOlap {
 
 ui64 TPortionInfo::GetColumnRawBytes() const {
@@ -16,6 +18,27 @@ ui64 TPortionInfo::GetColumnRawBytes() const {
 
 ui64 TPortionInfo::GetColumnBlobBytes() const {
     return GetMeta().GetColumnBlobBytes();
+}
+
+ui64 TPortionInfo::GetSmallBlobBytesInBlobStorage(const ui64 smallBlobThresholdBytes) const {
+    const TString& defaultStorageId = NBlobOperations::TGlobal::DefaultStorageId;
+
+    const ui64 columnBsBytes = IsDefaultTier(defaultStorageId) ? GetColumnBlobBytes() : 0;
+
+    ui64 indexBsBytes;
+    if (const auto& bsBytes = GetMeta().GetBsIndexBlobBytes(); bsBytes.has_value()) {
+        indexBsBytes = bsBytes.value();
+    } else {
+        // At the moment of introducing BsIndexBlobBytes, for all existing ydb installations, indices lived TOGETHER
+        // with the columns. So, if columns are in blob storage, all the indices are there too.
+        indexBsBytes = columnBsBytes ? GetIndexBlobBytes() : 0;
+    }
+
+    // The splitter guarantees that there can be only one small blob in blob storage for a portion.
+    // If both columns and indices are in blob storage, and their total size is less than the threshold,
+    // then they are packed into a single blob.
+    const ui64 totalBsBytes = columnBsBytes + indexBsBytes;
+    return totalBsBytes <= smallBlobThresholdBytes ? totalBsBytes : 0;
 }
 
 TString TPortionInfo::DebugString(const bool withDetails) const {
@@ -38,8 +61,8 @@ TString TPortionInfo::DebugString(const bool withDetails) const {
     sb << "column_size:" << GetColumnBlobBytes() << ";"
        << "index_size:" << GetIndexBlobBytes() << ";"
        << "meta:(" << Meta.DebugString() << ");";
-    if (RemoveSnapshot.Valid()) {
-        sb << "remove_snapshot:(" << RemoveSnapshot.DebugString() << ");";
+    if (HasRemoveSnapshot()) {
+        sb << "remove_snapshot:(" << RemoveSnapshot.Get().DebugString() << ");";
     }
     return sb << ")";
 }
@@ -56,8 +79,8 @@ void TPortionInfo::SerializeToProto(const std::vector<TUnifiedBlobId>& blobIds, 
     PathId.ToProto(proto);
     proto.SetPortionId(PortionId);
     proto.SetSchemaVersion(GetSchemaVersionVerified());
-    if (!RemoveSnapshot.IsZero()) {
-        *proto.MutableRemoveSnapshot() = RemoveSnapshot.SerializeToProto();
+    if (HasRemoveSnapshot()) {
+        *proto.MutableRemoveSnapshot() = RemoveSnapshot.Get().SerializeToProto();
     }
 
     *proto.MutableMeta() = Meta.SerializeToProto(blobIds, GetProduced());
@@ -71,11 +94,15 @@ TConclusionStatus TPortionInfo::DeserializeFromProto(const NKikimrColumnShardDat
         return TConclusionStatus::Fail("portion's schema version cannot been equals to zero");
     }
     if (proto.HasRemoveSnapshot()) {
-        auto parse = RemoveSnapshot.DeserializeFromProto(proto.GetRemoveSnapshot());
+        TSnapshot tmp = TSnapshot::Zero();
+        auto parse = tmp.DeserializeFromProto(proto.GetRemoveSnapshot());
         if (!parse) {
             return parse;
         }
+
+        RemoveSnapshot.Set(std::move(tmp));
     }
+
     return TConclusionStatus::Success();
 }
 

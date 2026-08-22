@@ -20,7 +20,23 @@ public:
     TScannerConstructorContext(const TSnapshot& snapshot, const ui32 itemsLimit, const TReadMetadataBase::ESorting sorting)
         : Snapshot(snapshot)
         , ItemsLimit(itemsLimit)
-        , Sorting(sorting) {
+        , Sorting(sorting)
+    {
+    }
+};
+
+class TProgramParsingContext {
+private:
+    const TVersionedPresetSchemas& VersionedSchemas;
+
+public:
+    const TVersionedPresetSchemas& GetVersionedSchemas() const {
+        return VersionedSchemas;
+    }
+
+    TProgramParsingContext(const TVersionedPresetSchemas& schemas)
+        : VersionedSchemas(schemas)
+    {
     }
 };
 
@@ -29,13 +45,13 @@ protected:
     const TSnapshot Snapshot;
     const ui64 ItemsLimit;
     const TReadMetadataBase::ESorting Sorting;
-    TConclusionStatus ParseProgram(const TVersionedIndex* vIndex, const NKikimrSchemeOp::EOlapProgramType programType,
+    TConclusionStatus ParseProgram(const TProgramParsingContext& context, const NKikimrSchemeOp::EOlapProgramType programType,
         const TString& serializedProgram, TReadDescription& read, const NArrow::NSSA::IColumnResolver& columnResolver) const;
 
 private:
     virtual TConclusion<std::shared_ptr<TReadMetadataBase>> DoBuildReadMetadata(
         const NColumnShard::TColumnShard* self, const TReadDescription& read) const = 0;
-    virtual std::shared_ptr<IScanCursor> DoBuildCursor() const = 0;
+    virtual std::shared_ptr<IScanCursor> DoBuildCursor(const NKikimrKqp::TEvKqpScanCursor::ImplementationCase impl) const = 0;
 
 public:
     using TFactory = NObjectFactory::TParametrizedObjectFactory<IScannerConstructor, TString, TScannerConstructorContext>;
@@ -44,12 +60,13 @@ public:
     IScannerConstructor(const TScannerConstructorContext& context)
         : Snapshot(context.GetSnapshot())
         , ItemsLimit(context.GetItemsLimit())
-        , Sorting(context.GetSorting()) {
+        , Sorting(context.GetSorting())
+    {
     }
 
     TConclusion<std::shared_ptr<IScanCursor>> BuildCursorFromProto(const NKikimrKqp::TEvKqpScanCursor& proto) const;
     virtual TConclusionStatus ParseProgram(
-        const TVersionedIndex* vIndex, const NKikimrTxDataShard::TEvKqpScan& proto, TReadDescription& read) const = 0;
+        const TProgramParsingContext& context, const NKikimrTxDataShard::TEvKqpScan& proto, TReadDescription& read) const = 0;
     virtual std::vector<TNameTypeInfo> GetPrimaryKeyScheme(const NColumnShard::TColumnShard* self) const = 0;
     TConclusion<std::shared_ptr<TReadMetadataBase>> BuildReadMetadata(
         const NColumnShard::TColumnShard* self, const TReadDescription& read) const;

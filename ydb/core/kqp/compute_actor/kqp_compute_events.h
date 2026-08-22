@@ -6,7 +6,7 @@
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/protos/data_events.pb.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
-
+#include <ydb/core/kqp/compute_actor/kqp_compute_events_stats.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
 
 namespace NKikimr::NKqp {
@@ -54,8 +54,10 @@ struct TEvScanData: public NActors::TEventLocal<TEvScanData, TKqpComputeEvents::
 
     TOwnedCellVec LastKey;
     NKikimrKqp::TEvKqpScanCursor LastCursorProto;
+    TScanStatistics CurrentStats;
     TDuration CpuTime;
     TDuration WaitTime;
+    ui64 RawBytes = 0;
     ui32 PageFaults = 0; // number of page faults occurred when filling in this message
     bool RequestedBytesLimitReached = false;
     bool Finished = false;

@@ -1,14 +1,16 @@
 #pragma once
 #include "common/blob.h"
+
+#include <ydb/core/base/blobstorage_tablet_types.h>
 #include <ydb/core/base/defs.h>
 #include <ydb/core/base/events.h>
-#include <ydb/core/base/blobstorage.h>
-#include <ydb/library/yverify_stream/yverify_stream.h>
-#include <ydb/core/tx/ctor_logger.h>
 #include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/tx/columnshard/engines/changes/abstract/settings.h>
 #include <ydb/core/tx/columnshard/engines/defs.h>
 #include <ydb/core/tx/columnshard/engines/writer/put_status.h>
+#include <ydb/core/tx/ctor_logger.h>
+
+#include <ydb/library/yverify_stream/yverify_stream.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -29,15 +31,18 @@ public:
     static constexpr ui64 GetBlobSizeLimit() {
         return MAX_BLOB_SIZE_LIMIT;
     }
+
     static ui64 GetMaxBlobSize() {
         return MaxBlobSize;
     }
+
     static void SetMaxBlobSize(const ui64 value);
 
     class TMaxBlobSizeGuard: TNonCopyable {
     private:
         const ui64 Size;
         const ui64 Original;
+
     public:
         TMaxBlobSizeGuard(const ui64 value)
             : Size(value)
@@ -62,9 +67,9 @@ public:
     TLimits();
 
     void RegisterControls(TControlBoard& icb) {
-        icb.RegisterSharedControl(MinInsertBytes, "ColumnShardControls.MinBytesToIndex");
-        icb.RegisterSharedControl(MaxInsertBytes, "ColumnShardControls.MaxBytesToIndex");
-        icb.RegisterSharedControl(InsertTableSize, "ColumnShardControls.InsertTableCommittedSize");
+        TControlBoard::RegisterSharedControl(MinInsertBytes, icb.ColumnShardControls.MinBytesToIndex);
+        TControlBoard::RegisterSharedControl(MaxInsertBytes, icb.ColumnShardControls.MaxBytesToIndex);
+        TControlBoard::RegisterSharedControl(InsertTableSize, icb.ColumnShardControls.InsertTableCommittedSize);
     }
 };
 
@@ -74,7 +79,7 @@ struct TCompactionLimits {
     TControlWrapper GoodBlobSize;
     ui32 GranuleBlobSplitSize;
     TControlWrapper GranuleOverloadSize;
-    TControlWrapper InGranuleCompactSeconds; // Trigger in-granule comcation to guarantee no PK intersections
+    TControlWrapper InGranuleCompactSeconds;   // Trigger in-granule comcation to guarantee no PK intersections
 
     TControlWrapper GranuleIndexedPortionsSizeLimit;
     TControlWrapper GranuleIndexedPortionsCountLimit;
@@ -86,25 +91,23 @@ struct TCompactionLimits {
         , InGranuleCompactSeconds(2 * 60, 10, 3600)
         , GranuleIndexedPortionsSizeLimit(TBase::WARNING_INSERTED_PORTIONS_SIZE)
         , GranuleIndexedPortionsCountLimit(TBase::WARNING_INSERTED_PORTIONS_COUNT)
-    {}
+    {
+    }
 
     void RegisterControls(TControlBoard& icb) {
-        icb.RegisterSharedControl(GoodBlobSize, "ColumnShardControls.IndexGoodBlobSize");
-        icb.RegisterSharedControl(GranuleOverloadSize, "ColumnShardControls.GranuleOverloadBytes");
-        icb.RegisterSharedControl(InGranuleCompactSeconds, "ColumnShardControls.CompactionDelaySec");
-        icb.RegisterSharedControl(GranuleIndexedPortionsSizeLimit, "ColumnShardControls.GranuleIndexedPortionsSizeLimit");
-        icb.RegisterSharedControl(GranuleIndexedPortionsCountLimit, "ColumnShardControls.GranuleIndexedPortionsCountLimit");
+        TControlBoard::RegisterSharedControl(GoodBlobSize, icb.ColumnShardControls.IndexGoodBlobSize);
+        TControlBoard::RegisterSharedControl(GranuleOverloadSize, icb.ColumnShardControls.GranuleOverloadBytes);
+        TControlBoard::RegisterSharedControl(InGranuleCompactSeconds, icb.ColumnShardControls.CompactionDelaySec);
+        TControlBoard::RegisterSharedControl(GranuleIndexedPortionsSizeLimit, icb.ColumnShardControls.GranuleIndexedPortionsSizeLimit);
+        TControlBoard::RegisterSharedControl(GranuleIndexedPortionsCountLimit, icb.ColumnShardControls.GranuleIndexedPortionsCountLimit);
     }
 
     NOlap::TCompactionLimits Get() const {
-        return NOlap::TCompactionLimits{
-            .GoodBlobSize = (ui32)GoodBlobSize,
-            .GranuleBlobSplitSize = GranuleBlobSplitSize,
+        return NOlap::TCompactionLimits{ .GoodBlobSize = (ui32)GoodBlobSize, .GranuleBlobSplitSize = GranuleBlobSplitSize,
             .InGranuleCompactSeconds = (ui32)InGranuleCompactSeconds,
             .GranuleOverloadSize = (ui32)GranuleOverloadSize,
             .GranuleIndexedPortionsSizeLimit = (ui32)GranuleIndexedPortionsSizeLimit,
-            .GranuleIndexedPortionsCountLimit = (ui32)GranuleIndexedPortionsCountLimit
-        };
+            .GranuleIndexedPortionsCountLimit = (ui32)GranuleIndexedPortionsCountLimit };
     }
 };
 
@@ -124,7 +127,8 @@ class TCpuGuard {
 public:
     TCpuGuard(TUsage& usage)
         : Usage(usage)
-    {}
+    {
+    }
 
     ~TCpuGuard() {
         Usage.CPUExecTime = 1000000 * CpuTimer.PassedReset();
@@ -135,20 +139,20 @@ private:
     THPTimer CpuTimer;
 };
 
-
 // A helper to resolve DS groups where a tablet's blob ids
-class TBlobGroupSelector : public NOlap::IBlobGroupSelector {
+class TBlobGroupSelector: public NOlap::IBlobGroupSelector {
 private:
     TIntrusiveConstPtr<TTabletStorageInfo> TabletInfo;
 
 public:
     explicit TBlobGroupSelector(TIntrusiveConstPtr<TTabletStorageInfo> tabletInfo)
         : TabletInfo(tabletInfo)
-    {}
+    {
+    }
 
     ui32 GetGroup(const TLogoBlobID& blobId) const override {
         return TabletInfo->GroupFor(blobId.Channel(), blobId.Generation());
     }
 };
 
-}
+}   // namespace NKikimr::NColumnShard

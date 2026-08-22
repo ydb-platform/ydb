@@ -3,7 +3,7 @@
   "args":
     [
       {
-        "op_name":"LeftOnlyJoin (Grace)",
+        "op_name":"LeftOnlyJoin (BlockHash)",
         "args":
           [
             {

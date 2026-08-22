@@ -84,6 +84,10 @@
 
 #else // Things from boost/config that are required, and easy to replicate
 
+#if __has_include(<version>)
+#include <version>
+#endif
+
 #define BOOST_MATH_PREVENT_MACRO_SUBSTITUTION
 #define BOOST_MATH_NO_REAL_CONCEPT_TESTS
 #define BOOST_MATH_NO_DISTRIBUTION_CONCEPT_TESTS
@@ -92,19 +96,19 @@
 // Since Boost.Multiprecision is in active development some tests do not fully cooperate yet.
 #define BOOST_MATH_NO_MP_TESTS
 
-#if (__cplusplus > 201400L || _MSVC_LANG > 201400L)
+#if ((__cplusplus > 201400L) || (defined(_MSVC_LANG) && (_MSVC_LANG > 201400L)))
 #define BOOST_MATH_CXX14_CONSTEXPR constexpr
 #else
 #define BOOST_MATH_CXX14_CONSTEXPR
 #define BOOST_MATH_NO_CXX14_CONSTEXPR
 #endif // BOOST_MATH_CXX14_CONSTEXPR
 
-#if (__cplusplus > 201700L || _MSVC_LANG > 201700L)
+#if ((__cplusplus > 201700L) || (defined(_MSVC_LANG) && (_MSVC_LANG > 201700L)))
 #define BOOST_MATH_IF_CONSTEXPR if constexpr
 
-// Clang on mac provides the execution header with none of the functionality. TODO: Check back on this
+// libc++ currently provides the execution header with none of the functionality.
 // https://en.cppreference.com/w/cpp/compiler_support "Standardization of Parallelism TS"
-#  if !__has_include(<execution>) || (defined(__APPLE__) && defined(__clang__))
+#  if !__has_include(<execution>) || !defined(__cpp_lib_execution) || (__cpp_lib_execution < 201603L)
 #  define BOOST_MATH_NO_CXX17_HDR_EXECUTION
 #  endif
 #else
@@ -113,7 +117,7 @@
 #  define BOOST_MATH_NO_CXX17_HDR_EXECUTION
 #endif
 
-#if __cpp_lib_gcd_lcm >= 201606L
+#if (defined(__cpp_lib_gcd_lcm) && (__cpp_lib_gcd_lcm >= 201606L))
 #define BOOST_MATH_HAS_CXX17_NUMERIC
 #endif
 
@@ -200,7 +204,7 @@
 
 // C++23
 #if __cplusplus > 202002L || (defined(_MSVC_LANG) &&_MSVC_LANG > 202002L)
-#  if __GNUC__ >= 13
+#  if defined(__GNUC__) && __GNUC__ >= 13
      // libstdc++3 only defines to/from_chars for std::float128_t when one of these defines are set
      // otherwise we're right out of luck...
 #    if defined(_GLIBCXX_LDOUBLE_IS_IEEE_BINARY128) || defined(_GLIBCXX_HAVE_FLOAT128_MATH)
@@ -653,7 +657,9 @@ namespace boost{ namespace math{
 // Some mingw flavours have issues with thread_local and types with non-trivial destructors
 // See https://sourceforge.net/p/mingw-w64/bugs/527/
 //
-#if (defined(__MINGW32__) && (__GNUC__ < 9) && !defined(__clang__))
+// When running windows-2022 or 2025 we see this issue again with GCC 12 and 14
+//
+#if (defined(__MINGW32__) && ((__GNUC__ < 9) || (__GNUC__ >= 12)) && !defined(__clang__))
 #  define BOOST_MATH_NO_THREAD_LOCAL_WITH_NON_TRIVIAL_TYPES
 #endif
 
@@ -700,14 +706,10 @@ namespace boost{ namespace math{
 #  undef BOOST_MATH_FORCEINLINE
 #  define BOOST_MATH_FORCEINLINE __forceinline__
 
-#elif defined(SYCL_LANGUAGE_VERSION)
+#elif defined(BOOST_MATH_ENABLE_SYCL)
 
 #  define BOOST_MATH_SYCL_ENABLED SYCL_EXTERNAL
 #  define BOOST_MATH_HAS_GPU_SUPPORT
-
-#  ifndef BOOST_MATH_ENABLE_SYCL
-#    define BOOST_MATH_ENABLE_SYCL
-#  endif
 
 #  ifndef BOOST_MATH_NO_EXCEPTIONS
 #    define BOOST_MATH_NO_EXCEPTIONS

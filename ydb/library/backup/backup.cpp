@@ -20,6 +20,10 @@
 #include <ydb/public/lib/ydb_cli/common/retry_func.h>
 #include <ydb/public/lib/ydb_cli/dump/files/files.h>
 #include <ydb/public/lib/ydb_cli/dump/util/util.h>
+#include <ydb/public/lib/ydb_cli/dump/util/external_data_source_utils.h>
+#include <ydb/public/lib/ydb_cli/dump/util/external_table_utils.h>
+#include <ydb/public/lib/ydb_cli/dump/util/query_utils.h>
+#include <ydb/public/lib/ydb_cli/dump/util/replication_utils.h>
 #include <ydb/public/lib/ydb_cli/dump/util/view_utils.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_view.h>
@@ -53,10 +57,6 @@
 #include <util/system/file.h>
 #include <util/system/fs.h>
 
-#include <google/protobuf/text_format.h>
-
-#include <format>
-#include <ranges>
 
 namespace NYdb::NBackup {
 
@@ -66,7 +66,6 @@ static constexpr i64 READ_TABLE_RETRIES = 100;
 static const std::string ATTR_ASYNC_REPLICATION = "__async_replication";
 static const std::string ATTR_ASYNC_REPLICA = "__async_replica";
 
-
 ////////////////////////////////////////////////////////////////////////////////
 //                               Util
 ////////////////////////////////////////////////////////////////////////////////
@@ -75,7 +74,7 @@ void TYdbErrorException::LogToStderr() const {
     Cerr << Status;
 }
 
-static void VerifyStatus(TStatus status, TString explain = "") {
+static void VerifyStatus(TStatus status, const TString& explain = {}) {
     if (status.IsSuccess()) {
         if (status.GetIssues()) {
             LOG_D(status);
@@ -85,6 +84,18 @@ static void VerifyStatus(TStatus status, TString explain = "") {
             LOG_E(explain << ": " << status.GetIssues().ToOneLineString());
         }
         throw TYdbErrorException(status) << explain;
+    }
+}
+
+class TSkipException: public yexception {
+};
+
+static void VerifyStatusOrSkip(TStatus status, const TString& explain = {}) {
+    if (status.GetStatus() == EStatus::CLIENT_CALL_UNIMPLEMENTED) {
+        LOG_D(explain << '\n' << status);
+        throw TSkipException() << explain;
+    } else {
+        VerifyStatus(status, explain);
     }
 }
 
@@ -150,10 +161,18 @@ void PrintPrimitive(IOutputStream& out, const TValueParser& parser) {
         CASE_PRINT_PRIMITIVE_TYPE(out, Datetime);
         CASE_PRINT_PRIMITIVE_TYPE(out, Timestamp);
         CASE_PRINT_PRIMITIVE_TYPE(out, Interval);
-        CASE_PRINT_PRIMITIVE_TYPE(out, Date32);
-        CASE_PRINT_PRIMITIVE_TYPE(out, Datetime64);
-        CASE_PRINT_PRIMITIVE_TYPE(out, Timestamp64);
-        CASE_PRINT_PRIMITIVE_TYPE(out, Interval64);
+        case EPrimitiveType::Date32:
+            out << parser.GetDate32().time_since_epoch().count();
+            break;
+        case EPrimitiveType::Datetime64:
+            out << parser.GetDatetime64().time_since_epoch().count();
+            break;
+        case EPrimitiveType::Timestamp64:
+            out << parser.GetTimestamp64().time_since_epoch().count();
+            break;
+        case EPrimitiveType::Interval64:
+            out << parser.GetInterval64().count();
+            break;
         CASE_PRINT_PRIMITIVE_TYPE(out, Uuid);
         CASE_PRINT_PRIMITIVE_STRING_TYPE(out, TzDate);
         CASE_PRINT_PRIMITIVE_STRING_TYPE(out, TzDatetime);
@@ -491,8 +510,7 @@ TFsPath CreateDirectory(const TFsPath& folderPath, const TString& name) {
 }
 
 void WriteProtoToFile(const google::protobuf::Message& proto, const TFsPath& folderPath, const NDump::NFiles::TFileInfo& fileInfo) {
-    TString protoStr;
-    google::protobuf::TextFormat::PrintToString(proto, &protoStr);
+    const auto protoStr = ProtoToString(proto);
     LOG_D("Write " << fileInfo.LogObjectType << " into " << folderPath.Child(fileInfo.FileName).GetPath().Quote());
     TFile outFile(folderPath.Child(fileInfo.FileName), CreateAlways | WrOnly);
     outFile.Write(protoStr.data(), protoStr.size());
@@ -526,7 +544,7 @@ NTopic::TTopicDescription DescribeTopic(TDriver driver, const TString& path) {
     const auto result = NConsoleClient::RetryFunction([&]() {
         return client.DescribeTopic(path).ExtractValueSync();
     });
-    VerifyStatus(result, "describe topic");
+    VerifyStatusOrSkip(result, "error describing topic");
     return result.GetTopicDescription();
 }
 
@@ -596,13 +614,11 @@ void BackupTable(TDriver driver, const TString& dbPrefix, const TString& backupP
 
 namespace {
 
-NView::TViewDescription DescribeView(TDriver driver, const TString& path) {
-    NView::TViewClient client(driver);
-    auto status = NConsoleClient::RetryFunction([&]() {
-        return client.DescribeView(path).ExtractValueSync();
-    });
-    VerifyStatus(status, "describe view");
-    return status.GetViewDescription();
+TString DescribeViewQuery(TDriver driver, const TString& path) {
+    TString query;
+    auto status = NDump::DescribeViewQuery(driver, path, query);
+    VerifyStatusOrSkip(status, "error describing view");
+    return query;
 }
 
 }
@@ -617,7 +633,7 @@ and writes it to the backup folder designated for this view.
 \param fsBackupFolder the path on the file system to write the file with the CREATE VIEW statement to
 \param issues the accumulated backup issues container
 */
-void BackupView(TDriver driver, const TString& dbBackupRoot, const TString& dbPathRelativeToBackupRoot,
+void BackupView(TDriver driver, const TString& db, const TString& dbBackupRoot, const TString& dbPathRelativeToBackupRoot,
     const TFsPath& fsBackupFolder, NYql::TIssues& issues
 ) {
     Y_ENSURE(!dbPathRelativeToBackupRoot.empty());
@@ -625,12 +641,13 @@ void BackupView(TDriver driver, const TString& dbBackupRoot, const TString& dbPa
 
     LOG_I("Backup view " << dbPath.Quote() << " to " << fsBackupFolder.GetPath().Quote());
 
-    const auto viewDescription = DescribeView(driver, dbPath);
+    const auto query = DescribeViewQuery(driver, dbPath);
 
     const auto creationQuery = NDump::BuildCreateViewQuery(
-        TFsPath(dbPathRelativeToBackupRoot).GetName(),
+        TString(TPathSplitUnix(dbPathRelativeToBackupRoot).back()),
         dbPath,
-        TString(viewDescription.GetQueryText()),
+        query,
+        db,
         dbBackupRoot,
         issues
     );
@@ -648,7 +665,6 @@ void BackupTopic(TDriver driver, const TString& dbPath, const TFsPath& fsBackupF
 
     Ydb::Topic::CreateTopicRequest creationRequest;
     topicDescription.SerializeTo(creationRequest);
-    creationRequest.clear_attributes();
 
     WriteProtoToFile(creationRequest, fsBackupFolder, NDump::NFiles::CreateTopic());
     BackupPermissions(driver, dbPath, fsBackupFolder);
@@ -661,7 +677,7 @@ NCoordination::TNodeDescription DescribeCoordinationNode(TDriver driver, const T
     auto status = NConsoleClient::RetryFunction([&]() {
         return client.DescribeNode(path).ExtractValueSync();
     });
-    VerifyStatus(status, "describe coordination node");
+    VerifyStatusOrSkip(status, "error describing coordination node");
     return status.ExtractResult();
 }
 
@@ -671,7 +687,7 @@ std::vector<std::string> ListRateLimiters(NRateLimiter::TRateLimiterClient& clie
     auto status = NConsoleClient::RetryFunction([&]() {
         return client.ListResources(coordinationNodePath, AllRootResourcesTag, settings).ExtractValueSync();
     });
-    VerifyStatus(status, "list rate limiters");
+    VerifyStatusOrSkip(status, "error listing rate limiters");
     return status.GetResourcePaths();
 }
 
@@ -681,7 +697,7 @@ NRateLimiter::TDescribeResourceResult DescribeRateLimiter(
     auto status = NConsoleClient::RetryFunction([&]() {
         return client.DescribeResource(coordinationNodePath, rateLimiterPath).ExtractValueSync();
     });
-    VerifyStatus(status, "describe rate limiter");
+    VerifyStatusOrSkip(status, "error describing rate limiter");
     return status;
 }
 
@@ -719,79 +735,6 @@ void BackupCoordinationNode(TDriver driver, const TString& dbPath, const TFsPath
     BackupPermissions(driver, dbPath, fsBackupFolder);
 }
 
-namespace {
-
-TString BuildConnectionString(const NReplication::TConnectionParams& params) {
-    return TStringBuilder()
-        << (params.GetEnableSsl() ? "grpcs://" : "grpc://")
-        << params.GetDiscoveryEndpoint()
-        << "/?database=" << params.GetDatabase();
-}
-
-inline TString BuildTarget(const char* src, const char* dst) {
-    return TStringBuilder() << "  `" << src << "` AS `" << dst << "`";
-}
-
-inline TString Quote(const char* value) {
-    return TStringBuilder() << "'" << value << "'";
-}
-
-template <typename StringType>
-inline TString Quote(const StringType& value) {
-    return Quote(value.c_str());
-}
-
-inline TString BuildOption(const char* key, const TString& value) {
-    return TStringBuilder() << "  " << key << " = " << value << "";
-}
-
-inline TString Interval(const TDuration& value) {
-    return TStringBuilder() << "Interval('PT" << value.Seconds() << "S')";
-}
-
-TString BuildCreateReplicationQuery(
-        const TString& db,
-        const TString& backupRoot,
-        const TString& name,
-        const NReplication::TReplicationDescription& desc)
-{
-    TVector<TString> targets(::Reserve(desc.GetItems().size()));
-    for (const auto& item : desc.GetItems()) {
-        if (!item.DstPath.ends_with("/indexImplTable")) { // TODO(ilnaz): get rid of this hack
-            targets.push_back(BuildTarget(item.SrcPath.c_str(), item.DstPath.c_str()));
-        }
-    }
-
-    const auto& params = desc.GetConnectionParams();
-
-    TVector<TString> opts(::Reserve(5 /* max options */));
-    opts.push_back(BuildOption("CONNECTION_STRING", Quote(BuildConnectionString(params))));
-    switch (params.GetCredentials()) {
-        case NReplication::TConnectionParams::ECredentials::Static:
-            opts.push_back(BuildOption("USER", Quote(params.GetStaticCredentials().User)));
-            opts.push_back(BuildOption("PASSWORD_SECRET_NAME", Quote(params.GetStaticCredentials().PasswordSecretName)));
-            break;
-        case NReplication::TConnectionParams::ECredentials::OAuth:
-            if (const auto& secret = params.GetOAuthCredentials().TokenSecretName; !secret.empty()) {
-                opts.push_back(BuildOption("TOKEN_SECRET_NAME", Quote(secret)));
-            }
-            break;
-    }
-
-    opts.push_back(BuildOption("CONSISTENCY_LEVEL", Quote(ToString(desc.GetConsistencyLevel()))));
-    if (desc.GetConsistencyLevel() == NReplication::TReplicationDescription::EConsistencyLevel::Global) {
-        opts.push_back(BuildOption("COMMIT_INTERVAL", Interval(desc.GetGlobalConsistency().GetCommitInterval())));
-    }
-
-    return std::format(
-            "-- database: \"{}\"\n"
-            "-- backup root: \"{}\"\n"
-            "CREATE ASYNC REPLICATION `{}`\nFOR\n{}\nWITH (\n{}\n);",
-        db.c_str(), backupRoot.c_str(), name.c_str(), JoinSeq(",\n", targets).c_str(), JoinSeq(",\n", opts).c_str());
-}
-
-}
-
 void BackupReplication(
     TDriver driver,
     const TString& db,
@@ -806,57 +749,51 @@ void BackupReplication(
 
     NReplication::TReplicationClient replicationClient(driver);
     TMaybe<NReplication::TReplicationDescription> desc;
-    VerifyStatus(NDump::DescribeReplication(replicationClient, dbPath, desc), "describe replication");
-    const auto creationQuery = BuildCreateReplicationQuery(db, dbBackupRoot, fsBackupFolder.GetName(), *desc);
+    VerifyStatusOrSkip(NDump::DescribeReplication(replicationClient, dbPath, desc), "error describing replication");
+    const auto creationQuery = NDump::BuildCreateReplicationQuery(db, dbBackupRoot, fsBackupFolder.GetName(), *desc);
 
     WriteCreationQueryToFile(creationQuery, fsBackupFolder, NDump::NFiles::CreateAsyncReplication());
     BackupPermissions(driver, dbPath, fsBackupFolder);
 }
 
+void BackupTransfer(
+    TDriver driver,
+    const TString& db,
+    const TString& dbBackupRoot,
+    const TString& dbPathRelativeToBackupRoot,
+    const TFsPath& fsBackupFolder)
+{
+    Y_ENSURE(!dbPathRelativeToBackupRoot.empty());
+    const auto dbPath = JoinDatabasePath(dbBackupRoot, dbPathRelativeToBackupRoot);
+
+    LOG_I("Backup transfer " << dbPath.Quote() << " to " << fsBackupFolder.GetPath().Quote());
+
+    NReplication::TReplicationClient client(driver);
+    TMaybe<NReplication::TTransferDescription> desc;
+    VerifyStatus(NDump::DescribeTransfer(client, dbPath, desc), "describe transfer");
+    const auto creationTransferQuery = NDump::BuildCreateTransferQuery(db, dbBackupRoot, fsBackupFolder.GetName(), *desc);
+
+    WriteCreationQueryToFile(creationTransferQuery, fsBackupFolder, NDump::NFiles::CreateTransfer());
+    BackupPermissions(driver, dbPath, fsBackupFolder);
+}
+
 namespace {
-
-std::string ToString(std::string_view key, std::string_view value) {
-    // indented to follow the default YQL formatting
-    return std::format(R"(  {} = '{}')", key, value);
-}
-
-namespace NExternalDataSource {
-
-    std::string PropertyToString(const std::pair<TProtoStringType, TProtoStringType>& property) {
-        const auto& [key, value] = property;
-        return ToString(key, value);
-    }
-
-}
 
 void CanonizeForBackup(Ydb::Table::DescribeExternalDataSourceResult& desc) {
     desc.mutable_properties()->erase("REFERENCES");
 }
 
-TString BuildCreateExternalDataSourceQuery(const Ydb::Table::DescribeExternalDataSourceResult& description) {
-    return std::format(
-        "CREATE EXTERNAL DATA SOURCE IF NOT EXISTS `{}` WITH (\n{},\n{}{}\n);",
-        description.self().name().c_str(),
-        ToString("SOURCE_TYPE", description.source_type()),
-        ToString("LOCATION", description.location()),
-        description.properties().empty()
-            ? ""
-            : std::string(",\n") +
-                JoinSeq(",\n", std::views::transform(description.properties(), NExternalDataSource::PropertyToString)).c_str()
-    );
 }
 
-}
-
-void BackupExternalDataSource(TDriver driver, const TString& dbPath, const TFsPath& fsBackupFolder) {
+void BackupExternalDataSource(TDriver driver, const TString& db, const TString& dbPath, const TFsPath& fsBackupFolder) {
     Y_ENSURE(!dbPath.empty());
     LOG_I("Backup external data source " << dbPath.Quote() << " to " << fsBackupFolder.GetPath().Quote());
 
     Ydb::Table::DescribeExternalDataSourceResult description;
     NTable::TTableClient client(driver);
-    VerifyStatus(NDump::DescribeExternalDataSource(client, dbPath, description), "describe external data source");
+    VerifyStatusOrSkip(NDump::DescribeExternalDataSource(client, dbPath, description), "error describing external data source");
     CanonizeForBackup(description);
-    const auto creationQuery = BuildCreateExternalDataSourceQuery(description);
+    const auto creationQuery = NDump::BuildCreateExternalDataSourceQuery(description, db);
 
     WriteCreationQueryToFile(creationQuery, fsBackupFolder, NDump::NFiles::CreateExternalDataSource());
     BackupPermissions(driver, dbPath, fsBackupFolder);
@@ -874,60 +811,47 @@ Ydb::Table::DescribeExternalTableResult DescribeExternalTable(TDriver driver, co
         }
         return result;
     });
-    VerifyStatus(status, "describe external table");
+    VerifyStatusOrSkip(status, "error describing external table");
     return description;
 }
 
-namespace NExternalTable {
-
-    std::string PropertyToString(const std::pair<TProtoStringType, TProtoStringType>& property) {
-        const auto& [key, json] = property;
-        const auto items = NJson::ReadJsonFastTree(json).GetArray();
-        Y_ENSURE(!items.empty(), "Empty items for an external table property: " << key);
-        if (items.size() == 1) {
-            return ToString(key, items.front().GetString());
-        } else {
-            return ToString(key, std::format("[{}]", JoinSeq(", ", items).c_str()));
-        }
-    }
-
-}
-
-std::string ColumnToString(const Ydb::Table::ColumnMeta& column) {
-    const auto& type = column.type();
-    const bool notNull = !type.has_optional_type() || (type.has_pg_type() && column.not_null());
-    return std::format(
-        "    {} {}{}",
-        column.name().c_str(),
-        TType(type).ToString(),
-        notNull ? " NOT NULL" : ""
-    );
-}
-
-TString BuildCreateExternalTableQuery(const Ydb::Table::DescribeExternalTableResult& description) {
-    return std::format(
-        "CREATE EXTERNAL TABLE IF NOT EXISTS `{}` (\n{}\n) WITH (\n{},\n{}{}\n);",
-        description.self().name().c_str(),
-        JoinSeq(",\n", std::views::transform(description.columns(), ColumnToString)).c_str(),
-        ToString("DATA_SOURCE", description.data_source_path()),
-        ToString("LOCATION", description.location()),
-        description.content().empty()
-            ? ""
-            : std::string(",\n") +
-                JoinSeq(",\n", std::views::transform(description.content(), NExternalTable::PropertyToString)).c_str()
-    );
+Ydb::Table::DescribeSystemViewResult DescribeSystemView(TDriver driver, const TString& path) {
+    NTable::TTableClient client(driver);
+    Ydb::Table::DescribeSystemViewResult description;
+    auto status = NDump::DescribeSystemView(client, path, description);
+    VerifyStatusOrSkip(status, "error describing system view");
+    description.clear_self();
+    return description;
 }
 
 }
 
-void BackupExternalTable(TDriver driver, const TString& dbPath, const TFsPath& fsBackupFolder) {
-    Y_ENSURE(!dbPath.empty());
+void BackupExternalTable(
+    TDriver driver,
+    const TString& db,
+    const TString& dbBackupRoot,
+    const TString& dbPathRelativeToBackupRoot,
+    const TFsPath& fsBackupFolder)
+{
+    Y_ENSURE(!dbPathRelativeToBackupRoot.empty());
+    const auto dbPath = JoinDatabasePath(dbBackupRoot, dbPathRelativeToBackupRoot);
+
     LOG_I("Backup external table " << dbPath.Quote() << " to " << fsBackupFolder.GetPath().Quote());
 
     const auto description = DescribeExternalTable(driver, dbPath);
-    const auto creationQuery = BuildCreateExternalTableQuery(description);
+    const auto creationQuery = NDump::BuildCreateExternalTableQuery(db, dbBackupRoot, description);
 
     WriteCreationQueryToFile(creationQuery, fsBackupFolder, NDump::NFiles::CreateExternalTable());
+    BackupPermissions(driver, dbPath, fsBackupFolder);
+}
+
+void BackupSystemView(TDriver driver, const TString& dbPath, const TFsPath& fsBackupFolder) {
+    Y_ENSURE(!dbPath.empty());
+    LOG_I("Backup system view " << dbPath.Quote() << " to " << fsBackupFolder.GetPath().Quote());
+
+    const auto description = DescribeSystemView(driver, dbPath);
+
+    WriteProtoToFile(description, fsBackupFolder, NDump::NFiles::SystemView());
     BackupPermissions(driver, dbPath, fsBackupFolder);
 }
 
@@ -973,6 +897,22 @@ static void MaybeCreateEmptyFile(const TFsPath& folderPath) {
     }
 }
 
+bool SkipItem(const TVector<TRegExMatch>& exclusionPatterns, const THashSet<TString>& seenItems,
+        TDbIterator<ETraverseType::Postordering>& dbIt
+) {
+    if (IsExcluded(dbIt.GetFullPath(), exclusionPatterns)) {
+        LOG_D("Skip " << dbIt.GetFullPath().Quote());
+        dbIt.Next();
+        return true;
+    }
+    if (!seenItems.contains(dbIt.GetFullPath())) {
+        LOG_W("Skip " << dbIt.GetFullPath().Quote() << ": it was created after the dumping had started");
+        dbIt.Next();
+        return true;
+    }
+    return false;
+}
+
 void BackupFolderImpl(TDriver driver, const TString& database, const TString& dbPrefix, const TString& backupPrefix,
         const TFsPath folderPath, const TVector<TRegExMatch>& exclusionPatterns,
         bool schemaOnly, bool useConsistentCopyTable, bool avoidCopy, bool preservePoolKinds, bool ordered,
@@ -981,7 +921,10 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
     TFile(folderPath.Child(NDump::NFiles::Incomplete().FileName), CreateAlways).Close();
 
     TMap<TString, TAsyncStatus> copiedTablesStatuses;
+    // Track items seen during first iteration to skip the new ones created after
+    THashSet<TString> seenItems;
     TVector<NTable::TCopyItem> tablesToCopy;
+
     // Copy all tables to temporal folder and backup other scheme objects along the way.
     {
         TDbIterator<ETraverseType::Preordering> dbIt(driver, dbPrefix);
@@ -991,6 +934,7 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
                 dbIt.Next();
                 continue;
             }
+            seenItems.insert(dbIt.GetFullPath());
 
             auto childFolderPath = CreateDirectory(folderPath, dbIt.GetRelPath());
             TFile(childFolderPath.Child(NDump::NFiles::Incomplete().FileName), CreateAlways).Close();
@@ -1009,28 +953,36 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
                         auto status = CopyTableAsyncStart(driver, dbIt.GetFullPath(), tmpTablePath);
                         copiedTablesStatuses.emplace(dbIt.GetFullPath(), std::move(status));
                     }
-                } else if (dbIt.IsDir()) {
+                } else if (dbIt.IsDir() && !dbIt.IsSystemDir()) {
                     CreateClusterDirectory(driver, JoinDatabasePath(backupPrefix, dbIt.GetRelPath()));
                 }
             }
-            if (dbIt.IsView()) {
-                BackupView(driver, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath, issues);
+
+            try {
+                if (dbIt.IsView()) {
+                    BackupView(driver, database, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath, issues);
+                } else if (dbIt.IsTopic()) {
+                    BackupTopic(driver, dbIt.GetFullPath(), childFolderPath);
+                } else if (dbIt.IsCoordinationNode()) {
+                    BackupCoordinationNode(driver, dbIt.GetFullPath(), childFolderPath);
+                } else if (dbIt.IsReplication()) {
+                    BackupReplication(driver, database, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath);
+                } else if (dbIt.IsExternalDataSource()) {
+                    BackupExternalDataSource(driver, database, dbIt.GetFullPath(), childFolderPath);
+                } else if (dbIt.IsExternalTable()) {
+                    BackupExternalTable(driver, database, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath);
+                } else if (dbIt.IsSystemView()) {
+                    BackupSystemView(driver, dbIt.GetFullPath(), childFolderPath);
+                } else if (dbIt.IsTransfer()) {
+                    BackupTransfer(driver, database, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath);
+                } else if (!dbIt.IsTable() && !dbIt.IsDir()) {
+                    throw TSkipException() << "dumping objects of type " << dbIt.GetCurrentNode()->Type << " is not supported";
+                }
+            } catch (const TSkipException& ex) {
+                LOG_W("Skipping " << dbIt.GetFullPath().Quote() << ": " << ex.what());
+                childFolderPath.ForceDelete();
             }
-            if (dbIt.IsTopic()) {
-                BackupTopic(driver, dbIt.GetFullPath(), childFolderPath);
-            }
-            if (dbIt.IsCoordinationNode()) {
-                BackupCoordinationNode(driver, dbIt.GetFullPath(), childFolderPath);
-            }
-            if (dbIt.IsReplication()) {
-                BackupReplication(driver, database, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath);
-            }
-            if (dbIt.IsExternalDataSource()) {
-                BackupExternalDataSource(driver, dbIt.GetFullPath(), childFolderPath);
-            }
-            if (dbIt.IsExternalTable()) {
-                BackupExternalTable(driver, dbIt.GetFullPath(), childFolderPath);
-            }
+
             dbIt.Next();
         }
     }
@@ -1038,9 +990,7 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
     if (schemaOnly) {
         TDbIterator<ETraverseType::Postordering> dbIt(driver, dbPrefix);
         while (dbIt) {
-            if (IsExcluded(dbIt.GetFullPath(), exclusionPatterns)) {
-                LOG_D("Skip " << dbIt.GetFullPath().Quote());
-                dbIt.Next();
+            if (SkipItem(exclusionPatterns, seenItems, dbIt)) {
                 continue;
             }
 
@@ -1068,9 +1018,7 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
     {
         TDbIterator<ETraverseType::Postordering> dbIt(driver, dbPrefix);
         while (dbIt) {
-            if (IsExcluded(dbIt.GetFullPath(), exclusionPatterns)) {
-                LOG_D("Skip " << dbIt.GetFullPath().Quote());
-                dbIt.Next();
+            if (SkipItem(exclusionPatterns, seenItems, dbIt)) {
                 continue;
             }
 
@@ -1092,7 +1040,7 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
             } else if (dbIt.IsDir()) {
                 MaybeCreateEmptyFile(childFolderPath);
                 BackupPermissions(driver, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath);
-                if (!avoidCopy) {
+                if (!avoidCopy && !dbIt.IsSystemDir()) {
                     RemoveClusterDirectory(driver, tmpTablePath);
                 }
             }

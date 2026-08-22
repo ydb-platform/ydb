@@ -3,16 +3,17 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
-class TTypeKindWrapper : public TMutableComputationNode<TTypeKindWrapper> {
-    typedef TMutableComputationNode<TTypeKindWrapper> TBaseComputation;
+class TTypeKindWrapper: public TMutableComputationNode<TTypeKindWrapper> {
+    using TBaseComputation = TMutableComputationNode<TTypeKindWrapper>;
+
 public:
     TTypeKindWrapper(TComputationMutables& mutables, IComputationNode* handle)
         : TBaseComputation(mutables)
         , Handle_(handle)
-    {}
+    {
+    }
 
     NUdf::TUnboxedValue DoCalculate(TComputationContext& ctx) const {
         auto handle = Handle_->GetValue(ctx);
@@ -35,5 +36,4 @@ IComputationNode* WrapTypeKind(TCallable& callable, const TComputationNodeFactor
     return new TTypeKindWrapper(ctx.Mutables, handle);
 }
 
-}
-}
+} // namespace NKikimr::NMiniKQL

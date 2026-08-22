@@ -243,8 +243,7 @@ namespace pdqsort_detail
   // pivot is a median of at least 3 elements and that [begin, end) is at least
   // insertion_sort_threshold long. Uses branchless partitioning.
   template <class Iter, class Compare>
-  inline std::pair<Iter, bool> partition_right_branchless(Iter begin, Iter end,
-                                                          Compare comp)
+  inline std::pair<Iter, bool> partition_right_branchless(Iter begin, Iter end, Compare comp)
   {
     typedef typename std::iterator_traits<Iter>::value_type T;
 
@@ -346,8 +345,7 @@ namespace pdqsort_detail
 
       // Swap elements and update block sizes and first/last boundaries.
       int num = std::min(num_l, num_r);
-      swap_offsets(first, last, offsets_l + start_l, offsets_r + start_r, num,
-                   num_l == num_r);
+      swap_offsets(first, last, offsets_l + start_l, offsets_r + start_r, num, num_l == num_r);
       num_l -= num;
       num_r -= num;
       start_l += num;
@@ -359,8 +357,7 @@ namespace pdqsort_detail
     }
 
     int l_size = 0, r_size = 0;
-    int unknown_left =
-        (int)(last - first) - ((num_r || num_l) ? block_size : 0);
+    int unknown_left = (int)(last - first) - ((num_r || num_l) ? block_size : 0);
     if (num_r) {
       // Handle leftover block by assigning the unknown elements to the other
       // block.
@@ -395,8 +392,7 @@ namespace pdqsort_detail
     }
 
     int num = std::min(num_l, num_r);
-    swap_offsets(first, last, offsets_l + start_l, offsets_r + start_r, num,
-                 num_l == num_r);
+    swap_offsets(first, last, offsets_l + start_l, offsets_r + start_r, num, num_l == num_r);
     num_l -= num;
     num_r -= num;
     start_l += num;
@@ -438,8 +434,7 @@ namespace pdqsort_detail
   // pivot is a median of at least 3 elements and that [begin, end) is at least
   // insertion_sort_threshold long.
   template <class Iter, class Compare>
-  inline std::pair<Iter, bool> partition_right(Iter begin, Iter end,
-                                               Compare comp)
+  inline std::pair<Iter, bool> partition_right(Iter begin, Iter end, Compare comp)
   {
     typedef typename std::iterator_traits<Iter>::value_type T;
 
@@ -577,9 +572,8 @@ namespace pdqsort_detail
       }
 
       // Partition and get results.
-      std::pair<Iter, bool> part_result =
-          Branchless ? partition_right_branchless(begin, end, comp)
-                     : partition_right(begin, end, comp);
+      std::pair<Iter, bool> part_result = Branchless ? partition_right_branchless(begin, end, comp)
+                                                     : partition_right(begin, end, comp);
       Iter pivot_pos = part_result.first;
       bool already_partitioned = part_result.second;
 
@@ -626,8 +620,7 @@ namespace pdqsort_detail
         // If we were decently balanced and we tried to sort an already
         // partitioned
         // sequence try to use insertion sort.
-        if (already_partitioned &&
-            partial_insertion_sort(begin, pivot_pos, comp) &&
+        if (already_partitioned && partial_insertion_sort(begin, pivot_pos, comp) &&
             partial_insertion_sort(pivot_pos + 1, end, comp))
           return;
       }
@@ -635,8 +628,7 @@ namespace pdqsort_detail
       // Sort the left partition first using recursion and do tail recursion
       // elimination for
       // the right-hand partition.
-      pdqsort_loop<Iter, Compare, Branchless>(begin, pivot_pos, comp,
-                                              bad_allowed, leftmost);
+      pdqsort_loop<Iter, Compare, Branchless>(begin, pivot_pos, comp, bad_allowed, leftmost);
       begin = pivot_pos + 1;
       leftmost = false;
     }
@@ -652,14 +644,12 @@ inline void pdqsort(Iter begin, Iter end, Compare comp)
 #if __cplusplus >= 201103L
   pdqsort_detail::pdqsort_loop<
       Iter, Compare,
-      pdqsort_detail::is_default_compare<
-          typename std::decay<Compare>::type>::value &&
-          std::is_arithmetic<
-              typename std::iterator_traits<Iter>::value_type>::value>(
+      pdqsort_detail::is_default_compare<std::decay_t<Compare>>::value &&
+          std::is_arithmetic<typename std::iterator_traits<Iter>::value_type>::value>(
       begin, end, comp, pdqsort_detail::log2(end - begin));
 #else
-  pdqsort_detail::pdqsort_loop<Iter, Compare, false>(
-      begin, end, comp, pdqsort_detail::log2(end - begin));
+  pdqsort_detail::pdqsort_loop<Iter, Compare, false>(begin, end, comp,
+                                                     pdqsort_detail::log2(end - begin));
 #endif
 }
 
@@ -675,8 +665,8 @@ inline void pdqsort_branchless(Iter begin, Iter end, Compare comp)
 {
   if (begin == end)
     return;
-  pdqsort_detail::pdqsort_loop<Iter, Compare, true>(
-      begin, end, comp, pdqsort_detail::log2(end - begin));
+  pdqsort_detail::pdqsort_loop<Iter, Compare, true>(begin, end, comp,
+                                                    pdqsort_detail::log2(end - begin));
 }
 
 template <class Iter>

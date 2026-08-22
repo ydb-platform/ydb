@@ -1,6 +1,6 @@
 # Exporting data to the file system
 
-## Cluster
+## Cluster {#cluster}
 
 The `admin cluster dump` command dumps the cluster' metadata to the client file system in the format described in the [{#T}](../file-structure.md) article:
 
@@ -14,9 +14,13 @@ The `admin cluster dump` command dumps the cluster' metadata to the client file 
 
 A [cluster configuration](../../../../maintenance/manual/config-overview.md) is dumped separately using the `{{ ydb-cli }} admin cluster config fetch` command.
 
-## Database
+## Database {#db}
 
 The `admin database dump` command dumps the database' data and metadata to the client file system in the format described in [{#T}](../file-structure.md):
+
+{% include [limitation](./limitation-dump-column-tables.md) %}
+
+{% include [limitation](./limitation-dump-secrets.md) %}
 
 ```bash
 {{ ydb-cli }} [connection options] admin database dump [options]
@@ -28,9 +32,13 @@ The `admin database dump` command dumps the database' data and metadata to the c
 
 A [database configuration](../../../../maintenance/manual/config-overview.md) is dumped separately using the `{{ ydb-cli }} admin database config fetch` command.
 
-## Schema objects
+## Schema objects {#schema-objects}
 
 The `tools dump` command dumps the schema objects to the client file system in the format described in [{#T}](../file-structure.md):
+
+{% include [limitation](./limitation-dump-column-tables.md) %}
+
+{% include [limitation](./limitation-dump-secrets.md) %}
 
 ```bash
 {{ ydb-cli }} [connection options] tools dump [options]
@@ -55,7 +63,7 @@ The `tools dump` command dumps the schema objects to the client file system in t
 
 - `--save-partial-result`: Retain the result of a partial dump. Without this option, dumps that terminate with an error are deleted.
 
-- `--preserve-pool-kinds`: If enabled, the `tools dump` command saves the storage device types specified for column groups of the tables to the dump (see the `DATA` parameter in [{#T}](../../../../yql/reference/syntax/create_table/family.md) for reference). To import such a dump, the same [storage pools](../../../../concepts/glossary.md#storage-pool) must be present in the database. If at least one storage pool is missing, the import procedure will end with an error. By default, this option is disabled, and the import procedure uses the default storage pool specified at the time of database creation (see [{#T}](../../../../devops/deployment-options/manual/initial-deployment.md#create-db) for reference).
+- `--preserve-pool-kinds`: If enabled, the `tools dump` command saves the storage device types specified for column groups of the tables to the dump (see the `DATA` parameter in [{#T}](../../../../yql/reference/syntax/create_table/family.md) for reference). To import such a dump, the same [storage pools](../../../../concepts/glossary.md#storage-pool) must be present in the database. If at least one storage pool is missing, the import procedure will end with an error. By default, this option is disabled, and the import procedure uses the default storage pool specified at the time of database creation (see [{#T}](../../../../devops/deployment-options/manual/initial-deployment/deployment-configuration-v1.md#create-db) for reference).
 
 - `--ordered`: Sorts rows in the exported tables by the primary key.
 

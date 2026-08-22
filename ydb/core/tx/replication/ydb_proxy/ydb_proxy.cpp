@@ -1,14 +1,14 @@
 #include "partition_end_watcher.h"
 #include "ydb_proxy.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
-
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam/iam.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam_private/iam.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/hfunc.h>
-
-#include <ydb/core/base/appdata.h>
 
 #include <util/generic/hash_set.h>
 #include <util/string/join.h>
@@ -188,6 +188,7 @@ class TTopicReader: public TBaseProxyActor<TTopicReader> {
         if (AutoCommit && !settings.SkipCommit_) {
             DeferredCommit.Commit();
         }
+
         WaitEvent(ev->Sender, ev->Cookie);
     }
 
@@ -308,6 +309,9 @@ class TYdbProxy: public TBaseProxyActor<TYdbProxy> {
         }
         if (base.CredentialsProviderFactory_) {
             derived.CredentialsProviderFactory(*base.CredentialsProviderFactory_);
+        }
+        if (base.SslCredentials_) {
+            derived.SslCredentials_ = base.SslCredentials_;
         }
 
         return derived;
@@ -446,32 +450,49 @@ class TYdbProxy: public TBaseProxyActor<TYdbProxy> {
         Call<TEvYdbProxy::TEvCommitOffsetResponse>(ev, &TTopicClient::CommitOffset);
     }
 
-    static TCommonClientSettings MakeSettings(const TString& endpoint, const TString& database, bool ssl) {
+    static TCommonClientSettings BaseSettings(const TString& endpoint, const TString& database, bool ssl, const TString& caCert) {
         return TCommonClientSettings()
             .DiscoveryEndpoint(endpoint)
             .DiscoveryMode(EDiscoveryMode::Async)
             .Database(database)
-            .SslCredentials(ssl);
+            .SslCredentials(TSslCredentials(ssl, caCert));
     }
 
-    static TCommonClientSettings MakeSettings(const TString& endpoint, const TString& database, bool ssl, const TString& token) {
-        return MakeSettings(endpoint, database, ssl)
-            .AuthToken(token);
+    static TCommonClientSettings MakeSettings(TCommonClientSettings&& settings) {
+        return settings;
     }
 
-    static TCommonClientSettings MakeSettings(const TString& endpoint, const TString& database, bool ssl, const TStaticCredentials& credentials) {
-        return MakeSettings(endpoint, database, ssl)
-            .CredentialsProviderFactory(CreateLoginCredentialsProviderFactory({
+    static TCommonClientSettings MakeSettings(TCommonClientSettings&& settings, const TString& token) {
+        return settings.AuthToken(token);
+    }
+
+    static TCommonClientSettings MakeSettings(TCommonClientSettings&& settings, const TStaticCredentials& credentials) {
+        return settings.CredentialsProviderFactory(CreateLoginCredentialsProviderFactory({
                 .User = credentials.GetUser(),
                 .Password = credentials.GetPassword(),
             }));
     }
 
+    static TCommonClientSettings MakeSettings(TCommonClientSettings&& settings, const TIamCredentials& credentials) {
+        const auto& serviceControl = AppData()->ReplicationConfig.GetIamServiceControl();
+
+        TIamServiceParams iamParams;
+        iamParams.SystemServiceAccountCredentials = CreateIamCredentialsProviderFactory();
+        iamParams.Endpoint = serviceControl.GetEndpoint();
+        iamParams.ServiceId = serviceControl.GetServiceId();
+        iamParams.MicroserviceId = serviceControl.GetMicroserviceId();
+        iamParams.ResourceType = serviceControl.GetResourceType();
+        iamParams.ResourceId = credentials.GetResourceId();
+        iamParams.TargetServiceAccountId = credentials.GetServiceAccountId();
+
+        return settings.CredentialsProviderFactory(CreateIamServiceCredentialsProviderFactory(iamParams));
+    }
+
 public:
     template <typename... Args>
-    explicit TYdbProxy(Args&&... args)
+    explicit TYdbProxy(const TString& endpoint, const TString& database, bool ssl, const TString& caCert, Args&&... args)
         : TBaseProxyActor(&TThis::StateWork)
-        , CommonSettings(MakeSettings(std::forward<Args>(args)...))
+        , CommonSettings(MakeSettings(BaseSettings(endpoint, database, ssl, caCert), std::forward<Args>(args)...))
     {
     }
 
@@ -513,16 +534,20 @@ private:
 
 }; // TYdbProxy
 
-IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ssl) {
-    return new TYdbProxy(endpoint, database, ssl);
+IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ssl, const TString& caCert) {
+    return new TYdbProxy(endpoint, database, ssl, caCert);
 }
 
-IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ssl, const TString& token) {
-    return new TYdbProxy(endpoint, database, ssl, token);
+IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ssl, const TString& caCert, const TString& token) {
+    return new TYdbProxy(endpoint, database, ssl, caCert, token);
 }
 
-IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ssl, const TStaticCredentials& credentials) {
-    return new TYdbProxy(endpoint, database, ssl, credentials);
+IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ssl, const TString& caCert, const TStaticCredentials& credentials) {
+    return new TYdbProxy(endpoint, database, ssl, caCert, credentials);
+}
+
+IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ssl, const TString& caCert, const TIamCredentials& credentials) {
+    return new TYdbProxy(endpoint, database, ssl, caCert, credentials);
 }
 
 }

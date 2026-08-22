@@ -1,5 +1,5 @@
 #pragma once
-#include "defs.h"
+#include <ydb/core/ymq/actor/cfg/defs.h>
 
 #include <util/generic/string.h>
 
@@ -10,5 +10,8 @@ extern const TString USER_SETTING_DISABLE_COUNTERS;
 extern const TString USER_SETTING_SHOW_DETAILED_COUNTERS_DEADLINE_MS;
 extern const TString USER_SETTING_EXPORT_TRANSACTION_COUNTERS;
 extern const TString USE_CPU_LEADER_OPTIMIZATION;
+
+extern const TString USER_SETTING_MIGRATION_COMPATIBILITY;
+extern const TString USER_SETTING_MIGRATION_FINISHED;
 
 } // namespace NKikimr::NSQS

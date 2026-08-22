@@ -64,6 +64,10 @@ private:
     }
 
     bool CanReplaceOnHybrid(const TYtOutputOpBase& operation) const {
+        if (operation.DataSink().Cluster().Value() == YtUnspecifiedCluster) {
+            // wait until runtime cluster is assigned
+            return false;
+        }
         const TStringBuf nodeName = operation.Raw()->Content();
         if (!State_->IsHybridEnabledForCluster(operation.DataSink().Cluster().Value())) {
             PushSkipStat("DisabledCluster", nodeName);
@@ -72,6 +76,9 @@ private:
 
         if (State_->HybridTakesTooLong()) {
             PushSkipStat("TakesTooLong", nodeName);
+            YQL_CLOG(DEBUG, ProviderYt) << "CanReplaceOnHybrid: skip " << nodeName
+                << " by TakesTooLong: timeSpentInHybrid=" << State_->TimeSpentInHybrid
+                << ", limit=" << State_->GetHybridDqTimeSpentLimit();
             return false;
         }
 
@@ -95,6 +102,8 @@ private:
 
         if (operation.Output().Size() != 1U) {
             PushSkipStat("MultipleOutputs", nodeName);
+            YQL_CLOG(DEBUG, ProviderYt) << "CanReplaceOnHybrid: skip " << nodeName
+                << " by MultipleOutputs: outputCount=" << operation.Output().Size();
             return false;
         }
 
@@ -109,6 +118,10 @@ private:
                 PushSkipStat("UnsupportedDqOpSettings", nodeName);
                 PushSettingsToStat(settings, nodeName, "SkipDqOpSettings", DqOpSupportedSettings);
             }
+            return false;
+        }
+
+        if (HasNodesToCalculate(operation.Ptr())) {
             return false;
         }
 
@@ -151,6 +164,10 @@ private:
                 PushSkipStat("DynamicStoreRead", nodeName);
                 return false;
             }
+            if (tableInfo->Meta->HasRLS) {
+                PushSkipStat("RLSTable", nodeName);
+                return false;
+            }
             if (NYql::HasSetting(tableInfo->Settings.Ref(), EYtSettingType::WithQB)) {
                 PushSkipStat("WithQB", nodeName);
                 return false;
@@ -173,6 +190,10 @@ private:
 
         if (dataSize > sizeLimit || dataChunks > chunksLimit) {
             PushSkipStat("OverLimits", nodeName);
+            YQL_CLOG(DEBUG, ProviderYt) << "CanReadHybrid: skip " << nodeName
+                << " by OverLimits: dataSize=" << dataSize << " (limit=" << sizeLimit << ")"
+                << ", dataChunks=" << dataChunks << " (limit=" << chunksLimit << ")"
+                << ", orderedInput=" << orderedInput;
             return false;
         }
 
@@ -199,6 +220,16 @@ private:
                 if (TCoScriptUdf::Match(node.Get()) && NKikimr::NMiniKQL::IsSystemPython(NKikimr::NMiniKQL::ScriptTypeFromStr(node->Head().Content()))) {
                     return true;
                 }
+
+                if ((TCoScriptUdf::Match(node.Get()) && node->ChildrenSize() > 4) || (TCoUdf::Match(node.Get()) && node->ChildrenSize() == 8)) {
+                    for (const auto& setting: node->Child(TCoScriptUdf::Match(node.Get()) ? 4 : 7)->Children()) {
+                        YQL_ENSURE(setting->Head().IsAtom());
+                        if (setting->Head().Content() == "layers") {
+                            return true;
+                        }
+                    }
+                }
+
 
                 if (const auto& tableContent = TMaybeNode<TYtTableContent>(node)) {
                     if (!flow)
@@ -523,7 +554,7 @@ private:
                 sortKeys = ctx.Builder(reduce.Pos())
                     .Lambda()
                         .Param("row")
-                        .Do(std::bind(keysBuilder, std::ref(sort), std::placeholders::_1))
+                        .Do(std::bind_front(keysBuilder, std::ref(sort)))
                     .Seal().Build();
             }
         }
@@ -531,7 +562,7 @@ private:
         const auto extract = TCoLambda(ctx.Builder(reduce.Pos())
             .Lambda()
                 .Param("row")
-                .Do(std::bind(keysBuilder, std::ref(keys), std::placeholders::_1))
+                .Do(std::bind_front(keysBuilder, std::ref(keys)))
             .Seal().Build());
 
         const bool hasGetSysKeySwitch = bool(FindNode(reduce.Reducer().Body().Ptr(),
@@ -718,6 +749,7 @@ private:
     }
 
     void PushSkipStat(const TStringBuf& statName, const TStringBuf& nodeName) const {
+        State_->FullHybridExecution = false;
         PushHybridStat(statName, nodeName, "SkipReasons");
         PushHybridStat("Skip", nodeName);
     }

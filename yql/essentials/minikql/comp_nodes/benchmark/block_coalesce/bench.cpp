@@ -19,8 +19,10 @@
 
 namespace NKikimr::NMiniKQL {
 
+namespace {
+
 template <typename T>
-static void BenchmarkFixedSizeCoalesce(benchmark::State& state) {
+void BenchmarkFixedSizeCoalesce(benchmark::State& state) {
     NYql::TExprContext exprCtx;
     TSetup<false> setup;
     bool secondIsScalar = state.range(1);
@@ -43,7 +45,7 @@ static void BenchmarkFixedSizeCoalesce(benchmark::State& state) {
     TTypeInfoHelper tif;
 
     auto getArray = [&](TType* type, bool isOptional) {
-        auto array_builder = MakeArrayBuilder(tif, type, *NYql::NUdf::GetYqlMemoryPool(), arrayLength, nullptr);
+        auto array_builder = MakeArrayBuilder(tif, type, *NYql::NUdf::GetYqlMemoryPool(), arrayLength, /*pgBuilder=*/nullptr);
         for (int i = 0; i < arrayLength; i++) {
             if (!isOptional) {
                 array_builder->Add(getBlockItem(drng->GenRand64()));
@@ -85,12 +87,18 @@ static void BenchmarkFixedSizeCoalesce(benchmark::State& state) {
     }
 }
 
+} // namespace
+
 } // namespace NKikimr::NMiniKQL
 
-static void CustomArguments(benchmark::internal::Benchmark* b) {
+namespace {
+
+void CustomArguments(benchmark::Benchmark* b) {
     b->Args({9000000, 0});
     b->Args({9000000, 1});
 }
+
+} // namespace
 
 BENCHMARK(NKikimr::NMiniKQL::BenchmarkFixedSizeCoalesce<ui8>)->Unit(benchmark::kMillisecond)->Apply(CustomArguments);
 BENCHMARK(NKikimr::NMiniKQL::BenchmarkFixedSizeCoalesce<ui16>)->Unit(benchmark::kMillisecond)->Apply(CustomArguments);

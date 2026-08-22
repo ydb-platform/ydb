@@ -1,4 +1,4 @@
-import ydb.core.protos.blobstorage_config_pb2 as kikimr_bsconfig
+import ydb.core.protos.blobstorage_base3_pb2 as kikimr_bs3
 import ydb.core.protos.blobstorage_disk_color_pb2 as disk_color
 import ydb.apps.dstool.lib.common as common
 import sys
@@ -22,7 +22,7 @@ def add_options(p):
     g.add_argument('--max-scrubbed-disks-at-once', type=int, metavar='N', help='Maximum number of simultaneously scrubbed PDisks')
     choices = disk_color.TPDiskSpaceColor.E.keys()
     g.add_argument('--pdisk-space-color-border', choices=choices, help='PDisk space color border')
-    choices = kikimr_bsconfig.TSerialManagementStage.E.keys()
+    choices = kikimr_bs3.TSerialManagementStage.E.keys()
     g.add_argument('--disk-management-mode', type=str, choices=choices, help='Disk management mode')
     g.add_argument('--enable-self-heal-local-policy', action='store_const', const=True, dest='self_heal_local_policy', help='Enable SelfHeal local policy for cluster')
     g.add_argument('--disable-self-heal-local-policy', action='store_const', const=False, dest='self_heal_local_policy', help='Disable SelfHeal local policy for cluster')
@@ -31,20 +31,23 @@ def add_options(p):
 
 
 def create_request(args):
+    if args.dry_run:
+        raise Exception('Option --dry-run is not allowed for this command')
+
     request = common.create_bsc_request(args)
 
     if args.disk_management_mode is not None:
         cmd = request.Command.add().MigrateToSerial
-        cmd.Stage = kikimr_bsconfig.TSerialManagementStage.E.Value(args.disk_management_mode)
+        cmd.Stage = kikimr_bs3.TSerialManagementStage.E.Value(args.disk_management_mode)
         return request
 
     cmd = request.Command.add().UpdateSettings
     if args.default_max_slots is not None:
-        cmd.DefaultMaxSlots = args.default_max_slots
+        cmd.DefaultMaxSlots.append(args.default_max_slots)
     if args.self_heal is not None:
-        cmd.EnableSelfHeal = args.self_heal
+        cmd.EnableSelfHeal.append(args.self_heal)
     if args.donor_mode is not None:
-        cmd.EnableDonorMode = args.donor_mode
+        cmd.EnableDonorMode.append(args.donor_mode)
     if args.scrub_periodicity is not None:
         if args.scrub_periodicity == 'disable':
             d = timedelta()
@@ -53,21 +56,21 @@ def create_request(args):
             if m is None:
                 raise Exception('Incorrect scrub periodicity format %s' % args.scrub_periodicity)
             d = timedelta(**dict(zip(['days', 'hours', 'minutes', 'seconds'], map(lambda x: int(x or 0), m.group(2, 4, 6, 8)))))
-        cmd.ScrubPeriodicitySeconds = int(d.total_seconds())
+        cmd.ScrubPeriodicitySeconds.append(int(d.total_seconds()))
     if args.pdisk_space_margin_promille is not None:
         if args.pdisk_space_margin_promille < 0 or args.pdisk_space_margin_promille > 1000:
             raise Exception('Incorrect PDisk space margin setting %f' % args.pdisk_space_margin_promille)
-        cmd.PDiskSpaceMarginPromille = args.pdisk_space_margin_promille
+        cmd.PDiskSpaceMarginPromille.append(args.pdisk_space_margin_promille)
     if args.group_reserve_min is not None:
-        cmd.GroupReserveMin = args.group_reserve_min
+        cmd.GroupReserveMin.append(args.group_reserve_min)
     if args.group_reserve_part_ppm is not None:
-        cmd.GroupReservePartPPM = args.group_reserve_part_ppm
+        cmd.GroupReservePartPPM.append(args.group_reserve_part_ppm)
     if args.max_scrubbed_disks_at_once is not None:
-        cmd.MaxScrubbedDisksAtOnce = args.max_scrubbed_disks_at_once
+        cmd.MaxScrubbedDisksAtOnce.append(args.max_scrubbed_disks_at_once)
     if args.pdisk_space_color_border is not None:
-        cmd.PDiskSpaceColorBorder = disk_color.TPDiskSpaceColor.E.Value(args.pdisk_space_color_border)
+        cmd.PDiskSpaceColorBorder.append(disk_color.TPDiskSpaceColor.E.Value(args.pdisk_space_color_border))
     if args.self_heal_local_policy is not None:
-        cmd.UseSelfHealLocalPolicy = args.self_heal_local_policy
+        cmd.UseSelfHealLocalPolicy.append(args.self_heal_local_policy)
 
     return request
 

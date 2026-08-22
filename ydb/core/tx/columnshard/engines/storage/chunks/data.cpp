@@ -1,6 +1,7 @@
 #include "data.h"
-#include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
+
 #include <ydb/core/tx/columnshard/engines/portions/constructor_accessor.h>
+#include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 
 namespace NKikimr::NOlap::NChunks {
 
@@ -9,8 +10,10 @@ void TPortionIndexChunk::DoAddIntoPortionBeforeBlob(const TBlobRangeLink16& bRan
     portionInfo.AddIndex(TIndexChunk(GetEntityId(), GetChunkIdxVerified(), RecordsCount, RawBytes, bRange));
 }
 
-std::shared_ptr<IPortionDataChunk> TPortionIndexChunk::DoCopyWithAnotherBlob(
-    TString&& data, const ui32 /*rawBytes*/, const TSimpleColumnInfo& /*columnInfo*/) const {
+std::shared_ptr<IPortionDataChunk> TPortionIndexChunk::DoCopyWithAnotherBlob(TString&& data, const ui32 /*rawBytes*/,
+    const std::shared_ptr<NArrow::NAccessor::IAdditionalAccessorData>& additionalData, const TSimpleColumnInfo& /*columnInfo*/) const {
+    // Index chunks have no accessor metadata; reject any that isn't empty rather than drop it silently.
+    AFL_VERIFY(!additionalData || !additionalData->SerializeToProto());
     return std::make_shared<TPortionIndexChunk>(GetChunkAddressVerified(), RecordsCount, RawBytes, std::move(data));
 }
 
@@ -18,4 +21,4 @@ void TPortionIndexChunk::DoAddInplaceIntoPortion(TPortionAccessorConstructor& po
     portionInfo.AddIndex(TIndexChunk(GetEntityId(), GetChunkIdxVerified(), RecordsCount, RawBytes, GetData()));
 }
 
-}   // namespace NKikimr::NOlap::NIndexes
+}   // namespace NKikimr::NOlap::NChunks

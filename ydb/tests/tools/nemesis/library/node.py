@@ -29,13 +29,26 @@ class AbstractKillDaemonNemesis(Nemesis, base.AbstractMonitoredNemesis):
         pass
 
     def inject_fault(self):
+        self.logger.info("=== INJECT_FAULT START: %s ===", str(self))
+        self.logger.info("Available daemons: %s (count: %d)", str(self.daemons), len(self.daemons))
+
         if len(self.daemons) == 0:
-            return self.logger.info("Cannot inject the fault. List of daemons is empty, %s", str(self.daemons))
+            self.logger.warning("Cannot inject the fault. List of daemons is empty, %s", str(self.daemons))
+            self.logger.info("=== INJECT_FAULT SKIPPED (no daemons): %s ===", str(self))
+            return
 
         daemon = random.choice(self.daemons)
+        self.logger.info("Selected daemon to kill: %s", str(daemon))
         self.logger.info("Kill daemon %s", str(daemon))
-        daemon.kill()
-        self.on_success_inject_fault()
+
+        try:
+            daemon.kill()
+            self.logger.info("Successfully killed daemon: %s", str(daemon))
+            self.on_success_inject_fault()
+            self.logger.info("=== INJECT_FAULT SUCCESS: %s ===", str(self))
+        except Exception as e:
+            self.logger.error("Failed to kill daemon %s: %s", str(daemon), str(e))
+            self.logger.info("=== INJECT_FAULT FAILED: %s ===", str(self))
 
 
 class KillSlotNemesis(AbstractKillDaemonNemesis):
@@ -243,23 +256,59 @@ class RollingUpdateClusterNemesis(Nemesis, base.AbstractMonitoredNemesis):
         self.logger.info("Slots to update = %s", str(self.cluster.slots.values()))
 
         for slot in self.cluster.slots.values():
+            self.logger.info("Adding slot %s (host: %s) to slots_by_host", str(slot), slot.host)
             self.slots_by_host[slot.host].append(slot)
+
+        # Log the final mapping
+        for host, slots in self.slots_by_host.items():
+            self.logger.info("Host %s has %d slots: %s", host, len(slots), [str(slot) for slot in slots])
 
     def extract_fault(self):
         pass
 
     def inject_fault(self):
+        self.logger.info("=== INJECT_FAULT START: RollingUpdateClusterNemesis ===")
         self.logger.info("Starting next (%d-th) iteration of rolling update process...." % next(self.step_id))
+
+        # Log current state
+        self.logger.info("Current cluster state - nodes: %d, slots: %d",
+                         len(self.cluster.nodes), len(self.cluster.slots))
+        self.logger.info("Bucket 0 size: %d, Bucket 1 size: %d",
+                         len(self.buckets[0]), len(self.buckets[1]))
+
         bucket_id = 0 if len(self.buckets[0]) >= len(self.buckets[1]) else 1
+        self.logger.info("Selected bucket_id: %d (bucket[0] size: %d, bucket[1] size: %d)",
+                         bucket_id, len(self.buckets[0]), len(self.buckets[1]))
 
         node = self.buckets[bucket_id].popleft()
         self.buckets[bucket_id ^ 1].append(node)
         self.logger.info("Update nodes on host %s, direction is %s -> %s" % (node.host, bucket_id, bucket_id ^ 1))
-        node.switch_version()
-        node.kill()
 
-        self.logger.info("Successfully updated version on host %s" % node.host)
-        for slot in self.slots_by_host.get(node.host, []):
-            slot.kill()
+        try:
+            self.logger.info("Calling node.switch_version() for host: %s", node.host)
+            node.switch_version()
+            self.logger.info("Successfully switched version for host: %s", node.host)
 
-        self.on_success_inject_fault()
+            self.logger.info("Calling node.kill() for host: %s", node.host)
+            node.kill()
+            self.logger.info("Successfully killed node for host: %s", node.host)
+
+            self.logger.info("Successfully updated version on host %s" % node.host)
+
+            slots_for_host = self.slots_by_host.get(node.host, [])
+            self.logger.info("Killing %d slots for host: %s", len(slots_for_host), node.host)
+            for i, slot in enumerate(slots_for_host):
+                try:
+                    self.logger.info("Killing slot %d/%d: %s (type: %s)", i+1, len(slots_for_host), str(slot), type(slot).__name__)
+                    slot.kill()
+                    self.logger.info("Successfully killed slot: %s", str(slot))
+                except Exception as e:
+                    self.logger.error("Failed to kill slot %s: %s", str(slot), str(e))
+                    self.logger.exception("Exception details for slot %s:", str(slot))
+
+            self.on_success_inject_fault()
+            self.logger.info("=== INJECT_FAULT SUCCESS: RollingUpdateClusterNemesis ===")
+
+        except Exception as e:
+            self.logger.error("Failed to perform rolling update for host %s: %s", node.host, str(e))
+            self.logger.info("=== INJECT_FAULT FAILED: RollingUpdateClusterNemesis ===")

@@ -23,7 +23,7 @@ using namespace NYTProf;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static void RunSubprocess(const std::vector<TString>& cmd)
+static void RunSubprocess(const std::vector<std::string>& cmd)
 {
     auto command = cmd[0];
     auto args = TList<TString>(cmd.begin() + 1, cmd.end());
@@ -111,7 +111,7 @@ private:
 
     void SymbolizeAndWriteProfile(NYTProf::NProto::Profile* profile)
     {
-        Symbolize(profile, /*filesOnly*/ true);
+        Symbolize(profile, { .SymbolizeExistingFunctions = false });
         AddBuildInfo(profile, TBuildInfo::GetDefault());
 
         if (RunExternalSymbolizer_) {

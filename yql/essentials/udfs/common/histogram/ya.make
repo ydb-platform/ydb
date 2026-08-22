@@ -19,3 +19,4 @@ YQL_UDF_CONTRIB(histogram_udf)
 RECURSE_FOR_TESTS(
     test
 )
+

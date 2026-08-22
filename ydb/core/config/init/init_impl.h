@@ -29,12 +29,14 @@
 #include <ydb/public/lib/ydb_cli/common/common.h>
 
 #include <google/protobuf/text_format.h>
+#include <contrib/libs/protobuf/src/google/protobuf/io/tokenizer.h>
 
 #include <library/cpp/getopt/small/last_getopt_opts.h>
 
 #include <util/system/hostname.h>
 #include <util/stream/file.h>
 #include <util/system/file.h>
+#include <util/folder/path.h>
 #include <util/generic/maybe.h>
 #include <util/generic/map.h>
 #include <util/generic/string.h>
@@ -63,14 +65,38 @@ constexpr static ui32 DefaultLogSamplingLevel = NActors::NLog::PRI_DEBUG; // log
 constexpr static ui32 DefaultLogSamplingRate = 0; // log settings
 
 template<typename T>
-bool ParsePBFromString(const TString &content, T *pb, bool allowUnknown = false) {
-    if (!allowUnknown) {
-        return ::google::protobuf::TextFormat::ParseFromString(content, pb);
+bool ParsePBFromString(const TString &content, T *pb, TString* error = nullptr, bool allowUnknown = false) {
+    class TProtoParseErrorCollector : public ::google::protobuf::io::ErrorCollector {
+    public:
+        void RecordError(int line, ::google::protobuf::io::ColumnNumber column, y_absl::string_view message) override {
+            if (Error.empty()) {
+                Error = TStringBuilder() << "line " << line + 1 << ", column " << column + 1 << ": " << message;
+            }
+        }
+
+        void RecordWarning(int, ::google::protobuf::io::ColumnNumber, y_absl::string_view) override {
+        }
+
+        const TString& GetError() const {
+            return Error;
+        }
+
+    private:
+        TString Error;
+    };
+
+    TProtoParseErrorCollector errorCollector;
+    ::google::protobuf::TextFormat::Parser parser;
+    parser.RecordErrorsTo(&errorCollector);
+    if (allowUnknown) {
+        parser.AllowUnknownField(true);
     }
 
-    ::google::protobuf::TextFormat::Parser parser;
-    parser.AllowUnknownField(true);
-    return parser.ParseFromString(content, pb);
+    const bool ok = parser.ParseFromString(content, pb);
+    if (!ok && error && errorCollector.GetError()) {
+        *error = errorCollector.GetError();
+    }
+    return ok;
 }
 
 struct TConfigRefs {
@@ -83,6 +109,31 @@ struct TFileConfigOptions {
     TString Description;
     TMaybe<TString> ParsedOption;
 };
+
+struct TYamlConfigs {
+    std::optional<TString> Main;
+    std::optional<TString> Storage;
+    TString MainSource;
+    std::optional<TString> StorageSource;
+    bool LoadedFromStore = false;
+};
+
+inline TString DescribeFetchConfigFailure(TStringBuf context, const IStorageConfigResult& result) {
+    TStringBuilder message;
+    message << "Failed to fetch config " << context;
+    if (const TString& endpoint = result.GetEndpoint(); endpoint) {
+        message << " at " << endpoint.Quote();
+    }
+    if (result.IsTransportError()) {
+        message << " (transport error)";
+    }
+    if (const TString& issue = result.GetPrimaryIssueMessage(); issue) {
+        message << ": " << issue;
+    } else if (const TString& issues = result.GetIssuesText(); issues) {
+        message << ": " << issues;
+    }
+    return message;
+}
 
 template <class TProto>
 using TAccessors = std::tuple<
@@ -117,9 +168,15 @@ auto MutableConfigPart(
         TString path = protoConfigFileProvider.Get(optname);
         const TString protoString = protoConfigFileProvider.GetProtoFromFile(path, errorCollector);
         // TODO(Enjeciton): CFG-UX-0 handle error collector errors
-        const bool result = ParsePBFromString(protoString, res);
+        TString parseError;
+        const bool result = ParsePBFromString(protoString, res, &parseError);
         if (!result) {
-            errorCollector.Fatal(Sprintf("Can't parse protobuf: %s", path.c_str()));
+            TStringBuilder message;
+            message << "Failed to parse protobuf file " << path.Quote();
+            if (parseError) {
+                message << ": " << parseError;
+            }
+            errorCollector.Fatal(message, "YDBE-10024");
             return nullptr;
         }
 
@@ -159,9 +216,15 @@ auto MutableConfigPartMerge(
         TString path = protoConfigFileProvider.Get(optname);
         const TString protoString = protoConfigFileProvider.GetProtoFromFile(path, errorCollector);
         // TODO(Enjection): CFG-UX-0 handle error collector errors
-        const bool result = ParsePBFromString(protoString, &cfg);
+        TString parseError;
+        const bool result = ParsePBFromString(protoString, &cfg, &parseError);
         if (!result) {
-            errorCollector.Fatal(Sprintf("Can't parse protobuf: %s", path.c_str()));
+            TStringBuilder message;
+            message << "Failed to parse protobuf file " << path.Quote();
+            if (parseError) {
+                message << ": " << parseError;
+            }
+            errorCollector.Fatal(message, "YDBE-10024");
             return nullptr;
         }
 
@@ -178,10 +241,8 @@ auto MutableConfigPartMerge(
 
 void AddProtoConfigOptions(IProtoConfigFileProvider& out);
 void LoadBootstrapConfig(IProtoConfigFileProvider& protoConfigFileProvider, IErrorCollector& errorCollector, TVector<TString> configFiles, NKikimrConfig::TAppConfig& out);
-void LoadMainYamlConfig(TConfigRefs refs, const TString& mainYamlConfigFile, const TString& storageYamlConfigFile,
-    bool loadedFromStore, NKikimrConfig::TAppConfig& appConfig,
-    NYamlConfig::IConfigSwissKnife* csk,
-    const NCompat::TSourceLocation location = NCompat::TSourceLocation::current());
+void ApplyMainYamlConfig(TConfigRefs refs, const TYamlConfigs& yamlConfigs, NKikimrConfig::TAppConfig& appConfig,
+                         const NCompat::TSourceLocation location = NCompat::TSourceLocation::current());
 void CopyNodeLocation(NActorsInterconnect::TNodeLocation* dst, const NYdb::NDiscovery::TNodeLocation& src);
 void CopyNodeLocation(NYdb::NDiscovery::TNodeLocation* dst, const NActorsInterconnect::TNodeLocation& src);
 
@@ -197,7 +258,7 @@ struct TWithDefault {
 
     void EnsureDefined() const {
         if (Y_UNLIKELY(Default)) {
-            ythrow yexception() << "TWithDefault access through GetRef() assuming it is non-default";
+            throw TInitializationException("YDBE-10006") << "TWithDefault access through GetRef() assuming it is non-default";
         }
     }
 
@@ -297,6 +358,8 @@ struct TCommonAppOptions {
     ui32 MonitoringThreads = 10;
     ui32 MonitoringMaxRequestsPerSecond = 0;
     TString MonitoringCertificateFile;
+    TString MonitoringPrivateKeyFile;
+    TString MonitoringCaFile;
     TString RestartsCountFile = "";
     size_t CompileInflightLimit = 100000; // MiniKQLCompileService
     TString UDFsDir;
@@ -307,16 +370,17 @@ struct TCommonAppOptions {
     bool NodeBrokerUseTls = false;
     bool FixedNodeID = false;
     ui32 InterconnectPort = 0;
-    bool IgnoreCmsConfigs = false;
     bool TinyMode = false;
     TString NodeAddress;
     TString NodeHost;
     TString NodeResolveHost;
     TString NodeDomain;
+    ui32 HttpProxyPort = 0;
     ui32 SqsHttpPort = 0;
     TString NodeKind = TString(NODE_KIND_YDB);
     TMaybe<TString> NodeType;
     TMaybe<TString> DataCenter;
+    TMaybe<TString> Module;
     TString Rack = "";
     ui32 Body = 0;
     ui32 GRpcPort = 0;
@@ -325,8 +389,7 @@ struct TCommonAppOptions {
     ui32 GRpcPublicPort = 0;
     ui32 GRpcsPublicPort = 0;
     ui32 KafkaPort = 0;
-    TString PGWireAddress = "";
-    ui32 PGWirePort = 0;
+    TString KafkaListenAddress = "";
     TVector<TString> GRpcPublicAddressesV4;
     TVector<TString> GRpcPublicAddressesV6;
     TString GRpcPublicTargetNameOverride = "";
@@ -343,6 +406,7 @@ struct TCommonAppOptions {
     TString BridgePileName;
     TString SeedNodesFile;
     TVector<TString> SeedNodes;
+    bool ForceDatabaseLabels = false;
 
     void RegisterCliOptions(NLastGetopt::TOpts& opts) {
         opts.AddLongOption("cluster-name", "which cluster this node belongs to")
@@ -388,13 +452,18 @@ struct TCommonAppOptions {
             .RequiredArgument("NUM").StoreResult(&InterconnectPort);
         opts.AddLongOption("sqs-port", "sqs port")
             .RequiredArgument("NUM").StoreResult(&SqsHttpPort);
+        opts.AddLongOption("http-proxy-port", "http proxy port")
+            .RequiredArgument("NUM").StoreResult(&HttpProxyPort);
         opts.AddLongOption("tenant", "add binding for Local service to specified tenant, might be one of {'/<root>', '/<root>/<path_to_user>'}")
             .RequiredArgument("NAME").StoreResult(&TenantName);
         opts.AddLongOption("mon-port", "Monitoring port").OptionalArgument("NUM").StoreResult(&MonitoringPort);
         opts.AddLongOption("mon-address", "Monitoring address").OptionalArgument("ADDR").StoreResult(&MonitoringAddress);
-        opts.AddLongOption("mon-cert", "Monitoring certificate (https)").OptionalArgument("PATH").StoreResult(&MonitoringCertificateFile);
+        opts.AddLongOption("mon-cert", "Path to monitoring certificate file (https)").OptionalArgument("PATH").StoreResult(&MonitoringCertificateFile);
+        opts.AddLongOption("mon-key", "Path to monitoring private key file (https)").OptionalArgument("PATH").StoreResult(&MonitoringPrivateKeyFile);
         opts.AddLongOption("mon-threads", "Monitoring http server threads").RequiredArgument("NUM").StoreResult(&MonitoringThreads);
-        opts.AddLongOption("suppress-version-check", "Suppress version compatibility checking via IC").NoArgument().SetFlag(&SuppressVersionCheck);
+        opts.AddLongOption("mon-ca", "Path to CA certificate file for verifying client certificates (mTLS)").OptionalArgument("PATH").StoreResult(&MonitoringCaFile);
+        // Should be provided in yaml config: TStaticNameserviceConfig.SuppressVersionCheck
+        opts.AddLongOption("suppress-version-check", "Suppress version compatibility checking via IC").NoArgument().Hidden().SetFlag(&SuppressVersionCheck);
 
         opts.AddLongOption("grpc-port", "enable gRPC server on port").RequiredArgument("PORT").StoreResult(&GRpcPort);
         opts.AddLongOption("grpcs-port", "enable gRPC SSL server on port").RequiredArgument("PORT").StoreResult(&GRpcsPort);
@@ -402,23 +471,25 @@ struct TCommonAppOptions {
         opts.AddLongOption("grpc-public-port", "set public gRPC port for discovery").RequiredArgument("PORT").StoreResult(&GRpcPublicPort);
         opts.AddLongOption("grpcs-public-port", "set public gRPC SSL port for discovery").RequiredArgument("PORT").StoreResult(&GRpcsPublicPort);
         opts.AddLongOption("kafka-port", "enable kafka proxy to listen on port").OptionalArgument("PORT").StoreResult(&KafkaPort);
-        opts.AddLongOption("pgwire-address", "set host for listen postgres protocol").RequiredArgument("ADDR").StoreResult(&PGWireAddress);
-        opts.AddLongOption("pgwire-port", "set port for listen postgres protocol").OptionalArgument("PORT").StoreResult(&PGWirePort);
-        opts.AddLongOption("grpc-public-address-v4", "set public ipv4 address for discovery").RequiredArgument("ADDR").EmplaceTo(&GRpcPublicAddressesV4);
-        opts.AddLongOption("grpc-public-address-v6", "set public ipv6 address for discovery").RequiredArgument("ADDR").EmplaceTo(&GRpcPublicAddressesV6);
-        opts.AddLongOption("grpc-public-target-name-override", "set public hostname override for TLS in discovery").RequiredArgument("HOST").StoreResult(&GRpcPublicTargetNameOverride);
+        opts.AddLongOption("kafka-address", "set kafka proxy listen address").RequiredArgument("ADDR").StoreResult(&KafkaListenAddress);
+        // Should be provided in yaml config: TGRpcConfig.PublicAddressesV4
+        opts.AddLongOption("grpc-public-address-v4", "set public ipv4 address for discovery").RequiredArgument("ADDR").Hidden().EmplaceTo(&GRpcPublicAddressesV4);
+        // Should be provided in yaml config: TGRpcConfig.PublicAddressesV6
+        opts.AddLongOption("grpc-public-address-v6", "set public ipv6 address for discovery").RequiredArgument("ADDR").Hidden().EmplaceTo(&GRpcPublicAddressesV6);
+        // Should be provided in yaml config: TGRpcConfig.PublicTargetNameOverride
+        opts.AddLongOption("grpc-public-target-name-override", "set public hostname override for TLS in discovery").RequiredArgument("HOST").Hidden().StoreResult(&GRpcPublicTargetNameOverride);
+        // Should be provided in yaml config: TRestartsCountConfig.RestartsCountFile
         opts.AddLongOption('r', "restarts-count-file", "State for restarts monitoring counter,\nuse empty string to disable\n")
             .OptionalArgument("PATH").DefaultValue(RestartsCountFile)
-            .StoreResult(&RestartsCountFile);
-        opts.AddLongOption("compile-inflight-limit", "Limit on parallel programs compilation").OptionalArgument("NUM").StoreResult(&CompileInflightLimit);
+            .Hidden().StoreResult(&RestartsCountFile);
+        // Should be provided in yaml config: TCompileServiceConfig.InflightLimit
+        opts.AddLongOption("compile-inflight-limit", "Limit on parallel programs compilation").OptionalArgument("NUM").Hidden().StoreResult(&CompileInflightLimit);
         opts.AddLongOption("udf", "Load shared library with UDF by given path").AppendTo(&UDFsPaths);
         opts.AddLongOption("udfs-dir", "Load all shared libraries with UDFs found in given directory").StoreResult(&UDFsDir);
         opts.AddLongOption("node-kind", Sprintf("Kind of the node (affects list of services activated allowed values are {'%s', '%s'} )", NODE_KIND_YDB.data(), NODE_KIND_YQ.data()))
             .RequiredArgument("NAME").StoreResult(&NodeKind);
         opts.AddLongOption("node-type", "Type of the node")
             .RequiredArgument("NAME").StoreResult(&NodeType);
-        opts.AddLongOption("ignore-cms-configs", "Don't load configs from CMS")
-            .NoArgument().SetFlag(&IgnoreCmsConfigs);
         opts.AddLongOption("cert", "Path to client certificate file (PEM) for interconnect").RequiredArgument("PATH").StoreResult(&PathToInterconnectCertFile);
         opts.AddLongOption("grpc-cert", "Path to client certificate file (PEM) for grpc").RequiredArgument("PATH").StoreResult(&GrpcSslSettings.PathToGrpcCertFile);
         opts.AddLongOption("ic-cert", "Path to client certificate file (PEM) for interconnect").RequiredArgument("PATH").StoreResult(&PathToInterconnectCertFile);
@@ -430,21 +501,23 @@ struct TCommonAppOptions {
         opts.AddLongOption("ic-ca", "Path to certificate authority file (PEM) for interconnect").RequiredArgument("PATH").StoreResult(&PathToInterconnectCaFile);
         opts.AddLongOption("data-center", "data center name (used to describe dynamic node location)")
             .RequiredArgument("NAME").StoreResult(&DataCenter);
+        opts.AddLongOption("module", "module name (used to describe dynamic node location)")
+            .RequiredArgument("NAME").StoreResult(&Module);
         opts.AddLongOption("rack", "rack name (used to describe dynamic node location)")
             .RequiredArgument("NAME").StoreResult(&Rack);
         opts.AddLongOption("body", "body name (used to describe dynamic node location)")
             .RequiredArgument("NUM").StoreResult(&Body);
         opts.AddLongOption("yaml-config", "Yaml config").OptionalArgument("PATH").StoreResult(&YamlConfigFile);
         opts.AddLongOption("config-dir", "Directory to store Yaml config").RequiredArgument("PATH").StoreResult(&ConfigDirPath);
-
         opts.AddLongOption("tiny-mode", "Start in a tiny mode")
             .NoArgument().SetFlag(&TinyMode);
-
         opts.AddLongOption("workload", Sprintf("Workload to be served by this node, allowed values are %s", GetEnumAllNames<EWorkload>().data()))
             .RequiredArgument("NAME").StoreResult(&Workload);
-
         opts.AddLongOption("seed-nodes", "Path to seed nodes configuration file")
             .RequiredArgument("PATH").StoreResult(&SeedNodesFile);
+        // Should be provided in yaml config: TMonitoringConfig.ForceDatabaseLabels
+        opts.AddLongOption("force-database-labels", "Forced reporting of a label with the name of the database (tenant/domain)")
+            .NoArgument().Hidden().SetFlag(&ForceDatabaseLabels);
     }
 
     void ApplyFields(NKikimrConfig::TAppConfig& appConfig, IEnv& env, IConfigUpdateTracer& ConfigUpdateTracer) const {
@@ -469,9 +542,39 @@ struct TCommonAppOptions {
             ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::InterconnectConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
 
-        if (appConfig.HasGRpcConfig() && appConfig.GetGRpcConfig().HasCert()) {
-            appConfig.MutableGRpcConfig()->SetPathToCertificateFile(appConfig.GetGRpcConfig().GetCert());
-            ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
+        if (appConfig.HasGRpcConfig()) {
+            if (appConfig.GetGRpcConfig().HasCert()) {
+                appConfig.MutableGRpcConfig()->SetPathToCertificateFile(appConfig.GetGRpcConfig().GetCert());
+                ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
+            }
+            if (appConfig.GetGRpcConfig().HasXdsBootstrap()) {
+                auto* xdsBootstrapConfig = appConfig.MutableGRpcConfig()->MutableXdsBootstrap();
+                if (xdsBootstrapConfig->GetNode().GetId().empty()) {
+                    xdsBootstrapConfig->MutableNode()->SetId(env.FQDNHostName());
+                    ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
+                }
+                if (xdsBootstrapConfig->GetNode().GetLocality().GetZone().empty()) {
+                    TString dataCenter;
+                    if (DataCenter) {
+                        dataCenter = to_lower(DataCenter.GetRef());
+                    } else if (appConfig.HasNameserviceConfig()) {
+                        for (const auto& node : appConfig.GetNameserviceConfig().GetNode()) {
+                            if (node.GetNodeId() == NodeId) {
+                                if (node.HasLocation()) {
+                                    dataCenter = to_lower(node.GetLocation().GetDataCenter());
+                                } else if (node.HasWalleLocation()) {
+                                    dataCenter = to_lower(node.GetWalleLocation().GetDataCenter());
+                                }
+                                break;
+                            }
+                        }
+                    }
+                    if (!dataCenter.empty()) {
+                        xdsBootstrapConfig->MutableNode()->MutableLocality()->SetZone(dataCenter);
+                        ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
+                    }
+                }
+            }
         }
 
         if (!GrpcSslSettings.PathToGrpcCertFile.empty()) {
@@ -500,11 +603,11 @@ struct TCommonAppOptions {
         }
 
         if (!appConfig.HasDomainsConfig()) {
-            ythrow yexception() << "DomainsConfig is not provided";
+            throw TInitializationException("YDBE-10007") << "DomainsConfig is not provided";
         }
 
         if (!appConfig.HasChannelProfileConfig()) {
-            ythrow yexception() << "ChannelProfileConfig is not provided";
+            throw TInitializationException("YDBE-10008") << "ChannelProfileConfig is not provided";
         }
 
         if (NodeKind == NODE_KIND_YQ && InterconnectPort) {
@@ -534,7 +637,7 @@ struct TCommonAppOptions {
                 appConfig.MutableNameserviceConfig()->SetSuppressVersionCheck(true);
                 ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::NameserviceConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
             } else {
-                ythrow yexception() << "--suppress-version-check option is provided without static nameservice config";
+                throw TMisuseException() << "--suppress-version-check option is provided without static nameservice config";
             }
         }
 
@@ -568,13 +671,16 @@ struct TCommonAppOptions {
             ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::MonitoringConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
         if (MonitoringCertificateFile) {
-            TString sslCertificate = TUnbufferedFileInput(MonitoringCertificateFile).ReadAll();
-            if (!sslCertificate.empty()) {
-                appConfig.MutableMonitoringConfig()->SetMonitoringCertificate(sslCertificate);
-                ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::MonitoringConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
-            } else {
-                ythrow yexception() << "invalid ssl certificate file";
-            }
+            appConfig.MutableMonitoringConfig()->SetMonitoringCertificateFile(MonitoringCertificateFile);
+            ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::MonitoringConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
+        }
+        if (MonitoringPrivateKeyFile) {
+            appConfig.MutableMonitoringConfig()->SetMonitoringPrivateKeyFile(MonitoringPrivateKeyFile);
+            ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::MonitoringConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
+        }
+        if (MonitoringCaFile) {
+            appConfig.MutableMonitoringConfig()->SetMonitoringCaFile(MonitoringCaFile);
+            ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::MonitoringConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
         if (SqsHttpPort) {
             appConfig.MutableSqsConfig()->MutableHttpServerConfig()->SetPort(SqsHttpPort);
@@ -622,17 +728,22 @@ struct TCommonAppOptions {
             }
             ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
-	if (KafkaPort) {
+	    if (KafkaPort) {
             auto& conf = *appConfig.MutableKafkaProxyConfig();
             conf.SetEnableKafkaProxy(true);
             conf.SetListeningPort(KafkaPort);
             ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::KafkaProxyConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
-        if (PGWireAddress) {
-            appConfig.MutableLocalPgWireConfig()->SetAddress(PGWireAddress);
+        if (KafkaListenAddress) {
+            auto& conf = *appConfig.MutableKafkaProxyConfig();
+            conf.SetListeningAddress(KafkaListenAddress);
+            ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::KafkaProxyConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
-        if (PGWirePort) {
-            appConfig.MutableLocalPgWireConfig()->SetListeningPort(PGWirePort);
+        if (HttpProxyPort) {
+            auto* httpProxyConfig = appConfig.MutableHttpProxyConfig();
+            httpProxyConfig->SetEnabled(true);
+            httpProxyConfig->SetPort(HttpProxyPort);
+            ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::HttpProxyConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
         for (const auto& addr : GRpcPublicAddressesV4) {
             appConfig.MutableGRpcConfig()->AddPublicAddressesV4(addr);
@@ -698,6 +809,11 @@ struct TCommonAppOptions {
                     // default, do nothing
                     break;
             }
+        }
+
+        if (ForceDatabaseLabels) {
+            appConfig.MutableMonitoringConfig()->SetForceDatabaseLabels(ForceDatabaseLabels);
+            ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::MonitoringConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
     }
 
@@ -765,23 +881,30 @@ struct TCommonAppOptions {
         if (NodeIdValue) {
             if (NodeIdValue.GetRef() == "static") {
                 if (!appConfig.HasNameserviceConfig() || !InterconnectPort) {
-                    ythrow yexception() << "'--node static' requires naming file and IC port to be specified";
+                    throw TMisuseException() << "'--node static' requires naming file and IC port to be specified";
                 }
 
                 try {
                     nodeId = FindStaticNodeId(appConfig, env);
                 } catch(TSystemError& e) {
-                    ythrow yexception() << "cannot detect host name: " << e.what();
+                    throw TInitializationException("YDBE-10009") << "cannot detect host name: " << e.what();
                 }
 
                 if (!nodeId) {
-                    ythrow yexception() << "cannot detect node ID for " << env.HostName() << ":" << InterconnectPort
-                        << " and for " << env.FQDNHostName() << ":" << InterconnectPort << Endl;
+                    const TString hostname = env.HostName();
+                    const TString fqdn = env.FQDNHostName();
+                    TStringBuilder msg;
+                    msg << "no static node entry for " << hostname << ":" << InterconnectPort;
+                    if (fqdn != hostname) {
+                        msg << " or " << fqdn << ":" << InterconnectPort;
+                    }
+                    msg << " in cluster configuration";
+                    throw TInitializationException("YDBE-10010") << msg;
                 }
                 return nodeId;
             } else {
                 if (!TryFromString(NodeIdValue.GetRef(), nodeId)) {
-                    ythrow yexception() << "wrong '--node' value (should be NUM, 'static')";
+                    throw TMisuseException() << "wrong '--node' value (should be NUM, 'static')";
                 }
             }
         }
@@ -790,7 +913,13 @@ struct TCommonAppOptions {
 
     NActors::TNodeLocation CreateNodeLocation() const {
         NActorsInterconnect::TNodeLocation location;
+        if (BridgePileName) {
+            location.SetBridgePileName(BridgePileName);
+        }
         location.SetDataCenter(DataCenter ? DataCenter.GetRef() : TString(""));
+        if (Module) {
+            location.SetModule(Module.GetRef());
+        }
         location.SetRack(Rack);
         location.SetUnit(ToString(Body));
         NActors::TNodeLocation loc(location);
@@ -891,7 +1020,7 @@ struct TCommonAppOptions {
             }
         } else {
             if (!NodeBrokerPort) {
-                ythrow yexception() << "NodeBrokerPort MUST be defined";
+                throw TInitializationException("YDBE-10011") << "NodeBrokerPort MUST be defined";
             }
 
             for (const auto &node : appConfig.GetNameserviceConfig().GetNode()) {
@@ -911,10 +1040,10 @@ struct TCommonAppOptions {
     void ValidateTenant() const {
         if (TenantName) {
             if (!IsStartWithSlash(TenantName.GetRef())) { // ?
-                ythrow yexception() << "leading / in --tenant parametr is always required.";
+                throw TMisuseException() << "leading / in --tenant parameter is always required.";
             }
             if (NodeId && NodeKind != NODE_KIND_YQ) {
-                ythrow yexception() << "opt '--node' compatible only with '--tenant no', opt 'node' incompatible with any other values of opt '--tenant'";
+                throw TMisuseException() << "opt '--node' compatible only with '--tenant no', opt 'node' incompatible with any other values of opt '--tenant'";
             }
         }
     }
@@ -929,7 +1058,7 @@ struct TCommonAppOptions {
             out.DisableAll();
             out.EnableYQ();
         } else {
-            ythrow yexception() << "wrong '--node-kind' value '" << NodeKind << "', only '" << NODE_KIND_YDB << "' or '" << NODE_KIND_YQ << "' is allowed";
+            throw TMisuseException() << "wrong '--node-kind' value '" << NodeKind << "', only '" << NODE_KIND_YDB << "' or '" << NODE_KIND_YQ << "' is allowed";
         }
     }
 
@@ -939,7 +1068,7 @@ struct TCommonAppOptions {
 
     void ValidateStaticNodeConfig() const {
         if (!NodeId) {
-            ythrow yexception() << "Either --node [NUM|'static'] or --node-broker[-port] should be specified";
+            throw TMisuseException() << "Either --node [NUM|'static'] or --node-broker[-port] should be specified";
         }
     }
 };
@@ -953,13 +1082,22 @@ struct TMbusAppOptions {
     bool Start = false;
 
     void RegisterCliOptions(NLastGetopt::TOpts& opts) {
-        opts.AddLongOption("mbus", "Start MessageBus proxy").NoArgument().SetFlag(&Start);
-        opts.AddLongOption("mbus-port", "MessageBus proxy port").RequiredArgument("PORT").StoreResult(&BusProxyPort);
-        opts.AddLongOption("mbus-trace-path", "Path for trace files").RequiredArgument("PATH").StoreResult(&TracePath);
-        opts.AddLongOption("proxy", "Bind to proxy(-ies)").RequiredArgument("ADDR").AppendTo(&ProxyBindToProxy);
+        // MessageBus is deprecated
+        opts.AddLongOption("mbus", "Start MessageBus proxy").NoArgument().Hidden().SetFlag(&Start);
+        opts.AddLongOption("mbus-port", "MessageBus proxy port").RequiredArgument("PORT").Hidden().StoreResult(&BusProxyPort);
+        opts.AddLongOption("mbus-trace-path", "Path for trace files").RequiredArgument("PATH").Hidden().StoreResult(&TracePath);
+        opts.AddLongOption("proxy", "Bind to proxy(-ies)").RequiredArgument("ADDR").Hidden().AppendTo(&ProxyBindToProxy);
         SetMsgBusDefaults(ProxyBusSessionConfig, ProxyBusQueueConfig);
         ProxyBusSessionConfig.ConfigureLastGetopt(opts, "mbus-");
         ProxyBusQueueConfig.ConfigureLastGetopt(opts, "mbus-");
+        for (auto& opt : opts.Opts_) {
+            for (const TString& longName : opt->GetLongNames()) {
+                if (longName.StartsWith("mbus-")) {
+                    opt->Hidden_ = true;
+                    break;
+                }
+            }
+        }
     }
 
     void ValidateCliOptions(const NLastGetopt::TOpts& opts, const NLastGetopt::TOptsParseResult& parseResult) const {
@@ -967,7 +1105,7 @@ struct TMbusAppOptions {
             for (const auto &option : opts.Opts_) {
                 for (const TString &longName : option->GetLongNames()) {
                     if (longName.StartsWith("mbus-") && parseResult.Has(option.Get())) {
-                        ythrow yexception() << "option --" << longName << " is useless without --mbus option";
+                        throw TMisuseException() << "option --" << longName << " is useless without --mbus option";
                     }
                 }
             }
@@ -1025,12 +1163,14 @@ ui32 NextValidKind(ui32 kind);
 bool HasCorrespondingManagedKind(ui32 kind, const NKikimrConfig::TAppConfig& appConfig);
 NClient::TKikimr GetKikimr(const TGrpcSslSettings& cf, const TString& addr, const IEnv& env);
 NKikimrConfig::TAppConfig GetYamlConfigFromResult(const IConfigurationResult& result, const TMap<TString, TString>& labels);
-NKikimrConfig::TAppConfig GetActualDynConfig(
+TMaybe<NKikimrConfig::TAppConfig> GetActualDynConfig(
     const NKikimrConfig::TAppConfig& yamlConfig,
-    const NKikimrConfig::TAppConfig& regularConfig,
+    const TMaybe<NKikimrConfig::TAppConfig>& regularConfig,
+    IConfigUpdateTracer& ConfigUpdateTracer);
+void UpdateConfigUpdateTracer(
     IConfigUpdateTracer& ConfigUpdateTracer);
 
-NYdb::TDriverConfig CreateDriverConfig(const TGrpcSslSettings& settings, const TString& addrs, const IEnv& env, const std::optional<TString>& authToken = std::nullopt);
+NYdb::TDriverConfig CreateDriverConfig(const TGrpcSslSettings& settings, const TString& addrs, const IEnv& env, const std::string& database = "", const std::optional<TString>& authToken = std::nullopt);
 
 // =====
 
@@ -1078,9 +1218,7 @@ public:
         Option("auth-file", TCfg::TAuthConfigFieldTag{});
         LoadBootstrapConfig(ProtoConfigFileProvider, ErrorCollector, freeArgs, BaseConfig);
 
-        TString yamlConfigFile = CommonAppOptions.YamlConfigFile;
-        TString storageYamlConfigFile;
-        bool loadedFromStore = false;
+        TYamlConfigs yamlConfigs;
 
         if (CommonAppOptions.ConfigDirPath) {
             AppConfig.SetConfigDirPath(CommonAppOptions.ConfigDirPath);
@@ -1088,14 +1226,31 @@ public:
             auto dir = fs::path(CommonAppOptions.ConfigDirPath.c_str());
 
             if (auto path = dir / STORAGE_CONFIG_NAME; fs::is_regular_file(path)) {
-                storageYamlConfigFile = path.string();
+                yamlConfigs.Storage.emplace(ProtoConfigFileProvider.GetProtoFromFile(path.string(), ErrorCollector));
+                yamlConfigs.StorageSource = TStringBuilder() << "storage YAML config file " << TString(path.string()).Quote();
+                if (csk) {
+                    csk->VerifyStorageConfig(*yamlConfigs.Storage);
+                }
             }
 
             if (auto path = dir / CONFIG_NAME; fs::is_regular_file(path)) {
-                yamlConfigFile = path.string();
-                loadedFromStore = true;
+                yamlConfigs.Main.emplace(ProtoConfigFileProvider.GetProtoFromFile(path.string(), ErrorCollector));
+                yamlConfigs.MainSource = TStringBuilder() << "main YAML config file " << TString(path.string()).Quote();
+                if (csk) {
+                    csk->VerifyMainConfig(*yamlConfigs.Main);
+                }
+                yamlConfigs.LoadedFromStore = true;
             } else {
-                storageYamlConfigFile.clear();
+                yamlConfigs.Storage.reset();
+                yamlConfigs.StorageSource.reset();
+            }
+        }
+
+        if (!yamlConfigs.Main && CommonAppOptions.YamlConfigFile) {
+            yamlConfigs.Main.emplace(ProtoConfigFileProvider.GetProtoFromFile(CommonAppOptions.YamlConfigFile, ErrorCollector));
+            yamlConfigs.MainSource = TStringBuilder() << "YAML config file " << CommonAppOptions.YamlConfigFile.Quote();
+            if (csk) {
+                csk->VerifyMainConfig(*yamlConfigs.Main);
             }
         }
 
@@ -1103,16 +1258,23 @@ public:
             ParseSeedNodes(CommonAppOptions);
         }
 
-        if (CommonAppOptions.IsStaticNode()) {
-            if (yamlConfigFile.empty() && CommonAppOptions.SeedNodesFile) {
-                InitConfigFromSeedNodes(yamlConfigFile, storageYamlConfigFile);
-            }
-            if (!CommonAppOptions.ConfigDirPath.empty() && yamlConfigFile.empty()) {
-                ythrow yexception() << "YAML config is not provided for static node";
+        if (CommonAppOptions.IsStaticNode() && !yamlConfigs.Main && CommonAppOptions.NodeKind != NODE_KIND_YQ) {
+            if (CommonAppOptions.SeedNodesFile) {
+                InitConfigFromSeedNodes(yamlConfigs.Main.emplace(), yamlConfigs.Storage);
+                Y_ABORT_UNLESS(yamlConfigs.Main);
+                yamlConfigs.MainSource = "main YAML config fetched from seed nodes";
+                if (yamlConfigs.Storage) {
+                    yamlConfigs.StorageSource = "storage YAML config fetched from seed nodes";
+                }
+            } else if (CommonAppOptions.ConfigDirPath) {
+                throw TInitializationException("YDBE-10012") << "YAML config is not provided for static node and no seed nodes given";
             }
         }
 
-        LoadMainYamlConfig(refs, yamlConfigFile, storageYamlConfigFile, loadedFromStore, AppConfig, csk);
+        if (yamlConfigs.Main) {
+            ApplyMainYamlConfig(refs, yamlConfigs, AppConfig);
+        }
+
         OptionMerge("auth-token-file", TCfg::TAuthConfigFieldTag{});
 
         // start memorylog as soon as possible
@@ -1134,7 +1296,16 @@ public:
             InitDynamicNode();
         }
 
-        LoadMainYamlConfig(refs, yamlConfigFile, storageYamlConfigFile, loadedFromStore, AppConfig, csk);
+        if (yamlConfigs.Main) {
+            ApplyMainYamlConfig(refs, yamlConfigs, AppConfig);
+        }
+
+        // disable as early as possible to properly propagate it everywhere
+        if (CommonAppOptions.TinyMode) {
+            if (!AppConfig.GetFeatureFlags().HasEnableBackgroundCompaction()) {
+                AppConfig.MutableFeatureFlags()->SetEnableBackgroundCompaction(false);
+            }
+        }
 
         Option("sys-file", TCfg::TActorSystemConfigFieldTag{});
 
@@ -1174,6 +1345,7 @@ public:
         Option(nullptr, TCfg::TTracingConfigFieldTag{});
         Option(nullptr, TCfg::TFailureInjectionConfigFieldTag{});
 
+        ValidateCertPaths();
         CommonAppOptions.ApplyFields(AppConfig, Env, ConfigUpdateTracer);
 
        // MessageBus options.
@@ -1188,10 +1360,14 @@ public:
 
         std::vector<TString> errors;
         if (csk && csk->ValidateConfig(AppConfig, errors) == NYamlConfig::EValidationResult::Error) {
-            ythrow yexception() << errors.front();
+            throw TInitializationException("YDBE-10013") << errors.front();
         }
 
-        Logger.Out() << "configured" << Endl;
+        if (const auto it = Labels.find("empty_domain_during_node_registration"); it != Labels.end()) {
+            AddLabelToAppConfig(it->first, it->second);
+        }
+
+        Logger.Out() << "Configured YDB server" << Endl;
     }
 
     void FillData(const NConfig::TCommonAppOptions& cf) {
@@ -1298,14 +1474,16 @@ public:
         cf.FillClusterEndpoints(AppConfig, addrs);
 
         if (!cf.InterconnectPort) {
-            ythrow yexception() << "Either --node or --ic-port must be specified";
+            throw TMisuseException() << "Either --node or --ic-port must be specified";
         }
 
         if (addrs.empty()) {
-            ythrow yexception() << "List of Node Broker end-points is empty";
+            throw TInitializationException("YDBE-10014") << "List of Node Broker end-points is empty";
         }
 
         TString domainName = DeduceNodeDomain(cf, AppConfig);
+
+        Labels["empty_domain_during_node_registration"] = domainName.empty() ? "true" : "false";
 
         if (!cf.NodeHost) {
             cf.NodeHost = Env.FQDNHostName();
@@ -1325,7 +1503,6 @@ public:
             cf.InterconnectPort,
             cf.CreateNodeLocation(),
             AppConfig.GetAuthConfig().GetNodeRegistrationToken(),
-            cf.BridgePileName ? std::make_optional(cf.BridgePileName) : std::nullopt,
         };
 
         auto result = NodeBrokerClient.RegisterDynamicNode(cf.GrpcSslSettings, addrs, settings, Env, Logger);
@@ -1349,7 +1526,7 @@ public:
 
     class TAppConfigFieldsPreserver {
     public:
-        TAppConfigFieldsPreserver(NKikimrConfig::TAppConfig& appConfig) 
+        TAppConfigFieldsPreserver(NKikimrConfig::TAppConfig& appConfig)
             : AppConfig(appConfig)
             , ConfigDirPath(appConfig.HasConfigDirPath() ? std::make_optional(appConfig.GetConfigDirPath()) : std::nullopt)
             , StoredConfigYaml(appConfig.HasStoredConfigYaml() ? std::make_optional(appConfig.GetStoredConfigYaml()) : std::nullopt)
@@ -1409,8 +1586,8 @@ public:
             AddLabelToAppConfig("node_name", Labels["node_name"]);
         }
 
-        if (CommonAppOptions.IgnoreCmsConfigs) {
-            return;
+        if (CommonAppOptions.SeedNodesFile) {
+            return InitConfigFromSeedNodesDynamic();
         }
 
         TVector<TString> addrs;
@@ -1435,11 +1612,7 @@ public:
         NYamlConfig::ReplaceUnmanagedKinds(result->GetConfig(), yamlConfig);
 
         InitDebug.OldConfig.CopyFrom(result->GetConfig());
-        InitDebug.YamlConfig.CopyFrom(yamlConfig);
-
-        NKikimrConfig::TAppConfig appConfig = GetActualDynConfig(yamlConfig, result->GetConfig(), ConfigUpdateTracer);
-
-        ApplyConfigForNode(appConfig);
+        ApplyActualDynConfigFromYaml(yamlConfig, result->GetConfig());
     }
 
     void RegisterCliOptions(NLastGetopt::TOpts& opts) override {
@@ -1460,6 +1633,7 @@ public:
         TKikimrScopeId& scopeId,
         TString& tenantName,
         TBasicKikimrServicesMask& servicesMask,
+        bool& tinyMode,
         TString& clusterName,
         TConfigsDispatcherInitInfo& configsDispatcherInitInfo) const override
     {
@@ -1468,12 +1642,15 @@ public:
         scopeId = ScopeId;
         tenantName = TenantName;
         servicesMask = ServicesMask;
+        tinyMode = CommonAppOptions.TinyMode;
         clusterName = ClusterName;
         configsDispatcherInitInfo.InitialConfig = appConfig;
         configsDispatcherInitInfo.StartupConfigYaml = appConfig.GetStartupConfigYaml();
+        if (appConfig.HasStartupStorageYaml()) {
+            configsDispatcherInitInfo.StartupStorageYaml = appConfig.GetStartupStorageYaml();
+        }
         configsDispatcherInitInfo.ItemsServeRules = std::monostate{},
         configsDispatcherInitInfo.Labels = Labels;
-        configsDispatcherInitInfo.Labels["configuration_version"] = appConfig.GetConfigDirPath() ? "v2" : "v1";
         configsDispatcherInitInfo.DebugInfo = TDebugInfo {
             .InitInfo = InitDebug.ConfigTransformInfo,
         };
@@ -1494,90 +1671,177 @@ public:
                         if (item.Type() == NFyaml::ENodeType::Scalar) {
                             cf.SeedNodes.push_back(item.Scalar());
                         } else {
-                            ythrow yexception() << "Invalid format in seed nodes file: expected a list of strings, but found non-scalar item at " << item.Path();
+                            throw TInitializationException("YDBE-10015")
+                                << "Invalid format in seed nodes file: expected a list of strings, but found non-scalar item at "
+                                << item.Path();
                         }
                     }
                 } else {
-                    ythrow yexception() << "Invalid format in seed nodes file: expected a list of strings at root";
+                    throw TInitializationException("YDBE-10016")
+                        << "Invalid format in seed nodes file: expected a list of strings at root";
                 }
             } catch (const std::exception& e) {
-                ythrow yexception() << "Failed to read or parse seed nodes file: " << e.what();
+                throw TInitializationException("YDBE-10017") << "Failed to read or parse seed nodes file: " << e.what();
             }
         } else {
-            ythrow yexception() << "Seed nodes file not found: " << cf.SeedNodesFile;
+            throw TInitializationException("YDBE-10018") << "Seed nodes file not found: " << cf.SeedNodesFile;
         }
     }
 
-    void InitConfigFromSeedNodes(TString& yamlConfigFile, TString& storageYamlConfigFile) {
-        if (AppConfig.GetConfigDirPath().empty()) {
-            ythrow yexception() << "Seed nodes file provided, but config dir path is not set";
+    void InitConfigFromSeedNodes(TString& mainYamlConfigString, std::optional<TString>& storageYamlConfigString) {
+        if (!AppConfig.GetConfigDirPath()) {
+            throw TInitializationException("YDBE-10019") << "Seed nodes file provided, but config dir path is not set";
         }
 
-        if (CommonAppOptions.SeedNodes.empty()) {
-            ythrow yexception() << "No seed nodes provided";
+        std::vector<TString> hostOptions = {
+            // possible variants how host can be identified in config; they should be kept consistent with DeduceNodeId code
+            Env.HostName(),
+            Env.FQDNHostName(),
+        };
+        std::ranges::sort(hostOptions);
+        auto [begin, end] = std::ranges::unique(hostOptions);
+        hostOptions.erase(begin, end);
+        auto result = ConfigClient.FetchConfig(CommonAppOptions.GrpcSslSettings, CommonAppOptions.SeedNodes, Env, Logger,
+            hostOptions, CommonAppOptions.InterconnectPort);
+        if (!result || !result->IsSuccess()) {
+            throw TInitializationException("YDBE-10020")
+                << (result
+                    ? DescribeFetchConfigFailure("from seed nodes for static node", *result)
+                    : TString("Failed to fetch config from seed nodes for static node"));
         }
 
-        auto result = ConfigClient.FetchConfig(CommonAppOptions.GrpcSslSettings, CommonAppOptions.SeedNodes, Env, Logger);
-        if (!result) {
-            Logger.Out() << "Failed to fetch config from seed nodes" << Endl;
+        if (const auto& config = result->GetMainYamlConfig()) {
+            mainYamlConfigString = *config;
+        } else {
+            throw TInitializationException("YDBE-10021")
+                << "No main YAML config has been provided from seed nodes for static node";
+        }
+
+        storageYamlConfigString = result->GetStorageYamlConfig();
+
+        if (result->IsTransient()) {
+            // we do not want to save transient configs into filesystem
             return;
         }
 
-        const TString& clusterConfig = result->GetMainYamlConfig();
-        const TString& storageConfig = result->GetStorageYamlConfig();
-        const TString configDirPath = AppConfig.GetConfigDirPath();
+        const fs::path configDirPath(AppConfig.GetConfigDirPath().c_str());
 
         auto saveConfig = [&](const TString& config, const TString& configName) {
             try {
-                TString tempPath = TStringBuilder() << AppConfig.GetConfigDirPath() << "/temp_" << configName;
-                TString configPath = TStringBuilder() << AppConfig.GetConfigDirPath() << "/" << configName;
-            {
-                TFileOutput tempFile(tempPath);
-                tempFile << config;
-                tempFile.Flush();
-
-                if (Chmod(tempPath.c_str(), S_IRUSR | S_IRGRP | S_IROTH) != 0) {
+                fs::path tempPath = configDirPath / (TStringBuilder() << configName << "."
+                    << Sprintf("%08" PRIx32, RandomNumber<ui32>())).c_str();
+                *std::make_unique<TFileOutput>(tempPath) << config;
+                if (Chmod(tempPath.string().c_str(), S_IRUSR | S_IRGRP | S_IROTH) != 0) {
+                    NFs::Remove(tempPath.string());
                     return false;
                 }
-            }
 
-            return NFs::Rename(tempPath, configPath);
+                fs::path configPath = configDirPath / configName.c_str();
+                if (!NFs::Rename(tempPath.string(), configPath.string())) {
+                    NFs::Remove(tempPath.string());
+                    return false;
+                }
+
+                return true;
             } catch (const std::exception& e) {
                 return false;
             }
         };
 
-        bool clusterSaved = !clusterConfig.empty() && saveConfig(clusterConfig, CONFIG_NAME);
-        bool storageSaved = !storageConfig.empty() && saveConfig(storageConfig, STORAGE_CONFIG_NAME);
+        const bool mainError = !saveConfig(mainYamlConfigString, CONFIG_NAME);
+        const bool storageError = storageYamlConfigString && !saveConfig(*storageYamlConfigString, STORAGE_CONFIG_NAME);
 
-        if (clusterSaved) {
-            yamlConfigFile = configDirPath + "/" + CONFIG_NAME;
-        }
-        if (storageSaved) {
-            storageYamlConfigFile = configDirPath + "/" + STORAGE_CONFIG_NAME;
-        }
-
-        if (clusterSaved && storageSaved) {
-            Logger.Out() << "Initialized main and storage configs in " << configDirPath << "/"
-                         << CONFIG_NAME << " and " << STORAGE_CONFIG_NAME << Endl;
-        } else if (clusterSaved) {
-            Logger.Out() << "Initialized config in " << configDirPath << "/" << CONFIG_NAME << Endl;
-        } else if (!clusterConfig.empty() || !storageConfig.empty()) {
+        if (mainError || storageError) {
             TStringBuilder errorMsg;
             errorMsg << "Failed to save configs: ";
-            if (!clusterConfig.empty() && !clusterSaved) {
+            if (mainError) {
                 errorMsg << "main config";
             }
-            if (!storageConfig.empty() && !storageSaved) {
-                if (!clusterConfig.empty() && !clusterSaved) {
+            if (storageError) {
+                if (mainError) {
                     errorMsg << ", ";
                 }
                 errorMsg << "storage config";
             }
-            ythrow yexception() << errorMsg;
+            throw TInitializationException("YDBE-10022") << errorMsg;
+        } else if (storageYamlConfigString) {
+            Logger.Out() << "Initialized main and storage configs in " << configDirPath << "/"
+                << CONFIG_NAME << " and " << STORAGE_CONFIG_NAME << Endl;
         } else {
-            Logger.Out() << "No configs received from seed nodes" << Endl;
+            Logger.Out() << "Initialized config in " << configDirPath << "/" << CONFIG_NAME << Endl;
         }
+    }
+
+    bool ApplyActualDynConfigFromYaml(const NKikimrConfig::TAppConfig& yamlConfig, const TMaybe<NKikimrConfig::TAppConfig>& regularConfigOpt) {
+        InitDebug.YamlConfig.CopyFrom(yamlConfig);
+        auto appConfig = GetActualDynConfig(yamlConfig, regularConfigOpt, ConfigUpdateTracer);
+        if (!appConfig) {
+            return false;
+        }
+        Logger.Out() << "Successfully applied dynamic config from YAML" << Endl;
+        ApplyConfigForNode(*appConfig);
+        return true;
+    }
+
+    void InitConfigFromSeedNodesDynamic() {
+        if (CommonAppOptions.SeedNodes.empty()) {
+            throw TInitializationException("YDBE-10023") << "No seed nodes provided";
+        }
+
+        auto cfgResult = ConfigClient.FetchConfig(CommonAppOptions.GrpcSslSettings, CommonAppOptions.SeedNodes, Env, Logger, {}, 0);
+        if (!cfgResult || !cfgResult->IsSuccess()) {
+            Logger.Out() << (cfgResult
+                ? DescribeFetchConfigFailure("from seed nodes", *cfgResult)
+                : TString("Failed to fetch config from seed nodes")) << Endl;
+            return;
+        }
+
+        const std::optional<TString>& mainYaml = cfgResult->GetMainYamlConfig();
+        if (!mainYaml) {
+            Logger.Out() << "No main config received from seed nodes" << Endl;
+            return;
+        }
+
+        const TString& sourceAddress = cfgResult->GetSourceAddress();
+        NKikimrConfig::TAppConfig yamlConfig;
+        NYamlConfig::ResolveAndParseYamlConfig(*mainYaml, {}, Labels, yamlConfig);
+
+        yamlConfig.SetYamlConfigEnabled(true);
+        Labels["config_source"] = "seed_nodes";
+        AddLabelToAppConfig("config_source", Labels["config_source"]);
+
+        if (sourceAddress) {
+            Labels["config_source_address"] = sourceAddress;
+            AddLabelToAppConfig("config_source_address", Labels["config_source_address"]);
+        }
+
+        InitDebug.YamlConfig.CopyFrom(yamlConfig);
+        UpdateConfigUpdateTracer(ConfigUpdateTracer);
+
+        Logger.Out() << "Successfully applied dynamic config from seed nodes" << Endl;
+        ApplyConfigForNode(yamlConfig);
+    }
+
+    void ValidateCertPaths() const {
+        auto ensureFileExists = [](const TString& path, TStringBuf optName) {
+            if (path.empty()) {
+                return;
+            }
+            TFsPath fspath(path);
+            TFileStat filestat;
+            if (!fspath.Stat(filestat) || !filestat.IsFile()) {
+                throw TMisuseException() << "File passed to --" << optName << " does not exist: " << path;
+            }
+        };
+
+        ensureFileExists(CommonAppOptions.PathToInterconnectCertFile, "cert/ic-cert");
+        ensureFileExists(CommonAppOptions.PathToInterconnectPrivateKeyFile, "key/ic-key");
+        ensureFileExists(CommonAppOptions.PathToInterconnectCaFile, "ca/ic-ca");
+        ensureFileExists(CommonAppOptions.GrpcSslSettings.PathToGrpcCertFile, "grpc-cert");
+        ensureFileExists(CommonAppOptions.GrpcSslSettings.PathToGrpcPrivateKeyFile, "grpc-key");
+        ensureFileExists(CommonAppOptions.GrpcSslSettings.PathToGrpcCaFile, "grpc-ca");
+        ensureFileExists(CommonAppOptions.MonitoringCertificateFile, "mon-cert");
+        ensureFileExists(CommonAppOptions.MonitoringPrivateKeyFile, "mon-key");
     }
 };
 

@@ -6,17 +6,20 @@
 
 #include "collection_helpers.h"
 #include "maybe_inf.h"
-#include "mpl.h"
 
 #include <yt/yt/core/phoenix/concepts.h>
 
 #include <yt/yt/core/yson/string.h>
 
-#include <library/cpp/yt/compact_containers/compact_vector.h>
 #include <library/cpp/yt/compact_containers/compact_flat_map.h>
+#include <library/cpp/yt/compact_containers/compact_flat_set.h>
 #include <library/cpp/yt/compact_containers/compact_set.h>
+#include <library/cpp/yt/compact_containers/compact_vector.h>
 
 #include <library/cpp/yt/containers/enum_indexed_array.h>
+#include <library/cpp/yt/containers/non_empty.h>
+
+#include <library/cpp/yt/mpl/type_traits.h>
 
 #include <library/cpp/yt/assert/assert.h>
 
@@ -34,8 +37,8 @@ void ReadRef(TInput& input, TMutableRef ref)
     if (bytesLoaded != ref.Size()) {
         TCrashOnDeserializationErrorGuard::OnError();
         THROW_ERROR_EXCEPTION("Premature end-of-stream")
-            << TErrorAttribute("bytes_loaded", bytesLoaded)
-            << TErrorAttribute("bytes_expected", ref.Size());
+            .With("bytes_loaded", bytesLoaded)
+            .With("bytes_expected", ref.Size());
     }
 }
 
@@ -117,8 +120,8 @@ void ReadPadding(TInput& input, size_t sizeToPad)
     if (bytesSkipped != bytesToSkip) {
         TCrashOnDeserializationErrorGuard::OnError();
         THROW_ERROR_EXCEPTION("Premature end-of-stream")
-            << TErrorAttribute("bytes_skipped", bytesSkipped)
-            << TErrorAttribute("bytes_expected", bytesToSkip);
+            .With("bytes_skipped", bytesSkipped)
+            .With("bytes_expected", bytesToSkip);
     }
 }
 
@@ -219,7 +222,7 @@ void UnpackRefs(const TSharedRef& packedRef, T* parts)
     if (size < 0) {
         TCrashOnDeserializationErrorGuard::OnError();
         THROW_ERROR_EXCEPTION("Packed ref size is negative")
-            << TErrorAttribute("size", size);
+            .With("size", size);
     }
 
     parts->clear();
@@ -231,15 +234,15 @@ void UnpackRefs(const TSharedRef& packedRef, T* parts)
         if (partSize < 0) {
             TCrashOnDeserializationErrorGuard::OnError();
             THROW_ERROR_EXCEPTION("A part of a packed ref has negative size")
-                << TErrorAttribute("index", index)
-                << TErrorAttribute("size", partSize);
+                .With("index", index)
+                .With("size", partSize);
         }
         if (packedRef.End() - input.Buf() < partSize) {
             TCrashOnDeserializationErrorGuard::OnError();
             THROW_ERROR_EXCEPTION("A part of a packed ref is too large")
-                << TErrorAttribute("index", index)
-                << TErrorAttribute("size", partSize)
-                << TErrorAttribute("bytes_left", packedRef.End() - input.Buf());
+                .With("index", index)
+                .With("size", partSize)
+                .With("bytes_left", packedRef.End() - input.Buf());
         }
 
         parts->push_back(packedRef.Slice(input.Buf(), input.Buf() + partSize));
@@ -250,7 +253,7 @@ void UnpackRefs(const TSharedRef& packedRef, T* parts)
     if (input.Buf() < packedRef.End()) {
         TCrashOnDeserializationErrorGuard::OnError();
         THROW_ERROR_EXCEPTION("Packed ref is too large")
-            << TErrorAttribute("extra_bytes", packedRef.End() - input.Buf());
+            .With("extra_bytes", packedRef.End() - input.Buf());
     }
 }
 
@@ -265,7 +268,7 @@ inline std::vector<TSharedRef> UnpackRefs(const TSharedRef& packedRef)
 
 Y_FORCE_INLINE void TSaveContextStream::Write(const void* buf, size_t len)
 {
-    if (Y_LIKELY(BufferRemaining_ >= len)) {
+    if (BufferRemaining_ >= len) [[likely]] {
         ::memcpy(BufferPtr_, buf, len);
         BufferPtr_ += len;
         BufferRemaining_ -= len;
@@ -290,7 +293,7 @@ Y_FORCE_INLINE int TStreamSaveContext::GetVersion() const
 
 Y_FORCE_INLINE size_t TLoadContextStream::Load(void* buf, size_t len)
 {
-    if (Y_LIKELY(BufferRemaining_ >= len)) {
+    if (BufferRemaining_ >= len) [[likely]] {
         ::memcpy(buf, BufferPtr_, len);
         BufferPtr_ += len;
         BufferRemaining_ -= len;
@@ -1009,18 +1012,18 @@ public:
             , Index_(index)
         { }
 
-        const typename T::value_type& operator * ()
+        const typename T::value_type& operator*()
         {
             return *((*Iterators_)[Index_]);
         }
 
-        TIteratorWrapper& operator ++ ()
+        TIteratorWrapper& operator++()
         {
             ++Index_;
             return *this;
         }
 
-        bool operator == (const TIteratorWrapper& other) const
+        bool operator==(const TIteratorWrapper& other) const
         {
             return Index_ == other.Index_;
         }
@@ -1112,6 +1115,12 @@ template <class C, class T, size_t N, class Q>
 struct TSorterSelector<TCompactSet<T, N, Q>, C, TSortedTag>
 {
     using TSorter = TNoopSorter<TCompactSet<T, N, Q>, C>;
+};
+
+template <class C, class T, size_t N>
+struct TSorterSelector<TCompactFlatSet<T, N>, C, TSortedTag>
+{
+    using TSorter = TNoopSorter<TCompactFlatSet<T, N>, C>;
 };
 
 template <class C, class... T>
@@ -1409,6 +1418,32 @@ struct TEnumIndexedArraySerializer
     }
 };
 
+struct TOptionalNonEmptySerializer
+{
+    template <class T, class C>
+    static void Save(C& context, const std::optional<TNonEmpty<T>>& value)
+    {
+        if (value) {
+            TVectorSerializer<TDefaultSerializer, TUnsortedTag>::Save(context, value->Get());
+        } else {
+            static const T Empty;
+            TVectorSerializer<TDefaultSerializer, TUnsortedTag>::Save(context, Empty);
+        }
+    }
+
+    template <class T, class C>
+    static void Load(C& context, std::optional<TNonEmpty<T>>& value)
+    {
+        T result;
+        TVectorSerializer<TDefaultSerializer, TUnsortedTag>::Load(context, result);
+        if (result.empty()) {
+            value.reset();
+        } else {
+            value.emplace(std::move(result));
+        }
+    }
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 // Possibly unordered collections
 
@@ -1632,24 +1667,24 @@ struct TTupleSerializer;
 template <class T>
 struct TTupleSerializer<T, 0U>
 {
-    template<class C>
+    template <class C>
     static void Save(C&, const T&) {}
 
-    template<class C>
+    template <class C>
     static void Load(C&, T&) {}
 };
 
 template <class T, size_t Size>
 struct TTupleSerializer
 {
-    template<class C>
+    template <class C>
     static void Save(C& context, const T& tuple)
     {
         TTupleSerializer<T, Size - 1U>::Save(context, tuple);
         NYT::Save(context, std::get<Size - 1U>(tuple));
     }
 
-    template<class C>
+    template <class C>
     static void Load(C& context, T& tuple)
     {
         TTupleSerializer<T, Size - 1U>::Load(context, tuple);
@@ -1702,6 +1737,24 @@ struct TUniquePtrSerializer
             ptr.reset();
             SERIALIZATION_DUMP_WRITE(context, "nullptr");
         }
+    }
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class TUnderlyingSerializer = TDefaultSerializer>
+struct TDerefSerializer
+{
+    template <class T, class C>
+    static void Save(C& context, const T& obj)
+    {
+        TUnderlyingSerializer::Save(context, *obj);
+    }
+
+    template <class T, class C>
+    static void Load(C& context, T& obj)
+    {
+        TUnderlyingSerializer::Load(context, *obj);
     }
 };
 
@@ -1848,6 +1901,12 @@ struct TSerializerTraits<TCompactVector<T, N>, C, void>
     using TSerializer = TVectorSerializer<>;
 };
 
+template <class T, class C>
+struct TSerializerTraits<std::optional<TNonEmpty<T>>, C>
+{
+    using TSerializer = TOptionalNonEmptySerializer;
+};
+
 template <class T, std::size_t size, class C>
 struct TSerializerTraits<std::array<T, size>, C, void>
 {
@@ -1887,6 +1946,12 @@ template <class T, size_t N, class Q, class C>
 struct TSerializerTraits<TCompactSet<T, N, Q>, C, void>
 {
     using TSerializer = TSetSerializer<>;
+};
+
+template <class T, size_t N, class C>
+struct TSerializerTraits<TCompactFlatSet<T, N>, C, void>
+{
+    using TSerializer = TSetSerializer<NYT::TDefaultSerializer, NYT::TSortedTag>;
 };
 
 template <class T, class C>
@@ -2012,6 +2077,26 @@ struct TSerializerTraits<TMaybeInf<T>, C, void>
         static void Load(C& context, TMaybeInf<T>& value)
         {
             value.UnsafeAssign(NYT::Load<T>(context));
+        }
+    };
+};
+
+template <class T, class C>
+struct TSerializerTraits<NThreading::TAtomicObject<T>, C, void>
+{
+    struct TSerializer
+    {
+        static void Save(C& context, const NThreading::TAtomicObject<T>& object)
+        {
+            object.Read([&] (const T& value) {
+                TDefaultSerializer::Save(context, value);
+            });
+        }
+        static void Load(C& context, NThreading::TAtomicObject<T>& object)
+        {
+            object.Transform([&] (T& value) {
+                TDefaultSerializer::Load(context, value);
+            });
         }
     };
 };

@@ -3,7 +3,7 @@
 #include "config.h"
 #include "private.h"
 
-#include <yt/yt/library/profiling/percpu.h>
+#include <yt/yt/library/profiling/per_cpu_sensor_impl.h>
 
 #include <yt/yt/core/concurrency/action_queue.h>
 #include <yt/yt/core/concurrency/periodic_executor.h>
@@ -26,7 +26,7 @@ using namespace NProfiling;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static auto Logger = RpcServerLogger().WithTag("OverloadController");
+static const auto Logger = RpcServerLogger().WithTag("Controller", "Overload");
 static const std::string CpuThrottlingTrackerName = "CpuThrottling";
 static const std::string LogDropTrackerName = "LogDrop";
 static const std::string ControlGroupCpuName = "cpu";
@@ -45,6 +45,8 @@ public:
     { }
 
     virtual bool CalculateIsOverloaded(const TOverloadTrackerConfig& config) = 0;
+
+    virtual EOverloadTrackerConfigType GetConfigType() const = 0;
 
     const std::string& GetType() const
     {
@@ -91,14 +93,20 @@ public:
             meanValue = summary.Sum() / summary.Count();
         }
 
-        YT_LOG_DEBUG("Reporting mean wait time for tracker "
-            "(Tracker: %v, TotalWaitTime: %v, TotalCount: %v, MeanValue: %v)",
-            Id_,
-            summary.Sum(),
-            summary.Count(),
-            meanValue);
+        YT_TLOG_DEBUG("Reporting mean wait time for tracker")
+            .With("Tracker", Id_)
+            .With("TotalWaitTime", summary.Sum())
+            .With("TotalCount", summary.Count())
+            .With("MeanValue", meanValue);
 
-        return ProfileAndGetOverloaded(meanValue, config.TryGetConcrete<TOverloadTrackerMeanWaitTimeConfig>());
+        auto meanWaitTimeConfig = config.GetConcrete<TOverloadTrackerMeanWaitTimeConfig>();
+
+        return ProfileAndGetOverloaded(meanValue, meanWaitTimeConfig);
+    }
+
+    virtual EOverloadTrackerConfigType GetConfigType() const override
+    {
+        return EOverloadTrackerConfigType::MeanWaitTime;
     }
 
 protected:
@@ -145,17 +153,18 @@ public:
             auto throttlingDelta = cpuStats->ThrottledTime - LastCpuStats_->ThrottledTime;
             throttlingTime = TDuration::MicroSeconds(throttlingDelta / 1000);
 
-            YT_LOG_DEBUG("Reporting container CPU throttling time "
-                "(LastCpuThrottlingTime: %v, CpuThrottlingTime: %v, ThrottlingDelta: %v, ThrottlingTime: %v)",
-                LastCpuStats_->ThrottledTime,
-                cpuStats->ThrottledTime,
-                throttlingDelta,
-                throttlingTime);
+            YT_TLOG_DEBUG("Reporting container CPU throttling time")
+                .With("LastCpuThrottlingTime", LastCpuStats_->ThrottledTime)
+                .With("CpuThrottlingTime", cpuStats->ThrottledTime)
+                .With("ThrottlingDelta", throttlingDelta)
+                .With("ThrottlingTime", throttlingTime);
         }
 
         LastCpuStats_ = cpuStats;
 
-        return ProfileAndGetOverloaded(throttlingTime, config.TryGetConcrete<TOverloadTrackerMeanWaitTimeConfig>());
+        auto meanWaitTimeConfig = config.GetConcrete<TOverloadTrackerMeanWaitTimeConfig>();
+
+        return ProfileAndGetOverloaded(throttlingTime, meanWaitTimeConfig);
     }
 
 private:
@@ -175,7 +184,8 @@ private:
             }
         } catch (const std::exception& ex) {
             if (!CgroupErrorLogged_) {
-                YT_LOG_INFO(ex, "Failed to collect cgroup CPU statistics");
+                YT_TLOG_INFO("Failed to collect cgroup CPU statistics")
+                    .With(TError(ex));
                 CgroupErrorLogged_ = true;
             }
         }
@@ -206,11 +216,10 @@ public:
     {
         double BacklogQueueFillFraction = TLogManager::Get()->GetBacklogQueueFillFraction();
 
-        YT_LOG_DEBUG("Reporting logging queue filling fraction "
-            "(BacklogQueueFillFraction: %v)",
-            BacklogQueueFillFraction);
+        YT_TLOG_DEBUG("Reporting logging queue filling fraction")
+            .With("BacklogQueueFillFraction", BacklogQueueFillFraction);
 
-        const auto& logDropConfig = config.TryGetConcrete<TOverloadTrackerBacklogQueueFillFractionConfig>();
+        auto logDropConfig = config.GetConcrete<TOverloadTrackerBacklogQueueFillFractionConfig>();
 
         bool overloaded = BacklogQueueFillFraction > logDropConfig->BacklogQueueFillFractionThreshold;
 
@@ -219,6 +228,11 @@ public:
         BacklogQueueFillFractionThreshold_.Update(logDropConfig->BacklogQueueFillFractionThreshold);
 
         return overloaded;
+    }
+
+    EOverloadTrackerConfigType GetConfigType() const override
+    {
+        return EOverloadTrackerConfigType::BacklogQueueFillFraction;
     }
 
 private:
@@ -245,7 +259,10 @@ class TCongestionController
     : public TRefCounted
 {
 public:
-    TCongestionController(TServiceMethodConfigPtr methodConfig, TOverloadControllerConfigPtr config, TProfiler profiler)
+    TCongestionController(
+        TOverloadTrackedServiceMethodConfigPtr methodConfig,
+        TOverloadControllerConfigPtr config,
+        TProfiler profiler)
         : MethodConfig_(std::move(methodConfig))
         , Config_(std::move(config))
         , MaxWindow_(MethodConfig_->MaxWindow)
@@ -298,10 +315,10 @@ public:
             SlowStartThreshold_ = window > 0 ? window / 2 : SlowStartThreshold_;
             Window_.store(0, std::memory_order::relaxed);
 
-            YT_LOG_WARNING("System is overloaded (SlowStartThreshold: %v, Window: %v, OverloadedTrackers: %v)",
-                SlowStartThreshold_,
-                window,
-                overloadedTrackers);
+            YT_TLOG_WARNING("System is overloaded")
+                .With("SlowStartThreshold", SlowStartThreshold_)
+                .With("Window", window)
+                .With("OverloadedTrackers", overloadedTrackers);
             return;
         }
 
@@ -316,9 +333,9 @@ public:
         window = std::min(MaxWindow_, window);
         window = std::max(1, window);
 
-        YT_LOG_DEBUG("Adjusting system load up (SlowStartThreshold: %v, CurrentWindow: %v)",
-            SlowStartThreshold_,
-            window);
+        YT_TLOG_DEBUG("Adjusting system load up")
+            .With("SlowStartThreshold", SlowStartThreshold_)
+            .With("CurrentWindow", window);
 
         Window_.store(window, std::memory_order::relaxed);
     }
@@ -331,7 +348,7 @@ public:
     }
 
 private:
-    const TServiceMethodConfigPtr MethodConfig_;
+    const TOverloadTrackedServiceMethodConfigPtr MethodConfig_;
     const TOverloadControllerConfigPtr Config_;
     const int MaxWindow_;
 
@@ -432,7 +449,7 @@ public:
     }
 
 private:
-    using TMethodIndex = std::pair<TString, TString>;
+    using TMethodIndex = std::pair<std::string, std::string>;
     using TMethodsCongestionControllers = THashMap<TMethodIndex, TCongestionControllerPtr>;
 
     struct TState final
@@ -441,7 +458,7 @@ private:
 
         TOverloadControllerConfigPtr Config;
         TMethodsCongestionControllers CongestionControllers;
-        THashMap<TString, TOverloadTrackerPtr> Trackers;
+        THashMap<std::string, TOverloadTrackerPtr> Trackers;
     };
 
     using TSpinLockGuard = TGuard<NThreading::TSpinLock>;
@@ -453,7 +470,7 @@ private:
 
     TAtomicPtr<TState, /*EnableAcquireHazard*/ true> StateSnapshot_;
 
-    NThreading::TSpinLock SpinLock_;
+    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
     TState State_;
 
     void Adjust()
@@ -487,6 +504,13 @@ private:
 
             const auto& trackerConfig = trackerIt->second;
 
+            if (trackerConfig.GetType() != tracker->GetConfigType()) {
+                YT_TLOG_ERROR("Incorrect overload controller tracker config type")
+                    .With("ExpectedType", tracker->GetConfigType())
+                    .With("ActualType", trackerConfig.GetType());
+                continue;
+            }
+
             auto trackerOverloaded = tracker->CalculateIsOverloaded(trackerConfig);
 
             if (!trackerOverloaded) {
@@ -502,9 +526,9 @@ private:
         for (const auto& [method, overloadedTrackers] : methodOverloaded) {
             auto it = state->CongestionControllers.find(method);
             if (it == state->CongestionControllers.end()) {
-                YT_LOG_WARNING("Cannot find congestion controller for method (Service: %v, Method: %v)",
-                    method.first,
-                    method.second);
+                YT_TLOG_WARNING("Cannot find congestion controller for method")
+                    .With("Service", method.first)
+                    .With("Method", method.second);
 
                 continue;
             }
@@ -532,9 +556,9 @@ private:
     template <class TTracker>
     TIntrusivePtr<TTracker> CreateGenericTracker(TStringBuf trackerType, std::optional<TStringBuf> id = {})
     {
-        YT_LOG_DEBUG("Creating overload tracker (TrackerType: %v, Id: %v)",
-            trackerType,
-            id);
+        YT_TLOG_DEBUG("Creating overload tracker")
+            .With("TrackerType", trackerType)
+            .With("Id", id);
 
         auto trackerId = id.value_or(trackerType);
 
@@ -557,20 +581,21 @@ private:
     {
         TMethodsCongestionControllers controllers;
 
-        THashMap<TMethodIndex, TServiceMethodConfigPtr> configIndex;
+        THashMap<TMethodIndex, TOverloadTrackedServiceMethodConfigPtr> configIndex;
         for (const auto& methodConfig : config->Methods) {
             configIndex[std::pair(methodConfig->Service, methodConfig->Method)] = methodConfig;
         }
 
-        auto getConfig = [&configIndex] (TStringBuf service, TStringBuf method) {
+        auto getConfig = [&configIndex] (TStringBuf service, TStringBuf method, int maxWindow) {
             auto it = configIndex.find(std::pair(service, method));
             if (it != configIndex.end()) {
                 return it->second;
             }
 
-            auto defaultConfig = New<TServiceMethodConfig>();
+            auto defaultConfig = New<TOverloadTrackedServiceMethodConfig>();
             defaultConfig->Service = service;
             defaultConfig->Method = method;
+            defaultConfig->MaxWindow = maxWindow;
             return defaultConfig;
         };
 
@@ -579,7 +604,7 @@ private:
                 auto& controller = controllers[std::pair(method.Service, method.Method)];
 
                 if (!controller) {
-                    auto methodConfig = getConfig(method.Service, method.Method);
+                    auto methodConfig = getConfig(method.Service, method.Method, method.MaxWindow);
                     auto controllerProfiler = profiler
                         .WithTag("yt_service", method.Service)
                         .WithTag("method", method.Method);

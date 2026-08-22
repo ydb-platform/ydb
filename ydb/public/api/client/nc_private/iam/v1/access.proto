@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package nebius.iam.v1;
+
+option java_multiple_files = true;
+option java_outer_classname = "AccessProto";
+option java_package = "ai.nebius.iam.access.api.priv.v1";
+
+message Account {
+  oneof type {
+    UserAccount user_account = 1;
+    ServiceAccount service_account = 2;
+    AnonymousAccount anonymous_account = 3;
+  }
+
+  message UserAccount {
+    string id = 1;
+  }
+
+  message ServiceAccount {
+    string id = 1;
+  }
+
+  message AnonymousAccount {
+  }
+}
+
+message Permission {
+  string name = 1;
+}
+
+message Resource {
+  string id = 1;
+}
+
+message ResourcePath {
+  repeated Resource path = 1;
+}

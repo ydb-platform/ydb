@@ -28,7 +28,7 @@ TRunActorParams::TRunActorParams(
     const int64_t previousQueryRevision,
     TVector<FederatedQuery::Connection> connections,
     TVector<FederatedQuery::Binding> bindings,
-    NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+    NYql::IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
     THashMap<TString, TString> accountIdSignatures,
     FederatedQuery::QueryContent::QueryType queryType,
     FederatedQuery::QueryContent::QuerySyntax querySyntax,
@@ -61,7 +61,9 @@ TRunActorParams::TRunActorParams(
     std::map<TString, Ydb::TypedValue>&& queryParameters,
     std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory,
     const ::NFq::NConfig::TWorkloadManagerConfig& workloadManager,
-    NYql::IPqGatewayFactory::TPtr pqGatewayFactory
+    NYql::IPqGatewayFactory::TPtr pqGatewayFactory,
+    const std::vector<std::pair<TString, TString>>& taskSensorLabels,
+    const std::vector<ui64>& nodeIds
     )
     : YqSharedResources(yqSharedResources)
     , CredentialsProviderFactory(credentialsProviderFactory)
@@ -119,6 +121,8 @@ TRunActorParams::TRunActorParams(
     , S3ActorsFactory(std::move(s3ActorsFactory))
     , WorkloadManager(workloadManager)
     , PqGatewayFactory(std::move(pqGatewayFactory))
+    , TaskSensorLabels(taskSensorLabels)
+    , NodeIds(nodeIds)
     {
     }
 
@@ -157,6 +161,7 @@ IOutputStream& operator<<(IOutputStream& out, const TRunActorParams& params) {
                 << " QueryParameters: " << params.QueryParameters.size()
                 << " WorkloadManager: " << params.WorkloadManager.ShortDebugString()
                 << " NextUniqueId: " << params.NextUniqueId
+                << " NodeIds: " << params.NodeIds.size()
                 << "}";
 }
 

@@ -4,6 +4,8 @@
   - thrust/device_vector.h
   - thrust/functional.h
   - thrust/execution_policy.h
+  - thrust/iterator/constant_iterator.h
+  - thrust/iterator/counting_iterator.h
   - thrust/iterator/iterator_facade.h
   - thrust/iterator/iterator_traits.h
   - thrust/iterator/transform_iterator.h

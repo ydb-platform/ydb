@@ -1,6 +1,7 @@
-import "ydb/core/protos/blobstorage_config.proto";
+import "ydb/core/protos/blobstorage_base3.proto";
 import "ydb/core/protos/blobstorage_disk.proto";
 import "ydb/library/actors/protos/interconnect.proto";
+import "ydb/public/api/protos/annotations/sensitive.proto";
 
 package NKikimrCms;
 option java_package = "ru.yandex.kikimr.proto";
@@ -109,6 +110,8 @@ message TAction {
     REPLACE_DEVICES = 8;
     REMOVE_DEVICES = 9;
     REBOOT_HOST = 10; // Same as SHUTDOWN_HOST, but forcibly allowed if host is down
+    DRAIN_NODE = 11;
+    CORDON_NODE = 12;
   }
 
   message TIssue {
@@ -134,6 +137,7 @@ message TAction {
   // If specified will be expanded to list of hosts.
   optional string Tenant = 6;
   optional TIssue Issue = 7;
+  optional string MaintenanceTaskContext = 8;
 }
 
 enum ETenantPolicy {
@@ -156,14 +160,13 @@ enum EAvailabilityMode {
     // of parity parts in that group.
     // Compute nodes are handled as in default mode.
     MODE_KEEP_AVAILABLE = 1;
-    // In this mode CMS allows at most 1 locked disk in a group
-    // ignoring its parity parts count. Allows to restart nodes
-    // even if multiple disks of some group are down. Using
-    // this mode might cause data unavailability.
-    // For compute nodes CMS follows tenant and cluster policies
-    // but allows to restart at least one node for tenant or
-    // cluster.
+    // This mode ignores all cluster availability checks.
+    // Using this mode might cause data unavailability.
     MODE_FORCE_RESTART = 2;
+    // Behaves like MODE_MAX_AVAILABILITY but automatically
+    // falls back to MODE_KEEP_AVAILABLE when it is not possible
+    // to restart nodes using MODE_MAX_AVAILABILITY.
+    MODE_SMART_AVAILABILITY = 3;
 }
 
 message TPermissionRequest {
@@ -182,6 +185,9 @@ message TPermissionRequest {
   // Evit vdisks before granting permission
   optional bool EvictVDisks = 11 [default = false];
   optional int32 Priority = 12;
+  // Maximum number of permissions that may be issued by a single check of this request.
+  // Unset means "no cap", 0 means "cap is zero".
+  optional uint32 MaxPermissionCount = 13 [default = 0];
 }
 
 enum EExtensionType {
@@ -213,6 +219,7 @@ message TManageRequestRequest {
     LIST = 1;
     GET = 2;
     REJECT = 3;
+    APPROVE = 4;
   }
 
   optional string   User = 1;
@@ -234,6 +241,7 @@ message TManageRequestResponse {
 
   optional TStatus           Status = 1;
   repeated TScheduledRequest Requests = 2;
+  repeated TPermission       ManuallyApprovedPermissions = 3;
 }
 
 message TCheckRequest {
@@ -426,6 +434,19 @@ message TCmsConfig {
     }
 
     message TSentinelConfig {
+        message TStateStorageSelfHealConfig {
+            optional bool Enable = 1 [default = false];
+            optional uint32 NodeGoodStateLimit = 2 [default = 10];
+            optional uint32 NodePrettyGoodStateLimit = 3 [default = 7];
+            optional uint32 NodeBadStateLimit = 4 [default = 10];
+            optional uint32 WaitForConfigStep = 5 [default = 60000000];
+            optional uint32 RelaxTime = 6 [default = 600000000];
+            optional bool PileupReplicas = 7 [default = false];
+            optional uint32 OverrideReplicasInRingCount = 8 [default = 0];
+            optional uint32 OverrideRingsCount = 9 [default = 0];
+            optional uint32 ReplicasSpecificVolume = 10 [default = 200]; // 1 additional replica in ring per ReplicasSpecificVolume nodes in cluster
+        }
+
         message TStateLimit {
             optional uint32 State = 1; // EPDiskState
             optional uint32 Limit = 2;
@@ -453,6 +474,7 @@ message TCmsConfig {
         optional uint32 DataCenterRatio = 10 [default = 50];
         optional uint32 RoomRatio = 11 [default = 70];
         optional uint32 RackRatio = 12 [default = 90];
+        optional uint32 PileRatio = 18 [default = 50];
         // Similar to *Ratio settings, but specified in absolute numbers and applied per storage node.
         // This limit helps prevent cascading overreaction when many disks go offline on a single host
         // (due to disk shelf disconnection).
@@ -465,8 +487,11 @@ message TCmsConfig {
         optional bool DryRun = 13;
         repeated TStateLimit StateLimits = 14;
         optional EEvictVDisksStatus EvictVDisksStatus = 15;
-        
+
         optional uint32 GoodStateLimit = 16 [default = 5];
+
+        optional TStateStorageSelfHealConfig StateStorageSelfHealConfig = 19;
+        optional uint64 InitialDeploymentGracePeriod = 20 [default = 600000000];
     }
 
     message TLogConfig {
@@ -493,6 +518,7 @@ message TCmsConfig {
     optional uint64 InfoCollectionTimeout = 6 [default = 15000000];
     optional TLogConfig LogConfig = 7;
     optional TSentinelConfig SentinelConfig = 8;
+    optional bool DisableMaintenance = 9;
 }
 
 message TPDiskID {
@@ -510,7 +536,7 @@ message TItems {
 message TSetMarkerRequest {
     optional EMarker Marker = 1;
     optional TItems Items = 2;
-    optional string UserToken = 10;
+    optional string UserToken = 10 [(Ydb.sensitive) = true];
 }
 
 message TSetMarkerResponse {
@@ -520,7 +546,7 @@ message TSetMarkerResponse {
 message TResetMarkerRequest {
     optional EMarker Marker = 1;
     optional TItems Items = 2;
-    optional string UserToken = 10;
+    optional string UserToken = 10 [(Ydb.sensitive) = true];
 }
 
 message TResetMarkerResponse {
@@ -589,7 +615,7 @@ message TLogRecordData {
         }
         repeated EMarker OldMarkers = 5;
         repeated EMarker NewMarkers = 6;
-        optional string UserToken = 7;
+        optional string UserToken = 7 [(Ydb.sensitive) = true];
     }
 
     optional uint32 RecordType = 1;
@@ -656,6 +682,7 @@ message TPDiskInfo {
         RATIO_BY_ROOM = 4;
         RATIO_BY_RACK = 5;
         TOO_MANY_FAULTY_PER_NODE = 6;
+        RATIO_BY_PILE = 7;
     }
 
     optional uint32 State = 1; // EPDiskState
@@ -700,9 +727,15 @@ message TConfigUpdaterState {
 }
 
 message TGetSentinelStateResponse {
+    message TNodeState {
+        optional uint32 NodeId = 1;
+        optional uint32 State = 2;
+    }
+
     optional TStatus Status = 1;
     optional TCmsConfig.TSentinelConfig SentinelConfig = 2;
     repeated TPDisk PDisks = 3;
     optional TStateUpdaterState StateUpdater = 4;
     optional TConfigUpdaterState ConfigUpdater = 5;
+    repeated TNodeState NodesState = 6;
 }

@@ -31,4 +31,4 @@ struct TResult {
 
 TVector<TResult> ParseResponse(const NYT::TNode& responseNode);
 
-}
+} // namespace NYql::NResult

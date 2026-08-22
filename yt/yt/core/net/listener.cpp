@@ -28,7 +28,7 @@ public:
     TListener(
         SOCKET serverSocket,
         const TNetworkAddress& address,
-        const TString& name,
+        const std::string& name,
         IPollerPtr poller,
         IPollerPtr acceptor)
         : Name_(name)
@@ -36,12 +36,13 @@ public:
         , ServerSocket_(serverSocket)
         , Poller_(poller)
         , Acceptor_(acceptor)
+        , LoggingTags_(NLogging::TLoggingTagList().With("Listener", Name_))
     { }
 
     // IPollable implementation
-    const std::string& GetLoggingTag() const override
+    const NLogging::TLoggingTagList& GetLoggingTags() const override
     {
-        return Name_;
+        return LoggingTags_;
     }
 
     void OnEvent(EPollControl /*control*/) override
@@ -73,9 +74,10 @@ public:
                 }
             }
         } catch (const TErrorException& ex) {
-            auto error = TError(ex) << TErrorAttribute("listener", Name_);
+            auto error = TError(ex).With("listener", Name_);
             Abort(error);
-            YT_LOG_FATAL(error, "Listener crashed with fatal error");
+            YT_TLOG_FATAL("Listener crashed with fatal error")
+                .With(error);
         }
 
         auto guard = Guard(Lock_);
@@ -112,17 +114,22 @@ public:
     {
         auto promise = NewPromise<IConnectionPtr>();
 
+        bool needRetry = false;
         if (!Pending_ || !TryAccept(promise)) {
             auto guard = Guard(Lock_);
             if (Error_.IsOK()) {
                 Queue_.push_back(promise);
                 if (Pending_) {
                     Pending_ = false;
-                    Acceptor_->Retry(this);
+                    needRetry = true;
                 }
             } else {
                 promise.Set(Error_);
             }
+        }
+
+        if (needRetry) {
+            Acceptor_->Retry(this);
         }
 
         promise.OnCanceled(BIND([promise, this, thisWeak_ = MakeWeak(this)] (const TError& error) {
@@ -134,7 +141,7 @@ public:
                 }
             }
             promise.TrySet(TError(NYT::EErrorCode::Canceled, "Accept canceled")
-                << error);
+                .With(error));
         }));
 
         return promise.ToFuture();
@@ -146,11 +153,12 @@ public:
     }
 
 private:
-    const TString Name_;
+    const std::string Name_;
     const TNetworkAddress Address_;
     const SOCKET ServerSocket_;
     const IPollerPtr Poller_;
     const IPollerPtr Acceptor_;
+    const NLogging::TLoggingTagList LoggingTags_;
 
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock_);
     std::atomic<bool> Pending_ = false;
@@ -171,7 +179,7 @@ private:
 
             Pending_ = false;
             Error_ = error
-                << TErrorAttribute("listener", Name_);
+                .With("listener", Name_);
             Acceptor_->Unarm(ServerSocket_, this);
         }
 

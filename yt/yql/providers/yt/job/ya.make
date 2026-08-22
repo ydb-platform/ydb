@@ -8,6 +8,7 @@ SRCS(
     yql_job_registry.h
     yql_job_stats_writer.cpp
     yql_job_user.cpp
+    yql_job_user_base.cpp
 )
 
 PEERDIR(

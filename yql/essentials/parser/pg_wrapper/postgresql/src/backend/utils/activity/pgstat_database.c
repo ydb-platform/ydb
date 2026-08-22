@@ -197,7 +197,7 @@ pgstat_report_connect(Oid dboid)
 
 	pgLastSessionReportTime = MyStartTimestamp;
 
-	dbentry = pgstat_prep_database_pending(MyDatabaseId);
+	dbentry = pgstat_prep_database_pending(dboid);
 	dbentry->sessions++;
 }
 
@@ -212,7 +212,7 @@ pgstat_report_disconnect(Oid dboid)
 	if (!pgstat_should_report_connstat())
 		return;
 
-	dbentry = pgstat_prep_database_pending(MyDatabaseId);
+	dbentry = pgstat_prep_database_pending(dboid);
 
 	switch (pgStatSessionEndCause)
 	{
@@ -356,7 +356,7 @@ pgstat_reset_database_timestamp(Oid dboid, TimestampTz ts)
 	PgStat_EntryRef *dbref;
 	PgStatShared_Database *dbentry;
 
-	dbref = pgstat_get_entry_ref_locked(PGSTAT_KIND_DATABASE, MyDatabaseId, InvalidOid,
+	dbref = pgstat_get_entry_ref_locked(PGSTAT_KIND_DATABASE, dboid, InvalidOid,
 										false);
 
 	dbentry = (PgStatShared_Database *) dbref->shared_stats;
@@ -368,8 +368,8 @@ pgstat_reset_database_timestamp(Oid dboid, TimestampTz ts)
 /*
  * Flush out pending stats for the entry
  *
- * If nowait is true, this function returns false if lock could not
- * immediately acquired, otherwise true is returned.
+ * If nowait is true and the lock could not be immediately acquired, returns
+ * false without flushing the entry.  Otherwise returns true.
  */
 bool
 pgstat_database_flush_cb(PgStat_EntryRef *entry_ref, bool nowait)

@@ -70,13 +70,29 @@ public:
     const TDqOutputStats& GetPushStats() const override {
         return PushStats;
     }
-    
+
     const TDqAsyncOutputBufferStats& GetPopStats() const override {
         return PopStats;
     }
 
-    bool IsFull() const override {
-        return EstimatedStoredBytes >= MaxStoredBytes;
+    EDqFillLevel GetFillLevel() const override {
+        return FillLevel;
+    }
+
+    EDqFillLevel UpdateFillLevel() override {
+        auto result = EstimatedStoredBytes >= MaxStoredBytes ? HardLimit : NoLimit;
+        if (FillLevel != result) {
+            if (Aggregator) {
+                Aggregator->UpdateCount(FillLevel, result);
+            }
+            FillLevel = result;
+        }
+        return result;
+    }
+
+    void SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator) override {
+        Aggregator = aggregator;
+        Aggregator->AddCount(FillLevel);
     }
 
     void Push(NUdf::TUnboxedValue&& value) override {
@@ -105,6 +121,9 @@ public:
 
     void Finish() override {
         Finished = true;
+    }
+
+    void Flush() override {
     }
 
     ui64 Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, ui64 bytes) override {
@@ -201,6 +220,10 @@ public:
         return true;
     }
 
+    bool IsEarlyFinished() const override {
+        return false;
+    }
+
     NKikimr::NMiniKQL::TType* GetOutputType() const override {
         return OutputType;
     }
@@ -265,22 +288,25 @@ private:
             PushStats.Resume();
         }
 
-        if (IsFull()) {
-            PopStats.TryPause();
-        }
+        auto fillLevel = UpdateFillLevel();
 
         if (PopStats.CollectFull()) {
+            if (fillLevel != NoLimit) {
+                PopStats.TryPause();
+            }
             PopStats.MaxMemoryUsage = std::max(PopStats.MaxMemoryUsage, EstimatedStoredBytes);
             PopStats.MaxRowsInMemory = std::max(PopStats.MaxRowsInMemory, Values.size());
         }
     }
 
     void ReportChunkOut(ui64 rows, ui64 bytes) {
+        auto fillLevel = UpdateFillLevel();
+
         if (PopStats.CollectBasic()) {
             PopStats.Bytes += bytes;
             PopStats.Rows += rows;
             PopStats.Chunks++;
-            if (!IsFull()) {
+            if (fillLevel == NoLimit) {
                 PopStats.Resume();
             }
         }
@@ -318,6 +344,8 @@ private:
     bool Finished = false;
     std::deque<TValueDesc> Values;
     ui64 EstimatedRowBytes = 0;
+    std::shared_ptr<TDqFillAggregator> Aggregator;
+    EDqFillLevel FillLevel = NoLimit;
 };
 
 } // namespace

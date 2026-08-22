@@ -2,6 +2,7 @@
 
 #include "arrow_parser.h"
 #include "arrow_writer.h"
+#include "blob_writer.h"
 #include "dsv_parser.h"
 #include "dsv_writer.h"
 #include "protobuf_parser.h"
@@ -12,8 +13,6 @@
 #include "schemaless_writer_adapter.h"
 #include "skiff_parser.h"
 #include "skiff_writer.h"
-#include "yaml_parser.h"
-#include "yaml_writer.h"
 #include "yamred_dsv_parser.h"
 #include "yamred_dsv_writer.h"
 #include "yamr_parser.h"
@@ -40,12 +39,17 @@
 #include <yt/yt/core/json/json_parser.h>
 #include <yt/yt/core/json/json_writer.h>
 
+#include <yt/yt/core/yaml/config.h>
+#include <yt/yt/core/yaml/parser.h>
+#include <yt/yt/core/yaml/writer.h>
+
 namespace NYT::NFormats {
 
 using namespace NConcurrency;
 using namespace NYTree;
 using namespace NYson;
 using namespace NJson;
+using namespace NYaml;
 using namespace NTableClient;
 using namespace NSkiffExt;
 using namespace NComplexTypes;
@@ -89,6 +93,18 @@ std::unique_ptr<IFlushableYsonConsumer> CreateConsumerForJson(
     return CreateJsonConsumer(output, DataTypeToYsonType(dataType), config);
 }
 
+std::unique_ptr<IFlushableYsonConsumer> CreateConsumerForWebJson(
+    EDataType dataType,
+    const IAttributeDictionary& attributes,
+    IOutputStream* output)
+{
+    if (dataType != EDataType::Structured) {
+        THROW_ERROR_EXCEPTION("Web JSON is supported only for structured data");
+    }
+    auto config = ConvertTo<NJson::TWebJsonFormatConfigPtr>(&attributes);
+    return CreateWebJsonConsumer(output, DataTypeToYsonType(dataType), config);
+}
+
 std::unique_ptr<IFlushableYsonConsumer> CreateConsumerForDsv(
     EDataType dataType,
     const IAttributeDictionary& attributes,
@@ -107,7 +123,7 @@ std::unique_ptr<IFlushableYsonConsumer> CreateConsumerForDsv(
 
         default:
             YT_ABORT();
-    };
+    }
 }
 
 std::unique_ptr<IFlushableYsonConsumer> CreateConsumerForYaml(
@@ -173,6 +189,8 @@ std::unique_ptr<IFlushableYsonConsumer> CreateConsumerForFormat(
             return CreateConsumerForYson(dataType, format.Attributes(), output);
         case EFormatType::Json:
             return CreateConsumerForJson(dataType, format.Attributes(), output);
+        case EFormatType::WebJson:
+            return CreateConsumerForWebJson(dataType, format.Attributes(), output);
         case EFormatType::Dsv:
             return CreateConsumerForDsv(dataType, format.Attributes(), output);
         case EFormatType::Yaml:
@@ -335,9 +353,18 @@ ISchemalessFormatWriterPtr CreateStaticTableWriterForFormat(
                 keyColumnCount);
         case EFormatType::Arrow:
             return CreateWriterForArrow(
+                format.Attributes(),
                 nameTable,
                 tableSchemas,
                 columns,
+                std::move(output),
+                enableContextSaving,
+                controlAttributesConfig,
+                keyColumnCount);
+        case EFormatType::Blob:
+            return CreateSchemalessWriterForBlob(
+                format.Attributes(),
+                nameTable,
                 std::move(output),
                 enableContextSaving,
                 controlAttributesConfig,
@@ -424,6 +451,18 @@ TYsonProducer CreateProducerForJson(
     });
 }
 
+TYsonProducer CreateProducerForWebJson(
+    EDataType dataType,
+    const IAttributeDictionary& attributes,
+    IInputStream* input)
+{
+    auto ysonType = DataTypeToYsonType(dataType);
+    auto config = ConvertTo<NJson::TWebJsonFormatConfigPtr>(&attributes);
+    return BIND([=] (IYsonConsumer* consumer) {
+        ParseWebJson(input, consumer, config, ysonType);
+    });
+}
+
 TYsonProducer CreateProducerForYaml(
     EDataType dataType,
     const IAttributeDictionary& attributes,
@@ -452,6 +491,8 @@ TYsonProducer CreateProducerForFormat(const TFormat& format, EDataType dataType,
             return CreateProducerForYson(dataType, input);
         case EFormatType::Json:
             return CreateProducerForJson(dataType, format.Attributes(), input);
+        case EFormatType::WebJson:
+            return CreateProducerForWebJson(dataType, format.Attributes(), input);
         case EFormatType::Dsv:
             return CreateProducerForDsv(dataType, format.Attributes(), input);
         case EFormatType::Yamr:
@@ -470,14 +511,14 @@ TYsonProducer CreateProducerForFormat(const TFormat& format, EDataType dataType,
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template<class TBase>
+template <class TBase>
 struct TParserAdapter
     : public TBase
     , public IParser
 {
 public:
-    template<class... TArgs>
-    TParserAdapter(TArgs&&... args)
+    template <class... TArgs>
+    explicit TParserAdapter(TArgs&&... args)
         : TBase(std::forward<TArgs>(args)...)
     { }
 

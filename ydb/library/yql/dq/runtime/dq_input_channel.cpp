@@ -12,8 +12,8 @@ public:
     TDqInputChannelStats PushStats;
     TDqInputStats PopStats;
 
-    TDqInputChannelImpl(ui64 channelId, ui32 srcStageId, NKikimr::NMiniKQL::TType* inputType, ui64 maxBufferBytes, TCollectStatsLevel level)
-        : TBaseImpl(inputType, maxBufferBytes)
+    TDqInputChannelImpl(ui64 channelId, ui32 srcStageId, NKikimr::NMiniKQL::TType* inputType, ui64 maxBufferBytes, TCollectStatsLevel level, IMemoryQuotaManager::TPtr quotaManager)
+        : TBaseImpl(inputType, maxBufferBytes, quotaManager)
     {
         PopStats.Level = level;
         PushStats.Level = level;
@@ -33,8 +33,21 @@ public:
         return PopStats;
     }
 
+    void Bind(NActors::TActorId outputActorId, NActors::TActorId inputActorId) override { // noop
+        Y_UNUSED(outputActorId);
+        Y_UNUSED(inputActorId);
+    }
+
+    bool IsLocal() const override {
+        return false;
+    }
+
 private:
     void Push(TDqSerializedBatch&&) override {
+        Y_ABORT("Not implemented");
+    }
+
+    void Push(TInstant) override {
         Y_ABORT("Not implemented");
     }
 };
@@ -42,7 +55,7 @@ private:
 class TDqInputChannel : public IDqInputChannel {
 
 private:
-    std::deque<TDqSerializedBatch> DataForDeserialize;
+    std::deque<std::variant<TDqSerializedBatch, TInstant>> DataForDeserialize;
     ui64 StoredSerializedBytes = 0;
 
     void PushImpl(TDqSerializedBatch&& data) {
@@ -65,18 +78,37 @@ private:
 
     void DeserializeAllData() {
         while (!DataForDeserialize.empty()) {
-            PushImpl(std::move(DataForDeserialize.front()));
+            auto& data = DataForDeserialize.front();
+            std::visit(TOverloaded {
+                [this](TDqSerializedBatch& data) {
+                    auto size = data.Size();
+                    PushImpl(std::move(data));
+                    if (QuotaManager) {
+                        QuotaManager->FreeQuota(size);
+                    }
+                    StoredSerializedBytes -= size;
+                },
+                [this](TInstant watermark) {
+                    Impl.PushWatermark(watermark);
+                },
+            }, data);
             DataForDeserialize.pop_front();
         }
-        StoredSerializedBytes = 0;
+        YQL_ENSURE(StoredSerializedBytes == 0);
     }
 
 public:
-    TDqInputChannel(ui64 channelId, ui32 srcStageId, NKikimr::NMiniKQL::TType* inputType, ui64 maxBufferBytes, TCollectStatsLevel level,
-        const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv, const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-        NDqProto::EDataTransportVersion transportVersion)
-        : Impl(channelId, srcStageId, inputType, maxBufferBytes, level)
-        , DataSerializer(typeEnv, holderFactory, transportVersion) {
+    TDqInputChannel(const TDqChannelSettings& settings, const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv)
+        : Impl(settings.ChannelId, settings.SrcStageId, settings.RowType, settings.MaxStoredBytes, settings.Level, settings.ChannelQuotaManager)
+        , DataSerializer(typeEnv, *settings.HolderFactory, settings.TransportVersion, settings.PackerVersion, settings.DatumValidationMode)
+        , QuotaManager(settings.ChannelQuotaManager)
+    {
+    }
+
+    ~TDqInputChannel() override {
+        if (StoredSerializedBytes && QuotaManager) {
+            QuotaManager->FreeQuota(StoredSerializedBytes);
+        }
     }
 
     ui64 GetChannelId() const override {
@@ -107,22 +139,25 @@ public:
         return (DataForDeserialize.empty() || Impl.IsPaused()) && Impl.Empty();
     }
 
-    void Pause() override {
+    void PauseByCheckpoint() override {
         DeserializeAllData();
-        Impl.Pause();
+        Impl.PauseByCheckpoint();
     }
 
-    bool Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch) override {
+    bool Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMaybe<TInstant>& watermark) override {
         if (Impl.Empty() && !Impl.IsPaused()) {
             DeserializeAllData();
         }
-        return Impl.Pop(batch);
+        return Impl.Pop(batch, watermark);
     }
 
     void Push(TDqSerializedBatch&& data) override {
         YQL_ENSURE(!Impl.IsFinished(), "input channel " << Impl.PushStats.ChannelId << " already finished");
         if (Y_UNLIKELY(data.Proto.GetChunks() == 0)) {
             return;
+        }
+        if (QuotaManager && !QuotaManager->AllocateQuota(data.Size())) {
+            throw NKikimr::TMemoryLimitExceededException();
         }
         StoredSerializedBytes += data.Size();
 
@@ -143,33 +178,46 @@ public:
         DataForDeserialize.emplace_back(std::move(data));
     }
 
+    void Push(TInstant watermark) override {
+        YQL_ENSURE(!Impl.IsFinished(), "input channel " << Impl.PushStats.ChannelId << " already finished");
+
+        DataForDeserialize.emplace_back(watermark);
+    }
+
     NKikimr::NMiniKQL::TType* GetInputType() const override {
         return Impl.GetInputType();
     }
 
-    void Resume() override {
-        Impl.Resume();
+    void ResumeByCheckpoint() override {
+        Impl.ResumeByCheckpoint();
     }
 
-    bool IsPaused() const override {
-        return Impl.IsPaused();
+    bool IsPausedByCheckpoint() const override {
+        return Impl.IsPausedByCheckpoint();
     }
 
     void Finish() override {
         Impl.Finish();
     }
 
+    void Bind(NActors::TActorId outputActorId, NActors::TActorId inputActorId) override {
+        IsLocalChannel = outputActorId.NodeId() == inputActorId.NodeId();
+    }
+
+    bool IsLocal() const override {
+        return IsLocalChannel;
+    }
+
 private:
     TDqInputChannelImpl Impl;
     TDqDataSerializer DataSerializer;
+    bool IsLocalChannel = false;
+    IMemoryQuotaManager::TPtr QuotaManager;
 };
 
-IDqInputChannel::TPtr CreateDqInputChannel(ui64 channelId, ui32 srcStageId, NKikimr::NMiniKQL::TType* inputType, ui64 maxBufferBytes,
-    TCollectStatsLevel level, const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
-    const NKikimr::NMiniKQL::THolderFactory& holderFactory, NDqProto::EDataTransportVersion transportVersion)
+IDqInputChannel::TPtr CreateDqInputChannel(const TDqChannelSettings& settings, const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv)
 {
-    return new TDqInputChannel(channelId, srcStageId, inputType, maxBufferBytes, level, typeEnv, holderFactory,
-        transportVersion);
+    return new TDqInputChannel(settings, typeEnv);
 }
 
 } // namespace NYql::NDq

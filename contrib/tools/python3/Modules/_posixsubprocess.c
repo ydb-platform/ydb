@@ -6,29 +6,30 @@
 #include "Python.h"
 #include "pycore_fileutils.h"
 #include "pycore_pystate.h"
+#include "pycore_signal.h"        // _Py_RestoreSignals()
 #if defined(HAVE_PIPE2) && !defined(_GNU_SOURCE)
-# define _GNU_SOURCE
+#  define _GNU_SOURCE
 #endif
-#include <unistd.h>
-#include <fcntl.h>
+#include <unistd.h>               // close()
+#include <fcntl.h>                // fcntl()
 #ifdef HAVE_SYS_TYPES_H
-#include <sys/types.h>
+#  include <sys/types.h>
 #endif
 #if defined(HAVE_SYS_STAT_H)
-#include <sys/stat.h>
+#  include <sys/stat.h>           // stat()
 #endif
 #ifdef HAVE_SYS_SYSCALL_H
-#include <sys/syscall.h>
+#  include <sys/syscall.h>
 #endif
 #if defined(HAVE_SYS_RESOURCE_H)
-#include <sys/resource.h>
+#  include <sys/resource.h>
 #endif
 #ifdef HAVE_DIRENT_H
-#include <dirent.h>
+#  include <dirent.h>             // opendir()
 #endif
-#ifdef HAVE_GRP_H
-#include <grp.h>
-#endif /* HAVE_GRP_H */
+#if defined(HAVE_SETGROUPS)
+#  include <grp.h>                // setgroups()
+#endif
 
 #include "posixmodule.h"
 
@@ -86,15 +87,16 @@ class pid_t_converter(CConverter):
     type = 'pid_t'
     format_unit = '" _Py_PARSE_PID "'
 
-    def parse_arg(self, argname, displayname):
-        return """
+    def parse_arg(self, argname, displayname, *, limited_capi):
+        return self.format_code("""
             {paramname} = PyLong_AsPid({argname});
             if ({paramname} == -1 && PyErr_Occurred()) {{{{
                 goto exit;
             }}}}
-            """.format(argname=argname, paramname=self.parser_name)
+            """,
+            argname=argname)
 [python start generated code]*/
-/*[python end generated code: output=da39a3ee5e6b4b0d input=5af1c116d56cbb5a]*/
+/*[python end generated code: output=da39a3ee5e6b4b0d input=c94349aa1aad151d]*/
 
 #include "clinic/_posixsubprocess.c.h"
 
@@ -181,6 +183,88 @@ _is_fd_in_sorted_fd_sequence(int fd, int *fd_sequence,
     } while (search_min <= search_max);
     return 0;
 }
+
+
+// Forward declaration
+static void _Py_FreeCharPArray(char *const array[]);
+
+/*
+ * Flatten a sequence of bytes() objects into a C array of
+ * NULL terminated string pointers with a NULL char* terminating the array.
+ * (ie: an argv or env list)
+ *
+ * Memory allocated for the returned list is allocated using PyMem_Malloc()
+ * and MUST be freed by _Py_FreeCharPArray().
+ */
+static char *const *
+_PySequence_BytesToCharpArray(PyObject* self)
+{
+    char **array;
+    Py_ssize_t i, argc;
+    PyObject *item = NULL;
+    Py_ssize_t size;
+
+    argc = PySequence_Size(self);
+    if (argc == -1)
+        return NULL;
+
+    assert(argc >= 0);
+
+    if ((size_t)argc > (PY_SSIZE_T_MAX-sizeof(char *)) / sizeof(char *)) {
+        PyErr_NoMemory();
+        return NULL;
+    }
+
+    array = PyMem_Malloc((argc + 1) * sizeof(char *));
+    if (array == NULL) {
+        PyErr_NoMemory();
+        return NULL;
+    }
+    for (i = 0; i < argc; ++i) {
+        char *data;
+        item = PySequence_GetItem(self, i);
+        if (item == NULL) {
+            /* NULL terminate before freeing. */
+            array[i] = NULL;
+            goto fail;
+        }
+        /* check for embedded null bytes */
+        if (PyBytes_AsStringAndSize(item, &data, NULL) < 0) {
+            /* NULL terminate before freeing. */
+            array[i] = NULL;
+            goto fail;
+        }
+        size = PyBytes_GET_SIZE(item) + 1;
+        array[i] = PyMem_Malloc(size);
+        if (!array[i]) {
+            PyErr_NoMemory();
+            goto fail;
+        }
+        memcpy(array[i], data, size);
+        Py_DECREF(item);
+    }
+    array[argc] = NULL;
+
+    return array;
+
+fail:
+    Py_XDECREF(item);
+    _Py_FreeCharPArray(array);
+    return NULL;
+}
+
+
+/* Free's a NULL terminated char** array of C strings. */
+static void
+_Py_FreeCharPArray(char *const array[])
+{
+    Py_ssize_t i;
+    for (i = 0; array[i] != NULL; ++i) {
+        PyMem_Free(array[i]);
+    }
+    PyMem_Free((void*)array);
+}
+
 
 /*
  * Do all the Python C API calls in the parent process to turn the pass_fds
@@ -428,7 +512,13 @@ _close_open_fds_maybe_unsafe(int start_fd, int *fds_to_keep,
         proc_fd_dir = NULL;
     else
 #endif
+#if defined(_AIX)
+        char fd_path[PATH_MAX];
+        snprintf(fd_path, sizeof(fd_path), "/proc/%ld/fd", (long)getpid());
+        proc_fd_dir = opendir(fd_path);
+#else
         proc_fd_dir = opendir(FD_DIR);
+#endif
     if (!proc_fd_dir) {
         /* No way to get a list of open fds. */
         _close_range_except(start_fd, -1, fds_to_keep, fds_to_keep_len,
@@ -544,7 +634,7 @@ reset_signal_handlers(const sigset_t *child_sigmask)
  * (v)fork to set things up and call exec().
  *
  * All of the code in this function must only use async-signal-safe functions,
- * listed at `man 7 signal` or
+ * listed at `man 7 signal-safety` or
  * http://www.opengroup.org/onlinepubs/009695399/functions/xsh_chap02_04.html.
  *
  * This restriction is documented at
@@ -662,8 +752,9 @@ child_exec(char *const exec_array[],
     if (child_umask >= 0)
         umask(child_umask);  /* umask() always succeeds. */
 
-    if (restore_signals)
+    if (restore_signals) {
         _Py_RestoreSignals();
+    }
 
 #ifdef VFORK_USABLE
     if (child_sigmask) {
@@ -897,15 +988,15 @@ _posixsubprocess.fork_exec as subprocess_fork_exec
 
 Spawn a fresh new child process.
 
-Fork a child process, close parent file descriptors as appropriate in the
-child and duplicate the few that are needed before calling exec() in the
-child process.
+Fork a child process, close parent file descriptors as appropriate in
+the child and duplicate the few that are needed before calling exec() in
+the child process.
 
-If close_fds is True, close file descriptors 3 and higher, except those listed
-in the sorted tuple pass_fds.
+If close_fds is True, close file descriptors 3 and higher, except those
+listed in the sorted tuple pass_fds.
 
-The preexec_fn, if supplied, will be called immediately before closing file
-descriptors and exec.
+The preexec_fn, if supplied, will be called immediately before closing
+file descriptors and exec.
 
 WARNING: preexec_fn is NOT SAFE if your application uses threads.
          It may trigger infrequent, difficult to debug deadlocks.
@@ -930,7 +1021,7 @@ subprocess_fork_exec_impl(PyObject *module, PyObject *process_args,
                           PyObject *extra_groups_packed,
                           PyObject *uid_object, int child_umask,
                           PyObject *preexec_fn, int allow_vfork)
-/*[clinic end generated code: output=7ee4f6ee5cf22b5b input=51757287ef266ffa]*/
+/*[clinic end generated code: output=7ee4f6ee5cf22b5b input=53eb802a43d5c5fc]*/
 {
     PyObject *converted_args = NULL, *fast_args = NULL;
     PyObject *preexec_fn_args_tuple = NULL;
@@ -945,11 +1036,11 @@ subprocess_fork_exec_impl(PyObject *module, PyObject *process_args,
     int *c_fds_to_keep = NULL;
     Py_ssize_t fds_to_keep_len = PyTuple_GET_SIZE(py_fds_to_keep);
 
-    PyInterpreterState *interp = PyInterpreterState_Get();
+    PyInterpreterState *interp = _PyInterpreterState_GET();
     if ((preexec_fn != Py_None) &&
         _PyInterpreterState_GetFinalizing(interp) != NULL)
     {
-        PyErr_SetString(PyExc_RuntimeError,
+        PyErr_SetString(PyExc_PythonFinalizationError,
                         "preexec_fn not supported at interpreter shutdown");
         return NULL;
     }
@@ -998,8 +1089,14 @@ subprocess_fork_exec_impl(PyObject *module, PyObject *process_args,
                 goto cleanup;
             }
             borrowed_arg = PySequence_Fast_GET_ITEM(fast_args, arg_num);
-            if (PyUnicode_FSConverter(borrowed_arg, &converted_arg) == 0)
+            /* borrowed_arg is only borrowed; its __fspath__() may run Python
+               that drops fast_args' last reference to it. */
+            Py_INCREF(borrowed_arg);
+            if (PyUnicode_FSConverter(borrowed_arg, &converted_arg) == 0) {
+                Py_DECREF(borrowed_arg);
                 goto cleanup;
+            }
+            Py_DECREF(borrowed_arg);
             PyTuple_SET_ITEM(converted_args, arg_num, converted_arg);
         }
 
@@ -1232,6 +1329,7 @@ static PyMethodDef module_methods[] = {
 
 static PyModuleDef_Slot _posixsubprocess_slots[] = {
     {Py_mod_multiple_interpreters, Py_MOD_PER_INTERPRETER_GIL_SUPPORTED},
+    {Py_mod_gil, Py_MOD_GIL_NOT_USED},
     {0, NULL}
 };
 

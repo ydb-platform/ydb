@@ -27,6 +27,7 @@ using namespace NSchemeShard;
 class TDstCreator: public TActorBootstrapped<TDstCreator> {
     void Resolve(const TPathId& pathId) {
         auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+        request->DatabaseName = Database;
 
         auto& entry = request->ResultSet.emplace_back();
         entry.TableId = pathId;
@@ -76,7 +77,11 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             }
 
             DomainKey = entry.DomainInfo->DomainKey;
-            Resolve(DomainKey);
+            if (!Database) {
+                Resolve(DomainKey);
+            } else {
+                DescribeSrcPath(true);
+            }
         } else {
             Database = CanonizePath(entry.Path);
             DescribeSrcPath(true);
@@ -336,27 +341,27 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         const auto& record = ev->Get()->GetRecord();
 
         switch (record.GetStatus()) {
-            case NKikimrScheme::StatusSuccess: {
-                TString error;
-                if (!CheckScheme(record.GetPathDescription(), error)) {
-                    return Error(NKikimrScheme::StatusSchemeError, error);
-                } else {
-                    DstPathId = TPathId(record.GetPathOwnerId(), record.GetPathId());
-                    return Success();
-                }
-                break;
+        case NKikimrScheme::StatusSuccess: {
+            TString error;
+            if (!CheckScheme(record.GetPathDescription(), error)) {
+                return Error(NKikimrScheme::StatusSchemeError, error);
+            } else {
+                DstPathId = TPathId(record.GetPathOwnerId(), record.GetPathId());
+                return Success();
             }
-            case NKikimrScheme::StatusPathDoesNotExist:
-                return AllocateTxId();
-            case NKikimrScheme::StatusSchemeError:
-            case NKikimrScheme::StatusAccessDenied:
-            case NKikimrScheme::StatusRedirectDomain:
-            case NKikimrScheme::StatusNameConflict:
-            case NKikimrScheme::StatusInvalidParameter:
-            case NKikimrScheme::StatusPreconditionFailed:
-                return Error(record.GetStatus(), record.GetReason());
-            default:
-                return Retry();
+            break;
+        }
+        case NKikimrScheme::StatusPathDoesNotExist:
+            return AllocateTxId();
+        case NKikimrScheme::StatusSchemeError:
+        case NKikimrScheme::StatusAccessDenied:
+        case NKikimrScheme::StatusRedirectDomain:
+        case NKikimrScheme::StatusNameConflict:
+        case NKikimrScheme::StatusInvalidParameter:
+        case NKikimrScheme::StatusPreconditionFailed:
+            return Error(record.GetStatus(), record.GetReason());
+        default:
+            return Retry();
         }
     }
 
@@ -539,13 +544,14 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         LOG_T("Handle " << ev->Get()->ToString());
 
         switch (Kind) {
-            case TReplication::ETargetKind::Table:
-            case TReplication::ETargetKind::IndexTable:
-                return;
-            case TReplication::ETargetKind::Transfer:
-                return Error(NKikimrScheme::EStatus::StatusPathDoesNotExist, TStringBuilder() << "The target table `" << DstPath << "` does not exist");
-            }
+        case TReplication::ETargetKind::Table:
+        case TReplication::ETargetKind::IndexTable:
+            return;
+        case TReplication::ETargetKind::Transfer:
+            return Error(NKikimrScheme::EStatus::StatusPathDoesNotExist,
+                TStringBuilder() << "The target table `" << DstPath << "` does not exist");
         }
+    }
 
     void Handle(TSchemeBoardEvents::TEvNotifyUpdate::TPtr& ev) {
         LOG_T("Handle " << ev->Get()->ToString());
@@ -645,11 +651,7 @@ public:
     void Bootstrap() {
         switch (Kind) {
         case TReplication::ETargetKind::Table:
-            if (Database) {
-                return DescribeSrcPath(true);
-            } else {
-                return Resolve(PathId);
-            }
+            return Resolve(PathId);
         case TReplication::ETargetKind::IndexTable:
         case TReplication::ETargetKind::Transfer:
             // indexed table will be created along with its indexes
@@ -712,8 +714,8 @@ static NKikimrSchemeOp::TTableReplicationConfig::EReplicationMode ConvertMode(ER
 void FillReplicationConfig(
         NKikimrSchemeOp::TTableReplicationConfig& out,
         EReplicationMode mode,
-        EConsistencyLevel consistency
-) {
+        EConsistencyLevel consistency)
+{
     out.SetMode(ConvertMode(mode));
     out.SetConsistencyLevel(ConvertConsistencyLevel(consistency));
 }
@@ -722,8 +724,8 @@ bool CheckReplicationConfig(
         const NKikimrSchemeOp::TTableReplicationConfig& in,
         EReplicationMode mode,
         EConsistencyLevel consistency,
-        TString& error
-) {
+        TString& error)
+{
     if (in.GetMode() != ConvertMode(mode)) {
         error = TStringBuilder() << "Replication mode mismatch"
             << ": expected: " << ConvertMode(mode)
@@ -756,14 +758,16 @@ IActor* CreateDstCreator(TReplication* replication, ui64 targetId, const TActorC
     const auto* target = replication->FindTarget(targetId);
     Y_ABORT_UNLESS(target);
 
-    return CreateDstCreator(ctx.SelfID, replication->GetSchemeShardId(), replication->GetYdbProxy(), replication->GetPathId(),
+    return CreateDstCreator(ctx.SelfID, replication->GetSchemeShardId(), replication->GetYdbProxy(),
+        replication->GetDatabase(), replication->GetPathId(),
         replication->GetId(), target->GetId(), target->GetKind(), target->GetSrcPath(), target->GetDstPath(),
-        EReplicationMode::ReadOnly, ConvertConsistencyLevel(replication->GetConfig().GetConsistencySettings()), replication->GetDatabase());
+        EReplicationMode::ReadOnly, ConvertConsistencyLevel(replication->GetConfig().GetConsistencySettings()));
 }
 
-IActor* CreateDstCreator(const TActorId& parent, ui64 schemeShardId, const TActorId& proxy, const TPathId& pathId,
+IActor* CreateDstCreator(const TActorId& parent, ui64 schemeShardId, const TActorId& proxy,
+        const TString& database, const TPathId& pathId,
         ui64 rid, ui64 tid, TReplication::ETargetKind kind, const TString& srcPath, const TString& dstPath,
-        EReplicationMode mode, EConsistencyLevel consistency, const TString& database)
+        EReplicationMode mode, EConsistencyLevel consistency)
 {
     return new TDstCreator(parent, schemeShardId, proxy, pathId, rid, tid, kind, srcPath, dstPath, mode, consistency, database);
 }

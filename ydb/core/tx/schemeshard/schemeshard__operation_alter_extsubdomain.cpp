@@ -3,7 +3,6 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_states.h"
 #include "schemeshard_impl.h"
-#include "schemeshard_utils.h"  // for TransactionTemplate
 
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/subdomain.h>
@@ -319,6 +318,13 @@ VerifyParams(TParamsDelta* delta, const TPathId pathId, const TSubDomainInfo::TP
         serverlessComputeResourcesModeChanged = current->GetServerlessComputeResourcesMode() != input.GetServerlessComputeResourcesMode();
     }
 
+    if (input.HasTablesMetricsLevel()) {
+        TString error;
+        if (!CheckTablesMetricsLevel(input.GetTablesMetricsLevel(), /* isRootDomain */ false, error)) {
+            return paramError(error);
+        }
+    }
+
     delta->CoordinatorsAdded = coordinatorsAdded;
     delta->MediatorsAdded = mediatorsAdded;
     delta->TimeCastBucketsPerMediatorAdded = timeCastBucketsPerMediatorAdded;
@@ -399,8 +405,8 @@ public:
     void SendCreateTabletEvent(const TPathId& pathId, TShardIdx shardIdx, TOperationContext& context) {
         auto path = context.SS->PathsById.at(pathId);
 
-        auto ev = CreateEvCreateTablet(path, shardIdx, context);
-        auto rootHiveId = context.SS->GetGlobalHive(context.Ctx);
+        auto ev = CreateEvCreateTablet(path, shardIdx, context.SS);
+        auto rootHiveId = context.SS->GetGlobalHive();
 
         LOG_D(DebugHint() << "Send CreateTablet event to Hive: " << rootHiveId << " msg:  "<< ev->Record.DebugString());
 
@@ -474,7 +480,7 @@ public:
         );
 
         auto rootHiveId = TTabletId(record.GetOrigin());
-        Y_ABORT_UNLESS(rootHiveId == context.SS->GetGlobalHive(context.Ctx));
+        Y_ABORT_UNLESS(rootHiveId == context.SS->GetGlobalHive());
 
         TShardInfo& shardInfo = context.SS->ShardInfos.at(shardIdx);
 
@@ -765,7 +771,7 @@ public:
             Y_ABORT_UNLESS(context.SS->SubDomains.contains(pathId));
             TSubDomainInfo::TConstPtr subDomain = context.SS->SubDomains.at(pathId);
 
-            const TTabletId hiveToSync = context.SS->ResolveHive(pathId, context.Ctx);
+            const TTabletId hiveToSync = context.SS->ResolveHive(pathId);
 
             auto event = MakeHolder<TEvHive::TEvUpdateDomain>();
             event->Record.SetTxId(ui64(OperationId.GetTxId()));
@@ -951,6 +957,13 @@ public:
 
         if (inputSettings.HasServerlessComputeResourcesMode()) {
             alter->SetServerlessComputeResourcesMode(inputSettings.GetServerlessComputeResourcesMode());
+        }
+
+        // alter is copy-constructed from the current subdomain info, so the
+        // current level is already carried over; only an explicit request
+        // changes it (already validated in VerifyParams).
+        if (inputSettings.HasTablesMetricsLevel()) {
+            alter->SetTablesMetricsLevel(inputSettings.GetTablesMetricsLevel());
         }
 
         LOG_D("TAlterExtSubDomain Propose"

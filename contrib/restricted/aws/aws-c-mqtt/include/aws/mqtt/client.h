@@ -693,6 +693,21 @@ int aws_mqtt_client_connection_get_stats(
     struct aws_mqtt_client_connection *connection,
     struct aws_mqtt_connection_operation_statistics *stats);
 
+/**
+ * Sets IoT SDK metrics configuration for the connection.
+ * These metrics will be appended to the username field during connection.
+ *
+ * NOTE: DO NOT USE METADATA. Metadata will not be set.
+ *
+ * \param connection The connection object
+ * \param metrics The IoT SDK metrics configuration (pass NULL to disable metrics)
+ * \returns AWS_OP_SUCCESS if successful, AWS_OP_ERR otherwise
+ */
+AWS_MQTT_API
+int aws_mqtt_client_connection_set_metrics(
+    struct aws_mqtt_client_connection *connection,
+    const struct aws_mqtt_iot_metrics *metrics);
+
 AWS_EXTERN_C_END
 AWS_POP_SANE_WARNING_LEVEL
 

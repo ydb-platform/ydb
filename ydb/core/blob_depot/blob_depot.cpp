@@ -7,6 +7,8 @@
 #include "data_uncertain.h"
 #include "space_monitor.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT
+
 namespace NKikimr::NBlobDepot {
 
     TBlobDepot::TBlobDepot(TActorId tablet, TTabletStorageInfo *info)
@@ -31,7 +33,7 @@ namespace NKikimr::NBlobDepot {
     {}
 
     void TBlobDepot::HandleFromAgent(STATEFN_SIG) {
-        switch (const ui32 type = ev->GetTypeRewrite()) {
+        switch (ev->GetTypeRewrite()) {
             hFunc(TEvBlobDepot::TEvRegisterAgent, Handle);
             hFunc(TEvBlobDepot::TEvAllocateIds, Handle);
             hFunc(TEvBlobDepot::TEvCommitBlobSeq, Handle);
@@ -53,8 +55,13 @@ namespace NKikimr::NBlobDepot {
             auto handleDelivery = [this](auto& ev) {
                 const auto it = PipeServers.find(ev->Recipient);
                 if (it == PipeServers.end()) {
-                    STLOG(PRI_DEBUG, BLOB_DEPOT, BDT29, "HandleDelivery dropped", (Id, GetLogId()),
-                        (RequestId, ev->Cookie), (Sender, ev->Sender), (PipeServerId, ev->Recipient), (Type, ev->Type));
+                    YDB_LOG_DEBUG("HandleDelivery dropped",
+                        {"marker", "BDT29"},
+                        {"id", GetLogId()},
+                        {"requestId", ev->Cookie},
+                        {"sender", ev->Sender},
+                        {"pipeServerId", ev->Recipient},
+                        {"type", ev->Type});
                     return;
                 }
                 auto& info = it->second;
@@ -76,16 +83,28 @@ namespace NKikimr::NBlobDepot {
             auto handleFromAgentPipe = [this](auto& ev) {
                 const auto it = PipeServers.find(ev->Recipient);
                 if (it == PipeServers.end()) {
-                    STLOG(PRI_DEBUG, BLOB_DEPOT, BDT23, "HandleFromAgentPipe dropped", (Id, GetLogId()),
-                        (RequestId, ev->Cookie), (Sender, ev->Sender), (PipeServerId, ev->Recipient), (Type, ev->Type));
+                    YDB_LOG_DEBUG("HandleFromAgentPipe dropped",
+                        {"marker", "BDT23"},
+                        {"id", GetLogId()},
+                        {"requestId", ev->Cookie},
+                        {"sender", ev->Sender},
+                        {"pipeServerId", ev->Recipient},
+                        {"type", ev->Type});
                     return; // this may be a race with TEvServerDisconnected and postpone queue; it's okay to have this
                 }
                 auto& info = it->second;
 
-                STLOG(PRI_DEBUG, BLOB_DEPOT, BDT69, "HandleFromAgentPipe", (Id, GetLogId()), (RequestId, ev->Cookie),
-                    (Sender, ev->Sender), (PipeServerId, ev->Recipient), (NextExpectedMsgId, info.NextExpectedMsgId),
-                    (PostponeQ.size, info.PostponeQ.size()), (InFlightDeliveries, info.InFlightDeliveries),
-                    (ReadyForAgentQueries, ReadyForAgentQueries()), (Type, ev->Type));
+                YDB_LOG_DEBUG("HandleFromAgentPipe",
+                    {"marker", "BDT69"},
+                    {"id", GetLogId()},
+                    {"requestId", ev->Cookie},
+                    {"sender", ev->Sender},
+                    {"pipeServerId", ev->Recipient},
+                    {"nextExpectedMsgId", info.NextExpectedMsgId},
+                    {"PostponeQ.size", info.PostponeQ.size()},
+                    {"inFlightDeliveries", info.InFlightDeliveries},
+                    {"readyForAgentQueries", ReadyForAgentQueries()},
+                    {"type", ev->Type});
 
                 Y_ABORT_UNLESS(ev->Type == ev->GetTypeRewrite());
                 ev->Rewrite(TEvPrivate::EvDeliver, ev->GetRecipientRewrite());
@@ -118,12 +137,17 @@ namespace NKikimr::NBlobDepot {
                 fFunc(TEvPrivate::EvDeliver, handleDelivery);
 
                 hFunc(TEvBlobDepot::TEvPushMetrics, Handle);
+                hFunc(TEvBlobDepot::TEvPushS3RouterMetrics, Handle);
 
                 hFunc(TEvBlobStorage::TEvCollectGarbageResult, Data->Handle);
                 hFunc(TEvBlobStorage::TEvGetResult, Data->UncertaintyResolver->Handle);
 
                 hFunc(TEvBlobStorage::TEvStatusResult, SpaceMonitor->Handle);
                 cFunc(TEvPrivate::EvKickSpaceMonitor, KickSpaceMonitor);
+
+                hFunc(TEvTablet::TEvMoveData, Handle);
+                cFunc(TEvPrivate::EvMoveDataContinue, ContinueMoveData);
+                hFunc(TEvMoveDataBlobCopied, Handle);
 
                 hFunc(TEvTabletPipe::TEvServerConnected, Handle);
                 hFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
@@ -139,6 +163,8 @@ namespace NKikimr::NBlobDepot {
                 fFunc(TEvPrivate::EvUploadResult, S3Manager->Handle);
                 fFunc(TEvPrivate::EvDeleteResult, S3Manager->Handle);
                 fFunc(TEvPrivate::EvScanFound, S3Manager->Handle);
+                fFunc(TEvPrivate::EvDeleteThrottleWakeup, S3Manager->Handle);
+                fFunc(TEvPrivate::EvPutThrottleWakeup, S3Manager->Handle);
 
                 default:
                     if (!HandleDefaultEvents(ev, SelfId())) {
@@ -152,19 +178,23 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepot::PassAway() {
-        for (const TActorId& actorId : {GroupAssimilatorId, S3Manager->GetWrapperId()}) {
+        for (const TActorId& actorId : {GroupAssimilatorId}) {
             if (actorId) {
                 TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, SelfId(), nullptr, 0));
             }
         }
 
+        // S3Manager owns the S3 router lifecycle via NodeWarden; releasing it happens
+        // inside TerminateAllActors().
         S3Manager->TerminateAllActors();
 
         TActor::PassAway();
     }
 
     void TBlobDepot::InitChannelKinds() {
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT07, "InitChannelKinds", (Id, GetLogId()));
+        YDB_LOG_DEBUG("InitChannelKinds",
+            {"marker", "BDT07"},
+            {"id", GetLogId()});
 
         TTabletStorageInfo *info = Info();
         const ui32 generation = Executor()->Generation();
@@ -244,6 +274,7 @@ namespace NKikimr::NBlobDepot {
                 }
             }
             if (kindv.GroupAccumWeights.empty()) {
+                TabletCounters->Cumulative()[NKikimrBlobDepot::COUNTER_PICK_CHANNELS_FAILURES] += 1;
                 return false; // no allocation possible
             }
         }

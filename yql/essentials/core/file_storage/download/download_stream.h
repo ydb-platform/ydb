@@ -5,10 +5,10 @@
 
 namespace NYql {
 
-class TDownloadError : public yexception {
+class TDownloadError: public yexception {
 };
 
-class TDownloadStream : public IInputStream {
+class TDownloadStream: public IInputStream {
 public:
     explicit TDownloadStream(IInputStream& delegatee);
 
@@ -18,4 +18,4 @@ private:
 private:
     IInputStream& Delegatee_;
 };
-}
+} // namespace NYql

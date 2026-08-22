@@ -2,16 +2,16 @@
 
 ## Introduction
 
-BinaryJson is on-disk binary format for JSON. Its main characteristics are the following:
-  - Access to values inside JSON document without document parsing;
-  - Minimal effort to value deserialization.
+BinaryJson is an on-disk binary format for JSON. Its main characteristics are the following:
+  - Access to values inside a JSON document without document parsing;
+  - Minimal effort for value deserialization.
 
 ## Main Idea
 
-Let's separate storing values of JSON document and document's structure.
-Document's structure would be represented as sequence of fixed size entries, each entry describes a node in the JSON document.
+Let's separate storing values of the JSON document and the document's structure.
+The document's structure would be represented as a sequence of fixed size entries, each entry describes a node in the JSON document.
 Simple type values would be stored inside these entries, complex type values would be stored in special indexes.
-We build a dictionary of document's string values to operate string indexes instead of strings themselves.
+We build a dictionary of the document's string values to operate string indexes instead of strings themselves.
 
 ## Data Structures
 
@@ -24,197 +24,197 @@ BinaryJson contains the following parts:
 ```
 
 - `Header` - metadata about BinaryJson
-- `Tree` - store documents structure
+- `Tree` - stores the document's structure
 - `String index` - a place to store all string values
 - `Number index` - a place to store all numbers
 
 ### Header
 
-`Header ` хранит метаинформацию о BinaryJson документе.
+`Header` stores metadata about the BinaryJson document.
 
-Структура:
+Structure:
 
 ```
 +----------------+-----------------------------+
-| Version, 5 бит | String index offset, 27 бит |
+| Version, 5 bit | String index offset, 27 bit |
 +----------------+-----------------------------+
 ```
 
-- `Version` - номер версии BinaryJson. Всегда равен `1`
-- `String index offset` - сдвиг на начало `String index`
+- `Version` - BinaryJson version number. Always equal to `1`
+- `String index offset` - offset to the beginning of `String index`
 
 ### Tree
 
-Дерево JSON документа, где каждый узел представлен структурой `Entry`, `KeyEntry` или `Meta`.
+The JSON document tree, where each node is represented by the structure `Entry`, `KeyEntry`, or `Meta`.
 
 #### Entry
 
-`Entry` - это `uint32_t`, представляющий узел в дереве JSON. `Entry` может в зависимости от типа:
-- Хранить значение в себе (для простых типов вроде `boolean` и `null`)
-- Указывать на другой узел дерева (для массивов и объектов)
-- Указывать на элемент в `String index` или `Number index` (для строк и чисел)
+`Entry` is a `uint32_t` representing a node in the JSON tree. Depending on the type, `Entry` can:
+- Store the value itself (for simple types like `boolean` and `null`)
+- Point to another node in the tree (for arrays and objects)
+- Point to an element in `String index` or `Number index` (for strings and numbers)
 
-`Entry` имеет следующую структуру:
+`Entry` has the following structure:
 ```
 +-------------------+---------------+
-| Entry type, 5 бит | Value, 27 бит |
+| Entry type, 5 bit | Value, 27 bit |
 +-------------------+---------------+
 ```
 
-- `Entry type`. Задает тип значения:
-  - `0` - bool значение `false`
-  - `1` - bool значение `true`
-  - `2` - значение `null`
-  - `3` - строка
-  - `4` - число
-  - `5` - массив или объект
-  - Остальные типы зарезервированы на будущее
-- `Value`. В зависимости от типа:
-  - Сдвиг указывающий на начало `SEntry` в `String index` (для строк)
-  - Сдвиг указывающий на начало числа в `Number index` (для чисел)
-  - Сдвиг указывающий на начало структуры `Meta` (для массивов и объектов)
-  - Для остальных типов не определено
+- `Entry type`. Specifies the value type:
+  - `0` - bool value `false`
+  - `1` - bool value `true`
+  - `2` - value `null`
+  - `3` - string
+  - `4` - number
+  - `5` - array or object
+  - Other types are reserved for future use
+- `Value`. Depending on the type:
+  - Offset pointing to the start of `SEntry` in `String index` (for strings)
+  - Offset pointing to the start of a number in `Number index` (for numbers)
+  - Offset pointing to the start of the `Meta` structure (for arrays and objects)
+  - Not defined for other types
 
 #### KeyEntry
 
-`KeyEntry` - это `uint32_t`, являющийся сдвигом на начало `SEntry` в `String index`. Указывает на строку которая хранит ключ объекта
+`KeyEntry` is a `uint32_t` which is an offset to the start of `SEntry` in `String index`. It points to the string which holds the object key.
 
 #### Meta
 
-`Meta` - это `uint32_t` хранящий в себе тип контейнера (массив или объект) и его размер (длину массива или количество ключей в объекте)
+`Meta` is a `uint32_t` storing the container type (array or object) and its size (the length of the array or the number of keys in the object).
 
-`Meta` имеет следующую структуру:
+`Meta` has the following structure:
 ```
 +-----------------------+--------------+
-| Container type, 5 бит | Size, 27 бит |
+| Container type, 5 bit | Size, 27 bit |
 +-----------------------+--------------+
 ```
 
 - `Container type`
-  - `0` если `Meta` описывает массив
-  - `1` если `Meta` описывает объект
-  - `2` если `Meta` описывает top-level скалярное значение (см раздел "Сериализация")
-  - Остальные типы зарезервированы на будущее
-- `Size`. В зависимости от типа:
-  - Количество элементов в массиве (для массивов)
-  - Количество ключей в объекте (для объектов)
-  - Для остальных типов не определено
+  - `0` if `Meta` describes an array
+  - `1` if `Meta` describes an object
+  - `2` if `Meta` describes a top-level scalar value (see the section "Serialization")
+  - Other types are reserved for future use
+- `Size`. Depending on the type:
+  - Number of elements in the array (for arrays)
+  - Number of keys in the object (for objects)
+  - Not defined for other types
 
-#### Массивы
+#### Arrays
 
-Массивы хранятся как последовательность `Entry` для каждого элемента массива.
+Arrays are stored as a sequence of `Entry` for each element.
 
-Массивы имеют следующую структуру:
+Arrays have the following structure:
 ```
 +------+---------+-----+------------+
 | Meta | Entry 1 | ... | Entry Size |
 +------+---------+-----+------------+
 ```
 
-- `Meta`. Хранит количество элементов в массиве `Size`, имеет `Container type` равный `0` или `2`.
-- Последовательность `Entry`, `Size` штук. `Entry` с номером `i` описывает `i`ый элемент массива.
+- `Meta`. Stores the number of elements in the array in `Size`, and has a `Container type` equal to `0` or `2`.
+- Sequence of `Entry`, `Size` items. The `Entry` with index `i` describes the i-th element of the array.
 
-#### Объекты
+#### Objects
 
-Объект хранится как массив ключей, сопровождаемый массивом значений. Пары ключ-значение (где ключ берется из первого массива, а значение из второго) отсортированы по ключу в возрастающем лексикографическом порядке
+An object is stored as an array of keys, accompanied by an array of values. Key-value pairs (where the key is taken from the first array and the value from the second) are sorted by key in ascending lexicographic order.
 
-Объекты имеют следующую структуру:
+Objects have the following structure:
 ```
 +------+------------+-----+---------------+---------+-----+------------+
 | Meta | KeyEntry 1 | ... | KeyEntry Size | Entry 1 | ... | Entry Size |
 +------+------------+-----+---------------+---------+-----+------------+
 ```
 
-- `Meta`. Хранит количество пар ключ-значение в объекте `Size`, имеет `Container type` равный `1`.
-- Последовательность `KeyEntry`, `Size` штук. Это `KeyEntry` для ключа из каждой пары ключ-значение в объекте
-- Последовательность `Entry`, `Size` штук. Это `Entry` для значения из каждой пары ключ-значение в объекте
+- `Meta`. Stores the number of key-value pairs in the object in `Size`, with `Container type` equal to `1`.
+- Sequence of `KeyEntry`, `Size` items. These are `KeyEntry` for the key of each key-value pair in the object
+- Sequence of `Entry`, `Size` items. These are `Entry` for the value of each key-value pair in the object
 
 ### String index
 
-`String index` - это место хранения всех строк (и ключей объектов и значений) из JSON документа. Все строки внутри `String index` уникальны.
+`String index` is where all strings (both object keys and values) from the JSON document are stored. All strings within the `String index` are unique.
 
-Каждая строка описывается двумя структурами
-- `SEntry` хранит местоположение строки в индексе
-- `SData` хранит содержание строки
+Each string is described by two structures:
+- `SEntry` stores the location of the string in the index
+- `SData` stores the content of the string
 
-`String index` имеет следующую структуру:
+`String index` has the following structure:
 ```
 +----------------+----------+-----+--------------+---------+-----+-------------+
-| Count, 32 бита | SEntry 1 | ... | SEntry Count | SData 1 | ... | SData Count |
+| Count, 32 bit  | SEntry 1 | ... | SEntry Count | SData 1 | ... | SData Count |
 +----------------+----------+-----+--------------+---------+-----+-------------+
 ```
 
-- `Count`. Это `uint32_t` хранящий количество строк в индексе
-- `SEntry`, `Count` штук. `SEntry` для каждой строки в индексе
-- `SData`, `Count` штук. `SData` для каждой строки в индексе
+- `Count`. This is a `uint32_t` storing the number of strings in the index
+- `SEntry`, `Count` items. `SEntry` for each string in the index
+- `SData`, `Count` items. `SData` for each string in the index
 
 #### SEntry
 
-`SEntry` - это `uint32_t`, хранящий сдвиг, который указывает на символ сразу после соответствующего `SData` для строки.
+`SEntry` is a `uint32_t`, storing an offset which points to the character immediately after the corresponding `SData` for the string.
 
-`SEntry` имеет следующую структуру:
+`SEntry` has the following structure:
 
 ```
 +--------------------+-----------------------+
-| String type, 5 бит | String offset, 27 бит |
+| String type, 5 bit | String offset, 27 bit |
 +--------------------+-----------------------+
 ```
 
-- `String type` зарезервирован на будущее
-- `String offset` - сдвиг, указывающий на байт сразу после соответствующего `SData` для строки
+- `String type` is reserved for future use
+- `String offset` - offset pointing to the byte immediately after the corresponding `SData` for the string
 
 #### SData
 
-`SData` - это содержимое строки, включая символ `\0` в конце
+`SData` is the contents of the string, including the `\0` character at the end
 
 ### Number index
 
-`Number index` - это место хранения всех чисел из JSON документа. Числа в BinaryJson представлены как double, поэтому это просто последовательность double.
+`Number index` is the place where all numbers from the JSON document are stored. Numbers in BinaryJson are represented as double, so this is simply a sequence of doubles.
 
-## Сериализация
+## Serialization
 
-1. `Entry` элементов массива записываются в том порядке как они идут в JSON массиве.
-2. `KeyEntry` и `Entry` для пар ключ-значение объектов записываются в возрастающем лексикографическом порядке ключей. Если есть несколько одинаковых ключей, берется значение первого из них.
-4. Для представления JSON, состоящего из одного top-level скалярного (не массив и не объект) значения записывается массив из одного элемента. При этом в `Meta` устанавливается `Container type` равный `2`.
-5. Все строки в `String index` должны быть уникальны и записываться в возрастающем лексикографическом порядке. Если несколько узлов JSON документа содержат равные строки, соответствующие им `Entry` должны указывать на один и тот же `SEntry`.
+1. `Entry` elements of arrays are written in the same order as they appear in the JSON array.
+2. `KeyEntry` and `Entry` for key-value pairs of objects are written in ascending lexicographical order of keys. If there are multiple identical keys, the value of the first is taken.
+4. To represent a JSON consisting of a single top-level scalar (not array or object) value, an array of one element is written. In this case, the `Meta` `Container type` is set to `2`.
+5. All strings in the `String index` must be unique and written in ascending lexicographical order. If multiple nodes of the JSON document contain equal strings, the corresponding `Entry` should point to the same `SEntry`.
 
-## Поиск значений
+## Value Lookup
 
-### Поиск в массиве по индексу
+### Array element search by index
 
-Дано:
-- Сдвиг `start` на начало структуры `Meta` массива
-- Индекс элемента массива `i`
+Given:
+- Offset `start` to the beginning of the array's `Meta` structure
+- Index of the array element `i`
 
-Найти: Сдвиг на начало `Entry` для элемента массива с индексом `i`
+Find: Offset to the beginning of the `Entry` for the array element by index `i`
 
-Способ: `start + sizeof(Meta) + i * sizeof(Entry)`
+Method: `start + sizeof(Meta) + i * sizeof(Entry)`
 
-Сложность: `O(1)`
+Complexity: `O(1)`
 
-### Поиск в объекте по ключу
+### Object lookup by key
 
-Дано:
-- Сдвиг `start` на начало структуры `Meta` массива
-- Ключ `key`
+Given:
+- Offset `start` to the beginning of the object's `Meta` structure
+- Key `key`
 
-Найти: Сдвиг на начало `Entry` для значения которое соответствует ключу `key` в объекте
+Find: Offset to the beginning of the `Entry` for the value that corresponds to the key `key` in the object
 
-Способ: С помощью бинарного поиска находим в объекте пару ключ-значение для строки `key`
+Method: Using binary search, find the key-value pair for the string `key` in the object
 
-Сложность: `O(log2(Size) + log2(Total count of strings in JSON))`
+Complexity: `O(log2(Size) + log2(Total count of strings in JSON))`
 
-## Идеи
+## Ideas
 
-- Использовать NaN tagging.
-  В double есть значение NaN. Оно устроено так, что умеет хранить 53 бита информации.
-  Я предлагаю хранить все Entry как double.
-Если значение NaN - читаем эти 53 бита информации, там храним тип ноды, сдвиг если нужен. Поскольку бита теперь 53, можем хранить большие сдвиги, большие JSONы.
-Если значение не NaN - это нода с числом.
-  Данный подход используется в [LuaJIT](http://lua-users.org/lists/lua-l/2009-11/msg00089.html). Статья с [подробностями](https://nikic.github.io/2012/02/02/Pointer-magic-for-efficient-dynamic-value-representations.html).
-- Использовать perfect hashing для хранения объектов. Сейчас чтобы произвести lookup в JSON объекте по ключу необходимо сделать бинарный поиск в последовательности KeyEntry. Поскольку объекты в BinaryJson не изменяемы, можно было бы применить perfect hashing чтобы сразу вычислить сдвиг по которому находится значение
+- Use NaN tagging.
+  Double has a NaN value. It is organized in such a way that it can store 53 bits of information.
+  I propose to store all Entry as double.
+If the value is NaN - we read these 53 bits of information, storing node type, offset if needed. Since there are now 53 bits, we can store large offsets, large JSONs.
+If the value is not NaN - it's a node with a number.
+  This approach is used in [LuaJIT](http://lua-users.org/lists/lua-l/2009-11/msg00089.html). Article with [details](https://nikic.github.io/2012/02/02/Pointer-magic-for-efficient-dynamic-value-representations.html).
+- Use perfect hashing for storing objects. Currently, to perform a lookup in a JSON object by key, you need to do a binary search in the KeyEntry sequence. Since objects in BinaryJson are immutable, perfect hashing could be applied to immediately calculate the offset at which the value is located.
 
-## Что нужно обсудить
+## What needs to be discussed
 
-- Структуры `Header`, `Entry`, `Meta` и `SEntry` резервируют 27 бит на хранение сдвигов. Это вводит ограничение на длину хранимого JSON значения: `2^27 = 128 Mb`. Мы не уверены достаточно ли это для всех пользовательских кейсов. Возможно, стоит рассмотреть увеличение размера этих структур (например, использовать `uint64_t`).
-- Структуры `Entry`, `Meta` и `SEntry` резервируют по 5 бит на хранение типа, что даем нам 32 варианта типов. Мы не уверены будет ли этого достаточно для наших целей учитывая что некоторые типы могут иметь параметры (например что-то вроде Decimal). С учетом этого может не хватить расширения структур даже до `uint64_t`. Решением может быть хранить дополнительные `Entry` для некоторых типов, которые будут содержать необходимое описание. К сожалению, сейчас так сделать не получится так как формат полагается на то что все `Entry` имеют фиксированный размер. Возможно, нужно вводить отдельный индекс для сложных типов.
+- Structures `Header`, `Entry`, `Meta`, and `SEntry` reserve 27 bits for storing offsets. This imposes a limitation on the length of a stored JSON value: `2^27 = 128 Mb`. We are not sure if this is sufficient for all user cases. Perhaps, it makes sense to consider increasing the size of these structures (for example, using `uint64_t`).
+- Structures `Entry`, `Meta`, and `SEntry` reserve 5 bits each for storing the type, giving us 32 type variants. We are not sure whether this will be enough for our purposes, considering that some types may have parameters (e.g., something like Decimal). Taking this into account, even expanding the structures to `uint64_t` may not be sufficient. A solution may be to store additional `Entry` for some types, which will contain the necessary description. Unfortunately, this cannot currently be done because the format relies on all `Entry` having a fixed size. Perhaps a separate index for complex types should be introduced.

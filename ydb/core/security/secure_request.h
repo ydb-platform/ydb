@@ -16,6 +16,7 @@ private:
     bool RequireAdminAccess = false;
     bool UserAdmin = false;
     TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> Entries;
+    TIntrusiveConstPtr<NACLib::TUserToken> InternalToken;
 
     static bool GetEnforceUserTokenRequirement() {
         return AppData()->EnforceUserTokenRequirement;
@@ -37,26 +38,57 @@ private:
         return !SecurityToken.empty() || !GetDefaultUserSIDs().empty();
     }
 
-    void Handle(TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev, const TActorContext& ctx) {
-        const TEvTicketParser::TEvAuthorizeTicketResult& result(*ev->Get());
-        if (!result.Error.empty()) {
+    bool IsTokenRequired() const {
+        if (GetEnforceUserTokenRequirement()) {
+            return true;
+        }
+
+        // Admin access
+        if (RequireAdminAccess && !GetAdministrationAllowedSIDs().empty()) {
+            return true;
+        }
+
+         // Acts in case of !EnforceUserTokenRequirement: If user specify token,
+         // it is checked and required to be valid for further usage of YDB.
+         // If user doesn't specify token, no checks are made.
+        if (GetEnforceUserTokenCheckRequirement() && IsTokenExists()) {
+            return true;
+        }
+
+        return false;
+    }
+
+    void ProcessAuthorizeTicketResult(THolder<TEvTicketParser::TEvAuthorizeTicketResult> result, const TActorContext& ctx) {
+        if (result->HasError()) {
             if (IsTokenRequired()) {
-                return static_cast<TDerived*>(this)->OnAccessDenied(result.Error, ctx);
-            }
-        } else {
-            UserAdmin = IsTokenAllowed(result.Token.Get(), GetAdministrationAllowedSIDs());
-            if (RequireAdminAccess && !UserAdmin) {
-                return static_cast<TDerived*>(this)->OnAccessDenied(TEvTicketParser::TError{.Message = "Administrative access denied", .Retryable = false}, ctx);
+                return static_cast<TDerived*>(this)->OnAccessDenied(result->Error, ctx);
             }
         }
-        AuthorizeTicketResult = ev.Get()->Release();
+
+        AuthorizeTicketResult = std::move(result);
+
+        UserAdmin = IsAdministrator(AppData(), GetParsedToken().Get());
+        if (RequireAdminAccess && !UserAdmin) {
+            return static_cast<TDerived*>(this)->OnAccessDenied(TEvTicketParser::TError{.Message = "Administrative access denied", .Retryable = false}, ctx);
+        }
+
         static_cast<TBootstrap*>(this)->Bootstrap(ctx);
+    }
+
+    void Handle(TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev, const TActorContext& ctx) {
+        ProcessAuthorizeTicketResult(ev.Get()->Release(), ctx);
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr&, const TActorContext& ctx) {
         if (IsTokenRequired()) {
             return static_cast<TDerived*>(this)->OnAccessDenied(TEvTicketParser::TError{.Message = "Access denied - error parsing token", .Retryable = false}, ctx);
         }
+
+        UserAdmin = IsAdministrator(AppData(), GetParsedToken().Get());
+        if (RequireAdminAccess && !UserAdmin) {
+            return static_cast<TDerived*>(this)->OnAccessDenied(TEvTicketParser::TError{.Message = "Administrative access denied", .Retryable = false}, ctx);
+        }
+
         static_cast<TBootstrap*>(this)->Bootstrap(ctx);
     }
 
@@ -76,6 +108,13 @@ public:
 
     void SetSecurityToken(const TString& securityToken) {
         SecurityToken = securityToken;
+    }
+
+    // Set internal token
+    // It cancels ticket parser request (as we already have its result),
+    // but keeps access checks. For example, admin access checks.
+    void SetInternalToken(TIntrusiveConstPtr<NACLib::TUserToken> token) {
+        InternalToken = std::move(token);
     }
 
     void SetPeerName(const TString& peerName) {
@@ -149,53 +188,50 @@ public:
     }
 
 public:
-    bool IsTokenRequired() const {
-        if (GetEnforceUserTokenRequirement()) {
-            return true;
-        }
-
-        // Admin access
-        if (RequireAdminAccess && !GetAdministrationAllowedSIDs().empty()) {
-            return true;
-        }
-
-         // Acts in case of !EnforceUserTokenRequirement: If user specify token,
-         // it is checked and required to be valid for futher usage of YDB.
-         // If user doesn't specify token, no checks are made.
-        if (GetEnforceUserTokenCheckRequirement() && IsTokenExists()) {
-            return true;
-        }
-
-        return false;
-    }
 
     void Bootstrap(const TActorContext& ctx) {
-        if (IsTokenRequired() && !IsTokenExists()) {
-            return static_cast<TDerived*>(this)->OnAccessDenied(TEvTicketParser::TError{.Message = "Access denied without user token", .Retryable = false}, ctx);
-        }
-        if (SecurityToken.empty()) {
-            if (!GetDefaultUserSIDs().empty()) {
-                TIntrusivePtr<NACLib::TUserToken> userToken = new NACLib::TUserToken(GetDefaultUserSIDs());
-                THolder<TEvTicketParser::TEvAuthorizeTicketResult> AuthorizeTicketResult = MakeHolder<TEvTicketParser::TEvAuthorizeTicketResult>(TString(), userToken);
-                ctx.Send(ctx.SelfID, AuthorizeTicketResult.Release());
-            } else {
-                return static_cast<TBootstrap*>(this)->Bootstrap(ctx);
-            }
+        if (InternalToken) {
+            // Perform access checks
+            ProcessAuthorizeTicketResult(MakeHolder<TEvTicketParser::TEvAuthorizeTicketResult>(SecurityToken, InternalToken), ctx);
         } else {
-            ctx.Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({
-                .Database = Database,
-                .Ticket = SecurityToken,
-                .PeerName = PeerName,
-                .Entries = Entries
-            }));
+            if (IsTokenRequired() && !IsTokenExists()) {
+                return static_cast<TDerived*>(this)->OnAccessDenied(TEvTicketParser::TError{.Message = "Access denied without user token", .Retryable = false}, ctx);
+            }
+            if (SecurityToken.empty()) {
+                TIntrusivePtr<NACLib::TUserToken> userToken;
+                if (!GetDefaultUserSIDs().empty()) {
+                    userToken = new NACLib::TUserToken(GetDefaultUserSIDs());
+                } else {
+                    userToken = nullptr;
+                }
+
+                THolder<TEvTicketParser::TEvAuthorizeTicketResult> authorizeTicketResult = MakeHolder<TEvTicketParser::TEvAuthorizeTicketResult>(TString(), userToken);
+                ctx.Send(ctx.SelfID, authorizeTicketResult.Release());
+            } else {
+                ctx.Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({
+                    .Ticket = SecurityToken,
+                    .Database = Database,
+                    .PeerName = PeerName,
+                    .Entries = Entries
+                }));
+            }
+            TBase::Become(&TSecureRequestActor::StateWaitForTicket);
         }
-        TBase::Become(&TSecureRequestActor::StateWaitForTicket);
+    }
+
+    void Cancel(const TActorContext& ctx) {
+        if constexpr (requires(TSecureRequestActor& self) { self.TBase::Cancel(ctx); }) {
+            TBase::Cancel(ctx); // TMessageBusCancellableRequest case
+        } else {
+            TBase::Die(ctx); // TActorBootstrapped case
+        }
     }
 
     STFUNC(StateWaitForTicket) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvTicketParser::TEvAuthorizeTicketResult, Handle);
             HFunc(TEvents::TEvUndelivered, Handle);
+            CFunc(TEvents::TSystem::PoisonPill, Cancel);
         }
     }
 };

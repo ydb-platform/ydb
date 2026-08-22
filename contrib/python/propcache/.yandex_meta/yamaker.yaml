@@ -1,0 +1,4 @@
+mark_as_cython_c:
+  - propcache/_helpers_c.pyx
+exclude:
+  - tests/test_benchmarks.py

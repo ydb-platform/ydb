@@ -1,5 +1,6 @@
-#include "session.h"
 #include "adapter.h"
+#include "session.h"
+
 #include <ydb/public/api/protos/ydb_operation.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
 
@@ -12,4 +13,4 @@ Ydb::Operations::Operation TSessionInfoReport::SerializeToProto() const {
     return result;
 }
 
-}
+}   // namespace NKikimr::NOlap::NBackground

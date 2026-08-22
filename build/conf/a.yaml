@@ -1,15 +1,14 @@
-service: ya_make
-title: build/conf
+service: docstools
+title: Build Config Auto-trigger
 
-arcanum:
-    auto_merge:
-        enabled: true
-        requirements:
-          - system: arcanum
-            type: merge_time_fits
-            alias: build/conf commits invalidate autocheck dependency caches for ALL and thus are forbidden from 11:00 to 20:00 MSK
-            data:
-                merge_intervals_utc:
-                  # 20:00..11:00 MSK
-                  - from: "17:00"
-                    to: "08:00"
+ci:
+  secret: sec-01drh3z694nqvd4wa9qwc0y39z
+  runtime:
+    sandbox:
+      owner: DOCS_TO_YFM
+
+  on-demand-auto:
+    - abs-paths:
+        - 'devtools/dummy_arcadia/hello_docs/yfm-test-ext/a.yaml'  # new CI
+        - 'devtools/dummy_arcadia/hello_docs/yfm-test-doc/a.yaml'  # old CI
+      tags: docs-ci-action

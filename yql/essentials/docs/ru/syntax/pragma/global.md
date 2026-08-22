@@ -181,11 +181,11 @@ SELECT * FROM test;
 
 `OrderedColumns` / `DisableOrderedColumns`
 
-Выводить [порядок колонок](../select/index.md#orderedcolumns) в `SELECT`/`JOIN`/`UNION ALL` и сохранять его при записи результатов. По умолчанию порядок колонок не определен.
+Выводить [порядок колонок](../select/index.md#orderedcolumns) в `SELECT` / `JOIN` / `UNION [ALL]` / `INTERSECT [ALL]` / `EXCEPT [ALL]` и сохранять его при записи результатов. По умолчанию порядок колонок не определен.
 
 ## PositionalUnionAll {#positionalunionall}
 
-Включить соответствующий стандарту поколоночный режим выполнения [UNION ALL](../select/index.md#unionall). При этом автоматически включается [упорядоченность колонок](#orderedcolumns).
+Включить соответствующий стандарту поколоночный режим выполнения [UNION [ALL]](../select/operators.md#union), [INTERSECT [ALL]](../select/operators.md#intersect), [EXCEPT [ALL]](../select/operators.md#except). При этом автоматически включается [упорядоченность колонок](#orderedcolumns).
 
 ## RegexUseRe2
 
@@ -241,6 +241,19 @@ SELECT * FROM test;
 
 `WarnUntypedStringLiterals` является [scoped](#pragmascope) настройкой.
 
+## SimplePg
+
+`SimplePg`/`DisableSimplePg`
+
+| Тип значения | По умолчанию |
+| --- | --- |
+| Флаг | false |
+
+При включенном режиме в глобальное пространство функций импортируются все функции из модуля [SimplePg](../../udf/list/simple_pg.md).
+При выключенном режиме для вызова этих функций требуется префикс `SimplePg::`.
+
+`SimplePg` является [scoped](#pragmascope) настройкой.
+
 ## AllowDotInAlias
 
 | Тип значения | По умолчанию |
@@ -274,3 +287,18 @@ SELECT * FROM test;
 Увеличение лимита на число размерностей [GROUP BY](../group_by.md#rollup-cube-group-sets).
 
 Использовать нужно аккуратно, так как вычислительная сложность запроса растет экспоненциально по отношению к числу размерностей.
+
+## CostBasedOptimizer {#costbasedoptimizer}
+
+| Тип значения | По умолчанию |
+| --- | --- |
+| Строка: `disable` / `pg` / `native` | disable |
+
+Включает стоимостный оптимизатор (cost-based optimizer) для порядка JOIN-ов. Оптимизатор переупорядочивает входы JOIN-а, минимизируя стоимость плана на основе статистики таблиц. Работает только при числе входов JOIN-а больше двух.
+
+Допустимые значения:
+* `disable` — оптимизация выключена (по умолчанию).
+* `native` — нативный оптимизатор (рекомендуется для YT).
+* `pg` — оптимизатор на базе алгоритмов PostgreSQL.
+
+Это статическая прагма: значение фиксируется до стадии оптимизации запроса.

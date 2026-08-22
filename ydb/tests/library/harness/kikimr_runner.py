@@ -10,19 +10,23 @@ from importlib_resources import read_binary
 from google.protobuf import text_format
 import yaml
 import subprocess
+import requests
 
 from six.moves.queue import Queue
 
 import yatest
 
 from ydb.tests.library.common.wait_for import wait_for
+from ydb.tests.library.common.types import FailDomainType
 from . import daemon
 from . import kikimr_config
 from . import kikimr_node_interface
 from . import kikimr_cluster_interface
-
+from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 import ydb.core.protos.blobstorage_config_pb2 as bs
 from ydb.tests.library.predicates.blobstorage import blobstorage_controller_has_started_on_some_node
+from ydb.tests.library.clients.kikimr_config_client import config_client_factory
+from ydb.tests.library.clients.kikimr_monitoring import KikimrMonitor
 
 
 logger = logging.getLogger(__name__)
@@ -51,11 +55,12 @@ def ensure_path_exists(path):
 
 
 class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
-    def __init__(self, node_id, config_path, port_allocator, cluster_name, configurator,
+    def __init__(self, server, node_id, config_path, port_allocator, cluster_name, configurator,
                  udfs_dir=None, role='node', node_broker_port=None, tenant_affiliation=None, encryption_key=None,
                  binary_path=None, data_center=None, use_config_store=False, seed_nodes_file=None):
 
         super(kikimr_node_interface.NodeInterface, self).__init__()
+        self.server = server
         self.node_id = node_id
         self.data_center = data_center
         self.__config_path = config_path
@@ -69,9 +74,36 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         self._tenant_affiliation = tenant_affiliation
         self.grpc_port = port_allocator.grpc_port
         self.mon_port = port_allocator.mon_port
+        self.mon_uses_https = self.__configurator.monitoring_tls_cert_path is not None
+        self._monitor_ca_file = self.__configurator.monitoring_tls_ca_path
+        if self.__configurator.monitoring_tls_client_certificate_required:
+            # Without proper client cert the cluster setup cannot be checked via monitoring:
+            # __wait_for_bs_controller_to_start polls /counters/json and hangs.
+            missing = []
+            if not self.__configurator.monitoring_tls_admin_client_cert_path:
+                missing.append('monitoring_tls_admin_client_cert_path')
+            if not self.__configurator.monitoring_tls_admin_client_key_path:
+                missing.append('monitoring_tls_admin_client_key_path')
+            if not self.__configurator.monitoring_tls_ca_path:
+                missing.append('monitoring_tls_ca_path')
+            if missing:
+                raise ValueError(
+                    'monitoring TLS client certificate is required, but the following configurator '
+                    'fields are not set: %s' % ', '.join(missing)
+                )
+            self._monitor_client_cert_file = self.__configurator.monitoring_tls_admin_client_cert_path
+            self._monitor_client_key_file = self.__configurator.monitoring_tls_admin_client_key_path
+        else:
+            self._monitor_client_cert_file = None
+            self._monitor_client_key_file = None
         self.ic_port = port_allocator.ic_port
         self.grpc_ssl_port = port_allocator.grpc_ssl_port
-        self.pgwire_port = port_allocator.pgwire_port
+        self.http_proxy_port = None
+        self.kafka_api_port = None
+        if configurator.kafka_proxy_enabled:
+            self.kafka_api_port = configurator.get_kafka_api_port(node_id)
+        if not configurator.simple_config and configurator.http_proxy_enabled:
+            self.http_proxy_port = port_allocator.http_proxy_port
         self.sqs_port = None
         if not configurator.simple_config and configurator.sqs_service_enabled:
             self.sqs_port = port_allocator.sqs_port
@@ -79,6 +111,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         self.__role = role
         self.__node_broker_port = node_broker_port
         self.__seed_nodes_file = seed_nodes_file
+        self.__use_node_id_auto_detection = False
 
         self.__working_dir = ensure_path_exists(
             os.path.join(
@@ -92,23 +125,25 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         )
 
         if configurator.use_log_files:
-            # use NamedTemporaryFile only as a unique name generator
-            log_file = tempfile.NamedTemporaryFile(dir=self.__working_dir, prefix="logfile_", suffix=".log", delete=False)
-            self.__log_file_name = log_file.name
-            log_file.close()
+            self.__make_log_file_name("logfile_")
             kwargs = {
                 "stdout_file": os.path.join(self.__working_dir, "stdout"),
                 "stderr_file": os.path.join(self.__working_dir, "stderr"),
                 "aux_file": self.__log_file_name,
-                }
+            }
         else:
             self.__log_file_name = None
             kwargs = {
                 "stdout_file": "/dev/stdout",
                 "stderr_file": "/dev/stderr"
-                }
-
+            }
         daemon.Daemon.__init__(self, self.command, cwd=self.__working_dir, timeout=180, stderr_on_error_lines=240, **kwargs)
+
+    def __make_log_file_name(self, prefix):
+        # use NamedTemporaryFile only as a unique name generator
+        log_file = tempfile.NamedTemporaryFile(dir=self.__working_dir, prefix=prefix, suffix=".log", delete=False)
+        self.__log_file_name = log_file.name
+        log_file.close()
 
     def is_port_listening(self, port):
         """Check if the port is listening after node startup"""
@@ -140,9 +175,6 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         if hasattr(self, 'grpc_ssl_port') and self.grpc_ssl_port:
             ports_status["grpc_ssl_port"] = self.is_port_listening(self.grpc_ssl_port)
 
-        if hasattr(self, 'pgwire_port') and self.pgwire_port:
-            ports_status["pgwire_port"] = self.is_port_listening(self.pgwire_port)
-
         if hasattr(self, 'sqs_port') and self.sqs_port:
             ports_status["sqs_port"] = self.is_port_listening(self.sqs_port)
 
@@ -151,6 +183,11 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
     @property
     def cwd(self):
         return self.__working_dir
+
+    @property
+    def ydbd_log_file_path(self):
+        """Absolute path passed to ydbd --log-file-name when use_log_files is set; otherwise None."""
+        return self.__log_file_name
 
     @property
     def binary_path(self):
@@ -196,11 +233,24 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
                 self.host,
                 self.__node_broker_port))
         else:
-            command.append("--node=%d" % self.node_id)
+            command.append("--node=%s" % ("static" if self.__use_node_id_auto_detection else self.node_id))
 
         if self.__configurator.grpc_ssl_enable:
             command.append(
                 "--ca=%s" % self.__configurator.grpc_tls_ca_path
+            )
+
+        if self.__configurator.protected_mode:
+            command.append(
+                "--cert=%s" % self.__configurator.grpc_tls_cert_path
+            )
+            command.append(
+                "--key=%s" % self.__configurator.grpc_tls_key_path
+            )
+
+        if self.__configurator.domain_name:
+            command.append(
+                "--node-domain=%s" % self.__configurator.domain_name
             )
 
         if self.__role == 'slot' or (self.__configurator.node_kind == "yq" and self._tenant_affiliation is not None):
@@ -225,6 +275,11 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
                 "--log-file-name=%s" % self.__log_file_name,
             )
 
+        if self.kafka_api_port is not None:
+            command.append(
+                "--kafka-port=%s" % self.kafka_api_port,
+            )
+
         command.extend(
             [
                 "--grpc-port=%s" % self.grpc_port,
@@ -233,8 +288,20 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
             ]
         )
 
-        if os.environ.get("YDB_ALLOCATE_PGWIRE_PORT", "") == "true":
-            command.append("--pgwire-port=%d" % self.pgwire_port)
+        if self.__configurator.monitoring_tls_cert_path is not None:
+            command.append(
+                "--mon-cert=%s" % self.__configurator.monitoring_tls_cert_path
+            )
+
+        if self.__configurator.monitoring_tls_key_path is not None:
+            command.append(
+                "--mon-key=%s" % self.__configurator.monitoring_tls_key_path
+            )
+
+        if self.__configurator.monitoring_tls_ca_path is not None:
+            command.append(
+                "--mon-ca=%s" % self.__configurator.monitoring_tls_ca_path
+            )
 
         if self.__encryption_key is not None:
             command.extend(["--key-file", self.__encryption_key])
@@ -242,9 +309,17 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         if self.sqs_port is not None:
             command.extend(["--sqs-port=%d" % self.sqs_port])
 
+        if self.http_proxy_port is not None:
+            command.extend(["--http-proxy-port=%d" % self.http_proxy_port])
+
         if self.data_center is not None:
             command.append(
                 "--data-center=%s" % self.data_center
+            )
+
+        if self.__configurator.module is not None:
+            command.append(
+                "--module=%s" % self.__configurator.module
             )
 
         if self.__configurator.breakpad_minidumps_path:
@@ -252,17 +327,27 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         if self.__configurator.breakpad_minidumps_script:
             command.extend(["--breakpad-minidumps-script", self.__configurator.breakpad_minidumps_script])
 
+        if getattr(self.__configurator, "tiny_mode", False):
+            command.append("--tiny-mode")
+
         logger.info('CFG_DIR_PATH="%s"', self.__config_path)
         logger.info("Final command: %s", ' '.join(command).replace(self.__config_path, '$CFG_DIR_PATH'))
         return command
 
+    def __prepare_to_shutdown(self):
+        self.server.reset_clients()  # Prevent gRPC channels slow shutdown
+
     def stop(self):
+        self.__prepare_to_shutdown()
+
         try:
             super(KiKiMRNode, self).stop()
         finally:
             logger.info("Stopped node %s", self)
 
     def kill(self):
+        self.__prepare_to_shutdown()
+
         try:
             super(KiKiMRNode, self).kill()
             self.start()
@@ -288,12 +373,16 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
     def pid(self):
         return self.daemon.process.pid
 
+    def get_kafka_api_port(self):
+        return self.kafka_api_port
+
     def start(self):
         try:
             self.update_command(self.__make_run_command())
             super(KiKiMRNode, self).start()
         finally:
             logger.info("Started node %s", self)
+            logger.info("Node %s version:\n%s", self.node_id, self.get_node_binary_version())
 
     def read_node_config(self):
         config_file = os.path.join(self.__config_path, "config.yaml")
@@ -304,9 +393,46 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         config = self.read_node_config()
         return config.get('metadata', {}).get('version', 0)
 
+    def get_node_binary_version(self):
+        version_output = yatest.common.execute([self.binary_path, '-V']).std_out.decode('utf-8')
+        version_info = []
+        for line in version_output.splitlines():
+            if not line.strip():
+                break
+            version_info.append(line)
+        return '\n'.join(version_info)
+
     def enable_config_dir(self):
         self.__use_config_store = True
         self.update_command(self.__make_run_command())
+
+    def disable_config_dir(self, cleanup=True):
+        self.__use_config_store = False
+        self.update_command(self.__make_run_command())
+        if cleanup:
+            if self.__configurator.separate_node_configs:
+                node_config_dir = os.path.join(
+                    self.__config_path,
+                )
+                if os.path.exists(node_config_dir):
+                    shutil.rmtree(node_config_dir)
+            else:
+                config_file = os.path.join(self.__config_path, "config.yaml")
+                if os.path.exists(config_file):
+                    os.remove(config_file)
+
+    def set_seed_nodes_file(self, seed_nodes_file):
+        self.__seed_nodes_file = seed_nodes_file
+        self.update_command(self.__make_run_command())
+
+    def enable_node_id_auto_detection(self):
+        self.__use_node_id_auto_detection = True
+        self.update_command(self.__make_run_command())
+
+    def set_log_file_prefix(self, prefix):
+        self.__make_log_file_name(prefix)
+        self.update_command(self.__make_run_command())
+        self.update_aux_file(self.__log_file_name)
 
     def make_config_dir(self, source_config_yaml_path, target_config_dir_path):
         if not os.path.exists(source_config_yaml_path):
@@ -343,6 +469,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         self._node_index_allocator = itertools.count(1)
         self.default_channel_bindings = None
         self.__initialy_prepared = False
+        self.root_token = None
 
     @property
     def config(self):
@@ -364,12 +491,42 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
     def server(self):
         return self.__server
 
+    def _get_token(self, timeout=30, interval=2):
+        logger.info("Fetching token for cluster")
+        start_time = time.time()
+        last_exception = None
+        while time.time() - start_time < timeout:
+            try:
+                result = self.__call_ydb_cli(['--user', 'root', '--no-password', 'auth', 'get-token', '--force'], use_database=True)
+                token = result.std_out.decode('utf-8').strip()
+                if token:
+                    logger.info("Successfully got token")
+                    return token
+                else:
+                    raise Exception("Got empty token")
+
+            except Exception as e:
+                last_exception = e
+                time.sleep(interval)
+        raise last_exception
+
     def __call_kikimr_new_cli(self, cmd, connect_to_server=True, token=None):
-        server = 'grpc://{server}:{port}'.format(server=self.server, port=self.nodes[1].port)
+        if self.__configurator.protected_mode:
+            server = 'grpcs://{server}:{port}'.format(server=self.server, port=self.nodes[1].grpc_ssl_port)
+        else:
+            server = 'grpc://{server}:{port}'.format(server=self.server, port=self.nodes[1].port)
+
         binary_path = self.__configurator.get_binary_path(0)
         full_command = [binary_path]
         if connect_to_server:
-            full_command += ["--server={server}".format(server=server)]
+            full_command += ["--server", server]
+            if self.__configurator.protected_mode:
+                full_command += ['--ca-file', self.__configurator.grpc_tls_ca_path]
+        if self.root_token is not None:
+            token_file = tempfile.NamedTemporaryFile(dir=self.__configurator.working_dir, delete=False)
+            token_file.write(self.root_token.encode('utf-8'))
+            token_file.close()
+            full_command += ["--token-file", token_file.name]
         full_command += cmd
 
         env = None
@@ -377,6 +534,12 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         if token is not None:
             env = os.environ.copy()
             env['YDB_TOKEN'] = token
+        elif self.__configurator.enable_static_auth:
+            # If no token is provided, use the default user from the configuration
+            default_user = next(iter(self.__configurator.yaml_config["domains_config"]["security_config"]["default_users"]))
+            env = os.environ.copy()
+            env['YDB_USER'] = default_user["name"]
+            env['YDB_PASSWORD'] = default_user["password"]
 
         logger.debug("Executing command = {}".format(full_command))
         try:
@@ -390,9 +553,20 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             ))
             raise
 
-    def __call_ydb_cli(self, cmd, token=None, check_exit_code=True):
-        endpoint = 'grpc://{server}:{port}'.format(server=self.server, port=self.nodes[1].port)
-        full_command = [self.__configurator.get_ydb_cli_path(), '--endpoint', endpoint, '-y'] + cmd
+    def __call_ydb_cli(self, cmd, token=None, check_exit_code=True, use_database=False):
+        if self.__configurator.protected_mode:
+            endpoint = 'grpcs://{server}:{port}'.format(server=self.server, port=self.nodes[1].grpc_ssl_port)
+        else:
+            endpoint = 'grpc://{server}:{port}'.format(server=self.server, port=self.nodes[1].port)
+
+        full_command = [self.__configurator.get_ydb_cli_path(), '--endpoint', endpoint]
+
+        if use_database:
+            full_command += ['--database', '/{}'.format(self.domain_name)]
+        if self.__configurator.protected_mode:
+            full_command += ['--ca-file', self.__configurator.grpc_tls_ca_path]
+
+        full_command += ['-y'] + cmd
 
         env = None
         token = token or self.__configurator.default_clusteradmin
@@ -412,14 +586,14 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             ))
             raise
 
-    def start(self):
+    def start(self, timeout_seconds=240):
         """
         Safely starts kikimr instance.
         Do not override this method.
         """
         try:
             logger.debug("Working directory: " + self.__tmpdir)
-            self.__run()
+            self.__run(timeout_seconds=timeout_seconds)
             return self
 
         except Exception:
@@ -438,19 +612,28 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             self.__register_node()
 
     def _bootstrap_cluster(self, self_assembly_uuid="test-cluster", timeout=30, interval=2):
+        logger.info("Bootstrapping cluster with uuid: %s" % self_assembly_uuid)
+
         start_time = time.time()
         last_exception = None
         while time.time() - start_time < timeout:
             try:
                 result = self.config_client.bootstrap_cluster(self_assembly_uuid=self_assembly_uuid)
-                logger.info("Successfully bootstrapped cluster")
-                return result
+                if result.operation.status == StatusIds.SUCCESS:
+                    logger.info("Successfully bootstrapped cluster")
+                    return result
+                else:
+                    error_msg = "Bootstrap cluster failed with status: %s" % (result.operation.status, )
+                    for issue in result.operation.issues:
+                        error_msg += "\nIssue: %s" % (issue, )
+                    raise Exception(error_msg)
+
             except Exception as e:
                 last_exception = e
                 time.sleep(interval)
         raise last_exception
 
-    def __run(self):
+    def __run(self, timeout_seconds=240):
         self.prepare()
 
         for node_id in self.__configurator.all_node_ids():
@@ -459,10 +642,15 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         if self.__configurator.use_self_management:
             self._bootstrap_cluster(self_assembly_uuid="test-cluster")
 
+        if self.__configurator.protected_mode:
+            time.sleep(5)
+            self.root_token = self._get_token()
+
         bs_needed = ('blob_storage_config' in self.__configurator.yaml_config) or self.__configurator.use_self_management
 
         if bs_needed:
-            self.__wait_for_bs_controller_to_start()
+            token = self.root_token or self.__configurator.default_clusteradmin
+            self.__wait_for_bs_controller_to_start(timeout_seconds=timeout_seconds, token=token)
             if not self.__configurator.use_self_management:
                 self.__add_bs_box()
 
@@ -473,11 +661,22 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
                 name=p['name'],
                 kind=p['kind'],
                 pdisk_user_kind=p['pdisk_user_kind'],
+                num_groups=p.get('num_groups'),
             )
             pools[p['name']] = p['kind']
 
+        root_token = self.root_token or self.__configurator.default_clusteradmin
+
+        if not root_token and self.__configurator.enable_static_auth:
+            root_token = 'Login ' + requests.post("http://localhost:%s/login" % self.nodes[1].mon_port, json={
+                "user": self.__configurator.yaml_config["domains_config"]["security_config"]["default_users"][0]["name"],
+                "password": self.__configurator.yaml_config["domains_config"]["security_config"]["default_users"][0]["password"]
+            }).cookies.get('ydb_session_id')
+            logger.info("Obtained root token: %s" % root_token)
+
         if len(pools) > 0:
-            self.client.bind_storage_pools(self.domain_name, pools)
+            logger.info("Binding storage pools to domain %s: %s", self.domain_name, pools)
+            self.client.bind_storage_pools(self.domain_name, pools, token=root_token)
             default_pool_name = list(pools.keys())[0]
         else:
             default_pool_name = ""
@@ -486,7 +685,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         logger.info("Cluster started and initialized")
 
         if bs_needed:
-            self.client.add_config_item(read_binary(__name__, "resources/default_profile.txt"), token=self.__configurator.default_clusteradmin)
+            self.client.add_config_item(read_binary(__name__, "resources/default_profile.txt"), token=root_token)
 
     def __run_node(self, node_id):
         """
@@ -513,6 +712,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             if node_index in configurator.dc_mapping:
                 data_center = configurator.dc_mapping[node_index]
         self._nodes[node_index] = KiKiMRNode(
+            server=self,
             node_id=node_index,
             config_path=node_config_path,
             port_allocator=self.__port_allocator.get_node_port_allocator(node_index),
@@ -526,22 +726,41 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         )
         return self._nodes[node_index]
 
-    def __register_slots(self, database, count=1, encryption_key=None):
-        return [self.__register_slot(database, encryption_key) for _ in range(count)]
+    def __register_slots(self, database, count=1, encryption_key=None, seed_nodes_file=None):
+        return [self.__register_slot(database, encryption_key, seed_nodes_file=seed_nodes_file) for _ in range(count)]
 
-    def register_and_start_slots(self, database, count=1, encryption_key=None):
-        slots = self.__register_slots(database, count, encryption_key)
+    def register_and_start_slots(self, database, count=1, encryption_key=None, seed_nodes_file=None):
+        slots = self.__register_slots(database, count, encryption_key, seed_nodes_file=seed_nodes_file)
         for slot in slots:
             slot.start()
         return slots
 
-    def __register_slot(self, tenant_affiliation=None, encryption_key=None):
+    def write_encryption_key(self, slug):
+        workdir = os.path.join(self.__configurator.working_dir, self.__cluster_name)
+        secret_path = os.path.join(workdir, slug + "_secret.txt")
+        with open(secret_path, "w") as writer:
+            writer.write("fake_secret_data_for_%s" % slug)
+        keyfile_path = os.path.join(workdir, slug + "_key.txt")
+        with open(keyfile_path, "w") as writer:
+            writer.write('Keys { ContainerPath: "%s" Pin: "" Id: "%s" Version: 1 } ' % (secret_path, slug))
+        return keyfile_path
+
+    def __register_slot(self, tenant_affiliation=None, encryption_key=None, seed_nodes_file=None):
         slot_index = next(self._slot_index_allocator)
         node_broker_port = (
             self.nodes[1].grpc_ssl_port if self.__configurator.grpc_ssl_enable
             else self.nodes[1].grpc_port
         )
+
+        if tenant_affiliation is None:
+            tenant_affiliation = "dynamic"
+
+        if encryption_key is None and self.__configurator.enable_pool_encryption:
+            slug = tenant_affiliation.replace('/', '_')
+            encryption_key = self.write_encryption_key(slug)
+
         self._slots[slot_index] = KiKiMRNode(
+            server=self,
             node_id=slot_index,
             config_path=self.config_path,
             port_allocator=self.__port_allocator.get_slot_port_allocator(slot_index),
@@ -550,9 +769,10 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             udfs_dir=self.__common_udfs_dir,
             role='slot',
             node_broker_port=node_broker_port,
-            tenant_affiliation=tenant_affiliation if tenant_affiliation is not None else 'dynamic',
+            tenant_affiliation=tenant_affiliation,
             encryption_key=encryption_key,
             binary_path=self.__configurator.get_binary_path(slot_index),
+            seed_nodes_file=seed_nodes_file,
         )
         return self._slots[slot_index]
 
@@ -582,6 +802,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         return ret
 
     def stop(self, kill=False):
+        self.reset_clients()
         saved_exceptions_queue = Queue()
 
         def stop_node(node, kill):
@@ -610,6 +831,11 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             node.stop()
             node.start()
 
+    def restart_slots(self):
+        for slot in list(self.slots.values()):
+            slot.stop()
+            slot.start()
+
     def prepare_node(self, configurator=None, seed_nodes_file=None):
         try:
             new_node_object = self.__register_node(configurator, seed_nodes_file)
@@ -635,13 +861,21 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             raise RuntimeError("Failed to start node %s: %s" % (str(node_id), str(e)))
 
     def update_configurator_and_restart(self, configurator):
-        for node in self.nodes.values():
+        for node in itertools.chain(self.nodes.values(), self.slots.values()):
             node.stop()
+
         self.__configurator = configurator
         self.__initialy_prepared = False
+        # re-register nodes
         self._node_index_allocator = itertools.count(1)
         self.prepare()
-        for node in self.nodes.values():
+        # re-register slots
+        tenants = [s._tenant_affiliation for s in self.slots.values()]
+        self._slot_index_allocator = itertools.count(1)
+        for tenant in tenants:
+            self.__register_slot(tenant)
+
+        for node in itertools.chain(self.nodes.values(), self.slots.values()):
             node.start()
 
     def enable_config_dir(self, node_ids=None):
@@ -650,6 +884,13 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         self.__configurator.use_config_store = True
         for node_id in node_ids:
             self.nodes[node_id].enable_config_dir()
+
+    def disable_config_dir(self, node_ids=None):
+        if node_ids is None:
+            node_ids = self.__configurator.all_node_ids()
+        self.__configurator.use_config_store = False
+        for node_id in node_ids:
+            self.nodes[node_id].disable_config_dir()
 
     @property
     def config_path(self):
@@ -673,9 +914,18 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         else:
             self.__configurator.write_proto_configs(self.__config_path)
 
-    def overwrite_configs(self, config):
+    def overwrite_configs(self, config, node_ids=None):
         self.__configurator.full_config = config
-        self.__write_configs()
+        if node_ids is None:
+            self.__write_configs()
+        else:
+            if not self.__configurator.separate_node_configs:
+                raise ValueError(
+                    "overwrite_configs(node_ids=...) is only supported when "
+                    "separate_node_configs is enabled"
+                )
+            for node_id in node_ids:
+                self.__write_node_config(node_id)
 
     def __instantiate_udfs_dir(self):
         to_load = self.__configurator.get_yql_udfs_to_load()
@@ -695,6 +945,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             self.nodes[node_id].format_pdisk(**pdisk)
 
     def __add_bs_box(self):
+        logger.info("Adding bs box")
         request = bs.TConfigRequest()
 
         for node_id in self.__configurator.all_node_ids():
@@ -708,6 +959,12 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
                 drive_proto.Path = drive['pdisk_path']
                 drive_proto.Kind = drive['pdisk_user_kind']
                 drive_proto.Type = drive.get('pdisk_type', 0)
+
+                for key, value in drive.get('pdisk_config', {}).items():
+                    if key == 'expected_slot_count':
+                        drive_proto.PDiskConfig.ExpectedSlotCount = value
+                    else:
+                        raise KeyError("unknown pdisk_config option %s" % key)
 
         cmd = request.Command.add()
         cmd.DefineBox.BoxId = 1
@@ -744,9 +1001,12 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
                 if retries == 0:
                     raise
 
-    def add_storage_pool(self, name=None, kind="rot", pdisk_user_kind=0, erasure=None):
+    def add_storage_pool(self, name=None, kind="rot", pdisk_user_kind=0, erasure=None, num_groups=None):
+        logger.info("Adding storage pool with kind %s" % kind)
         if erasure is None:
             erasure = self.__configurator.static_erasure
+        if num_groups is None:
+            num_groups = 2
         request = bs.TConfigRequest()
         cmd = request.Command.add()
         cmd.DefineStoragePool.BoxId = 1
@@ -759,7 +1019,13 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         cmd.DefineStoragePool.Kind = kind
         cmd.DefineStoragePool.ErasureSpecies = str(erasure)
         cmd.DefineStoragePool.VDiskKind = "Default"
-        cmd.DefineStoragePool.NumGroups = 2
+        cmd.DefineStoragePool.NumGroups = num_groups
+
+        if str(erasure) == "mirror-3-dc" and len(self.__configurator.all_node_ids()) == 3:
+            cmd.DefineStoragePool.Geometry.RealmLevelBegin = int(FailDomainType.DC)
+            cmd.DefineStoragePool.Geometry.RealmLevelEnd = int(FailDomainType.Room)
+            cmd.DefineStoragePool.Geometry.DomainLevelBegin = int(FailDomainType.DC)
+            cmd.DefineStoragePool.Geometry.DomainLevelEnd = int(FailDomainType.Disk) + 1
 
         pdisk_filter = cmd.DefineStoragePool.PDiskFilter.add()
         pdisk_filter.Property.add().Type = 0
@@ -767,15 +1033,27 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         self._bs_config_invoke(request)
         return name
 
-    def __wait_for_bs_controller_to_start(self):
-        monitors = [node.monitor for node in self.nodes.values()]
+    def __wait_for_bs_controller_to_start(self, timeout_seconds=240, token=None):
+        logger.info("Waiting for bs controller up")
+        monitors = [
+            KikimrMonitor(
+                node.host,
+                node.mon_port,
+                use_https=getattr(node, 'mon_uses_https', False),
+                token=token,
+                client_cert_file=getattr(node, '_monitor_client_cert_file', None),
+                client_key_file=getattr(node, '_monitor_client_key_file', None),
+                ca_file=getattr(node, '_monitor_ca_file', None),
+            )
+            for node in self.nodes.values()
+        ]
 
         def predicate():
+            logger.debug("Run bs controller check, amount nodes %s" % len(monitors))
             return blobstorage_controller_has_started_on_some_node(monitors)
 
-        timeout_seconds = 240
         bs_controller_started = wait_for(
-            predicate=predicate, timeout_seconds=timeout_seconds, step_seconds=1.0, multiply=1.3
+            predicate=predicate, timeout_seconds=timeout_seconds, step_seconds=0.001, multiply=2, max_step_seconds=1
         )
         assert bs_controller_started
 
@@ -832,6 +1110,21 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         )
         return result.std_out.decode('utf-8')
 
+    def _create_config_client(self):
+        first_node = self.nodes[list(self.nodes.keys())[0]]
+        if self.__configurator.protected_mode:
+            port = first_node.grpc_ssl_port
+            client = config_client_factory(
+                first_node.host, port, retry_count=20,
+                ca_path=self.__configurator.grpc_tls_ca_path,
+                cert_path=self.__configurator.grpc_tls_cert_path,
+                key_path=self.__configurator.grpc_tls_key_path
+            )
+            return client
+        else:
+            port = first_node.port
+            return config_client_factory(first_node.host, port, retry_count=20)
+
 
 class KikimrExternalNode(daemon.ExternalNodeDaemon, kikimr_node_interface.NodeInterface):
     kikimr_binary_deploy_path = '/Berkanavt/kikimr/bin/kikimr'
@@ -846,6 +1139,10 @@ class KikimrExternalNode(daemon.ExternalNodeDaemon, kikimr_node_interface.NodeIn
             kikimr_next_path,
             node_id,
             host,
+            datacenter,
+            rack,
+            bridge_pile_name,
+            bridge_pile_id,
             ssh_username,
             port,
             mon_port,
@@ -861,6 +1158,10 @@ class KikimrExternalNode(daemon.ExternalNodeDaemon, kikimr_node_interface.NodeIn
         self.__grpc_port = port
         self.__mon_port = mon_port
         self.__ic_port = ic_port
+        self.__datacenter = datacenter
+        self.__rack = rack
+        self.__bridge_pile_name = bridge_pile_name
+        self.__bridge_pile_id = bridge_pile_id
         self.__configurator = configurator
         self.__mbus_port = mbus_port
         self.logger = logger.getChild(self.__class__.__name__)
@@ -951,6 +1252,22 @@ mon={mon}""".format(
         return self.__host
 
     @property
+    def datacenter(self):
+        return self.__datacenter
+
+    @property
+    def rack(self):
+        return self.__rack
+
+    @property
+    def bridge_pile_name(self):
+        return self.__bridge_pile_name
+
+    @property
+    def bridge_pile_id(self):
+        return self.__bridge_pile_id
+
+    @property
     def port(self):
         return self.__port
 
@@ -1004,8 +1321,9 @@ mon={mon}""".format(
         self.update_binary_links()
 
     def prepare_artifacts(self, cluster_yml):
-        self.copy_file_or_dir(
-            self.__kikimr_configure_binary_path, self.kikimr_configure_binary_deploy_path)
+        if self.__kikimr_configure_binary_path is not None:
+            self.copy_file_or_dir(
+                self.__kikimr_configure_binary_path, self.kikimr_configure_binary_deploy_path)
 
         for version, local_driver in zip(self.versions, self.local_drivers_path):
             self.ssh_command("sudo rm -rf %s" % version)
@@ -1015,25 +1333,26 @@ mon={mon}""".format(
                 self.ssh_command("sudo /sbin/setcap 'CAP_SYS_RAWIO,CAP_SYS_NICE=ep' %s" % version)
 
         self.update_binary_links()
-        self.ssh_command("sudo mkdir -p %s" % self.kikimr_configuration_deploy_path)
-        self.copy_file_or_dir(cluster_yml, self.kikimr_cluster_yaml_deploy_path)
-        self.ssh_command(self.__generate_configs_cmd())
-        self.ssh_command(
-            self.__generate_configs_cmd(
-                "--dynamic"
+        if self.__kikimr_configure_binary_path is not None:
+            self.ssh_command("sudo mkdir -p %s" % self.kikimr_configuration_deploy_path)
+            self.copy_file_or_dir(cluster_yml, self.kikimr_cluster_yaml_deploy_path)
+            self.ssh_command(self.__generate_configs_cmd())
+            self.ssh_command(
+                self.__generate_configs_cmd(
+                    "--dynamic"
+                )
             )
-        )
 
     def format_pdisk(self, pdisk_id):
         pass
 
     def cleanup_disk(self, path):
         self.ssh_command(
-            'sudo dd if=/dev/zero of={} bs=1M count=1 status=none;'.format(path),
+            'sudo /Berkanavt/kikimr/bin/kikimr admin bs disk obliterate {};'.format(path),
             raise_on_error=True)
 
     def cleanup_disks(self):
         self.ssh_command(
             "for X in /dev/disk/by-partlabel/kikimr_*; "
-            "do sudo dd if=/dev/zero of=$X bs=1M count=1 status=none; done",
+            "do sudo /Berkanavt/kikimr/bin/kikimr admin bs disk obliterate $X; done",
             raise_on_error=True)

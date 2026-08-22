@@ -30,6 +30,12 @@ public:
             return true;
         }
 
+        if (replication->GetState() == TReplication::EState::Removing) {
+            CLOG_W(ctx, "Replication is being removed"
+                << ": rid# " << WorkerId.ReplicationId());
+            return true;
+        }
+
         auto* target = replication->FindTarget(WorkerId.TargetId());
         if (!target) {
             CLOG_W(ctx, "Unknown target"

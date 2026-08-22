@@ -41,14 +41,25 @@ inline NActors::TActorId MakeKqpFinalizeScriptServiceId(ui32 nodeId) {
     return NActors::TActorId(nodeId, TStringBuf(name, 12));
 }
 
-inline NActors::TActorId MakeKqpWorkloadServiceId(ui32 nodeId) {
-    const char name[12] = "kqp_workld";
-    return NActors::TActorId(nodeId, TStringBuf(name, 12));
-}
 
 inline NActors::TActorId MakeKqpSchedulerServiceId(ui32 nodeId) {
     const char name[12] = "kqp_schdlr";
     return NActors::TActorId(nodeId, TStringBuf(name, 12));
+}
+
+inline NActors::TActorId MakeKqpQueryTextCacheServiceId(ui32 nodeId) {
+    const char name[12] = "kqp_qtcache";
+    return NActors::TActorId(nodeId, TStringBuf(name, 12));
+}
+
+inline NActors::TActorId MakeKqpDescribeResourceIdServiceId() {
+    const char name[12] = "kqp_dsc_res";
+    return NActors::TActorId(0, TStringBuf(name, 12));
+}
+
+inline NActors::TActorId MakeKqpAccessServiceId() {
+    const char name[12] = "kqp_as_srv";
+    return NActors::TActorId(0, TStringBuf(name, 12));
 }
 
 } // namespace NKikimr::NKqp

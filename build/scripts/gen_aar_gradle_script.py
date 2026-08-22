@@ -58,9 +58,9 @@ ext.compileOnlyAndroidArs = [
 ]
 
 def minVersion = 26
-def compileVersion = 35
-def targetVersion = 35
-def buildVersion = '35.0.0'
+def compileVersion = 36
+def targetVersion = 36
+def buildVersion = '36.0.0'
 
 import java.nio.file.Files
 import java.nio.file.Paths
@@ -109,8 +109,8 @@ android {{
     buildToolsVersion buildVersion
 
     compileOptions {{
-        sourceCompatibility 1.8
-        targetCompatibility 1.8
+        sourceCompatibility JavaVersion.VERSION_21
+        targetCompatibility JavaVersion.VERSION_21
     }}
 
     defaultConfig {{
@@ -251,7 +251,7 @@ def gen_build_script(args):
         maven_repos=maven_repos,
         proguard_rules=args.proguard_rules,
         res_dirs=wrap(args.res_dirs),
-        package_name=args.package_name
+        package_name=args.package_name,
     )
 
 

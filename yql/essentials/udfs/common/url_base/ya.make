@@ -2,10 +2,10 @@ YQL_UDF_CONTRIB(url_udf)
     
     YQL_ABI_VERSION(
         2
-        37
+        46
         0
     )
-    
+
     SRCS(
         url_base.cpp
     )

@@ -1,11 +1,20 @@
 LIBRARY()
 
 SRCS(
+    blob_checker.cpp
+    blob_checker_actors.cpp
+    blob_checker_events.cpp
+    blob_checker_planner.cpp
     bsc.cpp
     bsc.h
     bsc_audit.h
     bsc_audit.cpp
+    bridge.cpp
+    cleanup_stale_storage_entries.cpp
+    cluster_balancing.cpp
     cmds_box.cpp
+    cmds_bridge.cpp
+    cmds_ddisk.cpp
     cmds_drive_status.cpp
     cmds_host_config.cpp
     cmds_storage_pool.cpp
@@ -14,9 +23,11 @@ SRCS(
     config.cpp
     config_fit_groups.cpp
     config_fit_pdisks.cpp
+    config_v2_enable.cpp
     config.h
     console_interaction.h
     console_interaction.cpp
+    ddisk.cpp
     defs.h
     diff.h
     disk_metrics.cpp
@@ -59,10 +70,12 @@ SRCS(
     sys_view.cpp
     sys_view.h
     table_merger.h
+    types.cpp
     types.h
     update_group_latencies.cpp
     update_last_seen_ready.cpp
     update_seen_operational.cpp
+    util.cpp
     virtual_group.cpp
     yaml_config_helpers.h
 )

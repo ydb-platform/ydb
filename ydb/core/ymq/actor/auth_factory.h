@@ -33,6 +33,7 @@ struct TAuthActorData {
 
     TStringBuf IAMToken;
     TStringBuf FolderID;
+    TStringBuf SourceAddress;
 
     ESqsRequestFormat RequestFormat = Xml;
     TActorId Requester;

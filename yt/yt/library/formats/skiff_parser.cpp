@@ -50,7 +50,7 @@ public:
         , Function_(function)
     { }
 
-    void operator() (TCheckedInDebugSkiffParser* parser, IValueConsumer* valueConsumer)
+    void operator()(TCheckedInDebugSkiffParser* parser, IValueConsumer* valueConsumer)
     {
         if constexpr (IsNullable) {
             ui8 tag = parser->ParseVariant8Tag();
@@ -107,7 +107,7 @@ TPrimitiveTypeConverter<IsNullable, TFunction> CreatePrimitiveTypeConverter(ui32
     return TPrimitiveTypeConverter<IsNullable, TFunction>(columnId, function);
 }
 
-template<bool isNullable>
+template <bool isNullable>
 class TYson32TypeConverterImpl
 {
 public:
@@ -325,7 +325,7 @@ TSkiffToUnversionedValueConverter CreateSimpleValueConverter(
                     EWireType::Boolean,
                     EWireType::String32,
                     EWireType::Nothing,
-                    EWireType::Yson32
+                    EWireType::Yson32,
                 });
             return CreatePrimitiveTypeConverter(wireType, required, columnId, ysonConverter);
 
@@ -386,7 +386,7 @@ public:
         , ColumnId_(columnId)
     { }
 
-    void operator() (TCheckedInDebugSkiffParser* parser, IValueConsumer* valueConsumer)
+    void operator()(TCheckedInDebugSkiffParser* parser, IValueConsumer* valueConsumer)
     {
         Buffer_.Clear();
         {
@@ -426,7 +426,6 @@ TSkiffToUnversionedValueConverter CreateComplexValueConverter(
 
 class TSkiffParserImpl
 {
-
 public:
     TSkiffParserImpl(
         std::shared_ptr<TSkiffSchema> skiffSchema,
@@ -437,7 +436,7 @@ public:
         , YsonToUnversionedValueConverter_(TYsonConverterConfig(), ValueConsumer_)
         , OtherColumnsConsumer_(TYsonConverterConfig(), ValueConsumer_)
     {
-        THashMap<TString, const TColumnSchema*> columnSchemas;
+        THashMap<std::string, const TColumnSchema*> columnSchemas;
         for (const auto& column : tableSchema->Columns()) {
             columnSchemas[column.Name()] = &column;
         }
@@ -466,8 +465,8 @@ public:
                     }
                     THROW_ERROR_EXCEPTION("Cannot create Skiff parser for table #%v",
                         tableIndex)
-                        << TErrorAttribute("logical_type", logicalType)
-                        << ex;
+                        .With("logical_type", logicalType)
+                        .With(ex);
                 }
                 parserTableDescription.DenseFieldConverters.emplace_back(converter);
             }
@@ -485,7 +484,7 @@ public:
                 } catch (const std::exception& ex) {
                     THROW_ERROR_EXCEPTION("Cannot create Skiff parser for table #%v",
                         tableIndex)
-                        << ex;
+                        .With(ex);
                 }
                 parserTableDescription.SparseFieldConverters.emplace_back(converter);
             }
@@ -587,7 +586,7 @@ private:
         } catch (const std::exception& ex) {
             THROW_ERROR_EXCEPTION("Cannot create Skiff parser for column %Qv",
                 skiffField.Name())
-                << ex;
+                .With(ex);
         }
     }
 
@@ -649,7 +648,7 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace // anonymous
+} // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -682,7 +681,7 @@ std::unique_ptr<IParser> CreateParserForSkiff(
     if (tableIndex == 0 && config->OverrideIntermediateTableSchema) {
         if (!IsTrivialIntermediateSchema(*consumer->GetSchema())) {
             THROW_ERROR_EXCEPTION("Cannot use \"override_intermediate_table_schema\" since output table #0 has nontrivial schema")
-                << TErrorAttribute("schema", *consumer->GetSchema());
+                .With("schema", *consumer->GetSchema());
         }
         return CreateParserForSkiff(
             skiffSchemas[tableIndex],

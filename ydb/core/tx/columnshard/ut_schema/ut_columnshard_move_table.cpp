@@ -1,22 +1,26 @@
-#include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
-#include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include <ydb/core/base/blobstorage.h>
-#include <util/string/printf.h>
-#include <arrow/api.h>
-#include <arrow/ipc/reader.h>
-#include <ydb/library/yverify_stream/yverify_stream.h>
+#include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
-#include <ydb/core/tx/columnshard/engines/changes/with_appended.h>
-#include <ydb/core/tx/columnshard/engines/changes/compaction.h>
 #include <ydb/core/tx/columnshard/engines/changes/cleanup_portions.h>
-#include <ydb/core/tx/columnshard/operations/write_data.h>
+#include <ydb/core/tx/columnshard/engines/changes/compaction.h>
+#include <ydb/core/tx/columnshard/engines/changes/with_appended.h>
+#include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
+#include <ydb/core/tx/columnshard/engines/scheme/objects_cache.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
-#include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
+#include <ydb/core/tx/columnshard/operations/write_data.h>
+#include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
 #include <ydb/core/tx/columnshard/test_helper/shard_reader.h>
+#include <ydb/core/tx/columnshard/test_helper/test_combinator.h>
+
 #include <ydb/library/actors/protos/unittests.pb.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
+
+#include <arrow/api.h>
+#include <arrow/ipc/reader.h>
 #include <util/string/join.h>
+#include <util/string/printf.h>
 
 namespace NKikimr {
 
@@ -28,7 +32,6 @@ using TTypeId = NScheme::TTypeId;
 using TTypeInfo = NScheme::TTypeInfo;
 using TDefaultTestsController = NKikimr::NYDBTest::NColumnShard::TController;
 
-
 Y_UNIT_TEST_SUITE(MoveTable) {
     Y_UNIT_TEST(EmptyTable) {
         TTestBasicRuntime runtime;
@@ -37,13 +40,13 @@ Y_UNIT_TEST_SUITE(MoveTable) {
         TActorId sender = runtime.AllocateEdgeActor();
 
         const ui64 srcPathId = 1;
-        TestTableDescription testTabe{};
-        auto planStep = PrepareTablet(runtime, srcPathId, testTabe.Schema);
+        TestTableDescription testTable{};
+        auto planStep = PrepareTablet(runtime, srcPathId, testTable.Schema);
 
         ui64 txId = 10;
         const ui64 dstPathId = 2;
         planStep = ProposeSchemaTx(runtime, sender, TTestSchema::MoveTableTxBody(srcPathId, dstPathId, 1), ++txId);
-        PlanSchemaTx(runtime, sender, {planStep, txId});
+        PlanSchemaTx(runtime, sender, { planStep, txId });
     }
 
     Y_UNIT_TEST(WithUncomittedData) {
@@ -53,43 +56,160 @@ Y_UNIT_TEST_SUITE(MoveTable) {
         TActorId sender = runtime.AllocateEdgeActor();
 
         const ui64 srcPathId = 1;
-        TestTableDescription testTabe{};
-        auto planStep = PrepareTablet(runtime, srcPathId, testTabe.Schema);
+        TestTableDescription testTable{};
+        auto planStep = PrepareTablet(runtime, srcPathId, testTable.Schema);
 
         ui64 txId = 10;
         int writeId = 10;
         std::vector<ui64> writeIds;
-        const bool ok = WriteData(runtime, sender, writeId++, srcPathId, MakeTestBlob({0, 100}, testTabe.Schema), testTabe.Schema, true, &writeIds);
+        const bool ok =
+            WriteData(runtime, sender, writeId++, srcPathId, MakeTestBlob({ 0, 100 }, testTable.Schema), testTable.Schema, true, &writeIds);
         UNIT_ASSERT(ok);
         const ui64 dstPathId = 2;
         planStep = ProposeSchemaTx(runtime, sender, TTestSchema::MoveTableTxBody(srcPathId, dstPathId, 1), ++txId);
-        PlanSchemaTx(runtime, sender, {planStep, txId});
+        {
+            const bool ok = WriteData(
+                runtime, sender, writeId++, srcPathId, MakeTestBlob({ 100, 200 }, testTable.Schema), testTable.Schema, true, &writeIds);
+            UNIT_ASSERT(!ok);
+        }
+        PlanSchemaTx(runtime, sender, { planStep, txId });
+        {
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, srcPathId, NOlap::TSnapshot(planStep, txId));
+            reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(!rb);
+        }
+        {
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, dstPathId, NOlap::TSnapshot(planStep, txId));
+            reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(!rb);
+        }
     }
 
-    Y_UNIT_TEST(WithData) {
+    Y_UNIT_TEST_DUO(WithCommitInProgress, Reboot) {
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);
         auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
         TActorId sender = runtime.AllocateEdgeActor();
 
         const ui64 srcPathId = 1;
-        TestTableDescription testTabe{};
-        auto planStep = PrepareTablet(runtime, srcPathId, testTabe.Schema);
+        TestTableDescription testTable{};
+        auto planStep = PrepareTablet(runtime, srcPathId, testTable.Schema);
+
+        ui64 txId = 10;
+        int writeId = 10;
+        std::vector<ui64> writeIds1;
+        const auto lock1 = 1;
+        {
+            const bool ok = WriteData(runtime, sender, writeId++, srcPathId, MakeTestBlob({ 0, 100 }, testTable.Schema), testTable.Schema, true,
+                &writeIds1, NEvWrite::EModificationType::Upsert, lock1);
+            UNIT_ASSERT(ok);
+        }
+        std::vector<ui64> writeIds2;
+        const auto lock2 = 2;
+        {
+            const bool ok = WriteData(runtime, sender, writeId++, srcPathId, MakeTestBlob({ 100, 200 }, testTable.Schema), testTable.Schema,
+                true, &writeIds2, NEvWrite::EModificationType::Upsert, lock2);
+            UNIT_ASSERT(ok);
+        }
+        const auto commitTxId1 = ++txId;
+        planStep = ProposeCommit(runtime, sender, commitTxId1, writeIds1, lock1);
+        const auto commitPlanStep = planStep;
+        const ui64 dstPathId = 2;
+        const auto moveTableTxId = ++txId;
+        auto event = std::make_unique<TEvColumnShard::TEvProposeTransaction>(
+            NKikimrTxColumnShard::TX_KIND_SCHEMA, 0, sender, moveTableTxId, TTestSchema::MoveTableTxBody(srcPathId, dstPathId, 1), 0, 0);
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, event.release());
+
+        {
+            const auto commitTxId2 = ++txId;
+            ProposeCommitFail(runtime, sender, TTestTxConfig::TxTablet0, commitTxId2, writeIds2, lock2);
+        }
+
+        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+        if (Reboot) {
+            RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+        }
+
+        PlanCommit(runtime, sender, commitPlanStep, commitTxId1);
+
+        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+        if (Reboot) {
+            RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+        }
+
+        auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(sender);
+        UNIT_ASSERT(ev);
+        const auto& res = ev->Get()->Record;
+        UNIT_ASSERT_EQUAL(res.GetTxId(), moveTableTxId);
+        UNIT_ASSERT_EQUAL(res.GetTxKind(), NKikimrTxColumnShard::TX_KIND_SCHEMA);
+        UNIT_ASSERT_EQUAL(res.GetStatus(), NKikimrTxColumnShard::PREPARED);
+        planStep = TPlanStep{ res.GetMaxStep() };
+        const auto moveTablePlanStep = planStep;
+        UNIT_ASSERT(commitPlanStep.Val() < moveTablePlanStep.Val());
+
+        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+        if (Reboot) {
+            RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+        }
+        PlanSchemaTx(runtime, sender, { moveTablePlanStep, moveTableTxId });
+
+        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+        if (Reboot) {
+            RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+        }
+
+        {
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, dstPathId, NOlap::TSnapshot{ moveTablePlanStep, moveTableTxId });
+            reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(rb);
+            UNIT_ASSERT_EQUAL(rb->num_rows(), 100);
+        }
+
+        {
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, srcPathId, NOlap::TSnapshot{ moveTablePlanStep, moveTableTxId });
+            reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(!rb);
+        }
+    }
+
+    Y_UNIT_TEST_DUO(WithData, Reboot) {
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        const ui64 srcPathId = 1;
+        TestTableDescription testTable{};
+        auto planStep = PrepareTablet(runtime, srcPathId, testTable.Schema);
 
         ui64 txId = 10;
         int writeId = 10;
         std::vector<ui64> writeIds;
-        const bool ok = WriteData(runtime, sender, writeId++, srcPathId, MakeTestBlob({0, 100}, testTabe.Schema), testTabe.Schema, true, &writeIds);
+        const bool ok =
+            WriteData(runtime, sender, writeId++, srcPathId, MakeTestBlob({ 0, 100 }, testTable.Schema), testTable.Schema, true, &writeIds);
         UNIT_ASSERT(ok);
         planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
         PlanCommit(runtime, sender, planStep, txId);
 
         const ui64 dstPathId = 2;
         planStep = ProposeSchemaTx(runtime, sender, TTestSchema::MoveTableTxBody(srcPathId, dstPathId, 1), ++txId);
-        PlanSchemaTx(runtime, sender, {planStep, txId});
+        PlanSchemaTx(runtime, sender, { planStep, txId });
+
+        if (Reboot) {
+            RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+        }
+
+        //TODO fix me https://github.com/ydb-platform/ydb/issues/22489
+        const auto expectedCachedCount = Reboot ? 2 : 1;
+        UNIT_ASSERT_EQUAL(expectedCachedCount, NOlap::TSchemaCachesManager::GetCachedOwnersCount());
 
         {
             TShardReader reader(runtime, TTestTxConfig::TxTablet0, dstPathId, NOlap::TSnapshot(planStep, txId));
+            reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
             auto rb = reader.ReadAll();
             UNIT_ASSERT(rb);
             UNIT_ASSERT_EQUAL(rb->num_rows(), 100);
@@ -97,10 +217,10 @@ Y_UNIT_TEST_SUITE(MoveTable) {
 
         {
             TShardReader reader(runtime, TTestTxConfig::TxTablet0, srcPathId, NOlap::TSnapshot(planStep, txId));
+            reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
             auto rb = reader.ReadAll();
             UNIT_ASSERT(!rb);
         }
-
     }
 
     Y_UNIT_TEST(RenameAbsentTable_Negative) {
@@ -110,8 +230,8 @@ Y_UNIT_TEST_SUITE(MoveTable) {
         TActorId sender = runtime.AllocateEdgeActor();
 
         const ui64 srcPathId = 1;
-        TestTableDescription testTabe{};
-        const auto& planStep = PrepareTablet(runtime, srcPathId, testTabe.Schema);
+        TestTableDescription testTable{};
+        const auto& planStep = PrepareTablet(runtime, srcPathId, testTable.Schema);
         Y_UNUSED(planStep);
 
         const ui64 absentPathId = 111;
@@ -127,11 +247,122 @@ Y_UNIT_TEST_SUITE(MoveTable) {
         TActorId sender = runtime.AllocateEdgeActor();
 
         const ui64 srcPathId = 1;
-        TestTableDescription testTabe{};
-        const auto& planStep = PrepareTablet(runtime, srcPathId, testTabe.Schema);
+        TestTableDescription testTable{};
+        const auto& planStep = PrepareTablet(runtime, srcPathId, testTable.Schema);
         Y_UNUSED(planStep);
         ui64 txId = 10;
         ProposeSchemaTxFail(runtime, sender, TTestSchema::MoveTableTxBody(srcPathId, srcPathId, 1), ++txId);
     }
+
+    Y_UNIT_TEST(WaitTxsIgnoresUnrelatedTxCompleted) {
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        const ui64 srcPathId = 1;
+        TestTableDescription testTable{};
+        Y_UNUSED(PrepareTablet(runtime, srcPathId, testTable.Schema));
+
+        ui64 txId = 10;
+        int writeId = 10;
+        std::vector<ui64> writeIdsSrc;
+        const auto lockSrc = 1;
+        {
+            const bool ok = WriteData(runtime, sender, writeId++, srcPathId, MakeTestBlob({ 0, 100 }, testTable.Schema), testTable.Schema, true,
+                &writeIdsSrc, NEvWrite::EModificationType::Upsert, lockSrc);
+            UNIT_ASSERT(ok);
+        }
+        const auto commitSrcTxId = ++txId;
+        const auto commitSrcPlanStep = ProposeCommit(runtime, sender, commitSrcTxId, writeIdsSrc, lockSrc);
+
+        const ui64 dstPathId = 2;
+        const auto moveTableTxId = ++txId;
+        {
+            auto event = std::make_unique<TEvColumnShard::TEvProposeTransaction>(
+                NKikimrTxColumnShard::TX_KIND_SCHEMA, 0, sender, moveTableTxId, TTestSchema::MoveTableTxBody(srcPathId, dstPathId, 1), 0, 0);
+            ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, event.release());
+        }
+        // Let MoveTable propose execute and register TWaitTxs before an unrelated tx completes.
+        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+
+        TPlanStep lastPlanStep = commitSrcPlanStep;
+        {
+            constexpr ui64 auxPathId = 99;
+            NKikimrTxColumnShard::TSchemaTxBody auxTx;
+            Y_ABORT_UNLESS(auxTx.ParseFromString(TTestSchema::CreateTableTxBody(auxPathId, testTable.Schema, testTable.Pk)));
+            auxTx.MutableSeqNo()->SetRound(2);
+            TString auxTxBody;
+            Y_PROTOBUF_SUPPRESS_NODISCARD auxTx.SerializeToString(&auxTxBody);
+            const auto auxPlan = ProposeSchemaTx(runtime, sender, auxTxBody, ++txId);
+            PlanSchemaTx(runtime, sender, { auxPlan, txId });
+            lastPlanStep = auxPlan;
+        }
+
+        PlanCommit(runtime, sender, TPlanStep{ lastPlanStep.Val() + 1 }, commitSrcTxId);
+
+        auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(sender);
+        UNIT_ASSERT(ev);
+        const auto& res = ev->Get()->Record;
+        UNIT_ASSERT_EQUAL(res.GetTxId(), moveTableTxId);
+        UNIT_ASSERT_EQUAL(res.GetStatus(), NKikimrTxColumnShard::PREPARED);
+        const auto moveTablePlanStep = TPlanStep{ res.GetMaxStep() };
+        PlanSchemaTx(runtime, sender, { moveTablePlanStep, moveTableTxId });
+
+        {
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, dstPathId, NOlap::TSnapshot{ moveTablePlanStep, moveTableTxId });
+            reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(rb);
+            UNIT_ASSERT_EQUAL(rb->num_rows(), 100);
+        }
+    }
+
+    // Verifies that MoveTable uses independent per-path seq_no tracking on the destination path.
+    // Analogous to CopyAndDropIndependentSeqNo but for MoveTable.
+    Y_UNIT_TEST(MoveTableIndependentSeqNo) {
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        const ui64 srcPathId = 1;
+        TestTableDescription testTable{};
+        auto planStep = PrepareTablet(runtime, srcPathId, testTable.Schema);
+
+        ui64 txId = 10;
+        int writeId = 10;
+
+        // Write and commit data to srcPathId so that move has something to work with
+        std::vector<ui64> writeIds;
+        {
+            const bool ok =
+                WriteData(runtime, sender, writeId++, srcPathId, MakeTestBlob({ 0, 100 }, testTable.Schema), testTable.Schema, true, &writeIds);
+            UNIT_ASSERT(ok);
+        }
+        planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
+        PlanCommit(runtime, sender, planStep, txId);
+
+        // MoveTable: src=1 -> dst=2, round=5 (high round for path 2)
+        const ui64 moveDstPathId = 2;
+        planStep = ProposeSchemaTx(runtime, sender, TTestSchema::MoveTableTxBody(srcPathId, moveDstPathId, 5), ++txId);
+        PlanSchemaTx(runtime, sender, { planStep, txId });
+
+        // Verify data is readable from the moved table
+        {
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, moveDstPathId, NOlap::TSnapshot(planStep, txId));
+            reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(rb);
+            UNIT_ASSERT_EQUAL(rb->num_rows(), 100);
+        }
+
+        // DropTable: path=2, round=1 (lower round than the MoveTable's round=5 for same path — should fail)
+        ProposeSchemaTxFail(runtime, sender, TTestSchema::DropTableTxBody(moveDstPathId, 1), ++txId);
+
+        // DropTable on path 2 with round=6 should succeed (higher round than MoveTable's round=5)
+        planStep = ProposeSchemaTx(runtime, sender, TTestSchema::DropTableTxBody(moveDstPathId, 6), ++txId);
+        PlanSchemaTx(runtime, sender, { planStep, txId });
+    }
 }
-}// namespace NKikimr
+}   // namespace NKikimr

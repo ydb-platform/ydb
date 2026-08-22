@@ -1,10 +1,12 @@
 #pragma once
 
-#include <yt/yt/core/misc/public.h>
+#include <yt/yt/client/api/public.h>
 
 #include <yt/yt/client/hydra/public.h>
 
 #include <yt/yt/client/transaction_client/public.h>
+
+#include <yt/yt/core/misc/public.h>
 
 namespace NYT::NHiveClient {
 
@@ -29,12 +31,20 @@ using NHydra::NullCellId;
 
 struct TTimestampMap;
 
+DECLARE_REFCOUNTED_STRUCT(TClusterDirectoryConfig)
+
+struct TClusterDirectoryUpdateResult;
+
+template <std::derived_from<NApi::IConnection> TConnection>
+class TClusterDirectoryBase;
+
 DECLARE_REFCOUNTED_STRUCT(ITransactionParticipant)
 
 YT_DEFINE_ERROR_ENUM(
     ((MailboxNotCreatedYet)    (2200))
     ((ParticipantUnregistered) (2201))
     ((TimeEntryNotFound)       (2202))
+    ((UnknownCell)             (2203))
 );
 
 ////////////////////////////////////////////////////////////////////////////////

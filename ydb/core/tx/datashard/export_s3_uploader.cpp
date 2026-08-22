@@ -6,10 +6,14 @@
 #include "extstorage_usage_config.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/fs_settings.pb.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/backup/common/checksum.h>
+#include <ydb/core/backup/common/fields_wrappers.h>
 #include <ydb/core/backup/common/metadata.h>
+#include <ydb/core/wrappers/retry_policy.h>
 #include <ydb/core/wrappers/s3_storage_config.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/core/wrappers/events/common.h>
@@ -18,6 +22,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/http/http_proxy.h>
+#include <ydb/library/actors/struct_log/text_writer.h>
 #include <library/cpp/random_provider/random_provider.h>
 
 #include <util/generic/buffer.h>
@@ -30,6 +35,8 @@
 #include <google/protobuf/text_format.h>
 
 #include <ydb/core/protos/config.pb.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::DATASHARD_BACKUP
 
 namespace NKikimr {
 namespace NDataShard {
@@ -44,7 +51,12 @@ struct TChangefeedExportDescriptions {
     TString Prefix;
 };
 
-class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
+template <typename TSettings>
+constexpr bool RequiresHttpResolver = std::is_same_v<TSettings, NKikimrSchemeOp::TS3Settings>;
+
+template <typename TSettings>
+class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
+    using TThis = TS3Uploader;
     using TS3ExternalStorageConfig = NWrappers::NExternalStorage::TS3ExternalStorageConfig;
     using THttpResolverConfig = NKikimrConfig::TS3ProxyResolverConfig::THttpResolverConfig;
     using TEvExternalStorage = NWrappers::TEvExternalStorage;
@@ -67,6 +79,9 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
     }
 
     static TMaybe<THttpResolverConfig> GetHttpResolverConfig(const TS3ExternalStorageConfig& settings) {
+        if constexpr (!RequiresHttpResolver<TSettings>) {
+            return Nothing();
+        }
         return GetHttpResolverConfig(NormalizeEndpoint(settings.GetConfig().endpointOverride));
     }
 
@@ -110,37 +125,37 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
 
     void ResolveProxy() {
         if (!HttpProxy) {
-            HttpProxy = Register(NHttp::CreateHttpProxy(NMonitoring::TMetricRegistry::SharedInstance()));
+            HttpProxy = this->Register(NHttp::CreateHttpProxy(NMonitoring::TMetricRegistry::SharedInstance()));
         }
 
-        Send(HttpProxy, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(
+        this->Send(HttpProxy, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(
             NHttp::THttpOutgoingRequest::CreateRequestGet(GetResolveProxyUrl(*GetS3StorageConfig())),
             TDuration::Seconds(10)
         ));
 
-        Become(&TThis::StateResolveProxy);
+        this->Become(&TThis::StateResolveProxy);
     }
 
     void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr& ev) {
         const auto& msg = *ev->Get();
 
-        EXPORT_LOG_D("Handle NHttp::TEvHttpProxy::TEvHttpIncomingResponse"
-            << ": self# " << SelfId()
-            << ", status# " << (msg.Response ? msg.Response->Status : "null")
-            << ", body# " << (msg.Response ? msg.Response->Body : "null"));
+        YDB_LOG_DEBUG("[Export]",
+            {"self", this->SelfId()},
+            {"status", (msg.Response ? msg.Response->Status : "null")},
+            {"body", (msg.Response ? msg.Response->Body : "null")});
 
         if (!msg.Response || !msg.Response->Status.StartsWith("200")) {
-            EXPORT_LOG_E("Error at 'GetProxy'"
-                << ": self# " << SelfId()
-                << ", error# " << msg.GetError());
+            YDB_LOG_ERROR("[Export]",
+                {"self", this->SelfId()},
+                {"error", msg.GetError()});
             return RetryOrFinish(Aws::S3::S3Error({Aws::S3::S3Errors::SERVICE_UNAVAILABLE, true}));
         }
 
         if (msg.Response->Body.find('<') != TStringBuf::npos) {
-            EXPORT_LOG_E("Error at 'GetProxy'"
-                << ": self# " << SelfId()
-                << ", error# " << "invalid body"
-                << ", body# " << msg.Response->Body);
+            YDB_LOG_ERROR("[Export] body",
+                {"self", this->SelfId()},
+                {"body", msg.Response->Body},
+                {"error", "invalid"});
             return RetryOrFinish(Aws::S3::S3Error({Aws::S3::S3Errors::SERVICE_UNAVAILABLE, true}));
         }
 
@@ -148,9 +163,10 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
         ProxyResolved = true;
 
         const auto& cfg = GetS3StorageConfig()->GetConfig();
-        EXPORT_LOG_N("Using proxy: "
-            << (cfg.proxyScheme == Aws::Http::Scheme::HTTPS ? "https://" : "http://")
-            << cfg.proxyHost << ":" << cfg.proxyPort);
+        YDB_LOG_NOTICE("[Export]",
+            {"proxy", (cfg.proxyScheme == Aws::Http::Scheme::HTTPS ? "https://" : "http://")},
+            {"proxyHost", cfg.proxyHost},
+            {"proxyPort", cfg.proxyPort});
 
         Restart();
     }
@@ -166,7 +182,8 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
             this->Send(std::exchange(Client, TActorId()), new TEvents::TEvPoisonPill());
         }
 
-        Client = this->RegisterWithSameMailbox(NWrappers::CreateS3Wrapper(ExternalStorageConfig->ConstructStorageOperator()));
+        auto storageOperator = ExternalStorageConfig->ConstructStorageOperator();
+        Client = this->RegisterWithSameMailbox(NWrappers::CreateStorageWrapper(std::move(storageOperator)));
 
         if (!MetadataUploaded) {
             UploadMetadata();
@@ -301,9 +318,8 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
     void HandleScheme(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-        EXPORT_LOG_D("HandleScheme TEvExternalStorage::TEvPutObjectResponse"
-            << ": self# " << this->SelfId()
-            << ", result# " << result);
+        YDB_LOG_DEBUG("[Export]",
+            {"result", result});
 
         if (!CheckResult(result, TStringBuf("PutObject (scheme)"))) {
             return;
@@ -325,9 +341,8 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
     void HandlePermissions(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-        EXPORT_LOG_D("HandleMetadata TEvExternalStorage::TEvPutObjectResponse"
-            << ": self# " << this->SelfId()
-            << ", result# " << result);
+        YDB_LOG_DEBUG("[Export]",
+            {"result", result});
 
         if (!CheckResult(result, TStringBuf("PutObject (permissions)"))) {
             return;
@@ -349,9 +364,8 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
     void HandleChangefeed(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-        EXPORT_LOG_D("HandleChangefeed TEvExternalStorage::TEvPutObjectResponse"
-            << ": self# " << this->SelfId()
-            << ", result# " << result);
+        YDB_LOG_DEBUG("[Export]",
+            {"result", result});
 
         if (!CheckResult(result, TStringBuf("PutObject (changefeed)"))) {
             return;
@@ -372,9 +386,8 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
     void HandleTopic(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-        EXPORT_LOG_D("HandleTopic TEvExternalStorage::TEvPutObjectResponse"
-            << ": self# " << this->SelfId()
-            << ", result# " << result);
+        YDB_LOG_DEBUG("[Export]",
+            {"result", result});
 
         if (!CheckResult(result, TStringBuf("PutObject (topic)"))) {
             return;
@@ -396,9 +409,8 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
     void HandleMetadata(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-        EXPORT_LOG_D("HandleMetadata TEvExternalStorage::TEvPutObjectResponse"
-            << ": self# " << this->SelfId()
-            << ", result# " << result);
+        YDB_LOG_DEBUG("[Export]",
+            {"result", result});
 
         if (!CheckResult(result, TStringBuf("PutObject (metadata)"))) {
             return;
@@ -424,9 +436,8 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
     void HandleChecksum(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-        EXPORT_LOG_D("HandleChecksum TEvExternalStorage::TEvPutObjectResponse"
-            << ": self# " << this->SelfId()
-            << ", result# " << result);
+        YDB_LOG_DEBUG("[Export]",
+            {"result", result});
 
         if (!CheckResult(result, TStringBuf("PutObject (checksum)"))) {
             return;
@@ -436,9 +447,8 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
     }
 
     void Handle(TEvExportScan::TEvReady::TPtr& ev) {
-        EXPORT_LOG_D("Handle TEvExportScan::TEvReady"
-            << ": self# " << this->SelfId()
-            << ", sender# " << ev->Sender);
+        YDB_LOG_DEBUG("[Export]",
+            {"sender", ev->Sender});
 
         Scanner = ev->Sender;
 
@@ -453,16 +463,14 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
     }
 
     void Handle(TEvBuffer::TPtr& ev) {
-        EXPORT_LOG_D("Handle TEvExportScan::TEvBuffer"
-            << ": self# " << this->SelfId()
-            << ", sender# " << ev->Sender
-            << ", msg# " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("[Export]",
+            {"sender", ev->Sender},
+            {"msg", ev->Get()->ToString()});
 
         if (ev->Sender != Scanner) {
-            EXPORT_LOG_W("Received buffer from unknown scanner"
-                << ": self# " << this->SelfId()
-                << ", sender# " << ev->Sender
-                << ", scanner# " << Scanner);
+            YDB_LOG_WARN("[Export]",
+                {"sender", ev->Sender},
+                {"scanner", Scanner});
             return;
         }
 
@@ -496,9 +504,8 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
     void HandleData(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-        EXPORT_LOG_D("HandleData TEvExternalStorage::TEvPutObjectResponse"
-            << ": self# " << this->SelfId()
-            << ", result# " << result);
+        YDB_LOG_DEBUG("[Export]",
+            {"result", result});
 
         if (!CheckResult(result, TStringBuf("PutObject (data)"))) {
             return;
@@ -521,14 +528,20 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
     void Handle(TEvDataShard::TEvS3Upload::TPtr& ev) {
         auto& upload = ev->Get()->Upload;
 
-        EXPORT_LOG_D("Handle TEvDataShard::TEvS3Upload"
-            << ": self# " << this->SelfId()
-            << ", upload# " << upload);
+        YDB_LOG_DEBUG("[Export]",
+            {"upload", upload});
 
         if (!upload) {
             auto request = Aws::S3::Model::CreateMultipartUploadRequest()
                 .WithKey(Settings.GetDataKey(DataFormat, CompressionCodec));
             this->Send(Client, new TEvExternalStorage::TEvCreateMultipartUploadRequest(request));
+        } else if (ForceNewUpload) {
+            ForceNewUpload = false;
+            UploadId = upload->Id;
+            Parts.clear();
+            this->Send(DataShard, new TEvDataShard::TEvChangeS3UploadStatus(
+                this->SelfId(), TxId,
+                TS3Upload::EStatus::UploadParts, TVector<TString>{}));
         } else {
             UploadId = upload->Id;
 
@@ -573,9 +586,8 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
     void Handle(TEvExternalStorage::TEvCreateMultipartUploadResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-        EXPORT_LOG_D("Handle TEvExternalStorage::TEvCreateMultipartUploadResponse"
-            << ": self# " << this->SelfId()
-            << ", result# " << result);
+        YDB_LOG_DEBUG("[Export]",
+            {"result", result});
 
         if (!CheckResult(result, TStringBuf("CreateMultipartUpload"))) {
             return;
@@ -587,9 +599,8 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
     void Handle(TEvExternalStorage::TEvUploadPartResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-        EXPORT_LOG_D("Handle TEvExternalStorage::TEvUploadPartResponse"
-            << ": self# " << this->SelfId()
-            << ", result# " << result);
+        YDB_LOG_DEBUG("[Export]",
+            {"result", result});
 
         if (!CheckResult(result, TStringBuf("UploadPart"))) {
             return;
@@ -618,9 +629,8 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
     void Handle(TEvExternalStorage::TEvCompleteMultipartUploadResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-        EXPORT_LOG_D("Handle TEvExternalStorage::TEvCompleteMultipartUploadResponse"
-            << ": self# " << this->SelfId()
-            << ", result# " << result);
+        YDB_LOG_DEBUG("[Export]",
+            {"result", result});
 
         if (result.IsSuccess()) {
             return PassAway();
@@ -628,14 +638,52 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
 
         const auto& error = result.GetError();
         if (error.GetErrorType() == Aws::S3::S3Errors::NO_SUCH_UPLOAD) {
-            return PassAway();
+            auto request = Aws::S3::Model::HeadObjectRequest()
+                .WithKey(Settings.GetDataKey(DataFormat, CompressionCodec));
+            this->Send(Client, new TEvExternalStorage::TEvHeadObjectRequest(request));
+            return this->Become(&TThis::StateCheckUploadedData);
         }
 
         if (CanRetry(error)) {
+            if (RequiresNewUpload(error)) {
+                ForceNewUpload = true;
+            }
             UploadId.Clear(); // force getting info after restart
             Retry();
         } else {
-            Error = error.GetMessage().c_str();
+            NActors::NStructuredLog::TTextWriter writer;
+
+            TStringBuilder errorBuilder;
+            writer.Write(errorBuilder, LogPrefix());
+            errorBuilder << " error: " << error;
+
+            Error = errorBuilder;
+            PassAway();
+        }
+    }
+
+    void Handle(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
+        const auto& result = ev->Get()->Result;
+
+        YDB_LOG_DEBUG("[Export]",
+            {"result", result});
+
+        if (result.IsSuccess()) {
+            return PassAway();
+        }
+
+        const auto& error = result.GetError();
+        if (CanRetry(error)) {
+            UploadId.Clear();
+            Retry();
+        } else {
+            NActors::NStructuredLog::TTextWriter writer;
+
+            TStringBuilder errorBuilder;
+            writer.Write(errorBuilder, LogPrefix());
+            errorBuilder << " error: " << error;
+
+            Error = errorBuilder;
             PassAway();
         }
     }
@@ -643,9 +691,8 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
     void Handle(TEvExternalStorage::TEvAbortMultipartUploadResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-        EXPORT_LOG_D("Handle TEvExternalStorage::TEvAbortMultipartUploadResponse"
-            << ": self# " << this->SelfId()
-            << ", result# " << result);
+        YDB_LOG_DEBUG("[Export]",
+            {"result", result});
 
         if (result.IsSuccess()) {
             return PassAway();
@@ -658,7 +705,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
         } else {
             Y_ENSURE(Error);
             Error = TStringBuilder() << *Error << " Additionally, 'AbortMultipartUpload' has failed: "
-                << error.GetMessage();
+                << error;
             PassAway();
         }
     }
@@ -669,28 +716,23 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
             return true;
         }
 
-        EXPORT_LOG_E("Error at '" << marker << "'"
-            << ": self# " << this->SelfId()
-            << ", error# " << result);
+        YDB_LOG_ERROR("[Export]",
+            {"marker", marker},
+            {"error", result});
         RetryOrFinish(result.GetError());
 
         return false;
     }
 
-    static bool ShouldRetry(const Aws::S3::S3Error& error) {
-        if (error.ShouldRetry()) {
-            return true;
-        }
-
-        if ("TooManyRequests" == error.GetExceptionName()) {
-            return true;
-        }
-
-        return false;
+    bool CanRetry(const Aws::S3::S3Error& error) const {
+        return Attempt < Retries && NWrappers::ShouldRetry(error);
     }
 
-    bool CanRetry(const Aws::S3::S3Error& error) const {
-        return Attempt < Retries && ShouldRetry(error);
+    static bool RequiresNewUpload(const Aws::S3::S3Error& error) {
+        const auto& exceptionName = error.GetExceptionName();
+        return exceptionName == "FsCompleteMultipartUploadFailed"
+            || exceptionName == "InvalidPart"
+            || exceptionName == "InvalidPartOrder";
     }
 
     void Retry() {
@@ -703,17 +745,21 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
         if (CanRetry(error)) {
             Retry();
         } else {
-            Finish(false, TStringBuilder() << "S3 error: " << error.GetMessage().c_str());
+            NStructuredLog::TTextWriter writer;
+            TStringBuilder errorBuilder;
+            writer.Write(errorBuilder, LogPrefix());
+            errorBuilder << " error: " << error;
+
+            Finish(false, errorBuilder);
         }
     }
 
     void Finish(bool success = true, const TString& error = TString()) {
-        EXPORT_LOG_I("Finish"
-            << ": self# " << this->SelfId()
-            << ", success# " << success
-            << ", error# " << error
-            << ", multipart# " << MultiPart
-            << ", uploadId# " << UploadId);
+        YDB_LOG_INFO("[Export]",
+            {"success", success},
+            {"error", error},
+            {"multipart", MultiPart},
+            {"uploadId", UploadId});
 
         if (!success) {
             Error = error;
@@ -733,13 +779,13 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
                 this->Send(DataShard, new TEvDataShard::TEvChangeS3UploadStatus(this->SelfId(), TxId,
                     TS3Upload::EStatus::Abort, *Error));
             }
-            Become(&TThis::StateUploadData);
+            this->Become(&TThis::StateUploadData);
         }
     }
 
     void PassAway() override {
         if (HttpProxy) {
-            Send(HttpProxy, new TEvents::TEvPoisonPill());
+            this->Send(HttpProxy, new TEvents::TEvPoisonPill());
         }
 
         if (Scanner) {
@@ -753,11 +799,27 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::EXPORT_S3_UPLOADER_ACTOR;
+        return NKikimrServices::TActivity::EXPORT_UPLOADER_ACTOR;
     }
 
-    static constexpr TStringBuf LogPrefix() {
-        return "s3"sv;
+    NActors::NStructuredLog::TStructuredMessage LogPrefix() {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "S3Uploader"},
+            {"selfId", this->SelfId()},
+            {"storageName", NBackup::NFieldsWrappers::GetStorageName<TSettings>()});
+    }
+
+    static TMaybe<THttpResolverConfig> GetHttpResolverConfigSafe(
+            const NWrappers::IExternalStorageConfig::TPtr& config)
+    {
+        if constexpr (!RequiresHttpResolver<TSettings>) {
+            return Nothing();
+        }
+        auto s3Config = std::dynamic_pointer_cast<TS3ExternalStorageConfig>(config);
+        if (!s3Config) {
+            return Nothing();
+        }
+        return GetHttpResolverConfig(*s3Config);
     }
 
     explicit TS3Uploader(
@@ -767,12 +829,12 @@ public:
             TVector<TChangefeedExportDescriptions> changefeeds,
             TMaybe<Ydb::Scheme::ModifyPermissionsRequest>&& permissions,
             TString&& metadata)
-        : ExternalStorageConfig(new TS3ExternalStorageConfig(task.GetS3Settings()))
-        , Settings(TS3Settings::FromBackupTask(task))
-        , DataFormat(EDataFormat::Csv)
+        : ExternalStorageConfig(NWrappers::IExternalStorageConfig::Construct(AppData()->AwsClientConfig, NBackup::NFieldsWrappers::GetSettings<TSettings>(task)))
+        , Settings(TStorageSettings::FromBackupTask<TSettings>(task))
+        , DataFormat(DataFormatFromTask(task))
         , CompressionCodec(CodecFromTask(task))
         , ShardNum(task.GetShardNum())
-        , HttpResolverConfig(GetHttpResolverConfig(*GetS3StorageConfig()))
+        , HttpResolverConfig(GetHttpResolverConfigSafe(ExternalStorageConfig))
         , DataShard(dataShard)
         , TxId(txId)
         , Scheme(std::move(scheme))
@@ -792,11 +854,16 @@ public:
     }
 
     void Bootstrap() {
-        EXPORT_LOG_D("Bootstrap"
-            << ": self# " << this->SelfId()
-            << ", attempt# " << Attempt);
+        YDB_LOG_CREATE_CONTEXT(LogPrefix());
+        YDB_LOG_DEBUG("[Export]",
+            {"attempt", Attempt});
 
-        ProxyResolved = !HttpResolverConfig.Defined();
+        if constexpr (!RequiresHttpResolver<TSettings>) {
+            ProxyResolved = true;
+        } else {
+            ProxyResolved = !HttpResolverConfig.Defined();
+        }
+
         if (!ProxyResolved) {
             ResolveProxy();
         } else {
@@ -805,6 +872,8 @@ public:
     }
 
     STATEFN(StateBase) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix(),
+            {"actorState", "StateBase"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExportScan::TEvReady, Handle);
 
@@ -814,6 +883,8 @@ public:
     }
 
     STATEFN(StateResolveProxy) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix(),
+            {"actorState", "StateResolveProxy"});
         switch (ev->GetTypeRewrite()) {
             hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, Handle);
         default:
@@ -822,6 +893,8 @@ public:
     }
 
     STATEFN(StateUploadScheme) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix(),
+            {"actorState", "StateUploadScheme"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExternalStorage::TEvPutObjectResponse, HandleScheme);
         default:
@@ -830,6 +903,8 @@ public:
     }
 
     STATEFN(StateUploadPermissions) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix(),
+            {"actorState", "StateUploadPermissions"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExternalStorage::TEvPutObjectResponse, HandlePermissions);
         default:
@@ -838,6 +913,8 @@ public:
     }
 
     STATEFN(StateUploadChangefeed) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix(),
+            {"actorState", "StateUploadChangefeed"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExternalStorage::TEvPutObjectResponse, HandleChangefeed);
         default:
@@ -846,6 +923,8 @@ public:
     }
 
     STATEFN(StateUploadTopic) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix(),
+            {"actorState", "StateUploadTopic"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExternalStorage::TEvPutObjectResponse, HandleTopic);
         default:
@@ -854,6 +933,8 @@ public:
     }
 
     STATEFN(StateUploadMetadata) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix(),
+            {"actorState", "StateUploadMetadata"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExternalStorage::TEvPutObjectResponse, HandleMetadata);
         default:
@@ -862,6 +943,8 @@ public:
     }
 
     STATEFN(StateUploadChecksum) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix(),
+            {"actorState", "StateUploadChecksum"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExternalStorage::TEvPutObjectResponse, HandleChecksum);
         default:
@@ -870,6 +953,8 @@ public:
     }
 
     STATEFN(StateUploadData) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix(),
+            {"actorState", "StateUploadData"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvBuffer, Handle);
             hFunc(TEvDataShard::TEvS3Upload, Handle);
@@ -884,9 +969,19 @@ public:
         }
     }
 
+    STATEFN(StateCheckUploadedData) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix(),
+            {"actorState", "StateCheckUploadedData"});
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvExternalStorage::TEvHeadObjectResponse, Handle);
+        default:
+            return StateBase(ev);
+        }
+    }
+
 private:
     NWrappers::IExternalStorageConfig::TPtr ExternalStorageConfig;
-    TS3Settings Settings;
+    TStorageSettings Settings;
     const EDataFormat DataFormat;
     const ECompressionCodec CompressionCodec;
     const ui32 ShardNum;
@@ -921,6 +1016,7 @@ private:
     TString Buffer;
 
     TMaybe<TString> UploadId;
+    bool ForceNewUpload = false;
     TVector<TString> Parts;
     TMaybe<TString> Error;
 
@@ -936,6 +1032,30 @@ private:
     std::function<void()> ChecksumUploadedCallback;
 
 }; // TS3Uploader
+
+IActor* CreateUploaderBySettingsType(
+    const TActorId& dataShard,
+    ui64 txId,
+    const NKikimrSchemeOp::TBackupTask& task,
+    TMaybe<Ydb::Table::CreateTableRequest>&& scheme,
+    TVector<TChangefeedExportDescriptions>&& changefeeds,
+    TMaybe<Ydb::Scheme::ModifyPermissionsRequest>&& permissions,
+    TString&& metadata)
+{
+    if (task.HasS3Settings()) {
+        return new TS3Uploader<NKikimrSchemeOp::TS3Settings>(
+            dataShard, txId, task,
+            std::move(scheme), std::move(changefeeds),
+            std::move(permissions), std::move(metadata));
+    } else if (task.HasFSSettings()) {
+        return new TS3Uploader<NKikimrSchemeOp::TFSSettings>(
+            dataShard, txId, task,
+            std::move(scheme), std::move(changefeeds),
+            std::move(permissions), std::move(metadata));
+    }
+
+    Y_ABORT("Unsupported storage type in backup task");
+}
 
 IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
     auto scheme = (Task.GetShardNum() == 0)
@@ -989,10 +1109,38 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
         }
     }
 
+    if (scheme) {
+        int idx = changefeeds.size() + 1;
+        for (const auto& index : scheme->indexes()) {
+            const auto indexType = NTableIndex::TryConvertIndexType(index.type_case());
+            if (!indexType) {
+                continue;
+            }
+
+            const TVector<TString> indexColumns(index.index_columns().begin(), index.index_columns().end());
+
+            for (const auto& implTable : NTableIndex::GetImplTables(*indexType, indexColumns)) {
+                const TString implTablePrefix = TStringBuilder() << index.name() << "/" << implTable;
+                TString exportPrefix;
+                if (encrypted) {
+                    std::stringstream prefix;
+                    prefix << std::setfill('0') << std::setw(3) << std::right << idx++;
+                    exportPrefix = prefix.str();
+                } else {
+                    exportPrefix = implTablePrefix;
+                }
+
+                metadata.AddIndex(TIndexMetadata{
+                    .ExportPrefix = exportPrefix,
+                    .ImplTablePrefix = implTablePrefix,
+                });
+            }
+        }
+    }
+
     auto permissions = (Task.GetEnablePermissions() && Task.GetShardNum() == 0)
         ? GenYdbPermissions(Task.GetTable())
         : Nothing();
-
     TFullBackupMetadata::TPtr backup = new TFullBackupMetadata{
         .SnapshotVts = TVirtualTimestamp(
             Task.GetSnapshotStep(),
@@ -1000,8 +1148,10 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
     };
     metadata.AddFullBackup(backup);
 
-    return new TS3Uploader(
-        dataShard, txId, Task, std::move(scheme), std::move(changefeeds), std::move(permissions), metadata.Serialize());
+    return CreateUploaderBySettingsType(
+        dataShard, txId, Task,
+        std::move(scheme), std::move(changefeeds),
+        std::move(permissions), metadata.Serialize());
 }
 
 } // NDataShard

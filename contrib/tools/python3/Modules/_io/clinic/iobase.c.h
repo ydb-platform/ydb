@@ -3,10 +3,10 @@ preserve
 [clinic start generated code]*/
 
 #if defined(Py_BUILD_CORE) && !defined(Py_BUILD_CORE_MODULE)
-#  include "pycore_gc.h"            // PyGC_Head
-#  include "pycore_runtime.h"       // _Py_ID()
+#  include "pycore_runtime.h"     // _Py_SINGLETON()
 #endif
-
+#include "pycore_abstract.h"      // _Py_convert_optional_to_ssize_t()
+#include "pycore_modsupport.h"    // _PyArg_UnpackKeywords()
 
 PyDoc_STRVAR(_io__IOBase_seek__doc__,
 "seek($self, offset, whence=os.SEEK_SET, /)\n"
@@ -19,11 +19,13 @@ PyDoc_STRVAR(_io__IOBase_seek__doc__,
 "  whence\n"
 "    The relative position to seek from.\n"
 "\n"
-"The offset is interpreted relative to the position indicated by whence.\n"
-"Values for whence are:\n"
+"The offset is interpreted relative to the position indicated by\n"
+"whence.  Values for whence are:\n"
 "\n"
-"* os.SEEK_SET or 0 -- start of stream (the default); offset should be zero or positive\n"
-"* os.SEEK_CUR or 1 -- current stream position; offset may be negative\n"
+"* os.SEEK_SET or 0 -- start of stream (the default); offset should\n"
+"  be zero or positive\n"
+"* os.SEEK_CUR or 1 -- current stream position; offset may be\n"
+"  negative\n"
 "* os.SEEK_END or 2 -- end of stream; offset is usually negative\n"
 "\n"
 "Return the new absolute position.");
@@ -60,14 +62,14 @@ _io__IOBase_seek(PyObject *self, PyTypeObject *cls, PyObject *const *args, Py_ss
     if (!args) {
         goto exit;
     }
-    offset = _PyLong_AsInt(args[0]);
+    offset = PyLong_AsInt(args[0]);
     if (offset == -1 && PyErr_Occurred()) {
         goto exit;
     }
     if (nargs < 2) {
         goto skip_optional_posonly;
     }
-    whence = _PyLong_AsInt(args[1]);
+    whence = PyLong_AsInt(args[1]);
     if (whence == -1 && PyErr_Occurred()) {
         goto exit;
     }
@@ -102,8 +104,8 @@ PyDoc_STRVAR(_io__IOBase_truncate__doc__,
 "\n"
 "Truncate file to size bytes.\n"
 "\n"
-"File pointer is left unchanged. Size defaults to the current IO position\n"
-"as reported by tell(). Return the new size.");
+"File pointer is left unchanged.  Size defaults to the current IO\n"
+"position as reported by tell().  Return the new size.");
 
 #define _IO__IOBASE_TRUNCATE_METHODDEF    \
     {"truncate", _PyCFunction_CAST(_io__IOBase_truncate), METH_METHOD|METH_FASTCALL|METH_KEYWORDS, _io__IOBase_truncate__doc__},
@@ -441,4 +443,4 @@ _io__RawIOBase_readall(PyObject *self, PyObject *Py_UNUSED(ignored))
 {
     return _io__RawIOBase_readall_impl(self);
 }
-/*[clinic end generated code: output=60faa842b41185d2 input=a9049054013a1b77]*/
+/*[clinic end generated code: output=23596f673b4acd03 input=a9049054013a1b77]*/

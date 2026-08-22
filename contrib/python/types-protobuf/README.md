@@ -1,19 +1,14 @@
 ## Typing stubs for protobuf
 
-This is a [PEP 561](https://peps.python.org/pep-0561/)
-type stub package for the [`protobuf`](https://github.com/protocolbuffers/protobuf) package.
-It can be used by type-checking tools like
-[mypy](https://github.com/python/mypy/),
-[pyright](https://github.com/microsoft/pyright),
-[pytype](https://github.com/google/pytype/),
-[Pyre](https://pyre-check.org/),
-PyCharm, etc. to check code that uses `protobuf`. This version of
+This is a [type stub package](https://typing.python.org/en/latest/tutorials/external_libraries.html)
+for the [`protobuf`](https://github.com/protocolbuffers/protobuf) package. It can be used by type checkers
+to check code that uses `protobuf`. This version of
 `types-protobuf` aims to provide accurate annotations for
-`protobuf~=6.30.2`.
+`protobuf~=7.34.1`.
 
-Partially generated using [mypy-protobuf==3.6.0](https://github.com/nipunn1313/mypy-protobuf/tree/v3.6.0) and libprotoc 29.0 on [protobuf v30.2](https://github.com/protocolbuffers/protobuf/releases/tag/v30.2) (python `protobuf==6.30.2`).
+Partially generated using [mypy-protobuf==3.6.0](https://github.com/nipunn1313/mypy-protobuf/tree/v3.6.0) and libprotoc 34.1 on [protobuf v34.1](https://github.com/protocolbuffers/protobuf/releases/tag/v34.1) (python `protobuf==7.34.1`).
 
-This stub package is marked as [partial](https://peps.python.org/pep-0561/#partial-stub-packages).
+This stub package is marked as [partial](https://typing.python.org/en/latest/spec/distributing.html#partial-stub-packages).
 If you find that annotations are missing, feel free to contribute and help complete them.
 
 
@@ -24,9 +19,9 @@ for more details. The source for this package can be found in the
 [`stubs/protobuf`](https://github.com/python/typeshed/tree/main/stubs/protobuf)
 directory.
 
-This package was tested with
-mypy 1.15.0,
-pyright 1.1.400,
-and pytype 2024.10.11.
+This package was tested with the following type checkers:
+* [mypy](https://github.com/python/mypy/) 2.1.0
+* [pyright](https://github.com/microsoft/pyright) 1.1.409
+
 It was generated from typeshed commit
-[`126768408a69b7a3a09b7d3992970b289f92937e`](https://github.com/python/typeshed/commit/126768408a69b7a3a09b7d3992970b289f92937e).
+[`3402466d17144ed7edfc92940c6973167ba285af`](https://github.com/python/typeshed/commit/3402466d17144ed7edfc92940c6973167ba285af).

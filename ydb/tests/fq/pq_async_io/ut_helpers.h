@@ -14,16 +14,18 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <chrono>
-#include <queue>
-
 namespace NYql::NDq {
+
+using TMessage = std::pair<ui64, TString>;
+template<typename T>
+using TWatermarkOr = std::variant<T, TInstant>;
 
 NYql::NPq::NProto::TDqPqTopicSource BuildPqTopicSourceSettings(
     TString topic,
     TMaybe<TDuration> watermarksPeriod = Nothing(),
     TDuration lateArrivalDelay = TDuration::Seconds(2),
-    bool idlePartitionsEnabled = false);
+    bool idlePartitionsEnabled = false,
+    bool streamingMode = true);
 
 NYql::NPq::NProto::TDqPqTopicSink BuildPqTopicSinkSettings(TString topic);
 
@@ -33,53 +35,45 @@ TString GetDefaultPqDatabase();
 struct TPqIoTestFixture : public NUnitTest::TBaseFixture {
     std::unique_ptr<TFakeCASetup> CaSetup = std::make_unique<TFakeCASetup>();
     NYdb::TDriver Driver = NYdb::TDriver(NYdb::TDriverConfig().SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr").Release())));
+    NYql::IStructuredTokenCredentialsFactory::TPtr CredentialsFactory = NYql::CreateStructuredTokenCredentialsFactory();
 
     TPqIoTestFixture();
     ~TPqIoTestFixture();
 
-    void InitSource(
-        NYql::NPq::NProto::TDqPqTopicSource&& settings,
-        i64 freeSpace = 1_MB);
-
-    void InitSource(
-        const TString& topic,
-        i64 freeSpace = 1_MB)
-    {
-        InitSource(BuildPqTopicSourceSettings(topic), freeSpace);
+    template<typename T>
+    std::vector<TWatermarkOr<T>> SourceRead(const TReadValueParser<T> parser, i64 freeSpace = 12345) const {
+        NThreading::TFuture<void> nextDataFutureOut;
+        return CaSetup->AsyncInputRead(parser, nextDataFutureOut, freeSpace);
     }
 
     template<typename T>
-    std::vector<std::variant<T, TInstant>> SourceRead(const TReadValueParser<T> parser, i64 freeSpace = 12345) {
-        NThreading::TFuture<void> nextDataFuture;
-        return CaSetup->AsyncInputRead(parser, nextDataFuture, freeSpace);
-    }
-
-    template<typename T>
-    std::vector<std::variant<T, TInstant>> SourceReadUntil(
+    std::vector<TWatermarkOr<T>> SourceReadUntil(
         const TReadValueParser<T> parser,
         ui64 size,
         i64 eachReadFreeSpace = 1000,
-        TDuration timeout = TDuration::Seconds(30))
-    {
+        TDuration timeout = TDuration::Seconds(30)
+    ) const {
         return CaSetup->AsyncInputReadUntil(parser, size, eachReadFreeSpace, timeout, false);
     }
 
     template<typename T>
-    std::vector<std::variant<T, TInstant>> SourceReadDataUntil(
+    std::vector<TWatermarkOr<T>> SourceReadDataUntil(
         const TReadValueParser<T> parser,
         ui64 size,
-        i64 eachReadFreeSpace = 1000)
-    {
+        i64 eachReadFreeSpace = 1000
+    ) const {
         return CaSetup->AsyncInputReadUntil(parser, size, eachReadFreeSpace, TDuration::Seconds(30), true);
     }
 
-
-    void SaveSourceState(NDqProto::TCheckpoint checkpoint, TSourceState& state) {
+    void SaveSourceState(NDqProto::TCheckpoint checkpoint, TSourceState& state) const {
         CaSetup->SaveSourceState(checkpoint, state);
     }
 
-    void LoadSource(const TSourceState& state) {
-        return CaSetup->LoadSource(state);
+    void LoadSource(const TSourceState& state) const {
+        CaSetup->LoadSource(state);
+
+        // Wait for reader to reconnect and resume from checkpoint
+        Sleep(TDuration::Seconds(10));
     }
 
 
@@ -124,7 +118,11 @@ void AddReadRule(
     NYdb::TDriver& driver,
     const TString& streamName);
 
-std::vector<std::pair<ui64, TString>> UVPairParser(const NUdf::TUnboxedValue& item);
+void ChangePartitionCount(
+    const TString& streamName,
+    ui32 partitionCount);
+
+std::vector<TMessage> UVPairParser(const NUdf::TUnboxedValue& item);
 std::vector<TString> UVParser(const NUdf::TUnboxedValue& item);
 
 }

@@ -1,41 +1,47 @@
 #include "mkql_flatmap.h"
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/utils/cast.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
+#ifndef MKQL_DISABLE_CODEGEN
 using NYql::EnsureDynamicCast;
+#endif
 
 namespace {
 
-class TFlowFlatMapFlowWrapper : public TStatefulFlowCodegeneratorNode<TFlowFlatMapFlowWrapper> {
-using TBaseComputation = TStatefulFlowCodegeneratorNode<TFlowFlatMapFlowWrapper>;
+class TFlowFlatMapFlowWrapper: public TStatefulFlowCodegeneratorNode<TFlowFlatMapFlowWrapper> {
+    using TBaseComputation = TStatefulFlowCodegeneratorNode<TFlowFlatMapFlowWrapper>;
+
 public:
-     TFlowFlatMapFlowWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* flow, IComputationExternalNode* input, IComputationNode* output)
-        : TBaseComputation(mutables, flow, kind, EValueRepresentation::Embedded), Flow(flow), Input(input), Output(output)
-    {}
+    TFlowFlatMapFlowWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* flow, IComputationExternalNode* input, IComputationNode* output)
+        : TBaseComputation(mutables, flow, kind, EValueRepresentation::Embedded)
+        , Flow_(flow)
+        , Input_(input)
+        , Output_(output)
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
         if (state.IsInvalid()) {
-            if (auto item = Flow->GetValue(ctx); item.IsSpecial()) {
+            if (auto item = Flow_->GetValue(ctx); item.IsSpecial()) {
                 return item.Release();
             } else {
                 state = NUdf::TUnboxedValuePod();
-                Input->SetValue(ctx, std::move(item));
+                Input_->SetValue(ctx, std::move(item));
             }
         }
 
         while (true) {
-            if (auto output = Output->GetValue(ctx); output.IsFinish()) {
-                if (auto item = Flow->GetValue(ctx); item.IsSpecial()) {
+            if (auto output = Output_->GetValue(ctx); output.IsFinish()) {
+                if (auto item = Flow_->GetValue(ctx); item.IsSpecial()) {
                     state = NUdf::TUnboxedValuePod::Invalid();
                     return item.Release();
                 } else {
                     state = NUdf::TUnboxedValuePod();
-                    Input->SetValue(ctx, std::move(item));
+                    Input_->SetValue(ctx, std::move(item));
                 }
             } else {
                 return output.Release();
@@ -43,8 +49,8 @@ public:
         }
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
-        const auto codegenInput = dynamic_cast<ICodegeneratorExternalNode*>(Input);
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
+        const auto codegenInput = dynamic_cast<ICodegeneratorExternalNode*>(Input_);
         MKQL_ENSURE(codegenInput, "Input must be codegenerator node.");
 
         auto& context = ctx.Codegen.GetContext();
@@ -65,7 +71,7 @@ public:
 
         block = init;
 
-        const auto item = GetNodeValue(Flow, ctx, block);
+        const auto item = GetNodeValue(Flow_, ctx, block);
         result->addIncoming(item, block);
         BranchInst::Create(exit, next, IsSpecial(item, block, context), block);
 
@@ -78,7 +84,7 @@ public:
 
         block = work;
 
-        const auto output = GetNodeValue(Output, ctx, block);
+        const auto output = GetNodeValue(Output_, ctx, block);
 
         const auto finish = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, output, GetFinish(context), "finish", block);
         result->addIncoming(output, block);
@@ -95,50 +101,55 @@ public:
 #endif
 private:
     void RegisterDependencies() const final {
-        if (const auto flow = FlowDependsOn(Flow)) {
-            Own(flow, Input);
-            DependsOn(flow, Output);
+        if (const auto flow = FlowDependsOn(Flow_)) {
+            Own(flow, Input_);
+            DependsOn(flow, Output_);
         }
-        Input->AddDependence(Output->GetSource());
+        Input_->AddDependent(Output_->GetSource());
     }
 
-    IComputationNode* const Flow;
-    IComputationExternalNode* const Input;
-    IComputationNode* const Output;
+    IComputationNode* const Flow_;
+    IComputationExternalNode* const Input_;
+    IComputationNode* const Output_;
 };
 
-class TFlowFlatMapWideWrapper : public TStatefulWideFlowCodegeneratorNode<TFlowFlatMapWideWrapper> {
-using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TFlowFlatMapWideWrapper>;
-public:
-     TFlowFlatMapWideWrapper(TComputationMutables& mutables, IComputationNode* flow, IComputationExternalNode* input, IComputationWideFlowNode* output)
-        : TBaseComputation(mutables, flow, EValueRepresentation::Embedded), Flow(flow), Input(input), Output(output)
-    {}
+class TFlowFlatMapWideWrapper: public TStatefulWideFlowCodegeneratorNode<TFlowFlatMapWideWrapper> {
+    using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TFlowFlatMapWideWrapper>;
 
-    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
+public:
+    TFlowFlatMapWideWrapper(TComputationMutables& mutables, IComputationNode* flow, IComputationExternalNode* input, IComputationWideFlowNode* output)
+        : TBaseComputation(mutables, flow, EValueRepresentation::Embedded)
+        , Flow_(flow)
+        , Input_(input)
+        , Output_(output)
+    {
+    }
+
+    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const {
         if (state.IsInvalid()) {
-            if (auto item = Flow->GetValue(ctx); item.IsSpecial()) {
+            if (auto item = Flow_->GetValue(ctx); item.IsSpecial()) {
                 return item.IsFinish() ? EFetchResult::Finish : EFetchResult::Yield;
             } else {
                 state = NUdf::TUnboxedValuePod();
-                Input->SetValue(ctx, std::move(item));
+                Input_->SetValue(ctx, std::move(item));
             }
         }
 
         while (true) {
-            if (const auto result = Output->FetchValues(ctx, output); EFetchResult::Finish != result)
+            if (const auto result = Output_->FetchValues(ctx, output); EFetchResult::Finish != result) {
                 return result;
-            else if (auto item = Flow->GetValue(ctx); item.IsSpecial()) {
+            } else if (auto item = Flow_->GetValue(ctx); item.IsSpecial()) {
                 state = NUdf::TUnboxedValuePod::Invalid();
                 return item.IsFinish() ? EFetchResult::Finish : EFetchResult::Yield;
             } else {
                 state = NUdf::TUnboxedValuePod();
-                Input->SetValue(ctx, std::move(item));
+                Input_->SetValue(ctx, std::move(item));
             }
         }
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
-        const auto codegenInput = dynamic_cast<ICodegeneratorExternalNode*>(Input);
+    TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
+        const auto codegenInput = dynamic_cast<ICodegeneratorExternalNode*>(Input_);
         MKQL_ENSURE(codegenInput, "Input must be codegenerator node.");
 
         auto& context = ctx.Codegen.GetContext();
@@ -159,7 +170,7 @@ public:
 
         block = init;
 
-        const auto item = GetNodeValue(Flow, ctx, block);
+        const auto item = GetNodeValue(Flow_, ctx, block);
         const auto outres = SelectInst::Create(IsFinish(item, block, context), ConstantInt::get(resultType, i32(EFetchResult::Finish)), ConstantInt::get(resultType, i32(EFetchResult::Yield)), "outres", block);
         result->addIncoming(outres, block);
         BranchInst::Create(exit, next, IsSpecial(item, block, context), block);
@@ -173,7 +184,7 @@ public:
 
         block = work;
 
-        auto output = GetNodeValues(Output, ctx, block);
+        auto output = GetNodeValues(Output_, ctx, block);
 
         const auto finish = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SLT, output.first, ConstantInt::get(resultType, 0), "finish", block);
         result->addIncoming(output.first, block);
@@ -190,32 +201,38 @@ public:
 #endif
 private:
     void RegisterDependencies() const final {
-        if (const auto flow = FlowDependsOn(Flow)) {
-            Own(flow, Input);
-            DependsOn(flow, Output);
+        if (const auto flow = FlowDependsOn(Flow_)) {
+            Own(flow, Input_);
+            DependsOn(flow, Output_);
         }
-        Input->AddDependence(Output->GetSource());
+        Input_->AddDependent(Output_->GetSource());
     }
 
-    IComputationNode* const Flow;
-    IComputationExternalNode* const Input;
-    IComputationWideFlowNode* const Output;
+    IComputationNode* const Flow_;
+    IComputationExternalNode* const Input_;
+    IComputationWideFlowNode* const Output_;
 };
 
-class TListFlatMapFlowWrapper : public TStatefulFlowCodegeneratorNode<TListFlatMapFlowWrapper> {
-using TBaseComputation = TStatefulFlowCodegeneratorNode<TListFlatMapFlowWrapper>;
+class TListFlatMapFlowWrapper: public TStatefulFlowCodegeneratorNode<TListFlatMapFlowWrapper> {
+    using TBaseComputation = TStatefulFlowCodegeneratorNode<TListFlatMapFlowWrapper>;
+
 public:
-     TListFlatMapFlowWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* list, IComputationExternalNode* input, IComputationNode* output)
-        : TBaseComputation(mutables, output, kind, EValueRepresentation::Boxed), List(list), Input(input), Output(output)
-    {}
+    TListFlatMapFlowWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* list, IComputationExternalNode* input, IComputationNode* output)
+        : TBaseComputation(mutables, output, kind, EValueRepresentation::Boxed)
+        , List_(list)
+        , Input_(input)
+        , Output_(output)
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
         if (state.IsInvalid()) {
-            state = List->GetValue(ctx).GetListIterator();
-
-            if (!state.Next(Input->RefValue(ctx))) {
+            state = List_->GetValue(ctx).GetListIterator();
+            NYql::NUdf::TUnboxedValue fetchResult;
+            if (!state.Next(fetchResult)) {
                 state = NUdf::TUnboxedValuePod::MakeFinish();
             }
+            Input_->SetValue(ctx, std::move(fetchResult));
         }
 
         if (state.IsFinish()) {
@@ -223,8 +240,10 @@ public:
         }
 
         while (true) {
-            if (auto output = Output->GetValue(ctx); output.IsFinish()) {
-                if (state.Next(Input->RefValue(ctx))) {
+            if (auto output = Output_->GetValue(ctx); output.IsFinish()) {
+                NYql::NUdf::TUnboxedValue fetchResult;
+                if (state.Next(fetchResult)) {
+                    Input_->SetValue(ctx, std::move(fetchResult));
                     continue;
                 }
 
@@ -235,8 +254,8 @@ public:
         }
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
-        const auto codegenInput = dynamic_cast<ICodegeneratorExternalNode*>(Input);
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
+        const auto codegenInput = dynamic_cast<ICodegeneratorExternalNode*>(Input_);
         MKQL_ENSURE(codegenInput, "Input must be codegenerator node.");
 
         auto& context = ctx.Codegen.GetContext();
@@ -258,9 +277,9 @@ public:
 
         block = init;
 
-        const auto list = GetNodeValue(List, ctx, block);
+        const auto list = GetNodeValue(List_, ctx, block);
         CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::GetListIterator>(statePtr, list, ctx.Codegen, block);
-        if (List->IsTemporaryValue()) {
+        if (List_->IsTemporaryValue()) {
             CleanupBoxed(list, ctx, block);
         }
 
@@ -269,13 +288,14 @@ public:
         block = next;
 
         const auto iterator = new LoadInst(valueType, statePtr, "iterator", block);
-        const auto itemPtr = codegenInput->CreateRefValue(ctx, block);
-        const auto status = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Next>(Type::getInt1Ty(context), iterator, ctx.Codegen, block, itemPtr);
-        BranchInst::Create(work, done, status,  block);
+        const auto [status, itemPtr] = RefValueWithCallResult(codegenInput, ctx, block, [&](Value* itemPtr) {
+            return CallBoxedValueNext(iterator, ctx, block, itemPtr);
+        });
+        BranchInst::Create(work, done, status, block);
 
         block = work;
 
-        const auto output = GetNodeValue(Output, ctx, block);
+        const auto output = GetNodeValue(Output_, ctx, block);
         result->addIncoming(output, block);
         BranchInst::Create(next, exit, IsFinish(output, block, context), block);
 
@@ -292,32 +312,39 @@ public:
 #endif
 private:
     void RegisterDependencies() const final {
-        if (const auto flow = FlowDependsOn(List)) {
-            Own(flow, Input);
-            DependsOn(flow, Output);
+        if (const auto flow = FlowDependsOn(List_)) {
+            Own(flow, Input_);
+            DependsOn(flow, Output_);
         }
-        Input->AddDependence(Output->GetSource());
+        Input_->AddDependent(Output_->GetSource());
     }
 
-    IComputationNode* const List;
-    IComputationExternalNode* const Input;
-    IComputationNode* const Output;
+    IComputationNode* const List_;
+    IComputationExternalNode* const Input_;
+    IComputationNode* const Output_;
 };
 
-class TListFlatMapWideWrapper : public TStatefulWideFlowCodegeneratorNode<TListFlatMapWideWrapper> {
-using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TListFlatMapWideWrapper>;
+class TListFlatMapWideWrapper: public TStatefulWideFlowCodegeneratorNode<TListFlatMapWideWrapper> {
+    using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TListFlatMapWideWrapper>;
+
 public:
-     TListFlatMapWideWrapper(TComputationMutables& mutables, IComputationNode* list, IComputationExternalNode* input, IComputationWideFlowNode* output)
-        : TBaseComputation(mutables, output, EValueRepresentation::Boxed), List(list), Input(input), Output(output)
-    {}
+    TListFlatMapWideWrapper(TComputationMutables& mutables, IComputationNode* list, IComputationExternalNode* input, IComputationWideFlowNode* output)
+        : TBaseComputation(mutables, output, EValueRepresentation::Boxed)
+        , List_(list)
+        , Input_(input)
+        , Output_(output)
+    {
+    }
 
-    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
+    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const {
         if (state.IsInvalid()) {
-            state = List->GetValue(ctx).GetListIterator();
+            state = List_->GetValue(ctx).GetListIterator();
 
-            if (!state.Next(Input->RefValue(ctx))) {
+            NYql::NUdf::TUnboxedValue fetchResult;
+            if (!state.Next(fetchResult)) {
                 state = NUdf::TUnboxedValuePod::MakeFinish();
             }
+            Input_->SetValue(ctx, std::move(fetchResult));
         }
 
         if (state.IsFinish()) {
@@ -325,18 +352,21 @@ public:
         }
 
         while (true) {
-            if (const auto result = Output->FetchValues(ctx, output); EFetchResult::Finish != result)
+            NYql::NUdf::TUnboxedValue fetchResult;
+            if (const auto result = Output_->FetchValues(ctx, output); EFetchResult::Finish != result) {
                 return result;
-            else if (state.Next(Input->RefValue(ctx)))
+            } else if (state.Next(fetchResult)) {
+                Input_->SetValue(ctx, std::move(fetchResult));
                 continue;
+            }
 
             state = NUdf::TUnboxedValuePod::MakeFinish();
             return EFetchResult::Finish;
         }
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
-        const auto codegenInput = dynamic_cast<ICodegeneratorExternalNode*>(Input);
+    TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
+        const auto codegenInput = dynamic_cast<ICodegeneratorExternalNode*>(Input_);
         MKQL_ENSURE(codegenInput, "Input must be codegenerator node.");
 
         auto& context = ctx.Codegen.GetContext();
@@ -359,9 +389,9 @@ public:
 
         block = init;
 
-        const auto list = GetNodeValue(List, ctx, block);
+        const auto list = GetNodeValue(List_, ctx, block);
         CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::GetListIterator>(statePtr, list, ctx.Codegen, block);
-        if (List->IsTemporaryValue()) {
+        if (List_->IsTemporaryValue()) {
             CleanupBoxed(list, ctx, block);
         }
 
@@ -370,13 +400,14 @@ public:
         block = next;
 
         const auto iterator = new LoadInst(valueType, statePtr, "iterator", block);
-        const auto itemPtr = codegenInput->CreateRefValue(ctx, block);
-        const auto status = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Next>(Type::getInt1Ty(context), iterator, ctx.Codegen, block, itemPtr);
-        BranchInst::Create(work, done, status,  block);
+        const auto [status, itemPtr] = RefValueWithCallResult(codegenInput, ctx, block, [&](Value* itemPtr) {
+            return CallBoxedValueNext(iterator, ctx, block, itemPtr);
+        });
+        BranchInst::Create(work, done, status, block);
 
         block = work;
 
-        auto output = GetNodeValues(Output, ctx, block);
+        auto output = GetNodeValues(Output_, ctx, block);
         const auto finish = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SLT, output.first, ConstantInt::get(resultType, 0), "finish", block);
         result->addIncoming(output.first, block);
         BranchInst::Create(next, exit, finish, block);
@@ -394,38 +425,42 @@ public:
 #endif
 private:
     void RegisterDependencies() const final {
-        if (const auto flow = FlowDependsOn(List)) {
-            Own(flow, Input);
-            DependsOn(flow, Output);
+        if (const auto flow = FlowDependsOn(List_)) {
+            Own(flow, Input_);
+            DependsOn(flow, Output_);
         }
-        Input->AddDependence(Output->GetSource());
+        Input_->AddDependent(Output_->GetSource());
     }
 
-    IComputationNode* const List;
-    IComputationExternalNode* const Input;
-    IComputationWideFlowNode* const Output;
+    IComputationNode* const List_;
+    IComputationExternalNode* const Input_;
+    IComputationWideFlowNode* const Output_;
 };
 
-class TNarrowFlatMapFlowWrapper : public TStatefulFlowCodegeneratorNode<TNarrowFlatMapFlowWrapper> {
-using TBaseComputation = TStatefulFlowCodegeneratorNode<TNarrowFlatMapFlowWrapper>;
+class TNarrowFlatMapFlowWrapper: public TStatefulFlowCodegeneratorNode<TNarrowFlatMapFlowWrapper> {
+    using TBaseComputation = TStatefulFlowCodegeneratorNode<TNarrowFlatMapFlowWrapper>;
+
 public:
-     TNarrowFlatMapFlowWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationWideFlowNode* flow, TComputationExternalNodePtrVector&& items, IComputationNode* output)
+    TNarrowFlatMapFlowWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationWideFlowNode* flow, TComputationExternalNodePtrVector&& items, IComputationNode* output)
         : TBaseComputation(mutables, flow, kind, EValueRepresentation::Embedded)
-        , Flow(flow)
-        , Items(std::move(items))
-        , Output(output)
-        , WideFieldsIndex(mutables.IncrementWideFieldsIndex(Items.size()))
-    {}
+        , Flow_(flow)
+        , Items_(std::move(items))
+        , Output_(output)
+        , WideFieldsIndex_(mutables.IncrementWideFieldsIndex(Items_.size()))
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
-        auto** fields = ctx.WideFields.data() + WideFieldsIndex;
+        auto** fields = ctx.WideFields.data() + WideFieldsIndex_;
 
         if (state.IsInvalid()) {
-            for (auto i = 0U; i < Items.size(); ++i)
-                if (Items[i]->GetDependencesCount() > 0U)
-                    fields[i] = &Items[i]->RefValue(ctx);
+            for (auto i = 0U; i < Items_.size(); ++i) {
+                if (Items_[i]->GetDependentsCount() > 0U) {
+                    fields[i] = &Items_[i]->RefValue(ctx);
+                }
+            }
 
-            switch (Flow->FetchValues(ctx, fields)) {
+            switch (Flow_->FetchValues(ctx, fields)) {
                 case EFetchResult::Finish:
                     return NUdf::TUnboxedValuePod::MakeFinish();
                 case EFetchResult::Yield:
@@ -436,12 +471,14 @@ public:
         }
 
         while (true) {
-            if (auto output = Output->GetValue(ctx); output.IsFinish()) {
-                for (auto i = 0U; i < Items.size(); ++i)
-                    if (Items[i]->GetDependencesCount() > 0U)
-                        fields[i] = &Items[i]->RefValue(ctx);
+            if (auto output = Output_->GetValue(ctx); output.IsFinish()) {
+                for (auto i = 0U; i < Items_.size(); ++i) {
+                    if (Items_[i]->GetDependentsCount() > 0U) {
+                        fields[i] = &Items_[i]->RefValue(ctx);
+                    }
+                }
 
-                switch (Flow->FetchValues(ctx, fields)) {
+                switch (Flow_->FetchValues(ctx, fields)) {
                     case EFetchResult::Finish:
                         return NUdf::TUnboxedValuePod::MakeFinish();
                     case EFetchResult::Yield:
@@ -455,7 +492,7 @@ public:
         }
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto init = BasicBlock::Create(context, "init", ctx.Func);
@@ -474,7 +511,7 @@ public:
 
         block = init;
 
-        const auto getres = GetNodeValues(Flow, ctx, block);
+        const auto getres = GetNodeValues(Flow_, ctx, block);
 
         const auto yield = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, getres.first, ConstantInt::get(getres.first->getType(), 0), "yield", block);
         const auto good = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SGT, getres.first, ConstantInt::get(getres.first->getType(), 0), "good", block);
@@ -488,15 +525,17 @@ public:
 
         new StoreInst(GetEmpty(context), statePtr, block);
 
-        for (auto i = 0U; i < Items.size(); ++i)
-            if (Items[i]->GetDependencesCount() > 0U)
-                EnsureDynamicCast<ICodegeneratorExternalNode*>(Items[i])->CreateSetValue(ctx, block, getres.second[i](ctx, block));
+        for (auto i = 0U; i < Items_.size(); ++i) {
+            if (Items_[i]->GetDependentsCount() > 0U) {
+                EnsureDynamicCast<ICodegeneratorExternalNode*>(Items_[i])->CreateSetValue(ctx, block, getres.second[i](ctx, block));
+            }
+        }
 
         BranchInst::Create(work, block);
 
         block = work;
 
-        const auto output = GetNodeValue(Output, ctx, block);
+        const auto output = GetNodeValue(Output_, ctx, block);
 
         const auto finish = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, output, GetFinish(context), "finish", block);
         result->addIncoming(output, block);
@@ -513,42 +552,82 @@ public:
 #endif
 private:
     void RegisterDependencies() const final {
-        if (const auto flow = FlowDependsOn(Flow)) {
-            std::for_each(Items.cbegin(), Items.cend(), std::bind(&TNarrowFlatMapFlowWrapper::Own, flow, std::placeholders::_1));
-            DependsOn(flow, Output);
+        if (const auto flow = FlowDependsOn(Flow_)) {
+            std::for_each(Items_.cbegin(), Items_.cend(), std::bind(&TNarrowFlatMapFlowWrapper::Own, flow, std::placeholders::_1));
+            DependsOn(flow, Output_);
         }
-        std::for_each(Items.cbegin(), Items.cend(), std::bind(&IComputationNode::AddDependence, std::placeholders::_1, Output->GetSource()));
+        std::for_each(Items_.cbegin(), Items_.cend(), std::bind(&IComputationNode::AddDependent, std::placeholders::_1, Output_->GetSource()));
     }
 
-    IComputationWideFlowNode* const Flow;
-    const TComputationExternalNodePtrVector Items;
-    IComputationNode* const Output;
+    IComputationWideFlowNode* const Flow_;
+    const TComputationExternalNodePtrVector Items_;
+    IComputationNode* const Output_;
 
-    const ui32 WideFieldsIndex;
+    const ui32 WideFieldsIndex_;
+};
+
+template <typename TDerived, bool IsStateful>
+class TFlatMapFlowCodegeneratorBase;
+
+template <typename TDerived>
+class TFlatMapFlowCodegeneratorBase<TDerived, false>
+    : public TStatelessFlowCodegeneratorNode<TDerived> {
+    using TBase = TStatelessFlowCodegeneratorNode<TDerived>;
+
+protected:
+    TFlatMapFlowCodegeneratorBase(TComputationMutables& mutables, IComputationNode* flow, EValueRepresentation kind)
+        : TBase(mutables, flow, kind)
+    {
+    }
+
+#ifndef MKQL_DISABLE_CODEGEN
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
+        return static_cast<const TDerived*>(this)->GenerateGetValue(ctx, block);
+    }
+#endif
+};
+
+template <typename TDerived>
+class TFlatMapFlowCodegeneratorBase<TDerived, true>
+    : public TStatefulFlowCodegeneratorNode<TDerived> {
+    using TBase = TStatefulFlowCodegeneratorNode<TDerived>;
+
+protected:
+    TFlatMapFlowCodegeneratorBase(TComputationMutables& mutables, IComputationNode* flow, EValueRepresentation kind)
+        : TBase(mutables, flow, kind)
+    {
+    }
+
+#ifndef MKQL_DISABLE_CODEGEN
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
+        return static_cast<const TDerived*>(this)->GenerateGetValue(ctx, statePtr, block);
+    }
+#endif
 };
 
 template <bool IsMultiRowPerItem, bool ResultContainerOpt>
-class TFlowFlatMapWrapper : public std::conditional_t<IsMultiRowPerItem,
-    TStatefulFlowCodegeneratorNode<TFlowFlatMapWrapper<IsMultiRowPerItem, ResultContainerOpt>>,
-    TStatelessFlowCodegeneratorNode<TFlowFlatMapWrapper<IsMultiRowPerItem, ResultContainerOpt>>> {
-using TBaseComputation = std::conditional_t<IsMultiRowPerItem,
-    TStatefulFlowCodegeneratorNode<TFlowFlatMapWrapper<IsMultiRowPerItem, ResultContainerOpt>>,
-    TStatelessFlowCodegeneratorNode<TFlowFlatMapWrapper<IsMultiRowPerItem, ResultContainerOpt>>>;
+class TFlowFlatMapWrapper: public TFlatMapFlowCodegeneratorBase<TFlowFlatMapWrapper<IsMultiRowPerItem, ResultContainerOpt>, IsMultiRowPerItem> {
+    using TBaseComputation = TFlatMapFlowCodegeneratorBase<TFlowFlatMapWrapper<IsMultiRowPerItem, ResultContainerOpt>, IsMultiRowPerItem>;
+
 public:
-     TFlowFlatMapWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* flow, IComputationExternalNode* item, IComputationNode* newItem)
-        : TBaseComputation(mutables, flow, kind), Flow(flow), Item(item), NewItem(newItem)
-    {}
+    TFlowFlatMapWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* flow, IComputationExternalNode* item, IComputationNode* newItem)
+        : TBaseComputation(mutables, flow, kind)
+        , Flow_(flow)
+        , Item_(item)
+        , NewItem_(newItem)
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         while (true) {
-            if (auto item = Flow->GetValue(ctx); item.IsSpecial()) {
+            if (auto item = Flow_->GetValue(ctx); item.IsSpecial()) {
                 return item.Release();
             } else {
-                Item->SetValue(ctx, std::move(item));
+                Item_->SetValue(ctx, std::move(item));
             }
 
-            if (auto newItem = NewItem->GetValue(ctx)) {
-                return newItem.Release().GetOptionalValueIf<!IsMultiRowPerItem && ResultContainerOpt>();
+            if (auto newItem = NewItem_->GetValue(ctx)) {
+                return newItem.Release().GetOptionalValueIf < !IsMultiRowPerItem && ResultContainerOpt > ();
             }
         }
     }
@@ -558,9 +637,12 @@ public:
             if (state.HasValue()) {
                 if constexpr (ResultContainerOpt) {
                     switch (NUdf::TUnboxedValue result; state.Fetch(result)) {
-                        case NUdf::EFetchStatus::Finish: break;
-                        case NUdf::EFetchStatus::Yield: return NUdf::TUnboxedValuePod::MakeYield();
-                        case NUdf::EFetchStatus::Ok: return result.Release();
+                        case NUdf::EFetchStatus::Finish:
+                            break;
+                        case NUdf::EFetchStatus::Yield:
+                            return NUdf::TUnboxedValuePod::MakeYield();
+                        case NUdf::EFetchStatus::Ok:
+                            return result.Release();
                     }
                 } else if (NUdf::TUnboxedValue result; state.Next(result)) {
                     return result.Release();
@@ -580,10 +662,10 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* GenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
         auto& context = ctx.Codegen.GetContext();
 
-        const auto codegenItem = dynamic_cast<ICodegeneratorExternalNode*>(Item);
+        const auto codegenItem = dynamic_cast<ICodegeneratorExternalNode*>(Item_);
         MKQL_ENSURE(codegenItem, "Item must be codegenerator node.");
 
         const auto loop = BasicBlock::Create(context, "loop", ctx.Func);
@@ -591,7 +673,7 @@ public:
         BranchInst::Create(loop, block);
         block = loop;
 
-        const auto item = GetNodeValue(Flow, ctx, block);
+        const auto item = GetNodeValue(Flow_, ctx, block);
 
         const auto work = BasicBlock::Create(context, "work", ctx.Func);
         const auto exit = BasicBlock::Create(context, "exit", ctx.Func);
@@ -602,7 +684,7 @@ public:
 
         block = work;
         codegenItem->CreateSetValue(ctx, block, item);
-        const auto value = GetNodeValue(NewItem, ctx, block);
+        const auto value = GetNodeValue(NewItem_, ctx, block);
         result->addIncoming(!IsMultiRowPerItem && ResultContainerOpt ? GetOptionalValue(context, value, block) : value, block);
         BranchInst::Create(loop, exit, IsEmpty(value, block, context), block);
 
@@ -610,7 +692,7 @@ public:
         return result;
     }
 
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* currentPtr, BasicBlock*& block) const {
+    Value* GenerateGetValue(const TCodegenContext& ctx, Value* currentPtr, BasicBlock*& block) const {
         auto& context = ctx.Codegen.GetContext();
 
         const auto statusType = Type::getInt32Ty(context);
@@ -638,14 +720,14 @@ public:
             block = pull;
 
             if constexpr (ResultContainerOpt) {
-                const auto status = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Fetch>(statusType, current, ctx.Codegen, block, valuePtr);
+                const auto status = CallBoxedValueFetch(current, ctx, block, valuePtr);
 
                 result->addIncoming(GetYield(context), block);
                 const auto choise = SwitchInst::Create(status, good, 2U, block);
                 choise->addCase(ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Yield)), over);
                 choise->addCase(ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Finish)), next);
             } else {
-                const auto status = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Next>(Type::getInt1Ty(context), current, ctx.Codegen, block, valuePtr);
+                const auto status = CallBoxedValueNext(current, ctx, block, valuePtr);
                 BranchInst::Create(good, next, status, block);
             }
 
@@ -666,9 +748,9 @@ public:
 
             block = skip;
 
-            const auto list = DoGenerateGetValue(ctx, block);
+            const auto list = GenerateGetValue(ctx, block);
             result->addIncoming(list, block);
-            BranchInst::Create(over, good, IsSpecial(list, block, context),  block);
+            BranchInst::Create(over, good, IsSpecial(list, block, context), block);
 
             block = good;
             if constexpr (ResultContainerOpt) {
@@ -676,7 +758,7 @@ public:
                 AddRefBoxed(list, ctx, block);
             } else {
                 CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::GetListIterator>(currentPtr, list, ctx.Codegen, block);
-                if (NewItem->IsTemporaryValue()) {
+                if (NewItem_->IsTemporaryValue()) {
                     CleanupBoxed(list, ctx, block);
                 }
             }
@@ -689,43 +771,43 @@ public:
 #endif
 private:
     void RegisterDependencies() const final {
-        if (const auto flow = this->FlowDependsOn(this->Flow)) {
-            this->Own(flow, this->Item);
-            this->DependsOn(flow, this->NewItem);
+        if (const auto flow = this->FlowDependsOn(this->Flow_)) {
+            this->Own(flow, this->Item_);
+            this->DependsOn(flow, this->NewItem_);
         }
     }
 
-    IComputationNode* const Flow;
-    IComputationExternalNode* const Item;
-    IComputationNode* const NewItem;
+    IComputationNode* const Flow_;
+    IComputationExternalNode* const Item_;
+    IComputationNode* const NewItem_;
 };
 
 template <bool IsMultiRowPerItem, bool ResultContainerOpt>
-class TNarrowFlatMapWrapper : public std::conditional_t<IsMultiRowPerItem,
-    TStatefulFlowCodegeneratorNode<TNarrowFlatMapWrapper<IsMultiRowPerItem, ResultContainerOpt>>,
-    TStatelessFlowCodegeneratorNode<TNarrowFlatMapWrapper<IsMultiRowPerItem, ResultContainerOpt>>> {
-using TBaseComputation = std::conditional_t<IsMultiRowPerItem,
-    TStatefulFlowCodegeneratorNode<TNarrowFlatMapWrapper<IsMultiRowPerItem, ResultContainerOpt>>,
-    TStatelessFlowCodegeneratorNode<TNarrowFlatMapWrapper<IsMultiRowPerItem, ResultContainerOpt>>>;
+class TNarrowFlatMapWrapper: public TFlatMapFlowCodegeneratorBase<TNarrowFlatMapWrapper<IsMultiRowPerItem, ResultContainerOpt>, IsMultiRowPerItem> {
+    using TBaseComputation = TFlatMapFlowCodegeneratorBase<TNarrowFlatMapWrapper<IsMultiRowPerItem, ResultContainerOpt>, IsMultiRowPerItem>;
+
 public:
-     TNarrowFlatMapWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationWideFlowNode* flow, const TComputationExternalNodePtrVector&& items, IComputationNode* newItem)
+    TNarrowFlatMapWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationWideFlowNode* flow, const TComputationExternalNodePtrVector&& items, IComputationNode* newItem)
         : TBaseComputation(mutables, flow, kind)
-        , Flow(flow)
-        , Items(std::move(items))
-        , NewItem(newItem)
-        , PasstroughItem(GetPasstroughtMap(TComputationNodePtrVector{NewItem}, Items).front())
-        , WideFieldsIndex(mutables.IncrementWideFieldsIndex(Items.size()))
-    {}
+        , Flow_(flow)
+        , Items_(items)
+        , NewItem_(newItem)
+        , PasstroughItem_(GetPasstroughtMap(TComputationNodePtrVector{NewItem_}, Items_).front())
+        , WideFieldsIndex_(mutables.IncrementWideFieldsIndex(Items_.size()))
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        auto** fields = ctx.WideFields.data() + WideFieldsIndex;
+        auto** fields = ctx.WideFields.data() + WideFieldsIndex_;
 
         while (true) {
-            for (auto i = 0U; i < Items.size(); ++i)
-                if (NewItem == Items[i] || Items[i]->GetDependencesCount() > 0U)
-                    fields[i] = &Items[i]->RefValue(ctx);
+            for (auto i = 0U; i < Items_.size(); ++i) {
+                if (NewItem_ == Items_[i] || Items_[i]->GetDependentsCount() > 0U) {
+                    fields[i] = &Items_[i]->RefValue(ctx);
+                }
+            }
 
-            switch (const auto result = Flow->FetchValues(ctx, fields)) {
+            switch (Flow_->FetchValues(ctx, fields)) {
                 case EFetchResult::Finish:
                     return NUdf::TUnboxedValuePod::MakeFinish();
                 case EFetchResult::Yield:
@@ -734,8 +816,8 @@ public:
                     break;
             }
 
-            if (auto newItem = NewItem->GetValue(ctx)) {
-                return newItem.Release().GetOptionalValueIf<!IsMultiRowPerItem && ResultContainerOpt>();
+            if (auto newItem = NewItem_->GetValue(ctx)) {
+                return newItem.Release().GetOptionalValueIf < !IsMultiRowPerItem && ResultContainerOpt > ();
             }
         }
     }
@@ -745,9 +827,12 @@ public:
             if (state.HasValue()) {
                 if constexpr (ResultContainerOpt) {
                     switch (NUdf::TUnboxedValue result; state.Fetch(result)) {
-                        case NUdf::EFetchStatus::Finish: break;
-                        case NUdf::EFetchStatus::Yield: return NUdf::TUnboxedValuePod::MakeYield();
-                        case NUdf::EFetchStatus::Ok: return result.Release();
+                        case NUdf::EFetchStatus::Finish:
+                            break;
+                        case NUdf::EFetchStatus::Yield:
+                            return NUdf::TUnboxedValuePod::MakeYield();
+                        case NUdf::EFetchStatus::Ok:
+                            return result.Release();
                     }
                 } else if (NUdf::TUnboxedValue result; state.Next(result)) {
                     return result.Release();
@@ -767,7 +852,7 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* GenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
         auto& context = ctx.Codegen.GetContext();
 
         const auto loop = BasicBlock::Create(context, "loop", ctx.Func);
@@ -778,13 +863,12 @@ public:
         BranchInst::Create(loop, block);
         block = loop;
 
-        const auto getres = GetNodeValues(Flow, ctx, block);
+        const auto getres = GetNodeValues(Flow_, ctx, block);
 
         const auto yield = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, getres.first, ConstantInt::get(getres.first->getType(), 0), "yield", block);
         const auto good = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SGT, getres.first, ConstantInt::get(getres.first->getType(), 0), "good", block);
 
         const auto outres = SelectInst::Create(yield, GetYield(context), GetFinish(context), "outres", block);
-
 
         result->addIncoming(outres, block);
         BranchInst::Create(work, exit, good, block);
@@ -792,14 +876,16 @@ public:
         block = work;
 
         Value* value = nullptr;
-        if (const auto passtrough = PasstroughItem) {
+        if (const auto passtrough = PasstroughItem_) {
             value = getres.second[*passtrough](ctx, block);
         } else {
-            for (auto i = 0U; i < Items.size(); ++i)
-                if (Items[i]->GetDependencesCount() > 0U)
-                    EnsureDynamicCast<ICodegeneratorExternalNode*>(Items[i])->CreateSetValue(ctx, block, getres.second[i](ctx, block));
+            for (auto i = 0U; i < Items_.size(); ++i) {
+                if (Items_[i]->GetDependentsCount() > 0U) {
+                    EnsureDynamicCast<ICodegeneratorExternalNode*>(Items_[i])->CreateSetValue(ctx, block, getres.second[i](ctx, block));
+                }
+            }
 
-            value = GetNodeValue(NewItem, ctx, block);
+            value = GetNodeValue(NewItem_, ctx, block);
         }
 
         result->addIncoming(!IsMultiRowPerItem && ResultContainerOpt ? GetOptionalValue(context, value, block) : value, block);
@@ -809,7 +895,7 @@ public:
         return result;
     }
 
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* currentPtr, BasicBlock*& block) const {
+    Value* GenerateGetValue(const TCodegenContext& ctx, Value* currentPtr, BasicBlock*& block) const {
         auto& context = ctx.Codegen.GetContext();
 
         const auto statusType = Type::getInt32Ty(context);
@@ -837,14 +923,14 @@ public:
             block = pull;
 
             if constexpr (ResultContainerOpt) {
-                const auto status = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Fetch>(statusType, current, ctx.Codegen, block, valuePtr);
+                const auto status = CallBoxedValueFetch(current, ctx, block, valuePtr);
 
                 result->addIncoming(GetYield(context), block);
                 const auto choise = SwitchInst::Create(status, good, 2U, block);
                 choise->addCase(ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Yield)), over);
                 choise->addCase(ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Finish)), next);
             } else {
-                const auto status = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Next>(Type::getInt1Ty(context), current, ctx.Codegen, block, valuePtr);
+                const auto status = CallBoxedValueNext(current, ctx, block, valuePtr);
                 BranchInst::Create(good, next, status, block);
             }
 
@@ -865,9 +951,9 @@ public:
 
             block = skip;
 
-            const auto list = DoGenerateGetValue(ctx, block);
+            const auto list = GenerateGetValue(ctx, block);
             result->addIncoming(list, block);
-            BranchInst::Create(over, good, IsSpecial(list, block, context),  block);
+            BranchInst::Create(over, good, IsSpecial(list, block, context), block);
 
             block = good;
             if constexpr (ResultContainerOpt) {
@@ -875,7 +961,7 @@ public:
                 AddRefBoxed(list, ctx, block);
             } else {
                 CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::GetListIterator>(currentPtr, list, ctx.Codegen, block);
-                if (NewItem->IsTemporaryValue()) {
+                if (NewItem_->IsTemporaryValue()) {
                     CleanupBoxed(list, ctx, block);
                 }
             }
@@ -888,88 +974,93 @@ public:
 #endif
 private:
     void RegisterDependencies() const final {
-        if (const auto flow = this->FlowDependsOn(Flow)) {
-            for (const auto& item : this->Items)
+        if (const auto flow = this->FlowDependsOn(Flow_)) {
+            for (const auto& item : this->Items_) {
                 this->Own(flow, item);
-            this->DependsOn(flow, this->NewItem);
+            }
+            this->DependsOn(flow, this->NewItem_);
         }
     }
 
-    IComputationWideFlowNode* const Flow;
-    const TComputationExternalNodePtrVector Items;
-    IComputationNode* const NewItem;
+    IComputationWideFlowNode* const Flow_;
+    const TComputationExternalNodePtrVector Items_;
+    IComputationNode* const NewItem_;
 
-    const std::optional<size_t> PasstroughItem;
+    const std::optional<size_t> PasstroughItem_;
 
-    const ui32 WideFieldsIndex;
+    const ui32 WideFieldsIndex_;
 };
 
 template <bool MultiOptional>
-class TSimpleListValue : public TCustomListValue {
+class TSimpleListValue: public TCustomListValue {
 public:
-    class TIterator : public TComputationValue<TIterator> {
+    class TIterator: public TComputationValue<TIterator> {
     public:
         TIterator(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, NUdf::TUnboxedValue&& iter, IComputationExternalNode* item, IComputationNode* newItem)
             : TComputationValue<TIterator>(memInfo)
-            , CompCtx(compCtx)
-            , Iter(std::move(iter))
-            , Item(item)
-            , NewItem(newItem)
-        {}
+            , CompCtx_(compCtx)
+            , Iter_(std::move(iter))
+            , Item_(item)
+            , NewItem_(newItem)
+        {
+        }
 
     private:
         bool Next(NUdf::TUnboxedValue& value) final {
+            NUdf::TUnboxedValue item;
             for (;;) {
-                if (!Iter.Next(Item->RefValue(CompCtx))) {
+                if (!Iter_.Next(item)) {
                     return false;
                 }
 
-                if (auto newItem = NewItem->GetValue(CompCtx)) {
+                Item_->SetValue(CompCtx_, std::move(item));
+                if (auto newItem = NewItem_->GetValue(CompCtx_)) {
                     value = newItem.Release().template GetOptionalValueIf<MultiOptional>();
                     return true;
                 }
             }
         }
 
-        TComputationContext& CompCtx;
-        const NUdf::TUnboxedValue Iter;
+        TComputationContext& CompCtx_;
+        const NUdf::TUnboxedValue Iter_;
 
-        IComputationExternalNode* const Item;
-        IComputationNode* const NewItem;
+        IComputationExternalNode* const Item_;
+        IComputationNode* const NewItem_;
     };
 
     TSimpleListValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, NUdf::TUnboxedValue&& list, IComputationExternalNode* item, IComputationNode* newItem)
         : TCustomListValue(memInfo)
-        , CompCtx(compCtx)
-        , List(std::move(list))
-        , Item(item)
-        , NewItem(newItem)
+        , CompCtx_(compCtx)
+        , List_(std::move(list))
+        , Item_(item)
+        , NewItem_(newItem)
     {
     }
 
 private:
     NUdf::TUnboxedValue GetListIterator() const final {
-        return CompCtx.HolderFactory.Create<TIterator>(CompCtx, List.GetListIterator(), Item, NewItem);
+        return CompCtx_.HolderFactory.Create<TIterator>(CompCtx_, List_.GetListIterator(), Item_, NewItem_);
     }
 
-    TComputationContext& CompCtx;
-    const NUdf::TUnboxedValue List;
-    IComputationExternalNode* const Item;
-    IComputationNode* const NewItem;
+    TComputationContext& CompCtx_;
+    const NUdf::TUnboxedValue List_;
+    IComputationExternalNode* const Item_;
+    IComputationNode* const NewItem_;
 };
 
 template <bool MultiOptional>
-class TSimpleStreamValue : public TComputationValue<TSimpleStreamValue<MultiOptional>> {
+class TSimpleStreamValue: public TComputationValue<TSimpleStreamValue<MultiOptional>> {
 public:
     using TBase = TComputationValue<TSimpleStreamValue>;
 
     TSimpleStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, NUdf::TUnboxedValue&& stream, IComputationExternalNode* item, IComputationNode* newItem)
         : TBase(memInfo)
-        , CompCtx(compCtx)
-        , Stream(std::move(stream))
-        , Item(item)
-        , NewItem(newItem)
-    {}
+        , CompCtx_(compCtx)
+        , Stream_(std::move(stream))
+        , Item_(item)
+        , NewItem_(newItem)
+    {
+    }
 
 private:
     ui32 GetTraverseCount() const override {
@@ -978,7 +1069,7 @@ private:
 
     NUdf::TUnboxedValue GetTraverseItem(ui32 index) const override {
         Y_UNUSED(index);
-        return Stream;
+        return Stream_;
     }
 
     NUdf::TUnboxedValue Save() const override {
@@ -991,12 +1082,13 @@ private:
 
     NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) final {
         for (;;) {
-            const auto status = Stream.Fetch(Item->RefValue(CompCtx));
+            NYql::NUdf::TUnboxedValue fetchResult;
+            const auto status = Stream_.Fetch(fetchResult);
             if (NUdf::EFetchStatus::Ok != status) {
                 return status;
             }
-
-            if (auto newItem = NewItem->GetValue(CompCtx)) {
+            Item_->SetValue(CompCtx_, std::move(fetchResult));
+            if (auto newItem = NewItem_->GetValue(CompCtx_)) {
                 result = newItem.Release().template GetOptionalValueIf<MultiOptional>();
                 return NUdf::EFetchStatus::Ok;
             }
@@ -1004,31 +1096,34 @@ private:
     }
 
 private:
-    TComputationContext& CompCtx;
-    const NUdf::TUnboxedValue Stream;
-    IComputationExternalNode* const Item;
-    IComputationNode* const NewItem;
+    TComputationContext& CompCtx_;
+    const NUdf::TUnboxedValue Stream_;
+    IComputationExternalNode* const Item_;
+    IComputationNode* const NewItem_;
 };
 
 template <bool IsNewStream>
-class TListValue : public TCustomListValue {
+class TListValue: public TCustomListValue {
 public:
-    class TIterator : public TComputationValue<TIterator> {
+    class TIterator: public TComputationValue<TIterator> {
     public:
         TIterator(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, NUdf::TUnboxedValue&& iter, IComputationExternalNode* item, IComputationNode* newItem)
             : TComputationValue<TIterator>(memInfo)
-            , CompCtx(compCtx)
-            , Iter(std::move(iter))
-            , Item(item)
-            , NewItem(newItem)
-        {}
+            , CompCtx_(compCtx)
+            , Iter_(std::move(iter))
+            , Item_(item)
+            , NewItem_(newItem)
+        {
+        }
 
     private:
         bool Next(NUdf::TUnboxedValue& value) final {
-            for (NUdf::TUnboxedValue current = std::move(Current);; current.Clear()) {
+            for (NUdf::TUnboxedValue current = std::move(Current_);; current.Clear()) {
                 if (!current) {
-                    if (Iter.Next(Item->RefValue(CompCtx))) {
-                        current = IsNewStream ? NewItem->GetValue(CompCtx) : NewItem->GetValue(CompCtx).GetListIterator();
+                    NYql::NUdf::TUnboxedValue fetchResult;
+                    if (Iter_.Next(fetchResult)) {
+                        Item_->SetValue(CompCtx_, std::move(fetchResult));
+                        current = IsNewStream ? NewItem_->GetValue(CompCtx_) : NewItem_->GetValue(CompCtx_).GetListIterator();
                     } else {
                         return false;
                     }
@@ -1046,51 +1141,53 @@ public:
                     }
                 }
 
-                Current = std::move(current);
+                Current_ = std::move(current);
                 return true;
             }
         }
 
-        TComputationContext& CompCtx;
-        const NUdf::TUnboxedValue Iter;
+        TComputationContext& CompCtx_;
+        const NUdf::TUnboxedValue Iter_;
 
-        IComputationExternalNode* const Item;
-        IComputationNode* const NewItem;
+        IComputationExternalNode* const Item_;
+        IComputationNode* const NewItem_;
 
-        NUdf::TUnboxedValue Current;
+        NUdf::TUnboxedValue Current_;
     };
 
     TListValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, NUdf::TUnboxedValue&& list, IComputationExternalNode* item, IComputationNode* newItem)
         : TCustomListValue(memInfo)
-        , CompCtx(compCtx)
-        , List(std::move(list))
-        , Item(item)
-        , NewItem(newItem)
-    {}
+        , CompCtx_(compCtx)
+        , List_(std::move(list))
+        , Item_(item)
+        , NewItem_(newItem)
+    {
+    }
 
 private:
     NUdf::TUnboxedValue GetListIterator() const final {
-        return CompCtx.HolderFactory.Create<TIterator>(CompCtx, List.GetListIterator(), Item, NewItem);
+        return CompCtx_.HolderFactory.Create<TIterator>(CompCtx_, List_.GetListIterator(), Item_, NewItem_);
     }
 
-    TComputationContext& CompCtx;
-    const NUdf::TUnboxedValue List;
-    IComputationExternalNode* const Item;
-    IComputationNode* const NewItem;
+    TComputationContext& CompCtx_;
+    const NUdf::TUnboxedValue List_;
+    IComputationExternalNode* const Item_;
+    IComputationNode* const NewItem_;
 };
 
 template <bool IsNewStream>
-class TStreamValue : public TComputationValue<TStreamValue<IsNewStream>> {
+class TStreamValue: public TComputationValue<TStreamValue<IsNewStream>> {
 public:
     using TBase = TComputationValue<TStreamValue<IsNewStream>>;
 
     TStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, NUdf::TUnboxedValue&& stream, IComputationExternalNode* item, IComputationNode* newItem)
         : TBase(memInfo)
-        , CompCtx(compCtx)
-        , Stream(std::move(stream))
-        , Item(item)
-        , NewItem(newItem)
-    {}
+        , CompCtx_(compCtx)
+        , Stream_(std::move(stream))
+        , Item_(item)
+        , NewItem_(newItem)
+    {
+    }
 
 private:
     ui32 GetTraverseCount() const override {
@@ -1099,7 +1196,7 @@ private:
 
     NUdf::TUnboxedValue GetTraverseItem(ui32 index) const override {
         Y_UNUSED(index);
-        return Stream;
+        return Stream_;
     }
 
     NUdf::TUnboxedValue Save() const override {
@@ -1111,13 +1208,15 @@ private:
     }
 
     NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) final {
-        for (NUdf::TUnboxedValue current = std::move(Current);; current.Clear()) {
+        for (NUdf::TUnboxedValue current = std::move(Current_);; current.Clear()) {
             if (!current) {
-                const auto status = Stream.Fetch(Item->RefValue(CompCtx));
+                NYql::NUdf::TUnboxedValue fetchResult;
+                const auto status = Stream_.Fetch(fetchResult);
                 if (NUdf::EFetchStatus::Ok != status) {
                     return status;
                 }
-                current = IsNewStream ? NewItem->GetValue(CompCtx) : NewItem->GetValue(CompCtx).GetListIterator();
+                Item_->SetValue(CompCtx_, std::move(fetchResult));
+                current = IsNewStream ? NewItem_->GetValue(CompCtx_) : NewItem_->GetValue(CompCtx_).GetListIterator();
             }
 
             auto status = NUdf::EFetchStatus::Ok;
@@ -1132,48 +1231,52 @@ private:
                 }
             }
 
-            Current = std::move(current);
+            Current_ = std::move(current);
             return status;
         }
     }
 
 private:
-    TComputationContext& CompCtx;
-    const NUdf::TUnboxedValue Stream;
-    IComputationExternalNode* const Item;
-    IComputationNode* const NewItem;
+    TComputationContext& CompCtx_;
+    const NUdf::TUnboxedValue Stream_;
+    IComputationExternalNode* const Item_;
+    IComputationNode* const NewItem_;
 
-    NUdf::TUnboxedValue Current;
+    NUdf::TUnboxedValue Current_;
 };
 
 template <bool IsInputStream, bool IsMultiRowPerItem, bool ResultContainerOpt>
 class TBaseFlatMapWrapper {
 protected:
-     TBaseFlatMapWrapper(IComputationNode* list, IComputationExternalNode* item, IComputationNode* newItem)
-        : List(list), Item(item), NewItem(newItem)
-    {}
+    TBaseFlatMapWrapper(IComputationNode* list, IComputationExternalNode* item, IComputationNode* newItem)
+        : List_(list)
+        , Item_(item)
+        , NewItem_(newItem)
+    {
+    }
 
 #ifndef MKQL_DISABLE_CODEGEN
     using TCodegenValue = std::conditional_t<IsInputStream,
-        typename std::conditional_t<IsMultiRowPerItem, TStreamCodegenStatefulValue, TStreamCodegenValueStateless>,
-        typename std::conditional_t<IsMultiRowPerItem, TCustomListCodegenStatefulValue, TCustomListCodegenValue>>;
+                                             typename std::conditional_t<IsMultiRowPerItem, TStreamCodegenStatefulValue, TStreamCodegenValueStateless>,
+                                             typename std::conditional_t<IsMultiRowPerItem, TCustomListCodegenStatefulValue, TCustomListCodegenValue>>;
 
     Function* GenerateSimpleMapper(NYql::NCodegen::ICodegen& codegen, const TString& name) const {
         auto& module = codegen.GetModule();
         auto& context = codegen.GetContext();
 
-        const auto codegenItem = dynamic_cast<ICodegeneratorExternalNode*>(Item);
+        const auto codegenItem = dynamic_cast<ICodegeneratorExternalNode*>(Item_);
 
         MKQL_ENSURE(codegenItem, "Item must be codegenerator node.");
 
-        if (const auto f = module.getFunction(name.c_str()))
+        if (const auto f = module.getFunction(name.c_str())) {
             return f;
+        }
 
         const auto valueType = Type::getInt128Ty(context);
         const auto containerType = static_cast<Type*>(valueType);
         const auto contextType = GetCompContextType(context);
         const auto statusType = IsInputStream ? Type::getInt32Ty(context) : Type::getInt1Ty(context);
-        const auto funcType = FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, PointerType::getUnqual(valueType)}, false);
+        const auto funcType = FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, PointerType::getUnqual(valueType)}, /*isVarArg=*/false);
 
         TCodegenContext ctx(codegen);
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
@@ -1199,19 +1302,15 @@ protected:
         BranchInst::Create(loop, block);
         block = loop;
 
-        const auto itemPtr = codegenItem->CreateRefValue(ctx, block);
-        const auto status = IsInputStream ?
-            CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Fetch>(statusType, container, codegen, block, itemPtr):
-            CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Next>(statusType, container, codegen, block, itemPtr);
-
-        const auto icmp = IsInputStream ?
-            CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, status, ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Ok)), "cond", block):
-            status;
+        const auto [status, itemPtr] = RefValueWithCallResult(codegenItem, ctx, block, [&](Value* itemPtr) {
+            return IsInputStream ? CallBoxedValueFetch(container, ctx, block, itemPtr) : CallBoxedValueNext(container, ctx, block, itemPtr);
+        });
+        const auto icmp = IsInputStream ? CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, status, ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Ok)), "cond", block) : status;
 
         BranchInst::Create(good, done, icmp, block);
         block = good;
 
-        const auto resItem = GetNodeValue(NewItem, ctx, block);
+        const auto resItem = GetNodeValue(NewItem_, ctx, block);
 
         BranchInst::Create(loop, pass, IsEmpty(resItem, block, context), block);
 
@@ -1220,7 +1319,7 @@ protected:
         SafeUnRefUnboxedOne(valuePtr, ctx, block);
         const auto getOpt = GetOptionalValue(context, resItem, block);
         new StoreInst(getOpt, valuePtr, block);
-        ValueAddRef(NewItem->GetRepresentation(), valuePtr, ctx, block);
+        ValueAddRef(NewItem_->GetRepresentation(), valuePtr, ctx, block);
 
         BranchInst::Create(done, block);
 
@@ -1233,19 +1332,20 @@ protected:
         auto& module = codegen.GetModule();
         auto& context = codegen.GetContext();
 
-        const auto codegenItem = dynamic_cast<ICodegeneratorExternalNode*>(Item);
+        const auto codegenItem = dynamic_cast<ICodegeneratorExternalNode*>(Item_);
 
         MKQL_ENSURE(codegenItem, "Item must be codegenerator node.");
 
-        if (const auto f = module.getFunction(name.c_str()))
+        if (const auto f = module.getFunction(name.c_str())) {
             return f;
+        }
 
         const auto valueType = Type::getInt128Ty(context);
         const auto containerType = static_cast<Type*>(valueType);
         const auto contextType = GetCompContextType(context);
         const auto statusType = IsInputStream ? Type::getInt32Ty(context) : Type::getInt1Ty(context);
         const auto stateType = ResultContainerOpt ? Type::getInt32Ty(context) : Type::getInt1Ty(context);
-        const auto funcType = FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, PointerType::getUnqual(valueType), PointerType::getUnqual(valueType)}, false);
+        const auto funcType = FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, PointerType::getUnqual(valueType), PointerType::getUnqual(valueType)}, /*isVarArg=*/false);
 
         TCodegenContext ctx(codegen);
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
@@ -1283,25 +1383,23 @@ protected:
 
         block = next;
 
-        const auto itemPtr = codegenItem->CreateRefValue(ctx, block);
-        const auto status = IsInputStream ?
-            CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Fetch>(statusType, container, codegen, block, itemPtr):
-            CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Next>(statusType, container, codegen, block, itemPtr);
+        const auto [status, itemPtr] = RefValueWithCallResult(codegenItem, ctx, block, [&](Value* itemPtr) {
+            return IsInputStream ? CallBoxedValueFetch(container, ctx, block, itemPtr) : CallBoxedValueNext(container, ctx, block, itemPtr);
+        });
 
-        const auto icmp = IsInputStream ?
-            CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, status, ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Ok)), "cond", block):
-            status;
+        const auto icmp = IsInputStream ? CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, status, ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Ok)), "cond", block) : status;
 
         BranchInst::Create(good, done, icmp, block);
         block = good;
 
         if constexpr (ResultContainerOpt) {
-            GetNodeValue(currentArg, NewItem, ctx, block);
+            GetNodeValue(currentArg, NewItem_, ctx, block);
         } else {
-            const auto list = GetNodeValue(NewItem, ctx, block);
+            const auto list = GetNodeValue(NewItem_, ctx, block);
             CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::GetListIterator>(currentArg, list, codegen, block);
-            if (NewItem->IsTemporaryValue())
+            if (NewItem_->IsTemporaryValue()) {
                 CleanupBoxed(list, ctx, block);
+            }
         }
 
         const auto iter = new LoadInst(valueType, currentArg, "iter", block);
@@ -1310,13 +1408,9 @@ protected:
         BranchInst::Create(pass, block);
         block = pass;
 
-        const auto state = ResultContainerOpt ?
-            CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Fetch>(stateType, current, codegen, block, valuePtr):
-            CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Next>(stateType, current, codegen, block, valuePtr);
+        const auto state = ResultContainerOpt ? CallBoxedValueFetch(current, ctx, block, valuePtr) : CallBoxedValueNext(current, ctx, block, valuePtr);
 
-        const auto scmp = ResultContainerOpt ?
-            CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, state, ConstantInt::get(stateType, static_cast<ui32>(NUdf::EFetchStatus::Finish)), "scmp", block):
-            state;
+        const auto scmp = ResultContainerOpt ? CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, state, ConstantInt::get(stateType, static_cast<ui32>(NUdf::EFetchStatus::Finish)), "scmp", block) : state;
 
         BranchInst::Create(exit, cont, scmp, block);
 
@@ -1335,55 +1429,57 @@ protected:
     }
 
     using TFlatMapPtr = std::conditional_t<IsInputStream,
-        typename std::conditional_t<IsMultiRowPerItem, TStreamCodegenStatefulValue, TStreamCodegenValueStateless>::TFetchPtr,
-        typename std::conditional_t<IsMultiRowPerItem, TCustomListCodegenStatefulValue, TCustomListCodegenValue>::TNextPtr
-    >;
+                                           typename std::conditional_t<IsMultiRowPerItem, TStreamCodegenStatefulValue, TStreamCodegenValueStateless>::TFetchPtr,
+                                           typename std::conditional_t<IsMultiRowPerItem, TCustomListCodegenStatefulValue, TCustomListCodegenValue>::TNextPtr>;
 
-    Function* FlatMapFunc = nullptr;
+    Function* FlatMapFunc_ = nullptr;
 
-    TFlatMapPtr FlatMap = nullptr;
+    TFlatMapPtr FlatMap_ = nullptr;
 #endif
 
-    IComputationNode* const List;
-    IComputationExternalNode* const Item;
-    IComputationNode* const NewItem;
+    IComputationNode* const List_;
+    IComputationExternalNode* const Item_;
+    IComputationNode* const NewItem_;
 };
 
 template <bool IsMultiRowPerItem, bool ResultContainerOpt>
-class TStreamFlatMapWrapper : public TCustomValueCodegeneratorNode<TStreamFlatMapWrapper<IsMultiRowPerItem, ResultContainerOpt>>,
-    private TBaseFlatMapWrapper<true, IsMultiRowPerItem, ResultContainerOpt> {
-    typedef TBaseFlatMapWrapper<true, IsMultiRowPerItem, ResultContainerOpt> TBaseWrapper;
-    typedef TCustomValueCodegeneratorNode<TStreamFlatMapWrapper<IsMultiRowPerItem, ResultContainerOpt>> TBaseComputation;
+class TStreamFlatMapWrapper: public TCustomValueCodegeneratorNode<TStreamFlatMapWrapper<IsMultiRowPerItem, ResultContainerOpt>>,
+                             private TBaseFlatMapWrapper<true, IsMultiRowPerItem, ResultContainerOpt> {
+    using TBaseWrapper = TBaseFlatMapWrapper<true, IsMultiRowPerItem, ResultContainerOpt>;
+    using TBaseComputation = TCustomValueCodegeneratorNode<TStreamFlatMapWrapper<IsMultiRowPerItem, ResultContainerOpt>>;
+
 public:
     TStreamFlatMapWrapper(TComputationMutables& mutables, IComputationNode* list, IComputationExternalNode* item, IComputationNode* newItem)
-        : TBaseComputation(mutables), TBaseWrapper(list, item, newItem)
-    {}
+        : TBaseComputation(mutables)
+        , TBaseWrapper(list, item, newItem)
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
 #ifndef MKQL_DISABLE_CODEGEN
-        if (ctx.ExecuteLLVM && this->FlatMap)
-            return ctx.HolderFactory.Create<typename TBaseWrapper::TCodegenValue>(this->FlatMap, &ctx, this->List->GetValue(ctx));
+        if (ctx.ExecuteLLVM && this->FlatMap_) {
+            return ctx.HolderFactory.Create<typename TBaseWrapper::TCodegenValue>(this->FlatMap_, &ctx, this->List_->GetValue(ctx));
+        }
 #endif
-        return ctx.HolderFactory.Create<std::conditional_t<IsMultiRowPerItem, TStreamValue<ResultContainerOpt>, TSimpleStreamValue<ResultContainerOpt>>>(ctx, this->List->GetValue(ctx), this->Item, this->NewItem);
+        return ctx.HolderFactory.Create<std::conditional_t<IsMultiRowPerItem, TStreamValue<ResultContainerOpt>, TSimpleStreamValue<ResultContainerOpt>>>(ctx, this->List_->GetValue(ctx), this->Item_, this->NewItem_);
     }
 
 private:
     void RegisterDependencies() const final {
-        this->DependsOn(this->List);
-        this->Own(this->Item);
-        this->DependsOn(this->NewItem);
+        this->DependsOn(this->List_);
+        this->Own(this->Item_);
+        this->DependsOn(this->NewItem_);
     }
 #ifndef MKQL_DISABLE_CODEGEN
     void GenerateFunctions(NYql::NCodegen::ICodegen& codegen) final {
-        this->FlatMapFunc = IsMultiRowPerItem ?
-            this->GenerateMapper(codegen, TBaseComputation::MakeName("Fetch")):
-            this->GenerateSimpleMapper(codegen, TBaseComputation::MakeName("Fetch"));
-        codegen.ExportSymbol(this->FlatMapFunc);
+        this->FlatMapFunc_ = IsMultiRowPerItem ? this->GenerateMapper(codegen, TBaseComputation::MakeName("Fetch")) : this->GenerateSimpleMapper(codegen, TBaseComputation::MakeName("Fetch"));
+        codegen.ExportSymbol(this->FlatMapFunc_);
     }
 
     void FinalizeFunctions(NYql::NCodegen::ICodegen& codegen) final {
-        if (this->FlatMapFunc)
-            this->FlatMap = reinterpret_cast<typename TBaseWrapper::TFlatMapPtr>(codegen.GetPointerToFunction(this->FlatMapFunc));
+        if (this->FlatMapFunc_) {
+            this->FlatMap_ = reinterpret_cast<typename TBaseWrapper::TFlatMapPtr>(codegen.GetPointerToFunction(this->FlatMapFunc_));
+        }
     }
 #endif
 };
@@ -1393,33 +1489,36 @@ NUdf::TUnboxedValuePod* MyArrayAlloc(const ui64 size) {
     return TMKQLAllocator<NUdf::TUnboxedValuePod>::allocate(size);
 }
 
-void MyArrayFree(const NUdf::TUnboxedValuePod *const ptr, const ui64 size) noexcept {
+void MyArrayFree(const NUdf::TUnboxedValuePod* const ptr, const ui64 size) noexcept {
     TMKQLAllocator<NUdf::TUnboxedValuePod>::deallocate(ptr, size);
 }
 #endif
 template <bool IsMultiRowPerItem, bool ResultContainerOpt>
-class TListFlatMapWrapper : public TBothWaysCodegeneratorNode<TListFlatMapWrapper<IsMultiRowPerItem, ResultContainerOpt>>,
-    private TBaseFlatMapWrapper<false, IsMultiRowPerItem, ResultContainerOpt> {
-    typedef TBaseFlatMapWrapper<false, IsMultiRowPerItem, ResultContainerOpt> TBaseWrapper;
-    typedef TBothWaysCodegeneratorNode<TListFlatMapWrapper<IsMultiRowPerItem, ResultContainerOpt>> TBaseComputation;
+class TListFlatMapWrapper: public TBothWaysCodegeneratorNode<TListFlatMapWrapper<IsMultiRowPerItem, ResultContainerOpt>>,
+                           private TBaseFlatMapWrapper<false, IsMultiRowPerItem, ResultContainerOpt> {
+    using TBaseWrapper = TBaseFlatMapWrapper<false, IsMultiRowPerItem, ResultContainerOpt>;
+    using TBaseComputation = TBothWaysCodegeneratorNode<TListFlatMapWrapper<IsMultiRowPerItem, ResultContainerOpt>>;
     static constexpr size_t UseOnStack = 1ULL << 8ULL;
+
 public:
     TListFlatMapWrapper(TComputationMutables& mutables, IComputationNode* list, IComputationExternalNode* item, IComputationNode* newItem)
-        : TBaseComputation(mutables), TBaseWrapper(list, item, newItem)
-    {}
+        : TBaseComputation(mutables)
+        , TBaseWrapper(list, item, newItem)
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        auto list = this->List->GetValue(ctx);
+        auto list = this->List_->GetValue(ctx);
         if (const auto elements = list.GetElements()) {
             const auto size = list.GetListLength();
             TUnboxedValueVector values(size);
 
             auto it = values.begin();
-            std::for_each(elements, elements + size, [&] (NUdf::TUnboxedValue item) {
-                this->Item->SetValue(ctx, std::move(item));
-                *it = this->NewItem->GetValue(ctx);
+            std::for_each(elements, elements + size, [&](NUdf::TUnboxedValue item) {
+                this->Item_->SetValue(ctx, std::move(item));
+                *it = this->NewItem_->GetValue(ctx);
                 if (IsMultiRowPerItem || *it) {
-                    auto value = it->GetOptionalValueIf<!IsMultiRowPerItem && ResultContainerOpt>();
+                    auto value = it->GetOptionalValueIf < !IsMultiRowPerItem && ResultContainerOpt > ();
                     *it++ = value;
                 }
             });
@@ -1434,22 +1533,21 @@ public:
             return result;
         }
 
-
-        return ctx.HolderFactory.Create<std::conditional_t<IsMultiRowPerItem, TListValue<ResultContainerOpt>, TSimpleListValue<ResultContainerOpt>>>(ctx, std::move(list), this->Item, this->NewItem);
+        return ctx.HolderFactory.Create<std::conditional_t<IsMultiRowPerItem, TListValue<ResultContainerOpt>, TSimpleListValue<ResultContainerOpt>>>(ctx, std::move(list), this->Item_, this->NewItem_);
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
     NUdf::TUnboxedValuePod MakeLazyList(TComputationContext& ctx, const NUdf::TUnboxedValuePod value) const {
-        return ctx.HolderFactory.Create<typename TBaseWrapper::TCodegenValue>(this->FlatMap, &ctx, value);
+        return ctx.HolderFactory.Create<typename TBaseWrapper::TCodegenValue>(this->FlatMap_, &ctx, value);
     }
 
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
-        const auto codegenItem = dynamic_cast<ICodegeneratorExternalNode*>(this->Item);
+        const auto codegenItem = dynamic_cast<ICodegeneratorExternalNode*>(this->Item_);
         MKQL_ENSURE(codegenItem, "Item must be codegenerator node.");
 
-        const auto list = GetNodeValue(this->List, ctx, block);
+        const auto list = GetNodeValue(this->List_, ctx, block);
 
         const auto lazy = BasicBlock::Create(context, "lazy", ctx.Func);
         const auto hard = BasicBlock::Create(context, "hard", ctx.Func);
@@ -1484,9 +1582,7 @@ public:
                 block = smsk;
 
                 const auto arrayType = ArrayType::get(list->getType(), UseOnStack);
-                const auto array = *this->Stateless_ || ctx.AlwaysInline ?
-                    new AllocaInst(arrayType, 0U, "array", &ctx.Func->getEntryBlock().back()):
-                    new AllocaInst(arrayType, 0U, "array", block);
+                const auto array = *this->Stateless_ || ctx.AlwaysInline ? new AllocaInst(arrayType, 0U, "array", &ctx.Func->getEntryBlock().back()) : new AllocaInst(arrayType, 0U, "array", block);
                 const auto ptr = GetElementPtrInst::CreateInBounds(arrayType, array, {zeroSize, zeroSize}, "ptr", block);
 
                 vector->addIncoming(ptr, block);
@@ -1496,7 +1592,7 @@ public:
             {
                 block = hmsk;
 
-                const auto fnType = FunctionType::get(vector->getType(), {size->getType()}, false);
+                const auto fnType = FunctionType::get(vector->getType(), {size->getType()}, /*isVarArg=*/false);
                 const auto name = "MyArrayAlloc";
                 ctx.Codegen.AddGlobalMapping(name, reinterpret_cast<const void*>(&MyArrayAlloc));
                 const auto func = ctx.Codegen.GetModule().getOrInsertFunction(name, fnType);
@@ -1532,7 +1628,7 @@ public:
             const auto item = new LoadInst(list->getType(), src, "item", block);
             codegenItem->CreateSetValue(ctx, block, item);
             const auto dst = GetElementPtrInst::CreateInBounds(list->getType(), vector, {idx}, "dst", block);
-            GetNodeValue(dst, this->NewItem, ctx, block);
+            GetNodeValue(dst, this->NewItem_, ctx, block);
 
             const auto inc = BinaryOperator::CreateAdd(index, plusSize, "inc", block);
             index->addIncoming(inc, block);
@@ -1549,16 +1645,14 @@ public:
 
             block = stop;
 
-            if (this->List->IsTemporaryValue()) {
+            if (this->List_->IsTemporaryValue()) {
                 CleanupBoxed(list, ctx, block);
             }
 
             Value* res;
             if constexpr (!IsMultiRowPerItem) {
                 const auto newType = PointerType::getUnqual(list->getType());
-                const auto newPtr = *this->Stateless_ || ctx.AlwaysInline ?
-                    new AllocaInst(newType, 0U, "new_ptr", &ctx.Func->getEntryBlock().back()):
-                    new AllocaInst(newType, 0U, "new_ptr", block);
+                const auto newPtr = *this->Stateless_ || ctx.AlwaysInline ? new AllocaInst(newType, 0U, "new_ptr", &ctx.Func->getEntryBlock().back()) : new AllocaInst(newType, 0U, "new_ptr", block);
                 res = GenNewArray(ctx, idx, newPtr, block);
                 const auto target = new LoadInst(newType, newPtr, "target", block);
 
@@ -1567,18 +1661,13 @@ public:
                 const auto psrc = CastInst::Create(Instruction::BitCast, vector, pType, "psrc", block);
                 const auto bytes = BinaryOperator::CreateShl(idx, ConstantInt::get(idx->getType(), 4), "bytes", block);
 
-                const auto fnType = FunctionType::get(Type::getVoidTy(context), {pType, pType, bytes->getType(), Type::getInt1Ty(context)}, false);
+                const auto fnType = FunctionType::get(Type::getVoidTy(context), {pType, pType, bytes->getType(), Type::getInt1Ty(context)}, /*isVarArg=*/false);
                 const auto memcpyName = (LLVM_VERSION_MAJOR < 16) ? "llvm.memcpy.p0i8.p0i8.i64" : "llvm.memcpy.p0.p0.i64";
                 const auto func = ctx.Codegen.GetModule().getOrInsertFunction(memcpyName, fnType);
                 CallInst::Create(func, {pdst, psrc, bytes, ConstantInt::getFalse(context)}, "", block);
             } else {
                 const auto factory = ctx.GetFactory();
-
-                const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&THolderFactory::ExtendList<ResultContainerOpt>>());
-
-                const auto funType = FunctionType::get(list->getType(), {factory->getType(), vector->getType(), index->getType()}, false);
-                const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
-                res = CallInst::Create(funType, funcPtr, {factory, vector, index}, "res", block);
+                res = EmitFunctionCall<&THolderFactory::ExtendList<ResultContainerOpt>>(list->getType(), {factory, vector, index}, ctx, block);
             }
             map->addIncoming(res, block);
             BranchInst::Create(free, done, heap, block);
@@ -1586,7 +1675,7 @@ public:
             {
                 block = free;
 
-                const auto fnType = FunctionType::get(Type::getVoidTy(context), {vector->getType(), size->getType()}, false);
+                const auto fnType = FunctionType::get(Type::getVoidTy(context), {vector->getType(), size->getType()}, /*isVarArg=*/false);
                 const auto name = "MyArrayFree";
                 ctx.Codegen.AddGlobalMapping(name, reinterpret_cast<const void*>(&MyArrayFree));
                 const auto func = ctx.Codegen.GetModule().getOrInsertFunction(name, fnType);
@@ -1600,12 +1689,9 @@ public:
         {
             block = lazy;
 
-            const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TListFlatMapWrapper::MakeLazyList>());
             const auto ptrType = PointerType::getUnqual(StructType::get(context));
             const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
-            const auto funType = FunctionType::get(list->getType() , {self->getType(), ctx.Ctx->getType(), list->getType()}, false);
-            const auto doFuncPtr = CastInst::Create(Instruction::IntToPtr, doFunc, PointerType::getUnqual(funType), "function", block);
-            const auto value = CallInst::Create(funType, doFuncPtr, {self, ctx.Ctx, list}, "value", block);
+            const auto value = EmitFunctionCall<&TListFlatMapWrapper::MakeLazyList>(list->getType(), {self, ctx.Ctx, list}, ctx, block);
             map->addIncoming(value, block);
             BranchInst::Create(done, block);
         }
@@ -1616,33 +1702,33 @@ public:
 #endif
 private:
     void RegisterDependencies() const final {
-        this->DependsOn(this->List);
-        this->Own(this->Item);
-        this->DependsOn(this->NewItem);
+        this->DependsOn(this->List_);
+        this->Own(this->Item_);
+        this->DependsOn(this->NewItem_);
     }
 #ifndef MKQL_DISABLE_CODEGEN
     void GenerateFunctions(NYql::NCodegen::ICodegen& codegen) final {
         TMutableCodegeneratorRootNode<TListFlatMapWrapper>::GenerateFunctions(codegen);
-        this->FlatMapFunc = IsMultiRowPerItem ?
-            this->GenerateMapper(codegen, TBaseComputation::MakeName("Next")):
-            this->GenerateSimpleMapper(codegen, TBaseComputation::MakeName("Next"));
-        codegen.ExportSymbol(this->FlatMapFunc);
+        this->FlatMapFunc_ = IsMultiRowPerItem ? this->GenerateMapper(codegen, TBaseComputation::MakeName("Next")) : this->GenerateSimpleMapper(codegen, TBaseComputation::MakeName("Next"));
+        codegen.ExportSymbol(this->FlatMapFunc_);
     }
 
     void FinalizeFunctions(NYql::NCodegen::ICodegen& codegen) final {
         TMutableCodegeneratorRootNode<TListFlatMapWrapper>::FinalizeFunctions(codegen);
-        if (this->FlatMapFunc)
-            this->FlatMap = reinterpret_cast<typename TBaseWrapper::TFlatMapPtr>(codegen.GetPointerToFunction(this->FlatMapFunc));
+        if (this->FlatMapFunc_) {
+            this->FlatMap_ = reinterpret_cast<typename TBaseWrapper::TFlatMapPtr>(codegen.GetPointerToFunction(this->FlatMapFunc_));
+        }
     }
 #endif
 };
 
-}
+} // namespace
 
 IComputationNode* WrapFlatMap(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 3, "Expected 3 args");
 
-    const auto listType = callable.GetInput(0).GetStaticType();;
+    const auto listType = callable.GetInput(0).GetStaticType();
+    ;
     const auto newListType = callable.GetInput(2).GetStaticType();
 
     const auto type = callable.GetType()->GetReturnType();
@@ -1652,10 +1738,11 @@ IComputationNode* WrapFlatMap(TCallable& callable, const TComputationNodeFactory
     const auto kind = GetValueRepresentation(type);
     if (listType->IsFlow()) {
         if (newListType->IsFlow()) {
-            if (const auto wideOut = dynamic_cast<IComputationWideFlowNode*>(newItem))
+            if (const auto wideOut = dynamic_cast<IComputationWideFlowNode*>(newItem)) {
                 return new TFlowFlatMapWideWrapper(ctx.Mutables, list, itemArg, wideOut);
-            else
+            } else {
                 return new TFlowFlatMapFlowWrapper(ctx.Mutables, kind, list, itemArg, newItem);
+            }
         } else if (newListType->IsList()) {
             return new TFlowFlatMapWrapper<true, false>(ctx.Mutables, kind, list, itemArg, newItem);
         } else if (newListType->IsStream()) {
@@ -1681,10 +1768,11 @@ IComputationNode* WrapFlatMap(TCallable& callable, const TComputationNodeFactory
         }
     } else if (listType->IsList()) {
         if (newListType->IsFlow()) {
-            if (const auto wideOut = dynamic_cast<IComputationWideFlowNode*>(newItem))
+            if (const auto wideOut = dynamic_cast<IComputationWideFlowNode*>(newItem)) {
                 return new TListFlatMapWideWrapper(ctx.Mutables, list, itemArg, wideOut);
-            else
+            } else {
                 return new TListFlatMapFlowWrapper(ctx.Mutables, kind, list, itemArg, newItem);
+            }
         } else if (newListType->IsList()) {
             return new TListFlatMapWrapper<true, false>(ctx.Mutables, list, itemArg, newItem);
         } else if (newListType->IsStream()) {
@@ -1712,7 +1800,7 @@ IComputationNode* WrapNarrowFlatMap(TCallable& callable, const TComputationNodeF
 
     TComputationExternalNodePtrVector args(width, nullptr);
     ui32 index = 0U;
-    std::generate(args.begin(), args.end(), [&](){ return LocateExternalNode(ctx.NodeLocator, callable, ++index); });
+    std::generate(args.begin(), args.end(), [&]() { return LocateExternalNode(ctx.NodeLocator, callable, ++index); });
 
     const auto newListType = callable.GetInput(last).GetStaticType();
     const auto kind = GetValueRepresentation(callable.GetType()->GetReturnType());
@@ -1735,5 +1823,4 @@ IComputationNode* WrapNarrowFlatMap(TCallable& callable, const TComputationNodeF
     THROW yexception() << "Expected wide flow.";
 }
 
-}
-}
+} // namespace NKikimr::NMiniKQL

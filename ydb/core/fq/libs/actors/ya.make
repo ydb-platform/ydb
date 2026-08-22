@@ -18,8 +18,6 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/actors/core
-    ydb/library/actors/interconnect
     library/cpp/json/yson
     library/cpp/monlib/dynamic_counters
     library/cpp/random_provider
@@ -29,7 +27,6 @@ PEERDIR(
     library/cpp/yson
     library/cpp/yson/node
     ydb/core/base
-    ydb/core/fq/libs/actors/logging
     ydb/core/fq/libs/checkpointing
     ydb/core/fq/libs/checkpointing_common
     ydb/core/fq/libs/common
@@ -48,24 +45,15 @@ PEERDIR(
     ydb/core/fq/libs/result_formatter
     ydb/core/fq/libs/shared_resources
     ydb/core/fq/libs/signer
-    ydb/core/kqp/federated_query
+    ydb/core/kqp/proxy_service/script_executions_utils
     ydb/core/protos
     ydb/core/util
+    ydb/library/actors/core
+    ydb/library/actors/interconnect
     ydb/library/mkql_proto
     ydb/library/security
-    yql/essentials/ast
-    yql/essentials/core/facade
-    yql/essentials/core/services/mounts
-    yql/essentials/core/dq_integration/transform
-    yql/essentials/minikql/comp_nodes
-    yql/essentials/providers/common/codec
-    yql/essentials/providers/common/comp_nodes
     ydb/library/yql/providers/common/db_id_async_resolver
-    yql/essentials/providers/common/metrics
-    yql/essentials/providers/common/provider
-    yql/essentials/providers/common/schema/mkql
     ydb/library/yql/providers/common/token_accessor/client
-    yql/essentials/providers/common/udf_resolve
     ydb/library/yql/providers/dq/actors
     ydb/library/yql/providers/dq/common
     ydb/library/yql/providers/dq/counters
@@ -75,29 +63,37 @@ PEERDIR(
     ydb/library/yql/providers/generic/connector/libcpp
     ydb/library/yql/providers/generic/provider
     ydb/library/yql/providers/pq/cm_client
+    ydb/library/yql/providers/pq/gateway/abstract
     ydb/library/yql/providers/pq/provider
     ydb/library/yql/providers/pq/task_meta
     ydb/library/yql/providers/s3/actors_factory
     ydb/library/yql/providers/s3/provider
-    yql/essentials/public/issue
-    yql/essentials/public/issue/protos
-    yql/essentials/sql/settings
-    yql/essentials/utils
     ydb/library/yql/utils/actor_log
     ydb/public/api/protos
     ydb/public/lib/fq
     ydb/public/sdk/cpp/src/client/query
     ydb/public/sdk/cpp/src/client/operation
     ydb/public/sdk/cpp/src/client/table
+    yql/essentials/ast
+    yql/essentials/core/dq_integration/transform
+    yql/essentials/core/facade
+    yql/essentials/core/services/mounts
+    yql/essentials/minikql/comp_nodes
+    yql/essentials/providers/common/codec
+    yql/essentials/providers/common/comp_nodes
+    yql/essentials/providers/common/metrics
+    yql/essentials/providers/common/provider
+    yql/essentials/providers/common/schema/mkql
+    yql/essentials/providers/common/udf_resolve
+    yql/essentials/public/issue
+    yql/essentials/public/issue/protos
+    yql/essentials/sql/settings
+    yql/essentials/utils
 )
 
 YQL_LAST_ABI_VERSION()
 
 END()
-
-RECURSE(
-    logging
-)
 
 RECURSE_FOR_TESTS(
     ut

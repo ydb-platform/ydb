@@ -24,16 +24,18 @@ public:
             {T::CurrentAvailableSize::ColumnId, {E::kCurrentAvailableSizeFieldNumber}},
             {T::AvailableGroupsToCreate::ColumnId, {E::kAvailableGroupsToCreateFieldNumber}},
             {T::AvailableSizeToCreate::ColumnId, {E::kAvailableSizeToCreateFieldNumber}},
+            {T::ImmediateGroupsToCreate::ColumnId, {E::kImmediateGroupsToCreateFieldNumber}},
+            {T::ImmediateSizeToCreate::ColumnId, {E::kImmediateSizeToCreateFieldNumber}},
         };
         return fieldMap;
     }
 };
 
 THolder<NActors::IActor> CreateStorageStatsScan(const NActors::TActorId& ownerId, ui32 scanId,
-    const NKikimrSysView::TSysViewDescription& sysViewInfo, const TTableRange& tableRange,
-    const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
+    const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
+    const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
 {
-    return MakeHolder<TStorageStatsScan>(ownerId, scanId, sysViewInfo, tableRange, columns);
+    return MakeHolder<TStorageStatsScan>(ownerId, scanId, database, sysViewInfo, tableRange, columns);
 }
 
 } // NKikimr::NSysView

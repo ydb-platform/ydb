@@ -8,6 +8,7 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/containers/cow_string
     library/cpp/yt/assert
     library/cpp/yt/coding
     library/cpp/yt/exception

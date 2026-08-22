@@ -1,4 +1,3 @@
-/* postgres can not */
 $a = (
     SELECT
         NULL AS a,

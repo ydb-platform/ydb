@@ -45,6 +45,18 @@ message TRecursiveType {
     repeated TRecursiveType types = 3;
 }
 
+message TComplexObject {
+    bool sens_bool = 1 [(Ydb.sensitive) = true];
+    int32 sens_int = 2 [(Ydb.sensitive) = true];
+    double sens_double = 3 [(Ydb.sensitive) = true];
+    string sens_string = 4 [(Ydb.sensitive) = true];
+    repeated string arr1 = 5 [(Ydb.sensitive) = true];
+    repeated string arr2 = 6 [(Ydb.sensitive) = true];
+    map<string, string> map1 = 7 [(Ydb.sensitive) = true];
+    optional TTestSubProto map2 = 8 [(Ydb.sensitive) = true];
+    map<string, string> map3 = 9 [(Ydb.sensitive) = true];
+}
+
 message TInnerObject2 {
     repeated string a = 1;
 }

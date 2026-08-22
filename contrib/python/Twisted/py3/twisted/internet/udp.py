@@ -19,7 +19,6 @@ from __future__ import annotations
 # System Imports
 import socket
 import warnings
-from typing import Optional
 
 from zope.interface import implementer
 
@@ -87,7 +86,7 @@ class Port(base.BasePort):
     socketType: socket.SocketKind = socket.SOCK_DGRAM
     maxThroughput = 256 * 1024
 
-    _realPortNumber: Optional[int] = None
+    _realPortNumber: int | None = None
     _preexistingSocket = None
 
     def __init__(self, port, proto, interface="", maxPacketSize=8192, reactor=None):
@@ -466,7 +465,7 @@ class MulticastPort(MulticastMixin, Port):
     def createInternetSocket(self) -> socket.socket:
         """
         Override L{Port.createInternetSocket} to configure the socket to honor
-        the C{listenMultiple} argument to L{IReactorMulticast.listenMultiple}.
+        the C{listenMultiple} argument to L{IReactorMulticast.listenMulticast}.
         """
         skt = Port.createInternetSocket(self)
         if self.listenMultiple:

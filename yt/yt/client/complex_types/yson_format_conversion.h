@@ -23,12 +23,12 @@ namespace NYT::NComplexTypes {
 //   {field0=v0; field1=v1}
 //
 //
-// Consider Struct({{"field0", type0}, {"field1", type1}, ...})
+// Consider VariantStruct({{"field0", type0}, {"field1", type1}, ...})
 // Its positional representation might be:
 //   [1, v1]
 //
 // Named representation of the same structure:
-//   [field1; v1]
+//   ["field1"; v1]
 //
 // Functions in this file create convertors between these two representations.
 

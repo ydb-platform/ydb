@@ -1,0 +1,34 @@
+# Ruler Configuration for YDB
+# See https://ai.intellectronica.net/ruler for documentation.
+
+# --- Agent Specific Configurations ---
+# All agents will receive instructions from concatenated .ruler/*.md files
+
+[agents.claude]
+enabled = true
+output_path = "AGENTS.md"
+
+[agents.cursor]
+enabled = true
+output_path = ".cursor/rules"
+
+[agents.copilot]
+enabled = true
+output_path = ".github/copilot-instructions.md"
+
+[agents.jetbrains-ai]
+enabled = true
+output_path = ".idea/ai.xml"
+
+[agents.cline]
+enabled = true
+output_path = ".cline/rules"
+
+[agents.windsurf]
+enabled = true
+output_path = ".windsurf/rules"
+
+[agents.aider]
+enabled = true
+output_path_instructions = "AGENTS.md"
+output_path_config = ".aider.conf.yml"

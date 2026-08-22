@@ -21,9 +21,16 @@ import string
 import threading
 from collections import defaultdict
 
-from botocore.exceptions import IncompleteReadError, ReadTimeoutError
+from botocore.exceptions import (
+    IncompleteReadError,
+    ReadTimeoutError,
+    ResponseStreamingError,
+)
+from botocore.httpchecksum import DEFAULT_CHECKSUM_ALGORITHM, AwsChunkedWrapper
+from botocore.utils import is_s3express_bucket
 
 from s3transfer.compat import SOCKET_ERROR, fallocate, rename_file
+from s3transfer.constants import FULL_OBJECT_CHECKSUM_ARGS
 
 MAX_PARTS = 10000
 # The maximum file size you can upload via S3 per request.
@@ -39,6 +46,7 @@ S3_RETRYABLE_DOWNLOAD_ERRORS = (
     SOCKET_ERROR,
     ReadTimeoutError,
     IncompleteReadError,
+    ResponseStreamingError,
 )
 
 
@@ -54,10 +62,12 @@ def signal_not_transferring(request, operation_name, **kwargs):
 
 
 def signal_transferring(request, operation_name, **kwargs):
-    if operation_name in ['PutObject', 'UploadPart'] and hasattr(
-        request.body, 'signal_transferring'
-    ):
-        request.body.signal_transferring()
+    if operation_name in ['PutObject', 'UploadPart']:
+        body = request.body
+        if isinstance(body, AwsChunkedWrapper):
+            body = getattr(body, '_raw', None)
+        if hasattr(body, 'signal_transferring'):
+            body.signal_transferring()
 
 
 def calculate_num_parts(size, part_size):
@@ -139,20 +149,27 @@ def invoke_progress_callbacks(callbacks, bytes_transferred):
             callback(bytes_transferred=bytes_transferred)
 
 
-def get_filtered_dict(original_dict, whitelisted_keys):
-    """Gets a dictionary filtered by whitelisted keys
+def get_filtered_dict(
+    original_dict, whitelisted_keys=None, blocklisted_keys=None
+):
+    """Gets a dictionary filtered by whitelisted and blocklisted keys.
 
     :param original_dict: The original dictionary of arguments to source keys
         and values.
     :param whitelisted_key: A list of keys to include in the filtered
         dictionary.
+    :param blocklisted_key: A list of keys to exclude in the filtered
+        dictionary.
 
     :returns: A dictionary containing key/values from the original dictionary
-        whose key was included in the whitelist
+        whose key was included in the whitelist and/or not included in the
+        blocklist.
     """
     filtered_dict = {}
     for key, value in original_dict.items():
-        if key in whitelisted_keys:
+        if (whitelisted_keys and key in whitelisted_keys) or (
+            blocklisted_keys and key not in blocklisted_keys
+        ):
             filtered_dict[key] = value
     return filtered_dict
 
@@ -182,9 +199,7 @@ class FunctionContainer:
         self._kwargs = kwargs
 
     def __repr__(self):
-        return 'Function: {} with args {} and kwargs {}'.format(
-            self._func, self._args, self._kwargs
-        )
+        return f'Function: {self._func} with args {self._args} and kwargs {self._kwargs}'
 
     def __call__(self):
         return self._func(*self._args, **self._kwargs)
@@ -627,7 +642,7 @@ class TaskSemaphore:
         """
         logger.debug("Acquiring %s", tag)
         if not self._semaphore.acquire(blocking):
-            raise NoResourcesAvailable("Cannot acquire tag '%s'" % tag)
+            raise NoResourcesAvailable(f"Cannot acquire tag '{tag}'")
 
     def release(self, tag, acquire_token):
         """Release the semaphore
@@ -685,7 +700,7 @@ class SlidingWindowSemaphore(TaskSemaphore):
         try:
             if self._count == 0:
                 if not blocking:
-                    raise NoResourcesAvailable("Cannot acquire tag '%s'" % tag)
+                    raise NoResourcesAvailable(f"Cannot acquire tag '{tag}'")
                 else:
                     while self._count == 0:
                         self._condition.wait()
@@ -707,7 +722,7 @@ class SlidingWindowSemaphore(TaskSemaphore):
         self._condition.acquire()
         try:
             if tag not in self._tag_sequences:
-                raise ValueError("Attempted to release unknown tag: %s" % tag)
+                raise ValueError(f"Attempted to release unknown tag: {tag}")
             max_sequence = self._tag_sequences[tag]
             if self._lowest_sequence[tag] == sequence_number:
                 # We can immediately process this request and free up
@@ -734,7 +749,7 @@ class SlidingWindowSemaphore(TaskSemaphore):
             else:
                 raise ValueError(
                     "Attempted to release unknown sequence number "
-                    "%s for tag: %s" % (sequence_number, tag)
+                    f"{sequence_number} for tag: {tag}"
                 )
         finally:
             self._condition.release()
@@ -772,13 +787,13 @@ class ChunksizeAdjuster:
         if current_chunksize > self.max_size:
             logger.debug(
                 "Chunksize greater than maximum chunksize. "
-                "Setting to %s from %s." % (self.max_size, current_chunksize)
+                f"Setting to {self.max_size} from {current_chunksize}."
             )
             return self.max_size
         elif current_chunksize < self.min_size:
             logger.debug(
                 "Chunksize less than minimum chunksize. "
-                "Setting to %s from %s." % (self.min_size, current_chunksize)
+                f"Setting to {self.min_size} from {current_chunksize}."
             )
             return self.min_size
         else:
@@ -795,8 +810,39 @@ class ChunksizeAdjuster:
         if chunksize != current_chunksize:
             logger.debug(
                 "Chunksize would result in the number of parts exceeding the "
-                "maximum. Setting to %s from %s."
-                % (chunksize, current_chunksize)
+                f"maximum. Setting to {chunksize} from {current_chunksize}."
             )
 
         return chunksize
+
+
+def add_s3express_defaults(bucket, extra_args):
+    """
+    This function has been deprecated, but is kept for backwards compatibility.
+    This function is subject to removal in a future release.
+    """
+    if is_s3express_bucket(bucket) and "ChecksumAlgorithm" not in extra_args:
+        # Default Transfer Operations to S3Express to use CRC32
+        extra_args["ChecksumAlgorithm"] = "crc32"
+
+
+def set_default_checksum_algorithm(extra_args):
+    """Set the default algorithm to CRC32 if not specified by the user."""
+    if any(checksum in extra_args for checksum in FULL_OBJECT_CHECKSUM_ARGS):
+        return
+    extra_args.setdefault("ChecksumAlgorithm", DEFAULT_CHECKSUM_ALGORITHM)
+
+
+# NOTE: The following interfaces are considered private and are subject
+# to abrupt breaking changes. Please do not use them directly.
+
+try:
+    from botocore.utils import create_nested_client as create_client
+except ImportError:
+
+    def create_client(session, *args, **kwargs):
+        return session.create_client(*args, **kwargs)
+
+
+def create_nested_client(session, service_name, **kwargs):
+    return create_client(session, service_name, **kwargs)

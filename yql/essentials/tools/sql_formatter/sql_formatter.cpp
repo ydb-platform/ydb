@@ -11,7 +11,7 @@
 
 #include <util/stream/file.h>
 
-int RunFormat(int argc, char* argv[]) {
+int RunFormat(int argc, char** argv) {
     NLastGetopt::TOpts opts = NLastGetopt::TOpts::Default();
 
     TString outFileName;
@@ -24,12 +24,11 @@ int RunFormat(int argc, char* argv[]) {
     opts.AddLongOption('p', "print-query", "print given query before parsing").NoArgument();
     opts.AddLongOption('f', "obfuscate", "obfuscate query").NoArgument();
     opts.AddLongOption("ansi-lexer", "use ansi lexer").NoArgument();
-    opts.AddLongOption("langver", "Set current language version").Optional().RequiredArgument("VER")
-        .Handler1T<TString>([&](const TString& str) {
-            if (!NYql::ParseLangVersion(str, langver)) {
-                throw yexception() << "Failed to parse language version: " << str;
-            }
-        });
+    opts.AddLongOption("langver", "Set current language version").Optional().RequiredArgument("VER").Handler1T<TString>([&](const TString& str) {
+        if (!NYql::ParseLangVersion(str, langver)) {
+            throw yexception() << "Failed to parse language version: " << str;
+        }
+    });
 
     opts.SetFreeArgsNum(0);
     opts.AddHelpOption();
@@ -58,23 +57,34 @@ int RunFormat(int argc, char* argv[]) {
     if (res.Has("print-query")) {
         out << queryString << Endl;
     }
+
     google::protobuf::Arena arena;
     NSQLTranslation::TTranslationSettings settings;
     settings.LangVer = langver;
     settings.Arena = &arena;
     settings.AnsiLexer = res.Has("ansi-lexer");
-    NSQLTranslationV1::TLexers lexers;
-    lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
-    lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
-    NSQLTranslationV1::TParsers parsers;
-    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
-    parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
+
+    NSQLTranslationV1::TLexers lexers = {
+        .Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory(),
+        .Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory(),
+    };
+
+    NSQLTranslationV1::TParsers parsers = {
+        .Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(
+            /*isAmbiguityError=*/false,
+            /*isAmbiguityDebugging=*/false,
+            settings.MaxParseTreeDepth),
+        .Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory(
+            /*isAmbiguityError=*/false,
+            /*isAmbiguityDebugging=*/false,
+            settings.MaxParseTreeDepth),
+    };
+
     auto formatter = NSQLFormat::MakeSqlFormatter(lexers, parsers, settings);
     TString frm_query;
     TString error;
     NYql::TIssues issues;
-    if (!formatter->Format(queryString, frm_query, issues, res.Has("obfuscate") ?
-        NSQLFormat::EFormatMode::Obfuscate : NSQLFormat::EFormatMode::Pretty)) {
+    if (!formatter->Format(queryString, frm_query, issues, res.Has("obfuscate") ? NSQLFormat::EFormatMode::Obfuscate : NSQLFormat::EFormatMode::Pretty)) {
         ++errors;
         Cerr << "Error formatting query: " << issues.ToString() << Endl;
     } else {
@@ -84,7 +94,7 @@ int RunFormat(int argc, char* argv[]) {
     return errors;
 }
 
-int main(int argc, char* argv[]) {
+int main(int argc, char** argv) {
     try {
         return RunFormat(argc, argv);
     } catch (const yexception& e) {

@@ -2,7 +2,6 @@
 
 #include <util/generic/scope.h>
 
-#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/providers/common/schema/mkql/yql_mkql_schema.h>
 
@@ -10,16 +9,18 @@ namespace NFq::NRowDispatcher {
 
 //// TTypeParser
 
-TTypeParser::TTypeParser(const TSourceLocation& location, const TCountersDesc& counters)
+TTypeParser::TTypeParser(const TSourceLocation& location, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, const TCountersDesc& counters)
     : Alloc(location, NKikimr::TAlignedPagePoolCounters(counters.CountersRoot, counters.MkqlCountersName), true, false)
-    , FunctionRegistry(NKikimr::NMiniKQL::CreateFunctionRegistry(&PrintBackTrace, NKikimr::NMiniKQL::CreateBuiltinRegistry(), false, {}))
+    , FunctionRegistry(functionRegistry)
     , TypeEnv(std::make_unique<NKikimr::NMiniKQL::TTypeEnvironment>(Alloc))
     , ProgramBuilder(std::make_unique<NKikimr::NMiniKQL::TProgramBuilder>(*TypeEnv, *FunctionRegistry))
+    , MemInfo("SharedReadingParser")
+    , HolderFactory(std::make_unique<NKikimr::NMiniKQL::THolderFactory>(Alloc.Ref(), MemInfo, functionRegistry))
 {}
 
 TTypeParser::~TTypeParser() {
     with_lock (Alloc) {
-        FunctionRegistry.Reset();
+        HolderFactory.reset();
         TypeEnv.reset();
         ProgramBuilder.reset();
     }
@@ -57,13 +58,18 @@ void TTopicParserBase::TStats::Clear() {
 
 //// TTopicParserBase
 
-TTopicParserBase::TTopicParserBase(IParsedDataConsumer::TPtr consumer, const TSourceLocation& location, const TCountersDesc& counters)
-    : TTypeParser(location, counters)
+TTopicParserBase::TTopicParserBase(IParsedDataConsumer::TPtr consumer, const TSourceLocation& location, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, const TCountersDesc& counters)
+    : TTypeParser(location, functionRegistry, counters)
     , Consumer(std::move(consumer))
 {}
 
 void TTopicParserBase::Refresh(bool force) {
     Y_UNUSED(force);
+}
+
+TStatus TTopicParserBase::ChangeConsumer(IParsedDataConsumer::TPtr consumer) {
+    Consumer = std::move(consumer);
+    return TStatus::Success();
 }
 
 void TTopicParserBase::FillStatistics(TFormatHandlerStatistic& statistic) {
@@ -108,20 +114,23 @@ void TTopicParserBase::ParseBuffer() {
 //// Functions
 
 NYql::NUdf::TUnboxedValue LockObject(NYql::NUdf::TUnboxedValue&& value) {
-    // All UnboxedValue's with type Boxed or String should be locked
-    // because after parsing they will be used under another MKQL allocator in purecalc filters
-
-    const i32 numberRefs = value.LockRef();
-
-    // -1 - value is embbeded or empty, otherwise value should have exactly one ref
-    Y_ENSURE(numberRefs == -1 || numberRefs == 1);
-
-    return value;
+    // Object must be one of:
+    // 1) null (refs = -1)
+    // 2) embedded string/POD (refs = -1)
+    // 3) large string (refs = 1)
+    // 4a) dict as boxed: (refs = 1)
+    // 4b) (struct | tuple | list) as boxed -> direct array holder (refs = 1, except for special case: zero-length direct array holder points to special shared zero-length container)
+    Y_ABORT_UNLESS(value.RefCount() == -1 || value.RefCount() == 1 || (value.IsBoxed() && value.GetListLength() == 0));
+    // Note that GetListLength will trigger ABORT if called on non-List (i.e. Dict), so there are no much point in turning it into YQL_ENSURE/Y_VALIDATE.
+    // It is debatable if this should be Y_DEBUG_ABORT_UNLESS (if anything else keeps reference on our object, it must be outside of our code and will result in freeing-with-wrong-allocator, which is UB anyway, and better die early than later).
+    // It is debatable if it is NOT sufficient check for nested structures (but that check would be expensive and thus belong to DEBUG checks)
+    return std::move(value);
 }
 
 void ClearObject(NYql::NUdf::TUnboxedValue& value) {
-    // Value should be unlocked with same number of refs
-    value.UnlockRef(1);
+    // Every other reference to value must be cleared (except for special case - zero-length list)
+    Y_ABORT_UNLESS(value.RefCount() == -1 || value.RefCount() == 1 || (value.IsBoxed() && value.GetListLength() == 0));
+    // (again, using YQL_ENSURE/Y_VALIDATE pointless here)
     value.Clear();
 }
 
@@ -139,7 +148,7 @@ TString TruncateString(std::string_view rawString, size_t maxSize) {
     if (rawString.size() <= maxSize) {
         return TString(rawString);
     }
-    return TStringBuilder() << rawString.substr(0, maxSize) << " truncated...";
+    return TStringBuilder() << rawString.substr(0, maxSize) << " truncated (full length was " << rawString.size() << ")...";
 }
 
 }  // namespace NFq::NRowDispatcher

@@ -1,0 +1,5 @@
+use plato;
+pragma OrderedColumns;
+
+select * from Input order by key;
+

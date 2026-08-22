@@ -11,15 +11,12 @@
 #include <memory>
 #include <ydb/library/actors/core/harmonizer/harmonizer.h>
 #include <ydb/library/actors/actor_type/indexes.h>
-#include <ydb/library/actors/util/unordered_cache.h>
 #include <ydb/library/actors/util/threadparkpad.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include <library/cpp/threading/chunk_queue/queue.h>
 
 #include <util/system/mutex.h>
-
-#include <queue>
 
 namespace NActors {
 
@@ -133,6 +130,7 @@ namespace NActors {
         friend class TBasicExecutorPoolSanitizer;
         friend class TSharedExecutorPool;
 
+        NThreading::TPadded<std::atomic<ui64>> CheckToSleepWorkers = 0;
         NThreading::TPadded<std::atomic_bool> AllThreadsSleep = true;
         const ui64 DefaultSpinThresholdCycles;
         std::atomic<ui64> SpinThresholdCycles;
@@ -140,10 +138,8 @@ namespace NActors {
 
         TArrayHolder<NThreading::TPadded<TExecutorThreadCtx>> Threads;
         static_assert(sizeof(std::decay_t<decltype(Threads[0])>) == PLATFORM_CACHE_LINE);
-        TArrayHolder<NThreading::TPadded<std::queue<ui32>>> LocalQueues;
         TArrayHolder<TWaitingStats<ui64>> WaitingStats;
         TArrayHolder<TWaitingStats<double>> MovingWaitingStats;
-        std::atomic<ui16> LocalQueueSize;
 
         TArrayHolder<NSchedulerQueue::TReader> ScheduleReaders;
         TArrayHolder<NSchedulerQueue::TWriter> ScheduleWriters;
@@ -165,17 +161,16 @@ namespace NActors {
         std::atomic<float> SharedCpuQuota = 0.0;
         TMutex ChangeThreadsLock;
 
-        float MinThreadCount;
-        i16 MinFullThreadCount;
-        float MaxThreadCount;
-        i16 MaxFullThreadCount;
-        float DefaultThreadCount;
-        i16 DefaultFullThreadCount;
-        IHarmonizer *Harmonizer;
+        float MinThreadCount = 0.0;
+        i16 MinFullThreadCount = 0;
+        float MaxThreadCount = 0.0;
+        i16 MaxFullThreadCount = 0;
+        float DefaultThreadCount = 0.0;
+        i16 DefaultFullThreadCount = 0;
+        IHarmonizer *Harmonizer = nullptr;
         ui64 SoftProcessingDurationTs = 0;
         bool HasOwnSharedThread = false;
-        ui16 MaxLocalQueueSize = 0;
-        ui16 MinLocalQueueSize = 0;
+        bool SharedOnly = false;
 
         const i16 Priority = 0;
         const ui32 ActorSystemIndex = NActors::TActorTypeOperator::GetActorSystemIndex();
@@ -232,23 +227,15 @@ namespace NActors {
 
         void Initialize() override;
         TMailbox* GetReadyActivation(ui64 revolvingReadCounter) override;
-        TMailbox* GetReadyActivationCommon(ui64 revolvingReadCounter);
         TMailbox* GetReadyActivationShared(ui64 revolvingReadCounter);
         TMailbox* GetReadyActivationRingQueue(ui64 revolvingReadCounter);
-        TMailbox* GetReadyActivationLocalQueue(ui64 revolvingReadCounter);
 
         void Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) override;
         void Schedule(TMonotonic deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) override;
         void Schedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) override;
 
         void ScheduleActivationEx(TMailbox* mailbox, ui64 revolvingWriteCounter) override;
-        void ScheduleActivationExCommon(TMailbox* mailbox, ui64 revolvingWriteCounter, std::optional<TAtomic> semaphoreValue);
-        void ScheduleActivationExLocalQueue(TMailbox* mailbox, ui64 revolvingWriteCounter);
-
-        void SetLocalQueueSize(ui16 size);
-        ui16 GetLocalQueueSize() const;
-        ui16 GetMaxLocalQueueSize() const;
-        ui16 GetMinLocalQueueSize() const;
+        void ScheduleActivationExRingQueue(TMailbox* mailbox, ui64 revolvingWriteCounter, std::optional<TAtomic> semaphoreValue);
         void Prepare(TActorSystem* actorSystem, NSchedulerQueue::TReader** scheduleReaders, ui32* scheduleSz) override;
         void Start() override;
         void PrepareStop() override;
@@ -288,11 +275,13 @@ namespace NActors {
 
         ui64 TimePerMailboxTs() const final;
         ui32 EventsPerMailbox() const final;
+
+        bool IsSharedOnly() const;
     private:
         void AskToGoToSleep(bool *needToWait, bool *needToBlock);
 
         void WakeUpLoop(i16 currentThreadCount);
         bool WakeUpLoopShared();
-        
+
     };
 }

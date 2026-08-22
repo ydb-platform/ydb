@@ -5,7 +5,7 @@
 #include "schemeshard_impl.h"
 
 #include <ydb/core/base/subdomain.h>
-#include <ydb/core/persqueue/config/config.h>
+#include <ydb/core/persqueue/public/config.h>
 
 namespace {
 
@@ -245,6 +245,13 @@ public:
             return result;
         }
 
+        if (settings.HasTablesMetricsLevel()
+            && !CheckTablesMetricsLevel(settings.GetTablesMetricsLevel(), /* isRootDomain */ false, errStr)
+        ) {
+            result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+            return result;
+        }
+
         dstPath.MaterializeLeaf(owner);
         result->SetPathId(dstPath.Base()->PathId.LocalPathId);
 
@@ -307,6 +314,10 @@ public:
 
         if (settings.HasAuditSettings()) {
             alter->SetAuditSettings(settings.GetAuditSettings());
+        }
+
+        if (settings.HasTablesMetricsLevel()) {
+            alter->SetTablesMetricsLevel(settings.GetTablesMetricsLevel());
         }
 
         Y_ABORT_UNLESS(!context.SS->SubDomains.contains(newNode->PathId));

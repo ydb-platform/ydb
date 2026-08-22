@@ -146,10 +146,6 @@ Y_UNIT_TEST_SUITE(BlobPatching) {
         MakePatchingTest("mirror-3-dc");
     }
 
-    Y_UNIT_TEST(Mirror3) {
-        MakePatchingTest("mirror-3");
-    }
-
     Y_UNIT_TEST(Block42) {
         MakePatchingTest("block-4-2");
     }
@@ -165,10 +161,6 @@ Y_UNIT_TEST_SUITE(BlobPatching) {
 
     Y_UNIT_TEST(StressMirror3dc) {
         MakeStressPatchingTest("mirror-3-dc");
-    }
-
-    Y_UNIT_TEST(StressMirror3) {
-        MakeStressPatchingTest("mirror-3");
     }
 
     Y_UNIT_TEST(StressBlock42) {
@@ -400,7 +392,7 @@ Y_UNIT_TEST_SUITE(BlobPatching) {
             const ui32 canRestore = putBlobs.size() ? 50 : 0;
             const ui32 canPatch = putBlobs.size() ? 2000 : 0;
             const ui32 canWait = 100;
-            i32 w = RandomNumber(canStop + canStart + canPut + canPatch + canWait);
+            i32 w = RandomNumber(canStop + canStart + canPut + canRestore + canPatch + canWait);
             if ((w -= canStop) < 0) {
                 stopNode();
                 env.Sim(TDuration::Seconds(5));
@@ -501,4 +493,3 @@ Y_UNIT_TEST_SUITE(BlobPatching) {
         }
     }
 }
-

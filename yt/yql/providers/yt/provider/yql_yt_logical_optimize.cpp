@@ -6,6 +6,7 @@
 #include <yt/yql/providers/yt/opt/yql_yt_join.h>
 #include <yt/yql/providers/yt/opt/yql_yt_key_selector.h>
 #include <yt/yql/providers/yt/common/yql_configuration.h>
+#include <yql/essentials/providers/result/expr_nodes/yql_res_expr_nodes.h>
 #include <yql/essentials/providers/common/transform/yql_optimize.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/providers/common/codec/yql_codec_type_flags.h>
@@ -15,6 +16,7 @@
 #include <yql/essentials/core/yql_opt_window.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_opt_match_recognize.h>
+#include <yql/essentials/core/yql_sql_combine_expander.h>
 #include <yql/essentials/core/yql_join.h>
 #include <yql/essentials/core/yql_type_helpers.h>
 #include <yql/essentials/utils/log/log.h>
@@ -43,6 +45,7 @@ public:
         AddHandler(0, &TYtMap::Match, HNDL(DirectRow));
         AddHandler(0, Names({TYtReduce::CallableName(), TYtMapReduce::CallableName()}), HNDL(IsKeySwitch));
         AddHandler(0, &TCoLeft::Match, HNDL(TrimReadWorld));
+        AddHandler(1, &TCoRight::Match, HNDL(RightOverPersist));
         AddHandler(0, &TCoCalcOverWindowBase::Match, HNDL(CalcOverWindow));
         AddHandler(0, &TCoCalcOverWindowGroup::Match, HNDL(CalcOverWindow));
         AddHandler(0, &TCoSort::Match, HNDL(SortOverAlreadySorted<false>));
@@ -54,8 +57,11 @@ public:
         AddHandler(0, &TCoFlatMapBase::Match, HNDL(DirectRowInFlatMap));
         AddHandler(0, &TCoUnorderedBase::Match, HNDL(Unordered));
         AddHandler(0, &TCoAggregate::Match, HNDL(CountAggregate));
+        AddHandler(0, &TYtReadTable::Match, HNDL(TrimQlFilters));
         AddHandler(0, &TYtReadTable::Match, HNDL(ZeroSampleToZeroLimit));
         AddHandler(0, &TCoMatchRecognize::Match, HNDL(MatchRecognize));
+        AddHandler(0, &TResPull::Match, HNDL(TrimResPullWorld));
+        AddHandler(0, &TYtPublish::Match, HNDL(TrimPublishWorld));
 
         AddHandler(1, &TCoFilterNullMembers::Match, HNDL(FilterNullMemebers<TCoFilterNullMembers>));
         AddHandler(1, &TCoSkipNullMembers::Match, HNDL(FilterNullMemebers<TCoSkipNullMembers>));
@@ -74,13 +80,20 @@ public:
         AddHandler(1, &TCoExtendBase::Match, HNDL(ExtendOverSameMap));
         AddHandler(1, &TCoFlatMapBase::Match, HNDL(FlatMapOverExtend));
         AddHandler(1, &TCoTake::Match, HNDL(TakeOverExtend));
+        AddHandler(1, &TCoSqlCombine::Match, HNDL(SqlCombine));
 
         AddHandler(2, &TCoEquiJoin::Match, HNDL(ConvertToCommonTypeForForcedMergeJoin));
         AddHandler(2, &TCoShuffleByKeys::Match, HNDL(ShuffleByKeys));
+
+        AddHandler(3, &TCoExtractMembers::Match, HNDL(ExtractMembersOverMaterialize));
+        AddHandler(3, &TCoRight::Match, HNDL(ExtractMembersOverMaterializeMultiUsage));
 #undef HNDL
+
+        SetGlobal(3);
     }
 
 protected:
+
     TYtSection PushdownSectionColumns(TYtSection section, TExprContext& ctx, const TGetParents& getParents) const {
         if (HasNonEmptyKeyFilter(section)) {
             // wait until key filter values are calculated and pushed to Path/Ranges
@@ -88,7 +101,10 @@ protected:
         }
         bool hasNewPath = false;
         TVector<TExprBase> paths;
+
         const bool useNativeDescSort = State_->Configuration->UseNativeDescSort.Get().GetOrElse(DEFAULT_USE_NATIVE_DESC_SORT);
+        const bool useNativeYtDefaultColumnOrder = State_->Configuration->UseNativeYtDefaultColumnOrder.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_DEFAULT_COLUMN_ORDER);
+
         for (auto path: section.Paths()) {
             paths.push_back(path);
 
@@ -139,7 +155,7 @@ protected:
                     effectiveColumns.insert(column.Name);
                 }
 
-                if (NYql::HasSetting(op.Settings().Ref(), EYtSettingType::KeepSorted)) {
+                if (NYql::HasSetting(op.Settings().Ref(), EYtSettingType::KeepSorted) || op.Maybe<TYtPersist>()) {
                     for (size_t i = 0; i < rowSpec->SortedBy.size(); ++i) {
                         const bool inserted = effectiveColumns.insert(rowSpec->SortedBy[i]).second;
                         keepColumns = keepColumns || inserted;
@@ -157,11 +173,20 @@ protected:
                     }
                 }
 
+                if (const auto qlFilter = path.QLFilter().Maybe<TYtQLFilter>()) {
+                    // add columns which are implicitly used by path.QLFilter(), but not included in path.Columns();
+                    const TStructExprType* qlFilterType = qlFilter.Cast().Ref().Head().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+                    for (const auto& item : qlFilterType->GetItems()) {
+                        const bool inserted = effectiveColumns.emplace(item->GetName()).second;
+                        keepColumns = keepColumns || inserted;
+                    }
+                }
                 if (type->GetSize() <= effectiveColumns.size()) {
                     // The same column set as original type
                     continue;
                 }
 
+                const ui64 nativeTypeCompatibility = GetNativeYtTypeCompatibility(op.Cast().DataSink().Cluster().StringValue(), *State_->Configuration);
                 if (auto maybeMap = op.Maybe<TYtMap>()) {
                     TYtMap map = maybeMap.Cast();
                     TVector<const TItemExprType*> structItems;
@@ -202,14 +227,14 @@ protected:
                         .Build();
 
                     auto outStructType = ctx.MakeType<TStructExprType>(structItems);
-                    TYtOutTableInfo mapOut(outStructType, State_->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE);
+                    TYtOutTableInfo mapOut(outStructType, nativeTypeCompatibility);
 
                     if (ctx.IsConstraintEnabled<TSortedConstraintNode>()) {
                         if (const auto s = path.Table().Ref().GetConstraint<TSortedConstraintNode>()) {
                             if (const auto sorted = s->FilterFields(ctx, [outStructType](const TPartOfConstraintBase::TPathType& path) { return !path.empty() && outStructType->FindItem(path.front()); }) ) {
                                 TKeySelectorBuilder builder(map.Mapper().Pos(), ctx, useNativeDescSort, outStructType);
                                 builder.ProcessConstraint(*sorted);
-                                builder.FillRowSpecSort(*mapOut.RowSpec);
+                                builder.FillRowSpecSort(*mapOut.RowSpec, useNativeYtDefaultColumnOrder);
 
                                 if (builder.NeedMap()) {
                                     mapper = ctx.Builder(map.Mapper().Pos())
@@ -228,7 +253,7 @@ protected:
                             }
                         }
                     } else {
-                        mapOut.RowSpec->CopySortness(ctx, TYqlRowSpecInfo(map.Output().Item(0).RowSpec()));
+                        mapOut.RowSpec->CopySortness(ctx, TYqlRowSpecInfo(map.Output().Item(0).RowSpec()), useNativeYtDefaultColumnOrder);
                     }
                     mapOut.SetUnique(path.Ref().GetConstraint<TDistinctConstraintNode>(), map.Mapper().Pos(), ctx);
                     mapOut.RowSpec->SetConstraints(path.Ref().GetConstraintSet());
@@ -254,8 +279,7 @@ protected:
                         .Columns(newColumns)
                         .Stat<TCoVoid>().Build()
                         .Done();
-                }
-                else if (auto maybeMerge = op.Maybe<TYtMerge>()) {
+                } else if (auto maybeMerge = op.Maybe<TYtMerge>()) {
                     TYtMerge merge = maybeMerge.Cast();
 
                     auto prevRowSpec = TYqlRowSpecInfo(merge.Output().Item(0).RowSpec());
@@ -267,10 +291,10 @@ protected:
                         structItems.push_back(prevOutType->GetItems()[*pos]);
                     }
 
-                    TYtOutTableInfo mergeOut(ctx.MakeType<TStructExprType>(structItems), prevRowSpec.GetNativeYtTypeFlags());
-                    mergeOut.RowSpec->CopySortness(ctx, prevRowSpec, TYqlRowSpecInfo::ECopySort::WithDesc);
+                    TYtOutTableInfo mergeOut(ctx.MakeType<TStructExprType>(structItems), nativeTypeCompatibility);
+                    mergeOut.RowSpec->CopySortness(ctx, prevRowSpec, useNativeYtDefaultColumnOrder, TYqlRowSpecInfo::ECopySort::WithDesc);
                     if (auto nativeType = prevRowSpec.GetNativeYtType()) {
-                        mergeOut.RowSpec->CopyTypeOrders(*nativeType);
+                        mergeOut.RowSpec->CopyTypeOrders(*nativeType, useNativeYtDefaultColumnOrder);
                     }
                     mergeOut.SetUnique(path.Ref().GetConstraint<TDistinctConstraintNode>(), merge.Pos(), ctx);
                     mergeOut.RowSpec->SetConstraints(path.Ref().GetConstraintSet());
@@ -305,6 +329,71 @@ protected:
                         .Columns(newColumns)
                         .Stat<TCoVoid>().Build()
                         .Done();
+                } else if (auto maybePersist = op.Maybe<TYtPersist>(); maybePersist && NYql::HasSetting(maybePersist.Cast().Settings().Ref(), EYtSettingType::PruneUnusedColumns)) {
+                    TYtPersist persist = maybePersist.Cast();
+
+                    TVector<const TItemExprType*> structItems;
+                    for (const auto& column: effectiveColumns) {
+                        auto pos = type->FindItem(column);
+                        YQL_ENSURE(pos);
+                        structItems.push_back(type->GetItems()[*pos]);
+                    }
+
+                    TYtOutTableInfo mergeOut(ctx.MakeType<TStructExprType>(structItems), rowSpec->GetNativeYtTypeFlags());
+                    mergeOut.RowSpec->CopySortness(ctx, *rowSpec, useNativeYtDefaultColumnOrder, TYqlRowSpecInfo::ECopySort::WithDesc);
+                    if (auto nativeType = rowSpec->GetNativeYtType()) {
+                        mergeOut.RowSpec->CopyTypeOrders(*nativeType, useNativeYtDefaultColumnOrder);
+                    }
+                    mergeOut.SetUnique(path.Ref().GetConstraint<TDistinctConstraintNode>(), persist.Pos(), ctx);
+                    mergeOut.RowSpec->SetConstraints(path.Ref().GetConstraintSet());
+
+                    TSet<TStringBuf> columnSet(effectiveColumns.begin(), effectiveColumns.end());
+                    if (mergeOut.RowSpec->HasAuxColumns()) {
+                        for (auto item: mergeOut.RowSpec->GetAuxColumns()) {
+                            columnSet.insert(item.first);
+                        }
+                    }
+
+                    hasNewPath = true;
+                    auto persistInput = Build<TYtPath>(ctx, path.Pos())
+                        .InitFrom(persist.Input().Item(0).Paths().Item(0))
+                        .Table<TYtOutput>()
+                            .Operation<TYtMerge>()
+                                .World<TCoWorld>().Build()
+                                .DataSink(persist.DataSink())
+                                .Input()
+                                    .Add(UpdateInputFields(persist.Input().Item(0), std::move(columnSet), ctx, false))
+                                .Build()
+                                .Output()
+                                    .Add(mergeOut.ToExprNode(ctx, persist.Pos()).Cast<TYtOutTable>())
+                                .Build()
+                                .Settings().Build()
+                            .Build()
+                            .OutIndex().Value(0).Build()
+                        .Build()
+                        .Done();
+
+                    paths.back() = Build<TYtPath>(ctx, path.Pos())
+                        .InitFrom(path)
+                        .Table<TYtOutput>()
+                            .Operation<TYtPersist>()
+                                .InitFrom(persist)
+                                .Input()
+                                    .Add()
+                                        .Paths()
+                                            .Add(persistInput)
+                                        .Build()
+                                        .Settings().Build()
+                                    .Build()
+                                .Build()
+                                .Output()
+                                    .Add(mergeOut.ToExprNode(ctx, persist.Pos()).Cast<TYtOutTable>())
+                                .Build()
+                            .Build()
+                            .OutIndex().Value(0).Build()
+                            .Mode(path.Table().Cast<TYtOutput>().Mode())
+                        .Build()
+                        .Done();
                 }
             }
         }
@@ -320,6 +409,42 @@ protected:
     }
 
 protected:
+    TMaybeNode<TExprBase> SqlCombine(TExprBase node, TExprContext& ctx) const {
+        auto sqlCombine = node.Cast<TCoSqlCombine>();
+
+        TString usedCluster;
+        const ERuntimeClusterSelectionMode selectionMode =
+            State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
+
+        TSyncMap syncList;
+        bool hasYtInput = false;
+        for (auto input : { sqlCombine.LeftInput(), sqlCombine.RightInput() }) {
+            if (IsYtProviderInput(input.Input())) {
+                hasYtInput = true;
+                auto cluster = DeriveClusterFromInput(input.Input(), selectionMode);
+                if (!cluster || !UpdateUsedCluster(usedCluster, *cluster, selectionMode)) {
+                    return node;
+                }
+            }
+
+            for (auto lambda : { input.PresortKeyLambda().Raw(), input.KeyExtractorLambda().Raw(), input.ListHandlerLambda().Raw() }) {
+                if (!IsYtCompleteIsolatedLambda(*lambda, syncList, usedCluster, false, selectionMode)) {
+                    return node;
+                }
+            }
+        }
+
+        if (!hasYtInput) {
+            return node;
+        }
+
+        if (!IsYtCompleteIsolatedLambda(sqlCombine.UsingLambda().Ref(), syncList, usedCluster, false, selectionMode)) {
+            return node;
+        }
+
+        return ExpandSqlCombine(node.Ptr(), ctx, *State_->Types);
+    }
+
     TMaybeNode<TExprBase> Aggregate(TExprBase node, TExprContext& ctx) const {
         auto aggregate = node.Cast<TCoAggregateBase>();
 
@@ -387,14 +512,11 @@ protected:
         TNodeSet nodesToOptimize;
         TProcessedNodesSet processedNodes;
         processedNodes.insert(map.World().Ref().UniqueId());
-        VisitExpr(lambda.Ptr(), [&nodesToOptimize, &processedNodes, arg](const TExprNode::TPtr& node) {
-            if (TCoTablePath::Match(node.Get())) {
-                if (node->ChildrenSize() == 0 || node->Child(0)->Child(0) == arg.Raw()) {
+        VisitExpr(lambda.Ptr(), [&nodesToOptimize, &processedNodes, arg, directRowDependsOn = State_->Types->DirectRowDependsOn](const TExprNode::TPtr& node) {
+            if (TCoTablePath::Match(node.Get()) || TCoTableRecord::Match(node.Get())) {
+                if (node->ChildrenSize() == 0) {
                     nodesToOptimize.insert(node.Get());
-                }
-            }
-            else if (TCoTableRecord::Match(node.Get())) {
-                if (node->ChildrenSize() == 0 || node->Child(0)->Child(0) == arg.Raw()) {
+                } else if (!directRowDependsOn || node->Head().HeadPtr() == arg.Ptr()) {
                     nodesToOptimize.insert(node.Get());
                 }
             }
@@ -409,31 +531,45 @@ protected:
             return node;
         }
 
+        auto rowLambda = Build<TCoLambda>(ctx, lambda.Pos())
+            .Args({"row"})
+            .Body("row")
+            .Done();
+        if (State_->Types->DirectRowDependsOn) {
+            rowLambda = Build<TCoLambda>(ctx, lambda.Pos())
+                .Args({"row"})
+                .Body<TCoDependsOn>()
+                    .Input("row")
+                .Build()
+                .Done();
+        }
+
         TExprNode::TPtr newBody = lambda.Body().Ptr();
         TPositionHandle tablePos;
         TOptimizeExprSettings settings(State_->Types);
         settings.ProcessedNodes = &processedNodes; // Prevent optimizer to go deeper than current operation
-        auto status = OptimizeExpr(newBody, newBody, [&nodesToOptimize, &tablePos, arg](const TExprNode::TPtr& input, TExprContext& ctx) -> TExprNode::TPtr {
+        auto status = OptimizeExpr(newBody, newBody, [&nodesToOptimize, &tablePos, arg, rowLambda, directRowDependsOn = State_->Types->DirectRowDependsOn](const TExprNode::TPtr& input, TExprContext& ctx) -> TExprNode::TPtr {
             if (nodesToOptimize.find(input.Get()) != nodesToOptimize.end()) {
                 if (TCoTablePath::Match(input.Get())) {
                     tablePos = input->Pos();
-                    if (input->ChildrenSize() == 1) {
+                    if (directRowDependsOn && input->ChildrenSize() == 1) {
                         return ctx.RenameNode(*input, TYtTablePath::CallableName());
                     }
                     return Build<TYtTablePath>(ctx, input->Pos())
-                        .DependsOn()
-                            .Input(arg)
+                        .Row<TExprApplier>()
+                            .Apply(rowLambda)
+                            .With(0, arg)
                         .Build()
                         .Done().Ptr();
-                }
-                else if (TCoTableRecord::Match(input.Get())) {
+                } else if (TCoTableRecord::Match(input.Get())) {
                     tablePos = input->Pos();
-                    if (input->ChildrenSize() == 1) {
+                    if (directRowDependsOn && input->ChildrenSize() == 1) {
                         return ctx.RenameNode(*input, TYtTableRecord::CallableName());
                     }
                     return Build<TYtTableRecord>(ctx, input->Pos())
-                        .DependsOn()
-                            .Input(arg)
+                        .Row<TExprApplier>()
+                            .Apply(rowLambda)
+                            .With(0, arg)
                         .Build()
                         .Done().Ptr();
                 }
@@ -514,6 +650,19 @@ protected:
             return node;
         }
 
+        auto rowLambda = Build<TCoLambda>(ctx, lambda.Pos())
+            .Args({"row"})
+            .Body("row")
+            .Done();
+        if (State_->Types->DirectRowDependsOn) {
+            rowLambda = Build<TCoLambda>(ctx, lambda.Pos())
+                .Args({"row"})
+                .Body<TCoDependsOn>()
+                    .Input("row")
+                .Build()
+                .Done();
+        }
+
         TExprNode::TPtr newBody = lambda.Body().Ptr();
         TPosition tablePos;
         TOptimizeExprSettings settings(State_->Types);
@@ -523,8 +672,9 @@ protected:
                 if (TCoIsKeySwitch::Match(input.Get())) {
                     return
                         Build<TYtIsKeySwitch>(ctx, input->Pos())
-                            .DependsOn()
-                                .Input(input->HeadPtr())
+                            .Row<TExprApplier>()
+                                .Apply(rowLambda)
+                                .With(0, TExprBase(input->HeadPtr()))
                             .Build()
                         .Done().Ptr();
                 }
@@ -599,6 +749,7 @@ protected:
                         .Columns<TCoVoid>().Build()
                         .Ranges<TCoVoid>().Build()
                         .Stat<TCoVoid>().Build()
+                        .QLFilter<TCoVoid>().Build()
                     .Build()
                 .Build()
                 .Settings().Build()
@@ -616,6 +767,17 @@ protected:
         }
 
         return node;
+    }
+
+    TMaybeNode<TExprBase> RightOverPersist(TExprBase node, TExprContext& ctx) const {
+        auto maybePersist = node.Cast<TCoRight>().Input().Maybe<TYtPersist>();
+        if (!maybePersist) {
+            return node;
+        }
+        return Build<TYtOutput>(ctx, node.Pos())
+            .Operation(maybePersist.Cast())
+            .OutIndex().Value(0).Build()
+            .Done();
     }
 
     TMaybeNode<TExprBase> TrimReadWorld(TExprBase node, TExprContext& ctx) const {
@@ -641,14 +803,98 @@ protected:
         return TExprBase(worlds.size() == 1 ? worlds.front() : ctx.NewCallable(node.Pos(), TCoSync::CallableName(), std::move(worlds)));
     }
 
+    TMaybeNode<TExprBase> TrimResPullWorld(TExprBase node, TExprContext& ctx) const {
+        auto pull = node.Cast<TResPull>();
+        if (auto worldOp = pull.World().Maybe<TCoLeft>().Input().Maybe<TYtOutputOpBase>()) {
+            if (auto dataOp = pull.Data().Maybe<TYtOutput>().Operation().Maybe<TYtOutputOpBase>()) {
+                if (worldOp.Raw() == dataOp.Raw()) {
+                    return Build<TResPull>(ctx, pull.Pos())
+                        .InitFrom(pull)
+                        .World(worldOp.Cast().World())
+                        .Done();
+                }
+            }
+        }
+        return node;
+    }
+
+    TMaybeNode<TExprBase> TrimPublishWorld(TExprBase node, TExprContext& ctx) const {
+        auto publish = node.Cast<TYtPublish>();
+        if (auto worldOp = publish.World().Maybe<TCoLeft>().Input().Maybe<TYtOutputOpBase>()) {
+            if (AnyOf(publish.Input(), [op = worldOp.Raw()](const TYtOutput& out) { return out.Operation().Maybe<TYtOutputOpBase>().Raw() == op; })) {
+                return Build<TYtPublish>(ctx, publish.Pos())
+                    .InitFrom(publish)
+                    .World(worldOp.Cast().World())
+                    .Done();
+            }
+        }
+        return node;
+    }
+
+    TMaybeNode<TExprBase> CalcOverWindowFilterAware(TExprBase node, TExprContext& ctx) const {
+        auto input = node.Cast<TCoInputBase>().Input();
+        if (!IsYtProviderInput(input)) {
+            return node;
+        }
+        TVector<TYtTableBaseInfo::TPtr> tableInfos = GetInputTableInfos(input);
+        if (AllOf(tableInfos, [](const TYtTableBaseInfo::TPtr& info) { return !info->Meta->IsDynamic && !info->Meta->HasRLS; })) {
+            TExprNodeList calcs = ExtractCalcsOverWindow(node.Ptr(), ctx);
+            TSet<TStringBuf> rowNumberCols;
+            bool seenWinFilter = false;
+            for (auto& calcNode : calcs) {
+                TCoCalcOverWindowTuple calc(calcNode);
+                if (seenWinFilter || calc.Keys().Size() != 0 || !calc.SessionSpec().Maybe<TCoVoid>() || !calc.SortSpec().Maybe<TCoVoid>()) {
+                    continue;
+                }
+                auto frames = calc.Frames().Ref().ChildrenList();
+                for (auto& win : frames) {
+                    YQL_ENSURE(TCoWinOnBase::Match(win.Get()));
+                    if (TCoWinFilter::Match(win.Get())) {
+                        seenWinFilter = true;
+                        break;
+                    }
+                    auto winOnArgs = win->ChildrenList();
+                    TExprNodeList newWinOnArgs;
+                    newWinOnArgs.push_back(std::move(winOnArgs[0]));
+                    for (size_t i = 1; i < winOnArgs.size(); ++i) {
+                        auto labelAtom = winOnArgs[i]->Child(0);
+                        YQL_ENSURE(labelAtom->IsAtom());
+                        auto trait = winOnArgs[i]->Child(1);
+                        if (trait->IsCallable("RowNumber")) {
+                            rowNumberCols.insert(labelAtom->Content());
+                        } else {
+                            newWinOnArgs.push_back(std::move(winOnArgs[i]));
+                        }
+                    }
+                    win = ctx.ChangeChildren(*win, std::move(newWinOnArgs));
+                }
+                calcNode = Build<TCoCalcOverWindowTuple>(ctx, calc.Pos())
+                    .Keys(calc.Keys())
+                    .SortSpec(calc.SortSpec())
+                    .Frames(ctx.NewList(calc.Frames().Pos(), std::move(frames)))
+                    .SessionSpec(calc.SessionSpec())
+                    .SessionColumns(calc.SessionColumns())
+                    .Done().Ptr();
+            }
+
+            if (rowNumberCols) {
+                return RebuildCalcOverWindowWithYtRowColumns(node.Pos(), input, rowNumberCols, calcs, ctx);
+            }
+        }
+        return ExpandCalcOverWindow(node.Ptr(), ctx, *State_->Types);
+    }
+
     TMaybeNode<TExprBase> CalcOverWindow(TExprBase node, TExprContext& ctx) const {
+        if (CanPushdownFiltersOverWindow(State_->Types)) {
+            return CalcOverWindowFilterAware(node, ctx);
+        }
         auto list = node.Cast<TCoInputBase>().Input();
         if (!IsYtProviderInput(list)) {
             return node;
         }
 
         TVector<TYtTableBaseInfo::TPtr> tableInfos = GetInputTableInfos(list);
-        if (AllOf(tableInfos, [](const TYtTableBaseInfo::TPtr& info) { return !info->Meta->IsDynamic; })) {
+        if (AllOf(tableInfos, [](const TYtTableBaseInfo::TPtr& info) { return !info->Meta->IsDynamic && !info->Meta->HasRLS; })) {
             TExprNodeList calcs = ExtractCalcsOverWindow(node.Ptr(), ctx);
             TSet<TStringBuf> rowNumberCols;
             for (auto& calcNode : calcs) {
@@ -710,77 +956,91 @@ protected:
             }
 
             if (rowNumberCols) {
-                auto rowArg = ctx.NewArgument(node.Pos(), "row");
-                auto body = rowArg;
-
-                const bool useSysColumns = State_->Configuration->UseSystemColumns.Get().GetOrElse(DEFAULT_USE_SYS_COLUMNS);
-                const auto sysColumnNum = TString(YqlSysColumnPrefix).append("num");
-                if (useSysColumns) {
-                    for (auto& col : rowNumberCols) {
-                        body = ctx.Builder(node.Pos())
-                            .Callable("AddMember")
-                                .Add(0, body)
-                                .Atom(1, col)
-                                .Callable(2, "Member")
-                                    .Add(0, rowArg)
-                                    .Atom(1, sysColumnNum)
-                                .Seal()
-                            .Seal()
-                            .Build();
-                    }
-                    body = ctx.Builder(node.Pos())
-                        .Callable("ForceRemoveMember")
-                            .Add(0, body)
-                            .Atom(1, sysColumnNum)
-                        .Seal()
-                        .Build();
-
-                    auto settings = Build<TCoNameValueTupleList>(ctx, list.Pos())
-                        .Add()
-                            .Name()
-                                .Value(ToString(EYtSettingType::SysColumns))
-                            .Build()
-                            .Value(ToAtomList(TVector<TStringBuf>{"num"}, list.Pos(), ctx))
-                        .Build()
-                        .Done();
-
-                    if (auto right = list.Maybe<TCoRight>()) {
-                        list = right.Cast().Input();
-                    }
-
-                    list = Build<TCoRight>(ctx, list.Pos())
-                        .Input(ConvertContentInputToRead(list, settings, ctx))
-                        .Done();
-                } else {
-                    for (auto& col : rowNumberCols) {
-                        body = ctx.Builder(node.Pos())
-                            .Callable("AddMember")
-                                .Add(0, body)
-                                .Atom(1, col)
-                                .Callable(2, "YtRowNumber")
-                                    .Callable(0, "DependsOn")
-                                        .Add(0, rowArg)
-                                    .Seal()
-                                .Seal()
-                            .Seal()
-                            .Build();
-                    }
-                }
-
-                auto input = ctx.Builder(node.Pos())
-                    .Callable("OrderedMap")
-                        .Add(0, list.Ptr())
-                        .Add(1, ctx.NewLambda(node.Pos(), ctx.NewArguments(node.Pos(), {rowArg}), std::move(body)))
-                    .Seal()
-                    .Build();
-
-                YQL_CLOG(INFO, ProviderYt) << "Replaced " << rowNumberCols.size() << " RowNumber()s with " << (useSysColumns ? sysColumnNum : TString("YtRowNumber()"));
-
-                return RebuildCalcOverWindowGroup(node.Pos(), input, calcs, ctx);
+                return RebuildCalcOverWindowWithYtRowColumns(node.Pos(), list, rowNumberCols, calcs, ctx);
             }
         }
 
         return ExpandCalcOverWindow(node.Ptr(), ctx, *State_->Types);
+    }
+
+    TExprBase RebuildCalcOverWindowWithYtRowColumns(TPositionHandle pos, TExprBase input, const TSet<TStringBuf>& rowNumberCols,
+        const TExprNodeList& calcs, TExprContext& ctx) const
+    {
+        YQL_ENSURE(!rowNumberCols.empty());
+        auto rowArg = ctx.NewArgument(pos, "row");
+        auto body = rowArg;
+
+        const bool useSysColumns = State_->Configuration->UseSystemColumns.Get().GetOrElse(DEFAULT_USE_SYS_COLUMNS);
+        const auto sysColumnNum = TString(YqlSysColumnPrefix).append("num");
+        if (useSysColumns) {
+            for (auto& col : rowNumberCols) {
+                body = ctx.Builder(pos)
+                    .Callable("AddMember")
+                        .Add(0, body)
+                        .Atom(1, col)
+                        .Callable(2, "Member")
+                            .Add(0, rowArg)
+                            .Atom(1, sysColumnNum)
+                        .Seal()
+                    .Seal()
+                    .Build();
+            }
+            body = ctx.Builder(pos)
+                .Callable("ForceRemoveMember")
+                    .Add(0, body)
+                    .Atom(1, sysColumnNum)
+                .Seal()
+                .Build();
+
+            auto settings = Build<TCoNameValueTupleList>(ctx, input.Pos())
+                .Add()
+                    .Name()
+                        .Value(ToString(EYtSettingType::SysColumns))
+                    .Build()
+                    .Value(ToAtomList(TVector<TStringBuf>{"num"}, input.Pos(), ctx))
+                .Build()
+                .Done();
+
+            if (auto right = input.Maybe<TCoRight>()) {
+                input = right.Cast().Input();
+            }
+
+            input = Build<TCoRight>(ctx, input.Pos())
+                .Input(ConvertContentInputToRead(input, settings, ctx))
+                .Done();
+        } else {
+            for (auto& col : rowNumberCols) {
+                body = ctx.Builder(pos)
+                    .Callable("AddMember")
+                        .Add(0, body)
+                        .Atom(1, col)
+                        .Callable(2, "YtRowNumber")
+                            .Do([&](TExprNodeBuilder& builder) -> TExprNodeBuilder& {
+                                if (State_->Types->DirectRowDependsOn) {
+                                    return builder
+                                        .Callable(0, "DependsOn")
+                                            .Add(0, rowArg)
+                                        .Seal();
+                                } else {
+                                    return builder.Add(0, rowArg);
+                                }
+                            })
+                        .Seal()
+                    .Seal()
+                    .Build();
+            }
+        }
+
+        auto processed = ctx.Builder(pos)
+            .Callable("OrderedMap")
+                .Add(0, input.Ptr())
+                .Add(1, ctx.NewLambda(pos, ctx.NewArguments(pos, {rowArg}), std::move(body)))
+            .Seal()
+            .Build();
+
+        YQL_CLOG(INFO, ProviderYt) << "Replaced " << rowNumberCols.size() << " RowNumber()s with " << (useSysColumns ? sysColumnNum : TString("YtRowNumber()"));
+
+        return TExprBase(RebuildCalcOverWindowGroup(pos, processed, calcs, ctx));
     }
 
     template<bool IsTop>
@@ -1083,7 +1343,7 @@ protected:
         for (auto n: it->second) {
             if (TCoUnordered::Match(n)) {
                 nodesToOptimize.emplace(n, arg.Ptr());
-            } else if (!TCoDependsOn::Match(n)) {
+            } else if (!IsDependsOnUsage(*n, parentsMap)) {
                 return node;
             }
         }
@@ -1118,6 +1378,11 @@ protected:
     TMaybeNode<TExprBase> FuseFlatmaps(TExprBase node, TExprContext& ctx, const TGetParents& getParents) const {
         auto outerFlatmap = node.Cast<TCoFlatMapBase>();
         if (!outerFlatmap.Input().Maybe<TCoFlatMapBase>()) {
+            return node;
+        }
+
+        auto outerLambdaArg = outerFlatmap.Lambda().Args().Arg(0).Raw();
+        if (outerLambdaArg->IsUsedInDependsOn()) {
             return node;
         }
 
@@ -1346,6 +1611,7 @@ protected:
                         .Columns(extract.Members())
                         .Ranges<TCoVoid>().Build()
                         .Stat<TCoVoid>().Build()
+                        .QLFilter<TCoVoid>().Build()
                     .Build()
                 .Build()
                 .Settings().Build()
@@ -1386,6 +1652,110 @@ protected:
             .Done();
     }
 
+    TMaybeNode<TExprBase> ExtractMembersOverMaterialize(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) const {
+        auto extractMembers = node.Cast<TCoExtractMembers>();
+
+        auto maybeMaterialize = extractMembers.Input().Maybe<TCoRight>().Input().Maybe<TYtMaterialize>();
+        if (!maybeMaterialize) {
+            return node;
+        }
+
+        auto parentsMap = getParents();
+        if (auto it = parentsMap->find(extractMembers.Input().Raw()); it == parentsMap->cend() || it->second.size() > 1) {
+            // Right! is used multiple times
+            return node;
+        }
+
+        auto materialize = maybeMaterialize.Cast();
+        if (!NYql::HasSetting(materialize.Settings().Ref(), EYtSettingType::PruneUnusedColumns)) {
+            return node;
+        }
+
+        TVector<const TExprNode*> lefts;
+        auto it = parentsMap->find(materialize.Raw());
+        YQL_ENSURE(it != parentsMap->cend());
+        for (auto parent: it->second) {
+            if (parent == extractMembers.Input().Raw()) {
+                continue;
+            } else if (TCoLeft::Match(parent)) {
+                lefts.push_back(parent);
+            } else {
+                // YtMaterialize is used multiple times
+                return node;
+            }
+        }
+
+        auto newMaterialize = Build<TYtMaterialize>(ctx, materialize.Pos())
+            .InitFrom(materialize)
+            .Input<TCoExtractMembers>()
+                .InitFrom(extractMembers)
+                .Input(materialize.Input())
+            .Build()
+            .Done();
+
+        for (auto left: lefts) {
+            optCtx.RemapNode(*left, ctx.ChangeChild(*left, TCoLeft::idx_Input, newMaterialize.Ptr()));
+        }
+
+        return Build<TCoRight>(ctx, extractMembers.Input().Pos())
+            .Input(newMaterialize)
+            .Done();
+    }
+
+    TMaybeNode<TExprBase> ExtractMembersOverMaterializeMultiUsage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) const {
+        auto maybeMaterialize = node.Cast<TCoRight>().Input().Maybe<TYtMaterialize>();
+        if (!maybeMaterialize) {
+            return node;
+        }
+        auto materialize = maybeMaterialize.Cast();
+        if (!NYql::HasSetting(materialize.Settings().Ref(), EYtSettingType::PruneUnusedColumns)) {
+            return node;
+        }
+
+        TVector<const TExprNode*> lefts;
+        auto parentsMap = getParents();
+        auto it = parentsMap->find(materialize.Raw());
+        YQL_ENSURE(it != parentsMap->cend());
+        for (auto parent: it->second) {
+            if (parent == node.Raw()) {
+                continue;
+            } else if (TCoLeft::Match(parent)) {
+                lefts.push_back(parent);
+            } else {
+                return node;
+            }
+        }
+
+        TNodeOnNodeOwnedMap toOptimize;
+        TExprNode::TPtr newRight;
+        TExprNode::TPtr newMaterialize;
+        OptimizeSubsetFieldsForNodeWithMultiUsage(node.Ptr(), *parentsMap, toOptimize, ctx,
+            [&] (const TExprNode::TPtr& input, const TExprNode::TPtr& members, const TParentsMap&, TExprContext& ctx) -> TExprNode::TPtr {
+                newMaterialize = Build<TYtMaterialize>(ctx, node.Pos())
+                    .InitFrom(materialize)
+                    .Input<TCoExtractMembers>()
+                        .Input(materialize.Input())
+                        .Members(members)
+                    .Build()
+                    .Done().Ptr();
+                newRight = ctx.ChangeChild(*input, TCoRight::idx_Input, TExprNode::TPtr(newMaterialize));
+                return newRight;
+            }
+        );
+        if (newRight) {
+            YQL_ENSURE(newMaterialize);
+            for (auto& [s, d]: toOptimize) {
+                optCtx.RemapNode(*s, d);
+            }
+            for (auto left: lefts) {
+                optCtx.RemapNode(*left, ctx.ChangeChild(*left, TCoLeft::idx_Input, TExprNode::TPtr(newMaterialize)));
+            }
+            return TExprBase(newRight);
+        }
+
+        return node;
+    }
+
     TMaybeNode<TExprBase> TakeOrSkip(TExprBase node, TExprContext& ctx) const {
         auto countBase = node.Cast<TCoCountBase>();
         auto input = countBase.Input();
@@ -1394,6 +1764,15 @@ protected:
         }
 
         input = input.Cast<TYtTableContent>().Input();
+        if (const auto& maybeRead = input.Maybe<TYtReadTable>()) {
+            for (const auto& section: maybeRead.Cast().Input()) {
+                for (const auto& path: section.Paths()) {
+                    if (TYtTableBaseInfo::GetMeta(path.Table())->HasRLS) {
+                        return node;
+                    }
+                }
+            }
+        }
 
         TYtDSource dataSource = GetDataSource(input, ctx);
         TString cluster = TString{dataSource.Cluster().Value()};
@@ -1509,7 +1888,7 @@ protected:
     }
 
     struct TExtendOverSameMapGroupLess {
-        bool operator() (const std::pair<bool, TCoLambda>& left, const std::pair<bool, TCoLambda>& right) const {
+        bool operator()(const std::pair<bool, TCoLambda>& left, const std::pair<bool, TCoLambda>& right) const {
             return std::make_pair(left.first, left.second.Ref().UniqueId()) < std::make_pair(right.first, right.second.Ref().UniqueId());
         }
     };
@@ -1739,6 +2118,17 @@ protected:
             return node;
         }
 
+        auto rowHandler = [directRowDependsOn = State_->Types->DirectRowDependsOn](TExprNodeBuilder& builder) -> TExprNodeBuilder& {
+            if (directRowDependsOn) {
+                return builder
+                    .Callable(0, "DependsOn")
+                        .Arg(0, "row")
+                    .Seal();
+            } else {
+                return builder.Arg(0, "row");
+            }
+        };
+
         // move TablePath/TableRecord if any
         const auto& extend = input.Ref();
         const bool ordered = flatMap.Maybe<TCoOrderedFlatMap>() && !input.Maybe<TCoExtend>();
@@ -1754,16 +2144,12 @@ protected:
                                 .Arg(0, "row")
                                 .Atom(1, "_yql_table_path")
                                 .Callable(2, "TablePath")
-                                    .Callable(0, "DependsOn")
-                                        .Arg(0, "row")
-                                    .Seal()
+                                    .Do(rowHandler)
                                 .Seal()
                             .Seal()
                             .Atom(1, "_yql_table_record")
                             .Callable(2, "TableRecord")
-                                .Callable(0, "DependsOn")
-                                    .Arg(0, "row")
-                                .Seal()
+                                .Do(rowHandler)
                             .Seal()
                         .Seal()
                     .Seal()
@@ -2090,7 +2476,7 @@ protected:
             }
 
             // derive common type for all join keys in key set
-            const TTypeAnnotationNode* commonType = UnifyJoinKeyType(equiJoin.Pos(), srcKeyTypes, ctx);
+            const TTypeAnnotationNode* commonType = UnifyJoinKeyType(equiJoin.Pos(), srcKeyTypes, ctx, *State_->Types);
             YQL_ENSURE(commonType);
 
             const TTypeAnnotationNode* commonTypeNoOpt = RemoveOptionalType(commonType);
@@ -2317,6 +2703,10 @@ protected:
             }
 
             if (leftPath.Ranges().Raw() != rightPath.Ranges().Raw()) {
+                return node;
+            }
+
+            if (leftPath.QLFilter().Raw() != rightPath.QLFilter().Raw()) {
                 return node;
             }
         }
@@ -2578,6 +2968,16 @@ protected:
 
         return TAggregateExpander::CountAggregateRewrite(aggregate, ctx,
             State_->Types->UseBlocks || State_->Types->BlockEngineMode == EBlockEngineMode::Force);
+    }
+
+    TMaybeNode<TExprBase> TrimQlFilters(TExprBase node, TExprContext& ctx) const {
+        auto read = node.Cast<TYtReadTable>();
+        auto input = RemoveYtQLFilters(read.Input(), ctx);
+        if (input.Raw() == read.Input().Raw()) {
+            return node;
+        }
+
+        return ctx.ChangeChild(read.Ref(), TYtReadTable::idx_Input, input.Ptr());
     }
 
     TMaybeNode<TExprBase> ZeroSampleToZeroLimit(TExprBase node, TExprContext& ctx) const {

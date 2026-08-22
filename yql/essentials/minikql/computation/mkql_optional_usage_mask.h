@@ -7,10 +7,7 @@
 
 #include <cstring>
 
-namespace NKikimr {
-namespace NMiniKQL {
-
-namespace NDetails {
+namespace NKikimr::NMiniKQL::NDetails {
 
 class TOptionalUsageMask {
 public:
@@ -25,7 +22,11 @@ public:
         Reset();
         ui64 bytes = UnpackUInt64(buf);
         if (bytes) {
-            Mask_.Reserve(bytes << 3ULL);
+            constexpr ui64 maskChunkSize = 3;
+            constexpr ui64 maxMaskSizeBytes = std::numeric_limits<ui64>::max() >> maskChunkSize;
+            MKQL_ENSURE(bytes <= maxMaskSizeBytes, "Bad packed data. Optional mask size " << bytes << " exceeds max size " << maxMaskSizeBytes);
+
+            Mask_.Reserve(bytes << maskChunkSize);
             buf.CopyTo(reinterpret_cast<char*>(const_cast<ui8*>(Mask_.GetChunks())), bytes);
         }
     }
@@ -55,7 +56,7 @@ public:
         return GetPack64Length(usedBytes) + usedBytes;
     }
 
-    template<typename TBuf>
+    template <typename TBuf>
     void Serialize(TBuf& buf) const {
         if (!CountOfOptional_ || Mask_.Empty()) {
             return buf.Append(0);
@@ -74,6 +75,4 @@ private:
     TBitMapOps<TDynamicBitMapTraits<ui8>> Mask_;
 };
 
-} // NDetails
-}
-}
+} // namespace NKikimr::NMiniKQL::NDetails

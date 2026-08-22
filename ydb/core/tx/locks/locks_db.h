@@ -14,7 +14,7 @@ public:
         , DB(txc.DB)
     { }
 
-    bool HasChanges() const {
+    bool HasChanges() const override {
         return HasChanges_;
     }
 

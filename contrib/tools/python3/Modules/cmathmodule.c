@@ -7,6 +7,7 @@
 #endif
 
 #include "Python.h"
+#include "pycore_complexobject.h" // _Py_c_neg()
 #include "pycore_pymath.h"        // _PY_SHORT_FLOAT_REPR
 /* we need DBL_MAX, DBL_MIN, DBL_EPSILON, DBL_MANT_DIG and FLT_RADIX from
    float.h.  We assume that FLT_RADIX is either 2 or 16. */
@@ -909,12 +910,13 @@ cmath.log
 
 log(z[, base]) -> the logarithm of z to the given base.
 
-If the base is not specified, returns the natural logarithm (base e) of z.
+If the base is not specified, returns the natural logarithm (base e)
+of z.
 [clinic start generated code]*/
 
 static PyObject *
 cmath_log_impl(PyObject *module, Py_complex x, PyObject *y_obj)
-/*[clinic end generated code: output=4effdb7d258e0d94 input=e1f81d4fcfd26497]*/
+/*[clinic end generated code: output=4effdb7d258e0d94 input=eb25de0757baf4a0]*/
 {
     Py_complex y;
 
@@ -1131,17 +1133,18 @@ Determine whether two complex numbers are close in value.
 
 Return True if a is close in value to b, and False otherwise.
 
-For the values to be considered close, the difference between them must be
-smaller than at least one of the tolerances.
+For the values to be considered close, the difference between them must
+be smaller than at least one of the tolerances.
 
--inf, inf and NaN behave similarly to the IEEE 754 Standard. That is, NaN is
-not close to anything, even itself. inf and -inf are only close to themselves.
+-inf, inf and NaN behave similarly to the IEEE 754 Standard.  That is,
+NaN is not close to anything, even itself. inf and -inf are only close
+to themselves.
 [clinic start generated code]*/
 
 static int
 cmath_isclose_impl(PyObject *module, Py_complex a, Py_complex b,
                    double rel_tol, double abs_tol)
-/*[clinic end generated code: output=8a2486cc6e0014d1 input=df9636d7de1d4ac3]*/
+/*[clinic end generated code: output=8a2486cc6e0014d1 input=301b56c90d9a79de]*/
 {
     double diff;
 
@@ -1216,29 +1219,29 @@ static PyMethodDef cmath_methods[] = {
 static int
 cmath_exec(PyObject *mod)
 {
-    if (_PyModule_Add(mod, "pi", PyFloat_FromDouble(Py_MATH_PI)) < 0) {
+    if (PyModule_Add(mod, "pi", PyFloat_FromDouble(Py_MATH_PI)) < 0) {
         return -1;
     }
-    if (_PyModule_Add(mod, "e", PyFloat_FromDouble(Py_MATH_E)) < 0) {
+    if (PyModule_Add(mod, "e", PyFloat_FromDouble(Py_MATH_E)) < 0) {
         return -1;
     }
     // 2pi
-    if (_PyModule_Add(mod, "tau", PyFloat_FromDouble(Py_MATH_TAU)) < 0) {
+    if (PyModule_Add(mod, "tau", PyFloat_FromDouble(Py_MATH_TAU)) < 0) {
         return -1;
     }
-    if (_PyModule_Add(mod, "inf", PyFloat_FromDouble(Py_INFINITY)) < 0) {
+    if (PyModule_Add(mod, "inf", PyFloat_FromDouble(Py_INFINITY)) < 0) {
         return -1;
     }
 
     Py_complex infj = {0.0, Py_INFINITY};
-    if (_PyModule_Add(mod, "infj", PyComplex_FromCComplex(infj)) < 0) {
+    if (PyModule_Add(mod, "infj", PyComplex_FromCComplex(infj)) < 0) {
         return -1;
     }
-    if (_PyModule_Add(mod, "nan", PyFloat_FromDouble(fabs(Py_NAN))) < 0) {
+    if (PyModule_Add(mod, "nan", PyFloat_FromDouble(fabs(Py_NAN))) < 0) {
         return -1;
     }
     Py_complex nanj = {0.0, fabs(Py_NAN)};
-    if (_PyModule_Add(mod, "nanj", PyComplex_FromCComplex(nanj)) < 0) {
+    if (PyModule_Add(mod, "nanj", PyComplex_FromCComplex(nanj)) < 0) {
         return -1;
     }
 
@@ -1362,6 +1365,7 @@ cmath_exec(PyObject *mod)
 static PyModuleDef_Slot cmath_slots[] = {
     {Py_mod_exec, cmath_exec},
     {Py_mod_multiple_interpreters, Py_MOD_PER_INTERPRETER_GIL_SUPPORTED},
+    {Py_mod_gil, Py_MOD_GIL_NOT_USED},
     {0, NULL}
 };
 

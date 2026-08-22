@@ -3,39 +3,34 @@
 #include "collection.h"
 
 #include <ydb/core/formats/arrow/accessor/composite/accessor.h>
+#include <ydb/core/formats/arrow/accessor/sub_columns/json_value_path.h>
 
 #include <library/cpp/object_factory/object_factory.h>
+#include <yql/essentials/core/arrow_kernels/request/request.h>
 
 namespace NKikimr::NArrow::NSSA {
 
 enum class ECalculationHardness {
     JustAccessorUsage = 1,
     NotSpecified = 3,
-    Equals = 5,
+    Compare = 5,
     StringMatching = 10,
     Unknown = 8
 };
 
 class IKernelLogic {
 private:
-    virtual TConclusion<bool> DoExecute(const std::vector<TColumnChainInfo>& input, const std::vector<TColumnChainInfo>& output,
-        const std::shared_ptr<TAccessorsCollection>& resources) const = 0;
+    virtual TConclusion<bool> DoExecute(
+        const std::vector<TColumnChainInfo>& input, const std::vector<TColumnChainInfo>& output, TAccessorsCollection& resources) const = 0;
 
     virtual std::optional<TIndexCheckOperation> DoGetIndexCheckerOperation() const = 0;
-    YDB_ACCESSOR_DEF(std::optional<ui32>, YqlOperationId);
+    YDB_READONLY_DEF(std::optional<ui32>, YqlOperationId);
     virtual NJson::TJsonValue DoDebugJson() const {
         return NJson::JSON_NULL;
     }
+
 public:
-    NJson::TJsonValue DebugJson() const {
-        NJson::TJsonValue result = NJson::JSON_MAP;
-        result.InsertValue("class_name", GetClassName());
-        auto details = DoDebugJson();
-        if (details.IsDefined()) {
-            result.InsertValue("details", std::move(details));
-        }
-        return result;
-    }
+    NJson::TJsonValue DebugJson() const;
 
     IKernelLogic() = default;
 
@@ -54,11 +49,8 @@ public:
 
     virtual TString GetClassName() const = 0;
 
-    TConclusion<bool> Execute(const std::vector<TColumnChainInfo>& input, const std::vector<TColumnChainInfo>& output,
-        const std::shared_ptr<TAccessorsCollection>& resources) const {
-        if (!resources) {
-            return TConclusionStatus::Fail("resources in incorrect (nullptr)");
-        }
+    TConclusion<bool> Execute(
+        const std::vector<TColumnChainInfo>& input, const std::vector<TColumnChainInfo>& output, TAccessorsCollection& resources) const {
         return DoExecute(input, output, resources);
     }
 
@@ -71,10 +63,9 @@ public:
 class TSimpleKernelLogic: public IKernelLogic {
 private:
     using TBase = IKernelLogic;
-    YDB_READONLY_DEF(std::optional<ui32>, YqlOperationId);
 
     virtual TConclusion<bool> DoExecute(const std::vector<TColumnChainInfo>& /*input*/, const std::vector<TColumnChainInfo>& /*output*/,
-        const std::shared_ptr<TAccessorsCollection>& /*resources*/) const override {
+        TAccessorsCollection& /*resources*/) const override {
         return false;
     }
 
@@ -86,14 +77,13 @@ private:
 public:
     TSimpleKernelLogic() = default;
     TSimpleKernelLogic(const ui32 yqlOperationId)
-        : TBase(yqlOperationId)
-        , YqlOperationId(yqlOperationId) {
+        : TBase(yqlOperationId) {
     }
 
     virtual TString SignalDescription() const override;
 
     virtual ECalculationHardness GetWeight() const override {
-        if (!YqlOperationId) {
+        if (!GetYqlOperationId()) {
             return ECalculationHardness::Unknown;
         }
         return ECalculationHardness::NotSpecified;
@@ -110,7 +100,7 @@ class TLogicMatchString: public IKernelLogic {
 private:
     using TBase = IKernelLogic;
     virtual TConclusion<bool> DoExecute(const std::vector<TColumnChainInfo>& /*input*/, const std::vector<TColumnChainInfo>& /*output*/,
-        const std::shared_ptr<TAccessorsCollection>& /*resources*/) const override {
+        TAccessorsCollection& /*resources*/) const override {
         return false;
     }
     virtual std::optional<TIndexCheckOperation> DoGetIndexCheckerOperation() const override {
@@ -153,9 +143,10 @@ private:
     static TString GetClassNameStatic() {
         return "String._yql_AsciiEqualsIgnoreCase";
     }
-public:
-    TLogicMatchAsciiEqualsIgnoreCase() : TLogicMatchString(TIndexCheckOperation::EOperation::Contains, false, false) {
 
+public:
+    TLogicMatchAsciiEqualsIgnoreCase()
+        : TLogicMatchString(TIndexCheckOperation::EOperation::Contains, false, false) {
     }
     static const inline auto Registrator = TFactory::TRegistrator<TLogicMatchAsciiEqualsIgnoreCase>(GetClassNameStatic());
 };
@@ -165,9 +156,10 @@ private:
     static TString GetClassNameStatic() {
         return "String._yql_AsciiContainsIgnoreCase";
     }
-public:
-    TLogicMatchAsciiContainsIgnoreCase() : TLogicMatchString(TIndexCheckOperation::EOperation::Contains, false, false) {
 
+public:
+    TLogicMatchAsciiContainsIgnoreCase()
+        : TLogicMatchString(TIndexCheckOperation::EOperation::Contains, false, false) {
     }
     static const inline auto Registrator = TFactory::TRegistrator<TLogicMatchAsciiContainsIgnoreCase>(GetClassNameStatic());
 };
@@ -177,9 +169,10 @@ private:
     static TString GetClassNameStatic() {
         return "String._yql_AsciiStartsWithIgnoreCase";
     }
-public:
-    TLogicMatchAsciiStartsWithIgnoreCase() : TLogicMatchString(TIndexCheckOperation::EOperation::StartsWith, false, false) {
 
+public:
+    TLogicMatchAsciiStartsWithIgnoreCase()
+        : TLogicMatchString(TIndexCheckOperation::EOperation::StartsWith, false, false) {
     }
     static const inline auto Registrator = TFactory::TRegistrator<TLogicMatchAsciiStartsWithIgnoreCase>(GetClassNameStatic());
 };
@@ -189,36 +182,63 @@ private:
     static TString GetClassNameStatic() {
         return "String._yql_AsciiEndsWithIgnoreCase";
     }
-public:
-    TLogicMatchAsciiEndsWithIgnoreCase() : TLogicMatchString(TIndexCheckOperation::EOperation::EndsWith, false, false) {
 
+public:
+    TLogicMatchAsciiEndsWithIgnoreCase()
+        : TLogicMatchString(TIndexCheckOperation::EOperation::EndsWith, false, false) {
     }
     static const inline auto Registrator = TFactory::TRegistrator<TLogicMatchAsciiEndsWithIgnoreCase>(GetClassNameStatic());
 };
 
-class TLogicEquals: public IKernelLogic {
+class TCompareKernel: public IKernelLogic {
 private:
     using TBase = IKernelLogic;
     virtual TConclusion<bool> DoExecute(const std::vector<TColumnChainInfo>& /*input*/, const std::vector<TColumnChainInfo>& /*output*/,
-        const std::shared_ptr<TAccessorsCollection>& /*resources*/) const override {
+        TAccessorsCollection& /*resources*/) const override {
         return false;
     }
     virtual std::optional<TIndexCheckOperation> DoGetIndexCheckerOperation() const override {
-        return TIndexCheckOperation(TIndexCheckOperation::EOperation::Equals, true);
+        return TIndexCheckOperation(Op, true);
     }
     const bool IsSimpleFunction;
+    const TIndexCheckOperation::EOperation Op;
 
     virtual ECalculationHardness GetWeight() const override {
-        return ECalculationHardness::Equals;
+        return ECalculationHardness::Compare;
     }
 
 public:
-    TLogicEquals(const bool isSimpleFunction)
-        : IsSimpleFunction(isSimpleFunction) {
-    }
+    TCompareKernel(const bool isSimpleFunction, TIndexCheckOperation::EOperation op)
+        : IKernelLogic([&] {
+            {
+                using enum TIndexCheckOperation::EOperation;
+                
+                AFL_VERIFY(op == Less || op == LessOrEqual || 
+                    op == Greater || op == GreaterOrEqual || op == Equals
+                );
+            }
+        
+            switch(op) {
+                case TIndexCheckOperation::EOperation::Equals:
+                    return (ui32)NYql::TKernelRequestBuilder::EBinaryOp::Equals;
+                case TIndexCheckOperation::EOperation::Less:
+                    return (ui32)NYql::TKernelRequestBuilder::EBinaryOp::Less;
+                case TIndexCheckOperation::EOperation::Greater:
+                    return (ui32)NYql::TKernelRequestBuilder::EBinaryOp::Greater;
+                case TIndexCheckOperation::EOperation::LessOrEqual:
+                    return (ui32)NYql::TKernelRequestBuilder::EBinaryOp::LessOrEqual;
+                case TIndexCheckOperation::EOperation::GreaterOrEqual:
+                    return (ui32)NYql::TKernelRequestBuilder::EBinaryOp::GreaterOrEqual;
+                default:
+                    AFL_VERIFY(false);
+            }
+        }()),
+          IsSimpleFunction(isSimpleFunction)
+        , Op(op)
+    {}
 
     virtual TString GetClassName() const override {
-        return "EQUALS";
+        return TStringBuilder() << "TCompareKernel{" << Op << "}";
     }
 
     virtual bool IsBoolInResult() const override {
@@ -262,12 +282,11 @@ private:
         }
     };
 
-    TConclusion<TDescription> BuildDescription(
-        const std::vector<TColumnChainInfo>& input, const std::shared_ptr<TAccessorsCollection>& resources) const {
+    TConclusion<TDescription> BuildDescription(const std::vector<TColumnChainInfo>& input, const TAccessorsCollection& resources) const {
         if (input.size() != 2) {
             return TConclusionStatus::Fail("incorrect parameters count (2 expected) for json path extraction");
         }
-        auto jsonPathScalar = resources->GetConstantScalarOptional(input[1].GetColumnId());
+        auto jsonPathScalar = resources.GetConstantScalarOptional(input[1].GetColumnId());
         if (!jsonPathScalar) {
             return TConclusionStatus::Fail("no data for json path (cannot find parameter)");
         }
@@ -276,12 +295,11 @@ private:
         }
         const auto buffer = std::static_pointer_cast<arrow::StringScalar>(jsonPathScalar)->value;
         std::string_view svPath((const char*)buffer->data(), buffer->size());
-        if (!svPath.starts_with("$.") || svPath.size() == 2) {
-            return TConclusionStatus::Fail("incorrect path format: have to be as '$.**...**'");
+        if (const auto pathValidation = NAccessor::NSubColumns::ValidateJsonPath(svPath); pathValidation.IsFail()) {
+            return pathValidation;
         }
-        svPath = svPath.substr(2);
 
-        return TDescription(resources->GetAccessorOptional(input.front().GetColumnId()), svPath);
+        return TDescription(resources.GetAccessorOptional(input.front().GetColumnId()), svPath);
     }
 
     virtual TString GetClassName() const override {
@@ -290,8 +308,8 @@ private:
 
     static const inline TFactory::TRegistrator<TGetJsonPath> Registrator = TFactory::TRegistrator<TGetJsonPath>(GetClassNameStatic());
 
-    virtual TConclusion<bool> DoExecute(const std::vector<TColumnChainInfo>& input, const std::vector<TColumnChainInfo>& output,
-        const std::shared_ptr<TAccessorsCollection>& resources) const override;
+    virtual TConclusion<bool> DoExecute(
+        const std::vector<TColumnChainInfo>& input, const std::vector<TColumnChainInfo>& output, TAccessorsCollection& resources) const override;
 
 protected:
     virtual NAccessor::TCompositeChunkedArray::TBuilder MakeCompositeBuilder() const;

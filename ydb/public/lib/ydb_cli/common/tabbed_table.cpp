@@ -1,13 +1,11 @@
 #include "tabbed_table.h"
-
-#include <ydb/public/lib/ydb_cli/common/interactive.h>
-
-#include "common.h"
 #include "print_utils.h"
 
-namespace NYdb {
-namespace NConsoleClient {
+#include <ydb/library/yverify_stream/yverify_stream.h>
+#include <ydb/public/lib/ydb_cli/common/colors.h>
+#include <ydb/public/lib/ydb_cli/common/interactive.h>
 
+namespace NYdb::NConsoleClient {
 
 TAdaptiveTabbedTable::TAdaptiveTabbedTable(const std::vector<NScheme::TSchemeEntry>& entries)
     : Entries(entries)
@@ -16,12 +14,17 @@ TAdaptiveTabbedTable::TAdaptiveTabbedTable(const std::vector<NScheme::TSchemeEnt
 }
 
 void TAdaptiveTabbedTable::Print(IOutputStream& o) const {
+    if (Entries.empty()) {
+        return;
+    }
+
+    Y_VALIDATE(ColumnCount > 0, "Column count is 0, internal error during table calculation");
 
     /* Calculate the number of rows that will be in each column except possibly
         for a short column on the right.  */
     size_t rows = Entries.size() / ColumnCount + (Entries.size() % ColumnCount != 0);
 
-    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
     for (size_t row = 0; row < rows; ++row) {
         for (size_t column = 0; column < ColumnCount; ++column) {
             size_t idx = column * rows + row;
@@ -51,13 +54,13 @@ void TAdaptiveTabbedTable::InitializeColumnInfo(size_t maxCols, size_t minColumn
 void TAdaptiveTabbedTable::CalculateColumns() {
     auto terminalWidth = GetTerminalWidth();
     size_t lineLength = terminalWidth ? *terminalWidth : Max<size_t>();
-    size_t max_length = 0;
+    size_t maxLength = 0;
     for (auto entry : Entries) {
-        if (entry.Name.length() > max_length) {
-            max_length = entry.Name.length();
+        if (entry.Name.length() > maxLength) {
+            maxLength = entry.Name.length();
         }
     }
-    if (lineLength < max_length + 1) {
+    if (lineLength < maxLength + 1) {
         lineLength = Max<size_t>();
     }
     size_t minColumnWidth = 3;
@@ -109,5 +112,4 @@ void TAdaptiveTabbedTable::CalculateColumns() {
     return;
 }
 
-}
-}
+} // namespace NYdb::NConsoleClient

@@ -2,13 +2,21 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
-#include <ydb/core/persqueue/writer/writer.cpp>
+#include <ydb/core/persqueue/writer/writer.h>
+#include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
 
 namespace {
     using namespace NKafka;
 
     class TDummySchemeCacheActor : public TActor<TDummySchemeCacheActor> {
         public:
+            enum EEv {
+                EvReplyTopicNotFound = EventSpaceBegin(TEvents::ES_PRIVATE),
+            };
+
+            struct TEvReplyTopicNotFound : public TEventLocal<TEvReplyTopicNotFound, EvReplyTopicNotFound> {
+            };
+
             TDummySchemeCacheActor(ui64 pqTabletId) :
                 TActor<TDummySchemeCacheActor>(&TDummySchemeCacheActor::StateFunc),
                 PqTabletId(pqTabletId) {}
@@ -17,7 +25,9 @@ namespace {
                 auto response = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
                 for (auto& requestedEntry : ev->Get()->Request->ResultSet) {
                     NSchemeCache::TSchemeCacheNavigate::TEntry entry;
-                    entry.Status = NSchemeCache::TSchemeCacheNavigate::EStatus::Ok;
+                    entry.Status = ReplyTopicNotFound
+                        ? NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown
+                        : NSchemeCache::TSchemeCacheNavigate::EStatus::Ok;
                     entry.Path = requestedEntry.Path;
                     auto groupInfo = std::make_unique<NKikimr::NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo>();
                     groupInfo->Description.MutablePQTabletConfig()->SetMeteringMode(NKikimrPQ::TPQTabletConfig_EMeteringMode_METERING_MODE_REQUEST_UNITS);
@@ -31,14 +41,24 @@ namespace {
                 Send(ev->Sender, MakeHolder<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(response.release()));
             }
 
+            void Handle(TEvReplyTopicNotFound::TPtr&, const TActorContext&) {
+                SetReplyTopicNotFound(true);
+            }
+
         private:
             STFUNC(StateFunc) {
                 switch (ev->GetTypeRewrite()) {
                     HFunc(TEvTxProxySchemeCache::TEvNavigateKeySet, Handle);
+                    HFunc(TEvReplyTopicNotFound, Handle);
                 }
             }
 
+            void SetReplyTopicNotFound(bool value) {
+                ReplyTopicNotFound = value;
+            }
+
             ui64 PqTabletId;
+            bool ReplyTopicNotFound = false;
         };
 
     class TProduceActorFixture : public NUnitTest::TBaseFixture {
@@ -62,8 +82,11 @@ namespace {
                 Ctx->Runtime->DisableBreakOnStopCondition();
                 Ctx->Runtime->SetLogPriority(NKikimrServices::KAFKA_PROXY, NLog::PRI_TRACE);
                 Ctx->Runtime->SetLogPriority(NKikimrServices::PQ_WRITE_PROXY, NLog::PRI_TRACE);
+                Ctx->Runtime->SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_DEBUG);
                 TContext::TPtr kafkaContext = std::make_shared<TContext>(KafkaConfig);
                 kafkaContext->DatabasePath = "/Root/PQ";
+                kafkaContext->ResourceDatabasePath = "/Root/PQ";
+                kafkaContext->ConnectionId = Ctx->Edge;
                 ActorId = Ctx->Runtime->Register(CreateKafkaProduceActor(kafkaContext));
                 auto dummySchemeCacheId = Ctx->Runtime->Register(new TDummySchemeCacheActor(Ctx->TabletId));
                 Ctx->Runtime->RegisterService(MakeSchemeCacheID(), dummySchemeCacheId);
@@ -86,7 +109,6 @@ namespace {
                 records->ProducerId = producerId;
                 records->ProducerEpoch = producerEpoch;
 
-                TKafkaRecordBatch batch;
                 records->BaseOffset = 3;
                 records->BaseSequence = baseSequence;
                 records->Magic = 2; // Current supported
@@ -94,15 +116,18 @@ namespace {
                 records->Records[0].Key = TKafkaRawBytes(KeyToProduce.data(), KeyToProduce.size());
                 records->Records[0].Value = TKafkaRawBytes(ValueToProduce.data(), ValueToProduce.size());
 
-                partitionData.Records = records;
+                const TString serializedRecords = WriteKafkaRecordBatch(*records);
+                auto recordsBuffer = std::make_shared<TBuffer>(serializedRecords.data(), serializedRecords.size());
+                partitionData.Records = TKafkaRawBytes(recordsBuffer->data(), recordsBuffer->size());
                 topicData.PartitionData.push_back(partitionData);
                 message->TopicData.push_back(topicData);
-                auto event = MakeHolder<TEvKafka::TEvProduceRequest>(0, NKafka::TMessagePtr<NKafka::TProduceRequestData>({}, message));
+                auto event = MakeHolder<TEvKafka::TEvProduceRequest>(0, NKafka::TMessagePtr<NKafka::TProduceRequestData>(recordsBuffer, message));
                 Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
             }
 
             void AssertCorrectOptsInPartitionWriter(const TActorId& writerId, const TProducerInstanceId& producerInstanceId, const TMaybe<TString>& transactionalId) {
-                NKikimr::NPQ::TPartitionWriter* writer = dynamic_cast<NKikimr::NPQ::TPartitionWriter*>(Ctx->Runtime->FindActor(writerId));
+                const auto* writer = dynamic_cast<NKikimr::NPQ::TPartitionWriterOpts::IGetter*>(Ctx->Runtime->FindActor(writerId));
+                UNIT_ASSERT(writer);
                 const TPartitionWriterOpts& writerOpts = writer->GetOpts();
 
                 UNIT_ASSERT_VALUES_EQUAL(*writerOpts.KafkaProducerInstanceId, producerInstanceId);
@@ -111,6 +136,21 @@ namespace {
                 } else {
                     UNIT_ASSERT(transactionalId.Empty());
                 }
+            }
+
+            THolder<TEvPersQueue::TEvResponse> CreateMissingSupPartitionErrorResponse(ui64 cookie) {
+                auto event = MakeHolder<TEvPersQueue::TEvResponse>();
+                NKikimrClient::TResponse record;
+                record.SetErrorReason("expected test error");
+                record.SetErrorCode(::NPersQueue::NErrorCode::EErrorCode::KAFKA_TRANSACTION_MISSING_SUPPORTIVE_PARTITION);
+                record.MutablePartitionResponse()->SetCookie(cookie);
+                event->Record = record;
+                return event;
+            }
+
+            void SetSchemeCacheReplyTopicNotFound() {
+                auto ev = std::make_unique<TDummySchemeCacheActor::TEvReplyTopicNotFound>();
+                Ctx->Runtime->SingleSys()->Send(new IEventHandle(MakeSchemeCacheID(), Ctx->Edge, ev.release()));
             }
         };
 
@@ -125,10 +165,10 @@ namespace {
             ui32 poisonPillCounter = 0;
             auto observer = [&](TAutoPtr<IEventHandle>& input) {
                 Cout << input->ToString() << Endl;
-                if (auto* event = input->CastAsLocal<TEvPartitionWriter::TEvWriteRequest>()) {
+                if (input->CastAsLocal<TEvPartitionWriter::TEvWriteRequest>()) {
                     writeRequestReceiver = input->Recipient;
                     writeRequestsCounter++;
-                } else if (auto* event = input->CastAsLocal<TEvents::TEvPoison>()) {
+                } else if (input->CastAsLocal<TEvents::TEvPoison>()) {
                     if (poisonPillCounter == 0) { // only first poison pill goes to writer
                         poisonPillReceiver = input->Recipient;
                         poisonPillCounter++;
@@ -171,6 +211,53 @@ namespace {
             UNIT_ASSERT_VALUES_EQUAL(poisonPillReceiver, firstPartitionWriterId);
         }
 
+        Y_UNIT_TEST(OnProduceWithTransactionalId_andLostMessagesError_shouldRecreatePartitionWriterAndRetryProduce) {
+            i64 producerId = 1;
+            i32 producerEpoch = 2;
+            TActorId firstWriteRequestReceiver;
+            TActorId poisonPillReceiver;
+            TActorId secondWriteRequestReceiver;
+            int writeRequestsCounter = 0;
+            int poisonPillCounter = 0;
+            auto observer = [&](TAutoPtr<IEventHandle>& input) {
+                Cout << input->ToString() << Endl;
+                if (input->CastAsLocal<TEvPartitionWriter::TEvWriteRequest>()) {
+                    if (writeRequestsCounter == 0) {
+                        firstWriteRequestReceiver = input->Recipient;
+                        AssertCorrectOptsInPartitionWriter(firstWriteRequestReceiver, {producerId, producerEpoch}, TransactionalId);
+                    } else if (writeRequestsCounter == 1) {
+                        secondWriteRequestReceiver = input->Recipient;
+                        AssertCorrectOptsInPartitionWriter(secondWriteRequestReceiver, {producerId, producerEpoch}, TransactionalId);
+                    }
+                    writeRequestsCounter++;
+                } else if (auto* event = input->CastAsLocal<TEvPersQueue::TEvRequest>()) {
+                    if (event->Record.GetPartitionRequest().HasCmdReserveBytes()) {
+                        Ctx->Runtime->Send(new IEventHandle(firstWriteRequestReceiver, input->Sender, CreateMissingSupPartitionErrorResponse(event->Record.GetPartitionRequest().GetCookie()).Release()));
+                        return TTestActorRuntimeBase::EEventAction::DROP;
+                    }
+                } else if (input->CastAsLocal<TEvents::TEvPoison>()) {
+                    if (poisonPillCounter == 0) { // only first poison pill goes to writer
+                        poisonPillReceiver = input->Recipient;
+                        poisonPillCounter++;
+                    } // we are not interested in all subsequent
+                }
+
+                return TTestActorRuntimeBase::EEventAction::PROCESS;
+            };
+            Ctx->Runtime->SetObserverFunc(observer);
+
+            SendProduce(TransactionalId, producerId, producerEpoch);
+
+            TDispatchOptions options;
+            options.CustomFinalCondition = [&writeRequestsCounter, &poisonPillCounter]() {
+                return writeRequestsCounter > 1 && poisonPillCounter > 0;
+            };
+            UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+
+            UNIT_ASSERT_VALUES_UNEQUAL(firstWriteRequestReceiver, secondWriteRequestReceiver);
+            UNIT_ASSERT_VALUES_EQUAL(firstWriteRequestReceiver, poisonPillReceiver);
+        }
+
         Y_UNIT_TEST(OnProduceWithoutTransactionalId_shouldNotKillOldWriter) {
             i64 producerId = 0;
             i32 producerEpoch = 0;
@@ -178,10 +265,10 @@ namespace {
             ui32 writeRequestsCounter = 0;
             ui32 poisonPillCounter = 0;
             auto observer = [&](TAutoPtr<IEventHandle>& input) {
-                if (auto* event = input->CastAsLocal<TEvPartitionWriter::TEvWriteRequest>()) {
+                if (input->CastAsLocal<TEvPartitionWriter::TEvWriteRequest>()) {
                     writeRequestReceiver = input->Recipient;
                     writeRequestsCounter++;
-                } else if (auto* event = input->CastAsLocal<TEvents::TEvPoison>()) {
+                } else if (input->CastAsLocal<TEvents::TEvPoison>()) {
                     poisonPillCounter++;
                 }
 
@@ -217,6 +304,106 @@ namespace {
                 return poisonPillCounter > 0;
             };
             UNIT_ASSERT(!Ctx->Runtime->DispatchEvents(options3, TDuration::Seconds(2)));
+        }
+
+        Y_UNIT_TEST(OnWriteExpiredAndWakeUp_ShouldReturnREQUEST_TIMED_OUT) {
+            auto observer = [&](TAutoPtr<IEventHandle>& input) {
+                if (input->CastAsLocal<TEvPartitionWriter::TEvWriteRequest>()) {
+                    return TTestActorRuntimeBase::EEventAction::DROP;
+                }
+
+                return TTestActorRuntimeBase::EEventAction::PROCESS;
+            };
+            Ctx->Runtime->SetObserverFunc(observer);
+
+            SendProduce();
+
+            Ctx->Runtime->AdvanceCurrentTime(TDuration::Seconds(31));
+
+            Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, new TEvKafka::TEvWakeup()));
+
+            auto response = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>();
+
+            UNIT_ASSERT(response != nullptr);
+            UNIT_ASSERT_VALUES_EQUAL(response->ErrorCode, NKafka::EKafkaErrors::REQUEST_TIMED_OUT);
+        }
+
+        Y_UNIT_TEST(OnProduce_andPipeDisconnected) {
+            i64 producerId = 1;
+            i32 producerEpoch = 2;
+
+            int writeRequestsCounter = 0;
+            int poisonPillCounter = 0;
+
+            auto observer = [&](TAutoPtr<IEventHandle>& input) {
+                if (input->CastAsLocal<TEvPartitionWriter::TEvWriteRequest>()) {
+                    if (writeRequestsCounter++ == 0) {
+                        auto r = std::make_unique<TEvPartitionWriter::TEvDisconnected>(TEvPartitionWriter::TEvWriteResponse::EErrorCode::InternalError);
+                        Ctx->Runtime->Send(new IEventHandle(input->Sender, input->Recipient, r.release()));
+                        return TTestActorRuntimeBase::EEventAction::DROP;
+                    }
+                } else if (input->CastAsLocal<TEvents::TEvPoison>()) {
+                    poisonPillCounter++;
+                }
+
+                return TTestActorRuntimeBase::EEventAction::PROCESS;
+            };
+
+            Ctx->Runtime->SetObserverFunc(observer);
+
+            SendProduce({}, producerId, producerEpoch);
+
+            auto response = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>();
+            UNIT_ASSERT(response);
+            UNIT_ASSERT_VALUES_EQUAL(response->ErrorCode, NKafka::EKafkaErrors::NOT_LEADER_OR_FOLLOWER);
+            UNIT_ASSERT_VALUES_EQUAL(std::dynamic_pointer_cast<NKafka::TProduceResponseData>(response->Response)->Responses[0].PartitionResponses[0].ErrorCode,
+                NKafka::EKafkaErrors::NOT_LEADER_OR_FOLLOWER);
+        }
+
+        Y_UNIT_TEST(OnProduce_ManyRequests) {
+            i64 producerId = 1;
+            i32 producerEpoch = 2;
+
+            SendProduce({}, producerId, producerEpoch, 1);
+            SendProduce({}, producerId, producerEpoch, 2);
+
+            {
+                auto response = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>();
+                UNIT_ASSERT(response);
+                UNIT_ASSERT_VALUES_EQUAL(response->ErrorCode, NKafka::EKafkaErrors::NONE_ERROR);
+                UNIT_ASSERT_VALUES_EQUAL(std::dynamic_pointer_cast<NKafka::TProduceResponseData>(response->Response)->Responses[0].PartitionResponses[0].ErrorCode,
+                    NKafka::EKafkaErrors::NONE_ERROR);
+            }
+            {
+                auto response = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>();
+                UNIT_ASSERT(response);
+                UNIT_ASSERT_VALUES_EQUAL(response->ErrorCode, NKafka::EKafkaErrors::NONE_ERROR);
+                UNIT_ASSERT_VALUES_EQUAL(std::dynamic_pointer_cast<NKafka::TProduceResponseData>(response->Response)->Responses[0].PartitionResponses[0].ErrorCode,
+                    NKafka::EKafkaErrors::NONE_ERROR);
+            }
+        }
+
+        Y_UNIT_TEST(OnUnknownTopic_ShouldReturnUNKNOWN_TOPIC_OR_PARTITION) {
+            const i64 producerId = 0;
+            const i32 producerEpoch = 0;
+
+            SetSchemeCacheReplyTopicNotFound();
+
+            SendProduce(TransactionalId, producerId, producerEpoch + 0);
+            SendProduce(TransactionalId, producerId, producerEpoch + 1);
+            SendProduce(TransactionalId, producerId, producerEpoch + 2);
+
+            auto response = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>();
+            UNIT_ASSERT(response != nullptr);
+            UNIT_ASSERT_VALUES_EQUAL(response->ErrorCode, NKafka::EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION);
+
+            response = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>();
+            UNIT_ASSERT(response != nullptr);
+            UNIT_ASSERT_VALUES_EQUAL(response->ErrorCode, NKafka::EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION);
+
+            response = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>();
+            UNIT_ASSERT(response != nullptr);
+            UNIT_ASSERT_VALUES_EQUAL(response->ErrorCode, NKafka::EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION);
         }
     }
 } // anonymous namespace

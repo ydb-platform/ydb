@@ -5,18 +5,18 @@
 #include <yt/yt/core/misc/error.h>
 
 #include <library/cpp/yt/memory/type_erasure.h>
-#include <library/cpp/yt/misc/tag_invoke_cpo.h>
+#include <library/cpp/yt/mpl/tag_invoke_cpo.h>
 
 namespace NYT::NDetail {
 
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TIsCancelationRequestedFn
-    : public TTagInvokeCpoBase<TIsCancelationRequestedFn>
+    : public NMpl::TTagInvokeCpoBase<TIsCancelationRequestedFn>
 { };
 
 struct TGetCancelationErrorFn
-    : public TTagInvokeCpoBase<TGetCancelationErrorFn>
+    : public NMpl::TTagInvokeCpoBase<TGetCancelationErrorFn>
 { };
 
 inline constexpr TIsCancelationRequestedFn IsCancelationRequested = {};
@@ -29,8 +29,8 @@ inline constexpr TGetCancelationErrorFn GetCancelationError = {};
 template <class T>
 concept CCancelationToken =
     std::copyable<T> &&
-    CTagInvocableS<TIsCancelationRequestedFn, bool(const T&) noexcept> &&
-    CTagInvocableS<TGetCancelationErrorFn, const TError&(const T&)>;
+    NMpl::CTagInvocableS<TIsCancelationRequestedFn, bool(const T&) noexcept> &&
+    NMpl::CTagInvocableS<TGetCancelationErrorFn, const TError&(const T&)>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -48,7 +48,7 @@ public:
     ~TCurrentCancelationTokenGuard();
 
     TCurrentCancelationTokenGuard(const TCurrentCancelationTokenGuard& other) = delete;
-    TCurrentCancelationTokenGuard& operator= (const TCurrentCancelationTokenGuard& other) = delete;
+    TCurrentCancelationTokenGuard& operator=(const TCurrentCancelationTokenGuard& other) = delete;
 
 private:
     TAnyCancelationToken PrevToken_;

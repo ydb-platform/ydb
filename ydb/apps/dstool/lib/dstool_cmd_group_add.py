@@ -9,6 +9,7 @@ description = 'Add groups to the pool'
 def add_options(p):
     p.add_argument('--pool-name', type=str, required=True, help='Storage pool to add to')
     p.add_argument('--groups', type=int, required=True, help='Number of groups to add')
+    p.add_argument('--size-in-units', type=int, required=False, default=None, help='Size in units for the new groups')
     table.TableOutput([]).add_options(p)
 
 
@@ -17,8 +18,18 @@ def create_request(args, storage_pool):
     cmd = request.Command.add()
     cmd.DefineStoragePool.CopyFrom(storage_pool)
     cmd.DefineStoragePool.NumGroups += args.groups
+    if args.size_in_units is not None:
+        cmd.DefineStoragePool.DefaultGroupSizeInUnits = args.size_in_units
+    define_cmd = cmd.DefineStoragePool
     cmd = request.Command.add()
     cmd.QueryBaseConfig.CopyFrom(common.kikimr_bsconfig.TQueryBaseConfig())
+    if args.size_in_units is not None:
+        # Reset DefaultGroupSizeInUnits back to its original value
+        # so it does not affect future group additions.
+        cmd = request.Command.add()
+        cmd.DefineStoragePool.CopyFrom(define_cmd)
+        cmd.DefineStoragePool.ItemConfigGeneration += 1
+        cmd.DefineStoragePool.DefaultGroupSizeInUnits = storage_pool.DefaultGroupSizeInUnits
     return request
 
 
@@ -61,6 +72,7 @@ def do(args):
     response = perform_request(request)
     if not is_successful_response(response):
         common.print_request_result(args, request, response)
+        common.dump_group_mapper_error(response, args)
         sys.exit(1)
 
     pdisk_usage_before = common.build_pdisk_usage_map(base_config, count_donors=False, storage_pool=sp)

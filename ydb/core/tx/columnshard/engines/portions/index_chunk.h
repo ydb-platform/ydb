@@ -3,17 +3,15 @@
 #include "common.h"
 
 #include <ydb/core/protos/tx_columnshard.pb.h>
-
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/splitter/chunks.h>
 
 #include <ydb/library/accessor/accessor.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/scalar.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
-
+#include <contrib/libs/apache/arrow/cpp/src/arrow/scalar.h>
 #include <util/string/builder.h>
 
 namespace NKikimrColumnShardDataSharingProto {
@@ -33,6 +31,7 @@ private:
 
     TIndexChunk() = default;
     TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TIndexChunk& proto);
+
 public:
     ui64 GetDataSize() const;
 
@@ -77,8 +76,8 @@ public:
         , ChunkIdx(chunkIdx)
         , RecordsCount(recordsCount)
         , RawBytes(rawBytes)
-        , Data(blobRange) {
-
+        , Data(blobRange)
+    {
     }
 
     TIndexChunk(const ui32 indexId, const ui32 chunkIdx, const ui32 recordsCount, const ui64 rawBytes, const TString& blobData)
@@ -86,7 +85,8 @@ public:
         , ChunkIdx(chunkIdx)
         , RecordsCount(recordsCount)
         , RawBytes(rawBytes)
-        , Data(blobData) {
+        , Data(blobData)
+    {
     }
 
     void RegisterBlobIdx(const TBlobRangeLink16::TLinkId blobLinkId) {
@@ -105,7 +105,6 @@ public:
     }
 
     NKikimrColumnShardDataSharingProto::TIndexChunk SerializeToProto() const;
-
 };
 
-}
+}   // namespace NKikimr::NOlap

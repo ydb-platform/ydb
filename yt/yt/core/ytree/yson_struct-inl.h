@@ -24,6 +24,7 @@
 #include <yt/yt/core/actions/bind.h>
 
 #include <library/cpp/yt/misc/enum.h>
+#include <library/cpp/yt/misc/source_location.h>
 
 #include <util/datetime/base.h>
 
@@ -46,6 +47,21 @@ const std::type_info& CallCtor()
         T dummy;
         return typeid(T);
     }
+}
+
+template <class T>
+IMapNodePtr GetDefaultStructNode()
+{
+    auto builder = CreateBuilderFromFactory(GetEphemeralNodeFactory());
+    builder->BeginTree();
+
+    if constexpr (std::convertible_to<T*, TRefCountedBase*>) {
+        New<T>()->Save(builder.get());
+    } else {
+        T().Save(builder.get());
+    }
+
+    return builder->EndTree()->AsMap();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -95,7 +111,7 @@ YT_PREVENT_TLS_CACHING TStruct* TExternalizedYsonStruct::GetDefault() noexcept
 // When it is first called for a particular struct it will initialize TYsonStructMeta for that struct.
 // Also this method initializes defaults for the struct.
 template <class TStruct>
-void TYsonStructRegistry::InitializeStruct(TStruct* target)
+void TYsonStructRegistry::InitializeStruct(TStruct* target, const NYT::TSourceLocation& sourceLocation)
 {
     TForbidCachedDynamicCastGuard guard(target);
 
@@ -109,8 +125,13 @@ void TYsonStructRegistry::InitializeStruct(TStruct* target)
         return;
     }
 
-    auto metaConstructor = [] {
-        auto* result = new TYsonStructMeta();
+    auto metaConstructor = [&] {
+        auto defaultStructNodeGetter = [] {
+            static auto defaultStructNode = GetDefaultStructNode<TStruct>();
+            return defaultStructNode;
+        };
+
+        auto* result = new TYsonStructMeta(sourceLocation, defaultStructNodeGetter);
         NSan::MarkAsIntentionallyLeaked(result);
 
         // NB: Here initialization of TYsonStructMeta of particular struct takes place.
@@ -135,6 +156,20 @@ void TYsonStructRegistry::InitializeStruct(TStruct* target)
 
     static TYsonStructMeta* meta = metaConstructor();
     target->Meta_ = meta;
+}
+
+template <CYsonStructDerived TStruct>
+const IYsonStructMeta* TYsonStructRegistry::GetMeta()
+{
+    if constexpr (CYsonStruct<TStruct>) {
+        static const auto meta = New<TStruct>()->GetMeta();
+        return meta;
+    } else if constexpr (CYsonStructLite<TStruct>) {
+        static const auto meta = TStruct().GetMeta();
+        return meta;
+    } else {
+        static_assert(TDependentFalse<TStruct>, "TStruct must be descendant of TYsonStruct or TYsonStructLite");
+    }
 }
 
 template <class TTargetStruct>
@@ -182,7 +217,7 @@ TYsonStructParameter<TValue>& TYsonStructRegistrar<TStruct>::BaseClassParameter(
 {
     static_assert(std::derived_from<TStruct, TBase>);
     int fieldIndex = ssize(Meta_->GetParameterMap());
-    auto parameter = New<TYsonStructParameter<TValue>>(key, std::make_unique<TYsonFieldAccessor<TBase, TValue>>(field), fieldIndex);
+    auto parameter = New<TYsonStructParameter<TValue>>(key, std::make_unique<TYsonFieldAccessor<TBase, TValue>>(field), fieldIndex, typeid(TStruct));
     Meta_->RegisterParameter(key, parameter);
     return *parameter;
 }
@@ -192,7 +227,7 @@ template <class TValue>
 TYsonStructParameter<TValue>& TYsonStructRegistrar<TStruct>::ParameterWithUniversalAccessor(const std::string& key, std::function<TValue&(TStruct*)> accessor)
 {
     int fieldIndex = ssize(Meta_->GetParameterMap());
-    auto parameter = New<TYsonStructParameter<TValue>>(key, std::make_unique<TUniversalYsonParameterAccessor<TStruct, TValue>>(std::move(accessor)), fieldIndex);
+    auto parameter = New<TYsonStructParameter<TValue>>(key, std::make_unique<TUniversalYsonParameterAccessor<TStruct, TValue>>(std::move(accessor)), fieldIndex, typeid(TStruct));
     Meta_->RegisterParameter(key, parameter);
     return *parameter;
 }
@@ -229,10 +264,10 @@ TYsonStructParameter<TValue>& TYsonStructRegistrar<TStruct>::ExternalClassParame
 
 template <class TStruct>
 template <class TExternalPreprocessor>
-    // requires (CInvocable<TExternalPreprocessor, void(typename TStruct::TExternal*)>)
+    // requires (NMpl::CInvocable<TExternalPreprocessor, void(typename TStruct::TExternal*)>)
 void TYsonStructRegistrar<TStruct>::ExternalPreprocessor(TExternalPreprocessor preprocessor)
 {
-    static_assert(CInvocable<TExternalPreprocessor, void(typename TStruct::TExternal*)>);
+    static_assert(NMpl::CInvocable<TExternalPreprocessor, void(typename TStruct::TExternal*)>);
     Meta_->RegisterPreprocessor([preprocessor = std::move(preprocessor)] (TYsonStructBase* target) {
         preprocessor(TYsonStructRegistry::Get()->template CachedDynamicCast<TStruct>(target)->That_);
     });
@@ -240,10 +275,10 @@ void TYsonStructRegistrar<TStruct>::ExternalPreprocessor(TExternalPreprocessor p
 
 template <class TStruct>
 template <class TExternalPostprocessor>
-    // requires (CInvocable<TExternalPostprocessor, void(typename TStruct::TExternal*)>)
+    // requires (NMpl::CInvocable<TExternalPostprocessor, void(typename TStruct::TExternal*)>)
 void TYsonStructRegistrar<TStruct>::ExternalPostprocessor(TExternalPostprocessor postprocessor)
 {
-    static_assert(CInvocable<TExternalPostprocessor, void(typename TStruct::TExternal*)>);
+    static_assert(NMpl::CInvocable<TExternalPostprocessor, void(typename TStruct::TExternal*)>);
     Meta_->RegisterPostprocessor([postprocessor = std::move(postprocessor)] (TYsonStructBase* target) {
         postprocessor(TYsonStructRegistry::Get()->template CachedDynamicCast<TStruct>(target)->That_);
     });
@@ -269,7 +304,7 @@ void TYsonStructRegistrar<TStruct>::UnrecognizedStrategy(EUnrecognizedStrategy s
 }
 
 template <class TStruct>
-template<class TBase>
+template <class TBase>
 TYsonStructRegistrar<TStruct>::operator TYsonStructRegistrar<TBase>()
 {
     static_assert(std::derived_from<TStruct, TBase>);
@@ -278,16 +313,14 @@ TYsonStructRegistrar<TStruct>::operator TYsonStructRegistrar<TBase>()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <CExternallySerializable T>
-void Serialize(const T& value, NYson::IYsonConsumer* consumer)
-{
-    using TSerializer = typename TGetExternalizedYsonStructTraits<T>::TExternalSerializer;
-    auto serializer = TSerializer::template CreateReadOnly<T, TSerializer>(value);
-    Serialize(serializer, consumer);
-}
+} // namespace NYT::NYTree
+
+namespace NYT::NYTree::NDetail {
+
+////////////////////////////////////////////////////////////////////////////////
 
 template <CExternallySerializable T, CYsonStructSource TSource>
-void Deserialize(T& value, TSource source, bool postprocess, bool setDefaults, std::optional<EUnrecognizedStrategy> strategy)
+void DeserializeFromAny(T& value, TSource source, bool postprocess, bool setDefaults, std::optional<EUnrecognizedStrategy> strategy)
 {
     using TTraits = TGetExternalizedYsonStructTraits<T>;
     using TSerializer = typename TTraits::TExternalSerializer;
@@ -297,6 +330,49 @@ void Deserialize(T& value, TSource source, bool postprocess, bool setDefaults, s
     }
     serializer.Load(std::move(source), postprocess, setDefaults);
 }
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NYT::NYTree::NDetail
+
+namespace NYT::NYson {
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <NYTree::CExternallySerializable T>
+void Serialize(const T& value, NYson::IYsonConsumer* consumer)
+{
+    using TSerializer = typename NYTree::TGetExternalizedYsonStructTraits<T>::TExternalSerializer;
+    auto serializer = TSerializer::template CreateReadOnly<T, TSerializer>(value);
+    Serialize(serializer, consumer);
+}
+
+template <NYTree::CExternallySerializable T>
+void Deserialize(
+    T& value,
+    NYson::TYsonPullParserCursor* cursor,
+    bool postprocess,
+    bool setDefaults,
+    std::optional<NYTree::EUnrecognizedStrategy> strategy)
+{
+    NYTree::NDetail::DeserializeFromAny(value, cursor, postprocess, setDefaults, strategy);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NYT::NYson
+
+namespace NYT::NYTree {
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <CExternallySerializable T>
+void Deserialize(T& value, INodePtr source, bool postprocess, bool setDefaults, std::optional<EUnrecognizedStrategy> strategy)
+{
+    NDetail::DeserializeFromAny(value, source, postprocess, setDefaults, strategy);
+}
+
+////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
 TIntrusivePtr<T> CloneYsonStruct(const TIntrusivePtr<const T>& obj, bool postprocess, bool setDefaults)
@@ -446,14 +522,14 @@ private: \
     friend class ::NYT::NYTree::TYsonStructRegistry;
 
 #define YSON_STRUCT_IMPL__CTOR_BODY \
-    ::NYT::NYTree::TYsonStructRegistry::Get()->InitializeStruct(this);
+    ::NYT::NYTree::TYsonStructRegistry::Get()->InitializeStruct(this, YT_CURRENT_SOURCE_LOCATION);
 
 #define YSON_STRUCT_LITE_IMPL__CTOR_BODY(TStruct) \
     YSON_STRUCT_IMPL__CTOR_BODY \
     if (std::type_index(typeid(TStruct)) == this->FinalType_) { \
         ::NYT::NYTree::TYsonStructRegistry::Get()->OnFinalCtorCalled(); \
         if (!::NYT::NYTree::TYsonStructRegistry::Get()->InitializationInProgress()) { \
-            this->SetDefaults(); \
+            this->SetDefaults(/*dontSetLiteMembers*/ true); \
         } \
     } \
 

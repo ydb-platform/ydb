@@ -140,6 +140,13 @@ void TSideEffects::DeleteShard(TShardIdx idx) {
     ToDeleteShards.insert(idx);
 }
 
+void TSideEffects::DeleteSystemShard(TShardIdx idx) {
+    if (!idx) {
+        return; //KIKIMR-8507
+    }
+    ToDeleteSystemShards.insert(idx);
+}
+
 void TSideEffects::ToProgress(TIndexBuildId id) {
     IndexToProgress.push_back(id);
 }
@@ -187,6 +194,7 @@ void TSideEffects::ApplyOnExecute(TSchemeShard* ss, NTabletFlatExecutor::TTransa
     DoPersistDependencies(ss,txc, ctx);
 
     DoPersistDeleteShards(ss, txc, ctx);
+    DoPersistDeleteSystemShards(ss, txc, ctx);
 
     SetupRoutingLongOps(ss, ctx);
 }
@@ -226,6 +234,9 @@ void TSideEffects::ApplyOnComplete(TSchemeShard* ss, const TActorContext& ctx) {
     DoRegisterRelations(ss, ctx);
 
     DoTriggerDeleteShards(ss, ctx);
+    DoTriggerDeleteSystemShards(ss, ctx);
+
+    DoFireFullBackupItemDone(ss, ctx);
 
     ResumeLongOps(ss, ctx);
 }
@@ -278,7 +289,7 @@ void TSideEffects::DoActivateOps(TSchemeShard* ss, const TActorContext& ctx) {
     }
 }
 
-bool TSideEffects::CheckDecouplingProposes(TString& errExpl) const {
+bool TSideEffects::CheckDecouplingProposes(const TSchemeShard* ss, TString& errExpl) const {
     THashMap<TTabletId, TOperationId> checkDecoupling;
     for (auto& rec: CoordinatorProposesShards) {
         TOperationId opId;
@@ -289,6 +300,18 @@ bool TSideEffects::CheckDecouplingProposes(TString& errExpl) const {
         auto position = checkDecoupling.end();
         std::tie(position, inserted) = checkDecoupling.emplace(shard, opId);
         if (!inserted && position->second != opId) {
+            // For shared shards, the same tablet can legitimately be involved
+            // in multiple concurrent operations (one per sharing table).
+            auto shardIdxIt = ss->TabletIdToShardIdx.find(shard);
+            if (shardIdxIt != ss->TabletIdToShardIdx.end()
+                && ss->SharedShards.contains(shardIdxIt->second))
+            {
+                const auto* txState1 = ss->TxInFlight.FindPtr(opId);
+                const auto* txState2 = ss->TxInFlight.FindPtr(position->second);
+                if (txState1 && txState2 && txState1->TargetPathId != txState2->TargetPathId) {
+                    continue;
+                }
+            }
             errExpl = TStringBuilder()
                     << "can't propose more then one operation to the shard with the same txId"
                     << ", here shardId is " << shard
@@ -303,7 +326,7 @@ bool TSideEffects::CheckDecouplingProposes(TString& errExpl) const {
 
 void TSideEffects::ExpandCoordinatorProposes(TSchemeShard* ss, const TActorContext& ctx) {
     TString errExpl;
-    Y_ABORT_UNLESS(CheckDecouplingProposes(errExpl), "check decoupling: %s", errExpl.c_str());
+    Y_ABORT_UNLESS(CheckDecouplingProposes(ss, errExpl), "check decoupling: %s", errExpl.c_str());
 
     TSet<TTxId> touchedTxIds;
     for (auto& rec: CoordinatorProposes) {
@@ -478,13 +501,16 @@ void TSideEffects::DoUpdateTenant(TSchemeShard* ss, NTabletFlatExecutor::TTransa
             if (subDomain->GetDatabaseQuotas()) {
                 message->Record.MutableDatabaseQuotas()->CopyFrom(*subDomain->GetDatabaseQuotas());
             }
-            message->Record.MutableSchemeLimits()->CopyFrom(subDomain->GetSchemeLimits().AsProto());
+            if (AppData()->FeatureFlags.GetEnableAlterDatabase()) {
+                message->Record.MutableSchemeLimits()->CopyFrom(subDomain->GetSchemeLimits().AsProto());
+            }
             if (const auto& auditSettings = subDomain->GetAuditSettings()) {
                 message->Record.MutableAuditSettings()->CopyFrom(*auditSettings);
             }
             if (const auto& serverlessComputeResourcesMode = subDomain->GetServerlessComputeResourcesMode()) {
                 message->Record.SetServerlessComputeResourcesMode(*serverlessComputeResourcesMode);
             }
+            message->Record.SetTablesMetricsLevel(subDomain->GetTablesMetricsLevel());
             hasChanges = true;
         }
 
@@ -646,7 +672,7 @@ void TSideEffects::DoBindMsg(TSchemeShard *ss, const TActorContext &ctx) {
         const ui32 msgType = message->Type();
 
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "Send tablet strongly msg "
+                    "Send tablet strongly msg"
                         << " operationId: " << opId
                         << " from tablet: " << ss->TabletID()
                         << " to tablet: " << tablet
@@ -673,7 +699,7 @@ void TSideEffects::DoBindMsg(TSchemeShard *ss, const TActorContext &ctx) {
         TAllocChunkSerializer serializer;
         const bool success = message->SerializeToArcadiaStream(&serializer);
         Y_ABORT_UNLESS(success);
-        TIntrusivePtr<TEventSerializedData> data = serializer.Release(message->CreateSerializationInfo());
+        TIntrusivePtr<TEventSerializedData> data = serializer.Release(message->CreateSerializationInfo(false));
         operation->PipeBindedMessages[tablet][cookie] = TOperation::TPreSerializedMessage(msgType, data, opId);
 
         ss->PipeClientCache->Send(ctx, ui64(tablet), msgType,  data, cookie.second);
@@ -755,6 +781,10 @@ void TSideEffects::DoTriggerDeleteShards(TSchemeShard *ss, const TActorContext &
     ss->DoShardsDeletion(ToDeleteShards, ctx);
 }
 
+void TSideEffects::DoTriggerDeleteSystemShards(TSchemeShard *ss, const TActorContext &ctx) {
+    ss->DoDeleteSystemShards(ToDeleteSystemShards, ctx);
+}
+
 void TSideEffects::DoReleasePathState(TSchemeShard *ss, const TActorContext &) {
     for (auto& rec: ReleasePathStateRecs) {
         TOperationId opId = InvalidOperationId;
@@ -781,13 +811,18 @@ void TSideEffects::DoPersistDeleteShards(TSchemeShard *ss, NTabletFlatExecutor::
     ss->PersistShardsToDelete(db, ToDeleteShards);
 }
 
+void TSideEffects::DoPersistDeleteSystemShards(TSchemeShard *ss, NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &) {
+    NIceDb::TNiceDb db(txc.DB);
+    ss->PersistSystemShardsToDelete(db, ToDeleteSystemShards);
+}
+
 void TSideEffects::DoUpdateTempDirsToMakeState(TSchemeShard* ss, const TActorContext &ctx) {
     for (auto& [ownerActorId, tempDirs]: TempDirsToMakeState) {
 
-        auto& TempDirsByOwner = ss->TempDirsState.TempDirsByOwner;
+        auto& tempDirsByOwner = ss->TempDirsState.TempDirsByOwner;
         auto& nodeStates = ss->TempDirsState.NodeStates;
 
-        const auto it = TempDirsByOwner.find(ownerActorId);
+        const auto it = tempDirsByOwner.find(ownerActorId);
 
         const auto nodeId = ownerActorId.NodeId();
 
@@ -801,12 +836,12 @@ void TSideEffects::DoUpdateTempDirsToMakeState(TSchemeShard* ss, const TActorCon
             itNodeStates->second.Owners.insert(ownerActorId);
         }
 
-        if (it == TempDirsByOwner.end()) {
+        if (it == tempDirsByOwner.end()) {
             ctx.Send(new IEventHandle(ownerActorId, ss->SelfId(),
                 new TEvSchemeShard::TEvOwnerActorAck(),
                 IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession));
 
-            auto& currentDirsTables = TempDirsByOwner[ownerActorId];
+            auto& currentDirsTables = tempDirsByOwner[ownerActorId];
 
             for (auto& pathId : tempDirs) {
                 currentDirsTables.insert(std::move(pathId));
@@ -822,9 +857,9 @@ void TSideEffects::DoUpdateTempDirsToMakeState(TSchemeShard* ss, const TActorCon
 
 void TSideEffects::DoUpdateTempDirsToRemoveState(TSchemeShard* ss, const TActorContext& ctx) {
     for (auto& [ownerActorId, tempDirs]: TempDirsToRemoveState) {
-        auto& TempDirsByOwner = ss->TempDirsState.TempDirsByOwner;
-        const auto it = TempDirsByOwner.find(ownerActorId);
-        if (it == TempDirsByOwner.end()) {
+        auto& tempDirsByOwner = ss->TempDirsState.TempDirsByOwner;
+        const auto it = tempDirsByOwner.find(ownerActorId);
+        if (it == tempDirsByOwner.end()) {
             continue;
         }
 
@@ -839,7 +874,7 @@ void TSideEffects::DoUpdateTempDirsToRemoveState(TSchemeShard* ss, const TActorC
         }
 
         if (it->second.empty()) {
-            TempDirsByOwner.erase(it);
+            tempDirsByOwner.erase(it);
 
             auto& nodeStates = ss->TempDirsState.NodeStates;
 
@@ -901,7 +936,28 @@ void TSideEffects::DoDoneParts(TSchemeShard *ss, const TActorContext &ctx) {
         }
 
         TOperation::TPtr operation = ss->Operations.at(txId);
-        operation->DoneParts.insert(opId.GetSubTxId());
+        const bool partNewlyDone = operation->DoneParts.insert(opId.GetSubTxId()).second;
+
+        // Queue (not send) TEvFullBackupItemDone for tracked TxCopyTable sub-ops;
+        // sending must happen post-commit in ApplyOnComplete, not here in ApplyOnExecute.
+        // Gate on partNewlyDone because DoDoneParts is called twice per ApplyOnExecute
+        // (barrier-released ops), so without it we would enqueue duplicates.
+        // Restrict to TxCopyTable to avoid firing on the control op's own Done.
+        if (partNewlyDone && ss->FullBackups.contains(ui64(opId.GetTxId()))) {
+            auto* txState = ss->FindTx(opId);
+            if (txState && txState->TxType == TTxState::TxCopyTable) {
+                // EPathStateDrop means AbortUnsafe was triggered; any other state is success.
+                bool aborted = false;
+                if (auto* path = ss->PathsById.FindPtr(txState->TargetPathId)) {
+                    aborted = ((*path)->PathState == NKikimrSchemeOp::EPathState::EPathStateDrop);
+                }
+                PendingFullBackupItemDone.emplace_back(
+                    ui64(opId.GetTxId()),
+                    txState->TargetPathId,
+                    /*success=*/!aborted);
+            }
+        }
+
         LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "Part operation is done"
                         << " id#" << opId
@@ -913,6 +969,19 @@ void TSideEffects::DoDoneParts(TSchemeShard *ss, const TActorContext &ctx) {
 
         DoneTransactions.insert(opId.GetTxId());
     }
+}
+
+void TSideEffects::DoFireFullBackupItemDone(TSchemeShard* ss, const TActorContext& ctx) {
+    for (auto& [id, dstPathId, success] : PendingFullBackupItemDone) {
+        LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "Fire TEvFullBackupItemDone"
+                        << " fullBackupId#" << id
+                        << " dstPathId#" << dstPathId
+                        << " success#" << success);
+        ctx.Send(ss->SelfId(),
+            new TEvPrivate::TEvFullBackupItemDone(id, dstPathId, success));
+    }
+    PendingFullBackupItemDone.clear();
 }
 
 void TSideEffects::DoDoneTransactions(TSchemeShard *ss, NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx) {
@@ -935,6 +1004,12 @@ void TSideEffects::DoDoneTransactions(TSchemeShard *ss, NTabletFlatExecutor::TTr
 
             Y_ABORT_UNLESS(ss->PathsById.contains(pathId));
             TPathElement::TPtr path = ss->PathsById.at(pathId);
+            Y_VERIFY_S(!path->Dropped() || state == NKikimrSchemeOp::EPathStateNotExist,
+                "ReleasePathAtDone: dropped path with non-NotExist state"
+                << ": pathId=" << pathId
+                << " StepDropped=" << path->StepDropped
+                << " currentPathState=" << static_cast<ui32>(path->PathState)
+                << " newPathState=" << static_cast<ui32>(state));
             path->PathState = state;
         }
 

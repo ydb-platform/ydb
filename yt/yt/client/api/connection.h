@@ -3,6 +3,8 @@
 #include "public.h"
 #include "options.h"
 
+#include <library/cpp/yt/logging/tag.h>
+
 #include <yt/yt/client/chunk_client/public.h>
 
 #include <yt/yt/client/object_client/public.h>
@@ -12,6 +14,8 @@
 #include <yt/yt/client/tablet_client/public.h>
 
 #include <yt/yt/client/hive/public.h>
+
+#include <yt/yt/library/tvm/service/public.h>
 
 #include <yt/yt/core/actions/callback.h>
 
@@ -46,10 +50,13 @@ struct TTransactionParticipantOptions
 struct IConnection
     : public virtual TRefCounted
 {
+    using TConnectionOptions = NApi::TConnectionOptions;
+
     virtual TClusterTag GetClusterTag() const = 0;
-    virtual const std::string& GetLoggingTag() const = 0;
+    virtual const NLogging::TLoggingTagList& GetLoggingTags() const = 0;
     virtual const std::string& GetClusterId() const = 0;
     virtual const std::optional<std::string>& GetClusterName() const = 0;
+    virtual const std::optional<NAuth::TTvmId>& GetTvmId() const = 0;
     virtual IInvokerPtr GetInvoker() = 0;
 
     // TODO(gritukan): Fix alien transaction creation for RPC proxy connection

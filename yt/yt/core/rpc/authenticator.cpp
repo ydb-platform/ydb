@@ -73,6 +73,7 @@ public:
             context.Header->has_user() ? FromProto<std::string>(context.Header->user()) : RootUserName,
             Realm,
             UserTicket,
+            {},
         };
         return MakeFuture<TAuthenticationResult>(result);
     }

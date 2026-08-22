@@ -1,12 +1,16 @@
 #include "config.h"
 
 #include <util/string/builder.h>
+#include <ydb/core/protos/config.pb.h>
 
 namespace NKikimr::NGeneralCache::NPublic {
 
 TConclusionStatus TConfig::DeserializeFromProto(const NKikimrConfig::TGeneralCacheConfig& config) {
-    if (config.HasDirectInflightLimit()) {
-        DirectInflightLimit = config.GetDirectInflightLimit();
+    if (config.HasDirectInflightSourceLimit()) {
+        DirectInflightSourceLimit = config.GetDirectInflightSourceLimit();
+    }
+    if (config.HasDirectInflightGlobalLimit()) {
+        DirectInflightGlobalLimit = config.GetDirectInflightGlobalLimit();
     }
     if (config.HasMemoryLimit()) {
         MemoryLimit = config.GetMemoryLimit();
@@ -27,7 +31,8 @@ TString TConfig::DebugString() const {
     TStringBuilder sb;
     sb << "{";
     sb << "MemoryLimit=" << MemoryLimit << ";";
-    sb << "DirectInflightLimit=" << DirectInflightLimit << ";";
+    sb << "DirectInflightSourceLimit=" << DirectInflightSourceLimit << ";";
+    sb << "DirectInflightGlobalLimit=" << DirectInflightGlobalLimit << ";";
     sb << "}";
     return sb;
 }

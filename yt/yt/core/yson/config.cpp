@@ -12,6 +12,8 @@ void TProtobufInteropConfig::Register(TRegistrar registrar)
         .Default(EUtf8Check::ThrowOnFail);
     registrar.Parameter("force_snake_case_names", &TThis::ForceSnakeCaseNames)
         .Default(false);
+    registrar.Parameter("force_enum_string_type", &TThis::ForceEnumStringType)
+        .Default(false);
 }
 
 TProtobufInteropConfigPtr TProtobufInteropConfig::ApplyDynamic(

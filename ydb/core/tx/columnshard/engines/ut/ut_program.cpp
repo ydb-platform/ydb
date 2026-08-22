@@ -480,7 +480,8 @@ Y_UNIT_TEST_SUITE(TestProgram) {
 
             auto batch = program.ApplyProgram(updates.BuildArrow(), columnResolver).DetachResult();
 
-            TTableUpdatesBuilder result(NArrow::MakeArrowSchema({ std::make_pair("21", TTypeInfo(NTypeIds::Bool)) }));
+            auto schema = arrow::schema({ arrow::field("21", arrow::boolean()) });
+            TTableUpdatesBuilder result(schema);
             result.AddRow().Add<bool>(true);
             result.AddRow().Add<bool>(false);
 
@@ -614,8 +615,8 @@ Y_UNIT_TEST_SUITE(TestProgram) {
 
         auto batch = program.ApplyProgram(updates.BuildArrow(), columnResolver).DetachResult();
 
-        TTableUpdatesBuilder result(NArrow::MakeArrowSchema(
-            { std::make_pair("10001", TTypeInfo(NTypeIds::Uint64)), std::make_pair("4", TTypeInfo(NTypeIds::Int32)) }));
+        TTableUpdatesBuilder result(
+            NArrow::MakeArrowSchema({ std::make_pair("10001", TTypeInfo(NTypeIds::Uint64)), std::make_pair("4", TTypeInfo(NTypeIds::Int32)) }));
         result.AddRow().Add<ui64>(0).Add<i32>(3);
         result.AddRow().Add<ui64>(1).Add<i32>(2);
         result.AddRow().Add<ui64>(2).Add<i32>(1);

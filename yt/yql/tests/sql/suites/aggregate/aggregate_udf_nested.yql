@@ -1,0 +1,5 @@
+SELECT
+   String::HexText(String::HexText(value)) as value
+FROM plato.Input4
+GROUP BY value
+ORDER BY value;

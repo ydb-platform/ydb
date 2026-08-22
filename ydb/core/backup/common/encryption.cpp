@@ -26,6 +26,14 @@
 #include <openssl/evp.h>
 #include <openssl/rand.h>
 
+#if defined(__has_feature)
+#  if __has_feature(memory_sanitizer)
+#    include <sanitizer/msan_interface.h>
+#  else
+#    define __msan_unpoison(data, size)
+#  endif
+#endif
+
 #include <deque>
 
 namespace NKikimr::NBackup {
@@ -34,7 +42,6 @@ namespace {
 
 static constexpr size_t MAC_SIZE = 16;
 static constexpr size_t MAX_HEADER_SIZE = 16_KB; // Header does not contain much data
-static constexpr size_t MAX_BLOCK_SIZE = 50_MB; // Max block size must always be at least size of table row (~8 MB) serialized into text csv format. // Real value is bound to 32 MB in TBackupTask.TScanSettings.BytesBatchSize setting.
 
 THashMap<TString, TString> AlgNames = {
     {"aes128gcm", "AES-128-GCM"},
@@ -209,6 +216,19 @@ public:
     }
 
     TBuffer AddBlock(TStringBuf data, bool last) {
+        if (data.size() > MAX_BLOCK_SIZE) {
+            throw yexception() << "Block size " << data.size() << " is greater than the maximum"
+                " supported encrypted backup block size " << MAX_BLOCK_SIZE
+                << ": such a file could not be restored."
+                   " Check the export batch size: data_shard_config.backup_bytes_batch_size"
+                   " (default 32 MB) and, if set, ScanSettings.BytesBatchSize must be <= "
+                << MAX_BLOCK_SIZE
+                << ". Also check s3_settings.limits.min_write_batch_size /"
+                   " fs_settings.limits.min_write_batch_size (default 5 MB): it must be <= "
+                << MAX_BLOCK_SIZE
+                << ".";
+        }
+
         TBuffer buffer;
         ReserveBufferSize(buffer, data, last);
         if (CurrentChunkNumber == 0) {
@@ -316,9 +336,12 @@ public:
             int bufferSize = static_cast<int>(dst.Avail());
             Y_VERIFY(bufferSize >= static_cast<int>(size));
 
-            if (int err = EVP_EncryptUpdate(Ctx.get(), reinterpret_cast<unsigned char*>(dst.Data() + dst.Size()), &bufferSize, data, static_cast<int>(size)); err <= 0) {
+            if (int err = EVP_EncryptUpdate(Ctx.get(), reinterpret_cast<unsigned char*>(dst.Pos()), &bufferSize, data, static_cast<int>(size)); err <= 0) {
                 throw yexception() << "Failed to write unencrypted data: " << GetOpenSslErrorText(err);
             }
+
+            __msan_unpoison(dst.Pos(), bufferSize);
+
             dst.Advance(static_cast<size_t>(bufferSize));
         }
     }
@@ -334,9 +357,12 @@ public:
     void FinalizeAndWriteMAC(TBuffer& dst) {
         // Finalize
         int bufferSize = static_cast<int>(dst.Avail());
-        if (int err = EVP_EncryptFinal_ex(Ctx.get(), reinterpret_cast<unsigned char*>(dst.Data() + dst.Size()), &bufferSize); err <= 0) {
+        if (int err = EVP_EncryptFinal_ex(Ctx.get(), reinterpret_cast<unsigned char*>(dst.Pos()), &bufferSize); err <= 0) {
             throw yexception() << "Failed to finalize encryption: " << GetOpenSslErrorText(err);
         }
+
+        __msan_unpoison(dst.Pos(), bufferSize);
+
         dst.Advance(static_cast<size_t>(bufferSize));
 
         // Write MAC
@@ -390,6 +416,8 @@ TEncryptedFileSerializer::TEncryptedFileSerializer(TString algorithm, TEncryptio
 {
 }
 
+TEncryptedFileSerializer::TEncryptedFileSerializer(TEncryptedFileSerializer&&) noexcept = default;
+TEncryptedFileSerializer& TEncryptedFileSerializer::operator=(TEncryptedFileSerializer&&) noexcept = default;
 TEncryptedFileSerializer::~TEncryptedFileSerializer() = default;
 
 TBuffer TEncryptedFileSerializer::AddBlock(TStringBuf data, bool last) {
@@ -500,6 +528,9 @@ public:
             if (int err = EVP_DecryptUpdate(Ctx.get(), reinterpret_cast<unsigned char*>(data), &outSize, reinterpret_cast<const unsigned char*>(GetCurrentBufferData()), toDecrypt); err <= 0) {
                 ThrowFileIsCorrupted();
             }
+
+            __msan_unpoison(data, outSize);
+
             Y_VERIFY(static_cast<size_t>(outSize) == toDecrypt);
             CurrentBufferPos += static_cast<size_t>(outSize);
             size -= static_cast<size_t>(outSize);
@@ -686,9 +717,12 @@ public:
     void FinalizeAndCheckMAC(TBuffer& dst) {
         ReadMAC();
         int outLen = dst.Avail();
-        if (int err = EVP_DecryptFinal_ex(Ctx.get(), reinterpret_cast<unsigned char*>(dst.Data() + dst.Size()), &outLen); err <= 0) {
+        if (int err = EVP_DecryptFinal_ex(Ctx.get(), reinterpret_cast<unsigned char*>(dst.Pos()), &outLen); err <= 0) {
             ThrowFileIsCorrupted();
         }
+
+        __msan_unpoison(dst.Pos(), outLen);
+
         dst.Advance(outLen);
     }
 

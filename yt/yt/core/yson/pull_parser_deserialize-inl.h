@@ -5,6 +5,7 @@
 #endif
 
 #include <yt/yt/core/misc/error.h>
+#include <yt/yt/core/misc/protobuf_helpers.h>
 
 #include <yt/yt/core/yson/token_writer.h>
 
@@ -287,11 +288,11 @@ void Deserialize(std::tuple<T...>& value, TYsonPullParserCursor* cursor, std::en
 }
 
 // For any associative container.
-template <template<typename...> class C, class... T, class K>
+template <NMpl::CAssociative TContainer>
 void Deserialize(
-    C<T...>& value,
+    TContainer& value,
     TYsonPullParserCursor* cursor,
-    std::enable_if_t<ArePullParserDeserializable<typename NDetail::TRemoveConst<typename C<T...>::value_type>::Type>(), void*>)
+    std::enable_if_t<ArePullParserDeserializable<typename NDetail::TRemoveConst<typename TContainer::value_type>::Type>(), void*>)
 {
     NDetail::DeserializeAssociative(value, cursor);
 }
@@ -377,8 +378,7 @@ void Deserialize(TStrongTypedef<T, TTag>& value, TYsonPullParserCursor* cursor)
     Deserialize(value.Underlying(), cursor);
 }
 
-template <class T>
-    requires std::derived_from<T, google::protobuf::Message>
+template <NYTree::CProtobufMessageAsYson T>
 void Deserialize(
     T& message,
     NYson::TYsonPullParserCursor* cursor)
@@ -388,6 +388,19 @@ void Deserialize(
         NYson::EUnknownYsonFieldsMode::Keep);
 
     DeserializeProtobufMessage(message, NYson::ReflectProtobufMessageType<T>(), cursor, options);
+}
+
+template <NYTree::CProtobufMessageAsString T>
+void Deserialize(
+    T& message,
+    NYson::TYsonPullParserCursor* cursor)
+{
+    std::string string;
+    Deserialize(string, cursor);
+    if (!TryDeserializeProto(&message, TRef::FromString(string))) {
+        THROW_ERROR_EXCEPTION("Error parsing protobuf message from string")
+            .With("protobuf_type", message.GetTypeName());
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

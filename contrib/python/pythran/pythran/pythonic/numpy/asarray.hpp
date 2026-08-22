@@ -29,24 +29,18 @@ namespace numpy
 
   template <class E>
   auto asarray(E &&e, types::none_type d)
-      -> decltype(_asarray<typename std::decay<E>::type,
-                           typename types::dtype_of<
-                               typename std::decay<E>::type>::type>{}(
+      -> decltype(_asarray<std::decay_t<E>, typename types::dtype_of<std::decay_t<E>>::type>{}(
           std::forward<E>(e)))
   {
-    return _asarray<
-        typename std::decay<E>::type,
-        typename types::dtype_of<typename std::decay<E>::type>::type>{}(
+    return _asarray<std::decay_t<E>, typename types::dtype_of<std::decay_t<E>>::type>{}(
         std::forward<E>(e));
   }
 
   template <class E, class dtype>
   auto asarray(E &&e, dtype d)
-      -> decltype(_asarray<typename std::decay<E>::type,
-                           typename dtype::type>{}(std::forward<E>(e), d))
+      -> decltype(_asarray<std::decay_t<E>, typename dtype::type>{}(std::forward<E>(e), d))
   {
-    return _asarray<typename std::decay<E>::type, typename dtype::type>{}(
-        std::forward<E>(e), d);
+    return _asarray<std::decay_t<E>, typename dtype::type>{}(std::forward<E>(e), d);
   }
 } // namespace numpy
 PYTHONIC_NS_END

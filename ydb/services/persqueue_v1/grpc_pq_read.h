@@ -4,15 +4,16 @@
 #include "actors/direct_read_actor.h"
 
 #include <ydb/core/client/server/grpc_base.h>
-#include <ydb/core/persqueue/cluster_tracker.h>
+#include <ydb/core/persqueue/public/cluster_tracker/cluster_tracker.h>
 #include <ydb/core/mind/address_classification/net_classifier.h>
 
-#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/actorid.h>
 
 #include <util/generic/hash.h>
 #include <util/system/mutex.h>
 
 #include <type_traits>
+#include <ydb/library/actors/core/log.h>
 
 
 namespace NKikimr {
@@ -38,7 +39,6 @@ private:
     ui64 NextCookie();
 
     bool TooMuchSessions();
-    TString AvailableLocalCluster();
 
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
@@ -46,7 +46,7 @@ private:
             HFunc(NGRpcService::TEvStreamTopicDirectReadRequest, Handle);
             HFunc(NGRpcService::TEvStreamPQMigrationReadRequest, Handle);
             HFunc(NGRpcService::TEvCommitOffsetRequest, Handle);
-            HFunc(NGRpcService::TEvPQReadInfoRequest, Handle);
+            FFunc(TRpcServices::EvPQReadInfo, HandleReadInfo);
             HFunc(NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate, Handle);
             HFunc(NNetClassifier::TEvNetClassifier::TEvClassifierUpdate, Handle);
             HFunc(TEvPQProxy::TEvSessionDead, Handle);
@@ -61,7 +61,7 @@ private:
     void Handle(NGRpcService::TEvStreamTopicDirectReadRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(NGRpcService::TEvStreamPQMigrationReadRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(NGRpcService::TEvCommitOffsetRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(NGRpcService::TEvPQReadInfoRequest::TPtr& ev, const TActorContext& ctx);
+    void HandleReadInfo(TAutoPtr<NActors::IEventHandle>& ev, const TActorContext& ctx);
     void Handle(NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate::TPtr& ev, const TActorContext& ctx);
     void Handle(NNetClassifier::TEvNetClassifier::TEvClassifierUpdate::TPtr& ev, const TActorContext& ctx);
 
@@ -90,9 +90,9 @@ private:
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // template methods implementation
 
-template <bool UseMigrationProtocol>
+template <EProtocol Protocol>
 auto FillReadResponse(const TString& errorReason, const PersQueue::ErrorCode::ErrorCode code) {
-    using ServerMessage = typename std::conditional<UseMigrationProtocol,
+    using ServerMessage = typename std::conditional<Protocol == EProtocol::PQv1,
                                                     PersQueue::V1::MigrationStreamingReadServerMessage,
                                                     Topic::StreamReadMessage::FromServer>::type;
     ServerMessage res;
@@ -106,35 +106,36 @@ Topic::StreamDirectReadMessage::FromServer FillDirectReadResponse(const TString&
 
 template <typename ReadRequest>
 void TPQReadService::HandleStreamPQReadRequest(typename ReadRequest::TPtr& ev, const TActorContext& ctx) {
-    constexpr bool UseMigrationProtocol = std::is_same_v<ReadRequest, NGRpcService::TEvStreamPQMigrationReadRequest>;
+    constexpr EProtocol Protocol = std::is_same_v<ReadRequest, NGRpcService::TEvStreamPQMigrationReadRequest> ? EProtocol::PQv1 : EProtocol::Topic;
 
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "new grpc connection");
+    YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::PQ_READ_PROXY, "New grpc connection");
 
     if (TooMuchSessions()) {
-        LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, "new grpc connection failed - too much sessions");
-        ev->Get()->GetStreamCtx()->Attach(ctx.SelfID);
-        ev->Get()->GetStreamCtx()->WriteAndFinish(
-            FillReadResponse<UseMigrationProtocol>("proxy overloaded", PersQueue::ErrorCode::OVERLOAD), grpc::Status::OK); //CANCELLED
+        YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::PQ_READ_PROXY, "New grpc connection failed - too much sessions");
+        ev->Get()->Attach(ctx.SelfID);
+        ev->Get()->WriteAndFinish(
+            FillReadResponse<Protocol>("proxy overloaded", PersQueue::ErrorCode::OVERLOAD), Ydb::StatusIds::OVERLOADED); //CANCELLED
         return;
     }
     if (HaveClusters && (Clusters.empty() || LocalCluster.empty())) {
-        LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, "new grpc connection failed - cluster is not known yet");
+        YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::PQ_READ_PROXY, "New grpc connection failed - cluster is not known yet");
 
-        ev->Get()->GetStreamCtx()->Attach(ctx.SelfID);
-        ev->Get()->GetStreamCtx()->WriteAndFinish(
-            FillReadResponse<UseMigrationProtocol>("cluster initializing", PersQueue::ErrorCode::INITIALIZING), grpc::Status::OK); //CANCELLED
+        ev->Get()->Attach(ctx.SelfID);
+        ev->Get()->WriteAndFinish(
+            FillReadResponse<Protocol>("cluster initializing", PersQueue::ErrorCode::INITIALIZING), Ydb::StatusIds::UNAVAILABLE); //CANCELLED
         // TODO: Inc SLI Errors
         return;
     } else {
 
-        Y_ABORT_UNLESS(TopicsHandler != nullptr);
+        AFL_ENSURE(TopicsHandler != nullptr)("local_cluster", LocalCluster)("have_clusters", HaveClusters);
         const ui64 cookie = NextCookie();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "new session created cookie " << cookie);
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::PQ_READ_PROXY, "New session created cookie",
+            {"cookie", cookie});
 
-        auto ip = ev->Get()->GetStreamCtx()->GetPeerName();
+        auto ip = ev->Get()->GetPeerName();
 
-        TActorId worker = ctx.Register(new TReadSessionActor<UseMigrationProtocol>(
+        TActorId worker = ctx.Register(new TReadSessionActor<Protocol>(
                 ev->Release().Release(), cookie, SchemeCache, NewSchemeCache, Counters,
                 DatacenterClassifier ? DatacenterClassifier->ClassifyAddress(NAddressClassifier::ExtractAddress(ip)) : "unknown",
                 *TopicsHandler

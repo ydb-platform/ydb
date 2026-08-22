@@ -6,6 +6,7 @@
 #include <ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_localwriter.h>
 #include <ydb/core/blobstorage/vdisk/anubis_osiris/blobstorage_anubis_osiris.h>
 #include <ydb/core/blobstorage/vdisk/repl/blobstorage_repl.h>
+#include <ydb/core/retro_tracing_impl/spans/lazy_retro_span.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 
 namespace NKikimr {
@@ -49,8 +50,10 @@ namespace NKikimr {
     class TLoggedRecVPut : public ILoggedRec {
     public:
         TLoggedRecVPut(TLsnSeg seg, bool confirmSyncLogAlso, const TLogoBlobID &id, const TIngress &ingress,
-                TRope &&buffer, std::unique_ptr<TEvBlobStorage::TEvVPutResult> result, const TActorId &recipient,
-                ui64 recipientCookie, NWilson::TTraceId traceId, NKikimrBlobStorage::EPutHandleClass handleClass);
+            TRope &&buffer, std::optional<ui64> checksum, std::unique_ptr<TEvBlobStorage::TEvVPutResult> result,
+            const TActorId &recipient, ui64 recipientCookie, NWilson::TTraceId traceId,
+            NKikimrBlobStorage::EPutHandleClass handleClass, const TVDiskID& vdiskId,
+            const TIntrusivePtr<TVDiskConfig>& config, const TVDiskContextPtr& vctx);
         void Replay(THull &hull, const TActorContext &ctx) override;
 
         NWilson::TTraceId GetTraceId() const;
@@ -59,10 +62,11 @@ namespace NKikimr {
         TLogoBlobID Id;
         TIngress Ingress;
         TRope Buffer;
+        std::optional<ui64> Checksum;
         std::unique_ptr<TEvBlobStorage::TEvVPutResult> Result;
         TActorId Recipient;
         ui64 RecipientCookie;
-        NWilson::TSpan Span;
+        TLazyRetroSpan Span;
         NKikimrBlobStorage::EPutHandleClass HandleClass;
     };
 
@@ -72,8 +76,10 @@ namespace NKikimr {
     class TLoggedRecVMultiPutItem : public ILoggedRec {
     public:
         TLoggedRecVMultiPutItem(TLsnSeg seg, bool confirmSyncLogAlso, const TLogoBlobID &id, const TIngress &ingress,
-                TRope &&buffer, std::unique_ptr<TEvVMultiPutItemResult> result, const TActorId &recipient,
-                ui64 recipientCookie, NWilson::TTraceId traceId, NKikimrBlobStorage::EPutHandleClass);
+            TRope &&buffer, std::optional<ui64> checksum, std::unique_ptr<TEvVMultiPutItemResult> result,
+            const TActorId &recipient, ui64 recipientCookie, NWilson::TTraceId traceId,
+            NKikimrBlobStorage::EPutHandleClass handleClass, const TVDiskID& vdiskId,
+            const TIntrusivePtr<TVDiskConfig>& config, const TVDiskContextPtr& vctx);
         void Replay(THull &hull, const TActorContext &ctx) override;
 
         NWilson::TTraceId GetTraceId() const;
@@ -82,10 +88,11 @@ namespace NKikimr {
         TLogoBlobID Id;
         TIngress Ingress;
         TRope Buffer;
+        std::optional<ui64> Checksum;
         std::unique_ptr<TEvVMultiPutItemResult> Result;
         TActorId Recipient;
         ui64 RecipientCookie;
-        NWilson::TSpan Span;
+        TLazyRetroSpan Span;
     };
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -94,13 +101,14 @@ namespace NKikimr {
     class TLoggedRecVPutHuge : public ILoggedRec {
     public:
         TLoggedRecVPutHuge(TLsnSeg seg, bool confirmSyncLogAlso, const TActorId &hugeKeeperId,
-                TEvHullLogHugeBlob::TPtr ev);
+                TEvHullLogHugeBlob::TPtr ev,  const TVDiskID& vdiskId,
+                const TIntrusivePtr<TVDiskConfig>& config, const TVDiskContextPtr& vctx);
         void Replay(THull &hull, const TActorContext &ctx) override;
 
     private:
         const TActorId HugeKeeperId;
         TEvHullLogHugeBlob::TPtr Ev;
-        NWilson::TSpan Span;
+        TLazyRetroSpan Span;
     };
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -144,13 +152,14 @@ namespace NKikimr {
     class TLoggedRecLocalSyncData : public ILoggedRec {
     public:
         TLoggedRecLocalSyncData(TLsnSeg seg, bool confirmSyncLogAlso, std::unique_ptr<TEvLocalSyncDataResult> result,
-                TEvLocalSyncData::TPtr origEv);
+                TEvLocalSyncData::TPtr origEv, TActorId syncLogActorId);
         void Replay(THull &hull, const TActorContext &ctx) override;
 
     private:
         std::unique_ptr<TEvLocalSyncDataResult> Result;
         TEvLocalSyncData::TPtr OrigEv;
         NWilson::TSpan Span;
+        const TActorId SyncLogActorId;
     };
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////

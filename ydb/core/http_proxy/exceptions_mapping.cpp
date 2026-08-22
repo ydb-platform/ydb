@@ -1,7 +1,8 @@
 #include "exceptions_mapping.h"
 
-#include <unordered_map>
+#include <util/generic/string.h>
 
+#include <unordered_map>
 
 namespace NKikimr::NHttpProxy {
 
@@ -172,4 +173,5 @@ TException UnsupportedExceptions(const TString& method, NYds::EErrorCodes issueC
     }
 }
 
-}
+} // namespace NKikimr::NHttpProxy
+

@@ -1,0 +1,7 @@
+/* custom error: The linear value has already been used */
+$x = WithSideEffects(MutDictHasItems(ToMutDict({1: 2}, 0)));
+
+SELECT
+    FromMutDict($x.0),
+    FromMutDict($x.0)
+;

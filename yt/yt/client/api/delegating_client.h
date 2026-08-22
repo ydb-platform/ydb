@@ -35,6 +35,7 @@ public:
     DELEGATE_METHOD(const NChaosClient::IReplicationCardCachePtr&, GetReplicationCardCache, (), ())
 
     DELEGATE_METHOD(const NTransactionClient::ITimestampProviderPtr&, GetTimestampProvider, (), ())
+    DELEGATE_METHOD(const TClientOptions&, GetOptions, (), ())
 
     // Transactions
     DELEGATE_METHOD(TFuture<ITransactionPtr>, StartTransaction, (
@@ -340,6 +341,19 @@ public:
         const TChaosLeaseAttachOptions& options),
         (chaosLeaseId, options));
 
+    DELEGATE_METHOD(TFuture<void>, SetUserBanned, (
+        const std::string& user,
+        bool isBanned,
+        const TSetUserBannedOptions& options = {}),
+        (user, isBanned, options))
+    DELEGATE_METHOD(TFuture<bool>, GetUserBanned, (
+        const std::string& user,
+        const TGetUserBannedOptions& options = {}),
+        (user, options))
+    DELEGATE_METHOD(TFuture<std::vector<std::string>>, ListBannedUsers, (
+        const TListBannedUsersOptions& options = {}),
+        (options))
+
     DELEGATE_METHOD(TFuture<NYson::TYsonString>, GetTablePivotKeys, (
         const NYPath::TYPath& path,
         const TGetTablePivotKeysOptions& options),
@@ -414,6 +428,18 @@ public:
         const TReadTablePartitionOptions& options),
         (descriptor, options))
 
+    DELEGATE_METHOD(TFuture<IFormattedTableReaderPtr>, CreateFormattedTableReader, (
+        const NYPath::TRichYPath& path,
+        const NYson::TYsonString& format,
+        const TTableReaderOptions& options),
+        (path, format, options))
+
+    DELEGATE_METHOD(TFuture<IFormattedTableReaderPtr>, CreateFormattedTablePartitionReader, (
+        const TTablePartitionCookiePtr& cookie,
+        const NYson::TYsonString& format,
+        const TReadTablePartitionOptions& options),
+        (cookie, format, options))
+
     // Journals
     DELEGATE_METHOD(TFuture<void>, TruncateJournal, (
         const NYPath::TYPath& path,
@@ -423,13 +449,13 @@ public:
 
     // Files
     DELEGATE_METHOD(TFuture<TGetFileFromCacheResult>, GetFileFromCache, (
-        const TString& md5,
+        const std::string& md5,
         const TGetFileFromCacheOptions& options),
         (md5, options))
 
     DELEGATE_METHOD(TFuture<TPutFileToCacheResult>, PutFileToCache, (
         const NYPath::TYPath& path,
-        const TString& expectedMD5,
+        const std::string& expectedMD5,
         const TPutFileToCacheOptions& options),
         (path, expectedMD5, options))
 
@@ -460,6 +486,7 @@ public:
         const TCheckPermissionByAclOptions& options),
         (user, permission, acl, options))
 
+    // Accounting
     DELEGATE_METHOD(TFuture<void>, TransferAccountResources, (
         const std::string& srcAccount,
         const std::string& dstAccount,
@@ -467,15 +494,22 @@ public:
         const TTransferAccountResourcesOptions& options),
         (srcAccount, dstAccount, resourceDelta, options))
 
-    // Scheduler
     DELEGATE_METHOD(TFuture<void>, TransferPoolResources, (
-        const TString& srcPool,
-        const TString& dstPool,
-        const TString& poolTree,
+        const std::string& srcPool,
+        const std::string& dstPool,
+        const std::string& poolTree,
         NYTree::INodePtr resourceDelta,
         const TTransferPoolResourcesOptions& options),
         (srcPool, dstPool, poolTree, resourceDelta, options))
 
+    DELEGATE_METHOD(TFuture<void>, TransferBundleResources, (
+        const std::string& srcBundle,
+        const std::string& dstBundle,
+        NYTree::INodePtr resourceDelta,
+        const TTransferBundleResourcesOptions& options),
+        (srcBundle, dstBundle, resourceDelta, options))
+
+    // Scheduler
     DELEGATE_METHOD(TFuture<NScheduler::TOperationId>, StartOperation, (
         NScheduler::EOperationType type,
         const NYson::TYsonString& spec,
@@ -546,10 +580,11 @@ public:
         const TGetJobStderrOptions& options),
         (operationIdOrAlias, jobId, options))
 
-    DELEGATE_METHOD(TFuture<std::vector<TJobTraceEvent>>, GetJobTrace, (
+    DELEGATE_METHOD(TFuture<NConcurrency::IAsyncZeroCopyInputStreamPtr>, GetJobTrace, (
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
+        NJobTrackerClient::TJobId jobId,
         const TGetJobTraceOptions& options),
-        (operationIdOrAlias, options))
+        (operationIdOrAlias, jobId, options))
 
     DELEGATE_METHOD(TFuture<TSharedRef>, GetJobFailContext, (
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
@@ -571,6 +606,19 @@ public:
         const TListJobsOptions& options),
         (operationIdOrAlias, options))
 
+    DELEGATE_METHOD(TFuture<std::vector<TJobTraceMeta>>, ListJobTraces, (
+        const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
+        NJobTrackerClient::TJobId jobId,
+        const TListJobTracesOptions& options),
+        (operationIdOrAlias, jobId, options))
+
+    DELEGATE_METHOD(TFuture<TCheckOperationPermissionResult>, CheckOperationPermission, (
+        const std::string& user,
+        const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
+        NYTree::EPermission permission,
+        const TCheckOperationPermissionOptions& options),
+        (user, operationIdOrAlias, permission, options))
+
     DELEGATE_METHOD(TFuture<NYson::TYsonString>, GetJob, (
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
         NJobTrackerClient::TJobId jobId,
@@ -584,10 +632,17 @@ public:
 
     DELEGATE_METHOD(TFuture<TPollJobShellResponse>, PollJobShell, (
         NJobTrackerClient::TJobId jobId,
-        const std::optional<TString>& shellName,
+        const std::optional<std::string>& shellName,
         const NYson::TYsonString& parameters,
         const TPollJobShellOptions& options),
         (jobId, shellName, parameters, options))
+
+    DELEGATE_METHOD(TFuture<NConcurrency::IAsyncZeroCopyInputStreamPtr>, RunJobShellCommand, (
+        NJobTrackerClient::TJobId jobId,
+        const std::optional<std::string>& shellName,
+        const std::string& command,
+        const TRunJobShellCommandOptions& options),
+        (jobId, shellName, command, options))
 
     DELEGATE_METHOD(TFuture<void>, AbortJob, (
         NJobTrackerClient::TJobId jobId,
@@ -632,6 +687,28 @@ public:
         const TMasterExitReadOnlyOptions& options),
         (options))
 
+    DELEGATE_METHOD(TFuture<void>, FreezeHydraPeer, (
+        NHydra::TCellId cellId,
+        const std::string& address,
+        const TFreezeHydraPeerOptions& options),
+        (cellId, address, options))
+
+    DELEGATE_METHOD(TFuture<void>, TruncateChangelog, (
+        NHydra::TCellId cellId,
+        const std::string& address,
+        const TTruncateChangelogOptions& options),
+        (cellId, address, options))
+
+    DELEGATE_METHOD(TFuture<void>, ScheduleRestart, (
+        NHydra::TCellId cellId,
+        const std::string& address,
+        const TScheduleRestartOptions& options),
+        (cellId, address, options))
+
+    DELEGATE_METHOD(TFuture<void>, ResetDynamicallyPropagatedMasterCells, (
+        const TResetDynamicallyPropagatedMasterCellsOptions& options),
+        (options))
+
     DELEGATE_METHOD(TFuture<void>, DiscombobulateNonvotingPeers, (
         NHydra::TCellId cellId,
         const TDiscombobulateNonvotingPeersOptions& options),
@@ -657,7 +734,7 @@ public:
         const TKillProcessOptions& options),
         (address, options))
 
-    DELEGATE_METHOD(TFuture<TString>, WriteCoreDump, (
+    DELEGATE_METHOD(TFuture<std::string>, WriteCoreDump, (
         const std::string& address,
         const TWriteCoreDumpOptions& options),
         (address, options))
@@ -667,7 +744,7 @@ public:
         const TWriteLogBarrierOptions& options),
         (address, options))
 
-    DELEGATE_METHOD(TFuture<TString>, WriteOperationControllerCoreDump, (
+    DELEGATE_METHOD(TFuture<std::string>, WriteOperationControllerCoreDump, (
         NJobTrackerClient::TOperationId operationId,
         const TWriteOperationControllerCoreDumpOptions& options),
         (operationId, options))
@@ -716,7 +793,7 @@ public:
         EMaintenanceComponent component,
         const std::string& address,
         EMaintenanceType type,
-        const TString& comment,
+        const std::string& comment,
         const TAddMaintenanceOptions& options),
         (component, address, type, comment, options))
 
@@ -758,38 +835,38 @@ public:
 
     DELEGATE_METHOD(TFuture<void>, SetUserPassword, (
         const std::string& user,
-        const TString& currentPasswordSha256,
-        const TString& newPasswordSha256,
+        const std::string& currentPasswordSha256,
+        const std::string& newPasswordSha256,
         const TSetUserPasswordOptions& options),
         (user, currentPasswordSha256, newPasswordSha256, options))
 
     DELEGATE_METHOD(TFuture<TIssueTokenResult>, IssueToken, (
         const std::string& user,
-        const TString& passwordSha256,
+        const std::string& passwordSha256,
         const TIssueTokenOptions& options),
         (user, passwordSha256, options))
 
     DELEGATE_METHOD(TFuture<void>, RevokeToken, (
         const std::string& user,
-        const TString& passwordSha256,
-        const TString& tokenSha256,
+        const std::string& passwordSha256,
+        const std::string& tokenSha256,
         const TRevokeTokenOptions& options),
         (user, passwordSha256, tokenSha256, options))
 
     DELEGATE_METHOD(TFuture<TListUserTokensResult>, ListUserTokens, (
         const std::string& user,
-        const TString& passwordSha256,
+        const std::string& passwordSha256,
         const TListUserTokensOptions& options),
         (user, passwordSha256, options))
 
-    DELEGATE_METHOD(TFuture<TGetCurrentUserResultPtr>, GetCurrentUser, (
+    DELEGATE_METHOD(TFuture<TGetCurrentUserResult>, GetCurrentUser, (
         const TGetCurrentUserOptions& options),
         (options))
 
     // Query tracker
     DELEGATE_METHOD(TFuture<NQueryTrackerClient::TQueryId>, StartQuery, (
         NQueryTrackerClient::EQueryEngine engine,
-        const TString& query,
+        const std::string& query,
         const TStartQueryOptions& options),
         (engine, query, options))
 
@@ -826,6 +903,10 @@ public:
 
     DELEGATE_METHOD(TFuture<TGetQueryTrackerInfoResult>, GetQueryTrackerInfo, (
         const TGetQueryTrackerInfoOptions& options),
+        (options))
+
+    DELEGATE_METHOD(TFuture<TGetQueryDeclaredParametersInfoResult>, GetQueryDeclaredParametersInfo, (
+        const TGetQueryDeclaredParametersInfoOptions& options),
         (options))
 
     // Bundle Controller
@@ -891,7 +972,7 @@ public:
 
     DELEGATE_METHOD(TFuture<TFlowExecuteResult>, FlowExecute, (
         const NYPath::TYPath& pipelinePath,
-        const TString& command,
+        const std::string& command,
         const NYson::TYsonString& argument,
         const TFlowExecuteOptions& options = {}),
         (pipelinePath, command, argument, options))
@@ -902,6 +983,11 @@ public:
         const TDistributedWriteSessionStartOptions& options),
         (path, options))
 
+    DELEGATE_METHOD(TFuture<void>, PingDistributedWriteSession, (
+        TSignedDistributedWriteSessionPtr session,
+        const TDistributedWriteSessionPingOptions& options),
+        (session, options))
+
     DELEGATE_METHOD(TFuture<void>, FinishDistributedWriteSession, (
         const TDistributedWriteSessionWithResults& sessionWithResults,
         const TDistributedWriteSessionFinishOptions& options),
@@ -910,6 +996,27 @@ public:
     DELEGATE_METHOD(TFuture<ITableFragmentWriterPtr>, CreateTableFragmentWriter, (
         const TSignedWriteFragmentCookiePtr& cookie,
         const TTableFragmentWriterOptions& options),
+        (cookie, options))
+
+    // Distributed file client
+    DELEGATE_METHOD(TFuture<TDistributedWriteFileSessionWithCookies>, StartDistributedWriteFileSession, (
+        const NYPath::TRichYPath& path,
+        const TDistributedWriteFileSessionStartOptions& options),
+        (path, options))
+
+    DELEGATE_METHOD(TFuture<void>, PingDistributedWriteFileSession, (
+        const TSignedDistributedWriteFileSessionPtr& session,
+        const TDistributedWriteFileSessionPingOptions& options),
+        (session, options))
+
+    DELEGATE_METHOD(TFuture<void>, FinishDistributedWriteFileSession, (
+        const TDistributedWriteFileSessionWithResults& sessionWithResults,
+        const TDistributedWriteFileSessionFinishOptions& options),
+        (sessionWithResults, options))
+
+    DELEGATE_METHOD(IFileFragmentWriterPtr, CreateFileFragmentWriter, (
+        const TSignedWriteFileFragmentCookiePtr& cookie,
+        const TFileFragmentWriterOptions& options),
         (cookie, options))
 
     // Shuffle Service
@@ -923,16 +1030,16 @@ public:
     DELEGATE_METHOD(TFuture<IRowBatchReaderPtr>, CreateShuffleReader, (
         const TSignedShuffleHandlePtr& shuffleHandle,
         int partitionIndex,
-        std::optional<std::pair<int, int>> writerIndexRange,
+        std::optional<std::pair<int, int>> logicalWriterIndexRange,
         const TShuffleReaderOptions& options),
-        (shuffleHandle, partitionIndex, writerIndexRange, options))
+        (shuffleHandle, partitionIndex, logicalWriterIndexRange, options))
 
     DELEGATE_METHOD(TFuture<IRowBatchWriterPtr>, CreateShuffleWriter, (
         const TSignedShuffleHandlePtr& shuffleHandle,
         const std::string& partitionColumn,
-        std::optional<int> writerIndex,
+        std::optional<int> logicalWriterIndex,
         const TShuffleWriterOptions& options),
-        (shuffleHandle, partitionColumn, writerIndex, options))
+        (shuffleHandle, partitionColumn, logicalWriterIndex, options))
 
     #undef DELEGATE_METHOD
 

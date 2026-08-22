@@ -3,6 +3,7 @@
 #include <yt/yt/core/yson/unittests/proto/protobuf_yson_ut.pb.h>
 #include <yt/yt/core/yson/unittests/proto/protobuf_yson_casing_ut.pb.h>
 #include <yt/yt/core/yson/unittests/proto/protobuf_yson_casing_ext_ut.pb.h>
+#include <yt/yt/core/yson/unittests/proto/protobuf_scalar_type_ut.pb.h>
 
 #include <yt/yt/core/yson/config.h>
 #include <yt/yt/core/yson/protobuf_interop.h>
@@ -31,8 +32,8 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-DECLARE_PROTO_EXTENSION(NYT::NYson::NProto::TMessageExt, 12345)
-REGISTER_PROTO_EXTENSION(NYT::NYson::NProto::TNestedMessageWithCustomConverter, 12345, ext)
+DECLARE_PROTO_EXTENSION(NYT::NYson::NProto::TMessageExt, 12345);
+REGISTER_PROTO_EXTENSION(NYT::NYson::NProto::TNestedMessageWithCustomConverter, 12345, ext);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -46,7 +47,7 @@ using TError = NYT::NProto::TError;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT
+} // namespace NYT::NYson::NProto
 
 namespace NYT::NYson {
 namespace {
@@ -95,7 +96,7 @@ void Deserialize(TNestedMessageWithCustomConverter& message, NYTree::INodePtr no
     message.Y = mapNode->GetChildOrThrow("y")->AsInt64()->GetValue() - 1;
 }
 
-REGISTER_INTERMEDIATE_PROTO_INTEROP_REPRESENTATION(NYT::NYson::NProto::TNestedMessageWithCustomConverter, TNestedMessageWithCustomConverter)
+REGISTER_INTERMEDIATE_PROTO_INTEROP_REPRESENTATION(NYT::NYson::NProto::TNestedMessageWithCustomConverter, TNestedMessageWithCustomConverter);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -127,12 +128,12 @@ void Deserialize(TBytesIntermediateRepresentation& value, NYTree::INodePtr node)
     value.X = mapNode->GetChildOrThrow("x")->AsInt64()->GetValue() - 1;
 }
 
-REGISTER_INTERMEDIATE_PROTO_INTEROP_BYTES_FIELD_REPRESENTATION(NYT::NYson::NProto::TMessage, 29, TBytesIntermediateRepresentation)
-REGISTER_INTERMEDIATE_PROTO_INTEROP_BYTES_FIELD_REPRESENTATION(NYT::NYson::NProto::TMessage, 30, TBytesIntermediateRepresentation)
+REGISTER_INTERMEDIATE_PROTO_INTEROP_BYTES_FIELD_REPRESENTATION(NYT::NYson::NProto::TMessage, 29, TBytesIntermediateRepresentation);
+REGISTER_INTERMEDIATE_PROTO_INTEROP_BYTES_FIELD_REPRESENTATION(NYT::NYson::NProto::TMessage, 30, TBytesIntermediateRepresentation);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString ToHex(const TString& data)
+TString ToHex(const std::string& data)
 {
     TStringBuilder builder;
     for (char ch : data) {
@@ -894,7 +895,7 @@ TEST(TYsonToProtobufTest, ErrorProto)
 
     auto attribute = message.attributes().attributes()[0];
     EXPECT_EQ(attribute.key(), "host");
-    EXPECT_EQ(ConvertTo<TString>(TYsonString(attribute.value())), "localhost");
+    EXPECT_EQ(ConvertTo<std::string>(TYsonString(attribute.value())), "localhost");
 }
 
 TEST(TYsonToProtobufTest, SkipUnknownFields)
@@ -1011,6 +1012,23 @@ TEST(TYsonToProtobufTest, KeepUnknownFields)
     EXPECT_TRUE(AreNodesEqual(ConvertToNode(TYsonString(newYsonString)), ConvertToNode(ysonString)));
 }
 
+TEST(TYsonToProtobufTest, RejectWireTypeMismatch)
+{
+    // Field 2 is length-delimited in TNestedMessage and varint in TMessage.
+    NYT::NYson::NProto::TNestedMessage message;
+    message.mutable_nested_message()->set_int32_field(42);
+    TString protobufString = message.SerializeAsString();
+
+    TString ysonString;
+    TStringOutput ysonOutputStream(ysonString);
+    TYsonWriter ysonWriter(&ysonOutputStream, EYsonFormat::Pretty);
+    ArrayInputStream protobufInput(protobufString.data(), protobufString.length());
+
+    EXPECT_THROW_WITH_ERROR_CODE(
+        ParseProtobuf(&ysonWriter, &protobufInput, ReflectProtobufMessageType<NYT::NYson::NProto::TMessage>()),
+        EErrorCode::InvalidProtobufWireFormat);
+}
+
 TEST(TYsonToProtobufTest, Entities)
 {
     TProtobufWriterOptions options;
@@ -1035,7 +1053,7 @@ TEST(TYsonToProtobufTest, ValidUtf8StringCheck)
             SetProtobufInteropConfig(config);
             auto effectiveOption = option.value_or(configOption);
 
-            TString invalidUtf8 = "\xc3\x28";
+            std::string invalidUtf8 = "\xc3\x28";
             auto checkWrite = [&] {
                 TEST_PROLOGUE_WITH_OPTIONS(TMessage, TProtobufWriterOptions{.Utf8Check = option})
                     .BeginMap()
@@ -1073,7 +1091,7 @@ TEST(TYsonToProtobufTest, CustomUnknownFieldsModeResolver)
         // Basic usage of custom resolver with state.
         TProtobufWriterOptions options;
         int unknownKeyCount = 0;
-        options.UnknownYsonFieldModeResolver = [&unknownKeyCount] (const NYPath::TYPath& path) -> NYson::EUnknownYsonFieldsMode {
+        options.UnknownYsonFieldModeResolver = [&unknownKeyCount] (NYPath::TYPathBuf path) -> NYson::EUnknownYsonFieldsMode {
             if (path == "/nested_message1/nested_message/unknown_map") {
                 return NYson::EUnknownYsonFieldsMode::Forward;
             } else if (path == "/nested_message1/nested_message/unknown_map/first_unknown_key" || path == "/nested_message1/nested_message/unknown_map/second_unknown_key") {
@@ -1146,7 +1164,7 @@ TEST(TYsonToProtobufTest, CustomUnknownFieldsModeResolver)
         TString protobufString;
         StringOutputStream protobufOutput(&protobufString);
         TProtobufWriterOptions options;
-        options.UnknownYsonFieldModeResolver = [] (const NYPath::TYPath& path) -> NYson::EUnknownYsonFieldsMode {
+        options.UnknownYsonFieldModeResolver = [] (NYPath::TYPathBuf path) -> NYson::EUnknownYsonFieldsMode {
             if (path == "/unknown_map1") {
                 return NYson::EUnknownYsonFieldsMode::Forward;
             }
@@ -1202,7 +1220,7 @@ TEST(TYsonToProtobufTest, CustomUnknownFieldsModeResolver)
     }
     {
         TProtobufWriterOptions options;
-        options.UnknownYsonFieldModeResolver = [] (const NYPath::TYPath& path) -> NYson::EUnknownYsonFieldsMode {
+        options.UnknownYsonFieldModeResolver = [] (NYPath::TYPathBuf path) -> NYson::EUnknownYsonFieldsMode {
             if (path == "/nested_message1/unknown_map") {
                 return NYson::EUnknownYsonFieldsMode::Forward;
             }
@@ -1230,7 +1248,7 @@ TEST(TYsonToProtobufTest, CustomUnknownFieldsModeResolver)
     {
         // Don't fail if Forward is returned on empty map or empty list.
         TProtobufWriterOptions options;
-        options.UnknownYsonFieldModeResolver = [] (const NYPath::TYPath& path) -> NYson::EUnknownYsonFieldsMode {
+        options.UnknownYsonFieldModeResolver = [] (NYPath::TYPathBuf path) -> NYson::EUnknownYsonFieldsMode {
             if (path == "/nested_message1/unknown_map") {
                 return NYson::EUnknownYsonFieldsMode::Forward;
             }
@@ -1263,7 +1281,7 @@ TEST(TYsonToProtobufTest, CustomUnknownFieldsModeResolver)
         // Fail if leaf is scalar and returns Forward.
         {
             TProtobufWriterOptions options;
-            options.UnknownYsonFieldModeResolver = [] (const NYPath::TYPath& path) -> NYson::EUnknownYsonFieldsMode {
+            options.UnknownYsonFieldModeResolver = [] (NYPath::TYPathBuf path) -> NYson::EUnknownYsonFieldsMode {
                 if (path == "/nested_message1/unknown_map") {
                     return NYson::EUnknownYsonFieldsMode::Forward;
                 }
@@ -1287,7 +1305,7 @@ TEST(TYsonToProtobufTest, CustomUnknownFieldsModeResolver)
         {
             // Fail on forwarded scalar value on the top level.
             TProtobufWriterOptions options;
-            options.UnknownYsonFieldModeResolver = [] (const NYPath::TYPath& path) -> NYson::EUnknownYsonFieldsMode {
+            options.UnknownYsonFieldModeResolver = [] (NYPath::TYPathBuf path) -> NYson::EUnknownYsonFieldsMode {
                 if (path == "/nested_message1/unknown_map") {
                     return NYson::EUnknownYsonFieldsMode::Forward;
                 }
@@ -1315,7 +1333,7 @@ TEST(TYsonToProtobufTest, CustomUnknownFieldsModeResolver)
     }
     {
         TProtobufWriterOptions options;
-        options.UnknownYsonFieldModeResolver = [] (const NYPath::TYPath& path) -> NYson::EUnknownYsonFieldsMode {
+        options.UnknownYsonFieldModeResolver = [] (NYPath::TYPathBuf path) -> NYson::EUnknownYsonFieldsMode {
             if (path == "/nested_message1/unknown_map") {
                 return NYson::EUnknownYsonFieldsMode::Forward;
             }
@@ -1383,7 +1401,7 @@ TEST(TYsonToProtobufTest, CustomUnknownFieldsModeResolver)
         TString protobufString;
         StringOutputStream protobufOutput(&protobufString);
         TProtobufWriterOptions options;
-        options.UnknownYsonFieldModeResolver = [] (const NYPath::TYPath& path) -> NYson::EUnknownYsonFieldsMode {
+        options.UnknownYsonFieldModeResolver = [] (NYPath::TYPathBuf path) -> NYson::EUnknownYsonFieldsMode {
             if (path == "/nested_message1/unknown_map1") {
                 return NYson::EUnknownYsonFieldsMode::Forward;
             }
@@ -1442,7 +1460,7 @@ TEST(TYsonToProtobufTest, CustomUnknownFieldsModeResolver)
     }
     {
         TProtobufWriterOptions options;
-        options.UnknownYsonFieldModeResolver = [] (const NYPath::TYPath& path) {
+        options.UnknownYsonFieldModeResolver = [] (NYPath::TYPathBuf path) {
             if (path == "/forwarded_attr") {
                 return NYson::EUnknownYsonFieldsMode::Forward;
             }
@@ -1499,7 +1517,7 @@ TEST(TYsonToProtobufTest, CustomUnknownFieldsModeResolver)
     }
     {
         TProtobufWriterOptions options;
-        options.UnknownYsonFieldModeResolver = [] (const NYPath::TYPath& path) {
+        options.UnknownYsonFieldModeResolver = [] (NYPath::TYPathBuf path) {
             if (path == R"(/nested_message1/unknown_field\x01)") {
                 return EUnknownYsonFieldsMode::Forward;
             }
@@ -2080,6 +2098,36 @@ TEST(TProtobufToYsonTest, ReservedFields)
     TEST_EPILOGUE(TMessageWithReservedFields)
 }
 
+TEST(TProtobufToYsonTest, MessageWithUsedUnknownFieldNumber)
+{
+    TEST_PROLOGUE()
+    codedStream.WriteTag(WireFormatLite::MakeTag(3005, WireFormatLite::WIRETYPE_VARINT));
+    codedStream.WriteVarint64(1);
+    TEST_EPILOGUE(TMessageWithUsedUnknownFieldNumber)
+
+    auto writtenNode = ConvertToNode(TYsonString(yson));
+    auto expectedNode = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("field").Value(1)
+        .EndMap();
+    EXPECT_TRUE(AreNodesEqual(writtenNode, expectedNode));
+}
+
+TEST(TProtobufToYsonTest, MessageWith3005FieldAndUnknownFieldNumberOverride)
+{
+    TEST_PROLOGUE()
+    codedStream.WriteTag(WireFormatLite::MakeTag(3005, WireFormatLite::WIRETYPE_VARINT));
+    codedStream.WriteVarint64(1);
+    TEST_EPILOGUE(TMessageWith3005FieldAndUnknownFieldNumberOverride)
+
+    auto writtenNode = ConvertToNode(TYsonString(yson));
+    auto expectedNode = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("field").Value(1)
+        .EndMap();
+    EXPECT_TRUE(AreNodesEqual(writtenNode, expectedNode));
+}
+
 #undef TEST_PROLOGUE
 #undef TEST_EPILOGUE
 #undef TEST_EPILOGUE_WITH_OPTIONS
@@ -2097,7 +2145,7 @@ void TestMessageByYPath(const TYPath& path)
     EXPECT_EQ("", result.TailPath);
 }
 
-TEST(TResolveProtobufElementByYPath, Message)
+TEST(TResolveProtobufElementByYPathTest, Message)
 {
     TestMessageByYPath<NYT::NYson::NProto::TMessage>("");
     TestMessageByYPath<NYT::NYson::NProto::TNestedMessage>("/nested_message1");
@@ -2120,7 +2168,7 @@ void TestScalarByYPath(const TYPath& path, FieldDescriptor::Type type)
         std::get<std::unique_ptr<TProtobufScalarElement>>(result.Element)->Type);
 }
 
-TEST(TResolveProtobufElementByYPath, Scalar)
+TEST(TResolveProtobufElementByYPathTest, Scalar)
 {
     TestScalarByYPath("/uint32_field", FieldDescriptor::TYPE_UINT32);
     TestScalarByYPath("/repeated_int32_field/123", FieldDescriptor::TYPE_INT32);
@@ -2140,7 +2188,7 @@ void TestAttributeDictionaryByYPath(const TYPath& path, const TYPath& headPath)
     EXPECT_EQ(path.substr(headPath.length()), result.TailPath);
 }
 
-TEST(TResolveProtobufElementByYPath, AttributeDictionary)
+TEST(TResolveProtobufElementByYPathTest, AttributeDictionary)
 {
     TestAttributeDictionaryByYPath("/attributes", "/attributes");
 }
@@ -2158,7 +2206,7 @@ void TestAnyByYPath(const TYPath& path, const TYPath& headPath)
     EXPECT_EQ(path.substr(headPath.length()), result.TailPath);
 }
 
-TEST(TResolveProtobufElementByYPath, Any)
+TEST(TResolveProtobufElementByYPathTest, Any)
 {
     TestAnyByYPath<NYT::NYson::NProto::TMessage>("/yson_field", "/yson_field");
     TestAnyByYPath<NYT::NYson::NProto::TMessage>("/yson_field/abc", "/yson_field");
@@ -2182,7 +2230,7 @@ void TestRepeatedByYPath(const TYPath& path)
     EXPECT_EQ("", result.TailPath);
 }
 
-TEST(TResolveProtobufElementByYPath, Repeated)
+TEST(TResolveProtobufElementByYPathTest, Repeated)
 {
     TestRepeatedByYPath("/repeated_int32_field");
     TestRepeatedByYPath("/nested_message1/repeated_int32_field");
@@ -2204,7 +2252,7 @@ void TestMapByYPath(const TYPath& path, int expectedUnderlyingKeyProtoType)
     EXPECT_TRUE(std::holds_alternative<std::unique_ptr<ValueElementType>>((*map)->Element));
 }
 
-TEST(TResolveProtobufElementByYPath, Map)
+TEST(TResolveProtobufElementByYPathTest, Map)
 {
     TestMapByYPath<TProtobufScalarElement>("/string_to_int32_map", FieldDescriptor::TYPE_STRING);
     TestMapByYPath<TProtobufScalarElement>("/int32_to_int32_map", FieldDescriptor::TYPE_INT32);
@@ -2218,7 +2266,7 @@ TEST(TResolveProtobufElementByYPath, Map)
 #define DO(path, errorPath) \
     EXPECT_YPATH({ResolveProtobufElementByYPath(ReflectProtobufMessageType<NYT::NYson::NProto::TMessage>(), path);}, errorPath);
 
-TEST(TResolveProtobufElementByYPath, Failure)
+TEST(TResolveProtobufElementByYPathTest, Failure)
 {
     DO("/repeated_int32_field/1/2", "/repeated_int32_field/1")
     DO("/repeated_int32_field/ 1/2", "/repeated_int32_field/ 1")
@@ -2237,28 +2285,28 @@ TEST(TResolveProtobufElementByYPath, Failure)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TProtobufEnums, FindValueByLiteral)
+TEST(TProtobufEnumsTest, FindValueByLiteral)
 {
     static const auto* type = ReflectProtobufEnumType(NYT::NYson::NProto::EColor_descriptor());
     ASSERT_EQ(std::nullopt, FindProtobufEnumValueByLiteral<NYT::NYson::NProto::EColor>(type, "zzz"));
     ASSERT_EQ(NYT::NYson::NProto::Color_Red, FindProtobufEnumValueByLiteral<NYT::NYson::NProto::EColor>(type, "red"));
 }
 
-TEST(TProtobufEnums, FindLiteralByValue)
+TEST(TProtobufEnumsTest, FindLiteralByValue)
 {
     static const auto* type = ReflectProtobufEnumType(NYT::NYson::NProto::EColor_descriptor());
     ASSERT_EQ("red", FindProtobufEnumLiteralByValue(type, NYT::NYson::NProto::Color_Red));
     ASSERT_EQ(TStringBuf(), FindProtobufEnumLiteralByValue(type, NYT::NYson::NProto::EColor(666)));
 }
 
-TEST(TProtobufEnums, FindValueByLiteralWithAlias)
+TEST(TProtobufEnumsTest, FindValueByLiteralWithAlias)
 {
     static const auto* type = ReflectProtobufEnumType(NYT::NYson::NProto::EFlag_descriptor());
     ASSERT_EQ(NYT::NYson::NProto::Flag_True, FindProtobufEnumValueByLiteral<NYT::NYson::NProto::EFlag>(type, "true"));
     ASSERT_EQ(NYT::NYson::NProto::Flag_True, FindProtobufEnumValueByLiteral<NYT::NYson::NProto::EFlag>(type, "yes"));
 }
 
-TEST(TProtobufEnums, FindLiteralByValueWithAlias)
+TEST(TProtobufEnumsTest, FindLiteralByValueWithAlias)
 {
     static const auto* type = ReflectProtobufEnumType(NYT::NYson::NProto::EFlag_descriptor());
     ASSERT_EQ("true", FindProtobufEnumLiteralByValue(type, NYT::NYson::NProto::Flag_True));
@@ -2266,7 +2314,7 @@ TEST(TProtobufEnums, FindLiteralByValueWithAlias)
     ASSERT_EQ("true", FindProtobufEnumLiteralByValue(type, NYT::NYson::NProto::Flag_AnotherYes));
 }
 
-TEST(TProtobufEnums, ConvertToProtobufEnumValueUntyped)
+TEST(TProtobufEnumsTest, ConvertToProtobufEnumValueUntyped)
 {
     static const auto* type = ReflectProtobufEnumType(NYT::NYson::NProto::EColor_descriptor());
     EXPECT_EQ(
@@ -2826,12 +2874,11 @@ TEST(TYsonToProtobufTest, ForceSnakeCaseNames)
     newConfig->ForceSnakeCaseNames = true;
     SetProtobufInteropConfig(newConfig);
 
-    auto ysonNode = BuildYsonNodeFluently()
+    auto ysonString = BuildYsonStringFluently()
         .BeginMap()
             .Item("some_field").Value(1)
             .Item("another_field123").Value(2)
         .EndMap();
-    auto ysonString = ConvertToYsonString(ysonNode);
 
     NProto::TOtherExternalProtobuf message;
     message.ParseFromStringOrThrow(NYson::YsonStringToProto(
@@ -2854,6 +2901,47 @@ TEST(TYsonToProtobufTest, ForceSnakeCaseNames)
             << "Expected: " << ysonString.AsStringBuf() << "\n\n"
             << "Actual: " << newYsonString << "\n\n";
     }
+}
+
+TEST(TYsonToProtobufTest, MessageWithUsedUnknownFieldNumber)
+{
+    auto ysonString = BuildYsonStringFluently()
+        .BeginMap()
+            .Item("field").Value(1)
+            .Item("field2").Value(1)
+        .EndMap();
+
+    EXPECT_THROW(
+        YsonStringToProto(
+            ysonString,
+            NYson::ReflectProtobufMessageType<NProto::TMessageWithUsedUnknownFieldNumber>(),
+            EUnknownYsonFieldsMode::Keep),
+        TErrorException);
+
+    auto protoString = YsonStringToProto(
+        ysonString,
+        NYson::ReflectProtobufMessageType<NProto::TMessageWithUsedUnknownFieldNumber>(),
+        EUnknownYsonFieldsMode::Skip);
+    NProto::TMessageWithUsedUnknownFieldNumber proto;
+    proto.ParseFromStringOrThrow(protoString);
+    EXPECT_EQ(proto.field(), 1);
+}
+
+TEST(TYsonToProtobufTest, MessageWithUnknownFieldNumberOverride)
+{
+    auto protoString = YsonStringToProto(BuildYsonStringFluently()
+        .BeginMap()
+            .Item("unknown_field").Value(2)
+        .EndMap(),
+        ReflectProtobufMessageType<NProto::TMessageWith3005FieldAndUnknownFieldNumberOverride>(),
+        EUnknownYsonFieldsMode::Keep);
+
+    NProto::TMessageWith3005FieldAndUnknownFieldNumberOverride proto;
+    proto.ParseFromStringOrThrow(protoString);
+
+    const auto& unknownFieldsSet = proto.GetReflection()->GetUnknownFields(proto);
+    EXPECT_EQ(unknownFieldsSet.field_count(), 1);
+    EXPECT_EQ(unknownFieldsSet.field(0).number(), 3006);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -3012,7 +3100,7 @@ TEST(TStrictEnumValueCheckTest, ProtoToYsonUnknownChecked)
 TEST(TProtobufWriterOptionsTest, CreateChildOptions)
 {
     TProtobufWriterOptions options{
-        .UnknownYsonFieldModeResolver = [] (const NYPath::TYPath& path) {
+        .UnknownYsonFieldModeResolver = [] (NYPath::TYPathBuf path) {
             return path.StartsWith("/foo")
                 ? EUnknownYsonFieldsMode::Keep
                 : EUnknownYsonFieldsMode::Fail;
@@ -3033,6 +3121,111 @@ TEST(TProtobufWriterOptionsTest, CreateChildOptions)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+
+YT_STATIC_INITIALIZER(
+    RegisterCustomProtobufIntFieldConverter(
+        NProto::TExampleMessage::descriptor(),
+        1,
+        {.Serializer = [] (IYsonConsumer* consumer, int64_t value) {
+            consumer->OnInt64Scalar(value * 2);
+        }})
+);
+
+TEST(TCustomIntFieldConverterTest, Basic)
+{
+    NProto::TExampleMessage message;
+    message.set_int32_field(21);
+
+    TString protobufString;
+    ASSERT_TRUE(message.SerializeToString(&protobufString));
+
+    TString ysonString;
+    TStringOutput ysonOutput(ysonString);
+    TYsonWriter ysonWriter(&ysonOutput, EYsonFormat::Text);
+
+    google::protobuf::io::ArrayInputStream protobufInput(protobufString.data(), protobufString.length());
+    ParseProtobuf(&ysonWriter, &protobufInput, NYson::ReflectProtobufMessageType<NProto::TExampleMessage>());
+    EXPECT_EQ("{\"int32_field\"=42;}", ysonString);
+}
+
+TEST(TCustomIntFieldConverterTest, OtherFieldsWorkingDefault)
+{
+    NProto::TExampleMessage message;
+    message.set_uint64_field(73);
+
+    TString protobufString;
+    ASSERT_TRUE(message.SerializeToString(&protobufString));
+
+    TString ysonString;
+    TStringOutput ysonOutput(ysonString);
+    TYsonWriter ysonWriter(&ysonOutput, EYsonFormat::Text);
+
+    google::protobuf::io::ArrayInputStream protobufInput(protobufString.data(), protobufString.length());
+    ParseProtobuf(&ysonWriter, &protobufInput, NYson::ReflectProtobufMessageType<NProto::TExampleMessage>());
+    EXPECT_EQ("{\"uint64_field\"=73u;}", ysonString);
+}
+
+TEST(TCustomEnumFieldConverterTest, Basic)
+{
+    auto oldConfig = GetProtobufInteropConfig();
+    Y_DEFER {
+        SetProtobufInteropConfig(oldConfig);
+    };
+
+    auto newConfig = CloneYsonStruct(oldConfig);
+    newConfig->ForceEnumStringType = true;
+    SetProtobufInteropConfig(newConfig);
+
+    NProto::TExampleMessage message;
+    message.set_enum_int(NProto::TExampleMessage::EEnum::TExampleMessage_EEnum_VALUE0);
+
+    TString protobufString;
+    ASSERT_TRUE(message.SerializeToString(&protobufString));
+
+    TString ysonString;
+    TStringOutput ysonOutput(ysonString);
+    TYsonWriter ysonWriter(&ysonOutput, EYsonFormat::Text);
+
+    google::protobuf::io::ArrayInputStream protobufInput(protobufString.data(), protobufString.length());
+    ParseProtobuf(&ysonWriter, &protobufInput, NYson::ReflectProtobufMessageType<NProto::TExampleMessage>());
+    EXPECT_EQ("{\"enum_int\"=\"VALUE0\";}", ysonString);
+}
+
+TEST(TCustomEnumFieldConverterTest, OtherEnumsWorkingDefault)
+{
+    auto oldConfig = GetProtobufInteropConfig();
+    Y_DEFER {
+        SetProtobufInteropConfig(oldConfig);
+    };
+
+    auto newConfig = CloneYsonStruct(oldConfig);
+    newConfig->ForceEnumStringType = true;
+    SetProtobufInteropConfig(newConfig);
+
+    NProto::TExampleMessage message;
+    message.set_enum_string(NProto::TExampleMessage::EAnotherEnum::TExampleMessage_EAnotherEnum_ANOTHER_VALUE1);
+
+    TString protobufString;
+    ASSERT_TRUE(message.SerializeToString(&protobufString));
+
+    TString ysonString;
+    TStringOutput ysonOutput(ysonString);
+    TYsonWriter ysonWriter(&ysonOutput, EYsonFormat::Text);
+
+    google::protobuf::io::ArrayInputStream protobufInput(protobufString.data(), protobufString.length());
+    ParseProtobuf(&ysonWriter, &protobufInput, NYson::ReflectProtobufMessageType<NProto::TExampleMessage>());
+    EXPECT_EQ("{\"enum_string\"=\"ANOTHER_VALUE1\";}", ysonString);
+}
+
+//////////////////////////////////////////////////////////////////////////////
+
+TEST(TProtobufFormatterTest, Format)
+{
+    EXPECT_EQ("blue", Format("%v", NProto::EColor::Color_Blue));
+    EXPECT_EQ("42", Format("%v", static_cast<NProto::EColor>(42)));
+}
+
+//////////////////////////////////////////////////////////////////////////////
 
 } // namespace
 } // namespace NYT::NYson

@@ -1,7 +1,8 @@
 #include "schema.h"
+#include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc/misc.h>
 #include <ydb/library/accessor/validator.h>
 #include <ydb/core/tx/columnshard/blobs_action/common/const.h>
-
+#include <ydb/core/tx/schemeshard/olap/schema/schema.h>
 namespace NKikimr::NSchemeShard {
 
 void TOlapIndexSchema::SerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& indexSchema) const {
@@ -23,7 +24,7 @@ bool TOlapIndexSchema::ApplyUpdate(const TOlapSchema& currentSchema, const TOlap
         errors.AddError("different index classes: " + upsert.GetIndexConstructor().GetClassName() + " vs " + IndexMeta.GetClassName());
         return false;
     }
-    auto object = upsert.GetIndexConstructor()->CreateIndexMeta(GetId(), GetName(), currentSchema, errors);
+    auto object = upsert.GetIndexConstructor()->CreateOrPatchIndexMeta(GetId(), GetName(), currentSchema, errors, IndexMeta.GetObjectVerified());
     if (!object) {
         return false;
     }
@@ -37,6 +38,41 @@ bool TOlapIndexSchema::ApplyUpdate(const TOlapSchema& currentSchema, const TOlap
 }
 
 bool TOlapIndexesDescription::ApplyUpdate(const TOlapSchema& currentSchema, const TOlapIndexesUpdate& schemaUpdate, IErrorCollector& errors, ui32& nextEntityId) {
+    for (const auto& index : Indexes) {
+        nextEntityId = Max(nextEntityId, index.first + 1);
+    }
+
+    for (auto&& rename : schemaUpdate.GetMoveIndexes()) {
+        const auto* sourceIndex = GetByName(rename.GetSourceName());
+        if (!sourceIndex) {
+            errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder() << "Unknown index for rename: " << rename.GetSourceName());
+            return false;
+        }
+
+        const ui32 sourceIndexId = sourceIndex->GetId();
+        if (auto&& destinationIndex = GetByName(rename.GetDestinationName())) {
+            if (!rename.GetReplaceDestination()) {
+                errors.AddError(NKikimrScheme::StatusAlreadyExists, TStringBuilder() << "Index already exists: " << rename.GetDestinationName());
+                return false;
+            }
+
+            AFL_VERIFY(IndexesByName.erase(rename.GetDestinationName()));
+            AFL_VERIFY(Indexes.erase(destinationIndex->GetId()));
+        }
+
+        NKikimrSchemeOp::TOlapIndexDescription renamedProto;
+        sourceIndex->SerializeToProto(renamedProto);
+        renamedProto.SetName(rename.GetDestinationName());
+
+        TOlapIndexSchema renamedIndex;
+        renamedIndex.DeserializeFromProto(renamedProto);
+
+        AFL_VERIFY(IndexesByName.erase(rename.GetSourceName()));
+        AFL_VERIFY(Indexes.erase(sourceIndexId));
+        Y_ABORT_UNLESS(IndexesByName.emplace(rename.GetDestinationName(), sourceIndexId).second);
+        Y_ABORT_UNLESS(Indexes.emplace(sourceIndexId, std::move(renamedIndex)).second);
+    }
+
     for (auto&& index : schemaUpdate.GetUpsertIndexes()) {
         auto* currentIndex = MutableByName(index.GetName());
         if (currentIndex) {
@@ -48,6 +84,25 @@ bool TOlapIndexesDescription::ApplyUpdate(const TOlapSchema& currentSchema, cons
             auto meta = index.GetIndexConstructor()->CreateIndexMeta(id, index.GetName(), currentSchema, errors);
             if (!meta) {
                 return false;
+            }
+            // Forbid two min_max and bloom_filter indexes on the same column.
+            if (const auto newColumnId = meta->GetSingleColumnId()) {
+                for (const auto& indexPair : Indexes) {
+                    const auto& existingIndex = indexPair.second;
+                    const auto& existingMeta = existingIndex.GetIndexMeta();
+                    if ((meta->GetClassName() == NKikimr::NOlap::NIndexes::NMinMax::kMinMaxClassName || meta->GetClassName() == "BLOOM_FILTER") && 
+                        existingMeta->GetClassName() == meta->GetClassName() && existingMeta->GetSingleColumnId() == newColumnId) {
+                        TString columnName = ToString(*newColumnId);
+                        if (const auto* column = currentSchema.GetColumns().GetById(*newColumnId)) {
+                            columnName = column->GetName();
+                        }
+                        errors.AddError(NKikimrScheme::StatusAlreadyExists,
+                            TStringBuilder() << "cannot create " << meta->GetClassName() << " index '" << index.GetName() << "' on column '"
+                                             << columnName << "': it already has " << meta->GetClassName() << " index '"
+                                             << existingIndex.GetName() << "'");
+                        return false;
+                    }
+                }
             }
             TOlapIndexSchema newIndex(id, index.GetName(), meta);
             Y_ABORT_UNLESS(IndexesByName.emplace(index.GetName(), id).second);
@@ -75,6 +130,35 @@ void TOlapIndexesDescription::Parse(const NKikimrSchemeOp::TColumnTableSchema& t
         Y_ABORT_UNLESS(IndexesByName.emplace(indexProto.GetName(), indexProto.GetId()).second);
         Y_ABORT_UNLESS(Indexes.emplace(indexProto.GetId(), std::move(index)).second);
     }
+}
+
+bool TOlapIndexesDescription::ValidateNoDuplicateMinMaxAndBloomFilterIndexes(const TOlapSchema& currentSchema, IErrorCollector& errors) const {
+    // Forbid two min_max and bloom_filter indexes on the same column.
+    THashMap<std::pair<ui32, TString>, TString> indexNameByColumnId;   // (columnId, className) -> indexName
+    for (const auto& indexPair : Indexes) {
+        const auto& index = indexPair.second;
+        const auto& meta = index.GetIndexMeta();
+        const auto columnId = meta->GetSingleColumnId();
+        if (!columnId) {
+            continue;
+        }
+        if (meta.GetClassName() != NKikimr::NOlap::NIndexes::NMinMax::kMinMaxClassName 
+            && meta.GetClassName() != "BLOOM_FILTER") {
+            continue;
+        }
+        const auto [it, ok] = indexNameByColumnId.emplace(std::pair{*columnId, meta.GetClassName()} , index.GetName());
+        if (!ok) {
+            TString columnName = ToString(*columnId);
+            if (const auto* column = currentSchema.GetColumns().GetById(*columnId)) {
+                columnName = column->GetName();
+            }
+            errors.AddError(NKikimrScheme::StatusSchemeError,
+                TStringBuilder() << "creating 2 " << it->first.second << " indexes on one column is forbidden, tried to create both '" << index.GetName() << "' and '" << it->second << 
+                "' on column " << columnName << ".");
+            return false;
+        }
+    }
+    return true;
 }
 
 void TOlapIndexesDescription::Serialize(NKikimrSchemeOp::TColumnTableSchema& tableSchema) const {

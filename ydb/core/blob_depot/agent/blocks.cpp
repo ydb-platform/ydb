@@ -1,5 +1,7 @@
 #include "blocks.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT_AGENT
+
 namespace NKikimr::NBlobDepot {
 
     NKikimrProto::EReplyStatus TBlobDepotAgent::TBlocksManager::CheckBlockForTablet(ui64 tabletId, std::optional<ui32> generation,
@@ -26,10 +28,17 @@ namespace NKikimr::NBlobDepot {
         if (status == NKikimrProto::UNKNOWN) {
             block.PendingBlockChecks.PushBack(query);
         }
-        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA01, "CheckBlockForTablet", (AgentId, Agent.LogId),
-            (QueryId, query->GetQueryId()), (TabletId, tabletId), (Generation, generation), (Status, status), (Now, now),
-            (ExpirationTimestamp, block.ExpirationTimestamp), (RefreshQueried, refreshQueried),
-            (RefreshId, block.RefreshId));
+        YDB_LOG_DEBUG("CheckBlockForTablet",
+            {"marker", "BDA01"},
+            {"agentId", Agent.LogId},
+            {"queryId", query->GetQueryId()},
+            {"tabletId", tabletId},
+            {"generation", generation},
+            {"status", status},
+            {"now", now},
+            {"expirationTimestamp", block.ExpirationTimestamp},
+            {"refreshQueried", refreshQueried},
+            {"refreshId", block.RefreshId});
         return status;
     }
 
@@ -39,8 +48,11 @@ namespace NKikimr::NBlobDepot {
         } else if (std::holds_alternative<TTabletDisconnected>(response)) {
             auto& queryBlockContext = context->Obtain<TQueryBlockContext>();
             auto& block = Blocks[queryBlockContext.TabletId];
-            STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA36, "TBlocksManager::TTabletDisconnected", (AgentId, Agent.LogId),
-                (TabletId, queryBlockContext.TabletId), (RefreshId, block.RefreshId));
+            YDB_LOG_DEBUG("TBlocksManager::TTabletDisconnected",
+                {"marker", "BDA36"},
+                {"agentId", Agent.LogId},
+                {"tabletId", queryBlockContext.TabletId},
+                {"refreshId", block.RefreshId});
             block.RefreshId = 0;
             IssueOnUpdateBlock(block);
         } else {
@@ -50,8 +62,11 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepotAgent::TBlocksManager::Handle(TRequestContext::TPtr context, NKikimrBlobDepot::TEvQueryBlocksResult& msg) {
         auto& queryBlockContext = context->Obtain<TQueryBlockContext>();
-        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA02, "TEvQueryBlocksResult", (AgentId, Agent.LogId),
-            (Msg, msg), (TabletId, queryBlockContext.TabletId));
+        YDB_LOG_DEBUG("TEvQueryBlocksResult",
+            {"marker", "BDA02"},
+            {"agentId", Agent.LogId},
+            {"msg", msg},
+            {"tabletId", queryBlockContext.TabletId});
         auto& block = Blocks[queryBlockContext.TabletId];
         Y_ABORT_UNLESS(block.RefreshId);
         Y_ABORT_UNLESS(msg.BlockedGenerationsSize() == 1);
@@ -95,9 +110,13 @@ namespace NKikimr::NBlobDepot {
         for (const auto& tablet : tablets) {
             if (const auto it = Blocks.find(tablet.GetTabletId()); it != Blocks.end()) {
                 auto& block = it->second;
-                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA37, "OnBlockedTablets", (AgentId, Agent.LogId),
-                    (TabletId, it->first), (RefreshId, block.RefreshId), (BlockedGeneration, tablet.GetBlockedGeneration()),
-                    (IssuerGuid, tablet.GetIssuerGuid()));
+                YDB_LOG_DEBUG("OnBlockedTablets",
+                    {"marker", "BDA37"},
+                    {"agentId", Agent.LogId},
+                    {"tabletId", it->first},
+                    {"refreshId", block.RefreshId},
+                    {"blockedGeneration", tablet.GetBlockedGeneration()},
+                    {"issuerGuid", tablet.GetIssuerGuid()});
                 block.BlockedGeneration = tablet.GetBlockedGeneration();
                 block.IssuerGuid = tablet.GetIssuerGuid();
                 block.ExpirationTimestamp = TMonotonic::Zero();

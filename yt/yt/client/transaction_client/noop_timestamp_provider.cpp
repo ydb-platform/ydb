@@ -20,6 +20,9 @@ public:
     {
         return NullTimestamp;
     }
+
+    void Reconfigure(const TRemoteTimestampProviderConfigPtr& /*config*/) override
+    { }
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -31,4 +34,4 @@ ITimestampProviderPtr CreateNoopTimestampProvider()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NNTransactionClient
+} // namespace NYT::NTransactionClient

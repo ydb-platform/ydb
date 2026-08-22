@@ -1,57 +1,63 @@
 # Выгрузка в S3-совместимое хранилище
 
-Команда `export s3` запускает на стороне сервера процесс выгрузки в S3-совместимое хранилище данных и информации об объектах схемы данных, в описанном в статье [Файловая структура](../file-structure.md) формате:
+Команда `export s3` запускает на стороне сервера процесс выгрузки в S3-совместимое хранилище данных и информации об объектах схемы, в описанном в статье [Файловая структура](../file-structure.md) формате:
 
 ```bash
 {{ ydb-cli }} [connection options] export s3 [options]
 ```
 
+{% include [conn_options_ref.md](../../commands/_includes/conn_options_ref.md) %}
+
 {% note warning %}
 
-Выгрузка доступна только для объектов следующих типов:
+{% include [export-supported-object-types.md](export-supported-object-types.md) %}
 
-- [директория](../../../../concepts/datamodel/dir.md);
-- [строковая таблица](../../../../concepts/datamodel/table.md#row-oriented-tables);
-- [вторичный индекс](../../../../concepts/glossary.md#secondary-index).
-- [векторный индекс](../../../../concepts/glossary.md#vector-index).
+Для более простого экспорта одиночных строковых и колоночных таблиц в S3-совместимое хранилище данных можно использовать [внешние источники данных](../../../../concepts/datamodel/external_data_source.md). Подробнее см. в статье [{#T}](../../../../concepts/query_execution/federated_query/s3/write_data.md#export-to-s3).
 
 {% endnote %}
-
-{% include [conn_options_ref.md](../../commands/_includes/conn_options_ref.md) %}
 
 ## Параметры командной строки {#pars}
 
 `[options]` - параметры команды:
 
-### Параметры соединения с S3 {#s3-conn}
+### Параметры S3 {#s3-params}
 
 Команда выгрузки в S3 требует указания [параметров соединения с S3](../auth-s3.md). Так как выгрузка производится в асинхронном режиме сервером {{ ydb-short-name }}, указанный эндпоинт должен быть доступен для установки соединения со стороны сервера.
 
+`--destination-prefix PREFIX`: Префикс ключа в бакете S3.
+
 ### Перечень выгружаемых объектов {#items}
+
+{% include [export-root-include-exclude-params.md](export-root-include-exclude-params.md) %}
+
+{% cut "Альтернативный способ" %}
+
+Поддерживается альтернативный способ указания перечня объектов:
 
 `--item STRING`: Описание объекта выгрузки. Параметр `--item` может быть указан несколько раз, если необходимо выполнить выгрузку нескольких объектов. `STRING` задается в формате `<свойство>=<значение>,...`, со следующими обязательными свойствами:
 
-- `source`, `src`, или `s` — путь до выгружаемой директории или таблицы, `.` указывает на корневую директорию базы данных. При указании директории выгружаются все объекты в ней, имена которых не начинаются с точки, а также рекурсивно все поддиректории, имена которых не начинаются с точки.
-- `destination`, `dst`, или `d` —  путь (префикс ключа) в S3 для размещения выгружаемых объектов
+- `source`, `src`, или `s` — путь до выгружаемой директории или таблицы, `.` указывает на корневую директорию базы данных. При указании директории выгружаются все несистемные объекты в ней, а также рекурсивно все несистемные поддиректории.
+- `destination`, `dst`, или `d` —  путь (префикс ключа) в S3 для размещения выгружаемых объектов.
 
-`--exclude STRING`: Шаблон ([PCRE](https://www.pcre.org/original/doc/html/pcrepattern.html)) для исключения путей из выгрузки. Данный параметр может быть указан несколько раз, для разных шаблонов.
+`--exclude STRING`: Шаблон ([PCRE](https://www.pcre.org/original/doc/html/pcrepattern.html)) для исключения путей из выгрузки. Данный параметр может быть указан несколько раз для разных шаблонов.
+
+{% include [export-alternative-syntax-warning.md](export-alternative-syntax-warning.md) %}
+
+{% endcut %}
 
 ### Дополнительные параметры {#aux}
 
-Параметр | Описание
---- | ---
-`--description STRING` | Текстовое описание операции, сохраняемое в истории операций.
-`--retries NUM` | Количество повторных попыток выгрузки, которые будет предпринимать сервер.<br/>Значение по умолчанию: `10`.
-`--compression STRING` | Сжимать выгружаемые данные.<br/>При уровне сжатия по умолчанию для алгоритма [Zstandard](https://ru.wikipedia.org/wiki/Zstandard) данные могут быть сжаты в 5-10 раз. Сжатие данных использует ресурс CPU и может повлиять на скорость выполнения других операций с БД.<br/>Допустимые значения:<br/><ul><li>`zstd` — сжатие алгоритмом Zstandard c уровнем сжатия по умолчанию (`3`);</li><li>`zstd-N` — сжатие алгоритмом Zstandard, `N` — уровень сжатия (`1` — `22`).</li></ul>
-`--format STRING` | Формат вывода результата.<br/>Допустимые значения:<br/><ul><li>`pretty` — человекопонятный формат (по умолчанию);</li><li>`proto-json-base64` — [Protocol Buffers](https://ru.wikipedia.org/wiki/Protocol_Buffers) в формате [JSON](https://ru.wikipedia.org/wiki/JSON), бинарные строки закодированы в [Base64](https://ru.wikipedia.org/wiki/Base64).</li></ul>
+{% include [export-additional-params.md](export-additional-params.md) %}
 
 ## Выполнение выгрузки {#exec}
+
+{% include [server-export-workflow.md](server-export-workflow.md) %}
 
 ### Результат запуска {#result}
 
 При успешном исполнении команда `export s3` выводит сводную информацию о поставленной в очередь операции выгрузки в S3, в заданном опцией `--format` формате. Фактическая выгрузка производится сервером асинхронно. В сводной информации выводится ID операции, который может быть использован в дальнейшем для проверки статуса и действий с операцией:
 
-- В режиме вывода `pretty` (по умолчанию) идентификатор операции показывается в выделенном псевдографикой поле id:
+{% include [export-operation-result-pretty-intro.md](export-operation-result-pretty-intro.md) %}
 
   ```text
   ┌───────────────────────────────────────────┬───────┬─────...
@@ -64,7 +70,7 @@
   ...
   ```
 
-- В режиме вывода proto-json-base64 идентификатор находится в атрибуте "id":
+{% include [export-operation-result-json-intro.md](export-operation-result-json-intro.md) %}
 
   ```json
   {"id":"ydb://export/6?id=281474976788395&kind=s3","ready":true, ... }
@@ -72,40 +78,17 @@
 
 ### Статус выгрузки {#status}
 
-Выгрузка данных выполняется в фоновом режиме. Получить информацию о статусе и прогрессе выгрузки можно вызовом команды `operation get`, параметром которой должен быть передан **заключенный в кавычки** идентификатор операции, например:
+{% include [export-operation-status-intro.md](export-operation-status-intro.md) %}
 
 ```bash
 {{ ydb-cli }} -p quickstart operation get "ydb://export/6?id=281474976788395&kind=s3"
 ```
 
-Формат вывода `operation get` также устанавливается опцией `--format`.
-
-Несмотря на то, что идентификатор операции имеет формат URL, не гарантируется, что он будет сохранен в дальнейшем. Его нужно интерпретировать только как строку.
-
-Завершение выгрузки отслеживается по изменению атрибута "progress":
-
-- В режиме вывода `pretty` (по умолчанию) успешно завершенная операция отражается значением "Done" в выделенном псевдографикой поле `progress`:
-
-  ```text
-  ┌───── ... ──┬───────┬─────────┬──────────┬─...
-  | id         | ready | status  | progress | ...
-  ├──────... ──┼───────┼─────────┼──────────┼─...
-  | ydb:/...   | true  | SUCCESS | Done     | ...
-  ├╴╴╴╴╴ ... ╴╴┴╴╴╴╴╴╴╴┴╴╴╴╴╴╴╴╴╴┴╴╴╴╴╴╴╴╴╴╴┴╴...
-  ...
-  ```
-
-- В режиме вывода proto-json-base64 завершенная операция отражается значением `PROGRESS_DONE` атрибута `progress`:
-
-  ```json
-  {"id":"ydb://...", ...,"progress":"PROGRESS_DONE",... }
-  ```
+{% include [export-operation-status-after-get.md](export-operation-status-after-get.md) %}
 
 ### Завершение операции выгрузки {#forget}
 
-При выполнении выгрузки в корневом каталоге базы данных создается директория с именем `export_*`, где `*` — это числовая часть идентификатора выгрузки. В данной директории размещаются таблицы, содержащие консистентный снапшот выгружаемых данных на момент начала выгрузки.
-
-После выполнения выгрузки воспользуйтесь командой `operation forget` для того, чтобы выгрузка была завершена: удалена из перечня операций, а также были удалены все созданные для неё файлы:
+{% include [export-operation-forget-intro.md](export-operation-forget-intro.md) %}
 
 ```bash
 {{ ydb-cli }} -p quickstart operation forget "ydb://export/6?id=281474976788395&kind=s3"
@@ -119,7 +102,7 @@
 {{ ydb-cli }} -p quickstart operation list export/s3
 ```
 
-Формат вывода `operation list` также устанавливается опцией `--format`.
+{% include [export-operation-list-tail.md](export-operation-list-tail.md) %}
 
 ## Примеры {#examples}
 
@@ -127,23 +110,65 @@
 
 ### Выгрузка базы данных {#example-full-db}
 
-Выгрузка всех объектов базы данных, имена которых не начинаются с точки, и не размещенных внутри директорий, имена которых начинаются с точки, в директорию `export1` в бакете `mybucket` с использованием параметров аутентификации S3 из переменных окружения или файла `~/.aws/credentials`:
+Выгрузка всех несистемных объектов базы данных в директорию `export1` в бакете `mybucket` с использованием параметров аутентификации S3 из переменных окружения или файла `~/.aws/credentials`:
 
 ```bash
 {{ ydb-cli }} -p quickstart export s3 \
   --s3-endpoint storage.yandexcloud.net --bucket mybucket \
-  --item src=.,dst=export1
+  --destination-prefix export1
 ```
 
 ### Выгрузка нескольких директорий {#example-specific-dirs}
 
-Выгрузка объектов из директорий dir1 и dir2 базы данных, в директорию `export1` в бакете `mybucket`, с использованием явно заданных параметров аутентификации в S3:
+Выгрузка объектов из директорий `dir1` и `dir2` базы данных, в директорию `export1` в бакете `mybucket`, с использованием явно заданных параметров аутентификации в S3:
 
 ```bash
 {{ ydb-cli }} -p quickstart export s3 \
   --s3-endpoint storage.yandexcloud.net --bucket mybucket \
-  --access-key VJGSOScgs-5kDGeo2hO9 --secret-key fZ_VB1Wi5-fdKSqH6074a7w0J4X0 \
+  --access-key <access-key> --secret-key <secret-key> \
+  --destination-prefix export1 --include dir1 --include dir2
+```
+
+Либо с использованием альтернативного способа:
+
+```bash
+{{ ydb-cli }} -p quickstart export s3 \
+  --s3-endpoint storage.yandexcloud.net --bucket mybucket \
+  --access-key <access-key> --secret-key <secret-key> \
   --item src=dir1,dst=export1/dir1 --item src=dir2,dst=export1/dir2
+```
+
+### Выгрузка с шифрованием {#example-encryption}
+
+Выгрузка всей базы данных с шифрованием:
+
+- С использованием алгоритма шифрования `AES-128-GCM`
+- С генерацией случайного ключа утилитой `openssl` в файл `~/my_secret_key`
+- С чтением сгенерированного ключа из файла `~/my_secret_key`
+- В префикс пути `export1` в бакете S3 `mybucket`
+- С использованием параметров аутентификации S3 из переменных окружения или файла `~/.aws/credentials`
+
+```bash
+openssl rand -out ~/my_secret_key 16
+{{ ydb-cli }} -p quickstart export s3 \
+  --s3-endpoint storage.yandexcloud.net --bucket mybucket --destination-prefix export1 \
+  --encryption-algorithm AES-128-GCM --encryption-key-file ~/my_secret_key
+```
+
+Выгрузка директории `dir1` базы данных с шифрованием:
+
+- С использованием алгоритма шифрования `AES-256-GCM`
+- С генерацией случайного ключа утилитой `openssl` в переменную окружения `YDB_ENCRYPTION_KEY`
+- С чтением сгенерированного ключа из переменной окружения `YDB_ENCRYPTION_KEY`
+- В префикс пути `export1` в бакете S3 `mybucket`
+- С использованием параметров аутентификации S3 из переменных окружения или файла `~/.aws/credentials`
+
+```bash
+export YDB_ENCRYPTION_KEY=$(openssl rand -hex 32)
+{{ ydb-cli }} -p quickstart export s3 \
+  --root-path dir1 \
+  --s3-endpoint storage.yandexcloud.net --bucket mybucket --destination-prefix export1 \
+  --encryption-algorithm AES-256-GCM
 ```
 
 ### Получение идентификаторов операций {#example-list-oneline}

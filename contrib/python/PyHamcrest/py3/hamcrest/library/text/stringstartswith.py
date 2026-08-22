@@ -1,26 +1,26 @@
+from hamcrest.core.helpers.hasmethod import hasmethod
+from hamcrest.core.matcher import Matcher
+from hamcrest.library.text.substringmatcher import SubstringMatcher
+
 __author__ = "Jon Reid"
 __copyright__ = "Copyright 2011 hamcrest.org"
 __license__ = "BSD, see License.txt"
 
-from hamcrest.library.text.substringmatcher import SubstringMatcher
-from hamcrest.core.helpers.hasmethod import hasmethod
-
 
 class StringStartsWith(SubstringMatcher):
-
-    def __init__(self, substring):
+    def __init__(self, substring) -> None:
         super(StringStartsWith, self).__init__(substring)
 
-    def _matches(self, item):
-        if not hasmethod(item, 'startswith'):
+    def _matches(self, item: str) -> bool:
+        if not hasmethod(item, "startswith"):
             return False
         return item.startswith(self.substring)
 
     def relationship(self):
-        return 'starting with'
+        return "starting with"
 
 
-def starts_with(substring):
+def starts_with(substring: str) -> Matcher[str]:
     """Matches if object is a string starting with a given string.
 
     :param string: The string to search for.

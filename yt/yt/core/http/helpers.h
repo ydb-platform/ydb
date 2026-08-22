@@ -15,9 +15,9 @@
 
 namespace NYT::NHttp {
 
-namespace NHeaders {
-
 ////////////////////////////////////////////////////////////////////////////////
+
+namespace NHeaders {
 
 inline const std::string AcceptHeaderName("Accept");
 inline const std::string AccessControlAllowCredentialsHeaderName("Access-Control-Allow-Credentials");
@@ -54,25 +54,41 @@ inline const std::string ResponseFormatOptionsHeaderName("X-YT-Response-Format-O
 inline const std::string UserNameHeaderName("X-YT-User-Name");
 inline const std::string UserTagHeaderName("X-YT-User-Tag");
 inline const std::string XYTErrorHeaderName("X-YT-Error");
+inline const std::string XYTErrorContentTypeHeaderName("X-YT-Error-Content-Type");
 inline const std::string XYTResponseCodeHeaderName("X-YT-Response-Code");
 inline const std::string XYTResponseMessageHeaderName("X-YT-Response-Message");
 inline const std::string XYTSpanIdHeaderName("X-YT-Span-Id");
 inline const std::string XYTTraceIdHeaderName("X-YT-Trace-Id");
 
+inline const std::string ApplicationJsonContentType("application/json");
+inline const std::string ApplicationXYsonContentType("application/x-yson");
+inline const std::string ApplicationXProtobufContentType("application/x-protobuf");
+
+} // namespace NHeaders
+
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace Headers
+void FillYTErrorHeaders(
+    const IResponseWriterPtr& rsp,
+    const TError& error);
+void FillYTErrorTrailers(
+    const IResponseWriterPtr& rsp,
+    const TError& error);
 
-////////////////////////////////////////////////////////////////////////////////
+void FillYTErrorResponseHeaders(
+    const IResponseWriterPtr& rsp,
+    const TError& error);
+void FillYTErrorResponseTrailers(
+    const IResponseWriterPtr& rsp,
+    const TError& error);
 
-void FillYTErrorHeaders(const IResponseWriterPtr& rsp, const TError& error);
-void FillYTErrorTrailers(const IResponseWriterPtr& rsp, const TError& error);
-
-TError ParseYTError(const IResponsePtr& rsp, bool fromTrailers = false);
+TError ParseYTError(
+    const IResponsePtr& rsp,
+    bool fromTrailers = false);
 
 //! Catches exception thrown from underlying handler body and
 //! translates it into HTTP error.
-IHttpHandlerPtr WrapYTException(IHttpHandlerPtr underlying);
+IHttpHandlerPtr CreateErrorWrappingHttpHandler(IHttpHandlerPtr underlying);
 
 bool MaybeHandleCors(
     const IRequestPtr& req,

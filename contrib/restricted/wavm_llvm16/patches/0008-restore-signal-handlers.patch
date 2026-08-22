@@ -1,0 +1,162 @@
+commit f975eba5bdab412fd51c564121aedda7ef2f2f65
+author: dtorilov
+date: 2023-08-31T21:07:27+03:00
+
+    Add WebAssembly Execution Backend
+
+--- a/Lib/Platform/POSIX/SignalPOSIX.cpp	(24bc218073432246195052658040cc093fe7b222)
++++ b/Lib/Platform/POSIX/SignalPOSIX.cpp	(f975eba5bdab412fd51c564121aedda7ef2f2f65)
+@@ -7,8 +7,11 @@
+ #include "WAVM/Inline/Errors.h"
+ #include "WAVM/Platform/Diagnostics.h"
+ 
++#include <contrib/restricted/wavm_llvm16/Lib/Runtime/RuntimePrivate.h>
++
+ using namespace WAVM;
+ using namespace WAVM::Platform;
++using namespace WAVM::Runtime;
+ 
+ #if defined(__APPLE__)
+ #define UC_RESET_ALT_STACK 0x80000000
+@@ -48,10 +51,58 @@ static void maskSignals(int how)
+ 	pthread_sigmask(how, &set, nullptr);
+ }
+ 
+-[[noreturn]] static void signalHandler(int signalNumber, siginfo_t* signalInfo, void*)
++struct sigaction oldSEGVHandler;
++struct sigaction oldBUSHandler;
++struct sigaction oldFPEHandler;
++
++[[noreturn]] static void signalHandler(int signalNumber, siginfo_t* signalInfo, void* ptr)
+ {
+ 	maskSignals(SIG_BLOCK);
+ 
++	bool happenedInsideOfACompartment = false;
++	if (Memory::getCurrentMemory() != nullptr) {
++		WAVM_ASSERT(Table::getCurrentTable() != nullptr);
++
++		auto memory = Memory::getCurrentMemory();
++		auto table = Table::getCurrentTable();
++		auto address = reinterpret_cast<U8*>(signalInfo->si_addr);
++
++		{
++			U8* startAddress = memory->getBaseAddress();
++			U8* endAddress = memory->getBaseAddress() + memory->getNumReservedBytes() + Memory::getNumGuardBytes();
++			if(address >= startAddress && address < endAddress)
++			{
++				happenedInsideOfACompartment = true;
++			}
++		}
++
++		{
++			U8* startAddress = (U8*)table->elements;
++			U8* endAddress = ((U8*)table->elements) + table->numReservedBytes;
++			if(address >= startAddress && address < endAddress)
++			{
++				happenedInsideOfACompartment = true;
++			}
++		}
++	}
++
++	if (!happenedInsideOfACompartment) {
++		switch(signalNumber)
++		{
++		case SIGFPE:
++			oldFPEHandler.sa_sigaction(signalNumber, signalInfo, ptr);
++			return;
++		case SIGSEGV:
++			oldSEGVHandler.sa_sigaction(signalNumber, signalInfo, ptr);
++			return;
++		case SIGBUS:
++			oldBUSHandler.sa_sigaction(signalNumber, signalInfo, ptr);
++			return;
++		default:
++			return;
++		};
++	}
++
+ 	Signal signal;
+ 
+ 	// Derive the exception cause the from signal that was received.
+@@ -116,9 +167,9 @@ bool Platform::initGlobalSignalsOnce()
+ 	signalAction.sa_sigaction = signalHandler;
+ 	signalAction.sa_flags = SA_SIGINFO | SA_ONSTACK | SA_NODEFER;
+ 	sigemptyset(&signalAction.sa_mask);
+-	WAVM_ERROR_UNLESS(!sigaction(SIGSEGV, &signalAction, nullptr));
+-	WAVM_ERROR_UNLESS(!sigaction(SIGBUS, &signalAction, nullptr));
+-	WAVM_ERROR_UNLESS(!sigaction(SIGFPE, &signalAction, nullptr));
++	WAVM_ERROR_UNLESS(!sigaction(SIGSEGV, &signalAction, &oldSEGVHandler));
++	WAVM_ERROR_UNLESS(!sigaction(SIGBUS, &signalAction, &oldBUSHandler));
++	WAVM_ERROR_UNLESS(!sigaction(SIGFPE, &signalAction, &oldFPEHandler));
+ 
+ 	return true;
+ }
+--- a/Lib/Runtime/Memory.cpp	(24bc218073432246195052658040cc093fe7b222)
++++ b/Lib/Runtime/Memory.cpp	(f975eba5bdab412fd51c564121aedda7ef2f2f65)
+@@ -27,6 +27,16 @@ namespace WAVM { namespace Runtime {
+ static Platform::RWMutex memoriesMutex;
+ static std::vector<Memory*> memories;
+ 
++static thread_local Memory* CurrentMemory = nullptr;
++__attribute__((__noinline__)) void Memory::setCurrentMemory(Memory* memory)
++{
++	CurrentMemory = memory;
++}
++__attribute__((__noinline__)) Memory* Memory::getCurrentMemory()
++{
++	return CurrentMemory;
++}
++
+ static constexpr U64 maxMemory64WASMPages =
+ #if WAVM_ENABLE_TSAN
+ 	(U64(8) * 1024 * 1024 * 1024) >> IR::numBytesPerPageLog2; // 8GB
+--- a/Lib/Runtime/RuntimePrivate.h	(24bc218073432246195052658040cc093fe7b222)
++++ b/Lib/Runtime/RuntimePrivate.h	(f975eba5bdab412fd51c564121aedda7ef2f2f65)
+@@ -72,6 +72,9 @@ namespace WAVM { namespace Runtime {
+ 		{
+ 		}
+ 		~Table() override;
++
++		static void setCurrentTable(Table* table);
++		static Table* getCurrentTable();
+ 	};
+ 
+ 	// This is used as a sentinel value for table elements that are out-of-bounds. The address of
+@@ -108,6 +111,9 @@ namespace WAVM { namespace Runtime {
+ 		{
+ 		}
+ 		~Memory() override;
++
++		static void setCurrentMemory(Memory* memory);
++		static Memory* getCurrentMemory();
+ 	};
+ 
+ 	// An instance of a WebAssembly global.
+@@ -172,7 +178,7 @@ namespace WAVM { namespace Runtime {
+ 	{
+ 		const Uptr id;
+ 
+-		const HashMap<std::string, Object*> exportMap;
++		HashMap<std::string, Object*> exportMap;
+ 		const std::vector<Object*> exports;
+ 
+ 		const std::vector<Function*> functions;
+--- a/Lib/Runtime/Table.cpp	(24bc218073432246195052658040cc093fe7b222)
++++ b/Lib/Runtime/Table.cpp	(f975eba5bdab412fd51c564121aedda7ef2f2f65)
+@@ -25,6 +25,16 @@ namespace WAVM { namespace Runtime {
+ static Platform::RWMutex tablesMutex;
+ static std::vector<Table*> tables;
+ 
++static thread_local Table* CurrentTable = nullptr;
++__attribute__((__noinline__)) void Table::setCurrentTable(Table* table)
++{
++	CurrentTable = table;
++}
++__attribute__((__noinline__)) Table* Table::getCurrentTable()
++{
++	return CurrentTable;
++}
++
+ static constexpr Uptr numGuardPages = 1;
+ static constexpr U64 maxTable32Elems = U64(UINT32_MAX) + 1;
+ static constexpr U64 maxTable64Elems = U64(128) * 1024 * 1024 * 1024;

@@ -11,7 +11,6 @@ from typing import (
     IO,
     TYPE_CHECKING,
     Any,
-    ByteString,
     Dict,
     Final,
     Iterable,
@@ -102,6 +101,7 @@ class PayloadRegistry:
         self._first: List[_PayloadRegistryItem] = []
         self._normal: List[_PayloadRegistryItem] = []
         self._last: List[_PayloadRegistryItem] = []
+        self._normal_lookup: Dict[Any, PayloadType] = {}
 
     def get(
         self,
@@ -110,12 +110,20 @@ class PayloadRegistry:
         _CHAIN: "Type[chain[_PayloadRegistryItem]]" = chain,
         **kwargs: Any,
     ) -> "Payload":
+        if self._first:
+            for factory, type_ in self._first:
+                if isinstance(data, type_):
+                    return factory(data, *args, **kwargs)
+        # Try the fast lookup first
+        if lookup_factory := self._normal_lookup.get(type(data)):
+            return lookup_factory(data, *args, **kwargs)
+        # Bail early if its already a Payload
         if isinstance(data, Payload):
             return data
-        for factory, type in _CHAIN(self._first, self._normal, self._last):
-            if isinstance(data, type):
+        # Fallback to the slower linear search
+        for factory, type_ in _CHAIN(self._normal, self._last):
+            if isinstance(data, type_):
                 return factory(data, *args, **kwargs)
-
         raise LookupError()
 
     def register(
@@ -125,6 +133,11 @@ class PayloadRegistry:
             self._first.append((factory, type))
         elif order is Order.normal:
             self._normal.append((factory, type))
+            if isinstance(type, Iterable):
+                for t in type:
+                    self._normal_lookup[t] = factory
+            else:
+                self._normal_lookup[type] = factory
         elif order is Order.try_last:
             self._last.append((factory, type))
         else:
@@ -160,7 +173,8 @@ class Payload(ABC):
             self._headers[hdrs.CONTENT_TYPE] = content_type
         else:
             self._headers[hdrs.CONTENT_TYPE] = self._default_content_type
-        self._headers.update(headers or {})
+        if headers:
+            self._headers.update(headers)
 
     @property
     def size(self) -> Optional[int]:
@@ -209,6 +223,13 @@ class Payload(ABC):
         )
 
     @abstractmethod
+    def decode(self, encoding: str = "utf-8", errors: str = "strict") -> str:
+        """Return string representation of the value.
+
+        This is named decode() to allow compatibility with bytes objects.
+        """
+
+    @abstractmethod
     async def write(self, writer: AbstractStreamWriter) -> None:
         """Write payload.
 
@@ -217,10 +238,11 @@ class Payload(ABC):
 
 
 class BytesPayload(Payload):
-    def __init__(self, value: ByteString, *args: Any, **kwargs: Any) -> None:
-        if not isinstance(value, (bytes, bytearray, memoryview)):
-            raise TypeError(f"value argument must be byte-ish, not {type(value)!r}")
+    _value: bytes
 
+    def __init__(
+        self, value: Union[bytes, bytearray, memoryview], *args: Any, **kwargs: Any
+    ) -> None:
         if "content_type" not in kwargs:
             kwargs["content_type"] = "application/octet-stream"
 
@@ -228,8 +250,10 @@ class BytesPayload(Payload):
 
         if isinstance(value, memoryview):
             self._size = value.nbytes
-        else:
+        elif isinstance(value, (bytes, bytearray)):
             self._size = len(value)
+        else:
+            raise TypeError(f"value argument must be byte-ish, not {type(value)!r}")
 
         if self._size > TOO_LARGE_BYTES_BODY:
             kwargs = {"source": self}
@@ -240,6 +264,9 @@ class BytesPayload(Payload):
                 ResourceWarning,
                 **kwargs,
             )
+
+    def decode(self, encoding: str = "utf-8", errors: str = "strict") -> str:
+        return self._value.decode(encoding, errors)
 
     async def write(self, writer: AbstractStreamWriter) -> None:
         await writer.write(self._value)
@@ -282,7 +309,7 @@ class StringIOPayload(StringPayload):
 
 
 class IOBasePayload(Payload):
-    _value: IO[Any]
+    _value: io.IOBase
 
     def __init__(
         self, value: IO[Any], disposition: str = "attachment", *args: Any, **kwargs: Any
@@ -306,9 +333,12 @@ class IOBasePayload(Payload):
         finally:
             await loop.run_in_executor(None, self._value.close)
 
+    def decode(self, encoding: str = "utf-8", errors: str = "strict") -> str:
+        return "".join(r.decode(encoding, errors) for r in self._value.readlines())
+
 
 class TextIOPayload(IOBasePayload):
-    _value: TextIO
+    _value: io.TextIOBase
 
     def __init__(
         self,
@@ -345,6 +375,9 @@ class TextIOPayload(IOBasePayload):
         except OSError:
             return None
 
+    def decode(self, encoding: str = "utf-8", errors: str = "strict") -> str:
+        return self._value.read()
+
     async def write(self, writer: AbstractStreamWriter) -> None:
         loop = asyncio.get_event_loop()
         try:
@@ -362,6 +395,8 @@ class TextIOPayload(IOBasePayload):
 
 
 class BytesIOPayload(IOBasePayload):
+    _value: io.BytesIO
+
     @property
     def size(self) -> int:
         position = self._value.tell()
@@ -369,16 +404,26 @@ class BytesIOPayload(IOBasePayload):
         self._value.seek(position)
         return end - position
 
+    def decode(self, encoding: str = "utf-8", errors: str = "strict") -> str:
+        return self._value.read().decode(encoding, errors)
+
 
 class BufferedReaderPayload(IOBasePayload):
+    _value: io.BufferedIOBase
+
     @property
     def size(self) -> Optional[int]:
         try:
             return os.fstat(self._value.fileno()).st_size - self._value.tell()
-        except OSError:
+        except (OSError, AttributeError):
             # data.fileno() is not supported, e.g.
             # io.BufferedReader(io.BytesIO(b'data'))
+            # For some file-like objects (e.g. tarfile), the fileno() attribute may
+            # not exist at all, and will instead raise an AttributeError.
             return None
+
+    def decode(self, encoding: str = "utf-8", errors: str = "strict") -> str:
+        return self._value.read().decode(encoding, errors)
 
 
 class JsonPayload(BytesPayload):
@@ -416,6 +461,7 @@ else:
 class AsyncIterablePayload(Payload):
 
     _iter: Optional[_AsyncIterator] = None
+    _value: _AsyncIterable
 
     def __init__(self, value: _AsyncIterable, *args: Any, **kwargs: Any) -> None:
         if not isinstance(value, AsyncIterable):
@@ -442,6 +488,9 @@ class AsyncIterablePayload(Payload):
                     await writer.write(chunk)
             except StopAsyncIteration:
                 self._iter = None
+
+    def decode(self, encoding: str = "utf-8", errors: str = "strict") -> str:
+        raise TypeError("Unable to decode.")
 
 
 class StreamReaderPayload(AsyncIterablePayload):

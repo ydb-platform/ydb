@@ -22,7 +22,7 @@
 
 * [EvUpdateTx](https://github.com/ydb-platform/ydb/blob/ab6222f2deabf1a12b50db13728b68cbd6b59604/ydb/core/tablet_flat/flat_redo_writer.h#L160) сохраняет изменения в таблице с указанием незакомиченного `TxId`. Это событие создаётся методом [TDatabase::UpdateTx](https://github.com/ydb-platform/ydb/blob/ab6222f2deabf1a12b50db13728b68cbd6b59604/ydb/core/tablet_flat/flat_database.h#L123) локальной базы данных (LocalDB).
 * [EvRemoveTx](https://github.com/ydb-platform/ydb/blob/ab6222f2deabf1a12b50db13728b68cbd6b59604/ydb/core/tablet_flat/flat_redo_writer.h#L169) используется для удаленения указанного `TxId`, когда выполняется отмена транзакции. Это событие создаётся методом [TDatabase::RemoveTx](https://github.com/ydb-platform/ydb/blob/ab6222f2deabf1a12b50db13728b68cbd6b59604/ydb/core/tablet_flat/flat_database.h#L124) локальной базы данных.
-* [EvCommitTx](https://github.com/ydb-platform/ydb/blob/ab6222f2deabf1a12b50db13728b68cbd6b59604/ydb/core/tablet_flat/flat_redo_writer.h#L183) используется для коммита указанного `TxId` с указанием [MVCC](../concepts/mvcc.md) версии коммита. Это событие создаётся методом [TDatabase::CommitTx](https://github.com/ydb-platform/ydb/blob/ab6222f2deabf1a12b50db13728b68cbd6b59604/ydb/core/tablet_flat/flat_database.h#L125) локальной базы данных.
+* [EvCommitTx](https://github.com/ydb-platform/ydb/blob/ab6222f2deabf1a12b50db13728b68cbd6b59604/ydb/core/tablet_flat/flat_redo_writer.h#L183) используется для коммита указанного `TxId` с указанием [MVCC](../concepts/query_execution/mvcc.md) версии коммита. Это событие создаётся методом [TDatabase::CommitTx](https://github.com/ydb-platform/ydb/blob/ab6222f2deabf1a12b50db13728b68cbd6b59604/ydb/core/tablet_flat/flat_database.h#L125) локальной базы данных.
 
 ## Хранение незакомиченных изменений в MemTable
 
@@ -145,7 +145,7 @@
 | 87       | 12 | .. RowVersion.TxId                              |
 | 95       | - | Конец записи                                    |
 
-При этом оставшиеся две записи будут в исторических данных в ключами `(RowId, 2000, 11)` и `(RowId, 1000, 10)`, соответственно. Об их наличии которых говорит флаг `HasHistory` в основной записи.
+При этом оставшиеся две записи будут в исторических данных в ключах `(RowId, 2000, 11)` и `(RowId, 1000, 10)`, соответственно. Об их наличии говорит флаг `HasHistory` в основной записи.
 
 В процессе компакшена итератор работает в специальном режиме с перебором всех дельт и всех версий для каждого ключа. Реализация скана для компакшена (см. [flat_ops_compact.h](https://github.com/ydb-platform/ydb/blob/main/ydb/core/tablet_flat/flat_ops_compact.h)) сначала агрегирует незакомиченные на момент начала компакшена дельты по `TxId` с сохранением их относительного порядка. В случае, если изменения от разных `TxId` накладываются друг на друга, их порядок может поменяться произвольным образом. Такое изменение порядка валидно, так как такие транзакции пересекаются по порядку записи и вышестоящий уровень не имеет права коммитить их одновременно. Когда все незакомиченные дельты сагрегированы, они пишутся в правильном порядке в результирующую SST (см. [flat_part_writer.h](https://github.com/ydb-platform/ydb/blob/main/ydb/core/tablet_flat/flat_part_writer.h) и [flat_page_writer.h](https://github.com/ydb-platform/ydb/blob/main/ydb/core/tablet_flat/flat_page_writer.h)). После этого начинается перебор версий строк для ключа, которые пишутся в SST в порядке уменьшения версий.
 
@@ -177,3 +177,5 @@
 8. В такой ситуации в `TxStatus` от шарда L будет коммит, а в `TxStatus` от шарда R будет отмена для того же `TxId`. Так как транзакции успешно коммитят все изменения, а отмена может быть в том числе из-за наложенного фильтра, в случае мержа конфликтующей информации по `TxId` коммит «выигрывает» над отменой.
 
 На практике DataShard перед очередным сплитом или мержем полностью компактятся, так что конфликтующая информация по статусу коммита не должна возникнуть. Например, это означает, что транзакции не могут решить закоммитить только часть изменений, все изменения для конкретного `TxId` должны быть закоммичены вместе. Это также означает, что идентификаторы транзакций нельзя переиспользовать, в том числе между разными шардами. В качестве `TxId` для незакомиченных изменений также могут использоваться только глобально уникальные идентификаторы.
+
+{% include [career](./_includes/career.md) %}

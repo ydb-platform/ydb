@@ -3,7 +3,6 @@
 // For the sake of sane code completion.
 #include "nonblocking_queue.h"
 #endif
-#undef NONBLOCKING_QUEUE_INL_H_
 
 namespace NYT::NConcurrency {
 
@@ -60,7 +59,7 @@ TFuture<void> TBoundedNonblockingQueue<T>::Enqueue(TFuture<T> asyncValue)
         AsyncValueQueue_.push(std::move(asyncValue));
 
         if (std::ssize(AsyncValueQueue_) <= SizeLimit_) {
-            return VoidFuture;
+            return OKFuture;
         }
 
         auto promise = NewPromise<void>();
@@ -74,7 +73,7 @@ TFuture<void> TBoundedNonblockingQueue<T>::Enqueue(TFuture<T> asyncValue)
 
         promise.SetFrom(std::move(asyncValue));
 
-        return VoidFuture;
+        return OKFuture;
     }
 }
 
@@ -135,7 +134,7 @@ void TBoundedNonblockingQueue<T>::Drain(const TError& error)
 
     guard.Release();
 
-    auto resultError = TError("Queue was drained with error") << error;
+    auto resultError = TError("Queue was drained with error").With(error);
 
     for (const auto& consumer : consumers) {
         consumer.Set(resultError);

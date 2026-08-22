@@ -245,9 +245,10 @@ class StreamReader(AsyncStreamReaderMixin):
         if not data:
             return
 
-        self._size += len(data)
+        data_len = len(data)
+        self._size += data_len
         self._buffer.append(data)
-        self.total_bytes += len(data)
+        self.total_bytes += data_len
 
         waiter = self._waiter
         if waiter is not None:
@@ -296,6 +297,9 @@ class StreamReader(AsyncStreamReaderMixin):
             set_result(waiter, None)
 
     async def _wait(self, func_name: str) -> None:
+        if not self._protocol.connected:
+            raise RuntimeError("Connection closed.")
+
         # StreamReader uses a future to link the protocol feed_data() method
         # to a read coroutine. Running two read coroutines at the same time
         # would have an unexpected behaviour. It would not possible to know

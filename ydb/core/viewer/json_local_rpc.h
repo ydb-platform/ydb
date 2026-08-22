@@ -212,7 +212,7 @@ public:
                     TStringStream stream;
                     NJson::WriteJson(&stream, &json);
                     if (status->GetStatus() == NYdb::EStatus::UNAUTHORIZED) {
-                        return ReplyAndPassAway(GetHTTPFORBIDDEN("application/json", stream.Str()), message);
+                        return ReplyAndPassAway(GETHTTPACCESSDENIED("application/json", stream.Str()), message);
                     } else {
                         return ReplyAndPassAway(GetHTTPBADREQUEST("application/json", stream.Str()), message);
                     }

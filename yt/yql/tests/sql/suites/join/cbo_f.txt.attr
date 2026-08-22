@@ -15,8 +15,8 @@
         };
         {
             "name" = "val";
-            "type" = "int64";
-            "type_v3" = {"type_name" = "optional"; item = "int64"}
+            "type" = "int32";
+            "type_v3" = {"type_name" = "optional"; item = "int32"}
         };
     ];
     "extended_stats" = [

@@ -1,14 +1,26 @@
 #pragma once
 
-#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/util/backoff.h>
+#include <ydb/core/wrappers/retry_policy.h>
 
-#include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/wrappers/events/abstract.h>
 #include <ydb/core/wrappers/events/common.h>
 #include <ydb/core/wrappers/events/get_object.h>
 #include <ydb/core/wrappers/events/object_exists.h>
 
+#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/log.h>
+
+#include <library/cpp/monlib/dynamic_counters/counters.h>
+
+#include <util/system/mutex.h>
+
 #include <memory>
+
+namespace NKikimrConfig {
+    class TAwsClientConfig;
+};
 
 namespace NKikimr::NWrappers {
 
@@ -41,6 +53,25 @@ struct TEvExternalStorage {
 
 namespace NExternalStorage {
 
+class TThreadSafeBackoff {
+private:
+    mutable TMutex Mutex;
+    NKikimr::TBackoff Policy;
+public:
+    TThreadSafeBackoff(size_t maxRetries = 100, TDuration initial = TDuration::Seconds(3), TDuration max = TDuration::Seconds(10))
+        : Policy(maxRetries, initial, max) {}
+    void Reset() {
+        with_lock(Mutex) {
+            Policy.Reset();
+        }
+    }
+    TDuration Next() {
+        with_lock(Mutex) {
+            return Policy.Next();
+        }
+    }
+};
+
 class IReplyAdapter {
 private:
     std::optional<NActors::TActorId> CustomRecipient;
@@ -48,8 +79,20 @@ public:
     using TPtr = std::shared_ptr<IReplyAdapter>;
     virtual ~IReplyAdapter() = default;
 
+    struct TRequestStats {
+        TStringBuf RequestName;
+        TDuration Latency;
+        bool Success = false;
+        int HttpResponseCode = 0;
+        size_t BytesRead = 0;
+        size_t BytesWritten = 0;
+    };
+
     NActors::TActorId GetRecipient(const NActors::TActorId& defaultValue) {
         return CustomRecipient.value_or(defaultValue);
+    }
+
+    virtual void CollectStats(const TRequestStats& /*stats*/) const {
     }
 
     virtual std::unique_ptr<IEventBase> RebuildReplyEvent(std::unique_ptr<TEvListObjectsResponse>&& ev) const = 0;
@@ -69,10 +112,12 @@ public:
 class TReplyAdapterContainer {
 private:
     IReplyAdapter::TPtr Adapter;
+    std::shared_ptr<TThreadSafeBackoff> Backoff;
 public:
     TReplyAdapterContainer() = default;
-    TReplyAdapterContainer(IReplyAdapter::TPtr adapter)
-        : Adapter(adapter) {
+    TReplyAdapterContainer(IReplyAdapter::TPtr adapter, std::shared_ptr<TThreadSafeBackoff> backoff = {})
+        : Adapter(adapter)
+        , Backoff(std::move(backoff)) {
 
     }
 
@@ -93,12 +138,38 @@ public:
         return Adapter ? Adapter->GetRecipient(defaultValue) : defaultValue;
     }
 
+    void CollectStats(const IReplyAdapter::TRequestStats& stats) const {
+        if (Adapter) {
+            Adapter->CollectStats(stats);
+        }
+    }
+
     template <class TBaseEventObject>
     void Reply(const NActors::TActorId& recipientId, std::unique_ptr<TBaseEventObject>&& ev) const {
+        bool doBackoff = false;
+        TDuration delay = TDuration::Zero();
+
+        if (ev->IsSuccess()) {
+            Backoff->Reset();
+        } else if (NWrappers::ShouldBackoff(ev->GetError())) {
+            AFL_VERIFY(Backoff);
+            delay = Backoff->Next();
+            doBackoff = delay > TDuration::Zero();
+        }
+
+        std::unique_ptr<NActors::IEventBase> finalEvent;
         if (Adapter) {
-            TlsActivationContext->ActorSystem()->Send(Adapter->GetRecipient(recipientId), Adapter->RebuildReplyEvent(std::move(ev)).release());
+            finalEvent = Adapter->RebuildReplyEvent(std::move(ev));
         } else {
-            TlsActivationContext->ActorSystem()->Send(recipientId, ev.release());
+            finalEvent.reset(ev.release());
+        }
+
+        const NActors::TActorId recipient = Adapter ? Adapter->GetRecipient(recipientId) : recipientId;
+        if (doBackoff) {
+            auto* handle = new NActors::IEventHandle(recipient, NActors::TActorId(), finalEvent.release());
+            TlsActivationContext->ActorSystem()->Schedule(delay, handle);
+        } else {
+            TlsActivationContext->ActorSystem()->Send(recipient, finalEvent.release());
         }
 
     }
@@ -108,6 +179,7 @@ public:
 class IExternalStorageOperator {
 protected:
     TReplyAdapterContainer ReplyAdapter;
+    std::shared_ptr<TThreadSafeBackoff> BackoffPolicy = std::make_shared<TThreadSafeBackoff>();
     virtual TString DoDebugString() const {
         return "";
     }
@@ -115,7 +187,7 @@ public:
     using TPtr = std::shared_ptr<IExternalStorageOperator>;
     void InitReplyAdapter(IReplyAdapter::TPtr adapter) {
         Y_ABORT_UNLESS(!ReplyAdapter);
-        ReplyAdapter = TReplyAdapterContainer(adapter);
+        ReplyAdapter = TReplyAdapterContainer(adapter, BackoffPolicy);
     }
 
 
@@ -152,8 +224,9 @@ protected:
 public:
     using TPtr = std::shared_ptr<IExternalStorageConfig>;
     virtual ~IExternalStorageConfig() = default;
-    IExternalStorageOperator::TPtr ConstructStorageOperator(bool verbose = true) const;
-    static IExternalStorageConfig::TPtr Construct(const NKikimrSchemeOp::TS3Settings& settings);
+    IExternalStorageOperator::TPtr ConstructStorageOperator(bool verbose = false) const;
+    template <typename TSettings>
+    static IExternalStorageConfig::TPtr Construct(const NKikimrConfig::TAwsClientConfig& defaultAwsClientSettings, const TSettings& settings, NMonitoring::TDynamicCounterPtr rootCounters = AppData()->Counters);
 };
 } // NExternalStorage
 

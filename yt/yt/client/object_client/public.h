@@ -4,12 +4,13 @@
 
 #include <yt/yt/client/job_tracker_client/public.h>
 
+#include <library/cpp/yt/compact_containers/compact_flat_set.h>
+#include <library/cpp/yt/compact_containers/compact_vector.h>
+
 #include <library/cpp/yt/misc/enum.h>
 #include <library/cpp/yt/misc/guid.h>
 #include <library/cpp/yt/misc/hash.h>
 #include <library/cpp/yt/misc/strong_typedef.h>
-
-#include <library/cpp/yt/compact_containers/compact_vector.h>
 
 #include <library/cpp/yt/string/string_builder.h>
 
@@ -19,6 +20,7 @@ namespace NYT::NObjectClient {
 
 namespace NProto {
 
+class TPrerequisiteRevision;
 class TUserDirectory;
 
 } // namespace NProto
@@ -27,7 +29,7 @@ class TUserDirectory;
 
 YT_DEFINE_ERROR_ENUM(
     ((PrerequisiteCheckFailed)                   (1000))
-    ((InvalidObjectLifeStage)                    (1001))
+    ((InactiveObjectLifeStage)                   (1001))
     ((CrossCellAdditionalPath)                   (1002))
     ((CrossCellRevisionPrerequisitePath)         (1003))
     ((ForwardedRequestFailed)                    (1004))
@@ -71,7 +73,7 @@ using NElection::NullCellId;
 
 //! Identifies a particular cell of YT cluster.
 //! Must be globally unique to prevent object ids from colliding.
-YT_DEFINE_STRONG_TYPEDEF(TCellTag, ui16)
+YT_DEFINE_STRONG_TYPEDEF(TCellTag, ui16);
 
 //! The minimum valid cell tag.
 constexpr auto MinValidCellTag = TCellTag(0x0001);
@@ -91,6 +93,7 @@ constexpr auto InvalidCellTag = TCellTag(0xf004);
 //! A static limit for the number of secondary master cells.
 constexpr int MaxSecondaryMasterCells = 48;
 
+using TCellTagSet = TCompactFlatSet<TCellTag, MaxSecondaryMasterCells + 1>;
 using TCellTagList = TCompactVector<TCellTag, MaxSecondaryMasterCells + 1>;
 using TCellIdList = TCompactVector<TCellId, MaxSecondaryMasterCells + 1>;
 
@@ -154,11 +157,16 @@ DEFINE_ENUM(EObjectType,
     ((OverreplicatedChunkMap)                       (404))
     ((UnderreplicatedChunkMap)                      (405))
     ((DataMissingChunkMap)                          (419))
+    ((DataMissingChunksSampleMap)                   (466))
     ((ParityMissingChunkMap)                        (420))
+    ((ParityMissingChunksSampleMap)                 (467))
     ((OldestPartMissingChunkMap)                    (428))
+    ((OldestPartMissingChunksSampleMap)             (468))
     ((QuorumMissingChunkMap)                        (424))
+    ((QuorumMissingChunksSampleMap)                 (469))
     ((UnsafelyPlacedChunkMap)                       (120))
     ((InconsistentlyPlacedChunkMap)                 (160))
+    ((InconsistentlyPlacedChunksSampleMap)          (470))
     ((UnexpectedOverreplicatedChunkMap)             (434))
     ((ReplicaTemporarilyUnavailableChunkMap)        (436))
     ((ForeignChunkMap)                              (122))
@@ -217,7 +225,7 @@ DEFINE_ENUM(EObjectType,
     ((Uint64Node)                                   (306))
     ((DoubleNode)                                   (302))
     ((MapNode)                                      (303))
-    ((ListNode)                                     (304))
+    ((DeprecatedListNode)                           (304))
     ((BooleanNode)                                  (305))
 
     // Dynamic nodes
@@ -360,6 +368,7 @@ DEFINE_ENUM(EObjectType,
     // Queue stuff
     ((QueueConsumer)                               (1700))
     ((QueueProducer)                               (1701))
+    ((QueueMultiConsumer)                          (1702))
 );
 
 //! A bit mask marking schema types.
@@ -410,15 +419,6 @@ struct TVersionedObjectId
 
     static TVersionedObjectId FromString(TStringBuf str);
 };
-
-//! Formats id into a string (for debugging and logging purposes mainly).
-void FormatValue(TStringBuilderBase* builder, const TVersionedObjectId& id, TStringBuf spec);
-
-//! Compares TVersionedNodeId s for equality.
-bool operator == (const TVersionedObjectId& lhs, const TVersionedObjectId& rhs);
-
-//! Compares TVersionedNodeId s for "less than".
-bool operator <  (const TVersionedObjectId& lhs, const TVersionedObjectId& rhs);
 
 class TObjectServiceProxy;
 

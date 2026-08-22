@@ -1,56 +1,60 @@
+from typing import Sequence, TypeVar, Union, cast
+
+from hamcrest.core.base_matcher import BaseMatcher
+from hamcrest.core.core.allof import all_of
+from hamcrest.core.description import Description
+from hamcrest.core.helpers.wrap_matcher import wrap_matcher
+from hamcrest.core.matcher import Matcher
+
 __author__ = "Jon Reid"
 __copyright__ = "Copyright 2011 hamcrest.org"
 __license__ = "BSD, see License.txt"
 
-from hamcrest.core.base_matcher import BaseMatcher
-from hamcrest.core.core.allof import all_of
-from hamcrest.core.helpers.hasmethod import hasmethod
-from hamcrest.core.helpers.wrap_matcher import wrap_matcher
+T = TypeVar("T")
 
 
-class IsSequenceContaining(BaseMatcher):
-
-    def __init__(self, element_matcher):
+class IsSequenceContaining(BaseMatcher[Sequence[T]]):
+    def __init__(self, element_matcher: Matcher[T]) -> None:
         self.element_matcher = element_matcher
 
-    def _matches(self, sequence):
+    def _matches(self, item: Sequence[T]) -> bool:
         try:
-            for item in sequence:
-                if self.element_matcher.matches(item):
+            for element in item:
+                if self.element_matcher.matches(element):
                     return True
-        except TypeError: # not a sequence
-            return False
+        except TypeError:  # not a sequence
+            pass
+        return False
 
-    def describe_to(self, description):
-        description.append_text('a sequence containing ')           \
-                    .append_description_of(self.element_matcher)
+    def describe_to(self, description: Description) -> None:
+        description.append_text("a sequence containing ").append_description_of(
+            self.element_matcher
+        )
 
 
 # It'd be great to make use of all_of, but we can't be sure we won't
 # be seeing a one-time sequence here (like a generator); see issue #20
 # Instead, we wrap it inside a class that will convert the sequence into
 # a concrete list and then hand it off to the all_of matcher.
-class IsSequenceContainingEvery(BaseMatcher):
+class IsSequenceContainingEvery(BaseMatcher[Sequence[T]]):
+    def __init__(self, *element_matchers: Matcher[T]) -> None:
+        delegates = [cast(Matcher[Sequence[T]], has_item(e)) for e in element_matchers]
+        self.matcher: Matcher[Sequence[T]] = all_of(*delegates)
 
-    def __init__(self, *element_matchers):
-        delegates = [has_item(e) for e in element_matchers]
-        self.matcher = all_of(*delegates)
-
-    def _matches(self, sequence):
+    def _matches(self, item: Sequence[T]) -> bool:
         try:
-            return self.matcher.matches(list(sequence))
+            return self.matcher.matches(list(item))
         except TypeError:
             return False
 
-    def describe_mismatch(self, item, mismatch_description):
+    def describe_mismatch(self, item: Sequence[T], mismatch_description: Description) -> None:
         self.matcher.describe_mismatch(item, mismatch_description)
 
-    def describe_to(self, description):
+    def describe_to(self, description: Description) -> None:
         self.matcher.describe_to(description)
 
 
-
-def has_item(match):
+def has_item(match: Union[Matcher[T], T]) -> Matcher[Sequence[T]]:
     """Matches if any element of sequence satisfies a given matcher.
 
     :param match: The matcher to satisfy, or an expected value for
@@ -68,7 +72,7 @@ def has_item(match):
     return IsSequenceContaining(wrap_matcher(match))
 
 
-def has_items(*items):
+def has_items(*items: Union[Matcher[T], T]) -> Matcher[Sequence[T]]:
     """Matches if all of the given matchers are satisfied by any elements of
     the sequence.
 

@@ -2,6 +2,14 @@
 
 namespace NYql::NFmr {
 
+void NormalizeRichPath(NYT::TRichYPath& richPath) {
+    TString prefix = NYT::TConfig::Get()->Prefix;
+    if (prefix.empty()) {
+        prefix = "//";
+    }
+    richPath.Path(NYT::AddPathPrefix(richPath.Path_, prefix));
+}
+
 NYT::IClientPtr CreateClient(const TClusterConnection& clusterConnection) {
     NYT::TCreateClientOptions createOpts;
     auto token = clusterConnection.Token;

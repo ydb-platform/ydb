@@ -46,12 +46,12 @@ public:
 
     TVector<std::pair<TString, bool>> ForeignSortColumns() const;
 
-    void FillRowSpecSort(TYqlRowSpecInfo& rowSpec);
+    void FillRowSpecSort(TYqlRowSpecInfo& rowSpec, bool useNativeYtDefaultColumnOrder);
 
 private:
     template <bool ComputedTuple, bool SingleColumn>
     void AddColumn(const TExprNode::TPtr& rootLambda, const TExprNode::TPtr& keyNode, bool ascending, size_t columnIndex, const TExprNode::TPtr& structArg, bool unordered);
-    void AddColumn(const TStringBuf memberName, const TTypeAnnotationNode* columnType, bool ascending, bool unordered);
+    void AddColumn(const TStringBuf memberName, const TTypeAnnotationNode* columnType, bool ascending, const TStringBuf sortedBy, bool unordered);
 
 private:
     TPositionHandle Pos_;

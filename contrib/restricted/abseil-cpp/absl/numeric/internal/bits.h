@@ -77,8 +77,28 @@ template <class T>
   static_assert(IsPowerOf2(std::numeric_limits<T>::digits),
                 "T must have a power-of-2 size");
 
-  return static_cast<T>(x >> (s & (std::numeric_limits<T>::digits - 1))) |
-         static_cast<T>(x << ((-s) & (std::numeric_limits<T>::digits - 1)));
+  // Rotate by s mod the number of digits to avoid unnecessary rotations.
+  //
+  // A negative s represents a left rotation instead of a right rotation.
+  // We compute it as an equivalent complementary right rotation by leveraging
+  // its two's complement representation.
+  //
+  // For example, suppose we rotate a 3-bit number by -2.
+  // In that case:
+  //   * s = 0b11111111111111111111111111111110
+  //   * n = 8
+  //   * r = (0b11111111111111111111111111111110 & 0b111) = 0b110
+  //
+  // Instead of rotating by 2 to the left, we rotate by 6 to the right, which
+  // is equivalent.
+  const int n = std::numeric_limits<T>::digits;
+  const int r = s & (n - 1);
+
+  if (r == 0) {
+    return x;
+  } else {
+    return (x >> r) | (x << (n - r));
+  }
 }
 
 template <class T>
@@ -88,8 +108,16 @@ template <class T>
   static_assert(IsPowerOf2(std::numeric_limits<T>::digits),
                 "T must have a power-of-2 size");
 
-  return static_cast<T>(x << (s & (std::numeric_limits<T>::digits - 1))) |
-         static_cast<T>(x >> ((-s) & (std::numeric_limits<T>::digits - 1)));
+  // Rotate by s mod the number of digits to avoid unnecessary rotations.
+  // See comment in RotateRight for a detailed explanation of the logic below.
+  const int n = std::numeric_limits<T>::digits;
+  const int r = s & (n - 1);
+
+  if (r == 0) {
+    return x;
+  } else {
+    return (x << r) | (x >> (n - r));
+  }
 }
 
 ABSL_ATTRIBUTE_ALWAYS_INLINE ABSL_INTERNAL_CONSTEXPR_POPCOUNT inline int
@@ -171,7 +199,7 @@ CountLeadingZeroes32(uint32_t x) {
 
 ABSL_ATTRIBUTE_ALWAYS_INLINE ABSL_INTERNAL_CONSTEXPR_CLZ inline int
 CountLeadingZeroes16(uint16_t x) {
-#if ABSL_HAVE_BUILTIN(__builtin_clzg)
+#if ABSL_HAVE_BUILTIN(__builtin_clzg) && !defined(__CUDACC__)
   return x == 0 ? 16 : __builtin_clzg(x);
 #elif ABSL_HAVE_BUILTIN(__builtin_clzs)
   static_assert(sizeof(unsigned short) == sizeof(x),  // NOLINT(runtime/int)
@@ -309,7 +337,7 @@ CountTrailingZeroesNonzero64(uint64_t x) {
 
 ABSL_ATTRIBUTE_ALWAYS_INLINE ABSL_INTERNAL_CONSTEXPR_CTZ inline int
 CountTrailingZeroesNonzero16(uint16_t x) {
-#if ABSL_HAVE_BUILTIN(__builtin_ctzg)
+#if ABSL_HAVE_BUILTIN(__builtin_ctzg) && !defined(__CUDACC__)
   return __builtin_ctzg(x);
 #elif ABSL_HAVE_BUILTIN(__builtin_ctzs)
   static_assert(sizeof(unsigned short) == sizeof(x),  // NOLINT(runtime/int)

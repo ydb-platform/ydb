@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(3.21.4)
+VERSION(3.31.2)
 
 LICENSE(Apache-2.0)
 
@@ -16,6 +16,7 @@ PEERDIR(
 NO_LINT()
 
 NO_CHECK_IMPORTS(
+    ydb.opentelemetry.*
     ydb.public.api.grpc
     ydb.public.api.grpc.*
 )
@@ -24,11 +25,14 @@ PY_SRCS(
     TOP_LEVEL
     ydb/__init__.py
     ydb/_apis.py
+    ydb/_constants.py
     ydb/_errors.py
     ydb/_grpc/__init__.py
     ydb/_grpc/common/__init__.py
     ydb/_grpc/grpcwrapper/__init__.py
     ydb/_grpc/grpcwrapper/common_utils.py
+    ydb/_grpc/grpcwrapper/ydb_coordination.py
+    ydb/_grpc/grpcwrapper/ydb_coordination_public_types.py
     ydb/_grpc/grpcwrapper/ydb_query.py
     ydb/_grpc/grpcwrapper/ydb_query_public_types.py
     ydb/_grpc/grpcwrapper/ydb_scheme.py
@@ -49,10 +53,17 @@ PY_SRCS(
     ydb/_topic_writer/topic_writer_asyncio.py
     ydb/_topic_writer/topic_writer_sync.py
     ydb/_tx_ctx_impl.py
+    ydb/_typing.py
     ydb/_utilities.py
     ydb/aio/__init__.py
     ydb/aio/_utilities.py
     ydb/aio/connection.py
+    ydb/aio/coordination/__init__.py
+    ydb/aio/coordination/client.py
+    ydb/aio/coordination/reconnector.py
+    ydb/aio/coordination/semaphore.py
+    ydb/aio/coordination/session.py
+    ydb/aio/coordination/stream.py
     ydb/aio/credentials.py
     ydb/aio/driver.py
     ydb/aio/iam.py
@@ -69,6 +80,11 @@ PY_SRCS(
     ydb/auth_helpers.py
     ydb/connection.py
     ydb/convert.py
+    ydb/coordination/__init__.py
+    ydb/coordination/base.py
+    ydb/coordination/client.py
+    ydb/coordination/semaphore.py
+    ydb/coordination/session.py
     ydb/credentials.py
     ydb/dbapi/__init__.py
     ydb/dbapi/connection.py
@@ -89,6 +105,14 @@ PY_SRCS(
     ydb/oauth2_token_exchange/__init__.py
     ydb/oauth2_token_exchange/token_exchange.py
     ydb/oauth2_token_exchange/token_source.py
+    ydb/observability/__init__.py
+    ydb/observability/_endpoint.py
+    ydb/observability/metrics.py
+    ydb/observability/tracing.py
+    ydb/opentelemetry/__init__.py
+    ydb/opentelemetry/metrics_plugin.py
+    ydb/opentelemetry/plugin.py
+    ydb/opentelemetry/tracing.py
     ydb/operation.py
     ydb/pool.py
     ydb/query/__init__.py

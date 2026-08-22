@@ -1,6 +1,41 @@
 #include <ydb/core/persqueue/ut/common/autoscaling_ut_common.h>
 
+#include <ydb/core/persqueue/public/schema/alter_topic_operation.h>
+
 namespace NKikimr::NPQ::NTest {
+
+namespace {
+
+class TAlterTopicSetPartitionWriteSpeedInMessagesStrategy : public NKikimr::NPQ::NSchema::IAlterTopicStrategy {
+public:
+    TAlterTopicSetPartitionWriteSpeedInMessagesStrategy(TString topicName, ui64 writeSpeedInMessagesPerSecond)
+        : TopicName_(std::move(topicName))
+        , WriteSpeedInMessagesPerSec_(writeSpeedInMessagesPerSecond)
+    {}
+
+    const TString& GetTopicName() const override {
+        return TopicName_;
+    }
+
+    NKikimr::NPQ::NSchema::TResult ApplyChanges(
+        const TString& /*localCluster*/,
+        const NKikimr::NPQ::NDescriber::TTopicInfo& /*topicInfo*/,
+        NKikimrSchemeOp::TModifyScheme& /*modifyScheme*/,
+        NKikimrSchemeOp::TPersQueueGroupDescription& targetConfig,
+        const NKikimrSchemeOp::TPersQueueGroupDescription& sourceConfig
+    ) override
+    {
+        NKikimr::NPQ::NSchema::CopyConfig(targetConfig, sourceConfig);
+        targetConfig.MutablePQTabletConfig()->MutablePartitionConfig()->SetWriteSpeedInMessagesPerSecond(WriteSpeedInMessagesPerSec_);
+        return {};
+    }
+
+private:
+    TString TopicName_;
+    ui64 WriteSpeedInMessagesPerSec_;
+};
+
+} // namespace
 
 using namespace NYdb::NTopic;
 using namespace NYdb::NTopic::NTests;
@@ -11,6 +46,7 @@ NKikimrSchemeOp::TModifyScheme CreateTransaction(const TString& parentPath, ::NK
     tx.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterPersQueueGroup);
     tx.SetWorkingDir(parentPath);
     tx.MutableAlterPersQueueGroup()->CopyFrom(scheme);
+    tx.SetInternal(true);
     return tx;
 }
 
@@ -25,12 +61,16 @@ ui64 DoRequest(TTopicSdkTestSetup& setup, ui64& txId, NKikimrSchemeOp::TPersQueu
 }
 
 ui64 DoRequest(NActors::TTestActorRuntime& runtime, ui64& txId, NKikimrSchemeOp::TPersQueueGroupDescription& scheme) {
+    return DoRequest(runtime, txId, "/Root", scheme);
+}
+
+ui64 DoRequest(NActors::TTestActorRuntime& runtime, ui64& txId, const TString& dir, NKikimrSchemeOp::TPersQueueGroupDescription& scheme) {
     Sleep(TDuration::Seconds(1));
 
     Cerr << "ALTER_SCHEME: " << scheme << Endl << Flush;
 
     const auto sender = runtime.AllocateEdgeActor();
-    const auto request = CreateRequest(txId, CreateTransaction("/Root", scheme));
+    const auto request = CreateRequest(txId, CreateTransaction(dir, scheme));
     runtime.Send(new IEventHandle(
             MakeTabletResolverID(),
             sender,
@@ -66,14 +106,23 @@ ui64 SplitPartition(NActors::TTestActorRuntime& runtime, ui64& txId, const ui32 
     return SplitPartition(runtime, txId, TString{TEST_TOPIC}, partition, boundary);
 }
 
-ui64 SplitPartition(NActors::TTestActorRuntime& runtime, ui64& txId, const TString& topic, const ui32 partition, TString boundary) {
+ui64 SplitPartition(NActors::TTestActorRuntime& runtime, ui64& txId, const TString& dir, const TString& topic, const ui32 partition, TString boundary) {
+    return SplitPartitions(runtime, txId, dir, topic, {{partition, boundary}});
+}
+
+ui64 SplitPartitions(NActors::TTestActorRuntime& runtime, ui64& txId, const TString& dir, const TString& topic, const std::map<ui32, TString>& partitionBoundaries) {
     ::NKikimrSchemeOp::TPersQueueGroupDescription scheme;
     scheme.SetName(topic);
-    auto* split = scheme.AddSplit();
-    split->SetPartition(partition);
-    split->SetSplitBoundary(boundary);
+    for (const auto& [partition, boundary] : partitionBoundaries) {
+        auto* split = scheme.AddSplit();
+        split->SetPartition(partition);
+        split->SetSplitBoundary(boundary);
+    }
+    return DoRequest(runtime, txId, dir, scheme);
+}
 
-    return DoRequest(runtime, txId, scheme);
+ui64 SplitPartition(NActors::TTestActorRuntime& runtime, ui64& txId, const TString& topic, const ui32 partition, TString boundary) {
+    return SplitPartition(runtime, txId, "/Root", topic, partition, boundary);
 }
 
 void MergePartition(TTopicSdkTestSetup& setup, ui64& txId, const ui32 partitionLeft, const ui32 partitionRight) {
@@ -86,38 +135,63 @@ void MergePartition(TTopicSdkTestSetup& setup, ui64& txId, const ui32 partitionL
     DoRequest(setup, txId, scheme);
 }
 
+void AlterTopicPartitionWriteSpeedInMessagesPerSecondViaAlterTopicStrategy(TTopicSdkTestSetup& setup, ui64 writeSpeedInMessagesPerSecond) {
+    auto& runtime = setup.GetRuntime();
+    const auto parent = runtime.AllocateEdgeActor();
+    TString database(setup.GetDatabase());
+    const auto aid = runtime.Register(NKikimr::NPQ::NSchema::CreateAlterTopicOperationActor(parent, {
+        .Database = std::move(database),
+        .Strategy = std::make_unique<TAlterTopicSetPartitionWriteSpeedInMessagesStrategy>(TString{TEST_TOPIC}, writeSpeedInMessagesPerSecond),
+    }));
+    runtime.EnableScheduleForActor(aid);
+    auto reply = runtime.GrabEdgeEvent<NKikimr::NPQ::NSchema::TEvSchemaResponse>(parent, TDuration::Seconds(120));
+    UNIT_ASSERT(reply);
+    const auto& alter = *reply->Get();
+    UNIT_ASSERT_C(alter.Status == Ydb::StatusIds::SUCCESS,
+        "AlterTopicOperation (partition write speed in messages/sec): " << alter.ErrorMessage);
+}
+
 TWriteMessage Msg(const TString& data, ui64 seqNo) {
     TWriteMessage msg(data);
     msg.SeqNo(seqNo);
     return msg;
 }
 
-TTopicSdkTestSetup CreateSetup() {
+TTopicSdkTestSetup CreateSetup(
+    NActors::NLog::EPriority priority,
+    bool enableTopicPartitionSplitBasedOnKllSketch,
+    bool enableTopicPartitionSplitBasedOnMessages)
+{
     NKikimrConfig::TFeatureFlags ff;
-    ff.SetEnableTopicSplitMerge(true);
-    ff.SetEnablePQConfigTransactionsAtSchemeShard(true);
-    ff.SetEnableTopicServiceTx(true);
-    ff.SetEnableTopicAutopartitioningForCDC(true);
     ff.SetEnableTopicAutopartitioningForReplication(true);
+    if (enableTopicPartitionSplitBasedOnKllSketch) {
+        ff.SetEnableTopicPartitionSplitBasedOnKllSketch(true);
+    }
+    if (enableTopicPartitionSplitBasedOnMessages) {
+        ff.SetEnableTopicPartitionSplitBasedOnMessages(true);
+    }
 
     auto settings = TTopicSdkTestSetup::MakeServerSettings();
     settings.SetFeatureFlags(ff);
 
     auto setup = TTopicSdkTestSetup("TopicSplitMerge", settings, false);
 
-    setup.GetRuntime().SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
-    setup.GetRuntime().SetLogPriority(NKikimrServices::PERSQUEUE, NActors::NLog::PRI_TRACE);
-    setup.GetRuntime().SetLogPriority(NKikimrServices::PQ_PARTITION_CHOOSER, NActors::NLog::PRI_TRACE);
-    setup.GetRuntime().SetLogPriority(NKikimrServices::PQ_READ_PROXY, NActors::NLog::PRI_TRACE);
+    setup.GetRuntime().SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, priority);
+    setup.GetRuntime().SetLogPriority(NKikimrServices::PERSQUEUE, priority);
+    setup.GetRuntime().SetLogPriority(NKikimrServices::PQ_PARTITION_CHOOSER, priority);
+    setup.GetRuntime().SetLogPriority(NKikimrServices::PQ_READ_PROXY, priority);
+    setup.GetRuntime().SetLogPriority(NKikimrServices::PQ_MIRRORER, priority);
+    setup.GetRuntime().SetLogPriority(NKikimrServices::PQ_MIRROR_DESCRIBER, priority);
 
     setup.GetRuntime().GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(true);
     setup.GetRuntime().GetAppData().PQConfig.SetUseSrcIdMetaMappingInFirstClass(true);
     setup.GetRuntime().GetAppData().PQConfig.SetBalancerWakeupIntervalSec(1);
+    setup.GetRuntime().GetAppData().PQConfig.SetACLRetryTimeoutSec(1);
 
     return setup;
 }
 
-std::shared_ptr<ISimpleBlockingWriteSession> CreateWriteSession(TTopicClient& client, const TString& producer, std::optional<ui32> partition, TString topic, bool useCodec) {
+std::shared_ptr<NYdb::NTopic::ISimpleBlockingWriteSession> CreateWriteSession(TTopicClient& client, const TString& producer, std::optional<ui32> partition, TString topic, bool useCodec) {
     auto writeSettings = TWriteSessionSettings()
                     .Path(topic)
                     .ProducerId(producer);
@@ -226,6 +300,9 @@ std::shared_ptr<TTestReadSession<SdkVersion::Topic>::TSdkReadSession> TTestReadS
     }
     for (auto partitionId : settings.Partitions) {
         readSettings.Topics_[0].AppendPartitionIds(partitionId);
+    }
+    if (settings.WithoutConsumer) {
+        readSettings.WithoutConsumer();
     }
 
     struct MsgWrapper : public IMessage {
@@ -345,6 +422,7 @@ std::shared_ptr<TTestReadSession<SdkVersion::PQv1>::TSdkReadSession> TTestReadSe
     for (auto partitionId : settings.Partitions) {
         readSettings.Topics_[0].PartitionGroupIds_.push_back(partitionId + 1);
     }
+    UNIT_ASSERT_VALUES_EQUAL_C(settings.WithoutConsumer, false, "Reading WithoutConsumer is not supported in PQv1");
 
     struct MsgWrapper : public IMessage {
 
@@ -607,6 +685,34 @@ std::shared_ptr<ITestReadSession> CreateTestReadSession(TestReadSessionSettings 
     } else {
         return std::make_shared<TTestReadSession<SdkVersion::PQv1>>(settings);
     }
+}
+
+TActorId CreateDescriberActor(NActors::TTestActorRuntime& runtime, const TString& databasePath, const TString& topicPath) {
+    auto edgeId = runtime.AllocateEdgeActor();
+    auto readerId = runtime.Register(NDescriber::CreateDescriberActor(edgeId, databasePath, {topicPath}));
+    runtime.EnableScheduleForActor(readerId);
+    runtime.DispatchEvents();
+
+    return readerId;
+}
+
+THolder<NDescriber::TEvDescribeTopicsResponse> GetDescriberResponse(NActors::TTestActorRuntime& runtime, TDuration timeout) {
+    return runtime.GrabEdgeEvent<NDescriber::TEvDescribeTopicsResponse>(timeout);
+}
+
+ui64 GetPQRBTabletId(NActors::TTestActorRuntime& runtime, const TString& database, const TString& topic) {
+    CreateDescriberActor(runtime, database, topic);
+    auto result = GetDescriberResponse(runtime);
+    UNIT_ASSERT_VALUES_EQUAL(result->Topics[topic].Status, NDescriber::EStatus::SUCCESS);
+    return result->Topics[topic].Info->Description.GetBalancerTabletID();
+}
+
+void ReloadPQRBTablet(NActors::TTestActorRuntime& runtime, const TString& database, const TString& topic) {
+    Cerr << (TStringBuilder() << ">>>>>> reload PQRB tablet " << database << " " << topic) << Endl;
+
+    auto tabletId = GetPQRBTabletId(runtime, database, topic);
+    ForwardToTablet(runtime, tabletId, runtime.AllocateEdgeActor(), new TEvents::TEvPoison());
+    Sleep(TDuration::Seconds(1));
 }
 
 }

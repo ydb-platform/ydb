@@ -5,8 +5,8 @@
 
 select  *
 from (select item.i_manager_id i_manager_id
-             ,sum($todecimal(ss_sales_price, 7, 2)) sum_sales
-             ,avg(sum($todecimal(ss_sales_price, 7, 2))) over (partition by item.i_manager_id) avg_monthly_sales
+             ,sum(ss_sales_price) sum_sales
+             ,avg(sum(ss_sales_price)) over (partition by item.i_manager_id) avg_monthly_sales
       from {{item}} as item
           cross join {{store_sales}} as store_sales
           cross join {{date_dim}} as date_dim
@@ -24,7 +24,7 @@ from (select item.i_manager_id i_manager_id
               and i_brand in ('amalgimporto #1','edu packscholar #1','exportiimporto #1',
 		                 'importoamalg #1')))
 group by item.i_manager_id, date_dim.d_moy) tmp1
-where case when avg_monthly_sales > 0 then abs (sum_sales - avg_monthly_sales) / avg_monthly_sales else null end > $todecimal(0.1,7,2)
+where case when avg_monthly_sales > 0 then $upscale(abs (sum_sales - avg_monthly_sales)) / $upscale(avg_monthly_sales) else null end > $todecimal(0.1,'35','9')
 order by i_manager_id
         ,avg_monthly_sales
         ,sum_sales

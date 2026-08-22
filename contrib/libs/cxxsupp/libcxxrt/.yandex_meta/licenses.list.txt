@@ -79,6 +79,10 @@ The BSD License
  * Copyright 2021 David Chisnall. All rights reserved.
 
 
+====================COPYRIGHT====================
+ * Copyright 2021 Microsoft. All rights reserved.
+
+
 ====================File: AUTHORS====================
 David Chisnall
 PathScale engineers

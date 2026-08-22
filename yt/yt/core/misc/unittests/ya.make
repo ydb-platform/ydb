@@ -6,6 +6,7 @@ PROTO_NAMESPACE(yt)
 
 SRCS(
     adjusted_exponential_moving_average_ut.cpp
+    absolute_normalized_path_ut.cpp
     algorithm_helpers_ut.cpp
     arithmetic_formula_ut.cpp
     async_expiring_cache_ut.cpp
@@ -22,8 +23,9 @@ SRCS(
     concurrent_cache_ut.cpp
     configurable_singleton_ut.cpp
     consistent_hashing_ut.cpp
-    default_map_ut.cpp
+    crash_handler_ut.cpp
     digest_ut.cpp
+    duration_moving_average_ut.cpp
     ema_counter_ut.cpp
     enum_ut.cpp
     error_ut.cpp
@@ -46,7 +48,6 @@ SRCS(
     lru_cache_ut.cpp
     maybe_inf_ut.cpp
     moving_average_ut.cpp
-    mpl_ut.cpp
     mpsc_fair_share_queue_ut.cpp
     mpsc_queue_ut.cpp
     mpsc_stack_ut.cpp
@@ -55,11 +56,9 @@ SRCS(
     pool_allocator_ut.cpp
     proc_ut.cpp
     random_ut.cpp
-    range_helpers_ut.cpp
     ref_counted_tracker_ut.cpp
     relaxed_mpsc_queue_ut.cpp
-    ring_queue_ut.cpp
-    skip_list_ut.cpp
+    serialize_ut.cpp
     slab_allocator_ut.cpp
     sliding_window_ut.cpp
     spsc_queue_ut.cpp
@@ -68,7 +67,6 @@ SRCS(
     sync_cache_ut.cpp
     sync_expiring_cache_ut.cpp
     time_formula_ut.cpp
-    three_level_stable_vector_ut.cpp
     tls_destructor_ut.cpp
     tls_expiring_cache_ut.cpp
     topological_ordering_ut.cpp

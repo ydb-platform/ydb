@@ -7,39 +7,39 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-using TStringRegistry = TInternRegistry<TString>;
-using TInternedString = TInternedObject<TString>;
+using TStringRegistry = TInternRegistry<std::string>;
+using TInternedString = TInternedObject<std::string>;
 
-TEST(TInternRegistry, TestEmptyRegistry)
+TEST(TInternRegistryTest, TestEmptyRegistry)
 {
     auto registry = New<TStringRegistry>();
     EXPECT_EQ(0, registry->GetSize());
 }
 
-TEST(TInternRegistry, TestEmptyInstance)
+TEST(TInternRegistryTest, TestEmptyInstance)
 {
     TInternedString s;
     EXPECT_EQ(0u, s->length());
 }
 
-TEST(TInternRegistry, Simple)
+TEST(TInternRegistryTest, Simple)
 {
     auto registry = New<TStringRegistry>();
     EXPECT_EQ(0, registry->GetSize());
 
-    auto s1 = registry->Intern(TString("hello"));
+    auto s1 = registry->Intern(std::string("hello"));
     EXPECT_EQ(1, registry->GetSize());
 
-    auto s2 = registry->Intern(TString("world"));
+    auto s2 = registry->Intern(std::string("world"));
     EXPECT_EQ(2, registry->GetSize());
 
-    auto s3 = registry->Intern(TString("hello"));
+    auto s3 = registry->Intern(std::string("hello"));
     EXPECT_EQ(2, registry->GetSize());
 
     EXPECT_TRUE(*s1 == *s3);
     EXPECT_FALSE(*s1 == *s2);
 
-    auto s4 = registry->Intern(TString("test"));
+    auto s4 = registry->Intern(std::string("test"));
     EXPECT_EQ(3, registry->GetSize());
 
     s4 = TInternedString();
@@ -56,14 +56,14 @@ TEST(TInternRegistry, Simple)
 }
 
 
-TEST(TInternRegistry, Default)
+TEST(TInternRegistryTest, Default)
 {
     auto registry = New<TStringRegistry>();
     EXPECT_EQ(0, registry->GetSize());
 
     auto s1 = TInternedString();
 
-    auto s2 = registry->Intern(TString());
+    auto s2 = registry->Intern(std::string());
     EXPECT_EQ(0, registry->GetSize());
 
     EXPECT_TRUE(*s1 == *s2);
@@ -71,5 +71,5 @@ TEST(TInternRegistry, Default)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-}
+} // namespace
 } // namespace NYT

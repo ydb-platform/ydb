@@ -476,6 +476,24 @@ public:
             return result;
         }
 
+        for (auto& schemaPreset : Transaction.GetAlterColumnStore().GetAddSchemaPresets()) {
+            if (schemaPreset.HasSchema()) {
+                if (auto checkResult = NKikimr::NSchemeShard::NOlap::CheckColumns(schemaPreset.GetSchema().GetColumns(), AppData()); !checkResult) {
+                    result->SetError(NKikimrScheme::StatusSchemeError, checkResult.error());
+                    return result;
+                }
+            }
+        }
+
+        for (auto& schemaPreset : Transaction.GetAlterColumnStore().GetAlterSchemaPresets()) {
+            if (schemaPreset.HasAlterSchema()) {
+                if (auto checkResult = NKikimr::NSchemeShard::NOlap::CheckColumns(schemaPreset.GetAlterSchema().GetAddColumns(), AppData()); !checkResult) {
+                    result->SetError(NKikimrScheme::StatusInvalidParameter, checkResult.error());
+                    return result;
+                }
+            }
+        }
+
         TPath parentPath = TPath::Resolve(parentPathStr, context.SS);
         TPath path = parentPath.Dive(name);
         {

@@ -4,7 +4,7 @@
 #include "schemeshard_impl.h"
 
 #include <ydb/core/base/subdomain.h>
-#include <ydb/core/persqueue/config/config.h>
+#include <ydb/core/persqueue/public/config.h>
 
 namespace {
 
@@ -306,6 +306,17 @@ public:
         }
         if (settings.HasAuditSettings()) {
             alterData->ApplyAuditSettings(settings.GetAuditSettings());
+        }
+
+        // alterData is copy-constructed from subDomainInfo, so the current
+        // level is already carried over; only an explicit request changes it.
+        if (settings.HasTablesMetricsLevel()) {
+            const bool isRootDomain = subDomain->IsRoot() && context.SS->IsDomainSchemeShard;
+            if (!CheckTablesMetricsLevel(settings.GetTablesMetricsLevel(), isRootDomain, errStr)) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+                return result;
+            }
+            alterData->SetTablesMetricsLevel(settings.GetTablesMetricsLevel());
         }
 
         NIceDb::TNiceDb db(context.GetDB());

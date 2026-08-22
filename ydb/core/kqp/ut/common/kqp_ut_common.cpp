@@ -1,18 +1,20 @@
 #include "kqp_ut_common.h"
 
 #include <ydb/core/base/backtrace.h>
-#include <ydb/core/tx/datashard/datashard.h>
-#include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/core/fq/libs/checkpointing/checkpoint_coordinator.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/provider/yql_kikimr_results.h>
+#include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/library/testlib/common/test_utils.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <yql/essentials/core/yql_data_provider.h>
-#include <yql/essentials/utils/backtrace/backtrace.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/public/udf/udf_helpers.h>
 #include <yql/essentials/public/udf/udf_value_builder.h>
-#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/utils/backtrace/backtrace.h>
 #include <yql/essentials/utils/yql_panic.h>
 
 #include <library/cpp/testing/common/env.h>
@@ -68,44 +70,24 @@ SIMPLE_UDF(TRandString, char*(ui32)) {
 }
 
 SIMPLE_MODULE(TTestUdfsModule, TTestFilter, TTestFilterTerminate, TRandString);
-NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateJson2Module();
-NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateRe2Module();
-NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateStringModule();
-NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateDateTime2Module();
-NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateMathModule();
-NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateUnicodeModule();
-NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateDigestModule();
+REGISTER_MODULES(TTestUdfsModule)
 
 NMiniKQL::IFunctionRegistry* UdfFrFactory(const NScheme::TTypeRegistry& typeRegistry) {
     Y_UNUSED(typeRegistry);
     auto funcRegistry = NMiniKQL::CreateFunctionRegistry(NMiniKQL::CreateBuiltinRegistry())->Clone();
-    funcRegistry->AddModule("", "TestUdfs", new TTestUdfsModule());
-    funcRegistry->AddModule("", "Json2", CreateJson2Module());
-    funcRegistry->AddModule("", "Re2", CreateRe2Module());
-    funcRegistry->AddModule("", "String", CreateStringModule());
-    funcRegistry->AddModule("", "DateTime", CreateDateTime2Module());
-    funcRegistry->AddModule("", "Math", CreateMathModule());
-    funcRegistry->AddModule("", "Unicode", CreateUnicodeModule());
-    funcRegistry->AddModule("", "Digest", CreateDigestModule());
-
     NKikimr::NMiniKQL::FillStaticModules(*funcRegistry);
     return funcRegistry.Release();
 }
 
-TVector<NKikimrKqp::TKqpSetting> SyntaxV1Settings() {
-    auto setting = NKikimrKqp::TKqpSetting();
-    setting.SetName("_KqpYqlSyntaxVersion");
-    setting.SetValue("1");
-    return {setting};
-}
-
 TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
-    EnableYDBBacktraceFormat();
+    NTestUtils::SetupSignalHandlers();
 
     auto mbusPort = PortManager.GetPort();
     auto grpcPort = PortManager.GetPort();
 
-    Cerr << "Trying to start YDB, gRPC: " << grpcPort << ", MsgBus: " << mbusPort << Endl;
+    if (settings.Verbose) {
+        Cerr << "Trying to start YDB, gRPC: " << grpcPort << ", MsgBus: " << mbusPort << Endl;
+    }
 
     TVector<NKikimrKqp::TKqpSetting> effectiveKqpSettings;
 
@@ -125,10 +107,28 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     ServerSettings.Reset(MakeHolder<Tests::TServerSettings>(mbusPort, authConfig, settings.PQConfig));
     ServerSettings->SetDomainName(settings.DomainRoot);
     ServerSettings->SetKqpSettings(effectiveKqpSettings);
+    ServerSettings->SetVerbose(settings.Verbose);
+    for (const auto& storagePoolType : settings.StoragePoolTypes) {
+        ServerSettings->AddStoragePoolType(storagePoolType);
+    }
+    ServerSettings->SetDynamicNodeCount(settings.DynamicNodeCount);
 
     NKikimrConfig::TAppConfig appConfig = settings.AppConfig;
     appConfig.MutableColumnShardConfig()->SetDisabledOnSchemeShard(false);
     appConfig.MutableTableServiceConfig()->SetEnableRowsDuplicationCheck(true);
+    if (settings.EnableStorageProxy) {
+        NFq::TCheckpointCoordinatorSettings::DefaultCheckpointingPeriod = settings.CheckpointPeriod;
+
+        auto* streamingQueries = appConfig.MutableQueryServiceConfig()->MutableStreamingQueries();
+        if (!settings.UseLocalCheckpointsInStreamingQueries) {
+            auto& checkpoints = *streamingQueries->MutableExternalStorage()->MutableDatabaseConnection();
+            checkpoints.SetEndpoint(GetEnv("YDB_ENDPOINT"));
+            checkpoints.SetDatabase(GetEnv("YDB_DATABASE"));
+        }
+    }
+    if (!appConfig.GetQueryServiceConfig().HasAllExternalDataSourcesAreAvailable()) {
+        appConfig.MutableQueryServiceConfig()->SetAllExternalDataSourcesAreAvailable(true);
+    }
     ServerSettings->SetAppConfig(appConfig);
     ServerSettings->SetFeatureFlags(settings.FeatureFlags);
     ServerSettings->SetNodeCount(settings.NodeCount);
@@ -140,10 +140,11 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     ServerSettings->SetEnableMoveIndex(true);
     ServerSettings->SetUseRealThreads(settings.UseRealThreads);
     ServerSettings->SetEnableTablePgTypes(true);
-    ServerSettings->SetEnablePgSyntax(true);
     ServerSettings->S3ActorsFactory = settings.S3ActorsFactory;
     ServerSettings->Controls = settings.Controls;
     ServerSettings->SetEnableForceFollowers(settings.EnableForceFollowers);
+    ServerSettings->SetEnableScriptExecutionBackgroundChecks(settings.EnableScriptExecutionBackgroundChecks);
+    ServerSettings->SetNeedStatsCollectors(settings.NeedsStatsCollectors);
 
     if (!settings.FeatureFlags.HasEnableOlapCompression()) {
         ServerSettings->SetEnableOlapCompression(true);
@@ -154,14 +155,34 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
         ServerSettings->SetEnableMockOnSingleNode(false);
     }
 
-    if (settings.LogStream)
-        ServerSettings->SetLogBackend(new TStreamLogBackend(settings.LogStream));
+    if (settings.LogStream) {
+        if (settings.NodeCount > 1) {
+            auto* logStream = settings.LogStream;
+            ServerSettings->SetLoggerInitializer([logStream](NActors::TTestActorRuntime& runtime) {
+                runtime.SetLogBackendFactory([logStream]() {
+                    return new TOwningThreadedLogBackend(new TStreamLogBackend(logStream));
+                });
+            });
+        } else {
+            ServerSettings->SetLogBackend(new TStreamLogBackend(settings.LogStream));
+        }
+    }
 
-    if (settings.FederatedQuerySetupFactory) {
+    if (settings.InitFederatedQuerySetupFactory) {
+        ServerSettings->SetInitializeFederatedQuerySetupFactory(true);
+    } else if (settings.FederatedQuerySetupFactory) {
         ServerSettings->SetFederatedQuerySetupFactory(settings.FederatedQuerySetupFactory);
     }
 
-    Server.Reset(MakeHolder<Tests::TServer>(*ServerSettings));
+    if (settings.DescribeSchemaSecretsServiceFactory) {
+        ServerSettings->SetDescribeSchemaSecretsServiceFactory(settings.DescribeSchemaSecretsServiceFactory);
+    }
+
+    if (settings.QueryReplayBackendFactory) {
+        ServerSettings->SetQueryReplayBackendFactory(settings.QueryReplayBackendFactory);
+    }
+
+    Server.Reset(MakeIntrusive<Tests::TServer>(*ServerSettings));
 
     if (settings.GrpcServerOptions) {
         auto options = settings.GrpcServerOptions;
@@ -193,6 +214,33 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     Initialize(settings);
 }
 
+TString TKikimrRunner::CreateDatabase(const TString& name, const TString& storagePoolType, const TVector<std::pair<TString, TString>>& attributes, ui32 nodesCount, TDuration timeout, bool acceptIfExists) {
+    TString databasePath = TStringBuilder() << CanonizePath(ServerSettings->DomainName) << "/" << name;
+
+    Ydb::Cms::CreateDatabaseRequest request;
+    request.set_path(databasePath);
+
+    for (auto& [attrName, attrValue] : attributes) {
+        request.mutable_attributes()->emplace(attrName, attrValue);
+    }
+
+    auto& storage = *request.mutable_resources()->add_storage_units();
+    storage.set_unit_kind(storagePoolType);
+    storage.set_count(1);
+
+    if (!Tenants) {
+        Tenants = MakeHolder<Tests::TTenants>(Server);
+    }
+    Tenants->CreateTenant(std::move(request), nodesCount, timeout, acceptIfExists);
+
+    // Setup discovery
+    for (auto nodeIdx : Tenants->List(databasePath)) {
+        GetTestServer().EnableGRpc(PortManager.GetPort(), nodeIdx, databasePath);
+    }
+
+    return databasePath;
+}
+
 TKikimrRunner::TKikimrRunner(const TVector<NKikimrKqp::TKqpSetting>& kqpSettings, const TString& authToken,
     const TString& domainRoot, ui32 nodeCount)
     : TKikimrRunner(TKikimrSettings()
@@ -203,8 +251,7 @@ TKikimrRunner::TKikimrRunner(const TVector<NKikimrKqp::TKqpSetting>& kqpSettings
 
 TKikimrRunner::TKikimrRunner(const NKikimrConfig::TAppConfig& appConfig, const TString& authToken,
     const TString& domainRoot, ui32 nodeCount)
-    : TKikimrRunner(TKikimrSettings()
-        .SetAppConfig(appConfig)
+    : TKikimrRunner(TKikimrSettings(appConfig)
         .SetAuthToken(authToken)
         .SetDomainRoot(domainRoot)
         .SetNodeCount(nodeCount)) {}
@@ -212,8 +259,7 @@ TKikimrRunner::TKikimrRunner(const NKikimrConfig::TAppConfig& appConfig, const T
 TKikimrRunner::TKikimrRunner(const NKikimrConfig::TAppConfig& appConfig,
     const TVector<NKikimrKqp::TKqpSetting>& kqpSettings, const TString& authToken, const TString& domainRoot,
     ui32 nodeCount)
-    : TKikimrRunner(TKikimrSettings()
-        .SetAppConfig(appConfig)
+    : TKikimrRunner(TKikimrSettings(appConfig)
         .SetKqpSettings(kqpSettings)
         .SetAuthToken(authToken)
         .SetDomainRoot(domainRoot)
@@ -359,7 +405,7 @@ void TKikimrRunner::CreateSampleTables() {
             PARTITION_AT_KEYS = (105)
         );
 
-        CREATE TABLE `TuplePrimaryDescending` (
+        CREATE TABLE `ReorderKey` (
             Col1 Uint32,
             Col2 Uint64,
             Col3 Int64,
@@ -369,6 +415,19 @@ void TKikimrRunner::CreateSampleTables() {
         WITH (
             AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2,
             PARTITION_AT_KEYS = (2, 3)
+        );
+
+        CREATE TABLE `ReorderOptionalKey` (
+            k1 Uint64 NOT NULL,
+            k2 Uint64,
+            v1 Uint64,
+            v2 String,
+            id Int64,
+            PRIMARY KEY (k2, k1)
+        )
+        WITH (
+            AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 3,
+            PARTITION_AT_KEYS = ((2, 2), (4), (5, 6), (8))
         );
     )").GetValueSync());
 
@@ -481,7 +540,7 @@ void TKikimrRunner::CreateSampleTables() {
             (106, "One",   "Name3", "Value29"),
             (108, "One",    NULL,   "Value31");
 
-        REPLACE INTO `TuplePrimaryDescending` (Col1, Col2, Col3, Col4) VALUES
+        REPLACE INTO `ReorderKey` (Col1, Col2, Col3, Col4) VALUES
             (0, 1, 0, 3),
             (1, 1, 0, 1),
             (1, 1, 1, 0),
@@ -498,46 +557,69 @@ void TKikimrRunner::CreateSampleTables() {
             (1, 3, 1, 1),
             (2, 3, 1, 2),
             (3, 3, 0, 1);
+
+        REPLACE INTO `ReorderOptionalKey` (k1, k2, v1, v2, id) VALUES
+            (0, NULL, 0, "0NULL", 0),
+            (1, NULL, 1, "1NULL", 2),
+            (1, 0, 1, "10", 0),
+            (1, 1, 2, "11", 1),
+            (1, 2, 3, "12", 2),
+            (1, 3, 4, "13", 0),
+            (1, 4, 5, "14", 1),
+            (2, NULL, 2, "2NULL", 1),
+            (2, 0, 2, "20", 2),
+            (2, 1, 3, "21", 0),
+            (2, 2, 4, "22", 1),
+            (2, 3, 5, "23", 2),
+            (2, 4, 6, "24", 0),
+            (3, NULL, 3, "3NULL", 0),
+            (3, 0, 3, "30", 1),
+            (3, 1, 4, "31", 2),
+            (3, 2, 5, "32", 0),
+            (3, 3, 6, "33", 1),
+            (3, 4, 7, "34", 2),
+            (4, NULL, 4, "4NULL", 2),
+            (4, 0, 4, "40", 0),
+            (4, 1, 5, "41", 1),
+            (4, 2, 6, "42", 2),
+            (4, 3, 7, "43", 0),
+            (4, 4, 8, "44", 1),
+            (5, NULL, 5, "5NULL", 1),
+            (5, 0, 5, "50", 2),
+            (5, 1, 6, "51", 0),
+            (5, 2, 7, "52", 1),
+            (5, 3, 8, "53", 2),
+            (5, 4, 9, "54", 0),
+            (6, NULL, 6, "6NULL", 0),
+            (6, 0, 6, "60", 1),
+            (6, 1, 7, "61", 2),
+            (6, 2, 8, "62", 0),
+            (6, 3, 9, "63", 1),
+            (6, 4, 10, "64", 2),
+            (6, 5, 11, "65", 0),
+            (7, NULL, 7, "7NULL", 2),
+            (7, 0, 7, "70", 0),
+            (7, 1, 8, "71", 1),
+            (7, 2, 9, "72", 2),
+            (7, 3, 10, "73", 0),
+            (7, 4, 11, "74", 1),
+            (8, NULL, 8, "8NULL", 1),
+            (8, 0, 8, "80", 2),
+            (8, 1, 9, "81", 0),
+            (8, 2, 10, "82", 1),
+            (8, 3, 11, "83", 2),
+            (8, 4, 12, "84", 0),
+            (9, NULL, 9, "9NULL", 0),
+            (9, 0, 9, "90", 1),
+            (9, 1, 10, "91", 2),
+            (9, 2, 11, "92", 0),
+            (9, 3, 12, "93", 1),
+            (9, 4, 13, "94", 2);
     )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).GetValueSync());
 
-}
-
-static TMaybe<NActors::NLog::EPriority> ParseLogLevel(const TString& level) {
-    static const THashMap<TString, NActors::NLog::EPriority> levels = {
-        { "TRACE", NActors::NLog::PRI_TRACE },
-        { "DEBUG", NActors::NLog::PRI_DEBUG },
-        { "INFO", NActors::NLog::PRI_INFO },
-        { "NOTICE", NActors::NLog::PRI_NOTICE },
-        { "WARN", NActors::NLog::PRI_WARN },
-        { "ERROR", NActors::NLog::PRI_ERROR },
-        { "CRIT", NActors::NLog::PRI_CRIT },
-        { "ALERT", NActors::NLog::PRI_ALERT },
-        { "EMERG", NActors::NLog::PRI_EMERG },
-    };
-
-    TString l = level;
-    l.to_upper();
-    const auto levelIt = levels.find(l);
-    if (levelIt != levels.end()) {
-        return levelIt->second;
-    } else {
-        Cerr << "Failed to parse test log level [" << level << "]" << Endl;
-        return Nothing();
-    }
-}
-
-void TKikimrRunner::SetupLogLevelFromTestParam(NKikimrServices::EServiceKikimr service) {
-    if (const TString paramForService = GetTestParam(TStringBuilder() << "KQP_LOG_" << NKikimrServices::EServiceKikimr_Name(service))) {
-        if (const TMaybe<NActors::NLog::EPriority> level = ParseLogLevel(paramForService)) {
-            Server->GetRuntime()->SetLogPriority(service, *level);
-            return;
-        }
-    }
-    if (const TString commonParam = GetTestParam("KQP_LOG")) {
-        if (const TMaybe<NActors::NLog::EPriority> level = ParseLogLevel(commonParam)) {
-            Server->GetRuntime()->SetLogPriority(service, *level);
-        }
-    }
+    auto r = session.Close().GetValueSync();
+    client.Stop();
+    driver.Stop(true);
 }
 
 void TKikimrRunner::Initialize(const TKikimrSettings& settings) {
@@ -547,50 +629,29 @@ void TKikimrRunner::Initialize(const TKikimrSettings& settings) {
     // For example:
     // --test-param KQP_LOG=TRACE
     // --test-param KQP_LOG_FLAT_TX_SCHEMESHARD=debug
-    SetupLogLevelFromTestParam(NKikimrServices::FLAT_TX_SCHEMESHARD);
-    SetupLogLevelFromTestParam(NKikimrServices::KQP_YQL);
-    SetupLogLevelFromTestParam(NKikimrServices::TX_DATASHARD);
-    SetupLogLevelFromTestParam(NKikimrServices::TX_COORDINATOR);
-    SetupLogLevelFromTestParam(NKikimrServices::KQP_COMPUTE);
-    SetupLogLevelFromTestParam(NKikimrServices::KQP_TASKS_RUNNER);
-    SetupLogLevelFromTestParam(NKikimrServices::KQP_EXECUTER);
-    SetupLogLevelFromTestParam(NKikimrServices::TX_PROXY_SCHEME_CACHE);
-    SetupLogLevelFromTestParam(NKikimrServices::TX_PROXY);
-    SetupLogLevelFromTestParam(NKikimrServices::SCHEME_BOARD_REPLICA);
-    SetupLogLevelFromTestParam(NKikimrServices::KQP_WORKER);
-    SetupLogLevelFromTestParam(NKikimrServices::KQP_SESSION);
-    SetupLogLevelFromTestParam(NKikimrServices::TABLET_EXECUTOR);
-    SetupLogLevelFromTestParam(NKikimrServices::KQP_SLOW_LOG);
-    SetupLogLevelFromTestParam(NKikimrServices::KQP_PROXY);
-    SetupLogLevelFromTestParam(NKikimrServices::KQP_COMPILE_SERVICE);
-    SetupLogLevelFromTestParam(NKikimrServices::KQP_COMPILE_ACTOR);
-    SetupLogLevelFromTestParam(NKikimrServices::KQP_COMPILE_REQUEST);
-    SetupLogLevelFromTestParam(NKikimrServices::KQP_GATEWAY);
-    SetupLogLevelFromTestParam(NKikimrServices::RPC_REQUEST);
-    SetupLogLevelFromTestParam(NKikimrServices::KQP_RESOURCE_MANAGER);
-    SetupLogLevelFromTestParam(NKikimrServices::KQP_NODE);
-    SetupLogLevelFromTestParam(NKikimrServices::KQP_BLOBS_STORAGE);
-    SetupLogLevelFromTestParam(NKikimrServices::KQP_WORKLOAD_SERVICE);
-    SetupLogLevelFromTestParam(NKikimrServices::TX_COLUMNSHARD);
-    SetupLogLevelFromTestParam(NKikimrServices::TX_COLUMNSHARD_SCAN);
-    SetupLogLevelFromTestParam(NKikimrServices::LOCAL_PGWIRE);
-    SetupLogLevelFromTestParam(NKikimrServices::SSA_GRAPH_EXECUTION);
-
+    NTestUtils::SetupLogLevel(*Server->GetRuntime(), settings.LogSettings, "KQP");
 
     RunCall([this, domain = settings.DomainRoot]{
         this->Client->InitRootScheme(domain);
         return true;
     });
 
-    if (settings.AuthToken) {
-        this->Client->GrantConnect(settings.AuthToken);
-    }
-
+    // Create sample tables in anonymous mode
     if (settings.WithSampleTables) {
         RunCall([this] {
             this->CreateSampleTables();
             return true;
         });
+    }
+
+    // Initial user becomes cluster admin.
+    if (settings.AuthToken) {
+        // Cluster admin does not require the explicit EAccessRights::ConnectDatabase right,
+        // but does require explicit EAccessRights::GenericFull rights.
+        // The order is important here, because grants from anonymous user are possible
+        // only while AdministrationAllowedSIDs is empty (which means that anyone is an admin).
+        this->Client->TestGrant("/", settings.DomainRoot, settings.AuthToken, NACLib::EAccessRights::GenericFull);
+        Server->GetRuntime()->GetAppData().AdministrationAllowedSIDs.push_back(settings.AuthToken);
     }
 }
 
@@ -601,8 +662,67 @@ TString ReformatYson(const TString& yson) {
     return output.Str();
 }
 
+static void SplitYsonListAtTopLevel(const TString& yson, std::vector<TString>& items) {
+    int depth = 0;
+    char inQuote = 0;
+    bool escape = false;
+    size_t start = 0;
+    const size_t len = yson.size();
+    for (size_t i = 0; i < len; ++i) {
+        const char c = yson[i];
+        if (inQuote) {
+            if (escape) {
+                escape = false;
+            } else if (c == '\\' && (inQuote == '"' || inQuote == '\'')) {
+                escape = true;
+            } else if (c == inQuote) {
+                inQuote = 0;
+            }
+            continue;
+        }
+        if (c == '"' || c == '\'') {
+            inQuote = c;
+            continue;
+        }
+        if (c == '[') {
+            if (depth == 0) {
+                start = i + 1;
+            }
+            ++depth;
+            continue;
+        }
+        if (c == ']') {
+            if (depth == 1) {
+                TString item = yson.substr(start, i - start);
+                items.push_back(StripString(item));
+            }
+            --depth;
+            continue;
+        }
+        if (c == ';' && depth == 1) {
+            TString item = yson.substr(start, i - start);
+            items.push_back(StripString(item));
+            start = i + 1;
+        }
+    }
+}
+
+TString SortYsonList(const TString& yson) {
+    std::vector<TString> items;
+    SplitYsonListAtTopLevel(yson, items);
+    std::sort(items.begin(), items.end());
+    return "[" + JoinSeq(";", items) + "]";
+}
+
 void CompareYson(const TString& expected, const TString& actual, const TString& message) {
     UNIT_ASSERT_VALUES_EQUAL_C(ReformatYson(expected), ReformatYson(actual), message);
+}
+
+void CompareYsonUnordered(const TString& expected, const TString& actual, const TString& message) {
+    UNIT_ASSERT_VALUES_EQUAL_C(
+        ReformatYson(SortYsonList(expected)),
+        ReformatYson(SortYsonList(actual)),
+        message);
 }
 
 void CompareYson(const TString& expected, const NKikimrMiniKQL::TResult& actual, const TString& message) {
@@ -717,6 +837,11 @@ void AssertTableStats(const TDataQueryResult& result, TStringBuf table, const TE
     return AssertTableStats(stats, table, expectedStats);
 }
 
+void AssertTableStats(const NYdb::NQuery::TExecuteQueryResult& result, TStringBuf table, const TExpectedTableStats& expectedStats) {
+    auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+    return AssertTableStats(stats, table, expectedStats);
+}
+
 TDataQueryResult ExecQueryAndTestResult(TSession& session, const TString& query, const NYdb::TParams& params,
     const TString& expectedYson)
 {
@@ -735,9 +860,8 @@ TDataQueryResult ExecQueryAndTestResult(TSession& session, const TString& query,
     return result;
 }
 
-NYdb::NQuery::TExecuteQueryResult ExecQueryAndTestEmpty(NYdb::NQuery::TSession& session, const TString& query) {
-    auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx())
-        .ExtractValueSync();
+NYdb::NQuery::TExecuteQueryResult ExecQueryAndTestEmpty(NYdb::NQuery::TSession& session, const TString& query, NYdb::NQuery::TTxControl txControl) {
+    auto result = session.ExecuteQuery(query, txControl).ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
     CompareYson("[[0u]]", FormatResultSetYson(result.GetResultSet(0)));
     return result;
@@ -1419,6 +1543,16 @@ void Grant(NYdb::NTable::TSession& adminSession, const char* permissions, const 
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 };
 
+void Revoke(NYdb::NTable::TSession& adminSession, const char* permissions, const char* path, const char* user) {
+    auto revokeQuery = Sprintf(R"(
+            REVOKE %s ON `%s` FROM `%s`;
+        )",
+        permissions, path, user
+    );
+    auto result = adminSession.ExecuteSchemeQuery(revokeQuery).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+};
+
 THolder<NSchemeCache::TSchemeCacheNavigate> Navigate(TTestActorRuntime& runtime, const TActorId& sender,
                                                      const TString& path, NSchemeCache::TSchemeCacheNavigate::EOp op)
 {
@@ -1627,7 +1761,6 @@ void WaitForCompaction(Tests::TServer* server, const TString& path, bool compact
 }
 
 NJson::TJsonValue SimplifyPlan(NJson::TJsonValue& opt, const TGetPlanParams& params) {
-    Cout << opt.GetStringRobust() << Endl;
     if (!opt.IsMap()) {
         return {};
     }
@@ -1819,7 +1952,7 @@ TTestExtEnv::TTestExtEnv(TTestExtEnv::TEnvSettings envSettings) {
     Tenants = MakeHolder<Tests::TTenants>(Server);
 
     Endpoint = "localhost:" + ToString(grpcPort);
-    DriverConfig = NYdb::TDriverConfig().SetEndpoint(Endpoint);
+    DriverConfig = NYdb::TDriverConfig().SetEndpoint(Endpoint).SetDatabase("/Root");
     Driver = MakeHolder<NYdb::TDriver>(DriverConfig);
 }
 
@@ -1849,12 +1982,37 @@ Tests::TClient& TTestExtEnv::GetClient() const {
     return *Client;
 }
 
+const TString& TTestExtEnv::GetEndpoint() const {
+    return Endpoint;
+}
+
 void CheckOwner(TSession& session, const TString& path, const TString& name) {
     TDescribeTableResult describe = session.DescribeTable(path).GetValueSync();
     UNIT_ASSERT_VALUES_EQUAL(describe.GetStatus(), NYdb::EStatus::SUCCESS);
     auto tableDesc = describe.GetTableDescription();
     const auto& currentOwner = tableDesc.GetOwner();
     UNIT_ASSERT_VALUES_EQUAL_C(name, currentOwner, "name is not currentOwner");
+}
+
+void WaitForProxy(const TKikimrRunner& kikimr, const TString& subject) {
+    auto driver = NYdb::TDriver(NYdb::TDriverConfig()
+        .SetEndpoint(kikimr.GetEndpoint())
+        .SetDatabase("/Root")
+        .SetAuthToken(subject));
+
+    NYdb::NQuery::TQueryClient client(driver);
+    while (true) {
+        auto result = client.ExecuteScript("SELECT 1").ExtractValueSync();
+        NYdb::EStatus scriptStatus = result.Status().GetStatus();
+        UNIT_ASSERT_C(
+            scriptStatus == NYdb::EStatus::UNAVAILABLE ||
+            scriptStatus == NYdb::EStatus::SUCCESS ||
+            scriptStatus == NYdb::EStatus::UNAUTHORIZED,
+            result.Status().GetIssues().ToString());
+        if (scriptStatus == NYdb::EStatus::SUCCESS)
+            return;
+        Sleep(TDuration::Seconds(1));
+    };
 }
 
 } // namspace NKqp

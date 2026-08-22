@@ -10,12 +10,9 @@
 
 #include <library/cpp/yt/assert/assert.h>
 
-#include <library/cpp/yt/compact_containers/compact_vector.h>
-#include <library/cpp/yt/compact_containers/compact_flat_map.h>
-
 #include <library/cpp/yt/containers/enum_indexed_array.h>
 
-#include <library/cpp/yt/misc/concepts.h>
+#include <library/cpp/yt/mpl/concepts.h>
 #include <library/cpp/yt/misc/enum.h>
 #include <library/cpp/yt/misc/source_location.h>
 
@@ -81,6 +78,17 @@ TString ToStringIgnoringFormatValue(const T& t)
     o << t;
     return s;
 }
+
+// Forward declarations to avoid dependencies, that are not needed by all clients.
+
+template <class T, size_t N>
+class TCompactVector;
+
+template <class TValue, size_t N>
+class TCompactFlatSet;
+
+template <class TKey, class TValue, size_t N, class TKeyCompare>
+class TCompactFlatMap;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -148,6 +156,8 @@ template <class... Ts>
 constexpr bool CKnownRange<THashSet<Ts...>> = true;
 template <class... Ts>
 constexpr bool CKnownRange<THashMultiSet<Ts...>> = true;
+template <class T, size_t N>
+constexpr bool CKnownRange<TCompactFlatSet<T, N>> = true;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -166,8 +176,8 @@ template <class... Ts>
 constexpr bool CKnownKVRange<THashMultiMap<Ts...>> = true;
 template <class... Ts>
 constexpr bool CKnownKVRange<TCompactFlatMap<Ts...>> = true;
-template <class K, class V, size_t N>
-constexpr bool CKnownKVRange<TCompactFlatMap<K, V, N>> = true;
+template <class K, class V, size_t N, class C>
+constexpr bool CKnownKVRange<TCompactFlatMap<K, V, N, C>> = true;
 
 // TODO(arkady-e1ppa): Uncomment me when
 // https://github.com/llvm/llvm-project/issues/58534 is shipped.
@@ -341,7 +351,7 @@ TFormatterWrapper<TFormatter> MakeFormatterWrapper(
     TFormatter&& formatter)
 {
     return TFormatterWrapper<TFormatter>{
-        .Formatter = std::move(formatter)
+        .Formatter = std::forward<TFormatter>(formatter)
     };
 }
 
@@ -414,49 +424,12 @@ auto MakeLazyMultiValueFormatter(TStringBuf format, TArgs&&... args)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// Non-container objects.
-
-#define XX(valueType, castType, genericSpec) \
-    inline void FormatValue(TStringBuilderBase* builder, valueType value, TStringBuf spec) \
-    { \
-        NYT::NDetail::FormatIntValue(builder, static_cast<castType>(value), spec, genericSpec); \
-    }
-
-XX(i8,                  i32,      TStringBuf("d"))
-XX(ui8,                 ui32,     TStringBuf("u"))
-XX(i16,                 i32,      TStringBuf("d"))
-XX(ui16,                ui32,     TStringBuf("u"))
-XX(i32,                 i32,      TStringBuf("d"))
-XX(ui32,                ui32,     TStringBuf("u"))
-XX(long,                i64,      TStringBuf(PRIdLEAST64))
-XX(long long,           i64,      TStringBuf(PRIdLEAST64))
-XX(unsigned long,       ui64,     TStringBuf(PRIuLEAST64))
-XX(unsigned long long,  ui64,     TStringBuf(PRIuLEAST64))
-
-#undef XX
-
-#define XX(valueType, castType, genericSpec) \
-    inline void FormatValue(TStringBuilderBase* builder, valueType value, TStringBuf spec) \
-    { \
-        NYT::NDetail::FormatValueViaSprintf(builder, static_cast<castType>(value), spec, genericSpec); \
-    }
-
-XX(double,              double,   TStringBuf("lf"))
-XX(float,               float,    TStringBuf("f"))
-
-#undef XX
-
-// Pointer
-template <class T>
-void FormatValue(TStringBuilderBase* builder, T* value, TStringBuf spec)
+template <class TStringBuilder>
+void FormatString(TStringBuilder* builder, TStringBuf value, TStringBuf spec)
 {
-    NYT::NDetail::FormatPointerValue(builder, static_cast<const void*>(value), spec);
-}
-
-// TStringBuf
-inline void FormatValue(TStringBuilderBase* builder, TStringBuf value, TStringBuf spec)
-{
-    if (!spec) {
+    // Fast path: plain "%v" (the overwhelmingly common case) and empty spec
+    // both mean "emit the string verbatim". Skip alignment/flag parsing.
+    if (spec.empty() || (spec.size() == 1 && spec.front() == NDetail::GenericSpecSymbol)) {
         builder->AppendString(value);
         return;
     }
@@ -541,6 +514,53 @@ inline void FormatValue(TStringBuilderBase* builder, TStringBuf value, TStringBu
     if (padRight) {
         builder->AppendChar(' ', padding);
     }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+// Non-container objects.
+
+#define XX(valueType, castType, genericSpec) \
+    inline void FormatValue(TStringBuilderBase* builder, valueType value, TStringBuf spec) \
+    { \
+        NYT::NDetail::FormatIntValue(builder, static_cast<castType>(value), spec, genericSpec); \
+    }
+
+XX(i8,                  i32,      TStringBuf("d"))
+XX(ui8,                 ui32,     TStringBuf("u"))
+XX(i16,                 i32,      TStringBuf("d"))
+XX(ui16,                ui32,     TStringBuf("u"))
+XX(i32,                 i32,      TStringBuf("d"))
+XX(ui32,                ui32,     TStringBuf("u"))
+XX(long,                i64,      TStringBuf(PRIdLEAST64))
+XX(long long,           i64,      TStringBuf(PRIdLEAST64))
+XX(unsigned long,       ui64,     TStringBuf(PRIuLEAST64))
+XX(unsigned long long,  ui64,     TStringBuf(PRIuLEAST64))
+
+#undef XX
+
+#define XX(valueType, castType, genericSpec) \
+    inline void FormatValue(TStringBuilderBase* builder, valueType value, TStringBuf spec) \
+    { \
+        NYT::NDetail::FormatValueViaSprintf(builder, static_cast<castType>(value), spec, genericSpec); \
+    }
+
+XX(double,              double,   TStringBuf("lf"))
+XX(float,               float,    TStringBuf("f"))
+
+#undef XX
+
+// Pointer
+template <class T>
+void FormatValue(TStringBuilderBase* builder, T* value, TStringBuf spec)
+{
+    NYT::NDetail::FormatPointerValue(builder, static_cast<const void*>(value), spec);
+}
+
+// TStringBuf
+inline void FormatValue(TStringBuilderBase* builder, TStringBuf value, TStringBuf spec)
+{
+    FormatString(builder, value, spec);
 }
 
 // TString
@@ -704,7 +724,9 @@ void FormatValue(TStringBuilderBase* builder, TEnum value, TStringBuf spec)
 }
 
 template <class TArcadiaEnum>
-    requires (std::is_enum_v<TArcadiaEnum> && !TEnumTraits<TArcadiaEnum>::IsEnum)
+concept CArcadiaEnum = (std::is_enum_v<TArcadiaEnum> && !TEnumTraits<TArcadiaEnum>::IsEnum);
+
+template <CArcadiaEnum TArcadiaEnum>
 void FormatValue(TStringBuilderBase* builder, TArcadiaEnum value, TStringBuf /*spec*/)
 {
     // NB(arkady-e1ppa): This can catch normal enums which
@@ -923,7 +945,7 @@ void FormatValue(
 {
     std::apply(
         [&] <class... TInnerArgs> (TInnerArgs&&... args) {
-            builder->AppendFormat(value.Format_, std::forward<TInnerArgs>(args)...);
+            builder->AppendFormat(TRuntimeFormat{value.Format_}, std::forward<TInnerArgs>(args)...);
         },
         value.Args_);
 }
@@ -997,12 +1019,26 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
-concept CFormatter = CInvocable<T, void(size_t, TStringBuilderBase*, TStringBuf)>;
+concept CFormatter = NMpl::CInvocable<T, void(size_t, TStringBuilderBase*, TStringBuf)>;
+
+////////////////////////////////////////////////////////////////////////////////
+
+// NB: |spec| is tiny (usually a single char), so an inline scan beats
+// the AVX2 |memchr| that |TStringBuf::Contains| dispatches to.
+Y_FORCE_INLINE bool SpecContains(TStringBuf spec, char symbol)
+{
+    for (char c : spec) {
+        if (c == symbol) {
+            return true;
+        }
+    }
+    return false;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 
 template <CFormatter TFormatter>
-void RunFormatterAt(
+Y_FORCE_INLINE void RunFormatterAt(
     const TFormatter& formatter,
     size_t index,
     TStringBuilderBase* builder,
@@ -1011,7 +1047,7 @@ void RunFormatterAt(
     bool doubleQuotes)
 {
     // 'n' means 'nothing'; skip the argument.
-    if (!spec.Contains('n')) {
+    if (!SpecContains(spec, 'n')) {
         if (singleQuotes) {
             builder->AppendChar('\'');
         }

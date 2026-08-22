@@ -5,7 +5,7 @@ The {{ ydb-short-name }} documentation style guide is designed to help writers c
 ## Core principles {#core-principles}
 
 - **Target audience understanding:**
-  - Before starting a new article or improving an existing one, take a moment to narrow down its target audience. Consider their specific role ([application developers](../../dev/index.md), [DevOps engineers](../../dev/index.md), [security engineers](../../security/index.md), etc.), technical background, and familiarity with the subject and {{ ydb-short-name }} in general.
+  - Before starting a new article or improving an existing one, take a moment to narrow down its target audience. Consider their specific role ([application developers](../../dev/index.md), [cluster administrators](../../devops/index.md), [security engineers](../../security/index.md), etc.), technical background, and familiarity with the subject and {{ ydb-short-name }} in general.
   - Ensure the text is understandable to the article's intended audience.
 - **Clear language:**
   - Use plain, simple language that directly communicates ideas.
@@ -58,7 +58,7 @@ Ensure that text follows proper language rules with no typos, grammar, punctuati
 - **Linking and references.**
 
     - Provide clear and descriptive links to related resources or additional documentation.
-    - Links internal to documentation should always include a `.md` suffix and always be relative (that is, no `https://ydb.tech` prefix); otherwise, link consistency checking doesn't work, and they will eventually start leading to 404 errors.
+    - Links internal to documentation should always include a `.md` suffix and always be relative (that is, no `https://ydb.tech` prefix); otherwise, link consistency checking doesn't work, and they will eventually start leading to 404 errors. Internal links shouldn't contain `?version=...`, `?revision=...`, or similar parameters.
     - Instead of repeating the target's header for internal links, use `[{#T}](path/to/an/article.md)`.
 
 - **No copy-pasting.** If a piece of information needs to be displayed more than once, create a separate Markdown file in the `_includes` folder, then add it to all necessary places via the [`include`](https://diplodoc.com/docs/en/project/includes) feature instead of duplicating content by copying and pasting.

@@ -4,48 +4,83 @@
 #include "collections/full_scan_sorted.h"
 #include "collections/limit_sorted.h"
 #include "collections/not_sorted.h"
+#include "sync_points/aggr.h"
+#include "sync_points/distinct_limit.h"
 #include "sync_points/limit.h"
 #include "sync_points/result.h"
 
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_metadata.h>
 #include <ydb/core/tx/columnshard/engines/reader/common/result.h>
+#include <ydb/core/tx/columnshard/engines/reader/tracing/data_source_probes.h>
 
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_SCAN
 
 namespace NKikimr::NOlap::NReader::NSimple {
+
+LWTRACE_USING(YDB_CS_DATA_SOURCE);
 
 TConclusionStatus TScanHead::Start() {
     return TConclusionStatus::Success();
 }
 
-TScanHead::TScanHead(std::deque<TSourceConstructor>&& sources, const std::shared_ptr<TSpecialReadContext>& context)
-    : Context(context) {
-    if (Context->GetReadMetadata()->IsSorted()) {
-        if (Context->GetReadMetadata()->HasLimit()) {
-            auto collection =
-                std::make_shared<TScanWithLimitCollection>(Context, std::move(sources), context->GetCommonContext()->GetScanCursor());
+TScanHead::TScanHead(std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesConstructor, const std::shared_ptr<TSpecialReadContext>& context)
+    : Context(context)
+{
+    auto readMetadataContext = context->GetReadMetadata();
+    const auto distinctKeyColumnId = readMetadataContext->GetProgram().GetDistinctKeyColumnIdOptional();
+    const auto robustLimit = readMetadataContext->GetLimitRobustOptional();
+    const std::optional<ui64> distinctLimit =
+        distinctKeyColumnId && robustLimit && *robustLimit > 0 ? std::optional<ui64>(static_cast<ui64>(*robustLimit)) : std::nullopt;
+    if (auto script = Context->GetSourcesAggregationScript()) {
+        SourcesCollection =
+            std::make_shared<TNotSortedCollection>(Context, std::move(sourcesConstructor), readMetadataContext->GetLimitRobustOptional());
+        SyncPoints.emplace_back(std::make_shared<TSyncPointResult>(SyncPoints.size(), context, SourcesCollection));
+        SyncPoints.emplace_back(std::make_shared<TSyncPointResultsAggregationControl>(
+            SourcesCollection, Context->GetSourcesAggregationScript(), Context->GetRestoreResultScript(), SyncPoints.size(), context));
+    } else if (readMetadataContext->IsSorted()) {
+        if (readMetadataContext->HasLimit() && readMetadataContext->OrderByLimitAllowed()) {
+            auto collection = std::make_shared<TScanWithLimitCollection>(Context, std::move(sourcesConstructor));
             SourcesCollection = collection;
             SyncPoints.emplace_back(std::make_shared<TSyncPointLimitControl>(
                 (ui64)Context->GetCommonContext()->GetReadMetadata()->GetLimitRobust(), SyncPoints.size(), context, collection));
         } else {
-            SourcesCollection =
-                std::make_shared<TSortedFullScanCollection>(Context, std::move(sources), context->GetCommonContext()->GetScanCursor());
+            SourcesCollection = std::make_shared<TSortedFullScanCollection>(Context, std::move(sourcesConstructor));
         }
+        if (distinctLimit) {
+            SyncPoints.emplace_back(std::make_shared<TSyncPointDistinctLimitControl>(
+                *distinctLimit, *distinctKeyColumnId, SyncPoints.size(), context, SourcesCollection));
+        }
+        SyncPoints.emplace_back(std::make_shared<TSyncPointResult>(SyncPoints.size(), context, SourcesCollection));
     } else {
-        SourcesCollection = std::make_shared<TNotSortedCollection>(
-            Context, std::move(sources), context->GetCommonContext()->GetScanCursor(), Context->GetReadMetadata()->GetLimitRobustOptional());
+        SourcesCollection =
+            std::make_shared<TNotSortedCollection>(Context, std::move(sourcesConstructor), readMetadataContext->GetLimitRobustOptional());
+        if (distinctLimit) {
+            SyncPoints.emplace_back(std::make_shared<TSyncPointDistinctLimitControl>(
+                *distinctLimit, *distinctKeyColumnId, SyncPoints.size(), context, SourcesCollection));
+        }
+        SyncPoints.emplace_back(std::make_shared<TSyncPointResult>(SyncPoints.size(), context, SourcesCollection));
     }
-    SyncPoints.emplace_back(std::make_shared<TSyncPointResult>(SyncPoints.size(), context, SourcesCollection));
     for (ui32 i = 0; i + 1 < SyncPoints.size(); ++i) {
         SyncPoints[i]->SetNext(SyncPoints[i + 1]);
     }
 }
 
 TConclusion<bool> TScanHead::BuildNextInterval() {
+    YDB_LOG_CREATE_CONTEXT(
+        {"tabletId", SourcesCollection->GetTabletId()});
+    YDB_LOG_DEBUG("",
+        {"event", "build_next_interval"});
     bool changed = false;
     while (SourcesCollection->HasData() && SourcesCollection->CheckInFlightLimits()) {
-        auto source = SourcesCollection->ExtractNext();
-        SyncPoints.front()->AddSource(source);
+        auto source = SourcesCollection->TryExtractNext();
+        if (!source) {
+            return changed;
+        }
+        source->OnStartProcessing();
+        SyncPoints.front()->AddSource(std::move(source));
         changed = true;
     }
     return changed;

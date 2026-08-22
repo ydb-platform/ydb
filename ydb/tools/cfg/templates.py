@@ -18,7 +18,6 @@ BASE_VARS = [
     ("kikimr_udfs_dir", "${kikimr_binaries_base_path}/libs"),
     ("kikimr_key_file", "${kikimr_config}/key.txt"),
     ("kikimr_auth_file", "${kikimr_config}/auth.txt"),
-    ("kikimr_auth_token_file", "${kikimr_home}/token/kikimr.token"),
     ("kikimr_dyn_ns_file", "${kikimr_config}/dyn_ns.txt"),
     ("kikimr_tracing_file", "${kikimr_config}/tracing.txt"),
     ("kikimr_pdisk_key_file", "${kikimr_config}/pdisk_key.txt"),
@@ -39,9 +38,8 @@ if [ -z "$kikimr_system_file" ]; then
 fi
 """
 
-NEW_STYLE_CONFIG = """kikimr_auth_token_file="${kikimr_home}/token/kikimr.token"
+NEW_STYLE_CONFIG = """
 kikimr_config="${kikimr_home}/cfg"
-kikimr_auth_token_file="${kikimr_home}/token/kikimr.token"
 kikimr_key_file="${kikimr_config}/key.txt"
 
 kikimr_arg="${kikimr_arg} server --yaml-config ${kikimr_config}/config.yaml --node static"
@@ -56,9 +54,7 @@ else
     echo "Monitoring address is not defined."
 fi
 
-if [ -f "${kikimr_auth_token_file}" ]; then
-    kikimr_arg="${kikimr_arg}${kikimr_auth_token_file:+ --auth-token-file ${kikimr_auth_token_file}}"
-fi
+kikimr_arg="${kikimr_arg}${kikimr_auth_token_file:+ --auth-token-file ${kikimr_auth_token_file}}"
 
 if [ -f "${kikimr_key_file}" ]; then
     kikimr_arg="${kikimr_arg}${kikimr_key_file:+ --key-file ${kikimr_key_file}}"
@@ -70,9 +66,8 @@ kikimr_arg="${kikimr_arg}${kikimr_ca:+ --ca=${kikimr_ca}}${kikimr_cert:+ --cert=
 """
 
 
-CONFIG_V2 = """kikimr_auth_token_file="${kikimr_home}/token/kikimr.token"
+CONFIG_V2 = """
 kikimr_config="${kikimr_home}/cfg"
-kikimr_auth_token_file="${kikimr_home}/token/kikimr.token"
 kikimr_key_file="${kikimr_config}/key.txt"
 
 kikimr_arg="${kikimr_arg} server --config-dir ${kikimr_config} --node static"
@@ -87,9 +82,7 @@ else
     echo "Monitoring address is not defined."
 fi
 
-if [ -f "${kikimr_auth_token_file}" ]; then
-    kikimr_arg="${kikimr_arg}${kikimr_auth_token_file:+ --auth-token-file ${kikimr_auth_token_file}}"
-fi
+kikimr_arg="${kikimr_arg}${kikimr_auth_token_file:+ --auth-token-file ${kikimr_auth_token_file}}"
 
 if [ -f "${kikimr_key_file}" ]; then
     kikimr_arg="${kikimr_arg}${kikimr_key_file:+ --key-file ${kikimr_key_file}}"
@@ -111,7 +104,6 @@ kikimr_node_broker_port="2135"
 kikimr_syslog_service_tag="${kikimr_syslog_service_tag:? expected not empty var}"
 kikimr_tenant="${kikimr_tenant:? expected not empty var}"
 kikimr_config="${kikimr_home}/cfg"
-kikimr_auth_token_file="${kikimr_home}/token/kikimr.token"
 kikimr_key_file="${kikimr_config}/key.txt"
 
 #Custom config
@@ -122,11 +114,12 @@ kikimr_arg="${kikimr_arg}${kikimr_mon_port:+ --mon-port ${kikimr_mon_port}}"
 kikimr_arg="${kikimr_arg}${kikimr_grpc_port:+ --grpc-port ${kikimr_grpc_port}}"
 kikimr_arg="${kikimr_arg}${kikimr_ic_port:+ --ic-port ${kikimr_ic_port}}"
 kikimr_arg="${kikimr_arg}${kikimr_node_broker_port:+ --node-broker-port ${kikimr_node_broker_port}}"
+if [ ! -z "${kikimr_node_domain}" ]; then
+    kikimr_arg="${kikimr_arg} --node-domain ${kikimr_node_domain}"
+fi
 kikimr_arg="${kikimr_arg}${kikimr_syslog_service_tag:+ --syslog-service-tag ${kikimr_syslog_service_tag}}"
 
-if [ -f "${kikimr_auth_token_file}" ]; then
-    kikimr_arg="${kikimr_arg}${kikimr_auth_token_file:+ --auth-token-file ${kikimr_auth_token_file}}"
-fi
+kikimr_arg="${kikimr_arg}${kikimr_auth_token_file:+ --auth-token-file ${kikimr_auth_token_file}}"
 
 if [ ! -z "${kikimr_kafka_port}" ]; then
     kikimr_arg="${kikimr_arg}${kikimr_kafka_port:+ --kafka-port ${kikimr_kafka_port}}"
@@ -162,7 +155,6 @@ kikimr_node_broker_port="2135"
 kikimr_syslog_service_tag="${kikimr_syslog_service_tag:? expected not empty var}"
 kikimr_tenant="${kikimr_tenant:? expected not empty var}"
 kikimr_config="${kikimr_home}/cfg"
-kikimr_auth_token_file="${kikimr_home}/token/kikimr.token"
 
 #Custom config
 [ -s /etc/default/kikimr.custom ] && . /etc/default/kikimr.custom
@@ -174,9 +166,7 @@ kikimr_arg="${kikimr_arg}${kikimr_ic_port:+ --ic-port ${kikimr_ic_port}}"
 kikimr_arg="${kikimr_arg}${kikimr_node_broker_port:+ --node-broker-port ${kikimr_node_broker_port}}"
 kikimr_arg="${kikimr_arg}${kikimr_syslog_service_tag:+ --syslog-service-tag ${kikimr_syslog_service_tag}}"
 
-if [ -f "${kikimr_auth_token_file}" ]; then
-    kikimr_arg="${kikimr_arg}${kikimr_auth_token_file:+ --auth-token-file ${kikimr_auth_token_file}}"
-fi
+kikimr_arg="${kikimr_arg}${kikimr_auth_token_file:+ --auth-token-file ${kikimr_auth_token_file}}"
 
 if [ ! -z "${kikimr_kafka_port}" ]; then
     kikimr_arg="${kikimr_arg}${kikimr_kafka_port:+ --kafka-port ${kikimr_kafka_port}}"
@@ -238,9 +228,7 @@ fi
 if [ -f "${kikimr_auth_file}" ]; then
     kikimr_arg="${kikimr_arg}${kikimr_auth_file:+ --auth-file ${kikimr_auth_file}}"
 fi
-if [ -f "${kikimr_auth_token_file}" ]; then
-    kikimr_arg="${kikimr_arg}${kikimr_auth_token_file:+ --auth-token-file ${kikimr_auth_token_file}}"
-fi
+kikimr_arg="${kikimr_arg}${kikimr_auth_token_file:+ --auth-token-file ${kikimr_auth_token_file}}"
 
 if [ -f "${kikimr_dyn_ns_file}" ]; then
     kikimr_arg="${kikimr_arg}${kikimr_dyn_ns_file:+ --dyn-nodes-file ${kikimr_dyn_ns_file}}"
@@ -293,6 +281,7 @@ def local_vars(
     fq_txt_enabled=False,
     new_style_kikimr_cfg=False,
     mbus_enabled=False,
+    use_auth_token_file=False,
 ):
     cur_vars = []
     if enable_cores:
@@ -338,6 +327,9 @@ def local_vars(
 
     if not new_style_kikimr_cfg:
         cur_vars.extend(BASE_VARS)
+
+    if use_auth_token_file:
+        cur_vars.append(("kikimr_auth_token_file", "${kikimr_home}/token/kikimr.token"))
 
     if pq_enable:
         cur_vars.append(("kikimr_pq_file", "${kikimr_config}/pq.txt"))
@@ -457,10 +449,14 @@ def ydbd_extra_args(extra_args: str = ""):
 def dynamic_cfg_new_style(
     enable_cores=False,
     extra_args="",
+    use_auth_token_file=False,
+    domain="",
 ):
     return "\n".join(
         [
             "kikimr_coregen=\"--core\"" if enable_cores else "",
+            "kikimr_auth_token_file=${kikimr_home}/token/kikimr.token" if use_auth_token_file else "",
+            f'kikimr_node_domain="{domain}"' if domain else "",
             NEW_STYLE_DYNAMIC_CFG,
         ]
         + ydbd_extra_args(extra_args)
@@ -469,9 +465,11 @@ def dynamic_cfg_new_style(
 
 def dynamic_cfg_new_style_v2(
     extra_args="",
+    use_auth_token_file=False,
 ):
     return "\n".join(
         [
+            "kikimr_auth_token_file=${kikimr_home}/token/kikimr.token" if use_auth_token_file else "",
             DYNAMIC_CFG_V2,
         ]
         + ydbd_extra_args(extra_args)
@@ -490,6 +488,7 @@ def kikimr_cfg_for_static_node_new_style(
     new_style_kikimr_cfg=True,
     mbus_enabled=False,
     pq_enable=True,
+    use_auth_token_file=False,
 ):
     return "\n".join(
         [
@@ -507,6 +506,7 @@ def kikimr_cfg_for_static_node_new_style(
                 new_style_kikimr_cfg=new_style_kikimr_cfg,
                 mbus_enabled=mbus_enabled,
                 pq_enable=pq_enable,
+                use_auth_token_file=use_auth_token_file,
             ),
             NEW_STYLE_CONFIG,
         ]
@@ -526,6 +526,7 @@ def kikimr_cfg_for_static_node_new_style_v2(
     new_style_kikimr_cfg=True,
     mbus_enabled=False,
     pq_enable=True,
+    use_auth_token_file=False,
 ):
     return "\n".join(
         [
@@ -542,6 +543,7 @@ def kikimr_cfg_for_static_node_new_style_v2(
                 new_style_kikimr_cfg=new_style_kikimr_cfg,
                 mbus_enabled=mbus_enabled,
                 pq_enable=pq_enable,
+                use_auth_token_file=use_auth_token_file,
             ),
             CONFIG_V2,
         ]
@@ -566,6 +568,7 @@ def kikimr_cfg_for_static_node(
     yql_txt_enabled=False,
     fq_txt_enabled=False,
     mbus_enabled=False,
+    use_auth_token_file=False,
 ):
     return '\n'.join(
         [
@@ -586,10 +589,10 @@ def kikimr_cfg_for_static_node(
                 yql_txt_enabled=yql_txt_enabled,
                 fq_txt_enabled=fq_txt_enabled,
                 mbus_enabled=mbus_enabled,
+                use_auth_token_file=use_auth_token_file,
             ),
             NODE_ID_LOCAL_VAR,
             CUSTOM_CONFIG_INJECTOR,
-            # arguments
             DEFAULT_ARGUMENTS_SET,
             NODE_ID_ARGUMENT,
             tenant_argument(tenant),
@@ -621,6 +624,7 @@ def kikimr_cfg_for_dynamic_node(
     audit_txt_enabled=False,
     yql_txt_enabled=False,
     fq_txt_enabled=False,
+    use_auth_token_file=False,
 ):
     return "\n".join(
         [
@@ -642,9 +646,9 @@ def kikimr_cfg_for_dynamic_node(
                 audit_txt_enabled=audit_txt_enabled,
                 yql_txt_enabled=yql_txt_enabled,
                 fq_txt_enabled=fq_txt_enabled,
+                use_auth_token_file=use_auth_token_file,
             ),
             CUSTOM_CONFIG_INJECTOR,
-            # arguments
             DEFAULT_ARGUMENTS_SET,
             NODE_BROKER_ARGUMENT,
             tenant_argument(tenant),
@@ -702,7 +706,6 @@ def kikimr_cfg_for_dynamic_slot(
         + [
             CUSTOM_CONFIG_INJECTOR,
             CUSTOM_SYS_CONFIG_INJECTOR,
-            # arguments
             DEFAULT_ARGUMENTS_SET,
             NODE_BROKER_ARGUMENT,
             SYS_LOG_SERVICE_TAG,

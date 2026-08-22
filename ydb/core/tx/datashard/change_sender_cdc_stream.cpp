@@ -12,6 +12,7 @@
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/scheme_cache/helpers.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/library/aclib/user_context.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
@@ -19,23 +20,23 @@
 
 #include <library/cpp/json/json_writer.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CHANGE_EXCHANGE
+
 namespace NKikimr::NDataShard {
 
 using namespace NPQ;
 using ESenderType = TEvChangeExchange::ESenderType;
 
 class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderPartition> {
-    TStringBuf GetLogPrefix() const {
-        if (!LogPrefix) {
-            LogPrefix = TStringBuilder()
-                << "[CdcChangeSenderPartition]"
-                << "[" << DataShard.TabletId << ":" << DataShard.Generation << "]"
-                << "[" << PartitionId << "]"
-                << "[" << ShardId << "]"
-                << SelfId() /* contains brackets */ << " ";
-        }
 
-        return LogPrefix.GetRef();
+    NActors::NStructuredLog::TStructuredMessage GetLogPrefix() const {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "CdcChangeSenderPartition"},
+            {"selfId", SelfId()},
+            {"tabletId", DataShard.TabletId},
+            {"generation", DataShard.Generation},
+            {"partitionId", PartitionId},
+            {"shardId", ShardId});
     }
 
     /// Init
@@ -50,6 +51,8 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
     }
 
     STATEFN(StateInit) {
+        YDB_LOG_CREATE_CONTEXT(GetLogPrefix(),
+            {"actorState", "StateInit"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPartitionWriter::TEvInitResult, Handle);
         default:
@@ -58,11 +61,13 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
     }
 
     void Handle(TEvPartitionWriter::TEvInitResult::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"eventDetails", ev->Get()->ToString()});
 
         const auto& result = *ev->Get();
         if (!result.IsSuccess()) {
-            LOG_E("Error at 'Init': " << result.GetError().ToString());
+            YDB_LOG_ERROR("CDC partition writer initialization failed",
+                {"initErrorMessage", result.GetError()});
             return Leave();
         }
 
@@ -83,6 +88,8 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
     /// WaitingRecords
 
     STATEFN(StateWaitingRecords) {
+        YDB_LOG_CREATE_CONTEXT(GetLogPrefix(),
+            {"actorState", "StateWaitingRecords"});
         switch (ev->GetTypeRewrite()) {
             hFunc(NChangeExchange::TEvChangeExchange::TEvRecords, Handle);
             sFunc(TEvPartitionWriter::TEvWriteResponse, Lost);
@@ -108,7 +115,8 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
     };
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvRecords::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"eventDetails", ev->Get()->ToString()});
         NKikimrClient::TPersQueueRequest request;
 
         for (auto recordPtr : ev->Get()->Records) {
@@ -148,6 +156,8 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
     }
 
     STATEFN(StateWrite) {
+        YDB_LOG_CREATE_CONTEXT(GetLogPrefix(),
+            {"actorState", "StateWrite"});
         switch (ev->GetTypeRewrite()) {
             IgnoreFunc(TEvPartitionWriter::TEvWriteAccepted);
             hFunc(TEvPartitionWriter::TEvWriteResponse, Handle);
@@ -157,26 +167,28 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
     }
 
     void Handle(TEvPartitionWriter::TEvWriteResponse::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"eventDetails", ev->Get()->ToString()});
 
         const auto& result = *ev->Get();
         if (!result.IsSuccess()) {
-            LOG_E("Error at 'Write': " << result.DumpError());
+            YDB_LOG_ERROR("CDC partition writer write failed",
+                {"writeErrorMessage", result.DumpError()});
             return Leave();
         }
 
         const auto& response = result.Record.GetPartitionResponse();
         if (response.GetCookie() != Cookie) {
-            LOG_E("Cookie mismatch"
-                << ": expected# " << Cookie
-                << ", got# " << response.GetCookie());
+            YDB_LOG_ERROR("PersQueue write cookie mismatch",
+                {"expectedCookie", Cookie},
+                {"actualCookie", response.GetCookie()});
             return Leave();
         }
 
         if (response.CmdWriteResultSize() != Pending.size()) {
-            LOG_E("Write result size mismatch"
-                << ": expected# " << Pending.size()
-                << ", got# " << response.CmdWriteResultSize());
+            YDB_LOG_ERROR("PersQueue write result count mismatch",
+                {"expectedCount", Pending.size()},
+                {"actualCount", response.CmdWriteResultSize()});
             return Leave();
         }
 
@@ -189,9 +201,9 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
                 continue;
             }
 
-            LOG_E("SeqNo mismatch"
-                << ": expected# " << expected
-                << ", got# " << got);
+            YDB_LOG_ERROR("PersQueue sequence number mismatch",
+                {"expectedSeqNo", expected},
+                {"actualSeqNo", got});
             return Leave();
         }
 
@@ -201,16 +213,20 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
     void Handle(NMon::TEvRemoteHttpInfo::TPtr& ev) {
         using namespace NChangeExchange;
 
+        const auto tabletAppPath = AppData()->FeatureFlags.GetEnableTabletDevUiSecurePath()
+            ? ETabletAppPath::Secure
+            : ETabletAppPath::Plain;
+
         TStringStream html;
 
         HTML(html) {
-            Header(html, "CdcStream partition change sender", DataShard.TabletId);
+            Header(html, "CdcStream partition change sender", DataShard.TabletId, tabletAppPath);
 
-            SimplePanel(html, "Info", [this](IOutputStream& html) {
+            SimplePanel(html, "Info", [this, tabletAppPath](IOutputStream& html) {
                 HTML(html) {
                     DL_CLASS("dl-horizontal") {
                         TermDesc(html, "PartitionId", PartitionId);
-                        TermDescLink(html, "ShardId", ShardId, TabletPath(ShardId));
+                        TermDescLink(html, "ShardId", ShardId, TabletPath(ShardId, tabletAppPath));
                         TermDesc(html, "SourceId", SourceId);
                         TermDesc(html, "Writer", Writer);
                         TermDesc(html, "MaxSeqNo", MaxSeqNo);
@@ -225,7 +241,7 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
     }
 
     void Disconnected() {
-        LOG_D("Disconnected");
+        YDB_LOG_DEBUG("PersQueue pipe disconnected during initialization");
 
         if (CurrentStateFunc() != static_cast<TReceiveFunc>(&TThis::StateInit)) {
             return Leave();
@@ -236,7 +252,7 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
     }
 
     void Lost() {
-        LOG_W("Lost");
+        YDB_LOG_WARN("CDC stream partition change sender lost");
         Leave();
     }
 
@@ -278,15 +294,20 @@ public:
             .AwsRegion = stream.AwsRegion.GetOrElse(AppData()->AwsCompatibilityConfig.GetAwsRegion()),
             .VirtualTimestamps = stream.VirtualTimestamps,
             .ShardId = DataShard.TabletId,
+            .UserSIDs = stream.UserSIDs,
+            .TraceIds = stream.TraceIds,
         }))
     {
     }
 
     void Bootstrap() {
+        YDB_LOG_CREATE_CONTEXT(GetLogPrefix());
         Init();
     }
 
     STATEFN(StateBase) {
+        YDB_LOG_CREATE_CONTEXT(GetLogPrefix(),
+            {"actorState", "StateBase"});
         switch (ev->GetTypeRewrite()) {
             sFunc(TEvPartitionWriter::TEvDisconnected, Disconnected);
             hFunc(NMon::TEvRemoteHttpInfo, Handle);
@@ -302,7 +323,6 @@ private:
     const ui64 ShardId;
     const TString SourceId;
     THolder<IChangeRecordSerializer> Serializer;
-    mutable TMaybe<TString> LogPrefix;
 
     TActorId Writer;
     i64 MaxSeqNo = 0;
@@ -351,15 +371,11 @@ class TCdcChangeSenderMain
     , public NChangeExchange::IChangeSenderFactory
     , private NSchemeCache::TSchemeCacheHelpers
 {
-    TStringBuf GetLogPrefix() const {
-        if (!LogPrefix) {
-            LogPrefix = TStringBuilder()
-                << "[CdcChangeSenderMain]"
-                << "[" << DataShard.TabletId << ":" << DataShard.Generation << "]"
-                << SelfId() /* contains brackets */ << " ";
-        }
-
-        return LogPrefix.GetRef();
+    NActors::NStructuredLog::TStructuredMessage GetLogPrefix() const {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "CdcChangeSenderMain"},
+            {"selfId", SelfId()},
+            {"tabletId", DataShard.TabletId});
     }
 
     bool IsResolvingCdcStream() const {
@@ -390,12 +406,14 @@ class TCdcChangeSenderMain
     }
 
     void LogCritAndRetry(const TString& error) {
-        LOG_C(error);
+        YDB_LOG_CRIT("Critical error during change exchange operation, retrying",
+            {"errorMessage", error});
         Retry();
     }
 
     void LogWarnAndRetry(const TString& error) {
-        LOG_W(error);
+        YDB_LOG_WARN("Recoverable error during change exchange operation, retrying",
+            {"errorMessage", error});
         Retry();
     }
 
@@ -453,6 +471,8 @@ class TCdcChangeSenderMain
     }
 
     STATEFN(StateResolveCdcStream) {
+        YDB_LOG_CREATE_CONTEXT(GetLogPrefix(),
+            {"actorState", "StateResolveCdcStream"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleCdcStream);
             sFunc(TEvents::TEvWakeup, ResolveCdcStream);
@@ -464,8 +484,8 @@ class TCdcChangeSenderMain
     void HandleCdcStream(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         const auto& result = ev->Get()->Request;
 
-        LOG_D("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult"
-            << ": result# " << (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr"));
+        YDB_LOG_DEBUG("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult",
+            {"navigateResult", (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr")});
 
         if (!CheckNotEmpty(result)) {
             return;
@@ -494,7 +514,7 @@ class TCdcChangeSenderMain
         }
 
         if (entry.Self && entry.Self->Info.GetPathState() == NKikimrSchemeOp::EPathStateDrop) {
-            LOG_D("Stream is planned to drop, waiting for the EvRemoveSender command");
+            YDB_LOG_DEBUG("CDC stream is planned to drop, waiting for remove sender command");
 
             RemoveRecords();
             KillSenders();
@@ -523,6 +543,8 @@ class TCdcChangeSenderMain
     }
 
     STATEFN(StateResolveTopic) {
+        YDB_LOG_CREATE_CONTEXT(GetLogPrefix(),
+            {"actorState", "StateResolveTopic"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleTopic);
             sFunc(TEvents::TEvWakeup, ResolveCdcStream);
@@ -534,8 +556,8 @@ class TCdcChangeSenderMain
     void HandleTopic(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         const auto& result = ev->Get()->Request;
 
-        LOG_D("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult"
-            << ": result# " << (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr"));
+        YDB_LOG_DEBUG("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult",
+            {"navigateResult", (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr")});
 
         if (!CheckNotEmpty(result)) {
             return;
@@ -582,10 +604,13 @@ class TCdcChangeSenderMain
         }
 
         const bool topicAutoPartitioning = IsTopicAutoPartitioningEnabled(pqConfig.GetPartitionStrategy().GetPartitionStrategyType());
-        Y_ENSURE(topicAutoPartitioning || entry.PQGroupInfo->Schema);
+        if (!topicAutoPartitioning && !entry.PQGroupInfo->Schema) {
+            return LogWarnAndRetry("Empty schema and disabled auto-partitioning");
+        }
+
         KeyDesc = NKikimr::TKeyDesc::CreateMiniKeyDesc(entry.PQGroupInfo->Schema);
         Y_ENSURE(entry.PQGroupInfo->Partitioning);
-        KeyDesc->Partitioning = std::make_shared<TVector<NKikimr::TKeyDesc::TPartitionInfo>>(entry.PQGroupInfo->Partitioning);
+        KeyDesc->Partitioning = std::make_shared<TPartitioning>(entry.PQGroupInfo->Partitioning);
 
         if (topicAutoPartitioning) {
             Y_ENSURE(entry.PQGroupInfo->PartitionChooser);
@@ -596,7 +621,7 @@ class TCdcChangeSenderMain
             SetPartitionResolver(new TMd5PartitionResolver(KeyDesc->GetPartitions().size()));
         }
 
-        CreateSenders(NChangeExchange::MakePartitionIds(*KeyDesc->Partitioning));
+        CreateSenders(NChangeExchange::MakePartitionIds(KeyDesc->GetPartitions()));
         Become(&TThis::StateMain);
     }
 
@@ -625,32 +650,38 @@ class TCdcChangeSenderMain
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"eventDetails", ev->Get()->ToString()});
         EnqueueRecords(std::move(ev->Get()->Records));
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvRecords::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"eventDetails", ev->Get()->ToString()});
         ProcessRecords(std::move(ev->Get()->Records));
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvForgetRecords::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"eventDetails", ev->Get()->ToString()});
         ForgetRecords(std::move(ev->Get()->Records));
     }
 
     void Handle(NChangeExchange::TEvChangeExchangePrivate::TEvReady::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"eventDetails", ev->Get()->ToString()});
         OnReady(ev->Get()->PartitionId);
     }
 
     void Handle(NChangeExchange::TEvChangeExchangePrivate::TEvGone::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"eventDetails", ev->Get()->ToString()});
         OnGone(ev->Get()->PartitionId);
     }
 
     void Handle(TEvChangeExchange::TEvRemoveSender::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"eventDetails", ev->Get()->ToString()});
         Y_ENSURE(ev->Get()->PathId == GetChangeSenderIdentity());
 
         RemoveRecords();
@@ -658,7 +689,8 @@ class TCdcChangeSenderMain
     }
 
     void AutoRemove(NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"eventDetails", ev->Get()->ToString()});
         RemoveRecords(std::move(ev->Get()->Records));
     }
 
@@ -694,6 +726,8 @@ public:
     }
 
     STFUNC(StateBase) {
+        YDB_LOG_CREATE_CONTEXT(GetLogPrefix(),
+            {"actorState", "StateBase"});
         switch (ev->GetTypeRewrite()) {
             hFunc(NChangeExchange::TEvChangeExchange::TEvEnqueueRecords, Handle);
             hFunc(NChangeExchange::TEvChangeExchange::TEvRecords, Handle);
@@ -707,6 +741,8 @@ public:
     }
 
     STFUNC(StatePendingRemove) {
+        YDB_LOG_CREATE_CONTEXT(GetLogPrefix(),
+            {"actorState", "StatePendingRemove"});
         switch (ev->GetTypeRewrite()) {
             hFunc(NChangeExchange::TEvChangeExchange::TEvEnqueueRecords, AutoRemove);
             hFunc(TEvChangeExchange::TEvRemoveSender, Handle);
@@ -718,7 +754,6 @@ public:
 private:
     const TPathId StreamPathId;
     const TDataShardId DataShard;
-    mutable TMaybe<TString> LogPrefix;
 
     TUserTable::TCdcStream Stream;
     TPathId TopicPathId;

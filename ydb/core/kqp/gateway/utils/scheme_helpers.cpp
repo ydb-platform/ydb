@@ -83,14 +83,12 @@ TString SelectDatabaseForAlterLoginOperations(const TAppData* appData, const TSt
 
 void FillCreateExternalTableColumnDesc(NKikimrSchemeOp::TExternalTableDescription& externalTableDesc,
                                        const TString& name,
-                                       bool replaceIfExists,
                                        const TCreateExternalTableSettings& settings)
 {
     externalTableDesc.SetName(name);
     externalTableDesc.SetDataSourcePath(settings.DataSourcePath);
     externalTableDesc.SetLocation(settings.Location);
     externalTableDesc.SetSourceType("General");
-    externalTableDesc.SetReplaceIfExists(replaceIfExists);
 
     Y_ENSURE(settings.ColumnOrder.size() == settings.Columns.size());
     for (const auto& name : settings.ColumnOrder) {
@@ -146,9 +144,11 @@ void FillAlterDatabaseSchemeLimits(TModifyScheme& modifyScheme, const TString& n
 
 std::pair<TString, TString> SplitPathByDirAndBaseNames(const TString& path) {
     auto splitPos = path.find_last_of('/');
-    if (splitPos == path.npos || splitPos + 1 == path.size()) {
-        ythrow yexception() << "wrong path format '" << path << "'";
+
+    if (splitPos == path.npos) {
+        return {{}, path};
     }
+
     return {path.substr(0, splitPos), path.substr(splitPos + 1)};
 }
 

@@ -1,148 +1,289 @@
-## How to Mute a test <a id="how-to-mute"></a>
+## 📖 Mute and Unmute Rules
 
-- Through a PR Report
-  - Open report in PR ![screen](https://storage.yandexcloud.net/ydb-public-images/report_mute.png)
-  - In context menu of test select `Crete mute issue`
+---
 
- - Through the [Test history](https://datalens.yandex/4un3zdm0zcnyr?tab=A4) dashboard
-  
-    - Enter the test name or path in the `full_name contain` field, click **Apply** - the search is done by the occurrence.  ![image.png](https://storage.yandexcloud.net/ydb-public-images/mute_candidate.png)
+### Mute a test if in the last 4 days:
+- **3 or more failures AND runs (pass + fail) more than 10**
+- **OR** 2 or more failures AND runs (pass + fail) not more than 10
 
-   - Click the `Mute` link, which will create a draft issue in GitHub.
+### Unmute a test if in the last 7 days:
+- **Runs (pass + fail + mute) >= 4**
+- **AND no failures (fail + mute = 0)**
 
+### Remove from mute if in the last 7 days:
+- **No runs at all** (pass + fail + mute + skip = 0)
 
-* Add the issue to the [Mute and Un-mute](https://github.com/orgs/ydb-platform/projects/45/views/6?visibleFields=%5B%22Title%22%2C%22Assignees%22%2C%22Status%22%2C126637100%5D) project.
-* Set the `status` to `Mute`
-* Set the `owner` field to the team name (see the issue for the owner's name). ![image.png](https://storage.yandexcloud.net/ydb-public-images/create_issue.png)
-* Open [muted_ya.txt](https://github.com/ydb-platform/ydb/blob/main/.github/config/muted_ya.txt) in a new tab and edit it.
-* Copy the line under `Add line to muted_ya.txt` (for example, like in the screenshot, `ydb/core/kqp/ut/query KqpStats.SysViewClientLost`) and add it to [muted_ya.txt](https://github.com/ydb-platform/ydb/blob/main/.github/config/muted_ya.txt).
-* Edit the branch for merging, for example, replace `{username}-patch-1` with `mute/{username}`.
-* Create a PR - copy the PR name from the issue name.
-* Copy the issue description to the PR, keep the line `Not for changelog (changelog entry is not required)`.
-* Take "OK" from member of test owner team in PR
-* Merge.
-* Link Issue and Pr (field "Development" in issue and PR)
-* Inform test owner team about new mutes - dm or in public chat (with mention of maintainer of team)
-* You are awesome!
+---
 
-## How to UnMute a test <a id="how-to-unmute"></a>
---IN PROGRESS--
-* Open [muted_ya.txt](https://github.com/ydb-platform/ydb/blob/main/.github/config/muted_ya.txt)
-* Press "Edit file" and delete line of test
-* Commit changes (Edit the branch for merging, for example, replace `{username}-patch-1` with `mute/{username}`)
-* Edit PR name like "UnMute {testname}"
-* Take "OK" from member of test owner team in PR
-* Merge
-* If test have an issue in [Mute and Un-mute](https://github.com/orgs/ydb-platform/projects/45/views/6?visibleFields=%5B%22Title%22%2C%22Assignees%22%2C%22Status%22%2C126637100%5D) in status `Muted` - Move it to `Unmuted`
-* Link Issue and Pr (field "Development" in issue and PR)
-* Move issue to status `Unmuted`
-* You are awesome!
+### Notes
+- For all rules, only the last N days are considered (N=4 for mute, N=7 for unmute, N=7 for delete), including the current day.
+- A "run" is any test execution with result pass, fail, or mute.
+- A "failure" is a test execution with result fail or mute.
+- Statistics aggregation is done by key (test_name, suite_folder, full_name, build_type, branch).
 
-## How to manage muted tests by team <a id="how-to-manage"></a>
---IN PROGRESS--
-### Explore your tests stability
- >If you want to get more info about stability of your test visit [dashboard](https://datalens.yandex/4un3zdm0zcnyr?tab=wED) (fill field `owner`=`{your_team_name}`)
-![image.png](https://storage.yandexcloud.net/ydb-public-images/test_analitycs_1.png)
-![image.png](https://storage.yandexcloud.net/ydb-public-images/test_analitycs_2.png)
-### Find your muted tests
- >Not all muted tests have issue in github project about this , we working on it
-* Open project [Mute and Un-mute](https://github.com/orgs/ydb-platform/projects/45/views/6?visibleFields=%5B%22Title%22%2C%22Assignees%22%2C%22Status%22%2C126637100%5D)
-* click in label with name of your team, example [link to qp](https://github.com/orgs/ydb-platform/projects/45/views/6?filterQuery=owner%3Aqp) muted tests (cgi `?filterQuery=owner%3Aqp`)
-* Open `Mute {testname}` issue
-* Perform [How to unmute](#how-to-unmute)
+---
 
-## Flaky Tests
+**Example:**
+- If a test ran 15 times in 3 days with 3 failures — the test will be muted.
+- If a test ran 5 times in 3 days with 2 failures — the test will be muted.
+- If a test ran 4 times in 7 days and all passed successfully — the test will be unmuted.
+- If a test didn't run at all in 7 days — it will be removed from mute.
 
-### Who and When Monitors Flaky Tests
+---
 
-The CI duty engineer (in progress) checks flaky tests once a day (only working days). 
+### New stable branch grace
 
-- Open the [Flaky](https://datalens.yandex/4un3zdm0zcnyr) dashboard.
-- Perform the sections **[Mute Flaky Test](#mute-flaky)** and **[Test Flaps More - Need to Unmute](#unmute-flaky)** once a day or ondemand
+For **7 days** after a branch first appears in [stable_tests_branches.json](./stable_tests_branches.json) (date from git history; `main` excluded), inherited `muted_ya` lines are kept and not dropped via zero-run delete. Unmute/mute rules still apply when monitor data exists. Grace length is its own setting: `stable_branch_grace_days`.
 
-### Mute Flaky Tests <a id="mute-flaky"></a>
+---
 
-Open the [Flaky](https://datalens.yandex/4un3zdm0zcnyr) dashboard.
+### Fast track — start (manual fast-unmute)
+- Fixed the tests → **close the mute issue as Completed**.
+- Only a **human** close counts (not a bot). How it works in full: [Manual fast-unmute](#manual-fast-unmute-close-issue-shortcut) below.
 
-- Select today's date.
-- Look at the tests in the Mute candidate table.
+### Fast track — unmute (short history window)
+- Same idea as normal unmute, but only the **last ~2 calendar days** of history are checked.
+- Need at least **2** runs (pass + fail + mute) and **no failures** (fail + mute = 0) in that window.
 
-![image.png](https://storage.yandexcloud.net/ydb-public-images/mute_candidate.png)
-
-- Select today's date in the `date_window`.
-- Select `days_ago_window = 5` (how many days back from the selected day to calculate statistics). Currently, there are calculations for 1 day and 5 days ago.
-  * If you want to understand how long ago and how often the test started failing, you can click the `history` link in the table (loading may take time) or select `days_ago_window = 1`.
-- For `days_ago_window = 5`, set the values to filter out isolated failures and low run counts:
-  * `fail_count >= 3`
-  * `run_count >= 10`
-- Click the `Mute` link, which will create a draft issue in GitHub.
-- Perform steps from [How to mute](#how-to-mute)
-- You are awesome!
-
-### Test is no longer flaky - Time to Unmute <a id="unmute-flaky"></a>
-
-- Open the [Flaky](https://datalens.yandex/4un3zdm0zcnyr) dashboard.
-- Look at the tests in the UNMute candidate table.
-
-![image.png](https://storage.yandexcloud.net/ydb-public-images/unmute.png)
-
-- If the `summary:` column shows `mute <= 3` and `success rate >= 98%` - **it's time to enable the test**.
-- Perform steps from [How to Unmute](#how-to-unmute)
-- You are awesome!
-
-### Unmute stable and flaky tests automaticaly
+### Fast track — if the deadline passes while still muted
+- After about **3** calendar days from the start of fast track, if the test is **still muted** in CI → the **normal 7-day** unmute rule applies again and the issue is **reopened**.
 
 
-**setup**
-1) ```pip install PyGithub```
-2) request git token
+
+## 🔄 Automated Workflow
+
+### Automatic muted_ya.txt Updates
+The `.github/workflows/update_muted_ya.yml` workflow automatically:
+- Runs every hour at :00 UTC
+- Analyzes test data for the last 4-7 days
+- Creates a PR with updated `muted_ya.txt` based on the rules above
+- The PR should be approved to merge by CI Team @ydb-platform/ci
+
+### Automatic Issue Creation
+The `.github/workflows/create_issues_for_muted_tests.yml` workflow:
+- Triggers after approval of PRs with `mute-unmute` label
+- Creates GitHub issues for newly muted tests and close unmute
+- Assigns issues to appropriate teams based on test ownership
+- Links issues to the PR that introduced the mutes
+
+## 📝 Manual mute/unmute management
+
+### How to mute a test manually
+
+- Open [muted_ya.txt](https://github.com/ydb-platform/ydb/blob/main/.github/config/muted_ya.txt) and add a test line.
+- Create a PR, copy the title and description from the issue.
+- Get confirmation from the test owner.
+- After merging, link the PR and issue, notify the team.
+
+**You can also:**
+- Use the context menu in the PR report (see screenshot).
+- Use [Test history dashboard](https://datalens.yandex/4un3zdm0zcnyr?tab=A4) to search and mute a test.
+
+### How to unmute a test manually
+
+- Open [muted_ya.txt](https://github.com/ydb-platform/ydb/blob/main/.github/config/muted_ya.txt) and remove the test line.
+- Create a PR with title "UnMute {testname}".
+- Get confirmation from the test owner.
+- After merging, move the issue to Unmuted status, link the PR and issue.
+
+## ⚡ Manual fast-unmute (close-issue shortcut)
+
+Once you have fixed the tests tracked by a mute-issue, you can skip the default 7-day unmute wait by **manually closing the issue as Completed**. The `python3 .github/scripts/tests/mute/manual_unmute.py sync` step on the next workflow run will:
+
+1. Detect CLOSED+COMPLETED issues in the lookback window (`manual_unmute_issue_closed_lookback_days` in `mute_config.json`).
+2. **Human-only trigger:** the *latest* GitHub *Close* event must be by a real user (`User` actor), not a bot. Known automation logins are ignored (see `BOT_LOGINS` in `mute/fast_unmute_pipeline.py`). If a bot closed the issue, fast-unmute does **not** start — this is intentional.
+3. For every test listed in the issue body that is still muted in CI on the parsed branch(es), register a per-test row in the `fast_unmute_active` YDB table (`test_mute/fast_unmute_active`).
+4. **Leave the issue closed**, add the `manual-fast-unmute` label, update org project **Status**, and post a “fast-unmute started” comment.
+
+While a test is registered in that table, `mute/create_new_muted_ya.py` evaluates it against a **shorter unmute window** defined in [mute_config.json](./mute_config.json):
+
+- `manual_unmute_window_days` — how many days of history are aggregated for the short unmute path (default: 2).
+- `manual_unmute_min_runs` — minimum clean runs (pass+fail+mute) needed to unmute (default: 2).
+- `manual_unmute_ttl_calendar_days` — calendar days from row registration; if any row for the issue is still muted after this, the issue is reopened and all fast-unmute rows for that issue are cleared (default: 3).
+- `mute_window_days` — days of monitor history for default `to_mute` thresholds and the upper bound of the post–fast-unmute mute ladder (default: 4).
+- `unmute_window_days` / `delete_window_days` — aggregation windows for normal unmute / delete lists (default: 7).
+- `manual_unmute_issue_closed_lookback_days` — how far back `mute/manual_unmute.py` scans CLOSED+COMPLETED issues (default: 14).
+- `manual_unmute_currently_muted_lookback_days` — monitor lookback when resolving latest `is_muted` per test (default: 30).
+
+**While the deadline runs:** if a test is already **unmuted in CI**, only its row is removed; automation may post a short **progress** comment if other tests on the same issue are still tracked.
+
+**All tests unmuted in CI before any deadline miss:** when the last row for the issue is removed for that reason, a **success** comment is posted, project **Status → Unmuted**, and the `manual-fast-unmute` label is removed (the issue stays **closed**).
+
+**Deadline miss:** if at least one row passes `manual_unmute_ttl_calendar_days` while still muted, **all** rows for that GitHub issue number are removed, the issue is **reopened**, **Status → Muted**, one summary comment (who already unmuted vs who is still muted vs rows cleared early), and the label is removed.
+
+## 📊 Dashboard for analyzing muted and flaky tests
+
+For analyzing test status, finding mute/unmute candidates, and tracking stability, use the interactive dashboard:
+
+- [YDB Test Analytics Dashboard](https://datalens.yandex/4un3zdm0zcnyr)
+
+**Dashboard capabilities:**
+- View all muted tests by owner, full_name, status
+- Quick search by test name or team (owner)
+- Filter by status (flaky, muted, stable, etc.)
+- History of runs and failures by day
+- Tables of mute/unmute candidates (see corresponding tabs)
+- Quick transition to creating mute-issues via link in the table
+
+**Usage examples:**
+- Find all muted tests for your team: select owner in the filter
+- Find flaky candidates for mute: Flaky tab, filter by fail_count/run_count
+- Find stable mutes for unmute: Stable tab, filter by success_rate
+
+## 📋 Files generated by mute/create_new_muted_ya.py
+
+### 🔇 [to_mute.txt](mute_update/to_mute.txt)
+**Content:** Mute candidates by new rules  
+**Rules:** In 4 days (≥3 failures **AND** runs >10) **OR** (≥2 failures **AND** runs ≤10)  
+**Usage:** Main file for mute decisions
+
+### 🔊 [to_unmute.txt](mute_update/to_unmute.txt)
+**Content:** Unmute candidates by new rules  
+**Rules:** In 7 days ≥4 runs (pass+fail+mute), no failures (fail+mute=0)  
+**Usage:** Main file for unmute decisions
+
+### 🗑️ [to_remove_from_mute.txt](mute_update/to_remove_from_mute.txt)
+**Content:** Tests to remove from mute  
+**Rules:** No runs in 7 days  
+**Usage:** Main file for removal from mute
+
+---
+
+## 🔄 File lifecycle
+
+1. **Data analysis** → Creation of main action files
+2. **Rule application** → Formation of main outputs and other `mute_update/` artifacts used by the workflow
+3. **Issue creation** → Using `new_muted_ya.txt`
+
+**All files are created in the `mute_update/` directory when running the script. The final mute file for workflow is `new_muted_ya.txt`.**
+
+# Mute logic output files table
+
+This table shows all files created by the mute logic script, with descriptions of their content and purpose.
+
+## 📋 Main files
+
+| File | Description | Rules | Usage |
+|------|----------|---------|---------------|
+| `to_mute.txt` | Mute candidates | In 4 days ≥2 failures **OR** (≥1 failure and runs ≤10) | Main file for mute decisions |
+| `to_unmute.txt` | Unmute candidates | In 7 days ≥4 runs (pass+fail+mute), no failures (fail+mute=0) | Main file for unmute decisions |
+| `to_remove_from_mute.txt` | Tests to remove from mute | No runs in 7 days | Main file for removal from mute |
+
+---
+## Muted Tests Workflow Diagram
+
+### Main workflow: update `muted_ya` → PR merge → issues → digest queue → Telegram
+
+```mermaid
+graph TB
+    Start([Schedule: Hourly UTC<br/>or Manual]) --> Prereq[🔧 Prereq jobs<br/>Branch matrix setup<br/>upload_testowners.py<br/>export_issues_to_ydb.py<br/>mute/manual_unmute.py sync]
+    
+    Prereq --> UpdateAnalytics[📊 Per branch: analytics<br/>flaky_tests_history<br/>upload_muted_tests<br/>tests_monitor]
+    
+    UpdateAnalytics --> GenerateFile[📝 Generate new muted_ya.txt<br/>mute/create_new_muted_ya.py]
+    
+    GenerateFile --> CheckChanges{Changes?}
+    CheckChanges -->|No| End1([End])
+    CheckChanges -->|Yes| CreatePR[📦 Create PR<br/>with changes]
+    
+    CreatePR --> CommentPR[💬 Comment PR<br/>Add labels & reviewers]
+    CommentPR --> AutoMerge[🔄 Enable auto-merge]
+    AutoMerge --> WaitMerge[⏳ Wait for PR merge]
+    
+    WaitMerge --> PRMerged[✅ PR merged<br/>Issues workflow: merged PR<br/>to main + mute-unmute label]
+    
+    PRMerged --> CreateIssues[📋 create_issues_for_muted_tests.yml<br/>New mute issues]
+    CreateIssues --> DigestQ[📥 YDB digest_queue<br/>enqueue from mute/create_new_muted_ya.py]
+    CreateIssues --> CommentMergedPR[💬 Comment merged PR<br/>Append issue links]
+    
+    CommentMergedPR --> UpdateAnalyticsAfterMerge[📊 Same three scripts<br/>upload_muted_tests<br/>flaky_tests_history<br/>tests_monitor]
+    
+    UpdateAnalyticsAfterMerge --> AsyncAnalytics[⏱️ export_issues / mappings /<br/>muted_tests_with_issue_and_area …<br/>collect_analytics_fast<br/>~every 30 min, separate workflow]
+    
+    DigestQ --> SendDigest[📤 telegram_scheduled_notifications.yml<br/>job Mute digest to Telegram<br/>send_digest.py ~30 min UTC]
+    SendDigest --> TG[Telegram per team]
+    
+    AsyncAnalytics --> End2([End])
+    TG --> End2
+    
+    style Start fill:#e1f5ff
+    style Prereq fill:#e8e8ff
+    style UpdateAnalytics fill:#ffe1ff
+    style UpdateAnalyticsAfterMerge fill:#ffe1ff
+    style CommentPR fill:#fff4e1
+    style CommentMergedPR fill:#fff4e1
+    style AsyncAnalytics fill:#f0f0f0
+    style DigestQ fill:#e8f4ff
+    style SendDigest fill:#e8f4ff
+    style TG fill:#e1ffe1
+    style End1 fill:#ffe1e1
+    style End2 fill:#e1ffe1
+    style CheckChanges fill:#fff4e1
+    style PRMerged fill:#e1e1ff
 ```
-# Github api (personal access token (classic)) token shoud have permitions to
-# repo
-# - repo:status
-# - repo_deployment
-# - public_repo
-# admin:org
-# project
+
+### What runs where (sequence)
+
+There are **three pieces**: (1) every hour **`update_muted_ya.yml`** refreshes data and may open a mute PR; (2) after that PR merges, **`create_issues_for_muted_tests.yml`** creates GitHub issues and **enqueues `digest_queue`**; (3) on its own schedule, **`telegram_scheduled_notifications.yml`** (GitHub name *Telegram scheduled notifications*, job **Mute digest to Telegram**) runs **`send_digest.py`** and sends **Telegram** from that queue. Diagrams **1–2** are the mute repo path; **3** is the digest mailing path.
+
+#### 1) Hourly: `update_muted_ya.yml` (one workflow run)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant WF as update_muted_ya
+    participant YDB as YDB
+    participant GH as GitHub
+
+    rect rgb(240, 248, 255)
+        Note over WF,YDB: Job collect-testowners-and-sync runs once
+        WF->>YDB: upload_testowners.py
+        WF->>YDB: export_issues_to_ydb.py
+        WF->>YDB: mute/manual_unmute.py sync
+        WF->>GH: GraphQL inside mute/manual_unmute only labels / comments / who closed the issue
+    end
+
+    rect rgb(255, 250, 240)
+        Note over WF,GH: Job update-muted-tests once per target branch
+        WF->>YDB: flaky_tests_history.py
+        WF->>YDB: upload_muted_tests
+        WF->>YDB: tests_monitor.py
+        Note over WF,GH: mute/create_new_muted_ya.py writes mute_update then opens PR if muted_ya changed
+    end
 ```
-3) save it to env `export GITHUB_TOKEN=<token>
-4) save to env `export CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS=<iam_cloud_file> 
 
-**How to use**
+#### 2) After mute PR merged: `create_issues_for_muted_tests.yml`
 
-0) *update your branch* - you shoud have last version of muted_ya localy
-1) Run instance https://github.com/ydb-platform/ydb/actions/workflows/collect_analytics.yml
-2) wait till end of step `Collect all test monitor (how long tests in state)` (about 7 min)
-3) run `create_new_muted_ya.py update_muted_ya` - it creates bunch of files in `%repo_path%/mute_update/`
-     
-| File Name                              | Description                                                                                     |
-|----------------------------------------|-------------------------------------------------------------------------------------------------|
-| deleted.txt                            | Tests what look like deleted (no runs 28 days in a row)                                         |
-| deleted_debug.txt                      | With detailed info                                                                              |
-| flaky.txt                              | Tests which are flaky today AND total runs > 3 AND fail_count > 2                               |
-| flaky_debug.txt                        | With detailed info                                                                              |
-| muted_stable.txt                       | Muted tests which are stable for the last 14 days                                               |
-| muted_stable_debug.txt                 | With detailed info                                                                              |
-| new_muted_ya.txt                       | Muted_ya.txt version with excluded **muted_stable** and **deleted** tests                       |
-| new_muted_ya_debug.txt                 | With detailed info                                                                              |
-| new_muted_ya_with_flaky.txt            | Muted_ya.txt version with excluded **muted_stable** and **deleted** tests and included **flaky**|
-| new_muted_ya_with_flaky_debug.txt      | With detailed info                                                                              |
-|muted_ya_sorted.txt| original muted_ya with resolved wildcards for real tests (not chunks)|
-|muted_ya_sorted_debug.txt| With detailed info|
+```mermaid
+sequenceDiagram
+    autonumber
+    participant WF as create_issues_for_muted_tests
+    participant GH as GitHub
+    participant YDB as YDB
 
+    Note over WF: Trigger merged PR to main with mute-unmute label
+    WF->>GH: Create issues, append PR body, post PR comment
+    WF->>YDB: upload_muted_tests, flaky_tests_history, tests_monitor
+    WF->>YDB: enqueue digest_queue for new mute issues
+```
 
-**1. Unmute Stable**
-1) replace content of [muted_ya](https://github.com/ydb-platform/ydb/blob/main/.github/config/muted_ya.txt) with content of **new_muted_ya.txt** 
-2) create new PR and paste in PR Description 
-- `<Unmuted tests : stable 9 and deleted 0>`  from concole output
--  content from **muted_stable_debug** and **deleted_debug**
-3) Merge
- example https://github.com/ydb-platform/ydb/pull/11099
+#### 3) Mute digest to Telegram: `telegram_scheduled_notifications.yml` (job Mute digest to Telegram)
 
-**2. Mute Flaky** (AFTER UNMUTE STABLE ONLY)
-1) replace content of [muted_ya](https://github.com/ydb-platform/ydb/blob/main/.github/config/muted_ya.txt) with content of **new_muted_ya_with_flaky.txt** 
-2) create new PR 
-2) run `create_new_muted_ya.py create_issues` - it creates issue for each flaky test in **flaky.txt** 
-3) copy from console output text like ' Created issue ...' and paste in PR
-4) merge
- example https://github.com/ydb-platform/ydb/pull/11101
+Runs on a **different** timer than mute PRs (~every 30 min UTC in the same workflow file as **CI queue Telegram alerts**). **`send_digest.py`** uses [mute_issue_and_digest_config.json](./mute_issue_and_digest_config.json) to decide **which UTC hours / weekdays** to send.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant AJ as telegram_scheduled_notifications
+    participant CFG as mute_issue_and_digest_config
+    participant YDB as YDB digest_queue
+    participant TG as Telegram
+
+    Note over AJ: Cron ~30 min workflow telegram_scheduled_notifications.yml
+    AJ->>CFG: read schedule profiles mute_issue_and_digest_config.json
+    AJ->>AJ: skip hour if no profile matches now unless --force
+    AJ->>YDB: read rows where sent_at empty still-open issues only
+    AJ->>TG: per-team Markdown and plots parse_and_send_team_issues
+    AJ->>YDB: write sent_at on sent rows
+```
+

@@ -5,11 +5,10 @@
 #include <vector>
 #include <deque>
 #include <util/generic/string.h>
+#include <ydb/library/login/account_lockout/account_lockout.h>
+#include <ydb/library/login/hashes_checker/hash_types.h>
 #include <ydb/library/login/protos/login.pb.h>
 #include <ydb/library/login/password_checker/password_checker.h>
-#include <ydb/library/login/password_checker/hash_checker.h>
-#include <ydb/library/login/account_lockout/account_lockout.h>
-#include <ydb/library/login/cache/lru.h>
 
 namespace NLogin {
 
@@ -22,15 +21,9 @@ public:
     static constexpr auto KEYS_ROTATION_PERIOD = std::chrono::hours(6);
     static constexpr auto KEY_EXPIRE_TIME = std::chrono::hours(24);
 
-    static constexpr size_t SALT_SIZE = THashChecker::SALT_SIZE;
-    static constexpr size_t HASH_SIZE = THashChecker::HASH_SIZE;
-
     static constexpr const char* GROUPS_CLAIM_NAME = "https://ydb.tech/groups";
     static constexpr const char* EXTERNAL_AUTH_CLAIM_NAME = "external_authentication";
     static constexpr auto MAX_TOKEN_EXPIRE_TIME = std::chrono::hours(12);
-
-    static constexpr size_t SUCCESS_PASSWORDS_CACHE_CAPACITY = 20;
-    static constexpr size_t WRONG_PASSWORDS_CACHE_CAPACITY = 20;
 
     struct TBasicRequest {};
 
@@ -56,6 +49,13 @@ public:
         EStatus Status = EStatus::UNSPECIFIED;
     };
 
+    struct THashToValidate {
+        NLoginProto::ESaslAuthMech::SaslAuthMech AuthMech;
+        NLoginProto::EHashType::HashType HashType;
+        TString Hash;
+        TString AuthMessage;
+    };
+
     struct TLoginUserRequest : TBasicRequest {
         struct TOptions {
             bool WithUserGroups = false;
@@ -63,9 +63,9 @@ public:
         };
 
         TString User;
-        TString Password;
+        std::optional<THashToValidate> HashToValidate;
+        std::optional<TString> ExternalAuth;
         TOptions Options;
-        TString ExternalAuth;
     };
 
     struct TPasswordCheckResult : TBasicResponse {
@@ -75,10 +75,13 @@ public:
             SUCCESS,
             INVALID_USER,
             INVALID_PASSWORD,
-            UNAVAILABLE_KEY
+            UNAVAILABLE_KEY,
+            UNSUPPORTED_SASL_MECHANISM,
+            INVALID_HASH_TYPE,
         };
 
         EStatus Status = EStatus::UNSPECIFIED;
+        std::optional<TString> ServerSignature;
 
     public:
         void FillInvalidPassword() {
@@ -94,6 +97,16 @@ public:
         void FillInvalidUser(const TString& error) {
             Status = TLoginUserResponse::EStatus::INVALID_USER;
             Error = error;
+        }
+
+        void FillUnsupportedSaslMech() {
+            Status = TLoginUserResponse::EStatus::UNSUPPORTED_SASL_MECHANISM;
+            Error = "Unsupported SASL auth mechanism";
+        }
+
+        void FillInvalidHashType() {
+            Status = TLoginUserResponse::EStatus::INVALID_HASH_TYPE;
+            Error = "Invalid hash type";
         }
     };
 
@@ -119,14 +132,14 @@ public:
     struct TCreateUserRequest : TBasicRequest {
         TString User;
         TString Password;
-        bool IsHashedPassword = false;
+        TString HashedPassword;
         bool CanLogin = true;
     };
 
     struct TModifyUserRequest : TBasicRequest {
         TString User;
         std::optional<TString> Password;
-        bool IsHashedPassword = false;
+        std::optional<TString> HashedPassword;
         std::optional<bool> CanLogin;
     };
 
@@ -181,21 +194,26 @@ public:
     std::deque<TKeyRecord> Keys; // it's always ordered by KeyId
     std::chrono::time_point<std::chrono::system_clock> KeysRotationTime;
 
+    struct THashRecord {
+        TString HashInitParams;
+        TString HashValues;
+    };
+
     struct TSidRecord {
         ESidType::SidType Type = ESidType::UNKNOWN;
         TString Name;
-        TString PasswordHash;
+
+        TString PasswordHashes;
+        THashMap<NLoginProto::EHashType::HashType, THashRecord> HashStorage;
+
         bool IsEnabled;
         std::unordered_set<TString> Members;
         std::chrono::system_clock::time_point CreatedAt;
         ui32 FailedLoginAttemptCount = 0;
         std::chrono::system_clock::time_point LastFailedLogin;
         std::chrono::system_clock::time_point LastSuccessfulLogin;
-    };
 
-    struct TCacheSettings {
-        size_t SuccessPasswordsCacheCapacity = SUCCESS_PASSWORDS_CACHE_CAPACITY;
-        size_t WrongPasswordsCacheCapacity = WRONG_PASSWORDS_CACHE_CAPACITY;
+        void FillHashStorage();
     };
 
     // our current audience (database name)
@@ -220,10 +238,8 @@ public:
 
     // Login
     TLoginUserResponse LoginUser(const TLoginUserRequest& request);
-    // The next four methods are used (all together combined) when it's needed to separate hash verification which is quite cpu-intensive
-    bool NeedVerifyHash(const TLoginUserRequest& request, TPasswordCheckResult* checkResult, TString* passwordHash);
-    static bool VerifyHash(const TLoginUserRequest& request, const TString& passwordHash); // it's made static to be thread-safe
-    void UpdateCache(const TLoginUserRequest& request, const TString& passwordHash, const bool isSuccessVerifying);
+    bool NeedVerifyHash(const TLoginUserRequest& request, TPasswordCheckResult* checkResult, TString* hashValues);
+    void VerifyHashValues(const TLoginUserRequest& request, TPasswordCheckResult* checkResult, const TString& hashValues);
     TLoginProvider::TLoginUserResponse LoginUser(const TLoginUserRequest& request, const TPasswordCheckResult& checkResult);
 
     TValidateTokenResponse ValidateToken(const TValidateTokenRequest& request);
@@ -241,18 +257,17 @@ public:
     bool CheckGroupExists(const TString& group);
 
     void UpdatePasswordCheckParameters(const TPasswordComplexity& passwordComplexity);
+    const TPasswordComplexity& GetPasswordCheckParameters() const;
     void UpdateAccountLockout(const TAccountLockout::TInitializer& accountLockoutInitializer);
-    void UpdateCacheSettings(const TCacheSettings& settings);
 
     TLoginProvider();
     TLoginProvider(const TAccountLockout::TInitializer& accountLockoutInitializer);
     TLoginProvider(const TPasswordComplexity& passwordComplexity,
-        const TAccountLockout::TInitializer& accountLockoutInitializer,
-        const std::function<bool()>& isCacheUsed,
-        const TCacheSettings& cacheSettings);
+        const TAccountLockout::TInitializer& accountLockoutInitializer);
     ~TLoginProvider();
 
     std::vector<TString> GetGroupsMembership(const TString& member) const;
+    static bool CanDecodeToken(const TString& token);
     static TString GetTokenAudience(const TString& token);
     static std::chrono::system_clock::time_point GetTokenExpiresAt(const TString& token);
     static TString SanitizeJwtToken(const TString& token);
@@ -270,7 +285,8 @@ private:
     static void UnlockAccount(TSidRecord* sid);
     bool ShouldResetFailedAttemptCount(const TSidRecord& sid) const;
     bool ShouldUnlockAccount(const TSidRecord& sid) const;
-    bool CheckPasswordOrHash(bool IsHashedPassword, const TString& user, const TString& password, TString& error) const;
+    bool CheckHashes(const TString& hashedPassword, TString& error) const;
+    bool CheckPassword(const TString& user, const TString& password, TString& error) const;
     TSidRecord* GetUserSid(const TString& user);
     bool FillUnavailableKey(TPasswordCheckResult* checkResult) const;
     bool FillInvalidUser(const TSidRecord* sid, TPasswordCheckResult* checkResult) const;
@@ -280,7 +296,6 @@ private:
     THolder<TImpl> Impl;
 
     TPasswordChecker PasswordChecker;
-    THashChecker HashChecker;
     TAccountLockout AccountLockout;
 };
 

@@ -17,6 +17,8 @@
 #include <yt/yt/core/misc/proc.h>
 #include "yt/yt/core/misc/protobuf_helpers.h"
 
+#include <library/cpp/yt/system/thread_id.h>
+
 #include <library/cpp/yt/cpu_clock/clock.h>
 
 #include <library/cpp/yt/misc/hash.h>
@@ -143,7 +145,7 @@ void TSignalSafeProfiler::RecordSample(NBacktrace::TFramePointerCursor* cursor, 
     auto tagsPtr = GetCpuProfilerTags();
 
     uintptr_t threadName[2] = {};
-    prctl(PR_GET_NAME, (unsigned long)threadName, 0UL, 0UL, 0UL);
+    prctl(PR_GET_NAME, reinterpret_cast<unsigned long>(&threadName[0]), 0UL, 0UL, 0UL);
     int namePushed = 0;
 
     auto ok = Queue_.TryPush([&] () -> std::pair<const void*, bool> {
@@ -154,7 +156,7 @@ void TSignalSafeProfiler::RecordSample(NBacktrace::TFramePointerCursor* cursor, 
 
         if (!pushTid) {
             pushTid = true;
-            return {reinterpret_cast<void*>(GetCurrentThreadId()), true};
+            return {reinterpret_cast<void*>(GetSystemThreadId()), true};
         }
 
         if (Options_.RecordActionRunTime && !pushActionRunTime) {
@@ -272,7 +274,7 @@ void TSignalSafeProfiler::DequeueSamples()
                 break;
             }
 
-            sample.ThreadName = TString{reinterpret_cast<char*>(threadName)};
+            sample.ThreadName = std::string{reinterpret_cast<char*>(threadName)};
             sample.Tid = *tid;
             for (auto& tag : ReadFiberTags(*fiberStorage)) {
                 sample.Tags.push_back(std::move(tag));

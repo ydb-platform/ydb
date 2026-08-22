@@ -1,4 +1,6 @@
 items:
+- name: dbt
+  href: dbt.md
 - name: Flyway
   href: flyway.md
 - name: goose

@@ -80,7 +80,7 @@ struct TVDiskDelayEmulator {
             }
             return true;
         }
-        
+
         ui32 type = ev->GetTypeRewrite();
         auto it = EventHandlers.find(type);
         if (it != EventHandlers.end() && it->second) {

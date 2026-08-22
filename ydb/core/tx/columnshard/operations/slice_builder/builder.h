@@ -25,13 +25,13 @@ public:
         return "Write::ConstructBlobs::Slices";
     }
 
-    TBuildSlicesTask(NEvWrite::TWriteData&& writeData, const std::shared_ptr<arrow::RecordBatch>& batch,
-        const TWritingContext& context)
+    TBuildSlicesTask(NEvWrite::TWriteData&& writeData, const std::shared_ptr<arrow::RecordBatch>& batch, const TWritingContext& context)
         : WriteData(std::move(writeData))
         , TabletId(context.GetTabletId())
         , OriginalBatch(batch)
-        , Context(context) {
-        WriteData.MutableWriteMeta().OnStage(NEvWrite::EWriteStage::BuildSlices);
+        , Context(context)
+    {
+        WriteData.MutableWriteMeta().OnStage(NEvWrite::EWriteStage::SlicesConstruction);
     }
 };
 }   // namespace NKikimr::NOlap

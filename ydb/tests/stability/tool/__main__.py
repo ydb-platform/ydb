@@ -111,9 +111,17 @@ DICT_OF_PROCESSES = {
                 echo "Stopped"
             fi"""
     },
+    'statistics' : {
+        'status' : """
+            if ps aux | grep -E "/Berkanavt/nemesis/bin/statistics|/tmp/statistics_wrapper.sh" | grep -v grep > /dev/null; then
+                echo "Running"
+            else
+                echo "Stopped"
+            fi"""
+    },
     'workload_log_column' : {
         'status' : """
-            if ps aux | grep -E "/Berkanavt/nemesis/bin/ydb_cli.*workload.*log.*run.*bulk_upsert.*log_workload_column|/tmp/workload_log_column_wrapper.sh" | grep -v grep > /dev/null; then
+            if ps aux | grep -E "/Berkanavt/nemesis/bin/ydb_cli.*workload.*log.*run.*bulk.upsert.*log_workload_column|/tmp/workload_log_column_wrapper.sh" | grep -v grep > /dev/null; then
                 echo "Running"
             else
                 echo "Stopped"
@@ -121,7 +129,7 @@ DICT_OF_PROCESSES = {
     },
     'workload_log_row' : {
         'status' : """
-            if ps aux | grep -E "/Berkanavt/nemesis/bin/ydb_cli.*workload.*log.*run.*bulk_upsert.*log_workload_row|/tmp/workload_log_row_wrapper.sh" | grep -v grep > /dev/null; then
+            if ps aux | grep -E "/Berkanavt/nemesis/bin/ydb_cli.*workload.*log.*run.*bulk.upsert.*log_workload_row|/tmp/workload_log_row_wrapper.sh" | grep -v grep > /dev/null; then
                 echo "Running"
             else
                 echo "Stopped"
@@ -145,12 +153,36 @@ DICT_OF_PROCESSES = {
     },
     'workload_topic' : {
         'status' : """
-            if ps aux | grep -E "/Berkanavt/nemesis/bin/ydb_cli.*workload.*topic.*run.*|/tmp/workload_topic.sh" | grep -v grep > /dev/null; then
+            if ps aux | grep -E "/Berkanavt/nemesis/bin/topic_workload|/tmp/topic_workload.sh" | grep -v grep > /dev/null; then
                 echo "Running"
             else
                 echo "Stopped"
             fi"""
-    }
+    },
+    'workload_ctas' : {
+        'status' : """
+            if ps aux | grep -E "/Berkanavt/nemesis/bin/ctas_workload|/tmp/ctas_workload.sh" | grep -v grep > /dev/null; then
+                echo "Running"
+            else
+                echo "Stopped"
+            fi"""
+    },
+    'workload_topic_kafka' : {
+        'status' : """
+            if ps aux | grep -E "/Berkanavt/nemesis/bin/topic_kafka_workload|/tmp/topic_kafka_workload.sh" | grep -v grep > /dev/null; then
+                echo "Running"
+            else
+                echo "Stopped"
+            fi"""
+    },
+    'workload_kafka' : {
+        'status' : """
+            if ps aux | grep -E "/Berkanavt/nemesis/bin/kafka_workload|/tmp/kafka_workload.sh" | grep -v grep > /dev/null; then
+                echo "Running"
+            else
+                echo "Stopped"
+            fi"""
+    },
 }
 
 
@@ -187,10 +219,14 @@ class CustomArgumentParser(argparse.ArgumentParser):
                 "start_workload_node_broker_workload": "Start Node Broker workload",
                 "start_workload_transfer_workload": "Start topic to table transfer workload",
                 "start_workload_s3_backups_workload": "Start auto removal of tmp tables workload",
+                "start_topic_kafka_workload": "start_topic_kafka_workload",
+                "start_kafka_workload": "start_kafka_workload",
+                "start_ctas_workload": "start_ctas_workload",
                 "start_workload_log": "Start log workloads with both row and column storage",
                 "start_workload_log_column": "Start log workload with column storage",
                 "start_workload_log_row": "Start log workload with row storage",
                 "start_workload_topic": "Start topic workload",
+                "start_statistics_workload": "Start statistics workload",
                 "stop_workloads": "Stop all workloads",
                 "stop_workload": "Stop a specific workload (requires --name)",
                 "perform_checks": "Run safety and liveness checks on the cluster",
@@ -224,13 +260,14 @@ class bcolors:
 
 
 class StabilityCluster:
-    def __init__(self, ssh_username, cluster_path, ydbd_path=None, ydbd_next_path=None):
+    def __init__(self, ssh_username, cluster_path, ydbd_path=None, ydbd_next_path=None, yaml_config=None):
         self.working_dir = os.path.join(tempfile.gettempdir(), "ydb_stability")
         os.makedirs(self.working_dir, exist_ok=True)
         self.ssh_username = ssh_username
         self.slice_directory = cluster_path
         self.ydbd_path = ydbd_path
         self.ydbd_next_path = ydbd_next_path
+        self.yaml_config = yaml_config
 
         self.artifacts = (
             self._unpack_resource('nemesis'),
@@ -241,17 +278,31 @@ class StabilityCluster:
             self._unpack_resource('transfer_workload'),
             self._unpack_resource('s3_backups_workload'),
             self._unpack_resource('statistics_workload'),
+            self._unpack_resource('ctas_workload'),
+            self._unpack_resource('topic_kafka_workload'),
+            self._unpack_resource('kafka_workload'),
+            self._unpack_resource('topic_workload'),
             self._unpack_resource('ydb_cli'),
         )
 
-        self.kikimr_cluster = ExternalKiKiMRCluster(
-            config_path=self.slice_directory,
-            kikimr_configure_binary_path=self._unpack_resource("cfg"),
-            kikimr_path=self.ydbd_path,
-            kikimr_next_path=self.ydbd_next_path,
-            ssh_username=self.ssh_username,
-            deploy_cluster=True,
-        )
+        if self.yaml_config is None:
+            self.kikimr_cluster = ExternalKiKiMRCluster(
+                cluster_template=self.slice_directory,
+                kikimr_configure_binary_path=self._unpack_resource("cfg"),
+                kikimr_path=self.ydbd_path,
+                kikimr_next_path=self.ydbd_next_path,
+                ssh_username=self.ssh_username,
+                deploy_cluster=True,
+            )
+        else:
+            self.kikimr_cluster = ExternalKiKiMRCluster(
+                cluster_template=self.slice_directory,
+                kikimr_configure_binary_path=None,
+                kikimr_path=self.ydbd_path,
+                kikimr_next_path=self.ydbd_next_path,
+                ssh_username=self.ssh_username,
+                yaml_config=self.yaml_config,
+            )
 
     def _unpack_resource(self, name):
         res = resource.find(name)
@@ -401,7 +452,7 @@ class StabilityCluster:
             print(f'    {node}: {minidumps_search_results[node]}')
 
     def start_nemesis(self):
-        self.prepare_cluster_yaml()
+        self.prepare_config_files()
         with ThreadPoolExecutor() as pool:
             pool.map(lambda node: node.ssh_command(DICT_OF_SERVICES['nemesis']['start_command'], raise_on_error=True), self.kikimr_cluster.nodes.values())
 
@@ -436,7 +487,8 @@ class StabilityCluster:
 
         # На всякий случай убиваем все потенциальные процессы рабочих нагрузок
         node.ssh_command(
-            'pkill -f "SCREEN.*workload\\|simple_queue\\|olap_workload\\|oltp_workload\\|node_broker_workload\\|transfer_workload\\|s3_backups_workload"',
+            'pkill -f "SCREEN.*workload\\|simple_queue\\|olap_workload\\|oltp_workload\\|node_broker_workload\\|transfer_workload\\|s3_backups_workload\\|\
+                statistics_workload\\|kafka_workload\\|topic_kafka_workload\\|ctas_workload\\|topic_workload\\|"',
             raise_on_error=False
         )
 
@@ -540,8 +592,157 @@ class StabilityCluster:
         print(f"{bcolors.OKGREEN}Завершено выполнение остановки {workload_name} на всех узлах{bcolors.ENDC}")
 
     def stop_nemesis(self):
+        print(f"{bcolors.BOLD}{bcolors.HEADER}=== ОСТАНОВКА NEMESIS ==={bcolors.ENDC}")
+
+        # Останавливаем nemesis на всех нодах
         with ThreadPoolExecutor() as pool:
             pool.map(lambda node: node.ssh_command(DICT_OF_SERVICES['nemesis']['stop_command'], raise_on_error=False), self.kikimr_cluster.nodes.values())
+
+        print(f"{bcolors.OKGREEN}Nemesis остановлен на всех нодах{bcolors.ENDC}")
+
+        # Автоматически восстанавливаем кластер после остановки nemesis
+        print(f"\n{bcolors.BOLD}{bcolors.OKCYAN}=== АВТОМАТИЧЕСКОЕ ВОССТАНОВЛЕНИЕ ПОСЛЕ ОСТАНОВКИ NEMESIS ==={bcolors.ENDC}")
+        self.restore_cluster()
+
+    def restore_cluster(self):
+        """
+        Восстанавливает сетевую связанность кластера, нарушенную nemesis.
+        Восстанавливает только порты и маршруты, не трогает сервисы YDB.
+        """
+        print(f"{bcolors.BOLD}{bcolors.HEADER}=== ВОССТАНОВЛЕНИЕ СЕТЕВОЙ СВЯЗАННОСТИ ==={bcolors.ENDC}")
+
+        # Счетчики для итоговой статистики
+        total_nodes = len(self.kikimr_cluster.nodes.values())
+        restored_nodes = 0
+        cleared_fw_rules = 0
+        cleared_routes = 0
+        available_ports = 0
+
+        with ThreadPoolExecutor() as pool:
+            # Восстанавливаем сетевую связанность всех нод параллельно
+            results = list(pool.map(self._restore_node, self.kikimr_cluster.nodes.values()))
+
+        # Подсчитываем результаты
+        for result in results:
+            if result:
+                restored_nodes += 1
+                cleared_fw_rules += result.get('fw_cleared', 0)
+                cleared_routes += result.get('routes_cleared', 0)
+                available_ports += result.get('available_ports', 0)
+
+        # Выводим итоговую статистику
+        print(f"\n{bcolors.BOLD}📊 ИТОГОВАЯ СТАТИСТИКА:{bcolors.ENDC}")
+        print(f"  ✅ Восстановлено нод: {restored_nodes}/{total_nodes}")
+
+        # Статистика нарушений
+        total_violations = cleared_fw_rules + cleared_routes
+        if total_violations > 0:
+            print(f"  🔧 Исправлено нарушений: {total_violations}")
+            print(f"    • Правил ip6tables: {cleared_fw_rules}")
+            print(f"    • Недоступных маршрутов: {cleared_routes}")
+        else:
+            print("  ✅ Нарушений не обнаружено")
+
+        # Итоговое сообщение
+        if restored_nodes == total_nodes:
+            if total_violations > 0:
+                print(f"\n{bcolors.OKGREEN}🎉 Восстановление завершено! Исправлено {total_violations} нарушений.{bcolors.ENDC}")
+            else:
+                print(f"\n{bcolors.OKGREEN}🎉 Восстановление завершено! Нарушений не обнаружено.{bcolors.ENDC}")
+        else:
+            print(f"\n{bcolors.WARNING}⚠️  Восстановление завершено с предупреждениями{bcolors.ENDC}")
+
+    def _restore_node(self, node):
+        """
+        Восстанавливает сетевую связанность ноды кластера.
+        Восстанавливает только порты и маршруты, не трогает сервисы YDB.
+
+        Args:
+            node: Нода кластера для восстановления
+
+        Returns:
+            dict: Статистика восстановления ноды
+        """
+        node_host = node.host.split(':')[0]
+
+        # Статистика для возврата
+        stats = {
+            'node': node_host,
+            'fw_cleared': 0,
+            'routes_cleared': 0,
+            'available_ports': 0,
+            'success': False
+        }
+
+        try:
+            # 1. Проверяем и восстанавливаем сетевые правила
+            fw_rules_cleared = 0
+            routes_cleared = 0
+
+            # Проверяем правила ip6tables YDB_FW
+            fw_check = node.ssh_command("sudo /sbin/ip6tables -w -L YDB_FW 2>/dev/null | grep -v 'Chain YDB_FW' | grep -v 'target' | wc -l", raise_on_error=False)
+            if fw_check:
+                try:
+                    rules_count = int(fw_check.decode('utf-8').strip())
+                    if rules_count > 0:
+                        fw_result = node.ssh_command("sudo /sbin/ip6tables -w -F YDB_FW", raise_on_error=False)
+                        if fw_result:
+                            fw_rules_cleared = rules_count
+                            print(f"    🔧 Найдено и очищено {rules_count} правил ip6tables")
+                except (ValueError, AttributeError):
+                    pass
+
+            # Проверяем и удаляем недоступные маршруты
+            unreach_result = node.ssh_command("sudo /usr/bin/ip -6 route show | grep unreachable", raise_on_error=False)
+            if unreach_result:
+                unreach_routes = unreach_result.decode('utf-8').strip().split('\n')
+                found_routes = 0
+                for route in unreach_routes:
+                    if route.strip():
+                        ip_match = re.search(r'unreachable\s+([^\s]+)', route)
+                        if ip_match:
+                            ip = ip_match.group(1)
+                            node.ssh_command(f"sudo /usr/bin/ip -6 route del unreachable {ip}", raise_on_error=False)
+                            routes_cleared += 1
+                            found_routes += 1
+
+                if found_routes > 0:
+                    print(f"    🔧 Найдено и удалено {found_routes} недоступных маршрутов")
+
+            # 2. Проверяем сетевую доступность
+            ports_to_check = [2135, 2136, 8765, 19001]
+            available_ports_count = 0
+
+            for port in ports_to_check:
+                port_result = node.ssh_command(f"nc -z localhost {port}", raise_on_error=False)
+                if port_result:
+                    available_ports_count += 1
+
+            # Обновляем статистику
+            stats['fw_cleared'] = fw_rules_cleared
+            stats['routes_cleared'] = routes_cleared
+            stats['available_ports'] = available_ports_count
+            stats['success'] = True
+
+            # Краткий вывод для ноды с указанием нарушений
+            status_icon = "✅" if stats['success'] else "❌"
+            violations = []
+            if fw_rules_cleared > 0:
+                violations.append(f"FW:{fw_rules_cleared}")
+            if routes_cleared > 0:
+                violations.append(f"Routes:{routes_cleared}")
+
+            if violations:
+                violations_str = f" [Исправлено: {', '.join(violations)}]"
+            else:
+                violations_str = " [Нарушений не найдено]"
+
+            print(f"{status_icon} {node_host}: Ports={available_ports_count}/4{violations_str}")
+
+        except Exception as e:
+            print(f"❌ {node_host}: Ошибка - {e}")
+
+        return stats
 
     def get_state(self):
         logging.getLogger().setLevel(logging.WARNING)
@@ -550,16 +751,19 @@ class StabilityCluster:
             node_host = node.host.split(':')[0]
             print(f'{bcolors.BOLD}{node_host}{bcolors.ENDC}:')
             for state_object in state_objects_dic:
-                result = node.ssh_command(
-                    state_objects_dic[state_object]['status'],
-                    raise_on_error=True
-                )
-                status = result.decode('utf-8').replace('\n', '')
-                if status == 'Running' :
-                    status = bcolors.OKGREEN + status + bcolors.ENDC
-                else:
-                    status = bcolors.FAIL + status + bcolors.ENDC
-                print(f'\t{state_object}:\t{status}')
+                try:
+                    result = node.ssh_command(
+                        state_objects_dic[state_object]['status'],
+                        raise_on_error=True
+                    )
+                    status = result.decode('utf-8').replace('\n', '')
+                    if status == 'Running' :
+                        status = bcolors.OKGREEN + status + bcolors.ENDC
+                    else:
+                        status = bcolors.FAIL + status + bcolors.ENDC
+                    print(f'\t{state_object}:\t{status}')
+                except Exception as e:
+                    print(f'\t{state_object}:\t{bcolors.FAIL}{e}{bcolors.ENDC}')
 
     def cleanup(self, mode='all'):
         for node in self.kikimr_cluster.nodes.values():
@@ -603,17 +807,27 @@ class StabilityCluster:
             )
             node.ssh_command(f"sudo chmod 777 {node_artifact_path}", raise_on_error=False)
 
-    def prepare_cluster_yaml(self):
+    def prepare_config_files(self):
         with ThreadPoolExecutor() as pool:
-            pool.map(lambda node: node.copy_file_or_dir(
-                self.slice_directory,
-                '/Berkanavt/kikimr/cfg/cluster.yaml'
-            ), self.kikimr_cluster.nodes.values())
+            if self.yaml_config is None:
+                pool.map(lambda node: node.copy_file_or_dir(
+                    self.slice_directory,
+                    '/Berkanavt/kikimr/cfg/cluster.yaml'
+                ), self.kikimr_cluster.nodes.values())
+            else:
+                pool.map(lambda node: node.copy_file_or_dir(
+                    self.slice_directory,
+                    '/Berkanavt/kikimr/cfg/databases.yaml'
+                ), self.kikimr_cluster.nodes.values())
+                pool.map(lambda node: node.copy_file_or_dir(
+                    self.yaml_config,
+                    '/Berkanavt/kikimr/cfg/config.yaml'
+                ), self.kikimr_cluster.nodes.values())
 
     def deploy_tools(self):
         with ThreadPoolExecutor(len(self.kikimr_cluster.nodes)) as pool:
             pool.map(self.deploy_node_tools, self.kikimr_cluster.nodes.values())
-        self.prepare_cluster_yaml()
+        self.prepare_config_files()
 
     def get_workload_outputs(self, mode='err', last_n_lines=10):
         """Capture last N lines of output from all running workload screens."""
@@ -869,6 +1083,31 @@ handle_timeout() {{
     echo "[$(date +'%Y-%m-%d %H:%M:%S.%N')] Performing s3_backups_workload specific cleanup"
     # Убиваем процессы s3_backups_workload
     pkill -9 -f "s3_backups_workload" || true
+
+  elif [[ "{base_command}" == *"topic_workload"* ]]; then
+    echo "[$(date +'%Y-%m-%d %H:%M:%S.%N')] Performing topic_workload specific cleanup"
+    # Убиваем процессы topic_workload
+    pkill -9 -f "topic_workload" || true
+
+  elif [[ "{base_command}" == *"ctas_workload"* ]]; then
+    echo "[$(date +'%Y-%m-%d %H:%M:%S.%N')] Performing ctas_workload specific cleanup"
+    # Убиваем процессы ctas_workload
+    pkill -9 -f "ctas_workload" || true
+
+  elif [[ "{base_command}" == *"kafka_workload"* ]]; then
+    echo "[$(date +'%Y-%m-%d %H:%M:%S.%N')] Performing kafka_workload specific cleanup"
+    # Убиваем процессы kafka_workload
+    pkill -9 -f "kafka_workload" || true
+
+  elif [[ "{base_command}" == *"statistics_workload"* ]]; then
+    echo "[$(date +'%Y-%m-%d %H:%M:%S.%N')] Performing statistics_workload specific cleanup"
+    # Убиваем процессы statistics_workload
+    pkill -9 -f "statistics_workload" || true
+
+  elif [[ "{base_command}" == *"topic_kafka_workload"* ]]; then
+    echo "[$(date +'%Y-%m-%d %H:%M:%S.%N')] Performing topic_kafka_workload specific cleanup"
+    # Убиваем процессы topic_kafka_workload
+    pkill -9 -f "topic_kafka_workload" || true
   fi
 
   echo "[$(date +'%Y-%m-%d %H:%M:%S.%N')] Emergency cleanup completed"
@@ -958,7 +1197,7 @@ done
 
         # Use cat with a heredoc approach for more reliable script generation
         cmd = f"cat > {script_path} << 'EOFSCRIPT'\n{script_content}\nEOFSCRIPT\n" + \
-              f"chmod +x {script_path} && screen -S {workload_name} -d -m -L -Logfile {log_file} {script_path}"
+              f"sudo chmod +x {script_path} && screen -S {workload_name} -d -m -L -Logfile {log_file} {script_path}"
 
         return cmd
 
@@ -977,7 +1216,7 @@ done
             log_file = f'/tmp/{workload_name}.out.log'
 
         # Clean log file
-        node.ssh_command(['rm', '-f', log_file], raise_on_error=False)
+        node.ssh_command(['sudo', 'rm', '-f', log_file], raise_on_error=False)
 
         # Create and run command
         screen_command = self._create_workload_command(workload_name, command, log_file)
@@ -1041,6 +1280,13 @@ Common usage scenarios:
         help="Path to next ydbd version binary (for cross-version testing)",
     )
     parser.add_argument(
+        "--yaml-config",
+        required=False,
+        default=None,
+        type=path_type,
+        help="Path to Yandex DB configuration v2",
+    )
+    parser.add_argument(
         "--ssh_user",
         required=False,
         default=getpass.getuser(),
@@ -1061,7 +1307,8 @@ Common usage scenarios:
         "deploy_ydb": "Deploy YDB cluster and configure it",
         "deploy_tools": "Deploy workload tools to the cluster nodes",
         "start_nemesis": "Start the nemesis service",
-        "stop_nemesis": "Stop the nemesis service",
+        "stop_nemesis": "Stop the nemesis service and automatically restore cluster",
+        "restore_cluster": "Restore network connectivity (ports and routes) caused by nemesis",
         "start_default_workloads": "Start all default workloads on the cluster",
         "start_workload_simple_queue_row": "Start simple_queue workload with row storage",
         "start_workload_simple_queue_column": "Start simple_queue workload with column storage",
@@ -1070,10 +1317,14 @@ Common usage scenarios:
         "start_workload_node_broker_workload": "Start Node Broker workload",
         "start_workload_transfer_workload": "Start topic to table transfer workload",
         "start_workload_s3_backups_workload": "Start auto removal of tmp tables workload",
+        "start_topic_kafka_workload": "Start auto removal of tmp tables workload",
+        "start_kafka_workload": "Start auto removal of tmp tables workload",
+        "start_ctas_workload": "Start auto removal of tmp tables workload",
         "start_workload_log": "Start log workloads with both row and column storage",
         "start_workload_log_column": "Start log workload with column storage",
         "start_workload_log_row": "Start log workload with row storage",
         "start_workload_topic": "Start topic workload",
+        "start_statistics_workload": "Start statistics workload",
         "stop_workloads": "Stop all workloads",
         "stop_workload": "Stop a specific workload (requires --name)",
         "perform_checks": "Run safety and liveness checks on the cluster",
@@ -1084,7 +1335,7 @@ Common usage scenarios:
     action_categories = {
         "CLUSTER MANAGEMENT": [
             "deploy_ydb", "deploy_tools", "start_nemesis", "stop_nemesis",
-            "get_state", "perform_checks"
+            "restore_cluster", "get_state", "perform_checks"
         ],
         "ERROR HANDLING": [
             "get_errors", "get_errors_aggr", "get_errors_last"
@@ -1103,8 +1354,12 @@ Common usage scenarios:
             "start_workload_node_broker_workload",
             "start_workload_transfer_workload",
             "start_workload_s3_backups_workload",
+            "start_topic_kafka_workload",
+            "start_kafka_workload",
+            "start_ctas_workload",
             "start_workload_log", "start_workload_log_column", "start_workload_log_row",
             "start_workload_topic",
+            "start_statistics_workload",
         ]
     }
 
@@ -1184,12 +1439,14 @@ Common usage scenarios:
 def main():
     args = parse_args()
     ssh_username = args.ssh_user
+    yaml_config = args.yaml_config
     print('Initing cluster info')
     stability_cluster = StabilityCluster(
         ssh_username=ssh_username,
         cluster_path=args.cluster_path,
         ydbd_path=args.ydbd_path,
         ydbd_next_path=args.next_ydbd_path,
+        yaml_config=yaml_config,
     )
 
     for action in args.actions:
@@ -1292,7 +1549,7 @@ def main():
                         f'workload_log_{store_type}',
                         (
                             f'/Berkanavt/nemesis/bin/ydb_cli --endpoint grpc://localhost:{node.grpc_port} '
-                            f'--database /Root/db1 workload log run bulk_upsert --rows 2000 --threads 10 '
+                            f'--database /Root/db1 workload log run bulk-upsert --rows 2000 --threads 10 '
                             f'--timestamp_deviation 180 --seconds 86400 --path log_workload_{store_type}'
                         )
                     )
@@ -1310,35 +1567,15 @@ def main():
                     )
             stability_cluster.get_state()
         if action == "start_workload_topic":
-            def run_topic_workload(node):
-                node.ssh_command(['rm', '-f', '/tmp/workload_topic.out.log'], raise_on_error=False)
-
+            for node_id, node in enumerate(stability_cluster.kikimr_cluster.nodes.values()):
                 stability_cluster._clean_and_start_workload(
                     node,
-                    'workload_topic',
-                    (
-                        f'/Berkanavt/nemesis/bin/ydb_cli --verbose --endpoint grpc://localhost:{node.grpc_port} '
-                        f'--database /Root/db1 workload topic run full -s 60 --byte-rate 100M --use-tx --tx-commit-interval 2000 -p 100 -c 50'
-                    ),
-                    '/tmp/workload_topic.out.log'
+                    'topic_workload',
+                    f"""/Berkanavt/nemesis/bin/topic_workload --database /Root/db1 \
+                    --endpoint grpc://localhost:{node.grpc_port} \
+                    --topic_prefix topics/topic_{node_id}_ \
+                    --duration 120"""
                 )
-            init_node = list(stability_cluster.kikimr_cluster.nodes.values())[0]
-            init_node.ssh_command([
-                '/Berkanavt/nemesis/bin/ydb_cli',
-                '--verbose',
-                '--endpoint',
-                f'grpc://localhost:{init_node.grpc_port}',
-                '--database',
-                '/Root/db1',
-                'workload',
-                'topic',
-                'init',
-                '-c',
-                '50',
-                '-p',
-                '100'], raise_on_error=False)
-            with ThreadPoolExecutor() as pool:
-                pool.map(run_topic_workload, stability_cluster.kikimr_cluster.nodes.values())
             stability_cluster.get_state()
         if action == "start_workload_simple_queue_row":
             for node_id, node in enumerate(stability_cluster.kikimr_cluster.nodes.values()):
@@ -1398,6 +1635,53 @@ def main():
                     '/Berkanavt/nemesis/bin/s3_backups_workload --database /Root/db1'
                 )
             stability_cluster.get_state()
+        if action == "start_topic_kafka_workload":
+            for node_id, node in enumerate(stability_cluster.kikimr_cluster.nodes.values()):
+                stability_cluster._clean_and_start_workload(
+                    node,
+                    'topic_kafka_workload',
+                    f"""/Berkanavt/nemesis/bin/topic_kafka_workload --database /Root/db1 --topic_prefix topic_kafka/{node_id}_$RANDOM \
+                    --duration 120 \
+                    --consumers 2 \
+                    --consumer-threads 2 \
+                    --restart-interval 15s \
+                    --partitions 4 \
+                    --write-workload 0.01 9000000 2 big_record 1 \
+                    --write-workload 8000 45 1000 small_record 10 \
+                    --write-workload 800 409 1 medium_record 10"""
+                )
+            stability_cluster.get_state()
+        if action == "start_kafka_workload":
+            for node_id, node in enumerate(stability_cluster.kikimr_cluster.nodes.values()):
+                stability_cluster._clean_and_start_workload(
+                    node,
+                    'kafka_workload',
+                    f"""/Berkanavt/nemesis/bin/kafka_workload --database /Root/db1 \
+                    --endpoint grpc://localhost:{node.grpc_port} \
+                    --bootstrap http://localhost:11223 \
+                    --source-path kafka/test-topic-{node_id} \
+                    --target-path kafka/target-topic-{node_id} \
+                    --consumer workload-consumer-0 \
+                    --num-workers 2 \
+                    --duration 120"""
+                )
+            stability_cluster.get_state()
+        if action == "start_ctas_workload":
+            for node_id, node in enumerate(stability_cluster.kikimr_cluster.nodes.values()):
+                stability_cluster._clean_and_start_workload(
+                    node,
+                    'ctas_workload',
+                    f'/Berkanavt/nemesis/bin/ctas_workload --database /Root/db1 --path {node_id}'
+                )
+            stability_cluster.get_state()
+        if action == "start_statistics_workload":
+            for node_id, node in enumerate(stability_cluster.kikimr_cluster.nodes.values()):
+                stability_cluster._clean_and_start_workload(
+                    node,
+                    'statistics_workload',
+                    f'/Berkanavt/nemesis/bin/statistics_workload --database /Root/db1 --prefix statistics_workload/{node_id}/table'
+                )
+            stability_cluster.get_state()
         if action == "stop_workloads":
             stability_cluster.stop_workloads_all_nodes()
             stability_cluster.get_state()
@@ -1408,6 +1692,10 @@ def main():
 
         if action == "start_nemesis":
             stability_cluster.start_nemesis()
+            stability_cluster.get_state()
+
+        if action == "restore_cluster":
+            stability_cluster.restore_cluster()
             stability_cluster.get_state()
 
         if action == "perform_checks":

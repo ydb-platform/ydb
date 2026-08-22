@@ -93,7 +93,7 @@ TFuture<void> TPeriodicExecutorBase<TInvocationTimePolicy>::Stop()
         return idlePromise;
     } else {
         DoStop(guard);
-        return VoidFuture;
+        return OKFuture;
     }
 }
 
@@ -166,18 +166,17 @@ void TPeriodicExecutorBase<TInvocationTimePolicy>::PostDelayedCallback(TInstant 
 template <CInvocationTimePolicy TInvocationTimePolicy>
 void TPeriodicExecutorBase<TInvocationTimePolicy>::PostCallback()
 {
-    GuardedInvoke(
-        Invoker_,
-        [this, weakThis = MakeWeak(this)] {
+    Invoker_->Invoke(MakeGuardedCallback(
+        BIND_NO_PROPAGATE([this, weakThis = MakeWeak(this)] {
             if (auto this_ = weakThis.Lock()) {
                 RunCallback();
             }
-        },
-        [this, weakThis = MakeWeak(this)] {
+        }),
+        BIND_NO_PROPAGATE([this, weakThis = MakeWeak(this)] {
             if (auto this_ = weakThis.Lock()) {
                 OnCallbackCancelled();
             }
-        });
+        })));
 }
 
 template <CInvocationTimePolicy TInvocationTimePolicy>
@@ -318,9 +317,14 @@ void TPeriodicExecutorBase<TInvocationTimePolicy>::DoRunCallback()
 {
     if constexpr (std::same_as<TCallbackResult, void>) {
         Callback_();
+
+        auto guard = Guard(SpinLock_);
         TInvocationTimePolicy::ProcessResult();
     } else {
-        TInvocationTimePolicy::ProcessResult(Callback_());
+        auto&& result = Callback_();
+
+        auto guard = Guard(SpinLock_);
+        TInvocationTimePolicy::ProcessResult(std::forward<decltype(result)>(result));
     }
 }
 

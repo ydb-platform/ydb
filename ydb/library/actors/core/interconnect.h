@@ -7,15 +7,24 @@
 #include <util/string/cast.h>
 #include <util/string/builder.h>
 
+#include <memory>
+
 namespace NActors {
+    // Defined in ydb/library/actors/interconnect/interconnect_direct_session.h; forward declared here to
+    // avoid a dependency from actors/core onto actors/interconnect. Only referenced through shared_ptr.
+    class IDirectSession;
+
     class TNodeLocation {
     public:
         struct TKeys {
             enum E : int {
+                BridgePileName = 5,
                 DataCenter = 10,
                 Module = 20,
                 Rack = 30,
                 Unit = 40,
+                // value 50 is used for PDisk domain mapping
+                // DiskScope = 50,
             };
         };
 
@@ -88,6 +97,17 @@ namespace NActors {
         TLegacyValue GetLegacyValue() const;
 
         const std::vector<std::pair<TKeys::E, TString>>& GetItems() const { return Items; }
+
+        const std::optional<TString> GetBridgePileName() const {
+            if (Items.empty()) {
+                return std::nullopt;
+            }
+
+            auto& [key, value] = Items.front();
+            return key == TKeys::BridgePileName
+                ? std::make_optional(value)
+                : std::nullopt;
+        }
 
         bool HasKey(TKeys::E key) const {
             auto comp = [](const auto& p, TKeys::E value) { return p.first < value; };
@@ -167,7 +187,15 @@ namespace NActors {
                 : NodeId(node)
             {
             }
+            TEvNodeConnected(ui32 node, std::shared_ptr<IDirectSession> directSession) noexcept
+                : NodeId(node)
+                , DirectSession(std::move(directSession))
+            {
+            }
             const ui32 NodeId;
+            // Set only for TInterconnectSessionTCPv2 sessions; carries a thread-safe direct send/receive
+            // interface that bypasses the actor system. Null for classic (v1) sessions.
+            std::shared_ptr<IDirectSession> DirectSession;
         };
 
         struct TEvNodeDisconnected: public TEventLocal<TEvNodeDisconnected, EvNodeDisconnected> {
@@ -183,11 +211,13 @@ namespace NActors {
 
         struct TEvListNodes: public TEventLocal<TEvListNodes, EvListNodes> {
             const bool SubscribeToStaticNodeChanges = false;
+            const bool OnlyAliveDynamicNodes = true;
 
             TEvListNodes() = default;
 
-            TEvListNodes(bool subscribeToStaticNodeChanges)
+            TEvListNodes(bool subscribeToStaticNodeChanges, bool onlyAliveDynamicNodes = true)
                 : SubscribeToStaticNodeChanges(subscribeToStaticNodeChanges)
+                , OnlyAliveDynamicNodes(onlyAliveDynamicNodes)
             {}
         };
 
@@ -322,19 +352,23 @@ namespace NActors {
         };
 
         struct TEvCheckIncomingConnectionResult : TEventLocal<TEvCheckIncomingConnectionResult, EvCheckIncomingConnectionResult> {
-            std::variant<TString, THashMap<TString, TString>> Conclusion;
+            std::optional<TString> ErrorReason;
+            THashMap<TString, TString> ParamsToSend;
 
-            TEvCheckIncomingConnectionResult(std::variant<TString, THashMap<TString, TString>>&& conclusion)
-                : Conclusion(std::move(conclusion))
+            TEvCheckIncomingConnectionResult(std::optional<TString>&& errorReason, THashMap<TString, TString>&& paramsToSend)
+                : ErrorReason(std::move(errorReason))
+                , ParamsToSend(std::move(paramsToSend))
              {}
         };
 
         struct TEvNotifyOutgoingConnectionEstablished : TEventLocal<TEvNotifyOutgoingConnectionEstablished, EvNotifyOutgoingConnectionEstablished> {
             const ui32 PeerNodeId;
-            THashMap<TString, TString> Params; // parameters received upon successful handshake
+            const bool Success;
+            THashMap<TString, TString> Params;
 
-            TEvNotifyOutgoingConnectionEstablished(ui32 peerNodeId, THashMap<TString, TString>&& params)
+            TEvNotifyOutgoingConnectionEstablished(ui32 peerNodeId, const bool success, THashMap<TString, TString>&& params)
                 : PeerNodeId(peerNodeId)
+                , Success(success)
                 , Params(std::move(params))
             {}
         };

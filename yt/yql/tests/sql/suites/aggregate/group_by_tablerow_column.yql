@@ -1,0 +1,5 @@
+use plato;
+select *
+from Input
+group by TableRow().key as k
+order by k;

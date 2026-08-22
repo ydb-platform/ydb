@@ -1,42 +1,49 @@
 from ._base_response import EC2BaseResponse
+from ..exceptions import AuthFailureRestricted, InvalidRequest
 
 
 class AmisResponse(EC2BaseResponse):
-    def create_image(self):
-        name = self.querystring.get("Name")[0]
+    def create_image(self) -> str:
+        name = self.querystring.get("Name")[0]  # type: ignore[index]
         description = self._get_param("Description", if_none="")
         instance_id = self._get_param("InstanceId")
         tag_specifications = self._get_multi_param("TagSpecification")
-        if self.is_not_dryrun("CreateImage"):
-            image = self.ec2_backend.create_image(
-                instance_id,
-                name,
-                description,
-                tag_specifications=tag_specifications,
-            )
-            template = self.response_template(CREATE_IMAGE_RESPONSE)
-            return template.render(image=image)
 
-    def copy_image(self):
+        self.error_on_dryrun()
+
+        image = self.ec2_backend.create_image(
+            instance_id,
+            name,
+            description,
+            tag_specifications=tag_specifications,
+        )
+        template = self.response_template(CREATE_IMAGE_RESPONSE)
+        return template.render(image=image)
+
+    def copy_image(self) -> str:
         source_image_id = self._get_param("SourceImageId")
         source_region = self._get_param("SourceRegion")
         name = self._get_param("Name")
         description = self._get_param("Description")
-        if self.is_not_dryrun("CopyImage"):
-            image = self.ec2_backend.copy_image(
-                source_image_id, source_region, name, description
-            )
-            template = self.response_template(COPY_IMAGE_RESPONSE)
-            return template.render(image=image)
 
-    def deregister_image(self):
+        self.error_on_dryrun()
+
+        image = self.ec2_backend.copy_image(
+            source_image_id, source_region, name, description
+        )
+        template = self.response_template(COPY_IMAGE_RESPONSE)
+        return template.render(image=image)
+
+    def deregister_image(self) -> str:
         ami_id = self._get_param("ImageId")
-        if self.is_not_dryrun("DeregisterImage"):
-            success = self.ec2_backend.deregister_image(ami_id)
-            template = self.response_template(DEREGISTER_IMAGE_RESPONSE)
-            return template.render(success=str(success).lower())
 
-    def describe_images(self):
+        self.error_on_dryrun()
+
+        self.ec2_backend.deregister_image(ami_id)
+        template = self.response_template(DEREGISTER_IMAGE_RESPONSE)
+        return template.render(success="true")
+
+    def describe_images(self) -> str:
         self.error_on_dryrun()
         ami_ids = self._get_multi_param("ImageId")
         filters = self._filters_from_querystring()
@@ -48,42 +55,91 @@ class AmisResponse(EC2BaseResponse):
         template = self.response_template(DESCRIBE_IMAGES_RESPONSE)
         return template.render(images=images)
 
-    def describe_image_attribute(self):
+    def describe_image_attribute(self) -> str:
         ami_id = self._get_param("ImageId")
-        groups = self.ec2_backend.get_launch_permission_groups(ami_id)
-        users = self.ec2_backend.get_launch_permission_users(ami_id)
-        template = self.response_template(DESCRIBE_IMAGE_ATTRIBUTES_RESPONSE)
-        return template.render(ami_id=ami_id, groups=groups, users=users)
+        attribute_name = self._get_param("Attribute")
 
-    def modify_image_attribute(self):
+        # only valid attributes as per
+        # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/ec2/client/describe_image_attribute.html
+        valid_atrributes_list = {
+            "description": "description",
+            "kernel": "kernel_id",
+            "ramdisk": "ramdisk",
+            "launchPermission": {
+                "groups": "launch_permission_groups",
+                "users": "launch_permission_users",
+            },
+            "productCodes": "product_codes",
+            "blockDeviceMapping": "bdm",
+            "sriovNetSupport": "sriov",
+            "bootMode": "boot_mode",
+            "tpmSupport": "tmp",
+            "uefiData": "uefi",
+            "lastLaunchedTime": "lld",
+            "imdsSupport": "imds",
+        }
+        if attribute_name not in valid_atrributes_list:
+            raise InvalidRequest
+        elif attribute_name == "blockDeviceMapping":
+            # replicate real aws behaviour and throw and error
+            # https://github.com/aws/aws-cli/issues/1083
+            raise AuthFailureRestricted
+
+        groups = None
+        users = None
+        attribute_value = None
+        if attribute_name == "launchPermission":
+            groups = self.ec2_backend.describe_image_attribute(
+                ami_id, valid_atrributes_list[attribute_name]["groups"]  # type: ignore[index]
+            )
+            users = self.ec2_backend.describe_image_attribute(
+                ami_id, valid_atrributes_list[attribute_name]["users"]  # type: ignore[index]
+            )
+        else:
+            attribute_value = self.ec2_backend.describe_image_attribute(
+                ami_id, valid_atrributes_list[attribute_name]
+            )
+        template = self.response_template(DESCRIBE_IMAGE_ATTRIBUTES_RESPONSE)
+        return template.render(
+            ami_id=ami_id,
+            users=users,
+            groups=groups,
+            attribute_name=attribute_name,
+            attribute_value=attribute_value,
+        )
+
+    def modify_image_attribute(self) -> str:
         ami_id = self._get_param("ImageId")
         operation_type = self._get_param("OperationType")
         group = self._get_param("UserGroup.1")
         user_ids = self._get_multi_param("UserId")
-        if self.is_not_dryrun("ModifyImageAttribute"):
-            if operation_type == "add":
-                self.ec2_backend.add_launch_permission(
-                    ami_id, user_ids=user_ids, group=group
-                )
-            elif operation_type == "remove":
-                self.ec2_backend.remove_launch_permission(
-                    ami_id, user_ids=user_ids, group=group
-                )
-            return MODIFY_IMAGE_ATTRIBUTE_RESPONSE
 
-    def register_image(self):
-        name = self.querystring.get("Name")[0]
-        description = self._get_param("Description", if_none="")
-        if self.is_not_dryrun("RegisterImage"):
-            image = self.ec2_backend.register_image(name, description)
-            template = self.response_template(REGISTER_IMAGE_RESPONSE)
-            return template.render(image=image)
+        self.error_on_dryrun()
 
-    def reset_image_attribute(self):
-        if self.is_not_dryrun("ResetImageAttribute"):
-            raise NotImplementedError(
-                "AMIs.reset_image_attribute is not yet implemented"
+        if operation_type == "add":
+            self.ec2_backend.add_launch_permission(
+                ami_id, user_ids=user_ids, group=group
             )
+        elif operation_type == "remove":
+            self.ec2_backend.remove_launch_permission(
+                ami_id, user_ids=user_ids, group=group
+            )
+        return MODIFY_IMAGE_ATTRIBUTE_RESPONSE
+
+    def register_image(self) -> str:
+        name = self.querystring.get("Name")[0]  # type: ignore[index]
+        description = self._get_param("Description", if_none="")
+
+        self.error_on_dryrun()
+
+        image = self.ec2_backend.register_image(name, description)
+        template = self.response_template(REGISTER_IMAGE_RESPONSE)
+        return template.render(image=image)
+
+    def reset_image_attribute(self) -> str:
+        self.error_on_dryrun()
+
+        raise NotImplementedError("AMIs.reset_image_attribute is not yet implemented")
 
 
 CREATE_IMAGE_RESPONSE = """<CreateImageResponse xmlns="http://ec2.amazonaws.com/doc/2013-10-15/">
@@ -166,10 +222,16 @@ DESCRIBE_IMAGE_ATTRIBUTES_RESPONSE = """
 <DescribeImageAttributeResponse xmlns="http://ec2.amazonaws.com/doc/2013-10-15/">
    <requestId>59dbff89-35bd-4eac-99ed-be587EXAMPLE</requestId>
    <imageId>{{ ami_id }}</imageId>
-   {% if not groups and not users %}
-      <launchPermission/>
-   {% else %}
-      <launchPermission>
+    <{{ attribute_name }}>
+    {% if attribute_name == 'productCodes' %}
+        {% for value in attribute_value %}
+        <item>
+            <productCode>{{ value }}</productCode>
+            <type>marketplace</type>
+        </item>
+        {% endfor %}
+    {% endif %}
+    {% if attribute_name == 'launchPermission' %}
          {% if groups %}
             {% for group in groups %}
                <item>
@@ -184,8 +246,11 @@ DESCRIBE_IMAGE_ATTRIBUTES_RESPONSE = """
                </item>
             {% endfor %}
          {% endif %}
-      </launchPermission>
-   {% endif %}
+    {% endif %}
+    {% if attribute_name not in ['launchPermission', 'productCodes'] %}
+            <value>{{ attribute_value }}</value>
+    {% endif %}
+    </{{ attribute_name }}>
 </DescribeImageAttributeResponse>"""
 
 MODIFY_IMAGE_ATTRIBUTE_RESPONSE = """

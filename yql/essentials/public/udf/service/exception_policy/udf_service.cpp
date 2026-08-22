@@ -30,11 +30,11 @@ extern "C" void UdfFreeWithSize(const void* mem, ui64 size) {
     return ::NKikimr::NMiniKQL::TWithDefaultMiniKQLAlloc::FreeWithSize(mem, size);
 }
 
-extern "C" void* UdfArrowAllocate(ui64 size) { 
+extern "C" void* UdfArrowAllocate(ui64 size) {
     return ::NKikimr::NMiniKQL::MKQLArrowAllocate(size);
 }
 
-extern "C" void* UdfArrowReallocate(const void* mem, ui64 prevSize, ui64 size) { 
+extern "C" void* UdfArrowReallocate(const void* mem, ui64 prevSize, ui64 size) {
     return ::NKikimr::NMiniKQL::MKQLArrowReallocate(mem, prevSize, size);
 }
 

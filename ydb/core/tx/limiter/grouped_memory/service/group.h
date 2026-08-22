@@ -39,6 +39,8 @@ public:
     }
 
     std::vector<std::shared_ptr<TAllocationInfo>> AllocatePossible(const ui32 allocationsLimit);
+
+    TString DebugString() const;
 };
 
 class TAllocationGroups {
@@ -52,7 +54,7 @@ public:
 
     [[nodiscard]] bool Allocate(const bool isPriorityProcess, TProcessMemoryScope& process, const ui32 allocationsLimit);
 
-    [[nodiscard]] std::vector<std::shared_ptr<TAllocationInfo>> ExtractGroup(const ui64 id) {
+    [[nodiscard]] std::vector<std::shared_ptr<TAllocationInfo>> ExtractGroupExt(const ui64 id) {
         auto it = Groups.find(id);
         if (it == Groups.end()) {
             return {};
@@ -62,7 +64,7 @@ public:
         return result;
     }
 
-    std::optional<ui64> GetMinGroupId() const {
+    std::optional<ui64> GetMinExternalGroupId() const {
         if (Groups.size()) {
             return Groups.begin()->first;
         } else {
@@ -70,8 +72,8 @@ public:
         }
     }
 
-    [[nodiscard]] bool RemoveAllocation(const ui64 internalGroupId, const std::shared_ptr<TAllocationInfo>& allocation) {
-        auto groupIt = Groups.find(internalGroupId);
+    [[nodiscard]] bool RemoveAllocationExt(const ui64 externalGroupId, const std::shared_ptr<TAllocationInfo>& allocation) {
+        auto groupIt = Groups.find(externalGroupId);
         if (groupIt == Groups.end()) {
             return false;
         }
@@ -84,9 +86,11 @@ public:
         return true;
     }
 
-    void AddAllocation(const ui64 internalGroupId, const std::shared_ptr<TAllocationInfo>& allocation) {
-        Groups[internalGroupId].AddAllocation(allocation);
+    void AddAllocationExt(const ui64 externalGroupId, const std::shared_ptr<TAllocationInfo>& allocation) {
+        Groups[externalGroupId].AddAllocation(allocation);
     }
+
+    TString DebugString() const;
 };
 
 }   // namespace NKikimr::NOlap::NGroupedMemoryManager

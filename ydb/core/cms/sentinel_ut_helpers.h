@@ -19,6 +19,8 @@ auto& MockNodes = TFakeNodeWhiteboardService::Info;
 static constexpr ui32 DefaultStateLimit = 5;
 static constexpr ui32 GoodStateLimit = 5;
 static constexpr ui32 DefaultErrorStateLimit = 60;
+static constexpr TDuration ZeroGracePeriod = TDuration::Zero();
+static constexpr TInstant ZeroBootTimestamp = TInstant::Zero();
 auto DefaultStateLimits = NCms::TCmsSentinelConfig::DefaultStateLimits();
 
 static constexpr NCms::EPDiskState ErrorStates[] = {
@@ -68,6 +70,7 @@ class TTestEnv: public TCmsTestEnv {
         UNIT_ASSERT(DispatchEvents(options));
     }
 
+public:
     void SetPDiskStateImpl(const TSet<TPDiskID>& ids, EPDiskState state) {
         for (const auto& id : ids) {
             Y_ABORT_UNLESS(MockNodes.contains(id.NodeId));
@@ -82,8 +85,7 @@ class TTestEnv: public TCmsTestEnv {
         Send(new IEventHandle(Sentinel, TActorId(), new TEvSentinel::TEvUpdateState));
     }
 
-public:
-    explicit TTestEnv(ui32 nodeCount, ui32 pdisks, const NKikimrCms::TCmsConfig &config = {})
+    explicit TTestEnv(ui32 nodeCount, ui32 pdisks, NKikimrCms::TCmsConfig config = {})
         : TCmsTestEnv(nodeCount, pdisks)
     {
         SetLogPriority(NKikimrServices::CMS, NLog::PRI_DEBUG);
@@ -123,6 +125,11 @@ public:
         });
 
         State = new TCmsState;
+
+        auto* sentinelConfig = config.MutableSentinelConfig();
+        if (!sentinelConfig->HasInitialDeploymentGracePeriod()) {
+            sentinelConfig->SetInitialDeploymentGracePeriod(0);
+        }
         State->Config.Deserialize(config);
         MockClusterInfo(State->ClusterInfo);
         State->CmsActorId = GetSender();
@@ -130,6 +137,14 @@ public:
         Sentinel = Register(CreateSentinel(State));
         EnableScheduleForActor(Sentinel, true);
         WaitForSentinelBoot();
+    }
+
+    void MockBridgeModePiles(ui32 numPiles) {
+        auto& nodes = State->ClusterInfo->AllNodes();
+        for (auto& [id, info] : nodes) {
+            info->PileId = id % numPiles;
+            State->ClusterInfo->NodeIdToPileId[id] = *info->PileId;
+        }
     }
 
     TPDiskID RandomPDiskID() const {
@@ -153,6 +168,20 @@ public:
                 ? info->Location.GetRackId()
                 : "";
             if (targetRack == foundRack) {
+                std::copy(info->PDisks.begin(), info->PDisks.end(), std::inserter(res, res.begin()));
+            }
+        }
+        return res;
+    }
+
+    TSet<TPDiskID> PDisksForRandomPile() const {
+        auto nodes = State->ClusterInfo->AllNodes();
+        size_t idx = RandomNumber(nodes.size() - 1);
+        auto target = std::next(nodes.begin(), idx)->second;
+
+        TSet<TPDiskID> res;
+        for (const auto& [id, info] : nodes) {
+            if (info->PileId == target->PileId) {
                 std::copy(info->PDisks.begin(), info->PDisks.end(), std::inserter(res, res.begin()));
             }
         }
@@ -231,7 +260,9 @@ public:
                             if (it != pdiskUpdates.end()) {
                                 if (expectedStatus == update.GetStatus()) {
                                     auto& vec = TFakeNodeWhiteboardService::BSControllerResponsePatterns[id];
-                                    if (!(TFakeNodeWhiteboardService::NoisyBSCPipeCounter % 3) && (vec.empty() || *vec.begin())) {
+                                    bool bscWillDisconnect = TFakeNodeWhiteboardService::NoisyBSCPipe
+                                        && (TFakeNodeWhiteboardService::NoisyBSCPipeCounter + 1) % 3;
+                                    if (!bscWillDisconnect && (vec.empty() || *vec.begin())) {
                                         it->second.UpdateStatusRequested = true;
                                     } else {
                                         it->second.IgnoredUpdateRequests++;
@@ -245,7 +276,6 @@ public:
             default:
                 break;
             }
-
             bool allUpdateStatusRequestedOrIgnored = true;
             for (const auto& [id, info] : pdiskUpdates) {
                 allUpdateStatusRequestedOrIgnored &= (info.UpdateStatusRequested || info.IgnoredUpdateRequests == 6);

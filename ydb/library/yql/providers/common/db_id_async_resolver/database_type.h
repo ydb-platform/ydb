@@ -19,11 +19,13 @@ enum class EDatabaseType {
     Oracle,
     Logging,
     Solomon,
+    MoniumMetrics /* "Monium.Metrics" */,
     Iceberg,
     Redis,
     Prometheus,
     MongoDB,
-    OpenSearch
+    OpenSearch,
+    YdbTopics,
 };
 
 std::set<TString> GetAllExternalDataSourceTypes();

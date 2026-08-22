@@ -26,6 +26,12 @@ public:
         IMPORT = 8,
         SCRIPT_EXECUTION = 9,
         SS_BG_TASKS = 10,
+        INCREMENTAL_BACKUP = 11,
+        RESTORE = 12,
+        COMPACTION = 13,
+        FULL_BACKUP = 14,
+        ANALYZE = 15,
+        SET_NOT_NULL = 16,
     };
 
     struct TData {

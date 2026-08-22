@@ -1,6 +1,7 @@
 import re
 
 import _common
+from ymake import macro, Unit
 
 
 def get_coverage_filter_regexp(pattern, cache={}):
@@ -30,12 +31,17 @@ def get_coverage_filters(unit, filters=[]):
         cov_exclude_re = get_coverage_filter_regexp(coverage_exclude_regexp)
         filters.append(lambda x: re.match(cov_exclude_re, x) is not None)
     if unit.get("ENABLE_CONTRIB_COVERAGE") != "yes":
-        paths_to_exclude = ("contrib",)
-        filters.append(lambda x: x.startswith(paths_to_exclude))
+        if unit.get("ENABLE_CONTRIB_YDB_COVERAGE") == "yes":
+            pattern = r'^contrib/(?!ydb)'
+            filters.append(lambda x: re.match(pattern, x) is not None)
+        else:
+            paths_to_exclude = ("contrib",)
+            filters.append(lambda x: x.startswith(paths_to_exclude))
     return filters
 
 
-def onset_cpp_coverage_flags(unit):
+@macro
+def SET_CPP_COVERAGE_FLAGS(unit: Unit):
     if unit.get("CLANG_COVERAGE") != "yes":
         return
     filters = get_coverage_filters(unit)
@@ -43,7 +49,8 @@ def onset_cpp_coverage_flags(unit):
         unit.on_setup_clang_coverage()
 
 
-def on_filter_py_coverage(unit):
+@macro
+def _FILTER_PY_COVERAGE(unit: Unit):
     if unit.get("PYTHON_COVERAGE") != "yes":
         return
 

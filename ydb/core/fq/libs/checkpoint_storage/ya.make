@@ -4,6 +4,7 @@ SRCS(
     gc.cpp
     storage_proxy.cpp
     storage_service.cpp
+    storage_settings.cpp
     ydb_checkpoint_storage.cpp
     ydb_state_storage.cpp
 )
@@ -11,7 +12,6 @@ SRCS(
 PEERDIR(
     contrib/libs/fmt
     ydb/library/actors/core
-    ydb/core/fq/libs/actors/logging
     ydb/core/fq/libs/config/protos
     ydb/core/fq/libs/control_plane_storage
     ydb/core/fq/libs/ydb

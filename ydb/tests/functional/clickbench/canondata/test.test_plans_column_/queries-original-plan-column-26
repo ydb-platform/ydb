@@ -48,6 +48,7 @@
                                                         "TopSortBy": "[$5.EventTime,$5.SearchPhrase]"
                                                     },
                                                     {
+                                                        "Blocks": "True",
                                                         "Inputs": [
                                                             {
                                                                 "InternalOperatorId": 2
@@ -62,15 +63,12 @@
                                                         "Name": "TableFullScan",
                                                         "Path": "/local/clickbench/plans/column/hits",
                                                         "ReadColumns": [
-                                                            "EventTime",
-                                                            "SearchPhrase"
-                                                        ],
-                                                        "ReadRanges": [
                                                             "CounterID (-\u221e, +\u221e)",
                                                             "EventDate (-\u221e, +\u221e)",
                                                             "UserID (-\u221e, +\u221e)",
                                                             "EventTime (-\u221e, +\u221e)",
-                                                            "WatchID (-\u221e, +\u221e)"
+                                                            "WatchID (-\u221e, +\u221e)",
+                                                            "SearchPhrase"
                                                         ],
                                                         "Scan": "Parallel",
                                                         "SsaProgram": {

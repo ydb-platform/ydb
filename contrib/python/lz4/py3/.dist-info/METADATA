@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: lz4
-Version: 4.4.4
+Version: 4.4.5
 Summary: LZ4 Bindings for Python
 Home-page: https://github.com/python-lz4/python-lz4
 Author: Jonathan Underwood

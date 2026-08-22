@@ -83,14 +83,14 @@ class DFAState(Generic[_TokenTypeT]):
         self.from_rule = from_rule
         self.nfa_set = nfa_set
         # map from terminals/nonterminals to DFAState
-        self.arcs: Mapping[str, DFAState] = {}
+        self.arcs: dict[str, DFAState] = {}
         # In an intermediary step we set these nonterminal arcs (which has the
         # same structure as arcs). These don't contain terminals anymore.
-        self.nonterminal_arcs: Mapping[str, DFAState] = {}
+        self.nonterminal_arcs: dict[str, DFAState] = {}
 
         # Transitions are basically the only thing that  the parser is using
         # with is_final. Everyting else is purely here to create a parser.
-        self.transitions: Mapping[Union[_TokenTypeT, ReservedString], DFAPlan] = {}
+        self.transitions: dict[Union[_TokenTypeT, ReservedString], DFAPlan] = {}
         self.is_final = final in nfa_set
 
     def add_arc(self, next_, label):
@@ -261,7 +261,7 @@ def generate_grammar(bnf_grammar: str, token_namespace) -> Grammar:
         if start_nonterminal is None:
             start_nonterminal = nfa_a.from_rule
 
-    reserved_strings: Mapping[str, ReservedString] = {}
+    reserved_strings: dict[str, ReservedString] = {}
     for nonterminal, dfas in rule_to_dfas.items():
         for dfa_state in dfas:
             for terminal_or_nonterminal, next_dfa in dfa_state.arcs.items():

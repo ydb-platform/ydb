@@ -17,8 +17,7 @@ namespace builtins
   namespace str
   {
 
-    inline types::list<types::str> split(types::str const &in,
-                                         types::str const &sep, long maxsplit)
+    inline types::list<types::str> split(types::str const &in, types::str const &sep, long maxsplit)
     {
       types::str s = strip(in);
       types::list<types::str> res(0);
@@ -28,8 +27,7 @@ namespace builtins
       size_t current = 0;
       size_t next = 0;
       long numsplit = 0;
-      while (next != types::str::npos &&
-             (numsplit++ < maxsplit || maxsplit == -1)) {
+      while (next != types::str::npos && (numsplit++ < maxsplit || maxsplit == -1)) {
         next = s.find_first_of(sep, current);
         res.push_back(s.substr(current, next - current));
         current = next + 1;
@@ -41,8 +39,8 @@ namespace builtins
       return res;
     }
 
-    inline types::list<types::str>
-    split(types::str const &in, types::none_type const &, long maxsplit)
+    inline types::list<types::str> split(types::str const &in, types::none_type const &,
+                                         long maxsplit)
     {
       types::str s = strip(in);
       types::list<types::str> res(0);
@@ -52,8 +50,7 @@ namespace builtins
       size_t current = 0;
       size_t next = 0;
       long numsplit = 0;
-      while (next != types::str::npos &&
-             (numsplit++ < maxsplit || maxsplit == -1)) {
+      while (next != types::str::npos && (numsplit++ < maxsplit || maxsplit == -1)) {
         next = s.find_first_of(" \n\r\t", current);
         // from the pydoc, we skip any blank list
         size_t end = s.find_first_not_of(" \n\r\t", next);

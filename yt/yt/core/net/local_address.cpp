@@ -49,7 +49,7 @@ public:
         char* ptr = Ptr_.load(std::memory_order::relaxed);
         ptr = ptr ? ptr : Buffer_;
 
-        if (::strncmp(ptr, value.data(), value.length()) == 0) {
+        if (TStringBuf(ptr) == value) {
             // No changes; just return.
             return;
         }
@@ -99,7 +99,7 @@ void SetLocalHostName(TStringBuf hostName) noexcept
 {
     NYT::NDetail::EnableErrorOriginOverrides();
 
-    static NThreading::TForkAwareSpinLock Lock;
+    static YT_DECLARE_SPIN_LOCK(NThreading::TForkAwareSpinLock, Lock);
     auto guard = Guard(Lock);
 
     LocalHostName.Write(hostName);
@@ -125,7 +125,7 @@ void UpdateLocalHostName(const TAddressResolverConfigPtr& config)
     std::array<char, 256> hostName{};
 
     auto onFail = [&] (const std::vector<TError>& errors) {
-        THROW_ERROR_EXCEPTION("Failed to update localhost name") << errors;
+        THROW_ERROR_EXCEPTION("Failed to update localhost name").With(errors);
     };
 
     auto runWithRetries = [&] (auto func, auto onError) {

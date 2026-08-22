@@ -1,6 +1,6 @@
 """Parse (absolute and relative) URLs.
 
-urlparse module is based upon the following RFC specifications.
+urllib.parse module is based upon the following RFC specifications.
 
 RFC 3986 (STD66): "Uniform Resource Identifiers" by T. Berners-Lee, R. Fielding
 and L.  Masinter, January 2005.
@@ -20,7 +20,7 @@ RFC 1738: "Uniform Resource Locators (URL)" by T. Berners-Lee, L. Masinter, M.
 McCahill, December 1994
 
 RFC 3986 is considered the current standard and any future changes to
-urlparse module should conform with it.  The urlparse module is
+urllib.parse module should conform with it.  The urllib.parse module is
 currently not entirely compliant with this RFC due to defacto
 scenarios for parsing, and for backward compatibility purposes, some
 parsing quirks from older RFCs are retained. The testcases in
@@ -390,6 +390,8 @@ def urlparse(url, scheme='', allow_fragments=True):
     path or query.
 
     Note that % escapes are not expanded.
+
+    urlsplit() should generally be used instead of urlparse().
     """
     url, scheme, _coerce_result = _coerce_args(url, scheme)
     splitresult = urlsplit(url, scheme, allow_fragments)
@@ -456,8 +458,8 @@ def _check_bracketed_netloc(netloc):
 # Valid bracketed hosts are defined in
 # https://www.rfc-editor.org/rfc/rfc3986#page-49 and https://url.spec.whatwg.org/
 def _check_bracketed_host(hostname):
-    if hostname.startswith('v'):
-        if not re.match(r"\Av[a-fA-F0-9]+\..+\Z", hostname):
+    if hostname.startswith(('v', 'V')):
+        if not re.match(r"\A[vV][a-fA-F0-9]+\..+\Z", hostname):
             raise ValueError(f"IPvFuture address is invalid")
     else:
         ip = ipaddress.ip_address(hostname) # Throws Value Error if not IPv6 or IPv4

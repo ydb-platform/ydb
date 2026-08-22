@@ -1,0 +1,18 @@
+CreateTenantRequest {
+  Request {
+    path: "/Root/NBS"
+    resources {
+      storage_units {
+        unit_kind: "ssd"
+        count: 8
+      }
+      storage_units {
+        unit_kind: "rot"
+        count: 2
+      }
+    }
+    options {
+      disable_tx_service: true
+    }
+  }
+}

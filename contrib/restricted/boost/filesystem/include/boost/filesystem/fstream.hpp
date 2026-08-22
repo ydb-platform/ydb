@@ -20,7 +20,7 @@
 
 #include <boost/filesystem/detail/header.hpp> // must be the last #include
 
-#if defined(BOOST_WINDOWS_API)
+#if defined(BOOST_FILESYSTEM_WINDOWS_API)
 // On Windows, except for standard libaries known to have wchar_t overloads for
 // file stream I/O, use path::string() to get a narrow character c_str()
 #if (defined(_CPPLIB_VER) && _CPPLIB_VER >= 405 && !defined(_STLPORT_VERSION)) || \
@@ -40,7 +40,7 @@
 // Use narrow characters, since wide not available
 #define BOOST_FILESYSTEM_C_STR(p) p.string().c_str()
 #endif
-#endif // defined(BOOST_WINDOWS_API)
+#endif // defined(BOOST_FILESYSTEM_WINDOWS_API)
 
 #if !defined(BOOST_FILESYSTEM_C_STR)
 #define BOOST_FILESYSTEM_C_STR(p) p.c_str()

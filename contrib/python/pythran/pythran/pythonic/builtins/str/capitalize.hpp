@@ -21,8 +21,7 @@ namespace builtins
       else {
         types::str copy = s;
         copy.chars()[0] = ::toupper(s.chars()[0]);
-        std::transform(s.chars().begin() + 1, s.chars().end(),
-                       copy.chars().begin() + 1, ::tolower);
+        std::transform(s.chars().begin() + 1, s.chars().end(), copy.chars().begin() + 1, ::tolower);
         return copy;
       }
     }

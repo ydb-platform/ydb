@@ -4,9 +4,9 @@ Abstraction of CLI Input.
 
 from __future__ import annotations
 
-from abc import ABCMeta, abstractmethod, abstractproperty
-from contextlib import contextmanager
-from typing import Callable, ContextManager, Generator
+from abc import ABCMeta, abstractmethod
+from collections.abc import Callable, Generator
+from contextlib import AbstractContextManager, contextmanager
 
 from prompt_toolkit.key_binding import KeyPress
 
@@ -55,32 +55,35 @@ class Input(metaclass=ABCMeta):
         "The event loop can call this when the input has to be flushed."
         pass
 
-    @abstractproperty
+    @property
+    @abstractmethod
     def closed(self) -> bool:
         "Should be true when the input stream is closed."
         return False
 
     @abstractmethod
-    def raw_mode(self) -> ContextManager[None]:
+    def raw_mode(self) -> AbstractContextManager[None]:
         """
         Context manager that turns the input into raw mode.
         """
 
     @abstractmethod
-    def cooked_mode(self) -> ContextManager[None]:
+    def cooked_mode(self) -> AbstractContextManager[None]:
         """
         Context manager that turns the input into cooked mode.
         """
 
     @abstractmethod
-    def attach(self, input_ready_callback: Callable[[], None]) -> ContextManager[None]:
+    def attach(
+        self, input_ready_callback: Callable[[], None]
+    ) -> AbstractContextManager[None]:
         """
         Return a context manager that makes this input active in the current
         event loop.
         """
 
     @abstractmethod
-    def detach(self) -> ContextManager[None]:
+    def detach(self) -> AbstractContextManager[None]:
         """
         Return a context manager that makes sure that this input is not active
         in the current event loop.
@@ -128,13 +131,15 @@ class DummyInput(Input):
         # `EOFError` immediately in the application.
         return True
 
-    def raw_mode(self) -> ContextManager[None]:
+    def raw_mode(self) -> AbstractContextManager[None]:
         return _dummy_context_manager()
 
-    def cooked_mode(self) -> ContextManager[None]:
+    def cooked_mode(self) -> AbstractContextManager[None]:
         return _dummy_context_manager()
 
-    def attach(self, input_ready_callback: Callable[[], None]) -> ContextManager[None]:
+    def attach(
+        self, input_ready_callback: Callable[[], None]
+    ) -> AbstractContextManager[None]:
         # Call the callback immediately once after attaching.
         # This tells the callback to call `read_keys` and check the
         # `input.closed` flag, after which it won't receive any keys, but knows
@@ -144,7 +149,7 @@ class DummyInput(Input):
 
         return _dummy_context_manager()
 
-    def detach(self) -> ContextManager[None]:
+    def detach(self) -> AbstractContextManager[None]:
         return _dummy_context_manager()
 
 

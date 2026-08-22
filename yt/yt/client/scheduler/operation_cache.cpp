@@ -3,6 +3,8 @@
 
 #include <yt/yt/client/api/client.h>
 
+#include <yt/yt/core/rpc/dispatcher.h>
+
 namespace NYT::NScheduler {
 
 using namespace NApi;
@@ -12,12 +14,13 @@ using namespace NYson;
 
 TOperationCache::TOperationCache(
     TAsyncExpiringCacheConfigPtr config,
-    THashSet<TString> attributes,
+    THashSet<std::string> attributes,
     NApi::IClientPtr client,
     NProfiling::TProfiler profiler)
     : TAsyncExpiringCache(
         std::move(config),
-        SchedulerLogger().WithTag("Cache: Operation"),
+        NRpc::TDispatcher::Get()->GetHeavyInvoker(),
+        SchedulerLogger().WithTag("Cache", "Operation"),
         std::move(profiler))
     , Attributes_(std::move(attributes))
     , Client_(std::move(client))

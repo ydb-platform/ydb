@@ -20,7 +20,7 @@ TStringBuf ToHttpString(EMethod method)
     }
 }
 
-TString ToHttpString(EStatusCode code)
+std::string ToHttpString(EStatusCode code)
 {
     switch (code) {
 #define XX(num, name, string) case EStatusCode::name: return #string;
@@ -40,7 +40,7 @@ TUrlRef ParseUrl(TStringBuf url)
     http_parser_url parsed;
     if (0 != http_parser_parse_url(url.data(), url.size(), false, &parsed)) {
         THROW_ERROR_EXCEPTION("Invalid URL")
-            << TErrorAttribute("url", url);
+            .With("url", url);
     }
 
     auto convertField = [&] (int flag) -> TStringBuf {
@@ -79,7 +79,10 @@ void THeaders::Add(std::string header, std::string value)
 
 void THeaders::Remove(TStringBuf header)
 {
-    NameToEntry_.erase(header);
+    // TODO(babenko): replace with just |NameToEntry_.erase(header)| after C++23.
+    if (auto it = NameToEntry_.find(header); it != NameToEntry_.end()) {
+        NameToEntry_.erase(it);
+    }
 }
 
 void THeaders::Set(std::string header, std::string value)
@@ -201,10 +204,10 @@ std::string EscapeHeaderValue(TStringBuf value)
 
 void ValidateHeaderValue(TStringBuf header, TStringBuf value)
 {
-    if (value.find('\n') != TString::npos) {
+    if (value.find('\n') != std::string::npos) {
         THROW_ERROR_EXCEPTION("Header value should not contain newline symbol")
-            << TErrorAttribute("header", header)
-            << TErrorAttribute("value", value);
+            .With("header", header)
+            .With("value", value);
     }
 }
 

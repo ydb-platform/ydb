@@ -17,6 +17,9 @@ class TCallbackList;
 template <class T>
 class TFuture;
 
+template <class T>
+class TUniqueFuture;
+
 template <>
 class TFuture<void>;
 

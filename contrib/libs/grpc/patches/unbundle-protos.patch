@@ -1,0 +1,18 @@
+--- contrib/libs/grpc/src/cpp/ext/proto_server_reflection.h	(a49212ea19ea2638d15a9dcfbf6bba5b07a08555)
++++ contrib/libs/grpc/src/cpp/ext/proto_server_reflection.h	(index)
+@@ -32,4 +32,4 @@
+-#include "src/proto/grpc/reflection/v1/reflection.grpc.pb.h"
+-#include "src/proto/grpc/reflection/v1/reflection.pb.h"
+-#include "src/proto/grpc/reflection/v1alpha/reflection.grpc.pb.h"
+-#include "src/proto/grpc/reflection/v1alpha/reflection.pb.h"
++#include "grpc/reflection/v1/reflection.grpc.pb.h"
++#include "grpc/reflection/v1/reflection.pb.h"
++#include "grpc/reflection/v1alpha/reflection.grpc.pb.h"
++#include "grpc/reflection/v1alpha/reflection.pb.h"
+--- contrib/libs/grpc/src/cpp/server/channelz/channelz_service.h	(a49212ea19ea2638d15a9dcfbf6bba5b07a08555)
++++ contrib/libs/grpc/src/cpp/server/channelz/channelz_service.h	(index)
+@@ -24,2 +24,2 @@
+-#include "src/proto/grpc/channelz/channelz.grpc.pb.h"
+-#include "src/proto/grpc/channelz/channelz.pb.h"
++#include "grpc/channelz/v1/channelz.grpc.pb.h"
++#include "grpc/channelz/v1/channelz.pb.h"

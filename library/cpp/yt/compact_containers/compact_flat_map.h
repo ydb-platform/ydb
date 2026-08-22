@@ -2,6 +2,8 @@
 
 #include "compact_vector.h"
 
+#include <functional>
+
 namespace NYT {
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -61,8 +63,7 @@ public:
 
     TCompactFlatMap(std::initializer_list<value_type> values);
 
-    bool operator==(const TCompactFlatMap& rhs) const;
-    bool operator!=(const TCompactFlatMap& rhs) const;
+    bool operator==(const TCompactFlatMap& rhs) const = default;
 
     iterator begin();
     const_iterator begin() const;
@@ -122,7 +123,7 @@ private:
     TStorage Storage_;
 
     template <class TArg>
-    std::pair<iterator, bool> do_insert(TArg&& value);
+    std::pair<iterator, bool> DoInsert(TArg&& value);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -7,11 +7,7 @@
 
 
 ====================COPYRIGHT====================
-//  Copyright (c) 1998-2024 Marti Maria Saguer
-
-
-====================COPYRIGHT====================
-//  Copyright (c) 1998-2025 Marti Maria Saguer
+//  Copyright (c) 1998-2026 Marti Maria Saguer
 
 
 ====================COPYRIGHT====================
@@ -64,6 +60,7 @@ Amyspark
 Lovell Fuller
 Eli Schwartz
 Diogo Teles Sant'Anna
+Vlad Erium
 
 Special Thanks 
 --------------

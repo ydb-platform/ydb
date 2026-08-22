@@ -2,7 +2,7 @@ UNITTEST()
 
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
@@ -10,12 +10,14 @@ ENDIF()
 FORK_SUBTESTS()
 
 PEERDIR(
+    util
     ydb/public/api/grpc
     ydb/public/sdk/cpp/src/client/coordination
 )
 
 SRCS(
     coordination_ut.cpp
+    distributed_lock_ut.cpp
 )
 
 END()

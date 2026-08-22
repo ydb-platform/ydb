@@ -30,7 +30,7 @@ def post_install(self):
 boost_filesystem = NixSourceProject(
     nixattr="boost_filesystem",
     arcdir=boost.make_arcdir("filesystem"),
-    owners=["g:cpp-contrib", "g:taxi-common"],
+    owners=["g:cpp-contrib"],
     copy_sources=[
         "include/boost/",
         "src/",

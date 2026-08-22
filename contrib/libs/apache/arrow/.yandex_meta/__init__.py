@@ -140,6 +140,8 @@ def post_install(self):
 
     with self.yamakes["."] as arrow:
         arrow.PEERDIR.add("contrib/libs/xxhash")
+        arrow.PEERDIR.remove("contrib/libs/brotli/c/common")
+        arrow.PEERDIR.remove("contrib/libs/brotli/c/tools")
 
     xxhash_path = f"{self.dstdir}/cpp/src/arrow/vendored/xxhash"
     # NOTE: There are no SRCS for xxhash, skipped removing from yamakes
@@ -196,7 +198,7 @@ def post_install(self):
 
 
 apache_arrow = CMakeNinjaNixProject(
-    owners=["primorial", "g:cpp-contrib"],
+    owners=["g:cpp-contrib"],
     arcdir="contrib/libs/apache/arrow",
     nixattr="arrow-cpp",
     ignore_commands=["cmake"],

@@ -1,5 +1,6 @@
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
 
 #include <google/protobuf/text_format.h>
 
@@ -8,14 +9,20 @@ using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(SubDomainWithReboots) {
-    Y_UNIT_TEST(Fake) {
-    }
 
-    Y_UNIT_TEST(Create) { //+
-        TTestWithReboots t(true);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(Create, 2, 1, true) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TVector<TString> userAttrsKeys{"AttrA1", "AttrA2"};
             TUserAttrs userAttrs{{"AttrA1", "ValA1"}, {"AttrA2", "ValA2"}};
+
+            ui64 expectedDomainPaths;
+            TLocalPathId subdomainPathId;
+            {
+                TInactiveZone inactive(activeZone);
+                auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+                expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
+                subdomainPathId = GetNextLocalPathId(runtime, t.TxId);
+            }
 
             AsyncCreateSubDomain(runtime, ++t.TxId, "/MyRoot/DirA",
                                  "PlanResolution: 50 "
@@ -25,6 +32,8 @@ Y_UNIT_TEST_SUITE(SubDomainWithReboots) {
                                  "Name: \"USER_0\"",
                                  AlterUserAttrs(userAttrs));
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            expectedDomainPaths += 1;
 
             {
                 TInactiveZone inactive(activeZone);
@@ -39,20 +48,26 @@ Y_UNIT_TEST_SUITE(SubDomainWithReboots) {
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
                                    {NLs::PathExist,
                                     NLs::PathVersionEqual(5),
-                                    NLs::PathsInsideDomain(2),
+                                    NLs::PathsInsideDomain(expectedDomainPaths),
                                     NLs::ShardsInsideDomain(0)});
 
-                UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3));
-                UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 3));
+                UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", subdomainPathId));
+                UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", subdomainPathId));
             }
         });
     }
 
-    Y_UNIT_TEST(DeclareAndDefine) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(DeclareAndDefine, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TVector<TString> userAttrsKeys{"AttrA1", "AttrA2"};
             TUserAttrs userAttrs{{"AttrA1", "ValA1"}, {"AttrA2", "ValA2"}};
+
+            ui64 expectedDomainPaths;
+            {
+                TInactiveZone inactive(activeZone);
+                auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+                expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
+            }
 
             {
                 TInactiveZone inactive(activeZone);
@@ -61,6 +76,8 @@ Y_UNIT_TEST_SUITE(SubDomainWithReboots) {
                                     "Name: \"USER_0\"",
                                     AlterUserAttrs(userAttrs));
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                expectedDomainPaths += 1;
             }
 
             TestAlterSubDomain(runtime, ++t.TxId,  "/MyRoot/DirA",
@@ -82,15 +99,21 @@ Y_UNIT_TEST_SUITE(SubDomainWithReboots) {
                                     NLs::UserAttrsEqual(userAttrs)});
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
                                    {NLs::PathVersionEqual(5),
-                                    NLs::PathsInsideDomain(2),
+                                    NLs::PathsInsideDomain(expectedDomainPaths),
                                     NLs::ShardsInsideDomain(0)});
             }
         });
     }
 
-    Y_UNIT_TEST(CreateWithStoragePools) { //+
-        TTestWithReboots t(true);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateWithStoragePools, 2, 1, true) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            ui64 expectedDomainPaths;
+            {
+                TInactiveZone inactive(activeZone);
+                auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+                expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
+            }
+
             AsyncCreateSubDomain(runtime, ++t.TxId, "/MyRoot/DirA",
                                  "PlanResolution: 50 "
                                  "Coordinators: 1 "
@@ -107,6 +130,8 @@ Y_UNIT_TEST_SUITE(SubDomainWithReboots) {
                                  "}");
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
+            expectedDomainPaths += 1;
+
             {
                 TInactiveZone inactive(activeZone);
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/USER_0"),
@@ -118,14 +143,13 @@ Y_UNIT_TEST_SUITE(SubDomainWithReboots) {
 
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
                                    {NLs::PathVersionEqual(5),
-                                    NLs::PathsInsideDomain(2),
+                                    NLs::PathsInsideDomain(expectedDomainPaths),
                                     NLs::ShardsInsideDomain(0)});
             }
         });
     }
 
-    Y_UNIT_TEST(RootWithStoragePools) { //+
-        TTestWithReboots t(true);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(RootWithStoragePools, 2, 1, true) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -164,8 +188,7 @@ Y_UNIT_TEST_SUITE(SubDomainWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(RootWithStoragePoolsAndTable) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(RootWithStoragePoolsAndTable, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -215,9 +238,17 @@ Y_UNIT_TEST_SUITE(SubDomainWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(Delete) { //+
-        TTestWithReboots t(true);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(Delete, 2, 1, true) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            ui64 expectedDomainPaths;
+            TLocalPathId subdomainPathId;
+            {
+                TInactiveZone inactive(activeZone);
+                auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+                expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
+                subdomainPathId = GetNextLocalPathId(runtime, t.TxId);
+            }
+
             {
                 TInactiveZone inactive(activeZone);
                 TestCreateSubDomain(runtime, ++t.TxId, "/MyRoot/DirA",
@@ -227,11 +258,15 @@ Y_UNIT_TEST_SUITE(SubDomainWithReboots) {
                                     "TimeCastBucketsPerMediator: 2 "
                                     "Name: \"USER_0\"");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                expectedDomainPaths += 1;
             }
 
             AsyncDropSubDomain(runtime, ++t.TxId,  "/MyRoot/DirA", "USER_0");
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
             t.TestEnv->TestWaitTabletDeletion(runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+1});
+
+            expectedDomainPaths -= 1;
 
             {
                 TInactiveZone inactive(activeZone);
@@ -239,18 +274,26 @@ Y_UNIT_TEST_SUITE(SubDomainWithReboots) {
                                    {NLs::PathNotExist});
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
                                    {NLs::PathVersionEqual(7),
-                                    NLs::PathsInsideDomain(1),
+                                    NLs::PathsInsideDomain(expectedDomainPaths),
                                     NLs::ShardsInsideDomain(0)});
                 t.TestEnv->TestWaitShardDeletion(runtime, {1, 2});
-                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 3));
-                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3));
+                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", subdomainPathId));
+                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", subdomainPathId));
             }
         });
     }
 
-    Y_UNIT_TEST(DeleteWithStoragePools) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(DeleteWithStoragePools, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            ui64 expectedDomainPaths;
+            TLocalPathId subdomainPathId;
+            {
+                TInactiveZone inactive(activeZone);
+                auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+                expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
+                subdomainPathId = GetNextLocalPathId(runtime, t.TxId);
+            }
+
             {
                 TInactiveZone inactive(activeZone);
                 TestCreateSubDomain(runtime, ++t.TxId, "/MyRoot/DirA",
@@ -268,11 +311,15 @@ Y_UNIT_TEST_SUITE(SubDomainWithReboots) {
                                     "  Kind: \"hdd-2\""
                                     "}");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                expectedDomainPaths += 1;
             }
 
             TestDropSubDomain(runtime, ++t.TxId,  "/MyRoot/DirA", "USER_0");
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
             t.TestEnv->TestWaitTabletDeletion(runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+1});
+
+            expectedDomainPaths -= 1;
 
             {
                 TInactiveZone inactive(activeZone);
@@ -280,18 +327,26 @@ Y_UNIT_TEST_SUITE(SubDomainWithReboots) {
                                    {NLs::PathNotExist});
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
                                    {NLs::PathVersionEqual(7),
-                                    NLs::PathsInsideDomain(1),
+                                    NLs::PathsInsideDomain(expectedDomainPaths),
                                     NLs::ShardsInsideDomain(0)});
                 t.TestEnv->TestWaitShardDeletion(runtime, {1, 2});
-                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 3));
-                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3));
+                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", subdomainPathId));
+                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", subdomainPathId));
             }
         });
     }
 
-    Y_UNIT_TEST(DropSplittedTabletInsideWithStoragePools) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(DropSplittedTabletInsideWithStoragePools, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            ui64 expectedDomainPaths;
+            TLocalPathId subdomainPathId;
+            {
+                TInactiveZone inactive(activeZone);
+                auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+                expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
+                subdomainPathId = GetNextLocalPathId(runtime, t.TxId);
+            }
+
             {
                 TInactiveZone inactive(activeZone);
                 TestCreateSubDomain(runtime, ++t.TxId, "/MyRoot/DirA",
@@ -310,9 +365,11 @@ Y_UNIT_TEST_SUITE(SubDomainWithReboots) {
                                     "}");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
+                expectedDomainPaths += 1;
+
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
                                    {NLs::PathVersionEqual(5),
-                                    NLs::PathsInsideDomain(2),
+                                    NLs::PathsInsideDomain(expectedDomainPaths),
                                     NLs::ShardsInsideDomain(0)});
 
                 TestCreateTable(runtime, ++t.TxId, "/MyRoot/DirA/USER_0",
@@ -325,7 +382,7 @@ Y_UNIT_TEST_SUITE(SubDomainWithReboots) {
 
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
                                    {NLs::PathVersionEqual(5),
-                                    NLs::PathsInsideDomain(2),
+                                    NLs::PathsInsideDomain(expectedDomainPaths),
                                     NLs::ShardsInsideDomain(0)});
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/USER_0"),
                                    {NLs::PathVersionEqual(5),
@@ -362,6 +419,8 @@ Y_UNIT_TEST_SUITE(SubDomainWithReboots) {
             TestForceDropSubDomain(runtime, ++t.TxId,  "/MyRoot/DirA", "USER_0");
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
+            expectedDomainPaths -= 1;
+
             t.TestEnv->TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 5));
 
             {
@@ -370,21 +429,27 @@ Y_UNIT_TEST_SUITE(SubDomainWithReboots) {
                                    {NLs::PathNotExist});
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
                                    {NLs::PathVersionEqual(7),
-                                    NLs::PathsInsideDomain(1),
+                                    NLs::PathsInsideDomain(expectedDomainPaths),
                                     NLs::ShardsInsideDomain(0)});
                 // FIXME: DropTable breaks down during ForceDropSubDomain and leaves table half-dropped
                 //        an additional reboot "fixes" the half-dropped table
                 RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
                 t.TestEnv->TestWaitShardDeletion(runtime, {1, 2, 3, 4, 5});
-                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 3));
-                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3));
+                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", subdomainPathId));
+                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", subdomainPathId));
             }
         });
     }
 
-    Y_UNIT_TEST(SplitTabletInsideWithStoragePools) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(SplitTabletInsideWithStoragePools, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            ui64 expectedDomainPaths;
+            {
+                TInactiveZone inactive(activeZone);
+                auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+                expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
+            }
+
             {
                 TInactiveZone inactive(activeZone);
                 TestCreateSubDomain(runtime, ++t.TxId, "/MyRoot/DirA",
@@ -403,9 +468,11 @@ Y_UNIT_TEST_SUITE(SubDomainWithReboots) {
                                     "}");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
+                expectedDomainPaths += 1;
+
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
                                    {NLs::PathVersionEqual(5),
-                                    NLs::PathsInsideDomain(2),
+                                    NLs::PathsInsideDomain(expectedDomainPaths),
                                     NLs::ShardsInsideDomain(0)});
 
                 TestCreateTable(runtime, ++t.TxId, "/MyRoot/DirA/USER_0",
@@ -418,7 +485,7 @@ Y_UNIT_TEST_SUITE(SubDomainWithReboots) {
 
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
                                    {NLs::PathVersionEqual(5),
-                                    NLs::PathsInsideDomain(2),
+                                    NLs::PathsInsideDomain(expectedDomainPaths),
                                     NLs::ShardsInsideDomain(0)});
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/USER_0"),
                                    {NLs::PathVersionEqual(5),
@@ -457,9 +524,15 @@ Y_UNIT_TEST_SUITE(SubDomainWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(CreateTabletInsideWithStoragePools) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateTabletInsideWithStoragePools, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            ui64 expectedDomainPaths;
+            {
+                TInactiveZone inactive(activeZone);
+                auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+                expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
+            }
+
             {
                 TInactiveZone inactive(activeZone);
                 TestCreateSubDomain(runtime, ++t.TxId, "/MyRoot/DirA",
@@ -478,9 +551,11 @@ Y_UNIT_TEST_SUITE(SubDomainWithReboots) {
                                     "}");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
+                expectedDomainPaths += 1;
+
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
                                    {NLs::PathVersionEqual(5),
-                                    NLs::PathsInsideDomain(2),
+                                    NLs::PathsInsideDomain(expectedDomainPaths),
                                     NLs::ShardsInsideDomain(0)});
             }
 
@@ -496,7 +571,7 @@ Y_UNIT_TEST_SUITE(SubDomainWithReboots) {
                 TInactiveZone inactive(activeZone);
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
                                    {NLs::PathVersionEqual(5),
-                                    NLs::PathsInsideDomain(2),
+                                    NLs::PathsInsideDomain(expectedDomainPaths),
                                     NLs::ShardsInsideDomain(0)});
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/USER_0"),
                                    {NLs::PathVersionEqual(5),
@@ -509,12 +584,13 @@ Y_UNIT_TEST_SUITE(SubDomainWithReboots) {
 }
 
 Y_UNIT_TEST_SUITE(ForceDropWithReboots) {
-    Y_UNIT_TEST(Fake) {
-    }
-
-    Y_UNIT_TEST(ForceDelete) { //+
-        TTestWithReboots t(true);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ForceDelete, 2, 1, true) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            TLocalPathId subdomainPathId;
+            {
+                TInactiveZone inactive(activeZone);
+                subdomainPathId = GetNextLocalPathId(runtime, t.TxId);
+            }
             {
                 TInactiveZone inactive(activeZone);
                 TestCreateSubDomain(runtime, t.TxId, "/MyRoot/DirA",
@@ -524,8 +600,8 @@ Y_UNIT_TEST_SUITE(ForceDropWithReboots) {
                                     "TimeCastBucketsPerMediator: 2 "
                                     "Name: \"USER_0\"");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
-                UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3));
-                UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 3));
+                UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", subdomainPathId));
+                UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", subdomainPathId));
             }
 
             AsyncForceDropSubDomain(runtime, ++t.TxId,  "/MyRoot/DirA", "USER_0");
@@ -538,15 +614,19 @@ Y_UNIT_TEST_SUITE(ForceDropWithReboots) {
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/USER_0"),
                                    {NLs::PathNotExist});
                 t.TestEnv->TestWaitShardDeletion(runtime, {1, 2});
-                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 3));
-                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3));
+                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", subdomainPathId));
+                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", subdomainPathId));
             }
         });
     }
 
-    Y_UNIT_TEST(ForceDeleteCreateSubdomainInfly) { //+
-        TTestWithReboots t(true);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ForceDeleteCreateSubdomainInfly, 2, 1, true) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            TLocalPathId subdomainPathId;
+            {
+                TInactiveZone inactive(activeZone);
+                subdomainPathId = GetNextLocalPathId(runtime, t.TxId);
+            }
 
             AsyncCreateSubDomain(runtime, ++t.TxId, "/MyRoot/DirA",
                                  "PlanResolution: 50 "
@@ -564,21 +644,32 @@ Y_UNIT_TEST_SUITE(ForceDropWithReboots) {
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/USER_0"),
                                    {NLs::PathNotExist});
                 t.TestEnv->TestWaitShardDeletion(runtime, {1, 2});
-                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 3));
-                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3));
+                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", subdomainPathId));
+                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", subdomainPathId));
             }
         });
     }
 
-    Y_UNIT_TEST(ForceDeleteCreateTableInFlyWithRebootAtCommit) { //+
-        TTestWithReboots t(true);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ForceDeleteCreateTableInFlyWithRebootAtCommit, 2, 1, true) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            ui64 expectedDomainPaths;
+            TLocalPathId subdomainPathId;
+            {
+                TInactiveZone inactive(activeZone);
+                auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+                expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
+                subdomainPathId = GetNextLocalPathId(runtime, t.TxId);
+            }
+
             AsyncCreateSubDomain(runtime, ++t.TxId, "/MyRoot/DirA",
                                  "PlanResolution: 50 "
                                  "Coordinators: 1 "
                                  "Mediators: 1 "
                                  "TimeCastBucketsPerMediator: 2 "
                                  "Name: \"USER_0\"");
+
+            expectedDomainPaths += 1;
+
             AsyncMkDir(runtime, ++t.TxId, "/MyRoot/DirA/USER_0", "dir");
             AsyncCreateTable(runtime, ++t.TxId, "/MyRoot/DirA/USER_0/dir",
                              "Name: \"table_0\""
@@ -587,6 +678,7 @@ Y_UNIT_TEST_SUITE(ForceDropWithReboots) {
                              "KeyColumnNames: [\"RowId\"]");
 
             AsyncForceDropSubDomain(runtime, ++t.TxId,  "/MyRoot/DirA", "USER_0");
+            expectedDomainPaths -= 1;
 
             Cerr << Endl << "Wait notification " << Endl;
             t.TestEnv->TestWaitNotification(runtime, {t.TxId-3, t.TxId-2, t.TxId-1, t.TxId} );
@@ -600,24 +692,35 @@ Y_UNIT_TEST_SUITE(ForceDropWithReboots) {
                                    {NLs::PathNotExist});
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
                                    {NLs::PathVersionOneOf({5, 6}),
-                                    NLs::PathsInsideDomain(1),
+                                    NLs::PathsInsideDomain(expectedDomainPaths),
                                     NLs::ShardsInsideDomain(0)});
                 t.TestEnv->TestWaitShardDeletion(runtime, {1, 2, 3});
-                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 3));
-                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3));
+                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", subdomainPathId));
+                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", subdomainPathId));
             }
         });
     }
 
-    Y_UNIT_TEST(ForceDeleteCreateTableInFly) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ForceDeleteCreateTableInFly, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            ui64 expectedDomainPaths;
+            TLocalPathId subdomainPathId;
+            {
+                TInactiveZone inactive(activeZone);
+                auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+                expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
+                subdomainPathId = GetNextLocalPathId(runtime, t.TxId);
+            }
+
             TestCreateSubDomain(runtime, ++t.TxId, "/MyRoot/DirA",
                                 "PlanResolution: 50 "
                                 "Coordinators: 1 "
                                 "Mediators: 1 "
                                 "TimeCastBucketsPerMediator: 2 "
                                 "Name: \"USER_0\"");
+
+            expectedDomainPaths += 1;
+
             TestMkDir(runtime, ++t.TxId, "/MyRoot/DirA/USER_0", "dir");
             TestCreateTable(runtime, ++t.TxId, "/MyRoot/DirA/USER_0/dir",
                             "Name: \"table_0\""
@@ -626,6 +729,7 @@ Y_UNIT_TEST_SUITE(ForceDropWithReboots) {
                             "KeyColumnNames: [\"RowId\"]");
 
             AsyncForceDropSubDomain(runtime, ++t.TxId,  "/MyRoot/DirA", "USER_0");
+            expectedDomainPaths -= 1;
 
             Cerr << Endl << "Wait notification " << Endl;
             t.TestEnv->TestWaitNotification(runtime, {t.TxId-3, t.TxId-2, t.TxId-1, t.TxId} );
@@ -639,18 +743,26 @@ Y_UNIT_TEST_SUITE(ForceDropWithReboots) {
                                    {NLs::PathNotExist});
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
                                    {NLs::PathVersionOneOf({6, 7}),
-                                    NLs::PathsInsideDomain(1),
+                                    NLs::PathsInsideDomain(expectedDomainPaths),
                                     NLs::ShardsInsideDomain(0)});
                 t.TestEnv->TestWaitShardDeletion(runtime, {1, 2, 3});
-                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 3));
-                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3));
+                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", subdomainPathId));
+                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", subdomainPathId));
             }
         });
     }
 
-    Y_UNIT_TEST(ForceDeleteSplitInFly) { //+
-        TTestWithReboots t(true);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ForceDeleteSplitInFly, 2, 1, true) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            ui64 expectedDomainPaths;
+            TLocalPathId subdomainPathId;
+            {
+                TInactiveZone inactive(activeZone);
+                auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+                expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
+                subdomainPathId = GetNextLocalPathId(runtime, t.TxId);
+            }
+
             {
                 TInactiveZone inactive(activeZone);
                 TestCreateSubDomain(runtime, ++t.TxId, "/MyRoot/DirA",
@@ -659,6 +771,9 @@ Y_UNIT_TEST_SUITE(ForceDropWithReboots) {
                                     "Mediators: 1 "
                                     "TimeCastBucketsPerMediator: 2 "
                                     "Name: \"USER_0\"");
+
+                expectedDomainPaths += 1;
+
                 TestMkDir(runtime, ++t.TxId, "/MyRoot/DirA/USER_0", "dir");
                 TestCreateTable(runtime, ++t.TxId, "/MyRoot/DirA/USER_0/dir",
                                 "Name: \"table_0\""
@@ -673,7 +788,7 @@ Y_UNIT_TEST_SUITE(ForceDropWithReboots) {
                                     NLs::ShardsInsideDomain(3)});
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
                                    {NLs::PathVersionEqual(5),
-                                    NLs::PathsInsideDomain(2),
+                                    NLs::PathsInsideDomain(expectedDomainPaths),
                                     NLs::ShardsInsideDomain(0)});
             }
 
@@ -686,6 +801,7 @@ Y_UNIT_TEST_SUITE(ForceDropWithReboots) {
                                         })");
 
             AsyncForceDropSubDomain(runtime, ++t.TxId,  "/MyRoot/DirA", "USER_0");
+            expectedDomainPaths -= 1;
 
             t.TestEnv->TestWaitNotification(runtime, {t.TxId-1, t.TxId});
             t.TestEnv->TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 5));
@@ -696,18 +812,26 @@ Y_UNIT_TEST_SUITE(ForceDropWithReboots) {
                                    {NLs::PathNotExist});
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
                                    {NLs::PathVersionEqual(7),
-                                    NLs::PathsInsideDomain(1),
+                                    NLs::PathsInsideDomain(expectedDomainPaths),
                                     NLs::ShardsInsideDomain(0)});
                 t.TestEnv->TestWaitShardDeletion(runtime, {1, 2, 3, 4, 5});
-                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 3));
-                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3));
+                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", subdomainPathId));
+                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", subdomainPathId));
             }
         });
     }
 
-    Y_UNIT_TEST(ForceDropDeleteInFly) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ForceDropDeleteInFly, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            ui64 expectedDomainPaths;
+            TLocalPathId subdomainPathId;
+            {
+                TInactiveZone inactive(activeZone);
+                auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+                expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
+                subdomainPathId = GetNextLocalPathId(runtime, t.TxId);
+            }
+
             {
                 TInactiveZone inactive(activeZone);
                 TestCreateSubDomain(runtime, ++t.TxId, "/MyRoot/DirA",
@@ -716,6 +840,8 @@ Y_UNIT_TEST_SUITE(ForceDropWithReboots) {
                                     "Mediators: 1 "
                                     "TimeCastBucketsPerMediator: 2 "
                                     "Name: \"USER_0\"");
+
+                expectedDomainPaths += 1;
 
                 TestCreateTable(runtime, ++t.TxId, "/MyRoot/DirA/USER_0",
                                 "Name: \"table_0\""
@@ -731,12 +857,13 @@ Y_UNIT_TEST_SUITE(ForceDropWithReboots) {
                                     NLs::ShardsInsideDomain(3)});
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
                                    {NLs::PathVersionEqual(5),
-                                    NLs::PathsInsideDomain(2),
+                                    NLs::PathsInsideDomain(expectedDomainPaths),
                                     NLs::ShardsInsideDomain(0)});
             }
 
             TestDropTable(runtime, ++t.TxId, "/MyRoot/DirA/USER_0", "table_0");
             AsyncForceDropSubDomain(runtime, ++t.TxId,  "/MyRoot/DirA", "USER_0");
+            expectedDomainPaths -= 1;
             t.TestEnv->TestWaitNotification(runtime, {t.TxId-1, t.TxId});
             t.TestEnv->TestWaitTabletDeletion(runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+1, TTestTxConfig::FakeHiveTablets+2});
 
@@ -746,20 +873,19 @@ Y_UNIT_TEST_SUITE(ForceDropWithReboots) {
                                    {NLs::PathNotExist});
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
                                    {NLs::PathVersionEqual(7),
-                                    NLs::PathsInsideDomain(1),
+                                    NLs::PathsInsideDomain(expectedDomainPaths),
                                     NLs::ShardsInsideDomain(0)});
                 // FIXME: DropTable breaks down during ForceDropSubDomain and leaves table half-dropped
                 //        an additional reboot "fixes" the half-dropped table
                 RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
                 t.TestEnv->TestWaitShardDeletion(runtime, {1, 2, 3});
-                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 3));
-                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3));
+                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", subdomainPathId));
+                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", subdomainPathId));
             }
         });
     }
 
-    Y_UNIT_TEST(DoNotLostDeletedTablets) {
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(DoNotLostDeletedTablets, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TPathVersion pathVersion;
             {
@@ -829,8 +955,7 @@ Y_UNIT_TEST_SUITE(ForceDropWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(PathsAndShardsCountersSimultaneousAlterSubDomain) {
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(PathsAndShardsCountersSimultaneousAlterSubDomain, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);

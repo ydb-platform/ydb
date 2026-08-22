@@ -1,4 +1,3 @@
-/* postgres can not */
 SELECT
     @@@@,
     @@A@@,

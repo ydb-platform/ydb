@@ -6,8 +6,9 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 import string
+import sys
 from types import MappingProxyType
-from typing import Any, BinaryIO, NamedTuple
+from typing import Any, BinaryIO, NamedTuple, Final
 
 from ._re import (
     RE_DATETIME,
@@ -18,6 +19,13 @@ from ._re import (
     match_to_number,
 )
 from ._types import Key, ParseFloat, Pos
+
+# Pathologically excessive number of parts in a key runs into quadratic
+# behavior (e.g. in Flags.is_).
+# Even if keys aren't currently parsed using recursion, they name a
+# recursive structure, so it makes sense to limit it using getrecursionlimit()
+# and RecursionError.
+MAX_KEY_PARTS: Final = sys.getrecursionlimit()
 
 ASCII_CTRL = frozenset(chr(i) for i in range(32)) | frozenset(chr(127))
 
@@ -142,7 +150,7 @@ class Flags:
     EXPLICIT_NEST = 1
 
     def __init__(self) -> None:
-        self._flags: dict[str, dict] = {}
+        self._flags: dict[str, dict[Any, Any]] = {}
         self._pending_flags: set[tuple[Key, int]] = set()
 
     def add_pending(self, key: Key, flag: int) -> None:
@@ -200,7 +208,7 @@ class NestedDict:
         key: Key,
         *,
         access_lists: bool = True,
-    ) -> dict:
+    ) -> dict[str, Any]:
         cont: Any = self.dict
         for k in key:
             if k not in cont:
@@ -210,7 +218,7 @@ class NestedDict:
                 cont = cont[-1]
             if not isinstance(cont, dict):
                 raise KeyError("There is no nest behind this key")
-        return cont
+        return cont  # type: ignore[no-any-return]
 
     def append_nest_to_list(self, key: Key) -> None:
         cont = self.get_or_create_nest(key[:-1])
@@ -385,6 +393,10 @@ def parse_key(src: str, pos: Pos) -> tuple[Pos, Key]:
         pos = skip_chars(src, pos, TOML_WS)
         pos, key_part = parse_key_part(src, pos)
         key += (key_part,)
+        if len(key) > MAX_KEY_PARTS:
+            raise RecursionError(
+                f"TOML key has more than the allowed {MAX_KEY_PARTS} parts"
+            )
         pos = skip_chars(src, pos, TOML_WS)
 
 
@@ -409,9 +421,9 @@ def parse_one_line_basic_str(src: str, pos: Pos) -> tuple[Pos, str]:
     return parse_basic_str(src, pos, multiline=False)
 
 
-def parse_array(src: str, pos: Pos, parse_float: ParseFloat) -> tuple[Pos, list]:
+def parse_array(src: str, pos: Pos, parse_float: ParseFloat) -> tuple[Pos, list[Any]]:
     pos += 1
-    array: list = []
+    array: list[Any] = []
 
     pos = skip_comments_and_array_ws(src, pos)
     if src.startswith("]", pos):
@@ -433,7 +445,7 @@ def parse_array(src: str, pos: Pos, parse_float: ParseFloat) -> tuple[Pos, list]
             return pos + 1, array
 
 
-def parse_inline_table(src: str, pos: Pos, parse_float: ParseFloat) -> tuple[Pos, dict]:
+def parse_inline_table(src: str, pos: Pos, parse_float: ParseFloat) -> tuple[Pos, dict[str, Any]]:
     pos += 1
     nested_dict = NestedDict()
     flags = Flags()
@@ -679,7 +691,7 @@ def make_safe_parse_float(parse_float: ParseFloat) -> ParseFloat:
     instead of returning illegal types.
     """
     # The default `float` callable never returns illegal types. Optimize it.
-    if parse_float is float:  # type: ignore[comparison-overlap]
+    if parse_float is float:
         return float
 
     def safe_parse_float(float_str: str) -> Any:

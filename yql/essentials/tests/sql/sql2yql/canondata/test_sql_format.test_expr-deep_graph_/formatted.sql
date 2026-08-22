@@ -1,0 +1,10 @@
+/* custom error:deep graph*/
+$n = 300;
+
+EVALUATE FOR $m IN ListFromRange(1, $n) DO BEGIN
+    EVALUATE FOR $i IN ListFromRange(1, $n) DO BEGIN
+        SELECT
+            $m * $n + $i AS num
+        ;
+    END DO;
+END DO;

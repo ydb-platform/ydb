@@ -10,11 +10,10 @@
 
 #include <yt/yt/core/yson/public.h>
 
-#include <yt/yt/core/misc/property.h>
-#include <yt/yt/core/misc/copyable_atomic.h>
-
 #include <library/cpp/yt/misc/enum.h>
+#include <library/cpp/yt/misc/property.h>
 
+#include <library/cpp/yt/threading/copyable_atomic.h>
 #include <library/cpp/yt/threading/rw_spin_lock.h>
 
 namespace NYT::NNodeTrackerClient {
@@ -39,7 +38,7 @@ public:
         std::optional<TInstant> lastSeenTime = {});
 
     TNodeDescriptor& operator=(const TNodeDescriptor& other) = default;
-    TNodeDescriptor& operator=(TNodeDescriptor&& other) = default;
+    TNodeDescriptor& operator=(TNodeDescriptor&& other) noexcept = default;
 
     bool IsNull() const;
 
@@ -79,7 +78,7 @@ private:
     std::vector<std::string> Tags_;
 
     // Not persisted.
-    mutable TCopyableAtomic<TCpuInstant> LastSeenTime_;
+    mutable NThreading::TCopyableAtomic<TCpuInstant> LastSeenTime_;
 };
 
 const std::string& NullNodeAddress();
@@ -87,8 +86,8 @@ const TNodeDescriptor& NullNodeDescriptor();
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool operator == (const TNodeDescriptor& lhs, const TNodeDescriptor& rhs);
-bool operator == (const TNodeDescriptor& lhs, const NProto::TNodeDescriptor& rhs);
+bool operator==(const TNodeDescriptor& lhs, const TNodeDescriptor& rhs);
+bool operator==(const TNodeDescriptor& lhs, const NProto::TNodeDescriptor& rhs);
 
 void FormatValue(TStringBuilderBase* builder, const TNodeDescriptor& descriptor, TStringBuf spec);
 

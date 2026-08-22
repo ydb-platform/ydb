@@ -23,7 +23,6 @@
 
 #include "absl/algorithm/algorithm.h"
 #include "absl/base/config.h"
-#include "absl/base/internal/throw_delegate.h"
 #include "absl/meta/type_traits.h"
 
 namespace absl {
@@ -55,7 +54,7 @@ constexpr auto GetData(C& c) noexcept  // NOLINT(runtime/references)
 // Detection idioms for size() and data().
 template <typename C>
 using HasSize =
-    std::is_integral<absl::decay_t<decltype(std::declval<C&>().size())>>;
+    std::is_integral<std::decay_t<decltype(std::declval<C&>().size())>>;
 
 // We want to enable conversion from vector<T*> to Span<const T* const> but
 // disable conversion from vector<Derived> to Span<Base>. Here we use
@@ -65,13 +64,13 @@ using HasSize =
 // which returns a reference.
 template <typename T, typename C>
 using HasData =
-    std::is_convertible<absl::decay_t<decltype(GetData(std::declval<C&>()))>*,
+    std::is_convertible<std::decay_t<decltype(GetData(std::declval<C&>()))>*,
                         T* const*>;
 
 // Extracts value type from a Container
 template <typename C>
 struct ElementType {
-  using type = typename absl::remove_reference_t<C>::value_type;
+  using type = typename std::remove_reference_t<C>::value_type;
 };
 
 template <typename T, size_t N>
@@ -114,13 +113,14 @@ struct IsView {
 
 template <typename T>
 struct IsView<
-    T, absl::void_t<decltype(span_internal::GetData(std::declval<const T&>()))>,
-    absl::void_t<decltype(span_internal::GetData(std::declval<T&>()))>> {
+    T, std::void_t<decltype(span_internal::GetData(std::declval<const T&>()))>,
+    std::void_t<decltype(span_internal::GetData(std::declval<T&>()))>> {
  private:
   using Container = std::remove_const_t<T>;
   using ConstData =
       decltype(span_internal::GetData(std::declval<const Container&>()));
   using MutData = decltype(span_internal::GetData(std::declval<Container&>()));
+
  public:
   static constexpr bool value = std::is_same<ConstData, MutData>::value;
 };

@@ -7,8 +7,6 @@
 
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 
-#include <ydb/library/actors/core/actorsystem.h>
-
 namespace NFq {
 
 struct TYqSharedResources : public IYqSharedResources {

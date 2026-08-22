@@ -40,16 +40,17 @@ public:
             {T::Kind::ColumnId, {E::kInfoFieldNumber, V::kKindFieldNumber}},
             {T::Replicated::ColumnId, {E::kInfoFieldNumber, V::kReplicatedFieldNumber}},
             {T::DiskSpace::ColumnId, {E::kInfoFieldNumber, V::kDiskSpaceFieldNumber}},
+            {T::PhantomOnly::ColumnId, {E::kInfoFieldNumber, V::kPhantomOnlyFieldNumber}},
         };
         return fieldMap;
     }
 };
 
 THolder<NActors::IActor> CreateVSlotsScan(const NActors::TActorId& ownerId, ui32 scanId,
-    const NKikimrSysView::TSysViewDescription& sysViewInfo, const TTableRange& tableRange,
-    const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
+    const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
+    const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
 {
-    return MakeHolder<TVSlotsScan>(ownerId, scanId, sysViewInfo, tableRange, columns);
+    return MakeHolder<TVSlotsScan>(ownerId, scanId, database, sysViewInfo, tableRange, columns);
 }
 
 } // NKikimr::NSysView

@@ -130,6 +130,7 @@ class TestLargeS3Import:
                     f"tables: {get_external_param('results-table', '-')}, "
                     f"has key {'YES' if os.getenv('RESULT_YDB_OAUTH', None) else 'NO'}")
 
+        YdbCluster._dyn_nodes_count = 0  # Disable node count check
         health_errors, health_warnings = YdbCluster.check_if_ydb_alive()
         logger.info(f"ydb health warnings: {health_warnings}")
         assert health_errors is None, f"ydb is not alive: {health_errors}"
@@ -193,8 +194,8 @@ class TestLargeS3Import:
         access_key_id_name = f"{secret_prefix}test_olap_s3_import_aws_access_key_id"
         access_key_secret_name = f"{secret_prefix}test_olap_s3_import_aws_access_key_secret"
         self.query(f"""
-            UPSERT OBJECT {access_key_id_name} (TYPE SECRET) WITH (value = "{self.sink_access_key_id}");
-            UPSERT OBJECT {access_key_secret_name} (TYPE SECRET) WITH (value = "{self.sink_access_key_secret}");
+            CREATE SECRET {access_key_id_name} WITH (value = "{self.sink_access_key_id}");
+            CREATE SECRET {access_key_secret_name} WITH (value = "{self.sink_access_key_secret}");
         """, log_query=False)
 
         self.query(f"""
@@ -202,8 +203,8 @@ class TestLargeS3Import:
                 SOURCE_TYPE="ObjectStorage",
                 LOCATION="{self.s3_url}/{self.s3_sink_bucket}/",
                 AUTH_METHOD="AWS",
-                AWS_ACCESS_KEY_ID_SECRET_NAME="{access_key_id_name}",
-                AWS_SECRET_ACCESS_KEY_SECRET_NAME="{access_key_secret_name}",
+                AWS_ACCESS_KEY_ID_SECRET_PATH="{access_key_id_name}",
+                AWS_SECRET_ACCESS_KEY_SECRET_PATH="{access_key_secret_name}",
                 AWS_REGION="ru-central-1"
             );
 

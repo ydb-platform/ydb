@@ -9,6 +9,8 @@ SRCS(
     interface.cpp
     pack.h
     parser.h
+    in_range.h
+    sign.h
     type_desc.h
     utils.h
 )

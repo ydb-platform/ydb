@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/protos/kqp.pb.h>
+#include <ydb/core/protos/kqp_physical.pb.h>
 #include <ydb/public/api/protos/ydb_query.pb.h>
 
 #include <util/generic/string.h>
@@ -14,8 +15,12 @@ namespace NKikimr::NKqp {
 struct TKqpQuerySettings {
     bool DocumentApiRestricted = true;
     bool IsInternalCall = false;
+    i32 RuntimeParameterSizeLimit = 0;
+    bool RuntimeParameterSizeLimitSatisfied = false;
+
     NKikimrKqp::EQueryType QueryType = NKikimrKqp::EQueryType::QUERY_TYPE_UNDEFINED;
     Ydb::Query::Syntax Syntax = Ydb::Query::Syntax::SYNTAX_UNSPECIFIED;
+    bool UsePessimisticLocks = false;
 
     explicit TKqpQuerySettings(NKikimrKqp::EQueryType queryType)
         : QueryType(queryType) {}
@@ -25,7 +30,10 @@ struct TKqpQuerySettings {
             DocumentApiRestricted == other.DocumentApiRestricted &&
             IsInternalCall == other.IsInternalCall &&
             QueryType == other.QueryType &&
-            Syntax == other.Syntax;
+            Syntax == other.Syntax &&
+            UsePessimisticLocks == other.UsePessimisticLocks &&
+            RuntimeParameterSizeLimit == other.RuntimeParameterSizeLimit &&
+            RuntimeParameterSizeLimitSatisfied == other.RuntimeParameterSizeLimitSatisfied;
     }
 
     bool operator!=(const TKqpQuerySettings& other) {
@@ -38,7 +46,9 @@ struct TKqpQuerySettings {
     bool operator>=(const TKqpQuerySettings&) = delete;
 
     size_t GetHash() const noexcept {
-        auto tuple = std::make_tuple(DocumentApiRestricted, IsInternalCall, QueryType, Syntax);
+        auto tuple = std::make_tuple(
+            DocumentApiRestricted, IsInternalCall, QueryType, Syntax,
+            UsePessimisticLocks, RuntimeParameterSizeLimitSatisfied);
         return THash<decltype(tuple)>()(tuple);
     }
 
@@ -46,7 +56,12 @@ struct TKqpQuerySettings {
         TStringBuilder result = TStringBuilder() << "{"
             << "DocumentApiRestricted: " << DocumentApiRestricted << ", "
             << "IsInternalCall: " << IsInternalCall << ", "
-            << "QueryType: " << QueryType << "}";
+            << "QueryType: " << QueryType << ", "
+            << "Syntax: " << static_cast<int>(Syntax) << ", "
+            << "UsePessimisticLocks: " << UsePessimisticLocks << ", "
+            << "RuntimeParameterSizeLimit: " << RuntimeParameterSizeLimit << ", "
+            << "RuntimeParameterSizeLimitSatisfied: " << RuntimeParameterSizeLimitSatisfied
+            << "}";
         return result;
     }
 };

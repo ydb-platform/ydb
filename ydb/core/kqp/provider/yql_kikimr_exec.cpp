@@ -1,35 +1,36 @@
 #include "yql_kikimr_provider_impl.h"
 
+#include <ydb/core/base/fulltext.h>
+#include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/docapi/traits.h>
+#include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+#include <ydb/core/kqp/provider/yql_kikimr_results.h>
+#include <ydb/core/protos/index_builder.pb.h>
+#include <ydb/core/local_indexes/bloom/const.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc/misc.h>
+#include <ydb/core/ydb_convert/ydb_convert.h>
+#include <ydb/library/ydb_issue/proto/issue_id.pb.h>
+#include <ydb/library/yql/dq/tasks/dq_task_program.h>
+#include <ydb/public/api/protos/ydb_topic.pb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
-#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/core/peephole_opt/yql_opt_peephole_physical.h>
+#include <yql/essentials/core/type_ann/type_ann_expr.h>
+#include <yql/essentials/core/type_ann/type_ann_core.h>
 #include <yql/essentials/core/yql_execution.h>
 #include <yql/essentials/core/yql_graph_transformer.h>
 #include <yql/essentials/core/yql_opt_utils.h>
-#include <yql/essentials/core/type_ann/type_ann_expr.h>
-#include <yql/essentials/core/type_ann/type_ann_core.h>
-#include <yql/essentials/core/peephole_opt/yql_opt_peephole_physical.h>
+#include <yql/essentials/minikql/mkql_program_builder.h>
 #include <yql/essentials/providers/common/mkql/yql_provider_mkql.h>
 #include <yql/essentials/providers/common/mkql/yql_type_mkql.h>
 #include <yql/essentials/providers/result/expr_nodes/yql_res_expr_nodes.h>
-
-#include <ydb/library/ydb_issue/proto/issue_id.pb.h>
 #include <yql/essentials/public/issue/yql_issue.h>
-
-#include <ydb/core/ydb_convert/ydb_convert.h>
-#include <ydb/core/protos/index_builder.pb.h>
-
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
-#include <ydb/public/api/protos/ydb_topic.pb.h>
-
-#include <ydb/library/yql/dq/tasks/dq_task_program.h>
-
-#include <yql/essentials/minikql/mkql_program_builder.h>
-
-#include <ydb/core/kqp/provider/yql_kikimr_results.h>
-#include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NYql {
+
 namespace {
 
 using namespace NNodes;
@@ -162,6 +163,12 @@ namespace {
         return alterDatabaseSettings;
     }
 
+    TTruncateTableSettings ParseTruncateTableSettings(TKiTruncateTable truncateTable) {
+        TTruncateTableSettings truncateTableSettings;
+        truncateTableSettings.TablePath = truncateTable.TablePath().Value();
+        return truncateTableSettings;
+    }
+
     TCreateUserSettings ParseCreateUserSettings(TKiCreateUser createUser) {
         TCreateUserSettings createUserSettings;
         createUserSettings.UserName = TString(createUser.UserName());
@@ -176,8 +183,7 @@ namespace {
             } else if (name == "passwordEncrypted") {
                 // PasswordEncrypted is never used
             } else if (name == "hash") {
-                createUserSettings.IsHashedPassword = true;
-                createUserSettings.Password = setting.Value().Cast<TCoAtom>().StringValue();
+                createUserSettings.HashedPassword = setting.Value().Cast<TCoAtom>().StringValue();
             } else if (name == "login") {
                 createUserSettings.CanLogin = true;
             } else if (name == "noLogin") {
@@ -202,8 +208,7 @@ namespace {
             } else if (name == "passwordEncrypted") {
                 // PasswordEncrypted is never used
             } else if (name == "hash") {
-                alterUserSettings.IsHashedPassword = true;
-                alterUserSettings.Password = setting.Value().Cast<TCoAtom>().StringValue();
+                alterUserSettings.HashedPassword = setting.Value().Cast<TCoAtom>().StringValue();
             } else if (name == "login") {
                 alterUserSettings.CanLogin = true;
             } else if (name == "noLogin") {
@@ -436,37 +441,110 @@ namespace {
         return alterSequenceSettings;
     }
 
+    TSecretSettings ParseSecretSettings(TKiCreateSecret createSecret) {
+        TSecretSettings settings;
+        settings.Name = TString(createSecret.Secret());
+        if (auto value = TString(createSecret.Value())) {
+            settings.Value = std::move(value);
+        }
+        if (auto paramName = TString(createSecret.ValueParamName())) {
+            settings.ValueParamName = std::move(paramName);
+        }
+        if (auto inheritPermissions = TString(createSecret.InheritPermissions())) {
+            settings.InheritPermissions = FromString<bool>(inheritPermissions);
+        }
+        settings.ReplaceIfExists = (TString(createSecret.ReplaceIfExists()) == "1");
+        settings.ExistingOk = (TString(createSecret.ExistingOk()) == "1");
+        return settings;
+    }
+
+    TSecretSettings ParseSecretSettings(TKiAlterSecret alterSecret) {
+        TSecretSettings settings;
+        settings.Name = TString(alterSecret.Secret());
+        if (auto value = TString(alterSecret.Value())) {
+            settings.Value = std::move(value);
+        }
+        if (auto paramName = TString(alterSecret.ValueParamName())) {
+            settings.ValueParamName = std::move(paramName);
+        }
+        settings.MissingOk = (TString(alterSecret.MissingOk()) == "1");
+        return settings;
+    }
+
+    TSecretSettings ParseSecretSettings(TKiDropSecret dropSecret) {
+        TSecretSettings settings;
+        settings.Name = TString(dropSecret.Secret());
+        settings.MissingOk = (TString(dropSecret.MissingOk()) == "1");
+        return settings;
+    }
+
+    bool GetBoolValue(const TCoNameValueTuple& setting) {
+        return FromString<bool>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+    }
+
+    auto GetStringValue(const TCoNameValueTuple& setting) {
+        return TString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+    }
+
+    std::optional<ui64> GetTimestampValue(const TCoNameValueTuple& setting) {
+        if(setting.Value().Maybe<TCoDatetime>()) {
+            return FromString<ui64>(setting.Value().Cast<TCoDatetime>().Literal().Value());
+        } else if (setting.Value().Maybe<TCoTimestamp>()) {
+            return FromString<ui64>(setting.Value().Cast<TCoTimestamp>().Literal().Value()) / 1'000'000ull;
+        } else {
+            try {
+                return FromString<ui64>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+            } catch (const yexception& e) {
+                return std::nullopt;
+            }
+        }
+    }
+
+    auto GetConsumerTimestampParseError(const auto& consumer, auto field) {
+        return TStringBuilder() <<  "Failed to parse " << field << " setting value for consumer "
+                                << consumer.Name().StringValue()
+                                << ". Datetime(), Timestamp or integer value is supported";
+    }
+
+    auto GetIntValue(const TCoNameValueTuple& setting) {
+        return FromString<ui64>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+    }
+
+    auto GetIntervalValue(const TCoNameValueTuple& setting) {
+        return TDuration::MicroSeconds(FromString<ui64>(setting.Value().Cast<TCoInterval>().Literal().Value()));
+    }
+
     [[nodiscard]] TString AddConsumerToTopicRequest(
             Ydb::Topic::Consumer* protoConsumer, const TCoTopicConsumer& consumer
     ) {
+        std::optional<TString> type;
+        std::optional<bool> keepMessagesOrder;
+        std::optional<TDuration> defaultProcessingTimeout;
+        std::optional<TString> policy;
+        std::optional<ui64> maxProcessingAttempts;
+        std::optional<TString> dlq;
+        std::optional<TDuration> receiveMessageWaitTime;
+        std::optional<TDuration> receiveMessageDelay;
+
+
         protoConsumer->set_name(consumer.Name().StringValue());
         auto settings = consumer.Settings().Cast<TCoNameValueTupleList>();
         for (const auto& setting : settings) {
             auto name = setting.Name().Value();
-            if (name == "important") {
-                protoConsumer->set_important(FromString<bool>(
-                        setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
-                ));
-            } else if (name == "setReadFromTs") {
-                ui64 tsValue = 0;
-                if(setting.Value().Maybe<TCoDatetime>()) {
-                    tsValue = FromString<ui64>(setting.Value().Cast<TCoDatetime>().Literal().Value());
-                } else if (setting.Value().Maybe<TCoTimestamp>()) {
-                    tsValue = static_cast<ui64>(
-                            FromString<ui64>(setting.Value().Cast<TCoTimestamp>().Literal().Value()) / 1'000'000
-                    );
-                } else {
-                    try {
-                        tsValue = FromString<ui64>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
-                    } catch (const yexception& e) {
-                        return TStringBuilder() <<  "Failed to parse read_from setting value for consumer"
-                                                << consumer.Name().StringValue()
-                                                << ". Datetime(), Timestamp or integer value is supported";
-                    }
-                }
-                protoConsumer->mutable_read_from()->set_seconds(tsValue);
 
-            } else if (name == "setSupportedCodecs") {
+            if (name == "important") {
+                protoConsumer->set_important(GetBoolValue(setting));
+            } else if (name == "setAvailabilityPeriod"sv) {
+                auto period = GetIntervalValue(setting);
+                protoConsumer->mutable_availability_period()->set_seconds(period.Seconds());
+                protoConsumer->mutable_availability_period()->set_nanos(period.NanoSecondsOfSecond());
+            } else if (name == "setReadFromTs"sv) {
+                auto tsValue = GetTimestampValue(setting);
+                if (!tsValue) {
+                    return GetConsumerTimestampParseError(consumer, "read_from");
+                }
+                protoConsumer->mutable_read_from()->set_seconds(tsValue.value());
+            } else if (name == "setSupportedCodecs"sv) {
                 auto codecs = GetTopicCodecsFromString(
                         TString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value())
                 );
@@ -475,8 +553,98 @@ namespace {
                 for (auto codec : codecs) {
                     protoCodecs->add_codecs(codec);
                 }
+            } else if (name == "type"sv) {
+                type = to_lower(GetStringValue(setting));
+                if (type.value() == "streaming") {
+                    protoConsumer->mutable_streaming_consumer_type();
+                } else if (type.value() == "shared") {
+                    protoConsumer->mutable_shared_consumer_type();
+                } else {
+                    return TStringBuilder() << "Unknown consumer type: " << type.value();
+                }
+            } else if (name == "keep_messages_order"sv) {
+                keepMessagesOrder = GetBoolValue(setting);
+                protoConsumer->mutable_shared_consumer_type()->set_keep_messages_order(keepMessagesOrder.value());
+            } else if (name == "default_processing_timeout"sv) {
+                defaultProcessingTimeout = GetIntervalValue(setting);
+                auto* value = protoConsumer->mutable_shared_consumer_type()->mutable_default_processing_timeout();
+                value->set_seconds(defaultProcessingTimeout->Seconds());
+                value->set_nanos(defaultProcessingTimeout->NanoSecondsOfSecond());
+            } else if (name == "max_processing_attempts"sv) {
+                maxProcessingAttempts = GetIntValue(setting);
+                protoConsumer->mutable_shared_consumer_type()->mutable_dead_letter_policy()->mutable_condition()->set_max_processing_attempts(maxProcessingAttempts.value());
+            } else if (name == "dead_letter_policy"sv) {
+                policy = to_lower(GetStringValue(setting));
+                auto policyProto = protoConsumer->mutable_shared_consumer_type()->mutable_dead_letter_policy();
+                if (policy.value() == "move"sv) {
+                    policyProto->set_enabled(true);
+                    policyProto->mutable_move_action();
+                } else if (policy.value() == "delete"sv) {
+                    policyProto->set_enabled(true);
+                    policyProto->mutable_delete_action();
+                } else if (policy.value() == "none"sv) {
+                    policyProto->set_enabled(false);
+                } else {
+                    return TStringBuilder() << "Unknown dead letter policy: " << policy.value();
+                }
+            } else if (name == "dead_letter_queue"sv) {
+                dlq = GetStringValue(setting);
+                auto policyProto = protoConsumer->mutable_shared_consumer_type()->mutable_dead_letter_policy();
+                policyProto->mutable_move_action()->set_dead_letter_queue(dlq.value());
+            } else if (name == "receive_message_wait_time"sv) {
+                receiveMessageWaitTime = GetIntervalValue(setting);
+                auto* value = protoConsumer->mutable_shared_consumer_type()->mutable_receive_message_wait_time();
+                value->set_seconds(receiveMessageWaitTime->Seconds());
+                value->set_nanos(receiveMessageWaitTime->NanoSecondsOfSecond());
+            } else if (name == "receive_message_delay"sv) {
+                receiveMessageDelay = GetIntervalValue(setting);
+                auto* value = protoConsumer->mutable_shared_consumer_type()->mutable_receive_message_delay();
+                value->set_seconds(receiveMessageDelay->Seconds());
+                value->set_nanos(receiveMessageDelay->NanoSecondsOfSecond());
             }
         }
+
+        if (!type || type.value() == "streaming"sv) {
+            if (keepMessagesOrder) {
+                return TStringBuilder() << "keep_messages_order is not supported for streaming consumers";
+            }
+            if (defaultProcessingTimeout) {
+                return TStringBuilder() << "default_processing_timeout is not supported for streaming consumers";
+            }
+            if (maxProcessingAttempts) {
+                return TStringBuilder() << "max_processing_attempts is not supported for streaming consumers";
+            }
+            if (policy) {
+                return TStringBuilder() << "dead_letter_policy is not supported for streaming consumers";
+            }
+            if (dlq) {
+                return TStringBuilder() << "dead_letter_queue is not supported for streaming consumers";
+            }
+            if (receiveMessageWaitTime) {
+                return TStringBuilder() << "receive_message_wait_time is not supported for streaming consumers";
+            }
+            if (receiveMessageDelay) {
+                return TStringBuilder() << "receive_message_delay is not supported for streaming consumers";
+            }
+        } else {
+            if (!policy || policy.value() == "none"sv) {
+                if (maxProcessingAttempts) {
+                    return TStringBuilder() << "max_processing_attempts is not supported for shared consumers with dead letter policy 'none'";
+                }
+                if (dlq) {
+                    return TStringBuilder() << "dead_letter_queue is not supported for shared consumers with dead letter policy 'none'";
+                }
+            } else if (policy.value() == "delete"sv) {
+                if (dlq) {
+                    return TStringBuilder() << "dead_letter_queue is not supported for shared consumers with dead letter policy 'delete'";
+                }
+            } else {
+                if (!dlq) {
+                    return TStringBuilder() << "dead_letter_queue is required for shared consumers with dead letter policy 'move'";
+                }
+            }
+        }
+
         return {};
     }
 
@@ -485,31 +653,27 @@ namespace {
     ) {
         protoConsumer->set_name(consumer.Name().StringValue());
         auto settings = consumer.Settings().Cast<TCoNameValueTupleList>();
+
+        std::optional<TString> alterPolicy;
+        std::optional<TString> alterDLQ;
+
         for (const auto& setting : settings) {
             //ToDo[RESET]: Add reset when supported
             auto name = setting.Name().Value();
             if (name == "important") {
-                protoConsumer->set_set_important(FromString<bool>(
-                        setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
-                ));
+                protoConsumer->set_set_important(GetBoolValue(setting));
+            } else if (name == "setAvailabilityPeriod"sv) {
+                auto period = GetIntervalValue(setting);
+                protoConsumer->mutable_set_availability_period()->set_seconds(period.Seconds());
+                protoConsumer->mutable_set_availability_period()->set_nanos(period.NanoSecondsOfSecond());
+            } else if (name == "resetAvailabilityPeriod"sv) {
+                protoConsumer->mutable_reset_availability_period();
             } else if (name == "setReadFromTs") {
-                ui64 tsValue = 0;
-                if(setting.Value().Maybe<TCoDatetime>()) {
-                    tsValue = FromString<ui64>(setting.Value().Cast<TCoDatetime>().Literal().Value());
-                } else if (setting.Value().Maybe<TCoTimestamp>()) {
-                    tsValue = static_cast<ui64>(
-                            FromString<ui64>(setting.Value().Cast<TCoTimestamp>().Literal().Value()) / 1'000'000
-                    );
-                } else {
-                    try {
-                        tsValue = FromString<ui64>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
-                    } catch (const yexception& e) {
-                        return TStringBuilder() <<  "Failed to parse read_from setting value for consumer"
-                                                << consumer.Name().StringValue()
-                                                << ". Datetime(), Timestamp or integer value is supported";
-                    }
+                auto tsValue = GetTimestampValue(setting);
+                if (!tsValue) {
+                    return GetConsumerTimestampParseError(consumer, "read_from");
                 }
-                protoConsumer->mutable_set_read_from()->set_seconds(tsValue);
+                protoConsumer->mutable_set_read_from()->set_seconds(tsValue.value());
             } else if (name == "setSupportedCodecs") {
                 auto codecs = GetTopicCodecsFromString(
                         TString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value())
@@ -518,8 +682,55 @@ namespace {
                 for (auto codec : codecs) {
                     protoCodecs->add_codecs(codec);
                 }
+            } else if (name == "default_processing_timeout"sv) {
+                auto period = GetIntervalValue(setting);
+                auto* value = protoConsumer->mutable_alter_shared_consumer_type()->mutable_set_default_processing_timeout();
+                value->set_seconds(period.Seconds());
+                value->set_nanos(period.NanoSecondsOfSecond());
+            } else if (name == "max_processing_attempts"sv) {
+                protoConsumer->mutable_alter_shared_consumer_type()->mutable_alter_dead_letter_policy()->mutable_alter_condition()->set_set_max_processing_attempts(GetIntValue(setting));
+            } else if (name == "dead_letter_policy"sv) {
+                alterPolicy = GetStringValue(setting);
+                auto policyProto = protoConsumer->mutable_alter_shared_consumer_type()->mutable_alter_dead_letter_policy();
+                if (alterPolicy.value() == "move"sv) {
+                    policyProto->set_set_enabled(true);
+                    policyProto->mutable_set_move_action();
+                } else if (alterPolicy.value() == "delete"sv) {
+                    policyProto->set_set_enabled(true);
+                    policyProto->mutable_set_delete_action();
+                } else if (alterPolicy.value() == "none"sv) {
+                    policyProto->set_set_enabled(false);
+                } else {
+                    return TStringBuilder() << "Unknown dead letter policy: " << alterPolicy.value();
+                }
+            } else if (name == "dead_letter_queue"sv) {
+                alterDLQ = GetStringValue(setting);
+            } else if (name == "receive_message_wait_time"sv) {
+                auto period = GetIntervalValue(setting);
+                auto* value = protoConsumer->mutable_alter_shared_consumer_type()->mutable_set_receive_message_wait_time();
+                value->set_seconds(period.Seconds());
+                value->set_nanos(period.NanoSecondsOfSecond());
+            } else if (name == "receive_message_delay"sv) {
+                auto period = GetIntervalValue(setting);
+                auto* value = protoConsumer->mutable_alter_shared_consumer_type()->mutable_set_receive_message_delay();
+                value->set_seconds(period.Seconds());
+                value->set_nanos(period.NanoSecondsOfSecond());
             }
         }
+
+        if (alterDLQ) {
+            auto policyProto = protoConsumer->mutable_alter_shared_consumer_type()->mutable_alter_dead_letter_policy();
+            if (alterPolicy) {
+                if (alterPolicy.value() == "move"sv) {
+                    policyProto->mutable_set_move_action()->set_dead_letter_queue(alterDLQ.value());
+                } else {
+                    return TStringBuilder() << "The dead_letter_queue option can only be used with dead_letter_policy 'move'";
+                }
+            } else {
+                policyProto->mutable_alter_move_action()->set_set_dead_letter_queue(alterDLQ.value());
+            }
+        }
+
         return {};
     }
 
@@ -538,6 +749,10 @@ namespace {
                 auto microValue = FromString<ui64>(setting.Value().Cast<TCoInterval>().Literal().Value());
                 request->mutable_retention_period()->set_seconds(
                         static_cast<ui64>(microValue / 1'000'000)
+                );
+            } else if (name == "setRetentionStorage") {
+                request->set_retention_storage_mb(
+                        FromString<ui64>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value())
                 );
             } else if (name == "setPartitionWriteSpeed") {
                 request->set_partition_write_speed_bytes_per_second(
@@ -584,6 +799,12 @@ namespace {
                 );
                 YQL_ENSURE(result);
                 request->mutable_partitioning_settings()->mutable_auto_partitioning_settings()->set_strategy(strategy);
+            } else if (name == "setMetricsLevel") {
+                auto metricsLevel = FromString<i32>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+                request->set_metrics_level(metricsLevel);
+            } else if (name == "setContentBasedDeduplication") {
+                auto value = FromString<bool>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+                request->set_content_based_deduplication(value);
             }
         }
     }
@@ -604,6 +825,10 @@ namespace {
                 auto microValue = FromString<ui64>(setting.Value().Cast<TCoInterval>().Literal().Value());
                 request->mutable_set_retention_period()->set_seconds(
                         static_cast<ui64>(microValue / 1'000'000)
+                );
+            } else if (name == "setRetentionStorage") {
+                request->set_set_retention_storage_mb(
+                        FromString<ui64>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value())
                 );
             } else if (name == "setPartitionWriteSpeed") {
                 request->set_set_partition_write_speed_bytes_per_second(
@@ -650,6 +875,14 @@ namespace {
                 );
                 YQL_ENSURE(result);
                 request->mutable_alter_partitioning_settings()->mutable_alter_auto_partitioning_settings()->set_set_strategy(strategy);
+            } else if (name == "setMetricsLevel") {
+                auto metricsLevel = FromString<i32>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+                request->set_set_metrics_level(metricsLevel);
+            } else if (name == "resetMetricsLevel") {
+                request->mutable_reset_metrics_level();
+            } else if (name == "setContentBasedDeduplication") {
+                auto value = FromString<bool>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+                request->set_set_content_based_deduplication(value);
             }
         }
     }
@@ -767,7 +1000,7 @@ namespace {
 
     bool ParseAsyncReplicationSettingsBase(
         TReplicationSettingsBase& dstSettings, const TCoNameValueTupleList& srcSettings, TExprContext& ctx, TPositionHandle pos,
-        const TString& objectName = "replication"
+        bool disableOldSecretCreation, const TString& objectName = "replication"
     ) {
         for (auto setting : srcSettings) {
             auto name = setting.Name().Value();
@@ -780,7 +1013,7 @@ namespace {
             } else if (name == "token") {
                 dstSettings.EnsureOAuthToken().Token =
                     setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
-            } else if (name == "token_secret_name") {
+            } else if (name == "token_secret_name" || name == "token_secret_path") {
                 dstSettings.EnsureOAuthToken().TokenSecretName =
                     setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
             } else if (name == "user") {
@@ -789,16 +1022,30 @@ namespace {
             } else if (name == "password") {
                 dstSettings.EnsureStaticCredentials().Password =
                     setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
-            } else if (name == "password_secret_name") {
+            } else if (name == "password_secret_name" || name == "password_secret_path") {
                 dstSettings.EnsureStaticCredentials().PasswordSecretName =
                     setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
+            } else if (name == "service_account_id") {
+                dstSettings.EnsureIamCredentials().ServiceAccountId =
+                    setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
+            } else if (name == "initial_token") {
+                dstSettings.EnsureIamCredentials().InitialToken.Token =
+                    setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
+            } else if (name == "initial_token_secret_name" || name == "initial_token_secret_path") {
+                dstSettings.EnsureIamCredentials().InitialToken.TokenSecretName =
+                    setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
+            } else if (name == "resource_id") {
+                dstSettings.EnsureIamCredentials().ResourceId =
+                    setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
+            } else if (name == "ca_cert") {
+                dstSettings.CaCert = setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
             } else if (name == "state") {
                 auto value = ToString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
                 if (to_lower(value) == "done") {
                     dstSettings.EnsureStateDone();
                 } else if (to_lower(value) == "paused") {
                     dstSettings.StatePaused = true;
-                } else if (to_lower(value) == "standby") {
+                } else if (to_lower(value) == "standby" || to_lower(value) == "active") {
                     dstSettings.StateStandBy = true;
                 } else {
                     ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
@@ -825,9 +1072,12 @@ namespace {
             return false;
         }
 
-        if (dstSettings.OAuthToken && dstSettings.StaticCredentials) {
+        const auto authCredentials = int(!!dstSettings.OAuthToken)
+            + int(!!dstSettings.StaticCredentials)
+            + int(!!dstSettings.IamCredentials);
+        if (authCredentials > 1) {
             ctx.AddError(TIssue(ctx.GetPosition(pos),
-                "TOKEN and USER/PASSWORD are mutually exclusive"));
+                "TOKEN, USER/PASSWORD and SERVICE_ACCOUNT_ID/INITIAL_TOKEN are mutually exclusive"));
             return false;
         }
 
@@ -843,14 +1093,46 @@ namespace {
             return false;
         }
 
+        if (const auto& x = dstSettings.IamCredentials; x && x->InitialToken.Token && x->InitialToken.TokenSecretName) {
+            ctx.AddError(TIssue(ctx.GetPosition(pos),
+                "INITIAL_TOKEN and INITIAL_TOKEN_SECRET_NAME are mutually exclusive"));
+            return false;
+        }
+
+        if (disableOldSecretCreation) {
+            auto checkSecret = [&](const TString& secretName) {
+                if (secretName && !secretName.StartsWith('/')) {
+                    ctx.AddError(
+                        TIssue(
+                            ctx.GetPosition(pos),
+                            "Old secrets are disabled for creating new objects. Please use new secrets"
+                        )
+                    );
+                    return false;
+                }
+                return true;
+            };
+
+            if (const auto& x = dstSettings.OAuthToken; x && !checkSecret(x->TokenSecretName)) {
+                return false;
+            }
+            if (const auto& x = dstSettings.StaticCredentials; x && !checkSecret(x->PasswordSecretName)) {
+                return false;
+            }
+            if (const auto& x = dstSettings.IamCredentials; x && !checkSecret(x->InitialToken.TokenSecretName)) {
+                return false;
+            }
+        }
+
         return true;
     }
 
     bool ParseAsyncReplicationSettings(
-        TReplicationSettings& dstSettings, const TCoNameValueTupleList& srcSettings, TExprContext& ctx, TPositionHandle pos
+        TReplicationSettings& dstSettings, const TCoNameValueTupleList& srcSettings, TExprContext& ctx, TPositionHandle pos,
+        bool disableOldSecretCreation
     ) {
 
-        if (!ParseAsyncReplicationSettingsBase(dstSettings, srcSettings, ctx, pos)) {
+        if (!ParseAsyncReplicationSettingsBase(dstSettings, srcSettings, ctx, pos, disableOldSecretCreation)) {
             return false;
         }
 
@@ -892,9 +1174,10 @@ namespace {
     }
 
     bool ParseTransferSettings(
-        TTransferSettings& dstSettings, const TCoNameValueTupleList& srcSettings, TExprContext& ctx, TPositionHandle pos
+        TTransferSettings& dstSettings, const TCoNameValueTupleList& srcSettings, TExprContext& ctx, TPositionHandle pos,
+        bool disableOldSecretCreation
     ) {
-        if (!ParseAsyncReplicationSettingsBase(dstSettings, srcSettings, ctx, pos, "transfer")) {
+        if (!ParseAsyncReplicationSettingsBase(dstSettings, srcSettings, ctx, pos, disableOldSecretCreation, "transfer")) {
             return false;
         }
 
@@ -936,6 +1219,39 @@ namespace {
                 }
 
                 dstSettings.ConsumerName = value;
+            } else if (name == "directory") {
+                auto value = ToString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+                if (value.empty()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                        TStringBuilder() << name << " must be not empty"));
+                    return false;
+                }
+                dstSettings.DirectoryPath = value;
+            } else if (name == "metrics_level") {
+                auto value = to_lower(ToString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()));
+                if (value.empty()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                        TStringBuilder() << name << " must be not empty"));
+                    return false;
+                }
+                auto& levelSetting = dstSettings.MetricsSettings.ConstructInPlace().Level;
+                ui64 numericVal = 0;
+                const ui64 maxValue = static_cast<ui64>(TReplicationSettingsBase::TMetricsSettings::EMetricsLevel::Detailed);
+                if (TryFromString<ui64>(value, numericVal) && numericVal <= maxValue) {
+                    levelSetting = static_cast<TReplicationSettingsBase::TMetricsSettings::EMetricsLevel>(numericVal);
+                } else if (value == "database") {
+                    levelSetting = TReplicationSettingsBase::TMetricsSettings::EMetricsLevel::Database;
+                } else if (value == "object") {
+                    levelSetting = TReplicationSettingsBase::TMetricsSettings::EMetricsLevel::Object;
+                } else if (value == "detailed") {
+                    levelSetting = TReplicationSettingsBase::TMetricsSettings::EMetricsLevel::Detailed;
+                } else {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                        TStringBuilder() << name << " value is invalid: " << value << "."
+                            << "Expected numeric value from 0 to " << maxValue << " or one of " << GetEnumAllNames<TReplicationSettingsBase::TMetricsSettings::EMetricsLevel>()
+                    ));
+                    return false;
+                }
             }
         }
 
@@ -957,6 +1273,13 @@ namespace {
                         "INCREMENTAL_BACKUP_ENABLED must be true or false"));
                     return false;
                 }
+            } else if (name == "omit_indexes") {
+                auto value = ToString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+                if (!TryFromString(value, dstSettings.OmitIndexes)) {
+                    ctx.AddError(TIssue(ctx.GetPosition(pos),
+                        "OMIT_INDEXES must be true or false"));
+                    return false;
+                }
             } else if (name == "storage") {
                 auto value = ToString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
                 if (to_lower(value) != "cluster") {
@@ -969,50 +1292,7 @@ namespace {
 
         return true;
     }
-}
-
-class TKiSinkPlanInfoTransformer : public TGraphTransformerBase {
-public:
-    TKiSinkPlanInfoTransformer(TIntrusivePtr<IKikimrQueryExecutor> queryExecutor)
-        : QueryExecutor(queryExecutor) {}
-
-    TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ) final {
-        output = input;
-        VisitExpr(input, [](const TExprNode::TPtr& node) {
-            if (auto maybeExec = TMaybeNode<TKiExecDataQuery>(node)) {
-                auto exec = maybeExec.Cast();
-                if (exec.Ast().Maybe<TCoVoid>()) {
-                    YQL_ENSURE(false);
-                }
-            }
-
-            return true;
-        });
-
-        return TStatus::Ok;
-    }
-
-    TFuture<void> DoGetAsyncFuture(const TExprNode& input) final {
-        Y_UNUSED(input);
-        return MakeFuture();
-    }
-
-    TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext&) final {
-        output = input;
-        return TStatus::Ok;
-    }
-
-    void Rewind() final {
-    }
-private:
-    struct TExecInfo {
-        TKiExecDataQuery Node;
-        TIntrusivePtr<IKikimrQueryExecutor::TAsyncQueryResult> Result;
-    };
-
-private:
-    TIntrusivePtr<IKikimrQueryExecutor> QueryExecutor;
-};
+} // anonymous namespace
 
 class TKiSourceCallableExecutionTransformer : public TAsyncCallbackTransformer<TKiSourceCallableExecutionTransformer> {
 private:
@@ -1137,7 +1417,7 @@ public:
                 return SyncStatus(status);
             }
 
-            auto literalResult = Gateway->ExecuteLiteralInstant(program, resultType, SessionCtx->Query().QueryData->GetAllocState());
+            auto literalResult = Gateway->ExecuteLiteralInstant(program, SessionCtx->Config().GetDefaultLangVer(), resultType, SessionCtx->Query().QueryData->GetAllocState());
 
             if (!literalResult.Success()) {
                 for (const auto& issue : literalResult.Issues()) {
@@ -1147,14 +1427,7 @@ public:
                 return SyncError();
             }
 
-            bool truncated = false;
-            auto yson = EncodeResultToYson(literalResult.Result, truncated);
-            if (truncated) {
-                ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "EvaluteExpr result is too big and was truncated"));
-                input->SetState(TExprNode::EState::Error);
-                return SyncError();
-            }
-
+            auto yson = literalResult.BinaryResult;
             output = input;
             input->SetState(TExprNode::EState::ExecutionComplete);
             input->SetResult(ctx.NewAtom(input->Pos(), yson));
@@ -1258,7 +1531,14 @@ private:
 
         IDataProvider::TFillSettings fillSettings = NCommon::GetFillSettings(res.Ref());
 
-        if (IsIn({EKikimrQueryType::Query, EKikimrQueryType::Script}, SessionCtx->Query().Type)) {
+        if (SessionCtx->Query().Type == EKikimrQueryType::Script) {
+            if (fillSettings.Discard) {
+                ctx.AddError(YqlIssue(ctx.GetPosition(res.Pos()), TIssuesIds::KIKIMR_BAD_OPERATION, TStringBuilder()
+                    << "DISCARD not supported in YDB scripts"));
+                return SyncError();
+            }
+        }
+        if (!SessionCtx->Config().GetEnableDiscardSelect() && SessionCtx->Query().Type == EKikimrQueryType::Query) {
             if (fillSettings.Discard) {
                 ctx.AddError(YqlIssue(ctx.GetPosition(res.Pos()), TIssuesIds::KIKIMR_BAD_OPERATION, TStringBuilder()
                     << "DISCARD not supported in YDB queries"));
@@ -1378,6 +1658,122 @@ public:
     using TBase::TBase;
 };
 
+template <class TKiObject>
+class TSecretTransformer {
+private:
+    TIntrusivePtr<IKikimrGateway> Gateway;
+    TString ActionInfo;
+protected:
+    TIntrusivePtr<TKikimrSessionContext> SessionCtx;
+    virtual TFuture<IKikimrGateway::TGenericResult> DoExecute(const TString& cluster, const TSecretSettings& settings) = 0;
+    TIntrusivePtr<IKikimrGateway> GetGateway() const {
+        return Gateway;
+    }
+public:
+    TSecretTransformer(const TString& actionInfo, TIntrusivePtr<IKikimrGateway> gateway, TIntrusivePtr<TKikimrSessionContext> sessionCtx)
+        : Gateway(gateway)
+        , ActionInfo(actionInfo)
+        , SessionCtx(sessionCtx)
+    {
+    }
+
+    std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> Execute(const TKiObject& kiObject, const TExprNode::TPtr& input) {
+        auto requireStatus = RequireChild(*input, 0);
+            if (requireStatus.Level != IGraphTransformer::TStatus::Ok) {
+                return SyncStatus(requireStatus);
+            }
+
+            auto cluster = TString(kiObject.DataSink().Cluster());
+            auto settings = ParseSecretSettings(kiObject);
+
+            auto future = DoExecute(cluster, settings);
+
+            return WrapFuture(future,
+                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
+                Y_UNUSED(res);
+                auto resultNode = ctx.NewWorld(input->Pos());
+                return resultNode;
+            }, "Executing " + ActionInfo);
+    }
+};
+
+class TCreateSecretTransformer: public TSecretTransformer<TKiCreateSecret> {
+private:
+    using TBase = TSecretTransformer<TKiCreateSecret>;
+protected:
+    virtual TFuture<IKikimrGateway::TGenericResult> DoExecute(const TString& cluster, const TSecretSettings& settings) override {
+        return GetGateway()->CreateSecret(cluster, settings);
+    }
+public:
+    using TBase::TBase;
+};
+
+class TAlterSecretTransformer: public TSecretTransformer<TKiAlterSecret> {
+private:
+    using TBase = TSecretTransformer<TKiAlterSecret>;
+protected:
+    virtual TFuture<IKikimrGateway::TGenericResult> DoExecute(const TString& cluster, const TSecretSettings& settings) override {
+        return GetGateway()->AlterSecret(cluster, settings);
+    }
+public:
+    using TBase::TBase;
+};
+
+class TDropSecretTransformer: public TSecretTransformer<TKiDropSecret> {
+private:
+    using TBase = TSecretTransformer<TKiDropSecret>;
+protected:
+    virtual TFuture<IKikimrGateway::TGenericResult> DoExecute(const TString& cluster, const TSecretSettings& settings) override {
+        return GetGateway()->DropSecret(cluster, settings);
+    }
+public:
+    using TBase::TBase;
+};
+
+bool ParseCompressionSettings(
+    const TExprList& columnSource,
+    Ydb::Table::ColumnMeta* columnDest,
+    TExprContext& ctx) {
+
+    auto compression = columnDest->mutable_compression();
+    const auto settings = columnSource.Item(1).Cast<TExprList>();
+    for (const auto setting : settings) {
+        const auto sKV = setting.Cast<TExprList>();
+        const auto key = sKV.Item(0).Cast<TCoAtom>().Value();
+        const auto& settingVal = sKV.Item(1).Ref();
+        if (key == "algorithm" && settingVal.IsCallable("String")) {
+            const auto algoVal = settingVal.Child(0)->Content();
+            if (algoVal == "lz4") {
+                compression->set_algorithm(Ydb::Table::ColumnCompression::ALGORITHM_LZ4);
+            } else if (algoVal == "zstd") {
+                compression->set_algorithm(Ydb::Table::ColumnCompression::ALGORITHM_ZSTD);
+            } else if (algoVal == "off") {
+                compression->set_algorithm(Ydb::Table::ColumnCompression::ALGORITHM_OFF);
+            } else {
+                ctx.AddError(TIssue(ctx.GetPosition(settingVal.Pos()), TStringBuilder()
+                    << "Unknown compression algorithm: " << algoVal));
+                return false;
+            }
+        } else if (key == "level" && (settingVal.IsCallable("Uint64") || settingVal.IsCallable("Int64"))) {
+            compression->set_compression_level(FromString<i64>(settingVal.Child(0)->Content()));
+        } else {
+            ctx.AddError(TIssue(ctx.GetPosition(sKV.Pos()), TStringBuilder()
+                << " Column: \"" << columnDest->name()
+                << "\". Setting: \"" << key
+                << "\". Only algorithm and level settings supported for column COMPRESSION"));
+            return false;
+        }
+    }
+
+    if (compression->has_compression_level() && !compression->has_algorithm()) {
+        ctx.AddError(TIssue(ctx.GetPosition(settings.Pos()), TStringBuilder()
+            << "compression level specified without an algorithm"));
+        return false;
+    }
+
+    return true;
+}
+
 class TKiSinkCallableExecutionTransformer : public TAsyncCallbackTransformer<TKiSinkCallableExecutionTransformer> {
 public:
     TKiSinkCallableExecutionTransformer(
@@ -1444,6 +1840,25 @@ public:
                 auto resultNode = ctx.NewWorld(input->Pos());
                 return resultNode;
             }, "Executing ALTER DATABASE");
+        }
+
+        if (auto maybeTruncateTable = TMaybeNode<TKiTruncateTable>(input)) {
+            auto requireStatus = RequireChild(*input, TKiExecDataQuery::idx_World);
+            if (requireStatus.Level != TStatus::Ok) {
+                return SyncStatus(requireStatus);
+            }
+
+            auto cluster = TString(maybeTruncateTable.Cast().DataSink().Cluster());
+            TTruncateTableSettings truncateTableSettings = ParseTruncateTableSettings(maybeTruncateTable.Cast());
+
+            auto future = Gateway->TruncateTable(cluster, truncateTableSettings);
+
+            return WrapFuture(future,
+                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
+                Y_UNUSED(res);
+                auto resultNode = ctx.NewWorld(input->Pos());
+                return resultNode;
+            }, "Executing TRUNCATE TABLE");
         }
 
         if (auto maybeCreate = TMaybeNode<TKiCreateTable>(input)) {
@@ -1591,6 +2006,21 @@ public:
             NKikimrIndexBuilder::TIndexBuildSettings indexBuildSettings;
             indexBuildSettings.set_source_path(table.Metadata->Name);
 
+            auto applyLocalBloomNgramFilterIndex = [](Ydb::Table::LocalBloomNgramFilterIndex* proto,
+                                                           const TIndexDescription::TLocalBloomNgramFilterDescription& desc) -> decltype(auto) {
+                if (desc.NgramSize) {
+                    proto->set_ngram_size(*desc.NgramSize);
+                }
+
+                if (desc.FalsePositiveProbability) {
+                    proto->set_false_positive_probability(*desc.FalsePositiveProbability);
+                }
+
+                if (desc.CaseSensitive) {
+                    proto->set_case_sensitive(*desc.CaseSensitive);
+                }
+            };
+
             for (auto action : maybeAlter.Cast().Actions()) {
                 auto name = action.Name().Value();
                 if (name == "renameTo") {
@@ -1636,7 +2066,17 @@ public:
                                     ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
                                         "Column addition with serial data type is unsupported"));
                                     return SyncError();
+                                } else if (constraint.Name().Value() == "generated") {
+                                    ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
+                                        "Column addition with a GENERATED ALWAYS AS expression is not supported"));
+                                    return SyncError();
                                 } else if (constraint.Name().Value() == "default") {
+                                    if (table.Metadata->Kind == EKikimrTableKind::Olap) {
+                                        ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
+                                            "Default values are not supported in column tables"));
+                                        return SyncError();
+                                    }
+
                                     if (columnBuild == nullptr) {
                                         columnBuild = indexBuildSettings.mutable_column_build_operation()->add_column();
                                     }
@@ -1661,6 +2101,30 @@ public:
                             }
                         }
 
+                        // Auto-bind ALTER ADD COLUMN __ydb_row_id Uint64 NOT NULL to a server-side
+                        // sequence: __ydb_row_id is a reserved name for the fulltext UseRowIdAsDocId
+                        // opt-in (NFulltext::RowIdColumn). The schemeshard creates the sequence,
+                        // backfills existing rows via the column-build scan, and bit-reverses
+                        // each value to spread inserts across posting-table shards.
+                        if (hasNotNull && !hasDefaultValue
+                            && TString(columnName.Value()) == NKikimr::NTableIndex::NFulltext::RowIdColumn
+                            && actualType->GetKind() == ETypeAnnotationKind::Data
+                            && actualType->Cast<TDataExprType>()->GetName() == "Uint64")
+                        {
+                            if (columnBuild == nullptr) {
+                                columnBuild = indexBuildSettings.mutable_column_build_operation()->add_column();
+                            }
+                            // The not_null branch above creates columnBuild without a name; set it
+                            // unconditionally here so the schemeshard build pipeline can identify the column.
+                            columnBuild->SetColumnName(TString(columnName));
+                            columnBuild->SetNotNull(true);
+                            columnBuild->set_default_from_sequence(
+                                NKikimr::NTableIndex::NFulltext::RowIdSequenceName);
+                            columnBuild->set_bit_reverse_sequence_value(true);
+                            columnBuild->mutable_default_from_literal()->mutable_type()->set_type_id(Ydb::Type::UINT64);
+                            hasDefaultValue = true;
+                        }
+
                         if (hasNotNull && !hasDefaultValue) {
                             ctx.AddError(
                                 YqlIssue(ctx.GetPosition(columnTuple.Pos()),
@@ -1669,21 +2133,41 @@ public:
                             return SyncError();
                         }
 
-                        if (columnTuple.Size() > 3) {
-                            auto families = columnTuple.Item(3).Cast<TCoAtomList>();
-                            if (families.Size() > 1) {
-                                ctx.AddError(TIssue(ctx.GetPosition(families.Pos()),
-                                    "Unsupported number of families"));
-                                return SyncError();
+                        for (size_t itemIdx = 3; itemIdx < columnTuple.Size(); ++itemIdx) {
+                            auto columnItem = columnTuple.Item(itemIdx);
+                            if (!columnItem.Maybe<TExprList>()) {
+                                continue;
                             }
+                            const auto exprs = columnItem.Cast<TExprList>();
+                            if (exprs.Size() > 1 && exprs.Item(0).Cast<TCoAtom>().Value() == "columnCompression") {
+                                if (!ParseCompressionSettings(exprs, add_column, ctx)) {
+                                    return SyncError();
+                                }
+                            } else if (exprs.Size() > 1 && exprs.Item(0).Cast<TCoAtom>().Value() == "columnEncoding") {
+                                if (!ParseEncodingSettings(exprs, add_column, ctx, table.Metadata->Kind)) {
+                                    return SyncError();
+                                }
+                            } else {
+                                auto families = columnItem.Cast<TCoAtomList>();
+                                if (table.Metadata->IsOlap() && families.Size() > 0) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(families.Pos()),
+                                        "Column FAMILY is not supported for column tables"));
+                                    return SyncError();
+                                }
+                                if (families.Size() > 1) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(families.Pos()),
+                                        "Unsupported number of families"));
+                                    return SyncError();
+                                }
 
-                            for (auto family : families) {
-                                add_column->set_family(TString(family.Value()));
-                            }
-
-                            if (columnBuild) {
                                 for (auto family : families) {
-                                    columnBuild->SetFamily(TString(family.Value()));
+                                    add_column->set_family(TString(family.Value()));
+                                }
+
+                                if (columnBuild) {
+                                    for (auto family : families) {
+                                        columnBuild->SetFamily(TString(family.Value()));
+                                    }
                                 }
                             }
                         }
@@ -1694,22 +2178,73 @@ public:
                         alterTableRequest.add_drop_columns(TString(dropColumn.Value()));
                     }
                 } else if (name == "alterColumns") {
+                    std::vector<TString> notNullColumns;
                     auto listNode = action.Value().Cast<TExprList>();
+
+                    THashSet<TString> generatedColumns;
+                    THashSet<TString> virtualGeneratedColumns;
+                    THashSet<TString> generatedDependencyColumns;
+
+                    for (const auto& [genName, genMeta] : table.Metadata->Columns) {
+                        if (!genMeta.IsDefaultFromExpression()) {
+                            continue;
+                        }
+
+                        generatedColumns.insert(genName);
+                        if (!genMeta.DefaultExpression->Stored) {
+                            virtualGeneratedColumns.insert(genName);
+                        }
+
+                        for (const auto& dep : genMeta.DefaultExpression->Dependencies) {
+                            generatedDependencyColumns.insert(dep);
+                        }
+                    }
+
                     for (size_t i = 0; i < listNode.Size(); ++i) {
-                        auto alter_columns = alterTableRequest.add_alter_columns();
                         auto item = listNode.Item(i);
                         auto columnTuple = item.Cast<TExprList>();
                         auto columnName = columnTuple.Item(0).Cast<TCoAtom>();
-                        alter_columns->set_name(TString(columnName));
                         auto alterColumnList = columnTuple.Item(1).Cast<TExprList>();
                         auto alterColumnAction = TString(alterColumnList.Item(0).Cast<TCoAtom>());
+
+                        auto alter_columns = alterTableRequest.add_alter_columns();
+                        alter_columns->set_name(TString(columnName));
+
+                        const TString columnNameStr(columnName.Value());
+                        const bool isGenerated = generatedColumns.contains(columnNameStr);
+                        const bool isGeneratedDependency = generatedDependencyColumns.contains(columnNameStr);
+
+                        if (alterColumnAction == "changeColumnConstraints" && (isGenerated || isGeneratedDependency)) {
+                            ctx.AddError(TIssue(ctx.GetPosition(columnName.Pos()), TStringBuilder()
+                                << "Cannot alter the NOT NULL constraint of column " << columnNameStr
+                                << (isGenerated ? ": it is a GENERATED column" : ": it is referenced by a GENERATED column")));
+                            return SyncError();
+                        }
+
+                        if ((alterColumnAction == "setDefault" || alterColumnAction == "setDefaultValue"
+                            || alterColumnAction == "dropDefault") && isGenerated)
+                        {
+                            ctx.AddError(TIssue(ctx.GetPosition(columnName.Pos()), TStringBuilder()
+                                << "Cannot alter the DEFAULT of GENERATED column " << columnNameStr));
+                            return SyncError();
+                        }
+
+                        if ((alterColumnAction == "setFamily" || alterColumnAction == "changeEncoding" ||
+                            alterColumnAction == "changeCompression") && virtualGeneratedColumns.contains(columnNameStr))
+                        {
+                            ctx.AddError(TIssue(ctx.GetPosition(columnName.Pos()), TStringBuilder()
+                                << "Cannot alter the column family, encoding or compression of VIRTUAL GENERATED column "
+                                << columnNameStr));
+                            return SyncError();
+                        }
+
                         if (alterColumnAction == "setDefault") {
                             auto setDefault = alterColumnList.Item(1).Cast<TCoAtomList>();
                             if (setDefault.Size() == 1) {
                                 auto defaultExpr = TString(setDefault.Item(0).Cast<TCoAtom>());
                                 if (defaultExpr != "Null") {
                                     ctx.AddError(TIssue(ctx.GetPosition(setDefault.Pos()),
-                                        TStringBuilder() << "Unsupported value to set defualt: " << defaultExpr));
+                                        TStringBuilder() << "Unsupported value to set default: " << defaultExpr));
                                     return SyncError();
                                 }
                                 alter_columns->set_empty_default(google::protobuf::NullValue());
@@ -1725,6 +2260,11 @@ public:
                                 fromSequence->set_name(arg);
                             }
                         } else if (alterColumnAction == "setFamily") {
+                            if (table.Metadata->IsOlap()) {
+                                ctx.AddError(TIssue(ctx.GetPosition(alterColumnList.Pos()),
+                                    "Column FAMILY is not supported for column tables"));
+                                return SyncError();
+                            }
                             auto families = alterColumnList.Item(1).Cast<TCoAtomList>();
                             if (families.Size() > 1) {
                                 ctx.AddError(TIssue(ctx.GetPosition(families.Pos()),
@@ -1756,21 +2296,85 @@ public:
                             if (value == "drop_not_null") {
                                 alter_columns->set_not_null(false);
                             } else if (value == "set_not_null") {
-                                ctx.AddError(TIssue(ctx.GetPosition(constraintsList.Pos()), TStringBuilder()
-                                    << "SET NOT NULL is currently not supported."));
-                                return SyncError();
+                                if (!SessionCtx->Config().FeatureFlags.GetEnableSetColumnConstraint()) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(constraintsList.Pos()), TStringBuilder()
+                                        << "SET NOT NULL is currently not supported."));
+                                    return SyncError();
+                                } else {
+                                    alterTableRequest.mutable_alter_columns()->RemoveLast();
+                                    notNullColumns.push_back(TString(columnName));
+                                }
                             } else {
                                 ctx.AddError(TIssue(ctx.GetPosition(constraintsList.Pos()), TStringBuilder()
                                     << "Unknown operation in changeColumnConstraints"));
                                 return SyncError();
                             }
+                        } else if (alterColumnAction == "setDefaultValue") {
+                            if (table.Metadata->Kind == EKikimrTableKind::Olap) {
+                                ctx.AddError(TIssue(ctx.GetPosition(alterColumnList.Pos()),
+                                    "Default values are not supported in column tables"));
+                                return SyncError();
+                            }
+
+                            auto defaultExpr = TExprBase(alterColumnList.Item(1));
+
+                            if (auto maybeJust = defaultExpr.Maybe<TCoJust>()) {
+                                defaultExpr = maybeJust.Cast().Input();
+                            }
+
+                            bool isNull = defaultExpr.Maybe<TCoNull>().IsValid() || IsPgNullExprNode(defaultExpr);
+                            if (isNull) {
+                                alter_columns->set_empty_default(google::protobuf::NullValue());
+                            } else {
+                                auto err = FillLiteralProto(defaultExpr, nullptr, *alter_columns->mutable_from_literal());
+                                if (err) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(defaultExpr.Pos()), *err));
+                                    return SyncError();
+                                }
+                            }
+                        } else if (alterColumnAction == "dropDefault") {
+                            if (table.Metadata->Kind == EKikimrTableKind::Olap) {
+                                ctx.AddError(TIssue(ctx.GetPosition(alterColumnList.Pos()),
+                                    "Default values are not supported in column tables"));
+                                return SyncError();
+                            }
+
+                            alter_columns->set_empty_default(google::protobuf::NullValue());
+                        } else if (alterColumnAction == "changeCompression") {
+                            if (!ParseCompressionSettings(alterColumnList, alter_columns, ctx)) {
+                                return SyncError();
+                            }
+                        } else if (alterColumnAction == "changeEncoding") {
+                            if (!ParseEncodingSettings(alterColumnList, alter_columns, ctx, table.Metadata->Kind)) {
+                                return SyncError();
+                            }
                         } else {
                             ctx.AddError(TIssue(ctx.GetPosition(alterColumnList.Pos()),
-                                    TStringBuilder() << "Unsupported action to alter column"));
+                                    TStringBuilder() << "Unsupported action to alter column: " << alterColumnAction));
                             return SyncError();
                         }
                     }
+
+                    if (notNullColumns.size() > 0) {
+                        if (alterTableRequest.alter_columns_size() != 0) {
+                            ctx.AddError(TIssue(
+                                ctx.GetPosition(listNode.Pos()),
+                                "Multiple ALTER COLUMN operations of different kinds are not allowed in a single statement."
+                            ));
+                            return SyncError();
+                        }
+
+                        for (const auto& columnName : notNullColumns) {
+                            auto* req = alterTableRequest.add_set_not_null();
+                            req->set_column_name(TString(columnName));
+                        }
+                    }
                 } else if (name == "addColumnFamilies" || name == "alterColumnFamilies") {
+                    if (table.Metadata->IsOlap()) {
+                        ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
+                            "Column FAMILY is not supported for column tables"));
+                        return SyncError();
+                    }
                     auto listNode = action.Value().Cast<TExprList>();
                     for (size_t i = 0; i < listNode.Size(); ++i) {
                         auto item = listNode.Item(i);
@@ -1810,6 +2414,25 @@ public:
                                 } else if (name == "compression_level") {
                                     auto level = FromString<i32>(familySetting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
                                     f->set_compression_level(level);
+                                } else if (name == "cache_mode") {
+                                    if (!SessionCtx->Config().FeatureFlags.GetEnableTableCacheModes()) {
+                                        ctx.AddError(TIssue(ctx.GetPosition(familySetting.Name().Pos()),
+                                            TStringBuilder() << "Setting cache_mode is not allowed"));
+                                        return SyncError();
+                                    }
+                                    auto cacheMode = TString(
+                                        familySetting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
+                                    );
+                                    if (to_lower(cacheMode) == "regular") {
+                                        f->set_cache_mode(Ydb::Table::ColumnFamily::CACHE_MODE_REGULAR);
+                                    } else if (to_lower(cacheMode) == "in_memory") {
+                                        f->set_cache_mode(Ydb::Table::ColumnFamily::CACHE_MODE_IN_MEMORY);
+                                    } else {
+                                        ctx.AddError(TIssue(ctx.GetPosition(familySetting.Name().Pos()),
+                                            TStringBuilder() << "Unknown cache mode '" << cacheMode
+                                                << "' for a column family"));
+                                        return SyncError();
+                                    }
                                 } else {
                                     ctx.AddError(TIssue(ctx.GetPosition(familySetting.Name().Pos()),
                                         TStringBuilder() << "Unknown column family setting name: " << name));
@@ -1891,13 +2514,59 @@ public:
                             } else if (type == "asyncGlobal") {
                                 add_index->mutable_global_async_index();
                             } else if (type == "globalVectorKmeansTree") {
-                                if (!SessionCtx->Config().FeatureFlags.GetEnableVectorIndex()) {
+                                add_index->mutable_global_vector_kmeans_tree_index();
+                            } else if (type == "globalFulltextPlain") {
+                                if (!SessionCtx->Config().FeatureFlags.GetEnableFulltextIndex()) {
                                     ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
-                                        TStringBuilder() << "Vector index support is disabled"));
+                                        TStringBuilder() << "Fulltext index support is disabled"));
+                                    return SyncError();
+                                }
+                                add_index->mutable_global_fulltext_plain_index();
+                            } else if (type == "globalFulltextRelevance") {
+                                if (!SessionCtx->Config().FeatureFlags.GetEnableFulltextIndex()) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
+                                        TStringBuilder() << "Fulltext index support is disabled"));
                                     return SyncError();
                                 }
 
-                                add_index->mutable_global_vector_kmeans_tree_index();
+                                add_index->mutable_global_fulltext_relevance_index();
+                            } else if (type == "globalJson") {
+                                if (!SessionCtx->Config().FeatureFlags.GetEnableJsonIndex()) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
+                                        TStringBuilder() << "JSON index support is disabled"));
+                                    return SyncError();
+                                }
+                                if (table.Metadata->Kind == EKikimrTableKind::Olap) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
+                                        "JSON index is not supported on column tables"));
+                                    return SyncError();
+                                }
+                                add_index->mutable_global_json_index();
+                            } else if (type == "localBloomFilter") {
+                                if (table.Metadata->Kind != EKikimrTableKind::Datashard &&
+                                    !SessionCtx->Config().FeatureFlags.GetEnableLocalBloomFilterIndex()) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
+                                        TStringBuilder() << "Local bloom filter index support is disabled"));
+                                    return SyncError();
+                                }
+
+                                add_index->mutable_local_bloom_filter_index();
+                            } else if (type == "localBloomNgramFilter") {
+                                if (table.Metadata->Kind != EKikimrTableKind::Datashard &&
+                                    !SessionCtx->Config().FeatureFlags.GetEnableLocalBloomNgramFilterIndex()) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
+                                        TStringBuilder() << "Local bloom ngram filter index support is disabled"));
+                                    return SyncError();
+                                }
+
+                                add_index->mutable_local_bloom_ngram_filter_index();
+                            } else if (type == "localMinMax") {
+                                if (!SessionCtx->Config().FeatureFlags.GetEnableLocalMinMaxIndex()) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
+                                        NKikimr::NOlap::NIndexes::NMinMax::FeatureFlagDisabledErrorMessage));
+                                    return SyncError();
+                                }
+                                add_index->mutable_local_min_max_index();
                             } else {
                                 ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
                                     TStringBuilder() << "Unknown index type: " << type));
@@ -1930,43 +2599,200 @@ public:
                                 }
                             }
                         } else if (name == "indexSettings") {
-                            YQL_ENSURE(add_index->type_case() == Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex);
-                            auto& protoVectorSettings = *add_index->mutable_global_vector_kmeans_tree_index()->mutable_vector_settings();
+                            if (add_index->type_case() == Ydb::Table::TableIndex::kGlobalFulltextPlainIndex) {
+                                // fulltext index has per-column analyzers settings, single value for now
+                                add_index->mutable_global_fulltext_plain_index()->mutable_fulltext_settings()->add_columns()->set_column(
+                                    add_index->index_columns().empty() ? "<none>" : *add_index->index_columns().rbegin()
+                                );
+                            } else if (add_index->type_case() == Ydb::Table::TableIndex::kGlobalFulltextRelevanceIndex) {
+                                // fulltext index has per-column analyzers settings, single value for now
+                                add_index->mutable_global_fulltext_relevance_index()->mutable_fulltext_settings()->add_columns()->set_column(
+                                    add_index->index_columns().empty() ? "<none>" : *add_index->index_columns().rbegin()
+                                );
+                            }
                             auto indexSettings = columnTuple.Item(1).Cast<TCoAtomList>();
-                            YQL_ENSURE(indexSettings.Maybe<TCoNameValueTupleList>());
-                            for (const auto& vectorSetting : indexSettings.Cast<TCoNameValueTupleList>()) {
-                                YQL_ENSURE(vectorSetting.Value().Maybe<TCoAtom>());
-                                auto parseU32 = [] (const char* key, const TString& value) {
-                                    ui32 num = 0;
-                                    YQL_ENSURE(TryFromString(value, num), "Wrong " << key << ": " << value);
-                                    return num;
-                                };
-                                const auto value = vectorSetting.Value().Cast<TCoAtom>().StringValue();
-                                if (vectorSetting.Name().Value() == "distance") {
-                                    protoVectorSettings.mutable_settings()->set_metric(VectorIndexSettingsParseDistance(value));
-                                } else if (vectorSetting.Name().Value() == "similarity") {
-                                    protoVectorSettings.mutable_settings()->set_metric(VectorIndexSettingsParseSimilarity(value));
-                                } else if (vectorSetting.Name().Value() == "vector_type") {
-                                    protoVectorSettings.mutable_settings()->set_vector_type(VectorIndexSettingsParseVectorType(value));
-                                } else if (vectorSetting.Name().Value() == "vector_dimension") {
-                                    protoVectorSettings.mutable_settings()->set_vector_dimension(parseU32("vector_dimension", value));
-                                } else if (vectorSetting.Name().Value() == "clusters") {
-                                    protoVectorSettings.set_clusters(parseU32("clusters", value));
-                                } else if (vectorSetting.Name().Value() == "levels") {
-                                    protoVectorSettings.set_levels(parseU32("levels", value));
+                            TIndexDescription::TLocalBloomFilterDescription localBloomFilterDesc;
+                            TIndexDescription::TLocalBloomNgramFilterDescription localBloomNgramFilterDesc;
+                            for (const auto& indexSetting : indexSettings.Cast<TCoNameValueTupleList>()) {
+                                YQL_ENSURE(indexSetting.Value().Maybe<TCoAtom>());
+                                const auto& name = to_lower(indexSetting.Name().StringValue());
+                                const auto& value = indexSetting.Value().Cast<TCoAtom>();
+
+                                TString error;
+
+                                if (name == "parallel") {
+                                    ui32 result = 0;
+                                    if (TryFromString(value.StringValue(), result) && result > 0) {
+                                        add_index->set_parallel(result);
+                                    } else {
+                                        error = TStringBuilder() << "Invalid " << name << ": " << value.StringValue();
+                                    }
                                 } else {
-                                    YQL_ENSURE(false, "Wrong vector setting name: " << vectorSetting.Name().Value());
+                                    switch (add_index->type_case()) {
+                                        case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex: {
+                                            NKikimr::NKMeans::FillSetting(
+                                                *add_index->mutable_global_vector_kmeans_tree_index()->mutable_vector_settings(),
+                                                name, value.StringValue(), error);
+                                            break;
+                                        }
+                                        case Ydb::Table::TableIndex::kGlobalFulltextPlainIndex: {
+                                            NKikimr::NFulltext::FillSetting(
+                                                *add_index->mutable_global_fulltext_plain_index()->mutable_fulltext_settings(),
+                                                name, value.StringValue(), error);
+                                            break;
+                                        }
+                                        case Ydb::Table::TableIndex::kGlobalFulltextRelevanceIndex: {
+                                            NKikimr::NFulltext::FillSetting(
+                                                *add_index->mutable_global_fulltext_relevance_index()->mutable_fulltext_settings(),
+                                                name, value.StringValue(), error);
+                                            break;
+                                        }
+                                        case Ydb::Table::TableIndex::kLocalBloomFilterIndex: {
+                                            FillLocalBloomFilterSetting(
+                                                localBloomFilterDesc,
+                                                name, value.StringValue(), error);
+                                            break;
+                                        }
+                                        case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex: {
+                                            FillLocalBloomNgramFilterSetting(
+                                                localBloomNgramFilterDesc,
+                                                name, value.StringValue(), error);
+                                            break;
+                                        }
+                                        case Ydb::Table::TableIndex::kLocalMinMaxIndex: {
+                                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
+                                                << "min_max index does not support setting: " << name));
+                                            return SyncError();
+                                        }
+                                        default:
+                                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
+                                                << "Unknown index setting: " << name));
+                                            return SyncError();
+                                    }
+                                }
+
+                                if (error) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(value.Pos()), error));
+                                    return SyncError();
                                 }
                             }
-                        }
-                        else {
-                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder() << "Unknown add vector index setting: " << name));
+
+                            if (add_index->type_case() == Ydb::Table::TableIndex::kLocalBloomFilterIndex) {
+                                auto* proto = add_index->mutable_local_bloom_filter_index();
+                                const double fpp = localBloomFilterDesc.FalsePositiveProbability.value_or(NKikimr::NOlap::NIndexes::NDefaults::FalsePositiveProbability);
+                                proto->set_false_positive_probability(fpp);
+                            }
+
+                            if (add_index->type_case() == Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex) {
+                                auto* proto = add_index->mutable_local_bloom_ngram_filter_index();
+                                applyLocalBloomNgramFilterIndex(proto, localBloomNgramFilterDesc);
+                            }
+                        } else {
+                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder() << "Unknown index setting: " << name));
                             return SyncError();
                         }
                     }
-                    YQL_ENSURE(add_index->name());
-                    YQL_ENSURE(add_index->type_case() != Ydb::Table::TableIndex::TYPE_NOT_SET);
-                    YQL_ENSURE(add_index->index_columns_size());
+
+                    if (!add_index->name()) {
+                        ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), "Index name should be set"));
+                        return SyncError();
+                    }
+                    if (add_index->index_columns().empty()) {
+                        ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), "Index columns should be set"));
+                        return SyncError();
+                    }
+
+                    switch (add_index->type_case()) {
+                        case Ydb::Table::TableIndex::kGlobalIndex:
+                        case Ydb::Table::TableIndex::kGlobalAsyncIndex:
+                        case Ydb::Table::TableIndex::kGlobalUniqueIndex:
+                        case Ydb::Table::TableIndex::kGlobalJsonIndex:
+                            // no settings validation
+                            break;
+                        case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex: {
+                            TString error;
+                            if (!NKikimr::NKMeans::ValidateSettingsPartial(add_index->global_vector_kmeans_tree_index().vector_settings(), error)) {
+                                ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), error));
+                                return SyncError();
+                            }
+                            break;
+                        }
+                        case Ydb::Table::TableIndex::kGlobalFulltextPlainIndex: {
+                            TString error;
+                            if (!NKikimr::NFulltext::ValidateSettings(add_index->global_fulltext_plain_index().fulltext_settings(), error)) {
+                                ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), error));
+                                return SyncError();
+                            }
+                            break;
+                        }
+                        case Ydb::Table::TableIndex::kGlobalFulltextRelevanceIndex: {
+                            TString error;
+                            if (!NKikimr::NFulltext::ValidateSettings(add_index->global_fulltext_relevance_index().fulltext_settings(), error)) {
+                                ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), error));
+                                return SyncError();
+                            }
+                            break;
+                        }
+                        case Ydb::Table::TableIndex::kLocalBloomFilterIndex:
+                            if (!add_index->data_columns().empty()) {
+                                ctx.AddError(TIssue(ctx.GetPosition(action.Pos()),
+                                    "Local bloom index does not support data columns"));
+                                return SyncError();
+                            }
+                            if (table.Metadata->StoreType == EStoreType::Column) {
+                                if (add_index->index_columns().size() != 1) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(action.Pos()),
+                                        "Local bloom index on column tables requires exactly one index column"));
+                                    return SyncError();
+                                }
+                            } else {
+                                // Row-store: columns must be a left-prefix of the primary key.
+                                const auto& pk = table.Metadata->KeyColumnNames;
+                                const auto& idxCols = add_index->index_columns();
+                                bool validPrefix = static_cast<size_t>(idxCols.size()) <= pk.size();
+                                for (size_t i = 0; validPrefix && i < static_cast<size_t>(idxCols.size()); ++i) {
+                                    validPrefix = (idxCols[i] == pk[i]);
+                                }
+                                if (!validPrefix) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(action.Pos()),
+                                        "Bloom filter index columns must be a prefix of the primary key"));
+                                    return SyncError();
+                                }
+                            }
+                            break;
+                        case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex:
+                            if (table.Metadata->StoreType != EStoreType::Column) {
+                                ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), "Local bloom ngram indexes are supported only for column tables"));
+                                return SyncError();
+                            }
+
+                            break;
+                        case Ydb::Table::TableIndex::kLocalMinMaxIndex: {
+                            if (table.Metadata->StoreType != EStoreType::Column) {
+                                ctx.AddError(TIssue(ctx.GetPosition(action.Pos()),
+                                 NKikimr::NOlap::NIndexes::NMinMax::DisabledForRowTablesErrorMessage));
+                                return SyncError();
+                            }
+
+                            if (!add_index->data_columns().empty()) {
+                                ctx.AddError(TIssue(ctx.GetPosition(action.Pos()),
+                                    NKikimr::NOlap::NIndexes::NMinMax::IncorrectDataColumnsErrorMessage(add_index->data_columns())));
+                                return SyncError();
+                            }
+
+                            if (add_index->index_columns_size() != 1) {
+                                ctx.AddError(TIssue(ctx.GetPosition(action.Pos()),
+                                    NKikimr::NOlap::NIndexes::NMinMax::IncorrectIndexColumnsErrorMessage(add_index->index_columns())));
+                                return SyncError();
+                            }
+
+                            break;
+                        }
+                        case Ydb::Table::TableIndex::TYPE_NOT_SET: {
+                            ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), "Index type should be set"));
+                            return SyncError();
+                        }
+                    }
                 } else if (name == "alterIndex") {
                     if (maybeAlter.Cast().Actions().Size() > 1) {
                         ctx.AddError(
@@ -1977,63 +2803,238 @@ public:
                         return SyncError();
                     }
                     auto listNode = action.Value().Cast<TCoNameValueTupleList>();
-                    for (const auto& indexSetting : listNode) {
-                        auto settingName = indexSetting.Name().Value();
+                    TString alterIndexName;
+                    TMaybeNode<TExprBase> alterIndexTableSettingsExpr;
+                    TMaybeNode<TExprBase> alterIndexIndexSettingsExpr;
+                    for (auto&& indexSetting : listNode) {
+                        const auto settingName = indexSetting.Name().Value();
                         if (settingName == "indexName") {
-                            const auto indexName = indexSetting.Value().Cast<TCoAtom>().StringValue();
-                            const auto indexIter = std::find_if(table.Metadata->Indexes.begin(), table.Metadata->Indexes.end(), [&indexName] (const auto& index) {
-                                return index.Name == indexName;
-                            });
-                            if (indexIter == table.Metadata->Indexes.end()) {
-                                ctx.AddError(
-                                    YqlIssue(ctx.GetPosition(indexSetting.Name().Pos()),
-                                        TIssuesIds::KIKIMR_SCHEME_ERROR,
-                                        TStringBuilder() << "Unknown index name: " << indexName));
-                                return SyncError();
-                            }
-                            auto indexTablePaths = NKikimr::NKqp::NSchemeHelpers::CreateIndexTablePath(table.Metadata->Name, *indexIter);
-                            if (indexTablePaths.size() != 1) {
-                                ctx.AddError(
-                                    TIssue(ctx.GetPosition(indexSetting.Name().Pos()),
-                                        TStringBuilder() << "Only index with one impl table is supported"));
-                                return SyncError();
-                            }
-                            alterTableRequest.set_path(std::move(indexTablePaths[0]));
+                            alterIndexName = indexSetting.Value().Cast<TCoAtom>().StringValue();
                         } else if (settingName == "tableSettings") {
-                            auto tableSettings = indexSetting.Value().Cast<TCoNameValueTupleList>();
-                            for (const auto& tableSetting : tableSettings) {
-                                const auto name = tableSetting.Name().Value();
-                                if (IsPartitioningSetting(name)) {
-                                    if (!ParsePartitioningSettings(
-                                        *alterTableRequest.mutable_alter_partitioning_settings(), tableSetting, ctx
-                                    )) {
-                                        return SyncError();
-                                    }
-                                } else if (name == "readReplicasSettings") {
-                                    if (!ParseReadReplicasSettings(*alterTableRequest.mutable_set_read_replicas_settings(), tableSetting, ctx)) {
-                                        return SyncError();
-                                    }
-                                } else {
-                                    ctx.AddError(
-                                        TIssue(ctx.GetPosition(tableSetting.Name().Pos()),
-                                               TStringBuilder() << "Unknown index table setting: " << name
-                                        )
-                                    );
-                                    return SyncError();
-                                }
-                            }
+                            alterIndexTableSettingsExpr = indexSetting.Value();
+                        } else if (settingName == "indexSettings") {
+                            alterIndexIndexSettingsExpr = indexSetting.Value();
                         } else {
                             ctx.AddError(
                                 TIssue(ctx.GetPosition(indexSetting.Name().Pos()),
                                        TStringBuilder() << "Unknown alter index setting: " << settingName
                                 )
                             );
+
                             return SyncError();
+                        }
+                    }
+
+                    if (alterIndexName.empty()) {
+                        ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()), "Index name is not set for ALTER INDEX"));
+                        return SyncError();
+                    }
+
+                    const auto tableSettingsCount = alterIndexTableSettingsExpr
+                        ? alterIndexTableSettingsExpr.Cast<TCoNameValueTupleList>().Size()
+                        : 0;
+                    const auto indexSettingsCount = alterIndexIndexSettingsExpr
+                        ? alterIndexIndexSettingsExpr.Cast<TCoNameValueTupleList>().Size()
+                        : 0;
+
+                    if (table.Metadata->StoreType == EStoreType::Column) {
+                        const auto indexIter = std::find_if(table.Metadata->Indexes.begin(), table.Metadata->Indexes.end(), [&alterIndexName] (const auto& index) {
+                            return index.Name == alterIndexName;
+                        });
+                        if (indexIter == table.Metadata->Indexes.end()) {
+                            if (table.Metadata->Indexes.empty()) {
+                                ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
+                                    TStringBuilder() << table.Metadata->Name << " has no indexes, so index " << alterIndexName << " does not exist in " << table.Metadata->Name << "."));
+                                return SyncError();
+                            }
+
+                            TStringBuilder allIndexes;
+                            allIndexes << "[";
+                            bool firstIndex = true;
+                            for (auto& index: table.Metadata->Indexes) {
+                                if (!firstIndex) allIndexes << ", ";
+                                allIndexes << index.Name;
+                                firstIndex = false;
+                            }
+                            allIndexes << "]";
+                            ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
+                                TStringBuilder() << "Index " << alterIndexName << " does not exist in table " << table.Metadata->Name << ". Only these " << table.Metadata->Indexes.size() << " do exist: " << allIndexes));
+                            return SyncError();
+                        }
+
+                        if (indexIter->Type != NYql::TIndexDescription::EType::LocalBloomFilter && indexIter->Type != NYql::TIndexDescription::EType::LocalBloomNgramFilter ) {
+                            YQL_ENSURE(indexIter->Type ==  NYql::TIndexDescription::EType::LocalMinMax);
+                            ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
+                                TStringBuilder() << "Index " << alterIndexName << " is MIN_MAX index. "
+                                "Only BLOOM_FILTER and BLOOM_NGRAMM_FILTER indexes can be used in ALTER INDEX statement in Column Shards"));
+                            return SyncError();
+                        }
+                        if (tableSettingsCount > 0) {
+                            ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
+                                "ALTER INDEX option 'tableSettings' is not supported for column tables; use 'indexSettings'"));
+                            return SyncError();
+                        }
+
+                        if (indexSettingsCount == 0) {
+                            ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
+                                "ALTER INDEX for column tables requires non-empty option 'indexSettings'"));
+                            return SyncError();
+                        }
+
+                        auto add_index = alterTableRequest.add_add_indexes();
+                        add_index->set_name(alterIndexName);
+                        add_index->add_index_columns(indexIter->KeyColumns[0]);
+                        const auto alterIndexSettings = alterIndexIndexSettingsExpr.Cast<TCoNameValueTupleList>();
+
+                        if (indexIter->Type == NYql::TIndexDescription::EType::LocalBloomFilter) {
+                            if (table.Metadata->Kind != EKikimrTableKind::Datashard &&
+                                !SessionCtx->Config().FeatureFlags.GetEnableLocalBloomFilterIndex()) {
+                                ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
+                                    "Local bloom filter index support is disabled"));
+                                return SyncError();
+                            }
+
+                            TIndexDescription::TLocalBloomFilterDescription localBloomFilterDesc;
+                            for (auto&& is : alterIndexSettings) {
+                                YQL_ENSURE(is.Value().Maybe<TCoAtom>());
+                                const auto& nameAtom = is.Name();
+                                const auto& valueAtom = is.Value().Cast<TCoAtom>();
+
+                                TString bloomErr;
+                                FillLocalBloomFilterSetting(localBloomFilterDesc, nameAtom.StringValue(), valueAtom.StringValue(), bloomErr);
+                                if (bloomErr) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(valueAtom.Pos()), bloomErr));
+                                    return SyncError();
+                                }
+                            }
+                            auto* proto = add_index->mutable_local_bloom_filter_index();
+                            if (localBloomFilterDesc.FalsePositiveProbability) {
+                                proto->set_false_positive_probability(*localBloomFilterDesc.FalsePositiveProbability);
+                            }
+
+                        } else {
+                            if (table.Metadata->Kind != EKikimrTableKind::Datashard &&
+                                !SessionCtx->Config().FeatureFlags.GetEnableLocalBloomNgramFilterIndex()) {
+                                ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
+                                    "Local bloom ngram filter index support is disabled"));
+                                return SyncError();
+                            }
+                            TIndexDescription::TLocalBloomNgramFilterDescription localBloomNgramFilterDesc;
+                            for (auto&& is : alterIndexSettings) {
+                                YQL_ENSURE(is.Value().Maybe<TCoAtom>());
+                                const auto& nameAtom = is.Name();
+                                const auto& valueAtom = is.Value().Cast<TCoAtom>();
+
+                                TString ngramErr;
+                                FillLocalBloomNgramFilterSetting(localBloomNgramFilterDesc, nameAtom.StringValue(), valueAtom.StringValue(), ngramErr);
+                                if (ngramErr) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(valueAtom.Pos()), ngramErr));
+                                    return SyncError();
+                                }
+                            }
+                            auto* proto = add_index->mutable_local_bloom_ngram_filter_index();
+                            applyLocalBloomNgramFilterIndex(proto, localBloomNgramFilterDesc);
+                        }
+                    } else {
+                        const auto indexIter = std::find_if(table.Metadata->Indexes.begin(), table.Metadata->Indexes.end(), [&alterIndexName] (const auto& index) {
+                            return index.Name == alterIndexName;
+                        });
+
+                        if (indexIter == table.Metadata->Indexes.end()) {
+                            ctx.AddError(
+                                YqlIssue(ctx.GetPosition(action.Name().Pos()),
+                                    TIssuesIds::KIKIMR_SCHEME_ERROR,
+                                    TStringBuilder() << "Unknown index name: " << alterIndexName));
+                            return SyncError();
+                        }
+
+                        auto indexTablePaths = NKikimr::NKqp::NSchemeHelpers::CreateIndexTablePath(table.Metadata->Name, *indexIter);
+                        if (indexTablePaths.size() != 1) {
+                            ctx.AddError(
+                                TIssue(ctx.GetPosition(action.Name().Pos()),
+                                    TStringBuilder() << "Only index with one impl table is supported"));
+                            return SyncError();
+                        }
+
+                        alterTableRequest.set_path(std::move(indexTablePaths[0]));
+                        if (indexSettingsCount > 0) {
+                            ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
+                                "ALTER INDEX option 'indexSettings' is not supported for row tables; use 'tableSettings'"));
+                            return SyncError();
+                        }
+
+                        if (alterIndexTableSettingsExpr) {
+                            for (auto&& tableSetting : alterIndexTableSettingsExpr.Cast<TCoNameValueTupleList>()) {
+                                const auto tsName = tableSetting.Name().Value();
+                                if (IsPartitioningSetting(tsName)) {
+                                    if (!ParsePartitioningSettings(
+                                        *alterTableRequest.mutable_alter_partitioning_settings(), tableSetting, ctx
+                                    )) {
+                                        return SyncError();
+                                    }
+                                } else if (tsName == "readReplicasSettings") {
+                                    if (!ParseReadReplicasSettings(*alterTableRequest.mutable_set_read_replicas_settings(), tableSetting, ctx)) {
+                                        return SyncError();
+                                    }
+                                } else {
+                                    ctx.AddError(
+                                        TIssue(ctx.GetPosition(tableSetting.Name().Pos()),
+                                               TStringBuilder() << "Unknown index table setting: " << tsName
+                                        )
+                                    );
+                                    return SyncError();
+                                }
+                            }
                         }
                     }
                 } else if (name == "dropIndex") {
                     auto nameNode = action.Value().Cast<TCoAtom>();
                     alterTableRequest.add_drop_indexes(TString(nameNode.Value()));
+                } else if (name == "addStatistics") {
+                    if (!SessionCtx->Config().FeatureFlags.GetEnableColumnStatistics()) {
+                        ctx.AddError(TIssue(ctx.GetPosition(action.Pos()),
+                            "Multi-column statistics support is disabled"));
+                        return SyncError();
+                    }
+                    auto listNode = action.Value().Cast<TExprList>();
+                    auto add_statistics = alterTableRequest.add_add_statistics();
+                    for (size_t i = 0; i < listNode.Size(); ++i) {
+                        auto columnTuple = listNode.Item(i).Cast<TExprList>();
+                        auto nameNode = columnTuple.Item(0).Cast<TCoAtom>();
+                        auto itemName = TString(nameNode.Value());
+                        if (itemName == "statisticsName") {
+                            add_statistics->set_name(TString(columnTuple.Item(1).Cast<TCoAtom>().Value()));
+                        } else if (itemName == "statisticsColumns") {
+                            auto columnList = columnTuple.Item(1).Cast<TCoAtomList>();
+                            for (auto column : columnList) {
+                                add_statistics->add_columns(TString(column.Value()));
+                            }
+                        } else if (itemName == "statisticsTypes") {
+                            auto typeList = columnTuple.Item(1).Cast<TCoAtomList>();
+                            for (auto type : typeList) {
+                                const auto typeName = to_upper(TString(type.Value()));
+                                if (typeName == "COUNT_MIN_SKETCH") {
+                                    add_statistics->add_types(Ydb::Table::TableMultiColumnStatistics::COUNT_MIN_SKETCH);
+                                } else {
+                                    ctx.AddError(TIssue(ctx.GetPosition(type.Pos()),
+                                        TStringBuilder() << "Unknown statistic type: " << TString(type.Value())));
+                                    return SyncError();
+                                }
+                            }
+                        } else {
+                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()),
+                                TStringBuilder() << "Unknown add statistics item: " << itemName));
+                            return SyncError();
+                        }
+                    }
+                } else if (name == "dropStatistics") {
+                    if (!SessionCtx->Config().FeatureFlags.GetEnableColumnStatistics()) {
+                        ctx.AddError(TIssue(ctx.GetPosition(action.Pos()),
+                            "Multi-column statistics support is disabled"));
+                        return SyncError();
+                    }
+                    auto nameNode = action.Value().Cast<TCoAtom>();
+                    alterTableRequest.add_drop_statistics(TString(nameNode.Value()));
                 } else if (name == "addChangefeed") {
                     auto listNode = action.Value().Cast<TExprList>();
                     auto add_changefeed = alterTableRequest.add_add_changefeeds();
@@ -2089,6 +3090,18 @@ public:
                                     );
 
                                     add_changefeed->set_initial_scan(FromString<bool>(to_lower(value)));
+                                } else if (name == "user_sids") {
+                                    auto value = TString(
+                                        setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
+                                    );
+
+                                    add_changefeed->set_user_sids(FromString<bool>(to_lower(value)));
+                                } else if (name == "trace_ids") {
+                                    auto value = TString(
+                                        setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
+                                    );
+
+                                    add_changefeed->set_trace_ids(FromString<bool>(to_lower(value)));
                                 } else if (name == "virtual_timestamps") {
                                     auto value = TString(
                                         setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
@@ -2218,6 +3231,172 @@ public:
                             return SyncError();
                         }
                     }
+                } else if (name == "rebuildIndex") {
+                    auto listNode = action.Value().Cast<TExprList>();
+                    auto add_index = alterTableRequest.add_add_indexes();
+                    TString rebuildIndexName;
+                    bool hasUserColumns = false;
+
+                    // Parse the same way as addIndex
+                    for (size_t i = 0; i < listNode.Size(); ++i) {
+                        auto item = listNode.Item(i);
+                        auto columnTuple = item.Cast<TExprList>();
+                        auto nameNode = columnTuple.Item(0).Cast<TCoAtom>();
+                        auto n = TString(nameNode.Value());
+                        if (n == "indexName") {
+                            rebuildIndexName = TString(columnTuple.Item(1).Cast<TCoAtom>().Value());
+                            add_index->set_name(rebuildIndexName);
+                        } else if (n == "indexType") {
+                            // Will be resolved from existing index below
+                        } else if (n == "indexColumns") {
+                            auto columnList = columnTuple.Item(1).Cast<TCoAtomList>();
+                            for (auto column : columnList) {
+                                add_index->add_index_columns(TString(column.Value()));
+                            }
+                            hasUserColumns = columnList.Size() > 0;
+                        } else if (n == "dataColumns") {
+                            auto columnList = columnTuple.Item(1).Cast<TCoAtomList>();
+                            for (auto column : columnList) {
+                                add_index->add_data_columns(TString(column.Value()));
+                            }
+                        } else if (n == "indexSettings") {
+                            // Defer settings parsing until after we resolve the index type
+                        }
+                    }
+
+                    // Find existing index in table metadata
+                    const NYql::TIndexDescription* existingIndex = nullptr;
+                    for (const auto& idx : table.Metadata->Indexes) {
+                        if (idx.Name == rebuildIndexName) {
+                            existingIndex = &idx;
+                            break;
+                        }
+                    }
+
+                    if (!existingIndex) {
+                        ctx.AddError(TIssue(ctx.GetPosition(action.Pos()),
+                            TStringBuilder() << "Index '" << rebuildIndexName << "' not found"));
+                        return SyncError();
+                    }
+
+                    // Only vector_kmeans_tree is supported for rebuild
+                    if (existingIndex->Type != NYql::TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+                        ctx.AddError(TIssue(ctx.GetPosition(action.Pos()),
+                            TStringBuilder() << "REBUILD INDEX is only supported for vector_kmeans_tree indexes"));
+                        return SyncError();
+                    }
+
+                    // Set the index type
+                    add_index->mutable_global_vector_kmeans_tree_index();
+
+                    // If user didn't provide ON columns, inherit from existing index
+                    if (!hasUserColumns) {
+                        for (const auto& col : existingIndex->KeyColumns) {
+                            add_index->add_index_columns(col);
+                        }
+                    }
+                    // Inherit data columns if user didn't provide any
+                    if (add_index->data_columns().empty()) {
+                        for (const auto& col : existingIndex->DataColumns) {
+                            add_index->add_data_columns(col);
+                        }
+                    }
+
+                    // Parse user-provided index settings (don't pre-populate with existing;
+                    // schemeshard will merge with existing settings in Prepare)
+                    auto* vectorSettings = add_index->mutable_global_vector_kmeans_tree_index()->mutable_vector_settings();
+                    for (size_t i = 0; i < listNode.Size(); ++i) {
+                        auto item = listNode.Item(i);
+                        auto columnTuple = item.Cast<TExprList>();
+                        auto nameNode = columnTuple.Item(0).Cast<TCoAtom>();
+                        auto n = TString(nameNode.Value());
+                        if (n == "indexSettings") {
+                            auto indexSettings = columnTuple.Item(1).Cast<TCoAtomList>();
+                            for (const auto& indexSetting : indexSettings.Cast<TCoNameValueTupleList>()) {
+                                YQL_ENSURE(indexSetting.Value().Maybe<TCoAtom>());
+                                const auto& settingName = to_lower(indexSetting.Name().StringValue());
+                                const auto& value = indexSetting.Value().Cast<TCoAtom>();
+
+                                if (settingName == "distance" || settingName == "similarity"
+                                    || settingName == "vector_type" || settingName == "vector_dimension")
+                                {
+                                    ctx.AddError(TIssue(ctx.GetPosition(value.Pos()),
+                                        "Can't override parameters distance, similarity, vector_type or vector_dimension on index rebuild"));
+                                    return SyncError();
+                                }
+
+                                TString error;
+                                if (settingName == "parallel") {
+                                    ui32 result = 0;
+                                    if (TryFromString(value.StringValue(), result) && result > 0) {
+                                        add_index->set_parallel(result);
+                                    } else {
+                                        error = TStringBuilder() << "Invalid " << settingName << ": " << value.StringValue();
+                                    }
+                                } else {
+                                    NKikimr::NKMeans::FillSetting(
+                                        *vectorSettings,
+                                        settingName, value.StringValue(), error);
+                                }
+                                if (error) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(value.Pos()), error));
+                                    return SyncError();
+                                }
+                            }
+                        }
+                    }
+
+                    // NB: don't run ValidateSettingsPartial here. On rebuild the nested
+                    // VectorIndexSettings (metric/vector_type/vector_dimension) is inherited
+                    // from the existing index and cannot be provided by the user, so it is
+                    // always empty at this point and the check would spuriously fail with
+                    // "vector index settings should be set". levels/clusters are already
+                    // bounds-checked in FillSetting, and full validation runs on the
+                    // schemeshard side after merging with the existing index settings.
+
+                    // Mark as rebuild via flags
+                    alterTableFlags |= NKqpProto::TKqpSchemeOperation::FLAG_REBUILD_INDEX;
+
+                } else if (name == "compact") {
+                    if (table.Metadata->StoreType == EStoreType::Row && !SessionCtx->Config().FeatureFlags.GetEnableForcedCompactions()) {
+                        ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
+                            TStringBuilder() << "Compact is not allowed for row tables"));
+                        return SyncError();
+                    }
+                    if (table.Metadata->StoreType == EStoreType::Column && !SessionCtx->Config().FeatureFlags.GetEnableForcedColumnCompactions()) {
+                        ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
+                            TStringBuilder() << "Compact is not allowed for column tables"));
+                        return SyncError();
+                    }
+                    auto& compact = *alterTableRequest.mutable_compact();
+                    const auto& listNode = action.Value().Cast<TCoNameValueTupleList>();
+                     for (const auto& compactParam : listNode) {
+                        const auto& paramName = compactParam.Name().Value();
+                        if (paramName == "settings") {
+                            const auto& settingsList = compactParam.Value().Cast<TCoNameValueTupleList>();
+                            for (const auto& setting : settingsList) {
+                                const auto& name = setting.Name().Value();
+                                if (name == "cascade") {
+                                    auto value = FromString<bool>(to_lower(TString(
+                                        setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
+                                    )));
+
+                                    compact.set_cascade(value);
+                                } else if (name == "parallel") {
+                                    i32 value = FromString<i32>(
+                                        setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
+                                    );
+                                    if (value <= 0) {
+                                        ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                                            TStringBuilder() << name << " must be positive"));
+                                        return SyncError();
+                                    }
+
+                                    compact.set_max_shards_in_flight(value);
+                                }
+                            }
+                        }
+                     }
                 } else {
                     ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
                         TStringBuilder() << "Unknown alter table action: " << name));
@@ -2328,7 +3507,7 @@ public:
             for (const auto& consumer : maybeCreate.Cast().Consumers()) {
                 auto error = AddConsumerToTopicRequest(createReq.add_consumers(), consumer);
                 if (!error.empty()) {
-                    ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << error << input->Content()));
+                    ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << error));
                     return SyncError();
                 }
             }
@@ -2421,7 +3600,13 @@ public:
                 );
             }
 
-            if (!ParseAsyncReplicationSettings(settings.Settings, createReplication.ReplicationSettings(), ctx, createReplication.Pos())) {
+            if (!ParseAsyncReplicationSettings(
+                settings.Settings,
+                createReplication.ReplicationSettings(),
+                ctx,
+                createReplication.Pos(),
+                SessionCtx->Config().FeatureFlags.GetDisableOldSecretCreation())
+            ) {
                 return SyncError();
             }
 
@@ -2437,9 +3622,21 @@ public:
                 return SyncError();
             }
 
-            if (const auto& x = settings.Settings.StaticCredentials; x && (!x->Password || !x->PasswordSecretName)) {
+            if (const auto& x = settings.Settings.StaticCredentials; x && !x->Password && !x->PasswordSecretName) {
                 ctx.AddError(TIssue(ctx.GetPosition(createReplication.Pos()),
-                    "PASSWORD or PASSWORD_SECRET_NAME are not provided"));
+                    "Neither PASSWORD nor PASSWORD_SECRET_NAME are provided"));
+                return SyncError();
+            }
+
+            if (const auto& x = settings.Settings.IamCredentials; x && !x->ServiceAccountId) {
+                ctx.AddError(TIssue(ctx.GetPosition(createReplication.Pos()),
+                    "SERVICE_ACCOUNT_ID is not provided"));
+                return SyncError();
+            }
+
+            if (const auto& x = settings.Settings.IamCredentials; x && !x->InitialToken.Token && !x->InitialToken.TokenSecretName) {
+                ctx.AddError(TIssue(ctx.GetPosition(createReplication.Pos()),
+                    "Neither INITIAL_TOKEN nor INITIAL_TOKEN_SECRET_NAME are provided"));
                 return SyncError();
             }
 
@@ -2465,7 +3662,10 @@ public:
             TAlterReplicationSettings settings;
             settings.Name = TString(alterReplication.Replication());
 
-            if (!ParseAsyncReplicationSettings(settings.Settings, alterReplication.ReplicationSettings(), ctx, alterReplication.Pos())) {
+            if (!ParseAsyncReplicationSettings(
+                settings.Settings, alterReplication.ReplicationSettings(), ctx, alterReplication.Pos(),
+                SessionCtx->Config().FeatureFlags.GetDisableOldSecretCreation())
+            ) {
                 return SyncError();
             }
 
@@ -2520,7 +3720,13 @@ public:
                 createTransfer.TransformLambda()
             };
 
-            if (!ParseTransferSettings(settings.Settings, createTransfer.TransferSettings(), ctx, createTransfer.Pos())) {
+            if (!ParseTransferSettings(
+                settings.Settings,
+                createTransfer.TransferSettings(),
+                ctx,
+                createTransfer.Pos(),
+                SessionCtx->Config().FeatureFlags.GetDisableOldSecretCreation())
+            ) {
                 return SyncError();
             }
 
@@ -2536,9 +3742,21 @@ public:
                 return SyncError();
             }
 
-            if (const auto& x = settings.Settings.StaticCredentials; x && (!x->Password || !x->PasswordSecretName)) {
+            if (const auto& x = settings.Settings.StaticCredentials; x && !x->Password && !x->PasswordSecretName) {
                 ctx.AddError(TIssue(ctx.GetPosition(createTransfer.Pos()),
-                    "PASSWORD or PASSWORD_SECRET_NAME are not provided"));
+                    "Neither PASSWORD nor PASSWORD_SECRET_NAME are provided"));
+                return SyncError();
+            }
+
+            if (const auto& x = settings.Settings.IamCredentials; x && !x->ServiceAccountId) {
+                ctx.AddError(TIssue(ctx.GetPosition(createTransfer.Pos()),
+                    "SERVICE_ACCOUNT_ID is not provided"));
+                return SyncError();
+            }
+
+            if (const auto& x = settings.Settings.IamCredentials; x && !x->InitialToken.Token && !x->InitialToken.TokenSecretName) {
+                ctx.AddError(TIssue(ctx.GetPosition(createTransfer.Pos()),
+                    "Neither INITIAL_TOKEN nor INITIAL_TOKEN_SECRET_NAME are provided"));
                 return SyncError();
             }
 
@@ -2565,7 +3783,9 @@ public:
             settings.Name = TString(alterTransfer.Transfer());
             settings.TranformLambda = alterTransfer.TransformLambda();
 
-            if (!ParseTransferSettings(settings.Settings, alterTransfer.TransferSettings(), ctx, alterTransfer.Pos())) {
+            if (!ParseTransferSettings(settings.Settings, alterTransfer.TransferSettings(), ctx, alterTransfer.Pos(),
+                SessionCtx->Config().FeatureFlags.GetDisableOldSecretCreation())
+            ) {
                 return SyncError();
             }
 
@@ -2975,6 +4195,16 @@ public:
             }, "Executing RESTORE");
         }
 
+        if (auto kiObject = TMaybeNode<TKiCreateSecret>(input)) {
+            return TCreateSecretTransformer("CREATE SECRET", Gateway, SessionCtx).Execute(kiObject.Cast(), input);
+        }
+        if (auto kiObject = TMaybeNode<TKiAlterSecret>(input)) {
+            return TAlterSecretTransformer("ALTER SECRET", Gateway, SessionCtx).Execute(kiObject.Cast(), input);
+        }
+        if (auto kiObject = TMaybeNode<TKiDropSecret>(input)) {
+            return TDropSecretTransformer("DROP SECRET", Gateway, SessionCtx).Execute(kiObject.Cast(), input);
+        }
+
         ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder()
             << "(Kikimr DataSink) Failed to execute node: " << input->Content()));
         return SyncError();
@@ -3155,13 +4385,65 @@ private:
         return success;
     }
 
+    bool ParseEncodingSettings(
+        const TExprList& alterColumnList,
+        Ydb::Table::ColumnMeta* columnDest,
+        TExprContext& ctx,
+        EKikimrTableKind tableKind)
+    {
+        auto encodingList = alterColumnList.Item(1).Cast<TExprList>();
+        if (tableKind != EKikimrTableKind::Olap && tableKind != EKikimrTableKind::Unspecified) {
+            ctx.AddError(TIssue(ctx.GetPosition(encodingList.Pos()), "Column encoding is supported only for column tables"));
+            return false;
+        }
+
+        if (encodingList.Empty()) {
+            columnDest->add_encoding();
+            return true;
+        } else if (encodingList.Size() > 1) {
+            ctx.AddError(TIssue(ctx.GetPosition(encodingList.Pos()), "Invalid column encoding parameters"));
+            return false;
+        }
+
+        auto config = encodingList.Item(0).Cast<TExprList>();
+        if (config.Size() != 1) {
+            ctx.AddError(TIssue(ctx.GetPosition(encodingList.Pos()), "Invalid column encoding parameters"));
+            return false;
+        }
+
+        TString encodingName;
+        auto pair = config.Item(0).Cast<TExprList>();
+        if (pair.Size() >= 2 && pair.Item(0).Cast<TCoAtom>().Value() == "name" && encodingName.empty()) {
+            encodingName = to_lower(TString(pair.Item(1).Cast<TCoAtom>().Value()));
+        } else {
+            ctx.AddError(TIssue(ctx.GetPosition(encodingList.Pos()), "Invalid column encoding parameters"));
+            return false;
+        }
+
+        if (encodingName == "dict") {
+            if (!SessionCtx->Config().FeatureFlags.GetEnableCsDictionaryEncoding()) {
+                ctx.AddError(TIssue(ctx.GetPosition(encodingList.Pos()), TStringBuilder()
+                    << "ENCODING(DICT) is disabled."));
+                return false;
+            }
+            columnDest->add_encoding()->mutable_dictionary();
+        } else if (encodingName == "off") {
+            columnDest->add_encoding()->mutable_off();
+        } else {
+            ctx.AddError(TIssue(ctx.GetPosition(encodingList.Pos()), "Invalid column encoding parameters"));
+            return false;
+        }
+
+        return true;
+    }
+
 private:
     TIntrusivePtr<IKikimrGateway> Gateway;
     TIntrusivePtr<TKikimrSessionContext> SessionCtx;
     TIntrusivePtr<IKikimrQueryExecutor> QueryExecutor;
 };
 
-} // namespace
+} // anonymous namespace
 
 TAutoPtr<IGraphTransformer> CreateKiSourceCallableExecutionTransformer(
     TIntrusivePtr<IKikimrGateway> gateway,
@@ -3177,10 +4459,6 @@ TAutoPtr<IGraphTransformer> CreateKiSinkCallableExecutionTransformer(
     TIntrusivePtr<IKikimrQueryExecutor> queryExecutor)
 {
     return new TKiSinkCallableExecutionTransformer(gateway, sessionCtx, queryExecutor);
-}
-
-TAutoPtr<IGraphTransformer> CreateKiSinkPlanInfoTransformer(TIntrusivePtr<IKikimrQueryExecutor> queryExecutor) {
-    return new TKiSinkPlanInfoTransformer(queryExecutor);
 }
 
 } // namespace NYql

@@ -2,7 +2,6 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
-#include "schemeshard_utils.h"  // for IsAllowedKeyType
 
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/mind/hive/hive.h>
@@ -58,8 +57,8 @@ bool InitPartitioning(const NKikimrSchemeOp::TTableDescription& op,
                       const TVector<ui32>& keyColIds,
                       const TVector<NScheme::TTypeInfo>& keyColTypeIds,
                       TString& errStr,
-                      TVector<TTableShardInfo>& partitions,
-                      const TSchemeLimits& limits) {
+                      TVector<TTableShardInfo>& partitions)
+{
     ui32 partitionCount = 1;
     if (op.HasUniformPartitionsCount()) {
         partitionCount = op.GetUniformPartitionsCount();
@@ -67,8 +66,8 @@ bool InitPartitioning(const NKikimrSchemeOp::TTableDescription& op,
         partitionCount = op.SplitBoundarySize() + 1;
     }
 
-    if (partitionCount == 0 || partitionCount > limits.MaxShardsInPath) {
-        errStr = Sprintf("Invalid partition count specified: %u", partitionCount);
+    if (partitionCount == 0) {
+        errStr = Sprintf("Invalid table partition count specified: %u", partitionCount);
         return false;
     }
 
@@ -109,8 +108,8 @@ bool DoInitPartitioning(TTableInfo::TPtr tableInfo,
                         const NKikimrSchemeOp::TTableDescription& op,
                         const NScheme::TTypeRegistry* typeRegistry,
                         TString& errStr,
-                        TVector<TTableShardInfo>& partitions,
-                        const TSchemeLimits& limits) {
+                        TVector<TTableShardInfo>& partitions)
+{
     const TVector<ui32>& keyColIds = tableInfo->KeyColumnIds;
     if (keyColIds.size() == 0) {
         errStr = Sprintf("No key columns specified");
@@ -130,7 +129,7 @@ bool DoInitPartitioning(TTableInfo::TPtr tableInfo,
         keyColTypeIds.push_back(type);
     }
 
-    if (!InitPartitioning(op, typeRegistry, keyColIds, keyColTypeIds, errStr, partitions, limits)) {
+    if (!InitPartitioning(op, typeRegistry, keyColIds, keyColTypeIds, errStr, partitions)) {
         return false;
     }
 
@@ -158,6 +157,29 @@ void ApplyPartitioning(TTxId txId,
     ss->SetPartitioning(pathId, tableInfo, std::move(partitions));
 }
 
+std::optional<TString> InferDefaultPoolKind(const TStoragePools& storagePools, const NKikimrSchemeOp::TPartitionConfig& changes) {
+    if (changes.HasChannelProfileId()) {
+        return std::nullopt;
+    }
+
+    // Refuse to infer the default pool kind if any column family in the requested changes has a legacy Storage parameter
+    for (const auto& changesFamily : changes.GetColumnFamilies()) {
+        if (changesFamily.HasStorage()) {
+            return std::nullopt;
+        }
+    }
+
+    // If all pool kinds are the same in storagePools we can infer the one pool kind and use it in default StorageConfig
+    std::optional<TString> result = std::nullopt;
+    for (const auto& storagePool : storagePools) {
+        if (!result) {
+            result = storagePool.GetKind();
+        } else if (*result != storagePool.GetKind()) {
+            return std::nullopt;
+        }
+    }
+    return result;
+}
 
 class TConfigureParts: public TSubOperationState {
 private:
@@ -302,7 +324,7 @@ public:
             context.SS->TabletCounters->Simple()[COUNTER_TTL_ENABLED_TABLE_COUNT].Add(1);
 
             const auto now = context.Ctx.Now();
-            for (auto& shard : table->GetPartitions()) {
+            for (const auto& shard : table->GetPartitionStore() | std::views::values) {
                 auto& lag = shard.LastCondEraseLag;
                 Y_DEBUG_ABORT_UNLESS(!lag.Defined());
 
@@ -311,6 +333,12 @@ public:
             }
         }
         context.SS->PersistTableCreated(db, pathId);
+
+        if (table->PartitionsInShardIdxFormat) {
+            context.SS->TabletCounters->Simple()[COUNTER_FORMAT_SHARDIDX_TABLE_COUNT].Add(1);
+        } else {
+            context.SS->TabletCounters->Simple()[COUNTER_FORMAT_POSITION_TABLE_COUNT].Add(1);
+        }
 
         auto parentDir = context.SS->PathsById.at(path->ParentPathId);
         if (parentDir->IsDirectory() || parentDir->IsDomainRoot()) {
@@ -456,7 +484,8 @@ public:
                     checks.IsInsideTableIndexPath();
                     // Not build index impl tables can be created only as part of create index
                     // build index impl tables created multiple times during index construction
-                    if (!NTableIndex::IsBuildImplTable(name)) {
+                    // Internal operations (e.g. rebuild index) are allowed to create impl tables
+                    if (!NTableIndex::IsBuildImplTable(name) && !Transaction.GetInternal()) {
                         checks
                             .IsUnderCreating(NKikimrScheme::StatusNameConflict)
                             .IsUnderTheSameOperation(OperationId.GetTxId());
@@ -524,6 +553,32 @@ public:
             return result;
         }
 
+        if (schema.HasDetailedMetricsSettings()) {
+            // Do not allow changing detailed metrics settings without the feature flag
+            if (!AppData()->FeatureFlags.GetEnableDataShardDetailedMetrics()) {
+                result->SetError(
+                    NKikimrScheme::StatusInvalidParameter,
+                    "The detailed metrics settings are specified in the request, "
+                    "but the detailed metrics feature is disabled by the corresponding "
+                    "feature flag (EnableDataShardDetailedMetrics)"
+                );
+
+                return result;
+            }
+
+            TString errorString;
+
+            // Make sure the detailed metrics settings are valid (correct metrics level etc)
+            if (!ValidateTableDetailedMetricsSettings(
+                true /* forCreate */,
+                schema.GetDetailedMetricsSettings(),
+                errorString
+            )) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter, errorString);
+                return result;
+            }
+        }
+
         if (parentPath.Base()->IsTableIndex()) {
             LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                          "Creating private table for table index"
@@ -559,8 +614,11 @@ public:
             return result;
         }
 
+        const bool isServerless = context.SS->IsServerlessDomain(TPath::Init(context.SS->RootPathId(), context.SS));
+
+        std::optional<TString> defaultPoolKind = InferDefaultPoolKind(domainInfo->EffectiveStoragePools(), schema.GetPartitionConfig());
         NKikimrSchemeOp::TPartitionConfig compilationPartitionConfig;
-        if (!TPartitionConfigMerger::ApplyChanges(compilationPartitionConfig, TPartitionConfigMerger::DefaultConfig(AppData()), schema.GetPartitionConfig(), AppData(), errStr)
+        if (!TPartitionConfigMerger::ApplyChanges(compilationPartitionConfig, TPartitionConfigMerger::DefaultConfig(AppData(), defaultPoolKind), schema.GetPartitionConfig(), schema.GetColumns(), AppData(), isServerless, errStr)
             || !TPartitionConfigMerger::VerifyCreateParams(compilationPartitionConfig, AppData(), IsShadowDataAllowed(), errStr)) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
             return result;
@@ -578,6 +636,10 @@ public:
             .EnableTablePgTypes = AppData()->FeatureFlags.GetEnableTablePgTypes(),
             .EnableTableDatetime64 = AppData()->FeatureFlags.GetEnableTableDatetime64(),
             .EnableParameterizedDecimal = AppData()->FeatureFlags.GetEnableParameterizedDecimal(),
+            .EnableDetailedMetrics = AppData()->FeatureFlags.GetEnableDataShardDetailedMetrics(),
+            .EnableColumnStatistics = AppData()->FeatureFlags.GetEnableColumnStatistics(),
+            .EnableGeneratedStored = AppData()->FeatureFlags.GetEnableGeneratedStored(),
+            .EnableGeneratedVirtual = AppData()->FeatureFlags.GetEnableGeneratedVirtual(),
         };
         TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(
             nullptr,
@@ -597,9 +659,13 @@ public:
         TTableInfo::TPtr tableInfo = new TTableInfo(std::move(*alterData));
         alterData.Reset();
 
+        if (AppData()->FeatureFlags.GetEnableTablePartitionsFormatShardIdx() && AppData()->FeatureFlags.GetEnableTablePartitionsFormatShardIdxByDefault()) {
+            tableInfo->PartitionsInShardIdxFormat = true;
+        }
+
         TVector<TTableShardInfo> partitions;
 
-        if (!DoInitPartitioning(tableInfo, schema, typeRegistry, errStr, partitions, domainInfo->GetSchemeLimits())) {
+        if (!DoInitPartitioning(tableInfo, schema, typeRegistry, errStr, partitions)) {
             result->SetError(NKikimrScheme::StatusSchemeError, errStr);
             return result;
         }
@@ -667,7 +733,7 @@ public:
 
         ApplyPartitioning(OperationId.GetTxId(), newTable->PathId, tableInfo, txState, channelsBinding, context.SS, partitions);
 
-        Y_ABORT_UNLESS(tableInfo->GetPartitions().back().EndOfRange.empty(), "End of last range must be +INF");
+        Y_ABORT_UNLESS(tableInfo->GetPartitions().back()->EndOfRange.empty(), "End of last range must be +INF");
 
         if (tableInfo->IsAsyncReplica()) {
             newTable->SetAsyncReplica(true);
@@ -701,16 +767,16 @@ public:
         context.SS->PersistUpdateNextPathId(db);
         context.SS->PersistUpdateNextShardIdx(db);
         // Persist new shards info
-        for (const auto& shard : tableInfo->GetPartitions()) {
-            Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shard.ShardIdx), "shard info is set before");
-            auto tabletType = context.SS->ShardInfos[shard.ShardIdx].TabletType;
-            const auto& bindedChannels = context.SS->ShardInfos[shard.ShardIdx].BindedChannels;
-            context.SS->PersistShardMapping(db, shard.ShardIdx, InvalidTabletId, newTable->PathId, OperationId.GetTxId(), tabletType);
-            context.SS->PersistChannelsBinding(db, shard.ShardIdx, bindedChannels);
+        for (const auto& shardIdx : tableInfo->GetPartitionStore() | std::views::keys) {
+            Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shardIdx), "shard info is set before");
+            auto tabletType = context.SS->ShardInfos[shardIdx].TabletType;
+            const auto& bindedChannels = context.SS->ShardInfos[shardIdx].BindedChannels;
+            context.SS->PersistShardMapping(db, shardIdx, InvalidTabletId, newTable->PathId, OperationId.GetTxId(), tabletType);
+            context.SS->PersistChannelsBinding(db, shardIdx, bindedChannels);
 
             if (storePerShardConfig) {
-                tableInfo->PerShardPartitionConfig[shard.ShardIdx].CopyFrom(perShardConfig);
-                context.SS->PersistAddTableShardPartitionConfig(db, shard.ShardIdx, perShardConfig);
+                tableInfo->PerShardPartitionConfig[shardIdx].CopyFrom(perShardConfig);
+                context.SS->PersistAddTableShardPartitionConfig(db, shardIdx, perShardConfig);
             }
         }
 
@@ -801,9 +867,11 @@ ISubOperation::TPtr CreateNewTable(TOperationId id, TTxState::ETxState state) {
     return MakeSubOperation<TCreateTable>(id, state);
 }
 
-ISubOperation::TPtr CreateInitializeBuildIndexImplTable(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateInitializeBuildIndexImplTable(TOperationId id, const TTxTransaction& tx, const THashSet<TString>& localSequences) {
     auto obj = MakeSubOperation<TCreateTable>(id, tx);
-    static_cast<TCreateTable*>(obj.Get())->SetAllowShadowDataForBuildIndex();
+    TCreateTable *createTable = static_cast<TCreateTable*>(obj.Get());
+    createTable->SetAllowShadowDataForBuildIndex();
+    createTable->SetLocalSequences(localSequences);
     return obj;
 }
 

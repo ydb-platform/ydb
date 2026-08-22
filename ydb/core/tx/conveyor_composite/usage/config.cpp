@@ -134,8 +134,8 @@ TConclusionStatus TWorkersPool::DeserializeFromProto(const NKikimrConfig::TCompo
         if (conclusion.IsFail()) {
             return conclusion;
         }
-        Links.emplace_back(std::move(link));
         categories.emplace(::ToString(link.GetCategory()));
+        Links.emplace_back(std::move(link));
     }
     if (!PoolName || PoolName == "WP::DEFAULT") {
         PoolName = "WP::" + JoinSeq("-", categories);
@@ -148,6 +148,9 @@ TConclusionStatus TWorkersPool::DeserializeFromProto(const NKikimrConfig::TCompo
         if (parseConclusion.IsFail()) {
             return parseConclusion;
         }
+    }
+    if (proto.HasMaxBatchSize()) {
+        MaxBatchSize = proto.GetMaxBatchSize();
     }
 
     return TConclusionStatus::Success();
@@ -256,6 +259,7 @@ TCPULimitsConfig::TCPULimitsConfig(const double cpuGroupThreadsLimit, const doub
 TConclusionStatus TCPULimitsConfig::DeserializeFromProto(const NKikimrTxDataShard::TEvKqpScan& config) {
     if (config.HasCpuGroupThreadsLimit()) {
         CPUGroupThreadsLimit = config.GetCpuGroupThreadsLimit();
+        CPUGroupName = config.GetCpuGroupName();
     }
     return TConclusionStatus::Success();
 }

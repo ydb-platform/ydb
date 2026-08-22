@@ -132,8 +132,7 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        AppData(ctx)->Icb->RegisterSharedControl(DefaultTimeoutMs,
-                                                "TxLimitControls.DefaultTimeoutMs");
+        TControlBoard::RegisterSharedControl(DefaultTimeoutMs, AppData(ctx)->Icb->TxLimitControls.DefaultTimeoutMs);
 
         WallClockAccepted = Now();
 
@@ -413,17 +412,16 @@ public:
     }
 
     void HandleLongTxSnaphot(NLongTxService::TEvLongTxService::TEvAcquireReadSnapshotResult::TPtr& ev, const TActorContext& ctx) {
-        const auto& record = ev->Get()->Record;
-        if (record.GetStatus() == Ydb::StatusIds::SUCCESS) {
-            PlanStep = record.GetSnapshotStep();
-            SnapshotTxId = record.GetSnapshotTxId();
+        const auto* msg = ev->Get();
+        if (msg->Status == Ydb::StatusIds::SUCCESS) {
+            PlanStep = msg->Snapshot.Step;
+            SnapshotTxId = msg->Snapshot.TxId;
             ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete, NKikimrIssues::TStatusIds::SUCCESS, true, ctx);
         } else {
-            NYql::TIssues issues;
-            NYql::IssuesFromMessage(record.GetIssues(), issues);
+            NYql::TIssues issues = msg->Issues;
             IssueManager.RaiseIssues(issues);
             NKikimrIssues::TStatusIds::EStatusCode statusCode = NKikimrIssues::TStatusIds::ERROR;
-            switch (record.GetStatus()) {
+            switch (msg->Status) {
             case Ydb::StatusIds::SCHEME_ERROR:
                 statusCode = NKikimrIssues::TStatusIds::SCHEME_ERROR;
                 break;
@@ -1169,8 +1167,7 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        AppData(ctx)->Icb->RegisterSharedControl(DefaultTimeoutMs,
-                                                "TxLimitControls.DefaultTimeoutMs");
+        TControlBoard::RegisterSharedControl(DefaultTimeoutMs, AppData(ctx)->Icb->TxLimitControls.DefaultTimeoutMs);
 
         WallClockAccepted = Now();
 

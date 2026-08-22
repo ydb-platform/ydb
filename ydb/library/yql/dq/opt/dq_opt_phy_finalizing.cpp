@@ -121,6 +121,7 @@ std::pair<TDqStage, TVector<TCoAtom>> ReplicateStageOutput(const TDqStage& stage
             .Body(ctx.ReplaceNodes(std::move(newResult), stageArgsReplaces))
             .Build()
         .Settings(TDqStageSettings().BuildNode(ctx, stage.Pos()))
+        .Outputs(stage.Outputs())
         .Done();
 
     YQL_CLOG(TRACE, CoreDq) << "new stage #" << newStage.Ref().UniqueId();
@@ -617,4 +618,4 @@ IGraphTransformer::TStatus DqExtractPrecomputeToStageInput(const TExprNode::TPtr
     return RemapExpr(input, output, replaces, ctx, TOptimizeExprSettings(nullptr));
 }
 
-} // NKikimr::NKqp
+} // namespace NYql::NDq

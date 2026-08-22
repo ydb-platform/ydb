@@ -22,6 +22,7 @@ CyclicDFA<ImplTraits, CtxType>::CyclicDFA( ANTLR_INT32	decisionNumber
 	m_description = description;
 }
 
+#if ANTLR3_ALLOW_CHANGES_IN_CONST_FIELDS
 template<class ImplTraits, class CtxType>
 CyclicDFA<ImplTraits, CtxType>::CyclicDFA( const CyclicDFA& dfa )
 {
@@ -50,6 +51,7 @@ CyclicDFA<ImplTraits, CtxType>& CyclicDFA<ImplTraits, CtxType>::operator=( const
 	m_transition = dfa.m_transition;
 	return *this;
 }
+#endif
 
 template<class ImplTraits, class CtxType>
 ANTLR_INT32	CyclicDFA<ImplTraits, CtxType>::specialStateTransition(CtxType * ,

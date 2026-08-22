@@ -1,0 +1,8 @@
+items:
+- name: Подготовка к развёртыванию
+  href: deployment-preparation.md
+- name: Развёртывание кластера с использованием конфигурации V1
+  href: deployment-configuration-v1.md
+- name: Развёртывание кластера с использованием конфигурации V2
+  href: deployment-configuration-v2.md
+  

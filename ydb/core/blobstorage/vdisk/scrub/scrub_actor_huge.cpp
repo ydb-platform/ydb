@@ -3,6 +3,8 @@
 #include <optional>
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullds_heap_it.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT BS_VDISK_SCRUB
+
 namespace NKikimr {
 
     void TScrubCoroImpl::ScrubHugeBlobs() {
@@ -10,50 +12,54 @@ namespace NKikimr {
         THeapIterator<TKeyLogoBlob, TMemRecLogoBlob, false> heapIt(&iter);
         if (State->HasBlobId()) {
             const TLogoBlobID& id = LogoBlobIDFromLogoBlobID(State->GetBlobId());
-            STLOGX(GetActorContext(), PRI_INFO, BS_VDISK_SCRUB, VDS19, VDISKP(LogPrefix, "resuming huge blob scrubbing"),
-                (Id, id));
+            YDB_LOG_INFO_CTX(GetActorContext(), VDISKP(LogPrefix, "resuming huge blob scrubbing"),
+                {"marker", "VDS19"},
+                {"id", id});
             heapIt.Seek(id);
             if (heapIt.Valid() && heapIt.GetCurKey() == id) {
-                heapIt.Prev();
+                heapIt.Prev(); // skip already processed blob
             }
         } else {
-            STLOGX(GetActorContext(), PRI_INFO, BS_VDISK_SCRUB, VDS20, VDISKP(LogPrefix, "starting huge blob scrubbing"));
-            // FIXME: check if this is correct logic?
-            heapIt.Seek(TLogoBlobID(Max<ui64>(), Max<ui32>(), Max<ui32>(), TLogoBlobID::MaxChannel,
-                TLogoBlobID::MaxBlobSize, TLogoBlobID::MaxCookie));
+            YDB_LOG_INFO_CTX(GetActorContext(), VDISKP(LogPrefix, "starting huge blob scrubbing"),
+                {"marker", "VDS20"});
+            heapIt.SeekToLast();
         }
 
-        auto readHugeBlob = [&](const TDiskPart& location) {
+        auto readHugeBlob = [&](const TDiskPart& location, TLogoBlobID blobId) {
             ++MonGroup.HugeBlobsRead();
             MonGroup.HugeBlobBytesRead() += location.Size;
-            return Read(location);
+            return Read(location, blobId);
         };
 
         auto essence = GetBarriersEssence();
         THugeBlobAndIndexMerger merger(LogPrefix, Info->Type, readHugeBlob, this);
 
         const TInstant startTime = TActorCoroImpl::Now();
-        if (heapIt.Valid()) {
-            auto callback = [&] (TKeyLogoBlob key, auto* merger) -> bool {
-                auto status = essence->Keep(key, merger->GetMemRec(), {}, Snap->HullCtx->AllowKeepFlags,
-                    true /*allowGarbageCollection*/);
-                const TLogoBlobID& id = key.LogoBlobID();
-                if (status.KeepData) {
-                    const NMatrix::TVectorType needed = merger->GetPartsToRestore();
-                    UpdateUnreadableParts(id, needed, merger->GetCorruptedPart());
-                    if (!needed.Empty()) {
-                        Checkpoints |= TEvScrubNotify::HUGE_BLOB_SCRUBBED;
-                    }
-                } else {
-                    DropGarbageBlob(id);
+        bool timeout = false;
+        heapIt.Walk(std::nullopt, &merger, [&](TKeyLogoBlob key, auto *merger) -> bool {
+            const auto status = essence->Keep(key, merger->GetMemRec(), {}, Snap->HullCtx->AllowKeepFlags,
+                true /*allowGarbageCollection*/);
+            const TLogoBlobID& id = key.LogoBlobID();
+            LogoBlobIDFromLogoBlobID(id, State->MutableBlobId()); // remember last processed blob
+            if (status.KeepData) {
+                if (ScrubCtx->EnableDeepScrubbing) {
+                    EnqueueCheckIntegrity(id, true);
                 }
-                return TActorCoroImpl::Now() < startTime + TDuration::Seconds(5);
-            };
-            heapIt.Walk(std::nullopt, &merger, callback);
-        }
-        if (heapIt.Valid()) {
-            LogoBlobIDFromLogoBlobID(heapIt.GetCurKey().LogoBlobID(), State->MutableBlobId());
-        } else {
+                const NMatrix::TVectorType needed = merger->GetPartsToRestore();
+                UpdateUnreadableParts(id, needed, merger->GetCorruptedPart());
+                if (!needed.Empty()) {
+                    Checkpoints |= TEvScrubNotify::HUGE_BLOB_SCRUBBED;
+                }
+            } else {
+                DropGarbageBlob(id);
+            }
+            if (TActorCoroImpl::Now() < startTime + TDuration::Seconds(5)) {
+                return true;
+            }
+            timeout = true;
+            return false;
+        });
+        if (!timeout) { // we have finished walking without premature exit, so we have processed all the blobs
             State->ClearBlobId();
         }
     }

@@ -1,6 +1,9 @@
 #include "columns_storage.h"
 
-#include <ydb/core/formats/arrow/arrow_filter.h>
+#include <ydb/core/formats/arrow/container/filterable/filterable.h>
+#include <ydb/core/formats/arrow/filter/filter.h>
+
+#include <yql/essentials/types/binary_json/read.h>
 
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
 TColumnsData TColumnsData::Slice(const ui32 offset, const ui32 count) const {
@@ -12,7 +15,8 @@ TColumnsData TColumnsData::Slice(const ui32 offset, const ui32 count) const {
         for (auto&& i : records.GetColumns()) {
             AFL_VERIFY(Stats.GetColumnName(idx) == records.GetSchema()->field(idx)->name());
             if (i->GetRecordsCount() > i->GetNullsCount()) {
-                builder.Add(Stats.GetColumnName(idx), i->GetRecordsCount() - i->GetNullsCount(), i->GetValueRawBytes(), i->GetType());
+                builder.Add(Stats.GetColumnName(idx), i->GetRecordsCount() - i->GetNullsCount(), i->GetValueRawBytes(), i->GetType(),
+                    Stats.GetValueType(idx));
             } else {
                 indexesToRemove.emplace_back(idx);
             }
@@ -20,7 +24,6 @@ TColumnsData TColumnsData::Slice(const ui32 offset, const ui32 count) const {
         }
         records.DeleteFieldsByIndex(indexesToRemove);
         return TColumnsData(builder.Finish(), std::make_shared<TGeneralContainer>(std::move(records)));
-
     } else {
         return TColumnsData(TDictStats::BuildEmpty(), std::make_shared<TGeneralContainer>(0));
     }
@@ -30,8 +33,7 @@ TColumnsData TColumnsData::ApplyFilter(const TColumnFilter& filter) const {
     if (!Stats.GetColumnsCount()) {
         return *this;
     }
-    auto records = Records;
-    filter.Apply(records);
+    auto records = NArrow::ApplyFilter(filter, Records);
     if (records->GetRecordsCount()) {
         TDictStats::TBuilder builder;
         ui32 idx = 0;
@@ -39,7 +41,8 @@ TColumnsData TColumnsData::ApplyFilter(const TColumnFilter& filter) const {
         for (auto&& i : records->GetColumns()) {
             AFL_VERIFY(Stats.GetColumnName(idx) == records->GetSchema()->field(idx)->name());
             if (i->GetRecordsCount() > i->GetNullsCount()) {
-                builder.Add(Stats.GetColumnName(idx), i->GetRecordsCount() - i->GetNullsCount(), i->GetValueRawBytes(), i->GetType());
+                builder.Add(Stats.GetColumnName(idx), i->GetRecordsCount() - i->GetNullsCount(), i->GetValueRawBytes(), i->GetType(),
+                    Stats.GetValueType(idx));
             } else {
                 indexesToRemove.emplace_back(idx);
             }
@@ -61,14 +64,20 @@ void TColumnsData::TIterator::InitArrays() {
         }
         const ui32 localIndex = FullArrayAddress->GetAddress().GetLocalIndex(CurrentIndex);
         ChunkAddress = FullArrayAddress->GetArray()->GetChunk(ChunkAddress, localIndex);
-        AFL_VERIFY(ChunkAddress->GetArray()->type()->id() == arrow::utf8()->id());
-        CurrentArrayData = static_cast<const arrow::StringArray*>(ChunkAddress->GetArray().get());
-        if (FullArrayAddress->GetArray()->GetType() == IChunkedArray::EType::Array) {
+        CurrentArrayData = ChunkAddress->GetArray().get();
+        // Dictionary columns materialize (decode) to a dense array, so they are
+        // read exactly like a plain Array here.
+        if (FullArrayAddress->GetArray()->GetType() == IChunkedArray::EType::Array ||
+            FullArrayAddress->GetArray()->GetType() == IChunkedArray::EType::Dictionary) {
             if (CurrentArrayData->IsNull(localIndex)) {
                 Next();
             }
             break;
         } else if (FullArrayAddress->GetArray()->GetType() == IChunkedArray::EType::SparsedArray) {
+            AFL_VERIFY(localIndex < CurrentArrayData->length())
+                ("localIndex", localIndex)
+                ("CurrentArray->length()", CurrentArrayData->length())
+                ("CurrentArray", CurrentArrayData->ToString());
             if (CurrentArrayData->IsNull(localIndex) &&
                 std::static_pointer_cast<TSparsedArray>(FullArrayAddress->GetArray())->GetDefaultValue() == nullptr) {
                 CurrentIndex = ChunkAddress->GetAddress().GetGlobalFinishPosition();

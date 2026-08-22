@@ -6,6 +6,8 @@ import pytest
 import logging
 import time
 import json
+import random
+import string
 
 from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
@@ -15,14 +17,24 @@ from ydb.tests.tools.fq_runner.kikimr_runner import StreamingOverKikimrConfig
 from ydb.tests.tools.fq_runner.kikimr_runner import TenantConfig
 
 from ydb.tests.tools.datastreams_helpers.control_plane import list_read_rules
-from ydb.tests.tools.datastreams_helpers.control_plane import create_stream, create_read_rule
+from ydb.tests.tools.datastreams_helpers.control_plane import create_stream, create_read_rule, delete_stream
 from ydb.tests.tools.datastreams_helpers.data_plane import read_stream, write_stream
 from ydb.tests.tools.fq_runner.fq_client import StreamingDisposition
+from ydb.tests.tools.fq_runner.kikimr_runner import plain_or_under_sanitizer_wrapper
 
+import ydb.public.api.protos.ydb_value_pb2 as ydb_value
 import ydb.public.api.protos.draft.fq_pb2 as fq
 
 YDS_CONNECTION = "yds"
 COMPUTE_NODE_COUNT = 3
+
+
+class Param(object):
+    def __init__(
+        self,
+        rebalancing_timeout_sec=60
+    ):
+        self.rebalancing_timeout_sec = rebalancing_timeout_sec
 
 
 @pytest.fixture
@@ -33,6 +45,9 @@ def kikimr(request):
     kikimr = StreamingOverKikimr(kikimr_conf)
     kikimr.compute_plane.fq_config['row_dispatcher']['enabled'] = True
     kikimr.compute_plane.fq_config['row_dispatcher']['without_consumer'] = True
+    kikimr.compute_plane.fq_config['row_dispatcher']['json_parser'] = {}
+    if hasattr(request, "param"):
+        kikimr.compute_plane.fq_config['row_dispatcher']['coordinator']['rebalancing_timeout_sec'] = request.param.rebalancing_timeout_sec
     kikimr.start_mvp_mock_server()
     kikimr.start()
     yield kikimr
@@ -40,10 +55,10 @@ def kikimr(request):
     kikimr.stop()
 
 
-def start_yds_query(kikimr, client, sql) -> str:
+def start_yds_query(kikimr, client, sql, timeout=plain_or_under_sanitizer_wrapper(30, 150)) -> str:
     query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
     client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
-    kikimr.compute_plane.wait_zero_checkpoint(query_id)
+    kikimr.compute_plane.wait_zero_checkpoint(query_id, timeout)
     return query_id
 
 
@@ -57,12 +72,12 @@ def wait_actor_count(kikimr, activity, expected_count):
     while True:
         count = 0
         for node_index in kikimr.compute_plane.kikimr_cluster.nodes:
-            count = count + kikimr.compute_plane.get_actor_count(node_index, activity)
-        if count == expected_count:
-            break
+            if kikimr.compute_plane.kikimr_cluster.nodes[node_index].is_alive():
+                count = count + kikimr.compute_plane.get_actor_count(node_index, activity)
+            if count == expected_count:
+                return node_index  # return any node
         assert time.time() < deadline, f"Waiting actor {activity} count failed, current count {count}"
         time.sleep(1)
-    pass
 
 
 def wait_row_dispatcher_sensor_value(kikimr, sensor, expected_count, exact_match=True):
@@ -101,6 +116,10 @@ def wait_public_sensor_value(kikimr, query_id, sensor, expected_value):
 
 class TestPqRowDispatcher(TestYdsBase):
 
+    def init(self, client, topic_name_prefix, partitions=1):
+        client.create_yds_connection(YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True)
+        self.init_topics(topic_name_prefix, create_input=True, create_output=True, partitions_count=partitions)
+
     def run_and_check(self, kikimr, client, sql, input, output, expected_predicate):
         query_id = start_yds_query(kikimr, client, sql)
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
@@ -116,30 +135,24 @@ class TestPqRowDispatcher(TestYdsBase):
 
     @yq_v1
     def test_read_raw_format_with_row_dispatcher(self, kikimr, client):
-        client.create_yds_connection(
-            YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
-        )
+        self.init(client, "test_read_raw_format_with_row_dispatcher")
+
         connections = client.list_connections(fq.Acl.Visibility.PRIVATE).result.connection
         assert len(connections) == 1
         assert connections[0].content.setting.data_streams.shared_reading
 
-        self.init_topics("test_read_raw_format_with_row_dispatcher", create_output=False)
-        output_topic = "pq_test_pq_read_write_output"
-        create_stream(output_topic, partitions_count=1)
-        create_read_rule(output_topic, self.consumer_name)
-
-        sql1 = Rf'''INSERT INTO {YDS_CONNECTION}.`{output_topic}`
+        sql1 = Rf'''INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
                     SELECT * FROM {YDS_CONNECTION}.`{self.input_topic}` WITH (format=raw, SCHEMA (data String NOT NULL));'''
 
         query_id = start_yds_query(kikimr, client, sql1)
         data = ['{"time" = 101;}', '{"time" = 102;}']
 
         self.write_stream(data)
-        assert self.read_stream(len(data), topic_path=output_topic) == data
+        assert self.read_stream(len(data), topic_path=self.output_topic) == data
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
         stop_yds_query(client, query_id)
 
-        sql2 = Rf'''INSERT INTO {YDS_CONNECTION}.`{output_topic}`
+        sql2 = Rf'''INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
                     SELECT * FROM {YDS_CONNECTION}.`{self.input_topic}` WITH (format=raw, SCHEMA (data String NOT NULL))
                     WHERE data != "romashka";'''
 
@@ -147,16 +160,13 @@ class TestPqRowDispatcher(TestYdsBase):
         data = ['{"time" = 103;}', '{"time" = 104;}']
 
         self.write_stream(data)
-        assert self.read_stream(len(data), topic_path=output_topic) == data
+        assert self.read_stream(len(data), topic_path=self.output_topic) == data
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
         stop_yds_query(client, query_id)
 
     @yq_v1
     def test_simple_not_null(self, kikimr, client):
-        client.create_yds_connection(
-            YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
-        )
-        self.init_topics("test_simple_not_null")
+        self.init(client, "test_simple_not_null")
 
         sql = Rf'''
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
@@ -187,10 +197,7 @@ class TestPqRowDispatcher(TestYdsBase):
 
     @yq_v1
     def test_metadatafields(self, kikimr, client):
-        client.create_yds_connection(
-            YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
-        )
-        self.init_topics("test_metadatafields")
+        self.init(client, "test_metadatafields")
 
         # Its not completely clear why metadatafields appear in this request(
         sql = Rf'''
@@ -198,7 +205,7 @@ class TestPqRowDispatcher(TestYdsBase):
             PRAGMA config.flags("TimeOrderRecoverDelay", "-10");
             PRAGMA config.flags("TimeOrderRecoverAhead", "10");
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
-            SELECT ToBytes(Unwrap(Json::SerializeJson(Yson::From(TableRow())))) FROM {YDS_CONNECTION}.`{self.input_topic}`
+            SELECT ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow())))) FROM {YDS_CONNECTION}.`{self.input_topic}`
                 WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL))
                 MATCH_RECOGNIZE(
                     ORDER BY CAST(time as Timestamp)
@@ -221,10 +228,7 @@ class TestPqRowDispatcher(TestYdsBase):
 
     @yq_v1
     def test_simple_optional(self, kikimr, client):
-        client.create_yds_connection(
-            YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
-        )
-        self.init_topics("test_simple_optional")
+        self.init(client, "test_simple_optional")
 
         sql = Rf'''
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
@@ -250,10 +254,7 @@ class TestPqRowDispatcher(TestYdsBase):
 
     @yq_v1
     def test_scheme_error(self, kikimr, client):
-        client.create_yds_connection(
-            YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
-        )
-        self.init_topics("test_scheme_error")
+        self.init(client, "test_scheme_error")
 
         sql = Rf'''
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
@@ -284,10 +285,7 @@ class TestPqRowDispatcher(TestYdsBase):
 
     @yq_v1
     def test_nested_types(self, kikimr, client):
-        client.create_yds_connection(
-            YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
-        )
-        self.init_topics("test_nested_types")
+        self.init(client, "test_nested_types")
 
         sql = Rf'''
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
@@ -321,11 +319,55 @@ class TestPqRowDispatcher(TestYdsBase):
         assert "Row dispatcher will use the predicate:" in issues, "Incorrect Issues: " + issues
 
     @yq_v1
+    def test_nested_structured_types(self, kikimr, client):
+        self.init(client, "test_nested_structured_types")
+
+        large_string = "abcdefghjkl1234567890+abcdefghjkl1234567890"
+        sql = Rf'''
+            INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
+            SELECT ToBytes(Unwrap(Json::SerializeJson(Yson::From(data))))
+             FROM {YDS_CONNECTION}.`{self.input_topic}`
+                WITH (
+                    format = json_each_row,
+                    SCHEMA = (
+                        time UInt64 NOT NULL,
+                        data Struct<key: String, second_key: Tuple<Int64, Bool?>> NOT NULL,
+                        event String NOT NULL
+                    )
+                )
+                WHERE (event = "event1" or event = "event2" or event = "event4" or event = "event5")
+                  AND (data.key = "value" OR data.key = "ev2" OR data.key = "{large_string}")
+                  AND data.second_key.0 > 0 AND data.second_key.1 IS DISTINCT FROM true;
+        '''
+
+        query_id = start_yds_query(kikimr, client, sql)
+        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
+
+        data = [
+            '{"time": 101, "data": {"key": "value", "second_key":[1, false]}, "event": "event1"}',
+            '{"time": 102, "data": {"second_key":[2], "key":"' + large_string + '"}, "event": "event2"}',
+            '{"time": 103, "data": {"key":"ev2", "second_key":[3]}, "event": "event3"}',
+            '{"time": 104, "data": {"key":"ev2", "second_key":[42, true]}, "event": "event4"}',
+            '{"time": 105, "data": {"key":"ev2", "second_key":[42, false]}, "event": "event5"}',
+        ]
+
+        self.write_stream(data)
+        expected = [
+            '{"key":"value","second_key":[1,false]}',
+            '{"key":"' + large_string + '","second_key":[2,null]}',
+            '{"key":"ev2","second_key":[42,false]}',
+        ]
+        assert self.read_stream(len(expected), topic_path=self.output_topic) == expected
+
+        wait_actor_count(kikimr, "DQ_PQ_READ_ACTOR", 1)
+        stop_yds_query(client, query_id)
+
+        issues = str(client.describe_query(query_id).result.query.transient_issue)
+        assert "Row dispatcher will use the predicate:" in issues and "second_key" in issues, "Incorrect Issues: " + issues
+
+    @yq_v1
     def test_nested_types_without_predicate(self, kikimr, client):
-        client.create_yds_connection(
-            YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
-        )
-        self.init_topics("test_nested_types_without_predicate")
+        self.init(client, "test_nested_types_without_predicate")
 
         sql = Rf'''
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
@@ -352,10 +394,7 @@ class TestPqRowDispatcher(TestYdsBase):
 
     @yq_v1
     def test_filters_non_optional_field(self, kikimr, client):
-        client.create_yds_connection(
-            YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
-        )
-        self.init_topics("test_filters_non_optional_field")
+        self.init(client, "test_filters_non_optional_field")
 
         sql = Rf'''
             PRAGMA AnsiLike;
@@ -365,42 +404,43 @@ class TestPqRowDispatcher(TestYdsBase):
         data = [
             '{"time": 101, "data": "hello1", "event": "event1", "nested": {"xyz": "key"}}',
             '{"time": 102, "data": "hello2", "event": "event2", "nested": ["abc", "key"]}']
-        filter = "time > 101;"
         expected = ['102']
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (`time` > 101)')
+        filter = "time > 101;"
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: (`time` > 101)')
         filter = 'data = "hello2"'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (`data` = \\"hello2\\")')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: (`data` = \\"hello2\\")')
         filter = ' event IS NOT DISTINCT FROM "event2"'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (`event` IS NOT DISTINCT FROM \\"event2\\")')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: (`event` IS NOT DISTINCT FROM \\"event2\\")')
         filter = ' event IS DISTINCT FROM "event1"'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (`event` IS DISTINCT FROM \\"event1\\")')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: (`event` IS DISTINCT FROM \\"event1\\")')
         filter = 'event IN ("event2")'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (`event` IN (\\"event2\\"))')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: (`event` IN (\\"event2\\"))')
         filter = 'event NOT IN ("event1", "event3")'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (NOT (`event` IN (\\"event1\\", \\"event3\\")))')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: (NOT (`event` IN (\\"event1\\", \\"event3\\")))')
         filter = 'event IN ("1", "2", "3", "4", "5", "6", "7", "event2")'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (`event` IN (\\"1\\"')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: (`event` IN (\\"1\\"')
         filter = ' event IS DISTINCT FROM data AND event IN ("1", "2", "3", "4", "5", "6", "7", "event2")'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE ((`event` IS DISTINCT FROM `data`) AND (`event` IN (\\"1\\"')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: ((`event` IS DISTINCT FROM `data`) AND (`event` IN (\\"1\\"')
         filter = ' IF(event = "event2", event IS DISTINCT FROM data, FALSE)'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE IF((`event` = \\"event2\\"), (`event` IS DISTINCT FROM `data`), FALSE)')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: IF((`event` = \\"event2\\"), (`event` IS DISTINCT FROM `data`), FALSE)')
         filter = ' nested REGEXP ".*abc.*"'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (CAST(`nested` AS String) REGEXP \\".*abc.*\\")')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: (CAST(`nested` AS String) REGEXP \\".*abc.*\\")')
         filter = ' CAST(nested AS String) REGEXP ".*abc.*"'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (CAST(`nested` AS String) REGEXP \\".*abc.*\\")')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: (CAST(`nested` AS String) REGEXP \\".*abc.*\\")')
         filter = 'event LIKE "event2%"'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE StartsWith(`event`, \\"event2\\")')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: StartsWith(`event`, \\"event2\\")')
         filter = 'event LIKE "%event2"'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE EndsWith(`event`, \\"event2\\")')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: EndsWith(`event`, \\"event2\\")')
         filter = 'event LIKE "%event2%"'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE String::Contains(`event`, \\"event2\\")')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: String::Contains(`event`, \\"event2\\")')
+        filter = ' (data = "hello2") IS NOT DISTINCT FROM true'
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: ((`data` = \\"hello2\\") IS NOT DISTINCT FROM TRUE)')
+        filter = ' (data REGEXP ".*hello2.*") IS NOT DISTINCT FROM true'
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: ((`data` REGEXP \\".*hello2.*\\") IS NOT DISTINCT FROM TRUE)')
 
     @yq_v1
     def test_filters_optional_field(self, kikimr, client):
-        client.create_yds_connection(
-            YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
-        )
-        self.init_topics("test_filters_optional_field")
+        self.init(client, "test_filters_optional_field")
 
         sql = Rf'''
             PRAGMA AnsiLike;
@@ -412,56 +452,59 @@ class TestPqRowDispatcher(TestYdsBase):
             '{"time": 102, "data": "hello2", "event": "event2", "flag": true, "field1": 5, "field2": 1005, "nested": ["abc", "key"]}']
         expected = ['102']
         filter = 'data = "hello2"'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (`data` = \\"hello2\\")')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: (`data` = \\"hello2\\")')
         filter = 'flag'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE `flag`')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: `flag`')
         filter = 'time * (field2 - field1) != 0'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE ((`time` * (`field2` - `field1`)) <> 0)')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: ((`time` * (`field2` - `field1`)) <> 0)')
         filter = '(field1 % field2) / 5 = 1'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (((`field1` % `field2`) / 5) = 1)')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: (((`field1` % `field2`) / 5) = 1)')
         filter = ' event IS NOT DISTINCT FROM "event2"'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (`event` IS NOT DISTINCT FROM \\"event2\\")')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: (`event` IS NOT DISTINCT FROM \\"event2\\")')
         filter = ' event IS DISTINCT FROM "event1"'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (`event` IS DISTINCT FROM \\"event1\\")')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: (`event` IS DISTINCT FROM \\"event1\\")')
         filter = ' field1 IS DISTINCT FROM field2'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (`field1` IS DISTINCT FROM `field2`)')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: (`field1` IS DISTINCT FROM `field2`)')
         filter = 'time == 102 OR (field2 IS NOT DISTINCT FROM 1005 AND Random(field1) < 10.0)'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE ((`time` = 102) OR (`field2` IS NOT DISTINCT FROM 1005))')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: ((`time` = 102) OR (`field2` IS NOT DISTINCT FROM 1005))')
         filter = 'event IN ("event2")'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (`event` IN (\\"event2\\"))')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: (`event` IN (\\"event2\\"))')
         filter = 'event IN ("1", "2", "3", "4", "5", "6", "7", "event2")'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (`event` IN (\\"1\\"')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: (`event` IN (\\"1\\"')
         filter = ' event IS DISTINCT FROM data AND event IN ("1", "2", "3", "4", "5", "6", "7", "event2")'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE ((`event` IS DISTINCT FROM `data`) AND COALESCE((`event` IN (\\"1\\"')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: ((`event` IS DISTINCT FROM `data`) AND COALESCE((`event` IN (\\"1\\"')
         filter = ' IF(event == "event2", event IS DISTINCT FROM data, FALSE)'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE IF(COALESCE((`event` = \\"event2\\"), FALSE), (`event` IS DISTINCT FROM `data`), FALSE)')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: IF(COALESCE((`event` = \\"event2\\"), FALSE), (`event` IS DISTINCT FROM `data`), FALSE)')
         filter = ' COALESCE(event = "event2", TRUE)'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE COALESCE((`event` = \\"event2\\"), TRUE)')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: COALESCE((`event` = \\"event2\\"), TRUE)')
         filter = ' COALESCE(event = "event2", data = "hello2", TRUE)'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE COALESCE((`event` = \\"event2\\"), (`data` = \\"hello2\\"), TRUE)')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: COALESCE((`event` = \\"event2\\"), (`data` = \\"hello2\\"), TRUE)')
         filter = " event ?? '' REGEXP @@e.*e.*t2@@"
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (COALESCE(`event`, \\"\\") REGEXP \\"e.*e.*t2\\")')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: (COALESCE(`event`, \\"\\") REGEXP \\"e.*e.*t2\\")')
         filter = " event ?? '' NOT REGEXP @@e.*e.*t1@@"
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (NOT (COALESCE(`event`, \\"\\") REGEXP \\"e.*e.*t1\\"))')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: (NOT (COALESCE(`event`, \\"\\") REGEXP \\"e.*e.*t1\\"))')
         filter = " event ?? '' REGEXP data ?? '' OR time = 102"
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE ((COALESCE(`event`, \\"\\") REGEXP COALESCE(`data`, \\"\\")) OR (`time` = 102))')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: ((COALESCE(`event`, \\"\\") REGEXP COALESCE(`data`, \\"\\")) OR (`time` = 102))')
         filter = ' nested REGEXP ".*abc.*"'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (IF((`nested` IS NOT NULL), CAST(`nested` AS String), NULL) REGEXP \\".*abc.*\\")')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: (IF((`nested` IS NOT NULL), CAST(`nested` AS String), NULL) REGEXP \\".*abc.*\\")')
         filter = ' CAST(nested AS String) REGEXP ".*abc.*"'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (CAST(`nested` AS String?) REGEXP \\".*abc.*\\")')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: (CAST(`nested` AS String?) REGEXP \\".*abc.*\\")')
         filter = 'event LIKE "event2%"'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE StartsWith(`event`, \\"event2\\")')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: StartsWith(`event`, \\"event2\\")')
         filter = 'event LIKE "%event2"'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE EndsWith(`event`, \\"event2\\")')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: EndsWith(`event`, \\"event2\\")')
         filter = 'event LIKE "%event2%"'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE String::Contains(`event`, \\"event2\\")')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: String::Contains(`event`, \\"event2\\")')
+        filter = ' (data = "hello2") IS NOT DISTINCT FROM true'
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: ((`data` = \\"hello2\\") IS NOT DISTINCT FROM TRUE)')
+        filter = ' (data REGEXP ".*hello2.*") IS NOT DISTINCT FROM true'
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: ((`data` REGEXP \\".*hello2.*\\") IS NOT DISTINCT FROM TRUE)')
+        filter = ' (data in ("hello2", "hello3")) IS NOT DISTINCT FROM true'
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: ((`data` IN (\\"hello2\\", \\"hello3\\")) IS NOT DISTINCT FROM TRUE)')
 
     @yq_v1
     def test_filter_missing_fields(self, kikimr, client):
-        client.create_yds_connection(
-            YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
-        )
-        self.init_topics("test_filter_missing_fields")
+        self.init(client, "test_filter_missing_fields")
 
         sql = Rf'''
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
@@ -491,10 +534,7 @@ class TestPqRowDispatcher(TestYdsBase):
 
     @yq_v1
     def test_filter_use_unsupported_predicate(self, kikimr, client):
-        client.create_yds_connection(
-            YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
-        )
-        self.init_topics("test_filter_use_unsupported_predicate")
+        self.init(client, "test_filter_use_unsupported_predicate")
 
         sql = Rf'''
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
@@ -516,10 +556,7 @@ class TestPqRowDispatcher(TestYdsBase):
 
     @yq_v1
     def test_filter_with_mr(self, kikimr, client):
-        client.create_yds_connection(
-            YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
-        )
-        self.init_topics("test_filter_with_mr")
+        self.init(client, "test_filter_with_mr")
 
         sql = Rf'''
             pragma FeatureR010="prototype";
@@ -565,7 +602,7 @@ class TestPqRowDispatcher(TestYdsBase):
         stop_yds_query(client, query_id)
 
         issues = str(client.describe_query(query_id).result.query.transient_issue)
-        assert "Row dispatcher will use the predicate: WHERE (`event_class` =" in issues, "Incorrect Issues: " + issues
+        assert "Row dispatcher will use the predicate: (`event_class` =" in issues, "Incorrect Issues: " + issues
 
     @yq_v1
     def test_start_new_query(self, kikimr, client):
@@ -649,27 +686,20 @@ class TestPqRowDispatcher(TestYdsBase):
 
     @yq_v1
     def test_stop_start(self, kikimr, client):
-        client.create_yds_connection(
-            YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
-        )
-        self.init_topics("test_stop_start", create_output=False)
-
-        output_topic = "test_stop_start"
-        create_stream(output_topic, partitions_count=1)
-        create_read_rule(output_topic, self.consumer_name)
+        self.init(client, "test_stop_start", 10)
 
         sql1 = Rf'''
-            INSERT INTO {YDS_CONNECTION}.`{output_topic}`
+            INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
             SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
                 WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL));'''
 
         query_id = start_yds_query(kikimr, client, sql1)
-        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
+        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 10)
 
         data = ['{"time": 101}', '{"time": 102}']
         self.write_stream(data)
         expected = ['101', '102']
-        assert self.read_stream(len(expected), topic_path=output_topic) == expected
+        assert sorted(self.read_stream(len(expected), topic_path=self.output_topic)) == sorted(expected)
 
         kikimr.compute_plane.wait_completed_checkpoints(
             query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 2
@@ -679,7 +709,7 @@ class TestPqRowDispatcher(TestYdsBase):
 
         client.modify_query(
             query_id,
-            "continue",
+            "simple",
             sql1,
             type=fq.QueryContent.QueryType.STREAMING,
             state_load_mode=fq.StateLoadMode.EMPTY,
@@ -691,24 +721,59 @@ class TestPqRowDispatcher(TestYdsBase):
 
         self.write_stream(data)
         expected = ['103', '104']
-        assert self.read_stream(len(expected), topic_path=output_topic) == expected
+        assert sorted(self.read_stream(len(expected), topic_path=self.output_topic)) == sorted(expected)
 
         stop_yds_query(client, query_id)
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 0)
 
     @yq_v1
-    def test_stop_start_with_filter(self, kikimr, client):
-        client.create_yds_connection(
-            YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
-        )
-        self.init_topics("test_stop_start_with_filter", create_output=False)
+    def test_stop_start2(self, kikimr, client):
+        self.init(client, "test_stop_start")
+        sql1 = Rf'''INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
+                    SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
+                        WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL));'''
+        query_id1 = start_yds_query(kikimr, client, sql1)
+        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
+        self.write_stream(['{"time": 101}', '{"time": 102}'])
+        expected = ['101', '102']
+        assert sorted(self.read_stream(len(expected), topic_path=self.output_topic)) == sorted(expected)
 
-        output_topic = "test_stop_start_with_filter"
-        create_stream(output_topic, partitions_count=1)
-        create_read_rule(output_topic, self.consumer_name)
+        kikimr.compute_plane.wait_completed_checkpoints(query_id1, kikimr.compute_plane.get_completed_checkpoints(query_id1) + 2)
+        stop_yds_query(client, query_id1)
+
+        client.modify_query(query_id1, "simple", sql1, type=fq.QueryContent.QueryType.STREAMING,
+                            state_load_mode=fq.StateLoadMode.EMPTY, streaming_disposition=StreamingDisposition.from_last_checkpoint())
+        client.wait_query_status(query_id1, fq.QueryMeta.RUNNING)
+        query_id2 = start_yds_query(kikimr, client, sql1)
+        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
+
+        time.sleep(10)
+        kikimr.compute_plane.wait_completed_checkpoints(query_id1, kikimr.compute_plane.get_completed_checkpoints(query_id1) + 2)
+        stop_yds_query(client, query_id1)
+        stop_yds_query(client, query_id2)
+
+        client.modify_query(query_id1, "simple", sql1, type=fq.QueryContent.QueryType.STREAMING,
+                            state_load_mode=fq.StateLoadMode.EMPTY, streaming_disposition=StreamingDisposition.from_last_checkpoint())
+        client.wait_query_status(query_id1, fq.QueryMeta.RUNNING)
+        client.modify_query(query_id2, "simple", sql1, type=fq.QueryContent.QueryType.STREAMING,
+                            state_load_mode=fq.StateLoadMode.EMPTY, streaming_disposition=StreamingDisposition.from_last_checkpoint())
+        client.wait_query_status(query_id2, fq.QueryMeta.RUNNING)
+        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
+
+        self.write_stream(['{"time": 103}', '{"time": 104}'])
+        expected = ['103', '104', '103', '104']
+        assert sorted(self.read_stream(len(expected), topic_path=self.output_topic)) == sorted(expected)
+
+        stop_yds_query(client, query_id1)
+        stop_yds_query(client, query_id2)
+        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 0)
+
+    @yq_v1
+    def test_stop_start_with_filter(self, kikimr, client):
+        self.init(client, "test_stop_start_with_filter")
 
         sql = Rf'''
-            INSERT INTO {YDS_CONNECTION}.`{output_topic}`
+            INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
             SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
                 WITH (format=json_each_row, SCHEMA (time UInt64 NOT NULL))
                 WHERE time > 200;'''
@@ -726,13 +791,13 @@ class TestPqRowDispatcher(TestYdsBase):
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 0)
 
         sql = Rf'''
-            INSERT INTO {YDS_CONNECTION}.`{output_topic}`
+            INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
             SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
                 WITH (format=json_each_row, SCHEMA (time UInt64 NOT NULL));'''
 
         client.modify_query(
             query_id,
-            "continue",
+            "simple",
             sql,
             type=fq.QueryContent.QueryType.STREAMING,
             state_load_mode=fq.StateLoadMode.EMPTY,
@@ -743,17 +808,14 @@ class TestPqRowDispatcher(TestYdsBase):
         data = ['{"time": 203}', '{"time": 204}']
         self.write_stream(data)
         expected = ['203', '204']
-        assert self.read_stream(len(expected), topic_path=output_topic) == expected
+        assert self.read_stream(len(expected), topic_path=self.output_topic) == expected
 
         stop_yds_query(client, query_id)
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 0)
 
     @yq_v1
     def test_restart_compute_node(self, kikimr, client):
-        client.create_yds_connection(
-            YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
-        )
-        self.init_topics("test_restart_compute_node", partitions_count=4)
+        self.init(client, "test_restart_compute_node", partitions=4)
 
         sql = Rf'''
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
@@ -780,6 +842,9 @@ class TestPqRowDispatcher(TestYdsBase):
         kikimr.compute_plane.kikimr_cluster.nodes[node_index].start()
         kikimr.compute_plane.wait_bootstrap(node_index)
 
+        kikimr.compute_plane.wait_completed_checkpoints(
+            query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 2)
+
         write_stream(self.input_topic, [Rf'''{{"time": {c}}}''' for c in range(108, 110)], "partition_key1")
         write_stream(self.input_topic, [Rf'''{{"time": {c}}}''' for c in range(110, 112)], "partition_key2")
         write_stream(self.input_topic, [Rf'''{{"time": {c}}}''' for c in range(112, 114)], "partition_key3")
@@ -798,6 +863,9 @@ class TestPqRowDispatcher(TestYdsBase):
         kikimr.compute_plane.kikimr_cluster.nodes[node_index].start()
         kikimr.compute_plane.wait_bootstrap(node_index)
 
+        kikimr.compute_plane.wait_completed_checkpoints(
+            query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 2)
+
         write_stream(self.input_topic, [Rf'''{{"time": {c}}}''' for c in range(116, 118)], "partition_key1")
         write_stream(self.input_topic, [Rf'''{{"time": {c}}}''' for c in range(118, 120)], "partition_key2")
         write_stream(self.input_topic, [Rf'''{{"time": {c}}}''' for c in range(120, 122)], "partition_key3")
@@ -815,6 +883,9 @@ class TestPqRowDispatcher(TestYdsBase):
         kikimr.compute_plane.kikimr_cluster.nodes[node_index].stop()
         kikimr.compute_plane.kikimr_cluster.nodes[node_index].start()
         kikimr.compute_plane.wait_bootstrap(node_index)
+
+        kikimr.compute_plane.wait_completed_checkpoints(
+            query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 2)
 
         write_stream(self.input_topic, [Rf'''{{"time": {c}}}''' for c in range(124, 126)], "partition_key1")
         write_stream(self.input_topic, [Rf'''{{"time": {c}}}''' for c in range(126, 128)], "partition_key2")
@@ -886,7 +957,7 @@ class TestPqRowDispatcher(TestYdsBase):
 
         client.modify_query(
             query_id1,
-            "continue",
+            "simple",
             sql1,
             type=fq.QueryContent.QueryType.STREAMING,
             state_load_mode=fq.StateLoadMode.EMPTY,
@@ -913,10 +984,7 @@ class TestPqRowDispatcher(TestYdsBase):
 
     @yq_v1
     def test_many_partitions(self, kikimr, client):
-        client.create_yds_connection(
-            YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
-        )
-        self.init_topics("test_many_partitions", partitions_count=4)
+        self.init(client, "test_many_partitions", partitions=4)
 
         sql = Rf'''
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
@@ -978,10 +1046,7 @@ class TestPqRowDispatcher(TestYdsBase):
 
     @yq_v1
     def test_sensors(self, kikimr, client):
-        client.create_yds_connection(
-            YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
-        )
-        self.init_topics("test_sensors")
+        self.init(client, "test_sensors")
 
         sql = Rf'''
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
@@ -1019,10 +1084,7 @@ class TestPqRowDispatcher(TestYdsBase):
     @yq_v1
     @pytest.mark.skip(reason="Is not implemented")
     def test_group_by_hop_restart_query(self, kikimr, client):
-        client.create_yds_connection(
-            YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
-        )
-        self.init_topics("test_group_by_hop_restart")
+        self.init(client, "test_group_by_hop_restart")
 
         sql1 = Rf'''
             $data = SELECT * FROM {YDS_CONNECTION}.`{self.input_topic}`
@@ -1069,7 +1131,7 @@ class TestPqRowDispatcher(TestYdsBase):
 
         client.modify_query(
             query_id,
-            "continue",
+            "simple",
             sql1,
             type=fq.QueryContent.QueryType.STREAMING,
             state_load_mode=fq.StateLoadMode.FROM_LAST_CHECKPOINT,
@@ -1087,10 +1149,7 @@ class TestPqRowDispatcher(TestYdsBase):
 
     @yq_v1
     def test_group_by_hop_restart_node(self, kikimr, client):
-        client.create_yds_connection(
-            YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
-        )
-        self.init_topics("test_group_by_hop_restart")
+        self.init(client, "test_group_by_hop_restart_node")
 
         sql1 = Rf'''
             $data = SELECT * FROM {YDS_CONNECTION}.`{self.input_topic}`
@@ -1147,3 +1206,233 @@ class TestPqRowDispatcher(TestYdsBase):
 
         stop_yds_query(client, query_id)
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 0)
+
+    @yq_v1
+    def test_huge_messages(self, kikimr, client):
+        self.init(client, "test_huge")
+
+        sql = Rf'''
+            $data = SELECT * FROM {YDS_CONNECTION}.`{self.input_topic}`
+                WITH (format=json_each_row, SCHEMA (time UInt64 NOT NULL, sql String NOT NULL, event String NOT NULL))
+                WHERE event = "event1" or event = "event2";
+
+            $data = SELECT time, LENGTH(sql) AS len FROM $data;
+
+            INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
+            SELECT ToBytes(Unwrap(Json::SerializeJson(Yson::From(TableRow())))) FROM $data;
+                '''
+
+        query_id = start_yds_query(kikimr, client, sql)
+        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
+
+        large_string = "abcdefghjkl1234567890"
+        huge_string = large_string*(1000*1000//len(large_string) + 2)
+        assert len(huge_string) > 1000*1000
+
+        data = [
+            '{"time": 101, "sql":"' + large_string + '", "event": "event1"}',
+            '{"time": 102, "sql":"' + huge_string + '", "event": "event2"}',
+            '{"time": 103, "sql": "' + large_string + '", "event": "event3"}',
+            '{"time": 104, "sql": "' + huge_string + '", "event": "event4"}',
+            '{"time": 105, "sql":"' + large_string + '", "event": "event1"}',
+            '{"time": 106, "sql":"' + huge_string + '", "event": "event2"}',
+        ]
+
+        self.write_stream(data)
+        expected = [
+            f'{{"len":{len(large_string)},"time":101}}',
+            f'{{"len":{len(huge_string)},"time":102}}',
+            f'{{"len":{len(large_string)},"time":105}}',
+            f'{{"len":{len(huge_string)},"time":106}}',
+        ]
+        # TODO: normalize json and tolerate order mismatch
+
+        received = self.read_stream(len(expected), topic_path=self.output_topic)
+
+        # wait_actor_count(kikimr, "DQ_PQ_READ_ACTOR", 1)
+        stop_yds_query(client, query_id)
+
+        issues = str(client.describe_query(query_id).result.query.transient_issue)
+        assert "Row dispatcher will use the predicate:" in issues, "Incorrect Issues: " + issues
+        issues = str(client.describe_query(query_id).result.query.issue)
+        assert "Failed to parse json message for offset" not in issues, "Incorrect Issues: " + issues
+
+        assert received == expected
+
+    @yq_v1
+    @pytest.mark.parametrize("use_binding", [False, True], ids=["with_option", "bindings"])
+    def test_json_errors(self, kikimr, client, use_binding):
+        connection_response = client.create_yds_connection(YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True)
+        self.init_topics(f"test_json_errors_{use_binding}", create_input=True, create_output=True, partitions_count=1)
+
+        time_type = ydb_value.Column(name="time", type=ydb_value.Type(type_id=ydb_value.Type.PrimitiveTypeId.INT32))
+        data_type = ydb_value.Column(name="data", type=ydb_value.Type(type_id=ydb_value.Type.PrimitiveTypeId.STRING))
+        null_type = ydb_value.Column(name="null_field", type=ydb_value.Type(optional_type=ydb_value.OptionalType(item=ydb_value.Type(type_id=ydb_value.Type.PrimitiveTypeId.STRING))))
+
+        if use_binding:
+            client.create_yds_binding(
+                name="my_binding",
+                stream=self.input_topic,
+                format="json_each_row",
+                connection_id=connection_response.result.connection_id,
+                columns=[time_type, data_type, null_type],
+                format_setting={"skip.json.errors": "true"},
+            )
+
+        if use_binding:
+            sql = Rf'''
+                INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
+                SELECT data || COALESCE(cast(null_field as String), "_null") FROM bindings.`my_binding`;'''
+        else:
+            sql = Rf'''
+                INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
+                SELECT data || COALESCE(cast(null_field as String), "_null") FROM {YDS_CONNECTION}.`{self.input_topic}`
+                    WITH (format=json_each_row, `skip.json.errors` = "true", SCHEMA (time Int32 NOT NULL, data String NOT NULL, null_field String));'''
+
+        query_id = start_yds_query(kikimr, client, sql)
+        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
+
+        data = [
+            '{"time": 101, "data": "hello1"}',
+            '{"time": 102, "data": 7777}',
+            '{"time": 103, "data": "hello2"}',
+            '{"time": 104, "data": "hello3", "null_field": null}',
+        ]
+
+        self.write_stream(data, partition_key="key")
+        expected = ['hello1_null', 'hello2_null', 'hello3_null']
+        assert self.read_stream(len(expected), topic_path=self.output_topic) == expected
+
+        deadline = time.time() + 30
+        while True:
+            count = 0
+            for node_index in kikimr.compute_plane.kikimr_cluster.nodes:
+                value = kikimr.compute_plane.get_sensors(node_index, "yq").find_sensor(
+                    {"subsystem": "row_dispatcher", "partition": "0", "format": "json_each_row", "sensor": "ParsingErrors"})
+                count += value if value is not None else 0
+            if count > 0:
+                break
+            assert time.time() < deadline, f"Waiting sensor ParsingErrors value failed, current count {count}"
+            time.sleep(1)
+
+        while True:
+            count = 0
+            for node_index in kikimr.compute_plane.kikimr_cluster.nodes:
+                value = kikimr.compute_plane.get_sensors(node_index, "yq").find_sensor(
+                    {"subsystem": "row_dispatcher", "topic": f"{self.input_topic}", "sensor": "JsonParsingErrors"})
+                count += value if value is not None else 0
+            if count > 0:
+                break
+            assert time.time() < deadline, f"Waiting sensor JsonParsingErrors value failed, current count {count}"
+            time.sleep(1)
+        stop_yds_query(client, query_id)
+
+    @yq_v1
+    def test_delete_topic(self, kikimr, client):
+        self.init(client, "test_delete_topic")
+
+        sql = Rf'''
+            INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
+            SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
+                WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL, data String NOT NULL));'''
+
+        query_id = start_yds_query(kikimr, client, sql)
+        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
+
+        data = [
+            '{"time": 101, "data": "hello1", "event": "event1"}',
+            '{"time": 102, "data": "hello2", "event": "event2"}',
+            '{"time": 103, "data": "hello3", "event": "event3"}',
+        ]
+
+        self.write_stream(data)
+        expected = ['101', '102', '103']
+        assert self.read_stream(len(expected), topic_path=self.output_topic) == expected
+        kikimr.compute_plane.wait_completed_checkpoints(
+            query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 2
+        )
+        stop_yds_query(client, query_id)
+
+        delete_stream(self.input_topic)
+        create_stream(self.input_topic)
+
+        client.modify_query(
+            query_id,
+            "simple",
+            sql,
+            type=fq.QueryContent.QueryType.STREAMING,
+            state_load_mode=fq.StateLoadMode.EMPTY,
+            streaming_disposition=StreamingDisposition.from_last_checkpoint(),
+        )
+
+        data = [
+            '{"time": 101, "data": "hello1", "event": "event1"}',
+            '{"time": 102, "data": "hello2", "event": "event2"}',
+            '{"time": 103, "data": "hello3", "event": "event3"}',
+            '{"time": 104, "data": "hello4", "event": "event4"}',
+        ]
+
+        self.write_stream(data)
+        expected = ['104']
+        assert self.read_stream(len(expected), topic_path=self.output_topic) == expected
+
+    @yq_v1
+    @pytest.mark.parametrize(
+        "kikimr", [Param(rebalancing_timeout_sec=5)], indirect=["kikimr"]
+    )
+    @pytest.mark.parametrize("single_node", [False, True])
+    def test_redistribute_partition_after_timeout(self, kikimr, client, single_node):
+        partitions_count = 10
+        self.init(client, "redistribute", partitions=partitions_count)
+        wait_row_dispatcher_sensor_value(kikimr, "KnownRowDispatchers", 2 * COMPUTE_NODE_COUNT - 1)
+
+        single_node = R'''PRAGMA dq.Scheduler=@@{{"type": "single_node"}}@@;'''
+
+        sql = Rf'''
+            {single_node if single_node else ""}
+            INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
+            SELECT data FROM {YDS_CONNECTION}.`{self.input_topic}`
+                WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL, data String NOT NULL));'''
+
+        query_id = start_yds_query(kikimr, client, sql)
+        session_node_index = wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", partitions_count)
+        kikimr.compute_plane.wait_completed_checkpoints(query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 2)
+
+        message_count = 10
+        expected = "hello"
+        for i in range(message_count):
+            self.write_stream(['{"time": 100, "data": "hello"}'], topic_path=None, partition_key=str(i))
+        assert self.read_stream(message_count, topic_path=self.output_topic) == [expected] * message_count
+        kikimr.compute_plane.wait_completed_checkpoints(query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 2)
+
+        logging.debug(f"Stopping node: {session_node_index}")
+        kikimr.compute_plane.kikimr_cluster.nodes[session_node_index].stop()
+
+        expected = "Relativitätstheorie"
+        for i in range(message_count):
+            self.write_stream(['{"time": 101, "data": "Relativitätstheorie"}'], topic_path=None, partition_key=str(i))
+        assert self.read_stream(message_count, topic_path=self.output_topic) == [expected] * message_count
+        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", partitions_count)
+
+    @yq_v1
+    def test_big_text_query_size(self, kikimr, client):
+        self.init(client, "test_big_text_query_size")
+
+        text_size = 1000000
+        element_size = 100
+        filter = " OR ".join(['data = "' + ''.join(random.choices(string.ascii_uppercase, k=element_size - 13)) + '"' for c in range(int(text_size / element_size))])
+
+        sql = Rf'''INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
+                    SELECT * FROM {YDS_CONNECTION}.`{self.input_topic}`
+                    WITH (format=json_each_row, SCHEMA (data String NOT NULL))
+                    WHERE data = "100" OR {filter};'''
+
+        logging.debug(f"query text size: {str(len(sql))}")
+        query_id = start_yds_query(kikimr, client, sql, timeout=300)
+        data = ['{"data": "100"}', '{"data": "101"}']
+        expected = ["100"]
+
+        self.write_stream(data)
+        assert self.read_stream(len(expected), topic_path=self.output_topic) == expected
+        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
+        stop_yds_query(client, query_id)

@@ -1,6 +1,6 @@
 from typing import Callable
 
-from typeguard import check_argument_types, check_return_type, typechecked
+from typeguard import typechecked
 
 
 @typechecked
@@ -15,18 +15,17 @@ def takes_callable(f: Callable[[str], str]) -> str:
 takes_callable(foo)
 
 
-def has_valid_arguments(x: int, y: str) -> bool:
-    return check_argument_types()
+@typechecked
+def has_valid_arguments(x: int, y: str) -> None:
+    pass
 
 
 def has_valid_return_type(y: str) -> str:
-    check_return_type(y)
     return y
 
 
 @typechecked
 class MyClass:
-
     def __init__(self, x: int) -> None:
         self.x = x
 

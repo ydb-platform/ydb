@@ -17,7 +17,7 @@ class TestVectorIndexLargeLevelsAndClusters(VectorBase):
         self.rows_count = 1000
         self.count_prefix = 5
 
-    def test_vecot_index_large_levels_and_clusters(self):
+    def test_vector_index_large_levels_and_clusters(self):
         prefix_data = {"String": lambda i: f"{i}"}
         vector = {"String": lambda i: f"{i}"}
         all_types = {
@@ -52,8 +52,8 @@ class TestVectorIndexLargeLevelsAndClusters(VectorBase):
                 create_table_sql = create_table_sql_request(
                     table_name=self.table_name,
                     columns=columns,
-                    pk_colums=pk_columns,
-                    index_colums={},
+                    pk_columns=pk_columns,
+                    index_columns={},
                     unique="",
                     sync="",
                 )

@@ -14,6 +14,7 @@ namespace NTable {
         using TFamily = TScheme::TFamily;
         using ECodec = NPage::ECodec;
         using ECache = NPage::ECache;
+        using ECacheMode = NPage::ECacheMode;
 
         explicit TSchemeModifier(TScheme &scheme, TSchemeRollbackState *rollbackState = nullptr);
 
@@ -32,8 +33,9 @@ namespace NTable {
     protected:
         bool AddTable(const TString& name, ui32 id);
         bool DropTable(ui32 id);
-        bool AddColumn(ui32 table, const TString& name, ui32 id, ui32 type, bool notNull, TCell null = { });
-        bool AddColumnWithTypeInfo(ui32 table, const TString& name, ui32 id, ui32 type, const std::optional<NKikimrProto::TTypeInfo>& typeInfoProto, bool notNull, TCell null = { });
+        bool AddColumn(ui32 table, const TString& name, ui32 id, ui32 type, bool notNull, bool isSensitive, TCell null = { }, bool setNotNullInProgress = false);
+        bool AddColumnWithTypeInfo(ui32 table, const TString& name, ui32 id, ui32 type,
+                const std::optional<NKikimrProto::TTypeInfo>& typeInfoProto, bool notNull, bool isSensitive, TCell null = { }, bool setNotNullInProgress = false);
         bool DropColumn(ui32 table, ui32 id);
         bool AddColumnToFamily(ui32 table, ui32 column, ui32 family);
         bool AddColumnToKey(ui32 table, ui32 column);

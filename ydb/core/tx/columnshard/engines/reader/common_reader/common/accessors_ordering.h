@@ -1,0 +1,441 @@
+#pragma once
+#include <ydb/core/tx/columnshard/data_accessor/request.h>
+#include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
+#include <ydb/core/tx/columnshard/engines/reader/common/comparable.h>
+#include <ydb/core/tx/columnshard/engines/reader/common/description.h>
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/constructor/read_metadata.h>
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/context.h>
+
+#include <ydb/library/conclusion/status.h>
+
+namespace NKikimr::NOlap::NReader::NCommon {
+
+class TDataSourceConstructor: public ICursorEntity, public TMoveOnly {
+private:
+    TReplaceKeyAdapter Start;
+    TReplaceKeyAdapter Finish;
+    bool Conflicting;
+    ui32 SourceIdx = 0;
+    bool SourceIdxInitialized = false;
+
+    virtual ui64 DoGetEntityId() const override {
+        return GetSourceIdx();
+    }
+
+public:
+    void SetIndex(const ui32 index) {
+        AFL_VERIFY(!SourceIdxInitialized);
+        SourceIdxInitialized = true;
+        SourceIdx = index;
+    }
+
+    ui32 GetSourceIdx() const {
+        AFL_VERIFY(SourceIdxInitialized);
+        return SourceIdx;
+    }
+
+    TReplaceKeyAdapter ExtractStart() {
+        return std::move(Start);
+    }
+
+    TReplaceKeyAdapter ExtractFinish() {
+        return std::move(Finish);
+    }
+
+    TDataSourceConstructor(TReplaceKeyAdapter&& start, TReplaceKeyAdapter&& finish, const bool conflicting)
+        : Start(std::move(start))
+        , Finish(std::move(finish))
+        , Conflicting(conflicting)
+    {
+    }
+
+    const TReplaceKeyAdapter& GetStart() const {
+        return Start;
+    }
+
+    const TReplaceKeyAdapter& GetFinish() const {
+        return Finish;
+    }
+
+    bool IsConflicting() const {
+        return Conflicting;
+    }
+
+    virtual bool QueryAgnosticLess(const TDataSourceConstructor& rhs) const = 0;
+    virtual ~TDataSourceConstructor() = default;
+
+    TDataSourceConstructor(TDataSourceConstructor&& other)
+        : Start(std::move(other.Start))
+        , Finish(std::move(other.Finish))
+        , Conflicting(other.Conflicting)
+        , SourceIdx(other.SourceIdx)
+        , SourceIdxInitialized(other.SourceIdxInitialized)
+    {
+    }
+
+    TDataSourceConstructor& operator=(TDataSourceConstructor&& other) {
+        Start = std::move(other.Start);
+        Finish = std::move(other.Finish);
+        Conflicting = other.Conflicting;
+        SourceIdx = other.SourceIdx;
+        SourceIdxInitialized = other.SourceIdxInitialized;
+        return *this;
+    }
+
+    class TLessByStart {
+    public:
+        bool operator()(const TDataSourceConstructor& l, const TDataSourceConstructor& r) const {
+            auto cmp = l.Start.Compare(r.Start);
+            if (cmp == std::partial_ordering::less) {
+                return true;
+            } else if (cmp == std::partial_ordering::greater) {
+                return false;
+            } else {
+                return l.QueryAgnosticLess(r);
+            }
+        }
+    };
+
+    class TLessByFinish {
+    public:
+        bool operator()(const TDataSourceConstructor& l, const TDataSourceConstructor& r) const {
+            auto cmp = l.Finish.Compare(r.Finish);
+            if (cmp == std::partial_ordering::less) {
+                return true;
+            } else if (cmp == std::partial_ordering::greater) {
+                return false;
+            } else {
+                return l.QueryAgnosticLess(r);
+            }
+        }
+    };
+
+    class TSimpleLess {
+    public:
+        bool operator()(const TDataSourceConstructor& l, const TDataSourceConstructor& r) const {
+            return l.QueryAgnosticLess(r);
+        }
+    };
+
+    class TReversedComparator {
+    private:
+        ERequestSorting Sorting;
+        bool SortByFinish = false;
+
+    public:
+        TReversedComparator(const ERequestSorting sorting, const bool sortByFinish = false)
+            : Sorting(sorting)
+            , SortByFinish(sortByFinish)
+        {
+        }
+
+        bool operator()(const TDataSourceConstructor& l, const TDataSourceConstructor& r) const {
+            if (l.Conflicting || r.Conflicting) {
+                if (!r.Conflicting) {
+                    return true;
+                }
+                if (!l.Conflicting) {
+                    return false;
+                }
+                return false;
+            }
+            switch (Sorting) {
+                case ERequestSorting::NONE:
+                    return TSimpleLess()(r, l);
+                case ERequestSorting::ASC:
+                case ERequestSorting::DESC:
+                    if (SortByFinish) {
+                        return TLessByFinish()(r, l);
+                    }
+                    return TLessByStart()(r, l);
+            }
+        }
+    };
+};
+
+template <std::derived_from<TDataSourceConstructor> TObject>
+class TOrderedObjects {
+private:
+    const ERequestSorting Sorting;
+    const bool SortByFinish = false;
+    std::deque<TObject> HeapObjects;
+    YDB_READONLY_DEF(std::deque<TObject>, AlreadySorted);
+    bool Initialized = false;
+    ui32 NextObjectIdx = 0;
+
+public:
+    TOrderedObjects(const ERequestSorting sorting, const bool sortByFinish = false)
+        : Sorting(sorting)
+        , SortByFinish(sortByFinish)
+    {
+    }
+
+    ERequestSorting GetSorting() const {
+        return Sorting;
+    }
+
+    template <typename F>
+    void ForEachObject(F&& f) const {
+        for (const auto& obj : AlreadySorted) {
+            f(obj);
+        }
+        for (const auto& obj : HeapObjects) {
+            f(obj);
+        }
+    }
+
+    const std::deque<TObject>& GetObjects() const {
+        if (AlreadySorted.size()) {
+            AFL_VERIFY(!HeapObjects.size());
+            return AlreadySorted;
+        }
+        return HeapObjects;
+    }
+
+    TObject& MutableNextObject() {
+        AFL_VERIFY(GetSize());
+        if (AlreadySorted.empty()) {
+            PrepareOrdered(1);
+        }
+        return AlreadySorted.front();
+    }
+
+    void Initialize(std::deque<TObject>&& objects) {
+        AFL_VERIFY(!Initialized);
+        Initialized = true;
+        HeapObjects = std::move(objects);
+        std::make_heap(HeapObjects.begin(), HeapObjects.end(), typename TObject::TReversedComparator(Sorting, SortByFinish));
+    }
+
+    void PrepareOrdered(const ui32 count) {
+        while (AlreadySorted.size() < count && HeapObjects.size()) {
+            std::pop_heap(HeapObjects.begin(), HeapObjects.end(), typename TObject::TReversedComparator(Sorting, SortByFinish));
+            HeapObjects.back().SetIndex(NextObjectIdx++);
+            AlreadySorted.emplace_back(std::move(HeapObjects.back()));
+            HeapObjects.pop_back();
+        }
+    }
+
+    TObject PopFront() {
+        if (AlreadySorted.empty()) {
+            PrepareOrdered(1);
+        }
+        AFL_VERIFY(AlreadySorted.size());
+        auto result = std::move(AlreadySorted.front());
+        AlreadySorted.pop_front();
+        return result;
+    }
+
+    bool IsEmpty() const {
+        return AlreadySorted.empty() && HeapObjects.empty();
+    }
+
+    ui32 GetSize() const {
+        return AlreadySorted.size() + HeapObjects.size();
+    }
+
+    void Clear() {
+        AlreadySorted.clear();
+        HeapObjects.clear();
+    }
+};
+
+class TAccessorsFetcherImpl {
+private:
+    THashMap<ui64, std::shared_ptr<TPortionDataAccessor>> Accessors;
+    int InFlightRequests = 0;
+    bool Finished = false;
+
+public:
+    void Stop() {
+        Finished = true;
+        Accessors.clear();
+    }
+
+    ui32 GetSize() const {
+        return Accessors.size();
+    }
+
+    bool HasRequest() const {
+        return InFlightRequests;
+    }
+
+    std::shared_ptr<TPortionDataAccessor> ExtractAccessorVerified(const ui64 portionId) {
+        auto it = Accessors.find(portionId);
+        AFL_VERIFY(it != Accessors.end());
+        auto result = std::move(it->second);
+        Accessors.erase(it);
+        return std::move(result);
+    }
+
+    void StartRequest(std::shared_ptr<TDataAccessorsRequest>&& request, const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context);
+
+    TConclusionStatus AddRequestedAccessors(TDataAccessorsResult&& accessors) {
+        if (Finished) {
+            return TConclusionStatus::Success();
+        }
+
+        AFL_VERIFY(InFlightRequests);
+        --InFlightRequests;
+
+        if (accessors.HasErrors()) {
+            const TString errorMessage = TStringBuilder{} << "prefetch accessors fetch failed: " << accessors.GetErrorMessage();
+            YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD, "", {"error", errorMessage});
+            return TConclusionStatus::Fail(errorMessage);
+        }
+
+        if (accessors.HasRemovedData()) {
+            const TString errorMessage = TStringBuilder{}
+                                         << "prefetch accessors fetch has removed data, count=" << accessors.GetRemovedData().size()
+                                         << ". The reading data snapshot is stale. Please reduce the database load and try again.";
+            YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD, "", {"error", errorMessage});
+            return TConclusionStatus::Fail(errorMessage);
+        }
+
+        if (Accessors.empty()) {
+            Accessors = std::move(accessors.ExtractPortions());
+        } else {
+            for (auto&& i : accessors.ExtractPortions()) {
+                AFL_VERIFY(Accessors.emplace(i.first, std::move(i.second)).second);
+            }
+        }
+        return TConclusionStatus::Success();
+    }
+};
+
+class TSourcesConstructorWithAccessorsImpl: public ISourcesConstructor {
+protected:
+    TAccessorsFetcherImpl Accessors;
+
+public:
+    TConclusionStatus AddAccessors(TDataAccessorsResult&& accessors) {
+        return Accessors.AddRequestedAccessors(std::move(accessors));
+    }
+};
+
+template <std::derived_from<TDataSourceConstructor> TConstructor>
+class TSourcesConstructorWithAccessors: public TSourcesConstructorWithAccessorsImpl {
+private:
+    TOrderedObjects<TConstructor> Constructors;
+
+    virtual TString DoDebugString() const override {
+        return "{CC:" + ::ToString(Constructors.GetSize()) + "}";
+    }
+
+    virtual TString GetClassName() const override {
+        return "GENERAL_ORDERING::" + ::ToString(Constructors.GetSorting());
+    }
+
+    virtual void DoClear() override {
+        Constructors.Clear();
+        Accessors.Stop();
+    }
+
+    virtual void DoAbort() override {
+        Constructors.Clear();
+        Accessors.Stop();
+    }
+
+    virtual bool DoIsFinished() const override {
+        return Constructors.IsEmpty();
+    }
+
+    virtual std::shared_ptr<IDataSource> DoExtractNextImpl(const std::shared_ptr<TSpecialReadContext>& context) = 0;
+
+    virtual std::shared_ptr<IDataSource> DoTryExtractNext(
+        const std::shared_ptr<TSpecialReadContext>& context, const ui32 inFlightCurrentLimit) override final {
+        if (!context->GetCommonContext()->IsActive()) {
+            return nullptr;
+        }
+        if (!Accessors.GetSize() && Accessors.HasRequest()) {
+            YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+                {"event", "SKIP_NO_ACCESSORS"},
+                {"hasRequest", Accessors.HasRequest()},
+                {"inFlight", inFlightCurrentLimit});
+            return nullptr;
+        }
+        if (!Accessors.HasRequest() && (Accessors.GetSize() < Constructors.GetSize() && Accessors.GetSize() < inFlightCurrentLimit)) {
+            Constructors.PrepareOrdered(inFlightCurrentLimit * 2);
+            std::shared_ptr<TDataAccessorsRequest> request =
+                std::make_shared<TDataAccessorsRequest>(NGeneralCache::TPortionsMetadataCachePolicy::EConsumer::SCAN);
+            for (ui32 idx = Accessors.GetSize(); idx < Constructors.GetAlreadySorted().size(); ++idx) {
+                request->AddPortion(Constructors.GetAlreadySorted()[idx].GetPortion());
+                if (request->GetSize() == 2 * inFlightCurrentLimit) {
+                    break;
+                }
+            }
+            YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+                {"event", "START_FETCH_ACCESSORS"},
+                {"accCount", Accessors.GetSize()},
+                {"add", request->GetSize()},
+                {"inFlight", inFlightCurrentLimit});
+            request->SetColumnIds(context->GetAllUsageColumns()->GetColumnIds());
+            Accessors.StartRequest(std::move(request), context);
+        }
+        if (!Accessors.GetSize()) {
+            AFL_VERIFY(Accessors.HasRequest());
+            YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+                {"event", "SKIP_NO_ACCESSORS"},
+                {"hasRequest", Accessors.HasRequest()},
+                {"inFlight", inFlightCurrentLimit});
+            return nullptr;
+        }
+        return DoExtractNextImpl(context);
+    }
+
+public:
+    template <typename F>
+    void ForEachConstructor(F&& f) const {
+        Constructors.ForEachObject(std::forward<F>(f));
+    }
+
+    const std::deque<TConstructor>& GetConstructors() const {
+        return Constructors.GetObjects();
+    }
+
+    ui32 GetConstructorsCount() const {
+        return Constructors.GetSize();
+    }
+
+    void DropNextConstructor() {
+        Constructors.PopFront();
+    }
+
+    TConstructor& MutableNextConstructor() {
+        return Constructors.MutableNextObject();
+    }
+
+    class TObjectWithAccessor {
+    private:
+        TConstructor Object;
+        YDB_ACCESSOR_DEF(std::shared_ptr<TPortionDataAccessor>, Accessor);
+
+    public:
+        TObjectWithAccessor(TConstructor&& obj, std::shared_ptr<TPortionDataAccessor>&& acc)
+            : Object(std::move(obj))
+            , Accessor(std::move(acc))
+        {
+        }
+
+        TConstructor& MutableObject() {
+            return Object;
+        }
+    };
+
+    TObjectWithAccessor PopObjectWithAccessor() {
+        auto object = Constructors.PopFront();
+        auto acc = Accessors.ExtractAccessorVerified(object.GetPortion()->GetPortionId());
+        TObjectWithAccessor result(std::move(object), std::move(acc));
+        return result;
+    }
+
+    TSourcesConstructorWithAccessors(const ERequestSorting sorting, const bool sortByFinish = false)
+        : Constructors(sorting, sortByFinish)
+    {
+    }
+
+    void InitializeConstructors(std::deque<TConstructor>&& objects) {
+        Constructors.Initialize(std::move(objects));
+    }
+};
+}   // namespace NKikimr::NOlap::NReader::NCommon

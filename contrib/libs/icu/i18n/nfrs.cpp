@@ -152,7 +152,7 @@ NFRuleSet::NFRuleSet(RuleBasedNumberFormat *_owner, UnicodeString* descriptions,
 
     UnicodeString& description = descriptions[index]; // !!! make sure index is valid
 
-    if (description.length() == 0) {
+    if (description.isEmpty()) {
         // throw new IllegalArgumentException("Empty rule set description");
         status = U_PARSE_ERROR;
         return;
@@ -164,9 +164,11 @@ NFRuleSet::NFRuleSet(RuleBasedNumberFormat *_owner, UnicodeString* descriptions,
     // and delete it from the description
     if (description.charAt(0) == gPercent) {
         int32_t pos = description.indexOf(gColon);
-        if (pos == -1) {
+        // if there are no name or the name is "%".
+        if (pos < 2) {
             // throw new IllegalArgumentException("Rule set name doesn't end in colon");
             status = U_PARSE_ERROR;
+            return;
         } else {
             name.setTo(description, 0, pos);
             while (pos < description.length() && PatternProps::isWhiteSpace(description.charAt(++pos))) {
@@ -177,16 +179,17 @@ NFRuleSet::NFRuleSet(RuleBasedNumberFormat *_owner, UnicodeString* descriptions,
         name.setTo(UNICODE_STRING_SIMPLE("%default"));
     }
 
-    if (description.length() == 0) {
+    if (description.isEmpty()) {
         // throw new IllegalArgumentException("Empty rule set description");
         status = U_PARSE_ERROR;
+        return;
     }
 
     fIsPublic = name.indexOf(gPercentPercent, 2, 0) != 0;
 
-    if ( name.endsWith(gNoparse,8) ) {
+    if (name.endsWith(gNoparse, 8)) {
         fIsParseable = false;
-        name.truncate(name.length()-8); // remove the @noparse from the name
+        name.truncate(name.length() - 8); // remove the @noparse from the name
     }
 
     // all of the other members of NFRuleSet are initialized
@@ -220,6 +223,9 @@ NFRuleSet::parseRules(UnicodeString& description, UErrorCode& status)
         }
         currentDescription.setTo(description, oldP, p - oldP);
         NFRule::makeRules(currentDescription, this, rules.last(), owner, rules, status);
+        if (U_FAILURE(status)) {
+            return;
+        }
         oldP = p + 1;
     }
 
@@ -244,6 +250,9 @@ NFRuleSet::parseRules(UnicodeString& description, UErrorCode& status)
             // same as the preceding rule's base value in fraction
             // rule sets)
             rule->setBaseValue(defaultBaseValue, status);
+            if (U_FAILURE(status)) {
+                return;
+            }
         }
         else {
             // if it's a regular rule that already knows its base value,

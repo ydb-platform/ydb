@@ -130,7 +130,7 @@ if TYPE_CHECKING:
 
 # We may not need the following imports here:
 from matplotlib.colors import Normalize
-from matplotlib.lines import Line2D
+from matplotlib.lines import Line2D, AxLine
 from matplotlib.text import Text, Annotation
 from matplotlib.patches import Polygon, Rectangle, Circle, Arrow
 from matplotlib.widgets import Button, Slider, Widget
@@ -1000,9 +1000,24 @@ def gcf() -> Figure:
         return figure()
 
 
-def fignum_exists(num: int) -> bool:
-    """Return whether the figure with the given id exists."""
-    return _pylab_helpers.Gcf.has_fignum(num) or num in get_figlabels()
+def fignum_exists(num: int | str) -> bool:
+    """Return whether the figure with the given id exists.
+
+    Parameters
+    ----------
+    num : int or str
+        A figure identifier.
+
+    Returns
+    -------
+    bool
+        Whether or not a figure with id *num* exists.
+    """
+    return (
+        _pylab_helpers.Gcf.has_fignum(num)
+        if isinstance(num, int)
+        else num in get_figlabels()
+    )
 
 
 def get_fignums() -> list[int]:
@@ -2706,7 +2721,7 @@ def axline(
     *,
     slope: float | None = None,
     **kwargs,
-) -> Line2D:
+) -> AxLine:
     return gca().axline(xy1, xy2=xy2, slope=slope, **kwargs)
 
 

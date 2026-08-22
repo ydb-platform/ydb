@@ -19,9 +19,10 @@ void PropagateStatisticsToStageArguments(const TExprNode::TPtr& input, TTypeAnno
 void InferStatisticsForStage(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
 void InferStatisticsForDqSource(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
 void InferStatisticsForDqMerge(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
-void InferStatisticsForGraceJoin(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx, const IProviderContext& ctx, TCardinalityHints hints = {});
-void InferStatisticsForMapJoin(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx, const IProviderContext& ctx, TCardinalityHints hints = {});
-void InferStatisticsForDqJoin(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx, const IProviderContext& ctx, TCardinalityHints hints = {});
+void InferStatisticsForGraceJoin(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx, const IProviderContext& ctx, TOptimizerHints hints = {}, TShufflingOrderingsByJoinLabels* shufflingOrderingsByJoinLabels = nullptr);
+void InferStatisticsForBlockHashJoin(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx, const IProviderContext& ctx, TOptimizerHints hints = {});
+void InferStatisticsForMapJoin(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx, const IProviderContext& ctx, TOptimizerHints hints = {});
+void InferStatisticsForDqJoinBase(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx, const IProviderContext& ctx, TOptimizerHints hints = {});
 void InferStatisticsForDqPhyCrossJoin(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
 void InferStatisticsForAsList(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
 void InferStatisticsForAsStruct(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
@@ -29,8 +30,19 @@ void InferStatisticsForTopBase(const TExprNode::TPtr& input, TTypeAnnotationCont
 void InferStatisticsForSortBase(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
 bool InferStatisticsForListParam(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
 void InferStatisticsForEquiJoin(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
+void InferStatisticsForUnionAll(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
+
+template <typename TAggregationCallable>
+void InferStatisticsForAggregationCallable(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
+extern template void InferStatisticsForAggregationCallable<NNodes::TCoShuffleByKeys>(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
+
+
 std::shared_ptr<TOptimizerStatistics> RemoveSorting(const std::shared_ptr<TOptimizerStatistics>& stats);
 std::shared_ptr<TOptimizerStatistics> RemoveSorting(const std::shared_ptr<TOptimizerStatistics>& stats, const TExprNode::TPtr& input);
+std::shared_ptr<TOptimizerStatistics> RemoveShuffling(const std::shared_ptr<TOptimizerStatistics>& stats);
+std::shared_ptr<TOptimizerStatistics> RemoveShuffling(const std::shared_ptr<TOptimizerStatistics>& stats, const TExprNode::TPtr& input);
+
+std::shared_ptr<TOptimizerStatistics> RemoveOrderings(const std::shared_ptr<TOptimizerStatistics>& stats, const TExprNode::TPtr& input);
 
 struct TOrderingInfo {
     std::int64_t OrderingIdx = -1;
@@ -41,13 +53,15 @@ struct TOrderingInfo {
 TOrderingInfo GetTopBaseSortingOrderingInfo(const NNodes::TCoTopBase&, const TSimpleSharedPtr<TOrderingsStateMachine>& sortingsFSM, TTableAliasMap*);
 TOrderingInfo GetSortBaseSortingOrderingInfo(const NNodes::TCoSortBase&, const TSimpleSharedPtr<TOrderingsStateMachine>& sortingsFSM, TTableAliasMap*);
 TOrderingInfo GetAggregationBaseShuffleOrderingInfo(const NNodes::TCoAggregateBase&, const TSimpleSharedPtr<TOrderingsStateMachine>& shufflingsFSM, TTableAliasMap*);
+TVector<TJoinColumn> GetKeySelectorOrdering(const NNodes::TCoLambda& keySelector);
 
 class TPredicateSelectivityComputer {
 public:
     struct TColumnStatisticsUsedMembers {
         struct TColumnStatisticsUsedMember {
             enum _ : ui32 {
-                EEquality
+                EEquality,
+                EInequality
             };
 
             TColumnStatisticsUsedMember(NNodes::TCoMember member, ui32 predicateType)
@@ -60,7 +74,11 @@ public:
         };
 
         void AddEquality(const NNodes::TCoMember& member) {
-            Data.emplace_back(std::move(member), TColumnStatisticsUsedMember::EEquality);
+            Data.emplace_back(member, TColumnStatisticsUsedMember::EEquality);
+        }
+
+        void AddInequality(const NNodes::TCoMember& member) {
+            Data.emplace_back(member, TColumnStatisticsUsedMember::EInequality);
         }
 
         TVector<TColumnStatisticsUsedMember> Data{};
@@ -110,7 +128,8 @@ protected:
     double ComputeInequalitySelectivity(
         const NYql::NNodes::TExprBase& left,
         const NYql::NNodes::TExprBase& right,
-        EInequalityPredicateType predicate
+        EInequalityPredicateType predicate,
+        bool collectConstantMembers
     );
 
     double ComputeComparisonSelectivity(
@@ -132,7 +151,21 @@ private:
 };
 
 bool NeedCalc(NNodes::TExprBase node);
+// Returns true if the expression is already a fully-evaluated literal
+// (TCoDataCtor, TCoNothing, or TCoJust wrapping a literal) and
+// does not need further evaluation via EvaluateExpr.
+bool IsLiteralDataExpr(NNodes::TExprBase node);
 bool IsConstantExpr(const TExprNode::TPtr& input, bool foldUdfs = true);
 bool IsConstantExprWithParams(const TExprNode::TPtr& input);
+
+TCardinalityHints::TCardinalityHint* FindCardHint(TVector<TString>& labels, TCardinalityHints& hints);
+TCardinalityHints::TCardinalityHint* FindBytesHint(TVector<TString>& labels, TCardinalityHints& hints);
+std::shared_ptr<TOptimizerStatistics> ApplyBytesHints(std::shared_ptr<TOptimizerStatistics>& inputStats,
+    TVector<TString>& labels,
+    TCardinalityHints hints);
+std::shared_ptr<TOptimizerStatistics> ApplyRowsHints(
+    std::shared_ptr<TOptimizerStatistics>& inputStats,
+    TVector<TString>& labels,
+    TCardinalityHints hints);
 
 } // namespace NYql::NDq {

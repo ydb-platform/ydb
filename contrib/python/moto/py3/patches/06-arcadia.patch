@@ -1,11 +1,12 @@
---- contrib/python/moto/py3/moto/iam/access_control.py
-+++ contrib/python/moto/py3/moto/iam/access_control.py
-@@ -390,7 +390,7 @@ class IAMPolicyStatement(object):
-                 is_action_concerned = True
-
-         if is_action_concerned:
--            same_resource = self._match(self._statement["Resource"], resource)
-+            same_resource = self._check_element_matches("Resource", resource)
-             if self._statement["Effect"] == "Allow" and same_resource:
-                 return PermissionResult.PERMITTED
-             else:  # Deny
+--- contrib/python/moto/py3/moto/kms/utils.py	(index)
++++ contrib/python/moto/py3/moto/kms/utils.py	(working tree)
+@@ -11,8 +11,8 @@ from cryptography.exceptions import InvalidSignature
+ from cryptography.hazmat.backends import default_backend
+ from cryptography.hazmat.primitives.ciphers import algorithms, Cipher, modes
+ from cryptography.hazmat.primitives import hashes, serialization
+-from cryptography.hazmat.primitives._asymmetric import AsymmetricPadding
+ from cryptography.hazmat.primitives.asymmetric import rsa, padding, ec
++from cryptography.hazmat.primitives.asymmetric.padding import AsymmetricPadding
+ 
+ 
+ from .exceptions import (

@@ -3,17 +3,26 @@ PY3TEST()
 TEST_SRCS(
     conftest.py
     test_ydb_backup.py
+    test_ydb_common.py
     test_ydb_flame_graph.py
     test_ydb_impex.py
+    test_ydb_interactive_ai.py
+    test_ydb_interactive_sql.py
+    test_ydb_profile.py
     test_ydb_recursive_remove.py
+    test_ydb_operation.py
     test_ydb_scheme.py
     test_ydb_scripting.py
     test_ydb_sql.py
     test_ydb_table.py
+    test_ydb_tools.py
+    test_ydb_topic_deferred_publish.py
 )
 
-INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
+ENV(YDB_CLI_EXPERIMENTAL_BINARY="ydb/apps/ydb/experimental/ydb/ydb")
+ENV(YDB_CLI_WITH_ENABLED_AI_BINARY="ydb/tests/functional/ydb_cli/ai_interactive/ydb")
 ENV(YDB_ENABLE_COLUMN_TABLES="true")
 
 IF (SANITIZER_TYPE)
@@ -25,14 +34,23 @@ ENDIF()
 
 DEPENDS(
     ydb/apps/ydb
+    ydb/apps/ydb/experimental/ydb
+    ydb/tests/functional/ydb_cli/ai_interactive
 )
 
 PEERDIR(
+    contrib/python/pexpect
     contrib/python/pyarrow
+    contrib/python/PyYAML
     ydb/tests/library
     ydb/tests/library/fixtures
     ydb/tests/oss/canonical
     ydb/tests/oss/ydb_sdk_import
+)
+
+PY_SRCS(
+    ydb_cli_helpers.py
+    ydb_cli_interactive_helpers.py
 )
 
 FORK_TEST_FILES()
@@ -40,3 +58,8 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(30)
 
 END()
+
+RECURSE(
+    ai_interactive
+    benchmarks
+)

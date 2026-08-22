@@ -4,7 +4,7 @@
 #include <yt/yt/core/actions/invoker_detail.h>
 #include <yt/yt/core/actions/current_invoker.h>
 
-#include <yt/yt/core/profiling/tscp.h>
+#include <library/cpp/yt/system/tscp.h>
 
 #include <library/cpp/yt/misc/tls.h>
 
@@ -35,7 +35,7 @@ void TMpmcQueueImpl::Enqueue(TEnqueuedAction&& action)
 
 void TMpmcQueueImpl::Enqueue(TMutableRange<TEnqueuedAction> actions)
 {
-    if (Y_UNLIKELY(actions.empty())) {
+    if (actions.empty()) [[unlikely]] {
         return;
     }
 
@@ -443,9 +443,9 @@ TEnqueuedAction TInvokerQueue<TQueueImpl>::MakeAction(
     YT_ASSERT(callback);
     YT_ASSERT(profilingTag >= 0 && profilingTag < std::ssize(Counters_));
 
-    YT_LOG_TRACE("Callback enqueued (Callback: %v, ProfilingTag: %v)",
-        callback.GetHandle(),
-        profilingTag);
+    YT_TLOG_TRACE("Callback enqueued")
+        .With("Callback", callback.GetHandle())
+        .With("ProfilingTag", profilingTag);
 
     return {
         .Finished = false,
@@ -468,9 +468,8 @@ TCpuInstant TInvokerQueue<TQueueImpl>::EnqueueCallback(
     if (!Running_.load(std::memory_order::relaxed)) {
         std::atomic_thread_fence(std::memory_order::acquire);
         TryDrainProducer();
-        YT_LOG_TRACE(
-            "Queue had been shut down, incoming action ignored (Callback: %v)",
-            callback.GetHandle());
+        YT_TLOG_TRACE("Queue had been shut down, incoming action ignored")
+            .With("Callback", callback.GetHandle());
         return GetCpuInstant();
     }
 
@@ -478,9 +477,9 @@ TCpuInstant TInvokerQueue<TQueueImpl>::EnqueueCallback(
 
     auto action = MakeAction(std::move(callback), profilingTag, std::move(profilerTag), cpuInstant);
 
-    if (Counters_[profilingTag]) {
-        Counters_[profilingTag]->ActiveCallbacks += 1;
-        Counters_[profilingTag]->EnqueuedCounter.Increment();
+    if (const auto& counters = Counters_[profilingTag]) {
+        counters->ActiveCallbacks += 1;
+        counters->EnqueuedCallbacks += 1;
     }
 
     QueueImpl_.Enqueue(std::move(action)); // <- (a)
@@ -488,9 +487,8 @@ TCpuInstant TInvokerQueue<TQueueImpl>::EnqueueCallback(
     std::atomic_thread_fence(std::memory_order::seq_cst); // <- (b)
     if (!Running_.load(std::memory_order::relaxed)) { // <- (c)
         TryDrainProducer(/*force*/ true);
-        YT_LOG_TRACE(
-            "Queue had been shut down concurrently, incoming action ignored (Callback: %v)",
-            callback.GetHandle());
+        YT_TLOG_TRACE("Queue had been shut down concurrently, incoming action ignored")
+            .With("Callback", callback.GetHandle());
     }
 
     return cpuInstant;
@@ -507,21 +505,21 @@ TCpuInstant TInvokerQueue<TQueueImpl>::EnqueueCallbacks(
     if (!Running_.load(std::memory_order::relaxed)) {
         std::atomic_thread_fence(std::memory_order::acquire);
         TryDrainProducer();
-        YT_LOG_TRACE(
-            "Queue had been shut down, incoming actions ignored");
+        YT_TLOG_TRACE("Queue had been shut down, incoming actions ignored");
         return cpuInstant;
     }
 
-    std::vector<TEnqueuedAction> actions;
-    actions.reserve(callbacks.size());
+    auto size = std::ssize(callbacks);
 
+    std::vector<TEnqueuedAction> actions;
+    actions.reserve(size);
     for (auto& callback : callbacks) {
         actions.push_back(MakeAction(std::move(callback), profilingTag, profilerTag, cpuInstant));
     }
 
-    if (Counters_[profilingTag]) {
-        Counters_[profilingTag]->ActiveCallbacks += std::ssize(actions);
-        Counters_[profilingTag]->EnqueuedCounter.Increment(std::ssize(actions));
+    if (const auto& counters = Counters_[profilingTag]) {
+        counters->ActiveCallbacks += size;
+        counters->EnqueuedCallbacks += size;
     }
 
     QueueImpl_.Enqueue(actions); // <- (a')
@@ -529,8 +527,7 @@ TCpuInstant TInvokerQueue<TQueueImpl>::EnqueueCallbacks(
     std::atomic_thread_fence(std::memory_order::seq_cst); // <- (b')
     if (!Running_.load(std::memory_order::relaxed)) { // <- (c')
         TryDrainProducer(/*force*/ true);
-        YT_LOG_TRACE(
-            "Queue had been shut down concurrently, incoming actions ignored");
+        YT_TLOG_TRACE("Queue had been shut down concurrently, incoming actions ignored");
         return cpuInstant;
     }
 
@@ -606,9 +603,9 @@ bool TInvokerQueue<TQueueImpl>::BeginExecute(TEnqueuedAction* action, typename T
 
     WaitTimeObserved_.Fire(waitTime);
 
-    if (Counters_[action->ProfilingTag]) {
-        Counters_[action->ProfilingTag]->DequeuedCounter.Increment();
-        Counters_[action->ProfilingTag]->WaitTimer.Record(waitTime);
+    if (const auto& counters = Counters_[action->ProfilingTag]) {
+        counters->DequeuedCallbacks += 1;
+        counters->WaitTimer.Record(waitTime);
     }
 
     if (const auto& profilerTag = action->ProfilerTag) {
@@ -638,14 +635,13 @@ void TInvokerQueue<TQueueImpl>::EndExecute(TEnqueuedAction* action)
     action->FinishedAt = cpuInstant;
     action->Finished = true;
 
-    auto timeFromStart = CpuDurationToDuration(action->FinishedAt - action->StartedAt);
-    auto timeFromEnqueue = CpuDurationToDuration(action->FinishedAt - action->EnqueuedAt);
-
-    if (Counters_[action->ProfilingTag]) {
-        Counters_[action->ProfilingTag]->ExecTimer.Record(timeFromStart);
-        Counters_[action->ProfilingTag]->CumulativeTimeCounter.Add(timeFromStart);
-        Counters_[action->ProfilingTag]->TotalTimer.Record(timeFromEnqueue);
-        Counters_[action->ProfilingTag]->ActiveCallbacks -= 1;
+    if (const auto& counters = Counters_[action->ProfilingTag]) {
+        auto timeFromStart = CpuDurationToDuration(action->FinishedAt - action->StartedAt);
+        auto timeFromEnqueue = CpuDurationToDuration(action->FinishedAt - action->EnqueuedAt);
+        counters->ExecTimer.Record(timeFromStart);
+        counters->CumulativeTimeCounter.Add(timeFromStart);
+        counters->TotalTimer.Record(timeFromEnqueue);
+        counters->ActiveCallbacks -= 1;
     }
 }
 
@@ -698,15 +694,19 @@ typename TInvokerQueue<TQueueImpl>::TCountersPtr TInvokerQueue<TQueueImpl>::Crea
     auto profiler = TProfiler(registry, "/action_queue").WithTags(tagSet).WithHot();
 
     auto counters = std::make_unique<TCounters>();
-    counters->EnqueuedCounter = profiler.Counter("/enqueued");
-    counters->DequeuedCounter = profiler.Counter("/dequeued");
     counters->WaitTimer = profiler.Timer("/time/wait");
     counters->ExecTimer = profiler.Timer("/time/exec");
     counters->CumulativeTimeCounter = profiler.TimeCounter("/time/cumulative");
     counters->TotalTimer = profiler.Timer("/time/total");
 
+    profiler.AddFuncCounter("/enqueued", MakeStrong(this), [counters = counters.get()] {
+        return counters->EnqueuedCallbacks.load(std::memory_order::relaxed);
+    });
+    profiler.AddFuncCounter("/dequeued", MakeStrong(this), [counters = counters.get()] {
+        return counters->DequeuedCallbacks.load(std::memory_order::relaxed);
+    });
     profiler.AddFuncGauge("/size", MakeStrong(this), [counters = counters.get()] {
-        return counters->ActiveCallbacks.load();
+        return counters->ActiveCallbacks.load(std::memory_order::relaxed);
     });
 
     return counters;

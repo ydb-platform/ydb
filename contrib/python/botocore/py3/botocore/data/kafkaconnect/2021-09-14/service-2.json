@@ -2,9 +2,10 @@
   "version":"2.0",
   "metadata":{
     "apiVersion":"2021-09-14",
+    "auth":["aws.auth#sigv4"],
     "endpointPrefix":"kafkaconnect",
-    "jsonVersion":"1.1",
     "protocol":"rest-json",
+    "protocols":["rest-json"],
     "serviceAbbreviation":"Kafka Connect",
     "serviceFullName":"Managed Streaming for Kafka Connect",
     "serviceId":"KafkaConnect",
@@ -32,7 +33,7 @@
         {"shape":"UnauthorizedException"},
         {"shape":"InternalServerErrorException"}
       ],
-      "documentation":"<p>Creates a connector using the specified properties.</p>"
+      "documentation":"<p>Creates a connector using the specified properties. </p>"
     },
     "CreateCustomPlugin":{
       "name":"CreateCustomPlugin",
@@ -118,6 +119,27 @@
       "documentation":"<p>Deletes a custom plugin.</p>",
       "idempotent":true
     },
+    "DeleteWorkerConfiguration":{
+      "name":"DeleteWorkerConfiguration",
+      "http":{
+        "method":"DELETE",
+        "requestUri":"/v1/worker-configurations/{workerConfigurationArn}",
+        "responseCode":200
+      },
+      "input":{"shape":"DeleteWorkerConfigurationRequest"},
+      "output":{"shape":"DeleteWorkerConfigurationResponse"},
+      "errors":[
+        {"shape":"NotFoundException"},
+        {"shape":"BadRequestException"},
+        {"shape":"ForbiddenException"},
+        {"shape":"ServiceUnavailableException"},
+        {"shape":"TooManyRequestsException"},
+        {"shape":"UnauthorizedException"},
+        {"shape":"InternalServerErrorException"}
+      ],
+      "documentation":"<p>Deletes the specified worker configuration.</p>",
+      "idempotent":true
+    },
     "DescribeConnector":{
       "name":"DescribeConnector",
       "http":{
@@ -137,6 +159,26 @@
         {"shape":"InternalServerErrorException"}
       ],
       "documentation":"<p>Returns summary information about the connector.</p>"
+    },
+    "DescribeConnectorOperation":{
+      "name":"DescribeConnectorOperation",
+      "http":{
+        "method":"GET",
+        "requestUri":"/v1/connectorOperations/{connectorOperationArn}",
+        "responseCode":200
+      },
+      "input":{"shape":"DescribeConnectorOperationRequest"},
+      "output":{"shape":"DescribeConnectorOperationResponse"},
+      "errors":[
+        {"shape":"NotFoundException"},
+        {"shape":"BadRequestException"},
+        {"shape":"ForbiddenException"},
+        {"shape":"ServiceUnavailableException"},
+        {"shape":"TooManyRequestsException"},
+        {"shape":"UnauthorizedException"},
+        {"shape":"InternalServerErrorException"}
+      ],
+      "documentation":"<p>Returns information about the specified connector's operations.</p>"
     },
     "DescribeCustomPlugin":{
       "name":"DescribeCustomPlugin",
@@ -178,6 +220,26 @@
       ],
       "documentation":"<p>Returns information about a worker configuration.</p>"
     },
+    "ListConnectorOperations":{
+      "name":"ListConnectorOperations",
+      "http":{
+        "method":"GET",
+        "requestUri":"/v1/connectors/{connectorArn}/operations",
+        "responseCode":200
+      },
+      "input":{"shape":"ListConnectorOperationsRequest"},
+      "output":{"shape":"ListConnectorOperationsResponse"},
+      "errors":[
+        {"shape":"NotFoundException"},
+        {"shape":"BadRequestException"},
+        {"shape":"ForbiddenException"},
+        {"shape":"ServiceUnavailableException"},
+        {"shape":"TooManyRequestsException"},
+        {"shape":"UnauthorizedException"},
+        {"shape":"InternalServerErrorException"}
+      ],
+      "documentation":"<p>Lists information about a connector's operation(s).</p>"
+    },
     "ListConnectors":{
       "name":"ListConnectors",
       "http":{
@@ -218,6 +280,26 @@
       ],
       "documentation":"<p>Returns a list of all of the custom plugins in this account and Region.</p>"
     },
+    "ListTagsForResource":{
+      "name":"ListTagsForResource",
+      "http":{
+        "method":"GET",
+        "requestUri":"/v1/tags/{resourceArn}",
+        "responseCode":200
+      },
+      "input":{"shape":"ListTagsForResourceRequest"},
+      "output":{"shape":"ListTagsForResourceResponse"},
+      "errors":[
+        {"shape":"NotFoundException"},
+        {"shape":"BadRequestException"},
+        {"shape":"ForbiddenException"},
+        {"shape":"ServiceUnavailableException"},
+        {"shape":"TooManyRequestsException"},
+        {"shape":"UnauthorizedException"},
+        {"shape":"InternalServerErrorException"}
+      ],
+      "documentation":"<p>Lists all the tags attached to the specified resource.</p>"
+    },
     "ListWorkerConfigurations":{
       "name":"ListWorkerConfigurations",
       "http":{
@@ -237,6 +319,49 @@
         {"shape":"InternalServerErrorException"}
       ],
       "documentation":"<p>Returns a list of all of the worker configurations in this account and Region.</p>"
+    },
+    "TagResource":{
+      "name":"TagResource",
+      "http":{
+        "method":"POST",
+        "requestUri":"/v1/tags/{resourceArn}",
+        "responseCode":200
+      },
+      "input":{"shape":"TagResourceRequest"},
+      "output":{"shape":"TagResourceResponse"},
+      "errors":[
+        {"shape":"NotFoundException"},
+        {"shape":"ConflictException"},
+        {"shape":"BadRequestException"},
+        {"shape":"ForbiddenException"},
+        {"shape":"ServiceUnavailableException"},
+        {"shape":"TooManyRequestsException"},
+        {"shape":"UnauthorizedException"},
+        {"shape":"InternalServerErrorException"}
+      ],
+      "documentation":"<p>Attaches tags to the specified resource.</p>",
+      "idempotent":true
+    },
+    "UntagResource":{
+      "name":"UntagResource",
+      "http":{
+        "method":"DELETE",
+        "requestUri":"/v1/tags/{resourceArn}",
+        "responseCode":200
+      },
+      "input":{"shape":"UntagResourceRequest"},
+      "output":{"shape":"UntagResourceResponse"},
+      "errors":[
+        {"shape":"NotFoundException"},
+        {"shape":"BadRequestException"},
+        {"shape":"ForbiddenException"},
+        {"shape":"ServiceUnavailableException"},
+        {"shape":"TooManyRequestsException"},
+        {"shape":"UnauthorizedException"},
+        {"shape":"InternalServerErrorException"}
+      ],
+      "documentation":"<p>Removes tags from the specified resource.</p>",
+      "idempotent":true
     },
     "UpdateConnector":{
       "name":"UpdateConnector",
@@ -302,7 +427,7 @@
       ],
       "members":{
         "maxWorkerCount":{
-          "shape":"__integerMin1Max10",
+          "shape":"__integer",
           "documentation":"<p>The maximum number of workers allocated to the connector.</p>"
         },
         "mcuCount":{
@@ -310,7 +435,7 @@
           "documentation":"<p>The number of microcontroller units (MCUs) allocated to each connector worker. The valid values are 1,2,4,8.</p>"
         },
         "minWorkerCount":{
-          "shape":"__integerMin1Max10",
+          "shape":"__integer",
           "documentation":"<p>The minimum number of workers allocated to the connector.</p>"
         },
         "scaleInPolicy":{
@@ -361,7 +486,7 @@
       ],
       "members":{
         "maxWorkerCount":{
-          "shape":"__integerMin1Max10",
+          "shape":"__integer",
           "documentation":"<p>The target maximum number of workers allocated to the connector.</p>"
         },
         "mcuCount":{
@@ -369,7 +494,7 @@
           "documentation":"<p>The target number of microcontroller units (MCUs) allocated to each connector worker. The valid values are 1,2,4,8.</p>"
         },
         "minWorkerCount":{
-          "shape":"__integerMin1Max10",
+          "shape":"__integer",
           "documentation":"<p>The target minimum number of workers allocated to the connector.</p>"
         },
         "scaleInPolicy":{
@@ -478,6 +603,99 @@
       },
       "exception":true
     },
+    "ConnectorConfiguration":{
+      "type":"map",
+      "key":{"shape":"__string"},
+      "value":{"shape":"__string"},
+      "sensitive":true
+    },
+    "ConnectorConfigurationUpdate":{
+      "type":"map",
+      "key":{"shape":"__string"},
+      "value":{"shape":"__string"},
+      "sensitive":true
+    },
+    "ConnectorOperationState":{
+      "type":"string",
+      "enum":[
+        "PENDING",
+        "UPDATE_IN_PROGRESS",
+        "UPDATE_COMPLETE",
+        "UPDATE_FAILED",
+        "ROLLBACK_IN_PROGRESS",
+        "ROLLBACK_FAILED",
+        "ROLLBACK_COMPLETE"
+      ]
+    },
+    "ConnectorOperationStep":{
+      "type":"structure",
+      "members":{
+        "stepType":{
+          "shape":"ConnectorOperationStepType",
+          "documentation":"<p>The step type of the operation.</p>"
+        },
+        "stepState":{
+          "shape":"ConnectorOperationStepState",
+          "documentation":"<p>The step state of the operation.</p>"
+        }
+      },
+      "documentation":"<p>Details of a step that is involved in a connector's operation.</p>"
+    },
+    "ConnectorOperationStepState":{
+      "type":"string",
+      "enum":[
+        "PENDING",
+        "IN_PROGRESS",
+        "COMPLETED",
+        "FAILED",
+        "CANCELLED"
+      ]
+    },
+    "ConnectorOperationStepType":{
+      "type":"string",
+      "enum":[
+        "INITIALIZE_UPDATE",
+        "FINALIZE_UPDATE",
+        "UPDATE_WORKER_SETTING",
+        "UPDATE_CONNECTOR_CONFIGURATION",
+        "VALIDATE_UPDATE"
+      ]
+    },
+    "ConnectorOperationSummary":{
+      "type":"structure",
+      "members":{
+        "connectorOperationArn":{
+          "shape":"__string",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the connector operation.</p>"
+        },
+        "connectorOperationType":{
+          "shape":"ConnectorOperationType",
+          "documentation":"<p>The type of connector operation performed.</p>"
+        },
+        "connectorOperationState":{
+          "shape":"ConnectorOperationState",
+          "documentation":"<p>The state of the connector operation.</p>"
+        },
+        "creationTime":{
+          "shape":"__timestampIso8601",
+          "documentation":"<p>The time when operation was created.</p>"
+        },
+        "endTime":{
+          "shape":"__timestampIso8601",
+          "documentation":"<p>The time when operation ended.</p>"
+        }
+      },
+      "documentation":"<p>Summary of a connector operation.</p>"
+    },
+    "ConnectorOperationType":{
+      "type":"string",
+      "enum":[
+        "UPDATE_WORKER_SETTING",
+        "UPDATE_CONNECTOR_CONFIGURATION",
+        "ISOLATE_CONNECTOR",
+        "RESTORE_CONNECTOR"
+      ]
+    },
     "ConnectorState":{
       "type":"string",
       "enum":[
@@ -573,7 +791,7 @@
           "documentation":"<p>Information about the capacity allocated to the connector. Exactly one of the two properties must be specified.</p>"
         },
         "connectorConfiguration":{
-          "shape":"__sensitive__mapOf__string",
+          "shape":"ConnectorConfiguration",
           "documentation":"<p>A map of keys to values that represent the configuration for the connector.</p>"
         },
         "connectorDescription":{
@@ -606,7 +824,7 @@
         },
         "plugins":{
           "shape":"__listOfPlugin",
-          "documentation":"<p>Specifies which plugins to use for the connector.</p>"
+          "documentation":"<important> <p>Amazon MSK Connect does not currently support specifying multiple plugins as a list. To use more than one plugin for your connector, you can create a single custom plugin using a ZIP file that bundles multiple plugins together.</p> </important> <p>Specifies which plugin to use for the connector. You must specify a single-element list containing one <code>customPlugin</code> object.</p>"
         },
         "serviceExecutionRoleArn":{
           "shape":"__string",
@@ -615,6 +833,10 @@
         "workerConfiguration":{
           "shape":"WorkerConfiguration",
           "documentation":"<p>Specifies which worker configuration to use with the connector.</p>"
+        },
+        "tags":{
+          "shape":"Tags",
+          "documentation":"<p>The tags you want to attach to the connector.</p>"
         }
       }
     },
@@ -658,6 +880,10 @@
         "name":{
           "shape":"__stringMin1Max128",
           "documentation":"<p>The name of the custom plugin.</p>"
+        },
+        "tags":{
+          "shape":"Tags",
+          "documentation":"<p>The tags you want to attach to the custom plugin.</p>"
         }
       }
     },
@@ -700,6 +926,10 @@
         "propertiesFileContent":{
           "shape":"__sensitiveString",
           "documentation":"<p>Base64 encoded contents of connect-distributed.properties file.</p>"
+        },
+        "tags":{
+          "shape":"Tags",
+          "documentation":"<p>The tags you want to attach to the worker configuration.</p>"
         }
       }
     },
@@ -721,6 +951,10 @@
         "workerConfigurationArn":{
           "shape":"__string",
           "documentation":"<p>The Amazon Resource Name (ARN) that Amazon assigned to the worker configuration.</p>"
+        },
+        "workerConfigurationState":{
+          "shape":"WorkerConfigurationState",
+          "documentation":"<p>The state of the worker configuration.</p>"
         }
       }
     },
@@ -740,7 +974,7 @@
           "documentation":"<p>The revision of the custom plugin.</p>"
         }
       },
-      "documentation":"<p>A plugin is an AWS resource that contains the code that defines a connector's logic.</p>"
+      "documentation":"<p>A plugin is an Amazon Web Services resource that contains the code that defines a connector's logic.</p>"
     },
     "CustomPluginContentType":{
       "type":"string",
@@ -925,6 +1159,93 @@
         }
       }
     },
+    "DeleteWorkerConfigurationRequest":{
+      "type":"structure",
+      "required":["workerConfigurationArn"],
+      "members":{
+        "workerConfigurationArn":{
+          "shape":"__string",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the worker configuration that you want to delete.</p>",
+          "location":"uri",
+          "locationName":"workerConfigurationArn"
+        }
+      }
+    },
+    "DeleteWorkerConfigurationResponse":{
+      "type":"structure",
+      "members":{
+        "workerConfigurationArn":{
+          "shape":"__string",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the worker configuration that you requested to delete.</p>"
+        },
+        "workerConfigurationState":{
+          "shape":"WorkerConfigurationState",
+          "documentation":"<p>The state of the worker configuration.</p>"
+        }
+      }
+    },
+    "DescribeConnectorOperationRequest":{
+      "type":"structure",
+      "required":["connectorOperationArn"],
+      "members":{
+        "connectorOperationArn":{
+          "shape":"__string",
+          "documentation":"<p>ARN of the connector operation to be described.</p>",
+          "location":"uri",
+          "locationName":"connectorOperationArn"
+        }
+      }
+    },
+    "DescribeConnectorOperationResponse":{
+      "type":"structure",
+      "members":{
+        "connectorArn":{
+          "shape":"__string",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the connector.</p>"
+        },
+        "connectorOperationArn":{
+          "shape":"__string",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the connector operation.</p>"
+        },
+        "connectorOperationState":{
+          "shape":"ConnectorOperationState",
+          "documentation":"<p>The state of the connector operation.</p>"
+        },
+        "connectorOperationType":{
+          "shape":"ConnectorOperationType",
+          "documentation":"<p>The type of connector operation performed.</p>"
+        },
+        "operationSteps":{
+          "shape":"__listOfConnectorOperationStep",
+          "documentation":"<p>The array of operation steps taken.</p>"
+        },
+        "originWorkerSetting":{
+          "shape":"WorkerSetting",
+          "documentation":"<p>The origin worker setting.</p>"
+        },
+        "originConnectorConfiguration":{
+          "shape":"ConnectorConfiguration",
+          "documentation":"<p>The origin connector configuration.</p>"
+        },
+        "targetWorkerSetting":{
+          "shape":"WorkerSetting",
+          "documentation":"<p>The target worker setting.</p>"
+        },
+        "targetConnectorConfiguration":{
+          "shape":"ConnectorConfiguration",
+          "documentation":"<p>The target connector configuration.</p>"
+        },
+        "errorInfo":{"shape":"StateDescription"},
+        "creationTime":{
+          "shape":"__timestampIso8601",
+          "documentation":"<p>The time when the operation was created.</p>"
+        },
+        "endTime":{
+          "shape":"__timestampIso8601",
+          "documentation":"<p>The time when the operation ended.</p>"
+        }
+      }
+    },
     "DescribeConnectorRequest":{
       "type":"structure",
       "required":["connectorArn"],
@@ -949,7 +1270,7 @@
           "documentation":"<p>The Amazon Resource Name (ARN) of the connector.</p>"
         },
         "connectorConfiguration":{
-          "shape":"__sensitive__mapOf__string",
+          "shape":"ConnectorConfiguration",
           "documentation":"<p>A map of keys to values that represent the configuration for the connector.</p>"
         },
         "connectorDescription":{
@@ -1000,13 +1321,13 @@
           "shape":"__string",
           "documentation":"<p>The Amazon Resource Name (ARN) of the IAM role used by the connector to access Amazon Web Services resources.</p>"
         },
-        "stateDescription":{
-          "shape":"StateDescription",
-          "documentation":"<p>Details about the state of a connector.</p>"
-        },
         "workerConfiguration":{
           "shape":"WorkerConfigurationDescription",
           "documentation":"<p>Specifies which worker configuration was used for the connector.</p>"
+        },
+        "stateDescription":{
+          "shape":"StateDescription",
+          "documentation":"<p>Details about the state of a connector.</p>"
         }
       }
     },
@@ -1089,6 +1410,10 @@
         "workerConfigurationArn":{
           "shape":"__string",
           "documentation":"<p>The Amazon Resource Name (ARN) of the custom configuration.</p>"
+        },
+        "workerConfigurationState":{
+          "shape":"WorkerConfigurationState",
+          "documentation":"<p>The state of the worker configuration.</p>"
         }
       }
     },
@@ -1220,6 +1545,43 @@
         "TLS"
       ]
     },
+    "ListConnectorOperationsRequest":{
+      "type":"structure",
+      "required":["connectorArn"],
+      "members":{
+        "connectorArn":{
+          "shape":"__string",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the connector for which to list operations.</p>",
+          "location":"uri",
+          "locationName":"connectorArn"
+        },
+        "maxResults":{
+          "shape":"MaxResults",
+          "documentation":"<p>Maximum number of connector operations to fetch in one get request.</p>",
+          "location":"querystring",
+          "locationName":"maxResults"
+        },
+        "nextToken":{
+          "shape":"__string",
+          "documentation":"<p>If the response is truncated, it includes a NextToken. Send this NextToken in a subsequent request to continue listing from where it left off.</p>",
+          "location":"querystring",
+          "locationName":"nextToken"
+        }
+      }
+    },
+    "ListConnectorOperationsResponse":{
+      "type":"structure",
+      "members":{
+        "connectorOperations":{
+          "shape":"__listOfConnectorOperationSummary",
+          "documentation":"<p>An array of connector operation descriptions.</p>"
+        },
+        "nextToken":{
+          "shape":"__string",
+          "documentation":"<p>If the response is truncated, it includes a NextToken. Send this NextToken in a subsequent request to continue listing from where it left off.</p>"
+        }
+      }
+    },
     "ListConnectorsRequest":{
       "type":"structure",
       "members":{
@@ -1270,6 +1632,12 @@
           "documentation":"<p>If the response of a ListCustomPlugins operation is truncated, it will include a NextToken. Send this NextToken in a subsequent request to continue listing from where the previous operation left off.</p>",
           "location":"querystring",
           "locationName":"nextToken"
+        },
+        "namePrefix":{
+          "shape":"__string",
+          "documentation":"<p>Lists custom plugin names that start with the specified text string.</p>",
+          "location":"querystring",
+          "locationName":"namePrefix"
         }
       }
     },
@@ -1283,6 +1651,27 @@
         "nextToken":{
           "shape":"__string",
           "documentation":"<p>If the response of a ListCustomPlugins operation is truncated, it will include a NextToken. Send this NextToken in a subsequent request to continue listing from where the previous operation left off.</p>"
+        }
+      }
+    },
+    "ListTagsForResourceRequest":{
+      "type":"structure",
+      "required":["resourceArn"],
+      "members":{
+        "resourceArn":{
+          "shape":"__string",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the resource for which you want to list all attached tags.</p>",
+          "location":"uri",
+          "locationName":"resourceArn"
+        }
+      }
+    },
+    "ListTagsForResourceResponse":{
+      "type":"structure",
+      "members":{
+        "tags":{
+          "shape":"Tags",
+          "documentation":"<p>Lists the tags attached to the specified resource in the corresponding request.</p>"
         }
       }
     },
@@ -1300,6 +1689,12 @@
           "documentation":"<p>If the response of a ListWorkerConfigurations operation is truncated, it will include a NextToken. Send this NextToken in a subsequent request to continue listing from where the previous operation left off.</p>",
           "location":"querystring",
           "locationName":"nextToken"
+        },
+        "namePrefix":{
+          "shape":"__string",
+          "documentation":"<p>Lists worker configuration names that start with the specified text string.</p>",
+          "location":"querystring",
+          "locationName":"namePrefix"
         }
       }
     },
@@ -1339,6 +1734,7 @@
     },
     "MaxResults":{
       "type":"integer",
+      "box":true,
       "max":100,
       "min":1
     },
@@ -1363,7 +1759,7 @@
           "documentation":"<p>Details about a custom plugin.</p>"
         }
       },
-      "documentation":"<p>A plugin is an AWS resource that contains the code that defines your connector logic. </p>"
+      "documentation":"<p>A plugin is an Amazon Web Services resource that contains the code that defines your connector logic. </p>"
     },
     "PluginDescription":{
       "type":"structure",
@@ -1387,7 +1783,7 @@
           "documentation":"<p>The number of microcontroller units (MCUs) allocated to each connector worker. The valid values are 1,2,4,8.</p>"
         },
         "workerCount":{
-          "shape":"__integerMin1Max10",
+          "shape":"__integer",
           "documentation":"<p>The number of workers that are allocated to the connector.</p>"
         }
       },
@@ -1419,7 +1815,7 @@
           "documentation":"<p>The number of microcontroller units (MCUs) allocated to each connector worker. The valid values are 1,2,4,8.</p>"
         },
         "workerCount":{
-          "shape":"__integerMin1Max10",
+          "shape":"__integer",
           "documentation":"<p>The number of workers that are allocated to the connector.</p>"
         }
       },
@@ -1590,6 +1986,53 @@
       },
       "documentation":"<p>Details about the state of a resource.</p>"
     },
+    "TagKey":{
+      "type":"string",
+      "max":128,
+      "min":1
+    },
+    "TagKeyList":{
+      "type":"list",
+      "member":{"shape":"TagKey"},
+      "max":200,
+      "min":0
+    },
+    "TagResourceRequest":{
+      "type":"structure",
+      "required":[
+        "resourceArn",
+        "tags"
+      ],
+      "members":{
+        "resourceArn":{
+          "shape":"__string",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the resource to which you want to attach tags.</p>",
+          "location":"uri",
+          "locationName":"resourceArn"
+        },
+        "tags":{
+          "shape":"Tags",
+          "documentation":"<p>The tags that you want to attach to the resource.</p>"
+        }
+      }
+    },
+    "TagResourceResponse":{
+      "type":"structure",
+      "members":{
+      }
+    },
+    "TagValue":{
+      "type":"string",
+      "max":256,
+      "min":0
+    },
+    "Tags":{
+      "type":"map",
+      "key":{"shape":"TagKey"},
+      "value":{"shape":"TagValue"},
+      "max":200,
+      "min":0
+    },
     "TooManyRequestsException":{
       "type":"structure",
       "members":{
@@ -1614,10 +2057,35 @@
       },
       "exception":true
     },
+    "UntagResourceRequest":{
+      "type":"structure",
+      "required":[
+        "resourceArn",
+        "tagKeys"
+      ],
+      "members":{
+        "resourceArn":{
+          "shape":"__string",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the resource from which you want to remove tags.</p>",
+          "location":"uri",
+          "locationName":"resourceArn"
+        },
+        "tagKeys":{
+          "shape":"TagKeyList",
+          "documentation":"<p>The keys of the tags that you want to remove from the resource.</p>",
+          "location":"querystring",
+          "locationName":"tagKeys"
+        }
+      }
+    },
+    "UntagResourceResponse":{
+      "type":"structure",
+      "members":{
+      }
+    },
     "UpdateConnectorRequest":{
       "type":"structure",
       "required":[
-        "capacity",
         "connectorArn",
         "currentVersion"
       ],
@@ -1625,6 +2093,10 @@
         "capacity":{
           "shape":"CapacityUpdate",
           "documentation":"<p>The target capacity.</p>"
+        },
+        "connectorConfiguration":{
+          "shape":"ConnectorConfigurationUpdate",
+          "documentation":"<p>A map of keys to values that represent the configuration for the connector.</p>"
         },
         "connectorArn":{
           "shape":"__string",
@@ -1650,6 +2122,10 @@
         "connectorState":{
           "shape":"ConnectorState",
           "documentation":"<p>The state of the connector.</p>"
+        },
+        "connectorOperationArn":{
+          "shape":"__string",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the connector operation.</p>"
         }
       }
     },
@@ -1754,6 +2230,13 @@
       },
       "documentation":"<p>The summary of a worker configuration revision.</p>"
     },
+    "WorkerConfigurationState":{
+      "type":"string",
+      "enum":[
+        "ACTIVE",
+        "DELETING"
+      ]
+    },
     "WorkerConfigurationSummary":{
       "type":"structure",
       "members":{
@@ -1776,6 +2259,10 @@
         "workerConfigurationArn":{
           "shape":"__string",
           "documentation":"<p>The Amazon Resource Name (ARN) of the worker configuration.</p>"
+        },
+        "workerConfigurationState":{
+          "shape":"WorkerConfigurationState",
+          "documentation":"<p>The state of the worker configuration.</p>"
         }
       },
       "documentation":"<p>The summary of a worker configuration.</p>"
@@ -1816,13 +2303,15 @@
       },
       "documentation":"<p>Workers can send worker logs to different destination types. This configuration specifies the details of these destinations.</p>"
     },
+    "WorkerSetting":{
+      "type":"structure",
+      "members":{
+        "capacity":{"shape":"CapacityDescription"}
+      },
+      "documentation":"<p>Details about worker setting of a connector</p>"
+    },
     "__boolean":{"type":"boolean"},
     "__integer":{"type":"integer"},
-    "__integerMin1Max10":{
-      "type":"integer",
-      "max":10,
-      "min":1
-    },
     "__integerMin1Max100":{
       "type":"integer",
       "max":100,
@@ -1832,6 +2321,14 @@
       "type":"integer",
       "max":8,
       "min":1
+    },
+    "__listOfConnectorOperationStep":{
+      "type":"list",
+      "member":{"shape":"ConnectorOperationStep"}
+    },
+    "__listOfConnectorOperationSummary":{
+      "type":"list",
+      "member":{"shape":"ConnectorOperationSummary"}
     },
     "__listOfConnectorSummary":{
       "type":"list",
@@ -1865,12 +2362,6 @@
     },
     "__sensitiveString":{
       "type":"string",
-      "sensitive":true
-    },
-    "__sensitive__mapOf__string":{
-      "type":"map",
-      "key":{"shape":"__string"},
-      "value":{"shape":"__string"},
       "sensitive":true
     },
     "__string":{"type":"string"},

@@ -3,14 +3,16 @@ UNITTEST_FOR(ydb/services/ydb)
 FORK_SUBTESTS()
 SPLIT_FACTOR(60)
 
-IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
+REQUIREMENTS(cpu:2)
+IF (SANITIZER_TYPE)
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
 SRCS(
+    ydb_bulk_upsert_csv_ut.cpp
     ydb_bulk_upsert_ut.cpp
     ydb_bulk_upsert_olap_ut.cpp
     ydb_coordination_ut.cpp
@@ -20,6 +22,7 @@ SRCS(
     ydb_register_node_ut.cpp
     ydb_scripting_ut.cpp
     ydb_table_ut.cpp
+    ydb_unary_retry_ut.cpp
     ydb_stats_ut.cpp
     ydb_logstore_ut.cpp
     ydb_olapstore_ut.cpp
@@ -29,6 +32,7 @@ SRCS(
     ydb_ldap_login_ut.cpp
     ydb_login_ut.cpp
     ydb_object_storage_ut.cpp
+    ydb_whoami_ut.cpp
 )
 
 PEERDIR(
@@ -43,6 +47,7 @@ PEERDIR(
     ydb/core/grpc_services/base
     ydb/core/testlib
     ydb/core/security
+    ydb/core/security/ldap_auth_provider/test_utils
     yql/essentials/minikql/dom
     yql/essentials/minikql/jsonpath
     ydb/library/testlib/service_mocks/ldap_mock
@@ -51,6 +56,10 @@ PEERDIR(
     ydb/public/lib/yson_value
     ydb/public/lib/ut_helpers
     ydb/public/lib/ydb_cli/commands
+    ydb/core/kqp/common/events
+    ydb/core/kqp/common/shutdown
+    ydb/core/kqp/common/simple
+    ydb/public/sdk/cpp/src/client/discovery
     ydb/public/sdk/cpp/src/client/draft
     ydb/public/sdk/cpp/src/client/coordination
     ydb/public/sdk/cpp/src/client/export

@@ -1,0 +1,398 @@
+#include "mkql_datum_validate.h"
+
+#include <yql/essentials/minikql/defs.h>
+#include <yql/essentials/minikql/mkql_type_builder.h>
+#include <yql/essentials/public/udf/arrow/args_dechunker.h>
+#include <yql/essentials/public/udf/arrow/dense_union.h>
+#include <yql/essentials/public/udf/arrow/dense_union_scalar.h>
+#include <yql/essentials/public/udf/arrow/dispatch_traits.h>
+
+#include <util/string/builder.h>
+
+#include <arrow/array/validate.h>
+#include <arrow/scalar.h>
+#include <arrow/util/config.h>
+#include <arrow/util/checked_cast.h>
+
+namespace NKikimr::NMiniKQL {
+namespace {
+// This helper is introduced to fix differences between Apache Arrow and YQL data invariants.
+// In order to take a subarray for any nesting depth of a tuple,
+// you only need to change the offset of the top-most ArrayData representative.
+// All other children should remain as is, without changing their offsets.
+// However, in YQL, we recursively traverse all nested ArrayData and change the offset there as well.
+// Accordingly, this creates a difference between the classic Arrow ArrayData representation and what we have.
+
+// E.g.
+// We have Tuple<Int> array with following structure.
+// {
+//     len = 10
+//     offset = 0
+//     children = {
+//          len = 10
+//          offset = 5
+//     }
+// }
+// To create a slice with offset == 3 apache arrow need only to change outer offset.
+// {
+//     len = 10
+//     offset = 0 + 3
+//     children = {
+//          len = 10
+//          offset = 5
+//     }
+// }
+// But in YQL we change both: outer and inner offset.
+// {
+//     len = 10
+//     offset = 0 + 3
+//     children = {
+//          len = 10
+//          offset = 5 + 3
+
+// }
+// }
+// So here is the helper that can help fix this.
+// It simply sets the offset to 0 for types that have this problem.
+// Also check bitmask before fixing.
+//
+// FIXME(YQL-20162): Change the validation algorithm.
+std::shared_ptr<arrow::ArrayData> ConvertYqlOffsetsToArrowStandard(
+    const arrow::ArrayData& arrayData) {
+    auto result = arrayData.Copy();
+    if (result->type->id() == arrow::Type::STRUCT) {
+        if (!result->buffers.empty() && result->buffers[0]) {
+            auto actualSize = arrow::BitUtil::BytesForBits(result->length + result->offset);
+            MKQL_ENSURE(result->buffers[0]->size() >= actualSize, "Bitmask is invalid.");
+        }
+        result->offset = 0;
+        result->null_count = arrow::kUnknownNullCount;
+    }
+
+    std::vector<std::shared_ptr<arrow::ArrayData>> children;
+    children.reserve(result->child_data.size());
+    for (const auto& child : result->child_data) {
+        children.push_back(ConvertYqlOffsetsToArrowStandard(*child));
+    }
+    result->child_data = children;
+    return result;
+}
+
+// Helper for datum validation.
+// It checks invariants that cannot be checked via standart Apache Arrow validator.
+class IDatumValidator {
+public:
+    virtual ~IDatumValidator() = default;
+    virtual void Validate(arrow::Datum datum) const = 0;
+};
+
+class TDatumValidatorBase: public IDatumValidator {
+public:
+    using TPtr = std::unique_ptr<TDatumValidatorBase>;
+
+    explicit TDatumValidatorBase(const NYql::NUdf::TType* type, bool isExpensive)
+        : Type_(type)
+        , IsExpensive_(isExpensive)
+    {
+    }
+
+protected:
+    const NYql::NUdf::TType* Type() const {
+        return Type_;
+    }
+
+    bool IsExpensive() const {
+        return IsExpensive_;
+    }
+
+private:
+    const NYql::NUdf::TType* Type_;
+    bool IsExpensive_;
+};
+
+class TUnimplementedValidator: public TDatumValidatorBase {
+public:
+    explicit TUnimplementedValidator(const NYql::NUdf::TType* type, bool isExpensive)
+        : TDatumValidatorBase(type, isExpensive)
+    {
+    }
+
+    void Validate(arrow::Datum datum) const override {
+        Y_UNUSED(datum);
+    }
+};
+
+template <bool IsNull>
+class TSingularValidator: public TDatumValidatorBase {
+public:
+    using TDatumValidatorBase::TDatumValidatorBase;
+
+    void Validate(arrow::Datum datum) const override {
+        ValidateSingular(datum);
+    }
+
+private:
+    void ValidateSingular(arrow::Datum datum) const {
+        if (datum.is_scalar()) {
+            MKQL_ENSURE(datum.scalar()->is_valid == !IsNull, "Singular type invariant violation.");
+        } else {
+            auto expectedNullCount = IsNull ? datum.array()->length : 0;
+            ValidateEmptyNullBuffer(*datum.array());
+            // For singular types it is OK to call GetNullCount directly since buffer is always empty.
+            MKQL_ENSURE(datum.array()->GetNullCount() == expectedNullCount,
+                        TStringBuilder() << "Singular type invariant null count violation. Expected: " << expectedNullCount << ", Got: " << datum.array()->GetNullCount());
+        }
+    }
+
+    void ValidateEmptyNullBuffer(const arrow::ArrayData& arrayData) const {
+        MKQL_ENSURE(arrayData.buffers[0] == nullptr, "Must be empty buffer.");
+    }
+};
+
+template <bool Nullable>
+class TTupleValidator: public TDatumValidatorBase {
+public:
+    TTupleValidator(TVector<TDatumValidatorBase::TPtr>&& children,
+                    const NYql::NUdf::TType* type,
+                    bool isExpensive)
+        : TDatumValidatorBase(type, isExpensive)
+        , Children_(std::move(children))
+    {
+    }
+
+    void Validate(arrow::Datum datum) const override {
+        if (datum.is_scalar()) {
+            if (datum.scalar()->is_valid) {
+                for (size_t i = 0; i < Children_.size(); ++i) {
+                    Children_[i]->Validate(arrow::Datum(dynamic_cast<const arrow::StructScalar&>(*datum.scalar()).value.at(i)));
+                }
+            }
+        } else {
+            auto array = datum.array();
+            for (size_t i = 0; i < Children_.size(); ++i) {
+                Children_[i]->Validate(*array->child_data[i]);
+                MKQL_ENSURE(array->child_data[i]->length == array->length, "A tuple's child array must have the same size as the tuple itself.");
+            }
+        }
+    }
+
+protected:
+    TVector<TDatumValidatorBase::TPtr> Children_;
+};
+
+class TExternalOptionalValidator: public TDatumValidatorBase {
+public:
+    TExternalOptionalValidator(TDatumValidatorBase::TPtr base, const NYql::NUdf::TType* type, bool isExpensive)
+        : TDatumValidatorBase(type, isExpensive)
+        , Base_(std::move(base))
+    {
+    }
+
+    void Validate(arrow::Datum datum) const override {
+        if (datum.is_scalar()) {
+            if (datum.scalar()->is_valid) {
+                Base_->Validate(arrow::Datum(dynamic_cast<const arrow::StructScalar&>(*datum.scalar()).value.at(0)));
+            }
+        } else {
+            Base_->Validate(*datum.array()->child_data[0]);
+        }
+    }
+
+protected:
+    TDatumValidatorBase::TPtr Base_;
+};
+
+class TVariantValidator: public TDatumValidatorBase {
+public:
+    TVariantValidator(TVector<TDatumValidatorBase::TPtr>&& children, const NYql::NUdf::TType* type, bool isExpensive)
+        : TDatumValidatorBase(type, isExpensive)
+        , Children_(std::move(children))
+    {
+    }
+
+    void Validate(arrow::Datum datum) const override {
+        if (datum.is_scalar()) {
+            MKQL_ENSURE(datum.scalar()->is_valid, "Variant type invariant violation.");
+            const auto* variantScalar = arrow::internal::checked_cast<const NYql::NUdf::TDenseUnionScalar*>(datum.scalar().get());
+            MKQL_ENSURE(variantScalar, "Variant scalar expected.");
+            MKQL_ENSURE(variantScalar->Index < Children_.size(), "Variant type code out of range.");
+            Children_[variantScalar->Index]->Validate(arrow::Datum(variantScalar->value));
+        } else {
+            auto array = datum.array();
+            if (!IsExpensive()) {
+                for (size_t i = 0; i < Children_.size(); ++i) {
+                    Children_[i]->Validate(*array->child_data[i]);
+                }
+                return;
+            }
+            ValidateExpensiveArray(*array);
+            auto usage = NYql::NUdf::CalculateDenseUnionChildrenUsage(*array);
+            for (size_t i = 0; i < Children_.size(); ++i) {
+                Children_[i]->Validate(NYql::NUdf::DeepSlice(*array->child_data[i], usage[i].Offset, usage[i].Length));
+            }
+            return;
+        }
+    }
+
+private:
+    void ValidateExpensiveArray(const arrow::ArrayData& arrayData) const {
+        const auto* typeCodes = arrayData.GetValues<i8>(1);
+        const auto* offsets = arrayData.GetValues<i32>(2);
+
+        TVector<TMaybe<i32>> lastOffsetForType(Children_.size());
+
+        for (i64 i = 0; i < arrayData.length; ++i) {
+            MKQL_ENSURE(typeCodes[i] >= 0, "DenseUnion type code is negative.");
+            const size_t typeCode = static_cast<size_t>(typeCodes[i]);
+            MKQL_ENSURE(typeCode < Children_.size(), "DenseUnion type code out of range.");
+            const i32 currentOffset = offsets[i];
+
+            if (lastOffsetForType[typeCode].Defined()) {
+                const i32 offsetDiff = currentOffset - *lastOffsetForType[typeCode];
+                MKQL_ENSURE(offsetDiff == 0 || offsetDiff == 1,
+                            "DenseUnion offset invariant violated at row " << i
+                                                                           << " for type code " << typeCode
+                                                                           << ": consecutive offsets must differ by 0 or 1, got " << offsetDiff);
+            }
+            lastOffsetForType[typeCode] = currentOffset;
+        }
+    }
+
+    TVector<TDatumValidatorBase::TPtr> Children_;
+};
+
+struct TValidatorTraits {
+    using TResult = TDatumValidatorBase;
+    using TVariant = TVariantValidator;
+
+    template <bool Nullable>
+    using TTuple = TTupleValidator<Nullable>;
+
+    template <typename T, bool Nullable>
+    using TFixedSize = TUnimplementedValidator;
+
+    template <typename TStringType, bool Nullable, NKikimr::NUdf::EDataSlot TOriginal>
+    using TStrings = TUnimplementedValidator;
+    using TExtOptional = TExternalOptionalValidator;
+    template <bool Nullable>
+    using TResource = TUnimplementedValidator;
+
+    template <typename TTzDate, bool Nullable>
+    using TTzDateValidator = TUnimplementedValidator;
+    template <bool IsNull>
+    using TSingular = TSingularValidator<IsNull>;
+
+    constexpr static bool PassType = true;
+
+    static std::unique_ptr<TResult> MakePg(const NYql::NUdf::TPgTypeDescription& desc,
+                                           const NYql::NUdf::IPgBuilder* pgBuilder,
+                                           const NYql::NUdf::TType* type,
+                                           bool isExpensive) {
+        Y_UNUSED(desc, pgBuilder);
+        return std::make_unique<TUnimplementedValidator>(type, isExpensive);
+    }
+
+    static std::unique_ptr<TResult> MakeResource(bool isOptional,
+                                                 const NYql::NUdf::TType* type,
+                                                 bool isExpensive) {
+        Y_UNUSED(isOptional);
+        return std::make_unique<TUnimplementedValidator>(type, isExpensive);
+    }
+
+    template <typename TTzDate>
+    static std::unique_ptr<TResult> MakeTzDate(bool isOptional,
+                                               const NYql::NUdf::TType* type,
+                                               bool isExpensive) {
+        Y_UNUSED(isOptional);
+        return std::make_unique<TUnimplementedValidator>(type, isExpensive);
+    }
+
+    template <bool IsNull>
+    static std::unique_ptr<TResult> MakeSingular(const NYql::NUdf::TType* type, bool isExpensive) {
+        return std::make_unique<TSingularValidator<IsNull>>(type, isExpensive);
+    }
+};
+
+std::unique_ptr<TValidatorTraits::TResult> MakeBlockValidator(const NYql::NUdf::ITypeInfoHelper& typeInfoHelper,
+                                                              const NYql::NUdf::TType* type,
+                                                              bool isExpensive) {
+    MKQL_ENSURE(typeInfoHelper.GetTypeKind(type) == NYql::NUdf::ETypeKind::Block, "Expected block type.");
+    return DispatchByArrowTraits<TValidatorTraits>(typeInfoHelper, NYql::NUdf::TBlockTypeInspector(typeInfoHelper, type).GetItemType(), /*pgBuilder=*/nullptr, isExpensive);
+}
+
+arrow::Status ValidateArrayCheap(arrow::Datum datum, const TType* type) {
+    auto array = ConvertYqlOffsetsToArrowStandard(*datum.array());
+    ARROW_RETURN_NOT_OK(arrow::internal::ValidateArray(*array));
+    if (type) {
+        MakeBlockValidator(TTypeInfoHelper(), type, /*isExpensive=*/false)->Validate(datum);
+    }
+    return arrow::Status::OK();
+}
+
+arrow::Status ValidateArrayExpensive(arrow::Datum datum, const TType* type) {
+    if (type) {
+        MakeBlockValidator(TTypeInfoHelper(), type, /*isExpensive=*/true)->Validate(datum);
+    }
+    auto array = ConvertYqlOffsetsToArrowStandard(*datum.array());
+    ARROW_RETURN_NOT_OK(arrow::internal::ValidateArray(*array));
+    ARROW_RETURN_NOT_OK(arrow::internal::ValidateArrayFull(*array));
+    return arrow::Status::OK();
+}
+
+arrow::Status ValidateDatum(arrow::Datum datum, const TType* type, NYql::EDatumValidationMode validateMode) {
+    if (datum.is_arraylike()) {
+        NYql::NUdf::TArgsDechunker dechunker({datum});
+        std::vector<arrow::Datum> chunk;
+        while (dechunker.Next(chunk)) {
+            Y_ENSURE(chunk[0].is_array(), "Chunk expected to be array. Got: " << chunk[0].ToString());
+            switch (validateMode) {
+                case NYql::EDatumValidationMode::None:
+                    break;
+                case NYql::EDatumValidationMode::Cheap:
+                    if (auto status = ValidateArrayCheap(chunk[0], type); !status.ok()) {
+                        return status;
+                    }
+                    break;
+                case NYql::EDatumValidationMode::Expensive:
+                    if (auto status = ValidateArrayExpensive(chunk[0], type); !status.ok()) {
+                        return status;
+                    }
+                    break;
+            }
+        }
+    } else if (datum.is_scalar()) {
+        if (type) {
+            const bool isExpensive = validateMode == NYql::EDatumValidationMode::Expensive;
+            MakeBlockValidator(TTypeInfoHelper(), type, isExpensive)->Validate(datum);
+        }
+        // Apache arrow scalar validation is supported in ARROW-13132.
+        // Add scalar support after library update (this is very similar to above array validation).
+        // NOLINTNEXTLINE(misc-redundant-expression)
+        static_assert(ARROW_VERSION_MAJOR == 5, "If you see this message please notify owners about update and remove this assert.");
+    } else {
+        // Must be either arraylike, scalar, or collection.
+        ythrow yexception() << "Invalid datum type. Expected only: arraylike, scalar, or collection. Got: " << datum.ToString();
+    }
+    return arrow::Status::OK();
+}
+
+} // namespace
+
+void ValidateDatum(arrow::Datum datum, TMaybe<arrow::ValueDescr> expectedDescription, const TType* type, NYql::EDatumValidationMode validateMode) {
+    if (validateMode == NYql::EDatumValidationMode::None) {
+        return;
+    }
+    if (datum.is_collection()) {
+        for (const auto& item : datum.collection()) {
+            ValidateDatum(item, expectedDescription, type, validateMode);
+        }
+        return;
+    }
+    if (expectedDescription) {
+        ARROW_CHECK_DATUM_TYPES(*expectedDescription, datum.descr());
+    }
+    auto status = ValidateDatum(datum, type, validateMode);
+    Y_ABORT_UNLESS(status.ok(), "%s", (TStringBuilder() << "Type: " << datum.descr().ToString() << ". Original error is: " << status.message()).c_str());
+}
+
+} // namespace NKikimr::NMiniKQL

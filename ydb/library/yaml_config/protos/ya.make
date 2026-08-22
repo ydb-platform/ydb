@@ -1,4 +1,5 @@
 PROTO_LIBRARY(yaml-config-protos)
+PROTOC_FATAL_WARNINGS()
 
 SRCS(
     config.proto

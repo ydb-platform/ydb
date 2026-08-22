@@ -1,7 +1,7 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/common.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
-#include "ut_helpers.h"
+#include <ydb/core/blobstorage/ut_blobstorage/lib/ut_helpers.h>
 
 constexpr bool VERBOSE = false;
 
@@ -222,7 +222,7 @@ void TestBurst(ui32 requests, ui32 inflight, TDuration delay, ELoadDistribution 
 
     ui64 redMs = env->AggregateVDiskCounters(env->StoragePoolName, groupSize, groupSize, groupId, pdiskLayout,
             "advancedCost", "BurstDetector_redMs");
-    
+
     if (loadDistribution == ELoadDistribution::DistributionBurst) {
         UNIT_ASSERT_VALUES_UNEQUAL(redMs, 0);
     } else {
@@ -314,13 +314,13 @@ void TestDSProxyAndVDiskEqualByteCounters(TInflightActor* actor) {
 
 Y_UNIT_TEST_SUITE(TestDSProxyAndVDiskEqualByteCounters) {
     Y_UNIT_TEST(MultiPut) {
-        auto actor = new TInflightActorPut({10, 10}, 1000, 10);                       
-        TestDSProxyAndVDiskEqualByteCounters(actor);    
+        auto actor = new TInflightActorPut({10, 10}, 1000, 10);
+        TestDSProxyAndVDiskEqualByteCounters(actor);
     }
 
     Y_UNIT_TEST(SinglePut) {
-        auto actor = new TInflightActorPut({1, 1}, 1000);                       
-        TestDSProxyAndVDiskEqualByteCounters(actor);    
+        auto actor = new TInflightActorPut({1, 1}, 1000);
+        TestDSProxyAndVDiskEqualByteCounters(actor);
     }
 }
 

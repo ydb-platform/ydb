@@ -198,9 +198,19 @@ namespace NLWTrace {
         }
 
         // Checks if there is at least one shuttle in orbit
-        // NOTE: used by every LWTRACK macro check, so keep it optimized - do not lock
-        bool HasShuttles() const {
-            return HeadNoLock.Get();
+        // Uses atomic read to synchronize with NotConcurrent() and avoid data
+        // races, still optimized and no lock
+        bool HasShuttles() const
+        {
+            static_assert(sizeof(HeadNoLock) == sizeof(TAtomic));
+            const TAtomic* headPtr =
+                reinterpret_cast<const TAtomic*>(&HeadNoLock);
+            TAtomicBase value = AtomicGet(*headPtr);
+            // Return true for any non-null value (including lock sentinel 0x1)
+            // Lock sentinel means some operation is in progress
+            // This allows harmless false positives but prevents data loss from
+            // false negatives
+            return value != 0;
         }
 
         void AddShuttle(const TShuttlePtr& shuttle) {
@@ -255,6 +265,20 @@ namespace NLWTrace {
             });
         }
 
+        template <class TFunc>
+        void ForEachShuttle(TFunc&& func)
+        {
+            NotConcurrent(
+                [&](TShuttlePtr& head)
+                {
+                    TShuttlePtr* ref = &head;
+                    while (IShuttle* s = ref->Get()) {
+                        func(s);
+                        ref = &s->GetNext();
+                    }
+                });
+        }
+
         void Serialize(ui64 traceIdx, TShuttleTrace& msg) {
             ForEachShuttle(traceIdx, [&] (NLWTrace::IShuttle* shuttle) {
                 shuttle->Serialize(msg);
@@ -285,7 +309,9 @@ namespace NLWTrace {
                         if (shuttle->IsDead()) {
                             *ref = shuttle->Drop();
                         } else {
-                            result = result && shuttle->Fork(cHead);
+                            if (Y_UNLIKELY(!shuttle->Fork(cHead))) {
+                                result = false;
+                            }
                             ref = &shuttle->GetNext();
                         }
                     }

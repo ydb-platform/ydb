@@ -1,7 +1,13 @@
 #include "group.h"
 #include "process.h"
 
+#include <ydb/core/tx/limiter/grouped_memory/tracing/probes.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::GROUPED_MEMORY_LIMITER
+
 namespace NKikimr::NOlap::NGroupedMemoryManager {
+
+LWTRACE_USING(YDB_GROUPED_MEMORY_PROVIDER);
 
 std::vector<std::shared_ptr<TAllocationInfo>> TGrouppedAllocations::AllocatePossible(const ui32 allocationsLimit) {
     std::vector<std::shared_ptr<TAllocationInfo>> result;
@@ -19,35 +25,70 @@ std::vector<std::shared_ptr<TAllocationInfo>> TGrouppedAllocations::AllocatePoss
     return result;
 }
 
+TString TGrouppedAllocations::DebugString() const {
+    TStringBuilder sb;
+    sb << "TGrouppedAllocations{" << Endl
+       << "  AllocationsCount=" << Allocations.size() << Endl
+       << "  Allocations=[" << Endl;
+    
+    bool first = true;
+    for (const auto& [id, allocation] : Allocations) {
+        if (!first) {
+            sb << "," << Endl;
+        }
+        first = false;
+        sb << "    {Id=" << id << ";Info=" << allocation->DebugString() << "}";
+    }
+    
+    sb << Endl << "  ]" << Endl << "}";
+    return sb;
+}
+
 bool TAllocationGroups::Allocate(const bool isPriorityProcess, TProcessMemoryScope& scope, const ui32 allocationsLimit) {
-    AFL_DEBUG(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "try_allocation")("limit", allocationsLimit)(
-        "external_process_id", scope.ExternalProcessId)("forced_internal_group_id", scope.GroupIds.GetMinInternalIdOptional())(
-        "external_scope_id", scope.ExternalScopeId)("forced_external_group_id", scope.GroupIds.GetMinExternalIdOptional());
+    YDB_LOG_DEBUG("",
+        {"event", "try_allocation"},
+        {"limit", allocationsLimit},
+        {"externalProcessId", scope.ExternalProcessId},
+        {"externalScopeId", scope.ExternalScopeId},
+        {"forcedExternalGroupId", scope.GroupIds.GetMinExternalIdOptional()},
+        {"isPriorityProcess", isPriorityProcess});
     ui32 allocationsCount = 0;
     while (true) {
         std::vector<ui64> toRemove;
         for (auto it = Groups.begin(); it != Groups.end();) {
-            const ui64 internalGroupId = it->first;
-            const bool forced = isPriorityProcess && internalGroupId == scope.GroupIds.GetMinInternalIdVerified();
+            const ui64 externalGroupId = it->first;
+            TGrouppedAllocations& groupedAllocations = it->second;
+            const bool forced = isPriorityProcess && externalGroupId == scope.GroupIds.GetMinExternalIdVerified();
             std::vector<std::shared_ptr<TAllocationInfo>> allocated;
             if (forced) {
-                allocated = it->second.ExtractAllocationsToVector();
+                allocated = groupedAllocations.ExtractAllocationsToVector();
+                YDB_LOG_DEBUG("",
+                    {"event", "forced_group"},
+                    {"count", allocated.size()},
+                    {"externalGroupId", externalGroupId});
             } else if (allocationsLimit) {
-                allocated = it->second.AllocatePossible(allocationsLimit - allocationsCount);
+                allocated = groupedAllocations.AllocatePossible(allocationsLimit - allocationsCount);
+                YDB_LOG_DEBUG("",
+                    {"event", "common_forced_group"},
+                    {"count", allocated.size()},
+                    {"externalGroupId", externalGroupId});
             } else {
                 break;
             }
             for (auto&& i : allocated) {
-                if (!i->Allocate(scope.OwnerActorId)) {
+                bool success = i->Allocate(scope.OwnerActorId);
+                auto stage = i->GetStage();
+                LWPROBE(Allocated, "delayed", i->GetIdentifier(), stage->GetName(), stage->GetLimit(), stage->GetHardLimit().value_or(std::numeric_limits<ui64>::max()), stage->GetUsage().Val(), stage->GetWaiting().Val(), i->GetAllocationTime(), forced, success);
+                if (!success) {
                     toRemove.emplace_back(i->GetIdentifier());
                 } else if (!forced) {
                     AFL_VERIFY(++allocationsCount <= allocationsLimit)("count", allocationsCount)("limit", allocationsLimit);
                 }
                 if (!forced) {
-                    AFL_VERIFY(it->second.Remove(i));
+                    AFL_VERIFY(groupedAllocations.Remove(i));
                 }
             }
-            if (!it->second.IsEmpty()) {
+            if (!groupedAllocations.IsEmpty()) {
                 break;
             }
             it = Groups.erase(it);
@@ -63,6 +104,25 @@ bool TAllocationGroups::Allocate(const bool isPriorityProcess, TProcessMemorySco
         }
     }
     return allocationsCount;
+}
+
+TString TAllocationGroups::DebugString() const {
+    TStringBuilder sb;
+    sb << "TAllocationGroups{" << Endl
+       << "  GroupsCount=" << Groups.size() << Endl
+       << "  Groups=[" << Endl;
+    
+    bool first = true;
+    for (const auto& [groupId, groupedAllocations] : Groups) {
+        if (!first) {
+            sb << "," << Endl;
+        }
+        first = false;
+        sb << "    {GroupId=" << groupId << ";Group=" << groupedAllocations.DebugString() << "}";
+    }
+    
+    sb << Endl << "  ]" << Endl << "}";
+    return sb;
 }
 
 }   // namespace NKikimr::NOlap::NGroupedMemoryManager

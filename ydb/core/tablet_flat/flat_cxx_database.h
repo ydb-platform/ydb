@@ -1,8 +1,11 @@
 #pragma once
 
+#include <ydb/core/tablet_flat/flat_backup.h>
 #include <ydb/core/tablet_flat/flat_database.h>
 #include <ydb/core/util/tuples.h>
 #include <ydb/core/base/blobstorage_common.h>
+#include <ydb/core/base/subdomain.h>
+#include <ydb/library/actors/core/actorid.h>
 
 #include <util/system/type_name.h>
 #include <util/system/unaligned_mem.h>
@@ -18,6 +21,22 @@ namespace NIceDb {
 using TToughDb = NTable::TDatabase;
 using NTable::TUpdateOp;
 using NTable::ELookup;
+using NTable::TBackupExclusion;
+
+template <typename T>
+struct TTriviallySerializable : std::bool_constant<std::is_scalar<T>::value && !std::is_pointer<T>::value> {};
+
+template <typename T, typename U>
+struct TTriviallySerializable<std::pair<T, U>> : std::bool_constant<TTriviallySerializable<T>::value && TTriviallySerializable<U>::value> {};
+
+template <>
+struct TTriviallySerializable<TActorId> : std::true_type {};
+
+template<>
+struct TTriviallySerializable<TSubDomainKey> : std::true_type {};
+
+template <typename T>
+concept CTriviallySerializable = TTriviallySerializable<T>::value;
 
 class TTypeValue : public TRawTypeValue {
 public:
@@ -56,7 +75,7 @@ public:
         : TRawTypeValue(&value, sizeof(value), type)
     {}
 
-    template <typename ElementType>
+    template <CTriviallySerializable ElementType>
     TTypeValue(const TVector<ElementType> &value, NScheme::TTypeId type = NScheme::NTypeIds::String)
         : TRawTypeValue(value.empty() ? (const ElementType*)0xDEADBEEFDEADBEEF : value.data(), value.size() * sizeof(ElementType), type)
     {}
@@ -127,7 +146,7 @@ public:
     }
 
     operator i32() const {
-        Y_ENSURE((Type() == NScheme::NTypeIds::Int32 
+        Y_ENSURE((Type() == NScheme::NTypeIds::Int32
                   || Type() == NScheme::NTypeIds::Date32)
                  && Size() == sizeof(i32), "Data=" << (const void*)Data() << ", Type=" << (i64)Type() << ", Size=" << (i64)Size());
         i32 value = ReadUnaligned<i32>(reinterpret_cast<const i32*>(Data()));
@@ -193,9 +212,8 @@ public:
         return *reinterpret_cast<const std::pair<ui64, i64>*>(Data());
     }
 
-    template <typename ElementType>
+    template <CTriviallySerializable ElementType>
     operator TVector<ElementType>() const {
-        static_assert(std::is_pod<ElementType>::value, "ElementType should be a POD type");
         Y_ENSURE(Type() == NScheme::NTypeIds::String || Type() == NScheme::NTypeIds::String4k || Type() == NScheme::NTypeIds::String2m);
         Y_ENSURE(Size() % sizeof(ElementType) == 0);
         std::size_t count = Size() / sizeof(ElementType);
@@ -204,9 +222,8 @@ public:
         return TVector<ElementType>(begin, end);
     }
 
-    template <typename ElementType>
+    template <CTriviallySerializable ElementType>
     void ExtractArray(THashSet<ElementType> &container) const {
-        static_assert(std::is_pod<ElementType>::value, "ElementType should be a POD type");
         Y_ENSURE(Type() == NScheme::NTypeIds::String || Type() == NScheme::NTypeIds::String4k || Type() == NScheme::NTypeIds::String2m);
         Y_ENSURE(Size() % sizeof(ElementType) == 0);
         const ElementType *begin = reinterpret_cast<const ElementType*>(Data());
@@ -275,7 +292,7 @@ public:
         return static_cast<typename NSchemeTypeMapper<NScheme::NTypeIds::String>::Type>(value.SerializeAsString());
     }
 
-    template <typename ElementType>
+    template <CTriviallySerializable ElementType>
     static typename NSchemeTypeMapper<NScheme::NTypeIds::String>::Type ConvertFrom(const TVector<ElementType>& value) {
         return static_cast<typename NSchemeTypeMapper<NScheme::NTypeIds::String>::Type>(
             TString(
@@ -343,7 +360,7 @@ template <typename TColumnType>
 struct TConvertValue<TColumnType, TRawTypeValue, TInstant> {
     typename NSchemeTypeMapper<TColumnType::ColumnType>::Type Storage;
     TTypeValue Value;
-    TConvertValue(const TInstant& value) : Storage(value.GetValue()), Value(Storage, TColumnType::ColumnType) {}
+    TConvertValue(const TInstant& value) : Storage(value.MicroSeconds()), Value(Storage, TColumnType::ColumnType) {}
     operator const TRawTypeValue&() const { return Value; }
 };
 
@@ -351,7 +368,7 @@ template <typename TColumnType>
 struct TConvertValue<TColumnType, TInstant, TRawTypeValue> {
     TTypeValue Value;
     TConvertValue(const TRawTypeValue& value) : Value(value) {}
-    operator TInstant() const { return TInstant::FromValue(static_cast<ui64>(Value)); }
+    operator TInstant() const { return TInstant::MicroSeconds(static_cast<ui64>(Value)); }
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -361,7 +378,7 @@ template <typename TColumnType>
 struct TConvertValue<TColumnType, TRawTypeValue, TDuration> {
     typename NSchemeTypeMapper<TColumnType::ColumnType>::Type Storage;
     TTypeValue Value;
-    TConvertValue(const TDuration& value) : Storage(value.GetValue()), Value(Storage, TColumnType::ColumnType) {}
+    TConvertValue(const TDuration& value) : Storage(value.MicroSeconds()), Value(Storage, TColumnType::ColumnType) {}
     operator const TRawTypeValue&() const { return Value; }
 };
 
@@ -369,7 +386,7 @@ template <typename TColumnType>
 struct TConvertValue<TColumnType, TDuration, TRawTypeValue> {
     TTypeValue Value;
     TConvertValue(const TRawTypeValue& value) : Value(value) {}
-    operator TDuration() const { return TDuration::FromValue(static_cast<ui64>(Value)); }
+    operator TDuration() const { return TDuration::MicroSeconds(static_cast<ui64>(Value)); }
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -388,6 +405,37 @@ struct TConvertValue<TColumnType, TIdWrapper<T, Tag>, TRawTypeValue> {
     TTypeValue Value;
     TConvertValue(const TRawTypeValue & value) : Value(value) {}
     operator TIdWrapper<T, Tag>() const { return TIdWrapper<T, Tag>::FromValue(static_cast<T>(Value)); }
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// TBridgePileId conversion
+
+template<typename TColumnType>
+struct TConvertValue<TColumnType, TRawTypeValue, TBridgePileId> {
+    static_assert(TColumnType::ColumnType == NScheme::NTypeIds::Uint32);
+
+    ui32 Storage;
+    TTypeValue Value;
+
+    TConvertValue(TBridgePileId value)
+        : Storage(value.GetLocalDb())
+        , Value(value ? TTypeValue(Storage) : TTypeValue())
+    {}
+
+    operator const TRawTypeValue&() const { return Value; }
+};
+
+template<typename TColumnType>
+struct TConvertValue<TColumnType, TBridgePileId, TRawTypeValue> {
+    TTypeValue Value;
+
+    TConvertValue(const TRawTypeValue& value)
+        : Value(value)
+    {}
+
+    operator TBridgePileId() const {
+        return Value.HaveValue() ? TBridgePileId::FromLocalDb(static_cast<ui32>(Value)) : TBridgePileId();
+    }
 };
 
 template <typename TColumnType, typename SourceType>
@@ -492,7 +540,7 @@ struct TConvertValueFromRawTypeValueToPod {
     }
 };
 
-template <typename ColumnType, typename VectorType>
+template <typename ColumnType, CTriviallySerializable VectorType>
 struct TConvertValue<ColumnType, TVector<VectorType>, TRawTypeValue> {
     TVector<VectorType> Value;
 
@@ -512,7 +560,7 @@ struct TConvertValue<ColumnType, TVector<VectorType>, TRawTypeValue> {
     }
 };
 
-template <typename TColumnType, typename VectorType>
+template <typename TColumnType, CTriviallySerializable VectorType>
 struct TConvertValue<TColumnType, TRawTypeValue, TVector<VectorType>> {
     TTypeValue Value;
 
@@ -662,17 +710,29 @@ struct Schema {
     struct NoAutoPrecharge {};
     struct AutoPrecharge {};
 
+    // Excludes table or column data from system tablet backup. Can't be applied to key columns.
+    // When applied to a column, an update to a row containing only the excluded columns will
+    // not be recorded in the backup's changelog, even if it involves inserting a new row.
+    // By default, all tables and columns are included in backup. When excluding data from a backup,
+    // remember to override the BackupExclusion method in the ITablet.
+    struct NoBackup;
+    struct InBackup;
+
     template <TTableId _TableId> struct Table {
         constexpr static TTableId TableId = _TableId;
 
         using Precharge = AutoPrecharge;
+        using BackupPolicy = InBackup;
 
-        template <TColumnId _ColumnId, NScheme::TTypeId _ColumnType, bool _IsNotNull = false>
+        template <TColumnId _ColumnId, NScheme::TTypeId _ColumnType, bool _IsNotNull = false, bool _IsSensitive = false, bool _IsSetNotNullInProgress = false>
         struct Column {
             constexpr static TColumnId ColumnId = _ColumnId;
             constexpr static NScheme::TTypeId ColumnType = _ColumnType;
             constexpr static bool IsNotNull = _IsNotNull;
+            constexpr static bool IsSensitive = _IsSensitive;
+            constexpr static bool IsSetNotNullInProgress = _IsSetNotNullInProgress;
             using Type = typename NSchemeTypeMapper<_ColumnType>::Type;
+            using BackupPolicy = InBackup;
 
             static TString GetColumnName(const TString& typeName) {
                 return typeName.substr(typeName.rfind(':') + 1);
@@ -697,7 +757,7 @@ struct Schema {
             }
 
             static void Materialize(TToughDb& database) {
-                database.Alter().AddColumn(TableId, GetColumnName(), T::ColumnId, T::ColumnType, T::IsNotNull);
+                database.Alter().AddColumn(TableId, GetColumnName(), T::ColumnId, T::ColumnType, T::IsNotNull, T::IsSensitive, { }, T::IsSetNotNullInProgress);
             }
 
             static constexpr bool HaveColumn(ui32 columnId) {
@@ -707,6 +767,12 @@ struct Schema {
             template <typename OtherT>
             static constexpr bool HaveColumn() {
                 return std::is_same<T, OtherT>::value != 0;
+            }
+
+            static void FillBackupExclusion(TBackupExclusion& exclusion) {
+                if constexpr (std::is_same<typename T::BackupPolicy, NoBackup>::value) {
+                    exclusion.AddColumn(TableId, T::ColumnId);
+                }
             }
         };
 
@@ -723,6 +789,11 @@ struct Schema {
 
             static constexpr bool HaveColumn(ui32 columnId) {
                 return TableColumns<T>::HaveColumn(columnId) || TableColumns<Ts...>::HaveColumn(columnId);
+            }
+
+            static void FillBackupExclusion(TBackupExclusion& exclusion) {
+                TableColumns<T>::FillBackupExclusion(exclusion);
+                TableColumns<Ts...>::FillBackupExclusion(exclusion);
             }
         };
 
@@ -849,6 +920,8 @@ struct Schema {
 
             template <typename T>
             struct TableKeyMaterializer<T> {
+                static_assert(std::is_same_v<typename T::BackupPolicy, InBackup>, "Key column must be in backup");
+
                 static void Materialize(TToughDb& database) {
                     database.Alter().AddColumnToKey(TableId, T::ColumnId);
                 }
@@ -2065,6 +2138,11 @@ struct Schema {
         static bool HaveTable(ui32 tableId) {
             return SchemaTables<Type>::HaveTable(tableId) || SchemaTables<Types...>::HaveTable(tableId);
         }
+
+        static void FillBackupExclusion(TBackupExclusion& exclusion) {
+            SchemaTables<Type>::FillBackupExclusion(exclusion);
+            SchemaTables<Types...>::FillBackupExclusion(exclusion);
+        }
     };
 
     template <typename Type>
@@ -2112,6 +2190,14 @@ struct Schema {
         static bool HaveTable(ui32 tableId) {
             return Type::TableId == tableId;
         }
+
+        static void FillBackupExclusion(TBackupExclusion& exclusion) {
+            if constexpr (std::is_same_v<typename Type::BackupPolicy, NoBackup>) {
+                exclusion.AddTable(Type::TableId);
+            } else {
+                Type::TColumns::FillBackupExclusion(exclusion);
+            }
+        }
     };
 
     using TSettings = SchemaSettings<>;
@@ -2123,7 +2209,7 @@ inline bool Schema::Precharger<Schema::AutoPrecharge>::Precharge(
         NTable::TRawVals minKey, NTable::TRawVals maxKey,
         NTable::TTagsRef columns, NTable::EDirection direction, ui64 maxRowCount, ui64 maxBytes)
 {
-    return database.Precharge(table, minKey, maxKey, columns, 0, maxRowCount, maxBytes, direction);
+    return database.Precharge(table, minKey, maxKey, columns, 0, maxRowCount, maxBytes, direction).Ready;
 }
 
 template <>
@@ -2133,6 +2219,13 @@ inline bool Schema::Precharger<Schema::NoAutoPrecharge>::Precharge(
         NTable::TTagsRef, NTable::EDirection, ui64, ui64)
 {
     return true;
+}
+
+template <typename SchemaType>
+inline TIntrusivePtr<TBackupExclusion> GenerateBackupExclusion() {
+    auto exclusion = MakeIntrusive<TBackupExclusion>();
+    SchemaType::TTables::FillBackupExclusion(*exclusion);
+    return exclusion;
 }
 
 class TNiceDb {

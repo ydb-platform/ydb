@@ -2,6 +2,7 @@
 
 #include "symbolize.h"
 
+#include <yt/yt/core/misc/error.h>
 #include <yt/yt/core/misc/protobuf_helpers.h>
 
 #include <library/cpp/yt/memory/allocation_tags_hooks.h>
@@ -21,13 +22,21 @@ void ReadCompressedProfile(IInputStream* in, NProto::Profile* profile)
 {
     TZLibDecompress decompress(in);
     profile->Clear();
-    profile->ParseFromArcadiaStream(&decompress);
+    TProtobufInputStreamAdaptor adaptor(&decompress);
+    THROW_ERROR_EXCEPTION_UNLESS(
+        profile->ParseFromZeroCopyStream(&adaptor),
+        "Failed to parse compressed profile");
 }
 
 void WriteCompressedProfile(IOutputStream* out, const NProto::Profile& profile)
 {
     TZLibCompress compress(out, ZLib::StreamType::GZip);
-    profile.SerializeToArcadiaStream(&compress);
+    {
+        TProtobufOutputStreamAdaptor adaptor(&compress);
+        THROW_ERROR_EXCEPTION_UNLESS(
+            profile.SerializeToZeroCopyStream(&adaptor),
+            "Failed to serialize profile");
+    }
     compress.Finish();
 }
 
@@ -61,6 +70,10 @@ NProto::Profile TCMallocProfileToProtoProfile(const tcmalloc::Profile& snapshot)
     }
 
     profile.set_period(tcmalloc::MallocExtension::GetProfileSamplingInterval());
+    if (const auto& startTime = snapshot.StartTime()) {
+        profile.set_time_nanos(ToUnixNanos(*startTime));
+    }
+    profile.set_duration_nanos(absl::ToInt64Nanoseconds(snapshot.Duration()));
 
     auto allocatedSizeId = addString("allocated_size");
     auto requestedSizeId = addString("requested_size");
@@ -121,7 +134,7 @@ NProto::Profile TCMallocProfileToProtoProfile(const tcmalloc::Profile& snapshot)
         "TBasicString::TBasicString",
     })));
 
-    Symbolize(&profile, true);
+    Symbolize(&profile, {.SymbolizeExistingFunctions = true});
     return profile;
 }
 

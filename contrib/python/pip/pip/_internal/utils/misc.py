@@ -1,14 +1,18 @@
+from __future__ import annotations
+
 import errno
 import getpass
 import hashlib
 import logging
 import os
+import pathlib
 import posixpath
 import shutil
 import stat
 import sys
 import sysconfig
 import urllib.parse
+from collections.abc import Callable, Generator, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from functools import partial
 from io import StringIO
@@ -18,25 +22,15 @@ from types import FunctionType, TracebackType
 from typing import (
     Any,
     BinaryIO,
-    Callable,
-    Generator,
-    Iterable,
-    Iterator,
-    List,
-    Mapping,
-    Optional,
-    Sequence,
     TextIO,
-    Tuple,
-    Type,
     TypeVar,
-    Union,
     cast,
 )
 
 from pip._vendor.packaging.requirements import Requirement
 from pip._vendor.pyproject_hooks import BuildBackendHookCaller
 
+from pip import __file__ as pip_location
 from pip import __version__
 from pip._internal.exceptions import CommandError, ExternallyManagedEnvironment
 from pip._internal.locations import get_major_minor_version
@@ -58,19 +52,37 @@ __all__ = [
     "ensure_dir",
     "remove_auth_from_url",
     "check_externally_managed",
+    "looks_like_ci",
     "ConfiguredBuildBackendHookCaller",
 ]
 
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
-ExcInfo = Tuple[Type[BaseException], BaseException, TracebackType]
-VersionInfo = Tuple[int, int, int]
-NetlocTuple = Tuple[str, Tuple[Optional[str], Optional[str]]]
+ExcInfo = tuple[type[BaseException], BaseException, TracebackType]
+VersionInfo = tuple[int, int, int]
+NetlocTuple = tuple[str, tuple[str | None, str | None]]
 OnExc = Callable[[FunctionType, Path, BaseException], Any]
 OnErr = Callable[[FunctionType, Path, ExcInfo], Any]
 
 FILE_CHUNK_SIZE = 1024 * 1024
+# These are environment variables present when running under various
+# CI systems.  For each variable, some CI systems that use the variable
+# are indicated.  The collection was chosen so that for each of a number
+# of popular systems, at least one of the environment variables is used.
+# This list is used to provide some indication of and lower bound for
+# CI traffic to PyPI.  Thus, it is okay if the list is not comprehensive.
+# For more background, see: https://github.com/pypa/pip/issues/5499
+CI_ENVIRONMENT_VARIABLES = (
+    # Azure Pipelines
+    "BUILD_BUILDID",
+    # Jenkins
+    "BUILD_ID",
+    # AppVeyor, CircleCI, Codeship, Gitlab CI, Shippable, Travis CI
+    "CI",
+    # Explicit environment variable.
+    "PIP_IS_CI",
+)
 
 
 def get_pip_version() -> str:
@@ -80,7 +92,23 @@ def get_pip_version() -> str:
     return f"pip {__version__} from {pip_pkg_dir} (python {get_major_minor_version()})"
 
 
-def normalize_version_info(py_version_info: Tuple[int, ...]) -> Tuple[int, int, int]:
+def get_runnable_pip() -> str:
+    """Get a file to pass to a Python executable, to run the currently-running pip.
+
+    This is used to run a pip subprocess, for installing requirements into the build
+    environment.
+    """
+    source = pathlib.Path(pip_location).resolve().parent
+
+    if not source.is_dir():
+        # This would happen if someone is using pip from inside a zip file. In that
+        # case, we can use that directly.
+        return str(source)
+
+    return os.fsdecode(source / "__pip-runner__.py")
+
+
+def normalize_version_info(py_version_info: tuple[int, ...]) -> tuple[int, int, int]:
     """
     Convert a tuple of ints representing a Python version to one of length
     three.
@@ -123,9 +151,7 @@ def get_prog() -> str:
 
 # Retry every half second for up to 3 seconds
 @retry(stop_after_delay=3, wait=0.5)
-def rmtree(
-    dir: str, ignore_errors: bool = False, onexc: Optional[OnExc] = None
-) -> None:
+def rmtree(dir: str, ignore_errors: bool = False, onexc: OnExc | None = None) -> None:
     if ignore_errors:
         onexc = _onerror_ignore
     if onexc is None:
@@ -149,7 +175,7 @@ def _onerror_reraise(*_args: Any) -> None:
 def rmtree_errorhandler(
     func: FunctionType,
     path: Path,
-    exc_info: Union[ExcInfo, BaseException],
+    exc_info: ExcInfo | BaseException,
     *,
     onexc: OnExc = _onerror_reraise,
 ) -> None:
@@ -190,10 +216,12 @@ def rmtree_errorhandler(
 def display_path(path: str) -> str:
     """Gives the display value for a given path, making it relative to cwd
     if possible."""
-    path = os.path.normcase(os.path.abspath(path))
-    if path.startswith(os.getcwd() + os.path.sep):
-        path = "." + path[len(os.getcwd()) :]
-    return path
+    try:
+        relative = Path(path).relative_to(Path.cwd())
+    except ValueError:
+        # If the path isn't relative to the CWD, leave it alone
+        return path
+    return os.path.join(".", relative)
 
 
 def backup_dir(dir: str, ext: str = ".bak") -> str:
@@ -276,7 +304,7 @@ def format_size(bytes: float) -> str:
         return f"{int(bytes)} bytes"
 
 
-def tabulate(rows: Iterable[Iterable[Any]]) -> Tuple[List[str], List[int]]:
+def tabulate(rows: Iterable[Iterable[Any]]) -> tuple[list[str], list[int]]:
     """Return a list of formatted rows and a list of column sizes.
 
     For example::
@@ -331,7 +359,7 @@ def normalize_path(path: str, resolve_symlinks: bool = True) -> str:
     return os.path.normcase(path)
 
 
-def splitext(path: str) -> Tuple[str, str]:
+def splitext(path: str) -> tuple[str, str]:
     """Like os.path.splitext, but take off .tar too"""
     base, ext = posixpath.splitext(path)
     if base.lower().endswith(".tar"):
@@ -379,7 +407,7 @@ class StreamWrapper(StringIO):
     orig_stream: TextIO
 
     @classmethod
-    def from_stream(cls, orig_stream: TextIO) -> "StreamWrapper":
+    def from_stream(cls, orig_stream: TextIO) -> StreamWrapper:
         ret = cls()
         ret.orig_stream = orig_stream
         return ret
@@ -392,14 +420,14 @@ class StreamWrapper(StringIO):
 
 
 # Simulates an enum
-def enum(*sequential: Any, **named: Any) -> Type[Any]:
+def enum(*sequential: Any, **named: Any) -> type[Any]:
     enums = dict(zip(sequential, range(len(sequential))), **named)
     reverse = {value: key for key, value in enums.items()}
     enums["reverse_mapping"] = reverse
     return type("Enum", (), enums)
 
 
-def build_netloc(host: str, port: Optional[int]) -> str:
+def build_netloc(host: str, port: int | None) -> str:
     """
     Build a netloc from a host-port pair
     """
@@ -421,7 +449,7 @@ def build_url_from_netloc(netloc: str, scheme: str = "https") -> str:
     return f"{scheme}://{netloc}"
 
 
-def parse_netloc(netloc: str) -> Tuple[Optional[str], Optional[int]]:
+def parse_netloc(netloc: str) -> tuple[str | None, int | None]:
     """
     Return the host-port pair from a netloc.
     """
@@ -443,7 +471,7 @@ def split_auth_from_netloc(netloc: str) -> NetlocTuple:
     # behaves if more than one @ is present (which can be checked using
     # the password attribute of urlsplit()'s return value).
     auth, netloc = netloc.rsplit("@", 1)
-    pw: Optional[str] = None
+    pw: str | None = None
     if ":" in auth:
         # Split from the left because that's how urllib.parse.urlsplit()
         # behaves if more than one : is present (which again can be checked
@@ -480,8 +508,8 @@ def redact_netloc(netloc: str) -> str:
 
 
 def _transform_url(
-    url: str, transform_netloc: Callable[[str], Tuple[Any, ...]]
-) -> Tuple[str, NetlocTuple]:
+    url: str, transform_netloc: Callable[[str], tuple[Any, ...]]
+) -> tuple[str, NetlocTuple]:
     """Transform and replace netloc in a url.
 
     transform_netloc is a function taking the netloc and returning a
@@ -503,13 +531,13 @@ def _get_netloc(netloc: str) -> NetlocTuple:
     return split_auth_from_netloc(netloc)
 
 
-def _redact_netloc(netloc: str) -> Tuple[str]:
+def _redact_netloc(netloc: str) -> tuple[str]:
     return (redact_netloc(netloc),)
 
 
 def split_auth_netloc_from_url(
     url: str,
-) -> Tuple[str, str, Tuple[Optional[str], Optional[str]]]:
+) -> tuple[str, str, tuple[str | None, str | None]]:
     """
     Parse a url into separate netloc, auth, and url with no auth.
 
@@ -549,14 +577,18 @@ class HiddenText:
     def __str__(self) -> str:
         return self.redacted
 
-    # This is useful for testing.
-    def __eq__(self, other: Any) -> bool:
-        if type(self) is not type(other):
-            return False
+    def __eq__(self, other: object) -> bool:
+        # Equality is particularly useful for testing.
+        if type(self) is type(other):
+            # The string being used for redaction doesn't also have to match,
+            # just the raw, original string.
+            return self.secret == other.secret
+        return NotImplemented
 
-        # The string being used for redaction doesn't also have to match,
-        # just the raw, original string.
-        return self.secret == other.secret
+    # Disable hashing, since we have a custom __eq__ and don't need hash-ability
+    # (yet). The only required property of hashing is that objects which compare
+    # equal have the same hash value.
+    __hash__ = None  # type: ignore[assignment]
 
 
 def hide_value(value: str) -> HiddenText:
@@ -614,7 +646,7 @@ def is_console_interactive() -> bool:
     return sys.stdin is not None and sys.stdin.isatty()
 
 
-def hash_file(path: str, blocksize: int = 1 << 20) -> Tuple[Any, int]:
+def hash_file(path: str, blocksize: int = 1 << 20) -> tuple[Any, int]:
     """Return (hash, length) for path using hashlib.sha256()"""
 
     h = hashlib.sha256()
@@ -626,7 +658,7 @@ def hash_file(path: str, blocksize: int = 1 << 20) -> Tuple[Any, int]:
     return h, length
 
 
-def pairwise(iterable: Iterable[Any]) -> Iterator[Tuple[Any, Any]]:
+def pairwise(iterable: Iterable[Any]) -> Iterator[tuple[Any, Any]]:
     """
     Return paired elements.
 
@@ -639,7 +671,7 @@ def pairwise(iterable: Iterable[Any]) -> Iterator[Tuple[Any, Any]]:
 
 def partition(
     pred: Callable[[T], bool], iterable: Iterable[T]
-) -> Tuple[Iterable[T], Iterable[T]]:
+) -> tuple[Iterable[T], Iterable[T]]:
     """
     Use a predicate to partition entries into false entries and true entries,
     like
@@ -656,9 +688,9 @@ class ConfiguredBuildBackendHookCaller(BuildBackendHookCaller):
         config_holder: Any,
         source_dir: str,
         build_backend: str,
-        backend_path: Optional[str] = None,
-        runner: Optional[Callable[..., None]] = None,
-        python_executable: Optional[str] = None,
+        backend_path: str | None = None,
+        runner: Callable[..., None] | None = None,
+        python_executable: str | None = None,
     ):
         super().__init__(
             source_dir, build_backend, backend_path, runner, python_executable
@@ -668,8 +700,8 @@ class ConfiguredBuildBackendHookCaller(BuildBackendHookCaller):
     def build_wheel(
         self,
         wheel_directory: str,
-        config_settings: Optional[Mapping[str, Any]] = None,
-        metadata_directory: Optional[str] = None,
+        config_settings: Mapping[str, Any] | None = None,
+        metadata_directory: str | None = None,
     ) -> str:
         cs = self.config_holder.config_settings
         return super().build_wheel(
@@ -679,7 +711,7 @@ class ConfiguredBuildBackendHookCaller(BuildBackendHookCaller):
     def build_sdist(
         self,
         sdist_directory: str,
-        config_settings: Optional[Mapping[str, Any]] = None,
+        config_settings: Mapping[str, Any] | None = None,
     ) -> str:
         cs = self.config_holder.config_settings
         return super().build_sdist(sdist_directory, config_settings=cs)
@@ -687,8 +719,8 @@ class ConfiguredBuildBackendHookCaller(BuildBackendHookCaller):
     def build_editable(
         self,
         wheel_directory: str,
-        config_settings: Optional[Mapping[str, Any]] = None,
-        metadata_directory: Optional[str] = None,
+        config_settings: Mapping[str, Any] | None = None,
+        metadata_directory: str | None = None,
     ) -> str:
         cs = self.config_holder.config_settings
         return super().build_editable(
@@ -696,19 +728,19 @@ class ConfiguredBuildBackendHookCaller(BuildBackendHookCaller):
         )
 
     def get_requires_for_build_wheel(
-        self, config_settings: Optional[Mapping[str, Any]] = None
+        self, config_settings: Mapping[str, Any] | None = None
     ) -> Sequence[str]:
         cs = self.config_holder.config_settings
         return super().get_requires_for_build_wheel(config_settings=cs)
 
     def get_requires_for_build_sdist(
-        self, config_settings: Optional[Mapping[str, Any]] = None
+        self, config_settings: Mapping[str, Any] | None = None
     ) -> Sequence[str]:
         cs = self.config_holder.config_settings
         return super().get_requires_for_build_sdist(config_settings=cs)
 
     def get_requires_for_build_editable(
-        self, config_settings: Optional[Mapping[str, Any]] = None
+        self, config_settings: Mapping[str, Any] | None = None
     ) -> Sequence[str]:
         cs = self.config_holder.config_settings
         return super().get_requires_for_build_editable(config_settings=cs)
@@ -716,7 +748,7 @@ class ConfiguredBuildBackendHookCaller(BuildBackendHookCaller):
     def prepare_metadata_for_build_wheel(
         self,
         metadata_directory: str,
-        config_settings: Optional[Mapping[str, Any]] = None,
+        config_settings: Mapping[str, Any] | None = None,
         _allow_fallback: bool = True,
     ) -> str:
         cs = self.config_holder.config_settings
@@ -729,9 +761,9 @@ class ConfiguredBuildBackendHookCaller(BuildBackendHookCaller):
     def prepare_metadata_for_build_editable(
         self,
         metadata_directory: str,
-        config_settings: Optional[Mapping[str, Any]] = None,
+        config_settings: Mapping[str, Any] | None = None,
         _allow_fallback: bool = True,
-    ) -> Optional[str]:
+    ) -> str | None:
         cs = self.config_holder.config_settings
         return super().prepare_metadata_for_build_editable(
             metadata_directory=metadata_directory,
@@ -771,3 +803,13 @@ def warn_if_run_as_root() -> None:
         "Use the --root-user-action option if you know what you are doing and "
         "want to suppress this warning."
     )
+
+
+def looks_like_ci() -> bool:
+    """
+    Return whether it looks like pip is running under CI.
+    """
+    # We don't use the method of checking for a tty (e.g. using isatty())
+    # because some CI systems mimic a tty (e.g. Travis CI).  Thus that
+    # method doesn't provide definitive information in either direction.
+    return any(name in os.environ for name in CI_ENVIRONMENT_VARIABLES)

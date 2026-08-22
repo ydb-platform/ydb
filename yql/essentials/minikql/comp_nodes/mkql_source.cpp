@@ -1,25 +1,28 @@
 #include "mkql_source.h"
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders_codegen.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
-class TSourceOfWrapper : public TMutableComputationNode<TSourceOfWrapper> {
-    typedef TMutableComputationNode<TSourceOfWrapper> TBaseComputation;
+class TSourceOfWrapper: public TMutableComputationNode<TSourceOfWrapper> {
+    using TBaseComputation = TMutableComputationNode<TSourceOfWrapper>;
+
 private:
-    class TValue : public TComputationValue<TValue> {
+    class TValue: public TComputationValue<TValue> {
     public:
-        TValue(TMemoryUsageInfo* memInfo)
+        explicit TValue(TMemoryUsageInfo* memInfo)
             : TComputationValue<TValue>(memInfo)
-        {}
+        {
+        }
 
     private:
-        ui32 GetTraverseCount() const override { return 0U; }
+        ui32 GetTraverseCount() const override {
+            return 0U;
+        }
 
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
             result = NUdf::TUnboxedValuePod();
@@ -28,38 +31,43 @@ private:
     };
 
 public:
-    TSourceOfWrapper(TComputationMutables& mutables)
+    explicit TSourceOfWrapper(TComputationMutables& mutables)
         : TBaseComputation(mutables)
-    {}
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         return ctx.HolderFactory.Create<TValue>();
     }
 
 private:
-    void RegisterDependencies() const final {}
+    void RegisterDependencies() const final {
+    }
 };
 
-class TSourceWrapper : public TStatelessWideFlowCodegeneratorNode<TSourceWrapper> {
-using TBaseComputation = TStatelessWideFlowCodegeneratorNode<TSourceWrapper>;
+class TSourceWrapper: public TStatelessWideFlowCodegeneratorNode<TSourceWrapper> {
+    using TBaseComputation = TStatelessWideFlowCodegeneratorNode<TSourceWrapper>;
+
 public:
     TSourceWrapper()
         : TStatelessWideFlowCodegeneratorNode<TSourceWrapper>(nullptr)
-    {}
+    {
+    }
 
-    EFetchResult DoCalculate(TComputationContext&, NUdf::TUnboxedValue*const*) const {
+    EFetchResult DoCalculate(TComputationContext&, NUdf::TUnboxedValue* const*) const {
         return EFetchResult::One;
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    TGenerateResult DoGenGetValues(const TCodegenContext& ctx, BasicBlock*&) const {
+    TGenerateResult DoGenGetValues(const TCodegenContext& ctx, BasicBlock*&) const override {
         return {ConstantInt::get(Type::getInt32Ty(ctx.Codegen.GetContext()), static_cast<i32>(EFetchResult::One)), {}};
     }
 #endif
 private:
-    void RegisterDependencies() const final {}
+    void RegisterDependencies() const final {
+    }
 };
 
-}
+} // namespace
 
 IComputationNode* WrapSourceOf(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(!callable.GetInputsCount(), "Expected no args.");
@@ -79,5 +87,4 @@ IComputationNode* WrapSource(TCallable& callable, const TComputationNodeFactoryC
     return new TSourceWrapper;
 }
 
-}
-}
+} // namespace NKikimr::NMiniKQL

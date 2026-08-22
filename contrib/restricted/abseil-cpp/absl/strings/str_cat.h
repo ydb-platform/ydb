@@ -43,6 +43,13 @@
 // Floating point numbers are formatted with six-digit precision, which is
 // the default for "std::cout <<" or printf "%g" (the same as "%.6g").
 //
+// Floating point values can also be converted to a string which, if passed to
+// `strtod()`, would produce the exact same original double (except in case of
+// NaN; all NaNs are considered the same value) by passing the number to
+// absl::HighPrecision. HighPrecision tries to keep the string short but
+// it's not guaranteed to be as short as possible.
+// See http://go/faster-double-strcat
+//
 // You can convert to hexadecimal output rather than decimal output using the
 // `Hex` type contained here. To do so, pass `Hex(my_int)` as a parameter to
 // `StrCat()` or `StrAppend()`. You may specify a minimum hex field width using
@@ -106,9 +113,9 @@
 #include "absl/base/port.h"
 #include "absl/meta/type_traits.h"
 #include "absl/strings/has_absl_stringify.h"
-#include "absl/strings/internal/resize_uninitialized.h"
 #include "absl/strings/internal/stringify_sink.h"
 #include "absl/strings/numbers.h"
+#include "absl/strings/resize_and_overwrite.h"
 #include "absl/strings/string_view.h"
 
 #if !defined(ABSL_USES_STD_STRING_VIEW)
@@ -305,6 +312,35 @@ struct Dec {
 };
 
 // -----------------------------------------------------------------------------
+// HighPrecision
+// -----------------------------------------------------------------------------
+//
+// Converts floating point values to a string which, if passed to
+// `absl::SimpleAtof`/`absl::SimpleAtod`, would produce the exact same original
+// floating point value (except in case of NaN; all NaNs are considered the same
+// value). Tries to keep the string short but it's not guaranteed to be as short
+// as possible.
+//
+// HighPrecision is conisderably slower than the default formatting, so only use
+// it if you need the string to convert back to the same floating-point value.
+
+inline strings_internal::AlphaNumBuffer<numbers_internal::kFastToBufferSize>
+HighPrecision(float f) {
+  strings_internal::AlphaNumBuffer<numbers_internal::kFastToBufferSize> result;
+  result.size =
+      strlen(numbers_internal::RoundTripFloatToBuffer(f, &result.data[0]));
+  return result;
+}
+
+inline strings_internal::AlphaNumBuffer<numbers_internal::kFastToBufferSize>
+HighPrecision(double d) {
+  strings_internal::AlphaNumBuffer<numbers_internal::kFastToBufferSize> result;
+  result.size =
+      strlen(numbers_internal::RoundTripDoubleToBuffer(d, &result.data[0]));
+  return result;
+}
+
+// -----------------------------------------------------------------------------
 // AlphaNum
 // -----------------------------------------------------------------------------
 //
@@ -471,23 +507,27 @@ std::string IntegerToString(Integer i) {
   // with 22 bytes (including NULL at the end).
   constexpr size_t kMaxDigits10 = 22;
   std::string result;
-  strings_internal::STLStringResizeUninitialized(&result, kMaxDigits10);
-  char* start = &result[0];
-  // note: this can be optimized to not write last zero.
-  char* end = numbers_internal::FastIntToBuffer(i, start);
-  auto size = static_cast<size_t>(end - start);
-  assert((size < result.size()) &&
-         "StrCat(Integer) does not fit into kMaxDigits10");
-  result.erase(size);
+  StringResizeAndOverwrite(
+      result, kMaxDigits10, [i](char* start, size_t buf_size) {
+        // Note: This can be optimized to not write last zero.
+        char* end = numbers_internal::FastIntToBuffer(i, start);
+        auto size = static_cast<size_t>(end - start);
+        ABSL_ASSERT(size < buf_size);
+        return size;
+      });
   return result;
 }
+
 template <typename Float>
 std::string FloatToString(Float f) {
   std::string result;
-  strings_internal::STLStringResizeUninitialized(
-      &result, numbers_internal::kSixDigitsToBufferSize);
-  char* start = &result[0];
-  result.erase(numbers_internal::SixDigitsToBuffer(f, start));
+  StringResizeAndOverwrite(result, numbers_internal::kSixDigitsToBufferSize,
+                           [f](char* start, size_t buf_size) {
+                             size_t size =
+                                 numbers_internal::SixDigitsToBuffer(f, start);
+                             ABSL_ASSERT(size < buf_size);
+                             return size;
+                           });
   return result;
 }
 

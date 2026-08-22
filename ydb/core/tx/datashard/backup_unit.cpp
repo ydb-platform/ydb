@@ -56,11 +56,15 @@ protected:
 
             if (auto* exportFactory = appData->DataShardExportFactory) {
                 std::shared_ptr<IExport>(exportFactory->CreateExportToYt(backup, columns)).swap(exp);
+                if (!exp) {
+                    Abort(op, ctx, "Failed to create YT export");
+                    return false;
+                }
             } else {
                 Abort(op, ctx, "Exports to YT are disabled");
                 return false;
             }
-        } else if (backup.HasS3Settings()) {
+        } else if (backup.HasS3Settings() || backup.HasFSSettings()) {
             NBackupRestoreTraits::ECompressionCodec codec;
             if (!TryCodecFromTask(backup, codec)) {
                 Abort(op, ctx, TStringBuilder() << "Unsupported compression codec"
@@ -68,10 +72,26 @@ protected:
                 return false;
             }
 
+            if (NBackupRestoreTraits::DataFormatFromTask(backup) == NBackupRestoreTraits::EDataFormat::Parquet) {
+                if (!appData->FeatureFlags.GetEnableExportInParquet()) {
+                    Abort(op, ctx, "Parquet export is disabled by feature flag EnableExportInParquet");
+                    return false;
+                }
+                if (backup.HasEncryptionSettings()) {
+                    Abort(op, ctx, "Encryption is not supported for parquet files");
+                    return false;
+                }
+            }
+
+            const TStringBuf exportKind = backup.HasFSSettings() ? "FS"sv : "S3"sv;
             if (auto* exportFactory = appData->DataShardExportFactory) {
                 std::shared_ptr<IExport>(exportFactory->CreateExportToS3(backup, columns)).swap(exp);
+                if (!exp) {
+                    Abort(op, ctx, TStringBuilder() << "Failed to create " << exportKind << " export");
+                    return false;
+                }
             } else {
-                Abort(op, ctx, "Exports to S3 are disabled");
+                Abort(op, ctx, TStringBuilder() << "Exports to " << exportKind << " are disabled");
                 return false;
             }
         } else {

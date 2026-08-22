@@ -10,8 +10,8 @@ namespace NYT::NConcurrency {
 
 TAsyncLooper::TAsyncLooper(
     IInvokerPtr invoker,
-    TCallback<TFuture<void>(bool)> asyncStart,
-    TCallback<void(bool)> syncFinish,
+    TCallback<TFuture<void>()> asyncStart,
+    TClosure syncFinish,
     const NLogging::TLogger& logger)
     : Invoker_(std::move(invoker))
     , AsyncStart_(std::move(asyncStart))
@@ -28,7 +28,7 @@ void TAsyncLooper::Start()
 {
     auto traceContext = NTracing::GetOrCreateTraceContext("LooperStart");
     auto traceGuard = NTracing::TCurrentTraceContextGuard(traceContext);
-    YT_LOG_DEBUG("Requesting looper to start");
+    YT_TLOG_DEBUG("Requesting looper to start");
 
     Invoker_->Invoke(
         BIND(&TAsyncLooper::DoStart, MakeStrong(this)));
@@ -42,7 +42,7 @@ void TAsyncLooper::DoStart()
             // Already Running.
         case EState::Restarting:
             // Soon to be Running.
-            YT_LOG_DEBUG("Looper is either already running or restarting");
+            YT_TLOG_DEBUG("Looper is either already running or restarting");
             return;
 
         case EState::NotRunning:
@@ -59,7 +59,7 @@ void TAsyncLooper::DoStart()
         case EStage::Busy:
             // Has been stopped during sync step
             // -> request restart.
-            YT_LOG_DEBUG("Looper is busy but was stopped. Requesting restart");
+            YT_TLOG_DEBUG("Looper is busy but was stopped. Requesting restart");
             State_ = EState::Restarting;
             return;
 
@@ -72,8 +72,8 @@ void TAsyncLooper::DoStart()
             // will bail out due to epoch mismatch -> we are free to
             // ignore this case on our side.
             State_ = EState::Running;
-            YT_LOG_DEBUG("Starting looper");
-            StartLoop(/*cleanStart*/ true, guard);
+            YT_TLOG_DEBUG("Starting looper");
+            StartLoop(guard);
             break;
 
         default:
@@ -81,7 +81,7 @@ void TAsyncLooper::DoStart()
     }
 }
 
-void TAsyncLooper::StartLoop(bool cleanStart, const TGuard& guard)
+void TAsyncLooper::StartLoop(const TGuard& guard)
 {
     YT_ASSERT_SPINLOCK_AFFINITY(StateLock_);
     YT_VERIFY(State_ == EState::Running);
@@ -101,7 +101,7 @@ void TAsyncLooper::StartLoop(bool cleanStart, const TGuard& guard)
             Stage_ = EStage::Idle;
         });
         auto unguard = Unguard(guard);
-        future = AsyncStart_(cleanStart);
+        future = AsyncStart_();
 
     } catch (const TFiberCanceledException&) {
         // We got canceled -- this is normal.
@@ -110,17 +110,17 @@ void TAsyncLooper::StartLoop(bool cleanStart, const TGuard& guard)
         if (TError(ex).GetCode() == NYT::EErrorCode::Canceled) {
             throw;
         }
-        YT_LOG_FATAL(ex, "Unexpected error encountered during the async step");
+        YT_TLOG_FATAL("Unexpected error encountered during the async step")
+            .With(TError(ex));
     } catch (...) {
-        YT_LOG_FATAL("Unexpected error encountered during the async step");
+        YT_TLOG_FATAL("Unexpected error encountered during the async step");
     }
 
-    bool wasRestarted = false;
     switch (State_) {
         case EState::NotRunning:
             // We have been stopped during the async step
             // -> cancel the future if there is one.
-            YT_LOG_DEBUG("Looper stop occured during the async part");
+            YT_TLOG_DEBUG("Looper stop occurred during the async part");
 
             if (future) {
                 future.Cancel(TError("Looper stopped"));
@@ -130,12 +130,9 @@ void TAsyncLooper::StartLoop(bool cleanStart, const TGuard& guard)
         case EState::Restarting:
             // We have been restarted during the async step
             // -> convert to running.
-            YT_LOG_DEBUG("Looper restart occured during the async part. Next loop will be a clean start");
+            YT_TLOG_DEBUG("Looper restart occurred during the async part. Next loop will be a clean start");
 
             State_ = EState::Running;
-            wasRestarted = true;
-            // Next step, should it occur
-            // will have cleanStart == true
             break;
 
         case EState::Running:
@@ -156,17 +153,20 @@ void TAsyncLooper::StartLoop(bool cleanStart, const TGuard& guard)
             .Apply(BIND(
                 &TAsyncLooper::AfterStart,
                 MakeWeak(this),
-                cleanStart,
-                wasRestarted,
                 EpochNumber_)
                     .AsyncVia(Invoker_));
+    } else {
+        YT_TLOG_DEBUG("Looper received null future, stopping");
+        State_ = EState::NotRunning;
+        ++EpochNumber_;
     }
 }
 
-void TAsyncLooper::AfterStart(bool cleanStart, bool wasRestarted, ui64 epochNumber, const TError& error)
+void TAsyncLooper::AfterStart(ui64 epochNumber, const TError& error)
 {
     if (!error.IsOK()) {
-        YT_LOG_WARNING(error, "Async start failed unexpectedly. Stopping looper");
+        YT_TLOG_WARNING("Async start failed unexpectedly. Stopping looper")
+            .With(error);
         return;
     }
 
@@ -177,7 +177,7 @@ void TAsyncLooper::AfterStart(bool cleanStart, bool wasRestarted, ui64 epochNumb
 
         switch (State_) {
             case EState::NotRunning:
-                YT_LOG_DEBUG("Looper stop occured during the intermission between async and sync steps");
+                YT_TLOG_DEBUG("Looper stop occurred during the intermission between async and sync steps");
                 // We have been stopped -> bail out.
                 return;
 
@@ -186,7 +186,7 @@ void TAsyncLooper::AfterStart(bool cleanStart, bool wasRestarted, ui64 epochNumb
                     // We got restarted during the intermission.
                     // Caller of |Start| will start the new chain
                     // and we just bail out.
-                    YT_LOG_DEBUG("Looper restart occured during the intermission between async and sync steps");
+                    YT_TLOG_DEBUG("Looper restart occurred during the intermission between async and sync steps");
                     return;
                 }
                 break;
@@ -198,31 +198,32 @@ void TAsyncLooper::AfterStart(bool cleanStart, bool wasRestarted, ui64 epochNumb
         Stage_ = EStage::Busy;
     }
 
-    DoStep(cleanStart, wasRestarted);
+    DoStep();
 }
 
-void TAsyncLooper::DoStep(bool cleanStart, bool wasRestarted)
+void TAsyncLooper::DoStep()
 {
-    auto cleanup = Finally([this, wasRestarted] {
-        FinishStep(wasRestarted);
+    auto cleanup = Finally([this] {
+        FinishStep();
     });
 
     try {
-        SyncFinish_(cleanStart);
+        SyncFinish_();
     } catch (const TFiberCanceledException&) {
-        // We got canceled -- this is normal.
+        Stop();
         throw;
     } catch (const std::exception& ex) {
         if (TError(ex).GetCode() == NYT::EErrorCode::Canceled) {
             throw;
         }
-        YT_LOG_FATAL(ex, "Unexpected error encountered during the sync step");
+        YT_TLOG_FATAL("Unexpected error encountered during the sync step")
+            .With(TError(ex));
     } catch (...) {
-        YT_LOG_FATAL("Unexpected error encountered during the sync step");
+        YT_TLOG_FATAL("Unexpected error encountered during the sync step");
     }
 }
 
-void TAsyncLooper::FinishStep(bool wasRestarted)
+void TAsyncLooper::FinishStep()
 {
     auto guard = Guard(StateLock_);
 
@@ -236,28 +237,23 @@ void TAsyncLooper::FinishStep(bool wasRestarted)
         case EState::NotRunning:
             // We have been stopped
             // -> bail out.
-            YT_LOG_DEBUG("Looper stop occured during the sync step");
+            YT_TLOG_DEBUG("Looper stop occurred during the sync step");
 
             return;
 
         case EState::Restarting:
             // We have been restarted
             // -> start the new chain of loops.
-            YT_LOG_DEBUG("Looper restart occured during the sync step");
+            YT_TLOG_DEBUG("Looper restart occurred during the sync step");
 
             State_ = EState::Running;
-            StartLoop(/*cleanStart*/ true, guard);
+            StartLoop(guard);
             return;
 
         case EState::Running:
             // Nothing has happened
             // -> continue the current chain of loops.
-            // NB(arkady-e1ppa): If |wasRestarted| is |true|
-            // then we have been restarted during the async step
-            // of this loop iteration. In order to be able to
-            // reliable ever restart the async part, we will
-            // enforce clean start of the next iteration.
-            StartLoop(/*cleanStart*/ wasRestarted, guard);
+            StartLoop(guard);
             return;
 
         default:
@@ -275,13 +271,13 @@ void TAsyncLooper::Stop()
         if (State_ == EState::NotRunning) {
             // Already stopping
             // -> bail out.
-            YT_LOG_DEBUG("Trying to stop looper that is already stopped");
+            YT_TLOG_DEBUG("Trying to stop looper that is already stopped");
             return;
         }
 
         State_ = EState::NotRunning;
         ++EpochNumber_;
-        YT_LOG_DEBUG("Stopping the looper");
+        YT_TLOG_DEBUG("Stopping the looper");
 
         // We could be in one of three possible situations (for each stage):
         // 1. EStage::AsyncBusy -- |StartLoop| caller will observe

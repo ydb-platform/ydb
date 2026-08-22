@@ -1,5 +1,3 @@
 #include "status_channel.h"
 
-namespace NKikimr::NOlap::NBackground {
-
-}
+namespace NKikimr::NOlap::NBackground {}

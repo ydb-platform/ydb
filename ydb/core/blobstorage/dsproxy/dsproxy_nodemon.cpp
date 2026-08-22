@@ -30,6 +30,7 @@ TDsProxyNodeMon::TDsProxyNodeMon(TIntrusivePtr<::NMonitoring::TDynamicCounters> 
     GetFastReadResponseTimeInf.Initialize(Group, "event", "getFastReadInf", "latency", percentiles1);
     GetDiscoverResponseTime.Initialize(Group, "event", "getDiscover", "latency", percentiles1);
     GetLowReadResponseTime.Initialize(Group, "event", "getLowRead", "latency", percentiles1);
+    GetBlockResponseTime.Initialize(Group, "event", "getBlock", "latency", percentiles1);
 
     BlockResponseTime.Initialize(Group, "event", "block", "latency", percentiles1);
     DiscoverResponseTime.Initialize(Group, "event", "discover", "latency", percentiles1);
@@ -192,6 +193,15 @@ void TDsProxyNodeMon::CountPatchResponseTime(NPDisk::EDeviceType type, TDuration
     PatchResponseTimeHist[idx]->Collect(durationMsFloat);
 }
 
+void TDsProxyNodeMon::CountGetBlockResponseTime(NPDisk::EDeviceType type, TDuration duration) {
+    const ui32 durationMs = duration.MilliSeconds();
+    const double durationMsFloat = duration.MicroSeconds() / 1000.0;
+    GetBlockResponseTime.Increment(durationMs);
+    const ui32 idx = IdxForType(type);
+    Y_ABORT_UNLESS(IsCountersPresentedForIdx[idx]);
+    GetBlockResponseTimeHist[idx]->Collect(durationMsFloat);
+}
+
 void TDsProxyNodeMon::CheckNodeMonCountersForDeviceType(NPDisk::EDeviceType type) {
     const ui32 idx = IdxForType(type);
 
@@ -214,6 +224,7 @@ void TDsProxyNodeMon::CheckNodeMonCountersForDeviceType(NPDisk::EDeviceType type
         GetFastReadResponseTimeHistInf[idx] = getNamedHisto("getFastReadInfMs");
         GetDiscoverResponseTimeHist[idx] = getNamedHisto("getDiscoverMs");
         GetLowReadResponseTimeHist[idx] = getNamedHisto("getLowReadMs");
+        GetBlockResponseTimeHist[idx] = getNamedHisto("getBlockMs");
         PatchResponseTimeHist[idx] = getNamedHisto("patchMs");
     }
 }

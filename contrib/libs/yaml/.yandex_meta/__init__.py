@@ -13,7 +13,6 @@ def libyaml_post_install(self):
 
 libyaml = GNUMakeNixProject(
     owners=[
-        "borman",
         "g:cpp-contrib",
     ],
     arcdir="contrib/libs/yaml",

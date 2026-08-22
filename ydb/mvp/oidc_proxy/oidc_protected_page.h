@@ -1,31 +1,32 @@
 #pragma once
 
+#include "extension_manager.h"
+#include <ydb/mvp/core/mvp_log.h>
+
 #include <util/generic/string.h>
 #include <util/generic/strbuf.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/http/http.h>
 #include <ydb/library/actors/http/http_proxy.h>
-#include "oidc_settings.h"
 
 namespace NMVP::NOIDC {
 
-class THandlerSessionServiceCheck : public NActors::TActorBootstrapped<THandlerSessionServiceCheck> {
+class THandlerSessionServiceCheck
+    : public NActors::TActorBootstrapped<THandlerSessionServiceCheck>
+    , protected TMvpLogContextProvider {
 protected:
     using TBase = NActors::TActorBootstrapped<THandlerSessionServiceCheck>;
 
     const NActors::TActorId Sender;
-    const NHttp::THttpIncomingRequestPtr Request;
+    NHttp::THttpIncomingRequestPtr Request;
     const NActors::TActorId HttpProxyId;
     const TOpenIdConnectSettings Settings;
-    const TString ProtectedPageUrl;
-    TString RequestedPageScheme;
+    const TCrackedPage ProtectedPage;
+
+    THolder<TExtensionManager> ExtensionManager;
     NHttp::THttpOutgoingResponsePtr StreamResponse;
     NActors::TActorId StreamConnection;
-
-    const static inline TStringBuf IAM_TOKEN_SCHEME = "Bearer ";
-    const static inline TStringBuf IAM_TOKEN_SCHEME_LOWER = "bearer ";
-    const static inline TStringBuf AUTH_HEADER_NAME = "Authorization";
 
 public:
     THandlerSessionServiceCheck(const NActors::TActorId& sender,
@@ -52,25 +53,14 @@ public:
 
 protected:
     virtual void StartOidcProcess(const NActors::TActorContext& ctx) = 0;
+    TDuration GetRequestTimeout() const;
     virtual void ForwardUserRequest(TStringBuf authHeader, bool secure = false);
     virtual bool NeedSendSecureHttpRequest(const NHttp::THttpIncomingResponsePtr& response) const = 0;
-
-    bool CheckRequestedHost();
-    NHttp::THttpOutgoingRequestPtr CreateProxiedRequest(TStringBuf authHeader, bool secure) const;
     void ReplyAndPassAway(NHttp::THttpOutgoingResponsePtr httpResponse);
-
     static bool IsAuthorizedRequest(TStringBuf authHeader);
-    static TString FixReferenceInHtml(TStringBuf html, TStringBuf host, TStringBuf findStr);
-    static TString FixReferenceInHtml(TStringBuf html, TStringBuf host);
 
 private:
-    NHttp::THeadersBuilder ProxyResponseHeaders(const NHttp::THttpIncomingResponsePtr& response);
-    TString ProxyResponseBody(const NHttp::THttpIncomingResponsePtr& response);
-    NHttp::THttpOutgoingResponsePtr CreateProxiedResponse(const NHttp::THttpIncomingResponsePtr& response);
     void SendSecureHttpRequest(const NHttp::THttpIncomingResponsePtr& response);
-    TString GetFixedLocationHeader(TStringBuf location);
-    NHttp::THttpOutgoingResponsePtr CreateResponseForbiddenHost();
-    NHttp::THttpOutgoingResponsePtr CreateResponseForNotExistingResponseFromProtectedResource(const TString& errorMessage);
 };
 
 } // NMVP::NOIDC

@@ -22,37 +22,6 @@ public:
     void Post(TFunction&& f) final;
 };
 
-IExecutor::TPtr CreateDefaultExecutor();
-
-
-class TThreadPoolExecutor : public IAsyncExecutor {
-private:
-    std::shared_ptr<IThreadPool> ThreadPool;
-
-public:
-    TThreadPoolExecutor(std::shared_ptr<IThreadPool> threadPool);
-    TThreadPoolExecutor(size_t threadsCount);
-    ~TThreadPoolExecutor() = default;
-
-    bool IsAsync() const override {
-        return !IsFakeThreadPool;
-    }
-
-    void DoStart() override {
-        if (ThreadsCount) {
-            ThreadPool->Start(ThreadsCount);
-        }
-    }
-
-private:
-    void PostImpl(std::vector<TFunction>&& fs) override;
-    void PostImpl(TFunction&& f) override;
-
-private:
-    bool IsFakeThreadPool = false;
-    size_t ThreadsCount = 0;
-};
-
 class TSerialExecutor : public IAsyncExecutor, public std::enable_shared_from_this<TSerialExecutor> {
 private:
     IAsyncExecutor::TPtr Executor; //!< Wrapped executor that is actually doing the job
@@ -80,8 +49,8 @@ public:
     }
     void DoStart() override {
     }
+    void Stop() override {
+    }
 };
-
-IExecutor::TPtr CreateGenericExecutor();
 
 } // namespace NYdb::NTopic

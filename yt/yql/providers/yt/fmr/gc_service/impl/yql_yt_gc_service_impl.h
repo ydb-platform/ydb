@@ -9,6 +9,7 @@ struct TGcServiceSettings {
     ui64 GroupDeletionRequestMaxBatchSize = 1000;
     ui64 MaxInflightGroupDeletionRequests = 1000000;
     ui64 WorkersNum = 3;
+    ui64 MaxQueueSize = 100;
 };
 
 IFmrGcService::TPtr MakeGcService(

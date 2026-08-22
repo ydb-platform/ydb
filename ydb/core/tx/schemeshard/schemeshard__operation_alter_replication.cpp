@@ -16,7 +16,7 @@ namespace {
 
 struct IStrategy {
     virtual void Check(const TPath::TChecker& checks) const = 0;
-    virtual bool Validate(TProposeResponse& result, const NKikimrSchemeOp::TReplicationDescription& desc) const = 0;
+    virtual bool Validate(TProposeResponse& result, const NKikimrSchemeOp::TReplicationDescription& desc, const TOperationContext& context) const = 0;
 };
 
 struct TReplicationStrategy : public IStrategy {
@@ -24,7 +24,7 @@ struct TReplicationStrategy : public IStrategy {
         checks.IsReplication();
     };
 
-    bool Validate(TProposeResponse&, const NKikimrSchemeOp::TReplicationDescription&) const override {
+    bool Validate(TProposeResponse&, const NKikimrSchemeOp::TReplicationDescription&, const TOperationContext&) const override {
         return true;
     }
 };
@@ -34,7 +34,7 @@ struct TTransferStrategy : public IStrategy {
         checks.IsTransfer();
     };
 
-    bool Validate(TProposeResponse& result, const NKikimrSchemeOp::TReplicationDescription& desc) const override {
+    bool Validate(TProposeResponse& result, const NKikimrSchemeOp::TReplicationDescription& desc, const TOperationContext& context) const override {
         const auto& alter = desc.GetAlterTransfer();
         const auto& batching = desc.GetConfig().GetTransferSpecific().GetBatching();
 
@@ -52,6 +52,13 @@ struct TTransferStrategy : public IStrategy {
             || (batching.HasFlushIntervalMilliSeconds() && batching.GetFlushIntervalMilliSeconds() > TDuration::Hours(24).MilliSeconds())) {
             result.SetError(NKikimrScheme::StatusInvalidParameter, "Flush interval must be less than or equal to 24 hours");
             return false;
+        }
+        if (alter.HasDirectoryPath()) {
+            auto directoryPath = TPath::Resolve(alter.GetDirectoryPath(), context.SS);
+            if (!directoryPath.IsResolved() || directoryPath.IsUnderDeleting() || directoryPath->IsUnderMoving() || directoryPath.IsDeleted()) {
+                result.SetError(NKikimrScheme::StatusNotAvailable, TStringBuilder() << "The transfer destination directory path '" << alter.GetDirectoryPath() << "' not found");
+                return true;
+            }
         }
 
         return true;
@@ -109,6 +116,22 @@ public:
                 ev->Record.MutableConfig()->CopyFrom(alterData->Description.GetConfig());
                 if (alterData->Description.GetState().GetStateCase() != context.SS->Replications.at(pathId)->Description.GetState().GetStateCase()) {
                     ev->Record.MutableSwitchState()->CopyFrom(alterData->Description.GetState());
+                }
+                auto& location = *ev->Record.MutableLocation();
+                location.SetPath(TPath::Init(pathId, context.SS).PathString());
+
+                const auto& attrs = context.SS->PathsById.at(context.SS->RootPathId())->UserAttrs->Attrs;
+                if (auto it = attrs.find("cloud_id"); it != attrs.end()) {
+                    location.SetYcCloudId(it->second);
+                }
+                if (auto it = attrs.find("folder_id"); it != attrs.end()) {
+                    location.SetYcFolderId(it->second);
+                }
+                if (auto it = attrs.find("database_id"); it != attrs.end()) {
+                    location.SetYcResourceId(it->second);
+                }
+                if (auto it = attrs.find(NSchemeShard::ATTR_MONITORING_PROJECT_ID); it != attrs.end()) {
+                    location.SetMonitoringProjectId(it->second);
                 }
 
                 LOG_D(DebugHint() << "Send TEvAlterReplication to controller"
@@ -415,7 +438,7 @@ public:
             return result;
         }
 
-        if (!Strategy->Validate(*result, op)) {
+        if (!Strategy->Validate(*result, op, context)) {
             return result;
         }
 
@@ -495,6 +518,14 @@ public:
             if (op.GetAlterTransfer().HasBatchSizeBytes()) {
                 if (!transferSetter("BatchSize", [&](NKikimrReplication::TReplicationConfig::TTransferSpecific& specific) -> void {
                     specific.MutableBatching()->SetBatchSizeBytes(op.GetAlterTransfer().GetBatchSizeBytes());
+                })) {
+                    return result;
+                }
+            }
+
+            if (op.GetAlterTransfer().HasDirectoryPath()) {
+                if (!transferSetter("DirectoryPath", [&](NKikimrReplication::TReplicationConfig::TTransferSpecific& specific) -> void {
+                    specific.MutableTarget()->SetDirectoryPath(op.GetAlterTransfer().GetDirectoryPath());
                 })) {
                     return result;
                 }

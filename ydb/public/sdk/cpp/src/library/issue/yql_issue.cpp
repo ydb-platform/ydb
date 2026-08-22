@@ -7,6 +7,7 @@
 #include <library/cpp/colorizer/output.h>
 
 #include <util/charset/utf8.h>
+#include <util/stream/str.h>
 #include <util/string/ascii.h>
 #include <util/string/split.h>
 #include <util/string/strip.h>
@@ -79,6 +80,12 @@ void TIssue::PrintTo(IOutputStream& out, bool oneLine) const {
     }
 }
 
+std::string TIssue::ToString(bool oneLine) const {
+    TStringStream out;
+    PrintTo(out, oneLine);
+    return std::move(out.Str().MutRef());
+}
+
 void WalkThroughIssues(const TIssue& topIssue, bool leafOnly, std::function<void(const TIssue&, uint16_t level)> fn, std::function<void(const TIssue&, uint16_t level)> afterChildrenFn) {
     enum class EFnType {
         Main,
@@ -114,6 +121,27 @@ void WalkThroughIssues(const TIssue& topIssue, bool leafOnly, std::function<void
             }
         }
     }
+}
+
+bool WalkThroughIssues(const TIssue& topIssue, bool leafOnly, std::function<bool(const TIssue&, uint16_t level)> fn) {
+    TStack<std::tuple<uint16_t, const TIssue*>> issuesStack;
+    issuesStack.push(std::make_tuple(0, &topIssue));
+    while (!issuesStack.empty()) {
+        auto level = std::get<0>(issuesStack.top());
+        const auto& curIssue = *std::get<1>(issuesStack.top());
+        issuesStack.pop();
+        if (!leafOnly || curIssue.GetSubIssues().empty()) {
+            if (!fn(curIssue, level)) {
+                return false;
+            }
+        }
+        level++;
+        const auto& subIssues = curIssue.GetSubIssues();
+        for (int i = subIssues.size() - 1; i >= 0; i--) {
+            issuesStack.push(std::make_tuple(level, subIssues[i].Get()));
+        }
+    }
+    return true;
 }
 
 namespace {
@@ -154,7 +182,7 @@ void ProgramLinesWithErrors(
     }
 }
 
-} // namspace
+} // namespace
 
 void TIssues::PrintTo(IOutputStream& out, bool oneLine) const
 {
@@ -222,6 +250,12 @@ void TIssues::PrintWithProgramTo(
             out << Endl;
         });
     }
+}
+
+std::string TIssues::ToString(bool oneLine) const {
+    TStringStream out;
+    PrintTo(out, oneLine);
+    return std::move(out.Str().MutRef());
 }
 
 TIssue ExceptionToIssue(const std::exception& e, const TPosition& pos) {

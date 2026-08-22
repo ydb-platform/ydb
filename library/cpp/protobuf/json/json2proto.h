@@ -102,6 +102,11 @@ namespace NProtobufJson {
             return *this;
         }
 
+        TSelf& SetVectorizeObjects(bool vectorizeObjects) {
+            VectorizeObjects = vectorizeObjects;
+            return *this;
+        }
+
         TSelf& SetAllowComments(bool value) {
             AllowComments = value;
             return *this;
@@ -109,6 +114,16 @@ namespace NProtobufJson {
 
         TSelf& SetAllowUnknownFields(bool value) {
             AllowUnknownFields = value;
+            return *this;
+        }
+
+        TSelf& SetAllowFieldNameAliases(bool value) {
+            AllowFieldNameAliases = value;
+            return *this;
+        }
+
+        TSelf& SetAllowUnknownEnumValues(bool value) {
+            AllowUnknownEnumValues = value;
             return *this;
         }
 
@@ -134,7 +149,7 @@ namespace NProtobufJson {
         bool UseJsonEnumValue = false;
 
         /// Transforms will be applied only to string values (== protobuf fields of string / bytes type).
-        TVector<TStringTransformPtr> StringTransforms;
+        TVector<TStringTransformPtr> StringTransforms = {};
 
         /// Cast string json values to protobuf field type
         bool CastFromString = false;
@@ -162,8 +177,14 @@ namespace NProtobufJson {
         /// Append scalars to repeated fields
         bool VectorizeScalars = false;
 
+        bool VectorizeObjects = false;
+
+        bool AllowFieldNameAliases = false;
+
+        bool AllowUnknownEnumValues = false;
+
         /// Custom spliter non array value to repeated fields.
-        TValueVectorizer ValueVectorizer;
+        TValueVectorizer ValueVectorizer = {};
 
         /// Allow js-style comments (both // and /**/)
         bool AllowComments = false;

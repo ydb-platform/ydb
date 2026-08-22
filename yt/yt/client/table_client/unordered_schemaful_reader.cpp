@@ -65,7 +65,7 @@ public:
                     continue;
                 }
 
-                const auto& error = session.ReadyEvent->Get();
+                const auto& error = session.ReadyEvent->GetOrCrash();
                 if (!error.IsOK()) {
                     auto guard = WriterGuard(SpinLock_);
                     ReadyEvent_ = MakePromise<void>(error);
@@ -246,7 +246,7 @@ private:
     void OnCanceled(const TError& error)
     {
         DoGetReadyEvent().TrySet(TError(NYT::EErrorCode::Canceled, "Table reader canceled")
-            << error);
+            .With(error));
         CancelableContext_->Cancel(error);
     }
 };

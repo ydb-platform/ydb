@@ -1,0 +1,15 @@
+/* sort outputs */
+
+use plato;
+
+pragma Engine = "ytflow";
+
+pragma Ytflow.Cluster = "plato";
+pragma Ytflow.PipelinePath = "pipelines/test";
+
+insert into Output
+select
+    key_a,
+    key_b || "_b" as key_b,
+    value as kv_value
+from Input;

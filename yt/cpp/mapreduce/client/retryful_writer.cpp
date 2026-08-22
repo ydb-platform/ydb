@@ -1,6 +1,6 @@
 #include "retryful_writer.h"
 
-#include "retry_heavy_write_request.h"
+#include <yt/cpp/mapreduce/common/trace_context.h>
 
 #include <yt/cpp/mapreduce/http/requests.h>
 
@@ -8,9 +8,6 @@
 #include <yt/cpp/mapreduce/interface/finish_or_die.h>
 
 #include <yt/cpp/mapreduce/interface/logging/yt_log.h>
-
-#include <yt/cpp/mapreduce/http_client/raw_client.h>
-#include <yt/cpp/mapreduce/http_client/raw_requests.h>
 
 #include <util/generic/size_literals.h>
 
@@ -76,6 +73,26 @@ void TRetryfulWriter::DoFinish()
     WriterState_ = Completed;
 }
 
+void TRetryfulWriter::CreateTransaction()
+{
+    NTracing::TCurrentTraceContextGuard guard(TraceContext_->Ptr);
+
+    WriteTransaction_.ConstructInPlace(
+        RawClient_,
+        ClientRetryPolicy_,
+        Context_,
+        ParentTransactionId_,
+        TransactionPinger_->GetChildTxPinger(),
+        TStartTransactionOptions());
+    auto append = Path_.Append_.GetOrElse(false);
+    auto lockMode = (append ? LM_SHARED : LM_EXCLUSIVE);
+    NDetail::RequestWithRetry<void>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [this, &lockMode] (TMutationId& mutationId) {
+            RawClient_->Lock(mutationId, WriteTransaction_->GetId(), this->Path_.Path_, lockMode);
+        });
+}
+
 void TRetryfulWriter::FlushBuffer(bool lastBlock)
 {
     if (!Started_) {
@@ -104,6 +121,8 @@ void TRetryfulWriter::FlushBuffer(bool lastBlock)
 
 void TRetryfulWriter::Send(const TBuffer& buffer)
 {
+    NTracing::TCurrentTraceContextGuard guard(TraceContext_->Ptr);
+
     auto transactionId = (WriteTransaction_ ? WriteTransaction_->GetId() : ParentTransactionId_);
 
     NDetail::RequestWithRetry<void>(
@@ -117,9 +136,9 @@ void TRetryfulWriter::Send(const TBuffer& buffer)
             std::visit([this, &attemptTx, &stream] (const auto& options) -> void {
                 using TType = std::decay_t<decltype(options)>;
                 if constexpr (std::is_same_v<TType, TFileWriterOptions>) {
-                    stream = NDetail::NRawClient::WriteFile(Context_, attemptTx.GetId(), Path_, options);
+                    stream = RawClient_->WriteFile(attemptTx.GetId(), Path_, options);
                 } else if constexpr (std::is_same_v<TType, TTableWriterOptions>) {
-                    stream = NDetail::NRawClient::WriteTable(Context_, attemptTx.GetId(), Path_, Format_, options);
+                    stream = RawClient_->WriteTable(attemptTx.GetId(), Path_, Format_, options);
                 } else {
                     static_assert(TDependentFalse<TType>);
                 }
@@ -159,6 +178,8 @@ void* TRetryfulWriter::SendThread(void* opaque)
 
 void TRetryfulWriter::Abort()
 {
+    NTracing::TCurrentTraceContextGuard guard(TraceContext_->Ptr);
+
     if (Started_) {
         FilledBuffers_.Stop();
         Thread_.Join();

@@ -1,8 +1,13 @@
 #include "schemeshard_impl.h"
+#include "schemeshard__operation_common.h"
+
+#include <ydb/core/base/mon_auth.h>
+#include <ydb/core/tx/schemeshard/schemeshard__monitoring.h_serialized.h>  // for enum ESweepAlert support methods
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/tx/datashard/range_ops.h>
+#include <ydb/core/tx/schemeshard/index/index_build_info.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 
 #include <library/cpp/html/pcdata/pcdata.h>
@@ -10,7 +15,29 @@
 
 #include <util/string/cast.h>
 
-static ui64 TryParseTabletId(TStringBuf tabletIdParam) {
+#include <format>
+
+namespace std {
+
+// Inherit TString* formatters from std::string* ones.
+template <>
+struct std::formatter<TString> : std::formatter<std::string> {
+    auto format(const TString& s, std::format_context& ctx) const {
+        return std::formatter<std::string>::format(s, ctx);
+    }
+};
+template <>
+struct std::formatter<TStringBuf> : std::formatter<std::string_view> {
+    auto format(const TStringBuf& s, std::format_context& ctx) const {
+        return std::formatter<std::string_view>::format(s, ctx);
+    }
+};
+
+}  // namespace std
+
+namespace {
+
+ui64 TryParseTabletId(TStringBuf tabletIdParam) {
     ui64 tabletId = ui64(NKikimr::NSchemeShard::InvalidTabletId);
     if (tabletIdParam.StartsWith("0x")) {
         TryIntFromString<16>(tabletIdParam.substr(2), tabletId);
@@ -19,6 +46,19 @@ static ui64 TryParseTabletId(TStringBuf tabletIdParam) {
     }
     return tabletId;
 }
+
+bool ParseTablePartitionsFormat(const TStringBuf& input, bool* result) {
+    if (input == "shardidx") {
+        *result = true;
+        return true;
+    } else if (input == "position") {
+        *result = false;
+        return true;
+    }
+    return false;
+}
+
+}  // anonymous namespace
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -76,15 +116,24 @@ struct TCgi {
     static const TParam OwnerPathId;
     static const TParam LocalPathId;
     static const TParam IsReadOnlyMode;
-    static const TParam UpdateAccessDatabaseRights;
-    static const TParam UpdateAccessDatabaseRightsDryRun;
-    static const TParam FixAccessDatabaseInheritance;
-    static const TParam FixAccessDatabaseInheritanceDryRun;
+    // Deprecated: connect (ConnectDatabase) right is now always inherited via DefaultInheritanceType.
+    // static const TParam UpdateAccessDatabaseRights;
+    // static const TParam UpdateAccessDatabaseRightsDryRun;
+    // static const TParam FixAccessDatabaseInheritance;
+    // static const TParam FixAccessDatabaseInheritanceDryRun;
     static const TParam Page;
     static const TParam BuildIndexId;
     static const TParam UpdateCoordinatorsConfig;
     static const TParam UpdateCoordinatorsConfigDryRun;
     static const TParam Action;
+    static const TParam TablePartitionsFormat;
+    static const TParam Start;
+    static const TParam Pause;
+    static const TParam Resume;
+    static const TParam Cancel;
+    static const TParam SweepAlert;
+    static const TParam StoragePool;
+    static const TParam ConfirmSamePool;
 
     struct TPages {
         static constexpr TStringBuf MainPage = "Main";
@@ -100,6 +149,10 @@ struct TCgi {
 
     struct TActions {
         static constexpr TStringBuf SplitOneToOne = "SplitOneToOne";
+        static constexpr TStringBuf ForceDropUnsafe = "ForceDropUnsafe";
+        static constexpr TStringBuf TablePartitionsFormatSwitch = "TablePartitionsFormatSwitch";
+        static constexpr TStringBuf TablePartitionsFormatSweep = "TablePartitionsFormatSweep";
+        static constexpr TStringBuf MoveToStoragePool = "MoveToStoragePool";
     };
 };
 
@@ -113,16 +166,56 @@ const TCgi::TParam TCgi::ShardID = TStringBuf("ShardID");
 const TCgi::TParam TCgi::OwnerPathId = TStringBuf("OwnerPathId");
 const TCgi::TParam TCgi::LocalPathId = TStringBuf("LocalPathId");
 const TCgi::TParam TCgi::IsReadOnlyMode = TStringBuf("IsReadOnlyMode");
-const TCgi::TParam TCgi::UpdateAccessDatabaseRights = TStringBuf("UpdateAccessDatabaseRights");
-const TCgi::TParam TCgi::UpdateAccessDatabaseRightsDryRun = TStringBuf("UpdateAccessDatabaseRightsDryRun");
-const TCgi::TParam TCgi::FixAccessDatabaseInheritance = TStringBuf("FixAccessDatabaseInheritance");
-const TCgi::TParam TCgi::FixAccessDatabaseInheritanceDryRun = TStringBuf("FixAccessDatabaseInheritanceDryRun");
+// Deprecated: connect (ConnectDatabase) right is now always inherited via DefaultInheritanceType.
+// const TCgi::TParam TCgi::UpdateAccessDatabaseRights = TStringBuf("UpdateAccessDatabaseRights");
+// const TCgi::TParam TCgi::UpdateAccessDatabaseRightsDryRun = TStringBuf("UpdateAccessDatabaseRightsDryRun");
+// const TCgi::TParam TCgi::FixAccessDatabaseInheritance = TStringBuf("FixAccessDatabaseInheritance");
+// const TCgi::TParam TCgi::FixAccessDatabaseInheritanceDryRun = TStringBuf("FixAccessDatabaseInheritanceDryRun");
 const TCgi::TParam TCgi::Page = TStringBuf("Page");
 const TCgi::TParam TCgi::BuildIndexId = TStringBuf("BuildIndexId");
 const TCgi::TParam TCgi::UpdateCoordinatorsConfig = TStringBuf("UpdateCoordinatorsConfig");
 const TCgi::TParam TCgi::UpdateCoordinatorsConfigDryRun = TStringBuf("UpdateCoordinatorsConfigDryRun");
+const TCgi::TParam TCgi::TablePartitionsFormat = TStringBuf("format");
+const TCgi::TParam TCgi::Start = TStringBuf("Start");
+const TCgi::TParam TCgi::Pause = TStringBuf("Pause");
+const TCgi::TParam TCgi::Resume = TStringBuf("Resume");
+const TCgi::TParam TCgi::Cancel = TStringBuf("Cancel");
+const TCgi::TParam TCgi::SweepAlert = TStringBuf("sweepalert");
 const TCgi::TParam TCgi::Action = TStringBuf("Action");
+const TCgi::TParam TCgi::StoragePool = TStringBuf("StoragePool");
+const TCgi::TParam TCgi::ConfirmSamePool = TStringBuf("ConfirmSamePool");
 
+namespace {
+
+bool IsSchemeShardDevUiMonitoringPage(TStringBuf page) {
+    return page == TCgi::TPages::MainPage
+        || page == TCgi::TPages::TransactionList
+        || page == TCgi::TPages::TransactionInfo
+        || page == TCgi::TPages::PathInfo
+        || page == TCgi::TPages::ShardInfoByTabletId
+        || page == TCgi::TPages::ShardInfoByShardIdx
+        || page == TCgi::TPages::BuildIndexInfo;
+}
+
+bool IsSchemeShardDevUiAdminRequest(const TCgiParameters& cgi, const TActorContext& ctx) {
+    if (cgi.Has(TCgi::Action)) {
+        return true;
+    }
+
+    const TString& page = cgi.Has(TCgi::Page) ? cgi.Get(TCgi::Page) : ToString(TCgi::TPages::MainPage);
+    if (page == TCgi::TPages::AdminPage || page == TCgi::TPages::AdminRequest) {
+        return true;
+    }
+    if (IsSchemeShardDevUiMonitoringPage(page)) {
+        return false;
+    }
+
+    LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+        "SchemeShard DevUI request to unknown page: " << page << ", cgi: " << cgi.Print());
+    return true;
+}
+
+} // namespace
 
 class TUpdateCoordinatorsConfigActor : public TActorBootstrapped<TUpdateCoordinatorsConfigActor> {
 public:
@@ -329,6 +422,222 @@ private:
     TActorId PipeCache;
 };
 
+class TMonitoringForceDropUnsafe : public TActorBootstrapped<TMonitoringForceDropUnsafe> {
+private:
+    NMon::TEvRemoteHttpInfo::TPtr Ev;
+    ui64 SchemeShardId;
+    TString Path;
+
+    ui64 TxId = 0;
+    TActorId PipeCache;
+
+public:
+    TMonitoringForceDropUnsafe(NMon::TEvRemoteHttpInfo::TPtr&& ev, ui64 schemeShardId, const TString& path)
+        : Ev(std::move(ev))
+        , SchemeShardId(schemeShardId)
+        , Path(path)
+    {}
+
+    void Bootstrap() {
+        Send(MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId);
+        Become(&TThis::StateWaitTxId);
+    }
+
+    STFUNC(StateWaitTxId) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, Handle);
+        }
+    }
+
+    void Handle(TEvTxUserProxy::TEvAllocateTxIdResult::TPtr& ev) {
+        TxId = ev->Get()->TxId;
+
+        auto propose = [&]() {
+            auto result = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(TxId, SchemeShardId);
+
+            auto& modifyScheme = *result->Record.AddTransaction();
+            modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpForceDropUnsafe);
+            modifyScheme.SetInternal(true);
+            modifyScheme.SetWorkingDir(TString(ExtractParent(Path)));
+
+            auto& drop = *modifyScheme.MutableDrop();
+            drop.SetName(TString(ExtractBase(Path)));
+
+            return result;
+        }();
+
+        PipeCache = MakePipePerNodeCacheID(EPipePerNodeCache::Leader);
+        Send(PipeCache, new TEvPipeCache::TEvForward(propose.Release(), SchemeShardId, /* subscribe */ true));
+
+        Become(&TThis::StateWaitProposed);
+    }
+
+    STFUNC(StateWaitProposed) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvSchemeShard::TEvModifySchemeTransactionResult, Handle);
+            hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
+        }
+    }
+
+    void Handle(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev) {
+        TString text;
+        try {
+            NProtobufJson::Proto2Json(ev->Get()->Record, text, {
+                .EnumMode = NProtobufJson::TProto2JsonConfig::EnumName,
+                .FieldNameMode = NProtobufJson::TProto2JsonConfig::FieldNameSnakeCaseDense,
+                .MapAsObject = true,
+            });
+        } catch (const std::exception& e) {
+            Send(Ev->Sender, new NMon::TEvRemoteBinaryInfoRes(
+                "HTTP/1.1 500 Internal Error\r\nConnection: Close\r\n\r\nUnexpected failure to serialize the response\r\n"));
+            PassAway();
+        }
+
+        Send(Ev->Sender, new NMon::TEvRemoteJsonInfoRes(text));
+        PassAway();
+    }
+
+    void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&) {
+        Send(Ev->Sender, new NMon::TEvRemoteBinaryInfoRes(
+            TStringBuilder() << "HTTP/1.1 502 Bad Gateway\r\nConnection: Close\r\n\r\nSchemeShard tablet disconnected\r\n"));
+        PassAway();
+    }
+
+    void PassAway() override {
+        if (PipeCache) {
+            Send(PipeCache, new TEvPipeCache::TEvUnlink(0));
+        }
+        TActorBootstrapped::PassAway();
+    }
+};
+
+// Moves a shard's channels to other storage pool: notify Hive first, then (only on ack) ask the
+// schemeshard to persist the new bindings via TEvMoveShardToStoragePool. Hive-first keeps a
+// failed move retryable — nothing is persisted, so the recorded bindings still name the old pool.
+class TMonitoringMoveShardToStoragePool : public TActorBootstrapped<TMonitoringMoveShardToStoragePool> {
+private:
+    NMon::TEvRemoteHttpInfo::TPtr Ev;
+    TActorId SchemeShard;
+    TTabletId Hive;  // the Hive the request is currently addressed to; updated on a redirect
+    TShardIdx ShardIdx;
+    TChannelsBindings NewBindings;
+    // Keep the request record so it can be re-sent to another Hive on INVALID_OWNER. The
+    // TEvCreateTablet event itself is consumed by each send, so it is rebuilt from this record.
+    NKikimrHive::TEvCreateTablet CreateRecord;
+    bool Redirected = false;
+
+    TActorId PipeCache;
+
+public:
+    TMonitoringMoveShardToStoragePool(NMon::TEvRemoteHttpInfo::TPtr&& ev, TActorId schemeShard, TTabletId hive,
+            TShardIdx shardIdx, TChannelsBindings newBindings, THolder<TEvHive::TEvCreateTablet> createEv)
+        : Ev(std::move(ev))
+        , SchemeShard(schemeShard)
+        , Hive(hive)
+        , ShardIdx(shardIdx)
+        , NewBindings(std::move(newBindings))
+        , CreateRecord(createEv->Record)
+    {}
+
+    void SendCreateTablet() {
+        auto ev = MakeHolder<TEvHive::TEvCreateTablet>();
+        ev->Record = CreateRecord;
+        Send(PipeCache, new TEvPipeCache::TEvForward(ev.Release(), ui64(Hive), /* subscribe */ true));
+    }
+
+    void Bootstrap() {
+        PipeCache = MakePipePerNodeCacheID(EPipePerNodeCache::Leader);
+        SendCreateTablet();
+        Become(&TThis::StateWait);
+    }
+
+    STFUNC(StateWait) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvHive::TEvCreateTabletReply, Handle);
+            hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
+        }
+    }
+
+    void SendError(ui32 httpCode, const TString& reason, const TString& details) {
+        // Nothing has been persisted, so the action stays retryable.
+        Send(Ev->Sender, new NMon::TEvRemoteBinaryInfoRes(TStringBuilder()
+            << "HTTP/1.1 " << httpCode << " " << reason << "\r\nConnection: Close\r\n\r\n"
+            << details << "\r\n"));
+    }
+
+    void Handle(TEvHive::TEvCreateTabletReply::TPtr& ev) {
+        const auto& record = ev->Get()->Record;
+        const NKikimrProto::EReplyStatus status = record.GetStatus();
+
+        // The tablet lives on a different Hive: re-send the request there. Bindings are persisted
+        // only after the owning Hive acks with OK/ALREADY, so a redirect must not persist anything.
+        // A tablet is owned by exactly one Hive (the root Hive or a tenant Hive), so a correct Hive
+        // redirects at most once; a second INVALID_OWNER means something is wrong, so bail out.
+        if (status == NKikimrProto::INVALID_OWNER) {
+            const TTabletId redirectTo = TTabletId(record.GetForwardRequest().GetHiveTabletId());
+            if (!redirectTo || Redirected) {
+                SendError(502, "Bad Gateway", TStringBuilder()
+                    << "Hive redirected the request (INVALID_OWNER) but no valid target Hive was"
+                       " provided or it redirected more than once; nothing was changed");
+                PassAway();
+                return;
+            }
+            Redirected = true;
+            // Stop subscribing to the old Hive before addressing the new one.
+            Send(PipeCache, new TEvPipeCache::TEvUnlink(ui64(Hive)));
+            Hive = redirectTo;
+            SendCreateTablet();
+            return;  // keep waiting for the reply from the new Hive
+        }
+
+        // Any status other than OK/ALREADY means Hive did not apply the move (e.g. BLOCKED or
+        // ERROR). Report it and persist nothing, so the recorded bindings still name the old pool.
+        if (status != NKikimrProto::OK && status != NKikimrProto::ALREADY) {
+            SendError(409, "Conflict", TStringBuilder()
+                << "Hive rejected the move: status " << NKikimrProto::EReplyStatus_Name(status)
+                << ", error reason " << NKikimrHive::EErrorReason_Name(record.GetErrorReason())
+                << "; nothing was changed");
+            PassAway();
+            return;
+        }
+
+        TString text;
+        try {
+            NProtobufJson::Proto2Json(record, text, {
+                .EnumMode = NProtobufJson::TProto2JsonConfig::EnumName,
+                .FieldNameMode = NProtobufJson::TProto2JsonConfig::FieldNameSnakeCaseDense,
+                .MapAsObject = true,
+            });
+        } catch (const std::exception& e) {
+            Send(Ev->Sender, new NMon::TEvRemoteBinaryInfoRes("HTTP/1.1 500 Internal Error\r\nConnection: Close\r\n\r\nUnexpected failure to serialize the response\r\n"));
+            PassAway();
+            return;
+        }
+
+        // Hive acked; hand the sender and serialized reply to the schemeshard to persist the
+        // bindings. That tx answers the HTTP request, so success is reported only once durable.
+        Send(SchemeShard, new TEvPrivate::TEvMoveShardToStoragePool(ShardIdx, std::move(NewBindings), Ev->Sender, std::move(text)));
+        PassAway();
+    }
+
+    void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
+        if (ev->Get()->TabletId != ui64(Hive)) {
+            // Stale problem from a Hive we already redirected away from; ignore.
+            return;
+        }
+        // Hive not reached: nothing persisted, so the action is retryable.
+        Send(Ev->Sender, new NMon::TEvRemoteBinaryInfoRes(TStringBuilder() << "HTTP/1.1 502 Bad Gateway\r\nConnection: Close\r\n\r\nHive tablet disconnected\r\n"));
+        PassAway();
+    }
+
+    void PassAway() override {
+        if (PipeCache) {
+            Send(PipeCache, new TEvPipeCache::TEvUnlink(0));
+        }
+        TActorBootstrapped::PassAway();
+    }
+};
+
 struct TSchemeShard::TTxMonitoring : public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
     NMon::TEvRemoteHttpInfo::TPtr Ev;
     TStringStream Answer;
@@ -347,8 +656,13 @@ public:
 
         const TCgiParameters& cgi = Ev->Get()->Cgi();
 
+        LOG_DEBUG(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, TStringBuilder() << "TTxMonitoring.Execute: " << cgi.Print());
+
         if (cgi.Has(TCgi::Action)) {
-            HandleAction(cgi.Get(TCgi::Action), cgi, ctx);
+            NIceDb::TNiceDb db(txc.DB);
+            db.NoMoreReadsForTx();
+
+            HandleAction(cgi.Get(TCgi::Action), db, ctx);
             return true;
         }
 
@@ -405,6 +719,7 @@ public:
         else if (page == TCgi::TPages::AdminPage)
         {
             OutputAdminPage(Answer);
+            OutputTablePartitionsFormatSweepSection(Answer);
         }
         else if (page == TCgi::TPages::BuildIndexInfo)
         {
@@ -448,6 +763,9 @@ private:
             Self->IsReadOnlyMode = value;
         }
 
+        // Deprecated: connect (ConnectDatabase) right is now always inherited via DefaultInheritanceType.
+        // These admin actions (UpdateAccessDatabaseRights / FixAccessDatabaseInheritance) are no longer available.
+        /*
         if (cgi.Has(TCgi::UpdateAccessDatabaseRights)) {
             TString rowDryRunStr = cgi.Get(TCgi::UpdateAccessDatabaseRightsDryRun);
             auto valueDryRun = FromStringWithDefault<ui64>(rowDryRunStr, ui64(1));
@@ -464,6 +782,7 @@ private:
             str.clear();
 
             OutputAdminPage(templateAnswer);
+            OutputTablePartitionsFormatSweepSection(templateAnswer);
 
             auto func = [templateAnswer] (const TMap<TPathId, TSet<TString>>& done) -> NActors::IEventBase* {
                 TStringStream str = templateAnswer;
@@ -515,6 +834,7 @@ private:
             str.clear();
 
             OutputAdminPage(templateAnswer);
+            OutputTablePartitionsFormatSweepSection(templateAnswer);
 
             auto func = [templateAnswer] (const TMap<TPathId, TSet<TString>>& done) -> NActors::IEventBase* {
                 TStringStream str = templateAnswer;
@@ -549,6 +869,7 @@ private:
 
             return;
         }
+        */
 
         if (cgi.Has(TCgi::UpdateCoordinatorsConfig)) {
             TString rawDryRunStr = cgi.Get(TCgi::UpdateCoordinatorsConfigDryRun);
@@ -589,6 +910,7 @@ private:
 
             str << "</pre>";
             OutputAdminPage(str);
+            OutputTablePartitionsFormatSweepSection(str);
 
             auto callback = [sender = Ev->Sender, str = std::move(str)] (const TString& log, const TActorContext& ctx) mutable {
                 str << "<pre>" << log << "</pre>";
@@ -600,13 +922,240 @@ private:
             ctx.Register(new TUpdateCoordinatorsConfigActor(std::move(items), std::move(callback), valueDryRun));
             return;
         }
-
-        OutputAdminPage(str);
     }
 
-    TString SubmitButton(const TStringBuf value) const {
+    TString AttrDisabled(bool enabled) const {
+        return (enabled ? "" : "disabled='disabled'");
+    };
+
+    TString SubmitButton(const TStringBuf value, bool enabled = true) const {
         return TStringBuilder()
-            << "<div class=\"col-md-4\"><input class=\"btn btn-default\" type=\"submit\" value=\"" << value << "\"></div>" << Endl;
+            << "<div class='col-md-4'><input class='btn btn-default' type='submit' value='" << value << "'" << AttrDisabled(enabled) << "></div>" << Endl;
+    }
+
+    TStringBuf TabletDevUiAppPath() const {
+        return AppData()->FeatureFlags.GetEnableTabletDevUiSecurePath()
+            ? TABLET_DEV_UI_SECURE_MON_RELATIVE_PATH
+            : TStringBuf("app");
+    }
+
+    void ActionForceDropUnsafe(const TPathId pathId, TStringStream& str) const {
+        // Duplicate params in query string in addition to form-urlencoded body
+        // to give user clear knowledge what parameters were.
+        // Params in the body are the actually used ones, query parameters will be ignored
+        // (see ydb/core/tablet/tablet_monitoring_proxy.cpp).
+        const TStringBuf appPath = TabletDevUiAppPath();
+        const TString actionUrl = TStringBuilder() << appPath << "?" << TCgi::TabletID.AsCgiParam(Self->TabletID())
+            << "&" << TCgi::Action.AsCgiParam(TCgi::TActions::ForceDropUnsafe)
+            << "&" << TCgi::OwnerPathId.AsCgiParam(pathId.OwnerId)
+            << "&" << TCgi::LocalPathId.AsCgiParam(pathId.LocalPathId)
+        ;
+        str << "<form action='" << actionUrl << "' method='POST' id='tblMonSSFrm' name='tblMonSSFrm' class='form-group' accept-charset='utf-8'>" << Endl;
+        str << TCgi::TabletID.AsHiddenInput(Self->TabletID());
+        str << TCgi::Action.AsHiddenInput(TCgi::TActions::ForceDropUnsafe);
+        str << TCgi::OwnerPathId.AsHiddenInput(pathId.OwnerId);
+        str << TCgi::LocalPathId.AsHiddenInput(pathId.LocalPathId);
+        str << R"(<div style='display: flex; align-items: center;'>)" << SubmitButton("ForceDropUnsafe") << "</div>";
+        str << "</form>" << Endl;
+    }
+
+    void ActionSwitchTablePartitionsFormat(const TPathId pathId, TStringStream& str) const {
+        auto* tableInfoPtr = Self->Tables.FindPtr(pathId);
+        if (!tableInfoPtr) {
+            return;
+        }
+
+        const bool switchEnabled = AppData()->FeatureFlags.GetEnableTablePartitionsFormatShardIdx();
+
+        const bool currentShardIdxFormat = (*tableInfoPtr)->PartitionsInShardIdxFormat;
+        const TStringBuf format = currentShardIdxFormat ? "position" : "shardidx";
+
+        // Duplicate params in query string in addition to form-urlencoded body
+        // to give user clear knowledge what parameters were.
+        // Params in the body are the actually used ones, query parameters will be ignored
+        // (see ydb/core/tablet/tablet_monitoring_proxy.cpp, TTabletMonitoringProxyActor::Handle(NMon::TEvHttpInfo::TPtr))
+        const TStringBuf appPath = TabletDevUiAppPath();
+        const TString actionUrl = TStringBuilder() << appPath << "?" << TCgi::TabletID.AsCgiParam(Self->TabletID())
+            << "&" << TCgi::Action.AsCgiParam(TCgi::TActions::TablePartitionsFormatSwitch)
+            << "&" << TCgi::OwnerPathId.AsCgiParam(pathId.OwnerId)
+            << "&" << TCgi::LocalPathId.AsCgiParam(pathId.LocalPathId)
+            << "&" << TCgi::TablePartitionsFormat.AsCgiParam(format)
+        ;
+
+        str << "Current table partitions storage format: <code>" << (currentShardIdxFormat ? "shardidx" : "position") << "</code><br>" << Endl;
+
+        str << std::format(R"(
+                <div class='container col-md-12'>
+                    <form method='POST' class='form-horizontal col-md-12' action='{0}' {7}>
+                        <input type='hidden' id='TabletID' name='{1}' value='{2}' />
+                        <input type='hidden' id='Action' name='{3}' value='{4}' />
+                        <input type='hidden' id='format' name='{5}' value='{6}'/>
+                        <div class='form-group col-md-12'>
+                            <input class='btn btn-primary btn-lg' type='submit' {7}>
+                        </div>
+                    </form>
+                </div>
+            )",
+            /* {0} */ actionUrl,
+            /* {1} */ TCgi::TabletID.Name,
+            /* {2} */ Self->TabletID(),
+            /* {3} */ TCgi::Action.Name,
+            /* {4} */ TCgi::TActions::TablePartitionsFormatSwitch,
+            /* {5} */ TCgi::TablePartitionsFormat.Name,
+            /* {6} */ format,
+            /* {7} */ AttrDisabled(switchEnabled)
+        );
+    }
+
+    void OutputTablePartitionsFormatSweepSection(TStringStream& str) const {
+        const auto& sweep = Self->TablePartitionsFormatSweep;
+
+        const bool switchEnabled = AppData()->FeatureFlags.GetEnableTablePartitionsFormatShardIdx()
+            && (Self->Tables.size() > 0)
+        ;
+
+        bool startEnabled = switchEnabled && (sweep.Status == TSchemeShard::TTablePartitionsFormatSweepState::EStatus::Idle);
+        bool pauseEnabled = switchEnabled && (sweep.Status == TSchemeShard::TTablePartitionsFormatSweepState::EStatus::Running);
+        bool resumeEnabled = switchEnabled && (sweep.Status == TSchemeShard::TTablePartitionsFormatSweepState::EStatus::Paused);
+        bool cancelEnabled = switchEnabled && (sweep.Status != TSchemeShard::TTablePartitionsFormatSweepState::EStatus::Idle);
+
+        // Duplicate params in query string in addition to form-urlencoded body
+        // to give user clear knowledge what parameters were.
+        // Params in the body are the actually used ones, query parameters will be ignored
+        // (see ydb/core/tablet/tablet_monitoring_proxy.cpp, TTabletMonitoringProxyActor::Handle(NMon::TEvHttpInfo::TPtr)).
+        const TStringBuf appPath = TabletDevUiAppPath();
+        const TString actionUrl = TStringBuilder() << appPath
+            << "?" << TCgi::TabletID.AsCgiParam(Self->TabletID())
+            << "&" << TCgi::Page.AsCgiParam(TCgi::TPages::AdminPage)
+            << "&" << TCgi::Action.AsCgiParam(TCgi::TActions::TablePartitionsFormatSweep)
+        ;
+
+        str << "<legend>Table partitions storage format sweep:</legend>" << Endl;
+
+        const TCgiParameters& params = Ev->Get()->Cgi();
+
+        // Alert
+        if (params.Has(TCgi::SweepAlert)) {
+            ui8 num;
+            if (TryFromString<ui8>(params.Get(TCgi::SweepAlert), num) && num < GetEnumItemsCount<ESweepAlert>()) {
+                str << "<div class='alert alert-info' role='alert'>" << ESweepAlert(num) << "</div>" << Endl;
+            }
+        }
+
+        // Current status
+        str << "<div class='container col-md-12'>" << Endl;
+        str << "<h4>Status</h4>" << Endl;
+        str << "Currently: <code>" << sweep.Status << "</code>";
+        if (sweep.Status != TSchemeShard::TTablePartitionsFormatSweepState::EStatus::Idle) {
+            str << ", switch to format: <code>" << (sweep.TargetIsShardIdx ? "shardidx" : "position") << "</code>" << Endl;
+        }
+        str << "<br>" << Endl;
+        str << "Tables:"
+            << " " << Self->TabletCounters->Simple()[COUNTER_FORMAT_POSITION_TABLE_COUNT].Get() << " in <code>position</code>"
+            << ", " << Self->TabletCounters->Simple()[COUNTER_FORMAT_SHARDIDX_TABLE_COUNT].Get() << " in <code>shardidx</code>"
+            << ", total " << Self->Tables.size()
+            << "<br>" << Endl;
+        str << "</div>" << Endl;
+
+        // Progress
+        if (sweep.Status != TSchemeShard::TTablePartitionsFormatSweepState::EStatus::Idle) {
+            str << std::format(R"(
+                    <div class='container col-md-12'>
+                        <h4>Progress</h4>
+                        <div class='col-md-2'>Done: {}</div>
+                        <div class='col-md-2'>Skipped: {}</div>
+                        <div class='col-md-2'>Queued: {}</div>
+                    </div>
+                )",
+                sweep.Done,
+                sweep.Skipped,
+                sweep.Queue.size()
+            );
+        }
+
+        // Start block
+        str << std::format(R"(
+                <div class='container col-md-12'>
+                    <h4>Start sweep</h4>
+                    <form method='POST' class='form-horizontal col-md-12' action='{0}' {9}>
+                        <input type='hidden' id='TabletID' name='{1}' value='{2}' />
+                        <input type='hidden' id='Page' name='{3}' value='{4}' />
+                        <input type='hidden' id='Action' name='{5}' value='{6}' />
+                        <input type='hidden' id='Start' name='{8}' value='1'/>
+                        <div class='form-inline'>
+                            <input class='form-control' type='radio' id='shardidx' name='{7}' value='shardidx' aria-describedby='start-help' checked {9}>
+                            <label class='control-label' for='shardidx'>shardidx</label>
+                            <input class='form-control' type='radio' id='position' name='{7}' value='position' aria-describedby='start-help' {9}>
+                            <label class='control-label' for='position'>position</label>
+                            <span id='start-help' class='help-block'>Tables will be converted to a selected partitions storage format.</span>
+                        </div>
+                        <div class='form-group col-md-12'>
+                            <input class='btn btn-primary btn-lg' type='submit' value='{8}' {9}>
+                        </div>
+                    </form>
+                </div>
+            )",
+            /* {0} */ actionUrl,
+            /* {1} */ TCgi::TabletID.Name,
+            /* {2} */ Self->TabletID(),
+            /* {3} */ TCgi::Page.Name,
+            /* {4} */ TCgi::TPages::AdminPage,
+            /* {5} */ TCgi::Action.Name,
+            /* {6} */ TCgi::TActions::TablePartitionsFormatSweep,
+            /* {7} */ TCgi::TablePartitionsFormat.Name,
+            /* {8} */ TCgi::Start.Name,
+            /* {9} */ AttrDisabled(startEnabled)
+        );
+
+        // Control block
+        str << std::format(R"(
+                <div class='container col-md-12'>
+                    <h4>Controls</h4>
+                    <div class='btn-toolbar'>
+                        <div class='btn-group'>
+                            <form method='POST' action='{0}' {8}>
+                                <input type='hidden' id='TabletID' name='{1}' value='{2}' />
+                                <input type='hidden' id='Page' name='{3}' value='{4}' />
+                                <input type='hidden' id='Action' name='{5}' value='{6}' />
+                                <input type='hidden' id='Pause' name='{7}' value='1'/>
+                                <input class='btn btn-default' type='submit' value='{7}' {8}/>
+                            </form>
+                        </div>
+                        <div class='btn-group'>
+                            <form method='POST' action='{0}' {10}>
+                                <input type='hidden' id='TabletID' name='{1}' value='{2}' />
+                                <input type='hidden' id='Page' name='{3}' value='{4}' />
+                                <input type='hidden' id='Action' name='{5}' value='{6}' />
+                                <input type='hidden' id='Resume' name='{9}' value='1'/>
+                                <input class='btn btn-default' type='submit' value='{9}' {10}/>
+                            </form>
+                        </div>
+                        <div class='btn-group'>
+                            <form method='POST' action='{0}' {12}>
+                                <input type='hidden' id='TabletID' name='{1}' value='{2}' />
+                                <input type='hidden' id='Page' name='{3}' value='{4}' />
+                                <input type='hidden' id='Action' name='{5}' value='{6}' />
+                                <input type='hidden' id='Cancel' name='{11}' value='1'/>
+                                <input class='btn btn-default' type='submit' value='{11}' {12}/>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            )",
+            /* {0} */ actionUrl,
+            /* {1} */ TCgi::TabletID.Name,
+            /* {2} */ Self->TabletID(),
+            /* {3} */ TCgi::Page.Name,
+            /* {4} */ TCgi::TPages::AdminPage,
+            /* {5} */ TCgi::Action.Name,
+            /* {6} */ TCgi::TActions::TablePartitionsFormatSweep,
+            /* {7} */ TCgi::Pause.Name,
+            /* {8} */ AttrDisabled(pauseEnabled),
+            /* {9} */ TCgi::Resume.Name,
+            /* {10} */ AttrDisabled(resumeEnabled),
+            /* {11} */ TCgi::Cancel.Name,
+            /* {12} */ AttrDisabled(cancelEnabled)
+        );
     }
 
     void OutputAdminPage(TStringStream& str) const {
@@ -621,6 +1170,9 @@ private:
             str << "</div>";
             str << "</form>" << Endl;
         }
+        // Deprecated: connect (ConnectDatabase) right is now always inherited via DefaultInheritanceType.
+        // These admin sections (UpdateAccessDatabaseRights / FixAccessDatabaseInheritance) are no longer shown.
+        /*
         {
             str << "<form method=\"GET\" id=\"tblMonSSFrm\" name=\"tblMonSSFrm\" class=\"form-group\">" << Endl;
             str << "<legend> Execute upgrade DB's ACL, grant ACCESS to all existed users: </legend>";
@@ -645,6 +1197,7 @@ private:
             str << "</div>";
             str << "</form>" << Endl;
         }
+        */
         {
             str << "<form method=\"GET\" id=\"tblMonSSFrmUpdateCoordinatorsConfig\" name=\"tblMonSSFrmUpdateCoordinatorsConfig\" class=\"form-group\">" << Endl;
             str << "<legend> Send configuration update to all coordinators: </legend>";
@@ -664,8 +1217,9 @@ private:
             TAG(TH3) {str << "SchemeShard main page:";}
 
             {
+                const TStringBuf appPath = TabletDevUiAppPath();
                 str << "<legend>";
-                str << "<a href='app?"
+                str << "<a href='" << appPath << "?"
                     << TCgi::TabletID.AsCgiParam(Self->TabletID())
                     << "&" << TCgi::Page.AsCgiParam(TCgi::TPages::AdminPage)
                     << "'> Administration settings </a>";
@@ -809,7 +1363,7 @@ private:
                 }
                 return;
             }
-            const auto& info = *indexInfoPtr->Get();
+            const auto& info = *indexInfoPtr->get();
             TAG(TH4) {str << "Fields";}
             PRE () {
                 str << "BuildInfoId: " << info.Id << Endl
@@ -818,9 +1372,10 @@ private:
                     << "CancelRequested: " << (info.CancelRequested ? "YES" : "NO") << Endl
 
                     << "State: " << info.State << Endl
+                    << "SubState: " << info.SubState << Endl
                     << "KMeans: " << info.KMeans.DebugString() << Endl
                     << "Sample: " << info.Sample.DebugString() << Endl
-                    << "IsBroken: " << info.IsBroken << Endl
+                    << "IsBroken: " << (info.IsBroken ? "YES" : "NO") << Endl
                     << "Issue: " << info.GetIssue() << Endl
 
                     << "Shards.size: " << info.Shards.size() << Endl
@@ -864,6 +1419,10 @@ private:
                     << "UnlockTxStatus: " << NKikimrScheme::EStatus_Name(info.UnlockTxStatus) << Endl
                     << "UnlockTxDone: " << (info.UnlockTxDone ? "DONE" : "not done") << Endl
 
+                    << "DropColumnsTxId: " << info.DropColumnsTxId << Endl
+                    << "DropColumnsTxStatus: " << NKikimrScheme::EStatus_Name(info.DropColumnsTxStatus) << Endl
+                    << "DropColumnsTxDone: " << (info.DropColumnsTxDone ? "DONE" : "not done") << Endl
+
                     << "SnapshotStep: " << info.SnapshotStep << Endl
                     << "SnapshotTxId: " << info.SnapshotTxId << Endl;
 
@@ -876,7 +1435,7 @@ private:
 
             auto getKeyTypes = [&](TPathId pathId) {
                 TVector<NScheme::TTypeInfo> keyTypes;
-                
+
                 auto tableInfo = Self->Tables.FindPtr(pathId);
                 if (!tableInfo) {
                     return keyTypes;
@@ -907,7 +1466,7 @@ private:
                     }
                     for (auto item : info.Shards) {
                         TShardIdx idx = item.first;
-                        const TIndexBuildInfo::TShardStatus& status = item.second;
+                        const TIndexBuildShardStatus& status = item.second;
                         TABLER() {
                             TABLED() {
                                 str << idx;
@@ -1008,7 +1567,7 @@ private:
 
     void OutputTxInfoPage(TOperationId operationId, TStringStream& str) const {
         HTML(str) {
-            TAG(TH3) {str << "Transaction " << operationId;}
+            TAG(TH3) {str << "Operation " << operationId;}
 
             auto txInfo = Self->FindTx(operationId);
             if (!txInfo) {
@@ -1017,7 +1576,10 @@ private:
                 }
             } else {
                 const TTxState txState = *txInfo;
-                TAG(TH3) {str << "Shards in progress : " << txState.ShardsInProgress.size() << "\n";}
+
+                OutputOperationPartInfo(operationId, str);
+
+                TAG(TH3) {str << "Shards in progress : " << txState.ShardsInProgress.size();}
                 TABLE_SORTABLE_CLASS("table") {
                     TABLEHEAD() {
                         TABLER() {
@@ -1026,7 +1588,7 @@ private:
                             TABLEH() {str << "TabletId";}
                         }
                     }
-                    for (auto shardIdx :  txState.ShardsInProgress) {
+                    for (auto shardIdx : txState.ShardsInProgress) {
                         TABLER() {
                             TABLED() {
                                 str << "<a href='../tablets/app?" << TCgi::TabletID.AsCgiParam(Self->TabletID())
@@ -1089,7 +1651,106 @@ private:
                     ++channelId;
                 }
             }
+
+            ActionMoveToStoragePool(shard, str);
         }
+    }
+
+    void ActionMoveToStoragePool(const TShardInfo& shard, TStringStream& str) const {
+        if (shard.TabletID == InvalidTabletId) {
+            return;
+        }
+        // A shard with no channel bindings can't be rebound to a new pool. On a tenant
+        // schemeshard this is expected for the tenant's system tablets: their storage pool
+        // bindings are kept only on the root schemeshard, so point the operator there. On
+        // the root schemeshard itself empty bindings are anomalous, so say so plainly
+        // rather than blaming a tenant that isn't involved.
+        if (shard.BindedChannels.empty()) {
+            if (Self->IsDomainSchemeShard) {
+                str << R"(
+                    <div class='container col-md-12'>
+                        <p>This is the <b>root schemeshard</b>, and this shard has no channel bindings
+                        recorded &mdash; that is unexpected. The tablet cannot be moved to another storage
+                        pool without bindings; investigate the shard's state before moving it.</p>
+                    </div>
+                )";
+                return;
+            }
+            const TStringBuf appPath = TabletDevUiAppPath();
+            const TString rootShardUrl = TStringBuilder() << appPath
+                << "?" << TCgi::TabletID.AsCgiParam(ui64(Self->ParentDomainId.OwnerId))
+                << "&" << TCgi::Page.AsCgiParam(TCgi::TPages::ShardInfoByTabletId)
+                << "&" << TCgi::ShardID.AsCgiParam(ui64(shard.TabletID))
+            ;
+            str << std::format(R"(
+                <div class='container col-md-12'>
+                    <p>This is a <b>tenant schemeshard</b>, and this shard has no channel bindings here:
+                    it is a tenant system tablet whose storage pool bindings are kept only on the root
+                    schemeshard. Move it to another storage pool from the
+                    <a href='{0}'>shard-info page on the root schemeshard</a>.</p>
+                </div>
+            )",
+                /* {0} */ rootShardUrl
+            );
+            return;
+        }
+        const TPathId subdomainPathId = Self->ResolvePathIdForDomain(shard.PathId);
+        auto itSubDomain = Self->SubDomains.find(subdomainPathId);
+        if (itSubDomain == Self->SubDomains.end()) {
+            return;
+        }
+        const auto& pools = itSubDomain->second->EffectiveStoragePools();
+        if (pools.empty()) {
+            return;
+        }
+
+        TStringBuilder options;
+        for (const auto& pool : pools) {
+            // Pool name/kind are not user-controlled, but escape them anyway as basic HTML hygiene
+            // so values with special characters render literally.
+            const TString name = EncodeHtmlPcdata(pool.GetName());
+            const TString kind = EncodeHtmlPcdata(pool.GetKind());
+            options << std::format("<option value='{0}'>{0} ({1})</option>", name, kind);
+        }
+
+        // Duplicate params in query string in addition to form-urlencoded body
+        // to give user clear knowledge what parameters were.
+        // Params in the body are the actually used ones, query parameters will be ignored
+        // (see ydb/core/tablet/tablet_monitoring_proxy.cpp, TTabletMonitoringProxyActor::Handle(NMon::TEvHttpInfo::TPtr))
+        const TStringBuf appPath = TabletDevUiAppPath();
+        const TString actionUrl = TStringBuilder() << appPath << "?" << TCgi::TabletID.AsCgiParam(Self->TabletID())
+            << "&" << TCgi::Action.AsCgiParam(TCgi::TActions::MoveToStoragePool)
+            << "&" << TCgi::ShardID.AsCgiParam(shard.TabletID)
+        ;
+
+        str << std::format(R"(
+                <div class='container col-md-12'>
+                    <form method='POST' class='form-horizontal col-md-12' action='{0}'>
+                        <input type='hidden' id='TabletID' name='{1}' value='{2}' />
+                        <input type='hidden' id='Action' name='{3}' value='{4}' />
+                        <input type='hidden' id='ShardID' name='{5}' value='{6}' />
+                        <div class='form-group col-md-12'>
+                            <label for='{7}'>Target storage pool:</label>
+                            <select id='{7}' name='{7}'>{8}</select>
+                            <input class='btn btn-primary btn-lg' type='submit' value='Move tablet to storage pool' />
+                        </div>
+                        <div class='form-group col-md-12'>
+                            <label><input type='checkbox' name='{9}' value='1' /> Move even if already on this pool (re-notify Hive)</label>
+                        </div>
+                    </form>
+                </div>
+            )",
+            /* {0} */ actionUrl,
+            /* {1} */ TCgi::TabletID.Name,
+            /* {2} */ Self->TabletID(),
+            /* {3} */ TCgi::Action.Name,
+            /* {4} */ TCgi::TActions::MoveToStoragePool,
+            /* {5} */ TCgi::ShardID.Name,
+            /* {6} */ ui64(shard.TabletID),
+            /* {7} */ TCgi::StoragePool.Name,
+            /* {8} */ TString(options),
+            /* {9} */ TCgi::ConfirmSamePool.Name
+        );
     }
 
     TString LinkToPathInfo(TPathId pathId) const {
@@ -1137,7 +1798,7 @@ private:
             auto localACL = TSecurityObject(path->Owner, path->ACL, path->IsContainer());
             auto effectiveACL = TSecurityObject(path->Owner, path->CachedEffectiveACL.GetForSelf(), path->IsContainer());
 
-            TAG(TH4) {str << "Path info " << pathId << "</a>";}
+            TAG(TH3) {str << "Path info " << pathId;}
             PRE () {
                 str << "Path: " << Self->PathToString(path) << Endl
                     << "PathId: " << pathId << Endl
@@ -1161,11 +1822,11 @@ private:
                     << "User attrs alter version  " << path->UserAttrs->AlterVersion << Endl
                     << "User attrs count          " << path->UserAttrs->Attrs.size() << Endl
                     << "DbRefCount count          " << path->DbRefCount << Endl
-                    << "ShardsInside count        " << path->GetShardsInside() << Endl;
+                    << "Shards inside count       " << path->GetShardsInside() << Endl;
             }
 
             if (path->UserAttrs->Attrs) {
-                TAG(TH4) {str << "UserAttrs for pathId " << pathId << "</a>";}
+                TAG(TH4) {str << "UserAttrs : " << path->UserAttrs->Attrs.size();}
                 TABLE_SORTABLE_CLASS("UserAttrs") {
                     TABLEHEAD() {
                         TABLER() {
@@ -1183,7 +1844,7 @@ private:
             }
 
             if (path->GetChildren().size()) {
-                TAG(TH4) {str << "Childrens for pathId " << pathId << "</a>";}
+                TAG(TH4) {str << "Childrens : " << path->GetChildren().size();}
                 TABLE_SORTABLE_CLASS("UserAttrs") {
                     TABLEHEAD() {
                         TABLER() {
@@ -1208,39 +1869,40 @@ private:
                 }
             }
 
-            auto shards = Self->CollectAllShards({pathId});
+            const auto& shards = Self->CollectAllShards({pathId});
 
-            TAG(TH4) {str << "Shards for pathId " << pathId << "</a>";}
-            TABLE_SORTABLE_CLASS("ShardForPath") {
-                TABLEHEAD() {
-                    TABLER() {
-                        TABLEH() {str << "ShardIdx";}
-                        TABLEH() {str << "TableId";}
-                        TABLEH() {str << "IsActive";}
+            if (!shards.empty()) {
+                TAG(TH4) {str << "Shards inside : " << shards.size();}
+                TABLE_SORTABLE_CLASS("ShardForPath") {
+                    TABLEHEAD() {
+                        TABLER() {
+                            TABLEH() {str << "ShardIdx";}
+                            TABLEH() {str << "TableId";}
+                            TABLEH() {str << "IsActive";}
+                        }
                     }
-                }
 
-                TPath path_ = TPath::Init(pathId, Self);
+                    TPath path_ = TPath::Init(pathId, Self);
 
-                for (const auto& shardIdx: shards) {
-                    TABLER() {
-                        TABLED() {
-                            str << LinkToShardInfo(shardIdx);
-                        }
-                        TABLED() {
-                            str << LinkToTablet(shardIdx);
-                        }
-                        TABLED() {
-                            if (path->Dropped() || !path->IsTable() || !Self->Tables.contains(pathId)) {
-                                str << "path is dropped or is not a table";
-                            } else {
-                                const TTableInfo::TPtr table = Self->Tables.at(pathId);
-                                str << (table->GetShard2PartitionIdx().contains(shardIdx) ? "Active" : "Inactive");
+                    for (const auto& shardIdx: shards) {
+                        TABLER() {
+                            TABLED() {
+                                str << LinkToShardInfo(shardIdx);
+                            }
+                            TABLED() {
+                                str << LinkToTablet(shardIdx);
+                            }
+                            TABLED() {
+                                if (path->Dropped() || !path->IsTable() || !Self->Tables.contains(pathId)) {
+                                    str << "path is dropped or is not a table";
+                                } else {
+                                    const TTableInfo::TPtr table = Self->Tables.at(pathId);
+                                    str << (table->GetPartitionStore().contains(shardIdx) ? "Active" : "Inactive");
+                                }
                             }
                         }
                     }
                 }
-                str << "\n";
             }
         }
     }
@@ -1249,7 +1911,7 @@ private:
         HTML(str) {
             if (!Self->Operations.contains(opId.GetTxId())) {
                 TAG(TH4) {
-                    str << "No operations for tx id " << opId << "</a>";
+                    str << "No operations for tx id " << opId;
                 }
                 return;
             }
@@ -1258,148 +1920,177 @@ private:
 
             if (ui64(opId.GetSubTxId()) >= operation->Parts.size()) {
                 TAG(TH4) {
-                    str << "No part operations for operation id " << opId << "</a>";
+                    str << "No suboperations for operation " << opId;
                 }
                 return;
             }
 
             if (!Self->TxInFlight.contains(opId)) {
                 TAG(TH4) {
-                    str << "No txInfly record for operation id " << opId << "</a>";
+                    str << "No txState for operation " << opId;
                 }
                 return;
             }
 
             const TTxState& txState = Self->TxInFlight.at(opId);
 
-
-            TAG(TH4) {str << "TxState info " << opId << "</a>";}
+            TAG(TH4) {str << "Suboperation " << opId << " TxState info";}
             PRE () {
-                str << "TxType: " << TTxState::TypeName(txState.TxType) << Endl
+                str << "StartTime: " << txState.StartTime << " (" << (::Now() - txState.StartTime) << " ago)" << Endl
+                    << Endl
+                    << "TxType: " << TTxState::TypeName(txState.TxType) << Endl
                     << "TargetPathId: " << LinkToPathInfo(txState.TargetPathId) << Endl
                     << "SourcePathId: " << LinkToPathInfo(txState.SourcePathId) << Endl
                     << "State: " << TTxState::StateName(txState.State) << Endl
                     << "MinStep: " << txState.MinStep << Endl
-                    << "ReadyForNotifications: " << txState.ReadyForNotifications << Endl
-                    << "DataTotalSize: " << txState.DataTotalSize << Endl
-                    << "TxShardsListFinalized: " << txState.TxShardsListFinalized << Endl
-                    << "SchemeOpSeqNo: " << txState.SchemeOpSeqNo.Generation << ":" << txState.SchemeOpSeqNo.Round << Endl
-                    << "StartTime: " << txState.StartTime << Endl
-                    << "Shards count: " << txState.Shards.size() << Endl
-                    << "Shards in progress count: " << txState.ShardsInProgress.size() << Endl
-                    << "SchemeChangeNotificationReceived count: " << txState.SchemeChangeNotificationReceived.size() << Endl
-                    << "SplitDescription: " << (txState.SplitDescription ? txState.SplitDescription->ShortDebugString() : "") << Endl
-                    << "Dependent operations count: " << operation->DependentOperations.size() << Endl
-                    << "Wait operations count: " << operation->WaitOperations.size() << Endl;
+                    << "PlanStep: " << txState.PlanStep << Endl
+                    << "NeedUpdateObject: " << txState.NeedUpdateObject << Endl
+                    << "NeedSyncHive: " << txState.NeedSyncHive << Endl
+                    << Endl
+                    << "Progress:" << Endl
+                    << "- ReadyForNotifications: " << txState.ReadyForNotifications << Endl
+                    << "- TxShardsListFinalized: " << txState.TxShardsListFinalized << Endl
+                    << "- SchemeOpSeqNo: " << txState.SchemeOpSeqNo.Generation << ":" << txState.SchemeOpSeqNo.Round << Endl
+                    << "- Shards count: " << txState.Shards.size() << Endl
+                    << "- Shards in progress count: " << txState.ShardsInProgress.size() << Endl
+                    << "- SchemeChangeNotificationReceived count: " << txState.SchemeChangeNotificationReceived.size() << Endl
+                    << Endl
+                    << "Dependency:" << Endl
+                    << "- Transactions we-waiting-for count: " << operation->WaitOperations.size() << Endl
+                    << "- Transactions waiting-for-us count: " << operation->DependentOperations.size() << Endl
+                    << Endl
+                    << "Split/Merge:" << Endl
+                    << "- SplitDescription: " << (txState.SplitDescription ? txState.SplitDescription->ShortDebugString() : "") << Endl
+                    << Endl
+                    << "CDC:" << Endl
+                    << "- CdcPathId: " << LinkToPathInfo(txState.CdcPathId) << Endl
+                    << "- TargetPathTargetState: " << txState.TargetPathTargetState << Endl
+                    << Endl
+                    << "Backup/Restore:" << Endl
+                    << "- Cancel: " << txState.Cancel << Endl
+                    << "- DataTotalSize: " << txState.DataTotalSize << Endl
+                    << "- ShardStatuses count: " << txState.ShardStatuses.size() << Endl
+                ;
             }
 
-            TAG(TH4) {str << "Dependent operations for txId " << opId.GetTxId() << "</a>";}
-            TABLE_SORTABLE_CLASS("DependentTxId") {
-                TABLEHEAD() {
-                    TABLER() {
-                        TABLEH() {str << "TxId";}
+            if (!operation->WaitOperations.empty()) {
+                TAG(TH4) {str << "Transactions we waiting for : " << operation->WaitOperations.size();}
+                TABLE_SORTABLE_CLASS("WaitTxId") {
+                    TABLEHEAD() {
+                        TABLER() {
+                            TABLEH() {str << "TxId";}
+                        }
                     }
-                }
-                for (auto& txId: operation->DependentOperations) {
-                    TABLER() {
-                        TABLED() { str << txId; }
-                    }
-                }
-            }
-
-            TAG(TH4) {str << "Wait operations for txId " << opId.GetTxId() << "</a>";}
-            TABLE_SORTABLE_CLASS("WaitTxId") {
-                TABLEHEAD() {
-                    TABLER() {
-                        TABLEH() {str << "TxId";}
-                    }
-                }
-                for (auto& txId: operation->WaitOperations) {
-                    TABLER() {
-                        TABLED() { str << txId; }
-                    }
-                }
-            }
-
-
-            TAG(TH4) {str << "Shards for opId " << opId << "</a>";}
-            TABLE_SORTABLE_CLASS("Shards") {
-                TABLEHEAD() {
-                    TABLER() {
-                        TABLEH() {str << "ShardId";}
-                        TABLEH() {str << "TabletType";}
-                        TABLEH() {str << "Operation";}
-                        TABLEH() {str << "RangeEnd";}
-                    }
-                }
-                ui32 maxItems = 100;
-                for (auto& item: txState.Shards) {
-                    if (0 == maxItems) { break; }
-                    --maxItems;
-                    TABLER() {
-                        TABLED() { str << item.Idx; }
-                        TABLED() { str << TTabletTypes::TypeToStr(item.TabletType); }
-                        TABLED() { str << TTxState::StateName(item.Operation); }
-                        TABLED() { str << item.RangeEnd; }
+                    for (auto& txId: operation->WaitOperations) {
+                        TABLER() {
+                            TABLED() { str << txId; }
+                        }
                     }
                 }
             }
 
-            TAG(TH4) {str << "Shards in progress for opId " << opId << "</a>";}
-            TABLE_SORTABLE_CLASS("Shards") {
-                TABLEHEAD() {
-                    TABLER() {
-                        TABLEH() {str << "ShardId";}
+            if (!operation->DependentOperations.empty()) {
+                TAG(TH4) {str << "Transactions waiting for us : " << operation->DependentOperations.size();}
+                TABLE_SORTABLE_CLASS("DependentTxId") {
+                    TABLEHEAD() {
+                        TABLER() {
+                            TABLEH() {str << "TxId";}
+                        }
                     }
-                }
-                ui32 maxItems = 100;
-                for (auto& shardId: txState.ShardsInProgress) {
-                    if (0 == maxItems) { break; }
-                    --maxItems;
-                    TABLER() {
-                        TABLED() { str << shardId; }
-                    }
-                }
-            }
-
-            TAG(TH4) {str << "SchemeChangeNotificationReceived for opId " << opId << "</a>";}
-            TABLE_SORTABLE_CLASS("SchemeChangeNotificationReceived") {
-                TABLEHEAD() {
-                    TABLER() {
-                        TABLEH() {str << "ShardId";}
-                    }
-                }
-                ui32 maxItems = 100;
-                for (auto& item: txState.SchemeChangeNotificationReceived) {
-                    if (0 == maxItems) { break; }
-                    --maxItems;
-                    TABLER() {
-                        TABLED() { str << item.first; }
+                    for (auto& txId: operation->DependentOperations) {
+                        TABLER() {
+                            TABLED() { str << txId; }
+                        }
                     }
                 }
             }
 
-            TAG(TH4) {str << "ShardStatuses for opId " << opId << "</a>";}
-            TABLE_SORTABLE_CLASS("ShardStatuses") {
-                TABLEHEAD() {
-                    TABLER() {
-                        TABLEH() {str << "ShardId";}
-                        TABLEH() {str << "Success";}
-                        TABLEH() {str << "Error";}
-                        TABLEH() {str << "BytesProcessed";}
-                        TABLEH() {str << "RowsProcessed";}
+            if (!txState.Shards.empty()) {
+                TAG(TH4) {str << "Shards : " << txState.Shards.size();}
+                TABLE_SORTABLE_CLASS("Shards") {
+                    TABLEHEAD() {
+                        TABLER() {
+                            TABLEH() {str << "ShardId";}
+                            TABLEH() {str << "TabletType";}
+                            TABLEH() {str << "Operation";}
+                            TABLEH() {str << "RangeEnd";}
+                        }
+                    }
+                    ui32 maxItems = 100;
+                    for (auto& item: txState.Shards) {
+                        if (0 == maxItems) { break; }
+                        --maxItems;
+                        TABLER() {
+                            TABLED() { str << item.Idx; }
+                            TABLED() { str << TTabletTypes::TypeToStr(item.TabletType); }
+                            TABLED() { str << TTxState::StateName(item.Operation); }
+                            TABLED() { str << item.RangeEnd; }
+                        }
                     }
                 }
-                ui32 maxItems = 10;
-                for (auto& item: txState.ShardStatuses) {
-                    if (0 == maxItems) { break; }
-                    --maxItems;
-                    TABLER() {
-                        TABLED() { str << item.first; }
-                        TABLED() { str << item.second.Success; }
-                        TABLED() { str << item.second.Error; }
-                        TABLED() { str << item.second.BytesProcessed; }
-                        TABLED() { str << item.second.RowsProcessed; }
+            }
+
+            if (!txState.ShardsInProgress.empty()) {
+                TAG(TH4) {str << "Shards in progress : " << txState.ShardsInProgress.size();}
+                TABLE_SORTABLE_CLASS("Shards") {
+                    TABLEHEAD() {
+                        TABLER() {
+                            TABLEH() {str << "ShardId";}
+                        }
+                    }
+                    ui32 maxItems = 100;
+                    for (auto& shardId: txState.ShardsInProgress) {
+                        if (0 == maxItems) { break; }
+                        --maxItems;
+                        TABLER() {
+                            TABLED() { str << shardId; }
+                        }
+                    }
+                }
+            }
+
+            if (!txState.SchemeChangeNotificationReceived.empty()) {
+                TAG(TH4) {str << "SchemeChangeNotificationReceived : " << txState.SchemeChangeNotificationReceived.size();}
+                TABLE_SORTABLE_CLASS("SchemeChangeNotificationReceived") {
+                    TABLEHEAD() {
+                        TABLER() {
+                            TABLEH() {str << "ShardId";}
+                        }
+                    }
+                    ui32 maxItems = 100;
+                    for (auto& item: txState.SchemeChangeNotificationReceived) {
+                        if (0 == maxItems) { break; }
+                        --maxItems;
+                        TABLER() {
+                            TABLED() { str << item.first; }
+                        }
+                    }
+                }
+            }
+
+            if (!txState.ShardStatuses.empty()) {
+                TAG(TH4) {str << "ShardStatuses : " << txState.ShardStatuses.size();}
+                TABLE_SORTABLE_CLASS("ShardStatuses") {
+                    TABLEHEAD() {
+                        TABLER() {
+                            TABLEH() {str << "ShardId";}
+                            TABLEH() {str << "Success";}
+                            TABLEH() {str << "Error";}
+                            TABLEH() {str << "BytesProcessed";}
+                            TABLEH() {str << "RowsProcessed";}
+                        }
+                    }
+                    ui32 maxItems = 10;
+                    for (auto& item: txState.ShardStatuses) {
+                        if (0 == maxItems) { break; }
+                        --maxItems;
+                        TABLER() {
+                            TABLED() { str << item.first; }
+                            TABLED() { str << item.second.Success; }
+                            TABLED() { str << item.second.Error; }
+                            TABLED() { str << item.second.BytesProcessed; }
+                            TABLED() { str << item.second.RowsProcessed; }
+                        }
                     }
                 }
             }
@@ -1416,6 +2107,7 @@ private:
             }
 
             TOperation::TPtr operation = Self->Operations.at(txId);
+            TAG(TH4) {str << "Suboperations : " << operation->Parts.size();}
             for (ui32 partId = 0; partId < operation->Parts.size(); ++partId) {
                 OutputOperationPartInfo(TOperationId(txId, partId), str);
             }
@@ -1425,9 +2117,7 @@ private:
     void OutputPathInfoPage(TPathId pathId, TStringStream& str) {
         HTML(str) {
             if (!Self->PathsById.contains(pathId)) {
-                TAG(TH4) {
-                    str << "No path item for tablet " << pathId << "</a>";
-                }
+                TAG(TH4) {str << "No path item for pathId " << pathId;}
                 return;
             }
 
@@ -1436,10 +2126,17 @@ private:
             auto& path = Self->PathsById.at(pathId);
 
             if (Self->Operations.contains(path->LastTxId)) {
+                TAG(TH3) {str << "Active transaction " << path->LastTxId;}
                 OutputOperationInfo(path->LastTxId, str);
             }
 
             //add path specific object
+
+            TAG(TH3) {str << "Admin actions:";}
+            ActionForceDropUnsafe(pathId, str);
+            if (path->IsTable()) {
+                ActionSwitchTablePartitionsFormat(pathId, str);
+            }
         }
     }
     void OutputShardInfoPageByShardIdx(TShardIdx shardIdx, TStringStream& str) const {
@@ -1488,18 +2185,46 @@ private:
 private:
     void SendBadRequest(const TString& details, const TActorContext& ctx) {
         ctx.Send(Ev->Sender, new NMon::TEvRemoteBinaryInfoRes(
-            TStringBuilder() << "HTTP/1.1 400 Bad Request\r\nConnection: Close\r\n\r\n" << details << "\r\n"));
+            TStringBuilder() << "HTTP/1.1 400 Bad Request\r\nConnection: Close\r\n\r\n" << details << "\r\n"
+        ));
+    }
+
+    void SendRedirect(const TString& location, const TActorContext& ctx) {
+        ctx.Send(Ev->Sender, new NMon::TEvRemoteBinaryInfoRes(
+            TStringBuilder() << "HTTP/1.1 303 See Other\r\nLocation: " << location << "\r\n\r\n"
+        ));
+    }
+
+    void SendOk(const TString& details, const TActorContext& ctx) {
+        ctx.Send(Ev->Sender, new NMon::TEvRemoteBinaryInfoRes(
+            TStringBuilder() << "HTTP/1.1 200 OK\r\nConnection: Close\r\n\r\n" << details << "\r\n"
+        ));
     }
 
 private:
-    void HandleAction(const TString& action, const TCgiParameters& cgi, const TActorContext& ctx) {
+    void HandleAction(const TString& action, NIceDb::TNiceDb& db, const TActorContext& ctx) {
         if (Ev->Get()->GetMethod() != HTTP_METHOD_POST) {
             SendBadRequest("Action requires a POST method", ctx);
             return;
         }
 
+        TCgiParameters params;
+        {
+            const auto& request = *Ev->Get();
+            if (request.ExtendedQuery) {
+                for (const auto& i : request.ExtendedQuery->GetPostParams()) {
+                    params.emplace(i.GetKey(), i.GetValue());
+                }
+                for (const auto& i : request.ExtendedQuery->GetQueryParams()) {
+                    params.emplace(i.GetKey(), i.GetValue());
+                }
+            } else {
+                params = request.Cgi();
+            }
+        }
+
         if (action == TCgi::TActions::SplitOneToOne) {
-            TTabletId tabletId = TTabletId(TryParseTabletId(cgi.Get(TCgi::ShardID)));
+            TTabletId tabletId = TTabletId(TryParseTabletId(params.Get(TCgi::ShardID)));
             TShardIdx shardIdx = Self->GetShardIdx(tabletId);
             if (!shardIdx) {
                 SendBadRequest("Cannot find the specified shard", ctx);
@@ -1518,12 +2243,289 @@ private:
             }
 
             ctx.Register(new TMonitoringShardSplitOneToOne(std::move(Ev), Self->TabletID(), pathId, tabletId));
-            return;
-        }
 
-        SendBadRequest("Action not supported", ctx);
+        } else if (action == TCgi::TActions::ForceDropUnsafe) {
+            const TPathId pathId(
+                FromStringWithDefault<ui64>(params.Get(TCgi::OwnerPathId), InvalidOwnerId),
+                FromStringWithDefault<ui64>(params.Get(TCgi::LocalPathId), InvalidLocalPathId)
+            );
+
+            const auto path = TPath::Init(pathId, Self);
+            if (!path) {
+                SendBadRequest(TStringBuilder() << "Cannot find path with PathId " << pathId, ctx);
+                return;
+            }
+
+            ctx.Register(new TMonitoringForceDropUnsafe(std::move(Ev), Self->TabletID(), path.PathString()));
+
+        } else if (action == TCgi::TActions::MoveToStoragePool) {
+            const TTabletId tabletId = TTabletId(TryParseTabletId(params.Get(TCgi::ShardID)));
+            const TShardIdx shardIdx = Self->GetShardIdx(tabletId);
+            if (!shardIdx) {
+                SendBadRequest("Cannot find the specified shard", ctx);
+                return;
+            }
+            auto* info = Self->ShardInfos.FindPtr(shardIdx);
+            if (!info) {
+                SendBadRequest("Cannot find the specified shard info", ctx);
+                return;
+            }
+            if (info->TabletID == InvalidTabletId) {
+                SendBadRequest("Shard has no running tablet to move", ctx);
+                return;
+            }
+            // Reject if the shard is owned by an in-flight schema operation. CurrentTxId
+            // is set when an op starts but not reset on completion, so a bare
+            // CurrentTxId != InvalidTxId check would wrongly block long-idle shards;
+            // keying on the op being still active also lets idle system tablets be moved.
+            if (info->CurrentTxId != InvalidTxId && Self->Operations.contains(info->CurrentTxId)) {
+                SendBadRequest(
+                    TStringBuilder() << "Shard is busy with an in-flight operation " << info->CurrentTxId,
+                    ctx
+                );
+                return;
+            }
+            // A shard with no channel bindings can't be rebound: rebinding from empty
+            // would just persist and ship empty bindings to Hive. On a tenant schemeshard
+            // this is the expected shape of the tenant's system tablets (their bindings
+            // live only on the root schemeshard); on the root schemeshard it is anomalous.
+            if (info->BindedChannels.empty()) {
+                SendBadRequest(
+                    Self->IsDomainSchemeShard
+                        ? "Shard has no channel bindings; this is unexpected on the root schemeshard. "
+                          "Cannot move a tablet without bindings."
+                        : "Shard has no channel bindings on this tenant schemeshard; it is a tenant system "
+                          "tablet whose storage pool bindings are kept only on the root schemeshard. "
+                          "Move it from the root schemeshard instead.",
+                    ctx
+                );
+                return;
+            }
+
+            const TPathId subdomainPathId = Self->ResolvePathIdForDomain(info->PathId);
+            auto itSubDomain = Self->SubDomains.find(subdomainPathId);
+            if (itSubDomain == Self->SubDomains.end()) {
+                SendBadRequest(TStringBuilder() << "Cannot resolve subdomain for path " << info->PathId, ctx);
+                return;
+            }
+            const auto& pools = itSubDomain->second->EffectiveStoragePools();
+
+            const TString targetPoolName = params.Get(TCgi::StoragePool);
+            if (!targetPoolName) {
+                SendBadRequest("StoragePool parameter is required", ctx);
+                return;
+            }
+            const TStoragePool* targetPool = nullptr;
+            for (const auto& pool : pools) {
+                if (pool.GetName() == targetPoolName) {
+                    targetPool = &pool;
+                    break;
+                }
+            }
+            if (!targetPool) {
+                SendBadRequest(
+                    TStringBuilder() << "Storage pool '" << targetPoolName << "' is not registered for the shard's subdomain",
+                    ctx
+                );
+                return;
+            }
+
+            // Already on the target pool: normally a completed move (bindings are recorded only
+            // after a Hive ack), so no-op. The confirmation box forces a re-notify anyway (e.g. to
+            // reconcile a Hive that lost the assignment).
+            const bool alreadyOnTargetPool = AllOf(info->BindedChannels, [&](const auto& bind) {
+                return bind.GetStoragePoolName() == targetPool->GetName();
+            });
+            const bool confirmSamePool = params.Get(TCgi::ConfirmSamePool) == "1";
+            if (alreadyOnTargetPool && !confirmSamePool) {
+                SendOk(
+                    TStringBuilder() << "Shard is already on storage pool '" << targetPoolName
+                        << "', nothing to do. Tick the confirmation box to re-notify Hive anyway.",
+                    ctx
+                );
+                return;
+            }
+
+            // No persist here: compute new bindings and pre-build the Hive event. Persist runs only
+            // after Hive acks (in the actor's flow), keeping a failed move retryable.
+            TChannelsBindings newBindings = info->BindedChannels;
+            for (auto& bind : newBindings) {
+                bind.SetStoragePoolName(targetPool->GetName());
+                bind.SetStoragePoolKind(targetPool->GetKind());
+            }
+
+            TPathElement::TPtr path = Self->PathsById.at(info->PathId);
+            // CreateEvCreateTablet copies the current (old-pool) bindings; override with the new ones.
+            THolder<TEvHive::TEvCreateTablet> createEv = CreateEvCreateTablet(path, shardIdx, Self);
+            createEv->Record.ClearBindedChannels();
+            for (const auto& bind : newBindings) {
+                *createEv->Record.AddBindedChannels() = bind;
+            }
+            const TTabletId hive = Self->ResolveHive(shardIdx);
+
+            ctx.Register(new TMonitoringMoveShardToStoragePool(
+                std::move(Ev), Self->SelfId(), hive, shardIdx, std::move(newBindings), std::move(createEv)
+            ));
+
+        } else if (action == TCgi::TActions::TablePartitionsFormatSwitch) {
+            const bool switchEnabled = AppData()->FeatureFlags.GetEnableTablePartitionsFormatShardIdx();
+            if (!switchEnabled) {
+                SendBadRequest("Format switching is disabled", ctx);
+                return;
+            }
+
+            const TPathId pathId(
+                FromStringWithDefault<ui64>(params.Get(TCgi::OwnerPathId), InvalidOwnerId),
+                FromStringWithDefault<ui64>(params.Get(TCgi::LocalPathId), InvalidLocalPathId)
+            );
+
+            const auto path = TPath::Init(pathId, Self);
+            if (!path) {
+                SendBadRequest(TStringBuilder() << "Cannot find path with PathId " << pathId, ctx);
+                return;
+            }
+            if (!Self->Tables.FindPtr(pathId)) {
+                SendBadRequest(TStringBuilder() << "PathId " << pathId << " is not a table", ctx);
+                return;
+            }
+
+            const TString input = params.Get(TCgi::TablePartitionsFormat);
+            bool formatShardIdx = false;
+            if (ParseTablePartitionsFormat(input, &formatShardIdx)) {
+                Self->Execute(Self->CreateTxTablePartitionsFormatSwitch(std::move(Ev), pathId, formatShardIdx), ctx);
+            } else {
+                SendBadRequest(
+                    TStringBuilder() << "Invalid target '" << input << "', expected 'position' or 'shardidx'",
+                    ctx
+                );
+            }
+
+        } else if (action == TCgi::TActions::TablePartitionsFormatSweep) {
+            ESweepAlert sweepAlert = ESweepAlert::NONE;
+
+            const bool switchEnabled = AppData()->FeatureFlags.GetEnableTablePartitionsFormatShardIdx();
+            if (switchEnabled) {
+                const auto& sweep = Self->TablePartitionsFormatSweep;
+
+                if (params.Has(TCgi::Start)) {
+                    if (sweep.Status == TSchemeShard::TTablePartitionsFormatSweepState::EStatus::Idle) {
+                        const TString input = params.Get(TCgi::TablePartitionsFormat);
+                        bool formatShardIdx = false;
+                        if (ParseTablePartitionsFormat(input, &formatShardIdx)) {
+                            Self->StartTablePartitionsFormatSweep(db, formatShardIdx);
+                            sweepAlert = ESweepAlert::START_OK;
+                        } else {
+                            sweepAlert = ESweepAlert::START_ERROR_1;
+                        }
+                    } else {
+                        sweepAlert = ESweepAlert::START_ERROR_2;
+                    }
+
+                } else if (params.Has(TCgi::Pause)) {
+                    if (sweep.Status == TSchemeShard::TTablePartitionsFormatSweepState::EStatus::Running) {
+                        Self->PauseTablePartitionsFormatSweep(db);
+                        sweepAlert = ESweepAlert::PAUSE_OK;
+                    } else {
+                        sweepAlert = ESweepAlert::PAUSE_ERROR;
+                    }
+
+                } else if (params.Has(TCgi::Resume)) {
+                    if (sweep.Status == TSchemeShard::TTablePartitionsFormatSweepState::EStatus::Paused) {
+                        Self->ResumeTablePartitionsFormatSweep(db);
+                        sweepAlert = ESweepAlert::RESUME_OK;
+                    } else {
+                        sweepAlert = ESweepAlert::RESUME_ERROR;
+                    }
+
+                } else if (params.Has(TCgi::Cancel)) {
+                    if (sweep.Status != TSchemeShard::TTablePartitionsFormatSweepState::EStatus::Idle) {
+                        Self->CancelTablePartitionsFormatSweep(db);
+                        sweepAlert = ESweepAlert::CANCEL_OK;
+                    } else {
+                        sweepAlert = ESweepAlert::CANCEL_ERROR;
+                    }
+                }
+                // else: return current status
+
+            } else {
+                sweepAlert = ESweepAlert::ERROR_DISABLED;
+            }
+
+            // make redirect with location relative to the original request url (path)
+            const TStringBuf appPath = TabletDevUiAppPath();
+            TStringBuilder location;
+            location << appPath
+                << "?" << TCgi::TabletID.AsCgiParam(Self->TabletID())
+                << "&" << TCgi::Page.AsCgiParam(TCgi::TPages::AdminPage)
+            ;
+            if (sweepAlert != ESweepAlert::NONE) {
+                // output an underlying number, not an associated string value
+                location << "&" << TCgi::SweepAlert.AsCgiParam(ToString(ui8(sweepAlert)));
+            }
+            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxMonitoring.Execute: redirect to " << location);
+            SendRedirect(location, ctx);
+
+        } else {
+            SendBadRequest("Action not supported", ctx);
+        }
     }
 };
+
+// Persists a shard's new channel bindings once Hive has acked the move, then answers the HTTP
+// request from Complete() — so success is reported only after the binding is durable.
+struct TSchemeShard::TTxMoveShardToStoragePool : public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
+    TEvPrivate::TEvMoveShardToStoragePool::TPtr Ev;
+    bool Persisted = false;
+
+    TTxMoveShardToStoragePool(TSchemeShard* self, TEvPrivate::TEvMoveShardToStoragePool::TPtr& ev)
+        : TBase(self)
+        , Ev(ev)
+    {}
+
+    TTxType GetTxType() const override { return TXTYPE_MONITORING; }
+
+    bool Execute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) override {
+        const TShardIdx shardIdx = Ev->Get()->ShardIdx;
+        auto* info = Self->ShardInfos.FindPtr(shardIdx);
+        if (!info) {
+            // Shard deleted between Hive ack and persist; nothing to record.
+            LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "TTxMoveShardToStoragePool: shard " << shardIdx << " no longer exists, skipping persist");
+            return true;
+        }
+
+        NIceDb::TNiceDb db(txc.DB);
+        info->BindedChannels = Ev->Get()->NewBindings;
+        Self->PersistChannelsBinding(db, shardIdx, info->BindedChannels);
+        Persisted = true;
+
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "TTxMoveShardToStoragePool: persisted new channel bindings for shard " << shardIdx);
+        return true;
+    }
+
+    void Complete(const TActorContext& ctx) override {
+        if (!Persisted) {
+            // Shard was deleted between the Hive ack and this transaction; Hive did apply the move
+            // but SchemeShard can no longer record it. Report partial success so the operator knows.
+            ctx.Send(Ev->Get()->HttpSender, new NMon::TEvRemoteBinaryInfoRes(
+                "HTTP/1.1 409 Conflict\r\nConnection: Close\r\n\r\n"
+                "Hive acknowledged the move but the shard was deleted before the bindings could be "
+                "persisted; the recorded bindings were not updated\r\n"));
+            return;
+        }
+        // Binding durable now: answer with the Hive reply the actor captured.
+        ctx.Send(Ev->Get()->HttpSender, new NMon::TEvRemoteJsonInfoRes(Ev->Get()->HiveReply));
+    }
+};
+
+NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxMoveShardToStoragePool(TEvPrivate::TEvMoveShardToStoragePool::TPtr& ev) {
+    return new TTxMoveShardToStoragePool(this, ev);
+}
+
+void TSchemeShard::Handle(TEvPrivate::TEvMoveShardToStoragePool::TPtr& ev, const TActorContext& ctx) {
+    Execute(CreateTxMoveShardToStoragePool(ev), ctx);
+}
 
 bool TSchemeShard::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext &ctx) {
     if (!Executor() || !Executor()->GetStats().IsActive)
@@ -1532,7 +2534,18 @@ bool TSchemeShard::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const T
     if (!ev)
         return true;
 
-    LOG_DEBUG(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Handle TEvRemoteHttpInfo: %s", ev->Get()->Query.data());
+    const TCgiParameters& cgi = ev->Get()->Cgi();
+    if (!IsTabletDevUiAccessAllowed(
+            AppData(),
+            ev->Get()->PathInfo(),
+            ev->Get()->GetUserToken(),
+            !IsSchemeShardDevUiAdminRequest(cgi, ctx)))
+    {
+        Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
+        return true;
+    }
+
+    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Handle TEvRemoteHttpInfo: " << ev->Get()->Cgi().Print());
     Execute(new TTxMonitoring(this, ev), ctx);
 
     return true;

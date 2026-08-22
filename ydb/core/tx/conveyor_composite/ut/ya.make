@@ -3,10 +3,14 @@ UNITTEST_FOR(ydb/core/tx/conveyor_composite/service)
 FORK_SUBTESTS()
 
 SPLIT_FACTOR(60)
-SIZE(MEDIUM)
 
+REQUIREMENTS(cpu:4)
 IF (SANITIZER_TYPE)
+    SIZE(LARGE)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
     REQUIREMENTS(ram:16)
+ELSE()
+    SIZE(MEDIUM)
 ENDIF()
 
 PEERDIR(

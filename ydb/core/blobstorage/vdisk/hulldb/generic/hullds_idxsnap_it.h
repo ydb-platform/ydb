@@ -86,6 +86,11 @@ namespace NKikimr {
             MergeAndAdvance();
         }
 
+        void SeekToLast() {
+            HeapIt.SeekToLast();
+            MergeAndAdvance();
+        }
+
         void Seek(const TKey& key) {
             HeapIt.Seek(key);
             MergeAndAdvance();

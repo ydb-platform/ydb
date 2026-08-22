@@ -14,16 +14,17 @@ private:
     ui32 FetchedCount = 0;
     std::optional<ui32> PKPrefixSize;
 
-    virtual bool IsSourcePrepared(const std::shared_ptr<IDataSource>& source) const override {
+    virtual bool IsSourcePrepared(const std::shared_ptr<NCommon::IDataSource>& source) const override {
         if (source->IsSyncSection() && source->HasStageResult()) {
             AFL_VERIFY(!source->GetStageResult().HasResultChunk());
             return true;
         }
         return false;
     }
+
     class TSourceIterator {
     private:
-        std::shared_ptr<IDataSource> Source;
+        std::shared_ptr<NCommon::IDataSource> Source;
         bool Reverse;
         int Delta = 0;
         i64 Start = 0;
@@ -49,28 +50,31 @@ private:
     public:
         TString DebugString() const;
 
-        const std::shared_ptr<IDataSource>& GetSource() const {
+        const std::shared_ptr<NCommon::IDataSource>& GetSource() const {
             AFL_VERIFY(Source);
             return Source;
         }
 
-        TSourceIterator(const std::shared_ptr<IDataSource>& source)
+        TSourceIterator(const std::shared_ptr<NCommon::IDataSource>& source)
             : Source(source)
             , Reverse(Source->GetContext()->GetReadMetadata()->IsDescSorted())
-            , Delta(Reverse ? -1 : 1) {
+            , Delta(Reverse ? -1 : 1)
+        {
             AFL_VERIFY(Source);
-            auto batch = Source->GetStart().GetValue().ToBatch();
+            AFL_VERIFY(Source->GetType() == IDataSource::EType::SimplePortion)("type", Source->GetType());
+            auto batch = Source->GetAs<TPortionDataSource>()->GetStart().GetValue().ToBatch();
             SortableRecord = std::make_shared<NArrow::NMerger::TRWSortableBatchPosition>(batch, 0, Reverse);
         }
 
         TSourceIterator(const std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>& arrs,
-            const std::shared_ptr<NArrow::TColumnFilter>& filter, const std::shared_ptr<IDataSource>& source)
+            const std::shared_ptr<NArrow::TColumnFilter>& filter, const std::shared_ptr<NCommon::IDataSource>& source)
             : Source(source)
             , Reverse(Source->GetContext()->GetReadMetadata()->IsDescSorted())
             , Delta(Reverse ? -1 : 1)
             , Start(Reverse ? (arrs.front()->GetRecordsCount() - 1) : 0)
             , Finish(Reverse ? 0 : (arrs.front()->GetRecordsCount() - 1))
-            , Filter(filter ? filter : std::make_shared<NArrow::TColumnFilter>(NArrow::TColumnFilter::BuildAllowFilter())) {
+            , Filter(filter ? filter : std::make_shared<NArrow::TColumnFilter>(NArrow::TColumnFilter::BuildAllowFilter()))
+        {
             AFL_VERIFY(arrs.size());
             AFL_VERIFY(arrs.front()->GetRecordsCount());
             FilterIterator = std::make_shared<NArrow::TColumnFilter::TIterator>(Filter->GetBegin(Reverse, arrs.front()->GetRecordsCount()));
@@ -81,9 +85,9 @@ private:
             IsValidFlag = ShiftWithFilter();
         }
 
-        ui64 GetSourceId() const {
+        ui32 GetSourceIdx() const {
             AFL_VERIFY(Source);
-            return Source->GetSourceId();
+            return Source->GetSourceIdx();
         }
 
         bool IsFilled() const {
@@ -107,27 +111,33 @@ private:
         }
 
         bool operator<(const TSourceIterator& item) const {
-            const auto cmp = SortableRecord->ComparePartial(*item.SortableRecord);
+            const auto cmp = SortableRecord->Compare(*item.SortableRecord);
             if (cmp == std::partial_ordering::equivalent) {
-                return item.Source->GetSourceId() < Source->GetSourceId();
+                return item.Source->GetSourceIdx() < Source->GetSourceIdx();
             }
             return cmp == std::partial_ordering::greater;
         }
+
+        std::partial_ordering ComparePrefix(const TSourceIterator& item, const ui32 prefixSize) const {
+            return SortableRecord->ComparePrefix(*item.SortableRecord, prefixSize);
+        }
     };
 
-    std::vector<TSourceIterator> Iterators;
+    std::vector<TSourceIterator> FilledIterators;
+    std::deque<TSourceIterator> UnfilledIterators;
 
-    virtual void OnAddSource(const std::shared_ptr<IDataSource>& source) override {
-        AFL_VERIFY(FetchedCount < Limit);
-        Iterators.emplace_back(TSourceIterator(source));
-        std::push_heap(Iterators.begin(), Iterators.end());
+    virtual bool IsFinished() const override {
+        return FetchedCount >= Limit || TBase::IsFinished();
     }
+
+    virtual std::shared_ptr<NCommon::IDataSource> OnAddSource(const std::shared_ptr<NCommon::IDataSource>& source) override;
 
     virtual void DoAbort() override {
-        Iterators.clear();
+        FilledIterators.clear();
+        UnfilledIterators.clear();
     }
 
-    virtual ESourceAction OnSourceReady(const std::shared_ptr<IDataSource>& source, TPlainReadData& reader) override;
+    virtual ESourceAction OnSourceReady(const std::shared_ptr<NCommon::IDataSource>& source, TPlainReadData& reader) override;
 
     bool DrainToLimit();
 

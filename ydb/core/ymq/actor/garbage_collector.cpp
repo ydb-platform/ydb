@@ -1,6 +1,6 @@
 #include "garbage_collector.h"
 
-#include "cfg.h"
+#include <ydb/core/ymq/actor/cfg/cfg.h>
 #include "log.h"
 #include "events.h"
 #include "executor.h"
@@ -503,7 +503,7 @@ private:
         } else if (CurrentNode.Kind == TSchemeCacheNavigate::EKind::KindTable) {
             trans->SetOperationType(NKikimrSchemeOp::ESchemeOpDropTable);
         } else {
-            Y_ABORT_UNLESS("Unexpected node kind");
+            Y_ABORT("Unexpected node kind");
         }
 
         LOG_SQS_INFO(GARBAGE_CLEANER_LABEL << " attempts to remove the node " << CanonizePath(CurrentNode.Path));

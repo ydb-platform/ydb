@@ -24,6 +24,7 @@
 #include "Adaptor.hh"
 #include "wrap/orc-proto-wrapper.hh"
 
+#include <memory>
 #include <vector>
 
 namespace orc {
@@ -41,6 +42,9 @@ namespace orc {
     uint64_t precision_;
     uint64_t scale_;
     std::map<std::string, std::string> attributes_;
+    std::string crs_;
+    geospatial::EdgeInterpolationAlgorithm edgeInterpolationAlgorithm_ =
+        geospatial::EdgeInterpolationAlgorithm::SPHERICAL;
 
    public:
     /**
@@ -57,6 +61,16 @@ namespace orc {
      * Create decimal type.
      */
     TypeImpl(TypeKind kind, uint64_t precision, uint64_t scale);
+
+    /**
+     * Create geometry type.
+     */
+    TypeImpl(TypeKind kind, const std::string& crs);
+
+    /**
+     * Create geography type.
+     */
+    TypeImpl(TypeKind kind, const std::string& crs, geospatial::EdgeInterpolationAlgorithm algo);
 
     uint64_t getColumnId() const override;
 
@@ -75,6 +89,10 @@ namespace orc {
     uint64_t getPrecision() const override;
 
     uint64_t getScale() const override;
+
+    const std::string& getCrs() const override;
+
+    geospatial::EdgeInterpolationAlgorithm getAlgorithm() const override;
 
     Type& setAttribute(const std::string& key, const std::string& value) override;
 
@@ -176,6 +194,14 @@ namespace orc {
     static std::unique_ptr<Type> parseDecimalType(const std::string& input, size_t start,
                                                   size_t end);
 
+    /**
+     * Parse geography type from string
+     * @param input the input string of a decimal type
+     * @param start start position of the input string
+     * @param end end position of the input string
+     */
+    static std::unique_ptr<Type> parseGeographyType(const std::string& input, size_t start,
+                                                    size_t end);
     /**
      * Parse type for a category
      * @param category type name

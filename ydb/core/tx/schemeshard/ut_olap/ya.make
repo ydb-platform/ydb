@@ -4,9 +4,9 @@ FORK_SUBTESTS()
 
 SPLIT_FACTOR(10)
 
-IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
+IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
@@ -16,6 +16,7 @@ PEERDIR(
     library/cpp/regex/pcre
     library/cpp/svnversion
     ydb/core/testlib/default
+    ydb/core/kqp/compute_actor
     ydb/core/formats
     ydb/core/tx
     ydb/core/tx/columnshard
@@ -29,6 +30,7 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     ut_olap.cpp
+    ut_olap_schema_entity_id.cpp
 )
 
 END()

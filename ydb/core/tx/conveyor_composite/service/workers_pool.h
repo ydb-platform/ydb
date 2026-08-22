@@ -60,6 +60,7 @@ private:
     std::shared_ptr<TWorkersPoolCounters> Counters;
     TAverageCalcer<TDuration> DeliveringDuration;
     std::deque<TDuration> DeliveryDurations;
+    ui64 MaxBatchSize = 30;
 
 public:
     static constexpr double Eps = 1e-6;
@@ -87,7 +88,7 @@ public:
         DeliveringDuration.Add(d);
     }
 
-    void PutTaskResults(std::vector<TWorkerTaskResult>&& result);
+    void PutTaskResults(std::vector<TWorkerTaskResult>&& result, const ui64 workersPoolId = 0, const ui64 workerIdx = 0);
     bool HasFreeWorker() const;
     void RunTask(std::vector<TWorkerTask>&& tasksBatch);
     void ReleaseWorker(const ui32 workerIdx);

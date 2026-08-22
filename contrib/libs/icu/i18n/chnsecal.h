@@ -194,25 +194,15 @@ class U_I18N_API ChineseCalendar : public Calendar {
   virtual void handleComputeFields(int32_t julianDay, UErrorCode &status) override;
   virtual const UFieldResolutionTable* getFieldResolutionTable() const override;
 
+ private:
+  int32_t handleGetMonthLengthWithLeap(int32_t extendedYear, int32_t month, bool isLeap, UErrorCode& status) const;
+  int64_t handleComputeMonthStartWithLeap(int32_t eyear, int32_t month, bool isLeap, UErrorCode& status) const;
+
  public:
   virtual void add(UCalendarDateFields field, int32_t amount, UErrorCode &status) override;
   virtual void add(EDateFields field, int32_t amount, UErrorCode &status) override;
   virtual void roll(UCalendarDateFields field, int32_t amount, UErrorCode &status) override;
   virtual void roll(EDateFields field, int32_t amount, UErrorCode &status) override;
-
-  /**
-   * @return      The related Gregorian year; will be obtained by modifying the value
-   *              obtained by get from UCAL_EXTENDED_YEAR field
-   * @internal
-   */
-  virtual int32_t getRelatedYear(UErrorCode &status) const override;
-
-  /**
-   * @param year  The related Gregorian year to set; will be modified as necessary then
-   *              set in UCAL_EXTENDED_YEAR field
-   * @internal
-   */
-  virtual void setRelatedYear(int32_t year) override;
 
   //----------------------------------------------------------------------
   // Internal methods & astronomical calculations
@@ -254,8 +244,9 @@ class U_I18N_API ChineseCalendar : public Calendar {
    */
   virtual const char * getType() const override;
 
+  virtual int32_t getActualMaximum(UCalendarDateFields field, UErrorCode& status) const override;
+
   struct Setting {
-      int32_t epochYear;
       const TimeZone* zoneAstroCalc;
       CalendarCache** winterSolsticeCache;
       CalendarCache** newYearCache;

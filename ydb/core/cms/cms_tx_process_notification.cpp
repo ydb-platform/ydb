@@ -3,6 +3,8 @@
 
 #include <google/protobuf/text_format.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS
+
 namespace NKikimr::NCms {
 
 class TCms::TTxProcessNotification : public TTransactionBase<TCms> {
@@ -16,21 +18,22 @@ public:
     TTxType GetTxType() const override { return TXTYPE_PROCESS_NOTIFICATION; }
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
-        LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxProcessNotification Execute");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxProcessNotification Execute");
 
         auto &rec = Event->Get()->Record;
         Response = new TEvCms::TEvNotificationResponse;
 
-        LOG_INFO(ctx, NKikimrServices::CMS, "Processing notification from %s (time=%s reason='%s')",
-                  rec.GetUser().data(), TInstant::MicroSeconds(rec.GetTime()).ToStringLocalUpToSeconds().data(),
-                  rec.GetReason().data());
+        YDB_LOG_INFO_CTX(ctx, "Processing notification",
+            {"user", rec.GetUser()},
+            {"time", TInstant::MicroSeconds(rec.GetTime()).ToStringLocalUpToSeconds()},
+            {"reason", rec.GetReason()});
 
         if (Self->CheckNotification(rec, Response->Record, ctx)) {
             TString id = Self->AcceptNotification(rec, ctx);
             Response->Record.SetNotificationId(id);
 
             NIceDb::TNiceDb db(txc.DB);
-            db.Table<Schema::Param>().Key(1)
+            db.Table<Schema::Param>().Key(Schema::Param::Key)
                 .Update(NIceDb::TUpdate<Schema::Param::NextNotificationID>(Self->State->NextNotificationId));
 
             TString notificationStr;
@@ -49,8 +52,8 @@ public:
     }
 
     void Complete(const TActorContext &ctx) override {
-        LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxProcessNotification complete with response: %s",
-                  Response->Record.ShortDebugString().data());
+        YDB_LOG_DEBUG_CTX(ctx, "TTxProcessNotification complete with response",
+            {"response", Response->Record.ShortDebugString()});
 
         Self->Reply(Event, std::move(Response), ctx);
         Self->ScheduleNotificationsCleanup(ctx);

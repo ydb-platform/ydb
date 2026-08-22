@@ -4,10 +4,12 @@
     "apiVersion":"2015-01-01",
     "endpointPrefix":"es",
     "protocol":"rest-json",
+    "protocols":["rest-json"],
     "serviceFullName":"Amazon Elasticsearch Service",
     "serviceId":"Elasticsearch Service",
     "signatureVersion":"v4",
-    "uid":"es-2015-01-01"
+    "uid":"es-2015-01-01",
+    "auth":["aws.auth#sigv4"]
   },
   "operations":{
     "AcceptInboundCrossClusterSearchConnection":{
@@ -75,6 +77,23 @@
         {"shape":"BaseException"}
       ],
       "documentation":"<p>Provides access to an Amazon OpenSearch Service domain through the use of an interface VPC endpoint.</p>"
+    },
+    "CancelDomainConfigChange":{
+      "name":"CancelDomainConfigChange",
+      "http":{
+        "method":"POST",
+        "requestUri":"/2015-01-01/es/domain/{DomainName}/config/cancel"
+      },
+      "input":{"shape":"CancelDomainConfigChangeRequest"},
+      "output":{"shape":"CancelDomainConfigChangeResponse"},
+      "errors":[
+        {"shape":"BaseException"},
+        {"shape":"InternalException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"ValidationException"},
+        {"shape":"DisabledOperationException"}
+      ],
+      "documentation":"<p>Cancels a pending configuration change on an Amazon OpenSearch Service domain.</p>"
     },
     "CancelElasticsearchServiceSoftwareUpdate":{
       "name":"CancelElasticsearchServiceSoftwareUpdate",
@@ -860,8 +879,7 @@
     },
     "AccessDeniedException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>An error occurred because user does not have permissions to access the resource. Returns HTTP status code 403.</p>",
       "error":{"httpStatusCode":403},
       "exception":true
@@ -1287,6 +1305,41 @@
       "exception":true
     },
     "Boolean":{"type":"boolean"},
+    "CancelDomainConfigChangeRequest":{
+      "type":"structure",
+      "required":["DomainName"],
+      "members":{
+        "DomainName":{
+          "shape":"DomainName",
+          "documentation":"<p>Name of the OpenSearch Service domain configuration request to cancel.</p>",
+          "location":"uri",
+          "locationName":"DomainName"
+        },
+        "DryRun":{
+          "shape":"DryRun",
+          "documentation":"<p>When set to <b>True</b>, returns the list of change IDs and properties that will be cancelled without actually cancelling the change.</p>"
+        }
+      },
+      "documentation":"<p>Container for parameters of the <code>CancelDomainConfigChange</code> operation.</p>"
+    },
+    "CancelDomainConfigChangeResponse":{
+      "type":"structure",
+      "members":{
+        "DryRun":{
+          "shape":"DryRun",
+          "documentation":"<p>Whether or not the request was a dry run. If <b>True</b>, the changes were not actually cancelled.</p>"
+        },
+        "CancelledChangeIds":{
+          "shape":"GUIDList",
+          "documentation":"<p>The unique identifiers of the changes that were cancelled.</p>"
+        },
+        "CancelledChangeProperties":{
+          "shape":"CancelledChangePropertyList",
+          "documentation":"<p>The domain change properties that were cancelled.</p>"
+        }
+      },
+      "documentation":"<p>Contains the details of the cancelled domain config change.</p>"
+    },
     "CancelElasticsearchServiceSoftwareUpdateRequest":{
       "type":"structure",
       "required":["DomainName"],
@@ -1308,6 +1361,28 @@
       },
       "documentation":"<p>The result of a <code>CancelElasticsearchServiceSoftwareUpdate</code> operation. Contains the status of the update.</p>"
     },
+    "CancelledChangeProperty":{
+      "type":"structure",
+      "members":{
+        "PropertyName":{
+          "shape":"String",
+          "documentation":"<p>The name of the property whose change was cancelled.</p>"
+        },
+        "CancelledValue":{
+          "shape":"String",
+          "documentation":"<p>The pending value of the property that was cancelled. This would have been the eventual value of the property if the chance had not been cancelled.</p>"
+        },
+        "ActiveValue":{
+          "shape":"String",
+          "documentation":"<p>The current value of the property, after the change was cancelled.</p>"
+        }
+      },
+      "documentation":"<p>A property change that was cancelled for an Amazon OpenSearch Service domain.</p>"
+    },
+    "CancelledChangePropertyList":{
+      "type":"list",
+      "member":{"shape":"CancelledChangeProperty"}
+    },
     "ChangeProgressDetails":{
       "type":"structure",
       "members":{
@@ -1318,6 +1393,22 @@
         "Message":{
           "shape":"Message",
           "documentation":"<p>Contains an optional message associated with the domain configuration change.</p>"
+        },
+        "ConfigChangeStatus":{
+          "shape":"ConfigChangeStatus",
+          "documentation":"<p>The current status of the configuration change.</p>"
+        },
+        "StartTime":{
+          "shape":"UpdateTimestamp",
+          "documentation":"<p>The time that the configuration change was initiated, in Universal Coordinated Time (UTC).</p>"
+        },
+        "LastUpdatedTime":{
+          "shape":"UpdateTimestamp",
+          "documentation":"<p>The last time that the configuration change was updated.</p>"
+        },
+        "InitiatedBy":{
+          "shape":"InitiatedBy",
+          "documentation":"<p>The IAM principal who initiated the configuration change.</p>"
         }
       },
       "documentation":"<p>Specifies change details of the domain configuration change.</p>"
@@ -1389,6 +1480,18 @@
         "ChangeProgressStages":{
           "shape":"ChangeProgressStageList",
           "documentation":"<p>The specific stages that the domain is going through to perform the configuration change.</p>"
+        },
+        "ConfigChangeStatus":{
+          "shape":"ConfigChangeStatus",
+          "documentation":"<p>The current status of the configuration change.</p>"
+        },
+        "LastUpdatedTime":{
+          "shape":"UpdateTimestamp",
+          "documentation":"<p>The last time that the status of the configuration change was updated.</p>"
+        },
+        "InitiatedBy":{
+          "shape":"InitiatedBy",
+          "documentation":"<p>The IAM principal who initiated the configuration change.</p>"
         }
       },
       "documentation":"<p>The progress details of a specific domain configuration change.</p>"
@@ -1472,10 +1575,22 @@
       },
       "documentation":"<p> A map from an <code> <a>ElasticsearchVersion</a> </code> to a list of compatible <code> <a>ElasticsearchVersion</a> </code> s to which the domain can be upgraded. </p>"
     },
+    "ConfigChangeStatus":{
+      "type":"string",
+      "enum":[
+        "Pending",
+        "Initializing",
+        "Validating",
+        "ValidationFailed",
+        "ApplyingChanges",
+        "Completed",
+        "PendingUserInput",
+        "Cancelled"
+      ]
+    },
     "ConflictException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>An error occurred because the client attempts to remove a resource that is currently in use. Returns HTTP status code 409.</p>",
       "error":{"httpStatusCode":409},
       "exception":true
@@ -2225,8 +2340,7 @@
     "DisableTimestamp":{"type":"timestamp"},
     "DisabledOperationException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>An error occured because the client wanted to access a not supported operation. Gives http status code of 409.</p>",
       "error":{"httpStatusCode":409},
       "exception":true
@@ -2278,7 +2392,7 @@
         },
         "TLSSecurityPolicy":{
           "shape":"TLSSecurityPolicy",
-          "documentation":"<p>Specify the TLS security policy that needs to be applied to the HTTPS endpoint of Elasticsearch domain. <br/> It can be one of the following values: <ul> <li><b>Policy-Min-TLS-1-0-2019-07: </b> TLS security policy which supports TLSv1.0 and higher.</li> <li><b>Policy-Min-TLS-1-2-2019-07: </b> TLS security policy which supports only TLSv1.2</li> </ul> </p>"
+          "documentation":"<p>Specify the TLS security policy that needs to be applied to the HTTPS endpoint of Elasticsearch domain. <br/> It can be one of the following values: <ul> <li><b>Policy-Min-TLS-1-0-2019-07: </b> TLS security policy that supports TLS version 1.0 to TLS version 1.2</li> <li><b>Policy-Min-TLS-1-2-2019-07: </b> TLS security policy that supports only TLS version 1.2</li> <li><b>Policy-Min-TLS-1-2-PFS-2023-10: </b> TLS security policy that supports TLS version 1.2 to TLS version 1.3 with perfect forward secrecy cipher suites</li> </ul> </p>"
         },
         "CustomEndpointEnabled":{
           "shape":"Boolean",
@@ -2415,6 +2529,18 @@
         "ACTIVE",
         "DISSOCIATING",
         "DISSOCIATION_FAILED"
+      ]
+    },
+    "DomainProcessingStatusType":{
+      "type":"string",
+      "enum":[
+        "Creating",
+        "Active",
+        "Modifying",
+        "UpgradingEngineVersion",
+        "UpdatingServiceSoftware",
+        "Isolated",
+        "Deleting"
       ]
     },
     "Double":{"type":"double"},
@@ -2696,6 +2822,10 @@
         "ChangeProgressDetails":{
           "shape":"ChangeProgressDetails",
           "documentation":"<p>Specifies change details of the domain configuration change.</p>"
+        },
+        "ModifyingProperties":{
+          "shape":"ModifyingPropertiesList",
+          "documentation":"<p>Information about the domain properties that are currently being modified.</p>"
         }
       },
       "documentation":"<p>The configuration of an Elasticsearch domain.</p>"
@@ -2805,6 +2935,14 @@
         "ChangeProgressDetails":{
           "shape":"ChangeProgressDetails",
           "documentation":"<p>Specifies change details of the domain configuration change.</p>"
+        },
+        "DomainProcessingStatus":{
+          "shape":"DomainProcessingStatusType",
+          "documentation":"<p>The status of any changes that are currently in progress for the domain.</p>"
+        },
+        "ModifyingProperties":{
+          "shape":"ModifyingPropertiesList",
+          "documentation":"<p>Information about the domain properties that are currently being modified.</p>"
         }
       },
       "documentation":"<p>The current status of an Elasticsearch domain.</p>"
@@ -2924,6 +3062,10 @@
     "GUID":{
       "type":"string",
       "pattern":"\\p{XDigit}{8}-\\p{XDigit}{4}-\\p{XDigit}{4}-\\p{XDigit}{4}-\\p{XDigit}{12}"
+    },
+    "GUIDList":{
+      "type":"list",
+      "member":{"shape":"GUID"}
     },
     "GetCompatibleElasticsearchVersionsRequest":{
       "type":"structure",
@@ -3106,6 +3248,13 @@
       "type":"list",
       "member":{"shape":"InboundCrossClusterSearchConnection"}
     },
+    "InitiatedBy":{
+      "type":"string",
+      "enum":[
+        "CUSTOMER",
+        "SERVICE"
+      ]
+    },
     "InstanceCount":{
       "type":"integer",
       "documentation":"<p>Specifies the number of EC2 instances in the Elasticsearch domain.</p>",
@@ -3131,24 +3280,21 @@
     "IntegerClass":{"type":"integer"},
     "InternalException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The request processing has failed because of an unknown error, exception or failure (the failure is internal to the service) . Gives http status code of 500.</p>",
       "error":{"httpStatusCode":500},
       "exception":true
     },
     "InvalidPaginationTokenException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The request processing has failed because of invalid pagination token provided by customer. Returns an HTTP status code of 400. </p>",
       "error":{"httpStatusCode":400},
       "exception":true
     },
     "InvalidTypeException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>An exception for trying to create or access sub-resource that is either invalid or not supported. Gives http status code of 409.</p>",
       "error":{"httpStatusCode":409},
       "exception":true
@@ -3166,8 +3312,7 @@
     "LastUpdated":{"type":"timestamp"},
     "LimitExceededException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>An exception for trying to create more than allowed resources or sub-resources. Gives http status code of 409.</p>",
       "error":{"httpStatusCode":409},
       "exception":true
@@ -3569,6 +3714,32 @@
       "type":"integer",
       "documentation":"<p> Minimum number of Instances that can be instantiated for given InstanceType. </p>"
     },
+    "ModifyingProperties":{
+      "type":"structure",
+      "members":{
+        "Name":{
+          "shape":"String",
+          "documentation":"<p>The name of the property that is currently being modified.</p>"
+        },
+        "ActiveValue":{
+          "shape":"String",
+          "documentation":"<p>The current value of the domain property that is being modified.</p>"
+        },
+        "PendingValue":{
+          "shape":"String",
+          "documentation":"<p>The value that the property that is currently being modified will eventually have.</p>"
+        },
+        "ValueType":{
+          "shape":"PropertyValueType",
+          "documentation":"<p>The type of value that is currently being modified. Properties can have two types:</p> <ul> <li><b>PLAIN_TEXT</b>: Contain direct values such as \"1\", \"True\", or \"c5.large.search\".</li> <li><b>STRINGIFIED_JSON</b>: Contain content in JSON format, such as {\"Enabled\":\"True\"}\".</li> </ul>"
+        }
+      },
+      "documentation":"<p>Information about the domain properties that are currently being modified.</p>"
+    },
+    "ModifyingPropertiesList":{
+      "type":"list",
+      "member":{"shape":"ModifyingProperties"}
+    },
     "NextToken":{
       "type":"string",
       "documentation":"<p> Paginated APIs accepts NextToken input to returns next page results and provides a NextToken output in the response which can be used by the client to retrieve more results. </p>"
@@ -3839,6 +4010,13 @@
         "AWS_SERVICE"
       ]
     },
+    "PropertyValueType":{
+      "type":"string",
+      "enum":[
+        "PLAIN_TEXT",
+        "STRINGIFIED_JSON"
+      ]
+    },
     "PurchaseReservedElasticsearchInstanceOfferingRequest":{
       "type":"structure",
       "required":[
@@ -4055,16 +4233,14 @@
     },
     "ResourceAlreadyExistsException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>An exception for creating a resource that already exists. Gives http status code of 400.</p>",
       "error":{"httpStatusCode":409},
       "exception":true
     },
     "ResourceNotFoundException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>An exception for accessing or deleting a resource that does not exist. Gives http status code of 400.</p>",
       "error":{"httpStatusCode":409},
       "exception":true
@@ -4091,8 +4267,7 @@
     },
     "RevokeVpcEndpointAccessResponse":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>Container for response parameters to the <code><a>RevokeVpcEndpointAccess</a></code> operation. The response body for this operation is empty.</p>"
     },
     "RoleArn":{
@@ -4389,7 +4564,8 @@
       "type":"string",
       "enum":[
         "Policy-Min-TLS-1-0-2019-07",
-        "Policy-Min-TLS-1-2-2019-07"
+        "Policy-Min-TLS-1-2-2019-07",
+        "Policy-Min-TLS-1-2-PFS-2023-10"
       ]
     },
     "Tag":{
@@ -4756,8 +4932,7 @@
     },
     "ValidationException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>An exception for missing / invalid input fields. Gives http status code of 400.</p>",
       "error":{"httpStatusCode":400},
       "exception":true

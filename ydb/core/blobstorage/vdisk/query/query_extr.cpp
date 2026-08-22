@@ -1,4 +1,5 @@
 #include "query_base.h"
+#include <ydb/core/blobstorage/base/blobstorage_checksum.h>
 #include <ydb/core/blobstorage/vdisk/scrub/restore_corrupted_blob_actor.h>
 
 using namespace NKikimrServices;
@@ -108,7 +109,7 @@ namespace NKikimr {
             TQuery *query = nullptr;
             while ((query = FetchNextQuery()) && !ResultSize.IsOverflow()) {
                 // only full blobs (w/o specifying a part) are allowed
-                Y_VERIFY_S(query->PartId == 0, QueryCtx->HullCtx->VCtx->VDiskLogPrefix); 
+                Y_VERIFY_S(query->PartId == 0, QueryCtx->HullCtx->VCtx->VDiskLogPrefix);
                 const ui64 *cookiePtr = query->HasCookie ? &query->CookieVal : nullptr;
                 ResultSize.AddLogoBlobIndex();
                 if (!BlobInIndex) {
@@ -244,21 +245,80 @@ namespace NKikimr {
                             const ui64 *IngrPtr;
                             const bool Keep;
                             const bool DoNotKeep;
+                            ui32 ResponseSize;
+                            bool IsFullPartRead;
+                            bool EnableChecksumReadValidationOnVDisk;
                             bool Success = true;
+
+                            std::optional<ui64> ExtractChecksumInplace(TRope& data) const {
+                                Y_ABORT_UNLESS(data.GetSize() >= ResponseSize);
+                                const ui32 writtenSize = data.GetSize();
+
+                                ui32 dataOffset = 0;
+                                switch (TDiskBlob::DeriveBlobHeaderMode(ResponseSize, writtenSize, &dataOffset)) {
+                                    case EBlobHeaderMode::XXH3_64BIT_HEADER: {
+                                        Y_ABORT_UNLESS(!dataOffset);
+                                        ui64 checksum;
+                                        auto it = data.Position(ResponseSize);
+                                        it.ExtractPlainDataAndAdvance(&checksum, sizeof(checksum));
+                                        data.EraseBack(sizeof(checksum));
+                                        return checksum;
+                                    }
+
+                                    case EBlobHeaderMode::OLD_HEADER:
+                                    case EBlobHeaderMode::NO_HEADER:
+                                        return std::nullopt;
+                                }
+
+                                Y_ABORT("unexpected blob header mode");
+                            }
+
                             void operator()(NReadBatcher::TReadError) {
                                 Result->AddResult(NKikimrProto::CORRUPTED, Id, Shift, static_cast<ui32>(Size), CookiePtr,
                                     IngrPtr, Keep, DoNotKeep);
                                 Success = false;
                             }
-                            void operator()(TRcBuf&& buffer) const {
-                                Result->AddResult(NKikimrProto::OK, Id, Shift, TRope(std::move(buffer)), CookiePtr,
-                                    IngrPtr, Keep, DoNotKeep);
+                            void operator()(TRcBuf&& buffer) {
+                                this->operator()(TRope(std::move(buffer)));
                             }
-                            void operator()(const TRope& data) const {
-                                Result->AddResult(NKikimrProto::OK, Id, Shift, TRope(data), CookiePtr,
-                                    IngrPtr, Keep, DoNotKeep);
+                            void operator()(const TRope& data) {
+                                TRope dataCopy(data);
+                                this->operator()(std::move(dataCopy));
                             }
-                        } processor{Result, it->Id, query->Shift, query->Size, cookiePtr, pingr, keep, doNotKeep};
+                            void operator()(TRope&& data) {
+                                std::optional<ui64> checksumInBlob = IsFullPartRead ? ExtractChecksumInplace(data) : std::nullopt;
+                                std::optional<ui64> calculatedChecksum;
+                                if (EnableChecksumReadValidationOnVDisk) {
+                                    calculatedChecksum = CalculateXxh3Hash(data.Begin(), data.GetSize()).second;
+                                }
+                                if (calculatedChecksum && checksumInBlob && *calculatedChecksum != *checksumInBlob) {
+                                    Result->AddResult(NKikimrProto::CORRUPTED, Id, Shift, static_cast<ui32>(Size), CookiePtr,
+                                        IngrPtr, Keep, DoNotKeep);
+                                    Success = false;
+                                    return;
+                                }
+
+                                // If both are present they match;
+                                // Otherwise return whichever checksum is available as best-effort.
+                                const ui64 *checksumPtr = nullptr;
+                                if (calculatedChecksum) {
+                                    checksumPtr = &*calculatedChecksum;
+                                } else if (checksumInBlob) {
+                                    checksumPtr = &*checksumInBlob;
+                                }
+                                const auto checksumType = checksumPtr
+                                    ? NKikimrBlobStorage::TChecksumType::XXH3_64BitBlob
+                                    : NKikimrBlobStorage::TChecksumType::NoChecksum;
+                                Result->AddResult(NKikimrProto::OK, Id, Shift, std::move(data), CookiePtr,
+                                    IngrPtr, Keep, DoNotKeep, checksumPtr, checksumType);
+                            }
+                        };
+                        const ui32 partSize = GType.PartSize(it->Id);
+                        const ui32 responseSize = static_cast<ui32>(query->Size ? query->Size : partSize - query->Shift);
+                        const bool isFullPartRead = query->Shift == 0 && responseSize == partSize;
+                        TProcessor processor{Result, it->Id, query->Shift, query->Size, cookiePtr, pingr, keep,
+                            doNotKeep, responseSize, isFullPartRead,
+                            static_cast<bool>(QueryCtx->HullCtx->VCfg->EnableChecksumReadValidationOnVDisk)};
                         rit.GetData(processor);
                         if (!processor.Success) {
                             NMatrix::TVectorType& v = neededParts[it->Id.FullID()];
@@ -314,11 +374,14 @@ namespace NKikimr {
             if (IsRepl()) {
                 quoter = QueryCtx->HullCtx->VCtx->ReplNodeResponseQuoter;
             }
+            const TMonotonic now = TActivationContext::Monotonic();
             const TDuration duration = quoter
-                ? quoter->Take(TActivationContext::Now(), Result->CalculateSerializedSizeCached())
+                ? quoter->Take(now, Result->CalculateSerializedSizeCached())
                 : TDuration::Zero();
             if (duration != TDuration::Zero()) {
                 Schedule(duration, new TEvents::TEvWakeup);
+                const auto deltaMicrosec = quoter->MergeThrottledIntervalAndGetDeltaMicrosec(now, duration);
+                QueryCtx->ReplMonGroup.ReplNodeResponseThrottledMicroseconds() += deltaMicrosec;
                 Become(&TThis::StateFunc);
             } else {
                 SendResponse(ctx);
@@ -374,11 +437,11 @@ namespace NKikimr {
                 if (a) {
                     auto aid = ctx.Register(a.release());
                     ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
-                    Become(&TThis::StateFunc);
                     // wait for reply
                 } else {
                     Finish(ctx);
                 }
+                Become(&TThis::StateFunc);
             }
 
             BarriersEssence.Reset();

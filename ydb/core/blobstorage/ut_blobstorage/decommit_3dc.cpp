@@ -1,10 +1,8 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 
 Y_UNIT_TEST_SUITE(Decommit3dc) {
-    Y_UNIT_TEST(Test) {
-        for (ui32 numNodes : {12, 16})
-        for (ui32 numGroups : {1, 7})
-        for (bool resetToNone : {false, true})
+
+    void Test(ui32 numNodes, ui32 numGroups, bool resetToNone) {
         for (ui32 numDecommitted = 0; numDecommitted <= numNodes / 4; ++numDecommitted) {
             Cerr << "numNodes# " << numNodes
                 << " numGroups# " << numGroups
@@ -86,4 +84,20 @@ Y_UNIT_TEST_SUITE(Decommit3dc) {
             }
         }
     }
+
+    #define DECOMMIT_3_DC_TEST(numNodes, numGroups, resetToNone)                        \
+    Y_UNIT_TEST(Test##numNodes##Nodes##numGroups##groups##ResetToNone_##resetToNone) {  \
+        Test(numNodes, numGroups, resetToNone);                                         \
+    }
+
+    DECOMMIT_3_DC_TEST(12, 1, false)
+    DECOMMIT_3_DC_TEST(16, 1, false)
+    DECOMMIT_3_DC_TEST(12, 7, false)
+    DECOMMIT_3_DC_TEST(16, 7, false)
+    DECOMMIT_3_DC_TEST(12, 1, true)
+    DECOMMIT_3_DC_TEST(16, 1, true)
+    DECOMMIT_3_DC_TEST(12, 7, true)
+    DECOMMIT_3_DC_TEST(16, 7, true)
+
+    #undef DECOMMIT_3_DC_TEST
 }

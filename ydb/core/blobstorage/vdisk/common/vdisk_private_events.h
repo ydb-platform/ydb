@@ -15,7 +15,8 @@ namespace NKikimr {
             CommitFresh,
             CommitLevel,
             CommitAdvanceLsn,
-            CommitReplSst
+            CommitReplSst,
+            CommitSyncSst,
         };
 
         EType Type;
@@ -30,6 +31,7 @@ namespace NKikimr {
                 case CommitLevel:      return "CommitLevel";
                 case CommitAdvanceLsn: return "CommitAdvanceLsn";
                 case CommitReplSst:    return "CommitReplSst";
+                case CommitSyncSst:    return "CommitSyncSst";
                 default:               return "<invalid>";
             }
         }
@@ -86,16 +88,18 @@ namespace NKikimr {
         const ui32 Mask;
         const EMode Mode;
         THashSet<ui64> TablesToCompact;
+        const bool Force;
 
-        TEvCompactVDisk(ui32 mask, EMode mode = EMode::FULL, THashSet<ui64> tablesToCompact = {})
+        TEvCompactVDisk(ui32 mask, EMode mode = EMode::FULL, THashSet<ui64> tablesToCompact = {}, bool force = true)
             : Mask(mask)
             , Mode(mode)
             , TablesToCompact(std::move(tablesToCompact))
+            , Force(force)
         {}
 
         // create a message for compaction one database of type 'type'
-        static TEvCompactVDisk *Create(EHullDbType type, EMode mode = EMode::FULL) {
-            return new TEvCompactVDisk(::NKikimr::Mask(type), mode);
+        static TEvCompactVDisk *Create(EHullDbType type, EMode mode = EMode::FULL, bool force = true) {
+            return new TEvCompactVDisk(::NKikimr::Mask(type), mode, {}, force);
         }
 
         static TEvCompactVDisk *Create(EHullDbType type, THashSet<ui64> tablesToCompact) {
@@ -128,17 +132,19 @@ namespace NKikimr {
         const ui64 RequestId;
         const TEvCompactVDisk::EMode Mode;
         THashSet<ui64> TablesToCompact;
+        const bool Force;
 
-        TEvHullCompact(EHullDbType type, ui64 requestId, TEvCompactVDisk::EMode mode, THashSet<ui64> tablesToCompact)
+        TEvHullCompact(EHullDbType type, ui64 requestId, TEvCompactVDisk::EMode mode, THashSet<ui64> tablesToCompact, bool force)
             : Type(type)
             , RequestId(requestId)
             , Mode(mode)
             , TablesToCompact(std::move(tablesToCompact))
+            , Force(force)
         {}
 
         TString ToString() const {
             return TStringBuilder() << "{Type# " << EHullDbTypeToString(Type) << " RequestId# " << RequestId
-                << " Mode# " << TEvCompactVDisk::ModeToString(Mode) << "}";
+                << " Mode# " << TEvCompactVDisk::ModeToString(Mode) << " Force# " << Force << "}";
         }
     };
 
@@ -181,7 +187,7 @@ namespace NKikimr {
     struct TEvListChunksResult : TEventLocal<TEvListChunksResult, TEvBlobStorage::EvListChunksResult> {
         THashSet<TChunkIdx> ChunksHuge;
         THashSet<TChunkIdx> ChunksSyncLog;
+        THashSet<TChunkIdx> ChunksChunkKeeper;
     };
 
 } // NKikimr
-

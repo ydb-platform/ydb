@@ -16,6 +16,7 @@
 #include <util/string/join.h>
 
 #include <unordered_map>
+#include <utility>
 
 using namespace NYql;
 
@@ -68,10 +69,10 @@ private:
 
 class TBasicAggrFunc final: public TAstListNode {
 public:
-    TBasicAggrFunc(TPosition pos, const TString& name, TAggregationPtr aggr, const TVector<TNodePtr>& args)
+    TBasicAggrFunc(TPosition pos, TString name, TAggregationPtr aggr, const TVector<TNodePtr>& args)
         : TAstListNode(pos)
-        , Name_(name)
-        , Aggr_(aggr)
+        , Name_(std::move(name))
+        , Aggr_(std::move(aggr))
         , Args_(args)
     {}
 
@@ -121,10 +122,10 @@ protected:
 
 class TBasicAggrFactory final : public TAstListNode {
 public:
-    TBasicAggrFactory(TPosition pos, const TString& name, TAggregationPtr aggr, const TVector<TNodePtr>& args)
+    TBasicAggrFactory(TPosition pos, TString name, TAggregationPtr aggr, const TVector<TNodePtr>& args)
         : TAstListNode(pos)
-        , Name_(name)
-        , Aggr_(aggr)
+        , Name_(std::move(name))
+        , Aggr_(std::move(aggr))
         , Args_(args)
     {}
 
@@ -145,8 +146,8 @@ public:
             apply = L(apply, "extractor");
         } else {
             // make several extractors from main that returns a tuple
-            for (ui32 arg = 0; arg < columnIndices.size(); ++arg) {
-                auto partial = BuildLambda(Pos_, Y("row"), Y("Nth", Y("Apply", "extractor", "row"), Q(ToString(columnIndices[arg]))));
+            for (ui32 index : columnIndices) {
+                auto partial = BuildLambda(Pos_, Y("row"), Y("Nth", Y("Apply", "extractor", "row"), Q(ToString(index))));
                 apply = L(apply, partial);
             }
         }
@@ -181,14 +182,14 @@ protected:
     TNodePtr Lambda_;
 };
 
-typedef THolder<TBasicAggrFunc> TAggrFuncPtr;
+using TAggrFuncPtr = THolder<TBasicAggrFunc>;
 
 class TLiteralStringAtom: public INode {
 public:
-    TLiteralStringAtom(TPosition pos, TNodePtr node, const TString& info)
+    TLiteralStringAtom(TPosition pos, TNodePtr node, TString info)
         : INode(pos)
-        , Node_(node)
-        , Info_(info)
+        , Node_(std::move(node))
+        , Info_(std::move(info))
     {
     }
 
@@ -318,7 +319,7 @@ public:
                 value += NKikimr::NMiniKQL::GetTimezoneIANAName(out.GetTimezoneId());
             }
         } else if (NUdf::EDataSlot::Uuid == *slot) {
-            char out[0x10];
+            char out[0x10]; // NOLINT(modernize-avoid-c-arrays)
             if (!NKikimr::NMiniKQL::ParseUuid(*atom, out)) {
                 ctx.Error(Pos_) << "Invalid value " << atom->Quote() << " for type " << GetOpName();
                 return false;
@@ -345,9 +346,9 @@ public:
 
 class TTableName : public TCallNode {
 public:
-    TTableName(TPosition pos, const TVector<TNodePtr>& args, const TString& cluster)
+    TTableName(TPosition pos, const TVector<TNodePtr>& args, TString cluster)
         : TCallNode(pos, "TableName", 0, 2, args)
-        , Cluster_(cluster)
+        , Cluster_(std::move(cluster))
     {
     }
 
@@ -676,8 +677,8 @@ public:
             ctx.Error(Pos_) << "CombineMembers requires at least one argument";
             return false;
         }
-        for (size_t i = 0; i < Args_.size(); ++i) {
-            Args_[i] = Q(Y(Q(""), Args_[i])); // flatten without prefix
+        for (auto& arg : Args_) {
+            arg = Q(Y(Q(""), arg)); // flatten without prefix
         }
         return TCallNode::DoInit(ctx, src);
     }
@@ -698,15 +699,15 @@ public:
             ctx.Error(Pos_) << OpName_ << " requires at least one argument";
             return false;
         }
-        for (size_t i = 0; i < Args_.size(); ++i) {
-            if (!Args_[i]->Init(ctx, src)) {
+        for (auto& arg : Args_) {
+            if (!arg->Init(ctx, src)) {
                 return false;
             }
-            if (Args_[i]->GetTupleSize() == 2) {
+            if (arg->GetTupleSize() == 2) {
                 // flatten with prefix
-                Args_[i] = Q(Y(
-                    MakeAtomFromExpression(ctx, Args_[i]->GetTupleElement(0)).Build(),
-                    Args_[i]->GetTupleElement(1)
+                arg = Q(Y(
+                    MakeAtomFromExpression(ctx, arg->GetTupleElement(0)).Build(),
+                    arg->GetTupleElement(1)
                 ));
             } else {
                 ctx.Error(Pos_) << OpName_ << " requires arguments to be tuples of size 2: prefix and struct";
@@ -734,9 +735,9 @@ static const TSet<TString> AvailableDataTypes = {"Bool", "String", "Uint32", "Ui
     "Date", "Datetime", "Timestamp", "Interval", "Uint8", "Int8", "Uint16", "Int16", "TzDate", "TzDatetime", "TzTimestamp", "Uuid", "Decimal"};
 TNodePtr GetDataTypeStringNode(TContext& ctx, TCallNode& node, unsigned argNum, TString* outTypeStrPtr = nullptr) {
     auto errMsgFunc = [&node, argNum]() {
-        static std::array<TString, 2> numToName = {{"first", "second"}};
+        static std::array<TString, 2> NumToName = {{"first", "second"}};
         TStringBuilder sb;
-        sb << "At " << numToName.at(argNum) << " argument of " << node.GetOpName() << " expected type string, available one of: "
+        sb << "At " << NumToName.at(argNum) << " argument of " << node.GetOpName() << " expected type string, available one of: "
             << JoinRange(", ", AvailableDataTypes.begin(), AvailableDataTypes.end()) << ";";
         return TString(sb);
     };
@@ -1241,7 +1242,7 @@ public:
 
         const auto memberPos = Args_[0]->GetPos();
         TVector<TNodePtr> repackArgs = {BuildAtom(memberPos, "row", NYql::TNodeFlags::Default)};
-        if (auto literal = Args_[1]->GetLiteral("String")) {
+        if (/*auto literal =*/ Args_[1]->GetLiteral("String")) {
             TString targetType;
             if (!GetDataTypeStringNode(ctx, *this, 1, &targetType)) {
                 return false;
@@ -1327,7 +1328,7 @@ private:
     ui32 ArgsCount_;
 };
 
-TNodePtr BuildUdfUserTypeArg(TPosition pos, const TVector<TNodePtr>& args, TNodePtr customUserType) {
+TNodePtr BuildUdfUserTypeArg(TPosition pos, const TVector<TNodePtr>& args, TNodePtr externalTypes) {
     TVector<TNodePtr> argsTypeItems;
     for (auto& arg : args) {
         argsTypeItems.push_back(new TCallNodeImpl(pos, "TypeOf", TVector<TNodePtr>(1, arg)));
@@ -1336,8 +1337,8 @@ TNodePtr BuildUdfUserTypeArg(TPosition pos, const TVector<TNodePtr>& args, TNode
     TVector<TNodePtr> userTypeItems;
     userTypeItems.push_back(new TCallNodeImpl(pos, "TupleType", argsTypeItems));
     userTypeItems.push_back(new TCallNodeImpl(pos, "StructType", {}));
-    if (customUserType) {
-        userTypeItems.push_back(customUserType);
+    if (externalTypes) {
+        userTypeItems.push_back(externalTypes);
     } else {
         userTypeItems.push_back(new TCallNodeImpl(pos, "TupleType", {}));
     }
@@ -1345,13 +1346,13 @@ TNodePtr BuildUdfUserTypeArg(TPosition pos, const TVector<TNodePtr>& args, TNode
     return new TCallNodeImpl(pos, "TupleType", userTypeItems);
 }
 
-TNodePtr BuildUdfUserTypeArg(TPosition pos, TNodePtr positionalArgs, TNodePtr namedArgs, TNodePtr customUserType) {
+TNodePtr BuildUdfUserTypeArg(TPosition pos, TNodePtr positionalArgs, TNodePtr namedArgs, TNodePtr externalTypes) {
     TVector<TNodePtr> userTypeItems;
     userTypeItems.reserve(3);
     userTypeItems.push_back(positionalArgs->Y("TypeOf", positionalArgs));
     userTypeItems.push_back(positionalArgs->Y("TypeOf", namedArgs));
-    if (customUserType) {
-        userTypeItems.push_back(customUserType);
+    if (externalTypes) {
+        userTypeItems.push_back(externalTypes);
     } else {
         userTypeItems.push_back(new TCallNodeImpl(pos, "TupleType", {}));
     }
@@ -1360,7 +1361,7 @@ TNodePtr BuildUdfUserTypeArg(TPosition pos, TNodePtr positionalArgs, TNodePtr na
 }
 
 TVector<TNodePtr> BuildUdfArgs(const TContext& ctx, TPosition pos, const TVector<TNodePtr>& args,
-        TNodePtr positionalArgs, TNodePtr namedArgs, TNodePtr customUserType) {
+        TNodePtr positionalArgs, TNodePtr namedArgs, TNodePtr externalTypes) {
     if (!ctx.Settings.EnableGenericUdfs) {
         return {};
     }
@@ -1368,19 +1369,19 @@ TVector<TNodePtr> BuildUdfArgs(const TContext& ctx, TPosition pos, const TVector
     udfArgs.push_back(new TAstListNodeImpl(pos));
     udfArgs[0]->Add(new TAstAtomNodeImpl(pos, "Void", 0));
     if (namedArgs) {
-        udfArgs.push_back(BuildUdfUserTypeArg(pos, positionalArgs, namedArgs, customUserType));
+        udfArgs.push_back(BuildUdfUserTypeArg(pos, positionalArgs, namedArgs, externalTypes));
     } else {
-        udfArgs.push_back(BuildUdfUserTypeArg(pos, args, customUserType));
+        udfArgs.push_back(BuildUdfUserTypeArg(pos, args, externalTypes));
     }
     return udfArgs;
 }
 
 class TCallableNode final: public INode {
 public:
-    TCallableNode(TPosition pos, const TString& module, const TString& name, const TVector<TNodePtr>& args)
+    TCallableNode(TPosition pos, const TString& module, TString name, const TVector<TNodePtr>& args)
         : INode(pos)
         , Module_(module)
-        , Name_(name)
+        , Name_(std::move(name))
         , Args_(args)
     {}
 
@@ -1414,16 +1415,16 @@ public:
                 src->AllColumns();
             }
         } else {
-            TNodePtr customUserType = nullptr;
+            TNodePtr externalTypes = nullptr;
             if (Module_ == "Tensorflow" && Name_ == "RunBatch") {
                 if (Args_.size() > 2) {
                     auto passThroughAtom = Q("PassThrough");
                     auto passThroughType = Y("StructMemberType", Y("ListItemType", Y("TypeOf", Args_[1])), passThroughAtom);
-                    customUserType = Y("AddMemberType", Args_[2], passThroughAtom, passThroughType);
+                    externalTypes = Y("AddMemberType", Args_[2], passThroughAtom, passThroughType);
                     Args_.erase(Args_.begin() + 2);
                 }
             }
-            auto udfArgs = BuildUdfArgs(ctx, Pos_, Args_, nullptr, nullptr, customUserType);
+            auto udfArgs = BuildUdfArgs(ctx, Pos_, Args_, nullptr, nullptr, externalTypes);
             Node_ = BuildUdf(ctx, Pos_, Module_, Name_, udfArgs);
         }
         return Node_->Init(ctx, src);
@@ -1468,10 +1469,10 @@ TNodePtr BuildUdf(TContext& ctx, TPosition pos, const TString& module, const TSt
 
 class TScriptUdf final: public INode {
 public:
-    TScriptUdf(TPosition pos, const TString& moduleName, const TString& funcName, const TVector<TNodePtr>& args)
+    TScriptUdf(TPosition pos, TString moduleName, TString funcName, const TVector<TNodePtr>& args)
         : INode(pos)
-        , ModuleName_(moduleName)
-        , FuncName_(funcName)
+        , ModuleName_(std::move(moduleName))
+        , FuncName_(std::move(funcName))
         , Args_(args)
     {}
 
@@ -1554,9 +1555,9 @@ private:
 template <bool Sorted>
 class TYqlToDict final: public TCallNode {
 public:
-    TYqlToDict(TPosition pos, const TString& mode, const TVector<TNodePtr>& args)
+    TYqlToDict(TPosition pos, TString mode, const TVector<TNodePtr>& args)
         : TCallNode(pos, "ToDict", 4, 4, args)
-        , Mode_(mode)
+        , Mode_(std::move(mode))
     {}
 
 private:
@@ -1581,7 +1582,7 @@ private:
 template <bool IsStart>
 class THoppingTime final: public TAstListNode {
 public:
-    THoppingTime(TPosition pos, const TVector<TNodePtr>& args = {})
+    explicit THoppingTime(TPosition pos, const TVector<TNodePtr>& args = {})
         : TAstListNode(pos)
     {
         Y_UNUSED(args);
@@ -1621,9 +1622,9 @@ private:
 
 class TInvalidBuiltin final: public INode {
 public:
-    TInvalidBuiltin(TPosition pos, const TString& info)
+    TInvalidBuiltin(TPosition pos, TString info)
         : INode(pos)
-        , Info_(info)
+        , Info_(std::move(info))
     {
     }
 
@@ -1681,6 +1682,8 @@ TAggrFuncFactoryCallback BuildAggrFuncFactoryCallback(
         const TVector<EAggregateMode>& validModes = {}) {
 
     const TString realFunctionName = functionNameOverride.empty() ? functionName : functionNameOverride;
+    // TODO(YQL-20095): Explore real problem to fix this.
+    // NOLINTNEXTLINE(bugprone-exception-escape)
     return [functionName, realFunctionName, factoryName, type, validModes] (TPosition pos, const TVector<TNodePtr>& args, EAggregateMode aggMode, bool isFactory) -> INode::TPtr {
         if (!validModes.empty()) {
             if (!IsIn(validModes, aggMode)) {
@@ -2291,8 +2294,8 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
             usedArgs = positionalArgsElements;
         }
 
-        TNodePtr customUserType = nullptr;
-        const auto& udfArgs = BuildUdfArgs(ctx, pos, usedArgs, positionalArgs, namedArgs, customUserType);
+        TNodePtr externalTypes = nullptr;
+        const auto& udfArgs = BuildUdfArgs(ctx, pos, usedArgs, positionalArgs, namedArgs, externalTypes);
         TNodePtr udfNode = BuildUdf(ctx, pos, nameSpace, name, udfArgs);
         TVector<TNodePtr> applyArgs = { udfNode };
         applyArgs.insert(applyArgs.end(), usedArgs.begin(), usedArgs.end());
@@ -2470,10 +2473,10 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
 
     auto usedArgs = reuseArgs ? reuseArgs : args;
 
-    TNodePtr customUserType = nullptr;
+    TNodePtr externalTypes = nullptr;
     if (ns == "yson") {
         if (name == "ConvertTo" && usedArgs.size() > 1) {
-            customUserType = usedArgs[1];
+            externalTypes = usedArgs[1];
             usedArgs.erase(usedArgs.begin() + 1);
         }
         ui32 optionsIndex = name.Contains("Lookup") ? 2 : 1;
@@ -2485,7 +2488,7 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
             << "Json UDF is deprecated and is going to be removed, please switch to Yson UDF that also supports Json input: https://yql.yandex-team.ru/docs/yt/udf/list/yson/";
     }
 
-    const auto& udfArgs = BuildUdfArgs(ctx, pos, usedArgs, positionalArgs, namedArgs, customUserType);
+    const auto& udfArgs = BuildUdfArgs(ctx, pos, usedArgs, positionalArgs, namedArgs, externalTypes);
     TNodePtr udfNode = BuildUdf(ctx, pos, nameSpace, name, udfArgs);
     TVector<TNodePtr> applyArgs = { udfNode };
     applyArgs.insert(applyArgs.end(), usedArgs.begin(), usedArgs.end());

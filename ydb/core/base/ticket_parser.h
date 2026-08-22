@@ -86,14 +86,20 @@ namespace NKikimr {
 
             const TAccessKeySignature Signature;
 
-            struct TInitializationFields {
-                TString Database;
+            struct TInitializationFieldsWithTicket {
                 TString Ticket;
+                TString Database;
+                TString PeerName;
+                std::vector<TEntry> Entries;
+            };
+            struct TInitializationFieldsWithSignature {
+                TAccessKeySignature Signature;
+                TString Database;
                 TString PeerName;
                 std::vector<TEntry> Entries;
             };
 
-            TEvAuthorizeTicket(TInitializationFields&& init)
+            TEvAuthorizeTicket(TInitializationFieldsWithTicket&& init)
                 : Database(std::move(init.Database))
                 , Ticket(std::move(init.Ticket))
                 , PeerName(std::move(init.PeerName))
@@ -101,55 +107,13 @@ namespace NKikimr {
             {
             }
 
-            TEvAuthorizeTicket(const TString& ticket)
-                : Ticket(ticket)
-            {}
-
-            TEvAuthorizeTicket(const TString& ticket, const TString& peerName)
-                : Ticket(ticket)
-                , PeerName(peerName)
-            {}
-
-            TEvAuthorizeTicket(const TString& ticket, const TVector<std::pair<TString, TString>>& attributes, const TVector<TString>& permissions)
-                : Ticket(ticket)
-                , Entries({{ToPermissions(permissions), attributes}})
-            {}
-
-            TEvAuthorizeTicket(const TString& ticket, const TString& peerName, const TVector<std::pair<TString, TString>>& attributes, const TVector<TString>& permissions)
-                : Ticket(ticket)
-                , PeerName(peerName)
-                , Entries({{ToPermissions(permissions), attributes}})
-            {}
-
-            TEvAuthorizeTicket(const TString& ticket, const TVector<std::pair<TString, TString>>& attributes, const TVector<TPermission>& permissions)
-                : Ticket(ticket)
-                , Entries({{permissions, attributes}})
-            {}
-
-            TEvAuthorizeTicket(const TString& ticket, const TString& peerName, const TVector<std::pair<TString, TString>>& attributes, const TVector<TPermission>& permissions)
-                : Ticket(ticket)
-                , PeerName(peerName)
-                , Entries({{permissions, attributes}})
-            {}
-
-            TEvAuthorizeTicket(const TString& ticket, const TVector<TEntry>& entries)
-                : Ticket(ticket)
-                , Entries(entries)
-            {}
-
-            TEvAuthorizeTicket(const TString& ticket, const TString& peerName, const TVector<TEntry>& entries)
-                : Ticket(ticket)
-                , PeerName(peerName)
-                , Entries(entries)
-            {}
-
-            TEvAuthorizeTicket(TAccessKeySignature&& sign, const TString& peerName, const TVector<TEntry>& entries)
-                : Ticket("")
-                , PeerName(peerName)
-                , Entries(entries)
-                , Signature(std::move(sign))
-            {}
-
+            TEvAuthorizeTicket(TInitializationFieldsWithSignature&& init)
+                : Database(std::move(init.Database))
+                , PeerName(std::move(init.PeerName))
+                , Entries(std::move(init.Entries))
+                , Signature(std::move(init.Signature))
+            {
+            }
         };
 
         struct TError {
@@ -190,18 +154,30 @@ namespace NKikimr {
             TError Error;
             TIntrusiveConstPtr<NACLib::TUserToken> Token;
             const TString SerializedToken;
+            bool IsSuccess = false;
 
             TEvAuthorizeTicketResult(const TString& ticket, const TIntrusiveConstPtr<NACLib::TUserToken>& token)
                 : Ticket(ticket)
                 , Token(token)
                 , SerializedToken(token ? token->GetSerializedToken() : "")
+                , IsSuccess(true)
             {
             }
 
             TEvAuthorizeTicketResult(const TString& ticket, const TError& error)
                 : Ticket(ticket)
                 , Error(error)
+                , IsSuccess(false)
             {}
+
+            void SetError(const TError& error) {
+                Error = error;
+                IsSuccess = false;
+            }
+
+            bool HasError() const {
+                return !IsSuccess;
+            }
         };
 
         struct TEvRefreshTicket : TEventLocal<TEvRefreshTicket, EvRefreshTicket> {

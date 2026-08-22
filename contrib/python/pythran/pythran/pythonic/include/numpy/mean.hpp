@@ -13,9 +13,8 @@ namespace numpy
   namespace details
   {
     template <size_t N>
-    struct make_scalar_pshape
-        : sutils::concat<types::pshape<std::integral_constant<long, 1>>,
-                         typename make_scalar_pshape<N - 1>::type> {
+    struct make_scalar_pshape : sutils::concat<types::pshape<std::integral_constant<long, 1>>,
+                                               typename make_scalar_pshape<N - 1>::type> {
     };
 
     template <>
@@ -36,15 +35,13 @@ namespace numpy
   } // namespace details
 
   template <class E, class dtype = types::none_type>
-  auto mean(E const &expr, types::none_type axis = {}, dtype d = {},
-            types::none_type out = {}, types::false_immediate keep_dims = {})
-      -> decltype(sum(expr, axis, d) /
-                  details::dtype_or_double<dtype>(expr.flat_size()));
+  auto mean(E const &expr, types::none_type axis = {}, dtype d = {}, types::none_type out = {},
+            types::false_immediate keep_dims = {})
+      -> decltype(sum(expr, axis, d) / details::dtype_or_double<dtype>(expr.flat_size()));
 
   template <class E, class dtype = types::none_type>
   auto mean(E const &expr, long axis, dtype d = {}, types::none_type out = {},
-            types::false_immediate keep_dims = {}) -> decltype(sum(expr, axis,
-                                                                   d));
+            types::false_immediate keep_dims = {}) -> decltype(sum(expr, axis, d));
 
   template <class E, class dtype>
   types::ndarray<details::dtype_or_double<dtype>,
@@ -54,8 +51,7 @@ namespace numpy
 
   template <class E, class dtype>
   auto mean(E const &expr, long axis, dtype d, types::none_type out,
-            types::true_immediate keep_dims)
-      -> decltype(expand_dims(mean(expr, axis, d), axis));
+            types::true_immediate keep_dims) -> decltype(expand_dims(mean(expr, axis, d), axis));
 
   DEFINE_FUNCTOR(pythonic::numpy, mean);
 } // namespace numpy

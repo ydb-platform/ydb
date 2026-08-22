@@ -29,9 +29,11 @@ public:
     ui32 GetRecordsCount() const {
         return RecordsCount;
     }
+
     ui32 GetRawBytes() const {
         return RawBytes;
     }
+
     void SetRawBytes(const ui32 value) {
         RawBytes = value;
     }

@@ -1,0 +1,47 @@
+PY3TEST()
+ENV(YDB_HARD_MEMORY_LIMIT_BYTES="107374182400")
+
+TEST_SRCS(
+    test_decimal.py
+    test_parallel.py
+    test_s_float.py
+    test_s1.py
+    test_duplicates.py
+)
+
+IF (SANITIZER_TYPE)
+    SIZE(LARGE)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+ELSE()
+    SIZE(MEDIUM)
+ENDIF()
+
+REQUIREMENTS(ram:16 cpu:4)
+
+ENV(YDB_ENABLE_COLUMN_TABLES="true")
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
+ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
+ENV(NO_KUBER_LOGS="yes")
+ENV(WAIT_CLUSTER_ALIVE_TIMEOUT="60")
+ENV(ARCADIA_EXTERNAL_DATA=ydb/tests/functional/tpc/data)
+ENV(SIMPLE_QUEUE_BINARY="ydb/tests/stress/simple_queue/simple_queue")
+ENV(OLTP_WORKLOAD_BINARY="ydb/tests/stress/oltp_workload/oltp_workload")
+
+PEERDIR(
+    ydb/tests/functional/tpc/lib
+)
+
+DEPENDS(
+    ydb/apps/ydb
+    ydb/tests/stress/simple_queue
+    ydb/tests/stress/oltp_workload
+)
+
+DATA(
+    arcadia/ydb/tests/functional/clickbench/data/hits.csv
+    arcadia/ydb/tests/functional/tpc/data
+)
+
+FORK_TEST_FILES()
+FORK_SUBTESTS()
+END()

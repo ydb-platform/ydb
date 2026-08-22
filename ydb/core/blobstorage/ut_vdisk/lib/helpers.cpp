@@ -4,9 +4,12 @@
 #include <util/random/shuffle.h>
 
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogreader.h>
 #include <ydb/core/blobstorage/backpressure/queue_backpressure_client.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NActorsServices::TEST
 
 using namespace NKikimr;
 
@@ -14,6 +17,11 @@ static inline TString LimitData(const TString &data) {
     return data.size() <= 16 ? data : (data.substr(0, 16) + "...");
 }
 
+std::string trim(std::string const& str) {
+    if(str.empty())
+        return str;
+    return str.substr(0, str.find_last_not_of(' ') + 1);
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // PDisk Gen status handlers
@@ -25,7 +33,7 @@ bool PDiskGenStatusHandlerDefault(const TActorContext &ctx,
     Y_UNUSED(notifyId);
     Y_ABORT_UNLESS(ev->Get()->Record.GetStatus() == NKikimrProto::OK, "Status=%d (%s)", ev->Get()->Record.GetStatus(),
             NKikimrProto::EReplyStatus_Name(ev->Get()->Record.GetStatus()).c_str());
-    LOG_DEBUG(ctx, NActorsServices::TEST, "  TEvVPutResult succeded");
+    YDB_LOG_DEBUG_CTX(ctx, "TEvVPutResult succeded");
     return false;
 }
 
@@ -110,9 +118,14 @@ class TRangeGet : public TActorBootstrapped<TRangeGet> {
     void Bootstrap(const TActorContext &ctx) {
         Become(&TThis::StateFunc);
 
-        LOG_NOTICE(ctx, NActorsServices::TEST,
-                   "  RANGE READ: from=%s to=%s\n", ReadFrom.ToString().data(), ReadTo.ToString().data());
+        YDB_LOG_NOTICE_CTX(ctx, "RANGE READ",
+            {"from", ReadFrom},
+            {"to", ReadTo});
 
+        SendRequest();
+    }
+
+    void SendRequest() {
         auto req = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(VDiskInfo.VDiskID,
                                                                   TInstant::Max(),
                                                                   NKikimrBlobStorage::EGetHandleClass::FastRead,
@@ -122,7 +135,7 @@ class TRangeGet : public TActorBootstrapped<TRangeGet> {
                                                                   ReadTo,
                                                                   MaxResults);
 
-        ctx.Send(VDiskInfo.ActorID, req.release());
+        Send(VDiskInfo.ActorID, req.release(), IEventHandle::FlagTrackDelivery);
     }
 
     void CheckOrder(const NKikimrBlobStorage::TEvVGetResult &rec,
@@ -142,7 +155,7 @@ class TRangeGet : public TActorBootstrapped<TRangeGet> {
 
     void Handle(TEvBlobStorage::TEvVGetResult::TPtr &ev, const TActorContext &ctx) {
         Y_ABORT_UNLESS(ev->Get()->Record.GetStatus() == NKikimrProto::OK);
-        LOG_NOTICE(ctx, NActorsServices::TEST, "  TEvVGetResult succeded");
+        YDB_LOG_NOTICE_CTX(ctx, "TEvVGetResult succeded");
 
         // check result order
         const NKikimrBlobStorage::TEvVGetResult &rec = ev->Get()->Record;
@@ -163,6 +176,7 @@ class TRangeGet : public TActorBootstrapped<TRangeGet> {
     STRICT_STFUNC(StateFunc,
         HFunc(TEvBlobStorage::TEvVGetResult, Handle);
         IgnoreFunc(TEvBlobStorage::TEvVWindowChange);
+        cFunc(TEvents::TEvUndelivered::EventType, SendRequest);
     )
 
 public:
@@ -238,7 +252,8 @@ class TManyPuts : public TActorBootstrapped<TManyPuts> {
             Y_ABORT_UNLESS(RequestDeadlines);
         }
         ui32 msgsSent = MsgNum - BadSteps->size();
-        LOG_NOTICE(ctx, NActorsServices::TEST, "TOTALLY SENT %u messages", msgsSent);
+        YDB_LOG_NOTICE_CTX(ctx, "TOTALLY SENT messages",
+            {"msgsSent", msgsSent});
         ctx.Send(NotifyID, new TEvents::TEvCompleted());
         Die(ctx);
     }
@@ -251,7 +266,8 @@ class TManyPuts : public TActorBootstrapped<TManyPuts> {
         // put logo blob
         while (!IsEnd()) {
             if (PutIdx % 100 == 0)
-                LOG_NOTICE(ctx, NActorsServices::TEST, "PUT PutIdx=%u", PutIdx);
+                YDB_LOG_NOTICE_CTX(ctx, "PUT PutIdx=",
+                    {"putIdx", PutIdx});
 
             const TPut &put = Puts[PutIdx];
 
@@ -260,9 +276,13 @@ class TManyPuts : public TActorBootstrapped<TManyPuts> {
             if (mainVDiskId == VDiskInfo.VDiskID) {
                 const bool noTimeout = RequestTimeout == TDuration::Seconds(0);
                 const TInstant deadline = noTimeout ? TInstant::Max() : TInstant::Now() + RequestTimeout;
+                auto s = put.Data;
+                if (Conf->GroupInfo->Type.GetErasure() == NKikimr::TBlobStorageGroupType::Erasure4Plus2Block) {
+                    s.resize(Conf->GroupInfo->Type.PartSize(logoBlobID));
+                }
                 ctx.Send(QueueActorId,
-                         new TEvBlobStorage::TEvVPut(logoBlobID, TRope(put.Data), VDiskInfo.VDiskID, false,
-                                                     nullptr, deadline, HandleClassGen->GetHandleClass()));
+                         new TEvBlobStorage::TEvVPut(logoBlobID, TRope(s), VDiskInfo.VDiskID, false,
+                                                     nullptr, deadline, HandleClassGen->GetHandleClass(), false));
                 return;
             } else {
                 BadSteps->insert(put.Step);
@@ -428,7 +448,8 @@ class TManyMultiPuts : public TActorBootstrapped<TManyMultiPuts> {
             Y_ABORT_UNLESS(RequestDeadlines);
         }
         ui32 msgsSent = MsgNum - BadSteps->size();
-        LOG_NOTICE(ctx, NActorsServices::TEST, "TOTALLY SENT %u messages", msgsSent);
+        YDB_LOG_NOTICE_CTX(ctx, "TOTALLY SENT messages",
+            {"msgsSent", msgsSent});
         ctx.Send(NotifyID, new TEvents::TEvCompleted());
         Die(ctx);
     }
@@ -445,13 +466,15 @@ class TManyMultiPuts : public TActorBootstrapped<TManyMultiPuts> {
                                              false, nullptr));
         while (Step < MsgNum) {
             if (Step % 100 == 0)
-                LOG_NOTICE(ctx, NActorsServices::TEST, "PUT Step=%u", Step);
+                YDB_LOG_NOTICE_CTX(ctx, "PUT Step=",
+                    {"step", Step});
 
             TLogoBlobID logoBlobID(TabletId, Gen, Steps[Step], Channel, MsgData.size(), 0, 1);
             TVDiskIdShort mainVDiskId = TIngress::GetMainReplica(&Conf->GroupInfo->GetTopology(), logoBlobID);
             if (mainVDiskId == VDiskInfo.VDiskID) {
                 ui64 cookieValue = Step;
-                vMultiPut->AddVPut(logoBlobID, TRcBuf(MsgData), &cookieValue, nullptr, NWilson::TTraceId());
+                vMultiPut->AddVPut(logoBlobID, TRcBuf(MsgData), &cookieValue, false, false, false, nullptr,
+                    NWilson::TTraceId(), false);
                 putCount++;
 
                 Step++;
@@ -580,7 +603,12 @@ class TManyGets : public TActorBootstrapped<TManyGets> {
     void SendGet(const TActorContext &ctx) {
         // get logo blob
         if (Step % 100 == 0)
-            LOG_NOTICE(ctx, NActorsServices::TEST, "GET Step=%u", Step);
+            YDB_LOG_NOTICE_CTX(ctx, "GET Step=",
+                {"step", Step});
+        SendRequest();
+    }
+
+    void SendRequest() {
         TLogoBlobID logoBlobID(TabletId, Gen, Step, Channel, MsgData.size(), 0, 1);
         auto req = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(VDiskInfo.VDiskID,
                                                                    TInstant::Max(),
@@ -588,7 +616,7 @@ class TManyGets : public TActorBootstrapped<TManyGets> {
                                                                    TEvBlobStorage::TEvVGet::EFlags::None,
                                                                    {},
                                                                    {logoBlobID});
-        ctx.Send(VDiskInfo.ActorID, req.release());
+        Send(VDiskInfo.ActorID, req.release(), IEventHandle::FlagTrackDelivery);
     }
 
     void Check(const TActorContext &ctx, const NKikimrBlobStorage::TEvVGetResult &rec, const TEvBlobStorage::TEvVGetResult& ev) {
@@ -605,7 +633,7 @@ class TManyGets : public TActorBootstrapped<TManyGets> {
 
     void Handle(TEvBlobStorage::TEvVGetResult::TPtr &ev, const TActorContext &ctx) {
         if (ev->Get()->Record.GetStatus() != NKikimrProto::OK) {
-            LOG_NOTICE(ctx, NActorsServices::TEST, "ERROR");
+            YDB_LOG_NOTICE_CTX(ctx, "ERROR");
             fprintf(stderr, "ERROR\n");
         } else {
             if (BadSteps->find(Step) == BadSteps->end()) {
@@ -626,6 +654,7 @@ class TManyGets : public TActorBootstrapped<TManyGets> {
     STRICT_STFUNC(StateReadFunc,
         HFunc(TEvBlobStorage::TEvVGetResult, Handle);
         IgnoreFunc(TEvBlobStorage::TEvVWindowChange);
+        cFunc(TEvents::TEvUndelivered::EventType, SendRequest);
     )
 
 public:
@@ -729,7 +758,7 @@ class TGet : public TActorBootstrapped<TGet> {
             break;
 
         default:
-            LOG_NOTICE(ctx, NActorsServices::TEST, "ERROR");
+            YDB_LOG_NOTICE_CTX(ctx, "ERROR");
             fprintf(stderr, "ERROR\n");
         }
 
@@ -816,24 +845,30 @@ class TPutGC : public TActorBootstrapped<TPutGC> {
 
     friend class TActorBootstrapped<TPutGC>;
 
-    void Bootstrap(const TActorContext &ctx) {
+    void Bootstrap(const TActorContext&) {
         TThis::Become(&TThis::StateFunc);
-        ctx.Send(VDiskInfo.ActorID,
-                 new TEvBlobStorage::TEvVCollectGarbage(TabletID, RecGen, RecGenCounter, Channel, Collect, CollectGen,
-                                                        CollectStep, false, Keep.Get(), DoNotKeep.Get(), VDiskInfo.VDiskID,
-                                                        TInstant::Max()));
+        SendRequest();
     }
 
     void Handle(TEvBlobStorage::TEvVCollectGarbageResult::TPtr &ev, const TActorContext &ctx) {
         Y_ABORT_UNLESS(ev->Get()->Record.GetStatus() == NKikimrProto::OK, "Status=%d", ev->Get()->Record.GetStatus());
-        LOG_NOTICE(ctx, NActorsServices::TEST, "  TEvVCollectGarbageResult succeded");
+        YDB_LOG_NOTICE_CTX(ctx, "TEvVCollectGarbageResult succeded");
         ctx.Send(NotifyID, new TEvents::TEvCompleted());
         TThis::Die(ctx);
+    }
+
+    void SendRequest() {
+        Send(VDiskInfo.ActorID,
+             new TEvBlobStorage::TEvVCollectGarbage(TabletID, RecGen, RecGenCounter, Channel, Collect, CollectGen,
+                                                    CollectStep, false, Keep.Get(), DoNotKeep.Get(), VDiskInfo.VDiskID,
+                                                    TInstant::Max()),
+             IEventHandle::FlagTrackDelivery);
     }
 
     STRICT_STFUNC(StateFunc,
         HFunc(TEvBlobStorage::TEvVCollectGarbageResult, Handle);
         IgnoreFunc(TEvBlobStorage::TEvVWindowChange);
+        cFunc(TEvents::TEvUndelivered::EventType, SendRequest);
     )
 
 public:
@@ -869,26 +904,43 @@ NActors::IActor *CreatePutGC(const NActors::TActorId &notifyID, const TAllVDisks
 class TWaitForCompactionOneDisk : public TActorBootstrapped<TWaitForCompactionOneDisk> {
     TActorId NotifyID;
     const TAllVDisks::TVDiskInstance VDiskInfo;
-
+    const bool Sync;
     friend class TActorBootstrapped<TWaitForCompactionOneDisk>;
 
-    void Bootstrap(const TActorContext &ctx) {
+    void Bootstrap(const TActorContext&) {
         Become(&TThis::StateSchedule);
-        ctx.Send(VDiskInfo.ActorID,
-            new TEvBlobStorage::TEvVCompact(VDiskInfo.VDiskID, NKikimrBlobStorage::TEvVCompact::ASYNC));
+        SendVCompact();
     }
 
-    void Handle(TEvBlobStorage::TEvVCompactResult::TPtr &ev, const TActorContext &ctx) {
+    void Handle(TEvBlobStorage::TEvVCompactResult::TPtr &ev) {
         if (ev->Get()->Record.GetStatus() == NKikimrProto::OK) {
             Become(&TThis::StateWait);
-            ctx.Send(VDiskInfo.ActorID, new TEvBlobStorage::TEvVStatus(VDiskInfo.VDiskID));
+            SendVStatus();
         } else {
-            ctx.Send(VDiskInfo.ActorID,
-                new TEvBlobStorage::TEvVCompact(VDiskInfo.VDiskID, NKikimrBlobStorage::TEvVCompact::ASYNC));
+            SendVCompact();
         }
     }
 
-    void Handle(TEvBlobStorage::TEvVStatusResult::TPtr &ev, const TActorContext &ctx) {
+    void SendVCompact() {
+        if (Sync) {
+            Send(VDiskInfo.ActorID, TEvCompactVDisk::Create(EHullDbType::LogoBlobs,
+                TEvCompactVDisk::EMode::FULL, false));
+        } else {
+            Send(VDiskInfo.ActorID, new TEvBlobStorage::TEvVCompact(VDiskInfo.VDiskID,
+                    NKikimrBlobStorage::TEvVCompact::ASYNC), IEventHandle::FlagTrackDelivery);
+        }
+    }
+
+    void SendVStatus() {
+        Send(VDiskInfo.ActorID, new TEvBlobStorage::TEvVStatus(VDiskInfo.VDiskID), IEventHandle::FlagTrackDelivery);
+    }
+
+    void Handle(TEvCompactVDiskResult::TPtr&, const TActorContext& ctx) {
+        ctx.Send(NotifyID, new TEvents::TEvCompleted());
+        Die(ctx);
+    }
+
+    void Handle(TEvBlobStorage::TEvVStatusResult::TPtr &ev) {
         Y_ABORT_UNLESS(ev->Get()->Record.GetStatus() == NKikimrProto::OK);
         const NKikimrBlobStorage::TEvVStatusResult &record = ev->Get()->Record;
 
@@ -898,33 +950,36 @@ class TWaitForCompactionOneDisk : public TActorBootstrapped<TWaitForCompactionOn
 
         if (logoBlobsCompacted && blocksCompacted && barriersCompacted) {
             // Finished
-            ctx.Send(NotifyID, new TEvents::TEvCompleted());
-            Die(ctx);
+            Send(NotifyID, new TEvents::TEvCompleted());
+            PassAway();
         } else {
             Become(&TThis::StateSchedule);
-            ctx.Send(VDiskInfo.ActorID,
-                new TEvBlobStorage::TEvVCompact(VDiskInfo.VDiskID, NKikimrBlobStorage::TEvVCompact::ASYNC));
+            SendVCompact();
         }
     }
 
     STRICT_STFUNC(StateSchedule,
-        HFunc(TEvBlobStorage::TEvVCompactResult, Handle);
+        hFunc(TEvBlobStorage::TEvVCompactResult, Handle);
+        cFunc(TEvents::TEvUndelivered::EventType, SendVCompact)
+        HFunc(TEvCompactVDiskResult, Handle);
     )
 
     STRICT_STFUNC(StateWait,
-        HFunc(TEvBlobStorage::TEvVStatusResult, Handle);
+        hFunc(TEvBlobStorage::TEvVStatusResult, Handle);
+        cFunc(TEvents::TEvUndelivered::EventType, SendVStatus);
     )
 
 public:
-    TWaitForCompactionOneDisk(const TActorId &notifyID, const TAllVDisks::TVDiskInstance &vdiskInfo)
+    TWaitForCompactionOneDisk(const TActorId &notifyID, const TAllVDisks::TVDiskInstance &vdiskInfo, bool sync)
         : TActorBootstrapped<TWaitForCompactionOneDisk>()
         , NotifyID(notifyID)
         , VDiskInfo(vdiskInfo)
+        , Sync(sync)
     {}
 };
 
-NActors::IActor *CreateWaitForCompaction(const NActors::TActorId &notifyID, const TAllVDisks::TVDiskInstance &vdiskInfo) {
-    return new TWaitForCompactionOneDisk(notifyID, vdiskInfo);
+NActors::IActor *CreateWaitForCompaction(const NActors::TActorId &notifyID, const TAllVDisks::TVDiskInstance &vdiskInfo, bool sync) {
+    return new TWaitForCompactionOneDisk(notifyID, vdiskInfo, sync);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -932,7 +987,7 @@ class TWaitForCompaction : public TActorBootstrapped<TWaitForCompaction> {
     TActorId NotifyID;
     TConfiguration *Conf;
     ui32 Counter;
-
+    bool Sync;
     friend class TActorBootstrapped<TWaitForCompaction>;
 
     void Bootstrap(const TActorContext &ctx) {
@@ -941,7 +996,7 @@ class TWaitForCompaction : public TActorBootstrapped<TWaitForCompaction> {
         ui32 total = Conf->GroupInfo->GetTotalVDisksNum();
         for (ui32 i = 0; i < total; i++) {
             TAllVDisks::TVDiskInstance &instance = Conf->VDisks->Get(i);
-            ctx.RegisterWithSameMailbox(CreateWaitForCompaction(ctx.SelfID, instance));
+            ctx.RegisterWithSameMailbox(CreateWaitForCompaction(ctx.SelfID, instance, Sync));
             Counter++;
         }
     }
@@ -960,16 +1015,17 @@ class TWaitForCompaction : public TActorBootstrapped<TWaitForCompaction> {
     )
 
 public:
-    TWaitForCompaction(const TActorId &notifyID, TConfiguration *conf)
+    TWaitForCompaction(const TActorId &notifyID, TConfiguration *conf, bool sync)
         : TActorBootstrapped<TWaitForCompaction>()
         , NotifyID(notifyID)
         , Conf(conf)
         , Counter(0)
+        , Sync(sync)
     {}
 };
 
-NActors::IActor *CreateWaitForCompaction(const NActors::TActorId &notifyID, TConfiguration *conf) {
-    return new TWaitForCompaction(notifyID, conf);
+NActors::IActor *CreateWaitForCompaction(const NActors::TActorId &notifyID, TConfiguration *conf, bool sync) {
+    return new TWaitForCompaction(notifyID, conf, sync);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -981,9 +1037,14 @@ class TWaitForDefragOneDisk : public TActorBootstrapped<TWaitForDefragOneDisk> {
 
     friend class TActorBootstrapped<TWaitForDefragOneDisk>;
 
-    void Bootstrap(const TActorContext &ctx) {
+    void Bootstrap(const TActorContext&) {
         Become(&TThis::StateFunc);
-        ctx.Send(VDiskInfo.ActorID, new TEvBlobStorage::TEvVDefrag(VDiskInfo.VDiskID, Full));
+        SendRequest();
+    }
+
+    void SendRequest() {
+        Send(VDiskInfo.ActorID, new TEvBlobStorage::TEvVDefrag(VDiskInfo.VDiskID, Full),
+                IEventHandle::FlagTrackDelivery);
     }
 
     void Handle(TEvBlobStorage::TEvVDefragResult::TPtr &ev, const TActorContext &ctx) {
@@ -993,12 +1054,13 @@ class TWaitForDefragOneDisk : public TActorBootstrapped<TWaitForDefragOneDisk> {
             ctx.Send(NotifyID, new TEvents::TEvCompleted());
             Die(ctx);
         } else {
-            ctx.Send(VDiskInfo.ActorID, new TEvBlobStorage::TEvVDefrag(VDiskInfo.VDiskID, Full));
+            SendRequest();
         }
     }
 
     STRICT_STFUNC(StateFunc,
         HFunc(TEvBlobStorage::TEvVDefragResult, Handle);
+        cFunc(TEvents::TEvUndelivered::EventType, SendRequest);
     )
 
 public:
@@ -1198,21 +1260,30 @@ class TWaitForSync : public TActorBootstrapped<TWaitForSync> {
     TActorId NotifyID;
     ui32 Counter = 0;
     TMutualSyncState MutualSyncState;
+    std::vector<std::pair<TActorId, TVDiskID>> VStatusSent;
 
     friend class TActorBootstrapped<TWaitForSync>;
 
-    void Bootstrap(const TActorContext &ctx) {
+    void Bootstrap(const TActorContext&) {
         Become(&TThis::StateFunc);
-        GetStatuses(ctx);
+        GetStatuses();
     }
 
-    void GetStatuses(const TActorContext &ctx) {
+    void GetStatuses() {
         // send TEvVStatus to all working VDisks
-        auto sendFunc = [&ctx] (const TInfo &info) {
-            ctx.Send(info.ActorId, new TEvBlobStorage::TEvVStatus(info.VDiskId));
+        VStatusSent.clear();
+        auto sendFunc = [this] (const TInfo &info) {
+            ui32 idx = VStatusSent.size();
+            VStatusSent.emplace_back(info.ActorId, info.VDiskId);
+            SendVStatus(idx);
         };
         MutualSyncState.ForEach(sendFunc);
         Counter = MutualSyncState.InfoVecSize();
+    }
+
+    void SendVStatus(ui32 idx) {
+        const auto& [actorId, vdiskId] = VStatusSent[idx];
+        Send(actorId, new TEvBlobStorage::TEvVStatus(vdiskId), IEventHandle::FlagTrackDelivery, idx);
     }
 
     void Handle(TEvBlobStorage::TEvVStatusResult::TPtr &ev, const TActorContext &ctx) {
@@ -1230,13 +1301,18 @@ class TWaitForSync : public TActorBootstrapped<TWaitForSync> {
             } else {
                 // Retry
                 MutualSyncState.Clear();
-                GetStatuses(ctx);
+                GetStatuses();
             }
         }
     }
 
+    void Handle(const TEvents::TEvUndelivered::TPtr& ev) {
+        SendVStatus(ev->Cookie);
+    }
+
     STRICT_STFUNC(StateFunc,
         HFunc(TEvBlobStorage::TEvVStatusResult, Handle);
+        hFunc(TEvents::TEvUndelivered, Handle);
     )
 
 public:
@@ -1262,10 +1338,9 @@ class TCheckDbEmptynessActor : public TActorBootstrapped<TCheckDbEmptynessActor>
 
     friend class TActorBootstrapped<TCheckDbEmptynessActor>;
 
-    void Bootstrap(const TActorContext &ctx) {
+    void Bootstrap(const TActorContext&) {
         Become(&TThis::StateFunc);
-        ctx.Send(VDiskInfo.ActorID,
-                 new TEvBlobStorage::TEvVStatus(VDiskInfo.VDiskID));
+        SendVStatus();
     }
 
     void Handle(TEvBlobStorage::TEvVStatusResult::TPtr &ev, const TActorContext &ctx) {
@@ -1280,8 +1355,14 @@ class TCheckDbEmptynessActor : public TActorBootstrapped<TCheckDbEmptynessActor>
         TThis::Die(ctx);
     }
 
+    void SendVStatus() {
+        Send(VDiskInfo.ActorID, new TEvBlobStorage::TEvVStatus(VDiskInfo.VDiskID),
+                IEventHandle::FlagTrackDelivery);
+    }
+
     STRICT_STFUNC(StateFunc,
         HFunc(TEvBlobStorage::TEvVStatusResult, Handle);
+        cFunc(TEvents::TEvUndelivered::EventType, SendVStatus);
     )
 
 public:
@@ -1318,25 +1399,32 @@ class TPutGCToCorrespondingVDisksActor : public TActorBootstrapped<TPutGCToCorre
 
     friend class TActorBootstrapped<TPutGCToCorrespondingVDisksActor>;
 
-    void Bootstrap(const TActorContext &ctx) {
+    void Bootstrap(const TActorContext&) {
         TThis::Become(&TThis::StateFunc);
 
         ui32 total = Conf->GroupInfo->GetTotalVDisksNum();
         for (ui32 i = 0; i < total; i++) {
             TAllVDisks::TVDiskInstance &instance = Conf->VDisks->Get(i);
             if (instance.Initialized) {
-                ctx.Send(instance.ActorID,
-                         new TEvBlobStorage::TEvVCollectGarbage(TabletID, RecGen, RecGenCounter, Channel, Collect,
-                                                                CollectGen, CollectStep, false, Keep.Get(),
-                                                                DoNotKeep.Get(), instance.VDiskID, TInstant::Max()));
+                SendRequest(i);
                 Counter++;
             }
         }
     }
 
+    void SendRequest(ui32 idx) {
+        TAllVDisks::TVDiskInstance &instance = Conf->VDisks->Get(idx);
+        Send(instance.ActorID,
+             new TEvBlobStorage::TEvVCollectGarbage(TabletID, RecGen, RecGenCounter, Channel, Collect,
+                                                    CollectGen, CollectStep, false, Keep.Get(),
+                                                    DoNotKeep.Get(), instance.VDiskID, TInstant::Max()),
+             IEventHandle::FlagTrackDelivery,
+             /*cookie=*/idx);
+    }
+
     void Handle(TEvBlobStorage::TEvVCollectGarbageResult::TPtr &ev, const TActorContext &ctx) {
         Y_ABORT_UNLESS(ev->Get()->Record.GetStatus() == NKikimrProto::OK, "Status=%d", ev->Get()->Record.GetStatus());
-        LOG_NOTICE(ctx, NActorsServices::TEST, "  TEvVCollectGarbageResult succeded");
+        YDB_LOG_NOTICE_CTX(ctx, "TEvVCollectGarbageResult succeded");
 
         --Counter;
         if (Counter == 0) {
@@ -1346,9 +1434,14 @@ class TPutGCToCorrespondingVDisksActor : public TActorBootstrapped<TPutGCToCorre
         }
     }
 
+    void Handle(const TEvents::TEvUndelivered::TPtr& ev) {
+        SendRequest(ev->Cookie);
+    }
+
     STRICT_STFUNC(StateFunc,
         HFunc(TEvBlobStorage::TEvVCollectGarbageResult, Handle);
         IgnoreFunc(TEvBlobStorage::TEvVWindowChange);
+        hFunc(TEvents::TEvUndelivered, Handle);
     )
 
 public:
@@ -1397,8 +1490,10 @@ NActors::IActor *PutGCToCorrespondingVDisks(const NActors::TActorId &notifyID, T
 
 void PutLogoBlobToVDisk(const TActorContext &ctx, const TActorId &actorID, const TVDiskID &vdiskID,
                         const TLogoBlobID &id, const TString &data, NKikimrBlobStorage::EPutHandleClass cls) {
-    LOG_DEBUG(ctx, NActorsServices::TEST, "  Sending TEvPut: id=%s data='%s'", id.ToString().data(), LimitData(data).data());
-    ctx.Send(actorID, new TEvBlobStorage::TEvVPut(id, TRope(data), vdiskID, false, nullptr, TInstant::Max(), cls));
+    YDB_LOG_DEBUG_CTX(ctx, "Sending TEvPut",
+        {"id", id},
+        {"data", LimitData(data)});
+    ctx.Send(actorID, new TEvBlobStorage::TEvVPut(id, TRope(data), vdiskID, false, nullptr, TInstant::Max(), cls, false));
 }
 
 // returns number of messages sent
@@ -1412,7 +1507,11 @@ ui32 PutLogoBlobToCorrespondingVDisks(const TActorContext &ctx, NKikimr::TBlobSt
     ui8 n = info->Type.TotalPartCount();
     for (ui8 i = 0; i < n; i++) {
         TLogoBlobID aid(id, i + 1);
-        PutLogoBlobToVDisk(ctx, outServIds[i], outVDisks[i], aid, data, cls);
+        auto s = data;
+        if (info->Type.GetErasure() == NKikimr::TBlobStorageGroupType::Erasure4Plus2Block) {
+            s.resize(info->Type.PartSize(aid));
+        }
+        PutLogoBlobToVDisk(ctx, outServIds[i], outVDisks[i], aid, s, cls);
         msgsSent++;
     }
     return msgsSent;
@@ -1428,7 +1527,8 @@ ui32 GetLogoBlobFromCorrespondingVDisks(const NActors::TActorContext &ctx, NKiki
     ui8 n = info->Type.TotalPartCount();
     for (ui8 i = 0; i < n; i++) {
         TLogoBlobID aid(id, i + 1);
-        LOG_NOTICE(ctx, NActorsServices::TEST, "  Sending TEvGet: id=%s", aid.ToString().data());
+        YDB_LOG_NOTICE_CTX(ctx, "Sending TEvGet: id=",
+            {"id", aid});
         auto req = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(outVDisks[i],
                                                                    TInstant::Max(),
                                                                    NKikimrBlobStorage::EGetHandleClass::AsyncRead,
@@ -1531,7 +1631,11 @@ private:
         TThis::Become(&TThis::StateFunc);
         // send all messages
         for (const auto &it : *DataPtr) {
-            PutLogoBlobToVDisk(ctx, it.ServiceID, it.VDiskID, it.Id, it.Data, HandleClass);
+            auto s = it.Data;
+            if (Conf->GroupInfo->Type.GetErasure() == NKikimr::TBlobStorageGroupType::Erasure4Plus2Block) {
+                s.resize(Conf->GroupInfo->Type.PartSize(it.Id));
+            }
+            PutLogoBlobToVDisk(ctx, it.ServiceID, it.VDiskID, it.Id, s, HandleClass);
             Counter++;
         }
     }
@@ -1605,14 +1709,18 @@ class TCheckDataSnapshotActor : public TActorBootstrapped<TCheckDataSnapshotActo
             TThis::Die(ctx);
         } else {
             // send read
-            auto req = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(Cur->VDiskID,
-                                                                       TInstant::Max(),
-                                                                       NKikimrBlobStorage::EGetHandleClass::AsyncRead,
-                                                                       TEvBlobStorage::TEvVGet::EFlags::ShowInternals,
-                                                                       {},
-                                                                       {TLogoBlobID(Cur->Id, 0)});
-            ctx.Send(Cur->ServiceID, req.release());
+            SendRequest();
         }
+    }
+
+    void SendRequest() {
+        auto req = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(Cur->VDiskID,
+                                                                   TInstant::Max(),
+                                                                   NKikimrBlobStorage::EGetHandleClass::AsyncRead,
+                                                                   TEvBlobStorage::TEvVGet::EFlags::ShowInternals,
+                                                                   {},
+                                                                   {TLogoBlobID(Cur->Id, 0)});
+        Send(Cur->ServiceID, req.release(), IEventHandle::FlagTrackDelivery);
     }
 
     void Handle(TEvBlobStorage::TEvVGetResult::TPtr &ev, const TActorContext &ctx) {
@@ -1665,6 +1773,7 @@ class TCheckDataSnapshotActor : public TActorBootstrapped<TCheckDataSnapshotActo
     STRICT_STFUNC(StateFunc,
         HFunc(TEvBlobStorage::TEvVGetResult, Handle);
         IgnoreFunc(TEvBlobStorage::TEvVWindowChange);
+        cFunc(TEvents::TEvUndelivered::EventType, SendRequest);
     )
 
 public:
@@ -1693,7 +1802,7 @@ void CheckQueryResult(NKikimr::TEvBlobStorage::TEvVGetResult::TPtr &ev, const NA
     switch (eqr) {
         case EQR_OK_NODATA: {
             Y_ABORT_UNLESS(ev->Get()->Record.GetStatus() == NKikimrProto::OK);
-            LOG_NOTICE(ctx, NActorsServices::TEST, "  TEvVGetResult succeded");
+            YDB_LOG_NOTICE_CTX(ctx, "TEvVGetResult succeded");
             const NKikimrBlobStorage::TEvVGetResult &rec = ev->Get()->Record;
             int size = rec.GetResult().size();
             Y_ABORT_UNLESS(size == 1);
@@ -1703,7 +1812,7 @@ void CheckQueryResult(NKikimr::TEvBlobStorage::TEvVGetResult::TPtr &ev, const NA
         }
         case EQR_OK_EMPTY: {
             Y_ABORT_UNLESS(ev->Get()->Record.GetStatus() == NKikimrProto::OK);
-            LOG_NOTICE(ctx, NActorsServices::TEST, "  TEvVGetResult succeded");
+            YDB_LOG_NOTICE_CTX(ctx, "TEvVGetResult succeded");
             const NKikimrBlobStorage::TEvVGetResult &rec = ev->Get()->Record;
             int size = rec.GetResult().size();
             Y_ABORT_UNLESS(size == 0);
@@ -1711,16 +1820,18 @@ void CheckQueryResult(NKikimr::TEvBlobStorage::TEvVGetResult::TPtr &ev, const NA
         }
         case EQR_OK_EXPECTED_SET: {
             Y_ABORT_UNLESS(ev->Get()->Record.GetStatus() == NKikimrProto::OK, "Status=%d", ev->Get()->Record.GetStatus());
-            LOG_NOTICE(ctx, NActorsServices::TEST, "  TEvVGetResult succeded");
+            YDB_LOG_NOTICE_CTX(ctx, "TEvVGetResult succeded");
             const NKikimrBlobStorage::TEvVGetResult &rec = ev->Get()->Record;
             int size = rec.GetResult().size();
             for (int i = 0; i < size; i++) {
                 const NKikimrBlobStorage::TQueryResult &q = rec.GetResult(i);
                 const TLogoBlobID id = LogoBlobIDFromLogoBlobID(q.GetBlobID());
                 const TString& data = ev->Get()->GetBlobData(q).ConvertToString();
-                LOG_NOTICE(ctx, NActorsServices::TEST, "    @@@@@@@@@@ Status=%s LogoBlob=%s Data='%s' Cookie=%" PRIu64,
-                           NKikimrProto::EReplyStatus_Name(q.GetStatus()).data(), id.ToString().data(), LimitData(data).data(),
-                           q.GetCookie());
+                YDB_LOG_NOTICE_CTX(ctx, "@@@@@@@@@@",
+                    {"status", NKikimrProto::EReplyStatus_Name(q.GetStatus()).data()},
+                    {"logoBlob", id},
+                    {"data", LimitData(data).data()},
+                    {"cookie", q.GetCookie()});
                 expSet->Check(id, q.GetStatus(), data);
             }
             if (fullResult)
@@ -1740,7 +1851,8 @@ void PrintDebug(NKikimr::TEvBlobStorage::TEvVGetResult::TPtr &ev, const NActors:
     // output result
     const NKikimrBlobStorage::TEvVGetResult &rec = ev->Get()->Record;
     int size = rec.GetResult().size();
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  TEvVGetResult succeded (%d items)", size);
+    YDB_LOG_NOTICE_CTX(ctx, "TEvVGetResult succeeded",
+        {"size", size});
     for (int i = 0; i < size; i++) {
         const NKikimrBlobStorage::TQueryResult &q = rec.GetResult(i);
         const TLogoBlobID id = LogoBlobIDFromLogoBlobID(q.GetBlobID());
@@ -1752,9 +1864,12 @@ void PrintDebug(NKikimr::TEvBlobStorage::TEvVGetResult::TPtr &ev, const NActors:
             ingressRaw = ingress.Raw();
         }
         const TString& data = ev->Get()->GetBlobData(q).ConvertToString();
-        LOG_NOTICE(ctx, NActorsServices::TEST, "  @@@@@@@@@@ Status=%s LogoBlob=%s Data='%s' Ingress='%s' Raw=0x%lx",
-                   NKikimrProto::EReplyStatus_Name(q.GetStatus()).data(), id.ToString().data(), LimitData(data).data(),
-                   ingressStr.data(), ingressRaw);
+        YDB_LOG_NOTICE_CTX(ctx, "@@@@@@@@@@",
+            {"status", NKikimrProto::EReplyStatus_Name(q.GetStatus()).data()},
+            {"logoBlob", id},
+            {"data", LimitData(data).data()},
+            {"ingress", ingressStr.data()},
+            {"ingressRaw", ingressRaw});
     }
 }
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1787,7 +1902,7 @@ void TExpectedSet::Check(const TLogoBlobID &id, NKikimrProto::EReplyStatus statu
     Y_ABORT_UNLESS(it->second.Status == status, "TExpectedSet::Check: incorrect status %s instead of %s for %s",
            NKikimrProto::EReplyStatus_Name(status).data(), NKikimrProto::EReplyStatus_Name(it->second.Status).data(),
            id.ToString().data());
-    Y_ABORT_UNLESS(it->second.Data == data, "TExpectedSet::Check: incorrect data '%s' instead of '%s' for %s; "
+    Y_ABORT_UNLESS(trim(it->second.Data) == trim(data), "TExpectedSet::Check: incorrect data '%s' instead of '%s' for %s; "
            "got string of size %u instead of string of size %u",
            data.data(), it->second.Data.data(), id.ToString().data(), unsigned(data.size()), unsigned(it->second.Data.size()));
     Map.erase(it);
@@ -1925,15 +2040,19 @@ class TManyPutsToOneVDiskActor : public TActorBootstrapped<TManyPutsToOneVDiskAc
 
     void SendRequest(const TActorContext &ctx) {
         Y_ASSERT(Counter == 0);
-        PutLogoBlobToVDisk(ctx, VDiskInfo.ActorID, VDiskInfo.VDiskID, TLogoBlobID(Cur->Get()->Id, PartId),
-                           Cur->Get()->Data, HandleClass);
+        SendPut(ctx);
         Counter = 1;
         Cur->Next();
     }
 
+    void SendPut(const TActorContext& ctx) {
+        PutLogoBlobToVDisk(ctx, VDiskInfo.ActorID, VDiskInfo.VDiskID, TLogoBlobID(Cur->Get()->Id, PartId),
+                Cur->Get()->Data, HandleClass);
+    }
+
     void Handle(TEvBlobStorage::TEvVPutResult::TPtr &ev, const TActorContext &ctx) {
         Y_ABORT_UNLESS(ev->Get()->Record.GetStatus() == NKikimrProto::OK, "Status=%d", ev->Get()->Record.GetStatus());
-        LOG_DEBUG(ctx, NActorsServices::TEST, "  TEvVPutResult succeded");
+        YDB_LOG_DEBUG_CTX(ctx, "TEvVPutResult succeded");
 
         --Counter;
         if (Counter == 0) {
@@ -1950,6 +2069,7 @@ class TManyPutsToOneVDiskActor : public TActorBootstrapped<TManyPutsToOneVDiskAc
     STRICT_STFUNC(StateFunc,
         HFunc(TEvBlobStorage::TEvVPutResult, Handle);
         IgnoreFunc(TEvBlobStorage::TEvVWindowChange);
+        CFunc(TEvents::TEvUndelivered::EventType, SendPut);
     )
 
 public:
@@ -2027,8 +2147,11 @@ class TManyPutsToCorrespondingVDisksActor : public TActorBootstrapped<TManyPutsT
             double blobsPerSecond = (double)deltaBlobs / secs;
             double bytesPerSecond = (double)deltaBytes / secs;
 
-            LOG_INFO_S(ctx, NActorsServices::TEST, "BlobsSent# " << BlobsSent << " BytesSent# " << BytesSent <<
-                        " blobsPerSecond# " << blobsPerSecond << " bytesPerSecond# " << bytesPerSecond);
+            YDB_LOG_INFO_CTX(ctx, "Send request",
+                {"blobsSent", BlobsSent},
+                {"bytesSent", BytesSent},
+                {"blobsPerSecond", blobsPerSecond},
+                {"bytesPerSecond", bytesPerSecond});
 
             PrevTimestamp = time;
             UpdateTimestamp += Period;

@@ -8,7 +8,7 @@ import operator
 import random
 import re
 from collections.abc import Container, Iterable, Mapping
-from typing import TYPE_CHECKING, Any, Callable, Dict, TypeVar, Union, overload
+from typing import TYPE_CHECKING, Any, Callable, TypeVar, Union, overload
 
 import jaraco.text
 
@@ -135,7 +135,7 @@ def dict_map(function, dictionary):
     return dict((key, function(value)) for key, value in dictionary.items())
 
 
-class RangeMap(Dict[_RangeMapKT, _VT]):
+class RangeMap(dict[_RangeMapKT, _VT]):
     """
     A dictionary-like object that uses the keys as bounds for a range.
     Inclusion of the value for that range is determined by the
@@ -1089,3 +1089,22 @@ class WeightedLookup(RangeMap):
         lower, upper = self.bounds()
         selector = random.random() * upper
         return self[selector]
+
+
+def set_defaults(__anon_self: dict[str, object], /, **defaults) -> None:
+    """
+    Sets values on target in source not already in target.
+
+    Like :meth:`dict.setdefault`, but applies to all keys.
+
+    >>> target = dict(a=1, c=3)
+    >>> set_defaults(target, b=2, c=4)
+    >>> target
+    {'a': 1, 'c': 3, 'b': 2}
+
+    The first parameter is bound to a name that's unlikely to
+    collide with the keys in defaults.
+
+    >>> set_defaults(target, target=999)
+    """
+    __anon_self.update(Mask(__anon_self.__contains__, defaults))

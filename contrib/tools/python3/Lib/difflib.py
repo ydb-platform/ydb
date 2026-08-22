@@ -78,8 +78,8 @@ class SequenceMatcher:
     sequences.  As a rule of thumb, a .ratio() value over 0.6 means the
     sequences are close matches:
 
-    >>> print(round(s.ratio(), 3))
-    0.866
+    >>> print(round(s.ratio(), 2))
+    0.87
     >>>
 
     If you're only interested in where the sequences match,
@@ -1961,6 +1961,8 @@ class HtmlDiff(object):
 
         # change tabs to spaces before it gets more difficult after we insert
         # markup
+        # it also removes trailing newlines, causing some diffs to be missed
+        # see: gh-71896
         fromlines,tolines = self._tab_newline_replace(fromlines,tolines)
 
         # create diffs iterator which generates side by side from/to data

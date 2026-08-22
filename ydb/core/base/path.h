@@ -23,6 +23,13 @@ TString::const_iterator PathPartBrokenAt(const TString &part, const TStringBuf e
 bool TrySplitPathByDb(const TString& path, const TString& database,
     std::pair<TString, TString>& result, TString& error);
 
+/**
+ * If path is already under database (or equal), returns path as-is.
+ * Otherwise joins database/path and canonizes.
+ */
+TString NormalizePath(TStringBuf database, TStringBuf path);
+TString NormalizePath(const TString& database, const TString& path);
+
 template <typename TIter>
 TString CombinePath(TIter begin, TIter end, bool canonize = true) {
     auto path = JoinRange("/", begin, end);

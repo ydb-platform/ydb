@@ -12,6 +12,8 @@
 #include <util/memory/pool.h>
 #include <util/generic/array_ref.h>
 
+#include <utility>
+
 namespace NYql {
 
 struct TNodeFlags {
@@ -25,15 +27,28 @@ struct TNodeFlags {
     static constexpr ui32 FlagsMask = 0x07; // all flags should fit here
 };
 
-struct TAstNode {
-#define YQL_AST_NODE_TYPE_MAP(xx) \
-    xx(List, 0) \
-    xx(Atom, 1) \
-
-    enum EType : ui32 {
-        YQL_AST_NODE_TYPE_MAP(ENUM_VALUE_GEN)
+struct TAstNodeFlags {
+    enum : ui16 {
+        Default = 0,
+        ArbitraryContent = 0x01,
+        BinaryContent = 0x02,
+        MultilineContent = 0x04,
+        UnstableFormat = 0x08, // e.g. for AST with __query_text equality
     };
 
+    static constexpr ui32 FlagsMask = 0x0F; // all flags should fit here
+};
+
+struct TAstNode {
+    // clang-format off
+#define YQL_AST_NODE_TYPE_MAP(xx) \
+    xx(List, 0)                   \
+    xx(Atom, 1)
+    // clang-format on
+
+    enum EType: ui32 {
+        YQL_AST_NODE_TYPE_MAP(ENUM_VALUE_GEN)
+    };
 
     static const ui32 SmallListCount = 2;
 
@@ -131,20 +146,20 @@ struct TAstNode {
 
     inline TArrayRef<TAstNode* const> GetChildren() const {
         Y_ABORT_UNLESS(IsList());
-        return {ListCount_ <= SmallListCount ? Data_.S.Children : Data_.L.Children, ListCount_};
+        return {ListCount_ <= SmallListCount ? Data_.S.Children.data() : Data_.L.Children, ListCount_};
     }
 
     static inline TAstNode* NewAtom(TPosition position, TStringBuf content, TMemoryPool& pool, ui32 flags = TNodeFlags::Default) {
         auto poolContent = pool.AppendString(content);
         auto ret = pool.Allocate<TAstNode>();
-        ::new(ret) TAstNode(position, poolContent, flags);
+        ::new (ret) TAstNode(position, poolContent, flags);
         return ret;
     }
 
     // atom with non-owning content, useful for literal strings
     static inline TAstNode* NewLiteralAtom(TPosition position, TStringBuf content, TMemoryPool& pool, ui32 flags = TNodeFlags::Default) {
         auto ret = pool.Allocate<TAstNode>();
-        ::new(ret) TAstNode(position, content, flags);
+        ::new (ret) TAstNode(position, content, flags);
         return ret;
     }
 
@@ -164,18 +179,18 @@ struct TAstNode {
         }
 
         auto ret = pool.Allocate<TAstNode>();
-        ::new(ret) TAstNode(position, poolChildren, childrenCount);
+        ::new (ret) TAstNode(position, poolChildren, childrenCount);
         return ret;
     }
 
     template <typename... TNodes>
     static inline TAstNode* NewList(TPosition position, TMemoryPool& pool, TNodes... nodes) {
-        TAstNode* children[] = { nodes... };
-        return NewList(position, children, sizeof...(nodes), pool);
+        std::array<TAstNode*, sizeof...(TNodes)> children = {nodes...};
+        return NewList(position, children.data(), sizeof...(nodes), pool);
     }
 
     static inline TAstNode* NewList(TPosition position, TMemoryPool& pool) {
-        return NewList(position, nullptr, 0, pool);
+        return NewList(position, /*children=*/nullptr, 0, pool);
     }
 
     static TAstNode QuoteAtom;
@@ -184,7 +199,8 @@ struct TAstNode {
         return NewList(position, pool, &QuoteAtom, node);
     }
 
-    inline ~TAstNode() {}
+    inline ~TAstNode() {
+    }
 
     void Destroy() {
         TString().swap(Position_.File);
@@ -192,7 +208,7 @@ struct TAstNode {
 
 private:
     inline TAstNode(TPosition position, TStringBuf content, ui32 flags)
-        : Position_(position)
+        : Position_(std::move(position))
         , Type_(Atom)
         , ListCount_(0)
     {
@@ -202,7 +218,7 @@ private:
     }
 
     inline TAstNode(TPosition position, TAstNode** children, ui32 childrenCount)
-        : Position_(position)
+        : Position_(std::move(position))
         , Type_(List)
         , ListCount_(childrenCount)
     {
@@ -230,7 +246,7 @@ private:
     };
 
     struct TSmallList {
-        TAstNode* Children[SmallListCount];
+        std::array<TAstNode*, SmallListCount> Children;
     };
 
     union {
@@ -291,9 +307,9 @@ public:
     virtual IAutoParamBuilder& FinishData() = 0;
 };
 
-class IAutoParamBuilder : public TThrRefBase {
+class IAutoParamBuilder: public TThrRefBase {
 public:
-    virtual ~IAutoParamBuilder() = default;
+    ~IAutoParamBuilder() override = default;
 
     virtual ui32 Size() const = 0;
 
@@ -351,5 +367,5 @@ TAstParseResult ParseAst(const TStringBuf& str, TMemoryPool* externalPool = null
 
 } // namespace NYql
 
-template<>
-void Out<NYql::TAstNode::EType>(class IOutputStream &o, NYql::TAstNode::EType x);
+template <>
+void Out<NYql::TAstNode::EType>(IOutputStream& out, NYql::TAstNode::EType value);

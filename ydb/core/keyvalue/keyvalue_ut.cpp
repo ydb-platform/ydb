@@ -9,6 +9,8 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/random/fast.h>
 #include <ydb/core/base/blobstorage.h>
+#include <array>
+#include <bitset>
 
 const bool ENABLE_DETAILED_KV_LOG = false;
 const bool ENABLE_TESTLOG_OUTPUT = false;
@@ -156,6 +158,13 @@ void DoWithRetry(std::function<bool(void)> action, i32 retryCount = 2) {
     UNIT_ASSERT(isEnd);
 }
 
+void EnableRejectNonExistentStorageChannel(TTestContext &tc) {
+    auto &icb = tc.Runtime->GetAppData().Icb;
+    TControlWrapper rejectNonExistentStorageChannel(0, 0, 1);
+    TControlBoard::RegisterSharedControl(rejectNonExistentStorageChannel, icb->KeyValueVolumeControls.RejectNonExistentStorageChannel);
+    rejectNonExistentStorageChannel = 1;
+}
+
 void CmdWrite(const TDeque<TString> &keys, const TDeque<TString> &values,
         const NKikimrClient::TKeyValueRequest::EStorageChannel storageChannel,
         const NKikimrClient::TKeyValueRequest::EPriority priority,
@@ -237,7 +246,7 @@ void CmdPatch(const TString &originalKey, const TString &patchedKey, const TVect
         UNIT_ASSERT(result->Record.HasStatus());
         UNIT_ASSERT_EQUAL(result->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK);
         UNIT_ASSERT_VALUES_EQUAL(result->Record.PatchResultSize(), 1);
-        
+
         const auto &patchResult = result->Record.GetPatchResult(0);
         UNIT_ASSERT(patchResult.HasStatus());
         UNIT_ASSERT_EQUAL(patchResult.GetStatus(), NKikimrProto::OK);
@@ -647,9 +656,19 @@ void CmdSetExecutorFastLogPolicy(bool isAllowed, TTestContext &tc) {
 // NEW SINGLE COMMAND TEST FUNCTIONS
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+template <typename T>
+struct NotEq {
+    T Value;
+
+    bool Check(const T &value) const {
+        return Value != value;
+    }
+};
+
 struct TKeyValuePair {
     TString Key;
     TString Value;
+    std::variant<std::monostate, ui64, NotEq<ui64>> CreationUnixTime = std::monostate();
 };
 
 template <typename TRequestEvent>
@@ -675,6 +694,163 @@ auto ReceiveResponse(TTestContext &tc) -> decltype(std::declval<TResponseEvent>(
     return response->Record;
 }
 
+std::unique_ptr<TEvKeyValue::TEvRequest> MakeReadRequest(ui64 cookie, const TVector<TString> &keys) {
+    auto request = std::make_unique<TEvKeyValue::TEvRequest>();
+    request->Record.SetCookie(cookie);
+    for (const TString& key : keys) {
+        auto read = request->Record.AddCmdRead();
+        read->SetKey(key);
+        read->SetPriority(NKikimrClient::TKeyValueRequest::REALTIME);
+    }
+    return request;
+}
+
+std::unique_ptr<TEvKeyValue::TEvRequest> MakeWriteRequest(ui64 cookie, const TString &key, const TString &value,
+        NKikimrClient::TKeyValueRequest::EStorageChannel storageChannel) {
+    auto request = std::make_unique<TEvKeyValue::TEvRequest>();
+    request->Record.SetCookie(cookie);
+    auto write = request->Record.AddCmdWrite();
+    write->SetKey(key);
+    write->SetValue(value);
+    write->SetStorageChannel(storageChannel);
+    write->SetPriority(NKikimrClient::TKeyValueRequest::REALTIME);
+    return request;
+}
+
+NKikimrClient::TResponse ReceiveKeyValueResponse(TTestContext &tc) {
+    return ReceiveResponse<TEvKeyValue::TEvResponse>(tc);
+}
+
+void CheckReadResponse(const NKikimrClient::TResponse &response, ui64 cookie, const TVector<TString> &values) {
+    UNIT_ASSERT(response.HasCookie());
+    UNIT_ASSERT_VALUES_EQUAL(response.GetCookie(), cookie);
+    UNIT_ASSERT(response.HasStatus());
+    UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(), NMsgBusProxy::MSTATUS_OK);
+    UNIT_ASSERT_VALUES_EQUAL(response.ReadResultSize(), values.size());
+    for (ui32 i = 0; i < values.size(); ++i) {
+        const auto& result = response.GetReadResult(i);
+        UNIT_ASSERT(result.HasStatus());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), static_cast<ui32>(NKikimrProto::OK));
+        UNIT_ASSERT(result.HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetValue(), values[i]);
+    }
+}
+
+void CheckWriteResponse(const NKikimrClient::TResponse &response, ui64 cookie) {
+    UNIT_ASSERT(response.HasCookie());
+    UNIT_ASSERT_VALUES_EQUAL(response.GetCookie(), cookie);
+    UNIT_ASSERT(response.HasStatus());
+    UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(), NMsgBusProxy::MSTATUS_OK);
+    UNIT_ASSERT_VALUES_EQUAL(response.WriteResultSize(), 1);
+    const auto& result = response.GetWriteResult(0);
+    UNIT_ASSERT(result.HasStatus());
+    UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), static_cast<ui32>(NKikimrProto::OK));
+}
+
+class TGetBlocker {
+public:
+    explicit TGetBlocker(TTestActorRuntime& runtime)
+        : Runtime(runtime)
+        , Holder(Runtime.AddObserver<TEvBlobStorage::TEvGet>(
+            [this](TEvBlobStorage::TEvGet::TPtr& ev) {
+                Process(ev);
+            }))
+    {}
+
+    void BlockChannel(ui32 channel) {
+        Y_ABORT_UNLESS(channel < BlockedChannels.size());
+        BlockedChannels.set(channel);
+    }
+
+    ui32 Seen(ui32 channel) const {
+        Y_ABORT_UNLESS(channel < SeenByChannel.size());
+        return SeenByChannel[channel];
+    }
+
+    ui32 TotalSeen() const {
+        ui32 total = 0;
+        for (ui32 count : SeenByChannel) {
+            total += count;
+        }
+        return total;
+    }
+
+    size_t BlockedSize() const {
+        return Blocked.size();
+    }
+
+    size_t BlockedCount(ui32 channel) const {
+        size_t count = 0;
+        for (const auto& ev : Blocked) {
+            if (TouchesChannel(ev, channel)) {
+                ++count;
+            }
+        }
+        return count;
+    }
+
+    void UnblockOne() {
+        Y_ABORT_UNLESS(!Blocked.empty());
+        auto ev = std::move(Blocked.front());
+        Blocked.pop_front();
+        SendBlocked(std::move(ev));
+    }
+
+    void UnblockAll() {
+        while (!Blocked.empty()) {
+            UnblockOne();
+        }
+    }
+
+private:
+    static bool TouchesChannel(const TEvBlobStorage::TEvGet::TPtr& ev, ui32 channel) {
+        const auto *msg = ev->Get();
+        for (ui32 i = 0; i < msg->QuerySize; ++i) {
+            if (msg->Queries[i].Id.Channel() == channel) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    void Process(TEvBlobStorage::TEvGet::TPtr& ev) {
+        IEventHandle *ptr = ev.Get();
+        if (UnblockedOnce.erase(ptr)) {
+            return;
+        }
+
+        bool shouldBlock = false;
+        const auto *msg = ev->Get();
+        for (ui32 i = 0; i < msg->QuerySize; ++i) {
+            const ui32 channel = msg->Queries[i].Id.Channel();
+            Y_ABORT_UNLESS(channel < SeenByChannel.size());
+            ++SeenByChannel[channel];
+            if (channel < BlockedChannels.size() && BlockedChannels.test(channel)) {
+                shouldBlock = true;
+            }
+        }
+
+        if (shouldBlock) {
+            Blocked.emplace_back(std::move(ev));
+        }
+    }
+
+    void SendBlocked(TEvBlobStorage::TEvGet::TPtr ev) {
+        IEventHandle *ptr = ev.Get();
+        UnblockedOnce.insert(ptr);
+        const ui32 nodeIdx = ev->GetRecipientRewrite().NodeId() - Runtime.GetFirstNodeId();
+        Runtime.Send(ev.Release(), nodeIdx, /* viaActorSystem */ true);
+    }
+
+private:
+    TTestActorRuntime& Runtime;
+    TTestActorRuntime::TEventObserverHolder Holder;
+    std::array<ui32, 256> SeenByChannel = {};
+    std::bitset<256> BlockedChannels;
+    TDeque<TEvBlobStorage::TEvGet::TPtr> Blocked;
+    THashSet<IEventHandle*> UnblockedOnce;
+};
+
 template <typename TRequestEvent>
 void ExecuteEvent(TDesiredPair<TRequestEvent> &dp, TTestContext &tc) {
     DoWithRetry([&] {
@@ -685,8 +861,8 @@ void ExecuteEvent(TDesiredPair<TRequestEvent> &dp, TTestContext &tc) {
     });
 }
 
-NKikimrKeyValue::CleanUpDataResponse SendCleanUpDataRequest(ui64 generation, TTestContext &tc) {
-    TDesiredPair<TEvKeyValue::TEvCleanUpDataRequest> dp;
+NKikimrKeyValue::VacuumResponse SendVacuumRequest(ui64 generation, TTestContext &tc) {
+    TDesiredPair<TEvKeyValue::TEvVacuumRequest> dp;
     dp.Request.set_generation(generation);
     ExecuteEvent(dp, tc);
     return dp.Response;
@@ -698,7 +874,7 @@ void SendWrite(TTestContext &tc, const TDeque<TKeyValuePair> &pairs, ui64 locked
 {
     NKikimrKeyValue::ExecuteTransactionRequest et;
 
-    for (auto &[key, value] : pairs) {
+    for (auto &[key, value, creationUnixTime] : pairs) {
         NKikimrKeyValue::ExecuteTransactionRequest::Command *cmd = et.add_commands();
         NKikimrKeyValue::ExecuteTransactionRequest::Command::Write *write = cmd->mutable_write();
 
@@ -720,7 +896,7 @@ void ExecuteWrite(TTestContext &tc, const TDeque<TKeyValuePair> &pairs, ui64 loc
 {
     TDesiredPair<TEvKeyValue::TEvExecuteTransaction> dp;
 
-    for (auto &[key, value] : pairs) {
+    for (auto &[key, value, creationUnixTime] : pairs) {
         NKikimrKeyValue::ExecuteTransactionRequest::Command *cmd = dp.Request.add_commands();
         NKikimrKeyValue::ExecuteTransactionRequest::Command::Write *write = cmd->mutable_write();
 
@@ -990,6 +1166,12 @@ void ExecuteReadRange(TTestContext &tc,
                     << " msg# " << dp.Response.msg());
             UNIT_ASSERT_VALUES_EQUAL_C(pair.key(), expectedPairs[idx].Key, "msg# " << dp.Response.msg());
             UNIT_ASSERT_VALUES_EQUAL_C(pair.value(), expectedPairs[idx].Value, "msg# " << dp.Response.msg());
+
+            if (std::holds_alternative<ui64>(expectedPairs[idx].CreationUnixTime)) {
+                UNIT_ASSERT_VALUES_EQUAL_C(pair.creation_unix_time(), std::get<ui64>(expectedPairs[idx].CreationUnixTime), "msg# " << dp.Response.msg());
+            } else if (std::holds_alternative<NotEq<ui64>>(expectedPairs[idx].CreationUnixTime)) {
+                UNIT_ASSERT_VALUES_UNEQUAL_C(pair.creation_unix_time(), std::get<NotEq<ui64>>(expectedPairs[idx].CreationUnixTime).Value, "msg# " << dp.Response.msg());
+            }
         }
     }
 }
@@ -1185,7 +1367,7 @@ Y_UNIT_TEST(TestBlockedEvGetRequest) {
     tc.Runtime->Send(new IEventHandle(*dsProxyActor, *tabletActor, ev.release()));
 
     // read with the blocked generation should fail and lead to a restart of the key value tablet
-    ExecuteRead<NKikimrKeyValue::Statuses::RSTATUS_ERROR>(tc, "key", "", 0, 0, 0);
+    ExecuteRead<NKikimrKeyValue::Statuses::RSTATUS_BLOCKED>(tc, "key", "", 0, 0, 0);
     // read data through the newly created key value tablet
     ExecuteRead(tc, "key", "value", 0, 0, 0);
     // check that the key value tablet has indeed restarted
@@ -1558,7 +1740,7 @@ Y_UNIT_TEST(TestWriteReadWithRestartsThenResponseOk) {
                 values.push_back(value.Str());
             }
         }
-        CmdWrite(keys, values, NKikimrClient::TKeyValueRequest::EXTRA9,
+        CmdWrite(keys, values, NKikimrClient::TKeyValueRequest::MAIN,
             NKikimrClient::TKeyValueRequest::REALTIME, tc);
 
         TDeque<TString> expectedKeys;
@@ -1605,7 +1787,7 @@ Y_UNIT_TEST(TestWriteReadWithRestartsThenResponseOkNewApi) {
             }
         }
 
-        ExecuteWrite(tc, pairs, 0, 11, NKikimrKeyValue::Priorities::PRIORITY_REALTIME);
+        ExecuteWrite(tc, pairs, 0, NKikimrClient::TKeyValueRequest::MAIN, NKikimrKeyValue::Priorities::PRIORITY_REALTIME);
 
         TDeque<TKeyValuePair> expectedPairs;
         for (ui32 itemIdx = 1; itemIdx < 4; ++itemIdx) {
@@ -2643,7 +2825,7 @@ Y_UNIT_TEST(TestConcatToLongKey) {
     });
 }
 
-Y_UNIT_TEST(TestCleanUpDataOnEmptyTablet) {
+Y_UNIT_TEST(TestVacuumOnEmptyTablet) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -2652,63 +2834,63 @@ Y_UNIT_TEST(TestCleanUpDataOnEmptyTablet) {
         tc.Prepare(dispatchName, setup, activeZone);
         ExecuteObtainLock(tc, 1);
 
-        NKikimrKeyValue::CleanUpDataResponse response = SendCleanUpDataRequest(1, tc);
+        NKikimrKeyValue::VacuumResponse response = SendVacuumRequest(1, tc);
         UNIT_ASSERT_EQUAL(response.status(), decltype(response)::STATUS_SUCCESS);
         UNIT_ASSERT_EQUAL(response.generation(), 1);
 
-        
-        NKikimrKeyValue::CleanUpDataResponse responseAlreadyCompleted = SendCleanUpDataRequest(1, tc);
+
+        NKikimrKeyValue::VacuumResponse responseAlreadyCompleted = SendVacuumRequest(1, tc);
         UNIT_ASSERT_EQUAL(responseAlreadyCompleted.status(), decltype(responseAlreadyCompleted)::STATUS_ALREADY_COMPLETED);
         UNIT_ASSERT_EQUAL(responseAlreadyCompleted.generation(), 1);
 
-        NKikimrKeyValue::CleanUpDataResponse response4 = SendCleanUpDataRequest(4, tc);
+        NKikimrKeyValue::VacuumResponse response4 = SendVacuumRequest(4, tc);
         UNIT_ASSERT_EQUAL(response4.status(), decltype(response4)::STATUS_SUCCESS);
         UNIT_ASSERT_EQUAL(response4.generation(), 4);
 
-        NKikimrKeyValue::CleanUpDataResponse response2 = SendCleanUpDataRequest(2, tc);
+        NKikimrKeyValue::VacuumResponse response2 = SendVacuumRequest(2, tc);
         UNIT_ASSERT_EQUAL(response2.status(), decltype(response2)::STATUS_ALREADY_COMPLETED);
         UNIT_ASSERT_EQUAL(response2.generation(), 2);
 
-        NKikimrKeyValue::CleanUpDataResponse response3 = SendCleanUpDataRequest(3, tc);
+        NKikimrKeyValue::VacuumResponse response3 = SendVacuumRequest(3, tc);
         UNIT_ASSERT_EQUAL(response3.status(), decltype(response3)::STATUS_ALREADY_COMPLETED);
-        UNIT_ASSERT_EQUAL(response3.generation(), 3);    
+        UNIT_ASSERT_EQUAL(response3.generation(), 3);
     });
 }
 
-Y_UNIT_TEST(TestCleanUpDataOnEmptyTabletResetGeneration) {
+Y_UNIT_TEST(TestVacuumOnEmptyTabletResetGeneration) {
     TTestContext tc;
     TFinalizer finalizer(tc);
     bool activeZone = false;
-    tc.Prepare("TestCleanUpDataOnEmptyTabletInflight3", [&](TTestActorRuntime&) {
+    tc.Prepare("TestVacuumOnEmptyTabletInflight3", [&](TTestActorRuntime&) {
         return tc.InitialEventsFilter.Prepare();
     }, activeZone);
 
-    SendRequestEvent(std::make_unique<TEvKeyValue::TEvCleanUpDataRequest>(5), tc);
-    NKikimrKeyValue::CleanUpDataResponse response5 = ReceiveResponse<TEvKeyValue::TEvCleanUpDataResponse>(tc);
+    SendRequestEvent(std::make_unique<TEvKeyValue::TEvVacuumRequest>(5), tc);
+    NKikimrKeyValue::VacuumResponse response5 = ReceiveResponse<TEvKeyValue::TEvVacuumResponse>(tc);
     UNIT_ASSERT_EQUAL(response5.status(), decltype(response5)::STATUS_SUCCESS);
     UNIT_ASSERT_VALUES_EQUAL(response5.generation(), 5);
     UNIT_ASSERT_VALUES_EQUAL(response5.actual_generation(), 5);
 
-    SendRequestEvent(std::make_unique<TEvKeyValue::TEvCleanUpDataRequest>(6), tc);
-    SendRequestEvent(std::make_unique<TEvKeyValue::TEvCleanUpDataRequest>(6), tc);
-    SendRequestEvent(std::make_unique<TEvKeyValue::TEvCleanUpDataRequest>(7), tc);
-    SendRequestEvent(std::make_unique<TEvKeyValue::TEvCleanUpDataRequest>(7), tc);
-    SendRequestEvent(std::make_unique<TEvKeyValue::TEvCleanUpDataRequest>(1, true), tc);
-    NKikimrKeyValue::CleanUpDataResponse response6 = ReceiveResponse<TEvKeyValue::TEvCleanUpDataResponse>(tc);
+    SendRequestEvent(std::make_unique<TEvKeyValue::TEvVacuumRequest>(6), tc);
+    SendRequestEvent(std::make_unique<TEvKeyValue::TEvVacuumRequest>(6), tc);
+    SendRequestEvent(std::make_unique<TEvKeyValue::TEvVacuumRequest>(7), tc);
+    SendRequestEvent(std::make_unique<TEvKeyValue::TEvVacuumRequest>(7), tc);
+    SendRequestEvent(std::make_unique<TEvKeyValue::TEvVacuumRequest>(1, true), tc);
+    NKikimrKeyValue::VacuumResponse response6 = ReceiveResponse<TEvKeyValue::TEvVacuumResponse>(tc);
     UNIT_ASSERT_EQUAL(response6.status(), decltype(response6)::STATUS_ABORTED);
     UNIT_ASSERT_VALUES_EQUAL(response6.generation(), 6);
     UNIT_ASSERT_VALUES_EQUAL(response6.actual_generation(), 0);
-    NKikimrKeyValue::CleanUpDataResponse response7 = ReceiveResponse<TEvKeyValue::TEvCleanUpDataResponse>(tc);
+    NKikimrKeyValue::VacuumResponse response7 = ReceiveResponse<TEvKeyValue::TEvVacuumResponse>(tc);
     UNIT_ASSERT_EQUAL(response7.status(), decltype(response7)::STATUS_ABORTED);
     UNIT_ASSERT_VALUES_EQUAL(response7.generation(), 7);
     UNIT_ASSERT_VALUES_EQUAL(response7.actual_generation(), 0);
-    NKikimrKeyValue::CleanUpDataResponse response1 = ReceiveResponse<TEvKeyValue::TEvCleanUpDataResponse>(tc);
+    NKikimrKeyValue::VacuumResponse response1 = ReceiveResponse<TEvKeyValue::TEvVacuumResponse>(tc);
     UNIT_ASSERT_EQUAL(response1.status(), decltype(response1)::STATUS_SUCCESS);
     UNIT_ASSERT_VALUES_EQUAL(response1.generation(), 1);
     UNIT_ASSERT_VALUES_EQUAL(response1.actual_generation(), 1);
 }
 
-Y_UNIT_TEST(TestCleanUpDataWithMockDisk) {
+Y_UNIT_TEST(TestVacuumWithMockDisk) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -2747,7 +2929,7 @@ Y_UNIT_TEST(TestCleanUpDataWithMockDisk) {
         UNIT_ASSERT(found);
 
         ExecuteDeleteRange(tc, "", EBorderKind::Without, "", EBorderKind::Without, 1);
-        NKikimrKeyValue::CleanUpDataResponse response = SendCleanUpDataRequest(1, tc);
+        NKikimrKeyValue::VacuumResponse response = SendVacuumRequest(1, tc);
         UNIT_ASSERT_EQUAL(response.status(), decltype(response)::STATUS_SUCCESS);
         UNIT_ASSERT_EQUAL(response.generation(), 1);
 
@@ -2816,6 +2998,565 @@ Y_UNIT_TEST(TestWriteAndRenameWithCreationUnixTime)
             NKikimrClient::TKeyValueRequest::REALTIME,
             {"value"}, {false}, {renameUnixTime},
             tc);
+}
+
+
+
+Y_UNIT_TEST(TestWriteAndRenameWithoutCreationUnixTimeNewApi)
+{
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    bool activeZone = false;
+    tc.Prepare(INITIAL_TEST_DISPATCH_NAME, [](TTestActorRuntime &runtime){
+        runtime.UpdateCurrentTime(TInstant::Zero() + TDuration::Seconds(1000));
+    }, activeZone);
+
+    ExecuteWrite(tc, {{"key-1", "value"}}, 0, 1, NKikimrKeyValue::Priorities::PRIORITY_REALTIME);
+
+    ExecuteReadRange(tc,
+        {"key-1"}, EBorderKind::Include,
+        "key-1", EBorderKind::Include,
+        {{"key-1", "value", NotEq<ui64>{0}}},
+        0, true, 65000);
+
+    ExecuteRename(tc, {{"key-1", "key-2"}}, 0);
+
+    ExecuteReadRange(tc,
+        {"key-2"}, EBorderKind::Include,
+        "key-2", EBorderKind::Include,
+        {{"key-2", "value", NotEq<ui64>{0}}},
+        0, true, 65000);
+}
+
+
+Y_UNIT_TEST(TestReadRequestInFlightLimit) {
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    bool activeZone = false;
+    tc.Prepare(INITIAL_TEST_DISPATCH_NAME, [](TTestActorRuntime &){}, activeZone);
+
+    auto &icb = tc.Runtime->GetAppData().Icb;
+    TControlWrapper readRequestInFlightLimit(5, 1, 4096);
+    TControlBoard::RegisterSharedControl(readRequestInFlightLimit, icb->KeyValueVolumeControls.ReadRequestsInFlightLimit);
+    readRequestInFlightLimit = 5;
+
+    ui64 creationUnixTime = (TInstant::Now() - TDuration::Seconds(1000)).Seconds();
+
+    CmdWrite("key-1", "value", NKikimrClient::TKeyValueRequest::MAIN, NKikimrClient::TKeyValueRequest::REALTIME, creationUnixTime, tc);
+    CmdRead({"key-1"}, NKikimrClient::TKeyValueRequest::REALTIME, {"value"}, {false}, {creationUnixTime}, tc);
+}
+
+Y_UNIT_TEST(TestWriteToNonExistentChannelReturnsError) {
+    TTestContext tc;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
+    }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) {
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
+        EnableRejectNonExistentStorageChannel(tc);
+        activeZone = false;
+
+        TAutoPtr<IEventHandle> handle;
+        TEvKeyValue::TEvResponse *result;
+        THolder<TEvKeyValue::TEvRequest> request;
+        DoWithRetry([&] {
+            tc.Runtime->ResetScheduledCount();
+            request.Reset(new TEvKeyValue::TEvRequest);
+            auto write = request->Record.AddCmdWrite();
+            write->SetKey("key");
+            write->SetValue("value");
+            write->SetStorageChannel(NKikimrClient::TKeyValueRequest::EXTRA3);
+            tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
+            result = tc.Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>(handle);
+            UNIT_ASSERT(result);
+            UNIT_ASSERT_EQUAL(result->Record.GetStatus(), NMsgBusProxy::MSTATUS_ERROR);
+            return true;
+        });
+    });
+}
+
+Y_UNIT_TEST(TestWriteToNonExistentChannelReturnsErrorNewApi) {
+    TTestContext tc;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
+    }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) {
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
+        EnableRejectNonExistentStorageChannel(tc);
+
+        ExecuteWrite<NKikimrKeyValue::Statuses::RSTATUS_BAD_REQUEST>(tc, {{"key", "value"}}, 0, 5,
+            NKikimrKeyValue::Priorities::PRIORITY_REALTIME);
+    });
+}
+
+Y_UNIT_TEST(TestGetStatusNonExistentChannelReturnsError) {
+    TTestContext tc;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
+    }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) {
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
+        EnableRejectNonExistentStorageChannel(tc);
+        activeZone = false;
+
+        TAutoPtr<IEventHandle> handle;
+        TEvKeyValue::TEvResponse *result;
+        THolder<TEvKeyValue::TEvRequest> request;
+        DoWithRetry([&] {
+            tc.Runtime->ResetScheduledCount();
+            request.Reset(new TEvKeyValue::TEvRequest);
+            auto getStatus = request->Record.AddCmdGetStatus();
+            getStatus->SetStorageChannel(NKikimrClient::TKeyValueRequest::EXTRA3);
+            tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
+            result = tc.Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>(handle);
+            UNIT_ASSERT(result);
+            UNIT_ASSERT_EQUAL(result->Record.GetStatus(), NMsgBusProxy::MSTATUS_ERROR);
+            return true;
+        });
+    });
+}
+
+Y_UNIT_TEST(TestGetStatusNonExistentChannelReturnsErrorNewApi) {
+    TTestContext tc;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
+    }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) {
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
+        EnableRejectNonExistentStorageChannel(tc);
+
+        ExecuteGetStatus<NKikimrKeyValue::Statuses::RSTATUS_BAD_REQUEST>(tc, {5}, 0);
+    });
+}
+
+
+Y_UNIT_TEST(TestPerChannelReadLimitKeepsOtherChannelsAvailable)
+{
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    bool activeZone = false;
+    tc.Prepare(INITIAL_TEST_DISPATCH_NAME, [](TTestActorRuntime &){}, activeZone);
+
+    auto &icb = tc.Runtime->GetAppData().Icb;
+    TControlWrapper readRequestInFlightLimit(5, 1, 4096);
+    TControlBoard::RegisterSharedControl(readRequestInFlightLimit, icb->KeyValueVolumeControls.ReadRequestsInFlightLimit);
+    readRequestInFlightLimit = 1;
+    TControlWrapper usePerChannelReadQueues(0, 0, 1);
+    TControlBoard::RegisterSharedControl(usePerChannelReadQueues, icb->KeyValueVolumeControls.UsePerChannelReadQueues);
+    usePerChannelReadQueues = 1;
+
+    constexpr ui32 mainBlobChannel = NKeyValue::BLOB_CHANNEL;
+    constexpr ui32 extraBlobChannel = NKeyValue::BLOB_CHANNEL + 1;
+
+    CmdWrite("main-hold", "value-main-hold",
+        NKikimrClient::TKeyValueRequest::MAIN,
+        NKikimrClient::TKeyValueRequest::REALTIME, tc);
+    CmdWrite("main-wait", "value-main-wait",
+        NKikimrClient::TKeyValueRequest::MAIN,
+        NKikimrClient::TKeyValueRequest::REALTIME, tc);
+    CmdWrite("extra-free", "value-extra-free",
+        NKikimrClient::TKeyValueRequest::EXTRA,
+        NKikimrClient::TKeyValueRequest::REALTIME, tc);
+
+    TGetBlocker gets(*tc.Runtime);
+    gets.BlockChannel(mainBlobChannel);
+
+    SendRequestEvent(MakeReadRequest(1, {"main-hold"}), tc);
+    tc.Runtime->WaitFor("blocked main read", [&] {
+        return gets.BlockedCount(mainBlobChannel) == 1;
+    }, TDuration::Seconds(1));
+    UNIT_ASSERT_VALUES_EQUAL(gets.Seen(mainBlobChannel), 1);
+
+    SendRequestEvent(MakeReadRequest(2, {"main-wait"}), tc);
+    tc.Runtime->DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
+    UNIT_ASSERT_VALUES_EQUAL(gets.Seen(mainBlobChannel), 1);
+
+    SendRequestEvent(MakeReadRequest(3, {"extra-free"}), tc);
+    CheckReadResponse(ReceiveKeyValueResponse(tc), 3, {"value-extra-free"});
+    UNIT_ASSERT_VALUES_EQUAL(gets.Seen(extraBlobChannel), 1);
+
+    gets.UnblockOne();
+    CheckReadResponse(ReceiveKeyValueResponse(tc), 1, {"value-main-hold"});
+
+    tc.Runtime->WaitFor("second main read starts after first one completes", [&] {
+        return gets.BlockedCount(mainBlobChannel) == 1 && gets.Seen(mainBlobChannel) == 2;
+    }, TDuration::Seconds(1));
+    gets.UnblockOne();
+    CheckReadResponse(ReceiveKeyValueResponse(tc), 2, {"value-main-wait"});
+}
+
+Y_UNIT_TEST(TestReadLimitUsesSingleQueueByDefault)
+{
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    bool activeZone = false;
+    tc.Prepare(INITIAL_TEST_DISPATCH_NAME, [](TTestActorRuntime &){}, activeZone);
+
+    auto &icb = tc.Runtime->GetAppData().Icb;
+    TControlWrapper readRequestInFlightLimit(5, 1, 4096);
+    TControlBoard::RegisterSharedControl(readRequestInFlightLimit, icb->KeyValueVolumeControls.ReadRequestsInFlightLimit);
+    readRequestInFlightLimit = 1;
+
+    constexpr ui32 mainBlobChannel = NKeyValue::BLOB_CHANNEL;
+    constexpr ui32 extraBlobChannel = NKeyValue::BLOB_CHANNEL + 1;
+
+    CmdWrite("main-hold", "value-main-hold",
+        NKikimrClient::TKeyValueRequest::MAIN,
+        NKikimrClient::TKeyValueRequest::REALTIME, tc);
+    CmdWrite("extra-wait", "value-extra-wait",
+        NKikimrClient::TKeyValueRequest::EXTRA,
+        NKikimrClient::TKeyValueRequest::REALTIME, tc);
+
+    TGetBlocker gets(*tc.Runtime);
+    gets.BlockChannel(mainBlobChannel);
+
+    SendRequestEvent(MakeReadRequest(1, {"main-hold"}), tc);
+    tc.Runtime->WaitFor("blocked main read", [&] {
+        return gets.BlockedCount(mainBlobChannel) == 1;
+    }, TDuration::Seconds(1));
+    UNIT_ASSERT_VALUES_EQUAL(gets.Seen(mainBlobChannel), 1);
+
+    SendRequestEvent(MakeReadRequest(2, {"extra-wait"}), tc);
+    tc.Runtime->DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
+    UNIT_ASSERT_VALUES_EQUAL(gets.Seen(extraBlobChannel), 0);
+
+    gets.UnblockOne();
+    CheckReadResponse(ReceiveKeyValueResponse(tc), 1, {"value-main-hold"});
+
+    tc.Runtime->WaitFor("extra read starts after main queue is released", [&] {
+        return gets.Seen(extraBlobChannel) == 1;
+    }, TDuration::Seconds(1));
+    CheckReadResponse(ReceiveKeyValueResponse(tc), 2, {"value-extra-wait"});
+}
+
+Y_UNIT_TEST(TestReadLimitDoesNotBlockGetStorageChannelStatus)
+{
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    bool activeZone = false;
+    tc.Prepare(INITIAL_TEST_DISPATCH_NAME, [](TTestActorRuntime &){}, activeZone);
+
+    auto &icb = tc.Runtime->GetAppData().Icb;
+    TControlWrapper readRequestInFlightLimit(5, 1, 4096);
+    TControlBoard::RegisterSharedControl(readRequestInFlightLimit, icb->KeyValueVolumeControls.ReadRequestsInFlightLimit);
+    readRequestInFlightLimit = 1;
+
+    constexpr ui32 mainBlobChannel = NKeyValue::BLOB_CHANNEL;
+
+    CmdWrite("main-hold", "value-main-hold",
+        NKikimrClient::TKeyValueRequest::MAIN,
+        NKikimrClient::TKeyValueRequest::REALTIME, tc);
+
+    TGetBlocker gets(*tc.Runtime);
+    gets.BlockChannel(mainBlobChannel);
+
+    SendRequestEvent(MakeReadRequest(1, {"main-hold"}), tc);
+    tc.Runtime->WaitFor("blocked main read", [&] {
+        return gets.BlockedCount(mainBlobChannel) == 1;
+    }, TDuration::Seconds(1));
+    UNIT_ASSERT_VALUES_EQUAL(gets.Seen(mainBlobChannel), 1);
+
+    ExecuteGetStatus(tc, {1}, 0);
+    UNIT_ASSERT_VALUES_EQUAL(gets.Seen(mainBlobChannel), 1);
+
+    gets.UnblockOne();
+    CheckReadResponse(ReceiveKeyValueResponse(tc), 1, {"value-main-hold"});
+}
+
+Y_UNIT_TEST(TestPerChannelReadLimitDoesNotReserveGetStatusChannelInCompositeRequest)
+{
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    bool activeZone = false;
+    tc.Prepare(INITIAL_TEST_DISPATCH_NAME, [](TTestActorRuntime &){}, activeZone);
+
+    auto &icb = tc.Runtime->GetAppData().Icb;
+    TControlWrapper readRequestInFlightLimit(5, 1, 4096);
+    TControlBoard::RegisterSharedControl(readRequestInFlightLimit, icb->KeyValueVolumeControls.ReadRequestsInFlightLimit);
+    readRequestInFlightLimit = 1;
+    TControlWrapper usePerChannelReadQueues(0, 0, 1);
+    TControlBoard::RegisterSharedControl(usePerChannelReadQueues, icb->KeyValueVolumeControls.UsePerChannelReadQueues);
+    usePerChannelReadQueues = 1;
+
+    constexpr ui32 mainBlobChannel = NKeyValue::BLOB_CHANNEL;
+    constexpr ui32 extraBlobChannel = NKeyValue::BLOB_CHANNEL + 1;
+
+    CmdWrite("main-hold", "value-main-hold",
+        NKikimrClient::TKeyValueRequest::MAIN,
+        NKikimrClient::TKeyValueRequest::REALTIME, tc);
+    CmdWrite("main-wait", "value-main-wait",
+        NKikimrClient::TKeyValueRequest::MAIN,
+        NKikimrClient::TKeyValueRequest::REALTIME, tc);
+    CmdWrite("extra-free", "value-extra-free",
+        NKikimrClient::TKeyValueRequest::EXTRA,
+        NKikimrClient::TKeyValueRequest::REALTIME, tc);
+
+    TGetBlocker gets(*tc.Runtime);
+    gets.BlockChannel(mainBlobChannel);
+
+    SendRequestEvent(MakeReadRequest(1, {"main-hold"}), tc);
+    tc.Runtime->WaitFor("blocked main read", [&] {
+        return gets.BlockedCount(mainBlobChannel) == 1;
+    }, TDuration::Seconds(1));
+    UNIT_ASSERT_VALUES_EQUAL(gets.Seen(mainBlobChannel), 1);
+
+    auto compositeRequest = MakeReadRequest(2, {"main-wait"});
+    compositeRequest->Record.AddCmdGetStatus()->SetStorageChannel(NKikimrClient::TKeyValueRequest::EXTRA);
+    SendRequestEvent(std::move(compositeRequest), tc);
+    tc.Runtime->DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
+    UNIT_ASSERT_VALUES_EQUAL(gets.Seen(mainBlobChannel), 1);
+    UNIT_ASSERT_VALUES_EQUAL(gets.Seen(extraBlobChannel), 0);
+
+    SendRequestEvent(MakeReadRequest(3, {"extra-free"}), tc);
+    CheckReadResponse(ReceiveKeyValueResponse(tc), 3, {"value-extra-free"});
+    UNIT_ASSERT_VALUES_EQUAL(gets.Seen(extraBlobChannel), 1);
+
+    gets.UnblockOne();
+    CheckReadResponse(ReceiveKeyValueResponse(tc), 1, {"value-main-hold"});
+
+    tc.Runtime->WaitFor("composite read starts after main queue is released", [&] {
+        return gets.BlockedCount(mainBlobChannel) == 1 && gets.Seen(mainBlobChannel) == 2;
+    }, TDuration::Seconds(1));
+
+    gets.UnblockOne();
+    const NKikimrClient::TResponse compositeResponse = ReceiveKeyValueResponse(tc);
+    CheckReadResponse(compositeResponse, 2, {"value-main-wait"});
+    UNIT_ASSERT_VALUES_EQUAL(compositeResponse.GetStatusResultSize(), 1);
+    UNIT_ASSERT(compositeResponse.GetGetStatusResult(0).HasStatus());
+    UNIT_ASSERT_EQUAL(compositeResponse.GetGetStatusResult(0).GetStatus(), NKikimrProto::OK);
+}
+
+Y_UNIT_TEST(TestPerChannelReadLimitDoesNotBlockWritesAndInlineReads)
+{
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    bool activeZone = false;
+    tc.Prepare(INITIAL_TEST_DISPATCH_NAME, [](TTestActorRuntime &){}, activeZone);
+
+    auto &icb = tc.Runtime->GetAppData().Icb;
+    TControlWrapper readRequestInFlightLimit(5, 1, 4096);
+    TControlBoard::RegisterSharedControl(readRequestInFlightLimit, icb->KeyValueVolumeControls.ReadRequestsInFlightLimit);
+    readRequestInFlightLimit = 1;
+    TControlWrapper usePerChannelReadQueues(0, 0, 1);
+    TControlBoard::RegisterSharedControl(usePerChannelReadQueues, icb->KeyValueVolumeControls.UsePerChannelReadQueues);
+    usePerChannelReadQueues = 1;
+
+    constexpr ui32 mainBlobChannel = NKeyValue::BLOB_CHANNEL;
+
+    CmdWrite("main-hold", "value-main-hold",
+        NKikimrClient::TKeyValueRequest::MAIN,
+        NKikimrClient::TKeyValueRequest::REALTIME, tc);
+    CmdWrite("inline-key", "value-inline",
+        NKikimrClient::TKeyValueRequest::INLINE,
+        NKikimrClient::TKeyValueRequest::REALTIME, tc);
+
+    TGetBlocker gets(*tc.Runtime);
+    gets.BlockChannel(mainBlobChannel);
+
+    SendRequestEvent(MakeReadRequest(1, {"main-hold"}), tc);
+    tc.Runtime->WaitFor("blocked main read", [&] {
+        return gets.BlockedCount(mainBlobChannel) == 1;
+    }, TDuration::Seconds(1));
+
+    SendRequestEvent(MakeWriteRequest(2, "main-write-while-read-blocked", "value-write",
+        NKikimrClient::TKeyValueRequest::MAIN), tc);
+    CheckWriteResponse(ReceiveKeyValueResponse(tc), 2);
+
+    SendRequestEvent(MakeReadRequest(3, {"inline-key"}), tc);
+    CheckReadResponse(ReceiveKeyValueResponse(tc), 3, {"value-inline"});
+    UNIT_ASSERT_VALUES_EQUAL(gets.Seen(mainBlobChannel), 1);
+
+    gets.UnblockOne();
+    CheckReadResponse(ReceiveKeyValueResponse(tc), 1, {"value-main-hold"});
+}
+
+Y_UNIT_TEST(TestPerChannelReadLimitMultiChannelReadWaitsForBlockedChannel)
+{
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    bool activeZone = false;
+    tc.Prepare(INITIAL_TEST_DISPATCH_NAME, [](TTestActorRuntime &){}, activeZone);
+
+    auto &icb = tc.Runtime->GetAppData().Icb;
+    TControlWrapper readRequestInFlightLimit(5, 1, 4096);
+    TControlBoard::RegisterSharedControl(readRequestInFlightLimit, icb->KeyValueVolumeControls.ReadRequestsInFlightLimit);
+    readRequestInFlightLimit = 1;
+    TControlWrapper usePerChannelReadQueues(0, 0, 1);
+    TControlBoard::RegisterSharedControl(usePerChannelReadQueues, icb->KeyValueVolumeControls.UsePerChannelReadQueues);
+    usePerChannelReadQueues = 1;
+
+    constexpr ui32 mainBlobChannel = NKeyValue::BLOB_CHANNEL;
+    constexpr ui32 extraBlobChannel = NKeyValue::BLOB_CHANNEL + 1;
+
+    CmdWrite("main-hold", "value-main-hold",
+        NKikimrClient::TKeyValueRequest::MAIN,
+        NKikimrClient::TKeyValueRequest::REALTIME, tc);
+    CmdWrite("main-part", "value-main-part",
+        NKikimrClient::TKeyValueRequest::MAIN,
+        NKikimrClient::TKeyValueRequest::REALTIME, tc);
+    CmdWrite("extra-part", "value-extra-part",
+        NKikimrClient::TKeyValueRequest::EXTRA,
+        NKikimrClient::TKeyValueRequest::REALTIME, tc);
+
+    TGetBlocker gets(*tc.Runtime);
+    gets.BlockChannel(mainBlobChannel);
+
+    SendRequestEvent(MakeReadRequest(1, {"main-hold"}), tc);
+    tc.Runtime->WaitFor("blocked main read", [&] {
+        return gets.BlockedCount(mainBlobChannel) == 1;
+    }, TDuration::Seconds(1));
+    UNIT_ASSERT_VALUES_EQUAL(gets.Seen(mainBlobChannel), 1);
+    UNIT_ASSERT_VALUES_EQUAL(gets.Seen(extraBlobChannel), 0);
+
+    SendRequestEvent(MakeReadRequest(2, {"main-part", "extra-part"}), tc);
+    tc.Runtime->DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
+    UNIT_ASSERT_VALUES_EQUAL(gets.Seen(mainBlobChannel), 1);
+    UNIT_ASSERT_VALUES_EQUAL(gets.Seen(extraBlobChannel), 0);
+
+    gets.UnblockOne();
+    CheckReadResponse(ReceiveKeyValueResponse(tc), 1, {"value-main-hold"});
+
+    tc.Runtime->WaitFor("multi-channel read starts after blocked channel is released", [&] {
+        return gets.BlockedCount(mainBlobChannel) == 1 && gets.Seen(mainBlobChannel) == 2;
+    }, TDuration::Seconds(1));
+    UNIT_ASSERT_VALUES_EQUAL(gets.Seen(extraBlobChannel), 1);
+
+    gets.UnblockOne();
+    CheckReadResponse(ReceiveKeyValueResponse(tc), 2, {"value-main-part", "value-extra-part"});
+}
+
+Y_UNIT_TEST(TestPerChannelReadLimitRandomizedNoDeadlock)
+{
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    bool activeZone = false;
+    tc.Prepare(INITIAL_TEST_DISPATCH_NAME, [](TTestActorRuntime &){}, activeZone);
+
+    auto &icb = tc.Runtime->GetAppData().Icb;
+    TControlWrapper readRequestInFlightLimit(5, 1, 4096);
+    TControlBoard::RegisterSharedControl(readRequestInFlightLimit, icb->KeyValueVolumeControls.ReadRequestsInFlightLimit);
+    readRequestInFlightLimit = 1;
+    TControlWrapper usePerChannelReadQueues(0, 0, 1);
+    TControlBoard::RegisterSharedControl(usePerChannelReadQueues, icb->KeyValueVolumeControls.UsePerChannelReadQueues);
+    usePerChannelReadQueues = 1;
+
+    struct TChannelKey {
+        TString Key;
+        TString Value;
+        NKikimrClient::TKeyValueRequest::EStorageChannel StorageChannel;
+        ui32 BlobChannel;
+    };
+
+    const TVector<TChannelKey> keys = {
+        {"random-main", "value-random-main", NKikimrClient::TKeyValueRequest::MAIN, NKeyValue::BLOB_CHANNEL},
+        {"random-extra", "value-random-extra", NKikimrClient::TKeyValueRequest::EXTRA, NKeyValue::BLOB_CHANNEL + 1},
+        {"random-extra2", "value-random-extra2", NKikimrClient::TKeyValueRequest::EXTRA2, NKeyValue::BLOB_CHANNEL + 2},
+    };
+
+    for (const TChannelKey& key : keys) {
+        CmdWrite(key.Key, key.Value, key.StorageChannel, NKikimrClient::TKeyValueRequest::REALTIME, tc);
+    }
+
+    TGetBlocker gets(*tc.Runtime);
+    for (const TChannelKey& key : keys) {
+        gets.BlockChannel(key.BlobChannel);
+    }
+
+    THashMap<ui64, TVector<TString>> expectedValuesByCookie;
+    TReallyFastRng32 rng(17);
+    constexpr ui32 requestCount = 36;
+    auto makeRandomRequest = [&](ui32 i) {
+        std::bitset<8> usedKeys;
+        const ui32 keyCount = 1 + rng.Uniform(3);
+        TVector<TString> requestKeys;
+        TVector<TString> expectedValues;
+        while (requestKeys.size() < keyCount) {
+            const ui32 keyIdx = rng.Uniform(keys.size());
+            if (!usedKeys.test(keyIdx)) {
+                usedKeys.set(keyIdx);
+                requestKeys.push_back(keys[keyIdx].Key);
+                expectedValues.push_back(keys[keyIdx].Value);
+            }
+        }
+
+        const ui64 cookie = 1000 + i;
+        expectedValuesByCookie.emplace(cookie, expectedValues);
+        return MakeReadRequest(cookie, requestKeys);
+    };
+
+    THashSet<ui64> seenCookies;
+    auto handleResponse = [&](const NKikimrClient::TResponse& response) {
+        UNIT_ASSERT(response.HasCookie());
+        const ui64 cookie = response.GetCookie();
+        UNIT_ASSERT_C(seenCookies.insert(cookie).second, "duplicate cookie# " << cookie);
+        auto it = expectedValuesByCookie.find(cookie);
+        UNIT_ASSERT_C(it != expectedValuesByCookie.end(), "unexpected cookie# " << cookie);
+        CheckReadResponse(response, cookie, it->second);
+    };
+
+    auto waitDescription = [&](TStringBuf action, ui32 targetGets, ui32 targetResponses) {
+        return TStringBuilder() << action
+            << " received# " << seenCookies.size() << "/" << targetResponses
+            << " blockedGets# " << gets.BlockedSize()
+            << " totalGets# " << gets.TotalSeen() << "/" << targetGets;
+    };
+
+    constexpr ui32 batchSize = 6;
+    const TDuration progressTimeout = TDuration::Seconds(5);
+    for (ui32 batchBegin = 0; batchBegin < requestCount; batchBegin += batchSize) {
+        const ui32 batchEnd = Min<ui32>(requestCount, batchBegin + batchSize);
+        const ui32 targetResponses = seenCookies.size() + (batchEnd - batchBegin);
+        const ui32 initialSeenGets = gets.TotalSeen();
+        ui32 batchGets = 0;
+
+        SendRequestEvent(makeRandomRequest(batchBegin), tc);
+        batchGets += expectedValuesByCookie[1000 + batchBegin].size();
+
+        tc.Runtime->WaitFor(waitDescription("initial randomized read batch", initialSeenGets + batchGets, targetResponses), [&] {
+            return gets.BlockedSize() > 0;
+        }, progressTimeout);
+
+        for (ui32 i = batchBegin + 1; i < batchEnd; ++i) {
+            SendRequestEvent(makeRandomRequest(i), tc);
+            batchGets += expectedValuesByCookie[1000 + i].size();
+        }
+        tc.Runtime->DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
+
+        const ui32 targetGets = initialSeenGets + batchGets;
+        for (ui32 iteration = 0; (gets.TotalSeen() < targetGets || gets.BlockedSize() > 0) && iteration < batchGets * 2; ++iteration) {
+            if (gets.BlockedSize() == 0) {
+                tc.Runtime->WaitFor(waitDescription("more randomized blob reads", targetGets, targetResponses), [&] {
+                    return gets.BlockedSize() > 0;
+                }, progressTimeout);
+            }
+
+            if (gets.BlockedSize() > 0) {
+                gets.UnblockAll();
+                tc.Runtime->DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
+            }
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL_C(gets.TotalSeen(), targetGets,
+            waitDescription("all randomized blob reads must start", targetGets, targetResponses));
+        UNIT_ASSERT_VALUES_EQUAL_C(gets.BlockedSize(), 0,
+            waitDescription("all randomized blob reads must be unblocked", targetGets, targetResponses));
+
+        while (seenCookies.size() < targetResponses) {
+            TAutoPtr<IEventHandle> handle;
+            TEvKeyValue::TEvResponse *response = tc.Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>(
+                handle, progressTimeout);
+            UNIT_ASSERT_C(response, waitDescription("randomized response timeout", targetGets, targetResponses));
+            handleResponse(response->Record);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL_C(seenCookies.size(), targetResponses,
+            "received# " << seenCookies.size() << " expected# " << targetResponses
+                << " blockedGets# " << gets.BlockedSize() << " totalGets# " << gets.TotalSeen());
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL_C(seenCookies.size(), requestCount,
+        "received# " << seenCookies.size() << " expected# " << requestCount
+            << " blockedGets# " << gets.BlockedSize() << " totalGets# " << gets.TotalSeen());
 }
 
 } // TKeyValueTest

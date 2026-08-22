@@ -1,5 +1,7 @@
 GTEST()
 
+SIZE(MEDIUM)
+
 PEERDIR(
     contrib/libs/apache/arrow
     yql/essentials/minikql

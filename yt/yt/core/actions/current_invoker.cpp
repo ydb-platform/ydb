@@ -30,7 +30,7 @@ TCurrentInvokerGuard::TCurrentInvokerGuard(IInvoker* invoker)
         },
         nullptr)
     , Active_(true)
-    , SavedInvoker_(std::move(invoker))
+    , SavedInvoker_(invoker)
 {
     std::swap(CurrentInvoker(), SavedInvoker_);
 }
@@ -41,7 +41,7 @@ void TCurrentInvokerGuard::Restore()
         return;
     }
     Active_ = false;
-    CurrentInvoker() = std::move(SavedInvoker_);
+    CurrentInvoker() = SavedInvoker_;
 }
 
 TCurrentInvokerGuard::~TCurrentInvokerGuard()

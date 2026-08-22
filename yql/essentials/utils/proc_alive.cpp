@@ -5,8 +5,7 @@
 #include <util/system/error.h>
 #include <util/system/winint.h>
 
-#include <errno.h>
-
+#include <cerrno>
 
 namespace NYql {
 
@@ -33,5 +32,4 @@ bool IsProcessAlive(TProcessId pid) {
 #endif
 }
 
-} // NYql
-
+} // namespace NYql

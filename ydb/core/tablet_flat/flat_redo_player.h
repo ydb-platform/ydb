@@ -78,6 +78,8 @@ namespace NRedo {
                     return DoRemoveTx(chunk);
                 case ERedo::CommitTx:
                     return DoCommitTx(chunk);
+                case ERedo::LockRowTx:
+                    return DoLockRowTx(chunk);
                 case ERedo::Erase:
                     // Not used in current log format
                     break;
@@ -107,6 +109,7 @@ namespace NRedo {
                 case ERedo::UpdateTx:
                 case ERedo::RemoveTx:
                 case ERedo::CommitTx:
+                case ERedo::LockRowTx:
                     // Not used in legacy log format
                     break;
             }
@@ -212,6 +215,18 @@ namespace NRedo {
 
             if (Base.NeedIn(ev->Table)) {
                 Base.DoRemoveTx(ev->Table, ev->TxId);
+            }
+        }
+
+        void DoLockRowTx(const TArrayRef<const char> chunk)
+        {
+            auto *ev = reinterpret_cast<const TEvLockRowTx*>(chunk.data());
+            if (Base.NeedIn(ev->Table)) {
+                const char *buf = chunk.begin() + sizeof(*ev);
+
+                buf += ReadKey(buf, chunk.end() - buf, ev->Keys);
+
+                Base.DoLockRowTx(ev->Table, ev->Mode, KeyVec, ev->TxId);
             }
         }
 

@@ -1,7 +1,7 @@
 The code contained in this directory was automatically generated using the
 following command:
 
-    python -m validate_pyproject.pre_compile --output-dir=setuptools/config/_validate_pyproject --enable-plugins setuptools distutils --very-verbose -t distutils=setuptools/config/distutils.schema.json -t setuptools=setuptools/config/setuptools.schema.json
+    python -m validate_pyproject.pre_compile --output-dir=setuptools/config/_validate_pyproject --enable-plugins setuptools distutils --very-verbose -t setuptools=setuptools/config/setuptools.schema.json -t distutils=setuptools/config/distutils.schema.json
 
 Please avoid changing it manually.
 

@@ -13,9 +13,9 @@ std::optional<ui64> TTrivialArray::DoGetRawSize() const {
     return NArrow::GetArrayDataSize(Array);
 }
 
-std::shared_ptr<arrow::Scalar> TTrivialArray::DoGetMaxScalar() const {
-    auto minMaxPos = NArrow::FindMinMaxPosition(Array);
-    return NArrow::TStatusValidator::GetValid(Array->GetScalar(minMaxPos.second));
+
+TMinMax TTrivialArray::DoGetMinMaxScalars() const {
+    return TMinMax::Compute(Array);
 }
 
 ui32 TTrivialArray::DoGetValueRawBytes() const {
@@ -32,24 +32,12 @@ void TTrivialArray::Reallocate() {
 
 std::shared_ptr<arrow::Array> TTrivialArray::BuildArrayFromOptionalScalar(
     const std::shared_ptr<arrow::Scalar>& scalar, const std::shared_ptr<arrow::DataType>& typePtr) {
+    AFL_VERIFY(!!typePtr);
     if (scalar) {
         AFL_VERIFY(scalar->type->id() == typePtr->id());
-        auto builder = NArrow::MakeBuilder(scalar->type, 1);
-        TStatusValidator::Validate(builder->AppendScalar(*scalar));
-        return NArrow::FinishBuilder(std::move(builder));
+        return BuildArrayFromScalar(scalar);
     } else {
-        std::shared_ptr<arrow::Array> result;
-        NArrow::SwitchType(typePtr->id(), [&](const auto& /*type*/) {
-            static const std::shared_ptr<arrow::Array> arrResult = [&]() {
-                auto builder = NArrow::MakeBuilder(typePtr, 1);
-                TStatusValidator::Validate(builder->AppendNull());
-                return NArrow::FinishBuilder(std::move(builder));
-            }();
-            result = arrResult;
-            return true;
-        });
-        AFL_VERIFY(result);
-        return result;
+        return TStatusValidator::GetValid(arrow::MakeArrayOfNull(typePtr, 1));
     }
 }
 
@@ -70,7 +58,8 @@ private:
 public:
     TChunkAccessor(const std::shared_ptr<arrow::ChunkedArray>& chunkedArray, std::optional<IChunkedArray::TLocalDataAddress>& result)
         : ChunkedArray(chunkedArray)
-        , Result(&result) {
+        , Result(&result)
+    {
     }
     ui64 GetChunksCount() const {
         return (ui64)ChunkedArray->num_chunks();
@@ -102,21 +91,10 @@ std::optional<ui64> TTrivialChunkedArray::DoGetRawSize() const {
     return result;
 }
 
-std::shared_ptr<arrow::Scalar> TTrivialChunkedArray::DoGetMaxScalar() const {
-    std::shared_ptr<arrow::Scalar> result;
-    for (auto&& i : Array->chunks()) {
-        if (!i->length()) {
-            continue;
-        }
-        auto minMaxPos = NArrow::FindMinMaxPosition(i);
-        auto scalarCurrent = NArrow::TStatusValidator::GetValid(i->GetScalar(minMaxPos.second));
-        if (!result || ScalarCompare(result, scalarCurrent) < 0) {
-            result = scalarCurrent;
-        }
-    }
-
-    return result;
+TMinMax TTrivialChunkedArray::DoGetMinMaxScalars() const {
+    return TMinMax::Compute(Array);
 }
+
 
 ui32 TTrivialChunkedArray::DoGetValueRawBytes() const {
     ui32 result = 0;

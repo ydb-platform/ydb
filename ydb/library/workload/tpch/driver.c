@@ -98,3 +98,22 @@ void GenSeed(int tableNum, DSS_HUGE rowsCount) {
         ((gen_seed)tdefs[childNum].gen_seed)(0, rowsCount);
     }
 }
+
+DSS_HUGE SetState(int table, double sf, long procs, long step, DSS_HUGE* extraRows) {
+    DSS_HUGE rowsCount;
+
+    if (sf == 0 || step == 0)
+        return(0);
+
+    rowsCount = tdefs[table].base;
+    rowsCount *= sf;
+    *extraRows = rowsCount % procs;
+    rowsCount /= procs;
+    for (int i = 0; i < step - 1; i++) {
+        GenSeed(table, rowsCount);
+    }
+    if (step > procs)    /* moving to the end to generate updates */
+        GenSeed(table, *extraRows);
+
+    return rowsCount;
+}

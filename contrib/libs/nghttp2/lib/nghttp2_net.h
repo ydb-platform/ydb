@@ -27,65 +27,27 @@
 
 #ifdef HAVE_CONFIG_H
 #  include <config.h>
-#endif /* HAVE_CONFIG_H */
+#endif /* defined(HAVE_CONFIG_H) */
 
 #ifdef HAVE_ARPA_INET_H
 #  include <arpa/inet.h>
-#endif /* HAVE_ARPA_INET_H */
+#endif /* defined(HAVE_ARPA_INET_H) */
 
 #ifdef HAVE_NETINET_IN_H
 #  include <netinet/in.h>
-#endif /* HAVE_NETINET_IN_H */
+#endif /* defined(HAVE_NETINET_IN_H) */
 
 #include <nghttp2/nghttp2.h>
 
-#if defined(WIN32)
-/* Windows requires ws2_32 library for ntonl family functions.  We
-   define inline functions for those function so that we don't have
-   dependency on that lib. */
+#ifdef WIN32
+/* Windows requires ws2_32 library for ntonl family of functions.
+   Instead of using them, use _byteswap_* functions.  This is fine
+   because all platforms that can run Windows these days are little
+   endian. */
+#  define htonl(N) _byteswap_ulong(N)
+#  define htons(N) _byteswap_ushort(N)
+#  define ntohl(N) _byteswap_ulong(N)
+#  define ntohs(N) _byteswap_ushort(N)
+#endif /* defined(WIN32) */
 
-#  ifdef _MSC_VER
-#    define STIN static __inline
-#  else
-#    define STIN static inline
-#  endif
-
-STIN uint32_t htonl(uint32_t hostlong) {
-  uint32_t res;
-  unsigned char *p = (unsigned char *)&res;
-  *p++ = (unsigned char)(hostlong >> 24);
-  *p++ = (hostlong >> 16) & 0xffu;
-  *p++ = (hostlong >> 8) & 0xffu;
-  *p = hostlong & 0xffu;
-  return res;
-}
-
-STIN uint16_t htons(uint16_t hostshort) {
-  uint16_t res;
-  unsigned char *p = (unsigned char *)&res;
-  *p++ = (unsigned char)(hostshort >> 8);
-  *p = hostshort & 0xffu;
-  return res;
-}
-
-STIN uint32_t ntohl(uint32_t netlong) {
-  uint32_t res;
-  unsigned char *p = (unsigned char *)&netlong;
-  res = (uint32_t)(*p++ << 24);
-  res += (uint32_t)(*p++ << 16);
-  res += (uint32_t)(*p++ << 8);
-  res += *p;
-  return res;
-}
-
-STIN uint16_t ntohs(uint16_t netshort) {
-  uint16_t res;
-  unsigned char *p = (unsigned char *)&netshort;
-  res = (uint16_t)(*p++ << 8);
-  res += *p;
-  return res;
-}
-
-#endif /* WIN32 */
-
-#endif /* NGHTTP2_NET_H */
+#endif /* !defined(NGHTTP2_NET_H) */

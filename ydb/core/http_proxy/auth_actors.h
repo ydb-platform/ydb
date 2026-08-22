@@ -1,0 +1,20 @@
+#pragma once
+
+#include <ydb/core/protos/serverless_proxy_config.pb.h>
+#include <ydb/library/actors/core/actorsystem_fwd.h>
+
+#include <util/generic/ptr.h>
+
+namespace NKikimr::NSQS {
+    class TAwsRequestSignV4;
+}
+
+namespace NKikimr::NHttpProxy {
+
+struct THttpRequestContext;
+
+NActors::IActor* CreateAccessServiceActor(const NKikimrConfig::TServerlessProxyConfig& config, const TString& userAgentHint, bool enableV2Interface);
+NActors::IActor* CreateIamTokenServiceActor(const NKikimrConfig::TServerlessProxyConfig& config, const TString& userAgentHint);
+NActors::IActor* CreateIamAuthActor(const NActors::TActorId sender, THttpRequestContext& context, THolder<NKikimr::NSQS::TAwsRequestSignV4> signature);
+
+} // namespace NKikimr::NHttpProxy

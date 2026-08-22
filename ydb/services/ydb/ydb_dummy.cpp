@@ -6,8 +6,11 @@
 #include <ydb/core/grpc_services/rpc_deferrable.h>
 
 #include <ydb/core/grpc_streaming/grpc_streaming.h>
+#include <ydb/library/actors/core/actorsystem.h>
 
 #include <ydb/public/api/grpc/draft/dummy.grpc.pb.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::GRPC_SERVER
 
 namespace NKikimr {
 namespace NGRpcService {
@@ -73,14 +76,14 @@ public:
 
     void Bootstrap(const TActorContext& ctx) {
         Y_UNUSED(ctx);
-        Request_->GetStreamCtx()->Attach(SelfId());
-        Request_->GetStreamCtx()->Read();
+        Request_->Attach(SelfId());
+        Request_->Read();
         Become(&TBiStreamPingRequestRPC::StateWork);
     }
 
     void Handle(IContext::TEvReadFinished::TPtr& ev, const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::GRPC_SERVER,
-            "Received TEvReadFinished, success = " << ev->Get()->Success);
+        YDB_LOG_DEBUG_CTX(ctx, "Received TEvReadFinished, success",
+            {"success", ev->Get()->Success});
         auto req = static_cast<const TEvBiStreamPingRequest::TRequest&>(ev->Get()->Record);
 
         if (req.copy()) {
@@ -90,14 +93,24 @@ public:
     }
 
     void Handle(TGRpcRequestProxy::TEvRefreshTokenResponse::TPtr& ev, const TActorContext& ctx) {
-        LOG_ERROR_S(ctx, NKikimrServices::GRPC_SERVER,
-            "Received TEvRefreshTokenResponse, Authenticated = " << ev->Get()->Authenticated);
-        Request_->GetStreamCtx()->Write(std::move(Resp_));
+        YDB_LOG_ERROR_CTX(ctx, "Received TEvRefreshTokenResponse, Authenticated",
+            {"authenticated", ev->Get()->Authenticated});
+        Request_->Write(std::move(Resp_));
+        Ydb::StatusIds::StatusCode status = ev->Get()->Authenticated ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::UNAUTHORIZED;
         auto grpcStatus = grpc::Status(ev->Get()->Authenticated ?
             grpc::StatusCode::OK : grpc::StatusCode::UNAUTHENTICATED,
             "");
-        Request_->GetStreamCtx()->Finish(grpcStatus);
+        Request_->Finish(status, grpcStatus);
         PassAway();
+    }
+
+    void PassAway() override {
+        if (Request_) {
+            // Write to audit log if it is needed and we have not written yet.
+            Request_->AuditLogRequestEnd(Ydb::StatusIds::SUCCESS);
+        }
+
+        TActorBootstrapped::PassAway();
     }
 
     STFUNC(StateWork) {
@@ -161,12 +174,18 @@ void TGRpcYdbDummyService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
             CQ_,
             &Draft::Dummy::DummyService::AsyncService::RequestBiStreamPing,
             [this](TIntrusivePtr<TBiStreamGRpcRequest::IContext> context) {
-                ActorSystem_->Send(GRpcRequestProxyId_, new TEvBiStreamPingRequest(context));
+                ActorSystem_->Send(
+                    GRpcRequestProxyId_,
+                    new TEvBiStreamPingRequest(
+                        context,
+                        NGRpcService::TRequestAuxSettings{
+                            .EmptyDatabaseMode = EEmptyDatabaseMode::EmptyDatabaseForbidden
+                        }
+                    )
+                );
             },
-            *ActorSystem_,
-            "DummyService/BiStreamPing",
-            getCounterBlock("dummy", "biStreamPing", true),
-            nullptr);
+            *ActorSystem_, "BiStreamPing",
+            getCounterBlock("dummy", "biStreamPing", true), nullptr);
     }
 }
 

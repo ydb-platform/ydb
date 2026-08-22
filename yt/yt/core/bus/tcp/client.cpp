@@ -20,7 +20,7 @@
     #include <sys/socket.h>
 #endif
 
-namespace NYT::NBus {
+namespace NYT::NBus::NTcp {
 
 using namespace NNet;
 using namespace NYson;
@@ -32,20 +32,20 @@ constinit const auto Logger = BusLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//! A lightweight proxy controlling the lifetime of client #TTcpConnection.
+//! A lightweight proxy controlling the lifetime of client #TConnection.
 /*!
  *  When the last strong reference vanishes, it calls IBus::Terminate
  *  for the underlying connection.
  */
-class TTcpClientBusProxy
+class TClientBusProxy
     : public IBus
 {
 public:
-    explicit TTcpClientBusProxy(TTcpConnectionPtr connection)
+    explicit TClientBusProxy(TConnectionPtr connection)
         : Connection_(std::move(connection))
     { }
 
-    ~TTcpClientBusProxy()
+    ~TClientBusProxy()
     {
         YT_ASSERT_THREAD_AFFINITY_ANY();
         Connection_->Terminate(TError(NBus::EErrorCode::TransportError, "Bus terminated"));
@@ -130,16 +130,16 @@ public:
     }
 
 private:
-    const TTcpConnectionPtr Connection_;
+    const TConnectionPtr Connection_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TTcpBusClient
+class TBusClient
     : public IBusClient
 {
 public:
-    TTcpBusClient(
+    TBusClient(
         TBusClientConfigPtr config,
         IPacketTranscoderFactory* packetTranscoderFactory,
         IMemoryUsageTrackerPtr memoryUsageTracker)
@@ -160,7 +160,7 @@ public:
         return *EndpointAttributes_;
     }
 
-    void Reconfigure(const NBus::TBusClientDynamicConfigPtr& config) override
+    void Reconfigure(const NBus::NTcp::TBusClientDynamicConfigPtr& config) override
     {
         DynamicConfig_.Store(config);
     }
@@ -171,12 +171,12 @@ public:
 
         auto id = TConnectionId::Create();
 
-        YT_LOG_DEBUG("Connecting to server (Address: %v, ConnectionId: %v, MultiplexingBand: %v, EncryptionMode: %v, VerificationMode: %v)",
-            EndpointDescription_,
-            id,
-            options.MultiplexingBand,
-            Config_->EncryptionMode,
-            Config_->VerificationMode);
+        YT_TLOG_DEBUG("Connecting to server")
+            .With("Address", EndpointDescription_)
+            .With("ConnectionId", id)
+            .With("MultiplexingBand", options.MultiplexingBand)
+            .With("EncryptionMode", Config_->EncryptionMode)
+            .With("VerificationMode", Config_->VerificationMode);
 
         auto endpointAttributes = ConvertToAttributes(BuildYsonStringFluently()
             .BeginMap()
@@ -185,8 +185,8 @@ public:
                 .Item("connection_type").Value(EConnectionType::Client)
             .EndMap());
 
-        auto poller = TTcpDispatcher::TImpl::Get()->GetXferPoller();
-        auto connection = New<TTcpConnection>(
+        auto poller = TDispatcher::TImpl::Get()->GetXferPoller();
+        auto connection = New<TConnection>(
             Config_,
             EConnectionType::Client,
             id,
@@ -204,7 +204,7 @@ public:
             DynamicConfig_.Acquire()->RejectConnectionOnMemoryOvercommit);
         connection->Start();
 
-        return New<TTcpClientBusProxy>(std::move(connection));
+        return New<TClientBusProxy>(std::move(connection));
     }
 
 private:
@@ -245,7 +245,7 @@ IBusClientPtr CreateBusClient(
     IPacketTranscoderFactory* packetTranscoderFactory,
     IMemoryUsageTrackerPtr memoryUsageTracker)
 {
-    return New<TTcpBusClient>(
+    return New<TBusClient>(
         std::move(config),
         packetTranscoderFactory,
         std::move(memoryUsageTracker));
@@ -253,4 +253,4 @@ IBusClientPtr CreateBusClient(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NBus
+} // namespace NYT::NBus::NTcp

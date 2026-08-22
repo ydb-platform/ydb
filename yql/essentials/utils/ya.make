@@ -2,12 +2,13 @@ LIBRARY()
 
 SRCS(
     cast.h
+    checkpoint_map.cpp
     chunked_buffer.cpp
     chunked_buffer.h
     debug_info.cpp
     debug_info.h
-    exceptions.cpp
-    exceptions.h
+    exception_utils.cpp
+    exception_utils.h
     future_action.cpp
     future_action.h
     hash.cpp
@@ -20,8 +21,6 @@ SRCS(
     mem_limit.cpp
     method_index.cpp
     method_index.h
-    multi_resource_lock.cpp
-    multi_resource_lock.h
     parse_double.cpp
     parse_double.h
     proc_alive.cpp
@@ -31,9 +30,12 @@ SRCS(
     resetable_setting.h
     retry.cpp
     retry.h
+    checked_deref_ptr.h
     runnable.h
     sort.cpp
     sort.h
+    strong_alias.cpp
+    strong_alias.h
     swap_bytes.cpp
     swap_bytes.h
     time_provider.h
@@ -66,13 +68,18 @@ RECURSE_FOR_TESTS(
 IF (OPENSOURCE_PROJECT != "yt")
     RECURSE(
         backtrace
+        random_data_generator
+        docs
         failure_injector
         fetch
+        json
         log
         memory_profiling
+        meta
         network
         oom_helper
         signals
+        string
         sys
         test_http_server
         threading

@@ -1,7 +1,10 @@
 LIBRARY()
 
+ENABLE(SKIP_YQL_STYLE_CPP)
+NO_CLANG_TIDY()
+
 PEERDIR(
-    yql/essentials/core/issue/protos
+    yql/essentials/public/issue/protos
     yql/essentials/parser/proto_ast/gen/v0
 )
 

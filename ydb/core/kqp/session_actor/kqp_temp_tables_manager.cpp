@@ -12,14 +12,9 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
 
-namespace NKikimr::NKqp {
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_SESSION
 
-#define LOG_C(stream) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, stream)
-#define LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, stream)
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, stream)
-#define LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, stream)
-#define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, stream)
+namespace NKikimr::NKqp {
 
 using namespace NThreading;
 
@@ -59,13 +54,14 @@ public:
     {}
 
     void Bootstrap() {
-        if (TempTablesState.TempTables.empty()) {
+        if (!TempTablesState.NeedCleaning) {
+            AFL_ENSURE(TempTablesState.TempTables.empty());
             Finish();
             return;
         }
 
         PathsToTraverse.push_back(
-            NKikimr::SplitPath(GetSessionDirPath(Database, TempTablesState.SessionId)));
+            NKikimr::SplitPath(GetSessionDirPath(Database, TempTablesState.TempDirName)));
         TraverseNext();
         Become(&TKqpTempTablesManager::PathSearchState);
     }
@@ -99,6 +95,7 @@ private:
     void TraverseNext() {
         auto schemeCacheRequest = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
 
+        schemeCacheRequest->DatabaseName = Database;
         schemeCacheRequest->UserToken = UserToken;
         schemeCacheRequest->ResultSet.resize(PathsToTraverse.size());
 
@@ -106,7 +103,7 @@ private:
             DirsToDrop.push_back(PathsToTraverse[i]);
             schemeCacheRequest->ResultSet[i].Path = PathsToTraverse[i];
             schemeCacheRequest->ResultSet[i].Operation = NSchemeCache::TSchemeCacheNavigate::OpList;
-            schemeCacheRequest->ResultSet[i].SyncVersion = false;
+            schemeCacheRequest->ResultSet[i].SyncVersion = true;
             schemeCacheRequest->ResultSet[i].ShowPrivatePath = true;
         }
 
@@ -118,20 +115,25 @@ private:
     void HandleNavigate(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         const NSchemeCache::TSchemeCacheNavigate* navigate = ev->Get()->Request.Get();
         if (navigate->ErrorCount != 0) {
-            Finish();
+            YDB_LOG_ERROR("Navigate",
+                {"errors", navigate->ErrorCount});
         }
 
         for (const auto& entry : navigate->ResultSet) {
-            if (entry.ListNodeEntry) {
+            if (entry.ListNodeEntry && entry.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
                 for (const auto& child : entry.ListNodeEntry->Children) {
                     if (child.Kind == NSchemeCache::TSchemeCacheNavigate::KindPath) {
                         PathsToTraverse.push_back(entry.Path);
                         PathsToTraverse.back().push_back(child.Name);
-                    } else if (child.Kind == NSchemeCache::TSchemeCacheNavigate::KindTable) {
+                    } else if (child.Kind == NSchemeCache::TSchemeCacheNavigate::KindTable
+                            || child.Kind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable) {
                         TablesToDrop.push_back(entry.Path);
                         TablesToDrop.back().push_back(child.Name);
                     }
                 }
+            } else {
+                YDB_LOG_ERROR("Navigate error",
+                    {"entry", entry});
             }
         }
 
@@ -229,6 +231,7 @@ private:
     void HandleRemoveDir(TEvPrivate::TEvRemoveDirResult::TPtr& result) {
         if (!result->Get()->Result.Success()) {
             Finish();
+            return;
         }
 
         RemoveNextDir();

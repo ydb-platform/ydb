@@ -12,24 +12,32 @@
 #include <yql/essentials/core/yql_expr_constraint.h>
 #include <yql/essentials/core/yql_gc_transformer.h>
 #include <yql/essentials/core/common_opt/yql_co_transformer.h>
+#include <yql/essentials/core/yql_opt_normalize_depends_on.h>
 #include <yql/essentials/core/yql_opt_proposed_by_data.h>
 #include <yql/essentials/core/yql_opt_rewrite_io.h>
-
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/utils/log/log.h>
+
+#include <library/cpp/yson/node/node_io.h>
 
 namespace NYql {
+
+const TString LineageComponent = "Lineage";
+const TString LineageResultLabel = "LineageResult";
+const TString StandaloneLineageLabel = "StandaloneLineage";
 
 TTransformationPipeline::TTransformationPipeline(
     TIntrusivePtr<TTypeAnnotationContext> ctx,
     TTypeAnnCallableFactory typeAnnCallableFactory)
     : TypeAnnotationContext_(ctx)
-    , TypeAnnCallableFactory_(typeAnnCallableFactory ? typeAnnCallableFactory : [ctx = ctx.Get()](){
+    , TypeAnnCallableFactory_(typeAnnCallableFactory ? typeAnnCallableFactory : [ctx = ctx.Get()]() {
         return CreateExtCallableTypeAnnotationTransformer(*ctx);
     })
-{}
+{
+}
 
 TTransformationPipeline& TTransformationPipeline::Add(TAutoPtr<IGraphTransformer> transformer, const TString& stageName,
-    EYqlIssueCode issueCode, const TString& issueMessage)
+                                                      EYqlIssueCode issueCode, const TString& issueMessage)
 {
     if (transformer) {
         Transformers_.push_back(TTransformStage(transformer, stageName, issueCode, issueMessage));
@@ -38,7 +46,7 @@ TTransformationPipeline& TTransformationPipeline::Add(TAutoPtr<IGraphTransformer
 }
 
 TTransformationPipeline& TTransformationPipeline::Add(IGraphTransformer& transformer, const TString& stageName,
-    EYqlIssueCode issueCode, const TString& issueMessage)
+                                                      EYqlIssueCode issueCode, const TString& issueMessage)
 {
     Transformers_.push_back(TTransformStage(transformer, stageName, issueCode, issueMessage));
     return *this;
@@ -52,37 +60,41 @@ TTransformationPipeline& TTransformationPipeline::AddServiceTransformers(EYqlIss
 TTransformationPipeline& TTransformationPipeline::AddParametersEvaluation(const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry, EYqlIssueCode issueCode) {
     auto& typeCtx = *TypeAnnotationContext_;
     Transformers_.push_back(TTransformStage(CreateFunctorTransformer(
-        [&](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
-        return EvaluateParameters(input, output, typeCtx, ctx, functionRegistry);
-    }), "EvaluateParameters", issueCode));
+                                                [&](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+                                                    return EvaluateParameters(input, output, typeCtx, ctx, functionRegistry);
+                                                }), "EvaluateParameters", issueCode));
 
     return *this;
 }
 
 TTransformationPipeline& TTransformationPipeline::AddExpressionEvaluation(const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,
-    IGraphTransformer* calcTransfomer, EYqlIssueCode issueCode) {
-    auto& typeCtx = *TypeAnnotationContext_;
-    auto& funcReg = functionRegistry;
-    auto typeAnnCallableFactory = TypeAnnCallableFactory_;
-    Transformers_.push_back(TTransformStage(CreateFunctorTransformer(
-        [&typeCtx, &funcReg, calcTransfomer, typeAnnCallableFactory](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
-        return EvaluateExpression(input, output, typeCtx, ctx, funcReg, calcTransfomer, typeAnnCallableFactory);
-    }), "EvaluateExpression", issueCode));
+                                                                          IGraphTransformer* calcTransformer, EYqlIssueCode issueCode) {
+    Transformers_.push_back(TTransformStage(
+        CreateEvaluateExpressionTransformer(*TypeAnnotationContext_, functionRegistry, calcTransformer, TypeAnnCallableFactory_),
+        "EvaluateExpression",
+        issueCode));
 
     return *this;
 }
 
-TTransformationPipeline& TTransformationPipeline::AddPreTypeAnnotation(EYqlIssueCode issueCode) {
+TTransformationPipeline& TTransformationPipeline::AddPreTypeAnnotation(bool expandCons, EYqlIssueCode issueCode) {
     auto& typeCtx = *TypeAnnotationContext_;
-    Transformers_.push_back(TTransformStage(CreateFunctorTransformer(&ExpandApply), "ExpandApply",
-        issueCode));
+    if (expandCons) {
+        Transformers_.push_back(TTransformStage(CreateFunctorTransformer(&ExpandApply), "ExpandApply", issueCode));
+    } else {
+        Transformers_.push_back(TTransformStage(CreateFunctorTransformer(&ExpandApplyWithoutCons), "ExpandApply", issueCode));
+    }
     Transformers_.push_back(TTransformStage(CreateFunctorTransformer(
-        [&](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
-            return ValidateProviders(input, output, ctx, typeCtx);
-        }), "ValidateProviders", issueCode));
+                                                [&](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+                                                    return ValidateProviders(input, output, ctx, typeCtx);
+                                                }), "ValidateProviders", issueCode));
 
     Transformers_.push_back(TTransformStage(
         CreateConfigureTransformer(*TypeAnnotationContext_), "Configure", issueCode));
+    Transformers_.push_back(TTransformStage(CreateFunctorTransformer(
+                                                [&](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+                                                    return ExpandSeq(input, output, ctx, typeCtx);
+                                                }), "ExpandSeq", issueCode));
 
     return *this;
 }
@@ -105,9 +117,9 @@ TTransformationPipeline& TTransformationPipeline::AddIOAnnotation(bool withEpoch
 
     auto& typeCtx = *TypeAnnotationContext_;
     Transformers_.push_back(TTransformStage(CreateFunctorTransformer(
-        [&](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
-            return RewriteIO(input, output, typeCtx, ctx);
-        }), "RewriteIO", issueCode));
+                                                [&](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+                                                    return RewriteIO(input, output, typeCtx, ctx);
+                                                }), "RewriteIO", issueCode));
 
     return *this;
 }
@@ -122,21 +134,19 @@ TTransformationPipeline& TTransformationPipeline::AddTypeAnnotation(EYqlIssueCod
 
 TTransformationPipeline& TTransformationPipeline::AddPostTypeAnnotation(bool forSubGraph, bool disableConstraintCheck, EYqlIssueCode issueCode) {
     Transformers_.push_back(TTransformStage(
-        CreateConstraintTransformer(*TypeAnnotationContext_, false, forSubGraph, disableConstraintCheck), "Constraints", issueCode));
+        CreateConstraintTransformer(*TypeAnnotationContext_, /*instantOnly=*/false, forSubGraph, disableConstraintCheck), "Constraints", issueCode));
     Transformers_.push_back(TTransformStage(
         CreateFunctorTransformer(
             [](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
                 return UpdateCompletness(input, output, ctx);
-            }
-        ),
+            }),
         "UpdateCompletness",
         issueCode));
     Transformers_.push_back(TTransformStage(
         CreateFunctorTransformer(
             [forSubGraph, coStore = TypeAnnotationContext_->ColumnOrderStorage](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
                 return EliminateCommonSubExpressions(input, output, ctx, forSubGraph, *coStore);
-            }
-        ),
+            }),
         "CSEE",
         issueCode));
 
@@ -144,6 +154,10 @@ TTransformationPipeline& TTransformationPipeline::AddPostTypeAnnotation(bool for
 }
 
 TTransformationPipeline& TTransformationPipeline::AddCommonOptimization(bool forPeephole, EYqlIssueCode issueCode) {
+    Transformers_.push_back(TTransformStage(
+        CreateNormalizeDependsOnTransformer(*TypeAnnotationContext_),
+        "NormalizeDependsOn",
+        issueCode));
     Transformers_.push_back(TTransformStage(
         CreateCommonOptTransformer(forPeephole, TypeAnnotationContext_.Get()),
         "CommonOptimization",
@@ -159,8 +173,80 @@ TTransformationPipeline& TTransformationPipeline::AddFinalCommonOptimization(EYq
     return *this;
 }
 
-TTransformationPipeline& TTransformationPipeline::AddOptimization(bool checkWorld, bool withFinalOptimization, EYqlIssueCode issueCode) {
-    AddCommonOptimization(false, issueCode);
+TTransformationPipeline& TTransformationPipeline::AddOptimizationWithLineage(bool enableLineage, bool checkWorld, bool withFinalOptimization, EYqlIssueCode issueCode) {
+    AddCommonOptimization(/*forPeephole=*/false, issueCode);
+    if (enableLineage) {
+        Transformers_.push_back(TTransformStage(
+            CreateChoiceGraphTransformer(
+                [&typesCtx = std::as_const(*TypeAnnotationContext_)](const TExprNode::TPtr&, TExprContext&) {
+                    return typesCtx.LineageSettings.EnableLineage;
+                },
+                TTransformStage(
+                    CreateSinglePassFunctorTransformer(
+                        [typeCtx = TypeAnnotationContext_](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+                            output = input;
+                            TString calculatedLineage;
+                            TString loadedLineage;
+                            if (typeCtx->QContext && typeCtx->QContext.CanRead()) {
+                                auto loaded = typeCtx->QContext.GetReader()->Get({.Component = LineageComponent, .Label = LineageResultLabel}).GetValueSync();
+                                if (loaded.Defined()) {
+                                    loadedLineage = loaded->Value;
+                                } else {
+                                    YQL_LOG(INFO) << "There is no lineage in QStorage, lineage calculation is skipped in replay mode";
+                                    return IGraphTransformer::TStatus::Ok;
+                                }
+                            }
+                            std::exception_ptr lineageError;
+                            typeCtx->LineageStats.Correct = true;
+                            try {
+                                TLineageRunOptions lineageOptions;
+                                lineageOptions.Version = typeCtx->LineageSettings.LineageVersion;
+                                calculatedLineage = CalculateLineage(*input, *typeCtx, ctx, lineageOptions);
+                                typeCtx->LineageStats.Size = calculatedLineage.size();
+                                typeCtx->LineageStats.Version = typeCtx->LineageSettings.LineageVersion;
+                            } catch (const std::exception& e) {
+                                YQL_LOG(ERROR) << "Lineage calculation error: " << e.what();
+                                typeCtx->LineageStats.Correct = false;
+                                lineageError = std::current_exception();
+                            }
+                            if (!loadedLineage.empty()) {
+                                // if lineage calculation is failed, but loaded lineage exists, rethrow exception for replay mode
+                                if (lineageError) {
+                                    std::rethrow_exception(lineageError);
+                                }
+                                try {
+                                    CheckEquvalentLineages(calculatedLineage, loadedLineage);
+                                    YQL_LOG(INFO) << "Lineage replay is the same";
+                                } catch (const std::exception& e) {
+                                    YQL_LOG(ERROR) << "Lineage in replay is different:\n"
+                                                   << e.what();
+                                    throw yexception() << "Lineage in replay is different";
+                                }
+                            }
+                            if (typeCtx->QContext && typeCtx->QContext.CanWrite() && *typeCtx->LineageStats.Correct) {
+                                typeCtx->QContext.GetWriter()->Put({.Component = LineageComponent, .Label = LineageResultLabel}, calculatedLineage).GetValueSync();
+                                YQL_LOG(INFO) << "Lineage is saved to QStorage";
+                            }
+                            return IGraphTransformer::TStatus::Ok;
+                        }),
+                    "Lineage",
+                    issueCode),
+                TTransformStage(
+                    new TNullTransformer(),
+                    "SkipLineage",
+                    issueCode)),
+            "LineageCalculation",
+            issueCode));
+    }
+    AddProviderOptimization(issueCode);
+    if (withFinalOptimization) {
+        AddFinalCommonOptimization(issueCode);
+    }
+    AddCheckExecution(checkWorld, issueCode);
+    return *this;
+}
+
+TTransformationPipeline& TTransformationPipeline::AddProviderOptimization(EYqlIssueCode issueCode) {
     Transformers_.push_back(TTransformStage(
         CreateChoiceGraphTransformer(
             [&typesCtx = std::as_const(*TypeAnnotationContext_)](const TExprNode::TPtr&, TExprContext&) {
@@ -177,10 +263,20 @@ TTransformationPipeline& TTransformationPipeline::AddOptimization(bool checkWorl
         "RecaptureDataProposals",
         issueCode));
     Transformers_.push_back(TTransformStage(
-        CreateStatisticsProposalsInspector(*TypeAnnotationContext_, TString{DqProviderName}),
+        CreateChoiceGraphTransformer(
+            [&typesCtx = std::as_const(*TypeAnnotationContext_)](const TExprNode::TPtr&, TExprContext&) {
+                return typesCtx.CostBasedOptimizer != ECostBasedOptimizerType::Disable;
+            },
+            TTransformStage(
+                CreateStatisticsProposalsInspector(*TypeAnnotationContext_, TString{DqProviderName}),
+                "StatisticsProposalsDq",
+                issueCode),
+            TTransformStage(
+                new TNullTransformer(),
+                "SkipStatisticsProposals",
+                issueCode)),
         "StatisticsProposals",
-        issueCode
-    ));
+        issueCode));
     Transformers_.push_back(TTransformStage(
         CreateLogicalDataProposalsInspector(*TypeAnnotationContext_),
         "LogicalDataProposals",
@@ -193,6 +289,12 @@ TTransformationPipeline& TTransformationPipeline::AddOptimization(bool checkWorl
         CreatePhysicalFinalizers(*TypeAnnotationContext_),
         "PhysicalFinalizers",
         issueCode));
+    return *this;
+}
+
+TTransformationPipeline& TTransformationPipeline::AddOptimization(bool checkWorld, bool withFinalOptimization, EYqlIssueCode issueCode) {
+    AddCommonOptimization(/*forPeephole=*/false, issueCode);
+    AddProviderOptimization(issueCode);
     if (withFinalOptimization) {
         AddFinalCommonOptimization(issueCode);
     }
@@ -201,15 +303,79 @@ TTransformationPipeline& TTransformationPipeline::AddOptimization(bool checkWorl
 }
 
 TTransformationPipeline& TTransformationPipeline::AddLineageOptimization(TMaybe<TString>& lineageOut, EYqlIssueCode issueCode) {
-    AddCommonOptimization(false, issueCode);
+    AddCommonOptimization(/*forPeephole=*/false, issueCode);
     Transformers_.push_back(TTransformStage(
-        CreateFunctorTransformer(
+        CreateSinglePassFunctorTransformer(
             [typeCtx = TypeAnnotationContext_, &lineageOut](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
                 output = input;
-                lineageOut = CalculateLineage(*input, *typeCtx, ctx);
+                try {
+                    TLineageRunOptions lineageOptions;
+                    lineageOptions.Standalone = true;
+                    lineageOptions.Version = typeCtx->LineageSettings.LineageStandaloneVersion;
+                    if (const auto attrs = typeCtx->OperationOptions.AttrsYson) {
+                        const auto paramData = NYT::NodeFromYsonString(*attrs);
+                        if (const auto param = paramData.AsMap().FindPtr("lineage_version")) {
+                            if (TryFromString(param->AsString(), lineageOptions.Version)) {
+                                YQL_LOG(INFO) << "LineageVersion is provided in attributes: " << lineageOptions.Version;
+                            } else {
+                                YQL_LOG(ERROR) << "LineageVersion from attributes is incorrect: " << param->AsString();
+                            }
+                        }
+                        if (const auto param = paramData.AsMap().FindPtr("lineage_yson_type")) {
+                            if (TryFromString(param->AsString(), lineageOptions.YsonTypeFormat)) {
+                                YQL_LOG(INFO) << "LineageYsonType is provided in attributes: " << lineageOptions.YsonTypeFormat;
+                            } else {
+                                YQL_LOG(ERROR) << "LineageYsonType from attributes is incorrect: " << param->AsString();
+                            }
+                        }
+                    }
+                    lineageOut = CalculateLineage(*input, *typeCtx, ctx, lineageOptions);
+                    typeCtx->LineageStats.Size = lineageOut->size();
+                    typeCtx->LineageStats.CorrectStandalone = true;
+                    typeCtx->LineageStats.Version = lineageOptions.Version;
+                } catch (const std::exception& e) {
+                    YQL_LOG(ERROR) << "Lineage calculation error: " << e.what();
+                    typeCtx->LineageStats.CorrectStandalone = false;
+                    TStringStream s;
+                    NYson::TYsonWriter writer(&s, NYson::EYsonFormat::Binary);
+                    writer.OnBeginMap();
+                    writer.OnKeyedItem("Error");
+                    writer.OnStringScalar(e.what());
+                    writer.OnEndMap();
+                    lineageOut = s.Str();
+                }
+                if (typeCtx->QContext && typeCtx->QContext.CanRead()) {
+                    auto loaded = typeCtx->QContext.GetReader()->Get({.Component = LineageComponent, .Label = StandaloneLineageLabel}).GetValueSync();
+                    if (loaded.Defined()) {
+                        try {
+                            CheckEquvalentLineages(*lineageOut, loaded->Value);
+                            YQL_LOG(INFO) << "Lineage replay is the same";
+                        } catch (const std::exception& e) {
+                            YQL_LOG(ERROR) << "Lineage in replay is different for standalone mode:\n"
+                                           << e.what();
+                            throw yexception() << "Lineage in replay is different";
+                        }
+                    }
+                }
+                if (typeCtx->LineageSettings.EnableStandaloneLineage) {
+                    if (typeCtx->QContext && typeCtx->QContext.CanWrite()) {
+                        try {
+                            // need to check correctness of lineage output before saving, e.g. if column-wise lineage section is empty
+                            ValidateLineage(*lineageOut);
+                            typeCtx->QContext.GetWriter()->Put({.Component = LineageComponent, .Label = StandaloneLineageLabel}, *lineageOut).GetValueSync();
+                            YQL_LOG(INFO) << "Standalone Lineage is saved to QStorage";
+                        } catch (const std::exception& e) {
+                            typeCtx->LineageStats.CorrectStandalone = false;
+                            YQL_LOG(INFO) << "Skip saving to QStorageLineage as lineage is incorrect: "
+                                          << e.what()
+                                          << ", calculated lineage: "
+                                          << NYT::NodeToYsonString(*lineageOut);
+                            return IGraphTransformer::TStatus::Ok;
+                        }
+                    }
+                }
                 return IGraphTransformer::TStatus::Ok;
-            }
-        ),
+            }),
         "LineageScanner",
         issueCode));
     return *this;
@@ -253,18 +419,18 @@ TTransformationPipeline& TTransformationPipeline::AddTypeAnnotationTransformer(
     TString stageName;
     TString issue;
     switch (mode) {
-    case ETypeCheckMode::Single:
-        stageName = "TypeAnnotation";
-        issue = "Type annotation";
-        break;
-    case ETypeCheckMode::Initial:
-        stageName = "InitialTypeAnnotation";
-        issue = "Type annotation";
-        break;
-    case ETypeCheckMode::Repeat:
-        stageName = "RepeatTypeAnnotation";
-        issue = "Type annotation (repeat)";
-        break;
+        case ETypeCheckMode::Single:
+            stageName = "TypeAnnotation";
+            issue = "Type annotation";
+            break;
+        case ETypeCheckMode::Initial:
+            stageName = "InitialTypeAnnotation";
+            issue = "Type annotation";
+            break;
+        case ETypeCheckMode::Repeat:
+            stageName = "RepeatTypeAnnotation";
+            issue = "Type annotation (repeat)";
+            break;
     }
 
     Transformers_.push_back(TTransformStage(
@@ -303,6 +469,5 @@ TAutoPtr<IGraphTransformer> TTransformationPipeline::BuildWithNoArgChecks(bool u
 TIntrusivePtr<TTypeAnnotationContext> TTransformationPipeline::GetTypeAnnotationContext() const {
     return TypeAnnotationContext_;
 }
-
 
 } // namespace NYql

@@ -28,8 +28,8 @@
 PYTHONIC_NS_BEGIN
 
 template <typename npy_intp, typename npy_double, class T>
-static npy_intp binary_search_with_guess(const npy_double key, const T &arr,
-                                         npy_intp len, npy_intp guess)
+static npy_intp binary_search_with_guess(const npy_double key, const T &arr, npy_intp len,
+                                         npy_intp guess)
 {
   npy_intp imin = 0;
   npy_intp imax = len;
@@ -65,8 +65,7 @@ static npy_intp binary_search_with_guess(const npy_double key, const T &arr,
     if (key < arr[guess - 1]) {
       imax = guess - 1;
       /* last attempt to restrict search to items in cache */
-      if (guess > LIKELY_IN_CACHE_SIZE &&
-          key >= arr[guess - LIKELY_IN_CACHE_SIZE]) {
+      if (guess > LIKELY_IN_CACHE_SIZE && key >= arr[guess - LIKELY_IN_CACHE_SIZE]) {
         imin = guess - LIKELY_IN_CACHE_SIZE;
       }
     } else {
@@ -85,8 +84,7 @@ static npy_intp binary_search_with_guess(const npy_double key, const T &arr,
         /* key >= arr[guess + 2] */
         imin = guess + 2;
         /* last attempt to restrict search to items in cache */
-        if (guess < len - LIKELY_IN_CACHE_SIZE - 1 &&
-            key < arr[guess + LIKELY_IN_CACHE_SIZE]) {
+        if (guess < len - LIKELY_IN_CACHE_SIZE - 1 && key < arr[guess + LIKELY_IN_CACHE_SIZE]) {
           imax = guess + LIKELY_IN_CACHE_SIZE;
         }
       }
@@ -187,13 +185,11 @@ static npy_intp binary_search_with_guess(const npy_double key, const T &arr,
 // This is the output type, based on the type of T, which can be complex.
 template <class T>
 using out_type =
-    typename std::conditional<types::is_complex<typename T::dtype>::value,
-                              std::complex<double>, double>::type;
+    std::conditional_t<types::is_complex<typename T::dtype>::value, std::complex<double>, double>;
 
-template <typename npy_intp, typename T5, class T1, class T2, class T3,
-          class T4>
-void do_interp(const T1 &dz, const T2 &dx, const T3 &dy, T4 &dres,
-               npy_intp lenxp, npy_intp lenx, T5 lval, T5 rval)
+template <typename npy_intp, typename T5, class T1, class T2, class T3, class T4>
+void do_interp(const T1 &dz, const T2 &dx, const T3 &dy, T4 &dres, npy_intp lenxp, npy_intp lenx,
+               T5 lval, T5 rval)
 {
   npy_intp i;
   out_type<T3> *slopes = NULL;
@@ -246,8 +242,7 @@ void do_interp(const T1 &dz, const T2 &dx, const T3 &dy, T4 &dres,
         dres[i] = dy[j];
       } else {
         const out_type<T3> slope =
-            (slopes != NULL) ? slopes[j]
-                             : (dy[j + 1] - dy[j]) / (dx[j + 1] - dx[j]);
+            (slopes != NULL) ? slopes[j] : (dy[j + 1] - dy[j]) / (dx[j + 1] - dx[j]);
         dres[i] = slope * (x_val - dx[j]) + dy[j];
       }
     }

@@ -1,7 +1,5 @@
 UNITTEST_FOR(yql/essentials/minikql/jsonpath)
 
-
-
 SRCS(
     common_ut.cpp
     examples_ut.cpp
@@ -19,7 +17,7 @@ PEERDIR(
     yql/essentials/minikql/dom
     yql/essentials/minikql/invoke_builtins/llvm16
     yql/essentials/public/udf/service/exception_policy
-    yql/essentials/core/issue/protos
+    yql/essentials/public/issue/protos
     yql/essentials/sql/pg_dummy
 )
 

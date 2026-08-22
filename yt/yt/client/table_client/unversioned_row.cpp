@@ -44,7 +44,78 @@ using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const TString SerializedNullRow;
+const std::string SerializedNullRow;
+
+////////////////////////////////////////////////////////////////////////////////
+
+TUnversionedOwningValue::TUnversionedOwningValue()
+    : Value_{
+        .Id = 0,
+        .Type = EValueType::TheBottom,
+        .Flags = {},
+        .Length = 0,
+        .Data = {},
+    }
+    , StringHolder_(nullptr)
+{ }
+
+TUnversionedOwningValue::TUnversionedOwningValue(TUnversionedOwningValue&& other) noexcept
+    : TUnversionedOwningValue()
+{
+    *this = std::move(other);
+}
+
+TUnversionedOwningValue::TUnversionedOwningValue(const TUnversionedValue& other)
+    : Value_(other)
+    , StringHolder_(nullptr)
+{
+    if (IsStringLikeType(Value_.Type)) {
+        auto ref = TSharedMutableRef::Allocate<TOwningValueTag>(Value_.Length, {.InitializeStorage = false});
+        ::memcpy(ref.data(), Value_.Data.String, Value_.Length);
+        Value_.Data.String = ref.data();
+        StringHolder_ = ref.ReleaseHolder();
+    }
+}
+
+TUnversionedOwningValue::TUnversionedOwningValue(const TUnversionedValue& other, TSharedRangeHolderPtr stringHolder)
+    : Value_(other)
+    , StringHolder_(std::move(stringHolder))
+{ }
+
+TUnversionedOwningValue& TUnversionedOwningValue::operator=(TUnversionedOwningValue&& other) noexcept
+{
+    std::swap(Value_, other.Value_);
+    std::swap(StringHolder_, other.StringHolder_);
+    return *this;
+}
+
+TUnversionedOwningValue::operator TUnversionedValue() const
+{
+    return Value_;
+}
+
+void TUnversionedOwningValue::Clear()
+{
+    Value_.Type = EValueType::TheBottom;
+    Value_.Length = 0;
+    StringHolder_ = {};
+}
+
+EValueType TUnversionedOwningValue::Type() const
+{
+    return Value_.Type;
+}
+
+TSharedRef TUnversionedOwningValue::GetStringRef() const
+{
+    YT_VERIFY(IsStringLikeType(Value_.Type));
+    return TSharedRef(Value_.Data.String, Value_.Length, StringHolder_);
+}
+
+TSharedRangeHolderPtr TUnversionedOwningValue::GetStringHolder() const
+{
+    return StringHolder_;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -307,8 +378,8 @@ namespace {
         "Cannot compare values of types %Qlv and %Qlv; only scalar types are allowed for key columns",
         lhs.Type,
         rhs.Type)
-        << TErrorAttribute("lhs_value", lhs)
-        << TErrorAttribute("rhs_value", rhs);
+        .With("lhs_value", lhs)
+        .With("rhs_value", rhs);
 }
 
 } // namespace
@@ -337,9 +408,9 @@ int CompareRowValues(const TUnversionedValue& lhs, const TUnversionedValue& rhs)
             THROW_ERROR_EXCEPTION(
                 NTableClient::EErrorCode::IncomparableComplexValues,
                 "Cannot compare complex values")
-                << TErrorAttribute("lhs_value", lhs)
-                << TErrorAttribute("rhs_value", rhs)
-                << ex;
+                .With("lhs_value", lhs)
+                .With("rhs_value", rhs)
+                .With(ex);
         }
     }
 
@@ -360,13 +431,13 @@ int CompareRowValues(const TUnversionedValue& lhs, const TUnversionedValue& rhs)
             THROW_ERROR_EXCEPTION(
                 NTableClient::EErrorCode::IncomparableComplexValues,
                 "Cannot compare complex values")
-                << TErrorAttribute("lhs_value", lhs)
-                << TErrorAttribute("rhs_value", rhs)
-                << ex;
+                .With("lhs_value", lhs)
+                .With("rhs_value", rhs)
+                .With(ex);
         }
     }
 
-    if (Y_UNLIKELY(lhs.Type != rhs.Type)) {
+    if (lhs.Type != rhs.Type) [[unlikely]] {
         return TernaryCompare(lhs.Type, rhs.Type);
     }
 
@@ -392,27 +463,27 @@ int CompareRowValues(const TUnversionedValue& lhs, const TUnversionedValue& rhs)
     }
 }
 
-bool operator == (const TUnversionedValue& lhs, const TUnversionedValue& rhs)
+bool operator==(const TUnversionedValue& lhs, const TUnversionedValue& rhs)
 {
     return CompareRowValues(lhs, rhs) == 0;
 }
 
-bool operator <= (const TUnversionedValue& lhs, const TUnversionedValue& rhs)
+bool operator<=(const TUnversionedValue& lhs, const TUnversionedValue& rhs)
 {
     return CompareRowValues(lhs, rhs) <= 0;
 }
 
-bool operator < (const TUnversionedValue& lhs, const TUnversionedValue& rhs)
+bool operator<(const TUnversionedValue& lhs, const TUnversionedValue& rhs)
 {
     return CompareRowValues(lhs, rhs) < 0;
 }
 
-bool operator >= (const TUnversionedValue& lhs, const TUnversionedValue& rhs)
+bool operator>=(const TUnversionedValue& lhs, const TUnversionedValue& rhs)
 {
     return CompareRowValues(lhs, rhs) >= 0;
 }
 
-bool operator > (const TUnversionedValue& lhs, const TUnversionedValue& rhs)
+bool operator>(const TUnversionedValue& lhs, const TUnversionedValue& rhs)
 {
     return CompareRowValues(lhs, rhs) > 0;
 }
@@ -451,54 +522,54 @@ int CompareRows(TUnversionedRow lhs, TUnversionedRow rhs, ui32 prefixLength)
         rhs.FirstNElements(std::min(rhs.GetCount(), prefixLength)));
 }
 
-bool operator == (TUnversionedRow lhs, TUnversionedRow rhs)
+bool operator==(TUnversionedRow lhs, TUnversionedRow rhs)
 {
     return CompareRows(lhs, rhs) == 0;
 }
 
-bool operator <= (TUnversionedRow lhs, TUnversionedRow rhs)
+bool operator<=(TUnversionedRow lhs, TUnversionedRow rhs)
 {
     return CompareRows(lhs, rhs) <= 0;
 }
 
-bool operator < (TUnversionedRow lhs, TUnversionedRow rhs)
+bool operator<(TUnversionedRow lhs, TUnversionedRow rhs)
 {
     return CompareRows(lhs, rhs) < 0;
 }
 
-bool operator >= (TUnversionedRow lhs, TUnversionedRow rhs)
+bool operator>=(TUnversionedRow lhs, TUnversionedRow rhs)
 {
     return CompareRows(lhs, rhs) >= 0;
 }
 
-bool operator > (TUnversionedRow lhs, TUnversionedRow rhs)
+bool operator>(TUnversionedRow lhs, TUnversionedRow rhs)
 {
     return CompareRows(lhs, rhs) > 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool operator == (TUnversionedRow lhs, const TUnversionedOwningRow& rhs)
+bool operator==(TUnversionedRow lhs, const TUnversionedOwningRow& rhs)
 {
     return CompareRows(lhs, rhs) == 0;
 }
 
-bool operator <= (TUnversionedRow lhs, const TUnversionedOwningRow& rhs)
+bool operator<=(TUnversionedRow lhs, const TUnversionedOwningRow& rhs)
 {
     return CompareRows(lhs, rhs) <= 0;
 }
 
-bool operator < (TUnversionedRow lhs, const TUnversionedOwningRow& rhs)
+bool operator<(TUnversionedRow lhs, const TUnversionedOwningRow& rhs)
 {
     return CompareRows(lhs, rhs) < 0;
 }
 
-bool operator >= (TUnversionedRow lhs, const TUnversionedOwningRow& rhs)
+bool operator>=(TUnversionedRow lhs, const TUnversionedOwningRow& rhs)
 {
     return CompareRows(lhs, rhs) >= 0;
 }
 
-bool operator > (TUnversionedRow lhs, const TUnversionedOwningRow& rhs)
+bool operator>(TUnversionedRow lhs, const TUnversionedOwningRow& rhs)
 {
     return CompareRows(lhs, rhs) > 0;
 }
@@ -527,7 +598,7 @@ size_t GetUnversionedRowByteSize(ui32 valueCount)
     return sizeof(TUnversionedRowHeader) + sizeof(TUnversionedValue) * valueCount;
 }
 
-size_t GetDataWeight(TUnversionedRow row)
+i64 GetDataWeight(TUnversionedRow row)
 {
     if (!row) {
         return 0;
@@ -540,7 +611,7 @@ size_t GetDataWeight(TUnversionedRow row)
     return result;
 }
 
-size_t GetDataWeight(TRange<TUnversionedRow> rows)
+i64 GetDataWeight(TRange<TUnversionedRow> rows)
 {
     size_t result = 0;
     for (auto row : rows) {
@@ -787,51 +858,69 @@ void ValidateClientRow(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString SerializeToString(TUnversionedRow row)
+std::string SerializeToString(TUnversionedRow row)
 {
     return row
         ? SerializeToString(row.Elements())
         : SerializedNullRow;
 }
 
-TString SerializeToString(TUnversionedValueRange range)
+std::string SerializeToString(TUnversionedValueRange range)
 {
-    int size = 2 * MaxVarUint32Size; // header size
-    for (const auto& value : range) {
-        size += EstimateRowValueSize(value);
-    }
+    std::string buffer;
+    buffer.resize(GetUnversionedRowByteSizeForWire(range));
 
-    TString buffer;
-    buffer.resize(size);
+    char* begin = const_cast<char*>(buffer.data());
+    char* current = SerializeRowToBuffer(begin, range);
 
-    char* current = const_cast<char*>(buffer.data());
-    current += WriteVarUint32(current, 0); // format version
-    current += WriteVarUint32(current, range.size());
-
-    for (const auto& value : range) {
-        current += WriteRowValue(current, value);
-    }
-
-    buffer.resize(current - buffer.data());
+    buffer.resize(current - begin);
 
     return buffer;
 }
 
-TUnversionedOwningRow DeserializeFromString(TString&& data, std::optional<int> nullPaddingWidth = std::nullopt)
+size_t GetUnversionedRowByteSizeForWire(TUnversionedValueRange range)
+{
+    size_t size = 2 * MaxVarUint32Size; // header size
+    for (const auto& value : range) {
+        size += EstimateRowValueSize(value);
+    }
+    return size;
+}
+
+char* SerializeRowToBuffer(char* dst, TUnversionedValueRange range)
+{
+    char* current = dst;
+    current += WriteVarUint32(current, 0); // format version
+    current += WriteVarUint32(current, range.size());
+    for (const auto& value : range) {
+        current += WriteRowValue(current, value);
+    }
+    return current;
+}
+
+const char* ReadUnversionedRowHeaderFromBuffer(const char* input, ui32* valueCount)
+{
+    ui32 version;
+    input += ReadVarUint32(input, &version);
+    YT_VERIFY(version == 0);
+    input += ReadVarUint32(input, valueCount);
+    return input;
+}
+
+const char* ReadUnversionedValueFromBuffer(const char* input, TUnversionedValue* value)
+{
+    return input + ReadRowValue(input, value);
+}
+
+TUnversionedOwningRow DeserializeFromString(std::string&& data, std::optional<int> nullPaddingWidth = std::nullopt)
 {
     if (data == SerializedNullRow) {
         return TUnversionedOwningRow();
     }
     auto dataRef = TSharedRef::FromString(std::move(data));
 
-    const char* current = dataRef.begin();
-
-    ui32 version;
-    current += ReadVarUint32(current, &version);
-    YT_VERIFY(version == 0);
-
     ui32 valueCount;
-    current += ReadVarUint32(current, &valueCount);
+    const char* current = ReadUnversionedRowHeaderFromBuffer(dataRef.begin(), &valueCount);
 
     // TODO(max42): YT-14049.
     int nullCount = nullPaddingWidth ? std::max<int>(0, *nullPaddingWidth - static_cast<int>(valueCount)) : 0;
@@ -845,8 +934,7 @@ TUnversionedOwningRow DeserializeFromString(TString&& data, std::optional<int> n
 
     auto* values = reinterpret_cast<TUnversionedValue*>(header + 1);
     for (int index = 0; index < static_cast<int>(valueCount); ++index) {
-        auto* value = values + index;
-        current += ReadRowValue(current, value);
+        current = ReadUnversionedValueFromBuffer(current, values + index);
     }
     for (int index = valueCount; index < static_cast<int>(valueCount + nullCount); ++index) {
         values[index] = MakeUnversionedNullValue(index);
@@ -855,27 +943,21 @@ TUnversionedOwningRow DeserializeFromString(TString&& data, std::optional<int> n
     return TUnversionedOwningRow(std::move(rowData), std::move(dataRef));
 }
 
-TUnversionedRow DeserializeFromString(const TString& data, const TRowBufferPtr& rowBuffer)
+TUnversionedRow DeserializeFromString(const std::string& data, const TRowBufferPtr& rowBuffer)
 {
     if (data == SerializedNullRow) {
         return TUnversionedRow();
     }
 
-    const char* current = data.data();
-
-    ui32 version;
-    current += ReadVarUint32(current, &version);
-    YT_VERIFY(version == 0);
-
     ui32 valueCount;
-    current += ReadVarUint32(current, &valueCount);
+    const char* current = ReadUnversionedRowHeaderFromBuffer(data.data(), &valueCount);
 
     auto row = rowBuffer->AllocateUnversioned(valueCount);
 
     auto* values = row.begin();
     for (int index = 0; index < static_cast<int>(valueCount); ++index) {
         auto* value = values + index;
-        current += ReadRowValue(current, value);
+        current = ReadUnversionedValueFromBuffer(current, value);
         rowBuffer->CaptureValue(value);
     }
 
@@ -891,7 +973,7 @@ void TUnversionedRow::Save(TSaveContext& context) const
 
 void TUnversionedRow::Load(TLoadContext& context)
 {
-    *this = DeserializeFromString(NYT::Load<TString>(context), context.GetRowBuffer());
+    *this = DeserializeFromString(NYT::Load<std::string>(context), context.GetRowBuffer());
 }
 
 void ValidateValueType(
@@ -1089,7 +1171,7 @@ void ValidateValueType(
             NTableClient::EErrorCode::SchemaViolation,
             "Error validating column %v",
             columnSchema.GetDiagnosticNameString())
-            << ex;
+            .With(ex);
     }
 }
 
@@ -1269,9 +1351,10 @@ void ValidateClientKey(
     TLegacyKey key,
     const TTableSchema& schema,
     const TNameTableToSchemaIdMapping& idMapping,
-    const TNameTablePtr& nameTable)
+    const TNameTablePtr& nameTable,
+    bool allowMissingKeyColumns)
 {
-    ValidateClientRow(key, schema, idMapping, nameTable, true);
+    ValidateClientRow(key, schema, idMapping, nameTable, true, allowMissingKeyColumns);
 }
 
 void ValidateReadTimestamp(TTimestamp timestamp)
@@ -1477,7 +1560,7 @@ void ToProto(TProtobufString* protoRow, const TRange<TUnversionedOwningValue>& v
 
 void FromProto(TUnversionedOwningRow* row, const TProtobufString& protoRow, std::optional<int> nullPaddingWidth)
 {
-    *row = DeserializeFromString(TString{protoRow}, nullPaddingWidth);
+    *row = DeserializeFromString(std::string{protoRow}, nullPaddingWidth);
 }
 
 void FromProto(TUnversionedRow* row, const TProtobufString& protoRow, const TRowBufferPtr& rowBuffer)
@@ -1521,7 +1604,7 @@ void ToBytes(TString* bytes, const TUnversionedOwningRow& row)
 
 void FromBytes(TUnversionedOwningRow* row, TStringBuf bytes)
 {
-    *row = DeserializeFromString(TString(bytes));
+    *row = DeserializeFromString(std::string(bytes));
 }
 
 void PrintTo(const TUnversionedOwningRow& key, ::std::ostream* os)
@@ -1769,7 +1852,7 @@ void Deserialize(TLegacyOwningKey& key, INodePtr node)
             }
         } catch (const std::exception& ex) {
             THROW_ERROR_EXCEPTION("Error deserializing key component #%v", id)
-                << ex;
+                .With(ex);
         }
         ++id;
     }
@@ -1789,7 +1872,7 @@ void TUnversionedOwningRow::Save(TStreamSaveContext& context) const
 
 void TUnversionedOwningRow::Load(TStreamLoadContext& context)
 {
-    *this = DeserializeFromString(NYT::Load<TString>(context));
+    *this = DeserializeFromString(NYT::Load<std::string>(context));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2107,17 +2190,17 @@ void FormatValue(TStringBuilderBase* builder, const TUnversionedOwningRow& row, 
     FormatValue(builder, TUnversionedRow(row), format);
 }
 
-TString ToString(TUnversionedRow row, bool valuesOnly)
+std::string ToString(TUnversionedRow row, bool valuesOnly)
 {
     return ToStringViaBuilder(row, valuesOnly ? "k" : "");
 }
 
-TString ToString(TMutableUnversionedRow row, bool valuesOnly)
+std::string ToString(TMutableUnversionedRow row, bool valuesOnly)
 {
     return ToString(TUnversionedRow(row), valuesOnly);
 }
 
-TString ToString(const TUnversionedOwningRow& row, bool valuesOnly)
+std::string ToString(const TUnversionedOwningRow& row, bool valuesOnly)
 {
     return ToString(row.Get(), valuesOnly);
 }

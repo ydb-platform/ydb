@@ -3,7 +3,8 @@
 // For the sake of sane code completion.
 #include "coroutine.h"
 #endif
-#undef COROUTINE_INL_H_
+
+#include <library/cpp/yt/threading/execution_stack.h>
 
 namespace NYT::NConcurrency {
 
@@ -11,9 +12,9 @@ namespace NYT::NConcurrency {
 
 namespace NDetail {
 
-template <CInvocable<void()> TBody>
+template <NMpl::CInvocable<void()> TBody>
 TCoroutineBase::TCoroutineBase(TBody body, EExecutionStackKind stackKind)
-    : CoroutineStack_(CreateExecutionStack(stackKind))
+    : CoroutineStack_(GetPooledExecutionStack(stackKind))
 {
     TTrampoLine trampoline(&body, this);
 
@@ -21,19 +22,19 @@ TCoroutineBase::TCoroutineBase(TBody body, EExecutionStackKind stackKind)
         &CoroutineContext,
         TContClosure{
             .TrampoLine = &trampoline,
-            .Stack = TArrayRef(static_cast<char*>(CoroutineStack_->GetStack()), CoroutineStack_->GetSize())
+            .Stack = TArrayRef(static_cast<char*>(CoroutineStack_->GetStack()), CoroutineStack_->GetSize()),
         });
 
     Resume();
 }
 
-template <CInvocable<void()> TBody>
+template <NMpl::CInvocable<void()> TBody>
 TCoroutineBase::TTrampoLine<TBody>::TTrampoLine(TBody* body, TCoroutineBase* owner)
     : Body_(body)
     , Owner_(owner)
 { }
 
-template <CInvocable<void()> TBody>
+template <NMpl::CInvocable<void()> TBody>
 void TCoroutineBase::TTrampoLine<TBody>::DoRun()
 {
     // Move/Copy stuff on stack frame.
@@ -86,7 +87,7 @@ void Invoke(
 
 template <class R, class... TArgs>
 template <class TCallee>
-CInvocable<void()> auto TCoroutine<R(TArgs...)>::MakeBody(TCallee&& callee)
+NMpl::CInvocable<void()> auto TCoroutine<R(TArgs...)>::MakeBody(TCallee&& callee)
 {
     return [this, callee = std::forward<TCallee>(callee)] {
         try {
@@ -108,7 +109,7 @@ template <class TCallee>
 TCoroutine<R(TArgs...)>::TCoroutine(TCallee&& callee, const EExecutionStackKind stackKind)
     : NDetail::TCoroutineBase(MakeBody(std::forward<TCallee>(callee)), stackKind)
 {
-    static_assert(CInvocable<TCallee, void(TCoroutine<R(TArgs...)>&, TArgs...)>);
+    static_assert(NMpl::CInvocable<TCallee, void(TCoroutine<R(TArgs...)>&, TArgs...)>);
 }
 
 template <class R, class... TArgs>
@@ -135,7 +136,7 @@ typename TCoroutine<R(TArgs...)>::TArguments&& TCoroutine<R(TArgs...)>::Yield(Q&
 
 template <class... TArgs>
 template <class TCallee>
-CInvocable<void()> auto TCoroutine<void(TArgs...)>::MakeBody(TCallee&& callee)
+NMpl::CInvocable<void()> auto TCoroutine<void(TArgs...)>::MakeBody(TCallee&& callee)
 {
     return [this, callee = std::forward<TCallee>(callee)] {
         try {
@@ -157,7 +158,7 @@ template <class TCallee>
 TCoroutine<void(TArgs...)>::TCoroutine(TCallee&& callee, const EExecutionStackKind stackKind)
     : NDetail::TCoroutineBase(MakeBody(std::forward<TCallee>(callee)), stackKind)
 {
-    static_assert(CInvocable<TCallee, void(TCoroutine<void(TArgs...)>&, TArgs...)>);
+    static_assert(NMpl::CInvocable<TCallee, void(TCoroutine<void(TArgs...)>&, TArgs...)>);
 }
 
 template <class... TArgs>

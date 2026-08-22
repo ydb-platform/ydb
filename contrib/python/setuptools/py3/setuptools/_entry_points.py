@@ -15,6 +15,10 @@ def ensure_valid(ep):
     """
     Exercise one of the dynamic properties to trigger
     the pattern match.
+
+    This function is deprecated in favor of importlib_metadata 8.7 and
+    Python 3.14 importlib.metadata, which validates entry points on
+    construction.
     """
     try:
         ep.extras

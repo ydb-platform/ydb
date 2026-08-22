@@ -1,8 +1,8 @@
-YQL_UDF_TEST()
+YQL_UDF_MINITEST()
 
 DEPENDS(yql/essentials/udfs/common/string)
 
-TIMEOUT(300)
+TIMEOUT(600)
 
 SIZE(MEDIUM)
 

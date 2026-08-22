@@ -8,7 +8,7 @@ namespace NArgonish {
      */
     enum class EInstructionSet : ui32 {
         REF = 0,   /// Reference implementation
-#if !defined(_arm64_)
+#if defined(_x86_64_)
         SSE2 = 1,  /// SSE2 optimized version
         SSSE3 = 2, /// SSSE3 optimized version
         SSE41 = 3, /// SSE4.1 optimized version

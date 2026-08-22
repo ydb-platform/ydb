@@ -1,0 +1,8 @@
+<tmp_path>/program.sql:<main>: Warning: Parse Sql
+
+    <tmp_path>/program.sql:<main>:1:18: Warning: Consider using function Math::Round instead to avoid performance overhead
+    	select SimplePg::round(1.2345, 2), SimplePg::round(1.2345)
+	                 ^
+    <tmp_path>/program.sql:<main>:1:46: Warning: Consider using function Math::Round instead to avoid performance overhead
+    	select SimplePg::round(1.2345, 2), SimplePg::round(1.2345)
+	                                             ^

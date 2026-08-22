@@ -12,6 +12,7 @@ const std::string RootUserName("root");
 
 const std::string RequestIdAnnotation("rpc.request_id");
 const std::string EndpointAnnotation("rpc.endpoint");
+const std::string EndpointAddressAnnotation("rpc.endpoint_address");
 const std::string RequestInfoAnnotation("rpc.request_info");
 const std::string RequestUser("rpc.request_user");
 const std::string ResponseInfoAnnotation("rpc.response_info");

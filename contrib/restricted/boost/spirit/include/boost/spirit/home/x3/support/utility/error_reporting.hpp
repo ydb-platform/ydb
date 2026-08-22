@@ -85,7 +85,7 @@ namespace boost { namespace spirit { namespace x3
             err_out << "In ";
         }
 
-        err_out << "line " << line << ':' << std::endl;
+        err_out << "line " << line << ':' << '\n';
     }
 
     template <typename Iterator>
@@ -102,7 +102,7 @@ namespace boost { namespace spirit { namespace x3
         }
         typedef typename std::iterator_traits<Iterator>::value_type char_type;
         std::basic_string<char_type> line{start, end};
-        err_out << x3::to_utf8(line) << std::endl;
+        err_out << x3::to_utf8(line) << '\n';
     }
 
     template <typename Iterator>
@@ -165,12 +165,12 @@ namespace boost { namespace spirit { namespace x3
         Iterator last = pos_cache.last();
 
         print_file_line(position(err_pos));
-        err_out << error_message << std::endl;
+        err_out << error_message << '\n';
 
         Iterator start = get_line_start(first, err_pos);
         print_line(start, last);
         print_indicator(start, err_pos, '_');
-        err_out << "^_" << std::endl;
+        err_out << "^_" << '\n';
     }
 
     template <typename Iterator>
@@ -181,13 +181,13 @@ namespace boost { namespace spirit { namespace x3
         Iterator last = pos_cache.last();
 
         print_file_line(position(err_first));
-        err_out << error_message << std::endl;
+        err_out << error_message << '\n';
 
         Iterator start = get_line_start(first, err_first);
         print_line(start, last);
         print_indicator(start, err_first, ' ');
         print_indicator(start, err_last, '~');
-        err_out << " <<-- Here" << std::endl;
+        err_out << " <<-- Here" << '\n';
     }
 
 }}}

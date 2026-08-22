@@ -44,6 +44,7 @@ extern const std::string TabletBalancerUserName;
 extern const std::string PermissionCacheUserName;
 extern const std::string ReplicatedTableTrackerUserName;
 extern const std::string ChunkReplicaCacheUserName;
+extern const std::string SignatureKeysmithUserName;
 
 extern const std::string EveryoneGroupName;
 extern const std::string UsersGroupName;
@@ -52,7 +53,7 @@ extern const std::string AdminsGroupName;
 extern const std::string ReplicatorUserName;
 extern const std::string OwnerUserName;
 
-using TSecurityTag = TString;
+using TSecurityTag = std::string;
 constexpr int MaxSecurityTagLength = 128;
 
 DEFINE_ENUM(ESecurityAction,
@@ -79,6 +80,7 @@ YT_DEFINE_ERROR_ENUM(
     ((SafeModeEnabled)              (906))
     ((AlreadyPresentInGroup)        (908))
     ((IrreversibleAclModification)  (909))
+    ((NoSuchUser)                   (910))
 );
 
 DEFINE_ENUM(EAccessControlObjectNamespace,
@@ -94,13 +96,20 @@ DEFINE_ENUM(EAccessControlObject,
     (GetMasterConsistentState)
     (ExitReadOnly)
     (MasterExitReadOnly)
+    (ResetDynamicallyPropagatedMasterCells)
     (DiscombobulateNonvotingPeers)
     (SwitchLeader)
     (RequestRestart)
     (CollectCoverage)
 );
 
+DEFINE_ENUM(EInapplicableRowAccessPredicateMode,
+    // Fail the read action (e.g. scheduler operation / read_table command / SPYT/CHYT query).
+    (Fail)
+    // Pretend that the RL ACE does not exist for the current read action.
+    (Ignore)
+);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NSecurityClient
-

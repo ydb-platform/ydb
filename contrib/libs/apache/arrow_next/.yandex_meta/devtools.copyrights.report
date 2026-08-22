@@ -1,0 +1,1408 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 02a6d7053964d22012085134f3cdccc4
+BELONGS ya.make
+    License text:
+          * Copyright (C) 2007 The Guava Authors
+          * https://github.com/google/guava
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        NOTICE.txt [49:50]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 04eb5f749a7fc0aaffdade1450ef736e
+BELONGS ya.make
+    License text:
+        Copyright (c) 2014-2015      UT-Battelle, LLC. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [2151:2151]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 062cc1aeab0c1abc305964e8124f4115
+BELONGS ya.make
+    License text:
+        Copyright (c) 2009-present, Homebrew contributors
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [1896:1897]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 07bb8632fe90582f097391db4b909913
+BELONGS ya.make
+    License text:
+        copyright (c) Google inc and (c) The Chromium Authors and licensed under the
+        Apache 2.0 License or the under the 3-clause BSD license:
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [209:210]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0811f5522217ff18ba6144de0ef16810
+BELONGS ya.make
+    License text:
+        Copyright (C) 2007-2012 Mozilla Foundation.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [381:381]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0931600c1c6bfc8a8863a63cbdc0aece
+BELONGS ya.make
+    License text:
+        Copyright 2016 Cloudera Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [442:442]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 093318208e21d9d467c5a20dfde06568
+BELONGS ya.make
+    License text:
+        Copyright (C) 2015           The University of Tennessee and The University
+                                     of Tennessee Research Foundation. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [2154:2155]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1050d39974838d9e4a3ebfa807befa85
+BELONGS ya.make
+    License text:
+        Copyright (c) 2008-2009 Bjoern Hoehrmann <bjoern@hoehrmann.de>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [563:563]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 10fa53fe3220c3b3f37695fcb7d52b4e
+BELONGS ya.make
+    License text:
+         * Copyright (c) Facebook, Inc. and its affiliates.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        cpp/src/arrow/vendored/ProducerConsumerQueue.h [5:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1208e106ffe31b78a7778de2cccc8003
+BELONGS ya.make
+    License text:
+        Copyright (C) 2016-2020      Advanced Micro Devices, Inc.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [2158:2158]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1417b15fc26c50e1e468ccac87af9e76
+BELONGS ya.make
+    License text:
+        Copyright 2016-2024 The Apache Software Foundation
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        NOTICE.txt [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 15db7edc412ec75a60118463702bdcef
+BELONGS ya.make
+    License text:
+        // Copyright 2018 Nemanja Trifunovic
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        cpp/src/arrow/vendored/utfcpp/cpp11.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 16d77374d4f3ba25a3fdfa4958bf4c49
+BELONGS ya.make
+    License text:
+        Copyright 2006-2011, the V8 project authors. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [622:622]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1d42d552901b54037d78f435b26f76f8
+BELONGS ya.make
+    License text:
+        Copyright (c) 2009 The Go Authors. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [408:408]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1f71795eb1cf27a04a33d302337f0c40
+BELONGS ya.make
+    License text:
+         * Copyright 2014-2017 Melissa O'Neill <oneill@pcg-random.org>,
+         *                     and the PCG Project contributors.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        cpp/src/arrow/vendored/pcg/pcg_extras.hpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1fe72fe51558c5a41c937c279c752359
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        cpp/src/arrow/vendored/datetime/date.h [7:12]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 20fe293eda8f906ba46db857bd55be95
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2015, 2016 Howard Hinnant
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        cpp/src/arrow/vendored/datetime/tz_private.h [7:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 21d419b06e057fd073eece04d054aff1
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2008-2010 Bjoern Hoehrmann <bjoern@hoehrmann.de>
+        // See http://bjoern.hoehrmann.de/utf-8/decoder/dfa/ for details.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        cpp/src/arrow/util/utf8.cc [40:41]
+        cpp/src/arrow/util/utf8_internal.h [44:45]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 247dcc3a30dcbb2f92c97ca04aa03164
+BELONGS ya.make
+    License text:
+        // Copyright 2017 Asylo authors
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        cpp/src/arrow/result.h [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 25f909dde7cb2b432b9631287a825adb
+BELONGS ya.make
+    License text:
+          Copyright (C) 1995-2017 Jean-loup Gailly and Mark Adler
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [1640:1640]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 273212e34b861a3a897a3b3d79010d78
+BELONGS ya.make
+    License text:
+        Copyright 1998 by the Massachusetts Institute of Technology.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [1620:1620]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 292f00c236f0d18782c54ab62a60615b
+BELONGS ya.make
+    License text:
+        Copyright (c) 2003-2008, Jouni Malinen <j@w1.fi> and contributors
+        All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [1547:1548]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2933b5480b1e6f76da1757c45228a477
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        cpp/src/arrow/vendored/datetime/date.h [7:12]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2c9d39624ce4c8830403733b3c0f6bd3
+BELONGS ya.make
+    License text:
+        Copyright (c) 2019-2022 Contention
+        Copyright (c) 2019-2022 Burnett01
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [2235:2236]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2cb3334fb125e9233675e041bd4c507c
+BELONGS ya.make
+    License text:
+        * Copyright (C) 2015 Dato, Inc.
+        * Copyright (c) 2009 Carnegie Mellon University.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        NOTICE.txt [8:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 34bd9b473803a867ffb626a6b81fe652
+BELONGS ya.make
+    License text:
+        Copyright 2015 Microsoft Corporation. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [359:359]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3dca4b528d319aec5b8a91bf9e42c96b
+BELONGS ya.make
+    License text:
+        Copyright (C) 2016-2020      Stony Brook University. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [2162:2162]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3e16528bde34bd6e7e3e9019aef6e4d4
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        cpp/src/arrow/vendored/datetime/tz.cpp [3:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3e397a76b9105b24df6203017ac369ab
+BELONGS ya.make
+    License text:
+         * Copyright 2001-2009 Kitware, Inc.
+         * Copyright 2012-2014 Continuum Analytics, Inc.
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        NOTICE.txt [33:35]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4073ab1d76027acaf5947aafb420b63b
+BELONGS ya.make
+    License text:
+        Copyright (c) 2019 Omer Ozarslan
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [823:823]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 409f1a8627df4b24b0b66a8097ad82fe
+BELONGS ya.make
+    License text:
+        Copyright (c)  Copyright 2017 Asylo authors
+        Homepage: https://asylo.dev/
+        License: Apache 2.0
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [889:891]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 41706d00f08ee9a3fb5061b804d357c7
+BELONGS ya.make
+    License text:
+            Copyright (C) 2011-12, Dynamic NDArray Developers
+            All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [1853:1854]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 44dfb5f71e692d09de23d9668b9c3904
+BELONGS ya.make
+    License text:
+        Copyright (C) 2014-2015      The University of Houston System. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [2153:2153]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4664852aafea41007caf9dbfd4517316
+BELONGS ya.make
+    License text:
+        Copyright (C) 2004-2017 René Nyffenegger
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [1926:1926]
+        cpp/src/arrow/vendored/base64.cpp [8:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 48e1382598b24e6c53d47c303b81e500
+BELONGS ya.make
+    License text:
+        Copyright (c) 2015, 2016, 2017 Howard Hinnant
+        Copyright (c) 2016 Adrian Colomitchi
+        Copyright (c) 2017 Florian Dang
+        Copyright (c) 2017 Paul Thompson
+        Copyright (c) 2018 Tomasz Kamiński
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [533:537]
+        cpp/src/arrow/vendored/datetime/date.h [7:12]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4cadc42f09334926b6f64f38fa2e2dad
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2015, 2016, 2017 Howard Hinnant
+        // Copyright (c) 2017 Jiangang Zhuang
+        // Copyright (c) 2017 Aaron Bishop
+        // Copyright (c) 2017 Tomasz Kamiński
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        cpp/src/arrow/vendored/datetime/tz.h [7:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4fddbf6ee8350218a32ae55a42c2095a
+BELONGS ya.make
+    License text:
+        Copyright: 2013 Daniel Lemire
+        Home page: http://lemire.me/en/
+        Project page: https://github.com/lemire/FrameOfReference
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [247:249]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5004d990e89284bd48e9ce9bb40b3a5b
+BELONGS ya.make
+    License text:
+        Copyright (c) 2007 - 2018, Daniel Stenberg with many contributors, see AUTHORS
+        file.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [1617:1618]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 522505e5894778a882702849ee07b13a
+BELONGS ya.make
+    License text:
+        Copyright 2011, Google Inc.
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [1418:1419]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 55285dfc952ea7b0fc71adc3cb4a7f5e
+BELONGS ya.make
+    License text:
+        Copyright: 2016 manylinux
+        Homepage: https://github.com/pypa/manylinux
+        License: The MIT License (MIT)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [812:814]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5574984ffce22690a854ba364d6e738c
+BELONGS ya.make
+    License text:
+        * Copyright (C) 2015 Dato, Inc.
+        * Copyright (c) 2009 Carnegie Mellon University.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        NOTICE.txt [8:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 577658687915dc25d90db7aabd6f78df
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        cpp/src/arrow/vendored/datetime/tz.cpp [3:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 58b7390a1692c4372f7220b3953fc3b1
+BELONGS ya.make
+    License text:
+        Copyright (c) 2006, Google Inc.
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [1477:1478]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6161682be7bea233f35562ff2c39e6ab
+BELONGS ya.make
+    License text:
+        Copyright (c) 2021-2023 Contributors
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [2274:2274]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 61d95fdb12eec79e818df0df95667b7f
+BELONGS ya.make
+    License text:
+        Copyright (c) 2015, 2016, 2017 Howard Hinnant
+        Copyright (c) 2016 Adrian Colomitchi
+        Copyright (c) 2017 Florian Dang
+        Copyright (c) 2017 Paul Thompson
+        Copyright (c) 2018 Tomasz Kamiński
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [533:537]
+        cpp/src/arrow/vendored/datetime/date.h [7:12]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6311a72ce758031e9216e6c32d64ca94
+BELONGS ya.make
+    License text:
+        Copyright (c) 2008, Google Inc.
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [1511:1512]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 64f680c19b2530ac0e770568283d4c61
+BELONGS ya.make
+    License text:
+        Copyright 2014 gRPC authors.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [1181:1181]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6518b015a67ef080ce14d2b770875d6a
+BELONGS ya.make
+    License text:
+        Copyright 2014 Google Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [341:341]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 69abe630ff56f0d38f9b6964427759bd
+BELONGS ya.make
+    License text:
+        Copyright (c) 2009 The RE2 Authors. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [1582:1582]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 70cd0d7375e71c1a86d72a0801fa2019
+BELONGS ya.make
+    License text:
+        Copyright (c) 2019 Conan.io
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [2126:2126]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 71679980ec1a2a820b969398da5ac6e9
+BELONGS ya.make
+    License text:
+        Copyright: 2016 The Apache Software Foundation.
+        Home page: https://kudu.apache.org/
+        License: http://www.apache.org/licenses/LICENSE-2.0
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [758:760]
+        LICENSE.txt [768:771]
+        LICENSE.txt [780:782]
+        NOTICE.txt [64:64]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 73d3519c7332168c80ee6f17a055e682
+BELONGS ya.make
+    License text:
+        Copyright 2015 The TensorFlow Authors. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [256:256]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 73f82df69218ce132077e4cc026690a7
+BELONGS ya.make
+    License text:
+        Copyright (c) 2016           Los Alamos National Security, LLC. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [2157:2157]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7629172cfa05ef796be745f5bd0433dc
+BELONGS ya.make
+    License text:
+        Copyright (c) 2013-2019 RStudio and others.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [2089:2089]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 76395c89957476f85264bdbe23f33f34
+BELONGS ya.make
+    License text:
+        /* Copyright (C) 1995-1998 Eric Young (eay@cryptsoft.com)
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [1734:1735]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 794823b7a9a2d577add38be318b8ecd2
+BELONGS ya.make
+    License text:
+          * Copyright (C) 2017-2018 Dremio Corporation
+          * https://github.com/dremio/dremio-oss
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        NOTICE.txt [45:46]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 797b3d42a4550d9890a46f7c3a368009
+BELONGS ya.make
+    License text:
+        Copyright (c) 2015, 2016, 2017 Howard Hinnant
+        Copyright (c) 2016 Adrian Colomitchi
+        Copyright (c) 2017 Florian Dang
+        Copyright (c) 2017 Paul Thompson
+        Copyright (c) 2018 Tomasz Kamiński
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [533:537]
+        cpp/src/arrow/vendored/datetime/date.h [7:12]
+        cpp/src/arrow/vendored/datetime/tz.cpp [3:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7ad2123bf5a09d64b355a3c55c3dc76b
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1994-2016 Carnegie Mellon University.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        cpp/src/arrow/util/crc32.cc [44:44]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7afe0992310223cc0f62602274d88ef2
+BELONGS ya.make
+    License text:
+        Copyright 2006-2018 Nemanja Trifunovic
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [728:728]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7b24563929422447294323b01db4537e
+BELONGS ya.make
+    License text:
+        Copyright (c) 2016-present, Facebook, Inc. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [1253:1253]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7ddb2995f48012001146c0eb94d23367
+BELONGS ya.make
+    License text:
+        Copyright 2008 Google Inc.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [900:900]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 80d180ebff6dfe994c92db51b74538e3
+BELONGS ya.make
+    License text:
+        Copyright (c) 2017, Jeroen Ooms and Jim Hester
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [484:484]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 827abbffe88aa838015f2ca2d65d6b8f
+BELONGS ya.make
+    License text:
+        Copyright (c) 2011-2012, Lambda Foundry, Inc. and PyData Development Team
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [1811:1812]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 82b58372cd9653b3971bc1586f7f201a
+BELONGS ya.make
+    License text:
+        Copyright (c) 2005-2017, NumPy Developers.
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [278:279]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 88f72d02b992309be51624d56763d01f
+BELONGS ya.make
+    License text:
+        Copyright (C) 2009-2017 Facebook, Inc.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [382:382]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8a0cc24f130999af25d83e711cbf586c
+BELONGS ya.make
+    License text:
+        Copyright © 2005-2020 Rich Felker, et al.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [1968:1968]
+        cpp/src/arrow/vendored/musl/README.md [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8c61523a557231487f52814509f259b7
+BELONGS ya.make
+    License text:
+        Copyright (c) 2015, 2016, 2017 Howard Hinnant
+        Copyright (c) 2016 Adrian Colomitchi
+        Copyright (c) 2017 Florian Dang
+        Copyright (c) 2017 Paul Thompson
+        Copyright (c) 2018 Tomasz Kamiński
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [533:537]
+        cpp/src/arrow/vendored/datetime/date.h [7:12]
+        cpp/src/arrow/vendored/datetime/tz.cpp [3:9]
+        cpp/src/arrow/vendored/datetime/tz.h [7:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9033a569e0f045ca74896843f3fbaf0e
+BELONGS ya.make
+    License text:
+        Copyright (C) 2006 - 2019, The Apache Software Foundation
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [1201:1201]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 914704d67c7d82d8fb97106d035d7efa
+BELONGS ya.make
+    License text:
+        Copyright (C) 2014-2020      Mellanox Technologies Ltd. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [2152:2152]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 91d7eb03b1bab4692a8e52c6106c79a2
+BELONGS ya.make
+    License text:
+        // Copyright 2006 Nemanja Trifunovic
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        cpp/src/arrow/vendored/utfcpp/core.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 926366bfdb88ea43ea0d61441d8fe672
+BELONGS ya.make
+    License text:
+          * Copyright 2000-2019 Kitware, Inc. and Contributors
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        NOTICE.txt [54:54]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 931d5a16878c9c5ce4cfc2cbb6d66b7f
+BELONGS ya.make
+    License text:
+        Copyright (C) 2019           UChicago Argonne, LLC.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [2159:2159]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 93ebab08ca0f174629dd3a2bd9e43bf0
+BELONGS ya.make
+    License text:
+        Copyright (C) 2007, Weijia Song <songweijia@gmail.com>
+        Copyright (C) 2007, Sebastian Pipping <sebastian@pipping.org>
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [656:658]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 983a6784ef2a68075ca8d485fa869436
+BELONGS ya.make
+    License text:
+        Copyright (c) 2016 Giles Hall
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [460:460]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 99303530c4d8b3bf5a5ad4a0dc80d71b
+BELONGS ya.make
+    License text:
+        Copyright (C) 2020           Huawei Technologies Co., Ltd. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [2161:2161]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9de38fd07e2bf693e375096431eb96c9
+BELONGS ya.make
+    License text:
+        Copyright (c) 2015, 2016, 2017 Howard Hinnant
+        Copyright (c) 2016 Adrian Colomitchi
+        Copyright (c) 2017 Florian Dang
+        Copyright (c) 2017 Paul Thompson
+        Copyright (c) 2018 Tomasz Kamiński
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [533:537]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9e088e8c6a2451bfc48e25efee8e403b
+BELONGS ya.make
+    License text:
+          Copyright (c) 2013 The Chromium Authors. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [212:212]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9f5495c74f996123d7f0f605b3f5eed8
+BELONGS ya.make
+    License text:
+        Copyright (c) 2019 Cristian Adam
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [1997:1997]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a102624cb0ec83237638f76fddb52df4
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2011-2015 Stephan Brumme. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        cpp/src/arrow/util/crc32.cc [21:21]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a29ac0accd5113629b2d795bbd9e3021
+BELONGS ya.make
+    License text:
+        Copyright (c) 2012-2014, Yann Collet
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [589:590]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a7f832eb6aedc9f83b4f4cb9a199aaa7
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        cpp/src/arrow/vendored/datetime/tz.cpp [3:9]
+        cpp/src/arrow/vendored/datetime/tz.h [7:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a81d3ce159fa4afaabd0a0f8f72674e2
+BELONGS ya.make
+    License text:
+        Copyright (c) 2019-2022 Contention
+        Copyright (c) 2019-2022 Burnett01
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [2235:2236]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a8b2f783ca855aca98dcfec34df9c4c8
+BELONGS ya.make
+    License text:
+         * Copyright https://code.google.com/p/mman-win32/
+         * Licensed under the MIT License;
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        NOTICE.txt [24:25]
+        cpp/src/arrow/io/mman.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a93fae665b20c0b437c4ebda06d31480
+BELONGS ya.make
+    License text:
+        Copyright (C) 2002-2017 Jason Evans <jasone@canonware.com>.
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [379:380]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a9917a406fd66e1bcbfd16c00848be5f
+BELONGS ya.make
+    License text:
+        Copyright: Copyright (c) Facebook, Inc. and its affiliates.
+        Home page: https://github.com/facebook/folly
+        License: http://www.apache.org/licenses/LICENSE-2.0
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [1960:1962]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ab1166231a6e48cec58426cc098e784d
+BELONGS ya.make
+    License text:
+        Copyright (c) 2008-2011 AQR Capital Management, LLC
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [1814:1815]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b04931ece9bba8495ad84698ddea074d
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2011 The LevelDB Authors. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        NOTICE.txt [28:28]
+        cpp/src/arrow/status.cc [1:1]
+        cpp/src/arrow/status.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b2f5c2275db3e186e0b19e130d37e315
+BELONGS ya.make
+    License text:
+        // (c) Daniel Lemire 2013
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        cpp/src/arrow/util/bpacking64_default.h [26:26]
+        cpp/src/arrow/util/bpacking_default.h [26:26]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b517ed8cdd29e8132beffd8df906e313
+BELONGS ya.make
+    License text:
+        Copyright (c) 2011-2016, Yann Collet
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [1286:1287]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b65b0b99c25d99c6f1ca36f2d804e399
+BELONGS ya.make
+    License text:
+         - fireworks.jpeg is Copyright 2013 Steinar H. Gunderson, and
+           is licensed under the Creative Commons Attribution 3.0 license
+           (CC-BY-3.0). See https://creativecommons.org/licenses/by/3.0/
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [1450:1452]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b6ae51c2413c2d9ad4e94508305e113c
+BELONGS ya.make
+    License text:
+        Copyright: Copyright (c) 2013 - 2019, Алексей and Jeroen Ooms.
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [1798:1799]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b80cd91be957408d7700fad9bc3fdcb0
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2013-2016, Matt Terry and Matthew Brett; all rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        NOTICE.txt [38:38]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b9134efde20a92a863fab9b2e2ce26b7
+BELONGS ya.make
+    License text:
+        Copyright 2013-2019 The Apache Software Foundation
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [1224:1224]
+        NOTICE.txt [78:78]
+
+KEEP     COPYRIGHT_SERVICE_LABEL bcd08809ceaa7530b5ef6db2599cfe64
+BELONGS ya.make
+    License text:
+        Copyright (c) 2009 - 2013 by the mingw-w64 project
+        Homepage: https://mingw-w64.org
+        License: Zope Public License (ZPL) Version 2.1.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [879:881]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c23e5e5a5fe9683697eb779ab2118e99
+BELONGS ya.make
+    License text:
+        Copyright (c) 2016 Ray Project (https://github.com/ray-project/ray)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [510:510]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c53653d50e6be6ace2e15578a343b4ae
+BELONGS ya.make
+    License text:
+        Copyright (c) 2018-2020      NVIDIA CORPORATION. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [2160:2160]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c556f544e7d0efd74c598cb13883a92f
+BELONGS ya.make
+    License text:
+        Copyright (c) 2020 Joshua Piper
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [2206:2206]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ca11120e252b7a3a248c4559c19ed278
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2009 Google Inc. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        NOTICE.txt [21:21]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cf167f8e5cef47afa68bbcbe684c35e1
+BELONGS ya.make
+    License text:
+        Copyright: 2009 Google Inc. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [790:790]
+        LICENSE.txt [801:801]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d25f00ed0e56feb634e3fb2d253a1e3d
+BELONGS ya.make
+    License text:
+        Copyright (C) 2015 THL A29 Limited, a Tencent company, and Milo Yip.
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [1344:1345]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d67c1a70cf29dac1d09ca72a6c7427f0
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1998-2019 The OpenSSL Project.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [1678:1678]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d73f33a516f5e4a9b5ce47f967383cfb
+BELONGS ya.make
+    License text:
+        This product includes software developed by Hewlett-Packard:
+        (c) Copyright [2014-2015] Hewlett-Packard Development Company, L.P
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [1229:1230]
+        NOTICE.txt [83:84]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d745de277b7b04ad77de282cfd271ac7
+BELONGS ya.make
+    License text:
+         * Copyright 2001-2009 Kitware, Inc.
+         * Copyright 2012-2014 Continuum Analytics, Inc.
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        NOTICE.txt [33:35]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d83fcba4c514234b5ae9a1a5dbb607d5
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        cpp/src/arrow/vendored/datetime/tz.cpp [3:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL dc546ac6f116e23a5572cd498b804b23
+BELONGS ya.make
+    License text:
+        Copyright (C) 2007, Weijia Song <songweijia@gmail.com>
+        Copyright (C) 2007, Sebastian Pipping <sebastian@pipping.org>
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [656:658]
+
+KEEP     COPYRIGHT_SERVICE_LABEL dd0bfe31829ae2c1fa60fd3e22c73f24
+BELONGS ya.make
+    License text:
+        // Copyright 2006-2016 Nemanja Trifunovic
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        cpp/src/arrow/vendored/utfcpp/checked.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL dfe2a8f2e05441501cfc8ea516f3d1d7
+BELONGS ya.make
+    License text:
+        Copyright (c) 2009, 2010, 2013-2016 by the Brotli Authors.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [1315:1315]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ea5db1fc81faf6ea90aceaa70afb3122
+BELONGS ya.make
+    License text:
+        Copyright: 2012 Cloudera, Inc.
+        Copyright: 2016 The Apache Software Foundation.
+        Home page: http://impala.apache.org/
+        License: http://www.apache.org/licenses/LICENSE-2.0
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [768:771]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ebad7205cb990f72da3fb86ae4f44980
+BELONGS ya.make
+    License text:
+        Copyright (C) 2016-2020      ARM Ltd. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [2156:2156]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ebed53083d3648d028f650e9586bc9b7
+BELONGS ya.make
+    License text:
+        Copyright 2014-2019 Melissa O'Neill <oneill@pcg-random.org>,
+                            and the PCG Project contributors.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [2066:2067]
+        cpp/src/arrow/vendored/pcg/README.md [4:5]
+        cpp/src/arrow/vendored/pcg/pcg_random.hpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ebf8b3c45e9ca079f817c3cdef8c1163
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2015 Cloudera, Inc.
+         * https://github.com/cloudera/ibis
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        NOTICE.txt [41:42]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ee1a81d2156d549bf4ffe7a463a2ac3d
+BELONGS ya.make
+    License text:
+        Copyright (c) 2015-2018, conda-forge
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [696:697]
+
+KEEP     COPYRIGHT_SERVICE_LABEL efae35a17378bd3ac9d39d5158cb9b5a
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2016 Alexander Kormanovsky
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        cpp/src/arrow/vendored/datetime/ios.h [8:8]
+        cpp/src/arrow/vendored/datetime/ios.mm [4:4]
+        cpp/src/arrow/vendored/datetime/tz.cpp [3:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f556407274c01ef8e47714e8cc0bc9f8
+BELONGS ya.make
+    License text:
+            Copyright (c) 2006-2013 Alexander Chemeris
+            All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [1365:1366]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f71a2e2c00355121db396b1494969cf6
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2015, 2016, 2017 Howard Hinnant
+        // Copyright (c) 2017 Jiangang Zhuang
+        // Copyright (c) 2017 Aaron Bishop
+        // Copyright (c) 2017 Tomasz Kamiński
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        cpp/src/arrow/vendored/datetime/tz.h [7:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f8f2f9c153298daeb47b474093662695
+BELONGS ya.make
+    License text:
+        Copyright 2019 RStudio, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [850:850]

@@ -687,12 +687,10 @@ protected:
         str.replace(5, 5, str.c_str(), 10);
         UNIT_ASSERT(str == Data.This_This_is_test_StringT_for_StringT_calls());
 
-    #if !defined(STLPORT) || defined(_STLP_MEMBER_TEMPLATES)
         deque<TChar> cdeque;
         cdeque.push_back(*Data.I());
         str.replace(str.begin(), str.begin() + 11, cdeque.begin(), cdeque.end());
         UNIT_ASSERT(str == Data.Is_test_StringT_for_StringT_calls());
-    #endif
     }
 #endif
 }; // TStringStdTestImpl
@@ -1256,3 +1254,25 @@ Y_UNIT_TEST_SUITE(Interop) {
         ComparePointers(s, stringStart, "shared"); // converting a TString to a `const std::string&` should not cause data cloning
     }
 } // Y_UNIT_TEST_SUITE(Interop)
+
+#ifdef __cpp_lib_format
+
+    #include <format>
+Y_UNIT_TEST_SUITE(TStringStdFormatTest) {
+    Y_UNIT_TEST(TestFormatTString) {
+        TString s("hello");
+        UNIT_ASSERT_VALUES_EQUAL(std::format("{}", s), "hello");
+    }
+
+    Y_UNIT_TEST(TestFormatTStringWithWidth) {
+        TString s("hi");
+        UNIT_ASSERT_VALUES_EQUAL(std::format("{:>5}", s), "   hi");
+    }
+
+    Y_UNIT_TEST(TestFormatEmptyTString) {
+        TString s;
+        UNIT_ASSERT_VALUES_EQUAL(std::format("{}", s), "");
+    }
+} // Y_UNIT_TEST_SUITE(TStringStdFormatTest)
+
+#endif

@@ -60,7 +60,7 @@ namespace NKikimr::NBlobDepot {
     bool TGivenIdRange::IsEmpty() const {
         return Ranges.empty();
     }
-    
+
     ui32 TGivenIdRange::GetNumAvailableItems() const {
         return NumAvailableItems;
     }

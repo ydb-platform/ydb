@@ -10,7 +10,7 @@ import re
 import ply.lex as lex
 import ply.yacc as yacc
 
-from pythran.typing import List, Set, Dict, NDArray, Tuple, Pointer, Fun
+from pythran.typing import List, Set, Dict, NDArray, Tuple, Pointer, Fun, Type
 from pythran.syntax import PythranSyntaxError
 from pythran.config import cfg
 
@@ -166,6 +166,8 @@ class SpecParser(object):
         'ufunc': 'UFUNC',
         'or': 'OR',
         'list': 'LIST',
+        'type': 'TYPE',
+        'tuple': 'TUPLE',
         'set': 'SET',
         'dict': 'DICT',
         'slice': 'SLICE',
@@ -340,6 +342,8 @@ class SpecParser(object):
             p[0] = tuple(List[t] for t in p[1])
         elif len(p) == 3 and p[2] == 'set':
             p[0] = tuple(Set[t] for t in p[1])
+        elif len(p) == 3 and p[2] == 'type':
+            p[0] = tuple(Type[t] for t in p[1])
         elif len(p) == 3:
             if p[2] is None:
                 expanded = []
@@ -380,11 +384,32 @@ class SpecParser(object):
                 | pointer_type
                 | type LIST
                 | type SET
+                | generic_type TYPE
                 | type LPAREN opt_types RPAREN
                 | type COLUMN type DICT
                 | LPAREN types RPAREN
                 | LARRAY type RARRAY
                 | type OR type
+                '''
+
+    def p_generic_type(self, p):
+        if len(p) == 2:
+            p[0] = {'list': list, 'set': set, 'dict': dict, 'tuple': tuple}.get(p[1], p[1]),
+        elif len(p) == 3 and p[2] == 'type':
+            p[0] = tuple(Type[t] for t in p[1])
+        elif len(p) == 4 and p[2] == 'or':
+            p[0] = p[1] + p[3]
+        else:
+            msg = "Invalid Pythran spec. Unknown text '{0}'".format(p.value)
+            self.p_error(p, msg)
+
+    p_generic_type.__doc__ = '''generic_type : term
+                | LIST
+                | SET
+                | generic_type TYPE
+                | DICT
+                | TUPLE
+                | generic_type OR generic_type
                 '''
 
     def p_opt_order(self, p):

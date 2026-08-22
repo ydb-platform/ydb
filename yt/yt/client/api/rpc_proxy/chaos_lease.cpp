@@ -33,20 +33,20 @@ public:
         , Proxy_(Channel_)
     { }
 
+private:
+    TApiServiceProxy Proxy_;
+
     TFuture<void> DoPing(const TPrerequisitePingOptions& /*options*/) override
     {
         auto req = Proxy_.PingChaosLease();
         // TODO(gryzlov-ad): Put correct timeout here.
-        req->SetTimeout(NRpc::DefaultRpcRequestTimeout);
+        req->SetTimeout(NRpc::HugeDoNotUseRpcRequestTimeout);
 
         ToProto(req->mutable_chaos_lease_id(), GetId());
         req->set_ping_ancestors(PingAncestors_);
 
         return req->Invoke().AsVoid();
     }
-
-private:
-    TApiServiceProxy Proxy_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -59,15 +59,13 @@ IPrerequisitePtr CreateChaosLease(
     bool pingAncestors,
     std::optional<TDuration> pingPeriod)
 {
-    auto chaosLease = New<TChaosLease>(
+    return New<TChaosLease>(
         std::move(client),
         std::move(channel),
         chaosLeaseId,
         timeout,
         pingAncestors,
         pingPeriod);
-
-    return chaosLease;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

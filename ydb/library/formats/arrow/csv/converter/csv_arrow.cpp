@@ -1,10 +1,21 @@
 #include "csv_arrow.h"
 
+#include <ydb/public/lib/scheme_types/scheme_type_id.h>
+#include <yql/essentials/types/uuid/uuid.h>
+
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_binary.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/util/value_parsing.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
+
+#include <util/string/builder.h>
 #include <util/string/join.h>
+
+#include <array>
+
 
 namespace NKikimr::NFormats {
 
@@ -56,13 +67,26 @@ TArrowCSV::TArrowCSV(const TColummns& columns, bool header, const std::set<std::
     ReadOptions.block_size = DEFAULT_BLOCK_SIZE;
     ReadOptions.use_threads = false;
     ReadOptions.autogenerate_column_names = false;
+    auto SetOptionsForColumns = [&](const TColumnInfo& col) {
+        if (col.Precision > 0) {
+            ConvertOptions.column_types[col.Name] = arrow::decimal128(static_cast<int32_t>(col.Precision), static_cast<int32_t>(col.Scale));
+        } else if (col.IsBool) {
+            ConvertOptions.column_types[col.Name] = arrow::boolean();
+        } else {
+            ConvertOptions.column_types[col.Name] = col.CsvArrowType;
+        }
+        if (col.IsUuid) {
+            UuidColumns.insert(col.Name);
+        }
+    };
+
     if (header) {
         // !autogenerate + column_names.empty() => read from CSV
         ResultColumns.reserve(columns.size());
 
         for (const auto& col: columns) {
             ResultColumns.push_back(col.Name);
-            ConvertOptions.column_types[col.Name] = col.CsvArrowType;
+            SetOptionsForColumns(col);
             OriginalColumnTypes[col.Name] = col.ArrowType;
         }
     } else if (!columns.empty()) {
@@ -71,7 +95,7 @@ TArrowCSV::TArrowCSV(const TColummns& columns, bool header, const std::set<std::
 
         for (const auto& col: columns) {
             ReadOptions.column_names.push_back(col.Name);
-            ConvertOptions.column_types[col.Name] = col.CsvArrowType;
+            SetOptionsForColumns(col);
             OriginalColumnTypes[col.Name] = col.ArrowType;
         }
 #if 0
@@ -102,9 +126,34 @@ namespace {
         return *res;
     }
 
+    std::shared_ptr<arrow::Array> ConvertUuidFromString(const std::shared_ptr<arrow::FixedSizeBinaryType>& type, const std::shared_ptr<arrow::ArrayData>& data, TString& errString) {
+        auto originalArr = std::make_shared<arrow::StringArray>(data);
+        arrow::FixedSizeBinaryBuilder builder(type, arrow::default_memory_pool());
+        Y_ABORT_UNLESS(builder.Reserve(originalArr->length()).ok());
+        for (int64_t i = 0; i < originalArr->length(); ++i) {
+            if (originalArr->IsNull(i)) {
+                Y_ABORT_UNLESS(builder.AppendNull().ok());
+                continue;
+            }
+
+            const auto value = originalArr->GetView(i);
+            std::array<ui16, 8> uuid;
+            if (!NKikimr::NUuid::ParseUuidToArray(value, uuid.data(), value.size() == 32)) {
+                errString = TStringBuilder() << "Failed to convert string '"
+                    << TStringBuf(value.data(), value.size()) << "' to Uuid";
+                return nullptr;
+            }
+            builder.UnsafeAppend(reinterpret_cast<const char*>(uuid.data()));
+        }
+
+        std::shared_ptr<arrow::Array> result;
+        Y_ABORT_UNLESS(builder.Finish(&result).ok());
+        return result;
+    }
+
 }
 
-std::shared_ptr<arrow::RecordBatch> TArrowCSV::ConvertColumnTypes(std::shared_ptr<arrow::RecordBatch> parsedBatch) const {
+std::shared_ptr<arrow::RecordBatch> TArrowCSV::ConvertColumnTypes(std::shared_ptr<arrow::RecordBatch> parsedBatch, TString& errString) const {
     if (!parsedBatch) {
         return nullptr;
     }
@@ -128,6 +177,7 @@ std::shared_ptr<arrow::RecordBatch> TArrowCSV::ConvertColumnTypes(std::shared_pt
         } else {
             continue;
         }
+
         if (fArr->type()->Equals(originalType)) {
             resultColumns.emplace_back(fArr);
         } else if (fArr->type()->id() == arrow::TimestampType::type_id) {
@@ -145,6 +195,45 @@ std::shared_ptr<arrow::RecordBatch> TArrowCSV::ConvertColumnTypes(std::shared_pt
                     Y_ABORT_UNLESS(false);
                 }
             }());
+        } else if (fArr->type()->id() == arrow::BooleanType::type_id && originalType->id() == arrow::UInt8Type::type_id) {
+            auto boolArray = std::static_pointer_cast<arrow::BooleanArray>(fArr);
+            arrow::UInt8Builder builder;
+            Y_ABORT_UNLESS(builder.Reserve(boolArray->length()).ok());
+            for (int64_t i = 0; i < boolArray->length(); ++i) {
+                if (boolArray->IsNull(i)) {
+                    Y_ABORT_UNLESS(builder.AppendNull().ok());
+                } else {
+                    builder.UnsafeAppend(boolArray->Value(i) ? static_cast<uint8_t>(1) : static_cast<uint8_t>(0));
+                }
+            }
+
+            std::shared_ptr<arrow::Array> out;
+            Y_ABORT_UNLESS(builder.Finish(&out).ok());
+            resultColumns.emplace_back(out);
+        } else if (fArr->type()->id() == arrow::Decimal128Type::type_id && originalType->id() == arrow::FixedSizeBinaryType::type_id) {
+            auto fixedSizeBinaryType = std::static_pointer_cast<arrow::FixedSizeBinaryType>(originalType);
+            const auto& decData = fArr->data();
+            auto viewData = arrow::ArrayData::Make(
+                fixedSizeBinaryType,
+                decData->length,
+                decData->buffers,
+                decData->null_count,
+                decData->offset
+            );
+            resultColumns.emplace_back(arrow::MakeArray(viewData));
+        } else if (fArr->type()->id() == arrow::StringType::type_id && originalType->id() == arrow::FixedSizeBinaryType::type_id && UuidColumns.contains(f->name())) {
+            auto fixedSizeBinaryType = std::static_pointer_cast<arrow::FixedSizeBinaryType>(originalType);
+            Y_ABORT_UNLESS(fixedSizeBinaryType->byte_width() == NScheme::FSB_SIZE);
+            const auto& strData = fArr->data();
+            auto out = ConvertUuidFromString(fixedSizeBinaryType, strData, errString);
+            if (!out) {
+                return nullptr;
+            }
+            resultColumns.emplace_back(out);
+        } else if (fArr->type()->id() == arrow::Int64Type::type_id && originalType->id() == arrow::DurationType::type_id) { 
+            auto newData = fArr->data()->Copy();
+            newData->type = originalType;
+            resultColumns.emplace_back(arrow::MakeArray(newData));
         } else {
             Y_ABORT_UNLESS(false);
         }
@@ -201,7 +290,7 @@ std::shared_ptr<arrow::RecordBatch> TArrowCSV::ReadNext(const TString& csv, TStr
         }
     }
 
-    std::shared_ptr<arrow::RecordBatch> batch = ConvertColumnTypes(batchParsed);
+    std::shared_ptr<arrow::RecordBatch> batch = ConvertColumnTypes(batchParsed, errString);
     if (batch && !batch->Validate().ok()) {
         errString = ErrorPrefix() + batch->Validate().ToString();
         return {};

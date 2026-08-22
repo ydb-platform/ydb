@@ -1,16 +1,13 @@
 import "ydb/public/api/protos/draft/persqueue_error_codes.proto";
-import "ydb/public/api/protos/draft/persqueue_common.proto";
 
 import "ydb/public/api/protos/annotations/sensitive.proto";
 
-import "ydb/core/protos/base.proto";
 import "ydb/core/protos/msgbus_kv.proto";
 import "ydb/core/protos/netclassifier.proto";
 import "ydb/core/protos/node_limits.proto";
 import "ydb/core/scheme/protos/pathid.proto";
 import "ydb/core/scheme/protos/type_info.proto";
 
-import "ydb/library/actors/protos/actors.proto";
 import "ydb/library/services/services.proto";
 
 package NKikimrPQ;
@@ -33,7 +30,8 @@ message TPartitionMeta {
     optional bool SubDomainOutOfSpace = 3 [default = false];
     optional TPartitionCounterData CounterData = 4;
     optional uint64 EndWriteTimestamp = 5;
-    optional uint64 FirstUncompactedOffset = 6;
+    optional uint64 FirstUncompactedOffset = 6; //deprecated
+    optional uint64 NextMessageIdDeduplicatorWAL = 7 [default = 1];
 }
 
 message TPartitionTxMeta {
@@ -119,6 +117,7 @@ message TPQConfig {
     message TMirrorConfig {
         optional bool Enabled = 1 [default = true];
         optional TPQLibSettings PQLibSettings = 2;
+        optional uint32 RewindCommitDelaySeconds = 3;
     }
 
     optional TMirrorConfig MirrorConfig = 29;
@@ -219,6 +218,24 @@ message TPQConfig {
     }
 
     optional TCompactionConfig CompactionConfig = 58;
+    optional uint64 MaxMessageSizeBytes = 59 [default = 125829120]; // 120MB
+    optional uint64 MLPBatchWindowMilliSeconds = 60 [default = 10];
+
+    message TCloudEventsConfig {
+        enum EFormat {
+            JSON = 0;
+            PROTOBUF = 1;
+        }
+
+        optional bool Enabled = 1 [default = false];
+        oneof Endpoint {
+            string UaURI = 2;
+            string FilePath = 3;
+        }
+        optional EFormat Format = 4 [default = JSON];
+    }
+
+    optional TCloudEventsConfig CloudEventsConfig = 61;
 }
 
 message TChannelProfile {
@@ -251,7 +268,7 @@ message TMirrorPartitionConfig {
     optional TCredentials Credentials = 7;
     optional string Database = 8;
     optional bool UseSecureConnection = 9 [default = false];
-    optional bool SyncWriteTime = 10 [default = false];
+    reserved 10; // was SyncWriteTime; mirrored topics always sync source write time (PQv1 API)
 }
 
 message TPartitionConfig {
@@ -261,7 +278,7 @@ message TPartitionConfig {
     optional uint64 StorageLimitBytes = 16;
 
     // List of ClientIds, for which we don't delete data until they are read by these clients
-    repeated string ImportantClientId = 4; //can be empty . Deprecated. Use Consumer.Important
+    repeated string ImportantClientId_Deprecated = 4; //can be empty . Deprecated. Use Consumer.Important
     optional uint32 LowWatermark = 5 [default = 6291456]; //6Mb, compact blobs if they at least this big.
     optional uint32 SourceIdLifetimeSeconds = 6 [ default = 1382400]; //16 days
     optional uint32 SourceIdMaxCounts = 31 [default = 6000000]; // Maximum number of stored sourceId records in partition
@@ -269,11 +286,16 @@ message TPartitionConfig {
 
     optional uint64 WriteSpeedInBytesPerSecond = 7 [default = 50000000];
     optional uint64 BurstSize = 8 [default = 50000000];
+    optional uint64 WriteMessageDeduplicationIdPerSecond = 17 [default = 100000];
 
     message TReadQuota {
+        // Consumer name the quota is applied to. The special value CLIENTID_WITHOUT_CONSUMER
+        // ("$without_consumer") stores the quota for reading a partition without a consumer.
         optional string ClientId = 1;
         optional uint64 SpeedInBytesPerSecond = 2;
         optional uint64 BurstSize = 3;
+        optional uint64 SpeedInMessagesPerSecond = 4;
+        optional uint64 BurstSizeInMessages = 5;
     }
 
     repeated TReadQuota ReadQuota = 11;
@@ -287,6 +309,18 @@ message TPartitionConfig {
     repeated TChannelProfile ExplicitChannelProfiles = 14;
 
     optional TMirrorPartitionConfig MirrorFrom = 15;
+
+    optional uint64 WriteSpeedInMessagesPerSecond = 18 [default = 1048576]; // 1024 * 1024
+    optional uint64 BurstSizeInMessages = 19 [default = 1048576];           // 1024 * 1024
+
+    // Total read speed for a single partition (across all consumers), in bytes per second.
+    optional uint64 ReadSpeedInBytesPerSecond = 20;
+    // Total burst size for read from a single partition (across all consumers), in bytes.
+    optional uint64 ReadBurstBytes = 21;
+    // Total read speed for a single partition (across all consumers), in messages per second.
+    optional uint64 ReadSpeedInMessagesPerSecond = 22;
+    // Total burst size for read from a single partition (across all consumers), in messages.
+    optional uint64 ReadBurstMessages = 23;
 };
 
 message TPartitionKeyRange {
@@ -322,6 +356,7 @@ message TOffloadConfig {
     message TIncrementalBackup {
         optional string DstPath = 1;
         optional NKikimrProto.TPathID DstPathId = 2;
+        optional uint64 TxId = 3;
     }
 
     message TIncrementalRestore {
@@ -344,26 +379,38 @@ message TPQTabletConfig {
     optional bool RequireAuthWrite = 7 [default = false];
     optional bool RequireAuthRead = 8 [default = false];
     optional string Producer = 9;
-    optional string Ident = 10;
+    reserved 10; // optional string Ident = 10;
+    reserved "Ident";
     optional string Topic = 11;
     optional string DC = 12;
 
     // ReadRules, ReadTopicTimestampMs, ReadRuleVersions, ConsumerFormatVersions, ConsumersCodecs and ConsumerScalingSupport form a consumer data array stored by columns
-    repeated string ReadRules = 13; // Deprecated. Use Consumers.Name
-    repeated uint64 ReadFromTimestampsMs = 14; // Deprecated. Use Consumers.ReadFromTimestampsMs
-    repeated uint64 ConsumerFormatVersions = 15; // Deprecated. Use Consumers.FormatVersion
+    repeated string ReadRules_Deprecated = 13; // Deprecated. Use Consumers.Name
+    repeated uint64 ReadFromTimestampsMs_Deprecated = 14; // Deprecated. Use Consumers.ReadFromTimestampsMs
+    repeated uint64 ConsumerFormatVersions_Deprecated = 15; // Deprecated. Use Consumers.FormatVersion
     message TCodecs {
         repeated int64 Ids = 1;
         repeated string Codecs = 2;
     }
-    repeated TCodecs ConsumerCodecs = 16; // Deprecated. Use Consumers.Codec
-    repeated string ReadRuleServiceTypes = 17; // Deprecated. Use Consumers.ServiceType
+    repeated TCodecs ConsumerCodecs_Deprecated = 16; // Deprecated. Use Consumers.Codec
+    repeated string ReadRuleServiceTypes_Deprecated = 17; // Deprecated. Use Consumers.ServiceType
 
     optional uint64 FormatVersion = 20;
     optional TCodecs Codecs = 21;
 
-    repeated uint64 ReadRuleVersions = 22; // Deprecated. Use Consumers.Version
-    repeated uint64 ReadRuleGenerations = 32; // Deprecated. Use Consumers.Generation
+    repeated uint64 ReadRuleVersions_Deprecated = 22; // Deprecated. Use Consumers.Version
+    repeated uint64 ReadRuleGenerations_Deprecated = 32; // Deprecated. Use Consumers.Generation
+
+    enum EConsumerType {
+        CONSUMER_TYPE_STREAMING = 0;
+        CONSUMER_TYPE_MLP = 1;
+    }
+
+    enum EDeadLetterPolicy {
+        DEAD_LETTER_POLICY_UNSPECIFIED = 0;
+        DEAD_LETTER_POLICY_DELETE = 1;
+        DEAD_LETTER_POLICY_MOVE = 2;
+    }
 
     message TConsumer {
         optional string Name = 1;
@@ -375,6 +422,24 @@ message TPQTabletConfig {
         optional uint64 Version = 7 [default = 0];
         optional uint64 Generation = 8 [default = 0];
         optional bool Important = 9 [default = false];
+        optional uint64 AvailabilityPeriodMs = 10 [default = 0];
+        optional EConsumerType Type = 11 [default = CONSUMER_TYPE_STREAMING];
+        optional bool KeepMessageOrder = 12 [default = false]; // For MLP consumers
+        optional bool DeadLetterPolicyEnabled = 13 [default = false]; // For MLP consumers
+        optional EDeadLetterPolicy DeadLetterPolicy = 14 [default = DEAD_LETTER_POLICY_UNSPECIFIED]; // For MLP consumers
+        optional uint32 MaxProcessingAttempts = 15 [default = 1000]; // For MLP consumers
+        optional uint32 DefaultProcessingTimeoutSeconds = 16 [default = 30]; // For MLP consumers
+        optional string DeadLetterQueue = 17; // For MLP consumers
+        optional uint32 DefaultDelayMessageTimeMs = 18 [default = 0]; // For MLP consumers
+        optional uint32 DefaultReceiveMessageWaitTimeMs = 19 [default = 0]; // For MLP consumers
+        // For MLP (shared/SQS) consumers. The window during which a repeated read with the same
+        // receive-request-attempt-id replays the same messages. Default 5 minutes.
+        // Passed via the _sqs_read_request_attempt_id_period_ms consumer attribute.
+        optional uint32 ReadRequestAttemptIdPeriodMs = 20 [default = 300000];
+
+        optional uint32 MetricsLevel = 21;
+        // The ID of the Monitoring project that will be used as the value of `project` label for detailed metrics level.
+        optional string MonitoringProjectId = 22;
     }
 
     repeated TConsumer Consumers = 37;
@@ -405,6 +470,7 @@ message TPQTabletConfig {
         repeated uint32 ChildPartitionIds = 5;
         optional uint64 CreateVersion = 6;
         optional uint64 TabletId = 7;
+        optional uint64 CreationTimestampSeconds = 8;
     }
     repeated TPartition Partitions = 31; // filled by schemeshard
 
@@ -445,6 +511,22 @@ message TPQTabletConfig {
     optional TOffloadConfig OffloadConfig = 38;
 
     optional bool EnableCompactification = 39 [default = false];
+
+    optional uint32 MetricsLevel = 40;
+
+    // The ID of the Monitoring project that will be used as the value of `project` label for detailed metrics level.
+    optional string MonitoringProjectId = 41;
+
+    optional string TimestampType = 42;
+
+    optional bool ContentBasedDeduplication = 43 [default = false];
+
+    // SQS/YMQ migration: queue metadata for exporting queue metrics from PQRB.
+    optional string SqsQueueName = 44 [default = ""];
+    optional string SqsAccountName = 45 [default = ""];
+    optional string SqsCloudId = 46 [default = ""];
+    optional string SqsFolderId = 47 [default = ""];
+    optional bool SqsExportMetrics = 48 [default = false];
 }
 
 message THeartbeat {
@@ -478,84 +560,6 @@ message TBootstrapConfig {
     repeated TMessageGroup ExplicitMessageGroups = 1;
 }
 
-message TUpdateConfig {
-    optional uint64 TxId = 1;
-    optional TPQTabletConfig TabletConfig = 2;
-    optional TBootstrapConfig BootstrapConfig = 3; // passed only upon creation
-}
-
-message TUpdateBalancerConfig { //for schemeshard use only
-    optional uint64 TxId = 1;
-    optional uint64 PathId = 2;
-    optional string TopicName = 3;
-    optional string Path = 4;
-    optional uint32 Version = 5;
-
-    optional uint32 TotalGroupCount = 11;
-    optional uint32 NextPartitionId = 12;
-
-    optional TPQTabletConfig TabletConfig = 7;
-    optional uint32 PartitionPerTablet = 8;
-    optional uint64 SchemeShardId = 9;
-    message TPartition {
-        optional uint32 Partition = 1;
-        optional uint64 TabletId = 2;
-        optional uint32 Group = 3;
-        optional TPartitionKeyRange KeyRange = 4;
-        optional ETopicPartitionStatus Status = 5;
-        repeated uint32 ParentPartitionIds = 6;
-        repeated uint32 ChildPartitionIds = 7;
-        optional uint64 CreateVersion = 8;
-    }
-
-    repeated TPartition Partitions = 6;
-
-    message TTablet {
-        optional uint64 TabletId = 1;
-        optional uint64 Owner = 2;
-        optional uint64 Idx = 3;
-    }
-
-    repeated TTablet Tablets = 10;
-    optional uint64 SubDomainPathId = 13;
-}
-
-message TDescribe {
-}
-
-message TDescribeResponse {
-    optional string TopicName = 1;
-    optional uint32 Version = 2;
-    optional TPQTabletConfig Config = 3;
-    optional uint32 PartitionPerTablet = 4;
-    optional uint64 SchemeShardId = 6;
-    optional uint64 BalancerTabletId = 7;
-
-    optional bytes SecurityObject = 8; //NACLibProto.TSecurityObject
-
-    message TPartition {
-        optional uint32 Partition = 1;
-        optional uint64 TabletId = 2;
-    }
-
-    repeated TPartition Partitions = 5;
-}
-
-message TCheckACL {
-    optional EOperation Operation = 2;
-    optional NPersQueueCommon.Credentials Auth = 4; //leaved for compatibility
-    optional string User = 5;
-    optional bytes Token = 6;
-}
-
-message TCheckACLResponse {
-    optional EAccess Access = 1;
-    optional string Topic = 2;
-    optional string Path = 3;
-
-    optional string Error = 4;
-}
-
 enum EOperation {
     READ_OP = 1;
     WRITE_OP = 2;
@@ -566,28 +570,6 @@ enum EAccess {
     DENIED = 2;
     UNKNOWN = 3;
 }
-
-message TGetPartitionIdForWrite {
-}
-
-message TGetPartitionIdForWriteResponse {
-    optional uint64 PartitionId = 1;
-}
-
-message TRegisterReadSession {
-    optional string Session = 1;
-    optional NActorsProto.TActorId PipeClient = 2;
-    optional string ClientId = 3;
-    optional string ClientNode = 4;
-
-    repeated uint32 Groups = 5;
-}
-
-message TGetReadSessionsInfo {
-    optional string ClientId = 1;
-    repeated uint32 Partitions = 2;
-}
-
 
 message TReadSessionStatus { //request to PQ_READ_PROXY
 }
@@ -614,111 +596,19 @@ message TReadSessionStatusResponse {
     optional uint32 ProxyNodeId = 7;
 }
 
-
-message TReadSessionsInfoResponse {
-    message TPartitionInfo {
-        optional uint32 Partition = 1;
-        optional string ClientNode = 2;
-        optional uint32 ProxyNodeId = 3;
-        optional string Session = 4;
-        optional uint64 Timestamp = 5;
-        optional uint64 TimestampMs = 6;
-    }
-    repeated TPartitionInfo PartitionInfo = 1;
-    optional uint64 TabletId = 2;
-
-    message TReadSessionInfo {
-        optional NActorsProto.TActorId SessionActor = 1;
-        optional string Session = 2;
-
-    }
-    repeated TReadSessionInfo ReadSessions = 3;
-}
-
-
-message TGetPartitionsLocation {
-    repeated uint64 Partitions = 1;
-}
-
 message TPartitionLocation {
     optional uint32 PartitionId = 1;
     optional uint64 NodeId = 2;
     optional uint32 Generation = 3;
 };
 
-message TPartitionsLocationResponse {
-    optional bool Status = 1;
-    repeated TPartitionLocation Locations = 2;
-}
-
-message TLockPartition {
-    optional uint32 Partition = 1;
-    optional uint64 TabletId = 2;
-    optional string Topic = 3;
-    optional uint32 Generation = 4;
-    optional uint32 Step = 5;
-    optional string Session = 6;
-    optional string ClientId = 7;
-    optional NActorsProto.TActorId PipeClient = 8;
-    optional string Path = 9;
-}
-
-message TReleasePartition {
-    optional string Topic = 1;
-    optional uint64 Generation = 2;
-    optional string Session = 3;
-    optional string ClientId = 4;
-    reserved 5; // optional uint32 Count = 5;
-    optional NActorsProto.TActorId PipeClient = 6;
-    optional uint32 Group = 7;
-    optional string Path = 8;
-    reserved 9; // repeated uint32 Partition = 9
-}
-
-message TPartitionReleased {
-    optional uint32 Partition = 1;
-    optional string Topic = 2;
-    optional string Session = 3;
-    optional NActorsProto.TActorId PipeClient = 4;
-    optional string ClientId = 5;
-}
-
 enum ETabletState {
     ENormal = 0;
     EDropped = 1;
 }
 
-message TDropTablet {
-    optional uint64 TxId = 1;
-    optional ETabletState RequestedState = 2;
-}
-
-message TDropTabletResult {
-    optional NKikimrProto.EReplyStatus Status = 1;
-    optional uint64 TxId = 2;
-    optional uint64 TabletId = 3;
-    optional ETabletState ActualState = 4;
-}
-
 message TTabletState {
     optional ETabletState State = 1;
-}
-
-enum EStatus{
-    OK = 0;
-    ERROR = 1;
-    ERROR_BAD_VERSION = 2;
-    ERROR_UPDATE_IN_PROGRESS = 3;
-}
-
-message TUpdateConfigResponse {
-    optional uint64 TxId = 1;
-    optional uint64 Origin = 2;
-    optional EStatus Status = 3;
-}
-
-message TOffsets {
-    optional string ClientId = 1;
 }
 
 message TOffsetsResponse {
@@ -744,12 +634,6 @@ message TOffsetsResponse {
     repeated TPartResult PartResult = 2;
 }
 
-message TStatus {
-    optional string ClientId = 1;
-    optional bool GetStatForAllConsumers = 2;
-    repeated string Consumers = 3;
-}
-
 message TClientPosition {
     optional int64 Offset = 1;
     optional uint64 Size = 2;
@@ -769,14 +653,50 @@ message TClientInfo {
     optional uint64 CommitedLagMs = 10;
 }
 
+message TPersQueueUpdateReadMetricsRequest {
+    optional string ClientId = 1; // mandatory
+    optional uint64 InFlightLimitReachedDurationMs = 2; // if not set, then treat as 0
+}
+
+message TPersQueuePartitionUpdateReadMetrics {
+    optional int32 Partition = 1;
+    optional TPersQueueUpdateReadMetricsRequest UpdateReadMetrics = 2;
+}
 
 message TAggregatedCounters {
     repeated uint64 Values = 1;
+
     repeated TConsumerAggregatedCounters ConsumerAggregatedCounters = 2;
+    optional TCompactionCounters CompactionCounters = 3;
+    optional TExtendedCounters ExtendedCounters = 4;
+    repeated TMLPConsumerCounters MLPConsumerCounters = 5;
 
     message TConsumerAggregatedCounters {
         optional string Consumer = 1;
         repeated uint64 Values = 2;
+    }
+    message TCompactionCounters {
+        repeated uint64 Values = 1;
+    }
+
+    message TExtendedCounters {
+        repeated uint64 Values = 1;
+    }
+
+    message TMLPConsumerCounters {
+        optional string Consumer = 1;
+
+        repeated uint64 CountersValues = 2;
+        repeated uint64 MessageLocksValues = 3;
+        repeated uint64 MessageLockingDurationValues = 4;
+
+        optional uint64 DeletedByRetentionPolicy = 5;
+        optional uint64 DeletedByDeadlinePolicy = 6;
+        optional uint64 DeletedByMovedToDLQ = 7;
+
+        optional uint64 CPUUsage = 8;
+
+        repeated uint64 WaitingLockingDurationValues = 9;
     }
 }
 
@@ -851,6 +771,8 @@ message TStatusResponse {
         optional uint64 Cookie = 34;
 
         optional EScaleStatus ScaleStatus = 35;
+        optional TPartitionScaleParticipants ScaleParticipatingPartitions = 36;
+        optional string SplitBoundary = 37;
     }
 
     message TConsumerResult {
@@ -869,34 +791,16 @@ message TStatusResponse {
         optional bool ReadingFinished = 10;
         optional uint64 CommitedLagMs = 11;
         optional string CommittedMetadata = 12;
+        optional bool UseForReading = 13;
+
+        optional uint64 MLPLockedMessageCount = 14;
+        optional uint64 MLPDelayedMessageCount = 15;
+        optional uint64 MLPMessageCount = 16;
     }
 
 
     optional uint64 TabletId = 1;
     repeated TPartResult PartResult = 2;
-}
-
-message THasDataInfo {
-    optional int32 Partition = 1;
-    optional uint64 Offset = 2;
-    optional uint64 Deadline = 3; //in ms
-    optional NActorsProto.TActorId Sender = 4;
-    optional uint64 Cookie = 5;
-
-    optional string ClientId = 6;
-
-    optional int32 MaxTimeLagMs = 7; // optional, default = infinity, why we use int instead of uint?
-    optional uint64 ReadTimestampMs = 8; //optional, default = 0
-}
-
-message THasDataInfoResponse { //signal
-    optional uint64 EndOffset = 1;
-    optional uint64 Cookie = 2;
-    optional uint64 SizeLag = 3;
-    optional uint64 WriteTimestampEstimateMS = 4;
-    optional bool ReadingFinished = 5;
-    repeated uint32 AdjacentPartitionIds = 6;
-    repeated uint32 ChildPartitionIds = 7;
 }
 
 message TBatchHeader {
@@ -912,6 +816,8 @@ message TBatchHeader {
     }
     optional uint32 Format = 7; //for EPayloadFormat
     optional bool HasKinesis = 8;
+    optional uint32 ClientBlobCount = 9; // physical ClientBlob count; Count is offset span
+    optional uint64 OffsetDelta = 10;
 }
 
 message TUserInfo {
@@ -922,20 +828,15 @@ message TUserInfo {
     optional uint64 OffsetRewindSum = 5;
     optional uint64 ReadRuleGeneration = 6;
     optional uint64 PartitionSessionId = 7;
+    // Whether the consumer has ever committed past the partition StartOffset.
+    // Equivalent to (Offset > StartOffset): true means a real committed position in the
+    // live data range; false means the consumer is still at/before the retention boundary
+    // (never committed into live data, or was clamped back to StartOffset).
+    // Persisted with user info; recalculated on partition init from final StartOffset.
+    // Exposed to clients/proxies as ClientHasAnyCommits (TCmdGetClientOffsetResult) and
+    // used for first-commit distributed commits when the partition has parents after a split.
     optional bool AnyCommits = 8;
     optional string CommittedMetadata = 9;
-}
-
-message TPartitionClientInfo {
-    repeated int32 Partitions = 1;
-}
-
-message TClientInfoResponse {
-    optional int32 Partition = 1;
-    optional uint64 StartOffset = 2;
-    optional uint64 EndOffset = 3;
-    optional uint64 ResponseTimestamp = 4;
-    repeated TClientInfo ClientInfo = 5;
 }
 
 message TPQClusterDiscoveryConfig {
@@ -969,64 +870,6 @@ message TYdsShardIterator {
     optional ETopicKind Kind = 7;
 }
 
-message TKafkaProducerInstanceId {
-    optional int64 Id = 1;
-    optional int32 Epoch = 2;
-};
-
-message TPartitionOperation {
-    optional uint32 PartitionId = 1;
-    optional uint64 CommitOffsetsBegin = 2;
-    optional uint64 CommitOffsetsEnd = 3;
-    optional string Consumer = 4;
-    optional string Path = 5; // topic path
-    optional uint32 SupportivePartition = 6;
-    optional bool ForceCommit = 7;
-    optional bool KillReadSession = 8;
-    optional bool OnlyCheckCommitedToFinish = 9;
-    optional string ReadSessionId = 10;
-    optional bool KafkaTransaction = 11 [default = false];
-    optional TKafkaProducerInstanceId KafkaProducerInstanceId = 12;
-};
-
-message TWriteId {
-    optional uint64 NodeId = 1;
-    optional fixed64 KeyId = 2;
-    optional bool KafkaTransaction = 3 [default = false];
-    optional TKafkaProducerInstanceId KafkaProducerInstanceId = 4;
-};
-
-message TDataTransaction {
-    enum ELocksOp {
-        Unspecified = 0;
-        Validate = 1;
-        Commit = 2;
-        Rollback = 3;
-    }
-
-    repeated TPartitionOperation Operations = 1;
-    optional ELocksOp Op = 2;
-    repeated uint64 SendingShards = 3;
-    repeated uint64 ReceivingShards = 4;
-    optional bool Immediate = 5;
-    optional TWriteId WriteId = 6;
-}
-
-message TConfigTransaction {
-    optional TPQTabletConfig TabletConfig = 2;
-    optional TBootstrapConfig BootstrapConfig = 3;
-}
-
-message TEvProposeTransaction {
-    optional NActorsProto.TActorId SourceActor = 1;
-    optional uint64 TxId = 2;
-    oneof TxBody {
-        TDataTransaction Data = 3;
-        TConfigTransaction Config = 4;
-    }
-    optional NActorsProto.TActorId SupportivePartitionActor = 5;
-};
-
 message TError {
     enum EKind {
         OK = 0;
@@ -1039,171 +882,7 @@ message TError {
     optional string Reason = 2;
 };
 
-message TEvProposeTransactionResult {
-    enum EStatus {
-        PREPARED = 1;
-        COMPLETE = 2;
-        ABORTED = 3;
-        ERROR = 4;
-        LOCKS_BROKEN = 5;
-        CANCELLED = 6;
-        BAD_REQUEST = 7;
-        OVERLOADED = 8;
-    };
-
-    optional uint64 Origin = 1; // Tablet Id
-    optional EStatus Status = 2;
-    optional uint64 TxId = 3;
-    optional uint64 MinStep = 4;
-    optional uint64 MaxStep = 6;
-    optional string StatusMessage = 7;
-    optional uint64 Step = 8;
-    repeated fixed64 DomainCoordinators = 9;
-    repeated TError Errors = 10;
+message TPartitionScaleParticipants {
+    repeated uint32 ChildPartitionIds = 1;
+    repeated uint32 AdjacentPartitionIds = 2;
 };
-
-message TEvCancelTransactionProposal {
-    optional uint64 TxId = 1;
-};
-
-message TEvPeriodicTopicStats {
-    required uint64 PathId = 1;
-
-    required uint64 Generation = 2;
-    required uint64 Round = 3;
-
-    required uint64 DataSize = 4;
-    required uint64 UsedReserveSize = 5;
-
-    optional bool SubDomainOutOfSpace = 6;
-};
-
-message TEvSubDomainStatus {
-    required bool SubDomainOutOfSpace = 1;
-};
-
-message TEvCheckPartitionStatusRequest {
-    optional uint32 Partition = 1;
-    optional string SourceId = 2;
-};
-
-message TEvCheckPartitionStatusResponse {
-    optional ETopicPartitionStatus Status = 1;
-    optional uint64 SeqNo = 2;
-};
-
-// The consumer's reading of the partition is finished  (from the partition)
-message TEvReadingPartitionStatusRequest {
-    optional string Consumer = 1;
-    optional uint32 PartitionId = 2;
-    optional uint32 Generation = 3;
-    optional uint32 Cookie = 4;
-};
-
-// The consumer's reading of the partition is finished (from ReadSession)
-message TEvReadingPartitionFinishedRequest {
-    optional string Consumer = 1;
-    optional uint32 PartitionId = 2;
-    optional bool ScaleAwareSDK = 3;
-    optional bool StartedReadingFromEndOffset = 4;
-};
-
-// The consumer's reading of the partition is started (from ReadSession)
-message TEvReadingPartitionStartedRequest {
-    optional string Consumer = 1;
-    optional uint32 PartitionId = 2;
-};
-
-message TEvPartitionScaleStatusChanged {
-    required uint32 PartitionId = 1;
-    required EScaleStatus ScaleStatus = 2;
-};
-
-message TPartitions {
-    message TPartitionInfo {
-        required uint32 PartitionId = 1;
-
-        message TMessageGroup {
-            required string Id = 1;
-            optional uint64 SeqNo = 2;
-        };
-        repeated TMessageGroup MessageGroup = 2;
-    };
-
-    repeated TPartitionInfo Partition = 1;
-}
-
-message TTransaction {
-    enum EKind {
-        KIND_UNKNOWN = 0;
-        KIND_DATA = 1;
-        KIND_CONFIG = 2;
-    };
-
-    enum EState {
-        UNKNOWN = 0;
-        PREPARING = 1;
-        PREPARED = 2;     // persist
-        PLANNING = 3;
-        PLANNED = 4;      // persist
-        CALCULATING = 5;
-        CALCULATED = 6;
-        WAIT_RS = 7;      // persist
-        EXECUTING = 8;
-        EXECUTED = 9;     // persist
-        WAIT_RS_ACKS = 11;
-        DELETING = 10;
-    };
-
-    message TPredicateReceived {
-        optional uint64 TabletId = 1;
-        optional bool Predicate = 2;
-    }
-
-    optional EKind Kind = 11;
-    optional uint64 Step = 8;
-    optional uint64 TxId = 1;
-    optional EState State = 2;
-    optional uint64 MinStep = 3;
-    optional uint64 MaxStep = 4;
-
-    repeated TPredicateReceived PredicatesReceived = 5;
-    repeated uint64 PredicateRecipients = 6;
-    optional bool Predicate = 9;
-
-    //
-    // TDataTransaction
-    //
-    repeated TPartitionOperation Operations = 7;
-
-    //
-    // TConfigTransaction
-    //
-    optional TPQTabletConfig TabletConfig = 12;
-    optional TBootstrapConfig BootstrapConfig = 13;
-    optional TPartitions Partitions = 16;
-
-    //
-    // получатель результата
-    //
-    optional NActorsProto.TActorId SourceActor = 14;
-
-    optional TWriteId WriteId = 15;
-};
-
-message TTabletTxInfo {
-    message TTxWriteInfo {
-        optional TWriteId WriteId = 1;
-        optional uint32 OriginalPartitionId = 2;
-        optional uint32 InternalPartitionId = 3;
-        optional bool KafkaTransaction = 4 [default = false];
-        optional uint64 CreatedAt = 5;
-    };
-
-    optional uint64 PlanStep = 2;
-    optional uint64 PlanTxId = 3;
-    repeated TTxWriteInfo TxWrites = 4;
-    optional uint64 NextSupportivePartitionId = 5;
-    optional uint64 ExecStep = 6;
-    optional uint64 ExecTxId = 7;
-}

@@ -3,7 +3,7 @@
 #include <util/datetime/base.h>
 #include <util/string/printf.h>
 
-#include <ydb/core/persqueue/utils.h>
+#include <ydb/core/persqueue/public/utils.h>
 
 namespace NKikimr::NPQ::NHelpers {
 
@@ -14,8 +14,9 @@ NKikimrPQ::TPQTabletConfig MakeConfig(const TMakeConfigParams& params)
     config.SetVersion(params.Version);
 
     for (auto& c : params.Consumers) {
-        config.AddReadRules(c.Consumer);
-        config.AddReadRuleGenerations(c.Generation);
+        auto* consumer = config.AddConsumers();
+        consumer->SetName(c.Consumer);
+        consumer->SetGeneration(c.Generation);
     }
 
     for (const auto& e : params.AllPartitions) {
@@ -55,8 +56,9 @@ NKikimrPQ::TPQTabletConfig MakeConfig(const TMakeConfigParams& params)
         for (size_t i = 0; i < 2'500; ++i) {
             TString name = Sprintf("fake-consumer-%s-%" PRISZT,
                                    TString(3'000, 'a').data(), i);
-            config.AddReadRules(name);
-            config.AddReadRuleGenerations(1);
+            auto* consumer = config.AddConsumers();
+            consumer->SetName(name);
+            consumer->SetGeneration(1);
         }
     }
 

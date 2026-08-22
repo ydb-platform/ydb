@@ -23,3 +23,13 @@ message TChecksumState {
 message TS3DownloadState {
     optional bytes EncryptedDeserializerState = 1 [(Ydb.sensitive) = true]; // Contains secure key
 }
+
+message TChangeMetadata {
+    message TColumnState {
+        optional uint32 Tag = 1;
+        optional bool IsNull = 2;
+        optional bool IsChanged = 3;
+    }
+    repeated TColumnState ColumnStates = 1;
+    optional bool IsDeleted = 2;
+}

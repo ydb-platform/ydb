@@ -35,14 +35,15 @@
 #include <nghttp3/nghttp3.h>
 
 #include "nghttp3_objalloc.h"
+#include "nghttp3_range.h"
 
 #define NGHTTP3_KSL_DEGR 16
 /* NGHTTP3_KSL_MAX_NBLK is the maximum number of nodes which a single
    block can contain. */
-#define NGHTTP3_KSL_MAX_NBLK (2 * NGHTTP3_KSL_DEGR - 1)
+#define NGHTTP3_KSL_MAX_NBLK (2 * NGHTTP3_KSL_DEGR)
 /* NGHTTP3_KSL_MIN_NBLK is the minimum number of nodes which a single
    block other than root must contain. */
-#define NGHTTP3_KSL_MIN_NBLK (NGHTTP3_KSL_DEGR - 1)
+#define NGHTTP3_KSL_MIN_NBLK NGHTTP3_KSL_DEGR
 
 /*
  * nghttp3_ksl_key represents key in nghttp3_ksl.
@@ -56,21 +57,12 @@ typedef struct nghttp3_ksl_blk nghttp3_ksl_blk;
 /*
  * nghttp3_ksl_node is a node which contains either nghttp3_ksl_blk or
  * opaque data.  If a node is an internal node, it contains
- * nghttp3_ksl_blk.  Otherwise, it has data.  The key is stored at the
- * location starting at key.
+ * nghttp3_ksl_blk.  Otherwise, it has data.
  */
 struct nghttp3_ksl_node {
   union {
     nghttp3_ksl_blk *blk;
     void *data;
-  };
-  union {
-    uint64_t align;
-    /* key is a buffer to include key associated to this node.
-       Because the length of key is unknown until nghttp3_ksl_init is
-       called, the actual buffer will be allocated after this
-       field. */
-    uint8_t key[1];
   };
 };
 
@@ -85,19 +77,19 @@ struct nghttp3_ksl_blk {
       /* prev points to the previous block if leaf field is
          nonzero. */
       nghttp3_ksl_blk *prev;
+      nghttp3_ksl_node nodes[NGHTTP3_KSL_MAX_NBLK];
+      /* keys is a pointer to the buffer to include
+         NGHTTP3_KSL_MAX_NBLK keys.  Because the length of key is
+         unknown until nghttp3_ksl_init is called, the actual buffer
+         will be allocated after this object. */
+      uint8_t *keys;
       /* n is the number of nodes this object contains in nodes. */
       uint32_t n;
+      /* aligned_keylen is the length of the single key including
+         alignment. */
+      uint16_t aligned_keylen;
       /* leaf is nonzero if this block contains leaf nodes. */
-      uint32_t leaf;
-      union {
-        uint64_t align;
-        /* nodes is a buffer to contain NGHTTP3_KSL_MAX_NBLK
-           nghttp3_ksl_node objects.  Because nghttp3_ksl_node object
-           is allocated along with the additional variable length key
-           storage, the size of buffer is unknown until
-           nghttp3_ksl_init is called. */
-        uint8_t nodes[1];
-      };
+      uint8_t leaf;
     };
 
     nghttp3_opl_entry oplent;
@@ -134,11 +126,10 @@ typedef size_t (*nghttp3_ksl_search)(const nghttp3_ksl *ksl,
                                     nghttp3_ksl_blk *blk,                      \
                                     const nghttp3_ksl_key *key) {              \
     size_t i;                                                                  \
-    nghttp3_ksl_node *node;                                                    \
+    uint8_t *node_key;                                                         \
                                                                                \
-    for (i = 0, node = (nghttp3_ksl_node *)(void *)blk->nodes;                 \
-         i < blk->n && COMPAR((nghttp3_ksl_key *)node->key, key); ++i,         \
-        node = (nghttp3_ksl_node *)(void *)((uint8_t *)node + ksl->nodelen))   \
+    for (i = 0, node_key = blk->keys; i < blk->n && COMPAR(node_key, key);     \
+         ++i, node_key += ksl->aligned_keylen)                                 \
       ;                                                                        \
                                                                                \
     return i;                                                                  \
@@ -150,7 +141,6 @@ typedef struct nghttp3_ksl_it nghttp3_ksl_it;
  * nghttp3_ksl_it is a bidirectional iterator to iterate nodes.
  */
 struct nghttp3_ksl_it {
-  const nghttp3_ksl *ksl;
   nghttp3_ksl_blk *blk;
   size_t i;
 };
@@ -160,8 +150,8 @@ struct nghttp3_ksl_it {
  */
 struct nghttp3_ksl {
   nghttp3_objalloc blkalloc;
-  /* head points to the root block. */
-  nghttp3_ksl_blk *head;
+  /* root points to the root block. */
+  nghttp3_ksl_blk *root;
   /* front points to the first leaf block. */
   nghttp3_ksl_blk *front;
   /* back points to the last leaf block. */
@@ -172,9 +162,7 @@ struct nghttp3_ksl {
   size_t n;
   /* keylen is the size of key */
   size_t keylen;
-  /* nodelen is the actual size of nghttp3_ksl_node including key
-     storage. */
-  size_t nodelen;
+  size_t aligned_keylen;
 };
 
 /*
@@ -293,10 +281,12 @@ size_t nghttp3_ksl_len(const nghttp3_ksl *ksl);
 void nghttp3_ksl_clear(nghttp3_ksl *ksl);
 
 /*
- * nghttp3_ksl_nth_node returns the |n|th node under |blk|.
+ * nghttp3_ksl_blk_nth_key returns the |n|th key under |blk|.
  */
-#define nghttp3_ksl_nth_node(KSL, BLK, N)                                      \
-  ((nghttp3_ksl_node *)(void *)((BLK)->nodes + (KSL)->nodelen * (N)))
+static inline const nghttp3_ksl_key *
+nghttp3_ksl_blk_nth_key(const nghttp3_ksl_blk *blk, size_t n) {
+  return blk->keys + n * blk->aligned_keylen;
+}
 
 #ifndef WIN32
 /*
@@ -310,26 +300,28 @@ void nghttp3_ksl_print(const nghttp3_ksl *ksl);
 /*
  * nghttp3_ksl_it_init initializes |it|.
  */
-void nghttp3_ksl_it_init(nghttp3_ksl_it *it, const nghttp3_ksl *ksl,
-                         nghttp3_ksl_blk *blk, size_t i);
+void nghttp3_ksl_it_init(nghttp3_ksl_it *it, nghttp3_ksl_blk *blk, size_t i);
 
 /*
  * nghttp3_ksl_it_get returns the data associated to the node which
  * |it| points to.  It is undefined to call this function when
  * nghttp3_ksl_it_end(it) returns nonzero.
  */
-#define nghttp3_ksl_it_get(IT)                                                 \
-  nghttp3_ksl_nth_node((IT)->ksl, (IT)->blk, (IT)->i)->data
+static inline void *nghttp3_ksl_it_get(const nghttp3_ksl_it *it) {
+  return it->blk->nodes[it->i].data;
+}
 
 /*
  * nghttp3_ksl_it_next advances the iterator by one.  It is undefined
  * if this function is called when nghttp3_ksl_it_end(it) returns
  * nonzero.
  */
-#define nghttp3_ksl_it_next(IT)                                                \
-  (++(IT)->i == (IT)->blk->n && (IT)->blk->next                                \
-     ? ((IT)->blk = (IT)->blk->next, (IT)->i = 0)                              \
-     : 0)
+static inline void nghttp3_ksl_it_next(nghttp3_ksl_it *it) {
+  if (++it->i == it->blk->n && it->blk->next) {
+    it->blk = it->blk->next;
+    it->i = 0;
+  }
+}
 
 /*
  * nghttp3_ksl_it_prev moves backward the iterator by one.  It is
@@ -342,8 +334,9 @@ void nghttp3_ksl_it_prev(nghttp3_ksl_it *it);
  * nghttp3_ksl_it_end returns nonzero if |it| points to the one beyond
  * the last node.
  */
-#define nghttp3_ksl_it_end(IT)                                                 \
-  ((IT)->blk->n == (IT)->i && (IT)->blk->next == NULL)
+static inline int nghttp3_ksl_it_end(const nghttp3_ksl_it *it) {
+  return it->blk->n == it->i && it->blk->next == NULL;
+}
 
 /*
  * nghttp3_ksl_it_begin returns nonzero if |it| points to the first
@@ -357,8 +350,10 @@ int nghttp3_ksl_it_begin(const nghttp3_ksl_it *it);
  * It is undefined to call this function when nghttp3_ksl_it_end(it)
  * returns nonzero.
  */
-#define nghttp3_ksl_it_key(IT)                                                 \
-  ((nghttp3_ksl_key *)nghttp3_ksl_nth_node((IT)->ksl, (IT)->blk, (IT)->i)->key)
+static inline const nghttp3_ksl_key *
+nghttp3_ksl_it_key(const nghttp3_ksl_it *it) {
+  return nghttp3_ksl_blk_nth_key(it->blk, it->i);
+}
 
 /*
  * nghttp3_ksl_range_compar is an implementation of
@@ -366,8 +361,12 @@ int nghttp3_ksl_it_begin(const nghttp3_ksl_it *it);
  * object, and the function returns nonzero if ((const nghttp3_range
  * *)lhs)->begin < ((const nghttp3_range *)rhs)->begin.
  */
-int nghttp3_ksl_range_compar(const nghttp3_ksl_key *lhs,
-                             const nghttp3_ksl_key *rhs);
+static inline int nghttp3_ksl_range_compar(const nghttp3_ksl_key *lhs,
+                                           const nghttp3_ksl_key *rhs) {
+  const nghttp3_range *a = (const nghttp3_range *)lhs,
+                      *b = (const nghttp3_range *)rhs;
+  return a->begin < b->begin;
+}
 
 /*
  * nghttp3_ksl_range_search is an implementation of nghttp3_ksl_search
@@ -383,8 +382,14 @@ size_t nghttp3_ksl_range_search(const nghttp3_ksl *ksl, nghttp3_ksl_blk *blk,
  * *)lhs)->begin < ((const nghttp3_range *)rhs)->begin, and the 2
  * ranges do not intersect.
  */
-int nghttp3_ksl_range_exclusive_compar(const nghttp3_ksl_key *lhs,
-                                       const nghttp3_ksl_key *rhs);
+static inline int
+nghttp3_ksl_range_exclusive_compar(const nghttp3_ksl_key *lhs,
+                                   const nghttp3_ksl_key *rhs) {
+  const nghttp3_range *a = (const nghttp3_range *)lhs,
+                      *b = (const nghttp3_range *)rhs;
+  return a->begin < b->begin &&
+         !(nghttp3_max(a->begin, b->begin) < nghttp3_min(a->end, b->end));
+}
 
 /*
  * nghttp3_ksl_range_exclusive_search is an implementation of
@@ -399,8 +404,10 @@ size_t nghttp3_ksl_range_exclusive_search(const nghttp3_ksl *ksl,
  * |lhs| and |rhs| must point to uint64_t objects, and the function
  * returns nonzero if *(uint64_t *)|lhs| < *(uint64_t *)|rhs|.
  */
-int nghttp3_ksl_uint64_less(const nghttp3_ksl_key *lhs,
-                            const nghttp3_ksl_key *rhs);
+static inline int nghttp3_ksl_uint64_less(const nghttp3_ksl_key *lhs,
+                                          const nghttp3_ksl_key *rhs) {
+  return *(const uint64_t *)lhs < *(const uint64_t *)rhs;
+}
 
 /*
  * nghttp3_ksl_uint64_less_search is an implementation of
@@ -416,8 +423,10 @@ size_t nghttp3_ksl_uint64_less_search(const nghttp3_ksl *ksl,
  * and the function returns nonzero if *(int64_t *)|lhs| > *(int64_t
  * *)|rhs|.
  */
-int nghttp3_ksl_int64_greater(const nghttp3_ksl_key *lhs,
-                              const nghttp3_ksl_key *rhs);
+static inline int nghttp3_ksl_int64_greater(const nghttp3_ksl_key *lhs,
+                                            const nghttp3_ksl_key *rhs) {
+  return *(const int64_t *)lhs > *(const int64_t *)rhs;
+}
 
 /*
  * nghttp3_ksl_int64_greater_search is an implementation of

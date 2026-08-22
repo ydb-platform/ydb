@@ -1,0 +1,27 @@
+/* sort outputs */
+
+use plato;
+
+pragma Engine = "ytflow";
+
+pragma Ytflow.Cluster = "plato";
+pragma Ytflow.PipelinePath = "pipelines/test";
+
+$lambda = ($row) -> {
+    $output_row_type = Struct<"value":Optional<Int64>>;
+    $variant_type = Variant<$output_row_type, $output_row_type, $output_row_type>;
+
+    return case $row.key
+        when "foobar" then Variant(<|"value":$row.value|>, "2", $variant_type)
+        when "barfoo" then Variant(<|"value":$row.value|>, "1", $variant_type)
+        else               Variant(<|"value":$row.value|>, "0", $variant_type)
+    end
+};
+
+$first_stream, $unused_stream, $last_stream = process Input using $lambda(TableRow());
+
+insert into OutputA
+select value + 1 as value from $first_stream;
+
+insert into OutputB
+select value + 2 as value from $last_stream;

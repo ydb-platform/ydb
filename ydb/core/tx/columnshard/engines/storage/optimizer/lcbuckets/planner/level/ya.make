@@ -2,9 +2,9 @@ LIBRARY()
 
 SRCS(
     abstract.cpp
-    zero_level.cpp
-    common_level.cpp
     counters.cpp
+    one_layer.cpp
+    zero_level.cpp
 )
 
 PEERDIR(

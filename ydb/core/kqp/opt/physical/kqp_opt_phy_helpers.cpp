@@ -174,29 +174,6 @@ NYql::NNodes::TDqStage ReplaceTableSourceSettings(NYql::NNodes::TDqStage stage, 
         .Done();
 }
 
-ESortDirection GetSortDirection(const NYql::NNodes::TExprBase& sortDirections) {
-    auto getDirection = [] (TExprBase expr) -> ESortDirection {
-        if (!expr.Maybe<TCoBool>()) {
-            return ESortDirection::Unknown;
-        }
-
-        if (!FromString<bool>(expr.Cast<TCoBool>().Literal().Value())) {
-            return ESortDirection::Reverse;
-        }
-
-        return ESortDirection::Forward;
-    };
-
-    auto direction = ESortDirection::None;
-    if (auto maybeList = sortDirections.Maybe<TExprList>()) {
-        for (const auto& expr : maybeList.Cast()) {
-            direction |= getDirection(expr);
-        }
-    } else {
-        direction |= getDirection(sortDirections);
-    }
-    return direction;
-};
 
 TExprNode::TPtr MakeMessage(TStringBuf message, TPositionHandle pos, TExprContext& ctx) {
     return ctx.NewCallable(pos, "Utf8", { ctx.NewAtom(pos, message) });

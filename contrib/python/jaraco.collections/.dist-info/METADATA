@@ -1,36 +1,37 @@
-Metadata-Version: 2.1
+Metadata-Version: 2.4
 Name: jaraco.collections
-Version: 5.1.0
+Version: 5.2.1
 Summary: Collection objects similar to those in stdlib by jaraco
 Author-email: "Jason R. Coombs" <jaraco@jaraco.com>
+License-Expression: MIT
 Project-URL: Source, https://github.com/jaraco/jaraco.collections
 Classifier: Development Status :: 5 - Production/Stable
 Classifier: Intended Audience :: Developers
-Classifier: License :: OSI Approved :: MIT License
 Classifier: Programming Language :: Python :: 3
 Classifier: Programming Language :: Python :: 3 :: Only
-Requires-Python: >=3.8
+Requires-Python: >=3.9
 Description-Content-Type: text/x-rst
 License-File: LICENSE
 Requires-Dist: jaraco.text
-Provides-Extra: check
-Requires-Dist: pytest-checkdocs >=2.4 ; extra == 'check'
-Requires-Dist: pytest-ruff >=0.2.1 ; (sys_platform != "cygwin") and extra == 'check'
-Provides-Extra: cover
-Requires-Dist: pytest-cov ; extra == 'cover'
-Provides-Extra: doc
-Requires-Dist: sphinx >=3.5 ; extra == 'doc'
-Requires-Dist: jaraco.packaging >=9.3 ; extra == 'doc'
-Requires-Dist: rst.linker >=1.9 ; extra == 'doc'
-Requires-Dist: furo ; extra == 'doc'
-Requires-Dist: sphinx-lint ; extra == 'doc'
-Requires-Dist: jaraco.tidelift >=1.4 ; extra == 'doc'
-Provides-Extra: enabler
-Requires-Dist: pytest-enabler >=2.2 ; extra == 'enabler'
 Provides-Extra: test
-Requires-Dist: pytest !=8.1.*,>=6 ; extra == 'test'
+Requires-Dist: pytest!=8.1.*,>=6; extra == "test"
+Provides-Extra: doc
+Requires-Dist: sphinx>=3.5; extra == "doc"
+Requires-Dist: jaraco.packaging>=9.3; extra == "doc"
+Requires-Dist: rst.linker>=1.9; extra == "doc"
+Requires-Dist: furo; extra == "doc"
+Requires-Dist: sphinx-lint; extra == "doc"
+Requires-Dist: jaraco.tidelift>=1.4; extra == "doc"
+Provides-Extra: check
+Requires-Dist: pytest-checkdocs>=2.4; extra == "check"
+Requires-Dist: pytest-ruff>=0.2.1; sys_platform != "cygwin" and extra == "check"
+Provides-Extra: cover
+Requires-Dist: pytest-cov; extra == "cover"
+Provides-Extra: enabler
+Requires-Dist: pytest-enabler>=2.2; extra == "enabler"
 Provides-Extra: type
-Requires-Dist: pytest-mypy ; extra == 'type'
+Requires-Dist: pytest-mypy; extra == "type"
+Dynamic: license-file
 
 .. image:: https://img.shields.io/pypi/v/jaraco.collections.svg
    :target: https://pypi.org/project/jaraco.collections
@@ -41,14 +42,14 @@ Requires-Dist: pytest-mypy ; extra == 'type'
    :target: https://github.com/jaraco/jaraco.collections/actions?query=workflow%3A%22tests%22
    :alt: tests
 
-.. image:: https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/charliermarsh/ruff/main/assets/badge/v2.json
+.. image:: https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json
     :target: https://github.com/astral-sh/ruff
     :alt: Ruff
 
 .. image:: https://readthedocs.org/projects/jaracocollections/badge/?version=latest
    :target: https://jaracocollections.readthedocs.io/en/latest/?badge=latest
 
-.. image:: https://img.shields.io/badge/skeleton-2024-informational
+.. image:: https://img.shields.io/badge/skeleton-2025-informational
    :target: https://blog.jaraco.com/skeleton
 
 .. image:: https://tidelift.com/badges/package/pypi/jaraco.collections

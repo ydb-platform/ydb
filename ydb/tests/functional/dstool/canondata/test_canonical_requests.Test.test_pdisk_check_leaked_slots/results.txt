@@ -1,0 +1,33 @@
+dstool -e <endpoint> --mon-port <mon_port> vdisk evict --ignore-degraded-group-check --ignore-failure-model-group-check --vdisk-ids [82000000:_:0:0:0]
+Exit Status: 0
+===== stderr =====
+success
+
+===== grpc_calls =====
+=== Invoke BlobStorageConfig ===
+Domain: 1
+Request {
+  Command {
+    QueryBaseConfig {
+    }
+  }
+  Command {
+    ReadStoragePool {
+      BoxId: 18446744073709551615
+    }
+  }
+  Rollback: true
+}
+
+=== Invoke BlobStorageConfig ===
+Domain: 1
+Request {
+  Command {
+    ReassignGroupDisk {
+      GroupId: 2181038080
+      GroupGeneration: 1
+    }
+  }
+  IgnoreGroupFailModelChecks: true
+  IgnoreDegradedGroupsChecks: true
+}

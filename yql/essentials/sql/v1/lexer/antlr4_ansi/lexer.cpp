@@ -27,10 +27,10 @@ public:
     }
 };
 
-}
+} // namespace
 
 NSQLTranslation::TLexerFactoryPtr MakeAntlr4AnsiLexerFactory() {
     return MakeIntrusive<TFactory>();
 }
 
-}
+} // namespace NSQLTranslationV1

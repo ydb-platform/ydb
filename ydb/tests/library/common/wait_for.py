@@ -72,3 +72,25 @@ def wait_for_and_assert(callable_, matcher, message='', timeout_seconds=60, step
     )
     assert_that(result, matcher, message)
     return result
+
+
+def retry_assertions(callable_, timeout_seconds=60, step_seconds=1.0):
+    """
+    Repeatedly call a function retrying AssertionError exceptions.
+
+    :param callable_: zero argument function
+    :param timeout_seconds:
+    :param step_seconds:
+
+    :return: return value of successful callable_ invocation
+    """
+    deadline = time.time() + timeout_seconds
+    while True:
+        try:
+            return callable_()
+        except AssertionError as e:
+            logger.info(str(e))
+            if time.time() > deadline:
+                raise e
+            else:
+                time.sleep(step_seconds)

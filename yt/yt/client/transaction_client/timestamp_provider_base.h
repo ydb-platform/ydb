@@ -26,6 +26,7 @@ public:
         NObjectClient::TCellTag clockClusterTag = NObjectClient::InvalidCellTag) override;
 
     TTimestamp GetLatestTimestamp(NObjectClient::TCellTag clockClusterTag = NObjectClient::InvalidCellTag) override;
+    void Reconfigure(const TRemoteTimestampProviderConfigPtr& config) override;
 
 private:
     const std::optional<TDuration> LatestTimestampUpdatePeriod_;

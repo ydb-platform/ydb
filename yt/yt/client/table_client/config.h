@@ -129,6 +129,15 @@ DEFINE_REFCOUNTED_TYPE(TSlimVersionedWriterConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TCompactionHintWriterConfig
+{
+    // Both being overwritten by mount config, not registered in TChunkWriterConfig.
+    TTDigestConfigPtr RowDigest;
+    TMinHashDigestConfigPtr MinHashDigest;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 struct TChunkWriterConfig
     : public NChunkClient::TEncodingWriterConfig
 {
@@ -151,11 +160,16 @@ struct TChunkWriterConfig
 
     bool EnableLargeColumnarStatistics;
 
+    std::optional<bool> EnableSegmentMetaInBlocks;
+    //! This takes precedence over TChunkWriterOptions::EnableColumnMetaInChunkMeta
+    std::optional<bool> EnableColumnMetaInChunkMeta;
+
     TChunkIndexesWriterConfigPtr ChunkIndexes;
 
     TSlimVersionedWriterConfigPtr Slim;
 
-    TVersionedRowDigestConfigPtr VersionedRowDigest;
+    // Being overwritten by mount config, not registered in TChunkWriterConfig.
+    TCompactionHintWriterConfig CompactionHintWriter;
 
     TChunkWriterTestingOptionsPtr TestingOptions;
 
@@ -371,6 +385,21 @@ DEFINE_REFCOUNTED_TYPE(TInsertRowsFormatConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+//! Queues have no legacy of null-to-entity conversion to preserve, so an explicit null
+//! written into an `any` column of a queue stays a null instead of silently becoming
+//! a YSON entity.
+struct TPushQueueProducerFormatConfig
+    : public TInsertRowsFormatConfig
+{
+    REGISTER_YSON_STRUCT(TPushQueueProducerFormatConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TPushQueueProducerFormatConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
 struct TChunkReaderOptions
     : public virtual NYTree::TYsonStruct
 {
@@ -408,11 +437,10 @@ struct TChunkWriterOptions
     bool EnableSkynetSharing;
     bool ReturnBoundaryKeys;
     bool CastAnyToComposite = false;
+    bool CastCompositeToAny;
     bool SingleColumnGroupByDefault = false;
     bool EnableColumnarValueStatistics;
     bool EnableRowCountInColumnarStatistics;
-    bool EnableSegmentMetaInBlocks;
-    bool EnableColumnMetaInChunkMeta;
     bool ConsiderMinRowRangeDataWeight;
 
     NYTree::INodePtr CastAnyToCompositeNode;
@@ -442,18 +470,18 @@ DEFINE_REFCOUNTED_TYPE(TChunkWriterOptions)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TVersionedRowDigestConfig
+struct TMinHashDigestConfig
     : public NYTree::TYsonStruct
 {
-    bool Enable;
-    TTDigestConfigPtr TDigest;
+    int WriteTimestampCount;
+    int DeleteTimestampCount;
 
-    REGISTER_YSON_STRUCT(TVersionedRowDigestConfig);
+    REGISTER_YSON_STRUCT(TMinHashDigestConfig);
 
     static void Register(TRegistrar registrar);
 };
 
-DEFINE_REFCOUNTED_TYPE(TVersionedRowDigestConfig)
+DEFINE_REFCOUNTED_TYPE(TMinHashDigestConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -23,16 +23,16 @@ public:
     TAsyncSemaphoreGuard(TAsyncSemaphoreGuard&& other) noexcept;
     ~TAsyncSemaphoreGuard();
 
-    TAsyncSemaphoreGuard& operator=(TAsyncSemaphoreGuard&& other);
+    TAsyncSemaphoreGuard& operator=(TAsyncSemaphoreGuard&& other) noexcept;
 
     static TAsyncSemaphoreGuard Acquire(TAsyncSemaphorePtr semaphore, i64 slots = 1);
     static TAsyncSemaphoreGuard TryAcquire(TAsyncSemaphorePtr semaphore, i64 slots = 1);
 
-    friend void swap(TAsyncSemaphoreGuard& lhs, TAsyncSemaphoreGuard& rhs);
+    friend void swap(TAsyncSemaphoreGuard& lhs, TAsyncSemaphoreGuard& rhs) noexcept;
 
     TAsyncSemaphoreGuard TransferSlots(i64 slotsToTransfer);
 
-    void Release();
+    void Release() noexcept;
 
     explicit operator bool() const;
 
@@ -43,7 +43,7 @@ private:
 
     TAsyncSemaphoreGuard(TAsyncSemaphorePtr semaphore, i64 slots);
 
-    void MoveFrom(TAsyncSemaphoreGuard&& other);
+    void MoveFrom(TAsyncSemaphoreGuard&& other) noexcept;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -53,7 +53,8 @@ class TAsyncSemaphore
     : public TRefCounted
 {
 public:
-    // Overdrafting allows successfully execute requests that try to acquire more slots than semaphore has in total.
+    // Overdraft allows successfully execute requests that try to acquire more slots than semaphore has in total,
+    // it can happen only if all slots are available for acquisition.
     explicit TAsyncSemaphore(i64 totalSlots, bool enableOverdraft = false);
 
     //! Updates the total number of slots.
@@ -88,6 +89,9 @@ public:
 
     //! Returns the number of free slots.
     i64 GetFree() const;
+
+    //! Returns the number of waiters.
+    int GetWaiterCount() const;
 
     TFuture<void> GetReadyEvent();
 

@@ -65,6 +65,8 @@ struct TStageInfo : private TMoveOnly {
 
     ui32 InputsCount = 0;
     ui32 OutputsCount = 0;
+    NDqProto::EWatermarksMode WatermarksMode = NDqProto::WATERMARKS_MODE_DISABLED;
+    TMaybe<ui64> WatermarksIdleTimeoutUs = Nothing();
 
     TVector<ui64> Tasks;
     TStageInfoMeta Meta;
@@ -91,6 +93,7 @@ struct TChannel {
     bool InMemory = true;
     NDqProto::ECheckpointingMode CheckpointingMode = NDqProto::CHECKPOINTING_MODE_DEFAULT;
     NDqProto::EWatermarksMode WatermarksMode = NDqProto::WATERMARKS_MODE_DISABLED;
+    TMaybe<ui64> WatermarksIdleTimeoutUs = Nothing();
 
     TChannel() = default;
 };
@@ -140,6 +143,7 @@ struct TTaskInput {
     TMaybe<::google::protobuf::Any> SourceSettings;
     TString SourceType;
     NYql::NDqProto::EWatermarksMode WatermarksMode = NYql::NDqProto::EWatermarksMode::WATERMARKS_MODE_DISABLED;
+    TMaybe<ui64> WatermarksIdleTimeoutUs = Nothing();
     TInputMeta Meta;
     TMaybe<TTransform> Transform;
 
@@ -197,6 +201,37 @@ public:
     TTaskMeta Meta;
     NDqProto::ECheckpointingMode CheckpointingMode = NDqProto::CHECKPOINTING_MODE_DEFAULT;
     NDqProto::EWatermarksMode WatermarksMode = NDqProto::WATERMARKS_MODE_DISABLED;
+    TMaybe<ui64> WatermarksIdleTimeoutUs = Nothing();
+
+    // Reason of task creation - for better introspection
+    enum ECreateReason {
+        UNKNOWN = 0,
+
+        LITERAL,
+        RESTORED,
+        FORCED,
+        LEVEL_PREDICTED,
+
+        MINIMUM_COMPUTE,         // 1
+        SYSVIEW_COMPUTE,         // # table ops
+        PREV_STAGE_COMPUTE,      // # original stage tasks
+        AGGREGATION_COMPUTE,     // setting AggregationComputeThreads
+
+        UPSERT_DELETE_DATASHARD, // # pruned partitions
+        DEFAULT_SOURCE_SCAN,     // # pruned partitions
+        DEFAULT_SHARD_SCAN,
+        SHUFFLE_ELIMINATE_SCAN,
+        SINGLE_SOURCE_SCAN,      // 1
+        DEFAULT_SOURCE_READ,     // # external source partitioned tasks
+        SCHEDULED_SOURCE_READ,   // # scheduled tasks
+        SNAPSHOT_SOURCE_READ,    // resource snapshot size x2
+        OLAP_AGGREGATION_SCAN,
+        OLTP_AGGREGATION_SCAN,
+        OLAP_SORT_SCAN,
+        OLTP_SORT_SCAN,
+        OLTP_MAP_JOIN_SCAN,
+        MINIMUM_SCAN,
+    } Reason;
 };
 
 template <class TGraphMeta, class TStageInfoMeta, class TTaskMeta, class TInputMeta, class TOutputMeta>
@@ -298,9 +333,10 @@ public:
         return StagesInfo.emplace(stageInfo.Id, std::move(stageInfo)).second;
     }
 
-    TTaskType& AddTask(TStageInfoType& stageInfo) {
+    TTaskType& AddTask(TStageInfoType& stageInfo, TTaskType::ECreateReason reason = TTaskType::UNKNOWN) {
         auto& task = Tasks.emplace_back(stageInfo);
         task.Id = Tasks.size();
+        task.Reason = reason;
         stageInfo.Tasks.push_back(task.Id);
         return task;
     }
@@ -309,6 +345,159 @@ public:
         StagesInfo.clear();
         Tasks.clear();
         Channels.clear();
+    }
+
+    bool IsEgressTask(const TTaskType& task) const {
+        for (const auto& output : task.Outputs) {
+            for (ui64 channelId : output.Channels) {
+                if (GetChannel(channelId).DstTask) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    bool IsIngress(const TTaskType& task) const {
+        // No inputs at all or there is no input channels with checkpoints.
+        // We don't want to inject checkpoint into tasks that has checkpointed input channels,
+        // otherwise task can be checkpointed twice;
+        // once checkpoint will arrive from channels, it will pause reading from sources too.
+
+        if (!task.Inputs) {
+            return true;
+        }
+
+        bool hasSource = false;
+        for (const auto& input : task.Inputs) {
+            if (input.SourceType) {
+                hasSource = true;
+                continue;
+            }
+
+            for (ui64 channelId : input.Channels) {
+                if (GetChannel(channelId).CheckpointingMode != NDqProto::CHECKPOINTING_MODE_DISABLED) {
+                    return false;
+                }
+            }
+        }
+
+        return hasSource;
+    }
+
+    static bool IsInfiniteSourceType(const TString& sourceType) {
+        return sourceType == PqSource; // Now it is the only infinite source type. Others are finite.
+    }
+
+    void BuildCheckpointingAndWatermarksMode(bool enableCheckpoints, bool enableWatermarks) {
+        if (!enableCheckpoints && !enableWatermarks) {
+            return;
+        }
+
+        std::stack<TTaskType*> tasksStack;
+        std::vector<bool> processedTasks(GetTasks().size());
+        // TODO use toposort instead of Dreadful O(n^2)
+        for (TTaskType& task : GetTasks()) {
+            if (IsEgressTask(task)) {
+                tasksStack.push(&task);
+            }
+        }
+
+        while (!tasksStack.empty()) {
+            TTaskType& task = *tasksStack.top();
+            Y_ABORT_UNLESS(task.Id && task.Id <= processedTasks.size());
+            if (processedTasks[task.Id - 1]) {
+                tasksStack.pop();
+                continue;
+            }
+
+            // Make sure that all input tasks are processed
+            bool allInputsAreReady = true;
+            for (const auto& input : task.Inputs) {
+                for (ui64 channelId : input.Channels) {
+                    const NDq::TChannel& channel = GetChannel(channelId);
+                    Y_ABORT_UNLESS(channel.SrcTask && channel.SrcTask <= processedTasks.size());
+                    if (!processedTasks[channel.SrcTask - 1]) {
+                        allInputsAreReady = false;
+                        tasksStack.push(&GetTask(channel.SrcTask));
+                    }
+                }
+            }
+            if (!allInputsAreReady) {
+                continue;
+            }
+
+            // Current task has all inputs processed, so determine its checkpointing and watermarks mode now.
+            NDqProto::ECheckpointingMode checkpointingMode = NDqProto::CHECKPOINTING_MODE_DISABLED;
+            if (enableCheckpoints) {
+                for (const auto& input : task.Inputs) {
+                    if (input.SourceType) {
+                        if (IsInfiniteSourceType(input.SourceType)) {
+                            checkpointingMode = NDqProto::CHECKPOINTING_MODE_DEFAULT;
+                            break;
+                        }
+                    } else {
+                        for (ui64 channelId : input.Channels) {
+                            const NDq::TChannel& channel = GetChannel(channelId);
+                            if (channel.CheckpointingMode != NDqProto::CHECKPOINTING_MODE_DISABLED) {
+                                checkpointingMode = NDqProto::CHECKPOINTING_MODE_DEFAULT;
+                                break;
+                            }
+                        }
+                        if (checkpointingMode == NDqProto::CHECKPOINTING_MODE_DEFAULT) {
+                            break;
+                        }
+                    }
+                }
+            }
+
+            NDqProto::EWatermarksMode watermarksMode = NDqProto::WATERMARKS_MODE_DISABLED;
+            if (enableWatermarks) {
+                const auto& stageInfo = GetStageInfo(task.StageId);
+                if (stageInfo.WatermarksMode == NDqProto::WATERMARKS_MODE_DEFAULT) {
+                    watermarksMode = NDqProto::WATERMARKS_MODE_DEFAULT;
+                    task.WatermarksIdleTimeoutUs = Max(task.WatermarksIdleTimeoutUs, stageInfo.WatermarksIdleTimeoutUs);
+                }
+                for (auto& input : task.Inputs) {
+                    if (input.SourceType) {
+                        if (input.WatermarksMode == NDqProto::WATERMARKS_MODE_DEFAULT) {
+                            Y_DEBUG_ABORT_UNLESS(IsInfiniteSourceType(input.SourceType));
+                            watermarksMode = NDqProto::WATERMARKS_MODE_DEFAULT;
+                        }
+                    } else {
+                        for (ui64 channelId : input.Channels) {
+                            const NDq::TChannel& channel = GetChannel(channelId);
+                            if (channel.WatermarksMode == NDqProto::WATERMARKS_MODE_DEFAULT) {
+                                watermarksMode = NDqProto::WATERMARKS_MODE_DEFAULT;
+                                input.WatermarksIdleTimeoutUs = Max(input.WatermarksIdleTimeoutUs, channel.WatermarksIdleTimeoutUs);
+                            }
+                        }
+                    }
+                    task.WatermarksIdleTimeoutUs = Max(task.WatermarksIdleTimeoutUs, input.WatermarksIdleTimeoutUs);
+                }
+            } else {
+                for (auto& input : task.Inputs) {
+                    input.WatermarksMode = NDqProto::WATERMARKS_MODE_DISABLED;
+                    input.WatermarksIdleTimeoutUs.Clear();
+                    /* note: GetChannel().WatermarksMode default-initialized to DISABLED */
+                }
+            }
+
+            // Apply mode to task and its outputs.
+            task.CheckpointingMode = checkpointingMode;
+            task.WatermarksMode = watermarksMode;
+            for (const auto& output : task.Outputs) {
+                for (ui64 channelId : output.Channels) {
+                    auto& channel = GetChannel(channelId);
+                    channel.CheckpointingMode = checkpointingMode;
+                    channel.WatermarksMode = watermarksMode;
+                    channel.WatermarksIdleTimeoutUs = task.WatermarksIdleTimeoutUs;
+                }
+            }
+
+            processedTasks[task.Id - 1] = true;
+            tasksStack.pop();
+        }
     }
 
 private:

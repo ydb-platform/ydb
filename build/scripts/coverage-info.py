@@ -98,15 +98,15 @@ def print_stat(da, fnda, teamcity_stat_output):
             tc_file.write("##teamcity[blockClosed name='Code Coverage Summary']\n")
 
 
-def chunks(l, n):
+def chunks(items, n):
     """
     >>> list(chunks(range(10), 3))
     [[0, 1, 2], [3, 4, 5], [6, 7, 8], [9]]
     >>> list(chunks(range(10), 5))
     [[0, 1, 2, 3, 4], [5, 6, 7, 8, 9]]
     """
-    for i in xrange(0, len(l), n):
-        yield l[i : i + n]
+    for i in xrange(0, len(items), n):
+        yield items[i : i + n]
 
 
 def combine_info_files(lcov, files, out_file):

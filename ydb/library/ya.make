@@ -6,6 +6,7 @@ RECURSE(
     arrow_clickhouse
     arrow_kernels
     arrow_parquet
+    aws_init
     backup
     benchmarks
     breakpad
@@ -18,18 +19,22 @@ RECURSE(
     grpc
     http_proxy
     intersection_tree
+    json_index
     keys
+    kll_median
     lockfree_bucket
     logger
     login
     mkql_proto
     naming_conventions
     ncloud
+    nmslib
     pdisk_io
     persqueue
     planner
     pretty_types_print
     protobuf_printer
+    range_treap
     query_actor
     schlab
     security
@@ -42,6 +47,7 @@ RECURSE(
     time_series_vec
     union_copy_set
     wilson_ids
+    wasm
     workload
     workload
     yaml_config

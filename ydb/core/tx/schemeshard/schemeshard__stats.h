@@ -1,6 +1,8 @@
 #pragma once
 
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
+#include <ydb/core/protos/counters_schemeshard.pb.h>
+
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -122,7 +124,7 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
 
     // returns true to continue batching
-    virtual bool PersistSingleStats(const TPathId& pathId, const TItem& item, TTransactionContext& txc, const TActorContext& ctx) = 0;
+    virtual bool PersistSingleStats(const TPathId& pathId, const TItem& item, TInstant now, TTransactionContext& txc, const TActorContext& ctx) = 0;
 
     virtual void ScheduleNextBatch(const TActorContext& ctx) = 0;
 };

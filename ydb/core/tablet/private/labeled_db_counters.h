@@ -24,10 +24,8 @@ public:
     void Apply(ui64 tabletID, const NKikimr::TTabletLabeledCountersBase* labeledCounters) override;
     void ForgetTablet(ui64 tabletID) override;
 
-    const TProtobufTabletLabeledCounters<NKikimr::NPQ::EPartitionLabeledCounters_descriptor>
-        PartitionCounters{"topic_name", 1, "/Root/Db"};
-    const TProtobufTabletLabeledCounters<NKikimr::NPQ::EClientLabeledCounters_descriptor>
-        UserCounters{"client_name||topic_name", 1, "/Root/Db"};
+    const TTabletLabeledCountersBase PartitionCounters = CreateProtobufTabletLabeledCounters<NKikimr::NPQ::EPartitionLabeledCounters_descriptor>("topic_name", 1, "/Root/Db");
+    const TTabletLabeledCountersBase UserCounters = CreateProtobufTabletLabeledCounters<NKikimr::NPQ::EClientLabeledCounters_descriptor>("client_name||topic_name", 1, "/Root/Db");
     const THashMap<TString, TAutoPtr<TAggregatedLabeledCounters>> LabeledCountersByGroupReference = {
         {
             "topic",

@@ -6,6 +6,8 @@
 #include "base/base.h"
 #include "audit_log.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::GRPC_SERVER
+
 namespace NKikimr {
 namespace NGRpcService {
 
@@ -27,15 +29,14 @@ void AuditLogConn(const IRequestProxyCtx* ctx, const TString& database, const TS
     );
 
     // and transitional, to be removed, output to the common log
-    LOG_NOTICE_S(TlsActivationContext->AsActorContext(), NKikimrServices::GRPC_SERVER, "AUDIT: "
-        << "request name: " << ctx->GetRequestName()
-        << ", database: " << database
-        << ", peer: " << ctx->GetPeerName()
-        << ", subject: " << (userSID ? userSID : "no subject")
-    );
+    YDB_LOG_NOTICE("AUDIT: request",
+        {"name", ctx->GetRequestName()},
+        {"database", database},
+        {"peer", ctx->GetPeerName()},
+        {"subject", (userSID ? userSID : "no subject")});
 }
 
-void AuditLog(ui32 status, const TAuditLogParts& parts)
+void AuditLog(std::optional<ui32> status, const TAuditLogParts& parts)
 {
     static const TString GrpcProxyComponentName = "grpc-proxy";
 
@@ -47,11 +48,15 @@ void AuditLog(ui32 status, const TAuditLogParts& parts)
             AUDIT_PART(name, (!value.empty() ? value : EmptyValue))
         }
 
-        AUDIT_PART("status", (status == Ydb::StatusIds::SUCCESS ? TString("SUCCESS") : TString("ERROR")))
-        AUDIT_PART("detailed_status", (Ydb::StatusIds::StatusCode_IsValid(status)
-            ? TString(Ydb::StatusIds::StatusCode_Name(status))
-            : ToString(status)
-        ))
+        if (status) {
+            AUDIT_PART("status", (*status == Ydb::StatusIds::SUCCESS ? "SUCCESS" : "ERROR"))
+            AUDIT_PART("detailed_status", (Ydb::StatusIds::StatusCode_IsValid(*status)
+                ? TString(Ydb::StatusIds::StatusCode_Name(*status))
+                : ToString(*status)
+            ))
+        } else {
+            AUDIT_PART("status", "IN-PROCESS")
+        }
     );
 }
 

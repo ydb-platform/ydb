@@ -13,6 +13,7 @@ PEERDIR(
     ydb/core/grpc_services/local_rpc
     ydb/core/grpc_services/base
     ydb/core/grpc_services
+    ydb/public/api/protos
 )
 
 END()

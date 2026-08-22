@@ -1,7 +1,12 @@
 #include "viewer_topic_data.h"
+#include "log.h"
 #include <library/cpp/protobuf/json/proto2json.h>
+#include <ydb/core/persqueue/public/constants.h>
+#include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/codecs.h>
 #include <ydb/services/lib/auth/auth_helpers.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::VIEWER
 
 namespace NKikimr::NViewer {
 
@@ -39,7 +44,7 @@ void TTopicData::HandleDescribe(TEvTxProxySchemeCache::TEvNavigateKeySetResult::
 
                 case NSchemeCache::TSchemeCacheNavigate::EStatus::AccessDenied:
                     error << "Access denied to topuc: '" << TopicPath << "'";
-                    return ReplyAndPassAway(GetHTTPFORBIDDEN("text/plain", error));
+                    return ReplyAndPassAway(GETHTTPACCESSDENIED("text/plain", error));
 
                 default:
                     return ReplyAndPassAway(GetHTTPINTERNALERROR("text/plain", "Got unknown error type trying to describe topic"));
@@ -49,24 +54,31 @@ void TTopicData::HandleDescribe(TEvTxProxySchemeCache::TEvNavigateKeySetResult::
         error << "While trying to find topic: '" << TopicPath << "' got error '" << NavigateResponse->GetError() << "'";
         return ReplyAndPassAway(GetHTTPINTERNALERROR("text/plain", error));
     }
-    const auto& response = request.ResultSet.front();
+
+    const auto& response = request.ResultSet[0];
+    {
+        TString authError;
+        auto pathWithName = TStringBuilder() << "topic " << TopicPath;
+        auto authResult = NKikimr::NTopicHelpers::CheckAccess(response, Event->Get()->UserToken, pathWithName, authError);
+        switch (authResult) {
+            case NKikimr::NTopicHelpers::EAuthResult::AuthOk:
+                break;
+            case NKikimr::NTopicHelpers::EAuthResult::AccessDenied:
+                return ReplyAndPassAway(GETHTTPACCESSDENIED("text/plain", authError));
+        }
+    }
+    if (response.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {
+        if (ProcessCdc(response)) {
+            RequestDone();
+            return;
+        }
+    }
+
     if (response.Self->Info.GetPathType() != NKikimrSchemeOp::EPathTypePersQueueGroup) {
         auto error = TStringBuilder() << "No such topic '" << TopicPath << "";
         return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", error));
     }
 
-    {
-        TString authError;
-        auto pathWithName = TStringBuilder() << "topic " << TopicPath;
-        auto authResult = NKikimr::NTopicHelpers::CheckAccess(*AppData(ActorContext()), response, Event->Get()->UserToken, pathWithName, authError);
-        switch (authResult) {
-            case NKikimr::NTopicHelpers::EAuthResult::AuthOk:
-                break;
-            case NKikimr::NTopicHelpers::EAuthResult::AccessDenied:
-            case NKikimr::NTopicHelpers::EAuthResult::TokenRequired:
-                return ReplyAndPassAway(GetHTTPFORBIDDEN("text/plain", authError));
-        }
-    }
     const auto& partitions = response.PQGroupInfo->Description.GetPartitions();
     for (auto& partition : partitions) {
         auto partitionId = partition.GetPartitionId();
@@ -78,6 +90,21 @@ void TTopicData::HandleDescribe(TEvTxProxySchemeCache::TEvNavigateKeySetResult::
         }
     }
     ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "No such partition in topic"));
+}
+
+bool TTopicData::ProcessCdc(const NSchemeCache::TSchemeCacheNavigate::TEntry& response) {
+    if (!response.ListNodeEntry) {
+        ReplyAndPassAway(
+                GetHTTPINTERNALERROR("text/plain", "Error trying to describe CDC stream"));
+        return true;
+    }
+    if (response.ListNodeEntry->Children.size() != 1)
+        return false;
+
+    auto privateTopicName = response.ListNodeEntry->Children.at(0).Name;
+    TopicPath = JoinPath(ChildPath(NKikimr::SplitPath(TopicPath), privateTopicName));
+    NavigateResponse = MakeRequestSchemeCacheNavigateWithToken(TopicPath, NACLib::DescribeSchema, 1);
+    return true;
 }
 
 void TTopicData::SendPQReadRequest() {
@@ -99,6 +126,7 @@ void TTopicData::SendPQReadRequest() {
 
     cmdRead->SetTimeoutMs(READ_TIMEOUT_MS);
     cmdRead->SetExternalOperation(true);
+    cmdRead->SetCanReadBatches(true);
 
     auto req = MakeHolder<TEvPersQueue::TEvRequest>();
     req->Record.Swap(&request);
@@ -106,9 +134,10 @@ void TTopicData::SendPQReadRequest() {
 }
 
 void TTopicData::HandlePQResponse(TEvPersQueue::TEvResponse::TPtr& ev) {
+
     ReadResponse = ev->Release();
     const auto& record = ReadResponse->Record;
-    if (record.GetStatus() ==  NMsgBusProxy::MSTATUS_ERROR) {
+    if (record.GetStatus() == NMsgBusProxy::MSTATUS_ERROR) {
         switch (record.GetErrorCode()) {
             case ::NPersQueue::NErrorCode::READ_ERROR_TOO_SMALL_OFFSET:
             case ::NPersQueue::NErrorCode::READ_ERROR_TOO_BIG_OFFSET:
@@ -151,51 +180,117 @@ void TTopicData::FillProtoResponse(ui64 maxTotalSize) {
         totalSize += data.size();
         protoMessage.SetMessage(std::move(Base64Encode(data)));
     };
+    auto fillViewerMessageFields = [](NKikimrViewer::TTopicDataResponse::TMessage* proto,
+                                            const auto& r,
+                                            const auto& dataChunk,
+                                            const TString& decodedSrcId,
+                                            ui64 offset,
+                                            ui64 seqNo,
+                                            i64 createTimestampMs) {
+        proto->SetOffset(offset);
+        proto->SetCreateTimestamp(createTimestampMs);
+        proto->SetWriteTimestamp(r.GetWriteTimestampMS());
+        i64 msgDiff = r.GetWriteTimestampMS() - createTimestampMs;
+        if (msgDiff < 0) {
+            msgDiff = 0;
+        }
+        proto->SetTimestampDiff(msgDiff);
+        proto->SetStorageSize(dataChunk.GetData().size());
+        proto->SetCodec(dataChunk.GetCodec());
+        proto->SetProducerId(decodedSrcId);
+        proto->SetSeqNo(seqNo);
+        proto->SetIp(dataChunk.GetIp());
+    };
+    auto copyMessageMetadata = [](NKikimrViewer::TTopicDataResponse::TMessage* proto, const auto& dataChunk) {
+        if (dataChunk.MessageMetaSize() > 0) {
+            for (const auto& metadata : dataChunk.GetMessageMeta()) {
+                auto* metadataProto = proto->AddMessageMetadata();
+                metadataProto->SetKey(metadata.key());
+                metadataProto->SetValue(metadata.value());
+            }
+        }
+    };
     ProtoResponse.SetStartOffset(cmdRead.GetStartOffset());
     ProtoResponse.SetEndOffset(cmdRead.GetEndOffset());
-
     for (auto& r : cmdRead.GetResult()) {
         if (totalSize >= maxTotalSize) {
             isTruncated = true;
             break;
         }
         auto dataChunk = (NKikimr::GetDeserializedData(r.GetData()));
-        auto* messageProto = ProtoResponse.AddMessages();
-        messageProto->SetOffset(r.GetOffset());
 
-        messageProto->SetCreateTimestamp(r.GetCreateTimestampMS());
-        messageProto->SetWriteTimestamp(r.GetWriteTimestampMS());
-        i64 diff = r.GetWriteTimestampMS() - r.GetCreateTimestampMS();
-        if (diff < 0) {
-            diff = 0;
+        TString decodedSrcId;
+        if (!r.GetSourceId().empty()) {
+            decodedSrcId = NPQ::NSourceIdEncoding::Decode(r.GetSourceId());
         }
-        messageProto->SetTimestampDiff(diff);
-        messageProto->SetStorageSize(dataChunk.GetData().size());
 
         if (dataChunk.HasCodec() && dataChunk.GetCodec() != NPersQueueCommon::RAW) {
             const NYdb::NTopic::ICodec* codec = GetCodec(static_cast<NPersQueueCommon::ECodec>(dataChunk.GetCodec()));
             if (codec == nullptr) {
                 return ReplyAndPassAway(GetHTTPINTERNALERROR("text/plain", "Message decompression failed"));
             }
-            setData(*messageProto, std::move(codec->Decompress(dataChunk.GetData())));
-        } else {
-            setData(*messageProto, std::move(*dataChunk.MutableData()));
-        }
-        messageProto->SetCodec(dataChunk.GetCodec());
-        TString decodedSrcId;
-        if (!r.GetSourceId().empty()) {
-            decodedSrcId = NPQ::NSourceIdEncoding::Decode(r.GetSourceId());
-        }
-        messageProto->SetProducerId(decodedSrcId);
-        messageProto->SetSeqNo(r.GetSeqNo());
+            try {
+                auto decompressed = codec->DecompressData(dataChunk.GetData());
+                if (decompressed.Messages.empty()) {
+                    YDB_LOG_ERROR("Topic data decompression failed",
+                        {"logPrefix", GetLogPrefix()},
+                        {"path", TopicPath},
+                        {"partition", PartitionId},
+                        {"offset", r.GetOffset()},
+                        {"codec", dataChunk.GetCodec()},
+                        {"error", "No messages in decompressed data"});
 
-        if (dataChunk.MessageMetaSize() > 0) {
-            for (const auto& metadata : dataChunk.GetMessageMeta()) {
-                auto* metadataProto = messageProto->AddMessageMetadata();
-                auto jsonMetadataItem = NJson::TJsonValue(NJson::EJsonValueType::JSON_MAP);
-                metadataProto->SetKey(metadata.key());
-                metadataProto->SetValue(metadata.value());
+                    return ReplyAndPassAway(GetHTTPINTERNALERROR("text/plain", "Message decompression failed"));
+                }
+                for (size_t i = 0; i < decompressed.Messages.size(); ++i) {
+                    const auto& msg = decompressed.Messages[i];
+
+                    ui64 offset = r.GetOffset();
+                    ui64 seqNo = r.GetSeqNo();
+                    i64 createTs = r.GetCreateTimestampMS();
+                    if (msg.Meta) {
+                        offset = r.GetOffset() + static_cast<ui64>(msg.Meta->OffsetDelta);
+                        seqNo = static_cast<ui64>(*decompressed.BatchBaseSequence) + static_cast<ui64>(msg.Meta->SequenceDelta);
+                        createTs = *decompressed.BatchBaseTimestampMs + msg.Meta->TimestampDelta;
+                    }
+
+                    if (offset < Offset) {
+                        continue;
+                    }
+                    if (LastOffset > 0 && offset >= LastOffset) {
+                        break;
+                    }
+                    if (static_cast<ui64>(ProtoResponse.MessagesSize()) >= Limit) {
+                        break;
+                    }
+                    auto* proto = ProtoResponse.AddMessages();
+                    fillViewerMessageFields(proto, r, dataChunk, decodedSrcId, offset, seqNo, createTs);
+                    setData(*proto, TString(msg.Data));
+                    copyMessageMetadata(proto, dataChunk);
+                    if (totalSize >= maxTotalSize) {
+                        isTruncated = true;
+                        break;
+                    }
+                }
+                continue;
+            } catch (...) {
+                YDB_LOG_ERROR("Topic data decompression failed",
+                    {"logPrefix", GetLogPrefix()},
+                    {"path", TopicPath},
+                    {"partition", PartitionId},
+                    {"offset", r.GetOffset()},
+                    {"codec", dataChunk.GetCodec()},
+                    {"error", CurrentExceptionMessage()});
+                return ReplyAndPassAway(GetHTTPINTERNALERROR("text/plain", "Message decompression failed"));
             }
+        } else {
+            if (static_cast<ui64>(ProtoResponse.MessagesSize()) >= Limit) {
+                break;
+            }
+            auto* messageProto = ProtoResponse.AddMessages();
+            fillViewerMessageFields(messageProto, r, dataChunk, decodedSrcId, r.GetOffset(), r.GetSeqNo(), r.GetCreateTimestampMS());
+            setData(*messageProto, std::move(*dataChunk.MutableData()));
+            copyMessageMetadata(messageProto, dataChunk);
         }
     }
     ProtoResponse.SetTruncated(isTruncated);
@@ -215,6 +310,10 @@ NYdb::NTopic::ICodec* TTopicData::GetCodec(NPersQueueCommon::ECodec codec) {
     auto iter = Codecs.find(codecId);
     if (iter != Codecs.end()) {
         return iter->second.Get();
+    }
+    if (codecId == static_cast<ui32>(Ydb::Topic::CODEC_KAFKA_BATCH) - 1) {
+        auto [iterator, ins] = Codecs.emplace(codecId, MakeHolder<NYdb::NTopic::TKafkaBatchCodec>());
+        return iterator->second.Get();
     }
     switch (codec) {
         case NPersQueueCommon::GZIP: {
@@ -236,6 +335,9 @@ void TTopicData::StateRequestedDescribe(TAutoPtr<::NActors::IEventHandle>& ev) {
         hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleDescribe);
         hFunc(TEvPersQueue::TEvResponse, HandlePQResponse);
         cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
+
+        default:
+            TBase::StateWork(ev);
     }
 }
 
@@ -278,7 +380,7 @@ void TTopicData::Bootstrap() {
 
     TopicPath = params.Get("path");
     if (!TopicPath.empty()) {
-        NavigateResponse = MakeRequestSchemeCacheNavigateWithToken(TopicPath, true, NACLib::DescribeSchema, 1);
+        NavigateResponse = MakeRequestSchemeCacheNavigateWithToken(TopicPath, NACLib::DescribeSchema, 1);
     } else {
         return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "field 'path' is required and should not be empty"));
     }
@@ -287,4 +389,3 @@ void TTopicData::Bootstrap() {
 
 
 } // namespace NKikimr::NViewer
-

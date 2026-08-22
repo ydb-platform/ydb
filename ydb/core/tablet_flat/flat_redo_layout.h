@@ -17,6 +17,7 @@ namespace NRedo {
         UpdateTx = 10,
         CommitTx = 11,
         RemoveTx = 12,
+        LockRowTx = 13,
     };
 
     #pragma pack(push, 1)
@@ -124,6 +125,16 @@ namespace NRedo {
         ui64 RowVersionTxId;
     } Y_PACKED;
 
+    struct TEvLockRowTx {
+        TChunk Label;
+
+        ui32 Table;
+        ELockMode Mode;
+        ui8 Pad0_;
+        ui16 Keys;
+        ui64 TxId;
+    } Y_PACKED;
+
     struct TValue {
         bool IsNull() const noexcept
         {
@@ -147,8 +158,12 @@ namespace NRedo {
     static_assert(sizeof(TEvBegin_v1) == 32, "");
     static_assert(sizeof(TEvUpdate) == 18, "");
     static_assert(sizeof(TEvUpdateV) == 16, "");
+    static_assert(sizeof(TEvUpdateTx) == 8);
     static_assert(sizeof(TEvAnnex) == 12, "");
     static_assert(sizeof(TEvFlush) == 32, "");
+    static_assert(sizeof(TEvRemoveTx) == 24);
+    static_assert(sizeof(TEvCommitTx) == 40);
+    static_assert(sizeof(TEvLockRowTx) == 24);
 
 }
 }

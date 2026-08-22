@@ -687,7 +687,11 @@ In addition, there is a **root SchemeShard** that stores information about datab
 
 #### CMS {#cms}
 
-**CMS** or **cluster management system** is a system tablet responsible for managing information about the current state of the [cluster {{ ydb-short-name }}](#cluster). This information is used to perform gradual cluster restarts without affecting user workloads, maintenance, cluster reconfiguration, etc.
+**CMS** or **cluster management system** is a system tablet responsible for managing information about the current state of the [{{ ydb-short-name }} cluster](#cluster). This information is used to perform gradual cluster restarts without affecting user workloads, maintenance, cluster reconfiguration, and so on. CMS includes Sentinel, a component that implements [SelfHeal](#self-heal).
+
+#### SelfHeal {#self-heal}
+
+**SelfHeal** is a set of mechanisms that automatically maintain and restore cluster fault tolerance. [Storage SelfHeal](../maintenance/manual/selfheal.md) relocates [VDisks](#vdisk) of storage groups after prolonged node or disk failures. [State Storage SelfHeal](../maintenance/manual/selfheal_statestorage.md) relocates replicas of metadata distribution subsystems after failures and adds replicas when new nodes appear.
 
 #### NodeBroker {#node-broker}
 

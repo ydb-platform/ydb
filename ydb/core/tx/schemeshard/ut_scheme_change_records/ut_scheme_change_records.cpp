@@ -1094,4 +1094,36 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         UNIT_ASSERT_C(returned.contains(all[3]), "order " << all[3] << " missing");
         UNIT_ASSERT_VALUES_EQUAL(returned.size(), 3u);
     }
+
+    Y_UNIT_TEST(ZeroMaxSchemeChangeRecordsIsIgnored) {
+        TSchemeShard* schemeshard = nullptr;
+        auto ssFactory = [&schemeshard](const TActorId& tablet, TTabletStorageInfo* info) {
+            schemeshard = new TSchemeShard(tablet, info);
+            return schemeshard;
+        };
+        TTestBasicRuntime runtime;
+        TTestEnvOptions opts;
+        TTestEnv env(runtime, opts, ssFactory);
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "zero:sub", regHandle);
+
+        const ui64 before = schemeshard->MaxSchemeChangeRecords;
+        UNIT_ASSERT_C(before > 0, "precondition: the default cap must be non-zero");
+
+        {
+            auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+            request->Record.MutableConfig()->MutableSchemeShardConfig()->SetMaxSchemeChangeRecords(0);
+            SetConfig(runtime, TTestTxConfig::SchemeShard, std::move(request));
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL_C(schemeshard->MaxSchemeChangeRecords, before,
+            "a zero cap rejects every DDL including after a force-advance, so it "
+            "must be ignored rather than applied");
+
+        // The consequence that matters: DDL is still accepted.
+        TestMkDir(runtime, ++txId, "/MyRoot", "Dir1");
+        env.TestWaitNotification(runtime, txId);
+    }
 }

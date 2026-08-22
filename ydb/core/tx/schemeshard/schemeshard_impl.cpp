@@ -8842,7 +8842,14 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfi
         MaxBuildIndexShardsInFlight = schemeShardConfig.GetMaxBuildIndexShardsInFlight();
         MaxStoredIndexBuilds = schemeShardConfig.GetMaxStoredIndexBuilds();
         ConfigureCondErase(schemeShardConfig, ctx);
-        MaxSchemeChangeRecords = schemeShardConfig.GetMaxSchemeChangeRecords();
+        // A zero cap rejects every DDL unconditionally, force-advance
+        // included, since unacked >= 0 always holds. Keep the previous value.
+        if (const ui64 maxRecords = schemeShardConfig.GetMaxSchemeChangeRecords()) {
+            MaxSchemeChangeRecords = maxRecords;
+        } else {
+            LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "Ignoring MaxSchemeChangeRecords=0, keeping " << MaxSchemeChangeRecords);
+        }
         SchemeChangeSubscriberStaleTtl =
             TDuration::Seconds(schemeShardConfig.GetSchemeChangeSubscriberStaleTtlSeconds());
     }

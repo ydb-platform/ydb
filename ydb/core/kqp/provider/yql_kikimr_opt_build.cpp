@@ -96,6 +96,8 @@ struct TKiExploreTxResults {
         THashMap<TString, TPrimitiveYdbOperations> TablePrimitiveOps; // needed to split query into blocks
         TVector<TKiOperation> TableOperations;
         bool HasUncommittedChangesRead = false;
+        // Non-empty on a block that is nothing but an unsafe truncate of this path.
+        TString UnsafeTruncatePath;
     };
 
     bool ConcurrentResults = true;
@@ -760,7 +762,30 @@ bool ExploreNode(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink,
         }
 
         txRes.Ops.insert(node.Raw());
-        txRes.AddTableOperation(BuildYdbOpNode(cluster, TYdbOperation::TruncateTable, truncateTable.Pos(), ctx));
+
+        // The settings themselves are validated in HandleTruncateTable; here the two forms only
+        // need telling apart, because only the plain one is a scheme operation.
+        bool unsafe = false;
+        for (const auto& setting : truncateTable.Settings()) {
+            if (setting.Name().Value() == "UNSAFE") {
+                unsafe = setting.Value().Cast<TCoBool>().Literal().Value() == "true";
+            }
+        }
+
+        if (!unsafe) {
+            txRes.AddTableOperation(BuildYdbOpNode(cluster, TYdbOperation::TruncateTable, truncateTable.Pos(), ctx));
+            return true;
+        }
+
+        // The unsafe form is a data plane operation and must keep its place in statement order.
+        // Reads record no table operations, so nothing else would ever start a new block here and
+        // a truncate between two SELECTs would sink into the block they share. Give it a block of
+        // its own, and start another one so whatever follows lands after it.
+        // No TKiOperation is recorded: BuildYdbOpNode leaves the table name empty, and every
+        // consumer of the operation list resolves that name against the table metadata.
+        txRes.AddQueryBlock();
+        txRes.QueryBlocks.back().UnsafeTruncatePath = TString(truncateTable.TablePath().Value());
+        txRes.AddQueryBlock();
         return true;
     }
 
@@ -878,6 +903,7 @@ TVector<TKiDataQueryBlock> MakeKiDataQueryBlocks(TExprBase node, const TKiExplor
     for (const auto& block : txExplore.QueryBlocks) {
         TKiDataQueryBlockSettings settings;
         settings.HasUncommittedChangesRead = block.HasUncommittedChangesRead;
+        settings.UnsafeTruncatePath = block.UnsafeTruncatePath;
 
         TExprNode::TListType queryResults;
         for (auto& result : block.Results) {
@@ -1177,6 +1203,9 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf datab
         return MakeSchemeTx(commit, ctx);
     }
 
+    // An unsafe truncate deliberately does not go through MakeSchemeTx: it is a data plane
+    // operation and must be able to sit between data statements of one query. It rides along as a
+    // block of its own and becomes its own physical transaction further down the pipeline.
     auto dataQueryBlocks = MakeKiDataQueryBlocks(commit.World(), txExplore, ctx, types);
 
     TKiExecDataQuerySettings execSettings;

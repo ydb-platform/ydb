@@ -1586,6 +1586,46 @@ void TSysLocks::BreakAllLocks(const TTableId& tableId) {
     }
 }
 
+TSysLocks::TBreakLocksStats TSysLocks::BreakAllLocksExcept(const TTableId& tableId, TConstArrayRef<ui64> preserveLockIds) {
+    Y_ENSURE(Update);
+    Y_ENSURE(!tableId.HasSamePath(TTableId(TSysTables::SysSchemeShard, TSysTables::SysTableLocks)));
+    if (!Self->IsUserTable(tableId))
+        return {};
+
+    auto* table = Locker.FindTablePtr(tableId);
+    if (!table)
+        return {};
+
+    const absl::flat_hash_set<ui64> preserved(preserveLockIds.begin(), preserveLockIds.end());
+    absl::flat_hash_set<ui64> broken;
+    absl::flat_hash_set<ui64> spared;
+    TBreakLocksStats stats;
+
+    // Note this covers write locks as well, unlike BreakAllLocks: a lock taken by an uncommitted
+    // write without any read is in neither ShardLocks nor Ranges, so BreakAllLocks alone would
+    // leave it intact. Dedup is required because one lock may sit in several of the lists, and
+    // BreakLocks is an intrusive list.
+
+    auto breakUnlessPreserved = [&](TLockInfo* lock) {
+        const ui64 lockId = lock->GetLockId();
+        if (preserved.contains(lockId)) {
+            if (spared.insert(lockId).second)
+                ++stats.Preserved;
+            return;
+        }
+        if (!broken.insert(lockId).second)
+            return;
+        Update->AddBreakLock(lock);
+        ++stats.Broken;
+    };
+
+    table->ForEachShardLock(breakUnlessPreserved);
+    table->ForEachRangeLock(breakUnlessPreserved);
+    table->ForEachWriteLock(breakUnlessPreserved);
+
+    return stats;
+}
+
 void TSysLocks::BreakSetLocks() {
     Y_ENSURE(Update && Update->LockTxId);
 

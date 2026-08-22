@@ -2951,11 +2951,33 @@ private:
     }
 
     virtual TStatus HandleTruncateTable(NNodes::TKiTruncateTable node, TExprContext& ctx) override {
-        // there is will be checking on feature flag
         node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
 
         if (!node.TablePath().Value()) {
             ctx.AddError(TIssue(ctx.GetPosition(node.TablePath().Pos()), "TablePath can't be empty."));
+            return TStatus::Error;
+        }
+
+        static const THashSet<TString> supportedSettings = {"UNSAFE"};
+
+        bool unsafe = false;
+        for (const auto& setting : node.Settings()) {
+            const auto name = TString(setting.Name().Value());
+            if (!supportedSettings.contains(name)) {
+                ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                    TStringBuilder() << "Unknown TRUNCATE TABLE setting: " << name));
+                return TStatus::Error;
+            }
+
+            if (name == "UNSAFE") {
+                // The grammar only admits a bool literal here, so this cannot be anything else.
+                unsafe = setting.Value().Cast<TCoBool>().Literal().Value() == "true";
+            }
+        }
+
+        if (unsafe && !SessionCtx->Config().FeatureFlags.GetEnableUnsafeTruncateTable()) {
+            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
+                "TRUNCATE TABLE ... WITH (unsafe = true) is disabled. Please contact your system administrator to enable it"));
             return TStatus::Error;
         }
 

@@ -735,6 +735,8 @@ message TKqpPhyTx {
         TYPE_SCAN = 3;
         TYPE_GENERIC = 4;
         TYPE_SCHEME = 5;
+        // Data-plane truncate driven by KQP, see TKqpUnsafeTruncateOperation.
+        TYPE_UNSAFE_TRUNCATE = 6;
     };
 
     EType Type = 1;
@@ -748,6 +750,18 @@ message TKqpPhyTx {
     repeated string SecretNames = 9;
     bool EnableShuffleElimination = 10;
     uint32 DqChannelVersion = 11;
+    TKqpUnsafeTruncateOperation UnsafeTruncate = 12;
+}
+
+// TRUNCATE TABLE ... WITH (unsafe = true). Unlike TKqpSchemeOperation.TruncateTable this never
+// reaches SchemeShard: KQP drives a distributed 2PC over the shards of the table and of every
+// sync index impl table.
+//
+// Only the path is carried. The DDL compilation path registers the table but never loads its
+// metadata, so path ids, schema versions and the set of index impl tables are all discovered by
+// TKqpUnsafeTruncateExecuter against the live schema instead.
+message TKqpUnsafeTruncateOperation {
+    string TablePath = 1;
 }
 
 message TKqpTableInfo {

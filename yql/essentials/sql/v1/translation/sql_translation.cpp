@@ -902,6 +902,34 @@ bool TSqlTranslation::ParseDatabaseSetting(const TRule_database_setting& in, THa
     return true;
 }
 
+bool TSqlTranslation::ParseTruncateTableSettings(const TRule_truncate_table_settings& in, THashMap<TString, TNodePtr>& out) {
+    if (!ParseTruncateTableSetting(in.GetRule_truncate_table_setting1(), out)) {
+        return false;
+    }
+    for (const auto& setting : in.GetBlock2()) {
+        if (!ParseTruncateTableSetting(setting.GetRule_truncate_table_setting2(), out)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool TSqlTranslation::ParseTruncateTableSetting(const TRule_truncate_table_setting& in, THashMap<TString, TNodePtr>& out) {
+    const auto setting = to_upper(Id(in.GetRule_an_id1(), *this));
+
+    if (out.contains(setting)) {
+        Ctx_.Error() << "Duplicate setting: " << setting;
+        return false;
+    }
+
+    const auto value = ParseBool(Ctx_, in.GetRule_truncate_table_setting_value3().GetRule_bool_value1());
+    if (!value) {
+        return false;
+    }
+    out[setting] = BuildLiteralBool(Ctx_.Pos(), *value);
+    return true;
+}
+
 bool TSqlTranslation::FillIndexSettings(const TRule_with_index_settings& settingsNode,
                                         TIndexDescription::TIndexSettings& indexSettings) {
     const auto& firstEntry = settingsNode.GetRule_index_setting_entry3();

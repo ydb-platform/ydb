@@ -1111,6 +1111,13 @@ public:
                     secureParams.emplace(secretName, "");
                 }
 
+                // An unsafe truncate has no stages and a type of its own, so leaving it in would
+                // trip the tasks graph on "mixed physical tx types" as soon as a query holds both
+                // it and data transactions.
+                if (tx->GetType() == NKqpProto::TKqpPhyTx::TYPE_UNSAFE_TRUNCATE) {
+                    continue;
+                }
+
                 txs.emplace_back(tx, QueryState->QueryData);
                 try {
                     QueryState->QueryData->PrepareParameters(tx, QueryState->PreparedQuery, txAlloc->TypeEnv);
@@ -1121,7 +1128,11 @@ public:
                 }
             }
 
-            if (!txs.empty() && txs.front().Body->GetType() != NKqpProto::TKqpPhyTx::TYPE_SCHEME && isValidParams) {
+            // A scheme tx has no stages either, and it is never mixed with anything else.
+            const bool buildsTasksGraph = !txs.empty()
+                && txs.front().Body->GetType() != NKqpProto::TKqpPhyTx::TYPE_SCHEME;
+
+            if (buildsTasksGraph && isValidParams) {
                 auto tasksGraph = TKqpTasksGraph(
                     Settings.Database, txs, txAlloc,
                     Settings.TableService.GetResourceManager(),
@@ -1501,10 +1512,18 @@ public:
 
         const NKqpProto::TKqpPhyQuery& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
 
-        auto checkSchemeTx = [&]() {
+        // Sink settings are only emitted for transactions that write through a sink. A scheme tx
+        // never does, and neither does an unsafe truncate - it drives its own shard writes - so a
+        // query made only of those carries no sink settings at all. A query that also holds data
+        // transactions does carry them, and takes the branches above instead.
+        auto checkNoSinkTx = [&]() {
             for (const auto &tx : phyQuery.GetTransactions()) {
-                if (tx.GetType() != NKqpProto::TKqpPhyTx::TYPE_SCHEME) {
-                    return false;
+                switch (tx.GetType()) {
+                    case NKqpProto::TKqpPhyTx::TYPE_SCHEME:
+                    case NKqpProto::TKqpPhyTx::TYPE_UNSAFE_TRUNCATE:
+                        break;
+                    default:
+                        return false;
                 }
             }
             return true;
@@ -1520,7 +1539,7 @@ public:
                 return false;
             }
         } else {
-            AFL_ENSURE(checkSchemeTx());
+            AFL_ENSURE(checkNoSinkTx());
         }
 
         if (phyQuery.HasEnableHtapTx()) {
@@ -1533,7 +1552,7 @@ public:
                 return false;
             }
         } else {
-            AFL_ENSURE(checkSchemeTx());
+            AFL_ENSURE(checkNoSinkTx());
         }
 
         const bool hasOlapWrite = ::NKikimr::NKqp::HasOlapTableWriteInTx(phyQuery);
@@ -2019,6 +2038,20 @@ public:
                     SendToSchemeExecuter(tx);
                     return false;
 
+                case NKqpProto::TKqpPhyTx::TYPE_UNSAFE_TRUNCATE:
+                    // Deliberately skips the "scheme operations inside transaction" guard above:
+                    // this is a data-plane operation and its whole point is to run inside the
+                    // user transaction. It is still its own distributed transaction, applied
+                    // immediately and never rolled back with the surrounding one.
+                    if (QueryState->TxCtx->Readonly) {
+                        ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
+                            "Unsafe TRUNCATE TABLE cannot be executed in a read-only transaction");
+                        return true;
+                    }
+                    YQL_ENSURE(tx->StagesSize() == 0);
+                    SendToUnsafeTruncateExecuter(tx);
+                    return false;
+
                 case NKqpProto::TKqpPhyTx::TYPE_DATA:
                 case NKqpProto::TKqpPhyTx::TYPE_GENERIC:
                     if (QueryState->TxCtx->EffectiveIsolationLevel == NKqpProto::ISOLATION_LEVEL_UNDEFINED) {
@@ -2214,6 +2247,22 @@ public:
             QueryState->IsCreateTableAs(), TempTablesState.TempDirName, QueryState->UserRequestContext,
             expectsResult, expectsResult ? QueryState->QueryData->GetAllocState() : nullptr,
             KqpTempTablesAgentActor);
+
+        ExecuterId = RegisterWithSameMailbox(executerActor);
+
+        ++QueryState->CurrentTx;
+    }
+
+    void SendToUnsafeTruncateExecuter(const TKqpPhyTxHolder::TConstPtr& tx) {
+        YQL_ENSURE(QueryState);
+
+        // The lock id of the user transaction, so the shards spare its locks while breaking
+        // everyone else's. Zero when the truncate is the first statement and no lock exists yet.
+        const ui64 userLockTxId = QueryState->TxCtx ? QueryState->TxCtx->LockHandle.GetLockId() : 0;
+
+        auto executerActor = CreateKqpUnsafeTruncateExecuter(
+            tx, SelfId(), Settings.Database, QueryState->UserToken, userLockTxId,
+            QueryState->UserRequestContext, QueryState->QueryData->GetAllocState());
 
         ExecuterId = RegisterWithSameMailbox(executerActor);
 

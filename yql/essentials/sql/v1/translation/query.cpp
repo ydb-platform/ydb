@@ -1640,7 +1640,6 @@ public:
     }
 
     bool DoInit(TContext& ctx, ISource* src) override {
-        Y_UNUSED(Params_);
         auto keys = Table_.Keys->GetTableKeys()->BuildKeys(ctx, ITableKeys::EBuildKeysMode::CREATE);
         if (!keys || !keys->Init(ctx, src)) {
             return false;
@@ -1649,6 +1648,13 @@ public:
         TNodePtr cluster = Scoped_->WrapCluster(Table_.Cluster, ctx);
 
         auto options = Y(Q(Y(Q("mode"), Q("truncateTable"))));
+
+        for (const auto& [setting, value] : Params_.Settings) {
+            if (!value || !value->Init(ctx, src)) {
+                return false;
+            }
+            options = L(options, Q(Y(BuildQuotedAtom(Pos_, setting), value)));
+        }
 
         Add("block", Q(Y(Y("let", "sink", Y("DataSink", BuildQuotedAtom(Pos_, Table_.Service), cluster)),
                          Y("let", "world", Y(TString(WriteName), "world", "sink", keys, Y("Void"), Q(options))),

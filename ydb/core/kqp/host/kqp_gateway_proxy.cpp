@@ -1034,12 +1034,24 @@ public:
         return result;
     }
 
+    // The unsafe form is compiled as part of a data query and its physical transaction is emitted
+    // by TKqpBuildTxsTransformer, so this gateway entry must never be reached for it. Reaching it
+    // would append a second transaction and silently duplicate the truncate.
+    TFuture<TGenericResult> PrepareUnsafeTruncateTable(const TTruncateTableSettings&, const TString&) {
+        return MakeFuture(ResultFromError<TGenericResult>(
+            "Unsafe TRUNCATE TABLE reached the scheme gateway, which cannot execute it"));
+    }
+
     TFuture<TGenericResult> TruncateTable(const TString& cluster, const TTruncateTableSettings& settings) override {
         CHECK_PREPARED_DDL(TruncateTable);
 
         try {
             if (cluster != SessionCtx->GetCluster()) {
                 return InvalidCluster<TGenericResult>(cluster);
+            }
+
+            if (settings.Unsafe) {
+                return PrepareUnsafeTruncateTable(settings, cluster);
             }
 
             NKikimrSchemeOp::TModifyScheme modifyScheme;

@@ -1614,6 +1614,8 @@ TMaybe<TKqlQueryList> BuildKqlQuery(TKiDataQueryBlocks dataQueryBlocks, const TK
                     .Done());
         }
 
+        // Carried verbatim from the Ki block: an unsafe truncate has no results and no effects, so
+        // the settings are the only thing that tells the tx builder this block is anything at all.
         auto query = Build<TKqlQuery>(ctx, dataQueryBlocks.Pos())
             .Results()
                 .Add(kqlResults)
@@ -1621,6 +1623,7 @@ TMaybe<TKqlQueryList> BuildKqlQuery(TKiDataQueryBlocks dataQueryBlocks, const TK
              .Effects()
                 .Add(kqlEffects)
                 .Build()
+             .Settings(block.Settings())
              .Done();
 
         TOptimizeExprSettings optSettings(nullptr);

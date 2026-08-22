@@ -554,6 +554,19 @@ TVector<TDqPhyPrecompute> PrecomputeInputs(const TDqStage& stage) {
     return result;
 }
 
+// The Ki block settings ride through BuildKqlQuery untouched, so this is where an unsafe truncate
+// is recognised: it is the only block with neither results nor effects.
+std::optional<TString> GetUnsafeTruncatePath(const TKqlQuery& query) {
+    for (const auto& tuple : query.Settings()) {
+        // The Ki block and the physical tx spell this setting the same way on purpose, so the value
+        // travels from one to the other unchanged.
+        if (tuple.Name().Value() == TKqpPhyTxSettings::UnsafeTruncatePathSettingName) {
+            return TString(tuple.Value().Cast<TCoAtom>().Value());
+        }
+    }
+    return std::nullopt;
+}
+
 class TKqpBuildTxsTransformer : public TSyncTransformerBase {
     class TEffectsInfo {
     public:
@@ -626,6 +639,31 @@ public:
 
         TKqlQuery query(inputExpr);
 
+        // A block holding nothing but an unsafe truncate. There are no stages to build, so BuildTx
+        // is bypassed - it asserts on empty stage lists - and the transaction is assembled here.
+        // Appending it now is what puts it at its statement position among the data transactions.
+        if (auto truncatePath = GetUnsafeTruncatePath(query)) {
+            // Nothing below reads the results or the effects of this block, so anything left in
+            // them would be dropped without a trace. ExploreNode gives the truncate a block of its
+            // own precisely so that cannot happen; fail loudly rather than lose a write silently.
+            YQL_ENSURE(query.Results().Empty() && query.Effects().Empty(),
+                "Unsafe truncate block must hold nothing else, got "
+                    << query.Results().Size() << " results and " << query.Effects().Size() << " effects");
+
+            TKqpPhyTxSettings txSettings;
+            txSettings.Type = EPhysicalTxType::UnsafeTruncate;
+            txSettings.UnsafeTruncatePath = *truncatePath;
+
+            BuildCtx->PhysicalTxs.emplace_back(Build<TKqpPhysicalTx>(ctx, query.Pos())
+                .Stages().Build()
+                .Results().Build()
+                .ParamBindings().Build()
+                .Settings(txSettings.BuildNode(ctx, query.Pos()))
+                .Done());
+
+            return TStatus::Ok;
+        }
+
         if (auto status = TryBuildPrecomputeTx(query, outputExpr, ctx)) {
             return *status;
         }
@@ -682,6 +720,8 @@ public:
                             .Build()
                         .Effects()
                             .Build()
+                        .Settings()
+                            .Build()
                         .Done();
 
                     auto tx = BuildTx(resultsQuery.Ptr(), ctx, false);
@@ -707,6 +747,8 @@ public:
                         .Add(effectsResults)
                         .Build()
                     .Effects(effects)
+                    .Settings()
+                        .Build()
                     .Done();
 
                 auto tx = BuildTx(effectsQuery.Ptr(), ctx, /* isPrecompute */ false);
@@ -1182,6 +1224,8 @@ private:
                     .Add(phaseResults)
                     .Build()
                 .Effects()
+                    .Build()
+                .Settings()
                     .Build()
                 .Done().Ptr()
             : Build<TKqlQueryResultList>(ctx, query.Pos())

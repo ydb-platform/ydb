@@ -123,6 +123,7 @@ NKqpProto::TKqpPhyTx::EType GetPhyTxType(const EPhysicalTxType& type) {
         case EPhysicalTxType::Data: return NKqpProto::TKqpPhyTx::TYPE_DATA;
         case EPhysicalTxType::Scan: return NKqpProto::TKqpPhyTx::TYPE_SCAN;
         case EPhysicalTxType::Generic: return NKqpProto::TKqpPhyTx::TYPE_GENERIC;
+        case EPhysicalTxType::UnsafeTruncate: return NKqpProto::TKqpPhyTx::TYPE_UNSAFE_TRUNCATE;
 
         case EPhysicalTxType::Unspecified:
             break;
@@ -755,8 +756,18 @@ public:
         queryProto.SetEnableHtapTx(Config->GetEnableHtapTx());
         queryProto.SetLangVer(Config->GetDefaultLangVer());
 
-        queryProto.SetForceImmediateEffectsExecution(
-            Config->KqpForceImmediateEffectsExecution.Get().GetOrElse(false));
+        // An unsafe truncate must see the writes that precede it in the same query, so their
+        // effects cannot be deferred past it.
+        bool hasUnsafeTruncate = false;
+        for (const auto& tx : query.Transactions()) {
+            if (TKqpPhyTxSettings::Parse(tx).Type == EPhysicalTxType::UnsafeTruncate) {
+                hasUnsafeTruncate = true;
+                break;
+            }
+        }
+
+        queryProto.SetForceImmediateEffectsExecution(hasUnsafeTruncate
+            || Config->KqpForceImmediateEffectsExecution.Get().GetOrElse(false));
 
         queryProto.SetDefaultTxMode(
             Config->DefaultTxMode.Get().GetOrElse(NKqpProto::ISOLATION_LEVEL_UNDEFINED));
@@ -1190,6 +1201,14 @@ private:
         auto txSettings = TKqpPhyTxSettings::Parse(tx);
         YQL_ENSURE(txSettings.Type);
         txProto.SetType(GetPhyTxType(*txSettings.Type));
+
+        // Nothing else to compile: the transaction is the table path, and the executer discovers
+        // everything else from the live schema.
+        if (*txSettings.Type == EPhysicalTxType::UnsafeTruncate) {
+            YQL_ENSURE(!txSettings.UnsafeTruncatePath.empty());
+            txProto.MutableUnsafeTruncate()->SetTablePath(txSettings.UnsafeTruncatePath);
+            return;
+        }
 
         bool hasEffectStage = false;
 

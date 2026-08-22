@@ -1082,6 +1082,7 @@ struct TAlterDatabaseSettings {
 
 struct TTruncateTableSettings {
     TString TablePath;
+    bool Unsafe = false;
 };
 
 struct TCreateUserSettings {

@@ -1410,7 +1410,9 @@ struct TAlterDatabaseParameters {
     THashMap<TString, TNodePtr> DatabaseSettings;
 };
 
-struct TTruncateTableParameters {};
+struct TTruncateTableParameters {
+    THashMap<TString, TNodePtr> Settings;
+};
 
 struct TTableRef;
 struct TAnalyzeParams {

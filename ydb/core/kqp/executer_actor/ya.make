@@ -4,6 +4,7 @@ SRCS(
     kqp_data_executer.cpp
     kqp_scan_executer.cpp
     kqp_scheme_executer.cpp
+    kqp_unsafe_truncate_executer.cpp
     kqp_executer_impl.cpp
     kqp_executer_stats.cpp
     kqp_literal_executer.cpp

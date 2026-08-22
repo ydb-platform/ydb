@@ -192,6 +192,11 @@ IActor* CreateKqpSchemeExecuter(
     bool expectsResult = false, TTxAllocatorState::TPtr txAlloc = nullptr,
     const TActorId& kqpTempTablesAgentActor = TActorId());
 
+IActor* CreateKqpUnsafeTruncateExecuter(
+    TKqpPhyTxHolder::TConstPtr phyTx, const TActorId& target, const TString& database,
+    TIntrusiveConstPtr<NACLib::TUserToken> userToken, ui64 userLockTxId,
+    TIntrusivePtr<TUserRequestContext> requestContext, TTxAllocatorState::TPtr txAlloc);
+
 std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ExecuteLiteral(
     IKqpGateway::TExecPhysicalRequest&& request, TKqpRequestCounters::TPtr counters, TActorId owner, const TIntrusivePtr<TUserRequestContext>& userRequestContext);
 

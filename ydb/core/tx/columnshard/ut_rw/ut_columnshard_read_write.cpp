@@ -1942,7 +1942,8 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         }
 
         const ui64 tableId = 1;
-        TestTableDescription table;   // InStore == true: created via a schema preset (a column store)
+        TestTableDescription table;
+        table.InStore = true;   // created via a schema preset (a column store)
         Y_UNUSED(SetupSchema(runtime, sender, tableId, table));
 
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvDataShard::TEvCompactTable(/*ownerId=*/1, tableId));

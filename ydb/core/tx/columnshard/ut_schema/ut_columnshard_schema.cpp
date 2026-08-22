@@ -1207,7 +1207,9 @@ void TestCompaction(std::optional<ui32> numWrites = {}) {
     ui64 tableId = 1;
     ui64 txId = 100;
 
-    auto planStep = SetupSchema(runtime, sender, tableId, TestTableDescription(), "none", ++txId);
+    TestTableDescription tableDesc;
+    tableDesc.InStore = true;
+    auto planStep = SetupSchema(runtime, sender, tableId, tableDesc, "none", ++txId);
     // Set tiering
 
     ui64 ts = 1620000000;

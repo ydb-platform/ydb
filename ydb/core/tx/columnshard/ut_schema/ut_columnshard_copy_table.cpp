@@ -732,6 +732,7 @@ Y_UNIT_TEST_SUITE(CopyTable) {
         const ui64 srcPathId = 1;
         constexpr ui64 auxPathId = 99;
         TestTableDescription testTable{};
+        testTable.InStore = true;
         auto planStep = PrepareTablet(runtime, srcPathId, testTable.Schema);
 
         ui64 auxTxId = 1000;

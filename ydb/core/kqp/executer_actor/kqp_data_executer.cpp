@@ -68,7 +68,6 @@ public:
         const TActorId bufferActorId,
         TMaybe<NBatchOperations::TSettings> batchOperationSettings,
         const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
-        ui64 generation,
         std::shared_ptr<NYql::NDq::IDqChannelService> channelService,
         bool useKqpTasksGraphV2,
         TVector<NKikimr::TTableId> tableIdsForSnapshot)
@@ -81,7 +80,6 @@ public:
         , ReadOnlyTx(IsReadOnlyTx())
         , WaitCAStatsTimeout(TDuration::MilliSeconds(executerConfig.TableServiceConfig.GetQueryLimits().GetWaitCAStatsTimeoutMs()))
         , QueryServiceConfig(queryServiceConfig)
-        , Generation(generation)
     {
         TasksGraph.GetMeta().AllowOlapDataQuery = executerConfig.TableServiceConfig.GetAllowOlapDataQuery();
         Target = creator;
@@ -1230,9 +1228,13 @@ private:
             counters = counters->GetSubgroup("host", "");
             counters = counters->GetSubgroup("path", context->StreamingQueryPath);
         }
+
         const auto& checkpointId = context->CheckpointId;
+        const auto generation = context->CurrentExecutionGeneration;
+        Y_VALIDATE(generation, "Missing current execution generation");
+
         CheckpointCoordinatorId = Register(MakeCheckpointCoordinator(
-            ::NFq::TCoordinatorId(checkpointId, Generation),
+            ::NFq::TCoordinatorId(checkpointId, generation),
             NYql::NDq::MakeCheckpointStorageID(),
             SelfId(),
             {},
@@ -1248,7 +1250,7 @@ private:
             {"checkpointCoordinatorId", CheckpointCoordinatorId},
             {"executionId", context->CurrentExecutionId},
             {"checkpointId", checkpointId},
-            {"generation", Generation},
+            {"generation", generation},
             {"stateLoadMode", FederatedQuery::StateLoadMode_Name(stateLoadMode)},
             {"streamingDisposition", streamingDisposition.ShortDebugString()},
             {"hasQueryPhysicalGraph", Request.QueryPhysicalGraph != nullptr},
@@ -1372,7 +1374,6 @@ private:
     const TDuration WaitCAStatsTimeout;
 
     NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
-    ui64 Generation = 0;
 };
 
 } // namespace
@@ -1384,13 +1385,13 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
     TPartitionPrunerConfig partitionPrunerConfig, const TShardIdToTableInfoPtr& shardIdToTableInfo,
     const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId,
-    TMaybe<NBatchOperations::TSettings> batchOperationSettings, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, ui64 generation,
+    TMaybe<NBatchOperations::TSettings> batchOperationSettings, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
     std::shared_ptr<NYql::NDq::IDqChannelService> channelService, bool useKqpTasksGraphV2,
     TVector<NKikimr::TTableId> tableIdsForSnapshot)
 {
     return new TKqpDataExecuter(std::move(request), database, userToken, std::move(formatsSettings), counters, executerConfig,
         std::move(asyncIoFactory), creator, userRequestContext, statementResultIndex, federatedQuerySetup, GUCSettings,
-        std::move(partitionPrunerConfig), shardIdToTableInfo, txManager, bufferActorId, std::move(batchOperationSettings), queryServiceConfig, generation,
+        std::move(partitionPrunerConfig), shardIdToTableInfo, txManager, bufferActorId, std::move(batchOperationSettings), queryServiceConfig,
         channelService, useKqpTasksGraphV2, std::move(tableIdsForSnapshot));
 }
 

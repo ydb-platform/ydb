@@ -242,7 +242,12 @@ CREATE TABLE article (
   + Доступно и в первичном ключе и в остальных колонках: `Date`, `Datetime`, `Timestamp`, `Int32`, `Int64`, `Uint8`, `Uint16`, `Uint32`, `Uint64`, `Utf8`, `String`;
   + Доступно только в колонках, не входящих в первичный ключ: `Decimal`, `Double`, `Float`, `Int8`, `Int16`, `JsonDocument`, `Json`, `Yson`.
 
+<<<<<<< HEAD
 * В колоночных таблицах поддерживаются группы колонок, но пока это используется только для задания сжатия на колонках.
+=======
+* Поддерживается возможность задавать сжатие индивидуально для каждой колонки при [создании](../../../yql/reference/syntax/create_table/index.md#compression) колоночной таблицы или [изменить](../../../yql/reference/syntax/alter_table/columns.md#compression) её позднее.
+* Поддерживается возможность задавать кодирование данных индивидуально для каждой колонки при [создании](../../../yql/reference/syntax/create_table/index.md#encoding) колоночной таблицы или [изменить](../../../yql/reference/syntax/alter_table/columns.md#encoding) её позднее.
+>>>>>>> 3cc83c6fefe (Clarifications regarding column groups (#45849))
 
 Повторим создание таблицы `article`, на этот раз в колоночной форме, с помощью следующей YQL-команды:
 

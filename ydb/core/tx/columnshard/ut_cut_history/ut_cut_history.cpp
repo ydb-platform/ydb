@@ -5,8 +5,10 @@
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/tx/columnshard/blobs_action/bs/blob_manager.h>
+#include <ydb/core/tx/columnshard/blobs_action/bs/gc.h>
 #include <ydb/core/tx/columnshard/blobs_action/bs/history_cutter.h>
 #include <ydb/core/tx/columnshard/blobs_action/common/const.h>
+#include <ydb/core/tx/columnshard/blobs_action/counters/storage.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
@@ -651,6 +653,66 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         UNIT_ASSERT(runtime.GrabEdgeEvent<TEvBlobStorage::TEvCollectGarbage>(edgeBs));
         UNIT_ASSERT(cutter.GetCutStateForTest(key) == ECutState::SentBarrier);
         UNIT_ASSERT_VALUES_EQUAL(cutter.GetDisprovalAttemptsForTest(key), 0);
+    }
+
+    Y_UNIT_TEST(InFlightGCTaskPinsDrainGate) {
+        TActorSystemStub actorSystemStub;
+        actorSystemStub.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        static constexpr ui64 TabletId = 889;
+        static constexpr ui32 CurrentGen = 5;
+        const TVector<std::pair<ui32, ui32>> history{ { 0, 100 }, { CurrentGen, 200 } };
+        const TEntryKey key{ 2, 0 };
+
+        auto info = MakeTabletInfo(TabletId, 3, history);
+        auto bm = std::make_shared<NOlap::TBlobManager>(info, CurrentGen, NOlap::TTabletId(TabletId));
+        auto shared = std::make_shared<NOlap::NDataSharing::TStorageSharedBlobsManager>(
+            NOlap::NBlobOperations::TGlobal::DefaultStorageId, NOlap::TTabletId(TabletId));
+        TTestableHistoryCutter cutter(info, CurrentGen, bm, shared, TActorId(), TestSignals());
+        UNIT_ASSERT(cutter.IsDrained(key));
+
+        auto storageCounters = std::make_shared<NOlap::NBlobOperations::TStorageCounters>(NOlap::NBlobOperations::TGlobal::DefaultStorageId);
+        auto gcCounters =
+            std::make_shared<NOlap::NBlobOperations::TRemoveGCCounters>(NOlap::NBlobOperations::TConsumerCounters("GC", *storageCounters));
+        auto task = bm->BuildGCTask(NOlap::NBlobOperations::TGlobal::DefaultStorageId, bm, shared, gcCounters);
+        UNIT_ASSERT_C(task, "the first GC round carries the barrier even with empty queues");
+        UNIT_ASSERT_C(!cutter.IsDrained(key), "a GC task in flight must pin every entry");
+
+        const TGenStep barrier{ CurrentGen, 0 };
+        bm->OnGCStartOnComplete(barrier);
+        bm->OnGCFinishedOnComplete(barrier);
+        UNIT_ASSERT_C(cutter.IsDrained(key), "the pin is released once the task commits");
+    }
+
+    Y_UNIT_TEST(OrphanedDeleteMarkUnderCutEntryIsErasedNotCollected) {
+        TActorSystemStub actorSystemStub;
+        actorSystemStub.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        static constexpr ui64 TabletId = 890;
+        static constexpr ui32 CurrentGen = 7;
+        static constexpr ui32 DataChannel = 2;
+        const TVector<std::pair<ui32, ui32>> history{ { 5, 200 } };
+
+        auto info = MakeTabletInfo(TabletId, 3, history);
+        auto bm = std::make_shared<NOlap::TBlobManager>(info, CurrentGen, NOlap::TTabletId(TabletId));
+        auto shared = std::make_shared<NOlap::NDataSharing::TStorageSharedBlobsManager>(
+            NOlap::NBlobOperations::TGlobal::DefaultStorageId, NOlap::TTabletId(TabletId));
+
+        const TLogoBlobID orphan(TabletId, /*gen=*/0, /*step=*/0, DataChannel, BlobSize, /*cookie=*/1);
+        UNIT_ASSERT_VALUES_EQUAL(info->GroupFor(orphan), Max<ui32>());
+        bm->DeleteBlobOnComplete(NOlap::TTabletId(TabletId), NOlap::TUnifiedBlobId(Max<ui32>(), orphan));
+
+        auto storageCounters = std::make_shared<NOlap::NBlobOperations::TStorageCounters>(NOlap::NBlobOperations::TGlobal::DefaultStorageId);
+        auto gcCounters =
+            std::make_shared<NOlap::NBlobOperations::TRemoveGCCounters>(NOlap::NBlobOperations::TConsumerCounters("GC", *storageCounters));
+        auto task = bm->BuildGCTask(NOlap::NBlobOperations::TGlobal::DefaultStorageId, bm, shared, gcCounters);
+        UNIT_ASSERT(task);
+        const TString sentinelPrefix = "g=" + ToString(Max<ui32>()) + ";";
+        for (const auto& [address, lists] : task->GetListsByGroupId()) {
+            UNIT_ASSERT_C(
+                !address.DebugString().StartsWith(sentinelPrefix), "no GC request may target the sentinel group: " + address.DebugString());
+        }
+        bm->OnGCStartOnComplete(TGenStep{ CurrentGen, 0 });
+        bm->OnGCFinishedOnComplete(TGenStep{ CurrentGen, 0 });
+        UNIT_ASSERT_C(bm->HasNoBlobsInRange(DataChannel, 0, 5), "the orphaned mark left the delete queue with the task");
     }
 
 }   // TCutHistoryCutterCounters

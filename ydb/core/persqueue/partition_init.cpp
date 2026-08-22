@@ -458,6 +458,10 @@ void TInitInfoRangeStep::PostProcessing(const TActorContext& ctx) {
         userInfo.AnyCommits = userInfo.Offset > (i64)Partition()->StartOffset;
     }
 
+    PQ_LOG_NOTICE("SOURCE_ID_KV_RESTORE_COMPLETE topic '" << TopicName() << "' partition " << PartitionId()
+        << " sourceIdStorage# " << Partition()->SourceIdStorage.DescribeHeartbeatState(64)
+        << " minHeartbeatSourceIdsDetails# " << Partition()->SourceIdStorage.DescribeMinHeartbeatSourceIds(16));
+
     Done(ctx);
 }
 

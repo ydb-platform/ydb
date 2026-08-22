@@ -11,7 +11,7 @@ class TDataSourceConstructor: public ICursorEntity, public TMoveOnly {
 private:
     TReplaceKeyAdapter Start;
     TReplaceKeyAdapter Finish;
-    bool IsOutOfOrder;
+    bool Conflicting;
     ui32 SourceIdx = 0;
     bool SourceIdxInitialized = false;
 
@@ -39,10 +39,10 @@ public:
         return std::move(Finish);
     }
 
-    TDataSourceConstructor(TReplaceKeyAdapter&& start, TReplaceKeyAdapter&& finish, const bool isOutOfOrder)
+    TDataSourceConstructor(TReplaceKeyAdapter&& start, TReplaceKeyAdapter&& finish, const bool conflicting)
         : Start(std::move(start))
         , Finish(std::move(finish))
-        , IsOutOfOrder(isOutOfOrder)
+        , Conflicting(conflicting)
     {
     }
 
@@ -54,13 +54,17 @@ public:
         return Finish;
     }
 
+    bool IsConflicting() const {
+        return Conflicting;
+    }
+
     virtual bool QueryAgnosticLess(const TDataSourceConstructor& rhs) const = 0;
     virtual ~TDataSourceConstructor() = default;
 
     TDataSourceConstructor(TDataSourceConstructor&& other)
         : Start(std::move(other.Start))
         , Finish(std::move(other.Finish))
-        , IsOutOfOrder(other.IsOutOfOrder)
+        , Conflicting(other.Conflicting)
         , SourceIdx(other.SourceIdx)
         , SourceIdxInitialized(other.SourceIdxInitialized)
     {
@@ -69,7 +73,7 @@ public:
     TDataSourceConstructor& operator=(TDataSourceConstructor&& other) {
         Start = std::move(other.Start);
         Finish = std::move(other.Finish);
-        IsOutOfOrder = other.IsOutOfOrder;
+        Conflicting = other.Conflicting;
         SourceIdx = other.SourceIdx;
         SourceIdxInitialized = other.SourceIdxInitialized;
         return *this;
@@ -123,11 +127,11 @@ public:
         }
 
         bool operator()(const TDataSourceConstructor& l, const TDataSourceConstructor& r) const {
-            if (l.IsOutOfOrder || r.IsOutOfOrder) {
-                if (!r.IsOutOfOrder) {
+            if (l.Conflicting || r.Conflicting) {
+                if (!r.Conflicting) {
                     return true;
                 }
-                if (!l.IsOutOfOrder) {
+                if (!l.Conflicting) {
                     return false;
                 }
                 return false;

@@ -370,10 +370,6 @@ public:
         return !IsRemovedFor(snapshot);
     }
 
-    bool CheckForCleanup() const {
-        return HasRemoveSnapshot();
-    }
-
     TPortionAddress GetAddress() const {
         return TPortionAddress(PathId, PortionId);
     }

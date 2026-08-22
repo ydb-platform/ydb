@@ -42,14 +42,15 @@ public:
     const std::string& GetId() const;
     const std::string& GetEndpoint() const;
     const TEndpointKey& GetEndpointKey() const;
-    void MarkBroken();
-    void MarkAsClosing();
-    void MarkActive();
-    void MarkIdle();
+    bool MarkBroken();
+    bool MarkAsClosing();
+    bool MarkActive();
+    bool MarkIdle();
     bool IsOwnedBySessionPool() const;
     EState GetState() const;
     void SetNeedUpdateActiveCounter(bool flag);
     bool NeedUpdateActiveCounter() const;
+    virtual std::shared_ptr<ISessionClient> GetSessionClient() const { return {}; }
     void InvalidateQueryInCache(const std::string& key);
     void InvalidateQueryCache();
     void ScheduleTimeToTouch(TDuration interval, bool updateTimeInPast);

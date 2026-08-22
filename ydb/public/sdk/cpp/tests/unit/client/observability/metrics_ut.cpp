@@ -445,6 +445,15 @@ TEST_F(QueryPoolMetricsTest, TimeoutsIncrement) {
     EXPECT_EQ(counter->Get(), 3);
 }
 
+TEST_F(QueryPoolMetricsTest, ClosedSessionReason) {
+    Collector.IncSessionClosed("transport_error");
+    auto labels = QueryPoolLabels(kTestPoolName);
+    labels["reason"] = "transport_error";
+    auto counter = Registry->GetCounter("ydb.query.session.closed", labels);
+    ASSERT_NE(counter, nullptr);
+    EXPECT_EQ(counter->Get(), 1);
+}
+
 TEST_F(QueryPoolMetricsTest, SessionCountSplitsByState) {
     Collector.UpdateConnectionCount(/*idle=*/8, /*used=*/3);
 

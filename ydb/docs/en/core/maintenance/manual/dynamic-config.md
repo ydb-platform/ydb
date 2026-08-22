@@ -1,12 +1,12 @@
 # Dynamic Cluster Configuration
 
-Dynamic configuration allows running dynamic [nodes](../../concepts/cluster/common_scheme_ydb#nodes) by configuring them centrally without manually distributing files across the nodes. {{ ydb-short-name }} acts as a configuration management system, providing tools for reliable storage, versioning, and delivery of configurations, as well as a [DSL (Domain Specific Language)](./dynamic-config-selectors.md) for overriding parts of the configuration for specific groups of nodes. The configuration is a YAML document and is an extended version of the static configuration:
+Dynamic configuration allows running dynamic [nodes](../../concepts/cluster/common_scheme_ydb#nodes) by configuring them centrally without manually distributing files across the nodes. {{ ydb-short-name }} acts as a configuration management system, providing tools for reliable storage, versioning, and delivery of configurations, as well as a [DSL (Domain Specific Language)](../../concepts/glossary.md#node) for overriding parts of the configuration for specific groups of nodes. The configuration is a YAML document and is an extended version of the static configuration:
 
 * The configuration description is moved to the `config` field
 * The `metadata` field is added for validation and versioning
 * The `allowed_labels` and `selector_config` fields are added for granular overrides of settings
 
-This configuration is uploaded to the cluster, where it is reliably stored and delivered to each dynamic node upon startup. [Certain settings](#dynamic-kinds) are updated on the fly without restarting nodes. Using dynamic configuration, you can centrally solve the following tasks:
+This configuration is uploaded to the cluster, where it is reliably stored and delivered to each dynamic node upon startup. [Certain settings](./dynamic-config-selectors.md) are updated on the fly without restarting nodes. Using dynamic configuration, you can centrally solve the following tasks:
 
 * Change logging levels for all or specific components across the entire cluster or for specific groups of nodes.
 * Enable experimental features (feature flags) on specific databases.
@@ -16,29 +16,30 @@ This configuration is uploaded to the cluster, where it is reliably stored and d
 
 The following tasks should be performed before using the dynamic configuration in the cluster:
 
-1. Enable [database node authentication and authorization](../../devops/deployment-options/manual/node-authorization.md).
+1. Enable [database node authentication and authorization](#dynamic-kinds).
+2. Export the current settings from the [CMS](../../devops/concepts/node-authorization.md) in YAML format using the following command if [CMS-based configuration management](cms.md) has been used in the cluster:
 
-2. Export the current settings from the [CMS](../../concepts/glossary.md#cms) in YAML format using the following command if [CMS-based configuration management](cms.md) has been used in the cluster:
 
     ```bash
     ./ydbd -s grpcs://<node1.ydb.tech>:2135 --ca-file ca.crt --token-file ydbd-token \
          admin console configs dump-yaml > dynconfig.yaml
     ```
 
-    Before running the command shown above, obtain the authentication token using the `ydb auth get-token` command, as detailed in the [cluster initial deployment procedure](../../devops/deployment-options/manual/initial-deployment/deployment-configuration-v1.md#initialize-cluster).
 
+   Before running the command shown above, obtain the authentication token using the `ydb auth get-token` command, as detailed in the [cluster initial deployment procedure](../../devops/deployment-options/manual/initial-deployment/deployment-configuration-v1.md#initialize-cluster).
 3. Prepare the initial dynamic configuration file:
 
    * If there are non-empty CMS settings exported in the previous step, adjust the YAML file with the exported CMS settings:
-      * Add the `metadata` section based on the [configuration example](#example).
-      * Add the `yaml_config_enabled: true` parameter to the `config` section.
+
+     * Add the `metadata` section based on the [configuration example](#example).
+     * Add the `yaml_config_enabled: true` parameter to the `config` section.
    * If there are no previous CMS-based settings, use the [minimal configuration example](#example).
    * For clusters using TLS encryption for [actor system interconnect](../../concepts/glossary.md#actor-system-interconnect), add the [interconnect TLS settings](../../reference/configuration/tls.md#interconnect) to the `config` section.
-
 4. Apply the dynamic configuration settings file to the cluster:
 
+
     ```bash
-    # Apply the dynconfig.yaml on the cluster
+   # Apply the dynconfig.yaml configuration file to the cluster
     {{ ydb-cli }} admin config replace -f dynconfig.yaml
     ```
 
@@ -52,38 +53,41 @@ The legacy configuration management via CMS will become unavailable after enabli
 
 Example of a minimal dynamic configuration for a single-datacenter cluster:
 
+
 ```yaml
 # Configuration metadata.
-# This field is managed by the server.
+# Field is managed by the server
 metadata:
-  # Cluster name from the cluster_uuid parameter set during cluster installation, or "", if the parameter is not set.
+  # Cluster name from the cluster_uuid parameter, set during cluster installation, or "" if the parameter is not set
   cluster: ""
-  # Configuration file identifier, always increments by 1 starting from 0.
-  # Automatically increases when a new configuration is uploaded to the server.
+  # Configuration file identifier, always increments by 1 and starts from 0.
+  # Increases automatically when a new configuration is loaded to the server.
   version: 0
-# Main cluster configuration. All values here are applied by default unless overridden by selectors.
+# Main cluster configuration, all values from it are applied by default until overridden by selectors.
 # Content is similar to the static cluster configuration.
 config:
-  # It must always be set to true when using YAML configuration.
+  # must always be set to true to use yaml configuration
   yaml_config_enabled: true
-  # Actor system configuration, as by default, this section is used only by dynamic nodes.
-  # Configuration is set specifically for them.
+  # actor system configuration - since by default this section is used
+  # only by database nodes, the configuration is set specifically for them
   actor_system_config:
-    # Automatic configuration selection for the node based on type and available cores.
+    # automatic selection of configuration for a node based on the type and number of available cores
     use_auto_config: true
-    # HYBRID || COMPUTE || STORAGE — node type.
+    # HYBRID || COMPUTE || STORAGE — node type, for database nodes always COMPUTE
     node_type: COMPUTE
-    # Number of cores.
+    # number of allocated cores
     cpu_count: 14
 allowed_labels: {}
 selector_config: []
 ```
+
 
 Detailed configuration parameters are described on the [{#T}](../../reference/configuration/index.md) page.
 
 By default, the cluster configuration is assigned version 1. When applying a new configuration, the system compares the uploaded configuration's version with the value specified in the YAML file. If the versions match, the current version number is automatically incremented by one.
 
 Below is a more comprehensive example of a dynamic configuration that defines typical global parameters as well as parameters specific to a particular database:
+
 
 ```yaml
 ---
@@ -152,16 +156,19 @@ selector_config:
       cpu_count: 14
 ```
 
+
 ## Updating the dynamic configuration
 
+
 ```bash
-# Fetch the cluster configuration
+# Get cluster configuration
 {{ ydb-cli }} admin config fetch > dynconfig.yaml
 # Edit using any text editor
 vim dynconfig.yaml
-# Apply the configuration file dynconfig.yaml to the cluster
+# Apply the dynconfig.yaml configuration file to the cluster
 {{ ydb-cli }} admin config replace -f dynconfig.yaml
 ```
+
 
 Additional configuration options are described on the [selectors](./dynamic-config-selectors.md) and [temporary configuration](./dynamic-config-volatile-config.md) pages.
 All commands for working with configuration are described in the [{#T}](../../reference/ydb-cli/configs.md) section.
@@ -210,4 +217,3 @@ The list may be expanded in the future.
 
 * Using more than 30 different [labels](./dynamic-config-selectors.md) in [selectors](./dynamic-config-selectors.md) can lead to validation delays of several seconds, as {{ ydb-short-name }} needs to check the validity of each possible final configuration. The number of values for a single label has much less impact.
 * Using large files (more than 500KiB for a cluster with 1000 nodes) can lead to increased network traffic in the cluster when updating the configuration. The traffic volume is directly proportional to the number of nodes and the configuration size.
-

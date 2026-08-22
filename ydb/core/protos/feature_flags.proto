@@ -363,4 +363,5 @@ message TFeatureFlags {
     optional bool EnableTxIdInStats = 310 [default = false];
     optional bool EnableDqSourceStreamLookupJoinShuffleMode = 311 [default = false];
     optional bool EnableCsFlowControl = 312 [default = false];
+    optional bool EnableExactlyOnceTopicsWriting = 313 [default = false];
 }

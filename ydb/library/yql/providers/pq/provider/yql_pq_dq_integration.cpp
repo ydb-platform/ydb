@@ -679,6 +679,11 @@ public:
 
                 sinkDesc.SetUseActorSystemThreadsInTopicClient(State_->UseActorSystemThreadsInTopicClient);
 
+                const auto maybeEnableDeduplication = State_->Configuration->EnableDeduplication.Get();
+                if (maybeEnableDeduplication) {
+                    sinkDesc.SetEnableDeduplication(*maybeEnableDeduplication);
+                }
+
                 size_t const settingsCount = topicSink.Settings().Size();
                 for (size_t i = 0; i < settingsCount; ++i) {
                     TCoNameValueTuple setting = topicSink.Settings().Item(i);
@@ -689,15 +694,17 @@ public:
                         sinkDesc.SetUseSsl(FromString<bool>(Value(setting)));
                     } else if (name == AddBearerToTokenSetting) {
                         sinkDesc.SetAddBearerToToken(FromString<bool>(Value(setting)));
+                    } else if (name == TDeliveryGuaranteeSetting::Name) {
+                        if (Value(setting) == TDeliveryGuaranteeSetting::ExactlyOnceValue) {
+                            YQL_ENSURE(State_->DeferredPublicationExtIdPrefix, "Deferred publication is not enabled");
+                            YQL_ENSURE(!maybeEnableDeduplication.GetOrElse(false), "Deferred publication can not be used with enabled deduplication");
+                            sinkDesc.SetDeferredPublicationExtIdPrefix(State_->DeferredPublicationExtIdPrefix);
+                        }
                     }
                 }
 
                 if (auto maybeToken = TMaybeNode<TCoSecureParam>(topicSink.Token().Raw())) {
                     sinkDesc.MutableToken()->SetName(TString(maybeToken.Cast().Name().Value()));
-                }
-
-                if (auto maybeEnableDeduplication = State_->Configuration->EnableDeduplication.Get()) {
-                    sinkDesc.SetEnableDeduplication(*maybeEnableDeduplication);
                 }
 
                 protoSettings.PackFrom(sinkDesc);

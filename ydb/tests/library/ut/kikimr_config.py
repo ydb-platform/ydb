@@ -1,3 +1,4 @@
+from ydb.tests.library.harness import tls_tools
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 
 from yql.essentials.providers.common.proto.gateways_config_pb2 import TGenericConnectorConfig
@@ -64,3 +65,25 @@ def test_kikimr_config_generator_nbs_disabled():
 
     # Check that NBS config is not present when disabled
     assert "nbs_config" not in yaml_config
+
+
+def test_kikimr_config_generator_writes_generated_grpc_tls_data(tmp_path, monkeypatch):
+    tls_data_path = tmp_path / 'tls'
+    tls_data_path.mkdir()
+    generated_cert = b'generated-cert'
+    generated_key = b'generated-key'
+    monkeypatch.setattr(
+        tls_tools,
+        'generate_selfsigned_cert',
+        lambda hostname: (generated_cert, generated_key),
+    )
+
+    cfg_gen = KikimrConfigGenerator(
+        grpc_ssl_enable=True,
+        grpc_tls_data_path=str(tls_data_path),
+    )
+    cfg_gen.write_tls_data()
+
+    assert (tls_data_path / 'ca.pem').read_bytes() == generated_cert
+    assert (tls_data_path / 'cert.pem').read_bytes() == generated_cert
+    assert (tls_data_path / 'key.pem').read_bytes() == generated_key

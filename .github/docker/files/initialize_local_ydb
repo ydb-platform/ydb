@@ -9,6 +9,11 @@ export YDB_WORKING_DIR="${YDB_WORKING_DIR:-/ydb_data}"
 export YDB_GRPC_ENABLE_TLS=${YDB_GRPC_ENABLE_TLS:-true}
 export YDB_GRPC_TLS_DATA_PATH="${YDB_GRPC_TLS_DATA_PATH:-/ydb_certs}"
 
+export YDB_CLI_BINARY="${YDB_CLI_BINARY:-/ydb}"
+export YDBD_BINARY="${YDBD_BINARY:-/ydbd}"
+export LOCAL_YDB_BINARY="${LOCAL_YDB_BINARY:-/local_ydb}"
+export YDB_HEALTH_CHECK_BINARY="${YDB_HEALTH_CHECK_BINARY:-/health_check}"
+
 export PYTHONWARNINGS=ignore
 export YDB_INITSCRIPTS_DIR="${YDB_INITSCRIPTS_DIR:-/init.d}"
 export YDB_PREINITSCRIPTS_DIR="${YDB_PREINITSCRIPTS_DIR:-/preinit.d}"
@@ -16,7 +21,7 @@ export YDB_PREINITSCRIPTS_DIR="${YDB_PREINITSCRIPTS_DIR:-/preinit.d}"
 export YDB_PDISKS_DIRECTORY="${YDB_WORKING_DIR}/pdisks"
 
 # Disable checking newest versions of YDB CLI
-/ydb version --disable-checks >/dev/null 2>&1
+"$YDB_CLI_BINARY" version --disable-checks >/dev/null 2>&1
 
 log() {
     local channel="$1"
@@ -58,7 +63,7 @@ ydb_wait_ready() {
     local try=0
 
     while [ $try -lt $max_tries ]; do
-        if /health_check >/dev/null 2>&1; then
+        if "$YDB_HEALTH_CHECK_BINARY" >/dev/null 2>&1; then
             log init "YDB is ready"
             return 0
         fi
@@ -103,9 +108,12 @@ ydb_truncate_logs() {
 ydb_monitor_process() {
     local attempts=60
     local ydb_pid=""
+    local recipe_file="${YDB_WORKING_DIR}/ydb_recipe.json"
 
     while [ $attempts -gt 0 ]; do
-        ydb_pid=$(pgrep -f '/ydbd server' | head -n 1)
+        if [ -f "$recipe_file" ]; then
+            ydb_pid=$(sed -n 's/.*"pid":[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$recipe_file" | head -n 1)
+        fi
         if [ -n "$ydb_pid" ]; then
             break
         fi
@@ -131,7 +139,7 @@ ydb_custom_pre_init_scripts() {
     if [ -d "$YDB_PREINITSCRIPTS_DIR" ] && [ -n "$(find "$YDB_PREINITSCRIPTS_DIR/" -type f -name "*.sh")" ]; then
         local fail_marker="${YDB_WORKING_DIR}/.pre_init_failed"
         rm -f "$fail_marker"
-        find "$YDB_PREINITSCRIPTS_DIR/" -type f -name "*.sh" | sort | while read -r f; do
+        while read -r f; do
             local status
             # Non-executable scripts are sourced to allow them to modify the environment for subsequent scripts.
             if [ -x "$f" ]; then
@@ -149,7 +157,7 @@ ydb_custom_pre_init_scripts() {
                 touch "$fail_marker"
                 break
             fi
-        done
+        done < <(find "$YDB_PREINITSCRIPTS_DIR/" -type f -name "*.sh" | sort)
 
         if [ -f "$fail_marker" ]; then
             rm -f "$fail_marker"
@@ -171,7 +179,7 @@ ydb_custom_init_scripts() {
 
         local fail_marker="${YDB_WORKING_DIR}/.init_failed"
         rm -f "$fail_marker"
-        find "$YDB_INITSCRIPTS_DIR/" -type f -regex ".*\.\(sh\|sql\|sql\.gz\)" | sort | while read -r f; do
+        while read -r f; do
             local status
             case "$f" in
             *.sh)
@@ -188,12 +196,12 @@ ydb_custom_init_scripts() {
                 ;;
             *.sql)
                 log init "Executing queries from $f"
-                /ydb --endpoint grpc://localhost:${GRPC_PORT} --database /local --no-discovery sql -f "$f" < /dev/null 1> >(log_stream init_sql_stdout) 2> >(log_stream init_sql_stderr)
+                "$YDB_CLI_BINARY" --endpoint grpc://localhost:${GRPC_PORT} --database /local --no-discovery sql -f "$f" < /dev/null 1> >(log_stream init_sql_stdout) 2> >(log_stream init_sql_stderr)
                 status=$?
                 ;;
             *.sql.gz)
                 log init "Executing compressed queries from $f"
-                gunzip -c "$f" | /ydb --endpoint grpc://localhost:${GRPC_PORT} --database /local --no-discovery sql -f - 1> >(log_stream init_sql_stdout) 2> >(log_stream init_sql_stderr)
+                gunzip -c "$f" | "$YDB_CLI_BINARY" --endpoint grpc://localhost:${GRPC_PORT} --database /local --no-discovery sql -f - 1> >(log_stream init_sql_stdout) 2> >(log_stream init_sql_stderr)
                 status=$?
                 ;;
             *)
@@ -207,7 +215,7 @@ ydb_custom_init_scripts() {
                 touch "$fail_marker"
                 break
             fi
-        done
+        done < <(find "$YDB_INITSCRIPTS_DIR/" -type f -regex ".*\.\(sh\|sql\|sql\.gz\)" | sort)
 
         if [ -f "$fail_marker" ]; then
             rm -f "$fail_marker"
@@ -228,7 +236,7 @@ ydb_custom_pre_init_scripts
 # Start YDB in a background process
 log init "Starting YDB..."
 mkdir -p "${YDB_PDISKS_DIRECTORY}"
-/local_ydb deploy --ydb-working-dir "${YDB_WORKING_DIR}" --ydb-binary-path /ydbd --fixed-ports "$@" 1> >(log_stream "deploy|stdout") 2> >(log_stream "deploy|stderr")
+"$LOCAL_YDB_BINARY" deploy --ydb-working-dir "${YDB_WORKING_DIR}" --ydb-binary-path "$YDBD_BINARY" --fixed-ports "$@" 1> >(log_stream "deploy|stdout") 2> >(log_stream "deploy|stderr")
 deploy_exit_code=$?
 
 if [ $deploy_exit_code -ne 0 ]; then

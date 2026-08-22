@@ -25,6 +25,8 @@ from library.python.testing.recipe import set_env
 
 logger = logging.getLogger(__name__)
 
+GRPC_TLS_DATA_FILES = ('ca.pem', 'cert.pem', 'key.pem')
+
 
 class EmptyArguments(object):
     def __init__(self):
@@ -262,7 +264,7 @@ def default_users():
 
 
 def enable_tls():
-    return os.getenv('YDB_GRPC_ENABLE_TLS') == 'true'
+    return os.getenv('YDB_GRPC_ENABLE_TLS', '').strip().lower() in ('1', 'true')
 
 
 def is_tiny_mode():
@@ -304,6 +306,32 @@ def generic_connector_config():
 def grpc_tls_data_path(arguments):
     default_store = arguments.ydb_working_dir if arguments.ydb_working_dir else None
     return os.getenv('YDB_GRPC_TLS_DATA_PATH', default_store)
+
+
+def load_existing_grpc_tls_data(tls_data_path):
+    """Load user-provided gRPC TLS data, or return None when no files exist."""
+    if not tls_data_path:
+        return None
+
+    paths = [os.path.join(tls_data_path, filename) for filename in GRPC_TLS_DATA_FILES]
+    existing_paths = [path for path in paths if os.path.lexists(path)]
+    if not existing_paths:
+        return None
+
+    invalid_paths = [path for path in paths if not os.path.isfile(path) or os.path.getsize(path) == 0]
+    if invalid_paths:
+        raise ValueError(
+            'Existing gRPC TLS data requires non-empty regular files {}. Missing or invalid: {}'.format(
+                ', '.join(GRPC_TLS_DATA_FILES),
+                ', '.join(invalid_paths),
+            )
+        )
+
+    tls_data = []
+    for path in paths:
+        with open(path, 'rb') as tls_file:
+            tls_data.append(tls_file.read())
+    return tuple(tls_data)
 
 
 def pq_client_service_types(arguments):
@@ -376,8 +404,15 @@ def deploy(arguments):
 
     optionals = {}
     if enable_tls():
-        optionals.update({'grpc_tls_data_path': grpc_tls_data_path(arguments)})
+        tls_data_path = grpc_tls_data_path(arguments)
+        optionals.update({'grpc_tls_data_path': tls_data_path})
         optionals.update({'grpc_ssl_enable': enable_tls()})
+        # The Docker entrypoint always sets YDB_GRPC_TLS_DATA_PATH (to /ydb_certs by default).
+        # Do not implicitly reuse certificates from the ydb_working_dir fallback.
+        existing_tls_data = load_existing_grpc_tls_data(os.getenv('YDB_GRPC_TLS_DATA_PATH'))
+        if existing_tls_data is not None:
+            logger.info('Using existing gRPC TLS data from %s', tls_data_path)
+            optionals.update({'existing_grpc_tls_data': existing_tls_data})
     pdisk_store_path = arguments.ydb_working_dir if arguments.ydb_working_dir else None
 
     enable_feature_flags = arguments.enabled_feature_flags.copy()  # type: typing.List[str]

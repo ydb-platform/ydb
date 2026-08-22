@@ -2,13 +2,33 @@ import os
 import tempfile
 import unittest
 
+import pytest
+
 from ydb.public.tools.lib.cmds import (
+    enable_tls,
     generic_connector_config,
+    load_existing_grpc_tls_data,
     resolve_deploy_config_action,
     same_config_path,
     should_preserve_existing_config,
 )
 from yql.essentials.providers.common.proto.gateways_config_pb2 import TGenericConnectorConfig
+
+
+@pytest.mark.parametrize(
+    ('value', 'expected'),
+    (
+        ('1', True),
+        ('true', True),
+        ('TRUE', True),
+        ('0', False),
+        ('false', False),
+        ('', False),
+    ),
+)
+def test_enable_tls_accepts_documented_boolean_values(monkeypatch, value, expected):
+    monkeypatch.setenv('YDB_GRPC_ENABLE_TLS', value)
+    assert enable_tls() is expected
 
 
 def test_kikimr_config_generator_generic_connector_config():
@@ -84,3 +104,38 @@ def test_same_config_path_resolves_symlinks():
             raise unittest.SkipTest('symlinks not supported on this filesystem')
         assert same_config_path(link, target) is True
         assert resolve_deploy_config_action(link, target) == 'preserve'
+
+
+def test_load_existing_grpc_tls_data():
+    assert load_existing_grpc_tls_data(None) is None
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        assert load_existing_grpc_tls_data(tmpdir) is None
+
+        for filename, data in (
+            ('ca.pem', 'ca'),
+            ('cert.pem', 'certificate'),
+            ('key.pem', 'private-key'),
+        ):
+            with open(os.path.join(tmpdir, filename), 'w') as writer:
+                writer.write(data)
+
+        assert load_existing_grpc_tls_data(tmpdir) == (b'ca', b'certificate', b'private-key')
+
+
+def test_load_existing_grpc_tls_data_rejects_incomplete_data():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        cert_path = os.path.join(tmpdir, 'cert.pem')
+        with open(cert_path, 'w') as writer:
+            writer.write('certificate')
+
+        with pytest.raises(ValueError, match='ca.pem.*key.pem'):
+            load_existing_grpc_tls_data(tmpdir)
+
+        with open(os.path.join(tmpdir, 'ca.pem'), 'w') as writer:
+            writer.write('ca')
+        with open(os.path.join(tmpdir, 'key.pem'), 'w'):
+            pass
+
+        with pytest.raises(ValueError, match='key.pem'):
+            load_existing_grpc_tls_data(tmpdir)

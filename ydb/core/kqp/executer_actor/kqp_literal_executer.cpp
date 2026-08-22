@@ -4,6 +4,7 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/runtime/kqp_compute.h>
+#include <ydb/core/kqp/runtime/kqp_wasm_resident_string.h>
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
 #include <ydb/library/yql/dq/comp_nodes/dq_hash_combine.h>
@@ -40,6 +41,10 @@ std::unique_ptr<TDqTaskRunnerContext> CreateTaskRunnerContext(NMiniKQL::TKqpComp
         // only for _pure_ compute actors!
         if (name == "KqpEnsure"sv) {
             return WrapKqpEnsure(callable, ctx);
+        }
+
+        if (name == "KqpWasmResidentString"sv) {
+            return WrapKqpWasmResidentString(callable, ctx);
         }
 
         if (name == "DqHashCombine"sv) {

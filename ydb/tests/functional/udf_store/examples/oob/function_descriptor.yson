@@ -1,0 +1,26 @@
+[
+    {
+        name=crash;
+        calling_convention=unversioned_value;
+        argument_types=[];
+        result_type={value=int64; tag=concrete_type;};
+    };
+    {
+        name=bad_index;
+        calling_convention=unversioned_value;
+        argument_types=[];
+        result_type={value=int64; tag=concrete_type;};
+    };
+    {
+        name=null_deref;
+        calling_convention=unversioned_value;
+        argument_types=[];
+        result_type={value=int64; tag=concrete_type;};
+    };
+    {
+        name=bad_ref;
+        calling_convention=unversioned_value;
+        argument_types=[];
+        result_type={value=int64; tag=concrete_type;};
+    };
+]

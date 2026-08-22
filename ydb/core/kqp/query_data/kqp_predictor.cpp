@@ -23,6 +23,8 @@
 namespace NKikimr::NKqp {
 
 using namespace NActors;
+using namespace NYql;
+using namespace NYql::NNodes;
 
 void TStagePredictor::Prepare() {
     InputDataPrediction = 1;
@@ -129,6 +131,7 @@ void TStagePredictor::SerializeToKqpSettings(NYql::NDqProto::TProgram::TSettings
     kqpProto.SetOutputDataPrediction(OutputDataPrediction);
     kqpProto.SetStageLevel(StageLevel);
     kqpProto.SetLevelDataPrediction(LevelDataPrediction.value_or(1));
+    // WasmUdfModules / WasmUdfStringColumns live on TKqpPhyStage, not TProgram.TSettings.
 }
 
 bool TStagePredictor::DeserializeFromKqpSettings(const NYql::NDqProto::TProgram::TSettings& kqpProto) {
@@ -153,6 +156,8 @@ bool TStagePredictor::DeserializeFromKqpSettings(const NYql::NDqProto::TProgram:
     OutputDataPrediction = kqpProto.GetOutputDataPrediction();
     StageLevel = kqpProto.GetStageLevel();
     LevelDataPrediction = kqpProto.GetLevelDataPrediction();
+    // WasmUdfModules are not stored in TProgram.TSettings; leave WasmUdfModules_ as-is
+    // (filled by Scan, or empty when deserializing settings for LLVM heuristics).
     return true;
 }
 

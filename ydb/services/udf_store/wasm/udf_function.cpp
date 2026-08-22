@@ -4,6 +4,7 @@
 #include "invocation_context.h"
 #include "registry_helpers.h"
 #include "udf_configured_callable.h"
+#include "wasm_string.h"
 
 #include <yql/essentials/public/udf/udf_type_builder.h>
 
@@ -70,11 +71,8 @@ TPreparedArg PrepareArgFromUnboxed(
                 value.Data.Boolean = arg.Get<bool>() ? 1 : 0;
                 break;
             case EUdfValueType::String: {
-                const TStringBuf string = arg.AsStringRef();
-                prepared.Storage.StringGuard = CopyIntoCompartment(string, compartment);
-                value.Type = EAbiValueType::String;
-                value.Length = static_cast<ui32>(string.size());
-                value.Data.String = std::bit_cast<char*>(prepared.Storage.StringGuard.GetCopiedOffset());
+                TWasmStringValue::FillAbiStringArg(
+                    compartment, arg, value, prepared.Storage.StringGuard);
                 break;
             }
         }

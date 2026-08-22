@@ -106,6 +106,8 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, OverridePlanner);
     REGISTER_SETTING(*this, UseGraceJoinCoreForMap);
     REGISTER_SETTING(*this, UseBlockHashJoin);
+    REGISTER_SETTING(*this, EnableWasmUdfResidentStringColumns);
+    REGISTER_SETTING(*this, EnableWasmUdfResidentConstArgs);
     REGISTER_SETTING(*this, BlockHashJoinSwapLeftJoinSides);
     REGISTER_SETTING(*this, EnableOrderPreservingLookupJoin);
     REGISTER_SETTING(*this, OptEnableParallelUnionAllConnectionsForExtend);
@@ -390,6 +392,16 @@ bool TKikimrConfiguration::GetUseBlockHashJoin() const {
 
 bool TKikimrConfiguration::GetUseKqpTasksGraphV2() const {
     return UseKqpTasksGraphV2.Get().GetOrElse(TTableServiceConfig::GetUseKqpTasksGraphV2());
+}
+
+bool TKikimrConfiguration::GetEnableWasmUdfResidentStringColumns() const {
+    return EnableWasmUdfResidentStringColumns.Get().GetOrElse(
+        TTableServiceConfig::GetEnableWasmUdfResidentStringColumns());
+}
+
+bool TKikimrConfiguration::GetEnableWasmUdfResidentConstArgs() const {
+    return EnableWasmUdfResidentConstArgs.Get().GetOrElse(
+        TTableServiceConfig::GetEnableWasmUdfResidentConstArgs());
 }
 
 } // namespace NYql

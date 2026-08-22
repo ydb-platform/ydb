@@ -232,6 +232,22 @@ TRuntimeNode TKqpProgramBuilder::KqpEnsure(TRuntimeNode value, TRuntimeNode pred
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
+TRuntimeNode TKqpProgramBuilder::KqpWasmResidentString(TRuntimeNode value) {
+    bool isOptional;
+    const auto unpackedType = UnpackOptionalData(value, isOptional);
+    const auto schemeType = unpackedType->GetSchemeType();
+    MKQL_ENSURE(schemeType == NUdf::TDataType<char*>::Id
+            || schemeType == NUdf::TDataType<NUdf::TUtf8>::Id
+            || schemeType == NUdf::TDataType<NUdf::TYson>::Id
+            || schemeType == NUdf::TDataType<NUdf::TJson>::Id
+            || schemeType == NUdf::TDataType<NUdf::TJsonDocument>::Id,
+        "Expected a string-like argument.");
+
+    TCallableBuilder callableBuilder(Env, __func__, value.GetStaticType());
+    callableBuilder.Add(value);
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
 TRuntimeNode TKqpProgramBuilder::KqpIndexLookupJoin(const TRuntimeNode& input, const TString& joinType,
     const TString& leftLabel, const TString& rightLabel, ui32 cookieFormatVersion) {
 

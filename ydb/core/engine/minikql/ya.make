@@ -13,6 +13,7 @@ PEERDIR(
     ydb/core/engine
     ydb/core/formats
     ydb/core/tablet_flat
+    ydb/services/udf_store/wasm
     yql/essentials/parser/pg_wrapper/interface
 )
 

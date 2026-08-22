@@ -52,6 +52,9 @@ class TStringValue {
             Y_DEBUG_ABORT_UNLESS(Refs_ > 0);
             if (!--Refs_) {
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 8)
+                if (UdfTryFreeExternalString(this, sizeof(*this) + Capacity_)) {
+                    return;
+                }
                 UdfFreeWithSize(this, sizeof(*this) + Capacity_);
 #else
                 UdfFree(this);
@@ -75,6 +78,9 @@ class TStringValue {
 #endif
             if (!Refs_) {
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 8)
+                if (UdfTryFreeExternalString(this, sizeof(*this) + Capacity_)) {
+                    return;
+                }
                 UdfFreeWithSize(this, sizeof(*this) + Capacity_);
 #else
                 UdfFree(this);
@@ -261,6 +267,17 @@ public:
 #else
         return ::new (UdfAllocate(dataSize)) TData(len, alligned);
 #endif
+    }
+
+    //! Bytes needed for ConstructInPlace (header + aligned capacity).
+    static ui64 AllocationBytes(ui64 capacity) {
+        return sizeof(TData) + AlignUp<ui64>(capacity, 16ULL);
+    }
+
+    //! Placement-new TData into |memory| (e.g. WASM linear memory). Caller owns the region.
+    static TData* ConstructInPlace(void* memory, ui32 len, ui64 capacity) {
+        const auto aligned = AlignUp<ui64>(capacity, 16ULL);
+        return ::new (memory) TData(len, aligned);
     }
 
 private:

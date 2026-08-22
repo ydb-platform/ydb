@@ -1,4 +1,5 @@
 UNITTEST()
+YQL_LAST_ABI_VERSION()
 
 PEERDIR(
     library/cpp/json
@@ -8,6 +9,11 @@ PEERDIR(
     ydb/library/wasm/engine
     ydb/services/udf_store/wasm
     ydb/services/udf_store/wasm/object_framework
+    yql/essentials/minikql
+    # DeleteString: the string release entry point emitted by MiniKQL codegen.
+    yql/essentials/minikql/computation/llvm16
+    yql/essentials/public/udf/service/exception_policy
+    yql/essentials/sql/pg_dummy
 )
 
 SRCS(
@@ -16,6 +22,7 @@ SRCS(
     compartment_manager_ut.cpp
     object_framework_ut.cpp
     objects_abi_ut.cpp
+    prefer_wasm_string_ut.cpp
     shared_ctx_ut.cpp
     throw_exception_ut.cpp
     with_helpers_ut.cpp

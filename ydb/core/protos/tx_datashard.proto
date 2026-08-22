@@ -319,6 +319,10 @@ message TKqpReadRangesSourceSettings {
     optional uint64 QuerySpanId = 27;
 
     optional string PoolId = 28;
+
+    // String columns that should materialize into WASM linear memory (PreferWasm).
+    // Copied from TKqpPhyStage.WasmUdfStringColumns for the owning stage.
+    repeated string WasmUdfStringColumns = 29;
 }
 
 // Takes input rows with a vector column, resolves the leaf cluster ID using the given

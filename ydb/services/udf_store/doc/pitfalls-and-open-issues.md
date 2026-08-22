@@ -83,6 +83,23 @@ C++ UDF → отдельная библиотека: нужен `import_module("
 После фикса stats клиент должен видеть issue из CA.  
 Обёртка `Internal error while executing transaction` всё ещё возможна на других ENSURE/verification путях — при доработке UX ошибок смотреть цепочку `ReportStateAndMaybeDie` → `ReplyErrorAndDie` vs `InternalError`.
 
+### G. PreferWasm / резидентная память — оставшиеся ограничения
+
+Каноническая таблица и контекст — в `wasm-udf-runtime.md` §8 «Ограничения PreferWasm (backlog)». Здесь — короткий список для планирования работ (false negative безопасен: host + copy).
+
+1. **Same-stage only** — буфер не переживает канал; UDF после shuffle/join в другом stage не reuse.
+2. **Fail-closed AST** — только известные формы в `kqp_wasm_string_columns`; join / computed / результат UDF — нет.
+3. **`GROUP BY` / `DqPhyHashCombine`** — нет индексного маппинга wide-хендлеров.
+4. **Не-колонки** (литерал, param, `$dict` / tx_result_binding) — только через `EnableWasmUdfResidentConstArgs` (opt-in, default false).
+5. **ConstArgs узкий** — только прямые string-args `Apply(Udf)` без `Argument` в subtree; compile не отличает wasm от native; крупный частично читаемый blob держит всю linear memory на task.
+6. **Embedded / short strings** (≤ `InternalBufferSize`) — `MakePreferWasm` не материализует в WASM.
+7. **Нет compartment** → `FallbackNoCompartment` (планирование).
+8. **Native UDF** — PreferWasm не применим.
+9. **Returns** — нет resident path для string-результата UDF (только args).
+10. **Blocks / lazy holder** — вне скоупа.
+
+Кандидаты в ближайший план: (3) маппинг `DqPhyHashCombine`; (5) знание каталога на compile → безопасный default ConstArgs; (2) join/computed формы по мере появления реальных запросов.
+
 ---
 
 ## Чеклист при изменении линковки / compartment

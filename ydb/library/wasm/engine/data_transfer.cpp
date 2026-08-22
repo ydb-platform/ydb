@@ -23,6 +23,19 @@ TCopyGuard::~TCopyGuard()
     }
 }
 
+TGuestBuffer::~TGuestBuffer()
+{
+    if (Compartment_ != nullptr && Offset_ != 0) {
+        try {
+            Compartment_->FreeBytes(Offset_);
+        } catch (WAVM::Runtime::Exception* exception) {
+            WAVM::Runtime::destroyException(exception);
+        } catch (...) {
+            // FreeBytes may throw; never throw from dtor.
+        }
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYdb::NWasm

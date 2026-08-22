@@ -16,6 +16,9 @@ public:
         NTable::TTag Tag;
         NScheme::TTypeInfo Type;
         TString TypeMod;
+        TString Name;
+        //! When true, string materialization uses MakePreferWasm (1-copy into query compartment).
+        bool PreferWasm = false;
         TPgType* PgType = nullptr;
     };
 

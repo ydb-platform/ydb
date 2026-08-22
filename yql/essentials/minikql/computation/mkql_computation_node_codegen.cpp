@@ -15,7 +15,14 @@ extern "C" void DeleteBoxed(NKikimr::NUdf::IBoxedValue* const boxed) {
 
 extern "C" void DeleteString(void* strData) {
     auto& str = *(NKikimr::NUdf::TStringValue*)(&strData);
-    UdfFreeWithSize(strData, 16 + str.Capacity());
+    const ui64 size = 16 + str.Capacity();
+    // Same order as TStringValue::TData::UnRef: string data may live outside the
+    // MiniKQL allocator (WASM linear memory), and only its owner knows how to
+    // release it.
+    if (UdfTryFreeExternalString(strData, size)) {
+        return;
+    }
+    UdfFreeWithSize(strData, size);
 }
 
 namespace NKikimr::NMiniKQL {

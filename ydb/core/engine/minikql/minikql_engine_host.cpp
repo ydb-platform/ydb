@@ -3,6 +3,7 @@
 #include <ydb/core/tablet_flat/flat_dbase_sz_env.h>
 #include <ydb/core/tablet_flat/flat_row_state.h>
 #include <ydb/core/tablet_flat/flat_table_stats.h>
+#include <ydb/services/udf_store/wasm/wasm_string.h>
 #include <yql/essentials/minikql/computation/mkql_custom_list.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/parser/pg_wrapper/interface/codec.h>
@@ -10,6 +11,8 @@
 #include <ydb/library/aclib/user_context.h>
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
+
+#include <util/stream/output.h>
 
 #include <new>
 
@@ -1005,10 +1008,17 @@ void AnalyzeRowType(TStructLiteral* columnIds, TSmallVec<NTable::TTag>& tags, TS
     }
 }
 
-NUdf::TUnboxedValue GetCellValue(const TCell& cell, NScheme::TTypeInfo type) {
+NUdf::TUnboxedValue GetCellValue(const TCell& cell, NScheme::TTypeInfo type, bool preferWasm) {
     if (cell.IsNull()) {
         return NUdf::TUnboxedValue();
     }
+
+    auto makeStringValue = [preferWasm](NUdf::TStringRef data) -> NUdf::TUnboxedValue {
+        if (preferWasm) {
+            return NKikimr::NUdfStore::NWasm::TWasmStringValue::MakePreferWasm(data);
+        }
+        return MakeString(data);
+    };
 
     switch (type.GetTypeId()) {
         case NYql::NProto::TypeIds::Bool:
@@ -1088,7 +1098,7 @@ NUdf::TUnboxedValue GetCellValue(const TCell& cell, NScheme::TTypeInfo type) {
         case NYql::NProto::TypeIds::Uuid:
         case NYql::NProto::TypeIds::JsonDocument:
         case NYql::NProto::TypeIds::DyNumber:
-            return MakeString(NUdf::TStringRef(cell.Data(), cell.Size()));
+            return makeStringValue(NUdf::TStringRef(cell.Data(), cell.Size()));
 
         default:
             break;
@@ -1099,7 +1109,7 @@ NUdf::TUnboxedValue GetCellValue(const TCell& cell, NScheme::TTypeInfo type) {
     }
 
     Y_DEBUG_ABORT("Unsupported type: %" PRIu16, type.GetTypeId());
-    return MakeString(NUdf::TStringRef(cell.Data(), cell.Size()));
+    return makeStringValue(NUdf::TStringRef(cell.Data(), cell.Size()));
 }
 
 }}

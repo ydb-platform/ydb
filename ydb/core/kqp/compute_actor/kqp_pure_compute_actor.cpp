@@ -44,6 +44,10 @@ TKqpComputeActor::TKqpComputeActor(
     }
 }
 
+TKqpComputeActor::~TKqpComputeActor() {
+    FreeComputeCtxData();
+}
+
 void TKqpComputeActor::DoBootstrap() {
     const TActorSystem* actorSystem = TlsActivationContext->ActorSystem();
 
@@ -55,6 +59,12 @@ void TKqpComputeActor::DoBootstrap() {
             ErrorFromIssue(TIssuesIds::DEFAULT_ERROR, TStringBuilder()
                 << "Failed to acquire WASM query compartment: " << e.what());
             return;
+        }
+    }
+
+    if (const auto it = taskParams.find(TString(NUdfStore::NWasm::WasmUdfStringColumnsTaskParam)); it != taskParams.end()) {
+        for (const auto& name : NUdfStore::NWasm::ParseWasmUdfStringColumnsTaskParam(it->second)) {
+            WasmUdfStringColumns_.insert(name);
         }
     }
 
@@ -131,8 +141,21 @@ void TKqpComputeActor::DoBootstrap() {
     if (Meta) {
         YQL_ENSURE(ComputeCtx.GetTableScans().empty());
 
-        ComputeCtx.AddTableScan(0, *Meta, GetStatsMode(), &TaskRunner->GetTypeEnv());
+        ComputeCtx.AddTableScan(0, *Meta, GetStatsMode(), &TaskRunner->GetTypeEnv(),
+            WasmUdfStringColumns_);
         ScanData = &ComputeCtx.GetTableScan(0);
+
+        if (!WasmUdfStringColumns_.empty()) {
+            TStringBuilder columns;
+            for (const auto& name : WasmUdfStringColumns_) {
+                if (!columns.empty()) {
+                    columns << ",";
+                }
+                columns << name;
+            }
+            YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_COMPUTE, "Applied WasmUdfStringColumns for scan",
+                {"columns", columns});
+        }
 
         columns.reserve(Meta->ColumnsSize());
         for (const auto& column : ScanData->GetColumns()) {
@@ -254,11 +277,10 @@ void TKqpComputeActor::FillExtraStats(NDqProto::TDqComputeActorStats* dst, bool 
     }
 }
 
-void TKqpComputeActor::PassAway() {
-    if (SysViewActorId) {
-        Send(SysViewActorId, new TEvents::TEvPoison);
-    }
-
+void TKqpComputeActor::FreeComputeCtxData() {
+    // Clear must run under the MKQL allocator. Prefer TaskRunner's bind (same path as
+    // AddData); if TaskRunner is already gone (e.g. destructor after a partial
+    // Terminate), fall back to the actor Alloc so RowBatches never leak into ~TRowBatchReader.
     if (TaskRunner) {
         if (TaskRunner->IsAllocatorAttached()) {
             ComputeCtx.Clear();
@@ -266,10 +288,55 @@ void TKqpComputeActor::PassAway() {
             auto guard = TaskRunner->BindAllocator(GetMkqlMemoryLimit());
             ComputeCtx.Clear();
         }
+    } else if (!ComputeCtx.GetTableScans().empty()) {
+        auto guard = BindAllocator();
+        ComputeCtx.Clear();
+    }
+    ScanData = nullptr;
+}
+
+//! Must run before TDqSyncComputeActorBase::DoTerminateImpl resets TaskRunner:
+//! PassAway is too late — RowBatches would then be destroyed without Clear().
+void TKqpComputeActor::DoTerminateImpl() {
+    LogWasmResidentStringStats();
+    FreeComputeCtxData();
+    TBase::DoTerminateImpl();
+}
+
+void TKqpComputeActor::PassAway() {
+    if (SysViewActorId) {
+        Send(SysViewActorId, new TEvents::TEvPoison);
     }
 
     WasmQueryCompartment_.reset();
     TBase::PassAway();
+}
+
+//! The only per-query evidence that resident string columns engaged: how many
+//! column values the read wrote into linear memory and how many UDF args reused
+//! those bytes instead of copying them again.
+void TKqpComputeActor::LogWasmResidentStringStats() {
+    if (!WasmQueryCompartment_ || !WasmQueryCompartment_->HasHandle()) {
+        return;
+    }
+
+    const auto stats = WasmQueryCompartment_->GetPreferWasmSnapshot();
+    TStringBuilder columns;
+    for (const auto& name : WasmUdfStringColumns_) {
+        if (!columns.empty()) {
+            columns << ",";
+        }
+        columns << name;
+    }
+
+    YDB_LOG_INFO_COMP(NKikimrServices::KQP_COMPUTE, "Wasm resident string columns",
+        {"txId", GetTxId()},
+        {"task", GetTask().GetId()},
+        {"columns", columns},
+        {"materializedInWasm", stats.MaterializedInWasm},
+        {"residentReused", stats.ResidentReused},
+        {"copiedIntoCompartment", stats.CopiedIntoCompartment},
+        {"residentConstArgs", stats.ResidentConstArgs});
 }
 
 void TKqpComputeActor::HandleExecute(TEvKqpCompute::TEvScanInitActor::TPtr& ev) {

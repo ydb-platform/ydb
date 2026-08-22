@@ -7,6 +7,7 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 
+#include <util/generic/algorithm.h>
 #include <util/generic/guid.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/string.h>
@@ -81,6 +82,18 @@ public:
     TGenStep GetMinGenStepVerified() const {
         AFL_VERIFY(Blobs.size());
         return TGenStep(*Blobs.begin());
+    }
+
+    // Returns true if no blob in the set has the given channel and generation in [fromGen, nextFromGen).
+    // The set is ordered by (generation, step), so only that slice is scanned: a sentinel
+    // with all other fields zeroed is the smallest possible id of its generation, which
+    // makes lower_bound land on the first blob of each bound.
+    bool HasNoBlobsInRange(const ui32 channel, const ui32 fromGen, const ui32 nextFromGen) const {
+        const auto rangeBegin = Blobs.lower_bound(TLogoBlobID(0, fromGen, 0, 0, 0, 0));
+        const auto rangeEnd = Blobs.lower_bound(TLogoBlobID(0, nextFromGen, 0, 0, 0, 0));
+        return !AnyOf(rangeBegin, rangeEnd, [channel](const TLogoBlobID& blobId) {
+            return blobId.Channel() == channel;
+        });
     }
 
     template <class TActor>

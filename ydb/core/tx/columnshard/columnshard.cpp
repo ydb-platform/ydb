@@ -90,6 +90,7 @@ void TColumnShard::TrySwitchToWork(const TActorContext& ctx) {
             {"event", "initialize_shard"},
             {"step", "SwitchToWork"});
         Become(&TThis::StateWork);
+        SetupCutHistory();
         SignalTabletActive(ctx);
         YDB_LOG_INFO("",
             {"event", "initialize_shard"},

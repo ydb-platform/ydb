@@ -57,6 +57,18 @@ public:
     virtual bool IsReady() const override {
         return true;
     }
+
+    THistoryCutterWrapper* GetHistoryCutter() {
+        return Manager->GetHistoryCutter();
+    }
+
+    const THistoryCutterWrapper* GetHistoryCutter() const {
+        return std::as_const(*Manager).GetHistoryCutter();
+    }
+
+    void InitHistoryCutter(const TActorId& tabletActorId) {
+        Manager->InitHistoryCutter(Manager, GetSharedBlobs(), tabletActorId);
+    }
 };
 
 }   // namespace NKikimr::NOlap::NBlobOperations::NBlobStorage

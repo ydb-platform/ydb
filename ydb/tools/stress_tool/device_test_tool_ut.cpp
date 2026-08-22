@@ -328,7 +328,7 @@ Y_UNIT_TEST(PersistentBufferTestWrite) {
                 }
                 WriteInfos: { Size: 4096 Weight: 1 }
                 DurationSeconds: )___" << TestDurationSec << R"___(
-                InFlightWrites: 64
+                InFlightWrites: 32
                 FillRatio: 10
             }
         }

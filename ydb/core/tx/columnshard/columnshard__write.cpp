@@ -432,8 +432,8 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
             if (!lockInfo) {
                 LWPROBE(EvWrite, TabletID(), source.ToString(), cookie, record.GetTxId(), writeTimeout.value_or(TDuration::Max()), 0,
                     "CommitWriteLock", true, false, ToString(NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN),
-                    "haven't lock for commit: " + ::ToString(commitOperation->GetLockId()));
-                sendError("haven't lock for commit: " + ::ToString(commitOperation->GetLockId()),
+                    "missing lock for commit: " + ::ToString(commitOperation->GetLockId()));
+                sendError("missing lock for commit: " + ::ToString(commitOperation->GetLockId()),
                     NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
             } else {
                 THashSet<TSchemeShardLocalPathId> schemeShardLocalPathIds;

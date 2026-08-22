@@ -11,16 +11,18 @@ from ydb.tests.stress.oltp_workload.workload.type.select_partition import Worklo
 from ydb.tests.stress.oltp_workload.workload.type.secondary_index import WorkloadSecondaryIndex
 from ydb.tests.stress.oltp_workload.workload.type.bloom_filter_index import WorkloadBloomFilterIndex
 from ydb.tests.stress.oltp_workload.workload.type.tli import WorkloadTli
+from ydb.tests.stress.oltp_workload.workload.type.combined_indexes import WorkloadCombinedIndexes
 
 ydb.interceptor.monkey_patch_event_handler()
 
 
 class WorkloadRunner:
-    def __init__(self, client, path, duration):
+    def __init__(self, client, path, duration, seed=None):
         self.client = client
         self.name = path
         self.tables_prefix = "/".join([self.client.database, self.name])
         self.duration = duration
+        self.seed = seed
         ydb.interceptor.monkey_patch_event_handler()
 
     def __enter__(self):
@@ -39,19 +41,25 @@ class WorkloadRunner:
         stop = threading.Event()
         workloads = [
             WorkloadInsertDeleteAllTypes(self.client, self.name, stop),
-            WorkloadFulltextIndex(self.client, self.name, stop),
+            WorkloadFulltextIndex(self.client, self.name, stop, seed=self.seed),
             WorkloadVectorIndex(self.client, self.name, stop),
-            WorkloadJsonIndex(self.client, self.name, stop),
+            WorkloadJsonIndex(self.client, self.name, stop, seed=self.seed),
             WorkloadSelectPartition(self.client, self.name, stop),
             WorkloadSecondaryIndex(self.client, self.name, stop),
             WorkloadBloomFilterIndex(self.client, self.name, stop),
-            WorkloadTli(self.client, self.name, stop)
+            WorkloadTli(self.client, self.name, stop),
+            WorkloadCombinedIndexes(self.client, self.name, stop, seed=self.seed),
         ]
 
         if enabled_workloads is not None:
             workloads = [w for w in workloads if w.name in enabled_workloads]
         if disabled_workloads is not None:
             workloads = [w for w in workloads if w.name not in disabled_workloads]
+
+        print(
+            f"Starting workloads duration={self.duration}s seed={self.seed!r} "
+            f"names={[w.name for w in workloads]}"
+        )
 
         for w in workloads:
             w.start()

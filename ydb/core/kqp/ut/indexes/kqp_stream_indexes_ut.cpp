@@ -1163,6 +1163,197 @@ Y_UNIT_TEST_SUITE(KqpStreamIndexes) {
         }
     }
 
+    Y_UNIT_TEST_TWIN(UpsertUniqIndexInternalConflictIsAtomic, StreamIndex) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(StreamIndex);
+
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto result = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/T` (
+                pk Int64,
+                u Int64,
+                payload Int64,
+                PRIMARY KEY (pk),
+                INDEX idx GLOBAL UNIQUE SYNC ON (u)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        auto client = kikimr.GetQueryClient();
+        {
+            auto it = client.ExecuteQuery(R"(
+                UPSERT INTO `/Root/T` (pk, u, payload) VALUES
+                    (1, 100, 10),
+                    (2, 200, 20);
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        }
+
+        // The first row updates an existing primary key, while the second row is new.
+        // Their duplicate unique key must reject the whole statement, including the update.
+        {
+            auto it = client.ExecuteQuery(R"(
+                UPSERT INTO `/Root/T` (pk, u, payload) VALUES
+                    (1, 300, 11),
+                    (3, 300, 30);
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::PRECONDITION_FAILED, it.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(it.GetIssues().ToString(), "Duplicated keys found.");
+        }
+
+        {
+            auto it = client.StreamExecuteQuery(
+                "SELECT * FROM `/Root/T` ORDER BY pk;",
+                TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            CompareYson(R"([[[10];[1];[100]];[[20];[2];[200]]])", StreamResultToYson(it));
+        }
+        {
+            auto it = client.StreamExecuteQuery(
+                "SELECT * FROM `/Root/T/idx/indexImplTable` ORDER BY u;",
+                TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            CompareYson(R"([[[1];[100]];[[2];[200]]])", StreamResultToYson(it));
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(UpdateUniqIndexConflictIsAtomic, StreamIndex) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(StreamIndex);
+
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto result = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/T` (
+                pk Int64,
+                u Int64,
+                payload Int64,
+                PRIMARY KEY (pk),
+                INDEX idx GLOBAL UNIQUE SYNC ON (u)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        auto client = kikimr.GetQueryClient();
+        {
+            auto it = client.ExecuteQuery(R"(
+                UPSERT INTO `/Root/T` (pk, u, payload) VALUES
+                    (1, 100, 10),
+                    (2, 200, 20),
+                    (3, 300, 30);
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        }
+
+        // Both selected rows would acquire the same unique key. No selected row may
+        // be updated when validation rejects the statement.
+        {
+            auto it = client.ExecuteQuery(R"(
+                UPDATE `/Root/T` SET u = 400, payload = payload + 1 WHERE pk <= 2;
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::PRECONDITION_FAILED, it.GetIssues().ToString());
+        }
+
+        {
+            auto it = client.StreamExecuteQuery(
+                "SELECT * FROM `/Root/T` ORDER BY pk;",
+                TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            CompareYson(R"([[[10];[1];[100]];[[20];[2];[200]];[[30];[3];[300]]])", StreamResultToYson(it));
+        }
+        {
+            auto it = client.StreamExecuteQuery(
+                "SELECT * FROM `/Root/T/idx/indexImplTable` ORDER BY u;",
+                TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            CompareYson(R"([[[1];[100]];[[2];[200]];[[3];[300]]])", StreamResultToYson(it));
+        }
+    }
+
+    void RunUpdateUniqIndexSwap(bool streamIndex, bool expectSuccess) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(streamIndex);
+
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto result = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/T` (
+                pk Int64,
+                u Int64,
+                payload Int64,
+                PRIMARY KEY (pk),
+                INDEX idx GLOBAL UNIQUE SYNC ON (u)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        auto client = kikimr.GetQueryClient();
+        {
+            auto it = client.ExecuteQuery(R"(
+                UPSERT INTO `/Root/T` (pk, u, payload) VALUES
+                    (1, 100, 10),
+                    (2, 200, 20),
+                    (3, 300, 30);
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        }
+
+        // Regardless of whether this write path supports a key swap, it must not
+        // expose a partially swapped state.
+        {
+            auto it = client.ExecuteQuery(R"(
+                UPDATE `/Root/T`
+                SET u = CASE WHEN pk = 1 THEN 200 ELSE 100 END,
+                    payload = payload + 1
+                WHERE pk <= 2;
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            if (expectSuccess) {
+                UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::PRECONDITION_FAILED, it.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS(it.GetIssues().ToString(), "Conflict with existing key.");
+            }
+        }
+
+        {
+            auto it = client.StreamExecuteQuery(
+                "SELECT * FROM `/Root/T` ORDER BY pk;",
+                TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            CompareYson(
+                expectSuccess
+                    ? R"([[[11];[1];[200]];[[21];[2];[100]];[[30];[3];[300]]])"
+                    : R"([[[10];[1];[100]];[[20];[2];[200]];[[30];[3];[300]]])",
+                StreamResultToYson(it));
+        }
+        {
+            auto it = client.StreamExecuteQuery(
+                "SELECT * FROM `/Root/T/idx/indexImplTable` ORDER BY u;",
+                TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            CompareYson(
+                expectSuccess
+                    ? R"([[[2];[100]];[[1];[200]];[[3];[300]]])"
+                    : R"([[[1];[100]];[[2];[200]];[[3];[300]]])",
+                StreamResultToYson(it));
+        }
+    }
+
+    Y_UNIT_TEST(UpdateUniqIndexSwapLegacyWriteSucceeds) {
+        RunUpdateUniqIndexSwap(false, true);
+    }
+
+    Y_UNIT_TEST(UpdateUniqIndexSwapStreamWriteRollsBack) {
+        RunUpdateUniqIndexSwap(true, false);
+    }
+
     Y_UNIT_TEST_QUAD(InsertConflictMessages, WithIndex, StreamIndex) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(StreamIndex);
@@ -1645,6 +1836,66 @@ Y_UNIT_TEST_SUITE(KqpStreamIndexes) {
             UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
             CompareYson(R"([])", StreamResultToYson(it));
         }
+    }
+
+    // Establish a deterministic two-transaction overlap without sleeps or racing futures. Transaction 1
+    // stages its write without committing. Transaction 2 targets a different main-table partition but the
+    // same unique key and commits first; transaction 1's later commit must then abort on validation. This
+    // exercises both the legacy and stream index-write paths and verifies that the loser leaves neither a
+    // main row nor a partial index row.
+    Y_UNIT_TEST_TWIN(ConcurrentTransactionsConflictOnUniqueKey, StreamIndex) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(StreamIndex);
+
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        auto tableSession = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto createResult = tableSession.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/T` (
+                pk Int64,
+                u Int64,
+                payload Utf8,
+                PRIMARY KEY (pk),
+                INDEX uniq GLOBAL UNIQUE SYNC ON (u)
+            ) WITH (
+                PARTITION_AT_KEYS = (0)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(createResult.GetStatus(), EStatus::SUCCESS, createResult.GetIssues().ToString());
+
+        auto client = kikimr.GetQueryClient();
+        auto session1 = client.GetSession().GetValueSync().GetSession();
+        auto session2 = client.GetSession().GetValueSync().GetSession();
+
+        auto first = session1.ExecuteQuery(R"(
+            PRAGMA kikimr.KqpForceImmediateEffectsExecution="true";
+            INSERT INTO `/Root/T` (pk, u, payload) VALUES (-1, 42, "first-aborted");
+        )", TTxControl::BeginTx(TTxSettings::SnapshotRW())).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(first.GetStatus(), EStatus::SUCCESS, first.GetIssues().ToString());
+        auto tx1 = first.GetTransaction();
+        UNIT_ASSERT_C(tx1 && tx1->IsActive(), "the first transaction must remain open until validation");
+
+        auto second = session2.ExecuteQuery(R"(
+            PRAGMA kikimr.KqpForceImmediateEffectsExecution="true";
+            INSERT INTO `/Root/T` (pk, u, payload) VALUES (1, 42, "second-winner");
+        )", TTxControl::BeginTx(TTxSettings::SnapshotRW()).CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(second.GetStatus(), EStatus::SUCCESS, second.GetIssues().ToString());
+
+        auto commit = tx1->Commit().ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(commit.GetStatus(), EStatus::ABORTED, commit.GetIssues().ToString());
+
+        auto main = client.StreamExecuteQuery(R"(
+            SELECT pk, u, payload FROM `/Root/T` ORDER BY pk;
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(main.GetStatus(), EStatus::SUCCESS, main.GetIssues().ToString());
+        CompareYson(R"([[[1];[42];["second-winner"]]])", StreamResultToYson(main));
+
+        auto index = client.StreamExecuteQuery(R"(
+            SELECT u, pk FROM `/Root/T/uniq/indexImplTable` ORDER BY u, pk;
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(index.GetStatus(), EStatus::SUCCESS, index.GetIssues().ToString());
+        CompareYson(R"([[[42];[1]]])", StreamResultToYson(index));
     }
 
     Y_UNIT_TEST_TWIN(UpdateIndexedColumnToNullAndBack, EnableIndexStreamWrite) {

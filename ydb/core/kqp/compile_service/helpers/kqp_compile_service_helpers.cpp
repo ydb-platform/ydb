@@ -4,6 +4,7 @@
 #include "util/string/builder.h"
 
 #include <ydb/core/protos/table_service_config.pb.h>
+#include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/protos/kqp_compile_settings.pb.h>
 
 #include <google/protobuf/util/message_differencer.h>
@@ -58,6 +59,19 @@ std::optional<TString> ShouldInvalidateCompileCache(const NKikimrConfig::TTableS
     }
 
     return TString(finalMessage);
+}
+
+std::optional<TString> ShouldInvalidateCompileCache(
+    const NKikimrConfig::TFeatureFlags& prev,
+    const NKikimrConfig::TFeatureFlags& next)
+{
+    TString logMessage;
+    ::google::protobuf::util::MessageDifferencer differ;
+    differ.ReportDifferencesToString(&logMessage);
+    if (differ.Compare(prev, next)) {
+        return std::nullopt;
+    }
+    return logMessage;
 }
 
 }

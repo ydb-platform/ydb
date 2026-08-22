@@ -166,6 +166,7 @@ message IssueLog {
 
 
 ### Response field descriptions {#fields-Описание}
+
 | Field | Description |
 | :--- | :--- |
 | `self_check_result` | enum field which contains the [database check result](#selfcheck-result) |

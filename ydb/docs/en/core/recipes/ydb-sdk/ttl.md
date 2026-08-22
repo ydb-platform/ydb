@@ -8,7 +8,6 @@ In the example below, the rows of the `mytable` table will be deleted an hour af
 
 {% list tabs group=tool %}
 
-- 
 
   {% if oss == true %}
 
@@ -62,7 +61,6 @@ The example below shows how to use the `modified_at` column with a numeric type 
 
 {% list tabs group=tool %}
 
-- 
 
   {% if oss == true %}
 
@@ -126,7 +124,6 @@ In the following example, rows of the table `mytable` will be moved to the bucke
 
 {% list tabs group=tool %}
 
-- 
 
   {% if oss == true %}
 
@@ -172,7 +169,6 @@ For a newly created table, you can pass TTL settings along with the table descri
 
 {% list tabs group=tool %}
 
-- 
 
   {% if oss == true %}
 
@@ -241,7 +237,6 @@ For a newly created table, you can pass TTL settings along with the table descri
 
 {% list tabs group=tool %}
 
-- 
 
   {% if oss == true %}
 
@@ -295,7 +290,6 @@ The current TTL settings can be obtained from the table description:
 
 {% list tabs group=tool %}
 
-- 
 
   {% if oss == true %}
 

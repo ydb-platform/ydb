@@ -811,7 +811,7 @@ Currently, only connections with matching identifiers of the [source and message
             });
     ```
 
-  {% endlist %}
+    {% endlist %}
 
 - C#
 

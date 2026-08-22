@@ -740,7 +740,7 @@ Y_UNIT_TEST_SUITE(CopyTable) {
         {
             TestTableDescription auxTable{};
             auxTable.InStore = InStore;
-            const auto auxPlan = PrepareTablet(runtime, auxPathId, auxTable.Schema);
+            Y_UNUSED(PrepareTablet(runtime, auxPathId, auxTable.Schema));
         }
 
         ui64 txId = 10;

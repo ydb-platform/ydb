@@ -76,9 +76,9 @@ To enable mandatory authorization of database nodes, update the [static cluster 
     client_certificate_authorization:
       request_client_certificate: true
       client_certificate_definitions:
-    - member_groups: ["registerNode@cert"]
+   - member_groups: ["registerNode@cert"]
           subject_terms:
-        - short_name: "O"
+    - short_name: "O"
               values: ["YDB"]
     ```
 
@@ -96,8 +96,8 @@ To enable mandatory authorization of database nodes, update the [static cluster 
         enforce_user_token_requirement: true
         ...
         register_dynamic_node_allowed_sids:
-      - "root@builtin"
-      - "registerNode@cert"
+   - "root@builtin"
+   - "registerNode@cert"
     ```
 
 

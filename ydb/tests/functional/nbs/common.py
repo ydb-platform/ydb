@@ -98,30 +98,48 @@ class NbsTestBase:
 
         execute_ydbd(self.cluster, "token", ['admin', 'bs', 'config', 'invoke', '--proto', define_ddisk_pool])
 
+    def create_partition(self, disk_id, blocks_count=DEFAULT_DISK_BLOCKS_COUNT):
+        """
+        Create a disk and return the parsed CreatePartition JSON result.
+        """
+        proc = execute_dstool_grpc(
+            self.cluster,
+            "token",
+            [
+                'nbs',
+                'partition',
+                'create',
+                '--pool',
+                self.ddisk_pool_name,
+                '--block-size=4096',
+                f'--blocks-count={blocks_count}',
+                '--type=ssd',
+                '--disk-id',
+                disk_id,
+            ],
+            check_exit_code=False,
+            return_process=True,
+        )
+
+        stdout = proc.std_out.decode('utf-8')
+        stderr = proc.std_err.decode('utf-8')
+
+        try:
+            output = json.loads(stdout)
+        except json.JSONDecodeError as e:
+            assert False, (
+                f"CreatePartition for disk {disk_id} did not return JSON: "
+                f"{e}; stdout={stdout}, stderr={stderr}"
+            )
+
+        return output
+
     def create_disk(self, disk_id, blocks_count=DEFAULT_DISK_BLOCKS_COUNT):
         """
         Create a disk with specified number of blocks.
         Returns the partition tablet id.
         """
-        output = json.loads(
-            execute_dstool_grpc(
-                self.cluster,
-                "token",
-                [
-                    'nbs',
-                    'partition',
-                    'create',
-                    '--pool',
-                    self.ddisk_pool_name,
-                    '--block-size=4096',
-                    f'--blocks-count={blocks_count}',
-                    '--type=ssd',
-                    '--disk-id',
-                    disk_id,
-                ],
-            )
-        )
-
+        output = self.create_partition(disk_id, blocks_count)
         assert output.get('status') == 'SUCCESS', (
             f"CreatePartition failed for disk {disk_id}: {output}"
         )

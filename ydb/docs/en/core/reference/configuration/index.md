@@ -586,6 +586,7 @@ $Max(shared\_cache\_min\_percent * hard\_limit\_bytes / 100, shared\_cache\_min\
 
 | Parameter | Default | Description |
 | --- | --- | --- |
+<<<<<<< HEAD
 | `hard_limit_bytes` | CGroup&nbsp;memory&nbsp;limit&nbsp;/<br/>Host memory | Hard memory usage limit. |
 | `soft_limit_percent`&nbsp;/<br/>`soft_limit_bytes` | 75% | Soft memory usage limit. |
 | `target_utilization_percent`&nbsp;/<br/>`target_utilization_bytes` | 50% | Target memory utilization. |
@@ -595,6 +596,35 @@ $Max(shared\_cache\_min\_percent * hard\_limit\_bytes / 100, shared\_cache\_min\
 | `mem_table_min_percent`&nbsp;/<br/>`mem_table_min_bytes` | 1% | Minimum threshold for the MemTable memory limit. |
 | `mem_table_max_percent`&nbsp;/<br/>`mem_table_max_bytes` | 3% | Maximum threshold for the MemTable memory limit. |
 | `query_execution_limit_percent`&nbsp;/<br/>`query_execution_limit_bytes` | 20% | KQP memory limit. |
+=======
+| [{#T}](actor_system_config.md) | Yes | Distribution of CPU resources across actor system pools |
+| [{#T}](auth_config.md) | No | Authentication and authorization settings |
+| [{#T}](aws_client_config.md) | No | AWS client default settings |
+| [{#T}](blob_storage_config.md) | No | Static cluster group configuration for system tablets |
+| [{#T}](bridge_config.md) | No | Configuration of the [bridge mode](../../concepts/bridge.md) |
+| [{#T}](client_certificate_authorization.md) | No | Authentication using client certificates |
+| [{#T}](cms_config.md) | No | Cluster Management System (CMS) configuration |
+| [{#T}](domains_config.md) | No | Cluster domain configuration, including Blob Storage and State Storage |
+| [{#T}](feature_flags.md) | No | Feature flags to enable or disable certain {{ ydb-short-name }} capabilities |
+| [{#T}](healthcheck_config.md) | No | Thresholds and timeouts for the Health Check service |
+| [{#T}](hive_config.md) | No | Tablet launch configuration |
+| [{#T}](host_configs.md) | No | Typical host configurations for cluster nodes |
+| [{#T}](hosts.md) | Yes | Static cluster node configuration |
+| [{#T}](immediate_controls_config.md) | No | Configuration of dynamic cluster settings |
+| [{#T}](kafka_proxy_config.md) | No | Configuration of [Kafka Proxy](../../reference/kafka-api/index.md) |
+| [{#T}](log_config.md) | No | Logging configuration and parameters |
+| [{#T}](memory_controller_config.md) | No | Memory allocation and limits for database components |
+| [{#T}](monitoring_config.md) | No | Parameters of [YDB Monitoring](../embedded-ui/ydb-monitoring.md) |
+| [{#T}](node_broker_config.md) | No | Stable node name configuration |
+| [{#T}](query_service_config.md) | No | Configuration of external sources for federated queries |
+| [{#T}](resource_broker_config.md) | No | Resource broker for controlling CPU and memory consumption |
+| [{#T}](security_config.md) | No | Security configuration settings |
+| [{#T}](self_management_config.md) | No | Distributed configuration V2 and automatic cluster component management settings |
+| [{#T}](system_tablet_backup_config.md) | No | System tablet backup configuration |
+| [{#T}](table_service_config.md) | No | Query execution configuration settings |
+| [{#T}](tli_config.md) | No | Diagnostics parameters for [transaction lock invalidation](../../concepts/glossary.md#tli) (TLI) |
+| [{#T}](tls.md) | No | TLS configuration for secure connections |
+>>>>>>> 617b68b36c5 (add description for force_shard_split_data_size setting (#41348))
 
 ## blob_storage_config: Static cluster group {#blob-storage-config}
 

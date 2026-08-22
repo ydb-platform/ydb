@@ -307,6 +307,13 @@ void TBlobManager::DrainDeleteTo(const TGenStep& dest, TGCContext& gcContext) {
         const auto& unifiedBlobId = it.GetBlobId();
         TBlobAddress bAddress(unifiedBlobId.GetDsGroup(), unifiedBlobId.GetLogoBlobId().Channel());
         auto logoBlobId = unifiedBlobId.GetLogoBlobId();
+        // Below the first surviving history entry: already collected by the barrier that cut it.
+        if (unifiedBlobId.GetDsGroup() == Max<ui32>()) {
+            YDB_LOG_WARN("",
+                {"event", "orphaned_delete_mark_under_cut_history"},
+                {"blobId", unifiedBlobId.ToStringNew()});
+            continue;
+        }
         if (!gcContext.GetSharedBlobsManager()->BuildStoreCategories({ unifiedBlobId }).GetDirect().IsEmpty()) {
             YDB_LOG_INFO("",
                 {"toDeleteGc", unifiedBlobId.ToStringNew()});
@@ -332,6 +339,13 @@ bool TBlobManager::DrainKeepTo(const TGenStep& dest, TGCContext& gcContext) {
         TBlobAddress bAddress(blobGroup, logoBlobId.Channel());
         const TUnifiedBlobId keepUnified(blobGroup, logoBlobId);
         gcContext.MutableKeepsToErase().emplace_back(keepUnified);
+        if (blobGroup == Max<ui32>()) {
+            BlobsToDelete.ExtractBlobTo(keepUnified, gcContext.MutableExtractedToRemoveFromDB());
+            YDB_LOG_WARN("",
+                {"event", "orphaned_keep_mark_under_cut_history"},
+                {"blobId", keepUnified.ToStringNew()});
+            return;
+        }
         if (BlobsToDelete.ExtractBlobTo(keepUnified, gcContext.MutableExtractedToRemoveFromDB())) {
             if (logoBlobId.Generation() == CurrentGen) {
                 YDB_LOG_INFO("",
@@ -438,6 +452,7 @@ std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> TBlobManager::BuildGCTas
         return nullptr;
     }
 
+    GCTaskInFlight = true;
     return result;
 }
 
@@ -555,6 +570,7 @@ void TBlobManager::OnGCFinishedOnExecute(const std::optional<TGenStep>& genStep,
 }
 
 void TBlobManager::OnGCFinishedOnComplete(const std::optional<TGenStep>& genStep) {
+    GCTaskInFlight = false;
     if (genStep) {
         LastCollectedGenStep = *genStep;
         AFL_VERIFY(GCBarrierPreparation == LastCollectedGenStep)("prepare", GCBarrierPreparation)("last", LastCollectedGenStep);
@@ -579,6 +595,9 @@ void TBlobManager::OnGCStartOnComplete(const std::optional<TGenStep>& genStep) {
 }
 
 bool TBlobManager::HasNoBlobsInRange(const ui32 channel, const ui32 fromGen, const ui32 nextFromGen) const {
+    if (GCTaskInFlight) {
+        return false;
+    }
     const auto inRange = [&](const auto& blob) {
         const TLogoBlobID& logoBlobId = blob.first.GetLogoBlobId();
         return logoBlobId.Channel() == channel && logoBlobId.Generation() >= fromGen && logoBlobId.Generation() < nextFromGen;

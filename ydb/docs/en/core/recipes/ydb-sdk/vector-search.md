@@ -84,13 +84,13 @@ For more information about connecting to {{ ydb-short-name }}, see the article [
 
     async def main():
     async with ydb.aio.Driver(
-      endpoint=ydb_endpoint,
-      database=ydb_database,
-      credentials=ydb_credentials,
+    endpoint=ydb_endpoint,
+    database=ydb_database,
+    credentials=ydb_credentials,
     ) as driver:
-      await driver.wait(5, fail_fast=True)
-      pool = ydb.aio.QuerySessionPool(driver)
-      # ... use pool ...
+    await driver.wait(5, fail_fast=True)
+    pool = ydb.aio.QuerySessionPool(driver)
+    # ... use pool ...
 
     asyncio.run(main())
     ```
@@ -194,10 +194,10 @@ The `String` type is used to store the vector. For more details, see the documen
     def create_vector_table(pool: ydb.QuerySessionPool, table_name: str) -> None:
     query = f"""
     CREATE TABLE IF NOT EXISTS `{table_name}` (
-      id Utf8,
-      document Utf8,
-      embedding String,
-      PRIMARY KEY (id)
+    id Utf8,
+    document Utf8,
+    embedding String,
+    PRIMARY KEY (id)
     );"""
 
     pool.execute_with_retries(query)
@@ -213,10 +213,10 @@ The `String` type is used to store the vector. For more details, see the documen
     async def create_vector_table(pool: ydb.aio.QuerySessionPool, table_name: str) -> None:
     query = f"""
     CREATE TABLE IF NOT EXISTS `{table_name}` (
-      id Utf8,
-      document Utf8,
-      embedding String,
-      PRIMARY KEY (id)
+    id Utf8,
+    document Utf8,
+    embedding String,
+    PRIMARY KEY (id)
     );"""
 
     await pool.execute_with_retries(query)
@@ -232,15 +232,15 @@ The `String` type is used to store the vector. For more details, see the documen
   void CreateVectorTable(NYdb::NQuery::TQueryClient& client, const std::string& tableName)
   {
   std::string query = std::format(R"(
-    CREATE TABLE IF NOT EXISTS `{}` (
-        id Utf8,
-        document Utf8,
-        embedding String,
-        PRIMARY KEY (id)
-    ))", tableName);
+  CREATE TABLE IF NOT EXISTS `{}` (
+    id Utf8,
+    document Utf8,
+    embedding String,
+    PRIMARY KEY (id)
+  ))", tableName);
 
   NYdb::NStatusHelpers::ThrowOnError(client.RetryQuerySync([&](NYdb::NQuery::TSession session) {
-    return session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+  return session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
   }));
 
   std::cout << "Vector table created: " << tableName << std::endl;
@@ -380,21 +380,21 @@ In {{ ydb-short-name }} tables, vectors are stored as a serialized byte sequence
     ) -> None:
     query = f"""
     DECLARE $items AS List<Struct<
-      id: Utf8,
-      document: Utf8,
-      embedding: String
+    id: Utf8,
+    document: Utf8,
+    embedding: String
     >>;
 
     UPSERT INTO `{table_name}`
     (
-      id,
-      document,
-      embedding
+    id,
+    document,
+    embedding
     )
     SELECT
-      id,
-      document,
-      embedding,
+    id,
+    document,
+    embedding,
     FROM AS_TABLE($items);
     """
 
@@ -404,10 +404,10 @@ In {{ ydb-short-name }} tables, vectors are stored as a serialized byte sequence
     items_struct_type.add_member("embedding", ydb.PrimitiveType.String)
 
     for item in items:
-      item["embedding"] = convert_vector_to_bytes(item["embedding"])
+    item["embedding"] = convert_vector_to_bytes(item["embedding"])
 
     pool.execute_with_retries(
-      query, {"$items": (items, ydb.ListType(items_struct_type))}
+    query, {"$items": (items, ydb.ListType(items_struct_type))}
     )
 
     print(f"{len(items)} items inserted")
@@ -430,21 +430,21 @@ In {{ ydb-short-name }} tables, vectors are stored as a serialized byte sequence
     ) -> None:
     query = f"""
     DECLARE $items AS List<Struct<
-      id: Utf8,
-      document: Utf8,
-      embedding: String
+    id: Utf8,
+    document: Utf8,
+    embedding: String
     >>;
 
     UPSERT INTO `{table_name}`
     (
-      id,
-      document,
-      embedding
+    id,
+    document,
+    embedding
     )
     SELECT
-      id,
-      document,
-      embedding,
+    id,
+    document,
+    embedding,
     FROM AS_TABLE($items);
     """
 
@@ -454,10 +454,10 @@ In {{ ydb-short-name }} tables, vectors are stored as a serialized byte sequence
     items_struct_type.add_member("embedding", ydb.PrimitiveType.String)
 
     for item in items:
-      item["embedding"] = convert_vector_to_bytes(item["embedding"])
+    item["embedding"] = convert_vector_to_bytes(item["embedding"])
 
     await pool.execute_with_retries(
-      query, {"$items": (items, ydb.ListType(items_struct_type))}
+    query, {"$items": (items, ydb.ListType(items_struct_type))}
     )
 
     print(f"{len(items)} items inserted")
@@ -472,8 +472,8 @@ In {{ ydb-short-name }} tables, vectors are stored as a serialized byte sequence
   {
   std::string result;
   for (const auto& value : vector) {
-    const char* bytes = reinterpret_cast<const char*>(&value);
-    result += std::string(bytes, sizeof(float));
+  const char* bytes = reinterpret_cast<const char*>(&value);
+  result += std::string(bytes, sizeof(float));
   }
   return result + "\x01";
   }
@@ -484,40 +484,40 @@ In {{ ydb-short-name }} tables, vectors are stored as a serialized byte sequence
   const std::vector<TItem>& items)
   {
   std::string query = std::format(R"(
-    DECLARE $items AS List<Struct<
-        id: Utf8,
-        document: Utf8,
-        embedding: String
-    >>;
-    UPSERT INTO `{0}`
-    (
-        id,
-        document,
-        embedding
-    )
-    SELECT
-        id,
-        document,
-        embedding,
-    FROM AS_TABLE($items);
+  DECLARE $items AS List<Struct<
+    id: Utf8,
+    document: Utf8,
+    embedding: String
+  >>;
+  UPSERT INTO `{0}`
+  (
+    id,
+    document,
+    embedding
+  )
+  SELECT
+    id,
+    document,
+    embedding,
+  FROM AS_TABLE($items);
   )", tableName);
 
   NYdb::TParamsBuilder paramsBuilder;
   auto& valueBuilder = paramsBuilder.AddParam("$items");
   valueBuilder.BeginList();
   for (const auto& item : items) {
-    valueBuilder.AddListItem();
-    valueBuilder.BeginStruct();
-    valueBuilder.AddMember("id").Utf8(item.Id);
-    valueBuilder.AddMember("document").Utf8(item.Document);
-    valueBuilder.AddMember("embedding").String(ConvertVectorToBytes(item.Embedding));
-    valueBuilder.EndStruct();
+  valueBuilder.AddListItem();
+  valueBuilder.BeginStruct();
+  valueBuilder.AddMember("id").Utf8(item.Id);
+  valueBuilder.AddMember("document").Utf8(item.Document);
+  valueBuilder.AddMember("embedding").String(ConvertVectorToBytes(item.Embedding));
+  valueBuilder.EndStruct();
   }
   valueBuilder.EndList();
   valueBuilder.Build();
 
   NYdb::NStatusHelpers::ThrowOnError(client.RetryQuerySync([params = paramsBuilder.Build(), &query](NYdb::NQuery::TSession session) {
-    return session.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
+  return session.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
   }));
 
   std::cout << items.size() << " items inserted" << std::endl;
@@ -582,7 +582,7 @@ In {{ ydb-short-name }} tables, vectors are stored as a serialized byte sequence
   byte[] convertVectorToBytes(float[] vector) {
   ByteBuffer bb = ByteBuffer.allocate(vector.length * Float.BYTES + 1).order(ByteOrder.LITTLE_ENDIAN);
   for (float v : vector) {
-    bb.putFloat(v);
+  bb.putFloat(v);
   }
   bb.put((byte) 0x01);
   return bb.array();
@@ -590,44 +590,44 @@ In {{ ydb-short-name }} tables, vectors are stored as a serialized byte sequence
 
   void insertItemsAsBytes(SessionRetryContext retryCtx, String tableName, List<Item> items) {
   String query = String.format("""
-        DECLARE $items AS List<Struct<
-            id: Utf8,
-            document: Utf8,
-            embedding: String
-        >>;
+    DECLARE $items AS List<Struct<
+        id: Utf8,
+        document: Utf8,
+        embedding: String
+    >>;
 
-        UPSERT INTO `%s`
-        (
-            id,
-            document,
-            embedding
-        )
-        SELECT
-            id,
-            document,
-            embedding,
-        FROM AS_TABLE($items);""", tableName);
+    UPSERT INTO `%s`
+    (
+        id,
+        document,
+        embedding
+    )
+    SELECT
+        id,
+        document,
+        embedding,
+    FROM AS_TABLE($items);""", tableName);
 
   StructType rowType = StructType.of(
-        "id", PrimitiveType.Text,
-        "document", PrimitiveType.Text,
-        "embedding", PrimitiveType.Bytes
+    "id", PrimitiveType.Text,
+    "document", PrimitiveType.Text,
+    "embedding", PrimitiveType.Bytes
   );
 
   List<Value<?>> rows = new ArrayList<>(items.size());
   for (Item item : items) {
-    rows.add(rowType.newValue(
-            "id", PrimitiveValue.newText(item.id()),
-            "document", PrimitiveValue.newText(item.document()),
-            "embedding", PrimitiveValue.newBytes(convertVectorToBytes(item.embedding()))
-    ));
+  rows.add(rowType.newValue(
+        "id", PrimitiveValue.newText(item.id()),
+        "document", PrimitiveValue.newText(item.document()),
+        "embedding", PrimitiveValue.newBytes(convertVectorToBytes(item.embedding()))
+  ));
   }
 
   ListValue itemsParam = ListType.of(rowType).newValue(rows);
   Params params = Params.of("$items", itemsParam);
 
   retryCtx.supplyResult(session -> QueryReader.readFrom(
-        session.createQuery(query, TxMode.SERIALIZABLE_RW, params)
+    session.createQuery(query, TxMode.SERIALIZABLE_RW, params)
   )).join().getValue();
 
   System.out.println(items.size() + " items inserted");
@@ -663,49 +663,49 @@ In {{ ydb-short-name }} tables, vectors are stored as a serialized byte sequence
 
   void insertItemsAsFloatList(SessionRetryContext retryCtx, String tableName, List<Item> items) {
   String query = String.format("""
-        DECLARE $items AS List<Struct<
-            id: Utf8,
-            document: Utf8,
-            embedding: List<Float>
-        >>;
+    DECLARE $items AS List<Struct<
+        id: Utf8,
+        document: Utf8,
+        embedding: List<Float>
+    >>;
 
-        UPSERT INTO `%s`
-        (
-            id,
-            document,
-            embedding
-        )
-        SELECT
-            id,
-            document,
-            Untag(Knn::ToBinaryStringFloat(embedding), "FloatVector"),
-        FROM AS_TABLE($items);""", tableName);
+    UPSERT INTO `%s`
+    (
+        id,
+        document,
+        embedding
+    )
+    SELECT
+        id,
+        document,
+        Untag(Knn::ToBinaryStringFloat(embedding), "FloatVector"),
+    FROM AS_TABLE($items);""", tableName);
 
   StructType rowType = StructType.of(
-        "id", PrimitiveType.Text,
-        "document", PrimitiveType.Text,
-        "embedding", ListType.of(PrimitiveType.Float)
+    "id", PrimitiveType.Text,
+    "document", PrimitiveType.Text,
+    "embedding", ListType.of(PrimitiveType.Float)
   );
 
   List<Value<?>> rows = new ArrayList<>(items.size());
   for (Item item : items) {
-    Value<?>[] emb = new Value<?>[item.embedding().length];
-    for (int i = 0; i < item.embedding().length; i++) {
-        emb[i] = PrimitiveValue.newFloat(item.embedding()[i]);
-    }
-    ListValue embList = ListType.of(PrimitiveType.Float).newValueOwn(emb);
-    rows.add(rowType.newValue(
-            "id", PrimitiveValue.newText(item.id()),
-            "document", PrimitiveValue.newText(item.document()),
-            "embedding", embList
-    ));
+  Value<?>[] emb = new Value<?>[item.embedding().length];
+  for (int i = 0; i < item.embedding().length; i++) {
+    emb[i] = PrimitiveValue.newFloat(item.embedding()[i]);
+  }
+  ListValue embList = ListType.of(PrimitiveType.Float).newValueOwn(emb);
+  rows.add(rowType.newValue(
+        "id", PrimitiveValue.newText(item.id()),
+        "document", PrimitiveValue.newText(item.document()),
+        "embedding", embList
+  ));
   }
 
   ListValue itemsParam = ListType.of(rowType).newValue(rows);
   Params params = Params.of("$items", itemsParam);
 
   retryCtx.supplyResult(session -> QueryReader.readFrom(
-        session.createQuery(query, TxMode.SERIALIZABLE_RW, params)
+    session.createQuery(query, TxMode.SERIALIZABLE_RW, params)
   )).join().getValue();
 
   System.out.println(items.size() + " items inserted");
@@ -734,21 +734,21 @@ In {{ ydb-short-name }} tables, vectors are stored as a serialized byte sequence
     ) -> None:
     query = f"""
     DECLARE $items AS List<Struct<
-      id: Utf8,
-      document: Utf8,
-      embedding: List<Float>
+    id: Utf8,
+    document: Utf8,
+    embedding: List<Float>
     >>;
 
     UPSERT INTO `{table_name}`
     (
-      id,
-      document,
-      embedding
+    id,
+    document,
+    embedding
     )
     SELECT
-      id,
-      document,
-      Untag(Knn::ToBinaryStringFloat(embedding), "FloatVector"),
+    id,
+    document,
+    Untag(Knn::ToBinaryStringFloat(embedding), "FloatVector"),
     FROM AS_TABLE($items);
     """
 
@@ -758,7 +758,7 @@ In {{ ydb-short-name }} tables, vectors are stored as a serialized byte sequence
     items_struct_type.add_member("embedding", ydb.ListType(ydb.PrimitiveType.Float))
 
     pool.execute_with_retries(
-      query, {"$items": (items, ydb.ListType(items_struct_type))}
+    query, {"$items": (items, ydb.ListType(items_struct_type))}
     )
 
     print(f"{len(items)} items inserted")
@@ -776,21 +776,21 @@ In {{ ydb-short-name }} tables, vectors are stored as a serialized byte sequence
     ) -> None:
     query = f"""
     DECLARE $items AS List<Struct<
-      id: Utf8,
-      document: Utf8,
-      embedding: List<Float>
+    id: Utf8,
+    document: Utf8,
+    embedding: List<Float>
     >>;
 
     UPSERT INTO `{table_name}`
     (
-      id,
-      document,
-      embedding
+    id,
+    document,
+    embedding
     )
     SELECT
-      id,
-      document,
-      Untag(Knn::ToBinaryStringFloat(embedding), "FloatVector"),
+    id,
+    document,
+    Untag(Knn::ToBinaryStringFloat(embedding), "FloatVector"),
     FROM AS_TABLE($items);
     """
 
@@ -800,7 +800,7 @@ In {{ ydb-short-name }} tables, vectors are stored as a serialized byte sequence
     items_struct_type.add_member("embedding", ydb.ListType(ydb.PrimitiveType.Float))
 
     await pool.execute_with_retries(
-      query, {"$items": (items, ydb.ListType(items_struct_type))}
+    query, {"$items": (items, ydb.ListType(items_struct_type))}
     )
 
     print(f"{len(items)} items inserted")
@@ -817,45 +817,45 @@ In {{ ydb-short-name }} tables, vectors are stored as a serialized byte sequence
   const std::vector<TItem>& items)
   {
   std::string query = std::format(R"(
-    DECLARE $items AS List<Struct<
-        id: Utf8,
-        document: Utf8,
-        embedding: List<Float>
-    >>;
+  DECLARE $items AS List<Struct<
+    id: Utf8,
+    document: Utf8,
+    embedding: List<Float>
+  >>;
 
-    UPSERT INTO `{}`
-    (
-        id,
-        document,
-        embedding
-    )
-    SELECT
-        id,
-        document,
-        Untag(Knn::ToBinaryStringFloat(embedding), "FloatVector"),
-    FROM AS_TABLE($items);
+  UPSERT INTO `{}`
+  (
+    id,
+    document,
+    embedding
+  )
+  SELECT
+    id,
+    document,
+    Untag(Knn::ToBinaryStringFloat(embedding), "FloatVector"),
+  FROM AS_TABLE($items);
   )", tableName);
 
   NYdb::TParamsBuilder paramsBuilder;
   auto& valueBuilder = paramsBuilder.AddParam("$items");
   valueBuilder.BeginList();
   for (const auto& item : items) {
-    valueBuilder.AddListItem();
-    valueBuilder.BeginStruct();
-    valueBuilder.AddMember("id").Utf8(item.Id);
-    valueBuilder.AddMember("document").Utf8(item.Document);
-    valueBuilder.AddMember("embedding").BeginList();
-    for (const auto& value : item.Embedding) {
-        valueBuilder.AddListItem().Float(value);
-    }
-    valueBuilder.EndList();
-    valueBuilder.EndStruct();
+  valueBuilder.AddListItem();
+  valueBuilder.BeginStruct();
+  valueBuilder.AddMember("id").Utf8(item.Id);
+  valueBuilder.AddMember("document").Utf8(item.Document);
+  valueBuilder.AddMember("embedding").BeginList();
+  for (const auto& value : item.Embedding) {
+    valueBuilder.AddListItem().Float(value);
+  }
+  valueBuilder.EndList();
+  valueBuilder.EndStruct();
   }
   valueBuilder.EndList();
   valueBuilder.Build();
 
   NYdb::NStatusHelpers::ThrowOnError(client.RetryQuerySync([params = paramsBuilder.Build(), &query](NYdb::NQuery::TSession session) {
-    return session.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
+  return session.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
   }));
 
   std::cout << items.size() << " items inserted" << std::endl;
@@ -974,29 +974,31 @@ The parameters used when creating an index of type `vector_kmeans_tree` are desc
   GLOBAL USING vector_kmeans_tree
   ON (embedding)
   WITH (
-    {strategy},
-    vector_type="Float",
-    vector_dimension={dimension},
-    levels={levels},
-    clusters={clusters},
-    overlap_clusters=3
+  {strategy},
+  vector_type="Float",
+  vector_dimension={dimension},
+  levels={levels},
+  clusters={clusters},
+  overlap_clusters=3
   );
   """
 
   await pool.execute_with_retries(query)
   await driver.table_client.alter_table(
-    f"{driver._driver_config.database}/{table_name}",
-    rename_indexes=[
-        ydb.RenameIndexItem(
-            source_name=temp_index_name,
-            destination_name=f"{index_name}",
-            replace_destination=True,
-        ),
-    ],
+  f"{driver._driver_config.database}/{table_name}",
+  rename_indexes=[
+    ydb.RenameIndexItem(
+        source_name=temp_index_name,
+        destination_name=f"{index_name}",
+        replace_destination=True,
+    ),
+  ],
   )
 
     ```python
   import ydb
+
+
 
 
 
@@ -1024,37 +1026,37 @@ The parameters used when creating an index of type `vector_kmeans_tree` are desc
   GLOBAL USING vector_kmeans_tree
   ON (embedding)
   WITH (
-    {strategy},
-    vector_type="Float",
-    vector_dimension={dimension},
-    levels={levels},
-    clusters={clusters},
-    overlap_clusters=3
+  {strategy},
+  vector_type="Float",
+  vector_dimension={dimension},
+  levels={levels},
+  clusters={clusters},
+  overlap_clusters=3
   );
   """
 
   pool.execute_with_retries(query)
   driver.table_client.alter_table(
-    f"{driver._driver_config.database}/{table_name}",
-    rename_indexes=[
-        ydb.RenameIndexItem(
-            source_name=temp_index_name,
-            destination_name=f"{index_name}",
-            replace_destination=True,
-        ),
-    ],
+  f"{driver._driver_config.database}/{table_name}",
+  rename_indexes=[
+    ydb.RenameIndexItem(
+        source_name=temp_index_name,
+        destination_name=f"{index_name}",
+        replace_destination=True,
+    ),
+  ],
   )
 
   pool.execute_with_retries(query)
   driver.table_client.alter_table(
-      f"{driver._driver_config.database}/{table_name}",
-      rename_indexes=[
-          ydb.RenameIndexItem(
-              source_name=temp_index_name,
-              destination_name=f"{index_name}",
-              replace_destination=True,
-          ),
-      ],
+  f"{driver._driver_config.database}/{table_name}",
+  rename_indexes=[
+      ydb.RenameIndexItem(
+          source_name=temp_index_name,
+          destination_name=f"{index_name}",
+          replace_destination=True,
+      ),
+  ],
   )
 
   print(f"Table index {index_name} created.")
@@ -1098,17 +1100,19 @@ The parameters used when creating an index of type `vector_kmeans_tree` are desc
 
   await pool.execute_with_retries(query)
   await driver.table_client.alter_table(
-      f"{driver._driver_config.database}/{table_name}",
-      rename_indexes=[
-          ydb.RenameIndexItem(
-              source_name=temp_index_name,
-              destination_name=f"{index_name}",
-              replace_destination=True,
-          ),
-      ],
+  f"{driver._driver_config.database}/{table_name}",
+  rename_indexes=[
+      ydb.RenameIndexItem(
+          source_name=temp_index_name,
+          destination_name=f"{index_name}",
+          replace_destination=True,
+      ),
+  ],
   )
 
   print(f"Table index {index_name} created.")
+
+
 
 
 
@@ -1137,33 +1141,33 @@ The parameters used when creating an index of type `vector_kmeans_tree` are desc
   std::uint64_t clusters)
   {
   std::string query = std::format(R"(
-    ALTER TABLE `{0}`
-    ADD INDEX {1}__temp
-    GLOBAL USING vector_kmeans_tree
-    ON (embedding)
-    WITH (
-        {2},
-        vector_type="Float",
-        vector_dimension={3},
-        levels={4},
-        clusters={5},
-        overlap_clusters=3
-    );
+  ALTER TABLE `{0}`
+  ADD INDEX {1}__temp
+  GLOBAL USING vector_kmeans_tree
+  ON (embedding)
+  WITH (
+    {2},
+    vector_type="Float",
+    vector_dimension={3},
+    levels={4},
+    clusters={5},
+    overlap_clusters=3
+  );
   )", tableName, indexName, strategy, dim, levels, clusters);
 
   NYdb::NStatusHelpers::ThrowOnError(client.RetryQuerySync([&](NYdb::NQuery::TSession session) {
-    return session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+  return session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
   }));
 
   NYdb::NTable::TTableClient tableClient(driver);
   NYdb::NStatusHelpers::ThrowOnError(tableClient.RetryOperationSync([&](NYdb::NTable::TSession session) {
-    return session.AlterTable(database + "/" + tableName, NYdb::NTable::TAlterTableSettings()
-        .AppendRenameIndexes(NYdb::NTable::TRenameIndex{
-            .SourceName_ = indexName + "__temp",
-            .DestinationName_ = indexName,
-            .ReplaceDestination_ = true
-        })
-    ).ExtractValueSync();
+  return session.AlterTable(database + "/" + tableName, NYdb::NTable::TAlterTableSettings()
+    .AppendRenameIndexes(NYdb::NTable::TRenameIndex{
+        .SourceName_ = indexName + "__temp",
+        .DestinationName_ = indexName,
+        .ReplaceDestination_ = true
+    })
+  ).ExtractValueSync();
   }));
 
   std::cout << "Table index `" << indexName << "` for table `" << tableName << "` added" << std::endl;
@@ -1185,42 +1189,42 @@ The parameters used when creating an index of type `vector_kmeans_tree` are desc
   import tech.ydb.table.settings.AlterTableSettings;
 
   void addVectorIndex(
-    GrpcTransport transport,
-    SessionRetryContext queryRetry,
-    SessionRetryContext tableRetry,
-    String tableName,
-    String indexName,
-    String strategy,
-    long dimension,
-    long levels,
-    long clusters) {
+  GrpcTransport transport,
+  SessionRetryContext queryRetry,
+  SessionRetryContext tableRetry,
+  String tableName,
+  String indexName,
+  String strategy,
+  long dimension,
+  long levels,
+  long clusters) {
 
   String tempIndexName = indexName + "__temp";
   String query = String.format("""
-        ALTER TABLE `%s`
-        ADD INDEX %s
-        GLOBAL USING vector_kmeans_tree
-        ON (embedding)
-        WITH (
-            %s,
-            vector_type="Float",
-            vector_dimension=%d,
-            levels=%d,
-            clusters=%d
-        );
-        """, tableName, tempIndexName, strategy, dimension, levels, clusters);
+    ALTER TABLE `%s`
+    ADD INDEX %s
+    GLOBAL USING vector_kmeans_tree
+    ON (embedding)
+    WITH (
+        %s,
+        vector_type="Float",
+        vector_dimension=%d,
+        levels=%d,
+        clusters=%d
+    );
+    """, tableName, tempIndexName, strategy, dimension, levels, clusters);
 
   queryRetry.supplyResult(session -> QueryReader.readFrom(
-        session.createQuery(query, TxMode.NONE, Params.empty())
+    session.createQuery(query, TxMode.NONE, Params.empty())
   )).join().getValue();
 
   String tablePath = transport.getDatabase() + "/" + tableName;
   AlterTableSettings settings = new AlterTableSettings()
-        .addRenameIndex(tempIndexName, indexName, true);
+    .addRenameIndex(tempIndexName, indexName, true);
 
   tableRetry.supplyStatus(session -> session.alterTable(tablePath, settings))
-        .join()
-        .expectSuccess("alter table rename index");
+    .join()
+    .expectSuccess("alter table rename index");
 
   System.out.println("Table index `" + indexName + "` for table `" + tableName + "` added");
   }
@@ -1305,11 +1309,11 @@ The method returns a list of dictionaries with fields `id`, `document`, and `sco
   for r, err := rs.NextRow(ctx); err == nil; r, err = rs.NextRow(ctx) {
   var item ResultItem
   if err := r.ScanNamed(
-    query.Named("id", &item.ID),
-    query.Named("document", &item.Document),
-    query.Named("score", &item.Score),
+  query.Named("id", &item.ID),
+  query.Named("document", &item.Document),
+  query.Named("score", &item.Score),
   ); err != nil {
-    return nil, err
+  return nil, err
   }
   items = append(items, item)
   }
@@ -1363,22 +1367,22 @@ The method returns a list of dictionaries with fields `id`, `document`, and `sco
     DECLARE $embedding as String;
 
     SELECT
-      id,
-      document,
-      Knn::{strategy}(embedding, $embedding) as score
+    id,
+    document,
+    Knn::{strategy}(embedding, $embedding) as score
     FROM {table_name} {view_index}
     ORDER BY score {sort_order}
     LIMIT {limit};
     """
 
     result = pool.execute_with_retries(
-      query,
-      {
-          "$embedding": (
-              convert_vector_to_bytes(embedding),
-              ydb.PrimitiveType.String,
-          ),
-      },
+    query,
+    {
+      "$embedding": (
+          convert_vector_to_bytes(embedding),
+          ydb.PrimitiveType.String,
+      ),
+    },
     )
 
     - Native SDK (Asyncio)
@@ -1402,35 +1406,35 @@ The method returns a list of dictionaries with fields `id`, `document`, and `sco
     DECLARE $embedding as String;
 
     SELECT
-        id,
-        document,
-        Knn::{strategy}(embedding, $embedding) as score
+    id,
+    document,
+    Knn::{strategy}(embedding, $embedding) as score
     FROM {table_name} {view_index}
     ORDER BY score {sort_order}
     LIMIT {limit};
     """
 
     result = await pool.execute_with_retries(
-        query,
-        {
-            "$embedding": (
-                convert_vector_to_bytes(embedding),
-                ydb.PrimitiveType.String,
-            ),
-        },
+    query,
+    {
+        "$embedding": (
+            convert_vector_to_bytes(embedding),
+            ydb.PrimitiveType.String,
+        ),
+    },
     )
 
     items = []
 
     for result_set in result:
-        for row in result_set.rows:
-            items.append(
-                {
-                    "id": row["id"],
-                    "document": row["document"],
-                    "score": row["score"],
-                }
-            )
+    for row in result_set.rows:
+        items.append(
+            {
+                "id": row["id"],
+                "document": row["document"],
+                "score": row["score"],
+            }
+        )
 
     return items
     ```
@@ -1453,38 +1457,38 @@ The method returns a list of dictionaries with fields `id`, `document`, and `sco
   std::string sortOrder = strategy.ends_with("Similarity") ? "DESC" : "ASC";
 
   std::string query = std::format(R"(
-    PRAGMA ydb.KMeansTreeSearchTopSize = "{5}";
-    DECLARE $embedding as String;
-    SELECT
-        id,
-        document,
-        Knn::{2}(embedding, $embedding) as score
-    FROM {0} {1}
-    ORDER BY score {3}
-    LIMIT {4};
+  PRAGMA ydb.KMeansTreeSearchTopSize = "{5}";
+  DECLARE $embedding as String;
+  SELECT
+    id,
+    document,
+    Knn::{2}(embedding, $embedding) as score
+  FROM {0} {1}
+  ORDER BY score {3}
+  LIMIT {4};
   )", tableName, viewIndex, strategy, sortOrder, limit, topClusters);
 
   auto params = NYdb::TParamsBuilder()
-    .AddParam("$embedding")
-        .String(ConvertVectorToBytes(embedding))
-        .Build()
-    .Build();
+  .AddParam("$embedding")
+    .String(ConvertVectorToBytes(embedding))
+    .Build()
+  .Build();
 
   std::vector<TResultItem> result;
 
   NYdb::NStatusHelpers::ThrowOnError(client.RetryQuerySync([params, &query, &result](NYdb::NQuery::TSession session) {
-    auto execResult = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
-    if (execResult.IsSuccess()) {
-        auto parser = execResult.GetResultSetParser(0);
-        while (parser.TryNextRow()) {
-            result.push_back({
-                .Id = *parser.ColumnParser(0).GetOptionalUtf8(),
-                .Document = *parser.ColumnParser(1).GetOptionalUtf8(),
-                .Score = *parser.ColumnParser(2).GetOptionalFloat()
-            });
-        }
+  auto execResult = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
+  if (execResult.IsSuccess()) {
+    auto parser = execResult.GetResultSetParser(0);
+    while (parser.TryNextRow()) {
+        result.push_back({
+            .Id = *parser.ColumnParser(0).GetOptionalUtf8(),
+            .Document = *parser.ColumnParser(1).GetOptionalUtf8(),
+            .Score = *parser.ColumnParser(2).GetOptionalFloat()
+        });
     }
-    return execResult;
+  }
+  return execResult;
   }));
 
   return result;
@@ -1525,48 +1529,48 @@ The method returns a list of dictionaries with fields `id`, `document`, and `sco
   byte[] convertVectorToBytes(float[] vector) {
   ByteBuffer bb = ByteBuffer.allocate(vector.length * Float.BYTES + 1).order(ByteOrder.LITTLE_ENDIAN);
   for (float v : vector) {
-    bb.putFloat(v);
+  bb.putFloat(v);
   }
   bb.put((byte) 0x01);
   return bb.array();
   }
 
   List<ResultItem> searchItemsAsBytes(
-    SessionRetryContext retryCtx,
-    String tableName,
-    float[] embedding,
-    String strategy,
-    long limit,
-    Optional<String> indexName) {
+  SessionRetryContext retryCtx,
+  String tableName,
+  float[] embedding,
+  String strategy,
+  long limit,
+  Optional<String> indexName) {
 
   String viewIndex = indexName.map(n -> "VIEW " + n).orElse("");
   String sortOrder = strategy.endsWith("Similarity") ? "DESC" : "ASC";
 
   String query = String.format("""
-        DECLARE $embedding as String;
-        SELECT
-            id,
-            document,
-            Knn::%s(embedding, $embedding) as score
-        FROM %s %s
-        ORDER BY score %s
-        LIMIT %d;
-        """, strategy, tableName, viewIndex, sortOrder, limit);
+    DECLARE $embedding as String;
+    SELECT
+        id,
+        document,
+        Knn::%s(embedding, $embedding) as score
+    FROM %s %s
+    ORDER BY score %s
+    LIMIT %d;
+    """, strategy, tableName, viewIndex, sortOrder, limit);
 
   Params params = Params.of("$embedding", PrimitiveValue.newBytes(convertVectorToBytes(embedding)));
 
   QueryReader reader = retryCtx.supplyResult(session -> QueryReader.readFrom(
-        session.createQuery(query, TxMode.SERIALIZABLE_RW, params)
+    session.createQuery(query, TxMode.SERIALIZABLE_RW, params)
   )).join().getValue();
 
   List<ResultItem> result = new ArrayList<>();
   ResultSetReader rs = reader.getResultSet(0);
   while (rs.next()) {
-    result.add(new ResultItem(
-            rs.getColumn("id").getText(),
-            rs.getColumn("document").getText(),
-            rs.getColumn("score").getFloat()
-    ));
+  result.add(new ResultItem(
+        rs.getColumn("id").getText(),
+        rs.getColumn("document").getText(),
+        rs.getColumn("score").getFloat()
+  ));
   }
   return result;
   }
@@ -1595,50 +1599,50 @@ The method returns a list of dictionaries with fields `id`, `document`, and `sco
   import tech.ydb.table.values.Value;
 
   List<ResultItem> searchItemsAsFloatList(
-    SessionRetryContext retryCtx,
-    String tableName,
-    float[] embedding,
-    String strategy,
-    long limit,
-    Optional<String> indexName) {
+  SessionRetryContext retryCtx,
+  String tableName,
+  float[] embedding,
+  String strategy,
+  long limit,
+  Optional<String> indexName) {
 
   String viewIndex = indexName.map(n -> "VIEW " + n).orElse("");
   String sortOrder = strategy.endsWith("Similarity") ? "DESC" : "ASC";
 
   String query = String.format("""
-        DECLARE $embedding as List<Float>;
+    DECLARE $embedding as List<Float>;
 
-        $target_embedding = Knn::ToBinaryStringFloat($embedding);
+    $target_embedding = Knn::ToBinaryStringFloat($embedding);
 
-        SELECT
-            id,
-            document,
-            Knn::%s(embedding, $target_embedding) as score
-        FROM %s %s
-        ORDER BY score
-        %s
-        LIMIT %d;
-        """, strategy, tableName, viewIndex, sortOrder, limit);
+    SELECT
+        id,
+        document,
+        Knn::%s(embedding, $target_embedding) as score
+    FROM %s %s
+    ORDER BY score
+    %s
+    LIMIT %d;
+    """, strategy, tableName, viewIndex, sortOrder, limit);
 
   Value<?>[] floats = new Value<?>[embedding.length];
   for (int i = 0; i < embedding.length; i++) {
-    floats[i] = PrimitiveValue.newFloat(embedding[i]);
+  floats[i] = PrimitiveValue.newFloat(embedding[i]);
   }
   ListValue emb = ListType.of(PrimitiveType.Float).newValueOwn(floats);
   Params params = Params.of("$embedding", emb);
 
   QueryReader reader = retryCtx.supplyResult(session -> QueryReader.readFrom(
-        session.createQuery(query, TxMode.SERIALIZABLE_RW, params)
+    session.createQuery(query, TxMode.SERIALIZABLE_RW, params)
   )).join().getValue();
 
   List<ResultItem> result = new ArrayList<>();
   ResultSetReader rs = reader.getResultSet(0);
   while (rs.next()) {
-    result.add(new ResultItem(
-            rs.getColumn("id").getText(),
-            rs.getColumn("document").getText(),
-            rs.getColumn("score").getFloat()
-    ));
+  result.add(new ResultItem(
+        rs.getColumn("id").getText(),
+        rs.getColumn("document").getText(),
+        rs.getColumn("score").getFloat()
+  ));
   }
   return result;
   }
@@ -1693,9 +1697,9 @@ The method returns a list of dictionaries with fields `id`, `document`, and `sco
     $target_embedding = Knn::ToBinaryStringFloat($embedding);
 
     SELECT
-      id,
-      document,
-      Knn::{strategy}(embedding, $target_embedding) as score
+    id,
+    document,
+    Knn::{strategy}(embedding, $target_embedding) as score
     FROM {table_name} {view_index}
     ORDER BY score
     {sort_order}
@@ -1703,10 +1707,10 @@ The method returns a list of dictionaries with fields `id`, `document`, and `sco
     """
 
     result = pool.execute_with_retries(
-      query,
-      {
-          "$embedding": (embedding, ydb.ListType(ydb.PrimitiveType.Float)),
-      },
+    query,
+    {
+      "$embedding": (embedding, ydb.ListType(ydb.PrimitiveType.Float)),
+    },
     )
 
     - Native SDK (Asyncio)
@@ -1732,9 +1736,9 @@ The method returns a list of dictionaries with fields `id`, `document`, and `sco
     $target_embedding = Knn::ToBinaryStringFloat($embedding);
 
     SELECT
-        id,
-        document,
-        Knn::{strategy}(embedding, $target_embedding) as score
+    id,
+    document,
+    Knn::{strategy}(embedding, $target_embedding) as score
     FROM {table_name} {view_index}
     ORDER BY score
     {sort_order}
@@ -1742,23 +1746,23 @@ The method returns a list of dictionaries with fields `id`, `document`, and `sco
     """
 
     result = await pool.execute_with_retries(
-        query,
-        {
-            "$embedding": (embedding, ydb.ListType(ydb.PrimitiveType.Float)),
-        },
+    query,
+    {
+        "$embedding": (embedding, ydb.ListType(ydb.PrimitiveType.Float)),
+    },
     )
 
     items = []
 
     for result_set in result:
-        for row in result_set.rows:
-            items.append(
-                {
-                    "id": row["id"],
-                    "document": row["document"],
-                    "score": row["score"],
-                }
-            )
+    for row in result_set.rows:
+        items.append(
+            {
+                "id": row["id"],
+                "document": row["document"],
+                "score": row["score"],
+            }
+        )
 
     return items
     ```
@@ -1781,44 +1785,44 @@ The method returns a list of dictionaries with fields `id`, `document`, and `sco
   std::string sortOrder = strategy.ends_with("Similarity") ? "DESC" : "ASC";
 
   std::string query = std::format(R"(
-    PRAGMA ydb.KMeansTreeSearchTopSize = "{5}";
-    DECLARE $embedding as List<Float>;
+  PRAGMA ydb.KMeansTreeSearchTopSize = "{5}";
+  DECLARE $embedding as List<Float>;
 
-    $TargetEmbedding = Knn::ToBinaryStringFloat($embedding);
+  $TargetEmbedding = Knn::ToBinaryStringFloat($embedding);
 
-    SELECT
-        id,
-        document,
-        Knn::{2}(embedding, $TargetEmbedding) as score
-    FROM {0} {1}
-    ORDER BY score
-    {3}
-    LIMIT {4};
+  SELECT
+    id,
+    document,
+    Knn::{2}(embedding, $TargetEmbedding) as score
+  FROM {0} {1}
+  ORDER BY score
+  {3}
+  LIMIT {4};
   )", tableName, viewIndex, strategy, sortOrder, limit, topClusters);
 
   NYdb::TParamsBuilder paramsBuilder;
   auto& valueBuilder = paramsBuilder.AddParam("$embedding");
   valueBuilder.BeginList();
   for (auto value : embedding) {
-    valueBuilder.AddListItem().Float(value);
+  valueBuilder.AddListItem().Float(value);
   }
   valueBuilder.EndList().Build();
 
   std::vector<TResultItem> result;
 
   NYdb::NStatusHelpers::ThrowOnError(client.RetryQuerySync([params = paramsBuilder.Build(), &query, &result](NYdb::NQuery::TSession session) {
-    auto execResult = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
-    if (execResult.IsSuccess()) {
-        auto parser = execResult.GetResultSetParser(0);
-        while (parser.TryNextRow()) {
-            result.push_back({
-                .Id = *parser.ColumnParser(0).GetOptionalUtf8(),
-                .Document = *parser.ColumnParser(1).GetOptionalUtf8(),
-                .Score = *parser.ColumnParser(2).GetOptionalFloat()
-            });
-        }
+  auto execResult = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
+  if (execResult.IsSuccess()) {
+    auto parser = execResult.GetResultSetParser(0);
+    while (parser.TryNextRow()) {
+        result.push_back({
+            .Id = *parser.ColumnParser(0).GetOptionalUtf8(),
+            .Document = *parser.ColumnParser(1).GetOptionalUtf8(),
+            .Score = *parser.ColumnParser(2).GetOptionalFloat()
+        });
     }
-    return execResult;
+  }
+  return execResult;
   }));
 
   return result;
@@ -1881,11 +1885,11 @@ Combine all the methods described above into one example that includes the follo
 
     def print_results(items):
     if len(items) == 0:
-      print("No items found")
-      return
+    print("No items found")
+    return
 
     for item in items:
-      print(f"[score={item['score']}] {item['id']}: {item['document']}")
+    print(f"[score={item['score']}] {item['id']}: {item['document']}")
 
 
 
@@ -1895,11 +1899,11 @@ Combine all the methods described above into one example that includes the follo
     ```python
     def print_results(items):
     if len(items) == 0:
-      print("No items found")
-      return
+    print("No items found")
+    return
 
     for item in items:
-      print(f"[score={item['score']}] {item['id']}: {item['document']}")
+    print(f"[score={item['score']}] {item['id']}: {item['document']}")
 
     def drop_vector_table_if_exists(pool: ydb.QuerySessionPool, table_name: str) -> None:
     pool.execute_with_retries(f"DROP TABLE IF EXISTS `{table_name}`")
@@ -1914,9 +1918,9 @@ Combine all the methods described above into one example that includes the follo
     index_name: str,
     ):
     driver = ydb.Driver(
-      endpoint=ydb_endpoint,
-      database=ydb_database,
-      credentials=ydb_credentials,
+    endpoint=ydb_endpoint,
+    database=ydb_database,
+    credentials=ydb_credentials,
     )
     driver.wait(5, fail_fast=True)
     pool = ydb.QuerySessionPool(driver)
@@ -1926,58 +1930,58 @@ Combine all the methods described above into one example that includes the follo
     create_vector_table(pool, table_name)
 
     items = [
-      {"id": "1", "document": "vector 1", "embedding": [0.98, 0.1, 0.01]},
-      {"id": "2", "document": "vector 2", "embedding": [1.0, 0.05, 0.05]},
-      {"id": "3", "document": "vector 3", "embedding": [0.9, 0.1, 0.1]},
-      {"id": "4", "document": "vector 4", "embedding": [0.03, 0.0, 0.99]},
-      {"id": "5", "document": "vector 5", "embedding": [0.0, 0.0, 0.99]},
-      {"id": "6", "document": "vector 6", "embedding": [0.0, 0.02, 1.0]},
-      {"id": "7", "document": "vector 7", "embedding": [0.0, 1.05, 0.05]},
-      {"id": "8", "document": "vector 8", "embedding": [0.02, 0.98, 0.1]},
-      {"id": "9", "document": "vector 9", "embedding": [0.0, 1.0, 0.05]},
+    {"id": "1", "document": "vector 1", "embedding": [0.98, 0.1, 0.01]},
+    {"id": "2", "document": "vector 2", "embedding": [1.0, 0.05, 0.05]},
+    {"id": "3", "document": "vector 3", "embedding": [0.9, 0.1, 0.1]},
+    {"id": "4", "document": "vector 4", "embedding": [0.03, 0.0, 0.99]},
+    {"id": "5", "document": "vector 5", "embedding": [0.0, 0.0, 0.99]},
+    {"id": "6", "document": "vector 6", "embedding": [0.0, 0.02, 1.0]},
+    {"id": "7", "document": "vector 7", "embedding": [0.0, 1.05, 0.05]},
+    {"id": "8", "document": "vector 8", "embedding": [0.02, 0.98, 0.1]},
+    {"id": "9", "document": "vector 9", "embedding": [0.0, 1.0, 0.05]},
     ]
 
     insert_items_vector_as_bytes(pool, table_name, items)
 
     items = search_items_vector_as_bytes(
-      pool,
-      table_name,
-      embedding=[1, 0, 0],
-      strategy="CosineSimilarity",
-      limit=3,
-      top_clusters=10,
+    pool,
+    table_name,
+    embedding=[1, 0, 0],
+    strategy="CosineSimilarity",
+    limit=3,
+    top_clusters=10,
     )
     print_results(items)
 
     add_vector_index(
-      pool,
-      driver,
-      table_name,
-      index_name=index_name,
-      strategy="similarity=cosine",
-      dimension=3,
-      levels=1,
-      clusters=3,
+    pool,
+    driver,
+    table_name,
+    index_name=index_name,
+    strategy="similarity=cosine",
+    dimension=3,
+    levels=1,
+    clusters=3,
     )
 
     items = search_items_vector_as_bytes(
-      pool,
-      table_name,
-      embedding=[1, 0, 0],
-      index_name=index_name,
-      strategy="CosineSimilarity",
-      limit=3,
-      top_clusters=10,
+    pool,
+    table_name,
+    embedding=[1, 0, 0],
+    index_name=index_name,
+    strategy="CosineSimilarity",
+    limit=3,
+    top_clusters=10,
     )
     print_results(items)
 
     def print_results(items):
     if len(items) == 0:
-        print("No items found")
-        return
+    print("No items found")
+    return
 
     for item in items:
-        print(f"[score={item['score']}] {item['id']}: {item['document']}")
+    print(f"[score={item['score']}] {item['id']}: {item['document']}")
 
     async def drop_vector_table_if_exists(pool: ydb.aio.QuerySessionPool, table_name: str) -> None:
     await pool.execute_with_retries(f"DROP TABLE IF EXISTS `{table_name}`")
@@ -1992,70 +1996,70 @@ Combine all the methods described above into one example that includes the follo
     index_name: str,
     ):
     async with ydb.aio.Driver(
-        endpoint=ydb_endpoint,
-        database=ydb_database,
-        credentials=ydb_credentials,
+    endpoint=ydb_endpoint,
+    database=ydb_database,
+    credentials=ydb_credentials,
     ) as driver:
-        await driver.wait(5, fail_fast=True)
-        pool = ydb.aio.QuerySessionPool(driver)
+    await driver.wait(5, fail_fast=True)
+    pool = ydb.aio.QuerySessionPool(driver)
 
-        await drop_vector_table_if_exists(pool, table_name)
+    await drop_vector_table_if_exists(pool, table_name)
 
-        await create_vector_table(pool, table_name)
+    await create_vector_table(pool, table_name)
 
-        items = [
-            {"id": "1", "document": "vector 1", "embedding": [0.98, 0.1, 0.01]},
-            {"id": "2", "document": "vector 2", "embedding": [1.0, 0.05, 0.05]},
-            {"id": "3", "document": "vector 3", "embedding": [0.9, 0.1, 0.1]},
-            {"id": "4", "document": "vector 4", "embedding": [0.03, 0.0, 0.99]},
-            {"id": "5", "document": "vector 5", "embedding": [0.0, 0.0, 0.99]},
-            {"id": "6", "document": "vector 6", "embedding": [0.0, 0.02, 1.0]},
-            {"id": "7", "document": "vector 7", "embedding": [0.0, 1.05, 0.05]},
-            {"id": "8", "document": "vector 8", "embedding": [0.02, 0.98, 0.1]},
-            {"id": "9", "document": "vector 9", "embedding": [0.0, 1.0, 0.05]},
-        ]
+    items = [
+        {"id": "1", "document": "vector 1", "embedding": [0.98, 0.1, 0.01]},
+        {"id": "2", "document": "vector 2", "embedding": [1.0, 0.05, 0.05]},
+        {"id": "3", "document": "vector 3", "embedding": [0.9, 0.1, 0.1]},
+        {"id": "4", "document": "vector 4", "embedding": [0.03, 0.0, 0.99]},
+        {"id": "5", "document": "vector 5", "embedding": [0.0, 0.0, 0.99]},
+        {"id": "6", "document": "vector 6", "embedding": [0.0, 0.02, 1.0]},
+        {"id": "7", "document": "vector 7", "embedding": [0.0, 1.05, 0.05]},
+        {"id": "8", "document": "vector 8", "embedding": [0.02, 0.98, 0.1]},
+        {"id": "9", "document": "vector 9", "embedding": [0.0, 1.0, 0.05]},
+    ]
 
-        await insert_items_vector_as_bytes(pool, table_name, items)
+    await insert_items_vector_as_bytes(pool, table_name, items)
 
-        items = await search_items_vector_as_bytes(
-            pool,
-            table_name,
-            embedding=[1, 0, 0],
-            strategy="CosineSimilarity",
-            limit=3,
-        )
-        print_results(items)
+    items = await search_items_vector_as_bytes(
+        pool,
+        table_name,
+        embedding=[1, 0, 0],
+        strategy="CosineSimilarity",
+        limit=3,
+    )
+    print_results(items)
 
-        await add_vector_index(
-            pool,
-            driver,
-            table_name,
-            index_name=index_name,
-            strategy="similarity=cosine",
-            dimension=3,
-            levels=1,
-            clusters=3,
-        )
+    await add_vector_index(
+        pool,
+        driver,
+        table_name,
+        index_name=index_name,
+        strategy="similarity=cosine",
+        dimension=3,
+        levels=1,
+        clusters=3,
+    )
 
-        items = await search_items_vector_as_bytes(
-            pool,
-            table_name,
-            embedding=[1, 0, 0],
-            index_name=index_name,
-            strategy="CosineSimilarity",
-            limit=3,
-        )
-        print_results(items)
+    items = await search_items_vector_as_bytes(
+        pool,
+        table_name,
+        embedding=[1, 0, 0],
+        index_name=index_name,
+        strategy="CosineSimilarity",
+        limit=3,
+    )
+    print_results(items)
 
-        await pool.stop()
+    await pool.stop()
 
     if __name__ == "__main__":
     asyncio.run(main(
-        ydb_endpoint=os.environ.get("YDB_ENDPOINT", "grpc://localhost:2136"),
-        ydb_database=os.environ.get("YDB_DATABASE", "/local"),
-        ydb_credentials=ydb.credentials_from_env_variables(),
-        table_name="ydb_vector_search",
-        index_name="ydb_vector_index",
+    ydb_endpoint=os.environ.get("YDB_ENDPOINT", "grpc://localhost:2136"),
+    ydb_database=os.environ.get("YDB_DATABASE", "/local"),
+    ydb_credentials=ydb.credentials_from_env_variables(),
+    table_name="ydb_vector_search",
+    index_name="ydb_vector_index",
     ))
     ```
 
@@ -2088,12 +2092,12 @@ Combine all the methods described above into one example that includes the follo
   void PrintResults(const std::vector<TResultItem>& items)
   {
   if (items.empty()) {
-    std::cout << "No items found" << std::endl;
-    return;
+  std::cout << "No items found" << std::endl;
+  return;
   }
 
   for (const auto& item : items) {
-    std::cout << "[score=" << item.Score << "] " << item.Id << ": " << item.Document << std::endl;
+  std::cout << "[score=" << item.Score << "] " << item.Id << ": " << item.Document << std::endl;
   }
   }
 
@@ -2108,25 +2112,25 @@ Combine all the methods described above into one example that includes the follo
   NYdb::NQuery::TQueryClient client(driver);
 
   try {
-    DropVectorTable(client, tableName);
-    CreateVectorTable(client, tableName);
-    std::vector<TItem> items = {
-        {.Id = "1", .Document = "document 1", .Embedding = {0.98, 0.1, 0.01}},
-        {.Id = "2", .Document = "document 2", .Embedding = {1.0, 0.05, 0.05}},
-        {.Id = "3", .Document = "document 3", .Embedding = {0.9, 0.1, 0.1}},
-        {.Id = "4", .Document = "document 4", .Embedding = {0.03, 0.0, 0.99}},
-        {.Id = "5", .Document = "document 5", .Embedding = {0.0, 0.0, 0.99}},
-        {.Id = "6", .Document = "document 6", .Embedding = {0.0, 0.02, 1.0}},
-        {.Id = "7", .Document = "document 7", .Embedding = {0.0, 1.05, 0.05}},
-        {.Id = "8", .Document = "document 8", .Embedding = {0.02, 0.98, 0.1}},
-        {.Id = "9", .Document = "document 9", .Embedding = {0.0, 1.0, 0.05}},
-    };
-    InsertItemsAsBytes(client, tableName, items);
-    PrintResults(SearchItemsAsBytes(client, tableName, {1.0, 0.0, 0.0}, "CosineSimilarity", 3));
-    AddIndex(driver, client, database, tableName, indexName, "similarity=cosine", 3, 1, 3);
-    PrintResults(SearchItemsAsBytes(client, tableName, {1.0, 0.0, 0.0}, "CosineSimilarity", 3, 10, indexName));
+  DropVectorTable(client, tableName);
+  CreateVectorTable(client, tableName);
+  std::vector<TItem> items = {
+    {.Id = "1", .Document = "document 1", .Embedding = {0.98, 0.1, 0.01}},
+    {.Id = "2", .Document = "document 2", .Embedding = {1.0, 0.05, 0.05}},
+    {.Id = "3", .Document = "document 3", .Embedding = {0.9, 0.1, 0.1}},
+    {.Id = "4", .Document = "document 4", .Embedding = {0.03, 0.0, 0.99}},
+    {.Id = "5", .Document = "document 5", .Embedding = {0.0, 0.0, 0.99}},
+    {.Id = "6", .Document = "document 6", .Embedding = {0.0, 0.02, 1.0}},
+    {.Id = "7", .Document = "document 7", .Embedding = {0.0, 1.05, 0.05}},
+    {.Id = "8", .Document = "document 8", .Embedding = {0.02, 0.98, 0.1}},
+    {.Id = "9", .Document = "document 9", .Embedding = {0.0, 1.0, 0.05}},
+  };
+  InsertItemsAsBytes(client, tableName, items);
+  PrintResults(SearchItemsAsBytes(client, tableName, {1.0, 0.0, 0.0}, "CosineSimilarity", 3));
+  AddIndex(driver, client, database, tableName, indexName, "similarity=cosine", 3, 1, 3);
+  PrintResults(SearchItemsAsBytes(client, tableName, {1.0, 0.0, 0.0}, "CosineSimilarity", 3, 10, indexName));
   } catch (const std::exception& e) {
-    std::cerr << "Execution failed: " << e.what() << std::endl;
+  std::cerr << "Execution failed: " << e.what() << std::endl;
   }
 
   driver.Stop(true);
@@ -2163,60 +2167,60 @@ Combine all the methods described above into one example that includes the follo
   record ResultItem(String id, String document, float score) {}
 
   public static void main(String[] args) {
-    String connectionString = System.getenv().getOrDefault("YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
-    String tableName = "ydb_vector_search";
-    String indexName = "ydb_vector_index";
+  String connectionString = System.getenv().getOrDefault("YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
+  String tableName = "ydb_vector_search";
+  String indexName = "ydb_vector_index";
 
-    try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString).build();
-         QueryClient queryClient = QueryClient.newClient(transport).build();
-         TableClient tableClient = TableClient.newClient(transport).build()) {
+  try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString).build();
+     QueryClient queryClient = QueryClient.newClient(transport).build();
+     TableClient tableClient = TableClient.newClient(transport).build()) {
 
-        SessionRetryContext queryRetry = SessionRetryContext.create(queryClient).build();
-        SessionRetryContext tableRetry = SessionRetryContext.create(tableClient).build();
+    SessionRetryContext queryRetry = SessionRetryContext.create(queryClient).build();
+    SessionRetryContext tableRetry = SessionRetryContext.create(tableClient).build();
 
-        dropVectorTableIfExists(queryRetry, tableName);
-        createVectorTable(queryRetry, tableName);
+    dropVectorTableIfExists(queryRetry, tableName);
+    createVectorTable(queryRetry, tableName);
 
-        List<Item> items = List.of(
-                new Item("1", "vector 1", new float[]{0.98f, 0.1f, 0.01f}),
-                new Item("2", "vector 2", new float[]{1.0f, 0.05f, 0.05f}),
-                new Item("3", "vector 3", new float[]{0.9f, 0.1f, 0.1f}),
-                new Item("4", "vector 4", new float[]{0.03f, 0.0f, 0.99f}),
-                new Item("5", "vector 5", new float[]{0.0f, 0.0f, 0.99f}),
-                new Item("6", "vector 6", new float[]{0.0f, 0.02f, 1.0f}),
-                new Item("7", "vector 7", new float[]{0.0f, 1.05f, 0.05f}),
-                new Item("8", "vector 8", new float[]{0.02f, 0.98f, 0.1f}),
-                new Item("9", "vector 9", new float[]{0.0f, 1.0f, 0.05f})
-        );
+    List<Item> items = List.of(
+            new Item("1", "vector 1", new float[]{0.98f, 0.1f, 0.01f}),
+            new Item("2", "vector 2", new float[]{1.0f, 0.05f, 0.05f}),
+            new Item("3", "vector 3", new float[]{0.9f, 0.1f, 0.1f}),
+            new Item("4", "vector 4", new float[]{0.03f, 0.0f, 0.99f}),
+            new Item("5", "vector 5", new float[]{0.0f, 0.0f, 0.99f}),
+            new Item("6", "vector 6", new float[]{0.0f, 0.02f, 1.0f}),
+            new Item("7", "vector 7", new float[]{0.0f, 1.05f, 0.05f}),
+            new Item("8", "vector 8", new float[]{0.02f, 0.98f, 0.1f}),
+            new Item("9", "vector 9", new float[]{0.0f, 1.0f, 0.05f})
+    );
 
-        insertItemsAsBytes(queryRetry, tableName, items);
-        printResults(searchItemsAsBytes(queryRetry, tableName, new float[]{1, 0, 0},
-                "CosineSimilarity", 3, Optional.empty()));
+    insertItemsAsBytes(queryRetry, tableName, items);
+    printResults(searchItemsAsBytes(queryRetry, tableName, new float[]{1, 0, 0},
+            "CosineSimilarity", 3, Optional.empty()));
 
-        addVectorIndex(transport, queryRetry, tableRetry, tableName, indexName,
-                "similarity=cosine", 3, 1, 3);
+    addVectorIndex(transport, queryRetry, tableRetry, tableName, indexName,
+            "similarity=cosine", 3, 1, 3);
 
-        printResults(searchItemsAsBytes(queryRetry, tableName, new float[]{1, 0, 0},
-                "CosineSimilarity", 3, Optional.of(indexName)));
-    }
+    printResults(searchItemsAsBytes(queryRetry, tableName, new float[]{1, 0, 0},
+            "CosineSimilarity", 3, Optional.of(indexName)));
+  }
   }
 
   static void dropVectorTableIfExists(SessionRetryContext queryRetry, String tableName) {
-    String ddl = String.format("DROP TABLE IF EXISTS `%s`", tableName);
-    queryRetry.supplyResult(s -> QueryReader.readFrom(
-            s.createQuery(ddl, TxMode.NONE, Params.empty())
-    )).join().getValue();
-    System.out.println("Vector table dropped");
+  String ddl = String.format("DROP TABLE IF EXISTS `%s`", tableName);
+  queryRetry.supplyResult(s -> QueryReader.readFrom(
+        s.createQuery(ddl, TxMode.NONE, Params.empty())
+  )).join().getValue();
+  System.out.println("Vector table dropped");
   }
 
   static void printResults(List<ResultItem> items) {
-    if (items.isEmpty()) {
-        System.out.println("No items found");
-        return;
-    }
-    for (ResultItem item : items) {
-        System.out.printf("[score=%f] %s: %s%n", item.score(), item.id(), item.document());
-    }
+  if (items.isEmpty()) {
+    System.out.println("No items found");
+    return;
+  }
+  for (ResultItem item : items) {
+    System.out.printf("[score=%f] %s: %s%n", item.score(), item.id(), item.document());
+  }
   }
   }
   ```

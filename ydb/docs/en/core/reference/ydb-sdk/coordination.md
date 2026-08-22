@@ -146,7 +146,7 @@ To start working with coordination nodes, a client must establish a session with
 
     ```go
     session, err := db.Coordination().CreateSession(ctx,
-    "/path/to/mynode", // Coordination Node name in the database
+  "/path/to/mynode", // Coordination Node name in the database
     )
     ```
 

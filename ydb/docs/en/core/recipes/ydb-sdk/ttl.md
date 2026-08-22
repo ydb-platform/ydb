@@ -11,7 +11,7 @@ In the example below, the rows of the `mytable` table will be deleted an hour af
 
 {% if oss == true %}
 
-- C++
+  - C++
 
 
   ```c++
@@ -64,7 +64,7 @@ The example below shows how to use the `modified_at` column with a numeric type 
 
 {% if oss == true %}
 
-- C++
+  - C++
 
 
   ```c++
@@ -127,7 +127,7 @@ In the following example, rows of the table `mytable` will be moved to the bucke
 
 {% if oss == true %}
 
-- C++
+  - C++
 
 
   ```c++
@@ -172,7 +172,7 @@ For a newly created table, you can pass TTL settings along with the table descri
 
 {% if oss == true %}
 
-- C++
+  - C++
 
 
   ```c++
@@ -240,7 +240,7 @@ For a newly created table, you can pass TTL settings along with the table descri
 
 {% if oss == true %}
 
-- C++
+  - C++
 
 
   ```c++
@@ -293,7 +293,7 @@ The current TTL settings can be obtained from the table description:
 
 {% if oss == true %}
 
-- C++
+  - C++
 
 
   ```c++

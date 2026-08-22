@@ -56,8 +56,7 @@ For more information about connecting to {{ ydb-short-name }}, see the article [
 
     {% list tabs %}
 
-    - Native SDK
-
+  - Native SDK
 
     To run queries, you need to create `ydb.QuerySessionPool`.
 
@@ -74,8 +73,7 @@ For more information about connecting to {{ ydb-short-name }}, see the article [
       pool = ydb.QuerySessionPool(driver)
       ```
 
-    - Native SDK (Asyncio)
-
+  - Native SDK (Asyncio)
 
     To run queries, you need to create `ydb.aio.QuerySessionPool`:
 
@@ -151,7 +149,7 @@ For more information about connecting to {{ ydb-short-name }}, see the article [
 
 {% endlist %}
 
-## Creating a table {#insert-vectors}
+## Creating a table {#create-table}
 
 First, you need to create a table to store documents and their vector representations.
 
@@ -191,7 +189,7 @@ The `String` type is used to store the vector. For more details, see the documen
 
     {% list tabs %}
 
-    - Native SDK
+  - Native SDK
 
       ```python
       import ydb
@@ -210,7 +208,7 @@ The `String` type is used to store the vector. For more details, see the documen
           print(f"Vector table {table_name} created")
       ```
 
-    - Native SDK (Asyncio)
+  - Native SDK (Asyncio)
 
       ```python
       import ydb
@@ -298,7 +296,7 @@ The `String` type is used to store the vector. For more details, see the documen
 
 {% endlist %}
 
-## Inserting vectors {#add-vector-index}
+## Inserting vectors {#insert-vectors}
 
 To insert vectors, you need to prepare and execute a correct YQL query. It is parameterized to unify the insertion of different data.
 
@@ -334,7 +332,7 @@ In {{ ydb-short-name }} tables, vectors are stored as a serialized byte sequence
           id: Utf8,
           document: Utf8,
           embedding: String
-        >>;
+    >>;
 
         UPSERT INTO %s
         (id, document, embedding)
@@ -367,7 +365,7 @@ In {{ ydb-short-name }} tables, vectors are stored as a serialized byte sequence
 
     {% list tabs %}
 
-    - Native SDK
+  - Native SDK
 
       ```python
       import struct
@@ -388,7 +386,7 @@ In {{ ydb-short-name }} tables, vectors are stored as a serialized byte sequence
               id: Utf8,
               document: Utf8,
               embedding: String
-          >>;
+      >>;
 
           UPSERT INTO `{table_name}`
           (
@@ -418,7 +416,7 @@ In {{ ydb-short-name }} tables, vectors are stored as a serialized byte sequence
           print(f"{len(items)} items inserted")
       ```
 
-    - Native SDK (Asyncio)
+  - Native SDK (Asyncio)
 
       ```python
       import struct
@@ -438,7 +436,7 @@ In {{ ydb-short-name }} tables, vectors are stored as a serialized byte sequence
               id: Utf8,
               document: Utf8,
               embedding: String
-          >>;
+      >>;
 
           UPSERT INTO `{table_name}`
           (
@@ -493,7 +491,7 @@ In {{ ydb-short-name }} tables, vectors are stored as a serialized byte sequence
                 id: Utf8,
                 document: Utf8,
                 embedding: String
-            >>;
+        >>;
             UPSERT INTO `{0}`
             (
                 id,
@@ -599,7 +597,7 @@ In {{ ydb-short-name }} tables, vectors are stored as a serialized byte sequence
                     id: Utf8,
                     document: Utf8,
                     embedding: String
-                >>;
+            >>;
 
                 UPSERT INTO `%s`
                 (
@@ -672,7 +670,7 @@ In {{ ydb-short-name }} tables, vectors are stored as a serialized byte sequence
                     id: Utf8,
                     document: Utf8,
                     embedding: List<Float>
-                >>;
+            >>;
 
                 UPSERT INTO `%s`
                 (
@@ -727,7 +725,7 @@ In {{ ydb-short-name }} tables, vectors are stored as a serialized byte sequence
 
     {% list tabs %}
 
-    - Native SDK
+  - Native SDK
 
       ```python
       import ydb
@@ -742,7 +740,7 @@ In {{ ydb-short-name }} tables, vectors are stored as a serialized byte sequence
               id: Utf8,
               document: Utf8,
               embedding: List<Float>
-          >>;
+      >>;
 
           UPSERT INTO `{table_name}`
           (
@@ -769,7 +767,7 @@ In {{ ydb-short-name }} tables, vectors are stored as a serialized byte sequence
           print(f"{len(items)} items inserted")
       ```
 
-    - Native SDK (Asyncio)
+  - Native SDK (Asyncio)
 
       ```python
       import ydb
@@ -784,7 +782,7 @@ In {{ ydb-short-name }} tables, vectors are stored as a serialized byte sequence
               id: Utf8,
               document: Utf8,
               embedding: List<Float>
-          >>;
+      >>;
 
           UPSERT INTO `{table_name}`
           (
@@ -826,7 +824,7 @@ In {{ ydb-short-name }} tables, vectors are stored as a serialized byte sequence
                 id: Utf8,
                 document: Utf8,
                 embedding: List<Float>
-            >>;
+        >>;
 
             UPSERT INTO `{}`
             (
@@ -894,7 +892,7 @@ In {{ ydb-short-name }} tables, vectors are stored as a serialized byte sequence
 
 {% endlist %}
 
-## Adding an index {#search-by-vector}
+## Adding an index {#add-vector-index}
 
 Using a vector index allows you to efficiently solve the problem of approximate search for nearest vectors. More details on the advantages and features of its use are described in the documentation on the [vector index](../../dev/vector-indexes.md).
 
@@ -1012,6 +1010,8 @@ The parameters used when creating an index of type `vector_kmeans_tree` are desc
 
 
 
+
+
     {% endcut %}
 
 
@@ -1070,7 +1070,7 @@ The parameters used when creating an index of type `vector_kmeans_tree` are desc
       ```
 
 
-    - Native SDK (Asyncio)
+  - Native SDK (Asyncio)
 
 
       ```python
@@ -1118,6 +1118,8 @@ The parameters used when creating an index of type `vector_kmeans_tree` are desc
           )
 
           print(f"Table index {index_name} created.")
+
+
 
 
 
@@ -1250,7 +1252,7 @@ The parameters used when creating an index of type `vector_kmeans_tree` are desc
 
 {% endlist %}
 
-## Vector search {#full-example}
+## Vector search {#search-by-vector}
 
 To search documents by vector, a special YQL query is used, in which you need to define a similarity or distance function.
 Available values:
@@ -1335,7 +1337,7 @@ The method returns a list of dictionaries with fields `id`, `document`, and `sco
 
     {% list tabs %}
 
-    - Native SDK
+  - Native SDK
 
       ```python
       import ydb
@@ -1449,7 +1451,6 @@ The method returns a list of dictionaries with fields `id`, `document`, and `sco
 
           return items
       ```
-
 
     {% endlist %}
 
@@ -1666,7 +1667,7 @@ The method returns a list of dictionaries with fields `id`, `document`, and `sco
 
     {% list tabs %}
 
-    - Native SDK
+  - Native SDK
 
       ```python
       import ydb
@@ -1781,7 +1782,6 @@ The method returns a list of dictionaries with fields `id`, `document`, and `sco
           return items
       ```
 
-
     {% endlist %}
 
 - C++ (alternative)
@@ -1892,7 +1892,7 @@ Combine all the methods described above into one example that includes the follo
 
     {% list tabs %}
 
-    - Native SDK
+  - Native SDK
 
       ```python
       import os
@@ -2079,7 +2079,6 @@ Combine all the methods described above into one example that includes the follo
               index_name="ydb_vector_index",
           ))
       ```
-
 
     {% endlist %}
 

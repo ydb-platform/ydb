@@ -17,6 +17,8 @@
 #include <yql/essentials/public/issue/yql_issue.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 
+#include <ydb/core/grpc_services/counters/proxy_counters.h>
+
 namespace NKikimr {
     struct TAppData;
 }
@@ -132,6 +134,7 @@ protected:
     TActorId CountersServiceActorId;
     TActorId PingServiceActorId;
     TIntrusivePtr<NMonitoring::TDynamicCountersPage> CountersMonPage;
+    NKikimr::NGRpcService::IGRpcProxyCounters::TPtr GrpcProxyCounters;
 
     struct TActorMonPageInfo {
         NMonitoring::TMonPagePtr Page;

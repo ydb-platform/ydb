@@ -15,6 +15,8 @@ protected:
     ::NMonitoring::TDynamicCounterPtr Root_;
 
     ::NMonitoring::TDynamicCounters::TCounterPtr DatabaseAccessDenyCounter_;
+    // HTTP monitoring observe-mode: would-deny for strict database tokens (request is not blocked).
+    ::NMonitoring::TDynamicCounters::TCounterPtr DatabaseHttpAccessDenyCounter_;
     ::NMonitoring::TDynamicCounters::TCounterPtr DatabaseSchemeErrorCounter_;
     ::NMonitoring::TDynamicCounters::TCounterPtr DatabaseUnavailableCounter_;
     ::NMonitoring::TDynamicCounters::TCounterPtr EmptyDatabaseNameCounter_;
@@ -36,6 +38,7 @@ public:
         }
 
         DatabaseAccessDenyCounter_ = group->GetCounter("databaseAccessDeny", true);
+        DatabaseHttpAccessDenyCounter_ = group->GetCounter("databaseHttpAccessDeny", true);
         DatabaseSchemeErrorCounter_ = group->GetCounter("databaseSchemeError", true);
         DatabaseUnavailableCounter_ = group->GetCounter("databaseUnavailable", true);
 
@@ -64,6 +67,10 @@ public:
 
     void IncEmptyDatabaseNameCounter() override {
         EmptyDatabaseNameCounter_->Inc();
+    }
+
+    void IncDatabaseHttpAccessDenyCounter() override {
+        DatabaseHttpAccessDenyCounter_->Inc();
     }
 
     void IncDatabaseRateLimitedCounter() override {
@@ -283,6 +290,10 @@ public:
 
     void IncEmptyDatabaseNameCounter() override {
         Common->IncEmptyDatabaseNameCounter();
+    }
+
+    void IncDatabaseHttpAccessDenyCounter() override {
+        Common->IncDatabaseHttpAccessDenyCounter();
     }
 
     void IncDatabaseRateLimitedCounter() override {

@@ -11,6 +11,8 @@
 #include <ydb/core/base/monitoring_provider.h>
 #include <ydb/core/base/ticket_parser.h>
 #include <ydb/core/grpc_services/base/base.h>
+#include <ydb/core/grpc_services/counters/proxy_counters.h>
+#include <ydb/core/grpc_services/base/http_database_access_verdict.h>
 #include <ydb/core/mon/audit/audit.h>
 #include <ydb/core/protos/mon.pb.h>
 #include <ydb/core/util/wildcard.h>
@@ -67,6 +69,7 @@ void InitMonHttpIncomingRequest(NHttp::TEvHttpProxy::TEvHttpIncomingRequest* eve
 
 void LogAuthorizedHttpRequest(
     const TAppData* appData,
+    const NKikimr::NGRpcService::IGRpcProxyCounters::TPtr& grpcProxyCounters,
     const NGRpcService::TEvRequestAuthAndCheckResult* result,
     const NHttp::THttpIncomingRequest& request,
     const TString& database)
@@ -75,6 +78,16 @@ void LogAuthorizedHttpRequest(
     const TString user = (result && result->UserToken) ? result->UserToken->GetUserSID() : "anonymous";
     const NACLib::TUserToken* userToken = (result && result->UserToken) ? result->UserToken.Get() : nullptr;
     const TString accessLevel = ToString(GetHighestAccessLevel(appData, userToken));
+    const NGRpcService::EHttpDatabaseAccessVerdict verdict = result
+        ? result->DatabaseAccessVerdict
+        : NGRpcService::EHttpDatabaseAccessVerdict::Ok;
+    const bool wouldDeny = verdict != NGRpcService::EHttpDatabaseAccessVerdict::Ok;
+    const TString verdictStr(ToString(verdict));
+    if (wouldDeny && grpcProxyCounters && userToken &&
+        IsStrictDatabaseOnlyToken(appData, userToken->GetSerializedToken()))
+    {
+        grpcProxyCounters->IncDatabaseHttpAccessDenyCounter();
+    }
     YDB_LOG_NOTICE(
         "Send request"
             << " [" << address << "]"
@@ -82,13 +95,17 @@ void LogAuthorizedHttpRequest(
             << " " << request.Method
             << " " << request.URL
             << " highest_access_level=" << accessLevel
-            << " database=" << database,
+            << " database=" << database
+            << " database_access_verdict=" << verdictStr
+            << " would_deny=" << (wouldDeny ? 1 : 0),
         {"address", address},
         {"user", user},
         {"method", request.Method},
         {"url", request.URL},
         {"highest_access_level", accessLevel},
-        {"database", database});
+        {"database", database},
+        {"database_access_verdict", verdictStr},
+        {"would_deny", wouldDeny ? "1" : "0"});
 }
 
 const Ydb::Issue::IssueMessage* FindDeepestIssue(const google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>& issues) {
@@ -613,7 +630,7 @@ public:
     void SendRequest(const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult* result = nullptr) {
         NHttp::THttpIncomingRequestPtr request = Event->Get()->Request;
         if (ActorMonPage->Authorizer) {
-            LogAuthorizedHttpRequest(AppData(), result, *request, Event->Get()->Database);
+            LogAuthorizedHttpRequest(AppData(), ActorMonPage->GrpcProxyCounters, result, *request, Event->Get()->Database);
         }
         TString serializedToken = result && result->UserToken ? result->UserToken->GetSerializedToken() : TString();
         Send(ActorMonPage->TargetActorId, new NMon::TEvHttpInfo(
@@ -1131,14 +1148,21 @@ public:
     TMon::TRegisterHandlerFields Fields;
     TMon::TRequestAuthorizer Authorizer;
     NMonitoring::NAudit::TAuditCtx AuditCtx;
+    NKikimr::NGRpcService::IGRpcProxyCounters::TPtr GrpcProxyCounters;
     NHttp::TEvHttpProxy::TEvSubscribeForCancel::TPtr CancelSubscriber;
     bool CsrfCookieSet = false;
 
-    THttpMonAuthorizedActorRequest(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, const TMon::TRegisterHandlerFields& fields, TMon::TRequestAuthorizer authorizer)
+    THttpMonAuthorizedActorRequest(
+        NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event,
+        const TMon::TRegisterHandlerFields& fields,
+        TMon::TRequestAuthorizer authorizer,
+        NKikimr::NGRpcService::IGRpcProxyCounters::TPtr grpcProxyCounters
+    )
         : Event(std::move(event))
         , Request(Event->Get()->Request)
         , Fields(fields)
         , Authorizer(std::move(authorizer))
+        , GrpcProxyCounters(std::move(grpcProxyCounters))
     {}
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -1263,7 +1287,7 @@ public:
 
     void SendRequest(const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult* result = nullptr) {
         if (Authorizer) {
-            LogAuthorizedHttpRequest(AppData(), result, *Request, Event->Get()->Database);
+            LogAuthorizedHttpRequest(AppData(), GrpcProxyCounters, result, *Request, Event->Get()->Database);
         }
         Send(new IEventHandle(Fields.Handler, SelfId(), Event->ReleaseBase().Release(), IEventHandle::FlagTrackDelivery, Event->Cookie));
     }
@@ -1592,13 +1616,20 @@ THttpMonPageService(const TActorId& httpProxyActorId, TIntrusivePtr<NMonitoring:
 // receives everyhing not related to actor communcation, converts them to request-actors
 class THttpMonIndexService : public TActor<THttpMonIndexService> {
 public:
-    THttpMonIndexService(const TActorId& httpProxyActorId, TIntrusivePtr<NMonitoring::TIndexMonPage> indexMonPage,
-                         TVector<TString> allowedSIDs, TMon::TRequestAuthorizer authorizer, const TString& redirectRoot = {}, bool needMonLegacyAudit = true)
+    THttpMonIndexService(
+        const TActorId& httpProxyActorId,
+        TIntrusivePtr<NMonitoring::TIndexMonPage> indexMonPage,
+        TVector<TString> allowedSIDs,
+        TMon::TRequestAuthorizer authorizer,
+        NKikimr::NGRpcService::IGRpcProxyCounters::TPtr grpcProxyCounters,
+        const TString& redirectRoot = {},
+        bool needMonLegacyAudit = true)
         : TActor(&THttpMonIndexService::StateWork)
         , HttpProxyActorId(httpProxyActorId)
         , IndexMonPage(std::move(indexMonPage))
         , AllowedSIDs(std::move(allowedSIDs))
         , Authorizer(std::move(authorizer))
+        , GrpcProxyCounters(std::move(grpcProxyCounters))
         , RedirectRoot(redirectRoot)
         , NeedMonLegacyAudit(needMonLegacyAudit)
     {
@@ -1682,7 +1713,7 @@ public:
         while (!url.empty()) {
             auto it = Handlers.find(TString(url));
             if (it != Handlers.end()) {
-                Register(new THttpMonAuthorizedActorRequest(std::move(ev), it->second, Authorizer));
+                Register(new THttpMonAuthorizedActorRequest(std::move(ev), it->second, Authorizer, GrpcProxyCounters));
                 return;
             } else {
                 if (url.EndsWith('/')) {
@@ -1720,6 +1751,7 @@ public:
     std::unordered_map<TString, TMon::TRegisterHandlerFields> Handlers;
     TVector<TString> AllowedSIDs;
     TMon::TRequestAuthorizer Authorizer;
+    NKikimr::NGRpcService::IGRpcProxyCounters::TPtr GrpcProxyCounters;
     TString RedirectRoot;
     bool NeedMonLegacyAudit;
 };
@@ -1787,6 +1819,9 @@ std::future<void> TMon::Start(TActorSystem* actorSystem) {
     Y_ABORT_UNLESS(actorSystem);
     TGuard<TMutex> g(Mutex);
     ActorSystem = actorSystem;
+    if (auto* appData = ActorSystem->AppData<NKikimr::TAppData>()) {
+        GrpcProxyCounters = NKikimr::NGRpcService::CreateGRpcProxyCounters(appData->Counters);
+    }
     Register(new TIndexRedirectMonPage(IndexMonPage));
     Register(new NMonitoring::TVersionMonPage);
     Register(new NMonitoring::TBootstrapCssMonPage);
@@ -1810,11 +1845,11 @@ std::future<void> TMon::Start(TActorSystem* actorSystem) {
         TMailboxType::ReadAsFilled,
         executorPool);
     HttpMonServiceActorId = ActorSystem->Register(
-        new THttpMonIndexService(HttpProxyActorId, IndexMonPage, Config.AllowedSIDs, Config.Authorizer, Config.RedirectMainPageTo),
+        new THttpMonIndexService(HttpProxyActorId, IndexMonPage, Config.AllowedSIDs, Config.Authorizer, GrpcProxyCounters, Config.RedirectMainPageTo),
         TMailboxType::ReadAsFilled,
         executorPool);
     HttpAuthMonServiceActorId = ActorSystem->Register(
-        new THttpMonIndexService(HttpMonServiceActorId, IndexMonPage, Config.AllowedSIDs, Config.Authorizer, Config.RedirectMainPageTo, false),
+        new THttpMonIndexService(HttpMonServiceActorId, IndexMonPage, Config.AllowedSIDs, Config.Authorizer, GrpcProxyCounters, Config.RedirectMainPageTo, false),
         TMailboxType::ReadAsFilled,
         executorPool);
     RegisterLwtrace();
@@ -1905,6 +1940,7 @@ NMonitoring::TIndexMonPage* TMon::RegisterIndexPage(const TString& path, const T
 void TMon::RegisterActorMonPage(const TActorMonPageInfo& pageInfo) {
     if (ActorSystem) {
         TActorMonPage* actorMonPage = static_cast<TActorMonPage*>(pageInfo.Page.Get());
+        actorMonPage->GrpcProxyCounters = GrpcProxyCounters;
         auto& actorId = ActorServices[pageInfo.Path];
         if (actorId) {
             ActorSystem->Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, {}, nullptr, 0));

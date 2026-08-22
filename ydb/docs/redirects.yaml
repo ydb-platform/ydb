@@ -562,6 +562,8 @@ ru:
     to: /reference/ydb-sdk/observability/tracing/opentelemetry.md
   - from: /integrations/sql-dialect-converter.md
     to: /integrations/sql-translation/sql-dialect-converter.md
+  - from: /devops/deployment-options/manual/node-authorization.md
+    to: /devops/concepts/node-authorization.md
 
 en:
   - from: /reference/ydb-sdk/recipes/debug.md

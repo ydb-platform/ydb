@@ -54,7 +54,7 @@ client_certificate_authorization:
         values: ["user1"]
 ```
 
-В компоненте `CN` может указываться сетевое имя сервера, а не имя пользователя. Такой вариант целесообразно использовать при [регистрации динамических узлов](../../devops/deployment-options/manual/node-authorization.md#vklyuchenie-rezhima-autentifikacii-i-avtorizacii-uzlov). Следующий фрагмент конфигурации требует, чтобы в поле "Subject" клиентского сертификата узла были компоненты `O=YDB` и `CN=server1.internal.corp`. Для такого сертификата будет сформирован SID `O=YDB,CN=server1.internal.corp@cert` и будет назначена группа `registerNode@cert`:
+В компоненте `CN` может указываться сетевое имя сервера, а не имя пользователя. Такой вариант целесообразно использовать при [регистрации динамических узлов](../../devops/concepts/node-authorization.md#vklyuchenie-rezhima-autentifikacii-i-avtorizacii-uzlov). Следующий фрагмент конфигурации требует, чтобы в поле "Subject" клиентского сертификата узла были компоненты `O=YDB` и `CN=server1.internal.corp`. Для такого сертификата будет сформирован SID `O=YDB,CN=server1.internal.corp@cert` и будет назначена группа `registerNode@cert`:
 
 ```yaml
 client_certificate_authorization:

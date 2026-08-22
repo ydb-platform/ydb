@@ -114,7 +114,7 @@ class InstrumentedQuerySessionPool(ydb.QuerySessionPool):
             operation_name, self.full_name
         )
 
-    def explain_with_retries(self, query: str, *args, retry_settings=None,
+    def explain_with_retries(self, query: str, parameters=None, *, retry_settings=None,
                              operation_name: str = 'explain_query',
                              **kwargs):
         """
@@ -122,6 +122,7 @@ class InstrumentedQuerySessionPool(ydb.QuerySessionPool):
 
         Args:
             query: SQL query
+            parameters: Query parameters
             retry_settings: Retry settings
             operation_name: Operation name for metrics
 
@@ -129,15 +130,21 @@ class InstrumentedQuerySessionPool(ydb.QuerySessionPool):
             EXPLAIN result
         """
         retry_settings = maybe_extended_retry_settings(retry_settings)
+
+        # retry_settings is keyword-only on QuerySessionPool.explain_with_retries.
+        def call():
+            return super(InstrumentedQuerySessionPool, self).explain_with_retries(
+                query,
+                parameters,
+                retry_settings=retry_settings,
+                **kwargs,
+            )
+
         if not self.enable_metrics:
-            return super(InstrumentedQuerySessionPool, self).explain_with_retries(query, retry_settings,
-                                                                                  *args,
-                                                                                  **kwargs)
+            return call()
 
         return self.metrics_collector.wrap_call(
-            lambda: super(InstrumentedQuerySessionPool, self).explain_with_retries(query, retry_settings,
-                                                                                   *args,
-                                                                                   **kwargs),
+            call,
             operation_name, self.full_name
         )
 

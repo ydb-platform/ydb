@@ -986,6 +986,47 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(!disjointReadOp->GetMapSafe().contains("ReadRangesPointPrefixLen"), disjointPlan);
     }
 
+    Y_UNIT_TEST(ExplainAnalyzeSimplifiedPlanCpuWithActualRows) {
+        const TString txPlan = R"({
+            "Plans": [{
+                "Node Type": "TableFullScan",
+                "StageGuid": "stage-1",
+                "Operators": [{
+                    "Name": "TableFullScan",
+                    "OperatorId": 1
+                }],
+                "Stats": {
+                    "Table": [{
+                        "Path": "/Root/t1",
+                        "ReadRows": {"Sum": 6},
+                        "ReadBytes": {"Sum": 64}
+                    }],
+                    "CpuTimeUs": {"Max": 7000}
+                }
+            }],
+            "SimplifiedPlan": {
+                "Node Type": "TableFullScan",
+                "Operators": [{
+                    "Name": "TableFullScan",
+                    "OperatorId": 1,
+                    "Table": "/Root/t1"
+                }]
+            }
+        })";
+
+        NKqpProto::TKqpStatsQuery queryStats;
+        const TVector<const TString> txPlans = {txPlan};
+        const auto plan = SerializeRBOAnalyzePlan(txPlans, queryStats);
+        const auto simplifiedPlan = GetSimplifiedPlan(plan);
+        const auto* fullScan = FindOperatorByStringField(simplifiedPlan, "Name", "TableFullScan");
+        UNIT_ASSERT_C(fullScan, plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(fullScan->GetMapSafe().at("A-Rows").GetDoubleSafe(), 6, plan);
+        UNIT_ASSERT_C(fullScan->GetMapSafe().contains("A-SelfCpu"), plan);
+        UNIT_ASSERT_C(fullScan->GetMapSafe().contains("A-Cpu"), plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(fullScan->GetMapSafe().at("A-SelfCpu").GetDoubleSafe(), 7, plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(fullScan->GetMapSafe().at("A-Cpu").GetDoubleSafe(), 7, plan);
+    }
+
     Y_UNIT_TEST(ExplainAnalyzeRangePushdown) {
         TExplainPlanTestContext testContext;
         BulkUpsertExplainPlanTestRows(testContext.GetKikimr());

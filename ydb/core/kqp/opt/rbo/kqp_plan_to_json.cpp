@@ -332,7 +332,7 @@ void AddStatsToSimplifiedPlan(NJson::TJsonValue& txPlan) {
             if (!operatorRows && stats.contains("OutputRows")) {
                 auto outputRows = stats.at("OutputRows");
                 int aRows = outputRows.IsMap() ? outputRows.GetMapSafe().at("Sum").GetIntegerSafe() : outputRows.GetIntegerSafe();
-    
+
                 if (fromBroadcast && parentTaskCount && (aRows % parentTaskCount == 0)) {
                     aRows /= parentTaskCount;
                 }
@@ -346,7 +346,9 @@ void AddStatsToSimplifiedPlan(NJson::TJsonValue& txPlan) {
                 }
                 explainPlanOp->InsertValue("A-Size", aSize);
             }
+        }
 
+        if (execOperatorIdx == 0) {
             // cpu usage available for stage only, so assign it to top level operator
             if (stats.contains("CpuTimeUs")) {
                 double opCpuTime;

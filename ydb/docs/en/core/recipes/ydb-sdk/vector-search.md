@@ -1331,47 +1331,9 @@ The method returns a list of dictionaries with fields `id`, `document`, and `sco
 
     ```
 
-  - 
-
-  - 
-
-  - 
-
-  - 
-
-  - 
-
-  - 
-
-  - 
-
-  - 
-
-  - 
-
-  - 
 
     {% endcut %}
 
-  - 
-
-  - 
-
-  - 
-
-  - 
-
-  - 
-
-  - 
-
-  - 
-
-  - 
-
-  - 
-
-  - 
 
     ```python
     def search_items_vector_as_bytes(
@@ -1462,7 +1424,10 @@ The method returns a list of dictionaries with fields `id`, `document`, and `sco
                   )
 
           return items
-      ```
+    ```
+
+
+    ```
 
     ```
 
@@ -1700,47 +1665,9 @@ The method returns a list of dictionaries with fields `id`, `document`, and `sco
 
     ```
 
-  - 
-
-  - 
-
-  - 
-
-  - 
-
-  - 
-
-  - 
-
-  - 
-
-  - 
-
-  - 
-
-  - 
 
     {% endcut %}
 
-  - 
-
-  - 
-
-  - 
-
-  - 
-
-  - 
-
-  - 
-
-  - 
-
-  - 
-
-  - 
-
-  - 
 
     ```python
     def search_items_vector_as_float_list(
@@ -1831,7 +1758,10 @@ The method returns a list of dictionaries with fields `id`, `document`, and `sco
                   )
 
           return items
-      ```
+    ```
+
+
+    ```
 
     ```
 
@@ -1961,47 +1891,9 @@ Combine all the methods described above into one example that includes the follo
 
     ```
 
-  - 
-
-  - 
-
-  - 
-
-  - 
-
-  - 
-
-  - 
-
-  - 
-
-  - 
-
-  - 
-
-  - 
 
     {% endcut %}
 
-  - 
-
-  - 
-
-  - 
-
-  - 
-
-  - 
-
-  - 
-
-  - 
-
-  - 
-
-  - 
-
-  - 
 
     ```python
     def print_results(items):
@@ -2168,7 +2060,10 @@ Combine all the methods described above into one example that includes the follo
               table_name="ydb_vector_search",
               index_name="ydb_vector_index",
           ))
-      ```
+    ```
+
+
+    ```
 
     ```
 

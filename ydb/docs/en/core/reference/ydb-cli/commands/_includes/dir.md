@@ -62,7 +62,7 @@ Look up the description of the directory deletion command:
 ### Parameters of the subcommand {#rmdir-options}
 
 | Name | Description |
----|---
+| --- | --- |
 | `-r`, `--recursive` | This option deletes the directory recursively, which all its child objects (subdirectories, tables, topics). If you use this option, the confirmation prompt is shown by default. |
 | `-f`, `--force` | Do not prompt for confirmation. |
 | `-i` | Prompt for deletion confirmation on each object. |

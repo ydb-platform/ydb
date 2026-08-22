@@ -13,6 +13,8 @@ private:
     std::shared_ptr<TScanWithLimitCollection> Collection;
     ui32 FetchedCount = 0;
     std::optional<ui32> PKPrefixSize;
+    const ui32 SysViewMaxHeldPortions = 0;
+    bool Passthrough = false;
 
     virtual bool IsSourcePrepared(const std::shared_ptr<NCommon::IDataSource>& source) const override {
         if (source->IsSyncSection() && source->HasStageResult()) {
@@ -61,8 +63,9 @@ private:
             , Delta(Reverse ? -1 : 1)
         {
             AFL_VERIFY(Source);
-            AFL_VERIFY(Source->GetType() == IDataSource::EType::SimplePortion)("type", Source->GetType());
-            auto batch = Source->GetAs<TPortionDataSource>()->GetStart().GetValue().ToBatch();
+            AFL_VERIFY(Source->GetType() == IDataSource::EType::SimplePortion || Source->GetType() == IDataSource::EType::SimpleSysInfo)(
+                                                                                 "type", Source->GetType());
+            auto batch = Source->GetAs<IDataSource>()->GetStartPKRecordBatch().ToBatch();
             SortableRecord = std::make_shared<NArrow::NMerger::TRWSortableBatchPosition>(batch, 0, Reverse);
         }
 
@@ -78,7 +81,7 @@ private:
             AFL_VERIFY(arrs.size());
             AFL_VERIFY(arrs.front()->GetRecordsCount());
             FilterIterator = std::make_shared<NArrow::TColumnFilter::TIterator>(Filter->GetBegin(Reverse, arrs.front()->GetRecordsCount()));
-            auto prefixSchema = Source->GetSourceSchema()->GetIndexInfo().GetReplaceKeyPrefix(arrs.size());
+            auto prefixSchema = Source->GetContext()->GetReadMetadata()->GetResultSchema()->GetIndexInfo().GetReplaceKeyPrefix(arrs.size());
             auto copyArrs = arrs;
             auto batch = std::make_shared<NArrow::TGeneralContainer>(prefixSchema->fields(), std::move(copyArrs));
             SortableRecord = std::make_shared<NArrow::NMerger::TRWSortableBatchPosition>(batch, Start, Reverse);
@@ -127,6 +130,7 @@ private:
     std::deque<TSourceIterator> UnfilledIterators;
 
     virtual bool IsFinished() const override {
+        // in passthrough FetchedCount is frozen below Limit, so termination falls to TBase::IsFinished (all sources drained)
         return FetchedCount >= Limit || TBase::IsFinished();
     }
 

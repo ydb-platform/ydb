@@ -28,6 +28,7 @@ private:
         return false;
     }
 
+    // sorted scans require every implementation to emit rows ordered by the sys view PK
     virtual std::shared_ptr<arrow::Array> BuildArrayAccessor(const ui64 columnId, const ui32 recordsCount) const = 0;
 
     virtual void DoAssembleColumns(const std::shared_ptr<NReader::NCommon::TColumnsSet>& columns, const bool /*sequential*/) override {

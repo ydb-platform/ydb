@@ -1,4 +1,6 @@
 #pragma once
+#include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/constructor.h>
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/source.h>
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/sys_view/abstract/source.h>
@@ -30,6 +32,10 @@ public:
         , OptimizerTasks(std::move(tasks))
         , ExternalPathId(externalPathId)
     {
+        // planner task order differs from the sys view PK (TaskId asc); only sorted scans need it
+        if (context->GetReadMetadata()->IsSorted() && HasAppData() && AppDataVerified().FeatureFlags.GetEnableSysViewOrderByLimitPushdown()) {
+            std::sort(OptimizerTasks.begin(), OptimizerTasks.end());
+        }
     }
 };
 

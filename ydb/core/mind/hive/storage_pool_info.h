@@ -74,6 +74,7 @@ struct TStoragePoolInfo {
     ui64 ConsoleVersion = 0;
     THashSet<THistoryEntry, THistoryHash> RemainingHistory;
     bool NeedShrinkFromTenant = false;
+    TEvHive::TEvShrinkStoragePool::TPtr ShrinkRequest;
 
     TStoragePoolInfo(const TString& name, THiveSharedSettings* hive);
     TStoragePoolInfo(const TStoragePoolInfo&) = delete;
@@ -98,6 +99,7 @@ struct TStoragePoolInfo {
     void Invalidate();
     THolder<TEvControllerSelectGroups::TGroupParameters> BuildRefreshRequest() const;
     bool AddTabletToWait(TTabletId tabletId);
+    bool SetShrinkRequest(TEvHive::TEvShrinkStoragePool::TPtr ev);
     TVector<TTabletId> PullWaitingTablets();
     template <NKikimrConfig::THiveConfig::EHiveStorageSelectStrategy Strategy>
     size_t SelectGroup(const TVector<double>& groupCandidateUsages);

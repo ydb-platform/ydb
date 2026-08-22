@@ -72,11 +72,13 @@ monitoring_config:
 ```
 
 
+For a detailed description of TLS parameters for monitoring, see the section [monitoring_config](./monitoring_config.md#tls).
+
 ## {{ ydb-short-name }} as a client
 
 ### LDAP
 
-{{ ydb-short-name }} supports [LDAP](../../security/authentication.md#ldap-auth-provider) for user authentication. The LDAP protocol has two options for enabling TLS.
+{{ ydb-short-name }} supports [LDAP](../../security/authentication.md#ldap) for user authentication. The LDAP protocol has two options for enabling TLS.
 
 Example of enabling TLS for LDAP via the `StartTls` protocol extension:
 

@@ -349,12 +349,5 @@ message TFeatureFlags {
     optional bool EnableRejectActionInResourcePoolClassifiers = 304 [default = false];
     optional bool EnableMoveWithColumnTableReplace = 305 [default = false];
     optional bool DisableOldSecrets = 306 [default = false];
-<<<<<<< HEAD
-=======
-    optional bool EnableKafkaServerlessTransactions = 307 [default = false];
-    optional bool EnableGeneratedStored = 308 [default = false];
-    optional bool EnableGeneratedVirtual = 309 [default = false];
-    optional bool EnableTxIdInStats = 310 [default = false];
     optional bool EnableDqSourceStreamLookupJoinShuffleMode = 311 [default = false];
->>>>>>> a46b9b677fc (dq streamlookupjoin: correctly fix multi-partition: add feature-flag and tests (#41442))
 }

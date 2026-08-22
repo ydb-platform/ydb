@@ -391,6 +391,18 @@ common:
   - from: reference/ydb-sdk/recipes/upsert.md
     to: recipes/ydb-sdk/upsert.md
 
+  # Redirects after recipes/backup reorganization
+  - from: /recipes/backup-collections/(.*)$
+    to: /recipes/backup/backup-collections/$1
+  - from: /recipes/system-tablet-backup/(.*)$
+    to: /recipes/backup/system-tablet-backup/$1
+  - from: /recipes/nfs-backup/(.*)$
+    to: /recipes/backup/nfs-backup/$1
+  - from: /recipes/import-export-column-tables.md
+    to: /recipes/backup/import-export-column-tables.md
+  - from: /recipes/backup/import-export-column-tables/import-export-column-tables.md
+    to: /recipes/backup/import-export-column-tables.md
+
 # Redirects from export_import to export-import
   - from: /reference/ydb-cli/export_import/s3_conn.md
     to: /reference/ydb-cli/export-import/auth-s3.md

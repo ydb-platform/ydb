@@ -16,7 +16,7 @@ The following changes are available in Yandex Enterprise Database in addition to
 * Implemented a set of fixes in index access (StreamIndexLookup) that eliminates the possibility of rare situations where executed queries could hang, and reduces RAM consumption during query execution.
 * Invalid views can now be restored from a backup. This allows restoring backups created from databases containing such views without additional actions from the administrator.
 * Added support for mutual certificate-based authentication (mTLS) in the [Kafka API](./reference/kafka-api/index.md).
-* Added the `TraceId` column with the query trace identifier to the [`.sys/top_queries_*`](./dev/system-views.md) and `.sys/query_sessions` system views.
+* Added the `TraceId` column with the query trace identifier to the `.sys/top_queries_*` and `.sys/query_sessions` system views.
 
 ## Version 25.4 {#25-4}
 

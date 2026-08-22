@@ -1,4 +1,5 @@
 #include "yql_pq_provider_impl.h"
+#include "yql_pq_settings.h"
 
 #include <ydb/library/yql/providers/pq/common/yql_names.h>
 #include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.h>
@@ -127,8 +128,8 @@ public:
             return TStatus::Error;
         }
 
-        if (!ValidateWriteSetting(*input->Child(TPqWriteTopic::idx_Settings), ctx)) {
-            return TStatus::Error;
+        if (const auto status = ValidateWriteSetting(input, TPqWriteTopic::idx_Settings, ctx); status != TStatus::Ok) {
+            return status;
         }
 
         input->SetTypeAnn(writeWorld->GetTypeAnn());
@@ -205,8 +206,8 @@ public:
             return TStatus::Error;
         }
 
-        if (!ValidateWriteSetting(*input->Child(TPqInsert::idx_Settings), ctx)) {
-            return TStatus::Error;
+        if (const auto status = ValidateWriteSetting(input, TPqInsert::idx_Settings, ctx); status != TStatus::Ok) {
+            return status;
         }
 
         const auto* outputColumnType = insertInput->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>()->GetItems()[0];
@@ -217,9 +218,10 @@ public:
     }
 
 private:
-    bool ValidateWriteSetting(TExprNode& node, TExprContext& ctx) const {
+    TStatus ValidateWriteSetting(const TExprNode::TPtr& input, const size_t idx, TExprContext& ctx) const {
         std::unordered_set<TStringBuf> usedSettings;
-        const auto validator = [state = State_, &usedSettings](TStringBuf name, TExprNode& setting, TExprContext& ctx) {
+        std::unordered_set<TStringBuf> settingsToRemove;
+        const auto validator = [state = State_, &usedSettings, &settingsToRemove](TStringBuf name, TExprNode& setting, TExprContext& ctx) {
             if (!usedSettings.emplace(name).second) {
                 ctx.AddError(TIssue(ctx.GetPosition(setting.Pos()), TStringBuilder() << "Duplicate setting \"" << name << "\""));
                 return false;
@@ -227,7 +229,7 @@ private:
 
             if (name == TDeliveryGuaranteeSetting::Name) {
                 if (setting.ChildrenSize() != 2) {
-                    ctx.AddError(TIssue(ctx.GetPosition(setting.Pos()), "Expected `DELIVERY_GUARANTEE` = value"));
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Pos()), TStringBuilder() << "Expected `" << TDeliveryGuaranteeSetting::PrettyName << "` = value"));
                     return false;
                 }
 
@@ -238,10 +240,30 @@ private:
 
                 if (!IsIn({TDeliveryGuaranteeSetting::ExactlyOnceValue, TDeliveryGuaranteeSetting::AtLeastOnceValue}, settingValue->Content())) {
                     ctx.AddError(TIssue(ctx.GetPosition(setting.Pos()), TStringBuilder()
-                        << "`DELIVERY_GUARANTEE` must be \"" << TDeliveryGuaranteeSetting::ExactlyOnceValue << "\" or \""
-                        << TDeliveryGuaranteeSetting::AtLeastOnceValue << "\""
+                        << "`" << TDeliveryGuaranteeSetting::PrettyName << "` must be \"" << TDeliveryGuaranteeSetting::ExactlyOnceValue
+                        << "\" or \"" << TDeliveryGuaranteeSetting::AtLeastOnceValue << "\""
                     ));
                     return false;
+                }
+
+                if (settingValue->Content() == TDeliveryGuaranteeSetting::ExactlyOnceValue) {
+                    if (state->Configuration->EnableDeduplication.Get().GetOrElse(false)) {
+                        ctx.AddError(TIssue(ctx.GetPosition(setting.Pos()), TStringBuilder()
+                            << "`" << TDeliveryGuaranteeSetting::PrettyName << "` = \"" << TDeliveryGuaranteeSetting::ExactlyOnceValue
+                            << "\" is not supported with enabled deduplication"
+                        ));
+                        return false;
+                    }
+
+                    if (!state->DeferredPublicationExtIdPrefix) {
+                        TIssue issue(ctx.GetPosition(setting.Pos()), TStringBuilder()
+                            << "`" << TDeliveryGuaranteeSetting::PrettyName << "` = \"" << TDeliveryGuaranteeSetting::ExactlyOnceValue
+                            << "\" can not be used in current query context, falling back to default \"" << TDeliveryGuaranteeSetting::AtLeastOnceValue << "\""
+                        );
+                        issue.Severity = TSeverityIds::S_WARNING;
+                        ctx.AddWarning(issue);
+                        settingsToRemove.emplace(TDeliveryGuaranteeSetting::Name);
+                    }
                 }
 
                 return true;
@@ -250,7 +272,26 @@ private:
             return false;
         };
 
-        return EnsureValidSettings(node, {TDeliveryGuaranteeSetting::Name}, validator, ctx);
+        const auto settingsNode = input->Child(idx);
+        if (!EnsureValidSettings(*settingsNode, {TDeliveryGuaranteeSetting::Name}, validator, ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!settingsToRemove.empty()) {
+            TVector<TCoNameValueTuple> newSettings;
+            for (const auto& setting : TCoNameValueTupleList(settingsNode)) {
+                if (!settingsToRemove.contains(setting.Name().Value())) {
+                    newSettings.push_back(setting);
+                }
+            }
+
+            input->ChildRef(idx) = Build<TCoNameValueTupleList>(ctx, settingsNode->Pos())
+                .Add(std::move(newSettings))
+                .Done().Ptr();
+            return TStatus::Repeat;
+        }
+
+        return TStatus::Ok;
     }
 
     TPqState::TPtr State_;

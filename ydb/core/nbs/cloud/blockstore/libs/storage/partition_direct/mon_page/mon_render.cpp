@@ -289,10 +289,16 @@ void RenderDbgList(
                         str << "Inflight";
                     }
                     TABLEH () {
-                        str << "Consecutive errors";
+                        str << "Consecutive success / errors";
                     }
                     TABLEH () {
-                        str << "Consecutive success";
+                        str << "PBuffers usage";
+                    }
+                    TABLEH () {
+                        str << "Ahead";
+                    }
+                    TABLEH () {
+                        str << "Behind";
                     }
                 }
             }
@@ -302,6 +308,9 @@ void RenderDbgList(
                     size_t inflight = 0;
                     size_t consecutiveErrors = 0;
                     size_t consecutiveSuccesses = 0;
+                    TCountAndSize pBuffersUsage;
+                    TCountAndSize aheadBlocks;
+                    TCountAndSize behindBlocks;
                     for (const auto& host: dbg.Hosts) {
                         ++healthCounts[host.Health];
                         consecutiveErrors += host.Errors.ConsecutiveErrorCount;
@@ -312,6 +321,9 @@ void RenderDbgList(
                         {
                             inflight += host.InflightByOperation[operation];
                         }
+                        pBuffersUsage += host.PBuffersUsage;
+                        aheadBlocks += host.AheadBlocks;
+                        behindBlocks += host.BehindBlocks;
                     }
                     TABLER () {
                         TABLED () {
@@ -332,10 +344,17 @@ void RenderDbgList(
                             str << inflight;
                         }
                         TABLED () {
-                            str << consecutiveErrors;
+                            str << consecutiveErrors << " / "
+                                << consecutiveSuccesses;
                         }
                         TABLED () {
-                            str << consecutiveSuccesses;
+                            str << pBuffersUsage.Print(true);
+                        }
+                        TABLED () {
+                            str << aheadBlocks.Print(true);
+                        }
+                        TABLED () {
+                            str << behindBlocks.Print(true);
                         }
                     }
                 }
@@ -390,17 +409,16 @@ void RenderDbgDetail(
                         str << "PBuffer used";
                     }
                     TABLEH () {
+                        str << "Ahead blocks";
+                    }
+                    TABLEH () {
+                        str << "Behind blocks";
+                    }
+                    TABLEH () {
                         str << "Consecutive errors";
                     }
                     TABLEH () {
                         str << "Consecutive success";
-                    }
-                    for (size_t operation = 0; operation < OperationCount;
-                         ++operation)
-                    {
-                        TABLEH () {
-                            str << ToString(static_cast<EOperation>(operation));
-                        }
                     }
                 }
             }
@@ -417,13 +435,47 @@ void RenderDbgDetail(
                             str << ToString(host.Health);
                         }
                         TABLED () {
-                            str << host.PBufferUsedSize;
+                            str << host.PBuffersUsage.Print(true);
+                        }
+                        TABLED () {
+                            str << host.AheadBlocks.Print(true);
+                        }
+                        TABLED () {
+                            str << host.BehindBlocks.Print(true);
                         }
                         TABLED () {
                             str << host.Errors.ConsecutiveErrorCount;
                         }
                         TABLED () {
                             str << host.Errors.ConsecutiveSuccessCount;
+                        }
+                    }
+                }
+            }
+        }
+        TAG (TH4) {
+            str << "Inflight by operation";
+        }
+        TABLE_CLASS ("table table-condensed") {
+            TABLEHEAD () {
+                TABLER () {
+                    TABLEH () {
+                        str << "Host";
+                    }
+                    for (size_t operation = 0; operation < OperationCount;
+                         ++operation)
+                    {
+                        TABLEH () {
+                            str << ToString(static_cast<EOperation>(operation));
+                        }
+                    }
+                }
+            }
+            TABLEBODY () {
+                for (const auto& host: dbg.Hosts) {
+                    TABLER () {
+                        TABLED () {
+                            str << PrintHostIndex(host.Index);
                         }
                         for (size_t operation = 0; operation < OperationCount;
                              ++operation)

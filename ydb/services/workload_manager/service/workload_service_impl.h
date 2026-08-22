@@ -178,9 +178,14 @@ struct TCpuQuotaManagerState {
     bool CpuLoadRequestRunning = false;
     TInstant CpuLoadRequestTime = TInstant::Zero();
 
-    TCpuQuotaManagerState(NMonitoring::TDynamicCounterPtr subComponent)
-        : CpuQuotaManager(TDuration::Seconds(1), TDuration::Seconds(10), IDLE_DURATION, 0.1, true, 0, subComponent)
+    TCpuQuotaManagerState(const TCpuQuotaManager::TSettings& settings, NMonitoring::TDynamicCounterPtr subComponent)
+        : CpuQuotaManager(settings, subComponent)
     {}
+
+    void UpdateSettings(const TCpuQuotaManager::TSettings& settings) {
+        CpuQuotaManager.UpdateSettings(settings);
+        CheckPendingQueue();
+    }
 
     void RequestCpuQuota(TActorId poolHandler, double maxClusterLoad, ui64 coockie) {
         auto response = CpuQuotaManager.RequestCpuQuota(0.0, maxClusterLoad);

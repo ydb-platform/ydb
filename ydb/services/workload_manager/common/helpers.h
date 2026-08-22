@@ -1,5 +1,7 @@
 #pragma once
 
+#include "cpu_quota_manager.h"
+
 #include <library/cpp/retry/retry_policy.h>
 
 #include <ydb/core/base/path.h>
@@ -118,5 +120,7 @@ void ParsePoolSettings(const NKikimrSchemeOp::TResourcePoolDescription& descript
 ui64 SaturationSub(ui64 x, ui64 y);
 
 NResourcePool::TPoolSettings PoolSettingsFromConfig(const NKikimrConfig::TWorkloadManagerConfig& workloadManagerConfig);
+
+TCpuQuotaManager::TSettings CpuQuotaSettingsFromConfig(const NKikimrConfig::TWorkloadManagerConfig& workloadManagerConfig);
 
 }  // NKikimr::NWorkloadManager

@@ -1,6 +1,18 @@
 package NKikimrConfig;
 option java_package = "ru.yandex.kikimr.proto";
 
+message TCpuQuotaManagerConfig {
+    optional uint64 MonitoringRequestDelayMs = 1;
+    optional uint64 AverageLoadIntervalMs = 2;
+    // How long an admitted query keeps its cpu reservation before its load is expected
+    // to be visible in .sys/nodes measurements
+    optional uint64 LoadVisibilityDelayMs = 3;
+    optional uint64 IdleTimeoutMs = 4;
+    optional double DefaultQueryLoad = 5;
+    optional bool Strict = 6;
+    optional bool EnableLoadReservations = 7;
+};
+
 message TWorkloadManagerConfig {
     optional bool Enabled = 1 [default = false];
     // Inflight
@@ -16,4 +28,6 @@ message TWorkloadManagerConfig {
     // Memory
     optional double QueryMemoryLimitPercentPerNode = 8;  // RESERVED for future per-query enforcement, currently ignored
     optional double TotalMemoryLimitPercentPerNode = 9;  // Pool-wide memory limit
+
+    optional TCpuQuotaManagerConfig CpuQuotaManager = 10;
 };

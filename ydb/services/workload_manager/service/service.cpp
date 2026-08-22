@@ -73,9 +73,12 @@ public:
             (ui32)NKikimrConsole::TConfigItem::FeatureFlagsItem, (ui32)NKikimrConsole::TConfigItem::WorkloadManagerConfigItem
         }), IEventHandle::FlagTrackDelivery);
 
-        CpuQuotaManager = std::make_unique<TCpuQuotaManagerState>(Counters.Counters->GetSubgroup("subcomponent", "CpuQuotaManager"));
-
         WorkloadManagerConfig = AppData()->WorkloadManagerConfig;
+        CpuQuotaManager = std::make_unique<TCpuQuotaManagerState>(
+            CpuQuotaSettingsFromConfig(WorkloadManagerConfig),
+            Counters.Counters->GetSubgroup("subcomponent", "CpuQuotaManager")
+        );
+
         EnabledResourcePools = AppData()->FeatureFlags.GetEnableResourcePools() || WorkloadManagerConfig.GetEnabled();
         EnabledResourcePoolsOnServerless = AppData()->FeatureFlags.GetEnableResourcePoolsOnServerless() || WorkloadManagerConfig.GetEnabled();
         EnableResourcePoolsCounters = AppData()->FeatureFlags.GetEnableResourcePoolsCounters();
@@ -115,6 +118,9 @@ public:
         EnabledResourcePools = event.GetConfig().GetFeatureFlags().GetEnableResourcePools() || WorkloadManagerConfig.GetEnabled();
         EnabledResourcePoolsOnServerless = event.GetConfig().GetFeatureFlags().GetEnableResourcePoolsOnServerless() || WorkloadManagerConfig.GetEnabled();
         EnableResourcePoolsCounters = event.GetConfig().GetFeatureFlags().GetEnableResourcePoolsCounters();
+        if (CpuQuotaManager) {
+            CpuQuotaManager->UpdateSettings(CpuQuotaSettingsFromConfig(WorkloadManagerConfig));
+        }
         if (EnabledResourcePools) {
             LOG_I("Resource pools was enabled");
             InitializeWorkloadService();

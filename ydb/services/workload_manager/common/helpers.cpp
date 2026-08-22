@@ -93,4 +93,41 @@ NResourcePool::TPoolSettings PoolSettingsFromConfig(const NKikimrConfig::TWorklo
     return poolSettings;
 }
 
+TCpuQuotaManager::TSettings CpuQuotaSettingsFromConfig(const NKikimrConfig::TWorkloadManagerConfig& workloadManagerConfig) {
+    TCpuQuotaManager::TSettings settings;
+    if (!workloadManagerConfig.HasCpuQuotaManager()) {
+        return settings;
+    }
+
+    const auto& config = workloadManagerConfig.GetCpuQuotaManager();
+    if (config.HasMonitoringRequestDelayMs()) {
+        settings.MonitoringRequestDelay = TDuration::MilliSeconds(config.GetMonitoringRequestDelayMs());
+    }
+
+    if (config.HasAverageLoadIntervalMs()) {
+        settings.AverageLoadInterval = TDuration::MilliSeconds(config.GetAverageLoadIntervalMs());
+    }
+
+    if (config.HasLoadVisibilityDelayMs()) {
+        settings.LoadVisibilityDelay = TDuration::MilliSeconds(config.GetLoadVisibilityDelayMs());
+    }
+
+    if (config.HasIdleTimeoutMs()) {
+        settings.IdleTimeout = TDuration::MilliSeconds(config.GetIdleTimeoutMs());
+    }
+
+    if (config.HasDefaultQueryLoad()) {
+        settings.DefaultQueryLoad = config.GetDefaultQueryLoad();
+    }
+
+    if (config.HasStrict()) {
+        settings.Strict = config.GetStrict();
+    }
+
+    if (config.HasEnableLoadReservations()) {
+        settings.EnableLoadReservations = config.GetEnableLoadReservations();
+    }
+    return settings;
+}
+
 }  // NKikimr::NWorkloadManager

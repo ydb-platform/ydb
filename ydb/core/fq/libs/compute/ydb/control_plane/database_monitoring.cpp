@@ -19,6 +19,23 @@
 
 namespace NFq {
 
+namespace {
+
+NKikimr::NWorkloadManager::TCpuQuotaManager::TSettings GetCpuQuotaSettings(const NFq::NConfig::TLoadControlConfig& config) {
+    NKikimr::NWorkloadManager::TCpuQuotaManager::TSettings settings;
+    settings.MonitoringRequestDelay = GetDuration(config.GetMonitoringRequestDelay(), TDuration::Seconds(1));
+    settings.AverageLoadInterval = std::max<TDuration>(GetDuration(config.GetAverageLoadInterval(), TDuration::Seconds(10)), TDuration::Seconds(1));
+    settings.IdleTimeout = TDuration::Zero();
+    if (const auto queryLoadPercentage = config.GetDefaultQueryLoadPercentage()) {
+        settings.DefaultQueryLoad = std::min<ui32>(queryLoadPercentage, 100) / 100.0;
+    }
+    settings.Strict = config.GetStrict();
+    settings.CpuNumber = config.GetCpuNumber();
+    return settings;
+}
+
+}  // anonymous namespace
+
 class TComputeDatabaseMonitoringActor : public NActors::TActorBootstrapped<TComputeDatabaseMonitoringActor> {
     struct TCounters {
         ::NMonitoring::TDynamicCounterPtr Counters;
@@ -58,15 +75,7 @@ public:
         , MaxClusterLoad(std::min<ui32>(config.GetMaxClusterLoadPercentage(), 100) / 100.0)
         , PendingQueueSize(config.GetPendingQueueSize())
         , Strict(config.GetStrict())
-        , CpuQuotaManager(
-            GetDuration(config.GetMonitoringRequestDelay(), TDuration::Seconds(1)),
-            std::max<TDuration>(GetDuration(config.GetAverageLoadInterval(), TDuration::Seconds(10)), TDuration::Seconds(1)),
-            TDuration::Zero(),
-            config.GetDefaultQueryLoadPercentage() ? std::min<ui32>(config.GetDefaultQueryLoadPercentage(), 100) / 100.0 : 0.1,
-            config.GetStrict(),
-            config.GetCpuNumber(),
-            Counters.SubComponent
-        )
+        , CpuQuotaManager(GetCpuQuotaSettings(config), Counters.SubComponent)
     {
         *Counters.TargetLoadPercentage = static_cast<ui64>(MaxClusterLoad * 100);
     }

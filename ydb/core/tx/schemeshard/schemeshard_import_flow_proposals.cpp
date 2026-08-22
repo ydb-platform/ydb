@@ -94,7 +94,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
             return nullptr;
         }
 
-        if (!NeedToBuildIndexes(importInfo, itemIdx) && !FillIndexDescription(indexedTable, *item.Table, status, error)) {
+        if (!NeedToBuildIndexes(importInfo, itemIdx) && !FillIndexDescription(indexedTable, *item.Table,
+            ss->EnableCompactFulltextIndex, status, error)) {
             return nullptr;
         }
 

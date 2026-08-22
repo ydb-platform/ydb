@@ -761,7 +761,7 @@ public:
     void SetReadFinished() {
         ReadFinished = true;
     }
-    virtual TDocId GetMaxKey() const = 0;
+    virtual TVector<TCell> GetResumeKey() const = 0;
     virtual std::pair<ui64, ui64> GetStats() const = 0;
     virtual ui32 GetUnprocessedDocumentCount() const = 0;
     virtual void AddResult(std::unique_ptr<TEvDataShard::TEvReadResult> result) = 0;
@@ -782,7 +782,7 @@ public:
  *   - PendingDocumentIds: deque of Arrow UInt64 arrays (doc_id batches).
  *   - PendingDocumentFrequencies: matching deque of UInt32 arrays (term freq).
  *   - UnprocessedDocumentPos/Count: cursor within the current front batch.
- *   - MaxKey: the largest doc_id seen so far (used as a resume key for
+ *   - ResumeKey: the largest doc_id seen so far (used as a resume key for
  *     continued reads when partitions span multiple TEvRead responses).
  *   - ReadFinished: set when the last TEvReadResult for this token arrives.
  *
@@ -807,8 +807,8 @@ public:
         return UnprocessedDocumentCount == 0 && this->ReadFinished;
     }
 
-    TDocId GetMaxKey() const override {
-        return MaxKey;
+    TVector<TCell> GetResumeKey() const override {
+        return {TCell::Make(MaxKey)};
     }
 
     std::pair<ui64, ui64> GetStats() const override {
@@ -891,6 +891,9 @@ class TCompactTokenStream: public TTokenStream<TDocId> {
 
     bool Started = false;
     NFulltext::TMultiDeltaReader Reader;
+
+    NTableIndex::NFulltext::TGen ResumeGen = 0;
+    TDocId ResumeMaxId = 0;
 
     ui64 CurDocId = 0;
     ui32 CurFreq = 0;
@@ -978,8 +981,8 @@ public:
         return !Started && this->ReadFinished;
     }
 
-    TDocId GetMaxKey() const override {
-        return (TDocId)CurDocId;
+    TVector<TCell> GetResumeKey() const override {
+        return {TCell::Make(ResumeGen), TCell::Make(ResumeMaxId)};
     }
 
     std::pair<ui64, ui64> GetStats() const override {
@@ -1001,6 +1004,10 @@ public:
                 Bytes += cell.Size();
             }
         }
+        auto lastRow = result->GetCells(result->GetRowsCount()-1);
+        // row = { gen, max_id, added, segment }
+        ResumeGen = lastRow[0].AsValue<NTableIndex::NFulltext::TGen>();
+        ResumeMaxId = lastRow[1].AsValue<TDocId>();
         Results.push_back(std::move(result));
         StartReader();
     }
@@ -1062,7 +1069,7 @@ public:
     // Set from the `+term` query syntax: a required (Lucene MUST) term that every
     // matching document must contain.
     bool Required = false;
-    TDocId StartReadKeyFrom = std::numeric_limits<TDocId>::min();
+    TVector<TCell> StartReadKeyFrom;
     // at the start we begin with the inclusive boundary
     bool StartReadKeyFromInclusive = true;
 
@@ -1080,18 +1087,6 @@ public:
         , WordKeyCells(TOwnedTableRange(TVector<TCell>{TokenCell}))
     {
         BuildRangesToRead();
-    }
-
-    // Build [prefix..., token, extra...] key cells.
-    TVector<TCell> MakePrefixedKey(const TCell& tokenCell, const TMaybe<TCell>& extra = {}) const {
-        TVector<TCell> cells;
-        cells.reserve(Prefix.size() + 1 + (extra.Defined() ? 1 : 0));
-        cells.insert(cells.end(), Prefix.begin(), Prefix.end());
-        cells.push_back(tokenCell);
-        if (extra.Defined()) {
-            cells.push_back(*extra);
-        }
-        return cells;
     }
 
     TOwnedTableRange GetWordKeyCells() const {
@@ -1120,24 +1115,15 @@ public:
     void BuildRangesToRead() {
         RangesToRead.clear();
 
-        TCell tokenCell(Word.data(), Word.size());
-        if (Reader->GetIsCompact()) {
-            // With the compact format, we always have to read all rows with __ydb_gen < MAX (these are updates)
-            TVector<TCell> fromCells = MakePrefixedKey(tokenCell, TCell::Make<NTableIndex::NFulltext::TGen>(0));
-            TVector<TCell> toCells = MakePrefixedKey(tokenCell, TCell::Make<NTableIndex::NFulltext::TGen>(std::numeric_limits<NTableIndex::NFulltext::TGen>::max()-1));
-            auto range = TTableRange(fromCells, true /*fromInclusive*/, toCells, false /*toInclusive*/);
-            auto rangePartition = Reader->GetRangePartitioning(range);
-            for (const auto& [shardId, range] : rangePartition) {
-                RangesToRead.emplace_back(shardId, std::move(range));
-            }
-        }
+        TVector<TCell> prefixed(Prefix.begin(), Prefix.end());
+        prefixed.push_back(TCell(Word.data(), Word.size()));
 
-        TVector<TCell> fromCells = MakePrefixedKey(tokenCell, TCell::Make<TDocId>(StartReadKeyFrom));
-        TVector<TCell> toCells = MakePrefixedKey(tokenCell);
-        if (Reader->GetIsCompact()) {
-            // With the compact format, we always have to read all rows with __ydb_gen < MAX (these are updates)
-            fromCells.insert(fromCells.end()-1, TCell::Make<NTableIndex::NFulltext::TGen>(std::numeric_limits<NTableIndex::NFulltext::TGen>::max()));
+        // Resume process expects a single range, maybe split across shards
+        TVector<TCell> fromCells = prefixed;
+        if (StartReadKeyFrom.size()) {
+            fromCells.insert(fromCells.end(), StartReadKeyFrom.begin(), StartReadKeyFrom.end());
         }
+        TVector<TCell> toCells = prefixed;
         auto range = TTableRange(fromCells, StartReadKeyFromInclusive, toCells, false /*toInclusive*/);
 
         auto rangePartition = Reader->GetRangePartitioning(range);
@@ -1193,10 +1179,10 @@ public:
 
     virtual void AddResult(ui64 tokenIndex, std::unique_ptr<TEvDataShard::TEvReadResult> msg) = 0;
 
-    TDocId GetMaxTokenKey(ui64 tokenIndex) {
+    TVector<TCell> GetResumeKey(ui64 tokenIndex) {
         YQL_ENSURE(tokenIndex < Streams.size(), "Token index out of bounds");
         auto& stream = Streams[tokenIndex];
-        return stream->GetMaxKey();
+        return stream->GetResumeKey();
     }
 
     virtual void FinishTokenStream(ui64 tokenIndex) = 0;
@@ -3519,7 +3505,7 @@ public:
         const bool hasRows = msg->GetRowsCount() > 0;
         MergeAlgo->AddResult(wordIndex, std::move(msg));
         if (hasRows) {
-            incomingWordInfo->StartReadKeyFrom = MergeAlgo->GetMaxTokenKey(wordIndex);
+            incomingWordInfo->StartReadKeyFrom = MergeAlgo->GetResumeKey(wordIndex);
             incomingWordInfo->StartReadKeyFromInclusive = false;
         }
 

@@ -1,3 +1,5 @@
+#include <ydb/core/base/fulltext.h>
+
 #include "kqp_indexes_json_ut_common.h"
 
 namespace NKikimr::NKqp {
@@ -43,13 +45,77 @@ void CreateTestTable(TQueryClient& db, const std::string& type, bool withIndex) 
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
 
-TResultSet ReadIndex(TQueryClient& db, const char* table) {
-    const auto query = std::format(R"(
-        SELECT * FROM `TestTable/json_idx/{}`;
-    )", table);
-    auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+THashMap<TString, TVector<ui64>> ReadIndex(TKikimrRunner& kikimr) {
+    bool compact = kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.GetEnableCompactFulltextIndex();
+    auto db = kikimr.GetQueryClient();
+    auto result = db.ExecuteQuery(R"(
+        SELECT * FROM `TestTable/json_idx/indexImplTable`;
+    )", TTxControl::NoTx()).ExtractValueSync();
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-    return result.GetResultSet(0);
+    auto rs = result.GetResultSet(0);
+    THashMap<TString, TVector<ui64>> tokens;
+    TResultSetParser parser(rs);
+    if (compact) {
+        TVector<bool> addFlags;
+        TVector<std::string> segments;
+        std::string lastToken;
+        auto flush = [&]() {
+            NFulltext::TMultiDeltaReader mr;
+            mr.Reset(false, false);
+            for (size_t i = 0; i < segments.size(); i++) {
+                mr.Add(addFlags[i], TConstArrayRef<ui8>((const ui8*)segments[i].data(), segments[i].size()));
+            }
+            mr.Start();
+            ui64 docId;
+            ui32 freq;
+            auto& list = tokens[lastToken];
+            while (mr.Read(docId, freq)) {
+                list.push_back(docId);
+            }
+            segments.clear();
+            addFlags.clear();
+        };
+        while (parser.TryNextRow()) {
+            auto token = parser.ColumnParser("__ydb_token").GetString();
+            if (segments.size() && token != lastToken) {
+                flush();
+            }
+            addFlags.push_back(parser.ColumnParser("__ydb_added").GetBool());
+            segments.push_back(parser.ColumnParser("__ydb_segment").GetString());
+            lastToken = token;
+        }
+        if (segments.size()) {
+            flush();
+        }
+    } else {
+        while (parser.TryNextRow()) {
+            auto token = parser.ColumnParser(0).GetString();
+            auto id = parser.ColumnParser(1).GetUint64();
+            tokens[token].push_back(id);
+        }
+    }
+    return tokens;
+}
+
+TString FormatReadIndex(THashMap<TString, TVector<ui64>> tokens) {
+    TStringBuilder sb;
+    sb << "[";
+    bool next = false;
+    for (auto& [token, ids]: tokens) {
+        for (auto& id: ids) {
+            if (next) {
+                sb << ";";
+            }
+            sb << "[[" << id << "u];\"" << EscapeC(token) << "\"]";
+            next = true;
+        }
+    }
+    sb << "]";
+    return sb;
+}
+
+TString FormatReadIndex(TKikimrRunner& kikimr) {
+    return FormatReadIndex(ReadIndex(kikimr));
 }
 
 void TestAddJsonIndex(const std::string& type, bool nullable) {
@@ -99,14 +165,14 @@ void TestAddJsonIndex(const std::string& type, bool nullable) {
     }
 
     CompareYson(R"([
-        [[13u];"\0\0"];
-        [[15u];"\0\0"];
-        [[12u];"\0\1"];
-        [[14u];"\0\2"];
-        [[15u];"\0\3item 1"];
         [[10u];"\0\3literal string"];
-        [[15u];"\0\4\0\0\0\0\0\200F@"];
         [[11u];"\0\4\xB0rh\x91\xED|\xBF?"];
+        [[12u];"\0\1"];
+        [[13u];"\0\0"];
+        [[14u];"\0\2"];
+        [[15u];"\0\0"];
+        [[15u];"\0\3item 1"];
+        [[15u];"\0\4\0\0\0\0\0\200F@"];
         [[16u];"\3id"];
         [[16u];"\3id\0\4\0\0\0\0@\x87\xE4@"];
         [[16u];"\6brand"];
@@ -125,7 +191,7 @@ void TestAddJsonIndex(const std::string& type, bool nullable) {
         [[16u];"\6price\0\2"];
         [[16u];"\x0bpart_count"];
         [[16u];"\x0bpart_count\0\4\0\0\0\0\0\xE4\x95@"]
-    ])", FormatResultSetYson(ReadIndex(db)));
+    ])", FormatReadIndex(kikimr));
 }
 
 void FillTestTable(TQueryClient& db, const std::string& tableName, const std::string& jsonType) {

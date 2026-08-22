@@ -41,7 +41,6 @@ Y_UNIT_TEST_SUITE(MoveTable) {
 
         const ui64 srcPathId = 1;
         TestTableDescription testTable{};
-        testTable.InStore = true;
         auto planStep = PrepareTablet(runtime, srcPathId, testTable.Schema);
 
         ui64 txId = 10;
@@ -58,7 +57,6 @@ Y_UNIT_TEST_SUITE(MoveTable) {
 
         const ui64 srcPathId = 1;
         TestTableDescription testTable{};
-        testTable.InStore = true;
         auto planStep = PrepareTablet(runtime, srcPathId, testTable.Schema);
 
         ui64 txId = 10;
@@ -97,7 +95,6 @@ Y_UNIT_TEST_SUITE(MoveTable) {
 
         const ui64 srcPathId = 1;
         TestTableDescription testTable{};
-        testTable.InStore = true;
         auto planStep = PrepareTablet(runtime, srcPathId, testTable.Schema);
 
         ui64 txId = 10;
@@ -187,7 +184,6 @@ Y_UNIT_TEST_SUITE(MoveTable) {
 
         const ui64 srcPathId = 1;
         TestTableDescription testTable{};
-        testTable.InStore = true;
         auto planStep = PrepareTablet(runtime, srcPathId, testTable.Schema);
 
         ui64 txId = 10;
@@ -235,7 +231,6 @@ Y_UNIT_TEST_SUITE(MoveTable) {
 
         const ui64 srcPathId = 1;
         TestTableDescription testTable{};
-        testTable.InStore = true;
         const auto& planStep = PrepareTablet(runtime, srcPathId, testTable.Schema);
         Y_UNUSED(planStep);
 
@@ -253,7 +248,6 @@ Y_UNIT_TEST_SUITE(MoveTable) {
 
         const ui64 srcPathId = 1;
         TestTableDescription testTable{};
-        testTable.InStore = true;
         const auto& planStep = PrepareTablet(runtime, srcPathId, testTable.Schema);
         Y_UNUSED(planStep);
         ui64 txId = 10;
@@ -335,7 +329,6 @@ Y_UNIT_TEST_SUITE(MoveTable) {
 
         const ui64 srcPathId = 1;
         TestTableDescription testTable{};
-        testTable.InStore = true;
         auto planStep = PrepareTablet(runtime, srcPathId, testTable.Schema);
 
         ui64 txId = 10;

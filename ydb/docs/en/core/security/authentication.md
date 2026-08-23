@@ -26,7 +26,7 @@ Anonymous authentication should only be used for evaluation purposes on local da
 
 {% endnote %}
 
-The `enforce_user_token_requirement` flag in the [authentication mode settings](../reference/configuration/security_config.md#security-auth) {{ ydb-short-name }} is responsible for disabling anonymous authentication mode.
+The `enforce_user_token_requirement` flag in the [authentication mode settings](../reference/configuration/auth_config.md#security-auth) {{ ydb-short-name }} is responsible for disabling anonymous authentication mode.
 
 Depending on the authentication mode settings, the actual authentication may not be anonymous:
 
@@ -82,11 +82,11 @@ By default, the user is given 4 attempts to enter the correct password. Otherwis
 
 If necessary, the cluster or database administrator can [unlock](../yql/reference/syntax/alter-user.md) a user ahead of schedule.
 
-Information about the user lockout status and the number of incorrect password attempts can be found in the [system view](../dev/system-views.md#system-view) of the user.
+Information about the user lockout status and the number of incorrect password attempts can be found in the [system view](../dev/system-views.md#%D0%B8%D0%BD%D1%84%D0%BE%D1%80%D0%BC%D0%B0%D1%86%D0%B8%D1%8F-%D0%BE-%D0%BF%D0%BE%D0%BB%D1%8C%D0%B7%D0%BE%D0%B2%D0%B0%D1%82%D0%B5%D0%BB%D1%8F%D1%85-users) of the user.
 
 ## Authentication using LDAP directory {#ldap}
 
-Interaction with an [LDAP directory](https://en.wikipedia.org/wiki/Lightweight_Directory_Access_Protocol) is integrated into {{ ydb-short-name }}. The LDAP directory is an external service relative to {{ ydb-short-name }} and is used for authentication and authorization of database users. Before using this authentication and authorization method, you must have a deployed LDAP service and configured network access between it and the {{ ydb-short-name }} servers.
+{{ ydb-short-name }} integrates interaction with the [LDAP directory](https://en.wikipedia.org/wiki/Lightweight_Directory_Access_Protocol). The LDAP directory is an external service relative to {{ ydb-short-name }} and is used for authenticating and authorizing database users. Before using this authentication and authorization method, you must have a deployed LDAP service and configured network access between it and {{ ydb-short-name }} servers.
 
 Examples of supported LDAP directory implementations: [OpenLdap](https://openldap.org/), [Active Directory](https://azure.microsoft.com/en-us/products/active-directory/).
 
@@ -234,7 +234,7 @@ Client certificate verification during [device authentication](#device-auth) and
 
 {% endnote %}
 
-Successful certificate authentication creates a user SID with the suffix `@<domain>`, where `<domain>` is the [parameter value](../reference/configuration/auth_config.md#iam-auth-config) of `certificate_authentication_domain` in the `auth_config` section (default: `cert`). The name is formed from all attributes of the certificate's Subject field in `Name=Value,...@<domain>` notation. The order of attributes corresponds to the order of fields in the certificate. Example:
+Successful certificate authentication creates a user SID with the suffix `@<domain>`, where `<domain>` is the [parameter value](../reference/configuration/auth_config.md#certificate-auth-config) `certificate_authentication_domain` in section `auth_config` (by default: `cert`). The name is formed from all attributes of the certificate's Subject field in `Name=Value,...@<domain>` notation. The order of attributes matches the order of fields in the certificate. Example:
 
 
 ```text
@@ -252,7 +252,7 @@ Certificate verification rules and group assignment are set in the [client_certi
 
 ### Client configuration
 
-For more details on configuring the [{{ ydb-short-name }} CLI](../reference/ydb-cli/index.md), see the [TLS connection parameters](../reference/ydb-cli/connect.md#activated-profile) section.
+For more details on configuring the [{{ ydb-short-name }} CLI](../reference/ydb-cli/index.md), see the [TLS connection parameters](../reference/ydb-cli/connect.md#tls) section.
 
 ## Device authentication by certificate {#device-auth}
 
@@ -279,10 +279,8 @@ After passing device authentication, [user or application authentication](./auth
 Device authentication is optional and configured independently: the mechanism can be enabled on some ports and disabled on others.
 
 - **Interconnect** — when TLS is enabled in the [interconnect_config](../reference/configuration/tls.md#interconnect) section, [Interconnect](../concepts/glossary.md#actor-system-interconnect) requires a client certificate.
-- **gRPC** — you can enable client certificate request for device authentication, and also separately enable mandatory verification (an untrusted certificate is always rejected). Server configuration is described in the [grpc_config](../reference/configuration/tls.md#grpc) and [client_certificate_authorization](../reference/configuration/client_certificate_authorization.md) sections, and client connection — in the [TLS connection parameters](../reference/ydb-cli/connect.md#activated-profile) section.
-- **Kafka API** — when mTLS is enabled, it requires a client certificate; only the trust chain to the CA is verified, a connection without a certificate or with an untrusted certificate is not established. Server configuration is described in the [kafka_proxy_config](../reference/configuration/kafka_proxy_config.md) section, and client connection — in the [Device authentication via mTLS](../reference/kafka-api/auth.md#mtls-auth) section.
-
-**gRPC** and **YDB Monitoring**: you can enable a client certificate request for device authentication, and also separately enable its mandatory verification (an untrusted certificate is always rejected). The gRPC configuration is described in the [grpc_config](%E2%9F%A6U1%E2%9F%A7) and [client_certificate_authorization](%E2%9F%A6U2%E2%9F%A7) sections, and client connection — in the [TLS connection parameters](%E2%9F%A6U3%E2%9F%A7) section; the YDB Monitoring configuration is described in the [monitoring_config](%E2%9F%A6U4%E2%9F%A7) section.
+- **Kafka API** — when mTLS is enabled, it requires a client certificate; only the trust chain to the CA is verified, a connection without a certificate or with an untrusted certificate is not established. Server configuration is described in the [kafka_proxy_config](../reference/configuration/kafka_proxy_config.md) section, and client connection — in the [Device authentication via mTLS](../reference/kafka-api/auth.md#device-auth) section.
+- **gRPC** and **YDB Monitoring**: you can enable a client certificate request for device authentication, and also separately enable its mandatory verification (an untrusted certificate is always rejected). The gRPC configuration is described in the [grpc_config](../reference/configuration/tls.md#grpc) and [client_certificate_authorization](../reference/configuration/client_certificate_authorization.md) sections, and client connection — in the [TLS connection parameters](../reference/ydb-cli/connect.md#tls) section; the YDB Monitoring configuration is described in the [monitoring_config](../reference/configuration/monitoring_config.md#tls) section.
 
 ## Authentication using a third-party IAM provider {#iam}
 

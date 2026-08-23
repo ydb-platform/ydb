@@ -14,6 +14,7 @@ Main topics:
 * [{#T}](scrubbing.md)
 * [{#T}](disk_end_space.md)
 * [{#T}](../../devops/deployment-options/manual/decommissioning.md)
+* [{#T}](virtual_storage_groups_decommit.md)
 * [{#T}](failure_model.md)
 * [{#T}](node_restarting.md)
 * [{#T}](dynamic-config.md)

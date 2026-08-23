@@ -112,32 +112,31 @@ public:
     };
 
     TDqComputeActorCheckpoints(const NActors::TActorId& owner, const TTxId& txId, TDqTaskSettings task, ICallbacks* computeActor);
-    void Init(NActors::TActorId computeActorId, NActors::TActorId checkpointsId);
-    [[nodiscard]]
-    bool HasPendingCheckpoint() const;
+
+    // Public API methods, which may be called from compute actor
+
+    [[nodiscard]] bool HasPendingCheckpoint() const;
     bool ComputeActorStateSaved() const;
-    void DoCheckpoint();
-    bool SaveState();
     NDqProto::TCheckpoint GetPendingCheckpoint() const;
+
+    // Checkpoint saving.
+    void Init(NActors::TActorId computeActorId, NActors::TActorId checkpointsId);
     void RegisterCheckpoint(const NDqProto::TCheckpoint& checkpoint, ui64 channelId);
-    void StartCheckpoint(const NDqProto::TCheckpoint& checkpoint);
+    void DoCheckpoint();
     void AbortCheckpoint();
 
-    // Sink support.
+    // Sink checkpointing support.
     void OnSinkStateSaved(TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint);
+    void OnTransformStateSaved(TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint);
 
-    void OnTransformStateSaved(TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) {
-        Y_UNUSED(state);
-        Y_UNUSED(outputIndex); // Note that we can have both sink and transform on one output index
-        Y_UNUSED(checkpoint);
-        Y_ABORT("Transform states are unimplemented");
-    }
-
-    void TryToSavePendingCheckpoint();
-
+    // Checkpoint restore.
     void AfterStateLoading(const TMaybe<TString>& error);
 
 private:
+    bool SaveState();
+    void StartCheckpoint(const NDqProto::TCheckpoint& checkpoint);
+    void TryToSavePendingCheckpoint();
+
     STATEFN(StateFunc);
     void Handle(TEvDqCompute::TEvNewCheckpointCoordinator::TPtr&);
     void Handle(TEvDqCompute::TEvInjectCheckpoint::TPtr&);

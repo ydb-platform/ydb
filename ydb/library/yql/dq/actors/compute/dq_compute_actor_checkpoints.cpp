@@ -118,6 +118,8 @@ TComputeActorState CombineForeignState(
 
 } // namespace
 
+//// TPendingCheckpointBase
+
 TDqComputeActorCheckpoints::TPendingCheckpointBase::TPendingCheckpointBase(const TDqTaskSettings& task)
     : SinksCount(GetSinksCount(task))
 {}
@@ -164,6 +166,8 @@ size_t TDqComputeActorCheckpoints::TPendingCheckpointBase::GetSinksCount(const T
     return sinksCount;
 }
 
+//// TPendingStateSavingCheckpoint
+
 void TDqComputeActorCheckpoints::TPendingStateSavingCheckpoint::Clear() {
     TBase::Clear();
     SavedComputeActorState = false;
@@ -174,6 +178,8 @@ void TDqComputeActorCheckpoints::TPendingStateSavingCheckpoint::Clear() {
 bool TDqComputeActorCheckpoints::TPendingStateSavingCheckpoint::IsReady() const {
     return SavedComputeActorState && TBase::IsReady();
 }
+
+//// TDqComputeActorCheckpoints
 
 TDqComputeActorCheckpoints::TDqComputeActorCheckpoints(const NActors::TActorId& owner, const TTxId& txId, TDqTaskSettings task, ICallbacks* computeActor)
     : TActor(&TDqComputeActorCheckpoints::StateFunc)
@@ -581,6 +587,13 @@ void TDqComputeActorCheckpoints::OnSinkStateSaved(TSinkState&& state, ui64 outpu
     LOG_T("Sink[" << outputIndex << "] state saved");
 
     TryToSavePendingCheckpoint();
+}
+
+void TDqComputeActorCheckpoints::OnTransformStateSaved(TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) {
+    Y_UNUSED(state);
+    Y_UNUSED(outputIndex); // Note that we can have both sink and transform on one output index
+    Y_UNUSED(checkpoint);
+    Y_ABORT("Transform states are unimplemented");
 }
 
 void TDqComputeActorCheckpoints::TryToSavePendingCheckpoint() {

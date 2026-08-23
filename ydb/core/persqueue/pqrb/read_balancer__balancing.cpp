@@ -1773,9 +1773,11 @@ void TConsumer::StartReading(ui32 partitionId, const TActorContext& ctx) {
         // underflows InactivePartitionCount when several finished descendants share a family:
         // TPartition::Reset() returns NeedReleaseChildren(), which is true for still-active
         // children, so the old loop decremented inactive counters that were already 0.
+        absl::flat_hash_set<ui32> descendants;
         absl::flat_hash_set<TPartitionFamily*> childFamilies;
         bool childrenLeftInFamily = false;
         GetPartitionGraph().Travers(partitionId, [&](ui32 childId) {
+            descendants.insert(childId);
             if (auto* child = GetPartition(childId)) {
                 child->Reset();
             }
@@ -1797,8 +1799,28 @@ void TConsumer::StartReading(ui32 partitionId, const TActorContext& ctx) {
             }
             family->ClassifyPartitions();
         }
+        // After BreakUp of a merge family {0,1,2}, the leftover is {1,2}: 2 is a
+        // descendant of 0, but 1 is a sibling parent. Destroying that family
+        // orphans both. Pull descendants out and destroy only those families.
+        absl::flat_hash_set<TPartitionFamily*> toDestroy;
         for (auto* f : childFamilies) {
-            DestroyFamily(f, ctx);
+            if (!Families.contains(f->Id)) {
+                continue;
+            }
+            const bool leftover = std::any_of(f->Partitions.begin(), f->Partitions.end(),
+                [&](ui32 id) { return !descendants.contains(id); });
+            if (leftover) {
+                for (auto* extracted : ExtractDescendantsFromFamily(f, partitionId, ctx)) {
+                    toDestroy.insert(extracted);
+                }
+            } else {
+                toDestroy.insert(f);
+            }
+        }
+        for (auto* f : toDestroy) {
+            if (Families.contains(f->Id)) {
+                DestroyFamily(f, ctx);
+            }
         }
         if (Families.contains(family->Id)) {
             family->AssertInvariants();

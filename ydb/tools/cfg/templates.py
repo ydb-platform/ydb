@@ -164,6 +164,7 @@ kikimr_arg="${kikimr_arg}${kikimr_mon_port:+ --mon-port ${kikimr_mon_port}}"
 kikimr_arg="${kikimr_arg}${kikimr_grpc_port:+ --grpc-port ${kikimr_grpc_port}}"
 kikimr_arg="${kikimr_arg}${kikimr_ic_port:+ --ic-port ${kikimr_ic_port}}"
 kikimr_arg="${kikimr_arg}${kikimr_node_broker_port:+ --node-broker-port ${kikimr_node_broker_port}}"
+kikimr_arg="${kikimr_arg}${kikimr_node_domain:+ --node-domain ${kikimr_node_domain}}"
 kikimr_arg="${kikimr_arg}${kikimr_syslog_service_tag:+ --syslog-service-tag ${kikimr_syslog_service_tag}}"
 
 kikimr_arg="${kikimr_arg}${kikimr_auth_token_file:+ --auth-token-file ${kikimr_auth_token_file}}"
@@ -250,6 +251,9 @@ NODE_ID_ARGUMENT = """kikimr_arg="${kikimr_arg}${kikimr_node_id:+ --node ${kikim
 NODE_BROKER_ARGUMENT = """kikimr_arg="${kikimr_arg}${kikimr_node_broker_port:+ --node-broker-port ${kikimr_node_broker_port}}"
 """
 
+NODE_DOMAIN_ARGUMENT = """kikimr_arg="${kikimr_arg}${kikimr_node_domain:+ --node-domain ${kikimr_node_domain}}"
+"""
+
 SYS_LOG_SERVICE_TAG = """kikimr_arg="${kikimr_arg}${kikimr_syslog_service_tag:+ --syslog-service-tag ${kikimr_syslog_service_tag}}"
 """
 
@@ -260,6 +264,7 @@ DEFAULT_KIKIMR_MBUS_MAX_MESSAGE_SIZE = 140000000
 
 def local_vars(
     tenant,
+    domain=None,
     node_broker_port=None,
     ic_port=19001,
     mon_port=8765,
@@ -296,6 +301,9 @@ def local_vars(
 
     if tenant:
         cur_vars.append(('kikimr_tenant', tenant))
+
+    if domain:
+        cur_vars.append(('kikimr_node_domain', domain))
 
     if node_broker_port:
         cur_vars.append(('kikimr_node_broker_port', node_broker_port))
@@ -466,10 +474,12 @@ def dynamic_cfg_new_style(
 def dynamic_cfg_new_style_v2(
     extra_args="",
     use_auth_token_file=False,
+    domain="",
 ):
     return "\n".join(
         [
             "kikimr_auth_token_file=${kikimr_home}/token/kikimr.token" if use_auth_token_file else "",
+            f'kikimr_node_domain="{domain}"' if domain else "",
             DYNAMIC_CFG_V2,
         ]
         + ydbd_extra_args(extra_args)
@@ -609,6 +619,7 @@ def kikimr_cfg_for_static_node(
 def kikimr_cfg_for_dynamic_node(
     node_broker_port=2135,
     tenant=None,
+    domain=None,
     ic_port=19001,
     mon_port=8765,
     kikimr_home='/Berkanavt/kikimr',
@@ -630,6 +641,7 @@ def kikimr_cfg_for_dynamic_node(
         [
             local_vars(
                 tenant,
+                domain=domain,
                 node_broker_port=node_broker_port,
                 ic_port=ic_port,
                 mon_port=mon_port,
@@ -651,6 +663,7 @@ def kikimr_cfg_for_dynamic_node(
             CUSTOM_CONFIG_INJECTOR,
             DEFAULT_ARGUMENTS_SET,
             NODE_BROKER_ARGUMENT,
+            NODE_DOMAIN_ARGUMENT,
             tenant_argument(tenant),
             sqs_arguments(sqs_enable),
         ]
@@ -679,6 +692,7 @@ def expected_vars(**kwargs):
 def kikimr_cfg_for_dynamic_slot(
     enable_cores=False,
     cert_params=None,
+    domain="",
     rb_txt_enabled=False,
     metering_txt_enabled=False,
     audit_txt_enabled=False,
@@ -688,6 +702,7 @@ def kikimr_cfg_for_dynamic_slot(
     return "\n".join(
         [
             'kikimr_coregen="--core"' if enable_cores else "",
+            f'kikimr_node_domain="{domain}"' if domain else "",
             expected_vars(
                 node_broker_port=2135,
                 kikimr_binaries_base_path="/Berkanavt/kikimr",
@@ -708,6 +723,7 @@ def kikimr_cfg_for_dynamic_slot(
             CUSTOM_SYS_CONFIG_INJECTOR,
             DEFAULT_ARGUMENTS_SET,
             NODE_BROKER_ARGUMENT,
+            NODE_DOMAIN_ARGUMENT,
             SYS_LOG_SERVICE_TAG,
             tenant_argument(True),
         ]

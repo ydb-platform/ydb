@@ -3,22 +3,21 @@
 #include "dq_compute_actor.h"
 #include "dq_compute_actor_async_io.h"
 
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/yql/dq/actors/common/retry_queue.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
 
-#include <ydb/library/actors/core/log.h>
-
 #include <util/generic/ptr.h>
 
-#include <algorithm>
-#include <deque>
-#include <type_traits>
+namespace NYql {
 
-namespace NYql::NDqProto {
+namespace NDqProto {
+
 enum ECheckpointingMode : int;
-} // namespace NYql::NDqProto
 
-namespace NYql::NDq {
+} // namespace NDqProto
+
+namespace NDq {
 
 /*
 
@@ -34,45 +33,55 @@ These requirements also ensure compatibility with watermarks.
 
 */
 
-class TDqComputeActorCheckpoints : public NActors::TActor<TDqComputeActorCheckpoints>
-{
+class TDqComputeActorCheckpoints : public NActors::TActor<TDqComputeActorCheckpoints> {
     struct TCheckpointCoordinatorId {
         NActors::TActorId ActorId;
         ui64 Generation;
 
         TCheckpointCoordinatorId(NActors::TActorId actorId, ui64 generation)
             : ActorId(actorId)
-            , Generation(generation) {
-        }
+            , Generation(generation)
+        {}
     };
 
-    struct TPendingCheckpoint {
-        TPendingCheckpoint(const TDqTaskSettings& task)
-            : SinksCount(GetSinksCount(task))
-        {
-        }
+    class TPendingCheckpointBase {
+    public:
+        const size_t SinksCount = 0;
+        size_t SavedSinkStatesCount = 0;
+        TMaybe<NDqProto::TCheckpoint> Checkpoint;
+        TInstant CheckpointStartTime;
+
+        explicit TPendingCheckpointBase(const TDqTaskSettings& task);
 
         // New checkpoint (clears previously saved data).
-        TPendingCheckpoint& operator=(const NDqProto::TCheckpoint& checkpoint);
+        TPendingCheckpointBase& operator=(const NDqProto::TCheckpoint& checkpoint);
 
-        operator bool() const {
-            return Checkpoint.Defined();
-        }
+        operator bool() const;
 
-        void Clear();
+        bool IsSlowCheckpoint(TDuration& duration) const;
 
-        bool IsReady() const {
-            Y_ABORT_UNLESS(Checkpoint);
-            return SavedComputeActorState && SinksCount == SavedSinkStatesCount;
-        }
+        virtual void Clear();
 
+        virtual bool IsReady() const;
+
+    private:
         static size_t GetSinksCount(const TDqTaskSettings& task);
+    };
 
-        const size_t SinksCount;
-        TMaybe<NDqProto::TCheckpoint> Checkpoint;
+    class TPendingStateSavingCheckpoint final : public TPendingCheckpointBase {
+        using TBase = TPendingCheckpointBase;
+
+    public:
         TComputeActorState ComputeActorState;
-        size_t SavedSinkStatesCount = 0;
         bool SavedComputeActorState = false;
+        bool SavingToDatabase = false;
+
+        using TBase::TBase;
+        using TBase::operator=;
+
+        void Clear() final;
+
+        bool IsReady() const final;
     };
 
 public:
@@ -163,26 +172,25 @@ private:
     ICallbacks* ComputeActor = nullptr;
 
     TMaybe<TCheckpointCoordinatorId> CheckpointCoordinator;
-    TPendingCheckpoint PendingCheckpoint;
+    TPendingStateSavingCheckpoint PendingSaveStateCheckpoint;
     TRetryEventsQueue EventsQueue;
 
     // Restore
-    NYql::NDqProto::NDqStateLoadPlan::TTaskPlan StateLoadPlan;
+    NDqProto::NDqStateLoadPlan::TTaskPlan StateLoadPlan;
     NDqProto::TCheckpoint RestoringTaskRunnerForCheckpoint;
     ui64 RestoringTaskRunnerForEvent;
 
     bool SlowCheckpointsMonitoringStarted = false;
-    TInstant CheckpointStartTime;
-    bool SavingToDatabase = false;
 };
 
-NYql::NDqProto::ECheckpointingMode GetTaskCheckpointingMode(const NYql::NDq::TDqTaskSettings& task);
+NDqProto::ECheckpointingMode GetTaskCheckpointingMode(const TDqTaskSettings& task);
 
-bool IsIngress(const NYql::NDq::TDqTaskSettings& task);
+bool IsIngress(const TDqTaskSettings& task);
 
-bool IsEgress(const NYql::NDq::TDqTaskSettings& task);
+bool IsEgress(const TDqTaskSettings& task);
 
-bool HasState(const NYql::NDq::TDqTaskSettings& task);
+bool HasState(const TDqTaskSettings& task);
 
+} // namespace NDq
 
-} // namespace NYql::NDq
+} // namespace NYql

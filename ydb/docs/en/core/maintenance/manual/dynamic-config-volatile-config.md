@@ -7,7 +7,7 @@ Primary use cases:
 - Temporarily changing configuration for debugging or testing
 - Trial activation of potentially dangerous settings. In the event of a cluster crash or restart, these settings will be automatically disabled
 
-These configurations are added at the end of the selectors set, and the syntax for their description is identical to the [selector syntax](./dynamic-config-selectors.md).
+These configurations are added at the end of the selectors set, and the syntax for their description is identical to the [selector syntax](../../devops/configuration-management/configuration-v1/dynamic-config-selectors.md).
 
 ```bash
 # Retrieve all volatile configurations uploaded to the cluster

@@ -1,4 +1,5 @@
 #include "ydb_root.h"
+#include "ydb_echo.h"
 #include "ydb_update.h"
 #include "ydb_version.h"
 
@@ -64,6 +65,7 @@ void TClientCommandRoot::SetCredentialsGetter(TConfig& config) {
 TYdbClientCommandRoot::TYdbClientCommandRoot(const TString& name, const TClientSettings& settings)
     : TClientCommandRoot(name, settings)
 {
+    AddCommand(std::make_unique<TCommandEcho>());
     if (settings.StorageUrl.has_value()) {
         AddCommand(std::make_unique<TCommandUpdate>());
     }

@@ -20,7 +20,6 @@ from stringprep import (
     in_table_d1,
     in_table_d2,
 )
-from types import FunctionType
 
 from asn1crypto.x509 import Certificate
 
@@ -691,17 +690,15 @@ def _username_unescape(username):
 
 class AuthFn:
     def __init__(self, auth_fn):
-        if not isinstance(auth_fn, FunctionType):
+        if not callable(auth_fn):
             raise ScramException(
-                f"The 'auth_fn' must be of type FunctionType, "
-                f"but found type {type(auth_fn)}",
-                SERVER_ERROR_OTHER_ERROR,
+                "The 'auth_fn' must be callable", SERVER_ERROR_OTHER_ERROR
             )
         self.auth_fn = auth_fn
 
     def __call__(self, username):
         try:
-            salt, stored_key, server_key, i = self.auth_fn(str(username))
+            salt, stored_key, server_key, i = self.auth_fn(str(username))  # pyright: ignore[reportGeneralTypeIssues]
         except BaseException as e:
             raise ScramException("Unknown user", SERVER_ERROR_UNKNOWN_USER) from e
 

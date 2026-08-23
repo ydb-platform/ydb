@@ -925,14 +925,20 @@ void TWriteSessionImpl::Connect(const TDuration& delay) {
             connectDelayContext = ClientContext->CreateContext();
         connectTimeoutContext = ClientContext->CreateContext();
 
+        // ClientContext can outlive driver shutdown: TDriverScope::Cancel()
+        // drops the root so CreateContext() returns nullptr. Y_ASSERT used to
+        // abort here (topic balancing stress, write session reconnect).
+        if (!connectContext || !connectTimeoutContext || (delay && !connectDelayContext)) {
+            AbortImpl();
+            return;
+        }
+
         // Previous operations contexts.
 
         // Set new context
         prevConnectContext = std::exchange(ConnectContext, connectContext);
         prevConnectTimeoutContext = std::exchange(ConnectTimeoutContext, connectTimeoutContext);
         prevConnectDelayContext = std::exchange(ConnectDelayContext, connectDelayContext);
-        Y_ASSERT(ConnectContext);
-        Y_ASSERT(ConnectTimeoutContext);
 
         // Cancel previous operations.
         Cancel(prevConnectContext);

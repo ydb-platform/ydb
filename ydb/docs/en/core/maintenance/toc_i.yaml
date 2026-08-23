@@ -14,4 +14,4 @@ items:
   - name: Maintenance without downtime
     href: manual/maintenance-without-downtime.md
   - name: Updating configurations via CMS
-    href: manual/cms.md
+    href: ../devops/configuration-management/configuration-v1/cms.md

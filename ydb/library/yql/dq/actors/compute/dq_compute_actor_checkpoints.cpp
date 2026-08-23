@@ -1,7 +1,8 @@
 #include "dq_compute_actor_checkpoints.h"
 #include "dq_checkpoints.h"
-#include "dq_compute_actor_impl.h"
+
 #include <ydb/library/services/services.pb.h>
+#include <ydb/library/yql/dq/actors/dq.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
 
 #include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
@@ -135,24 +136,50 @@ TDqComputeActorCheckpoints::TPendingCheckpointBase::operator bool() const {
     return Checkpoint.Defined();
 }
 
-bool TDqComputeActorCheckpoints::TPendingCheckpointBase::IsSlowCheckpoint(TDuration& duration) const {
+bool TDqComputeActorCheckpoints::TPendingCheckpointBase::IsSlowCheckpoint(TString& diagnostics) const {
     if (!CheckpointStartTime) {
         return false;
     }
 
-    duration = TActivationContext::Now() - CheckpointStartTime;
-    return duration >= SLOW_CHECKPOINT_DURATION;
+    const auto duration = TActivationContext::Now() - CheckpointStartTime;
+    if (duration < SLOW_CHECKPOINT_DURATION) {
+        return false;
+    }
+
+    TStringBuilder checkpointDiagnostic;
+    const TString checkpointDuration = TStringBuilder() << "Slow checkpoint. Duration: " << duration.Seconds() << 's';
+
+    if (Checkpoint) {
+        checkpointDiagnostic << "[Checkpoint " << MakeStringForLog(*Checkpoint) << "] " << checkpointDuration;
+    } else {
+        checkpointDiagnostic << checkpointDuration;
+    }
+
+    if (const auto& info = GetDiagnostics()) {
+        checkpointDiagnostic << " " << info;
+    }
+
+    diagnostics = checkpointDiagnostic;
+    return true;
 }
 
 void TDqComputeActorCheckpoints::TPendingCheckpointBase::Clear() {
     Checkpoint = Nothing();
-    SavedSinkStatesCount = 0;
+    ProcessedSinksCount = 0;
     CheckpointStartTime = TInstant::Zero();
 }
 
 bool TDqComputeActorCheckpoints::TPendingCheckpointBase::IsReady() const {
     Y_ABORT_UNLESS(Checkpoint);
-    return SavedSinkStatesCount == SinksCount;
+    return ProcessedSinksCount == SinksCount;
+}
+
+TString TDqComputeActorCheckpoints::TPendingCheckpointBase::GetDiagnostics() const {
+    if (!SinksCount || !Checkpoint) {
+        return "";
+    }
+
+    return TStringBuilder() << "Sinks: " << ProcessedSinksCount << '/' << SinksCount;
 }
 
 size_t TDqComputeActorCheckpoints::TPendingCheckpointBase::GetSinksCount(const TDqTaskSettings& task) {
@@ -179,6 +206,30 @@ bool TDqComputeActorCheckpoints::TPendingStateSavingCheckpoint::IsReady() const 
     return SavedComputeActorState && TBase::IsReady();
 }
 
+TString TDqComputeActorCheckpoints::TPendingStateSavingCheckpoint::GetDiagnostics() const {
+    TStringBuilder result;
+
+    if (Checkpoint) {
+        result << "CA: " << SavedComputeActorState;
+
+        if (const auto& diagnostics = TBase::GetDiagnostics()) {
+            result << " " << diagnostics;
+        }
+
+        result << " ";
+    }
+
+    return result << "SavingToDatabase: " << SavingToDatabase;
+}
+
+//// TPendingCommitCheckpoint
+
+void TDqComputeActorCheckpoints::TPendingCommitCheckpoint::Clear() {
+    TBase::Clear();
+    Cookie = 0;
+    CommittedOutputs.clear();
+}
+
 //// TDqComputeActorCheckpoints
 
 TDqComputeActorCheckpoints::TDqComputeActorCheckpoints(const NActors::TActorId& owner, const TTxId& txId, TDqTaskSettings task, ICallbacks* computeActor)
@@ -190,6 +241,7 @@ TDqComputeActorCheckpoints::TDqComputeActorCheckpoints(const NActors::TActorId& 
     , CheckpointStorage(MakeCheckpointStorageID())
     , ComputeActor(computeActor)
     , PendingSaveStateCheckpoint(Task)
+    , PendingCommitCheckpoint(Task)
 {}
 
 void TDqComputeActorCheckpoints::Init(NActors::TActorId computeActorId, NActors::TActorId checkpointsId) {
@@ -278,10 +330,14 @@ void TDqComputeActorCheckpoints::Handle(TEvDqCompute::TEvNewCheckpointCoordinato
     Y_ABORT_UNLESS(EventsQueue.OnEventReceived(ev->Get()));
     EventsQueue.Send(new TEvDqCompute::TEvNewCheckpointCoordinatorAck());
 
-    const bool resumeInputs = PendingSaveStateCheckpoint;
-    AbortCheckpoint();
-    if (resumeInputs) {
-        LOG_W("Drop pending checkpoint since coordinator is stale");
+    if (PendingCommitCheckpoint) {
+        LOG_CP_W(*PendingCommitCheckpoint.Checkpoint, "Drop pending commit checkpoint since coordinator is stale");
+        PendingCommitCheckpoint.Clear();
+    }
+
+    if (PendingSaveStateCheckpoint) {
+        LOG_PCP_W("Drop pending save state checkpoint since coordinator is stale");
+        PendingSaveStateCheckpoint.Clear();
         ComputeActor->ResumeInputsByCheckpoint();
     }
 }
@@ -437,10 +493,17 @@ void TDqComputeActorCheckpoints::Handle(TEvDqCompute::TEvCommitState::TPtr& ev) 
         return;
     }
 
-    // No actual commit at the moment: will be done in further commits
-    auto checkpoint = ev->Get()->Record.GetCheckpoint();
-    ComputeActor->CommitState(checkpoint);
-    EventsQueue.Send(new TEvDqCompute::TEvStateCommitted(checkpoint.GetId(), checkpoint.GetGeneration(), Task.GetId()), ev->Cookie);
+    YQL_ENSURE(!PendingCommitCheckpoint); // Parallel checkpoints is not supported now
+    PendingCommitCheckpoint = ev->Get()->Record.GetCheckpoint();
+    PendingCommitCheckpoint.Cookie = ev->Cookie;
+    StartSlowCheckpointsMonitoring();
+    LOG_CP_D(*PendingCommitCheckpoint.Checkpoint, "TEvCommitState");
+
+    ComputeActor->CommitState(*PendingCommitCheckpoint.Checkpoint);
+
+    if (PendingCommitCheckpoint) {
+        TryToFinishPendingCommitCheckpoint();
+    }
 }
 
 void TDqComputeActorCheckpoints::Handle(NActors::TEvents::TEvPoison::TPtr&) {
@@ -471,24 +534,28 @@ void TDqComputeActorCheckpoints::Handle(TEvRetryQueuePrivate::TEvRetry::TPtr& ev
 }
 
 void TDqComputeActorCheckpoints::Handle(NActors::TEvents::TEvWakeup::TPtr&) {
-    if (TDuration duration; PendingSaveStateCheckpoint.IsSlowCheckpoint(duration)) {
-        auto checkpointDiagnostic = TStringBuilder() << " Stage: " << Task.GetStageId() << ". Channels version: " << Task.GetDqChannelVersion() << ". ";
-        const TString checkpointDuration = TStringBuilder() << "Slow checkpoint. Duration: " << duration.Seconds() << 's';
-
-        if (PendingSaveStateCheckpoint) {
-            checkpointDiagnostic << "[Checkpoint " << MakeStringForLog(*PendingSaveStateCheckpoint.Checkpoint) << "] " << checkpointDuration;
-            checkpointDiagnostic << " CA: " << PendingSaveStateCheckpoint.SavedComputeActorState;
-
-            if (PendingSaveStateCheckpoint.SinksCount) {
-                checkpointDiagnostic << " Sinks: " << PendingSaveStateCheckpoint.SavedSinkStatesCount << '/' << PendingSaveStateCheckpoint.SinksCount;
-            }
-        } else {
-            checkpointDiagnostic << checkpointDuration;
+    const auto buildDiagnostics = [task = &Task, ca = ComputeActor](const TPendingCheckpointBase& checkpoint, const TString& type) -> TString {
+        TString diagnostics;
+        if (!checkpoint.IsSlowCheckpoint(diagnostics)) {
+            return "";
         }
 
-        checkpointDiagnostic << " SavingToDatabase: " << PendingSaveStateCheckpoint.SavingToDatabase << ". Compute actor state diagnostics. " << ComputeActor->GetTaskDebugState();
-        LOG_W(checkpointDiagnostic);
+        return TStringBuilder()
+            << " Stage: " << task->GetStageId()
+            << ". Channels version: " << task->GetDqChannelVersion()
+            << ". Pending checkpoint type: " << type
+            << ". " << diagnostics
+            << ". Compute actor state diagnostics. " << ca->GetTaskDebugState();
+    };
+
+    if (const auto& diagnostics = buildDiagnostics(PendingSaveStateCheckpoint, "PendingSaveStateCheckpoint")) {
+        LOG_W(diagnostics);
     }
+
+    if (const auto& diagnostics = buildDiagnostics(PendingCommitCheckpoint, "PendingCommitCheckpoint")) {
+        LOG_W(diagnostics);
+    }
+
     Schedule(SLOW_CHECKPOINT_DURATION, new NActors::TEvents::TEvWakeup());
 }
 
@@ -532,7 +599,7 @@ bool TDqComputeActorCheckpoints::SaveState() {
         resultEv->Record.SetTaskId(Task.GetId());
         resultEv->Record.SetStatus(NDqProto::TEvSaveTaskStateResult::INTERNAL_ERROR);
         EventsQueue.Send(std::move(resultEv));
-        AbortCheckpoint();
+        PendingSaveStateCheckpoint.Clear();
 
         return false;
     }
@@ -555,15 +622,14 @@ void TDqComputeActorCheckpoints::RegisterCheckpoint(const NDqProto::TCheckpoint&
 void TDqComputeActorCheckpoints::StartCheckpoint(const NDqProto::TCheckpoint& checkpoint) {
     PendingSaveStateCheckpoint = checkpoint;
     PendingSaveStateCheckpoint.SavingToDatabase = false;
+    StartSlowCheckpointsMonitoring();
+}
 
+void TDqComputeActorCheckpoints::StartSlowCheckpointsMonitoring() {
     if (!SlowCheckpointsMonitoringStarted) {
         SlowCheckpointsMonitoringStarted = true;
         Schedule(SLOW_CHECKPOINT_DURATION, new NActors::TEvents::TEvWakeup());
     }
-}
-
-void TDqComputeActorCheckpoints::AbortCheckpoint() {
-    PendingSaveStateCheckpoint.Clear();
 }
 
 void TDqComputeActorCheckpoints::OnSinkStateSaved(TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) {
@@ -574,25 +640,52 @@ void TDqComputeActorCheckpoints::OnSinkStateSaved(TSinkState&& state, ui64 outpu
             << checkpoint.GetGeneration() << " < " << CheckpointCoordinator->Generation);
         return;
     }
+
     Y_ABORT_UNLESS(PendingSaveStateCheckpoint);
     Y_ABORT_UNLESS(PendingSaveStateCheckpoint.Checkpoint->GetId() == checkpoint.GetId(),
         "Expected pending checkpoint id %lu, but got %lu", PendingSaveStateCheckpoint.Checkpoint->GetId(), checkpoint.GetId());
+
     for (const TSinkState& sinkState : PendingSaveStateCheckpoint.ComputeActorState.Sinks) {
         Y_ABORT_UNLESS(sinkState.OutputIndex != outputIndex, "Double save sink[%lu] state", outputIndex);
     }
 
     state.OutputIndex = outputIndex; // Set index explicitly to avoid errors
     PendingSaveStateCheckpoint.ComputeActorState.Sinks.emplace_back(std::move(state));
-    ++PendingSaveStateCheckpoint.SavedSinkStatesCount;
-    LOG_T("Sink[" << outputIndex << "] state saved");
+    ++PendingSaveStateCheckpoint.ProcessedSinksCount;
+    LOG_PCP_T("Sink[" << outputIndex << "] state saved");
 
     TryToSavePendingCheckpoint();
 }
 
+void TDqComputeActorCheckpoints::OnSinkStateCommitted(ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) {
+    Y_ABORT_UNLESS(CheckpointCoordinator);
+    Y_ABORT_UNLESS(checkpoint.GetGeneration() <= CheckpointCoordinator->Generation);
+    if (checkpoint.GetGeneration() < CheckpointCoordinator->Generation) {
+        LOG_W("Ignoring sink[" << outputIndex << "] commit state event from previous coordinator: "
+            << checkpoint.GetGeneration() << " < " << CheckpointCoordinator->Generation);
+        return;
+    }
+
+    Y_ABORT_UNLESS(PendingCommitCheckpoint);
+    Y_ABORT_UNLESS(PendingCommitCheckpoint.Checkpoint->GetId() == checkpoint.GetId(),
+        "Expected pending commit checkpoint id %lu, but got %lu", PendingCommitCheckpoint.Checkpoint->GetId(), checkpoint.GetId());
+
+    const auto [_, inserted] = PendingCommitCheckpoint.CommittedOutputs.emplace(outputIndex);
+    Y_ABORT_UNLESS(inserted, "Double commit sink[%lu] state", outputIndex);
+
+    ++PendingCommitCheckpoint.ProcessedSinksCount;
+    LOG_CP_T(*PendingCommitCheckpoint.Checkpoint, "Sink[" << outputIndex << "] state committed");
+
+    TryToFinishPendingCommitCheckpoint();
+}
+
 void TDqComputeActorCheckpoints::OnTransformStateSaved(TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) {
-    Y_UNUSED(state);
-    Y_UNUSED(outputIndex); // Note that we can have both sink and transform on one output index
-    Y_UNUSED(checkpoint);
+    Y_UNUSED(state, outputIndex, checkpoint); // Note that we can have both sink and transform on one output index
+    Y_ABORT("Transform states are unimplemented");
+}
+
+void TDqComputeActorCheckpoints::OnTransformStateCommitted(ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) {
+    Y_UNUSED(outputIndex, checkpoint);
     Y_ABORT("Transform states are unimplemented");
 }
 
@@ -604,8 +697,21 @@ void TDqComputeActorCheckpoints::TryToSavePendingCheckpoint() {
         Send(CheckpointStorage, std::move(saveTaskStateRequest));
 
         LOG_PCP_D("Task checkpoint is done. Send to storage");
+        const auto startTime = PendingSaveStateCheckpoint.CheckpointStartTime;
         PendingSaveStateCheckpoint.Clear();
+        PendingSaveStateCheckpoint.CheckpointStartTime = startTime;
         PendingSaveStateCheckpoint.SavingToDatabase = true;
+    }
+}
+
+void TDqComputeActorCheckpoints::TryToFinishPendingCommitCheckpoint() {
+    Y_ABORT_UNLESS(PendingCommitCheckpoint);
+    if (PendingCommitCheckpoint.IsReady()) {
+        const auto& checkpoint = *PendingCommitCheckpoint.Checkpoint;
+        EventsQueue.Send(new TEvDqCompute::TEvStateCommitted(checkpoint.GetId(), checkpoint.GetGeneration(), Task.GetId()), PendingCommitCheckpoint.Cookie);
+
+        LOG_CP_D(*PendingCommitCheckpoint.Checkpoint, "Task checkpoint commit done.");
+        PendingCommitCheckpoint.Clear();
     }
 }
 

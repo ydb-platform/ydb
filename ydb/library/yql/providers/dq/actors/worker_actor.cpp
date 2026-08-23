@@ -771,6 +771,11 @@ private:
         SendFailure(MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::BAD_REQUEST, "Unimplemented"));
     }
 
+    void OnAsyncOutputStateCommitted(ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) override {
+        Y_UNUSED(outputIndex, checkpoint);
+        SendFailure(MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::BAD_REQUEST, "Unimplemented"));
+    }
+
     void SinkSend(
         ui64 index,
         NKikimr::NMiniKQL::TUnboxedValueBatch&& batch,

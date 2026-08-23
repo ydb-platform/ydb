@@ -9,6 +9,8 @@
 
 #include <util/generic/ptr.h>
 
+#include <unordered_set>
+
 namespace NYql {
 
 namespace NDqProto {
@@ -47,22 +49,27 @@ class TDqComputeActorCheckpoints : public NActors::TActor<TDqComputeActorCheckpo
     class TPendingCheckpointBase {
     public:
         const size_t SinksCount = 0;
-        size_t SavedSinkStatesCount = 0;
+        size_t ProcessedSinksCount = 0;
         TMaybe<NDqProto::TCheckpoint> Checkpoint;
         TInstant CheckpointStartTime;
 
         explicit TPendingCheckpointBase(const TDqTaskSettings& task);
+
+        virtual ~TPendingCheckpointBase() = default;
 
         // New checkpoint (clears previously saved data).
         TPendingCheckpointBase& operator=(const NDqProto::TCheckpoint& checkpoint);
 
         operator bool() const;
 
-        bool IsSlowCheckpoint(TDuration& duration) const;
+        bool IsSlowCheckpoint(TString& diagnostics) const;
 
         virtual void Clear();
 
         virtual bool IsReady() const;
+
+    protected:
+        virtual TString GetDiagnostics() const;
 
     private:
         static size_t GetSinksCount(const TDqTaskSettings& task);
@@ -82,6 +89,22 @@ class TDqComputeActorCheckpoints : public NActors::TActor<TDqComputeActorCheckpo
         void Clear() final;
 
         bool IsReady() const final;
+
+    private:
+        TString GetDiagnostics() const final;
+    };
+
+    class TPendingCommitCheckpoint final : public TPendingCheckpointBase {
+        using TBase = TPendingCheckpointBase;
+
+    public:
+        ui64 Cookie = 0;
+        std::unordered_set<ui64> CommittedOutputs;
+
+        void Clear() final;
+
+        using TBase::TBase;
+        using TBase::operator=;
     };
 
 public:
@@ -123,11 +146,12 @@ public:
     void Init(NActors::TActorId computeActorId, NActors::TActorId checkpointsId);
     void RegisterCheckpoint(const NDqProto::TCheckpoint& checkpoint, ui64 channelId);
     void DoCheckpoint();
-    void AbortCheckpoint();
 
-    // Sink checkpointing support.
+    // Sink/Transform checkpointing support.
     void OnSinkStateSaved(TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint);
+    void OnSinkStateCommitted(ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint);
     void OnTransformStateSaved(TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint);
+    void OnTransformStateCommitted(ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint);
 
     // Checkpoint restore.
     void AfterStateLoading(const TMaybe<TString>& error);
@@ -135,7 +159,9 @@ public:
 private:
     bool SaveState();
     void StartCheckpoint(const NDqProto::TCheckpoint& checkpoint);
+    void StartSlowCheckpointsMonitoring();
     void TryToSavePendingCheckpoint();
+    void TryToFinishPendingCommitCheckpoint();
 
     STATEFN(StateFunc);
     void Handle(TEvDqCompute::TEvNewCheckpointCoordinator::TPtr&);
@@ -172,6 +198,7 @@ private:
 
     TMaybe<TCheckpointCoordinatorId> CheckpointCoordinator;
     TPendingStateSavingCheckpoint PendingSaveStateCheckpoint;
+    TPendingCommitCheckpoint PendingCommitCheckpoint;
     TRetryEventsQueue EventsQueue;
 
     // Restore

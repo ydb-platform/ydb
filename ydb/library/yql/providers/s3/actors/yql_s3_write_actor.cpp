@@ -579,7 +579,10 @@ protected:
     }
 
 private:
-    void CommitState(const NDqProto::TCheckpoint&) final {}
+    void CommitState(const NDqProto::TCheckpoint& checkpoint) final {
+        Callbacks->OnAsyncOutputStateCommitted(OutputIndex, checkpoint);
+    }
+
     void LoadState(const TSinkState&) final {}
 
     ui64 GetOutputIndex() const final {

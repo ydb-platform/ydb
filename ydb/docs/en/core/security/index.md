@@ -26,7 +26,6 @@ The {{ ydb-short-name }} security system operates with the following concepts:
 - **[Authentication](./authentication.md) and [authorization](./authorization.md)**. The access control system in {{ ydb-short-name }} provides data protection in a {{ ydb-short-name }} cluster. Only authenticated [access subjects](../concepts/glossary.md#access-subject) (users and groups) can work with data, and access to data can be restricted.
 
   - **[Device authentication](./authentication.md#device-auth)**. When opening a TLS connection, {{ ydb-short-name }} can verify the [client certificate](../concepts/glossary.md#client-certificate) and thus restrict the network perimeter. Such authentication is optional and configurable for supported interfaces. After device authentication, [user authentication](./authentication.md) may still be required to access data.
-
   - **Client authentication**. When accessing a {{ ydb-short-name }} cluster, [users](../concepts/glossary.md#access-user) undergo [authentication](./authentication.md) — a verification process that confirms the user's identity. {{ ydb-short-name }} supports various authentication mechanisms; their detailed description can be found in the corresponding [authentication](./authentication.md) section.
 
     It is important to note that regardless of the mechanism used, upon successful authentication users receive an identifier (SID) and an authentication token.

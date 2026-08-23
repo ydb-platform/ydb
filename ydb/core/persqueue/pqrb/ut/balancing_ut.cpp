@@ -483,6 +483,21 @@ struct TScaleEnv {
         DispatchFor(tc, TDuration::MilliSeconds(50));
     }
 
+    void InjectStartReading(const TActorId& pipe, ui32 partition) {
+        ForwardToTablet(
+            *tc.Runtime,
+            tc.BalancerTabletId,
+            tc.Edge,
+            new TEvPersQueue::TEvReadingPartitionStartedRequest(pipe, "user", partition)
+        );
+        DispatchFor(tc, TDuration::MilliSeconds(50));
+    }
+
+    void Advance(TDuration delay) {
+        tc.Runtime->AdvanceCurrentTime(delay);
+        Pump(TDuration::MilliSeconds(100));
+    }
+
     void CloseSession(const TString& session) {
         auto it = Pipes.find(session);
         UNIT_ASSERT_C(it != Pipes.end(), session);
@@ -692,6 +707,13 @@ struct TScaleEnv {
 
         Pipes[session] = pipe;
         return pipe;
+    }
+};
+
+struct TSplitEnv : TScaleEnv {
+    TSplitEnv()
+        : TScaleEnv(NKikimrPQ::TPQTabletConfig::CAN_SPLIT)
+    {
     }
 };
 
@@ -1907,6 +1929,167 @@ Y_UNIT_TEST(SessionMigrateAfterFinishKeepsChildrenOnNewSession) {
     env.AssertSameSession({0, 2, 3});
 }
 
+Y_UNIT_TEST(LastSessionGoneAfterFinishStartsFromRoot) {
+    // Last session destroys TConsumer: Finish is lost. The next session starts
+    // from the root until it Finish-es (or Commit-s) again.
+    TSplitEnv env;
+    env.CreateParents(1);
+    env.RegisterSession("session-0");
+    env.Split(0);
+    env.Finish("session-0", 0);
+    env.AssertLocked(1);
+    env.AssertLocked(2);
+
+    env.CloseSession("session-0");
+    env.RegisterSession("session-new");
+    env.AssertLocked(0, "session-new");
+    env.AssertNotLocked(1);
+    env.AssertNotLocked(2);
+    env.Finish("session-new", 0);
+    env.AssertLocked(1);
+    env.AssertLocked(2);
+    env.AssertSameSession({0, 1, 2});
+}
+
+Y_UNIT_TEST(LastSessionGoneAfterCommitStartsFromRoot) {
+    TSplitEnv env;
+    env.CreateParents(1);
+    env.RegisterSession("session-0");
+    env.Split(0);
+    env.Commit(0);
+    env.AssertLocked(1);
+    env.AssertLocked(2);
+
+    env.CloseSession("session-0");
+    env.RegisterSession("session-new");
+    env.AssertLocked(0, "session-new");
+    env.AssertNotLocked(1);
+    env.AssertNotLocked(2);
+    env.Commit(0);
+    env.AssertLocked(1);
+    env.AssertLocked(2);
+}
+
+Y_UNIT_TEST(RereadThenFinishAgainLocksChildren) {
+    TSplitEnv env;
+    env.CreateParents(1);
+    env.RegisterSession("session-0");
+    env.Split(0);
+    env.Finish("session-0", 0);
+    env.AssertSameSession({0, 1, 2});
+
+    env.StartReading("session-0", 0);
+    env.AssertLocked(0, "session-0");
+    env.AssertNotLocked(1);
+    env.AssertNotLocked(2);
+
+    env.Finish("session-0", 0);
+    env.AssertLocked(1, "session-0");
+    env.AssertLocked(2, "session-0");
+    env.AssertSameSession({0, 1, 2});
+}
+
+Y_UNIT_TEST(RereadThenCommitLocksChildren) {
+    TSplitEnv env;
+    env.CreateParents(1);
+    env.RegisterSession("session-0");
+    env.Split(0);
+    env.Finish("session-0", 0);
+    env.StartReading("session-0", 0);
+    env.AssertNotLocked(1);
+    env.AssertNotLocked(2);
+
+    env.Commit(0);
+    env.AssertLocked(1);
+    env.AssertLocked(2);
+}
+
+Y_UNIT_TEST(RereadAfterCommitUnlocksChildrenUntilFinishAgain) {
+    // README Split §4: reread of 0 drops 1 and 2 until 0 Finish or Commit again.
+    TSplitEnv env;
+    env.CreateParents(1);
+    env.RegisterSession("session-0");
+    env.Split(0);
+    env.Finish("session-0", 0);
+    env.Commit(0);
+    env.AssertLocked(1);
+    env.AssertLocked(2);
+
+    env.StartReading("session-0", 0);
+    env.AssertLocked(0, "session-0");
+    env.AssertNotLocked(1);
+    env.AssertNotLocked(2);
+
+    env.Finish("session-0", 0);
+    env.AssertLocked(1, "session-0");
+    env.AssertLocked(2, "session-0");
+}
+
+Y_UNIT_TEST(OldSdkFromEndChildrenAreIndependentFamilies) {
+    // Old SDK + StartedReadingFromEndOffset: children are separate families,
+    // so a second session may take a child without Commit.
+    TSplitEnv env;
+    env.CreateParents(1);
+    env.RegisterSession("session-0");
+    env.Split(0);
+    env.Finish("session-0", 0, /*scaleAware=*/false, /*fromEnd=*/true);
+    env.AssertLocked(1);
+    env.AssertLocked(2);
+
+    env.RegisterSession("session-1");
+    env.AssertEvenDistribution(3, 2);
+}
+
+Y_UNIT_TEST(OldSdkNotFromEndDelayThenOtherSessionFromEndLocksChildren) {
+    TSplitEnv env;
+    env.CreateParents(1);
+    env.RegisterSession("session-0");
+    env.RegisterSession("session-1");
+    env.Split(0);
+    const TString first = env.SessionOf(0);
+    UNIT_ASSERT_C(!first.empty(), "parent must be locked");
+
+    env.Finish(first, 0, /*scaleAware=*/false, /*fromEnd=*/false);
+    env.AssertNotLocked(1);
+    env.AssertNotLocked(2);
+
+    env.tc.Runtime->AdvanceCurrentTime(TDuration::Seconds(3));
+    auto pending = env.WaitRelease(TDuration::Seconds(2));
+    UNIT_ASSERT_C(pending, "old SDK Finish without from-end must release the parent after delay");
+    UNIT_ASSERT_VALUES_EQUAL(pending->Partition, 0u);
+    auto pipeIt = env.Pipes.find(pending->Session);
+    UNIT_ASSERT(pipeIt != env.Pipes.end());
+    env.AckRelease(pipeIt->second, pending->Partition, pending->Session);
+    env.LockedBy.erase(pending->Partition);
+    env.Pump();
+
+    const TString afterDelay = env.SessionOf(0);
+    UNIT_ASSERT_C(!afterDelay.empty(), "parent must be re-locked after the heuristic release");
+    env.AssertNotLocked(1);
+    env.AssertNotLocked(2);
+
+    env.Finish(afterDelay, 0, /*scaleAware=*/false, /*fromEnd=*/true);
+    env.AssertLocked(1);
+    env.AssertLocked(2);
+}
+
+Y_UNIT_TEST(StaleStartReadingAfterLastSessionGoneDoesNotFinishParent) {
+    TSplitEnv env;
+    env.CreateParents(1);
+    env.RegisterSession("session-0");
+    env.Split(0);
+    const auto pipe = env.Pipes["session-0"];
+    env.CloseSession("session-0");
+    env.InjectStartReading(pipe, 0);
+    env.RegisterSession("session-new");
+    env.AssertLocked(0, "session-new");
+    env.AssertNotLocked(1);
+    env.AssertNotLocked(2);
+    env.Finish("session-new", 0);
+    env.AssertLocked(1);
+    env.AssertLocked(2);
+}
+
 } // Y_UNIT_TEST_SUITE(TPqrbSplitBalancing)
 
 Y_UNIT_TEST_SUITE(TPqrbBalancingInvariants) {
@@ -2553,7 +2736,270 @@ Y_UNIT_TEST(StaleFinishFromAliveOtherSessionDoesNotStealPartition) {
     env.AssertLocked(1);
 }
 
+Y_UNIT_TEST(StaleStartReadingAfterPipeBreakIsIgnored) {
+    TClassicEnv env;
+    env.CreateParents(2);
+    env.RegisterSession("session-0");
+    env.AssertEvenDistribution(2, 1);
+    const auto pipe = env.Pipes["session-0"];
+    env.CloseSession("session-0");
+    env.InjectStartReading(pipe, 0);
+    env.RegisterSession("session-new");
+    env.AssertEvenDistribution(2, 1);
+    env.AssertLocked(0, "session-new");
+    env.AssertLocked(1, "session-new");
+}
+
+Y_UNIT_TEST(StaleCommitAfterPipeBreakDoesNotStealPartition) {
+    TClassicEnv env;
+    env.CreateParents(2);
+    env.RegisterSession("session-0");
+    env.RegisterSession("session-1");
+    env.AssertEvenDistribution(2, 2);
+    env.CloseSession("session-1");
+    env.InjectCommit(0);
+    env.AssertLocked(0);
+    env.AssertLocked(1);
+    env.AssertEvenDistribution(2, 1);
+}
+
+Y_UNIT_TEST(LastSessionGoneThenNewSessionGetsAllRootsWithoutFinishOrCommit) {
+    TClassicEnv env;
+    env.CreateParents(3);
+    env.RegisterSession("session-0");
+    env.Finish("session-0", 0);
+    env.Commit(1);
+    env.CloseSession("session-0");
+    env.RegisterSession("session-new");
+    env.AssertEvenDistribution(3, 1);
+}
+
+Y_UNIT_TEST(FinishOnLeafDoesNotHidePartitionAfterHolderDisconnect) {
+    TClassicEnv env;
+    env.CreateParents(2);
+    env.RegisterSession("session-0");
+    env.RegisterSession("session-1");
+    env.AssertEvenDistribution(2, 2);
+    const TString holder0 = env.SessionOf(0);
+    env.Finish(holder0, 0);
+    env.CloseSession(holder0);
+    env.AssertLocked(0);
+    env.AssertLocked(1);
+    env.AssertEvenDistribution(2, 1);
+}
+
 } // Y_UNIT_TEST_SUITE(TPqrbClassicBalancing)
+
+Y_UNIT_TEST_SUITE(TPqrbStalePipeAndOrder) {
+
+Y_UNIT_TEST(StaleUnlockFromOldPipeAfterNewSessionLockedIsIgnored) {
+    TClassicEnv env;
+    env.CreateParents(1);
+    env.RegisterSession("session-0");
+    env.AssertLocked(0, "session-0");
+    const auto oldPipe = env.Pipes["session-0"];
+    env.CloseSession("session-0");
+    env.RegisterSession("session-new");
+    env.AssertLocked(0, "session-new");
+
+    env.AckRelease(oldPipe, 0, "session-0");
+    DispatchFor(env.tc, TDuration::MilliSeconds(50));
+    env.Pump();
+    env.AssertLocked(0, "session-new");
+}
+
+Y_UNIT_TEST(StaleFinishFromOldPipeAfterNewSessionLockedDoesNotMovePartition) {
+    TClassicEnv env;
+    env.CreateParents(2);
+    env.RegisterSession("session-0");
+    env.RegisterSession("session-1");
+    env.AssertEvenDistribution(2, 2);
+    const TString holder0 = env.SessionOf(0);
+    const auto oldPipe = env.Pipes[holder0];
+    env.CloseSession(holder0);
+    env.AssertLocked(0);
+    env.AssertLocked(1);
+
+    env.InjectFinish(oldPipe, 0);
+    env.AssertEvenDistribution(2, 1);
+    UNIT_ASSERT_VALUES_UNEQUAL(env.SessionOf(0), holder0);
+}
+
+Y_UNIT_TEST(StaleStartReadingFromOldPipeAfterNewSessionLockedDoesNotReread) {
+    TSplitEnv env;
+    env.CreateParents(1);
+    env.RegisterSession("session-0");
+    env.Split(0);
+    env.Finish("session-0", 0);
+    env.AssertLocked(1, "session-0");
+    const auto oldPipe = env.Pipes["session-0"];
+    env.CloseSession("session-0");
+    env.RegisterSession("session-new");
+    env.Finish("session-new", 0);
+    env.AssertLocked(1, "session-new");
+    env.AssertLocked(2, "session-new");
+
+    env.InjectStartReading(oldPipe, 0);
+    env.AssertLocked(1, "session-new");
+    env.AssertLocked(2, "session-new");
+}
+
+Y_UNIT_TEST(OldTabletCommitWithLowerGenerationIsIgnoredAfterReread) {
+    TSplitEnv env;
+    env.CreateParents(1);
+    env.RegisterSession("session-0");
+    env.Split(0);
+    env.Finish("session-0", 0);
+    env.Commit(0, /*generation=*/2, /*cookie=*/10);
+    env.AssertLocked(1);
+    env.AssertLocked(2);
+
+    env.StartReading("session-0", 0);
+    env.AssertNotLocked(1);
+    env.AssertNotLocked(2);
+
+    env.Commit(0, /*generation=*/1, /*cookie=*/99);
+    env.AssertNotLocked(1);
+    env.AssertNotLocked(2);
+
+    env.Finish("session-0", 0);
+    env.AssertLocked(1);
+    env.AssertLocked(2);
+}
+
+Y_UNIT_TEST(OldTabletCommitWithLowerCookieIsIgnoredAfterReread) {
+    TSplitEnv env;
+    env.CreateParents(1);
+    env.RegisterSession("session-0");
+    env.Split(0);
+    env.Finish("session-0", 0);
+    env.Commit(0, /*generation=*/3, /*cookie=*/50);
+    env.StartReading("session-0", 0);
+    env.AssertNotLocked(1);
+    env.AssertNotLocked(2);
+
+    env.Commit(0, /*generation=*/3, /*cookie=*/1);
+    env.AssertNotLocked(1);
+    env.AssertNotLocked(2);
+
+    env.Finish("session-0", 0);
+    env.AssertLocked(1);
+    env.AssertLocked(2);
+}
+
+Y_UNIT_TEST(NewerTabletCommitAfterOlderCommitStillLocksChildren) {
+    TSplitEnv env;
+    env.CreateParents(1);
+    env.RegisterSession("session-0");
+    env.Split(0);
+    env.Commit(0, /*generation=*/1, /*cookie=*/1);
+    env.AssertLocked(1);
+    env.AssertLocked(2);
+    env.Commit(0, /*generation=*/4, /*cookie=*/2);
+    env.AssertLocked(1);
+    env.AssertLocked(2);
+}
+
+Y_UNIT_TEST(MembershipStartReadingAfterMigrateDoesNotRereadParent) {
+    TSplitEnv env;
+    env.CreateParents(2);
+    env.RegisterSession("session-0");
+    env.RegisterSession("session-hold");
+    env.Split(0);
+    const TString reader = env.SessionOf(0);
+    env.Finish(reader, 0);
+    env.AssertLocked(2);
+    env.AssertLocked(3);
+    env.CloseSession(reader);
+    env.AssertSameSession({0, 2, 3});
+
+    const TString holder = env.SessionOf(0);
+    UNIT_ASSERT_C(!holder.empty(), "parent must migrate to the remaining session");
+    env.StartReading(holder, 0);
+    env.AssertLocked(2);
+    env.AssertLocked(3);
+    env.AssertSameSession({0, 2, 3});
+}
+
+Y_UNIT_TEST(StartReadingBeforeFirstFinishDoesNotSkipFinish) {
+    TSplitEnv env;
+    env.CreateParents(1);
+    env.RegisterSession("session-0");
+    env.Split(0);
+    env.StartReading("session-0", 0);
+    env.AssertNotLocked(1);
+    env.AssertNotLocked(2);
+    env.Finish("session-0", 0);
+    env.AssertLocked(1, "session-0");
+    env.AssertLocked(2, "session-0");
+}
+
+Y_UNIT_TEST(FinishThenCommitThenStartReadingThenFinishRelocksChildren) {
+    TSplitEnv env;
+    env.CreateParents(1);
+    env.RegisterSession("session-0");
+    env.Split(0);
+    env.Finish("session-0", 0);
+    env.Commit(0);
+    env.StartReading("session-0", 0);
+    env.AssertNotLocked(1);
+    env.AssertNotLocked(2);
+    env.Finish("session-0", 0);
+    env.AssertLocked(1);
+    env.AssertLocked(2);
+}
+
+Y_UNIT_TEST(CommitThenFinishThenPipeBreakOnLastSessionRequiresNewCommit) {
+    TSplitEnv env;
+    env.CreateParents(1);
+    env.RegisterSession("session-0");
+    env.Split(0);
+    env.Commit(0, 1, 1, /*pump=*/false);
+    env.Finish("session-0", 0, /*scaleAware=*/true, /*fromEnd=*/true, /*pump=*/false);
+    env.CloseSession("session-0");
+    env.RegisterSession("session-new");
+    env.AssertNotLocked(1);
+    env.AssertNotLocked(2);
+    env.Commit(0);
+    env.AssertLocked(1);
+    env.AssertLocked(2);
+}
+
+Y_UNIT_TEST(FinishInFlightThenLastSessionGoneDropsFinish) {
+    TSplitEnv env;
+    env.CreateParents(1);
+    env.RegisterSession("session-0");
+    env.Split(0);
+    env.Finish("session-0", 0, /*scaleAware=*/true, /*fromEnd=*/true, /*pump=*/false);
+    env.CloseSession("session-0");
+    env.RegisterSession("session-new");
+    env.AssertLocked(0, "session-new");
+    env.AssertNotLocked(1);
+    env.AssertNotLocked(2);
+    env.Finish("session-new", 0);
+    env.AssertLocked(1);
+    env.AssertLocked(2);
+}
+
+Y_UNIT_TEST(StaleUnlockDuringRebalanceDoesNotDropPartitionFromNewSession) {
+    TClassicEnv env;
+    env.CreateParents(2);
+    env.RegisterSession("session-0");
+    env.AssertLocked(0);
+    env.AssertLocked(1);
+    const auto oldPipe = env.Pipes["session-0"];
+
+    env.RegisterSession("session-1", {}, /*pump=*/false);
+    auto pending = env.WaitRelease();
+    UNIT_ASSERT_C(pending, "second session must trigger a release");
+    env.CloseSession("session-0");
+    env.AckRelease(oldPipe, pending->Partition, pending->Session);
+    env.Pump();
+    env.AssertLocked(0);
+    env.AssertLocked(1);
+}
+
+} // Y_UNIT_TEST_SUITE(TPqrbStalePipeAndOrder)
 
 } // namespace NKikimr::NPQ
 

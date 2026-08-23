@@ -282,6 +282,8 @@ Device authentication is optional and configured independently: the mechanism ca
 - **gRPC** — you can enable client certificate request for device authentication, and also separately enable mandatory verification (an untrusted certificate is always rejected). Server configuration is described in the [grpc_config](../reference/configuration/tls.md#grpc) and [client_certificate_authorization](../reference/configuration/client_certificate_authorization.md) sections, and client connection — in the [TLS connection parameters](../reference/ydb-cli/connect.md#activated-profile) section.
 - **Kafka API** — when mTLS is enabled, it requires a client certificate; only the trust chain to the CA is verified, a connection without a certificate or with an untrusted certificate is not established. Server configuration is described in the [kafka_proxy_config](../reference/configuration/kafka_proxy_config.md) section, and client connection — in the [Device authentication via mTLS](../reference/kafka-api/auth.md#mtls-auth) section.
 
+**gRPC** and **YDB Monitoring**: you can enable a client certificate request for device authentication, and also separately enable its mandatory verification (an untrusted certificate is always rejected). The gRPC configuration is described in the [grpc_config](%E2%9F%A6U1%E2%9F%A7) and [client_certificate_authorization](%E2%9F%A6U2%E2%9F%A7) sections, and client connection — in the [TLS connection parameters](%E2%9F%A6U3%E2%9F%A7) section; the YDB Monitoring configuration is described in the [monitoring_config](%E2%9F%A6U4%E2%9F%A7) section.
+
 ## Authentication using a third-party IAM provider {#iam}
 
 * **Access Token** — a fixed token is set as a parameter for the client (SDK or CLI) and is passed in requests.

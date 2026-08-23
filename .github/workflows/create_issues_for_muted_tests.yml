@@ -25,10 +25,11 @@ on:
 
 env:
   GH_TOKEN: ${{ secrets.YDBOT_TOKEN }}
-  WORKFLOW_CHECKOUT_REF: ${{ github.ref_name }}
+  WORKFLOW_CHECKOUT_REF: ${{ github.event_name == 'workflow_dispatch' && github.ref_name || github.event.pull_request.merge_commit_sha }}
 
 jobs:
   resolve-build-types:
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
     runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
     outputs:
       base_branch: ${{ steps.resolve.outputs.base_branch }}

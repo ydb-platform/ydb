@@ -6,7 +6,7 @@ Before YDB CLI 2.20.0, the `{{ ydb-cli }} admin cluster config` commands had the
 
 {% endnote %}
 
-This section contains commands for managing the {{ ydb-short-name }} [cluster configuration](../../maintenance/manual/config-overview.md).
+This section contains commands for managing the {{ ydb-short-name }} [cluster configuration](../../devops/configuration-management/configuration-v1/config-overview.md).
 
 - Apply the `dynconfig.yaml` configuration to the cluster:
 

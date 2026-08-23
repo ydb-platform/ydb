@@ -332,12 +332,17 @@ void TDqComputeActorCheckpoints::Handle(TEvDqCompute::TEvNewCheckpointCoordinato
 
     if (PendingCommitCheckpoint) {
         LOG_CP_W(*PendingCommitCheckpoint.Checkpoint, "Drop pending commit checkpoint since coordinator is stale");
-        PendingCommitCheckpoint.Clear();
     }
 
-    if (PendingSaveStateCheckpoint) {
+    const bool resumeInputs = PendingSaveStateCheckpoint;
+    if (resumeInputs) {
         LOG_PCP_W("Drop pending save state checkpoint since coordinator is stale");
-        PendingSaveStateCheckpoint.Clear();
+    }
+
+    PendingCommitCheckpoint.Clear();
+    PendingSaveStateCheckpoint.Clear();
+
+    if (resumeInputs) {
         ComputeActor->ResumeInputsByCheckpoint();
     }
 }
@@ -587,12 +592,15 @@ void TDqComputeActorCheckpoints::DoCheckpoint() {
 
 [[nodiscard]]
 bool TDqComputeActorCheckpoints::SaveState() {
+    Y_ABORT_UNLESS(PendingSaveStateCheckpoint);
+
     try {
         Y_ABORT_UNLESS(!PendingSaveStateCheckpoint.SavedComputeActorState);
         PendingSaveStateCheckpoint.SavedComputeActorState = true;
         ComputeActor->SaveState(*PendingSaveStateCheckpoint.Checkpoint, PendingSaveStateCheckpoint.ComputeActorState);
     } catch (const std::exception& e) {
         LOG_PCP_E("Failed to save state: " << e.what());
+        PendingSaveStateCheckpoint.Clear();
 
         auto resultEv = MakeHolder<TEvDqCompute::TEvSaveTaskStateResult>();
         *resultEv->Record.MutableCheckpoint() = *PendingSaveStateCheckpoint.Checkpoint;

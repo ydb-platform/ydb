@@ -600,7 +600,6 @@ bool TDqComputeActorCheckpoints::SaveState() {
         ComputeActor->SaveState(*PendingSaveStateCheckpoint.Checkpoint, PendingSaveStateCheckpoint.ComputeActorState);
     } catch (const std::exception& e) {
         LOG_PCP_E("Failed to save state: " << e.what());
-        PendingSaveStateCheckpoint.Clear();
 
         auto resultEv = MakeHolder<TEvDqCompute::TEvSaveTaskStateResult>();
         *resultEv->Record.MutableCheckpoint() = *PendingSaveStateCheckpoint.Checkpoint;

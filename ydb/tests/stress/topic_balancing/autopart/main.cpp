@@ -48,6 +48,7 @@ struct TOptions {
     ui32 ChurnGapMs = 200;
     std::string RewindTarget = "started";
     bool CommitData = false;
+    bool NoAutoPartitioningSupport = false;
     TDuration MaxLag = TDuration::Seconds(10);
     TDuration NewPartitionGrace = TDuration::Seconds(15);
 
@@ -103,6 +104,10 @@ struct TOptions {
             .StoreResult(&UpUtilizationPercent);
         opts.AddLongOption("commit-data", "Commit every received data event").NoArgument()
             .SetFlag(&CommitData);
+        opts.AddLongOption("no-auto-partitioning-support",
+                "Disable SDK AutoPartitioningSupport (old SDK: Finish is not enough, heuristic delay)")
+            .NoArgument()
+            .SetFlag(&NoAutoPartitioningSupport);
         opts.AddLongOption("rewind-rps",
                 "After warmup, CommitOffset this many times per second to a random already-processed offset")
             .RequiredArgument("COUNT")
@@ -635,6 +640,8 @@ TProducerSettings MakeProducerSettings(const std::string& topicPath, ui32 writer
 int main(int argc, const char* argv[]) {
     const TOptions opts(argc, argv);
     const std::string topicPath = MakeTopicPath(opts.Database, opts.Path);
+    const bool autoPartitioningSupport = !opts.NoAutoPartitioningSupport;
+    Cerr << "AutoPartitioningSupport=" << (autoPartitioningSupport ? "true" : "false") << Endl << Flush;
 
     auto driverConfig = TDriverConfig()
         .SetNetworkThreadsNum(16)
@@ -773,7 +780,7 @@ int main(int argc, const char* argv[]) {
             .ConsumerName(opts.Consumer)
             .MaxMemoryUsageBytes(1_MB)
             .ConnectTimeout(TDuration::Seconds(30))
-            .AutoPartitioningSupport(true)
+            .AutoPartitioningSupport(autoPartitioningSupport)
             .AppendTopics(topicPath);
 
         settings.EventHandlers_.HandlersExecutor(handlersExecutor);

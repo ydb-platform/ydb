@@ -79,3 +79,22 @@ class TestTopicBalancingAutopartWorkload(StressFixture):
             "--min-sessions", "32",
             "--max-lag-ms", "15000",
         ])
+
+    def test_read_legacy_sdk(self):
+        self._run([
+            "--path", "topic_balancing_autopart_read_legacy",
+            "--no-auto-partitioning-support",
+            "--min-sessions", "32",
+            "--max-lag-ms", "10000",
+        ])
+
+    def test_commit_roots_legacy_sdk(self):
+        self._run([
+            "--path", "topic_balancing_autopart_commit_legacy",
+            "--no-auto-partitioning-support",
+            "--commit-data",
+            "--rewind-rps", "2",
+            "--rewind-target", "assigned",
+            "--min-sessions", "32",
+            "--max-lag-ms", "15000",
+        ])

@@ -1773,6 +1773,78 @@ Y_UNIT_TEST(RereadClearsPendingFinishBeforeSplit) {
     env.AssertLocked(2);
 }
 
+Y_UNIT_TEST(InFlightFinishAfterHolderDisconnectLocksChildren) {
+    // Live consumer: Finish still in flight after the holder pipe dies.
+    TScaleEnv env;
+    env.CreateParents(1);
+    env.RegisterSession("session-0");
+    env.RegisterSession("session-hold");
+    env.Split(0);
+    const TString holder = env.SessionOf(0);
+    UNIT_ASSERT_C(!holder.empty(), "parent must be locked before disconnect");
+    const auto pipe = env.Pipes[holder];
+    env.CloseSession(holder);
+    env.InjectFinish(pipe, 0);
+    env.AssertLocked(1);
+    env.AssertLocked(2);
+}
+
+Y_UNIT_TEST(InjectFinishOfSecondMergeParentAfterSessionCloseLocksChild) {
+    // Autopart test_commit_roots: Finish of the second merge parent arrives on a
+    // dead pipe while the consumer still has another session. MergeFamilies must
+    // attach the child without aborting.
+    TScaleEnv env;
+    env.CreateParents(2);
+    auto [s0, s1] = env.TwoSessionsOnParents();
+    env.Merge(0, 1);
+    env.Finish(s0, 0);
+    env.AssertNotLocked(2);
+    const auto pipe = env.Pipes[s1];
+    env.CloseSession(s1);
+    env.InjectFinish(pipe, 1);
+    env.AssertLocked(2);
+}
+
+Y_UNIT_TEST(DisconnectOfReaderKeepsFinishSoChildrenMigrateWithParent) {
+    // Live consumer: Finish stays on the partitions the dying session read.
+    // The uncommitted family migrates as a unit onto the remaining session.
+    TScaleEnv env;
+    env.CreateParents(2);
+    env.RegisterSession("session-0");
+    env.RegisterSession("session-hold");
+    env.Split(0);
+    const TString reader = env.SessionOf(0);
+    env.Finish(reader, 0);
+    env.AssertLocked(2);
+    env.AssertLocked(3);
+
+    env.CloseSession(reader);
+    env.AssertLocked(0);
+    env.AssertLocked(2);
+    env.AssertLocked(3);
+    env.AssertSameSession({0, 2, 3});
+}
+
+Y_UNIT_TEST(SessionMigrateAfterFinishKeepsChildrenOnNewSession) {
+    // Live consumer: Finish stays, re-lock of 0 is membership, children remain
+    // readable and migrate with the parent family.
+    TScaleEnv env;
+    env.CreateParents(2);
+    env.RegisterSession("session-0");
+    env.RegisterSession("session-hold");
+    env.Split(0);
+    const TString reader = env.SessionOf(0);
+    env.Finish(reader, 0);
+    env.AssertLocked(2);
+    env.AssertLocked(3);
+
+    env.CloseSession(reader);
+    env.AssertLocked(0);
+    env.AssertLocked(2);
+    env.AssertLocked(3);
+    env.AssertSameSession({0, 2, 3});
+}
+
 } // Y_UNIT_TEST_SUITE(TPqrbSplitBalancing)
 
 Y_UNIT_TEST_SUITE(TPqrbBalancingInvariants) {

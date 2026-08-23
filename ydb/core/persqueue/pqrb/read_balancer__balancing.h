@@ -167,6 +167,7 @@ private:
     std::unique_ptr<TEvPersQueue::TEvReleasePartition> MakeEvReleasePartition(ui32 partitionId) const;
     std::unique_ptr<TEvPersQueue::TEvLockPartition> MakeEvLockPartition(ui32 partitionId, ui32 step) const;
     TString LogPrefix() const;
+    void AssertInvariants() const;
 };
 
 struct TPartitionFamilyComparator {

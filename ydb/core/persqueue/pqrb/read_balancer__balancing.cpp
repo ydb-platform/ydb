@@ -265,6 +265,7 @@ bool TPartitionFamily::Reset(ETargetStatus targetStatus, const TActorContext& ct
             Status = EStatus::Free;
             AfterRelease();
             AttachReadyWantedPartitions(ctx);
+            AssertInvariants();
 
             return true;
 
@@ -350,6 +351,11 @@ void TPartitionFamily::AfterRelease() {
     UpdatePartitionMapping(Partitions);
     // After reducing the number of partitions in the family, the list of reading sessions that can read this family may expand.
     UpdateSpecialSessions();
+
+    for (auto partitionId : Partitions) {
+        Y_DEBUG_ABORT_UNLESS(IsReadable(partitionId),
+            "AfterRelease restored unreadable partition %u, family %zu", partitionId, Id);
+    }
 }
 
 void TPartitionFamily::StartReading(TSession& session, const TActorContext& ctx) {
@@ -383,6 +389,16 @@ void TPartitionFamily::StartReading(TSession& session, const TActorContext& ctx)
     }
 
     LockedPartitions.insert(Partitions.begin(), Partitions.end());
+    for (auto partitionId : Partitions) {
+        if (IsReadable(partitionId)) {
+            Y_DEBUG_ABORT_UNLESS(LockedPartitions.contains(partitionId),
+                "StartReading did not lock readable partition %u, family %zu", partitionId, Id);
+        } else {
+            Y_DEBUG_ABORT_UNLESS(!LockedPartitions.contains(partitionId),
+                "StartReading locked unreadable partition %u, family %zu", partitionId, Id);
+        }
+    }
+    AssertInvariants();
 }
 
 void TPartitionFamily::AttachePartitions(const std::vector<ui32>& partitions, const TActorContext& ctx) {
@@ -413,6 +429,8 @@ void TPartitionFamily::AttachePartitions(const std::vector<ui32>& partitions, co
     }
 
     if (IsActive()) {
+        Y_DEBUG_ABORT_UNLESS(Session,
+            "Attaching partitions to an active family without a session, family %zu", Id);
         if (!Session) {
             YDB_LOG_CRIT("Attaching partitions to an active family without a session",
                 {"logPrefix", LogPrefix()});
@@ -456,6 +474,7 @@ void TPartitionFamily::AttachePartitions(const std::vector<ui32>& partitions, co
             SpecialSessions.erase(it++);
         }
     }
+    AssertInvariants();
 }
 
 void TPartitionFamily::AttachReadyWantedPartitions(const TActorContext& ctx) {
@@ -520,8 +539,10 @@ void TPartitionFamily::AppendUniqueRoots(const std::vector<ui32>& partitions) {
 }
 
 void TPartitionFamily::ChangePartitionCounters(ssize_t active, ssize_t inactive) {
-    Y_VERIFY_DEBUG((ssize_t)ActivePartitionCount + active >= 0, "ActivePartitionCount: %lu, active: %ld", ActivePartitionCount, active);
-    Y_VERIFY_DEBUG((ssize_t)InactivePartitionCount + inactive >= 0, "InactivePartitionCount: %lu, inactive: %ld", InactivePartitionCount, inactive);
+    Y_DEBUG_ABORT_UNLESS((ssize_t)ActivePartitionCount + active >= 0,
+        "ActivePartitionCount underflow: %zu, active: %ld, family %zu", ActivePartitionCount, (long)active, Id);
+    Y_DEBUG_ABORT_UNLESS((ssize_t)InactivePartitionCount + inactive >= 0,
+        "InactivePartitionCount underflow: %zu, inactive: %ld, family %zu", InactivePartitionCount, (long)inactive, Id);
 
     ActivePartitionCount += active;
     InactivePartitionCount += inactive;
@@ -565,6 +586,7 @@ void TPartitionFamily::Merge(TPartitionFamily* other) {
     if (other->IsActive() && other->Session) {
         --other->Session->ActiveFamilyCount;
     }
+    AssertInvariants();
 }
 
 TString TPartitionFamily::DebugStr() const {
@@ -583,6 +605,59 @@ TString TPartitionFamily::DebugStr() const {
     sb << ")";
 
     return sb;
+}
+
+void TPartitionFamily::AssertInvariants() const {
+#ifndef NDEBUG
+    auto familyIt = Consumer.Families.find(Id);
+    Y_DEBUG_ABORT_UNLESS(familyIt != Consumer.Families.end() && familyIt->second.get() == this,
+        "family %zu is not registered in the consumer", Id);
+
+    Y_DEBUG_ABORT_UNLESS(!Partitions.empty(),
+        "empty family %zu", Id);
+
+    absl::flat_hash_set<ui32> uniquePartitions;
+    uniquePartitions.reserve(Partitions.size());
+    for (auto partitionId : Partitions) {
+        Y_DEBUG_ABORT_UNLESS(uniquePartitions.insert(partitionId).second,
+            "duplicate partition %u in family %zu", partitionId, Id);
+        auto mit = Consumer.PartitionMapping.find(partitionId);
+        Y_DEBUG_ABORT_UNLESS(mit != Consumer.PartitionMapping.end() && mit->second == this,
+            "partition mapping mismatch for %u, family %zu", partitionId, Id);
+    }
+
+    absl::flat_hash_set<ui32> uniqueRoots;
+    uniqueRoots.reserve(RootPartitions.size());
+    for (auto partitionId : RootPartitions) {
+        Y_DEBUG_ABORT_UNLESS(uniqueRoots.insert(partitionId).second,
+            "duplicate root partition %u in family %zu", partitionId, Id);
+        Y_DEBUG_ABORT_UNLESS(uniquePartitions.contains(partitionId) || WantedPartitions.contains(partitionId),
+            "root partition %u is not in family %zu", partitionId, Id);
+    }
+
+    for (auto partitionId : LockedPartitions) {
+        Y_DEBUG_ABORT_UNLESS(uniquePartitions.contains(partitionId),
+            "locked partition %u is not in family %zu", partitionId, Id);
+    }
+
+    if (IsFree()) {
+        Y_DEBUG_ABORT_UNLESS(!Session, "free family %zu has a session", Id);
+        Y_DEBUG_ABORT_UNLESS(LockedPartitions.empty(), "free family %zu has locked partitions", Id);
+        auto uit = Consumer.UnreadableFamilies.find(Id);
+        Y_DEBUG_ABORT_UNLESS(uit != Consumer.UnreadableFamilies.end() && uit->second == this,
+            "free family %zu is not in UnreadableFamilies", Id);
+    } else {
+        Y_DEBUG_ABORT_UNLESS(Session, "family %zu has no session", Id);
+        if (Session) {
+            auto sit = Consumer.Sessions.find(Session->Pipe);
+            Y_DEBUG_ABORT_UNLESS(sit != Consumer.Sessions.end() && sit->second == Session,
+                "family %zu session is not registered", Id);
+            auto fit = Session->Families.find(Id);
+            Y_DEBUG_ABORT_UNLESS(fit != Session->Families.end() && fit->second == this,
+                "family %zu is not owned by its session", Id);
+        }
+    }
+#endif
 }
 
 TPartition* TPartitionFamily::GetPartition(ui32 partitionId) {
@@ -819,6 +894,7 @@ TPartitionFamily* TConsumer::CreateFamily(std::vector<ui32>&& partitions, TParti
     family->Status = status;
     if (status == TPartitionFamily::EStatus::Free) {
         UnreadableFamilies[id] = family;
+        family->AssertInvariants();
     }
 
     YDB_LOG_DEBUG("Family created",
@@ -967,6 +1043,12 @@ bool TConsumer::BreakUpFamily(TPartitionFamily* family, ui32 partitionId, bool d
         DestroyFamily(family, ctx);
     } else {
         family->UpdateSpecialSessions();
+        family->AssertInvariants();
+    }
+    for (auto* f : newFamilies) {
+        if (Families.contains(f->Id)) {
+            f->AssertInvariants();
+        }
     }
 
     return !newFamilies.empty();
@@ -1516,6 +1598,9 @@ void TConsumer::StartReading(ui32 partitionId, const TActorContext& ctx) {
 
             return true;
         });
+        if (Families.contains(family->Id)) {
+            family->AssertInvariants();
+        }
     }
 }
 

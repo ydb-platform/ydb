@@ -4,12 +4,12 @@ Managing a cluster's disk subsystem includes the following actions:
 
 * Configuration changes:
 
-  * [{#T}](../../devops/configuration-management/configuration-v2/cluster-expansion.md).
+  * [{#T}](cluster_expansion.md).
   * [{#T}](adding_storage_groups.md).
 
 * Maintenance:
 
-  * [{#T}](../../devops/configuration-management/configuration-v2/replacing-nodes.md).
+  * [{#T}](replacing_nodes.md).
   * [{#T}](node_restarting.md).
   * [{#T}](scrubbing.md).
   * [{#T}](selfheal.md).

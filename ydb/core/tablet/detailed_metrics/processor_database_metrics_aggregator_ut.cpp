@@ -625,4 +625,61 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
 
         UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(tableGroup, "table.datashard.row_count"), 90u);
     }
+
+    /**
+     * Pins the blackout ApplyOneTable's deferred-retry pass exists to close:
+     * a single node's own METRICS_LEVEL flip (PARTITION -> TABLE) is this
+     * node's OWN last contribution to the OLD (PARTITION) shape, so
+     * ReconcileStream retires it in the very same ApplyFromNode call this
+     * flipped message arrives in. Before the fix, the flipped message itself
+     * was simply dropped by LevelMatches() (see
+     * LevelDisagreementDoesNotResetTheSurvivingShapeEveryTick above), so the
+     * new (TABLE) shape only appeared on the NEXT node tick, 5 s later — the
+     * table would vanish from ydb_detailed entirely for one whole tick,
+     * present in neither shape. This asserts the new shape, with its fresh
+     * value, is already live in the SAME tick the flip is reported in, and
+     * that the old PARTITION leaf group is gone.
+     *
+     * Route: a single TFakeTablet::Report() at the new level, through the
+     * normal node aggregator (not hand built): TNodeDatabaseMetricsAggregator::
+     * ReconcileTable drops the node's own old-level entry and rebuilds it at
+     * the new level within that ONE AddCounters() call (node_database_metrics_
+     * aggregator.cpp), so the very next Pack() already carries a TABLE-only
+     * entry — a single fixture.ApplyNode() is enough to exercise the
+     * processor's retry path, no hand built RepeatedPtrField needed.
+     */
+    Y_UNIT_TEST(LevelFlipRebuildsWithinTheSameMessage) {
+        TSimulatedNode node1;
+        TProcessorFixture fixture;
+
+        TFakeTablet leader1(1000, 0);
+        leader1.SetSimple(DB_UNIQUE_ROWS_TOTAL, 42);
+        leader1.Report(node1.Leaders, TDetailedMetricsSettings::MetricsLevelPartition, NOW);
+
+        fixture.ApplyNode(1, node1, 1);
+        fixture.Processor->RecalculateAllCounters();
+
+        DumpCounters("Public tree, PARTITION level, tick 1", fixture.PublicRoot);
+
+        UNIT_ASSERT(FindPublicLeafGroup(fixture.PublicRoot, 1000, 0));
+
+        // TICK 2: the SAME node flips the SAME table to TABLE level, with a
+        // fresh value, in a SINGLE ApplyNode() call
+        leader1.SetSimple(DB_UNIQUE_ROWS_TOTAL, 100);
+        leader1.Report(node1.Leaders, TDetailedMetricsSettings::MetricsLevelTable, NOW + TDuration::Seconds(5));
+
+        fixture.ApplyNode(1, node1, 2);
+        fixture.Processor->RecalculateAllCounters();
+
+        DumpCounters("Public tree, same tick as the level flip", fixture.PublicRoot);
+
+        // The new (TABLE) shape is already live, with its fresh value...
+        auto tableGroup = FindPublicTableGroup(fixture.PublicRoot);
+        UNIT_ASSERT(tableGroup);
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(tableGroup, "table.datashard.row_count"), 100u);
+
+        // ...and the old (PARTITION) shape's leaf is gone, not just stale:
+        // the table never had a tick where it was in neither shape
+        UNIT_ASSERT(!tableGroup->FindSubgroup("tablet_id", "1000"));
+    }
 }

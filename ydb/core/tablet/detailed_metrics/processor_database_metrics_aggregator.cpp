@@ -313,13 +313,18 @@ struct TLeafEntry {
  *
  * @note Only one of the two shapes is ever populated at a time, chosen by
  *       Level. Kept stable, NOT torn down and rebuilt, for as long as an
- *       incoming message's Level agrees with it: ApplyFromNode's LevelMatches()
+ *       incoming message's Level agrees with it: ApplyOneTable's LevelMatches()
  *       guard keeps a message whose Level disagrees from ever touching this
- *       entry at all, so it survives untouched until every contributor of
- *       the OLD shape stops mentioning it (ReconcileStream's normal absence
- *       detection) — a METRICS_LEVEL flip reaches nodes asynchronously, and
- *       tearing the shared entry down on the first disagreeing node would
- *       destroy every OTHER still-agreeing node's live contribution with it.
+ *       entry in the first pass, so it survives untouched until every
+ *       contributor of the OLD shape stops mentioning it (ReconcileStream's
+ *       normal absence detection) — a METRICS_LEVEL flip reaches nodes
+ *       asynchronously, and tearing the shared entry down on the first
+ *       disagreeing node would destroy every OTHER still-agreeing node's
+ *       live contribution with it. ApplyFromNode retries a disagreeing
+ *       message once, right after ReconcileStream runs: if that same message
+ *       was the OLD shape's last contributor, the retire above and the
+ *       rebuild below land in the same ApplyFromNode call instead of the new
+ *       shape waiting for the next node tick.
  */
 struct TTableEntry {
     EMetricsLevel Level = TMetricsSettings::MetricsLevelUnspecified;
@@ -368,83 +373,46 @@ public:
         bool isFollowerRole,
         const NProtoBuf::RepeatedPtrField<NKikimrSysView::TDetailedTableCounters>& tables
     ) override {
+        const TStreamKey stream(nodeId, isFollowerRole);
+
         THashSet<TString> newTableContributions;
         THashSet<TTabletKey> newLeafContributions;
+        TVector<const NKikimrSysView::TDetailedTableCounters*> deferred;
 
         for (const auto& table : tables) {
-            const TString relativePath = TString(MakeRelativeTablePath(DatabasePrefix, table.GetTablePath()));
-            const EMetricsLevel level = table.GetLevel();
-
-            if (level == TMetricsSettings::MetricsLevelTable) {
-                if (isFollowerRole) {
-                    // S1'': the follower Tablet Counters Aggregator builds no TABLE
-                    // collapse bucket, so this can only mean the wire (or the caller
-                    // choosing which role's aggregator it packed) is confused about
-                    // roles. Drop rather than sum it — summing would silently double
-                    // the leader's own contribution into a "cross-node" accumulator
-                    // that is supposed to be leader-sourced by construction.
-                    //
-                    // Dropped silently rather than asserted on: this is remote input
-                    // off the wire, so a node running older or broken code must not
-                    // be able to abort the SysView Processor's debug build. The
-                    // Y_DEBUG_ABORT_UNLESS assertions elsewhere in the detailed
-                    // metrics code all guard LOCAL invariants instead.
-                    continue;
-                }
-
-                if (ApplyTableLevel(relativePath, nodeId, table.GetTableCounters())) {
-                    newTableContributions.insert(relativePath);
-                }
-            } else if (level == TMetricsSettings::MetricsLevelPartition) {
-                if (!LevelMatches(relativePath, level)) {
-                    // A METRICS_LEVEL flip reaches nodes asynchronously: this message
-                    // disagrees with the entry's current (TABLE) shape, which some
-                    // OTHER, not-yet-converged node may still be legitimately feeding.
-                    // Deliberately NOT touching the entry and NOT recording a
-                    // contribution here: leaving this table out of
-                    // newLeafContributions lets ReconcileStream's normal absence
-                    // detection retire the old shape one tick after its last
-                    // contributor stops feeding it, and the next message builds the
-                    // new (PARTITION) shape cleanly once nothing disagrees anymore.
-                    continue;
-                }
-
-                // Seeded from any already-existing entry (this table's Level was
-                // just confirmed to match, so it is safe to keep using as-is);
-                // stays null and is filled lazily inside GetOrCreateLeaf, on the
-                // first leaf that actually resolves, when the table is new — so a
-                // message whose leaves ALL fail to resolve (empty Leaves, or every
-                // GetOrCreateLeaf nullptr) never creates an entry nothing will ever
-                // reach again.
-                TTableEntry* entry = Tables.FindPtr(relativePath);
-
-                for (const auto& leafProto : table.GetLeaves()) {
-                    const TTabletKey tabletKey(leafProto.GetTabletId(), leafProto.GetFollowerId());
-
-                    EvictMovedLeaf(tabletKey, relativePath);
-
-                    const TTabletTypes::EType tabletType = leafProto.GetCounters().GetType();
-                    auto* leaf = GetOrCreateLeaf(entry, relativePath, level, tabletKey, tabletType);
-                    if (!leaf) {
-                        // An unpublished tablet type (GetDetailedMetricsCounterNames
-                        // returned nullptr): matches the node's own AddCounters, which
-                        // never lets such a tablet reach Pack() in the first place, so
-                        // this is defensive rather than an expected path.
-                        continue;
-                    }
-
-                    if (!leaf->Cross.ApplyDelta(nodeId, leafProto.GetCounters())) {
-                        continue;
-                    }
-                    newLeafContributions.insert(tabletKey);
-                }
-            }
-            // MetricsLevelUnspecified/Disabled: the node's Pack() never emits an
-            // entry for a table it holds neither a bucket nor a leaf for, so there
-            // is nothing to apply here.
+            ApplyOneTable(nodeId, isFollowerRole, table, newTableContributions, newLeafContributions, &deferred);
         }
 
-        ReconcileStream(TStreamKey(nodeId, isFollowerRole), std::move(newTableContributions), std::move(newLeafContributions));
+        ReconcileStream(stream, std::move(newTableContributions), std::move(newLeafContributions));
+
+        if (deferred.empty()) {
+            return;
+        }
+
+        // Second pass: ReconcileStream may have just retired the OLD shape these
+        // messages disagreed with (its last contributor stopped mentioning it in
+        // this very message), in which case the new shape can be built NOW instead
+        // of a whole node tick later. A table whose entry still exists - another
+        // node has not flipped yet - fails LevelMatches again and is skipped
+        // exactly as before, so this pass never loops or needs a third round.
+        THashSet<TString> retryTables;
+        THashSet<TTabletKey> retryLeaves;
+        for (const auto* table : deferred) {
+            ApplyOneTable(nodeId, isFollowerRole, *table, retryTables, retryLeaves, nullptr);
+        }
+
+        // Merged into the stored sets rather than reconciled a second time: this
+        // pass only ever ADDS contributions, the retirement already happened above.
+        // ReconcileStream erases the stream's entry when its set is empty, so
+        // operator[] recreating it here is intended.
+        if (!retryTables.empty()) {
+            auto& stored = StreamTableContributions[stream];
+            stored.insert(retryTables.begin(), retryTables.end());
+        }
+        if (!retryLeaves.empty()) {
+            auto& stored = StreamLeafContributions[stream];
+            stored.insert(retryLeaves.begin(), retryLeaves.end());
+        }
     }
 
     void DropNode(ui32 nodeId) override {
@@ -472,6 +440,113 @@ public:
 
 private:
     using TStreamKey = std::pair<ui32, bool>;
+
+    /**
+     * Apply a single TDetailedTableCounters entry from ApplyFromNode's tables.
+     * Records its contribution into newTableContributions/newLeafContributions
+     * on success. On a Level disagreement (see LevelMatches), pushes `table`
+     * onto *deferredSink (when non-null) instead of touching the entry, so
+     * ApplyFromNode's second pass — after ReconcileStream has had a chance to
+     * retire the OLD shape this table disagreed with — can retry it in the
+     * very same node message; deferredSink is nullptr on that second pass so
+     * a still-disagreeing table (another node has not flipped yet) is simply
+     * skipped again rather than deferred forever.
+     */
+    void ApplyOneTable(
+        ui32 nodeId,
+        bool isFollowerRole,
+        const NKikimrSysView::TDetailedTableCounters& table,
+        THashSet<TString>& newTableContributions,
+        THashSet<TTabletKey>& newLeafContributions,
+        TVector<const NKikimrSysView::TDetailedTableCounters*>* deferredSink
+    ) {
+        const TString relativePath = TString(MakeRelativeTablePath(DatabasePrefix, table.GetTablePath()));
+        const EMetricsLevel level = table.GetLevel();
+
+        if (level == TMetricsSettings::MetricsLevelTable) {
+            if (isFollowerRole) {
+                // S1'': the follower Tablet Counters Aggregator builds no TABLE
+                // collapse bucket, so this can only mean the wire (or the caller
+                // choosing which role's aggregator it packed) is confused about
+                // roles. Drop rather than sum it — summing would silently double
+                // the leader's own contribution into a "cross-node" accumulator
+                // that is supposed to be leader-sourced by construction.
+                //
+                // Dropped silently rather than asserted on: this is remote input
+                // off the wire, so a node running older or broken code must not
+                // be able to abort the SysView Processor's debug build. The
+                // Y_DEBUG_ABORT_UNLESS assertions elsewhere in the detailed
+                // metrics code all guard LOCAL invariants instead.
+                //
+                // Not deferrable: this has nothing to do with a Level
+                // disagreement, so retrying it after ReconcileStream would
+                // never change the outcome.
+                return;
+            }
+
+            if (!LevelMatches(relativePath, TMetricsSettings::MetricsLevelTable)) {
+                if (deferredSink) {
+                    deferredSink->push_back(&table);
+                }
+                return;
+            }
+
+            if (ApplyTableLevel(relativePath, nodeId, table.GetTableCounters())) {
+                newTableContributions.insert(relativePath);
+            }
+        } else if (level == TMetricsSettings::MetricsLevelPartition) {
+            if (!LevelMatches(relativePath, level)) {
+                // A METRICS_LEVEL flip reaches nodes asynchronously: this message
+                // disagrees with the entry's current (TABLE) shape, which some
+                // OTHER, not-yet-converged node may still be legitimately feeding.
+                // Deliberately NOT touching the entry and NOT recording a
+                // contribution here: leaving this table out of
+                // newLeafContributions lets ReconcileStream's normal absence
+                // detection retire the old shape once its last contributor stops
+                // feeding it. ApplyFromNode retries this same message right after
+                // that happens, so the new (PARTITION) shape is built in this very
+                // call when this message was that last contributor, rather than
+                // waiting a whole node tick for the next message.
+                if (deferredSink) {
+                    deferredSink->push_back(&table);
+                }
+                return;
+            }
+
+            // Seeded from any already-existing entry (this table's Level was
+            // just confirmed to match, so it is safe to keep using as-is);
+            // stays null and is filled lazily inside GetOrCreateLeaf, on the
+            // first leaf that actually resolves, when the table is new — so a
+            // message whose leaves ALL fail to resolve (empty Leaves, or every
+            // GetOrCreateLeaf nullptr) never creates an entry nothing will ever
+            // reach again.
+            TTableEntry* entry = Tables.FindPtr(relativePath);
+
+            for (const auto& leafProto : table.GetLeaves()) {
+                const TTabletKey tabletKey(leafProto.GetTabletId(), leafProto.GetFollowerId());
+
+                EvictMovedLeaf(tabletKey, relativePath);
+
+                const TTabletTypes::EType tabletType = leafProto.GetCounters().GetType();
+                auto* leaf = GetOrCreateLeaf(entry, relativePath, level, tabletKey, tabletType);
+                if (!leaf) {
+                    // An unpublished tablet type (GetDetailedMetricsCounterNames
+                    // returned nullptr): matches the node's own AddCounters, which
+                    // never lets such a tablet reach Pack() in the first place, so
+                    // this is defensive rather than an expected path.
+                    continue;
+                }
+
+                if (!leaf->Cross.ApplyDelta(nodeId, leafProto.GetCounters())) {
+                    continue;
+                }
+                newLeafContributions.insert(tabletKey);
+            }
+        }
+        // MetricsLevelUnspecified/Disabled: the node's Pack() never emits an
+        // entry for a table it holds neither a bucket nor a leaf for, so there
+        // is nothing to apply here.
+    }
 
     /**
      * @return Whether relativePath's stored Level (if it has an entry at

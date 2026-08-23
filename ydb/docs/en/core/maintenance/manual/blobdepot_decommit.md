@@ -24,14 +24,14 @@ It is worth noting once again that from the moment of blocking writes to the phy
 To start decommissioning, a BS_CONTROLLER command is executed, in which you need to specify the list of groups to be decommissioned, as well as the number of the Hive tablet that will manage the blob depots of the decommissioned groups. You can also specify a list of pools where the blob depot will store its data. If this list is not specified, BS_CONTROLLER automatically selects the same pools where the decommissioned groups are located for data storage, and the number of data channels is made equal to the number of physical groups in these pools (but no more than 250).
 
 ```bash
-dstool -e ... --direct group decommit --group-ids 2181038080 --database=/Root/db1 --hive-id=72057594037968897
+dstool -e ... --direct group decommit --group-ids 2181038080 --database=/Root/db1 --wait
 ```
 
 Command line parameters:
 
+* `--wait` — wait for decommissioning to start; if startup fails, print the error and cancel decommissioning automatically (only when this option is specified).
 * `--group-ids` GROUP_ID — GROUP_ID list of groups for which decommissioning can be performed.
-* `--database=DB` — specify the tenant in which decommissioning should be done.
-* `--hive-id=N` — explicitly specify the number of the Hive tablet that will manage this blob depot; you cannot specify the Hive identifier of the tenant that owns the pools with decommissioned groups, because this Hive may store its data on top of a group managed by the blob depot, which will lead to a circular dependency; it is recommended to specify the root Hive.
+* `--database=DB` — specify the tenant in which decommissioning should be done, or the domain when decommissioning groups inside a domain.
 * `--log-channel-sp=POOL_NAME` — name of the pool where channel 0 of the blob depot tablet will be placed.
 * `--snapshot-channel-sp=POOL_NAME` — name of the pool where channel 1 of the blob depot tablet will be placed; if not specified, the value from `--log-channel-sp` is used.
 * `--data-channel-sp=POOL_NAME[*COUNT]` — name of the pool where data channels are placed; if the `COUNT` parameter is specified (after the asterisk), `COUNT` data channels are created in the specified pool.

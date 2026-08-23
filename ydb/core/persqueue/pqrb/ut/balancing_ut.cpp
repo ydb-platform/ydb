@@ -1034,6 +1034,10 @@ Y_UNIT_TEST(PipeBreakDuringReleaseOfMergedFamily) {
 }
 
 Y_UNIT_TEST(PipeBreakOfTargetFamilyDuringRelease) {
+    // Crash: closing the merge-target session, then the releasing session,
+    // unregistered Sessions before Reset(Merge). Balance had re-locked the
+    // target family onto the dying pipe; AttachePartitions then asserted
+    // "family session is not registered".
     TScaleEnv env;
     env.CreateParents(2);
     auto [s0, s1] = env.TwoSessionsOnParents();

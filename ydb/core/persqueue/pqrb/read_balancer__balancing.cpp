@@ -287,6 +287,21 @@ bool TPartitionFamily::Reset(ETargetStatus targetStatus, const TActorContext& ct
                     {"logPrefix", LogPrefix()});
             } else {
                 auto* targetFamily = it->second.get();
+                // Target may still be Active on a session that UnregisterReadingSession
+                // already removed from Sessions (Balance re-locked it onto the
+                // dying pipe). Detach before MergeFamilies/AttachePartitions
+                // asserts ownership.
+                if (targetFamily->Session &&
+                    !Consumer.Sessions.contains(targetFamily->Session->Pipe))
+                {
+                    targetFamily->Reset(ETargetStatus::Free, ctx);
+                    it = Consumer.Families.find(MergeTo);
+                    if (it == Consumer.Families.end()) {
+                        Consumer.AttachReadableDescendants(this, ctx);
+                        return true;
+                    }
+                    targetFamily = it->second.get();
+                }
                 if (targetFamily->CanAttach(Partitions) && targetFamily->CanAttach(WantedPartitions)) {
                     attachTo = Consumer.MergeFamilies(targetFamily, this, ctx).first;
                 } else {

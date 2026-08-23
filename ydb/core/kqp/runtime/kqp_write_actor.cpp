@@ -203,6 +203,13 @@ namespace {
         }
     }
 
+    std::optional<NKikimr::NKqp::TCommitTimestamp> ExtractCommitTimestamp(const NKikimrDataEvents::TEvWriteResult& record) {
+        if (!record.HasStep()) {
+            return std::nullopt;
+        }
+        return NKikimr::NKqp::TCommitTimestamp{record.GetStep(), record.GetTxId()};
+    }
+
     std::optional<bool> HandleAttachResult(NKikimr::NKqp::IKqpTransactionManagerPtr& txManager, NKikimr::TEvDataShard::TEvProposeTransactionAttachResult::TPtr& ev) {
         const auto& record = ev->Get()->Record;
         const ui64 shardId = record.GetTabletId();
@@ -273,7 +280,7 @@ struct IKqpTableWriterCallbacks {
 
     // EvWrite statuses
     virtual void OnPrepared(IKqpTransactionManager::TPrepareResult&& preparedInfo, ui64 dataSize) = 0;
-    virtual void OnCommitted(ui64 shardId, ui64 dataSize) = 0;
+    virtual void OnCommitted(ui64 shardId, ui64 dataSize, std::optional<TCommitTimestamp> writeResultTimestamp = {}) = 0;
     virtual void OnMessageAcknowledged(ui64 dataSize) = 0;
 
     virtual void OnError(NYql::NDqProto::StatusIds::StatusCode statusCode, NYql::EYqlIssueCode id, const TString& message, const NYql::TIssues& subIssues) = 0;
@@ -672,17 +679,14 @@ public:
         }
     }
 
-    bool IsResolving() const {
-        return ResolveAttempts > 0;
-    }
-
     void RetryResolve() {
-        if (!IsResolving()) {
+        if (!ResolvingInProgress) {
             Resolve();
         }
     }
 
     void Resolve() {
+        ResolvingInProgress = true;
         AFL_ENSURE(InconsistentTx || IsOlap);
         TableWriteActorSpan = NWilson::TSpan(TWilsonKqp::TableWriteActor, NWilson::TTraceId(ParentTraceId),
             "WaitForTableResolve", NWilson::EFlags::AUTO_END);
@@ -742,6 +746,7 @@ public:
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+        ResolvingInProgress = false;
         auto& resultSet = ev->Get()->Request->ResultSet;
         YQL_ENSURE(resultSet.size() == 1);
 
@@ -802,12 +807,26 @@ public:
     }
 
     void Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
+        ResolvingInProgress = false;
         auto* request = ev->Get()->Request.Get();
 
         if (request->ErrorCount > 0) {
             YDB_LOG_ERROR("Failed to resolve table shards from scheme cache.",
                 {"logPrefix", this->LogPrefix},
                 {"table", TableId});
+            // For inconsistent-tx (streaming) row-table writes there was no attempt
+            // counter here, so a deleted table caused an infinite internal retry loop
+            // inside the actor.  Mirror the OLAP path: after MaxResolveAttempts give
+            // up and surface a SCHEME_ERROR so the session actor can propagate it to
+            // the streaming-query retry policy (which will restart the whole execution).
+            if (ResolveAttempts++ >= MessageSettings.MaxResolveAttempts) {
+                RuntimeError(
+                    NYql::NDqProto::StatusIds::SCHEME_ERROR,
+                    NYql::TIssuesIds::KIKIMR_SCHEME_ERROR,
+                    TStringBuilder()
+                        << "Too many table resolve attempts for table `" << TablePath << "`.");
+                return;
+            }
             PlanResolve();
             return;
         }
@@ -1184,7 +1203,7 @@ public:
 
         if (Mode == EMode::COMMIT) {
             UpdateStats(ev->Get()->Record.GetTxStats());
-            Callbacks->OnCommitted(ev->Get()->Record.GetOrigin(), 0);
+            Callbacks->OnCommitted(ev->Get()->Record.GetOrigin(), 0, ExtractCommitTimestamp(ev->Get()->Record));
             return;
         }
 
@@ -1193,7 +1212,7 @@ public:
                 ev->Get()->Record.GetOrigin(), ev->Cookie);
         if (result && result->IsShardEmpty && Mode == EMode::IMMEDIATE_COMMIT) {
             UpdateStats(ev->Get()->Record.GetTxStats());
-            Callbacks->OnCommitted(ev->Get()->Record.GetOrigin(), result->DataSize);
+            Callbacks->OnCommitted(ev->Get()->Record.GetOrigin(), result->DataSize, ExtractCommitTimestamp(ev->Get()->Record));
         } else if (result) {
             AFL_ENSURE(Mode == EMode::WRITE);
             UpdateStats(ev->Get()->Record.GetTxStats());
@@ -1674,6 +1693,7 @@ private:
     std::optional<NSchemeCache::TSchemeCacheNavigate::TEntry> SchemeEntry;
     TPartitioning::TCPtr Partitioning;
     ui64 ResolveAttempts = 0;
+    bool ResolvingInProgress = false;
 
     IKqpTransactionManagerPtr TxManager;
     bool Closed = false;
@@ -1714,6 +1734,7 @@ public:
         std::vector<ui32> OldColumnsIndexes;
         TKqpTableWriteActor* WriteActor = nullptr;
         std::vector<NScheme::TTypeInfo> ColumnTypes;
+        ui32 DataColumnCount = 0;
         bool NeedWriteProjection = true;
         EPathWriteType PathType = EPathWriteType::MainTable;
         Ydb::Table::FulltextIndexSettings FulltextSettings;
@@ -2507,6 +2528,7 @@ private:
         if (IsCompactPathType(info.PathType)) {
             auto projection = CreateFulltextTokenizeProjection(
                 info.ColumnTypes,
+                info.DataColumnCount,
                 info.PathType == EPathWriteType::FulltextCompactRelevance,
                 added,
                 info.FulltextSettings,
@@ -3072,7 +3094,7 @@ private:
                 return;
             }
 
-            if (!Closed && outOfMemory) {
+            if (!WriteTableActor->IsClosed() && (outOfMemory || CheckpointInProgress)) {
                 WriteTableActor->FlushBuffers();
             }
 
@@ -3148,7 +3170,7 @@ private:
         AFL_ENSURE(false);
     }
 
-    void OnCommitted(ui64, ui64) override {
+    void OnCommitted(ui64, ui64, std::optional<TCommitTimestamp>) override {
         AFL_ENSURE(false);
     }
 
@@ -3236,14 +3258,14 @@ struct TWriteSettings {
     TVector<NKikimrKqp::TKqpColumnMetadataProto> KeyColumns;
     TVector<NKikimrKqp::TKqpColumnMetadataProto> Columns;
     TVector<NKikimrKqp::TKqpColumnMetadataProto> ImplColumns;
-    bool NeedLookup;
+    bool NeedLookup = false;
     TVector<NKikimrKqp::TKqpColumnMetadataProto> LookupColumns;
     TVector<NKikimrKqp::TKqpColumnMetadataProto> ReturningColumns;
     TTransactionSettings TransactionSettings;
-    i64 Priority;
-    bool IsOlap;
+    i64 Priority = 0;
+    bool IsOlap = false;
     THashSet<TStringBuf> DefaultColumns;
-    bool SkipMissingRows;
+    bool SkipMissingRows = false;
     enum class EInputRowFormat { Flat, StructOfRows };
     EInputRowFormat InputRowFormat = EInputRowFormat::Flat;
 
@@ -3251,12 +3273,12 @@ struct TWriteSettings {
         TTableId TableId;
         TString TablePath;
         TVector<NKikimrKqp::TKqpColumnMetadataProto> KeyColumns;
-        ui32 KeyPrefixSize;
+        ui32 KeyPrefixSize = 0;
         TVector<NKikimrKqp::TKqpColumnMetadataProto> Columns;
         TVector<NKikimrKqp::TKqpColumnMetadataProto> ImplColumns;
-        bool IsUniq;
+        bool IsUniq = false;
         NKikimrKqp::TKqpTableSinkSettings::EType OperationType;
-        bool NeedDeleteOldRows;
+        bool NeedDeleteOldRows = false;
         NKqpProto::EKqpFullTextIndexType IndexType;
         Ydb::Table::FulltextIndexSettings FulltextSettings;
         TTableId DocsTableId;
@@ -3268,11 +3290,12 @@ struct TWriteSettings {
         TTableId StatsTableId;
         TString StatsTablePath;
         TVector<NKikimrKqp::TKqpColumnMetadataProto> StatsColumns;
+        ui32 DataColumnCount = 0;
     };
 
     std::vector<TIndex> Indexes;
 
-    bool EnableStreamWrite;
+    bool EnableStreamWrite = false;
     ui64 QuerySpanId = 0;
 };
 
@@ -3908,6 +3931,7 @@ public:
                             /* preferAdditionalInputColumns */ true),
                 .WriteActor = writeInfo.Actors.at(indexSettings.TableId.PathId).WriteActor,
                 .ColumnTypes = BuildColumnTypes(indexSettings.Columns),
+                .DataColumnCount = indexSettings.DataColumnCount,
                 .NeedWriteProjection = true,
                 .PathType = TKqpWriteTask::EPathWriteType::SecondaryIndex,
                 .FulltextSettings = indexSettings.FulltextSettings,
@@ -5645,7 +5669,7 @@ public:
             {"tablet", event.GetOrigin()},
             {"status", NKikimrPQ::TEvProposeTransactionResult_EStatus_Name(event.GetStatus())});
 
-        OnCommitted(event.GetOrigin(), 0);
+        OnCommitted(event.GetOrigin(), 0, std::nullopt);
     }
 
     void ProcessWritePreparedShard(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
@@ -5690,7 +5714,7 @@ public:
 
         CollectTliStats(ev->Get()->Record);
 
-        OnCommitted(ev->Get()->Record.GetOrigin(), 0);
+        OnCommitted(ev->Get()->Record.GetOrigin(), 0, ExtractCommitTimestamp(ev->Get()->Record));
     }
 
     void OnReady() override {
@@ -5722,7 +5746,19 @@ public:
         Process();
     }
 
-    void OnCommitted(ui64 shardId, ui64) override {
+    void OnCommitted(ui64 shardId, ui64, std::optional<TCommitTimestamp> writeResultTimestamp) override {
+        if (CommitTimestamp && writeResultTimestamp) {
+            AFL_ENSURE(CommitTimestamp->PlanStep == writeResultTimestamp->PlanStep)
+                ("reason", "commit timestamp PlanStep mismatch")
+                ("coordinator", CommitTimestamp->PlanStep)
+                ("writeResult", writeResultTimestamp->PlanStep)
+                ("shardId", shardId);
+            AFL_ENSURE(CommitTimestamp->TxId == writeResultTimestamp->TxId)
+                ("reason", "commit timestamp TxId mismatch")
+                ("coordinator", CommitTimestamp->TxId)
+                ("writeResult", writeResultTimestamp->TxId)
+                ("shardId", shardId);
+        }
         if (PendingCommitShards > 0) {
             --PendingCommitShards;
         }
@@ -6513,6 +6549,7 @@ private:
                     .FulltextSettings = (indexSettings.HasFulltextSettings()
                         ? indexSettings.GetFulltextSettings()
                         : Ydb::Table::FulltextIndexSettings()),
+                    .DataColumnCount = indexSettings.GetDataColumnCount(),
                 });
                 if (indexSettings.GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompactRelevance) {
                     auto& idx = ev->Settings->Indexes.back();

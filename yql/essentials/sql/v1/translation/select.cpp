@@ -476,7 +476,7 @@ protected:
 
     void AllColumns() override {
         Y_DEBUG_ABORT_UNLESS(Source_);
-        return Source_->AllColumns();
+        Source_->AllColumns();
     }
 
     const TColumns* GetColumns() const override {
@@ -520,7 +520,10 @@ protected:
         return Source_->GetWriteSettings();
     }
 
-protected:
+    void SetCompositeSelect(TCompositeSelect* composite) override {
+        Source_->SetCompositeSelect(composite);
+    }
+
     void SetSource(ISource* source) {
         Source_ = source;
     }
@@ -578,7 +581,6 @@ protected:
         return result ? result : ISource::FindColumnMistype(name);
     }
 
-protected:
     TColumns Columns_;
 };
 
@@ -1557,6 +1559,8 @@ public:
         Y_DEBUG_ABORT_UNLESS(Subselects_.size() > 1);
     }
 
+    void RebindNestedProxySources();
+
     void GetInputTables(TTableList& tableList) const override {
         for (const auto& select : Subselects_) {
             select->GetInputTables(tableList);
@@ -1711,6 +1715,7 @@ public:
     TNodePtr DoClone() const final {
         auto newSource = MakeIntrusive<TCompositeSelect>(Pos_, Source_->CloneSource(), OriginalSource_->CloneSource(), Settings_);
         newSource->SetSubselects(CloneContainer(Subselects_), CloneContainer(Grouping_), CloneContainer(GroupByExpr_));
+        newSource->RebindNestedProxySources();
         return newSource;
     }
 
@@ -2253,11 +2258,19 @@ public:
         return terms;
     }
 
+    ISource* RealSource() const {
+        return Source_.Get();
+    }
+
     TNodePtr DoClone() const final {
         return new TSelectCore(Pos_, Source_->CloneSource(), CloneContainer(GroupByExpr_),
                                CloneContainer(GroupBy_), CompactGroupBy_, GroupBySuffix_, AssumeSorted_, CloneContainer(OrderBy_),
                                SafeClone(Having_), CloneContainer(WinSpecs_), SafeClone(LegacyHoppingWindowSpec_),
                                CloneContainer(Terms_), Distinct_, Without_, ForceWithout_, SelectStream_, Settings_, TColumnsSets(UniqueSets_), TColumnsSets(DistinctSets_));
+    }
+
+    void SetCompositeSelect(TCompositeSelect* composite) override {
+        RealSource()->SetCompositeSelect(composite);
     }
 
 private:
@@ -2607,7 +2620,6 @@ private:
         return Y("block", Q(L(block, Y("return", "core"))));
     }
 
-private:
     TSourcePtr Source_;
     TVector<TNodePtr> GroupByExpr_;
     TVector<TNodePtr> DistinctAggrExpr_;
@@ -2879,7 +2891,6 @@ private:
         return terms;
     }
 
-private:
     TSourcePtr Source_;
     TNodePtr With_;
     const bool WithExtFunction_;
@@ -2946,6 +2957,12 @@ public:
 
     ISource* GetCompositeSource() override {
         return CompositeSelect_;
+    }
+
+    void SetCompositeSelect(TCompositeSelect* composite) override {
+        YQL_ENSURE(!Holder_);
+        CompositeSelect_ = composite;
+        Source_ = composite->RealSource();
     }
 
     bool AddGrouping(TContext& ctx, const TVector<TString>& columns, TString& hintColumn) override {
@@ -3020,6 +3037,12 @@ private:
     mutable TSet<TString> GroupByColumns_;
     mutable TVector<ui64> Hints_;
 };
+
+void TCompositeSelect::RebindNestedProxySources() {
+    for (const auto& select : Subselects_) {
+        select->SetCompositeSelect(this);
+    }
+}
 
 namespace {
 TSourcePtr DoBuildSelectCore(
@@ -3251,7 +3274,7 @@ public:
     }
 
     void AddTmpWindowColumn(const TString& column) override {
-        return Source_->AddTmpWindowColumn(column);
+        Source_->AddTmpWindowColumn(column);
     }
 
     bool AddAggregation(TContext& ctx, TAggregationPtr aggr) override {

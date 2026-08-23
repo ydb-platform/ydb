@@ -6,7 +6,6 @@
 
 #include "collection_helpers.h"
 #include "maybe_inf.h"
-#include "mpl.h"
 
 #include <yt/yt/core/phoenix/concepts.h>
 
@@ -19,6 +18,8 @@
 
 #include <library/cpp/yt/containers/enum_indexed_array.h>
 #include <library/cpp/yt/containers/non_empty.h>
+
+#include <library/cpp/yt/mpl/type_traits.h>
 
 #include <library/cpp/yt/assert/assert.h>
 
@@ -36,8 +37,8 @@ void ReadRef(TInput& input, TMutableRef ref)
     if (bytesLoaded != ref.Size()) {
         TCrashOnDeserializationErrorGuard::OnError();
         THROW_ERROR_EXCEPTION("Premature end-of-stream")
-            << TErrorAttribute("bytes_loaded", bytesLoaded)
-            << TErrorAttribute("bytes_expected", ref.Size());
+            .With("bytes_loaded", bytesLoaded)
+            .With("bytes_expected", ref.Size());
     }
 }
 
@@ -119,8 +120,8 @@ void ReadPadding(TInput& input, size_t sizeToPad)
     if (bytesSkipped != bytesToSkip) {
         TCrashOnDeserializationErrorGuard::OnError();
         THROW_ERROR_EXCEPTION("Premature end-of-stream")
-            << TErrorAttribute("bytes_skipped", bytesSkipped)
-            << TErrorAttribute("bytes_expected", bytesToSkip);
+            .With("bytes_skipped", bytesSkipped)
+            .With("bytes_expected", bytesToSkip);
     }
 }
 
@@ -221,7 +222,7 @@ void UnpackRefs(const TSharedRef& packedRef, T* parts)
     if (size < 0) {
         TCrashOnDeserializationErrorGuard::OnError();
         THROW_ERROR_EXCEPTION("Packed ref size is negative")
-            << TErrorAttribute("size", size);
+            .With("size", size);
     }
 
     parts->clear();
@@ -233,15 +234,15 @@ void UnpackRefs(const TSharedRef& packedRef, T* parts)
         if (partSize < 0) {
             TCrashOnDeserializationErrorGuard::OnError();
             THROW_ERROR_EXCEPTION("A part of a packed ref has negative size")
-                << TErrorAttribute("index", index)
-                << TErrorAttribute("size", partSize);
+                .With("index", index)
+                .With("size", partSize);
         }
         if (packedRef.End() - input.Buf() < partSize) {
             TCrashOnDeserializationErrorGuard::OnError();
             THROW_ERROR_EXCEPTION("A part of a packed ref is too large")
-                << TErrorAttribute("index", index)
-                << TErrorAttribute("size", partSize)
-                << TErrorAttribute("bytes_left", packedRef.End() - input.Buf());
+                .With("index", index)
+                .With("size", partSize)
+                .With("bytes_left", packedRef.End() - input.Buf());
         }
 
         parts->push_back(packedRef.Slice(input.Buf(), input.Buf() + partSize));
@@ -252,7 +253,7 @@ void UnpackRefs(const TSharedRef& packedRef, T* parts)
     if (input.Buf() < packedRef.End()) {
         TCrashOnDeserializationErrorGuard::OnError();
         THROW_ERROR_EXCEPTION("Packed ref is too large")
-            << TErrorAttribute("extra_bytes", packedRef.End() - input.Buf());
+            .With("extra_bytes", packedRef.End() - input.Buf());
     }
 }
 
@@ -1365,7 +1366,7 @@ struct TEnumIndexedArraySerializer
     {
         using NYT::Save;
 
-        auto keys = TEnumTraits<E>::GetDomainValues();
+        const auto& keys = TEnumTraits<E>::template GetDomainValues</*AllowAmbiguousValues*/ true>();
         size_t count = 0;
         for (auto key : keys) {
             if (!vector.IsValidIndex(key)) {

@@ -278,6 +278,7 @@ public:
         , MinInflightBytes(minInflightBytes)
         , ColdInflightBytes(coldInflightBytes)
         , QuotaManager(quotaManager)
+        , QuotaManagerAssigned(QuotaManager != nullptr)
     {
         PushStats.Level = info.Level;
         PopStats.Level = info.Level;
@@ -299,6 +300,58 @@ public:
     void BindStorage(std::shared_ptr<TOutputDescriptor>& self, std::shared_ptr<TNodeState>& nodeState, IDqChannelStorage::TPtr storage);
     void StorageWakeupHandler(TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self);
 
+    // QuotaManager may be assigned later than the descriptor is created - when the output side binds to
+    // a descriptor auto-created by an early finish from the peer. It is assigned only once (nullptr to a
+    // valid instance), so QuotaManagerAssigned is the only allowed way to test QuotaManager for null:
+    // the pointer itself is published by the release store below and never changed afterwards, hence
+    // readers which observe the flag set may read it without any lock and without a data race.
+    // Chunks pushed before the assignment are not tracked by the quota at all (TOutputItem::IsQuoted).
+
+    bool IsQuotaAssigned() const {
+        return QuotaManagerAssigned.load(std::memory_order_acquire);
+    }
+
+    // must be called only if IsQuotaAssigned() is true
+    bool AllocateQuota(ui64 bytes) {
+        return QuotaManager->AllocateQuota(bytes);
+    }
+
+    // must be called only for the bytes allocated by AllocateQuota
+    void FreeQuota(ui64 bytes) {
+        QuotaManager->FreeQuota(bytes);
+    }
+
+    IMemoryQuotaManager::TPtr GetQuotaManager() const {
+        return IsQuotaAssigned() ? QuotaManager : nullptr;
+    }
+
+    void SetQuotaManager(IMemoryQuotaManager::TPtr quotaManager) {
+        if (quotaManager && !QuotaManagerAssigned.load(std::memory_order_relaxed)) {
+            QuotaManager = std::move(quotaManager);
+            QuotaManagerAssigned.store(true, std::memory_order_release);
+        }
+    }
+
+    // Must be called under WaitQueueMutex right before the chunk is pushed into the WaitQueue. Accounts
+    // the chunk in UnquotedWaitBytes or, if the chunk lost the race with the QuotaManager assignment and
+    // some quoted chunk is already waiting, allocates quota for it - SendFromWaiters relies on the fact
+    // that unquoted chunks always precede quoted ones in the WaitQueue.
+    // Returns false if the quota limit is exceeded, the caller has to abort the channel then.
+    bool PrepareWaitQuota(bool& quoted, ui64 bytes) {
+        if (!quoted) {
+            if (WaitQueueBytes.load() > UnquotedWaitBytes) {
+                // there is a quoted chunk in the queue already, so QuotaManager is definitely assigned
+                if (!AllocateQuota(bytes)) {
+                    return false;
+                }
+                quoted = true;
+            } else {
+                UnquotedWaitBytes += bytes;
+            }
+        }
+        return true;
+    }
+
     TChannelFullInfo Info;
     NActors::TActorSystem* ActorSystem;
     std::atomic<ui64> GenMajor = 0;
@@ -316,6 +369,7 @@ public:
     std::atomic<ui64> WaitQueueBytes = 0;
     std::atomic<ui64> WaitQueueSize = 0;
     mutable std::queue<TDataChunk> WaitQueue;
+    ui64 UnquotedWaitBytes = 0; // bytes of the WaitQueue chunks which are not tracked by QuotaManager
     mutable TInstant WaitTimestamp;
 
     mutable std::mutex FlowControlMutex;
@@ -342,7 +396,9 @@ public:
     const ui64 MinInflightBytes; // HardLimit => NoLimit
     const ui64 ColdInflightBytes;
 
+private:
     IMemoryQuotaManager::TPtr QuotaManager;
+    std::atomic<bool> QuotaManagerAssigned;
 };
 
 struct TOutputDescriptorCompare {
@@ -360,14 +416,15 @@ public:
         Sent
     };
 
-    TOutputItem(TDataChunk&& data, std::shared_ptr<TOutputDescriptor> descriptor)
-        : Data(std::move(data)), Descriptor(descriptor), State(EState::Init) {
+    TOutputItem(TDataChunk&& data, std::shared_ptr<TOutputDescriptor> descriptor, bool quoted)
+        : Data(std::move(data)), Descriptor(descriptor), State(EState::Init), IsQuoted(quoted) {
     }
     ~TOutputItem();
 
     TDataChunk Data;
     std::shared_ptr<TOutputDescriptor> Descriptor;
     std::atomic<EState> State;
+    const bool IsQuoted; // whether Data.Bytes is tracked by Descriptor's QuotaManager
     ui64 SeqNo = 0;
     bool Leading = false;
     ui64 ChannelSeqNo = 0;

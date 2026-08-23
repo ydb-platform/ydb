@@ -90,6 +90,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, OptForceOlapPushdownDistinct);
     REGISTER_SETTING(*this, OptForceOlapPushdownDistinctLimit);
     REGISTER_SETTING(*this, OptEnableOlapPushdownProjections);
+    REGISTER_SETTING(*this, OptEnableOlapPushdownRegexp);
     REGISTER_SETTING(*this, OptEnableOlapProvideComputeSharding);
     REGISTER_SETTING(*this, OptOverrideStatistics);
     REGISTER_SETTING(*this, OptimizerHints).Parser([](const TString& v) { return NKikimr::NKqp::TOptimizerHints::Parse(v); });
@@ -100,6 +101,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, OptDisallowFuseJoins);
     REGISTER_SETTING(*this, OptCreateStageForAggregation);
     REGISTER_SETTING(*this, OptValidateStreamingConstraints);
+    REGISTER_SETTING(*this, OptValidateStreamingCheckpoints);
     REGISTER_SETTING(*this, OptFallbackToLegacyOptimizer);
     REGISTER_SETTING(*this, OverridePlanner);
     REGISTER_SETTING(*this, UseGraceJoinCoreForMap);
@@ -204,7 +206,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, OptCBOConstsGraceJoinRightSidePow);
     REGISTER_SETTING(*this, OptCBOConstsGraceJoinOutputMult);
     REGISTER_SETTING(*this, OptCBOConstsGraceJoinOutputPow);
-    
+
     /* Runtime */
     REGISTER_SETTING(*this, ScanQuery);
 }
@@ -315,6 +317,11 @@ bool TKikimrConfiguration::GetEnableParallelUnionAllConnectionsForExtend() const
 bool TKikimrConfiguration::GetEnableOlapPushdownAggregate() const {
     return ((GetOptionalFlagValue(OptEnableOlapPushdownAggregate.Get()) == EOptionalFlag::Enabled) ||
         TTableServiceConfig::GetEnableOlapPushdownAggregate());
+}
+
+bool TKikimrConfiguration::GetEnableOlapPushdownRegexp() const {
+    return ((GetOptionalFlagValue(OptEnableOlapPushdownRegexp.Get()) == EOptionalFlag::Enabled) ||
+        TTableServiceConfig::GetEnableOlapPushdownRegexp());
 }
 
 bool TKikimrConfiguration::GetUseDqHashCombine() const {

@@ -1,6 +1,8 @@
 #include "impl.h"
 #include "group_layout_checker.h"
 
+#include <ydb/core/protos/blobstorage_ddisk.pb.h>
+
 #include <util/generic/yexception.h>
 
 namespace NKikimr::NBsController {
@@ -14,6 +16,8 @@ namespace NKikimr::NBsController {
         std::unique_ptr<TEventHandle<TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>> RequestEv;
         std::unique_ptr<TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult> Result;
         bool CompatReply = false;
+        ui64 ChangedTabletId = 0;
+        ui64 ChangedTabletRevision = 0;
 
         class TStoragePoolRecord {
             using TEntityId = NLayoutChecker::TEntityId;
@@ -357,11 +361,20 @@ namespace NKikimr::NBsController {
             NIceDb::TNiceDb db(txc.DB);
             const ui64 tabletId = record.GetTabletId();
             using Table = Schema::DirectBlockGroupClaims;
+            using TabletStateTable = Schema::DirectBlockGroupTabletState;
 
             // prefetch direct block group ids we are going to work with
             if (!Prefetch(db, tabletId, record)) {
                 return false;
             }
+
+            auto tabletState = db.Table<TabletStateTable>().Key(tabletId).Select();
+            if (!tabletState.IsReady()) {
+                return false;
+            }
+            const ui64 currentRevision = tabletState.IsValid()
+                ? tabletState.GetValueOrDefault<TabletStateTable::Revision>(0)
+                : 0;
 
             Result = std::make_unique<TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult>();
             auto& rr = Result->Record;
@@ -653,6 +666,16 @@ namespace NKikimr::NBsController {
                 db.Table<Table>().Key(key).Update<Table::Allocation>(s);
             }
 
+            if (!updates.empty()) {
+                ChangedTabletId = tabletId;
+                ChangedTabletRevision = currentRevision + 1;
+                db.Table<TabletStateTable>().Key(tabletId).Update<
+                    TabletStateTable::Revision,
+                    TabletStateTable::LastChangedAt>(
+                        ChangedTabletRevision,
+                        TInstant::Now());
+            }
+
             for (auto& [vslotId, update] : vslotUpdates) {
                 TVSlotInfo *vslot = Self->FindVSlot(vslotId);
                 Y_DEBUG_ABORT_UNLESS(vslot);
@@ -674,6 +697,17 @@ namespace NKikimr::NBsController {
                 h->Rewrite(TEvInterconnect::EvForward, RequestEv->InterconnectSession);
             }
             TActivationContext::Send(h.release());
+
+            if (ChangedTabletId) {
+                if (!Self->CmsPipe) {
+                    Self->CmsPipe = Self->Register(NTabletPipe::CreateClient(Self->SelfId(), MakeCmsID(),
+                        NTabletPipe::TClientRetryPolicy::WithRetries()));
+                }
+                auto notification = MakeHolder<TEvBlobStorage::TEvControllerDDiskInfoTabletRevisionChanged>();
+                notification->Record.SetTabletId(ChangedTabletId);
+                notification->Record.SetRevision(ChangedTabletRevision);
+                NTabletPipe::SendData(ctx, Self->CmsPipe, notification.Release());
+            }
         }
     };
 

@@ -91,6 +91,8 @@ struct TTestContext {
     THashMap<ui32, ui32> MsgSeqNoMap;
     THashMap<ui32, TString> OwnerCookieMap;
     bool EnableDetailedPQLog = ENABLE_DETAILED_PQ_LOG;
+    ui64 NextPqConfigTxId = 12345;
+    ui64 NextPqConfigPlanStep = 1;
 
     TTestContext() {
         TabletId = MakeTabletID(false, 1);
@@ -267,6 +269,8 @@ struct TTabletPreparationParameters {
     std::optional<uint32_t> metricsLevel;
     std::optional<TString> monitoringProjectId;
     bool AddDefaultConsumer{true};
+    ui32 readSpeed{0};
+    ui32 readSpeedInMessages{0};
 };
 
 struct TConsumerPreparationParameters {
@@ -274,14 +278,35 @@ struct TConsumerPreparationParameters {
     bool Important = false;
     std::optional<uint32_t> MetricsLevel;
     std::optional<TString> MonitoringProjectId;
+
+    std::optional<ui64> ReadSpeedInBytesPerSecond;
+    std::optional<ui64> ReadSpeedInMessagesPerSecond;
+    std::optional<NKikimrPQ::TPQTabletConfig::EConsumerType> Type;
+    bool KeepMessageOrder = false;
 };
+
+NKikimrPQ::TPQTabletConfig MakePQTabletConfig(
+    const TTabletPreparationParameters& parameters,
+    TConstArrayRef<TConsumerPreparationParameters> users,
+    TTestActorRuntime& runtime,
+    ui32 version);
+
+void SendPQTabletConfig(
+    TTestActorRuntime& runtime,
+    ui64 tabletId,
+    const TActorId& edge,
+    const NKikimrPQ::TPQTabletConfig& tabletConfig,
+    ui64 txId,
+    ui64 planStep);
 
 void PQTabletPrepare(
     const TTabletPreparationParameters& parameters,
     const TConstArrayRef<TConsumerPreparationParameters> users,
     TTestActorRuntime& runtime,
     ui64 tabletId,
-    TActorId edge);
+    TActorId edge,
+    ui64 txId = 12345,
+    ui64 planStep = 1);
 
 
 struct TBalancerParams {

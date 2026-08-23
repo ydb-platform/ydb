@@ -25,6 +25,7 @@ bool TPartitionActor::PrepareLoadState(
         db.ReadVolumeConfig(args.VolumeConfig),
         db.ReadDirectBlockGroupsConnections(args.DirectBlockGroupsConnections),
         db.ReadAllVChunkConfigs(args.VChunkConfigs),
+        db.ReadAllDirtyMapStates(args.DirtyMapStates),
         db.ReadAddHostInProgress(args.AddHostInProgress),
     };
 
@@ -59,7 +60,8 @@ void TPartitionActor::CompleteLoadState(
             Start(
                 ctx,
                 std::move(*args.DirectBlockGroupsConnections),
-                std::move(args.VChunkConfigs));
+                args.VChunkConfigs,
+                args.DirtyMapStates);
 
             // An add-host was in flight at the last restart: hold the single
             // in-flight slot and replay the BSController request once the fast

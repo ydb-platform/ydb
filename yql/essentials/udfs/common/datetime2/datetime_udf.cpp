@@ -3527,8 +3527,9 @@ private:
                             ++it;
                             --digits;
                         }
-                        for (; !digits && limit && std::isdigit(*it); --limit, ++it)
+                        for (; !digits && limit && std::isdigit(*it); --limit, ++it) {
                             ;
+                        }
                         while (digits--) {
                             usec *= 10U;
                         }
@@ -3538,8 +3539,8 @@ private:
                     break;
                 }
                 case 'z':
-                    if (currentLangVersion < NYql::NFeature::DateTimeFormatZ.MinLangVer) {
-                        throw yexception() << "%z specfifier is available since 2025.05";
+                    if (auto x = NYql::EnsureIsAvailableOn(currentLangVersion, NYql::EBackportCompatibleFeaturesMode::None, NYql::NFeature::DateTimeFormatZ); !x) {
+                        throw yexception() << x.error();
                     }
                     if (useTzNameScanner) {
                         throw yexception() << "%Z specifier is already used for parsing";

@@ -496,7 +496,7 @@ void TSolomonRegistry::ReadRecentSensorValues(
     if (it == Sensors_.end()) {
         THROW_ERROR_EXCEPTION(NYTree::EErrorCode::ResolveError,
             "No such sensor")
-                << TErrorAttribute("name", name);
+                .With("name", name);
     }
 
     const auto& sensorSet = it->second;
@@ -539,14 +539,14 @@ void TSolomonRegistry::ReadRecentSensorValues(
         if (valuesRead == 0) {
             THROW_ERROR_EXCEPTION(NYTree::EErrorCode::ResolveError,
                 "Projection not found for sensor")
-                    << TErrorAttribute("name", name)
-                    << TErrorAttribute("tags", tags);
+                    .With("name", name)
+                    .With("tags", tags);
         } else if (valuesRead > 1) {
             THROW_ERROR_EXCEPTION(NYTree::EErrorCode::ResolveError,
                 "More than one projection found for sensor")
-                    << TErrorAttribute("name", name)
-                    << TErrorAttribute("tags", tags)
-                    << TErrorAttribute("values_read", valuesRead);
+                    .With("name", name)
+                    .With("tags", tags)
+                    .With("values_read", valuesRead);
         }
     } else if (valuesRead == 0) {
         fluent.BeginList().EndList();

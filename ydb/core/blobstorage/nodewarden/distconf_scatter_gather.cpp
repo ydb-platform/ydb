@@ -5,7 +5,7 @@
 namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::IssueScatterTask(TScatterTaskOrigin&& origin, TEvScatter&& request,
-            std::span<TNodeIdentifier> addedNodes) {
+            std::span<const TNodeIdentifier> targetedNodes) {
         ui64 cookie = NextScatterCookie++;
         if (cookie == 0) {
             cookie = NextScatterCookie++;
@@ -20,7 +20,7 @@ namespace NKikimr::NStorage {
             {"origin", origin},
             {"binding", Binding},
             {"scepter", Scepter ? std::make_optional(Scepter->Id) : std::nullopt},
-            {"addedNodes", addedNodes});
+            {"targetedNodes", targetedNodes});
         const auto [it, inserted] = ScatterTasks.try_emplace(cookie, std::move(origin), std::move(request), ScepterCounter,
             TActivationContext::Monotonic());
         Y_ABORT_UNLESS(inserted);
@@ -30,11 +30,11 @@ namespace NKikimr::NStorage {
             for (auto& [nodeId, info] : DirectBoundNodes) {
                 IssueScatterTaskForNode(nodeId, info, cookie, task);
             }
-            for (const TNodeIdentifier& nodeId : addedNodes) {
-                IssueAddedNodeScatterTask(nodeId.NodeId(), cookie, task);
-                const auto [it, inserted] = task.PendingNodes.insert(nodeId.NodeId());
+            for (const TNodeIdentifier& node : targetedNodes) {
+                IssueAddedNodeScatterTask(node.NodeId(), cookie, task);
+                const auto [it, inserted] = task.PendingNodes.insert(node.NodeId());
                 Y_ABORT_UNLESS(inserted);
-                AddedNodesScatterTasks.emplace(nodeId.NodeId(), cookie);
+                AddedNodesScatterTasks.emplace(node.NodeId(), cookie);
             }
         }
         CheckCompleteScatterTask(it);

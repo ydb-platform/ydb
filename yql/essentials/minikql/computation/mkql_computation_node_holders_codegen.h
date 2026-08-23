@@ -9,8 +9,7 @@ class BasicBlock;
 } // namespace llvm
 #endif
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 class TMemoryUsageInfo;
 
@@ -19,7 +18,7 @@ struct TCodegenContext;
 #endif
 
 struct TContainerCacheOnContext: private TNonCopyable {
-    TContainerCacheOnContext(TComputationMutables& mutables);
+    explicit TContainerCacheOnContext(TComputationMutables& mutables);
 
     NUdf::TUnboxedValuePod NewArray(TComputationContext& ctx, ui64 size, NUdf::TUnboxedValue*& items) const;
 #ifndef MKQL_DISABLE_CODEGEN
@@ -41,7 +40,7 @@ public:
 
     IComputationNode* CreateEmptyNode() const;
 
-    IComputationNode* CreateArrayNode(TComputationNodePtrVector&& items) const;
+    IComputationNode* CreateArrayNode(TComputationNodePtrVector&& values) const;
 
     IComputationNode* CreateOptionalNode(IComputationNode* item) const;
 
@@ -53,9 +52,8 @@ public:
     IComputationNode* CreateVariantNode(IComputationNode* item, ui32 index) const;
 
 private:
-    TMemoryUsageInfo& MemInfo;
-    TComputationMutables& Mutables;
+    TMemoryUsageInfo& MemInfo_;
+    TComputationMutables& Mutables_;
 };
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

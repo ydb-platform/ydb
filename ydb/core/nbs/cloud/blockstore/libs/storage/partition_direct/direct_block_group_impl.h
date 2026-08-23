@@ -4,6 +4,7 @@
 
 #include <ydb/core/nbs/cloud/blockstore/config/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/thread_checker.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/dbg_counters.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/storage.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/log_title.h>
@@ -53,7 +54,8 @@ public:
         size_t directBlockGroupIndex,
         const TVector<NKikimr::NBsController::TDDiskId>& ddisksIds,
         const TVector<NKikimr::NBsController::TDDiskId>& pbufferIds,
-        std::unique_ptr<NTransport::IStorageTransport> storageTransport);
+        std::unique_ptr<NTransport::IStorageTransport> storageTransport,
+        NMonitoring::TDynamicCounterPtr counters);
 
     ~TDirectBlockGroup() override = default;
 
@@ -139,15 +141,15 @@ public:
     NThreading::TFuture<TListPBufferResponse> ListPBuffers(
         THostIndex hostIndex) override;
 
-    ui32 GetNodeId(THostIndex host) override;
-
-    NThreading::TFuture<TDBGDumpResponse> Dump() override;
-
     void OnAddHostResult(
         const NProto::TError& error,
         THostIndex newHostIndex,
         NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
         NKikimrBlobStorage::NDDisk::TDDiskId pbufferId) override;
+
+    ui32 GetNodeId(THostIndex host) const override;
+
+    NThreading::TFuture<TDBGDumpResponse> Dump() override;
 
     NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot() const override;
 
@@ -193,7 +195,7 @@ private:
     void DoEstablishConnection(
         THostIndex hostIndex,
         EConnectionType connectionType);
-    void OnConnectionEstablished(
+    void OnConnectResponse(
         EConnectionType connectionType,
         THostIndex hostIndex,
         ui64 seqNo,
@@ -263,6 +265,8 @@ private:
     [[nodiscard]] TConnectionSnapshot MakeConnectionSnapshot(
         size_t hostIndex) const;
 
+    [[nodiscard]] TString PrintHostAndNode(THostIndex host) const;
+
     NActors::TActorSystem* const ActorSystem = nullptr;
     const TStorageConfigPtr StorageConfig;
     const TExecutorPtr Executor;
@@ -280,6 +284,7 @@ private:
     TDDiskIdToHostIndex PBufferIdToHostIndex;
     TVector<TVChunkWeakPtr> VChunks;
     TOracle Oracle;
+    TDirectBlockGroupCounters Counters;
 
     bool BlockedGenerationDetected = false;
 

@@ -276,7 +276,7 @@ class LogConfigView {
         var cfg = this.item.getConfig().LogConfig;
         if (cfg !== undefined)
             for (var field of ['SysLog', 'Format', 'ClusterName', 'AllowDropEntries', 'UseLocalTimestamps',
-                               'BackendFileName', 'SysLogService', 'SysLogToStdErr']) {
+                               'BackendFileName', 'SysLogService', 'SysLogToStdErr', 'EnableStructuredLogInJson']) {
                 if (cfg[field] !== undefined)
                     result += field + ': ' + cfg[field];
             }

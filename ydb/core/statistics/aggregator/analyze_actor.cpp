@@ -1,7 +1,9 @@
 #include "analyze_actor.h"
 
 #include <ydb/library/query_actor/query_actor.h>
+#include <ydb/core/base/request_types.h>
 #include <ydb/core/statistics/events.h>
+#include <ydb/core/base/path.h>
 #include <util/generic/size_literals.h>
 #include <util/string/vector.h>
 #include <algorithm>
@@ -33,7 +35,9 @@ public:
         , Parent(parent)
         , Query(std::move(query))
         , ColumnCount(columnCount)
-    {}
+    {
+        RequestType = TString(NRequestTypes::Analyze);
+    }
 
     void OnRunQuery() override {
         RunStreamQuery(Query);
@@ -74,6 +78,10 @@ public:
             return;
         }
 
+        YDB_LOG_WARN("ScanActor OnFinish non-success",
+            {"selfId", SelfId()},
+            {"status", status});
+
         if (!ResponseSent) {
             auto response = std::make_unique<TEvPrivate::TEvAnalyzeScanResult>(
                 status, std::move(issues));
@@ -105,6 +113,12 @@ private:
 };
 
 void TAnalyzeActor::Bootstrap() {
+    YDB_LOG_DEBUG("Bootstrap",
+        {"selfId", SelfId()},
+        {"operationId", OperationId.Quote()},
+        {"pathId", PathId},
+        {"databaseName", DatabaseName});
+
     Become(&TThis::StateNavigate);
 
     using TNavigate = NSchemeCache::TSchemeCacheNavigate;
@@ -123,6 +137,12 @@ void TAnalyzeActor::Bootstrap() {
 void TAnalyzeActor::FinishWithFailure(
         TEvStatistics::TEvAnalyzeActorResult::EStatus status,
         NYql::TIssue issue) {
+    YDB_LOG_WARN("FinishWithFailure",
+        {"selfId", SelfId()},
+        {"status", static_cast<int>(status)},
+        {"operationId", OperationId.Quote()},
+        {"pathId", PathId});
+
     auto response = std::make_unique<TEvStatistics::TEvAnalyzeActorResult>(status);
 
     TStringBuilder errMsg;
@@ -144,6 +164,13 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
     const auto& request = *ev->Get()->Request;
     Y_ABORT_UNLESS(request.ResultSet.size() == 1);
     const NSchemeCache::TSchemeCacheNavigate::TEntry& entry = request.ResultSet.front();
+
+    // Second navigate round: resolve the domain key to an absolute database
+    // path for background traversals (where DatabaseName is empty).
+    if (ResolvingDatabase) {
+        HandleResolveDatabase(entry);
+        return;
+    }
 
     if (entry.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
         YDB_LOG_WARN("Navigate request failed",
@@ -176,8 +203,69 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
     TableName = "/" + JoinVectorIntoString(entry.Path, "/");
     IsColumnTable = !!entry.ColumnTableInfo;
 
+    // For background traversals, DatabaseName is empty. Resolve it from
+    // the table's DomainKey via a second navigate round, which correctly
+    // handles tables nested in subdirectories. We use DomainKey (the tenant
+    // domain), not ResourcesDomainKey, because the scan query runs against
+    // the tenant database.
+    if (DatabaseName.empty()) {
+        const auto& domainKey = entry.DomainInfo->DomainKey;
+
+        auto resolveNavigate = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
+        resolveNavigate->DatabaseName = AppData()->DomainsInfo->GetDomain()->Name;
+        auto& resolveEntry = resolveNavigate->ResultSet.emplace_back();
+        resolveEntry.TableId = TTableId(domainKey.OwnerId, domainKey.LocalPathId);
+        resolveEntry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpPath;
+        resolveEntry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByTableId;
+        resolveEntry.RedirectRequired = false;
+
+        NavigateColumns = entry.Columns;
+        NavigateMultiColumnStatistics = entry.MultiColumnStatistics;
+        ResolvingDatabase = true;
+        Send(MakeSchemeCacheID(),
+            new TEvTxProxySchemeCache::TEvNavigateKeySet(resolveNavigate.release()));
+        return;
+    }
+
+    NavigateColumns = entry.Columns;
+    NavigateMultiColumnStatistics = entry.MultiColumnStatistics;
+    HandleNavigateResult();
+}
+
+void TAnalyzeActor::HandleResolveDatabase(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry) {
+    ResolvingDatabase = false;
+
+    if (entry.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
+        YDB_LOG_WARN("Resolve database navigate failed",
+            {"selfId", SelfId()},
+            {"status", entry.Status},
+            {"operationId", OperationId.Quote()},
+            {"pathId", PathId});
+
+        FinishWithFailure(
+            TEvStatistics::TEvAnalyzeActorResult::EStatus::InternalError,
+            NYql::TIssue(TStringBuilder() << "Resolve database navigate failed with " << entry.Status));
+        return;
+    }
+
+    DatabaseName = CanonizePath(entry.Path);
+    if (DatabaseName.empty()) {
+        FinishWithFailure(
+            TEvStatistics::TEvAnalyzeActorResult::EStatus::InternalError,
+            NYql::TIssue("Resolved database path is empty"));
+        return;
+    }
+    YDB_LOG_DEBUG("Resolved database path",
+        {"selfId", SelfId()},
+        {"operationId", OperationId.Quote()},
+        {"databaseName", DatabaseName});
+
+    HandleNavigateResult();
+}
+
+void TAnalyzeActor::HandleNavigateResult() {
     THashMap<ui32, TSysTables::TTableColumnInfo> tag2Column;
-    for (const auto& col : entry.Columns) {
+    for (const auto& col : NavigateColumns) {
         tag2Column[col.second.Id] = col.second;
 
         if (col.second.KeyOrder >= 0) {
@@ -186,7 +274,7 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
         }
     }
 
-    for (const auto& def : entry.MultiColumnStatistics) {
+    for (const auto& def : NavigateMultiColumnStatistics) {
         TMultiColumnStatDesc desc;
         desc.Name = def.GetName();
 
@@ -418,7 +506,7 @@ void TAnalyzeActor::DispatchSomeScanActors() {
         auto actor = std::make_unique<TScanActor>(
             SelfId(), DatabaseName,
             SelectBuilder->Build(TableName, tabletId), SelectBuilder->ColumnCount());
-        ScanActorsInFlight[Register(actor.release())] = TScanActorInfo{
+        ScanActorsInFlight[Register(actor.release(), TMailboxType::HTSwap, AppData()->BatchPoolId)] = TScanActorInfo{
             .TabletNodeId = nodeId,
         };
     };
@@ -621,6 +709,11 @@ void TAnalyzeActor::Handle(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
     try {
         HandleImpl(ev);
     } catch (const std::exception& ex) {
+        YDB_LOG_ERROR("Handle TEvAnalyzeScanResult exception",
+            {"selfId", SelfId()},
+            {"operationId", OperationId.Quote()},
+            {"error", ex.what()});
+
         NYql::TIssue error(TStringBuilder()
             << "Processing statistics scan results failed with " << ex.what());
         FinishWithFailure(
@@ -630,6 +723,10 @@ void TAnalyzeActor::Handle(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
 }
 
 void TAnalyzeActor::PassAway() {
+    YDB_LOG_DEBUG("PassAway",
+        {"selfId", SelfId()},
+        {"operationId", OperationId.Quote()});
+
     for (const auto& [id, info] : ScanActorsInFlight){
         Send(id, new TEvents::TEvPoison());
     }

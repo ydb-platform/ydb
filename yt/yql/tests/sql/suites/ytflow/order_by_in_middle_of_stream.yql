@@ -1,0 +1,15 @@
+/* sort outputs */
+
+use plato;
+
+pragma Engine = "ytflow";
+
+pragma Ytflow.Cluster = "plato";
+pragma Ytflow.PipelinePath = "pipelines/test";
+
+$input = select string_field as key, int64_field as value from Input
+order by key;
+
+$intermediate = select key || "_middle" as key, value from $input;
+
+replace into Output select key, value from $intermediate;

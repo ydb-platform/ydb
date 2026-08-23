@@ -52,8 +52,8 @@ NApi::IClientPtr CreateClient(const NApi::NRpcProxy::TConnectionConfigPtr& confi
 {
     if (config->ClusterName && *(config->ClusterName) == "" && config->ClusterUrl != "") {
         THROW_ERROR_EXCEPTION("Connection config has empty cluster name but non-empty cluster URL, it usually means misconfiguration")
-            << TErrorAttribute("cluster_name", config->ClusterName)
-            << TErrorAttribute("cluster_url", config->ClusterUrl);
+            .With("cluster_name", config->ClusterName)
+            .With("cluster_url", config->ClusterUrl);
     }
     return NApi::NRpcProxy::CreateConnection(config)->CreateClient(options);
 }

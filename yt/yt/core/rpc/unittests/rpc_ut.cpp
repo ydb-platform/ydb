@@ -59,11 +59,14 @@ template <class TImpl>
 using TNotGrpcTest = TRpcTestBase<TImpl>;
 template <class TImpl>
 using TGrpcTest = TRpcTestBase<TImpl>;
+template <class TImpl>
+using TGrpcAuthenticatedTest = TRpcAuthenticatedTestBase<TImpl>;
 TYPED_TEST_SUITE(TRpcTest, TAllTransports);
 TYPED_TEST_SUITE(TAttachmentsTest, TWithAttachments);
 TYPED_TEST_SUITE(TNotUdsTest, TWithoutUds);
 TYPED_TEST_SUITE(TNotGrpcTest, TWithoutGrpc);
 TYPED_TEST_SUITE(TGrpcTest, TGrpcOnly);
+TYPED_TEST_SUITE(TGrpcAuthenticatedTest, TGrpcOnly);
 TYPED_TEST_SUITE(TRpcAuthenticatedTest, TAllTransports);
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -144,6 +147,27 @@ TYPED_TEST(TRpcTest, TestingDelayHeavy)
     EXPECT_GT(elapsed, TDuration::MilliSeconds(500));
 }
 
+TYPED_TEST(TRpcTest, DefaultUserIsRoot)
+{
+    TTestProxy proxy(this->CreateChannel());
+    auto req = proxy.PassCall();
+    EXPECT_EQ(req->GetUser(), RootUserName);
+    auto rspOrError = WaitForFast(req->Invoke());
+    EXPECT_TRUE(rspOrError.IsOK()) << ToString(rspOrError);
+    const auto& rsp = rspOrError.Value();
+    // Root is expressed by leaving the field unset.
+    EXPECT_FALSE(rsp->has_user());
+}
+
+TYPED_TEST(TGrpcAuthenticatedTest, ManuallySpecifiedUserMismatch)
+{
+    TTestProxy proxy(this->CreateChannel());
+    auto req = proxy.PassCall();
+    req->SetUser("different-user");
+    auto rspOrError = WaitForFast(req->Invoke());
+    EXPECT_EQ(NRpc::EErrorCode::AuthenticationError, rspOrError.GetCode());
+}
+
 TYPED_TEST(TRpcTest, UserTag)
 {
     TTestProxy proxy(this->CreateChannel());
@@ -155,6 +179,23 @@ TYPED_TEST(TRpcTest, UserTag)
     const auto& rsp = rspOrError.Value();
     EXPECT_EQ(req->GetUser(), rsp->user());
     EXPECT_EQ(req->GetUserTag(), rsp->user_tag());
+}
+
+TYPED_TEST(TRpcTest, StartTime)
+{
+    TTestProxy proxy(this->CreateChannel());
+    auto req = proxy.PassCall();
+
+    auto beforeInvoke = TInstant::Now();
+    auto rspOrError = WaitForFast(req->Invoke());
+    auto afterInvoke = TInstant::Now();
+
+    EXPECT_TRUE(rspOrError.IsOK()) << ToString(rspOrError);
+    const auto& rsp = rspOrError.Value();
+    ASSERT_TRUE(rsp->has_start_time());
+    auto startTime = NYT::FromProto<TInstant>(rsp->start_time());
+    EXPECT_GE(startTime, beforeInvoke);
+    EXPECT_LE(startTime, afterInvoke);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

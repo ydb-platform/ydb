@@ -383,7 +383,6 @@ private:
     {
     }
 
-private:
     TStringBuf StrBuf_;
 };
 
@@ -397,6 +396,18 @@ struct THash<NKikimr::NMiniKQL::TInternName> {
 };
 
 namespace NKikimr::NMiniKQL {
+
+struct THasherTType {
+    inline size_t operator()(const TTypeBase* t) const noexcept {
+        return t->CalcHash();
+    }
+};
+
+struct TEqualTType {
+    inline bool operator()(const TTypeBase* lhs, const TTypeBase* rhs) const noexcept {
+        return lhs->IsSameType(*rhs);
+    }
+};
 
 class TTypeEnvironment: private TNonCopyable {
 public:
@@ -414,6 +425,7 @@ public:
     }
 
     TInternName InternName(const TStringBuf& name) const;
+    TType* InternType(TType* type) const;
 
     TTypeType* GetTypeOfTypeLazy() const;
     TVoidType* GetTypeOfVoidLazy() const;
@@ -467,6 +479,7 @@ private:
     mutable TPagedArena Arena_;
     mutable std::stack<NUdf::TStringValue> Strings_;
     mutable THashSet<TStringBuf> NamesPool_;
+    mutable THashSet<TType*, THasherTType, TEqualTType> TypesPool_;
     mutable std::vector<TNode*> Stack_;
 
     mutable TTypeType* TypeOfType_ = nullptr;
@@ -681,7 +694,6 @@ private:
     void DoFreeze(const TTypeEnvironment& env);
     static bool CalculatePresortSupport(ui32 membersCount, std::pair<TInternName, TType*>* members);
 
-private:
     ui32 MembersCount_;
     std::pair<TInternName, TType*>* Members_;
 };
@@ -714,7 +726,6 @@ private:
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
 
-private:
     TRuntimeNode* Values_;
 };
 
@@ -745,7 +756,6 @@ private:
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
 
-private:
     TType* Data_;
     TDataType* IndexDictKey_;
 };
@@ -776,7 +786,6 @@ private:
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
 
-private:
     TRuntimeNode* Items_;
     ui32 Count_;
 };
@@ -804,7 +813,6 @@ private:
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
 
-private:
     TType* Data_;
 };
 
@@ -831,7 +839,6 @@ private:
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
 
-private:
     TType* Data_;
 };
 
@@ -858,7 +865,6 @@ private:
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
 
-private:
     TType* Data_;
 };
 
@@ -891,7 +897,6 @@ private:
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
 
-private:
     TRuntimeNode Item_;
 };
 
@@ -922,7 +927,6 @@ private:
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
 
-private:
     TType* Data_;
     bool IsDynamic_;
 };
@@ -956,7 +960,6 @@ private:
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
 
-private:
     TType* KeyType_;
     TType* PayloadType_;
 };
@@ -987,7 +990,6 @@ private:
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
 
-private:
     ui32 ItemsCount_;
     std::pair<TRuntimeNode, TRuntimeNode>* Items_;
 };
@@ -1052,7 +1054,6 @@ private:
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
 
-private:
     bool IsMergeDisabled0_;
     ui32 ArgumentsCount_;
     TInternName Name_;
@@ -1130,7 +1131,6 @@ private:
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
 
-private:
     ui32 InputsCount_;
     ui32 UniqueId_;
     TRuntimeNode* Inputs_;
@@ -1214,7 +1214,6 @@ private:
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
 
-private:
     TRuntimeNode Item_;
 };
 
@@ -1345,7 +1344,6 @@ private:
         return true;
     }
 
-private:
     ui32 ElementsCount_;
     TType** Elements_;
 };
@@ -1402,7 +1400,6 @@ private:
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
 
-private:
     TRuntimeNode* Values_;
 };
 
@@ -1438,7 +1435,6 @@ private:
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
 
-private:
     TInternName const Tag_;
 };
 
@@ -1473,7 +1469,6 @@ private:
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
 
-private:
     TType* BaseType_;
     TInternName const Tag_;
 };
@@ -1518,7 +1513,6 @@ private:
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
 
-private:
     TType* Data_;
 };
 
@@ -1548,7 +1542,6 @@ private:
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
 
-private:
     TRuntimeNode Item_;
     ui32 Index_;
 };
@@ -1562,7 +1555,6 @@ public:
         Many = 1
     };
 
-public:
     static TBlockType* Create(TType* itemType, EShape shape, const TTypeEnvironment& env);
 
     using TType::IsSameType;
@@ -1586,7 +1578,6 @@ private:
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
 
-private:
     TType* ItemType_;
     EShape Shape_;
 };
@@ -1685,17 +1676,5 @@ template <TType::EKind SingularKind>
 void TSingular<SingularKind>::DoFreeze(const TTypeEnvironment& env) {
     Y_UNUSED(env);
 }
-
-struct THasherTType {
-    inline size_t operator()(const TTypeBase& t) const noexcept {
-        return t.CalcHash();
-    }
-};
-
-struct TEqualTType {
-    inline bool operator()(const TTypeBase& lhs, const TTypeBase& rhs) const noexcept {
-        return lhs.IsSameType(rhs);
-    }
-};
 
 } // namespace NKikimr::NMiniKQL

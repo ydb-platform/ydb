@@ -13,18 +13,6 @@ public:
         : Client(driver, settings)
     {}
 
-    TAsyncStatus CreateTopic(const TString& path, const TCreateTopicSettings& settings) final {
-        return Client.CreateTopic(path, settings);
-    }
-
-    TAsyncStatus AlterTopic(const TString& path, const TAlterTopicSettings& settings) final {
-        return Client.AlterTopic(path, settings);
-    }
-
-    TAsyncStatus DropTopic(const TString& path, const TDropTopicSettings& settings) final {
-        return Client.DropTopic(path, settings);
-    }
-
     TAsyncDescribeTopicResult DescribeTopic(const TString& path, const TDescribeTopicSettings& settings) final {
         return Client.DescribeTopic(path, settings);
     }

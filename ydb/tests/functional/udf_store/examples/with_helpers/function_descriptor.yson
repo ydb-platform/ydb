@@ -1,0 +1,10 @@
+[
+    {
+        name=scale;
+        calling_convention=unversioned_value;
+        argument_types=[
+            {value=int64; tag=concrete_type};
+        ];
+        result_type={value=int64; tag=concrete_type;};
+    };
+]

@@ -3,8 +3,7 @@
 
 #include <yql/essentials/minikql/mkql_type_ops.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -209,5 +208,4 @@ void RegisterDiv(TKernelFamilyMap& kernelFamilyMap) {
     kernelFamilyMap["Div"] = std::move(family);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

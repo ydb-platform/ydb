@@ -37,19 +37,21 @@ namespace NKikimr {
         };
 
         enum EMsgType {
-            Put = 0,
-            Block = 1,
-            CollectGarbage = 2,
-            LocalSyncData = 3,
-            AnubisOsirisPut = 4,
-            RecoveredHugeBlob = 5,
-            DetectedPhantomBlob = 6,
+            UserPut = 0,
+            SystemPut = 1,
+            Block = 2,
+            CollectGarbage = 3,
+            LocalSyncData = 4,
+            AnubisOsirisPut = 5,
+            RecoveredHugeBlob = 6,
+            DetectedPhantomBlob = 7,
             Count
         };
 
         static const char *MsgTypeToStr(EMsgType msgType) {
             switch (msgType) {
-                case Put:                   return "Put";
+                case UserPut:               return "UserPut";
+                case SystemPut:             return "SystemPut";
                 case Block:                 return "Block";
                 case CollectGarbage:        return "CollectGarbage";
                 case LocalSyncData:         return "LocalSyncData";
@@ -117,11 +119,14 @@ namespace NKikimr {
     -----------------------------------------------------------------------------------------------
      Yellow   |  No restrictions, translate Yellow color to tablet and other VDisks in the group.
     -----------------------------------------------------------------------------------------------
-     Orange   |  Disk space for tablet is over. Tablet can boot (i.e. make TEvVPut for discovery
+     Orange   |  Disk space for user data is over. Tablet can boot (i.e. make TEvVPut for discovery
               |  with IgnoreBlock, block generation, delete data via garbage collection commands).
-              |  Other VDisks in the group don't accept ordinary TEvVPuts also.
+              |  Other VDisks in the group don't accept ordinary TEvVPuts also. System data (see
+              |  TDataKind) is still accepted here, so that the tenant keeps running and the admin
+              |  is able to drop tables.
     -----------------------------------------------------------------------------------------------
-     Red      |  Tablet or someone else can only delete tablet's data.
+     Red      |  Disk space for system data is over as well. Tablet or someone else can only delete
+              |  tablet's data; system tablets can still boot and block generations.
     -----------------------------------------------------------------------------------------------
      Black    |  Manual intervention required.
 
@@ -135,9 +140,17 @@ namespace NKikimr {
 
     TOutOfSpaceLogic::~TOutOfSpaceLogic() {}
 
-    bool TOutOfSpaceLogic::AllowVPutLikeWrite(const TActorContext& /*ctx*/, bool ignoreBlock, bool isZeroEntry, ui32 size) const {
+    bool TOutOfSpaceLogic::AllowVPutLikeWrite(const TActorContext& /*ctx*/, bool ignoreBlock, bool isZeroEntry, ui32 size,
+            NKikimrBlobStorage::TDataKind::E dataKind) const {
         const ESpaceColor color = GetSpaceColor();
-        auto& stat = Stat->Lookup(TOutOfSpaceLogic::TStat::Put, color).HandleMsg(size);
+        const bool system = dataKind == NKikimrBlobStorage::TDataKind::SYSTEM;
+        auto& stat = Stat->Lookup(system ? TStat::SystemPut : TStat::UserPut, color).HandleMsg(size);
+
+        // Restore-first reads and garbage collection zero entries: tiny writes a tablet cannot avoid
+        // and the only way out of an out-of-space state, so they outlive the ordinary writes of the
+        // same kind by one color.
+        const bool unavoidable = ignoreBlock || isZeroEntry;
+
         switch (color) {
             case TSpaceColor::GREEN:
             case TSpaceColor::CYAN:
@@ -148,9 +161,11 @@ namespace NKikimr {
 
             case TSpaceColor::PRE_ORANGE:
             case TSpaceColor::ORANGE:
-                return stat.Pass(ignoreBlock || isZeroEntry); // allow restore-first reads to pass through and zero entries too
+                return stat.Pass(system || unavoidable);
 
             case TSpaceColor::RED:
+                return stat.Pass(system && unavoidable);
+
             case TSpaceColor::BLACK:
                 return stat.NotAllow();
 
@@ -162,7 +177,8 @@ namespace NKikimr {
 
     bool TOutOfSpaceLogic::Allow(const TActorContext& ctx, TEvBlobStorage::TEvVPut::TPtr &ev) const {
         auto& record = ev->Get()->Record;
-        return AllowVPutLikeWrite(ctx, record.GetIgnoreBlock(), record.GetIsZeroEntry(), ev->Get()->GetBufferBytes());
+        return AllowVPutLikeWrite(ctx, record.GetIgnoreBlock(), record.GetIsZeroEntry(), ev->Get()->GetBufferBytes(),
+            record.GetDataKind());
     }
 
     bool TOutOfSpaceLogic::Allow(const TActorContext& /*ctx*/, TEvBlobStorage::TEvVBlock::TPtr &ev) const {

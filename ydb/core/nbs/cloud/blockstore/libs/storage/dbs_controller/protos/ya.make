@@ -7,6 +7,12 @@ EXCLUDE_TAGS(
 
 SRCS(
     dbs_controller.proto
+    dbs_controller_db.proto
+)
+
+PEERDIR(
+    ydb/core/nbs/cloud/storage/core/protos
+    ydb/core/protos
 )
 
 END()

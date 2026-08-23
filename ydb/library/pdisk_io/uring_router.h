@@ -1,6 +1,7 @@
 #pragma once
 
 #include "uring_operation.h"
+#include "device_io_sample.h"
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
@@ -11,6 +12,7 @@
 
 #include <atomic>
 #include <expected>
+#include <functional>
 #include <memory>
 
 struct io_uring;
@@ -83,6 +85,16 @@ struct TUringCounters {
 // single thread (e.g. the DDisk actor). The only internal concurrency is the
 // dedicated TCompletionPoller thread that consumes the CQ ring and invokes
 // OnComplete callbacks.
+//
+// Optional device I/O sample sink: if set (via SetSampleSink, before Start()),
+// the completion poller thread invokes it once per successfully completed
+// Read/Write CQE with a raw TDeviceIoSample (submit/complete cycles, offset,
+// size, direction). Used to feed a device-overestimation aggregator that
+// merges samples across multiple sources sharing the same physical device.
+// The sink is invoked from the completion poller thread and must be cheap
+// and thread-safe on its own (e.g. push into a lock-protected buffer).
+using TDeviceIoSampleSink = std::function<void(const TDeviceIoSample&)>;
+
 class TUringRouter {
 public:
     TUringRouter(
@@ -95,6 +107,12 @@ public:
 
     const TUringRouterConfig& GetConfig() const {
         return Config;
+    }
+
+    // Must be called before Start(). Not thread-safe with itself or with
+    // completion-poller activity.
+    void SetSampleSink(TDeviceIoSampleSink sink) {
+        SampleSink = std::move(sink);
     }
 
     // --- Setup (call before Start) ---
@@ -169,6 +187,7 @@ private:
     NActors::TActorSystem* ActorSystem;
     TUringRouterConfig Config;
     TUringCounters* Counters;
+    TDeviceIoSampleSink SampleSink;
 
     std::unique_ptr<struct io_uring> Ring;
 

@@ -3,6 +3,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_type_annotation.h>
 #include <util/system/info.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
@@ -11,9 +12,11 @@
 #include <ydb/library/actors/core/subsystems/stats.h>
 #include <ydb/library/services/services.pb.h>
 
+#include <util/generic/algorithm.h>
 #include <util/string/cast.h>
 
 #include <cmath>
+#include <algorithm>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_EXECUTER
 
@@ -90,6 +93,12 @@ void TStagePredictor::Scan(const NYql::TExprNode::TPtr& stageNode) {
             }
         } else if (node.Maybe<NYql::NNodes::TCoUdf>()) {
             HasUdfFlag = true;
+            const auto methodName = node.Cast<NYql::NNodes::TCoUdf>().MethodName().Value();
+            TStringBuf moduleName;
+            TStringBuf funcName;
+            if (NYql::SplitUdfName(methodName, moduleName, funcName) && !moduleName.empty()) {
+                WasmUdfModules_.insert(TString(moduleName));
+            }
         }
         return true;
         });
@@ -145,6 +154,12 @@ bool TStagePredictor::DeserializeFromKqpSettings(const NYql::NDqProto::TProgram:
     StageLevel = kqpProto.GetStageLevel();
     LevelDataPrediction = kqpProto.GetLevelDataPrediction();
     return true;
+}
+
+TVector<TString> TStagePredictor::GetWasmUdfModules() const {
+    TVector<TString> modules(WasmUdfModules_.begin(), WasmUdfModules_.end());
+    Sort(modules);
+    return modules;
 }
 
 ui32 TStagePredictor::GetUsableThreads() {

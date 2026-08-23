@@ -274,7 +274,7 @@ public:
                 underlyingContext->Reply(TError(
                     NRpc::EErrorCode::ProtocolError,
                     "Error deserializing request attachments")
-                    << TError(ex));
+                    .With(ex));
                 return false;
             }
 
@@ -777,9 +777,10 @@ protected:
         std::atomic<bool> Heavy = false;
         std::atomic<bool> Pooled = true;
 
-        // This value represents the combined queue sizes of all request
-        // queues associated with the method.
+        // These values represent the combined queue sizes and queue byte sizes
+        // of all request queues associated with the method.
         std::atomic<int> QueueSize = 0;
+        std::atomic<i64> QueueByteSize = 0;
 
         std::atomic<int> QueueSizeLimit = 0;
         std::atomic<i64> QueueByteSizeLimit = 0;
@@ -1150,12 +1151,13 @@ public:
 
     int GetQueueSize() const;
     std::optional<int> GetQueueSizeLimit() const;
-    // TODO(h0pless): support queue byte size limit for symmetry's sake.
+    std::optional<i64> GetQueueByteSizeLimit() const;
     i64 GetQueueByteSize() const;
     int GetConcurrency() const;
     i64 GetConcurrencyByte() const;
 
     void SetQueueSizeLimit(std::optional<int> limit);
+    void SetQueueByteSizeLimit(std::optional<i64> limit);
 
     void OnRequestArrived(TServiceBase::TServiceContextPtr context);
     void OnRequestFinished(i64 requestTotalSize);
@@ -1175,9 +1177,6 @@ private:
     TServiceBase* Service_;
     TServiceBase::TRuntimeMethodInfo* RuntimeInfo_ = nullptr;
 
-    std::atomic<int> Concurrency_ = 0;
-    std::atomic<i64> ConcurrencyByte_ = 0;
-
     struct TRequestThrottler
     {
         const NConcurrency::IReconfigurableThroughputThrottlerPtr Throttler;
@@ -1191,9 +1190,15 @@ private:
     std::atomic<bool> Throttled_ = false;
 
     std::atomic<int> QueueSize_ = 0;
+    std::atomic<i64> QueueByteSize_ = 0;
+    std::atomic<int> Concurrency_ = 0;
+    std::atomic<i64> ConcurrencyByte_ = 0;
+
     // Not std::optional to guarantee lock freeness; -1 means inf.
     std::atomic<int> QueueSizeLimit_ = -1;
-    std::atomic<i64> QueueByteSize_ = 0;
+    std::atomic<i64> QueueByteSizeLimit_ = -1;
+    // TODO(h0pless): Add ConcurrencyLimit and ConcurrencyByteLimit.
+
     moodycamel::ConcurrentQueue<TServiceBase::TServiceContextPtr> Queue_;
 
     std::atomic<TDuration> TestingDelay_;

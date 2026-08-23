@@ -120,7 +120,6 @@ public:
     using TStatus = IGraphTransformer::TStatus;
     using TFutureStatus = NThreading::TFuture<TStatus>;
 
-public:
     ~TProgram() override;
 
     void SetLanguageVersion(TLangVersion version);
@@ -435,7 +434,6 @@ private:
     NThreading::TFuture<IGraphTransformer::TStatus> AsyncTransformWithFallback(bool applyAsyncChanges);
     void SaveExprRoot();
 
-private:
     std::optional<bool> CheckFallbackIssues(const TIssues& issues);
     void HandleSourceCode();
     void HandleTranslationSettings(NSQLTranslation::TTranslationSettings& settings);

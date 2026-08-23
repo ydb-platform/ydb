@@ -28,7 +28,6 @@ np.float32(3j)  # E: incompatible type
 np.float32([1.0, 0.0, 0.0])  # E: incompatible type
 np.complex64([])  # E: incompatible type
 
-np.complex64(1, 2)  # E: Too many arguments
 # TODO: protocols (can't check for non-existent protocols w/ __getattr__)
 
 np.datetime64(0)  # E: No overload variant
@@ -60,11 +59,11 @@ np.flexible(b"test")  # E: Cannot instantiate abstract class
 np.float64(value=0.0)  # E: Unexpected keyword argument
 np.int64(value=0)  # E: Unexpected keyword argument
 np.uint64(value=0)  # E: Unexpected keyword argument
-np.complex128(value=0.0j)  # E: Unexpected keyword argument
+np.complex128(value=0.0j)  # E: No overload variant
 np.str_(value='bob')  # E: No overload variant
 np.bytes_(value=b'test')  # E: No overload variant
 np.void(value=b'test')  # E: No overload variant
-np.bool_(value=True)  # E: Unexpected keyword argument
+np.bool(value=True)  # E: Unexpected keyword argument
 np.datetime64(value="2019")  # E: No overload variant
 np.timedelta64(value=0)  # E: Unexpected keyword argument
 
@@ -81,8 +80,6 @@ def func(a: np.float32) -> None: ...
 
 func(f2)  # E: incompatible type
 func(f8)  # E: incompatible type
-
-round(c8)  # E: No overload variant
 
 c8.__getnewargs__()  # E: Invalid self argument
 f2.__getnewargs__()  # E: Invalid self argument

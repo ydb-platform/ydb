@@ -27,7 +27,7 @@ Using the `SCRAM-SHA-256` mechanism for authenticating existing users may requir
 
 {% endnote %}
 
-Authentication requires:
+For authentication, you need:
 
 * `<user-name>` — username. For user management, see the [{#T}](../../security/authentication.md) section.
 * `<password>` — user password. For user management, see the [{#T}](../../security/authentication.md) section.
@@ -50,9 +50,9 @@ Note that the logic for forming `<sasl.username>` and `<sasl.password>` in cloud
 
 For authentication examples, see [Reading and Writing](./examples.md).
 
-### mTLS authentication {#mtls-auth}
+### mTLS authentication {#device-auth}
 
-To allow a Kafka client to authenticate via mTLS, perform the following steps.
+To allow a Kafka client to authenticate devices using mTLS, follow these steps.
 
 #### Creating server and client certificates
 
@@ -71,7 +71,7 @@ openssl req -new -x509 -days 3650 -key ca-key.pem -out ca-cert.pem -subj "/C=***
 ```
 
 
-2. Create a certificate for the server
+2. Create a server certificate
 
 
 ```bash
@@ -202,10 +202,10 @@ kafka_proxy_config:
   listening_port: your_port
 
   mtls_enable: true
-  key: "server-key.pem" # укажите правильные пути до файлов
+  key: "server-key.pem" # specify the correct paths to files
   cert: "server-cert.pem"
   ca: "ca-cert.pem"
-  enable_self_signed_certs: true # разрешаете ли вы самоподписанные сертификаты
+  enable_self_signed_certs: true # do you allow self-signed certificates
 ```
 
 
@@ -219,16 +219,16 @@ client_certificate_authorization:
       subject_terms:
         - short_name: CN
           suffixes:
-            - '.myhost.net' # нужно заменить на нужный суффикс
+            - '.myhost.net' # need to replace with the required suffix
       member_groups:
-        - user@cert # заменить на нужную member группу
+        - user@cert # replace with the required member group
   request_client_certificate: true
 ```
 
 
 For correct operation, you must use the same certificate as in the gRPC settings, so you need to specify the path to the same server certificate in the gRPC configuration.
 
-Currently, it is not possible to configure Kafka and gRPC with different server certificates or to specify the server certificate only in the kafka_proxy_config settings when using mTLS.
+Currently, it is not possible to configure Kafka and gRPC with different server certificates, or to specify the server certificate only in the kafka_proxy_config settings when using mTLS.
 
 
 ```yaml

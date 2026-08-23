@@ -7,6 +7,7 @@
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/sql_types/block.h>
+#include <yql/essentials/core/langver/feature.h>
 #include <yql/essentials/minikql/mkql_type_ops.h>
 #include <yql/essentials/parser/pg_catalog/catalog.h>
 
@@ -216,6 +217,14 @@ bool EnsureTypeHandleResourceType(const TExprNode& node, TExprContext& ctx);
 const TTypeAnnotationNode* MakeCodeResourceType(TExprContext& ctx);
 bool EnsureCodeResourceType(const TExprNode& node, TExprContext& ctx);
 
+bool EnsureAvailable(
+    TPositionHandle p,
+    const TFeature& f,
+    TExprContext& exprCtx,
+    const TTypeAnnotationContext& typeCtx);
+
+bool IsAvailable(const TFeature& f, const TTypeAnnotationContext& typeCtx);
+
 const TTypeAnnotationNode* MakeSequenceType(ETypeAnnotationKind sequenceKind, const TTypeAnnotationNode& itemType, TExprContext& ctx);
 
 template <bool Strong>
@@ -341,6 +350,9 @@ bool IsUniversalLiteral(const TExprNode::TPtr& node);
 TString GetTypeDiff(const TTypeAnnotationNode& left, const TTypeAnnotationNode& right);
 TString GetTypePrettyDiff(const TTypeAnnotationNode& left, const TTypeAnnotationNode& right);
 TExprNode::TPtr ExpandType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
+
+// Members with this prefix are reserved for YQL internal needs and must not be used by user data
+inline constexpr TStringBuf SystemMemberPrefix = "_yql_";
 
 bool IsSystemMember(const TStringBuf& memberName);
 

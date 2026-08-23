@@ -24,8 +24,11 @@ jobs:
     if: |
       github.event_name == 'workflow_dispatch' ||
       github.event.pull_request.state == 'open'
+    # Include event_name so rebuild_docs workflow_dispatch does not cancel the
+    # pull_request build. Dispatch runs on main and its check attaches to main
+    # SHA; only the pull_request run updates the PR's build-docs status (#48409).
     concurrency:
-      group: docs-build-${{ github.event_name == 'workflow_dispatch' && inputs.pull_number || github.event.pull_request.number }}
+      group: docs-build-${{ github.event_name }}-${{ github.event_name == 'workflow_dispatch' && inputs.pull_number || github.event.pull_request.number }}
       cancel-in-progress: true
     runs-on: ubuntu-latest
     permissions:
@@ -48,8 +51,8 @@ jobs:
         with:
           revision: "pr-${{ github.event_name == 'workflow_dispatch' && inputs.pull_number || github.event.pull_request.number }}-${{ steps.sha.outputs.value }}"
           src-root: "./ydb/docs"
-          cli-version: "4.59.12"
-          use-ya-opensource: true
+          cli-version: "stable"
+          use-ya-opensource: false
 
       - name: Fail on documentation build issues
         run: |

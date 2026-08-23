@@ -11,8 +11,7 @@
 
 #include <algorithm>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 using namespace NYql::NUdf;
 
@@ -22,28 +21,28 @@ template <typename From, typename To>
 class TRoundIntegralWrapper: public TMutableComputationNode<TRoundIntegralWrapper<From, To>> {
     using TSelf = TRoundIntegralWrapper<From, To>;
     using TBase = TMutableComputationNode<TSelf>;
-    typedef TBase TBaseComputation;
+    using TBaseComputation = TBase;
 
 public:
     TRoundIntegralWrapper(TComputationMutables& mutables, IComputationNode* source, bool down)
         : TBaseComputation(mutables)
-        , Source(source)
-        , Down(down)
+        , Source_(source)
+        , Down_(down)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        const auto value = Source->GetValue(ctx).Get<From>();
+        const auto value = Source_->GetValue(ctx).Get<From>();
         constexpr auto toMin = std::numeric_limits<To>::min();
         constexpr auto toMax = std::numeric_limits<To>::max();
 
         if constexpr (std::is_signed<From>::value && std::is_unsigned<To>::value) {
             if (value < 0) {
-                return Down ? TUnboxedValuePod() : TUnboxedValuePod(toMin);
+                return Down_ ? TUnboxedValuePod() : TUnboxedValuePod(toMin);
             }
 
             if (static_cast<std::make_unsigned_t<From>>(value) > toMax) {
-                return Down ? TUnboxedValuePod(toMax) : TUnboxedValuePod();
+                return Down_ ? TUnboxedValuePod(toMax) : TUnboxedValuePod();
             }
 
             return TUnboxedValuePod(static_cast<To>(value));
@@ -51,18 +50,18 @@ public:
 
         if constexpr (std::is_unsigned<From>::value && std::is_signed<To>::value) {
             if (value > static_cast<std::make_unsigned_t<To>>(toMax)) {
-                return Down ? TUnboxedValuePod(toMax) : TUnboxedValuePod();
+                return Down_ ? TUnboxedValuePod(toMax) : TUnboxedValuePod();
             }
 
             return TUnboxedValuePod(static_cast<To>(value));
         }
 
         if (value < toMin) {
-            return Down ? TUnboxedValuePod() : TUnboxedValuePod(toMin);
+            return Down_ ? TUnboxedValuePod() : TUnboxedValuePod(toMin);
         }
 
         if (value > toMax) {
-            return Down ? TUnboxedValuePod(toMax) : TUnboxedValuePod();
+            return Down_ ? TUnboxedValuePod(toMax) : TUnboxedValuePod();
         }
 
         return TUnboxedValuePod(static_cast<To>(value));
@@ -70,76 +69,76 @@ public:
 
 private:
     void RegisterDependencies() const final {
-        this->DependsOn(Source);
+        this->DependsOn(Source_);
     }
 
-    IComputationNode* const Source;
-    const bool Down;
+    IComputationNode* const Source_;
+    const bool Down_;
 };
 
 class TRoundDateTypeWrapper: public TMutableComputationNode<TRoundDateTypeWrapper> {
     using TSelf = TRoundDateTypeWrapper;
     using TBase = TMutableComputationNode<TSelf>;
-    typedef TBase TBaseComputation;
+    using TBaseComputation = TBase;
 
 public:
     TRoundDateTypeWrapper(TComputationMutables& mutables, IComputationNode* source, bool down, EDataSlot from, EDataSlot to)
         : TBaseComputation(mutables)
-        , Source(source)
-        , Down(down)
-        , From(from)
-        , To(to)
+        , Source_(source)
+        , Down_(down)
+        , From_(from)
+        , To_(to)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        constexpr i64 usInDay = 86400'000'000ll;
-        constexpr i64 usInSec = 1000'000ll;
+        constexpr i64 usInDay = 86400'000'000LL;
+        constexpr i64 usInSec = 1000'000LL;
 
         i64 us;
-        if (From == EDataSlot::Timestamp64) {
-            us = Source->GetValue(ctx).Get<i64>();
-        } else if (From == EDataSlot::Datetime64) {
-            us = usInSec * Source->GetValue(ctx).Get<i64>();
-        } else if (From == EDataSlot::Timestamp) {
-            us = static_cast<i64>(Source->GetValue(ctx).Get<ui64>());
-        } else if (From == EDataSlot::Datetime) {
-            us = usInSec * static_cast<i64>(Source->GetValue(ctx).Get<ui32>());
+        if (From_ == EDataSlot::Timestamp64) {
+            us = Source_->GetValue(ctx).Get<i64>();
+        } else if (From_ == EDataSlot::Datetime64) {
+            us = usInSec * Source_->GetValue(ctx).Get<i64>();
+        } else if (From_ == EDataSlot::Timestamp) {
+            us = static_cast<i64>(Source_->GetValue(ctx).Get<ui64>());
+        } else if (From_ == EDataSlot::Datetime) {
+            us = usInSec * static_cast<i64>(Source_->GetValue(ctx).Get<ui32>());
         } else {
-            Y_ENSURE(From == EDataSlot::Date32);
-            us = usInDay * static_cast<i64>(Source->GetValue(ctx).Get<i32>());
+            Y_ENSURE(From_ == EDataSlot::Date32);
+            us = usInDay * static_cast<i64>(Source_->GetValue(ctx).Get<i32>());
         }
 
-        if (To == EDataSlot::Date || To == EDataSlot::Date32) {
+        if (To_ == EDataSlot::Date || To_ == EDataSlot::Date32) {
             i64 rounded = us / usInDay;
             i64 rem = us % usInDay;
-            if (rem > 0 && !Down) {
+            if (rem > 0 && !Down_) {
                 rounded += 1;
-            } else if (rem < 0 && Down) {
+            } else if (rem < 0 && Down_) {
                 rounded -= 1;
             }
-            if (To == EDataSlot::Date32 && rounded <= MAX_DATE32) {
+            if (To_ == EDataSlot::Date32 && rounded <= MAX_DATE32) {
                 // lower bound check is not needed as RoundDown(MinTimestamp64) is valid value
                 return TUnboxedValuePod(static_cast<i32>(rounded));
-            } else if (To == EDataSlot::Date && rounded >= 0 && rounded < MAX_DATE) {
+            } else if (To_ == EDataSlot::Date && rounded >= 0 && rounded < MAX_DATE) {
                 return TUnboxedValuePod(static_cast<ui16>(rounded));
             }
-        } else if (To == EDataSlot::Datetime || To == EDataSlot::Datetime64) {
+        } else if (To_ == EDataSlot::Datetime || To_ == EDataSlot::Datetime64) {
             i64 rounded = us / usInSec;
             i64 rem = us % usInSec;
-            if (rem > 0 && !Down) {
+            if (rem > 0 && !Down_) {
                 rounded += 1;
-            } else if (rem < 0 && Down) {
+            } else if (rem < 0 && Down_) {
                 rounded -= 1;
             }
-            if (To == EDataSlot::Datetime64 && rounded <= MAX_DATETIME64) {
+            if (To_ == EDataSlot::Datetime64 && rounded <= MAX_DATETIME64) {
                 // lower bound check is not needed as RoundDown(MinTimestamp64) is valid value
                 return TUnboxedValuePod(rounded);
-            } else if (To == EDataSlot::Datetime && rounded >= 0 && rounded < MAX_DATETIME) {
+            } else if (To_ == EDataSlot::Datetime && rounded >= 0 && rounded < MAX_DATETIME) {
                 return TUnboxedValuePod(static_cast<ui32>(rounded));
             }
         } else {
-            Y_ENSURE(To == EDataSlot::Timestamp);
+            Y_ENSURE(To_ == EDataSlot::Timestamp);
             if (0 <= us && us < static_cast<i64>(MAX_TIMESTAMP)) {
                 return TUnboxedValuePod(static_cast<ui64>(us));
             }
@@ -149,31 +148,31 @@ public:
 
 private:
     void RegisterDependencies() const final {
-        this->DependsOn(Source);
+        this->DependsOn(Source_);
     }
 
-    IComputationNode* const Source;
-    const bool Down;
-    const EDataSlot From;
-    const EDataSlot To;
+    IComputationNode* const Source_;
+    const bool Down_;
+    const EDataSlot From_;
+    const EDataSlot To_;
 };
 
 class TRoundStringWrapper: public TMutableComputationNode<TRoundStringWrapper> {
     using TSelf = TRoundStringWrapper;
     using TBase = TMutableComputationNode<TSelf>;
-    typedef TBase TBaseComputation;
+    using TBaseComputation = TBase;
 
 public:
     TRoundStringWrapper(TComputationMutables& mutables, IComputationNode* source, bool down)
         : TBaseComputation(mutables)
-        , Source(source)
-        , Down(down)
+        , Source_(source)
+        , Down_(down)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        TUnboxedValue input = Source->GetValue(ctx);
-        auto output = NYql::RoundToNearestValidUtf8(input.AsStringRef(), Down);
+        TUnboxedValue input = Source_->GetValue(ctx);
+        auto output = NYql::RoundToNearestValidUtf8(input.AsStringRef(), Down_);
         if (!output) {
             return {};
         }
@@ -182,11 +181,11 @@ public:
 
 private:
     void RegisterDependencies() const final {
-        this->DependsOn(Source);
+        this->DependsOn(Source_);
     }
 
-    IComputationNode* const Source;
-    const bool Down;
+    IComputationNode* const Source_;
+    const bool Down_;
 };
 
 template <typename From>
@@ -268,5 +267,4 @@ IComputationNode* WrapRound(TCallable& callable, const TComputationNodeFactoryCo
     return nullptr;
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

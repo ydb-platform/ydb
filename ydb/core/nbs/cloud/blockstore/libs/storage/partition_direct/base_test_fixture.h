@@ -48,6 +48,7 @@ struct TBaseFixture: public NUnitTest::TBaseFixture
         FixtureVChunkIndex,
         DirectBlockGroupHostCount,
         DefaultPrimaryCount);
+    TDirtyMapStateProto DirtyMapStateProto;
     TDiskDescription DiskDescription{
         .DiskId = "disk-id",
         .TabletId = 100,
@@ -65,7 +66,10 @@ struct TBaseFixture: public NUnitTest::TBaseFixture
         std::make_shared<TTraceServiceMock>();
     TPartitionDirectServiceMockPtr PartitionDirectService;
     TDirectBlockGroupMockPtr DirectBlockGroup;
-    TBlocksDirtyMap DirtyMap{VChunkConfig, BlockSize, VChunkBlockCount};
+    TBlocksDirtyMapPtr DirtyMap = std::make_shared<TBlocksDirtyMap>(
+        VChunkConfig,
+        BlockSize,
+        VChunkBlockCount);
 
     THostIndex ExpectedHost = 0;
     TBlockRange64 ExpectedRange;
@@ -97,9 +101,12 @@ struct TBaseFixture: public NUnitTest::TBaseFixture
     void SetEraseResult(TDBGEraseResponse response, bool async);
     bool WaitEraseRequests(size_t count, TDuration timeout);
 
+    size_t ReplyUpdateRequests();
+    size_t ReplyUpdateDirtyMapStateRequests();
+
     static auto& AccessBlocksDirtyMap(TVChunk& vchunk)
     {
-        return vchunk.BlocksDirtyMap;
+        return *vchunk.BlocksDirtyMap;
     }
 
     static auto& AccessConfig(TVChunk& vchunk)
@@ -110,6 +117,17 @@ struct TBaseFixture: public NUnitTest::TBaseFixture
     static bool IsDirtyMapReady(TVChunk& vchunk)
     {
         return vchunk.DirtyMapReady.HasValue();
+    }
+
+    static bool IsDirtyMapStatePersisting(TVChunk& vchunk)
+    {
+        return vchunk.DirtyMapStatePersisting;
+    }
+
+    // Must be invoked on the vchunk's executor thread.
+    static void InvokePersistDirtyMap(TVChunk& vchunk)
+    {
+        vchunk.DoPersistDirtyMap();
     }
 
     static auto& AccessDirtyMapReadyPromise(TVChunk& vchunk)

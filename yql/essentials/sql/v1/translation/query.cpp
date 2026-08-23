@@ -1985,6 +1985,11 @@ public:
             actions = L(actions, Q(Y(Q("dropChangefeed"), name)));
         }
 
+        for (const auto& index : Params_.RebuildIndexes) {
+            const auto& desc = CreateAlterIndex(index, *this);
+            actions = L(actions, Q(Y(Q("rebuildIndex"), Q(desc))));
+        }
+
         if (Params_.Compact) {
             auto settings = Y();
             if (Params_.Compact->Cascade) {
@@ -3686,6 +3691,11 @@ public:
                     currentWorlds->Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource, BuildQuotedAtom(Pos_, pragmaName))));
                 }
 
+                if (ctx.EvaluateExprCache) {
+                    currentWorlds->Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
+                                                           BuildQuotedAtom(Pos_, "EnableEvaluateExprCache"))));
+                }
+
                 if (ctx.OrderedColumns) {
                     currentWorlds->Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
                                                            BuildQuotedAtom(Pos_, "OrderedColumns"))));
@@ -4652,7 +4662,7 @@ public:
         TScopedStatePtr scoped,
         bool replaceIfExists,
         bool existingOk)
-        : TBase(pos, objectId, params, context, scoped, replaceIfExists, existingOk, false)
+        : TBase(pos, objectId, params, context, scoped, replaceIfExists, existingOk, /*missingOk=*/false)
     {
     }
 
@@ -4688,7 +4698,7 @@ public:
         const TObjectOperatorContext& context,
         TScopedStatePtr scoped,
         bool missingOk)
-        : TBase(pos, objectId, params, context, scoped, false, false, missingOk)
+        : TBase(pos, objectId, params, context, scoped, /*replaceIfExists=*/false, /*existingOk=*/false, missingOk)
     {
     }
 
@@ -4722,7 +4732,7 @@ public:
         const TObjectOperatorContext& context,
         TScopedStatePtr scoped,
         bool missingOk)
-        : TBase(pos, objectId, TSecretParameters{}, context, scoped, false, false, missingOk)
+        : TBase(pos, objectId, TSecretParameters{}, context, scoped, /*replaceIfExists=*/false, /*existingOk=*/false, missingOk)
     {
     }
 

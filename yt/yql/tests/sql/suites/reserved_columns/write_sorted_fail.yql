@@ -1,0 +1,11 @@
+/* custom error:Cannot write column "_yql_column_0" with reserved prefix "_yql_" */
+-- YQLOVERYT-388: user columns clashed with auxiliary sort columns generated for ORDER BY
+INSERT INTO plato.Output WITH TRUNCATE
+SELECT
+    key    AS `_yql_column_0`,
+    subkey AS `_yql_column_1`,
+    value
+FROM plato.Input
+ORDER BY
+    `_yql_column_0` DESC,
+    `_yql_column_1` DESC;

@@ -379,11 +379,6 @@ NThreading::TFuture<TListPBufferResponse> TDirectBlockGroupMock::ListPBuffers(
     return ListPBuffersHandler(hostIndex);
 }
 
-NThreading::TFuture<TDBGDumpResponse> TDirectBlockGroupMock::Dump()
-{
-    return DumpHandler();
-}
-
 void TDirectBlockGroupMock::OnAddHostResult(
     const NProto::TError& error,
     THostIndex newHostIndex,
@@ -397,9 +392,14 @@ void TDirectBlockGroupMock::OnAddHostResult(
         std::move(pbufferId));
 }
 
-ui32 TDirectBlockGroupMock::GetNodeId(THostIndex host)
+ui32 TDirectBlockGroupMock::GetNodeId(THostIndex host) const
 {
     return host + 10;
+}
+
+NThreading::TFuture<TDBGDumpResponse> TDirectBlockGroupMock::Dump()
+{
+    return DumpHandler();
 }
 
 NThreading::TFuture<TDbgSnapshot>

@@ -327,7 +327,7 @@ class BalancingStrategy(IBalancingStrategy):
                         disk_is_better = False
 
                 if not disk_is_better:
-                    self._add_update_drive_status(request, pdisk, common.kikimr_bsconfig.EDriveStatus.INACTIVE)
+                    self._add_update_drive_status(request, pdisk, common.kikimr_bs3.EDriveStatus.INACTIVE)
                     inactive.append(pdisk)
             index = len(request.Command)
             self._add_reassign_cmd(request, vslot)

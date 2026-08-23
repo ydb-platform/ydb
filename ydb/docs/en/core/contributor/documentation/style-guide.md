@@ -5,7 +5,7 @@ The {{ ydb-short-name }} documentation style guide is designed to help writers c
 ## Core principles {#core-principles}
 
 - **Target audience understanding:**
-  - Before starting a new article or improving an existing one, take a moment to narrow down its target audience. Consider their specific role ([application developers](../../dev/index.md), [DevOps engineers](../../dev/index.md), [security engineers](../../security/index.md), etc.), technical background, and familiarity with the subject and {{ ydb-short-name }} in general.
+  - Before starting a new article or improving an existing one, take a moment to narrow down its target audience. Consider their specific role ([application developers](../../dev/index.md), [cluster administrators](../../devops/index.md), [security engineers](../../security/index.md), etc.), technical background, and familiarity with the subject and {{ ydb-short-name }} in general.
   - Ensure the text is understandable to the article's intended audience.
 - **Clear language:**
   - Use plain, simple language that directly communicates ideas.

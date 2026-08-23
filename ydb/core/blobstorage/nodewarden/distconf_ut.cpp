@@ -23,7 +23,63 @@ namespace NBlobStorageNodeWardenTest{
 
 Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
 
-    Y_UNIT_TEST(AllocateStaticGroupRespectsExpectedSlotSizeFromBaseConfig) {
+    Y_UNIT_TEST(StaticGroupReassignParamsPreserveCommandAndTopology) {
+        NKikimrBlobStorage::TStorageConfig config;
+        NKikimrBlobStorage::TBaseConfig baseConfig;
+        NKikimrBlobStorage::TNodeWardenServiceSet serviceSet;
+        NKikimrBlobStorage::TGroupInfo group;
+        group.SetGroupID(0);
+        group.SetGroupGeneration(1);
+        group.SetErasureSpecies(TBlobStorageGroupType::ErasureNone);
+
+        const TVDiskID vdiskId(TGroupId::Zero(), 1, 0, 0, 0);
+        auto *currentVDisk = serviceSet.AddVDisks();
+        VDiskIDFromVDiskID(vdiskId, currentVDisk->MutableVDiskID());
+        currentVDisk->MutableVDiskLocation()->SetNodeID(1);
+        currentVDisk->MutableVDiskLocation()->SetPDiskID(1);
+
+        auto *donorVDisk = serviceSet.AddVDisks();
+        VDiskIDFromVDiskID(TVDiskID(TGroupId::Zero(), 0, 0, 0, 0), donorVDisk->MutableVDiskID());
+        donorVDisk->MutableVDiskLocation()->SetNodeID(9);
+        donorVDisk->MutableVDiskLocation()->SetPDiskID(3);
+        donorVDisk->SetEntityStatus(NKikimrBlobStorage::EEntityStatus::DESTROY);
+
+        NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot::TReassignGroupDisk command;
+        VDiskIDFromVDiskID(vdiskId, command.MutableVDiskId());
+        command.MutablePDiskId()->SetNodeId(2);
+        command.MutablePDiskId()->SetPDiskId(4);
+        command.SetConvertToDonor(true);
+        command.SetAllowUnusableDisks(true);
+        command.SetIsSelfHealReasonDecommit(true);
+        command.SetWithAttentionToReplication(true);
+        command.SetTryToRelocateBrokenDisksLocallyFirst(true);
+        command.SetFromSelfHeal(true);
+
+        NKikimr::NStorage::TDistributedConfigKeeper::TStaticGroupReassignments reassignments;
+        auto params = NStorage::TDistributedConfigKeeper::BuildStaticGroupReassignParams(&config, &baseConfig, command,
+                                                                                         group, serviceSet, &reassignments);
+
+        UNIT_ASSERT_VALUES_EQUAL(params.Config, &config);
+        UNIT_ASSERT_VALUES_EQUAL(params.BaseConfig, &baseConfig);
+        UNIT_ASSERT_VALUES_EQUAL(params.GroupId, TGroupId::Zero());
+        UNIT_ASSERT_VALUES_EQUAL(params.GroupGeneration, 2u);
+        UNIT_ASSERT_VALUES_EQUAL(params.GroupType.GetErasure(), TBlobStorageGroupType::ErasureNone);
+        UNIT_ASSERT_VALUES_EQUAL(params.ReplacedDisks.at(TVDiskIdShort(vdiskId)), NBsController::TPDiskId(2, 4));
+        UNIT_ASSERT(params.ForbiddenPDisks.contains(NBsController::TPDiskId(9, 3)));
+        UNIT_ASSERT(params.ConvertToDonor);
+        UNIT_ASSERT(!params.IgnoreVSlotQuotaCheck);
+        UNIT_ASSERT(params.AllowUnusableDisks);
+        UNIT_ASSERT(!params.SettleOnlyOnOperationalDisks);
+        UNIT_ASSERT(params.IsSelfHealReasonDecommit);
+        UNIT_ASSERT(!params.PreferLessOccupiedRack);
+        UNIT_ASSERT(params.WithAttentionToReplication);
+        UNIT_ASSERT(!params.UseSelfHealLocalPolicy);
+        UNIT_ASSERT(params.TryToRelocateBrokenDisksLocallyFirst);
+        UNIT_ASSERT(params.ApplySelfHealNodeAllowList);
+        UNIT_ASSERT_VALUES_EQUAL(params.Reassignments, &reassignments);
+    }
+
+    Y_UNIT_TEST(AllocateStaticGroupTargetSpaceCheck) {
         NKikimr::NStorage::TDistributedConfigKeeper keeper(nullptr, nullptr, true);
 
         NKikimrBlobStorage::TStorageConfig config;
@@ -60,6 +116,8 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
         selfManagementConfig->MutableGeometry()->CopyFrom(geometry);
         selfManagementConfig->SetPDiskType(NKikimrBlobStorage::SSD);
 
+        NKikimrBlobStorage::TStorageConfig configWithIgnoredCheck = config;
+
         try {
             keeper.AllocateStaticGroup({
                 .Config = &config,
@@ -75,6 +133,16 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
             UNIT_ASSERT_C(error.Contains("group allocation failed"), error);
             UNIT_ASSERT_C(error.Contains("-v"), error);
         }
+
+        UNIT_ASSERT_NO_EXCEPTION(keeper.AllocateStaticGroup({
+            .Config = &configWithIgnoredCheck,
+            .GroupId = TGroupId::Zero(),
+            .GroupGeneration = 1,
+            .GroupType = TBlobStorageGroupType(TBlobStorageGroupType::ErasureNone),
+            .RequiredSpace = 200,
+            .BaseConfig = &baseConfig,
+            .IgnoreVSlotQuotaCheck = true,
+        }));
     }
 
     Y_UNIT_TEST(AllocateStaticGroupOnFreshDrivesWithExpectedSlotSize) {
@@ -128,22 +196,26 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
         UNIT_ASSERT_VALUES_EQUAL(serviceSet.GroupsSize(), 1);
     }
 
-    NKikimrConfig::TDomainsConfig::TStateStorage GenerateSimpleStateStorage(ui32 nodes, std::unordered_set<ui32> usedNodes = {}, ui32 overrideReplicasInRingCount = 0, ui32 overrideRingsCount = 0, ui32 replicasSpecificVolume = 200, std::unordered_set<ui32> nodesToUse = {}, bool *goodConfigOut = nullptr, const NKikimrConfig::TDomainsConfig::TStateStorage& oldSS = {}, bool automaticManagement = true) {
+    NKikimrConfig::TStateStorageConfig GenerateSimpleStateStorage(ui32 nodes, std::unordered_set<ui32> usedNodes = {},
+            ui32 overrideReplicasInRingCount = 0, ui32 overrideRingsCount = 0, ui32 replicasSpecificVolume = 200,
+            std::unordered_set<ui32> nodesToUse = {}, bool *goodConfigOut = nullptr,
+            const NKikimrConfig::TStateStorageConfig& oldSS = {}, bool automaticManagement = true) {
         NKikimr::NStorage::TDistributedConfigKeeper keeper(nullptr, nullptr, true);
-        NKikimrConfig::TDomainsConfig::TStateStorage ss;
+        NKikimrConfig::TStateStorageConfig ss;
         NKikimrBlobStorage::TStorageConfig config;
         for (ui32 i : xrange(nodes)) {
             auto *node = config.AddAllNodes();
             node->SetNodeId(i + 1);
         }
-        bool goodConfig = keeper.GenerateStateStorageConfig(&ss, config, usedNodes, nodesToUse, oldSS, automaticManagement, overrideReplicasInRingCount, overrideRingsCount, replicasSpecificVolume);
+        bool goodConfig = keeper.GenerateStateStorageConfig(&ss, config, usedNodes, nodesToUse, &oldSS,
+            automaticManagement, overrideReplicasInRingCount, overrideRingsCount, replicasSpecificVolume);
         if (goodConfigOut) {
             *goodConfigOut = goodConfig;
         }
         return ss;
     }
 
-    NKikimrConfig::TDomainsConfig::TStateStorage GenerateDCStateStorage(
+    NKikimrConfig::TStateStorageConfig GenerateDCStateStorage(
         ui32 dcCnt
         , ui32 racksCnt
         , ui32 nodesInRack
@@ -172,7 +244,7 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
                 }
             }
         }
-        NKikimrConfig::TDomainsConfig::TStateStorage oldSS;
+        NKikimrConfig::TStateStorageConfig oldSS;
         if (!oldConfig.empty()) {
             auto* rg = oldSS.AddRingGroups();
             rg->SetNToSelect(oldNToSelect);
@@ -181,18 +253,19 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
                 ssRing->AddNode(node);
             }
         }
-        NKikimrConfig::TDomainsConfig::TStateStorage ss;
+        NKikimrConfig::TStateStorageConfig ss;
         for (auto [nodeId, state] : nodesState) {
             keeper.SelfHealNodesState[nodeId] = state;
         }
-        bool goodConfig = keeper.GenerateStateStorageConfig(&ss, config, usedNodes, nodesToUse, oldSS, automaticManagement, overrideReplicasInRingCount, overrideRingsCount, replicasSpecificVolume);
+        bool goodConfig = keeper.GenerateStateStorageConfig(&ss, config, usedNodes, nodesToUse, &oldSS,
+            automaticManagement, overrideReplicasInRingCount, overrideRingsCount, replicasSpecificVolume);
         if (goodConfigOut) {
             *goodConfigOut = goodConfig;
         }
         return ss;
     }
 
-    void CheckStateStorage(const NKikimrConfig::TDomainsConfig::TStateStorage& ss, ui32 nToSelect, const std::unordered_set<ui32>& nodes) {
+    void CheckStateStorage(const NKikimrConfig::TStateStorageConfig& ss, ui32 nToSelect, const std::unordered_set<ui32>& nodes) {
         auto &rg = ss.GetRingGroups(0);
         Cerr << "Actual: " << ss << " Expected: NToSelect: " << nToSelect << Endl;
         UNIT_ASSERT_EQUAL(rg.GetNToSelect(), nToSelect);
@@ -224,7 +297,7 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
         CheckStateStorage(GenerateDCStateStorage(3, 3, 3), 9, {1, 4, 7, 10, 13, 16, 19, 22, 25});
     }
 
-    void CheckStateStorage2(const NKikimrConfig::TDomainsConfig::TStateStorage& ss, std::string expected) {
+    void CheckStateStorage2(const NKikimrConfig::TStateStorageConfig& ss, std::string expected) {
         TString actual = TStringBuilder() << ss;
         if (actual != expected) {
             Cerr << "Err Actual: " << ss << Endl;
@@ -447,7 +520,7 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
     // untouched and report the result as "good", regardless of node states or overrides.
 
     Y_UNIT_TEST(AutomaticManagementDisabledKeepsOldConfigUnchanged) {
-        NKikimrConfig::TDomainsConfig::TStateStorage oldSS;
+        NKikimrConfig::TStateStorageConfig oldSS;
         {
             auto* rg = oldSS.AddRingGroups();
             rg->SetNToSelect(1);
@@ -464,7 +537,7 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
     }
 
     Y_UNIT_TEST(AutomaticManagementEnabledGeneratesNewConfig) {
-        NKikimrConfig::TDomainsConfig::TStateStorage oldSS;
+        NKikimrConfig::TStateStorageConfig oldSS;
         {
             auto* rg = oldSS.AddRingGroups();
             rg->SetNToSelect(1);
@@ -485,7 +558,7 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
         // Even if nodesToUse/overrides would normally produce a bad config, disabling automatic
         // management must short-circuit generation entirely and still report "good", since the
         // old config is kept as-is and self-heal is not supposed to touch it.
-        NKikimrConfig::TDomainsConfig::TStateStorage oldSS;
+        NKikimrConfig::TStateStorageConfig oldSS;
         {
             auto* rg = oldSS.AddRingGroups();
             rg->SetNToSelect(1);
@@ -503,7 +576,7 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
         // usedNodes with the node IDs taken from oldConfig, because usedNodes is shared across
         // the StateStorage / StateStorageBoard / SchemeBoard generator invocations, and subsequent
         // subsystem generators rely on it to avoid co-locating replicas on the same nodes.
-        NKikimrConfig::TDomainsConfig::TStateStorage oldSS;
+        NKikimrConfig::TStateStorageConfig oldSS;
         {
             auto* rg = oldSS.AddRingGroups();
             rg->SetNToSelect(2);
@@ -522,14 +595,14 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
         // usedNodes is passed by value into GenerateSimpleStateStorage's helper, so re-derive it
         // directly via the keeper API to check that the reference-passed set was actually filled.
         NKikimr::NStorage::TDistributedConfigKeeper keeper(nullptr, nullptr, true);
-        NKikimrConfig::TDomainsConfig::TStateStorage ssOut;
+        NKikimrConfig::TStateStorageConfig ssOut;
         NKikimrBlobStorage::TStorageConfig config;
         for (ui32 i : xrange(8)) {
             auto *node = config.AddAllNodes();
             node->SetNodeId(i + 1);
         }
         std::unordered_set<ui32> refUsedNodes;
-        bool refGoodConfig = keeper.GenerateStateStorageConfig(&ssOut, config, refUsedNodes, {}, oldSS,
+        bool refGoodConfig = keeper.GenerateStateStorageConfig(&ssOut, config, refUsedNodes, {}, &oldSS,
             /*automaticManagement=*/false, 0, 0, 200);
         UNIT_ASSERT(refGoodConfig);
         UNIT_ASSERT(refUsedNodes.contains(3));
@@ -542,7 +615,7 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
         // management disabled (its nodes are kept as-is), while StateStorageBoard has it enabled.
         // The board generator must avoid nodes already occupied by StateStorage replicas, which
         // are threaded through the shared usedNodes set.
-        NKikimrConfig::TDomainsConfig::TStateStorage oldStateStorage;
+        NKikimrConfig::TStateStorageConfig oldStateStorage;
         {
             auto* rg = oldStateStorage.AddRingGroups();
             rg->SetNToSelect(3);
@@ -569,19 +642,19 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
         std::unordered_set<ui32> usedNodes;
 
         // Step 1: StateStorage generation with automatic management disabled.
-        NKikimrConfig::TDomainsConfig::TStateStorage stateStorageOut;
+        NKikimrConfig::TStateStorageConfig stateStorageOut;
         bool goodConfig1 = keeper.GenerateStateStorageConfig(&stateStorageOut, config, usedNodes, {},
-            oldStateStorage, /*automaticManagement=*/false, 0, 0, 200);
+            &oldStateStorage, /*automaticManagement=*/false, 0, 0, 200);
         UNIT_ASSERT(goodConfig1);
         UNIT_ASSERT(usedNodes.contains(1));
         UNIT_ASSERT(usedNodes.contains(2));
         UNIT_ASSERT(usedNodes.contains(3));
 
         // Step 2: StateStorageBoard generation with automatic management enabled, sharing usedNodes.
-        NKikimrConfig::TDomainsConfig::TStateStorage boardOut;
-        NKikimrConfig::TDomainsConfig::TStateStorage emptyOldBoard;
+        NKikimrConfig::TStateStorageConfig boardOut;
+        NKikimrConfig::TStateStorageConfig emptyOldBoard;
         bool goodConfig2 = keeper.GenerateStateStorageConfig(&boardOut, config, usedNodes, {},
-            emptyOldBoard, /*automaticManagement=*/true, 0, 0, 200);
+            &emptyOldBoard, /*automaticManagement=*/true, 0, 0, 200);
         UNIT_ASSERT(goodConfig2);
 
         // None of the nodes selected for the board must overlap with the nodes already used by
@@ -888,9 +961,10 @@ Y_UNIT_TEST_SUITE(TDistconfStaticGroupSelfHealTest) {
             gloc->SetPDiskGuid(nodeId * 1000 + pdiskId);
         }
 
-        ui32 GetGroupVDiskNode() const {
+        NBsController::TPDiskId GetGroupVDiskPDisk() const {
             const auto& group = Config.GetBlobStorageConfig().GetServiceSet().GetGroups(0);
-            return group.GetRings(0).GetFailDomains(0).GetVDiskLocations(0).GetNodeID();
+            const auto& location = group.GetRings(0).GetFailDomains(0).GetVDiskLocations(0);
+            return {location.GetNodeID(), location.GetPDiskID()};
         }
 
         void AddMultiVDiskGroupOn(const std::vector<ui32>& nodeIds, i32 erasureSpecies) {
@@ -984,6 +1058,16 @@ Y_UNIT_TEST_SUITE(TDistconfStaticGroupSelfHealTest) {
             UNIT_FAIL("PDisk not found");
         }
 
+        void SetPDiskMaintenanceStatus(ui32 nodeId, NKikimrBlobStorage::TMaintenanceStatus::E status) {
+            for (auto& pdisk : *BaseConfig.MutablePDisk()) {
+                if (pdisk.GetNodeId() == nodeId) {
+                    pdisk.SetMaintenanceStatus(status);
+                    return;
+                }
+            }
+            UNIT_FAIL("PDisk not found");
+        }
+
         ui32 GetGroupGeneration() const {
             return Config.GetBlobStorageConfig().GetServiceSet().GetGroups(0).GetGroupGeneration();
         }
@@ -997,34 +1081,48 @@ Y_UNIT_TEST_SUITE(TDistconfStaticGroupSelfHealTest) {
         return g;
     }
 
+    struct TReallocateOptions {
+        i32 ErasureSpecies = TBlobStorageGroupType::ErasureNone;
+        ui32 NumFailDomains = 1;
+        bool AllowUnusableDisks = false;
+        bool SettleOnlyOnOperationalDisks = false;
+        NBsController::TPDiskId TargetPDiskId;
+        TVDiskIdShort VDiskId = TVDiskIdShort(0, 0, 0);
+        NKikimr::NStorage::TDistributedConfigKeeper::TStaticGroupReassignments *Reassignments = nullptr;
+        bool PreferLessOccupiedRack = false;
+        bool WithAttentionToReplication = false;
+        bool UseSelfHealLocalPolicy = false;
+        bool TryToRelocateBrokenDisksLocallyFirst = false;
+    };
+
     void Reallocate(TSetup& s, const NProtoBuf::RepeatedField<ui32>& allowedNodeIds, bool applyNodeAllowList,
-            i32 erasureSpecies = TBlobStorageGroupType::ErasureNone, ui32 numFailDomains = 1,
-            bool allowUnusableDisks = false, bool settleOnlyOnOperationalDisks = false,
-            NBsController::TPDiskId targetPDiskId = {},
-            TVDiskIdShort vdiskId = TVDiskIdShort(0, 0, 0),
-            NKikimr::NStorage::TDistributedConfigKeeper::TStaticGroupReassignments *reassignments = nullptr) {
+            TReallocateOptions options = {}) {
         auto *selfManagementConfig = s.Config.MutableSelfManagementConfig();
-        selfManagementConfig->MutableGeometry()->CopyFrom(Geometry(numFailDomains));
+        selfManagementConfig->MutableGeometry()->CopyFrom(Geometry(options.NumFailDomains));
         selfManagementConfig->SetPDiskType(NKikimrBlobStorage::EPDiskType::ROT);
         selfManagementConfig->MutableStaticGroupSelfHealAllowedNodes()->CopyFrom(allowedNodeIds);
 
         NKikimr::NStorage::TDistributedConfigKeeper keeper(nullptr, nullptr, true);
         THashMap<TVDiskIdShort, NBsController::TPDiskId> replacedDisks;
-        replacedDisks.emplace(vdiskId, targetPDiskId);
+        replacedDisks.emplace(options.VDiskId, options.TargetPDiskId);
         NBsController::TGroupMapper::TForbiddenPDisks forbid;
         keeper.AllocateStaticGroup({
             .Config = &s.Config,
             .GroupId = TGroupId::FromValue(0),
             .GroupGeneration = 2,
-            .GroupType = TBlobStorageGroupType((TBlobStorageGroupType::EErasureSpecies)erasureSpecies),
+            .GroupType = TBlobStorageGroupType(static_cast<TBlobStorageGroupType::EErasureSpecies>(options.ErasureSpecies)),
             .ReplacedDisks = std::move(replacedDisks),
             .ForbiddenPDisks = std::move(forbid),
             .BaseConfig = &s.BaseConfig,
             .IgnoreVSlotQuotaCheck = true,
-            .AllowUnusableDisks = allowUnusableDisks,
-            .SettleOnlyOnOperationalDisks = settleOnlyOnOperationalDisks,
+            .AllowUnusableDisks = options.AllowUnusableDisks,
+            .SettleOnlyOnOperationalDisks = options.SettleOnlyOnOperationalDisks,
+            .PreferLessOccupiedRack = options.PreferLessOccupiedRack,
+            .WithAttentionToReplication = options.WithAttentionToReplication,
+            .UseSelfHealLocalPolicy = options.UseSelfHealLocalPolicy,
+            .TryToRelocateBrokenDisksLocallyFirst = options.TryToRelocateBrokenDisksLocallyFirst,
             .ApplySelfHealNodeAllowList = applyNodeAllowList,
-            .Reassignments = reassignments,
+            .Reassignments = options.Reassignments,
         });
     }
 
@@ -1059,13 +1157,13 @@ Y_UNIT_TEST_SUITE(TDistconfStaticGroupSelfHealTest) {
     Y_UNIT_TEST(RespectsNodeAllowList) {
         TSetup s = MakeSetup();
         Reallocate(s, NodeIds({3}), /*applyNodeAllowList=*/ true);
-        UNIT_ASSERT_VALUES_EQUAL(s.GetGroupVDiskNode(), 3u);
+        UNIT_ASSERT_VALUES_EQUAL(s.GetGroupVDiskPDisk().NodeId, 3u);
     }
 
     Y_UNIT_TEST(RespectsNodeAllowListAnotherNode) {
         TSetup s = MakeSetup();
         Reallocate(s, NodeIds({4}), /*applyNodeAllowList=*/ true);
-        UNIT_ASSERT_VALUES_EQUAL(s.GetGroupVDiskNode(), 4u);
+        UNIT_ASSERT_VALUES_EQUAL(s.GetGroupVDiskPDisk().NodeId, 4u);
     }
 
     Y_UNIT_TEST(FailsWhenNoAllowedNodeAvailable) {
@@ -1092,7 +1190,7 @@ Y_UNIT_TEST_SUITE(TDistconfStaticGroupSelfHealTest) {
         s.SetNodeConnected(4, false);
         s.SetNodeConnected(5, false);
         Reallocate(s, NodeIds({}), false);
-        UNIT_ASSERT_VALUES_EQUAL(s.GetGroupVDiskNode(), 3u);
+        UNIT_ASSERT_VALUES_EQUAL(s.GetGroupVDiskPDisk().NodeId, 3u);
     }
 
     Y_UNIT_TEST(FallsBackToNonOperationalPDiskByDefault) {
@@ -1109,8 +1207,7 @@ Y_UNIT_TEST_SUITE(TDistconfStaticGroupSelfHealTest) {
             s.SetNodeConnected(nodeId, false);
         }
         UNIT_ASSERT_EXCEPTION(
-            Reallocate(s, NodeIds({}), false, TBlobStorageGroupType::ErasureNone, 1, false,
-                /*settleOnlyOnOperationalDisks=*/ true),
+            Reallocate(s, NodeIds({}), false, {.SettleOnlyOnOperationalDisks = true}),
             NKikimr::NStorage::TDistributedConfigKeeper::TExConfigError);
     }
 
@@ -1121,16 +1218,14 @@ Y_UNIT_TEST_SUITE(TDistconfStaticGroupSelfHealTest) {
             s.SetNodeConnected(nodeId, false);
         }
         UNIT_ASSERT_EXCEPTION(
-            Reallocate(s, NodeIds({}), false, TBlobStorageGroupType::ErasureNone, 1, false,
-                /*settleOnlyOnOperationalDisks=*/ true),
+            Reallocate(s, NodeIds({}), false, {.SettleOnlyOnOperationalDisks = true}),
             NKikimr::NStorage::TDistributedConfigKeeper::TExConfigError);
     }
 
     Y_UNIT_TEST(RejectsUnknownVDiskWithoutChangingGeneration) {
         TSetup s = MakeSetup();
         UNIT_ASSERT_EXCEPTION(
-            Reallocate(s, NodeIds({}), false, TBlobStorageGroupType::ErasureNone, 1, false, false, {},
-                TVDiskIdShort(0, 1, 0)),
+            Reallocate(s, NodeIds({}), false, {.VDiskId = TVDiskIdShort(0, 1, 0)}),
             NKikimr::NStorage::TDistributedConfigKeeper::TExConfigError);
         UNIT_ASSERT_VALUES_EQUAL(s.GetGroupGeneration(), 1u);
     }
@@ -1139,8 +1234,7 @@ Y_UNIT_TEST_SUITE(TDistconfStaticGroupSelfHealTest) {
         TSetup s = MakeSetup();
         s.SetPDiskDriveStatus(2, NKikimrBlobStorage::EDriveStatus::INACTIVE);
         UNIT_ASSERT_EXCEPTION(
-            Reallocate(s, NodeIds({}), false, TBlobStorageGroupType::ErasureNone, 1, false, false,
-                NBsController::TPDiskId(2, 1)),
+            Reallocate(s, NodeIds({}), false, {.TargetPDiskId = NBsController::TPDiskId(2, 1)}),
             NKikimr::NStorage::TDistributedConfigKeeper::TExConfigError);
     }
 
@@ -1148,8 +1242,10 @@ Y_UNIT_TEST_SUITE(TDistconfStaticGroupSelfHealTest) {
         TSetup s = MakeSetup();
         s.SetNodeConnected(2, false);
         UNIT_ASSERT_EXCEPTION(
-            Reallocate(s, NodeIds({}), false, TBlobStorageGroupType::ErasureNone, 1, false, true,
-                NBsController::TPDiskId(2, 1)),
+            Reallocate(s, NodeIds({}), false, {
+                .SettleOnlyOnOperationalDisks = true,
+                .TargetPDiskId = NBsController::TPDiskId(2, 1),
+            }),
             NKikimr::NStorage::TDistributedConfigKeeper::TExConfigError);
     }
 
@@ -1157,9 +1253,11 @@ Y_UNIT_TEST_SUITE(TDistconfStaticGroupSelfHealTest) {
         TSetup s = MakeSetup();
         NKikimr::NStorage::TDistributedConfigKeeper::TStaticGroupReassignments reassignments;
         UNIT_ASSERT_NO_EXCEPTION(
-            Reallocate(s, NodeIds({}), false, TBlobStorageGroupType::ErasureNone, 1, false, false,
-                NBsController::TPDiskId(3, 1), TVDiskIdShort(0, 0, 0), &reassignments));
-        UNIT_ASSERT_VALUES_EQUAL(s.GetGroupVDiskNode(), 3u);
+            Reallocate(s, NodeIds({}), false, {
+                .TargetPDiskId = NBsController::TPDiskId(3, 1),
+                .Reassignments = &reassignments,
+            }));
+        UNIT_ASSERT_VALUES_EQUAL(s.GetGroupVDiskPDisk().NodeId, 3u);
 
         UNIT_ASSERT_VALUES_EQUAL(reassignments.size(), 1u);
         const auto it = reassignments.find(TVDiskIdShort(0, 0, 0));
@@ -1176,7 +1274,10 @@ Y_UNIT_TEST_SUITE(TDistconfStaticGroupSelfHealTest) {
 
     Y_UNIT_TEST(Block42KeepsExistingVDisksOnNonAllowedNodes) {
         TSetup s = MakeBlock42Setup();
-        Reallocate(s, NodeIds({10}), /*applyNodeAllowList=*/ true, TBlobStorageGroupType::Erasure4Plus2Block, /*numFailDomains=*/ 8);
+        Reallocate(s, NodeIds({10}), /*applyNodeAllowList=*/ true, {
+            .ErasureSpecies = TBlobStorageGroupType::Erasure4Plus2Block,
+            .NumFailDomains = 8,
+        });
 
         const std::vector<ui32> domainNodes = s.GetGroupDomainNodes();
         UNIT_ASSERT_VALUES_EQUAL(domainNodes.size(), 8u);
@@ -1189,7 +1290,10 @@ Y_UNIT_TEST_SUITE(TDistconfStaticGroupSelfHealTest) {
     Y_UNIT_TEST(Block42FailsWhenAllowedNodeConflictsWithExistingDomain) {
         TSetup s = MakeBlock42Setup();
         UNIT_ASSERT_EXCEPTION(
-            Reallocate(s, NodeIds({2}), /*applyNodeAllowList=*/ true, TBlobStorageGroupType::Erasure4Plus2Block, /*numFailDomains=*/ 8),
+            Reallocate(s, NodeIds({2}), /*applyNodeAllowList=*/ true, {
+                .ErasureSpecies = TBlobStorageGroupType::Erasure4Plus2Block,
+                .NumFailDomains = 8,
+            }),
             NKikimr::NStorage::TDistributedConfigKeeper::TExConfigError);
     }
 
@@ -1197,7 +1301,10 @@ Y_UNIT_TEST_SUITE(TDistconfStaticGroupSelfHealTest) {
         TSetup s = MakeBlock42Setup();
         s.SetPDiskType(2, NKikimrBlobStorage::EPDiskType::SSD);
         UNIT_ASSERT_EXCEPTION(
-            Reallocate(s, NodeIds({}), false, TBlobStorageGroupType::Erasure4Plus2Block, /*numFailDomains=*/ 8),
+            Reallocate(s, NodeIds({}), false, {
+                .ErasureSpecies = TBlobStorageGroupType::Erasure4Plus2Block,
+                .NumFailDomains = 8,
+            }),
             NKikimr::NStorage::TDistributedConfigKeeper::TExConfigError);
     }
 
@@ -1205,9 +1312,132 @@ Y_UNIT_TEST_SUITE(TDistconfStaticGroupSelfHealTest) {
         TSetup s = MakeBlock42Setup();
         s.SetPDiskType(2, NKikimrBlobStorage::EPDiskType::SSD);
         UNIT_ASSERT_NO_EXCEPTION(
-            Reallocate(s, NodeIds({}), false, TBlobStorageGroupType::Erasure4Plus2Block, /*numFailDomains=*/ 8,
-                /*allowUnusableDisks=*/ true));
+            Reallocate(s, NodeIds({}), false, {
+                .ErasureSpecies = TBlobStorageGroupType::Erasure4Plus2Block,
+                .NumFailDomains = 8,
+                .AllowUnusableDisks = true,
+            }));
         UNIT_ASSERT_VALUES_EQUAL(s.GetGroupDomainNodes()[1], 2u);
+    }
+
+    Y_UNIT_TEST(RelocatesBrokenDiskLocallyFirst) {
+        TSetup s = MakeSetup();
+        s.AddCandidatePDisk(1, 2);
+
+        Reallocate(s, NodeIds({}), false, {
+            .TryToRelocateBrokenDisksLocallyFirst = true,
+        });
+
+        UNIT_ASSERT_VALUES_EQUAL(s.GetGroupVDiskPDisk(), NBsController::TPDiskId(1, 2));
+    }
+
+    Y_UNIT_TEST(SelfHealLocalPolicyDoesNotFallbackToAnotherNode) {
+        TSetup s = MakeSetup();
+
+        UNIT_ASSERT_EXCEPTION(Reallocate(s, NodeIds({}), false, {.UseSelfHealLocalPolicy = true}),
+                              NKikimr::NStorage::TDistributedConfigKeeper::TExConfigError);
+    }
+
+    Y_UNIT_TEST(RejectsMaintenancePDiskWhenOperationalRequired) {
+        TSetup s = MakeSetup();
+        s.SetPDiskMaintenanceStatus(2, NKikimrBlobStorage::TMaintenanceStatus::NO_NEW_VDISKS);
+        for (ui32 nodeId = 3; nodeId <= 5; ++nodeId) {
+            s.SetNodeConnected(nodeId, false);
+        }
+
+        UNIT_ASSERT_EXCEPTION(Reallocate(s, NodeIds({}), false, {.SettleOnlyOnOperationalDisks = true}),
+                              NKikimr::NStorage::TDistributedConfigKeeper::TExConfigError);
+    }
+
+    Y_UNIT_TEST(DestroyedServiceSetDuplicateDoesNotAffectLocality) {
+        TSetup s = MakeBlock42Setup();
+
+        auto addBaseConfigVSlot = [&](ui32 groupId, ui32 nodeId, ui32 vslotId) {
+            auto *vslot = s.BaseConfig.AddVSlot();
+            vslot->MutableVSlotId()->SetNodeId(nodeId);
+            vslot->MutableVSlotId()->SetPDiskId(1);
+            vslot->MutableVSlotId()->SetVSlotId(vslotId);
+            vslot->SetGroupId(groupId);
+            vslot->SetGroupGeneration(1);
+            vslot->SetFailRealmIdx(0);
+            vslot->SetFailDomainIdx(0);
+            vslot->SetVDiskIdx(0);
+            vslot->SetStatus("READY");
+        };
+
+        for (ui32 groupId : {42u, 43u}) {
+            auto *group = s.BaseConfig.AddGroup();
+            group->SetGroupId(groupId);
+            group->SetGroupGeneration(1);
+            group->SetGroupSizeInUnits(1);
+        }
+
+        addBaseConfigVSlot(42, 2, 7); // group shared with a preserved PDisk
+        addBaseConfigVSlot(42, 10, 7); // stale locality on one replacement candidate
+        addBaseConfigVSlot(43, 9, 7); // keep candidate slot counts equal
+
+        auto *destroyed = s.Config.MutableBlobStorageConfig()->MutableServiceSet()->AddVDisks();
+        VDiskIDFromVDiskID(TVDiskID(TGroupId::FromValue(42), 1, 0, 0, 0), destroyed->MutableVDiskID());
+        destroyed->MutableVDiskLocation()->SetNodeID(10);
+        destroyed->MutableVDiskLocation()->SetPDiskID(1);
+        destroyed->MutableVDiskLocation()->SetVDiskSlotID(7);
+        destroyed->SetEntityStatus(NKikimrBlobStorage::EEntityStatus::DESTROY);
+
+        Reallocate(s, NodeIds({}), false, {
+            .ErasureSpecies = TBlobStorageGroupType::Erasure4Plus2Block,
+            .NumFailDomains = 8,
+        });
+
+        UNIT_ASSERT_VALUES_EQUAL(s.GetGroupDomainNodes()[0], 9u);
+    }
+
+    Y_UNIT_TEST(UsesGroupsAndVSlotsFromBaseConfigSnapshot) {
+        TSetup s = MakeSetup();
+
+        auto addBaseConfigVSlot = [&](ui32 groupId, ui32 groupSizeInUnits, ui32 nodeId, ui32 vslotId,
+                                      TStringBuf status) {
+            auto *vslot = s.BaseConfig.AddVSlot();
+            vslot->MutableVSlotId()->SetNodeId(nodeId);
+            vslot->MutableVSlotId()->SetPDiskId(1);
+            vslot->MutableVSlotId()->SetVSlotId(vslotId);
+            vslot->SetGroupId(groupId);
+            vslot->SetGroupGeneration(1);
+            vslot->SetFailRealmIdx(0);
+            vslot->SetFailDomainIdx(0);
+            vslot->SetVDiskIdx(0);
+            vslot->SetStatus(TString(status));
+            vslot->MutableVDiskMetrics()->SetAllocatedSize(100);
+
+            auto *group = s.BaseConfig.AddGroup();
+            group->SetGroupId(groupId);
+            group->SetGroupGeneration(1);
+            group->SetGroupSizeInUnits(groupSizeInUnits);
+            group->AddVSlotId()->CopyFrom(vslot->GetVSlotId());
+        };
+
+        // This entry duplicates the static VSlot from ServiceSet, as a real BSC BaseConfig does.
+        addBaseConfigVSlot(0, 1, 1, 0, "READY");
+        // A three-unit dynamic group fully occupies PDisk (2, 1). Without importing GroupSizeInUnits
+        // the mapper would count it as one slot and incorrectly accept it as an explicit target.
+        addBaseConfigVSlot(42, 3, 2, 7, "REPLICATING");
+        for (auto& pdisk : *s.BaseConfig.MutablePDisk()) {
+            if (pdisk.GetNodeId() == 2) {
+                pdisk.SetExpectedSlotCount(3);
+                pdisk.MutablePDiskConfig()->SetSlotSizeInUnits(1);
+            }
+        }
+
+        try {
+            Reallocate(s, NodeIds({}), false, {
+                .TargetPDiskId = NBsController::TPDiskId(2, 1),
+                .PreferLessOccupiedRack = true,
+                .WithAttentionToReplication = true,
+            });
+            UNIT_FAIL("Expected the weighted VSlot to exhaust the target PDisk");
+        } catch (const NKikimr::NStorage::TDistributedConfigKeeper::TExConfigError& ex) {
+            const TString error = ex.what();
+            UNIT_ASSERT_C(error.Contains("2:1-s[3/3]"), error);
+        }
     }
 }
 

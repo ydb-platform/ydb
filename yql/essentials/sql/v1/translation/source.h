@@ -28,6 +28,7 @@ struct TTableRef {
 using TTableList = TVector<TTableRef>;
 
 class IJoin;
+class TCompositeSelect;
 class ISource: public INode {
 public:
     ~ISource() override;
@@ -92,6 +93,7 @@ public:
     virtual bool SetSamplingRate(TContext& ctx, ESampleClause clause, TNodePtr samplingRate);
     virtual IJoin* GetJoin();
     virtual ISource* GetCompositeSource();
+    virtual void SetCompositeSelect(TCompositeSelect* composite);
     bool IsSelect() const override;
     virtual bool IsTableSource() const;
     virtual bool ShouldUseSourceAsColumn(const TString& source) const;
@@ -151,6 +153,14 @@ protected:
     TNodePtr SamplingRate_;
     TMatchRecognizeBuilderPtr MatchRecognizeBuilder_;
 };
+
+using TSourceResult = TSQLResult<TNonNull<TSourcePtr>>;
+
+TSourceResult Wrap(TSourcePtr source);
+
+TSourcePtr Unwrap(TSourceResult result);
+
+TNodeResult ToNode(TSourceResult x);
 
 template <>
 inline TVector<TSourcePtr> CloneContainer<TSourcePtr>(const TVector<TSourcePtr>& args) {
@@ -244,7 +254,6 @@ private:
     TString GetOpName() const override;
     TNodePtr ProcessIntervalParam(const TNodePtr& val) const;
 
-private:
     TVector<TNodePtr> Args_;
     TSourcePtr FakeSource_;
     TNodePtr TimeExtractor_;

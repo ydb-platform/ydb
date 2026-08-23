@@ -26,6 +26,7 @@ SRCS(
     map/push_map_elements_through_input.cpp
     map/push_map_elements_through_union_all.cpp
     push_filter_into_join.cpp
+    push_simple_join_filter.cpp
     push_filter_under_map.cpp
     push_limit_into_sort.cpp
     push_ranges.cpp
@@ -40,6 +41,7 @@ SRCS(
     propagate_hash_func_stage.cpp
     propagate_topsort_through_stage.cpp
     propagate_limit_through_stage.cpp
+    rewrite_join_to_index_lookup_join.cpp
     rewrite_right_join.cpp
     traces/kqp_cbo_trace.cpp
 )

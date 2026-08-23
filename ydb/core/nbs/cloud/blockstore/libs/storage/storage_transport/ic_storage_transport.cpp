@@ -16,6 +16,13 @@ TICStorageTransport::TICStorageTransport(
     , ICStorageTransportActorId(icStorageTransportActorId)
 {}
 
+TICStorageTransport::~TICStorageTransport()
+{
+    ActorSystem->Send(
+        ICStorageTransportActorId,
+        std::make_unique<NActors::TEvents::TEvPoisonPill>().release());
+}
+
 IStorageTransport::TConnectResultFutures TICStorageTransport::Connect(
     const THostConnection& connection)
 {
@@ -281,6 +288,22 @@ TICStorageTransport::ListPBufferEntries(const THostConnection& connection)
     Y_ABORT_UNLESS(connection.ConnectionType == EConnectionType::PBuffer);
 
     auto request = std::make_unique<TEvTransportPrivate::TEvListPBufferEntries>(
+        connection.GetServiceId(),
+        connection.Credentials);
+
+    auto future = request->Promise.GetFuture();
+
+    ActorSystem->Send(ICStorageTransportActorId, request.release());
+
+    return future;
+}
+
+TFuture<NKikimrBlobStorage::NDDisk::TEvDeleteTabletChunksResult>
+TICStorageTransport::DeleteTabletChunks(const THostConnection& connection)
+{
+    Y_ABORT_UNLESS(connection.ConnectionType == EConnectionType::DDisk);
+
+    auto request = std::make_unique<TEvTransportPrivate::TEvDeleteTabletChunks>(
         connection.GetServiceId(),
         connection.Credentials);
 

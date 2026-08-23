@@ -1,0 +1,40 @@
+name: Collect_Combined_Summary
+
+on:
+  workflow_call:
+
+jobs:
+  collect_combined_summary:
+    name: Collect_Combined_Summary
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all summary artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: job-summary-*
+          merge-multiple: true
+          path: summary_artifacts
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Debug - List downloaded artifacts
+        if: always()
+        run: |
+          echo "Checking summary_artifacts directory..."
+          if [ -d "summary_artifacts" ]; then
+            echo "Directory exists"
+            find summary_artifacts -type f -name "*.md" | head -20
+            echo "Total files: $(find summary_artifacts -type f -name "*.md" | wc -l)"
+          else
+            echo "Directory does not exist"
+          fi
+
+      - name: Add combined summary
+        run: |
+          # Add combined summary
+          python3 .github/scripts/tests/collect_combined_summary.py \
+            --artifacts-dir summary_artifacts \
+            --output $GITHUB_STEP_SUMMARY

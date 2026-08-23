@@ -359,9 +359,24 @@ void TPartitionFamily::AfterRelease() {
         std::vector<ui32> uniqueRoots;
         uniqueRoots.reserve(RootPartitions.size());
         for (auto partitionId : RootPartitions) {
-            if (seen.insert(partitionId).second) {
-                uniqueRoots.push_back(partitionId);
+            if (!seen.insert(partitionId).second) {
+                continue;
             }
+            // Nested reread leaves descendants unreadable while they may still
+            // sit in RootPartitions. Restoring them would make the next Balance
+            // StartReading lock an unreadable id.
+            if (!IsReadable(partitionId)) {
+                continue;
+            }
+            // Finish+Commit during Release CreateFamily's children while they
+            // are only in RootPartitions. Remapping them here steals mapping
+            // from those families and the next StartReading aborts.
+            if (auto it = Consumer.PartitionMapping.find(partitionId);
+                it != Consumer.PartitionMapping.end() && it->second != this)
+            {
+                continue;
+            }
+            uniqueRoots.push_back(partitionId);
         }
         RootPartitions = std::move(uniqueRoots);
     }
@@ -371,6 +386,14 @@ void TPartitionFamily::AfterRelease() {
 
     ClassifyPartitions();
     UpdatePartitionMapping(Partitions);
+    for (auto it = WantedPartitions.begin(); it != WantedPartitions.end();) {
+        auto mit = Consumer.PartitionMapping.find(*it);
+        if (mit != Consumer.PartitionMapping.end() && mit->second != this) {
+            WantedPartitions.erase(it++);
+        } else {
+            ++it;
+        }
+    }
     // After reducing the number of partitions in the family, the list of reading sessions that can read this family may expand.
     UpdateSpecialSessions();
 
@@ -461,7 +484,6 @@ void TPartitionFamily::AttachePartitions(const std::vector<ui32>& partitions, co
         }
         if (!Session->AllPartitionsReadable(newPartitions)) {
             WantedPartitions.insert(newPartitions.begin(), newPartitions.end());
-            AppendUniqueRoots(newPartitions);
             UpdateSpecialSessions();
             Release(ctx);
             return;
@@ -489,7 +511,6 @@ void TPartitionFamily::AttachePartitions(const std::vector<ui32>& partitions, co
         }
     } else if (IsReleasing()) {
         WantedPartitions.insert(newPartitions.begin(), newPartitions.end());
-        AppendUniqueRoots(newPartitions);
     }
 
     // Removing sessions wich can't read the family now

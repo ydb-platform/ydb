@@ -1,4 +1,4 @@
-PROGRAM(workload_topic_balancing)
+PROGRAM(workload_topic_balancing_autopart)
 
 SRCS(
     main.cpp
@@ -10,11 +10,3 @@ PEERDIR(
 )
 
 END()
-
-RECURSE(
-    autopart
-)
-
-RECURSE_FOR_TESTS(
-    tests
-)

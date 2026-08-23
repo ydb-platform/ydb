@@ -42,6 +42,7 @@ private:
     ui32 VMultiPutResponses = 0;
     NActors::NLog::EPriority ResultPriority = NActors::NLog::PRI_DEBUG;
     bool EnableRequestMod3x3ForMinLatecy = false;
+    bool EnableChecksumCalcAndValidation = false;
 
     const TEvBlobStorage::TEvPut::ETactic Tactic;
 
@@ -61,13 +62,19 @@ private:
         bool IsZeroEntry = false;
         std::vector<std::pair<ui64, ui32>> ExtraBlockChecks;
         TWriteSource WriteSource;
+        NKikimrBlobStorage::TDataKind::E DataKind = NKikimrBlobStorage::TDataKind::USER;
         NWilson::TSpan Span;
+        // Span is not created for single-blob puts, where it would just duplicate the
+        // request-level DSProxy.Put span; keep the parent trace id in that case, otherwise
+        // VDisk requests would carry no trace id and the trace would stop at DSProxy.
+        NWilson::TTraceId SpanlessTraceId;
         std::shared_ptr<TEvBlobStorage::TExecutionRelay> ExecutionRelay;
         TInstant Deadline;
 
         TBlobInfo(TLogoBlobID id, TRope&& buffer, TActorId recipient, ui64 cookie, NWilson::TTraceId traceId,
                 NLWTrace::TOrbit&& orbit, bool issueKeepFlag, bool ignoreBlock, bool alreadyEncrypted, bool isZeroEntry,
-                std::vector<std::pair<ui64, ui32>> extraBlockChecks, TWriteSource writeSource, bool single,
+                std::vector<std::pair<ui64, ui32>> extraBlockChecks, TWriteSource writeSource,
+                NKikimrBlobStorage::TDataKind::E dataKind, bool single,
                 std::shared_ptr<TEvBlobStorage::TExecutionRelay> executionRelay, TInstant deadline)
             : BlobId(id)
             , Buffer(std::move(buffer))
@@ -81,10 +88,17 @@ private:
             , IsZeroEntry(isZeroEntry)
             , ExtraBlockChecks(std::move(extraBlockChecks))
             , WriteSource(writeSource)
-            , Span(single ? NWilson::TSpan() : NWilson::TSpan(TWilson::BlobStorage, std::move(traceId), "DSProxy.Put.Blob"))
+            , DataKind(dataKind)
+            , Span(single ? NWilson::TSpan() : NWilson::TSpan(TWilson::BlobStorage, NWilson::TTraceId(traceId), "DSProxy.Put.Blob"))
+            , SpanlessTraceId(single ? std::move(traceId) : NWilson::TTraceId())
             , ExecutionRelay(std::move(executionRelay))
             , Deadline(deadline)
         {}
+
+        // Trace id for requests sent to VDisks on behalf of this blob.
+        NWilson::TTraceId GetTraceIdForVDiskRequest() const {
+            return Span ? Span.GetTraceId() : NWilson::TTraceId(SpanlessTraceId);
+        }
 
         void Output(IOutputStream& s) const {
             s << BlobId;
@@ -120,7 +134,7 @@ public:
     TPutImpl(const TIntrusivePtr<TBlobStorageGroupInfo> &info, const TIntrusivePtr<TGroupQueues> &state,
             TEvBlobStorage::TEvPut *ev, const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon,
             bool enableRequestMod3x3ForMinLatecy, TActorId recipient, ui64 cookie, NWilson::TTraceId traceId,
-            const TAccelerationParams& accelerationParams)
+            const TAccelerationParams& accelerationParams, bool enableChecksumCalcAndValidation)
         : Info(info)
         , Blackboard(info, state, ev->HandleClass, NKikimrBlobStorage::EGetHandleClass::AsyncRead)
         , IsDone(1)
@@ -129,13 +143,15 @@ public:
         , ApproximateFreeSpaceShare(0.f)
         , Mon(mon)
         , EnableRequestMod3x3ForMinLatecy(enableRequestMod3x3ForMinLatecy)
+        , EnableChecksumCalcAndValidation(enableChecksumCalcAndValidation)
         , Tactic(ev->Tactic)
         , AccelerationParams(accelerationParams)
         , History(Info)
     {
         BlobMap.emplace(ev->Id, Blobs.size());
         Blobs.emplace_back(ev->Id, std::move(ev->Buffer), recipient, cookie, std::move(traceId), std::move(ev->Orbit),
-            ev->IssueKeepFlag, ev->IgnoreBlock, ev->AlreadyEncrypted, ev->IsZeroEntry,std::move(ev->ExtraBlockChecks), ev->WriteSource, true,
+            ev->IssueKeepFlag, ev->IgnoreBlock, ev->AlreadyEncrypted, ev->IsZeroEntry,std::move(ev->ExtraBlockChecks), ev->WriteSource,
+            ev->DataKind, true,
             std::move(ev->ExecutionRelay),
             ev->Deadline);
 
@@ -147,7 +163,7 @@ public:
     TPutImpl(const TIntrusivePtr<TBlobStorageGroupInfo> &info, const TIntrusivePtr<TGroupQueues> &state,
             TBatchedVec<TEvBlobStorage::TEvPut::TPtr> &events, const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon,
             NKikimrBlobStorage::EPutHandleClass putHandleClass, TEvBlobStorage::TEvPut::ETactic tactic,
-            bool enableRequestMod3x3ForMinLatecy, const TAccelerationParams& accelerationParams)
+            bool enableRequestMod3x3ForMinLatecy, const TAccelerationParams& accelerationParams, bool enableChecksumCalcAndValidation)
         : Info(info)
         , Blackboard(info, state, putHandleClass, NKikimrBlobStorage::EGetHandleClass::AsyncRead)
         , IsDone(events.size())
@@ -156,6 +172,7 @@ public:
         , ApproximateFreeSpaceShare(0.f)
         , Mon(mon)
         , EnableRequestMod3x3ForMinLatecy(enableRequestMod3x3ForMinLatecy)
+        , EnableChecksumCalcAndValidation(enableChecksumCalcAndValidation)
         , Tactic(tactic)
         , AccelerationParams(accelerationParams)
         , History(Info)
@@ -170,7 +187,7 @@ public:
             Blobs.emplace_back(msg.Id, std::move(msg.Buffer), ev->Sender, ev->Cookie, std::move(ev->TraceId),
                 std::move(msg.Orbit), msg.IssueKeepFlag, msg.IgnoreBlock, msg.AlreadyEncrypted, msg.IsZeroEntry,
                 std::move(msg.ExtraBlockChecks),
-                msg.WriteSource, false, std::move(msg.ExecutionRelay), msg.Deadline);
+                msg.WriteSource, msg.DataKind, false, std::move(msg.ExecutionRelay), msg.Deadline);
 
             auto& blob = Blobs.back();
             LWPROBE(DSProxyBlobPutTactics, blob.BlobId.TabletID(), Info->GroupID.GetRawId(), blob.BlobId.ToString(), Tactic,
@@ -249,14 +266,14 @@ public:
             Y_ABORT_UNLESS(it == begin);
 
             const TVDiskID vdiskId = Info->GetVDiskId(it->first);
-            const bool checksumming = Blackboard.GroupQueues->ChecksumExpected(Info->GetTopology(), vdiskId,
+            const bool checksumming = EnableChecksumCalcAndValidation && Blackboard.GroupQueues->ChecksumExpected(Info->GetTopology(), vdiskId,
                 TGroupQueues::TVDisk::TQueues::VDiskQueueId(Blackboard.PutHandleClass));
 
             if (std::next(it) == end) { // TEvVPut
                 auto [orderNumber, ptr] = *it++;
                 TBlobInfo& blob = Blobs[ptr->BlobIdx];
                 auto ev = std::make_unique<TEvBlobStorage::TEvVPut>(ptr->Id, ptr->Buffer, vdiskId, false, nullptr,
-                    blob.Deadline, Blackboard.PutHandleClass, checksumming, blob.WriteSource);
+                    blob.Deadline, Blackboard.PutHandleClass, checksumming, blob.WriteSource, blob.DataKind);
 
                 auto& record = ev->Record;
                 for (const auto& [tabletId, generation] : blob.ExtraBlockChecks) {
@@ -297,7 +314,8 @@ public:
                     auto [orderNumber, ptr] = *it++;
                     TBlobInfo& blob = Blobs[ptr->BlobIdx];
                     ev->AddVPut(ptr->Id, TRcBuf(ptr->Buffer), nullptr, blob.IssueKeepFlag, blob.IgnoreBlock,
-                        blob.IsZeroEntry, &blob.ExtraBlockChecks, blob.Span.GetTraceId(), checksumming, blob.WriteSource);
+                        blob.IsZeroEntry, &blob.ExtraBlockChecks, blob.GetTraceIdForVDiskRequest(), checksumming,
+                        blob.WriteSource, blob.DataKind);
                     HandoffPartsSent += ptr->IsHandoff;
                     vput.AddSubrequest(ptr->Id);
                 }

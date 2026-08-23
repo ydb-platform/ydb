@@ -8,28 +8,25 @@
 
 namespace NKikimr::NBlobDepot {
 
-    void TBlobDepot::Handle(TEvBlobDepot::TEvCommitBlobSeq::TPtr ev) {
-        class TTxCommitBlobSeq : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
-            const ui32 NodeId;
-            const ui64 AgentInstanceId;
-            std::unique_ptr<TEvBlobDepot::TEvCommitBlobSeq::THandle> Request;
-            std::unique_ptr<IEventHandle> Response;
-            std::vector<TBlobSeqId> BlobSeqIds;
-            std::set<TBlobSeqId> FailedBlobSeqIds;
-            std::set<TBlobSeqId> CanBeCollectedBlobSeqIds;
-            std::set<TBlobSeqId> AllowedBlobSeqIds;
+    class TBlobDepot::TTxCommitBlobSeq : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
+        std::vector<TPendingCommitBlobSeq> Commits;
+        std::vector<TBlobSeqId> BlobSeqIds;
+        std::set<TBlobSeqId> FailedBlobSeqIds;
+        std::set<TBlobSeqId> CanBeCollectedBlobSeqIds;
+        std::set<TBlobSeqId> AllowedBlobSeqIds;
+        std::vector<std::unique_ptr<IEventHandle>> Responses;
 
-        public:
-            TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_COMMIT_BLOB_SEQ; }
+    public:
+        TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_COMMIT_BLOB_SEQ; }
 
-            TTxCommitBlobSeq(TBlobDepot *self, TAgent& agent, std::unique_ptr<TEvBlobDepot::TEvCommitBlobSeq::THandle> request)
-                : TTransactionBase(self)
-                , NodeId(agent.Connection->NodeId)
-                , AgentInstanceId(*agent.AgentInstanceId)
-                , Request(std::move(request))
-            {
-                const ui32 generation = Self->Executor()->Generation();
-                const auto& items = Request->Get()->Record.GetItems();
+        TTxCommitBlobSeq(TBlobDepot *self, std::vector<TPendingCommitBlobSeq> commits)
+            : TTransactionBase(self, commits.empty() ? NWilson::TTraceId{} : std::move(commits.front().Request->TraceId))
+            , Commits(std::move(commits))
+        {
+            const ui32 generation = Self->Executor()->Generation();
+            for (auto& commit : Commits) {
+                TAgent& agent = Self->GetAgent(commit.NodeId);
+                const auto& items = commit.Request->Get()->Record.GetItems();
                 Self->TabletCounters->Cumulative()[NKikimrBlobDepot::COUNTER_PUTS_INCOMING] += items.size();
                 for (const auto& item : items) {
                     if (!TData::TValue::Validate(item)) {
@@ -38,7 +35,6 @@ namespace NKikimr::NBlobDepot {
                     if (!item.GetCommitNotify() && item.HasBlobLocator()) {
                         const auto blobSeqId = TBlobSeqId::FromProto(item.GetBlobLocator().GetBlobSeqId());
                         if (Self->Data->CanBeCollected(blobSeqId)) {
-                            // check for internal sanity -- we can't issue barriers on given ids without confirmed trimming
                             Y_VERIFY_S(blobSeqId.Generation < generation, "committing trimmed BlobSeqId"
                                 << " BlobSeqId# " << blobSeqId.ToString()
                                 << " Id# " << Self->GetLogId());
@@ -52,23 +48,32 @@ namespace NKikimr::NBlobDepot {
                     }
                 }
             }
+        }
 
-            bool Execute(TTransactionContext& txc, const TActorContext&) override {
-                TAgent& agent = Self->GetAgent(NodeId);
-                if (!agent.Connection || agent.AgentInstanceId != AgentInstanceId) { // agent disconnected while transaction was in queue -- drop this request
-                    return true;
-                }
-
-                if (!Self->Data->LoadMissingKeys(Request->Get()->Record, txc)) {
+        bool Execute(TTransactionContext& txc, const TActorContext&) override {
+            for (auto& commit : Commits) {
+                if (!Self->Data->LoadMissingKeys(commit.Request->Get()->Record, txc)) {
                     return false;
+                }
+            }
+
+            Responses.clear();
+            Responses.reserve(Commits.size());
+
+            const ui32 generation = Self->Executor()->Generation();
+
+            for (auto& commit : Commits) {
+                TAgent& agent = Self->GetAgent(commit.NodeId);
+                if (!agent.Connection || agent.AgentInstanceId != commit.AgentInstanceId) {
+                    Responses.emplace_back();
+                    continue;
                 }
 
                 NKikimrBlobDepot::TEvCommitBlobSeqResult *responseRecord;
-                std::tie(Response, responseRecord) = TEvBlobDepot::MakeResponseFor(*Request);
+                std::unique_ptr<IEventHandle> response;
+                std::tie(response, responseRecord) = TEvBlobDepot::MakeResponseFor(*commit.Request);
 
-                const ui32 generation = Self->Executor()->Generation();
-
-                for (const auto& item : Request->Get()->Record.GetItems()) {
+                for (const auto& item : commit.Request->Get()->Record.GetItems()) {
                     auto *responseItem = responseRecord->AddItems();
 
                     auto finishWithError = [&](NKikimrProto::EReplyStatus status, const TString& errorReason) {
@@ -79,7 +84,6 @@ namespace NKikimr::NBlobDepot {
                             const size_t numErased = agent.S3WritesInFlight.erase(locator);
                             Y_ABORT_UNLESS(numErased);
                             Self->S3Manager->AddTrashToCollect(locator);
-                            Self->S3Manager->OnS3WriteInFlightRemoved(/*success=*/false);
                         }
                     };
 
@@ -88,7 +92,7 @@ namespace NKikimr::NBlobDepot {
                         continue;
                     }
 
-                    bool canBeCollected = false; // can the just-written-blob be collected with GC logic?
+                    bool canBeCollected = false;
 
                     if (item.HasBlobLocator()) {
                         const auto& blobLocator = item.GetBlobLocator();
@@ -143,7 +147,6 @@ namespace NKikimr::NBlobDepot {
                         {"generation", generation});
 
                     if (canBeCollected) {
-                        // we can't accept this record, because it is potentially under already issued barrier
                         finishWithError(NKikimrProto::ERROR, "generation race");
                         continue;
                     }
@@ -160,7 +163,6 @@ namespace NKikimr::NBlobDepot {
                         } else if (const TData::TValue *v = Self->Data->FindKey(key); v && v->SameValueChainAsIn(item)) {
                             Self->Data->MakeKeyCertain(key);
                         } else {
-                            // data race -- this value has been altered since it was previously written
                             finishWithError(NKikimrProto::RACE, "value has been altered since it was previously written");
                         }
                     } else {
@@ -179,23 +181,19 @@ namespace NKikimr::NBlobDepot {
                         if (item.HasS3Locator()) {
                             auto locator = TS3Locator::FromProto(item.GetS3Locator());
 
-                            // remove written item from the trash
                             NIceDb::TNiceDb(txc.DB).Table<Schema::TrashS3>().Key(locator.Generation, locator.KeyId).Delete();
 
-                            // remove item from agent's inflight
                             const size_t numErased = agent.S3WritesInFlight.erase(locator);
                             Y_ABORT_UNLESS(numErased == 1);
 
                             Self->TabletCounters->Cumulative()[NKikimrBlobDepot::COUNTER_S3_PUTS_OK] += 1;
                             Self->TabletCounters->Cumulative()[NKikimrBlobDepot::COUNTER_S3_PUTS_BYTES] += locator.Len;
-
-                            Self->S3Manager->OnS3WriteInFlightRemoved(/*success=*/true);
                         }
                         Self->Data->UpdateKey(key, item, txc, this);
                     }
                 }
 
-                for (const auto& item : Response->Get<TEvBlobDepot::TEvCommitBlobSeqResult>()->Record.GetItems()) {
+                for (const auto& item : response->Get<TEvBlobDepot::TEvCommitBlobSeqResult>()->Record.GetItems()) {
                     Self->TabletCounters->Cumulative()[
                         item.GetStatus() == NKikimrProto::OK
                             ? NKikimrBlobDepot::COUNTER_PUTS_OK
@@ -203,21 +201,66 @@ namespace NKikimr::NBlobDepot {
                     ].Increment(1);
                 }
 
-                return true;
+                Responses.push_back(std::move(response));
             }
 
-            void Complete(const TActorContext&) override {
-                TAgent& agent = Self->GetAgent(NodeId);
-                for (const TBlobSeqId blobSeqId : BlobSeqIds) {
-                    Self->Data->EndCommittingBlobSeqId(agent, blobSeqId);
+            return true;
+        }
+
+        void Complete(const TActorContext&) override {
+            Y_ABORT_UNLESS(!Commits.empty());
+            TAgent& agent = Self->GetAgent(Commits.front().NodeId);
+            for (const TBlobSeqId blobSeqId : BlobSeqIds) {
+                Self->Data->EndCommittingBlobSeqId(agent, blobSeqId);
+            }
+            Self->Data->CommitTrash(this);
+            for (auto& response : Responses) {
+                if (response) {
+                    TActivationContext::Send(response.release());
                 }
-                Self->Data->CommitTrash(this);
-                TActivationContext::Send(Response.release());
             }
-        };
+            Self->CommitBlobSeqTxInFlight = false;
+            Self->StartCommitBlobSeqTxIfNeeded();
+        }
+    };
 
-        Execute(std::make_unique<TTxCommitBlobSeq>(this, GetAgent(ev->Recipient),
-            std::unique_ptr<TEvBlobDepot::TEvCommitBlobSeq::THandle>(ev.Release())));
+    void TBlobDepot::ReleaseS3HttpThrottle(TAgent& agent, const NKikimrBlobDepot::TEvCommitBlobSeq& record, bool success) {
+        ui32 released = 0;
+        for (const auto& item : record.GetItems()) {
+            if (item.HasS3Locator() && !item.GetCommitNotify()) {
+                const auto locator = TS3Locator::FromProto(item.GetS3Locator());
+                released += agent.S3ThrottleHeld.erase(locator);
+            }
+        }
+        if (released) {
+            S3Manager->OnS3WriteInFlightRemoved(success, released);
+        }
+    }
+
+    void TBlobDepot::StartCommitBlobSeqTxIfNeeded() {
+        if (CommitBlobSeqTxInFlight || PendingCommitBlobSeq.empty()) {
+            return;
+        }
+        std::vector<TPendingCommitBlobSeq> batch;
+        batch.reserve(Min<size_t>(PendingCommitBlobSeq.size(), MaxCommitBlobSeqBatch));
+        while (!PendingCommitBlobSeq.empty() && batch.size() < MaxCommitBlobSeqBatch) {
+            batch.push_back(std::move(PendingCommitBlobSeq.front()));
+            PendingCommitBlobSeq.pop_front();
+        }
+        CommitBlobSeqTxInFlight = true;
+        Execute(std::make_unique<TTxCommitBlobSeq>(this, std::move(batch)));
+    }
+
+    void TBlobDepot::Handle(TEvBlobDepot::TEvCommitBlobSeq::TPtr ev) {
+        TAgent& agent = GetAgent(ev->Recipient);
+        ReleaseS3HttpThrottle(agent, ev->Get()->Record, /*success=*/true);
+
+        PendingCommitBlobSeq.push_back(TPendingCommitBlobSeq{
+            .NodeId = agent.Connection->NodeId,
+            .AgentInstanceId = *agent.AgentInstanceId,
+            .Request = std::unique_ptr<TEvBlobDepot::TEvCommitBlobSeq::THandle>(ev.Release()),
+        });
+        StartCommitBlobSeqTxIfNeeded();
     }
 
     void TBlobDepot::Handle(TEvBlobDepot::TEvDiscardSpoiledBlobSeq::TPtr ev) {
@@ -258,14 +301,18 @@ namespace NKikimr::NBlobDepot {
             }
         }
 
+        ui32 throttleReleased = 0;
         for (const auto& item : record.GetS3Locators()) {
             const auto& locator = TS3Locator::FromProto(item);
             const size_t numErased = agent.S3WritesInFlight.erase(locator);
             Y_ABORT_UNLESS(numErased == 1);
+            throttleReleased += agent.S3ThrottleHeld.erase(locator);
             if (!record.GetS3SlowDown()) { // in case of SlowDown these items never had the chance of being written
                 S3Manager->AddTrashToCollect(locator);
             }
-            S3Manager->OnS3WriteInFlightRemoved(/*success=*/false);
+        }
+        if (throttleReleased) {
+            S3Manager->OnS3WriteInFlightRemoved(/*success=*/false, throttleReleased);
         }
     }
 

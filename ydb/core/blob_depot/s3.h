@@ -54,23 +54,30 @@ namespace NKikimr::NBlobDepot {
 
         // Throttling state for S3 SlowDown responses on agent put requests. Puts are issued by agents (one per
         // node), but throttling is centralized at the tablet by postponing TEvPrepareWriteS3Result.
-        static constexpr ui32 MaxWritesInFlight = 32;
+        // A slot is held from PrepareWriteS3 until the HTTP upload finishes (CommitBlobSeq is
+        // received, or the locator is discarded) — not until metadata commit completes.
         static constexpr ui32 SuccessesPerWriteConcurrencyStepUp = 3;
 
         TBackoff PutBackoff{TDuration::MilliSeconds(100), TDuration::Seconds(60)};
         TMonotonic PutThrottleUntil;
         bool PutWakeupScheduled = false;
-        ui32 CurrentMaxWritesInFlight = MaxWritesInFlight;
+        ui32 CurrentMaxWritesInFlight = Max<ui32>();
         ui32 ConsecutiveSuccessfulWriteBatches = 0;
         ui32 S3WritesInFlight = 0;
         std::deque<TEvBlobDepot::TEvPrepareWriteS3::TPtr> PendingPrepareWrites;
+
+        // The configured ceiling (ICB, BlobDepotControls.S3MaxWritesInFlight) and the actually
+        // enforced limit, which is the ceiling capped by what the adaptive limiter has recovered to
+        // after the last SlowDown. Read fresh every time -- the ICB value may change under us.
+        ui32 MaxWritesInFlight() const;
+        ui32 EffectiveMaxWritesInFlight() const { return Min(CurrentMaxWritesInFlight, MaxWritesInFlight()); }
 
         void HandlePrepareWriteS3(TEvBlobDepot::TEvPrepareWriteS3::TPtr ev);
         void NotifyPutSlowDown();
         void HandlePutThrottleWakeup();
         void RunPendingPrepareWritesIfPossible();
         void OnS3WriteInFlightAdded(ui32 count);
-        void OnS3WriteInFlightRemoved(bool success);
+        void OnS3WriteInFlightRemoved(bool success, ui32 count = 1);
 
     private: ///////////////////////////////////////////////////////////////////////////////////////////////////////////
         class TUploaderActor;
@@ -91,8 +98,9 @@ namespace NKikimr::NBlobDepot {
         class TTxDeleteTrashS3;
         struct TEvDeleteResult;
 
-        static constexpr ui32 MaxDeletesInFlight = 3;
-        static constexpr size_t MaxObjectsToDeleteAtOnce = 10;
+        // DeleteObjects is a multi-delete request (S3 allows up to 1000 keys per request), so the batch size
+        // is what actually determines delete throughput. Every request occupies a thread of the shared AWS
+        // executor pool for its whole duration, competing with puts, hence we prefer fewer larger batches.
         static constexpr ui32 SuccessesPerConcurrencyStepUp = 3;
 
         // items we are definitely going to delete (must be present in TrashS3)
@@ -106,8 +114,13 @@ namespace NKikimr::NBlobDepot {
         TBackoff DeleteBackoff{TDuration::MilliSeconds(100), TDuration::Seconds(60)};
         TMonotonic DeleteThrottleUntil;
         bool DeleteWakeupScheduled = false;
-        ui32 CurrentMaxDeletesInFlight = MaxDeletesInFlight;
+        ui32 CurrentMaxDeletesInFlight = Max<ui32>();
         ui32 ConsecutiveSuccessfulDeleteBatches = 0;
+
+        // Same split as for writes: configured ceiling vs. what the adaptive limiter allows now.
+        ui32 MaxDeletesInFlight() const;
+        ui32 EffectiveMaxDeletesInFlight() const { return Min(CurrentMaxDeletesInFlight, MaxDeletesInFlight()); }
+        size_t MaxObjectsToDeleteAtOnce() const;
 
         void RunDeletersIfNeeded();
         void HandleDeleter(TAutoPtr<IEventHandle> ev);

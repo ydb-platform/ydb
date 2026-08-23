@@ -237,6 +237,7 @@ void TExecutorGCLogic::ApplyDelta(TGCTime time, TGCBlobDelta &delta) {
         TGCTime gcTime(blobId.Generation(), blobId.Step());
         Y_ENSURE(channel.KnownGcBarrier < gcTime);
         channel.CommittedDelta[gcTime].Created.push_back(blobId);
+        HistoryCutter.SeenBlob(blobId);
     }
 
     for (const TLogoBlobID &blobId : delta.Deleted) {
@@ -516,6 +517,9 @@ ui64 TExecutorGCLogic::TChannelInfo::SendCollectGarbage(TGCTime uncommittedTime,
             ui32 activeGroup = Max<ui32>();
             TVector<TLogoBlobID> *vec = nullptr;
 
+            // A generation below the first surviving history entry resolves to the sentinel
+            // group: the entry was cut, so the blob is already collected and its flag has
+            // nowhere to go. Sending it anyway fails forever and blocks the channel's GC.
             for (const auto &blobId : keep) {
                 if (activeGen != blobId.Generation()) {
                     activeGen = blobId.Generation();

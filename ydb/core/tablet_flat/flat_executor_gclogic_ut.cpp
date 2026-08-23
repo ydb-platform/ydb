@@ -1,3 +1,5 @@
+#include "flat_boot_cookie.h"
+#include "flat_boot_oven.h"
 #include "flat_executor_gclogic.h"
 #include "flat_sausage_grind.h"
 #include <ydb/core/testlib/actors/test_runtime.h>
@@ -440,6 +442,48 @@ Y_UNIT_TEST_SUITE(THistoryCutter) {
         UNIT_ASSERT(!TExecutorGCLogic::IsHistoryCuttingSound(*columnShard, 65));
         UNIT_ASSERT(TExecutorGCLogic::IsHistoryCuttingSound(*makeInfo(TTabletTypes::DataShard), 2));
         UNIT_ASSERT(TExecutorGCLogic::IsHistoryCuttingSound(*makeInfo(TTabletTypes::KeyValue), 2));
+    }
+
+    // A blob that is deleted but not yet collected keeps its DoNotKeep mark in the GC
+    // deltas; cutting its entry makes the mark undeliverable, so the delta must feed
+    // the cutter. Observed live: GC to the sentinel group retried forever on channel 1.
+    Y_UNIT_TEST(PendingDeleteDeltaPinsHistoryEntry) {
+        static constexpr ui64 TabletId = 42;
+        static constexpr ui32 Channel = 1;
+        auto info = MakeIntrusive<TTabletStorageInfo>(TabletId, TTabletTypes::Dummy);
+        info->Channels.resize(Channel + 1);
+        info->Channels[Channel].Channel = Channel;
+        info->Channels[Channel].History.emplace_back(0, 100);
+        info->Channels[Channel].History.emplace_back(10, 200);
+
+        NBoot::TSteppedCookieAllocatorFactory cookies(*info, /*gen=*/10);
+        TExecutorGCLogic gcLogic(info, cookies.Sys(NBoot::TCookie::EIdx::GCExt));
+        UNIT_ASSERT_VALUES_EQUAL(gcLogic.HistoryCutter.GetHistoryToCut(Channel).size(), 1);
+
+        TGCLogEntry entry(TGCTime(10, 1));
+        entry.Delta.Deleted.push_back(TLogoBlobID(TabletId, /*gen=*/3, /*step=*/1, Channel, HistoryCutterUtBlobSize, 0));
+        gcLogic.ApplyLogEntry(entry);
+        UNIT_ASSERT_C(gcLogic.HistoryCutter.GetHistoryToCut(Channel).empty(),
+            "an entry with a pending DoNotKeep mark must not be cuttable");
+    }
+
+    Y_UNIT_TEST(CreatedDeltaPinsHistoryEntry) {
+        static constexpr ui64 TabletId = 43;
+        static constexpr ui32 Channel = 1;
+        auto info = MakeIntrusive<TTabletStorageInfo>(TabletId, TTabletTypes::Dummy);
+        info->Channels.resize(Channel + 1);
+        info->Channels[Channel].Channel = Channel;
+        info->Channels[Channel].History.emplace_back(0, 100);
+        info->Channels[Channel].History.emplace_back(10, 200);
+
+        NBoot::TSteppedCookieAllocatorFactory cookies(*info, /*gen=*/10);
+        TExecutorGCLogic gcLogic(info, cookies.Sys(NBoot::TCookie::EIdx::GCExt));
+
+        TGCLogEntry entry(TGCTime(10, 1));
+        entry.Delta.Created.push_back(TLogoBlobID(TabletId, /*gen=*/3, /*step=*/1, Channel, HistoryCutterUtBlobSize, 0));
+        gcLogic.ApplyLogEntry(entry);
+        UNIT_ASSERT_C(gcLogic.HistoryCutter.GetHistoryToCut(Channel).empty(),
+            "an entry with a live blob must not be cuttable");
     }
 }
 

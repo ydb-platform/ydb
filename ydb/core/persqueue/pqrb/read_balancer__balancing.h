@@ -278,6 +278,14 @@ private:
     bool TryApplyPendingInactive(ui32 partitionId, const TActorContext& ctx);
     bool ApplyFinishedState(ui32 partitionId, bool scaleAwareSDK, bool startedReadingFromEndOffset, const TActorContext& ctx);
 
+    // Move descendants of parentId that still sit in family into their own
+    // families so DestroyFamily can release them. BreakUpFamily cannot do this
+    // when parentId is not a root of the family partition set.
+    std::vector<TPartitionFamily*> ExtractDescendantsFromFamily(
+        TPartitionFamily* family,
+        ui32 parentId,
+        const TActorContext& ctx);
+
     // Families.erase in Destroy() would free `this` while Unlock/Reset is still
     // on the stack. Park the unique_ptr here and drop it when the outermost
     // TConsumer call returns.

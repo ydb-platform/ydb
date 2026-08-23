@@ -220,6 +220,7 @@ struct TConsumer {
     const TPartitionGraph& GetPartitionGraph() const;
     ui32 NextStep();
 
+    void EnsurePartition(ui32 partitionId);
     void RegisterPartition(ui32 partitionId, const TActorContext& ctx);
     void UnregisterPartition(ui32 partitionId, const TActorContext& ctx);
     void InitPartitions(const TActorContext& ctx);
@@ -255,8 +256,23 @@ struct TConsumer {
     bool ScalingSupport() const;
 
 private:
+    bool HasChildren(ui32 partitionId) const;
     TString LogPrefix() const;
     bool AttachingDescendants = false;
+
+    struct TPendingFinish {
+        bool ScaleAwareSDK = false;
+        bool StartedReadingFromEndOffset = false;
+    };
+    struct TPendingCommit {
+        ui32 Generation = 0;
+        ui64 Cookie = 0;
+    };
+    absl::flat_hash_map<ui32, TPendingFinish> PendingFinishes;
+    absl::flat_hash_map<ui32, TPendingCommit> PendingCommits;
+
+    bool TryApplyPendingInactive(ui32 partitionId, const TActorContext& ctx);
+    bool ApplyFinishedState(ui32 partitionId, bool scaleAwareSDK, bool startedReadingFromEndOffset, const TActorContext& ctx);
 
     // Families.erase in Destroy() would free `this` while Unlock/Reset is still
     // on the stack. Park the unique_ptr here and drop it when the outermost

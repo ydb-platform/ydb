@@ -254,6 +254,7 @@ void TProgramStep::ReportTracing(const std::shared_ptr<IDataSource>& source, con
     source->MutableExecutionContext().SetPrevExecutionResult(currentExecutionResult);
 }
 
+NO_SANITIZE_THREAD
 TConclusion<bool> TProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
     const bool started = !source->GetExecutionContext().HasProgramIterator();
     if (!source->GetExecutionContext().HasProgramIterator()) {

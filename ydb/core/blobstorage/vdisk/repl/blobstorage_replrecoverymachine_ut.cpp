@@ -90,7 +90,8 @@ namespace NKikimr {
             auto replCtx = CreateReplCtx(vdisks, groupInfo);
             auto info = MakeIntrusive<TEvReplFinished::TInfo>();
             info->WorkUnitsPlanned = Max<ui64>();
-            TBlobIdQueuePtr unreplicatedBlobsPtr = std::make_shared<TBlobIdQueue>();
+            TBlobIdQueuePtr unreplicatedBlobsPtr = std::make_shared<TBlobIdQueue>(
+                TMemoryConsumer(replCtx->VCtx->Replication));
             NRepl::TRecoveryMachine m(replCtx, info);
             TMap<TLogoBlobID, TVector<TString>> data = GenerateData(10000, 1024, groupInfo, vdisks);
             for (const auto& pair : data) {

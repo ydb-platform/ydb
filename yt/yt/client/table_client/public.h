@@ -447,6 +447,7 @@ class TVariantTupleLogicalType;
 class TVariantStructLogicalType;
 class TDictLogicalType;
 class TTaggedLogicalType;
+class TAggregateStateLogicalType;
 
 struct TStructField;
 

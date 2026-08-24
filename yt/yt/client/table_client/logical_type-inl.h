@@ -63,6 +63,11 @@ const TTaggedLogicalType& TLogicalType::UncheckedAsTaggedTypeRef() const
     return static_cast<const TTaggedLogicalType&>(*this);
 }
 
+const TAggregateStateLogicalType& TLogicalType::UncheckedAsAggregateStateTypeRef() const
+{
+    return static_cast<const TAggregateStateLogicalType&>(*this);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 int TDecimalLogicalType::GetPrecision() const
@@ -142,6 +147,23 @@ const std::string& TTaggedLogicalType::GetTag() const
 }
 
 const TLogicalTypePtr& TTaggedLogicalType::GetElement() const
+{
+    return Element_;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+EAggregateFunction TAggregateStateLogicalType::GetFunction() const
+{
+    return Function_;
+}
+
+const TLogicalTypePtr& TAggregateStateLogicalType::GetArgumentType() const
+{
+    return ArgumentType_;
+}
+
+const TLogicalTypePtr& TAggregateStateLogicalType::GetElement() const
 {
     return Element_;
 }

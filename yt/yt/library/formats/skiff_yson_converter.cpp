@@ -1318,6 +1318,7 @@ TYsonToSkiffConverter CreateYsonToSkiffConverterImpl(
             return CreateVariantYsonToSkiffConverter(std::move(descriptor), skiffSchema, innerContext, config);
         case ELogicalMetatype::Dict:
             return CreateDictYsonToSkiffConverter(std::move(descriptor), skiffSchema, innerContext, config);
+        case ELogicalMetatype::AggregateState:
         case ELogicalMetatype::Tagged:
             // We have detagged our type previously.
             YT_ABORT();
@@ -1953,6 +1954,7 @@ TSkiffToYsonConverter CreateSkiffToYsonConverterImpl(
         case ELogicalMetatype::Dict:
             return CreateDictSkiffToYsonConverter(std::move(descriptor), skiffSchema, innerContext, config);
         case ELogicalMetatype::Tagged:
+        case ELogicalMetatype::AggregateState:
             // We have detagged our type previously.
             break;
     }

@@ -2058,6 +2058,16 @@ void ValidateColumnSchema(
             THROW_ERROR_EXCEPTION("Key column cannot be aggregated");
         }
 
+        if (columnSchema.LogicalType()->GetMetatype() == ELogicalMetatype::AggregateState) {
+            if (columnSchema.SortOrder()) {
+                THROW_ERROR_EXCEPTION("Column with AggregateState type cannot be key column");
+            }
+
+            if (columnSchema.Aggregate()) {
+                THROW_ERROR_EXCEPTION("Column with AggregateState type cannot be aggregated");
+            }
+        }
+
         if (columnSchema.Aggregate()) {
             auto aggregateName = *columnSchema.Aggregate();
 
@@ -2442,6 +2452,18 @@ void ValidateNoRenamedColumns(const TTableSchema& schema)
                 NTableClient::EErrorCode::InvalidSchemaValue,
                 "Table column renaming is not available yet")
                 .With("renamed_column", column.GetDiagnosticNameString());
+        }
+    }
+}
+
+void ValidateNoAggregateStateType(const TTableSchema& schema)
+{
+    for (const auto& column : schema.Columns()) {
+        if (HasAggregateStateType(column.LogicalType())) {
+            THROW_ERROR_EXCEPTION(
+                NTableClient::EErrorCode::InvalidSchemaValue,
+                "AggregateState type is not available yet")
+                .With("column_name", column.GetDiagnosticNameString());
         }
     }
 }

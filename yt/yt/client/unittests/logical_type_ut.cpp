@@ -86,6 +86,10 @@ TEST(TLogicalTypeTest, TestCastToV1Type)
     EXPECT_EQ(
         CastToV1Type(Decimal(3, 2)),
         std::pair(ESimpleLogicalValueType::String, true));
+
+    EXPECT_EQ(
+        CastToV1Type(AggregateState(EAggregateFunction::Avg, Int64())),
+        std::pair(ESimpleLogicalValueType::Any, true));
 }
 
 TEST(TLogicalTypeTest, DictValidationTest)
@@ -152,6 +156,13 @@ TEST(TLogicalTypeTest, TestDetag)
             {"list", "stable_list", List(Int8())},
             {"tuple", "stable_tuple", Tuple(Double(), Optional(String()))},
         }, /*removedFieldStableNames*/ {"a", "b"}));
+
+    EXPECT_EQ(
+        *DetagLogicalType(AggregateState(EAggregateFunction::Avg, Int8())),
+        *StructLogicalType({
+            {"sum", "sum", Int64()},
+            {"count", "count", Int64()},
+        }, /*removedFieldStableNames*/ {}));
 }
 
 const std::vector<TLogicalTypePtr> ComplexTypeExampleList = {
@@ -231,6 +242,12 @@ const std::vector<TLogicalTypePtr> ComplexTypeExampleList = {
     Tagged("bar", Int64()),
     Tagged("foo", Optional(Int64())),
     Tagged("foo", List(Int64())),
+
+    // AggregateState
+    AggregateState(EAggregateFunction::Sum, Int64()),
+    AggregateState(EAggregateFunction::Avg, Int64()),
+    AggregateState(EAggregateFunction::Min, Int64()),
+    AggregateState(EAggregateFunction::Max, String()),
 };
 
 TEST(TLogicalTypeTest, TestAllTypesAreInExamples)
@@ -704,6 +721,18 @@ std::vector<std::pair<std::string, TCombineTypeFunc>> CombineFunctions = {
         [] (const TLogicalTypePtr& type) {
             return Tagged("foo", type);
         }
+    },
+    {
+        "aggregate_state_sum",
+        [] (const TLogicalTypePtr& type) {
+            return AggregateState(EAggregateFunction::Sum, type);
+        }
+    },
+    {
+        "aggregate_state_avg",
+        [] (const TLogicalTypePtr& type) {
+            return AggregateState(EAggregateFunction::Avg, type);
+        }
     }
 };
 
@@ -732,6 +761,13 @@ INSTANTIATE_TEST_SUITE_P(
 
 TEST_P(TCombineLogicalMetatypeTests, TestValidateStruct)
 {
+    const auto& [combineName, combineFunc] = GetParam();
+    if (combineName.starts_with("aggregate_state")) {
+        // AggregateState constrains argument_type to simple types,
+        // so struct validation errors don't propagate through it.
+        return;
+    }
+
     for (auto isStableName : {false, true}) {
         const auto* nameType = isStableName ? "Stable name" : "Name";
         TStructField field{
@@ -745,7 +781,6 @@ TEST_P(TCombineLogicalMetatypeTests, TestValidateStruct)
             ValidateComplexLogicalType(badType),
             Format("%v of struct field #0 is empty", nameType));
 
-        const auto& [combineName, combineFunc] = GetParam();
         const auto combinedType1 = combineFunc(badType);
         const auto combinedType2 = combineFunc(combinedType1);
         EXPECT_NE(*combinedType1, *badType);
@@ -764,7 +799,7 @@ TEST_P(TCombineLogicalMetatypeTests, TestValidateStruct)
 TEST_P(TCombineLogicalMetatypeTests, TestValidateAny)
 {
     const auto& [combineName, combineFunc] = GetParam();
-    if (combineName == "optional" || combineName == "dict-key") {
+    if (combineName == "optional" || combineName == "dict-key" || combineName.starts_with("aggregate_state")) {
         // Skip tests for these combiners.
         return;
     }
@@ -785,8 +820,8 @@ TEST_P(TCombineLogicalMetatypeTests, TestValidateAny)
 TEST_P(TCombineLogicalMetatypeTests, TestTrivialDetag)
 {
     const auto& [combineName, combineFunc] = GetParam();
-    if (combineName == "tagged") {
-        // Skip test for this combiner.
+    if (combineName == "tagged" || combineName.starts_with("aggregate_state")) {
+        // Skip test for these combiners.
         return;
     }
     const auto& logicalType = Utf8();
@@ -801,8 +836,8 @@ TEST_P(TCombineLogicalMetatypeTests, TestTrivialDetag)
 TEST_P(TCombineLogicalMetatypeTests, TestNonTrivialDetag)
 {
     const auto& [combineName, combineFunc] = GetParam();
-    if (combineName == "tagged") {
-        // Skip test for this combiner.
+    if (combineName == "tagged" || combineName.starts_with("aggregate_state")) {
+        // Skip test for these combiners.
         return;
     }
     const auto& logicalType = Tagged("foo", Utf8());
@@ -1071,6 +1106,104 @@ TEST(TTestLogicalTypesWithDataTest, BadTypes)
 
         EXPECT_THROW(ConvertTo<TLogicalTypePtr>(TYsonStringBuf(typeYson)), TErrorException);
     }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TEST(TAggregateStateLogicalTypeTest, Construction)
+{
+    auto sumType = AggregateState(EAggregateFunction::Sum, Int32());
+    const auto& sumState = sumType->AsAggregateStateTypeRef();
+    EXPECT_EQ(sumState.GetFunction(), EAggregateFunction::Sum);
+    EXPECT_EQ(*sumState.GetArgumentType(), *Int32());
+    EXPECT_EQ(*sumState.GetElement(), *Int64());
+
+    auto avgType = AggregateState(EAggregateFunction::Avg, Int64());
+    const auto& avgState = avgType->AsAggregateStateTypeRef();
+    EXPECT_EQ(avgState.GetFunction(), EAggregateFunction::Avg);
+    const auto& avgFields = avgState.GetElement()->AsStructTypeRef().GetFields();
+    ASSERT_EQ(avgFields.size(), 2u);
+    EXPECT_EQ(avgFields[0].Name, "sum");
+    EXPECT_EQ(*avgFields[0].Type, *Int64());
+    EXPECT_EQ(avgFields[1].Name, "count");
+    EXPECT_EQ(*avgFields[1].Type, *Int64());
+
+    auto minType = AggregateState(EAggregateFunction::Min, String());
+    EXPECT_EQ(*minType->AsAggregateStateTypeRef().GetElement(), *Optional(String()));
+
+    // Element type is always set, even for the arguments rejected by the validation later.
+    auto badSumType = AggregateState(EAggregateFunction::Sum, String());
+    EXPECT_EQ(*badSumType->AsAggregateStateTypeRef().GetElement(), *Null());
+    EXPECT_GT(badSumType->GetMemoryUsage(), 0);
+
+    auto badAvgType = AggregateState(EAggregateFunction::Avg, String());
+    EXPECT_EQ(*badAvgType->AsAggregateStateTypeRef().GetElement()->AsStructTypeRef().GetFields()[0].Type, *Null());
+    EXPECT_GT(badAvgType->GetMemoryUsage(), 0);
+}
+
+TEST(TAggregateStateLogicalTypeTest, Nullability)
+{
+    EXPECT_FALSE(AggregateState(EAggregateFunction::Sum, Int32())->IsNullable());
+    EXPECT_FALSE(AggregateState(EAggregateFunction::Avg, Int32())->IsNullable());
+    EXPECT_TRUE(AggregateState(EAggregateFunction::Min, Int32())->IsNullable());
+    EXPECT_TRUE(AggregateState(EAggregateFunction::Max, String())->IsNullable());
+
+    // Nullability must match the one of the detagged type, otherwise value validation
+    // and yson converters disagree on the value encoding.
+    for (auto function : TEnumTraits<EAggregateFunction>::GetDomainValues()) {
+        auto type = Optional(AggregateState(function, Int32()));
+        EXPECT_EQ(
+            type->AsOptionalTypeRef().IsElementNullable(),
+            DetagLogicalType(type)->AsOptionalTypeRef().IsElementNullable())
+            << "function is " << ToString(function);
+    }
+}
+
+TEST(TAggregateStateLogicalTypeTest, Equality)
+{
+    EXPECT_EQ(*AggregateState(EAggregateFunction::Sum, Int64()), *AggregateState(EAggregateFunction::Sum, Int64()));
+    EXPECT_NE(*AggregateState(EAggregateFunction::Sum, Int64()), *AggregateState(EAggregateFunction::Avg, Int64()));
+    EXPECT_NE(*AggregateState(EAggregateFunction::Sum, Int64()), *AggregateState(EAggregateFunction::Sum, Double()));
+    EXPECT_NE(*AggregateState(EAggregateFunction::Sum, Int64()), *Int64());
+}
+
+TEST(TAggregateStateLogicalTypeTest, ValidationSuccess)
+{
+    EXPECT_NO_THROW(ValidateComplexLogicalType(AggregateState(EAggregateFunction::Sum, Int64())));
+    EXPECT_NO_THROW(ValidateComplexLogicalType(AggregateState(EAggregateFunction::Avg, Double())));
+    EXPECT_NO_THROW(ValidateComplexLogicalType(AggregateState(EAggregateFunction::Min, String())));
+    EXPECT_NO_THROW(ValidateComplexLogicalType(AggregateState(EAggregateFunction::Max, Utf8())));
+}
+
+TEST(TAggregateStateLogicalTypeTest, DeserializationUnsupportedFuncName)
+{
+    // Unknown function names must be rejected at deserialization time (YSON parsing).
+    auto makeYson = [] (TStringBuf funcName) {
+        return Format(R"({"type_name"="aggregate_state";"function"=%Qv;"argument_type"={"type_name"="int64"}})", funcName);
+    };
+    EXPECT_THROW(NYTree::ConvertTo<TLogicalTypePtr>(NYson::TYsonString(makeYson("median"))), std::exception);
+    EXPECT_THROW(NYTree::ConvertTo<TLogicalTypePtr>(NYson::TYsonString(makeYson("uniq"))), std::exception);
+    EXPECT_THROW(NYTree::ConvertTo<TLogicalTypePtr>(NYson::TYsonString(makeYson(""))), std::exception);
+
+    EXPECT_NO_THROW(NYTree::ConvertTo<TLogicalTypePtr>(NYson::TYsonString(makeYson("sum"))));
+}
+
+TEST(TAggregateStateLogicalTypeTest, ValidationIncompatibleAggregateType)
+{
+    EXPECT_THROW_WITH_SUBSTRING(
+        ValidateComplexLogicalType(AggregateState(EAggregateFunction::Min, Struct("x", Int64()))),
+        "AggregateState requires a simple argument type");
+    EXPECT_THROW_WITH_SUBSTRING(ValidateComplexLogicalType(
+        AggregateState(EAggregateFunction::Sum, AggregateState(EAggregateFunction::Sum, Int64()))),
+        "AggregateState requires a simple argument type");
+
+    EXPECT_THROW_WITH_SUBSTRING(
+        ValidateComplexLogicalType(AggregateState(EAggregateFunction::Sum, String())),
+        "requires a simple numeric argument type");
+
+    EXPECT_THROW_WITH_SUBSTRING(
+        ValidateComplexLogicalType(AggregateState(EAggregateFunction::Min, Json())),
+        "requires a simple comparable argument type");
 }
 
 ////////////////////////////////////////////////////////////////////////////////

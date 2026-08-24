@@ -410,6 +410,62 @@ TEST(TTableSchemaTest, ColumnSchemaValidation)
 
 }
 
+TEST(TTableSchemaTest, AggregateStateColumnSchemaValidation)
+{
+    EXPECT_NO_THROW(
+        ValidateColumnSchema(
+            TColumnSchema("agg", AggregateStateLogicalType(EAggregateFunction::Avg, SimpleLogicalType(ESimpleLogicalValueType::Int64))),
+            /*isTableSorted*/ false,
+            /*isTableDynamic*/ false));
+
+    EXPECT_THROW(
+        ValidateColumnSchema(
+            TColumnSchema("agg", AggregateStateLogicalType(EAggregateFunction::Avg, SimpleLogicalType(ESimpleLogicalValueType::Int64)), ESortOrder::Ascending),
+            /*isTableSorted*/ true,
+            /*isTableDynamic*/ false),
+        std::exception);
+
+}
+
+TEST(TTableSchemaTest, ValidateNoAggregateStateType)
+{
+    auto aggregateStateType = [] {
+        return AggregateStateLogicalType(
+            EAggregateFunction::Avg,
+            SimpleLogicalType(ESimpleLogicalValueType::Int64));
+    };
+
+    std::vector<TLogicalTypePtr> typesWithAggregateState = {
+        aggregateStateType(),
+        OptionalLogicalType(aggregateStateType()),
+        ListLogicalType(aggregateStateType()),
+        StructLogicalType({{"field", "field", aggregateStateType()}}, {}),
+        TupleLogicalType({aggregateStateType()}),
+        VariantStructLogicalType({{"field", "field", aggregateStateType()}}),
+        VariantTupleLogicalType({aggregateStateType()}),
+        DictLogicalType(aggregateStateType(), SimpleLogicalType(ESimpleLogicalValueType::Int64)),
+        DictLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int64), aggregateStateType()),
+        TaggedLogicalType("tag", aggregateStateType()),
+        ListLogicalType(StructLogicalType({
+            {"field", "field", OptionalLogicalType(aggregateStateType())}
+        }, {})),
+    };
+
+    for (const auto& logicalType : typesWithAggregateState) {
+        TTableSchema schema({TColumnSchema("column", logicalType)});
+        EXPECT_THROW_WITH_SUBSTRING(
+            ValidateNoAggregateStateType(schema),
+            "AggregateState type is not available yet");
+    }
+
+    TTableSchema schemaWithoutAggregateState({
+        TColumnSchema("column", ListLogicalType(StructLogicalType({
+            {"field", "field", OptionalLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int64))}
+        }, {})))
+    });
+    EXPECT_NO_THROW(ValidateNoAggregateStateType(schemaWithoutAggregateState));
+}
+
 TEST(TTableSchemaTest, ValidateTableSchemaTest)
 {
     auto expectBad = [] (const auto& schemaString) {

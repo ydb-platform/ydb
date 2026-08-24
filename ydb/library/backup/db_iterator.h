@@ -140,7 +140,7 @@ public:
         return path.Reconstruct();
     }
 
-    bool IsTable() const {
+    bool IsRowTable() const {
         return GetCurrentNode()->Type == NScheme::ESchemeEntryType::Table;
     }
 
@@ -148,8 +148,8 @@ public:
         return GetCurrentNode()->Type == NScheme::ESchemeEntryType::ColumnTable;
     }
 
-    bool IsBackupTable() const {
-        return IsTable() || IsColumnTable();
+    bool IsTable() const {
+        return IsRowTable() || IsColumnTable();
     }
 
     bool IsView() const {

@@ -1108,13 +1108,13 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
             auto childFolderPath = CreateDirectory(folderPath, dbIt.GetRelPath());
             TFile(childFolderPath.Child(NDump::NFiles::Incomplete().FileName), CreateAlways).Close();
             if (schemaOnly) {
-                if (dbIt.IsBackupTable()) {
+                if (dbIt.IsTable()) {
                     BackupTable(driver, dbIt.GetTraverseRoot(), backupPrefix, dbIt.GetRelPath(),
                             childFolderPath, schemaOnly, preservePoolKinds, ordered, dbIt.IsColumnTable());
                     childFolderPath.Child(NDump::NFiles::Incomplete().FileName).DeleteIfExists();
                 }
             } else if (!avoidCopy) {
-                if (dbIt.IsBackupTable()) {
+                if (dbIt.IsTable()) {
                     const TString tmpTablePath = JoinDatabasePath(backupPrefix, dbIt.GetRelPath());
                     if (dbIt.IsColumnTable()) {
                         columnTablePaths.insert(dbIt.GetFullPath());
@@ -1147,7 +1147,7 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
                     BackupSystemView(driver, dbIt.GetFullPath(), childFolderPath);
                 } else if (dbIt.IsTransfer()) {
                     BackupTransfer(driver, database, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath);
-                } else if (!dbIt.IsBackupTable() && !dbIt.IsDir()) {
+                } else if (!dbIt.IsTable() && !dbIt.IsDir()) {
                     throw TSkipException() << "dumping objects of type " << dbIt.GetCurrentNode()->Type << " is not supported";
                 }
             } catch (const TSkipException& ex) {
@@ -1167,7 +1167,7 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
             }
 
             TFsPath childFolderPath = folderPath.Child(dbIt.GetRelPath());
-            if (dbIt.IsBackupTable()) {
+            if (dbIt.IsTable()) {
                 // If table backup was not successful exception should be thrown,
                 // so control flow can't reach this line. Check it just to be sure
                 Y_ENSURE(!childFolderPath.Child(NDump::NFiles::Incomplete().FileName).Exists());
@@ -1214,7 +1214,7 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
             TFsPath childFolderPath = folderPath.Child(dbIt.GetRelPath());
             const TString tmpTablePath = JoinDatabasePath(backupPrefix, dbIt.GetRelPath());
 
-            if (dbIt.IsBackupTable()) {
+            if (dbIt.IsTable()) {
                 if (skippedColumnTables.contains(dbIt.GetFullPath())) {
                     childFolderPath.ForceDelete();
                     dbIt.Next();

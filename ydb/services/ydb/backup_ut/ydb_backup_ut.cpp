@@ -3729,14 +3729,20 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         const auto& pathToBackup = tempDir.Path();
         constexpr const char* table = "/Root/olap_table";
 
-        TestTableContentIsPreserved(
-            table,
-            session,
-            CreateBackupLambda(driver, pathToBackup, "/Root", "/Root", NDump::TDumpSettings().AvoidCopy(true)),
-            CreateRestoreLambda(driver, pathToBackup, "/Root",
-                NDump::TRestoreSettings().Mode(NDump::TRestoreSettings::EMode::BulkUpsert)),
-            /* isOlap */ true
-        );
+        for (auto mode : {NDump::TRestoreSettings::EMode::BulkUpsert, NDump::TRestoreSettings::EMode::ImportData}) {
+            TestTableContentIsPreserved(
+                table,
+                session,
+                CreateBackupLambda(driver, pathToBackup, "/Root", "/Root", NDump::TDumpSettings().AvoidCopy(true)),
+                CreateRestoreLambda(driver, pathToBackup, "/Root",
+                    NDump::TRestoreSettings().Mode(mode)),
+                /* isOlap */ true
+            );
+            ExecuteQuery(session, Sprintf(R"(
+                    DROP TABLE `%s`;
+                )", table
+            ), true);
+        }
     }
 
     Y_UNIT_TEST(EmptyColumnTableBackupLeavesNoIncompleteDataFile) {

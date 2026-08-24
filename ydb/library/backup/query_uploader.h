@@ -38,6 +38,9 @@ private:
 
     bool WaitForRequestSlot();
     void ReportWriteTxResult(const NYdb::TStatus& status);
+
+    TUploader(const TOptions& opts, const TString& query, NYdb::NTable::TTableClient* tableClient, NYdb::NQuery::TQueryClient* queryClient);
+
 public:
     TUploader(const TOptions& opts, NYdb::NTable::TTableClient& tableClient, const TString& query);
     TUploader(const TOptions& opts, NYdb::NQuery::TQueryClient& queryClient, const TString& query);

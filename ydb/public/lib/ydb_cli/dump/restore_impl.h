@@ -196,7 +196,6 @@ struct TPendingConsumersRestore {
 } // NPrivate
 
 class TRestoreClient {
-    TRestoreResult CheckImportDataSupportsAllTables(const TFsPath& fsBackupRoot, const TString& dbRestoreRoot, const TRestoreSettings& settings) const;
     TRestoreResult RestoreFolder(const TFsPath& fsBackupRoot, const TString& dbRestoreRoot, const TRestoreSettings& settings);
     TRestoreResult RestoreDir(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings);
     TRestoreResult RestoreTable(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings);

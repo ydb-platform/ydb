@@ -13,26 +13,30 @@ ui32 TUploader::TOptions::GetRps() const {
     return Rate * TDuration::Seconds(1).MilliSeconds() / Interval.MilliSeconds();
 }
 
-TUploader::TUploader(const TUploader::TOptions &opts, NYdb::NTable::TTableClient& tableClient, const TString &query)
+TUploader::TUploader(
+        const TUploader::TOptions& opts,
+        const TString& query,
+        NYdb::NTable::TTableClient* tableClient,
+        NYdb::NQuery::TQueryClient* queryClient)
     : Opts(opts)
     , Query(query)
     , ShouldStop(0)
     , RequestLimiter(opts.GetRps(), opts.GetRps())
-    , TableClient(&tableClient)
+    , TableClient(tableClient)
+    , QueryClient(queryClient)
 {
     TasksQueue = MakeSimpleShared<TThreadPool>(TThreadPool::TParams().SetBlocking(true).SetCatching(true));
     TasksQueue->Start(opts.InFly, opts.InFly + 1);
 }
 
-TUploader::TUploader(const TUploader::TOptions &opts, NYdb::NQuery::TQueryClient& queryClient, const TString &query)
-    : Opts(opts)
-    , Query(query)
-    , ShouldStop(0)
-    , RequestLimiter(opts.GetRps(), opts.GetRps())
-    , QueryClient(&queryClient)
+TUploader::TUploader(const TUploader::TOptions& opts, NYdb::NTable::TTableClient& tableClient, const TString& query)
+    : TUploader(opts, query, &tableClient, nullptr)
 {
-    TasksQueue = MakeSimpleShared<TThreadPool>(TThreadPool::TParams().SetBlocking(true).SetCatching(true));
-    TasksQueue->Start(opts.InFly, opts.InFly + 1);
+}
+
+TUploader::TUploader(const TUploader::TOptions& opts, NYdb::NQuery::TQueryClient& queryClient, const TString& query)
+    : TUploader(opts, query, nullptr, &queryClient)
+{
 }
 
 bool TUploader::Push(const TString& path, TValue&& value) {

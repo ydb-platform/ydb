@@ -191,7 +191,7 @@ ui64 CreatePartitionTablet(
     return PartitionTabletId;
 }
 
-NThreading::TFuture<void> SendVChunkConfigUpdate(
+TPersistResultFuture SendVChunkConfigUpdate(
     TEnvironmentSetup& env,
     ui64 partitionTabletId,
     ui32 vChunkIndex)
@@ -221,7 +221,7 @@ NThreading::TFuture<void> SendVChunkConfigUpdate(
     return future;
 }
 
-NThreading::TFuture<void> SendDirtyMapStateUpdate(
+TPersistResultFuture SendDirtyMapStateUpdate(
     TEnvironmentSetup& env,
     ui64 partitionTabletId,
     ui32 vChunkIndex,
@@ -1089,7 +1089,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         UNIT_ASSERT_VALUES_EQUAL(1u, blockedCommits.size());
         UNIT_ASSERT(!first.HasValue());
 
-        TVector<NThreading::TFuture<void>> batched;
+        TVector<TPersistResultFuture> batched;
         batched.push_back(SendDirtyMapStateUpdate(env, partition, 1, 2));
         batched.push_back(SendDirtyMapStateUpdate(env, partition, 2, 3));
         batched.push_back(SendDirtyMapStateUpdate(env, partition, 3, 4));
@@ -1109,6 +1109,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         // stay unresolved until the common commit completes.
         UNIT_ASSERT_VALUES_EQUAL(2u, blockedCommits.size());
         UNIT_ASSERT(first.HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(EPersistResult::Success, first.GetValue());
         for (const auto& future: batched) {
             UNIT_ASSERT(!future.HasValue());
         }
@@ -1118,6 +1119,9 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         UNIT_ASSERT_VALUES_EQUAL(2u, blockedCommits.size());
         for (const auto& future: batched) {
             UNIT_ASSERT(future.HasValue());
+            UNIT_ASSERT_VALUES_EQUAL(
+                EPersistResult::Success,
+                future.GetValue());
         }
 
         // Completion of a batch resets the in-flight state: a later update
@@ -1130,6 +1134,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         releaseCommit(2);
         env.Sim(TDuration::Seconds(1));
         UNIT_ASSERT(next.HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(EPersistResult::Success, next.GetValue());
 
         runtime->FilterFunction = {};
     }
@@ -1178,7 +1183,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         UNIT_ASSERT_VALUES_EQUAL(1u, blockedCommits.size());
         UNIT_ASSERT(!first.HasValue());
 
-        TVector<NThreading::TFuture<void>> batched;
+        TVector<TPersistResultFuture> batched;
         batched.push_back(SendVChunkConfigUpdate(env, partition, 1));
         batched.push_back(SendVChunkConfigUpdate(env, partition, 2));
         batched.push_back(SendVChunkConfigUpdate(env, partition, 3));
@@ -1194,6 +1199,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
 
         UNIT_ASSERT_VALUES_EQUAL(2u, blockedCommits.size());
         UNIT_ASSERT(first.HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(EPersistResult::Success, first.GetValue());
         for (const auto& future: batched) {
             UNIT_ASSERT(!future.HasValue());
         }
@@ -1203,6 +1209,9 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         UNIT_ASSERT_VALUES_EQUAL(2u, blockedCommits.size());
         for (const auto& future: batched) {
             UNIT_ASSERT(future.HasValue());
+            UNIT_ASSERT_VALUES_EQUAL(
+                EPersistResult::Success,
+                future.GetValue());
         }
 
         auto next = SendVChunkConfigUpdate(env, partition, 4);
@@ -1213,6 +1222,89 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         releaseCommit(2);
         env.Sim(TDuration::Seconds(1));
         UNIT_ASSERT(next.HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(EPersistResult::Success, next.GetValue());
+    }
+
+    Y_UNIT_TEST(ShouldFailStateUpdatesWhenPartitionStops)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+
+        auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
+        TActorId bootstrapperId;
+        const ui64 partition =
+            CreatePartitionTablet(env, 32768, &bootstrapperId);
+
+        TVector<std::unique_ptr<IEventHandle>> blockedCommitResults;
+        bool bootstrapperDeathObserved = false;
+        runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev)
+        {
+            if (ev->GetTypeRewrite() == TEvTablet::TEvCommitResult::EventType) {
+                auto* msg = ev->Get<TEvTablet::TEvCommitResult>();
+                if (msg->TabletID == partition) {
+                    blockedCommitResults.push_back(std::move(ev));
+                    return false;
+                }
+            }
+
+            if (ev->GetTypeRewrite() == TEvTablet::TEvTabletDead::EventType) {
+                auto* msg = ev->Get<TEvTablet::TEvTabletDead>();
+                if (msg->TabletID == partition &&
+                    ev->GetRecipientRewrite() == bootstrapperId)
+                {
+                    bootstrapperDeathObserved = true;
+                    return false;
+                }
+            }
+            return true;
+        };
+
+        auto executingConfig = SendVChunkConfigUpdate(env, partition, 0);
+        env.Sim(TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(1u, blockedCommitResults.size());
+
+        auto pendingConfig = SendVChunkConfigUpdate(env, partition, 1);
+        auto executingDirtyMap = SendDirtyMapStateUpdate(env, partition, 0, 1);
+        env.Sim(TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(2u, blockedCommitResults.size());
+
+        auto pendingDirtyMap = SendDirtyMapStateUpdate(env, partition, 1, 2);
+        env.Sim(TDuration::Seconds(1));
+
+        UNIT_ASSERT(!executingConfig.HasValue());
+        UNIT_ASSERT(!pendingConfig.HasValue());
+        UNIT_ASSERT(!executingDirtyMap.HasValue());
+        UNIT_ASSERT(!pendingDirtyMap.HasValue());
+
+        const TActorId sender = runtime->AllocateEdgeActor(
+            env.Settings.ControllerNodeId,
+            __FILE__,
+            __LINE__);
+        runtime->SendToPipe(
+            partition,
+            sender,
+            new TEvPartitionDirectPrivate::TEvPoison("test shutdown"),
+            0,
+            TTestActorSystem::GetPipeConfigWithRetries());
+        runtime->DestroyActor(sender);
+
+        env.Sim(TDuration::Seconds(10));
+
+        UNIT_ASSERT(bootstrapperDeathObserved);
+        for (const auto& future:
+             {executingConfig,
+              pendingConfig,
+              executingDirtyMap,
+              pendingDirtyMap})
+        {
+            UNIT_ASSERT(future.HasValue());
+            UNIT_ASSERT_VALUES_EQUAL(
+                EPersistResult::Cancelled,
+                future.GetValue());
+        }
     }
 
     Y_UNIT_TEST(BasicWriteReadPBufferReplication)

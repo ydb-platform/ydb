@@ -1,5 +1,7 @@
 #pragma once
 
+#include "partition_direct_service.h"
+
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/dirty_map.pb.h>
@@ -121,7 +123,7 @@ struct TTxPartition
         struct TUpdateConfigRequest
         {
             TVChunkConfig VChunkConfig;
-            NThreading::TPromise<void> UpdateCompleted;
+            TPersistResultPromise UpdateCompleted;
         };
 
         using TUpdateConfigRequests = TVector<TUpdateConfigRequest>;
@@ -147,7 +149,7 @@ struct TTxPartition
         {
             ui32 VChunkIndex;
             TDirtyMapStateProto State;
-            NThreading::TPromise<void> UpdateCompleted;
+            TPersistResultPromise UpdateCompleted;
         };
 
         using TUpdateStateRequests = TVector<TUpdateStateRequest>;

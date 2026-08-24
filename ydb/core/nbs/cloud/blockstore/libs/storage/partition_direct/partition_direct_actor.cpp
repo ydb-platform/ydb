@@ -148,9 +148,46 @@ void TPartitionActor::CleanupResources(const TActorContext& ctx)
 
     GetNbsService()->VhostServer->DetachStorage(GetSocketPath());
 
+    // It is assumed that the transaction to the local database is always
+    // successful. If the Tablet finishes its work, then it is necessary to
+    // respond to all pending requests so that there are no leakage resources.
+    // We will do this after the initiator of the request is stopped.
+    auto failUpdateRequests =
+        [executingConfigPromises =
+             std::move(ExecutingUpdateVChunkConfigPromises),
+         pendingConfigRequests = std::move(PendingUpdateVChunkConfigRequests),
+         executingDirtyMapPromises =
+             std::move(ExecutingUpdateDirtyMapStatePromises),
+         pendingDirtyMapRequests =
+             std::move(PendingUpdateDirtyMapStateRequests)]() mutable
+    {
+        for (auto& promise: executingConfigPromises) {
+            promise.TrySetValue(EPersistResult::Cancelled);
+        }
+        for (auto& req: pendingConfigRequests) {
+            req.UpdateCompleted.TrySetValue(EPersistResult::Cancelled);
+        }
+
+        for (auto& promise: executingDirtyMapPromises) {
+            promise.TrySetValue(EPersistResult::Cancelled);
+        }
+        for (auto& req: pendingDirtyMapRequests) {
+            req.UpdateCompleted.TrySetValue(EPersistResult::Cancelled);
+        }
+    };
+
     if (FastPathService) {
-        FastPathService->Stop();
+        auto onStop = FastPathService->Stop();
+        onStop.Subscribe(
+            [failUpdateRequests = std::move(failUpdateRequests)](
+                const NThreading::TFuture<void>& stopFuture) mutable
+            {
+                Y_UNUSED(stopFuture);
+                failUpdateRequests();
+            });
         FastPathService.reset();
+    } else {
+        failUpdateRequests();
     }
 }
 

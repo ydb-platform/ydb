@@ -17,7 +17,13 @@ bool TPartitionActor::PrepareUpdateDirtyMapState(
 {
     Y_UNUSED(ctx);
     Y_UNUSED(tx);
-    Y_UNUSED(args);
+
+    Y_DEBUG_ABORT_UNLESS(ExecutingUpdateDirtyMapStatePromises.empty());
+    ExecutingUpdateDirtyMapStatePromises.reserve(
+        args.UpdateStateRequests.size());
+    for (const auto& request: args.UpdateStateRequests) {
+        ExecutingUpdateDirtyMapStatePromises.push_back(request.UpdateCompleted);
+    }
 
     return true;
 }
@@ -40,15 +46,16 @@ void TPartitionActor::CompleteUpdateDirtyMapState(
     TTxPartition::TUpdateDirtyMapState& args)
 {
     for (auto& request: args.UpdateStateRequests) {
-        request.UpdateCompleted.SetValue();
+        request.UpdateCompleted.TrySetValue(EPersistResult::Success);
     }
+    ExecutingUpdateDirtyMapStatePromises.clear();
     ExecutingUpdateDirtyMapState = false;
 
     if (!PendingUpdateDirtyMapStateRequests.empty()) {
         LOG_INFO(
             ctx,
             NKikimrServices::NBS_PARTITION,
-            "%s Execute pending UpdateDirtyMapStateRequests %lu",
+            "%s Execute pending UpdateDirtyMapStateRequests %zu",
             LogTitle.GetWithTime().c_str(),
             PendingUpdateDirtyMapStateRequests.size());
 

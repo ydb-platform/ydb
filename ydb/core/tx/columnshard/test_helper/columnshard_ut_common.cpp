@@ -639,16 +639,16 @@ NTxUT::TPlanStep SetupSchema(
     using namespace NTxUT;
     TString txBody;
     auto specials = TTestSchema::TTableSpecials().WithCodec(codec);
-    if (table.InStore) {
-        txBody = TTestSchema::CreateInitShardTxBody(pathId, table.Schema, table.Pk, specials);
-    } else {
+    if (table.Standalone) {
         txBody = TTestSchema::CreateStandaloneTableTxBody(pathId, table.Schema, table.Pk, specials);
+    } else {
+        txBody = TTestSchema::CreateInitShardTxBody(pathId, table.Standalone, table.Schema, table.Pk, specials);
     }
     return SetupSchema(runtime, sender, txBody, txId);
 }
 
 NTxUT::TPlanStep PrepareTablet(
-    TTestBasicRuntime& runtime, const ui64 tableId, const std::vector<NArrow::NTest::TTestColumn>& schema, const ui32 keySize) {
+    TTestBasicRuntime& runtime, const ui64 tableId, const std::vector<NArrow::NTest::TTestColumn>& schema, const ui32 keySize, const bool standalone) {
     using namespace NTxUT;
     CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
 
@@ -657,6 +657,7 @@ NTxUT::TPlanStep PrepareTablet(
     runtime.DispatchEvents(options);
 
     TestTableDescription tableDescription;
+    tableDescription.Standalone = standalone;
     tableDescription.Schema = schema;
     tableDescription.Pk = {};
     for (ui64 i = 0; i < keySize; ++i) {

@@ -76,8 +76,27 @@ public:
     virtual void Apply(NTabletFlatExecutor::TTransactionContext& txc) const override {
         using namespace NColumnShard;
         NIceDb::TNiceDb db(txc.DB);
-        // Add invalid widow schema, if SchemaVersionCleaner will not erase it, then test will fail
+
+        // Determine if the table uses a schema preset (InStore/column store) or is standalone.
+        // For standalone tables, SchemaPresetId in TableVersionInfo is 0 (no preset).
+        // For InStore tables, it references a registered schema preset.
+        bool hasSchemaPreset = false;
         {
+            auto versionRowset = db.Table<Schema::TableVersionInfo>().Select();
+            if (versionRowset.IsReady() && !versionRowset.EndOfSet()) {
+                NKikimrTxColumnShard::TTableVersionInfo existingVersion;
+                if (existingVersion.ParseFromString(versionRowset.GetValue<Schema::TableVersionInfo::InfoProto>())) {
+                    hasSchemaPreset = existingVersion.HasSchemaPresetId() && existingVersion.GetSchemaPresetId() > 0;
+                }
+            }
+        }
+
+        // The SchemaVersionsNormalizer only handles schema preset versions.
+        // For standalone tables (no preset), injecting fake TableVersionInfo entries would cause
+        // the normalizer to crash because it expects every TableVersionInfo to have a corresponding
+        // entry in SchemaPresetVersionInfo. Therefore, we only inject fake entries for InStore tables.
+        if (hasSchemaPreset) {
+            // Add invalid widow schema preset version, if SchemaVersionCleaner will not erase it, then test will fail.
             NKikimrTxColumnShard::TSchemaPresetVersionInfo info;
             info.SetId(1);
             info.SetSinceStep(5);
@@ -85,16 +104,22 @@ public:
             info.MutableSchema()->SetVersion(0);
             db.Table<Schema::SchemaPresetVersionInfo>().Key(1, 5, 1).Update(
                 NIceDb::TUpdate<Schema::SchemaPresetVersionInfo::InfoProto>(info.SerializeAsString()));
-        }
 
-        {
-            // Add invalid widow table version, if SchemaVersionCleaner will not erase it, then test will fail
+            // Resolve actual internal pathId from TableInfo.
+            auto rowset = db.Table<Schema::TableInfo>().Select();
+            UNIT_ASSERT(rowset.IsReady());
+            UNIT_ASSERT(!rowset.EndOfSet());
+            const auto pathId = TInternalPathId::FromRawValue(rowset.GetValue<Schema::TableInfo::PathId>());
+            Cerr << "QQQ: " << "pathId: " << pathId << Endl;
+
+            // Add invalid widow table version, if SchemaVersionCleaner will not erase it, then test will fail.
             NKikimrTxColumnShard::TTableVersionInfo versionInfo;
             versionInfo.SetSchemaPresetId(1);
             versionInfo.SetSinceStep(5);
             versionInfo.SetSinceTxId(1);
-            db.Table<Schema::TableVersionInfo>().Key(1, 5, 1).Update(
-                NIceDb::TUpdate<Schema::TableVersionInfo::InfoProto>(versionInfo.SerializeAsString()));
+            db.Table<Schema::TableVersionInfo>()
+                .Key(pathId.GetRawValue(), 5, 1)
+                .Update(NIceDb::TUpdate<Schema::TableVersionInfo::InfoProto>(versionInfo.SerializeAsString()));
         }
     }
 };

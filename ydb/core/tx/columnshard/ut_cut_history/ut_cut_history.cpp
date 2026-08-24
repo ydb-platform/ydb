@@ -1,4 +1,3 @@
-// Unit tests for the CutHistory (KIKIMR-26208) two-tier nomination engine.
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/testlib/actor_helpers.h>
@@ -20,10 +19,6 @@ namespace NKikimr {
 
 namespace {
 
-// ---- helpers ----------------------------------------------------------------
-
-// Build a TTabletStorageInfo with N channels, each having the given history.
-// historySlots: vector of (fromGeneration, groupId) pairs — first is oldest.
 TIntrusivePtr<TTabletStorageInfo> MakeTabletInfo(ui64 tabletId, ui32 nChannels, const TVector<std::pair<ui32, ui32>>& historySlots)
 {
     auto info = MakeIntrusive<TTabletStorageInfo>();
@@ -53,7 +48,6 @@ NOlap::TUnifiedBlobId MakeUnifiedBlob(const TLogoBlobID& logo) {
     return NOlap::TUnifiedBlobId(logo.TabletID(), logo);
 }
 
-// Test controller that enables CutHistory and counts nominated/cut events.
 class TCutHistoryController: public NYDBTest::ICSController {
 public:
     bool IsCSCutHistoryEnabled() const override {
@@ -105,7 +99,6 @@ static const NColumnShard::THistoryCutterCounters& TestSignals() {
     return counters.HistoryCutterCounters;
 }
 
-// Exposes the protected sweep test hooks to this suite only.
 class TTestableHistoryCutter: public THistoryCutterWrapper {
 public:
     using THistoryCutterWrapper::DecrementCounter;
@@ -142,8 +135,6 @@ public:
     }
 };
 
-// ---- tests ------------------------------------------------------------------
-
 Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
     /*
      * With 3 channels (0, 1, 2) and two history entries per channel:
@@ -153,23 +144,6 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
      * Generation=5 => blobs written at gen=0..4 are in history[0], gen>=5 in history[1].
      * Only data channels (ch >= 2) are tracked.
      */
-
-    Y_UNIT_TEST(IncrementOnPortionAdded) {
-        auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
-        static constexpr ui64 TabletId = 111;
-        auto info = MakeTabletInfo(TabletId, 3, { { 0, 100 }, { 5, 200 } });
-        auto bm = std::make_shared<NOlap::TBlobManager>(info, 5, NOlap::TTabletId(TabletId));
-        auto shared = std::make_shared<NOlap::NDataSharing::TStorageSharedBlobsManager>(
-            NOlap::NBlobOperations::TGlobal::DefaultStorageId, NOlap::TTabletId(TabletId));
-        TTestableHistoryCutter cutter(info, 5, bm, shared, TActorId(), TestSignals());
-
-        // TPortionDataAccessor is not constructible here; OnBootComplete drives the
-        // same IncrementCounter path.
-        THashMap<ui64, std::vector<NOlap::TUnifiedBlobId>> portionBlobs;
-        portionBlobs[42].push_back(MakeUnifiedBlob(MakeBlob(TabletId, 2, 3)));
-        cutter.OnBootComplete(portionBlobs);
-        UNIT_ASSERT_VALUES_EQUAL(cutter.GetCounterForTest(TEntryKey{ 2, 0 }), 1);
-    }
 
     Y_UNIT_TEST(DecrementToZeroOnPortionRemoved) {
         auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
@@ -284,13 +258,11 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         UNIT_ASSERT(THistoryCutterWrapper::SeenGroupsCheckPasses(hist, /*fromGen=*/0));
         UNIT_ASSERT(!THistoryCutterWrapper::SeenGroupsCheckPasses(hist, /*fromGen=*/5));
         UNIT_ASSERT(THistoryCutterWrapper::SeenGroupsCheckPasses(hist, /*fromGen=*/10));
-        // Non-existent fromGeneration → not found → false.
         UNIT_ASSERT(!THistoryCutterWrapper::SeenGroupsCheckPasses(hist, /*fromGen=*/99));
 
         // Entry {5,100} is blocked by {0,100} — unless {0,100} was already cut:
         // cut entries are transparent for the same-group walk.
         UNIT_ASSERT(THistoryCutterWrapper::SeenGroupsCheckPasses(hist, /*fromGen=*/5, /*cutFromGenerations=*/{ 0 }));
-        // A cut entry of a DIFFERENT generation does not unblock it.
         UNIT_ASSERT(!THistoryCutterWrapper::SeenGroupsCheckPasses(hist, /*fromGen=*/5, /*cutFromGenerations=*/{ 10 }));
     }
 
@@ -314,11 +286,9 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
 
         const auto ctx = NActors::TActivationContext::AsActorContext();
 
-        // Batch 1 result: keyA disproved (blob found), cursor exhausted.
         cutter.OnBatchComplete({ keyA }, /*exhausted=*/true, ctx);
 
         UNIT_ASSERT(!cutter.IsSweepInFlight());
-        // Disproved entry: back to None, never SentBarrier.
         UNIT_ASSERT(cutter.GetCutStateForTest(keyA) == ECutState::None);
         // Survivor keyB failed the final re-check (IsDrained false) → also None, no barrier.
         UNIT_ASSERT(cutter.GetCutStateForTest(keyB) == ECutState::None);
@@ -341,7 +311,6 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         TTestableHistoryCutter cutter(info, /*currentGen=*/5, bm, shared, TActorId(), TestSignals());
         const TEntryKey key{ /*channel=*/2, /*fromGeneration=*/0 };
 
-        // Empty queues and empty shared registry: the old entry is drained.
         UNIT_ASSERT(cutter.IsDrained(key));
 
         // Share out one of OUR blobs living in the old range (channel 2, gen 1 < 5).
@@ -576,6 +545,16 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         cutter.OnBarrierResult(key, done->Get()->Ok);
         UNIT_ASSERT(cutter.GetCutStateForTest(key) == ECutState::Cut);
         UNIT_ASSERT_VALUES_EQUAL(guard->GetCut().size(), 1);
+
+        // Converged: a cut entry is never nominated again, so Hive gets one request per
+        // entry instead of a nominate/cut loop that would never let the group go.
+        const auto nominationsAfterCut = guard->GetNominated().size();
+        runInActor([&](const NActors::TActorContext& ctx) {
+            nominated = cutter.TryNominate(ctx);
+        });
+        UNIT_ASSERT_C(!nominated, "a cut entry must not be renominated");
+        UNIT_ASSERT_VALUES_EQUAL(guard->GetNominated().size(), nominationsAfterCut);
+        UNIT_ASSERT_VALUES_EQUAL(guard->GetCut().size(), 1);
     }
 
     // One Attempts increment per disproving sweep; cooldown gates renomination in mock time.
@@ -713,6 +692,41 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         bm->OnGCStartOnComplete(TGenStep{ CurrentGen, 0 });
         bm->OnGCFinishedOnComplete(TGenStep{ CurrentGen, 0 });
         UNIT_ASSERT_C(bm->HasNoBlobsInRange(DataChannel, 0, 5), "the orphaned mark left the delete queue with the task");
+    }
+
+    // A live portion in the entry's range blocks nomination; MoveData's rewrite reaches
+    // the cutter as the portion erase, and that is what opens the gate.
+    Y_UNIT_TEST(LivePortionBlocksNomination) {
+        TActorSystemStub actorSystemStub;
+        actorSystemStub.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
+        static constexpr ui64 TabletId = 3131;
+        static constexpr ui32 DataChannel = 2;
+        static constexpr ui32 OldFromGen = 0;
+        static constexpr ui32 CurrentGen = 5;
+        static constexpr ui64 PortionId = 77;
+
+        auto info = MakeTabletInfo(TabletId, /*nChannels=*/3, { { OldFromGen, 100 }, { CurrentGen, 200 } });
+        auto bm = std::make_shared<NOlap::TBlobManager>(info, CurrentGen, NOlap::TTabletId(TabletId));
+        auto shared = std::make_shared<NOlap::NDataSharing::TStorageSharedBlobsManager>(
+            NOlap::NBlobOperations::TGlobal::DefaultStorageId, NOlap::TTabletId(TabletId));
+        TTestableHistoryCutter cutter(info, CurrentGen, bm, shared, TActorId(), TestSignals());
+        const TEntryKey key{ DataChannel, OldFromGen };
+        const auto ctx = NActors::TActivationContext::AsActorContext();
+
+        THashMap<ui64, std::vector<NOlap::TUnifiedBlobId>> portionBlobs;
+        portionBlobs[PortionId].push_back(MakeUnifiedBlob(MakeBlob(TabletId, DataChannel, OldFromGen + 3)));
+        cutter.OnBootComplete(portionBlobs);
+        UNIT_ASSERT_VALUES_EQUAL(cutter.GetCounterForTest(key), 1);
+        UNIT_ASSERT(cutter.IsDrained(key));
+
+        // Drained but not empty: the counter alone must hold nomination back.
+        UNIT_ASSERT_C(!cutter.TryNominate(ctx), "a live portion in the range must block nomination");
+        UNIT_ASSERT(guard->GetNominated().empty());
+
+        cutter.OnPortionRemoved(PortionId);
+        UNIT_ASSERT_VALUES_EQUAL(cutter.GetCounterForTest(key), 0);
+        UNIT_ASSERT(!cutter.IsChannelPoisonedForTest(DataChannel));
     }
 
 }   // TCutHistoryCutterCounters

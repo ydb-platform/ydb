@@ -106,8 +106,6 @@ Y_UNIT_TEST_SUITE(BlobDepotS3Router) {
         settings.MutableSettings()->SetEndpoint("initial-endpoint.example.com");
         settings.MutableSettings()->SetBucket("test-bucket");
         settings.SetBalancerHost(TStringBuilder() << "127.0.0.1:" << balancerPort);
-        settings.SetBalancerRefreshSecMin(1);
-        settings.SetBalancerRefreshSecMax(1);
 
         TActorId routerId = runtime.Register(CreateBlobDepotS3Router(std::move(settings), 12345));
         Y_UNUSED(routerId);
@@ -142,8 +140,6 @@ Y_UNIT_TEST_SUITE(BlobDepotS3Router) {
         settings.MutableSettings()->SetEndpoint("initial-endpoint.example.com");
         settings.MutableSettings()->SetBucket("test-bucket");
         settings.SetBalancerHost(TStringBuilder() << "127.0.0.1:" << balancerPort);
-        settings.SetBalancerRefreshSecMin(60);
-        settings.SetBalancerRefreshSecMax(60);
 
         TActorId routerId = runtime.Register(CreateBlobDepotS3Router(std::move(settings), 12345));
 

@@ -121,7 +121,7 @@ public:
         req->Record.SetLockTxId(LockTxId);
         req->Record.SetLockNodeId(LockNodeId);
         req->Record.SetLockMode(LockMode);
-        if (Snapshot) {
+        if (Snapshot && LockMode != NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE) {
             req->Record.MutableMvccSnapshot()->SetStep(Snapshot->Step);
             req->Record.MutableMvccSnapshot()->SetTxId(Snapshot->TxId);
         }

@@ -51,7 +51,6 @@ TMaybe<TString> ChooseIndexForLookupJoin(const NYql::TKikimrTableDescription& ma
 
 NYql::NNodes::TExprBase RedirectReadToIndex(NYql::NNodes::TExprBase read, const TString& indexName, NYql::TExprContext& ctx);
 
+void TryExtractPrefixValues(const NYql::TExprNode::TPtr& expr, const THashSet<TString>& prefixColumnsSet, TVector<std::pair<TString, NYql::TExprNode::TPtr>>& prefixValues);
+
 } // NKikimr::NKqp::NOpt
-
-
-

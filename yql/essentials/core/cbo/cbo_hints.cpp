@@ -162,7 +162,6 @@ private:
         }
     }
 
-private:
     // Expressions
     void ParseError(const TString& err, i32 pos) {
         auto [line, linePos] = GetLineAndLinePosFromTextPos(pos);
@@ -278,7 +277,6 @@ private:
         YQL_ENSURE(false, "Unreachable");
     }
 
-private:
     // Helpers
     constexpr std::bitset<256> Chars(const TString& s) {
         std::bitset<256> res;
@@ -340,12 +338,10 @@ private:
         return {Line, LinePos};
     }
 
-private:
     i32 Pos_;
     const i32 Size_;
     const TString& Text_;
 
-private:
     TOptimizerHints Hints_;
 };
 

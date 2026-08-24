@@ -484,7 +484,8 @@ public:
                     checks.IsInsideTableIndexPath();
                     // Not build index impl tables can be created only as part of create index
                     // build index impl tables created multiple times during index construction
-                    if (!NTableIndex::IsBuildImplTable(name)) {
+                    // Internal operations (e.g. rebuild index) are allowed to create impl tables
+                    if (!NTableIndex::IsBuildImplTable(name) && !Transaction.GetInternal()) {
                         checks
                             .IsUnderCreating(NKikimrScheme::StatusNameConflict)
                             .IsUnderTheSameOperation(OperationId.GetTxId());

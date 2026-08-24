@@ -347,8 +347,9 @@ public:
             auto newChild = child;
             if (child->GetState() == TExprNode::EState::ExecutionRequired) {
                 auto childStatus = ExecuteNode(child, newChild, ctx, depth);
-                if (childStatus.Level == TStatus::Error)
+                if (childStatus.Level == TStatus::Error) {
                     return childStatus;
+                }
 
                 combinedStatus = combinedStatus.Combine(childStatus);
             } else if (child->GetState() == TExprNode::EState::ExecutionInProgress) {

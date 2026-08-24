@@ -418,6 +418,7 @@ private:
         TNetworkAddress PeerAddress_;
 
         TRequestId RequestId_;
+        std::optional<i64> StartTime_;
         std::string User_ = RootUserName;
         std::optional<std::string> UserTag_;
         std::optional<std::string> UserAgent_;
@@ -475,6 +476,7 @@ private:
             New<TCallHandler>(Owner_);
 
             ParseRequestId();
+            ParseStartTime();
 
             if (!TryParsePeerAddress()) {
                 YT_TLOG_WARNING("Malformed peer address")
@@ -500,7 +502,7 @@ private:
             } catch (const std::exception& ex) {
                 YT_TLOG_DEBUG("Failed to parse ssl credentials")
                     .With("RequestId", RequestId_)
-                    .With(TError(ex));
+                    .With(ex);
                 Unref();
                 return;
             }
@@ -649,6 +651,23 @@ private:
                     .With("MalformedRequestId", *idString)
                     .With("RequestId", RequestId_);
             }
+        }
+
+        void ParseStartTime()
+        {
+            auto startTimeString = CallMetadata_.Find(StartTimeMetadataKey);
+            if (!startTimeString) {
+                return;
+            }
+
+            i64 startTime;
+            if (!TryFromString(*startTimeString, startTime)) {
+                YT_TLOG_WARNING("Failed to parse start time from request metadata")
+                    .With("RequestId", RequestId_);
+                return;
+            }
+
+            StartTime_ = startTime;
         }
 
         void ParseUser()
@@ -908,7 +927,7 @@ private:
             } catch (const std::exception& ex) {
                 YT_TLOG_WARNING("Failed to parse message body size from request metadata")
                     .With("RequestId", RequestId_)
-                    .With(TError(ex));
+                    .With(ex);
                 return false;
             }
 
@@ -927,7 +946,7 @@ private:
             } catch (const std::exception& ex) {
                 YT_TLOG_WARNING("Failed to parse protocol version from string")
                     .With("RequestId", RequestId_)
-                    .With(TError(ex));
+                    .With(ex);
                 return false;
             }
 
@@ -952,6 +971,9 @@ private:
 
             auto header = std::make_unique<NRpc::NProto::TRequestHeader>();
             ToProto(header->mutable_request_id(), RequestId_);
+            if (StartTime_) {
+                header->set_start_time(*StartTime_);
+            }
             if (User_ != RootUserName) {
                 header->set_user(User_);
             }
@@ -993,7 +1015,7 @@ private:
             } catch (const std::exception& ex) {
                 YT_TLOG_DEBUG("Failed to receive request body")
                     .With("RequestId", RequestId_)
-                    .With(TError(ex));
+                    .With(ex);
                 Unref();
                 return;
             }
@@ -1049,7 +1071,8 @@ private:
                     NRpc::EErrorCode::NoSuchService,
                     "Service is not registered")
                     .With("service", ServiceName_);
-                YT_LOG_WARNING(error);
+                YT_TLOG_WARNING("Request failed")
+                    .With(error);
 
                 auto responseMessage = CreateErrorResponseMessage(RequestId_, error);
                 YT_UNUSED_FUTURE(ReplyBus_->Send(std::move(responseMessage)));

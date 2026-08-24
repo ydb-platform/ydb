@@ -310,7 +310,6 @@ class TUserDataTypeFuncFactory: public ::NYql::NUdf::TBoxedValue {
 public:
     using TTypeAwareMarker = bool;
 
-public:
     static const ::NYql::NUdf::TStringRef& Name() {
         static auto Name = ::NYql::NUdf::TStringRef(TFuncName, std::strlen(TFuncName));
         return Name;

@@ -10,6 +10,7 @@
 #include <yql/essentials/core/yql_opt_window.h>
 #include <yql/essentials/core/yql_type_helpers.h>
 #include <yql/essentials/core/yql_window_features.h>
+#include <yql/essentials/core/langver/feature.gen.h>
 
 #include <yql/essentials/parser/pg_catalog/catalog.h>
 
@@ -2606,6 +2607,30 @@ namespace {
         return IGraphTransformer::TStatus::Ok;
     }
 
+    const TTypeAnnotationNode* InferDecimalListFromRangeType(
+        const TExprNode::TPtr& input, const TDataExprType* beginType,
+        const TDataExprType* endType, const TDataExprType* stepType, TExtContext& ctx)
+    {
+        if (!EnsureAvailable(input->Pos(), NFeature::DecimalListFromRange, ctx.Expr, ctx.Types)) {
+            return nullptr;
+        }
+        if (!IsDataTypeDecimal(beginType->GetSlot()) || !IsDataTypeDecimal(endType->GetSlot()) ||
+            (stepType && !IsDataTypeDecimal(stepType->GetSlot())))
+        {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                "ListFromRange over Decimal requires Decimal Start, End, and Step arguments"));
+            return nullptr;
+        }
+        if (!IsSameAnnotation(*beginType, *endType) ||
+            (stepType && !IsSameAnnotation(*beginType, *stepType)))
+        {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                "ListFromRange over Decimal requires Start, End, and Step with the same precision and scale"));
+            return nullptr;
+        }
+        return beginType;
+    }
+
     IGraphTransformer::TStatus ListFromRangeWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         if (!EnsureMinMaxArgsCount(*input, 2U, 3U, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -2672,8 +2697,9 @@ namespace {
                 return IGraphTransformer::TStatus::Ok;
             }
             auto commonType = CommonType<false>(input->Pos(), input->Child(idx1)->GetTypeAnn(), input->Child(idx2)->GetTypeAnn(), ctx.Expr, ctx.Types);
-            if (!commonType)
+            if (!commonType) {
                 return IGraphTransformer::TStatus::Error;
+            }
             if (ETypeAnnotationKind::Optional == commonType->GetKind()) {
                 commonType = commonType->Cast<TOptionalExprType>()->GetItemType();
             }
@@ -2695,13 +2721,14 @@ namespace {
         bool beginIsOpt = false;
         bool endIsOpt = false;
         bool stepIsOpt = false;
-        const TDataExprType* _itemType = nullptr;
+        const TDataExprType* beginItemType = nullptr;
+        const TDataExprType* endItemType = nullptr;
         const TDataExprType* stepItemType = nullptr;
 
         bool isUniversal1;
         bool isUniversal2;
-        if (!EnsureDataOrOptionalOfData(*input->Child(0U), beginIsOpt, _itemType, ctx.Expr, isUniversal1)
-            || !EnsureDataOrOptionalOfData(*input->Child(1U), endIsOpt, _itemType, ctx.Expr, isUniversal2))
+        if (!EnsureDataOrOptionalOfData(*input->Child(0U), beginIsOpt, beginItemType, ctx.Expr, isUniversal1)
+            || !EnsureDataOrOptionalOfData(*input->Child(1U), endIsOpt, endItemType, ctx.Expr, isUniversal2))
         {
             return IGraphTransformer::TStatus::Error;
         }
@@ -2718,8 +2745,20 @@ namespace {
             return IGraphTransformer::TStatus::Ok;
         }
 
+        const bool hasDecimalArgument = IsDataTypeDecimal(beginItemType->GetSlot()) ||
+            IsDataTypeDecimal(endItemType->GetSlot()) ||
+            (stepItemType && IsDataTypeDecimal(stepItemType->GetSlot()));
         const TTypeAnnotationNode* commonType = nullptr;
-        if (stepType && IsDataTypeFloat(stepItemType->GetSlot())) {
+        if (hasDecimalArgument) {
+            commonType = InferDecimalListFromRangeType(
+                input, beginItemType, endItemType, stepItemType, ctx);
+            if (!commonType) {
+                return IGraphTransformer::TStatus::Error;
+            }
+            if (beginIsOpt || endIsOpt || stepIsOpt) {
+                commonType = ctx.Expr.MakeType<TOptionalExprType>(commonType);
+            }
+        } else if (stepType && IsDataTypeFloat(stepItemType->GetSlot())) {
             commonType = ((beginIsOpt || endIsOpt) && !stepIsOpt)
                 ? ctx.Expr.MakeType<TOptionalExprType>(stepType) : stepType;
             if (const auto status = TrySilentConvertTo(input->ChildRef(0U), *commonType, ctx.Expr, ctx.Types); status != IGraphTransformer::TStatus::Ok) {
@@ -2738,13 +2777,15 @@ namespace {
             }
         } else {
             commonType = CommonType<false>(input->Pos(), input->Child(0U)->GetTypeAnn(), input->Child(1U)->GetTypeAnn(), ctx.Expr, ctx.Types);
-            if (!commonType)
+            if (!commonType) {
                 return IGraphTransformer::TStatus::Error;
+            }
 
             if (const auto status = TryConvertTo(input->ChildRef(0U), *commonType, ctx.Expr, ctx.Types)
-                .Combine(TryConvertTo(input->ChildRef(1U), *commonType, ctx.Expr, ctx.Types));
-                status != IGraphTransformer::TStatus::Ok)
+                                        .Combine(TryConvertTo(input->ChildRef(1U), *commonType, ctx.Expr, ctx.Types));
+                status != IGraphTransformer::TStatus::Ok) {
                 return status;
+            }
 
             if (stepIsOpt && ETypeAnnotationKind::Optional != commonType->GetKind()) {
                 commonType = ctx.Expr.MakeType<TOptionalExprType>(commonType);
@@ -2755,45 +2796,65 @@ namespace {
         const auto commonItemType = commonIsOpt
             ? commonType->Cast<TOptionalExprType>()->GetItemType() : commonType;
         const auto slot = commonItemType->Cast<TDataExprType>()->GetSlot();
-        if (!(IsDataTypeDateOrTzDateOrInterval(slot) || IsDataTypeNumeric(slot))) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "Expected type of bounds is numeric or datetime, but got " << *commonType));
+        if (!(IsDataTypeDateOrTzDateOrInterval(slot) || IsDataTypeNumeric(slot) || IsDataTypeDecimal(slot))) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "Expected type of bounds is numeric, decimal or datetime, but got " << *commonType));
             return IGraphTransformer::TStatus::Error;
         }
 
-        const auto stepSlot = IsDataTypeDateOrTzDateOrInterval(slot)
-            ? (IsDataTypeBigDate(slot) ? EDataSlot::Interval64 : EDataSlot::Interval)
-            : MakeSigned(slot);
-        if (stepItemType) {
-            if (const auto requredStepType = slot == stepSlot ? commonItemType : ctx.Expr.MakeType<TDataExprType>(stepSlot); !IsSameAnnotation(*stepItemType, *requredStepType)) {
-                if (const auto status = TrySilentConvertTo(input->ChildRef(2U), *requredStepType, ctx.Expr, ctx.Types); status == IGraphTransformer::TStatus::Repeat)
-                    return status;
-                else if (status == IGraphTransformer::TStatus::Error && !EnsureSpecificDataType(input->Tail().Pos(), *stepItemType, stepSlot, ctx.Expr))
-                    return status;
+        if (IsDataTypeDecimal(slot) && !stepItemType) {
+            const auto decimalType = commonItemType->Cast<TDataExprParamsType>();
+            const auto precision = FromString<ui8>(decimalType->GetParamOne());
+            const auto scale = FromString<ui8>(decimalType->GetParamTwo());
+            if (precision == scale) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder()
+                    << "ListFromRange cannot represent the default Step 1 as " << *commonItemType
+                    << "; provide an explicit non-zero Decimal Step"));
+                return IGraphTransformer::TStatus::Error;
             }
-        } else {
-            TExprNode::TPtr value;
-            switch (slot) {
-                case EDataSlot::Date:
-                case EDataSlot::TzDate:
-                case EDataSlot::Date32:
-                case EDataSlot::TzDate32:
-                    value = ctx.Expr.NewAtom(input->Pos(), "86400000000", TNodeFlags::Default);
-                    break;
-                case EDataSlot::Datetime:
-                case EDataSlot::TzDatetime:
-                case EDataSlot::Datetime64:
-                case EDataSlot::TzDatetime64:
-                    value = ctx.Expr.NewAtom(input->Pos(), "1000000", TNodeFlags::Default);
-                    break;
-                default:
-                    value = ctx.Expr.NewAtom(input->Pos(), "1", TNodeFlags::Default);
-                    break;
-            }
-
             auto newChildren = input->ChildrenList();
-            newChildren.emplace_back(ctx.Expr.NewCallable(input->Pos(), NKikimr::NUdf::GetDataTypeInfo(stepSlot).Name, {std::move(value)}));
+            newChildren.emplace_back(ctx.Expr.NewCallable(input->Pos(), "Decimal", {
+                ctx.Expr.NewAtom(input->Pos(), "1"),
+                ctx.Expr.NewAtom(input->Pos(), decimalType->GetParamOne()),
+                ctx.Expr.NewAtom(input->Pos(), decimalType->GetParamTwo())}));
             output = ctx.Expr.ChangeChildren(*input, std::move(newChildren));
             return IGraphTransformer::TStatus::Repeat;
+        } else if (!IsDataTypeDecimal(slot)) {
+            const auto stepSlot = IsDataTypeDateOrTzDateOrInterval(slot)
+                                      ? (IsDataTypeBigDate(slot) ? EDataSlot::Interval64 : EDataSlot::Interval)
+                                      : MakeSigned(slot);
+            if (stepItemType) {
+                if (const auto requredStepType = slot == stepSlot ? commonItemType : ctx.Expr.MakeType<TDataExprType>(stepSlot); !IsSameAnnotation(*stepItemType, *requredStepType)) {
+                    if (const auto status = TrySilentConvertTo(input->ChildRef(2U), *requredStepType, ctx.Expr, ctx.Types); status == IGraphTransformer::TStatus::Repeat) {
+                        return status;
+                    } else if (status == IGraphTransformer::TStatus::Error && !EnsureSpecificDataType(input->Tail().Pos(), *stepItemType, stepSlot, ctx.Expr)) {
+                        return status;
+                    }
+                }
+            } else {
+                TExprNode::TPtr value;
+                switch (slot) {
+                    case EDataSlot::Date:
+                    case EDataSlot::TzDate:
+                    case EDataSlot::Date32:
+                    case EDataSlot::TzDate32:
+                        value = ctx.Expr.NewAtom(input->Pos(), "86400000000", TNodeFlags::Default);
+                        break;
+                    case EDataSlot::Datetime:
+                    case EDataSlot::TzDatetime:
+                    case EDataSlot::Datetime64:
+                    case EDataSlot::TzDatetime64:
+                        value = ctx.Expr.NewAtom(input->Pos(), "1000000", TNodeFlags::Default);
+                        break;
+                    default:
+                        value = ctx.Expr.NewAtom(input->Pos(), "1", TNodeFlags::Default);
+                        break;
+                }
+
+                auto newChildren = input->ChildrenList();
+                newChildren.emplace_back(ctx.Expr.NewCallable(input->Pos(), NKikimr::NUdf::GetDataTypeInfo(stepSlot).Name, {std::move(value)}));
+                output = ctx.Expr.ChangeChildren(*input, std::move(newChildren));
+                return IGraphTransformer::TStatus::Repeat;
+            }
         }
 
         if (commonIsOpt) {
@@ -3421,10 +3482,11 @@ namespace {
                     return IGraphTransformer::TStatus::Error;
                 }
                 for (size_t i = 0; i < childTypes.size(); ++i) {
-                    if (const auto commonType = CommonType<false>(child->Pos(), resultTypes[i], childTypes[i], ctx.Expr, ctx.Types))
+                    if (const auto commonType = CommonType<false>(child->Pos(), resultTypes[i], childTypes[i], ctx.Expr, ctx.Types)) {
                         resultTypes[i] = commonType;
-                    else
+                    } else {
                         return IGraphTransformer::TStatus::Error;
+                    }
                 }
             }
             idx++;
@@ -3558,10 +3620,12 @@ namespace {
 
         if constexpr (!IsStrict) {
             if (const auto commonType = CommonTypeForChildren(*input, ctx.Expr, ctx.Types)) {
-                if (const auto status = ConvertChildrenToType(input, commonType, ctx.Expr, ctx.Types); status != IGraphTransformer::TStatus::Ok)
+                if (const auto status = ConvertChildrenToType(input, commonType, ctx.Expr, ctx.Types); status != IGraphTransformer::TStatus::Ok) {
                     return status;
-            } else
+                }
+            } else {
                 return IGraphTransformer::TStatus::Error;
+            }
         }
 
         return ListAutomapArgs(input, output, ctx, "OrderedExtend");

@@ -16,6 +16,8 @@ items:
     href: general-schema.md
   - name: Distributed storage
     href: distributed-storage.md
+  - name: Metadata Distribution Subsystems
+    href: metadata-distribution.md
   - name: LocalDB
     items:
     - name: Persistent uncommitted changes

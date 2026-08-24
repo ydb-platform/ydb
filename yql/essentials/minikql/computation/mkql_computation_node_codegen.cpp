@@ -1110,7 +1110,8 @@ NUdf::TUnboxedValue TExternalCodegeneratorRootNode::GetValue(TComputationContext
 
 void TExternalCodegeneratorRootNode::SetValue(TComputationContext& compCtx, NUdf::TUnboxedValue&& newValue) const {
     if (compCtx.ExecuteLLVM && SetFunction_) {
-        return SetFunction_(&compCtx, newValue.Release());
+        SetFunction_(&compCtx, newValue.Release());
+        return;
     }
 
     TExternalComputationNode::SetValue(compCtx, std::move(newValue));
@@ -1870,19 +1871,19 @@ void CleanupUnboxed(Value* value, const TCodegenContext& ctx, BasicBlock*& block
 }
     #else
 void AddRefUnboxed(Value* value, const TCodegenContext& ctx, BasicBlock*& block) {
-    return ChangeRefUnboxed<true>(value, ctx, block);
+    ChangeRefUnboxed<true>(value, ctx, block);
 }
 
 void ReleaseUnboxed(Value* value, const TCodegenContext& ctx, BasicBlock*& block) {
-    return ChangeRefUnboxed<false>(value, ctx, block);
+    ChangeRefUnboxed<false>(value, ctx, block);
 }
 
 void UnRefUnboxed(Value* value, const TCodegenContext& ctx, BasicBlock*& block) {
-    return CheckRefUnboxed<true>(value, ctx, block);
+    CheckRefUnboxed<true>(value, ctx, block);
 }
 
 void CleanupUnboxed(Value* value, const TCodegenContext& ctx, BasicBlock*& block) {
-    return CheckRefUnboxed<false>(value, ctx, block);
+    CheckRefUnboxed<false>(value, ctx, block);
 }
     #endif
 
@@ -1914,8 +1915,10 @@ void ValueAddRef(EValueRepresentation kind, Value* pointer, const TCodegenContex
             return;
         case EValueRepresentation::Boxed:  // TODO
         case EValueRepresentation::String: // TODO
-        case EValueRepresentation::Any:
-            return AddRefUnboxed(pointer, ctx, block);
+        case EValueRepresentation::Any: {
+            AddRefUnboxed(pointer, ctx, block);
+            return;
+        }
     }
 }
 
@@ -1925,8 +1928,10 @@ void ValueUnRef(EValueRepresentation kind, Value* pointer, const TCodegenContext
             return;
         case EValueRepresentation::Boxed:  // TODO
         case EValueRepresentation::String: // TODO
-        case EValueRepresentation::Any:
-            return UnRefUnboxed(pointer, ctx, block);
+        case EValueRepresentation::Any: {
+            UnRefUnboxed(pointer, ctx, block);
+            return;
+        }
     }
 }
 
@@ -1936,8 +1941,10 @@ void ValueCleanup(EValueRepresentation kind, Value* pointer, const TCodegenConte
             return;
         case EValueRepresentation::Boxed:  // TODO
         case EValueRepresentation::String: // TODO
-        case EValueRepresentation::Any:
-            return CleanupUnboxed(pointer, ctx, block);
+        case EValueRepresentation::Any: {
+            CleanupUnboxed(pointer, ctx, block);
+            return;
+        }
     }
 }
 
@@ -1947,8 +1954,10 @@ void ValueRelease(EValueRepresentation kind, Value* pointer, const TCodegenConte
             return;
         case EValueRepresentation::Boxed:  // TODO
         case EValueRepresentation::String: // TODO
-        case EValueRepresentation::Any:
-            return ReleaseUnboxed(pointer, ctx, block);
+        case EValueRepresentation::Any: {
+            ReleaseUnboxed(pointer, ctx, block);
+            return;
+        }
     }
 }
 

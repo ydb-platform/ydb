@@ -63,14 +63,58 @@ message TAuthConfig {
     optional string AccessServiceSslTargetNameOverride = 87;
     optional string UserAccountServiceSslTargetNameOverride = 88;
     optional string ServiceAccountServiceSslTargetNameOverride = 89;
+<<<<<<< HEAD
+<<<<<<< HEAD
+<<<<<<< HEAD
+<<<<<<< HEAD
     optional string ExternalIdpAuthenticationDomain = 90 [default = "sso"];
     optional TExternalIdpConfig ExternalIdpConfig = 91;
     optional TLocalMetadataService LocalMetadataService = 92;
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+=======
+=======
+>>>>>>> 72ee9e21e65 (Update auth.proto: fix conflicts)
+=======
+=======
+>>>>>>> 137aaa501a5 (BACKPORT-CONFLICT: manual resolution required for commit 4d167da)
+=======
+>>>>>>> 5cb8a226b2e (Update auth.proto: fix conflicts)
+    optional string ExternalIdpAuthenticationDomain = 90 [default = "sso"];
+    optional TExternalIdpConfig ExternalIdpConfig = 91;
+    optional TLocalMetadataService LocalMetadataService = 92;
+    optional TBlackBoxTvmSettings BlackBoxTvmSettings = 93;
+<<<<<<< HEAD
+>>>>>>> df8ef0f4337 (BACKPORT-CONFLICT: manual resolution required for commit 4d167da)
+=======
+>>>>>>> 137aaa501a5 (BACKPORT-CONFLICT: manual resolution required for commit 4d167da)
+=======
+    optional TBlackBoxTvmSettings BlackBoxTvmSettings = 93;
+>>>>>>> d04f492c636 ([auth] add TBlackboxTvmSettings for further internal usage (#50258))
+=======
+    optional TBlackBoxTvmSettings BlackBoxTvmSettings = 93;
+>>>>>>> 28ae9d83b62 ([auth] add TBlackboxTvmSettings for further internal usage (#50258))
 }
 
 message TLocalMetadataService {
     optional string Host = 1 [default = "169.254.169.254"];
     optional uint64 Port = 2 [default = 80];
+<<<<<<< HEAD
+<<<<<<< HEAD
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 4d167daafdf ([auth] add TBlackboxTvmSettings for further internal usage (#50258))
+>>>>>>> df8ef0f4337 (BACKPORT-CONFLICT: manual resolution required for commit 4d167da)
+=======
+>>>>>>> 72ee9e21e65 (Update auth.proto: fix conflicts)
+=======
+>>>>>>> 4d167daafdf ([auth] add TBlackboxTvmSettings for further internal usage (#50258))
+>>>>>>> 137aaa501a5 (BACKPORT-CONFLICT: manual resolution required for commit 4d167da)
+=======
+>>>>>>> 5cb8a226b2e (Update auth.proto: fix conflicts)
 }
 
 message TUserRegistryConfig {
@@ -92,6 +136,18 @@ message TStaffApiTvmSettings {
     optional uint32 SelfTvmId = 3;
     optional string DiskCacheDir = 4;
     optional uint32 StaffAppId = 5;
+    oneof Secret {
+        string SecretEnvironmentVariable = 6;
+        string PlainTextSecret = 7 [(Ydb.sensitive) = true];
+    }
+}
+
+message TBlackBoxTvmSettings {
+    optional string Host = 1;
+    optional uint32 Port = 2;
+    optional uint32 SelfTvmId = 3;
+    optional string DiskCacheDir = 4;
+    optional uint32 BlackBoxAppId = 5;
     oneof Secret {
         string SecretEnvironmentVariable = 6;
         string PlainTextSecret = 7 [(Ydb.sensitive) = true];

@@ -3,6 +3,7 @@
 
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/blob_set.h>
+#include <ydb/core/tx/columnshard/blobs_action/common/const.h>
 #include <ydb/core/tx/columnshard/common/blob.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/counters/blobs_manager.h>
@@ -51,7 +52,7 @@ enum class ECutState {
     Cut,
 };
 
-// Two-tier engine for CutTabletHistory on ColumnShard data channels (channels >= 2).
+// Two-tier engine for CutTabletHistory on the ColumnShard data channels.
 class THistoryCutterWrapper {
 public:
     THistoryCutterWrapper(const TIntrusivePtr<TTabletStorageInfo>& tabletInfo, ui32 currentGen,
@@ -228,7 +229,7 @@ private:
     TInstant LastNominateAt;
     // First channel to service in the next nomination round (rotation under the
     // MaxDrainChecksPerNomination cap).
-    ui32 NextChannelToCheck = 2;
+    ui32 NextChannelToCheck = TGlobal::FirstDataChannel;
     TVector<TEntryKey> SweepSurvivors;
 
     TVector<std::pair<TInternalPathId, ui64>> SweepPortionIds;

@@ -79,9 +79,12 @@ public:
     // Local kikimr settings
 
     NKikimrConfig::TAppConfig& SetupAppConfig();
+
     void UpdateConfig(NKikimrConfig::TAppConfig& appConfig);
 
     TIntrusivePtr<NTestUtils::IMockPqGateway> SetupMockPqGateway();
+
+    TIntrusivePtr<NYql::IPqGateway> SetupRealPqGateway();
 
     std::shared_ptr<NYql::NConnector::NTest::TConnectorClientMock> SetupMockConnectorClient();
 
@@ -112,6 +115,8 @@ public:
     std::shared_ptr<NYdb::TDriver> GetExternalDriver();
 
     std::shared_ptr<NYdb::NTopic::TTopicClient> GetTopicClient(bool local = false);
+
+    std::shared_ptr<NYdb::NTopic::TDeferredPublishClient> GetDeferredPublishClient(bool local = false, const TString& user = "");
 
     std::shared_ptr<NYdb::NQuery::TQueryClient> GetExternalQueryClient();
 
@@ -168,6 +173,8 @@ public:
     void CreateYdbSource(const std::string& ydbSourceName);
 
     void CreateSolomonSource(const std::string& solomonSourceName);
+
+    void DropSource(const TString& sourceName);
 
     // Script executions (using query client SDK)
 
@@ -233,6 +240,7 @@ protected:
     bool NeedsStatsCollectors = false;
     NYdb::NQuery::TClientSettings QueryClientSettings = NYdb::NQuery::TClientSettings().AuthToken(BUILTIN_ACL_ROOT);
     NYdb::NTopic::TTopicClientSettings TopicClientSettings = NYdb::NTopic::TTopicClientSettings().AuthToken(BUILTIN_ACL_ROOT);
+    std::shared_ptr<NYdb::TDriver> PqGatewayDriver;
 
 private:
     std::optional<NKikimrConfig::TAppConfig> AppConfig;
@@ -246,11 +254,13 @@ private:
     std::shared_ptr<NYdb::NTable::TTableClient> TableClient;
     std::shared_ptr<NYdb::NTable::TSession> TableClientSession;
     std::shared_ptr<NYdb::NTopic::TTopicClient> LocalTopicClient;
+    std::shared_ptr<NYdb::NTopic::TDeferredPublishClient> LocalDeferredPublishClient;
     std::shared_ptr<NKikimr::NPersQueueTests::TFlatMsgBusPQClient> LocalFlatMsgBusPQClient;
 
     // Attached to database from recipe (YDB_ENDPOINT / YDB_DATABASE)
     std::shared_ptr<NYdb::TDriver> ExternalDriver;
     std::shared_ptr<NYdb::NTopic::TTopicClient> TopicClient;
+    std::shared_ptr<NYdb::NTopic::TDeferredPublishClient> DeferredPublishClient;
     std::shared_ptr<NYdb::NQuery::TQueryClient> ExternalQueryClient;
 };
 

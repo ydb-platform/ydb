@@ -865,9 +865,24 @@ ui32 TConsumer::NextStep() {
     return Balancer.NextStep();
 }
 
+void TConsumer::EnsurePartition(ui32 partitionId) {
+    Partitions.try_emplace(partitionId, TPartition());
+}
+
 void TConsumer::RegisterPartition(ui32 partitionId, const TActorContext& ctx) {
-    auto [_, inserted] = Partitions.try_emplace(partitionId, TPartition());
-    if (inserted && IsReadable(partitionId)) {
+    EnsurePartition(partitionId);
+    bool pendingApplied = TryApplyPendingInactive(partitionId, ctx);
+    if (auto* node = GetPartitionGraph().GetPartition(partitionId)) {
+        for (auto* parent : node->DirectParents) {
+            if (parent) {
+                pendingApplied = TryApplyPendingInactive(parent->Id, ctx) || pendingApplied;
+            }
+        }
+    }
+    if (pendingApplied) {
+        ScheduleBalance(ctx);
+    }
+    if (IsReadable(partitionId) && !FindFamily(partitionId)) {
         YDB_LOG_DEBUG("Register readable partition",
             {"logPrefix", LogPrefix()},
             {"partitionId", partitionId});
@@ -881,6 +896,9 @@ void TConsumer::UnregisterPartition(ui32 partitionId, const TActorContext& ctx) 
 }
 
 void  TConsumer::InitPartitions(const TActorContext& ctx) {
+    for (auto& [partitionId,_] : Balancer.GetPartitionsInfo()) {
+        EnsurePartition(partitionId);
+    }
     for (auto& [partitionId,_] : Balancer.GetPartitionsInfo()) {
         RegisterPartition(partitionId, ctx);
     }
@@ -1457,6 +1475,11 @@ TString TConsumer::LogPrefix() const {
 }
 
 bool TConsumer::SetCommittedState(ui32 partitionId, ui32 generation, ui64 cookie) {
+    if (!HasChildren(partitionId)) {
+        PendingCommits[partitionId] = TPendingCommit{generation, cookie};
+        return false;
+    }
+    PendingCommits.erase(partitionId);
     return Partitions[partitionId].SetCommittedState(generation, cookie);
 }
 
@@ -1581,6 +1604,8 @@ void TConsumer::StartReading(ui32 partitionId, const TActorContext& ctx) {
     }
 
     auto wasInactive = partition->IsInactive();
+    PendingFinishes.erase(partitionId);
+    PendingCommits.erase(partitionId);
     if (partition->StartReading()) {
         if (!ScalingSupport()) {
             return;
@@ -1632,50 +1657,98 @@ void TConsumer::FinishReading(TEvPersQueue::TEvReadingPartitionFinishedRequest::
     auto& r = ev->Get()->Record;
     auto partitionId = r.GetPartitionId();
 
-    if (!IsReadable(partitionId)) {
-        YDB_LOG_DEBUG("Reading of the partition was finished by but the partition isn't readable",
-            {"logPrefix", LogPrefix()},
-            {"partitionId", partitionId},
-            {"consumerName", ConsumerName});
-        return;
-    }
+    EnsurePartition(partitionId);
 
-    auto* partitionPtr = GetPartition(partitionId);
-    if (!partitionPtr) {
-        YDB_LOG_DEBUG("Reading of the partition was finished by but the partition is unknown",
-            {"logPrefix", LogPrefix()},
-            {"partitionId", partitionId},
-            {"consumerName", ConsumerName});
-        return;
-    }
-
-    auto& partition = *partitionPtr;
-
-    const bool wasInactive = partition.IsInactive();
-    if (partition.SetFinishedState(r.GetScaleAwareSDK(), r.GetStartedReadingFromEndOffset()) || wasInactive) {
-        YDB_LOG_DEBUG("Reading of the partition was finished by",
+    const auto* node = GetPartitionGraph().GetPartition(partitionId);
+    if (!HasChildren(partitionId)) {
+        PendingFinishes[partitionId] = TPendingFinish{
+            r.GetScaleAwareSDK(),
+            r.GetStartedReadingFromEndOffset(),
+        };
+        YDB_LOG_DEBUG("Reading of the partition was finished before children are known; pending",
             {"logPrefix", LogPrefix()},
             {"partitionId", partitionId},
             {"consumer", r.GetConsumer()},
-            {"firstMessage", r.GetStartedReadingFromEndOffset()},
-            {"scaleAwareSdk", GetSdkDebugString0(r.GetScaleAwareSDK())});
+            {"hasNode", static_cast<bool>(node)});
+        return;
+    }
 
-        if (ProccessReadingFinished(partitionId, wasInactive, ctx)) {
-            ScheduleBalance(ctx);
-        }
+    PendingFinishes.erase(partitionId);
+
+    if (ApplyFinishedState(partitionId, r.GetScaleAwareSDK(), r.GetStartedReadingFromEndOffset(), ctx)) {
+        ScheduleBalance(ctx);
+    }
+}
+
+bool TConsumer::HasChildren(ui32 partitionId) const {
+    const auto* node = GetPartitionGraph().GetPartition(partitionId);
+    return node && !node->DirectChildren.empty();
+}
+
+bool TConsumer::ApplyFinishedState(ui32 partitionId, bool scaleAwareSDK, bool startedReadingFromEndOffset, const TActorContext& ctx) {
+    auto* partitionPtr = GetPartition(partitionId);
+    if (!partitionPtr) {
+        return false;
+    }
+    auto& partition = *partitionPtr;
+
+    const bool wasInactive = partition.IsInactive();
+    if (partition.SetFinishedState(scaleAwareSDK, startedReadingFromEndOffset) || wasInactive) {
+        YDB_LOG_DEBUG("Reading of the partition was finished by",
+            {"logPrefix", LogPrefix()},
+            {"partitionId", partitionId},
+            {"consumer", ConsumerName},
+            {"firstMessage", startedReadingFromEndOffset},
+            {"scaleAwareSdk", GetSdkDebugString0(scaleAwareSDK)});
+
+        return ProccessReadingFinished(partitionId, wasInactive, ctx);
     } else if (!partition.IsInactive()) {
-        auto delay = std::min<size_t>(1ul << partition.Iteration, Balancer.GetLifetimeSeconds()); // TODO use split/merge time
+        auto delay = std::min<size_t>(1ul << partition.Iteration, Balancer.GetLifetimeSeconds());
 
         YDB_LOG_DEBUG("Reading of the partition was finished by Scheduled release of the partition for re-reading. seconds",
             {"logPrefix", LogPrefix()},
             {"partitionId", partitionId},
-            {"consumer", r.GetConsumer()},
+            {"consumer", ConsumerName},
             {"delay", delay},
-            {"firstMessage", r.GetStartedReadingFromEndOffset()},
-            {"scaleAwareSdk", GetSdkDebugString0(r.GetScaleAwareSDK())});
+            {"firstMessage", startedReadingFromEndOffset},
+            {"scaleAwareSdk", GetSdkDebugString0(scaleAwareSDK)});
 
         ctx.Schedule(TDuration::Seconds(delay), new TEvPQ::TEvWakeupReleasePartition(ConsumerName, partitionId, partition.Cookie));
     }
+    return false;
+}
+
+bool TConsumer::TryApplyPendingInactive(ui32 partitionId, const TActorContext& ctx) {
+    if (!HasChildren(partitionId)) {
+        return false;
+    }
+
+    EnsurePartition(partitionId);
+
+    bool changed = false;
+
+    if (auto it = PendingCommits.find(partitionId); it != PendingCommits.end()) {
+        const auto pending = it->second;
+        PendingCommits.erase(it);
+        const bool wasInactive = IsInactive(partitionId);
+        if (Partitions[partitionId].SetCommittedState(pending.Generation, pending.Cookie)) {
+            YDB_LOG_DEBUG("Applying pending commit after children appeared",
+                {"logPrefix", LogPrefix()},
+                {"partitionId", partitionId});
+            changed = ProccessReadingFinished(partitionId, wasInactive, ctx) || changed;
+        }
+    }
+
+    if (auto it = PendingFinishes.find(partitionId); it != PendingFinishes.end()) {
+        const auto pending = it->second;
+        PendingFinishes.erase(it);
+        YDB_LOG_DEBUG("Applying pending finish after children appeared",
+            {"logPrefix", LogPrefix()},
+            {"partitionId", partitionId});
+        changed = ApplyFinishedState(partitionId, pending.ScaleAwareSDK, pending.StartedReadingFromEndOffset, ctx) || changed;
+    }
+
+    return changed;
 }
 
 void TConsumer::ScheduleBalance(const TActorContext& ctx) {
@@ -2043,6 +2116,12 @@ void TBalancer::UpdateConfig(const std::vector<ui32>& addedPartitions, const std
     for (auto partitionId : deletedPartitions) {
         for (auto& [_, consumer] : Consumers) {
             consumer->UnregisterPartition(partitionId, ctx);
+        }
+    }
+
+    for (auto& partitionId : addedPartitions) {
+        for (auto& [_, balancingConsumer] : Consumers) {
+            balancingConsumer->EnsurePartition(partitionId);
         }
     }
 

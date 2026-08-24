@@ -1738,6 +1738,41 @@ Y_UNIT_TEST(SecondFinishOfMergedParentsDoesNotAbort) {
     env.AssertSameSession({0, 1, 2});
 }
 
+Y_UNIT_TEST(FinishBeforeSplitLocksChildren) {
+    // SDK can Finish a sealed parent before the balancer has the new graph.
+    TScaleEnv env;
+    env.CreateParents(1);
+    env.RegisterSession("session-0");
+    env.Finish("session-0", 0);
+    env.Split(0);
+    env.AssertLocked(1);
+    env.AssertLocked(2);
+}
+
+Y_UNIT_TEST(CommitBeforeSplitLocksChildren) {
+    TScaleEnv env;
+    env.CreateParents(1);
+    env.RegisterSession("session-0");
+    env.Commit(0);
+    env.Split(0);
+    env.AssertLocked(1);
+    env.AssertLocked(2);
+}
+
+Y_UNIT_TEST(RereadClearsPendingFinishBeforeSplit) {
+    TScaleEnv env;
+    env.CreateParents(1);
+    env.RegisterSession("session-0");
+    env.Finish("session-0", 0);
+    env.StartReading("session-0", 0);
+    env.Split(0);
+    env.AssertNotLocked(1);
+    env.AssertNotLocked(2);
+    env.Finish("session-0", 0);
+    env.AssertLocked(1);
+    env.AssertLocked(2);
+}
+
 } // Y_UNIT_TEST_SUITE(TPqrbSplitBalancing)
 
 Y_UNIT_TEST_SUITE(TPqrbBalancingInvariants) {

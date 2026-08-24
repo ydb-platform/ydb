@@ -23,7 +23,7 @@ on:
       - ".github/workflows/cpp_codecov.yml"
       - ".github/codecov.yml"
   push:
-    branches: [main]
+    branches: [codecov-dogfood-independent-flags-20260824]
     paths:
       - "ydb/public/sdk/cpp/**"
       - "ydb/apps/ydb/**"
@@ -50,7 +50,7 @@ concurrency:
       && format('codecov-pr-{0}{1}', github.event.pull_request.number,
           github.event.action == 'labeled' && github.event.label.name != 'ok-to-test'
           && format('-ignore-{0}', github.run_id) || '')
-      || 'codecov-main'
+      || 'codecov-dogfood-independent-flags-20260824'
     }}
   cancel-in-progress: >-
     ${{ github.event_name == 'pull_request_target' && github.event.action != 'labeled' }}
@@ -188,10 +188,16 @@ jobs:
           # PR detection needs merge-base history; main only needs the helpers.
           fetch-depth: ${{ github.event_name == 'pull_request_target' && '0' || '1' }}
           sparse-checkout: |
+            .github/codecov.yml
             .github/scripts/codecov/codecov_suites.py
             .github/scripts/codecov/detect_codecov_matrix.py
           sparse-checkout-cone-mode: false
           persist-credentials: false
+
+      - name: Validate Codecov configuration (dogfood only)
+        if: github.event_name == 'push'
+        continue-on-error: true
+        run: curl --fail-with-body --data-binary @.github/codecov.yml https://codecov.io/validate
 
       - name: Fetch pinned PR head
         if: >-
@@ -256,6 +262,7 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           EVENT_SHA: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}
           REF_NAME: ${{ github.ref_name }}
           REPOSITORY: ${{ github.repository }}
           PR_REPOSITORY: ${{ steps.pr.outputs.repository }}
@@ -278,7 +285,7 @@ jobs:
             base_sha=""
             report_branch="$REF_NAME"
             pr_number=""
-            storage_prefix="ydb/coverage"
+            storage_prefix="ydb/dogfood-${RUN_ID}/coverage"
           fi
 
           {
@@ -340,6 +347,7 @@ jobs:
         with:
           suite: ${{ matrix.suite }}
           codecov_token: ${{ secrets.CODECOV_TOKEN }}
+          github_token: ${{ github.token }}
           aws_access_key_id: ${{ secrets.YDB_TECH_AWS_ACCESS_KEY_ID }}
           aws_secret_access_key: ${{ secrets.YDB_TECH_AWS_SECRET_ACCESS_KEY }}
           bazel_remote_uri: ${{ vars.REMOTE_CACHE_URL_YA }}
@@ -375,16 +383,11 @@ jobs:
 
       - name: Generate landing page
         env:
-          EVENT_NAME: ${{ github.event_name }}
           MATRIX: ${{ needs.detect.outputs.matrix }}
         run: |
           set -euo pipefail
           mkdir -p coverage_landing
-          if [ "$EVENT_NAME" = push ]; then
-            suites=(cpp_sdk cli cli_workload)
-          else
-            mapfile -t suites < <(python3 -c 'import json,os; print("\n".join(json.loads(os.environ["MATRIX"])))')
-          fi
+          mapfile -t suites < <(python3 -c 'import json,os; print("\n".join(json.loads(os.environ["MATRIX"])))')
           args=()
           for suite in "${suites[@]}"; do
             case "$suite" in

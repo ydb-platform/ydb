@@ -4,7 +4,7 @@
 coverage:
   status:
     # Only publish checks for components with a fresh upload on this commit.
-    # Carried flags remain available as comparison baselines, but stay hidden.
+    # Historical main reports remain available as comparison baselines.
     default_rules:
       flag_coverage_not_uploaded_behavior: exclude
     project:

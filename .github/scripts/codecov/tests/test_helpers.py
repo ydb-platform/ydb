@@ -731,6 +731,14 @@ class WorkflowContractTest(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertIn('--slug "${REPOSITORY_SLUG}"', action)
         self.assertIn('--sha "${COMMIT_SHA}"', action)
+        self.assertIn("github_token:", action)
+        self.assertIn("Verify current PR head before publication", action)
+        self.assertIn("pr.head.sha !== expectedSha", action)
+        self.assertIn("steps.pr_head.outcome == 'success'", action)
+        self.assertLess(
+            action.index("Verify current PR head before publication"),
+            action.index("Upload to Codecov"),
+        )
         self.assertNotIn("parent_sha", action)
         self.assertNotIn("PARENT_SHA", action)
         self.assertNotIn("--parent-sha", action)
@@ -765,8 +773,10 @@ class WorkflowContractTest(unittest.TestCase):
         self.assertNotIn("--first-parent", workflow)
         self.assertNotIn("--diff-merges=first-parent", workflow)
         self.assertNotIn('".github/workflows/cpp_codecov_checks.yml"', workflow)
-        self.assertIn("|| 'codecov-main'", workflow)
+        self.assertIn("|| 'codecov-dogfood-independent-flags-20260824'", workflow)
         self.assertEqual(workflow.count("concurrency:"), 1)
+        self.assertIn("github_token: ${{ github.token }}", workflow)
+        self.assertNotIn("suites=(cpp_sdk cli cli_workload)", workflow)
 
 
 if __name__ == "__main__":

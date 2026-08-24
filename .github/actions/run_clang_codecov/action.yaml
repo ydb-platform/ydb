@@ -7,6 +7,10 @@ inputs:
   codecov_token:
     description: Codecov upload token
     required: true
+  github_token:
+    description: GitHub token used to revalidate a PR head before publication
+    required: false
+    default: ""
   aws_access_key_id:
     description: Yandex Object Storage access key
     required: false
@@ -144,6 +148,80 @@ runs:
         # Prefer PyPI: self-hosted runners often cannot download cli.codecov.io.
         pip3 install --user 'codecov-cli==11.3.1'
 
+    - name: Generate filtered HTML report
+      id: html
+      if: >-
+        ${{
+          always() &&
+          steps.ya.outcome == 'success' &&
+          steps.export.outcome == 'success' &&
+          inputs.aws_access_key_id != '' &&
+          inputs.aws_secret_access_key != ''
+        }}
+      continue-on-error: true
+      shell: bash
+      env:
+        SUITE: ${{ inputs.suite }}
+        OUT: ${{ steps.ya.outputs.out_dir }}
+      run: |
+        set -euo pipefail
+        python3 .github/scripts/codecov/export_coverage_lcov.py \
+          --suite "${SUITE}" \
+          --ya-output "$OUT" \
+          --html-input "$OUT/coverage.lcov" \
+          --html-output "$OUT/coverage.filtered.report"
+
+    - name: Install AWS CLI
+      if: >-
+        ${{
+          always() &&
+          steps.ya.outcome == 'success' &&
+          steps.export.outcome == 'success' &&
+          steps.html.outcome == 'success' &&
+          inputs.aws_access_key_id != '' &&
+          inputs.aws_secret_access_key != ''
+        }}
+      continue-on-error: true
+      shell: bash
+      run: |
+        set -euo pipefail
+        export PATH="${HOME}/.local/bin:${PATH}"
+        if ! command -v aws >/dev/null 2>&1; then
+          pip3 install --user 'awscli==1.46.0'
+        fi
+
+    - name: Verify current PR head before publication
+      id: pr_head
+      if: ${{ inputs.pr_number != '' }}
+      uses: actions/github-script@v8
+      env:
+        EXPECTED_SHA: ${{ inputs.commit_sha }}
+        PR_NUMBER: ${{ inputs.pr_number }}
+      with:
+        github-token: ${{ inputs.github_token }}
+        script: |
+          const expectedSha = process.env.EXPECTED_SHA;
+          const pullNumber = Number(process.env.PR_NUMBER);
+          if (!/^[0-9a-f]{40}$/i.test(expectedSha)) {
+            core.setFailed('Expected PR head must be a 40-character hexadecimal SHA.');
+            return;
+          }
+          if (!Number.isSafeInteger(pullNumber) || pullNumber <= 0) {
+            core.setFailed('PR number must be a positive integer.');
+            return;
+          }
+          const { data: pr } = await github.rest.pulls.get({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            pull_number: pullNumber,
+          });
+          if (pr.state !== 'open' || pr.head.sha !== expectedSha) {
+            core.setFailed(
+              `Refusing to publish stale coverage: expected open PR head ${expectedSha}, ` +
+              `current state=${pr.state}, head=${pr.head.sha}.`
+            );
+          }
+
     - name: Upload to Codecov
       shell: bash
       env:
@@ -188,48 +266,6 @@ runs:
         fi
         codecovcli upload-coverage "${upload_args[@]}"
 
-    - name: Generate filtered HTML report
-      id: html
-      if: >-
-        ${{
-          always() &&
-          steps.ya.outcome == 'success' &&
-          steps.export.outcome == 'success' &&
-          inputs.aws_access_key_id != '' &&
-          inputs.aws_secret_access_key != ''
-        }}
-      continue-on-error: true
-      shell: bash
-      env:
-        SUITE: ${{ inputs.suite }}
-        OUT: ${{ steps.ya.outputs.out_dir }}
-      run: |
-        set -euo pipefail
-        python3 .github/scripts/codecov/export_coverage_lcov.py \
-          --suite "${SUITE}" \
-          --ya-output "$OUT" \
-          --html-input "$OUT/coverage.lcov" \
-          --html-output "$OUT/coverage.filtered.report"
-
-    - name: Install AWS CLI
-      if: >-
-        ${{
-          always() &&
-          steps.ya.outcome == 'success' &&
-          steps.export.outcome == 'success' &&
-          steps.html.outcome == 'success' &&
-          inputs.aws_access_key_id != '' &&
-          inputs.aws_secret_access_key != ''
-        }}
-      continue-on-error: true
-      shell: bash
-      run: |
-        set -euo pipefail
-        export PATH="${HOME}/.local/bin:${PATH}"
-        if ! command -v aws >/dev/null 2>&1; then
-          pip3 install --user 'awscli==1.46.0'
-        fi
-
     - name: Publish HTML report to Object Storage
       # Still publish HTML if Codecov upload fails.
       if: >-
@@ -238,6 +274,7 @@ runs:
           steps.ya.outcome == 'success' &&
           steps.export.outcome == 'success' &&
           steps.html.outcome == 'success' &&
+          (inputs.pr_number == '' || steps.pr_head.outcome == 'success') &&
           inputs.aws_access_key_id != '' &&
           inputs.aws_secret_access_key != ''
         }}

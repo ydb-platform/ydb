@@ -37,8 +37,11 @@ struct IReadyQueue
     // the old one.
     virtual void Register(ui64 lsn, EQueueType queueType) = 0;
 
-    // Removes all registrations from Lsn.
-    virtual void UnRegister(ui64 lsn) = 0;
+    // Removes Lsn registration.
+    virtual void UnRegister(ui64 lsn, EQueueType queueType) = 0;
+
+    // Notifies of flushes completion to DDisks.
+    virtual void FlushCompleted(ui64 lsn, THostMask ddisks) = 0;
 
     // Notification about the change of byte counters in PBuffer
     virtual void DataToPBufferAdded(
@@ -83,7 +86,7 @@ public:
         // concurrent read sees the pre-write data on DDisk, as before).
         PBufferPendingWrite,
 
-        // During the recovery, a item without quorum was detected. It must be
+        // During the recovery, an item without quorum was detected. It must be
         // copied to other PBuffers.
         // Reading will be possible only after receiving a quorum.
         PBufferIncompleteWrite,
@@ -175,6 +178,12 @@ public:
     // Removes the lock that prohibits erasing the PBuffer.
     void UnlockPBuffer();
 
+    // The generation of the DirtyMap persisted state. If a generation has been
+    // assigned, it means that erasing can only be started after saving of data
+    // from that or higher generation in the partition local database.
+    void SetPersistGeneration(ui32 persistGeneration);
+    [[nodiscard]] ui32 GetPersistGeneration() const;
+
     TString DebugPrint(TInstant now) const;
 
 private:
@@ -201,6 +210,7 @@ private:
     TInstant StartAt;
     size_t PBuffersLockCount = 0;
     NThreading::TPromise<void> QuorumReadyPromise;
+    ui32 PersistGeneration = 0;
 
     THostMask DesiredDDisks;
     THostMask Disabled;

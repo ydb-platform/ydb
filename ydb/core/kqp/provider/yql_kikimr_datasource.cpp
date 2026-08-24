@@ -249,6 +249,7 @@ public:
         TVector<NThreading::TFuture<void>> futures;
         futures.reserve(tablesCount);
         std::optional<THashMap<std::pair<TString, TString>, THashMap<TString, TString>>> readAttributes;
+        const bool isShowCreate = ContainsShowCreateSetting(*input);
 
         for (auto& it : SessionCtx->Tables().GetTables()) {
             const TString& clusterName = it.first.first;
@@ -279,7 +280,7 @@ public:
                             .WithTableStats(table.GetNeedsStats())
                             .WithPrivateTables(IsInternalCall)
                             .WithExternalDatasources(SessionCtx->Config().FeatureFlags.GetEnableExternalDataSources())
-                            .WithAuthInfo(table.GetNeedAuthInfo())
+                            .WithAuthInfo(isShowCreate ? false : table.GetNeedAuthInfo())
                             .WithExternalSourceFactory(ExternalSourceFactory)
                             .WithReadAttributes(readAttrs ? std::move(*readAttrs) : THashMap<TString, TString>{})
                             .WithSysViewRewritten(table.GetSysViewRewritten())

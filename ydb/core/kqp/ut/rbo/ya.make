@@ -23,6 +23,7 @@ PEERDIR(
     ydb/core/statistics/ut_common
     yql/essentials/udfs/common/digest
     yql/essentials/udfs/common/hyperloglog
+    yql/essentials/udfs/common/url_base
 )
 
 ADDINCL(

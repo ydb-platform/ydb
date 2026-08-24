@@ -694,6 +694,10 @@ public:
         return (NUdf::TUnboxedValue*)(this + 1);
     }
 
+    static consteval ui64 GetMaxSize() {
+        return (std::numeric_limits<ui64>::max() - sizeof(TDirectArrayHolderInplace)) / sizeof(NUdf::TUnboxedValue);
+    }
+
 private:
     class TIterator: public TTemporaryComputationValue<TIterator> {
     public:
@@ -1107,7 +1111,7 @@ public:
         }
     }
 
-public: // unavailable getters may be eliminated at compile time, but it'd make code much less readable
+    // unavailable getters may be eliminated at compile time, but it'd make code much less readable
     TValueEqual GetValueEqual() const {
         Y_ABORT_UNLESS(SupportEqual);
         return TValueEqual(KeyTypes_, IsTuple_, Equate_.Get());

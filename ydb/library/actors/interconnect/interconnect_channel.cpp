@@ -197,7 +197,7 @@ namespace NActors {
                         for (const auto& section : SerializationInfo->Sections) {
                             hasRdmaSections |= section.IsRdmaCapable;
                         }
-                        if (hasRdmaSections && Params.UseXdcShuffle && Params.UseRdma && RdmaMemPool && rdmaDeviceIndex >= 0) {
+                        if (hasRdmaSections && Params.UseXdcShuffle && Params.UseRdmaRead && RdmaMemPool && rdmaDeviceIndex >= 0) {
                             if (SerializeEventRdma(event)) {
                                 SerializationInfo = &event.Buffer->GetSerializationInfo();
                                 UseRdmaForCurrentEvent = IsRdmaSectionLayoutConsistentWithData(event, rdmaDeviceIndex);
@@ -290,12 +290,23 @@ namespace NActors {
 
     template<bool External>
     bool TEventOutputChannel::SerializeEvent(TTcpPacketOutTask& task, TEventHolder& event, bool disableChecksums, size_t *bytesSerialized) {
-        auto addChunk = [&](const void *data, size_t len, bool allowCopy) {
+        const bool useRdmaForMainChannelPacket = !External && task.UsePreallocatedInternalStream;
+        auto addChunk = [&](const void *data, size_t len, bool allowCopy, const NInterconnect::NRdma::TMemRegion* memRegion = nullptr) {
             event.UpdateChecksum(data, len);
-            if (allowCopy && (reinterpret_cast<uintptr_t>(data) & 63) + len <= 64) {
-                task.Write<External>(data, len);
+            if (useRdmaForMainChannelPacket) {
+                if (memRegion) {
+                    task.AppendRdma(data, len, memRegion, disableChecksums);
+                } else if (allowCopy) {
+                    task.Write<External>(data, len);
+                } else {
+                    task.Append<External>(data, len, &event.ZcTransferId, disableChecksums);
+                }
             } else {
-                task.Append<External>(data, len, &event.ZcTransferId, disableChecksums);
+                if (allowCopy && (reinterpret_cast<uintptr_t>(data) & 63) + len <= 64) {
+                    task.Write<External>(data, len);
+                } else {
+                    task.Append<External>(data, len, &event.ZcTransferId, disableChecksums);
+                }
             }
             *bytesSerialized += len;
             Y_DEBUG_ABORT_UNLESS(len <= PartLenRemain);
@@ -321,8 +332,11 @@ namespace NActors {
                 if (!out.size()) {
                     break;
                 }
-                for (const auto& chunk : Chunker.FeedBuf(out.data(), out.size())) {
-                    addChunk(chunk.Buf, chunk.Size, false);
+                const auto aliasedMode = useRdmaForMainChannelPacket
+                    ? TCoroutineChunkSerializer::EAliasedMode::CopyToBuffer
+                    : TCoroutineChunkSerializer::EAliasedMode::PassThrough;
+                for (const auto& chunk : Chunker.FeedBuf(out.data(), out.size(), aliasedMode)) {
+                    addChunk(chunk.Buf, chunk.Size, false, chunk.MemRegion);
                 }
                 complete = Chunker.IsComplete();
                 if (complete) {
@@ -333,7 +347,11 @@ namespace NActors {
             while (const size_t numb = Min<size_t>(External ? task.GetExternalFreeAmount() : task.GetInternalFreeAmount(),
                     Iter.ContiguousSize(), PartLenRemain)) {
                 const char *obuf = Iter.ContiguousData();
-                addChunk(obuf, numb, true);
+                NInterconnect::NRdma::TMemRegionSlice memRegion;
+                if (useRdmaForMainChannelPacket) {
+                    memRegion = NInterconnect::NRdma::TryExtractFromRcBuf(Iter.GetChunk());
+                }
+                addChunk(obuf, numb, true, memRegion.GetMemRegion());
                 Iter += numb;
             }
             complete = !Iter.Valid();
@@ -368,10 +386,10 @@ namespace NActors {
                 } else {
                     Y_ABORT_UNLESS(SectionIndex < sections.size());
                     IsPartInline = sections[SectionIndex].IsInline;
-                    IsPartRdma = sections[SectionIndex].IsRdmaCapable;
+                    IsPartRdma = UseRdmaForCurrentEvent && sections[SectionIndex].IsRdmaCapable;
                     while (SectionIndex < sections.size()
                             && IsPartInline == sections[SectionIndex].IsInline
-                            && IsPartRdma == sections[SectionIndex].IsRdmaCapable) {
+                            && IsPartRdma == (UseRdmaForCurrentEvent && sections[SectionIndex].IsRdmaCapable)) {
                         PartLenRemain += sections[SectionIndex].Size;
                         ++SectionIndex;
                     }

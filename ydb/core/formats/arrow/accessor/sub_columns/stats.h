@@ -210,7 +210,11 @@ public:
         return Original->num_rows();
     }
 
-    TConstructorContainer GetAccessorConstructor(const ui32 columnIndex) const;
+    // The serialization constructor for `columnIndex`. encodingParams selects the offset/index
+    // re-encoding for binary-backed Array/Dictionary columns; a disabled params yields the plain
+    // accessor constructor. Since the encoding lives in the accessor settings (not the stats blob),
+    // it is supplied per call rather than stored here.
+    TConstructorContainer GetAccessorConstructor(const ui32 columnIndex, const TEncodingParams& encodingParams) const;
     IChunkedArray::EType GetAccessorType(const ui32 columnIndex) const;
     EValueType GetValueType(const ui32 columnIndex) const;
 

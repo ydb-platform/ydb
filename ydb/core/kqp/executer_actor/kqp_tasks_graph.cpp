@@ -26,6 +26,7 @@
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 #include <ydb/library/yql/providers/pq/common/yql_names.h>
+#include <ydb/services/udf_store/wasm/query_compartment_scope.h>
 
 #include <algorithm>
 
@@ -1253,6 +1254,11 @@ void TKqpTasksGraph::BuildDqSourceStreamLookupChannels(const TStageInfo& stageIn
     } else if (dqSourceStreamLookup.HasFullscanLimit()) {
         settings->SetFullscanLimit(dqSourceStreamLookup.GetFullscanLimit());
     }
+    if (!AppData()->FeatureFlags.GetEnableDqSourceStreamLookupJoinShuffleMode()) {
+        Y_ENSURE(
+            dqSourceStreamLookup.GetShuffleMode() == NKqpProto::TKqpPhyCnDqSourceStreamLookup_EShuffleMode_DEFAULT || dqSourceStreamLookup.GetShuffleMode() == NKqpProto::TKqpPhyCnDqSourceStreamLookup_EShuffleMode_OFF,
+            TStringBuilder{} << "EnableDqSourceStreamLookupJoinShuffleMode disabled, but ShuffleMode is " << static_cast<NDq::EShuffleMode>(dqSourceStreamLookup.GetShuffleMode()));
+    }
     /* ShuffleMode intentionally omitted */
 
     const auto& leftJointKeys = dqSourceStreamLookup.GetLeftJoinKeyNames();
@@ -1925,6 +1931,12 @@ void TKqpTasksGraph::SerializeTaskToProto(const TTask& task, NYql::NDqProto::TDq
 
     const NKqpProto::TKqpPhyStage& stage = stageInfo.Meta.GetStage(stageInfo.Id);
     result->MutableProgram()->CopyFrom(stage.GetProgram());
+
+    if (stage.WasmUdfModulesSize() > 0) {
+        TVector<TString> modules = NUdfStore::NWasm::WasmUdfModulesFromRepeated(stage.GetWasmUdfModules());
+        (*result->MutableTaskParams())[TString(NUdfStore::NWasm::WasmUdfModulesTaskParam)] =
+            NUdfStore::NWasm::SerializeWasmUdfModulesTaskParam(modules);
+    }
 
     for (const auto& paramName : stage.GetProgramParameters()) {
         auto& dqParams = *result->MutableParameters();

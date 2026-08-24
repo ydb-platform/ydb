@@ -1140,17 +1140,18 @@ public:
     void HandleRequest(const IRequestPtr& /*req*/, const IResponseWriterPtr& /*rsp*/) override
     {
         auto finally = Finally([this] {
-            YT_LOG_DEBUG("Running finally block");
+            YT_TLOG_DEBUG("Running finally block");
             Canceled.Set();
         });
 
         auto p = NewPromise<void>();
         p.OnCanceled(BIND([p] (const TError& error) {
-            YT_LOG_INFO(error, "Promise is canceled");
+            YT_TLOG_INFO("Promise is canceled")
+                .With(error);
             p.Set(error);
         }));
 
-        YT_LOG_DEBUG("Blocking on promise");
+        YT_TLOG_DEBUG("Blocking on promise");
         WaitFor(p.ToFuture())
             .ThrowOnError();
     }
@@ -1179,7 +1180,7 @@ TEST_P(THttpServerTest, RequestCancel)
         .ThrowOnError();
 
     Sleep(TDuration::Seconds(1));
-    YT_LOG_DEBUG("Closing client connection");
+    YT_TLOG_DEBUG("Closing client connection");
     WaitFor(connection->CloseWrite())
         .ThrowOnError();
 

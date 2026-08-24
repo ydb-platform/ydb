@@ -1,0 +1,11 @@
+--- contrib/libs/grpc/src/core/ext/filters/client_channel/retry_filter_legacy_call_data.cc	(c49d201d74ca431947a46c36a75690cf47aeb145)
++++ contrib/libs/grpc/src/core/ext/filters/client_channel/retry_filter_legacy_call_data.cc	(79511fb720680a5251b2abdf756cee98bc8ffed1)
+@@ -2027,6 +2027,8 @@ void RetryFilter::LegacyCallData::OnRetryTimerLocked(
+   if (calld->retry_timer_handle_.has_value()) {
+     calld->retry_timer_handle_.reset();
+     calld->CreateCallAttempt(/*is_transparent_retry=*/false);
++  } else {
++    GRPC_CALL_COMBINER_STOP(calld->call_combiner_, "retry timer cancelled");
+   }
+   GRPC_CALL_STACK_UNREF(calld->owning_call_, "OnRetryTimer");
+ }

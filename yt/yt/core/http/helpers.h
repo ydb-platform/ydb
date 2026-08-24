@@ -51,6 +51,7 @@ inline const std::string ProtocolVersionMinor("X-YT-Rpc-Protocol-Version-Minor")
 inline const std::string RequestFormatOptionsHeaderName("X-YT-Request-Format-Options");
 inline const std::string RequestIdHeaderName("X-YT-Request-Id");
 inline const std::string ResponseFormatOptionsHeaderName("X-YT-Response-Format-Options");
+inline const std::string StartTimeHeaderName("X-YT-Start-Time");
 inline const std::string UserNameHeaderName("X-YT-User-Name");
 inline const std::string UserTagHeaderName("X-YT-User-Tag");
 inline const std::string XYTErrorHeaderName("X-YT-Error");

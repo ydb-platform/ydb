@@ -59,6 +59,7 @@ TInflightInfo::TInflightInfo(TInflightInfo&& other) noexcept
     , StartAt(other.StartAt)
     , PBuffersLockCount(other.PBuffersLockCount)
     , QuorumReadyPromise(std::move(other.QuorumReadyPromise))
+    , PersistGeneration(other.PersistGeneration)
     , DesiredDDisks(other.DesiredDDisks)
     , Disabled(other.Disabled)
     , WriteRequested(other.WriteRequested)
@@ -74,6 +75,10 @@ TInflightInfo::TInflightInfo(TInflightInfo&& other) noexcept
 
 TInflightInfo::~TInflightInfo()
 {
+    if (!ReadyQueue) {
+        return;
+    }
+
     Y_ABORT_UNLESS(PBuffersLockCount == 0);
     Y_ABORT_UNLESS(WriteConfirmed.Exclude(WriteRequested).Empty());
 
@@ -238,6 +243,7 @@ void TInflightInfo::RequestErase(THostIndex host)
     Y_ABORT_UNLESS(!EraseRequested.Get(host));
     Y_ABORT_UNLESS(!EraseConfirmed.Get(host));
     Y_ABORT_UNLESS(FlushConfirmed.Count() >= QuorumDirectBlockGroupHostCount);
+    Y_ABORT_UNLESS(PBuffersLockCount == 0);
 
     SetState(EState::PBufferErasing);
     EraseRequested.Set(host);
@@ -248,6 +254,7 @@ bool TInflightInfo::ConfirmErase(THostIndex host)
     Y_ABORT_UNLESS(State == EState::PBufferErasing);
     Y_ABORT_UNLESS(EraseRequested.Get(host));
     Y_ABORT_UNLESS(!EraseConfirmed.Get(host));
+    Y_ABORT_UNLESS(PBuffersLockCount == 0);
 
     EraseConfirmed.Set(host);
 
@@ -260,9 +267,10 @@ void TInflightInfo::EraseFailed(THostIndex host)
     Y_ABORT_UNLESS(
         State == EState::PBufferErasing || State == EState::PBufferErased);
     Y_ABORT_UNLESS(!EraseConfirmed.Get(host));
+    Y_ABORT_UNLESS(PBuffersLockCount == 0);
 
     if (State == EState::PBufferErased) {
-        // Belated error response after config has bee changed.
+        // Belated error response after config has been changed.
         Y_ABORT_UNLESS(Disabled.Get(host));
         return;
     }
@@ -281,7 +289,7 @@ void TInflightInfo::UpdateHosts(
     THostMask removed,
     THostMask disabled)
 {
-    // Removed hosts should be disabled to.
+    // Removed hosts should be disabled too.
     Y_ABORT_UNLESS(removed.Exclude(disabled).Empty());
 
     switch (State) {
@@ -335,8 +343,8 @@ void TInflightInfo::LockPBuffer()
     ++PBuffersLockCount;
 
     if (PBuffersLockCount == 1) {
-        // When lsn locked for reading, we should not erase it. (TODO)
-        ReadyQueue->UnRegister(Lsn);
+        // When lsn locked for reading, we should not erase it.
+        ReadyQueue->UnRegister(Lsn, IReadyQueue::EQueueType::Erase);
         ApplyBytes(WriteConfirmed, IReadyQueue::EPBufferCounter::Locked, true);
     }
 }
@@ -352,13 +360,20 @@ void TInflightInfo::UnlockPBuffer()
 
     if (PBuffersLockCount == 0) {
         ApplyBytes(WriteConfirmed, IReadyQueue::EPBufferCounter::Locked, false);
-
-        if (State == EState::PBufferWritten) {
-            ReadyQueue->Register(Lsn, IReadyQueue::EQueueType::Flush);
-        } else if (State == EState::PBufferFlushed) {
-            ReadyQueue->Register(Lsn, IReadyQueue::EQueueType::Erase);
-        }
+        MaybeQueryErase();
     }
+}
+
+void TInflightInfo::SetPersistGeneration(ui32 persistGeneration)
+{
+    Y_ABORT_UNLESS(PersistGeneration == 0);
+
+    PersistGeneration = persistGeneration;
+}
+
+ui32 TInflightInfo::GetPersistGeneration() const
+{
+    return PersistGeneration;
 }
 
 TString TInflightInfo::DebugPrint(TInstant now) const
@@ -366,8 +381,8 @@ TString TInflightInfo::DebugPrint(TInstant now) const
     TStringBuilder result;
     result << " " << FormatDuration(now - StartAt) << ", " << ToString(State)
            << ", size:" << ByteCount << ", locks:" << PBuffersLockCount
-           << ", dd:" << DesiredDDisks.Print() << ", d:" << Disabled.Print()
-           << ", wr:" << WriteRequested.Print()
+           << ", pgen:" << PersistGeneration << ", dd:" << DesiredDDisks.Print()
+           << ", d:" << Disabled.Print() << ", wr:" << WriteRequested.Print()
            << ", wc:" << WriteConfirmed.Print()
            << ", fr:" << FlushRequested.Print()
            << ", fc:" << FlushConfirmed.Print()
@@ -444,10 +459,7 @@ void TInflightInfo::MaybeAdvanceToFlushed()
         FlushConfirmed.Count() >= QuorumDirectBlockGroupHostCount)
     {
         SetState(EState::PBufferFlushed);
-    }
-
-    if (State == EState::PBufferFlushed && PBuffersLockCount == 0) {
-        ReadyQueue->Register(Lsn, IReadyQueue::EQueueType::Erase);
+        MaybeQueryErase();
     }
 }
 
@@ -463,11 +475,18 @@ void TInflightInfo::MaybeAdvanceToErased()
 
 void TInflightInfo::MaybeQueryErase()
 {
+    if (PBuffersLockCount != 0 || State == EState::PBufferWritten ||
+        State == EState::PBufferFlushing)
+    {
+        return;
+    }
+
     Y_ABORT_UNLESS(
         State == EState::PBufferFlushed || State == EState::PBufferErasing);
 
     if (!WriteRequested.Exclude(Disabled).Exclude(EraseRequested).Empty()) {
         ReadyQueue->Register(Lsn, IReadyQueue::EQueueType::Erase);
+        ReadyQueue->FlushCompleted(Lsn, FlushConfirmed);
     }
 }
 

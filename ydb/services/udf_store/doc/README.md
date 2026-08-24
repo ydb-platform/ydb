@@ -39,8 +39,8 @@ ydb/library/wasm/
   api/compartment.h               # IWebAssemblyCompartment
 
 ydb/core/kqp/
-  query_data/kqp_predictor.*      # собирает WasmUdfModules из плана
-  compute_actor/kqp_*_compute_actor.*  # Acquire scope + Activate TLS
+  query_data/kqp_predictor.*      # HasUdf + WasmUdfModules → TKqpPhyStage
+  compute_actor/kqp_*_compute_actor.*  # Acquire scope + MakeTlsGuard
   executer_actor/kqp_literal_executer.cpp
   executer_actor/kqp_executer_stats.cpp  # пустые Tasks при early CA fail
 

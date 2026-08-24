@@ -215,7 +215,11 @@ void TDDiskActor::Handle(NMon::TEvHttpInfo::TPtr ev) {
         }
 
         // --- Section 5: Active connections ------------------------------------------
-        str << "<h3>Active connections (" << Connections.size() << ")</h3>";
+        size_t activeConnectionCount = 0;
+        for (const auto& connection : Connections) {
+            activeConnectionCount += connection.Active;
+        }
+        str << "<h3>Active connections (" << activeConnectionCount << ")</h3>";
         TABLE_CLASS("table") {
             TABLEHEAD() {
                 TABLER() {
@@ -226,8 +230,10 @@ void TDDiskActor::Handle(NMon::TEvHttpInfo::TPtr ev) {
                 }
             }
             TABLEBODY() {
-                for (const auto& [tabletId, info] : Connections) {
-                    Y_UNUSED(tabletId);
+                for (const auto& info : Connections) {
+                    if (!info.Active) {
+                        continue;
+                    }
                     TABLER() {
                         TABLED() { str << info.TabletId; }
                         TABLED() { str << info.Generation; }

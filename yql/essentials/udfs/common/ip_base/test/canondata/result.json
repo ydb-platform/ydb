@@ -1,22 +1,22 @@
 {
-    "test.test[Basic]": [
+    "test.test[Basic-Results]": [
         {
-            "uri": "file://test.test_Basic_/results.txt"
+            "uri": "file://test.test_Basic-Results_/results.txt"
         }
     ],
-    "test.test[Ipv4Uint32]": [
+    "test.test[Ipv4Uint32-Results]": [
         {
-            "uri": "file://test.test_Ipv4Uint32_/results.txt"
+            "uri": "file://test.test_Ipv4Uint32-Results_/results.txt"
         }
     ],
-    "test.test[Ipv4Uint32_2025_02]": [
+    "test.test[Ipv4Uint32_2025_02-Results]": [
         {
-            "uri": "file://test.test_Ipv4Uint32_2025_02_/extracted"
+            "uri": "file://test.test_Ipv4Uint32_2025_02-Results_/extracted"
         }
     ],
-    "test.test[Subnets]": [
+    "test.test[Subnets-Results]": [
         {
-            "uri": "file://test.test_Subnets_/results.txt"
+            "uri": "file://test.test_Subnets-Results_/results.txt"
         }
     ]
 }

@@ -1531,6 +1531,10 @@ public:
             return ReadNext();
         }
 
+        if (batch->num_rows() == 0) {
+            return ReadNext();
+        }
+
         auto& decoder = *Specs_.Inputs[TableIndex_];
         auto& inputFields = decoder.FieldsVec;
         YQL_ENSURE(inputFields.size() == ColumnConverters_.size());

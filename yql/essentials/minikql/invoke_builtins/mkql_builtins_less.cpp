@@ -264,42 +264,43 @@ struct TCustomLess: public TAggrLess {
 #endif
 };
 
+template <i8 ScaleFactor>
 struct TDecimalLess {
-    static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right) {
-        return NUdf::TUnboxedValuePod(NYql::NDecimal::IsLess(left.GetInt128(), right.GetInt128()));
+    static NUdf::TUnboxedValuePod Execute(
+        const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right) {
+        return NUdf::TUnboxedValuePod(
+            NYql::NDecimal::IsLess(left.GetInt128(), right.GetInt128(), ScaleFactor));
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
-    {
+    static Value* Generate(
+        Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block) {
         auto& context = ctx.Codegen.GetContext();
-        const auto l = GetterForInt128(left, block);
-        const auto r = GetterForInt128(right, block);
-        const auto lok = NDecimal::GenIsComparable(l, context, block);
-        const auto rok = NDecimal::GenIsComparable(r, context, block);
-        const auto both = BinaryOperator::CreateAnd(lok, rok, "both", block);
-        const auto ls = GenLessSigned(l, r, block);
-        const auto res = BinaryOperator::CreateAnd(both, ls, "res", block);
-        return MakeBoolean(res, context, block);
+        const auto leftValue = GetterForInt128(left, block);
+        const auto rightValue = GetterForInt128(right, block);
+        const auto result = NDecimal::GenIsLess(
+            leftValue, rightValue, ScaleFactor, /*aggregate=*/false, block);
+        return MakeBoolean(result, context, block);
     }
 #endif
 };
 
+template <i8 ScaleFactor>
 struct TDecimalAggrLess: public TAggrLess {
-    static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right) {
-        const auto l = left.GetInt128();
-        const auto r = right.GetInt128();
-        return NUdf::TUnboxedValuePod(l < r);
+    static NUdf::TUnboxedValuePod Execute(
+        const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right) {
+        return NUdf::TUnboxedValuePod(
+            NYql::NDecimal::IsLess<true>(left.GetInt128(), right.GetInt128(), ScaleFactor));
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
-    {
+    static Value* Generate(
+        Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block) {
         auto& context = ctx.Codegen.GetContext();
-        const auto l = GetterForInt128(left, block);
-        const auto r = GetterForInt128(right, block);
-        const auto ls = GenLessSigned(l, r, block);
-        return MakeBoolean(ls, context, block);
+        const auto result = NDecimal::GenIsLess(
+            GetterForInt128(left, block), GetterForInt128(right, block),
+            ScaleFactor, /*aggregate=*/true, block);
+        return MakeBoolean(result, context, block);
     }
 #endif
 };
@@ -314,8 +315,6 @@ void RegisterLess(IBuiltinFunctionRegistry& registry) {
     RegisterCompareBigDatetime<TDiffDateLess, TCompareArgsOpt>(registry, name);
 
     RegisterCompareStrings<TCustomLess, TCompareArgsOpt>(registry, name);
-    RegisterCompareCustomOpt<NUdf::TDataType<NUdf::TDecimal>, NUdf::TDataType<NUdf::TDecimal>,
-                             TDecimalLess, TCompareArgsOpt>(registry, name);
 
     const auto aggrName = "AggrLess";
     RegisterAggrComparePrimitive<TLess, TCompareArgsOpt>(registry, aggrName);
@@ -325,8 +324,7 @@ void RegisterLess(IBuiltinFunctionRegistry& registry) {
     RegisterAggrCompareBigTzDatetime<TAggrTzDateLess, TCompareArgsOpt>(registry, aggrName);
 
     RegisterAggrCompareStrings<TCustomLess, TCompareArgsOpt>(registry, aggrName);
-    RegisterAggrCompareCustomOpt<NUdf::TDataType<NUdf::TDecimal>,
-                                 TDecimalAggrLess, TCompareArgsOpt>(registry, aggrName);
+    NDecimal::RegisterCompare<TDecimalLess, TDecimalAggrLess>(registry, name, aggrName);
 }
 
 void RegisterLess(TKernelFamilyMap& kernelFamilyMap) {

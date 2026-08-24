@@ -7,7 +7,7 @@ This section describes the parameters of limits set in {{ ydb-short-name }}.
 The table below shows the limits that apply to schema objects: tables, databases, and columns. The "Object" column specifies the type of schema object that the limit applies to.
 The "Error type" column shows the status that the query ends with if an error occurs. For more information about statuses, see [Error handling in the API](../../reference/ydb-sdk/error_handling.md).
 
-| Objects | Limit | Value | Explanation | Internal<br/>name | Error<br/>type | Error message
+| Objects | Limit | Value | Explanation | Internal<br/>name | Error<br/>type | Error message |
 | :--- | :--- | :--- | :--- | :---: | :---: | :--- |
 | Database | Maximum path depth | 32 | Maximum number of nested path elements (directories, tables). | MaxDepth | SCHEME_ERROR | Paths depth limit exceeded |
 | Database | Maximum number of paths (schema objects) | 10,000 | Maximum number of path elements (directories, tables) in a database. | MaxPaths | PRECONDITION_FAILED | Paths count limit exceeded |
@@ -35,7 +35,7 @@ The "Error type" column shows the status that the query ends with if an error oc
 ## Analytical Table Limits
 
 | Parameter | Value |
-:--- | :---
+| :--- | :--- |
 | Maximum row size | 8 MB |
 | Maximum size of an inserted data block | 8 MB |
 

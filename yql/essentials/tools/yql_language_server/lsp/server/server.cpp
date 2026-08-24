@@ -43,7 +43,8 @@ void LspServe(
 
     pool->SafeAddFunc([outbox, &cout]() mutable { StartWriter(std::move(outbox), cout); });
 
-    auto out = NJsonRpc::JsonRpcMarshalling(Consumer(outbox));
+    auto outs = Consumer(outbox);
+    auto out = NJsonRpc::JsonRpcMarshalling(std::move(outs));
 
     auto listener = factory(out);
     listener = NJsonRpc::JsonRpcExceptionHandling(out, std::move(listener));

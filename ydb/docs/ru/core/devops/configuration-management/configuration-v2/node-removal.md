@@ -33,7 +33,7 @@
 1. Дождитесь, пока SelfHeal перенесёт VDisk с узла. С настройками по умолчанию перенос начинается приблизительно через час после остановки узла. Чтобы не ждать и запустить перенос немедленно, переведите PDisk узла в статус `BROKEN` с помощью [{{ ydb-short-name }} DSTool](../../../reference/ydb-dstool/index.md):
 
     ```bash
-    ydb-dstool -e <bs_endpoint> pdisk set --status BROKEN --pdisk-ids "[NodeId:PDiskId]"
+    ydb-dstool -e <bs_endpoint> pdisk set --status BROKEN --unavail-as-offline --pdisk-ids "[NodeId:PDiskId]"
     ```
 
     Это сразу запускает перенос VDisk с указанных PDisk, не дожидаясь, пока CMS Sentinel определит узел как неисправный. Подробнее см. в статье [Перенос VDisk с повреждённого или недоступного тома блочного хранилища](../../../maintenance/manual/moving_vdisks.md#removal_from_a_broken_device).

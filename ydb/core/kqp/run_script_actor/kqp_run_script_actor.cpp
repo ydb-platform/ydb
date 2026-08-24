@@ -100,6 +100,7 @@ private:
         userRequestContext->StreamingQueryPath = settings.StreamingQueryPath;
         userRequestContext->WatermarkLateEventsPolicy = settings.WatermarkLateEventsPolicy;
         userRequestContext->StreamingDisposition = settings.StreamingDisposition;
+        userRequestContext->CurrentExecutionGeneration = settings.LeaseGeneration;
 
         return std::make_shared<TScriptExecutionContext>(TScriptExecutionContext{
             .UserRequestContext = std::move(userRequestContext),
@@ -125,7 +126,6 @@ private:
             ev->SetProgressStatsPeriod(settings.ProgressStatsPeriod ? settings.ProgressStatsPeriod : TDuration::MilliSeconds(queryServiceConfig.GetProgressStatsPeriodMs()));
         }
 
-        ev->SetGeneration(settings.LeaseGeneration);
         return ev;
     }
 

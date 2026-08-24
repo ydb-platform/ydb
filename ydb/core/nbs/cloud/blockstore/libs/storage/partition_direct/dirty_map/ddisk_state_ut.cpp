@@ -1,5 +1,7 @@
 #include "ddisk_state.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/dirty_map.pb.h>
+
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
@@ -80,7 +82,7 @@ Y_UNIT_TEST_SUITE(TDDiskStateTest)
             TDDiskState::EFlushCompletion::Completed);   // Ahead = [30..34]
 
         // --- Save ---
-        PartitionDirect::NProto::TDDiskState proto;
+        TDDiskStateProto proto;
         source.Save(&proto);
 
         // --- Load into a fresh DDisk ---
@@ -107,7 +109,7 @@ Y_UNIT_TEST_SUITE(TDDiskStateTest)
             /*totalBlockCount=*/100,
             /*operationalBlockCount=*/100);
 
-        PartitionDirect::NProto::TDDiskState emptyProto;
+        TDDiskStateProto emptyProto;
         empty.Save(&emptyProto);
         UNIT_ASSERT_VALUES_EQUAL(0, emptyProto.GetAhead().StartAndLengthSize());
         UNIT_ASSERT_VALUES_EQUAL(

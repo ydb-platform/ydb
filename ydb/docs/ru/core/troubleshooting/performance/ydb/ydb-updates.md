@@ -16,7 +16,7 @@
 
 Чтобы проверить, не обновляется ли {{ ydb-short-name }} кластер:
 
-1. Откройте [Встроенный UI](../../../reference/embedded-ui/index.md).
+1. Откройте [{{ ydb-ui-name }}](../../../reference/ydb-ui/index.md).
 
 1. На вкладке **Nodes** проверьте, отличаются ли версии {{ ydb-short-name }} на узлах.
 

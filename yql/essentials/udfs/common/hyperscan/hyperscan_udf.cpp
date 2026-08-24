@@ -226,7 +226,6 @@ private:
         UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
     }
 
-private:
     const TString Regex_;
     THyperscanMatch::EMode Mode_;
     const TSourcePosition Pos_;
@@ -253,7 +252,6 @@ public:
             UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
         }
 
-    private:
         TSourcePosition Pos_;
     };
 
@@ -318,7 +316,6 @@ public:
             UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
         }
 
-    private:
         TSourcePosition Pos_;
     };
 

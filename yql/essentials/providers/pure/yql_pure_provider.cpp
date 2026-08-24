@@ -247,7 +247,6 @@ private:
         return program;
     }
 
-private:
     const TPureState::TPtr State_;
 };
 

@@ -1253,8 +1253,9 @@ TExprNode::TPtr PullUpFlatMapOverEquiJoin(const TExprNode::TPtr& node, TExprCont
             toPull.push_back(i);
         } else {
             // If cannot pull flat map with labels list stop processing.
-            if (!input.Scope().Ref().IsAtom())
+            if (!input.Scope().Ref().IsAtom()) {
                 return node;
+            }
         }
 
         err = canaryLabels.Add(ctx, *input.Scope().Ptr(), structType);
@@ -3485,8 +3486,9 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
         TExprNode::TListType renamed;
         renamed.reserve(self.LeftRenames().Size() >> 1U);
         for (auto i = 0U; i < self.LeftRenames().Size(); ++++i) {
-            if (leftFileldsSet.emplace(self.LeftRenames().Item(i).Value()).second)
+            if (leftFileldsSet.emplace(self.LeftRenames().Item(i).Value()).second) {
                 renamed.emplace_back(self.LeftRenames().Item(i).Ptr());
+            }
         }
 
         if (leftFileldsSet.size() < leftItemType.Cast<TStructExprType>()->GetSize()) {

@@ -267,18 +267,20 @@ namespace NKikimr::NBsController {
                 }
 
                 const auto& statusStr = vslot.GetStatus();
-                NKikimrBlobStorage::EVDiskStatus status;
-                NKikimrBlobStorage::EVDiskStatus_Parse(statusStr, &status);
-
-                switch (status) {
-                    case NKikimrBlobStorage::ERROR:
-                    case NKikimrBlobStorage::READY:
-                        break;
-                    case NKikimrBlobStorage::INIT_PENDING:
-                    case NKikimrBlobStorage::REPLICATING:
-                        pdisksWithReplicatingVDisks.insert(pdiskId);
-                        replicatingVDisks++;
-                        break;
+                // Empty/unknown Status: Parse leaves value untouched; treat as ERROR
+                // (same as TVSlotInfo::GetStatus / value_or(ERROR)).
+                NKikimrBlobStorage::EVDiskStatus status = NKikimrBlobStorage::ERROR;
+                if (NKikimrBlobStorage::EVDiskStatus_Parse(statusStr, &status)) {
+                    switch (status) {
+                        case NKikimrBlobStorage::ERROR:
+                        case NKikimrBlobStorage::READY:
+                            break;
+                        case NKikimrBlobStorage::INIT_PENDING:
+                        case NKikimrBlobStorage::REPLICATING:
+                            pdisksWithReplicatingVDisks.insert(pdiskId);
+                            replicatingVDisks++;
+                            break;
+                    }
                 }
 
                 auto it = storageInfo.PDiskUsageMap.find(pdiskId);

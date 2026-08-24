@@ -37,7 +37,6 @@ public:
             return NUdf::EFetchStatus::Ok;
         }
 
-    private:
         ui64 Index_ = 0;
         const ui64 Count_;
     };
@@ -56,7 +55,6 @@ private:
     void RegisterDependencies() const final {
     }
 
-private:
     const ui64 Count_;
 };
 
@@ -95,7 +93,6 @@ public:
             return NUdf::EFetchStatus::Ok;
         }
 
-    private:
         TComputationContext& CompCtx_;
         ui64 Index_ = 0;
     };

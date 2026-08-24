@@ -150,6 +150,80 @@ TEST_W(TCoroutineTest, WaitFor)
     EXPECT_TRUE(coro.IsCompleted());
 }
 
+TEST_F(TCoroutineTest, AbandonSuspended)
+{
+    bool unwound = false;
+    {
+        TCoroutine<int(int)> coro([&] (TCoroutine<int(int)>& self, int arg) {
+            struct TGuard
+            {
+                bool* Flag;
+                ~TGuard()
+                {
+                    *Flag = true;
+                }
+            } guard{&unwound};
+            self.Yield(arg + 1);
+            ADD_FAILURE() << "Abandoned coroutine must not run past Yield";
+        });
+
+        auto result = coro.Run(1);
+        EXPECT_TRUE(result);
+        EXPECT_EQ(2, *result);
+        EXPECT_FALSE(coro.IsCompleted());
+        EXPECT_FALSE(unwound);
+    }
+    EXPECT_TRUE(unwound);
+}
+
+struct TDtorCountingResult
+{
+    static inline int Constructed = 0;
+    static inline int Destroyed = 0;
+
+    TDtorCountingResult()
+    {
+        ++Constructed;
+    }
+
+    TDtorCountingResult(const TDtorCountingResult& /*other*/)
+    {
+        ++Constructed;
+    }
+
+    TDtorCountingResult(TDtorCountingResult&& /*other*/) noexcept
+    {
+        ++Constructed;
+    }
+
+    TDtorCountingResult& operator=(const TDtorCountingResult& other) = default;
+    TDtorCountingResult& operator=(TDtorCountingResult&& other) = default;
+
+    ~TDtorCountingResult()
+    {
+        ++Destroyed;
+    }
+};
+
+TEST_F(TCoroutineTest, AbandonDestroysResultExactlyOnce)
+{
+    // Regression check of double destruction of Result_
+    // when EState::Abandoned was not set for coroutine
+    // in the destructor of the derived classes.
+    TDtorCountingResult::Constructed = 0;
+    TDtorCountingResult::Destroyed = 0;
+    {
+        TCoroutine<TDtorCountingResult()> coro([] (TCoroutine<TDtorCountingResult()>& self) {
+            self.Yield(TDtorCountingResult());
+        });
+
+        coro.Run();
+        EXPECT_FALSE(coro.IsCompleted());
+    }
+    EXPECT_GT(TDtorCountingResult::Constructed, 0);
+    EXPECT_EQ(TDtorCountingResult::Constructed, TDtorCountingResult::Destroyed);
+}
+
 TEST_F(TCoroutineTest, ResumeCoroutineAcrossFiberThreads)
 {
     auto creationQueue = New<TActionQueue>("Creation");

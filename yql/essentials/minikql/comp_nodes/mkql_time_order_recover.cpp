@@ -67,8 +67,8 @@ public:
             auto end() const {
                 return c.end();
             }
-            auto clear() {
-                return c.clear();
+            void clear() {
+                c.clear();
             }
         };
 
@@ -151,7 +151,6 @@ public:
             Terminating_ = false;
         }
 
-    private:
         const TSelf* const Self_;
         THeap Heap_;
         const TTimeinterval Delay_;

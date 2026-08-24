@@ -4,6 +4,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_roles.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/dirty_map.pb.h>
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 
@@ -19,14 +20,10 @@ TString TPBufferCounters::DebugPrint() const
 {
     TStringBuilder result;
 
-    result << "{CurrentRecordsCount:" << CurrentRecordsCount << ", "
-           << "CurrentBytesCount:" << CurrentBytesCount << ", "
-           << "TotalRecordsCount:" << TotalRecordsCount << ", "
-           << "TotalBytesCount:" << TotalBytesCount << ", "
-           << "CurrentLockedRecordsCount:" << CurrentLockedRecordsCount << ", "
-           << "CurrentLockedBytesCount:" << CurrentLockedBytesCount << ", "
-           << "TotalLockedRecordsCount:" << TotalLockedRecordsCount << ", "
-           << "TotalLockedBytesCount:" << TotalLockedBytesCount << "}";
+    result << "{Current:" << Current.Print(true) << ", "
+           << "Total:" << Total.Print(true) << ", "
+           << "CurrentLocked:" << CurrentLocked.Print(true) << ", "
+           << "TotalLocked:" << TotalLocked.Print(true) << "}";
 
     return result;
 }
@@ -54,6 +51,15 @@ TBlocksDirtyMap::~TBlocksDirtyMap()
 
             return TInflightMap::EEnumerateContinuation::Continue;
         });
+}
+
+void TBlocksDirtyMap::Load(const TDirtyMapStateProto& proto)
+{
+    size_t ddisk = 0;   // TODO (drbasic). Reliable ddisk matching.
+    for (const auto& ddiskState: proto.GetDDiskStates()) {
+        DDiskStates[ddisk].Load(ddiskState);
+        ++ddisk;
+    }
 }
 
 void TBlocksDirtyMap::UpdateConfig(const TVChunkConfig& vChunkConfig)
@@ -566,13 +572,35 @@ const TPBufferCounters& TBlocksDirtyMap::GetPBufferCounters(
     return PBufferCounters[host];
 }
 
-ui64 TBlocksDirtyMap::GetPBufferUsedSize(THostIndex host) const
+TCountAndSize TBlocksDirtyMap::GetPBuffersUsage(THostIndex host) const
 {
     if (host >= PBufferCounters.size()) {
-        return 0;
+        return {};
     }
 
-    return PBufferCounters[host].CurrentBytesCount;
+    return PBufferCounters[host].Current;
+}
+
+TCountAndSize TBlocksDirtyMap::GetAheadBlocks(THostIndex host) const
+{
+    if (host >= DDiskStates.size()) {
+        return {};
+    }
+
+    TCountAndSize result = DDiskStates[host].GetAheadSegmentsStat();
+    result.Size *= BlockSize;
+    return result;
+}
+
+TCountAndSize TBlocksDirtyMap::GetBehindBlocks(THostIndex host) const
+{
+    if (host >= DDiskStates.size()) {
+        return {};
+    }
+
+    TCountAndSize result = DDiskStates[host].GetBehindSegmentsStat();
+    result.Size *= BlockSize;
+    return result;
 }
 
 void TBlocksDirtyMap::LockPBuffer(ui64 lsn)
@@ -677,17 +705,13 @@ void TBlocksDirtyMap::DataToPBufferAdded(
 
     switch (counter) {
         case IReadyQueue::EPBufferCounter::Total: {
-            counters.CurrentRecordsCount++;
-            counters.CurrentBytesCount += byteCount;
-            counters.TotalRecordsCount++;
-            counters.TotalBytesCount += byteCount;
+            counters.Current.Add(byteCount);
+            counters.Total.Add(byteCount);
             break;
         }
         case IReadyQueue::EPBufferCounter::Locked: {
-            counters.CurrentLockedRecordsCount++;
-            counters.CurrentLockedBytesCount += byteCount;
-            counters.TotalLockedRecordsCount++;
-            counters.TotalLockedBytesCount += byteCount;
+            counters.CurrentLocked.Add(byteCount);
+            counters.TotalLocked.Add(byteCount);
             break;
         }
     }
@@ -702,19 +726,11 @@ void TBlocksDirtyMap::DataFromPBufferReleased(
 
     switch (counter) {
         case IReadyQueue::EPBufferCounter::Total: {
-            Y_ABORT_UNLESS(counters.CurrentRecordsCount > 0);
-            Y_ABORT_UNLESS(counters.CurrentBytesCount >= byteCount);
-
-            counters.CurrentRecordsCount--;
-            counters.CurrentBytesCount -= byteCount;
+            counters.Current.Sub(byteCount);
             break;
         }
         case IReadyQueue::EPBufferCounter::Locked: {
-            Y_ABORT_UNLESS(counters.CurrentLockedRecordsCount > 0);
-            Y_ABORT_UNLESS(counters.CurrentLockedBytesCount >= byteCount);
-
-            counters.CurrentLockedRecordsCount--;
-            counters.CurrentLockedBytesCount -= byteCount;
+            counters.CurrentLocked.Sub(byteCount);
             break;
         }
     }
@@ -740,10 +756,9 @@ bool TBlocksDirtyMap::NeedPersist() const
     return BehindAheadGeneration > PersistedGeneration;
 }
 
-PartitionDirect::NProto::TDirtyMapState
-TBlocksDirtyMap::GetStateForPersist() const
+TDirtyMapStateProto TBlocksDirtyMap::GetStateForPersist() const
 {
-    PartitionDirect::NProto::TDirtyMapState result;
+    TDirtyMapStateProto result;
     result.SetStateGeneration(GetCurrentGeneration());
     for (const auto& ddiskState: DDiskStates) {
         ddiskState.Save(result.AddDDiskStates());
@@ -759,7 +774,7 @@ void TBlocksDirtyMap::StatePersisted(ui32 persistGeneration)
     PersistedGeneration = persistGeneration;
 }
 
-ui64 TBlocksDirtyMap::GetCurrentGeneration() const
+ui32 TBlocksDirtyMap::GetCurrentGeneration() const
 {
     return BehindAheadGeneration;
 }
@@ -1028,14 +1043,18 @@ bool TBlocksDirtyMap::CheckEraseAbility(
     TInflightInfo& inflightInfo)
 {
     if (BehindAheadGeneration == 0) {
+        // There is not a single red block.
         return true;
     }
 
-    if (inflightInfo.GetPersistGeneration() < PersistedGeneration) {
+    if (inflightInfo.GetPersistGeneration() &&
+        inflightInfo.GetPersistGeneration() <= PersistedGeneration)
+    {
+        // Red blocks already persisted. Can erase.
         return true;
     }
 
-    bool eraseBlocked = AnyOf(
+    const bool eraseBlocked = AnyOf(
         DDiskStates,
         [&](const TDDiskState& ddiskState)
         {
@@ -1044,10 +1063,14 @@ bool TBlocksDirtyMap::CheckEraseAbility(
         });
 
     if (!eraseBlocked) {
+        // Don't overlaps with red blocks. Can erase.
         return true;
     }
 
     if (!inflightInfo.GetPersistGeneration()) {
+        // The red blocks from this inflightInfo are already in the current
+        // generation. Start waiting for data with the current or newer
+        // generation to be persisted.
         inflightInfo.SetPersistGeneration(BehindAheadGeneration);
     }
     return false;

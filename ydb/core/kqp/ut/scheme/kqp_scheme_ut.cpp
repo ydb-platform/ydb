@@ -12392,6 +12392,14 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         {
             const auto query = R"(
                 --!syntax_v1
+                CREATE TOPIC `/Root/dead_letter_queue_97`
+            )";
+            const auto result = executeQuery(query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            const auto query = R"(
+                --!syntax_v1
                 ALTER TOPIC `/Root/topic`
                     ALTER CONSUMER cs SET (default_processing_timeout = Interval('PT31S'), max_processing_attempts = 67, dead_letter_policy = 'move', dead_letter_queue = 'dead_letter_queue_97')
             )";
@@ -12523,6 +12531,87 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "dead_letter_queue is required for shared consumers with dead letter policy 'move'", result.GetIssues().ToString());
         }
+        {
+            const auto query = R"(
+                --!syntax_v1
+                CREATE TOPIC `/Root/topic1` (
+                    CONSUMER cs WITH (type='shared', dead_letter_policy='move', dead_letter_queue='')
+                )
+            )";
+            const auto result = executeQuery(query);
+            UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Dead letter queue cannot be empty", result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(CreateTopicSharedConsumerDlqAccessDenied, UseQueryService) {
+        TKikimrRunner kikimr;
+        auto adminQueryClient = kikimr.GetQueryClient();
+        auto adminSession = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        {
+            const auto result = ExecuteGeneric<UseQueryService>(adminQueryClient, adminSession, R"(
+                --!syntax_v1
+                CREATE TOPIC `/Root/dlq`
+            )");
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        kikimr.GetTestClient().GrantConnect("user@builtin");
+        {
+            const auto result = ExecuteGeneric<UseQueryService>(adminQueryClient, adminSession, R"(
+                --!syntax_v1
+                GRANT CREATE QUEUE, DESCRIBE SCHEMA ON `/Root` TO `user@builtin`;
+            )");
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            Sleep(TDuration::MilliSeconds(300));
+        }
+
+        auto userQueryClient = kikimr.GetQueryClient(NQuery::TClientSettings().AuthToken("user@builtin"));
+        auto userSession = kikimr.GetTableClient(NYdb::NTable::TClientSettings().AuthToken("user@builtin"))
+            .CreateSession().GetValueSync().GetSession();
+
+        const auto result = ExecuteGeneric<UseQueryService>(userQueryClient, userSession, R"(
+            --!syntax_v1
+            CREATE TOPIC `/Root/topic` (
+                CONSUMER cs WITH (
+                    type='shared',
+                    dead_letter_policy='move',
+                    dead_letter_queue='/Root/dlq'
+                )
+            )
+        )");
+        // Query service wraps scheme UNAUTHORIZED as GENERIC_ERROR (execution).
+        const auto expected = UseQueryService ? EStatus::GENERIC_ERROR : EStatus::UNAUTHORIZED;
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expected, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+            "Access denied for user@builtin on path /Root/dlq",
+            result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+            "AlterSchema or UpdateRow",
+            result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST_TWIN(CreateTopicSharedConsumerDlqDoesNotExist, UseQueryService) {
+        TKikimrRunner kikimr;
+        auto queryClient = kikimr.GetQueryClient();
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, R"(
+            --!syntax_v1
+            CREATE TOPIC `/Root/topic` (
+                CONSUMER cs WITH (
+                    type='shared',
+                    dead_letter_policy='move',
+                    dead_letter_queue='/Root/missing_dlq'
+                )
+            )
+        )");
+        const auto expected = UseQueryService ? EStatus::GENERIC_ERROR : EStatus::SCHEME_ERROR;
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expected, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+            "does not exist",
+            result.GetIssues().ToString());
     }
 
     Y_UNIT_TEST_TWIN(CreateAndAlterTopicMetricsLevel, UseQueryService) {
@@ -13336,13 +13425,13 @@ END DO)",
                 const auto& issues = result.GetIssues().ToString();
                 if (!issues.contains("Streaming query /Root/MyFolder/MyStreamingQuery already exists") &&
                     !issues.contains("Scheme transaction ESchemeOpCreateStreamingQuery failed StatusAlreadyExists: execution completed, streaming query /Root/MyFolder/MyStreamingQuery already exists")) {
-                    UNIT_FAIL(TStringBuilder() << "Unexpected GENERIC_ERROR error: " << issues);
+                    UNIT_FAIL(TStringBuilder() << "Unexpected SCHEME_ERROR error: " << issues);
                 }
-            } else if (result.GetStatus() == EStatus::ABORTED) {
+            } else if (result.GetStatus() == EStatus::PRECONDITION_FAILED) {
                 const auto& issues = result.GetIssues().ToString();
                 if (!issues.contains("Streaming query /Root/MyFolder/MyStreamingQuery already under operation CREATE STREAMING QUERY") &&
                     !(issues.contains("Lock streaming query failed") && issues.contains("Transaction locks invalidated"))) {
-                    UNIT_FAIL(TStringBuilder() << "Unexpected ABORTED error: " << issues);
+                    UNIT_FAIL(TStringBuilder() << "Unexpected PRECONDITION_FAILED error: " << issues);
                 }
             } else {
                 UNIT_FAIL(TStringBuilder() << "Unexpected result status: " << result.GetStatus() << ", issues: " << result.GetIssues().ToOneLineString());
@@ -13531,11 +13620,11 @@ END DO)",
             const auto result = resultFeature.ExtractValueSync();
             if (result.GetStatus() == EStatus::SUCCESS) {
                 ++successCount;
-            } else if (result.GetStatus() == EStatus::ABORTED) {
+            } else if (result.GetStatus() == EStatus::PRECONDITION_FAILED) {
                 const auto& issues = result.GetIssues().ToString();
                 if (!issues.contains("Streaming query /Root/MyFolder/MyStreamingQuery already under operation ALTER STREAMING QUERY") &&
                     !(issues.contains("Lock streaming query failed") && issues.contains("Transaction locks invalidated"))) {
-                    UNIT_FAIL(TStringBuilder() << "Unexpected ABORTED error: " << issues);
+                    UNIT_FAIL(TStringBuilder() << "Unexpected PRECONDITION_FAILED error: " << issues);
                 }
             } else {
                 UNIT_FAIL(TStringBuilder() << "Unexpected result status: " << result.GetStatus() << ", issues: " << result.GetIssues().ToOneLineString());
@@ -13663,11 +13752,11 @@ END DO)",
                     !issues.contains("Path `/Root/MyFolder/MyStreamingQuery` does not exist")) {
                     UNIT_FAIL(TStringBuilder() << "Unexpected NOT_FOUND error: " << issues);
                 }
-            } else if (result.GetStatus() == EStatus::ABORTED) {
+            } else if (result.GetStatus() == EStatus::PRECONDITION_FAILED) {
                 const auto& issues = result.GetIssues().ToString();
                 if (!issues.contains("Streaming query /Root/MyFolder/MyStreamingQuery already under operation DROP STREAMING QUERY") &&
                     !(issues.contains("Lock streaming query failed") && issues.contains("Transaction locks invalidated"))) {
-                    UNIT_FAIL(TStringBuilder() << "Unexpected ABORTED error: " << issues);
+                    UNIT_FAIL(TStringBuilder() << "Unexpected PRECONDITION_FAILED error: " << issues);
                 }
             } else {
                 UNIT_FAIL(TStringBuilder() << "Unexpected result status: " << result.GetStatus() << ", issues: " << result.GetIssues().ToOneLineString());
@@ -13677,8 +13766,6 @@ END DO)",
         UNIT_ASSERT_VALUES_EQUAL(successCount, 1);
         CheckObjectNotFound(runtime, "/Root/MyFolder/MyStreamingQuery");
     }
-
-
 
     Y_UNIT_TEST(StreamingQueriesAclValidation) {
         auto kikimr = SetupStreamingSource();

@@ -384,6 +384,7 @@ TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActo
     , WriteBufferIsFullCounter(nullptr)
     , WriteLagMs(TDuration::Minutes(1), 100)
     , LastEmittedHeartbeat(TRowVersion::Min())
+    , LastEmittedSchemaChange(TRowVersion::Min())
     , SamplingControl(samplingControl)
     , MessageIdDeduplicator(Partition, CreateDefaultTimeProvider(), TDuration::Minutes(5))
 {
@@ -942,6 +943,10 @@ void TPartition::DestroyActor(const TActorContext& ctx)
 
     for (const auto& w : Responses) {
         ReplyError(ctx, w.GetCookie(), errorCode, TStringBuilder() << ss << " (WriteResponses)");
+    }
+
+    for (const auto& w : PendingSchemaChangeResponses) {
+        ReplyError(ctx, w.GetCookie(), errorCode, TStringBuilder() << ss << " (PendingSchemaChangeResponses)");
     }
 
     for (const auto& ri : ReadInfo) {

@@ -1024,6 +1024,11 @@ bool TViewerPipeClient::IsDatabaseRequest() const {
     return DatabaseBoardInfoResponse || ResourceBoardInfoResponse;
 }
 
+bool TViewerPipeClient::AreDatabaseNodesKnown() const {
+    return (DatabaseBoardInfoResponse && DatabaseBoardInfoResponse->IsOk()) ||
+        (ResourceBoardInfoResponse && ResourceBoardInfoResponse->IsOk());
+}
+
 bool TViewerPipeClient::IsStrictDatabaseOnlyRequest() {
     if (!StrictDatabaseOnlyRequest.has_value()) {
         StrictDatabaseOnlyRequest = IsStrictDatabaseOnlyToken(AppData(), GetRequest().GetUserTokenObject());
@@ -1037,6 +1042,49 @@ TString TViewerPipeClient::GetUserSID() const {
         return {};
     }
     return userToken.GetUserSID();
+}
+
+bool TViewerPipeClient::DenyRequestIfNodesAreOutOfDatabase(std::span<const TNodeId> nodeIds) {
+    if (nodeIds.empty()) {
+        return false;
+    }
+    // We can't validate the scope of the requested nodes without the database node list,
+    // so an unresolved database denies the request.
+    if (!AreDatabaseNodesKnown()) {
+        YDB_LOG_NOTICE_COMP(
+            NKikimrServices::VIEWER,
+            "Access denied: database node list is unavailable, request cannot be validated",
+            {"logPrefix", GetLogPrefix()},
+            {"user", GetUserSID()},
+            {"database", Database});
+        ReplyAndPassAway(
+            GETHTTPACCESSDENIED(
+                "text/plain",
+                "Database node list is unavailable, request cannot be validated"),
+            "Access denied");
+        return true;
+    }
+    std::unordered_set<TNodeId> databaseNodes;
+    const auto nodes = GetDatabaseNodes();
+    databaseNodes.insert(nodes.begin(), nodes.end());
+    for (const auto& nodeId : nodeIds) {
+        if (!databaseNodes.contains(nodeId)) {
+            YDB_LOG_NOTICE_COMP(
+                NKikimrServices::VIEWER,
+                "Access denied: requested node is outside the specified database",
+                {"logPrefix", GetLogPrefix()},
+                {"user", GetUserSID()},
+                {"database", Database},
+                {"outOfDatabaseNode", nodeId});
+            ReplyAndPassAway(
+                GETHTTPACCESSDENIED(
+                    "text/plain",
+                    "Some requested nodes are outside the specified database"),
+                "Access denied");
+            return true;
+        }
+    }
+    return false;
 }
 
 void TViewerPipeClient::InitConfig(const TCgiParameters& params) {

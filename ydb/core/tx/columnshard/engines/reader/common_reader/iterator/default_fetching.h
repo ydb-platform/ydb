@@ -64,7 +64,7 @@ private:
     std::vector<TChunkRestoreInfo> ColumnChunks;
     std::optional<TString> StorageId;
 
-    virtual void DoOnDataCollected(TFetchingResultContext& context) override {
+    virtual TConclusionStatus DoOnDataCollected(TFetchingResultContext& context) override {
         AFL_VERIFY(!IIndexInfo::IsSpecialColumn(GetEntityId()));
         std::vector<TPortionDataAccessor::TAssembleBlobInfo> chunks;
         for (auto&& i : ColumnChunks) {
@@ -72,7 +72,12 @@ private:
         }
 
         TPortionDataAccessor::TPreparedColumn column(std::move(chunks), GetColumnLoader(context.GetSource()));
-        context.GetAccessors().AddVerified(GetEntityId(), column.AssembleAccessor().DetachResult(), true);
+        auto conclusion = column.AssembleAccessor();
+        if (conclusion.IsFail()) {
+            return conclusion;
+        }
+        context.GetAccessors().AddVerified(GetEntityId(), conclusion.DetachResult(), true);
+        return TConclusionStatus::Success();
     }
 
     virtual void DoOnDataReceived(TReadActionsCollection& /*nextRead*/, NBlobOperations::NRead::TCompositeReadBlobs& blobs) override {

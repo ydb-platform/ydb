@@ -2598,7 +2598,7 @@ private:
             N_,
             failedCount,
             totalCount)
-            << Errors_;
+            .With(Errors_);
 
         guard.Release();
 

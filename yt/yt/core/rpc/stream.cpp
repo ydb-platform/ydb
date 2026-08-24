@@ -279,7 +279,7 @@ void TAttachmentsOutputStream::OnWindowPacketsReady(TMutableRange<TWindowPacket>
 {
     if (ClosePromise_) {
         guard.Release();
-        auto error = TError("Stream is already closed") << GetErrorAttributes();
+        auto error = TError("Stream is already closed").With(GetErrorAttributes());
         for (auto& packet : packets) {
             TDelayedExecutor::CancelAndClear(packet.TimeoutCookie);
             packet.Promise.Set(error);
@@ -452,7 +452,7 @@ void TAttachmentsOutputStream::HandleFeedback(const TStreamingFeedback& feedback
         THROW_ERROR_EXCEPTION("Stream read position exceeds write position: %v > %v",
             feedback.ReadPosition,
             WritePosition_)
-            << GetErrorAttributes();
+            .With(GetErrorAttributes());
     }
 
     ReadPosition_ = feedback.ReadPosition;

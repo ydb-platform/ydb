@@ -210,8 +210,9 @@ private:
 
             if (bucket.Terminated) {
                 guard.Release();
+                auto terminationError = TerminationError_.Load();
                 THROW_ERROR_EXCEPTION(NRpc::EErrorCode::TransportError, "Channel terminated")
-                    << TerminationError_.Load();
+                    .WithIf(!terminationError.IsOK(), terminationError);
             }
 
             bucket.Sessions.reserve(parallelism);
@@ -855,13 +856,14 @@ private:
                     auto responseHandler = requestControl->Finalize(guard);
                     guard.Release();
 
+                    auto terminationError = TerminationError_.Load();
                     NotifyError(
                         requestControl,
                         responseHandler,
                         YT_TLOG_STATIC_ANCHOR_REF(),
                         "Request is dropped because channel is terminated"_sb,
                         TError(NRpc::EErrorCode::TransportError, "Channel terminated")
-                            << TerminationError_.Load());
+                            .WithIf(!terminationError.IsOK(), terminationError));
                     return;
                 }
 

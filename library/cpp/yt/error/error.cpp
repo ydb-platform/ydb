@@ -272,7 +272,7 @@ TError::TErrorOr(const std::exception& ex)
         //  so we force materialize them via this function call.
         auto addAttribute = [this] (const auto& key, const auto& value) {
             std::visit([&] (const auto& actual) {
-                *this <<= TErrorAttribute(key, actual);
+                this->Add(key, actual);
             }, value);
         };
         for (const auto& [key, value] : simpleException->GetAttributes()) {
@@ -283,7 +283,7 @@ TError::TErrorOr(const std::exception& ex)
                 std::rethrow_exception(simpleException->GetInnerException());
             }
         } catch (const std::exception& innerEx) {
-            *this <<= TError(innerEx);
+            Add(TError(innerEx));
         }
     } else if (const auto* errorEx = dynamic_cast<const TErrorException*>(&ex)) {
         *this = errorEx->Error();
@@ -291,7 +291,7 @@ TError::TErrorOr(const std::exception& ex)
         *this = TError::FromSystem(*sysError);
     } else {
         *this = TError(NYT::EErrorCode::Generic, TRuntimeFormat{ex.what()});
-        *this <<= TErrorAttribute("exception_type", TypeName(ex));
+        Add("exception_type", TypeName(ex));
     }
     EnrichFromException(ex);
     YT_VERIFY(!IsOK());
@@ -322,8 +322,8 @@ TError TError::FromSystem()
 
 TError TError::FromSystem(int error)
 {
-    return TError(TErrorCode(LinuxErrorCodeBase + error), TRuntimeFormat{LastSystemErrorText(error)}) <<
-        TErrorAttribute("errno", error);
+    return TError(TErrorCode(LinuxErrorCodeBase + error), TRuntimeFormat{LastSystemErrorText(error)})
+        .With("errno", error);
 }
 
 TError TError::FromSystem(const TSystemError& error)
@@ -718,7 +718,6 @@ void TError::AddAttributes(TAnyMergeableDictionaryRef attributes)
 
 void TError::AddInnerError(const TError& innerError)
 {
-    // NB: |operator <<=| stays lenient by design: #Wrap of an OK error relies on OK inner errors being dropped.
     YT_VERIFY(!innerError.IsOK());
     MutableInnerErrors()->push_back(innerError);
 }
@@ -802,53 +801,6 @@ TError& TError::Add(const TError& innerError) &
 TError& TError::Add(TError&& innerError) &
 {
     AddInnerError(std::move(innerError));
-    return *this;
-}
-
-TError& TError::operator <<= (const TErrorAttribute& attribute) &
-{
-    AddAttribute(attribute);
-    return *this;
-}
-
-TError& TError::operator <<= (const std::vector<TErrorAttribute>& attributes) &
-{
-    AddAttributes(attributes);
-    return *this;
-}
-
-TError& TError::operator <<= (const TError& innerError) &
-{
-    if (!innerError.IsOK()) {
-        MutableInnerErrors()->push_back(innerError);
-    }
-    return *this;
-}
-
-TError& TError::operator <<= (TError&& innerError) &
-{
-    if (!innerError.IsOK()) {
-        MutableInnerErrors()->push_back(std::move(innerError));
-    }
-    return *this;
-}
-
-TError& TError::operator <<= (const std::vector<TError>& innerErrors) &
-{
-    std::ranges::copy_if(innerErrors, std::back_inserter(*MutableInnerErrors()), std::not_fn(&TError::IsOK));
-    return *this;
-}
-
-TError& TError::operator <<= (std::vector<TError>&& innerErrors) &
-{
-    auto filteredErrors = std::views::filter(innerErrors, std::not_fn(&TError::IsOK));
-    std::ranges::move(filteredErrors, std::back_inserter(*MutableInnerErrors()));
-    return *this;
-}
-
-TError& TError::operator <<= (TAnyMergeableDictionaryRef attributes) &
-{
-    AddAttributes(attributes);
     return *this;
 }
 

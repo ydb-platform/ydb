@@ -126,56 +126,41 @@ bool TUploader::Push(TParams params) {
         return false;
     }
 
-    if (QueryClient) {
-        auto upload = [this, params] (NYdb::NQuery::TSession session) -> NYdb::TStatus {
-            auto transaction = NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx();
-            auto settings = NYdb::NQuery::TExecuteQuerySettings()
-                .Syntax(NYdb::NQuery::ESyntax::YqlV1)
-                .StatsMode(NYdb::NQuery::EStatsMode::None)
-                .RequestType(DOC_API_REQUEST_TYPE)
-                .ClientTimeout(TDuration::Seconds(120));
-            return session.ExecuteQuery(Query, transaction, std::move(params), settings).GetValueSync();
-        };
-
-        auto task = [this, upload] () {
-            if (!WaitForRequestSlot()) {
-                return;
-            }
-
-            auto settings = NYdb::NQuery::TRetryOperationSettings()
-                .MaxRetries(Opts.RetryOperationMaxRetries)
-                .FastBackoffSettings(NRetry::TBackoffSettings().SlotDuration(TDuration::MilliSeconds(10)).Ceiling(10))
-                .SlowBackoffSettings(NRetry::TBackoffSettings().SlotDuration(TDuration::Seconds(2)).Ceiling(6))
-                .Idempotent(true);
-
-            ReportWriteTxResult(QueryClient->RetryQuerySync(upload, settings));
-        };
-
-        return TasksQueue->AddFunc(task);
-    }
-
-    auto upload = [this, params] (NYdb::NTable::TSession session) -> NYdb::TStatus {
-        auto transaction = NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx();
-        auto settings = NTable::TExecDataQuerySettings()
-            .KeepInQueryCache(true)
-            .RequestType(DOC_API_REQUEST_TYPE)
-            .OperationTimeout(TDuration::Seconds(100))
-            .ClientTimeout(TDuration::Seconds(120));
-        return session.ExecuteDataQuery(Query, transaction, std::move(params), settings).GetValueSync();
-    };
-
-    auto task = [this, upload] () {
+    auto task = [this, params] () {
         if (!WaitForRequestSlot()) {
             return;
         }
 
-        auto settings = NYdb::NTable::TRetryOperationSettings()
+        auto retrySettings = NRetry::TRetryOperationSettings()
             .MaxRetries(Opts.RetryOperationMaxRetries)
             .FastBackoffSettings(NRetry::TBackoffSettings().SlotDuration(TDuration::MilliSeconds(10)).Ceiling(10))
             .SlowBackoffSettings(NRetry::TBackoffSettings().SlotDuration(TDuration::Seconds(2)).Ceiling(6))
             .Idempotent(true);
 
-        ReportWriteTxResult(TableClient->RetryOperationSync(upload, settings));
+        if (QueryClient) {
+            auto upload = [this, params] (NYdb::NQuery::TSession session) -> NYdb::TStatus {
+                auto transaction = NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx();
+                auto settings = NYdb::NQuery::TExecuteQuerySettings()
+                    .Syntax(NYdb::NQuery::ESyntax::YqlV1)
+                    .StatsMode(NYdb::NQuery::EStatsMode::None)
+                    .RequestType(DOC_API_REQUEST_TYPE)
+                    .ClientTimeout(TDuration::Seconds(120));
+                return session.ExecuteQuery(Query, transaction, std::move(params), settings).GetValueSync();
+            };
+            ReportWriteTxResult(QueryClient->RetryQuerySync(upload, retrySettings));
+            return;
+        }
+
+        auto upload = [this, params] (NYdb::NTable::TSession session) -> NYdb::TStatus {
+            auto transaction = NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx();
+            auto settings = NTable::TExecDataQuerySettings()
+                .KeepInQueryCache(true)
+                .RequestType(DOC_API_REQUEST_TYPE)
+                .OperationTimeout(TDuration::Seconds(100))
+                .ClientTimeout(TDuration::Seconds(120));
+            return session.ExecuteDataQuery(Query, transaction, std::move(params), settings).GetValueSync();
+        };
+        ReportWriteTxResult(TableClient->RetryOperationSync(upload, retrySettings));
     };
 
     return TasksQueue->AddFunc(task);

@@ -3725,16 +3725,15 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         NQuery::TQueryClient queryClient(driver);
         auto session = queryClient.GetSession().ExtractValueSync().GetSession();
-        TTempDir tempDir;
-        const auto& pathToBackup = tempDir.Path();
         constexpr const char* table = "/Root/olap_table";
 
         for (auto mode : {NDump::TRestoreSettings::EMode::BulkUpsert, NDump::TRestoreSettings::EMode::ImportData}) {
+            TTempDir tempDir;
             TestTableContentIsPreserved(
                 table,
                 session,
-                CreateBackupLambda(driver, pathToBackup, "/Root", "/Root", NDump::TDumpSettings().AvoidCopy(true)),
-                CreateRestoreLambda(driver, pathToBackup, "/Root",
+                CreateBackupLambda(driver, tempDir.Path(), "/Root", "/Root", NDump::TDumpSettings().AvoidCopy(true)),
+                CreateRestoreLambda(driver, tempDir.Path(), "/Root",
                     NDump::TRestoreSettings().Mode(mode)),
                 /* isOlap */ true
             );

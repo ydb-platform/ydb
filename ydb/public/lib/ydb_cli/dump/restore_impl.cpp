@@ -2046,6 +2046,11 @@ TRestoreResult TRestoreClient::RestoreData(
         return Result<TRestoreResult>();
     }
 
+    if (settings.Mode_ == TRestoreSettings::EMode::ImportData && desc.GetStoreType() == EStoreType::Column) {
+        LOG_W("ImportData restore mode is not supported for column-oriented table " << dbPath.Quote()
+            << ", falling back to BulkUpsert");
+    }
+
     TVector<THolder<NPrivate::IDataAccumulator>> accumulators;
     if (auto res = CreateDataAccumulators(accumulators, dbPath, settings, desc, dataFilesCount); !res.IsSuccess()) {
         return res;

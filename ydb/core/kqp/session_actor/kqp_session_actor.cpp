@@ -1147,6 +1147,14 @@ public:
                 {
                     TSet<ui64> shardIds;
                     for (const auto& [stageId, stageInfo] : tasksGraph.GetStagesInfo()) {
+                        // For OLAP tables, use ColumnTableInfo to get column shard IDs
+                        if (stageInfo.Meta.ColumnTableInfoPtr
+                                && stageInfo.Meta.ColumnTableInfoPtr->Description.HasSharding()) {
+                            for (const auto& shardId : stageInfo.Meta.ColumnTableInfoPtr->Description.GetSharding().GetColumnShards()) {
+                                shardIds.insert(shardId);
+                            }
+                        }
+                        // For DataShard tables, use ShardKey partitions
                         if (stageInfo.Meta.ShardKey) {
                             for (const auto& partition : stageInfo.Meta.ShardKey->GetPartitions()) {
                                 shardIds.insert(partition.ShardId);

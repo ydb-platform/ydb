@@ -128,6 +128,7 @@ struct TPartitionFamily {
     void StartReading(TSession& session, const TActorContext& ctx);
     // Add partitions to the family.
     void AttachePartitions(const std::vector<ui32>& partitions, const TActorContext& ctx);
+    void AttachReadyWantedPartitions(const TActorContext& ctx);
     void Merge(TPartitionFamily* other);
 
     // The partition became active
@@ -229,6 +230,9 @@ struct TConsumer {
     std::pair<TPartitionFamily*, bool> MergeFamilies(TPartitionFamily* lhs, TPartitionFamily* rhs, const TActorContext& ctx);
     void DestroyFamily(TPartitionFamily* family, const TActorContext& ctx);
     TPartitionFamily* FindFamily(ui32 partitionId);
+    // After parents of a merged partition are processed, attach (or independently
+    // balance) readable descendants. Safe to call repeatedly.
+    void AttachReadableDescendants(TPartitionFamily* family, const TActorContext& ctx);
 
     void RegisterReadingSession(TSession* session, const TActorContext& ctx);
     void UnregisterReadingSession(TSession* session, const TActorContext& ctx);
@@ -251,6 +255,7 @@ struct TConsumer {
 
 private:
     TString LogPrefix() const;
+    bool AttachingDescendants = false;
 
     // Families.erase in Destroy() would free `this` while Unlock/Reset is still
     // on the stack. Park the unique_ptr here and drop it when the outermost

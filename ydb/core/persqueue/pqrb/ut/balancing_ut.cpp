@@ -928,6 +928,32 @@ Y_UNIT_TEST(ScaleAwareFinishCommitThenSecondCommonSessionKeepsChildrenIndependen
     UNIT_ASSERT_C(childSessions.size() == 2 || childrenWithParent == 0,
         "independent child families must be able to sit on a different session than the parent");
 }
+Y_UNIT_TEST(FinishParentWhileFamilyReleasingAttachesChildrenAfterUnlock) {
+    TScaleEnv env;
+    env.CreateParents(1);
+    env.RegisterSession("session-0");
+    env.Split(0);
+    env.AssertLocked(0, "session-0");
+    env.AssertNotLocked(1);
+    env.AssertNotLocked(2);
+
+    env.RegisterSession("session-pref", {1}, /*pump=*/false);
+    auto pending = env.WaitRelease();
+    UNIT_ASSERT_C(pending, "preferred session must release the parent family");
+    UNIT_ASSERT_VALUES_EQUAL(pending->Partition, 0u);
+
+    env.Finish(pending->Session, 0, /*scaleAware=*/true, /*fromEnd=*/true, /*pump=*/false);
+
+    auto pipeIt = env.Pipes.find(pending->Session);
+    UNIT_ASSERT(pipeIt != env.Pipes.end());
+    env.AckRelease(pipeIt->second, pending->Partition, pending->Session);
+    env.Pump();
+
+    env.AssertLocked(1);
+    env.AssertLocked(2);
+    env.AssertLocked(0);
+    env.AssertSameSession({0, 1, 2});
+}
 } // Y_UNIT_TEST_SUITE(TPqrbSplitBalancing)
 
 Y_UNIT_TEST_SUITE(TPqrbBalancingInvariants) {

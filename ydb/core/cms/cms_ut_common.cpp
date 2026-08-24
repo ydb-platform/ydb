@@ -959,6 +959,32 @@ TCmsTestEnv::RequestDDiskInfo(ui64 tabletId)
     return reply->Record;
 }
 
+NKikimrCms::TDDiskTabletListResponse
+TCmsTestEnv::RequestDDiskTabletList(const NKikimrCms::TDDiskTabletListRequest &request)
+{
+    auto event = MakeHolder<TEvCms::TEvDDiskTabletListRequest>();
+    event->Record.CopyFrom(request);
+    SendToPipe(CmsId, Sender, event.Release(), 0, GetPipeConfigWithRetries());
+
+    TAutoPtr<IEventHandle> handle;
+    auto reply = GrabEdgeEventRethrow<TEvCms::TEvDDiskTabletListResponse>(handle);
+    UNIT_ASSERT(reply);
+    return reply->Record;
+}
+
+NKikimrCms::TDDiskDiskListResponse
+TCmsTestEnv::RequestDDiskDiskList(const NKikimrCms::TDDiskDiskListRequest &request)
+{
+    auto event = MakeHolder<TEvCms::TEvDDiskDiskListRequest>();
+    event->Record.CopyFrom(request);
+    SendToPipe(CmsId, Sender, event.Release(), 0, GetPipeConfigWithRetries());
+
+    TAutoPtr<IEventHandle> handle;
+    auto reply = GrabEdgeEventRethrow<TEvCms::TEvDDiskDiskListResponse>(handle);
+    UNIT_ASSERT(reply);
+    return reply->Record;
+}
+
 NKikimrBlobStorage::TEvControllerDDiskInfoGetTabletResult
 TCmsTestEnv::WaitForDDiskInfo(ui64 tabletId, ui64 revision, TDuration timeout)
 {

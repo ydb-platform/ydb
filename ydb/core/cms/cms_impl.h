@@ -277,6 +277,8 @@ private:
             // public api begin
             HFunc(TEvCms::TEvDDiskInfoListRequest, Handle);
             HFunc(TEvCms::TEvDDiskInfoGetRequest, Handle);
+            HFunc(TEvCms::TEvDDiskTabletListRequest, Handle);
+            HFunc(TEvCms::TEvDDiskDiskListRequest, Handle);
             HFunc(TEvCms::TEvListClusterNodesRequest, Handle);
             HFunc(TEvCms::TEvCreateMaintenanceTaskRequest, Handle);
             HFunc(TEvCms::TEvRefreshMaintenanceTaskRequest, Handle);
@@ -442,6 +444,9 @@ private:
 
     void Handle(TEvCms::TEvDDiskInfoListRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvCms::TEvDDiskInfoGetRequest::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvCms::TEvDDiskTabletListRequest::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvCms::TEvDDiskDiskListRequest::TPtr &ev, const TActorContext &ctx);
+    bool IsDDiskAvailable(const NKikimrBlobStorage::NDDisk::TDDiskId &id) const;
     void Handle(TEvPrivate::TEvClusterInfo::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvLogAndSend::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvPersistDDiskInfo::TPtr &ev, const TActorContext &ctx);

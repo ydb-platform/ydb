@@ -213,6 +213,11 @@ public:
     NKikimrBlobStorage::TEvControllerDDiskInfoListTabletsResult RequestBSControllerDDiskInfoList();
     NKikimrBlobStorage::TEvControllerDDiskInfoGetTabletResult RequestBSControllerDDiskInfo(ui64 tabletId);
 
+    NKikimrCms::TDDiskTabletListResponse RequestDDiskTabletList(
+        const NKikimrCms::TDDiskTabletListRequest &request = {});
+    NKikimrCms::TDDiskDiskListResponse RequestDDiskDiskList(
+        const NKikimrCms::TDDiskDiskListRequest &request = {});
+
     void ConfigureDDiskPool(ui32 numGroups = 1);
     NKikimrBlobStorage::TEvControllerAllocateDDiskBlockGroupResult
     AllocateDDiskBlockGroup(ui64 tabletId, ui64 directBlockGroupId, ui32 targetNumVChunks = 1);

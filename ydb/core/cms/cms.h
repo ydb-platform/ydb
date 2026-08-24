@@ -96,6 +96,10 @@ struct TEvCms {
         EvDDiskInfoListResponse,
         EvDDiskInfoGetRequest,
         EvDDiskInfoGetResponse,
+        EvDDiskTabletListRequest,
+        EvDDiskTabletListResponse,
+        EvDDiskDiskListRequest,
+        EvDDiskDiskListResponse,
 
         EvEnd
     };
@@ -304,6 +308,26 @@ struct TEvCms {
     struct TEvDDiskInfoGetResponse : public TEventPB<TEvDDiskInfoGetResponse,
                                                       NKikimrBlobStorage::TEvControllerDDiskInfoGetTabletResult,
                                                       EvDDiskInfoGetResponse> {
+    };
+
+    struct TEvDDiskTabletListRequest : public TEventPB<TEvDDiskTabletListRequest,
+                                                         NKikimrCms::TDDiskTabletListRequest,
+                                                         EvDDiskTabletListRequest> {
+    };
+
+    struct TEvDDiskTabletListResponse : public TEventPB<TEvDDiskTabletListResponse,
+                                                          NKikimrCms::TDDiskTabletListResponse,
+                                                          EvDDiskTabletListResponse> {
+    };
+
+    struct TEvDDiskDiskListRequest : public TEventPB<TEvDDiskDiskListRequest,
+                                                       NKikimrCms::TDDiskDiskListRequest,
+                                                       EvDDiskDiskListRequest> {
+    };
+
+    struct TEvDDiskDiskListResponse : public TEventPB<TEvDDiskDiskListResponse,
+                                                        NKikimrCms::TDDiskDiskListResponse,
+                                                        EvDDiskDiskListResponse> {
     };
 
     struct TEvGetConfigRequest : public TEventPB<TEvGetConfigRequest,

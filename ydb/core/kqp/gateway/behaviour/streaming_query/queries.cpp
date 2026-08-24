@@ -1115,7 +1115,7 @@ public:
 
 private:
     void FinishUnderOperation() {
-        Finish(Ydb::StatusIds::ABORTED, TStringBuilder() << "Streaming query " << QueryPath << " already under operation " << PreviousOperationName << " started at " << PreviousOperationStartedAt << ", try repeat request later");
+        Finish(Ydb::StatusIds::PRECONDITION_FAILED, TStringBuilder() << "Streaming query " << QueryPath << " already under operation " << PreviousOperationName << " started at " << PreviousOperationStartedAt << ", please retry later");
     }
 
 private:
@@ -1214,8 +1214,15 @@ public:
         if (WaitLock) {
             LOG_W("Streaming query " << ev->Sender << " owner was verified after started lock");
         } else {
+<<<<<<< HEAD
             LOG_I("Previous query owner " << ev->Sender << " is alive");
             FatalError(Ydb::StatusIds::ABORTED, {NYql::TIssue(TStringBuilder() << "Streaming query already under operation " << Info.PreviousOperationName << " started at " << Info.PreviousOperationStartedAt << ", try repeat request later")});
+=======
+            YDB_LOG_INFO("[StreamingQueries] Previous query owner is alive",
+                {"logPrefix", LogPrefix()},
+                {"sender", ev->Sender});
+            FatalError(Ydb::StatusIds::PRECONDITION_FAILED, {NYql::TIssue(TStringBuilder() << "Streaming query already under operation " << Info.PreviousOperationName << " started at " << Info.PreviousOperationStartedAt << ", please retry later")});
+>>>>>>> 70f683830e5 (YQ-5630 fixed streaming query ownership fail status (#50703))
         }
     }
 
@@ -1359,6 +1366,7 @@ public:
             }
 
             if (OperationOwner != currentOperationOwner) {
+<<<<<<< HEAD
                 LOG_E("Streaming query was locked by " << currentOperationOwner << " during operation (expected owner: " << OperationOwner << ")");
                 Finish(Ydb::StatusIds::INTERNAL_ERROR, "Streaming query was changed during operation");
                 return;
@@ -1366,6 +1374,19 @@ public:
         } else {
             LOG_E("Streaming query lock was lost");
             Finish(Ydb::StatusIds::INTERNAL_ERROR, "Streaming query was changed during operation");
+=======
+                YDB_LOG_ERROR("[StreamingQueries] Streaming query lock owner changed during operation",
+                    {"logPrefix", LogPrefix()},
+                    {"currentOperationOwner", currentOperationOwner},
+                    {"owner", OperationOwner});
+                Finish(Ydb::StatusIds::PRECONDITION_FAILED, "Streaming query was changed during operation");
+                return;
+            }
+        } else {
+            YDB_LOG_ERROR("[StreamingQueries] Streaming query lock was lost",
+                {"logPrefix", LogPrefix()});
+            Finish(Ydb::StatusIds::PRECONDITION_FAILED, "Streaming query was changed during operation");
+>>>>>>> 70f683830e5 (YQ-5630 fixed streaming query ownership fail status (#50703))
             return;
         }
 
@@ -1450,8 +1471,16 @@ public:
         const auto previousOwner = State.GetOperationActorId();
         const auto currentOwner = result.GetResult().GetOperationActorId();
         if (currentOwner != previousOwner) {
+<<<<<<< HEAD
             LOG_E("Streaming query was locked by " << currentOwner << " during operation (expected owner: " << previousOwner << ")");
             Finish(Ydb::StatusIds::INTERNAL_ERROR, "Streaming query was changed during operation");
+=======
+            YDB_LOG_ERROR("[StreamingQueries] Streaming query lock owner changed during operation",
+                {"logPrefix", LogPrefix()},
+                {"currentOwner", currentOwner},
+                {"owner", previousOwner});
+            Finish(Ydb::StatusIds::PRECONDITION_FAILED, "Streaming query was changed during operation");
+>>>>>>> 70f683830e5 (YQ-5630 fixed streaming query ownership fail status (#50703))
             return;
         }
 
@@ -1821,7 +1850,7 @@ private:
         }
 
         // Execution id for streaming queries:
-        // <GUID part>-<GUID part>-<GUID part>-<SS id>-<Path id in SS>-<Path version in SS>
+        // <GUID part>-<GUID part>-<GUID part>-<GUID part>-<SS id>-<Path id in SS>-<Path version in SS>
         // Checkpoint id for streaming queries:
         // <Execution id>-<Query path>
 

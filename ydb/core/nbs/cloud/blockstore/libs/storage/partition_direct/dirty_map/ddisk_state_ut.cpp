@@ -57,9 +57,9 @@ Y_UNIT_TEST_SUITE(TDDiskStateTest)
         UNIT_ASSERT_VALUES_EQUAL("[10..19]", ddisk.DebugPrintAhead());
     }
 
-    // Save() encodes Ahead/Behind ranges as (start<<16)|size entries; Load()
-    // must restore exactly the same ranges.  An empty DDisk produces an empty
-    // proto and loads back to empty.
+    // Save() chooses a compact encoding for Ahead/Behind; Load() must restore
+    // exactly the same ranges. An empty DDisk produces an empty proto and loads
+    // back to empty.
     Y_UNIT_TEST(ShouldSaveAndLoadAheadAndBehind)
     {
         TTestBlockFieldMonitor monitor;
@@ -111,10 +111,12 @@ Y_UNIT_TEST_SUITE(TDDiskStateTest)
 
         TDDiskStateProto emptyProto;
         empty.Save(&emptyProto);
-        UNIT_ASSERT_VALUES_EQUAL(0, emptyProto.GetAhead().StartAndLengthSize());
-        UNIT_ASSERT_VALUES_EQUAL(
-            0,
-            emptyProto.GetBehind().StartAndLengthSize());
+        UNIT_ASSERT(
+            emptyProto.GetAhead().GetEncodingCase() ==
+            TBlockFieldProto::ENCODING_NOT_SET);
+        UNIT_ASSERT(
+            emptyProto.GetBehind().GetEncodingCase() ==
+            TBlockFieldProto::ENCODING_NOT_SET);
 
         TTestBlockFieldMonitor monitor4;
         TDDiskState loaded;

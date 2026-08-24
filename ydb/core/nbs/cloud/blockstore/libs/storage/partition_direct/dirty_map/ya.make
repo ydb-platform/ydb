@@ -5,6 +5,7 @@ GENERATE_ENUM_SERIALIZATION(dirty_map.h)
 GENERATE_ENUM_SERIALIZATION(inflight_info.h)
 
 SRCS(
+    block_field_serializer.cpp
     ddisk_state.cpp
     dirty_map.cpp
     hints.cpp

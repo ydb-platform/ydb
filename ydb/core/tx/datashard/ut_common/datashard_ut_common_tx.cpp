@@ -29,18 +29,41 @@ NLongTxService::TLockHandle MakeLockHandle(TTestActorRuntime& runtime, ui64 lock
 }
 
 void TWriteOperation::ApplyTo(const TTableId& tableId, NEvents::TDataEvents::TEvWrite* req) {
-    TVector<TCell> cells;
-    cells.reserve(Rows.size() * 2);
-    for (const auto& row : Rows) {
-        cells.push_back(TCell::Make(row.Key));
-        cells.push_back(TCell::Make(row.Value));
+    switch (Type) {
+    case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT:
+    case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT: {
+        TVector<TCell> cells;
+        cells.reserve(Rows.size() * 2);
+        for (const auto& row : Rows) {
+            cells.push_back(TCell::Make(row.Key));
+            cells.push_back(TCell::Make(row.Value));
+        }
+
+        TSerializedCellMatrix matrix(cells, Rows.size(), 2);
+        TString blobData = matrix.ReleaseBuffer();
+
+        ui64 payloadIndex = NKikimr::NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(*req).AddDataToPayload(std::move(blobData));
+        req->AddOperation(Type, tableId, { 1, 2 }, payloadIndex, NKikimrDataEvents::FORMAT_CELLVEC);
+
+        break;
     }
+    case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE: {
+        TVector<TCell> cells;
+        cells.reserve(Rows.size());
+        for (const auto& row : Rows) {
+            cells.push_back(TCell::Make(row.Key));
+        }
 
-    TSerializedCellMatrix matrix(cells, Rows.size(), 2);
-    TString blobData = matrix.ReleaseBuffer();
+        TSerializedCellMatrix matrix(cells, Rows.size(), 1);
+        TString blobData = matrix.ReleaseBuffer();
 
-    ui64 payloadIndex = NKikimr::NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(*req).AddDataToPayload(std::move(blobData));
-    req->AddOperation(Type, tableId, { 1, 2 }, payloadIndex, NKikimrDataEvents::FORMAT_CELLVEC);
+        ui64 payloadIndex = NKikimr::NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(*req).AddDataToPayload(std::move(blobData));
+        req->AddOperation(Type, tableId, { 1 }, payloadIndex, NKikimrDataEvents::FORMAT_CELLVEC);
+        break;
+    }
+    default:
+        Y_ENSURE(false, "Unexpected op type: " << Type);
+    }
 }
 
 TTransactionState::TTransactionState(TTestActorRuntime& runtime, NKikimrDataEvents::ELockMode lockMode)

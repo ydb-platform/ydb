@@ -45,6 +45,17 @@ struct TWriteOperation {
             std::move(rows),
         };
     }
+
+    static TWriteOperation Delete(i32 key) {
+        return Delete({ { key, 0 } } );
+    }
+
+    static TWriteOperation Delete(TVector<TKeyValue> rows) {
+        return TWriteOperation{
+            NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE,
+            std::move(rows),
+        };
+    }
 };
 
 class TTransactionState {

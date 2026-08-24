@@ -33,7 +33,7 @@ To remove a static node:
 1. Wait for SelfHeal to move the VDisks from the node. With the default settings, relocation starts approximately one hour after the node is stopped. To start the relocation immediately instead of waiting, mark the node's PDisks as `BROKEN` using [{{ ydb-short-name }} DSTool](../../../reference/ydb-dstool/index.md):
 
     ```bash
-    ydb-dstool -e <bs_endpoint> pdisk set --status BROKEN --pdisk-ids "[NodeId:PDiskId]"
+    ydb-dstool -e <bs_endpoint> pdisk set --status BROKEN --unavail-as-offline --pdisk-ids "[NodeId:PDiskId]"
     ```
 
     This immediately triggers VDisk relocation from the specified PDisks instead of waiting for CMS Sentinel to detect the node as faulty. For details, see [Move VDisks from a broken/missing block store volume](../../../maintenance/manual/moving_vdisks.md#removal_from_a_broken_device).

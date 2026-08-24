@@ -401,23 +401,13 @@ namespace {
 // Column names come from DescribeTable, i.e. from the real schema, not from user input.
 // SchemeShard's IsValidColumnName restricts them to [A-Za-z0-9_-], so they can never contain
 // a backtick and this substitution is safe from injection.
-template <typename TNames>
-TString BuildQuotedIdentifierList(const TNames& names) {
+TString BuildQuotedIdentifierList(const std::vector<std::string>& names) {
     TVector<TString> quoted;
     quoted.reserve(names.size());
     for (const auto& name : names) {
         quoted.push_back(TStringBuilder() << '`' << name << '`');
     }
     return JoinSeq(", ", quoted);
-}
-
-TString BuildQuotedIdentifierList(const std::vector<TColumn>& columns) {
-    TVector<TString> names;
-    names.reserve(columns.size());
-    for (const auto& col : columns) {
-        names.emplace_back(col.Name);
-    }
-    return BuildQuotedIdentifierList(names);
 }
 
 std::pair<TString, TParams> BuildSelectQueryAndParams(const NTable::TTableDescription& desc,
@@ -431,8 +421,14 @@ std::pair<TString, TParams> BuildSelectQueryAndParams(const NTable::TTableDescri
         paramsBuilder.AddParam("$pk", *lastWrittenPK);
     }
 
+    std::vector<std::string> columnNames;
+    columnNames.reserve(desc.GetColumns().size());
+    for (const auto& col : desc.GetColumns()) {
+        columnNames.push_back(col.Name);
+    }
+
     const auto quotedPkList = BuildQuotedIdentifierList(desc.GetPrimaryKeyColumns());
-    query << "SELECT " << BuildQuotedIdentifierList(desc.GetColumns())
+    query << "SELECT " << BuildQuotedIdentifierList(columnNames)
         << " FROM `" << fullTablePath << '`';
     if (lastWrittenPK) {
         query << " WHERE (" << quotedPkList << ") > $pk";

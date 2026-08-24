@@ -37,7 +37,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/pull/{0}/head', inputs.pull_number) || github.event.pull_request.head.sha }}
+          # Validate the exact result GitHub would merge into the base branch.
+          # Checking only the PR head can miss incompatibilities with changes
+          # added to the base branch after the PR branch was created.
+          ref: ${{ format('refs/pull/{0}/merge', github.event_name == 'workflow_dispatch' && inputs.pull_number || github.event.pull_request.number) }}
 
       - name: Get commit SHA
         id: sha

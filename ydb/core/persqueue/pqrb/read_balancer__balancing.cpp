@@ -1090,6 +1090,96 @@ bool TConsumer::BreakUpFamily(TPartitionFamily* family, ui32 partitionId, bool d
     return !newFamilies.empty();
 }
 
+std::vector<TPartitionFamily*> TConsumer::ExtractDescendantsFromFamily(
+    TPartitionFamily* family,
+    ui32 parentId,
+    const TActorContext& ctx)
+{
+    absl::flat_hash_set<ui32> inFamily(family->Partitions.begin(), family->Partitions.end());
+    absl::flat_hash_set<ui32> descendants;
+    GetPartitionGraph().Travers(parentId, [&](ui32 childId) {
+        if (inFamily.contains(childId)) {
+            descendants.insert(childId);
+        }
+        return true;
+    });
+    if (descendants.empty()) {
+        return {};
+    }
+
+    std::vector<TPartitionFamily*> result;
+    absl::flat_hash_set<ui32> processed;
+    const auto partitions = family->Partitions;
+    for (auto id : partitions) {
+        if (!descendants.contains(id) || processed.contains(id)) {
+            continue;
+        }
+        if (!IsRoot(GetPartitionGraph().GetPartition(id), descendants)) {
+            continue;
+        }
+
+        std::vector<ui32> members;
+        GetPartitionGraph().Travers(id, [&](auto childId) {
+            if (!descendants.contains(childId)) {
+                return false;
+            }
+            if (processed.insert(childId).second) {
+                members.push_back(childId);
+            }
+            return true;
+        });
+        processed.insert(id);
+
+        bool locked = family->Session && (family->LockedPartitions.contains(id) ||
+            std::any_of(members.begin(), members.end(), [family](auto memberId) {
+                return family->LockedPartitions.contains(memberId);
+            }));
+        auto* f = CreateFamily({id}, locked ? family->Status : TPartitionFamily::EStatus::Free, ctx);
+        f->TargetStatus = family->TargetStatus;
+        f->Partitions.insert(f->Partitions.end(), members.begin(), members.end());
+        f->LastPipe = family->LastPipe;
+        f->RootPartitions.assign(f->Partitions.begin(), f->Partitions.end());
+        f->UpdatePartitionMapping(f->Partitions);
+        f->ClassifyPartitions();
+        if (locked) {
+            f->LockedPartitions = Intercept(family->LockedPartitions, f->Partitions);
+
+            f->Session = family->Session;
+            f->Session->Families.try_emplace(f->Id, f);
+            f->Session->ActivePartitionCount += f->ActivePartitionCount;
+            f->Session->InactivePartitionCount += f->InactivePartitionCount;
+            if (f->IsActive()) {
+                ++f->Session->ActiveFamilyCount;
+            } else if (f->IsReleasing()) {
+                ++f->Session->ReleasingFamilyCount;
+            }
+        }
+        result.push_back(f);
+    }
+
+    auto dropDescendants = [&](std::vector<ui32>& ids) {
+        ids.erase(std::remove_if(ids.begin(), ids.end(), [&](ui32 id) {
+            return descendants.contains(id);
+        }), ids.end());
+    };
+    dropDescendants(family->Partitions);
+    // AfterRelease rebuilds Partitions from RootPartitions. Remaining members
+    // must survive a session drop; otherwise nested reread + churn loses them.
+    family->RootPartitions.assign(family->Partitions.begin(), family->Partitions.end());
+    for (auto id : descendants) {
+        family->LockedPartitions.erase(id);
+        family->WantedPartitions.erase(id);
+    }
+    family->ClassifyPartitions();
+    family->UpdateSpecialSessions();
+    family->AssertInvariants();
+    for (auto* f : result) {
+        f->AssertInvariants();
+    }
+
+    return result;
+}
+
 std::pair<TPartitionFamily*, bool> TConsumer::MergeFamilies(TPartitionFamily* lhs, TPartitionFamily* rhs, const TActorContext& ctx) {
     Y_DEBUG_ABORT_UNLESS(lhs && rhs, "MergeFamilies with a null family");
     if (!lhs || !rhs || lhs == rhs) {
@@ -1643,19 +1733,37 @@ void TConsumer::StartReading(ui32 partitionId, const TActorContext& ctx) {
         }
 
         // Stop reading children: the parent is being read again, so they are no longer readable.
+        // Reset every descendant and destroy each child family once. ActivatePartition per child
+        // underflows InactivePartitionCount when several finished descendants share a family:
+        // TPartition::Reset() returns NeedReleaseChildren(), which is true for still-active
+        // children, so the old loop decremented inactive counters that were already 0.
+        absl::flat_hash_set<TPartitionFamily*> childFamilies;
+        bool childrenLeftInFamily = false;
         GetPartitionGraph().Travers(partitionId, [&](ui32 childId) {
-            auto* child = GetPartition(childId);
-            auto* f = FindFamily(childId);
-
-            if (f) {
-                if (child && child->Reset()) {
-                    f->ActivatePartition(childId);
-                }
-                DestroyFamily(f, ctx);
+            if (auto* child = GetPartition(childId)) {
+                child->Reset();
             }
-
+            if (auto* f = FindFamily(childId)) {
+                if (f == family) {
+                    childrenLeftInFamily = true;
+                } else {
+                    childFamilies.insert(f);
+                }
+            }
             return true;
         });
+        if (childrenLeftInFamily) {
+            // BreakUpFamily only splits when partitionId is a family root. A
+            // reread of a nested parent otherwise leaves unreadable descendants
+            // in Partitions; the next Balance StartReading would lock them.
+            for (auto* f : ExtractDescendantsFromFamily(family, partitionId, ctx)) {
+                childFamilies.insert(f);
+            }
+            family->ClassifyPartitions();
+        }
+        for (auto* f : childFamilies) {
+            DestroyFamily(f, ctx);
+        }
         if (Families.contains(family->Id)) {
             family->AssertInvariants();
         }

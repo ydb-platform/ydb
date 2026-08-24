@@ -1656,8 +1656,9 @@ Y_UNIT_TEST(PipeBreakAfterParentCommitted) {
 }
 
 Y_UNIT_TEST(NestedSplitRereadInnerParentThenFinishLocksGrandchildren) {
-    // Autopart stress: a sealed inner parent is re-locked from the end (StartReading
-    // then Finish). Children must not stay unreadable inside the parent family.
+    // Nested parent 1 is not a family root (root is 0). StartReading(1) must
+    // pull 3,4 out of the parent family; otherwise they stay unreadable inside
+    // it and Finish(1) never locks them.
     TScaleEnv env;
     env.CreateParents(1);
     env.RegisterSession("session-0");
@@ -1694,8 +1695,9 @@ Y_UNIT_TEST(RereadOneMergeParentThenFinishAgainLocksChild) {
 }
 
 Y_UNIT_TEST(NestedSplitRereadRootThenFinishRelocksWholeTree) {
-    // MergeFamilies leftover: attaching a descendant family that still lists
-    // unreadable grandchildren must keep the remainder instead of Destroy().
+    // Crash: StartReading(0) after 0→1,2 and 1→3,4 all finished used to call
+    // ActivatePartition on every descendant. Reset() is true for still-active
+    // children (NeedReleaseChildren), so InactivePartitionCount underflowed.
     TScaleEnv env;
     env.CreateParents(1);
     env.RegisterSession("session-0");

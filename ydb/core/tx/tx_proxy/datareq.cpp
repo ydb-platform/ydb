@@ -2496,7 +2496,7 @@ void TDataReq::Handle(TEvTxProcessing::TEvStreamClearanceRequest::TPtr &ev, cons
     // and therefore any shard restart may cause inconsistent response.
     if (ReadTableRequest->ClearanceSenders.contains(shard) || PerTablet[shard].StreamCleared) {
             YDB_LOG_ERROR_CTX_COMP(ctx, NKikimrServices::TX_PROXY, "Cannot recover from shard restart",
-                {"shardId", shard},
+                {"tabletId", shard},
                 {"txId", TxId});
 
             // We must send response to current request too
@@ -2511,7 +2511,7 @@ void TDataReq::Handle(TEvTxProcessing::TEvStreamClearanceRequest::TPtr &ev, cons
         }
 
     YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_PROXY, "Got clearance request",
-        {"shardId", rec.GetShardId()},
+        {"tabletId", rec.GetShardId()},
         {"txId", rec.GetTxId()});
 
     ctx.Send(ev->Sender, new TEvTxProcessing::TEvStreamClearancePending(TxId));
@@ -2969,14 +2969,14 @@ void TDataReq::SendStreamClearanceResponse(ui64 shard, bool cleared, const TActo
     auto it = ReadTableRequest->ClearanceSenders.find(shard);
     if (it == ReadTableRequest->ClearanceSenders.end()) {
         YDB_LOG_WARN_CTX_COMP(ctx, NKikimrServices::TX_PROXY, "No sender for clearance request",
-            {"shardId", shard},
+            {"tabletId", shard},
             {"txId", TxId},
             {"cleared", cleared});
         return;
     }
 
     YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_PROXY, "Send stream clearance",
-        {"shardId", shard},
+        {"tabletId", shard},
         {"txId", TxId},
         {"cleared", cleared});
 

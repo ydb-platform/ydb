@@ -440,7 +440,7 @@ private:
 
         WallClockAllocated = Now();
 
-        YDB_LOG_DEBUG("Allocated initial",
+        YDB_LOG_DEBUG("Allocated initial TxId",
             {"logPrefix", LogPrefix},
             {"txId", TxId});
 
@@ -1253,7 +1253,7 @@ private:
             TxProxyMon->MarkShardError->Inc();
             YDB_LOG_ERROR("Gathered all snapshot propose results",
                 {"logPrefix", LogPrefix},
-                {"error", TabletPrepareErrors});
+                {"tabletPrepareErrors", TabletPrepareErrors});
             return Die(ctx);
         }
     }
@@ -1413,7 +1413,8 @@ private:
         if (msg->GetTxId() != TxId) {
             YDB_LOG_ERROR("Unexpected TEvProposeTransactionResult (snapshot tx)",
                 {"logPrefix", LogPrefix},
-                {"txId", TxId});
+                {"msgTxId", msg->GetTxId()},
+                {"expectedTxId", TxId});
             return;
         }
 

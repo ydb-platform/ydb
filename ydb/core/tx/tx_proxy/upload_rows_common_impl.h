@@ -1355,7 +1355,7 @@ private:
 
         Span && Span.Event("TEvUploadRowsResponse", {{"shardId", long(shardId)}});
 
-        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::RPC_REQUEST, "Uploading status",
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::RPC_REQUEST, "Got TEvUploadRowsResponse",
             {"status", NKikimrTxDataShard::TError::EKind_Name((NKikimrTxDataShard::TError::EKind)shardResponse.GetStatus())},
             {"tabletId", shardResponse.GetTabletID()},
             {"error", shardResponse.GetErrorDescription()});
@@ -1463,7 +1463,7 @@ private:
     void ReplyIfDone(const NActors::TActorContext& ctx) {
         if (!ShardRepliesLeft.empty()) {
             YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::RPC_REQUEST, "Upload rows: waiting for shards replies",
-                {"shards", ShardRepliesLeft.size()});
+                {"shardRepliesLeft", ShardRepliesLeft.size()});
             return;
         }
 

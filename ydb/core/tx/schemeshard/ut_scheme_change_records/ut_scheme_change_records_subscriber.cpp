@@ -2040,6 +2040,159 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
             "the record for the rebooted operation must be present and identifiable");
     }
 
+    // A multi-target op rebooted between propose and done must restore ALL
+    // targets from table 144, not just a subset: finalisation cannot re-read
+    // anything else from the DB once InitOperationSchema's snapshot pass has
+    // moved on, so a partial restore here would permanently truncate the
+    // record.
+    Y_UNIT_TEST(MultiTargetPathsSurviveReboot) {
+        TSchemeShard* schemeshard = nullptr;
+        auto ssFactory = [&schemeshard](const TActorId& tablet, TTabletStorageInfo* info) {
+            schemeshard = new TSchemeShard(tablet, info);
+            return schemeshard;
+        };
+        TTestBasicRuntime runtime;
+        TTestEnvOptions opts;
+        opts.EnableSchemeChangeRecords(true);
+        TTestEnv env(runtime, opts, ssFactory);
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "multitarget:sub", regHandle);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Src1"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Src2"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Src3"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Positive companion: the identical operation without a reboot, run
+        // first so its target set is the oracle the rebooted run is compared
+        // against below.
+        const ui64 baselineTxId = ++txId;
+        TestConsistentCopyTables(runtime, baselineTxId, "/MyRoot", R"(
+            CopyTableDescriptions {
+                SrcPath: "/MyRoot/Src1"
+                DstPath: "/MyRoot/DstBaseline1"
+            }
+            CopyTableDescriptions {
+                SrcPath: "/MyRoot/Src2"
+                DstPath: "/MyRoot/DstBaseline2"
+            }
+            CopyTableDescriptions {
+                SrcPath: "/MyRoot/Src3"
+                DstPath: "/MyRoot/DstBaseline3"
+            }
+        )");
+        env.TestWaitNotification(runtime, baselineTxId);
+
+        auto baselineEntries = ReadSchemeChangeRecords(runtime);
+        const TSchemeChangeRecordEntry* baselineFound = nullptr;
+        for (const auto& e : baselineEntries) {
+            if (AnyPathContains(e, "DstBaseline1")) {
+                baselineFound = &e;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(baselineFound, "baseline (non-rebooted) copy must produce a record");
+        UNIT_ASSERT_VALUES_EQUAL_C(baselineFound->Targets.size(), 3u,
+            "baseline run must record all 3 targets, got " << baselineFound->Targets.size()
+                << ": " << AllTargetPaths(*baselineFound));
+
+        THashMap<TString, TString> baselineDstToSrc;
+        for (const auto& target : baselineFound->Targets) {
+            UNIT_ASSERT_VALUES_EQUAL_C(target.SourcePaths.size(), 1u,
+                "each baseline copy target must have exactly one source, got "
+                    << target.SourcePaths.size() << " for " << target.Path);
+            baselineDstToSrc[target.Path] = target.SourcePaths[0];
+        }
+
+        // Park the rebooted operation after the coordinator assigns its plan
+        // step but before it completes, mirroring RecordSurvivesProposeToDoneReboot.
+        TVector<THolder<IEventHandle>> suppressed;
+        auto prevObserver = SetSuppressObserver(runtime, suppressed,
+            TEvDataShard::TEvSchemaChanged::EventType);
+
+        const ui64 opTxId = ++txId;
+        TestConsistentCopyTables(runtime, opTxId, "/MyRoot", R"(
+            CopyTableDescriptions {
+                SrcPath: "/MyRoot/Src1"
+                DstPath: "/MyRoot/Dst1"
+            }
+            CopyTableDescriptions {
+                SrcPath: "/MyRoot/Src2"
+                DstPath: "/MyRoot/Dst2"
+            }
+            CopyTableDescriptions {
+                SrcPath: "/MyRoot/Src3"
+                DstPath: "/MyRoot/Dst3"
+            }
+        )");
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT_C(!schemeshard->InFlightByPlanStep.empty(),
+            "precondition: the multi-target op must be in flight WITH a plan step assigned");
+
+        // Restart inside that window: targets must be rebuilt from table 144.
+        runtime.SetObserverFunc(prevObserver);
+        TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        // Let the restored operation finish.
+        env.TestWaitNotification(runtime, opTxId);
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        const TSchemeChangeRecordEntry* found = nullptr;
+        for (const auto& e : entries) {
+            if (AnyPathContains(e, "Dst1") && !AnyPathContains(e, "DstBaseline1")) {
+                found = &e;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(found,
+            "the rebooted multi-target op must still produce a record");
+        UNIT_ASSERT_VALUES_EQUAL_C(found->Targets.size(), 3u,
+            "ALL targets must survive the reboot, not a subset; got "
+                << found->Targets.size() << ": " << AllTargetPaths(*found));
+
+        THashMap<TString, TString> dstToSrc;
+        for (const auto& target : found->Targets) {
+            UNIT_ASSERT_C(!target.Path.empty(), "restored target Path must not be empty");
+            UNIT_ASSERT_VALUES_EQUAL_C(target.SourcePaths.size(), 1u,
+                "restored target's SourcePaths must survive intact (not empty, not "
+                "truncated), got " << target.SourcePaths.size() << " for " << target.Path);
+            dstToSrc[target.Path] = target.SourcePaths[0];
+        }
+        UNIT_ASSERT_C(dstToSrc.contains("Dst1"), "missing Dst1 in " << AllTargetPaths(*found));
+        UNIT_ASSERT_C(dstToSrc.contains("Dst2"), "missing Dst2 in " << AllTargetPaths(*found));
+        UNIT_ASSERT_C(dstToSrc.contains("Dst3"), "missing Dst3 in " << AllTargetPaths(*found));
+        UNIT_ASSERT_VALUES_EQUAL_C(dstToSrc["Dst1"], "Src1",
+            "Dst1's restored target must record Src1 as its source");
+        UNIT_ASSERT_VALUES_EQUAL_C(dstToSrc["Dst2"], "Src2",
+            "Dst2's restored target must record Src2 as its source");
+        UNIT_ASSERT_VALUES_EQUAL_C(dstToSrc["Dst3"], "Src3",
+            "Dst3's restored target must record Src3 as its source");
+
+        // The rebooted run's target SET (paths database-relative, dst->src
+        // mapping) must match the non-rebooted baseline exactly, proving the
+        // reboot degraded nothing relative to normal operation.
+        UNIT_ASSERT_VALUES_EQUAL_C(dstToSrc.size(), baselineDstToSrc.size(),
+            "rebooted target count must match the baseline's");
+    }
+
     // A force-drop that aborts an in-flight CreateTable via AbortUnsafe must
     // not leave the outbox reporting StatusSuccess for an object that was
     // never actually created.

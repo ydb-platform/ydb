@@ -44,4 +44,4 @@ Create a DNS record for the new FQDN that points to the same server. The new FQD
 
     The service name may differ depending on the deployment method.
 
-1. On the **Nodes** tab of the [cluster monitoring page](../../../reference/embedded-ui/ydb-monitoring.md#node_list_page), make sure the node has reconnected with its original ID and the new FQDN. You can then remove the old DNS record.
+1. On the **Nodes** tab of the [cluster monitoring page](../../../reference/ydb-ui/ydb-monitoring.md#node_list_page), make sure the node has reconnected with its original ID and the new FQDN. You can then remove the old DNS record.

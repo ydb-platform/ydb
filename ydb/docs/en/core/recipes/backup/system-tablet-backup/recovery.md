@@ -23,7 +23,7 @@ If recovery is performed after a complete loss of the [static group](../../../co
 {% endnote %}
 
 1. Determine the ID of the system tablet to be recovered. The tablet ID can be found in the Tablets section of the [{{ ydb-ui-name }}](../../../reference/ydb-ui/index.md).
-2. Determine the list of nodes where the system tablet to be recovered can run. This list is located in the `bootstrap_config` section of the corresponding tablet in the [cluster configuration](../../devops/configuration-management/index.md). If the `bootstrap_config` section is missing from the configuration, use the list of all [static nodes](../../concepts/glossary.md#static-node) of the cluster specified in the `hosts` section of the cluster configuration.
+2. Determine the list of nodes where the system tablet to be recovered can run. This list is located in the `bootstrap_config` section of the corresponding tablet in the [cluster configuration](../../../devops/configuration-management/index.md). If the `bootstrap_config` section is missing from the configuration, use the list of all [static nodes](../../../concepts/glossary.md#static-node) of the cluster specified in the `hosts` section of the cluster configuration.
 3. Modify the configuration by adding `boot_mode: RECOVERY` to the `bootstrap_config` section of the tablet being recovered.
 
    - When using configuration V1, you need to modify the [static configuration](../../../devops/configuration-management/configuration-v1/static-config.md) on all nodes where the tablet being recovered can run.

@@ -680,7 +680,10 @@ namespace Tests {
         auto actorSystemConfig = Settings->AppConfig->GetActorSystemConfig();
         const bool useAutoConfig = actorSystemConfig.GetUseAutoConfig();
         if (useAutoConfig) {
-            NAutoConfigInitializer::ApplyAutoConfig(&actorSystemConfig, false, false);
+            NAutoConfigInitializer::ApplyAutoConfig(&actorSystemConfig, {
+                .IsDynamicNode = false,
+                .ForceTinyConfiguration = false,
+            });
         }
 
         TCpuManagerConfig cpuManager;
@@ -688,7 +691,7 @@ namespace Tests {
             NActorSystemConfigHelpers::AddExecutorPool(cpuManager, actorSystemConfig.GetExecutor(poolId), actorSystemConfig, poolId, nullptr);
         }
 
-        const NAutoConfigInitializer::TASPools pools = NAutoConfigInitializer::GetASPools(actorSystemConfig, useAutoConfig);
+        const NAutoConfigInitializer::TExecutorPoolLayout pools = NAutoConfigInitializer::GetExecutorPoolLayout(actorSystemConfig, useAutoConfig);
 
         Runtime->SetupActorSystemConfig(TTestActorRuntime::TActorSystemSetupConfig{
             .CpuManagerConfig = cpuManager,

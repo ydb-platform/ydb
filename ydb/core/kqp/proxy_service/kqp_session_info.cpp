@@ -69,8 +69,10 @@ void TKqpSessionInfo::SerializeTo(::NKikimrKqp::TSessionInfo* proto, const TFiel
         proto->SetSessionStartAt(SessionStartedAt.MicroSeconds());
     }
 
-    // QueryStartAt is left unset (NULL) while the request is queued.
-    if (fieldsMap.NeedField(VSessions::QueryStartAt::ColumnId) && !isInWmQueue) { // 12
+    // QueryStartAt is left unset (NULL) while the session is IDLE or queued.
+    if (fieldsMap.NeedField(VSessions::QueryStartAt::ColumnId)
+        && State == ESessionState::EXECUTING
+        && !isInWmQueue) { // 12
         if (wmExited) {
             proto->SetQueryStartAt(WmState->GetExitTime().MicroSeconds());
         } else {

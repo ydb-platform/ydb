@@ -958,7 +958,10 @@ void TConsumer::RegisterReadingSession(TSession* session, const TActorContext& c
         }
 
         for (auto& partitionId : session->Partitions) {
-            if (!FindFamily(partitionId)) {
+            // A session that names a merge-child must not get it before all parents
+            // are processed: CreateFamily here would make the partition immediately
+            // balanceable.
+            if (!FindFamily(partitionId) && IsReadable(partitionId)) {
                 CreateFamily({partitionId}, ctx);
             }
         }
@@ -1048,14 +1051,24 @@ bool TConsumer::IsReadable(ui32 partitionId) {
         return false;
     }
 
-    if (Partitions.empty()) {
-        return node->DirectParents.empty();
-    }
-
-    for(auto* parent : node->AllParents) {
-        if (!IsInactive(parent->Id)) {
-            return false;
+    auto parentsProcessed = [&](const auto& parents) {
+        for (auto* parent : parents) {
+            if (!parent || !IsInactive(parent->Id)) {
+                return false;
+            }
         }
+        return true;
+    };
+
+    // DirectParents is the source of truth for a merge child. AllParents also
+    // covers grandparents (chained split/merge). An empty AllParents must not
+    // be treated as "no parents" — that used to make merge children readable
+    // immediately.
+    if (!parentsProcessed(node->DirectParents)) {
+        return false;
+    }
+    if (!parentsProcessed(node->AllParents)) {
+        return false;
     }
 
     return true;

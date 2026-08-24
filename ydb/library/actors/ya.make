@@ -12,6 +12,7 @@ RECURSE(
     subsystems
     struct_log
     testlib
+    trace_data
     util
     wilson
 )

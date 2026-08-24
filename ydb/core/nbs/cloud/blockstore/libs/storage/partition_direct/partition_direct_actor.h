@@ -80,6 +80,11 @@ private:
     // At most one add-host runs at a time across the whole partition.
     std::optional<TAddHostInFlight> AddHostInFlight;
 
+    // Batch persisting of ahead and behind fields.
+    bool ExecutingUpdateDirtyMapState = false;
+    TTxPartition::TUpdateDirtyMapState::TUpdateStateRequests
+        PendingUpdateDirtyMapStateRequests;
+
 public:
     TPartitionActor(
         const NActors::TActorId& tablet,

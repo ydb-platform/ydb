@@ -718,16 +718,28 @@ void TPartitionActor::HandleUpdateDirtyMapState(
     LOG_INFO(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "%s Handle UpdateDirtyMapState vchunk %u",
+        "%s Handle UpdateDirtyMapState vchunk %u %s",
         LogTitle.GetWithTime().c_str(),
-        msg->VChunkIndex);
+        msg->VChunkIndex,
+        ExecutingUpdateDirtyMapState ? "later" : "now");
 
-    ExecuteTx(
-        ctx,
-        CreateTx<TUpdateDirtyMapState>(
-            msg->VChunkIndex,
-            std::move(msg->State),
-            std::move(msg->UpdateCompleted)));
+    if (ExecutingUpdateDirtyMapState) {
+        PendingUpdateDirtyMapStateRequests.push_back(
+            {.VChunkIndex = msg->VChunkIndex,
+             .State = std::move(msg->State),
+             .UpdateCompleted = std::move(msg->UpdateCompleted)});
+    } else {
+        Y_DEBUG_ABORT_UNLESS(PendingUpdateDirtyMapStateRequests.empty());
+
+        ExecutingUpdateDirtyMapState = true;
+        ExecuteTx(
+            ctx,
+            CreateTx<TUpdateDirtyMapState>(
+                TTxPartition::TUpdateDirtyMapState::TUpdateStateRequests{
+                    {.VChunkIndex = msg->VChunkIndex,
+                     .State = std::move(msg->State),
+                     .UpdateCompleted = std::move(msg->UpdateCompleted)}}));
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////

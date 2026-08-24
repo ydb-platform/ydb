@@ -139,17 +139,19 @@ struct TTxPartition
     //
     struct TUpdateDirtyMapState
     {
-        const ui32 VChunkIndex;
-        const TDirtyMapStateProto State;
-        NThreading::TPromise<void> UpdateCompleted;
+        struct TUpdateStateRequest
+        {
+            ui32 VChunkIndex;
+            TDirtyMapStateProto State;
+            NThreading::TPromise<void> UpdateCompleted;
+        };
 
-        TUpdateDirtyMapState(
-            ui32 vChunkIndex,
-            TDirtyMapStateProto state,
-            NThreading::TPromise<void> updateCompleted)
-            : VChunkIndex(vChunkIndex)
-            , State(std::move(state))
-            , UpdateCompleted(std::move(updateCompleted))
+        using TUpdateStateRequests = TVector<TUpdateStateRequest>;
+
+        TUpdateStateRequests UpdateStateRequests;
+
+        explicit TUpdateDirtyMapState(TUpdateStateRequests updateStateRequests)
+            : UpdateStateRequests(std::move(updateStateRequests))
         {}
 
         void Clear()

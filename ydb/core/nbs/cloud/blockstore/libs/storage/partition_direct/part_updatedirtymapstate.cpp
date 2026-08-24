@@ -30,16 +30,34 @@ void TPartitionActor::ExecuteUpdateDirtyMapState(
     Y_UNUSED(ctx);
 
     TPartitionDatabase db(tx.DB);
-    db.StoreDirtyMapState(args.VChunkIndex, args.State);
+    for (const auto& request: args.UpdateStateRequests) {
+        db.StoreDirtyMapState(request.VChunkIndex, request.State);
+    }
 }
 
 void TPartitionActor::CompleteUpdateDirtyMapState(
     const TActorContext& ctx,
     TTxPartition::TUpdateDirtyMapState& args)
 {
-    Y_UNUSED(ctx);
+    for (auto& request: args.UpdateStateRequests) {
+        request.UpdateCompleted.SetValue();
+    }
+    ExecutingUpdateDirtyMapState = false;
 
-    args.UpdateCompleted.SetValue();
+    if (!PendingUpdateDirtyMapStateRequests.empty()) {
+        LOG_INFO(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "%s Execute pending UpdateDirtyMapStateRequests %lu",
+            LogTitle.GetWithTime().c_str(),
+            PendingUpdateDirtyMapStateRequests.size());
+
+        ExecutingUpdateDirtyMapState = true;
+        ExecuteTx(
+            ctx,
+            CreateTx<TUpdateDirtyMapState>(
+                std::move(PendingUpdateDirtyMapStateRequests)));
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

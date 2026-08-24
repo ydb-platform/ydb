@@ -31,6 +31,10 @@ struct TPartition {
     // ReadSession reach EndOffset of the partition by first request
     bool StartedReadingFromEndOffset = false;
 
+    // Next StartReading after LockPartition of an inactive parent is membership,
+    // not a reread.
+    bool IgnoreNextStartReading = false;
+
     size_t Iteration = 0;
     ui64 Cookie = 0;
 

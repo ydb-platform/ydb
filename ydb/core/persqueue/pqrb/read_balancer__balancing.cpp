@@ -41,11 +41,17 @@ bool TPartition::BalanceToOtherPipe() const {
 }
 
 bool TPartition::StartReading() {
+    if (std::exchange(IgnoreNextStartReading, false)) {
+        Y_DEBUG_ABORT_UNLESS(IsInactive(),
+            "IgnoreNextStartReading on a partition that is not inactive");
+        return false;
+    }
     return std::exchange(ReadingFinished, false);
 }
 
 bool TPartition::StopReading() {
     ReadingFinished = false;
+    IgnoreNextStartReading = false;
     ++Cookie;
     return NeedReleaseChildren();
 }
@@ -85,6 +91,7 @@ bool TPartition::Reset() {
     ScaleAwareSDK = false;
     StartedReadingFromEndOffset = false;
     ReadingFinished = false;
+    IgnoreNextStartReading = false;
     Commited = false;
     ++Cookie;
 
@@ -772,6 +779,12 @@ void TPartitionFamily::LockPartition(ui32 partitionId, const TActorContext& ctx)
     }
 
     auto step = NextStep();
+
+    if (auto* partition = GetPartition(partitionId); partition && partition->IsInactive()) {
+        // The session will send ReadingPartitionStarted for this lock. That is
+        // membership, not a reread: keep ReadingFinished so children stay readable.
+        partition->IgnoreNextStartReading = true;
+    }
 
     YDB_LOG_INFO("Lock partition for generation step",
         {"logPrefix", LogPrefix()},
@@ -1604,8 +1617,10 @@ void TConsumer::StartReading(ui32 partitionId, const TActorContext& ctx) {
     }
 
     auto wasInactive = partition->IsInactive();
-    PendingFinishes.erase(partitionId);
-    PendingCommits.erase(partitionId);
+    if (!partition->IgnoreNextStartReading) {
+        PendingFinishes.erase(partitionId);
+        PendingCommits.erase(partitionId);
+    }
     if (partition->StartReading()) {
         if (!ScalingSupport()) {
             return;
@@ -2200,19 +2215,22 @@ void TBalancer::Handle(TEvPersQueue::TEvReadingPartitionFinishedRequest::TPtr& e
     auto& r = ev->Get()->Record;
     auto pipeClient = ActorIdFromProto(r.GetPipeClient());
 
-    if (pipeClient && !Sessions.contains(pipeClient)) {
-        YDB_LOG_DEBUG("Received TEvReadingPartitionFinishedRequest from unknown pipe",
-            {"logPrefix", LogPrefix()},
-            {"pipeClient", pipeClient});
-        return;
-    }
-
     auto consumer = GetConsumer(r.GetConsumer());
     if (!consumer) {
         YDB_LOG_DEBUG("Received TEvReadingPartitionFinishedRequest from unknown consumer",
             {"logPrefix", LogPrefix()},
             {"consumer", r.GetConsumer()});
         return;
+    }
+
+    if (pipeClient && !Sessions.contains(pipeClient)) {
+        // The session died, but the consumer still has other sessions. Finish
+        // is in-flight from the dying pipe; dropping it used to leave children
+        // unreadable until a new session re-read the parent from offset 0.
+        YDB_LOG_DEBUG("Received TEvReadingPartitionFinishedRequest from a disconnected pipe; applying while the consumer lives",
+            {"logPrefix", LogPrefix()},
+            {"pipeClient", pipeClient},
+            {"partitionId", r.GetPartitionId()});
     }
 
     consumer->FinishReading(ev, ctx);

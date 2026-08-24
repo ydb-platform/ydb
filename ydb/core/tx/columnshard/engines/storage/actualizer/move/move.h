@@ -76,12 +76,10 @@ protected:
 
     void AddToInitialAndPendingForTest(ui64 portionId) {
         InitialPortionIds.emplace(portionId);
-        // Mirrors DoAddPortion: a returned portion is no longer in flight.
         InFlightPortionIds.erase(portionId);
         PendingPortionIds.emplace(portionId);
     }
 
-    // Directly confirm a pending portion into PortionsToMove using a placeholder address.
     void ConfirmPortionForTest(ui64 portionId) {
         PendingPortionIds.erase(portionId);
         TRWAddress addr({ IStoragesManager::DefaultStorageId }, { IStoragesManager::DefaultStorageId });

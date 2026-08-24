@@ -74,7 +74,6 @@ void TMoveDataActualizer::DoAddPortion(const TPortionInfo& info, const TAddExter
     if (info.GetTierNameDef(IStoragesManager::DefaultStorageId) != IStoragesManager::DefaultStorageId) {
         return;
     }
-    // An aborted rewrite returns its portion through here — it is no longer in flight.
     InFlightPortionIds.erase(portionId);
     PendingPortionIds.emplace(portionId);
 }
@@ -123,8 +122,6 @@ void TMoveDataActualizer::DoExtractTasks(
             break;
         }
     }
-    // Remove only from the active queue; keep InitialPortionIds so that if the
-    // change is aborted the portion can re-enter PendingPortionIds via DoAddPortion.
     for (auto portionId : submitted) {
         RemoveFromActiveQueue(portionId);
         InFlightPortionIds.emplace(portionId);
@@ -201,8 +198,6 @@ void TMoveDataActualizer::Refresh(const TAddExternalContext& externalContext) {
     InFlightPortionIds.clear();
 
     for (auto& [portionId, portion] : externalContext.GetPortions()) {
-        // Remove-marked portions are rejected by IActualizer::AddPortion itself; the
-        // tier filter must stay here because InitialPortionIds feeds DoAddPortion's gate.
         if (portion->GetTierNameDef(IStoragesManager::DefaultStorageId) != IStoragesManager::DefaultStorageId) {
             continue;
         }

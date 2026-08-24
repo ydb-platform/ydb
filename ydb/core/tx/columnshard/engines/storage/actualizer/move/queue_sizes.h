@@ -32,7 +32,6 @@ enum class EMoveDataGate {
     BlockedByGC,
 };
 
-// The check order decides which GateBlocked sensor a refusal increments.
 inline EMoveDataGate ClassifyMoveDataGate(const bool vacuumCompleted, const TMoveDataQueueSizes& queues, const bool hasBlobsForGroups) {
     if (!vacuumCompleted) {
         return EMoveDataGate::BlockedByVacuum;

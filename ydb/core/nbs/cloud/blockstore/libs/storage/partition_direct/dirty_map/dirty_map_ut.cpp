@@ -71,6 +71,45 @@ void EraseAll(const TEraseHints& eraseHints, TBlocksDirtyMap& dirtyMap)
 
 Y_UNIT_TEST_SUITE(TDirtyMapTest)
 {
+    Y_UNIT_TEST(ShouldKeepTotalPBufferCountersAfterRelease)
+    {
+        const auto vchunkConfig = MakeTestVChunkConfig();
+        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
+            vchunkConfig,
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
+
+        constexpr THostIndex Host = 0;
+        constexpr size_t ByteCount = 4096;
+
+        dirtyMap->DataToPBufferAdded(
+            Host,
+            IReadyQueue::EPBufferCounter::Total,
+            ByteCount);
+        dirtyMap->DataToPBufferAdded(
+            Host,
+            IReadyQueue::EPBufferCounter::Locked,
+            ByteCount);
+        dirtyMap->DataFromPBufferReleased(
+            Host,
+            IReadyQueue::EPBufferCounter::Locked,
+            ByteCount);
+        dirtyMap->DataFromPBufferReleased(
+            Host,
+            IReadyQueue::EPBufferCounter::Total,
+            ByteCount);
+
+        const auto& counters = dirtyMap->GetPBufferCounters(Host);
+        UNIT_ASSERT_VALUES_EQUAL(0, counters.Current.Count);
+        UNIT_ASSERT_VALUES_EQUAL(0, counters.Current.Size);
+        UNIT_ASSERT_VALUES_EQUAL(1, counters.Total.Count);
+        UNIT_ASSERT_VALUES_EQUAL(ByteCount, counters.Total.Size);
+        UNIT_ASSERT_VALUES_EQUAL(0, counters.CurrentLocked.Count);
+        UNIT_ASSERT_VALUES_EQUAL(0, counters.CurrentLocked.Size);
+        UNIT_ASSERT_VALUES_EQUAL(1, counters.TotalLocked.Count);
+        UNIT_ASSERT_VALUES_EQUAL(ByteCount, counters.TotalLocked.Size);
+    }
+
     Y_UNIT_TEST(ShouldReadWithoutWrites)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
@@ -119,7 +158,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         UNIT_ASSERT_VALUES_EQUAL(
             0u,
-            dirtyMap->GetPBufferCounters(newIdx).CurrentBytesCount);
+            dirtyMap->GetPBufferCounters(newIdx).Current.Size);
         UNIT_ASSERT_VALUES_EQUAL(
             "H0*{Operational,32768};"
             "H1*{Operational,32768};"
@@ -384,15 +423,15 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         // Counters on primary PBuffers contain one record with 40960 bytes
         for (THostIndex h: MakePrimaryHosts()) {
             auto counters = dirtyMap->GetPBufferCounters(h);
-            UNIT_ASSERT_VALUES_EQUAL(1, counters.CurrentRecordsCount);
-            UNIT_ASSERT_VALUES_EQUAL(40960, counters.CurrentBytesCount);
-            UNIT_ASSERT_VALUES_EQUAL(1, counters.TotalRecordsCount);
-            UNIT_ASSERT_VALUES_EQUAL(40960, counters.TotalBytesCount);
+            UNIT_ASSERT_VALUES_EQUAL(1, counters.Current.Count);
+            UNIT_ASSERT_VALUES_EQUAL(40960, counters.Current.Size);
+            UNIT_ASSERT_VALUES_EQUAL(1, counters.Total.Count);
+            UNIT_ASSERT_VALUES_EQUAL(40960, counters.Total.Size);
 
-            UNIT_ASSERT_VALUES_EQUAL(0, counters.CurrentLockedRecordsCount);
-            UNIT_ASSERT_VALUES_EQUAL(0, counters.CurrentLockedBytesCount);
-            UNIT_ASSERT_VALUES_EQUAL(0, counters.TotalLockedRecordsCount);
-            UNIT_ASSERT_VALUES_EQUAL(0, counters.TotalLockedBytesCount);
+            UNIT_ASSERT_VALUES_EQUAL(0, counters.CurrentLocked.Count);
+            UNIT_ASSERT_VALUES_EQUAL(0, counters.CurrentLocked.Size);
+            UNIT_ASSERT_VALUES_EQUAL(0, counters.TotalLocked.Count);
+            UNIT_ASSERT_VALUES_EQUAL(0, counters.TotalLocked.Size);
         }
     }
 
@@ -439,28 +478,28 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         {
             // Host 0 contains two records, one locked for read
             auto counters = dirtyMap->GetPBufferCounters(THostIndex{0});
-            UNIT_ASSERT_VALUES_EQUAL(2, counters.CurrentRecordsCount);
-            UNIT_ASSERT_VALUES_EQUAL(81920, counters.CurrentBytesCount);
-            UNIT_ASSERT_VALUES_EQUAL(2, counters.TotalRecordsCount);
-            UNIT_ASSERT_VALUES_EQUAL(81920, counters.TotalBytesCount);
+            UNIT_ASSERT_VALUES_EQUAL(2, counters.Current.Count);
+            UNIT_ASSERT_VALUES_EQUAL(81920, counters.Current.Size);
+            UNIT_ASSERT_VALUES_EQUAL(2, counters.Total.Count);
+            UNIT_ASSERT_VALUES_EQUAL(81920, counters.Total.Size);
 
-            UNIT_ASSERT_VALUES_EQUAL(1, counters.CurrentLockedRecordsCount);
-            UNIT_ASSERT_VALUES_EQUAL(40960, counters.CurrentLockedBytesCount);
-            UNIT_ASSERT_VALUES_EQUAL(1, counters.TotalLockedRecordsCount);
-            UNIT_ASSERT_VALUES_EQUAL(40960, counters.TotalLockedBytesCount);
+            UNIT_ASSERT_VALUES_EQUAL(1, counters.CurrentLocked.Count);
+            UNIT_ASSERT_VALUES_EQUAL(40960, counters.CurrentLocked.Size);
+            UNIT_ASSERT_VALUES_EQUAL(1, counters.TotalLocked.Count);
+            UNIT_ASSERT_VALUES_EQUAL(40960, counters.TotalLocked.Size);
         }
         {
             // Host 3 contains one record, one locked for read
             auto counters = dirtyMap->GetPBufferCounters(THostIndex{3});
-            UNIT_ASSERT_VALUES_EQUAL(1, counters.CurrentRecordsCount);
-            UNIT_ASSERT_VALUES_EQUAL(40960, counters.CurrentBytesCount);
-            UNIT_ASSERT_VALUES_EQUAL(1, counters.TotalRecordsCount);
-            UNIT_ASSERT_VALUES_EQUAL(40960, counters.TotalBytesCount);
+            UNIT_ASSERT_VALUES_EQUAL(1, counters.Current.Count);
+            UNIT_ASSERT_VALUES_EQUAL(40960, counters.Current.Size);
+            UNIT_ASSERT_VALUES_EQUAL(1, counters.Total.Count);
+            UNIT_ASSERT_VALUES_EQUAL(40960, counters.Total.Size);
 
-            UNIT_ASSERT_VALUES_EQUAL(1, counters.CurrentLockedRecordsCount);
-            UNIT_ASSERT_VALUES_EQUAL(40960, counters.CurrentLockedBytesCount);
-            UNIT_ASSERT_VALUES_EQUAL(1, counters.TotalLockedRecordsCount);
-            UNIT_ASSERT_VALUES_EQUAL(40960, counters.TotalLockedBytesCount);
+            UNIT_ASSERT_VALUES_EQUAL(1, counters.CurrentLocked.Count);
+            UNIT_ASSERT_VALUES_EQUAL(40960, counters.CurrentLocked.Size);
+            UNIT_ASSERT_VALUES_EQUAL(1, counters.TotalLocked.Count);
+            UNIT_ASSERT_VALUES_EQUAL(40960, counters.TotalLocked.Size);
         }
     }
 
@@ -583,10 +622,10 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         // All current counters back to zero.
         for (THostIndex h: MakePrimaryHosts()) {
             auto counters = dirtyMap->GetPBufferCounters(h);
-            UNIT_ASSERT_VALUES_EQUAL(0, counters.CurrentRecordsCount);
-            UNIT_ASSERT_VALUES_EQUAL(0, counters.CurrentBytesCount);
-            UNIT_ASSERT_VALUES_EQUAL(2, counters.TotalRecordsCount);
-            UNIT_ASSERT_VALUES_EQUAL(81920, counters.TotalBytesCount);
+            UNIT_ASSERT_VALUES_EQUAL(0, counters.Current.Count);
+            UNIT_ASSERT_VALUES_EQUAL(0, counters.Current.Size);
+            UNIT_ASSERT_VALUES_EQUAL(2, counters.Total.Count);
+            UNIT_ASSERT_VALUES_EQUAL(81920, counters.Total.Size);
         }
     }
 
@@ -1207,10 +1246,10 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
              {THostIndex{0}, THostIndex{1}, THostIndex{2}, THostIndex{3}})
         {
             auto counters = dirtyMap->GetPBufferCounters(h);
-            UNIT_ASSERT_VALUES_EQUAL(1, counters.CurrentRecordsCount);
-            UNIT_ASSERT_VALUES_EQUAL(40960, counters.CurrentBytesCount);
-            UNIT_ASSERT_VALUES_EQUAL(1, counters.TotalRecordsCount);
-            UNIT_ASSERT_VALUES_EQUAL(40960, counters.TotalBytesCount);
+            UNIT_ASSERT_VALUES_EQUAL(1, counters.Current.Count);
+            UNIT_ASSERT_VALUES_EQUAL(40960, counters.Current.Size);
+            UNIT_ASSERT_VALUES_EQUAL(1, counters.Total.Count);
+            UNIT_ASSERT_VALUES_EQUAL(40960, counters.Total.Size);
         }
     }
 
@@ -1962,7 +2001,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         // Host 1 bytes are still accounted.
         UNIT_ASSERT_VALUES_EQUAL(
             40960,
-            dirtyMap->GetPBufferCounters(THostIndex{1}).CurrentBytesCount);
+            dirtyMap->GetPBufferCounters(THostIndex{1}).Current.Size);
 
         // Evacuate host 1 — this promotes host 3 as replacement.
         // DDisk set changes from {0,1,2} to {0,2,3}, making host 1 "removed".
@@ -2058,7 +2097,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         // Verify all 3 primary hosts have byte counters.
         for (THostIndex h: MakePrimaryHosts()) {
             auto counters = dirtyMap->GetPBufferCounters(h);
-            UNIT_ASSERT_VALUES_EQUAL(40960, counters.CurrentBytesCount);
+            UNIT_ASSERT_VALUES_EQUAL(40960, counters.Current.Size);
         }
 
         // Evacuate host 2 — host 3 gets promoted; DDisk set becomes {0,1,3}.
@@ -2068,18 +2107,18 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         // Hosts counters should be unchanged.
         UNIT_ASSERT_VALUES_EQUAL(
             40960,
-            dirtyMap->GetPBufferCounters(THostIndex{0}).CurrentBytesCount);
+            dirtyMap->GetPBufferCounters(THostIndex{0}).Current.Size);
         UNIT_ASSERT_VALUES_EQUAL(
             40960,
-            dirtyMap->GetPBufferCounters(THostIndex{1}).CurrentBytesCount);
+            dirtyMap->GetPBufferCounters(THostIndex{1}).Current.Size);
         UNIT_ASSERT_VALUES_EQUAL(
             40960,
-            dirtyMap->GetPBufferCounters(THostIndex{2}).CurrentBytesCount);
+            dirtyMap->GetPBufferCounters(THostIndex{2}).Current.Size);
 
         // Total bytes should remain as historical record.
         UNIT_ASSERT_VALUES_EQUAL(
             40960,
-            dirtyMap->GetPBufferCounters(THostIndex{2}).TotalBytesCount);
+            dirtyMap->GetPBufferCounters(THostIndex{2}).Total.Size);
     }
 
     Y_UNIT_TEST(ShouldIgnoreOutdatedFlushResponseAfterInflightRemoved)
@@ -2174,13 +2213,13 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         // Counters should not be changed
         UNIT_ASSERT_VALUES_EQUAL(
             40960,
-            dirtyMap->GetPBufferCounters(THostIndex{0}).CurrentBytesCount);
+            dirtyMap->GetPBufferCounters(THostIndex{0}).Current.Size);
         UNIT_ASSERT_VALUES_EQUAL(
             40960,
-            dirtyMap->GetPBufferCounters(THostIndex{1}).CurrentBytesCount);
+            dirtyMap->GetPBufferCounters(THostIndex{1}).Current.Size);
         UNIT_ASSERT_VALUES_EQUAL(
             40960,
-            dirtyMap->GetPBufferCounters(THostIndex{2}).CurrentBytesCount);
+            dirtyMap->GetPBufferCounters(THostIndex{2}).Current.Size);
 
         // Reads only see the remaining confirmed hosts, never the evacuated
         // one.
@@ -2230,13 +2269,13 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         // PBuffer data is kept, unlike the evacuation case.
         UNIT_ASSERT_VALUES_EQUAL(
             40960,
-            dirtyMap->GetPBufferCounters(THostIndex{0}).CurrentBytesCount);
+            dirtyMap->GetPBufferCounters(THostIndex{0}).Current.Size);
         UNIT_ASSERT_VALUES_EQUAL(
             40960,
-            dirtyMap->GetPBufferCounters(THostIndex{1}).CurrentBytesCount);
+            dirtyMap->GetPBufferCounters(THostIndex{1}).Current.Size);
         UNIT_ASSERT_VALUES_EQUAL(
             40960,
-            dirtyMap->GetPBufferCounters(THostIndex{2}).CurrentBytesCount);
+            dirtyMap->GetPBufferCounters(THostIndex{2}).Current.Size);
 
         // Reads still exclude the disabled host from the hint mask, but the
         // data remains on its PBuffer for when it comes back online.

@@ -51,6 +51,15 @@ enum class EHostState
     Offline,
 };
 
+enum class EHostHealth
+{
+    Online,
+    Sufferer,
+    TemporaryOffline,
+    Offline,
+    Broken,   // changes strictly outside of Oracle
+};
+
 // Determines where the data is located
 enum class EDataLocation
 {

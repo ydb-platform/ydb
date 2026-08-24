@@ -297,11 +297,25 @@ TExecutorPtr TVChunk::GetExecutor() const
     return Executor;
 }
 
-ui64 TVChunk::GetPBufferUsedSize(THostIndex hostIndex) const
+TCountAndSize TVChunk::GetPBuffersUsage(THostIndex hostIndex) const
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    return BlocksDirtyMap->GetPBufferUsedSize(hostIndex);
+    return BlocksDirtyMap->GetPBuffersUsage(hostIndex);
+}
+
+TCountAndSize TVChunk::GetAheadBlocks(THostIndex hostIndex) const
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    return BlocksDirtyMap->GetAheadBlocks(hostIndex);
+}
+
+TCountAndSize TVChunk::GetBehindBlocks(THostIndex hostIndex) const
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    return BlocksDirtyMap->GetBehindBlocks(hostIndex);
 }
 
 std::optional<ui64> TVChunk::GetSafeBarrierForErase() const

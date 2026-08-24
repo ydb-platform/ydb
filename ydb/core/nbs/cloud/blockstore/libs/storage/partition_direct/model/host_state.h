@@ -1,5 +1,6 @@
 #pragma once
 
+#include "count_size.h"
 #include "host.h"
 
 #include <util/generic/string.h>
@@ -13,7 +14,7 @@ struct THostState
 {
     EHostState State = EHostState::Online;
 
-    ui64 PBufferUsedSize = 0;
+    TCountAndSize UsedPBuffers;
 
     // Debug purposes
     [[nodiscard]] TString DebugPrint() const;
@@ -30,7 +31,7 @@ public:
         EHostState oldState,
         EHostState newState) = 0;
 
-    [[nodiscard]] virtual ui64 GetHostPBufferUsedSize(
+    [[nodiscard]] virtual TCountAndSize GetPBuffersUsage(
         THostIndex hostIndex) const = 0;
 
     virtual void QueryAddHost(THostIndex newHostIndex) = 0;

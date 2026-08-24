@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/block_range_field.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/count_size.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/public.h>
 
 #include <util/generic/string.h>
@@ -79,6 +80,9 @@ public:
 
     [[nodiscard]] std::optional<TBlockRange64> GetFreshRange() const;
     void RangeSynced(TBlockRange64 range);
+
+    [[nodiscard]] TCountAndSize GetAheadSegmentsStat() const;
+    [[nodiscard]] TCountAndSize GetBehindSegmentsStat() const;
 
     void UpdateWatermarkDebugOnly(ui64 blockCount);
     [[nodiscard]] TString DebugPrint() const;

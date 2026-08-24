@@ -53,7 +53,6 @@ enum class ECutState {
 };
 
 // Two-tier engine for CutTabletHistory on ColumnShard data channels (channels >= 2).
-// Owned by TBlobManager; accessed from TColumnShard for nomination and sweep callbacks.
 class THistoryCutterWrapper {
 public:
     THistoryCutterWrapper(const TIntrusivePtr<TTabletStorageInfo>& tabletInfo, ui32 currentGen,
@@ -64,22 +63,14 @@ public:
         LauncherActorId = id;
     }
 
-    // Called on write-index-complete path when a portion is added to the engine.
     void OnPortionAdded(const TPortionDataAccessor& accessor);
 
-    // Called on cleanup-complete path when a portion is durably erased from the engine.
     void OnPortionRemoved(ui64 portionId);
 
-    // One-shot rebuild after all granules finish loading at boot.
-    // portionBlobIds: portionId -> blob ids for that portion.
     void OnBootComplete(const THashMap<ui64, std::vector<TUnifiedBlobId>>& portionBlobIds);
 
-    // Nominates candidates for cutting. Starts tier-2 cursor scan by sending
-    // TEvStartCutHistorySweep to the tablet actor and returning true.
-    // Returns false when sweep already in flight or no candidates.
     bool TryNominate(const TActorContext& ctx);
 
-    // Returns current sweep candidates (non-empty while sweep in flight).
     std::shared_ptr<const TVector<TEntryKey>> GetSweepCandidates() const {
         static const auto empty = std::make_shared<const TVector<TEntryKey>>();
         return SweepCandidates ? SweepCandidates : empty;
@@ -145,20 +136,12 @@ protected:
     void DecrementCounter(const TEntryKey& key);
 
 public:
-    // Sets the snapshot of all engine portion IDs that tier-2 will scan.
-    // Called by TColumnShard::Handle(TEvStartCutHistorySweep) before the first accessor request.
     void SetPortionSnapshot(TVector<std::pair<TInternalPathId, ui64>>&& ids);
 
-    // Returns the next batch of at most batchSize portion IDs, advancing the internal offset.
-    // isLast is set to true if this is the last batch (offset reaches end).
     TVector<std::pair<TInternalPathId, ui64>> GetNextBatch(size_t batchSize, bool& isLast);
 
-    // Called by Handle(TEvCutHistorySweepBatchDone) after each accessor batch.
-    // disproved: {channel, fromGeneration} pairs whose blobs were found in this batch.
-    // exhausted: true when the portion snapshot is fully consumed.
     void OnBatchComplete(const THashSet<TEntryKey>& disproved, bool exhausted, const TActorContext& ctx);
 
-    // Called by barrier actor result handler in TColumnShard.
     void OnBarrierResult(const TEntryKey& key, bool ok);
 
     bool IsEnabled() const;
@@ -174,14 +157,12 @@ public:
         return SweepPortionOffset > 0 || !SweepPortionIds.empty();
     }
 
-    // Public accessor used by Handle(TEvStartCutHistorySweep) to build nextGenMap for the callback.
     ui32 GetNextFromGenerationForSweep(const TEntryKey& key) const {
         return GetNextFromGeneration(key);
     }
 
     // Pure function: returns true if no earlier entry in `hist` (all entries before the one
     // with fromGeneration == key.FromGeneration) uses the same GroupID as that entry.
-    // Testable without an actor context or THistoryCutterWrapper instance.
     // Entries whose FromGeneration is in cutFromGenerations are already barriered and
     // cut — they are transparent for the same-group safety walk (otherwise a cut entry
     // still visible in the boot-time TTabletStorageInfo would block a later same-group
@@ -190,15 +171,12 @@ public:
         const std::unordered_set<ui32>& cutFromGenerations = {});
 
 protected:
-    // Also reachable from the unit-test subclass (drain-gate integration tests).
     bool IsDrained(const TEntryKey& key) const;
 
 private:
     bool SeenGroupsCheckPasses(const TEntryKey& key) const;
     ui32 GetNextFromGeneration(const TEntryKey& key) const;
 
-    // Computes the entry key (channel, fromGen) for a blob id.
-    // Returns false if the blob belongs to the active entry or is foreign.
     bool GetEntryKey(const TLogoBlobID& blobId, TEntryKey& out) const;
 
     void IncrementCounter(const TEntryKey& key);
@@ -233,12 +211,10 @@ private:
     THashMap<TEntryKey, ECutState> CutState;
     THashSet<ui32> PoisonedChannels;
 
-    // portionId -> set of TEntryKey the portion contributes to (for decrement at erase).
     THashMap<ui64, THashSet<TEntryKey>> PortionKeys;
 
     bool SweepInFlight = false;
 
-    // Tier-2 sweep state (all in-memory; reset on restart/completion).
     // Shared with per-batch sweep callbacks — one allocation per sweep, not per batch.
     std::shared_ptr<const TVector<TEntryKey>> SweepCandidates;
 
@@ -253,14 +229,12 @@ private:
 
     THashMap<TEntryKey, TDisprovalState> DisprovedAt;
 
-    // Last full candidate evaluation; see NominateCadence in TryNominate.
     TInstant LastNominateAt;
     // First channel to service in the next nomination round (rotation under the
     // MaxDrainChecksPerNomination cap).
     ui32 NextChannelToCheck = 2;
     TVector<TEntryKey> SweepSurvivors;
 
-    // Cursor over the engine's in-memory portion snapshot (snapshotted once per sweep).
     TVector<std::pair<TInternalPathId, ui64>> SweepPortionIds;
     size_t SweepPortionOffset = 0;
 };

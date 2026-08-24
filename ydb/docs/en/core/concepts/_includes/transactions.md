@@ -35,7 +35,7 @@ For transactions that read column-oriented tables, use:
 
 Implicit transaction logic applies when a single YQL script is sent to the server without an explicitly selected [transaction mode](#modes). Typical entry points:
 
-* [Embedded UI](../../reference/embedded-ui/index.md) — the **Query** tab on the database page ([query form](../../reference/embedded-ui/ydb-monitoring.md#tenant_scheme)), when run without selecting an explicit transaction mode in the settings.
+* [{{ ydb-ui-name }}](../../reference/ydb-ui/index.md) — the **Query** tab on the database page ([query form](../../reference/ydb-ui/ydb-monitoring.md#tenant_scheme)), when run without selecting an explicit transaction mode in the settings.
 * [{{ ydb-short-name }} CLI](../../reference/ydb-cli/index.md) — a one-off script via [`ydb sql`](../../reference/ydb-cli/sql.md).
 * Applications using the [{{ ydb-short-name }} SDK](../../reference/ydb-sdk/index.md) — [ImplicitTx](../../recipes/ydb-sdk/tx-control.md#implicittx) mode.
 
@@ -64,7 +64,7 @@ In this mode, based on the query, {{ ydb-short-name }} decides whether to execut
 
 To set a transaction mode explicitly, use the corresponding options at each entry point:
 
-* [Embedded UI](../../reference/embedded-ui/index.md) — choose a transaction mode in the execution settings on the **Query** tab.
+* [{{ ydb-ui-name }}](../../reference/ydb-ui/index.md) — choose a transaction mode in the execution settings on the **Query** tab.
 * [{{ ydb-short-name }} CLI](../../reference/ydb-cli/index.md) — for [`table query execute`](../../reference/ydb-cli/table-query-execute.md) with `data` queries, set the [`--tx-mode`](../../reference/ydb-cli/table-query-execute.md#options) parameter (default: `serializable-rw`, which corresponds to *Serializable*).
 * [{{ ydb-short-name }} SDK](../../reference/ydb-sdk/index.md) — see [setting the mode in the {{ ydb-short-name }} SDK](../../recipes/ydb-sdk/tx-control.md).
 

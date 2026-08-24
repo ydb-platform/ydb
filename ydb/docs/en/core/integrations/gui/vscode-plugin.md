@@ -12,7 +12,7 @@
 - Query execution and results visualization: table, JSON, chart.
 - Visualization of the [query execution plan](../../dev/query-execution-optimization/query-plans-optimization.md) (`EXPLAIN`).
 - Monitoring active sessions via [`.sys/query_sessions`](../../dev/system-views.md#query-sessions).
-- Cluster dashboard based on [{{ ydb-short-name }} Embedded UI](../../reference/embedded-ui/index.md): CPU load, memory usage, network traffic (updated every 10 seconds).
+- Cluster dashboard based on [{{ ydb-ui-name }}](../../reference/ydb-ui/index.md): CPU load, memory usage, network traffic (updated every 10 seconds).
 - Managing [access rights (ACL)](../../security/authorization.md#right): viewing permissions for database objects.
 - Generating DDL scripts ([`CREATE`](../../yql/reference/syntax/create_table/index.md)) for any database object.
 - Managing [streaming queries](../../concepts/glossary.md#streaming-query): viewing, starting, stopping.
@@ -68,7 +68,7 @@ After installing using any of the methods, restart VS Code. The **YDB** icon wil
 | **Host** | Host of the [endpoint](../../concepts/connect.md#endpoint) of the {{ ydb-name }} cluster | `ydb.example.com` |
 | **Port** | Port (default `2135`) | `2135` |
 | **Database** | Path to the [database](../../concepts/glossary.md#database) | `/Root/database` |
-| **Monitoring URL** | URL of [{{ ydb-short-name }} Embedded UI](../../reference/embedded-ui/index.md), used for the dashboard (filled in automatically based on the host, can be overridden) | `http://ydb.example.com:8765` |
+| **Monitoring URL** | URL of [{{ ydb-ui-name }}](../../reference/ydb-ui/index.md), used for the dashboard (filled in automatically based on the host, can be overridden) | `http://ydb.example.com:8765` |
 | **Secure connection (grpcs)** | Use a secure connection (`grpcs://`) | ☑ |
 | **Use RAG** | Enable [YQL documentation search](#rag) for this connection | ☑ |
 1. If necessary, specify the path to the custom CA certificate (PEM) in the **CA Certificate File** field for connections with non-standard TLS. If the field is left empty, the built-in Yandex Cloud certificate is used.
@@ -168,7 +168,7 @@ The **Database Load** panel (Activity Bar → YDB) displays real-time cluster lo
 - Network traffic.
 {% note warning %}
 
-The dashboard is available only when working with self-hosted installations of {{ ydb-short-name }} that have access to [{{ ydb-short-name }} Embedded UI](../../reference/embedded-ui/index.md). In Yandex Cloud Managed Service for {{ ydb-short-name }}, Embedded UI is not published, so dashboard data is unavailable — use [cloud platform tools](https://yandex.cloud/en/docs/ydb/operations/monitoring) for monitoring.
+The dashboard is available only when working with self-hosted installations of {{ ydb-short-name }} that have access to [{{ ydb-ui-name }}](../../reference/ydb-ui/index.md). In Yandex Cloud Managed Service for {{ ydb-short-name }}, the {{ ydb-ui-name }} is not published, so dashboard data is unavailable — use [cloud platform tools](https://yandex.cloud/en/docs/ydb/operations/monitoring) for monitoring.
 
 {% endnote %}
 ### Streaming Queries {#streaming-queries}

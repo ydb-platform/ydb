@@ -161,7 +161,7 @@ private:
     }
 
     TString LogPrefix() const {
-        return TStringBuilder() << "[" << ActorName << "] " << SelfId() << ". Owner: " << Owner << ". Ctx: " << *Ctx->UserRequestContext << ". LeaseGeneration: " << Ctx->LeaseGeneration << ". ";
+        return TStringBuilder() << "[" << ActorName << "] " << SelfId() << ". Owner: " << Owner << ". Ctx: " << *Ctx->UserRequestContext << ". ";
     }
 
     const TScriptExecutionContext::TPtr Ctx;

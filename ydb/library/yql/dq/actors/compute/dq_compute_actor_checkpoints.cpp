@@ -465,7 +465,6 @@ bool TDqComputeActorCheckpoints::SaveState() {
         PendingCheckpoint.SavedComputeActorState = true;
         ComputeActor->SaveState(*PendingCheckpoint.Checkpoint, PendingCheckpoint.ComputeActorState);
     } catch (const std::exception& e) {
-        AbortCheckpoint();
         LOG_PCP_E("Failed to save state: " << e.what());
 
         auto resultEv = MakeHolder<TEvDqCompute::TEvSaveTaskStateResult>();
@@ -473,6 +472,7 @@ bool TDqComputeActorCheckpoints::SaveState() {
         resultEv->Record.SetTaskId(Task.GetId());
         resultEv->Record.SetStatus(NDqProto::TEvSaveTaskStateResult::INTERNAL_ERROR);
         EventsQueue.Send(std::move(resultEv));
+        AbortCheckpoint();
 
         return false;
     }

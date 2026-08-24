@@ -161,7 +161,7 @@ private:
     TString SubstParameters(const TString& str);
     bool IsSExpr(bool isYql, bool isYqls, const TString& body) const;
 
-private:
+
     const NSQLTranslation::TTranslators Translators_;
     THolder<TExprContext> OwnedCtx_;
     const TModulesTable* ParentModules_ = nullptr;

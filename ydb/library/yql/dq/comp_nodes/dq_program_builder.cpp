@@ -188,11 +188,6 @@ TRuntimeNode TDqProgramBuilder::DqBlockHashJoin(TRuntimeNode leftStream, TRuntim
     MKQL_ENSURE(leftKeyColumns.size() == rightKeyColumns.size(), "Key column count mismatch");
     MKQL_ENSURE(!leftKeyColumns.empty(), "At least one key column must be specified");
 
-    // A hash table lookup marks the build side rows as matched before the filters run, so unmatched
-    // left rows of a LeftIsBuild join could no longer be told apart.
-    const bool hasFilters = leftFilter || rightFilter || commonFilter;
-    MKQL_ENSURE(!hasFilters || !settings.LeftIsBuild(), "Join filters are not supported with LeftIsBuild block join");
-
     TCallableBuilder callableBuilder(Env, __func__, returnType);
     callableBuilder.Add(leftStream);
     callableBuilder.Add(rightStream);

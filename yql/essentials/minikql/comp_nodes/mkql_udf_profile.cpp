@@ -93,7 +93,7 @@ private:
     const ui32 Precision_;
     const ui64 SizeLimit_;
     NUdf::ICountersProvider* const Provider_;
-    THashSet<ui64, std::hash<ui64>, std::equal_to<ui64>, TMKQLAllocator<ui64>> Set_;
+    THashSet<ui64, std::hash<ui64>, std::equal_to<>, TMKQLAllocator<ui64>> Set_;
     TMaybe<THyperLogLogWithAlloc<TMKQLAllocator<ui8>>> Hll_;
 
     ui64 CallCount_ = 0;

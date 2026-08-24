@@ -194,6 +194,20 @@ void TDDiskState::RangeSynced(TBlockRange64 range)
     UpdateState(false);
 }
 
+TCountAndSize TDDiskState::GetAheadSegmentsStat() const
+{
+    return TCountAndSize{
+        .Count = AheadField.GetSegmentCount(),
+        .Size = AheadField.GetBlockCount()};
+}
+
+TCountAndSize TDDiskState::GetBehindSegmentsStat() const
+{
+    return TCountAndSize{
+        .Count = BehindField.GetSegmentCount(),
+        .Size = BehindField.GetBlockCount()};
+}
+
 void TDDiskState::UpdateWatermarkDebugOnly(ui64 blockCount)
 {
     Y_ABORT_UNLESS(blockCount <= TotalBlockCount);

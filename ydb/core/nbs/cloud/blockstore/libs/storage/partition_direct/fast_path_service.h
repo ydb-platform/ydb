@@ -75,7 +75,8 @@ public:
         ui64 blockCount,
         ui32 blockSize,
         TVector<IDirectBlockGroupPtr> directBlockGroups,
-        TVChunkConfigByIndex vChunkConfigs,
+        const TVChunkConfigs& vChunkConfigs,
+        const TDirtyMapStateProtos& dirtyMapStates,
         TStorageConfigPtr storageConfig,
         ISchedulerPtr scheduler,
         ITimerPtr timer,
@@ -120,10 +121,9 @@ public:
         TDuration delay,
         NYdb::NBS::TCallback callback) override;
 
-    NThreading::TFuture<void> UpdateVChunkConfig(
-        const TVChunkConfig& cfg) override;
+    TPersistResultFuture UpdateVChunkConfig(const TVChunkConfig& cfg) override;
 
-    NThreading::TFuture<void> UpdateDirtyMapState(
+    TPersistResultFuture UpdateDirtyMapState(
         ui32 vChunkIndex,
         TDirtyMapStateProto state) override;
 

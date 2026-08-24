@@ -649,7 +649,6 @@ private:
         return status;
     }
 
-private:
     const TIntrusivePtr<TResultProviderConfig> Config_;
     IDataProvider* DelegatedProvider_ = nullptr;
     TExprNode::TPtr DelegatedNode_;
@@ -926,7 +925,6 @@ private:
         return foundDataSource;
     }
 
-private:
     const TIntrusivePtr<TResultProviderConfig> Config_;
     TProcessedNodesSet PhysicalOptProcessedNodes_;
 };

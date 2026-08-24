@@ -315,7 +315,7 @@ struct TValidateStreamingConstraintsInfo {
         const auto& name = node->Content();
         if (!node->GetConstraint<TStreamingConstraintNode>()) {
             // Sanity check, that all checkpointed callables are used in streaming context
-            if (CheckpointintCallables.contains(name)) {
+            if (CheckpointCallables.contains(name)) {
                 HasErrors = true;
                 YQL_CLOG(WARN, ProviderKqp) << "Found checkpointed callable in non streaming context: " << KqpExprToPrettyString(*node, Ctx);
                 Ctx.AddError(TIssue(Ctx.GetPosition(node->Pos()), TStringBuilder() << "Callable with checkpoints: '" << node->Content() << "' can not be used outside streaming context"));
@@ -350,7 +350,7 @@ private:
     };
 
     // Callables for which will be unconditionally allocated checkpoint storage slot
-    inline static const std::unordered_set<std::string_view> CheckpointintCallables = {
+    inline static const std::unordered_set<std::string_view> CheckpointCallables = {
         TCoMultiHoppingCore::CallableName(), "TimeOrderRecover"sv, "MatchRecognizeCore"sv
     };
 };

@@ -461,7 +461,7 @@ void TConnection::ResolveAddress()
             EndpointHostName_ = FQDNHostName();
         } catch (const std::exception& ex) {
             YT_TLOG_ERROR("Failed to resolve local host name")
-                .With(TError(ex));
+                .With(ex);
             EndpointHostName_ = "localhost";
         }
 
@@ -2243,7 +2243,7 @@ void TConnection::TryEstablishSslSession()
         sslContext->ApplyConfig(Config_, pathResolver);
     } catch (const std::exception& ex) {
         Abort(TError(NBus::EErrorCode::SslError, "Failed to load TLS/SSL certificates")
-            .With(TError(ex)));
+            .With(ex));
         return;
     }
 

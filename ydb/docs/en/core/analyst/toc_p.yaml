@@ -6,6 +6,10 @@ items:
     include:
       mode: link
       path: datasets/toc_p.yaml
+  - name: Typical OLAP scenarios
+    href: scenarios.md
+  - name: Optimizing analytical queries
+    href: optimizing.md
   - name: Practical guides
     include:
       mode: link

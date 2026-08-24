@@ -26,5 +26,17 @@ items:
       href: grpc-headers.md
     - name: Health Check API
       href: health-check-api.md
+  - name: Observability
+    items:
+    - name: SDK logs in OpenTelemetry
+      href: observability/logging/opentelemetry.md
+    - name: SDK Metrics in OpenTelemetry
+      href: observability/metrics/opentelemetry.md
+    - name: SDK Metrics in Prometheus
+      href: observability/metrics/prometheus.md
+    - name: SDK tracing in OpenTelemetry
+      href: observability/tracing/opentelemetry.md
+    - name: SDK tracing in Jaeger
+      href: observability/tracing/jaeger.md
   - name: Comparison of SDK features
     href: feature-parity.md

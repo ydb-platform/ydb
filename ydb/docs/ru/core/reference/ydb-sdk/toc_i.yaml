@@ -33,5 +33,11 @@ items:
       href: grpc-headers.md
     - name: Health Check API
       href: health-check-api.md
+  - name: Наблюдаемость
+    items:
+    - name: Логи SDK в OpenTelemetry
+      href: observability/logging/opentelemetry.md
+    - name: Метрики SDK в OpenTelemetry
+      href: observability/metrics/opentelemetry.md
   - name: Сравнение возможностей SDK
     href: feature-parity.md

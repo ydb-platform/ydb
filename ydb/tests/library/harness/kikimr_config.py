@@ -257,38 +257,31 @@ class KikimrConfigGenerator(object):
             self.__grpc_tls_data_path = grpc_tls_data_path or yatest.common.output_path()
             if generate_grpc_tls_data:
                 cert_pem, key_pem = tls_tools.generate_selfsigned_cert(_get_fqdn())
-                self.__grpc_tls_ca = cert_pem
-                self.__grpc_tls_key = key_pem
-                self.__grpc_tls_cert = cert_pem
                 for path, data in (
-                    (self.grpc_tls_ca_path, self.grpc_tls_ca),
-                    (self.grpc_tls_cert_path, self.grpc_tls_cert),
-                    (self.grpc_tls_key_path, self.grpc_tls_key),
+                    (self.grpc_tls_ca_path, cert_pem),
+                    (self.grpc_tls_cert_path, cert_pem),
+                    (self.grpc_tls_key_path, key_pem),
                 ):
                     with open(path, 'wb') as tls_file:
                         tls_file.write(data)
-            else:
-                paths = [
-                    os.path.join(self.__grpc_tls_data_path, filename)
-                    for filename in GRPC_TLS_DATA_FILES
-                ]
-                invalid_paths = [
-                    path
-                    for path in paths
-                    if not os.path.isfile(path) or os.path.getsize(path) == 0
-                ]
-                if invalid_paths:
-                    raise ValueError(
-                        'Existing gRPC TLS data requires non-empty regular files {}. Missing or invalid: {}'.format(
-                            ', '.join(GRPC_TLS_DATA_FILES),
-                            ', '.join(invalid_paths),
-                        )
+
+            paths = [
+                os.path.join(self.__grpc_tls_data_path, filename)
+                for filename in GRPC_TLS_DATA_FILES
+            ]
+            invalid_paths = [path for path in paths if not os.path.isfile(path)]
+            if invalid_paths:
+                raise ValueError(
+                    'gRPC TLS data requires regular files {}. Missing or invalid: {}'.format(
+                        ', '.join(GRPC_TLS_DATA_FILES),
+                        ', '.join(invalid_paths),
                     )
-                tls_data = []
-                for path in paths:
-                    with open(path, 'rb') as tls_file:
-                        tls_data.append(tls_file.read())
-                self.__grpc_tls_ca, self.__grpc_tls_cert, self.__grpc_tls_key = tls_data
+                )
+            tls_data = []
+            for path in paths:
+                with open(path, 'rb') as tls_file:
+                    tls_data.append(tls_file.read())
+            self.__grpc_tls_ca, self.__grpc_tls_cert, self.__grpc_tls_key = tls_data
 
         self.monitoring_tls_cert_path = None
         self.monitoring_tls_key_path = None

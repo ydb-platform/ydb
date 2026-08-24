@@ -10,6 +10,7 @@
 #include <ydb/core/cms/console/validators/registry.h>
 #include <ydb/core/config/validation/validators.h>
 #include <ydb/core/base/feature_flags.h>
+#include <ydb/public/api/protos/draft/ydb_dynamic_config.pb.h>
 
 #include <ydb/library/yaml_config/yaml_config.h>
 #include <yql/essentials/public/issue/protos/issue_severity.pb.h>

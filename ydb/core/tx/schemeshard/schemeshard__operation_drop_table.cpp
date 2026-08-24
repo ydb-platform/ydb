@@ -536,7 +536,8 @@ public:
                         .IsInsideTableIndexPath();
                     // Not build index impl tables can be dropped only as part of drop index
                     // build index impl tables dropped multiple times during index construction
-                    if (!NTableIndex::IsBuildImplTable(name)) {
+                    // Internal operations (e.g. rebuild index) are allowed to drop impl tables
+                    if (!NTableIndex::IsBuildImplTable(name) && !Transaction.GetInternal()) {
                         checks
                             .IsUnderDeleting()
                             .IsUnderTheSameOperation(OperationId.GetTxId());

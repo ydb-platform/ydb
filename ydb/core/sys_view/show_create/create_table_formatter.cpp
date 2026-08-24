@@ -266,6 +266,25 @@ TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TStr
 
     TStringStreamWrapper wrapper(Stream);
 
+    std::optional<TString> generatedContext;
+    for (const auto& column : tableDesc.GetColumns()) {
+        if (!column.HasDefaultFromExpression()) {
+            continue;
+        }
+
+        const auto& context = column.GetDefaultFromExpression().GetContext();
+        if (generatedContext && *generatedContext != context) {
+            return TFormatResult(
+                Ydb::StatusIds::UNSUPPORTED,
+                "Generated columns have inconsistent expression contexts");
+        }
+        generatedContext = context;
+    }
+
+    if (generatedContext && !generatedContext->empty()) {
+        Stream << *generatedContext << "\n";
+    }
+
     Ydb::Table::CreateTableRequest createRequest;
     if (temporary) {
         Stream << "CREATE TEMPORARY TABLE ";
@@ -1860,6 +1879,13 @@ void TCreateTableFormatter::FormatAlterColumn(const TString& fullPath, const NKi
                         EscapeName("ENABLE_NATIVE_COLUMNS", paramsStr);
                         paramsStr << "=";
                         EscapeValue(settings.GetEnableNativeColumns(), paramsStr);
+                        del = ", ";
+                    }
+                    if (settings.HasDenseEncodingVersion()) {
+                        paramsStr << del;
+                        EscapeName("DENSE_ENCODING_VERSION", paramsStr);
+                        paramsStr << "=";
+                        EscapeValue(settings.GetDenseEncodingVersion(), paramsStr);
                         del = ", ";
                     }
                     if (settings.HasDataExtractor()) {

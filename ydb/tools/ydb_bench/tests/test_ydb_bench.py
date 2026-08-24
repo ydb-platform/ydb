@@ -3,6 +3,7 @@ import inspect
 import io
 import json
 import os
+import plistlib
 import shutil
 import signal
 import socket
@@ -21,7 +22,7 @@ from urllib.error import HTTPError
 from urllib.parse import quote
 from unittest import mock
 
-from ydb.tools.ydb_bench.lib import actors_core, cli, import_results, runner, web
+from ydb.tools.ydb_bench.lib import actors_core, cli, import_results, runner, topology, web
 from ydb.tools.ydb_bench.lib.actors_core import (
     PING_BENCHMARK,
     STAR_PING_BENCHMARK,
@@ -44,13 +45,22 @@ from ydb.tools.ydb_bench.lib.results import ResultStore, SCHEMA_VERSION, load_ma
 from ydb.tools.ydb_bench.lib.runner import run_command
 from ydb.tools.ydb_bench.lib.topology import (
     CpuTopology,
+    _parse_darwin_topology,
     discover_topology,
     parse_cpu_list,
     plan_affinity,
+    plan_background_load,
     topology_record,
 )
 from ydb.tools.ydb_bench.lib.import_results import export_archive, import_archive
-from ydb.tools.ydb_bench.lib.web import RunService, chart_data, comparison_keys, make_server, read_model
+from ydb.tools.ydb_bench.lib.web import (
+    RunService,
+    _add_memory_fairness_rows,
+    chart_data,
+    comparison_keys,
+    make_server,
+    read_model,
+)
 
 
 class YdbBenchTest(unittest.TestCase):
@@ -1206,6 +1216,58 @@ class YdbBenchTest(unittest.TestCase):
     def test_cpu_list_parser(self):
         self.assertEqual(parse_cpu_list("0-3,8,10-11\n"), (0, 1, 2, 3, 8, 10, 11))
 
+    def test_darwin_topology_uses_device_tree_clusters(self):
+        entries = []
+        for cpu, cluster, kind in ((0, 0, "E"), (1, 0, "E"), (2, 1, "P"), (3, 1, "P"), (4, 2, "P")):
+            entries.append(
+                {
+                    "logical-cpu-id": cpu,
+                    "cluster-id": cluster.to_bytes(4, byteorder="little"),
+                    "cluster-type": kind.encode("ascii") + b"\0",
+                }
+            )
+        entries.append(entries[0].copy())
+        topology = _parse_darwin_topology(
+            plistlib.dumps([{"IORegistryEntryChildren": entries}]),
+            (0, 1, 2, 3, 4),
+        )
+
+        self.assertEqual(topology.chiplets, ((0, (0, 1)), (0, (2, 3)), (0, (4,))))
+        self.assertEqual(
+            topology.chiplet_labels,
+            (
+                ((0, 1), "Efficiency cluster"),
+                ((2, 3), "Performance cluster 1"),
+                ((4,), "Performance cluster 2"),
+            ),
+        )
+        self.assertEqual(topology.physical_cores, ((0,), (1,), (2,), (3,), (4,)))
+        self.assertEqual(topology.smt_siblings, topology.physical_cores)
+        self.assertEqual(topology_record(topology)["chiplets"][0]["label"], "Efficiency cluster")
+
+    def test_darwin_topology_rejects_conflicting_cpu_entries(self):
+        entries = [
+            {"logical-cpu-id": 0, "cluster-id": 0, "cluster-type": b"E\0"},
+            {"logical-cpu-id": 0, "cluster-id": 1, "cluster-type": b"P\0"},
+        ]
+
+        self.assertIsNone(
+            _parse_darwin_topology(
+                plistlib.dumps([{"IORegistryEntryChildren": entries}]),
+                (0,),
+            )
+        )
+
+    def test_darwin_topology_discovery_times_out(self):
+        with mock.patch.object(
+            topology.subprocess,
+            "run",
+            side_effect=topology.subprocess.TimeoutExpired("ioreg", 10),
+        ) as run:
+            self.assertIsNone(topology._discover_darwin_topology((0,)))
+
+        self.assertEqual(run.call_args.kwargs["timeout"], 10)
+
     def test_topology_discovery_intersects_sysfs_with_allowed_cpus(self):
         sys_root = self.root / "sys" / "devices" / "system"
         for node_id, cpus in ((0, "0-3"), (1, "4-7")):
@@ -1428,6 +1490,26 @@ class YdbBenchTest(unittest.TestCase):
                 with self.subTest(mode=mode):
                     self.assertEqual(plan_affinity(mode, topology, 3).cpus, cpus)
 
+    def test_unpinned_all_numa_background_requires_multiple_numa_nodes(self):
+        single_node = CpuTopology(
+            allowed_cpus=(0, 1, 2, 3),
+            numa_nodes=((0, (0, 1, 2, 3)),),
+            chiplets=((0, (0, 1, 2, 3)),),
+            physical_cores=((0,), (1,), (2,), (3,)),
+        )
+        unsupported = plan_background_load("coherence-all-numa", single_node, None, 1)
+        self.assertFalse(unsupported.supported)
+        self.assertIn("at least two NUMA nodes", unsupported.reason)
+
+        two_nodes = replace(
+            single_node,
+            numa_nodes=((0, (0, 1)), (1, (2, 3))),
+            chiplets=((0, (0, 1)), (1, (2, 3))),
+        )
+        supported = plan_background_load("coherence-all-numa", two_nodes, None, 1)
+        self.assertTrue(supported.supported)
+        self.assertEqual(supported.workers, 2)
+
     def test_unavailable_affinity_mode_is_reported_not_guessed(self):
         topology = CpuTopology(
             allowed_cpus=(0, 1),
@@ -1439,7 +1521,7 @@ class YdbBenchTest(unittest.TestCase):
         self.assertFalse(placement.supported)
         self.assertIn("spread-numa", placement.reason)
 
-    def test_run_fails_when_all_affinity_modes_are_unsupported(self):
+    def test_run_skips_when_all_affinity_modes_are_unsupported(self):
         script = self._script("exit 99")
         output = self.root / "unsupported-output"
         output.mkdir()
@@ -1462,8 +1544,8 @@ class YdbBenchTest(unittest.TestCase):
 
         with mock.patch.object(actors_core, "discover_topology", return_value=topology), mock.patch.object(
             os, "sched_setaffinity", create=True
-        ), self.assertRaisesRegex(BenchmarkError, "none of the selected affinity modes is supported"):
-            run_actors_core(
+        ):
+            result = run_actors_core(
                 self._binary(script),
                 configuration,
                 output,
@@ -1471,13 +1553,17 @@ class YdbBenchTest(unittest.TestCase):
             )
 
         manifest = json.loads((output / "run.json").read_text())
-        self.assertEqual(manifest["status"], "failed")
-        self.assertEqual(manifest["state"], "failed")
+        self.assertEqual(result["status"], "unsupported")
+        self.assertEqual(manifest["status"], "unsupported")
+        self.assertEqual(manifest["state"], "unsupported")
         self.assertIn("finished_at", manifest)
-        self.assertIn("spread-numa-pack-chiplet", manifest["error"])
+        self.assertIn("unsupported", manifest["error"])
         self.assertEqual(manifest["runs"], [])
         self.assertEqual(manifest["affinity"][0]["status"], "unsupported")
-        self.assertFalse((output / "summary.csv").exists())
+        self.assertTrue((output / "summary.csv").exists())
+        self.assertEqual(manifest["summary"], "summary.csv")
+        self.assertEqual(manifest["repetitions"], "repetitions.csv")
+        self.assertEqual(manifest["summary_rows"], 0)
 
 
 class WebTest(unittest.TestCase):
@@ -1860,6 +1946,35 @@ class WebTest(unittest.TestCase):
         self.assertEqual(value["series"][1]["cpus"], [0, 1, 2, 4])
         self.assertIn("dimension_metadata", value)
 
+    def test_memory_fairness_is_derived_per_repeat_before_aggregation(self):
+        dimensions = ["threads", "random_percent", "scope", "worker_aggregation"]
+        rows = []
+        for repeat, minimum, maximum, mean in ((1, 80, 120, 100), (2, 90, 110, 100)):
+            for aggregation, value in (("min", minimum), ("max", maximum), ("mean", mean)):
+                rows.append(
+                    {
+                        "threads": 4,
+                        "random_percent": 50,
+                        "scope": "random",
+                        "worker_aggregation": aggregation,
+                        "repeat_aggregation": "raw",
+                        "repeat": repeat,
+                        "ops_per_sec": value,
+                    }
+                )
+        grouped = {"none": rows}
+        _add_memory_fairness_rows(grouped, dimensions)
+        raw = [row for row in rows if row.get("worker_aggregation") == "fairness" and row["repeat"] != "*"]
+        self.assertEqual([row["worker_max_min_spread_pct"] for row in raw], [40, 20])
+        self.assertEqual([row["worker_mean_min_gap_pct"] for row in raw], [20, 10])
+        median = next(
+            row
+            for row in rows
+            if row.get("worker_aggregation") == "fairness" and row.get("repeat_aggregation") == "median"
+        )
+        self.assertEqual(median["worker_max_min_spread_pct"], 30)
+        self.assertEqual(median["worker_mean_min_gap_pct"], 15)
+
     def test_web_static_api_is_csp_protected_and_read_only(self):
         self._manifest(self.root / "complete")
         server = make_server("127.0.0.1", 0, self.root)
@@ -1873,6 +1988,18 @@ class WebTest(unittest.TestCase):
             with urllib.request.urlopen(base + "/app.js") as response:
                 script = response.read()
                 self.assertIn(b"System topology", script)
+                self.assertIn(b"NUMA, cache and cores", script)
+                self.assertIn(b"function affinityTree", script)
+                self.assertIn(b"class=affinity-tree", script)
+                self.assertIn(b"SMT threads", script)
+                self.assertIn(b"<span class=cpu-ranges>vCPU ", script)
+                self.assertNotIn(b"(core.index+1)", script)
+                self.assertIn(b"Unavailable", script)
+                self.assertNotIn(b"Use in new run", script)
+                self.assertNotIn(b"data-mode", script)
+                self.assertNotIn(b"<th>First mask</th>", script)
+                self.assertNotIn(b"Physical cores (", script)
+                self.assertNotIn(b"SMT sibling sets (", script)
                 self.assertIn(b"New run", script)
                 self.assertIn(b"<th>Duration</th>", script)
                 self.assertIn(b"<th>Runs</th>", script)
@@ -1891,8 +2018,29 @@ class WebTest(unittest.TestCase):
                 self.assertIn(b"function parameterCases", script)
                 self.assertIn(b"class=parameter-choice", script)
                 self.assertIn(b"Incomplete data:", script)
+                self.assertIn(b"internal gaps break chart lines", script)
+                self.assertIn(b"segments.push(segment)", script)
+                self.assertIn(b"for(const points of segments)", script)
                 self.assertIn(b"function mountChartBuilder", script)
+                self.assertIn(b"function defaultActorCharts", script)
+                self.assertIn(b"function defaultMemoryCharts", script)
+                self.assertIn(b"function defaultChartScope", script)
+                self.assertIn(b"['actorPairs','in_flight']", script)
+                self.assertIn(b"['actorPairs','star_multiply']", script)
+                self.assertIn(b"metric:'median_msgs_per_sec'", script)
+                self.assertIn(b"chartTitle=scope.title", script)
+                self.assertIn(b"title:facets.map", script)
+                self.assertIn(b"worker_max_min_spread_pct", script)
+                self.assertIn(b"worker_mean_min_gap_pct", script)
                 self.assertIn(b"function mountSingleChart", script)
+                self.assertIn(b"function chartMultiplierDimensions", script)
+                self.assertIn(b"function labelExpandedSeries", script)
+                self.assertIn(b"queried.has(name)", script)
+                self.assertIn(b"varyingFacets", script)
+                self.assertIn(b"matched.map(item=>item.facets", script)
+                self.assertIn(b"indexed.length===1", script)
+                self.assertIn(b"singleProfile:true", script)
+                self.assertIn(b"{...chart,id:nextId++}", script)
                 self.assertIn(b"function expandedSeries", script)
                 self.assertIn(b"Add line row", script)
                 self.assertIn(b"class=query-row", script)

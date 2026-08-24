@@ -9,6 +9,9 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
+ENABLE(TIDY_ALLOW_GENERATED)
+SET(TIDY_HEADER_FILTER "${ARCADIA_ROOT}/yql/essentials/minikql/computation/")
+
 SRCDIR(yql/essentials/minikql/computation)
 
 SRCS(

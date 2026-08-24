@@ -15,7 +15,15 @@ struct TJsonIndexSettings {
     NYql::TKqpReadTableFullTextIndexSettings Settings;
 };
 
+enum class EJsonIndexSelectionMode {
+    Explicit,
+    Automatic,
+};
+
 std::expected<TJsonIndexSettings, NYql::TIssue> CollectJsonIndexPredicate(const NYql::NNodes::TExprBase& body,
-    const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx, const THashSet<TString>& jsonIndexedColumns);
+    const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx, const THashSet<TString>& jsonIndexedColumns,
+    const TVector<TString>& prefixColumns = {},
+    const TVector<std::pair<TString, NYql::TExprNode::TPtr>>& seedPrefixColumns = {},
+    EJsonIndexSelectionMode selectionMode = EJsonIndexSelectionMode::Explicit);
 
 }   // namespace NKikimr::NKqp::NOpt

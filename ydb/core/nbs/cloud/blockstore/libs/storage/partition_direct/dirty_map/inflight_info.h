@@ -178,6 +178,12 @@ public:
     // Removes the lock that prohibits erasing the PBuffer.
     void UnlockPBuffer();
 
+    // The generation of the DirtyMap persisted state. If a generation has been
+    // assigned, it means that erasing can only be started after saving of data
+    // from that or higher generation in the partition local database.
+    void SetPersistGeneration(ui32 persistGeneration);
+    [[nodiscard]] ui32 GetPersistGeneration() const;
+
     TString DebugPrint(TInstant now) const;
 
 private:
@@ -204,6 +210,7 @@ private:
     TInstant StartAt;
     size_t PBuffersLockCount = 0;
     NThreading::TPromise<void> QuorumReadyPromise;
+    ui32 PersistGeneration = 0;
 
     THostMask DesiredDDisks;
     THostMask Disabled;

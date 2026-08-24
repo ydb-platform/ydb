@@ -4,6 +4,7 @@
 #include "scan_snapshot_guard.h"
 
 #include "blobs_action/bs/storage.h"
+#include "blobs_action/common/const.h"
 #include "blobs_reader/task.h"
 #include "common/tablet_id.h"
 #include "resource_subscriber/task.h"
@@ -494,6 +495,13 @@ void TColumnShard::RunAlterStore(
         TablesManager.AddSchemaVersion(presetProto.GetId(), version, presetProto.GetSchema(), db);
     }
     ApplyColumnShardConfig();
+}
+
+// Portions live on the data channels and are written by TBlobManager, not by the executor,
+// so only our own drain-gated cutter may cut their history. Channels 0 and 1 hold the log
+// and the local database and stay with the executor's cutter.
+bool TColumnShard::HasExternallyWrittenBlobs(ui32 channel) const {
+    return channel >= NOlap::NBlobOperations::TGlobal::FirstDataChannel;
 }
 
 void TColumnShard::EnqueueBackgroundActivities(const bool periodic) {

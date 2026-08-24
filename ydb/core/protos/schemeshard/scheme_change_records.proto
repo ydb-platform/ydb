@@ -71,6 +71,17 @@ message TEvRegisterSubscriberResult {
 // One user-level TModifyScheme. `Body` (via TEvFetchSchemeChangeRecordBodies)
 // is the source of truth; the metadata fields below are advisory and may be
 // unset when the operation targets no single identifiable path.
+//
+// Consumer contract:
+// - Body is authoritative except for fields listed in RedactedFields, which
+//   were stripped before persisting and are never recoverable from the record.
+// - Cross-cluster identity is Path (database-relative), not PathId: PathId is
+//   source-local and meaningless on another cluster.
+// - Partitioning and partition config are not carried here; a consumer gets
+//   them from a snapshot taken at restore time, not from this record.
+// - The record is not directly executable: a consumer must translate any
+//   request that names its target by source-local id or absolute path
+//   (TDrop.Id, TMove.SrcPath/DstPath) into its own namespace first.
 message TSchemeChangeRecord {
     uint64 Order = 1;
     uint64 TxId = 2;
@@ -88,6 +99,10 @@ message TSchemeChangeRecord {
     // No tiebreak: records equal on both are concurrent, so consumers must not
     // infer an order from delivery. TxId is identity, never an order.
     optional TSchemeChangePosition.EKind PositionKind = 14;
+    // Paths of fields cleared from Body by redaction. Empty when redaction is
+    // disabled or nothing in this record was sensitive; never inferred from
+    // absence alone.
+    repeated string RedactedFields = 15;
 }
 
 // Request metadata for records after the given order, up to MaxCount entries.

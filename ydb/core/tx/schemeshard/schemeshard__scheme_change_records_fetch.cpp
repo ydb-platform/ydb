@@ -2,6 +2,8 @@
 
 #include <ydb/core/base/appdata.h>
 
+#include <util/string/split.h>
+
 namespace NKikimr::NSchemeShard {
 
 namespace {
@@ -261,6 +263,14 @@ struct TTxFetchSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBas
             entry->SetPositionKind(static_cast<NKikimrSchemeShard::TSchemeChangePosition::EKind>(
                 rowset.GetValueOrDefault<Schema::SchemeChangeRecords::PositionKind>(
                     NKikimrSchemeShard::TSchemeChangePosition::KIND_EXACT)));
+            {
+                const TString redacted = rowset.GetValueOrDefault<Schema::SchemeChangeRecords::RedactedFields>(TString());
+                if (!redacted.empty()) {
+                    for (const auto& field : StringSplitter(redacted).Split('\n')) {
+                        entry->AddRedactedFields(TString(field.Token()));
+                    }
+                }
+            }
 
             ++count;
 

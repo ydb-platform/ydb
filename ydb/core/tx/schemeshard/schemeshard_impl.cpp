@@ -8856,6 +8856,7 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfi
             LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "Ignoring MaxSchemeChangeRecords=0, keeping " << MaxSchemeChangeRecords);
         }
+        RedactSchemeChangeSensitiveFields = schemeShardConfig.GetRedactSensitiveSchemeChangeFields();
         SchemeChangeSubscriberStaleTtl =
             TDuration::Seconds(schemeShardConfig.GetSchemeChangeSubscriberStaleTtlSeconds());
     }

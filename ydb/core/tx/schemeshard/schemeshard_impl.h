@@ -287,6 +287,10 @@ public:
     // Highest outbox order known deleted. Cleanup resumes above it.
     ui64 SchemeChangeFloorOrder = 0;
     ui64 MaxSchemeChangeRecords = 100000;
+    // Strip (Ydb.sensitive) fields before persisting scheme change record
+    // bodies. Disabling persists and serves credentials to every subscriber
+    // over a protocol with no authentication; only safe once that exists.
+    bool RedactSchemeChangeSensitiveFields = true;
     // Diagnostic only. A stale subscriber still holds the retention floor.
     TDuration SchemeChangeSubscriberStaleTtl = TDuration::Days(30);
     ui64 MaxSchemeChangeSubscribers = 100;

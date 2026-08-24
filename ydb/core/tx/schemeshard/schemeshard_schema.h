@@ -2716,11 +2716,15 @@ struct Schema : NIceDb::Schema {
         struct Description :   Column<14, NScheme::NTypeIds::String, false, true> {}; // Sensitive: may describe a secret
         // NKikimrSchemeShard::TSchemeChangePosition::EKind
         struct PositionKind :  Column<15, NScheme::NTypeIds::Uint32> {};
+        // Newline-joined field paths cleared by redaction; empty when
+        // redaction was disabled or nothing sensitive was present.
+        struct RedactedFields : Column<16, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<Order>;
         using TColumns = TableColumns<Order, TxId, OperationType, PathOwnerId, PathLocalId,
                                       Path, ObjectType, Status, UserSID, SchemaVersion,
-                                      CompletedAtUs, PlanStep, BodySizeBytes, Description, PositionKind>;
+                                      CompletedAtUs, PlanStep, BodySizeBytes, Description, PositionKind,
+                                      RedactedFields>;
     };
 
     struct SchemeChangeRecordDetails : Table<143> {

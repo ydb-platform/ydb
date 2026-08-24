@@ -213,6 +213,8 @@ struct TSchemeChangeRecordEntry {
     NKikimrSchemeOp::TModifyScheme Body;
     // Resolved description captured when the record was written; empty if none.
     TString Description;
+    // Field paths cleared by redaction; empty when nothing was cleared.
+    TVector<TString> RedactedFields;
 };
 
 struct TSchemeChangeRecordsReadResult {
@@ -255,6 +257,9 @@ inline TSchemeChangeRecordsReadResult ReadSchemeChangeRecordsFull(
         entry.SchemaVersion = proto.GetSchemaVersion();
         entry.CompletedAtUs = proto.GetCompletedAtUs();
         entry.PositionKind = (ui32)proto.GetPositionKind();
+        for (const auto& field : proto.GetRedactedFields()) {
+            entry.RedactedFields.push_back(field);
+        }
         if (proto.GetBodySizeBytes() > 0) {
             ordersWithBody.push_back(proto.GetOrder());
         }
@@ -318,6 +323,7 @@ inline TVector<ui64> ProbeRecordOrdersPresent(
 struct TSchemeShardConfigOverrides {
     TMaybe<ui64> MaxSchemeChangeRecords;
     TMaybe<ui64> SchemeChangeSubscriberStaleTtlSeconds;
+    TMaybe<bool> RedactSensitiveSchemeChangeFields;
 };
 
 inline void ApplySchemeShardConfig(
@@ -330,6 +336,9 @@ inline void ApplySchemeShardConfig(
     }
     if (overrides.SchemeChangeSubscriberStaleTtlSeconds) {
         cfg.SetSchemeChangeSubscriberStaleTtlSeconds(*overrides.SchemeChangeSubscriberStaleTtlSeconds);
+    }
+    if (overrides.RedactSensitiveSchemeChangeFields) {
+        cfg.SetRedactSensitiveSchemeChangeFields(*overrides.RedactSensitiveSchemeChangeFields);
     }
     SetConfig(runtime, TTestTxConfig::SchemeShard, std::move(request));
 }

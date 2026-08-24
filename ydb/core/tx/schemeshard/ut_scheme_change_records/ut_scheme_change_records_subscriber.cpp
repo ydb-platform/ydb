@@ -6,6 +6,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
 #include <util/string/printf.h>
+#include <util/string/join.h>
 
 using namespace NKikimr;
 using namespace NSchemeShard;
@@ -2858,6 +2859,194 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
                 "the plaintext replication password must not appear in a persisted record body");
             UNIT_ASSERT_C(!rec.Description.Contains(password),
                 "the plaintext replication password must not appear in a persisted description");
+        }
+        UNIT_ASSERT_C(sawReplicationOp,
+            "the CreateReplication op must itself be among the records checked");
+    }
+
+    Y_UNIT_TEST(RedactedFieldsNamesTheStrippedPassword) {
+        // A consumer must be able to tell "no password was set" from
+        // "a password was stripped" -- RedactedFields is that signal.
+        TTestBasicRuntime runtime;
+        TTestEnvOptions opts;
+        opts.EnableSchemeChangeRecords(true);
+        opts.InitYdbDriver(true);
+        TTestEnv env(runtime, opts);
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "redact:sub", regHandle);
+
+        const TString password = "s3cr3t-replication-pwd";
+        TestCreateReplication(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            Name: "Replication"
+            Config {
+              SrcConnectionParams {
+                StaticCredentials {
+                  User: "user"
+                  Password: "%s"
+                }
+              }
+              Specific {
+                Targets {
+                  SrcPath: "/MyRoot1/Table"
+                  DstPath: "/MyRoot2/Table"
+                }
+              }
+            }
+        )", password.c_str()));
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        bool sawReplicationOp = false;
+        for (const auto& rec : entries) {
+            if (rec.OperationType == (ui32)NKikimrSchemeOp::ESchemeOpCreateReplication) {
+                sawReplicationOp = true;
+                UNIT_ASSERT_C(!rec.RedactedFields.empty(),
+                    "a record with a stripped password must name what was stripped");
+                bool namesPassword = false;
+                for (const auto& field : rec.RedactedFields) {
+                    if (field.Contains("Password")) {
+                        namesPassword = true;
+                    }
+                }
+                UNIT_ASSERT_C(namesPassword,
+                    "RedactedFields must name the password field, got: "
+                        << JoinSeq(",", rec.RedactedFields));
+            }
+        }
+        UNIT_ASSERT_C(sawReplicationOp,
+            "the CreateReplication op must itself be among the records checked");
+    }
+
+    Y_UNIT_TEST(RedactedFieldsEmptyWhenNothingSensitive) {
+        // Guards against a walker that reports every field it visits, not
+        // just the ones actually cleared.
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "plain:sub", regHandle);
+
+        TestMkDir(runtime, ++txId, "/MyRoot", "Dir");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        bool sawMkDir = false;
+        for (const auto& rec : entries) {
+            if (rec.OperationType == (ui32)NKikimrSchemeOp::ESchemeOpMkDir) {
+                sawMkDir = true;
+                UNIT_ASSERT_C(rec.RedactedFields.empty(),
+                    "a record with nothing sensitive must have an empty RedactedFields");
+            }
+        }
+        UNIT_ASSERT_C(sawMkDir,
+            "the MkDir op must itself be among the records checked");
+    }
+
+    Y_UNIT_TEST(RedactionDisabledPersistsSensitiveFields) {
+        // With the flag off, credentials are persisted in the outbox body and
+        // served to every subscriber over a protocol with no authentication
+        // (removed deliberately; subscriber-side auth does not exist yet).
+        // The flag is only safe once that exists.
+        TTestBasicRuntime runtime;
+        TTestEnvOptions opts;
+        opts.EnableSchemeChangeRecords(true);
+        opts.InitYdbDriver(true);
+        TTestEnv env(runtime, opts);
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "unredacted:sub", regHandle);
+
+        ApplySchemeShardConfig(runtime, TSchemeShardConfigOverrides{
+            .RedactSensitiveSchemeChangeFields = false,
+        });
+
+        const TString password = "s3cr3t-replication-pwd";
+        TestCreateReplication(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            Name: "Replication"
+            Config {
+              SrcConnectionParams {
+                StaticCredentials {
+                  User: "user"
+                  Password: "%s"
+                }
+              }
+              Specific {
+                Targets {
+                  SrcPath: "/MyRoot1/Table"
+                  DstPath: "/MyRoot2/Table"
+                }
+              }
+            }
+        )", password.c_str()));
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        bool sawReplicationOp = false;
+        for (const auto& rec : entries) {
+            if (rec.OperationType != (ui32)NKikimrSchemeOp::ESchemeOpCreateReplication) {
+                continue;
+            }
+            sawReplicationOp = true;
+            TString serializedBody;
+            UNIT_ASSERT(rec.Body.SerializeToString(&serializedBody));
+            UNIT_ASSERT_C(!serializedBody.empty(),
+                "the CreateReplication record must carry a non-empty body for this test to mean anything");
+            UNIT_ASSERT_C(serializedBody.Contains(password),
+                "with redaction disabled the plaintext password must be present in the body");
+            UNIT_ASSERT_C(rec.RedactedFields.empty(),
+                "with redaction disabled nothing was cleared, so RedactedFields must be empty");
+        }
+        UNIT_ASSERT_C(sawReplicationOp,
+            "the CreateReplication op must itself be among the records checked");
+    }
+
+    Y_UNIT_TEST(RedactionIsOnByDefault) {
+        // With no config applied, the secret must be absent -- the safe
+        // default given the protocol has no subscriber-side authentication.
+        TTestBasicRuntime runtime;
+        TTestEnvOptions opts;
+        opts.EnableSchemeChangeRecords(true);
+        opts.InitYdbDriver(true);
+        TTestEnv env(runtime, opts);
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "default:sub", regHandle);
+
+        const TString password = "s3cr3t-replication-pwd";
+        TestCreateReplication(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            Name: "Replication"
+            Config {
+              SrcConnectionParams {
+                StaticCredentials {
+                  User: "user"
+                  Password: "%s"
+                }
+              }
+              Specific {
+                Targets {
+                  SrcPath: "/MyRoot1/Table"
+                  DstPath: "/MyRoot2/Table"
+                }
+              }
+            }
+        )", password.c_str()));
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        bool sawReplicationOp = false;
+        for (const auto& rec : entries) {
+            TString serializedBody;
+            UNIT_ASSERT(rec.Body.SerializeToString(&serializedBody));
+            if (rec.OperationType == (ui32)NKikimrSchemeOp::ESchemeOpCreateReplication) {
+                sawReplicationOp = true;
+            }
+            UNIT_ASSERT_C(!serializedBody.Contains(password),
+                "the plaintext replication password must not appear in a persisted record body by default");
         }
         UNIT_ASSERT_C(sawReplicationOp,
             "the CreateReplication op must itself be among the records checked");

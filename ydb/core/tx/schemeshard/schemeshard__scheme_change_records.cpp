@@ -1,6 +1,8 @@
 #include "schemeshard_impl.h"
 #include "schemeshard_path_describer.h"
 
+#include <util/string/join.h>
+
 namespace NKikimr::NSchemeShard {
 
 namespace {
@@ -137,9 +139,13 @@ bool TSchemeShard::PersistSchemeChangeRecordAtPropose(NIceDb::TNiceDb& db, TTxId
     TMaybe<TResolvedSchemeChangePath> path = ResolveSchemeChangePath(userTx, this);
 
     // Redact every (Ydb.sensitive) field before persisting: passwords, access
-    // keys, and secret values must never reach the outbox or subscribers.
+    // keys, and secret values must never reach the outbox or subscribers --
+    // unless the operator has explicitly disabled this via config.
     NKikimrSchemeOp::TModifyScheme redacted = userTx;
-    ClearSensitiveFields(&redacted);
+    TVector<TString> redactedFields;
+    if (RedactSchemeChangeSensitiveFields) {
+        ClearSensitiveFields(&redacted, redactedFields);
+    }
 
     TString body;
     {
@@ -162,6 +168,7 @@ bool TSchemeShard::PersistSchemeChangeRecordAtPropose(NIceDb::TNiceDb& db, TTxId
         NIceDb::TUpdate<T::Status>(ui32(NKikimrScheme::StatusAccepted)),
         NIceDb::TUpdate<T::UserSID>(userSid),
         NIceDb::TUpdate<T::BodySizeBytes>(body.size()),
+        NIceDb::TUpdate<T::RedactedFields>(JoinSeq("\n", redactedFields)),
         // Zero until finalisation; the fetch path stops here so an in-flight
         // record is never handed out.
         NIceDb::TUpdate<T::CompletedAtUs>(ui64(0))

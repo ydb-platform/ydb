@@ -69,6 +69,26 @@ private:
     std::unordered_map<ui64, TIterator> Index;
 };
 
+// Structured parameters for TLI logging to improve readability
+struct TTliLogParams {
+    TString Component;
+    TString Message;
+    TString QueryText;
+
+    struct TQueryInfo {
+        TMaybe<ui64> Id;
+        TString Text;
+    };
+    TVector<TQueryInfo> OtherQueries;
+
+    TString TraceId;
+    TMaybe<ui64> BreakerQuerySpanId;
+    TMaybe<ui64> VictimQuerySpanId;
+    TMaybe<ui64> CurrentQuerySpanId;
+    TString VictimQueryText;
+    bool IsCommitAction = false;
+};
+
 // Collects query texts and QuerySpanIds for TLI logging and victim stats attribution
 class TQueryTextCollector {
 public:
@@ -94,22 +114,16 @@ public:
     }
 
     // Combine all query texts into a single string for logging
-    TString CombineQueryTexts() const {
+    TVector<NDataIntegrity::TTliLogParams::TQueryInfo> CombineQueryTexts() const {
         if (QueryTexts.empty()) {
-            return "";
+            return {};
         }
 
-        TStringBuilder builder;
-        builder << "[";
+        TVector<NDataIntegrity::TTliLogParams::TQueryInfo> result;
         for (size_t i = 0; i < QueryTexts.size(); ++i) {
-            if (i > 0) {
-                builder << " | ";
-            }
-            builder << "QuerySpanId=" << QueryTexts[i].first
-                << " QueryText=" << QueryTexts[i].second;
+            result.push_back(NDataIntegrity::TTliLogParams::TQueryInfo{QueryTexts[i].first, QueryTexts[i].second});
         }
-        builder << "]";
-        return builder;
+        return result;
     }
 
     // Check if there are any query texts
@@ -160,20 +174,6 @@ private:
     std::deque<std::pair<ui64, TString>> QueryTexts;
 };
 
-// Structured parameters for TLI logging to improve readability
-struct TTliLogParams {
-    TString Component;
-    TString Message;
-    TString QueryText;
-    TString QueryTexts;
-    TString TraceId;
-    TMaybe<ui64> BreakerQuerySpanId;
-    TMaybe<ui64> VictimQuerySpanId;
-    TMaybe<ui64> CurrentQuerySpanId;
-    TString VictimQueryText;
-    bool IsCommitAction = false;
-};
-
 inline void LogTli(const TTliLogParams& params, const NActors::TActorContext& ctx) {
     if (!IS_CTX_LOG_PRIORITY_ENABLED(ctx, NActors::NLog::PRI_INFO, NKikimrServices::TLI, 0)) {
         return;
@@ -202,16 +202,34 @@ inline void LogTli(const TTliLogParams& params, const NActors::TActorContext& ct
     }
 
     // Use appropriate field names based on breaker vs victim
-    if (isBreaker) {
-        YDB_LOG_UPDATE_MESSAGE(message,
-            {"breakerQueryText", EscapeC(params.QueryText)},
-            {"breakerQueryTexts", EscapeC(params.QueryTexts)});
-    } else {
-        YDB_LOG_UPDATE_MESSAGE(message,
-            {"victimQueryText", EscapeC(params.VictimQueryText)},
-            {"victimQueryTexts", EscapeC(params.QueryTexts)});
+    for(auto& allQueriesItem : params.OtherQueries) {
+        if (isBreaker) {
+            if (allQueriesItem.Text == params.QueryText) {
+                YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::TLI, "",
+                    message,
+                    {"breakerQueryText", params.QueryText});
+            }
+            else {
+                YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::TLI, "",
+                    message,
+                    {"breakerQueryText", params.QueryText},
+                    {"otherBreakerQueryText", allQueriesItem.Text});
+            }
+        }
+        else {
+            if (allQueriesItem.Text == params.VictimQueryText) {
+                YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::TLI, "",
+                    message,
+                    {"victimQueryText", params.VictimQueryText});
+            }
+            else {
+                YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::TLI, "",
+                    message,
+                    {"victimQueryText", params.VictimQueryText},
+                    {"otherVictimQueryText", allQueriesItem.Text});
+            }
+        }
     }
-    YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::TLI, "", message);
 }
 
 }

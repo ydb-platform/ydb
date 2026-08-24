@@ -44,33 +44,22 @@ inline void LogLocksBroken(const NActors::TActorContext& ctx, const ui64 tabletI
             YDB_LOG_UPDATE_MESSAGE(stlogMessageTLI,
                 {"breakerQuerySpanId", ToString(*breakerQuerySpanId)});
         }
-        TStringStream victimQuerySpanIdStr;
-        for (size_t i = 0; i < victimQuerySpanIds.size(); ++i) {
-            victimQuerySpanIdStr << victimQuerySpanIds[i];
-            if (i + 1 < victimQuerySpanIds.size()) {
-                victimQuerySpanIdStr << " ";
-            }
+        for(auto victimQuerySpanId: victimQuerySpanIds) {
+            YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::TLI, "",
+                stlogMessageTLI,
+                {"otherVictimQuerySpanId", victimQuerySpanId});
         }
-        YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::TLI, "",
-            stlogMessageTLI,
-            {"victimQuerySpanIds", victimQuerySpanIdStr.Str()});
     }
 
     // Log to DATA_INTEGRITY service (only if we have broken locks)
     if (canLogIntegrity) {
-        TStringStream brokenLocksStr;
-        for (size_t i = 0; i < brokenLocks.size(); ++i) {
-            brokenLocksStr << brokenLocks[i];
-            if (i + 1 < brokenLocks.size()) {
-                brokenLocksStr << " ";
-            }
+        for(auto brokenLock: brokenLocks) {
+            YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
+                stlogMessage,
+                {"component", "DataShard"},
+                {"type", "Locks"},
+                {"brokenLock", brokenLock});
         }
-
-        YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
-            stlogMessage,
-            {"component", "DataShard"},
-            {"type", "Locks"},
-            {"brokenLocks", brokenLocksStr.Str()});
     }
 
 }

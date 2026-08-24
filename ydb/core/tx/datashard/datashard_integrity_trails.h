@@ -128,17 +128,14 @@ inline void LogIntegrityTrailsLocks(const TActorContext& ctx, const ui64 tabletI
         return;
     }
 
-    TStringStream brokenLocks;
     for (const auto& lock : locks) {
-        brokenLocks << lock << " ";
+        YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
+            {"component", "DataShard"},
+            {"type", "Locks"},
+            {"tabletId", ToString(tabletId)},
+            {"phyTxId", ToString(txId)},
+            {"brokenLock", lock});
     }
-
-    YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
-        {"component", "DataShard"},
-        {"type", "Locks"},
-        {"tabletId", ToString(tabletId)},
-        {"phyTxId", ToString(txId)},
-        {"brokenLocks", brokenLocks.Str()});
 }
 
 template <typename TxResult>

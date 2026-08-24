@@ -18,7 +18,7 @@ namespace NDataIntegrity {
 inline void LogQueryTextImpl(TStructuredMessage& message, const TString& queryText, bool hashed) {
     if (!hashed) {
         YDB_LOG_UPDATE_CONTEXT(message,
-            {"QueryText", EscapeC(queryText)});
+            {"queryText", queryText});
         return;
     }
 
@@ -37,7 +37,7 @@ inline void LogQueryTextImpl(TStructuredMessage& message, const TString& queryTe
     std::string hashedQueryText(reinterpret_cast<char*>(hash), SHA256_DIGEST_LENGTH);
 
     YDB_LOG_UPDATE_CONTEXT(message,
-        {"QueryText", Base64Encode(hashedQueryText)});
+        {"queryText", Base64Encode(hashedQueryText)});
 }
 
 inline TStructuredMessage LogQueryText(const TString& queryText) {
@@ -79,8 +79,8 @@ inline void LogIntegrityTrails(const NKqp::TEvKqp::TEvQueryRequest::TPtr& reques
         {"sessionId", request->Get()->GetSessionId()},
         {"traceId", request->Get()->GetTraceId()},
         {"type", "Request"},
-        {"QueryAction", ToString(request->Get()->GetAction())},
-        {"QueryType", ToString(request->Get()->GetType())},
+        {"queryAction", ToString(request->Get()->GetAction())},
+        {"queryType", ToString(request->Get()->GetType())},
         LogQueryText(request->Get()->GetQuery())
     );
 }

@@ -1666,7 +1666,7 @@ Y_UNIT_TEST(PipeBreakAfterChildrenAttached) {
 }
 
 Y_UNIT_TEST(FinishAndCommitDuringReleaseDoesNotStealChildMapping) {
-    // test_commit_roots: split + commit while the parent family is Releasing.
+    // Autopart test_commit_reread: split + commit while the parent family is Releasing.
     // Finish of a preferred session cannot attach children 1,2, so
     // AttachePartitions only AppendUniqueRoots. Commit then sees a lonely
     // family and CreateFamily's those children. AfterRelease remaps
@@ -1874,7 +1874,7 @@ Y_UNIT_TEST(InFlightFinishAfterHolderDisconnectLocksChildren) {
 }
 
 Y_UNIT_TEST(InjectFinishOfSecondMergeParentAfterSessionCloseLocksChild) {
-    // Autopart test_commit_roots: Finish of the second merge parent arrives on a
+    // Autopart test_commit_reread: Finish of the second merge parent arrives on a
     // dead pipe while the consumer still has another session. MergeFamilies must
     // attach the child without aborting.
     TScaleEnv env;

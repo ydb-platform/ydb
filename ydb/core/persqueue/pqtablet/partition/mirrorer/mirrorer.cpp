@@ -133,7 +133,8 @@ bool AppendToWriteRequest(
     NKikimrClient::TPersQueuePartitionRequest& request,
     TPersQueueReadEvent::TDataReceivedEvent::TCompressedMessage& message,
     bool& incorrectRequest,
-    ui64& nextOffset
+    ui64& nextOffset,
+    bool syncWriteTime
 ) {
     if (!request.HasCmdWriteOffset()) {
         if (request.CmdWriteSize() > 0) {
@@ -159,7 +160,7 @@ bool AppendToWriteRequest(
     write->SetSourceId(NSourceIdEncoding::EncodeSimple(producerId));
     write->SetSeqNo(message.GetSeqNo());
     write->SetCreateTimeMS(message.GetCreateTime().MilliSeconds());
-    if (Config.GetSyncWriteTime()) {
+    if (syncWriteTime) {
         write->SetWriteTimeMS(message.GetWriteTime().MilliSeconds());
     }
     write->SetDisableDeduplication(true);
@@ -182,7 +183,7 @@ bool TMirrorer::AddToWriteRequest(
     bool& incorrectRequest,
     ui64& nextOffset
 ) {
-    return AppendToWriteRequest(request, message, incorrectRequest, nextOffset);
+    return AppendToWriteRequest(request, message, incorrectRequest, nextOffset, Config.GetSyncWriteTime());
 }
 
 void TMirrorer::ProcessError(const TActorContext& ctx, const TString& msg) {

@@ -261,8 +261,12 @@ def default_users():
     return {user: password}
 
 
+def parse_grpc_tls_enable(value):
+    return (value or '').strip().lower() in ('1', 'true')
+
+
 def enable_tls():
-    return os.getenv('YDB_GRPC_ENABLE_TLS', '').strip().lower() in ('1', 'true')
+    return parse_grpc_tls_enable(os.getenv('YDB_GRPC_ENABLE_TLS'))
 
 
 def is_tiny_mode():
@@ -312,8 +316,8 @@ def has_any_grpc_tls_data_file(tls_data_path):
     return any(os.path.lexists(os.path.join(tls_data_path, filename)) for filename in GRPC_TLS_DATA_FILES)
 
 
-def should_generate_grpc_tls_data():
-    return not has_any_grpc_tls_data_file(os.getenv('YDB_GRPC_TLS_DATA_PATH'))
+def should_generate_grpc_tls_data(tls_data_path):
+    return not has_any_grpc_tls_data_file(tls_data_path)
 
 
 def pq_client_service_types(arguments):
@@ -391,7 +395,7 @@ def deploy(arguments):
         optionals.update({'grpc_ssl_enable': enable_tls()})
         optionals.update(
             {
-                'generate_grpc_tls_data': should_generate_grpc_tls_data()
+                'generate_grpc_tls_data': should_generate_grpc_tls_data(os.getenv('YDB_GRPC_TLS_DATA_PATH'))
             }
         )
     pdisk_store_path = arguments.ydb_working_dir if arguments.ydb_working_dir else None

@@ -3,8 +3,8 @@ import tempfile
 import unittest
 
 from ydb.public.tools.lib.cmds import (
-    enable_tls,
     generic_connector_config,
+    parse_grpc_tls_enable,
     resolve_deploy_config_action,
     same_config_path,
     should_generate_grpc_tls_data,
@@ -88,34 +88,27 @@ def test_same_config_path_resolves_symlinks():
         assert resolve_deploy_config_action(link, target) == 'preserve'
 
 
-def test_enable_tls_accepts_documented_values(monkeypatch):
-    monkeypatch.delenv('YDB_GRPC_ENABLE_TLS', raising=False)
-    assert enable_tls() is False
-
+def test_parse_grpc_tls_enable_accepts_documented_values():
     for value in ('1', 'true', ' TRUE '):
-        monkeypatch.setenv('YDB_GRPC_ENABLE_TLS', value)
-        assert enable_tls() is True
+        assert parse_grpc_tls_enable(value) is True
 
-    for value in ('0', 'false', 'yes', ''):
-        monkeypatch.setenv('YDB_GRPC_ENABLE_TLS', value)
-        assert enable_tls() is False
+    for value in (None, '0', 'false', 'yes', ''):
+        assert parse_grpc_tls_enable(value) is False
 
 
-def test_should_generate_grpc_tls_data_uses_explicit_path(monkeypatch):
-    monkeypatch.delenv('YDB_GRPC_TLS_DATA_PATH', raising=False)
-    assert should_generate_grpc_tls_data() is True
+def test_should_generate_grpc_tls_data_uses_explicit_path():
+    assert should_generate_grpc_tls_data(None) is True
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        monkeypatch.setenv('YDB_GRPC_TLS_DATA_PATH', tmpdir)
-        assert should_generate_grpc_tls_data() is True
+        assert should_generate_grpc_tls_data(tmpdir) is True
 
         with open(os.path.join(tmpdir, 'unrelated.pem'), 'w'):
             pass
-        assert should_generate_grpc_tls_data() is True
+        assert should_generate_grpc_tls_data(tmpdir) is True
 
         for filename in ('ca.pem', 'cert.pem', 'key.pem'):
             path = os.path.join(tmpdir, filename)
             with open(path, 'w'):
                 pass
-            assert should_generate_grpc_tls_data() is False
+            assert should_generate_grpc_tls_data(tmpdir) is False
             os.unlink(path)

@@ -954,6 +954,49 @@ Y_UNIT_TEST(FinishParentWhileFamilyReleasingAttachesChildrenAfterUnlock) {
     env.AssertLocked(0);
     env.AssertSameSession({0, 1, 2});
 }
+Y_UNIT_TEST(RereadParentThenSecondSessionDoesNotReattachChildren) {
+    TScaleEnv env;
+    env.CreateParents(1);
+    env.RegisterSession("session-0");
+    env.Split(0);
+    env.Finish("session-0", 0);
+    env.AssertSameSession({0, 1, 2});
+
+    env.StartReading("session-0", 0);
+    env.RegisterSession("session-1");
+    env.AssertLocked(0);
+    env.AssertNotLocked(1);
+    env.AssertNotLocked(2);
+}
+
+Y_UNIT_TEST(RereadParentAfterIndependentChildren) {
+    TScaleEnv env;
+    env.CreateParents(1);
+    env.RegisterSession("session-0");
+    env.Split(0);
+    env.Finish("session-0", 0, /*scaleAware=*/false, /*fromEnd=*/true);
+    env.AssertLocked(1);
+    env.AssertLocked(2);
+
+    env.StartReading("session-0", 0);
+    env.AssertNotLocked(1);
+    env.AssertNotLocked(2);
+    env.AssertLocked(0, "session-0");
+}
+
+Y_UNIT_TEST(RereadParentAfterScaleAwareChildren) {
+    TScaleEnv env;
+    env.CreateParents(1);
+    env.RegisterSession("session-0");
+    env.Split(0);
+    env.Finish("session-0", 0);
+    env.AssertSameSession({0, 1, 2});
+
+    env.StartReading("session-0", 0);
+    env.AssertNotLocked(1);
+    env.AssertNotLocked(2);
+    env.AssertLocked(0, "session-0");
+}
 } // Y_UNIT_TEST_SUITE(TPqrbSplitBalancing)
 
 Y_UNIT_TEST_SUITE(TPqrbBalancingInvariants) {
@@ -985,5 +1028,38 @@ Y_UNIT_TEST(FinishThenImmediatePipeBreakKeepsConsumerIfOtherSessionAlive) {
 }
 
 } // Y_UNIT_TEST_SUITE(TPqrbBalancingInvariants)
+
+struct TClassicEnv : TScaleEnv {
+    TClassicEnv()
+        : TScaleEnv(NKikimrPQ::TPQTabletConfig::DISABLED)
+    {
+    }
+};
+
+Y_UNIT_TEST_SUITE(TPqrbClassicBalancing) {
+
+Y_UNIT_TEST(ParentLinksInConfigAreIgnoredWhenScalingDisabled) {
+    TClassicEnv env;
+    env.NextPartitionId = 3;
+    env.ParentPartitionIds[1] = {0};
+    env.ParentPartitionIds[2] = {0};
+    env.ChildPartitionIds[0] = {1, 2};
+    env.Publish();
+    env.RegisterSession("session-0");
+    env.AssertLocked(0);
+    env.AssertLocked(1);
+    env.AssertLocked(2);
+}
+
+Y_UNIT_TEST(FinishThenStartReadingKeepsPartitionLocked) {
+    TClassicEnv env;
+    env.CreateParents(1);
+    env.RegisterSession("session-0");
+    env.AssertLocked(0, "session-0");
+    env.Finish("session-0", 0);
+    env.StartReading("session-0", 0);
+    env.AssertLocked(0, "session-0");
+}
+} // Y_UNIT_TEST_SUITE(TPqrbClassicBalancing)
 
 } // namespace NKikimr::NPQ

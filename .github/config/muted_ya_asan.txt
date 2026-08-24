@@ -245,6 +245,7 @@ ydb/library/actors/interconnect/ut InterconnectSessionV2.ActorSystemTeardownIdle
 ydb/library/actors/interconnect/ut InterconnectSessionV2.ClosePeerSocketAndReconnect
 ydb/library/actors/interconnect/ut InterconnectSessionV2.DirectSessionRoundTrip
 ydb/library/actors/interconnect/ut InterconnectSessionV2.FallbackWithoutBufRing
+ydb/library/actors/interconnect/ut InterconnectSessionV2.LargePayloadRoundTrip
 ydb/library/actors/interconnect/ut InterconnectSessionV2.PeerStopTriggersDisconnect
 ydb/library/actors/interconnect/ut unittest.sole chunk
 ydb/library/nmslib/test/run_test_integr exectest.run[test_integr]

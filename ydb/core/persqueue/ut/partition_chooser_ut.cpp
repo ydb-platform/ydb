@@ -268,7 +268,9 @@ void InitTable(NPersQueue::TTestServer& server) {
     future.GetValueSync();
 }
 
-void WriteToTable(NPersQueue::TTestServer& server, const TString& sourceId, ui32 partitionId, ui64 seqNo = 0) {
+// topicKey overrides both the hash source and the Topic column: pass the unique topic Id
+// to address id-keyed rows; with an empty topicKey the legacy name-based key is used.
+void WriteToTable(NPersQueue::TTestServer& server, const TString& sourceId, ui32 partitionId, ui64 seqNo = 0, const TString& topicKey = {}) {
     InitTable(server);
 
     const auto& pqConfig = server.CleverServer->GetRuntime()->GetAppData().PQConfig;
@@ -276,35 +278,39 @@ void WriteToTable(NPersQueue::TTestServer& server, const TString& sourceId, ui32
                                                                : ESourceIdTableGeneration::SrcIdMeta2;
 
     NPersQueue::TTopicConverterPtr fullConverter = CreateTopicConverter();
+    const TString hashKey = topicKey ? topicKey : fullConverter->GetTopicForSrcIdHash();
+    const TString topicColumn = topicKey ? topicKey : fullConverter->GetClientsideName();
     NKikimr::NPQ::NSourceIdEncoding::TEncodedSourceId encoded = NSourceIdEncoding::EncodeSrcId(
-                fullConverter->GetTopicForSrcIdHash(), sourceId, tableGeneration
+                hashKey, sourceId, tableGeneration
         );
 
     TString query;
     if (pqConfig.GetTopicsAreFirstClassCitizen()) {
         query = TStringBuilder() << "--!syntax_v1\n"
             "UPSERT INTO `//Root/.metadata/TopicPartitionsMapping` (Hash, Topic, ProducerId, CreateTime, AccessTime, Partition, SeqNo) VALUES "
-                                              "(" << encoded.KeysHash << ", \"" << fullConverter->GetClientsideName() << "\", \""
+                                              "(" << encoded.KeysHash << ", \"" << topicColumn << "\", \""
                                               << encoded.EscapedSourceId << "\", "<< TInstant::Now().MilliSeconds() << ", "
                                               << TInstant::Now().MilliSeconds() << ", " << partitionId << ", " << seqNo << ");";
     } else {
         query = TStringBuilder() << "--!syntax_v1\n"
                     "UPSERT INTO `/Root/PQ/SourceIdMeta2` (Hash, Topic, SourceId, CreateTime, AccessTime, Partition, SeqNo) VALUES ("
-                  << encoded.Hash << ", \"" << fullConverter->GetClientsideName() << "\", \"" << encoded.EscapedSourceId << "\", "
+                  << encoded.Hash << ", \"" << topicColumn << "\", \"" << encoded.EscapedSourceId << "\", "
                   << TInstant::Now().MilliSeconds() << ", " << TInstant::Now().MilliSeconds() << ", " << partitionId << ", " << seqNo << "); ";
     }
     Cerr << "Run query:\n" << query << Endl;
     auto scResult = server.AnnoyingClient->RunYqlDataQuery(query);
 }
 
-TMaybe<NYdb::TResultSet> SelectTable(NPersQueue::TTestServer& server, const TString& sourceId) {
+TMaybe<NYdb::TResultSet> SelectTable(NPersQueue::TTestServer& server, const TString& sourceId, const TString& topicKey = {}) {
     const auto& pqConfig = server.CleverServer->GetRuntime()->GetAppData().PQConfig;
     auto tableGeneration = pqConfig.GetTopicsAreFirstClassCitizen() ? ESourceIdTableGeneration::PartitionMapping
                                                                : ESourceIdTableGeneration::SrcIdMeta2;
 
     NPersQueue::TTopicConverterPtr fullConverter = CreateTopicConverter();
+    const TString hashKey = topicKey ? topicKey : fullConverter->GetTopicForSrcIdHash();
+    const TString topicColumn = topicKey ? topicKey : fullConverter->GetClientsideName();
     NKikimr::NPQ::NSourceIdEncoding::TEncodedSourceId encoded = NSourceIdEncoding::EncodeSrcId(
-                fullConverter->GetTopicForSrcIdHash(), sourceId, tableGeneration
+                hashKey, sourceId, tableGeneration
         );
 
     TString query;
@@ -313,29 +319,29 @@ TMaybe<NYdb::TResultSet> SelectTable(NPersQueue::TTestServer& server, const TStr
             "SELECT Partition, SeqNo "
             "FROM  `//Root/.metadata/TopicPartitionsMapping` "
             "WHERE Hash = " << encoded.KeysHash <<
-            "  AND Topic = \"" << fullConverter->GetClientsideName() << "\"" <<
+            "  AND Topic = \"" << topicColumn << "\"" <<
             "  AND ProducerId = \"" << encoded.EscapedSourceId << "\"";
     } else {
         query = TStringBuilder() << "--!syntax_v1\n"
             "SELECT Partition, SeqNo "
             "FROM  `/Root/PQ/SourceIdMeta2` "
             "WHERE Hash = " << encoded.KeysHash <<
-            "  AND Topic = \"" << fullConverter->GetClientsideName() << "\"" <<
+            "  AND Topic = \"" << topicColumn << "\"" <<
             "  AND SourceId = \"" << encoded.EscapedSourceId << "\"";
     }
     Cerr << "Run query:\n" << query << Endl;
     return server.AnnoyingClient->RunYqlDataQuery(query);
 }
 
-void AssertTableEmpty(NPersQueue::TTestServer& server, const TString& sourceId) {
-    auto result = SelectTable(server, sourceId);
+void AssertTableEmpty(NPersQueue::TTestServer& server, const TString& sourceId, const TString& topicKey = {}) {
+    auto result = SelectTable(server, sourceId, topicKey);
 
     UNIT_ASSERT(result);
     UNIT_ASSERT_VALUES_EQUAL_C(result->RowsCount(), 0, "Table must not contains SourceId='" << sourceId << "'");
 }
 
-void AssertTable(NPersQueue::TTestServer& server, const TString& sourceId, ui32 partitionId, ui64 seqNo) {
-    auto result = SelectTable(server, sourceId);
+void AssertTable(NPersQueue::TTestServer& server, const TString& sourceId, ui32 partitionId, ui64 seqNo, const TString& topicKey = {}) {
+    auto result = SelectTable(server, sourceId, topicKey);
 
     UNIT_ASSERT(result);
     UNIT_ASSERT_VALUES_EQUAL_C(result->RowsCount(), 1, "Table must contains SourceId='" << sourceId << "'");
@@ -709,5 +715,134 @@ Y_UNIT_TEST(TPartitionChooserActor_SplitMergeDisabled_BadSourceId_Test) {
     UNIT_ASSERT(r->Error);
 }
 
+static constexpr ui64 TestTopicId = 1234567890;
+static constexpr ui64 TestOwnerId = 100;
+static const TString TestTopicKey = ToString(TestOwnerId) + "+" + ToString(TestTopicId);
+
+Y_UNIT_TEST(TPartitionChooserActor_TopicId_NewSourceId_WriteByIdKey_Test) {
+    // With a topic Id the mapping row is written with the id key, not the topic name.
+    NPersQueue::TTestServer server = CreateServer();
+    server.CleverServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableTopicSourceIdMappingById(true);
+
+    auto config = CreateConfig0(false);
+    config.MutablePQTabletConfig()->MutableId()->SetId(TestTopicId);
+    config.MutablePQTabletConfig()->MutableId()->SetOwnerId(TestOwnerId);
+    config.MutablePQTabletConfig()->MutableId()->SetTxStep(0); // Id filled at create: no name fallback
+    AddPartition(config, 0);
+
+    auto r = ChoosePartition(server, config, "Id_Source_0");
+
+    UNIT_ASSERT(r->Result);
+    UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->PartitionId, 0);
+    AssertTable(server, "Id_Source_0", 0, 0, TestTopicKey);
+    AssertTableEmpty(server, "Id_Source_0"); // no name-keyed row was written
+}
+
+Y_UNIT_TEST(TPartitionChooserActor_TopicId_NameFallbackInsideWindow_Test) {
+    // The Id was back-filled by an alter (IdTxStep != 0, window open): a row stored under
+    // the legacy name key must still be found and migrated to the id key by the upsert.
+    NPersQueue::TTestServer server = CreateServer();
+    server.CleverServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableTopicSourceIdMappingById(true);
+
+    auto config = CreateConfig0(false);
+    config.MutablePQTabletConfig()->MutableId()->SetId(TestTopicId);
+    config.MutablePQTabletConfig()->MutableId()->SetOwnerId(TestOwnerId);
+    config.MutablePQTabletConfig()->MutableId()->SetTxStep(TInstant::Now().MilliSeconds()); // back-filled now
+    AddPartition(config, 0);
+    AddPartition(config, 1);
+
+    WriteToTable(server, "Id_Source_1", 1, 13); // legacy name-keyed row
+    auto r = ChoosePartition(server, config, "Id_Source_1");
+
+    UNIT_ASSERT(r->Result);
+    UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->PartitionId, 1);
+    AssertTable(server, "Id_Source_1", 1, 13, TestTopicKey); // migrated to the id key
+}
+
+Y_UNIT_TEST(TPartitionChooserActor_TopicId_NoNameFallbackWhenFilledAtCreate_Test) {
+    // IdTxStep == 0 (Id filled at create): the legacy name-keyed row must be ignored.
+    NPersQueue::TTestServer server = CreateServer();
+    server.CleverServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableTopicSourceIdMappingById(true);
+
+    auto config = CreateConfig0(false);
+    config.MutablePQTabletConfig()->MutableId()->SetId(TestTopicId);
+    config.MutablePQTabletConfig()->MutableId()->SetOwnerId(TestOwnerId);
+    config.MutablePQTabletConfig()->MutableId()->SetTxStep(0);
+    AddPartition(config, 0);
+    AddPartition(config, 1);
+
+    WriteToTable(server, "Id_Source_2", 1, 13); // row of an older same-name topic
+    auto r = ChoosePartition(server, config, "Id_Source_2");
+
+    UNIT_ASSERT(r->Result);
+    UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->SeqNo.value_or(0), 0); // stale SeqNo not inherited
+    AssertTable(server, "Id_Source_2", r->Result->Get()->PartitionId, 0, TestTopicKey);
+}
+
+Y_UNIT_TEST(TPartitionChooserActor_TopicId_NoNameFallbackWhenWindowClosed_Test) {
+    // The transition window is over: the legacy name-keyed row must be ignored.
+    NPersQueue::TTestServer server = CreateServer();
+    server.CleverServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableTopicSourceIdMappingById(true);
+
+    auto config = CreateConfig0(false);
+    config.MutablePQTabletConfig()->MutableId()->SetId(TestTopicId);
+    config.MutablePQTabletConfig()->MutableId()->SetOwnerId(TestOwnerId);
+    config.MutablePQTabletConfig()->MutableId()->SetTxStep((TInstant::Now() - TDuration::Days(20)).MilliSeconds());
+    AddPartition(config, 0);
+    AddPartition(config, 1);
+
+    WriteToTable(server, "Id_Source_3", 1, 13); // legacy name-keyed row
+    auto r = ChoosePartition(server, config, "Id_Source_3");
+
+    UNIT_ASSERT(r->Result);
+    UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->SeqNo.value_or(0), 0); // stale SeqNo not inherited
+    AssertTable(server, "Id_Source_3", r->Result->Get()->PartitionId, 0, TestTopicKey);
+}
+
+Y_UNIT_TEST(TPartitionChooserActor_TopicId_IdKeyPreferredOverName_Test) {
+    // Window open but the id-keyed row exists: it must win, no fallback read is needed.
+    NPersQueue::TTestServer server = CreateServer();
+    server.CleverServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableTopicSourceIdMappingById(true);
+
+    auto config = CreateConfig0(false);
+    config.MutablePQTabletConfig()->MutableId()->SetId(TestTopicId);
+    config.MutablePQTabletConfig()->MutableId()->SetOwnerId(TestOwnerId);
+    config.MutablePQTabletConfig()->MutableId()->SetTxStep(TInstant::Now().MilliSeconds());
+    AddPartition(config, 0);
+    AddPartition(config, 1);
+
+    WriteToTable(server, "Id_Source_4", 0, 21, TestTopicKey); // id-keyed row
+    WriteToTable(server, "Id_Source_4", 1, 13);              // stale name-keyed row
+    auto r = ChoosePartition(server, config, "Id_Source_4");
+
+    UNIT_ASSERT(r->Result);
+    UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->PartitionId, 0);
+    AssertTable(server, "Id_Source_4", 0, 21, TestTopicKey);
+}
+
+Y_UNIT_TEST(TPartitionChooserActor_TopicId_FlagOff_UsesLegacyNameKey_Test) {
+    // The feature flag is off: even if an Id is present on the topic, the writer must
+    // fall back to the legacy name-based key (both for reads and writes).
+    NPersQueue::TTestServer server = CreateServer();
+    // Flag stays off (default): Id must be ignored.
+
+    auto config = CreateConfig0(false);
+    config.MutablePQTabletConfig()->MutableId()->SetId(TestTopicId);
+    config.MutablePQTabletConfig()->MutableId()->SetOwnerId(TestOwnerId);
+    config.MutablePQTabletConfig()->MutableId()->SetTxStep(TInstant::Now().MilliSeconds());
+    AddPartition(config, 0);
+    AddPartition(config, 1);
+
+    // A legacy name-keyed row exists; with the flag off it must be found and used.
+    WriteToTable(server, "Id_Source_5", 1, 13);
+    auto r = ChoosePartition(server, config, "Id_Source_5");
+
+    UNIT_ASSERT(r->Result);
+    UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->PartitionId, 1);
+    UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->SeqNo.value_or(0), 13);
+    // The row is read and written under the name key, not the id key.
+    AssertTable(server, "Id_Source_5", 1, 13);
+    AssertTableEmpty(server, "Id_Source_5", TestTopicKey); // no id-keyed row was written
+}
 
 }

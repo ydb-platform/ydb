@@ -4,6 +4,7 @@
 #include "dsproxy_test_state_ut.h"
 #include "dsproxy_vdisk_mock_ut.h"
 
+#include <ydb/core/blobstorage/dsproxy/dsproxy_patch.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_partlayout.h>
 #include <ydb/core/util/stlog.h>
 #include <ydb/core/base/blobstorage_common.h>
@@ -12,6 +13,17 @@
 
 namespace NKikimr {
 namespace NDSProxyPatchTest {
+
+Y_UNIT_TEST_SUITE(TVPatchMirror3dcQuorumTest) {
+    Y_UNIT_TEST(UsesTopologyAwareQuorum) {
+        const TBlobStorageGroupInfo info(TErasureType::ErasureMirror3dc, 1, 3, 3);
+
+        UNIT_ASSERT(NVPatch::HasMirror3dcQuorum(info, 0b000000111)); // 1+1+1
+        UNIT_ASSERT(NVPatch::HasMirror3dcQuorum(info, 0b000011011)); // 2+2
+        UNIT_ASSERT(!NVPatch::HasMirror3dcQuorum(info, 0b000001011)); // 2+1
+        UNIT_ASSERT(!NVPatch::HasMirror3dcQuorum(info, 0b001001001)); // one realm only
+    }
+}
 
 struct TVDiskPointer {
     ui32 VDiskIdx;

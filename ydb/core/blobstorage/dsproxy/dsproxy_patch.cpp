@@ -1,5 +1,6 @@
 #include "dsproxy.h"
 #include "dsproxy_mon.h"
+#include "dsproxy_patch.h"
 #include "root_cause.h"
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_partlayout.h>
@@ -14,6 +15,17 @@
 LWTRACE_USING(BLOBSTORAGE_PROVIDER);
 
 namespace NKikimr {
+
+namespace NVPatch {
+
+bool HasMirror3dcQuorum(const TBlobStorageGroupInfo& info, ui32 successfulSubgroupMask) {
+    Y_ABORT_UNLESS(info.Type.GetErasure() == TErasureType::ErasureMirror3dc);
+    const auto successful = TBlobStorageGroupInfo::TSubgroupVDisks::CreateFromMask(
+        &info.GetTopology(), successfulSubgroupMask);
+    return info.GetQuorumChecker().CheckQuorumForSubgroup(successful);
+}
+
+} // namespace NVPatch
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // PATCH request
@@ -82,6 +94,7 @@ class TBlobStorageGroupPatchRequest : public TBlobStorageGroupRequestActor {
     ui32 ErrorResponses = 0;
     ui32 SentVPatchDiff = 0;
     ui32 ReceivedResults = 0;
+    ui32 SuccessfulVPatchResultsMask = 0;
 
     TStackVec<TPartPlacement, TypicalMaxPartsCount> FoundParts;
     TStackVec<bool, TypicalDisksInSubring> ReceivedResponseFlags;
@@ -421,38 +434,30 @@ public:
             return;
         }
 
-        if (ReceivedResults == Info->Type.TotalPartCount()) {
-            YDB_LOG_PATCH_LOG(PRI_DEBUG, "Got all succesful responses, make own success response",
+        Y_ABORT_UNLESS(subgroupIdx < 32);
+        SuccessfulVPatchResultsMask |= ui32{1} << subgroupIdx;
+        const bool hasQuorum = Info->Type.GetErasure() == TErasureType::ErasureMirror3dc
+            ? NVPatch::HasMirror3dcQuorum(*Info, SuccessfulVPatchResultsMask)
+            : ReceivedResults == Info->Type.TotalPartCount();
+        if (hasQuorum) {
+            YDB_LOG_PATCH_LOG(PRI_DEBUG, "Got successful quorum, make own success response",
                 {"marker", "BPPA25"});
             ReplyAndDie(NKikimrProto::OK);
         }
     }
 
     bool VerifyPartPlacementForMirror3dc() const {
-        constexpr ui32 DCCount = 3;
-        constexpr ui32 VDiskByDC = 3;
-        ui32 countByDC[DCCount] = {0, 0, 0};
-
-        for (auto &[subgroupIdx, partId] : FoundParts) {
-            countByDC[subgroupIdx / VDiskByDC]++;
+        ui32 subgroupMask = 0;
+        for (const TPartPlacement& placement : FoundParts) {
+            Y_ABORT_UNLESS(placement.VDiskIdxInSubgroup < 32);
+            subgroupMask |= ui32{1} << placement.VDiskIdxInSubgroup;
         }
-
-        if (countByDC[0] && countByDC[1] && countByDC[2]) {
-            YDB_LOG_PATCH_LOG(PRI_DEBUG, "VerifyPartPlacement {mirror-3-dc} found all 3 disks",
-                {"marker", "BPPA22"});
-            return true;
-        }
-
-        ui32 x2Count = 0;
-        for (ui32 dcIdx = 0; dcIdx < DCCount; ++dcIdx) {
-            if (countByDC[dcIdx] >= 2) {
-                x2Count++;
-            }
-        }
+        const bool hasQuorum = NVPatch::HasMirror3dcQuorum(*Info, subgroupMask);
         YDB_LOG_PATCH_LOG(PRI_DEBUG, "VerifyPartPlacement {mirror-3-dc}",
             {"marker", "BPPA00"},
-            {"X2Count", x2Count});
-        return x2Count >= 2;
+            {"SubgroupMask", subgroupMask},
+            {"HasQuorum", hasQuorum});
+        return hasQuorum;
     }
 
     bool VerifyPartPlacement() const {
@@ -774,56 +779,29 @@ public:
     bool ContinueVPatchForMirror3dc() {
         YDB_LOG_PATCH_LOG(PRI_DEBUG, "Continue VPatch {mirror-3-dc}",
             {"marker", "BPPA10"});
-        constexpr ui32 DCCount = 3;
-        constexpr ui32 VDiskByDC = 3;
-        ui32 countByDC[DCCount] = {0, 0, 0};
-        TPartPlacement diskByDC[DCCount][VDiskByDC];
-
-        for (auto &[subgroupIdx, partId] : FoundParts) {
-            ui32 dc = subgroupIdx / VDiskByDC;
-            ui32 idx = countByDC[dc];
-            diskByDC[dc][idx] = TPartPlacement{subgroupIdx, partId};
-            countByDC[dc]++;
-        }
-
-        if (countByDC[0] && countByDC[1] && countByDC[2]) {
-            YDB_LOG_PATCH_LOG(PRI_DEBUG, "Found disks {mirror-3-dc} on each dc",
-                {"marker", "BPPA11"},
-                {"DiskFromFirstDC", diskByDC[0][0].ToString()},
-                {"DiskFromSecondDC", diskByDC[0][0].ToString()},
-                {"DiskFromThirdDC", diskByDC[2][0].ToString()});
-            SendDiffs({diskByDC[0][0], diskByDC[1][0], diskByDC[2][0]});
-            return true;
-        }
-        YDB_LOG_PATCH_LOG(PRI_DEBUG, "Didn't find disks {mirror-3-dc} on each dc",
-            {"marker", "BPPA12"});
-
-        ui32 x2Count = 0;
-        for (ui32 dcIdx = 0; dcIdx < DCCount; ++dcIdx) {
-            if (countByDC[dcIdx] >= 2) {
-                x2Count++;
-            }
-        }
-        if (x2Count < 2) {
-            YDB_LOG_PATCH_LOG(PRI_DEBUG, "Didn't find disks {mirror-3-dc}",
-                {"marker", "BPPA13"});
-            return false;
-        }
         TStackVec<TPartPlacement, TypicalPartsInBlob> placements;
-        for (ui32 dcIdx = 0; dcIdx < DCCount; ++dcIdx) {
-            if (countByDC[dcIdx] >= 2) {
-                placements.push_back(diskByDC[dcIdx][0]);
-                placements.push_back(diskByDC[dcIdx][1]);
+        ui32 subgroupMask = 0;
+        for (const TPartPlacement& placement : FoundParts) {
+            Y_ABORT_UNLESS(placement.VDiskIdxInSubgroup < 32);
+            const ui32 bit = ui32{1} << placement.VDiskIdxInSubgroup;
+            if (!(subgroupMask & bit)) {
+                subgroupMask |= bit;
+                placements.push_back(placement);
+                if (NVPatch::HasMirror3dcQuorum(*Info, subgroupMask)) {
+                    SentVPatchDiff += placements.size();
+                    SendDiffs(placements);
+                    YDB_LOG_PATCH_LOG(PRI_DEBUG, "Found quorum {mirror-3-dc}",
+                        {"marker", "BPPA14"},
+                        {"SubgroupMask", subgroupMask},
+                        {"PlacementCount", placements.size()});
+                    return true;
+                }
             }
         }
-        SendDiffs(placements);
-        YDB_LOG_PATCH_LOG(PRI_DEBUG, "Found disks {mirror-3-dc} x2 mode",
-            {"marker", "BPPA14"},
-            {"FirstDiskFromFirstDC", placements[0]},
-            {"SecondDiskFromFirstDC", placements[1]},
-            {"FirstDiskFromSecondDC", placements[2]},
-            {"SecondDiskFromSecondDC", placements[3]});
-        return true;
+        YDB_LOG_PATCH_LOG(PRI_DEBUG, "Didn't find quorum {mirror-3-dc}",
+            {"marker", "BPPA13"},
+            {"SubgroupMask", subgroupMask});
+        return false;
     }
 
     bool ContinueVPatch() {

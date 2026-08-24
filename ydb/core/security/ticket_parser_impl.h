@@ -948,7 +948,7 @@ private:
                             SetError(key, record, {.Message = "Login state is not available yet", .Retryable = false});
                             CounterTicketsLogin->Inc();
                             BLOG_TRACE("CanInitLoginToken, database " << database
-                                << ", login state is not available yet, cannot deffer token (" << MaskTicket(record.Ticket) << ")");
+                                << ", login state is not available yet, cannot defer token (" << MaskTicket(record.Ticket) << ")");
                             return true;
                         }
                     } else {
@@ -956,7 +956,7 @@ private:
                         DeferredLoginTokens.insert(std::make_pair(database, std::make_pair(TlsActivationContext->Now() + TDuration::Seconds(NUM_SECONDS_TO_WAIT_FOR_SECURITY_STATE_UPDATE), std::unordered_set<TString>({key}))));
                     }
                     BLOG_TRACE("CanInitLoginToken, database " << database
-                        << ", login state is not available yet, deffer token (" << MaskTicket(record.Ticket) << ")");
+                        << ", login state is not available yet, defer token (" << MaskTicket(record.Ticket) << ")");
                     return true;
                 }
                 BLOG_TRACE("CanInitLoginToken, database " << database << ", A6 error");
@@ -1044,7 +1044,7 @@ private:
     void Handle(TEvTicketParser::TEvAuthorizeTicket::TPtr& ev) {
         if (!NSecurity::IsGoodPeernameFormat(ev->Get()->PeerName)) {
             CounterWrongPeernameFormat->Inc();
-            BLOG_WARN("Ticket " << MaskTicket(ev->Get()->Ticket) << ": invalid peer name format: " << ev->Get()->PeerName.Quote()
+            BLOG_W("Ticket " << MaskTicket(ev->Get()->Ticket) << ": invalid peer name format: " << ev->Get()->PeerName.Quote()
                 << " for DB: " << ev->Get()->Database.Quote());
 
             if (AppData()->FeatureFlags.GetEnableTicketParserErrorBasedOnPeernameFormat()) {
@@ -1252,7 +1252,7 @@ private:
 
     void Handle(TEvExternalIdpProvider::TEvAuthenticateResponse::TPtr& ev) {
         TEvExternalIdpProvider::TEvAuthenticateResponse* response = ev->Get();
-        BLOG_DEBUG("Received TEvAuthenticateResponse from ExternalIdp for ticket "
+        BLOG_D("Received TEvAuthenticateResponse from ExternalIdp for ticket "
             << MaskTicket(response->Key) << " with status " << response->Status);
         auto& userTokens = GetDerived()->GetUserTokens();
         auto it = userTokens.find(response->Key);
@@ -1271,7 +1271,7 @@ private:
                 groups.emplace_back(group + domain);
             }
             record.ExpireTime = response->ExpiresAt;
-            BLOG_DEBUG("Ticket " << record.GetMaskedTicket() << " authenticated by ExternalIdp"
+            BLOG_D("Ticket " << record.GetMaskedTicket() << " authenticated by ExternalIdp"
                 << " as " << response->User << domain
                 << " with " << groups.size() << " group(s)");
             SetToken(key, record, new NACLib::TUserToken({
@@ -1355,7 +1355,7 @@ private:
         for (auto& [permissionName, permissionRecord] : record.Permissions) {
             permissionRecord.Subject.clear();
             permissionRecord.Error = {.Message = errorMessage, .Retryable = isRetryableError};
-            BLOG_WARN("Ticket " << record.GetMaskedTicket() << " permission " << permissionName
+            BLOG_TRACE("Ticket " << record.GetMaskedTicket() << " permission " << permissionName
                 << " now has a " << (isRetryableError ? "retryable" : "permanent")  << " error \"" << errorMessage << "\""
                 << " retryable: " << isRetryableError);
         }
@@ -1405,7 +1405,7 @@ private:
                         const auto checkIt = request->Request.checks().find(resultKey);
                         if (checkIt == request->Request.checks().end()) {
                             SetAccessServiceBulkAuthorizeError(key, record, TStringBuilder() << "Internal error: unknown result key: " << resultKey, false);
-                            BLOG_ERROR("Internal error: unknown result key: " << resultKey << " for ticket " << record.GetMaskedTicket());
+                            BLOG_W("Internal error: unknown result key: " << resultKey << " for ticket " << record.GetMaskedTicket());
                             processingError = true;
                             break;
                         }
@@ -1456,7 +1456,7 @@ private:
                                 permissionRecord.Error = {.Message = errorMessage, .Retryable = false};
                             }
                         } else {
-                            BLOG_ERROR("Received response for unknown permission " << permissionName << " for ticket " << record.GetMaskedTicket());
+                            BLOG_W("Received response for unknown permission " << permissionName << " for ticket " << record.GetMaskedTicket());
                         }
                     }
                     if (!processingError) {
@@ -1475,7 +1475,7 @@ private:
                                 }
                                 return std::move(b);
                             };
-                            BLOG_ERROR("Received response with not all permissions. Absent permissions: " << printAbsentPermissions());
+                            BLOG_W("Received response with not all permissions. Absent permissions: " << printAbsentPermissions());
                             SetAccessServiceBulkAuthorizeError(key, record, TStringBuilder() << "Internal error: not all permissions in authorize response", false);
                         } else if (permissionDeniedCount < examinedPermissions.size() && !hasRequiredPermissionFailed) {
                             record.TokenType = TDerived::ETokenType::NebiusAccessService;
@@ -1540,7 +1540,7 @@ private:
                             permissionDeniedCount++;
                             auto& permissionDeniedRecord = permissionDeniedIt->second;
                             permissionDeniedRecord.Subject.clear();
-                            BLOG_NOTICE("Ticket " << record.GetMaskedTicket() << " permission " << result.permission()
+                            BLOG_TRACE("Ticket " << record.GetMaskedTicket() << " permission " << result.permission()
                                 << " access denied for subject \"" << record.Subject << "\"");
                             TStringBuilder errorMessage;
                             if (permissionDeniedRecord.IsRequired()) {
@@ -1556,7 +1556,7 @@ private:
                             errorMessage << permissionDeniedError;
                             permissionDeniedRecord.Error = {.Message = errorMessage, .Retryable = false};
                         } else {
-                            BLOG_ERROR("Received response for unknown permission " << result.permission() << " for ticket " << record.GetMaskedTicket());
+                            BLOG_W("Received response for unknown permission " << result.permission() << " for ticket " << record.GetMaskedTicket());
                         }
                     }
                     if (permissionDeniedCount < examinedPermissions.size() && !hasRequiredPermissionFailed && subjectNameErrorMessage.empty()) {
@@ -1611,15 +1611,15 @@ private:
                     itPermission->second.Error = {.Message = TString{response->Status.Msg}, .Retryable = retryable};
                     if (itPermission->second.Subject.empty() || !retryable) {
                         itPermission->second.Subject.clear();
-                        BLOG_ERROR("Ticket " << record.GetMaskedTicket() << " permission " << permission
+                        BLOG_TRACE("Ticket " << record.GetMaskedTicket() << " permission " << permission
                             << " now has a permanent error \"" << itPermission->second.Error << "\" " << " retryable:" << retryable);
                     } else if (retryable) {
-                        BLOG_ERROR("Ticket " << record.GetMaskedTicket() << " permission " << permission
+                        BLOG_TRACE("Ticket " << record.GetMaskedTicket() << " permission " << permission
                             << " now has a retryable error \"" << response->Status.Msg << "\"");
                     }
                 }
             } else {
-                BLOG_ERROR("Received response for unknown permission " << permission << " for ticket " << record.GetMaskedTicket());
+                BLOG_W("Received response for unknown permission " << permission << " for ticket " << record.GetMaskedTicket());
             }
             if (--record.ResponsesLeft == 0) {
                 ui32 permissionsOk = 0;
@@ -1688,7 +1688,7 @@ private:
     void Handle(TEvTicketParser::TEvUpdateLoginSecurityState::TPtr& ev) {
         auto& loginProvider = LoginProviders[ev->Get()->SecurityState.GetAudience()];
         loginProvider.UpdateSecurityState(ev->Get()->SecurityState);
-        BLOG_DEBUG("Updated state for " << loginProvider.Audience << " keys " << GetLoginProviderKeys(loginProvider));
+        BLOG_D("Updated state for " << loginProvider.Audience << " keys " << GetLoginProviderKeys(loginProvider));
 
         auto it = DeferredLoginTokens.find(loginProvider.Audience);
         if (it != DeferredLoginTokens.end()) {
@@ -1730,12 +1730,12 @@ private:
             }
             auto& record = it->second;
             if ((record.ExpireTime > now) && (record.AccessTime + GetLifeTime() > now)) {
-                BLOG_DEBUG("Refreshing ticket " << record.GetMaskedTicket());
+                BLOG_D("Refreshing ticket " << record.GetMaskedTicket());
                 if (!RefreshTicket(key, record)) {
                     RefreshQueue.push({key, record.RefreshTime});
                 }
             } else {
-                BLOG_NOTICE("Expired ticket " << record.GetMaskedTicket());
+                BLOG_D("Expired ticket " << record.GetMaskedTicket());
                 if (!record.AuthorizeRequests.empty()) {
                     record.Error = {.Message = "Timed out", .Retryable = true};
                     Respond(record);
@@ -2027,7 +2027,7 @@ protected:
         } else {
             CounterTicketsHighPriorityBuildTime->Collect(ticketBuildTime);
         }
-        BLOG_DEBUG("Ticket " << record.GetMaskedTicket()
+        BLOG_D("Ticket " << record.GetMaskedTicket()
             << " (" << record.PeerName << ") has now valid token of " << record.Subject);
         record.IsLowRequestPriority = true;
         RefreshQueue.push({.Key = key, .RefreshTime = record.RefreshTime});
@@ -2045,7 +2045,7 @@ protected:
             record.ExpireTime = GetDerived()->GetExpireTime(record, now);
             record.SetErrorRefreshTime(this, now);
             CounterTicketsErrorsRetryable->Inc();
-            BLOG_WARN("Ticket " << record.GetMaskedTicket()
+            BLOG_W("Ticket " << record.GetMaskedTicket()
                 << " (" << record.PeerName << ") has now retryable error message '" << error.Message << errorLogMessage << "'");
             if (record.RefreshRetryableErrorImmediately) {
                 record.RefreshRetryableErrorImmediately = false;
@@ -2058,7 +2058,7 @@ protected:
             record.UnsetToken();
             record.SetOkRefreshTime(this, now);
             CounterTicketsErrorsPermanent->Inc();
-            BLOG_WARN("Ticket " << record.GetMaskedTicket()
+            BLOG_W("Ticket " << record.GetMaskedTicket()
                 << " (" << record.PeerName << ") has now permanent error message '" << error.Message << errorLogMessage << "'");
         }
         CounterTicketsErrors->Inc();
@@ -2421,7 +2421,7 @@ protected:
         }
 
         if (Config.HasExternalIdpConfig()) {
-            BLOG_DEBUG("External IdP authentication is enabled");
+            BLOG_D("External IdP authentication is enabled");
             ExternalIdpProvider = Register(
                 CreateExternalIdpProvider(Config.GetExternalIdpConfig(), {}),
                 TMailboxType::HTSwap, AppData()->UserPoolId);

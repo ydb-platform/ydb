@@ -1286,6 +1286,117 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
             "must not be reported as STATE_LOST");
     }
 
+    // Cleanup is only ever enqueued from the Complete() hooks of outbox
+    // transactions, and those are gated on the flag. Suppress the scheduled
+    // continuation so the self-chain cannot drain on its own; only the
+    // disable path (ApplyConsoleConfigs) may rescue it.
+    Y_UNIT_TEST(DisablingDrainsAckedRecords) {
+        TSchemeShard* schemeshard = nullptr;
+        auto ssFactory = [&schemeshard](const TActorId& tablet, TTabletStorageInfo* info) {
+            schemeshard = new TSchemeShard(tablet, info);
+            return schemeshard;
+        };
+        TTestBasicRuntime runtime;
+        TTestEnvOptions opts;
+        opts.EnableSchemeChangeRecords(true);
+        TTestEnv env(runtime, opts, ssFactory);
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        // Small cap so the Ack's own tx cannot finish the drain in one shot.
+        schemeshard->SchemeChangeCleanupBatchSize = 1;
+
+        constexpr int kRecords = 3;
+        for (int i = 0; i < kRecords; ++i) {
+            TestMkDir(runtime, ++txId, "/MyRoot", Sprintf("Dir%d", i));
+            env.TestWaitNotification(runtime, txId);
+        }
+
+        TAutoPtr<IEventHandle> fetchHandle;
+        auto* fetch = FetchSchemeChangeRecords(runtime, "test:sub", 0, 1000, fetchHandle);
+        ui64 latest = 0;
+        for (size_t i = 0; i < static_cast<size_t>(fetch->Record.EntriesSize()); ++i) {
+            latest = Max(latest, fetch->Record.GetEntries(i).GetOrder());
+        }
+
+        auto before = ProbeRecordOrdersPresent(runtime, "test:sub", {latest});
+        UNIT_ASSERT_C(!before.empty(), "precondition: the record must exist before acking");
+
+        // Suppress the scheduled continuation before acking, so the batch-size
+        // limited remainder cannot drain via the ordinary self-chain.
+        TVector<THolder<IEventHandle>> suppressed;
+        auto prevObserver = SetSuppressObserver(runtime, suppressed,
+            TEvPrivate::TEvSchemeChangeRecordsCleanup::EventType);
+
+        TAutoPtr<IEventHandle> ackHandle;
+        AckSchemeChangeRecords(runtime, "test:sub", latest, ackHandle);
+        runtime.SimulateSleep(TDuration::MilliSeconds(50));
+
+        auto stillPresent = ProbeRecordOrdersPresent(runtime, "test:sub", {latest});
+        UNIT_ASSERT_C(!stillPresent.empty(),
+            "precondition: the continuation must be suppressed, so acked "
+            "records are not yet swept");
+
+        // Stop suppressing, but deliberately drop the already-suppressed
+        // continuation instead of replaying it: the drain below must come
+        // from a freshly enqueued cleanup, not from that stale one.
+        runtime.SetObserverFunc(prevObserver);
+        suppressed.clear();
+
+        // Disabling must kick the drain despite the dropped continuation.
+        {
+            auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+            request->Record.MutableConfig()->MutableFeatureFlags()->SetEnableSchemeChangeRecords(false);
+            SetConfig(runtime, TTestTxConfig::SchemeShard, std::move(request));
+        }
+        runtime.SimulateSleep(TDuration::MilliSeconds(50));
+
+        runtime.GetAppData().FeatureFlags.SetEnableSchemeChangeRecords(true);
+        auto after = ProbeRecordOrdersPresent(runtime, "test:sub", {latest});
+        UNIT_ASSERT_C(after.empty(),
+            "disabling the flag must self-start a drain of already-acked records");
+    }
+
+    // Scope limit: disabling must not bypass GetMinSubscriberOrder. An
+    // unacked record stays retained so re-enabling resumes losslessly.
+    Y_UNIT_TEST(DisablingRetainsUnackedRecords) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestMkDir(runtime, ++txId, "/MyRoot", "Dir1");
+        env.TestWaitNotification(runtime, txId);
+
+        TAutoPtr<IEventHandle> fetchHandle;
+        auto* fetch = FetchSchemeChangeRecords(runtime, "test:sub", 0, 1000, fetchHandle);
+        ui64 latest = 0;
+        for (size_t i = 0; i < static_cast<size_t>(fetch->Record.EntriesSize()); ++i) {
+            latest = Max(latest, fetch->Record.GetEntries(i).GetOrder());
+        }
+
+        auto before = ProbeRecordOrdersPresent(runtime, "test:sub", {latest});
+        UNIT_ASSERT_C(!before.empty(), "precondition: the record must exist before disabling");
+
+        // No ack: the subscriber's cursor still sits below this record.
+        {
+            auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+            request->Record.MutableConfig()->MutableFeatureFlags()->SetEnableSchemeChangeRecords(false);
+            SetConfig(runtime, TTestTxConfig::SchemeShard, std::move(request));
+        }
+        runtime.SimulateSleep(TDuration::MilliSeconds(50));
+
+        runtime.GetAppData().FeatureFlags.SetEnableSchemeChangeRecords(true);
+        auto after = ProbeRecordOrdersPresent(runtime, "test:sub", {latest});
+        UNIT_ASSERT_C(!after.empty(),
+            "an unacked record must survive disabling: the retention floor "
+            "must not be bypassed");
+    }
+
     // (a) FinalizeSchemeChangeRecord resolves the target via TPath::Resolve but
     // only writes PathOwnerId/PathLocalId back -- Path itself keeps the
     // propose-time synthesis. A WorkingDir with a trailing slash still

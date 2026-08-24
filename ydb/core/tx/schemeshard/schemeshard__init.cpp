@@ -6845,6 +6845,14 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         });
 
         Self->ScheduleForcedCompactionProgress(ctx);
+
+        // A tablet that reboots while the flag is off would otherwise never
+        // enqueue a drain: the only enqueue sites are Complete() hooks of
+        // outbox transactions gated on the flag.
+        if (!AppData()->FeatureFlags.GetEnableSchemeChangeRecords() &&
+            Self->NextSchemeChangeOrder > Self->SchemeChangeFloorOrder) {
+            Self->EnqueueSchemeChangeRecordsCleanup(ctx);
+        }
     }
 };
 

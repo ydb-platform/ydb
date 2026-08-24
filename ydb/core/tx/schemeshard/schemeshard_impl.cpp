@@ -8916,6 +8916,13 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TFeatureFlags& featu
     EnableExternalDataSourcesOnServerless = featureFlags.GetEnableExternalDataSourcesOnServerless();
     EnableShred = featureFlags.GetEnableDataErasure();
     EnableExternalSourceSchemaInference = featureFlags.GetEnableExternalSourceSchemaInference();
+
+    // Cleanup only self-chains from Ack/Unregister/ForceAdvance Complete()
+    // hooks, which are gated on the flag. If the flag just went off, kick a
+    // drain so already-acked rows do not sit on disk until it comes back on.
+    if (!featureFlags.GetEnableSchemeChangeRecords() && NextSchemeChangeOrder > SchemeChangeFloorOrder) {
+        EnqueueSchemeChangeRecordsCleanup(ctx);
+    }
 }
 
 void TSchemeShard::ConfigureStatsBatching(const NKikimrConfig::TSchemeShardConfig& config, const TActorContext& ctx) {

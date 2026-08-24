@@ -1551,7 +1551,7 @@ private:
             ev->Record.SetReadShadowData(true);
         }
 
-        if (buildInfo.IsBuildFulltextRelevance()) {
+        if (buildInfo.IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextRelevance) {
             path.Rise().Dive(NTableIndex::NFulltext::DictTable);
             ev->Record.SetDictTableName(path.PathString());
         }
@@ -2471,7 +2471,7 @@ private:
             if (done) {
                 LOG_D("FillFulltextIndex Dictionary Done");
                 NIceDb::TNiceDb db{txc.DB};
-                if (buildInfo.IsBuildFulltextRelevance()) {
+                if (buildInfo.IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextRelevance) {
                     buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Collect;
                     buildInfo.SubState = TIndexBuildInfo::ESubState::FulltextIndexBorders;
                     done = false;

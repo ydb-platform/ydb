@@ -12,7 +12,7 @@ User-token lifetime and other key aspects are configured in the [`auth_config` s
 
 A user token is removed from the cache when either of the following conditions is met:
 
-- The user token has not been used for `auth_config.life_time`. Each request with the corresponding authentication token updates the last-access time. The default value is `1h`.
+- The user token has not been used for `auth_config.life_time`. Only a request that matches the same cache key (the authentication token and validation context) updates that entry's last-access time. The default value is `1h`.
 - The cache entry has expired. For most authentication-token types, the lifetime is configured by `auth_config.expire_time`; the default value is `24h`. After a successful refresh, the countdown starts again. Tokens issued through login-and-password authentication and external identity provider tokens use the authentication token's own expiration time. Requests signed with an access key use the separate `auth_config.as_signature_expire_time` parameter.
 
 Removal occurs while the token queue is processed periodically. The interval between processing runs is configured by `auth_config.refresh_period`, so a token is not necessarily removed at the exact moment a condition is met.

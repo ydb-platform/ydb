@@ -7,7 +7,7 @@ Authorization in {{ ydb-short-name }} is based on the concepts of:
 * [Access object](../concepts/glossary.md#access-object)
 * [Access subject](../concepts/glossary.md#access-subject)
 * [Access right](../concepts/glossary.md#access-right)
-* [Access control list](../concepts/glossary.md#access-acl)
+* [Access control list](../concepts/glossary.md#access-control-list)
 * [Owner](../concepts/glossary.md#access-owner)
 * [User](../concepts/glossary.md#access-user)
 * [Group](../concepts/glossary.md#access-group)
@@ -66,7 +66,7 @@ To create, alter, and delete [groups](../concepts/glossary.md#access-group), the
 
 [Rights](../concepts/glossary.md#access-right) in {{ ydb-short-name }} are tied not to the [subject](../concepts/glossary.md#access-subject), but to the [access object](../concepts/glossary.md#access-object).
 
-Each access object has a list of permissions — [ACL](../concepts/glossary.md#access-acl) (Access Control List) — it stores all the rights provided to [access subjects](../concepts/glossary.md#subject) (users and groups) for the object.
+Each access object has a list of permissions — [ACL](../concepts/glossary.md#access-control-list) (Access Control List) — it stores all the rights provided to [access subjects](../concepts/glossary.md#subject) (users and groups) for the object.
 
 By default, rights are inherited from parents to descendants in the access objects tree.
 
@@ -141,4 +141,3 @@ Access level lists are configured in the [security configuration](../reference/c
 - **Administration** (presence in `administration_allowed_sids`) — Full administrative access to the cluster and its databases. Also used for config changes, scheme operations requiring admin privileges, and other administrative checks.
 - **Register node** (presence in `register_dynamic_node_allowed_sids`) — a separate (non-hierarchical) level for dynamic node registration in the cluster. It does not automatically grant `database`/`viewer`/`monitoring`/`administration` privileges. For technical reasons, if this list is configured (non-empty), it must include `root@builtin`.
 - **Bootstrap** (presence in `bootstrap_allowed_sids`) — a separate (non-hierarchical) level only for cluster bootstrap operations. It is used in an uninitialized state, when the authentication subsystem is not yet functional. Bootstrap is allowed if the subject is in `bootstrap_allowed_sids` or `administration_allowed_sids`; `bootstrap` by itself does not grant full administrative privileges.
-

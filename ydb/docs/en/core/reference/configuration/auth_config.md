@@ -320,14 +320,14 @@ Default value: `1s`
 Default value: `1h`
     ||
 || life_time
-| Maximum user-token inactivity period. Each request with the corresponding authentication token updates the last-access time. If the user token is not used for `life_time`, the node removes it from the cache during the next token-queue processing run.
+| Maximum user-token inactivity period. Only a request that matches the same cache key (the authentication token and validation context) updates that entry's last-access time. If the user token is not used for `life_time`, the node removes it from the cache when the entry is next processed.
 
 Default value: `1h`
     ||
 || expire_time
 | Lifetime of a successful validation result for most authentication-token types. After a successful refresh, the countdown starts again. Login-and-password tokens and external identity provider tokens use the authentication token's own expiration time. Requests signed with an access key use the separate `as_signature_expire_time` parameter.
 
-When a validation result expires, the node removes the user token during the next token-queue processing run. `refresh_time` controls the frequency of scheduled revalidation, so reducing only `expire_time` neither disables caching nor sets the refresh frequency.
+When a validation result has expired, the node removes the user token when that entry next becomes due in the token queue. For refreshable tokens, entries are normally scheduled according to `refresh_time`, while `refresh_period` controls how often due entries are processed. Therefore, reducing `expire_time` alone neither disables caching nor directly determines the removal or refresh frequency.
 
 Default value: `24h`
     ||

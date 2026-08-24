@@ -7,7 +7,7 @@
 * [Объект доступа](../concepts/glossary.md#access-object)
 * [Субъект доступа](../concepts/glossary.md#access-subject)
 * [Права доступа](../concepts/glossary.md#access-right)
-* [Список доступов](../concepts/glossary.md#access-acl)
+* [Список доступов](../concepts/glossary.md#access-control-list)
 * [Владелец](../concepts/glossary.md#access-owner)
 * [Пользователь](../concepts/glossary.md#access-user)
 * [Группа](../concepts/glossary.md#access-group)

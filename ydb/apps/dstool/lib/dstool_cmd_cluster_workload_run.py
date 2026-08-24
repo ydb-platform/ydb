@@ -1,4 +1,4 @@
-from collections import defaultdict
+from collections import defaultdict, deque
 from datetime import datetime, timedelta, timezone
 import random
 import secrets
@@ -432,7 +432,7 @@ def do(args):
     max_node_restarts_per_minute = config.max_node_restarts_per_minute
     rng = random.Random(config.random_seed)
 
-    recent_restarts = []
+    recent_restarts = deque()
     pending_node_restarts = _PendingNodeRestarts()
     config_retries = None
 
@@ -666,7 +666,6 @@ def do(args):
             if action_config.ask_cms is None:
                 return
 
-            node = sysinfo[node_id]
             if pdisk_id is None and pdisk_ids is None:
                 action_type = common.kikimr_cms.TAction.RESTART_SERVICES
                 services = (
@@ -998,7 +997,7 @@ def do(args):
 
         now = datetime.now(timezone.utc)
         while recent_restarts and recent_restarts[0] + timedelta(minutes=1) < now:
-            recent_restarts.pop(0)
+            recent_restarts.popleft()
 
         possible_actions = []
 

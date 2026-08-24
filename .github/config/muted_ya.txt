@@ -1,5 +1,8 @@
 ydb/core/blobstorage/ut_blobstorage Get.TestRdmaRegiseredMemory
 ydb/core/blobstorage/ut_blobstorage NodeDisconnected.BsQueueRetries
+ydb/core/external_sources/hive_metastore/ut HiveMetastoreClient.SuccessTrinoRequest
+ydb/core/external_sources/hive_metastore/ut HiveMetastoreFetcher.SuccessTrinoRequest
+ydb/core/external_sources/hive_metastore/ut unittest.sole chunk
 ydb/core/kqp/ut/indexes KqpIndexes.OnlineDuplicatesStage1
 ydb/core/kqp/ut/indexes KqpIndexes.OnlineDuplicatesStage3
 ydb/core/kqp/ut/indexes KqpIndexes.OnlineDuplicatesStage4

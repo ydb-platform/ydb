@@ -29,18 +29,6 @@
 
 #|
 || **Версия** | **Дата выпуска** | **Скачать** | **Контрольные суммы** | **Список изменений** ||
-|| **v26.2** |  |  |  |  ||
-|| v.26.2.1.ent.3 | 20.08.2026 |
-
-[Дистрибутив](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/26.2.1.ent.3/ydbd-enterprise-26.2.1.ent.3-stable-linux-amd64.tar.xz)
-[Отладочные символы](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/26.2.1.ent.3/ydbd-enterprise-26.2.1.ent.3-stable-linux-amd64-debug.tar.xz)
-
-|
-
-[К дистрибутиву](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/26.2.1.ent.3/checksums.txt)
-[К отладочным символам](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/26.2.1.ent.3/checksums.debug.txt)
-
-|  ||
 || **v26.1** |  |  |  |  ||
 || v.26.1.1.ent.3 | 03.08.2026 |
 

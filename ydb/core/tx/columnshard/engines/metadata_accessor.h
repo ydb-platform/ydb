@@ -110,12 +110,6 @@ public:
             return Orbit;
         }
 
-<<<<<<< HEAD
-        TSelectMetadataContext(const NOlap::IPathIdTranslator& pathIdTranslator, const IColumnEngine& engine, const std::shared_ptr<NLWTrace::TOrbit>& orbit)
-            : PathIdTranslator(pathIdTranslator)
-            , Engine(engine)
-            , Orbit(orbit) {
-=======
         const std::shared_ptr<NDataLocks::TManager>& GetDataLocksManager() const {
             return DataLocksManager;
         }
@@ -127,7 +121,6 @@ public:
             , Orbit(orbit)
             , DataLocksManager(dataLocksManager)
         {
->>>>>>> 3be006e8874 (Fix missing portion problem (#50292))
         }
     };
 

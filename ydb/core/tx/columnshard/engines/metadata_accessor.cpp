@@ -46,14 +46,8 @@ std::unique_ptr<NReader::NCommon::ISourcesConstructor> TUserTableAccessor::Selec
     AFL_VERIFY(readDescription.PKRangesFilter);
     // here we select portions for a read
     std::vector<IColumnEngine::TSelectedPortionInfo> portions =
-<<<<<<< HEAD
-        context.GetEngine().Select(PathId.InternalPathId, readDescription.GetSnapshot(), *readDescription.PKRangesFilter,
-            readDescription.readNonconflictingPortions, readDescription.readConflictingPortions, readDescription.ownPortions, context.GetOrbit(), readDescription.TxId, readDescription.ScanId);
-    
-=======
         context.GetEngine().Select(PathId.InternalPathId, readDescription, context.GetDataLocksManager());
 
->>>>>>> 3be006e8874 (Fix missing portion problem (#50292))
     switch (readerClass) {
         case NReader::EReaderClass::Plain: {
             return std::make_unique<NReader::NPlain::TPortionSources>(std::move(portions));

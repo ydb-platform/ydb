@@ -297,6 +297,7 @@ ydb/core/kqp/ut/indexes KqpMultishardIndex.DataColumnWrite
 ydb/core/kqp/ut/indexes KqpUniqueIndex.UpdateOnNullInComplexFk
 ydb/core/kqp/ut/olap KqpOlapOptimizer.SpecialSliceToOneLayer
 ydb/core/kqp/ut/olap KqpOlapOptimizer.TilingPlusPlusTtlDeletion
+ydb/core/kqp/ut/olap/types KqpOlapJson.DoubleFilterReduceScopeWithPredicateVariants[10,false,0,0,100,0.5]
 ydb/core/kqp/ut/rbo KqpRboOlap.BlockChannelScalar
 ydb/core/kqp/ut/rbo KqpRboOlap.DisableBlocksOnColumnsLimit
 ydb/core/kqp/ut/rbo KqpRboOlap.PredicatePushdownCastErrors

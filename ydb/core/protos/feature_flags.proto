@@ -356,4 +356,7 @@ message TFeatureFlags {
     optional bool EnableS3Scheduling = 321 [default = false];
     // Allows client data writes and schema modifications.
     optional bool EnableClientModifications = 368 [default = true];
+    // Keys SourceId→Partition mapping by a unique topic Id (UUID) instead of the topic name,
+    // so that deleting and recreating a topic with the same name does not inherit stale mappings.
+    optional bool EnableTopicSourceIdMappingById = 313 [default = false];
 }

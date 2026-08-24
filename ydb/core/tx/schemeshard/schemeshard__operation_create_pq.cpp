@@ -1,5 +1,6 @@
 #include "schemeshard__op_traits.h"
 #include "schemeshard__operation_common.h"
+
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 #include "schemeshard_pq_helpers.h"  // for PQGroupReserve
@@ -163,6 +164,7 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
     NKikimrPQ::TPQTabletConfig tabletConfig = op.GetPQTabletConfig();
     tabletConfig.ClearPartitionIds();
     tabletConfig.ClearPartitions();
+
 
     if (!CheckPersQueueConfig(tabletConfig, false, &errStr)) {
         status = NKikimrScheme::StatusSchemeError;
@@ -463,6 +465,29 @@ public:
 
         dstPath.MaterializeLeaf(owner);
         result->SetPathId(dstPath.Base()->PathId.LocalPathId);
+
+        // Assign topic Id for SourceId→Partition mapping. For FirstClass topics use
+        // the LocalPathId; for federation topics the Id should already be set from
+        // the _id attribute via ProcessTopicAttributes.
+        // Re-serialization follows the same pattern as schemeshard__operation_alter_pq.cpp:347
+        // and schemeshard__operation_common_pq.cpp:830.
+        if (AppData()->FeatureFlags.GetEnableTopicSourceIdMappingById()) {
+            bool configChanged = false;
+            if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen() && !config.HasId()) {
+                config.MutableId()->SetId(dstPath.Base()->PathId.LocalPathId);
+                config.MutableId()->SetOwnerId(ui64(ssId));
+                configChanged = true;
+            }
+            if (config.HasId() && !config.GetId().HasTxStep()) {
+                // Sentinel: the id is filled at create, so writers must not use the
+                // name-keyed fallback (a brand-new topic has no legacy rows).
+                config.MutableId()->SetTxStep(0);
+                configChanged = true;
+            }
+            if (configChanged) {
+                Y_PROTOBUF_SUPPRESS_NODISCARD config.SerializeToString(&pqGroup->TabletConfig);
+            }
+        }
 
         context.SS->TabletCounters->Simple()[COUNTER_PQ_GROUP_COUNT].Add(1);
 

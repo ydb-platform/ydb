@@ -510,14 +510,10 @@ TSmallBlobsStat TBlobManager::CalcSmallBlobsToDelete(const ui64 sizeThreshold) c
 }
 
 bool TBlobManager::HasBlobsForGroups(const THashSet<ui32>& groups) const {
-    // BlobsToKeep: TBlobsByGenStep — TLogoBlobID entries; resolve group via TabletInfo.
     const auto keptBlobInGroups = [&](const TLogoBlobID& blob) {
         const ui32 groupId = TabletInfo->GroupFor(blob.Channel(), blob.Generation());
-        // GroupFor returns Max<ui32>() when the generation predates every history
-        // entry; never treat that sentinel as a real group match.
         return groupId != Max<ui32>() && groups.contains(groupId);
     };
-    // BlobsToDelete / BlobsToDeleteDelayed: TTabletsByBlob — keyed by TUnifiedBlobId.
     const auto deletedBlobInGroups = [&groups](const auto& blob) {
         return groups.contains(blob.first.GetDsGroup());
     };
@@ -525,11 +521,9 @@ bool TBlobManager::HasBlobsForGroups(const THashSet<ui32>& groups) const {
 }
 
 TBlobStorageGroupType TBlobManager::GetBlobStorageGroupType() const {
-    // We assume here that all the channels have the same group type.
-    // We get [2] because it is the first channel where we store data.
-    // So, just in case, in the future 0, 1 channels be different from the rest, the code will still work.
-    if (TabletInfo && TabletInfo->Channels.size() > 2) {
-        return TabletInfo->Channels[2].Type;
+    static constexpr size_t MeaningfulChannelStart = 2;
+    if (TabletInfo && TabletInfo->Channels.size() > MeaningfulChannelStart) {
+        return TabletInfo->Channels[MeaningfulChannelStart].Type;
     }
     return TBlobStorageGroupType(TBlobStorageGroupType::ErasureNone);
 }

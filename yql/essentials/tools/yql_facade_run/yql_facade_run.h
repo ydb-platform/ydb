@@ -31,6 +31,7 @@ class IFunctionRegistry;
 namespace NYql {
 class TFileStorageConfig;
 class TGatewaysConfig;
+class TStaticGatewaysConfig;
 } // namespace NYql
 
 namespace NYql::NProto {
@@ -131,6 +132,7 @@ public:
     bool ScanUdfs = false;
     THolder<NYqlMountConfig::TMountConfig> MountConfig;
     THolder<TGatewaysConfig> GatewaysConfig;
+    THolder<TStaticGatewaysConfig> StaticGatewaysConfig;
     THolder<TFileStorageConfig> FsConfig;
     THolder<NProto::TPgExtensions> PgExtConfig;
     THolder<TGatewaysConfig> GatewaysPatch;

@@ -1,6 +1,10 @@
 #pragma once
 
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/dirty_map.pb.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/public.h>
+
+#include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 
 #include <ydb/core/base/events.h>
 
@@ -27,12 +31,14 @@ struct TEvPartitionDirectPrivate
                   LocalEventsOffset,
 
         EvUpdateVChunkConfig,
+        EvUpdateDirtyMapState,
         EvFastPathServiceReady,
 
         EvFastPathServiceShutdown,
         EvFastPathServiceStopped,
         EvPoisonByBlockedGeneration,
         EvAddHostToDBG,
+        EvPartitionCleanupCompleted,
 
         EvEnd,
     };
@@ -46,6 +52,20 @@ struct TEvPartitionDirectPrivate
 
         explicit TEvUpdateVChunkConfig(TVChunkConfig cfg)
             : VChunkConfig(std::move(cfg))
+        {}
+    };
+
+    struct TEvUpdateDirtyMapState
+        : public NActors::
+              TEventLocal<TEvUpdateDirtyMapState, EvUpdateDirtyMapState>
+    {
+        ui32 VChunkIndex;
+        TDirtyMapStateProto State;
+        NThreading::TPromise<void> UpdateCompleted = NThreading::NewPromise();
+
+        TEvUpdateDirtyMapState(ui32 vChunkIndex, TDirtyMapStateProto state)
+            : VChunkIndex(vChunkIndex)
+            , State(std::move(state))
         {}
     };
 
@@ -91,6 +111,21 @@ struct TEvPartitionDirectPrivate
         TEvAddHostToDBG(size_t dbgId, size_t newHostIndex)
             : DirectBlockGroupId(dbgId)
             , NewHostIndex(newHostIndex)
+        {}
+    };
+
+    // Cleanup actor reports wipe + BSC deallocate outcome to the tablet.
+    struct TEvPartitionCleanupCompleted
+        : public NActors::TEventLocal<
+              TEvPartitionCleanupCompleted,
+              EvPartitionCleanupCompleted>
+    {
+        NProto::TError Error;
+
+        TEvPartitionCleanupCompleted() = default;
+
+        explicit TEvPartitionCleanupCompleted(NProto::TError error)
+            : Error(std::move(error))
         {}
     };
 };

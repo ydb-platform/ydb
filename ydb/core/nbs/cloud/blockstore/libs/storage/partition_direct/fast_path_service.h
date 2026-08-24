@@ -75,7 +75,8 @@ public:
         ui64 blockCount,
         ui32 blockSize,
         TVector<IDirectBlockGroupPtr> directBlockGroups,
-        TVChunkConfigByIndex vChunkConfigs,
+        const TVChunkConfigs& vChunkConfigs,
+        const TDirtyMapStateProtos& dirtyMapStates,
         TStorageConfigPtr storageConfig,
         ISchedulerPtr scheduler,
         ITimerPtr timer,
@@ -122,6 +123,10 @@ public:
 
     NThreading::TFuture<void> UpdateVChunkConfig(
         const TVChunkConfig& cfg) override;
+
+    NThreading::TFuture<void> UpdateDirtyMapState(
+        ui32 vChunkIndex,
+        TDirtyMapStateProto state) override;
 
     void QueryAddHost(size_t directBlockGroupId, size_t newHostIndex) override;
 

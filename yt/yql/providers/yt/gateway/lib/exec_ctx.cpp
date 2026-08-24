@@ -8,6 +8,7 @@
 #include <yt/yql/providers/yt/lib/schema/schema.h>
 
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/providers/common/proto/static_gateways_config.pb.h>
 
 namespace NYql {
 
@@ -45,6 +46,7 @@ TExecContextBaseSimple::TExecContextBaseSimple(
     : Gateway(gateway)
     , FunctionRegistry_(services->FunctionRegistry)
     , Config_(services->Config)
+    , StaticConfig_(services->StaticConfig)
     , Clusters_(clusters)
     , MkqlCompiler_(mkqlCompiler)
     , UrlMapper_(urlMapper)
@@ -65,7 +67,7 @@ void TExecContextBaseSimple::MakeUserFiles(const TUserDataTable& userDataBlocks)
     UserFiles_ = MakeIntrusive<TUserFiles>(*UrlMapper_, activeYtCluster);
     for (const auto& file: userDataBlocks) {
         auto block = file.second;
-        if (!Config_->GetMrJobUdfsDir().empty() && block.Usage.Test(EUserDataBlockUsage::Udf) && block.Type == EUserDataType::PATH) {
+        if (!StaticConfig_->GetMrJobUdfsDir().empty() && block.Usage.Test(EUserDataBlockUsage::Udf) && block.Type == EUserDataType::PATH) {
             TFsPath path = block.Data;
             TString fileName = path.Basename();
 #ifdef _win_
@@ -73,7 +75,7 @@ void TExecContextBaseSimple::MakeUserFiles(const TUserDataTable& userDataBlocks)
             changedName.ChopSuffix(".dll");
             fileName = TString("lib") + changedName + ".so";
 #endif
-            block.Data = TFsPath(Config_->GetMrJobUdfsDir()) / fileName;
+            block.Data = TFsPath(StaticConfig_->GetMrJobUdfsDir()) / fileName;
             TString md5;
             if (block.FrozenFile) {
                 md5 = block.FrozenFile->GetMd5();

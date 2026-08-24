@@ -459,8 +459,8 @@ public:
         resolved[ECGroupController::CpuAcct] = Cpu_.CpuAcctLocation;
         resolved[ECGroupController::IO] = IO_.Location;
         resolved[ECGroupController::Pids] = Pids_.Location;
-        YT_LOG_INFO("CGroups statistics fetcher initialized (Controllers: %v)",
-            resolved);
+        YT_TLOG_INFO("CGroups statistics fetcher initialized")
+            .With("Controllers", resolved);
     }
 
     bool IsControllerV2(ECGroupController controller) const override
@@ -532,7 +532,9 @@ TString ReadProcFile(const TString& path)
     try {
         return TFileInput(path).ReadAll();
     } catch (const std::exception& ex) {
-        YT_LOG_WARNING("Failed to read %v (Error: %v)", path, ex.what());
+        YT_TLOG_WARNING("Failed to read cgroup statistics")
+            .With("Path", path)
+            .With(ex);
         return {};
     }
 }

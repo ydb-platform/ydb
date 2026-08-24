@@ -1299,6 +1299,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                 100,
                 DirectBlockGroupHostCount,
                 DefaultPrimaryCount),
+            TDirtyMapStateProto(),
             dbg,
             3,
             vChunkSize,

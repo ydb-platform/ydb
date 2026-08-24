@@ -2480,6 +2480,7 @@ class Cuda(object):
         self.cuda_sanitize = Setting('CUDA_SANITIZE', auto=False, convert=to_bool)
         self.cuda_use_clang = Setting('CUDA_USE_CLANG', auto=False, convert=to_bool)
         self.cuda_host_compiler = Setting('CUDA_HOST_COMPILER', auto=self.auto_cuda_host_compiler)
+        self.cuda_host_compiler_version = Setting('CUDA_HOST_COMPILER_VERSION', auto=self.auto_cuda_host_compiler_version)
         self.cuda_host_compiler_env = Setting('CUDA_HOST_COMPILER_ENV')
         self.cuda_host_msvc_version = Setting('CUDA_HOST_MSVC_VERSION')
         self.cuda_nvcc_flags = Setting('CUDA_NVCC_FLAGS', auto=[], convert=self.filter_nvcc_flags, rewrite=True)
@@ -2561,6 +2562,7 @@ class Cuda(object):
         self.cuda_sanitize.emit()
         self.cuda_use_clang.emit()
         self.cuda_host_compiler.emit()
+        self.cuda_host_compiler_version.emit()
         self.cuda_host_compiler_env.emit()
         self.cuda_host_msvc_version.emit()
         self.cuda_nvcc_flags.emit()
@@ -2593,8 +2595,11 @@ class Cuda(object):
         sanitize = ' '
         if self.cuda_sanitize.value:
             sanitize = '--y_sanitize '
+        skip_compressed_debug_info = ' '
+        if self.cuda_host_compiler_version.value == '14':
+            skip_compressed_debug_info = '--y_skip_compressed_debug_info '
         if not self.cuda_use_clang.value:
-            cmd = '$YMAKE_PYTHON3 ${input:"build/scripts/compile_cuda.py"}' + mtime + custom_pid + sanitize + '$NVCC $NVCC_STD $NVCC_FLAGS $NVCC_GENCODE_FLAGS -c ${input:SRC} -o ${output;suf=${OBJ_SUF}${NVCC_OBJ_EXT}:SRC} ${pre=-I:_C__INCLUDE} --cflags $C_FLAGS_PLATFORM $CXXFLAGS $NVCC_STD $SRCFLAGS ${hide;input:"build/internal/platform/cuda/cuda_runtime_include.h"} $NVCC_ENV $CUDA_HOST_COMPILER_ENV ${hide;kv:"p CU"} ${hide;kv:"pc light-green"}'  # noqa E501
+            cmd = '$YMAKE_PYTHON3 ${input:"build/scripts/compile_cuda.py"}' + mtime + custom_pid + sanitize + skip_compressed_debug_info + '$NVCC $NVCC_STD $NVCC_FLAGS $NVCC_GENCODE_FLAGS -c ${input:SRC} -o ${output;suf=${OBJ_SUF}${NVCC_OBJ_EXT}:SRC} ${pre=-I:_C__INCLUDE} --cflags $C_FLAGS_PLATFORM $CXXFLAGS $NVCC_STD $SRCFLAGS ${hide;input:"build/internal/platform/cuda/cuda_runtime_include.h"} $NVCC_ENV $CUDA_HOST_COMPILER_ENV ${hide;kv:"p CU"} ${hide;kv:"pc light-green"}'  # noqa E501
         else:
             cmd = '$CXX_COMPILER --cuda-path=$CUDA_ROOT $C_FLAGS_PLATFORM -c ${input:SRC} -o ${output;suf=${OBJ_SUF}${NVCC_OBJ_EXT}:SRC} ${pre=-I:_C__INCLUDE} $CXXFLAGS $SRCFLAGS $TOOLCHAIN_ENV ${hide;kv:"p CU"} ${hide;kv:"pc green"}'  # noqa E501
 
@@ -2754,6 +2759,16 @@ class Cuda(object):
             (host.is_linux_x86_64 and target.is_linux_armv8, '$CUDA_HOST_TOOLCHAIN_RESOURCE_GLOBAL/bin/clang'),
             (host.is_linux_x86_64 and target.is_linux_armv9a, '$CUDA_HOST_TOOLCHAIN_RESOURCE_GLOBAL/bin/clang'),
         ))
+
+    def auto_cuda_host_compiler_version(self):
+        if not self.use_arcadia_cuda_host_compiler.value or not self.build.host.is_linux_x86_64:
+            return None
+
+        if is_positive('CUDA11'):
+            return '14'
+
+        version = tuple(map(int, self.cuda_version.value.split('.')))
+        return '14' if version < (12, 6) else None
 
     def cuda_windows_host_compiler(self):
         vc_version = '14.28.29910'

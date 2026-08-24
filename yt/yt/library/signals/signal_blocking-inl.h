@@ -69,7 +69,8 @@ inline auto GetDefaultSignalBlockingCallback(const NLogging::TLogger& logger)
 {
     return [Logger = logger] (bool ok, int threadCount) {
         if (!ok) {
-            YT_LOG_WARNING( "Thread count is not 1, trying to get thread infos (ThreadCount: %v)", threadCount);
+            YT_TLOG_WARNING("Thread count is not 1, trying to get thread infos")
+                .With("ThreadCount", threadCount);
             auto threadInfos = NBacktraceIntrospector::IntrospectThreads();
             auto formattedThreadInfos = NBacktraceIntrospector::FormatIntrospectionInfos(threadInfos);
             AbortProcessDramatically(

@@ -83,7 +83,6 @@ public:
             return NUdf::EFetchStatus::Ok;
         }
 
-    private:
         TComputationContext& CompCtx_;
         ui64 Index_ = 0;
         TTestStreamParams& Params_;

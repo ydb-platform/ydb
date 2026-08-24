@@ -279,7 +279,10 @@ TConclusion<NArrow::TColumnFilter> TPortionDataSource::DoCheckIndex(
     if (auto fetcher = MutableStageData().ExtractFetcherOptional(meta->GetIndexId())) {
         auto source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
         NCommon::TFetchingResultContext fetchContext(context.MutableResources(), *GetStageData().GetIndexes(), source);
-        fetcher->OnDataCollected(fetchContext);
+        auto conclusion = fetcher->OnDataCollected(fetchContext);
+        if (conclusion.IsFail()) {
+            return conclusion;
+        }
     }
 
     NArrow::TColumnFilter filter = NArrow::TColumnFilter::BuildAllowFilter();
@@ -336,7 +339,10 @@ TConclusion<NArrow::TColumnFilter> TPortionDataSource::DoCheckHeader(
     {
         if (auto fetcher = MutableStageData().ExtractFetcherOptional(fetchContext.GetColumnId())) {
             NCommon::TFetchingResultContext fetchContext(context.MutableResources(), *GetStageData().GetIndexes(), source);
-            fetcher->OnDataCollected(fetchContext);
+            auto conclusion = fetcher->OnDataCollected(fetchContext);
+            if (conclusion.IsFail()) {
+                return conclusion;
+            }
         } else {
             NYDBTest::TControllers::GetColumnShardController()->OnHeaderSelectProcessed({});
             return result;
@@ -397,13 +403,14 @@ TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> TPortionDataSource::DoSt
     }
 }
 
-void TPortionDataSource::DoAssembleAccessor(
+TConclusionStatus TPortionDataSource::DoAssembleAccessor(
     const NArrow::NSSA::TProcessorContext& context, const ui32 columnId, const TString& /*subColumnName*/) {
     auto source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
     NCommon::TFetchingResultContext fetchContext(context.MutableResources(), *GetStageData().GetIndexes(), source);
     if (auto fetcher = MutableStageData().ExtractFetcherOptional(columnId)) {
-        fetcher->OnDataCollected(fetchContext);
+        return fetcher->OnDataCollected(fetchContext);
     }
+    return TConclusionStatus::Success();
 }
 
 void TPortionDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns, const bool sequential) {

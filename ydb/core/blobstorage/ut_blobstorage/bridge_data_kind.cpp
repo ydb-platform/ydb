@@ -24,6 +24,74 @@ TNodeLocation GetLocation(ui32 nodeId) {
 
 Y_UNIT_TEST_SUITE(BridgeDataKind) {
 
+    Y_UNIT_TEST(EncryptionWorksWithInterpileTrafficOptimization) {
+        TFeatureFlags featureFlags;
+        featureFlags.SetEnableInterpileTrafficOptimization(true);
+
+        const ui8 keyData[32] = "Hello, I'm your new key";
+        const TEncryptionKey key{
+            .Key = {keyData, sizeof(keyData)},
+            .Version = 1,
+            .Id = "tenant key",
+        };
+
+        TEnvironmentSetup env{{
+            .NodeCount = 8 * 3,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .Encryption = true,
+            .ConfigPreprocessor = [key](ui32, TNodeWardenConfig& config) { config.TenantKey = key; },
+            .LocationGenerator = GetLocation,
+            .FeatureFlags = featureFlags,
+            .SelfManagementConfig = true,
+            .NumPiles = 3,
+            .AutomaticBootstrap = true,
+        }};
+        env.CreatePool();
+        const ui32 groupId = env.GetGroups().front();
+
+        ui32 step = 1;
+        auto put = [&](const TString& data) {
+            const TLogoBlobID id(100500, 1, step++, 0, data.size(), 0);
+            const TActorId sender = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+            env.Runtime->WrapInActorContext(sender, [&] {
+                SendToBSProxy(sender, groupId, new TEvBlobStorage::TEvPut(id, data, TInstant::Max()));
+            });
+            auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(sender, false);
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+            return id;
+        };
+
+        put("warmup");
+        env.Sim(TDuration::Seconds(5));
+
+        size_t encryptedInterpilePuts = 0;
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvInterpilePut) {
+                for (const auto& item : ev->Get<TEvInterpilePut>()->Record.GetItems()) {
+                    encryptedInterpilePuts += item.GetAlreadyEncrypted();
+                }
+            }
+            return true;
+        };
+
+        const TString data(1_MB + 1, 'x');
+        const TLogoBlobID id = put(data);
+
+        env.Runtime->FilterFunction = nullptr;
+
+        const TActorId sender = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        env.Runtime->WrapInActorContext(sender, [&] {
+            SendToBSProxy(sender, groupId, new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(),
+                NKikimrBlobStorage::EGetHandleClass::FastRead));
+        });
+        auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(sender, false);
+        UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(res->Get()->ResponseSz, 1);
+        UNIT_ASSERT_VALUES_EQUAL(res->Get()->Responses[0].Status, NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(res->Get()->Responses[0].Buffer.ConvertToString(), data);
+        UNIT_ASSERT_C(encryptedInterpilePuts, "no encrypted write reached a remote pile the interpile way");
+    }
+
     // With interpile traffic optimization the bridge proxy hands the blob over to a node inside the
     // remote pile instead of writing it across the link itself. That leg rebuilds the message and
     // then passes it through a protobuf, so the data kind has to survive both hops -- otherwise a

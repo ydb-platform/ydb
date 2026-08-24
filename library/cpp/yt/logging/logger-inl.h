@@ -366,12 +366,12 @@ inline void LogEventImpl(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//! References the per-call-site static anchor and its one-shot registration flag.
-//! Produced by the lambda embedded in the fluent |YT_TLOG_*| macros.
+//! Identifies a call site.
 struct TStaticAnchorRef
 {
     TLoggingAnchor* Anchor;
     std::atomic<bool>* Registered;
+    ::TSourceLocation SourceLocation;
 };
 
 struct TDynamicAnchorRef
@@ -395,13 +395,11 @@ public:
     TTaggedLoggingGuard(
         const TLogger& logger,
         ELogLevel level,
-        ::TSourceLocation sourceLocation,
         TStaticAnchorRef anchorRef,
         TStringBuf message)
         : TTaggedLoggingGuard(
             logger,
             level,
-            sourceLocation,
             anchorRef,
             message,
             /*alwaysBuildMessage*/ false)
@@ -520,16 +518,15 @@ protected:
     TTaggedLoggingGuard(
         const TLogger& logger,
         ELogLevel level,
-        ::TSourceLocation sourceLocation,
         TStaticAnchorRef anchorRef,
         TStringBuf message,
         bool alwaysBuildMessage)
         : Logger_(logger)
-        , SourceLocation_(sourceLocation)
+        , SourceLocation_(anchorRef.SourceLocation)
         , Anchor_(anchorRef.Anchor)
     {
         if (!Logger_.IsAnchorUpToDate(*Anchor_)) [[unlikely]] {
-            Logger_.UpdateStaticAnchor(Anchor_, anchorRef.Registered, sourceLocation, message);
+            Logger_.UpdateStaticAnchor(Anchor_, anchorRef.Registered, SourceLocation_, message);
         }
 
         Initialize(level, message, alwaysBuildMessage);
@@ -602,10 +599,9 @@ class TTaggedFatalLoggingGuard
 public:
     TTaggedFatalLoggingGuard(
         const TLogger& logger,
-        ::TSourceLocation sourceLocation,
         TStaticAnchorRef anchorRef,
         TStringBuf message)
-        : TTaggedLoggingGuard(logger, ELogLevel::Fatal, sourceLocation, anchorRef, message, /*alwaysBuildMessage*/ true)
+        : TTaggedLoggingGuard(logger, ELogLevel::Fatal, anchorRef, message, /*alwaysBuildMessage*/ true)
     { }
 
     //! Emits the event at |Fatal| level; the log manager aborts the process.
@@ -627,10 +623,9 @@ class TTaggedThrowingLoggingGuard
 public:
     TTaggedThrowingLoggingGuard(
         const TLogger& logger,
-        ::TSourceLocation sourceLocation,
         TStaticAnchorRef anchorRef,
         TStringBuf message)
-        : TTaggedLoggingGuard(logger, ELogLevel::Alert, sourceLocation, anchorRef, message, /*alwaysBuildMessage*/ true)
+        : TTaggedLoggingGuard(logger, ELogLevel::Alert, anchorRef, message, /*alwaysBuildMessage*/ true)
     { }
 
     //! Returns true exactly once, so the enclosing |for| runs the |.With| chain a single

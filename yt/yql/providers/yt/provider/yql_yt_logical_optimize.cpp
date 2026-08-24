@@ -432,7 +432,7 @@ protected:
                 }
             }
 
-            for (auto lambda : { input.PresortKeyLambda().Raw(), input.KeyExtractorLambda().Raw(), input.ListHandlerLambda().Raw() }) {
+            for (auto lambda : { input.PresortKeyLambda().Raw(), input.KeyExtractLambda().Raw(), input.ArgMapLambda().Raw() }) {
                 if (!IsYtCompleteIsolatedLambda(*lambda, syncList, usedCluster, false, selectionMode)) {
                     return node;
                 }

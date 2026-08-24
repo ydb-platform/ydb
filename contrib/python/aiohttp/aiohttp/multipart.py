@@ -530,9 +530,7 @@ class BodyPartReader:
         elif encoding in ("binary", "8bit", "7bit"):
             return data
         else:
-            raise RuntimeError(
-                "unknown content transfer encoding: {}" "".format(encoding)
-            )
+            raise RuntimeError(f"unknown content transfer encoding: {encoding}")
 
     def get_charset(self, default: str) -> str:
         """Returns charset parameter from Content-Type header or default."""
@@ -981,7 +979,7 @@ class MultipartWriter(Payload):
         return "".join(
             "--"
             + self.boundary
-            + "\n"
+            + "\r\n"
             + part._binary_headers.decode(encoding, errors)
             + part.decode()
             for part, _e, _te in self._parts

@@ -2215,7 +2215,7 @@ TEST_F(TFutureTest, ErrorFromException)
 
     TError::RegisterFromExceptionEnricher([](TError* error, const std::exception&) {
         if (testFromExceptionEnricherEnabled) {
-            *error <<= TErrorAttribute("test_attribute", getAttribute(*error) + "X");
+            error->Add("test_attribute", getAttribute(*error) + "X");
         }
     });
 

@@ -55,7 +55,7 @@ We recommend using `raw string` and the escape method using `\"`, as it is more 
 
 ### How do I update a JSON value in a table? {#update-json}
 
-Since YQL operates on immutable values in memory, to modify a JSON you need to construct a new value from pieces of the old one. This is done using the [`Yson` UDF](../../yql/reference/udf/list/yson.md) combined with [dictionary functions](../../yql/reference/builtins/dict.md).
+Partial updates of a JSON field are not supported, so it is necessary to construct a new value from parts of the old and new data. This is done using the [`Yson` UDF](../../yql/reference/udf/list/yson.md) combined with [dictionary functions](../../yql/reference/builtins/dict.md).
 
 The example below adds a new field `new_field` to the JSON object stored in the `column` column:
 

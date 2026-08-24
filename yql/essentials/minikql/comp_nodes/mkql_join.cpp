@@ -533,20 +533,20 @@ public:
                     }
                         continue;
                     case EOutputMode::LeftNull:
-                        if (const auto item = List2_.Next(ctx); item.IsSpecial()) {
+                        if (auto item = List2_.Next(ctx); item.IsSpecial()) {
                             return item;
                         } else {
                             return PrepareNullItem<true>(ctx, item);
                         }
                     case EOutputMode::RightNull:
-                        if (const auto item = List1_.Next(ctx); item.IsSpecial()) {
+                        if (auto item = List1_.Next(ctx); item.IsSpecial()) {
                             return item;
                         } else {
                             return PrepareNullItem<false>(ctx, item);
                         }
                     case EOutputMode::BothNull:
                         if (CrossMove1_) {
-                            if (const auto item = List1_.Next(ctx); item.IsFinish()) {
+                            if (auto item = List1_.Next(ctx); item.IsFinish()) {
                                 CrossMove1_ = false;
                             } else if (item.IsYield()) {
                                 return item;
@@ -555,7 +555,7 @@ public:
                             }
                         }
 
-                        if (const auto item = List2_.Next(ctx); item.IsSpecial()) {
+                        if (auto item = List2_.Next(ctx); item.IsSpecial()) {
                             return item;
                         } else {
                             return PrepareNullItem<true>(ctx, item);

@@ -422,8 +422,8 @@ public:
                 return item;
             }
 
-            if (const auto input = Flow_->GetValue(ctx); input.IsSpecial()) {
-                return input;
+            if (auto input = Flow_->GetValue(ctx); input.IsSpecial()) {
+                return NUdf::TUnboxedValuePod(input);
             } else {
                 s.Reset(input);
             }

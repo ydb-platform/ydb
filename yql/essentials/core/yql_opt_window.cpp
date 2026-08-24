@@ -1926,7 +1926,7 @@ public:
 
 private:
     TExprNode::TPtr BuildFinalOutput(TExprContext& ctx) const {
-        const auto defaultValue = GetDefaultValue();
+        auto defaultValue = GetDefaultValue();
         YQL_ENSURE(!FrameNeverEmpty_);
 
         if (defaultValue->IsCallable("Null")) {

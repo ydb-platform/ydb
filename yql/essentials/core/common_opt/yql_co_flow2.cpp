@@ -381,7 +381,7 @@ TExprNode::TPtr SqlCombineInputSubsetFields(const TCoSqlCombineInput& node, TExp
 
 TExprNode::TPtr OptimizeSqlCombineInput(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
     const TCoSqlCombineInput self(node);
-    const auto ret = SqlCombineInputSubsetFields(self, ctx, optCtx);
+    auto ret = SqlCombineInputSubsetFields(self, ctx, optCtx);
     if (ret != node) {
         YQL_CLOG(DEBUG, Core) << node->Content() << "SubsetFields";
         return ret;
@@ -465,7 +465,7 @@ TExprNode::TPtr SqlCombineSubsetFields(const TCoSqlCombine& node, TExprContext& 
 
 TExprNode::TPtr OptimizeSqlCombine(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
     const TCoSqlCombine self(node);
-    const auto ret = SqlCombineSubsetFields(self, ctx, optCtx);
+    auto ret = SqlCombineSubsetFields(self, ctx, optCtx);
     if (ret != node) {
         YQL_CLOG(DEBUG, Core) << node->Content() << "SubsetFields";
         return ret;

@@ -68,6 +68,20 @@ message TCounterOptions {
      *       If more than one counter is defined, their values are combined together.
      */
     repeated TSourceCounter SourceCounters = 5;
+
+    /**
+     * Whether this counter is meaningful only on leaders (step 09.5).
+     *
+     * @note A leader-only counter (for example, table.datashard.row_count or
+     *       table.datashard.write.rows) must be summed over FollowerId == 0
+     *       leaves alone when a PARTITION-level table is rolled up to the
+     *       table level: summing it over every leaf, followers included,
+     *       inflates it by the replication factor, since every follower
+     *       reports the very same absolute value (a Simple gauge) or the
+     *       very same accumulated delta (a Cumulative counter derived from
+     *       state the followers replicate from the leader).
+     */
+    optional bool LeaderOnly = 6;
 }
 
 message TTxTypeOptions {

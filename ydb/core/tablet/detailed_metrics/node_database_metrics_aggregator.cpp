@@ -1,168 +1,26 @@
 #include "node_database_metrics_aggregator.h"
 
 #include "detailed_metrics_counter_set.h"
-
-#include <ydb/core/tablet/private/aggregated_tablet_counters.h>
+#include "detailed_metrics_tree.h"
 
 #include <util/generic/hash.h>
 #include <util/generic/vector.h>
 #include <util/string/cast.h>
 #include <util/system/mutex.h>
 
-namespace NKikimr {
+#include <tuple>
 
-namespace {
+namespace NKikimr {
 
 /**
  * Process-wide as there's only two TCA per node: leader and follower. Finer granularity will not buy anything.
  */
-TMutex& Lock() {
+TMutex& DetailedMetricsLock() {
     static TMutex lock;
     return lock;
 }
 
-// Labels of the detailed metrics counter tree
-const TString DATABASE_LABEL = "database";
-const TString TABLE_LABEL = "table";
-const TString DETAILED_METRICS_LABEL = "detailed_metrics";
-const TString TABLET_ID_LABEL = "tablet_id";
-const TString FOLLOWER_ID_LABEL = "follower_id";
-
-const TString PER_PARTITION_VALUE = "per_partition";
-
-// Labels of the low level tablet counters (the same as in the "tablets" group)
-const TString TYPE_LABEL = "type";
-const TString CATEGORY_LABEL = "category";
-
-const TString EXECUTOR_CATEGORY = "executor";
-const TString APP_CATEGORY = "app";
-
-/**
- * A single tablet (a leader or a follower) within a table.
- */
-using TTabletKey = std::pair<ui64, ui32>;
-
-/**
- * @return path with any trailing "/" chopped, as a view into path.
- */
-TStringBuf ChopTrailingSlash(const TStringBuf path) {
-    TStringBuf chopped(path);
-    chopped.ChopSuffix("/");
-    return chopped;
-}
-
-/**
- * Strip the database path prefix from the full path of the table.
- *
- * @param[in] databasePrefix The database path with the trailing "/" already chopped
- *                            (see TNodeDatabaseMetricsAggregatorImpl::DatabasePrefix)
- * @param[in] tablePath The full path of the table, which outlives the returned view
- *
- * @return A view into tablePath: either the stripped suffix, or tablePath itself
- *         when it does not start with the database. No allocation either way.
- */
-TStringBuf MakeRelativeTablePath(const TStringBuf databasePrefix, const TString& tablePath) {
-    TStringBuf relativePath(tablePath);
-
-    // The "/" is required, so that /Root/db10/table is NOT stripped down to "0/table"
-    // within the database /Root/db1
-    if (relativePath.SkipPrefix(databasePrefix) && relativePath.SkipPrefix("/") && !relativePath.empty()) {
-        return relativePath;
-    }
-
-    return TStringBuf(tablePath);
-}
-
-/**
- * A single bucket of the detailed metrics counter tree: the low level counters
- * of one or more tablets of the same type.
- *
- * @note The bucket of a table level table holds many tablets, while a leaf group
- *       of a partition level table holds exactly one. Both cases are handled by
- *       the very same code: aggregating a single tablet is a passthrough
- *       (SUM(x) == MAX(x) == x).
- */
-class TCountersBucket {
-public:
-    TCountersBucket(
-        NMonitoring::TDynamicCounterPtr bucketGroup,
-        TTabletTypes::EType tabletType,
-        const TDetailedMetricsCounterNames& counterNames,
-        NMonitoring::TCountableBase::EVisibility visibility
-    )
-        : TabletType(tabletType)
-        , TypeGroup(bucketGroup->GetSubgroup(TYPE_LABEL, TTabletTypes::TypeToStr(tabletType)))
-        , ExecutorCounters(TypeGroup->GetSubgroup(CATEGORY_LABEL, EXECUTOR_CATEGORY), visibility)
-        , AppCounters(TypeGroup->GetSubgroup(CATEGORY_LABEL, APP_CATEGORY), visibility)
-        , CounterNames(&counterNames)
-    {}
-
-    void Apply(
-        const TTabletKey& tablet,
-        const TTabletCountersBase& executorCounters,
-        const TTabletCountersBase& appCounters,
-        TInstant now
-    ) {
-        // The aggregates identify their sources by a single ui64, while a bucket may hold
-        // several followers of the same tablet, hence the synthetic source IDs
-        auto [it, inserted] = SourceIds.try_emplace(tablet, NextSourceId);
-        if (inserted) {
-            ++NextSourceId;
-        }
-
-        if (!ExecutorCounters.IsInitialized) {
-            ExecutorCounters.Initialize(&executorCounters, &CounterNames->ExecutorNames);
-        }
-        if (!AppCounters.IsInitialized) {
-            AppCounters.Initialize(&appCounters, &CounterNames->AppNames);
-        }
-
-        ExecutorCounters.Apply(it->second, &executorCounters, TabletType, now);
-        AppCounters.Apply(it->second, &appCounters, TabletType, now);
-    }
-
-    void Forget(const TTabletKey& tablet) {
-        auto it = SourceIds.find(tablet);
-        if (it == SourceIds.end()) {
-            return;
-        }
-
-        if (ExecutorCounters.IsInitialized) {
-            ExecutorCounters.Forget(it->second);
-        }
-        if (AppCounters.IsInitialized) {
-            AppCounters.Forget(it->second);
-        }
-
-        SourceIds.erase(it);
-    }
-
-    bool IsEmpty() const {
-        return SourceIds.empty();
-    }
-
-    void RecalcAll() {
-        if (ExecutorCounters.IsInitialized) {
-            ExecutorCounters.RecalcAll();
-        }
-        if (AppCounters.IsInitialized) {
-            AppCounters.RecalcAll();
-        }
-    }
-
-private:
-    TTabletTypes::EType TabletType;
-
-    NMonitoring::TDynamicCounterPtr TypeGroup;
-
-    NPrivate::TAggregatedTabletCounters ExecutorCounters;
-    NPrivate::TAggregatedTabletCounters AppCounters;
-
-    const TDetailedMetricsCounterNames* CounterNames;
-
-    THashMap<TTabletKey, ui64> SourceIds;
-    ui64 NextSourceId = 0;
-};
+namespace {
 
 /**
  * Everything the aggregator keeps for a single table.
@@ -219,7 +77,7 @@ public:
         const TTabletCountersBase& appCounters,
         TInstant now
     ) override {
-        TGuard<TMutex> guard(Lock());
+        TGuard<TMutex> guard(DetailedMetricsLock());
 
         CheckSingleRole(followerId);
 
@@ -242,6 +100,8 @@ public:
             TabletToTableMap.erase(mapIt);
             mapIt = TabletToTableMap.end();
         }
+
+        ReconcileTable(relativePath, table);
 
         if (IsFollowerRole && IsTableLevel(table)) {
             return;
@@ -306,7 +166,7 @@ public:
     }
 
     void ForgetTablet(ui64 tabletId, ui32 followerId) override {
-        TGuard<TMutex> guard(Lock());
+        TGuard<TMutex> guard(DetailedMetricsLock());
 
         const TTabletKey tablet(tabletId, followerId);
 
@@ -325,19 +185,46 @@ public:
     }
 
     /**
-     * Deliberately takes no lock: it only recomputes counter VALUES over state private
-     * to this instance
-     *
-     * This stops being safe once something reads these values concurrently with this
-     * recalculation
+     * Republish every aggregate of the tree, taking DetailedMetricsLock() for the whole
+     * walk. See the lock's own comment for what it does and does not cover.
      */
     void RecalculateAllCounters() override {
+        // The guard is here  for the READER of the published counter VALUES
+        // TAggregatedTabletCounters republishes every HIST(x) by clearing and
+        // refilling it one tablet at a time
+        TGuard<TMutex> guard(DetailedMetricsLock());
+
         for (auto& [_, entry] : Tables) {
             if (entry.TableBucket) {
                 entry.TableBucket->RecalcAll();
             }
             for (auto& [_, leaf] : entry.Leaves) {
                 leaf->RecalcAll();
+            }
+        }
+    }
+
+    void Pack(NProtoBuf::RepeatedPtrField<NKikimrSysView::TDetailedTableCounters>& out, ui64 generation) override {
+        // Same lock as AddCounters/ForgetTablet: this is the writer<->reader axis
+        // A2's note says step 07 must reuse (SharedTreeLock()/DetailedMetricsLock()),
+        // guarding both the walk over Tables/Leaves below and every bucket's own
+        // RecalcAll()/ToProto() republish window.
+        TGuard<TMutex> guard(DetailedMetricsLock());
+
+        for (auto& [relativePath, entry] : Tables) {
+            auto* tableCounters = out.Add();
+            tableCounters->SetTablePath(entry.Info.TablePath);
+            tableCounters->SetLevel(entry.Info.MetricsLevel);
+
+            if (entry.TableBucket) {
+                entry.TableBucket->Pack(*tableCounters->MutableTableCounters(), generation);
+            }
+
+            for (auto& [tablet, leaf] : entry.Leaves) {
+                auto* leafOut = tableCounters->AddLeaves();
+                leafOut->SetTabletId(tablet.first);
+                leafOut->SetFollowerId(tablet.second);
+                leaf->Pack(*leafOut->MutableCounters(), generation);
             }
         }
     }
@@ -389,6 +276,28 @@ private:
         return entry.PerPartitionGroup;
     }
 
+    void ReconcileTable(const TStringBuf relativePath, const TDetailedMetricsTableInfo& table) {
+        auto it = Tables.find(relativePath);
+        if (it == Tables.end()) {
+            return;
+        }
+
+        const TDetailedMetricsTableInfo& stored = it->second.Info;
+
+        if (table.MetricsLevel != stored.MetricsLevel) {
+            DropTableEntry(it);
+            return;
+        }
+
+        // A table recreated at this path restarts SchemaVersion low, so a plain
+        // SchemaVersion comparison would pin Info to the older, already deleted table
+        // forever. A recreated table always gets a newer PathId, so the identity is
+        // ordered by the PathId first, and only then by SchemaVersion within one PathId.
+        if (std::tie(table.TableId, table.SchemaVersion) > std::tie(stored.TableId, stored.SchemaVersion)) {
+            it->second.Info = table;
+        }
+    }
+
     /**
      * @return The per-table state, or nullptr if the table collects no detailed metrics
      */
@@ -409,12 +318,6 @@ private:
 
             return &it->second;
         }
-
-        // NOTE: Reconciling an existing entry on a schema version or a metrics level
-        //       change is implemented in a separate step (the level and rename step of
-        //       the detailed metrics plan). Until then the level of a table is frozen at
-        //       the very first report, which MetricsLevelChangeIsIgnoredUntilReconciliation
-        //       pins, so that the step has to flip an explicit assertion
 
         // A new entry: this is the one place the key is actually materialized into a
         // TString, once, shared between the map key and the GetSubgroup() call
@@ -442,11 +345,35 @@ private:
         }
 
         if (entry.IsEmpty()) {
-            Tables.erase(it);
+            EraseTableEntry(it);
+        }
+    }
 
-            if (Tables.empty()) {
-                DatabaseGroup.Reset();
-            }
+    void DropTableEntry(THashMap<TString, TTableEntry>::iterator it) {
+        auto& entry = it->second;
+
+        TVector<TTabletKey> tablets;
+        tablets.reserve(entry.Leaves.size());
+        for (const auto& [tablet, _] : entry.Leaves) {
+            tablets.push_back(tablet);
+        }
+
+        for (const auto& tablet : tablets) {
+            ForgetLeaf(it->first, entry, tablet);
+        }
+
+        DropTableBucket(it->first, entry);
+
+        Y_DEBUG_ABORT_UNLESS(entry.IsEmpty());
+
+        EraseTableEntry(it);
+    }
+
+    void EraseTableEntry(THashMap<TString, TTableEntry>::iterator it) {
+        Tables.erase(it);
+
+        if (Tables.empty()) {
+            DatabaseGroup.Reset();
         }
     }
 
@@ -460,12 +387,18 @@ private:
 
         bucket->Forget(tablet);
 
-        if (!bucket->IsEmpty()) {
+        if (bucket->IsEmpty()) {
+            DropTableBucket(relativePath, entry);
+        }
+    }
+
+    void DropTableBucket(const TString& relativePath, TTableEntry& entry) {
+        if (!entry.TableBucket) {
             return;
         }
 
         const TTabletTypes::EType tabletType = entry.RegisteredTabletType;
-        bucket.Reset();
+        entry.TableBucket.Reset();
 
         TargetCounterGroup->RemoveSubgroupChain({
             {DATABASE_LABEL, DatabasePath},

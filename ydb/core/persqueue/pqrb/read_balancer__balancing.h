@@ -279,8 +279,9 @@ private:
     bool ApplyFinishedState(ui32 partitionId, bool scaleAwareSDK, bool startedReadingFromEndOffset, const TActorContext& ctx);
 
     // Move descendants of parentId that still sit in family into their own
-    // families so DestroyFamily can release them. BreakUpFamily cannot do this
-    // when parentId is not a root of the family partition set.
+    // families so DestroyFamily can release them. Used when BreakUpFamily cannot
+    // split (parentId is not a family root) and when a leftover family still
+    // holds a sibling merge parent that must not be destroyed.
     std::vector<TPartitionFamily*> ExtractDescendantsFromFamily(
         TPartitionFamily* family,
         ui32 parentId,

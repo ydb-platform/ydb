@@ -500,15 +500,27 @@ void LogStructuredEvent(
         /* NOLINTEND(bugprone-reserved-identifier, readability-identifier-naming) */                   \
     }()
 
-#define YT_TLOG_EVENT(logger, level, message)                  \
-    if (::NYT::NLogging::NDetail::TTaggedLoggingGuard loggingGuard__( \
-            (logger)(),                                               \
-            (level),                                                  \
-            __LOCATION__,                                             \
-            YT_TLOG_STATIC_ANCHOR_REF(),                              \
-            (message));                                               \
-        !loggingGuard__.IsEnabled())                                  \
-    { } else                                                          \
+#define YT_TLOG_EVENT(logger, level, message)                          \
+    if (::NYT::NLogging::NDetail::TTaggedLoggingGuard loggingGuard__(  \
+            (logger)(),                                                \
+            (level),                                                   \
+            __LOCATION__,                                              \
+            YT_TLOG_STATIC_ANCHOR_REF(),                               \
+            (message));                                                \
+        !loggingGuard__.IsEnabled())                                   \
+    { } else                                                           \
+        loggingGuard__.Self()
+
+//! Logs against a caller-owned #anchor; #message may be computed at run time.
+#define YT_TLOG_EVENT_WITH_DYNAMIC_ANCHOR(logger, level, anchor, message)          \
+    if (::NYT::NLogging::NDetail::TTaggedLoggingGuard loggingGuard__(              \
+            (logger)(),                                                            \
+            (level),                                                               \
+            __LOCATION__,                                                          \
+            ::NYT::NLogging::NDetail::TDynamicAnchorRef{(anchor)},                 \
+            (message));                                                            \
+        !loggingGuard__.IsEnabled())                                               \
+    { } else                                                                       \
         loggingGuard__.Self()
 
 #ifdef YT_ENABLE_TRACE_LOGGING
@@ -549,8 +561,7 @@ void LogStructuredEvent(
 // fires once the chain (the loop body) has completed.
 
 // The |for| deliberately has no condition: with no normal exit and a |[[noreturn]]| step,
-// the whole expansion is noreturn to the compiler. The body still runs exactly once, since
-// #Commit never returns.
+// the whole expansion is noreturn to the compiler.
 #define YT_TLOG_FATAL(message)                                              \
     for (::NYT::NLogging::NDetail::TTaggedFatalLoggingGuard loggingGuard__( \
             Logger(),                                                       \

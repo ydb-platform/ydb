@@ -42,6 +42,7 @@ public:
         IPartitionDirectService* partitionDirectService,
         const TDiskDescription& diskDescription,
         const TVChunkConfig& vChunkConfig,
+        const TDirtyMapStateProto& dirtyMapState,
         IDirectBlockGroupPtr directBlockGroup,
         ui32 syncRequestsBatchSize,
         ui64 vChunkSize,
@@ -127,6 +128,9 @@ private:
     void OnEraseBelatedResponse(
         const TEraseRequestExecutor::TResponse& response);
 
+    void DoPersistDirtyMap();
+    void OnDirtyMapPersisted(ui32 stateGeneration);
+
     void ScheduleCleaningUp();
     void CleaningUp();
 
@@ -168,6 +172,7 @@ private:
     TLogTitle LogTitle;
     TVChunkConfig VChunkConfig;
     TList<TPendingVChunkConfig> PendingVChunkConfigs;
+    bool DirtyMapStatePersisting = false;
     TBlocksDirtyMapPtr BlocksDirtyMap;
     // One-shot signal of the INITIAL DirtyMap assembly at tablet start.
     NThreading::TPromise<void> DirtyMapReady = NThreading::NewPromise();

@@ -101,7 +101,7 @@ public:
                         throw;
                     } else {
                         YT_TLOG_ERROR("HTTP server bind failed")
-                            .With(TError(ex));
+                            .With(ex);
                         Sleep(Config_->BindRetryBackoff);
                     }
                 }
@@ -341,7 +341,7 @@ private:
             closeResponse = true;
             YT_TLOG_INFO("Error handling HTTP request")
                 .With("RequestId", request->GetRequestId())
-                .With(TError(ex));
+                .With(ex);
 
             if (!response->AreHeadersFlushed()) {
                 response->SetStatus(EStatusCode::InternalServerError);
@@ -356,7 +356,7 @@ private:
         } catch (const std::exception& ex) {
             YT_TLOG_INFO("Error flushing HTTP response stream")
                 .With("RequestId", request->GetRequestId())
-                .With(TError(ex));
+                .With(ex);
         }
 
         return true;
@@ -387,7 +387,7 @@ private:
         } catch (const std::exception& ex) {
             YT_TLOG_ERROR("Unhandled exception")
                 .With("ConnectionId", connection->GetId())
-                .With(TError(ex));
+                .With(ex);
         }
     }
 

@@ -240,7 +240,23 @@ public:
             Started = true;
         }
         TDataChunk data;
-        while (MessageIndex < Settings.MessageCount && Buffer->Pop(data)) {
+        while (MessageIndex < Settings.MessageCount) {
+            if (Settings.PauseMessageIndex == MessageIndex) {
+                if (!ResumeTime) {
+                    ResumeTime = TInstant::Now() + TDuration::MilliSeconds(Settings.PauseDelayMs);
+                    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_CHANNELS, LogPrefix << "TEST PAUSED SelfId=" << SelfId() << ", ChannelId=" << ChannelId);
+                }
+                if (TInstant::Now() < ResumeTime) {
+                    Schedule(ResumeTime, new NActors::TEvents::TEvWakeup());
+                    return;
+                } else {
+                    ResumeTime = TInstant::Zero();
+                    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_CHANNELS, LogPrefix << "TEST RESUMED SelfId=" << SelfId() << ", ChannelId=" << ChannelId);
+                }
+            }
+            if (!Buffer->Pop(data)) {
+                break;
+            }
             MessageIndex++;
         }
         if (Settings.EarlyFinish && MessageIndex == Settings.MessageCount) {
@@ -257,6 +273,8 @@ public:
             PassAway();
         }
     }
+
+    TInstant ResumeTime;
 };
 
 struct TLoadTest {
@@ -469,6 +487,12 @@ Y_UNIT_TEST_SUITE(Channels20) {
 
     Y_UNIT_TEST(InstantFinish2n) {
         LoadTest(100, false, TWorkerSettings{ .MessageCount = 10 }, TWorkerSettings{ .MessageCount = 0, .EarlyFinish = true });
+    }
+
+    Y_UNIT_TEST(ConsumerPauseThenResume2n) {
+        LoadTest(50, false,
+            TWorkerSettings{ .MessageCount = 100 },
+            TWorkerSettings{ .MessageCount = 100, .PauseMessageIndex = 20, .PauseDelayMs = 200 });
     }
 
     Y_UNIT_TEST(EmptyFinish1n) {

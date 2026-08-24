@@ -1253,7 +1253,7 @@ private:
             TxProxyMon->MarkShardError->Inc();
             YDB_LOG_ERROR("Gathered all snapshot propose results",
                 {"logPrefix", LogPrefix},
-                {"tabletPrepareErrors", TabletPrepareErrors});
+                {"error", TabletPrepareErrors});
             return Die(ctx);
         }
     }
@@ -2832,7 +2832,7 @@ private:
             {
                 YDB_LOG_TRACE("Ignoring new shard (nothing to read)",
                     {"logPrefix", LogPrefix},
-                    {"shardId", (oldShard ? oldShard->ShardId : 0)});
+                    {"shardId", state.ShardId});
 
                 // We don't want to read anything from current shard
                 state.ShardPosition = ShardList.end();

@@ -741,11 +741,11 @@ private:
                 auto added = LeftPacker_->TablePtr->AddTuple(LeftPacker_->TupleIntVals.data(), LeftPacker_->TupleStrings.data(), LeftPacker_->TupleStrSizes.data(), LeftPacker_->IColumnsHolder.data(), *RightPacker_->TablePtr);
                 if (added == NGraceJoin::TTable::EAddTupleResult::Added) {
                     ++LeftPacker_->TuplesBatchPacked;
-                } else if (added == NGraceJoin::TTable::EAddTupleResult::AnyMatch)
-                    ; // row dropped
-                else if (JoinKind_ == EJoinKind::Inner || JoinKind_ == EJoinKind::Right || JoinKind_ == EJoinKind::RightSemi || JoinKind_ == EJoinKind::RightOnly || JoinKind_ == EJoinKind::LeftSemi)
-                    ;  // row dropped
-                else { // Left, LeftOnly, Full, Exclusion: output row
+                } else if (added == NGraceJoin::TTable::EAddTupleResult::AnyMatch) {
+                    // row dropped
+                } else if (JoinKind_ == EJoinKind::Inner || JoinKind_ == EJoinKind::Right || JoinKind_ == EJoinKind::RightSemi || JoinKind_ == EJoinKind::RightOnly || JoinKind_ == EJoinKind::LeftSemi) {
+                    // row dropped
+                } else { // Left, LeftOnly, Full, Exclusion: output row
                     for (size_t i = 0; i < LeftRenames_.size() / 2; i++) {
                         auto& valPtr = output[LeftRenames_[2 * i + 1]];
                         if (valPtr) {
@@ -783,11 +783,11 @@ private:
                 auto added = RightPacker_->TablePtr->AddTuple(RightPacker_->TupleIntVals.data(), RightPacker_->TupleStrings.data(), RightPacker_->TupleStrSizes.data(), RightPacker_->IColumnsHolder.data(), *LeftPacker_->TablePtr);
                 if (added == NGraceJoin::TTable::EAddTupleResult::Added) {
                     ++RightPacker_->TuplesBatchPacked;
-                } else if (added == NGraceJoin::TTable::EAddTupleResult::AnyMatch)
-                    ; // row dropped
-                else if (JoinKind_ == EJoinKind::Inner || JoinKind_ == EJoinKind::Left || JoinKind_ == EJoinKind::LeftSemi || JoinKind_ == EJoinKind::LeftOnly || JoinKind_ == EJoinKind::RightSemi)
-                    ;  // row dropped
-                else { // Right, RightOnly, Full, Exclusion: output row
+                } else if (added == NGraceJoin::TTable::EAddTupleResult::AnyMatch) {
+                    // row dropped
+                } else if (JoinKind_ == EJoinKind::Inner || JoinKind_ == EJoinKind::Left || JoinKind_ == EJoinKind::LeftSemi || JoinKind_ == EJoinKind::LeftOnly || JoinKind_ == EJoinKind::RightSemi) {
+                    // row dropped
+                } else { // Right, RightOnly, Full, Exclusion: output row
                     for (size_t i = 0; i < LeftRenames_.size() / 2; i++) {
                         auto& valPtr = output[LeftRenames_[2 * i + 1]];
                         if (valPtr) {
@@ -1087,7 +1087,6 @@ private:
         return EFetchResult::Finish;
     }
 
-private:
     EOperatingMode Mode_ = EOperatingMode::InMemory;
 
     IComputationWideFlowNode* const FlowLeft_;

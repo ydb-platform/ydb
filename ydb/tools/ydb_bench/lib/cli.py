@@ -209,6 +209,7 @@ def _run(arguments, resource_loader, tool_revision):
                 "benchmark": step.benchmark,
                 "profile": step.profile,
                 "affinity": step.affinity,
+                "background_load": step.background_load,
                 "threads": step.threads,
                 "case": step.case,
                 "parameters": step.parameters,
@@ -227,6 +228,11 @@ def _run(arguments, resource_loader, tool_revision):
     try:
         with tempfile.TemporaryDirectory(prefix="ydb-bench-", dir=work_dir_parent) as temporary_directory:
             binaries = {}
+            background_binary = None
+            if any("none" != mode for config in loaded_config.runs for mode in config.background_load_modes):
+                background_binary = extract_executable(
+                    resource_loader("background_load"), temporary_directory, "background_load"
+                )
             manifest["binaries"] = {}
             store.write()
 
@@ -263,6 +269,7 @@ def _run(arguments, resource_loader, tool_revision):
                             configuration.benchmark.name,
                             configuration.profile,
                             event.get("affinity"),
+                            event.get("background_load", "none"),
                             event.get("threads"),
                             event.get("case"),
                             event.get("repeat"),
@@ -292,6 +299,7 @@ def _run(arguments, resource_loader, tool_revision):
                         tool_revision=tool_revision,
                         work_dir_hint=temporary_directory,
                         profiler_binary_path=profiler_binary_path,
+                        background_binary=background_binary,
                         event_sink=on_event,
                     )
                 except BenchmarkInterrupted as error:
@@ -311,7 +319,7 @@ def _run(arguments, resource_loader, tool_revision):
                     if not arguments.continue_on_error:
                         raise
                     continue
-                run_record["status"] = "completed"
+                run_record["status"] = profile_manifest.get("status", "completed")
                 run_record["manifest"] = str(relative_directory / "run.json")
                 run_record["summary"] = str(relative_directory / profile_manifest["summary"])
                 store.write()
@@ -341,10 +349,13 @@ def _run(arguments, resource_loader, tool_revision):
         return 1
 
     failed = [record for record in manifest["runs"] if record["status"] == "failed"]
+    unsupported = bool(manifest["runs"]) and all(
+        record["status"] == "unsupported" for record in manifest["runs"]
+    )
     if failed:
         _cancel_unfinished_steps(store, "run completed with failed benchmark profiles")
-    manifest["status"] = "failed" if failed else "completed"
-    manifest["state"] = "failed" if failed else "passed"
+    manifest["status"] = "failed" if failed else "unsupported" if unsupported else "completed"
+    manifest["state"] = "failed" if failed else "unsupported" if unsupported else "passed"
     manifest["finished_at"] = _utc_now()
     if failed:
         manifest["error"] = "{} benchmark profile(s) failed".format(len(failed))

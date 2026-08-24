@@ -2969,14 +2969,14 @@ void TDataReq::SendStreamClearanceResponse(ui64 shard, bool cleared, const TActo
     auto it = ReadTableRequest->ClearanceSenders.find(shard);
     if (it == ReadTableRequest->ClearanceSenders.end()) {
         YDB_LOG_WARN_CTX_COMP(ctx, NKikimrServices::TX_PROXY, "No sender for clearance request",
-            {"tabletId", shard},
+            {"shardId", shard},
             {"txId", TxId},
             {"cleared", cleared});
         return;
     }
 
     YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_PROXY, "Send stream clearance",
-        {"tabletId", shard},
+        {"shardId", shard},
         {"txId", TxId},
         {"cleared", cleared});
 

@@ -109,11 +109,14 @@ struct TEvTabletCounters {
         const ui64 TabletID;
         const NKikimrTabletBase::TTabletTypes::EType TabletType;
         const TPathId TenantPathId;
+        const ui32 FollowerId; // 0 = leader, >0 = replica
 
-        TEvTabletCountersForgetTablet(ui64 tabletID, NKikimrTabletBase::TTabletTypes::EType tabletType, TPathId tenantPathId)
+        TEvTabletCountersForgetTablet(ui64 tabletID, NKikimrTabletBase::TTabletTypes::EType tabletType, TPathId tenantPathId,
+            ui32 followerId = 0)
             : TabletID(tabletID)
             , TabletType(tabletType)
             , TenantPathId(tenantPathId)
+            , FollowerId(followerId)
         {}
     };
 
@@ -153,7 +156,7 @@ struct TTabletLabeledCountersResponseContext {
 };
 
 ////////////////////////////////////////////
-void TabletCountersForgetTablet(ui64 tabletId, NKikimrTabletBase::TTabletTypes::EType tabletType, TPathId tenantPathId, bool follower, TActorIdentity identity);
+void TabletCountersForgetTablet(ui64 tabletId, NKikimrTabletBase::TTabletTypes::EType tabletType, TPathId tenantPathId, bool follower, TActorIdentity identity, ui32 followerId = 0);
 
 TStringBuf GetHistogramAggregateSimpleName(TStringBuf name);
 bool IsHistogramAggregateSimpleName(TStringBuf name);

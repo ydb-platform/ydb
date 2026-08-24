@@ -28,6 +28,28 @@ void ValidateOneOfTwoIndexesSelected(TQueryClient& db, const std::string& predic
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpJsonIndexesAutoSelect) {
+    Y_UNIT_TEST(FullRangeIsNotAutoSelected) {
+        TestSelectJsonWithIndex("JsonDocument", std::nullopt, [](TQueryClient& db, const auto&) {
+            const auto addIndexResult = db.ExecuteQuery(R"(
+                ALTER TABLE TestTable ADD INDEX json_idx_2 GLOBAL USING json ON (Text)
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(addIndexResult.IsSuccess(), addIndexResult.GetIssues().ToString());
+
+            const auto settings = TExecuteQuerySettings().ExecMode(EExecMode::Explain);
+            const auto query = R"(SELECT * FROM TestTable WHERE JSON_EXISTS(Text, '$[*]');)";
+
+            const auto result = db.ExecuteQuery(query, TTxControl::NoTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
+                "JSON index was not auto-selected: full-range search cannot be performed using full-text search");
+
+            NJson::TJsonValue planJson;
+            UNIT_ASSERT_C(NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &planJson, true), "Failed to parse plan JSON");
+            UNIT_ASSERT_VALUES_EQUAL(CountPlanNodesByKv(planJson, "Index", "json_idx"), 0);
+            UNIT_ASSERT_VALUES_EQUAL(CountPlanNodesByKv(planJson, "Index", "json_idx_2"), 0);
+        }, /* enableJsonIndexAutoSelect */ true);
+    }
+
     Y_UNIT_TEST(JsonExists) {
         TestSelectJsonWithIndex("JsonDocument", std::nullopt, [](TQueryClient& db, const auto&) {
             ValidateAutoSelect(db, R"(JSON_EXISTS(Text, '$.k1'))");
@@ -513,9 +535,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesAutoSelect) {
         }
 
         // AND of predicates from two different indexed columns
-        ValidateNoAutoSelect(db, "JSON_EXISTS(Text, '$.a') AND JSON_EXISTS(Extra, '$.x')",
-            "json_idx_text",  "TestTable");
-        ValidateNoAutoSelect(db, "JSON_EXISTS(Text, '$.a') AND JSON_EXISTS(Extra, '$.x')",
+        ValidateAutoSelect(db, "JSON_EXISTS(Text, '$.a') AND JSON_EXISTS(Extra, '$.x')",
             "json_idx_extra", "TestTable");
 
         // OR of predicates from two different indexed columns
@@ -544,6 +564,41 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesAutoSelect) {
         ValidateNoAutoSelect(db,
             "JSON_EXISTS(Text, '$.a') OR JSON_VALUE(Extra, '$.x' RETURNING Int64) == 10",
             "json_idx_extra", "TestTable");
+    }
+
+    Y_UNIT_TEST(Prefixed) {
+        auto kikimr = KikimrJsonPrefix(true);
+        auto db = kikimr.GetQueryClient();
+
+        {
+            std::string query = R"(
+                CREATE TABLE TestTable (
+                    Key Uint64,
+                    UserId Uint64,
+                    Text JsonDocument,
+                    PRIMARY KEY (Key),
+                    INDEX json_idx GLOBAL USING json ON (UserId, Text)
+                );
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            std::string query = R"(
+                UPSERT INTO TestTable (Key, UserId, Text) VALUES
+                    (1, 100, JsonDocument('{"k1": "v1"}')),
+                    (2, 100, JsonDocument('{"k2": "v2"}')),
+                    (3, 200, JsonDocument('{"k1": "v1"}')),
+                    (4, 200, JsonDocument('{"k3": "v3"}'));
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        // Predicate on Text -> must use json_idx_text, not json_idx_extra.
+        ValidateAutoSelect(db, "UserId=100 AND JSON_EXISTS(Text, '$.k1')", "json_idx", "TestTable");
+        ValidateNoAutoSelect(db, "JSON_EXISTS(Text, '$.k1')", "json_idx", "TestTable");
     }
 }
 

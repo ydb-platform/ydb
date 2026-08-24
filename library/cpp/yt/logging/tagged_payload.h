@@ -66,7 +66,7 @@ private:
  *
  *  A "well-known" tag sets the high bit of its key-size field; the low 31 bits stay the
  *  key length and the key bytes are still written. Consumers may render such tags
- *  specially (see #GetWellKnownLoggingTag).
+ *  specially (see #TWellKnownLoggingTagTraits).
  *
  *  Both the producer (#TTaggedPayloadWriter) and the consumer
  *  (#TTaggedPayloadReader) own this single definition of the layout.

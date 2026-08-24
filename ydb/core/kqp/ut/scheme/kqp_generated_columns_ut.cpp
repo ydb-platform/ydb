@@ -752,6 +752,8 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
 
         {
             const std::string query = R"(
+                PRAGMA classic_division = "0";
+
                 CREATE TABLE `/Root/Origin` (
                     k Int32 NOT NULL,
                     v1 Int32,
@@ -779,8 +781,15 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
 
         const auto originSt = generatedOf("st");
         const auto originVt = generatedOf("vt");
+        UNIT_ASSERT_VALUES_EQUAL(originSt.GetContext(), originVt.GetContext());
+        UNIT_ASSERT_STRING_CONTAINS(originSt.GetContext(), "PRAGMA classic_division");
 
         const std::string ddl = GetShowCreateTable(session, "/Root/Origin");
+        const auto contextPos = ddl.find("PRAGMA classic_division = '0';");
+        const auto createTablePos = ddl.find("CREATE TABLE");
+        UNIT_ASSERT_C(contextPos != std::string::npos, ddl.c_str());
+        UNIT_ASSERT_C(createTablePos != std::string::npos, ddl.c_str());
+        UNIT_ASSERT_C(contextPos < createTablePos, ddl.c_str());
 
         // Replay the printed statement over the dropped original: it must recreate it as it was.
         {
@@ -798,12 +807,14 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
         UNIT_ASSERT_VALUES_EQUAL(replayedSt.GetStored(), originSt.GetStored());
         UNIT_ASSERT_VALUES_EQUAL(replayedSt.GetExprText(), originSt.GetExprText());
         UNIT_ASSERT_VALUES_EQUAL(replayedSt.DependencyColumnNamesSize(), originSt.DependencyColumnNamesSize());
+        UNIT_ASSERT_VALUES_EQUAL(replayedSt.GetContext(), "PRAGMA classic_division = '0';\n");
 
         const auto replayedVt = generatedOf("vt");
         UNIT_ASSERT_VALUES_EQUAL(replayedVt.GetStored(), false);
         UNIT_ASSERT_VALUES_EQUAL(replayedVt.GetStored(), originVt.GetStored());
         UNIT_ASSERT_VALUES_EQUAL(replayedVt.GetExprText(), originVt.GetExprText());
         UNIT_ASSERT_VALUES_EQUAL(replayedVt.DependencyColumnNamesSize(), originVt.DependencyColumnNamesSize());
+        UNIT_ASSERT_VALUES_EQUAL(replayedVt.GetContext(), replayedSt.GetContext());
     }
 
     Y_UNIT_TEST(AlterRejected) {

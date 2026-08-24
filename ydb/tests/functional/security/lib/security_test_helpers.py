@@ -89,6 +89,50 @@ def mon_base_url(cluster, node_index=1):
     return f'https://{node.host}:{node.mon_port}'
 
 
+def describe_path_self(cluster, root_path, database_path, use_tls=False, token=None):
+    node = cluster.nodes[1]
+    scheme = 'https' if use_tls else 'http'
+    response = requests.get(
+        f'{scheme}://{node.host}:{node.mon_port}/viewer/json/describe',
+        params={'database': root_path, 'path': database_path},
+        headers={'Authorization': token} if token is not None else {},
+        verify=False,
+        timeout=5,
+    )
+    response.raise_for_status()
+    return response.json()['PathDescription']['Self']
+
+
+def get_tenant_schemeshard_id(cluster, root_path, database_path, use_tls=False, token=None):
+    return int(describe_path_self(cluster, root_path, database_path, use_tls, token)['SchemeshardId'])
+
+
+def get_tenant_path_id(cluster, root_path, database_path, use_tls=False, token=None):
+    return int(describe_path_self(cluster, root_path, database_path, use_tls, token)['PathId'])
+
+
+def get_nodelist_ids(base_url, database=None, token='root@builtin'):
+    params = {}
+    if database is not None:
+        params['database'] = database
+    response = requests.get(
+        base_url + '/viewer/json/nodelist',
+        params=params,
+        headers={'Authorization': token},
+        verify=False,
+        timeout=5,
+    )
+    response.raise_for_status()
+    return [node['Id'] for node in response.json()]
+
+
+def get_foreign_node_id_for_database(base_url, database, token='root@builtin'):
+    database_nodes = set(get_nodelist_ids(base_url, database=database, token=token))
+    foreign_nodes = set(get_nodelist_ids(base_url, token=token)) - database_nodes
+    assert foreign_nodes, f'no foreign nodes found for database={database}'
+    return min(foreign_nodes)
+
+
 def wait_for_viewer_ready(
     base_url,
     database=DATABASE,

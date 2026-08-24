@@ -40,7 +40,6 @@ private:
 public:
     ui64 TxId = 0;
     ui64 ScanId = 0;
-    ui32 ScanGeneration = 0;
     std::optional<ui64> LockId;
     std::optional<ui32> LockNodeId;
     std::optional<NKikimrDataEvents::ELockMode> LockMode;

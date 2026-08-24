@@ -55,7 +55,8 @@ public:
     }
 
     void ValidateCursor(const ISimpleScanCursor& cursor) const {
-        NCommon::VerifySimpleCursorPortion(cursor, *GetPortion(), GetSourceIdx(), IsConflicting());
+        AFL_VERIFY(cursor.GetPortionId() && GetPortion()->GetPortionId() == *cursor.GetPortionId())("expected", GetPortion()->GetPortionId())(
+                                                                            "cursor", cursor.GetPortionId().value_or(0));
     }
 };
 

@@ -48,11 +48,6 @@ public:
         return std::vector<TPortionInfo::TConstPtr>();
     }
 
-    // TEMPORARY DEBUG: pop-order portion list for cursor resume. Remove after SCAN_SET_DUMP investigation.
-    virtual std::vector<TString> DebugPopOrderEntries() {
-        return {};
-    }
-
     TString DebugString() const {
         TStringBuilder sb;
         sb << "{";

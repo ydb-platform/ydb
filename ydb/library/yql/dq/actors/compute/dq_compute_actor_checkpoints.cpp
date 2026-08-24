@@ -147,13 +147,12 @@ bool TDqComputeActorCheckpoints::TPendingCheckpointBase::IsSlowCheckpoint(TStrin
     }
 
     TStringBuilder checkpointDiagnostic;
-    const TString checkpointDuration = TStringBuilder() << "Slow checkpoint. Duration: " << duration.Seconds() << 's';
 
     if (Checkpoint) {
-        checkpointDiagnostic << "[Checkpoint " << MakeStringForLog(*Checkpoint) << "] " << checkpointDuration;
-    } else {
-        checkpointDiagnostic << checkpointDuration;
+        checkpointDiagnostic << "[Checkpoint " << MakeStringForLog(*Checkpoint) << "] ";
     }
+
+    checkpointDiagnostic << "Slow checkpoint. Duration: " << duration.Seconds() << 's';
 
     if (const auto& info = GetDiagnostics()) {
         checkpointDiagnostic << " " << info;

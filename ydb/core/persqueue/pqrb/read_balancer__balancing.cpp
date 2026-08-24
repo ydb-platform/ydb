@@ -422,6 +422,14 @@ void TPartitionFamily::AttachePartitions(const std::vector<ui32>& partitions, co
 
         Partitions.insert(Partitions.end(), newPartitions.begin(), newPartitions.end());
         UpdatePartitionMapping(newPartitions);
+        {
+            absl::flat_hash_set<ui32> seen(RootPartitions.begin(), RootPartitions.end());
+            for (auto partitionId : newPartitions) {
+                if (seen.insert(partitionId).second) {
+                    RootPartitions.push_back(partitionId);
+                }
+            }
+        }
 
         for (auto partitionId : newPartitions) {
             LockPartition(partitionId, ctx);
@@ -911,6 +919,7 @@ bool TConsumer::BreakUpFamily(TPartitionFamily* family, ui32 partitionId, bool d
                 f->TargetStatus = family->TargetStatus;
                 f->Partitions.insert(f->Partitions.end(), members.begin(), members.end());
                 f->LastPipe = family->LastPipe;
+                f->RootPartitions.assign(f->Partitions.begin(), f->Partitions.end());
                 f->UpdatePartitionMapping(f->Partitions);
                 f->ClassifyPartitions();
                 if (locked) {
@@ -932,6 +941,7 @@ bool TConsumer::BreakUpFamily(TPartitionFamily* family, ui32 partitionId, bool d
 
             family->Partitions.clear();
             family->Partitions.push_back(partitionId);
+            family->RootPartitions = {partitionId};
 
             auto locked = family->LockedPartitions.contains(partitionId);
             family->LockedPartitions.clear();
@@ -994,7 +1004,6 @@ std::pair<TPartitionFamily*, bool> TConsumer::MergeFamilies(TPartitionFamily* lh
     }
     if ((lhs->IsActive() || lhs->IsReleasing()) && rhs->IsFree()) {
         lhs->AttachePartitions(rhs->Partitions, ctx);
-        lhs->RootPartitions.insert(lhs->RootPartitions.end(), rhs->Partitions.begin(), rhs->Partitions.end());
 
         rhs->Partitions.clear();
         rhs->Destroy(ctx);

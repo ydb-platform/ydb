@@ -3,6 +3,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/schemeshard/schemeshard_tx_infly.h>
 #include <ydb/core/tx/schemeshard/ut_scheme_change_records/ut_scheme_change_records_helpers.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 
 using namespace NKikimr;
 using namespace NSchemeShard;
@@ -217,6 +218,74 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsReboots) {
                     UNIT_ASSERT_C(entries[i].Order > entries[i-1].Order,
                         "Orders must be strictly monotonic");
                 }
+            }
+        });
+    }
+
+    // A multi-target op's N (Path, SourcePaths) targets are carried in
+    // TSchemeChangeSlot in memory, backed by table 144 for recovery -- reboot
+    // mid-operation and confirm all N targets AND their sources survive, not
+    // just the destination paths.
+    Y_UNIT_TEST_WITH_REBOOTS(MultiTargetPathsSurviveReboot) {
+        t.GetTestEnvOptions().EnableSchemeChangeRecords(true);
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+                RegisterSubscriber(runtime, "test:sub");
+
+                TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "Src1"
+                    Columns { Name: "key" Type: "Uint64" }
+                    KeyColumnNames: ["key"]
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+                TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "Src2"
+                    Columns { Name: "key" Type: "Uint64" }
+                    KeyColumnNames: ["key"]
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            }
+
+            TestConsistentCopyTables(runtime, ++t.TxId, "/MyRoot", R"(
+                CopyTableDescriptions {
+                    SrcPath: "/MyRoot/Src1"
+                    DstPath: "/MyRoot/Dst1"
+                }
+                CopyTableDescriptions {
+                    SrcPath: "/MyRoot/Src2"
+                    DstPath: "/MyRoot/Dst2"
+                }
+            )");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/Dst1"), {NLs::Finished, NLs::IsTable});
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/Dst2"), {NLs::Finished, NLs::IsTable});
+
+                auto entries = ReadSchemeChangeRecords(runtime);
+                const NSchemeChangeRecordTestHelpers::TSchemeChangeRecordEntry* found = nullptr;
+                for (const auto& e : entries) {
+                    if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateConsistentCopyTables) {
+                        found = &e;
+                        break;
+                    }
+                }
+                UNIT_ASSERT_C(found, "CreateConsistentCopyTables entry not found after reboot");
+                UNIT_ASSERT_VALUES_EQUAL_C(found->Targets.size(), 2u,
+                    "both copy targets must survive a reboot, got " << found->Targets.size());
+                THashMap<TString, TString> dstToSrc;
+                for (const auto& target : found->Targets) {
+                    UNIT_ASSERT_VALUES_EQUAL_C(target.SourcePaths.size(), 1u,
+                        "each target's source must survive a reboot, got "
+                            << target.SourcePaths.size() << " for " << target.Path);
+                    dstToSrc[target.Path] = target.SourcePaths[0];
+                }
+                UNIT_ASSERT_C(dstToSrc.contains("Dst1"), "Dst1 missing after reboot");
+                UNIT_ASSERT_C(dstToSrc.contains("Dst2"), "Dst2 missing after reboot");
+                UNIT_ASSERT_VALUES_EQUAL_C(dstToSrc["Dst1"], "Src1", "Dst1's source must survive a reboot");
+                UNIT_ASSERT_VALUES_EQUAL_C(dstToSrc["Dst2"], "Src2", "Dst2's source must survive a reboot");
             }
         });
     }

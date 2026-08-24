@@ -1,11 +1,54 @@
 #include "schemeshard_impl.h"
 #include "schemeshard_path_describer.h"
 
+#include <ydb/core/protos/schemeshard/scheme_change_records.pb.h>
+
 #include <util/string/join.h>
 
 namespace NKikimr::NSchemeShard {
 
 namespace {
+
+// One (destination, source) pair extracted from the tx, before resolution.
+// Source is absolute and empty when the op has no source (plain create).
+struct TSchemeChangeRawTarget {
+    TString AbsDstPath;
+    TString AbsSrcPath;
+};
+
+// Ops whose target is named by an absolute DstPath rather than a bare name
+// under WorkingDir -- a rename/move, where the object's new identity is its
+// destination and SrcPath is where it used to live. Returns empty when tx
+// does not carry such a shape.
+TMaybe<TSchemeChangeRawTarget> ExtractSchemeChangeMoveTarget(const NKikimrSchemeOp::TModifyScheme& tx) {
+    if (tx.HasMoveTable()) {
+        return TSchemeChangeRawTarget{tx.GetMoveTable().GetDstPath(), tx.GetMoveTable().GetSrcPath()};
+    }
+    if (tx.HasMoveTableIndex()) {
+        return TSchemeChangeRawTarget{tx.GetMoveTableIndex().GetDstPath(), tx.GetMoveTableIndex().GetSrcPath()};
+    }
+    if (tx.HasMoveSequence()) {
+        return TSchemeChangeRawTarget{tx.GetMoveSequence().GetDstPath(), tx.GetMoveSequence().GetSrcPath()};
+    }
+    if (tx.HasMoveIndex()) {
+        return TSchemeChangeRawTarget{tx.GetMoveIndex().GetDstPath(), tx.GetMoveIndex().GetSrcPath()};
+    }
+    return Nothing();
+}
+
+// Ops that name N (destination, source) pairs rather than one -- a consistent
+// copy of N tables in a single user-level tx, each carrying its own SrcPath.
+// Returns empty when tx does not carry such a shape, distinct from a shape
+// that carries zero targets.
+TVector<TSchemeChangeRawTarget> ExtractSchemeChangeCopyTargets(const NKikimrSchemeOp::TModifyScheme& tx) {
+    TVector<TSchemeChangeRawTarget> result;
+    if (tx.HasCreateConsistentCopyTables()) {
+        for (const auto& copy : tx.GetCreateConsistentCopyTables().GetCopyTableDescriptions()) {
+            result.push_back(TSchemeChangeRawTarget{copy.GetDstPath(), copy.GetSrcPath()});
+        }
+    }
+    return result;
+}
 
 // Name of the object a user-level TModifyScheme targets, found via reflection
 // so a newly added object type is covered without extending a switch.
@@ -58,14 +101,71 @@ TString RelativeToDomain(const TPath& resolved) {
     return rel;
 }
 
-struct TResolvedSchemeChangePath {
+struct TResolvedSchemeChangeTarget {
     // Absolute; used only to re-resolve at finalisation.
     TString Absolute;
-    // Database-relative; what gets persisted in the outbox row.
+    // Database-relative; what gets persisted in the outbox row as Path.
     TString Relative;
+    // Database-relative source(s), empty unless this target is a move/copy.
+    // Never re-resolved (a source may no longer exist by finalisation).
+    TVector<TString> RelativeSources;
 };
 
-// Authoritative propose-time path for a user-level TModifyScheme: never a
+// Best-effort database-relative form of an absolute source path: resolved if
+// possible (canonical form), else the raw prefix strip if resolution fails
+// (e.g. a copy's source was concurrently dropped). Empty input yields empty
+// output -- a target with no source must not synthesize one.
+TString RelativeSourceToDomain(const TString& absSrcPath, TSchemeShard* ss) {
+    if (absSrcPath.empty()) {
+        return {};
+    }
+    TPath src = TPath::Resolve(absSrcPath, ss);
+    if (src.IsResolved()) {
+        return RelativeToDomain(src);
+    }
+    // Fallback: same domain-prefix-strip the resolved path uses, without
+    // requiring the source to still exist.
+    TString domain = TPath::Root(ss).PathString();
+    if (absSrcPath.StartsWith(domain)) {
+        TString rel = absSrcPath.substr(domain.size());
+        if (!rel.empty() && rel[0] == '/') {
+            rel = rel.substr(1);
+        }
+        return rel;
+    }
+    return absSrcPath;
+}
+
+// Resolves a single absolute destination path like a create: try the path
+// itself (a rename/move target may already exist by the time this reruns at
+// finalisation), else fall back to its parent directory and append the leaf.
+// Returns Nothing() when neither resolves. Today every extractor produces at
+// most one source per target (see ExtractSchemeChangeMoveTarget /
+// ExtractSchemeChangeCopyTargets), so raw.AbsSrcPath is singular here; the
+// wire/in-memory shape is still a list to allow a future many-sources op
+// without another schema change.
+TMaybe<TResolvedSchemeChangeTarget> ResolveRawTarget(const TSchemeChangeRawTarget& raw, TSchemeShard* ss) {
+    TVector<TString> relSources;
+    if (!raw.AbsSrcPath.empty()) {
+        relSources.push_back(RelativeSourceToDomain(raw.AbsSrcPath, ss));
+    }
+    TPath target = TPath::Resolve(raw.AbsDstPath, ss);
+    if (target.IsResolved()) {
+        return TResolvedSchemeChangeTarget{raw.AbsDstPath, RelativeToDomain(target), relSources};
+    }
+    TPath parent = TPath::Resolve(TString(TStringBuf(raw.AbsDstPath).RBefore('/')), ss);
+    if (parent.IsResolved()) {
+        TString relParent = RelativeToDomain(parent);
+        if (!relParent.empty()) {
+            relParent += '/';
+        }
+        TString leaf = TString(TStringBuf(raw.AbsDstPath).RAfter('/'));
+        return TResolvedSchemeChangeTarget{raw.AbsDstPath, relParent + leaf, relSources};
+    }
+    return Nothing();
+}
+
+// Authoritative propose-time targets for a user-level TModifyScheme: never a
 // string-assembled guess. Not classified by op type -- ConvertToTxType
 // collapses many EOperationType values onto TxInvalid, and IsCreate/IsDrop
 // hard-abort on TxInvalid, so op-type dispatch here would crash the tablet
@@ -76,15 +176,46 @@ struct TResolvedSchemeChangePath {
 // covers create, whose own target does not exist yet. A Drop-by-PathId
 // request (Drop.Id set, no Name/WorkingDir -- e.g. ForceDropUnsafe) resolves
 // directly by PathId, the same way the subop itself resolves its target.
-// Returns Nothing() when nothing resolves; the caller must then reject the
-// propose, never store an approximation.
-TMaybe<TResolvedSchemeChangePath> ResolveSchemeChangePath(const NKikimrSchemeOp::TModifyScheme& userTx, TSchemeShard* ss) {
+// Returns Nothing() when nothing resolves, or any of N multi-target paths
+// fails to resolve; the caller must then reject the propose, never store a
+// partial or approximate result.
+TMaybe<TVector<TResolvedSchemeChangeTarget>> ResolveSchemeChangeTargets(const NKikimrSchemeOp::TModifyScheme& userTx, TSchemeShard* ss) {
+    // Multi-target: every destination must resolve, or the whole propose is
+    // refused -- there is no such thing as a partially-authoritative record.
+    const TVector<TSchemeChangeRawTarget> copyTargets = ExtractSchemeChangeCopyTargets(userTx);
+    if (!copyTargets.empty()) {
+        TVector<TResolvedSchemeChangeTarget> result;
+        for (const auto& raw : copyTargets) {
+            TMaybe<TResolvedSchemeChangeTarget> resolved = ResolveRawTarget(raw, ss);
+            if (!resolved) {
+                return Nothing();
+            }
+            result.push_back(std::move(*resolved));
+        }
+        return result;
+    }
+
+    // A rename/move's target is its new (destination) location, not a bare
+    // name under WorkingDir -- WorkingDir is not even set on these ops.
+    // At propose time DstPath does not exist yet (the move has not executed),
+    // so resolve like a create: fall back to its parent directory if the
+    // full path itself does not resolve.
+    TMaybe<TSchemeChangeRawTarget> moveTarget = ExtractSchemeChangeMoveTarget(userTx);
+    if (moveTarget) {
+        TMaybe<TResolvedSchemeChangeTarget> resolved = ResolveRawTarget(*moveTarget, ss);
+        if (!resolved) {
+            return Nothing();
+        }
+        return TVector<TResolvedSchemeChangeTarget>{std::move(*resolved)};
+    }
+
     const TString targetName = ExtractSchemeChangeTargetName(userTx);
     if (targetName.empty()) {
         if (userTx.HasDrop() && userTx.GetDrop().GetId() != 0) {
             TPath target = TPath::Init(ss->MakeLocalId(userTx.GetDrop().GetId()), ss);
             if (target.IsResolved()) {
-                return TResolvedSchemeChangePath{target.PathString(), RelativeToDomain(target)};
+                return TVector<TResolvedSchemeChangeTarget>{
+                    TResolvedSchemeChangeTarget{target.PathString(), RelativeToDomain(target), {}}};
             }
         }
         return Nothing();
@@ -96,7 +227,7 @@ TMaybe<TResolvedSchemeChangePath> ResolveSchemeChangePath(const NKikimrSchemeOp:
 
     TPath target = TPath::Resolve(abs, ss);
     if (target.IsResolved()) {
-        return TResolvedSchemeChangePath{abs, RelativeToDomain(target)};
+        return TVector<TResolvedSchemeChangeTarget>{TResolvedSchemeChangeTarget{abs, RelativeToDomain(target), {}}};
     }
 
     TPath workingDir = TPath::Resolve(userTx.GetWorkingDir(), ss);
@@ -107,16 +238,49 @@ TMaybe<TResolvedSchemeChangePath> ResolveSchemeChangePath(const NKikimrSchemeOp:
     if (!relParent.empty()) {
         relParent += '/';
     }
-    return TResolvedSchemeChangePath{abs, relParent + targetName};
+    return TVector<TResolvedSchemeChangeTarget>{TResolvedSchemeChangeTarget{abs, relParent + targetName, {}}};
 }
 
 } // namespace
+
+// Wire encoding for the local-DB Path column: a serialized repeated-message
+// protobuf, never a delimited string (a path could contain any delimiter).
+TString TSchemeShard::EncodeSchemeChangeTargets(const TVector<TOperation::TSchemeChangeTarget>& targets) {
+    NKikimrSchemeShard::TSchemeChangeRecordTargets msg;
+    for (const auto& t : targets) {
+        auto* target = msg.AddTargets();
+        target->SetPath(t.Path);
+        for (const auto& src : t.SourcePaths) {
+            target->AddSourcePaths(src);
+        }
+    }
+    TString result;
+    Y_DEBUG_ABORT_UNLESS(msg.SerializeToString(&result));
+    return result;
+}
+
+TVector<TOperation::TSchemeChangeTarget> TSchemeShard::DecodeSchemeChangeTargets(const TString& encoded) {
+    NKikimrSchemeShard::TSchemeChangeRecordTargets msg;
+    TVector<TOperation::TSchemeChangeTarget> result;
+    if (encoded.empty() || !msg.ParseFromString(encoded)) {
+        return result;
+    }
+    for (const auto& t : msg.GetTargets()) {
+        TOperation::TSchemeChangeTarget target;
+        target.Path = t.GetPath();
+        for (const auto& src : t.GetSourcePaths()) {
+            target.SourcePaths.push_back(src);
+        }
+        result.push_back(std::move(target));
+    }
+    return result;
+}
 
 bool TSchemeShard::CheckSchemeChangeRecordHasPath(const NKikimrSchemeOp::TModifyScheme& userTx, TString& rejectReason) {
     if (IsChurnOp(userTx.GetOperationType()) || IsPathlessOp(userTx.GetOperationType())) {
         return true;
     }
-    if (ResolveSchemeChangePath(userTx, this)) {
+    if (ResolveSchemeChangeTargets(userTx, this)) {
         return true;
     }
     TabletCounters->Cumulative()[COUNTER_SCHEME_CHANGE_PATH_MISSING].Increment(1);
@@ -136,7 +300,7 @@ bool TSchemeShard::PersistSchemeChangeRecordAtPropose(NIceDb::TNiceDb& db, TTxId
     // CheckSchemeChangeRecordHasPath must have already validated this at the
     // caller, before any record in this batch was written -- a path-bearing
     // op with no path rejects the whole propose, not just this one record.
-    TMaybe<TResolvedSchemeChangePath> path = ResolveSchemeChangePath(userTx, this);
+    TMaybe<TVector<TResolvedSchemeChangeTarget>> targets = ResolveSchemeChangeTargets(userTx, this);
 
     // Redact every (Ydb.sensitive) field before persisting: passwords, access
     // keys, and secret values must never reach the outbox or subscribers --
@@ -157,14 +321,23 @@ bool TSchemeShard::PersistSchemeChangeRecordAtPropose(NIceDb::TNiceDb& db, TTxId
 
     TestSchemeChangeRedoBytesAccum += body.size() + 128;
 
-    const TString relPath = path ? path->Relative : TString();
-    const TString absPath = path ? path->Absolute : TString();
+    // Relative targets (persisted as Path) and absolute targets (carried in
+    // memory / table 144; finalisation re-resolves via TPath::Resolve, which
+    // requires the absolute form).
+    TVector<TOperation::TSchemeChangeTarget> relTargets;
+    TVector<TOperation::TSchemeChangeTarget> absTargets;
+    if (targets) {
+        for (const auto& t : *targets) {
+            relTargets.push_back(TOperation::TSchemeChangeTarget{t.Relative, t.RelativeSources});
+            absTargets.push_back(TOperation::TSchemeChangeTarget{t.Absolute, t.RelativeSources});
+        }
+    }
 
     using T = Schema::SchemeChangeRecords;
     db.Table<T>().Key(order).Update(
         NIceDb::TUpdate<T::TxId>(ui64(txId)),
         NIceDb::TUpdate<T::OperationType>(static_cast<ui32>(userTx.GetOperationType())),
-        NIceDb::TUpdate<T::Path>(relPath),
+        NIceDb::TUpdate<T::Path>(EncodeSchemeChangeTargets(relTargets)),
         NIceDb::TUpdate<T::Status>(ui32(NKikimrScheme::StatusAccepted)),
         NIceDb::TUpdate<T::UserSID>(userSid),
         NIceDb::TUpdate<T::BodySizeBytes>(body.size()),
@@ -180,13 +353,11 @@ bool TSchemeShard::PersistSchemeChangeRecordAtPropose(NIceDb::TNiceDb& db, TTxId
     }
 
     PersistUpdateNextSchemeChangeOrder(db);
-    // Absolute form: finalisation re-resolves via TPath::Resolve, which
-    // requires an absolute path, not the database-relative one stored above.
-    PersistSchemeChangePendingOrder(db, txId, userTxIdx, order, absPath);
+    PersistSchemeChangePendingOrder(db, txId, userTxIdx, order, absTargets);
 
     slot.UserTxIdx = userTxIdx;
     slot.Order = order;
-    slot.Path = absPath;
+    slot.Targets = absTargets;
     slot.UserSid = userSid;
     return true;
 }
@@ -203,21 +374,34 @@ void TSchemeShard::FinalizeSchemeChangeRecord(NIceDb::TNiceDb& db, const TActorC
     }
     step = Max<ui64>(step, 1);
 
-    // Must be captured now: after a DROP the name is gone.
+    // Must be captured now: after a DROP the name is gone. Identity/schema
+    // fields describe a single object, so they are captured from the first
+    // target only; a multi-target op's other targets are still canonicalized
+    // below, just without their own PathId/ObjectType/SchemaVersion.
     TPathId resolvedPathId;
     auto resolvedObjectType = NKikimrSchemeOp::EPathTypeInvalid;
     ui64 schemaVersion = 0;
-    // Canonical resolved path, database-relative; only set on success. A drop
-    // keeps the propose-time value written by PersistSchemeChangeRecordAtPropose,
-    // since the object is already gone by the time this runs.
-    TMaybe<TString> canonicalRelativePath;
-    if (!slot.Path.empty()) {
-        TPath resolved = TPath::Resolve(slot.Path, this);
-        if (resolved.IsResolved()) {
+    // Canonical resolved targets, database-relative Path (SourcePath is
+    // carried through unchanged, never re-resolved); only replaced on
+    // successful resolution. A drop keeps the propose-time value written by
+    // PersistSchemeChangeRecordAtPropose, since the object is already gone
+    // by the time this runs.
+    TVector<TOperation::TSchemeChangeTarget> canonicalTargets = slot.Targets;
+    bool anyResolved = false;
+    for (size_t i = 0; i < slot.Targets.size(); ++i) {
+        if (slot.Targets[i].Path.empty()) {
+            continue;
+        }
+        TPath resolved = TPath::Resolve(slot.Targets[i].Path, this);
+        if (!resolved.IsResolved()) {
+            continue;
+        }
+        canonicalTargets[i].Path = RelativeToDomain(resolved);
+        anyResolved = true;
+        if (i == 0) {
             resolvedPathId = resolved.Base()->PathId;
             resolvedObjectType = resolved.Base()->PathType;
             schemaVersion = resolved.Base()->DirAlterVersion;
-            canonicalRelativePath = RelativeToDomain(resolved);
         }
     }
 
@@ -255,12 +439,13 @@ void TSchemeShard::FinalizeSchemeChangeRecord(NIceDb::TNiceDb& db, const TActorC
         NIceDb::TUpdate<T::PositionKind>(static_cast<ui32>(positionKind)),
         NIceDb::TUpdate<T::CompletedAtUs>(ctx.Now().MicroSeconds())
     );
-    // Overwrite the propose-time synthesis with the canonical resolved path.
-    // Only on success: a drop's target is already gone, so the propose-time
-    // value (still database-relative, already correct) is left in place.
-    if (canonicalRelativePath) {
+    // Overwrite the propose-time synthesis with the canonical resolved
+    // targets. Only on success: a drop's target is already gone, so the
+    // propose-time value (still database-relative, already correct) is left
+    // in place.
+    if (anyResolved) {
         db.Table<T>().Key(slot.Order).Update(
-            NIceDb::TUpdate<T::Path>(*canonicalRelativePath)
+            NIceDb::TUpdate<T::Path>(EncodeSchemeChangeTargets(canonicalTargets))
         );
     }
 }
@@ -291,7 +476,8 @@ void TSchemeShard::PersistSchemeChangeRecord(NIceDb::TNiceDb& db, const TSchemeC
         NIceDb::TUpdate<T::OperationType>(entry.OpType),
         NIceDb::TUpdate<T::PathOwnerId>(entry.PathId.OwnerId),
         NIceDb::TUpdate<T::PathLocalId>(entry.PathId.LocalPathId),
-        NIceDb::TUpdate<T::Path>(entry.Path),
+        NIceDb::TUpdate<T::Path>(entry.Path.empty() ? TString()
+            : EncodeSchemeChangeTargets({TOperation::TSchemeChangeTarget{entry.Path, {}}})),
         NIceDb::TUpdate<T::ObjectType>(ui32(entry.ObjectType)),
         NIceDb::TUpdate<T::Status>(ui32(entry.Status)),
         NIceDb::TUpdate<T::UserSID>(entry.UserSid),

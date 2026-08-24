@@ -213,7 +213,8 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsProtocolTests) {
         // T1's order, needed for the physical-row probe below.
         ui64 t1Order = 0;
         for (size_t i = 0; i < static_cast<size_t>(fetch->Record.EntriesSize()); ++i) {
-            if (fetch->Record.GetEntries(i).GetPath() == "T1") {
+            const auto& targets = fetch->Record.GetEntries(i).GetTargets();
+            if (targets.size() == 1 && targets[0].GetPath() == "T1") {
                 t1Order = fetch->Record.GetEntries(i).GetOrder();
             }
         }
@@ -265,7 +266,8 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsProtocolTests) {
         TAutoPtr<IEventHandle> afterFetchHandle;
         auto* afterFetch = FetchSchemeChangeRecords(runtime, "probe:sub", 0, 100, afterFetchHandle);
         for (size_t i = 0; i < static_cast<size_t>(afterFetch->Record.EntriesSize()); ++i) {
-            UNIT_ASSERT_C(afterFetch->Record.GetEntries(i).GetPath() != "T2",
+            const auto& targets = afterFetch->Record.GetEntries(i).GetTargets();
+            UNIT_ASSERT_C(!(targets.size() == 1 && targets[0].GetPath() == "T2"),
                 "T2 record must not exist (created after last subscriber unregistered)");
         }
     }

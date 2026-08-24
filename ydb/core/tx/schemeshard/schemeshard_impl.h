@@ -1004,7 +1004,14 @@ public:
     // Back-pointer from an in-flight operation to the outbox order reserved for
     // one of its user-level transactions, so completion can finalise it after a restart.
     void PersistSchemeChangePendingOrder(NIceDb::TNiceDb& db, TTxId txId, ui32 userTxIdx,
-        ui64 order, const TString& path) const;
+        ui64 order, const TVector<TOperation::TSchemeChangeTarget>& targets) const;
+
+    // Local-DB wire encoding for the outbox Path column: a serialized
+    // NKikimrSchemeShard::TSchemeChangeRecordTargets, never a delimited string
+    // (a path could contain any delimiter). Shared by propose, finalisation,
+    // and reboot recovery.
+    static TString EncodeSchemeChangeTargets(const TVector<TOperation::TSchemeChangeTarget>& targets);
+    static TVector<TOperation::TSchemeChangeTarget> DecodeSchemeChangeTargets(const TString& encoded);
     void PersistRemoveSchemeChangePendingOrder(NIceDb::TNiceDb& db, TTxId txId, ui32 userTxIdx) const;
 
     // Must be called for every rewritten transaction in a batch before any of

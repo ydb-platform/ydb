@@ -1270,8 +1270,8 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         UNIT_ASSERT_VALUES_EQUAL_C(rec.ObjectType,
             (ui32)NKikimrSchemeOp::EPathTypeTable,
             "ObjectType must be resolved");
-        UNIT_ASSERT_C(rec.Path.Contains("T1"),
-            "Path must name the target, got: " << rec.Path);
+        UNIT_ASSERT_C(AnyPathContains(rec, "T1"),
+            "Path must name the target, got: " << AllTargetPaths(rec));
     }
 
     Y_UNIT_TEST(CreateRecordCarriesResolvedDescription) {
@@ -1456,8 +1456,8 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         }
         UNIT_ASSERT_C(extSrc, "the external data source CREATE must be recorded");
 
-        UNIT_ASSERT_C(extSrc->Path.Contains("ExtSrc"),
-            "Path must name the object itself, not just its parent dir; got: " << extSrc->Path);
+        UNIT_ASSERT_C(AnyPathContains(*extSrc, "ExtSrc"),
+            "Path must name the object itself, not just its parent dir; got: " << AllTargetPaths(*extSrc));
         UNIT_ASSERT_VALUES_EQUAL_C(extSrc->ObjectType,
             (ui32)NKikimrSchemeOp::EPathTypeExternalDataSource,
             "ObjectType must be the object's own type, not the parent's EPathTypeDir");
@@ -1653,7 +1653,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         auto entries = ReadSchemeChangeRecords(runtime);
         ui64 createA = 0, dropA = 0;
         for (const auto& rec : entries) {
-            if (!rec.Path.Contains("DirA")) {
+            if (!AnyPathContains(rec, "DirA")) {
                 continue;
             }
             if (rec.OperationType == (ui32)NKikimrSchemeOp::ESchemeOpMkDir) {
@@ -1760,10 +1760,10 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         const TSchemeChangeRecordEntry* dropT2 = nullptr;
         for (const auto& rec : entries) {
             if (rec.OperationType == (ui32)NKikimrSchemeOp::ESchemeOpCreateTable
-                && rec.Path.Contains("T2")) {
+                && AnyPathContains(rec, "T2")) {
                 createT2 = &rec;
             } else if (rec.OperationType == (ui32)NKikimrSchemeOp::ESchemeOpDropTable
-                && rec.Path.Contains("T2")) {
+                && AnyPathContains(rec, "T2")) {
                 dropT2 = &rec;
             }
         }
@@ -1895,9 +1895,9 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
             if (rec.OperationType
                     == (ui32)NKikimrSchemeOp::ESchemeOpBackupIncrementalBackupCollection) {
                 syncStep = rec.PlanStep;
-            } else if (rec.Path.Contains("BeforeSync")) {
+            } else if (AnyPathContains(rec, "BeforeSync")) {
                 beforeStep = rec.PlanStep;
-            } else if (rec.Path.Contains("AfterSync")) {
+            } else if (AnyPathContains(rec, "AfterSync")) {
                 afterStep = rec.PlanStep;
             }
         }
@@ -2027,7 +2027,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
 
         bool sawDurable = false;
         for (const auto& rec : entries) {
-            if (rec.Path.Contains("Durable")) {
+            if (AnyPathContains(rec, "Durable")) {
                 sawDurable = true;
                 UNIT_ASSERT_VALUES_EQUAL_C(rec.OperationType,
                     (ui32)NKikimrSchemeOp::ESchemeOpCreateTable,
@@ -2137,7 +2137,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         auto before = ReadSchemeChangeRecords(runtime);
         const TSchemeChangeRecordEntry* orphanedEntry = nullptr;
         for (const auto& e : before) {
-            if (e.Path == "Orphaned") {
+            if (SinglePathEquals(e, "Orphaned")) {
                 orphanedEntry = &e;
             }
         }
@@ -2182,7 +2182,8 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         auto* fetch = FetchSchemeChangeRecords(runtime, "orphan:sub", 0, 100, fetchHandle);
         bool sawAfter = false;
         for (size_t i = 0; i < static_cast<size_t>(fetch->Record.EntriesSize()); ++i) {
-            if (fetch->Record.GetEntries(i).GetPath() == "After") {
+            const auto& afterTargets = fetch->Record.GetEntries(i).GetTargets();
+            if (afterTargets.size() == 1 && afterTargets[0].GetPath() == "After") {
                 sawAfter = true;
             }
         }
@@ -2330,7 +2331,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         auto settled = ReadSchemeChangeRecords(runtime);
         const TSchemeChangeRecordEntry* done = nullptr;
         for (const auto& rec : settled) {
-            if (rec.Path.Contains("Early")) {
+            if (AnyPathContains(rec, "Early")) {
                 done = &rec;
             }
         }
@@ -2401,7 +2402,13 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         UNIT_ASSERT_VALUES_EQUAL_C(fetched->Record.EntriesSize(), 1u,
             "a subscriber that registered while the DDL was in flight must still "
             "receive its record once it finalises");
-        UNIT_ASSERT_C(fetched->Record.GetEntries(0).GetPath().Contains("MidDdl"),
+        bool midDdlSeen = false;
+        for (const auto& t : fetched->Record.GetEntries(0).GetTargets()) {
+            if (t.GetPath().Contains("MidDdl")) {
+                midDdlSeen = true;
+            }
+        }
+        UNIT_ASSERT_C(midDdlSeen,
             "and it must be that DDL's record");
 
         UNIT_ASSERT_VALUES_EQUAL_C(fetched->Record.GetSkippedEntries(), 0u,
@@ -2560,9 +2567,9 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         size_t single = 0;
         size_t spread = 0;
         for (const auto& rec : ReadSchemeChangeRecordsFull(runtime).Entries) {
-            if (rec.Path.Contains("single")) {
+            if (AnyPathContains(rec, "single")) {
                 single = rec.Description.size();
-            } else if (rec.Path.Contains("spread")) {
+            } else if (AnyPathContains(rec, "spread")) {
                 spread = rec.Description.size();
             }
         }

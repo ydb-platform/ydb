@@ -4387,7 +4387,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 TOperation::TSchemeChangeSlot slot;
                 slot.UserTxIdx = idx;
                 slot.Order = rowset.GetValue<Schema::SchemeChangePendingRecords::Order>();
-                slot.Path = rowset.GetValueOrDefault<Schema::SchemeChangePendingRecords::Path>("");
+                slot.Targets = TSchemeShard::DecodeSchemeChangeTargets(
+                    rowset.GetValueOrDefault<Schema::SchemeChangePendingRecords::Path>(""));
                 byTx[txId][idx] = std::move(slot);
                 if (!rowset.Next()) return false;
             }

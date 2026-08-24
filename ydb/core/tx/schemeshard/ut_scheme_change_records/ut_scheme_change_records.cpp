@@ -4,6 +4,7 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/schemeshard_counters.h>
 
 #include <util/string/printf.h>
+#include <util/string/join.h>
 
 using namespace NKikimr;
 using namespace NSchemeShard;
@@ -99,7 +100,8 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
                 && e.Body.GetCreateTable().GetName() == "Table1") {
                 found = true;
                 UNIT_ASSERT_VALUES_EQUAL(e.TxId, (ui64)txId);
-                UNIT_ASSERT_VALUES_EQUAL(e.Path, "Table1");
+                UNIT_ASSERT_VALUES_EQUAL(e.Targets.size(), 1u);
+                UNIT_ASSERT_VALUES_EQUAL(e.Targets[0].Path, "Table1");
                 UNIT_ASSERT(e.Order > 0);
                 break;
             }
@@ -574,7 +576,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         for (const auto& e : entries) {
             UNIT_ASSERT_C(e.PlanStep >= prevPlanStep,
                 "PlanStep should be monotonically non-decreasing: prev=" << prevPlanStep
-                    << " current=" << e.PlanStep << " path=" << e.Path);
+                    << " current=" << e.PlanStep << " path=" << AllTargetPaths(e));
             prevPlanStep = e.PlanStep;
         }
 
@@ -1429,8 +1431,9 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
             }
         }
         UNIT_ASSERT_C(found, "CREATE TABLE entry not found");
-        UNIT_ASSERT_C(!found->Path.Contains("//"),
-            "Path must be the canonical resolved path, not a raw concatenation; got \"" << found->Path << "\"");
+        UNIT_ASSERT_VALUES_EQUAL(found->Targets.size(), 1u);
+        UNIT_ASSERT_C(!found->Targets[0].Path.Contains("//"),
+            "Path must be the canonical resolved path, not a raw concatenation; got \"" << found->Targets[0].Path << "\"");
     }
 
     // (b) + (c) A stored path must be relative to the database root, and the
@@ -1464,9 +1467,10 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
             }
         }
         UNIT_ASSERT_C(found, "CREATE TABLE entry not found");
-        UNIT_ASSERT_C(!found->Path.StartsWith("/MyRoot"),
-            "Path must not carry the source database prefix; got \"" << found->Path << "\"");
-        UNIT_ASSERT_VALUES_EQUAL_C(found->Path, "DirA/Nested",
+        UNIT_ASSERT_VALUES_EQUAL(found->Targets.size(), 1u);
+        UNIT_ASSERT_C(!found->Targets[0].Path.StartsWith("/MyRoot"),
+            "Path must not carry the source database prefix; got \"" << found->Targets[0].Path << "\"");
+        UNIT_ASSERT_VALUES_EQUAL_C(found->Targets[0].Path, "DirA/Nested",
             "Path must be the full remainder relative to the database root, "
             "not truncated to empty or to just the leaf name");
     }
@@ -1543,5 +1547,239 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
             }
         }
         UNIT_ASSERT_C(found, "an ordinary path-bearing op must still produce a record");
+    }
+
+    // RFC 0129: CreateConsistentCopyTables carries N targets in one repeated
+    // TCopyTableConfig field, each pairing a destination with its own source.
+    // The record carries N (Path, SourcePaths) targets per record (one record
+    // per user-level tx, since Body is the atomic replay unit), so this
+    // propose must succeed and the record must list every copy as a target
+    // with both its destination Path and its source populated.
+    Y_UNIT_TEST(ConsistentCopyTablesRecordsAllTargetsWithSources) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Src1"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Src2"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const ui64 rejectedBefore = GetCumulativeCounter(runtime, "SchemeShard/SchemeChangePathMissing");
+
+        TestConsistentCopyTables(runtime, ++txId, "/MyRoot", R"(
+            CopyTableDescriptions {
+                SrcPath: "/MyRoot/Src1"
+                DstPath: "/MyRoot/Dst1"
+            }
+            CopyTableDescriptions {
+                SrcPath: "/MyRoot/Src2"
+                DstPath: "/MyRoot/Dst2"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const ui64 rejectedAfter = GetCumulativeCounter(runtime, "SchemeShard/SchemeChangePathMissing");
+        UNIT_ASSERT_VALUES_EQUAL_C(rejectedAfter, rejectedBefore,
+            "a resolvable multi-target copy must not bump the path-missing counter");
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        const TSchemeChangeRecordEntry* found = nullptr;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateConsistentCopyTables) {
+                found = &e;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(found, "CreateConsistentCopyTables entry not found -- the propose must not be refused");
+        UNIT_ASSERT_VALUES_EQUAL_C(found->Targets.size(), 2u,
+            "record must list all N copy targets, got " << found->Targets.size());
+
+        THashMap<TString, TString> dstToSrc;
+        for (const auto& target : found->Targets) {
+            UNIT_ASSERT_VALUES_EQUAL_C(target.SourcePaths.size(), 1u,
+                "each copy target must have exactly one source, got "
+                    << target.SourcePaths.size() << " for " << target.Path);
+            dstToSrc[target.Path] = target.SourcePaths[0];
+        }
+        UNIT_ASSERT_C(dstToSrc.contains("Dst1"), "missing Dst1 in " << AllTargetPaths(*found));
+        UNIT_ASSERT_C(dstToSrc.contains("Dst2"), "missing Dst2 in " << AllTargetPaths(*found));
+        UNIT_ASSERT_VALUES_EQUAL_C(dstToSrc["Dst1"], "Src1",
+            "Dst1's target must record Src1 as its source");
+        UNIT_ASSERT_VALUES_EQUAL_C(dstToSrc["Dst2"], "Src2",
+            "Dst2's target must record Src2 as its source");
+    }
+
+    // Guards against the repeated field silently turning every record into a
+    // list of one-or-more by accident: a plain single-target op must still
+    // yield exactly one target, with an empty SourcePaths (a create has no
+    // source, it is a repeated field so "empty" is the correct assertion,
+    // not "unset").
+    Y_UNIT_TEST(SingleTargetOpRecordsExactlyOneTarget) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        const TSchemeChangeRecordEntry* found = nullptr;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateTable
+                && e.Body.GetCreateTable().GetName() == "Table1") {
+                found = &e;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(found, "CREATE TABLE entry not found");
+        UNIT_ASSERT_VALUES_EQUAL_C(found->Targets.size(), 1u,
+            "a single-target op must yield exactly one target entry, got " << found->Targets.size());
+        UNIT_ASSERT_VALUES_EQUAL(found->Targets[0].Path, "Table1");
+        UNIT_ASSERT_C(found->Targets[0].SourcePaths.empty(),
+            "a plain create has no source, SourcePaths must be empty");
+    }
+
+    // TMove carries SrcPath/DstPath, no `Name` field at all, so a plain
+    // reflection-based lookup for "Name" finds nothing and the propose was
+    // being refused outright (see git history / diagnosis notes). A rename
+    // must be accepted and must record the object's new location (DstPath,
+    // since that is where a consumer would look the object up afterwards)
+    // as Path, and its old location as the sole entry in SourcePaths.
+    Y_UNIT_TEST(MoveRecordsDestinationAndSource) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "MoveSrc"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestMoveTable(runtime, ++txId, "/MyRoot/MoveSrc", "/MyRoot/MoveDst");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        const TSchemeChangeRecordEntry* found = nullptr;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpMoveTable) {
+                found = &e;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(found, "MOVE TABLE entry not found -- the propose must not be refused");
+        UNIT_ASSERT_VALUES_EQUAL(found->Targets.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL_C(found->Targets[0].Path, "MoveDst",
+            "Path must be the object's new (destination) location, database-relative");
+        UNIT_ASSERT_VALUES_EQUAL_C(found->Targets[0].SourcePaths.size(), 1u,
+            "a rename has exactly one source, got " << found->Targets[0].SourcePaths.size());
+        UNIT_ASSERT_VALUES_EQUAL_C(found->Targets[0].SourcePaths[0], "MoveSrc",
+            "SourcePaths must record the object's old (source) location, database-relative");
+    }
+
+    // Altering the database root itself: WorkingDir="/", Name="MyRoot"
+    // targets /MyRoot, which TTestEnv sets up as the domain root -- so
+    // RelativeToDomain collapses the resolved path down to the empty string,
+    // per its documented contract (a domain root's PathString() equals the
+    // domain prefix). This must succeed and must not carry an approximate
+    // or non-empty path.
+    Y_UNIT_TEST(AlterDatabaseRootItselfStoresEmptyPath) {
+        TTestBasicRuntime runtime;
+        TTestEnvOptions opts;
+        opts.EnableSchemeChangeRecords(true);
+        TTestEnv env(runtime, opts);
+        runtime.GetAppData().FeatureFlags.SetEnableAlterDatabase(true);
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestAlterSubDomain(runtime, ++txId, "/", R"(
+            Name: "MyRoot"
+            SchemeLimits {
+                MaxPaths: 1000
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        const TSchemeChangeRecordEntry* found = nullptr;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterSubDomain) {
+                found = &e;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(found, "ALTER SUBDOMAIN(root) entry not found -- altering the root must not be refused");
+        UNIT_ASSERT_VALUES_EQUAL(found->Targets.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL_C(found->Targets[0].Path, "",
+            "the database root's own path, relative to itself, must be the empty string");
+    }
+
+    // CreateIndexedTable already has a special case in
+    // ExtractSchemeChangeTargetName (returns TableDescription.Name directly),
+    // bypassing the reflection loop entirely. Confirm it actually produces
+    // exactly one record and that the stored path is the table, not an
+    // index impl table synthesized during the same user-level tx.
+    Y_UNIT_TEST(CreateIndexedTableWritesExactlyOneRecordForTheTable) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "IndexedTable1"
+                Columns { Name: "key" Type: "Uint64" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+                Name: "byValue"
+                KeyColumnNames: ["value"]
+                Type: EIndexTypeGlobal
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        ui32 indexedTableRecords = 0;
+        TVector<TString> storedPaths;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateIndexedTable) {
+                ++indexedTableRecords;
+                UNIT_ASSERT_VALUES_EQUAL(e.Targets.size(), 1u);
+                storedPaths.push_back(e.Targets[0].Path);
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL_C(indexedTableRecords, 1u,
+            "CreateIndexedTable must write exactly one record for the whole user-level tx");
+        UNIT_ASSERT_VALUES_EQUAL_C(storedPaths[0], "IndexedTable1",
+            "the stored path must be the table itself, not an index impl table");
     }
 }

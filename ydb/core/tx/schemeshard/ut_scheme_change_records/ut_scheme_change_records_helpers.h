@@ -6,6 +6,8 @@
 #include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/cms/console/console.h>
 
+#include <util/string/join.h>
+
 namespace NSchemeChangeRecordTestHelpers {
 
 using namespace NKikimr;
@@ -196,6 +198,14 @@ inline TEvSchemeShard::TEvFetchSchemeChangeRecordBodiesResult* FetchSchemeChange
 }
 
 
+// Mirrors NKikimrSchemeShard::TSchemeChangeTarget: Path is the target's
+// identity after the change, SourcePaths is empty for a plain create/alter/
+// drop and non-empty for a move/rename or copy target.
+struct TTestSchemeChangeTarget {
+    TString Path;
+    TVector<TString> SourcePaths;
+};
+
 struct TSchemeChangeRecordEntry {
     ui64 Order = 0;
     ui64 TxId = 0;
@@ -203,7 +213,7 @@ struct TSchemeChangeRecordEntry {
     ui32 OperationType = 0;
     ui64 PathOwnerId = 0;
     ui64 PathLocalId = 0;
-    TString Path;
+    TVector<TTestSchemeChangeTarget> Targets;
     ui32 ObjectType = 0;
     ui32 Status = 0;
     TString UserSID;
@@ -216,6 +226,31 @@ struct TSchemeChangeRecordEntry {
     // Field paths cleared by redaction; empty when nothing was cleared.
     TVector<TString> RedactedFields;
 };
+
+// True if any of the entry's N target paths contains the given substring.
+// For single-target test fixtures, where exactly one target is expected.
+inline bool AnyPathContains(const TSchemeChangeRecordEntry& entry, const TString& substr) {
+    for (const auto& target : entry.Targets) {
+        if (target.Path.Contains(substr)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// True if the entry has exactly one target whose Path equals the given value.
+inline bool SinglePathEquals(const TSchemeChangeRecordEntry& entry, const TString& value) {
+    return entry.Targets.size() == 1 && entry.Targets[0].Path == value;
+}
+
+// Comma-joined target paths, for diagnostic messages.
+inline TString AllTargetPaths(const TSchemeChangeRecordEntry& entry) {
+    TVector<TString> paths;
+    for (const auto& target : entry.Targets) {
+        paths.push_back(target.Path);
+    }
+    return JoinSeq(",", paths);
+}
 
 struct TSchemeChangeRecordsReadResult {
     TVector<TSchemeChangeRecordEntry> Entries;
@@ -250,7 +285,14 @@ inline TSchemeChangeRecordsReadResult ReadSchemeChangeRecordsFull(
         entry.OperationType = proto.GetOperationType();
         entry.PathOwnerId = proto.GetPathId().GetOwnerId();
         entry.PathLocalId = proto.GetPathId().GetLocalId();
-        entry.Path = proto.GetPath();
+        for (const auto& t : proto.GetTargets()) {
+            TTestSchemeChangeTarget target;
+            target.Path = t.GetPath();
+            for (const auto& src : t.GetSourcePaths()) {
+                target.SourcePaths.push_back(src);
+            }
+            entry.Targets.push_back(std::move(target));
+        }
         entry.ObjectType = proto.GetObjectType();
         entry.Status = proto.GetStatus();
         entry.UserSID = proto.GetUserSID();

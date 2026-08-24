@@ -4223,10 +4223,10 @@ void TSchemeShard::PersistUpdateLastAssignedPlanStep(NIceDb::TNiceDb& db) const 
 }
 
 void TSchemeShard::PersistSchemeChangePendingOrder(NIceDb::TNiceDb& db, TTxId txId, ui32 userTxIdx,
-        ui64 order, const TString& path) const {
+        ui64 order, const TVector<TOperation::TSchemeChangeTarget>& targets) const {
     db.Table<Schema::SchemeChangePendingRecords>().Key(txId, userTxIdx).Update(
         NIceDb::TUpdate<Schema::SchemeChangePendingRecords::Order>(order),
-        NIceDb::TUpdate<Schema::SchemeChangePendingRecords::Path>(path));
+        NIceDb::TUpdate<Schema::SchemeChangePendingRecords::Path>(EncodeSchemeChangeTargets(targets)));
 }
 
 void TSchemeShard::PersistRemoveSchemeChangePendingOrder(NIceDb::TNiceDb& db, TTxId txId, ui32 userTxIdx) const {

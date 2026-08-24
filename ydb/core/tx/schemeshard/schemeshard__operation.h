@@ -18,12 +18,23 @@ struct TOperation: TSimpleRefCount<TOperation> {
     // the propose that created them: outbox rows are written before it commits.
     TVector<TTxTransaction> UserLevelTransactions;
 
+    // One target of a scheme change, carried in memory (mirrors
+    // NKikimrSchemeShard::TSchemeChangeTarget). Path is the object's identity
+    // after the change, never empty. SourcePaths is empty for a plain
+    // create/alter/drop and non-empty for a move/rename or copy target;
+    // cardinality is not assumed 1:1 with Path.
+    struct TSchemeChangeTarget {
+        TString Path;
+        TVector<TString> SourcePaths;
+    };
+
     // Outbox rows reserved at propose, one per emitting user-level transaction.
     struct TSchemeChangeSlot {
         ui32 UserTxIdx = 0;
         ui64 Order = 0;
-        // Carried in memory because finalisation cannot re-read it.
-        TString Path;
+        // Carried in memory because finalisation cannot re-read it. One entry
+        // for a single-target op, N for a multi-target op; never empty.
+        TVector<TSchemeChangeTarget> Targets;
         // The DDL issuer's SID, captured at propose time. Empty if the
         // caller had no token; finalisation must not substitute the
         // target's owner for a missing issuer.

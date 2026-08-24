@@ -9,6 +9,29 @@ option java_package = "ru.yandex.kikimr.proto";
 
 import "ydb/core/scheme/protos/pathid.proto";
 
+// One target of a scheme change: the object's identity after the change,
+// and where it came from if the op moves or copies. Cardinality of
+// SourcePaths is not assumed 1:1 with the target: a rename has one source
+// for one target, but a future N-sources-into-one-target op would list all
+// of them here rather than picking one arbitrarily -- a consumer must not
+// assume SourcePaths[0] is the only source.
+message TSchemeChangeTarget {
+    // The target's identity after the change. Always set, never empty.
+    string Path = 1;
+    // Old location(s) this target came from: the prior path for a
+    // move/rename, the source table for a copy target. Empty for a plain
+    // create/alter/drop. May hold more than one entry.
+    repeated string SourcePaths = 2;
+}
+
+// Wire/storage encoding for a record's N authoritative targets. Used both as
+// the local-DB column payload (a delimiter could occur inside a path, so a
+// serialized repeated-message is the safe encoding) and internally when
+// carrying targets through in-memory operation state.
+message TSchemeChangeRecordTargets {
+    repeated TSchemeChangeTarget Targets = 1;
+}
+
 // Status enum for scheme change records subscriber protocol results.
 message TSchemeChangeRecordsStatus {
     enum EStatus {
@@ -75,8 +98,16 @@ message TEvRegisterSubscriberResult {
 // Consumer contract:
 // - Body is authoritative except for fields listed in RedactedFields, which
 //   were stripped before persisting and are never recoverable from the record.
-// - Cross-cluster identity is Path (database-relative), not PathId: PathId is
-//   source-local and meaningless on another cluster.
+// - Cross-cluster identity is Targets[].Path (database-relative), not PathId:
+//   PathId is source-local and meaningless on another cluster.
+// - Targets has exactly one entry for single-target operations, N for a
+//   multi-target operation (e.g. a consistent copy of N tables), and is
+//   NEVER empty: an operation that resolves no target refuses the propose.
+//   Targets[0].Path is the primary identity for a consumer keying by one path.
+// - Each Target's SourcePaths is populated only for a move/rename (the old
+//   location) or a copy target (the table copied from); empty for a plain
+//   create/alter/drop. May hold more than one entry -- a consumer must not
+//   assume SourcePaths[0] is the only source.
 // - Partitioning and partition config are not carried here; a consumer gets
 //   them from a snapshot taken at restore time, not from this record.
 // - The record is not directly executable: a consumer must translate any
@@ -88,7 +119,7 @@ message TSchemeChangeRecord {
     uint64 PlanStep = 3;
     uint32 OperationType = 4;
     NKikimrProto.TPathID PathId = 5;
-    string Path = 6;
+    repeated TSchemeChangeTarget Targets = 6;
     uint32 ObjectType = 7;
     optional uint32 Status = 8;
     string UserSID = 9;

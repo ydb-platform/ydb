@@ -2703,7 +2703,11 @@ struct Schema : NIceDb::Schema {
         struct OperationType : Column<3, NScheme::NTypeIds::Uint32> {};
         struct PathOwnerId :   Column<4, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
         struct PathLocalId :   Column<5, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
-        struct Path :          Column<6, NScheme::NTypeIds::Utf8> {};
+        // Serialized NKikimrSchemeShard::TSchemeChangeRecordTargets: N
+        // (Path, SourcePath) targets, never zero. A delimited string is
+        // unsafe (a path could contain the delimiter), so this is a
+        // serialized repeated-message protobuf.
+        struct Path :          Column<6, NScheme::NTypeIds::String> {};
         struct ObjectType :    Column<7, NScheme::NTypeIds::Uint32> {};
         struct Status :        Column<8, NScheme::NTypeIds::Uint32> {};
         struct UserSID :       Column<9, NScheme::NTypeIds::Utf8> {};
@@ -2757,6 +2761,9 @@ struct Schema : NIceDb::Schema {
         struct TxId :      Column<1, NScheme::NTypeIds::Uint64> { using Type = TTxId; };
         struct UserTxIdx : Column<2, NScheme::NTypeIds::Uint32> {};
         struct Order :     Column<4, NScheme::NTypeIds::Uint64> {};
+        // Serialized NKikimrSchemeShard::TSchemeChangeRecordTargets, absolute
+        // Paths (re-resolved at finalisation); same encoding as
+        // SchemeChangeRecords::Path.
         struct Path :      Column<5, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<TxId, UserTxIdx>;

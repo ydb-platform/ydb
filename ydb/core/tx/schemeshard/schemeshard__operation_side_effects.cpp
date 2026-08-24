@@ -7,6 +7,8 @@
 
 #include <ydb/core/tx/tx_processing.h>
 
+#include <util/string/join.h>
+
 namespace NKikimr {
 namespace NSchemeShard {
 
@@ -1033,12 +1035,16 @@ void TSideEffects::DoPersistSchemeChangeRecords(TSchemeShard* ss, NTabletFlatExe
 
             ss->UpdateSchemeChangeGauges();
 
+            TVector<TString> targetPaths;
+            for (const auto& t : slot.Targets) {
+                targetPaths.push_back(t.Path);
+            }
             LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "DoPersistSchemeChangeRecords: finalised user-level entry"
                     << " order=" << slot.Order
                     << " txId=" << txId
                     << " userTxIdx=" << slot.UserTxIdx
-                    << " path=" << slot.Path
+                    << " paths=" << JoinSeq(",", targetPaths)
                     << " planStep=" << planStep);
         }
     }

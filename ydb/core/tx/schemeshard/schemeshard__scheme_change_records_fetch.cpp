@@ -252,7 +252,13 @@ struct TTxFetchSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBas
             auto* pathId = entry->MutablePathId();
             pathId->SetOwnerId(rowset.GetValue<Schema::SchemeChangeRecords::PathOwnerId>());
             pathId->SetLocalId(rowset.GetValue<Schema::SchemeChangeRecords::PathLocalId>());
-            entry->SetPath(rowset.GetValue<Schema::SchemeChangeRecords::Path>());
+            for (const auto& t : TSchemeShard::DecodeSchemeChangeTargets(rowset.GetValue<Schema::SchemeChangeRecords::Path>())) {
+                auto* target = entry->AddTargets();
+                target->SetPath(t.Path);
+                for (const auto& src : t.SourcePaths) {
+                    target->AddSourcePaths(src);
+                }
+            }
             entry->SetObjectType(rowset.GetValue<Schema::SchemeChangeRecords::ObjectType>());
             entry->SetStatus(rowset.GetValue<Schema::SchemeChangeRecords::Status>());
             entry->SetUserSID(rowset.GetValue<Schema::SchemeChangeRecords::UserSID>());

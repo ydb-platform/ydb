@@ -1,133 +1,143 @@
-# PQRB: балансировка чтения
+# PQRB: read balancing
 
-Таблитка `PersQueueReadBalancer` раздаёт партиции топика по сессиям чтения
-консьюмера. Ниже — правила порядка при split/merge. Реализация:
+The `PersQueueReadBalancer` tablet assigns topic partitions to a consumer's
+read sessions. The rules below describe ordering across split/merge.
+Implementation:
 [`read_balancer__balancing.cpp`](read_balancer__balancing.cpp),
-[`read_balancer__balancing.h`](read_balancer__balancing.h). Тесты:
+[`read_balancer__balancing.h`](read_balancer__balancing.h). Tests:
 [`ut/balancing_ut.cpp`](ut/balancing_ut.cpp).
 
-## Термины
+## Terms
 
-- **Lock** — партиция отдана сессии (`TEvLockPartition`); из неё идёт чтение.
-  Залоченная партиция может быть и активной, и неактивной (например дочитанный
-  родитель остаётся в семье вместе с детьми).
-- **Unlocked** - партиция не отдана ни одной сессии чтения.
-- **Активная партиция** — сообщения в ней ещё не вычитаны до конца.
-- **Неактивная партиция** — все сообщения партиции уже вычитаны сессией чтения или она **Commit**.
-- **Finish** — сессия чтения дочитала партицию до конца. Сигнал приходит из
-  сессии чтения.
-- **Commit** — закоммичен offset, равный EndOffset. Приходит из партиции.
-- **Сессия чтения** — одно подключение чтения (`TSession`, pipe), в которое
-  балансируются партиции.
-- **Консьюмер** — состояние чтения на стороне балансировщика (`TConsumer`).
-  Живёт, пока есть хотя бы одна сессия этого consumer id.
-- **Корневая партиция** — партиция без родителя: она не возникла из split или
-  merge другой партиции, либо родитель уже удалён.
-- **Родительская партиция** — партиция, из split или merge которой получилась
-  текущая.
-- **Дочерняя партиция** — партиция, которая получилась из split или merge
-  текущей.
+- **Lock** — the partition is assigned to a session (`TEvLockPartition`);
+  the session is reading from it. A locked partition may be active or inactive
+  (for example a finished parent stays in the family together with its
+  children).
+- **Unlocked** — the partition is not assigned to any read session.
+- **Active partition** — its messages have not been fully read yet.
+- **Inactive partition** — a read session has consumed all of its messages,
+  or it is **Commit**.
+- **Finish** — a read session has reached the end of the partition. The
+  signal comes from the read session.
+- **Commit** — the committed offset equals EndOffset. Comes from the
+  partition.
+- **Read session** — one read connection (`TSession`, pipe) that partitions
+  are balanced into.
+- **Consumer** — read state on the balancer (`TConsumer`). Lives while at
+  least one session with this consumer id exists.
+- **Root partition** — a partition with no parent: it did not come from a
+  split or merge of another partition, or the parent has already been
+  deleted.
+- **Parent partition** — the partition whose split or merge produced the
+  current one.
+- **Child partition** — a partition produced by a split or merge of the
+  current one.
 
-**Finish** и **Commit** бывают только у партиции, у которой есть дочерние
-(в неё больше не могут попадать новые сообщения). У партиции без детей такого
-события быть не может: `ReadingFinished` и `Commited` всегда false. Это верно
-всегда, в том числе без автопартиционирования: все партиции тогда листья.
+**Finish** and **Commit** exist only for a partition that has children
+(new messages can no longer land in it). A partition without children cannot
+get these events: `ReadingFinished` and `Commited` are always false. This
+holds even without auto-partitioning: every partition is then a leaf.
 
-Топик может быть с включённым или выключенным автопартиционированием. Алгоритм
-балансировки от этого не меняется, но при выключенном автопартиционировании
-часть веток алгоритма не используется.
+A topic may have auto-partitioning on or off. The balancing algorithm does
+not change, but with auto-partitioning off some of its branches are unused.
 
-## Порядок
+## Order
 
-При подключении первой сессии чтения на чтение отдаются только корневые
-партиции.
+When the first read session connects, only root partitions are given out
+for reading.
 
-Дочерняя партиция отдаётся на чтение, только когда **обработаны все
-родительские**. Если в Finish пришёл `ScaleAwareSDK`, достаточно **Finish**
-или **Commit**. Для старого SDK одного Finish мало: нужен ещё
-`StartedReadingFromEndOffset` (чтение сразу с конца) или **Commit**. Иначе
-дети не readable, включается эвристика с delay (см. ниже).
+A child partition is given out for reading only after **all of its parents
+have been processed**. If Finish carried `ScaleAwareSDK`, **Finish** or
+**Commit** is enough. For the old SDK, Finish alone is not enough: it also
+needs `StartedReadingFromEndOffset` (reading started at the end) or
+**Commit**. Otherwise the children are not readable and the delay heuristic
+kicks in (see below).
 
-Если сессия чтения оборвалась, флаг **Finish** сбрасывается со всех партиций,
-которые она читала. **Commit** сохраняется.
+If a read session dies, **Finish** is cleared on every partition it was
+reading. **Commit** is kept.
 
-## Семья
+## Family
 
-`TPartitionFamily` — набор партиций, который всегда читается целиком в одной
-сессии. Так сохраняется порядок сообщений одной группы (SourceId):
+`TPartitionFamily` is a set of partitions that is always read together in
+one session. That preserves message order for a single group (SourceId):
 
-- split `0 → 1, 2` после Finish(0) у ScaleAware: на сессии, которая дочитала 0,
-  лочатся `{0, 1, 2}`;
-- merge `0 + 1 → 2` после Finish обоих родителей у ScaleAware: `{0, 1, 2}` в
-  одной сессии. У старого SDK ребёнок 2 — отдельная семья.
+- split `0 → 1, 2` after Finish(0) with ScaleAware: the session that
+  finished 0 locks `{0, 1, 2}`;
+- merge `0 + 1 → 2` after Finish of both parents with ScaleAware:
+  `{0, 1, 2}` in one session. With the old SDK, child 2 is a separate
+  family.
 
-После Commit семью можно разбить: 1 и 2 уезжают на другие сессии независимо
-от 0.
+After Commit the family can be split: 1 and 2 may move to other sessions
+independently of 0.
 
-Семья — единица load-balancing. Третья общая сессия не раздаёт 0 и 2 разным
-pipe, пока родители не committed.
+A family is the unit of load-balancing. A third common session does not
+hand 0 and 2 to different pipes while the parents are not committed.
 
 ## Split
 
-1. Пока 0 активна, 1 и 2 не лочатся.
-2. Finish(0) без Commit у ScaleAware: 1 и 2 лочатся **на той же сессии**,
-   что и 0. У старого SDK дети — отдельные семьи; ту же pipe им можно
-   не отдавать (`BalanceToOtherPipe`).
-3. Commit(0): 1 и 2 можно отдать другим сессиям.
-4. Если 0 снова начали читать (reread), 1 и 2 снимаются, пока 0 снова не
-   Finish или Commit.
+1. While 0 is active, 1 and 2 are not locked.
+2. Finish(0) without Commit on ScaleAware: 1 and 2 are locked **on the same
+   session** as 0. With the old SDK the children are separate families; they
+   may be kept off the same pipe (`BalanceToOtherPipe`).
+3. Commit(0): 1 and 2 may be given to other sessions.
+4. If 0 is read again (reread), 1 and 2 are taken away until 0 Finish or
+   Commit again.
 
 ## Merge
 
-Читать 2 можно, когда оба родителя inactive. Одна сессия для 0 и 1 нужна,
-только пока детей нельзя отдать отдельно (`NeedReleaseChildren`: ScaleAware
-без Commit). Тогда сливаются семьи **родителей** 0 и 1: если они на разных
-сессиях, одну отпускают и склеивают. Это не merge 0 и 2.
+2 can be read when both parents are inactive. 0 and 1 must share one
+session only while children cannot be handed out separately
+(`NeedReleaseChildren`: ScaleAware without Commit). Then the **parent**
+families of 0 and 1 are merged: if they sit on different sessions, one is
+released and they are glued together. This is not a merge of 0 and 2.
 
-После Commit обоих родителей 2 — отдельная семья; 0 и 1 могут остаться
-на разных сессиях.
+After Commit of both parents, 2 is a separate family; 0 and 1 may stay on
+different sessions.
 
-## Смена сессии
+## Session change
 
-Пока консьюмер жив (есть другие сессии), uncommitted-семья переезжает целиком:
-новая сессия получает родителя, дети добавляются, когда будут дочитаны
-родительские партиции.
+While the consumer is alive (other sessions remain), an uncommitted family
+moves as a whole: the new session gets the parent, and children are added
+once the parent partitions have been finished.
 
-Если закрылась **последняя** сессия, `TConsumer` уничтожается. Finish и Commit
-теряются. Следующая сессия начинается с корня: отдаём только 0, пока её снова
-не Finish или не Commit последнего сообщения. После Finish(0) без Commit дети
-снова только вместе с 0; после Commit(0) дети могут уехать на другие сессии.
+If the **last** session closes, `TConsumer` is destroyed. Finish and Commit
+are lost. The next session starts from the root: only 0 is given out until
+it Finish or Commit of the last message again. After Finish(0) without
+Commit, children go only together with 0; after Commit(0) children may move
+to other sessions.
 
-События Finish, Started и Commit с уже мёртвого pipe отбрасываются.
+Finish, Started, and Commit events from an already dead pipe are dropped.
 
-## Сессия чтения
+## Read session
 
-«Поддержка автопартиционирования» у сессии в коде — флаг `ScaleAwareSDK` на
-партиции из события Finish, не поле `TSession`.
+"Auto-partitioning support" for a session in the code is the `ScaleAwareSDK`
+flag on the partition from the Finish event, not a field of `TSession`.
 
-`ScaleAwareSDK` гарантируют, что сообщения отдаются на чтение в порядке, в котром
-они получены с сервера (в т.ч. для разных партиции).
+`ScaleAwareSDK` guarantees that messages are given out for reading in the
+order they were received from the server (including across partitions).
 
-Если `ScaleAwareSDK` есть, дочитывание партиции до конца определяется по
-**Finish** — дочерние можно отдавать сразу.
+If `ScaleAwareSDK` is set, reaching the end of a partition is determined by
+**Finish** — children can be given out immediately.
 
-Если флага нет (старый SDK), одного **Finish** мало: нужен ещё
-`StartedReadingFromEndOffset` (или **Commit**). Иначе дети не readable,
-включается эвристика:
+If the flag is absent (old SDK), **Finish** alone is not enough: it also
+needs `StartedReadingFromEndOffset` (or **Commit**). Otherwise the children
+are not readable and the heuristic runs:
 
-1. После **Finish** партиция через небольшую задержку отбирается у сессии
-   и отдаётся другой сессии.
-2. Если другая сессия сразу начала читать с конца (в партиции нет данных),
-   считаем партицию дочитанной до конца (`StartedReadingFromEndOffset`).
-3. Если чтение началось не с конца, то после того как партицию снова дочитают
-   до конца, через задержку снова отбираем её у сессии. Повторяем, каждый раз
-   удваивая задержку.
+1. After **Finish** the partition is taken from the session after a short
+   delay and given to another session.
+2. If the other session starts reading from the end (the partition has no
+   data), the partition is treated as fully read
+   (`StartedReadingFromEndOffset`).
+3. If reading did not start from the end, after the partition is finished
+   again it is taken from the session after a delay. Repeat, doubling the
+   delay each time.
 
-## Общая раздача
+## Common assignment
 
-Свободные семьи отдаются наименее загруженным сессиям. Загруженность сессии
-(`LowLoadSessionComparator`) — сначала `ActiveFamilyCount`, затем размер
-preferred-групп. Раздача и последующий rebalance — по числу семей на сессию.
+Free families go to the least loaded sessions. Session load
+(`LowLoadSessionComparator`) is `ActiveFamilyCount` first, then the size of
+preferred groups. Assignment and later rebalance are by family count per
+session.
 
-Счётчики активных и неактивных партиций упорядочивают **семьи**
-(`TPartitionFamilyComparator`), не сессии.
+Active and inactive partition counters order **families**
+(`TPartitionFamilyComparator`), not sessions.

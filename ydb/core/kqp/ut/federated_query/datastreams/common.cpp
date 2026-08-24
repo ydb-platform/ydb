@@ -30,6 +30,9 @@ using namespace NYql::NConnector::NApi;
 using namespace NYql::NConnector::NTest;
 
 TStreamingTestFixture::~TStreamingTestFixture () {
+    if (PqGatewayDriver) {
+        PqGatewayDriver.reset();
+    }
     if (InternalDriver) {
         InternalDriver->Stop(true);
     }
@@ -75,6 +78,24 @@ TIntrusivePtr<IMockPqGateway> TStreamingTestFixture::SetupMockPqGateway() {
     PqGateway = mockPqGateway;
 
     return mockPqGateway;
+}
+
+TIntrusivePtr<NYql::IPqGateway> TStreamingTestFixture::SetupRealPqGateway() {
+    UNIT_ASSERT_C(!PqGateway, "PqGateway is already initialized");
+
+    auto& runtime = GetRuntime();
+    auto actorSystemPtr = std::make_shared<NKikimr::TDeferredActorLogBackend::TAtomicActorSystemPtr>(nullptr);
+    actorSystemPtr->store(runtime.GetActorSystem(0));
+
+    auto uniqueDriver = NKqp::MakeYdbDriver(actorSystemPtr, AppConfig->GetQueryServiceConfig().GetStreamingQueries().GetTopicSdkSettings());
+    PqGatewayDriver = NKqp::MakeSharedYdbDriverWithStop(std::move(uniqueDriver));
+
+    PqGateway = NKqp::MakePqGatewayFactory(PqGatewayDriver, NYql::CreateStructuredTokenCredentialsFactory(), NKqp::TLocalTopicClientSettings{
+        .ActorSystem = runtime.GetActorSystem(0),
+        .ChannelBufferSize = AppConfig->GetTableServiceConfig().GetResourceManager().GetChannelBufferSize(),
+    })->CreatePqGateway();
+
+    return PqGateway;
 }
 
 std::shared_ptr<TConnectorClientMock> TStreamingTestFixture::SetupMockConnectorClient() {
@@ -256,6 +277,22 @@ std::shared_ptr<NYdb::NTopic::TTopicClient> TStreamingTestFixture::GetTopicClien
     }
 
     return local ? LocalTopicClient : TopicClient;
+}
+
+std::shared_ptr<NYdb::NTopic::TDeferredPublishClient> TStreamingTestFixture::GetDeferredPublishClient(bool local, const TString& user) {
+    if (local && !LocalDeferredPublishClient) {
+        LocalDeferredPublishClient = std::make_shared<NYdb::NTopic::TDeferredPublishClient>(*GetInternalDriver(), NYdb::TCommonClientSettings()
+            .AuthToken(user));
+    }
+
+    if (!DeferredPublishClient) {
+        DeferredPublishClient = std::make_shared<NYdb::NTopic::TDeferredPublishClient>(*GetExternalDriver(), NYdb::TCommonClientSettings()
+            .DiscoveryEndpoint(YDB_ENDPOINT)
+            .Database(YDB_DATABASE)
+            .AuthToken(user));
+    }
+
+    return local ? LocalDeferredPublishClient : DeferredPublishClient;
 }
 
 std::shared_ptr<TQueryClient> TStreamingTestFixture::GetExternalQueryClient() {
@@ -568,6 +605,15 @@ void TStreamingTestFixture::CreateSolomonSource(const std::string& solomonSource
         )sql",
         "solomon_source"_a = solomonSourceName,
         "solomon_port"_a = getenv("SOLOMON_HTTP_PORT")
+    ));
+}
+
+void TStreamingTestFixture::DropSource(const TString& sourceName) {
+    ExecQuery(fmt::format(
+        R"sql(
+            DROP EXTERNAL DATA SOURCE `{source_name}`;
+        )sql",
+        "source_name"_a = sourceName
     ));
 }
 

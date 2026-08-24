@@ -1,3 +1,5 @@
+#pragma once
+
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 

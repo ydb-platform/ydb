@@ -1,5 +1,6 @@
 #pragma once
 
+#include "yql_pq_deferred_publish_client.h"
 #include "yql_pq_federated_topic_client.h"
 #include "yql_pq_topic_client.h"
 
@@ -24,6 +25,8 @@ public:
     virtual ITopicClient::TPtr GetTopicClient(const NYdb::TDriver& driver, const NYdb::NTopic::TTopicClientSettings& settings) = 0;
 
     virtual IFederatedTopicClient::TPtr GetFederatedTopicClient(const NYdb::TDriver& driver, const NYdb::NFederatedTopic::TFederatedTopicClientSettings& settings) = 0;
+
+    virtual IDeferredPublishClient::TPtr GetDeferredPublishClient(const NYdb::TDriver& driver, const NYdb::TCommonClientSettings& settings) = 0;
 
     virtual NYdb::NTopic::TTopicClientSettings GetTopicClientSettings() const = 0;
 

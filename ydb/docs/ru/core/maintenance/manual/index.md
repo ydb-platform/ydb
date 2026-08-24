@@ -10,8 +10,10 @@
 * Обслуживание:
 
   * [{#T}](../../devops/configuration-management/configuration-v2/replacing-nodes.md).
+  * [{#T}](node_restarting.md).
   * [{#T}](scrubbing.md).
   * [{#T}](selfheal.md).
+  * [{#T}](selfheal_statestorage.md).
   * [{#T}](../../devops/deployment-options/manual/decommissioning.md).
   * [{#T}](virtual_storage_groups_decommit.md).
   * [{#T}](moving_vdisks.md).

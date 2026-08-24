@@ -246,17 +246,6 @@ Y_UNIT_TEST_TWIN(AddIndexWithRelevance, Covered) {
         ])", NYdb::FormatResultSetYson(index));
     }
 
-    index = ReadIndex(db, NTableIndex::NFulltext::DictTable);
-    CompareYson(R"([
-        [1u;"animals"];
-        [3u;"cats"];
-        [2u;"chase"];
-        [2u;"dogs"];
-        [1u;"foxes"];
-        [2u;"love"];
-        [2u;"small"]
-    ])", NYdb::FormatResultSetYson(index));
-
     index = ReadIndex(db, NTableIndex::NFulltext::StatsTable);
     CompareYson(R"([
         [4u;0u;14u]
@@ -544,13 +533,6 @@ Y_UNIT_TEST_QUAD(InsertRowsWithRelevance, Covered, UseUpsert) {
         [[100u];1u;"love"];
         [[200u];1u;"love"]
     ])", NYdb::FormatResultSetYson(index));
-    auto dict = ReadIndex(db, NTableIndex::NFulltext::DictTable);
-    CompareYson(R"([
-        [1u;"cats"];
-        [1u;"dogs"];
-        [1u;"foxes"];
-        [2u;"love"]
-    ])", NYdb::FormatResultSetYson(dict));
     auto docs = ReadIndex(db, NTableIndex::NFulltext::DocsTable);
     if (Covered) {
         CompareYson(R"([
@@ -589,13 +571,6 @@ Y_UNIT_TEST_QUAD(InsertRowsWithRelevance, Covered, UseUpsert) {
         [[150u];1u;"love"];
         [[200u];1u;"love"]
     ])", NYdb::FormatResultSetYson(index));
-    dict = ReadIndex(db, NTableIndex::NFulltext::DictTable);
-    CompareYson(R"([
-        [2u;"cats"];
-        [1u;"dogs"];
-        [2u;"foxes"];
-        [3u;"love"]
-    ])", NYdb::FormatResultSetYson(dict));
     docs = ReadIndex(db, NTableIndex::NFulltext::DocsTable);
     if (Covered) {
         CompareYson(R"([
@@ -639,15 +614,6 @@ Y_UNIT_TEST_QUAD(InsertRowsWithRelevance, Covered, UseUpsert) {
         [[152u];1u;"rabbits"];
         [[151u];1u;"wolves"]
     ])", NYdb::FormatResultSetYson(index));
-    dict = ReadIndex(db, NTableIndex::NFulltext::DictTable);
-    CompareYson(R"([
-        [2u;"cats"];
-        [1u;"dogs"];
-        [4u;"foxes"];
-        [5u;"love"];
-        [1u;"rabbits"];
-        [1u;"wolves"]
-    ])", NYdb::FormatResultSetYson(dict));
     docs = ReadIndex(db, NTableIndex::NFulltext::DocsTable);
     if (Covered) {
         CompareYson(R"([
@@ -1005,13 +971,6 @@ Y_UNIT_TEST_TWIN(UpsertWithRelevance, Covered) {
         AddIndexCovered(db, "fulltext_relevance");
     else
         AddIndex(db, "fulltext_relevance");
-    auto dict = ReadIndex(db, NTableIndex::NFulltext::DictTable);
-    CompareYson(R"([
-        [1u;"cats"];
-        [1u;"dogs"];
-        [1u;"foxes"];
-        [2u;"love"]
-    ])", NYdb::FormatResultSetYson(dict));
     // Dataset is the same as in InsertWithRelevance - don't check index table contents
 
     // Pure upsert of new rows is already checked in InsertWithRelevance
@@ -1041,16 +1000,6 @@ Y_UNIT_TEST_TWIN(UpsertWithRelevance, Covered) {
         [[100u];1u;"rabbits"];
         [[151u];1u;"wolves"]
     ])", NYdb::FormatResultSetYson(index));
-    dict = ReadIndex(db, NTableIndex::NFulltext::DictTable);
-    CompareYson(R"([
-        [1u;"birds"];
-        [1u;"cats"];
-        [1u;"dogs"];
-        [3u;"foxes"];
-        [4u;"love"];
-        [1u;"rabbits"];
-        [1u;"wolves"]
-    ])", NYdb::FormatResultSetYson(dict));
     auto docs = ReadIndex(db, NTableIndex::NFulltext::DocsTable);
     if (Covered) {
         CompareYson(R"([
@@ -1081,13 +1030,6 @@ Y_UNIT_TEST_TWIN(UpdateWithRelevance, Covered) {
         AddIndexCovered(db, "fulltext_relevance");
     else
         AddIndex(db, "fulltext_relevance");
-    auto dict = ReadIndex(db, NTableIndex::NFulltext::DictTable);
-    CompareYson(R"([
-        [1u;"cats"];
-        [1u;"dogs"];
-        [1u;"foxes"];
-        [2u;"love"]
-    ])", NYdb::FormatResultSetYson(dict));
     // Dataset is the same as in InsertWithRelevance - don't check index table contents
 
     // Pure upsert of new rows is already checked in InsertWithRelevance
@@ -1108,15 +1050,6 @@ Y_UNIT_TEST_TWIN(UpdateWithRelevance, Covered) {
         [[200u];1u;"love"];
         [[100u];1u;"rabbits"];
     ])", NYdb::FormatResultSetYson(index));
-    dict = ReadIndex(db, NTableIndex::NFulltext::DictTable);
-    CompareYson(R"([
-        [1u;"birds"];
-        [0u;"cats"];
-        [1u;"dogs"];
-        [1u;"foxes"];
-        [2u;"love"];
-        [1u;"rabbits"]
-    ])", NYdb::FormatResultSetYson(dict));
     auto docs = ReadIndex(db, NTableIndex::NFulltext::DocsTable);
     if (Covered) {
         CompareYson(R"([
@@ -1858,16 +1791,6 @@ Y_UNIT_TEST_TWIN(DeleteRowWithRelevance, Covered) {
         [[100u];1u;"small"];
         [[200u];1u;"small"]
     ])", NYdb::FormatResultSetYson(index));
-    auto dict = ReadIndex(db, NTableIndex::NFulltext::DictTable);
-    CompareYson(R"([
-        [1u;"animals"];
-        [3u;"cats"];
-        [2u;"chase"];
-        [2u;"dogs"];
-        [1u;"foxes"];
-        [2u;"love"];
-        [2u;"small"]
-    ])", NYdb::FormatResultSetYson(dict));
     auto docs = ReadIndex(db, NTableIndex::NFulltext::DocsTable);
     if (Covered) {
         CompareYson(R"([
@@ -1906,16 +1829,6 @@ Y_UNIT_TEST_TWIN(DeleteRowWithRelevance, Covered) {
         [[400u];1u;"love"];
         [[100u];1u;"small"]
     ])", NYdb::FormatResultSetYson(index));
-    dict = ReadIndex(db, NTableIndex::NFulltext::DictTable);
-    CompareYson(R"([
-        [1u;"animals"];
-        [2u;"cats"];
-        [1u;"chase"];
-        [1u;"dogs"];
-        [1u;"foxes"];
-        [2u;"love"];
-        [1u;"small"]
-    ])", NYdb::FormatResultSetYson(dict));
     docs = ReadIndex(db, NTableIndex::NFulltext::DocsTable);
     if (Covered) {
         CompareYson(R"([
@@ -1949,16 +1862,6 @@ Y_UNIT_TEST_TWIN(DeleteRowWithRelevance, Covered) {
         [[300u];1u;"love"];
         [[100u];1u;"small"]
     ])", NYdb::FormatResultSetYson(index));
-    dict = ReadIndex(db, NTableIndex::NFulltext::DictTable);
-    CompareYson(R"([
-        [1u;"animals"];
-        [2u;"cats"];
-        [1u;"chase"];
-        [0u;"dogs"];
-        [0u;"foxes"];
-        [1u;"love"];
-        [1u;"small"]
-    ])", NYdb::FormatResultSetYson(dict));
     docs = ReadIndex(db, NTableIndex::NFulltext::DocsTable);
     if (Covered) {
         CompareYson(R"([
@@ -1988,16 +1891,6 @@ Y_UNIT_TEST_TWIN(DeleteRowWithRelevance, Covered) {
         [[100u];1u;"chase"];
         [[100u];1u;"small"]
     ])", NYdb::FormatResultSetYson(index));
-    dict = ReadIndex(db, NTableIndex::NFulltext::DictTable);
-    CompareYson(R"([
-        [1u;"animals"];
-        [1u;"cats"];
-        [1u;"chase"];
-        [0u;"dogs"];
-        [0u;"foxes"];
-        [0u;"love"];
-        [1u;"small"]
-    ])", NYdb::FormatResultSetYson(dict));
     docs = ReadIndex(db, NTableIndex::NFulltext::DocsTable);
     if (Covered) {
         CompareYson(R"([

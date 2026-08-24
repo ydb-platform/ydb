@@ -86,8 +86,6 @@ public:
     static constexpr TDuration DisprovedRetryCooldown = TDuration::Minutes(5);
     static constexpr TDuration DisprovedRetryMaxCooldown = TDuration::Hours(6);
 
-    // Pure function of the attempt count (shift clamped, then capped), public so the
-    // backoff formula is testable without an instance.
     static TDuration GetDisprovedCooldown(const ui32 attempts) {
         const ui64 shift = Min<ui32>(attempts, 12);
         const TDuration cooldown = DisprovedRetryCooldown * (1ull << shift);
@@ -95,14 +93,10 @@ public:
     }
 
     static constexpr TDuration NominateCadence = TDuration::Minutes(1);
-    // Hard cap on IsDrained() queue scans per nomination round: with the cadence this
-    // bounds tablet-thread scan work to MaxDrainChecksPerNomination scans per minute
-    // regardless of how many history entries are eligible.
+    // With NominateCadence this bounds IsDrained() queue scans to 8 per minute.
     static constexpr ui32 MaxDrainChecksPerNomination = 8;
 
 protected:
-    // Enters the sweeping state directly (unit tests subclass to reach this; TryNominate
-    // needs a live actor context to send the sweep event, which unit tests do not have).
     void StartSweepForTest(TVector<TEntryKey>&& candidates) {
         SweepInFlight = true;
         SweepSurvivors = candidates;
@@ -157,12 +151,9 @@ public:
         return SweepPortionOffset > 0 || !SweepPortionIds.empty();
     }
 
-    // Pure function: returns true if no earlier entry in `hist` (all entries before the one
-    // with fromGeneration == key.FromGeneration) uses the same GroupID as that entry.
-    // Entries whose FromGeneration is in cutFromGenerations are already barriered and
-    // cut — they are transparent for the same-group safety walk (otherwise a cut entry
-    // still visible in the boot-time TTabletStorageInfo would block a later same-group
-    // entry until the next restart).
+    // True when no earlier entry shares the target's GroupID. Already-cut entries are
+    // transparent: they survive in the boot-time TTabletStorageInfo and would otherwise
+    // block a later same-group entry until the next restart.
     static bool SeenGroupsCheckPasses(
         const std::vector<TTabletChannelInfo::THistoryEntry>& hist, ui32 fromGeneration, const THashSet<ui32>& cutFromGenerations = {});
 
@@ -178,9 +169,8 @@ private:
 
     void IncrementCounter(const TEntryKey& key);
 
-    // Publishes the level sensors as deltas (see OnLevelsDelta). Call after any
-    // change to PoisonedChannels or DisprovedAt; an omitted sweepCandidates
-    // leaves that level unchanged.
+    // Call after any change to PoisonedChannels or DisprovedAt; an omitted
+    // sweepCandidates leaves that level unchanged.
     void PublishLevels(std::optional<ui64> sweepCandidates = {});
 
     struct TPublishedLevels {

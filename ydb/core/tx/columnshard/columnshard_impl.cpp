@@ -497,8 +497,7 @@ void TColumnShard::RunAlterStore(
     ApplyColumnShardConfig();
 }
 
-// Portions live on the data channels and are written by TBlobManager, not by the executor,
-// so only our own drain-gated cutter may cut their history. Channels 0 and 1 hold the log
+// Portions are written by TBlobManager, past the executor; channels 0 and 1 hold the log
 // and the local database and stay with the executor's cutter.
 bool TColumnShard::HasExternallyWrittenBlobs(ui32 channel) const {
     return channel >= NOlap::NBlobOperations::TGlobal::FirstDataChannel;

@@ -518,9 +518,8 @@ ui64 TExecutorGCLogic::TChannelInfo::SendCollectGarbage(TGCTime uncommittedTime,
             ui32 activeGroup = Max<ui32>();
             TVector<TLogoBlobID> *vec = nullptr;
 
-            // A generation below the first surviving history entry resolves to the sentinel
-            // group: the entry was cut, so the blob is already collected and its flag has
-            // nowhere to go. Sending it anyway fails forever and blocks the channel's GC.
+            // Below the first surviving entry the generation resolves to the sentinel group:
+            // the blob was collected with the cut entry, and the flag would fail forever.
             for (const auto &blobId : keep) {
                 if (activeGen != blobId.Generation()) {
                     activeGen = blobId.Generation();

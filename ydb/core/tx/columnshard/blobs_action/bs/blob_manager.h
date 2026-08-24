@@ -246,20 +246,15 @@ public:
     virtual void DeleteBlobOnExecute(const TTabletId tabletId, const TUnifiedBlobId& blobId, IBlobManagerDb& db) override;
     virtual void DeleteBlobOnComplete(const TTabletId tabletId, const TUnifiedBlobId& blobId) override;
 
-    // Returns true if none of BlobsToKeep / BlobsToDelete / BlobsToDeleteDelayed contains a
-    // blob with the given channel and generation in [fromGen, nextFromGen).
+    // Scans BlobsToKeep, BlobsToDelete and BlobsToDeleteDelayed.
     bool HasNoBlobsInRange(ui32 channel, ui32 fromGen, ui32 nextFromGen) const;
 
-    // Shared monotonic PerGenerationCounter for all TEvCollectGarbage requests sent by this
-    // tablet's blob operations (both regular GC and CutHistory barriers).  Callers pass the
-    // event's PerGenerationCounterStepSize() as `step` and store the returned value into
-    // result->PerGenerationCounter.
+    // One monotonic counter for every TEvCollectGarbage this tablet sends, regular GC and
+    // CutHistory barriers alike; pass PerGenerationCounterStepSize() as `step`.
     static ui32 AllocateGCPerGenerationCounter(ui32 step);
 
-    // Access to the cut history cutter (null if not initialized).
     NBlobOperations::NBlobStorage::THistoryCutterWrapper* GetHistoryCutter();
 
-    // Called by TColumnShard after boot to wire up the cutter.
     // Takes the owning shared_ptr so the cutter can hold the manager weakly (no raw this).
     void InitHistoryCutter(const std::shared_ptr<TBlobManager>& self,
         const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& sharedBlobs, const TActorId& tabletActorId);

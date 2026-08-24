@@ -80,9 +80,8 @@ public:
     void RegisterActors(const NCommon::ISourcesConstructor& sources);
     void UnregisterActors();
 
-    NActors::TActorId GetDuplicatesManagerVerified() const {
+    NActors::TActorId GetDuplicatesManager() const {
         TGuard<TSpinLock> g(DuplicatesManagerLock);
-        AFL_VERIFY(DuplicatesManager);
         return DuplicatesManager;
     }
 

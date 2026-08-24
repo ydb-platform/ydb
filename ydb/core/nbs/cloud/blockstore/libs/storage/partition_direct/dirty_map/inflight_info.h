@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/pbuffer_key.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_mask.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/disable_copy.h>
@@ -32,16 +33,16 @@ struct IReadyQueue
 
     virtual ~IReadyQueue() = default;
 
-    // Registers an Lsn ready for cloning, flushing, or erasing.
-    // An Lsn can only be registered in one queue. The new registration deletes
-    // the old one.
-    virtual void Register(ui64 lsn, EQueueType queueType) = 0;
+    // Registers a record ready for cloning, flushing, or erasing.
+    // A record can only be registered in one queue. The new registration
+    // deletes the old one.
+    virtual void Register(TPBufferKey pBufferKey, EQueueType queueType) = 0;
 
-    // Removes Lsn registration.
-    virtual void UnRegister(ui64 lsn, EQueueType queueType) = 0;
+    // Removes the record's registration from the given queue.
+    virtual void UnRegister(TPBufferKey pBufferKey, EQueueType queueType) = 0;
 
     // Notifies of flushes completion to DDisks.
-    virtual void FlushCompleted(ui64 lsn, THostMask ddisks) = 0;
+    virtual void FlushCompleted(TPBufferKey pBufferKey, THostMask ddisks) = 0;
 
     // Notification about the change of byte counters in PBuffer
     virtual void DataToPBufferAdded(
@@ -60,10 +61,11 @@ struct IReadyQueue
 struct TReadSource
 {
     THostMask Mask;
-    // 0 -> read from DDisk (Mask is the set of DDisk hosts to read from).
-    // >0 -> read from a PBuffer that holds the inflight write at this lsn
+    // PBufferKey.Lsn == 0 -> read from DDisk (Mask is the set of DDisk hosts to
+    // read from).
+    // PBufferKey.Lsn > 0 -> read from a PBuffer that holds this inflight record
     // (Mask is the set of PBuffer hosts that confirmed the write).
-    ui64 Lsn = 0;
+    TPBufferKey PBufferKey;
 
     [[nodiscard]] bool Empty() const
     {
@@ -72,7 +74,7 @@ struct TReadSource
 
     [[nodiscard]] bool OnlyDDisk() const
     {
-        return Lsn == 0;
+        return PBufferKey.Lsn == 0;
     }
 };
 
@@ -117,7 +119,7 @@ public:
         IReadyQueue* readyQueues,
         THostMask desiredDDisks,
         THostMask disabled,
-        ui64 lsn,
+        TPBufferKey pBufferKey,
         size_t byteCount,
         THostIndex host);
 
@@ -128,7 +130,7 @@ public:
         IReadyQueue* readyQueue,
         THostMask desiredDDisks,
         THostMask disabled,
-        ui64 lsn,
+        TPBufferKey pBufferKey,
         size_t byteCount);
 
     TInflightInfo(TInflightInfo&& other) noexcept;
@@ -205,7 +207,7 @@ private:
     EState State;
 
     IReadyQueue* ReadyQueue = nullptr;
-    ui64 Lsn = 0;
+    TPBufferKey PBufferKey;
     size_t ByteCount = 0;
     TInstant StartAt;
     size_t PBuffersLockCount = 0;

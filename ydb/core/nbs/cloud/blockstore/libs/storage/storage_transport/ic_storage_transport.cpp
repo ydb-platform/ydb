@@ -146,7 +146,7 @@ TICStorageTransport::WriteToDDisk(
 TFuture<NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult>
 TICStorageTransport::BatchEraseFromPBuffer(
     const THostConnection& connection,
-    TVector<ui64> lsns,
+    TVector<TPBufferKey> pBufferKeys,
     NWilson::TSpan* span)
 {
     Y_ABORT_UNLESS(connection.ConnectionType == EConnectionType::PBuffer);
@@ -155,7 +155,7 @@ TICStorageTransport::BatchEraseFromPBuffer(
         std::make_unique<TEvTransportPrivate::TEvBatchEraseFromPBuffer>(
             connection.GetServiceId(),
             connection.Credentials,
-            std::move(lsns),
+            std::move(pBufferKeys),
             span ? span->GetTraceId() : NWilson::TTraceId());
 
     auto future = request->Promise.GetFuture();
@@ -197,7 +197,7 @@ TFuture<NKikimrBlobStorage::NDDisk::TEvReadPersistentBufferResult>
 TICStorageTransport::ReadFromPBuffer(
     const THostConnection& connection,
     const NDDisk::TBlockSelector& selector,
-    const ui64 lsn,
+    const TPBufferKey pBufferKey,
     const NDDisk::TReadInstruction instruction,
     const TGuardedSgList& data,
     NWilson::TSpan* span)
@@ -208,7 +208,7 @@ TICStorageTransport::ReadFromPBuffer(
         connection.GetServiceId(),
         connection.Credentials,
         selector,
-        lsn,
+        pBufferKey,
         instruction,
         data,
         span ? span->GetTraceId() : NWilson::TTraceId());
@@ -256,7 +256,7 @@ TICStorageTransport::SyncWithPBuffer(
     const THostConnection& pbufferConnection,
     const THostConnection& ddiskConnection,
     TVector<NKikimr::NDDisk::TBlockSelector> selectors,
-    TVector<ui64> lsns,
+    TVector<TPBufferKey> pBufferKeys,
     NWilson::TSpan* span)
 {
     Y_ABORT_UNLESS(
@@ -267,7 +267,7 @@ TICStorageTransport::SyncWithPBuffer(
         ddiskConnection.GetServiceId(),
         ddiskConnection.Credentials,
         std::move(selectors),
-        std::move(lsns),
+        std::move(pBufferKeys),
         pbufferConnection.DDiskId,
         pbufferConnection.Credentials,
         span ? span->GetTraceId() : NWilson::TTraceId());

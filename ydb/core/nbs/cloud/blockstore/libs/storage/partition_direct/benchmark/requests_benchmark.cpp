@@ -48,7 +48,7 @@ std::shared_ptr<TWriteRequestBundle> MakeWriteBundle(
         NWilson::TTraceId(),
         MakeIntrusive<TCallContext>(),
         f.Range);
-    bundle->SetLsn(f.UserLsn);
+    bundle->SetPBufferKey(f.UserPBufferKey);
     return bundle;
 }
 
@@ -126,9 +126,11 @@ void InitFixture(TWriteRequestTestFixture& f)
 
     // Split the range so CreateReadRequestExecutor picks the multi-location
     // path when MakeReadHint is called for BM_ReadMultiple*.
-    f.DirtyMap->RegisterInflightWrite(100, TBlockRange64::WithLength(20, 10));
+    f.DirtyMap->RegisterInflightWrite(
+        MakeKey(100),
+        TBlockRange64::WithLength(20, 10));
     f.DirtyMap->WriteFinished(
-        100,
+        MakeKey(100),
         TBlockRange64::WithLength(20, 10),
         f.VChunkConfig.GetDesiredPBuffers(),
         f.VChunkConfig.GetDesiredPBuffers());
@@ -257,7 +259,7 @@ static void BM_EraseRequestExecutorCreation(benchmark::State& state)
             previous.reset();
         }
         TEraseHint hint;
-        hint.Segments.push_back(TEraseSegment{.Generation = 1, .Lsn = 42});
+        hint.Segments.push_back(TEraseSegment{.PBufferKey = MakeKey(42)});
         state.ResumeTiming();
 
         auto executor = std::make_shared<TEraseRequestExecutor>(
@@ -291,7 +293,7 @@ static void BM_FlushRequestExecutorCreation(benchmark::State& state)
         }
         TFlushHint hint;
         hint.Segments.push_back(TPBufferSegment{
-            .Lsn = 42,
+            .PBufferKey = MakeKey(42),
             .Range = TBlockRange64::WithLength(10, 3)});
         state.ResumeTiming();
 

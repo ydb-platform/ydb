@@ -3,6 +3,7 @@
 #include "range_locker.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/block_range.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/pbuffer_key.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_mask.h>
 
@@ -22,7 +23,7 @@ struct TReadRangeHint
 {
     TReadRangeHint(
         THostMask hostMask,
-        ui64 lsn,
+        TPBufferKey pBufferKey,
         TBlockRange64 requestRelativeRange,
         TBlockRange64 vchunkRange,
         TRangeLock&& lock);
@@ -31,10 +32,11 @@ struct TReadRangeHint
     TReadRangeHint& operator=(TReadRangeHint&& other) noexcept;
 
     THostMask HostMask;
-    // 0 -> read from DDisk (HostMask is the DDisk hosts to choose from).
-    // >0 -> read from a PBuffer that holds the inflight write at this lsn
+    // PBufferKey.Lsn == 0 -> read from DDisk (HostMask is the DDisk hosts to
+    // choose from).
+    // PBufferKey.Lsn > 0 -> read from a PBuffer that holds this inflight record
     // (HostMask is the PBuffer hosts that confirmed the write).
-    ui64 Lsn = 0;
+    TPBufferKey PBufferKey;
 
     // Range relative to the request.
     TBlockRange64 RequestRelativeRange;
@@ -62,10 +64,10 @@ struct TReadHint
 
 struct TPBufferSegment
 {
-    ui64 Lsn = 0;
+    TPBufferKey PBufferKey;
     TBlockRange64 Range;
 
-    static TVector<ui64> MakeLsnVector(
+    static TVector<TPBufferKey> MakePBufferKeys(
         std::span<const TPBufferSegment> segments);
 
     [[nodiscard]] TString DebugPrint(bool brief) const;
@@ -86,7 +88,7 @@ public:
     void AddHint(
         THostIndex source,
         THostIndex destination,
-        ui64 lsn,
+        TPBufferKey pBufferKey,
         TBlockRange64 range);
 
     [[nodiscard]] bool Empty() const;
@@ -104,8 +106,7 @@ private:
 
 struct TEraseSegment
 {
-    ui32 Generation = 0;
-    ui64 Lsn = 0;
+    TPBufferKey PBufferKey;
 
     [[nodiscard]] TString DebugPrint(bool brief) const;
 };
@@ -124,7 +125,7 @@ class TEraseHints
 public:
     using THints = TMap<THostIndex, TEraseHint>;
 
-    void AddHint(THostIndex host, ui64 lsn);
+    void AddHint(THostIndex host, TPBufferKey pBufferKey);
 
     [[nodiscard]] bool Empty() const;
 
@@ -153,8 +154,8 @@ struct TSyncHint
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TVector<ui64> MakeLsnVector(std::span<const TPBufferSegment> segments);
-TVector<ui64> MakeLsnVector(std::span<const TEraseSegment> segments);
+TVector<TPBufferKey> MakePBufferKeys(std::span<const TPBufferSegment> segments);
+TVector<TPBufferKey> MakePBufferKeys(std::span<const TEraseSegment> segments);
 
 ////////////////////////////////////////////////////////////////////////////////
 

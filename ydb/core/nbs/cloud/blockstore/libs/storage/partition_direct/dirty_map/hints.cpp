@@ -12,12 +12,12 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 namespace {
 
 template <typename T>
-TVector<ui64> DoMakeLsnVector(std::span<const T> segments)
+TVector<TPBufferKey> DoMakePBufferKeys(std::span<const T> segments)
 {
-    TVector<ui64> result;
+    TVector<TPBufferKey> result;
     result.reserve(segments.size());
     for (const auto& segment: segments) {
-        result.push_back(segment.Lsn);
+        result.push_back(segment.PBufferKey);
     }
     return result;
 }
@@ -28,12 +28,12 @@ TVector<ui64> DoMakeLsnVector(std::span<const T> segments)
 
 TReadRangeHint::TReadRangeHint(
     THostMask hostMask,
-    ui64 lsn,
+    TPBufferKey pBufferKey,
     TBlockRange64 requestRelativeRange,
     TBlockRange64 vchunkRange,
     TRangeLock&& lock)
     : HostMask(hostMask)
-    , Lsn(lsn)
+    , PBufferKey(pBufferKey)
     , RequestRelativeRange(requestRelativeRange)
     , VChunkRange(vchunkRange)
     , Lock(std::move(lock))
@@ -45,9 +45,15 @@ TReadRangeHint& TReadRangeHint::operator=(
 
 TString TReadRangeHint::DebugPrint() const
 {
-    return TStringBuilder()
-           << Lsn << "{" << HostMask.Print() << VChunkRange.Print()
+    TStringBuilder result;
+    if (PBufferKey.Lsn == 0) {
+        result << "0";
+    } else {
+        result << PBufferKey.Print();
+    }
+    result << "{" << HostMask.Print() << VChunkRange.Print()
            << RequestRelativeRange.Print() << "};";
+    return result;
 }
 
 TString TReadHint::DebugPrint() const
@@ -67,23 +73,18 @@ TString TReadHint::DebugPrint() const
 ////////////////////////////////////////////////////////////////////////////////
 
 // static
-TVector<ui64> TPBufferSegment::MakeLsnVector(
+TVector<TPBufferKey> TPBufferSegment::MakePBufferKeys(
     std::span<const TPBufferSegment> segments)
 {
-    TVector<ui64> result;
-    result.reserve(segments.size());
-    for (const auto& segment: segments) {
-        result.push_back(segment.Lsn);
-    }
-    return result;
+    return DoMakePBufferKeys(segments);
 }
 
 TString TPBufferSegment::DebugPrint(bool brief) const
 {
     if (brief) {
-        return ToString(Lsn);
+        return ToString(PBufferKey.Lsn);
     }
-    return TStringBuilder() << Lsn << Range.Print();
+    return TStringBuilder() << PBufferKey.Print() << Range.Print();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -107,13 +108,13 @@ TString TFlushHint::DebugPrint(bool brief) const
 void TFlushHints::AddHint(
     THostIndex source,
     THostIndex destination,
-    ui64 lsn,
+    TPBufferKey pBufferKey,
     TBlockRange64 range)
 {
     Hints[THostRoute{
               .SourceHostIndex = source,
               .DestinationHostIndex = destination}]
-        .Segments.emplace_back(lsn, range);
+        .Segments.emplace_back(pBufferKey, range);
 }
 
 bool TFlushHints::Empty() const
@@ -145,9 +146,9 @@ TString TFlushHints::DebugPrint() const
 TString TEraseSegment::DebugPrint(bool brief) const
 {
     if (brief) {
-        return ToString(Lsn);
+        return ToString(PBufferKey.Lsn);
     }
-    return TStringBuilder() << Generation << ":" << Lsn;
+    return PBufferKey.Print();
 }
 
 TString TEraseHint::DebugPrint(bool brief) const
@@ -164,11 +165,9 @@ TString TEraseHint::DebugPrint(bool brief) const
     return builder;
 }
 
-void TEraseHints::AddHint(THostIndex host, ui64 lsn)
+void TEraseHints::AddHint(THostIndex host, TPBufferKey pBufferKey)
 {
-    Hints[host].Segments.emplace_back(
-        0,   // TODO(drbasic)
-        lsn);
+    Hints[host].Segments.push_back(TEraseSegment{.PBufferKey = pBufferKey});
 }
 
 bool TEraseHints::Empty() const
@@ -197,14 +196,14 @@ TString TEraseHints::DebugPrint() const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TVector<ui64> MakeLsnVector(std::span<const TPBufferSegment> segments)
+TVector<TPBufferKey> MakePBufferKeys(std::span<const TPBufferSegment> segments)
 {
-    return DoMakeLsnVector<TPBufferSegment>(segments);
+    return DoMakePBufferKeys<TPBufferSegment>(segments);
 }
 
-TVector<ui64> MakeLsnVector(std::span<const TEraseSegment> segments)
+TVector<TPBufferKey> MakePBufferKeys(std::span<const TEraseSegment> segments)
 {
-    return DoMakeLsnVector<TEraseSegment>(segments);
+    return DoMakePBufferKeys<TEraseSegment>(segments);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/pbuffer_key.h>
+
 #include <ydb/core/nbs/cloud/storage/core/libs/common/guarded_sglist.h>
 
 #include <ydb/core/blobstorage/ddisk/ddisk.h>
@@ -75,7 +77,7 @@ public:
     virtual NThreading::TFuture<TEvReadPersistentBufferResult> ReadFromPBuffer(
         const THostConnection& connection,
         const NKikimr::NDDisk::TBlockSelector& selector,
-        const ui64 lsn,
+        const TPBufferKey pBufferKey,
         const NKikimr::NDDisk::TReadInstruction instruction,
         const TGuardedSgList& data,
         NWilson::TSpan* span) = 0;
@@ -120,13 +122,13 @@ public:
         const THostConnection& pbufferConnection,
         const THostConnection& ddiskConnection,
         TVector<NKikimr::NDDisk::TBlockSelector> selectors,
-        TVector<ui64> lsns,
+        TVector<TPBufferKey> pBufferKeys,
         NWilson::TSpan* span) = 0;
 
     virtual NThreading::TFuture<TEvErasePersistentBufferResult>
     BatchEraseFromPBuffer(
         const THostConnection& connection,
-        TVector<ui64> lsns,
+        TVector<TPBufferKey> pBufferKeys,
         NWilson::TSpan* span) = 0;
 
     virtual NThreading::TFuture<TEvErasePersistentBufferResult>

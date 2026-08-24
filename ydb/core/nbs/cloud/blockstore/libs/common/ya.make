@@ -6,6 +6,7 @@ SRCS(
     block_range_map.cpp
     block_range.cpp
     printable_params.cpp
+    pbuffer_key.cpp
     thread_checker.cpp
 )
 

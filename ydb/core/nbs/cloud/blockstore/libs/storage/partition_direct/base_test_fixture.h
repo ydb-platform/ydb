@@ -5,6 +5,7 @@
 #include "vchunk.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/pbuffer_key.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/storage_test.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/trace_service_mock.h>
@@ -27,6 +28,12 @@ constexpr ui64 DefaultVChunkSize = RegionSize / DirectBlockGroupsCount;
 ////////////////////////////////////////////////////////////////////////////////
 
 TString GenerateRandomString(size_t size);
+
+// Makes a PBuffer key for tests, which run within a single tablet generation.
+constexpr TPBufferKey MakeKey(ui64 lsn)
+{
+    return {.Generation = 1, .Lsn = lsn};
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 

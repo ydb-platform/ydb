@@ -65,9 +65,11 @@ Y_UNIT_TEST_SUITE(TReadRequestTest)
                 .RequestId = 1,
                 .Range = range});
 
-        DirtyMap->RegisterInflightWrite(100, TBlockRange64::WithLength(20, 10));
+        DirtyMap->RegisterInflightWrite(
+            MakeKey(100),
+            TBlockRange64::WithLength(20, 10));
         DirtyMap->WriteFinished(
-            100,
+            MakeKey(100),
             TBlockRange64::WithLength(20, 10),
             VChunkConfig.GetDesiredPBuffers(),
             VChunkConfig.GetDesiredPBuffers());
@@ -132,16 +134,20 @@ Y_UNIT_TEST_SUITE(TReadRequestTest)
     {
         Init();
 
-        DirtyMap->RegisterInflightWrite(100, TBlockRange64::WithLength(20, 10));
+        DirtyMap->RegisterInflightWrite(
+            MakeKey(100),
+            TBlockRange64::WithLength(20, 10));
         DirtyMap->WriteFinished(
-            100,
+            MakeKey(100),
             TBlockRange64::WithLength(20, 10),
             VChunkConfig.GetDesiredPBuffers(),
             VChunkConfig.GetDesiredPBuffers());
 
-        DirtyMap->RegisterInflightWrite(200, TBlockRange64::WithLength(40, 10));
+        DirtyMap->RegisterInflightWrite(
+            MakeKey(200),
+            TBlockRange64::WithLength(40, 10));
         DirtyMap->WriteFinished(
-            200,
+            MakeKey(200),
             TBlockRange64::WithLength(40, 10),
             VChunkConfig.GetDesiredPBuffers(),
             VChunkConfig.GetDesiredPBuffers());

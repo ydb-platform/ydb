@@ -29,11 +29,7 @@ IF (SANITIZER_TYPE)
 ELSE()
     SIZE(MEDIUM)
     FORK_SUBTESTS()
-<<<<<<< HEAD
-=======
     REQUIREMENTS(ram:12)
-    SPLIT_FACTOR(20)
->>>>>>> 6239348e2d5 (shared reading: support structued nested json parsing: feature-flag for ydb streaming (#46313))
 ENDIF()
 
 PEERDIR(

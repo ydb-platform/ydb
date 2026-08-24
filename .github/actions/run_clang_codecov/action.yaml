@@ -42,9 +42,6 @@ inputs:
   commit_sha:
     description: Commit SHA for meta/links
     required: true
-  parent_sha:
-    description: Complete Codecov baseline SHA used for carryforward
-    required: true
   branch:
     description: Branch name for Codecov (ref_name / head_ref)
     required: false
@@ -155,7 +152,6 @@ runs:
         FLAG: ${{ steps.suite.outputs.flag }}
         SUITE: ${{ inputs.suite }}
         COMMIT_SHA: ${{ inputs.commit_sha }}
-        PARENT_SHA: ${{ inputs.parent_sha }}
         BRANCH: ${{ inputs.branch }}
         PR_NUMBER: ${{ inputs.pr_number }}
         REPOSITORY_SLUG: ${{ github.repository }}
@@ -169,14 +165,6 @@ runs:
           echo "Codecov commit SHA must contain exactly 40 hexadecimal characters" >&2
           exit 1
         fi
-        if [[ ! "${PARENT_SHA}" =~ ^[0-9a-fA-F]{40}$ ]]; then
-          echo "Codecov parent SHA must contain exactly 40 hexadecimal characters" >&2
-          exit 1
-        fi
-        if [ "${PARENT_SHA}" = "${COMMIT_SHA}" ]; then
-          echo "Codecov parent SHA must differ from the uploaded commit SHA" >&2
-          exit 1
-        fi
         if [ -z "${BRANCH}" ]; then
           echo "Codecov branch is empty" >&2
           exit 1
@@ -187,7 +175,6 @@ runs:
           --git-service github
           --slug "${REPOSITORY_SLUG}"
           --sha "${COMMIT_SHA}"
-          --parent-sha "${PARENT_SHA}"
           --branch "${BRANCH}"
           --disable-search
           --plugin noop

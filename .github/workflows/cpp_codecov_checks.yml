@@ -39,7 +39,6 @@ jobs:
             .github/scripts/codecov/detect_codecov_matrix.py \
             .github/scripts/codecov/export_coverage_lcov.py \
             .github/scripts/codecov/generate_coverage_landing.py \
-            .github/scripts/codecov/resolve_codecov_parent.py \
             .github/scripts/codecov/tests/test_helpers.py
 
       - name: Check shell syntax

@@ -44,21 +44,20 @@ coverage:
 
 flag_management:
   default_rules:
-    carryforward: true
+    # Every relevant main push uploads all three flags. PRs intentionally
+    # upload only affected flags, so no synthetic carryforward is needed.
+    carryforward: false
   individual_flags:
     - name: cpp_sdk
       paths:
         - ydb/public/sdk/cpp/**
-      carryforward: true
     - name: cli
       paths:
         - ydb/apps/ydb/**
         - ydb/public/lib/ydb_cli/**
-      carryforward: true
     - name: cli_workload
       paths:
         - ydb/library/workload/**
-      carryforward: true
 
 component_management:
   individual_components:
@@ -76,6 +75,5 @@ comment:
   behavior: default
   require_changes: false
   # Selective PR uploads make the unscoped project aggregate misleading.
-  # Show only freshly measured component flags; carried flags stay internal.
+  # Show only freshly measured component flags.
   hide_project_coverage: true
-  show_carryforward_flags: false

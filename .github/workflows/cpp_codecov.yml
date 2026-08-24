@@ -21,7 +21,6 @@ on:
       - ".github/scripts/codecov/**"
       - "!.github/scripts/codecov/tests/**"
       - ".github/workflows/cpp_codecov.yml"
-      - ".github/workflows/cpp_codecov_checks.yml"
       - ".github/codecov.yml"
   push:
     branches: [main]
@@ -36,15 +35,14 @@ on:
       - ".github/scripts/codecov/**"
       - "!.github/scripts/codecov/tests/**"
       - ".github/workflows/cpp_codecov.yml"
-      - ".github/workflows/cpp_codecov_checks.yml"
       - ".github/codecov.yml"
 
 # GitHub cannot filter label names in `on`. Irrelevant labels therefore get a
 # unique workflow group and skip every job. ok-to-test shares the PR group but
 # label events cannot cancel a running workflow before the sender is verified.
 # A later synchronize/closed event can still invalidate the approved PR SHA.
-# Main runs use a unique workflow-level group: a later main push must not cancel
-# a different suite before its new baseline reaches Codecov.
+# Main runs are serialized as complete three-suite baselines. A newer pending
+# main run supersedes an older pending run, but never cancels the one in progress.
 concurrency:
   group: >-
     ${{
@@ -52,7 +50,7 @@ concurrency:
       && format('codecov-pr-{0}{1}', github.event.pull_request.number,
           github.event.action == 'labeled' && github.event.label.name != 'ok-to-test'
           && format('-ignore-{0}', github.run_id) || '')
-      || format('codecov-{0}-{1}', github.event_name, github.run_id)
+      || 'codecov-main'
     }}
   cancel-in-progress: >-
     ${{ github.event_name == 'pull_request_target' && github.event.action != 'labeled' }}
@@ -79,7 +77,6 @@ jobs:
       base_sha: ${{ steps.metadata.outputs.base_sha }}
       report_sha: ${{ steps.metadata.outputs.report_sha }}
       report_branch: ${{ steps.metadata.outputs.report_branch }}
-      parent_sha: ${{ steps.parent.outputs.parent_sha }}
       pr_number: ${{ steps.metadata.outputs.pr_number }}
       storage_prefix: ${{ steps.metadata.outputs.storage_prefix }}
     steps:
@@ -188,11 +185,11 @@ jobs:
         with:
           repository: ${{ github.repository }}
           ref: ${{ steps.pr.outputs.base_sha || github.sha }}
-          fetch-depth: 0
+          # PR detection needs merge-base history; main only needs the helpers.
+          fetch-depth: ${{ github.event_name == 'pull_request_target' && '0' || '1' }}
           sparse-checkout: |
             .github/scripts/codecov/codecov_suites.py
             .github/scripts/codecov/detect_codecov_matrix.py
-            .github/scripts/codecov/resolve_codecov_parent.py
           sparse-checkout-cone-mode: false
           persist-credentials: false
 
@@ -214,82 +211,20 @@ jobs:
             exit 1
           fi
 
-      # Select a full report explicitly. Without this, Codecov's inferred
-      # parent can be null and a partial upload silently drops the other flags.
-      - name: Resolve complete Codecov parent
-        id: parent
-        if: >-
-          github.event_name != 'pull_request_target' ||
-          steps.authorization.outputs.allowed == 'true'
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          EVENT_SHA: ${{ github.sha }}
-          REPOSITORY: ${{ github.repository }}
-          PR_HEAD_SHA: ${{ steps.pr.outputs.sha }}
-          PR_BASE_SHA: ${{ steps.pr.outputs.base_sha }}
-        run: |
-          set -euo pipefail
-          if [ "$EVENT_NAME" = pull_request_target ]; then
-            main_anchor="$PR_BASE_SHA"
-            report_head="$PR_HEAD_SHA"
-          else
-            main_anchor=$(git rev-parse --verify "${EVENT_SHA}^1")
-            report_head="$EVENT_SHA"
-          fi
-
-          python3 .github/scripts/codecov/resolve_codecov_parent.py \
-            --repository "$REPOSITORY" \
-            --branch main \
-            --main-anchor "$main_anchor" \
-            --report-head "$report_head" \
-            --output-format github \
-            >> "$GITHUB_OUTPUT"
-
       - name: Collect changed files
         id: inputs
         if: >-
-          github.event_name != 'pull_request_target' ||
+          github.event_name == 'pull_request_target' &&
           steps.authorization.outputs.allowed == 'true'
         env:
-          EVENT_NAME: ${{ github.event_name }}
-          AFTER_SHA: ${{ github.sha }}
-          CODECOV_PARENT_SHA: ${{ steps.parent.outputs.parent_sha }}
-          FORCE_FULL_CHECKPOINT: ${{ steps.parent.outputs.force_full }}
           PR_HEAD_SHA: ${{ steps.pr.outputs.sha }}
           PR_BASE_SHA: ${{ steps.pr.outputs.base_sha }}
         run: |
           set -euo pipefail
           changed_file=$(mktemp)
-
-          case "$EVENT_NAME" in
-            pull_request_target)
-              git -c core.quotePath=false diff --name-only --no-renames \
-                "$PR_BASE_SHA...$PR_HEAD_SHA" -- \
-                > "$changed_file"
-              ;;
-            push)
-              # Include paths touched by every main commit since the trusted
-              # baseline. Unlike an endpoint diff, this preserves changes that
-              # were later reverted and retries suites from failed/racing runs.
-              git -c core.quotePath=false log \
-                --first-parent \
-                --diff-merges=first-parent \
-                --format= \
-                --name-only \
-                --no-renames \
-                "$CODECOV_PARENT_SHA..$AFTER_SHA" -- \
-                | sed '/^$/d' | sort -u > "$changed_file"
-              if [ "$FORCE_FULL_CHECKPOINT" = true ]; then
-                # A shared-infrastructure path maps to every suite.
-                echo .github/codecov.yml >> "$changed_file"
-                sort -u -o "$changed_file" "$changed_file"
-              fi
-              ;;
-            *)
-              echo "Unsupported event: $EVENT_NAME" >&2
-              exit 1
-              ;;
-          esac
+          git -c core.quotePath=false diff --name-only --no-renames \
+            "$PR_BASE_SHA...$PR_HEAD_SHA" -- \
+            > "$changed_file"
 
           echo "changed_files_file=$changed_file" >> "$GITHUB_OUTPUT"
           echo "Changed files:"
@@ -301,11 +236,17 @@ jobs:
           github.event_name != 'pull_request_target' ||
           steps.authorization.outputs.allowed == 'true'
         env:
+          EVENT_NAME: ${{ github.event_name }}
           CHANGED_FILES_FILE: ${{ steps.inputs.outputs.changed_files_file }}
         run: |
           set -euo pipefail
-          python3 .github/scripts/codecov/detect_codecov_matrix.py \
-            --changed-files-file "$CHANGED_FILES_FILE"
+          if [ "$EVENT_NAME" = push ]; then
+            # Every relevant main push creates a self-contained baseline.
+            python3 .github/scripts/codecov/detect_codecov_matrix.py --all
+          else
+            python3 .github/scripts/codecov/detect_codecov_matrix.py \
+              --changed-files-file "$CHANGED_FILES_FILE"
+          fi
 
       - name: Resolve checkout and report metadata
         id: metadata
@@ -356,16 +297,6 @@ jobs:
     if: >-
       needs.detect.result == 'success' &&
       needs.detect.outputs.should_run == 'true'
-    # A newer main job supersedes only the same suite. It must not cancel a
-    # different flag whose baseline is still being produced by an older push.
-    concurrency:
-      group: >-
-        ${{
-          github.event_name == 'push'
-          && format('codecov-main-{0}', matrix.suite)
-          || format('codecov-run-{0}-{1}', github.run_id, matrix.suite)
-        }}
-      cancel-in-progress: ${{ github.event_name == 'push' }}
     runs-on: [self-hosted, auto-provisioned, build-preset-relwithdebinfo]
     timeout-minutes: 480
     strategy:
@@ -416,7 +347,6 @@ jobs:
           bazel_remote_password: ${{ secrets.REMOTE_CACHE_PASSWORD }}
           pr_number: ${{ needs.detect.outputs.pr_number }}
           commit_sha: ${{ needs.detect.outputs.report_sha }}
-          parent_sha: ${{ needs.detect.outputs.parent_sha }}
           branch: ${{ needs.detect.outputs.report_branch }}
           storage_prefix: ${{ needs.detect.outputs.storage_prefix }}
 

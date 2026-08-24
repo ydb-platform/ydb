@@ -406,6 +406,11 @@ public:
         std::optional<bool> UseFilterLength;
         std::optional<int32_t> FilterLengthMin;
         std::optional<int32_t> FilterLengthMax;
+        std::optional<bool> UseFilterSnowball;
+
+        static TAnalyzers Standard();
+        static TAnalyzers Snowball(std::string language);
+        static TAnalyzers Keyword();
     };
 
     struct TColumnAnalyzers {

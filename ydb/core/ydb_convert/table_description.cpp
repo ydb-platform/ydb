@@ -2015,7 +2015,6 @@ void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescr
 
             break;
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
-        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
             FillGlobalIndexSettings(
                 *index->mutable_global_fulltext_relevance_index()->mutable_dict_table_settings(),
                 tableIndex.GetIndexImplTableDescriptions(NTableIndex::NFulltext::DictTablePosition)
@@ -2031,6 +2030,23 @@ void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescr
             FillGlobalIndexSettings(
                 *index->mutable_global_fulltext_relevance_index()->mutable_posting_table_settings(),
                 tableIndex.GetIndexImplTableDescriptions(NTableIndex::NFulltext::PostingTablePosition)
+            );
+
+            *index->mutable_global_fulltext_relevance_index()->mutable_fulltext_settings() = tableIndex.GetFulltextIndexDescription().GetSettings();
+
+            break;
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
+            FillGlobalIndexSettings(
+                *index->mutable_global_fulltext_relevance_index()->mutable_docs_table_settings(),
+                tableIndex.GetIndexImplTableDescriptions(NTableIndex::NFulltext::DocsTablePosition - 1)
+            );
+            FillGlobalIndexSettings(
+                *index->mutable_global_fulltext_relevance_index()->mutable_stats_table_settings(),
+                tableIndex.GetIndexImplTableDescriptions(NTableIndex::NFulltext::StatsTablePosition - 1)
+            );
+            FillGlobalIndexSettings(
+                *index->mutable_global_fulltext_relevance_index()->mutable_posting_table_settings(),
+                tableIndex.GetIndexImplTableDescriptions(NTableIndex::NFulltext::PostingTablePosition - 1)
             );
 
             *index->mutable_global_fulltext_relevance_index()->mutable_fulltext_settings() = tableIndex.GetFulltextIndexDescription().GetSettings();

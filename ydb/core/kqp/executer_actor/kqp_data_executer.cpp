@@ -587,9 +587,6 @@ private:
                     ResourceSnapshotRequired = true;
                     HasExternalSources = true;
 
-                    // For restored streaming queries with PQ sources, asynchronously fetch
-                    // the current partition count so we can update the task graph before
-                    // RestoreTasksGraph() is called (avoids SCHEME_ERROR on first partition check).
                     if (AppData()->FeatureFlags.GetEnableUpdatingPartitionsOnStreamingQueryRestart()
                         && transaction.Body->GetHasPqSources()
                         && Request.QueryPhysicalGraph
@@ -616,11 +613,7 @@ private:
         }
         if (SecretSnapshotRequired) {
             GetSecretsSnapshot();
-            // PQ topic resolver is started after secrets are resolved
-            // in HandleResolve(TEvDescribeSecretsResponse).
         } else {
-            // No secrets needed — SecureParams is already populated, so we can
-            // start the PQ topic resolver right away.
             StartPqTopicResolver();
         }
         if (ResourceSnapshotRequired) {
@@ -1390,10 +1383,6 @@ private:
         }
     }
 
-private:
-    // Starts TKqpPqTopicResolver.
-    // Must be called only after SecureParams has been populated.
-    // The resolver collects PQ source descriptors from transactions internally.
     void StartPqTopicResolver() {
         if (!TopicPartitionSnapshotRequired) {
             return;
@@ -1403,13 +1392,6 @@ private:
         auto mutableGraph = std::const_pointer_cast<NKikimrKqp::TQueryPhysicalGraph>(
             Request.QueryPhysicalGraph);
 
-        // TDqPqTopicSource.Token.Name is the *external source name*
-        // (e.g. "cluster:default_/Root/logbroker_source2"), which is the key in
-        // externalSource.GetSourceName() and in task.Meta.SecureParams.
-        // FillExternalSourceSecureParams resolves the structured token authInfo
-        // (from externalSource.GetAuthInfo()) using TasksGraph.GetMeta().SecureParams
-        // (raw secret name -> secret value), producing the map the resolver needs:
-        //   "cluster:default_/Root/logbroker_source2" -> "<actual_token>"
         THashMap<TString, TString> resolvedSecureParams;
         for (const auto& transaction : Request.Transactions) {
             for (const auto& stage : transaction.Body->GetStages()) {
@@ -1428,6 +1410,8 @@ private:
 
         RegisterWithSameMailbox(resolverActor);
     }
+
+private:
 
     TShardIdToTableInfoPtr ShardIdToTableInfo;
     TVector<NKikimr::TTableId> TableIdsForSnapshot;

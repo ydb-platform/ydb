@@ -124,8 +124,6 @@ struct TEvKqpExecuter {
         TDuration CpuTime;
     };
 
-    // Sent by TKqpPqTopicResolver to the executer when all PQ topic describes
-    // have finished (or at least one failed).
     struct TEvPqTopicResolveStatus : public TEventLocal<TEvPqTopicResolveStatus,
         TKqpExecuterEvents::EvPqTopicResolveStatus>
     {

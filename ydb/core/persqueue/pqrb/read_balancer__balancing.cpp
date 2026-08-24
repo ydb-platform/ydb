@@ -45,9 +45,9 @@ bool TPartition::StartReading() {
 }
 
 bool TPartition::StopReading() {
-    ReadingFinished = false;
     ++Cookie;
-    return NeedReleaseChildren();
+    const bool hadFinish = std::exchange(ReadingFinished, false);
+    return hadFinish && NeedReleaseChildren();
 }
 
 bool TPartition::SetCommittedState(ui32 generation, ui64 cookie) {
@@ -1099,8 +1099,39 @@ void TConsumer::UnregisterReadingSession(TSession* session, const TActorContext&
         });
     }
 
+    std::vector<ui32> parentsToReleaseChildren;
     for (auto* family : Snapshot(Families)) {
-        auto special = family->SpecialSessions.erase(pipe);
+        if (session != family->Session) {
+            continue;
+        }
+        for (auto partitionId : family->Partitions) {
+            auto* partition = GetPartition(partitionId);
+            if (!partition) {
+                continue;
+            }
+            if (partition->StopReading()) {
+                YDB_LOG_DEBUG("Finish was reset because the reading session disconnected",
+                    {"logPrefix", LogPrefix()},
+                    {"partitionId", partitionId},
+                    {"session", session->SessionName});
+                parentsToReleaseChildren.push_back(partitionId);
+            }
+        }
+    }
+
+    for (auto partitionId : parentsToReleaseChildren) {
+        GetPartitionGraph().Travers(partitionId, [&](ui32 childId) {
+            auto* childFamily = FindFamily(childId);
+            if (!childFamily || childFamily->Session == session) {
+                return true;
+            }
+            DestroyFamily(childFamily, ctx);
+            return true;
+        });
+    }
+
+    for (auto* family : Snapshot(Families)) {
+        family->SpecialSessions.erase(pipe);
 
         if (session == family->Session) {
             std::vector<ui32> roots;
@@ -1108,16 +1139,8 @@ void TConsumer::UnregisterReadingSession(TSession* session, const TActorContext&
             roots.insert(roots.end(), family->RootPartitions.begin(), family->RootPartitions.end());
 
             TPartitionFamily::ETargetStatus targetStatus = family->TargetStatus;
-            if (special && family->SpecialSessions.empty()) {
-                for (auto& r : roots) {
-                    if (!IsReadable(r)) {
-                        targetStatus = TPartitionFamily::ETargetStatus::Destroy;
-                        break;
-                    }
-                }
-            }
-
-            if (!family->CanAttach(family->WantedPartitions)) {
+            if (AnyOf(roots, [&](ui32 rootId) { return !IsReadable(rootId); }) ||
+                    !family->CanAttach(family->WantedPartitions)) {
                 targetStatus = TPartitionFamily::ETargetStatus::Destroy;
             }
 

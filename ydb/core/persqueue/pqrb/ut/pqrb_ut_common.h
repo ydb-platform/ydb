@@ -214,6 +214,21 @@ struct TScaleEnv {
         return pipe;
     }
 
+    void DisconnectSession(const TString& name) {
+        auto it = Pipes.find(name);
+        UNIT_ASSERT_C(it != Pipes.end(), name);
+        tc.Runtime->ClosePipe(it->second, tc.Edge, 0);
+        Pipes.erase(it);
+        for (auto locked = LockedBy.begin(); locked != LockedBy.end(); ) {
+            if (locked->second == name) {
+                LockedBy.erase(locked++);
+            } else {
+                ++locked;
+            }
+        }
+        Pump();
+    }
+
     void Finish(const TString& session, ui32 partition, bool scaleAware = true, bool fromEnd = true, bool pump = true) {
         auto it = Pipes.find(session);
         UNIT_ASSERT_C(it != Pipes.end(), session);
@@ -315,6 +330,16 @@ struct TScaleEnv {
             }
         }
         return {};
+    }
+
+    void AssertNotLocked(ui32 partition) {
+        Pump();
+        if (auto it = LockedBy.find(partition); it != LockedBy.end()) {
+            UNIT_ASSERT_C(false, "partition " << partition << " must not be locked, session=" << it->second);
+        }
+        const TString session = SessionOf(partition);
+        UNIT_ASSERT_C(session.empty(),
+            "partition " << partition << " must not be assigned, session=" << session);
     }
 
     void AssertLocked(ui32 partition, const TString& expectedSession = {}) {

@@ -173,10 +173,6 @@ NBlobOperations::NBlobStorage::THistoryCutterWrapper* TBlobManager::GetHistoryCu
     return HistoryCutter.get();
 }
 
-const NBlobOperations::NBlobStorage::THistoryCutterWrapper* TBlobManager::GetHistoryCutter() const {
-    return HistoryCutter.get();
-}
-
 void TBlobManager::RegisterControls(NKikimr::TControlBoard& /*icb*/) {
 }
 

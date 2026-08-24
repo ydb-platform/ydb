@@ -258,7 +258,6 @@ public:
 
     // Access to the cut history cutter (null if not initialized).
     NBlobOperations::NBlobStorage::THistoryCutterWrapper* GetHistoryCutter();
-    const NBlobOperations::NBlobStorage::THistoryCutterWrapper* GetHistoryCutter() const;
 
     // Called by TColumnShard after boot to wire up the cutter.
     // Takes the owning shared_ptr so the cutter can hold the manager weakly (no raw this).

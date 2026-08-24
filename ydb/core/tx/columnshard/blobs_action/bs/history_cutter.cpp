@@ -120,7 +120,7 @@ bool THistoryCutterWrapper::IsEnabled() const {
 }
 
 bool THistoryCutterWrapper::SeenGroupsCheckPasses(
-    const std::vector<TTabletChannelInfo::THistoryEntry>& hist, const ui32 fromGeneration, const std::unordered_set<ui32>& cutFromGenerations) {
+    const std::vector<TTabletChannelInfo::THistoryEntry>& hist, const ui32 fromGeneration, const THashSet<ui32>& cutFromGenerations) {
     const auto target = FindIf(hist, [fromGeneration](const TTabletChannelInfo::THistoryEntry& entry) {
         return entry.FromGeneration == fromGeneration;
     });
@@ -138,7 +138,7 @@ bool THistoryCutterWrapper::SeenGroupsCheckPasses(const TEntryKey& key) const {
     if (key.Channel >= static_cast<ui32>(TabletInfo->Channels.size())) {
         return false;
     }
-    std::unordered_set<ui32> cutFromGenerations;
+    THashSet<ui32> cutFromGenerations;
     for (const auto& [stateKey, state] : CutState) {
         if (stateKey.Channel == key.Channel && state == ECutState::Cut) {
             cutFromGenerations.insert(stateKey.FromGeneration);

@@ -186,7 +186,7 @@ void TColumnShard::Handle(TEvPrivate::TEvStartCutHistorySweep::TPtr& /*ev*/, con
     const auto candidates = CutHistoryCutter->GetActiveSweepCandidates();
     THashMap<TEntryKey, ui32> nextGenMap;
     for (const auto& key : *candidates) {
-        nextGenMap.emplace(key, CutHistoryCutter->GetNextFromGenerationForSweep(key));
+        nextGenMap.emplace(key, CutHistoryCutter->GetNextFromGeneration(key));
     }
 
     auto callback = std::make_shared<TCutHistorySweepCallback>(SelfId(), TabletID(), candidates, std::move(nextGenMap), isLast);

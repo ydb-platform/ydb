@@ -12,7 +12,6 @@
 #include <util/generic/vector.h>
 
 #include <optional>
-#include <unordered_set>
 
 namespace NKikimr::NOlap {
 class TPortionDataAccessor;
@@ -157,25 +156,22 @@ public:
         return SweepPortionOffset > 0 || !SweepPortionIds.empty();
     }
 
-    ui32 GetNextFromGenerationForSweep(const TEntryKey& key) const {
-        return GetNextFromGeneration(key);
-    }
-
     // Pure function: returns true if no earlier entry in `hist` (all entries before the one
     // with fromGeneration == key.FromGeneration) uses the same GroupID as that entry.
     // Entries whose FromGeneration is in cutFromGenerations are already barriered and
     // cut — they are transparent for the same-group safety walk (otherwise a cut entry
     // still visible in the boot-time TTabletStorageInfo would block a later same-group
     // entry until the next restart).
-    static bool SeenGroupsCheckPasses(const std::vector<TTabletChannelInfo::THistoryEntry>& hist, ui32 fromGeneration,
-        const std::unordered_set<ui32>& cutFromGenerations = {});
+    static bool SeenGroupsCheckPasses(
+        const std::vector<TTabletChannelInfo::THistoryEntry>& hist, ui32 fromGeneration, const THashSet<ui32>& cutFromGenerations = {});
+
+    ui32 GetNextFromGeneration(const TEntryKey& key) const;
 
 protected:
     bool IsDrained(const TEntryKey& key) const;
 
 private:
     bool SeenGroupsCheckPasses(const TEntryKey& key) const;
-    ui32 GetNextFromGeneration(const TEntryKey& key) const;
 
     bool GetEntryKey(const TLogoBlobID& blobId, TEntryKey& out) const;
 

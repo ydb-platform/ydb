@@ -2073,6 +2073,37 @@ Y_UNIT_TEST(OldSdkNotFromEndDelayThenOtherSessionFromEndLocksChildren) {
     env.AssertLocked(2);
 }
 
+Y_UNIT_TEST(CommitOfResetInnerParentDuringDestroyUnderflowsActiveCount) {
+    // Nested split 0→1,2 then 1→3,4. Finish+Commit 0 and 1. Reread of 0 Reset()s
+    // inner parent 1 and DestroyFamily({1}) starts Release. Until Unlock, FindFamily(1)
+    // still points at that family. A newer tablet Commit must not underflow
+    // ActivePartitionCount: Reset left the family counted inactive, so
+    // wasInactive=false + InactivatePartition used to abort.
+    // test_commit_reread[old_sdk] hits this: rewind/session churn rereads an ancestor
+    // while PQ still sends EndOffset commits for sealed inner parents.
+    TSplitEnv env;
+    env.CreateParents(1);
+    env.RegisterSession("session-0");
+    env.Split(0);
+    env.Finish("session-0", 0, /*scaleAware=*/false, /*fromEnd=*/true);
+    env.Commit(0);
+    const TString holder1 = env.SessionOf(1);
+    UNIT_ASSERT_C(!holder1.empty(), "inner parent must be locked after first split");
+    env.Split(1);
+    env.Finish(holder1, 1, /*scaleAware=*/false, /*fromEnd=*/true);
+    env.Commit(1, /*generation=*/1, /*cookie=*/2);
+
+    env.InjectStartReading(env.Pipes["session-0"], 0);
+    auto pending = env.WaitRelease();
+    UNIT_ASSERT_C(pending, "reread of root must release a descendant family");
+
+    env.Commit(1, /*generation=*/1, /*cookie=*/3);
+    env.Finish("session-0", 0, /*scaleAware=*/false, /*fromEnd=*/true);
+    env.AssertLocked(2);
+    env.AssertLocked(3);
+    env.AssertLocked(4);
+}
+
 Y_UNIT_TEST(StaleStartReadingAfterLastSessionGoneDoesNotFinishParent) {
     TSplitEnv env;
     env.CreateParents(1);

@@ -1799,6 +1799,16 @@ void TConsumer::StartReading(ui32 partitionId, const TActorContext& ctx) {
             }
             family->ClassifyPartitions();
         }
+        // Reset() clears Commited/ReadingFinished but leaves family counters
+        // as they were. DestroyFamily of an Active child only starts Release;
+        // FindFamily still points at that family until Unlock. A newer tablet
+        // Commit in that window saw wasInactive=false and InactivatePartition
+        // underflowed ActivePartitionCount (test_commit_reread[old_sdk]).
+        for (auto* f : childFamilies) {
+            if (Families.contains(f->Id)) {
+                f->ClassifyPartitions();
+            }
+        }
         // After BreakUp of a merge family {0,1,2}, the leftover is {1,2}: 2 is a
         // descendant of 0, but 1 is a sibling parent. Destroying that family
         // orphans both. Pull descendants out and destroy only those families.

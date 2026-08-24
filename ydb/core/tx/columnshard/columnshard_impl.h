@@ -460,9 +460,6 @@ protected:
 
     STFUNC(StateWork);
 
-    // Portions live on the data channels and are written by TBlobManager, not by the
-    // executor, so only our own drain-gated cutter may cut their history. Channels 0
-    // and 1 hold the log and the local database and stay with the executor's cutter.
     bool HasExternallyWrittenBlobs(ui32 channel) const override;
 
 private:
@@ -639,7 +636,6 @@ private:
     ui64 NormalizeSmallBlobsCount(const ui64 rawCount);
 
 public:
-    // Engine portion lifecycle hooks for cut-history counter maintenance.
     void OnPortionAddedToEngine(const NOlap::TPortionDataAccessor& accessor);
     void OnPortionRemovedFromEngine(ui64 portionId);
 

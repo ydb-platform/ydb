@@ -1089,6 +1089,11 @@ std::vector<TPartitionFamily*> Snapshot(const absl::flat_hash_map<size_t, std::u
     return result;
 }
 
+bool PartitionHasChildren(const TPartitionGraph& graph, ui32 partitionId) {
+    const auto* node = graph.GetPartition(partitionId);
+    return node && !node->DirectChildren.empty();
+}
+
 void TConsumer::UnregisterReadingSession(TSession* session, const TActorContext& ctx) {
     auto pipe = session->Pipe;
     Sessions.erase(session->Pipe);
@@ -1210,6 +1215,8 @@ TString TConsumer::LogPrefix() const {
 }
 
 bool TConsumer::SetCommittedState(ui32 partitionId, ui32 generation, ui64 cookie) {
+    Y_DEBUG_ABORT_UNLESS(PartitionHasChildren(GetPartitionGraph(), partitionId),
+        "Commit of a leaf partition %u, consumer %s", partitionId, ConsumerName.data());
     return Partitions[partitionId].SetCommittedState(generation, cookie);
 }
 
@@ -1399,6 +1406,9 @@ void TConsumer::FinishReading(TEvPersQueue::TEvReadingPartitionFinishedRequest::
     }
 
     auto& partition = Partitions[partitionId];
+
+    Y_DEBUG_ABORT_UNLESS(PartitionHasChildren(GetPartitionGraph(), partitionId),
+        "Finish of a leaf partition %u, consumer %s", partitionId, ConsumerName.data());
 
     const bool wasInactive = partition.IsInactive();
     if (partition.SetFinishedState(r.GetScaleAwareSDK(), r.GetStartedReadingFromEndOffset()) || wasInactive) {

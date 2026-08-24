@@ -6,9 +6,17 @@
 
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>
+#include <util/generic/vector.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
+
+// Recursively clears all fields marked (Ydb.sensitive) in-place.
+void ClearSensitiveFields(google::protobuf::Message* message);
+
+// Same, but also appends the name of each cleared field to `clearedFields`
+// (e.g. "Password").
+void ClearSensitiveFields(google::protobuf::Message* message, TVector<TString>& clearedFields);
 
 class TPathDescriber {
     void FillPathDescr(NKikimrSchemeOp::TDirEntry* descr, TPathElement::TPtr pathEl,

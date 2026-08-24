@@ -160,4 +160,13 @@ bool IsCreate(ETxType t);
 bool IsDrop(ETxType t);
 bool CanDeleteParts(ETxType t);
 
+// Ops that fire on internal churn rather than expressing a user-visible schema
+// change. They neither produce scheme change records nor consume the outbox
+// budget. See IsChurnOp in the .cpp.
+bool IsChurnOp(NKikimrSchemeOp::EOperationType opType);
+
+// Path-bearing ops explicitly exempt from carrying a resolved path in their
+// scheme change record. See IsPathlessOp in the .cpp.
+bool IsPathlessOp(NKikimrSchemeOp::EOperationType opType);
+
 }  // namespace NKikimr::NSchemeShard

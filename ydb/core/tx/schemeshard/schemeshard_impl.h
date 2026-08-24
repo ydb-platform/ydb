@@ -283,6 +283,101 @@ public:
     ui64 MaxIncompatibleChange = 0;
     THashMap<TPathId, TPathElement::TPtr> PathsById;
     TLocalPathId NextLocalPathId = 0;
+    ui64 NextSchemeChangeOrder = 0;
+    // Highest outbox order known deleted. Cleanup resumes above it.
+    ui64 SchemeChangeFloorOrder = 0;
+    ui64 MaxSchemeChangeRecords = 100000;
+    // Strip (Ydb.sensitive) fields before persisting scheme change record
+    // bodies. Disabling persists and serves credentials to every subscriber
+    // over a protocol with no authentication; only safe once that exists.
+    bool RedactSchemeChangeSensitiveFields = true;
+    // Diagnostic only. A stale subscriber still holds the retention floor.
+    TDuration SchemeChangeSubscriberStaleTtl = TDuration::Days(30);
+    ui64 MaxSchemeChangeSubscribers = 100;
+    // SubscriberId is a persisted primary key.
+    static constexpr size_t MaxSchemeChangeSubscriberIdLength = 256;
+    ui64 LastAssignedPlanStep = 0;
+    // Membership runs from PlanStep assignment until RemoveTx. Do not filter on
+    // TTxState::State: a tx in Done that is not yet erased must keep its entry.
+    TMap<ui64, ui32> InFlightByPlanStep;
+
+    void AddInFlightPlanStep(ui64 step) {
+        if (step) {
+            ++InFlightByPlanStep[step];
+        }
+    }
+    void RemoveInFlightPlanStep(ui64 step) {
+        if (!step) {
+            return;
+        }
+        auto it = InFlightByPlanStep.find(step);
+        if (it == InFlightByPlanStep.end()) {
+            return;
+        }
+        if (--it->second == 0) {
+            InFlightByPlanStep.erase(it);
+        }
+    }
+    // Highest PlanStep through which the record stream is complete. Inclusive:
+    // a consumer may close window (S_prev, S] once this is >= S.
+    ui64 GetClosedThroughPlanStep() const {
+        if (InFlightByPlanStep.empty()) {
+            return LastAssignedPlanStep;
+        }
+        const ui64 minInFlight = InFlightByPlanStep.begin()->first;
+        return minInFlight ? minInFlight - 1 : 0;
+    }
+    // Row cap per cleanup tx. Remaining work continues in a follow-up tx.
+    ui64 SchemeChangeCleanupBatchSize = 1000;
+    // Yield between cleanup batches so DDL and fetches can interleave.
+    TDuration SchemeChangeCleanupInterval = TDuration::MilliSeconds(10);
+
+    // Cap on Orders per FetchSchemeChangeRecordBodies request.
+    ui64 MaxSchemeChangeBodiesPerRequest = 1000;
+
+    // Test-only.
+    mutable ui64 NextSchemeChangeOrderPersistCount = 0;
+    mutable ui64 TestSchemeChangeRedoBytesAccum = 0;
+    ui64 SchemeChangeCleanupTxCount = 0;
+
+    struct TSubscriberInfo {
+        ui64 LastAckedOrder = 0;
+        TInstant LastActivityAt;
+        // NKikimrSchemeShard::TSchemeChangeSubscriberState::EState value.
+        // Defaults to STATE_READY (1) so a pre-existing row reads as Ready.
+        ui32 State = 1;
+        // Order this subscriber's stream begins at; see the schema comment
+        // on Schema::SchemeChangeSubscribers::StartOrder.
+        ui64 StartOrder = 0;
+    };
+    THashMap<TString, TSubscriberInfo> Subscribers;
+
+    // Highest deliverable order. Orders above it are reserved by in-flight
+    // operations.
+    ui64 GetVisibleSchemeChangeTail() const;
+
+    void UpdateSchemeChangeGauges() const;
+
+    // Retention floor: cleanup deletes everything at or below this. Returns the
+    // visible tail when there are no subscribers.
+    ui64 GetMinSubscriberOrder(TInstant) const {
+        if (Subscribers.empty()) {
+            return GetVisibleSchemeChangeTail();
+        }
+        // Stale subscribers still hold the floor; only an admin force-advance drops it.
+        ui64 m = Max<ui64>();
+        for (const auto& [_, info] : Subscribers) {
+            m = Min(m, info.LastAckedOrder);
+        }
+        return m;
+    }
+
+    bool IsSubscriberStale(const TSubscriberInfo& info, TInstant now) const {
+        if (!SchemeChangeSubscriberStaleTtl) {
+            return false;
+        }
+        return (now - info.LastActivityAt) >= SchemeChangeSubscriberStaleTtl;
+    }
 
     THashMap<TPathId, TTableInfo::TPtr> Tables;
     THashMap<TPathId, TTableInfo::TPtr> TTLEnabledTables;
@@ -902,6 +997,98 @@ public:
     void PersistShardTx(NIceDb::TNiceDb& db, TShardIdx shardIdx, TTxId txId);
     void PersistUpdateNextPathId(NIceDb::TNiceDb& db) const;
     void PersistUpdateNextShardIdx(NIceDb::TNiceDb& db) const;
+    void PersistUpdateNextSchemeChangeOrder(NIceDb::TNiceDb& db) const;
+    void PersistSchemeChangeFloorOrder(NIceDb::TNiceDb& db) const;
+    void PersistUpdateLastAssignedPlanStep(NIceDb::TNiceDb& db) const;
+
+    // Back-pointer from an in-flight operation to the outbox order reserved for
+    // one of its user-level transactions, so completion can finalise it after a restart.
+    void PersistSchemeChangePendingOrder(NIceDb::TNiceDb& db, TTxId txId, ui32 userTxIdx,
+        ui64 order, const TVector<TOperation::TSchemeChangeTarget>& targets) const;
+
+    // Local-DB wire encoding for the outbox Path column: a serialized
+    // NKikimrSchemeShard::TSchemeChangeRecordTargets, never a delimited string
+    // (a path could contain any delimiter). Shared by propose, finalisation,
+    // and reboot recovery.
+    static TString EncodeSchemeChangeTargets(const TVector<TOperation::TSchemeChangeTarget>& targets);
+    static TVector<TOperation::TSchemeChangeTarget> DecodeSchemeChangeTargets(const TString& encoded);
+    void PersistRemoveSchemeChangePendingOrder(NIceDb::TNiceDb& db, TTxId txId, ui32 userTxIdx) const;
+
+    // Must be called for every rewritten transaction in a batch before any of
+    // them is persisted via PersistSchemeChangeRecordAtPropose below: a
+    // path-bearing op that resolves no path rejects the whole propose, and
+    // that must happen before any record in the batch is written, since
+    // local-DB writes already made are not undone by AbortOperationPropose.
+    bool CheckSchemeChangeRecordHasPath(const NKikimrSchemeOp::TModifyScheme& userTx, TString& rejectReason);
+
+    // Reserves an order and writes the row with CompletedAtUs = 0, which keeps
+    // it hidden from fetch. Returns false if this transaction emits no record.
+    // userSid is the DDL issuer captured at propose; empty if the caller had
+    // no token.
+    bool PersistSchemeChangeRecordAtPropose(NIceDb::TNiceDb& db, TTxId txId, ui32 userTxIdx,
+        const NKikimrSchemeOp::TModifyScheme& userTx, TOperation::TSchemeChangeSlot& slot,
+        const TString& userSid = {});
+
+    // Fill in what only completion knows: the resolved object's identity and
+    // description, and the record's position in the coordinator timeline.
+    // aborted marks a force-aborted operation, so Status is not a false
+    // StatusSuccess for an object that was never actually created.
+    void FinalizeSchemeChangeRecord(NIceDb::TNiceDb& db, const TActorContext& ctx,
+        const TOperation::TSchemeChangeSlot& slot, TStepId planStep, bool aborted = false);
+    ui64 AllocateSchemeChangeOrder(NIceDb::TNiceDb& db);
+    // Caller is responsible for a single PersistUpdateNextSchemeChangeOrder
+    // at the end of its tx; use for multi-record batches.
+    ui64 AllocateSchemeChangeOrderInMemory();
+
+    struct TSchemeChangeRecordData {
+        ui64 Order = 0;
+        TTxId TxId = InvalidTxId;
+        // User-level NKikimrSchemeOp::EOperationType, not TTxState::ETxType:
+        // ConvertToTxType collapses 17 operations onto TxInvalid. 0 means unset.
+        ui32 OpType = 0;
+        TPathId PathId;
+        TString Path;
+        NKikimrSchemeOp::EPathType ObjectType = NKikimrSchemeOp::EPathTypeInvalid;
+        NKikimrScheme::EStatus Status = NKikimrScheme::StatusSuccess;
+        TString UserSid;
+        ui64 SchemaVersion = 0;
+        TInstant CompletedAtUs;
+        TStepId PlanStep = InvalidStepId;
+        TString Body;  // serialized NKikimrSchemeOp::TModifyScheme
+        TString Description;  // serialized TEvDescribeSchemeResult of the target
+        // NKikimrSchemeShard::TSchemeChangePosition::EKind
+        ui32 PositionKind = 1;  // KIND_EXACT
+    };
+
+    void PersistSchemeChangeRecord(NIceDb::TNiceDb& db, const TSchemeChangeRecordData& entry);
+    NTabletFlatExecutor::ITransaction* CreateTxRegisterSubscriber(TEvSchemeShard::TEvRegisterSubscriber::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxFetchSchemeChangeRecords(TEvSchemeShard::TEvFetchSchemeChangeRecords::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxAckSchemeChangeRecords(TEvSchemeShard::TEvAckSchemeChangeRecords::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxFetchSchemeChangeRecordBodies(TEvSchemeShard::TEvFetchSchemeChangeRecordBodies::TPtr& ev);
+    void Handle(TEvSchemeShard::TEvRegisterSubscriber::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvSchemeShard::TEvFetchSchemeChangeRecords::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvSchemeShard::TEvAckSchemeChangeRecords::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvSchemeShard::TEvFetchSchemeChangeRecordBodies::TPtr& ev, const TActorContext& ctx);
+    // Scheme change records cleanup & backpressure
+    NTabletFlatExecutor::ITransaction* CreateTxUnregisterSubscriber(TEvSchemeShard::TEvUnregisterSubscriber::TPtr& ev);
+    void Handle(TEvSchemeShard::TEvUnregisterSubscriber::TPtr& ev, const TActorContext& ctx);
+    NTabletFlatExecutor::ITransaction* CreateTxSchemeChangeRecordsCleanup();
+    NTabletFlatExecutor::ITransaction* CreateTxForceAdvanceSubscriber(TEvSchemeShard::TEvForceAdvanceSubscriber::TPtr& ev);
+    // Force-advance initiated from the monitoring page, which has already
+    // authorized the caller; this in-process entry point skips the admin check.
+    NTabletFlatExecutor::ITransaction* CreateTxForceAdvanceSubscriberFromMonitoring(
+        const TString& subscriberId, TActorId replyTo);
+    void Handle(TEvSchemeShard::TEvForceAdvanceSubscriber::TPtr& ev, const TActorContext& ctx);
+    // Deletes (SchemeChangeFloorOrder, newMinOrder] up to `limit` rows per tx.
+    // Sets hasMore if the cap was hit; returns false if the rowset is not ready.
+    bool DeleteAckedSchemeChangeRecords(NIceDb::TNiceDb& db, ui64 newMinOrder,
+        ui64 limit, bool& hasMore);
+    // Schedules a follow-up cleanup tx after SchemeChangeCleanupInterval.
+    void EnqueueSchemeChangeRecordsCleanup(const TActorContext& ctx);
+    bool CheckSchemeChangeRecordsOverflow(TString& errStr, TInstant now) const;
+    // The outbox is scoped to a single domain, which keeps the borrowed
+    // LastAssignedPlanStep a sound lower bound.
+    ui32 CountTransactionSupportingDomains() const;
     void PersistParentDomain(NIceDb::TNiceDb& db, TPathId parentDomain) const;
     void PersistParentDomainEffectiveACL(NIceDb::TNiceDb& db, const TString& owner, const TString& effectiveACL, ui64 effectiveACLVersion) const;
     void PersistShardsToDelete(NIceDb::TNiceDb& db, const THashSet<TShardIdx>& shardsIdxs);
@@ -1568,6 +1755,7 @@ public:
     bool ProcessPendingConditionalEraseResponseBatch(const TInstant& now, const TActorContext& ctx);
     void ScheduleConditionalEraseRun(const TActorContext& ctx);
     void Handle(TEvPrivate::TEvRunConditionalErase::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvSchemeChangeRecordsCleanup::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvFlushConditionalEraseBatch::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvDataShard::TEvConditionalEraseRowsResponse::TPtr& ev, const TActorContext& ctx);

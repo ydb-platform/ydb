@@ -56,6 +56,7 @@ namespace TEvPrivate {
         EvFullBackupItemDone,
         EvProgressForcedCompaction,
         EvMoveShardToStoragePool,
+        EvSchemeChangeRecordsCleanup,
         EvEnd
     };
 
@@ -94,6 +95,12 @@ namespace TEvPrivate {
     };
 
     struct TEvRunConditionalErase: public TEventLocal<TEvRunConditionalErase, EvRunConditionalErase> {
+    };
+
+    // Self-send wakeup that drives the next bounded cleanup tx in a
+    // multi-batch sweep. The delay lets other SS work interleave so a
+    // large backlog doesn't monopolize the executor.
+    struct TEvSchemeChangeRecordsCleanup: public TEventLocal<TEvSchemeChangeRecordsCleanup, EvSchemeChangeRecordsCleanup> {
     };
 
     struct TEvFlushConditionalEraseBatch : public TEventLocal<TEvFlushConditionalEraseBatch, EvFlushConditionalEraseBatch> {

@@ -339,6 +339,26 @@ bool IsDrop(ETxType t) {
     }
 }
 
+// Ops that fire on internal churn and must never reach the scheme change
+// records outbox. Add an entry here to exclude an op; everything else is
+// logged, including Internal=true ops.
+bool IsChurnOp(NKikimrSchemeOp::EOperationType opType) {
+    switch (opType) {
+        case NKikimrSchemeOp::ESchemeOpSplitMergeTablePartitions:
+            return true;
+        default:
+            return false;
+    }
+}
+
+// Path-bearing ops that legitimately have no path target -- exempt from the
+// scheme change outbox's "every path-bearing op resolves a path" invariant.
+// None exist today: every non-churn op targets a concrete path. Add an entry
+// here only for a real op, never to silence a resolution failure.
+bool IsPathlessOp(NKikimrSchemeOp::EOperationType) {
+    return false;
+}
+
 bool CanDeleteParts(ETxType t) {
     switch (t) {
         case TxDropTable:

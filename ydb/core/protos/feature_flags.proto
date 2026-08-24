@@ -366,4 +366,7 @@ message TFeatureFlags {
     // Keys SourceId→Partition mapping by a unique topic Id (UUID) instead of the topic name,
     // so that deleting and recreating a topic with the same name does not inherit stale mappings.
     optional bool EnableTopicSourceIdMappingById = 313 [default = false];
+    // Kill switch for the SchemeShard scheme-change outbox. Off by default until
+    // a consumer exists; disabling must never leave DDL blocked by the outbox.
+    optional bool EnableSchemeChangeRecords = 314 [default = false];
 }

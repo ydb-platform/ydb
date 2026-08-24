@@ -2697,6 +2697,78 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<PathId, AlterVersion, TestShards, CmdInitialize>;
     };
 
+    struct SchemeChangeRecords : Table<141> {
+        struct Order :         Column<1, NScheme::NTypeIds::Uint64> {};
+        struct TxId :          Column<2, NScheme::NTypeIds::Uint64> {};
+        struct OperationType : Column<3, NScheme::NTypeIds::Uint32> {};
+        struct PathOwnerId :   Column<4, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
+        struct PathLocalId :   Column<5, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
+        // Serialized NKikimrSchemeShard::TSchemeChangeRecordTargets: N
+        // (Path, SourcePath) targets, never zero. A delimited string is
+        // unsafe (a path could contain the delimiter), so this is a
+        // serialized repeated-message protobuf.
+        struct Path :          Column<6, NScheme::NTypeIds::String> {};
+        struct ObjectType :    Column<7, NScheme::NTypeIds::Uint32> {};
+        struct Status :        Column<8, NScheme::NTypeIds::Uint32> {};
+        struct UserSID :       Column<9, NScheme::NTypeIds::Utf8> {};
+        struct SchemaVersion : Column<10, NScheme::NTypeIds::Uint64> {};
+        struct CompletedAtUs : Column<11, NScheme::NTypeIds::Uint64> {};
+        struct PlanStep :      Column<12, NScheme::NTypeIds::Uint64> {};
+        struct BodySizeBytes :      Column<13, NScheme::NTypeIds::Uint64> {};
+        // Serialized TEvDescribeSchemeResult for the target path, captured at
+        // completion so the record is self-contained even after a DROP.
+        struct Description :   Column<14, NScheme::NTypeIds::String, false, true> {}; // Sensitive: may describe a secret
+        // NKikimrSchemeShard::TSchemeChangePosition::EKind
+        struct PositionKind :  Column<15, NScheme::NTypeIds::Uint32> {};
+        // Newline-joined field paths cleared by redaction; empty when
+        // redaction was disabled or nothing sensitive was present.
+        struct RedactedFields : Column<16, NScheme::NTypeIds::Utf8> {};
+
+        using TKey = TableKey<Order>;
+        using TColumns = TableColumns<Order, TxId, OperationType, PathOwnerId, PathLocalId,
+                                      Path, ObjectType, Status, UserSID, SchemaVersion,
+                                      CompletedAtUs, PlanStep, BodySizeBytes, Description, PositionKind,
+                                      RedactedFields>;
+    };
+
+    struct SchemeChangeRecordDetails : Table<143> {
+        struct Order : Column<1, NScheme::NTypeIds::Uint64> {};
+        // Sensitive: the captured request body can contain a plaintext secret.
+        struct Body :  Column<2, NScheme::NTypeIds::String, false, true> {};
+
+        using TKey = TableKey<Order>;
+        using TColumns = TableColumns<Order, Body>;
+    };
+
+    struct SchemeChangeSubscribers : Table<142> {
+        struct SubscriberId :   Column<1, NScheme::NTypeIds::Utf8> {};
+        struct LastAckedOrder : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct LastActivityAtUs : Column<3, NScheme::NTypeIds::Uint64> {};
+        // NKikimrSchemeShard::TSchemeChangeSubscriberState::EState. LOST is
+        // written when a cursor is advanced past records the subscriber never
+        // received.
+        struct State :          Column<4, NScheme::NTypeIds::Uint32> {};
+        // Order this subscriber's stream begins at.
+        struct StartOrder :     Column<5, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<SubscriberId>;
+        using TColumns = TableColumns<SubscriberId, LastAckedOrder, LastActivityAtUs, State, StartOrder>;
+    };
+
+    // Maps an in-flight operation to the outbox orders reserved at propose.
+    // Path is duplicated here since finalisation runs after NoMoreReadsForTx().
+    struct SchemeChangePendingRecords : Table<144> {
+        struct TxId :      Column<1, NScheme::NTypeIds::Uint64> { using Type = TTxId; };
+        struct UserTxIdx : Column<2, NScheme::NTypeIds::Uint32> {};
+        struct Order :     Column<4, NScheme::NTypeIds::Uint64> {};
+        // Serialized NKikimrSchemeShard::TSchemeChangeRecordTargets, absolute
+        // Paths (re-resolved at finalisation); same encoding as
+        // SchemeChangeRecords::Path.
+        struct Path :      Column<5, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<TxId, UserTxIdx>;
+        using TColumns = TableColumns<TxId, UserTxIdx, Order, Path>;
+    };
     using TTables = SchemaTables<
         Paths,
         TxInFlight,
@@ -2835,7 +2907,11 @@ struct Schema : NIceDb::Schema {
         FullBackupItems,
         SetColumnConstraint,
         SetColumnConstraintShardStatus,
-        TestShardSet
+        TestShardSet,
+        SchemeChangeRecords,
+        SchemeChangeRecordDetails,
+        SchemeChangeSubscribers,
+        SchemeChangePendingRecords
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;
@@ -2852,6 +2928,11 @@ struct Schema : NIceDb::Schema {
     // static constexpr ui64 SysParam_IsOldArgonHashFormatMigrationCompleted = 12; deprecated
     static constexpr ui64 SysParam_TablePartitionsFormatSweepStatus = 13;
     static constexpr ui64 SysParam_TablePartitionsFormatSweepTarget = 14;
+    static constexpr ui64 SysParam_NextSchemeChangeOrder = 15;
+    static constexpr ui64 SysParam_LastAssignedPlanStep = 16;
+    // Highest outbox order known to be physically deleted. Cleanup resumes above
+    // it instead of restarting at order 1 on every batch.
+    static constexpr ui64 SysParam_SchemeChangeFloorOrder = 17;
 
     // List of incompatible changes:
     // * Change 1: store migrated shards of local tables (e.g. after a rename) as a migrated record

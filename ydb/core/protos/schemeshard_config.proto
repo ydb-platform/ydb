@@ -47,4 +47,19 @@ message TSchemeShardConfig {
 
     // maximum recent index build operations to maintain (older ones are removed)
     optional uint32 MaxStoredIndexBuilds = 11 [default = 1000];
+
+    // Scheme change records overflow threshold.
+    // New schema operations are rejected when this limit is reached.
+    optional uint64 MaxSchemeChangeRecords = 12 [default = 100000];
+
+    // A scheme change subscriber that has not fetched or acked for this long
+    // is reported as stale via a counter. It still holds down the retention
+    // floor; only an admin force-advance releases it. Default 30 days.
+    optional uint64 SchemeChangeSubscriberStaleTtlSeconds = 13 [default = 2592000];
+
+    // Strip (Ydb.sensitive) fields (passwords, access keys, secret values)
+    // from scheme change record bodies before persisting. Disabling this
+    // persists and serves credentials to every subscriber over a protocol
+    // that has no authentication; only safe once subscriber-side auth exists.
+    optional bool RedactSensitiveSchemeChangeFields = 14 [default = true];
 }

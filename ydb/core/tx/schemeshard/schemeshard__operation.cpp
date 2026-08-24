@@ -110,11 +110,24 @@ bool TSchemeShard::ProcessOperationParts(
         context.IsAllowedPrivateTables = true;
     }
 
+    // Overflow is a whole-schemeshard condition, not per-part; compute it
+    // once for the batch instead of rescanning Subscribers each iteration.
+    TString overflowErr;
+    const bool schemeChangeRecordsOverflow = !context.SS->CheckSchemeChangeRecordsOverflow(overflowErr, context.Ctx.Now());
+
     for (auto& part : parts) {
         TString errStr;
         if (!context.SS->CheckInFlightLimit(part->GetTransaction().GetOperationType(), errStr)) {
             response.Reset(new TProposeResponse(NKikimrScheme::StatusResourceExhausted, ui64(txId), ui64(selfId)));
             response->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
+        } else if (schemeChangeRecordsOverflow
+                && !part->GetTransaction().GetInternal()
+                && !IsChurnOp(part->GetTransaction().GetOperationType())) {
+            // Internal ops are never rejected: refusing split/merge or temp-dir
+            // GC is an outage, not backpressure. Churn ops are excluded
+            // separately because they emit no record at all.
+            response.Reset(new TProposeResponse(NKikimrScheme::StatusResourceExhausted, ui64(txId), ui64(selfId)));
+            response->SetError(NKikimrScheme::StatusResourceExhausted, overflowErr);
         } else {
             response = part->Propose(owner, context);
         }
@@ -287,6 +300,10 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
     // # Phase Three
     // For all initial transactions parts are constructed and proposed
 
+    // Keep the pre-split (post-rewrite) user-level transactions in memory
+    // so DoPersistSchemeChangeRecords can emit parent-level records.
+    operation->UserLevelTransactions = rewrittenTransactions;
+
     for (const auto& transaction : transactions) {
         auto parts = operation->ConstructParts(transaction, context);
         operation->PreparedParts += parts.size();
@@ -308,6 +325,39 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
         }
     }
 
+    // Must stay after every ProcessOperationParts call: writing via NIceDb sets
+    // DirectAccessGranted, and a later part proposing after that fails
+    // Y_VERIFY_S(context.IsUndoChangesSafe()) and aborts the tablet.
+    //
+    // The flag check must come before Subscribers.empty(): subscriber rows
+    // persist and reload at TTxInit, so with the flag off and rows on disk
+    // Subscribers is non-empty and reservation would otherwise stay live.
+    if (AppData()->FeatureFlags.GetEnableSchemeChangeRecords() && !Subscribers.empty()) {
+        // Validated before any record is written: a path-bearing op with no
+        // path rejects the whole propose, and that must happen before any
+        // local-DB write in this section, since AbortOperationPropose does
+        // not undo local-DB writes, only in-memory operation state.
+        for (const auto& transaction : rewrittenTransactions) {
+            TString rejectReason;
+            if (!CheckSchemeChangeRecordHasPath(transaction, rejectReason)) {
+                AbortOperationPropose(txId, context);
+                response.Reset(new TProposeResponse(NKikimrScheme::StatusInvalidParameter, ui64(txId), ui64(selfId)));
+                response->SetError(NKikimrScheme::StatusInvalidParameter, rejectReason);
+                return response;
+            }
+        }
+
+        NIceDb::TNiceDb db(context.GetDB());
+        operation->SchemeChangeOrderBase = NextSchemeChangeOrder;
+        operation->SchemeChangeOrdersReserved = true;
+        for (ui32 i = 0; i < rewrittenTransactions.size(); ++i) {
+            TOperation::TSchemeChangeSlot slot;
+            if (PersistSchemeChangeRecordAtPropose(db, txId, i, rewrittenTransactions[i], slot)) {
+                operation->SchemeChangeSlots.push_back(std::move(slot));
+            }
+        }
+    }
+
     return response;
 }
 
@@ -325,6 +375,12 @@ void TSchemeShard::AbortOperationPropose(const TTxId txId, TOperationContext& co
     }
 
     context.MemChanges.UnDo(context.SS);
+
+    // Rewind the in-memory counter. The local-DB rollback reverts the reserved
+    // rows and the persisted counter, but not this one.
+    if (operation->SchemeChangeOrdersReserved) {
+        NextSchemeChangeOrder = operation->SchemeChangeOrderBase;
+    }
 
     // And remove aborted operation from existence
     Operations.erase(txId);
@@ -702,6 +758,15 @@ struct TSchemeShard::TTxOperationPlanStep: public NTabletFlatExecutor::TTransact
                         << ", message: " << record.ShortDebugString()
                         << ", at schemeshard: " << Self->TabletID());
 
+        // Plan step is monotonic per coordinator, so advance the ceiling
+        // once per message rather than per op. Persisting keeps the
+        // ClosedThroughPlanStep monotonic across reboots.
+        if (ui64(step) > Self->LastAssignedPlanStep) {
+            Self->LastAssignedPlanStep = ui64(step);
+            NIceDb::TNiceDb db(txc.DB);
+            Self->PersistUpdateLastAssignedPlanStep(db);
+        }
+
         for (size_t i = 0; i < txCount; ++i) {
             const auto txId = TTxId(record.GetTransactions(i).GetTxId());
             const auto coordinator = ActorIdFromProto(record.GetTransactions(i).GetAckTo());
@@ -728,6 +793,17 @@ struct TSchemeShard::TTxOperationPlanStep: public NTabletFlatExecutor::TTransact
                                     << " operation part is already done"
                                     << ", operationId: " << opId);
                     continue;
+                }
+
+                // Set PlanStep on txState before HandleReply so it's available
+                // for scheme change records persistence (not all operations set it themselves)
+                if (auto* txState = Self->FindTx(opId)) {
+                    // A redelivered plan step (mediator reconnect) must not
+                    // bump the refcount again, or it never comes back down.
+                    if (txState->PlanStep == InvalidStepId) {
+                        Self->AddInFlightPlanStep(ui64(step));
+                    }
+                    txState->PlanStep = step;
                 }
 
                 TOperationContext context{Self, txc, ctx, OnComplete, MemChanges, DbChanges};

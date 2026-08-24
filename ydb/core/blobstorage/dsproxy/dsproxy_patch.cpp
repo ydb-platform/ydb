@@ -29,10 +29,8 @@ bool HasMirror3dcQuorum(const TBlobStorageGroupInfo& info, ui32 successfulSubgro
 
 ui32 SelectMirror3dcQuorum(const TBlobStorageGroupInfo& info, ui32 availableSubgroupMask) {
     for (ui32 diskCount = 3; diskCount <= 4; ++diskCount) {
-        for (ui32 candidate = availableSubgroupMask; candidate;
-                candidate = (candidate - 1) & availableSubgroupMask) {
-            if (static_cast<ui32>(std::popcount(candidate)) == diskCount
-                    && HasMirror3dcQuorum(info, candidate)) {
+        for (ui32 candidate = availableSubgroupMask; candidate; candidate = (candidate - 1) & availableSubgroupMask) {
+            if (static_cast<ui32>(std::popcount(candidate)) == diskCount && HasMirror3dcQuorum(info, candidate)) {
                 return candidate;
             }
         }

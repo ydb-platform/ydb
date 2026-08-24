@@ -385,6 +385,7 @@ private:
     void Handle(TEvRowDispatcher::TEvGetNextBatch::TPtr&);
     void Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr& ev);
     void Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev);
+    void HandleError(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev);
     void HandleException(const std::exception& err);
 
     void SendStatistics();
@@ -416,7 +417,7 @@ private:
         IgnoreFunc(NFq::TEvPrivate::TEvPqEventsReady);
         IgnoreFunc(NFq::TEvPrivate::TEvCreateSession);
         IgnoreFunc(TEvRowDispatcher::TEvGetNextBatch);
-        hFunc(NFq::TEvRowDispatcher::TEvStartSession, Handle);
+        hFunc(NFq::TEvRowDispatcher::TEvStartSession, HandleError);
         IgnoreFunc(NFq::TEvRowDispatcher::TEvStopSession);
         IgnoreFunc(NFq::TEvPrivate::TEvSendStatistic);
         IgnoreFunc(NFq::TEvPrivate::TEvReconnectSession);
@@ -910,11 +911,6 @@ void TTopicSession::StartClientSession(TClientsInfo& info) {
 }
 
 void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
-    if (CurrentStateFunc() == &TThis::ErrorState) {
-        Y_ENSURE(ErrorStatus, "ErrorStatus should be set in ErrorState");
-        SendSessionError(ev->Sender, ErrorStatus.GetRef(), true);
-        return;
-    }
     auto offset = GetOffset(ev->Get()->Record);
     const auto& source = ev->Get()->Record.GetSource();
     YDB_LOG_INFO("New client: read actor id watermark",
@@ -959,6 +955,11 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     ConsumerName = source.GetConsumerName();
     SkipJsonErrors = source.GetSkipJsonErrors();
     SendStatistics();
+}
+
+void TTopicSession::HandleError(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
+    Y_ENSURE(ErrorStatus, "ErrorStatus should be set in ErrorState");
+    SendSessionError(ev->Sender, ErrorStatus.GetRef(), true);
 }
 
 void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr& ev) {

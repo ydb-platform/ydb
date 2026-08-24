@@ -127,11 +127,10 @@ class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
         });
     }
 
-    // Cross join has no keys, so every build row matches. Iterates the table in build order.
+    // Cross join has no keys, so every build row matches and there is nothing to look up
     void ForEach(std::invocable<TSingleTuple> auto consume) const {
-        const size_t nTuples = static_cast<size_t>(BuildData_.NTuples);
-        for (size_t i = 0; i < nTuples; ++i) {
-            consume(TSingleTuple{Table_.PackedRow(i), BuildData_.Overflow.data()});
+        for (TSingleTuple tuple : BuildData_) {
+            consume(tuple);
         }
     }
 

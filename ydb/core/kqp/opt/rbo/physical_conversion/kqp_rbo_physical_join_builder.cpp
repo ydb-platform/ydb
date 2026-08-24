@@ -650,13 +650,12 @@ TExprNode::TPtr TPhysicalJoinBuilder::BuildPhysicalJoin(TExprNode::TPtr leftInpu
 
 TExprNode::TPtr TPhysicalJoinBuilder::BuildPhysicalOp(TExprNode::TPtr leftInput, TExprNode::TPtr rightInput, bool useBlockHashJoin, const TTypeAnnotationContext& typesCtx) {
     const auto joinKind = to_lower(Join->JoinKind);
-    if (joinKind == "cross") {
-        if (useBlockHashJoin) {
-            return BuildPhysicalJoin(leftInput, rightInput, useBlockHashJoin, typesCtx);
-        }
+    if (joinKind == "cross" && !useBlockHashJoin) {
+        // Nested loops over a condensed right side; BlockHashJoin does the cartesian product itself
         return BuildCrossJoin(leftInput, rightInput);
     }
 
-    Y_ENSURE(joinKind == "inner" || joinKind == "left" || joinKind == "leftonly" || joinKind == "leftsemi" || joinKind == "full");
+    Y_ENSURE(joinKind == "inner" || joinKind == "left" || joinKind == "leftonly" || joinKind == "leftsemi" ||
+             joinKind == "full" || joinKind == "cross");
     return BuildPhysicalJoin(leftInput, rightInput, useBlockHashJoin, typesCtx);
 }

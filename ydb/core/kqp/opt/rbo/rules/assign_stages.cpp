@@ -14,8 +14,9 @@ using namespace NKikimr::NKqp;
 
 void FinalizeJoinPhysicalProps(TOpJoin& join, const TRBOContext& rboCtx) {
     auto& props = join.Props;
+    const auto& config = *rboCtx.KqpCtx.Config;
     if (!props.JoinAlgo.has_value()) {
-        const auto joinMode = rboCtx.KqpCtx.Config->GetHashJoinMode();
+        const auto joinMode = config.GetHashJoinMode();
         switch (joinMode) {
             case NYql::NDq::EHashJoinMode::Map: {
                 props.JoinAlgo = EJoinAlgoType::MapJoin;
@@ -29,18 +30,20 @@ void FinalizeJoinPhysicalProps(TOpJoin& join, const TRBOContext& rboCtx) {
     }
 
     const auto joinKind = GetValidJoinKind(join.JoinKind);
-    const bool useBlockHashJoinForCross = rboCtx.KqpCtx.Config->GetUseBlockHashJoin()
-        && rboCtx.KqpCtx.Config->GetUseBlockHashJoinForCross();
-    if (joinKind == "Cross" && useBlockHashJoinForCross) {
-        // MapJoin cannot build a Cross join; BlockHashJoin treats it as a cartesian product.
-        props.JoinAlgo = EJoinAlgoType::GraceJoin;
+    if (joinKind == "Cross") {
+        // MapJoin cannot build a cartesian product, so the only BlockHashJoin option is grace.
+        // The stage graph keeps mapping the left side and broadcasting the right one regardless.
+        props.UseBlockHashJoin = config.GetUseBlockHashJoin() && config.GetUseBlockHashJoinForCross();
+        if (props.UseBlockHashJoin) {
+            props.JoinAlgo = EJoinAlgoType::GraceJoin;
+        }
+        return;
     }
 
     const auto joinAlgo = *props.JoinAlgo;
-    props.UseBlockHashJoin = rboCtx.KqpCtx.Config->GetUseBlockHashJoin()
+    props.UseBlockHashJoin = config.GetUseBlockHashJoin()
         && (joinAlgo == EJoinAlgoType::GraceJoin || joinAlgo == EJoinAlgoType::ReverseBlockJoin)
-        && (joinKind == "Inner" || joinKind == "Left" || joinKind == "LeftSemi" || joinKind == "LeftOnly"
-            || (joinKind == "Cross" && useBlockHashJoinForCross));
+        && (joinKind == "Inner" || joinKind == "Left" || joinKind == "LeftSemi" || joinKind == "LeftOnly");
 }
 
 // For row storage read we create a separate stage.

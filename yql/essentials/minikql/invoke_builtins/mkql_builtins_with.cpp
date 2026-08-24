@@ -1,7 +1,6 @@
 #include "mkql_builtins_compare.h"
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -47,5 +46,4 @@ void RegisterWith(IBuiltinFunctionRegistry& registry) {
     RegisterCompareStrings<TContains, TCompareArgsOpt, false>(registry, "StringContains");
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

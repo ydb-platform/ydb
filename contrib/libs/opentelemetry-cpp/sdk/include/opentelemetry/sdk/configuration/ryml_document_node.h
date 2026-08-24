@@ -70,7 +70,7 @@ private:
 
   const RymlDocument *doc_;
   ryml::ConstNodeRef node_;
-  std::size_t depth_;
+  std::size_t depth_{};
 };
 
 class RymlDocumentNodeConstIteratorImpl : public DocumentNodeConstIteratorImpl

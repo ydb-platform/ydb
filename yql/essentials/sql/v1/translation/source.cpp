@@ -935,6 +935,10 @@ ISource* ISource::GetCompositeSource() {
     return nullptr;
 }
 
+void ISource::SetCompositeSelect(TCompositeSelect* composite) {
+    Y_UNUSED(composite);
+}
+
 bool ISource::IsSelect() const {
     return true;
 }
@@ -1040,6 +1044,26 @@ TSourcePtr MoveOutIfSource(TNodePtr& node) {
 
     YQL_ENSURE(source == node.Release());
     return source;
+}
+
+TSourceResult Wrap(TSourcePtr source) {
+    if (!source) {
+        return std::unexpected(ESQLError::Basic);
+    }
+    return TNonNull(std::move(source));
+}
+
+TSourcePtr Unwrap(TSourceResult result) {
+    EnsureUnwrappable(result);
+    return result ? TSourcePtr(std::move(*result)) : nullptr;
+}
+
+TNodeResult ToNode(TSourceResult x) {
+    if (!x) {
+        return std::unexpected(x.error());
+    }
+
+    return TNonNull(TNodePtr(*x));
 }
 
 IJoin::IJoin(TPosition pos)

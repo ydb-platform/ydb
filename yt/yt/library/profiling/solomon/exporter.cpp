@@ -142,7 +142,7 @@ void TSolomonExporter::Register(TStringBuf prefix, const NYT::NHttp::IRequestPat
 void TSolomonExporter::Start()
 {
     if (!Config_->Enable) {
-        YT_LOG_INFO("Solomon exporter is disabled, disabling registry and skipping sensor collection");
+        YT_TLOG_INFO("Solomon exporter is disabled, disabling registry and skipping sensor collection");
         Registry_->Disable();
         return;
     }
@@ -151,7 +151,8 @@ void TSolomonExporter::Start()
         try {
             DoCollect();
         } catch (const std::exception& ex) {
-            YT_LOG_ERROR(ex, "Sensor collector crashed");
+            YT_TLOG_ERROR("Sensor collector crashed")
+                .With(ex);
         }
     })
         .AsyncVia(ControlQueue_->GetInvoker())
@@ -249,7 +250,8 @@ void TSolomonExporter::DoCollect()
         nextGridTime += Config_->GridStep;
     }
 
-    YT_LOG_DEBUG("Sensor collector started (StartTime: %v)", nextGridTime);
+    YT_TLOG_DEBUG("Sensor collector started")
+        .With("StartTime", nextGridTime);
     while (true) {
         CleanResponseCache();
 
@@ -261,7 +263,8 @@ void TSolomonExporter::DoCollect()
         auto delay = TInstant::Now() - nextGridTime;
         CollectionStartDelay_.Record(delay);
 
-        YT_LOG_DEBUG("Started sensor collection (Delay: %v)", delay);
+        YT_TLOG_DEBUG("Started sensor collection")
+            .With("Delay", delay);
         Registry_->ProcessRegistrations();
 
         auto iteration = Registry_->GetNextIteration();
@@ -274,7 +277,8 @@ void TSolomonExporter::DoCollect()
             Window_.erase(Window_.begin());
         }
 
-        YT_LOG_DEBUG("Finished sensor collection (Delay: %v)", TInstant::Now() - nextGridTime);
+        YT_TLOG_DEBUG("Finished sensor collection")
+            .With("Delay", TInstant::Now() - nextGridTime);
         nextGridTime += Config_->GridStep;
     }
 }
@@ -501,7 +505,7 @@ void TSolomonExporter::DoHandleShard(
 {
     TPromise<TSharedRef> responsePromise = NewPromise<TSharedRef>();
 
-    auto Logger = NProfiling::Logger().WithTag("Shard: %v", name);
+    auto Logger = NProfiling::Logger().WithTag("Shard", name);
 
     try {
         auto outputEncodingContext = CreateOutputEncodingContextFromHeaders(req->GetHeaders());
@@ -524,15 +528,15 @@ void TSolomonExporter::DoHandleShard(
             int gridSeconds;
             if (!TryFromString<int>(*gridHeader, gridSeconds)) {
                 THROW_ERROR_EXCEPTION("Invalid value of \"X-Solomon-GridSec\" header")
-                    << TErrorAttribute("value", *gridHeader);
+                    .With("value", *gridHeader);
             }
             readGridStep = TDuration::Seconds(gridSeconds);
         }
 
         if ((now && !period) || (period && !now)) {
             THROW_ERROR_EXCEPTION("Both \"period\" and \"now\" must be present in request")
-                << TErrorAttribute("now", now)
-                << TErrorAttribute("period", period);
+                .With("now", now)
+                .With("period", period);
         }
 
         auto gridStep = Config_->GridStep;
@@ -566,20 +570,20 @@ void TSolomonExporter::DoHandleShard(
         }
 
         auto solomonCluster = req->GetHeaders()->Find("X-Solomon-ClusterId");
-        YT_LOG_DEBUG("Processing sensor pull (Format: %v, Compression: %v, SolomonCluster: %v, Now: %v, Period: %v, Grid: %v)",
-            outputEncodingContext.Format,
-            outputEncodingContext.Compression,
-            solomonCluster ? *solomonCluster : "",
-            now,
-            period,
-            readGridStep);
+        YT_TLOG_DEBUG("Processing sensor pull")
+            .With("Format", outputEncodingContext.Format)
+            .With("Compression", outputEncodingContext.Compression)
+            .With("SolomonCluster", solomonCluster ? *solomonCluster : "")
+            .With("Now", now)
+            .With("Period", period)
+            .With("Grid", readGridStep);
 
         if (cacheKey) {
             auto cacheGuard = Guard(CacheLock_);
 
             auto cacheHitIt = ResponseCache_.find(*cacheKey);
             if (cacheHitIt != ResponseCache_.end() && !(cacheHitIt->second.IsSet() && !cacheHitIt->second.GetOrCrash().IsOK())) {
-                YT_LOG_DEBUG("Replying from cache");
+                YT_TLOG_DEBUG("Replying from cache");
 
                 ResponseCacheHit_.Increment();
 
@@ -601,7 +605,9 @@ void TSolomonExporter::DoHandleShard(
         if (period) {
             if (auto errorOrWindow = SelectReadWindow(*now, *period, readGridStep, gridStep); !errorOrWindow.IsOK()) {
                 ReadDelays_.Increment();
-                YT_LOG_DEBUG(errorOrWindow, "Delaying sensor read (Delay: %v)", Config_->ReadDelay);
+                YT_TLOG_DEBUG("Delaying sensor read")
+                    .With("Delay", Config_->ReadDelay)
+                    .With(errorOrWindow);
 
                 guard->Release();
                 TDelayedExecutor::WaitForDuration(Config_->ReadDelay);
@@ -618,7 +624,7 @@ void TSolomonExporter::DoHandleShard(
                 readWindow = errorOrWindow.Value();
             }
         } else {
-            YT_LOG_DEBUG("Timestamp query arguments are missing; returning last value");
+            YT_TLOG_DEBUG("Timestamp query arguments are missing; returning last value");
 
             int gridFactor = gridStep / Config_->GridStep;
             for (auto i = std::ssize(Window_) - 1; i >= 0; --i) {
@@ -631,9 +637,9 @@ void TSolomonExporter::DoHandleShard(
 
             if (readWindow.empty()) {
                 THROW_ERROR_EXCEPTION("Can't find latest timestamp")
-                    << TErrorAttribute("first_iteration", Window_[0].first)
-                    << TErrorAttribute("grid_factor", gridFactor)
-                    << TErrorAttribute("window_size", Window_.size());
+                    .With("first_iteration", Window_[0].first)
+                    .With("grid_factor", gridFactor)
+                    .With("window_size", Window_.size());
             }
         }
 
@@ -715,7 +721,8 @@ void TSolomonExporter::DoHandleShard(
         WaitFor(rsp->WriteBody(replyBlob))
             .ThrowOnError();
     } catch(const std::exception& ex) {
-        YT_LOG_DEBUG(ex, "Failed to export sensors");
+        YT_TLOG_DEBUG("Failed to export sensors")
+            .With(ex);
         responsePromise.TrySet(TError(ex));
 
         if (!rsp->AreHeadersFlushed()) {
@@ -728,7 +735,8 @@ void TSolomonExporter::DoHandleShard(
                 WaitFor(rsp->WriteBody(TSharedRef::FromString(TError(ex).GetMessage())))
                     .ThrowOnError();
             } catch (const std::exception& ex) {
-                YT_LOG_DEBUG(ex, "Failed to send export error");
+                YT_TLOG_DEBUG("Failed to send export error")
+                    .With(ex);
             }
         }
     }
@@ -742,39 +750,39 @@ void TSolomonExporter::ValidatePeriodAndGrid(std::optional<TDuration> period, st
 
     if (*period < gridStep) {
         THROW_ERROR_EXCEPTION("Period cannot be lower than grid step")
-            << TErrorAttribute("period", *period)
-            << TErrorAttribute("grid_step", gridStep);
+            .With("period", *period)
+            .With("grid_step", gridStep);
     }
 
     if (period->GetValue() % gridStep.GetValue() != 0) {
         THROW_ERROR_EXCEPTION("Period must be multiple of grid step")
-            << TErrorAttribute("period", *period)
-            << TErrorAttribute("grid_step", gridStep);
+            .With("period", *period)
+            .With("grid_step", gridStep);
     }
 
     if (readGridStep) {
         if (*readGridStep < gridStep) {
             THROW_ERROR_EXCEPTION("Server grid step cannot be lower than client grid step")
-                << TErrorAttribute("server_grid_step", *readGridStep)
-                << TErrorAttribute("grid_step", gridStep);
+                .With("server_grid_step", *readGridStep)
+                .With("grid_step", gridStep);
         }
 
         if (readGridStep->GetValue() % gridStep.GetValue() != 0) {
             THROW_ERROR_EXCEPTION("Server grid step must be multiple of client grid step")
-                << TErrorAttribute("server_grid_step", *readGridStep)
-                << TErrorAttribute("grid_step", gridStep);
+                .With("server_grid_step", *readGridStep)
+                .With("grid_step", gridStep);
         }
 
         if (*readGridStep > *period) {
             THROW_ERROR_EXCEPTION("Server grid step cannot be greater than fetch period")
-                << TErrorAttribute("server_grid_step", *readGridStep)
-                << TErrorAttribute("period", *period);
+                .With("server_grid_step", *readGridStep)
+                .With("period", *period);
         }
 
         if (period->GetValue() % readGridStep->GetValue() != 0) {
             THROW_ERROR_EXCEPTION("Server grid step must be multiple of fetch period")
-                << TErrorAttribute("server_grid_step", *readGridStep)
-                << TErrorAttribute("period", *period);
+                .With("server_grid_step", *readGridStep)
+                .With("period", *period);
         }
     }
 }
@@ -832,11 +840,11 @@ TErrorOr<TReadWindow> TSolomonExporter::SelectReadWindow(
         readWindow.back().first.size() != static_cast<size_t>(gridSubsample))
     {
         return TError("Read query is outside of window")
-            << TErrorAttribute("now", now)
-            << TErrorAttribute("period", period)
-            << TErrorAttribute("grid", readGridStep)
-            << TErrorAttribute("window_first", Window_.front().second)
-            << TErrorAttribute("window_last", Window_.back().second);
+            .With("now", now)
+            .With("period", period)
+            .With("grid", readGridStep)
+            .With("window_first", Window_.front().second)
+            .With("window_last", Window_.back().second);
     }
 
     return readWindow;
@@ -865,13 +873,13 @@ void TSolomonExporter::ValidateSummaryPolicy(ESummaryPolicy policy)
     auto summaryPolicyConflicts = GetSummaryPolicyConflicts(policy);
     if (summaryPolicyConflicts.AllPolicyWithSpecifiedAggregates) {
         THROW_ERROR SummaryPolicyError
-            << TError("%Qlv policy can be used only without specified policies", ESummaryPolicy::All)
-            << TErrorAttribute("policy", policy);
+            .With(TError("%Qlv policy can be used only without specified policies", ESummaryPolicy::All))
+            .With("policy", policy);
     }
     if (summaryPolicyConflicts.OmitNameLabelSuffixWithSeveralAggregates) {
         THROW_ERROR SummaryPolicyError
-            << TError("%Qlv option can be used only with single specified policy", ESummaryPolicy::OmitNameLabelSuffix)
-            << TErrorAttribute("policy", policy);
+            .With(TError("%Qlv option can be used only with single specified policy", ESummaryPolicy::OmitNameLabelSuffix))
+            .With("policy", policy);
     }
 }
 

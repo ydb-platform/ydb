@@ -289,7 +289,7 @@ public:
 
     friend TError operator<<(const TError& error, const TCharStream<TBlockStream, TPositionBase>& stream)
     {
-        return error << stream.GetErrorAttributes();
+        return error.With(stream.GetErrorAttributes());
     }
 };
 

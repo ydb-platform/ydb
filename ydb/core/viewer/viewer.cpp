@@ -1,5 +1,5 @@
 #include "viewer.h"
-#include "viewer_utils.h"
+#include <ydb/core/base/http_database_param.h>
 #include "counters_hosts.h"
 #include "viewer_healthcheck.h"
 #include "json_handlers.h"
@@ -48,7 +48,8 @@ enum class EViewerEndpointAccessType {
     Administration,
     Monitoring,
     Viewer,
-    Database
+    Database,
+    Any
 };
 
 struct TEndpointAccessSettings {
@@ -60,6 +61,17 @@ struct TEndpointAccessRule {
     TStringBuf Path;
     TEndpointAccessSettings Settings;
 };
+
+// Returns the legacy /X/json/Y alias of the /X/Y path, or an empty string if the path has no such alias.
+TString GetLegacyJsonPathAlias(TStringBuf path) {
+    path.SkipPrefix("/");
+    TStringBuf prefix;
+    TStringBuf rest;
+    if (!path.TrySplit('/', prefix, rest) || rest.StartsWith("json/")) {
+        return {};
+    }
+    return TStringBuilder() << '/' << prefix << "/json/" << rest;
+}
 
 }
 
@@ -221,20 +233,18 @@ public:
 
             for (const auto& handler : JsonHandlers.JsonHandlersList) {
                 // temporary handling of old paths
-                TStringBuf newPath(handler);
-                TString oldPath = "/" + TString(newPath.After('/').Before('/')) + "/json/" + TString(newPath.After('/').After('/'));
-                JsonHandlers.JsonHandlersIndex[oldPath] = JsonHandlers.JsonHandlersIndex[newPath];
+                const TString oldPath = GetLegacyJsonPathAlias(handler);
+                Y_ENSURE(!oldPath.empty());
+                JsonHandlers.JsonHandlersIndex[oldPath] = JsonHandlers.JsonHandlersIndex[handler];
             }
 
             auto applyAccessRule = [this](const TEndpointAccessRule& rule) {
                 EndpointAccess[TString(rule.Path)] = rule.Settings;
-                // Auto-register legacy /viewer/json/X alias for /viewer/X (same as JsonHandlers aliases).
-                TStringBuf path(rule.Path);
-                TStringBuf prefix = path.After('/').Before('/');
-                TStringBuf rest = path.After('/').After('/');
-                if (prefix == "viewer" && !rest.empty() && !rest.StartsWith("json/")) {
-                    EndpointAccess["/viewer/json/" + TString(rest)] = rule.Settings;
-                }
+
+                // The legacy alias of the endpoint has the same access settings.
+                const TString oldPath = GetLegacyJsonPathAlias(rule.Path);
+                Y_ENSURE(!oldPath.empty());
+                EndpointAccess[oldPath] = rule.Settings;
             };
 
             auto applyAccessRules = [&](std::initializer_list<TEndpointAccessRule> rules) {
@@ -243,9 +253,12 @@ public:
                 }
             };
 
-            if (AppData()->FeatureFlags.GetEnableExtraSidsControlForHttpViewer()) {
+            const bool enableExtraSidsControl = AppData()->FeatureFlags.GetEnableExtraSidsControlForHttpViewer();
+            if (enableExtraSidsControl) {
+                // Every endpoint must be registered with an explicit access level below,
+                // see GetEndpointAccessType.
                 applyAccessRules({
-                    // "/viewer" prefix endpoints (/viewer/json/* aliases are registered automatically).
+                    // /X/json/Y aliases are registered automatically for every /X/Y endpoint.
 
                     // Administration-level endpoints.
                     {"/viewer/bscontrollerinfo", {EViewerEndpointAccessType::Administration}},
@@ -253,7 +266,7 @@ public:
                     // Monitoring-level endpoints.
                     // restart pdisk and evict vdisk endpoints below have some query-parameters,
                     // which require Administration-level access. This is checked in the handler.
-                    // So the Monitoring-level access is not always enough got a successull call.
+                    // So the Monitoring-level access is not always enough for a successful call.
                     {"/pdisk/restart", {EViewerEndpointAccessType::Monitoring}},
                     {"/vdisk/evict", {EViewerEndpointAccessType::Monitoring}},
 
@@ -290,6 +303,10 @@ public:
                     {"/viewer/metainfo", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/browse", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/content", {EViewerEndpointAccessType::Viewer}},
+                    // `/viewer/render` is used by GraphShard metrics rendering.
+                    // It may expose cluster-level metrics, so it's intentionally restricted to Viewer access.
+                    // Before changing it back to Database access, ensure that only database-scoped metrics are returned.
+                    {"/viewer/render", {EViewerEndpointAccessType::Viewer}},
 
                     // Database-level endpoints that require explicit database parameter for strict database tokens.
                     {"/storage/groups", {EViewerEndpointAccessType::Database, true}},
@@ -300,7 +317,6 @@ public:
                     {"/query/script/execute", {EViewerEndpointAccessType::Database, true}},
                     {"/query/script/fetch", {EViewerEndpointAccessType::Database, true}},
                     {"/scheme/directory", {EViewerEndpointAccessType::Database, true}},
-                    {"/viewer/render", {EViewerEndpointAccessType::Database, true}},
                     {"/viewer/topic_data", {EViewerEndpointAccessType::Database, true}},
                     {"/viewer/feature_flags", {EViewerEndpointAccessType::Database, true}},
                     {"/viewer/sysinfo", {EViewerEndpointAccessType::Database, true}},
@@ -324,8 +340,16 @@ public:
                     {"/viewer/plan2svg", {EViewerEndpointAccessType::Database, true}},
                     {"/viewer/storage_stats", {EViewerEndpointAccessType::Database, true}},
                     {"/viewer/database_stats", {EViewerEndpointAccessType::Database, true}},
+                    // The effective access level of healthcheck endpoint is checked in the handler:
+                    // it requires the Monitoring level, except for the prometheus format,
+                    // which is checked separately (see RequireHealthcheckAuthentication).
+                    {"/viewer/healthcheck", {EViewerEndpointAccessType::Database, false}},
                 });
             }
+            // Endpoints which are intentionally available to anyone.
+            // The capabilities handler is used to discover capabilities, including auth requirements,
+            // so it must be always available without authentication, regardless of any feature flags.
+            applyAccessRule({"/viewer/capabilities", {EViewerEndpointAccessType::Any, false}});
 
             auto addV2JsonAlias = [&](TStringBuf aliasPath, TStringBuf canonicalPath) {
                 JsonHandlers.JsonHandlersIndex[TString(aliasPath)] = JsonHandlers.JsonHandlersIndex[TString(canonicalPath)];
@@ -345,39 +369,48 @@ public:
             addV2JsonAlias("/viewer/v2/json/tabletinfo", "/viewer/tabletinfo");
             addV2JsonAlias("/viewer/v2/json/nodeinfo", "/viewer/nodeinfo");
 
-            auto resolveAllowedSids = [&](const TString& path) -> const TVector<TString>& {
-                auto accessType = GetEndpointAccessType(path, EViewerEndpointAccessType::Database);
-                switch (accessType) {
+            struct TEndpointAuthSettings {
+                const TMon::EAuthMode AuthMode;
+                const TVector<TString>& AllowedSIDs;
+            };
+            auto resolveEndpointAuth = [&](const TString& path) -> TEndpointAuthSettings {
+                switch (GetEndpointAccessType(path)) {
                     case EViewerEndpointAccessType::Administration:
-                        return administrationAllowedSIDs;
-                    case EViewerEndpointAccessType::Viewer:
-                        return viewerAllowedSIDs;
+                        return {TMon::EAuthMode::Enforce, administrationAllowedSIDs};
                     case EViewerEndpointAccessType::Monitoring:
-                        return monitoringAllowedSIDs;
+                        return {TMon::EAuthMode::Enforce, monitoringAllowedSIDs};
+                    case EViewerEndpointAccessType::Viewer:
+                        return {TMon::EAuthMode::Enforce, viewerAllowedSIDs};
                     case EViewerEndpointAccessType::Database:
-                    default:
-                        return databaseAllowedSIDs;
+                        return {TMon::EAuthMode::Enforce, databaseAllowedSIDs};
+                    case EViewerEndpointAccessType::Any: {
+                        static const TVector<TString> emptyAllowedSIDs; // empty list allows any SID to proceed
+                        // The endpoint is available to anyone, so it needs no authentication at all.
+                        return {TMon::EAuthMode::Disabled, emptyAllowedSIDs};
+                    }
                 }
+                // The switch above is exhaustive, so this code is unreachable.
+                // It is still required, otherwise the compiler complains about a missing return.
+                Y_ABORT("unknown access type of the endpoint %s", path.c_str());
             };
 
-            for (const auto& [name, handler] : JsonHandlers.JsonHandlersIndex) {
+            for (const auto& [path, handler] : JsonHandlers.JsonHandlersIndex) {
                 // temporary handling of new handlers
                 if (handler->IsHttpEvent()) {
-                    if (name == "/viewer/capabilities" || name == "/viewer/json/capabilities") {
-                        // this handler is used to discover capabilities, including auth requirements, so it must be always available without authentication
-                        mon->RegisterActorHandler({
-                            .Path = name,
-                            .Handler = ctx.SelfID,
-                            .AuthMode = TMon::EAuthMode::Disabled,
-                        });
-                    } else {
-                        mon->RegisterActorHandler({
-                            .Path = name,
-                            .Handler = ctx.SelfID,
-                            .AuthMode = TMon::EAuthMode::Enforce,
-                            .AllowedSIDs = resolveAllowedSids(name),
-                        });
-                    }
+                    const auto auth = resolveEndpointAuth(path);
+                    mon->RegisterActorHandler({
+                        .Path = path,
+                        .Handler = ctx.SelfID,
+                        .AuthMode = auth.AuthMode,
+                        .AllowedSIDs = auth.AllowedSIDs,
+                    });
+                }
+
+                if (enableExtraSidsControl) {
+                    // Every handler path must have an explicit access level, so it has to be registered
+                    // in the rules above. Check it at the start: a path without an explicit access level
+                    // is reported as an error by GetEndpointAccessType.
+                    GetEndpointAccessType(path);
                 }
             }
         }
@@ -611,31 +644,37 @@ private:
     TString CurrentWorkerName;
     NProtobufJson::TProto2JsonConfig Proto2JsonConfig;
 
-    EViewerEndpointAccessType GetEndpointAccessType(const TString& path, EViewerEndpointAccessType defaultAccessType) const {
+    // An endpoint without an explicit access level requires the maximum (administration) one,
+    // so a newly added endpoint is never exposed by accident.
+    EViewerEndpointAccessType GetEndpointAccessType(const TString& path) const {
         const auto itAccess = EndpointAccess.find(path);
-        return itAccess != EndpointAccess.end()
-            ? itAccess->second.AccessType
-            : defaultAccessType;
+        if (itAccess != EndpointAccess.end()) {
+            return itAccess->second.AccessType;
+        }
+
+        // The access level of the endpoint is missing in the rules, it must be added there.
+        YDB_LOG_ERROR("Endpoint without an explicit access level", {"path", path});
+
+        if (!AppData()->FeatureFlags.GetEnableExtraSidsControlForHttpViewer()) {
+            return EViewerEndpointAccessType::Database;
+        }
+        return EViewerEndpointAccessType::Administration;
     }
 
     bool IsDatabaseAccessEndpoint(const TString& path) const {
-        auto accessType = GetEndpointAccessType(path, EViewerEndpointAccessType::Database);
-        return accessType == EViewerEndpointAccessType::Database;
+        return GetEndpointAccessType(path) == EViewerEndpointAccessType::Database;
     }
 
     // Returns true if the token has sufficient access for the endpoint's required access level.
     // Used for old-style (non-IsHttpEvent) handlers where per-endpoint SID enforcement is not
-    // done at the monitoring layer.
-    bool CheckEndpointAccess(const TString& path, const TString& serializedToken) const {
+    // done at the monitoring layer. Database-level endpoints are out of scope here, they are
+    // checked by ValidateDatabaseScopedRequest instead.
+    bool CheckNonDatabaseEndpointAccess(const TString& path, const TString& serializedToken) const {
         if (!AppData()->FeatureFlags.GetEnableExtraSidsControlForHttpViewer()) {
             return true;
         }
-        const auto itAccess = EndpointAccess.find(path);
-        if (itAccess == EndpointAccess.end()) {
-            return true; // no specific access requirement
-        }
         const auto& sec = AppData()->DomainsConfig.GetSecurityConfig();
-        switch (itAccess->second.AccessType) {
+        switch (GetEndpointAccessType(path)) {
             case EViewerEndpointAccessType::Administration:
                 return IsTokenAllowed(serializedToken, sec.GetAdministrationAllowedSIDs());
             case EViewerEndpointAccessType::Monitoring:
@@ -645,10 +684,14 @@ private:
                 return IsTokenAllowed(serializedToken, sec.GetViewerAllowedSIDs())
                     || IsTokenAllowed(serializedToken, sec.GetMonitoringAllowedSIDs())
                     || IsTokenAllowed(serializedToken, sec.GetAdministrationAllowedSIDs());
+            case EViewerEndpointAccessType::Any:
+                return true;
             case EViewerEndpointAccessType::Database:
-            default:
-                return false;
+                Y_ENSURE(false, "database-level endpoint is not expected here: " << path);
         }
+        // The switch above is exhaustive, so this code is unreachable.
+        // It is still required, otherwise the compiler complains about a missing return.
+        Y_ABORT("unknown access type of the endpoint %s", path.c_str());
     }
 
     enum class EDatabaseScopedRequestValidationResult {
@@ -661,6 +704,7 @@ private:
         const TCgiParameters& params,
         const TStringBuf& method,
         const TStringBuf& body,
+        const TStringBuf& contentType,
         const TString& serializedToken,
         TString& error) const
     {
@@ -675,7 +719,7 @@ private:
         }
         const auto itAccess = EndpointAccess.find(path);
         if (itAccess != EndpointAccess.end() && itAccess->second.RequireDatabaseParam) {
-            if (GetDatabaseParam(params, method, body).empty()) {
+            if (ExtractHttpDatabaseParam(params, method, body, contentType).empty()) {
                 error = TStringBuilder() << "`database` is required for " << path;
                 return EDatabaseScopedRequestValidationResult::DatabaseRequired;
             }
@@ -903,7 +947,7 @@ private:
             // For old-style (non-IsHttpEvent) handlers the per-endpoint SID check is not done at
             // the monitoring layer, so we enforce it here based on EndpointAccess.
             // Database-level endpoints are validated by ValidateDatabaseScopedRequest instead.
-            if (!handler->IsHttpEvent() && !IsDatabaseAccessEndpoint(path) && !CheckEndpointAccess(path, msg->UserToken)) {
+            if (!handler->IsHttpEvent() && !IsDatabaseAccessEndpoint(path) && !CheckNonDatabaseEndpointAccess(path, msg->UserToken)) {
                 Send(ev->Sender, new NMon::TEvHttpInfoRes(GETHTTPACCESSDENIED(ev->Get(), "text/plain", "Access denied"), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
                 return;
             }
@@ -913,6 +957,7 @@ private:
                 msg->Request.GetParams(),
                 msg->Request.GetMethod() == HTTP_METHOD_POST ? TStringBuf("POST") : TStringBuf(),
                 msg->Request.GetPostContent(),
+                TrimHttpContentTypeHeader(msg->Request.GetHeader("Content-Type")),
                 msg->UserToken,
                 scopeError)) {
                 case EDatabaseScopedRequestValidationResult::DatabaseRequired:
@@ -1015,6 +1060,7 @@ private:
                 proxyParams,
                 ev->Get()->Request->Method,
                 ev->Get()->Request->Body,
+                TrimHttpContentTypeHeader(NHttp::THeaders(ev->Get()->Request->Headers).Get("Content-Type")),
                 ev->Get()->UserToken,
                 scopeError)) {
                 case EDatabaseScopedRequestValidationResult::DatabaseRequired:

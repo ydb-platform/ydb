@@ -2,6 +2,7 @@
 #include "partition_compactification.h"
 #include "partition_common.h"
 
+#include <ydb/core/persqueue/pqtablet/blob/blob_offset.h>
 #include <ydb/core/persqueue/pqtablet/cache/read.h>
 #include <ydb/core/persqueue/pqtablet/common/constants.h>
 #include <ydb/core/persqueue/pqtablet/common/event_helpers.h>
@@ -504,6 +505,7 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
             readResult->SetEndOffset(endOffset);
             return TReadAnswer{
                 .Size = answerSize,
+                .ConsumedMessages = cnt,
                 .Event = std::move(answer),
                 .IsInternal = IsInternal,
                 .ReplyTo = ReplyTo,
@@ -520,6 +522,7 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
         }
         AFL_ENSURE(offset <= Offset);
         AFL_ENSURE(offset < Offset || partNo <= PartNo);
+        const ui64 blobKeyOffset = blobs[blobIdx].Key.GetOffset();
         const ui64 firstHeaderOffset = blobBatches->front().GetOffset();
 
         for (const auto& batch : *blobBatches) {
@@ -528,17 +531,23 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
             }
 
             const auto& header = batch.Header;
-            const ui64 trueOffset = blobs[blobIdx].Key.GetOffset() + (header.GetOffset() - firstHeaderOffset);
+            // Batch start in key/client space (header may still be supportive after tx rename).
+            const ui64 trueOffset = HeaderOffsetToKeySpace(
+                blobKeyOffset, firstHeaderOffset, header.GetOffset());
 
             ui32 batchStartIdx = 0;
             if (trueOffset > Offset || (trueOffset == Offset && header.GetPartNo() >= PartNo)) {
                 batchStartIdx = 0;
             } else {
-                const ui64 trueSearchOffset = Offset - blobs[blobIdx].Key.GetOffset() + firstHeaderOffset;
+                // FindPos searches in header space; convert reader Offset the other way.
+                const ui64 trueSearchOffset = KeyOffsetToHeaderSpace(
+                    blobKeyOffset, firstHeaderOffset, Offset);
                 const auto& position = batch.FindPos(trueSearchOffset, PartNo);
                 batchStartIdx = position.BlobIdx;
                 if (batchStartIdx != Max<ui32>()) {
-                    Offset = position.Offset;
+                    // FindPos returns header-space offsets; map back to key space.
+                    Offset = HeaderOffsetToKeySpace(
+                        blobKeyOffset, firstHeaderOffset, position.Offset);
                     PartNo = position.PartNo;
                 }
             }
@@ -617,6 +626,7 @@ TReadAnswer TReadInfo::FormAnswer(
         Error = true;
         return TReadAnswer{
             .Size = blobResponse.Error.ErrorStr.size(),
+            .ConsumedMessages = 0,
             .Event = MakeHolder<TEvPQ::TEvError>(blobResponse.Error.ErrorCode, blobResponse.Error.ErrorStr, destination),
             .IsInternal = IsInternal,
             .ReplyTo = ReplyTo
@@ -770,6 +780,7 @@ TReadAnswer TReadInfo::FormAnswer(
 
     return {
         .Size = answerSize,
+        .ConsumedMessages = cnt,
         .Event = std::move(answer),
         .IsInternal = IsInternal,
         .ReplyTo = ReplyTo
@@ -795,7 +806,7 @@ void TPartition::Handle(TEvPQ::TEvReadTimeout::TPtr& ev, const TActorContext& ct
     auto& userInfo = UsersInfoStorage->GetOrCreate(res->User, ctx);
 
     userInfo.ForgetSubscription(GetEndOffset(), ctx.Now());
-    OnReadRequestFinished(res->Destination, answer.Size, res->User, ctx);
+    OnReadRequestFinished(res->Destination, answer.Size, answer.ConsumedMessages, res->User, ctx);
 }
 
 void CollectReadRequestFromBody(ui64 startOffset, const ui16 partNo, const ui32 maxCount,
@@ -864,13 +875,12 @@ TVector<TClientBlob> TPartition::GetReadRequestFromHead(
 void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
     auto* read = ev->Get();
 
-    auto replyTo = ReplyTo(read->Cookie, read->ReplyTo);
-
+    // Pass unresolved read->ReplyTo: ReplyError uses !!replyTo as IsInternal (see TEvRead::IsInternal).
     if (read->Count == 0) {
         TabletCounters.Cumulative()[COUNTER_PQ_READ_ERROR].Increment(1);
         TabletCounters.Percentile()[COUNTER_LATENCY_PQ_READ_ERROR].IncrementFor(0);
         ReplyError(ctx, read->Cookie,  NPersQueue::NErrorCode::BAD_REQUEST, "no infinite flows allowed - count is not set or 0",
-                   replyTo);
+                   read->ReplyTo);
         return;
     }
     if (read->Offset < GetStartOffset() && !read->IsInternal()) {
@@ -890,7 +900,7 @@ void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
             ctx, read->Cookie,
             NPersQueue::NErrorCode::READ_ERROR_TOO_SMALL_OFFSET,
             "client requested not from first part, and this part is lost",
-            replyTo);
+            read->ReplyTo);
         return;
       }
     }
@@ -907,7 +917,7 @@ void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
         ReplyError(ctx, read->Cookie, NPersQueue::NErrorCode::READ_ERROR_TOO_BIG_OFFSET,
                                       TStringBuilder() << "trying to read from future. ReadOffset " <<
                                       read->Offset << ", " << read->PartNo << " EndOffset " << GetEndOffset(),
-                                      replyTo);
+                                      read->ReplyTo);
         return;
     }
 
@@ -920,7 +930,7 @@ void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
             TabletCounters.Cumulative()[COUNTER_PQ_READ_ERROR_NO_SESSION].Increment(1);
             TabletCounters.Percentile()[COUNTER_LATENCY_PQ_READ_ERROR].IncrementFor(0);
             ReplyError(ctx, read->Cookie, NPersQueue::NErrorCode::READ_ERROR_NO_SESSION,
-                TStringBuilder() << "no such session '" << read->SessionId << "'", replyTo);
+                TStringBuilder() << "no such session '" << read->SessionId << "'", read->ReplyTo);
             return;
         }
     }
@@ -944,7 +954,7 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr&& readEvent, TDuration waitQuotaTim
         if (BatchProcessorActor) {
             Send(BatchProcessorActor, new TEvPQ::TEvConsumerRemoved(user));
         }
-        OnReadRequestFinished(read->Cookie, 0, user, ctx);
+        OnReadRequestFinished(read->Cookie, 0, 0, user, ctx);
         return;
     }
     userInfo->ReadsInQuotaQueue--;
@@ -1004,17 +1014,19 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr&& readEvent, TDuration waitQuotaTim
 
     if (offset > GetEndOffset()) {
         ReplyError(ctx, read->Cookie,  NPersQueue::NErrorCode::BAD_REQUEST,
-            TStringBuilder() << "Offset more than EndOffset. Offset=" << offset << ", EndOffset=" << GetEndOffset(), ReplyTo(read->Cookie, read->ReplyTo));
+            TStringBuilder() << "Offset more than EndOffset. Offset=" << offset << ", EndOffset=" << GetEndOffset(),
+            read->ReplyTo);
         return;
     }
 
     ProcessRead(ctx, std::move(info), cookie, false);
 }
 
-void TPartition::OnReadRequestFinished(ui64 cookie, ui64 answerSize, const TString& consumer, const TActorContext& ctx) {
+void TPartition::OnReadRequestFinished(ui64 cookie, ui64 answerSize, ui64 consumedMessages, const TString& consumer, const TActorContext& ctx) {
     AvgReadBytes.Update(answerSize, ctx.Now());
+    AvgReadMessages.Update(consumedMessages, ctx.Now());
     if (ReadQuotaTrackerActor) {
-        Send(ReadQuotaTrackerActor, new TEvPQ::TEvConsumed(answerSize, 0, cookie, consumer));
+        Send(ReadQuotaTrackerActor, new TEvPQ::TEvConsumed(answerSize, consumedMessages, cookie, consumer));
     }
 }
 

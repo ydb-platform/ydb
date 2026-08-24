@@ -27,8 +27,8 @@ using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static YT_DEFINE_GLOBAL(std::unique_ptr<NThreading::TEvent>, Latch);
-static YT_DEFINE_GLOBAL(std::atomic<int>, ConcurrentCalls);
+static YT_DEFINE_LEAKY_GLOBAL(std::unique_ptr<NThreading::TEvent>, Latch);
+static YT_DEFINE_LEAKY_GLOBAL(std::atomic<int>, ConcurrentCalls);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -43,7 +43,9 @@ public:
 
     TFuture<TAuthenticationResult> AsyncAuthenticate(const TAuthenticationContext& /*context*/) override
     {
-        return MakeFuture(TAuthenticationResult());
+        return MakeFuture(TAuthenticationResult{
+            .User = "authenticated-user",
+        });
     }
 };
 
@@ -134,6 +136,9 @@ public:
         WriteAuthenticationIdentityToProto(response, context->GetAuthenticationIdentity());
         ToProto(response->mutable_mutation_id(), context->GetMutationId());
         response->set_retry(context->IsRetry());
+        if (const auto& header = context->GetRequestHeader(); header.has_start_time()) {
+            response->set_start_time(header.start_time());
+        }
         context->Reply();
     }
 

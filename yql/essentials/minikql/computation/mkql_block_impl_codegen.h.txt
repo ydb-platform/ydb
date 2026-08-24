@@ -11,34 +11,34 @@ namespace NKikimr::NMiniKQL {
     class TLLVMFieldsStructureBlockState: public TLLVMFieldsStructure<TComputationValue<TBlockState>> {
     private:
         using TBase = TLLVMFieldsStructure<TComputationValue<TBlockState>>;
-        llvm::IntegerType*const CountType;
-        llvm::PointerType*const PointerType;
-        llvm::ArrayType*const SkipSpaceType;
+        llvm::IntegerType* const CountType_;
+        llvm::PointerType* const PointerType_;
+        llvm::ArrayType* const SkipSpaceType_;
     protected:
-        using TBase::Context;
+        using TBase::GetContext;
         static constexpr auto BaseFields = 3U;
     public:
         std::vector<llvm::Type*> GetFieldsArray() {
             std::vector<llvm::Type*> result = TBase::GetFields();
-            result.emplace_back(CountType);
-            result.emplace_back(PointerType);
-            result.emplace_back(SkipSpaceType);
+            result.emplace_back(CountType_);
+            result.emplace_back(PointerType_);
+            result.emplace_back(SkipSpaceType_);
             return result;
         }
 
         llvm::Constant* GetCount() {
-            return llvm::ConstantInt::get(llvm::Type::getInt32Ty(Context), TBase::GetFieldsCount() + 0);
+            return llvm::ConstantInt::get(llvm::Type::getInt32Ty(GetContext()), TBase::GetFieldsCount() + 0);
         }
 
         llvm::Constant* GetPointer() {
-            return llvm::ConstantInt::get(llvm::Type::getInt32Ty(Context), TBase::GetFieldsCount() + 1);
+            return llvm::ConstantInt::get(llvm::Type::getInt32Ty(GetContext()), TBase::GetFieldsCount() + 1);
         }
 
         TLLVMFieldsStructureBlockState(llvm::LLVMContext& context, size_t width)
             : TBase(context)
-            , CountType(llvm::Type::getInt64Ty(Context))
-            , PointerType(llvm::PointerType::getUnqual(llvm::ArrayType::get(llvm::Type::getInt128Ty(Context), width)))
-            , SkipSpaceType(llvm::ArrayType::get(llvm::Type::getInt64Ty(Context), 10U)) // Skip Values, Deques, Arrays std::vectors and BlockLengthIndex ui64
+            , CountType_(llvm::Type::getInt64Ty(context))
+            , PointerType_(llvm::PointerType::getUnqual(llvm::ArrayType::get(llvm::Type::getInt128Ty(context), width)))
+            , SkipSpaceType_(llvm::ArrayType::get(llvm::Type::getInt64Ty(context), 10U)) // Skip Values, Deques, Arrays std::vectors and BlockLengthIndex ui64
         {}
     };
 #endif

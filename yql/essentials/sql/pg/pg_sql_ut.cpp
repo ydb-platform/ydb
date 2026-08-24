@@ -1130,7 +1130,7 @@ Y_UNIT_TEST(WarningAsErrorLangver) {
 
     auto issue = *(res.Issues.begin());
     UNIT_ASSERT_EQUAL(issue.GetSeverity(), NYql::TSeverityIds::S_ERROR);
-    UNIT_ASSERT_STRING_CONTAINS("VariableSetStmt, Warning pragma is not available before language version 2026.01", issue.GetMessage());
+    UNIT_ASSERT_STRING_CONTAINS("VariableSetStmt, PRAGMA Warning is not available before language version 2026.01", issue.GetMessage());
 }
 
 Y_UNIT_TEST(WarningAsError) {

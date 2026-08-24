@@ -44,6 +44,11 @@ jobs:
           YANDEX_CLOUD_API_KEY_DOC_REVIEW: ${{ secrets.YANDEX_CLOUD_API_KEY_DOC_REVIEW }}
           YDBDOC_REPO_PATH: ${{ github.workspace }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_ACTOR: ${{ github.event.sender.login }}
+          YDBDOC_ALLOWED_ACTORS: ${{ vars.YDBDOC_ALLOWED_ACTORS }}
+          YDBDOC_DAILY_BUDGET_RUB: ${{ vars.YDBDOC_DAILY_BUDGET_RUB }}
+          YDBDOC_TRANSCRIPT_BACKEND: ydb
+          YDB_SA_KEY: ${{ secrets.YDB_SA_KEY }}
 
   trigger-verify-ci:
     needs: ydbdoc-verify

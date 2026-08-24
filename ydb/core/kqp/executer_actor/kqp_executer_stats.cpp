@@ -1,5 +1,6 @@
 #include "kqp_executer_stats.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/protos/kqp_stats.pb.h>
 
 namespace NKikimr::NKqp {
@@ -1173,6 +1174,12 @@ void TQueryExecutionStats::UpdateTaskStats(ui32 nodeId, ui64 taskId, const NYql:
     NYql::NDqProto::EComputeState state, TDuration collectLongTaskStatsTimeout) {
 
     if (taskId) {
+        // CA may fail before SetTaskRunner (e.g. WASM compartment acquire);
+        // FillStats then sends empty Tasks. Do not ENSURE — that would mask
+        // the real failure issues from COMPUTE_STATE_FAILURE.
+        if (stats.GetTasks().empty()) {
+            return;
+        }
         AFL_ENSURE(stats.GetTasks().size() == 1);
         AFL_ENSURE(stats.GetTasks(0).GetTaskId() == taskId);
     }
@@ -1690,6 +1697,12 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
     }
 
     ExtraStats.SetAffectedShards(AffectedShards.size());
+    // Executer TxId, so that query stats can be matched with LWTrace records.
+    // It is 0 for literal-only execution (such phases never reach shards).
+    // Gated by EnableTxIdInStats feature flag.
+    if (AppData()->FeatureFlags.GetEnableTxIdInStats() && TasksGraph && TasksGraph->GetMeta().TxId) {
+        ExtraStats.SetTxId(TasksGraph->GetMeta().TxId);
+    }
     stats.MutableExtra()->PackFrom(ExtraStats);
 }
 

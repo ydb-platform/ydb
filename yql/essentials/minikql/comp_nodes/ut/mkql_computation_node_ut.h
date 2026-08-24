@@ -122,7 +122,7 @@ struct TSetup {
         Explorer.Walk(pgm.GetNode(), Env->GetNodeStack());
         TComputationPatternOpts opts(Alloc.Ref(), *Env, NodeFactory,
                                      FunctionRegistry.Get(), NUdf::EValidateMode::Greedy, NUdf::EValidatePolicy::Exception,
-                                     UseLLVM ? "" : "OFF", graphPerProcess, StatsRegistry.Get(), /*countersProvider=*/nullptr, /*secureParamsProvider=*/nullptr, /*logProvider=*/nullptr, NYql::UnknownLangVersion, RuntimeSettings);
+                                     UseLLVM ? "" : "OFF", graphPerProcess, StatsRegistry.Get(), CountersProvider, /*secureParamsProvider=*/nullptr, /*logProvider=*/nullptr, NYql::UnknownLangVersion, RuntimeSettings);
         Pattern = MakeComputationPattern(Explorer, pgm, entryPoints, opts);
         auto graph = Pattern->Clone(opts.ToComputationOptions(*RandomProvider, *TimeProvider));
         Terminator.Reset(new TBindTerminator(graph->GetTerminator()));
@@ -147,7 +147,7 @@ struct TSetup {
         TExploringNodeVisitor explorer;
         explorer.Walk(pgm.GetNode(), *Env);
         bool wereChanges = false;
-        SinglePassVisitCallables(pgm, explorer, renameProvider, *Env, true, wereChanges);
+        SinglePassVisitCallables(pgm, explorer, renameProvider, *Env, /*inPlace=*/true, wereChanges);
     }
 
     void Reset() {
@@ -162,6 +162,7 @@ struct TSetup {
     TIntrusivePtr<ITimeProvider> TimeProvider;
     IStatsRegistryPtr StatsRegistry;
     NYql::TRuntimeSettings::TPtr RuntimeSettings;
+    NUdf::ICountersProvider* CountersProvider = nullptr;
 
     THolder<TTypeEnvironment> Env;
     THolder<TProgramBuilder> PgmBuilder;

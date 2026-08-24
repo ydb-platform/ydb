@@ -143,6 +143,7 @@ TOracleHostStat::TOracleHostStat(
     const THostState& state,
     EHostHealth health,
     const THostStat& hostStat,
+    TLatencyByOperation latencyByOperation,
     TInstant now)
     : Index(index)
     , State(state.State)
@@ -150,6 +151,7 @@ TOracleHostStat::TOracleHostStat(
     , InflightByOperation(hostStat.GetInflightByOperation())
     , Errors(hostStat.GetErrorsInfo(now))
     , PBufferUsedSize(state.PBufferUsedSize)
+    , LatencyByOperation(std::move(latencyByOperation))
 {}
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -487,14 +489,28 @@ TVector<TOracleHostStat> TOracle::BuildHostStats(TInstant now) const
     TVector<TOracleHostStat> stats;
     stats.reserve(HostStatistics.size());
     for (THostIndex hostIndex = 0; hostIndex < GetHostCount(); ++hostIndex) {
+        // Compute latency stats for monitoring snapshot.
+        TLatencyByOperation latencyByOperation{};
+        for (size_t operation = 0; operation < OperationCount; ++operation) {
+            latencyByOperation[operation] =
+                GetTimePredictor(static_cast<EOperation>(operation))
+                    .GetLatencyStats(hostIndex);
+        }
         stats.emplace_back(
             hostIndex,
             HostStates[hostIndex],
             HostsHealths[hostIndex],
             HostStatistics[hostIndex],
+            std::move(latencyByOperation),
             now);
     }
     return stats;
+}
+
+size_t TOracle::GetLatencyHistoryCapacity() const
+{
+    // All predictors share the same capacity from OracleConfig.
+    return TimePredictors.empty() ? 0 : TimePredictors.front().GetCapacity();
 }
 
 TTimePredictor& TOracle::AccessTimePredictor(EOperation operation)

@@ -1,0 +1,6 @@
+/* custom error:Cannot write column "_yql_a" with reserved prefix "_yql_" */
+INSERT INTO plato.Output WITH TRUNCATE
+SELECT
+    key   AS `_yql_a`,
+    value
+FROM plato.Input;

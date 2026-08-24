@@ -99,6 +99,19 @@ class TRewriteRightJoinRule : public ISimplifiedRule {
 };
 
 /**
+ * Rewrite join into index lookup join if possible.
+ */
+class TRewriteJoinToIndexLookupJoinRule: public ISimplifiedRule {
+public:
+    TRewriteJoinToIndexLookupJoinRule()
+        : ISimplifiedRule("Rewrite join into index lookup join", ERuleProperties::RequireParents | ERuleProperties::RequireTypes) {
+    }
+
+    virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
+    virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+};
+
+/**
  * Remove a left join when the right side cannot change left-side row multiplicity
  * and no right-side output is used above the join.
  */
@@ -258,6 +271,17 @@ class TPushFilterIntoJoinRule : public ISimplifiedRule {
 
     virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
     virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
+};
+
+/**
+ * Push out simple join filter than can go on the left or right side of the join
+ */
+class TPushSimpleJoinFilterRule : public IRule {
+  public:
+    TPushSimpleJoinFilterRule() : IRule("Push simple join filter", ERuleProperties::RequireParents) {}
+
+    virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
+    virtual bool MatchAndApply(TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
 };
 
 /**

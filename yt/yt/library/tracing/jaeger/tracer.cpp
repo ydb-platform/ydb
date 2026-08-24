@@ -246,10 +246,10 @@ bool TJaegerChannelManager::Push(const std::vector<TSharedRef>& batches, int spa
                 {ServiceTicketMetadataName, TvmService_->GetServiceTicket(TracingServiceAlias)});
         }
 
-        YT_LOG_DEBUG("Sending spans (SpanCount: %v, PayloadSize: %v, Endpoint: %v)",
-            spanCount,
-            req->batch().size(),
-            Endpoint_);
+        YT_TLOG_DEBUG("Sending spans")
+            .With("SpanCount", spanCount)
+            .With("PayloadSize", req->batch().size())
+            .With("Endpoint", Endpoint_);
 
         TEventTimerGuard timerGuard(PushDuration_);
         WaitFor(req->Invoke())
@@ -259,7 +259,9 @@ bool TJaegerChannelManager::Push(const std::vector<TSharedRef>& batches, int spa
         PayloadSize_.Record(req->batch().size());
     } catch (const std::exception& ex) {
         PushErrors_.Increment();
-        YT_LOG_ERROR(ex, "Failed to send spans (Endpoint: %v)", Endpoint_);
+        YT_TLOG_ERROR("Failed to send spans")
+            .With("Endpoint", Endpoint_)
+            .With(ex);
         return false;
     }
 
@@ -318,7 +320,7 @@ void TJaegerTracer::NotifyEmptyQueue()
 
 void TJaegerTracer::Stop()
 {
-    YT_LOG_INFO("Stopping tracer");
+    YT_TLOG_INFO("Stopping tracer");
 
     auto flushFuture = WaitFlush();
     FlushExecutor_->ScheduleOutOfBand();
@@ -329,7 +331,7 @@ void TJaegerTracer::Stop()
     YT_UNUSED_FUTURE(FlushExecutor_->Stop());
     ActionQueue_->Shutdown();
 
-    YT_LOG_INFO("Tracer stopped");
+    YT_TLOG_INFO("Tracer stopped");
 }
 
 void TJaegerTracer::Configure(const TJaegerTracerConfigPtr& config)
@@ -456,7 +458,7 @@ void TJaegerTracer::DropFullQueue()
 
 void TJaegerTracer::DoFlush()
 {
-    YT_LOG_DEBUG("Started span flush");
+    YT_TLOG_DEBUG("Started span flush");
 
     auto config = Config_.Acquire();
 
@@ -472,12 +474,13 @@ void TJaegerTracer::DoFlush()
     DequeueAll(config);
 
     if (TInstant::Now() - LastSuccessfulFlushTime_ > config->QueueStallTimeout) {
-        YT_LOG_DEBUG("Queue stall timeout expired (QueueStallTimeout: %v)", config->QueueStallTimeout);
+        YT_TLOG_DEBUG("Queue stall timeout expired")
+            .With("QueueStallTimeout", config->QueueStallTimeout);
         DropFullQueue();
     }
 
     if (!config->IsEnabled()) {
-        YT_LOG_DEBUG("Tracer is disabled");
+        YT_TLOG_DEBUG("Tracer is disabled");
         DropFullQueue();
         NotifyEmptyQueue();
         return;
@@ -485,7 +488,7 @@ void TJaegerTracer::DoFlush()
 
     auto keys = GetKeys(BatchInfo_);
     if (keys.empty()) {
-        YT_LOG_DEBUG("Span batch info is empty");
+        YT_TLOG_DEBUG("Span batch info is empty");
         LastSuccessfulFlushTime_ = flushStartTime;
         NotifyEmptyQueue();
         return;
@@ -501,17 +504,18 @@ void TJaegerTracer::DoFlush()
             {
                 toRemove.push(endpoint);
             }
-            YT_LOG_DEBUG("Span queue is empty (Endpoint: %v)", endpoint);
+            YT_TLOG_DEBUG("Span queue is empty")
+                .With("Endpoint", endpoint);
             LastSuccessfulFlushTime_ = flushStartTime;
             continue;
         }
 
         if (config->TestDropSpans) {
             DropQueue(batchCount, endpoint);
-            YT_LOG_DEBUG("Spans dropped in test (BatchCount: %v, SpanCount: %v, Endpoint: %v)",
-                batchCount,
-                spanCount,
-                endpoint);
+            YT_TLOG_DEBUG("Spans dropped in test")
+                .With("BatchCount", batchCount)
+                .With("SpanCount", spanCount)
+                .With("Endpoint", endpoint);
             continue;
         }
 
@@ -528,7 +532,8 @@ void TJaegerTracer::DoFlush()
 
         if (channel->Push(batches, spanCount)) {
             DropQueue(batchCount, endpoint);
-            YT_LOG_DEBUG("Spans sent (Endpoint: %v)", endpoint);
+            YT_TLOG_DEBUG("Spans sent")
+                .With("Endpoint", endpoint);
             LastSuccessfulFlushTime_ = flushStartTime;
         }
     }

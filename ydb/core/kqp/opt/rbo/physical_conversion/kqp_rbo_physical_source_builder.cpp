@@ -39,6 +39,14 @@ TExprNode::TPtr TPhysicalSourceBuilder::BuildPhysicalOp() {
 
     switch (Read->GetTableStorageType()) {
         case NYql::EStorageType::RowStorage: {
+            TKqpReadTableSettings settings;
+            if (Read->SortDir != ESortDir::None) {
+                settings.SetSorting(Read->SortDir == ESortDir::Asc ? ERequestSorting::ASC : ERequestSorting::DESC);
+                if (Read->Limit) {
+                    settings.SetItemsLimit(Read->Limit);
+                }
+            }
+
             // clang-format off
             source = Build<TDqSource>(Ctx, Pos)
                 .DataSource<TCoDataSource>()
@@ -49,7 +57,7 @@ TExprNode::TPtr TPhysicalSourceBuilder::BuildPhysicalOp() {
                     .Columns()
                         .Add(columns)
                     .Build()
-                    .Settings<TCoNameValueTupleList>().Build()
+                    .Settings(settings.BuildNode(Ctx, Pos))
                     .RangesExpr(ranges)
                     .ExplainPrompt<TCoNameValueTupleList>().Build()
                 .Build()

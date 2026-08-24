@@ -31,15 +31,15 @@ public:
             ui32 rowLimit,
             TComputationContext& ctx)
             : TComputationValue<TState>(memInfo)
-            , Self(self)
-            , Heap(Greater)
-            , Delay(delay)
-            , Ahead(ahead)
-            , RowLimit(rowLimit + 1)
-            , Latest(0)
-            , Terminating(false)
-            , MonotonicCounter(0)
-            , Ctx(ctx)
+            , Self_(self)
+            , Heap_(Greater)
+            , Delay_(delay)
+            , Ahead_(ahead)
+            , RowLimit_(rowLimit + 1)
+            , Latest_(0)
+            , Terminating_(false)
+            , MonotonicCounter_(0)
+            , Ctx_(ctx)
         {
         }
 
@@ -56,7 +56,7 @@ public:
 
         struct THeap: public TStdHeap {
             template <typename... TArgs>
-            THeap(TArgs... args)
+            explicit THeap(TArgs... args)
                 : TStdHeap(args...)
             {
             }
@@ -67,24 +67,24 @@ public:
             auto end() const {
                 return c.end();
             }
-            auto clear() {
-                return c.clear();
+            void clear() {
+                c.clear();
             }
         };
 
     public:
         NUdf::TUnboxedValue GetOutputIfReady() {
-            if (Terminating && Heap.empty()) {
+            if (Terminating_ && Heap_.empty()) {
                 return NUdf::TUnboxedValue::MakeFinish();
             }
-            if (Heap.empty()) {
+            if (Heap_.empty()) {
                 return NUdf::TUnboxedValue{};
             }
-            THeapKey oldestKey = Heap.top().first;
+            THeapKey oldestKey = Heap_.top().first;
             TTimestamp oldest = oldestKey.first;
-            if (oldest < Latest + Delay || Heap.size() == RowLimit || Terminating) {
-                auto result = std::move(Heap.top().second);
-                Heap.pop();
+            if (oldest < Latest_ + Delay_ || Heap_.size() == RowLimit_ || Terminating_) {
+                auto result = Heap_.top().second;
+                Heap_.pop();
                 return result;
             }
             return NUdf::TUnboxedValue{};
@@ -92,20 +92,20 @@ public:
         /// return input row in case it cannot process it correctly
         NUdf::TUnboxedValue ProcessRow(TTimestamp t, NUdf::TUnboxedValue&& row) {
             MKQL_ENSURE(!row.IsSpecial(), "Internal logic error");
-            MKQL_ENSURE(Heap.size() < RowLimit, "Internal logic error");
-            if (Heap.empty()) {
-                Latest = t;
+            MKQL_ENSURE(Heap_.size() < RowLimit_, "Internal logic error");
+            if (Heap_.empty()) {
+                Latest_ = t;
             }
-            if (Latest + Delay < t && t < Latest + Ahead) {
-                Heap.emplace(THeapKey(t, ++MonotonicCounter), std::move(row));
+            if (Latest_ + Delay_ < t && t < Latest_ + Ahead_) {
+                Heap_.emplace(THeapKey(t, ++MonotonicCounter_), std::move(row));
             } else {
                 return row;
             }
-            Latest = std::max(Latest, t);
+            Latest_ = std::max(Latest_, t);
             return NUdf::TUnboxedValue{};
         }
         void Finish() {
-            Terminating = true;
+            Terminating_ = true;
         }
 
     private:
@@ -124,43 +124,42 @@ public:
             ClearState();
             for (auto i = 0U; i < heapSize; ++i) {
                 TTimestamp t = in.Read<ui64>();
-                in(MonotonicCounter);
-                NUdf::TUnboxedValue row = in.ReadUnboxedValue(Self->Packer.RefMutableObject(Ctx, false, Self->StateType), Ctx);
-                Heap.emplace(THeapKey(t, MonotonicCounter), std::move(row));
+                in(MonotonicCounter_);
+                NUdf::TUnboxedValue row = in.ReadUnboxedValue(Self_->Packer_.RefMutableObject(Ctx_, false, Self_->StateType_), Ctx_);
+                Heap_.emplace(THeapKey(t, MonotonicCounter_), std::move(row));
             }
-            in(Latest, Terminating);
+            in(Latest_, Terminating_);
             return true;
         }
 
         NUdf::TUnboxedValue Save() const override {
-            TOutputSerializer out(EMkqlStateType::SIMPLE_BLOB, StateVersion, Ctx);
-            out.Write<ui32>(Heap.size());
+            TOutputSerializer out(EMkqlStateType::SIMPLE_BLOB, StateVersion, Ctx_);
+            out.Write<ui32>(Heap_.size());
 
-            for (const TEntry& entry : Heap) {
+            for (const TEntry& entry : Heap_) {
                 THeapKey key = entry.first;
                 out(key);
-                out.WriteUnboxedValue(Self->Packer.RefMutableObject(Ctx, false, Self->StateType), entry.second);
+                out.WriteUnboxedValue(Self_->Packer_.RefMutableObject(Ctx_, false, Self_->StateType_), entry.second);
             }
-            out(Latest, Terminating);
+            out(Latest_, Terminating_);
             return out.MakeState();
         }
 
         void ClearState() {
-            Heap.clear();
-            Latest = 0;
-            Terminating = false;
+            Heap_.clear();
+            Latest_ = 0;
+            Terminating_ = false;
         }
 
-    private:
-        const TSelf* const Self;
-        THeap Heap;
-        const TTimeinterval Delay;
-        const TTimeinterval Ahead;
-        const ui32 RowLimit;
-        TTimestamp Latest;
-        bool Terminating; // not applicable for streams, but useful for debug and testing
-        ui64 MonotonicCounter;
-        TComputationContext& Ctx;
+        const TSelf* const Self_;
+        THeap Heap_;
+        const TTimeinterval Delay_;
+        const TTimeinterval Ahead_;
+        const ui32 RowLimit_;
+        TTimestamp Latest_;
+        bool Terminating_; // not applicable for streams, but useful for debug and testing
+        ui64 MonotonicCounter_;
+        TComputationContext& Ctx_;
     };
 
     TTimeOrderRecover(
@@ -176,17 +175,17 @@ public:
         IComputationNode* rowLimit,
         TType* stateType)
         : TBaseComputation(mutables, inputFlow, kind)
-        , InputFlow(inputFlow)
-        , InputRowArg(inputRowArg)
-        , RowTime(rowTime)
-        , InputRowColumnCount(inputRowColumnCount)
-        , OutOfOrderColumnIndex(outOfOrderColumnIndex)
-        , Delay(delay)
-        , Ahead(ahead)
-        , RowLimit(rowLimit)
-        , Cache(mutables)
-        , StateType(stateType)
-        , Packer(mutables)
+        , InputFlow_(inputFlow)
+        , InputRowArg_(inputRowArg)
+        , RowTime_(rowTime)
+        , InputRowColumnCount_(inputRowColumnCount)
+        , OutOfOrderColumnIndex_(outOfOrderColumnIndex)
+        , Delay_(delay)
+        , Ahead_(ahead)
+        , RowLimit_(rowLimit)
+        , Cache_(mutables)
+        , StateType_(stateType)
+        , Packer_(mutables)
     {
     }
 
@@ -194,9 +193,9 @@ public:
         if (stateValue.IsInvalid()) {
             stateValue = ctx.HolderFactory.Create<TState>(
                 this,
-                Delay->GetValue(ctx).Get<i64>(),
-                Ahead->GetValue(ctx).Get<i64>(),
-                RowLimit->GetValue(ctx).Get<ui32>(),
+                Delay_->GetValue(ctx).Get<i64>(),
+                Ahead_->GetValue(ctx).Get<i64>(),
+                RowLimit_->GetValue(ctx).Get<ui32>(),
                 ctx);
         } else if (stateValue.HasValue()) {
             MKQL_ENSURE(stateValue.IsBoxed(), "Expected boxed value");
@@ -205,9 +204,9 @@ public:
                 // Load from saved state.
                 NUdf::TUnboxedValue state = ctx.HolderFactory.Create<TState>(
                     this,
-                    Delay->GetValue(ctx).Get<i64>(),
-                    Ahead->GetValue(ctx).Get<i64>(),
-                    RowLimit->GetValue(ctx).Get<ui32>(),
+                    Delay_->GetValue(ctx).Get<i64>(),
+                    Ahead_->GetValue(ctx).Get<i64>(),
+                    RowLimit_->GetValue(ctx).Get<ui32>(),
                     ctx);
                 state.Load2(stateValue);
                 stateValue = state;
@@ -216,9 +215,9 @@ public:
         auto& state = *static_cast<TState*>(stateValue.AsBoxed().Get());
         while (true) {
             if (auto out = state.GetOutputIfReady()) {
-                return AddColumn(std::move(out), false, ctx);
+                return AddColumn(std::move(out), /*outOfOrder=*/false, ctx);
             }
-            auto item = InputFlow->GetValue(ctx);
+            auto item = InputFlow_->GetValue(ctx);
             if (item.IsSpecial()) {
                 if (item.IsFinish()) {
                     state.Finish();
@@ -226,10 +225,10 @@ public:
                     return item;
                 }
             } else {
-                InputRowArg->SetValue(ctx, NUdf::TUnboxedValue{item});
-                const auto t = RowTime->GetValue(ctx).Get<ui64>();
+                InputRowArg_->SetValue(ctx, NUdf::TUnboxedValue{item});
+                const auto t = RowTime_->GetValue(ctx).Get<ui64>();
                 if (auto row = state.ProcessRow(static_cast<TState::TTimestamp>(t), std::move(item))) {
-                    return AddColumn(std::move(row), true, ctx);
+                    return AddColumn(std::move(row), /*outOfOrder=*/true, ctx);
                 }
             }
         }
@@ -237,9 +236,9 @@ public:
 
 private:
     void RegisterDependencies() const final {
-        if (const auto flow = FlowDependsOn(InputFlow)) {
-            Own(flow, InputRowArg);
-            DependsOn(flow, RowTime);
+        if (const auto flow = FlowDependsOn(InputFlow_)) {
+            Own(flow, InputRowArg_);
+            DependsOn(flow, RowTime_);
         }
     }
 
@@ -248,29 +247,29 @@ private:
             return row;
         }
         NUdf::TUnboxedValue* itemsPtr = nullptr;
-        auto result = Cache.NewArray(ctx, InputRowColumnCount + 1, itemsPtr);
+        auto result = Cache_.NewArray(ctx, InputRowColumnCount_ + 1, itemsPtr);
         ui32 inputColumnIndex = 0;
-        for (ui32 i = 0; i != InputRowColumnCount + 1; ++i) {
-            if (OutOfOrderColumnIndex == i) {
+        for (ui32 i = 0; i != InputRowColumnCount_ + 1; ++i) {
+            if (OutOfOrderColumnIndex_ == i) {
                 *itemsPtr++ = NUdf::TUnboxedValuePod{outOfOrder};
             } else {
-                *itemsPtr++ = std::move(row.GetElements()[inputColumnIndex++]);
+                *itemsPtr++ = row.GetElements()[inputColumnIndex++];
             }
         }
         return result;
     }
 
-    IComputationNode* const InputFlow;
-    IComputationExternalNode* const InputRowArg;
-    IComputationNode* const RowTime;
-    const ui32 InputRowColumnCount;
-    const ui32 OutOfOrderColumnIndex;
-    const IComputationNode* Delay;
-    const IComputationNode* Ahead;
-    const IComputationNode* RowLimit;
-    const TContainerCacheOnContext Cache;
-    TType* const StateType;
-    TMutableObjectOverBoxedValue<TValuePackerBoxed> Packer;
+    IComputationNode* const InputFlow_;
+    IComputationExternalNode* const InputRowArg_;
+    IComputationNode* const RowTime_;
+    const ui32 InputRowColumnCount_;
+    const ui32 OutOfOrderColumnIndex_;
+    const IComputationNode* Delay_;
+    const IComputationNode* Ahead_;
+    const IComputationNode* RowLimit_;
+    const TContainerCacheOnContext Cache_;
+    TType* const StateType_;
+    TMutableObjectOverBoxedValue<TValuePackerBoxed> Packer_;
 };
 
 } // namespace

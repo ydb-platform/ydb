@@ -270,7 +270,8 @@ THttpResult THttpProxyTestMock::SendHttpRequestRawSpecified(const TString& handl
                                 const TString& host, const TString& date, const TString& userAgent,
                                 const TString& acceptEncoding,
                                 const IOutputStream::TPart& body, const TString& authorizationStr,
-                                const TString& contentType) {
+                                const TString& contentType,
+                                const TVector<std::pair<TString, TString>>& extraHeaders) {
     TNetworkAddress addr("::", HttpServicePort);
     TSocket sock(addr);
     TSocketOutput so(sock);
@@ -308,6 +309,12 @@ THttpResult THttpProxyTestMock::SendHttpRequestRawSpecified(const TString& handl
     if (!contentType.empty()) {
         parts.push_back(IOutputStream::TPart(TStringBuf("Content-Type:")));
         parts.push_back(IOutputStream::TPart(TStringBuf(contentType)));
+        parts.push_back(IOutputStream::TPart::CrLf());
+    }
+    for (const auto& [name, value] : extraHeaders) {
+        parts.push_back(IOutputStream::TPart(TStringBuf(name)));
+        parts.push_back(IOutputStream::TPart(TStringBuf(":")));
+        parts.push_back(IOutputStream::TPart(TStringBuf(value)));
         parts.push_back(IOutputStream::TPart::CrLf());
     }
     parts.push_back(IOutputStream::TPart::CrLf());
@@ -357,10 +364,11 @@ NJson::TJsonMap THttpProxyTestMock::CreateQueueWithSecurityToken(NJson::TJsonMap
 THttpResult THttpProxyTestMock::SendHttpRequestSpecified(const TString& handler, const TString& target, NJson::TJsonValue value,
                             const TString& host, const TString& date, const TString& userAgent,
                             const TString& acceptEncoding, const TString& authorizationStr,
-                            const TString& contentType) {
+                            const TString& contentType,
+                            const TVector<std::pair<TString, TString>>& extraHeaders) {
     TString jsonStr = NJson::WriteJson(value);
     return SendHttpRequestRawSpecified(handler, target, host, date, userAgent, acceptEncoding,
-                                {&jsonStr[0], jsonStr.size()}, authorizationStr, contentType);
+                                {&jsonStr[0], jsonStr.size()}, authorizationStr, contentType, extraHeaders);
 }
 
 THttpResult THttpProxyTestMock::SendPing() {
@@ -458,21 +466,34 @@ TMaybe<NYdb::TResultSet> THttpProxyTestMock::RunYqlDataQuery(TString query) {
 
     TMaybe<NYdb::TResultSet> resultSet;
 
+    // Default GetSessionClientTimeout is 5s; under ASAN + UseRealThreads(false) CreateSession
+    // often exceeds that and flakes with "request deadline expired".
+    NYdb::NTable::TRetryOperationSettings retrySettings;
+    retrySettings.GetSessionClientTimeout(TDuration::Seconds(60));
+    retrySettings.MaxTimeout(TDuration::Seconds(120));
+
     auto operationResult = tableClient.RetryOperationSync([&](NYdb::NTable::TSession session) {
+        NYdb::NTable::TExecDataQuerySettings execSettings;
+        execSettings.ClientTimeout(TDuration::Seconds(60));
+        execSettings.OperationTimeout(TDuration::Seconds(60));
+
         NYdb::TParamsBuilder paramsBuilder;
         auto queryResult = session.ExecuteDataQuery(
                 query,
                 NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx(),
-                paramsBuilder.Build()
+                paramsBuilder.Build(),
+                execSettings
             ).GetValueSync();
 
         if (queryResult.IsSuccess() && queryResult.GetResultSets().size() > 0) {
             resultSet = queryResult.GetResultSet(0);
         }
         return queryResult;
-    });
+    }, retrySettings);
 
-    Y_ABORT_UNLESS(operationResult.IsSuccess());
+    UNIT_ASSERT_C(operationResult.IsSuccess(),
+        "RunYqlDataQuery failed: " << operationResult.GetIssues().ToOneLineString()
+        << " for query: " << query);
     return resultSet;
 }
 
@@ -1007,13 +1028,13 @@ void THttpProxyTestMock::InitHttpServer(bool yandexCloudMode, bool enableSqsTopi
     auto as = ActorRuntime->GetAnyNodeActorSystem();
     opts.SetLogger(NYdbGrpc::CreateActorSystemLogger(*as, NKikimrServices::GRPC_SERVER));
 
-    TActorId actorId = as->Register(CreateAccessServiceActor(config, enableAccessServiceV2Interface));
+    TActorId actorId = as->Register(CreateAccessServiceActor(config, "ydb-http_proxy-datastreams", enableAccessServiceV2Interface));
     as->RegisterLocalService(MakeAccessServiceID(), actorId);
 
-    actorId = as->Register(CreateAccessServiceActor(config, enableAccessServiceV2Interface));
+    actorId = as->Register(CreateAccessServiceActor(config, "ydb-http_proxy-datastreams", enableAccessServiceV2Interface));
     as->RegisterLocalService(NSQS::MakeSqsAccessServiceID(), actorId);
 
-    actorId = as->Register(CreateIamTokenServiceActor(config));
+    actorId = as->Register(CreateIamTokenServiceActor(config, "ydb-http_proxy-datastreams"));
     as->RegisterLocalService(MakeIamTokenServiceID(), actorId);
 
     actorId = as->Register(CreateDiscoveryProxyActor(credentialsProvider, config));
@@ -1052,6 +1073,8 @@ void THttpProxyTestMock::InitHttpServer(bool yandexCloudMode, bool enableSqsTopi
     httpProxyConfig.Config = config;
     httpProxyConfig.CredentialsProvider = credentialsProvider;
     httpProxyConfig.UseSDK = GetEnv("INSIDE_YDB").empty();
+
+    AppData(as)->HttpProxyConfig.CopyFrom(config.GetHttpConfig());
 
     actorId = as->Register(NKikimr::NHttpProxy::CreateHttpProxy(httpProxyConfig));
     as->RegisterLocalService(MakeHttpProxyID(), actorId);

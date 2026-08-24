@@ -22,9 +22,10 @@ TDataProviderInitializer GetDqDataProviderInitializer(
     NKikimr::NMiniKQL::TComputationNodeFactory compFactory,
     const IMetricsRegistryPtr& metrics,
     const TFileStoragePtr& fileStorage,
-    bool externalUser)
+    bool externalUser,
+    TDqCliqueValidator cliqueValidator)
 {
-    return [execTransformerFactory, dqGateway, compFactory, metrics, fileStorage, externalUser] (
+    return [execTransformerFactory, dqGateway, compFactory, metrics, fileStorage, externalUser, cliqueValidator] (
         const TString& userName,
         const TString& sessionId,
         const TGatewaysConfig* gatewaysConfig,
@@ -61,6 +62,8 @@ TDataProviderInitializer GetDqDataProviderInitializer(
             externalUser,
             std::move(hiddenAborter)
         );
+
+        state->Settings->CliqueValidator = cliqueValidator;
 
         TDataProviderInfo info;
         info.Names.insert(TString{DqProviderName});

@@ -160,7 +160,7 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
             auto* logStream = settings.LogStream;
             ServerSettings->SetLoggerInitializer([logStream](NActors::TTestActorRuntime& runtime) {
                 runtime.SetLogBackendFactory([logStream]() {
-                    return new TStreamLogBackend(logStream);
+                    return new TOwningThreadedLogBackend(new TStreamLogBackend(logStream));
                 });
             });
         } else {
@@ -833,6 +833,11 @@ void AssertTableStats(const Ydb::TableStats::QueryStats& stats, TStringBuf table
 }
 
 void AssertTableStats(const TDataQueryResult& result, TStringBuf table, const TExpectedTableStats& expectedStats) {
+    auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+    return AssertTableStats(stats, table, expectedStats);
+}
+
+void AssertTableStats(const NYdb::NQuery::TExecuteQueryResult& result, TStringBuf table, const TExpectedTableStats& expectedStats) {
     auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
     return AssertTableStats(stats, table, expectedStats);
 }

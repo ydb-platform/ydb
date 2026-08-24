@@ -1,52 +1,34 @@
 # YDB Agent Guide
 
-Detailed instructions for AI agents working in the YDB monorepo.
-Quick reference: root [`AGENTS.md`](../../AGENTS.md).
+Root quick ref: [`AGENTS.md`](../../AGENTS.md). Prefer nearest local `AGENTS.md`.
 
-## Architecture boundaries
+## Layers
 
-Respect layer boundaries when adding dependencies (`PEERDIR` in `ya.make`):
+* `ydb/public/` — external (SDK, CLI).
+* `ydb/library/` — shared internals.
+* `ydb/core/` — server; not a dependency of CLI/SDK.
 
-- `ydb/public/` — code for external consumers (SDK, CLI).
-- `ydb/library/` — internal shared YDB libraries.
-- `ydb/core/` — server internals; must not be depended on by CLI or public SDK.
+## Build & test
 
-## Nested agent instructions
-
-Read the nearest `AGENTS.md` when working in that tree.
-Add area-specific rules in a local `AGENTS.md` rather than growing this file.
-
-## Build & Test
-
-Run `./ya` from the repository root. See [`BUILD.md`](../../BUILD.md) and
-[Yatool docs](https://ydb.tech/docs/en/development/build-ya).
+From repo root. Prefer `--build relwithdebinfo`. No `-j`, no force rebuild.
+Smallest relevant folder. `2>&1 | tail` for test output.
 
 ```bash
 ./ya make --build relwithdebinfo <folder>
-./ya make ydb/apps/ydbd --build relwithdebinfo
-./ya make ydb/apps/ydb --build relwithdebinfo
 ./ya make --build relwithdebinfo -tA <folder>
 ./ya make --build relwithdebinfo -tA <folder> -F *test-filter*
-./ya make --build relwithdebinfo -tA <folder> -F *test-filter* --test-retries N
 ```
 
-- Prefer `--build relwithdebinfo`. No `-j`. No force rebuild (`-r`, `-R`, …).
-- Use `2>&1 | tail` for test output.
-- Build and test the smallest relevant folder.
+Details: [`BUILD.md`](../../BUILD.md) · [`TESTS.md`](TESTS.md).
 
-Test types and frameworks: [`TESTS.md`](TESTS.md).
+## Languages & style
 
-## Languages
-
-C++20 or earlier. Style: [`CODESTYLE.md`](CODESTYLE.md). Tests: [`TESTS.md`](TESTS.md).
-Do not use `Y_ABORT` / `Y_VERIFY`: [`NO_ABORT.md`](NO_ABORT.md).
+C++20 or earlier. [`CODESTYLE.md`](CODESTYLE.md) · [`NO_ABORT.md`](NO_ABORT.md).
 Python via `ya`, packages from `contrib/python`.
 
-## Agent workflow
+## Workflow
 
-- Make the smallest correct change; do not edit `contrib/` or `vendor/` unless required.
-- Match surrounding code style ([`CODESTYLE.md`](CODESTYLE.md)).
-- Search for existing code; check for a local `AGENTS.md`.
-- For non-trivial changes, check [`CONTRIBUTING.md`](../../CONTRIBUTING.md).
-- Run `./ya make --build relwithdebinfo -tA <folder>` for the area you changed.
-- Do not create commits or push unless explicitly asked.
+* Smallest correct change; avoid `contrib/` / `vendor/` unless required.
+* Match surrounding style; search existing code first.
+* Non-trivial changes: [`CONTRIBUTING.md`](../../CONTRIBUTING.md).
+* Do not commit or push unless asked.

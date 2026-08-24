@@ -1,13 +1,15 @@
 #include "cluster_balancing.h"
 
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/events.h>
-#include <ydb/library/actors/core/hfunc.h>
-
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/mind/bscontroller/types.h>
 #include <ydb/core/protos/blobstorage_config.pb.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/sys_view/common/events.h>
+
+#include <ydb/library/actors/core/actor_coroutine.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/events.h>
+#include <ydb/library/actors/core/hfunc.h>
 
 #include <algorithm>
 #include <limits>
@@ -265,18 +267,20 @@ namespace NKikimr::NBsController {
                 }
 
                 const auto& statusStr = vslot.GetStatus();
-                NKikimrBlobStorage::EVDiskStatus status;
-                NKikimrBlobStorage::EVDiskStatus_Parse(statusStr, &status);
-
-                switch (status) {
-                    case NKikimrBlobStorage::ERROR:
-                    case NKikimrBlobStorage::READY:
-                        break;
-                    case NKikimrBlobStorage::INIT_PENDING:
-                    case NKikimrBlobStorage::REPLICATING:
-                        pdisksWithReplicatingVDisks.insert(pdiskId);
-                        replicatingVDisks++;
-                        break;
+                // Empty/unknown Status: Parse leaves value untouched; treat as ERROR
+                // (same as TVSlotInfo::GetStatus / value_or(ERROR)).
+                NKikimrBlobStorage::EVDiskStatus status = NKikimrBlobStorage::ERROR;
+                if (NKikimrBlobStorage::EVDiskStatus_Parse(statusStr, &status)) {
+                    switch (status) {
+                        case NKikimrBlobStorage::ERROR:
+                        case NKikimrBlobStorage::READY:
+                            break;
+                        case NKikimrBlobStorage::INIT_PENDING:
+                        case NKikimrBlobStorage::REPLICATING:
+                            pdisksWithReplicatingVDisks.insert(pdiskId);
+                            replicatingVDisks++;
+                            break;
+                    }
                 }
 
                 auto it = storageInfo.PDiskUsageMap.find(pdiskId);

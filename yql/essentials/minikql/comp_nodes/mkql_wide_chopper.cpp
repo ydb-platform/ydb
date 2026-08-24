@@ -4,8 +4,7 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/utils/cast.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 using NYql::EnsureDynamicCast;
 
@@ -26,71 +25,71 @@ public:
 
     TWideChopperWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, TComputationExternalNodePtrVector&& itemArgs, TComputationNodePtrVector&& keys, TComputationExternalNodePtrVector&& keyArgs, IComputationNode* chop, IComputationWideFlowProxyNode* input, IComputationWideFlowNode* output)
         : TBaseComputation(mutables, flow, EValueRepresentation::Any)
-        , Flow(flow)
-        , ItemArgs(std::move(itemArgs))
-        , Keys(std::move(keys))
-        , KeyArgs(std::move(keyArgs))
-        , Chop(chop)
-        , Input(input)
-        , Output(output)
-        , ItemsOnKeys(GetPasstroughtMap(ItemArgs, Keys))
-        , KeysOnItems(GetPasstroughtMap(Keys, ItemArgs))
-        , SwitchItem(IsPasstrought(Chop, ItemArgs))
-        , WideFieldsIndex(mutables.IncrementWideFieldsIndex(ItemArgs.size()))
+        , Flow_(flow)
+        , ItemArgs_(std::move(itemArgs))
+        , Keys_(std::move(keys))
+        , KeyArgs_(std::move(keyArgs))
+        , Chop_(chop)
+        , Input_(input)
+        , Output_(output)
+        , ItemsOnKeys_(GetPasstroughtMap(ItemArgs_, Keys_))
+        , KeysOnItems_(GetPasstroughtMap(Keys_, ItemArgs_))
+        , SwitchItem_(IsPasstrought(Chop_, ItemArgs_))
+        , WideFieldsIndex_(mutables.IncrementWideFieldsIndex(ItemArgs_.size()))
     {
-        Input->SetFetcher(std::bind(&TWideChopperWrapper::DoCalculateInput, this, std::bind(&TWideChopperWrapper::RefState, this, _1), _1, _2));
+        Input_->SetFetcher(std::bind(&TWideChopperWrapper::DoCalculateInput, this, std::bind(&TWideChopperWrapper::RefState, this, _1), _1, _2));
 #ifndef MKQL_DISABLE_CODEGEN
-        EnsureDynamicCast<IWideFlowProxyCodegeneratorNode*>(Input)->SetGenerator(std::bind(&TWideChopperWrapper::DoGenGetValuesInput, this, _1, _2));
+        EnsureDynamicCast<IWideFlowProxyCodegeneratorNode*>(Input_)->SetGenerator(std::bind(&TWideChopperWrapper::DoGenGetValuesInput, this, _1, _2));
 #endif
     }
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const {
-        auto** fields = ctx.WideFields.data() + WideFieldsIndex;
+        auto** fields = ctx.WideFields.data() + WideFieldsIndex_;
 
         if (state.IsInvalid()) {
-            for (auto i = 0U; i < ItemArgs.size(); ++i) {
-                fields[i] = &ItemArgs[i]->RefValue(ctx);
+            for (auto i = 0U; i < ItemArgs_.size(); ++i) {
+                fields[i] = &ItemArgs_[i]->RefValue(ctx);
             }
-            if (const auto result = Flow->FetchValues(ctx, fields); EFetchResult::One != result) {
+            if (const auto result = Flow_->FetchValues(ctx, fields); EFetchResult::One != result) {
                 return result;
             }
 
-            for (ui32 i = 0U; i < Keys.size(); ++i) {
-                if (KeyArgs[i]->GetDependentsCount() > 0U) {
-                    KeyArgs[i]->SetValue(ctx, Keys[i]->GetValue(ctx));
+            for (ui32 i = 0U; i < Keys_.size(); ++i) {
+                if (KeyArgs_[i]->GetDependentsCount() > 0U) {
+                    KeyArgs_[i]->SetValue(ctx, Keys_[i]->GetValue(ctx));
                 }
             }
             state = NUdf::TUnboxedValuePod(ui64(EState::Next));
         } else if (EState::Skip == EState(state.Get<ui64>())) {
             do {
-                for (auto i = 0U; i < ItemArgs.size(); ++i) {
-                    fields[i] = &ItemArgs[i]->RefValue(ctx);
+                for (auto i = 0U; i < ItemArgs_.size(); ++i) {
+                    fields[i] = &ItemArgs_[i]->RefValue(ctx);
                 }
-                if (const auto result = Flow->FetchValues(ctx, fields); EFetchResult::One != result) {
+                if (const auto result = Flow_->FetchValues(ctx, fields); EFetchResult::One != result) {
                     return result;
                 }
 
-            } while (!Chop->GetValue(ctx).Get<bool>());
+            } while (!Chop_->GetValue(ctx).Get<bool>());
 
-            for (ui32 i = 0U; i < Keys.size(); ++i) {
-                if (KeyArgs[i]->GetDependentsCount() > 0U) {
-                    KeyArgs[i]->SetValue(ctx, Keys[i]->GetValue(ctx));
+            for (ui32 i = 0U; i < Keys_.size(); ++i) {
+                if (KeyArgs_[i]->GetDependentsCount() > 0U) {
+                    KeyArgs_[i]->SetValue(ctx, Keys_[i]->GetValue(ctx));
                 }
             }
             state = NUdf::TUnboxedValuePod(ui64(EState::Next));
         }
 
         while (true) {
-            if (const auto result = Output->FetchValues(ctx, output); EFetchResult::Finish == result) {
-                Input->InvalidateValue(ctx);
+            if (const auto result = Output_->FetchValues(ctx, output); EFetchResult::Finish == result) {
+                Input_->InvalidateValue(ctx);
                 switch (EState(state.Get<ui64>())) {
                     case EState::Work:
                     case EState::Next:
                         do {
-                            for (auto i = 0U; i < ItemArgs.size(); ++i) {
-                                fields[i] = &ItemArgs[i]->RefValue(ctx);
+                            for (auto i = 0U; i < ItemArgs_.size(); ++i) {
+                                fields[i] = &ItemArgs_[i]->RefValue(ctx);
                             }
-                            switch (const auto next = Flow->FetchValues(ctx, fields)) {
+                            switch (const auto next = Flow_->FetchValues(ctx, fields)) {
                                 case EFetchResult::Yield:
                                     state = NUdf::TUnboxedValuePod(ui64(EState::Skip));
                                 case EFetchResult::Finish:
@@ -98,11 +97,11 @@ public:
                                 case EFetchResult::One:
                                     break;
                             }
-                        } while (!Chop->GetValue(ctx).Get<bool>());
+                        } while (!Chop_->GetValue(ctx).Get<bool>());
                     case EState::Chop:
-                        for (ui32 i = 0U; i < Keys.size(); ++i) {
-                            if (KeyArgs[i]->GetDependentsCount() > 0U) {
-                                KeyArgs[i]->SetValue(ctx, Keys[i]->GetValue(ctx));
+                        for (ui32 i = 0U; i < Keys_.size(); ++i) {
+                            if (KeyArgs_[i]->GetDependentsCount() > 0U) {
+                                KeyArgs_[i]->SetValue(ctx, Keys_[i]->GetValue(ctx));
                             }
                         }
                         state = NUdf::TUnboxedValuePod(ui64(EState::Next));
@@ -119,31 +118,31 @@ private:
     EFetchResult DoCalculateInput(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const {
         if (EState::Next == EState(state.Get<ui64>())) {
             state = NUdf::TUnboxedValuePod(ui64(EState::Work));
-            for (auto i = 0U; i < ItemArgs.size(); ++i) {
+            for (auto i = 0U; i < ItemArgs_.size(); ++i) {
                 if (const auto out = output[i]) {
-                    *out = ItemArgs[i]->GetValue(ctx);
+                    *out = ItemArgs_[i]->GetValue(ctx);
                 }
             }
             return EFetchResult::One;
         }
 
-        auto** fields = ctx.WideFields.data() + WideFieldsIndex;
+        auto** fields = ctx.WideFields.data() + WideFieldsIndex_;
 
-        for (auto i = 0U; i < ItemArgs.size(); ++i) {
-            fields[i] = &ItemArgs[i]->RefValue(ctx);
+        for (auto i = 0U; i < ItemArgs_.size(); ++i) {
+            fields[i] = &ItemArgs_[i]->RefValue(ctx);
         }
 
-        if (const auto result = Flow->FetchValues(ctx, fields); EFetchResult::One != result) {
+        if (const auto result = Flow_->FetchValues(ctx, fields); EFetchResult::One != result) {
             return result;
         }
 
-        for (auto i = 0U; i < ItemArgs.size(); ++i) {
+        for (auto i = 0U; i < ItemArgs_.size(); ++i) {
             if (const auto out = output[i]) {
                 *out = *fields[i];
             }
         }
 
-        if (Chop->GetValue(ctx).Get<bool>()) {
+        if (Chop_->GetValue(ctx).Get<bool>()) {
             state = NUdf::TUnboxedValuePod(ui64(EState::Chop));
             return EFetchResult::Finish;
         }
@@ -180,19 +179,19 @@ private:
 
         block = work;
 
-        auto getres = GetNodeValues(Flow, ctx, block);
+        auto getres = GetNodeValues(Flow_, ctx, block);
         const auto special = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SLE, getres.first, ConstantInt::get(getres.first->getType(), 0), "special", block);
         result->addIncoming(getres.first, block);
         BranchInst::Create(done, good, special, block);
 
         block = good;
 
-        std::vector<Value*> items(ItemArgs.size(), nullptr);
+        std::vector<Value*> items(ItemArgs_.size(), nullptr);
         for (ui32 i = 0U; i < items.size(); ++i) {
-            EnsureDynamicCast<ICodegeneratorExternalNode*>(ItemArgs[i])->CreateSetValue(ctx, block, items[i] = getres.second[i](ctx, block));
+            EnsureDynamicCast<ICodegeneratorExternalNode*>(ItemArgs_[i])->CreateSetValue(ctx, block, items[i] = getres.second[i](ctx, block));
         }
 
-        const auto chop = SwitchItem ? items[*SwitchItem] : GetNodeValue(Chop, ctx, block);
+        const auto chop = SwitchItem_ ? items[*SwitchItem_] : GetNodeValue(Chop_, ctx, block);
         const auto cast = CastInst::Create(Instruction::Trunc, chop, Type::getInt1Ty(context), "bool", block);
         result->addIncoming(ConstantInt::get(resultType, i32(EFetchResult::One)), block);
         BranchInst::Create(step, done, cast, block);
@@ -206,15 +205,15 @@ private:
         block = done;
 
         ICodegeneratorInlineWideNode::TGettersList getters;
-        getters.reserve(ItemArgs.size());
-        std::transform(ItemArgs.cbegin(), ItemArgs.cend(), std::back_inserter(getters), [&](IComputationNode* node) {
+        getters.reserve(ItemArgs_.size());
+        std::transform(ItemArgs_.cbegin(), ItemArgs_.cend(), std::back_inserter(getters), [&](IComputationNode* node) {
             return [node](const TCodegenContext& ctx, BasicBlock*& block) { return GetNodeValue(node, ctx, block); };
         });
         return {result, std::move(getters)};
     }
 
 public:
-    TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto init = BasicBlock::Create(context, "init", ctx.Func);
@@ -236,7 +235,7 @@ public:
 
             block = init;
 
-            const auto getfirst = GetNodeValues(Flow, ctx, block);
+            const auto getfirst = GetNodeValues(Flow_, ctx, block);
             const auto special = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SLE, getfirst.first, ConstantInt::get(getfirst.first->getType(), 0), "special", block);
             result->addIncoming(getfirst.first, block);
             BranchInst::Create(exit, next, special, block);
@@ -245,16 +244,16 @@ public:
 
             new StoreInst(GetConstant(ui64(EState::Next), context), statePtr, block);
 
-            std::vector<Value*> items(ItemArgs.size(), nullptr);
+            std::vector<Value*> items(ItemArgs_.size(), nullptr);
             for (ui32 i = 0U; i < items.size(); ++i) {
-                EnsureDynamicCast<ICodegeneratorExternalNode*>(ItemArgs[i])->CreateSetValue(ctx, block, items[i] = getfirst.second[i](ctx, block));
+                EnsureDynamicCast<ICodegeneratorExternalNode*>(ItemArgs_[i])->CreateSetValue(ctx, block, items[i] = getfirst.second[i](ctx, block));
             }
 
-            for (ui32 i = 0U; i < Keys.size(); ++i) {
-                if (KeyArgs[i]->GetDependentsCount() > 0U) {
-                    const auto map = KeysOnItems[i];
-                    const auto key = map ? items[*map] : GetNodeValue(Keys[i], ctx, block);
-                    EnsureDynamicCast<ICodegeneratorExternalNode*>(KeyArgs[i])->CreateSetValue(ctx, block, key);
+            for (ui32 i = 0U; i < Keys_.size(); ++i) {
+                if (KeyArgs_[i]->GetDependentsCount() > 0U) {
+                    const auto map = KeysOnItems_[i];
+                    const auto key = map ? items[*map] : GetNodeValue(Keys_[i], ctx, block);
+                    EnsureDynamicCast<ICodegeneratorExternalNode*>(KeyArgs_[i])->CreateSetValue(ctx, block, key);
                 }
             }
 
@@ -268,7 +267,7 @@ public:
 
         block = loop;
 
-        auto getres = GetNodeValues(Output, ctx, block);
+        auto getres = GetNodeValues(Output_, ctx, block);
         const auto state = new LoadInst(valueType, statePtr, "state", block);
         const auto finish = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SLT, getres.first, ConstantInt::get(getres.first->getType(), 0), "finish", block);
         result->addIncoming(getres.first, block);
@@ -276,7 +275,7 @@ public:
 
         block = part;
 
-        EnsureDynamicCast<IWideFlowProxyCodegeneratorNode*>(Input)->CreateInvalidate(ctx, block);
+        EnsureDynamicCast<IWideFlowProxyCodegeneratorNode*>(Input_)->CreateInvalidate(ctx, block);
 
         result->addIncoming(ConstantInt::get(resultType, i32(EFetchResult::Finish)), block);
 
@@ -287,7 +286,7 @@ public:
 
         block = pass;
 
-        const auto getnext = GetNodeValues(Flow, ctx, block);
+        const auto getnext = GetNodeValues(Flow_, ctx, block);
 
         result->addIncoming(getnext.first, block);
 
@@ -297,12 +296,12 @@ public:
 
         block = good;
 
-        std::vector<Value*> items(ItemArgs.size(), nullptr);
+        std::vector<Value*> items(ItemArgs_.size(), nullptr);
         for (ui32 i = 0U; i < items.size(); ++i) {
-            EnsureDynamicCast<ICodegeneratorExternalNode*>(ItemArgs[i])->CreateSetValue(ctx, block, items[i] = getnext.second[i](ctx, block));
+            EnsureDynamicCast<ICodegeneratorExternalNode*>(ItemArgs_[i])->CreateSetValue(ctx, block, items[i] = getnext.second[i](ctx, block));
         }
 
-        const auto chop = SwitchItem ? items[*SwitchItem] : GetNodeValue(Chop, ctx, block);
+        const auto chop = SwitchItem_ ? items[*SwitchItem_] : GetNodeValue(Chop_, ctx, block);
         const auto cast = CastInst::Create(Instruction::Trunc, chop, Type::getInt1Ty(context), "bool", block);
 
         BranchInst::Create(step, pass, cast, block);
@@ -311,10 +310,10 @@ public:
 
         new StoreInst(GetConstant(ui64(EState::Next), context), statePtr, block);
 
-        for (ui32 i = 0U; i < Keys.size(); ++i) {
-            if (KeyArgs[i]->GetDependentsCount() > 0U) {
-                const auto key = GetNodeValue(Keys[i], ctx, block);
-                EnsureDynamicCast<ICodegeneratorExternalNode*>(KeyArgs[i])->CreateSetValue(ctx, block, key);
+        for (ui32 i = 0U; i < Keys_.size(); ++i) {
+            if (KeyArgs_[i]->GetDependentsCount() > 0U) {
+                const auto key = GetNodeValue(Keys_[i], ctx, block);
+                EnsureDynamicCast<ICodegeneratorExternalNode*>(KeyArgs_[i])->CreateSetValue(ctx, block, key);
             }
         }
 
@@ -329,33 +328,34 @@ public:
         return {result, std::move(getres.second)};
     }
 #endif
-private:
     void RegisterDependencies() const final {
-        if (const auto flow = FlowDependsOn(Flow)) {
-            std::for_each(ItemArgs.cbegin(), ItemArgs.cend(), std::bind(&TWideChopperWrapper::Own, flow, std::placeholders::_1));
-            std::for_each(Keys.cbegin(), Keys.cend(), std::bind(&TWideChopperWrapper::DependsOn, flow, std::placeholders::_1));
-            std::for_each(KeyArgs.cbegin(), KeyArgs.cend(), std::bind(&TWideChopperWrapper::Own, flow, std::placeholders::_1));
-            OwnProxy(flow, Input);
-            DependsOn(flow, Output);
+        if (const auto flow = FlowDependsOn(Flow_)) {
+            std::for_each(ItemArgs_.cbegin(), ItemArgs_.cend(), std::bind(&TWideChopperWrapper::Own, flow, std::placeholders::_1));
+            std::for_each(Keys_.cbegin(), Keys_.cend(), std::bind(&TWideChopperWrapper::DependsOn, flow, std::placeholders::_1));
+            std::for_each(KeyArgs_.cbegin(), KeyArgs_.cend(), std::bind(&TWideChopperWrapper::Own, flow, std::placeholders::_1));
+            OwnProxy(flow, Input_);
+            DependsOn(flow, Output_);
         }
     }
 
-    IComputationWideFlowNode* const Flow;
+    // NOLINTNEXTLINE(readability-redundant-access-specifiers)
+private:
+    IComputationWideFlowNode* const Flow_;
 
-    const TComputationExternalNodePtrVector ItemArgs;
-    const TComputationNodePtrVector Keys;
-    const TComputationExternalNodePtrVector KeyArgs;
+    const TComputationExternalNodePtrVector ItemArgs_;
+    const TComputationNodePtrVector Keys_;
+    const TComputationExternalNodePtrVector KeyArgs_;
 
-    IComputationNode* const Chop;
+    IComputationNode* const Chop_;
 
-    IComputationWideFlowProxyNode* const Input;
-    IComputationWideFlowNode* const Output;
+    IComputationWideFlowProxyNode* const Input_;
+    IComputationWideFlowNode* const Output_;
 
-    const TPasstroughtMap ItemsOnKeys, KeysOnItems;
+    const TPasstroughtMap ItemsOnKeys_, KeysOnItems_;
 
-    const std::optional<size_t> SwitchItem;
+    const std::optional<size_t> SwitchItem_;
 
-    const ui32 WideFieldsIndex;
+    const ui32 WideFieldsIndex_;
 };
 
 } // namespace
@@ -376,10 +376,11 @@ IComputationNode* WrapWideChopper(TCallable& callable, const TComputationNodeFac
     index += keysSize;
 
     const auto switchResult = LocateNode(ctx.NodeLocator, callable, ++index);
-    const auto input = LocateNode(ctx.NodeLocator, callable, ++index, true);
-    const auto output = LocateNode(ctx.NodeLocator, callable, ++index, true);
+    const auto input = LocateNode(ctx.NodeLocator, callable, ++index, /*pop=*/true);
+    const auto output = LocateNode(ctx.NodeLocator, callable, ++index, /*pop=*/true);
 
-    TComputationExternalNodePtrVector itemArgs, keyArgs;
+    TComputationExternalNodePtrVector itemArgs;
+    TComputationExternalNodePtrVector keyArgs;
     itemArgs.reserve(width);
     index = 0U;
     std::generate_n(std::back_inserter(itemArgs), width, [&]() { return LocateExternalNode(ctx.NodeLocator, callable, ++index); });
@@ -397,5 +398,4 @@ IComputationNode* WrapWideChopper(TCallable& callable, const TComputationNodeFac
     THROW yexception() << "Expected wide flow.";
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

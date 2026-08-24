@@ -443,6 +443,20 @@
             "uri": "file://test.test_expr-between-default.txt-Results_/extracted"
         }
     ],
+    "test.test[expr-decimal_arithmetic_common_type--Debug]": [
+        {
+            "checksum": "8af3ab61cf828f88c29c972aa4e6a28e",
+            "size": 1265,
+            "uri": "https://{canondata_backend}/1900335/d4bc60156cb053fed60a55548cae4cc59c4ad67a/resource.tar.gz#test.test_expr-decimal_arithmetic_common_type--Debug_/opt.yql"
+        }
+    ],
+    "test.test[expr-decimal_arithmetic_common_type--Results]": [
+        {
+            "checksum": "59d8dd012fb40c90132baee8ea2e1c8c",
+            "size": 4957,
+            "uri": "https://{canondata_backend}/1900335/d4bc60156cb053fed60a55548cae4cc59c4ad67a/resource.tar.gz#test.test_expr-decimal_arithmetic_common_type--Results_/results.txt"
+        }
+    ],
     "test.test[expr-decimal_bytes-default.txt-Debug]": [
         {
             "checksum": "a31344a1c607b7b3ab19ce3258f1251b",
@@ -682,6 +696,20 @@
             "checksum": "907820c462f4b0e69374b64ec0bed3f2",
             "size": 695,
             "uri": "https://{canondata_backend}/1847551/58f37c8e1b8c74f66657e94c231b8acc11b82bf5/resource.tar.gz#test.test_lambda-lambda_brief-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[linear-fold_mut_dict_insert-default.txt-Debug]": [
+        {
+            "checksum": "dd584f3098cde7dea11fcae6c5574316",
+            "size": 694,
+            "uri": "https://{canondata_backend}/1871002/8a40cd200a505bba5aa61beb5af3fe0a738e1e71/resource.tar.gz#test.test_linear-fold_mut_dict_insert-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[linear-fold_mut_dict_insert-default.txt-Results]": [
+        {
+            "checksum": "3833198995ea8a9812574fb22bc1c26c",
+            "size": 982,
+            "uri": "https://{canondata_backend}/1871002/8a40cd200a505bba5aa61beb5af3fe0a738e1e71/resource.tar.gz#test.test_linear-fold_mut_dict_insert-default.txt-Results_/results.txt"
         }
     ],
     "test.test[linear-if_linear_twice_in_both_branches-default.txt-Debug]": [

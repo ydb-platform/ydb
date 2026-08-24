@@ -2,19 +2,24 @@ import asyncio
 import logging
 import threading
 import zlib
-from collections.abc import Iterator
+from collections.abc import Callable, Iterable, Iterator
 
 import lz4.frame
-import zstandard
 
 from clickhouse_connect.driver.asyncqueue import EOF_SENTINEL, AsyncSyncQueue
-from clickhouse_connect.driver.compression import available_compression
+from clickhouse_connect.driver.compression import _zstd_decompressor, available_compression
 from clickhouse_connect.driver.exceptions import OperationalError
 from clickhouse_connect.driver.types import Closable
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["StreamingResponseSource", "StreamingFileAdapter", "StreamingInsertSource"]
+__all__ = [
+    "StreamingResponseSource",
+    "StreamingFileAdapter",
+    "StreamingInsertSource",
+    "QueuedStreamSource",
+    "start_streaming_response",
+]
 
 if "br" in available_compression:
     import brotli
@@ -161,7 +166,7 @@ class StreamingResponseSource(Closable):
             raise ImportError("brotli compression requires 'brotli' package. Install with: pip install brotli")
 
         if encoding == "zstd":
-            return zstandard.ZstdDecompressor().decompressobj()
+            return _zstd_decompressor()
 
         if encoding == "lz4":
             return lz4.frame.LZ4FrameDecompressor()
@@ -198,6 +203,72 @@ class StreamingResponseSource(Closable):
             if not self._producer_completed:
                 self.response.close()
         self._release_lease()
+
+
+async def start_streaming_response(response, encoding: str | None = None, exception_tag: str | None = None) -> StreamingResponseSource:
+    """Create a StreamingResponseSource and start its producer on the running loop.
+
+    This is the async byte bridge: an async producer reads response chunks onto
+    a bounded queue that a sync consumer (usually parsing in an executor) drains.
+    """
+    source = StreamingResponseSource(response, encoding=encoding, exception_tag=exception_tag)
+    await source.start_producer(asyncio.get_running_loop())
+    return source
+
+
+class QueuedStreamSource(Closable):
+    """A streaming source paired with the bounded queue that feeds parsed items
+    from a sync producer (running in an executor) to an async consumer."""
+
+    def __init__(self, source: StreamingResponseSource, maxsize: int = 10):
+        self.source = source
+        self.queue: AsyncSyncQueue = AsyncSyncQueue(maxsize=maxsize)
+
+    def pump(self, produce: Callable[[], Iterable]) -> None:
+        """Run produce() in an executor, feeding its items into the queue.
+        Must be called from the event loop thread. A RuntimeError from a queue
+        put means the queue was shut down and ends the producer quietly; any
+        error from produce() itself is queued for the consumer to raise."""
+        queue = self.queue
+
+        def producer():
+            try:
+                for item in produce():
+                    try:
+                        queue.sync_q.put(item)
+                    except RuntimeError:
+                        return
+                try:
+                    queue.sync_q.put(EOF_SENTINEL)
+                except RuntimeError:
+                    return
+            except Exception as e:
+                try:
+                    queue.sync_q.put(e)
+                except Exception:
+                    pass
+            finally:
+                queue.shutdown()
+
+        asyncio.get_running_loop().run_in_executor(None, producer)
+
+    async def items(self):
+        """Async generator yielding queued items without blocking the event loop."""
+        while True:
+            item = await self.queue.async_q.get()
+            if item is EOF_SENTINEL:
+                break
+            if isinstance(item, Exception):
+                raise item
+            yield item
+
+    async def aclose(self):
+        self.queue.shutdown()
+        await self.source.aclose()
+
+    def close(self):
+        self.queue.shutdown()
+        self.source.close()
 
 
 class StreamingFileAdapter:

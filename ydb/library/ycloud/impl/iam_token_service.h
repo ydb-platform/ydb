@@ -6,13 +6,14 @@ namespace NCloud {
 
 using namespace NKikimr;
 
-struct TIamTokenServiceSettings : NGrpcActorClient::TGrpcClientSettings {};
+struct TIamTokenServiceSettings : NGrpcActorClient::TGrpcClientSettings {
+    TIamTokenServiceSettings(TString endpoint, TStringBuf userAgentHint);
+};
 
 IActor* CreateIamTokenService(const TIamTokenServiceSettings& settings);
 
-inline IActor* CreateIamTokenService(const TString& endpoint) {
-    TIamTokenServiceSettings settings;
-    settings.Endpoint = endpoint;
+inline IActor* CreateIamTokenService(TString endpoint, TStringBuf userAgentHint) {
+    TIamTokenServiceSettings settings(std::move(endpoint), userAgentHint);
     return CreateIamTokenService(settings);
 }
 

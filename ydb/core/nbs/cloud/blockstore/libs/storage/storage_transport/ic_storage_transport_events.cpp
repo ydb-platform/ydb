@@ -60,4 +60,9 @@ TEvTransportPrivate::TListPBufferEntries::~TListPBufferEntries()
     Y_ABORT_UNLESS(Promise.IsReady());
 }
 
+TEvTransportPrivate::TDeleteTabletChunks::~TDeleteTabletChunks()
+{
+    Y_ABORT_UNLESS(Promise.IsReady());
+}
+
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NTransport

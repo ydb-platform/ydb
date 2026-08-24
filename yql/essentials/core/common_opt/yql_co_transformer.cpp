@@ -2,8 +2,8 @@
 #include "yql_co.h"
 #include "yql_co_blocks.h"
 
-#include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_join.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_opt_window.h>
@@ -42,7 +42,7 @@ private:
 
     bool ScanErrors(const TExprNode& node, TExprContext& ctx);
 
-private:
+
     std::array<TProcessedNodesSet, TCoCallableRules::SIMPLE_STEPS> SimpleProcessedNodes_;
     std::array<TProcessedNodesSet, TCoCallableRules::FLOW_STEPS> FlowProcessedNodes_;
     TProcessedNodesSet FinalProcessedNodes_;
@@ -95,7 +95,7 @@ IGraphTransformer::TStatus TCommonOptTransformer::DoTransform(TExprNode::TPtr in
         return status;
     }
 
-    if (TypeCtx_->LangVer >= NFeature::LinearTypes.MinLangVer) {
+    if (IsAvailable(NFeature::LinearTypes, *TypeCtx_)) {
         status = OptimizeBlocks(input = std::move(output), output, ctx, *TypeCtx_);
         if (status.Level != IGraphTransformer::TStatus::Ok) {
             return status;

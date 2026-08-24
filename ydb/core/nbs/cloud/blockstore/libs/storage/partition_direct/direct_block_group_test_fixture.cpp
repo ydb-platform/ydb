@@ -118,6 +118,29 @@ ui64 TDBGFixture::GetDDiskSessionSeqNo(
         .GetValue(waitTimeout);
 }
 
+std::optional<NKikimr::NDDisk::TConnectionToken>
+TDBGFixture::GetConnectionToken(
+    const TExecutorPtr& executor,
+    const std::shared_ptr<TDirectBlockGroup>& dbg,
+    NTransport::THostConnection::EConnectionType connectionType,
+    size_t index,
+    TDuration waitTimeout)
+{
+    return RunOnExecutor(
+               executor,
+               [dbg, connectionType, index]
+               {
+                   const auto& connections =
+                       connectionType == NTransport::THostConnection::
+                                             EConnectionType::DDisk
+                           ? dbg->DDiskConnections
+                           : dbg->PBufferConnections;
+                   return connections[index]
+                       .HostConnection.Credentials.ConnectionToken;
+               })
+        .GetValue(waitTimeout);
+}
+
 TExecutorPtr TDBGFixture::MakeExecutor()
 {
     auto executor = TExecutor::Create("DBG_TEST");
@@ -131,17 +154,19 @@ TDBGFixture::MakeDirectBlockGroup(
     const TExecutorPtr& executor,
     std::unique_ptr<NStorage::NTransport::IStorageTransport> transport,
     const TVector<NKikimr::NBsController::TDDiskId>& ddisksIds,
-    const TVector<NKikimr::NBsController::TDDiskId>& pbufferIds) const
+    const TVector<NKikimr::NBsController::TDDiskId>& pbufferIds,
+    size_t directBlockGroupIndex) const
 {
     return std::make_shared<TDirectBlockGroup>(
         Runtime->GetActorSystem(0),
         std::make_shared<TStorageConfig>(NProto::TStorageServiceConfig()),
         executor,
         DiskDescription,
-        0,
+        directBlockGroupIndex,
         ddisksIds,
         pbufferIds,
-        std::move(transport));
+        std::move(transport),
+        nullptr);
 }
 
 bool TDBGFixture::DoExecutorAndRuntimeWorkWithPredicate(
@@ -217,6 +242,15 @@ void TDBGFixture::WaitReady(
         [&]() { return future.HasValue() || future.HasException(); },
         timeout);
     UNIT_ASSERT(future.HasValue());
+}
+
+size_t TDBGFixture::ReplyUpdateRequests()
+{
+    auto requests = std::move(Service->UpdateConfigRequests);
+    for (auto& r: requests) {
+        r.Promise.SetValue();
+    }
+    return requests.size();
 }
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

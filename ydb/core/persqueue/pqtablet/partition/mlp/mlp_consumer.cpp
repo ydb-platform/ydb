@@ -1,6 +1,7 @@
 #include "mlp_consumer.h"
 #include "mlp_storage.h"
 
+#include <ydb/core/base/path.h>
 #include <ydb/core/persqueue/common/key.h>
 #include <ydb/core/persqueue/public/config.h>
 #include <ydb/core/persqueue/public/constants.h>
@@ -589,6 +590,21 @@ void TConsumerActor::Handle(TEvPQ::TEvGetMLPConsumerStateRequest::TPtr& ev) {
     Send(ev->Sender, std::move(response), 0, ev->Cookie);
 }
 
+void TConsumerActor::RetryChildPartitionSync(ui32 partitionId) {
+    if (ChildPartitionsOrderManager.SetSendFullStateByPartitionId(partitionId, TChildPartitionsOrderManager::ESendReasons::DeliveryProblem)) {
+        Schedule(ChildPartitionsOrderManager.UpdateChildPartitionsBackoff.Next(), new TEvents::TEvWakeup(EWakeUpTag::UpdateChildPartitions));
+    }
+}
+
+void TConsumerActor::Handle(TEvPQ::TEvMLPErrorResponse::TPtr& ev) {
+    YDB_LOG_DEBUG("Handle TEvPQ::TEvMLPErrorResponse",
+        {"logPrefix", NPQ_LOG_PREFIX},
+        {"partitionId", ev->Get()->GetPartitionId()},
+        {"status", ev->Get()->GetStatus()},
+        {"error", ev->Get()->Record.GetErrorMessage()});
+    RetryChildPartitionSync(ev->Get()->GetPartitionId());
+}
+
 void TConsumerActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
     if (ev->Cookie == static_cast<int>(ESendCookie::SendToPQTablet)) {
         FirstPipeCacheRequest = true;
@@ -617,6 +633,8 @@ STFUNC(TConsumerActor::StateInit) {
         hFunc(TEvKeyValue::TEvResponse, HandleOnInit);
         hFunc(TEvPersQueue::TEvResponse, HandleOnInit);
         hFunc(TEvPQ::TEvError, Handle);
+        hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
+        hFunc(TEvPQ::TEvMLPErrorResponse, Handle);
         hFunc(TEvents::TEvWakeup, Handle);
         sFunc(TEvents::TEvPoison, PassAway);
         default:
@@ -646,6 +664,7 @@ STFUNC(TConsumerActor::StateWork) {
         hFunc(TEvPersQueue::TEvResponse, Handle);
         hFunc(TEvPQ::TEvError, Handle);
         hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
+        hFunc(TEvPQ::TEvMLPErrorResponse, Handle);
         hFunc(TEvPQ::TEvMLPDLQMoverResponse, Handle);
         hFunc(TEvents::TEvWakeup, HandleOnWork);
         sFunc(TEvents::TEvPoison, PassAway);
@@ -676,6 +695,7 @@ STFUNC(TConsumerActor::StateWrite) {
         hFunc(TEvPersQueue::TEvResponse, Handle);
         hFunc(TEvPQ::TEvError, Handle);
         hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
+        hFunc(TEvPQ::TEvMLPErrorResponse, Handle);
         hFunc(TEvPQ::TEvMLPDLQMoverResponse, Handle);
         hFunc(TEvents::TEvWakeup, Handle);
         sFunc(TEvents::TEvPoison, PassAway);
@@ -1140,12 +1160,11 @@ void TConsumerActor::MoveToDLQIfPossible() {
     }
 
     auto destinationTopic = [&]() -> TString {
-        auto databasePrefix = TStringBuilder() << Database << "/";
-        if (Config.GetDeadLetterQueue().StartsWith("sqs://") || Config.GetDeadLetterQueue().StartsWith(databasePrefix)) {
-            return Config.GetDeadLetterQueue();
-        } else {
-            return databasePrefix << Config.GetDeadLetterQueue();
+        const auto& dlq = Config.GetDeadLetterQueue();
+        if (dlq.empty() || dlq.StartsWith("sqs://")) {
+            return dlq;
         }
+        return NormalizePath(CanonizePath(Database), CanonizePath(dlq));
     };
 
     auto messages = Storage->GetDLQMessages();

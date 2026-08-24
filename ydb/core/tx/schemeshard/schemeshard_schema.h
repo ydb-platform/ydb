@@ -841,6 +841,7 @@ struct Schema : NIceDb::Schema {
         struct ServerlessComputeResourcesMode : Column<31, NScheme::NTypeIds::Uint32> { using Type = EServerlessComputeResourcesMode; };
         struct ColumnTableColumnsLimit : Column<32, NScheme::NTypeIds::Uint64> {};
         struct SmallBlobsQuotaExceeded : Column<33, NScheme::NTypeIds::Bool> {};
+        struct TablesMetricsLevel : Column<34, NScheme::NTypeIds::Uint32> { using Type = ETablesMetricsLevel; };
 
         using TKey = TableKey<PathId>;
         using TColumns = TableColumns<
@@ -876,7 +877,8 @@ struct Schema : NIceDb::Schema {
             AuditSettings,
             ServerlessComputeResourcesMode,
             ColumnTableColumnsLimit,
-            SmallBlobsQuotaExceeded
+            SmallBlobsQuotaExceeded,
+            TablesMetricsLevel
         >;
     };
 
@@ -919,6 +921,7 @@ struct Schema : NIceDb::Schema {
         struct ExportsLimit : Column<27, NScheme::NTypeIds::Uint64> {};
         struct ImportsLimit : Column<28, NScheme::NTypeIds::Uint64> {};
         struct ColumnTableColumnsLimit : Column<29, NScheme::NTypeIds::Uint64> {};
+        struct TablesMetricsLevel : Column<30, NScheme::NTypeIds::Uint32> { using Type = ETablesMetricsLevel; };
 
         using TKey = TableKey<PathId>;
         using TColumns = TableColumns<
@@ -950,7 +953,8 @@ struct Schema : NIceDb::Schema {
             TableCdcStreamsLimit,
             ExportsLimit,
             ImportsLimit,
-            ColumnTableColumnsLimit
+            ColumnTableColumnsLimit,
+            TablesMetricsLevel
         >;
     };
 
@@ -1494,6 +1498,7 @@ struct Schema : NIceDb::Schema {
         struct RowIdColumnBuildId : Column<56, NScheme::NTypeIds::Uint64> { using Type = TIndexBuildId; };
         struct RowIdUniqueBuildId : Column<57, NScheme::NTypeIds::Uint64> { using Type = TIndexBuildId; };
         struct ParentBuildId : Column<58, NScheme::NTypeIds::Uint64> { using Type = TIndexBuildId; };
+        struct IsRebuild : Column<59, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
@@ -1554,7 +1559,8 @@ struct Schema : NIceDb::Schema {
             AutoUniqueIndexName,
             RowIdColumnBuildId,
             RowIdUniqueBuildId,
-            ParentBuildId
+            ParentBuildId,
+            IsRebuild
         >;
     };
 

@@ -7,7 +7,9 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/change_exchange/change_sender.h>
 #include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/scheme_board/events.h>
@@ -34,6 +36,68 @@ using namespace NDataShard;
 using namespace NDataShard::NKqpHelpers;
 using namespace Tests;
 using namespace NSchemeShardUT_Private;
+
+NKikimrTabletBase::TTabletCountersBase GetAppCounters(TTestActorRuntime& runtime, ui64 tabletId) {
+    const auto edge = runtime.AllocateEdgeActor();
+    runtime.SendToPipe(tabletId, edge, new TEvTablet::TEvGetCounters(), 0, GetPipeConfigWithRetries());
+    auto ev = runtime.GrabEdgeEventRethrow<TEvTablet::TEvGetCountersResponse>(edge);
+    UNIT_ASSERT(ev);
+    return ev->Get()->Record.GetTabletCounters().GetAppCounters();
+}
+
+ui64 GetSimpleCounter(TTestActorRuntime& runtime, ui64 tabletId, const TString& name) {
+    const auto counters = GetAppCounters(runtime, tabletId);
+    for (const auto& counter : counters.GetSimpleCounters()) {
+        if (counter.GetName() == name) {
+            return counter.GetValue();
+        }
+    }
+    UNIT_ASSERT_C(false, name << " counter not found");
+    return 0;
+}
+
+ui64 GetCumulativeCounter(TTestActorRuntime& runtime, ui64 tabletId, const TString& name) {
+    const auto counters = GetAppCounters(runtime, tabletId);
+    for (const auto& counter : counters.GetCumulativeCounters()) {
+        if (counter.GetName() == name) {
+            return counter.GetValue();
+        }
+    }
+    UNIT_ASSERT_C(false, name << " counter not found");
+    return 0;
+}
+
+// which one is bumped depends on whether the op came as TEvWrite or TEvProposeTransaction
+ui64 GetRejectedByOverloadCount(TTestActorRuntime& runtime, ui64 tabletId) {
+    return GetCumulativeCounter(runtime, tabletId, "DataShard/WriteOverloaded")
+        + GetCumulativeCounter(runtime, tabletId, "DataShard/PrepareOverloaded");
+}
+
+ui64 AsyncAlterFreezeState(TServer::TPtr server, const TString& workingDir, const TString& name,
+        NKikimrSchemeOp::EFreezeState state)
+{
+    auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+    request->Record.SetExecTimeoutPeriod(Max<ui64>());
+
+    auto& tx = *request->Record.MutableTransaction()->MutableModifyScheme();
+    tx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
+    tx.SetWorkingDir(workingDir);
+
+    auto& desc = *tx.MutableAlterTable();
+    desc.SetName(name);
+    desc.MutablePartitionConfig()->SetFreezeState(state);
+
+    auto& runtime = *server->GetRuntime();
+    const auto sender = runtime.AllocateEdgeActor();
+    runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()), 0, false);
+
+    auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender);
+    UNIT_ASSERT_VALUES_EQUAL_C(ev->Get()->Record.GetStatus(),
+        TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress,
+        "Issues: " << ev->Get()->Record.GetIssues());
+
+    return ev->Get()->Record.GetTxId();
+}
 
 Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
     void SenderShouldBeActivated(const TString& path, const TShardedTableOptions& opts) {
@@ -668,8 +732,23 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
 
         CreateShardedTable(server, sender, "/Root", "Table", TableWithIndex(SimpleAsyncIndex()));
 
+        const auto tabletIds = GetTableShards(server, sender, "/Root/Table");
+        UNIT_ASSERT_VALUES_EQUAL(tabletIds.size(), 1);
+        const ui64 tabletId = tabletIds.at(0);
+
         ExecSQL(server, sender, "UPSERT INTO `/Root/Table` (pkey, ikey) VALUES (1, 10);");
+
+        // the record is enqueued but never delivered, so the queue stays full
+        UNIT_ASSERT_GT(GetSimpleCounter(runtime, tabletId, "DataShard/ChangeQueueSize"), 0);
+        UNIT_ASSERT_GT(GetSimpleCounter(runtime, tabletId, "DataShard/ChangeQueueBytes"), 0);
+        UNIT_ASSERT_VALUES_EQUAL(GetCumulativeCounter(runtime, tabletId, "DataShard/ChangeQueueOverflowRejects"), 0);
+
+        const ui64 rejectedBefore = GetRejectedByOverloadCount(runtime, tabletId);
+
         ExecSQL(server, sender, "UPSERT INTO `/Root/Table` (pkey, ikey) VALUES (2, 20);", true, Ydb::StatusIds::TIMEOUT);
+
+        UNIT_ASSERT_GT(GetCumulativeCounter(runtime, tabletId, "DataShard/ChangeQueueOverflowRejects"), 0);
+        UNIT_ASSERT_GT(GetRejectedByOverloadCount(runtime, tabletId), rejectedBefore);
 
         sendEnqueued();
         WaitForContent(server, "/Root/Table/by_ikey/indexImplTable",
@@ -690,6 +769,58 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
         ShouldRejectChangesOnQueueOverflow([](TServerSettings& opts) {
             opts.SetChangesQueueBytesLimit(1);
         });
+    }
+
+    Y_UNIT_TEST(ShouldNotEnqueueChangesOnFrozenShard) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings
+            .SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableDataColumnForIndexTable(true);
+
+        TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        const TActorId sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::CHANGE_EXCHANGE, NLog::PRI_DEBUG);
+        InitRoot(server, sender);
+
+        CreateShardedTable(server, sender, "/Root", "Table", TableWithIndex(SimpleAsyncIndex()));
+
+        const auto tabletIds = GetTableShards(server, sender, "/Root/Table");
+        UNIT_ASSERT_VALUES_EQUAL(tabletIds.size(), 1);
+        const ui64 tabletId = tabletIds.at(0);
+
+        ExecSQL(server, sender, "UPSERT INTO `/Root/Table` (pkey, ikey) VALUES (1, 10);");
+        WaitForContent(server, "/Root/Table/by_ikey/indexImplTable",
+            "ikey = 10, pkey = 1");
+        WaitFor(runtime, [&]{
+            return GetSimpleCounter(runtime, tabletId, "DataShard/ChangeQueueSize") == 0;
+        }, "empty change queue");
+
+        WaitTxNotification(server, sender, AsyncAlterFreezeState(server, "/Root", "Table",
+            NKikimrSchemeOp::EFreezeState::Freeze));
+
+        const ui64 rejectedBefore = GetRejectedByOverloadCount(runtime, tabletId);
+
+        // a frozen shard passes admission checks and is rejected by the pipeline instead
+        ExecSQL(server, sender, "UPSERT INTO `/Root/Table` (pkey, ikey) VALUES (2, 20);",
+            true, Ydb::StatusIds::INTERNAL_ERROR);
+
+        UNIT_ASSERT_GT(GetRejectedByOverloadCount(runtime, tabletId), rejectedBefore);
+        // the rejected write must not leave anything behind in the change queue
+        UNIT_ASSERT_VALUES_EQUAL(GetSimpleCounter(runtime, tabletId, "DataShard/ChangeQueueSize"), 0);
+        UNIT_ASSERT_VALUES_EQUAL(GetSimpleCounter(runtime, tabletId, "DataShard/ChangeQueueBytes"), 0);
+        UNIT_ASSERT_VALUES_EQUAL(GetCumulativeCounter(runtime, tabletId, "DataShard/ChangeQueueOverflowRejects"), 0);
+
+        WaitTxNotification(server, sender, AsyncAlterFreezeState(server, "/Root", "Table",
+            NKikimrSchemeOp::EFreezeState::Unfreeze));
+
+        ExecSQL(server, sender, "UPSERT INTO `/Root/Table` (pkey, ikey) VALUES (2, 20);");
+        WaitForContent(server, "/Root/Table/by_ikey/indexImplTable",
+            "ikey = 10, pkey = 1\nikey = 20, pkey = 2");
     }
 
     Y_UNIT_TEST(ShouldNotReorderChangesOnRace) {
@@ -999,6 +1130,11 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
     TCdcStream WithAwsRegion(const TString& awsRegion, TCdcStream streamDesc) {
         streamDesc.AwsRegion = awsRegion;
+        return streamDesc;
+    }
+
+    TCdcStream WithSchemaChanges(TCdcStream streamDesc) {
+        streamDesc.SchemaChanges = true;
         return streamDesc;
     }
 
@@ -4532,6 +4668,174 @@ Y_UNIT_TEST_SUITE(Cdc) {
                     "Record with ts " << ts << " after resolved " << resolved);
             }
         }
+    }
+
+    Y_UNIT_TEST(SchemaChanges) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable());
+
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            WithSchemaChanges(Updates(NKikimrSchemeOp::ECdcStreamFormatJson))));
+
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES (1, 10);
+        )");
+
+        WaitTxNotification(server, edgeActor, AsyncAlterAddExtraColumn(server, "/Root", "Table"));
+
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key, value, extra) VALUES (2, 20, 200);
+        )");
+
+        auto records = WaitForContent(server, edgeActor, "/Root/Table/Stream", {
+            R"({"update":{"value":10},"key":[1]})",
+            R"({"tableChanges":"***","ts":"***"})",
+            R"({"update":{"extra":200,"value":20},"key":[2]})",
+        });
+
+        const auto& table = records[1]["tableChanges"][0]["table"];
+        UNIT_ASSERT(table.Has("schemaVersion"));
+        const auto& pk = table["primaryKeyColumnNames"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(pk.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(pk[0].GetString(), "key");
+        UNIT_ASSERT_VALUES_EQUAL(table["columns"]["key"].GetString(), "Uint32");
+        UNIT_ASSERT_VALUES_EQUAL(table["columns"]["value"].GetString(), "Uint32");
+        UNIT_ASSERT_VALUES_EQUAL(table["columns"]["extra"].GetString(), "Uint32");
+    }
+
+    Y_UNIT_TEST(SchemaChangesCompositePrimaryKey) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", TShardedTableOptions()
+            .Columns({
+                {"key1", "Uint32", true, false},
+                {"key2", "Uint32", true, false},
+                {"value", "Uint32", false, false},
+            }));
+
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            WithSchemaChanges(Updates(NKikimrSchemeOp::ECdcStreamFormatJson))));
+
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key1, key2, value) VALUES (1, 10, 100);
+        )");
+
+        WaitTxNotification(server, edgeActor, AsyncAlterAddExtraColumn(server, "/Root", "Table"));
+
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key1, key2, value, extra) VALUES (2, 20, 200, 2000);
+        )");
+
+        auto records = WaitForContent(server, edgeActor, "/Root/Table/Stream", {
+            R"({"update":{"value":100},"key":[1,10]})",
+            R"({"tableChanges":"***","ts":"***"})",
+            R"({"update":{"extra":2000,"value":200},"key":[2,20]})",
+        });
+
+        const auto& table = records[1]["tableChanges"][0]["table"];
+        UNIT_ASSERT(table.Has("schemaVersion"));
+        const auto& pk = table["primaryKeyColumnNames"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(pk.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(pk[0].GetString(), "key1");
+        UNIT_ASSERT_VALUES_EQUAL(pk[1].GetString(), "key2");
+        UNIT_ASSERT_VALUES_EQUAL(table["columns"]["key1"].GetString(), "Uint32");
+        UNIT_ASSERT_VALUES_EQUAL(table["columns"]["key2"].GetString(), "Uint32");
+        UNIT_ASSERT_VALUES_EQUAL(table["columns"]["value"].GetString(), "Uint32");
+        UNIT_ASSERT_VALUES_EQUAL(table["columns"]["extra"].GetString(), "Uint32");
+    }
+
+    Y_UNIT_TEST(SchemaChangesMultipleShards) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", TShardedTableOptions().Shards(2));
+
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            WithSchemaChanges(Updates(NKikimrSchemeOp::ECdcStreamFormatJson))));
+
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES (1, 10), (2, 20);
+        )");
+
+        WaitTxNotification(server, edgeActor, AsyncAlterAddExtraColumn(server, "/Root", "Table"));
+
+        const auto& pqDesc = GetTopicDescription(runtime, edgeActor, "/Root/Table/Stream");
+        const size_t partitionCount = pqDesc.GetPartitions().size();
+        UNIT_ASSERT_C(partitionCount >= 1, "CDC stream must have at least one partition");
+
+        TVector<TVector<std::pair<TString, TString>>> records(partitionCount);
+        for (ui32 iteration = 0; ; ++iteration) {
+            UNIT_ASSERT_C(iteration < 60, "Timed out waiting for schema change records in all partitions");
+
+            bool allHaveSchemaChange = true;
+            for (ui32 i = 0; i < records.size(); ++i) {
+                records[i] = GetRecords(runtime, edgeActor, "/Root/Table/Stream", i);
+                const bool hasSchemaChange = AnyOf(records[i], [](const auto& rec) {
+                    return rec.second.Contains("tableChanges");
+                });
+                allHaveSchemaChange = allHaveSchemaChange && hasSchemaChange;
+            }
+            if (allHaveSchemaChange) {
+                break;
+            }
+            SimulateSleep(server, TDuration::Seconds(1));
+        }
+
+        ui32 schemaChangeCount = 0;
+        TString schemaChangeBody;
+        for (const auto& partitionRecords : records) {
+            for (const auto& rec : partitionRecords) {
+                if (rec.second.Contains("tableChanges")) {
+                    ++schemaChangeCount;
+                    if (schemaChangeBody.empty()) {
+                        schemaChangeBody = rec.second;
+                    } else {
+                        AssertJsonsEqual(rec.second, schemaChangeBody);
+                    }
+                }
+            }
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(schemaChangeCount, partitionCount);
+        AssertJsonsEqual(schemaChangeBody, R"({"tableChanges":"***","ts":"***"})");
+
+        NJson::TJsonValue json;
+        UNIT_ASSERT(NJson::ReadJsonTree(schemaChangeBody, &json));
+        const auto& table = json["tableChanges"][0]["table"];
+        UNIT_ASSERT(table.Has("schemaVersion"));
+        const auto& pk = table["primaryKeyColumnNames"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(pk.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(pk[0].GetString(), "key");
+        UNIT_ASSERT_VALUES_EQUAL(table["columns"]["key"].GetString(), "Uint32");
+        UNIT_ASSERT_VALUES_EQUAL(table["columns"]["value"].GetString(), "Uint32");
+        UNIT_ASSERT_VALUES_EQUAL(table["columns"]["extra"].GetString(), "Uint32");
     }
 
 } // Cdc

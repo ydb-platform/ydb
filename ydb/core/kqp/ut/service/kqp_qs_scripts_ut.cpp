@@ -98,40 +98,6 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
         }
     }
 
-    Y_UNIT_TEST(ExecuteScriptWithWorkloadManager) {
-        NKikimrConfig::TAppConfig config;
-        config.MutableFeatureFlags()->SetEnableResourcePools(true);
-
-        auto kikimr = TKikimrRunner(TKikimrSettings(config)
-            .SetEnableResourcePools(true)
-            .SetEnableScriptExecutionOperations(true));
-        auto db = kikimr.GetQueryClient();
-
-        TExecuteScriptSettings settings;
-
-        {  // Existing pool
-            settings.ResourcePool("default");
-
-            auto scripOp = db.ExecuteScript("SELECT 42", settings).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(scripOp.Status().GetStatus(), EStatus::SUCCESS, scripOp.Status().GetIssues().ToString());
-            CheckScriptResults(scripOp, WaitScriptExecutionOperation(scripOp.Id(), kikimr.GetDriver()), db);
-        }
-
-        {  // Not existing pool (check workload manager enabled)
-            settings.ResourcePool("another_pool_id");
-
-            auto scripOp = db.ExecuteScript("SELECT 42", settings).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(scripOp.Status().GetStatus(), EStatus::SUCCESS, scripOp.Status().GetIssues().ToString());
-
-            auto readyOp = WaitScriptExecutionOperation(scripOp.Id(), kikimr.GetDriver());
-            UNIT_ASSERT_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Failed, readyOp.Status().GetIssues().ToOneLineString());
-            UNIT_ASSERT_EQUAL_C(readyOp.Status().GetStatus(), EStatus::NOT_FOUND, readyOp.Status().GetIssues().ToOneLineString());
-            UNIT_ASSERT_STRING_CONTAINS(readyOp.Status().GetIssues().ToString(), "Resource pool another_pool_id not found");
-            UNIT_ASSERT_STRING_CONTAINS(readyOp.Status().GetIssues().ToString(), "Failed to resolve pool id another_pool");
-            UNIT_ASSERT_STRING_CONTAINS(readyOp.Status().GetIssues().ToString(), "Query failed during adding/waiting in workload pool");
-        }
-    }
-
     void ValidatePlan(const std::optional<std::string>& plan) {
         UNIT_ASSERT(plan);
         UNIT_ASSERT(plan != "{}");

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <yql/essentials/sql/v1/ide/completion/core/environment.h>
+#include <yql/essentials/sql/v1/ide/core/environment.h>
 #include <yql/essentials/sql/v1/ide/completion/core/input.h>
 #include <yql/essentials/sql/v1/ide/completion/core/name.h>
 
@@ -12,6 +12,8 @@
 #include <util/generic/hash_set.h>
 
 namespace NSQLComplete {
+
+using NSQLPureAST::TEnvironment;
 
 struct TClusterContext {
     TString Provider;
@@ -53,13 +55,12 @@ struct TGlobalContext {
     TMaybe<TColumnContext> Column;
 };
 
-// TODO(YQL-19747): Make it thread-safe to make ISqlCompletionEngine thread-safe.
 class IGlobalAnalysis {
 public:
     using TPtr = THolder<IGlobalAnalysis>;
 
     virtual ~IGlobalAnalysis() = default;
-    virtual TGlobalContext Analyze(TCompletionInput input, TEnvironment env) = 0;
+    virtual TGlobalContext Analyze(TCompletionInput input, TEnvironment env) const = 0;
 };
 
 IGlobalAnalysis::TPtr MakeGlobalAnalysis();

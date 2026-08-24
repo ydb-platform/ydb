@@ -862,22 +862,49 @@ public:                                                                         
         ///////////////////////////////////////////////////////////////////////////////////
         class TCostTrackerGroup : public TBase {
         public:
-            GROUP_CONSTRUCTOR(TCostTrackerGroup)
+            class TDiskCostGroup : public TBase {
+            public:
+                GROUP_CONSTRUCTOR(TDiskCostGroup)
+                {
+                    COUNTER_INIT_IF_EXTENDED(UserDiskCost, true);
+                    COUNTER_INIT_IF_EXTENDED(CompactionDiskCost, true);
+                    COUNTER_INIT_IF_EXTENDED(ScrubDiskCost, true);
+                    COUNTER_INIT_IF_EXTENDED(DefragDiskCost, true);
+                    COUNTER_INIT_IF_EXTENDED(InternalDiskCost, true);
+                }
+
+                COUNTER_DEF(UserDiskCost);
+                COUNTER_DEF(CompactionDiskCost);
+                COUNTER_DEF(ScrubDiskCost);
+                COUNTER_DEF(DefragDiskCost);
+                COUNTER_DEF(InternalDiskCost);
+            };
+
+            TCostTrackerGroup(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
+                    const TString& name, const TString& value)
+                : TBase(counters, name, value)
+                , ReadDiskCost(GroupCounters, "operation", "read")
+                , WriteDiskCost(GroupCounters, "operation", "write")
             {
-                COUNTER_INIT_IF_EXTENDED(UserDiskCost, true);
-                COUNTER_INIT_IF_EXTENDED(CompactionDiskCost, true);
-                COUNTER_INIT_IF_EXTENDED(ScrubDiskCost, true);
-                COUNTER_INIT_IF_EXTENDED(DefragDiskCost, true);
-                COUNTER_INIT_IF_EXTENDED(InternalDiskCost, true);
+                InitCounters();
+            }
+
+            TCostTrackerGroup(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters)
+                : TBase(counters)
+                , ReadDiskCost(GroupCounters, "operation", "read")
+                , WriteDiskCost(GroupCounters, "operation", "write")
+            {
+                InitCounters();
+            }
+
+            void InitCounters() {
                 COUNTER_INIT_IF_EXTENDED(DiskTimeAvailableCtr, false);
                 COUNTER_INIT_IF_EXTENDED(DiskTimeFairShareNs, false);
             }
 
-            COUNTER_DEF(UserDiskCost);
-            COUNTER_DEF(CompactionDiskCost);
-            COUNTER_DEF(ScrubDiskCost);
-            COUNTER_DEF(DefragDiskCost);
-            COUNTER_DEF(InternalDiskCost);
+            TDiskCostGroup ReadDiskCost;
+            TDiskCostGroup WriteDiskCost;
+
             COUNTER_DEF(DiskTimeAvailableCtr);
             COUNTER_DEF(DiskTimeFairShareNs);
         };
@@ -945,6 +972,7 @@ public:                                                                         
                 COUNTER_INIT(BlobsBalanceLevel, true);
                 COUNTER_INIT(BlobsBalanceFull, true);
                 COUNTER_INIT(BlobsFreeSpace, true);
+                COUNTER_INIT(BlobsEmergency, true);
                 COUNTER_INIT(BlobsSqueeze, true);
 
                 COUNTER_INIT(BlocksPromoteSsts, true);
@@ -963,6 +991,7 @@ public:                                                                         
             COUNTER_DEF(BlobsBalanceLevel);
             COUNTER_DEF(BlobsBalanceFull);
             COUNTER_DEF(BlobsFreeSpace);
+            COUNTER_DEF(BlobsEmergency);
             COUNTER_DEF(BlobsSqueeze);
 
             COUNTER_DEF(BlocksPromoteSsts);

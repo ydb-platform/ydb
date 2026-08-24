@@ -35,6 +35,8 @@ class HealthCheckReporter():
         self.hc_period_seconds = 15
         self.store_results = store_results
         self.last_results = {}
+        # Monotonic start of the last stored tick (not end): a ~50s tick must not look post-fault.
+        self.last_update: float | None = None
         # Interruptible sleep between ticks.
         self._stop_event = threading.Event()
         # Track live subprocesses so stop_healthchecks() can kill them.
@@ -123,6 +125,7 @@ class HealthCheckReporter():
                 results = self.__execute_healthcheck()
                 if self.store_results:
                     self.last_results = results
+                    self.last_update = tick_started_at
                 self.__publish_healthcheck_results(results)
                 self.__log_tick_summary(results, time.monotonic() - tick_started_at)
             except Exception:

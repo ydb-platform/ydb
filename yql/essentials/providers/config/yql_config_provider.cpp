@@ -1164,6 +1164,12 @@ private:
                 return false;
             }
             Types_.LineageSettings.EnableStandaloneLineage = ("EnableStandaloneLineage" == name);
+        } else if (name == "EnableEvaluateExprCache") {
+            if (!args.empty()) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
+                return false;
+            }
+            Types_.EnableEvaluateExprCache = true;
         } else if (name == "LineageOutputLimit") {
             if (args.size() != 1) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 1 argument, but got " << args.size()));
@@ -1498,7 +1504,6 @@ private:
         return parseResult == TWarningRule::EParseResult::PARSE_OK;
     }
 
-private:
     void RecordActivation(TStringBuf activationLabel, TStringBuf feature) {
         Statistics_.Entries.emplace_back(TStringBuilder() << "Activation:" << activationLabel << feature, 0, 0, 0, 0, 1);
     }

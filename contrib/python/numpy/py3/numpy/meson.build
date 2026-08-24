@@ -61,23 +61,34 @@ allow_noblas = get_option('allow-noblas')
 blas_symbol_suffix = get_option('blas-symbol-suffix')
 
 use_ilp64 = get_option('use-ilp64')
-if not use_ilp64
-  # TODO: clean this up
-  # For now, keep supporting the `NPY_USE_BLAS_ILP64` environment variable too
-  # `false` is the default for the CLI flag, so check if env var was set
-  use_ilp64 = run_command(py,
-    [
-      '-c',
-      'import os; print(1) if os.environ.get("NPY_USE_BLAS_ILP64", "0") != "0" else print(0)'
-    ],
-    check: true
-  ).stdout().strip() == '1'
-endif
-
 if use_ilp64
   blas_interface = ['interface: ilp64']
 else
   blas_interface = ['interface: lp64']
+endif
+
+
+blas_order = get_option('blas-order')
+if blas_order == ['auto']
+  blas_order = []
+  if host_machine.system() == 'darwin'
+    blas_order += 'accelerate'
+  endif
+  if host_machine.cpu_family() == 'x86_64'
+    blas_order += 'mkl'
+  endif
+  blas_order += ['openblas', 'flexiblas', 'blis', 'blas']
+endif
+lapack_order = get_option('lapack-order')
+if lapack_order == ['auto']
+  lapack_order = []
+  if host_machine.system() == 'darwin'
+    lapack_order += 'accelerate'
+  endif
+  if host_machine.cpu_family() == 'x86_64'
+    lapack_order += 'mkl'
+  endif
+  lapack_order += ['openblas', 'flexiblas', 'lapack']
 endif
 
 # MKL-specific options
@@ -104,7 +115,7 @@ if blas_name == 'openblas' or blas_name == 'auto'
   endif
 endif
 if blas_name == 'auto'
-  foreach _name : get_option('blas-order')
+  foreach _name : blas_order
     if _name == 'mkl'
       blas = dependency('mkl',
         modules: ['cblas'] + blas_interface + mkl_opts,
@@ -183,7 +194,7 @@ if 'mkl' in blas.name() or blas.name() == 'accelerate' or blas_name == 'scipy-op
   lapack = blas
 else
   if lapack_name == 'auto'
-    foreach _name : get_option('lapack-order')
+    foreach _name : lapack_order
       lapack = dependency(_name, modules: ['lapack'] + blas_interface, required: false)
       if lapack.found()
         break
@@ -203,6 +214,52 @@ else
   lapack_dep = declare_dependency(dependencies: [lapack, blas_dep])
 endif
 
+# Determine whether it is necessary to link libatomic with gcc. This
+# could be the case on 32-bit platforms when atomic operations are used
+# on 64-bit types or on RISC-V using 8-bit atomics, so we explicitly
+# check for both 64 bit and 8 bit operations.  The check is adapted from
+# SciPy, who copied it from Mesa.
+null_dep = dependency('', required : false)
+atomic_dep = null_dep
+code_non_lockfree = '''
+  #include <stdint.h>
+  #include <stddef.h>
+  int main() {
+   struct {
+     void *p;
+     uint8_t u8v;
+   } x;
+   x.p = NULL;
+   x.u8v = 0;
+   uint8_t res = __atomic_load_n(&x.u8v, __ATOMIC_SEQ_CST);
+   __atomic_store_n(&x.u8v, 1, __ATOMIC_SEQ_CST);
+   void *p = __atomic_load_n((void **)x.p, __ATOMIC_SEQ_CST);
+   __atomic_store_n((void **)x.p, NULL, __ATOMIC_SEQ_CST);
+   return 0;
+   }
+'''
+if cc.get_id() != 'msvc'
+  if not cc.links(
+      code_non_lockfree,
+      name : 'Check atomic builtins without -latomic'
+    )
+    atomic_dep = cc.find_library('atomic', required: false)
+    if atomic_dep.found()
+      # We're not sure that with `-latomic` things will work for all compilers,
+      # so verify and only keep libatomic as a dependency if this works. It is
+      # possible the build will fail later otherwise - unclear under what
+      # circumstances (compilers, runtimes, etc.) exactly and this may need to
+      # be extended when support is added for new CPUs
+      if not cc.links(
+          code_non_lockfree,
+          dependencies: atomic_dep,
+          name : 'Check atomic builtins with -latomic'
+        )
+        atomic_dep = null_dep
+      endif
+    endif
+  endif
+endif
 
 # Copy the main __init__.py|pxd files to the build dir (needed for Cython)
 __init__py = fs.copyfile('__init__.py')
@@ -215,10 +272,19 @@ python_sources = [
   '__init__.pxd',
   '__init__.py',
   '__init__.pyi',
+  '__config__.pyi',
+  '_array_api_info.py',
+  '_array_api_info.pyi',
+  '_configtool.py',
+  '_configtool.pyi',
   '_distributor_init.py',
+  '_distributor_init.pyi',
   '_globals.py',
+  '_globals.pyi',
   '_pytesttester.py',
   '_pytesttester.pyi',
+  '_expired_attrs_2_0.py',
+  '_expired_attrs_2_0.pyi',
   'conftest.py',
   'ctypeslib.py',
   'ctypeslib.pyi',
@@ -227,10 +293,12 @@ python_sources = [
   'dtypes.py',
   'dtypes.pyi',
   'matlib.py',
-  'py.typed'
+  'matlib.pyi',
+  'py.typed',
+  'version.pyi',
 ]
 
-if blas_name == 'scipy-openblas'
+if fs.exists('_distributor_init_local.py')
   python_sources += ['_distributor_init_local.py']
 endif
 
@@ -251,8 +319,6 @@ pure_subdirs = [
   '_pyinstaller',
   '_typing',
   '_utils',
-  '_core',
-  'array_api',
   'compat',
   'doc',
   'f2py',
@@ -261,8 +327,11 @@ pure_subdirs = [
   'matrixlib',
   'polynomial',
   'testing',
-  'tests',
-  'typing'
+  'typing',
+  'rec',
+  'char',
+  'core',
+  'strings',
 ]
 if py.version().version_compare('<3.12')
   pure_subdirs += 'distutils'
@@ -284,7 +353,8 @@ if not fs.exists('version.py')
     output: 'version.py',
     input: '_build_utils/gitversion.py',
     command: [py, '@INPUT@', '--write', '@OUTPUT@'],
-    install_dir: np_dir
+    install_dir: np_dir,
+    install_tag: 'python-runtime'
   )
 else
   # When building from sdist, version.py exists and should be included
@@ -295,13 +365,18 @@ else
 endif
 
 foreach subdir: pure_subdirs
-  install_subdir(subdir, install_dir: np_dir)
+  install_subdir(subdir, install_dir: np_dir, install_tag: 'python-runtime', exclude_directories: ['tests'])
+  if fs.is_dir(subdir/'tests')
+    install_subdir(subdir/'tests', install_dir: np_dir/subdir, install_tag: 'tests')
+  endif
 endforeach
+
+install_subdir('tests', install_dir: np_dir, install_tag: 'tests')
 
 compilers = {
   'C': cc,
   'CPP': cpp,
-  'CYTHON': meson.get_compiler('cython')
+  'CYTHON': cy,
 }
 
 machines = {
@@ -345,7 +420,7 @@ conf_data.set('PYTHON_VERSION', py.language_version())
 # `np.show_config()`; needs some special handling for the case BLAS was found
 # but CBLAS not (and hence BLAS was also disabled)
 dependency_map = {
-  'LAPACK': lapack_dep,
+  'LAPACK': lapack,
 }
 if have_blas
   dependency_map += {'BLAS': blas}
@@ -374,9 +449,10 @@ configure_file(
   output: '__config__.py',
   configuration : conf_data,
   install_dir: np_dir,
+  install_tag: 'python-runtime'
 )
 
-subdir('core')
+subdir('_core')
 subdir('fft')
 subdir('linalg')
 subdir('random')

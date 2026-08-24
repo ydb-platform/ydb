@@ -798,9 +798,10 @@ namespace NKikimr {
                 } else if (bridgePileId == BridgeInfo->SelfNodePile->BridgePileId) {
                     // send this message as is
                 } else if (AppData()->FeatureFlags.GetEnableInterpileTrafficOptimization()) {
-                    // enable reducing interpile traffic
-                    res = std::make_unique<TEvBlobStorage::TEvPut>(ev.Id, TRope(ev.Buffer), ev.Deadline, ev.HandleClass,
-                        ev.Tactic, ev.IssueKeepFlag, ev.IgnoreBlock, ev.AlreadyEncrypted,
+                    // enable reducing interpile traffic; clone the original message rather than
+                    // rebuilding it, so that fields the remote pile needs (WriteSource, DataKind)
+                    // survive the trip
+                    res = std::make_unique<TEvBlobStorage::TEvPut>(TEvBlobStorage::CloneEventPolicy, ev,
                         /*reduceInterpileTraffic=*/ true);
                 }
             }

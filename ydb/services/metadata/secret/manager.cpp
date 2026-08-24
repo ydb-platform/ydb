@@ -4,7 +4,7 @@
 
 #include <ydb/services/metadata/manager/ydb_value_operator.h>
 
-#include <util/string/vector.h>
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::METADATA_SECRET
 
 namespace NKikimr::NMetadata::NSecret {
 
@@ -13,22 +13,26 @@ private:
     THashMap<TString, TString> SecretNameToOwner;
 
     static Ydb::Table::ExecuteDataQueryRequest BuildRequest(std::vector<TSecretId> secrets) {
-        std::vector<TString> secretNameLiterals;
-        for (const auto& id : secrets) {
-            secretNameLiterals.push_back(TStringBuilder() << '"' << id.GetSecretId() << '"');
-        }
-
         Ydb::Table::ExecuteDataQueryRequest request;
         request.mutable_query_cache_policy()->set_keep_in_cache(true);
         TStringBuilder sb;
         sb << "--!syntax_v1\n";
+        sb << "DECLARE $secretNames AS List<Utf8>;" << Endl;
         sb << "SELECT " + TSecret::TDecoder::SecretId + ", " + TSecret::TDecoder::OwnerUserId + ", " + TSecret::TDecoder::Value << Endl;
         sb << "FROM `" + TSecret::GetBehaviour()->GetStorageTablePath() + "`" << Endl;
         sb << "VIEW index_by_secret_id" << Endl;
-        sb << "WHERE " + TSecret::TDecoder::SecretId + " IN (" + JoinStrings(secretNameLiterals.begin(), secretNameLiterals.end(), ", ") + ")"
-           << Endl;
-        AFL_DEBUG(NKikimrServices::METADATA_SECRET)("event", "build_precondition")("sql", sb);
+        sb << "WHERE " + TSecret::TDecoder::SecretId + " IN $secretNames" << Endl;
+        YDB_LOG_DEBUG("Dump event, sql",
+            {"event", "build_precondition"},
+            {"sql", sb});
         request.mutable_query()->set_yql_text(sb);
+
+        Ydb::TypedValue secretNamesParam;
+        for (const auto& id : secrets) {
+            *secretNamesParam.mutable_value()->add_items() = NInternal::TYDBValue::Utf8(id.GetSecretId());
+        }
+        secretNamesParam.mutable_type()->mutable_list_type()->mutable_item()->set_type_id(Ydb::Type::UTF8);
+        (*request.mutable_parameters())["$secretNames"] = secretNamesParam;
         return request;
     }
 

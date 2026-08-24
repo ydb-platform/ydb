@@ -32,6 +32,9 @@ void TMirrorDescriber::Bootstrap(const TActorContext& ctx) {
 void TMirrorDescriber::StartInit(const TActorContext& ctx) {
     Become(&TThis::StateInit);
     DescribeRetryTimeout = DESCRIBE_RETRY_TIMEOUT_START;
+    ++DescribeGeneration;
+    DescribeTopicRequestInFlight = false;
+    CredentialsRequestInFlight = false;
     ctx.Send(SelfId(), new TEvPQ::TEvInitCredentials);
 }
 
@@ -59,6 +62,13 @@ void TMirrorDescriber::HandleChangeConfig(TEvPQ::TEvChangePartitionConfig::TPtr&
 }
 
 void TMirrorDescriber::HandleDescriptionResult(TEvPQ::TEvMirrorTopicDescription::TPtr& ev, const TActorContext& ctx) {
+    if (ev->Cookie != DescribeGeneration) {
+        YDB_LOG_DEBUG("Ignoring stale topic description",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"cookie", ev->Cookie},
+            {"generation", DescribeGeneration});
+        return;
+    }
     DescribeTopicRequestInFlight = false;
     const auto& description = ev->Get()->Description;
     if (!description.has_value()) {
@@ -101,14 +111,15 @@ void TMirrorDescriber::DescribeTopic(const TActorContext& ctx) {
     future.Subscribe(
         [
             actorSystem = ctx.ActorSystem(),
-            selfId = SelfId()
+            selfId = SelfId(),
+            generation = DescribeGeneration
         ](const NThreading::TFuture<NYdb::NTopic::TDescribeTopicResult>& result) {
             THolder<TEvPQ::TEvMirrorTopicDescription> ev;
             const bool hasValue = result.HasValue();
             if (hasValue) {
                 const auto& value = result.GetValue();
                 ev = MakeHolder<TEvPQ::TEvMirrorTopicDescription>(value);
-                actorSystem->Send(new NActors::IEventHandle(selfId, selfId, ev.Release()));
+                actorSystem->Send(new NActors::IEventHandle(selfId, selfId, ev.Release(), 0, generation));
                 return;
             }
             try {
@@ -116,7 +127,7 @@ void TMirrorDescriber::DescribeTopic(const TActorContext& ctx) {
             } catch (...) {
                 ev = MakeHolder<TEvPQ::TEvMirrorTopicDescription>(CurrentExceptionMessage());
             }
-            actorSystem->Send(new NActors::IEventHandle(selfId, selfId, ev.Release()));
+            actorSystem->Send(new NActors::IEventHandle(selfId, selfId, ev.Release(), 0, generation));
         }
     );
     DescribeTopicRequestInFlight = true;

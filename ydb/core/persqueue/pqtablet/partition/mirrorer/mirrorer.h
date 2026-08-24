@@ -203,7 +203,8 @@ bool AppendToWriteRequest(
     NKikimrClient::TPersQueuePartitionRequest& request,
     NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage& message,
     bool& incorrectRequest,
-    ui64& nextOffset
+    ui64& nextOffset,
+    bool syncWriteTime = false
 );
 
 }// NPQ

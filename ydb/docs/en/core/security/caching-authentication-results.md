@@ -21,7 +21,7 @@ Removal occurs while the token queue is processed periodically. The interval bet
 
 If an application regularly sends requests to the same node, the user token is not removed based on `life_time`. When a refresh fails with a temporary error, the node continues to use the previously created user token, including the group list stored in it. For AccessService, each temporary error postpones cache-entry removal: by `expire_time` for regular tokens and by `as_signature_expire_time` for requests signed with an access key. Retries can therefore continue until a refresh succeeds, a permanent error occurs, or requests stop for `life_time`. For tokens issued through login-and-password authentication and external identity provider tokens, retries are additionally limited by authentication-token expiration.
 
-Account changes in this context include deleting a local or external user and changing the user's membership in [user groups](./authorization.md#group).
+Until the next successful refresh, the cached group list may remain stale, so account changes can take effect on a particular node with a delay. Account changes in this context include deleting a local or external user and changing the user's membership in [user groups](./authorization.md#group).
 
 [Access rights](../concepts/glossary.md#access-right) in {{ ydb-short-name }} are associated with an [access object](../concepts/glossary.md#access-object) and stored in [ACLs](../concepts/glossary.md#access-control-list) (Access Control Lists) for both users and groups. ACLs themselves are not cached: ACL changes take effect during the next access check. The user token caches the group list.
 
@@ -43,7 +43,7 @@ For AccessService, retries may continue until a refresh succeeds, a permanent er
 
 {% note info %}
 
-User-token refresh errors are available in the [metrics](../reference/observability/metrics/index.md) `auth.TicketParser.TicketsErrors`, `auth.TicketParser.TicketsErrorsPermanent`, and `auth.TicketParser.TicketsErrorsRetryable`, or in the `Error` field on **Developer UI** > **Actors** > **Ticket Parser** (`https://<ydb-server-address>:<embedded-ui-port>/actors/ticket_parser`).
+Ticket Parser token-processing errors, including errors during initial validation and subsequent refresh, are available in the [metrics](../reference/observability/metrics/index.md) `auth.TicketParser.TicketsErrors`, `auth.TicketParser.TicketsErrorsPermanent`, and `auth.TicketParser.TicketsErrorsRetryable`, or in the `Error` field on **Developer UI** > **Actors** > **Ticket Parser** (`https://<ydb-server-address>:<embedded-ui-port>/actors/ticket_parser`).
 
 Errors may be caused by the following issues:
 

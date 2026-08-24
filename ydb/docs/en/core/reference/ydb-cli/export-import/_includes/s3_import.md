@@ -10,7 +10,7 @@ The `import s3` command starts, on the server side, the process of importing dat
 
 As opposed to the [`tools restore` command](../tools-restore.md), the `import s3` command always creates objects in entirety, so none of the imported objects (directories or tables) should already exist.
 
-If you need to import some more data to your existing S3 tables (for example, using [S3cmd](https://s3tools.org/s3cmd)), you can copy the S3 contents to the file system and use the [`tools restore`](../tools-restore.md) command.
+If you need to load additional data into existing [row tables](../../../../concepts/datamodel/table.md#row-oriented-tables) from S3, you can copy the S3 contents to the file system (for example, using [S3cmd](https://s3tools.org/s3cmd)) and use the [`tools restore`](../tools-restore.md) command. The `tools restore` command does not load data into [column tables](../../../../concepts/datamodel/table.md#column-oriented-tables); to append data to existing column tables, use [external data sources](../../../../concepts/datamodel/external_data_source.md). For more information, see [{#T}](../../../../concepts/query_execution/federated_query/import_and_export.md#import).
 
 ## Command line parameters {#pars}
 

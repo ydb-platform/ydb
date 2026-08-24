@@ -1,14 +1,10 @@
 name: Codecov C++ (SDK / CLI / workload)
 
-# PR coverage intentionally uses pull_request_target: repository secrets and
-# self-hosted runners are available only after the trusted workflow from main
-# verifies that the PR author and event sender have write access, or a repository
-# writer explicitly approves an external PR with ok-to-test. Product code is
-# checked out at the exact PR head SHA, while coverage helpers come from the PR
-# base SHA.
+# Dogfood-only harness: this controlled same-repository PR uses pull_request so
+# the candidate workflow can run before it reaches the default branch.
 on:
-  pull_request_target:
-    branches: [main]
+  pull_request:
+    branches: [codecov-dogfood-independent-flags-20260824]
     types: [opened, synchronize, reopened, closed, labeled]
     paths:
       - "ydb/public/sdk/cpp/**"
@@ -22,21 +18,6 @@ on:
       - "!.github/scripts/codecov/tests/**"
       - ".github/workflows/cpp_codecov.yml"
       - ".github/codecov.yml"
-  push:
-    branches: [codecov-dogfood-independent-flags-20260824]
-    paths:
-      - "ydb/public/sdk/cpp/**"
-      - "ydb/apps/ydb/**"
-      - "ydb/public/lib/ydb_cli/**"
-      - "ydb/tests/functional/ydb_cli/**"
-      - "ydb/library/workload/**"
-      - ".github/actions/run_clang_codecov/**"
-      - ".github/actions/setup_ci_ydb_service_account_key_file_credentials/**"
-      - ".github/scripts/codecov/**"
-      - "!.github/scripts/codecov/tests/**"
-      - ".github/workflows/cpp_codecov.yml"
-      - ".github/codecov.yml"
-
 # GitHub cannot filter label names in `on`. Irrelevant labels therefore get a
 # unique workflow group and skip every job. ok-to-test shares the PR group but
 # label events cannot cancel a running workflow before the sender is verified.
@@ -46,14 +27,14 @@ on:
 concurrency:
   group: >-
     ${{
-      github.event_name == 'pull_request_target'
-      && format('codecov-pr-{0}{1}', github.event.pull_request.number,
+      github.event_name == 'pull_request'
+      && format('codecov-dogfood-independent-flags-20260824-pr-{0}{1}', github.event.pull_request.number,
           github.event.action == 'labeled' && github.event.label.name != 'ok-to-test'
           && format('-ignore-{0}', github.run_id) || '')
-      || 'codecov-dogfood-independent-flags-20260824'
+      || format('codecov-dogfood-independent-flags-20260824-ignore-{0}', github.run_id)
     }}
   cancel-in-progress: >-
-    ${{ github.event_name == 'pull_request_target' && github.event.action != 'labeled' }}
+    ${{ github.event_name == 'pull_request' && github.event.action != 'labeled' }}
 
 permissions:
   contents: read
@@ -64,9 +45,9 @@ jobs:
     name: Detect suites
     if: >-
       github.repository == 'ydb-platform/ydb' &&
-      (github.event_name != 'pull_request_target' ||
+      (github.event_name != 'pull_request' ||
        (github.event.pull_request.state == 'open' &&
-        github.base_ref == 'main' &&
+        github.base_ref == 'codecov-dogfood-independent-flags-20260824' &&
         (github.event.action != 'labeled' || github.event.label.name == 'ok-to-test')))
     runs-on: ubuntu-latest
     outputs:
@@ -82,7 +63,7 @@ jobs:
     steps:
       - name: Authorize PR coverage
         id: authorization
-        if: github.event_name == 'pull_request_target'
+        if: github.event_name == 'pull_request'
         uses: actions/github-script@v8
         with:
           # The restricted workflow GITHUB_TOKEN returned false 404 responses
@@ -144,7 +125,7 @@ jobs:
       - name: Pin PR head
         id: pr
         if: >-
-          github.event_name == 'pull_request_target' &&
+          github.event_name == 'pull_request' &&
           steps.authorization.outputs.allowed == 'true'
         uses: actions/github-script@v8
         with:
@@ -156,8 +137,8 @@ jobs:
               pull_number: eventPr.number,
             });
 
-            if (pr.state !== 'open' || pr.base.repo.full_name !== context.repo.owner + '/' + context.repo.repo || pr.base.ref !== 'main') {
-              core.setFailed('Coverage runs only for open pull requests targeting ydb-platform/ydb:main.');
+            if (pr.state !== 'open' || pr.base.repo.full_name !== context.repo.owner + '/' + context.repo.repo || pr.base.ref !== 'codecov-dogfood-independent-flags-20260824') {
+              core.setFailed('Dogfood coverage runs only for open pull requests targeting the temporary Codecov base branch.');
               return;
             }
             if (pr.head.sha !== eventPr.head.sha) {
@@ -179,14 +160,14 @@ jobs:
 
       - name: Checkout trusted detection helpers
         if: >-
-          github.event_name != 'pull_request_target' ||
+          github.event_name != 'pull_request' ||
           steps.authorization.outputs.allowed == 'true'
         uses: actions/checkout@v5
         with:
           repository: ${{ github.repository }}
           ref: ${{ steps.pr.outputs.base_sha || github.sha }}
           # PR detection needs merge-base history; main only needs the helpers.
-          fetch-depth: ${{ github.event_name == 'pull_request_target' && '0' || '1' }}
+          fetch-depth: ${{ github.event_name == 'pull_request' && '0' || '1' }}
           sparse-checkout: |
             .github/codecov.yml
             .github/scripts/codecov/codecov_suites.py
@@ -201,7 +182,7 @@ jobs:
 
       - name: Fetch pinned PR head
         if: >-
-          github.event_name == 'pull_request_target' &&
+          github.event_name == 'pull_request' &&
           steps.authorization.outputs.allowed == 'true'
         env:
           PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -220,7 +201,7 @@ jobs:
       - name: Collect changed files
         id: inputs
         if: >-
-          github.event_name == 'pull_request_target' &&
+          github.event_name == 'pull_request' &&
           steps.authorization.outputs.allowed == 'true'
         env:
           PR_HEAD_SHA: ${{ steps.pr.outputs.sha }}
@@ -239,7 +220,7 @@ jobs:
       - name: Decide matrix
         id: decide
         if: >-
-          github.event_name != 'pull_request_target' ||
+          github.event_name != 'pull_request' ||
           steps.authorization.outputs.allowed == 'true'
         env:
           EVENT_NAME: ${{ github.event_name }}
@@ -257,7 +238,7 @@ jobs:
       - name: Resolve checkout and report metadata
         id: metadata
         if: >-
-          github.event_name != 'pull_request_target' ||
+          github.event_name != 'pull_request' ||
           steps.authorization.outputs.allowed == 'true'
         env:
           EVENT_NAME: ${{ github.event_name }}
@@ -272,13 +253,13 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
-          if [ "$EVENT_NAME" = pull_request_target ]; then
+          if [ "$EVENT_NAME" = pull_request ]; then
             checkout_repository="$PR_REPOSITORY"
             checkout_sha="$PR_SHA"
             base_sha="$PR_BASE_SHA"
             report_branch="$PR_BRANCH"
             pr_number="$PR_NUMBER"
-            storage_prefix="ydb/pr-${PR_NUMBER}/coverage"
+            storage_prefix="ydb/dogfood-independent-flags-20260824/pr-${PR_NUMBER}/coverage"
           else
             checkout_repository="$REPOSITORY"
             checkout_sha="$EVENT_SHA"
@@ -321,7 +302,7 @@ jobs:
           persist-credentials: false
 
       - name: Checkout trusted coverage helpers from PR base
-        if: github.event_name == 'pull_request_target'
+        if: github.event_name == 'pull_request'
         uses: actions/checkout@v5
         with:
           ref: ${{ needs.detect.outputs.base_sha }}
@@ -333,7 +314,7 @@ jobs:
           persist-credentials: false
 
       - name: Overlay trusted coverage helpers
-        if: github.event_name == 'pull_request_target'
+        if: github.event_name == 'pull_request'
         run: bash _trusted_coverage_ci/.github/scripts/codecov/overlay_trusted_codecov_ci.sh
 
       - name: Setup YDB access

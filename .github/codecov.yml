@@ -1,9 +1,16 @@
 # Codecov config for ydb-platform/ydb (C++ SDK + CLI + workload).
 # Separate from per-language SDK repos (java/go/js) and their native-sdk component.
 
+codecov:
+  # strict_yaml_branch is omitted only in this dogfood harness so Codecov can
+  # evaluate the candidate config before it reaches the default branch.
+  require_ci_to_pass: true
+  notify:
+    wait_for_ci: true
+
 coverage:
   status:
-    # Only publish checks for components with a fresh upload on this commit.
+    # Only publish checks for suite flags with a fresh upload on this commit.
     # Historical main reports remain available as comparison baselines.
     default_rules:
       flag_coverage_not_uploaded_behavior: exclude
@@ -59,21 +66,10 @@ flag_management:
       paths:
         - ydb/library/workload/**
 
-component_management:
-  individual_components:
-    - component_id: cli_app
-      name: apps/ydb
-      paths:
-        - ydb/apps/ydb/**
-    - component_id: cli_core
-      name: ydb_cli lib
-      paths:
-        - ydb/public/lib/ydb_cli/**
-
 comment:
-  layout: "diff, flags, components, files"
+  layout: "diff, flags, files"
   behavior: default
   require_changes: false
   # Selective PR uploads make the unscoped project aggregate misleading.
-  # Show only freshly measured component flags.
+  # Show only freshly measured suite flags.
   hide_project_coverage: true

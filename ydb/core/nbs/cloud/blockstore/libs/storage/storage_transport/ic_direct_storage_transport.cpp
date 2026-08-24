@@ -281,6 +281,19 @@ template <typename TEvent>
     return false;
 }
 
+template <typename TRequest>
+void AttachPayload(
+    TRequest& request,
+    TRope rope,
+    bool enableChecksums)
+{
+    if (enableChecksums) {
+        request.AddPayloadThenChecksum(std::move(rope));
+    } else {
+        request.AddPayload(std::move(rope));
+    }
+}
+
 }   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -288,9 +301,11 @@ template <typename TEvent>
 TICDirectStorageTransport::TICDirectStorageTransport(
     TActorSystem* actorSystem,
     TActorId icStorageTransportActorId,
-    std::shared_ptr<TDirectSessionRegistry> directSessionRegistry)
+    std::shared_ptr<TDirectSessionRegistry> directSessionRegistry,
+    bool enableChecksums)
     : TICStorageTransport(actorSystem, icStorageTransportActorId)
     , DirectSessionRegistry(std::move(directSessionRegistry))
+    , EnableChecksums(enableChecksums)
 {
     Y_ABORT_UNLESS(DirectSessionRegistry);
 }
@@ -343,7 +358,7 @@ TICDirectStorageTransport::WriteToPBuffer(
     const auto& sglist = guard.Get();
     TRope rope = TRope::Uninitialized(SgListGetSize(sglist));
     SgListCopy(sglist, CreateSgList(rope));
-    request->AddPayloadThenChecksum(std::move(rope));
+    AttachPayload(*request, std::move(rope), EnableChecksums);
 
     auto promise = NewPromise<TEvWritePersistentBufferResult>();
     auto future = promise.GetFuture();
@@ -428,7 +443,7 @@ void TICDirectStorageTransport::WriteToManyPBuffers(
     const auto& sglist = guard.Get();
     TRope rope = TRope::Uninitialized(SgListGetSize(sglist));
     SgListCopy(sglist, CreateSgList(rope));
-    request->AddPayloadThenChecksum(std::move(rope));
+    AttachPayload(*request, std::move(rope), EnableChecksums);
 
     auto handler = MakeIntrusive<TWriteToManyReplyHandler>(
         std::move(wrappedCallback),
@@ -488,7 +503,7 @@ TICDirectStorageTransport::WriteToDDisk(
     const auto& sglist = guard.Get();
     TRope rope = TRope::Uninitialized(SgListGetSize(sglist));
     SgListCopy(sglist, CreateSgList(rope));
-    request->AddPayloadThenChecksum(std::move(rope));
+    AttachPayload(*request, std::move(rope), EnableChecksums);
 
     auto promise = NewPromise<TEvWriteResult>();
     auto future = promise.GetFuture();
@@ -816,14 +831,20 @@ TICDirectStorageTransport::ListPBufferEntries(const THostConnection& connection)
 std::unique_ptr<IStorageTransport> CreateDirectStorageTransport(
     TActorSystem* actorSystem,
     const TDiskDescription& diskDescription,
-    ui32 dbgIndex)
+    ui32 dbgIndex,
+    bool enableChecksums)
 {
     auto registry = std::make_shared<TDirectSessionRegistry>();
-    auto actorId = CreateTransportActor(diskDescription, dbgIndex, registry);
+    auto actorId = CreateTransportActor(
+        diskDescription,
+        dbgIndex,
+        enableChecksums,
+        registry);
     return std::make_unique<TICDirectStorageTransport>(
         actorSystem,
         actorId,
-        std::move(registry));
+        std::move(registry),
+        enableChecksums);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

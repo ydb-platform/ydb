@@ -27,6 +27,7 @@ Y_UNIT_TEST_SUITE(TStorageConfigTest)
         UNIT_ASSERT_VALUES_EQUAL(134217728, config.GetVChunkSize());
         UNIT_ASSERT_VALUES_EQUAL(4u, config.GetVhostThreadsCount());
         UNIT_ASSERT_VALUES_EQUAL(4u, config.GetVhostQueuesCount());
+        UNIT_ASSERT(config.GetEnableChecksums());
     }
 
     Y_UNIT_TEST(ShouldUseExplicitProtoValuesWhenSet)
@@ -39,6 +40,7 @@ Y_UNIT_TEST_SUITE(TStorageConfigTest)
         proto.SetVChunkSize(33554432);
         proto.SetVhostThreadsCount(12);
         proto.SetVhostQueuesCount(16);
+        proto.SetEnableChecksums(false);
 
         TStorageConfig config{std::move(proto)};
 
@@ -53,6 +55,7 @@ Y_UNIT_TEST_SUITE(TStorageConfigTest)
         UNIT_ASSERT_VALUES_EQUAL(33554432, config.GetVChunkSize());
         UNIT_ASSERT_VALUES_EQUAL(12u, config.GetVhostThreadsCount());
         UNIT_ASSERT_VALUES_EQUAL(16u, config.GetVhostQueuesCount());
+        UNIT_ASSERT(!config.GetEnableChecksums());
     }
 
     Y_UNIT_TEST(ShouldApplyDefaultsForPartialProto)

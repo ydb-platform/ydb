@@ -1,12 +1,12 @@
 # Configuring metadata distribution subsystems State Storage, Board, and Scheme Board
 
-Applies if you need to change the [metadata distribution subsystem configuration](../../../reference/configuration/domains_config.md) consisting of [State Storage](../../../concepts/glossary.md#state-storage), [Board](../../../concepts/glossary.md#board), and [Scheme Board](../../../concepts/glossary.md#scheme-board) on the {{ ydb-short-name }} cluster.
+Applies if you need to change the [metadata distribution subsystems configuration](../../../reference/configuration/domains_config.md) consisting of [State Storage](../../../concepts/glossary.md#state-storage), [Board](../../../concepts/glossary.md#board), and [Scheme Board](../../../concepts/glossary.md#scheme-board) on the {{ ydb-short-name }} cluster.
 
 {% include [warning-configuration-error](../configuration-v1/_includes/warning-configuration-error.md) %}
 
-To change the metadata distribution subsystem configuration in the {{ ydb-short-name }} cluster, perform the following steps.
+To change the metadata distribution subsystems configuration in the {{ ydb-short-name }} cluster, perform the following steps.
 
-1. Make the required changes to the `domains_config` sections of the `config.yaml` configuration file on each node of the {{ ydb-short-name }} cluster:
+1. Make the required changes to the `domains_config` section of the `config.yaml` configuration file on each node of the {{ ydb-short-name }} cluster:
    For rules on changing the `domains_config` section, see [Rules for configuring metadata distribution subsystems](#metadata-subsystems-reconfig-rules).
 2. Using the [rolling-restart](../../../maintenance/manual/node_restarting.md) procedure, sequentially restart all nodes of the {{ ydb-short-name }} cluster — [static](../../../concepts/glossary.md#static-node) and [dynamic](../../../concepts/glossary.md#dynamic): metadata subsystem replicas are placed on static nodes, and tablets on dynamic nodes access them. For more on nodes, see [Cluster topology](../../../concepts/topology.md).
    Before restarting the next host, wait for the restart on the previous host to complete and for the node to rejoin the cluster.

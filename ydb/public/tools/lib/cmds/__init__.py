@@ -312,6 +312,10 @@ def has_any_grpc_tls_data_file(tls_data_path):
     return any(os.path.lexists(os.path.join(tls_data_path, filename)) for filename in GRPC_TLS_DATA_FILES)
 
 
+def should_generate_grpc_tls_data():
+    return not has_any_grpc_tls_data_file(os.getenv('YDB_GRPC_TLS_DATA_PATH'))
+
+
 def pq_client_service_types(arguments):
     items = getattr(arguments, 'pq_client_service_types', None)
     if not items:
@@ -387,9 +391,7 @@ def deploy(arguments):
         optionals.update({'grpc_ssl_enable': enable_tls()})
         optionals.update(
             {
-                'generate_grpc_tls_data': not has_any_grpc_tls_data_file(
-                    os.getenv('YDB_GRPC_TLS_DATA_PATH')
-                )
+                'generate_grpc_tls_data': should_generate_grpc_tls_data()
             }
         )
     pdisk_store_path = arguments.ydb_working_dir if arguments.ydb_working_dir else None

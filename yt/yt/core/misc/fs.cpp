@@ -19,6 +19,7 @@
 #include <util/string/split.h>
 #include <util/system/env.h>
 #include <util/system/fs.h>
+#include <util/system/fstat.h>
 #include <util/system/maxlen.h>
 #include <util/system/shellcommand.h>
 
@@ -372,7 +373,29 @@ TDiskSpaceStatistics GetDiskSpaceStatistics(const std::string& path)
 
 void MakeDirRecursive(const std::string& path, int mode)
 {
-    MakePathIfNotExist(path.c_str(), mode);
+    if (Exists(path)) {
+        if (!TFileStat(path).IsDir()) {
+            THROW_ERROR_EXCEPTION("Path %v already exists and is not a directory", path);
+        }
+        return;
+    }
+
+    if (auto parentPath = GetDirectoryName(path); parentPath != path) {
+        MakeDirRecursive(parentPath, mode);
+    }
+
+    // TODO(dann239): migrate to std::string.
+    if (!NFs::MakeDirectory(TString(path), NFs::EFilePermission(mode))) {
+        auto error = TError::FromSystem();
+
+        // The directory could have been created concurrently.
+        if (TFileStat(path).IsDir()) {
+            return;
+        }
+
+        THROW_ERROR_EXCEPTION("Failed to create directory %v", path)
+            .With(std::move(error));
+    }
 }
 
 TPathStatistics GetPathStatistics(const std::string& path)

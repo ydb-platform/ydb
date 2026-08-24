@@ -4,9 +4,9 @@ Common mistakes in key design and partitioning configuration:
 
 Primary key design anti-patterns (monotonic keys, hot spots) are covered in [{#T}](../../primary-key/row-oriented.md).
 
-* **Cluster-level hard limit on partition size** — **2 GB** by default. If a partition exceeds this limit, it splits unless [`AUTO_PARTITIONING_MAX_PARTITIONS_COUNT`](auto/index.md#auto-sharding-limits) or the [per-table shard limit in the database](../../../concepts/limits-ydb.md#schema-object) is reached.
+* **Cluster-level hard limit on partition size** — **2 GiB** by default. If a partition exceeds this limit, it splits regardless of [`AUTO_PARTITIONING_MAX_PARTITIONS_COUNT`](auto/index.md#auto-sharding-limits), unless the [per-table shard limit in the database](../../../concepts/limits-ydb.md#schema-object) is reached.
 
-* **Ignoring `AUTO_PARTITIONING_MAX_PARTITIONS_COUNT`** — once the cap is reached, the table stops splitting and latency/partition size problems grow until the limit is raised.
+* **Treating `AUTO_PARTITIONING_MAX_PARTITIONS_COUNT` as a hard cap** — regular size-based and load-based splitting stops at this value. However, a partition that exceeds the 2 GiB hard size limit still splits, so the actual partition count can exceed the configured maximum.
 
 ## Defaults without explicit settings {#default-no-settings}
 

@@ -17,7 +17,7 @@ Practical guidelines:
 
 Regardless of the user-visible threshold, internal logic also uses a **~2000 MB** guideline for some split decisions — see [{#T}](../../../../concepts/datamodel/table.md#partitioning_row_table).
 
-When lowering the threshold on a **large existing table**, avoid a sudden jump (for example from 2000 MB to 100 MB in one step), which can trigger a wave of splits. Prefer **gradual** decreases and monitor stabilization; see also [{#T}](../../../../troubleshooting/performance/schemas/splits-merges.md).
+When lowering the threshold on a **large existing table**, avoid a sudden jump (for example, from 2000 MB to 100 MB in one step), which can queue many partitions for splitting at once. Operations in this queue run with limited concurrency. Prefer **gradual** decreases and monitor stabilization; see also [{#T}](../../../../troubleshooting/performance/schemas/splits-merges.md).
 
 Only a limited number of split operations can run on a table at once — other partitions wait in a queue. See [Automatic sharding limits](#auto-sharding-limits).
 
@@ -31,7 +31,7 @@ Authoritative thresholds, key sampling, replica-aware CPU accounting, and merge 
 
 * High CPU on individual partitions while overall cluster utilization stays moderate.
 * Increased latency on “hot” keys.
-* Errors such as **`STATUS_OVERLOADED`** on writes to a hot partition.
+* An increase in internal **`STATUS_OVERLOADED`** responses. Starting with version 26.2, Query Processor automatically retries these requests, so users usually observe increased latency rather than the error itself.
 
 A Data shard uses **at most one CPU core** for mutation and read work on a partition: adding CPUs on the node does not remove a single-partition bottleneck — you need splits and/or a key design that spreads load across shards more evenly.
 
@@ -43,11 +43,11 @@ A Data shard uses **at most one CPU core** for mutation and read work on a parti
 
 * **Maximum tablets in the database** (`MaxShards`) — once reached, automatic partition splitting stops. See [{#T}](../../../../concepts/limits-ydb.md#schema-object).
 * **Maximum table shards** (`MaxShardsInPath`) — upper bound on data shard count for a single table path, including indexes.
-* **Cluster hard limit on partition size** — **2 GB** by default (`ForceShardSplitDataSize`). If a partition exceeds this threshold, it splits even when [`AUTO_PARTITIONING_PARTITION_SIZE_MB`](../../../../concepts/datamodel/table.md#auto_partitioning_partition_size_mb) is higher or [`AUTO_PARTITIONING_MAX_PARTITIONS_COUNT`](../../../../concepts/datamodel/table.md#auto_partitioning_max_partitions_count) is reached. Details: [{#T}](../../../../concepts/datamodel/table.md#partitioning_row_table).
+* **Cluster hard limit on partition size** — **2 GiB** by default (`ForceShardSplitDataSize`). If a partition exceeds this threshold, it splits even when [`AUTO_PARTITIONING_PARTITION_SIZE_MB`](../../../../concepts/datamodel/table.md#auto_partitioning_partition_size_mb) is higher or [`AUTO_PARTITIONING_MAX_PARTITIONS_COUNT`](../../../../concepts/datamodel/table.md#auto_partitioning_max_partitions_count) is reached. Details: [{#T}](../../../../concepts/datamodel/table.md#partitioning_row_table).
 
 ### Table settings
 
-While the partition count stays inside [`AUTO_PARTITIONING_MIN_PARTITIONS_COUNT`](../../../../concepts/datamodel/table.md#auto_partitioning_min_partitions_count) — [`AUTO_PARTITIONING_MAX_PARTITIONS_COUNT`](../../../../concepts/datamodel/table.md#auto_partitioning_max_partitions_count), {{ ydb-short-name }} can **split** and **merge** partitions; when the **maximum** is reached, splitting stops and growth continues via partition size and per-shard load.
+[`AUTO_PARTITIONING_MIN_PARTITIONS_COUNT`](../../../../concepts/datamodel/table.md#auto_partitioning_min_partitions_count) is the lower bound for automatic merges, while [`AUTO_PARTITIONING_MAX_PARTITIONS_COUNT`](../../../../concepts/datamodel/table.md#auto_partitioning_max_partitions_count) is the upper bound for regular automatic splits. At the maximum, size-based and load-based splitting stops, but exceeding the 2 GiB hard size limit still triggers a split.
 
 **Recommended spread between min and max:** if the gap between minimum and maximum is **much larger than ~20%**, [Hive](../../../../concepts/glossary.md#hive) may oscillate between splits and merges under time-varying load. Details and remediation: [{#T}](../../../../troubleshooting/performance/schemas/splits-merges.md).
 
@@ -55,14 +55,14 @@ While the partition count stays inside [`AUTO_PARTITIONING_MIN_PARTITIONS_COUNT`
 
 With [`AUTO_PARTITIONING_BY_LOAD`](#auto-by-load) enabled:
 
-* the decision to split a partition by load takes **at least about two minutes**;
+* the minimum load-sampling period before a split decision is **two minutes**;
 * each split produces **at most two** child partitions.
 
-If load grows by a large factor, partitioning may take **minutes to tens of minutes** to catch up; overloaded partitions may return `OVERLOADED` errors — both from saturation and from the split process itself.
+If load grows by a large factor, partitioning may take **minutes to tens of minutes** to catch up. During this period, overloaded partitions can return internal `OVERLOADED` responses. Starting with version 26.2, Query Processor handles them with automatic retries, so users primarily observe increased latency.
 
 Split and merge operations include partition **compaction** — extra disk I/O.
 
-The scheme shard may take on the order of **15 seconds** to decide on splitting a tablet — see the [{#T}](../../../../troubleshooting/performance/schemas/splits-merges.md) article.
+After sampling is complete, processing the tablet split decision in the scheme shard may take about **15 seconds**. See [{#T}](../../../../troubleshooting/performance/schemas/splits-merges.md).
 
 ### Split/merge operation queue
 

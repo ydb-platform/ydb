@@ -20,8 +20,6 @@ namespace {
 using TEntryKey = NOlap::NBlobOperations::NBlobStorage::TEntryKey;
 using THistoryCutterWrapper = NOlap::NBlobOperations::NBlobStorage::THistoryCutterWrapper;
 
-// ---- TCutHistorySweepCallback -----------------------------------------------
-//
 // Runs on the conveyor thread after TTxAskPortionChunks delivers accessor objects.
 // Inspects each portion's blob IDs against the current sweep candidates and
 // sends TEvCutHistorySweepBatchDone back to the tablet.
@@ -41,7 +39,6 @@ public:
     void OnAccessorsFetched(std::vector<std::shared_ptr<NOlap::TPortionDataAccessor>>&& accessors) override {
         THashSet<TEntryKey> disprovedKeys;
 
-        // Group candidates by channel once: blobs then check only their channel's slice.
         THashMap<ui32, TVector<TEntryKey>> candidatesByChannel;
         for (const auto& key : *Candidates) {
             candidatesByChannel[key.Channel].push_back(key);
@@ -99,15 +96,11 @@ private:
 
 }   // anonymous namespace
 
-// ---- TColumnShard methods ---------------------------------------------------
-
 void TColumnShard::SetupCutHistory() {
     if (CutHistoryCutter) {
-        // Periodic nomination trigger.
         CutHistoryCutter->TryNominate(NActors::TActivationContext::AsActorContext());
         return;
     }
-    // One-time initialization on first call (from TrySwitchToWork).
     auto op = std::dynamic_pointer_cast<NOlap::NBlobOperations::NBlobStorage::TOperator>(
         StoragesManager->GetOperatorOptional(NOlap::IStoragesManager::DefaultStorageId));
     if (!op) {
@@ -139,7 +132,6 @@ void TColumnShard::Handle(TEvPrivate::TEvStartCutHistorySweep::TPtr& /*ev*/, con
         return;
     }
 
-    // Snapshot engine portion list on first batch of this sweep.
     if (!CutHistoryCutter->HasPortionSnapshot()) {
         TVector<std::pair<NOlap::TInternalPathId, ui64>> ids;
         if (HasIndex()) {
@@ -157,7 +149,6 @@ void TColumnShard::Handle(TEvPrivate::TEvStartCutHistorySweep::TPtr& /*ev*/, con
     auto batch = CutHistoryCutter->GetNextBatch(/*batchSize=*/1000, isLast);
 
     if (batch.empty()) {
-        // No portions — treat as fully exhausted.
         CutHistoryCutter->OnBatchComplete({}, /*exhausted=*/true, ctx);
         return;
     }
@@ -209,7 +200,6 @@ void TColumnShard::Handle(TEvPrivate::TEvCutHistorySweepBatchDone::TPtr& ev, con
     }
     const auto* msg = ev->Get();
 
-    // Convert flat pairs to THashSet<TEntryKey>.
     THashSet<TEntryKey> disproved;
     disproved.reserve(msg->Disproved.size());
     for (const auto& [ch, fromGen] : msg->Disproved) {

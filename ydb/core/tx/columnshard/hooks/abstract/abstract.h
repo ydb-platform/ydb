@@ -428,7 +428,6 @@ public:
     virtual void OnDeletePathId(const ui64 /* tabletId */, const NColumnShard::TUnifiedPathId& /* pathId */) {
     }
 
-    // CutHistory hooks.
     virtual bool IsCSCutHistoryEnabled() const {
         return false;
     }

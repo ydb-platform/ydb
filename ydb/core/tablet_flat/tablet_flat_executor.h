@@ -513,6 +513,10 @@ namespace NFlatExecutorSetup {
         virtual void ScanComplete(NTable::EStatus status, TAutoPtr<IDestructable> prod, ui64 cookie, const TActorContext &ctx);
 
         virtual bool ReassignChannelsEnabled() const;
+        // True for a channel whose blobs the tablet writes itself, bypassing the
+        // executor: the executor's seen-generation criterion cannot see them, so it
+        // must not cut that channel's history. Such a tablet cuts the channel itself.
+        virtual bool HasExternallyWrittenBlobs(ui32 channel) const;
         virtual void OnYellowChannelsChanged();
         virtual void OnRejectProbabilityRelaxed();
 

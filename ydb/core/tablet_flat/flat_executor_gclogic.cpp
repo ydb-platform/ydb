@@ -1,5 +1,6 @@
 #include "flat_executor_gclogic.h"
 #include "flat_bio_eggs.h"
+#include "tablet_flat_executor.h"
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/base/appdata.h>
@@ -114,7 +115,7 @@ void TExecutorGCLogic::SnapToLog(NKikimrExecutorFlat::TLogSnapshot &snap, ui32 s
             x->SetSetToStep(chIt.second.CommitedGcBarrier.Step);
 
             if (chIt.second.CutHistoryStatus == TChannelInfo::ECutHistoryStatus::None && chIt.second.GcWaitFor == 0 &&
-                    IsHistoryCuttingSound(*TabletStorageInfo, chIt.first)) {
+                    IsHistoryCuttingSound(chIt.first)) {
                 ChannelsToCutHistory.insert(chIt.first);
             }
         }
@@ -148,7 +149,7 @@ TDuration TExecutorGCLogic::OnCollectGarbageResult(TEvBlobStorage::TEvCollectGar
     TChannelInfo& channel = ChannelInfo[channelId];
     if (ev->Status == NKikimrProto::EReplyStatus::OK) {
         if (channel.OnCollectGarbageSuccess() && channel.CutHistoryStatus == TChannelInfo::ECutHistoryStatus::SentBarrier &&
-                IsHistoryCuttingSound(*TabletStorageInfo, channelId)) {
+                IsHistoryCuttingSound(channelId)) {
             auto historyToCut = HistoryCutter.GetHistoryToCut(channelId);
             for (const auto* historyEntry : historyToCut) {
                 TAutoPtr<TEvTablet::TEvCutTabletHistory> request(new TEvTablet::TEvCutTabletHistory);
@@ -200,8 +201,8 @@ void TExecutorGCLogic::FollowersSyncComplete(bool isBoot) {
     AllowGarbageCollection = true;
 }
 
-bool TExecutorGCLogic::IsHistoryCuttingSound(const TTabletStorageInfo& info, ui32 channel) {
-    return info.TabletType != TTabletTypes::ColumnShard || channel < 2;
+bool TExecutorGCLogic::IsHistoryCuttingSound(ui32 channel) const {
+    return !Owner || !Owner->HasExternallyWrittenBlobs(channel);
 }
 
 void TExecutorGCLogic::Confirm(const TActorContext &ctx) {

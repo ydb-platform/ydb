@@ -367,4 +367,5 @@ message TFeatureFlags {
     // so that deleting and recreating a topic with the same name does not inherit stale mappings.
     optional bool EnableTopicSourceIdMappingById = 313 [default = false];
     optional bool EnableSharedReadingStructuredJsonParsing = 314 [default = false];
+    optional bool EnableExactlyOnceTopicsWriting = 315 [default = false];
 }

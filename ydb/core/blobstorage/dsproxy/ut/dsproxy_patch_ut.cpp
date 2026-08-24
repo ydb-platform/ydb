@@ -9,6 +9,7 @@
 #include <ydb/core/util/stlog.h>
 #include <ydb/core/base/blobstorage_common.h>
 
+#include <bit>
 #include <cstring>
 
 namespace NKikimr {
@@ -22,6 +23,25 @@ Y_UNIT_TEST_SUITE(TVPatchMirror3dcQuorumTest) {
         UNIT_ASSERT(NVPatch::HasMirror3dcQuorum(info, 0b000011011)); // 2+2
         UNIT_ASSERT(!NVPatch::HasMirror3dcQuorum(info, 0b000001011)); // 2+1
         UNIT_ASSERT(!NVPatch::HasMirror3dcQuorum(info, 0b001001001)); // one realm only
+    }
+
+    Y_UNIT_TEST(PrefersOneReplicaFromEachRealm) {
+        const TBlobStorageGroupInfo info(TErasureType::ErasureMirror3dc, 1, 3, 3);
+
+        const ui32 selected = NVPatch::SelectMirror3dcQuorum(info, 0b000011111); // 2+2+1 available
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(std::popcount(selected)), 3);
+        UNIT_ASSERT(NVPatch::HasMirror3dcQuorum(info, selected));
+    }
+
+    Y_UNIT_TEST(FallsBackToTwoByTwo) {
+        const TBlobStorageGroupInfo info(TErasureType::ErasureMirror3dc, 1, 3, 3);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            NVPatch::SelectMirror3dcQuorum(info, 0b000011011),
+            0b000011011); // 2+2 available
+        UNIT_ASSERT_VALUES_EQUAL(
+            NVPatch::SelectMirror3dcQuorum(info, 0b000001011),
+            0); // only 2+1 available
     }
 }
 

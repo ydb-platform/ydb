@@ -5,5 +5,6 @@
 namespace NKikimr::NVPatch {
 
 bool HasMirror3dcQuorum(const TBlobStorageGroupInfo& info, ui32 successfulSubgroupMask);
+ui32 SelectMirror3dcQuorum(const TBlobStorageGroupInfo& info, ui32 availableSubgroupMask);
 
 } // namespace NKikimr::NVPatch

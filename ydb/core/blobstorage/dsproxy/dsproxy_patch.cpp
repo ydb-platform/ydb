@@ -6,6 +6,8 @@
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_partlayout.h>
 #include <ydb/core/util/stlog.h>
 
+#include <bit>
+
 #include <util/generic/ymath.h>
 #include <util/system/datetime.h>
 #include <util/system/hp_timer.h>
@@ -23,6 +25,19 @@ bool HasMirror3dcQuorum(const TBlobStorageGroupInfo& info, ui32 successfulSubgro
     const auto successful = TBlobStorageGroupInfo::TSubgroupVDisks::CreateFromMask(
         &info.GetTopology(), successfulSubgroupMask);
     return info.GetQuorumChecker().CheckQuorumForSubgroup(successful);
+}
+
+ui32 SelectMirror3dcQuorum(const TBlobStorageGroupInfo& info, ui32 availableSubgroupMask) {
+    for (ui32 diskCount = 3; diskCount <= 4; ++diskCount) {
+        for (ui32 candidate = availableSubgroupMask; candidate;
+                candidate = (candidate - 1) & availableSubgroupMask) {
+            if (static_cast<ui32>(std::popcount(candidate)) == diskCount
+                    && HasMirror3dcQuorum(info, candidate)) {
+                return candidate;
+            }
+        }
+    }
+    return 0;
 }
 
 } // namespace NVPatch
@@ -780,27 +795,35 @@ public:
         YDB_LOG_PATCH_LOG(PRI_DEBUG, "Continue VPatch {mirror-3-dc}",
             {"marker", "BPPA10"});
         TStackVec<TPartPlacement, TypicalPartsInBlob> placements;
-        ui32 subgroupMask = 0;
+        ui32 availableSubgroupMask = 0;
         for (const TPartPlacement& placement : FoundParts) {
             Y_ABORT_UNLESS(placement.VDiskIdxInSubgroup < 32);
+            availableSubgroupMask |= ui32{1} << placement.VDiskIdxInSubgroup;
+        }
+
+        const ui32 selectedSubgroupMask = NVPatch::SelectMirror3dcQuorum(*Info, availableSubgroupMask);
+        ui32 pendingSubgroupMask = selectedSubgroupMask;
+        for (const TPartPlacement& placement : FoundParts) {
             const ui32 bit = ui32{1} << placement.VDiskIdxInSubgroup;
-            if (!(subgroupMask & bit)) {
-                subgroupMask |= bit;
+            if (pendingSubgroupMask & bit) {
+                pendingSubgroupMask &= ~bit;
                 placements.push_back(placement);
-                if (NVPatch::HasMirror3dcQuorum(*Info, subgroupMask)) {
-                    SentVPatchDiff += placements.size();
-                    SendDiffs(placements);
-                    YDB_LOG_PATCH_LOG(PRI_DEBUG, "Found quorum {mirror-3-dc}",
-                        {"marker", "BPPA14"},
-                        {"SubgroupMask", subgroupMask},
-                        {"PlacementCount", placements.size()});
-                    return true;
-                }
             }
+        }
+        if (selectedSubgroupMask) {
+            Y_ABORT_UNLESS(!pendingSubgroupMask);
+            SentVPatchDiff += placements.size();
+            SendDiffs(placements);
+            YDB_LOG_PATCH_LOG(PRI_DEBUG, "Found quorum {mirror-3-dc}",
+                {"marker", "BPPA14"},
+                {"AvailableSubgroupMask", availableSubgroupMask},
+                {"SelectedSubgroupMask", selectedSubgroupMask},
+                {"PlacementCount", placements.size()});
+            return true;
         }
         YDB_LOG_PATCH_LOG(PRI_DEBUG, "Didn't find quorum {mirror-3-dc}",
             {"marker", "BPPA13"},
-            {"SubgroupMask", subgroupMask});
+            {"AvailableSubgroupMask", availableSubgroupMask});
         return false;
     }
 

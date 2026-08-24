@@ -527,6 +527,9 @@ enum ECumulativeCounters {
     // unbounded scan shows up here as a rate spike with no matching delivery.
     COUNTER_SCHEME_CHANGE_ROWS_SCANNED = 152             [(CounterOpts) = {Name: "SchemeChangeOutboxRowsScanned"}];
     COUNTER_SCHEME_CHANGE_DESCRIPTION_BYTES = 153        [(CounterOpts) = {Name: "SchemeChangeDescriptionBytes"}];
+    // A path-bearing op resolved to no path at propose. Means an op is
+    // missing from the pathless allowlist; the propose is rejected.
+    COUNTER_SCHEME_CHANGE_PATH_MISSING = 154             [(CounterOpts) = {Name: "SchemeChangePathMissing"}];
 }
 
 enum EPercentileCounters {

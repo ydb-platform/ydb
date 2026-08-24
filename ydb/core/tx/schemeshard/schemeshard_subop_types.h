@@ -165,4 +165,8 @@ bool CanDeleteParts(ETxType t);
 // budget. See IsChurnOp in the .cpp.
 bool IsChurnOp(NKikimrSchemeOp::EOperationType opType);
 
+// Path-bearing ops explicitly exempt from carrying a resolved path in their
+// scheme change record. See IsPathlessOp in the .cpp.
+bool IsPathlessOp(NKikimrSchemeOp::EOperationType opType);
+
 }  // namespace NKikimr::NSchemeShard

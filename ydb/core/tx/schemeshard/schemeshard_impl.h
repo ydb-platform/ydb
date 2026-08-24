@@ -1003,6 +1003,13 @@ public:
         ui64 order, const TString& path) const;
     void PersistRemoveSchemeChangePendingOrder(NIceDb::TNiceDb& db, TTxId txId, ui32 userTxIdx) const;
 
+    // Must be called for every rewritten transaction in a batch before any of
+    // them is persisted via PersistSchemeChangeRecordAtPropose below: a
+    // path-bearing op that resolves no path rejects the whole propose, and
+    // that must happen before any record in the batch is written, since
+    // local-DB writes already made are not undone by AbortOperationPropose.
+    bool CheckSchemeChangeRecordHasPath(const NKikimrSchemeOp::TModifyScheme& userTx, TString& rejectReason);
+
     // Reserves an order and writes the row with CompletedAtUs = 0, which keeps
     // it hidden from fetch. Returns false if this transaction emits no record.
     // userSid is the DDL issuer captured at propose; empty if the caller had

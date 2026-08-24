@@ -351,6 +351,14 @@ bool IsChurnOp(NKikimrSchemeOp::EOperationType opType) {
     }
 }
 
+// Path-bearing ops that legitimately have no path target -- exempt from the
+// scheme change outbox's "every path-bearing op resolves a path" invariant.
+// None exist today: every non-churn op targets a concrete path. Add an entry
+// here only for a real op, never to silence a resolution failure.
+bool IsPathlessOp(NKikimrSchemeOp::EOperationType) {
+    return false;
+}
+
 bool CanDeleteParts(ETxType t) {
     switch (t) {
         case TxDropTable:

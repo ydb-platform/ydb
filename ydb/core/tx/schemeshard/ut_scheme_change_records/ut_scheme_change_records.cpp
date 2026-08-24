@@ -1,6 +1,7 @@
 #include "ut_scheme_change_records_helpers.h"
 
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/schemeshard_counters.h>
 
 #include <util/string/printf.h>
 
@@ -98,7 +99,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
                 && e.Body.GetCreateTable().GetName() == "Table1") {
                 found = true;
                 UNIT_ASSERT_VALUES_EQUAL(e.TxId, (ui64)txId);
-                UNIT_ASSERT_VALUES_EQUAL(e.Path, "/MyRoot/Table1");
+                UNIT_ASSERT_VALUES_EQUAL(e.Path, "Table1");
                 UNIT_ASSERT(e.Order > 0);
                 break;
             }
@@ -187,9 +188,11 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
     }
 
     // TCreateCdcStream has no top-level "Name" field (the target is nested
-    // under TableName/StreamDescription.Name), so the reflection scan finds
-    // nothing and must not fall back to stamping the record with the parent
-    // directory's identity -- that directory did not change.
+    // under TableName/StreamDescription.Name and is not a direct child of
+    // WorkingDir), so path resolution fails -- the propose must be refused
+    // rather than produce a record stamped with the parent directory's
+    // identity or an empty path. See PathBearingOpNeverStoresAnApproximatePath
+    // for the counter and record-absence assertions.
     Y_UNIT_TEST(CdcStreamRecordDoesNotImpersonateParentDirectory) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
@@ -213,24 +216,14 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
                 Mode: ECdcStreamModeKeysOnly
                 Format: ECdcStreamFormatProto
             }
-        )");
-        env.TestWaitNotification(runtime, txId);
+        )", {NKikimrScheme::StatusInvalidParameter});
 
         auto entries = ReadSchemeChangeRecords(runtime);
-        const TSchemeChangeRecordEntry* cdcEntry = nullptr;
         for (const auto& e : entries) {
-            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateCdcStream) {
-                cdcEntry = &e;
-            }
+            UNIT_ASSERT_C(e.Body.GetOperationType() != NKikimrSchemeOp::ESchemeOpCreateCdcStream,
+                "the record must not be stamped with the parent directory's identity "
+                "or an empty path -- the propose itself must be refused instead");
         }
-        UNIT_ASSERT_C(cdcEntry, "CREATE CDC STREAM entry not found in notification log");
-        // Positive companion: the body is unaffected and still names the
-        // real target, so this is purely a metadata-attribution bug.
-        UNIT_ASSERT_VALUES_EQUAL_C(cdcEntry->Body.GetCreateCdcStream().GetTableName(), "Table1",
-            "precondition: the body must still carry the real target");
-        UNIT_ASSERT_C(cdcEntry->Path != "/MyRoot",
-            "the record must not be stamped with the parent directory's identity "
-            "(\"/MyRoot\") when no top-level Name field is found; got \"" << cdcEntry->Path << "\"");
     }
 
     Y_UNIT_TEST(DropTableWritesLogEntry) {
@@ -1291,5 +1284,153 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
             (ui32)NKikimrSchemeShard::TSchemeChangeSubscriberState::STATE_READY,
             "a subscriber that was mid-stream across a disable/enable cycle "
             "must not be reported as STATE_LOST");
+    }
+
+    // (a) FinalizeSchemeChangeRecord resolves the target via TPath::Resolve but
+    // only writes PathOwnerId/PathLocalId back -- Path itself keeps the
+    // propose-time synthesis. A WorkingDir with a trailing slash still
+    // canonicalizes on resolve, so the two differ and the record must carry
+    // the canonical one.
+    Y_UNIT_TEST(RecordCarriesCanonicalResolvedPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        // Trailing slash: propose-time string concatenation would leave a
+        // double slash, while TPath::Resolve canonicalizes it away.
+        TestCreateTable(runtime, ++txId, "/MyRoot/", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        const TSchemeChangeRecordEntry* found = nullptr;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateTable
+                && e.Body.GetCreateTable().GetName() == "Table1") {
+                found = &e;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(found, "CREATE TABLE entry not found");
+        UNIT_ASSERT_C(!found->Path.Contains("//"),
+            "Path must be the canonical resolved path, not a raw concatenation; got \"" << found->Path << "\"");
+    }
+
+    // (b) + (c) A stored path must be relative to the database root, and the
+    // relative remainder must be the full path to the object -- a path
+    // truncated to empty must not pass.
+    Y_UNIT_TEST(RecordPathIsRelativeToDatabaseRoot) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestMkDir(runtime, ++txId, "/MyRoot", "DirA");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot/DirA", R"(
+            Name: "Nested"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        const TSchemeChangeRecordEntry* found = nullptr;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateTable
+                && e.Body.GetCreateTable().GetName() == "Nested") {
+                found = &e;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(found, "CREATE TABLE entry not found");
+        UNIT_ASSERT_C(!found->Path.StartsWith("/MyRoot"),
+            "Path must not carry the source database prefix; got \"" << found->Path << "\"");
+        UNIT_ASSERT_VALUES_EQUAL_C(found->Path, "DirA/Nested",
+            "Path must be the full remainder relative to the database root, "
+            "not truncated to empty or to just the leaf name");
+    }
+
+    // (c) No fallback, ever: CreateCdcStream's target is not a direct child of
+    // WorkingDir (it is WorkingDir/TableName/StreamName), so today's target-name
+    // extraction cannot resolve it. The record must not carry an empty or
+    // approximate path -- the propose itself must be refused, loudly, with a
+    // counter bump naming the gap in the pathless allowlist.
+    Y_UNIT_TEST(PathBearingOpNeverStoresAnApproximatePath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key"   Type: "Uint64" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const ui64 rejectedBefore = GetCumulativeCounter(runtime, "SchemeShard/SchemeChangePathMissing");
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table1"
+            StreamDescription {
+                Name: "Stream1"
+                Mode: ECdcStreamModeKeysOnly
+                Format: ECdcStreamFormatProto
+            }
+        )", {NKikimrScheme::StatusInvalidParameter});
+
+        const ui64 rejectedAfter = GetCumulativeCounter(runtime, "SchemeShard/SchemeChangePathMissing");
+        UNIT_ASSERT_C(rejectedAfter > rejectedBefore,
+            "an unresolvable path-bearing op must bump the path-missing counter");
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        for (const auto& e : entries) {
+            UNIT_ASSERT_C(e.Body.GetOperationType() != NKikimrSchemeOp::ESchemeOpCreateCdcStream,
+                "a refused propose must not leave a scheme change record behind");
+        }
+    }
+
+    // Positive companion to PathBearingOpNeverStoresAnApproximatePath: the
+    // pathless allowlist is empty today, so an ordinary op must still produce
+    // its record -- the invariant above must not be satisfiable by refusing
+    // everything.
+    Y_UNIT_TEST(OrdinaryOpsStillProduceRecordsWhenAllowlistIsEmpty) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "PlainTable"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        bool found = false;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateTable
+                && e.Body.GetCreateTable().GetName() == "PlainTable") {
+                found = true;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(found, "an ordinary path-bearing op must still produce a record");
     }
 }

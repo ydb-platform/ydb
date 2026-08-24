@@ -2136,7 +2136,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         auto before = ReadSchemeChangeRecords(runtime);
         const TSchemeChangeRecordEntry* orphanedEntry = nullptr;
         for (const auto& e : before) {
-            if (e.Path == "/MyRoot/Orphaned") {
+            if (e.Path == "Orphaned") {
                 orphanedEntry = &e;
             }
         }
@@ -2181,14 +2181,14 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         auto* fetch = FetchSchemeChangeRecords(runtime, "orphan:sub", 0, 100, fetchHandle);
         bool sawAfter = false;
         for (size_t i = 0; i < static_cast<size_t>(fetch->Record.EntriesSize()); ++i) {
-            if (fetch->Record.GetEntries(i).GetPath() == "/MyRoot/After") {
+            if (fetch->Record.GetEntries(i).GetPath() == "After") {
                 sawAfter = true;
             }
         }
         UNIT_ASSERT_C(sawAfter,
             "a row orphaned by a TolerateOrphanedPaths recovery must not permanently block "
             "the fetch stream behind it; the record for a later, unrelated DDL "
-            "(/MyRoot/After) must still be reachable");
+            "(After) must still be reachable");
     }
 
     // A redelivered plan step (mediator reconnect) must not double-count in

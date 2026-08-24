@@ -333,6 +333,20 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
     // persist and reload at TTxInit, so with the flag off and rows on disk
     // Subscribers is non-empty and reservation would otherwise stay live.
     if (AppData()->FeatureFlags.GetEnableSchemeChangeRecords() && !Subscribers.empty()) {
+        // Validated before any record is written: a path-bearing op with no
+        // path rejects the whole propose, and that must happen before any
+        // local-DB write in this section, since AbortOperationPropose does
+        // not undo local-DB writes, only in-memory operation state.
+        for (const auto& transaction : rewrittenTransactions) {
+            TString rejectReason;
+            if (!CheckSchemeChangeRecordHasPath(transaction, rejectReason)) {
+                AbortOperationPropose(txId, context);
+                response.Reset(new TProposeResponse(NKikimrScheme::StatusInvalidParameter, ui64(txId), ui64(selfId)));
+                response->SetError(NKikimrScheme::StatusInvalidParameter, rejectReason);
+                return response;
+            }
+        }
+
         NIceDb::TNiceDb db(context.GetDB());
         operation->SchemeChangeOrderBase = NextSchemeChangeOrder;
         operation->SchemeChangeOrdersReserved = true;

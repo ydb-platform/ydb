@@ -41,7 +41,88 @@ TString ExtractSchemeChangeTargetName(const NKikimrSchemeOp::TModifyScheme& tx) 
     return {};
 }
 
+// Database-relative form of a resolved path: the domain prefix and its
+// joining slash stripped from PathString(). The database root itself is ""
+// (its PathString() equals the domain prefix), so a child of root is "name"
+// with no leading slash.
+TString RelativeToDomain(const TPath& resolved) {
+    TString abs = resolved.PathString();
+    TString domain = resolved.GetDomainPathString();
+    Y_DEBUG_ABORT_UNLESS(abs.StartsWith(domain));
+    TString rel = abs.substr(domain.size());
+    if (!rel.empty() && rel[0] == '/') {
+        rel = rel.substr(1);
+    }
+    return rel;
+}
+
+struct TResolvedSchemeChangePath {
+    // Absolute; used only to re-resolve at finalisation.
+    TString Absolute;
+    // Database-relative; what gets persisted in the outbox row.
+    TString Relative;
+};
+
+// Authoritative propose-time path for a user-level TModifyScheme: never a
+// string-assembled guess. Not classified by op type -- ConvertToTxType
+// collapses many EOperationType values onto TxInvalid, and IsCreate/IsDrop
+// hard-abort on TxInvalid, so op-type dispatch here would crash the tablet
+// on exactly the ops this function most needs to handle (e.g. CreateCdcStream).
+// Instead: try resolving the target itself first (covers drop/alter, whose
+// target already exists); if that fails, fall back to resolving WorkingDir
+// alone (which exists for any valid DDL) and appending the target name --
+// covers create, whose own target does not exist yet. A Drop-by-PathId
+// request (Drop.Id set, no Name/WorkingDir -- e.g. ForceDropUnsafe) resolves
+// directly by PathId, the same way the subop itself resolves its target.
+// Returns Nothing() when nothing resolves; the caller must then reject the
+// propose, never store an approximation.
+TMaybe<TResolvedSchemeChangePath> ResolveSchemeChangePath(const NKikimrSchemeOp::TModifyScheme& userTx, TSchemeShard* ss) {
+    const TString targetName = ExtractSchemeChangeTargetName(userTx);
+    if (targetName.empty()) {
+        if (userTx.HasDrop() && userTx.GetDrop().GetId() != 0) {
+            TPath target = TPath::Init(ss->MakeLocalId(userTx.GetDrop().GetId()), ss);
+            if (target.IsResolved()) {
+                return TResolvedSchemeChangePath{target.PathString(), RelativeToDomain(target)};
+            }
+        }
+        return Nothing();
+    }
+
+    TString abs = userTx.GetWorkingDir();
+    if (abs.empty() || abs.back() != '/') abs += '/';
+    abs += targetName;
+
+    TPath target = TPath::Resolve(abs, ss);
+    if (target.IsResolved()) {
+        return TResolvedSchemeChangePath{abs, RelativeToDomain(target)};
+    }
+
+    TPath workingDir = TPath::Resolve(userTx.GetWorkingDir(), ss);
+    if (!workingDir.IsResolved()) {
+        return Nothing();
+    }
+    TString relParent = RelativeToDomain(workingDir);
+    if (!relParent.empty()) {
+        relParent += '/';
+    }
+    return TResolvedSchemeChangePath{abs, relParent + targetName};
+}
+
 } // namespace
+
+bool TSchemeShard::CheckSchemeChangeRecordHasPath(const NKikimrSchemeOp::TModifyScheme& userTx, TString& rejectReason) {
+    if (IsChurnOp(userTx.GetOperationType()) || IsPathlessOp(userTx.GetOperationType())) {
+        return true;
+    }
+    if (ResolveSchemeChangePath(userTx, this)) {
+        return true;
+    }
+    TabletCounters->Cumulative()[COUNTER_SCHEME_CHANGE_PATH_MISSING].Increment(1);
+    rejectReason = TStringBuilder() << "scheme change outbox could not resolve a path for operation type "
+        << NKikimrSchemeOp::EOperationType_Name(userTx.GetOperationType())
+        << "; this operation is missing from the pathless allowlist";
+    return false;
+}
 
 bool TSchemeShard::PersistSchemeChangeRecordAtPropose(NIceDb::TNiceDb& db, TTxId txId, ui32 userTxIdx,
         const NKikimrSchemeOp::TModifyScheme& userTx, TOperation::TSchemeChangeSlot& slot,
@@ -49,6 +130,11 @@ bool TSchemeShard::PersistSchemeChangeRecordAtPropose(NIceDb::TNiceDb& db, TTxId
     if (IsChurnOp(userTx.GetOperationType())) {
         return false;
     }
+
+    // CheckSchemeChangeRecordHasPath must have already validated this at the
+    // caller, before any record in this batch was written -- a path-bearing
+    // op with no path rejects the whole propose, not just this one record.
+    TMaybe<TResolvedSchemeChangePath> path = ResolveSchemeChangePath(userTx, this);
 
     // Redact every (Ydb.sensitive) field before persisting: passwords, access
     // keys, and secret values must never reach the outbox or subscribers.
@@ -61,25 +147,18 @@ bool TSchemeShard::PersistSchemeChangeRecordAtPropose(NIceDb::TNiceDb& db, TTxId
         Y_DEBUG_ABORT_UNLESS(ok);
     }
 
-    // If no target name is found, leave path empty rather than falling back
-    // to WorkingDir: an unset target is honest, the parent directory is not.
-    const TString targetName = ExtractSchemeChangeTargetName(userTx);
-    TString path;
-    if (!targetName.empty()) {
-        path = userTx.GetWorkingDir();
-        if (path.empty() || path.back() != '/') path += '/';
-        path += targetName;
-    }
-
     const ui64 order = AllocateSchemeChangeOrderInMemory();
 
     TestSchemeChangeRedoBytesAccum += body.size() + 128;
+
+    const TString relPath = path ? path->Relative : TString();
+    const TString absPath = path ? path->Absolute : TString();
 
     using T = Schema::SchemeChangeRecords;
     db.Table<T>().Key(order).Update(
         NIceDb::TUpdate<T::TxId>(ui64(txId)),
         NIceDb::TUpdate<T::OperationType>(static_cast<ui32>(userTx.GetOperationType())),
-        NIceDb::TUpdate<T::Path>(path),
+        NIceDb::TUpdate<T::Path>(relPath),
         NIceDb::TUpdate<T::Status>(ui32(NKikimrScheme::StatusAccepted)),
         NIceDb::TUpdate<T::UserSID>(userSid),
         NIceDb::TUpdate<T::BodySizeBytes>(body.size()),
@@ -94,11 +173,13 @@ bool TSchemeShard::PersistSchemeChangeRecordAtPropose(NIceDb::TNiceDb& db, TTxId
     }
 
     PersistUpdateNextSchemeChangeOrder(db);
-    PersistSchemeChangePendingOrder(db, txId, userTxIdx, order, path);
+    // Absolute form: finalisation re-resolves via TPath::Resolve, which
+    // requires an absolute path, not the database-relative one stored above.
+    PersistSchemeChangePendingOrder(db, txId, userTxIdx, order, absPath);
 
     slot.UserTxIdx = userTxIdx;
     slot.Order = order;
-    slot.Path = path;
+    slot.Path = absPath;
     slot.UserSid = userSid;
     return true;
 }
@@ -119,12 +200,17 @@ void TSchemeShard::FinalizeSchemeChangeRecord(NIceDb::TNiceDb& db, const TActorC
     TPathId resolvedPathId;
     auto resolvedObjectType = NKikimrSchemeOp::EPathTypeInvalid;
     ui64 schemaVersion = 0;
+    // Canonical resolved path, database-relative; only set on success. A drop
+    // keeps the propose-time value written by PersistSchemeChangeRecordAtPropose,
+    // since the object is already gone by the time this runs.
+    TMaybe<TString> canonicalRelativePath;
     if (!slot.Path.empty()) {
         TPath resolved = TPath::Resolve(slot.Path, this);
         if (resolved.IsResolved()) {
             resolvedPathId = resolved.Base()->PathId;
             resolvedObjectType = resolved.Base()->PathType;
             schemaVersion = resolved.Base()->DirAlterVersion;
+            canonicalRelativePath = RelativeToDomain(resolved);
         }
     }
 
@@ -162,6 +248,14 @@ void TSchemeShard::FinalizeSchemeChangeRecord(NIceDb::TNiceDb& db, const TActorC
         NIceDb::TUpdate<T::PositionKind>(static_cast<ui32>(positionKind)),
         NIceDb::TUpdate<T::CompletedAtUs>(ctx.Now().MicroSeconds())
     );
+    // Overwrite the propose-time synthesis with the canonical resolved path.
+    // Only on success: a drop's target is already gone, so the propose-time
+    // value (still database-relative, already correct) is left in place.
+    if (canonicalRelativePath) {
+        db.Table<T>().Key(slot.Order).Update(
+            NIceDb::TUpdate<T::Path>(*canonicalRelativePath)
+        );
+    }
 }
 
 ui64 TSchemeShard::AllocateSchemeChangeOrder(NIceDb::TNiceDb& db) {

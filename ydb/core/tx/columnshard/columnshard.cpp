@@ -689,8 +689,6 @@ void TColumnShard::Handle(TEvTablet::TEvMoveData::TPtr& ev, const TActorContext&
         MoveDataState.TargetGroups.emplace(groupId);
     }
     if (MoveDataState.TargetGroups.empty()) {
-        // Nothing to rewrite — behave like the base executor: run the vacuum leg only
-        // and let the completion gate reply once it finishes.
         LOG_S_INFO("TColumnShard::Handle TEvMoveData: empty group list, vacuum-only at tablet " << TabletID());
         MoveDataState.Active = true;
         MoveDataState.VacuumCompleted = false;
@@ -727,8 +725,7 @@ void TColumnShard::MoveDataCompleted(const TActorContext& ctx) {
     switch (NOlap::NActualizer::ClassifyMoveDataGate(
         MoveDataState.VacuumCompleted, queues, GetStoragesManager()->GetDefaultOperator()->HasBlobsForGroups(MoveDataState.TargetGroups))) {
         case NOlap::NActualizer::EMoveDataGate::BlockedByVacuum:
-            // Unreachable here: VacuumCompleted is set above, and the wakeup path checks it.
-            return;
+            Y_UNREACHABLE();
         case NOlap::NActualizer::EMoveDataGate::BlockedByPortions:
             Counters.GetCSCounters().OnMoveDataGateBlockedByPortions();
             return;

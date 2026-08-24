@@ -2240,3 +2240,35 @@ FROM `{table_name}`"""
         second_node = list(kikimr.cluster.nodes.values())[1]
         second_ydb_client = YdbClient.from_driver_config(database=kikimr.endpoint.database, endpoint=f"grpc://{second_node.host}:{second_node.port}", enable_discovery=False)
         check_issues("Lease expired", client=second_ydb_client)
+
+    def test_pq_source_actor_count_for_many_partitions(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str]) -> None:
+
+        partitions_count = 100
+        inp, out, _ = self.get_io_names(
+            kikimr,
+            "test_pq_source_actor_count_for_many_partitions",
+            True,
+            entity_name,
+            partitions_count=partitions_count,
+        )
+        query_name = "test_pq_source_actor_count_for_many_partitions"
+        path = f"/Root/{query_name}"
+
+        kikimr.ydb_client.query(
+            f"""
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                INSERT INTO {out} SELECT Data FROM {inp};
+            END DO;
+            """
+        )
+        self.wait_completed_checkpoints(kikimr, path)
+
+        def pq_source_actor_count():
+            return sum(self.get_actor_count(kikimr, node_id, "DQ_PQ_READ_ACTOR") for node_id in kikimr.cluster.nodes)
+        expected_actor_count = partitions_count / 5
+        assert wait_for(lambda: pq_source_actor_count() == expected_actor_count, timeout_seconds=60, step_seconds=1), (
+            f"Expected {expected_actor_count} DQ_PQ_READ_ACTOR actors, got {pq_source_actor_count()}"
+        )
+
+        kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")

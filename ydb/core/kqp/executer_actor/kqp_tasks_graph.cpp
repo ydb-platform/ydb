@@ -3483,7 +3483,7 @@ size_t TKqpTasksGraph::BuildAllTasks(std::optional<TLlvmSettings> llvmSettings,
                         case NKqpProto::TKqpSource::kExternalSource: {
                             YQL_ENSURE(!GetMeta().IsScan);
                             auto it = scheduledTaskCount.find(stageIdx);
-                            CountReadTasksFromSource(stageInfo, resourcesSnapshot.size(), it != scheduledTaskCount.end() ? it->second.TaskCount : 0);
+                            CountReadTasksFromSource(stageInfo, resourcesSnapshot, it != scheduledTaskCount.end() ? it->second.TaskCount : 0);
                         } break;
                         default:
                             YQL_ENSURE(false, "unknown source type");
@@ -3961,7 +3961,7 @@ void TKqpTasksGraph::CountSysViewTasksFromSource(TStageInfo& stageInfo) {
     MaxTasksGraph->AddTask(AddTask(stageInfo, TTask::SYSVIEW_COMPUTE), GetMeta().ExecuterId.NodeId());
 }
 
-void TKqpTasksGraph::CountReadTasksFromSource(TStageInfo& stageInfo, size_t resourceSnapshotSize, ui32 scheduledTaskCount) {
+void TKqpTasksGraph::CountReadTasksFromSource(TStageInfo& stageInfo, const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot, ui32 scheduledTaskCount) {
     const auto& stageId = stageInfo.Id;
     const auto& stage = stageInfo.Meta.GetStage(stageId);
     const auto& externalSource = stage.GetSources(0).GetExternalSource();
@@ -3981,8 +3981,15 @@ void TKqpTasksGraph::CountReadTasksFromSource(TStageInfo& stageInfo, size_t reso
     ui32 taskCount = externalSource.GetPartitionedTaskParams().size();
     if (taskCountHint) {
         taskCount = std::min<ui32>(taskCount, taskCountHint);
-    } else if (resourceSnapshotSize) {
-        taskCount = std::min<ui32>(taskCount, resourceSnapshotSize * 2);
+    } else if (!resourcesSnapshot.empty()) {
+        ui32 userPoolThreads = 0;
+        for (const auto& nodeResources : resourcesSnapshot) {
+            userPoolThreads += nodeResources.GetKqpProxyNodeResources().GetThreads();
+        }
+
+        constexpr ui32 AveragePartitionsPerTask = 5;
+        const ui32 tasksByPartitions = (taskCount + AveragePartitionsPerTask - 1) / AveragePartitionsPerTask;
+        taskCount = std::min(tasksByPartitions, userPoolThreads);
     }
 
     for (ui32 i = 0; i < taskCount; ++i) {

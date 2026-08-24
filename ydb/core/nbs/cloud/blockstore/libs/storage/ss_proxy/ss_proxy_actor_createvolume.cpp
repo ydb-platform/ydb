@@ -31,6 +31,18 @@ ui64 GetBlocksCount(const TVolumeConfig& config)
     return res;
 }
 
+ui64 GetPartitionTabletIdFromPathDesc(
+    const NKikimrSchemeOp::TPathDescription& pathDescription)
+{
+    const auto& volumeDescription =
+        pathDescription.GetBlockStoreVolumeDescription();
+    if (volumeDescription.PartitionsSize() == 0) {
+        return 0;
+    }
+
+    return volumeDescription.GetPartitions(0).GetTabletId();
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TCreateVolumeActor final: public TActorBootstrapped<TCreateVolumeActor>
@@ -424,7 +436,10 @@ void TCreateVolumeActor::HandleDescribeVolumeBeforeCreateResponse(
     ReplyAndDie(
         ctx,
         std::make_unique<TEvSSProxy::TEvCreateVolumeResponse>(
-            MakeError(S_ALREADY)));
+            MakeError(S_ALREADY),
+            NKikimrScheme::StatusSuccess,
+            TString(),   // reason
+            GetPartitionTabletIdFromPathDesc(pathDescription)));
 }
 
 void TCreateVolumeActor::HandleCreateVolumeResponse(
@@ -580,7 +595,12 @@ void TCreateVolumeActor::HandleDescribeVolumeAfterCreateResponse(
         return;
     }
 
-    ReplyAndDie(ctx, std::make_unique<TEvSSProxy::TEvCreateVolumeResponse>());
+    ReplyAndDie(
+        ctx,
+        std::make_unique<TEvSSProxy::TEvCreateVolumeResponse>(
+            NKikimrScheme::StatusSuccess,
+            TString(),   // reason
+            GetPartitionTabletIdFromPathDesc(pathDescription)));
 }
 
 void TCreateVolumeActor::ReplyAndDie(

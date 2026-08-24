@@ -3,7 +3,7 @@
 #include "configuration.h"
 
 #include <yql/essentials/sql/v1/ide/completion/core/input.h>
-#include <yql/essentials/sql/v1/ide/completion/core/environment.h>
+#include <yql/essentials/sql/v1/ide/core/environment.h>
 #include <yql/essentials/sql/v1/ide/completion/name/service/ranking/ranking.h>
 #include <yql/essentials/sql/v1/ide/completion/name/service/name_service.h>
 #include <yql/essentials/sql/v1/lexer/lexer.h>
@@ -16,6 +16,8 @@
 #include <util/generic/hash_set.h>
 
 namespace NSQLComplete {
+
+using NSQLPureAST::TEnvironment;
 
 struct TCompletedToken {
     TStringBuf Content;

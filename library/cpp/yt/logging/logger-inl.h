@@ -374,6 +374,11 @@ struct TStaticAnchorRef
     std::atomic<bool>* Registered;
 };
 
+struct TDynamicAnchorRef
+{
+    TLoggingAnchor* Anchor;
+};
+
 class TWellKnownTaggedLoggingGuard;
 
 //! Accumulates a tagged log message via a fluent |.With| chain and emits the event in
@@ -401,6 +406,23 @@ public:
             message,
             /*alwaysBuildMessage*/ false)
     { }
+
+    TTaggedLoggingGuard(
+        const TLogger& logger,
+        ELogLevel level,
+        ::TSourceLocation sourceLocation,
+        TDynamicAnchorRef anchorRef,
+        TStringBuf message)
+        : Logger_(logger)
+        , SourceLocation_(sourceLocation)
+        , Anchor_(anchorRef.Anchor)
+    {
+        if (!Logger_.IsAnchorUpToDate(*Anchor_)) [[unlikely]] {
+            Logger_.UpdateDynamicAnchor(Anchor_);
+        }
+
+        Initialize(level, message, /*alwaysBuildMessage*/ false);
+    }
 
     TTaggedLoggingGuard(const TTaggedLoggingGuard&) = delete;
     TTaggedLoggingGuard& operator=(const TTaggedLoggingGuard&) = delete;
@@ -459,8 +481,7 @@ public:
         return *this;
     }
 
-    //! Attaches a well-known tag whose key is resolved from #value's type via the
-    //! |GetWellKnownLoggingTag| ADL point (the type must opt in, e.g. errors).
+    //! Attaches a well-known tag whose key comes from #TWellKnownLoggingTagTraits.
     //!
     //! Returns a #TWellKnownTaggedLoggingGuard, which exposes only further well-known
     //! tags: the payload contract requires well-known tags to come last (so
@@ -471,16 +492,9 @@ public:
 
     ~TTaggedLoggingGuard()
     {
-        if (!Enabled_) {
-            return;
+        if (Enabled_) {
+            Emit(EffectiveLevel_, Writer_.Finish());
         }
-        LogEventImpl(
-            LoggingContext_,
-            Logger_,
-            EffectiveLevel_,
-            SourceLocation_,
-            Anchor_,
-            Writer_.Finish());
     }
 
 protected:
@@ -492,6 +506,13 @@ protected:
     ELogLevel EffectiveLevel_ = ELogLevel::Minimum;
     TLoggingContext LoggingContext_;
     TTaggedPayloadWriter Writer_;
+
+    //! Emits #payload, disarming the destructor so the event is logged exactly once.
+    void Emit(ELogLevel level, TTaggedLogEventPayload&& payload)
+    {
+        Enabled_ = false;
+        LogEventImpl(LoggingContext_, Logger_, level, SourceLocation_, Anchor_, std::move(payload));
+    }
 
     //! Shared constructor. When #alwaysBuildMessage is set the payload message is built
     //! even if the level is disabled (so a terminal guard can still recover it); #Enabled_
@@ -511,6 +532,12 @@ protected:
             Logger_.UpdateStaticAnchor(Anchor_, anchorRef.Registered, sourceLocation, message);
         }
 
+        Initialize(level, message, alwaysBuildMessage);
+    }
+
+private:
+    void Initialize(ELogLevel level, TStringBuf message, bool alwaysBuildMessage)
+    {
         EffectiveLevel_ = TLogger::GetEffectiveLoggingLevel(level, *Anchor_);
         Enabled_ = Logger_.IsLevelEnabled(EffectiveLevel_);
         if (!Enabled_ && !alwaysBuildMessage) {
@@ -526,7 +553,6 @@ protected:
         AppendContextualTags(&Writer_, LoggingContext_, Logger_);
     }
 
-private:
     template <class TValue>
     TTaggedLoggingGuard& DoWith(TLoggingTagKey tag, const TValue& value, TStringBuf spec) &
     {
@@ -561,7 +587,7 @@ private:
 template <class TValue>
 TWellKnownTaggedLoggingGuard TTaggedLoggingGuard::With(const TValue& value) &
 {
-    FormatValue(Writer_.BeginWellKnownTag(GetWellKnownLoggingTag(value)), value, "v"_sb);
+    FormatValue(Writer_.BeginWellKnownTag(TWellKnownLoggingTagTraits<TValue>::Key), value, "v"_sb);
     Writer_.EndTag();
     return TWellKnownTaggedLoggingGuard(*this);
 }
@@ -585,8 +611,7 @@ public:
     //! Emits the event at |Fatal| level; the log manager aborts the process.
     [[noreturn]] void Commit() &
     {
-        Enabled_ = false; // The event is emitted here, not from the base destructor.
-        LogEventImpl(LoggingContext_, Logger_, ELogLevel::Fatal, SourceLocation_, Anchor_, Writer_.Finish());
+        Emit(ELogLevel::Fatal, Writer_.Finish());
         Y_UNREACHABLE();
     }
 };
@@ -623,8 +648,7 @@ public:
         auto payload = Writer_.Finish();
         auto message = FormatTaggedPayload(payload);
         if (Enabled_) {
-            Enabled_ = false; // The event is emitted here, not from the base destructor.
-            LogEventImpl(LoggingContext_, Logger_, EffectiveLevel_, SourceLocation_, Anchor_, std::move(payload));
+            Emit(EffectiveLevel_, std::move(payload));
         }
         return message;
     }

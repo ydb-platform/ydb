@@ -85,6 +85,13 @@ TTestEnv::~TTestEnv() {
     Server->ShutdownGRpc();
 }
 
+namespace {
+
+void WaitForDatabaseRunning(TTestEnv& env, const TString& path);
+void WaitForPath(TTestEnv& env, const TString& path, NSchemeCache::TSchemeCacheNavigate::EOp operation);
+
+} // anonymous namespace
+
 TString CreateDatabase(TTestEnv& env, const TString& databaseName,
     size_t nodeCount, bool isShared, const TString& poolName)
 {
@@ -116,12 +123,8 @@ TString CreateDatabase(TTestEnv& env, const TString& databaseName,
     UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
 
     env.GetTenants().Run(fullDbName, nodeCount);
-
-    if (!env.GetServer().GetSettings().UseRealThreads) {
-        runtime.SimulateSleep(TDuration::Seconds(1));
-    } else {
-        Sleep(TDuration::Seconds(1));
-    }
+    WaitForDatabaseRunning(env, fullDbName);
+    WaitForPath(env, fullDbName, NSchemeCache::TSchemeCacheNavigate::EOp::OpList);
 
     return fullDbName;
 }
@@ -145,13 +148,81 @@ TString CreateServerlessDatabase(TTestEnv& env, const TString& databaseName, con
     UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
 
     env.GetTenants().Run(fullDbName, nodeCount);
-
-    if (!env.GetServer().GetSettings().UseRealThreads) {
-        runtime.SimulateSleep(TDuration::Seconds(1));
-    }
+    WaitForDatabaseRunning(env, fullDbName);
+    WaitForPath(env, fullDbName, NSchemeCache::TSchemeCacheNavigate::EOp::OpList);
 
     return fullDbName;
 }
+
+namespace {
+
+void WaitForDatabaseRunning(TTestEnv& env, const TString& path) {
+    auto& runtime = *env.GetServer().GetRuntime();
+    const auto sender = runtime.AllocateEdgeActor();
+    Ydb::Cms::GetDatabaseStatusResult lastResult;
+
+    for (ui32 attempt = 0; attempt < 300; ++attempt) {
+        auto request = std::make_unique<NConsole::TEvConsole::TEvGetTenantStatusRequest>();
+        request->Record.MutableRequest()->set_path(path);
+        runtime.SendToPipe(MakeConsoleID(), sender, request.release(), 0, GetPipeConfigWithRetries());
+
+        auto response = runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvGetTenantStatusResponse>(
+            sender, TDuration::Seconds(30));
+        UNIT_ASSERT_C(response, "Timed out waiting for database status: " << path);
+        response->Get()->Record.GetResponse().operation().result().UnpackTo(&lastResult);
+        if (lastResult.state() == Ydb::Cms::GetDatabaseStatusResult::RUNNING) {
+            return;
+        }
+
+        if (env.GetServer().GetSettings().UseRealThreads) {
+            Sleep(TDuration::MilliSeconds(100));
+        } else {
+            runtime.SimulateSleep(TDuration::MilliSeconds(100));
+        }
+    }
+
+    UNIT_FAIL("Database " << path << " is not running, last status: " << lastResult.DebugString());
+}
+
+void WaitForPath(TTestEnv& env, const TString& path, NSchemeCache::TSchemeCacheNavigate::EOp operation) {
+    auto& runtime = *env.GetServer().GetRuntime();
+    const auto sender = runtime.AllocateEdgeActor();
+
+    using TNavigate = NSchemeCache::TSchemeCacheNavigate;
+    using TEvRequest = TEvTxProxySchemeCache::TEvNavigateKeySet;
+    using TEvResponse = TEvTxProxySchemeCache::TEvNavigateKeySetResult;
+
+    TNavigate::EStatus lastStatus = TNavigate::EStatus::Unknown;
+    for (ui32 attempt = 0; attempt < 300; ++attempt) {
+        auto request = std::make_unique<TNavigate>();
+        auto& entry = request->ResultSet.emplace_back();
+        entry.Path = SplitPath(path);
+        entry.RequestType = TNavigate::TEntry::ERequestType::ByPath;
+        entry.Operation = operation;
+        entry.ShowPrivatePath = true;
+        runtime.Send(MakeSchemeCacheID(), sender, new TEvRequest(request.release()));
+
+        auto ev = runtime.GrabEdgeEventRethrow<TEvResponse>(sender);
+        UNIT_ASSERT(ev);
+        UNIT_ASSERT(ev->Get());
+        std::unique_ptr<TNavigate> response(ev->Get()->Request.Release());
+        UNIT_ASSERT_VALUES_EQUAL(response->ResultSet.size(), 1);
+        lastStatus = response->ResultSet.front().Status;
+        if (lastStatus == TNavigate::EStatus::Ok) {
+            return;
+        }
+
+        if (env.GetServer().GetSettings().UseRealThreads) {
+            Sleep(TDuration::MilliSeconds(100));
+        } else {
+            runtime.SimulateSleep(TDuration::MilliSeconds(100));
+        }
+    }
+
+    UNIT_FAIL("Path " << path << " is not available, last navigation status: " << static_cast<ui32>(lastStatus));
+}
+
+} // anonymous namespace
 
 TPathId ResolvePathId(TTestActorRuntime& runtime, const TString& path, TPathId* domainKey, ui64* saTabletId) {
     auto sender = runtime.AllocateEdgeActor();
@@ -365,7 +436,7 @@ TTableInfo CreateColumnTable(TTestEnv& env, const TString& databaseName, const T
         << "WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = " << shardCount << ");";
 
     ExecuteYqlScript(env, createTable);
-    runtime.SimulateSleep(TDuration::Seconds(1));
+    WaitForPath(env, "/" + fullTableName, NSchemeCache::TSchemeCacheNavigate::EOp::OpPath);
 
     return MakeTableInfo(runtime, databaseName, tableName, true);
 }

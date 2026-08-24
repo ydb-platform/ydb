@@ -29,7 +29,6 @@ private:
 
     ui32 RefCount() const final;
 
-private:
     ui32 Refs_ = 0;
 };
 
@@ -106,7 +105,6 @@ class TStatefulComputationNode: public TRefCountedComputationNode<IComputationNo
 protected:
     TStatefulComputationNode(TComputationMutables& mutables, EValueRepresentation kind);
 
-protected:
     void InitNode(TComputationContext&) const override;
 
     ui32 GetIndex() const final;
@@ -349,7 +347,6 @@ private:
         return static_cast<const TDerived*>(this)->DoCalculate(this->ValueRef(compCtx), compCtx);
     }
 
-private:
     const EValueRepresentation RepresentationKind_;
 };
 

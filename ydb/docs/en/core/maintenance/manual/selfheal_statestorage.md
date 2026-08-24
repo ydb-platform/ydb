@@ -8,6 +8,8 @@ These instructions apply only to {{ ydb-short-name }} clusters with **V2 configu
 
 During cluster operation, nodes running {{ ydb-short-name }} may fail entirely.
 
+Self Heal State Storage is the SelfHeal mechanism for metadata distribution subsystems. Storage SelfHeal (disks and storage groups) is described in [{#T}](selfheal.md).
+
 Self Heal State Storage ensures the operability of the [metadata distribution subsystem](../../concepts/glossary.md#state-storage), [Board](../../concepts/glossary.md#board), and [SchemeBoard](../../concepts/glossary.md#scheme-board) of the cluster if it is impossible to quickly restore failed nodes, and automatically increases the number of replicas of these subsystems when new nodes are added to the cluster.
 
 Self Heal State Storage provides:
@@ -113,4 +115,4 @@ config:
 
 ## Checking the result {#verify-result}
 
-You can check that the changes have been applied in the `CMS` section of the cluster [Embedded UI](../../reference/embedded-ui/index.md) (available on port 8765): go to the `Sentinel` tab to view the status of Sentinel and Self Heal State Storage.
+You can check that the changes have been applied in the `CMS` section of the cluster [{{ ydb-ui-name }}](../../reference/ydb-ui/index.md) (available on port 8765): go to the `Sentinel` tab to view the status of Sentinel and Self Heal State Storage.

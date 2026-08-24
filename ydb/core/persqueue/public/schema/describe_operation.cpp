@@ -56,7 +56,16 @@ public:
         LOG_D("Bootstrap " << Settings.Path);
         RequestStartTime = TActivationContext::Now();
         Schedule(RequestTimeout, new TEvents::TEvWakeup(RequestTimeoutWakeupTag));
+        Become(&TDescribeOperationActor::StateDescribe);
 
+        ReadSessionsReceived = !Settings.IncludeStats;
+        LocationsReceived = !Settings.IncludeLocation && !Settings.IncludeStats;
+        StartDescribe();
+    }
+
+    void StartDescribe() {
+        LOG_D("StartDescribe path=" << Settings.Path
+                                    << " forceSyncVersion=" << Settings.ForceSyncVersion);
         DescriberActorId = RegisterWithSameMailbox(NDescriber::CreateDescriberActor(
             SelfId(),
             CanonizePath(Settings.Database),
@@ -64,11 +73,8 @@ public:
             {
                 .UserToken = Settings.UserToken,
                 .AccessRights = Settings.AccessRights,
+                .ForceSyncVersion = Settings.ForceSyncVersion,
             }));
-        Become(&TDescribeOperationActor::StateDescribe);
-
-        ReadSessionsReceived = !Settings.IncludeStats;
-        LocationsReceived = !Settings.IncludeLocation && !Settings.IncludeStats;
     }
 
     TStringBuilder LogBuilder() const {
@@ -134,6 +140,7 @@ private:
         response->SelfEntry = std::move(SelfEntry);
         response->Partitions = std::move(Partitions);
         response->ConsumerName = std::move(ConsumerName);
+        response->UsedSyncVersion = UsedSyncVersion;
         Send(Parent, response.release());
         IsDead = true;
         PassAway();
@@ -173,7 +180,9 @@ private:
     void Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
         DescriberActorId = {};
         TopicInfo = std::move(ev->Get()->Topics.begin()->second);
-        LOG_D("Handle TEvDescribeTopicsResponse. Status=" << TopicInfo.Status);
+        UsedSyncVersion = ev->Get()->UsedSyncVersion;
+        LOG_D("Handle TEvDescribeTopicsResponse. Status=" << TopicInfo.Status
+                                                         << " usedSyncVersion=" << UsedSyncVersion);
 
         if (TopicInfo.Status != NDescriber::EStatus::SUCCESS) {
             const auto status = [&]() {
@@ -183,6 +192,8 @@ private:
                     case NDescriber::EStatus::UNAUTHORIZED:
                     case NDescriber::EStatus::UNAUTHORIZED_WITH_DESCRIBE_ACCESS:
                         return Ydb::StatusIds::SCHEME_ERROR;
+                    case NDescriber::EStatus::BAD_REQUEST:
+                        return Ydb::StatusIds::BAD_REQUEST;
                     case NDescriber::EStatus::UNKNOWN_ERROR:
                         return Ydb::StatusIds::INTERNAL_ERROR;
                     default:
@@ -197,6 +208,8 @@ private:
                         return Ydb::PersQueue::ErrorCode::ACCESS_DENIED;
                     case NDescriber::EStatus::NOT_TOPIC:
                         return Ydb::PersQueue::ErrorCode::VALIDATION_ERROR;
+                    case NDescriber::EStatus::BAD_REQUEST:
+                        return Ydb::PersQueue::ErrorCode::BAD_REQUEST;
                     default:
                         return Ydb::PersQueue::ErrorCode::BAD_REQUEST;
                 }
@@ -212,6 +225,13 @@ private:
 
         auto schemaResult = Strategy->ValidateSchema(TopicInfo);
         if (schemaResult.Error) {
+            if (schemaResult.Error->RetryWithSync && !UsedSyncVersion) {
+                LOG_D("Schema validation failed without sync version, retrying describe. "
+                      << schemaResult.Error->Message);
+                Settings.ForceSyncVersion = true;
+                StartDescribe();
+                return;
+            }
             return ReplyWithError(
                 schemaResult.Error->Status,
                 schemaResult.Error->Message,
@@ -562,6 +582,7 @@ private:
     absl::flat_hash_map<ui64, TBackoff> StatsBackoff;
     absl::flat_hash_set<ui64> StatsRetryPending;
     NActors::TActorId DescriberActorId;
+    bool UsedSyncVersion = false;
 };
 
 } // namespace

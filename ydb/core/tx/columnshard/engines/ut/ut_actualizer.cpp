@@ -28,9 +28,6 @@ TIndexInfo MakeTestIndexInfo(const std::shared_ptr<TSchemaObjectsCache>& cache, 
     proto.AddKeyColumnNames("pk");
     proto.SetVersion(version);
     proto.MutableOptions()->SetSchemeNeedActualization(schemeNeedActualization);
-    proto.MutableOptions()->MutableCompactionPlannerConstructor()->SetClassName("l-buckets");
-    *proto.MutableOptions()->MutableCompactionPlannerConstructor()->MutableLBuckets() =
-        NKikimrSchemeOp::TCompactionPlannerConstructorContainer::TLOptimizer();
 
     auto result = TIndexInfo::BuildFromProto(version, proto, TTestStoragesManager::GetInstance(), cache);
     UNIT_ASSERT(result);

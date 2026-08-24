@@ -1,0 +1,31 @@
+package NYql;
+option java_package = "ru.yandex.yql.proto";
+
+/////////////////////////////// YT ///////////////////////////////
+
+message TStaticFileWithMd5 {
+    optional string File = 1;
+    optional string Md5 = 2;
+}
+
+message TYtStaticGatewayConfig {
+    optional string MrJobBin = 1; // Path to mrjob executable. If not set then main executable will be used
+    optional string MrJobBinMd5 = 2; // MD5 checksum of mrjob executable. Should not be specified directly
+    optional string MrJobUdfsDir = 3; // Path to linux udfs. If not set then loaded into main executable will be used
+    optional string YtDebugLogFile = 4; // File for full YT debug log
+    repeated TStaticFileWithMd5 MrJobSystemLibsWithMd5 = 5; // Paths to linux dynamic libraries required for running mrjob.
+}
+
+///////////////////////////// RTMR /////////////////////////////
+
+message TRtmrStaticGatewayConfig {
+    optional string YqlRtmrDynLib = 1; // path to libyql-dynlib.so
+    repeated string Artifacts = 2;     // local artifacts
+}
+
+/////////////////////////////// Root ///////////////////////////////
+
+message TStaticGatewaysConfig {
+    optional TYtStaticGatewayConfig Yt = 1;
+    optional TRtmrStaticGatewayConfig Rtmr = 2;
+}

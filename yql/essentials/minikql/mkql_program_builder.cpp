@@ -21,6 +21,18 @@ namespace NKikimr::NMiniKQL {
 
 namespace {
 
+TString WrapDecimalComparationName(
+    NUdf::TStringRef name, const TDataDecimalType& type1, const TDataDecimalType& type2) {
+    TStringBuilder result;
+    result << TStringBuf(name.Data(), name.Size());
+    const i8 scaleDifference = static_cast<i8>(type2.GetParams().second) -
+                               static_cast<i8>(type1.GetParams().second);
+    if (scaleDifference != 0) {
+        result << '_' << static_cast<i16>(scaleDifference);
+    }
+    return result;
+}
+
 struct TDataFunctionFlags {
     enum {
         HasBooleanResult = 0x01,
@@ -72,8 +84,10 @@ void EnsureScriptSpecificTypes(
     std::vector<TNode*>& nodeStack)
 {
     switch (scriptType) {
-        case EScriptType::Lua:
-            return TLuaTypeChecker().Walk(funcType, nodeStack);
+        case EScriptType::Lua: {
+            TLuaTypeChecker().Walk(funcType, nodeStack);
+            return;
+        }
         case EScriptType::Python:
         case EScriptType::Python2:
         case EScriptType::Python3:
@@ -91,10 +105,14 @@ void EnsureScriptSpecificTypes(
         case EScriptType::SystemPython3_11:
         case EScriptType::SystemPython3_12:
         case EScriptType::SystemPython3_13:
-        case EScriptType::SystemPython3_14:
-            return TPythonTypeChecker().Walk(funcType, nodeStack);
-        case EScriptType::Javascript:
-            return TJavascriptTypeChecker().Walk(funcType, nodeStack);
+        case EScriptType::SystemPython3_14: {
+            TPythonTypeChecker().Walk(funcType, nodeStack);
+            return;
+        }
+        case EScriptType::Javascript: {
+            TJavascriptTypeChecker().Walk(funcType, nodeStack);
+            return;
+        }
         default:
             MKQL_ENSURE(false, "Unknown script type " << static_cast<ui32>(scriptType));
     }
@@ -1841,15 +1859,23 @@ TRuntimeNode TProgramBuilder::BlockDecimalMul(TRuntimeNode first, TRuntimeNode s
 }
 
 TRuntimeNode TProgramBuilder::ListFromRange(TRuntimeNode start, TRuntimeNode end, TRuntimeNode step) {
-    MKQL_ENSURE(start.GetStaticType()->IsData(), "Expected data");
-    MKQL_ENSURE(end.GetStaticType()->IsSameType(*start.GetStaticType()), "Mismatch type");
-    MKQL_ENSURE(IsNumericType(AS_TYPE(TDataType, start)->GetSchemeType()) ||
+    MKQL_ENSURE(start.GetStaticType()->IsData(), "ListFromRange expects Start to be data");
+    MKQL_ENSURE(end.GetStaticType()->IsData(), "ListFromRange expects End to be data");
+    MKQL_ENSURE(step.GetStaticType()->IsData(), "ListFromRange expects Step to be data");
+    const auto startSchemeType = AS_TYPE(TDataType, start)->GetSchemeType();
+    const bool isDecimal = startSchemeType == NUdf::TDataType<NUdf::TDecimal>::Id;
+    MKQL_ENSURE(end.GetStaticType()->IsSameType(*start.GetStaticType()),
+                "ListFromRange expects Start and End to have the same type");
+    MKQL_ENSURE(IsNumericType(startSchemeType) || isDecimal ||
                     IsDateType(AS_TYPE(TDataType, start)->GetSchemeType()) ||
                     IsTzDateType(AS_TYPE(TDataType, start)->GetSchemeType()) ||
                     IsIntervalType(AS_TYPE(TDataType, start)->GetSchemeType()),
-                "Expected numeric, date or tzdate");
+                "ListFromRange expects numeric, Decimal, date, tzdate, or interval Start");
 
-    if (IsNumericType(AS_TYPE(TDataType, start)->GetSchemeType())) {
+    if (isDecimal) {
+        MKQL_ENSURE(step.GetStaticType()->IsSameType(*start.GetStaticType()),
+                    "ListFromRange expects Decimal Start and Step to have the same precision and scale");
+    } else if (IsNumericType(startSchemeType)) {
         MKQL_ENSURE(IsNumericType(AS_TYPE(TDataType, step)->GetSchemeType()), "Expected numeric");
     } else {
         MKQL_ENSURE(IsIntervalType(AS_TYPE(TDataType, step)->GetSchemeType()), "Expected interval");
@@ -3233,7 +3259,7 @@ TRuntimeNode TProgramBuilder::DataCompare(const std::string_view& callableName, 
     const auto lId = leftType->GetSchemeType();
     const auto rId = rightType->GetSchemeType();
 
-    if (lId == NUdf::TDataType<NUdf::TDecimal>::Id && rId == NUdf::TDataType<NUdf::TDecimal>::Id) {
+    if (lId == NUdf::TDataType<NUdf::TDecimal>::Id && rId == NUdf::TDataType<NUdf::TDecimal>::Id && RuntimeVersion < 84U) {
         const auto& lDec = static_cast<TDataDecimalType*>(leftType)->GetParams();
         const auto& rDec = static_cast<TDataDecimalType*>(rightType)->GetParams();
         if (lDec.second < rDec.second) {
@@ -3261,10 +3287,18 @@ TRuntimeNode TProgramBuilder::DataCompare(const std::string_view& callableName, 
                           scale);
     }
 
-    const std::array<TRuntimeNode, 2> args = {{data1, data2}};
     const auto boolType = NewDataType(NUdf::TDataType<bool>::Id);
     const auto resultType = isOptionalLeft || isOptionalRight ? NewOptionalType(boolType) : boolType;
-    return Invoke(callableName, resultType, args);
+    TString comparisonName(callableName);
+    if (leftType->GetSchemeType() == NUdf::TDataType<NUdf::TDecimal>::Id &&
+        rightType->GetSchemeType() == NUdf::TDataType<NUdf::TDecimal>::Id &&
+        RuntimeVersion >= 84U) {
+        comparisonName = WrapDecimalComparationName(
+            NUdf::TStringRef(callableName.data(), callableName.size()),
+            *static_cast<const TDataDecimalType*>(leftType),
+            *static_cast<const TDataDecimalType*>(rightType));
+    }
+    return InvokeBinary(comparisonName, resultType, data1, data2);
 }
 
 TRuntimeNode TProgramBuilder::BuildRangeLogical(const std::string_view& callableName, const TArrayRef<const TRuntimeNode>& lists) {

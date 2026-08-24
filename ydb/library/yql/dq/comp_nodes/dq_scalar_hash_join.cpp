@@ -113,9 +113,9 @@ private:
     int BatchCount_ = 0;
 };
 
-template <EJoinKind Kind>
-struct TRenamesScalarOutput : TPackedTupleOutputBase<Kind, IScalarLayoutConverter> {
-    using TBase = TPackedTupleOutputBase<Kind, IScalarLayoutConverter>;
+template <TPhysicalJoin Join>
+struct TRenamesScalarOutput : TPackedTupleOutputBase<Join, IScalarLayoutConverter> {
+    using TBase = TPackedTupleOutputBase<Join, IScalarLayoutConverter>;
 
     struct TFlushResult {
         TVector<NUdf::TUnboxedValue> Buffer;
@@ -123,7 +123,7 @@ struct TRenamesScalarOutput : TPackedTupleOutputBase<Kind, IScalarLayoutConverte
     };
 
     TRenamesScalarOutput(const TDqScalarJoinMetadata* meta, TSides<IScalarLayoutConverter*> converters)
-        : TBase(&meta->Renames, converters, /* leftIsBuild */ false)
+        : TBase(&meta->Renames, converters)
         , BuildWidth_(std::ssize(meta->InputTypes.Build))
         , ProbeWidth_(std::ssize(meta->InputTypes.Probe))
     {
@@ -141,7 +141,7 @@ struct TRenamesScalarOutput : TPackedTupleOutputBase<Kind, IScalarLayoutConverte
 
         res.Buffer.reserve(nItems * this->Columns());
 
-        if constexpr (LeftSemiOrOnly(Kind)) {
+        if constexpr (LeftSemiOrOnly(Join.Kind)) {
             TMKQLVector<NUdf::TUnboxedValue> probeValues(ProbeWidth_);
             for (i64 tupleIndex = 0; tupleIndex < nItems; ++tupleIndex) {
                 this->Converters_.Probe->Unpack(res.Packs.Probe, tupleIndex, probeValues.data());
@@ -175,8 +175,8 @@ private:
     const int ProbeWidth_;
 };
 
-template <EJoinKind Kind>
-class TScalarHashJoinWrapper : public TStatefulWideFlowComputationNode<TScalarHashJoinWrapper<Kind>> {
+template <TPhysicalJoin Join>
+class TScalarHashJoinWrapper : public TStatefulWideFlowComputationNode<TScalarHashJoinWrapper<Join>> {
 private:
     using TBaseComputation = TStatefulWideFlowComputationNode<TScalarHashJoinWrapper>;
 
@@ -200,7 +200,7 @@ public:
 private:
     class TStreamState : public TComputationValue<TStreamState> {
         using TBase = TComputationValue<TStreamState>;
-        using JoinType = NJoinPackedTuples::THybridHashJoin<TScalarPackedTupleSource, TestStorageSettings, Kind>;
+        using JoinType = NJoinPackedTuples::THybridHashJoin<TScalarPackedTupleSource, TestStorageSettings, Join>;
 
     public:
         TStreamState(TMemoryUsageInfo* memInfo, TComputationContext& ctx, TSides<IComputationWideFlowNode*> flows,
@@ -265,9 +265,9 @@ private:
         TSides<std::unique_ptr<IScalarLayoutConverter>> Converters_;
         TComputationContext* JoinCtx_;
         JoinType Join_;
-        TRenamesScalarOutput<Kind> Output_;
+        TRenamesScalarOutput<Join> Output_;
         std::optional<TPackedTuplePairFilter> PairFilter_;
-        std::optional<typename TRenamesScalarOutput<Kind>::TFlushResult> Buffer_;
+        std::optional<typename TRenamesScalarOutput<Join>::TFlushResult> Buffer_;
         size_t BufferPos_ = 0;
         static constexpr i64 OutputThreshold_ = 10000;
     };
@@ -355,7 +355,7 @@ IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TCompu
     const TSides<IComputationWideFlowNode*> flows{.Build = rightFlow, .Probe = leftFlow};
 
     return DispatchHashJoinByKind<TScalarHashJoinWrapper, IComputationWideFlowNode>(
-        joinKind, "unsupported join type in scalar hash join, see gh#26780 for details.", ctx.Mutables,
+        joinKind, ESide::Probe, "unsupported join type in scalar hash join, see gh#26780 for details.", ctx.Mutables,
         std::move(meta), flows, ParseJoinFilters(ctx, callable, BaseInputs));
 }
 

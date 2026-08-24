@@ -32,7 +32,7 @@ protected:
     IDataProvider* ParseMaterialize(const TExprNode& input, TExprContext& ctx);
     IDataProvider* ParseConfigure(const TExprNode& input, TExprContext& ctx, bool& isUniversal);
 
-protected:
+
     TTypeAnnotationContext& Types_;
 };
 
@@ -189,7 +189,7 @@ protected:
         return status;
     }
 
-protected:
+
     const bool InstantOnly_;
     TNodeMap<std::pair<TExprNode::TPtr, IDataProvider*>> PendingNodes_;
 };

@@ -116,11 +116,11 @@ For operations where both [access control lists](../concepts/glossary.md#access-
 
 ### Hierarchy of access levels
 
-Access level lists form a hierarchy (used by the [Embedded UI](../reference/embedded-ui/ydb-monitoring.md), viewer, and many other cluster-wide actions; ordered from lower to higher privileges):
+Access level lists form a hierarchy (used by the [{{ ydb-ui-name }}](../reference/ydb-ui/ydb-monitoring.md), viewer, and many other cluster-wide actions; ordered from lower to higher privileges):
 
 - `database_allowed_sids` (`Database`) - access to operations within a specific database scope
 - `viewer_allowed_sids` (`Viewer`) - read-only access to cluster-wide state
-- `monitoring_allowed_sids` (`Monitoring`) - access to operational actions in Embedded UI
+- `monitoring_allowed_sids` (`Monitoring`) - access to operational actions in {{ ydb-ui-name }}
 - `administration_allowed_sids` (`Administration`) - administrative actions on the cluster and databases
 
 Higher levels automatically include all lower level privileges, so a subject only needs to appear in one list. For example, presence in `administration_allowed_sids` automatically grants `monitoring`, `viewer`, and `database` privileges.
@@ -135,9 +135,9 @@ Additionally, there are two separate access level lists for specific operations:
 
 Access level lists are configured in the [security configuration](../reference/configuration/security_config.md#security-access-levels) and determine privileges for:
 
-- **Database** (presence in `database_allowed_sids`) — access only within a specific database scope. Subjects can open Embedded UI and work with that database data, but cannot run cluster-wide requests (for example, listing cluster nodes). Requests without a specified database are forbidden.
-- **Viewer** (presence in `viewer_allowed_sids`) — read-only access to cluster-wide state: subjects can open [Embedded UI](../reference/embedded-ui/ydb-monitoring.md) pages and diagnostics, but cannot run actions that change system state.
-- **Monitoring** (presence in `monitoring_allowed_sids`) — access to operational actions in Embedded UI, including actions that can change system state. For example, backup, database restore, or executing YQL statements from Embedded UI.
+- **Database** (presence in `database_allowed_sids`) — access only within a specific database scope. Subjects can open {{ ydb-ui-name }} and work with that database data, but cannot run cluster-wide requests (for example, listing cluster nodes). Requests without a specified database are forbidden.
+- **Viewer** (presence in `viewer_allowed_sids`) — read-only access to cluster-wide state: subjects can open [{{ ydb-ui-name }}](../reference/ydb-ui/ydb-monitoring.md) pages and diagnostics, but cannot run actions that change system state.
+- **Monitoring** (presence in `monitoring_allowed_sids`) — access to operational actions in {{ ydb-ui-name }}, including actions that can change system state. For example, backup, database restore, or executing YQL statements from {{ ydb-ui-name }}.
 - **Administration** (presence in `administration_allowed_sids`) — Full administrative access to the cluster and its databases. Also used for config changes, scheme operations requiring admin privileges, and other administrative checks.
 - **Register node** (presence in `register_dynamic_node_allowed_sids`) — a separate (non-hierarchical) level for dynamic node registration in the cluster. It does not automatically grant `database`/`viewer`/`monitoring`/`administration` privileges. For technical reasons, if this list is configured (non-empty), it must include `root@builtin`.
 - **Bootstrap** (presence in `bootstrap_allowed_sids`) — a separate (non-hierarchical) level only for cluster bootstrap operations. It is used in an uninitialized state, when the authentication subsystem is not yet functional. Bootstrap is allowed if the subject is in `bootstrap_allowed_sids` or `administration_allowed_sids`; `bootstrap` by itself does not grant full administrative privileges.

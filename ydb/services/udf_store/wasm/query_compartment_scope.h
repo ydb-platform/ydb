@@ -3,14 +3,40 @@
 #include "compartment_manager.h"
 #include "module_catalog.h"
 
-#include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
-
+#include <util/generic/strbuf.h>
+#include <util/generic/string.h>
 #include <util/generic/vector.h>
+#include <util/string/join.h>
+#include <util/string/split.h>
 
 namespace NKikimr::NUdfStore::NWasm {
 
+//! TaskParams key for per-stage WASM module list (KQP → CA).
+//! Value: newline-separated module names from TKqpPhyStage.WasmUdfModules.
+inline constexpr TStringBuf WasmUdfModulesTaskParam = "_WasmUdfModules";
+
+inline TString SerializeWasmUdfModulesTaskParam(const TVector<TString>& modules) {
+    return JoinSeq('\n', modules);
+}
+
+inline TVector<TString> ParseWasmUdfModulesTaskParam(TStringBuf data) {
+    TVector<TString> modules;
+    StringSplitter(data).Split('\n').SkipEmpty().Collect(&modules);
+    return modules;
+}
+
+template <typename TRepeatedString>
+inline TVector<TString> WasmUdfModulesFromRepeated(const TRepeatedString& repeated) {
+    TVector<TString> modules;
+    modules.reserve(repeated.size());
+    for (const auto& module : repeated) {
+        modules.push_back(module);
+    }
+    return modules;
+}
+
 //! Keep only module names registered in the WASM catalog.
-//! Stage predictor currently records every TCoUdf module (String, Knn, ...);
+//! Stage predictor records every TCoUdf module (String, Knn, ...);
 //! native UDFs must not trigger Acquire / ResolveModules.
 inline TVector<TString> FilterLoadedWasmUdfModules(
     const TVector<TString>& modules,
@@ -26,40 +52,10 @@ inline TVector<TString> FilterLoadedWasmUdfModules(
     return result;
 }
 
-//! Collect WASM modules for a stage compartment.
-//!
-//! Temporary: TProgram::TSettings has no WasmUdfModules yet (proto change deferred).
-//! When HasUdf is set, acquire all modules from the process catalog.
-//!
-//! Restore the per-stage list when proto field returns:
-//!   // modules.reserve(settings.WasmUdfModulesSize());
-//!   // for (const auto& module : settings.GetWasmUdfModules()) {
-//!   //     modules.push_back(module);
-//!   // }
-//!   // return FilterLoadedWasmUdfModules(modules, catalog);
-inline TVector<TString> CollectWasmUdfModules(
-    const NYql::NDqProto::TProgram::TSettings& settings,
-    const TWasmModuleCatalog& catalog = GetWasmModuleCatalog())
-{
-    if (!settings.GetHasUdf()) {
-        return {};
-    }
-    // TODO: replace with FilterLoadedWasmUdfModules(settings.GetWasmUdfModules()) once
-    // TProgram::TSettings.WasmUdfModules (=19) is restored in dq_tasks.proto.
-    return catalog.ListModuleNames();
-}
-
 // Owns a per-query compartment. Install it as the current TLS compartment only
-// for the duration of an activation guard (actor event / task run).
+// for the duration of a TLS guard (actor event / task run).
 class TQueryCompartmentScope : public TNonCopyable {
 public:
-    explicit TQueryCompartmentScope(const NYql::NDqProto::TProgram::TSettings& settings) {
-        const auto modules = CollectWasmUdfModules(settings);
-        if (!modules.empty()) {
-            Handle_ = GetWasmCompartmentManager().Acquire(modules);
-        }
-    }
-
     explicit TQueryCompartmentScope(const TVector<TString>& modules) {
         const auto loaded = FilterLoadedWasmUdfModules(modules);
         if (!loaded.empty()) {
@@ -67,11 +63,11 @@ public:
         }
     }
 
-    bool Active() const {
+    bool HasHandle() const {
         return Handle_ != nullptr;
     }
 
-    TCurrentQueryCompartmentGuard Activate() const {
+    TCurrentQueryCompartmentGuard MakeTlsGuard() const {
         return TCurrentQueryCompartmentGuard(Handle_.get());
     }
 

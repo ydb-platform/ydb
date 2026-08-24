@@ -2,7 +2,7 @@
 
 Applies if you need to change the [metadata distribution subsystem configuration](../../../reference/configuration/domains_config.md#domains-state) consisting of [State Storage](../../../concepts/glossary.md#state-storage), [Board](../../../concepts/glossary.md#board), and [Scheme Board](../../../concepts/glossary.md#scheme-board) on a {{ ydb-short-name }} cluster.
 
-When using configuration V2, the metadata distribution subsystem is partially supported automatically through the Self Heal mechanism — see [Self Heal State Storage](../../../maintenance/manual/selfheal_statestorage.md) (moving and adding replicas on topology changes). To disable this behavior, set `state_storage_self_heal_config.enable` to `false`, as described in the same section. Disabling is not required for the steps below: the configuration after `ydb admin cluster config replace` will be applied before the next automatic trigger.
+When using configuration V2, the metadata distribution subsystems are partially supported automatically through the Self Heal mechanism — see [Self Heal State Storage](../../../maintenance/manual/selfheal_statestorage.md) (moving and adding replicas on topology changes). To disable this behavior, set `state_storage_self_heal_config.enable` to `false`, as described in the same section. Disabling is not required for the steps below: the configuration after `ydb admin cluster config replace` will be applied before the next automatic trigger.
 
 {% include [warning-configuration-error](../configuration-v1/_includes/warning-configuration-error.md) %}
 

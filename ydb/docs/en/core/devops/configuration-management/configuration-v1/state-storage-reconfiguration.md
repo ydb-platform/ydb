@@ -33,10 +33,10 @@ To avoid cluster unavailability, perform the removal and addition of ring groups
 
    Therefore, you must pause for at least `1 minute` between steps.
 
-   - Add new group rings with parameter `WriteOnly: true` corresponding target configuration.
+   - Add a new ring group with the `WriteOnly: true` parameter corresponding to the target configuration.
    - Remove flag `WriteOnly`.
-   - Set flag `WriteOnly: true` on group rings corresponding old configuration, new group rings Move to beginning list groups rings.
-   - Delete old group rings.
+   - Set the `WriteOnly: true` flag on the ring group corresponding to the old configuration, and move the new ring group to the beginning of the list of ring groups.
+   - Delete the old ring group.
 
 ## Example
 

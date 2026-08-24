@@ -1655,6 +1655,89 @@ Y_UNIT_TEST(PipeBreakAfterParentCommitted) {
     env.AssertLocked(2);
 }
 
+Y_UNIT_TEST(NestedSplitRereadInnerParentThenFinishLocksGrandchildren) {
+    // Autopart stress: a sealed inner parent is re-locked from the end (StartReading
+    // then Finish). Children must not stay unreadable inside the parent family.
+    TScaleEnv env;
+    env.CreateParents(1);
+    env.RegisterSession("session-0");
+    env.Split(0);
+    env.Finish("session-0", 0);
+    env.AssertLocked(1);
+    env.AssertLocked(2);
+
+    env.Split(1);
+    env.Finish("session-0", 1);
+    env.AssertLocked(3);
+    env.AssertLocked(4);
+
+    env.StartReading("session-0", 1);
+    env.Finish("session-0", 1);
+    env.AssertLocked(3);
+    env.AssertLocked(4);
+    env.AssertSameSession({0, 1, 3, 4});
+}
+
+Y_UNIT_TEST(RereadOneMergeParentThenFinishAgainLocksChild) {
+    TScaleEnv env;
+    env.CreateParents(2);
+    env.RegisterSession("session-0");
+    env.Merge(0, 1);
+    env.Finish("session-0", 0);
+    env.Finish("session-0", 1);
+    env.AssertLocked(2, "session-0");
+
+    env.StartReading("session-0", 0);
+    env.Finish("session-0", 0);
+    env.AssertLocked(2, "session-0");
+    env.AssertSameSession({0, 1, 2});
+}
+
+Y_UNIT_TEST(NestedSplitRereadRootThenFinishRelocksWholeTree) {
+    // MergeFamilies leftover: attaching a descendant family that still lists
+    // unreadable grandchildren must keep the remainder instead of Destroy().
+    TScaleEnv env;
+    env.CreateParents(1);
+    env.RegisterSession("session-0");
+    env.Split(0);
+    env.Finish("session-0", 0);
+    env.Split(1);
+    env.Finish(env.SessionOf(1), 1);
+    env.AssertLocked(3);
+    env.AssertLocked(4);
+
+    env.StartReading("session-0", 0);
+    env.AssertLocked(0, "session-0");
+    env.AssertNotLocked(1);
+    env.AssertNotLocked(2);
+    env.AssertNotLocked(3);
+    env.AssertNotLocked(4);
+
+    env.Finish("session-0", 0);
+    env.Finish("session-0", 1);
+    env.AssertLocked(2);
+    env.AssertLocked(3);
+    env.AssertLocked(4);
+    env.AssertSameSession({0, 1, 2, 3, 4});
+}
+
+Y_UNIT_TEST(SecondFinishOfMergedParentsDoesNotAbort) {
+    // Finish of parents whose child is already in the same family used to hit
+    // MergeFamilies(lhs, lhs).
+    TScaleEnv env;
+    env.CreateParents(2);
+    env.RegisterSession("session-0");
+    env.Merge(0, 1);
+    env.Finish("session-0", 0);
+    env.Finish("session-0", 1);
+    env.AssertLocked(2, "session-0");
+
+    env.Finish("session-0", 0);
+    env.Finish("session-0", 1);
+    env.AssertLocked(2, "session-0");
+    env.AssertSameSession({0, 1, 2});
+}
+
 } // Y_UNIT_TEST_SUITE(TPqrbSplitBalancing)
 
 Y_UNIT_TEST_SUITE(TPqrbBalancingInvariants) {

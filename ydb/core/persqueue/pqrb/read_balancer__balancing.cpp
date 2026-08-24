@@ -415,17 +415,18 @@ void TPartitionFamily::AttachePartitions(const std::vector<ui32>& partitions, co
         if (existedPartitions.contains(partitionId)) {
             continue;
         }
+        if (!IsReadable(partitionId)) {
+            YDB_LOG_DEBUG("Skip attaching unreadable partition",
+                {"logPrefix", LogPrefix()},
+                {"partitionId", partitionId});
+            continue;
+        }
 
         newPartitions.push_back(partitionId);
         existedPartitions.insert(partitionId);
     }
-
-    auto [activePartitionCount, inactivePartitionCount] = ClassifyPartitions(newPartitions);
-    ChangePartitionCounters(activePartitionCount, inactivePartitionCount);
-
-    for (auto partitionId : newPartitions) {
-        Y_DEBUG_ABORT_UNLESS(IsReadable(partitionId),
-            "Cannot attach unreadable partition %u to family %lu", partitionId, Id);
+    if (newPartitions.empty()) {
+        return;
     }
 
     if (IsActive()) {
@@ -444,6 +445,8 @@ void TPartitionFamily::AttachePartitions(const std::vector<ui32>& partitions, co
             return;
         }
 
+        auto [activePartitionCount, inactivePartitionCount] = ClassifyPartitions(newPartitions);
+        ChangePartitionCounters(activePartitionCount, inactivePartitionCount);
         Partitions.insert(Partitions.end(), newPartitions.begin(), newPartitions.end());
         UpdatePartitionMapping(newPartitions);
         AppendUniqueRoots(newPartitions);
@@ -454,6 +457,8 @@ void TPartitionFamily::AttachePartitions(const std::vector<ui32>& partitions, co
         }
         LockedPartitions.insert(newPartitions.begin(), newPartitions.end());
     } else if (IsFree()) {
+        auto [activePartitionCount, inactivePartitionCount] = ClassifyPartitions(newPartitions);
+        ChangePartitionCounters(activePartitionCount, inactivePartitionCount);
         Partitions.insert(Partitions.end(), newPartitions.begin(), newPartitions.end());
         UpdatePartitionMapping(newPartitions);
         AppendUniqueRoots(newPartitions);
@@ -1056,9 +1061,9 @@ bool TConsumer::BreakUpFamily(TPartitionFamily* family, ui32 partitionId, bool d
 
 std::pair<TPartitionFamily*, bool> TConsumer::MergeFamilies(TPartitionFamily* lhs, TPartitionFamily* rhs, const TActorContext& ctx) {
     Y_DEBUG_ABORT_UNLESS(lhs && rhs, "MergeFamilies with a null family");
-    AFL_ENSURE(lhs != rhs)
-        ("lhs_id", lhs->Id)("rhs_id", rhs->Id)
-        ("lhs_partitions", lhs->Partitions.size())("rhs_partitions", rhs->Partitions.size());
+    if (!lhs || !rhs || lhs == rhs) {
+        return {lhs ? lhs : rhs, false};
+    }
 
     if (lhs->IsFree() && rhs->IsFree() ||
         lhs->IsActive() && rhs->IsActive() && lhs->Session == rhs->Session ||
@@ -1077,8 +1082,21 @@ std::pair<TPartitionFamily*, bool> TConsumer::MergeFamilies(TPartitionFamily* lh
     if ((lhs->IsActive() || lhs->IsReleasing()) && rhs->IsFree()) {
         lhs->AttachePartitions(rhs->Partitions, ctx);
 
-        rhs->Partitions.clear();
-        rhs->Destroy();
+        std::vector<ui32> leftover;
+        leftover.reserve(rhs->Partitions.size());
+        for (auto id : rhs->Partitions) {
+            if (FindFamily(id) != lhs) {
+                leftover.push_back(id);
+            }
+        }
+        rhs->Partitions = std::move(leftover);
+        if (rhs->Partitions.empty()) {
+            rhs->Destroy();
+        } else {
+            rhs->RootPartitions = rhs->Partitions;
+            rhs->ClassifyPartitions();
+            rhs->AssertInvariants();
+        }
         lhs->AttachReadyWantedPartitions(ctx);
 
         return {lhs, true};

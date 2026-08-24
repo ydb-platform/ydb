@@ -318,11 +318,12 @@ public:
             YDB_LOG_ERROR("[ydb] [SynchronizationService]: UpdateAcl response for .sys directory, issues",
                 {"scope", Scope},
                 {"issues", status.GetIssues().ToOneLineString()});
-            Issues.AddIssues(NYdb::NAdapters::ToYqlIssues(status.GetIssues()));
-        } else {
-            YDB_LOG_INFO("[ydb] [SynchronizationService]: ACL inheritance removed for .sys directory for the scope",
-                {"scope", Scope});
+            ReplyErrorAndPassAway(NYdb::NAdapters::ToYqlIssues(status.GetIssues()),
+                 "Error updating ACL for .sys directory at the synchronization stage");
+            return;
         }
+        YDB_LOG_INFO("[ydb] [SynchronizationService]: ACL inheritance removed for .sys directory for the scope",
+            {"scope", Scope});
         if (WorkloadManagerConfig.GetEnable() && !ComputeDatabase.workload_manager_synchronized()) {
             Become(&TSynchronizeScopeActor::StateCreateResourcePoolsFunc);
             YDB_LOG_INFO("[ydb] [SynchronizationService]: Start creating resource pools for the scope after UpdateAcl",
@@ -372,7 +373,6 @@ private:
     }
 
     void UpdateAcl() {
-
         const TString sysPath = ConnectionConfig.database() + "/.sys";
         auto settings = NYdb::NScheme::TModifyPermissionsSettings()
             .AddInterruptInheritance(true)

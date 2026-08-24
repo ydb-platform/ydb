@@ -16,6 +16,10 @@ std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> TShardReader::BuildStartEvent
 
     ev->Record.SetDataFormat(NKikimrDataEvents::FORMAT_ARROW);
 
+    if (StartCursor) {
+        *ev->Record.MutableScanCursor() = *StartCursor;
+    }
+
     auto protoRanges = ev->Record.MutableRanges();
     protoRanges->Reserve(Ranges.size());
     for (auto& range : Ranges) {

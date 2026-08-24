@@ -29,6 +29,8 @@ private:
     YDB_ACCESSOR(bool, Reverse, false);
     YDB_ACCESSOR(ui32, Limit, 0);
     std::vector<TSerializedTableRange> Ranges;
+    std::optional<NKikimrKqp::TEvKqpScanCursor> StartCursor;
+    NKikimrKqp::TEvKqpScanCursor LastCursor;
 
     std::unique_ptr<TEvDataShard::TEvKqpScan> BuildStartEvent() const;
 
@@ -51,6 +53,24 @@ public:
 
     void AddRange(const TSerializedTableRange& r) {
         Ranges.emplace_back(r);
+    }
+
+    // Resumes the scan from a point another reader stopped at, the way kqp does it when it has to
+    // restart a scan on a shard.
+    TShardReader& SetScanCursor(const NKikimrKqp::TEvKqpScanCursor& cursor) {
+        AFL_VERIFY(!ScanActorId);
+        StartCursor = cursor;
+        return *this;
+    }
+
+    const NKikimrKqp::TEvKqpScanCursor& GetLastCursor() const {
+        return LastCursor;
+    }
+
+    // Everything received so far. GetResult is not usable for a reader that was stopped in the
+    // middle of a scan, it requires the scan to be finished.
+    const std::vector<std::shared_ptr<arrow::RecordBatch>>& GetReceivedBatches() const {
+        return ResultBatches;
     }
 
     ui32 GetRecordsCount() const {
@@ -144,6 +164,8 @@ public:
                 AFL_VERIFY(evData->StatsOnFinished);
                 ResultStats = evData->StatsOnFinished->GetMetrics();
                 Finished = 1;
+            } else {
+                LastCursor = evData->LastCursorProto;
             }
         } else if (auto* evError = std::get<1>(event)) {
             for (auto issue : evError->Record.GetIssues()) {

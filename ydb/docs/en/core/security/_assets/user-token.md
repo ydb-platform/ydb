@@ -2,7 +2,7 @@
 sequenceDiagram
     actor user as User
     participant node as YDB Node
-    participant auth as User Source
+    participant auth as Authentication Subsystem
 
     user->>node: Request with an authentication token
     node->>auth: Validate the authentication token

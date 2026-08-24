@@ -13,7 +13,7 @@ sequenceDiagram
     cache-->>node: User token found
     Note right of node: life_time restarts
 
-    alt User token is unused for life_time
+    alt User token is unused for life_time or its cache entry has expired
     node->>cache: Delete the user token
     deactivate cache
     end

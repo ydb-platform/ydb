@@ -2,7 +2,7 @@
 sequenceDiagram
     actor user as Пользователь
     participant node as Узел YDB
-    participant auth as Источник пользователей
+    participant auth as Подсистема аутентификации
 
     user->>node: Запрос с аутентификационным токеном
     node->>auth: Проверить аутентификационный токен

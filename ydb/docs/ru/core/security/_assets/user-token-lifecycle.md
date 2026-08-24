@@ -13,7 +13,7 @@ sequenceDiagram
     cache-->>node: Токен пользователя найден
     Note right of node: Отсчёт life_time начат заново
 
-    alt Токен не использовался в течение life_time
+    alt Токен не использовался в течение life_time или истёк срок действия записи
     node->>cache: Удалить токен пользователя
     deactivate cache
     end

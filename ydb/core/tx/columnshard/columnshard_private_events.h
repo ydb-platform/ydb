@@ -520,10 +520,8 @@ struct TEvPrivate {
 
     struct TEvRetryConfigSubscription: public TEventLocal<TEvRetryConfigSubscription, EvRetryConfigSubscription> {};
 
-    // Sent by THistoryCutterWrapper::TryNominate to trigger the tier-2 disk sweep.
     struct TEvStartCutHistorySweep: public TEventLocal<TEvStartCutHistorySweep, EvStartCutHistorySweep> {};
 
-    // Sent by TCutHistoryBarrierActor with the final outcome of the hard GC barrier.
     struct TEvCutHistoryBarrierDone: public TEventLocal<TEvCutHistoryBarrierDone, EvCutHistoryBarrierDone> {
         ui32 Channel;
         ui32 FromGeneration;
@@ -537,9 +535,6 @@ struct TEvPrivate {
         }
     };
 
-    // Sent by TCutHistorySweepCallback (on conveyor) to the tablet after one accessor batch.
-    // Disproved: {channel, fromGeneration} pairs whose blobs were found in this batch.
-    // Exhausted: true when the portion snapshot cursor is fully consumed.
     struct TEvCutHistorySweepBatchDone: public TEventLocal<TEvCutHistorySweepBatchDone, EvCutHistorySweepBatchDone> {
         TVector<std::pair<ui32, ui32>> Disproved;
         bool Exhausted;

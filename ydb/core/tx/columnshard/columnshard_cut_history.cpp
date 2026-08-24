@@ -21,9 +21,6 @@ using TEntryKey = NOlap::NBlobOperations::NBlobStorage::TEntryKey;
 using THistoryCutterWrapper = NOlap::NBlobOperations::NBlobStorage::THistoryCutterWrapper;
 
 // Runs on the conveyor thread after TTxAskPortionChunks delivers accessor objects.
-// Inspects each portion's blob IDs against the current sweep candidates and
-// sends TEvCutHistorySweepBatchDone back to the tablet.
-//
 class TCutHistorySweepCallback: public NOlap::NDataAccessorControl::IAccessorCallback {
 public:
     TCutHistorySweepCallback(const TActorId& tabletActorId, ui64 ourTabletId, const std::shared_ptr<const TVector<TEntryKey>>& candidates,
@@ -153,10 +150,8 @@ void TColumnShard::Handle(TEvPrivate::TEvStartCutHistorySweep::TPtr& /*ev*/, con
         return;
     }
 
-    // Build per-path consumer map. The snapshot may reference portions (or whole
-    // paths) deleted since the sweep started — filter them out here, and the fetch
-    // tx additionally tolerates the erase-committed-but-still-in-memory window.
-    // A deleted portion cannot pin blobs in an old group, so skipping is correct.
+    // The snapshot may name portions deleted since the sweep started; a deleted portion
+    // cannot pin blobs in an old group, so skipping it is correct.
     if (!HasIndex()) {
         CutHistoryCutter->OnBatchComplete({}, /*exhausted=*/true, ctx);
         return;
@@ -175,14 +170,10 @@ void TColumnShard::Handle(TEvPrivate::TEvStartCutHistorySweep::TPtr& /*ev*/, con
         portionsMap[pathId].UpsertConsumer(NOlap::NBlobOperations::EConsumer::SCAN).AddPortion(portionId);
     }
     if (portionsMap.empty()) {
-        // Every portion of this batch is gone — report an empty batch instead of
-        // sending a vacuous accessor request.
         CutHistoryCutter->OnBatchComplete({}, isLast, ctx);
         return;
     }
 
-    // Build nextGenMap for the callback over the entries still alive in this sweep:
-    // earlier batches' disprovals shrink the set, so later batches skip them.
     const auto candidates = CutHistoryCutter->GetActiveSweepCandidates();
     THashMap<TEntryKey, ui32> nextGenMap;
     for (const auto& key : *candidates) {

@@ -63,35 +63,28 @@ class TestTopicBalancingAutopartWorkload(StressFixture):
             *extra_args,
         ])
 
-    def test_read(self):
+    def _sdk_args(self, sdk):
+        if sdk == "old_sdk":
+            return ["--no-auto-partitioning-support"]
+        return []
+
+    @pytest.mark.parametrize("sdk", ["scale_aware_sdk", "old_sdk"])
+    def test_read(self, sdk):
+        # Finish-only: ScaleAware unlocks children on Finish; old SDK needs
+        # from-end or the delay heuristic.
         self._run([
-            "--path", "topic_balancing_autopart_read",
+            "--path", f"topic_balancing_autopart_read_{sdk}",
+            *self._sdk_args(sdk),
             "--min-sessions", "32",
             "--max-lag-ms", "10000",
         ])
 
-    def test_commit_roots(self):
+    @pytest.mark.parametrize("sdk", ["scale_aware_sdk", "old_sdk"])
+    def test_commit_reread(self, sdk):
+        # Commit received data and rewind assigned partitions via CommitOffset.
         self._run([
-            "--path", "topic_balancing_autopart_commit",
-            "--commit-data",
-            "--rewind-rps", "2",
-            "--rewind-target", "assigned",
-            "--min-sessions", "32",
-            "--max-lag-ms", "15000",
-        ])
-
-    def test_read_legacy_sdk(self):
-        self._run([
-            "--path", "topic_balancing_autopart_read_legacy",
-            "--no-auto-partitioning-support",
-            "--min-sessions", "32",
-            "--max-lag-ms", "10000",
-        ])
-
-    def test_commit_roots_legacy_sdk(self):
-        self._run([
-            "--path", "topic_balancing_autopart_commit_legacy",
-            "--no-auto-partitioning-support",
+            "--path", f"topic_balancing_autopart_commit_reread_{sdk}",
+            *self._sdk_args(sdk),
             "--commit-data",
             "--rewind-rps", "2",
             "--rewind-target", "assigned",

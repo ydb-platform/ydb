@@ -127,7 +127,12 @@ namespace NKikimr::NStorage {
             config->Mutable##NAME##Config()->CopyFrom(Cfg->DomainsConfig->GetExplicit##NAME##Config()); \
         } \
         if (!config->Has##NAME##Config()) { \
-            GenerateStateStorageConfig(config->Mutable##NAME##Config(), *config, usedNodes); \
+            std::unordered_set<ui32> nodesToUse; \
+            if (Cfg->SelfManagementConfig && Cfg->SelfManagementConfig->NAME##SelfHealAllowedNodesSize()) { \
+                const auto& allowedNodes = Cfg->SelfManagementConfig->Get##NAME##SelfHealAllowedNodes(); \
+                nodesToUse.insert(allowedNodes.begin(), allowedNodes.end()); \
+            } \
+            GenerateStateStorageConfig(config->Mutable##NAME##Config(), *config, usedNodes, nodesToUse); \
         }
 
         UPDATE_EXPLICIT_CONFIG(StateStorage)
@@ -608,14 +613,23 @@ namespace NKikimr::NStorage {
 
     bool TDistributedConfigKeeper::GenerateStateStorageConfig(NKikimrConfig::TDomainsConfig::TStateStorage *ss
             , const NKikimrBlobStorage::TStorageConfig& baseConfig, std::unordered_set<ui32>& usedNodes
+            , const std::unordered_set<ui32>& nodesToUse
             , const NKikimrConfig::TDomainsConfig::TStateStorage& oldConfig
+            , bool automaticManagement
             , ui32 overrideReplicasInRingCount
             , ui32 overrideRingsCount
             , ui32 replicasSpecificVolume
         ) {
+        if (!automaticManagement) {
+            ss->CopyFrom(oldConfig);
+            return true;
+        }
         std::map<TBridgePileId, THashMap<TString, std::vector<std::tuple<ui32, TNodeLocation>>>> nodes;
         bool goodConfig = true;
         for (const auto& node : baseConfig.GetAllNodes()) {
+            if (!nodesToUse.empty() && !nodesToUse.contains(node.GetNodeId())) {
+                continue;
+            }
             TNodeLocation location(node.GetLocation());
             TBridgePileId pileId = ResolveNodePileId(location);
             nodes[pileId][location.GetDataCenterId()].emplace_back(node.GetNodeId(), location);

@@ -111,6 +111,22 @@ public:
     using THistoryCutterWrapper::THistoryCutterWrapper;
 };
 
+struct TCutterEnv {
+    TIntrusivePtr<TTabletStorageInfo> Info;
+    std::shared_ptr<NOlap::TBlobManager> Bm;
+    std::shared_ptr<NOlap::NDataSharing::TStorageSharedBlobsManager> Shared;
+};
+
+// The cutter keeps weak_ptrs to both managers, so they have to outlive it: keep the
+// returned object in the test's own scope, ahead of the cutter.
+TCutterEnv MakeCutterEnv(
+    const ui64 tabletId, const ui32 gen, const ui32 nChannels = 3, const TVector<std::pair<ui32, ui32>>& history = { { 0, 100 }, { 5, 200 } }) {
+    auto info = MakeTabletInfo(tabletId, nChannels, history);
+    return { info, std::make_shared<NOlap::TBlobManager>(info, gen, NOlap::TTabletId(tabletId)),
+        std::make_shared<NOlap::NDataSharing::TStorageSharedBlobsManager>(
+            NOlap::NBlobOperations::TGlobal::DefaultStorageId, NOlap::TTabletId(tabletId)) };
+}
+
 // Runs callbacks under a real actor context so Send/Register paths execute for real.
 struct TEvRunInActor: public NActors::TEventLocal<TEvRunInActor, EventSpaceBegin(NActors::TEvents::ES_PRIVATE)> {
     std::function<void(const NActors::TActorContext&)> Fn;
@@ -148,10 +164,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
     Y_UNIT_TEST(DecrementToZeroOnPortionRemoved) {
         auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
         static constexpr ui64 TabletId = 222;
-        auto info = MakeTabletInfo(TabletId, 3, { { 0, 100 }, { 5, 200 } });
-        auto bm = std::make_shared<NOlap::TBlobManager>(info, 5, NOlap::TTabletId(TabletId));
-        auto shared = std::make_shared<NOlap::NDataSharing::TStorageSharedBlobsManager>(
-            NOlap::NBlobOperations::TGlobal::DefaultStorageId, NOlap::TTabletId(TabletId));
+        auto [info, bm, shared] = MakeCutterEnv(TabletId, 5);
         TTestableHistoryCutter cutter(info, 5, bm, shared, TActorId(), TestSignals());
         const TEntryKey key{ 2, 0 };
 
@@ -168,10 +181,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
     Y_UNIT_TEST(ForeignBlobIgnored) {
         auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
         static constexpr ui64 TabletId = 333;
-        auto info = MakeTabletInfo(TabletId, 3, { { 0, 100 }, { 5, 200 } });
-        auto bm = std::make_shared<NOlap::TBlobManager>(info, 5, NOlap::TTabletId(TabletId));
-        auto shared = std::make_shared<NOlap::NDataSharing::TStorageSharedBlobsManager>(
-            NOlap::NBlobOperations::TGlobal::DefaultStorageId, NOlap::TTabletId(TabletId));
+        auto [info, bm, shared] = MakeCutterEnv(TabletId, 5);
         TTestableHistoryCutter cutter(info, 5, bm, shared, TActorId(), TestSignals());
 
         THashMap<ui64, std::vector<NOlap::TUnifiedBlobId>> portionBlobs;
@@ -187,10 +197,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
         static constexpr ui64 TabletId = 444;
         static constexpr ui32 CurrentGen = 5;
-        auto info = MakeTabletInfo(TabletId, 3, { { 0, 100 }, { CurrentGen, 200 } });
-        auto bm = std::make_shared<NOlap::TBlobManager>(info, CurrentGen, NOlap::TTabletId(TabletId));
-        auto shared = std::make_shared<NOlap::NDataSharing::TStorageSharedBlobsManager>(
-            NOlap::NBlobOperations::TGlobal::DefaultStorageId, NOlap::TTabletId(TabletId));
+        auto [info, bm, shared] = MakeCutterEnv(TabletId, CurrentGen, 3, { { 0, 100 }, { CurrentGen, 200 } });
         TTestableHistoryCutter cutter(info, CurrentGen, bm, shared, TActorId(), TestSignals());
 
         THashMap<ui64, std::vector<NOlap::TUnifiedBlobId>> portionBlobs;
@@ -203,10 +210,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
     Y_UNIT_TEST(BootCompleteWithEmptyMap) {
         auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
         static constexpr ui64 TabletId = 555;
-        auto info = MakeTabletInfo(TabletId, 3, { { 0, 100 }, { 3, 200 } });
-        auto bm = std::make_shared<NOlap::TBlobManager>(info, 3, NOlap::TTabletId(TabletId));
-        auto shared = std::make_shared<NOlap::NDataSharing::TStorageSharedBlobsManager>(
-            NOlap::NBlobOperations::TGlobal::DefaultStorageId, NOlap::TTabletId(TabletId));
+        auto [info, bm, shared] = MakeCutterEnv(TabletId, 3, 3, { { 0, 100 }, { 3, 200 } });
         TTestableHistoryCutter cutter(info, 3, bm, shared, TActorId(), TestSignals());
 
         cutter.OnBootComplete({});
@@ -218,10 +222,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
     Y_UNIT_TEST(DoubleBlobPerPortionDeduplicates) {
         auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
         static constexpr ui64 TabletId = 666;
-        auto info = MakeTabletInfo(TabletId, 3, { { 0, 100 }, { 5, 200 } });
-        auto bm = std::make_shared<NOlap::TBlobManager>(info, 5, NOlap::TTabletId(TabletId));
-        auto shared = std::make_shared<NOlap::NDataSharing::TStorageSharedBlobsManager>(
-            NOlap::NBlobOperations::TGlobal::DefaultStorageId, NOlap::TTabletId(TabletId));
+        auto [info, bm, shared] = MakeCutterEnv(TabletId, 5);
         TTestableHistoryCutter cutter(info, 5, bm, shared, TActorId(), TestSignals());
         const TEntryKey key{ 2, 0 };
 
@@ -303,10 +304,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         static constexpr ui64 TabletId = 888;
         static constexpr ui64 BorrowerTabletId = 999;
         // History: {fromGen=0, group=100}, {fromGen=5, group=200 (active)}.
-        auto info = MakeTabletInfo(TabletId, /*nChannels=*/3, { { 0, 100 }, { 5, 200 } });
-        auto bm = std::make_shared<NOlap::TBlobManager>(info, /*gen=*/5, NOlap::TTabletId(TabletId));
-        auto shared = std::make_shared<NOlap::NDataSharing::TStorageSharedBlobsManager>(
-            NOlap::NBlobOperations::TGlobal::DefaultStorageId, NOlap::TTabletId(TabletId));
+        auto [info, bm, shared] = MakeCutterEnv(TabletId, /*gen=*/5);
 
         TTestableHistoryCutter cutter(info, /*currentGen=*/5, bm, shared, TActorId(), TestSignals());
         const TEntryKey key{ /*channel=*/2, /*fromGeneration=*/0 };
@@ -380,10 +378,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         static constexpr ui64 TabletId = 1010;
         static constexpr ui32 DataChannel = 2;
         static constexpr ui32 OldFromGen = 0;
-        auto info = MakeTabletInfo(TabletId, /*nChannels=*/3, { { OldFromGen, 100 }, { 5, 200 } });
-        auto bm = std::make_shared<NOlap::TBlobManager>(info, /*gen=*/5, NOlap::TTabletId(TabletId));
-        auto shared = std::make_shared<NOlap::NDataSharing::TStorageSharedBlobsManager>(
-            NOlap::NBlobOperations::TGlobal::DefaultStorageId, NOlap::TTabletId(TabletId));
+        auto [info, bm, shared] = MakeCutterEnv(TabletId, /*gen=*/5, /*nChannels=*/3, { { OldFromGen, 100 }, { 5, 200 } });
         TTestableHistoryCutter cutter(info, /*currentGen=*/5, bm, shared, TActorId(), TestSignals());
         const TEntryKey key{ DataChannel, OldFromGen };
 
@@ -411,10 +406,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
         static constexpr ui64 TabletId = 2020;
         static constexpr ui32 CurrentGen = 10;
-        auto info = MakeTabletInfo(TabletId, /*nChannels=*/4, { { 0, 100 }, { 5, 200 }, { CurrentGen, 300 } });
-        auto bm = std::make_shared<NOlap::TBlobManager>(info, CurrentGen, NOlap::TTabletId(TabletId));
-        auto shared = std::make_shared<NOlap::NDataSharing::TStorageSharedBlobsManager>(
-            NOlap::NBlobOperations::TGlobal::DefaultStorageId, NOlap::TTabletId(TabletId));
+        auto [info, bm, shared] = MakeCutterEnv(TabletId, CurrentGen, /*nChannels=*/4, { { 0, 100 }, { 5, 200 }, { CurrentGen, 300 } });
         TTestableHistoryCutter cutter(info, CurrentGen, bm, shared, TActorId(), TestSignals());
         const auto ctx = NActors::TActivationContext::AsActorContext();
 
@@ -495,10 +487,8 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
             runtime.SimulateSleep(TDuration::MilliSeconds(1));
         };
 
-        auto info = MakeTabletInfo(TabletId, /*nChannels=*/3, { { OldFromGen, OldGroup }, { ActiveFromGen, ActiveGroup } });
-        auto bm = std::make_shared<NOlap::TBlobManager>(info, CurrentGen, NOlap::TTabletId(TabletId));
-        auto shared = std::make_shared<NOlap::NDataSharing::TStorageSharedBlobsManager>(
-            NOlap::NBlobOperations::TGlobal::DefaultStorageId, NOlap::TTabletId(TabletId));
+        auto [info, bm, shared] =
+            MakeCutterEnv(TabletId, CurrentGen, /*nChannels=*/3, { { OldFromGen, OldGroup }, { ActiveFromGen, ActiveGroup } });
         TTestableHistoryCutter cutter(info, CurrentGen, bm, shared, edgeTablet, TestSignals());
         cutter.SetLauncherActorId(edgeLauncher);
         const TEntryKey key{ DataChannel, OldFromGen };
@@ -579,10 +569,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
             runtime.SimulateSleep(TDuration::MilliSeconds(1));
         };
 
-        auto info = MakeTabletInfo(TabletId, /*nChannels=*/3, { { OldFromGen, OldGroup }, { CurrentGen, 200 } });
-        auto bm = std::make_shared<NOlap::TBlobManager>(info, CurrentGen, NOlap::TTabletId(TabletId));
-        auto shared = std::make_shared<NOlap::NDataSharing::TStorageSharedBlobsManager>(
-            NOlap::NBlobOperations::TGlobal::DefaultStorageId, NOlap::TTabletId(TabletId));
+        auto [info, bm, shared] = MakeCutterEnv(TabletId, CurrentGen, /*nChannels=*/3, { { OldFromGen, OldGroup }, { CurrentGen, 200 } });
         TTestableHistoryCutter cutter(info, CurrentGen, bm, shared, edgeTablet, TestSignals());
         const TEntryKey key{ DataChannel, OldFromGen };
 
@@ -706,10 +693,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         static constexpr ui32 CurrentGen = 5;
         static constexpr ui64 PortionId = 77;
 
-        auto info = MakeTabletInfo(TabletId, /*nChannels=*/3, { { OldFromGen, 100 }, { CurrentGen, 200 } });
-        auto bm = std::make_shared<NOlap::TBlobManager>(info, CurrentGen, NOlap::TTabletId(TabletId));
-        auto shared = std::make_shared<NOlap::NDataSharing::TStorageSharedBlobsManager>(
-            NOlap::NBlobOperations::TGlobal::DefaultStorageId, NOlap::TTabletId(TabletId));
+        auto [info, bm, shared] = MakeCutterEnv(TabletId, CurrentGen, /*nChannels=*/3, { { OldFromGen, 100 }, { CurrentGen, 200 } });
         TTestableHistoryCutter cutter(info, CurrentGen, bm, shared, TActorId(), TestSignals());
         const TEntryKey key{ DataChannel, OldFromGen };
         const auto ctx = NActors::TActivationContext::AsActorContext();

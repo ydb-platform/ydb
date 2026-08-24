@@ -9,7 +9,6 @@
 #include "tables_manager.h"
 
 #include "bg_tasks/events/local.h"
-#include "blobs_action/common/const.h"
 #include "blobs_action/events/delete_blobs.h"
 #include "common/path_id.h"
 #include "counters/columnshard.h"
@@ -464,9 +463,7 @@ protected:
     // Portions live on the data channels and are written by TBlobManager, not by the
     // executor, so only our own drain-gated cutter may cut their history. Channels 0
     // and 1 hold the log and the local database and stay with the executor's cutter.
-    bool HasExternallyWrittenBlobs(ui32 channel) const override {
-        return channel >= NOlap::NBlobOperations::TGlobal::FirstDataChannel;
-    }
+    bool HasExternallyWrittenBlobs(ui32 channel) const override;
 
 private:
     std::unique_ptr<TTabletCountersBase> TabletCountersHolder;

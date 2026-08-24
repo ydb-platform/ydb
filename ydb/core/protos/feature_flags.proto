@@ -363,4 +363,7 @@ message TFeatureFlags {
     optional bool EnableTxIdInStats = 310 [default = false];
     optional bool EnableDqSourceStreamLookupJoinShuffleMode = 311 [default = false];
     optional bool EnableCsFlowControl = 312 [default = false];
+    // Kill switch for the SchemeShard scheme-change outbox. Off by default until
+    // a consumer exists; disabling must never leave DDL blocked by the outbox.
+    optional bool EnableSchemeChangeRecords = 313 [default = false];
 }

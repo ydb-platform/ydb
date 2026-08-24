@@ -328,7 +328,11 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
     // Must stay after every ProcessOperationParts call: writing via NIceDb sets
     // DirectAccessGranted, and a later part proposing after that fails
     // Y_VERIFY_S(context.IsUndoChangesSafe()) and aborts the tablet.
-    if (!Subscribers.empty()) {
+    //
+    // The flag check must come before Subscribers.empty(): subscriber rows
+    // persist and reload at TTxInit, so with the flag off and rows on disk
+    // Subscribers is non-empty and reservation would otherwise stay live.
+    if (AppData()->FeatureFlags.GetEnableSchemeChangeRecords() && !Subscribers.empty()) {
         NIceDb::TNiceDb db(context.GetDB());
         operation->SchemeChangeOrderBase = NextSchemeChangeOrder;
         operation->SchemeChangeOrdersReserved = true;

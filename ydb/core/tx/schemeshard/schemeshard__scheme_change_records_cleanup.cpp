@@ -1,5 +1,7 @@
 #include "schemeshard_impl.h"
 
+#include <ydb/core/base/appdata.h>
+
 namespace NKikimr::NSchemeShard {
 
 struct TTxSchemeChangeRecordsCleanup : public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
@@ -56,6 +58,12 @@ struct TTxForceAdvanceSubscriber : public NTabletFlatExecutor::TTransactionBase<
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         HasMoreToCleanup = false;
         const TString& subscriberId = SubscriberId;
+
+        if (!AppData()->FeatureFlags.GetEnableSchemeChangeRecords()) {
+            Result->Record.SetStatus(NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_INVALID_REQUEST);
+            Result->Record.SetReason("Scheme change records are disabled");
+            return true;
+        }
 
         NIceDb::TNiceDb db(txc.DB);
 

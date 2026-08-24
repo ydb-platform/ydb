@@ -10,7 +10,7 @@ using namespace NSchemeChangeRecordTestHelpers;
 Y_UNIT_TEST_SUITE(TSchemeChangeRecordsProtocolTests) {
     Y_UNIT_TEST(RegisterSubscriberCreatesEmptyCursor) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
 
         TAutoPtr<IEventHandle> handle;
         auto result = RegisterSubscriber(runtime, "test:sub:1", handle);
@@ -20,7 +20,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsProtocolTests) {
 
     Y_UNIT_TEST(RegisterSubscriberIdempotent) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
 
         TAutoPtr<IEventHandle> h1;
         auto r1 = RegisterSubscriber(runtime, "test:sub:1", h1);
@@ -33,7 +33,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsProtocolTests) {
 
     Y_UNIT_TEST(FetchReturnsEntriesAfterCursor) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
         ui64 txId = 100;
 
         TAutoPtr<IEventHandle> regHandle;
@@ -61,7 +61,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsProtocolTests) {
 
     Y_UNIT_TEST(FetchRespectsMaxCount) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
         ui64 txId = 100;
 
         TAutoPtr<IEventHandle> regHandle;
@@ -85,7 +85,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsProtocolTests) {
 
     Y_UNIT_TEST(AckAdvancesCursor) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
         ui64 txId = 100;
 
         TAutoPtr<IEventHandle> regHandle;
@@ -123,7 +123,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsProtocolTests) {
 
     Y_UNIT_TEST(FetchForUnknownSubscriberReturnsError) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
 
         TAutoPtr<IEventHandle> fetchHandle;
         FetchSchemeChangeRecordsExpect(runtime, "nonexistent:sub", 0, 100,
@@ -132,7 +132,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsProtocolTests) {
 
     Y_UNIT_TEST(MultipleSubscribersIndependentCursors) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
         ui64 txId = 100;
 
         TAutoPtr<IEventHandle> reg1Handle, reg2Handle;
@@ -176,7 +176,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsProtocolTests) {
 
     Y_UNIT_TEST(UnregisterSubscriberRemovesSubscriber) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
 
         TAutoPtr<IEventHandle> regHandle;
         RegisterSubscriber(runtime, "test:sub:1", regHandle);
@@ -192,7 +192,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsProtocolTests) {
 
     Y_UNIT_TEST(UnregisterLastSubscriberStopsRecordCreation) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
         ui64 txId = 100;
 
         TAutoPtr<IEventHandle> regHandle;
@@ -272,7 +272,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsProtocolTests) {
 
     Y_UNIT_TEST(UnregisterNonexistentSubscriberReturnsError) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
 
         TAutoPtr<IEventHandle> unregHandle;
         UnregisterSubscriberExpect(runtime, "nonexistent:sub",

@@ -4286,6 +4286,12 @@ ui32 TSchemeShard::CountTransactionSupportingDomains() const {
 }
 
 bool TSchemeShard::CheckSchemeChangeRecordsOverflow(TString& errStr, TInstant now) const {
+    // Kill switch: disabled means DDL is never refused by the outbox,
+    // checked before anything else so a wedged cluster is always rescuable.
+    if (!AppData()->FeatureFlags.GetEnableSchemeChangeRecords()) {
+        return true;
+    }
+
     // Refresh the gauges here too: a wedged cluster runs no outbox
     // transactions, which would otherwise leave the gauges frozen.
     UpdateSchemeChangeGauges();

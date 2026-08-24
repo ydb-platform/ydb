@@ -14,14 +14,14 @@ using NSchemeChangeRecordTestHelpers::ReadSchemeChangeRecordsFull;
 Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
     Y_UNIT_TEST(SchemeChangeRecordsTableExists) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
         auto entries = ReadSchemeChangeRecords(runtime);
         Y_UNUSED(entries);
     }
 
     Y_UNIT_TEST(NoRecordsCreatedWithoutSubscribers) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
@@ -38,7 +38,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
 
     Y_UNIT_TEST(RecordsCreatedAfterSubscriberRegistered) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
         ui64 txId = 100;
 
         // Create T1 without subscriber -- no record expected
@@ -77,7 +77,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
 
     Y_UNIT_TEST(CreateTableWritesLogEntry) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
         ui64 txId = 100;
 
         TAutoPtr<IEventHandle> regHandle;
@@ -108,7 +108,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
 
     Y_UNIT_TEST(AlterTableWritesLogEntry) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
         ui64 txId = 100;
 
         TAutoPtr<IEventHandle> regHandle;
@@ -145,7 +145,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
     // attributed to that owner.
     Y_UNIT_TEST(UserSIDRecordsIssuerNotOwner) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
         ui64 txId = 100;
 
         TAutoPtr<IEventHandle> regHandle;
@@ -192,7 +192,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
     // directory's identity -- that directory did not change.
     Y_UNIT_TEST(CdcStreamRecordDoesNotImpersonateParentDirectory) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
         ui64 txId = 100;
 
         TAutoPtr<IEventHandle> regHandle;
@@ -235,7 +235,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
 
     Y_UNIT_TEST(DropTableWritesLogEntry) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
         ui64 txId = 100;
 
         TAutoPtr<IEventHandle> regHandle;
@@ -266,7 +266,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
 
     Y_UNIT_TEST(OrdersAreMonotonicAcrossOperations) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
         ui64 txId = 100;
 
         TAutoPtr<IEventHandle> regHandle;
@@ -303,6 +303,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         };
         TTestBasicRuntime runtime;
         TTestEnvOptions opts;
+        opts.EnableSchemeChangeRecords(true);
         TTestEnv env(runtime, opts, ssFactory);
         ui64 txId = 100;
 
@@ -346,6 +347,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         };
         TTestBasicRuntime runtime;
         TTestEnvOptions opts;
+        opts.EnableSchemeChangeRecords(true);
         TTestEnv env(runtime, opts, ssFactory);
         ui64 txId = 100;
 
@@ -401,6 +403,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         };
         TTestBasicRuntime runtime;
         TTestEnvOptions opts;
+        opts.EnableSchemeChangeRecords(true);
         TTestEnv env(runtime, opts, ssFactory);
         ui64 txId = 100;
 
@@ -450,7 +453,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
 
     Y_UNIT_TEST(LoweringLimitViaConfigBlocksOperations) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
         ui64 txId = 100;
 
         TAutoPtr<IEventHandle> regHandle;
@@ -485,7 +488,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
 
     Y_UNIT_TEST(PlanStepIsRecordedForCoordinatedOps) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
         ui64 txId = 100;
 
         TAutoPtr<IEventHandle> regHandle;
@@ -516,7 +519,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
 
     Y_UNIT_TEST(PlanStepIsRecordedForAlterTable) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
         ui64 txId = 100;
 
         TAutoPtr<IEventHandle> regHandle;
@@ -551,7 +554,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
 
     Y_UNIT_TEST(PlanStepMonotonicAcrossOperations) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
         ui64 txId = 100;
 
         TAutoPtr<IEventHandle> regHandle;
@@ -597,7 +600,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
 
     Y_UNIT_TEST(MkDirWritesLogEntry) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
         ui64 txId = 100;
 
         TAutoPtr<IEventHandle> regHandle;
@@ -620,7 +623,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
 
     Y_UNIT_TEST(WatermarkDoesNotRegressAfterAllOpsComplete) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
         ui64 txId = 100;
 
         TAutoPtr<IEventHandle> regHandle;
@@ -643,7 +646,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
 
     Y_UNIT_TEST(WatermarkSurvivesTabletReboot) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
         ui64 txId = 100;
 
         TAutoPtr<IEventHandle> regHandle;
@@ -670,7 +673,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
 
     Y_UNIT_TEST(WatermarkReflectsInFlightPlanStep) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
         ui64 txId = 100;
 
         TAutoPtr<IEventHandle> regHandle;
@@ -735,7 +738,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         // A multi-part DDL emits exactly one record carrying the user-level
         // body; the target cluster re-runs decomposition on replay.
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
         ui64 txId = 100;
 
         TAutoPtr<IEventHandle> regHandle;
@@ -781,7 +784,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         // Only the user's original CreateTable body is persisted; the target
         // cluster regenerates the auto-mkdir chain on replay.
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
         ui64 txId = 100;
 
         TAutoPtr<IEventHandle> regHandle;
@@ -812,7 +815,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         // Every sub-description the decomposer needs must live inside the one
         // parent body, or replay cannot reproduce the DDL on the target.
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
         ui64 txId = 100;
 
         TAutoPtr<IEventHandle> regHandle;
@@ -848,7 +851,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
 
     Y_UNIT_TEST(FetchBodiesReturnsOnlyRequestedSparseOrders) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
         ui64 txId = 100;
 
         TAutoPtr<IEventHandle> regHandle;
@@ -906,6 +909,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         };
         TTestBasicRuntime runtime;
         TTestEnvOptions opts;
+        opts.EnableSchemeChangeRecords(true);
         TTestEnv env(runtime, opts, ssFactory);
         ui64 txId = 100;
 
@@ -959,6 +963,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
     Y_UNIT_TEST(FetchUpperBoundDoesNotChangeResults) {
         TTestBasicRuntime runtime;
         TTestEnvOptions opts;
+        opts.EnableSchemeChangeRecords(true);
         TTestEnv env(runtime, opts);
         ui64 txId = 100;
 
@@ -1017,6 +1022,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         };
         TTestBasicRuntime runtime;
         TTestEnvOptions opts;
+        opts.EnableSchemeChangeRecords(true);
         TTestEnv env(runtime, opts, ssFactory);
         ui64 txId = 100;
 
@@ -1053,7 +1059,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
 
     Y_UNIT_TEST(FetchBodiesUnorderedAndDuplicateRequestedOrdersHandled) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
         ui64 txId = 100;
 
         TAutoPtr<IEventHandle> regHandle;
@@ -1103,6 +1109,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         };
         TTestBasicRuntime runtime;
         TTestEnvOptions opts;
+        opts.EnableSchemeChangeRecords(true);
         TTestEnv env(runtime, opts, ssFactory);
         ui64 txId = 100;
 
@@ -1125,5 +1132,164 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         // The consequence that matters: DDL is still accepted.
         TestMkDir(runtime, ++txId, "/MyRoot", "Dir1");
         env.TestWaitNotification(runtime, txId);
+    }
+
+    Y_UNIT_TEST(DisabledByDefaultEmitsNoRecords) {
+        // ReadSchemeChangeRecords itself registers a temp subscriber, which is
+        // refused while disabled; use the order counter as a disabled-safe oracle.
+        TSchemeShard* schemeshard = nullptr;
+        auto ssFactory = [&schemeshard](const TActorId& tablet, TTabletStorageInfo* info) {
+            schemeshard = new TSchemeShard(tablet, info);
+            return schemeshard;
+        };
+        TTestBasicRuntime runtime;
+        // Default options: the flag is off unless a test opts in.
+        TTestEnv env(runtime, TTestEnvOptions(), ssFactory);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(schemeshard->NextSchemeChangeOrder, 0u,
+            "no outbox rows should be reserved while the feature is disabled");
+    }
+
+    // Positive companion to DisabledByDefaultEmitsNoRecords: the identical DDL
+    // with the flag on does produce a row, so the disabled case can't pass
+    // vacuously because DDL itself failed.
+    Y_UNIT_TEST(EnabledByOptInEmitsRecord) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        UNIT_ASSERT_C(!entries.empty(), "expected at least one outbox row with the feature enabled");
+    }
+
+    Y_UNIT_TEST(DisabledRefusesRegistration) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        TAutoPtr<IEventHandle> regHandle;
+        auto* result = RegisterSubscriberExpect(runtime, "test:sub",
+            NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_INVALID_REQUEST, regHandle);
+        UNIT_ASSERT_C(!result->Record.GetReason().empty(),
+            "a disabled-feature refusal must carry a clear reason, not a silent failure");
+    }
+
+    Y_UNIT_TEST(DisabledNeverBlocksDdl) {
+        TSchemeShard* schemeshard = nullptr;
+        auto ssFactory = [&schemeshard](const TActorId& tablet, TTabletStorageInfo* info) {
+            schemeshard = new TSchemeShard(tablet, info);
+            return schemeshard;
+        };
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true), ssFactory);
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        auto baseline = ReadSchemeChangeRecords(runtime);
+        schemeshard->MaxSchemeChangeRecords = baseline.size() + 1;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "T1"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Seed the outbox to the cap: this DDL must be refused while enabled.
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "T2"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )", {NKikimrScheme::StatusResourceExhausted});
+
+        // The kill switch: disabling must rescue a cluster wedged by a full outbox.
+        runtime.GetAppData().FeatureFlags.SetEnableSchemeChangeRecords(false);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "T2"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+    }
+
+    Y_UNIT_TEST(FlagFlipTakesEffectWithoutReboot) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        // Disabled: registration is refused.
+        TAutoPtr<IEventHandle> regHandle1;
+        RegisterSubscriberExpect(runtime, "test:sub",
+            NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_INVALID_REQUEST, regHandle1);
+
+        // Flip live, on the same running tablet -- no reboot.
+        runtime.GetAppData().FeatureFlags.SetEnableSchemeChangeRecords(true);
+
+        TAutoPtr<IEventHandle> regHandle2;
+        RegisterSubscriber(runtime, "test:sub", regHandle2);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        UNIT_ASSERT_C(!entries.empty(),
+            "record emission must follow the flag flip without a tablet restart");
+    }
+
+    Y_UNIT_TEST(ReEnablingResumesWithoutReportingLoss) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "T1"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Mid-stream: fetch but don't ack past the tail, so the subscriber's
+        // cursor sits in the middle of the retained log.
+        TAutoPtr<IEventHandle> fetchHandle;
+        FetchSchemeChangeRecords(runtime, "test:sub", 0, 1000, fetchHandle);
+
+        // Disable, then re-enable: the cursor and its record window must survive.
+        runtime.GetAppData().FeatureFlags.SetEnableSchemeChangeRecords(false);
+        runtime.GetAppData().FeatureFlags.SetEnableSchemeChangeRecords(true);
+
+        TAutoPtr<IEventHandle> regHandle2;
+        auto* result = RegisterSubscriberExpect(runtime, "test:sub",
+            NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_SUCCESS, regHandle2);
+        UNIT_ASSERT_VALUES_EQUAL_C((ui32)result->Record.GetState(),
+            (ui32)NKikimrSchemeShard::TSchemeChangeSubscriberState::STATE_READY,
+            "a subscriber that was mid-stream across a disable/enable cycle "
+            "must not be reported as STATE_LOST");
     }
 }

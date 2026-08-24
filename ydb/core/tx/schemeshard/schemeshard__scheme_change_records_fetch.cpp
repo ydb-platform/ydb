@@ -1,5 +1,7 @@
 #include "schemeshard_impl.h"
 
+#include <ydb/core/base/appdata.h>
+
 namespace NKikimr::NSchemeShard {
 
 namespace {
@@ -39,6 +41,12 @@ struct TTxRegisterSubscriber : public NTabletFlatExecutor::TTransactionBase<TSch
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         const auto& record = Request->Get()->Record;
         const TString& subscriberId = record.GetSubscriberId();
+
+        if (!AppData()->FeatureFlags.GetEnableSchemeChangeRecords()) {
+            Result->Record.SetStatus(NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_INVALID_REQUEST);
+            Result->Record.SetReason("Scheme change records are disabled");
+            return true;
+        }
 
         if (!CheckSubscriberId(subscriberId, Result->Record)) {
             return true;
@@ -157,6 +165,12 @@ struct TTxFetchSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBas
         const TString& subscriberId = record.GetSubscriberId();
         const ui64 afterOrder = record.GetAfterOrder();
         ui32 maxCount = record.GetMaxCount();
+
+        if (!AppData()->FeatureFlags.GetEnableSchemeChangeRecords()) {
+            Result->Record.SetStatus(NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_INVALID_REQUEST);
+            Result->Record.SetReason("Scheme change records are disabled");
+            return true;
+        }
 
         if (maxCount == 0 || maxCount > 1000) {
             maxCount = 1000;
@@ -326,6 +340,12 @@ struct TTxAckSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBase<
         const TString& subscriberId = record.GetSubscriberId();
         const ui64 upToOrder = record.GetUpToOrder();
 
+        if (!AppData()->FeatureFlags.GetEnableSchemeChangeRecords()) {
+            Result->Record.SetStatus(NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_INVALID_REQUEST);
+            Result->Record.SetReason("Scheme change records are disabled");
+            return true;
+        }
+
         NIceDb::TNiceDb db(txc.DB);
 
         auto rowset = db.Table<Schema::SchemeChangeSubscribers>().Key(subscriberId).Select();
@@ -398,6 +418,12 @@ struct TTxUnregisterSubscriber : public NTabletFlatExecutor::TTransactionBase<TS
         const auto& record = Request->Get()->Record;
         const TString& subscriberId = record.GetSubscriberId();
 
+        if (!AppData()->FeatureFlags.GetEnableSchemeChangeRecords()) {
+            Result->Record.SetStatus(NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_INVALID_REQUEST);
+            Result->Record.SetReason("Scheme change records are disabled");
+            return true;
+        }
+
         NIceDb::TNiceDb db(txc.DB);
 
         auto rowset = db.Table<Schema::SchemeChangeSubscribers>().Key(subscriberId).Select();
@@ -448,6 +474,12 @@ struct TTxFetchSchemeChangeRecordBodies : public NTabletFlatExecutor::TTransacti
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         const auto& record = Request->Get()->Record;
         const TString& subscriberId = record.GetSubscriberId();
+
+        if (!AppData()->FeatureFlags.GetEnableSchemeChangeRecords()) {
+            Result->Record.SetStatus(NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_INVALID_REQUEST);
+            Result->Record.SetReason("Scheme change records are disabled");
+            return true;
+        }
 
         NIceDb::TNiceDb db(txc.DB);
 

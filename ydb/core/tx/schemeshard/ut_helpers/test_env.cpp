@@ -677,6 +677,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.FeatureFlags.SetEnableAlterDatabase(opts.EnableAlterDatabase_);
     app.SetEnableAccessToIndexImplTables(opts.EnableAccessToIndexImplTables_);
     app.SetEnableIndexMaterialization(opts.EnableIndexMaterialization_);
+    app.SetEnableSchemeChangeRecords(opts.EnableSchemeChangeRecords_);
 
     app.ColumnShardConfig.SetDisabledOnSchemeShard(false);
 

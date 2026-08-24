@@ -27,6 +27,7 @@ void RegisterSubscriber(TTestActorRuntime& runtime, const TString& subscriberId)
 Y_UNIT_TEST_SUITE(TSchemeChangeRecordsReboots) {
 
     Y_UNIT_TEST_WITH_REBOOTS(CreateTableWithReboots) {
+        t.GetTestEnvOptions().EnableSchemeChangeRecords(true);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -62,6 +63,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsReboots) {
     }
 
     Y_UNIT_TEST_WITH_REBOOTS(MultipleCreateTablesWithReboots) {
+        t.GetTestEnvOptions().EnableSchemeChangeRecords(true);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -112,6 +114,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsReboots) {
     }
 
     Y_UNIT_TEST_WITH_REBOOTS(AlterTableWithReboots) {
+        t.GetTestEnvOptions().EnableSchemeChangeRecords(true);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -161,6 +164,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsReboots) {
     }
 
     Y_UNIT_TEST_WITH_REBOOTS(OrderCounterSurvivesReboot) {
+        t.GetTestEnvOptions().EnableSchemeChangeRecords(true);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -218,6 +222,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsReboots) {
     }
 
     Y_UNIT_TEST_WITH_REBOOTS(SchemeChangeRecordsSurviveReboot) {
+        t.GetTestEnvOptions().EnableSchemeChangeRecords(true);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);

@@ -94,6 +94,7 @@ namespace NSchemeShardUT_Private {
         OPTION(bool, EnableDataShardSplitKeySelection, false);
         OPTION(bool, EnableDataShardSplitHistogramOmission, false);
         OPTION(bool, DisableFileStoreSSDSystemSpaceAccounting, false);
+        OPTION(std::optional<bool>, EnableSchemeChangeRecords, std::nullopt);
 
         #undef OPTION
     };

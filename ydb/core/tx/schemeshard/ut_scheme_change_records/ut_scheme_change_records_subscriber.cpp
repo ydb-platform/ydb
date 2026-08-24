@@ -16,7 +16,7 @@ using NSchemeChangeRecordTestHelpers::ReadSchemeChangeRecords;
 Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
     Y_UNIT_TEST(MockBackupSubscriberEndToEnd) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
         ui64 txId = 100;
 
         TAutoPtr<IEventHandle> regHandle;
@@ -77,7 +77,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
 
     Y_UNIT_TEST(MockBackupSubscriberPaginatedFetch) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
         ui64 txId = 100;
 
         TAutoPtr<IEventHandle> regHandle;
@@ -117,7 +117,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
 
     Y_UNIT_TEST(TwoSubscribersIndependentConsumption) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
         ui64 txId = 100;
 
         TAutoPtr<IEventHandle> reg1Handle, reg2Handle;
@@ -166,7 +166,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
 
     Y_UNIT_TEST(ForceAdvanceSubscriber) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
         ui64 txId = 100;
 
         TAutoPtr<IEventHandle> regHandle;
@@ -192,7 +192,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
 
     Y_UNIT_TEST(ForceAdvanceUnknownSubscriberReturnsError) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
 
         TAutoPtr<IEventHandle> advHandle;
         ForceAdvanceSubscriberExpect(runtime, "nonexistent:sub",
@@ -201,7 +201,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
 
     Y_UNIT_TEST(FetchReturnsMetadataWithoutBody) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
         ui64 txId = 100;
 
         TAutoPtr<IEventHandle> regHandle;
@@ -227,7 +227,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
 
     Y_UNIT_TEST(FetchBodiesReturnsRequestedBodies) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
         ui64 txId = 100;
 
         TAutoPtr<IEventHandle> regHandle;
@@ -260,7 +260,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
 
     Y_UNIT_TEST(FetchBodiesUnregisteredSubscriberRejected) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
 
         TVector<ui64> orders = {1, 2, 3};
         TAutoPtr<IEventHandle> bodiesHandle;
@@ -270,7 +270,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
 
     Y_UNIT_TEST(FetchUnknownSubscriberReturnsNotRegistered) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
 
         TAutoPtr<IEventHandle> fetchHandle;
         FetchSchemeChangeRecordsExpect(runtime, "ghost:sub", 0, 100,
@@ -280,7 +280,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
     Y_UNIT_TEST(AckDeletesAckedRecordsInline) {
         // Ack tx deletes records in the same transaction; no background sweep needed.
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
         ui64 txId = 100;
 
         TAutoPtr<IEventHandle> regHandle;
@@ -314,7 +314,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
 
     Y_UNIT_TEST(FetchResultHasNoTailOrderField) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
         ui64 txId = 100;
 
         TAutoPtr<IEventHandle> regHandle;
@@ -361,7 +361,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         // A backlog larger than SchemeChangeCleanupBatchSize drains via a
         // scheduled continuation chain; poll until empty.
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
         ui64 txId = 100;
 
         TAutoPtr<IEventHandle> regHandle;
@@ -395,7 +395,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         // ForceAdvance jumps the cursor to tail and must delete newly-stale
         // records inline, same as Ack/Unregister.
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
         ui64 txId = 100;
 
         TAutoPtr<IEventHandle> regHandle;
@@ -424,7 +424,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         // Slow subscriber holds min cursor at 0 while fast acks everything.
         // Unregistering the slow one must sweep all records immediately.
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
         ui64 txId = 100;
 
         TAutoPtr<IEventHandle> reg1Handle, reg2Handle;
@@ -473,6 +473,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         };
         TTestBasicRuntime runtime;
         TTestEnvOptions opts;
+        opts.EnableSchemeChangeRecords(true);
         TTestEnv env(runtime, opts, ssFactory);
         ui64 txId = 100;
 
@@ -507,6 +508,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         };
         TTestBasicRuntime runtime;
         TTestEnvOptions opts;
+        opts.EnableSchemeChangeRecords(true);
         TTestEnv env(runtime, opts, ssFactory);
         ui64 txId = 100;
 
@@ -556,6 +558,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         };
         TTestBasicRuntime runtime;
         TTestEnvOptions opts;
+        opts.EnableSchemeChangeRecords(true);
         TTestEnv env(runtime, opts, ssFactory);
         ui64 txId = 100;
 
@@ -601,7 +604,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
 
     Y_UNIT_TEST(ExplicitStartOrderOnEmptyLogAccepted) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
 
         // Zero subscribers, zero records: the floor is the tail is 0.
         TAutoPtr<IEventHandle> reg;
@@ -624,6 +627,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         };
         TTestBasicRuntime runtime;
         TTestEnvOptions opts;
+        opts.EnableSchemeChangeRecords(true);
         TTestEnv env(runtime, opts, ssFactory);
         ui64 txId = 100;
 
@@ -660,6 +664,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         };
         TTestBasicRuntime runtime;
         TTestEnvOptions opts;
+        opts.EnableSchemeChangeRecords(true);
         TTestEnv env(runtime, opts, ssFactory);
 
         TAutoPtr<IEventHandle> reg;
@@ -677,6 +682,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         };
         TTestBasicRuntime runtime;
         TTestEnvOptions opts;
+        opts.EnableSchemeChangeRecords(true);
         TTestEnv env(runtime, opts, ssFactory);
         ui64 txId = 100;
 
@@ -717,7 +723,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
 
     Y_UNIT_TEST(ReadHelperSeesAllRecordsRegardlessOfTail) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
         ui64 txId = 100;
 
         TAutoPtr<IEventHandle> regA;
@@ -753,6 +759,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         };
         TTestBasicRuntime runtime;
         TTestEnvOptions opts;
+        opts.EnableSchemeChangeRecords(true);
         TTestEnv env(runtime, opts, ssFactory);
         ui64 txId = 100;
 
@@ -800,6 +807,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         };
         TTestBasicRuntime runtime;
         TTestEnvOptions opts;
+        opts.EnableSchemeChangeRecords(true);
         TTestEnv env(runtime, opts, ssFactory);
         ui64 txId = 100;
 
@@ -836,6 +844,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         };
         TTestBasicRuntime runtime;
         TTestEnvOptions opts;
+        opts.EnableSchemeChangeRecords(true);
         TTestEnv env(runtime, opts, ssFactory);
         ui64 txId = 100;
 
@@ -881,6 +890,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         };
         TTestBasicRuntime runtime;
         TTestEnvOptions opts;
+        opts.EnableSchemeChangeRecords(true);
         TTestEnv env(runtime, opts, ssFactory);
         ui64 txId = 100;
 
@@ -932,6 +942,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         };
         TTestBasicRuntime runtime;
         TTestEnvOptions opts;
+        opts.EnableSchemeChangeRecords(true);
         TTestEnv env(runtime, opts, ssFactory);
         ui64 txId = 100;
 
@@ -968,6 +979,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         };
         TTestBasicRuntime runtime;
         TTestEnvOptions opts;
+        opts.EnableSchemeChangeRecords(true);
         TTestEnv env(runtime, opts, ssFactory);
         ui64 txId = 100;
 
@@ -1030,7 +1042,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
 
     Y_UNIT_TEST(UserDdlStillRejectedAtCap) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
         ui64 txId = 100;
 
         ApplySchemeShardConfig(runtime, {.MaxSchemeChangeRecords = 2});
@@ -1050,7 +1062,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
 
     Y_UNIT_TEST(UserInitiatedSplitAtCapNotRejected) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
         ui64 txId = 100;
 
         TAutoPtr<IEventHandle> regHandle;
@@ -1088,6 +1100,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         };
         TTestBasicRuntime runtime;
         TTestEnvOptions opts;
+        opts.EnableSchemeChangeRecords(true);
         TTestEnv env(runtime, opts, ssFactory);
         ui64 txId = 100;
 
@@ -1129,7 +1142,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
 
     Y_UNIT_TEST(EmptySubscriberIdRejected) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
 
         // Two consumers that both leave SubscriberId unset would silently
         // share one cursor.
@@ -1140,7 +1153,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
 
     Y_UNIT_TEST(OverlongSubscriberIdRejected) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
 
         TAutoPtr<IEventHandle> handle;
         RegisterSubscriberExpect(runtime, TString(300, 'x'),
@@ -1155,6 +1168,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         };
         TTestBasicRuntime runtime;
         TTestEnvOptions opts;
+        opts.EnableSchemeChangeRecords(true);
         TTestEnv env(runtime, opts, ssFactory);
 
         schemeshard->MaxSchemeChangeSubscribers = 2;
@@ -1182,6 +1196,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         };
         TTestBasicRuntime runtime;
         TTestEnvOptions opts;
+        opts.EnableSchemeChangeRecords(true);
         TTestEnv env(runtime, opts, ssFactory);
         ui64 txId = 100;
 
@@ -1216,7 +1231,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
 
     Y_UNIT_TEST(ForceAdvanceFromMonitoringRejectsUnknownSubscriber) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
 
         auto resp = SendSchemeShardMonRequest(runtime, TTestTxConfig::SchemeShard,
             "/app?Action=ForceAdvanceSchemeChangeSubscriber&SubscriberId=ghost:sub",
@@ -1227,7 +1242,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
 
     Y_UNIT_TEST(RecordCarriesResolvedIdentity) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
         ui64 txId = 100;
 
         TAutoPtr<IEventHandle> regHandle;
@@ -1260,7 +1275,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
 
     Y_UNIT_TEST(CreateRecordCarriesResolvedDescription) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
         ui64 txId = 100;
 
         TAutoPtr<IEventHandle> regHandle;
@@ -1296,7 +1311,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
 
     Y_UNIT_TEST(SecretValueNotPersistedInSchemeChangeRecord) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
         ui64 txId = 100;
 
         TAutoPtr<IEventHandle> regHandle;
@@ -1333,7 +1348,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
 
     Y_UNIT_TEST(SplitMergeProducesNoRecords) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
         ui64 txId = 100;
 
         TAutoPtr<IEventHandle> regHandle;
@@ -1368,7 +1383,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
 
     Y_UNIT_TEST(ChurnListIsTheOnlyFilter) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
         ui64 txId = 100;
 
         TAutoPtr<IEventHandle> regHandle;
@@ -1409,7 +1424,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
 
     Y_UNIT_TEST(NonTableObjectsCarryTheirOwnIdentity) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().RunFakeConfigDispatcher(true));
+        TTestEnv env(runtime, TTestEnvOptions().RunFakeConfigDispatcher(true).EnableSchemeChangeRecords(true));
         ui64 txId = 100;
 
         TAutoPtr<IEventHandle> regHandle;
@@ -1449,7 +1464,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
 
     Y_UNIT_TEST(EveryRecordHasNonZeroPlanStep) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
         ui64 txId = 100;
 
         TAutoPtr<IEventHandle> regHandle;
@@ -1479,7 +1494,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
 
     Y_UNIT_TEST(BucketedRecordsCarryLowerBoundPlanStep) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
         ui64 txId = 100;
 
         TAutoPtr<IEventHandle> regHandle;
@@ -1520,7 +1535,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         TTestBasicRuntime runtime;
         // Backup collections are feature-gated; without this the op is rejected
         // with StatusPreconditionFailed and the test proves nothing.
-        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true).EnableSchemeChangeRecords(true));
         ui64 txId = 100;
 
         TAutoPtr<IEventHandle> regHandle;
@@ -1598,7 +1613,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
 
     Y_UNIT_TEST(ClosedThroughPlanStepIsInclusiveAtQuiesce) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
         ui64 txId = 100;
 
         TAutoPtr<IEventHandle> regHandle;
@@ -1619,7 +1634,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
 
     Y_UNIT_TEST(PerObjectOrderingHoldsWithoutGlobalOrdering) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
         ui64 txId = 100;
 
         TAutoPtr<IEventHandle> regHandle;
@@ -1659,6 +1674,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         };
         TTestBasicRuntime runtime;
         TTestEnvOptions opts;
+        opts.EnableSchemeChangeRecords(true);
         TTestEnv env(runtime, opts, ssFactory);
 
         // A second transaction-supporting domain under one SchemeShard would
@@ -1672,7 +1688,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
 
     Y_UNIT_TEST(DdlBucketsIntoCorrectBackupWindow) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true).EnableSchemeChangeRecords(true));
         ui64 txId = 100;
 
         TAutoPtr<IEventHandle> regHandle;
@@ -1775,6 +1791,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         };
         TTestBasicRuntime runtime;
         TTestEnvOptions opts;
+        opts.EnableSchemeChangeRecords(true);
         TTestEnv env(runtime, opts, ssFactory);
         ui64 txId = 100;
 
@@ -1803,6 +1820,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         };
         TTestBasicRuntime runtime;
         TTestEnvOptions opts;
+        opts.EnableSchemeChangeRecords(true);
         TTestEnv env(runtime, opts, ssFactory);
         ui64 txId = 100;
 
@@ -1828,7 +1846,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
 
     Y_UNIT_TEST(SyncPointPlanStepIsTheWindowEdge) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true).EnableSchemeChangeRecords(true));
         ui64 txId = 100;
 
         TAutoPtr<IEventHandle> regHandle;
@@ -1903,6 +1921,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         };
         TTestBasicRuntime runtime;
         TTestEnvOptions opts;
+        opts.EnableSchemeChangeRecords(true);
         TTestEnv env(runtime, opts, ssFactory);
         ui64 txId = 100;
 
@@ -1965,6 +1984,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         };
         TTestBasicRuntime runtime;
         TTestEnvOptions opts;
+        opts.EnableSchemeChangeRecords(true);
         TTestEnv env(runtime, opts, ssFactory);
         ui64 txId = 100;
 
@@ -2025,6 +2045,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
     Y_UNIT_TEST(ForceAbortedOperationIsNotRecordedAsSuccess) {
         TTestBasicRuntime runtime;
         TTestEnvOptions opts;
+        opts.EnableSchemeChangeRecords(true);
         TTestEnv env(runtime, opts);
         ui64 txId = 100;
 
@@ -2100,6 +2121,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         };
         TTestBasicRuntime runtime;
         TTestEnvOptions opts;
+        opts.EnableSchemeChangeRecords(true);
         TTestEnv env(runtime, opts, ssFactory);
         ui64 txId = 100;
 
@@ -2180,6 +2202,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         };
         TTestBasicRuntime runtime;
         TTestEnvOptions opts;
+        opts.EnableSchemeChangeRecords(true);
         TTestEnv env(runtime, opts, ssFactory);
         ui64 txId = 100;
 
@@ -2247,6 +2270,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         };
         TTestBasicRuntime runtime;
         TTestEnvOptions opts;
+        opts.EnableSchemeChangeRecords(true);
         TTestEnv env(runtime, opts, ssFactory);
         ui64 txId = 100;
 
@@ -2333,6 +2357,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         };
         TTestBasicRuntime runtime;
         TTestEnvOptions opts;
+        opts.EnableSchemeChangeRecords(true);
         TTestEnv env(runtime, opts, ssFactory);
         ui64 txId = 100;
 
@@ -2391,6 +2416,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
     Y_UNIT_TEST(BrokenConsumerWedgesDdlUntilAdminOverride) {
         TTestBasicRuntime runtime;
         TTestEnvOptions opts;
+        opts.EnableSchemeChangeRecords(true);
         TTestEnv env(runtime, opts);
         ui64 txId = 100;
 
@@ -2452,6 +2478,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
     Y_UNIT_TEST(OutboxCountersAreExported) {
         TTestBasicRuntime runtime;
         TTestEnvOptions opts;
+        opts.EnableSchemeChangeRecords(true);
         TTestEnv env(runtime, opts);
         ui64 txId = 100;
 
@@ -2504,6 +2531,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
     Y_UNIT_TEST(DescriptionDoesNotGrowWithPartitionCount) {
         TTestBasicRuntime runtime;
         TTestEnvOptions opts;
+        opts.EnableSchemeChangeRecords(true);
         TTestEnv env(runtime, opts);
         ui64 txId = 100;
 
@@ -2559,6 +2587,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
     Y_UNIT_TEST(AbortedFirstProposeDoesNotFakeRecordLoss) {
         TTestBasicRuntime runtime;
         TTestEnvOptions opts;
+        opts.EnableSchemeChangeRecords(true);
         TTestEnv env(runtime, opts);
         ui64 txId = 100;
 
@@ -2628,6 +2657,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         };
         TTestBasicRuntime runtime;
         TTestEnvOptions opts;
+        opts.EnableSchemeChangeRecords(true);
         TTestEnv env(runtime, opts, ssFactory);
         ui64 txId = 100;
 
@@ -2675,6 +2705,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         };
         TTestBasicRuntime runtime;
         TTestEnvOptions opts;
+        opts.EnableSchemeChangeRecords(true);
         TTestEnv env(runtime, opts, ssFactory);
         ui64 txId = 100;
 
@@ -2715,6 +2746,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         };
         TTestBasicRuntime runtime;
         TTestEnvOptions opts;
+        opts.EnableSchemeChangeRecords(true);
         TTestEnv env(runtime, opts, ssFactory);
         ui64 txId = 100;
 
@@ -2752,6 +2784,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
     Y_UNIT_TEST(FetchBodiesRejectsOversizedRequestRatherThanTruncating) {
         TTestBasicRuntime runtime;
         TTestEnvOptions opts;
+        opts.EnableSchemeChangeRecords(true);
         TTestEnv env(runtime, opts);
         ui64 txId = 100;
 
@@ -2781,6 +2814,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         // serialized into the outbox body in cleartext.
         TTestBasicRuntime runtime;
         TTestEnvOptions opts;
+        opts.EnableSchemeChangeRecords(true);
         opts.InitYdbDriver(true);
         TTestEnv env(runtime, opts);
         ui64 txId = 100;
@@ -2844,6 +2878,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         };
         TTestBasicRuntime runtime;
         TTestEnvOptions opts;
+        opts.EnableSchemeChangeRecords(true);
         TTestEnv env(runtime, opts, ssFactory);
         ui64 txId = 100;
 

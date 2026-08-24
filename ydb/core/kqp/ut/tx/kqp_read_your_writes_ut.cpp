@@ -300,7 +300,9 @@ public:
 protected:
     void DoExecute() override {
         // TODO: SnapshotRW + row table: DELETE doesn't see uncommitted INSERT from same tx without mid-tx read
-        if (!GetIsOlap() && TxSettings_.GetMode() == TTxSettings::TS_SNAPSHOT_RW) return;
+        if (!GetIsOlap() && TxSettings_.GetMode() == TTxSettings::TS_SNAPSHOT_RW) {
+            return;
+        }
         TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
         tx.Begin();
         tx.Exec(R"(INSERT INTO KV2 (Key, Value) VALUES (1u, "inserted");)");
@@ -339,7 +341,9 @@ public:
 protected:
     void DoExecute() override {
         // TODO: OLAP: second UPDATE doesn't see first UPDATE's value without mid-tx read
-        if (GetIsOlap()) return;
+        if (GetIsOlap()) {
+            return;
+        }
         TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
         tx.ExecAuto(R"(INSERT INTO Test (Group, Name, Amount) VALUES (1u, "A", 100ul);)");
         tx.Begin();
@@ -379,7 +383,9 @@ public:
 protected:
     void DoExecute() override {
         // TODO: OLAP: predicate DELETE doesn't see UPDATE from same tx without mid-tx read
-        if (GetIsOlap()) return;
+        if (GetIsOlap()) {
+            return;
+        }
         TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
         tx.ExecAuto(R"(INSERT INTO KV2 (Key, Value) VALUES (1u, "A"), (2u, "A"), (3u, "B");)");
         tx.Begin();
@@ -419,7 +425,9 @@ protected:
     void DoExecute() override {
         // TODO: OLAP: INSERT doesn't see DELETE from same tx without mid-tx read
         // TODO: SnapshotRW: INSERT doesn't see DELETE from same tx without mid-tx read
-        if (GetIsOlap() || TxSettings_.GetMode() == TTxSettings::TS_SNAPSHOT_RW) return;
+        if (GetIsOlap() || TxSettings_.GetMode() == TTxSettings::TS_SNAPSHOT_RW) {
+            return;
+        }
         TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
         tx.ExecAuto(R"(INSERT INTO KV2 (Key, Value) VALUES (1u, "original");)");
         tx.Begin();
@@ -459,7 +467,9 @@ public:
 protected:
     void DoExecute() override {
         // TODO: SnapshotRW + row table: DELETE doesn't see uncommitted writes from same tx without mid-tx read
-        if (!GetIsOlap() && TxSettings_.GetMode() == TTxSettings::TS_SNAPSHOT_RW) return;
+        if (!GetIsOlap() && TxSettings_.GetMode() == TTxSettings::TS_SNAPSHOT_RW) {
+            return;
+        }
         TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
         tx.Begin();
         tx.Exec(R"(INSERT INTO KV2 (Key, Value) VALUES (1u, "inserted");)");

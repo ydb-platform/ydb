@@ -423,12 +423,8 @@ Y_UNIT_TEST_SUITE(THistoryCutter) {
     }
 
     Y_UNIT_TEST(HistoryCuttingUnsoundForExternalBlobWriters) {
-        // The seen-generations criterion only covers executor-written blobs; a tablet
-        // whose channels also hold externally-written blobs (ColumnShard portions via
-        // TBlobManager) must not be cut by the executor there. Observed live: entries
-        // cut under external blobs leave GroupFor() resolving to Max<ui32> and GC
-        // retrying an invalid group until the tablet is unusable. The tablet declares
-        // those channels itself, so this asserts the hook, not a tablet type.
+        // Observed live: entries cut under externally-written blobs left GroupFor()
+        // resolving to Max<ui32> and GC retrying an invalid group forever.
         struct TExternalWriter: public NFlatExecutorSetup::ITablet {
             explicit TExternalWriter(TTabletStorageInfo* info)
                 : ITablet(info, TActorId())
@@ -450,16 +446,14 @@ Y_UNIT_TEST_SUITE(THistoryCutter) {
 
         TExternalWriter external(info.Get());
         gcLogic.SetOwner(&external);
-        // Channels 0/1 carry only executor blobs, so they stay with this cutter.
         UNIT_ASSERT(gcLogic.IsHistoryCuttingSound(0));
         UNIT_ASSERT(gcLogic.IsHistoryCuttingSound(1));
         UNIT_ASSERT(!gcLogic.IsHistoryCuttingSound(2));
         UNIT_ASSERT(!gcLogic.IsHistoryCuttingSound(65));
     }
 
-    // A blob that is deleted but not yet collected keeps its DoNotKeep mark in the GC
-    // deltas; cutting its entry makes the mark undeliverable, so the delta must feed
-    // the cutter. Observed live: GC to the sentinel group retried forever on channel 1.
+    // Cutting an entry under a not-yet-collected DoNotKeep mark strands the mark:
+    // observed live as GC retrying the sentinel group forever on channel 1.
     Y_UNIT_TEST(PendingDeleteDeltaPinsHistoryEntry) {
         static constexpr ui64 TabletId = 42;
         static constexpr ui32 Channel = 1;

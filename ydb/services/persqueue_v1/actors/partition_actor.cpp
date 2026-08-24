@@ -461,6 +461,9 @@ void TPartitionActor::ResendRecentRequests() {
             WaitDataInfly.clear();
             if (IsNeedMorePartitionData()) {
                 WaitDataInPartition(ctx);
+            } else if (IsPartitionDataReady() && !PartitionInFlightMemoryController.IsMemoryLimitReached()) {
+                WaitForData = false;
+                SendPartitionReady(ctx);
             }
         }
     }

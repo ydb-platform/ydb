@@ -202,8 +202,6 @@
 
 #|
 || **Версия** | **Дата выпуска** | **Скачать** | **Список изменений** ||
-|| **v26.2** |  |  |  |  ||
-|| v.26.2.1.ent.3 | 20.08.2026 | `cr.yandex/crptqonuodf51kdj7a7d/ydb-enterprise:26.2.1.ent.3` |  ||
 || **v26.1** |  |  |  |  ||
 || v.26.1.1.ent.3 | 03.08.2026 | `cr.yandex/crptqonuodf51kdj7a7d/ydb-enterprise:26.1.1.ent.3` | [См. список](../changelog-enterprise.md#26-1-1-ent-3) ||
 || **v25.4** |  |  |  |  ||

@@ -7,9 +7,10 @@ This documentation section describes a method for configuring {{ ydb-short-name 
 Main materials:
 
 - [{#T}](config-overview.md)
-- [Cluster configuration DSL](update-config.md)
-- [Configuration parameters](dynamic-config-selectors.md)
 - [{#T}](update-config.md)
+- [Cluster configuration DSL](update-config.md)
+- [Cluster configuration DSL](dynamic-config-selectors.md)
+- [Configuration parameters](update-config.md)
 - [{#T}](cluster-expansion.md)
 - [{#T}](state-storage-reconfiguration.md)
 - [{#T}](state-storage-move.md)

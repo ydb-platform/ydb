@@ -5,6 +5,9 @@ VERSION(3.0.2)
 LICENSE(Apache-2.0)
 
 JAR_RESOURCE(289382642)
+
 SRC_RESOURCE(289381370)
+
+ORIGINAL_SOURCE(https://code.google.com/p/jsr-305/)
 
 END()

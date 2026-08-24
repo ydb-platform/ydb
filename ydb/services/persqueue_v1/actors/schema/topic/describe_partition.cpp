@@ -28,6 +28,7 @@ public:
                 .Error = TDescribeSchemaError{
                     .Status = Ydb::StatusIds::BAD_REQUEST,
                     .Message = TStringBuilder() << "No partition " << PartitionId << " in topic",
+                    .RetryWithSync = true,
                 },
             };
         }
@@ -91,25 +92,24 @@ private:
         auto* p = FindIfPtr(ev->Get()->TopicInfo.Info->Description.GetPartitions(), [partitionId](const auto& part) {
             return part.GetPartitionId() == partitionId;
         });
+        AFL_ENSURE(p)("partitionId", partitionId);
 
-        if (p) {
-            auto& partition = *result.mutable_partition();
-            partition.set_partition_id(p->GetPartitionId());
-            partition.set_active(p->GetStatus() == ::NKikimrPQ::ETopicPartitionStatus::Active);
+        auto& partition = *result.mutable_partition();
+        partition.set_partition_id(p->GetPartitionId());
+        partition.set_active(p->GetStatus() == ::NKikimrPQ::ETopicPartitionStatus::Active);
 
-            auto it = ev->Get()->Partitions.find(p->GetPartitionId());
-            if (it != ev->Get()->Partitions.end()) {
-                auto& partitionInfo = it->second;
+        auto it = ev->Get()->Partitions.find(p->GetPartitionId());
+        if (it != ev->Get()->Partitions.end()) {
+            auto& partitionInfo = it->second;
 
-                if (includeLocation) {
-                    *partition.mutable_partition_location() = partitionInfo.Location;
-                }
+            if (includeLocation) {
+                *partition.mutable_partition_location() = partitionInfo.Location;
+            }
 
-                if (includeStats) {
-                    auto* partitionStats = partition.mutable_partition_stats();
-                    *partitionStats = partitionInfo.Stats.partition_stats();
-                    partitionStats->set_partition_node_id(partitionInfo.Location.node_id());
-                }
+            if (includeStats) {
+                auto* partitionStats = partition.mutable_partition_stats();
+                *partitionStats = partitionInfo.Stats.partition_stats();
+                partitionStats->set_partition_node_id(partitionInfo.Location.node_id());
             }
         }
 

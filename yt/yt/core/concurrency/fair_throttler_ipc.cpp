@@ -337,7 +337,7 @@ private:
                 EmplaceOrCrash(OpenBuckets_, fileName, bucket);
             } catch (const std::exception& ex) {
                 YT_TLOG_DEBUG("Error reloading throttler IPC; ignored")
-                    .With(TError(ex));
+                    .With(ex);
                 continue;
             }
         }

@@ -582,11 +582,18 @@ public:
             return;
         }
 
+        // Guards from race with DoGuardedRun. If request timed out then there
+        // is no need to attempt to execute it. Thus, early exchange here.
+        auto wasRun = RunLatch_.exchange(true);
+
         YT_TLOG_DEBUG("Request timed out, canceling")
             .With("RequestId", RequestId_)
             .With("Stage", stage);
 
-        auto error = TError(NYT::EErrorCode::Timeout, "Request timed out");
+        auto error = TError(
+            NYT::EErrorCode::Timeout,
+            "Request timed out%v",
+            stage == ERequestProcessingStage::Waiting ? " before being run" : "");
 
         if (RuntimeInfo_->Descriptor.StreamingEnabled) {
             AbortStreamsUnlessClosed(error);
@@ -596,10 +603,10 @@ public:
 
         MethodPerformanceCounters_->TimedOutRequestCounter.Increment();
 
-        // Guards from race with DoGuardedRun.
         // We can only mark as complete those requests that will not be run
-        // as there's no guarantee that, if started,  the method handler will respond promptly to cancelation.
-        if (!RunLatch_.exchange(true)) {
+        // as there's no guarantee that, if started, the method handler will
+        // respond promptly to cancelation.
+        if (!wasRun) {
             SetComplete();
         }
     }
@@ -691,7 +698,7 @@ public:
         } catch (const std::exception& ex) {
             YT_TLOG_DEBUG("Error handling streaming payload")
                 .With("RequestId", RequestId_)
-                .With(TError(ex));
+                .With(ex);
             RequestAttachmentsStream_->Abort(ex);
         }
     }
@@ -716,7 +723,7 @@ public:
         } catch (const std::exception& ex) {
             YT_TLOG_DEBUG("Error handling streaming feedback")
                 .With("RequestId", RequestId_)
-                .With(TError(ex));
+                .With(ex);
             stream->Abort(ex);
         }
     }
@@ -1667,7 +1674,7 @@ void TRequestQueue::RunRequest(TServiceBase::TServiceContextPtr context)
 
 void TRequestQueue::IncrementQueueSize(i64 requestTotalSize)
 {
-    ++QueueSize_;
+    QueueSize_.fetch_add(1, std::memory_order::relaxed);
     QueueByteSize_.fetch_add(requestTotalSize);
 
     RuntimeInfo_->QueueSize.fetch_add(1, std::memory_order::relaxed);
@@ -1676,16 +1683,16 @@ void TRequestQueue::IncrementQueueSize(i64 requestTotalSize)
 
 void TRequestQueue::DecrementQueueSize(i64 requestTotalSize)
 {
-    auto newQueueSize = --QueueSize_;
+    auto oldQueueSize = QueueSize_.fetch_sub(1, std::memory_order::relaxed);
     auto oldQueueByteSize = QueueByteSize_.fetch_sub(requestTotalSize);
 
-    YT_ASSERT(newQueueSize >= 0);
+    YT_ASSERT(oldQueueSize > 0);
     YT_ASSERT(oldQueueByteSize >= requestTotalSize);
 
-    newQueueSize = RuntimeInfo_->QueueSize.fetch_sub(1, std::memory_order::relaxed);
+    oldQueueSize = RuntimeInfo_->QueueSize.fetch_sub(1, std::memory_order::relaxed);
     oldQueueByteSize = RuntimeInfo_->QueueByteSize.fetch_sub(requestTotalSize);
 
-    YT_ASSERT(newQueueSize >= 0);
+    YT_ASSERT(oldQueueSize > 0);
     YT_ASSERT(oldQueueByteSize >= requestTotalSize);
 }
 
@@ -2047,7 +2054,8 @@ void TServiceBase::ReplyError(TError error, TIncomingRequest&& incomingRequest)
         logLevel = NLogging::ELogLevel::Warning;
     }
 
-    YT_LOG_EVENT(Logger, logLevel, richError);
+    YT_TLOG_EVENT(Logger, logLevel, "Request failed")
+        .With(richError);
 
     auto errorMessage = CreateErrorResponseMessage(incomingRequest.RequestId, richError);
     YT_UNUSED_FUTURE(incomingRequest.ReplyBus->Send(errorMessage));
@@ -2943,7 +2951,7 @@ void TServiceBase::DoConfigure(
     } catch (const std::exception& ex) {
         THROW_ERROR_EXCEPTION("Error configuring RPC service %v",
             ServiceId_.ServiceName)
-            .With(TError(ex));
+            .With(ex);
     }
 }
 
@@ -2963,7 +2971,7 @@ void TServiceBase::Configure(
         } catch (const std::exception& ex) {
             THROW_ERROR_EXCEPTION("Error parsing RPC service %v config",
                 ServiceId_.ServiceName)
-                .With(TError(ex));
+                .With(ex);
         }
     } else {
         config = New<TServiceConfig>();

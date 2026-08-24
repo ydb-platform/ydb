@@ -29,6 +29,7 @@ SRCS(
     topic_deferred_publish_ut.cpp
     topic_to_table_ut.cpp
     topic_tx_skip_conflict_ut.cpp
+    write_session_flush_ut.cpp
     write_session_size_ut.cpp
 )
 

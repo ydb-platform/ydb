@@ -500,19 +500,31 @@ void LogStructuredEvent(
         /* NOLINTEND(bugprone-reserved-identifier, readability-identifier-naming) */                   \
     }()
 
-#define YT_TLOG_EVENT_FLUENT(logger, level, message)                  \
-    if (::NYT::NLogging::NDetail::TTaggedLoggingGuard loggingGuard__( \
-            (logger)(),                                               \
-            (level),                                                  \
-            __LOCATION__,                                             \
-            YT_TLOG_STATIC_ANCHOR_REF(),                              \
-            (message));                                               \
-        !loggingGuard__.IsEnabled())                                  \
-    { } else                                                          \
+#define YT_TLOG_EVENT(logger, level, message)                          \
+    if (::NYT::NLogging::NDetail::TTaggedLoggingGuard loggingGuard__(  \
+            (logger)(),                                                \
+            (level),                                                   \
+            __LOCATION__,                                              \
+            YT_TLOG_STATIC_ANCHOR_REF(),                               \
+            (message));                                                \
+        !loggingGuard__.IsEnabled())                                   \
+    { } else                                                           \
+        loggingGuard__.Self()
+
+//! Logs against a caller-owned #anchor; #message may be computed at run time.
+#define YT_TLOG_EVENT_WITH_DYNAMIC_ANCHOR(logger, level, anchor, message)          \
+    if (::NYT::NLogging::NDetail::TTaggedLoggingGuard loggingGuard__(              \
+            (logger)(),                                                            \
+            (level),                                                               \
+            __LOCATION__,                                                          \
+            ::NYT::NLogging::NDetail::TDynamicAnchorRef{(anchor)},                 \
+            (message));                                                            \
+        !loggingGuard__.IsEnabled())                                               \
+    { } else                                                                       \
         loggingGuard__.Self()
 
 #ifdef YT_ENABLE_TRACE_LOGGING
-#define YT_TLOG_TRACE(message)                     YT_TLOG_EVENT_FLUENT(Logger, ::NYT::NLogging::ELogLevel::Trace, message)
+#define YT_TLOG_TRACE(message)                     YT_TLOG_EVENT(Logger, ::NYT::NLogging::ELogLevel::Trace, message)
 #define YT_TLOG_TRACE_IF(condition, message)       if (!(condition)) { } else YT_TLOG_TRACE(message)
 #define YT_TLOG_TRACE_UNLESS(condition, message)   if (condition)    { } else YT_TLOG_TRACE(message)
 #else
@@ -522,23 +534,23 @@ void LogStructuredEvent(
 #define YT_TLOG_TRACE_UNLESS(condition, message)   YT_TLOG_UNUSED(message)
 #endif
 
-#define YT_TLOG_DEBUG(message)                     YT_TLOG_EVENT_FLUENT(Logger, ::NYT::NLogging::ELogLevel::Debug, message)
+#define YT_TLOG_DEBUG(message)                     YT_TLOG_EVENT(Logger, ::NYT::NLogging::ELogLevel::Debug, message)
 #define YT_TLOG_DEBUG_IF(condition, message)       if (!(condition)) { } else YT_TLOG_DEBUG(message)
 #define YT_TLOG_DEBUG_UNLESS(condition, message)   if (condition)    { } else YT_TLOG_DEBUG(message)
 
-#define YT_TLOG_INFO(message)                      YT_TLOG_EVENT_FLUENT(Logger, ::NYT::NLogging::ELogLevel::Info, message)
+#define YT_TLOG_INFO(message)                      YT_TLOG_EVENT(Logger, ::NYT::NLogging::ELogLevel::Info, message)
 #define YT_TLOG_INFO_IF(condition, message)        if (!(condition)) { } else YT_TLOG_INFO(message)
 #define YT_TLOG_INFO_UNLESS(condition, message)    if (condition)    { } else YT_TLOG_INFO(message)
 
-#define YT_TLOG_WARNING(message)                   YT_TLOG_EVENT_FLUENT(Logger, ::NYT::NLogging::ELogLevel::Warning, message)
+#define YT_TLOG_WARNING(message)                   YT_TLOG_EVENT(Logger, ::NYT::NLogging::ELogLevel::Warning, message)
 #define YT_TLOG_WARNING_IF(condition, message)     if (!(condition)) { } else YT_TLOG_WARNING(message)
 #define YT_TLOG_WARNING_UNLESS(condition, message) if (condition)    { } else YT_TLOG_WARNING(message)
 
-#define YT_TLOG_ERROR(message)                     YT_TLOG_EVENT_FLUENT(Logger, ::NYT::NLogging::ELogLevel::Error, message)
+#define YT_TLOG_ERROR(message)                     YT_TLOG_EVENT(Logger, ::NYT::NLogging::ELogLevel::Error, message)
 #define YT_TLOG_ERROR_IF(condition, message)       if (!(condition)) { } else YT_TLOG_ERROR(message)
 #define YT_TLOG_ERROR_UNLESS(condition, message)   if (condition)    { } else YT_TLOG_ERROR(message)
 
-#define YT_TLOG_ALERT(message)                     YT_TLOG_EVENT_FLUENT(Logger, ::NYT::NLogging::ELogLevel::Alert, message)
+#define YT_TLOG_ALERT(message)                     YT_TLOG_EVENT(Logger, ::NYT::NLogging::ELogLevel::Alert, message)
 #define YT_TLOG_ALERT_IF(condition, message)       if (!(condition)) { } else YT_TLOG_ALERT(message)
 #define YT_TLOG_ALERT_UNLESS(condition, message)   if (condition)    { } else YT_TLOG_ALERT(message)
 
@@ -549,8 +561,7 @@ void LogStructuredEvent(
 // fires once the chain (the loop body) has completed.
 
 // The |for| deliberately has no condition: with no normal exit and a |[[noreturn]]| step,
-// the whole expansion is noreturn to the compiler. The body still runs exactly once, since
-// #Commit never returns.
+// the whole expansion is noreturn to the compiler.
 #define YT_TLOG_FATAL(message)                                              \
     for (::NYT::NLogging::NDetail::TTaggedFatalLoggingGuard loggingGuard__( \
             Logger(),                                                       \

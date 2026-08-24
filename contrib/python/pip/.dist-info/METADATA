@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: pip
-Version: 26.1.2
+Version: 26.2.1
 Summary: The PyPA recommended tool for installing Python packages.
 Author-email: The pip developers <distutils-sig@python.org>
 Requires-Python: >=3.10
@@ -17,6 +17,7 @@ Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
 Classifier: Programming Language :: Python :: 3.13
 Classifier: Programming Language :: Python :: 3.14
+Classifier: Programming Language :: Python :: 3.15
 Classifier: Programming Language :: Python :: Implementation :: CPython
 Classifier: Programming Language :: Python :: Implementation :: PyPy
 License-File: AUTHORS.txt
@@ -63,7 +64,7 @@ pip - The Python Package Installer
 
 |pypi-version| |python-versions| |docs-badge|
 
-pip is the `package installer`_ for Python. You can use pip to install packages from the `Python Package Index`_ and other indexes.
+Pip is the `package installer`_ for Python. You can use pip to install packages from the `Python Package Index`_ and other indexes.
 
 Please take a look at our documentation for how to install and use pip:
 

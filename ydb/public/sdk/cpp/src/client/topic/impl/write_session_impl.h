@@ -275,6 +275,7 @@ private:
         size_t Size;
         std::vector<std::pair<std::string, std::string>> MessageMeta;
         TWriteContext WriteContext;
+        NThreading::TPromise<bool> FlushPromise;
 
         TOriginalMessage(const uint64_t id, const TInstant createdAt, const size_t size,
                          TWriteContext&& writeContext = std::monostate{})
@@ -293,6 +294,19 @@ private:
             , MessageMeta(std::move(messageMeta))
             , WriteContext(std::move(writeContext))
         {}
+
+        TOriginalMessage(TOriginalMessage&&) noexcept = default;
+        TOriginalMessage& operator=(TOriginalMessage&&) noexcept = default;
+
+        ~TOriginalMessage() {
+            CompleteFlush(true);
+        }
+
+        void CompleteFlush(bool value) noexcept {
+            if (FlushPromise.Initialized()) {
+                FlushPromise.TrySetValue(value);
+            }
+        }
     };
 
     //! Block comparer, makes block with smallest offset (first sequence number) appear on top of the PackedMessagesToSend priority queue
@@ -352,6 +366,7 @@ public:
     std::vector<TWriteSessionEvent::TEvent> GetEvents(bool block = false,
                                                   std::optional<size_t> maxEventsCount = std::nullopt);
     NThreading::TFuture<uint64_t> GetInitSeqNo();
+    NThreading::TFuture<bool> Flush();
 
     void Write(TContinuationToken&& continuationToken, TWriteMessage&& message);
 
@@ -428,6 +443,7 @@ private:
     //std::string GetDebugIdentity() const;
     TClientMessage GetInitClientMessage();
     bool CleanupOnAcknowledgedImpl(uint64_t id);
+    void AbortFlushPromisesImpl();
     bool IsReadyToSendNextImpl() const;
     uint64_t GetNextIdImpl(const std::optional<uint64_t>& seqNo);
     uint64_t GetSeqNoImpl(uint64_t id);

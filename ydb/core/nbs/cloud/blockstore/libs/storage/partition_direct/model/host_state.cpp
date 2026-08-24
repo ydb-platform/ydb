@@ -10,7 +10,7 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 TString THostState::DebugPrint() const
 {
     TStringBuilder result;
-    result << ToString(State) << " UsedSize:" << PBufferUsedSize;
+    result << ToString(State) << " Used:" << UsedPBuffers.Print(true);
     return result;
 }
 

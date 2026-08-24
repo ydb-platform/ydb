@@ -359,7 +359,7 @@ void TPhysicalJoinBuilder::PrepareJoinFilters(TExprNode::TPtr& leftLambda, TExpr
 
     // Common filter.
     leftInputs.insert(leftInputs.end(), rightInputs.begin(), rightInputs.end());
-    auto commonFilter = commonFilters.size() ? MakeConjunction(rightFilters).Node : NPhysicalConvertionUtils::BuildVoidLambda(Ctx, Pos);
+    auto commonFilter = commonFilters.size() ? MakeConjunction(commonFilters).Node : NPhysicalConvertionUtils::BuildVoidLambda(Ctx, Pos);
     commonLambda = NPhysicalConvertionUtils::ConvertToWideJoinFilter(commonFilter, leftInputs, Ctx);
 }
 

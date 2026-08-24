@@ -687,7 +687,11 @@ In addition, there is a **root SchemeShard** that stores information about datab
 
 #### CMS {#cms}
 
-**CMS** or **cluster management system** is a system tablet responsible for managing information about the current state of the [cluster {{ ydb-short-name }}](#cluster). This information is used to perform gradual cluster restarts without affecting user workloads, maintenance, cluster reconfiguration, etc.
+**CMS** or **cluster management system** is a system tablet responsible for managing information about the current state of the [{{ ydb-short-name }} cluster](#cluster). This information is used to perform gradual cluster restarts without affecting user workloads, maintenance, cluster reconfiguration, and so on. CMS includes Sentinel, a component that implements [SelfHeal](#self-heal).
+
+#### SelfHeal {#self-heal}
+
+**SelfHeal** is a set of mechanisms that automatically maintain and restore cluster fault tolerance. [Storage SelfHeal](../maintenance/manual/selfheal.md) relocates [VDisks](#vdisk) of storage groups after prolonged node or disk failures. [State Storage SelfHeal](../maintenance/manual/selfheal_statestorage.md) relocates replicas of metadata distribution subsystems after failures and adds replicas when new nodes appear.
 
 #### NodeBroker {#node-broker}
 
@@ -750,19 +754,19 @@ The information in the state storage is volatile. Thus, it is lost on power fail
 
 Due to its nature, the state storage service operates on a best-effort basis. For example, the absence of multiple tablet leaders is guaranteed through the leader election protocol on [distributed storage](#distributed-storage), not on state storage.
 
-For more details on the structure of StateStorage and related subsystems, see the section Metadata distribution services.
+For more details about the StateStorage architecture and related subsystems, see the section [Metadata distribution services](architecture/metadata-services.md).
 
 ### Board {#board}
 
 **Board** is a distributed service designed to store metadata as key-value pairs. It is used, among other things, to store information about [endpoints](../concepts/connect.md#endpoint).
 
-For more details on the structure of Board and related subsystems, see the section Metadata distribution services.
+For more details about the Board architecture and related subsystems, see the section [Metadata distribution services](architecture/metadata-services.md).
 
 ### SchemeBoard {#scheme-board}
 
 **SchemeBoard** is a distributed service designed to store metadata as key-value pairs. It is used, among other things, to store information about [schemas](#global-schema).
 
-For more details on the structure of SchemeBoard and related subsystems, see the section Metadata distribution services.
+For more details about the SchemeBoard architecture and related subsystems, see the section [Metadata distribution services](architecture/metadata-services.md).
 
 #### Compaction {#compaction}
 

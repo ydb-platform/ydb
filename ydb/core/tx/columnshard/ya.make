@@ -36,6 +36,7 @@ GENERATE_ENUM_SERIALIZATION(columnshard_impl.h)
 PEERDIR(
     ydb/core/actorlib_impl
     ydb/core/base
+    ydb/core/cms/console
     ydb/core/control/lib
     ydb/core/formats
     ydb/core/kqp
@@ -62,6 +63,7 @@ PEERDIR(
     ydb/core/tx/columnshard/normalizer
     ydb/core/tx/columnshard/operations
     ydb/core/tx/columnshard/overload_manager
+    ydb/core/tx/columnshard/flow_control_manager
     ydb/core/tx/columnshard/resource_subscriber
     ydb/core/tx/columnshard/splitter
     ydb/core/tx/columnshard/subscriber

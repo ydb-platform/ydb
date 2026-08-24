@@ -138,24 +138,6 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TOracleHostStat::TOracleHostStat(
-    THostIndex index,
-    const THostState& state,
-    EHostHealth health,
-    const THostStat& hostStat,
-    TLatencyByOperation latencyByOperation,
-    TInstant now)
-    : Index(index)
-    , State(state.State)
-    , Health(health)
-    , InflightByOperation(hostStat.GetInflightByOperation())
-    , Errors(hostStat.GetErrorsInfo(now))
-    , PBufferUsedSize(state.PBufferUsedSize)
-    , LatencyByOperation(std::move(latencyByOperation))
-{}
-
-////////////////////////////////////////////////////////////////////////////////
-
 TOracle::TOracle(
     TStorageConfigPtr storageConfig,
     IHostStateController* hostStateController)
@@ -197,8 +179,7 @@ void TOracle::Think(TInstant now)
     TVector<EHostHealth> newHostsHealths(HostsHealths);
 
     for (size_t i = 0; i < HostStatistics.size(); ++i) {
-        HostStates[i].PBufferUsedSize =
-            HostStateController->GetHostPBufferUsedSize(i);
+        HostStates[i].UsedPBuffers = HostStateController->GetPBuffersUsage(i);
 
         auto errorsInfo = HostStatistics[i].GetErrorsInfo(now);
 
@@ -217,7 +198,7 @@ void TOracle::Think(TInstant now)
                   config.GetMaxDurationBeforeGoingTemporaryOffline()) ||
              (errorsInfo.ConsecutiveErrorCount >=
               config.GetErrorsCountForGoingOffline()) ||
-             (HostStates[i].PBufferUsedSize >=
+             (HostStates[i].UsedPBuffers.Size >=
               config.GetErrorsTotalSizeForGoingOffline()));
         const bool hasOfflineSymptom =
             hasTemporaryOfflineSymptom &&
@@ -484,9 +465,9 @@ void TOracle::MaybeQueryAddHost()
     }
 }
 
-TVector<TOracleHostStat> TOracle::BuildHostStats(TInstant now) const
+TVector<THostSnapshot> TOracle::BuildHostStats(TInstant now) const
 {
-    TVector<TOracleHostStat> stats;
+    TVector<THostSnapshot> stats;
     stats.reserve(HostStatistics.size());
     for (THostIndex hostIndex = 0; hostIndex < GetHostCount(); ++hostIndex) {
         // Compute latency stats for monitoring snapshot.
@@ -496,13 +477,13 @@ TVector<TOracleHostStat> TOracle::BuildHostStats(TInstant now) const
                 GetTimePredictor(static_cast<EOperation>(operation))
                     .GetLatencyStats(hostIndex);
         }
-        stats.emplace_back(
+        stats.emplace_back(THostSnapshot::Make(
             hostIndex,
             HostStates[hostIndex],
             HostsHealths[hostIndex],
             HostStatistics[hostIndex],
-            std::move(latencyByOperation),
-            now);
+            latencyByOperation,
+            now));
     }
     return stats;
 }

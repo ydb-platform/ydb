@@ -2,11 +2,12 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/persqueue/public/nameresolver/nameresolver.h>
 
 #include <library/cpp/containers/absl/flat_hash_map.h>
 #include <library/cpp/containers/absl/flat_hash_set.h>
 
-#include <util/generic/algorithm.h>
+#include <util/string/join.h>
 
 #include <optional>
 
@@ -33,53 +34,6 @@ bool HasAccess(const TDescribeSettings& settings, TIntrusivePtr<TSecurityObject>
     return false;
 }
 
-TString MakeFederationTopicPath(const TString& federationRoot, const TString& topicPath) {
-    auto parts = NKikimr::SplitPath(federationRoot);
-    for (const auto& part : NKikimr::SplitPath(topicPath)) {
-        parts.push_back(part);
-    }
-    return CanonizePath(NKikimr::JoinPath(parts));
-}
-
-// First path component is federation account; requires account/topic shape.
-std::optional<TString> ExtractFederationAccount(const TString& topicPath) {
-    auto parts = NKikimr::SplitPath(topicPath);
-    if (parts.size() < 2 || parts[0].empty()) {
-        return std::nullopt;
-    }
-    return parts[0];
-}
-
-TString MakeFederationAccountDatabase(const TString& federationRoot, const TString& account) {
-    return CanonizePath(NKikimr::JoinPath({federationRoot, account}));
-}
-
-// Federation retries append account/topic under FederationRoot. Build that relative
-// suffix from the navigated absolute path vs the request database — never from a
-// database-prefixed originalPath (would become FederationRoot/Root/account/...).
-std::optional<TString> MakeFederationRelativeTopicPath(const TString& databasePath, const TString& originalPath, const TString& realPath) {
-    if (!databasePath.empty()) {
-        const auto dbParts = NKikimr::SplitPath(databasePath);
-        const auto realParts = NKikimr::SplitPath(realPath);
-        if (realParts.size() <= dbParts.size()) {
-            return std::nullopt;
-        }
-        for (size_t i = 0; i < dbParts.size(); ++i) {
-            if (dbParts[i] != realParts[i]) {
-                return std::nullopt;
-            }
-        }
-        return NKikimr::JoinPath(TVector<TString>(realParts.begin() + dbParts.size(), realParts.end()));
-    }
-
-    // No database in the request: originalPath must already be account/topic-shaped.
-    const auto parts = NKikimr::SplitPath(originalPath);
-    if (parts.size() < 2 || parts[0].empty()) {
-        return std::nullopt;
-    }
-    return NKikimr::JoinPath(parts);
-}
-
 class TDescribeActor : public TActorBootstrapped<TDescribeActor> {
 public:
     TDescribeActor(const NActors::TActorId& parent, const TString& databasePath, absl::flat_hash_set<TString>&& topicPaths, const TDescribeSettings& settings)
@@ -92,13 +46,34 @@ public:
 
     void Bootstrap() {
         Become(&TDescribeActor::StateWork);
-        if (!AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
-            FederationRoot = AppData()->PQConfig.GetPQDiscoveryConfig().GetLbUserDatabaseRoot();
-        }
         RetryWithSyncVersion = Settings.ForceSyncVersion;
         UsedSyncVersion = Settings.ForceSyncVersion;
-        RequestDatabaseName = DatabasePath;
-        DoRequest(TopicPaths);
+
+        for (const auto& topic : TopicPaths) {
+            auto resolved = NNameResolver::ResolveName(DatabasePath, topic);
+            if (!resolved) {
+                YDB_LOG_DEBUG("Name resolve failed",
+                    {"logPrefix", LOG_PREFIX},
+                    {"topic", topic},
+                    {"reason", resolved.error()});
+                SetErrorResult(topic, EStatus::BAD_REQUEST);
+                continue;
+            }
+            YDB_LOG_DEBUG("Name resolved",
+                {"logPrefix", LOG_PREFIX},
+                {"topic", topic},
+                {"resolvedPath", resolved->Path},
+                {"navigateDatabase", resolved->NavigateDatabase});
+            PathToOriginalPaths[resolved->Path].push_back(topic);
+            PendingByDatabase[resolved->NavigateDatabase].insert(resolved->Path);
+        }
+
+        if (PendingByDatabase.empty()) {
+            Send(Parent, new TEvDescribeTopicsResponse(std::move(Result), UsedSyncVersion));
+            PassAway();
+            return;
+        }
+        StartNextDatabaseRequest();
     }
 
     void DoRequest(const absl::flat_hash_set<TString>& topicPath) {
@@ -111,22 +86,14 @@ public:
         auto schemeRequest = std::make_unique<TSchemeCacheNavigate>(1);
         schemeRequest->DatabaseName = RequestDatabaseName;
 
-        auto addEntry = [&](const TString& topic) {
+        for (const auto& topic : topicPath) {
             auto split = NKikimr::SplitPath(topic);
-
             schemeRequest->ResultSet.emplace_back();
             auto& entry = schemeRequest->ResultSet.back();
             entry.Path.insert(entry.Path.end(), split.begin(), split.end());
             entry.Operation = TSchemeCacheNavigate::OpList;
             entry.SyncVersion = RetryWithSyncVersion;
             entry.ShowPrivatePath = true;
-        };
-
-        for (const auto& topic : topicPath) {
-            auto normalizedPath = NKikimr::NormalizePath(RequestDatabaseName, CanonizePath(topic));
-            // Keep the originally requested path across retries (sync / Federation / CDC).
-            PathToOriginalPath.try_emplace(normalizedPath, topic);
-            addEntry(normalizedPath);
         }
 
         Send(NKikimr::MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(schemeRequest.release()));
@@ -142,19 +109,15 @@ public:
         for (size_t i = 0; i < result->ResultSet.size(); ++i) {
             const auto& entry = result->ResultSet[i];
             auto realPath = CanonizePath(NKikimr::JoinPath(entry.Path));
-            Y_ASSERT(PathToOriginalPath.contains(realPath));
-            auto originalPath = PathToOriginalPath[realPath];
+            const auto& originals = OriginalsFor(realPath);
+            Y_ASSERT(!originals.empty());
 
             bool isCDCStream = false;
             TString cdcStreamName;
 
-            auto it = CDCPaths.find(realPath);
-            if (it != CDCPaths.end()) {
-                originalPath = it->second.OriginalPath;
+            if (auto it = CDCPaths.find(realPath); it != CDCPaths.end()) {
                 isCDCStream = true;
                 cdcStreamName = it->second.CdcStreamName;
-            } else if (auto federationIt = FederationPaths.find(realPath); federationIt != FederationPaths.end()) {
-                originalPath = federationIt->second.OriginalPath;
             }
 
             switch (entry.Status) {
@@ -167,19 +130,13 @@ public:
                                 {"logPrefix", LOG_PREFIX},
                                 {"realPath", realPath});
 
-                            SetErrorResult(originalPath, EStatus::UNAUTHORIZED);
-                        } else if (TryScheduleFederationRetry(originalPath, realPath)) {
-                            YDB_LOG_DEBUG("Path not found, will try FederationRoot",
-                                {"logPrefix", LOG_PREFIX},
-                                {"realPath", realPath},
-                                {"originalPath", originalPath},
-                                {"federationRoot", FederationRoot});
+                            SetErrorResults(originals, EStatus::UNAUTHORIZED);
                         } else {
                             YDB_LOG_DEBUG("Path not found",
                                 {"logPrefix", LOG_PREFIX},
                                 {"realPath", realPath});
 
-                            SetErrorResult(originalPath, EStatus::NOT_FOUND);
+                            SetErrorResults(originals, EStatus::NOT_FOUND);
                         }
                     } else {
                         unknownPaths.insert(realPath);
@@ -190,7 +147,7 @@ public:
                     YDB_LOG_DEBUG("Path ACCESS DENIED",
                         {"logPrefix", LOG_PREFIX},
                         {"realPath", realPath});
-                    SetErrorResult(originalPath, EStatus::UNAUTHORIZED);
+                    SetErrorResults(originals, EStatus::UNAUTHORIZED);
                     break;
                 }
                 case TSchemeCacheNavigate::EStatus::Ok: {
@@ -199,8 +156,11 @@ public:
                             {"logPrefix", LOG_PREFIX},
                             {"realPath", realPath});
 
-                        CDCPaths[TStringBuilder() << realPath << "/streamImpl"] = {
-                            .OriginalPath = originalPath,
+                        // Copy before mutating PathToOriginalPaths (rehash must not invalidate originals).
+                        TVector<TString> originalsCopy = originals;
+                        const TString streamImplPath = TStringBuilder() << realPath << "/streamImpl";
+                        PathToOriginalPaths[streamImplPath] = std::move(originalsCopy);
+                        CDCPaths[streamImplPath] = {
                             .CdcStreamName = entry.Self->Info.GetName(),
                             .AccountDatabase = RequestDatabaseName
                         };
@@ -208,18 +168,10 @@ public:
                     } else if (entry.Kind == TSchemeCacheNavigate::EKind::KindTopic) {
                         if (!entry.PQGroupInfo || entry.PQGroupInfo->Description.GetBalancerTabletID() == 0) {
                             if (RetryWithSyncVersion) {
-                                if (TryScheduleFederationRetry(originalPath, realPath)) {
-                                    YDB_LOG_DEBUG("Path not found, will try FederationRoot",
-                                        {"logPrefix", LOG_PREFIX},
-                                        {"realPath", realPath},
-                                        {"originalPath", originalPath},
-                                        {"federationRoot", FederationRoot});
-                                } else {
-                                    YDB_LOG_DEBUG("Path not found",
-                                        {"logPrefix", LOG_PREFIX},
-                                        {"realPath", realPath});
-                                    SetErrorResult(originalPath, EStatus::NOT_FOUND);
-                                }
+                                YDB_LOG_DEBUG("Path not found",
+                                    {"logPrefix", LOG_PREFIX},
+                                    {"realPath", realPath});
+                                SetErrorResults(originals, EStatus::NOT_FOUND);
                             } else {
                                 unknownPaths.insert(realPath);
                             }
@@ -229,15 +181,15 @@ public:
                                     {"logPrefix", LOG_PREFIX},
                                     {"realPath", realPath});
 
-                                Result[originalPath] = TTopicInfo{
+                                SetTopicResults(originals, TTopicInfo{
                                     .Status = entry.SecurityObject->CheckAccess(NACLib::EAccessRights::DescribeSchema, *Settings.UserToken)
                                             ? EStatus::UNAUTHORIZED_WITH_DESCRIBE_ACCESS : EStatus::UNAUTHORIZED
-                                };
+                                });
                             } else {
                                 YDB_LOG_DEBUG("Path SUCCESS",
                                     {"logPrefix", LOG_PREFIX},
                                     {"realPath", realPath});
-                                Result[originalPath] = TTopicInfo{
+                                SetTopicResults(originals, TTopicInfo{
                                     .Status = EStatus::SUCCESS,
                                     .RealPath = realPath,
                                     .CdcStream = isCDCStream,
@@ -246,7 +198,7 @@ public:
                                     .Info = entry.PQGroupInfo,
                                     .Self = entry.Self,
                                     .SecurityObject = entry.SecurityObject
-                                };
+                                });
                             }
                         }
                     } else {
@@ -258,14 +210,14 @@ public:
                             YDB_LOG_DEBUG("Path UNAUTHORIZED",
                                 {"logPrefix", LOG_PREFIX},
                                 {"realPath", realPath});
-                            Result[originalPath] = TTopicInfo{
+                            SetTopicResults(originals, TTopicInfo{
                                 .Status = EStatus::UNAUTHORIZED
-                            };
+                            });
                         } else {
-                            Result[originalPath] = TTopicInfo{
+                            SetTopicResults(originals, TTopicInfo{
                                 .Status = EStatus::NOT_TOPIC,
                                 .RealPath = realPath
-                            };
+                            });
                         }
                     }
                     break;
@@ -274,10 +226,10 @@ public:
                     YDB_LOG_DEBUG("Path unknown error",
                         {"logPrefix", LOG_PREFIX},
                         {"realPath", realPath});
-                    Result[originalPath] = TTopicInfo{
+                    SetTopicResults(originals, TTopicInfo{
                         .Status = EStatus::UNKNOWN_ERROR,
                         .RealPath = realPath
-                    };
+                    });
                     break;
                 }
             }
@@ -289,7 +241,7 @@ public:
             return DoRequest(unknownPaths);
         }
 
-        if (TryStartNextFederationDatabaseRequest()) {
+        if (StartNextDatabaseRequest()) {
             return;
         }
 
@@ -309,81 +261,26 @@ public:
     }
 
 private:
-    bool TryScheduleFederationRetry(const TString& originalPath, const TString& realPath) {
-        if (FederationRoot.empty()) {
-            return false;
-        }
-        if (CDCPaths.contains(realPath)) {
-            // streamImpl miss must not spawn FederationRoot/<...>/streamImpl retries.
-            return false;
-        }
-        if (FederationPaths.contains(realPath)) {
-            // This response is already for a FederationRoot path.
-            return false;
-        }
-        for (const auto& [_, info] : FederationPaths) {
-            if (info.OriginalPath == originalPath) {
-                // FederationRoot path is already scheduled.
-                return true;
-            }
-        }
-        if (RetryWithFederation) {
-            return false;
-        }
-
-        const auto relativePath = MakeFederationRelativeTopicPath(DatabasePath, originalPath, realPath);
-        if (!relativePath) {
-            return false;
-        }
-
-        const auto account = ExtractFederationAccount(*relativePath);
-        if (!account) {
-            return false;
-        }
-
-        const auto accountDatabase = MakeFederationAccountDatabase(FederationRoot, *account);
-        const auto federationPath = MakeFederationTopicPath(FederationRoot, *relativePath);
-        // Same path string can still need a retry with DatabaseName = account DB
-        // (e.g. DatabasePath == FederationRoot: /Root/account/topic under /Root).
-        if (federationPath == realPath && RequestDatabaseName == accountDatabase) {
-            return false;
-        }
-
-        FederationPaths[federationPath] = TFederationTopicInfo{
-            .OriginalPath = originalPath,
-            .AccountDatabase = accountDatabase
-        };
-        return true;
+    const TVector<TString>& OriginalsFor(const TString& realPath) const {
+        auto it = PathToOriginalPaths.find(realPath);
+        AFL_ENSURE(it != PathToOriginalPaths.end())("realPath", realPath);
+        return it->second;
     }
 
-    // One SchemeCache request per account database (DatabaseName = FederationRoot/account).
-    // Empty AccountDatabase is valid (fetch/API callers may pass Database="").
-    bool TryStartNextFederationDatabaseRequest() {
-        std::optional<TString> nextDatabase;
-        for (const auto& [_, info] : FederationPaths) {
-            if (!RequestedFederationDatabases.contains(info.AccountDatabase)) {
-                nextDatabase = info.AccountDatabase;
-                break;
+    // One SchemeCache request per NavigateDatabase from ResolveName.
+    bool StartNextDatabaseRequest() {
+        for (auto& [database, paths] : PendingByDatabase) {
+            if (RequestedDatabases.contains(database)) {
+                continue;
             }
+            // PendingByDatabase only stores non-empty path sets.
+            RetryWithSyncVersion = Settings.ForceSyncVersion;
+            RequestDatabaseName = database;
+            RequestedDatabases.insert(database);
+            DoRequest(paths);
+            return true;
         }
-        if (!nextDatabase) {
-            return false;
-        }
-
-        RetryWithFederation = true;
-        RetryWithSyncVersion = false;
-        RequestDatabaseName = *nextDatabase;
-        RequestedFederationDatabases.insert(*nextDatabase);
-
-        absl::flat_hash_set<TString> newPath;
-        for (const auto& [path, info] : FederationPaths) {
-            if (info.AccountDatabase == *nextDatabase) {
-                newPath.insert(path);
-            }
-        }
-
-        DoRequest(newPath);
-        return true;
+        return false;
     }
 
     // One SchemeCache request per account database for CDC streamImpl paths.
@@ -400,7 +297,6 @@ private:
             return false;
         }
 
-        RetryWithCDC = true;
         RetryWithSyncVersion = false;
         RequestDatabaseName = *nextDatabase;
         RequestedCdcDatabases.insert(*nextDatabase);
@@ -417,14 +313,22 @@ private:
     }
 
     void SetErrorResult(const TString& originalPath, EStatus status, const TString& realPath = {}) {
-        auto it = Result.find(originalPath);
-        if (it != Result.end() && it->second.Status == EStatus::SUCCESS) {
-            return;
-        }
         Result[originalPath] = TTopicInfo{
             .Status = status,
             .RealPath = realPath
         };
+    }
+
+    void SetErrorResults(const TVector<TString>& originals, EStatus status, const TString& realPath = {}) {
+        for (const auto& originalPath : originals) {
+            SetErrorResult(originalPath, status, realPath);
+        }
+    }
+
+    void SetTopicResults(const TVector<TString>& originals, const TTopicInfo& info) {
+        for (const auto& originalPath : originals) {
+            Result[originalPath] = info;
+        }
     }
 
 private:
@@ -432,31 +336,22 @@ private:
     const TString DatabasePath;
     const absl::flat_hash_set<TString> TopicPaths;
     const TDescribeSettings Settings;
-    // normalized path -> original path
-    absl::flat_hash_map<TString, TString> PathToOriginalPath;
+    // navigate path -> originally requested client path(s)
+    absl::flat_hash_map<TString, TVector<TString>> PathToOriginalPaths;
+    // SchemeCache DatabaseName -> resolved paths (from ResolveName.NavigateDatabase)
+    absl::flat_hash_map<TString, absl::flat_hash_set<TString>> PendingByDatabase;
 
     bool RetryWithSyncVersion = false;
     bool UsedSyncVersion = false;
-    bool RetryWithCDC = false;
-    bool RetryWithFederation = false;
-    TString FederationRoot;
-    // DatabaseName for the current SchemeCache request (account DB on Federation retry).
     TString RequestDatabaseName;
-    absl::flat_hash_set<TString> RequestedFederationDatabases;
+    absl::flat_hash_set<TString> RequestedDatabases;
     absl::flat_hash_set<TString> RequestedCdcDatabases;
-    // CDC streamImpl path -> original changefeed path
+    // CDC streamImpl path metadata (originals live in PathToOriginalPaths)
     struct TCDCTopicInfo {
-        TString OriginalPath;
         TString CdcStreamName;
         TString AccountDatabase;
     };
     absl::flat_hash_map<TString, TCDCTopicInfo> CDCPaths;
-    // FederationRoot-prefixed path -> original topic path
-    struct TFederationTopicInfo {
-        TString OriginalPath;
-        TString AccountDatabase;
-    };
-    absl::flat_hash_map<TString, TFederationTopicInfo> FederationPaths;
     absl::flat_hash_map<TString, TTopicInfo> Result;
 };
 
@@ -477,6 +372,8 @@ Ydb::StatusIds::StatusCode Convert(const EStatus status) {
         case EStatus::UNAUTHORIZED:
         case EStatus::UNAUTHORIZED_WITH_DESCRIBE_ACCESS:
             return Ydb::StatusIds::UNAUTHORIZED;
+        case EStatus::BAD_REQUEST:
+            return Ydb::StatusIds::BAD_REQUEST;
         case EStatus::UNKNOWN_ERROR:
             return Ydb::StatusIds::INTERNAL_ERROR;
     }
@@ -493,6 +390,8 @@ TString Description(const TString& topicPath, const EStatus status) {
             return TStringBuilder() << "You do not have access permissions to the '" << topicPath << "' topic";
         case EStatus::NOT_TOPIC:
             return TStringBuilder() << "The '" << topicPath << "' path is not a topic";
+        case EStatus::BAD_REQUEST:
+            return TStringBuilder() << "Invalid topic name '" << topicPath << "'";
         case EStatus::UNKNOWN_ERROR:
             return TStringBuilder() << "Error describing the path '" << topicPath << "'";
     }

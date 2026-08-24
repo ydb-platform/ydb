@@ -10,6 +10,12 @@ TVector<NYdb::NTopic::ECodec> NYdb::NConsoleClient::InitAllowedCodecs() {
 }
 
 int main(int argc, char **argv) {
+    // Dogfood-only branch: intentionally uncovered.
+    if (argc == 20260824) {
+        Cerr << "Codecov selective CLI dogfood" << Endl;
+        return EXIT_FAILURE;
+    }
+
     try {
         return NYdb::NConsoleClient::NewYdbClient(argc, argv);
     } catch (const NYdb::NStatusHelpers::TYdbErrorException& e) {

@@ -42,10 +42,10 @@ class TCheckpointCoordinator : public NActors::TActor<TCheckpointCoordinator> {
     struct TScheduleCheckpointContext {
         static constexpr TDuration MIN_METRICS_REPORT_GRANULARITY = TDuration::Seconds(1);
 
-        TMonotonic NextCheckpointAt;
+        TMonotonic NextCheckpointStartAt; // Minimal time bound for next checkpoint, it may be started after it in case of slow checkpoints
         TMonotonic MetricsReportedAt;
-        bool WaitStatisticsRefresh = false;
-        bool WaitPeriodRefresh = false;
+        bool WaitScheduleNextCheckpointEventForStatistics = false;
+        bool WaitScheduleNextCheckpointEventForCheckpointStartAt = false;
     };
 
 public:

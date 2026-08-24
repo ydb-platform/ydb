@@ -121,18 +121,18 @@ void TCheckpointCoordinator::Handle(NFq::TEvCheckpointCoordinator::TEvReadyState
 void TCheckpointCoordinator::ScheduleNextCheckpoint() {
     const auto now = TActivationContext::Monotonic();
     const auto checkpointPeriod = Settings.GetCheckpointingPeriod();
-    if (!ScheduleCheckpointContext.NextCheckpointAt) {
+    if (!ScheduleCheckpointContext.NextCheckpointStartAt) {
         // First checkpoint period must start from restore completion time
-        ScheduleCheckpointContext.NextCheckpointAt = now + checkpointPeriod;
+        ScheduleCheckpointContext.NextCheckpointStartAt = now + checkpointPeriod;
         ScheduleCheckpointContext.MetricsReportedAt = now;
     }
 
-    if (ScheduleCheckpointContext.NextCheckpointAt > now) {
+    if (ScheduleCheckpointContext.NextCheckpointStartAt > now) {
         // Checkpoint time in the future
 
-        if (!ScheduleCheckpointContext.WaitPeriodRefresh) {
-            ScheduleCheckpointContext.WaitPeriodRefresh = true;
-            Schedule(ScheduleCheckpointContext.NextCheckpointAt, new TEvCheckpointCoordinator::TEvScheduleCheckpointing(/* waitStatistics */ false));
+        if (!ScheduleCheckpointContext.WaitScheduleNextCheckpointEventForCheckpointStartAt) {
+            ScheduleCheckpointContext.WaitScheduleNextCheckpointEventForCheckpointStartAt = true;
+            Schedule(ScheduleCheckpointContext.NextCheckpointStartAt, new TEvCheckpointCoordinator::TEvScheduleCheckpointing(/* waitStatistics */ false));
         }
         return;
     }
@@ -143,15 +143,15 @@ void TCheckpointCoordinator::ScheduleNextCheckpoint() {
             ScheduleCheckpointContext.MetricsReportedAt = now;
         }
 
-        if (!ScheduleCheckpointContext.WaitStatisticsRefresh) {
+        if (!ScheduleCheckpointContext.WaitScheduleNextCheckpointEventForStatistics) {
             // Refresh skipped checkpoints statistics, at most once in max(checkpointPeriod, 1s)
-            ScheduleCheckpointContext.WaitStatisticsRefresh = true;
+            ScheduleCheckpointContext.WaitScheduleNextCheckpointEventForStatistics = true;
             Schedule(ScheduleCheckpointContext.MetricsReportedAt + std::max(checkpointPeriod, TScheduleCheckpointContext::MIN_METRICS_REPORT_GRANULARITY), new TEvCheckpointCoordinator::TEvScheduleCheckpointing(/* waitStatistics */ true));
         }
         return;
     }
 
-    ScheduleCheckpointContext.NextCheckpointAt = now + checkpointPeriod;
+    ScheduleCheckpointContext.NextCheckpointStartAt = now + checkpointPeriod;
     ScheduleCheckpointContext.MetricsReportedAt = now;
 
     do {
@@ -161,7 +161,7 @@ void TCheckpointCoordinator::ScheduleNextCheckpoint() {
         InitCheckpoint();
 
         // Keep going only for a zero period
-    } while (ScheduleCheckpointContext.NextCheckpointAt <= now && CanStartNewCheckpoint(/* log */ false));
+    } while (ScheduleCheckpointContext.NextCheckpointStartAt <= now && CanStartNewCheckpoint(/* log */ false));
 
     ScheduleNextCheckpoint();
 }
@@ -489,9 +489,9 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointCoordinator::TEvScheduleC
         {"waitStatistics", waitStatistics});
 
     if (waitStatistics) {
-        ScheduleCheckpointContext.WaitStatisticsRefresh = false;
+        ScheduleCheckpointContext.WaitScheduleNextCheckpointEventForStatistics = false;
     } else {
-        ScheduleCheckpointContext.WaitPeriodRefresh = false;
+        ScheduleCheckpointContext.WaitScheduleNextCheckpointEventForCheckpointStartAt = false;
     }
 
     ScheduleNextCheckpoint();

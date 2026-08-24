@@ -32,9 +32,7 @@ public:
         , FromGen(fromGen)
         , NextFromGen(nextFromGen)
     {
-        // NextFromGen - 1 is the hard collect generation; 0 would underflow to a
-        // collect-everything barrier. Callers must resolve a real next generation.
-        AFL_VERIFY(NextFromGen > 0);
+        AFL_VERIFY(NextFromGen > 0);   // NextFromGen - 1 below would underflow to collect-everything
     }
 
     void Bootstrap(const TActorContext& ctx) {
@@ -127,8 +125,6 @@ bool THistoryCutterWrapper::SeenGroupsCheckPasses(
     if (target == hist.end()) {
         return false;
     }
-    // No entry before the target may still be live in the target's group: a hard barrier
-    // for the target's range would collect that entry's blobs too.
     return !AnyOf(hist.begin(), target, [&](const TTabletChannelInfo::THistoryEntry& entry) {
         return entry.GroupID == target->GroupID && !cutFromGenerations.contains(entry.FromGeneration);
     });
@@ -196,10 +192,8 @@ bool THistoryCutterWrapper::GetEntryKey(const TLogoBlobID& blobId, TEntryKey& ou
         return false;
     }
     const auto& hist = TabletInfo->Channels[ch].History;
-    // The same search TTabletChannelInfo::GroupForGeneration performs, but the entry's
-    // FromGeneration is the key here rather than its group. `entry` is one past the
-    // owning history entry: at begin() no entry covers the generation, and at end() the
-    // owner is the active entry, which is never a cut candidate.
+    // UpperBound lands one past the owning entry: begin() means no entry covers the
+    // generation, end() means the owner is the active entry, never a cut candidate.
     const auto entry = UpperBound(hist.begin(), hist.end(), blobId.Generation(), TTabletChannelInfo::THistoryEntry::TCmp());
     if (entry == hist.begin() || entry == hist.end()) {
         return false;
@@ -276,7 +270,7 @@ void THistoryCutterWrapper::OnBootComplete(const THashMap<ui64, std::vector<TUni
     PortionKeys.clear();
     DisprovedAt.clear();
     LastNominateAt = TInstant::Zero();
-    NextChannelToCheck = 2;
+    NextChannelToCheck = TGlobal::FirstDataChannel;
     SweepInFlight = false;
     SweepCandidates.reset();
     SweepSurvivors.clear();
@@ -308,33 +302,32 @@ bool THistoryCutterWrapper::TryNominate(const TActorContext& ctx) {
     if (SweepInFlight) {
         return false;
     }
-    // Full candidate evaluation scans the GC queues (IsDrained); background activity
-    // enqueues run every few seconds, so cap the evaluation cadence for this rare
-    // maintenance operation instead of scanning per enqueue.
+    // Evaluating candidates scans the GC queues, and background enqueues fire every few
+    // seconds: rate-limit rather than scan per enqueue.
     if (LastNominateAt && ctx.Now() - LastNominateAt < NominateCadence) {
         return false;
     }
     LastNominateAt = ctx.Now();
 
-    // Channel rotation + hard cap: at most MaxDrainChecksPerNomination queue scans per
-    // round; the next round resumes from the first channel that was not fully serviced.
+    // The next round resumes from the first channel this one did not fully service.
     ui32 drainChecks = 0;
     const ui32 channelCount = static_cast<ui32>(TabletInfo->Channels.size());
-    if (channelCount <= 2) {
+    if (channelCount <= TGlobal::FirstDataChannel) {
         return false;
     }
-    if (NextChannelToCheck < 2 || NextChannelToCheck >= channelCount) {
-        NextChannelToCheck = 2;
+    if (NextChannelToCheck < TGlobal::FirstDataChannel || NextChannelToCheck >= channelCount) {
+        NextChannelToCheck = TGlobal::FirstDataChannel;
     }
+    const ui32 dataChannels = channelCount - TGlobal::FirstDataChannel;
     const ui32 firstChannel = NextChannelToCheck;
     TVector<TEntryKey> batch;
-    for (ui32 idx = 0; idx < channelCount - 2; ++idx) {
-        const ui32 ch = 2 + (firstChannel - 2 + idx) % (channelCount - 2);
+    for (ui32 idx = 0; idx < dataChannels; ++idx) {
+        const ui32 ch = TGlobal::FirstDataChannel + (firstChannel - TGlobal::FirstDataChannel + idx) % dataChannels;
         if (drainChecks >= MaxDrainChecksPerNomination) {
             NextChannelToCheck = ch;
             break;
         }
-        NextChannelToCheck = 2 + (ch - 2 + 1) % (channelCount - 2);
+        NextChannelToCheck = TGlobal::FirstDataChannel + (ch - TGlobal::FirstDataChannel + 1) % dataChannels;
         if (PoisonedChannels.contains(ch)) {
             continue;
         }
@@ -351,8 +344,6 @@ bool THistoryCutterWrapper::TryNominate(const TActorContext& ctx) {
                 disproval && ctx.Now() - disproval->At < GetDisprovedCooldown(disproval->Attempts)) {
                 continue;
             }
-            // Cheap history walk first; the queue scans in IsDrained run only for
-            // entries that already passed every in-memory gate.
             if (!SeenGroupsCheckPasses(key)) {
                 continue;
             }
@@ -409,8 +400,6 @@ void THistoryCutterWrapper::OnBatchComplete(const THashSet<TEntryKey>& disproved
         auto& state = DisprovedAt[key];
         state.At = ctx.Now();
         ++state.Attempts;
-        // Settle the entry now: otherwise it lingers as Verifying until the exhausted
-        // batch and the safety-net reset below would bump Attempts a second time.
         CutState[key] = ECutState::None;
     }
     if (!disproved.empty()) {
@@ -479,9 +468,8 @@ void THistoryCutterWrapper::OnBatchComplete(const THashSet<TEntryKey>& disproved
     }
     SweepSurvivors.clear();
 
-    // Safety net: disproved entries were already settled (and their backoff bumped)
-    // in the disproved loop above, so any Verifying leftover here is an unexpected
-    // state — reset it without counting a disproval attempt.
+    // Safety net: the disproved loop settled those already, so anything still Verifying
+    // is unexpected — reset it without counting an attempt.
     for (auto& [key, state] : CutState) {
         if (state == ECutState::Verifying) {
             state = ECutState::None;

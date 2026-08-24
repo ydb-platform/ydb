@@ -836,7 +836,7 @@ Banana,3'''
                     SELECT *
                     FROM `{storage_connection_name}`.`lookup.txt`
                     WITH (
-                        FORMAT=raw, 
+                        FORMAT=raw,
                         SCHEMA (class String)
                     )
                 );

@@ -13,15 +13,6 @@
 
 namespace NKikimr::NOlap::NReader::NCommon {
 
-<<<<<<< HEAD
-TConclusionStatus TReadMetadata::Init(const NColumnShard::TColumnShard* owner, const TReadDescription& readDescription, const EReaderClass readerClass) {
-    SetPKRangesFilter(readDescription.PKRangesFilter);
-    InitShardingInfo(readDescription.TableMetadataAccessor);
-    TxId = readDescription.TxId;
-    LockId = readDescription.LockId;
-    auto lockNodeId = readDescription.LockNodeId;
-    LockMode = readDescription.LockMode;
-=======
 TConclusionStatus TReadMetadata::Init(const NColumnShard::TColumnShard* owner, const TReadDescription& read, const EReaderClass readerClass) {
     SetPKRangesFilter(read.PKRangesFilter);
     InitShardingInfo(read.TableMetadataAccessor);
@@ -29,7 +20,6 @@ TConclusionStatus TReadMetadata::Init(const NColumnShard::TColumnShard* owner, c
     LockId = read.LockId;
     auto lockNodeId = read.LockNodeId;
     LockMode = read.LockMode;
->>>>>>> 3be006e8874 (Fix missing portion problem (#50292))
     if (LockId) {
         owner->GetOperationsManager().RegisterLock(*LockId, owner->Generation());
         if (lockNodeId.has_value()) {

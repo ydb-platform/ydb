@@ -401,34 +401,23 @@ namespace {
 // Column names come from DescribeTable, i.e. from the real schema, not from user input.
 // SchemeShard's IsValidColumnName restricts them to [A-Za-z0-9_-], so they can never contain
 // a backtick and this substitution is safe from injection.
-TString BuildQuotedColumnList(const NTable::TTableDescription& desc) {
-    TStringStream columns;
-    bool needsComma = false;
-    for (const auto& col : desc.GetColumns()) {
-        if (needsComma) {
-            columns << ", ";
-        } else {
-            needsComma = true;
-        }
-        columns << '`' << col.Name << '`';
+template <typename TNames>
+TString BuildQuotedIdentifierList(const TNames& names) {
+    TVector<TString> quoted;
+    quoted.reserve(names.size());
+    for (const auto& name : names) {
+        quoted.push_back(TStringBuilder() << '`' << name << '`');
     }
-    return columns.Str();
+    return JoinSeq(", ", quoted);
 }
 
-// Same reasoning as BuildQuotedColumnList: names come from DescribeTable and are validated
-// by SchemeShard, so no escaping is needed here either.
-TString BuildQuotedPkList(const NTable::TTableDescription& desc) {
-    TStringStream columns;
-    bool needsComma = false;
-    for (const auto& col : desc.GetPrimaryKeyColumns()) {
-        if (needsComma) {
-            columns << ", ";
-        } else {
-            needsComma = true;
-        }
-        columns << '`' << col << '`';
+TString BuildQuotedIdentifierList(const std::vector<TColumn>& columns) {
+    TVector<TString> names;
+    names.reserve(columns.size());
+    for (const auto& col : columns) {
+        names.emplace_back(col.Name);
     }
-    return columns.Str();
+    return BuildQuotedIdentifierList(names);
 }
 
 std::pair<TString, TParams> BuildSelectQueryAndParams(const NTable::TTableDescription& desc,
@@ -442,15 +431,16 @@ std::pair<TString, TParams> BuildSelectQueryAndParams(const NTable::TTableDescri
         paramsBuilder.AddParam("$pk", *lastWrittenPK);
     }
 
-    query << "SELECT " << BuildQuotedColumnList(desc)
+    const auto quotedPkList = BuildQuotedIdentifierList(desc.GetPrimaryKeyColumns());
+    query << "SELECT " << BuildQuotedIdentifierList(desc.GetColumns())
         << " FROM `" << fullTablePath << '`';
     if (lastWrittenPK) {
-        query << " WHERE (" << BuildQuotedPkList(desc) << ") > $pk";
+        query << " WHERE (" << quotedPkList << ") > $pk";
     }
     // lastWrittenPK is only a valid resume point if every attempt, including the first,
     // returns rows in PK order - otherwise a retry can both skip and duplicate rows.
-    if (!desc.GetPrimaryKeyColumns().empty()) {
-        query << " ORDER BY " << BuildQuotedPkList(desc);
+    if (!quotedPkList.empty()) {
+        query << " ORDER BY " << quotedPkList;
     }
     query << ';';
     return {query.Str(), paramsBuilder.Build()};

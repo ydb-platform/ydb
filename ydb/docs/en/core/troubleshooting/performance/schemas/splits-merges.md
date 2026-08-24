@@ -31,4 +31,4 @@ If the user load on {{ ydb-short-name }} has not changed, consider adjusting the
 
 If you want to avoid splitting and merging data shards, you can set the min limit to the max limit value or disable partitioning by load.
 
-When lowering `AUTO_PARTITIONING_PARTITION_SIZE_MB` on a large existing table, avoid a sudden drop (for example from 2000 MB to 100 MB in one step): this can trigger a wave of concurrent splits and temporarily increase latencies. Prefer **gradual** reductions and wait for partition count to stabilize between steps.
+When lowering `AUTO_PARTITIONING_PARTITION_SIZE_MB` below the current size of many partitions, this can queue many partitions for splitting and temporarily increase latencies. Operations in the queue run with limited concurrency. Prefer reducing the threshold gradually while monitoring metrics.

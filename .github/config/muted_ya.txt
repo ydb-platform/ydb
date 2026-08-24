@@ -48,6 +48,7 @@ ydb/tests/fq/yds test_recovery_match_recognize.py.TestRecoveryMatchRecognize.tes
 ydb/tests/fq/yds test_recovery_match_recognize.py.TestRecoveryMatchRecognize.test_time_order_recoverer[v1-kikimr0]
 ydb/tests/fq/yds test_recovery_mz.py.TestRecovery.test_recovery[v1]
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_group_by_hop_restart_node
+ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_redistribute_partition_after_timeout[False-kikimr0]
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_redistribute_partition_after_timeout[True-kikimr0]
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_restart_compute_node
 ydb/tests/fq/yds test_watermarks.py.TestWatermarks.test_idle_watermarks[2-no_shared]

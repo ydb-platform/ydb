@@ -9,7 +9,6 @@
 #include <ydb/core/util/stlog.h>
 #include <ydb/core/base/blobstorage_common.h>
 
-#include <bit>
 #include <cstring>
 
 namespace NKikimr {
@@ -28,9 +27,10 @@ Y_UNIT_TEST_SUITE(TVPatchMirror3dcQuorumTest) {
     Y_UNIT_TEST(PrefersOneReplicaFromEachRealm) {
         const TBlobStorageGroupInfo info(TErasureType::ErasureMirror3dc, 1, 3, 3);
 
-        const ui32 selected = NVPatch::SelectMirror3dcQuorum(info, 0b000011111); // 2+2+1 available
-        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(std::popcount(selected)), 3);
-        UNIT_ASSERT(NVPatch::HasMirror3dcQuorum(info, selected));
+        // Realm 0: bits 0, 3; realm 1: bits 1, 4; realm 2: bit 2.
+        constexpr ui32 available = 0b000011111; // 2+2+1
+        constexpr ui32 expected = 0b000011100; // bits 2, 3, 4: 1+1+1
+        UNIT_ASSERT_VALUES_EQUAL(NVPatch::SelectMirror3dcQuorum(info, available), expected);
     }
 
     Y_UNIT_TEST(FallsBackToTwoByTwo) {

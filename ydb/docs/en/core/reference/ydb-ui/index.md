@@ -1,4 +1,4 @@
-# Using the embedded web UI
+# Using {{ ydb-ui-name }}
 
 {{ ydb-short-name }} provides tools for monitoring and determining system health:
 

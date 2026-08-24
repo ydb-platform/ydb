@@ -2,7 +2,9 @@
 
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/dirty_map.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/partition_direct.pb.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/public.h>
 
 #include <ydb/core/protos/blobstorage_ddisk.pb.h>
 #include <ydb/core/protos/blockstore_config.pb.h>
@@ -25,6 +27,7 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
     xxx(StoreVolumeConfig, __VA_ARGS__)             \
     xxx(StorePartitionIds, __VA_ARGS__)             \
     xxx(UpdateVChunkConfig, __VA_ARGS__)            \
+    xxx(UpdateDirtyMapState, __VA_ARGS__)           \
     xxx(StartAddHost, __VA_ARGS__)                  \
     xxx(AddHostToDBG, __VA_ARGS__)                  \
     xxx(Monitoring, __VA_ARGS__)
@@ -45,9 +48,6 @@ struct TTxPartition
     //
     struct TInitSchema
     {
-        explicit TInitSchema()
-        {}
-
         void Clear()
         {
             // nothing to do
@@ -61,17 +61,16 @@ struct TTxPartition
     {
         TMaybe<NKikimrBlockStore::TVolumeConfig> VolumeConfig;
         TMaybe<TDirectBlockGroupsConnections> DirectBlockGroupsConnections;
-        TVector<TVChunkConfig> VChunkConfigs;
+        TVChunkConfigs VChunkConfigs;
+        TDirtyMapStateProtos DirtyMapStates;
         TMaybe<TAddHostInProgress> AddHostInProgress;
-
-        explicit TLoadState()
-        {}
 
         void Clear()
         {
             VolumeConfig.Clear();
             DirectBlockGroupsConnections.Clear();
             VChunkConfigs.clear();
+            DirtyMapStates.clear();
             AddHostInProgress.Clear();
         }
     };
@@ -136,6 +135,30 @@ struct TTxPartition
     };
 
     //
+    // TUpdateDirtyMapState
+    //
+    struct TUpdateDirtyMapState
+    {
+        const ui32 VChunkIndex;
+        const TDirtyMapStateProto State;
+        NThreading::TPromise<void> UpdateCompleted;
+
+        TUpdateDirtyMapState(
+            ui32 vChunkIndex,
+            TDirtyMapStateProto state,
+            NThreading::TPromise<void> updateCompleted)
+            : VChunkIndex(vChunkIndex)
+            , State(std::move(state))
+            , UpdateCompleted(std::move(updateCompleted))
+        {}
+
+        void Clear()
+        {
+            // nothing to do
+        }
+    };
+
+    //
     // TStartAddHost
     //
     struct TStartAddHost
@@ -183,7 +206,7 @@ struct TTxPartition
         TMaybe<NKikimrBlockStore::TVolumeConfig> VolumeConfig;
         TMaybe<TDirectBlockGroupsConnections> DirectBlockGroupsConnections;
         TMaybe<TAddHostInProgress> AddHostInProgress;
-        TVector<TVChunkConfig> VChunkConfigs;
+        TVChunkConfigs VChunkConfigs;
 
         explicit TMonitoring(NActors::TActorId requester)
             : Requester(requester)

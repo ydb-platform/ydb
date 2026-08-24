@@ -11,6 +11,7 @@ namespace NKikimr::NDDisk {
 // Checksum unit size (4 KiB), independent of LBA format. Matches MinSectorSize / DataAlignment.
 constexpr size_t IntegrityUnitSize = 4096;
 constexpr size_t IntegritySubBlockSize = 512;
+constexpr ui32 IntegrityPairSlots = 2;
 
 // DataChunk / IntegrityChunk are PDisk chunks whose size comes from the PDisk format at runtime.
 // IntegrityChunk reserves a fixed 128 KiB region at the front for its own metadata
@@ -46,6 +47,19 @@ std::vector<ui64> CalculatePayloadChecksums(const TRope& payload);
 // XORs in the new one.
 ui64 Contribution(ui64 vchunkGeneration, ui64 blockIdx, ui64 blockChecksum);
 void UpdateRoot(ui64& integrityBlockDigest, ui64 vchunkGeneration, ui64 idx, ui64 oldCsum, ui64 newCsum);
+
+// On-disk checksums are salted with their logical identity. The wire protocol and the in-memory
+// cache always carry pure XXH3_64(data) values; sealing/unsealing happens only at the integrity
+// block boundary. XOR makes the operation reversible without recomputing data checksums.
+ui64 CalculateChecksumIdentitySalt(ui64 ddiskId, ui64 pdiskGuid, ui64 tabletId,
+    ui64 vChunkIndex, ui64 blockIdx);
+ui64 SealBlockChecksum(ui64 pureChecksum, ui64 ddiskId, ui64 pdiskGuid, ui64 tabletId,
+    ui64 vChunkIndex, ui64 blockIdx);
+ui64 UnsealBlockChecksum(ui64 storedChecksum, ui64 ddiskId, ui64 pdiskGuid, ui64 tabletId,
+    ui64 vChunkIndex, ui64 blockIdx);
+
+// Pure checksum returned for a never-written data block.
+ui64 GetZeroBlockChecksum();
 
 #pragma pack(push, 1)
 
@@ -91,6 +105,25 @@ struct TIntegrityBlock {
 
 static_assert(sizeof(TIntegrityBlock) == IntegrityUnitSize);
 
+struct TIntegrityBlockIdentity {
+    ui64 OwnerId = 0;
+    ui64 VChunkId = 0;
+    ui64 VChunkGeneration = 0;
+    ui64 IntegrityChunkId = 0;
+    ui64 IntegrityExtentId = 0;
+    ui64 IntegrityChunkGeneration = 0;
+    ui32 ChecksumBlockIdx = 0;
+};
+
+// Validates a single slot without trusting any of its fields first. The self-checksum is checked
+// before identity/generation fields are used for winner selection.
+bool ValidateIntegrityBlock(const TIntegrityBlock& block, const TIntegrityBlockIdentity& expected);
+
+// Returns the winning slot index (0 for A, 1 for B), or -1 when neither slot is valid. A valid
+// slot with the larger PairSequenceNumber wins; equal sequence numbers deterministically prefer B.
+i32 SelectIntegrityBlockWinner(const TIntegrityBlock (&slots)[IntegrityPairSlots],
+    const TIntegrityBlockIdentity& expected);
+
 struct TIntegritySubBlockHeader {
     ui64 Magic;
     ui64 SubBlockChecksum; // XXH3_64 over this 512 B sub-block with this field zeroed
@@ -129,7 +162,6 @@ static_assert(sizeof(TIntegritySubBlock) == IntegritySubBlockSize);
 
 // On disk every TIntegrityBlock lives in a ping-pong pair of adjacent 4 KiB slots (A/B, read
 // together as one 8 KiB I/O; never rewritten in place because we do not rely on AWUPF).
-constexpr ui32 IntegrityPairSlots = 2;
 
 struct TIntegrityChunkHeader {
     ui64 Magic;

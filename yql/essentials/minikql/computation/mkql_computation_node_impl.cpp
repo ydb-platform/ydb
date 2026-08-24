@@ -180,7 +180,7 @@ Y_NO_INLINE void TStatefulSourceComputationNodeBase::PrepareStageOneImpl(const T
     if (!Stateless_) {
         Stateless_ = std::accumulate(
                          dependents.cbegin(), dependents.cend(), 0,
-                         std::bind(std::plus<i32>(), std::placeholders::_1,
+                         std::bind(std::plus<>(), std::placeholders::_1,
                                    std::bind(&IComputationNode::GetDependentWeight, std::placeholders::_2))) <= 1;
     }
 }

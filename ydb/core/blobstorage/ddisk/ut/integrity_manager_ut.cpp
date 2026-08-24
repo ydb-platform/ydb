@@ -5,6 +5,8 @@
 #include <util/generic/overloaded.h>
 
 #include <algorithm>
+#include <array>
+#include <cstddef>
 #include <cstring>
 #include <vector>
 
@@ -14,6 +16,7 @@ namespace {
 
 using TKey = TIntegrityManager::TDataChunkKey;
 using TWriteIo = TIntegrityManager::TWriteIo;
+using TReadIo = TIntegrityManager::TReadIo;
 using TReadPlan = TIntegrityManager::TReadPlan;
 
 constexpr ui64 TestDDiskId = 0xDD15C1D;
@@ -27,10 +30,12 @@ constexpr ui64 ProductionChunkSize = 128_MB;
 constexpr ui64 SmallChunkSize = 1_MB;
 constexpr ui64 TinyChunkSize = 160_KB;
 constexpr ui64 MultiBlockChunkSize = 4_MB;
+constexpr ui64 PairBoundaryChunkSize = (ChecksumsPerIntegrityBlock + 1) * IntegrityUnitSize;
 
 struct TActionLog {
     ui32 AllocateRequests = 0;
     std::vector<TWriteIo> Writes;
+    std::vector<TReadIo> Reads;
 };
 
 TActionLog Drain(TIntegrityManager& manager) {
@@ -42,6 +47,9 @@ TActionLog Drain(TIntegrityManager& manager) {
             },
             [&](TWriteIo& io) {
                 log.Writes.push_back(std::move(io));
+            },
+            [&](TReadIo& io) {
+                log.Reads.push_back(std::move(io));
             },
         }, action);
     }
@@ -141,6 +149,64 @@ void CheckExtentFormat(const TIntegrityManager& manager, const TWriteIo& io, TKe
     }
 }
 
+TIntegrityBlock MakeIntegrityBlock(TKey key, const TIntegrityManager::TExtentRef& ref,
+        ui64 integrityChunkGeneration, ui32 pairIdx, ui64 sequence,
+        const std::vector<std::pair<ui32, ui64>>& pureChecksums) {
+    TIntegrityBlock block{};
+    auto& header = block.Header;
+    header.Magic = MagicIntegrityBlock;
+    header.FormatVersion = static_cast<ui16>(EIntegrityFormatVersion::BaseAwupf4KiB);
+    header.ChecksumBlockIdx = pairIdx;
+    header.OwnerId = key.TabletId;
+    header.VChunkId = key.VChunkIndex;
+    header.VChunkGeneration = ref.VChunkGeneration;
+    header.IntegrityChunkId = ref.IntegrityChunkIdx;
+    header.IntegrityExtentId = ref.ExtentSlot;
+    header.IntegrityChunkGeneration = integrityChunkGeneration;
+    header.PairSequenceNumber = sequence;
+    for (const auto& [slot, pureChecksum] : pureChecksums) {
+        UNIT_ASSERT(slot < ChecksumsPerIntegrityBlock);
+        const ui32 blockIdx = pairIdx * ChecksumsPerIntegrityBlock + slot;
+        header.UsedBlocksBitmap[slot / 8] |= ui8(1u << (slot % 8));
+        block.Checksums[slot] = SealBlockChecksum(pureChecksum, TestDDiskId, TestPDiskGuid,
+            key.TabletId, key.VChunkIndex, blockIdx);
+        header.IntegrityBlockDigest ^= Contribution(ref.VChunkGeneration, blockIdx, pureChecksum);
+    }
+    header.BlockChecksum = CalculateRawChecksum(&block, sizeof(block));
+    return block;
+}
+
+TRope MakeIntegrityPair(TIntegrityBlock a, TIntegrityBlock b) {
+    auto data = TRcBuf::UninitializedPageAligned(IntegrityPairSlots * sizeof(TIntegrityBlock));
+    memcpy(data.GetDataMut(), &a, sizeof(a));
+    memcpy(data.GetDataMut() + sizeof(a), &b, sizeof(b));
+    return TRope(std::move(data));
+}
+
+void RecalculateBlockChecksum(TIntegrityBlock& block) {
+    block.Header.BlockChecksum = 0;
+    block.Header.BlockChecksum = CalculateRawChecksum(&block, sizeof(block));
+}
+
+TRope MakeFragmentedRope(const TString& data, const std::vector<size_t>& fragmentSizes) {
+    TRope rope;
+    size_t offset = 0;
+    for (const size_t size : fragmentSizes) {
+        UNIT_ASSERT(size > 0);
+        UNIT_ASSERT(offset + size <= data.size());
+        rope.Insert(rope.End(), TRope(TString(data.data() + offset, size)));
+        offset += size;
+    }
+    UNIT_ASSERT_VALUES_EQUAL(offset, data.size());
+    return rope;
+}
+
+TIntegrityManager::TOperationResult TakeOnlyCompletion(TIntegrityManager& manager) {
+    auto completed = manager.TakeCompletedOperations();
+    UNIT_ASSERT_VALUES_EQUAL(completed.size(), 1);
+    return std::move(completed.front());
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(TIntegrityManagerTest) {
@@ -161,6 +227,206 @@ Y_UNIT_TEST_SUITE(TIntegrityManagerTest) {
             UNIT_ASSERT_VALUES_EQUAL(manager.BlocksPerExtent(), 67);
             UNIT_ASSERT_VALUES_EQUAL(manager.ExtentOnDiskSize(), 536_KB);
             UNIT_ASSERT_VALUES_EQUAL(manager.ExtentsPerChunk(), 244);
+        }
+    }
+
+    Y_UNIT_TEST(ContiguousAndFragmentedRopeChecksums) {
+        TString payload = TString::Uninitialized(3 * IntegrityUnitSize);
+        char* payloadData = payload.Detach();
+        for (size_t i = 0; i < payload.size(); ++i) {
+            payloadData[i] = static_cast<char>((i * 37 + i / IntegrityUnitSize * 53) & 0xff);
+        }
+
+        std::vector<ui64> expected;
+        for (ui32 block = 0; block < 3; ++block) {
+            expected.push_back(CalculateRawChecksum(
+                payload.data() + block * IntegrityUnitSize, IntegrityUnitSize));
+        }
+        UNIT_ASSERT_UNEQUAL(expected[0], expected[1]);
+        UNIT_ASSERT_UNEQUAL(expected[1], expected[2]);
+
+        const TRope contiguous(payload);
+        UNIT_ASSERT_VALUES_EQUAL(CalculatePayloadChecksums(contiguous), expected);
+        UNIT_ASSERT_VALUES_EQUAL(
+            CalculateBlockChecksum(contiguous.Begin(), payload.size()),
+            CalculateRawChecksum(payload.data(), payload.size()));
+
+        const std::array<std::vector<size_t>, 2> layouts{{
+            {17, IntegrityUnitSize - 17, 101, IntegrityUnitSize - 101,
+                IntegrityUnitSize - 1, 1},
+            {1024, 2048, 3072, 4096, 2048},
+        }};
+        for (const auto& layout : layouts) {
+            const TRope fragmented = MakeFragmentedRope(payload, layout);
+            UNIT_ASSERT(fragmented.Begin().ContiguousSize() < IntegrityUnitSize);
+            UNIT_ASSERT_VALUES_EQUAL(CalculatePayloadChecksums(fragmented), expected);
+            UNIT_ASSERT_VALUES_EQUAL(
+                CalculateBlockChecksum(fragmented.Begin(), payload.size()),
+                CalculateRawChecksum(payload.data(), payload.size()));
+        }
+    }
+
+    Y_UNIT_TEST(ZeroBlockChecksumProperties) {
+        const ui64 zeroChecksum = GetZeroBlockChecksum();
+        UNIT_ASSERT_UNEQUAL(zeroChecksum, 0);
+
+        for (const ui32 blocks : {1u, 3u}) {
+            TString zeros = TString::Uninitialized(blocks * IntegrityUnitSize);
+            memset(zeros.Detach(), 0, zeros.size());
+            const TRope rope(zeros);
+            const auto checksums = CalculatePayloadChecksums(rope);
+            UNIT_ASSERT_VALUES_EQUAL(checksums.size(), blocks);
+            for (const ui64 checksum : checksums) {
+                UNIT_ASSERT_VALUES_EQUAL(checksum, zeroChecksum);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(
+                CalculateBlockChecksum(rope.Begin(), IntegrityUnitSize), zeroChecksum);
+        }
+
+        std::array<ui8, IntegrityUnitSize> zero{};
+        UNIT_ASSERT_VALUES_EQUAL(zeroChecksum, CalculateRawChecksum(zero.data(), zero.size()));
+        zero.back() = 1;
+        UNIT_ASSERT_UNEQUAL(zeroChecksum, CalculateRawChecksum(zero.data(), zero.size()));
+    }
+
+    Y_UNIT_TEST(ChecksumSealIdentitySeparation) {
+        struct TIdentity {
+            ui64 DDiskId;
+            ui64 PDiskGuid;
+            ui64 TabletId;
+            ui64 VChunkIndex;
+            ui64 BlockIdx;
+        };
+
+        const TIdentity baseline{TestDDiskId, TestPDiskGuid, 77, 9, 12};
+        const std::array<TIdentity, 5> changed{{
+            {TestDDiskId + 1, TestPDiskGuid, 77, 9, 12},
+            {TestDDiskId, TestPDiskGuid + 1, 77, 9, 12},
+            {TestDDiskId, TestPDiskGuid, 78, 9, 12},
+            {TestDDiskId, TestPDiskGuid, 77, 10, 12},
+            {TestDDiskId, TestPDiskGuid, 77, 9, 13},
+        }};
+
+        auto salt = [](const TIdentity& identity) {
+            return CalculateChecksumIdentitySalt(identity.DDiskId, identity.PDiskGuid,
+                identity.TabletId, identity.VChunkIndex, identity.BlockIdx);
+        };
+        auto seal = [](ui64 checksum, const TIdentity& identity) {
+            return SealBlockChecksum(checksum, identity.DDiskId, identity.PDiskGuid,
+                identity.TabletId, identity.VChunkIndex, identity.BlockIdx);
+        };
+        auto unseal = [](ui64 checksum, const TIdentity& identity) {
+            return UnsealBlockChecksum(checksum, identity.DDiskId, identity.PDiskGuid,
+                identity.TabletId, identity.VChunkIndex, identity.BlockIdx);
+        };
+
+        const ui64 pure = 0x123456789abcdef0ull;
+        const ui64 sealed = seal(pure, baseline);
+        UNIT_ASSERT_VALUES_EQUAL(unseal(sealed, baseline), pure);
+        for (const TIdentity& identity : changed) {
+            UNIT_ASSERT_UNEQUAL(salt(identity), salt(baseline));
+            UNIT_ASSERT_UNEQUAL(seal(pure, identity), sealed);
+            UNIT_ASSERT_UNEQUAL(unseal(sealed, identity), pure);
+        }
+    }
+
+    Y_UNIT_TEST(IntegrityBlockValidationRejectsCorruption) {
+        const TKey key{.TabletId = 77, .VChunkIndex = 9};
+        const TIntegrityManager::TExtentRef ref{
+            .IntegrityChunkIdx = 700,
+            .ExtentSlot = 3,
+            .VChunkGeneration = 5,
+        };
+        const ui64 chunkGeneration = 11;
+        const TIntegrityBlockIdentity expected{
+            .OwnerId = key.TabletId,
+            .VChunkId = key.VChunkIndex,
+            .VChunkGeneration = ref.VChunkGeneration,
+            .IntegrityChunkId = ref.IntegrityChunkIdx,
+            .IntegrityExtentId = ref.ExtentSlot,
+            .IntegrityChunkGeneration = chunkGeneration,
+            .ChecksumBlockIdx = 0,
+        };
+
+        const ui64 pure = 0x123456789abcdef0ull;
+        const TIntegrityBlock valid =
+            MakeIntegrityBlock(key, ref, chunkGeneration, 0, 2, {{0, pure}});
+        UNIT_ASSERT(ValidateIntegrityBlock(valid, expected));
+
+        struct TCorruption {
+            const char* Name;
+            size_t Offset;
+            bool RecalculateSelfChecksum;
+        };
+        const std::array<TCorruption, 11> corruptions{{
+            {"magic", offsetof(TIntegrityBlockHeader, Magic), true},
+            {"format version", offsetof(TIntegrityBlockHeader, FormatVersion), true},
+            {"checksum block index", offsetof(TIntegrityBlockHeader, ChecksumBlockIdx), true},
+            {"owner", offsetof(TIntegrityBlockHeader, OwnerId), true},
+            {"vchunk", offsetof(TIntegrityBlockHeader, VChunkId), true},
+            {"vchunk generation", offsetof(TIntegrityBlockHeader, VChunkGeneration), true},
+            {"integrity chunk", offsetof(TIntegrityBlockHeader, IntegrityChunkId), true},
+            {"integrity extent", offsetof(TIntegrityBlockHeader, IntegrityExtentId), true},
+            {"integrity chunk generation",
+                offsetof(TIntegrityBlockHeader, IntegrityChunkGeneration), true},
+            {"self checksum", offsetof(TIntegrityBlockHeader, BlockChecksum), false},
+            {"checksummed payload", offsetof(TIntegrityBlock, Checksums), false},
+        }};
+        for (const TCorruption& corruption : corruptions) {
+            TIntegrityBlock damaged = valid;
+            reinterpret_cast<ui8*>(&damaged)[corruption.Offset] ^= 1;
+            if (corruption.RecalculateSelfChecksum) {
+                RecalculateBlockChecksum(damaged);
+            }
+            UNIT_ASSERT_C(!ValidateIntegrityBlock(damaged, expected), corruption.Name);
+        }
+    }
+
+    Y_UNIT_TEST(IntegrityBlockWinnerSelection) {
+        const TKey key{.TabletId = 77, .VChunkIndex = 9};
+        const TIntegrityManager::TExtentRef ref{
+            .IntegrityChunkIdx = 700,
+            .ExtentSlot = 3,
+            .VChunkGeneration = 5,
+        };
+        const ui64 chunkGeneration = 11;
+        const TIntegrityBlockIdentity expected{
+            .OwnerId = key.TabletId,
+            .VChunkId = key.VChunkIndex,
+            .VChunkGeneration = ref.VChunkGeneration,
+            .IntegrityChunkId = ref.IntegrityChunkIdx,
+            .IntegrityExtentId = ref.ExtentSlot,
+            .IntegrityChunkGeneration = chunkGeneration,
+            .ChecksumBlockIdx = 0,
+        };
+
+        struct TCase {
+            bool ValidA;
+            ui64 SequenceA;
+            bool ValidB;
+            ui64 SequenceB;
+            i32 ExpectedWinner;
+        };
+        const std::array<TCase, 6> cases{{
+            {false, 2, false, 3, -1},
+            {true, 2, false, 3, 0},
+            {false, 2, true, 3, 1},
+            {true, 4, true, 3, 0},
+            {true, 2, true, 3, 1},
+            {true, 3, true, 3, 1},
+        }};
+        for (const TCase& test : cases) {
+            TIntegrityBlock slots[IntegrityPairSlots]{
+                MakeIntegrityBlock(key, ref, chunkGeneration, 0, test.SequenceA, {{0, 0xAA}}),
+                MakeIntegrityBlock(key, ref, chunkGeneration, 0, test.SequenceB, {{0, 0xBB}}),
+            };
+            if (!test.ValidA) {
+                ++slots[0].Checksums[0];
+            }
+            if (!test.ValidB) {
+                ++slots[1].Checksums[0];
+            }
+            UNIT_ASSERT_VALUES_EQUAL(SelectIntegrityBlockWinner(slots, expected), test.ExpectedWinner);
         }
     }
 
@@ -289,8 +555,8 @@ Y_UNIT_TEST_SUITE(TIntegrityManagerTest) {
         // Tracked, nothing written: all-zero without disk I/O.
         UNIT_ASSERT_EQUAL(manager.MakeReadPlan(key, 0, SmallChunkSize).Kind, TReadPlan::AllZero);
 
-        // Blocks 2..3 written (no checksums).
-        manager.OnBlocksWritten(key, 2 * IntegrityUnitSize, 2 * IntegrityUnitSize, {});
+        // Blocks 2..3 written with mandatory checksums.
+        manager.BeginBlocksWrite(key, 2 * IntegrityUnitSize, 2 * IntegrityUnitSize, {0xA, 0xB});
 
         // Whole written range: passthrough (no zeroing needed).
         UNIT_ASSERT_EQUAL(manager.MakeReadPlan(key, 2 * IntegrityUnitSize, 2 * IntegrityUnitSize).Kind,
@@ -320,14 +586,13 @@ Y_UNIT_TEST_SUITE(TIntegrityManagerTest) {
         UNIT_ASSERT_EQUAL(manager.MakeReadPlan(TKey{99, 99}, 0, IntegrityUnitSize).Kind, TReadPlan::Passthrough);
     }
 
-    Y_UNIT_TEST(UnalignedWritesRoundOutward) {
+    Y_UNIT_TEST(AlignedWritesMarkExactBlocks) {
         TIntegrityManager manager(SmallChunkSize, TestDDiskId, TestPDiskGuid);
         const TKey key{.TabletId = 4, .VChunkIndex = 0};
         TChunkIdx nextIntegrityChunkIdx = 730;
         MakeReady(manager, key, 400, &nextIntegrityChunkIdx);
 
-        // A write of [2048, 6144) touches blocks 0 and 1: both must count as used.
-        manager.OnBlocksWritten(key, 2048, 4096, {});
+        manager.BeginBlocksWrite(key, 0, 2 * IntegrityUnitSize, {0xA, 0xB});
         const TReadPlan plan = manager.MakeReadPlan(key, 0, 3 * IntegrityUnitSize);
         UNIT_ASSERT_EQUAL(plan.Kind, TReadPlan::Mixed);
         UNIT_ASSERT(plan.UsedBlocks.Get(0));
@@ -345,9 +610,9 @@ Y_UNIT_TEST_SUITE(TIntegrityManagerTest) {
         const ui64 generation = manager.FindExtentRef(key)->VChunkGeneration;
 
         // Blocks 0..1 with checksums, plus one block in the second TIntegrityBlock.
-        manager.OnBlocksWritten(key, 0, 2 * IntegrityUnitSize, {0xA, 0xB});
+        manager.BeginBlocksWrite(key, 0, 2 * IntegrityUnitSize, {0xA, 0xB});
         const ui32 farBlock = ChecksumsPerIntegrityBlock; // first block of digest index 1
-        manager.OnBlocksWritten(key, farBlock * IntegrityUnitSize, IntegrityUnitSize, {0xC});
+        manager.BeginBlocksWrite(key, farBlock * IntegrityUnitSize, IntegrityUnitSize, {0xC});
 
         ui64 checksum = 0;
         UNIT_ASSERT(manager.GetBlockChecksum(key, 0, &checksum));
@@ -366,18 +631,87 @@ Y_UNIT_TEST_SUITE(TIntegrityManagerTest) {
         UNIT_ASSERT_VALUES_EQUAL(manager.GetIntegrityBlockDigest(key, 2), 0);
 
         // Overwrite block 0: digest must be updated incrementally (UpdateRoot semantics).
-        manager.OnBlocksWritten(key, 0, IntegrityUnitSize, {0xD});
+        manager.BeginBlocksWrite(key, 0, IntegrityUnitSize, {0xD});
         ui64 expected = Contribution(generation, 0, 0xA) ^ Contribution(generation, 1, 0xB);
         UpdateRoot(expected, generation, 0, 0xA, 0xD);
         UNIT_ASSERT_VALUES_EQUAL(manager.GetIntegrityBlockDigest(key, 0), expected);
         UNIT_ASSERT_VALUES_EQUAL(expected, Contribution(generation, 0, 0xD) ^ Contribution(generation, 1, 0xB));
 
-        // Overwrite block 1 without checksums: its contribution is retired, block stays used.
-        manager.OnBlocksWritten(key, IntegrityUnitSize, IntegrityUnitSize, {});
-        UNIT_ASSERT(!manager.GetBlockChecksum(key, 1, &checksum));
-        UNIT_ASSERT_VALUES_EQUAL(manager.GetIntegrityBlockDigest(key, 0), Contribution(generation, 0, 0xD));
+        // Overwrite block 1 with its mandatory checksum.
+        manager.BeginBlocksWrite(key, IntegrityUnitSize, IntegrityUnitSize, {0xE});
+        UNIT_ASSERT(manager.GetBlockChecksum(key, 1, &checksum));
+        UNIT_ASSERT_VALUES_EQUAL(checksum, 0xE);
+        UNIT_ASSERT_VALUES_EQUAL(manager.GetIntegrityBlockDigest(key, 0),
+            Contribution(generation, 0, 0xD) ^ Contribution(generation, 1, 0xE));
         UNIT_ASSERT_EQUAL(manager.MakeReadPlan(key, IntegrityUnitSize, IntegrityUnitSize).Kind,
             TReadPlan::Passthrough);
+    }
+
+    Y_UNIT_TEST(ExactIntegrityPairBoundaryAndBitmapTail) {
+        TIntegrityManager manager(PairBoundaryChunkSize, TestDDiskId, TestPDiskGuid);
+        UNIT_ASSERT_VALUES_EQUAL(manager.DataBlocksInChunk(), ChecksumsPerIntegrityBlock + 1);
+        UNIT_ASSERT_VALUES_EQUAL(manager.BlocksPerExtent(), 2);
+
+        const TKey key{.TabletId = 6, .VChunkIndex = 0};
+        TChunkIdx nextIntegrityChunkIdx = 745;
+        MakeReady(manager, key, 550, &nextIntegrityChunkIdx);
+
+        std::vector<ui64> firstPairChecksums(ChecksumsPerIntegrityBlock);
+        for (ui32 i = 0; i < firstPairChecksums.size(); ++i) {
+            firstPairChecksums[i] = 0x10000 + i;
+        }
+        const ui64 firstOperation = manager.BeginBlocksWrite(
+            key, 0, ChecksumsPerIntegrityBlock * IntegrityUnitSize, firstPairChecksums);
+        TActionLog firstWrite = Drain(manager);
+        UNIT_ASSERT_VALUES_EQUAL(firstWrite.Writes.size(), 1);
+        TIntegrityBlock firstImage;
+        memcpy(&firstImage, firstWrite.Writes[0].Data.data(), sizeof(firstImage));
+        UNIT_ASSERT_VALUES_EQUAL(firstImage.Header.ChecksumBlockIdx, 0);
+        UNIT_ASSERT_VALUES_EQUAL(firstImage.Header.UsedBlocksBitmap[61], 0x0f);
+        manager.OnIoCompleted(firstWrite.Writes[0].IoId);
+        UNIT_ASSERT_VALUES_EQUAL(TakeOnlyCompletion(manager).OperationId, firstOperation);
+
+        const ui64 finalChecksum = 0x20000;
+        const ui64 finalOperation = manager.BeginBlocksWrite(
+            key, ChecksumsPerIntegrityBlock * IntegrityUnitSize, IntegrityUnitSize, {finalChecksum});
+        TActionLog finalWrite = Drain(manager);
+        UNIT_ASSERT_VALUES_EQUAL(finalWrite.Writes.size(), 1);
+        TIntegrityBlock finalImage;
+        memcpy(&finalImage, finalWrite.Writes[0].Data.data(), sizeof(finalImage));
+        UNIT_ASSERT_VALUES_EQUAL(finalImage.Header.ChecksumBlockIdx, 1);
+        UNIT_ASSERT_VALUES_EQUAL(finalImage.Header.UsedBlocksBitmap[0], 1);
+        for (size_t i = 1; i < sizeof(finalImage.Header.UsedBlocksBitmap); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL_C(finalImage.Header.UsedBlocksBitmap[i], 0, "bitmap byte " << i);
+        }
+        for (ui32 slot = 1; slot < ChecksumsPerIntegrityBlock; ++slot) {
+            UNIT_ASSERT_VALUES_EQUAL_C(finalImage.Checksums[slot], 0, "checksum slot " << slot);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(finalImage.Checksums[0],
+            SealBlockChecksum(finalChecksum, TestDDiskId, TestPDiskGuid,
+                key.TabletId, key.VChunkIndex, ChecksumsPerIntegrityBlock));
+        manager.OnIoCompleted(finalWrite.Writes[0].IoId);
+        UNIT_ASSERT_VALUES_EQUAL(TakeOnlyCompletion(manager).OperationId, finalOperation);
+
+        const TKey crossingKey{.TabletId = 6, .VChunkIndex = 1};
+        MakeReady(manager, crossingKey, 551, &nextIntegrityChunkIdx);
+        std::vector<ui64> crossingChecksums(ChecksumsPerIntegrityBlock + 1);
+        for (ui32 i = 0; i < crossingChecksums.size(); ++i) {
+            crossingChecksums[i] = 0x30000 + i;
+        }
+        const ui64 crossingOperation = manager.BeginBlocksWrite(
+            crossingKey, 0, PairBoundaryChunkSize, crossingChecksums);
+        TActionLog crossingWrites = Drain(manager);
+        UNIT_ASSERT_VALUES_EQUAL(crossingWrites.Writes.size(), 2);
+        std::array<bool, 2> seenPairs{};
+        for (const TWriteIo& write : crossingWrites.Writes) {
+            TIntegrityBlock image;
+            memcpy(&image, write.Data.data(), sizeof(image));
+            UNIT_ASSERT(image.Header.ChecksumBlockIdx < seenPairs.size());
+            seenPairs[image.Header.ChecksumBlockIdx] = true;
+            manager.OnIoCompleted(write.IoId);
+        }
+        UNIT_ASSERT(seenPairs[0] && seenPairs[1]);
+        UNIT_ASSERT_VALUES_EQUAL(TakeOnlyCompletion(manager).OperationId, crossingOperation);
     }
 
     Y_UNIT_TEST(SparseBlockStateAllocation) {
@@ -389,19 +723,14 @@ Y_UNIT_TEST_SUITE(TIntegrityManagerTest) {
         MakeReady(manager, key, 800, &nextIntegrityChunkIdx);
         UNIT_ASSERT_VALUES_EQUAL(manager.CachedBlockStates(), 0);
 
-        // Checksum-less writes mark blocks used but allocate no checksum state.
-        manager.OnBlocksWritten(key, 0, IntegrityUnitSize, {});
-        UNIT_ASSERT_VALUES_EQUAL(manager.CachedBlockStates(), 0);
-        UNIT_ASSERT_EQUAL(manager.MakeReadPlan(key, 0, IntegrityUnitSize).Kind, TReadPlan::Passthrough);
-
         // A checksummed write allocates exactly one state, covering its whole TIntegrityBlock.
-        manager.OnBlocksWritten(key, 0, IntegrityUnitSize, {0xA});
+        manager.BeginBlocksWrite(key, 0, IntegrityUnitSize, {0xA});
         UNIT_ASSERT_VALUES_EQUAL(manager.CachedBlockStates(), 1);
-        manager.OnBlocksWritten(key, IntegrityUnitSize, IntegrityUnitSize, {0xB});
+        manager.BeginBlocksWrite(key, IntegrityUnitSize, IntegrityUnitSize, {0xB});
         UNIT_ASSERT_VALUES_EQUAL(manager.CachedBlockStates(), 1);
 
         // A write into the second TIntegrityBlock's range allocates the second state.
-        manager.OnBlocksWritten(key, ChecksumsPerIntegrityBlock * IntegrityUnitSize, IntegrityUnitSize, {0xC});
+        manager.BeginBlocksWrite(key, ChecksumsPerIntegrityBlock * IntegrityUnitSize, IntegrityUnitSize, {0xC});
         UNIT_ASSERT_VALUES_EQUAL(manager.CachedBlockStates(), 2);
     }
 
@@ -420,16 +749,26 @@ Y_UNIT_TEST_SUITE(TIntegrityManagerTest) {
         const ui32 block1 = ChecksumsPerIntegrityBlock;     // first block of TIntegrityBlock 1
         const ui32 block2 = 2 * ChecksumsPerIntegrityBlock; // first block of TIntegrityBlock 2
 
-        // Fill all three TIntegrityBlocks: the oldest state (block 0's) is evicted.
-        manager.OnBlocksWritten(key, 0, IntegrityUnitSize, {0xA});
-        manager.OnBlocksWritten(key, block1 * IntegrityUnitSize, IntegrityUnitSize, {0xB});
-        manager.OnBlocksWritten(key, block2 * IntegrityUnitSize, IntegrityUnitSize, {0xC});
+        auto persist = [&](TKey target, ui32 block, ui64 checksum) {
+            manager.BeginBlocksWrite(target, block * IntegrityUnitSize, IntegrityUnitSize, {checksum});
+            TActionLog actions = Drain(manager);
+            UNIT_ASSERT_VALUES_EQUAL(actions.Writes.size(), 1);
+            manager.OnIoCompleted(actions.Writes[0].IoId);
+            Y_UNUSED(manager.TakeCompletedOperations());
+        };
+
+        // Fill all three TIntegrityBlocks durably: the oldest checksum array (block 0's) is
+        // evicted, while its pinned digest survives.
+        persist(key, 0, 0xA);
+        persist(key, block1, 0xB);
+        persist(key, block2, 0xC);
         UNIT_ASSERT_VALUES_EQUAL(manager.CachedBlockStates(), 2);
 
-        // Evicted: checksum unknown and digest reset, together.
+        // Evicted checksum array, pinned digest retained for lost-write detection.
         ui64 checksum = 0;
         UNIT_ASSERT(!manager.GetBlockChecksum(key, 0, &checksum));
-        UNIT_ASSERT_VALUES_EQUAL(manager.GetIntegrityBlockDigest(key, 0), 0);
+        UNIT_ASSERT_VALUES_EQUAL(manager.GetIntegrityBlockDigest(key, 0),
+            Contribution(generation, 0, 0xA));
 
         // The survivors are intact.
         UNIT_ASSERT(manager.GetBlockChecksum(key, block1, &checksum));
@@ -444,14 +783,15 @@ Y_UNIT_TEST_SUITE(TIntegrityManagerTest) {
 
         // Touching a state protects it: overwrite in TIntegrityBlock 1, then allocate a state in a
         // second data chunk - TIntegrityBlock 2's state (now the LRU) is the one evicted.
-        manager.OnBlocksWritten(key, block1 * IntegrityUnitSize, IntegrityUnitSize, {0xD});
+        persist(key, block1, 0xD);
         const TKey key2{.TabletId = 10, .VChunkIndex = 1};
         MakeReady(manager, key2, 811, &nextIntegrityChunkIdx);
-        manager.OnBlocksWritten(key2, 0, IntegrityUnitSize, {0xE});
+        persist(key2, 0, 0xE);
         UNIT_ASSERT_VALUES_EQUAL(manager.CachedBlockStates(), 2);
 
         UNIT_ASSERT(!manager.GetBlockChecksum(key, block2, &checksum));
-        UNIT_ASSERT_VALUES_EQUAL(manager.GetIntegrityBlockDigest(key, 2), 0);
+        UNIT_ASSERT_VALUES_EQUAL(manager.GetIntegrityBlockDigest(key, 2),
+            Contribution(generation, block2, 0xC));
         UNIT_ASSERT(manager.GetBlockChecksum(key, block1, &checksum));
         UNIT_ASSERT_VALUES_EQUAL(checksum, 0xD);
         UNIT_ASSERT_VALUES_EQUAL(manager.GetIntegrityBlockDigest(key, 1),
@@ -460,13 +800,81 @@ Y_UNIT_TEST_SUITE(TIntegrityManagerTest) {
         UNIT_ASSERT_VALUES_EQUAL(checksum, 0xE);
     }
 
+    Y_UNIT_TEST(ReadModifyWriteAfterEvictionPreservesUntouchedChecksums) {
+        TIntegrityManager manager(MultiBlockChunkSize, TestDDiskId, TestPDiskGuid,
+            TIntegrityManager::BlockStateApproxBytes);
+        const TKey key{.TabletId = 17, .VChunkIndex = 0};
+        TChunkIdx nextIntegrityChunkIdx = 796;
+        MakeReady(manager, key, 830, &nextIntegrityChunkIdx);
+        const auto ref = *manager.FindExtentRef(key);
+        const ui64 chunkGeneration =
+            manager.GetIntegrityChunkGeneration(ref.IntegrityChunkIdx);
+        const ui64 generation = ref.VChunkGeneration;
+
+        auto persist = [&](ui32 block, ui32 blocks, const std::vector<ui64>& checksums) {
+            const ui64 operationId = manager.BeginBlocksWrite(
+                key, block * IntegrityUnitSize, blocks * IntegrityUnitSize, checksums);
+            TActionLog actions = Drain(manager);
+            UNIT_ASSERT_VALUES_EQUAL(actions.Reads.size(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(actions.Writes.size(), 1);
+            manager.OnIoCompleted(actions.Writes[0].IoId);
+            UNIT_ASSERT_VALUES_EQUAL(TakeOnlyCompletion(manager).OperationId, operationId);
+        };
+
+        persist(0, 2, {0xAA, 0xBB});
+        persist(ChecksumsPerIntegrityBlock, 1, {0xCC});
+        UNIT_ASSERT_VALUES_EQUAL(manager.CachedBlockStates(), 1);
+        ui64 checksum = 0;
+        UNIT_ASSERT(!manager.GetBlockChecksum(key, 0, &checksum));
+        UNIT_ASSERT_VALUES_EQUAL(manager.GetIntegrityBlockDigest(key, 0),
+            Contribution(generation, 0, 0xAA) ^ Contribution(generation, 1, 0xBB));
+
+        const ui64 operationId =
+            manager.BeginBlocksWrite(key, 0, IntegrityUnitSize, {0xDD});
+        TActionLog read = Drain(manager);
+        UNIT_ASSERT_VALUES_EQUAL(read.Reads.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(read.Writes.size(), 0);
+        manager.OnReadIoCompleted(read.Reads[0].IoId, MakeIntegrityPair(
+            MakeIntegrityBlock(key, ref, chunkGeneration, 0, 2, {{0, 0xAA}, {1, 0xBB}}),
+            MakeIntegrityBlock(key, ref, chunkGeneration, 0, 1, {})));
+
+        TActionLog write = Drain(manager);
+        UNIT_ASSERT_VALUES_EQUAL(write.Writes.size(), 1);
+        TIntegrityBlock image;
+        memcpy(&image, write.Writes[0].Data.data(), sizeof(image));
+        UNIT_ASSERT_VALUES_EQUAL(image.Header.ChecksumBlockIdx, 0);
+        UNIT_ASSERT_VALUES_EQUAL(image.Header.PairSequenceNumber, 3);
+        UNIT_ASSERT_VALUES_EQUAL(image.Header.UsedBlocksBitmap[0] & 3, 3);
+        UNIT_ASSERT_VALUES_EQUAL(
+            UnsealBlockChecksum(image.Checksums[0], TestDDiskId, TestPDiskGuid,
+                key.TabletId, key.VChunkIndex, 0),
+            0xDD);
+        UNIT_ASSERT_VALUES_EQUAL(
+            UnsealBlockChecksum(image.Checksums[1], TestDDiskId, TestPDiskGuid,
+                key.TabletId, key.VChunkIndex, 1),
+            0xBB);
+        const ui64 expectedDigest =
+            Contribution(generation, 0, 0xDD) ^ Contribution(generation, 1, 0xBB);
+        UNIT_ASSERT_VALUES_EQUAL(image.Header.IntegrityBlockDigest, expectedDigest);
+
+        manager.OnIoCompleted(write.Writes[0].IoId);
+        const auto result = TakeOnlyCompletion(manager);
+        UNIT_ASSERT_VALUES_EQUAL(result.OperationId, operationId);
+        UNIT_ASSERT_EQUAL(result.Status, TIntegrityManager::EOperationStatus::Ok);
+        UNIT_ASSERT(manager.GetBlockChecksum(key, 0, &checksum));
+        UNIT_ASSERT_VALUES_EQUAL(checksum, 0xDD);
+        UNIT_ASSERT(manager.GetBlockChecksum(key, 1, &checksum));
+        UNIT_ASSERT_VALUES_EQUAL(checksum, 0xBB);
+        UNIT_ASSERT_VALUES_EQUAL(manager.GetIntegrityBlockDigest(key, 0), expectedDigest);
+    }
+
     Y_UNIT_TEST(BlockStatesDroppedOnDelete) {
         TIntegrityManager manager(SmallChunkSize, TestDDiskId, TestPDiskGuid);
         const TKey key{.TabletId = 11, .VChunkIndex = 0};
         TChunkIdx nextIntegrityChunkIdx = 795;
         MakeReady(manager, key, 820, &nextIntegrityChunkIdx);
 
-        manager.OnBlocksWritten(key, 0, IntegrityUnitSize, {0xA});
+        manager.BeginBlocksWrite(key, 0, IntegrityUnitSize, {0xA});
         UNIT_ASSERT_VALUES_EQUAL(manager.CachedBlockStates(), 1);
 
         manager.PrepareTabletChunksDeletion(11);
@@ -488,7 +896,7 @@ Y_UNIT_TEST_SUITE(TIntegrityManagerTest) {
         TChunkIdx nextIntegrityChunkIdx = 750;
 
         MakeReady(manager, key, 600, &nextIntegrityChunkIdx);
-        manager.OnBlocksWritten(key, 0, IntegrityUnitSize, {});
+        manager.BeginBlocksWrite(key, 0, IntegrityUnitSize, {0xA});
         {
             const auto* ref = manager.FindExtentRef(key);
             UNIT_ASSERT_VALUES_EQUAL(ref->ExtentSlot, 0);
@@ -743,15 +1151,26 @@ Y_UNIT_TEST_SUITE(TIntegrityManagerTest) {
         UNIT_ASSERT_VALUES_EQUAL(restored.GetIntegrityChunkGeneration(771), 7);
         UNIT_ASSERT_VALUES_EQUAL(restored.GetGenerationCounter(), 8);
 
-        // Restored extents have unknown bitmaps: reads pass through unchanged even though nothing
-        // was written since the restore (the previous incarnation's bitmap is lost); new writes
-        // are tracked again (checksums recorded) but do not change the read plan.
+        // Restored extents start with unknown bitmaps. A write first reads the pair, then performs
+        // a durable RMW and makes the bitmap/checksum state exact.
         UNIT_ASSERT_EQUAL(restored.MakeReadPlan(keys[0], 0, TinyChunkSize).Kind, TReadPlan::Passthrough);
-        restored.OnBlocksWritten(keys[0], 0, IntegrityUnitSize, {0xA});
+        const ui64 operationId = restored.BeginBlocksWrite(keys[0], 0, IntegrityUnitSize, {0xA});
+        TActionLog read = Drain(restored);
+        UNIT_ASSERT_VALUES_EQUAL(read.Reads.size(), 1);
+        const auto restoredRef = *restored.FindExtentRef(keys[0]);
+        const ui64 restoredChunkGeneration =
+            restored.GetIntegrityChunkGeneration(restoredRef.IntegrityChunkIdx);
+        restored.OnReadIoCompleted(read.Reads[0].IoId, MakeIntegrityPair(
+            MakeIntegrityBlock(keys[0], restoredRef, restoredChunkGeneration, 0, 0, {}),
+            MakeIntegrityBlock(keys[0], restoredRef, restoredChunkGeneration, 0, 1, {})));
+        TActionLog write = Drain(restored);
+        UNIT_ASSERT_VALUES_EQUAL(write.Writes.size(), 1);
+        restored.OnIoCompleted(write.Writes[0].IoId);
+        UNIT_ASSERT_VALUES_EQUAL(TakeOnlyCompletion(restored).OperationId, operationId);
         ui64 checksum = 0;
         UNIT_ASSERT(restored.GetBlockChecksum(keys[0], 0, &checksum));
         UNIT_ASSERT_VALUES_EQUAL(checksum, 0xA);
-        UNIT_ASSERT_EQUAL(restored.MakeReadPlan(keys[0], 0, TinyChunkSize).Kind, TReadPlan::Passthrough);
+        UNIT_ASSERT_EQUAL(restored.MakeReadPlan(keys[0], 0, TinyChunkSize).Kind, TReadPlan::Mixed);
 
         // The restored manager keeps allocating into the remaining free slots of known chunks
         // without requesting new integrity chunks (6 used out of 8 -> 2 slots left).
@@ -967,6 +1386,310 @@ Y_UNIT_TEST_SUITE(TIntegrityManagerTest) {
         const auto* ref = restored.FindExtentRef(key);
         UNIT_ASSERT(ref);
         UNIT_ASSERT_VALUES_EQUAL(ref->VChunkGeneration, 3);
+    }
+
+    Y_UNIT_TEST(ChecksumPersistenceSealsAndPingPongs) {
+        TIntegrityManager manager(SmallChunkSize, TestDDiskId, TestPDiskGuid);
+        const TKey key{.TabletId = 40, .VChunkIndex = 7};
+        TChunkIdx nextIntegrityChunkIdx = 900;
+        MakeReady(manager, key, 1600, &nextIntegrityChunkIdx);
+        const auto ref = *manager.FindExtentRef(key);
+
+        const ui64 firstOperation = manager.BeginBlocksWrite(
+            key, 0, 2 * IntegrityUnitSize, {0x111, 0x222});
+        TActionLog first = Drain(manager);
+        UNIT_ASSERT_VALUES_EQUAL(first.Reads.size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(first.Writes.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(first.Writes[0].OffsetInBytes, manager.ExtentOffset(ref.ExtentSlot));
+
+        TIntegrityBlock firstImage;
+        memcpy(&firstImage, first.Writes[0].Data.data(), sizeof(firstImage));
+        UNIT_ASSERT_VALUES_EQUAL(firstImage.Header.PairSequenceNumber, 2);
+        UNIT_ASSERT(firstImage.Header.UsedBlocksBitmap[0] & 1);
+        UNIT_ASSERT(firstImage.Header.UsedBlocksBitmap[0] & 2);
+        UNIT_ASSERT_VALUES_EQUAL(firstImage.Checksums[0],
+            SealBlockChecksum(
+                0x111, TestDDiskId, TestPDiskGuid, key.TabletId, key.VChunkIndex, 0));
+        UNIT_ASSERT_VALUES_EQUAL(firstImage.Checksums[1],
+            SealBlockChecksum(
+                0x222, TestDDiskId, TestPDiskGuid, key.TabletId, key.VChunkIndex, 1));
+        UNIT_ASSERT_VALUES_EQUAL(firstImage.Header.IntegrityBlockDigest,
+            Contribution(ref.VChunkGeneration, 0, 0x111)
+                ^ Contribution(ref.VChunkGeneration, 1, 0x222));
+
+        manager.OnIoCompleted(first.Writes[0].IoId);
+        auto completion = TakeOnlyCompletion(manager);
+        UNIT_ASSERT_VALUES_EQUAL(completion.OperationId, firstOperation);
+        UNIT_ASSERT_EQUAL(completion.Status, TIntegrityManager::EOperationStatus::Ok);
+
+        const ui64 secondOperation = manager.BeginBlocksWrite(
+            key, IntegrityUnitSize, IntegrityUnitSize, {0x333});
+        TActionLog second = Drain(manager);
+        UNIT_ASSERT_VALUES_EQUAL(second.Writes.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(second.Writes[0].OffsetInBytes,
+            manager.ExtentOffset(ref.ExtentSlot) + IntegrityUnitSize);
+        TIntegrityBlock secondImage;
+        memcpy(&secondImage, second.Writes[0].Data.data(), sizeof(secondImage));
+        UNIT_ASSERT_VALUES_EQUAL(secondImage.Header.PairSequenceNumber, 3);
+        manager.OnIoCompleted(second.Writes[0].IoId);
+        UNIT_ASSERT_VALUES_EQUAL(TakeOnlyCompletion(manager).OperationId, secondOperation);
+
+        const ui64 readOperation = manager.BeginChecksumRead(key, 0, 2 * IntegrityUnitSize);
+        completion = TakeOnlyCompletion(manager);
+        UNIT_ASSERT_VALUES_EQUAL(completion.OperationId, readOperation);
+        UNIT_ASSERT_VALUES_EQUAL(completion.Checksums.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(completion.Checksums[0], 0x111);
+        UNIT_ASSERT_VALUES_EQUAL(completion.Checksums[1], 0x333);
+    }
+
+    Y_UNIT_TEST(PairWritesSerializeAndCoalesce) {
+        TIntegrityManager manager(SmallChunkSize, TestDDiskId, TestPDiskGuid);
+        const TKey key{.TabletId = 41, .VChunkIndex = 0};
+        TChunkIdx nextIntegrityChunkIdx = 910;
+        MakeReady(manager, key, 1700, &nextIntegrityChunkIdx);
+
+        const ui64 firstOperation = manager.BeginBlocksWrite(key, 0, IntegrityUnitSize, {0xA});
+        TActionLog first = Drain(manager);
+        UNIT_ASSERT_VALUES_EQUAL(first.Writes.size(), 1);
+
+        const ui64 secondOperation = manager.BeginBlocksWrite(
+            key, IntegrityUnitSize, IntegrityUnitSize, {0xB});
+        UNIT_ASSERT_VALUES_EQUAL(Drain(manager).Writes.size(), 0);
+
+        manager.OnIoCompleted(first.Writes[0].IoId);
+        auto completed = manager.TakeCompletedOperations();
+        UNIT_ASSERT_VALUES_EQUAL(completed.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(completed[0].OperationId, firstOperation);
+
+        TActionLog second = Drain(manager);
+        UNIT_ASSERT_VALUES_EQUAL(second.Writes.size(), 1);
+        TIntegrityBlock image;
+        memcpy(&image, second.Writes[0].Data.data(), sizeof(image));
+        UNIT_ASSERT_VALUES_EQUAL(image.Header.PairSequenceNumber, 3);
+        UNIT_ASSERT(image.Header.UsedBlocksBitmap[0] & 1);
+        UNIT_ASSERT(image.Header.UsedBlocksBitmap[0] & 2);
+        manager.OnIoCompleted(second.Writes[0].IoId);
+        UNIT_ASSERT_VALUES_EQUAL(TakeOnlyCompletion(manager).OperationId, secondOperation);
+    }
+
+    Y_UNIT_TEST(RestoredPairSelectsWinnerAndRestoresBitmap) {
+        TIntegrityManager original(SmallChunkSize, TestDDiskId, TestPDiskGuid);
+        const TKey key{.TabletId = 42, .VChunkIndex = 3};
+        TChunkIdx nextIntegrityChunkIdx = 920;
+        MakeReady(original, key, 1800, &nextIntegrityChunkIdx);
+        const auto snapshot = original.SnapshotMapping();
+        const auto ref = *original.FindExtentRef(key);
+        const ui64 chunkGeneration = original.GetIntegrityChunkGeneration(ref.IntegrityChunkIdx);
+
+        TIntegrityManager restored(SmallChunkSize, TestDDiskId, TestPDiskGuid);
+        restored.ApplyMappingSnapshot(snapshot);
+        const ui64 operationId = restored.BeginChecksumRead(key, 0, 4 * IntegrityUnitSize);
+        TActionLog actions = Drain(restored);
+        UNIT_ASSERT_VALUES_EQUAL(actions.Reads.size(), 1);
+        const auto a = MakeIntegrityBlock(key, ref, chunkGeneration, 0, 2, {{0, 0x10}});
+        const auto b = MakeIntegrityBlock(key, ref, chunkGeneration, 0, 3, {{2, 0x30}});
+        restored.OnReadIoCompleted(actions.Reads[0].IoId, MakeIntegrityPair(a, b));
+
+        const auto result = TakeOnlyCompletion(restored);
+        UNIT_ASSERT_VALUES_EQUAL(result.OperationId, operationId);
+        UNIT_ASSERT_VALUES_EQUAL(result.Checksums.size(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(result.Checksums[0], GetZeroBlockChecksum());
+        UNIT_ASSERT_VALUES_EQUAL(result.Checksums[2], 0x30);
+        const auto plan = restored.MakeReadPlan(key, 0, 4 * IntegrityUnitSize);
+        UNIT_ASSERT_EQUAL(plan.Kind, TReadPlan::Mixed);
+        UNIT_ASSERT(!plan.UsedBlocks.Get(0));
+        UNIT_ASSERT(plan.UsedBlocks.Get(2));
+    }
+
+    Y_UNIT_TEST(BothInvalidSlotsReportCorruption) {
+        TIntegrityManager original(SmallChunkSize, TestDDiskId, TestPDiskGuid);
+        const TKey key{.TabletId = 43, .VChunkIndex = 0};
+        TChunkIdx nextIntegrityChunkIdx = 930;
+        MakeReady(original, key, 1900, &nextIntegrityChunkIdx);
+        const auto snapshot = original.SnapshotMapping();
+        const auto ref = *original.FindExtentRef(key);
+        const ui64 chunkGeneration = original.GetIntegrityChunkGeneration(ref.IntegrityChunkIdx);
+
+        TIntegrityManager restored(SmallChunkSize, TestDDiskId, TestPDiskGuid);
+        restored.ApplyMappingSnapshot(snapshot);
+        const ui64 operationId = restored.BeginChecksumRead(key, 0, IntegrityUnitSize);
+        TActionLog actions = Drain(restored);
+        auto a = MakeIntegrityBlock(key, ref, chunkGeneration, 0, 2, {{0, 1}});
+        auto b = MakeIntegrityBlock(key, ref, chunkGeneration, 0, 3, {{0, 2}});
+        ++a.Checksums[0];
+        ++b.Checksums[0];
+        restored.OnReadIoCompleted(actions.Reads[0].IoId, MakeIntegrityPair(a, b));
+        const auto result = TakeOnlyCompletion(restored);
+        UNIT_ASSERT_VALUES_EQUAL(result.OperationId, operationId);
+        UNIT_ASSERT_EQUAL(result.Status, TIntegrityManager::EOperationStatus::Corrupted);
+        UNIT_ASSERT(!result.LostWriteDetected);
+    }
+
+    Y_UNIT_TEST(PendingMultiPairReadPinsChecksumStates) {
+        TIntegrityManager original(MultiBlockChunkSize, TestDDiskId, TestPDiskGuid);
+        const TKey key{.TabletId = 45, .VChunkIndex = 0};
+        TChunkIdx nextIntegrityChunkIdx = 950;
+        MakeReady(original, key, 2100, &nextIntegrityChunkIdx);
+        const auto snapshot = original.SnapshotMapping();
+
+        TIntegrityManager restored(MultiBlockChunkSize, TestDDiskId, TestPDiskGuid,
+            TIntegrityManager::BlockStateApproxBytes);
+        restored.ApplyMappingSnapshot(snapshot);
+        const auto ref = *restored.FindExtentRef(key);
+        const ui64 chunkGeneration =
+            restored.GetIntegrityChunkGeneration(ref.IntegrityChunkIdx);
+        const ui32 blocks = ChecksumsPerIntegrityBlock + 1;
+
+        const ui64 operationId =
+            restored.BeginChecksumRead(key, 0, blocks * IntegrityUnitSize);
+        TActionLog reads = Drain(restored);
+        UNIT_ASSERT_VALUES_EQUAL(reads.Reads.size(), 2);
+
+        restored.OnReadIoCompleted(reads.Reads[0].IoId, MakeIntegrityPair(
+            MakeIntegrityBlock(key, ref, chunkGeneration, 0, 0, {{0, 0xAA}}),
+            MakeIntegrityBlock(key, ref, chunkGeneration, 0, 1, {{0, 0xAA}})));
+        UNIT_ASSERT_VALUES_EQUAL(restored.CachedBlockStates(), 1);
+        UNIT_ASSERT(restored.TakeCompletedOperations().empty());
+
+        restored.OnReadIoCompleted(reads.Reads[1].IoId, MakeIntegrityPair(
+            MakeIntegrityBlock(key, ref, chunkGeneration, 1, 0, {{0, 0xBB}}),
+            MakeIntegrityBlock(key, ref, chunkGeneration, 1, 1, {{0, 0xBB}})));
+        auto result = TakeOnlyCompletion(restored);
+        UNIT_ASSERT_VALUES_EQUAL(result.OperationId, operationId);
+        UNIT_ASSERT_EQUAL(result.Status, TIntegrityManager::EOperationStatus::Ok);
+        UNIT_ASSERT_VALUES_EQUAL(result.Checksums.size(), blocks);
+        UNIT_ASSERT_VALUES_EQUAL(result.Checksums.front(), 0xAA);
+        UNIT_ASSERT_VALUES_EQUAL(result.Checksums.back(), 0xBB);
+        UNIT_ASSERT_VALUES_EQUAL(restored.CachedBlockStates(), 1);
+    }
+
+    Y_UNIT_TEST(PendingMultiPairWritePinsChecksumStates) {
+        TIntegrityManager original(MultiBlockChunkSize, TestDDiskId, TestPDiskGuid);
+        const TKey key{.TabletId = 47, .VChunkIndex = 0};
+        TChunkIdx nextIntegrityChunkIdx = 970;
+        MakeReady(original, key, 2300, &nextIntegrityChunkIdx);
+        const auto snapshot = original.SnapshotMapping();
+
+        TIntegrityManager restored(MultiBlockChunkSize, TestDDiskId, TestPDiskGuid,
+            TIntegrityManager::BlockStateApproxBytes);
+        restored.ApplyMappingSnapshot(snapshot);
+        const auto ref = *restored.FindExtentRef(key);
+        const ui64 chunkGeneration =
+            restored.GetIntegrityChunkGeneration(ref.IntegrityChunkIdx);
+        const ui32 blocks = ChecksumsPerIntegrityBlock + 1;
+        std::vector<ui64> checksums(blocks);
+        for (ui32 i = 0; i < blocks; ++i) {
+            checksums[i] = 0x1000 + i;
+        }
+
+        const ui64 operationId =
+            restored.BeginBlocksWrite(key, 0, blocks * IntegrityUnitSize, checksums);
+        TActionLog reads = Drain(restored);
+        UNIT_ASSERT_VALUES_EQUAL(reads.Reads.size(), 2);
+
+        restored.OnReadIoCompleted(reads.Reads[0].IoId, MakeIntegrityPair(
+            MakeIntegrityBlock(key, ref, chunkGeneration, 0, 0, {{0, 0xAA}}),
+            MakeIntegrityBlock(key, ref, chunkGeneration, 0, 1, {{0, 0xAA}})));
+        UNIT_ASSERT(restored.TakeCompletedOperations().empty());
+
+        restored.OnReadIoCompleted(reads.Reads[1].IoId, MakeIntegrityPair(
+            MakeIntegrityBlock(key, ref, chunkGeneration, 1, 0, {{0, 0xBB}}),
+            MakeIntegrityBlock(key, ref, chunkGeneration, 1, 1, {{0, 0xBB}})));
+        TActionLog writes = Drain(restored);
+        UNIT_ASSERT_VALUES_EQUAL(writes.Writes.size(), 2);
+
+        ui64 expectedPair0Digest = 0;
+        for (ui32 i = 0; i < ChecksumsPerIntegrityBlock; ++i) {
+            expectedPair0Digest ^= Contribution(ref.VChunkGeneration, i, checksums[i]);
+        }
+        const ui64 expectedPair1Digest = Contribution(
+            ref.VChunkGeneration, ChecksumsPerIntegrityBlock, checksums.back());
+        for (const auto& write : writes.Writes) {
+            TIntegrityBlock block;
+            memcpy(&block, write.Data.data(), sizeof(block));
+            const ui64 expected = block.Header.ChecksumBlockIdx == 0
+                ? expectedPair0Digest
+                : expectedPair1Digest;
+            UNIT_ASSERT_VALUES_EQUAL(block.Header.IntegrityBlockDigest, expected);
+            restored.OnIoCompleted(write.IoId);
+        }
+
+        auto result = TakeOnlyCompletion(restored);
+        UNIT_ASSERT_VALUES_EQUAL(result.OperationId, operationId);
+        UNIT_ASSERT_EQUAL(result.Status, TIntegrityManager::EOperationStatus::Ok);
+    }
+
+    Y_UNIT_TEST(MultiPairCorruptionKeepsDeletionBusyForSiblingIo) {
+        TIntegrityManager original(MultiBlockChunkSize, TestDDiskId, TestPDiskGuid);
+        const TKey key{.TabletId = 46, .VChunkIndex = 0};
+        TChunkIdx nextIntegrityChunkIdx = 960;
+        MakeReady(original, key, 2200, &nextIntegrityChunkIdx);
+        const auto snapshot = original.SnapshotMapping();
+
+        TIntegrityManager restored(MultiBlockChunkSize, TestDDiskId, TestPDiskGuid);
+        restored.ApplyMappingSnapshot(snapshot);
+        const auto ref = *restored.FindExtentRef(key);
+        const ui64 chunkGeneration =
+            restored.GetIntegrityChunkGeneration(ref.IntegrityChunkIdx);
+        const ui32 blocks = ChecksumsPerIntegrityBlock + 1;
+
+        restored.BeginChecksumRead(key, 0, blocks * IntegrityUnitSize);
+        TActionLog reads = Drain(restored);
+        UNIT_ASSERT_VALUES_EQUAL(reads.Reads.size(), 2);
+
+        auto invalid = TRcBuf::UninitializedPageAligned(
+            IntegrityPairSlots * sizeof(TIntegrityBlock));
+        memset(invalid.GetDataMut(), 0, invalid.size());
+        restored.OnReadIoCompleted(reads.Reads[1].IoId, TRope(std::move(invalid)));
+        UNIT_ASSERT_EQUAL(
+            TakeOnlyCompletion(restored).Status,
+            TIntegrityManager::EOperationStatus::Corrupted);
+        UNIT_ASSERT(restored.HasInFlightOperationsForTablet(key.TabletId));
+
+        restored.OnReadIoCompleted(reads.Reads[0].IoId, MakeIntegrityPair(
+            MakeIntegrityBlock(key, ref, chunkGeneration, 0, 0, {}),
+            MakeIntegrityBlock(key, ref, chunkGeneration, 0, 1, {})));
+        UNIT_ASSERT(!restored.HasInFlightOperationsForTablet(key.TabletId));
+
+        // The known corruption is detected before any sibling pair read is queued.
+        restored.BeginChecksumRead(key, 0, blocks * IntegrityUnitSize);
+        UNIT_ASSERT(Drain(restored).Reads.empty());
+        UNIT_ASSERT_EQUAL(
+            TakeOnlyCompletion(restored).Status,
+            TIntegrityManager::EOperationStatus::Corrupted);
+
+        restored.PrepareTabletChunksDeletion(key.TabletId);
+        restored.CommitTabletChunksDeletion(key.TabletId);
+    }
+
+    Y_UNIT_TEST(PinnedDigestDetectsLostWriteAfterEviction) {
+        TIntegrityManager manager(MultiBlockChunkSize, TestDDiskId, TestPDiskGuid,
+            TIntegrityManager::BlockStateApproxBytes);
+        const TKey key{.TabletId = 44, .VChunkIndex = 0};
+        TChunkIdx nextIntegrityChunkIdx = 940;
+        MakeReady(manager, key, 2000, &nextIntegrityChunkIdx);
+        const auto ref = *manager.FindExtentRef(key);
+        const ui64 chunkGeneration = manager.GetIntegrityChunkGeneration(ref.IntegrityChunkIdx);
+
+        manager.BeginBlocksWrite(key, 0, IntegrityUnitSize, {0xAA});
+        TActionLog pair0Write = Drain(manager);
+        manager.OnIoCompleted(pair0Write.Writes[0].IoId);
+        Y_UNUSED(manager.TakeCompletedOperations());
+
+        const ui32 pair1Block = ChecksumsPerIntegrityBlock;
+        manager.BeginBlocksWrite(key, pair1Block * IntegrityUnitSize, IntegrityUnitSize, {0xBB});
+        Y_UNUSED(Drain(manager)); // creating pair 1 evicts the now-idle checksum array of pair 0
+
+        const ui64 readOperation = manager.BeginChecksumRead(key, 0, IntegrityUnitSize);
+        TActionLog read = Drain(manager);
+        UNIT_ASSERT_VALUES_EQUAL(read.Reads.size(), 1);
+        const auto stale = MakeIntegrityBlock(key, ref, chunkGeneration, 0, 1, {});
+        manager.OnReadIoCompleted(read.Reads[0].IoId, MakeIntegrityPair(stale, stale));
+        const auto result = TakeOnlyCompletion(manager);
+        UNIT_ASSERT_VALUES_EQUAL(result.OperationId, readOperation);
+        UNIT_ASSERT_EQUAL(result.Status, TIntegrityManager::EOperationStatus::Corrupted);
+        UNIT_ASSERT(result.ErrorReason.Contains("digest mismatch"));
+        UNIT_ASSERT(result.LostWriteDetected);
     }
 
 } // Y_UNIT_TEST_SUITE(TIntegrityManagerTest)

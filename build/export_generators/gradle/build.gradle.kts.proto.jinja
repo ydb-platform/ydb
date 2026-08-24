@@ -1,4 +1,9 @@
 {%- set publish = target.publish -%}
+{%- if target.required_jdk -%}
+{%-     set jdk_version = target.required_jdk -%}
+{%- else -%}
+{%-     set jdk_version = target.jdk_version -%}
+{%- endif -%}
 import com.google.protobuf.gradle.*
 
 val buildProtoDir = File("${buildDir}", "__proto__")
@@ -26,6 +31,16 @@ java {
     withJavadocJar()
 }
 
+{%  if jdk_version -%}
+tasks.withType<JavaCompile>().configureEach {
+    options.release.set({{ jdk_version }})
+}
+
+tasks.withType<Javadoc>().configureEach {
+    (options as CoreJavadocOptions).addStringOption("source", "{{ jdk_version }}")
+}
+
+{%  endif -%}
 dependencies {
 {%- for library in target.consumer -%}
 {%      set classpath = library.classpath -%}

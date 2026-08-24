@@ -155,9 +155,19 @@ struct Schema : NIceDb::Schema {
         >;
     };
 
+    struct DDiskInfo : Table<15> {
+        struct TabletId : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct Revision : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct LastChangedAt : Column<3, NScheme::NTypeIds::Uint64> {};
+        struct State : Column<4, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<TabletId>;
+        using TColumns = TableColumns<TabletId, Revision, LastChangedAt, State>;
+    };
+
     using TTables = SchemaTables<Param, Permission, Request, WalleTask, Notification, NodeTenant,
         HostMarkers, NodeMarkers, PDiskMarkers, VDiskMarkers, LogRecords, NodeDowntimes, PDiskDowntimes,
-        MaintenanceTasks>;
+        MaintenanceTasks, DDiskInfo>;
     using TSettings = SchemaSettings<ExecutorLogBatching<true>,
                                      ExecutorLogFlushPeriod<TDuration::MicroSeconds(512).GetValue()>>;
 };

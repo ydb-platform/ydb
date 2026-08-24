@@ -48,6 +48,11 @@ struct TTextEdit {
     TString NewText;
 };
 
+struct TLocation {
+    TDocumentUri Uri;
+    TRange Range;
+};
+
 } // namespace NLsp
 
 namespace NYql::NReflection {
@@ -58,6 +63,7 @@ YQL_DEFINE_REFLECTING(NLsp::TTextDocumentIdentifier, (Uri));
 YQL_DEFINE_REFLECTING(NLsp::TTextDocumentItem, (Uri)(LanguageId)(Version)(Text));
 YQL_DEFINE_REFLECTING(NLsp::TTextDocumentPositionParams, (TextDocument)(Position));
 YQL_DEFINE_REFLECTING(NLsp::TTextEdit, (Range)(NewText));
+YQL_DEFINE_REFLECTING(NLsp::TLocation, (Uri)(Range));
 
 } // namespace NYql::NReflection
 
@@ -69,6 +75,7 @@ JSON_DECLARE_BIDIRECTIONAL(NLsp::TTextDocumentIdentifier);
 JSON_DECLARE_BIDIRECTIONAL(NLsp::TTextDocumentItem);
 JSON_DECLARE_BIDIRECTIONAL(NLsp::TTextDocumentPositionParams);
 JSON_DECLARE_BIDIRECTIONAL(NLsp::TTextEdit);
+JSON_DECLARE_BIDIRECTIONAL(NLsp::TLocation);
 
 } // namespace NYql::NJson
 

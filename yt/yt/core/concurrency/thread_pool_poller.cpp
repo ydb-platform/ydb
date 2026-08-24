@@ -519,7 +519,7 @@ private:
         } catch (const std::exception& ex) {
             YT_TLOG_FATAL("Unhandled exception in executor thread")
                 .With("Name", GetThreadName())
-                .With(TError(ex));
+                .With(ex);
         }
 
         RegisterQueue_.DequeueAll(false, [&] (const auto&) { });

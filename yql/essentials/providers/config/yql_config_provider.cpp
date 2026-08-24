@@ -1504,7 +1504,6 @@ private:
         return parseResult == TWarningRule::EParseResult::PARSE_OK;
     }
 
-private:
     void RecordActivation(TStringBuf activationLabel, TStringBuf feature) {
         Statistics_.Entries.emplace_back(TStringBuilder() << "Activation:" << activationLabel << feature, 0, 0, 0, 0, 1);
     }

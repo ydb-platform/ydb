@@ -31,17 +31,64 @@ class TestNbs(NbsTestBase):
 
     def test_nbs_disk_deletion(self):
         """
-        Create nbs disk, wait until it is ready, then delete it
+        Create nbs disk, write data so PBuffers hold LSNs, delete it, then
+        verify the volume/tablet are gone and PBuffer tablet-LSN mon is empty.
         """
 
         disk_id = self.generate_disk_id()
         self.create_ddisk_pool()
-        self.create_disk(disk_id)
+        tablet_id = self.create_disk(disk_id)
         # Ensure the partition tablet is up before delete
-        self.get_load_actor_adapter_actor_id(disk_id)
+        actor_id = self.get_load_actor_adapter_actor_id(disk_id)
+
+        # Populate PBuffers so the mon page shows this tablet's LSNs before wipe.
+        self.write(actor_id, 0, self.generate_random_data(4096))
+
+        dbg_html_before = self.fetch_partition_dbg_page(tablet_id)
+        dbg_indexes = self.parse_dbg_indexes(dbg_html_before)
+        assert dbg_indexes, (
+            f"expected active DBGs on tablet mon before delete; html={dbg_html_before[:1000]}"
+        )
+
+        # Sample a few DBG details for PBuffer service ids (enough to cover hosts).
+        sample_dbgs = dbg_indexes[: min(3, len(dbg_indexes))]
+        pb_ids = self.collect_pbuffer_service_ids(tablet_id, sample_dbgs)
+        assert pb_ids, (
+            f"expected PBuffer links on DBG detail pages; dbgs={sample_dbgs}"
+        )
+
+        pbuffer_html_before = self.fetch_pbuffer_page(pb_ids)
+        assert tablet_id in pbuffer_html_before, (
+            f"expected tablet {tablet_id} LSNs on PBuffer mon before delete; "
+            f"html={pbuffer_html_before[:1500]}"
+        )
 
         deleted_disk_id = self.delete_disk(disk_id)
         assert deleted_disk_id == disk_id
+
+        # DestroyVolume completes before the RPC replies, so a second delete
+        # is already NOT_FOUND.
+        self.delete_disk_expect_failure(disk_id)
+
+        # After wipe/deallocate SchemeShard drops the volume; Hive may also
+        # drop the tablet so the mon proxy returns non-200.
+        def tablet_dbg_cleared():
+            html = self.fetch_partition_dbg_page(tablet_id, allow_missing=True)
+            return html == '' or not self.parse_dbg_indexes(html)
+
+        self.wait_until(tablet_dbg_cleared, description='tablet DBG mon cleared')
+
+        def pbuffer_page_empty():
+            html = self.fetch_pbuffer_page(pb_ids)
+            # Deallocated PBuffers report "No response"; wiped ones keep the PB
+            # heading but must not list this tablet's LSN row.
+            assert tablet_id not in html, (
+                f"tablet {tablet_id} still listed on PBuffer mon after delete; "
+                f"html={html[:2000]}"
+            )
+            return True
+
+        self.wait_until(pbuffer_page_empty, description='empty PBuffer tablet LSN mon')
 
     def test_nbs_disk_deletion_nonexistent(self):
         """

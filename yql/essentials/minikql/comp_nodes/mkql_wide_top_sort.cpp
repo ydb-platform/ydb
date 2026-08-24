@@ -788,7 +788,7 @@ public:
         : TBase(memInfo)
         , Indexes_(indexes)
         , Directions_(directons, directons + keyWidth)
-        , LessFunc_(std::bind(std::less<int>(), std::bind(compare, Directions_.data(), std::placeholders::_1, std::placeholders::_2), 0))
+        , LessFunc_(std::bind(std::less<>(), std::bind(compare, Directions_.data(), std::placeholders::_1, std::placeholders::_2), 0))
         , Fields_(Indexes_.size(), nullptr)
         , TupleMultiType_(tupleMultiType)
         , Ctx_(ctx)

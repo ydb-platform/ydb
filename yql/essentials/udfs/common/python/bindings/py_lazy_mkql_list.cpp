@@ -103,7 +103,6 @@ class TBaseLazyList: public NUdf::TBoxedValue {
             UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).c_str());
         }
 
-    private:
         const TPyCastContext::TPtr CastCtx_;
         TPyObjectPtr PyIter_;
         const NUdf::TType* ItemType_;

@@ -410,18 +410,23 @@ void TDqComputeActorCheckpoints::Handle(TEvRetryQueuePrivate::TEvRetry::TPtr& ev
 
 void TDqComputeActorCheckpoints::Handle(NActors::TEvents::TEvWakeup::TPtr&) {
     if (CheckpointStartTime && (TActivationContext::Now() - CheckpointStartTime) >= SLOW_CHECKPOINT_DURATION) {
-        TStringBuilder checkpointDiagnostic;
+        auto checkpointDiagnostic = TStringBuilder() << " Stage: " << Task.GetStageId() << ". Channels version: " << Task.GetDqChannelVersion() << ". ";
+
         if (PendingCheckpoint.Checkpoint) {
             checkpointDiagnostic << "[Checkpoint " << MakeStringForLog(*PendingCheckpoint.Checkpoint) << "] ";
         }
+
         checkpointDiagnostic << "Slow checkpoint. Duration: " << (TInstant::Now() - CheckpointStartTime).Seconds() << 's';
+
         if (PendingCheckpoint) {
             checkpointDiagnostic << " CA: " << PendingCheckpoint.SavedComputeActorState;
+
             if (PendingCheckpoint.SinksCount) {
                 checkpointDiagnostic << " Sinks: " << PendingCheckpoint.SavedSinkStatesCount << '/' << PendingCheckpoint.SinksCount;
             }
         }
-        checkpointDiagnostic << " SavingToDatabase: " << SavingToDatabase;
+
+        checkpointDiagnostic << " SavingToDatabase: " << SavingToDatabase << ". Compute actor state diagnostics. " << ComputeActor->GetTaskDebugState();
         LOG_W(checkpointDiagnostic);
     }
     Schedule(SLOW_CHECKPOINT_DURATION, new NActors::TEvents::TEvWakeup());

@@ -537,7 +537,11 @@ public:
             // Find split keys that are in the (From, To) range
             auto itBegin = std::upper_bound(kvSource.second.begin(), kvSource.second.end(), range.From, leftLess);
             auto itEnd = std::lower_bound(kvSource.second.begin(), kvSource.second.end(), range.To, rightLess);
-            Y_ENSURE(itBegin != kvSource.second.begin());
+            LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID()
+                << " Source " << EscapeC(sourceName)
+                << " " << kvSource.second.size() << " split keys"
+                << ", in-range [" << (itBegin - kvSource.second.begin())
+                << ", " << (itEnd - kvSource.second.begin()) << ")");
 
             // Add the shard right border first
             if (!range.To.GetCells().empty() && !rightFull) {
@@ -558,14 +562,21 @@ public:
                 source.EnsureSplitKey(rdb, it->SplitKey, it->MaxOffset);
             }
 
-            --itBegin;
-            const TSerializedCellVec& leftKey = leftFull ? TSerializedCellVec() : range.From;
-            YDB_LOG_TRACE_CTX(ctx, "Source adding left split at key",
-                {"tabletId", Self->TabletID()},
-                {"sourceName", EscapeC(sourceName)},
-                {"splitKey", EscapeC(leftKey.GetBuffer())},
-                {"offset", itBegin->MaxOffset});
-            source.EnsureSplitKey(rdb, leftKey, itBegin->MaxOffset);
+            if (itBegin != kvSource.second.begin()) {
+                --itBegin;
+                const TSerializedCellVec& leftKey = leftFull ? TSerializedCellVec() : range.From;
+                YDB_LOG_TRACE_CTX(ctx, "Source adding left split at key",
+                    {"tabletId", Self->TabletID()},
+                    {"sourceName", EscapeC(sourceName)},
+                    {"splitKey", EscapeC(leftKey.GetBuffer())},
+                    {"offset", itBegin->MaxOffset});
+                source.EnsureSplitKey(rdb, leftKey, itBegin->MaxOffset);
+            } else {
+                YDB_LOG_WARN_CTX(ctx, "Source has no split key predecessor for range, skipping left split key, MaxOffset stays -1 (dedup reset for this range)",
+                    {"tabletId", Self->TabletID()},
+                    {"sourceName", EscapeC(sourceName)},
+                    {"ragneFrom", EscapeC(range.From.GetBuffer())});
+            }
 
             // Dump final split keys and offsets for debugging
             if (IS_LOG_PRIORITY_ENABLED(NLog::PRI_TRACE, NKikimrServices::TX_DATASHARD)) {

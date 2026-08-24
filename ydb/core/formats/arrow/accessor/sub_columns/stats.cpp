@@ -1,3 +1,4 @@
+#include "dense_encoding/constructors.h"
 #include "settings.h"
 #include "stats.h"
 
@@ -94,13 +95,21 @@ TDictStats::TDictStats(const std::shared_ptr<arrow::RecordBatch>& original)
     ValueType = std::static_pointer_cast<arrow::UInt8Array>(Original->column(4));
 }
 
-TConstructorContainer TDictStats::GetAccessorConstructor(const ui32 columnIndex) const {
-    switch (GetAccessorType(columnIndex)) {
+TConstructorContainer TDictStats::GetAccessorConstructor(const ui32 columnIndex, const TEncodingParams& encodingParams) const {
+    const auto type = GetAccessorType(columnIndex);
+    const bool useDenseEncoder = encodingParams.IsEnabled() && GetField(columnIndex)->type()->id() == arrow::Type::BINARY;
+    switch (type) {
         case IChunkedArray::EType::Array:
+            if (useDenseEncoder) {
+                return std::make_shared<TBinaryDenseConstructor>();
+            }
             return std::make_shared<NAccessor::NPlain::TConstructor>();
         case IChunkedArray::EType::SparsedArray:
             return std::make_shared<NAccessor::NSparsed::TConstructor>();
         case IChunkedArray::EType::Dictionary:
+            if (useDenseEncoder) {
+                return std::make_shared<TDictionaryDenseConstructor>();
+            }
             return std::make_shared<NAccessor::NDictionary::TConstructor>();
         case IChunkedArray::EType::Undefined:
         case IChunkedArray::EType::SerializedChunkedArray:
@@ -108,7 +117,7 @@ TConstructorContainer TDictStats::GetAccessorConstructor(const ui32 columnIndex)
         case IChunkedArray::EType::SubColumnsArray:
         case IChunkedArray::EType::SubColumnsPartialArray:
         case IChunkedArray::EType::ChunkedArray:
-            AFL_VERIFY(false)("type", GetAccessorType(columnIndex));
+            AFL_VERIFY(false)("type", type);
             return TConstructorContainer();
     }
 }

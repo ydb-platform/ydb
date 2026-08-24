@@ -6,6 +6,8 @@
 #include <library/cpp/containers/absl/flat_hash_map.h>
 #include <library/cpp/containers/absl/flat_hash_set.h>
 
+#include <vector>
+
 namespace NKikimr::NPQ::NApp {
 struct TNavigationBar;
 }
@@ -117,8 +119,8 @@ struct TPartitionFamily {
     // Releases all partitions of the family.
     void Release(const TActorContext& ctx, ETargetStatus targetStatus = ETargetStatus::Free);
     // Processes the signal from the reading session that the partition has been released.
-    // Return true if all partitions has been unlocked.
-    bool Unlock(const TActorId& sender, ui32 partitionId, const TActorContext& ctx);
+    // Return true if all partitions has been unlocked; the caller then Reset()s the family.
+    bool Unlock(const TActorId& sender, ui32 partitionId);
     // Processes the signal that the reading session has ended.
     bool Reset(const TActorContext& ctx);
     bool Reset(ETargetStatus targetStatus, const TActorContext& ctx);
@@ -140,7 +142,7 @@ struct TPartitionFamily {
     TString DebugStr() const;
 
 private:
-    void Destroy(const TActorContext& ctx);
+    void Destroy();
     void AfterRelease();
 
 private:
@@ -249,6 +251,28 @@ struct TConsumer {
 
 private:
     TString LogPrefix() const;
+
+    // Families.erase in Destroy() would free `this` while Unlock/Reset is still
+    // on the stack. Park the unique_ptr here and drop it when the outermost
+    // TConsumer call returns.
+    std::vector<std::unique_ptr<TPartitionFamily>> DoomedFamilies;
+    ui32 DoomedGuardDepth = 0;
+
+    struct TDoomedFamilyGuard {
+        TConsumer& C;
+        explicit TDoomedFamilyGuard(TConsumer& c)
+            : C(c)
+        {
+            ++C.DoomedGuardDepth;
+        }
+        ~TDoomedFamilyGuard() {
+            if (--C.DoomedGuardDepth == 0) {
+                C.DoomedFamilies.clear();
+            }
+        }
+        TDoomedFamilyGuard(const TDoomedFamilyGuard&) = delete;
+        TDoomedFamilyGuard& operator=(const TDoomedFamilyGuard&) = delete;
+    };
 };
 
 struct TSession {

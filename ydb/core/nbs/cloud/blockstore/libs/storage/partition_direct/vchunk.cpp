@@ -937,9 +937,11 @@ void TVChunk::DoPersistDirtyMap()
         [weakSelf = weak_from_this(),
          executor = Executor,
          stateGeneration]   //
-        (const TFuture<void>& f) mutable
+        (const TPersistResultFuture& f) mutable
         {
-            Y_UNUSED(f);
+            if (f.GetValue() != EPersistResult::Success) {
+                return;
+            }
             executor->ExecuteSimple(
                 [weakSelf = std::move(weakSelf), stateGeneration]()
                 {
@@ -1089,10 +1091,11 @@ void TVChunk::PersistNextPendingConfig()
         PartitionDirectService->UpdateVChunkConfig(pending.Config);
     onPersisted.Subscribe(
         [weakSelf = weak_from_this(), executor = Executor]   //
-        (const TFuture<void>& f)
+        (const TPersistResultFuture& f) mutable
         {
-            Y_UNUSED(f);
-
+            if (f.GetValue() != EPersistResult::Success) {
+                return;
+            }
             executor->ExecuteSimple(
                 [weakSelf = std::move(weakSelf)]()
                 {

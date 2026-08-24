@@ -43,13 +43,9 @@ struct TGCLogEntry {
 
 class TExecutorGCLogic {
 public:
-    // The executor's history cutter judges an entry cuttable when no executor-known
-    // blob generation falls in its range, but it is seeded only from the local DB
-    // parts (bootlogic ExtractState). A tablet that writes channel blobs outside the
-    // executor — ColumnShard's portions go through TBlobManager — has channel
-    // contents the criterion cannot see, so cutting there strands those blobs below
-    // the surviving history and GroupFor() resolves them to the Max<ui32> sentinel
-    // forever. The tablet declares such channels through ITablet::HasExternallyWrittenBlobs.
+    // False for channels the tablet writes past the executor (ITablet::
+    // HasExternallyWrittenBlobs): cutting those strands their blobs below the surviving
+    // history, where GroupFor() resolves them to the Max<ui32> sentinel forever.
     bool IsHistoryCuttingSound(ui32 channel) const;
 
     TExecutorGCLogic(TIntrusiveConstPtr<TTabletStorageInfo>, TAutoPtr<NPageCollection::TSteppedCookieAllocator>);

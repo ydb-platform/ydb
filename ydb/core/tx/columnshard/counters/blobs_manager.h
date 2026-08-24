@@ -77,9 +77,8 @@ public:
         }
     }
 
-    // Deltas, not absolute values: every tablet owns a TBlobsManagerCounters but
-    // they share one module_id=BlobsManager subgroup, so Set() would be
-    // last-tablet-wins. The caller owns the per-tablet last-published state.
+    // Deltas, not absolute values: tablets share one module_id=BlobsManager subgroup,
+    // so Set() would be last-tablet-wins.
     void OnLevelsDelta(const i64 sweepCandidates, const i64 channelsPoisoned, const i64 entriesDisproved) const {
         SweepCandidates->Add(sweepCandidates);
         ChannelsPoisoned->Add(channelsPoisoned);

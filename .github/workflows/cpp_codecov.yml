@@ -79,6 +79,7 @@ jobs:
       base_sha: ${{ steps.metadata.outputs.base_sha }}
       report_sha: ${{ steps.metadata.outputs.report_sha }}
       report_branch: ${{ steps.metadata.outputs.report_branch }}
+      parent_sha: ${{ steps.parent.outputs.parent_sha }}
       pr_number: ${{ steps.metadata.outputs.pr_number }}
       storage_prefix: ${{ steps.metadata.outputs.storage_prefix }}
     steps:
@@ -191,8 +192,58 @@ jobs:
           sparse-checkout: |
             .github/scripts/codecov/codecov_suites.py
             .github/scripts/codecov/detect_codecov_matrix.py
+            .github/scripts/codecov/resolve_codecov_parent.py
           sparse-checkout-cone-mode: false
           persist-credentials: false
+
+      - name: Fetch pinned PR head
+        if: >-
+          github.event_name == 'pull_request_target' &&
+          steps.authorization.outputs.allowed == 'true'
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD_SHA: ${{ steps.pr.outputs.sha }}
+        run: |
+          set -euo pipefail
+          local_head_ref="refs/remotes/origin/codecov-pr-${PR_NUMBER}-head"
+          git fetch --no-tags --no-recurse-submodules origin \
+            "+refs/pull/${PR_NUMBER}/head:${local_head_ref}"
+          fetched_head=$(git rev-parse --verify "${local_head_ref}^{commit}")
+          if [ "$fetched_head" != "$PR_HEAD_SHA" ]; then
+            echo "The PR head changed while collecting files. Please use the latest run." >&2
+            exit 1
+          fi
+
+      # Select a full report explicitly. Without this, Codecov's inferred
+      # parent can be null and a partial upload silently drops the other flags.
+      - name: Resolve complete Codecov parent
+        id: parent
+        if: >-
+          github.event_name != 'pull_request_target' ||
+          steps.authorization.outputs.allowed == 'true'
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_SHA: ${{ github.sha }}
+          REPOSITORY: ${{ github.repository }}
+          PR_HEAD_SHA: ${{ steps.pr.outputs.sha }}
+          PR_BASE_SHA: ${{ steps.pr.outputs.base_sha }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = pull_request_target ]; then
+            main_anchor="$PR_BASE_SHA"
+            report_head="$PR_HEAD_SHA"
+          else
+            main_anchor=$(git rev-parse --verify "${EVENT_SHA}^1")
+            report_head="$EVENT_SHA"
+          fi
+
+          python3 .github/scripts/codecov/resolve_codecov_parent.py \
+            --repository "$REPOSITORY" \
+            --branch main \
+            --main-anchor "$main_anchor" \
+            --report-head "$report_head" \
+            --output-format github \
+            >> "$GITHUB_OUTPUT"
 
       - name: Collect changed files
         id: inputs
@@ -201,9 +252,9 @@ jobs:
           steps.authorization.outputs.allowed == 'true'
         env:
           EVENT_NAME: ${{ github.event_name }}
-          BEFORE_SHA: ${{ github.event.before }}
           AFTER_SHA: ${{ github.sha }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
+          CODECOV_PARENT_SHA: ${{ steps.parent.outputs.parent_sha }}
+          FORCE_FULL_CHECKPOINT: ${{ steps.parent.outputs.force_full }}
           PR_HEAD_SHA: ${{ steps.pr.outputs.sha }}
           PR_BASE_SHA: ${{ steps.pr.outputs.base_sha }}
         run: |
@@ -212,25 +263,26 @@ jobs:
 
           case "$EVENT_NAME" in
             pull_request_target)
-              local_head_ref="refs/remotes/origin/codecov-pr-${PR_NUMBER}-head"
-              git fetch --no-tags --no-recurse-submodules origin \
-                "+refs/pull/${PR_NUMBER}/head:${local_head_ref}"
-              fetched_head=$(git rev-parse --verify "${local_head_ref}^{commit}")
-              if [ "$fetched_head" != "$PR_HEAD_SHA" ]; then
-                echo "The PR head changed while collecting files. Please use the latest run." >&2
-                exit 1
-              fi
               git -c core.quotePath=false diff --name-only --no-renames \
                 "$PR_BASE_SHA...$PR_HEAD_SHA" -- \
                 > "$changed_file"
               ;;
             push)
-              if [ "$BEFORE_SHA" = "0000000000000000000000000000000000000000" ]; then
-                git -c core.quotePath=false diff --name-only --no-renames \
-                  HEAD~1 HEAD > "$changed_file"
-              else
-                git -c core.quotePath=false diff --name-only --no-renames \
-                  "$BEFORE_SHA" "$AFTER_SHA" > "$changed_file"
+              # Include paths touched by every main commit since the trusted
+              # baseline. Unlike an endpoint diff, this preserves changes that
+              # were later reverted and retries suites from failed/racing runs.
+              git -c core.quotePath=false log \
+                --first-parent \
+                --diff-merges=first-parent \
+                --format= \
+                --name-only \
+                --no-renames \
+                "$CODECOV_PARENT_SHA..$AFTER_SHA" -- \
+                | sed '/^$/d' | sort -u > "$changed_file"
+              if [ "$FORCE_FULL_CHECKPOINT" = true ]; then
+                # A shared-infrastructure path maps to every suite.
+                echo .github/codecov.yml >> "$changed_file"
+                sort -u -o "$changed_file" "$changed_file"
               fi
               ;;
             *)
@@ -364,6 +416,7 @@ jobs:
           bazel_remote_password: ${{ secrets.REMOTE_CACHE_PASSWORD }}
           pr_number: ${{ needs.detect.outputs.pr_number }}
           commit_sha: ${{ needs.detect.outputs.report_sha }}
+          parent_sha: ${{ needs.detect.outputs.parent_sha }}
           branch: ${{ needs.detect.outputs.report_branch }}
           storage_prefix: ${{ needs.detect.outputs.storage_prefix }}
 

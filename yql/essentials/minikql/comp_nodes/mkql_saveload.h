@@ -126,7 +126,6 @@ public:
         return NMiniKQL::MakeString(strRef);
     }
 
-public:
     TOutputSerializer(EMkqlStateType stateType, ui32 stateVersion, TComputationContext& ctx)
         : Ctx_(ctx)
     {

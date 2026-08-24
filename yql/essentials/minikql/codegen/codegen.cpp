@@ -689,7 +689,7 @@ private:
     }
 
     static void DiagnosticHandler(const llvm::DiagnosticInfo& info, void* context) {
-        return static_cast<TCodegen*>(context)->OnDiagnosticInfo(info);
+        static_cast<TCodegen*>(context)->OnDiagnosticInfo(info);
     }
 
     struct TPatterns {

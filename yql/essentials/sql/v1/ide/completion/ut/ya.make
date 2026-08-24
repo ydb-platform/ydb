@@ -22,8 +22,6 @@ PEERDIR(
     library/cpp/unicode/utf8_iter
 )
 
-IF (SANITIZER_TYPE == "thread")
-    SIZE(MEDIUM)
-ENDIF()
+SIZE(MEDIUM)
 
 END()

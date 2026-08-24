@@ -2430,8 +2430,10 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         auto vchunkConfig = MakeTestVChunkConfig();
 
         // H3 is fresh; writes above watermark populate its Ahead field.
+        // H1 is lagging; writes populate Behind field.
         vchunkConfig.PromoteHost(3);
         vchunkConfig.SetWatermark(3, DefaultBlockSize * 5);
+        vchunkConfig.DisableHost(1);
 
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
             vchunkConfig,
@@ -2440,7 +2442,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // Initially no changes.
         UNIT_ASSERT_VALUES_EQUAL(false, dirtyMap->NeedPersist());
-        UNIT_ASSERT_VALUES_EQUAL(0u, dirtyMap->GetCurrentGeneration());
+        UNIT_ASSERT_VALUES_EQUAL(0, dirtyMap->GetCurrentGeneration());
 
         const THostMask requested = MakeHostMask(true, true, true, true, false);
         dirtyMap->RegisterInflightWrite(100, TBlockRange64::WithLength(10, 10));
@@ -2455,12 +2457,15 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         UNIT_ASSERT_EQUAL(false, flushHint.Empty());
         FlushAll(flushHint, *dirtyMap);
 
-        UNIT_ASSERT_VALUES_EQUAL(true, dirtyMap->NeedPersist());
-        UNIT_ASSERT(dirtyMap->GetCurrentGeneration() > 0);
+        // Can't erase not persisted red blocks.
+        auto eraseHints = dirtyMap->MakeEraseHint(1);
+        UNIT_ASSERT_VALUES_EQUAL("", eraseHints.DebugPrint());
 
         // GetStateForPersist captures current generation.
         // Saves one entry per host slot (DirectBlockGroupHostCount = 5).
-        const ui32 gen = static_cast<ui32>(dirtyMap->GetCurrentGeneration());
+        UNIT_ASSERT_VALUES_EQUAL(true, dirtyMap->NeedPersist());
+        const ui32 gen = dirtyMap->GetCurrentGeneration();
+        UNIT_ASSERT(gen > 0);
         auto state = dirtyMap->GetStateForPersist();
         UNIT_ASSERT_VALUES_EQUAL(gen, state.GetStateGeneration());
         UNIT_ASSERT_VALUES_EQUAL(5, state.DDiskStatesSize());
@@ -2470,9 +2475,94 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         UNIT_ASSERT_VALUES_EQUAL(false, dirtyMap->NeedPersist());
 
         // Only Behind blocks erase; Ahead does not.
+        UNIT_ASSERT_VALUES_EQUAL(
+            "  H1: [10..19]\n",
+            dirtyMap->DebugPrintBehind());
+        eraseHints = dirtyMap->MakeEraseHint(1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H0:0:100;"
+            "H2:0:100;"
+            "H3:0:100;",
+            eraseHints.DebugPrint());
+    }
+
+    // Load() restores the per-DDisk Ahead/Behind state captured by
+    // GetStateForPersist() into a freshly constructed dirty map.
+    Y_UNIT_TEST(ShouldLoadPersistedDDiskState)
+    {
+        auto vchunkConfig = MakeTestVChunkConfig();
+
+        // H3 is fresh; writes above watermark populate its Ahead field.
+        // H1 is lagging; writes populate Behind field.
+        vchunkConfig.PromoteHost(3);
+        vchunkConfig.SetWatermark(3, DefaultBlockSize * 5);
+        vchunkConfig.DisableHost(1);
+
+        auto source = std::make_shared<TBlocksDirtyMap>(
+            vchunkConfig,
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
+
+        const THostMask requested = MakeHostMask(true, true, true, true, false);
+        source->RegisterInflightWrite(100, TBlockRange64::WithLength(10, 10));
+        source->WriteFinished(
+            100,
+            TBlockRange64::WithLength(10, 10),
+            requested,
+            requested);
+
+        // Flush all DDisks so H3's Ahead field records the flushed range.
+        auto flushHint = source->MakeFlushHint(1);
+        UNIT_ASSERT_EQUAL(false, flushHint.Empty());
+        FlushAll(flushHint, *source);
+
+        UNIT_ASSERT_VALUES_EQUAL("  H3: [10..19]\n", source->DebugPrintAhead());
+        UNIT_ASSERT_VALUES_EQUAL(
+            "  H1: [10..19]\n",
+            source->DebugPrintBehind());
+
+        const auto persisted = source->GetStateForPersist();
+        UNIT_ASSERT_VALUES_EQUAL(5, persisted.DDiskStatesSize());
+
+        // Load into a freshly constructed dirty map with the same config.
+        auto target = std::make_shared<TBlocksDirtyMap>(
+            vchunkConfig,
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
+
+        // Before load the target has no tracked ranges.
+        UNIT_ASSERT_VALUES_EQUAL("", target->DebugPrintAhead());
+        UNIT_ASSERT_VALUES_EQUAL("", target->DebugPrintBehind());
+
+        target->Load(persisted);
+
+        // After load the target mirrors the source's Ahead/Behind fields.
+        UNIT_ASSERT_VALUES_EQUAL(
+            source->DebugPrintAhead(),
+            target->DebugPrintAhead());
+        UNIT_ASSERT_VALUES_EQUAL(
+            source->DebugPrintBehind(),
+            target->DebugPrintBehind());
+    }
+
+    // Loading a default-constructed (empty) proto must be a no-op: no DDisk
+    // states are present, so the target keeps its freshly constructed state
+    // with no tracked Ahead/Behind ranges.
+    Y_UNIT_TEST(ShouldLoadEmptyStateAsNoOp)
+    {
+        const auto vchunkConfig = MakeTestVChunkConfig();
+        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
+            vchunkConfig,
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
+
+        const auto before = dirtyMap->DebugPrintDDiskState();
+
+        dirtyMap->Load(TDirtyMapStateProto());
+
+        UNIT_ASSERT_VALUES_EQUAL("", dirtyMap->DebugPrintAhead());
         UNIT_ASSERT_VALUES_EQUAL("", dirtyMap->DebugPrintBehind());
-        auto eraseHints = dirtyMap->MakeEraseHint(1);
-        UNIT_ASSERT_EQUAL(false, eraseHints.Empty());
+        UNIT_ASSERT_VALUES_EQUAL(before, dirtyMap->DebugPrintDDiskState());
     }
 
     Y_UNIT_TEST(ShouldNotEraseUntaggedLsn)

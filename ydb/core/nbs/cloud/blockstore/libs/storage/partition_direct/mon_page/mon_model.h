@@ -98,7 +98,7 @@ struct TLocalDbContents
     std::optional<TString> DirectBlockGroupsConnections;
     std::optional<TString> AddHostInProgress;
     // Persisted per-vchunk overrides.
-    TVector<TVChunkConfig> VChunkConfigs;
+    TVChunkConfigs VChunkConfigs;
 };
 
 struct TMonPageData

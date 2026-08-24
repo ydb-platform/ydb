@@ -1183,7 +1183,7 @@ private:
         return { Ctx_.ChangeChildren(*joinTree, std::move(children)), found1, found2 };
     }
 
-private:
+
     TVector<TStringBuf> CrossJoins_;
     TVector<TExprNode::TPtr> RestJoins_;
 

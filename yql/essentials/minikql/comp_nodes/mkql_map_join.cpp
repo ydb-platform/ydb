@@ -1493,7 +1493,6 @@ private:
             }
         }
 
-    private:
         NUdf::TUnboxedValue Stream_;
         NUdf::TUnboxedValue Dict_;
         TComputationContext& Ctx_;
@@ -1551,7 +1550,6 @@ private:
             }
         }
 
-    private:
         NUdf::TUnboxedValue Stream_;
         NUdf::TUnboxedValue Dict_;
         TComputationContext& Ctx_;

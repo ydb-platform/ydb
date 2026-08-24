@@ -275,7 +275,8 @@ private:
         const NArrow::NSSA::TProcessorContext& context, const TFetchHeaderContext& fetchContext) override;
     virtual TConclusion<NArrow::TColumnFilter> DoCheckHeader(
         const NArrow::NSSA::TProcessorContext& context, const TCheckHeaderContext& fetchContext) override;
-    virtual void DoAssembleAccessor(const NArrow::NSSA::TProcessorContext& context, const ui32 columnId, const TString& subColumnName) override;
+    virtual TConclusionStatus DoAssembleAccessor(
+        const NArrow::NSSA::TProcessorContext& context, const ui32 columnId, const TString& subColumnName) override;
     virtual TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> DoStartFetchData(
         const NArrow::NSSA::TProcessorContext& context, const TDataAddress& addr) override;
 
@@ -488,9 +489,10 @@ private:
         return TConclusionStatus::Fail("not implemented DoCheckHeader for TAggregationDataSource");
     }
 
-    virtual void DoAssembleAccessor(
+    virtual TConclusionStatus DoAssembleAccessor(
         const NArrow::NSSA::TProcessorContext& /*context*/, const ui32 /*columnId*/, const TString& /*subColumnName*/) override {
         AFL_VERIFY(false);
+        return TConclusionStatus::Fail("not implemented DoAssembleAccessor for TAggregationDataSource");
     }
 
     virtual TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> DoStartFetchData(

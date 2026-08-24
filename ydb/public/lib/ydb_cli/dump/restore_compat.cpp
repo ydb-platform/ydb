@@ -3,6 +3,8 @@
 #include <ydb/library/backup/query_builder.h>
 #include <ydb/library/backup/query_uploader.h>
 
+#include <util/stream/str.h>
+
 namespace NYdb::NDump {
 
 using namespace NBackup;
@@ -62,7 +64,13 @@ public:
     }
 
     void Feed(NPrivate::TLine&& line) override {
-        AddLine(line);
+        try {
+            AddLine(line);
+        } catch (const std::exception& e) {
+            TStringStream loc;
+            line.GetLocation().Out(loc);
+            throw yexception() << loc.Str() << ": " << e.what();
+        }
 
         ++Rows;
         Bytes += RecordSize(line);

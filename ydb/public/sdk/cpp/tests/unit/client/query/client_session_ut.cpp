@@ -41,7 +41,9 @@ public:
 
 class TMockServerCloseHandler : public IServerCloseHandler {
 public:
-    void OnCloseSession(const TKqpSessionCommon*, std::shared_ptr<ISessionClient>) override {
+    void OnCloseSession(const TKqpSessionCommon*, std::shared_ptr<ISessionClient>,
+        std::string_view) override
+    {
         ++CloseCalls;
     }
 
@@ -57,8 +59,8 @@ std::string MakeSessionIdWithNodeId(std::uint64_t nodeId) {
 
 class TTestKqpSession : public TKqpSessionCommon {
 public:
-    TTestKqpSession(const std::string& sessionId, const std::string& endpoint, bool pooled = true)
-        : TKqpSessionCommon(sessionId, endpoint, pooled)
+    TTestKqpSession(const std::string& sessionId, const std::string& endpoint)
+        : TKqpSessionCommon(sessionId, endpoint, true)
     {
         MarkActive();
     }
@@ -99,7 +101,6 @@ Y_UNIT_TEST(SessionShutdownIdleInPoolDelegatesToCloseHandler) {
 
     UNIT_ASSERT(HandleAttachSessionState(MakeSessionShutdownState(), &session, client)
         == EAttachStreamReadAction::Stop);
-    UNIT_ASSERT(session.GetState() == TKqpSessionCommon::S_CLOSING);
     UNIT_ASSERT_VALUES_EQUAL(closeHandler.CloseCalls, 1);
     UNIT_ASSERT_VALUES_EQUAL(client->PessimizeCalls, 0);
 }
@@ -167,7 +168,7 @@ Y_UNIT_TEST(CloseReasonCommandsAreCompleteAndDeduplicated) {
     }
     UNIT_ASSERT_VALUES_EQUAL(client->CloseMetrics, 10);
 
-    TTestKqpSession standalone("", "", false);
+    TKqpSessionCommon standalone("", "", false);
     NSessionPool::NSessionCloseCommands::BadSession.Execute(standalone, client.get());
     UNIT_ASSERT_VALUES_EQUAL(client->CloseMetrics, 10);
     UNIT_ASSERT(!NSessionPool::NSessionCloseCommands::FromStatus(TStatus(EStatus::SESSION_EXPIRED, {})));

@@ -20,7 +20,8 @@ class IServerCloseHandler {
 public:
     virtual ~IServerCloseHandler() = default;
     // called when session should be closed by server signal
-    virtual void OnCloseSession(const TKqpSessionCommon*, std::shared_ptr<ISessionClient>) = 0;
+    virtual void OnCloseSession(const TKqpSessionCommon*, std::shared_ptr<ISessionClient>,
+        std::string_view) = 0;
 };
 
 class TKqpSessionCommon : public TEndpointObj {
@@ -64,7 +65,7 @@ public:
     void UpdateServerCloseHandler(IServerCloseHandler*);
 
     // Called asynchronously from grpc thread.
-    void CloseFromServer(std::weak_ptr<ISessionClient> client) noexcept;
+    void CloseFromServer(std::weak_ptr<ISessionClient> client, std::string_view reason) noexcept;
 
 public:
     std::optional<TDeadline> PropagatedDeadline_;

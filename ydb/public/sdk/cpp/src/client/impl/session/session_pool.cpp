@@ -62,7 +62,7 @@ bool IsSessionCloseRequested(const TStatus& status) {
 }
 
 void TSessionCloseCommand::Execute(TKqpSessionCommon& session, ISessionClient* client) const {
-    if ((session.*Transition)() && client && session.IsOwnedBySessionPool()) {
+    if (Transition(session) && client && session.IsOwnedBySessionPool()) {
         client->RecordSessionClosed(Reason);
     }
 }
@@ -82,7 +82,7 @@ bool IsBreakingTransport(const TStatus& status) {
 }
 
 using TStatusCloseCommand =
-    std::pair<bool (*)(const TStatus&), const TSessionCloseCommand*>;
+    std::pair<std::function<bool(const TStatus&)>, const TSessionCloseCommand*>;
 
 } // namespace
 
@@ -164,7 +164,8 @@ void TSessionPool::ReplySessionToUser(
     TKqpSessionCommon* session,
     std::unique_ptr<IGetSessionCtx> ctx)
 {
-    session->MarkActive();
+    Y_ABORT_UNLESS(session->GetState() == TKqpSessionCommon::S_IDLE);
+    Y_ABORT_UNLESS(session->MarkActive());
     session->SetNeedUpdateActiveCounter(true);
     ctx->ReplySessionToUser(session);
 }
@@ -434,7 +435,8 @@ std::int64_t TSessionPool::GetCurrentPoolSize() const {
     return Sessions_.size();
 }
 
-void TSessionPool::OnCloseSession(const TKqpSessionCommon* s, std::shared_ptr<ISessionClient> client) {
+void TSessionPool::OnCloseSession(const TKqpSessionCommon* s, std::shared_ptr<ISessionClient> client,
+    std::string_view reason) {
     std::unique_ptr<TKqpSessionCommon> session;
     {
         std::lock_guard guard(Mtx_);
@@ -455,6 +457,8 @@ void TSessionPool::OnCloseSession(const TKqpSessionCommon* s, std::shared_ptr<IS
     }
 
     if (session) {
+        Y_ABORT_UNLESS(session->GetState() == TKqpSessionCommon::S_IDLE);
+        RecordSessionClosed(reason);
         CloseAndDeleteSession(std::move(session), client);
     }
 }

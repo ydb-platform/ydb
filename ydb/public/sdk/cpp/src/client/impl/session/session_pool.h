@@ -34,7 +34,7 @@ bool IsSessionCloseRequested(const TStatus& status);
 
 struct TSessionCloseCommand {
     std::string_view Reason;
-    bool (TKqpSessionCommon::*Transition)();
+    std::function<bool(TKqpSessionCommon&)> Transition;
 
     void Execute(TKqpSessionCommon& session, ISessionClient* client) const;
 };
@@ -143,7 +143,8 @@ public:
     void RecordConnectionCreateTime(double seconds);
     void RecordSessionClosed(std::string_view reason);
 
-    void OnCloseSession(const TKqpSessionCommon*, std::shared_ptr<ISessionClient> client) override;
+    void OnCloseSession(const TKqpSessionCommon*, std::shared_ptr<ISessionClient>,
+        std::string_view) override;
 
 private:
     void UpdateStats();

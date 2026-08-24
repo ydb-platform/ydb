@@ -54,6 +54,9 @@ void AddExecutorPool(NActors::TCpuManagerConfig& cpuManager, const NKikimrConfig
     Y_ABORT_UNLESS(!poolConfig.HasHarmonizerNeedyCpuWindowSeconds()
         || poolConfig.GetType() == NKikimrConfig::TActorSystemConfig::TExecutor::BASIC,
         "HarmonizerNeedyCpuWindowSeconds is supported only for BASIC executors");
+    Y_ABORT_UNLESS(!poolConfig.HasEnableWaker()
+        || poolConfig.GetType() == NKikimrConfig::TActorSystemConfig::TExecutor::BASIC,
+        "EnableWaker is supported only for BASIC executors");
 
     switch (poolConfig.GetType()) {
         case NKikimrConfig::TActorSystemConfig::TExecutor::BASIC: {
@@ -73,6 +76,7 @@ void AddExecutorPool(NActors::TCpuManagerConfig& cpuManager, const NKikimrConfig
             basic.Affinity = ParseAffinity(poolConfig.GetAffinity());
             basic.RealtimePriority = poolConfig.GetRealtimePriority();
             basic.HasSharedThread = poolConfig.GetHasSharedThread();
+            basic.EnableWaker = poolConfig.GetEnableWaker();
             if (poolConfig.HasTimePerMailboxMicroSecs()) {
                 basic.TimePerMailbox = TDuration::MicroSeconds(poolConfig.GetTimePerMailboxMicroSecs());
             } else if (systemConfig.HasTimePerMailboxMicroSecs()) {

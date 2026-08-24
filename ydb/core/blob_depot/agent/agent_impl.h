@@ -452,9 +452,6 @@ namespace NKikimr::NBlobDepot {
             bool Destroyed = false;
             std::shared_ptr<TEvBlobStorage::TExecutionRelay> ExecutionRelay;
             ui32 BlockChecksRemain = 3;
-            // covers the whole query processing inside the agent; child spans are created for the
-            // phases (S3 locator allocation, S3 upload, commit to the BlobDepot tablet) and for the
-            // underlying blobstorage requests
             NWilson::TSpan Span;
 
             static constexpr TDuration WatchdogDuration = TDuration::Seconds(10);
@@ -480,7 +477,6 @@ namespace NKikimr::NBlobDepot {
             virtual void OnDestroy(bool /*success*/) {}
             virtual void OnPutS3ObjectResponse(std::optional<TString>&& /*error*/, bool /*slowDown*/) { Y_ABORT(); }
             virtual void OnCheckIntegrity(TCheckOutcome&& /*outcome*/) {}
-            // Delivered by agent-side CommitBlobSeq coalescing (one tablet request → N put queries).
             virtual void OnCommitBlobSeqResult(NKikimrBlobDepot::TEvCommitBlobSeqResult&& /*msg*/) { Y_ABORT(); }
 
             NKikimrProto::EReplyStatus CheckBlockForTablet(ui64 tabletId, std::optional<ui32> generation,
@@ -659,9 +655,6 @@ namespace NKikimr::NBlobDepot {
         static constexpr ui32 SuccessesPerGetConcurrencyStepUp = 3;
         static constexpr ui32 MaxS3GetSlowDownRetries = 100;
 
-        // Ceiling for the adaptive limiter below, shared with the rest of the node through ICB
-        // (BlobDepotControls.S3MaxGetsInFlight). Read fresh at each use so that changing it takes
-        // effect on a running agent.
         TControlWrapper S3MaxGetsInFlight = 256;
         ui32 MaxS3GetsInFlight() const { return Max<ui32>(1, S3MaxGetsInFlight); }
         ui32 EffectiveMaxS3GetsInFlight() const { return Min(CurrentMaxS3GetsInFlight, MaxS3GetsInFlight()); }

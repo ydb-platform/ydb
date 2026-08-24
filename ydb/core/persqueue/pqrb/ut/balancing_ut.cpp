@@ -1643,6 +1643,62 @@ Y_UNIT_TEST(PipeBreakAfterChildrenAttached) {
     env.AssertLocked(2);
 }
 
+Y_UNIT_TEST(FinishAndCommitDuringReleaseDoesNotStealChildMapping) {
+    // test_commit_roots: split + commit while the parent family is Releasing.
+    // Finish of a preferred session cannot attach children 1,2, so
+    // AttachePartitions only AppendUniqueRoots. Commit then sees a lonely
+    // family and CreateFamily's those children. AfterRelease remaps
+    // RootPartitions onto the parent and steals mapping; Balance StartReading
+    // of the leftover child family aborts: "partition mapping mismatch".
+    TScaleEnv env;
+    env.CreateParents(1);
+    env.RegisterSession("session-0", {1});
+    env.RegisterSession("session-common");
+    env.Split(0);
+    env.AssertLocked(0, "session-0");
+
+    NActors::TBlockEvents<TEvPQ::TEvBalanceConsumer> blockBalance(*env.tc.Runtime);
+
+    env.Finish("session-0", 0, /*scaleAware=*/true, /*fromEnd=*/true, /*pump=*/false);
+    auto pending = env.WaitRelease();
+    UNIT_ASSERT_C(pending, "attaching unread children must release the parent family");
+    UNIT_ASSERT_VALUES_EQUAL(pending->Partition, 0u);
+
+    // Deliver Commit and Unlock while Balance is blocked so AfterRelease
+    // steals mapping before leftover child families StartReading.
+    ForwardToTablet(
+        *env.tc.Runtime,
+        env.tc.BalancerTabletId,
+        env.tc.Edge,
+        new TEvPQ::TEvReadingPartitionStatusRequest("user", 0, 1, 1)
+    );
+
+    auto pipeIt = env.Pipes.find("session-0");
+    UNIT_ASSERT(pipeIt != env.Pipes.end());
+    {
+        auto released = MakeHolder<TEvPersQueue::TEvPartitionReleased>();
+        released->Record.SetSession(pending->Session);
+        released->Record.SetPartition(pending->Partition);
+        released->Record.SetTopic("topic");
+        released->Record.SetClientId("user");
+        ActorIdToProto(pipeIt->second, released->Record.MutablePipeClient());
+        ForwardToTablet(
+            *env.tc.Runtime,
+            env.tc.BalancerTabletId,
+            env.tc.Edge,
+            released.Release()
+        );
+    }
+    DispatchFor(env.tc, TDuration::MilliSeconds(50));
+
+    blockBalance.Unblock();
+    blockBalance.Stop();
+    env.Pump();
+
+    env.AssertLocked(1);
+    env.AssertLocked(2);
+}
+
 Y_UNIT_TEST(PipeBreakAfterParentCommitted) {
     TScaleEnv env;
     env.CreateParents(1);

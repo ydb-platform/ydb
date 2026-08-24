@@ -1041,8 +1041,8 @@ void TTopicSession::FatalError(const TStatus& status) {
         YDB_LOG_DEBUG("Send TEvSessionError",
             {"logPrefix", LogPrefix},
             {"readActorId", readActorId});
-            SendSessionError(readActorId, status, true);
-        }
+        SendSessionError(readActorId, status, true);
+    }
     StopReadSession();
     ErrorStatus = status;
     Become(&TTopicSession::ErrorState);

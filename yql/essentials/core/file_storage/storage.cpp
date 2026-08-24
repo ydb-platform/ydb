@@ -486,9 +486,7 @@ TStorage::TStorage(size_t maxFiles, ui64 maxSize, const TString& storagePath)
 {
 }
 
-TStorage::~TStorage()
-{
-}
+TStorage::~TStorage() = default;
 
 TFsPath TStorage::GetRoot() const {
     return Impl_->GetRoot();

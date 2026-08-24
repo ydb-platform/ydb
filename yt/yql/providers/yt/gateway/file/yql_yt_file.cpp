@@ -218,7 +218,7 @@ public:
         }
 
         if (name == TYtTableContent::CallableName()) {
-            return [name](NMiniKQL::TCallable& callable, const TTypeEnvironment& env) {
+            return [](NMiniKQL::TCallable& callable, const TTypeEnvironment& env) {
                 TCallableBuilder callableBuilder(env,
                     TStringBuilder() << TYtTableContent::CallableName() << "File",
                     callable.GetType()->GetReturnType(), false);
@@ -230,7 +230,7 @@ public:
         }
 
         if (name == "YtTableInput") {
-            return [this, name](NMiniKQL::TCallable& callable, const TTypeEnvironment& env) {
+            return [this](NMiniKQL::TCallable& callable, const TTypeEnvironment& env) {
                 TCallableBuilder callableBuilder(env, "YtTableInputFile", callable.GetType()->GetReturnType(), false);
                 for (ui32 i: xrange(callable.GetInputsCount())) {
                     callableBuilder.Add(callable.GetInput(i));
@@ -244,7 +244,7 @@ public:
         }
 
         if (name == "YtTableInputNoCtx") {
-            return [name](NMiniKQL::TCallable& callable, const TTypeEnvironment& env) {
+            return [](NMiniKQL::TCallable& callable, const TTypeEnvironment& env) {
                 TCallableBuilder callableBuilder(env, "YtTableInputNoCtxFile", callable.GetType()->GetReturnType(), false);
                 for (ui32 i: xrange(callable.GetInputsCount())) {
                     callableBuilder.Add(callable.GetInput(i));
@@ -254,7 +254,7 @@ public:
         }
 
         if (name == "YtUngroupingList") {
-            return [this, name](NMiniKQL::TCallable& callable, const TTypeEnvironment& env) {
+            return [this](NMiniKQL::TCallable& callable, const TTypeEnvironment& env) {
                 TCallableBuilder callableBuilder(env, "YtUngroupingListFile", callable.GetType()->GetReturnType(), false);
                 for (ui32 i: xrange(callable.GetInputsCount())) {
                     callableBuilder.Add(callable.GetInput(i));

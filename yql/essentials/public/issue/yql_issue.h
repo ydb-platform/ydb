@@ -240,15 +240,9 @@ public:
     {
     }
 
-    inline TIssues(const TIssues& rhs)
-        : Issues_(rhs.Issues_)
-    {
-    }
+    inline TIssues(const TIssues& rhs) = default;
 
-    inline TIssues& operator=(const TIssues& rhs) {
-        Issues_ = rhs.Issues_;
-        return *this;
-    }
+    inline TIssues& operator=(const TIssues& rhs) = default;
 
     inline TIssues(TIssues&& rhs)
         : Issues_(std::move(rhs.Issues_))

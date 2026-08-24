@@ -91,9 +91,7 @@ TTypeBuilder::TTypeBuilder(EEnumFormat enumFormat,
     }
 }
 
-TTypeBuilder::~TTypeBuilder()
-{
-}
+TTypeBuilder::~TTypeBuilder() = default;
 
 void TTypeBuilder::Build(const Descriptor* descriptor, TProtoInfo* info) {
     Info_ = info;

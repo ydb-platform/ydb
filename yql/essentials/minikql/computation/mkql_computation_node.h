@@ -176,8 +176,7 @@ public:
     using TPtr = TIntrusivePtr<IComputationNode>;
     using TIndexesMap = std::map<ui32, EValueRepresentation>;
 
-    virtual ~IComputationNode() {
-    }
+    virtual ~IComputationNode() = default;
 
     virtual void InitNode(TComputationContext&) const = 0;
 
@@ -326,8 +325,7 @@ using TComputationNodeOnNodeMap = std::unordered_map<const IComputationNode*, IC
 
 class IComputationGraph {
 public:
-    virtual ~IComputationGraph() {
-    }
+    virtual ~IComputationGraph() = default;
     virtual void Prepare() = 0;
     virtual NUdf::TUnboxedValue GetValue() = 0;
     virtual TComputationContext& GetContext() = 0;

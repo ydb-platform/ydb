@@ -601,7 +601,7 @@ IComputationNode* WrapMatchRecognizeCore(TCallable& callable, const TComputation
     const auto& inputFlow = callable.GetInput(inputIndex++);
     const auto& inputRowArg = callable.GetInput(inputIndex++);
     const auto& partitionKeySelector = callable.GetInput(inputIndex++);
-    const auto& partitionColumnIndexes = callable.GetInput(inputIndex++);
+    Y_UNUSED(callable.GetInput(inputIndex++));
     const auto& measureInputDataArg = callable.GetInput(inputIndex++);
     const auto& measureSpecialColumnIndexes = callable.GetInput(inputIndex++);
     const auto& inputRowColumnCount = callable.GetInput(inputIndex++);

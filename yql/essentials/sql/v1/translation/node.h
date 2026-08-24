@@ -851,8 +851,7 @@ public:
     const TNodePtr OrderExpr;
     const bool Ascending;
     TIntrusivePtr<TSortSpecification> Clone() const;
-    ~TSortSpecification() {
-    }
+    ~TSortSpecification() = default;
 
 private:
     const TNodePtr CleanOrderExpr_;
@@ -884,8 +883,7 @@ struct TFrameBound: public TSimpleRefCount<TFrameBound> {
     EFrameSettings Settings = FrameUndefined;
 
     TIntrusivePtr<TFrameBound> Clone() const;
-    ~TFrameBound() {
-    }
+    ~TFrameBound() = default;
 };
 using TFrameBoundPtr = TIntrusivePtr<TFrameBound>;
 
@@ -896,8 +894,7 @@ struct TFrameSpecification: public TSimpleRefCount<TFrameSpecification> {
     EFrameExclusions FrameExclusion = FrameExclNone;
 
     TIntrusivePtr<TFrameSpecification> Clone() const;
-    ~TFrameSpecification() {
-    }
+    ~TFrameSpecification() = default;
 };
 using TFrameSpecificationPtr = TIntrusivePtr<TFrameSpecification>;
 
@@ -909,8 +906,7 @@ struct TLegacyHoppingWindowSpec: public TSimpleRefCount<TLegacyHoppingWindowSpec
     bool DataWatermarks;
 
     TIntrusivePtr<TLegacyHoppingWindowSpec> Clone() const;
-    ~TLegacyHoppingWindowSpec() {
-    }
+    ~TLegacyHoppingWindowSpec() = default;
 };
 using TLegacyHoppingWindowSpecPtr = TIntrusivePtr<TLegacyHoppingWindowSpec>;
 
@@ -923,8 +919,7 @@ struct TWindowSpecification: public TSimpleRefCount<TWindowSpecification> {
     TFrameSpecificationPtr Frame;
 
     TIntrusivePtr<TWindowSpecification> Clone() const;
-    ~TWindowSpecification() {
-    }
+    ~TWindowSpecification() = default;
 };
 using TWindowSpecificationPtr = TIntrusivePtr<TWindowSpecification>;
 using TWinSpecs = TMap<TString, TWindowSpecificationPtr>;
@@ -1468,8 +1463,7 @@ struct TAlterTableParameters {
 
 struct TRoleParameters {
 protected:
-    TRoleParameters() {
-    }
+    TRoleParameters() = default;
 
 public:
     TVector<TDeferredAtom> Roles;

@@ -9,9 +9,7 @@ IErrorCollector::IErrorCollector(size_t maxErrors)
     Y_ENSURE(0 < MaxErrors_);
 }
 
-IErrorCollector::~IErrorCollector()
-{
-}
+IErrorCollector::~IErrorCollector() = default;
 
 void IErrorCollector::Error(ui32 line, ui32 col, const TString& message) {
     GuardTooManyErrors();

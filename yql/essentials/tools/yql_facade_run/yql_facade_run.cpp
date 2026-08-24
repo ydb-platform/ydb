@@ -131,8 +131,7 @@ private:
 
 class TPeepHolePipelineConfigurator: public NYql::IPipelineConfigurator {
 public:
-    TPeepHolePipelineConfigurator() {
-    }
+    TPeepHolePipelineConfigurator() = default;
 
     void AfterCreate(NYql::TTransformationPipeline* pipeline) const final {
         Y_UNUSED(pipeline);
@@ -152,11 +151,9 @@ public:
 
 namespace NYql {
 
-TFacadeRunOptions::TFacadeRunOptions() {
-}
+TFacadeRunOptions::TFacadeRunOptions() = default;
 
-TFacadeRunOptions::~TFacadeRunOptions() {
-}
+TFacadeRunOptions::~TFacadeRunOptions() = default;
 
 void TFacadeRunOptions::InitLogger() {
     if (Verbosity != LOG_DEF_PRIORITY || ShowLog) {
@@ -553,8 +550,7 @@ TFacadeRunner::TFacadeRunner(TString name)
 {
 }
 
-TFacadeRunner::~TFacadeRunner() {
-}
+TFacadeRunner::~TFacadeRunner() = default;
 
 TIntrusivePtr<NKikimr::NMiniKQL::IFunctionRegistry> TFacadeRunner::GetFuncRegistry() {
     return FuncRegistry_;

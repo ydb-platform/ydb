@@ -87,8 +87,7 @@ void AddResolveResultToRegistry(const TResolveResult& resolveResult, const TMap<
 
 }
 
-TUdfIndex::TUdfIndex() {
-}
+TUdfIndex::TUdfIndex() = default;
 
 void TUdfIndex::SetCaseSentiveSearch(bool caseSensitive) {
     CaseSensitive_ = caseSensitive;

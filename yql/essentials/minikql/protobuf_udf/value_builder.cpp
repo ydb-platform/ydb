@@ -13,22 +13,16 @@ namespace NYql::NUdf {
 
 using namespace NProtoBuf;
 
-IProtobufParser::~IProtobufParser()
-{
-}
+IProtobufParser::~IProtobufParser() = default;
 
-IProtobufSerialize::~IProtobufSerialize()
-{
-}
+IProtobufSerialize::~IProtobufSerialize() = default;
 
 TProtobufValue::TProtobufValue(TProtoInfo info)
     : Info_(std::move(info))
 {
 }
 
-TProtobufValue::~TProtobufValue()
-{
-}
+TProtobufValue::~TProtobufValue() = default;
 
 TUnboxedValue TProtobufValue::Run(
     const IValueBuilder* valueBuilder,
@@ -52,9 +46,7 @@ TProtobufSerialize::TProtobufSerialize(TProtoInfo info)
 {
 }
 
-TProtobufSerialize::~TProtobufSerialize()
-{
-}
+TProtobufSerialize::~TProtobufSerialize() = default;
 
 TUnboxedValue TProtobufSerialize::Run(
     const IValueBuilder* valueBuilder,

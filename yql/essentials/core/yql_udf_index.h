@@ -32,9 +32,7 @@ struct TDownloadLink {
     TString Path;
     TString Md5;
 
-    TDownloadLink() {
-
-    }
+    TDownloadLink() = default;
 
     TDownloadLink(bool isUrl, TString path, TString md5)
         : IsUrl(isUrl)

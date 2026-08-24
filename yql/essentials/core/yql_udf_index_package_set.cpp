@@ -4,8 +4,7 @@
 
 using namespace NYql;
 
-TUdfIndexPackageSet::TUdfIndexPackageSet() {
-}
+TUdfIndexPackageSet::TUdfIndexPackageSet() = default;
 
 TUdfIndexPackageSet::TUdfIndexPackageSet(const TSet<TString>& knownPackages, const THashMap<TString, ui32>& packageDefaultVersions, const TMap<std::pair<TString, ui32>, TResourceInfo::TPtr>& resources)
     : KnownPackages_(knownPackages)

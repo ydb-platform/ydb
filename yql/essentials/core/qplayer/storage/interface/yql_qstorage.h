@@ -101,9 +101,7 @@ enum class EQPlayerCaptureMode {
 
 class TQContext {
 public:
-    TQContext()
-    {
-    }
+    TQContext() = default;
 
     explicit TQContext(IQReaderPtr reader, EQPlayerCaptureMode captureMode = EQPlayerCaptureMode::MetaOnly)
         : CaptureMode_(captureMode)

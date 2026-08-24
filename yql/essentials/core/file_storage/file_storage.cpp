@@ -121,8 +121,7 @@ public:
         Downloaders_.insert(Downloaders_.begin(), downloaders.begin(), downloaders.end());
     }
 
-    ~TFileStorageImpl() override {
-    }
+    ~TFileStorageImpl() override = default;
 
     TFileLinkPtr PutFile(const TString& file, const TString& outFileName = {}) final {
         YQL_LOG(INFO) << "PutFile to cache: " << file;

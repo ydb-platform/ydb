@@ -136,13 +136,7 @@ TString TColumnOrder::Find(const TString& name) const {
     return it->second;
 }
 
-TColumnOrder& TColumnOrder::operator=(const TColumnOrder& rhs) {
-    GeneratedToOriginal_ = rhs.GeneratedToOriginal_;
-    Order_ = rhs.Order_;
-    UseCountLcase_ = rhs.UseCountLcase_;
-    UseCount_ = rhs.UseCount_;
-    return *this;
-}
+TColumnOrder& TColumnOrder::operator=(const TColumnOrder& rhs) = default;
 
 TColumnOrder::TColumnOrder(const TVector<TString>& order) {
     Reserve(order.size());

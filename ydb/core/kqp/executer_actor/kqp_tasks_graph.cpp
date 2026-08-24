@@ -3986,6 +3986,7 @@ void TKqpTasksGraph::CountReadTasksFromSource(TStageInfo& stageInfo, const TVect
         for (const auto& nodeResources : resourcesSnapshot) {
             userPoolThreads += nodeResources.GetKqpProxyNodeResources().GetThreads();
         }
+        userPoolThreads = userPoolThreads ? userPoolThreads : static_cast<ui32>(resourcesSnapshot.size() * 2);
 
         constexpr ui32 AveragePartitionsPerTask = 5;
         const ui32 tasksByPartitions = (taskCount + AveragePartitionsPerTask - 1) / AveragePartitionsPerTask;

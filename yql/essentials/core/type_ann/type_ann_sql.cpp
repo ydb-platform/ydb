@@ -3204,7 +3204,7 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                             }
 
                             if (yqlFromSettings &&
-                                yqlFromSettings->IsCTE &&
+                                yqlFromSettings->IsExplicitlyColumnOrdered &&
                                 p->HeadPtr()->GetTypeAnn() &&
                                 p->HeadPtr()->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Universal)
                             {
@@ -5196,7 +5196,7 @@ IGraphTransformer::TStatus SqlGroupingWrapper(const TExprNode::TPtr& input, TExp
         return IGraphTransformer::TStatus::Repeat;
     }
 
-    YQL_TYPE_ANN_PTR result;
+    TCheckedDerefPtr<const TTypeAnnotationNode> result;
     if (isYql) {
         result = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint64);
     } else {

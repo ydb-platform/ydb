@@ -144,7 +144,7 @@ IServerPtr CreateServer(
                 } catch (const std::exception& ex) {
                     YT_TLOG_WARNING("Unexpected exception while updating TLS certificates")
                         .With("ServerName", config->ServerName)
-                        .With(TError(ex));
+                        .With(ex);
                 }
             }),
             sslConfig->UpdatePeriod);
@@ -174,7 +174,7 @@ IServerPtr CreateServer(
                     certChainToExpiry.Update(GetCertTimeToExpiry(sslConfig->CertificateChain));
                 } catch (const std::exception& ex) {
                     YT_TLOG_WARNING("Failed to update HTTPS server certificate sensors")
-                        .With(TError(ex));
+                        .With(ex);
                 }
             }),
             sslConfig->UpdatePeriod);

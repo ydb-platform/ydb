@@ -51,6 +51,7 @@ TVChunk::TVChunk(
     IPartitionDirectService* partitionDirectService,
     const TDiskDescription& diskDescription,
     const TVChunkConfig& vChunkConfig,
+    const TDirtyMapStateProto& dirtyMapState,
     IDirectBlockGroupPtr directBlockGroup,
     ui32 syncRequestsBatchSize,
     ui64 vChunkSize,
@@ -83,6 +84,8 @@ TVChunk::TVChunk(
         NKikimrServices::NBS_PARTITION,
         "%s Create",
         LogTitle.GetWithTime().c_str());
+
+    BlocksDirtyMap->Load(dirtyMapState);
 }
 
 TVChunk::~TVChunk()
@@ -294,11 +297,25 @@ TExecutorPtr TVChunk::GetExecutor() const
     return Executor;
 }
 
-ui64 TVChunk::GetPBufferUsedSize(THostIndex hostIndex) const
+TCountAndSize TVChunk::GetPBuffersUsage(THostIndex hostIndex) const
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    return BlocksDirtyMap->GetPBufferUsedSize(hostIndex);
+    return BlocksDirtyMap->GetPBuffersUsage(hostIndex);
+}
+
+TCountAndSize TVChunk::GetAheadBlocks(THostIndex hostIndex) const
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    return BlocksDirtyMap->GetAheadBlocks(hostIndex);
+}
+
+TCountAndSize TVChunk::GetBehindBlocks(THostIndex hostIndex) const
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    return BlocksDirtyMap->GetBehindBlocks(hostIndex);
 }
 
 std::optional<ui64> TVChunk::GetSafeBarrierForErase() const
@@ -846,7 +863,7 @@ void TVChunk::DoPersistDirtyMap()
         [weakSelf = weak_from_this(),
          executor = Executor,
          stateGeneration]   //
-        (const TFuture<void>& f)
+        (const TFuture<void>& f) mutable
         {
             Y_UNUSED(f);
             executor->ExecuteSimple(
@@ -861,6 +878,8 @@ void TVChunk::DoPersistDirtyMap()
 
 void TVChunk::OnDirtyMapPersisted(ui32 stateGeneration)
 {
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
     LOG_INFO(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,

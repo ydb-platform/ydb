@@ -37,7 +37,7 @@ def deprecated_method(method: t.Any, cls: t.Any, method_name: str, msg: str) -> 
     except (OSError, TypeError) as e:
         # Failed to inspect for some reason
         warn(
-            warn_msg + ("\n(inspection failed) %s" % e),
+            warn_msg + (f"\n(inspection failed) {e}"),
             DeprecationWarning,
             stacklevel=2,
         )
@@ -45,7 +45,7 @@ def deprecated_method(method: t.Any, cls: t.Any, method_name: str, msg: str) -> 
         warnings.warn_explicit(warn_msg, DeprecationWarning, fname, lineno)
 
 
-_deprecations_shown = set()
+_deprecations_shown: set[tuple[str, str, int]] = set()
 
 
 def should_warn(key: t.Any) -> bool:

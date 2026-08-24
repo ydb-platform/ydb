@@ -302,7 +302,7 @@ void TSolomonProxy::HandleSensors(const IRequestPtr& req, const IResponseWriterP
         GuardedHandleSensors(req, rsp);
     } catch(const std::exception& ex) {
         YT_TLOG_DEBUG("Failed to pull sensors from endpoints")
-            .With(TError(ex));
+            .With(ex);
 
         if (!rsp->AreHeadersFlushed()) {
             try {
@@ -313,7 +313,7 @@ void TSolomonProxy::HandleSensors(const IRequestPtr& req, const IResponseWriterP
                 ReplyError(rsp, ex);
             } catch (const std::exception& ex) {
                 YT_TLOG_DEBUG("Failed to send sensor pull error")
-                    .With(TError(ex));
+                    .With(ex);
             }
         }
     }

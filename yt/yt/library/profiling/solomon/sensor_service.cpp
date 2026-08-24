@@ -200,7 +200,7 @@ private:
             } catch (const std::exception& ex) {
                 YT_TLOG_DEBUG("Failed to add new sensor to the sensor service tree")
                     .With("Name", name)
-                    .With(TError(ex));
+                    .With(ex);
 
                 // Ignore sensors with weird names.
                 ++malformedSensorCount;

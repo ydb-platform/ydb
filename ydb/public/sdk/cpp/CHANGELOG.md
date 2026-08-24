@@ -2,6 +2,8 @@
 
 * Fixed query parameters with incomplete types being sent to the server; the parameter builder now reports the error locally.
 
+* Added the initial process-wide SDK runtime infrastructure. Driver cancellation and callback accounting are now isolated per driver, without changing public APIs or resource-sharing behavior.
+
 ## v3.21.1
 
 * Fix read session close deadlock in topic sdk.

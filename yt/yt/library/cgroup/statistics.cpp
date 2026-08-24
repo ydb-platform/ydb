@@ -534,7 +534,7 @@ TString ReadProcFile(const TString& path)
     } catch (const std::exception& ex) {
         YT_TLOG_WARNING("Failed to read cgroup statistics")
             .With("Path", path)
-            .With(TError(ex));
+            .With(ex);
         return {};
     }
 }

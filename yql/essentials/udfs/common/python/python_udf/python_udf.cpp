@@ -121,7 +121,8 @@ public:
         try {
             auto typeHelper = builder.TypeInfoHelper();
             if (ETypeKind::Callable != typeHelper->GetTypeKind(userType)) {
-                return builder.SetError(TStringRef::Of("Expected callable type"));
+                builder.SetError(TStringRef::Of("Expected callable type"));
+                return;
             }
 
             const auto pos = builder.GetSourcePosition();

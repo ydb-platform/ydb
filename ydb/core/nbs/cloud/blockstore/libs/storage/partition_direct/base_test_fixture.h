@@ -48,6 +48,7 @@ struct TBaseFixture: public NUnitTest::TBaseFixture
         FixtureVChunkIndex,
         DirectBlockGroupHostCount,
         DefaultPrimaryCount);
+    TDirtyMapStateProto DirtyMapStateProto;
     TDiskDescription DiskDescription{
         .DiskId = "disk-id",
         .TabletId = 100,

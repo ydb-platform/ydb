@@ -27,7 +27,8 @@ NSQLComplete::TLexerSupplier MakePureLexerSupplier() {
 } // namespace
 
 TCompletionService::TCompletionService(NSQLComplete::ISqlCompletionEngine::TPtr engine)
-    : Engine_(std::move(engine))
+    : Radix_(TRadix::SimpleAlphabet())
+    , Engine_(std::move(engine))
 {
 }
 
@@ -41,6 +42,10 @@ TCompletionList TCompletionService::Completion(TStringBuf text, const TCompletio
 
     auto completion = Engine_->CompleteAsync(input).ExtractValueSync();
     return ToMessage(completion.Candidates);
+}
+
+TString TCompletionService::SortText(size_t index, size_t length) const {
+    return Radix_.Encode(index, length);
 }
 
 ECompletionItemKind TCompletionService::ToMessage(NSQLComplete::ECandidateKind kind) {
@@ -71,8 +76,11 @@ ECompletionItemKind TCompletionService::ToMessage(NSQLComplete::ECandidateKind k
     }
 }
 
-TCompletionItem TCompletionService::ToMessage(NSQLComplete::TCandidate candidate) {
+TCompletionItem TCompletionService::ToMessage(
+    NSQLComplete::TCandidate candidate, size_t index, size_t sortTextLen) const {
     TString label = candidate.Content;
+
+    TString sortText = SortText(index, sortTextLen);
 
     const bool isSnippet = (candidate.CursorShift > 0);
 
@@ -105,16 +113,20 @@ TCompletionItem TCompletionService::ToMessage(NSQLComplete::TCandidate candidate
         .Kind = ToMessage(candidate.Kind),
         .Detail = std::move(detail),
         .Documentation = std::move(documentation),
+        .SortText = std::move(sortText),
         .FilterText = candidate.FilterText(),
         .InsertText = std::move(insertText),
         .InsertTextFormat = insertTextFormat,
     };
 }
 
-TCompletionList TCompletionService::ToMessage(TVector<NSQLComplete::TCandidate> candidates) {
+TCompletionList TCompletionService::ToMessage(TVector<NSQLComplete::TCandidate> candidates) const {
+    const size_t sortTextLen =
+        candidates.empty() ? 0 : Radix_.Encode(candidates.size() - 1).size();
+
     TVector<TCompletionItem> items(Reserve(candidates.size()));
-    for (auto& candidate : candidates) {
-        items.emplace_back(ToMessage(std::move(candidate)));
+    for (size_t i = 0; i < candidates.size(); ++i) {
+        items.emplace_back(ToMessage(std::move(candidates[i]), i, sortTextLen));
     }
 
     return {

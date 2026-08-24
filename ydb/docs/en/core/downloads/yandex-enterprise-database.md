@@ -29,6 +29,30 @@ Yandex Enterprise Database distributions are available for download via the link
 
 #|
 || **Version** | **Release date** | **Download** | **Checksums** | **Changelog** ||
+|| **v26.2** |  |  |  |  ||
+|| v.26.2.1.ent.3 | 20.08.2026 |
+
+[Distribution](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/26.2.1.ent.3/ydbd-enterprise-26.2.1.ent.3-stable-linux-amd64.tar.xz)
+[Debug symbols](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/26.2.1.ent.3/ydbd-enterprise-26.2.1.ent.3-stable-linux-amd64-debug.tar.xz)
+
+|
+
+[For distribution](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/26.2.1.ent.3/checksums.txt)
+[For debug symbols](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/26.2.1.ent.3/checksums.debug.txt)
+
+|  ||
+|| **v26.1** |  |  |  |  ||
+|| v.26.1.1.ent.3 | 03.08.2026 |
+
+[Distribution](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/26.1.1.ent.3/ydbd-enterprise-26.1.1.ent.3-stable-linux-amd64.tar.xz)
+[Debug symbols](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/26.1.1.ent.3/ydbd-enterprise-26.1.1.ent.3-stable-linux-amd64-debug.tar.xz)
+
+|
+
+[For distribution](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/26.1.1.ent.3/checksums.txt)
+[For debug symbols](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/26.1.1.ent.3/checksums.debug.txt)
+
+| [See list](../changelog-enterprise.md#26-1-1-ent-3) ||
 || **v25.4** |  |  |  |  ||
 || v.25.4.1.ent.2 | 17.06.2026 |
 
@@ -190,6 +214,10 @@ Yandex Enterprise Database distributions are available for download via the link
 
 #|
 || **Version** | **Release date** | **Download** | **Changelog** ||
+|| **v26.2** |  |  |  |  ||
+|| v.26.2.1.ent.3 | 20.08.2026 | `cr.yandex/crptqonuodf51kdj7a7d/ydb-enterprise:26.2.1.ent.3` |  ||
+|| **v26.1** |  |  |  |  ||
+|| v.26.1.1.ent.3 | 03.08.2026 | `cr.yandex/crptqonuodf51kdj7a7d/ydb-enterprise:26.1.1.ent.3` | [See list](../changelog-enterprise.md#26-1-1-ent-3) ||
 || **v25.4** |  |  |  |  ||
 || v.25.4.1.ent.2 | 17.06.2026 | `cr.yandex/crptqonuodf51kdj7a7d/ydb-enterpise:25.4.1.ent.2` | [See list](../changelog-enterprise.md#25-4-1-ent-2) ||
 || **v25.3** |  |  |  |  ||

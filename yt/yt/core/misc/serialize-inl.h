@@ -1366,7 +1366,7 @@ struct TEnumIndexedArraySerializer
     {
         using NYT::Save;
 
-        auto keys = TEnumTraits<E>::GetDomainValues();
+        const auto& keys = TEnumTraits<E>::template GetDomainValues</*AllowAmbiguousValues*/ true>();
         size_t count = 0;
         for (auto key : keys) {
             if (!vector.IsValidIndex(key)) {

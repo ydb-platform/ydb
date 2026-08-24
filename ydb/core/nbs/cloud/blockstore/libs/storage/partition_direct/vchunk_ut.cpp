@@ -84,6 +84,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             PartitionDirectService.get(),
             DiskDescription,
             VChunkConfig,
+            DirtyMapStateProto,
             DirectBlockGroup,
             3,   // syncRequestsBatchSize
             DefaultVChunkSize,
@@ -171,6 +172,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             PartitionDirectService.get(),
             DiskDescription,
             VChunkConfig,
+            DirtyMapStateProto,
             DirectBlockGroup,
             3,   // syncRequestsBatchSize
             DefaultVChunkSize,
@@ -251,6 +253,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             PartitionDirectService.get(),
             DiskDescription,
             VChunkConfig,
+            DirtyMapStateProto,
             DirectBlockGroup,
             3,   // syncRequestsBatchSize
             DefaultVChunkSize,
@@ -297,6 +300,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             PartitionDirectService.get(),
             DiskDescription,
             VChunkConfig,
+            DirtyMapStateProto,
             DirectBlockGroup,
             3,   // syncRequestsBatchSize
             DefaultVChunkSize,
@@ -410,6 +414,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             PartitionDirectService.get(),
             DiskDescription,
             VChunkConfig,
+            DirtyMapStateProto,
             DirectBlockGroup,
             3,
             DefaultVChunkSize,
@@ -524,6 +529,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             PartitionDirectService.get(),
             DiskDescription,
             VChunkConfig,
+            DirtyMapStateProto,
             DirectBlockGroup,
             3,   // syncRequestsBatchSize
             DefaultVChunkSize,
@@ -690,6 +696,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             PartitionDirectService.get(),
             DiskDescription,
             VChunkConfig,
+            DirtyMapStateProto,
             DirectBlockGroup,
             3,   // syncRequestsBatchSize
             DefaultVChunkSize,
@@ -794,6 +801,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             PartitionDirectService.get(),
             DiskDescription,
             VChunkConfig,
+            DirtyMapStateProto,
             DirectBlockGroup,
             3,   // syncRequestsBatchSize
             DefaultVChunkSize,
@@ -864,6 +872,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             PartitionDirectService.get(),
             DiskDescription,
             VChunkConfig,
+            DirtyMapStateProto,
             DirectBlockGroup,
             3,   // syncRequestsBatchSize
             DefaultVChunkSize,
@@ -881,8 +890,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
                 auto& dirtyMap = AccessBlocksDirtyMap(*vchunk);
                 MakeDirtyMapNeedPersist(dirtyMap);
                 UNIT_ASSERT_VALUES_EQUAL(true, dirtyMap.NeedPersist());
-                expectedGeneration =
-                    static_cast<ui32>(dirtyMap.GetCurrentGeneration());
+                expectedGeneration = dirtyMap.GetCurrentGeneration();
 
                 InvokePersistDirtyMap(*vchunk);
                 return true;
@@ -940,6 +948,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             PartitionDirectService.get(),
             DiskDescription,
             VChunkConfig,
+            DirtyMapStateProto,
             DirectBlockGroup,
             3,   // syncRequestsBatchSize
             DefaultVChunkSize,
@@ -986,6 +995,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             PartitionDirectService.get(),
             DiskDescription,
             VChunkConfig,
+            DirtyMapStateProto,
             DirectBlockGroup,
             3,   // syncRequestsBatchSize
             DefaultVChunkSize,

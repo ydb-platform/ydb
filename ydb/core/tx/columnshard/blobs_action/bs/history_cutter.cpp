@@ -50,14 +50,12 @@ public:
         const auto status = ev->Get()->Status;
         if (status == NKikimrProto::OK || status == NKikimrProto::ALREADY) {
             // ALREADY means the barrier is already at or beyond the requested level — safe to cut.
-            // Send cut request to Hive.
             auto req = MakeHolder<TEvTablet::TEvCutTabletHistory>();
             req->Record.SetTabletID(TabletId);
             req->Record.SetChannel(Channel);
             req->Record.SetFromGeneration(FromGen);
             req->Record.SetGroupID(Group);
             ctx.Send(LauncherActorId, req.Release());
-            // Notify tablet.
             ctx.Send(TabletActorId, new NColumnShard::TEvPrivate::TEvCutHistoryBarrierDone(Channel, FromGen, true));
             Die(ctx);
             return;
@@ -115,7 +113,6 @@ THistoryCutterWrapper::THistoryCutterWrapper(const TIntrusivePtr<TTabletStorageI
 }
 
 bool THistoryCutterWrapper::IsEnabled() const {
-    // Test hook takes priority over feature flags (allows enabling without AppData).
     if (NYDBTest::TControllers::GetColumnShardController()->IsCSCutHistoryEnabled()) {
         return true;
     }
@@ -253,7 +250,6 @@ void THistoryCutterWrapper::OnPortionAdded(const TPortionDataAccessor& accessor)
             continue;
         }
         if (portionKeySet.insert(key).second) {
-            // First time this portion maps to this entry.
             IncrementCounter(key);
         }
     }
@@ -343,7 +339,6 @@ bool THistoryCutterWrapper::TryNominate(const TActorContext& ctx) {
             continue;
         }
         const auto& hist = TabletInfo->Channels[ch].History;
-        // All entries except the last (active) are candidates.
         for (int i = 0; i < static_cast<int>(hist.size()) - 1; ++i) {
             const TEntryKey key{ ch, hist[i].FromGeneration };
             if (const auto* state = CutState.FindPtr(key); state && *state != ECutState::None) {
@@ -418,7 +413,6 @@ void THistoryCutterWrapper::OnBatchComplete(const THashSet<TEntryKey>& disproved
         // batch and the safety-net reset below would bump Attempts a second time.
         CutState[key] = ECutState::None;
     }
-    // Remove disproved entries from in-progress survivors list.
     if (!disproved.empty()) {
         PublishLevels();
         EraseIf(SweepSurvivors, [&](const TEntryKey& key) {
@@ -427,12 +421,10 @@ void THistoryCutterWrapper::OnBatchComplete(const THashSet<TEntryKey>& disproved
     }
 
     if (!exhausted) {
-        // More portion batches to check — schedule next batch.
         ctx.Send(TabletActorId, new NColumnShard::TEvPrivate::TEvStartCutHistorySweep());
         return;
     }
 
-    // Cursor exhausted: re-check each survivor and send hard barrier if still safe.
     SweepInFlight = false;
     Signals.OnSweepCompleted();
     PublishLevels(0);
@@ -441,7 +433,6 @@ void THistoryCutterWrapper::OnBatchComplete(const THashSet<TEntryKey>& disproved
     SweepPortionOffset = 0;
 
     for (const auto& key : SweepSurvivors) {
-        // Re-check: counter must still be zero and no blobs in flight.
         if (const auto* count = Counters.FindPtr(key); count && *count != 0) {
             CutState[key] = ECutState::None;
             continue;

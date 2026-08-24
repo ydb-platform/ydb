@@ -30,16 +30,34 @@ void TPartitionActor::ExecuteUpdateVChunkConfig(
     Y_UNUSED(ctx);
 
     TPartitionDatabase db(tx.DB);
-    db.StoreVChunkConfig(args.VChunkConfig);
+    for (const auto& request: args.UpdateConfigRequests) {
+        db.StoreVChunkConfig(request.VChunkConfig);
+    }
 }
 
 void TPartitionActor::CompleteUpdateVChunkConfig(
     const TActorContext& ctx,
     TTxPartition::TUpdateVChunkConfig& args)
 {
-    Y_UNUSED(ctx);
+    for (auto& request: args.UpdateConfigRequests) {
+        request.UpdateCompleted.SetValue();
+    }
+    ExecutingUpdateVChunkConfig = false;
 
-    args.UpdateCompleted.SetValue();
+    if (!PendingUpdateVChunkConfigRequests.empty()) {
+        LOG_INFO(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "%s Execute pending UpdateVChunkConfigRequests %lu",
+            LogTitle.GetWithTime().c_str(),
+            PendingUpdateVChunkConfigRequests.size());
+
+        ExecutingUpdateVChunkConfig = true;
+        ExecuteTx(
+            ctx,
+            CreateTx<TUpdateVChunkConfig>(
+                std::move(PendingUpdateVChunkConfigRequests)));
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -698,15 +698,26 @@ void TPartitionActor::HandleUpdateVChunkConfig(
     LOG_INFO(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "%s Handle UpdateVChunkConfig %s",
+        "%s Handle UpdateVChunkConfig %s %s",
         LogTitle.GetWithTime().c_str(),
-        msg->VChunkConfig.DebugPrint().c_str());
+        msg->VChunkConfig.DebugPrint().c_str(),
+        ExecutingUpdateVChunkConfig ? "later" : "now");
 
-    ExecuteTx(
-        ctx,
-        CreateTx<TUpdateVChunkConfig>(
-            std::move(msg->VChunkConfig),
-            std::move(msg->UpdateCompleted)));
+    if (ExecutingUpdateVChunkConfig) {
+        PendingUpdateVChunkConfigRequests.push_back(
+            {.VChunkConfig = std::move(msg->VChunkConfig),
+             .UpdateCompleted = std::move(msg->UpdateCompleted)});
+    } else {
+        Y_DEBUG_ABORT_UNLESS(PendingUpdateVChunkConfigRequests.empty());
+
+        ExecutingUpdateVChunkConfig = true;
+        ExecuteTx(
+            ctx,
+            CreateTx<TUpdateVChunkConfig>(
+                TTxPartition::TUpdateVChunkConfig::TUpdateConfigRequests{
+                    {.VChunkConfig = std::move(msg->VChunkConfig),
+                     .UpdateCompleted = std::move(msg->UpdateCompleted)}}));
+    }
 }
 
 void TPartitionActor::HandleUpdateDirtyMapState(

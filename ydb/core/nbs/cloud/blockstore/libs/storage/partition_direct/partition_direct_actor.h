@@ -80,6 +80,11 @@ private:
     // At most one add-host runs at a time across the whole partition.
     std::optional<TAddHostInFlight> AddHostInFlight;
 
+    // Batch persisting of vchunk configs.
+    bool ExecutingUpdateVChunkConfig = false;
+    TTxPartition::TUpdateVChunkConfig::TUpdateConfigRequests
+        PendingUpdateVChunkConfigRequests;
+
     // Batch persisting of ahead and behind fields.
     bool ExecutingUpdateDirtyMapState = false;
     TTxPartition::TUpdateDirtyMapState::TUpdateStateRequests

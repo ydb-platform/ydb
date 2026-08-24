@@ -118,14 +118,18 @@ struct TTxPartition
     //
     struct TUpdateVChunkConfig
     {
-        const TVChunkConfig VChunkConfig;
-        NThreading::TPromise<void> UpdateCompleted;
+        struct TUpdateConfigRequest
+        {
+            TVChunkConfig VChunkConfig;
+            NThreading::TPromise<void> UpdateCompleted;
+        };
 
-        explicit TUpdateVChunkConfig(
-            TVChunkConfig vChunkConfig,
-            NThreading::TPromise<void> updateCompleted)
-            : VChunkConfig(std::move(vChunkConfig))
-            , UpdateCompleted(std::move(updateCompleted))
+        using TUpdateConfigRequests = TVector<TUpdateConfigRequest>;
+
+        TUpdateConfigRequests UpdateConfigRequests;
+
+        explicit TUpdateVChunkConfig(TUpdateConfigRequests updateConfigRequests)
+            : UpdateConfigRequests(std::move(updateConfigRequests))
         {}
 
         void Clear()

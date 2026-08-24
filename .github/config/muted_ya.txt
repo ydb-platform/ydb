@@ -9,6 +9,7 @@ ydb/core/kqp/ut/olap KqpOlapOptimizer.TilingPlusPlusTtlDeletion
 ydb/core/kqp/ut/scheme KqpScheme.CreateDropTableMultipleTime
 ydb/core/persqueue/public/schema/ut DlqAcl.AlterTopicWithMlpConsumerFailsWhenDlqIsACdcStream
 ydb/core/persqueue/public/schema/ut DlqAcl.AlterTopicWithMlpConsumerFailsWhenDlqIsACdcStreamImpl
+ydb/core/persqueue/public/schema/ut DlqAcl.AlterTopicWithMlpConsumerFailsWhenDlqIsATable
 ydb/core/persqueue/public/schema/ut DlqAcl.CreateTopicWithSqsStyleDlqSkipsSchemeCheck
 ydb/core/persqueue/public/schema/ut SchemaOps.AlterCdcAllowsRetentionAndWriteLimits
 ydb/core/persqueue/public/schema/ut SchemaOps.AlterMessagesPerSecond
@@ -32,8 +33,20 @@ ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRollingUpgradeA
 ydb/tests/compatibility/topics test_kafka_topic.py.TestKafkaTopicMessagesBatchingDisabledRead.test_kafka_plain_and_batched_messages_survive_batching_flag_disable[restart_prestable-26-4_to_prestable-26-4]
 ydb/tests/compatibility/topics test_kafka_topic.py.TestKafkaTopicMessagesBatchingDisabledRead.test_kafka_written_messages_are_read_after_batching_flag_disable[restart_prestable-26-4_to_prestable-26-4]
 ydb/tests/compatibility/topics test_sqs_topic.py.TestTopicSqsRollingUpdate.test_write_and_read[rolling_stable-26-2-1_to_stable-26-3-1]
+ydb/tests/fq/s3 test_s3_0.py.TestS3.test_checkpoints_on_join_s3_with_yds[v1-mvp_external_ydb_endpoint0-client0]
+ydb/tests/fq/s3 test_s3_0.py.TestS3.test_csv[v1-false-client0]
 ydb/tests/fq/streaming py3test.[*/*] chunk
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_streaming_query_issues_after_restart[kikimr0-True]
+ydb/tests/fq/yds py3test.[*/*] chunk
+ydb/tests/fq/yds test_big_state.py.TestBigState.test_gt_8mb[v1]
+ydb/tests/fq/yds test_continue_mode.py.TestContinueMode.test_continue_from_offsets[v1-mvp_external_ydb_endpoint0]
+ydb/tests/fq/yds test_read_rules_deletion.py.TestReadRulesDeletion.test_delete_read_rules[v1-with_recovery]
+ydb/tests/fq/yds test_recovery.py.TestRecovery.test_program_state_recovery_error_if_no_states
+ydb/tests/fq/yds test_recovery.py.TestRecovery.test_recovery
+ydb/tests/fq/yds test_recovery_match_recognize.py.TestRecoveryMatchRecognize.test_match_recognize[v1-kikimr0]
+ydb/tests/fq/yds test_recovery_match_recognize.py.TestRecoveryMatchRecognize.test_time_order_recoverer[v1-kikimr0]
+ydb/tests/fq/yds test_recovery_mz.py.TestRecovery.test_recovery[v1]
+ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_restart_compute_node
 ydb/tests/fq/yds test_watermarks.py.TestWatermarks.test_idle_watermarks[2-no_shared]
 ydb/tests/fq/yt/yt_integration py3test.sole chunk
 ydb/tests/functional/blobstorage test_node_warden_cache.py.TestNodeWardenCacheFile.test_cache_file_lifecycle_and_restart

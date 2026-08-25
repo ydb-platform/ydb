@@ -25,10 +25,8 @@ struct TResolvedName {
  *   - Otherwise: request database (absolute), or empty if request database is empty
  *
  * First-class citizen (FCC / non-federation) mode:
- *   Converts legacy-style names (rt3.*, short legacy with --/@, or bare name without '/').
- *   Modern paths with '/' are joined with database (full topic path).
- *   Bare names inside a user database under LbRoot stay under that database
- *   (not remapped to LbRoot); explicit legacy still joins via LbRoot.
+ *   Names are joined with the request database as-is. Legacy forms (rt3.*, --, @)
+ *   are not converted: a leaf like TestSchemeList--test-topic-1 is a literal name.
  *
  * Federation mode (!TopicsAreFirstClassCitizen):
  *   - Root-like database (empty, prefixes PQ Root, or prefixes LbUserDatabaseRoot):
@@ -50,17 +48,21 @@ struct TResolvedName {
  *
  * Examples (LbRoot = "/Root/LbCommunal", PQ Root = "/Root/PQ"):
  *
- *   // Without localDc/dc (defaults): local path, no -mirrored-from- suffix
- *   ResolveName(db, "rt3.dc1--account--topic")
- *     -> Path="/Root/LbCommunal/account/topic", NavigateDatabase=db  // FCC
- *   ResolveName("/Root", "account/topic")  // federation
+ *   // FCC: literal names under the request database (-- is not a path separator)
+ *   ResolveName(db, "TestSchemeList--test-topic-1")
+ *     -> Path=db+"/TestSchemeList--test-topic-1", NavigateDatabase=db
+ *   ResolveName(db, "account/topic")
+ *     -> Path=db+"/account/topic", NavigateDatabase=db
+ *
+ *   // Federation: without localDc/dc (defaults) — local path, no -mirrored-from- suffix
+ *   ResolveName("/Root", "account/topic")
  *     -> Path="/Root/LbCommunal/account/topic", NavigateDatabase="/Root/LbCommunal/account"
  *   ResolveName("/Root/LbCommunal/account", "dir/topic")
  *     -> Path="/Root/LbCommunal/account/dir/topic", NavigateDatabase="/Root/LbCommunal/account"
  *
- *   // With localDc (mirroring / DC-aware resolve)
- *   ResolveName(db, "rt3.dc1--account--topic", "dc1")
- *     -> Path="/Root/LbCommunal/account/topic", NavigateDatabase=db
+ *   // Federation: with localDc (mirroring / DC-aware resolve)
+ *   ResolveName("/Root", "rt3.dc1--account--topic", "dc1")
+ *     -> Path="/Root/LbCommunal/account/topic", NavigateDatabase="/Root/LbCommunal/account"
  *   ResolveName("/Root", "account/topic", "dc1", "dc2")
  *     -> Path="/Root/LbCommunal/account/topic-mirrored-from-dc2", NavigateDatabase="/Root/LbCommunal/account"
  */

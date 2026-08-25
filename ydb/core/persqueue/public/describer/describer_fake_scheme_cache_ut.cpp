@@ -534,10 +534,10 @@ Y_UNIT_TEST_SUITE(TDescriberFakeSchemeCacheTests) {
         UNIT_ASSERT(!ev->UsedSyncVersion);
     }
 
-    Y_UNIT_TEST(FccLegacyRt3UsesLbRoot) {
+    Y_UNIT_TEST(FccKeepsLiteralLegacyLookingName) {
         TDescribeEnv env([](ui32 /*requestIndex*/, TNavigate& request, TNavigate::TEntry& entry) {
             UNIT_ASSERT_VALUES_EQUAL(request.DatabaseName, "/Root");
-            UNIT_ASSERT_VALUES_EQUAL(EntryPath(entry), "/Root/LbCommunal/account/topic");
+            UNIT_ASSERT_VALUES_EQUAL(EntryPath(entry), "/Root/rt3.dc1--account--topic");
             FillOkTopic(entry, /*balancerTabletId=*/15);
         });
         auto& appData = env.Runtime.GetAppData();
@@ -548,7 +548,7 @@ Y_UNIT_TEST_SUITE(TDescriberFakeSchemeCacheTests) {
         auto ev = env.WaitResponse();
 
         UNIT_ASSERT_VALUES_EQUAL(ev->Topics["rt3.dc1--account--topic"].Status, NDescriber::EStatus::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["rt3.dc1--account--topic"].RealPath, "/Root/LbCommunal/account/topic");
+        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["rt3.dc1--account--topic"].RealPath, "/Root/rt3.dc1--account--topic");
     }
 
     Y_UNIT_TEST(MultipleOriginalsSameResolvedPath) {

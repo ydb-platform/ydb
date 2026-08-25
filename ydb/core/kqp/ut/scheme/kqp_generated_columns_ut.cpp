@@ -739,6 +739,40 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
         fixture.Check("SELECT id, g FROM TestTable ORDER BY id;", "[[1;10]]");
     }
 
+    Y_UNIT_TEST(DefaultExprFeatureFlagDisabledPreservesGeneratedAndSerialColumns) {
+        auto appConfig = GeneratedColumnsAppConfig();
+        appConfig.MutableFeatureFlags()->SetEnableDefaultFromExpression(false);
+        TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        {
+            auto result = session.ExecuteQuery(R"(
+                CREATE TABLE TestTable (
+                    id Serial,
+                    payload Int32,
+                    generated Int32 GENERATED ALWAYS AS (COALESCE(payload, 0) + 1) STORED,
+                    PRIMARY KEY (id)
+                );
+            )", TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteQuery(
+                "INSERT INTO TestTable (payload) VALUES (5);", TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteQuery(
+                "SELECT payload, generated FROM TestTable;", TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson("[[[5];[6]]]", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
     Y_UNIT_TEST(ShowCreateTable) {
         auto appConfig = GeneratedColumnsAppConfig();
         TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));

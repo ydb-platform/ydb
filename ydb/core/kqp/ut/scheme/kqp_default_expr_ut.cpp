@@ -14,11 +14,14 @@ using namespace NYdb::NQuery;
 
 namespace {
 
-NKikimrConfig::TAppConfig DefaultExprAppConfig(bool enabled = true, bool indexStreamWrite = true)
+NKikimrConfig::TAppConfig DefaultExprAppConfig(
+    bool enabled = true,
+    bool indexStreamWrite = true,
+    bool generatedStored = false)
 {
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableFeatureFlags()->SetEnableDefaultFromExpression(enabled);
-    appConfig.MutableFeatureFlags()->SetEnableGeneratedStored(true);
+    appConfig.MutableFeatureFlags()->SetEnableGeneratedStored(generatedStored);
     appConfig.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(true);
     appConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(indexStreamWrite);
     return appConfig;
@@ -31,8 +34,11 @@ constexpr const char* DefaultExpr = "RandomNumber(1) * 0ul + 42ul";
 
 class TTestFixture {
 public:
-    explicit TTestFixture(bool featureFlagEnabled = true, bool indexStreamWrite = true)
-        : Kikimr(TKikimrSettings(DefaultExprAppConfig(featureFlagEnabled, indexStreamWrite))
+    explicit TTestFixture(
+        bool featureFlagEnabled = true,
+        bool indexStreamWrite = true,
+        bool generatedStored = false)
+        : Kikimr(TKikimrSettings(DefaultExprAppConfig(featureFlagEnabled, indexStreamWrite, generatedStored))
               .SetWithSampleTables(false))
         , Db(Kikimr.GetQueryClient())
         , Session(Db.GetSession().GetValueSync().GetSession())
@@ -499,21 +505,6 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
 
         fixture.Check("SELECT k, other, literal, added FROM TestTable ORDER BY k;",
             "[[1;#;[7u];[9u]];[2;[6];[7u];[9u]];[4;#;#;[9u]];[5;#;#;[50u]]]");
-    }
-
-    Y_UNIT_TEST(FeatureFlagDisabledPreservesGeneratedAndSerialColumns) {
-        TTestFixture fixture(/* featureFlagEnabled */ false);
-        fixture.Exec(R"(
-            CREATE TABLE TestTable (
-                id Serial,
-                payload Int32,
-                generated Int32 GENERATED ALWAYS AS (COALESCE(payload, 0) + 1) STORED,
-                PRIMARY KEY (id)
-            );
-        )");
-
-        fixture.Exec("INSERT INTO TestTable (payload) VALUES (5);");
-        fixture.Check("SELECT payload, generated FROM TestTable;", "[[[5];[6]]]");
     }
 
     Y_UNIT_TEST(ColumnReferenceRejected) {

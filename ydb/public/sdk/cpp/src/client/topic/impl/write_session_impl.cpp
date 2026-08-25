@@ -928,7 +928,8 @@ void TWriteSessionImpl::Connect(const TDuration& delay) {
         // ClientContext can outlive driver shutdown: TDriverScope::Cancel()
         // drops the root so CreateContext() returns nullptr. Y_ASSERT used to
         // abort here (topic balancing stress, write session reconnect).
-        if (!connectContext || !connectTimeoutContext || (delay && !connectDelayContext)) {
+        const bool missingDelayContext = delay && !connectDelayContext;
+        if (!connectContext || !connectTimeoutContext || missingDelayContext) {
             AbortImpl();
             return;
         }

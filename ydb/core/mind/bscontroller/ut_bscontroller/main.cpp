@@ -304,6 +304,12 @@ namespace {
             && lhs.GetVSlotId() == rhs.GetVSlotId();
     }
 
+    bool IsVSlotOnPDisk(const TVSlot& vslot, const NKikimrBlobStorage::TPDiskId& pdisk) {
+        const auto& vslotId = vslot.GetVSlotId();
+        return vslotId.GetNodeId() == pdisk.GetNodeId()
+            && vslotId.GetPDiskId() == pdisk.GetPDiskId();
+    }
+
     TBaseConfig FetchBaseConfig(TEnvironmentSetup* env) {
         NKikimrBlobStorage::TConfigRequest request;
         request.AddCommand()->MutableQueryBaseConfig();
@@ -1000,6 +1006,8 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             UNIT_ASSERT_VALUES_EQUAL(before.GetGroup(0).VSlotIdSize(), 8);
             const TVSlot source = FindVSlot(before, before.GetGroup(0).GetVSlotId(0));
             const auto destination = FindSparePDisk(before, source.GetGroupId());
+            UNIT_ASSERT_C(!IsVSlotOnPDisk(source, destination),
+                "test requires source VDisk not to reside on destination PDisk");
 
             request = MakePopulateRequest(source, destination);
             request.SetIgnoreGroupFailModelChecks(true); // the test environment does not run VDisks
@@ -1039,6 +1047,8 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             UNIT_ASSERT_VALUES_EQUAL(before.GroupSize(), 1);
             const TVSlot source = FindVSlot(before, before.GetGroup(0).GetVSlotId(0));
             const auto destination = FindSparePDisk(before, source.GetGroupId());
+            UNIT_ASSERT_C(!IsVSlotOnPDisk(source, destination),
+                "test requires source VDisk not to reside on destination PDisk");
 
             request = MakePopulateRequest(source, destination, true);
             request.SetIgnoreGroupFailModelChecks(true); // the test environment does not run VDisks
@@ -1086,6 +1096,10 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             UNIT_ASSERT(second.HasVSlotId());
 
             const auto destination = FindSparePDisk(before, first.GetGroupId());
+            UNIT_ASSERT_C(!IsVSlotOnPDisk(first, destination),
+                "test requires first VDisk not to reside on destination PDisk");
+            UNIT_ASSERT_C(!IsVSlotOnPDisk(second, destination),
+                "test requires second VDisk not to reside on destination PDisk");
             request = MakePopulateRequest(first, destination);
             AddVDiskId(second, request.MutableCommand(0)->MutablePopulatePDisk());
 

@@ -358,7 +358,7 @@ Checks: >
   performance-inefficient-string-concatenation,
   performance-inefficient-vector-operation,
   performance-move-const-arg,
-  -performance-move-constructor-init,
+  performance-move-constructor-init,
   performance-no-automatic-move,
   -performance-no-int-to-ptr,
   -performance-noexcept-move-constructor,

@@ -98,10 +98,7 @@ void RejectRequestsForNode(
 }
 
 template <typename TRequest>
-void AttachPayload(
-    TRequest& request,
-    TRope rope,
-    bool enableChecksums)
+void AttachPayload(TRequest& request, TRope rope, bool enableChecksums)
 {
     if (enableChecksums) {
         request.AddPayloadThenChecksum(std::move(rope));

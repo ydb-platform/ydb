@@ -151,10 +151,33 @@ public:
                 return true;
             }
             status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Found unexpected null value, expected non optional type " << GetTypeName(type));
-            return false;
+            if (type->GetKind() != NKikimr::NMiniKQL::TTypeBase::EKind::Variant) {
+                return false;
+            }
+            // if Variant type has optional component, json null may be accepted
         }
 
         switch (type->GetKind()) {
+            case NKikimr::NMiniKQL::TTypeBase::EKind::Variant: {
+                auto variantType = AS_TYPE(NKikimr::NMiniKQL::TVariantType, type);
+                const auto alternativesCount = variantType->GetAlternativesCount();
+                for (ui32 index = 0; index != alternativesCount; ++index) {
+                    auto alternativeType = variantType->GetAlternativeType(index);
+                    status = TStatus::Success();
+                    if (ParseNestedValue(jsonValue, resultValue, status, alternativeType, false)) {
+                        resultValue = HolderFactory->CreateVariantHolder(resultValue, index);
+                        return true;
+                    }
+                }
+                if (alternativesCount == 0) {
+                    return true;
+                }
+                if (status.IsSuccess()) {
+                    status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Failed to parse Variant type");
+                }
+                return false;
+            }
+
             case NKikimr::NMiniKQL::TTypeBase::EKind::Data: {
                 auto maybeDataSlot = AS_TYPE(NKikimr::NMiniKQL::TDataType, type)->GetDataSlot();
                 Y_ENSURE(maybeDataSlot);
@@ -172,14 +195,16 @@ public:
             }
 
             case NKikimr::NMiniKQL::TTypeBase::EKind::List: {
-                if (cellType != simdjson::builtin::ondemand::json_type::array) {
+                simdjson::ondemand::array array;
+                if (jsonValue.get_array().get(array)) {
                     status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Failed to parse nested json value (List), expected array, but got " << JsonTypeToString(cellType));
                     return false;
                 }
                 auto listType = AS_TYPE(NKikimr::NMiniKQL::TListType, type);
                 auto itemType = listType->GetItemType();
                 auto listBuilder = HolderFactory->NewList();
-                for (auto elt : jsonValue.get_array()) {
+                array.reset();
+                for (auto elt : array) {
                     simdjson::builtin::ondemand::value eltValue;
                     CHECK_JSON_ERROR(elt.get(eltValue)) {
                         SetParsingError(error, jsonValue, "parse as array", status);
@@ -196,7 +221,8 @@ public:
             }
 
             case NKikimr::NMiniKQL::TTypeBase::EKind::Tuple: {
-                if (cellType != simdjson::builtin::ondemand::json_type::array) {
+                simdjson::ondemand::array array;
+                if (jsonValue.get_array().get(array)) {
                     status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Failed to parse nested json value (Tuple), expected array, but got " << JsonTypeToString(cellType));
                     return false;
                 }
@@ -205,7 +231,8 @@ public:
                 NYql::NUdf::TUnboxedValue *resultValues;
                 resultValue = HolderFactory->CreateDirectArrayHolder(elementsCount, resultValues);
                 size_t idx = 0;
-                for (auto elt : jsonValue.get_array()) {
+                array.reset();
+                for (auto elt : array) {
                     if (idx == elementsCount) {
                         break;
                     }
@@ -230,7 +257,8 @@ public:
             }
 
             case NKikimr::NMiniKQL::TTypeBase::EKind::Struct: {
-                if (cellType != simdjson::builtin::ondemand::json_type::object) {
+                simdjson::ondemand::object object;
+                if (jsonValue.get_object().get(object)) {
                     status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Failed to parse nested json value (Struct), expected object, but got " << JsonTypeToString(cellType));
                     return false;
                 }
@@ -244,7 +272,8 @@ public:
 
                 NYql::NUdf::TUnboxedValue *resultValues;
                 resultValue = HolderFactory->CreateDirectArrayHolder(membersCount, resultValues);
-                for (auto elt : jsonValue.get_object()) {
+                object.reset();
+                for (auto elt : object) {
                     std::string_view name;
                     {
                         CHECK_JSON_ERROR(elt.escaped_key().get(name)) {
@@ -279,11 +308,12 @@ public:
             }
 
             case NKikimr::NMiniKQL::TTypeBase::EKind::Dict: {
-                if (cellType != simdjson::builtin::ondemand::json_type::object) {
+                simdjson::ondemand::object jsonObject;
+                if (jsonValue.get_object().get(jsonObject)) {
                     status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Failed to parse nested json value (Dict), expected object, but got " << JsonTypeToString(cellType));
                     return false;
                 }
-                auto jsonObject = jsonValue.get_object();
+                jsonObject.reset();
                 {
                     bool isEmpty;
                     CHECK_JSON_ERROR(jsonObject.is_empty().get(isEmpty)) {
@@ -512,6 +542,21 @@ private:
                 }
                 break;
             }
+            case NKikimr::NMiniKQL::TTypeBase::EKind::Variant: {
+                auto variantType = AS_TYPE(NKikimr::NMiniKQL::TVariantType, type);
+                auto alternativeCount = variantType->GetAlternativesCount();
+                auto index = value.GetVariantIndex();
+                if (!(index < alternativeCount)) {
+                    Y_DEBUG_ABORT();
+                    return false;
+                }
+                auto variantItem = value.GetVariantItem();
+                if (!ValidateObjectRefs(variantType->GetAlternativeType(index), variantItem, 2)) { // two refs expected: one from object, one from variantItem
+                    Y_DEBUG_ABORT();
+                    return false;
+                }
+                break;
+            }
             default:
                 Y_ABORT();
         }
@@ -592,6 +637,19 @@ private:
                 break;
             }
 
+            case NKikimr::NMiniKQL::TTypeBase::EKind::Variant: {
+                auto variantType = AS_TYPE(NKikimr::NMiniKQL::TVariantType, type);
+                const auto alternativesCount = variantType->GetAlternativesCount();
+                for (ui32 index = 0; index != alternativesCount; ++index) {
+                    auto alternativeType = variantType->GetAlternativeType(index);
+                    auto success = ParseNestedType(alternativeType);
+                    if (!success) {
+                        return success;
+                    }
+                }
+                break;
+            }
+
             default: {
                 return TStatus::Fail(EStatusId::UNSUPPORTED, TStringBuilder() << "Unsupported type kind: " << type->GetKindAsStr());
             }
@@ -618,6 +676,7 @@ private:
                 IsOptional = true;
                 return ExtractDataSlot(AS_TYPE(NKikimr::NMiniKQL::TOptionalType, type)->GetItemType());
             }
+            case NKikimr::NMiniKQL::TTypeBase::EKind::Variant:
             case NKikimr::NMiniKQL::TTypeBase::EKind::Dict:
             case NKikimr::NMiniKQL::TTypeBase::EKind::Tuple:
             case NKikimr::NMiniKQL::TTypeBase::EKind::Struct:

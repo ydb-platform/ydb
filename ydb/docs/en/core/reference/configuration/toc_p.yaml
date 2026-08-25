@@ -3,3 +3,5 @@ items:
   href: tls.md
 - name: client_certificate_authorization
   href: client_certificate_authorization.md
+- name: immediate_controls_config
+  href: immediate_controls_config.md

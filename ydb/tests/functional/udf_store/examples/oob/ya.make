@@ -8,7 +8,6 @@ CFLAGS(
     -O0
     -fno-inline
 )
-
 SRCS(
     main.cpp
 )

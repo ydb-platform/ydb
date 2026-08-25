@@ -4,6 +4,7 @@ YQL_LAST_ABI_VERSION()
 SRCS(
     ../cpu_spec.cpp
     compartment_manager.cpp
+    call_stack.cpp
     host.cpp
     manifest.cpp
     compile.cpp

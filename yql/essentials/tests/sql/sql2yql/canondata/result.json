@@ -3898,13 +3898,6 @@
             "uri": "https://{canondata_backend}/937458/e1a3cb1d311b8fb691aa3435e4aad231aa7ca32d/resource.tar.gz#test_sql2yql.test_expr-decimal_arithmetic_common_type_old_langver_fail_/sql.yql"
         }
     ],
-    "test_sql2yql.test[expr-decimal_arithmetic_common_type_without_fix_fail]": [
-        {
-            "checksum": "dda54420cf5efef23c805e0cee28be6a",
-            "size": 1050,
-            "uri": "https://{canondata_backend}/937458/e1a3cb1d311b8fb691aa3435e4aad231aa7ca32d/resource.tar.gz#test_sql2yql.test_expr-decimal_arithmetic_common_type_without_fix_fail_/sql.yql"
-        }
-    ],
     "test_sql2yql.test[expr-decimal_bytes]": [
         {
             "checksum": "fa91b1c85d2e69446e78c0676ccfe0ed",
@@ -15865,11 +15858,6 @@
     "test_sql_format.test[expr-decimal_arithmetic_common_type_old_langver_fail]": [
         {
             "uri": "file://test_sql_format.test_expr-decimal_arithmetic_common_type_old_langver_fail_/formatted.sql"
-        }
-    ],
-    "test_sql_format.test[expr-decimal_arithmetic_common_type_without_fix_fail]": [
-        {
-            "uri": "file://test_sql_format.test_expr-decimal_arithmetic_common_type_without_fix_fail_/formatted.sql"
         }
     ],
     "test_sql_format.test[expr-decimal_bytes]": [

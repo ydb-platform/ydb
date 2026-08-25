@@ -40,6 +40,10 @@
         "description": "MATERIALIZE",
         "min_langver": "2026.02"
     },
+    "AlwaysWithFixDecimalConversionMode": {
+        "description": "Always use Decimal common type conversion fixup",
+        "min_langver": "2026.02"
+    },
     "DecimalArithmeticWithCommonType": {
         "description": "Arithmetic operations on Decimal values with different types",
         "min_langver": "max",

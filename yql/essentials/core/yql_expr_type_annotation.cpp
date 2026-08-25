@@ -1517,7 +1517,7 @@ const TDataExprType* CommonType(TPositionHandle pos, const TDataExprType* one, c
         const auto parts2 = GetDecimalPartsForCommonType(*two);
         ui8 whole = 0;
         ui8 scale = 0;
-        switch (typesCtx.DecimalConversionMode) {
+        switch (typesCtx.GetDecimalConversionMode()) {
             case EDecimalConversionMode::WithCommonTypeFixup:
                 whole = std::max<ui8>(parts1.IntegralDigits, parts2.IntegralDigits);
                 scale = std::max<ui8>(parts1.Scale, parts2.Scale);

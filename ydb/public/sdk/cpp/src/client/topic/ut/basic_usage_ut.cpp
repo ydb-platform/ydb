@@ -1224,6 +1224,11 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         auto flushResult = session->Flush().GetValueSync();
         UNIT_ASSERT_C(flushResult.IsClosed(), "Failed to flush producer");
         UNIT_ASSERT_C(flushResult.ClosedDescription->GetStatus() == EStatus::BAD_REQUEST, "Status is not BAD_REQUEST");
+        // Flush after the producer is already closed must still report ProducerClosed,
+        // not Success (the historical race in issue #50613).
+        auto flushAfterClose = session->Flush().GetValueSync();
+        UNIT_ASSERT_C(flushAfterClose.IsClosed(), "Flush after close must report ProducerClosed");
+        UNIT_ASSERT_C(flushAfterClose.ClosedDescription->GetStatus() == EStatus::BAD_REQUEST, "Status is not BAD_REQUEST");
         UNIT_ASSERT_C(session->Close(TDuration::Seconds(10)).IsAlreadyClosed(), "Failed to close producer");
     }
 

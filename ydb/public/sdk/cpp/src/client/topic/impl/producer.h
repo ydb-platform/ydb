@@ -425,6 +425,7 @@ private:
     void DrainClientRequests();
     void HandleClientMessage(TMessageInfo&& message);
     void HandleClientFlush(NThreading::TPromise<TFlushResult> promise);
+    TFlushResult MakeFlushResultOnClosed();
 
     TWriteResult WriteInternal(TWriteMessage& message, bool checkMemory);
     TWriteResult WriteToExplicitPartition(

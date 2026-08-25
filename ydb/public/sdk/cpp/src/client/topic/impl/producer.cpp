@@ -2184,13 +2184,28 @@ void TProducer::HandleClientMessage(TMessageInfo&& message) {
     MessagesWorker->AddMessage(std::move(message));
 }
 
+TFlushResult TProducer::MakeFlushResultOnClosed() {
+    auto sessionClosedEvent = EventsWorker->GetSessionClosedEvent();
+    const bool closedDueToError = sessionClosedEvent &&
+        sessionClosedEvent->GetStatus() != EStatus::SUCCESS;
+    return TFlushResult{
+        .Status = closedDueToError ? EFlushStatus::ProducerClosed : EFlushStatus::Success,
+        .LastWrittenSeqNo = LastWrittenSeqNo.load(),
+        .ClosedDescription = sessionClosedEvent ? std::make_optional(TCloseDescription(*sessionClosedEvent)) : std::nullopt,
+    };
+}
+
 void TProducer::HandleClientFlush(NThreading::TPromise<TFlushResult> promise) {
-    if (Closed.load() || MessagesWorker->InFlightMessages.empty()) {
-        auto sessionClosedEvent = EventsWorker->GetSessionClosedEvent();
+    if (Closed.load()) {
+        FlushPromises.push_back(std::make_pair(std::move(promise), MakeFlushResultOnClosed()));
+        return;
+    }
+
+    if (MessagesWorker->InFlightMessages.empty()) {
         FlushPromises.push_back(std::make_pair(std::move(promise), TFlushResult{
             .Status = EFlushStatus::Success,
             .LastWrittenSeqNo = LastWrittenSeqNo.load(),
-            .ClosedDescription = sessionClosedEvent ? std::make_optional(TCloseDescription(*sessionClosedEvent)) : std::nullopt,
+            .ClosedDescription = std::nullopt,
         }));
         return;
     }
@@ -2418,12 +2433,7 @@ TWriteStats TProducer::GetWriteStats() {
 
 NThreading::TFuture<TFlushResult> TProducer::Flush() {
     if (Closed.load()) {
-        auto sessionClosedEvent = EventsWorker->GetSessionClosedEvent();
-        return NThreading::MakeFuture(TFlushResult{
-            .Status = EFlushStatus::Success,
-            .LastWrittenSeqNo = LastWrittenSeqNo.load(),
-            .ClosedDescription = sessionClosedEvent ? std::make_optional(TCloseDescription(*sessionClosedEvent)) : std::nullopt,
-        });
+        return NThreading::MakeFuture(MakeFlushResultOnClosed());
     }
 
     auto promise = NThreading::NewPromise<TFlushResult>();

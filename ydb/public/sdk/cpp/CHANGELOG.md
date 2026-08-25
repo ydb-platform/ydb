@@ -2,6 +2,8 @@
 
 * Added `IWriteSession::Flush` to asynchronously wait until all previously accepted topic writes are acknowledged.
 
+* Fixed `IProducer::Flush` reporting Success instead of ProducerClosed when the producer was already closed due to a non-retryable error.
+
 * Fixed query parameters with incomplete types being sent to the server; the parameter builder now reports the error locally.
 
 * Added the initial process-wide SDK runtime infrastructure. Driver cancellation and callback accounting are now isolated per driver, without changing public APIs or resource-sharing behavior.

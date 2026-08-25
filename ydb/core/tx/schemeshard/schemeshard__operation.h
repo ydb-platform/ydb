@@ -14,10 +14,6 @@ struct TOperation: TSimpleRefCount<TOperation> {
     ui32 PreparedParts = 0;
     TVector<ISubOperation::TPtr> Parts;
 
-    // User-level transactions driving this operation. In-memory, and only for
-    // the propose that created them: outbox rows are written before it commits.
-    TVector<TTxTransaction> UserLevelTransactions;
-
     // One target of a scheme change, carried in memory (mirrors
     // NKikimrSchemeShard::TSchemeChangeTarget). Path is the object's identity
     // after the change, never empty. SourcePaths is empty for a plain

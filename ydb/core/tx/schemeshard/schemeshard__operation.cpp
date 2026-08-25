@@ -300,10 +300,6 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
     // # Phase Three
     // For all initial transactions parts are constructed and proposed
 
-    // Keep the pre-split (post-rewrite) user-level transactions in memory
-    // so DoPersistSchemeChangeRecords can emit parent-level records.
-    operation->UserLevelTransactions = rewrittenTransactions;
-
     for (const auto& transaction : transactions) {
         auto parts = operation->ConstructParts(transaction, context);
         operation->PreparedParts += parts.size();

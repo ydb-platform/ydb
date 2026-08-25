@@ -63,6 +63,10 @@ message TChunkMapLogRecord {
         TSnapshot Snapshot = 1;
         TIncrement Increment = 2;
     }
+
+    // Set on records produced with DDisk integrity checksums disabled. Kept outside
+    // the oneof so snapshots and increments carry the same irreversible format marker.
+    bool ChecksumsDisabled = 3;
 }
 
 // SignaturePersistentBufferChunkMap; always contains full snapshot

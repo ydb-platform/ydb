@@ -24,7 +24,8 @@ public:
     TICDirectStorageTransport(
         NActors::TActorSystem* actorSystem,
         NActors::TActorId icStorageTransportActorId,
-        std::shared_ptr<TDirectSessionRegistry> directSessionRegistry);
+        std::shared_ptr<TDirectSessionRegistry> directSessionRegistry,
+        bool enableChecksums);
 
     ~TICDirectStorageTransport() override = default;
 
@@ -93,6 +94,7 @@ private:
     using EConnectionType = THostConnection::EConnectionType;
 
     const std::shared_ptr<TDirectSessionRegistry> DirectSessionRegistry;
+    const bool EnableChecksums;
 
     [[nodiscard]] TSessionEntry GetSessionEntry(
         const THostConnection& connection) const;
@@ -105,7 +107,8 @@ private:
 [[nodiscard]] std::unique_ptr<IStorageTransport> CreateDirectStorageTransport(
     NActors::TActorSystem* actorSystem,
     const TDiskDescription& diskDescription,
-    ui32 dbgIndex);
+    ui32 dbgIndex,
+    bool enableChecksums);
 
 ////////////////////////////////////////////////////////////////////////////////
 

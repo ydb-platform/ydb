@@ -56,14 +56,12 @@ ydb/tests/fq/yt/yt_integration py3test.sole chunk
 ydb/tests/functional/blobstorage test_node_warden_cache.py.TestNodeWardenCacheFile.test_cache_file_lifecycle_and_restart
 ydb/tests/functional/config test_distconf_static_group.py.TestStaticGroupSelfHealPlacementPolicy.test_local_policy_relocates_to_spare_pdisk_on_same_node
 ydb/tests/functional/query_cache/warmup test_warmup.py.TestCompileCacheViewPeerWarnings.test_peer_scan_warnings_increment_on_dead_peer
-ydb/tests/olap/s3_import py3test.[*/*] chunk
 ydb/tests/stress/kafka/tests test_kafka_streams.py.TestYdbTopicWorkload.test
 ydb/tests/stress/oltp_workload/tests py3test.sole chunk
 ydb/tests/stress/oltp_workload/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/streaming/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/topic_balancing/tests test_workload.py.TestTopicBalancingWorkload.test
 ydb/tools/mnc/viewer/ut py3test.sole chunk
-ydb/tools/mnc/viewer/ut test_cluster_config_validation.py.ClusterConfigSelectionStateTest.test_operations_tab_disables_run_for_invalid_waiting
 ydb/tools/mnc/viewer/ut test_navigation.py.ViewerTabNavigationTest.test_operation_tab_navigation_matches_state_machine
 ydb/tools/mnc/viewer/ut test_navigation.py.ViewerTabNavigationTest.test_tab_navigation_matches_state_machine_for_core_command_sequences
 ydb/tools/stress_tool/ut TDeviceTestTool.PDiskTestLogWrite

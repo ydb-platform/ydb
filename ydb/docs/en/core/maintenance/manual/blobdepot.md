@@ -22,9 +22,11 @@ Virtual groups are also created within Storage Pools, like physical groups, but 
 
 A virtual group is created through BS_CONTROLLER by passing a special command. The virtual group creation command is idempotent, so to avoid creating extra blob depots, each virtual group is assigned a name. The name must be unique within the entire cluster. In case of repeated command execution, an error will be returned with the `Already: true` field filled and indicating the number of the previously created virtual group.
 
+
 ```bash
 dstool -e ... --direct group virtual create --name vg1 vg2 --hive-id=72057594037968897 --storage-pool-name=/Root:virtual --log-channel-sp=/Root:ssd --data-channel-sp=/Root:ssd*8
 ```
+
 
 Command line parameters:
 
@@ -50,6 +52,7 @@ In both cases, creation should be controlled through the `VirtualGroupName` fiel
 * `WORKING` — group is created and working, ready to execute user requests
 * `CREATE_FAILED` — an error occurred during group creation, the text description of which can be seen in the ErrorReason field
 
+
 ```bash
 $ dstool --cluster=$CLUSTER --direct group list --virtual-groups-only
 ┌────────────┬──────────────┬───────────────┬────────────┬────────────────┬─────────────────┬──────────────┬───────────────────┬──────────────────┬───────────────────┬─────────────┬────────────────┐
@@ -61,6 +64,7 @@ $ dstool --cluster=$CLUSTER --direct group list --virtual-groups-only
 │ 4261412867 │ [1:2]        │ /Root:virtual │ 0          │ none           │ DISINTEGRATED   │ 0            │ WORKING           │ vg4              │ 72075186224037891 │             │ NONE           │
 └────────────┴──────────────┴───────────────┴────────────┴────────────────┴─────────────────┴──────────────┴───────────────────┴──────────────────┴───────────────────┴─────────────┴────────────────┘
 ```
+
 
 ## Architecture
 
@@ -88,16 +92,18 @@ On the BS_CONTROLLER monitoring page there is a special Virtual groups tab, whic
 
 The table provides the following columns:
 
-Field | Description
----- | --------
-GroupId | Group number.
-StoragePoolName | Name of the pool where the group is located.
-Name | Virtual group name; it is unique for the entire cluster. For decommissioned groups this will be null.
-BlobDepotId | Number of the blob depot tablet responsible for serving this group.
-State | [Blob depot state](#vg-check-running); can be NEW, WORKING, CREATED_FAILED.
-HiveId | Number of the Hive tablet within which the specified blob depot was created.
-ErrorReason | For CREATE_FAILED state contains a text description of the creation error reason.
-DecommitStatus | [Group decommission state](blobdepot_decommit.md#decommit-check-running); can be NONE, PENDING, IN_PROGRESS, DONE.
+| Field | Description |
+| --- | --- |
+| GroupId | Group number. |
+| StoragePoolName | Name of the pool where the group is located. |
+| Name | Virtual group name; it is unique for the entire cluster. For decommissioned groups this will be null. |
+| BlobDepotId | Number of the blob depot tablet responsible for serving this group. |
+| State | [Blob depot state](#vg-check-running); can be NEW, WORKING, CREATED_FAILED. |
+| HiveId | Number of the Hive tablet within which the specified blob depot was created. |
+| ErrorReason | For CREATE_FAILED state contains a text description of the creation error reason. |
+| DecommitStatus | [Group decommission state](blobdepot_decommit.md#decommit-check-running); can be NONE, PENDING, IN_PROGRESS, DONE. |
+
+[Group decommission state](%E2%9F%A6U1%E2%9F%A7); can be NONE, PENDING, IN_PROGRESS, DONE.
 
 ### Blob Depot Monitoring Page {#diag-blobdepot}
 
@@ -215,14 +221,19 @@ At DEBUG level, most occurring events will be logged, both on the tablet side an
 
 Each blob depot tablet provides the following charts:
 
-Chart               | Type          | Description
--------------------- | ------------ | --------
-TotalStoredDataSize  | simple      | Amount of saved user data net (if there are multiple references to one blob, it is counted once).
-TotalStoredTrashSize | simple      | Amount of bytes in garbage data that is no longer needed but has not yet been passed to garbage collection.
-InFlightTrashSize    | simple      | Amount of garbage bytes that are still waiting for write confirmation to the local database (they cannot even start being collected yet).
-BytesToDecommit      | simple      | Amount of data bytes remaining to be [decommissioned](blobdepot_decommit.md#decommit-progress) (if this blob depot is operating in group decommission mode).
-Puts/Incoming        | cumulative | Rate of incoming write requests (in pieces per unit time).
-Puts/Ok              | cumulative | Number of successfully executed write requests.
-Puts/Error           | cumulative | Number of write requests completed with an error.
-Decommit/GetBytes    | cumulative | Data read rate during [decommission](blobdepot_decommit.md#decommit-progress).
-Decommit/PutOkBytes  | cumulative | Data write rate during [decommission](blobdepot_decommit.md#decommit-progress) (only successfully executed writes are counted).
+| Chart | Type | Description |
+| --- | --- | --- |
+| TotalStoredDataSize | simple | Amount of saved user data net (if there are multiple references to one blob, it is counted once). |
+| TotalStoredTrashSize | simple | Amount of bytes in garbage data that is no longer needed but has not yet been passed to garbage collection. |
+| InFlightTrashSize | simple | Amount of garbage bytes that are still waiting for write confirmation to the local database (they cannot even start being collected yet). |
+| BytesToDecommit | simple | Amount of data bytes remaining to be [decommissioned](blobdepot_decommit.md#decommit-progress) (if this blob depot is operating in group decommission mode). |
+| Puts/Incoming | cumulative | Rate of incoming write requests (in pieces per unit time). |
+| Puts/Ok | cumulative | Number of successfully executed write requests. |
+| Puts/Error | cumulative | Number of write requests completed with an error. |
+| Decommit/GetBytes | cumulative | Data read rate during [decommission](blobdepot_decommit.md#decommit-progress). |
+| Decommit/PutOkBytes | cumulative | Data write rate during [decommission](blobdepot_decommit.md#decommit-progress) (only successfully executed writes are counted). |
+| Data write speed during [decommission](%E2%9F%A6U1%E2%9F%A7) (only successful writes are counted). |  |  |
+
+Data read speed during [decommission](%E2%9F%A6U1%E2%9F%A7).
+
+Number of data bytes remaining to [decommission](%E2%9F%A6U1%E2%9F%A7) (if this blob depot operates in group decommission mode).

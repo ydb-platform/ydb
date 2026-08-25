@@ -22,7 +22,7 @@ namespace {
 
 static NKikimrConfig::TAppConfig GeneratedColumnsAppConfig(bool enableIndexStreamWrite = true) {
     NKikimrConfig::TAppConfig appConfig;
-    appConfig.MutableFeatureFlags()->SetEnableDefaultFromExpression(true);
+    appConfig.MutableFeatureFlags()->SetEnableDefaultFromExpression(false);
     appConfig.MutableFeatureFlags()->SetEnableGeneratedStored(true);
     appConfig.MutableFeatureFlags()->SetEnableGeneratedVirtual(true);
     appConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(enableIndexStreamWrite);

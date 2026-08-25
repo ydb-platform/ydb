@@ -265,6 +265,7 @@ struct TTableAndSomeData {
     TMKQLDeque<TFuturePage> Futures;
     std::optional<TPackResult> CurrentProbePack;
     ui32 ProbeResumeIndex = 0;
+    size_t BuildCursor = 0;
     size_t PreservedResumeIndex = 0;
 };
 
@@ -444,6 +445,7 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
         TProbeSpiller<Settings> Spiller;
         std::optional<TPackResult> FetchedPack;
         ui32 ResumeIndex = 0;
+        size_t BuildCursor = 0;
         // Cursor of the post-probe scan over preserved rows left in the in-memory tables
         int PreservedBucketIndex = 0;
         size_t PreservedResumeIndex = 0;
@@ -547,12 +549,12 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
         auto notEnoughMemory = [hasSpiller = !!Spiller_] {
             return hasSpiller && TlsAllocState->IsMemoryYellowZoneEnabled();
         };
-        auto lookupToTable = [&](TTable& table, TSingleTuple probeRow) {
+        auto lookupToTable = [&](TTable& table, TSingleTuple probeRow, size_t& buildCursor) {
             if constexpr (HasFilter) {
                 filter->StartProbeRow(probeRow);
             }
             [[maybe_unused]] bool found = false;
-            table.Lookup(probeRow, [&](TSingleTuple tableMatch) {
+            auto onMatch = [&](TSingleTuple tableMatch) {
                 if constexpr (HasFilter) {
                     if (!filter->PairPasses(tableMatch)) {
                         return;
@@ -560,10 +562,19 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                 }
                 found = true;
                 table.MarkUsed(tableMatch);
-                if constexpr (Join.Kind == EJoinKind::Inner || Join.Kind == EJoinKind::Left) {
+                if constexpr (Join.Kind == EJoinKind::Inner || Join.Kind == EJoinKind::Left ||
+                              Join.Kind == EJoinKind::Cross) {
                     consume(TSides<TSingleTuple>{.Build = tableMatch, .Probe = probeRow});
                 }
-            });
+            };
+            if constexpr (Join.Kind == EJoinKind::Cross) {
+                if (!table.ForEachFrom(buildCursor, onMatch, isFull)) {
+                    return false;
+                }
+                buildCursor = 0;
+            } else {
+                table.Lookup(probeRow, onMatch);
+            }
             if constexpr (!PreservedRowsInBuildTable()) {
                 if constexpr (Join.Kind == EJoinKind::Left || Join.Kind == EJoinKind::LeftOnly) {
                     if (!found) {
@@ -575,6 +586,7 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                     }
                 }
             }
+            return true;
         };
         if (std::get_if<Init>(&State_)) {
             State_ = FetchingBuild{*this};
@@ -732,7 +744,10 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                     } else {
                         TTable* thisTable = std::get_if<TTable>(&state.Spiller.GetState().Buckets[bucketIndex]);
                         MKQL_ENSURE(thisTable, "sanity check");
-                        lookupToTable(*thisTable, tuple);
+                        if (!lookupToTable(*thisTable, tuple, state.BuildCursor)) {
+                            state.ResumeIndex = idx - 1;
+                            return EFetchResult::One;
+                        }
                     }
                     if (isFull()) {
                         state.ResumeIndex = idx;
@@ -799,7 +814,10 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                             if (idx++ < table->ProbeResumeIndex) {
                                 continue;
                             }
-                            lookupToTable(table->Table, probeTuple);
+                            if (!lookupToTable(table->Table, probeTuple, table->BuildCursor)) {
+                                table->ProbeResumeIndex = idx - 1;
+                                return EFetchResult::One;
+                            }
                             if (isFull()) {
                                 table->ProbeResumeIndex = idx;
                                 return EFetchResult::One;
@@ -890,6 +908,11 @@ inline TParsedHashJoinArgs ParseCommonHashJoinArgs(TCallable& callable) {
     res.KeyColumns.Probe = parseKeys(callable.GetInput(3));
     res.KeyColumns.Build = parseKeys(callable.GetInput(4));
     MKQL_ENSURE(res.KeyColumns.Build.size() == res.KeyColumns.Probe.size(), "Key columns mismatch");
+    if (res.Kind == EJoinKind::Cross) {
+        MKQL_ENSURE(res.KeyColumns.Build.empty(), "Specifying key columns is not allowed for cross join");
+    } else {
+        MKQL_ENSURE(!res.KeyColumns.Build.empty(), "At least one key column must be specified");
+    }
 
     res.UserRenames = FromGraceFormat(TGraceJoinRenames::FromRuntimeNodes(callable.GetInput(5), callable.GetInput(6)));
     return res;
@@ -928,6 +951,9 @@ TResult* DispatchHashJoinByKind(EJoinKind kind, ESide preservedSide, TStringBuf 
         return DispatchHashJoinByPreservedSide<Wrapper, TResult, LeftSemi>(preservedSide, std::forward<Args>(args)...);
     case Left:
         return DispatchHashJoinByPreservedSide<Wrapper, TResult, Left>(preservedSide, std::forward<Args>(args)...);
+    case Cross:
+        // Cross keeps no rows of its own, so there is nothing to instantiate per side
+        return new Wrapper<TPhysicalJoin{Cross}>(std::forward<Args>(args)...);
     default:
         break;
     }
@@ -1060,9 +1086,10 @@ protected:
         if constexpr (LeftSemiOrOnly(Join.Kind)) {
             MKQL_ENSURE(Output_.SelectSide(Join.NullSupplying()).NTuples == 0,
                         "Left Only and Left Semi join types shouldn't collect any tuples on the non-output side");
-        } else if constexpr (Join.Kind == EJoinKind::Left || Join.Kind == EJoinKind::Inner) {
+        } else if constexpr (Join.Kind == EJoinKind::Left || Join.Kind == EJoinKind::Inner ||
+                             Join.Kind == EJoinKind::Cross) {
             MKQL_ENSURE(Output_.Build.NTuples == Output_.Probe.NTuples,
-                        "Inner and Left join types must collect same amount of tuples from build and probe");
+                        "Inner, Left and Cross join types must collect same amount of tuples from build and probe");
         }
     }
 

@@ -31,8 +31,6 @@ items:
   href: dynamic-config-volatile-config.md
 - name: CMS
   href: cms.md
-- name: Changing actor system configs
-  href: change_actorsystem_configs.md
 - name: BlobDepot
   href: blobdepot.md
 - name: BlobDepot decommit

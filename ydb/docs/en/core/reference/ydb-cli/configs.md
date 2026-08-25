@@ -70,7 +70,7 @@ This section contains commands for managing the {{ ydb-short-name }} [cluster co
 
 ## Managing temporary configuration
 
-This section contains commands for managing [temporary configurations](../../maintenance/manual/dynamic-config-volatile-config.md).
+This section contains commands for managing [temporary configurations](../../devops/configuration-management/configuration-v1/dynamic-config-volatile-config.md).
 
 - Fetch all temporary configurations from the cluster:
 

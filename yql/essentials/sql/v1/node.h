@@ -1186,6 +1186,7 @@ namespace NSQLTranslationV1 {
         TNodePtr Compression;
         TNodePtr CompressionLevel;
         TNodePtr CacheMode;
+        TNodePtr ExternalThreshold;
     };
 
     struct TIndexDescription {

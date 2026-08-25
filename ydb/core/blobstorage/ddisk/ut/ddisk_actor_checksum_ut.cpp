@@ -25,6 +25,7 @@
 #include <util/string/printf.h>
 
 #include <algorithm>
+#include <array>
 #include <cstring>
 #include <functional>
 #include <map>
@@ -1204,6 +1205,32 @@ Y_UNIT_TEST_SUITE(TDDiskChecksumTests) {
         AssertStatus(
             WaitFromDDisk<NDDisk::TEvWriteResult>(ctx),
             TReplyStatus::OK);
+    }
+
+    Y_UNIT_TEST(ChecksumsDisabledPersistentBufferRejectsUnalignedSelectors) {
+        TTestContext ctx;
+        NDDisk::TDDiskConfig config;
+        config.EnableChecksums = false;
+        const TDiskHandle disk = ctx.CreateDDisk(53, 3, config, 4u << 20);
+        NDDisk::TQueryCredentials creds =
+            Connect(ctx, disk.PBServiceId, 97, 1);
+
+        const std::array<NDDisk::TBlockSelector, 2> selectors{{
+            {4, 1, BlockSize},
+            {4, 0, BlockSize - 1},
+        }};
+        ui64 lsn = 1;
+        for (const auto& selector : selectors) {
+            auto write = std::make_unique<NDDisk::TEvWritePersistentBuffer>(
+                creds, selector, lsn++, NDDisk::TWriteInstruction(0));
+            write->AddPayload(MakeAlignedRope(MakeData('U', selector.Size)));
+
+            auto result = SendToDDiskAndWait<NDDisk::TEvWritePersistentBufferResult>(
+                ctx, disk.PBServiceId, write.release());
+            AssertStatus(result, TReplyStatus::INCORRECT_REQUEST);
+        }
+
+        AssertNoDiskWrite(ctx, {disk.PDiskEdge});
     }
 
     Y_UNIT_TEST(ChecksumsDisabledPersistentBufferDropsAttachedChecksums) {

@@ -1,0 +1,16 @@
+{
+    "schema"=<
+        "strict" = %true;
+        "unique_keys" = %false
+    >[
+        {
+            "name" = "cnt";
+            "type" = "uint64";
+            "sort_order" = "descending";
+        };
+        {
+            "name" = "planner_type";
+            "type" = "string";
+        };
+    ]
+}

@@ -166,6 +166,7 @@ SRCS(
     Runtime/Linker.cpp
     Runtime/Memory.cpp
     Runtime/Module.cpp
+    Runtime/ModuleDebugInfo.cpp
     Runtime/ObjectGC.cpp
     Runtime/ResourceQuota.cpp
     Runtime/Runtime.cpp

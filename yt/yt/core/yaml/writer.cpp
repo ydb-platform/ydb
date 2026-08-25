@@ -292,7 +292,7 @@ private:
             .With("yaml_error_type", yamlErrorType);
 
         if (!WriteError_.IsOK()) {
-            error <<= WriteError_;
+            error.Add(WriteError_);
         }
 
         THROW_ERROR error;

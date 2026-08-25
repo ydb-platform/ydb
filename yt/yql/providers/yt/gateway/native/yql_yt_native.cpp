@@ -314,6 +314,10 @@ public:
             return session->Async([session, logCtx] {
                 YQL_LOG_CTX_ROOT_SESSION_SCOPE(logCtx);
                 try {
+                    with_lock(session->SecureTmpFolderPreparationsMutex_) {
+                        session->SecureTmpFolderPreparationsByCluster_.clear();
+                    }
+
                     session->TxCache_.AbortAll();
                 } catch (...) {
                     YQL_CLOG(ERROR, ProviderYt) << CurrentExceptionMessage();

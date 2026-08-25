@@ -495,10 +495,12 @@ public:
         if (useTLS) {
             auto httpsConfig = NYT::New<NYT::NHttps::TClientConfig>();
             httpsConfig->MaxIdleConnections = config->ConnectionPoolSize;
+            httpsConfig->DnsResolveOptions = GetDnsResolveOptions(config);
             Client_ = NHttps::CreateClient(httpsConfig, Poller_);
         } else {
             auto httpConfig = NYT::New<NYT::NHttp::TClientConfig>();
             httpConfig->MaxIdleConnections = config->ConnectionPoolSize;
+            httpConfig->DnsResolveOptions = GetDnsResolveOptions(config);
             Client_ = NHttp::CreateClient(httpConfig, Poller_);
         }
     }

@@ -674,6 +674,20 @@
             "uri": "https://{canondata_backend}/1775319/4853c35082216c826105aae8f4cce32b381019a3/resource.tar.gz#test.test_Optimizers-MoveExtractMembersOverTake-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[Optimizers-PruneUnusedColumnsOverSqlCombineInputPresort-default.txt-Debug]": [
+        {
+            "checksum": "3e78d94df0b7528ab1b48d560c83994e",
+            "size": 1042,
+            "uri": "https://{canondata_backend}/1942100/b3fea25ffcae61194497f22ab67e0a13afdd7490/resource.tar.gz#test.test_Optimizers-PruneUnusedColumnsOverSqlCombineInputPresort-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[Optimizers-PruneUnusedColumnsOverSqlCombineInputPresort-default.txt-Results]": [
+        {
+            "checksum": "e3647bd4ffe3af8f6709893b98f0b052",
+            "size": 2109,
+            "uri": "https://{canondata_backend}/1900335/3ed0230380f49ae9fe8480e9ff95053b860e88c7/resource.tar.gz#test.test_Optimizers-PruneUnusedColumnsOverSqlCombineInputPresort-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[Optimizers-VisitAllEqualLambdas-default.txt-Debug]": [
         {
             "checksum": "d507275746491c45cbc87ed0027c20b2",

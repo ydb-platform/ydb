@@ -139,7 +139,7 @@ public:
     };
 
     TConfigProvider(TTypeAnnotationContext& types, const TGatewaysConfig* config, TString username,
-                    TAllowSettingPolicy policy, bool forPartialTypeCheck)
+                    TAllowSettingPolicy policy, bool forPartialTypeCheck, const TVector<TString>& activatedGroups)
         : Types_(types)
         , ForPartialTypeCheck_(forPartialTypeCheck)
         , CoreConfig_(config && config->HasYqlCore() ? &config->GetYqlCore() : nullptr)
@@ -147,6 +147,9 @@ public:
         , Username_(std::move(username))
         , Policy_(std::move(policy))
     {
+        for (const auto& activationGroup : activatedGroups) {
+            RecordActivation(CoreActivationLabel, activationGroup);
+        }
     }
 
     TStringBuf GetName() const override {
@@ -1522,9 +1525,10 @@ private:
 } // namespace
 
 TIntrusivePtr<IDataProvider> CreateConfigProvider(TTypeAnnotationContext& types, const TGatewaysConfig* config, const TString& username,
-                                                  const TAllowSettingPolicy& policy, bool forPartialTypeCheck)
+                                                  const TAllowSettingPolicy& policy, bool forPartialTypeCheck,
+                                                  const TVector<TString>& activatedGroups)
 {
-    return new TConfigProvider(types, config, username, policy, forPartialTypeCheck);
+    return new TConfigProvider(types, config, username, policy, forPartialTypeCheck, activatedGroups);
 }
 
 const THashSet<TStringBuf>& ConfigProviderFunctions() {

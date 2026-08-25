@@ -126,7 +126,12 @@ _CSS = (
     ':flex;align-items:center;gap:.4rem;flex-wrap:wrap;padding:.55rem;margin:.45rem 0;border:1px solid #d0d5dd;border-radius:'
     '6px;background:var(--panel)}.query-row select{max-width:15rem}.query-token{display:flex;align-items:center;gap:.3rem;pad'
     'ding:.2rem .35rem;border-radius:4px;background:#fff;border:1px solid #d0d5dd}.query-token b{color:#6941c6;font-weight:60'
-    '0}.query-actions{margin-left:auto}\n'
+    '0}.query-actions{margin-left:auto}.run-tabs{display:flex;gap:.35rem;overflow-x:auto;margin:1rem 0;border-bottom:1px solid '
+    '#d0d5dd}.run-tab{display:block;padding:.6rem .8rem;border-radius:6px 6px 0 0;color:var(--muted);text-decoration:none;whit'
+    'e-space:nowrap}.run-tab:hover{background:var(--panel)}.run-tab.active{color:var(--text);font-weight:650;background:#fff;b'
+    'order:1px solid #d0d5dd;border-bottom-color:#fff;margin-bottom:-1px}.profile-overview td:first-child{font-weight:650}.run'
+    '-section-title{display:flex;align-items:baseline;justify-content:space-between;gap:1rem;flex-wrap:wrap}.downloads{display'
+    ':inline-block}.downloads summary{cursor:pointer}.downloads .actions{margin-top:.5rem}\n'
     '.status.queued{color:var(--warn)}\n'
 )
 _JS = (
@@ -149,8 +154,14 @@ _JS = (
     'function setRoute(value){location.hash=value}\n'
     'function displayError(error){return \'<div class="notice error">\'+esc(error.message||error)+\'</div>\'}\n'
     "function secondsLabel(seconds){return Number.isFinite(Number(seconds))?Math.max(0,Number(seconds)).toFixed(1)+' s':'—'}\n"
-    "function duration(record){if(!record.started_at||!record.finished_at)return '—';return secondsLabel((Date.parse(record.f"
-    'inished_at)-Date.parse(record.started_at))/1000)}\n'
+    "function humanTime(value){if(!value)return 'Not started';const date=new Date(value);return Number.isNaN(date.getTime())"
+    "?'—':new Intl.DateTimeFormat(undefined,{dateStyle:'medium',timeStyle:'short'}).format(date)}\n"
+    "function elapsedLabel(seconds){seconds=Math.max(0,Math.round(Number(seconds)));if(!Number.isFinite(seconds))return '—'"
+    ";const days=Math.floor(seconds/86400),hours=Math.floor(seconds%86400/3600),minutes=Math.floor(seconds%3600/60),remain"
+    "ing=seconds%60;if(days)return days+'d '+hours+'h';if(hours)return hours+'h '+minutes+'m';if(minutes)return minutes+'m '+"
+    "remaining+'s';return remaining+'s'}\n"
+    "function duration(record){if(!record.started_at)return 'Not started';const end=record.finished_at?Date.parse(record.fin"
+    "ished_at):record.status==='running'?Date.now():NaN;return elapsedLabel((end-Date.parse(record.started_at))/1000)}\n"
     "function cpuRanges(cpus){if(!Array.isArray(cpus)||!cpus.length)return '—';const values=[...new Set(cpus.map(Number).filt"
     'er(Number.isSafeInteger))].sort((left,right)=>left-right);const ranges=[];for(let index=0;index<values.length;){let end='
     'index;while(end+1<values.length&&values[end+1]===values[end]+1)end++;ranges.push(values[index]===values[end]?String(valu'
@@ -346,7 +357,8 @@ _JS = (
     '<tr><th>Run</th><th>Status</th><th>Source</th><th>Started / duration</th><th>Profiles / repeats</th><th>perf</th><th>Act'
     'ions</th></tr></thead><tbody>\'+runs.map(run=>\'<tr><td><a href="#run/\'+enc(run.id)+\'">\'+esc(run.id)+\'</a><br><small class'
     "=muted>'+esc(run.config_path||'config snapshot')+'</small></td><td>'+status(run.status)+'</td><td>'+esc(run.source)+'</t"
-    "d><td>'+esc(run.started_at||'—')+'<br><small>'+duration(run)+'</small></td><td>'+run.profiles+' / '+run.repetitions+'</t"
+    "d><td><time title=\"'+esc(run.started_at||'')+'\">'+esc(humanTime(run.started_at))+'</time><br><small>'+duration(run)+"
+    "'</small></td><td>'+run.profiles+' / '+run.repetitions+'</t"
     'd><td>\'+ (run.perf?\'yes\':\'no\')+\'</td><td><div class=actions><a href="#run/\'+enc(run.id)+\'">Open</a><a data-repeat="\'+esc'
     '(run.id)+\'">Repeat</a><a href="\'+runHref(run.id,\'config\')+\'">YAML</a><a href="\'+runHref(run.id,\'manifest\')+\'">run.json</'
     'a><a href="\'+runHref(run.id,\'archive\')+\'">Archive</a></div></td></tr>\').join(\'\')+\'</tbody></table>\':\'<div class=empty>No'
@@ -639,40 +651,51 @@ _JS = (
     'urrent_run_id?\'<a href="#run/\'+enc(run.current_run_id)+\'">Currently running: \'+esc(run.current_run_id)+\'</a>\':\'Waiting f'
     "or the dispatcher.')+'</div>':'';\n"
     "    sessionStorage.setItem('ydb-bench-active-run',activeRun);\n"
-    '    const groups=profileGroups(run.steps||[]);\n'
-    "    let content=breadcrumbs([{route:'runs',label:'Runs'},{route:'run/'+enc(id),label:id}])+queueNotice+'<h1 class=page-t"
-    "itle>'+esc(id)+(selectedProfile?' / '+esc(selectedProfile):'')+'</h1><div class=toolbar><button id=refresh-run>Refresh</"
-    "button>'+(['queued','running','recovery_required'].includes(run.state)?'<button class=danger id=cancel-run>Cancel</butto"
-    'n>\':\'\')+\'<button id=repeat-run>Repeat with this YAML</button><a href="\'+runHref(id,\'config\')+\'">Download YAML</a><a href'
-    '="\'+runHref(id,\'manifest\')+\'">run.json</a><a href="\'+runHref(id,\'archive\')+\'">Archive artifacts</a></div><div class="gri'
-    'd"><section class=card><div class=form-grid><div><div class=muted>Status</div>\'+status(run.status)+\'</div><div><div clas'
-    "s=muted>Output</div><code>'+esc(run.output_directory||id)+'</code></div><div><div class=muted>Time</div>'+esc(run.starte"
-    "d_at||'—')+' / '+duration(run)+'</div><div><div class=muted>Progress</div>'+run.finished_steps+' / '+run.steps.length+' "
-    "steps</div></div></section>';\n"
-    '    const visible=selectedProfile?Object.fromEntries(Object.entries(groups).filter(([key])=>key===selectedProfile)):grou'
-    'ps;\n'
-    '    content+=\'<section class="card run-tree"><h2>Queue</h2>\'+Object.entries(visible).map(([key,steps])=>\'<details open><'
-    'summary><a href="#run/\'+enc(id)+\'/profile/\'+enc(key)+\'">\'+esc(key)+\'</a></summary><table><tr><th>Affinity</th><th>Runs</'
-    "th><th>State</th></tr>'+affinityRows(id,steps)+'</table></details>').join('')+'</section>';\n"
-    "    if(selectedProfile)content+='<section class=card><h2>Results chart</h2><p class=muted>Affinity variants are lines. C"
-    'hoose a common X axis, one or more Y metrics, and fixed values for the remaining dimensions.</p><div id=run-chart>Loadin'
-    "g summary data…</div></section>';\n"
-    "    const running=(run.steps||[]).find(step=>step.state==='running');\n"
-    "    content+='<section class=card><h2>Current step</h2>'+ (running?'<p><strong>'+esc(running.benchmark)+' / '+esc(runnin"
-    "g.profile)+'</strong>, '+esc(running.affinity)+', '+esc(running.threads??'—')+' threads, repeat '+running.repeat+', elap"
-    "sed '+esc(stepDuration(running))+'</p>':'<p class=muted>No step is currently running.</p>')+'<h3>Live stdout</h3><pre cl"
-    "ass=log>'+esc(run.tail?.stdout||'No stdout captured yet.')+'</pre><h3>Live stderr</h3><pre class=log>'+esc(run.tail?.std"
-    "err||'No stderr captured yet.')+'</pre></section></div>';\n"
+    '    const groups=profileGroups(run.steps||[]),profileKeys=Object.keys(groups),activeProfile=groups[selectedProfile]?sele'
+    "ctedProfile:profileKeys.length===1?profileKeys[0]:'';\n"
+    "    const crumbs=[{route:'runs',label:'Runs'},{route:'run/'+enc(id),label:id}];if(activeProfile&&profileKeys.length>1)cr"
+    "umbs.push({route:'run/'+enc(id)+'/profile/'+enc(activeProfile),label:activeProfile});\n"
+    "    let content=breadcrumbs(crumbs)+queueNotice+'<h1 class=page-title>'+esc(id)+'</h1><div class=toolbar><button id=ref"
+    "resh-run>Refresh</button>'+(['queued','running'].includes(run.state)?'<button class=danger id=cancel-run>Cancel</button>'"
+    ":'')+'<button id=repeat-run>Repeat with this YAML</button><details class=downloads><summary>Downloads</summary><div cla"
+    "ss=actions><a href=\"'+runHref(id,'config')+'\">YAML</a><a href=\"'+runHref(id,'manifest')+'\">run.json</a><a href=\"'+r"
+    "unHref(id,'archive')+'\">Artifacts</a></div></details></div><div class=grid><section class=card><div class=form-grid><d"
+    "iv><div class=muted>Status</div>'+status(run.status)+'</div><div><div class=muted>Output</div><code>'+esc(run.output_di"
+    "rectory||id)+'</code></div><div><div class=muted>Time</div>'+esc(humanTime(run.started_at))+' / '+duration(run)+'</div>"
+    "<div><div class=muted>Progress</div>'+run.finished_steps+' / '+run.steps.length+' steps</div></div></section>';\n"
+    "    if(run.state==='recovery_required')content+='<div class=\"notice error\"><strong>Interrupted.</strong> The web servi"
+    "ce restarted while this run was active. Verify that the previous benchmark process stopped before repeating it.</div>'"
+    ";\n"
+    "    if(profileKeys.length>1)content+='<nav class=run-tabs><a class=\"run-tab '+(!activeProfile?'active':'')+'\" href=\"#r"
+    "un/'+enc(id)+'\">Overview</a>'+profileKeys.map(key=>'<a class=\"run-tab '+(key===activeProfile?'active':'')+'\" href=\"#"
+    "run/'+enc(id)+'/profile/'+enc(key)+'\">'+esc(key)+'</a>').join('')+'</nav>';\n"
+    "    if(!activeProfile)content+='<section class=\"card profile-overview\"><h2>Profiles</h2><table><tr><th>Profile</th><th"
+    ">Progress</th><th>State</th><th>Affinity modes</th></tr>'+profileKeys.map(key=>{const steps=groups[key],done=steps.fil"
+    "ter(step=>!['pending','running'].includes(step.state)).length,affinities=new Set(steps.map(step=>step.affinity)).size;re"
+    "turn '<tr><td><a href=\"#run/'+enc(id)+'/profile/'+enc(key)+'\">'+esc(key)+'</a></td><td>'+done+' / '+steps.length+'</td"
+    "><td>'+status(aggregateState(steps))+'</td><td>'+affinities+'</td></tr>'}).join('')+'</table></section>';\n"
+    "    if(activeProfile)content+='<section class=card><div class=run-section-title><h2>Results</h2><strong>'+esc(activeProf"
+    "ile)+'</strong></div><p class=muted>Affinity variants are lines. Choose a common X axis, one or more Y metrics, and fix"
+    "ed values for the remaining dimensions.</p><div id=run-chart>Loading summary data…</div></section>';\n"
+    "    if(activeProfile){const steps=groups[activeProfile],open=run.state==='running'?' open':'';content+='<section class=\""
+    "card run-tree\"><details'+open+'><summary><strong>Execution details</strong> — affinity, cases and artifacts</summary><"
+    "table><tr><th>Affinity</th><th>Runs</th><th>State</th></tr>'+affinityRows(id,steps)+'</table></details></section>'}\n"
+    "    const running=(run.steps||[]).find(step=>step.state==='running'),live=['running','queued','failed','recovery_requir"
+    "ed'].includes(run.state);\n"
+    "    if(live)content+='<section class=card><h2>Current step</h2>'+ (running?'<p><strong>'+esc(running.benchmark)+' / '+e"
+    "sc(running.profile)+'</strong>, '+esc(running.affinity)+', '+esc(running.threads??'—')+' threads, repeat '+running.repe"
+    "at+', elapsed '+esc(stepDuration(running))+'</p>':'<p class=muted>No step is currently running.</p>')+'<h3>Live stdout"
+    "</h3><pre class=log>'+esc(run.tail?.stdout||'No stdout captured yet.')+'</pre><h3>Live stderr</h3><pre class=log>'+esc"
+    "(run.tail?.stderr||'No stderr captured yet.')+'</pre></section>';content+='</div>';\n"
     "    app.innerHTML=shell('runs',content);\n"
-    "    document.querySelector('#refresh-run').onclick=()=>renderRun(id,selectedProfile);\n"
+    "    document.querySelector('#refresh-run').onclick=()=>renderRun(id,activeProfile);\n"
     "    document.querySelector('#repeat-run').onclick=()=>reuseRun(id);\n"
     "    const cancel=document.querySelector('#cancel-run');\n"
-    "    if(cancel)cancel.onclick=async()=>{try{await api('/api/runs/'+enc(id)+'/cancel',{method:'POST'});renderRun(id,select"
-    'edProfile)}catch(error){alert(error.message)}};\n'
-    "    if(selectedProfile){const pieces=selectedProfile.split('/'),benchmark=pieces.shift(),profile=pieces.join('/');try{mo"
-    "untChartBuilder(document.querySelector('#run-chart'),await loadChartData([id]),{benchmark,profile,singleProfile:true})}"
-    'catch(error){documen'
-    "t.querySelector('#run-chart').innerHTML=displayError(error)}}\n"
+    "    if(cancel)cancel.onclick=async()=>{try{await api('/api/runs/'+enc(id)+'/cancel',{method:'POST'});renderRun(id,acti"
+    'veProfile)}catch(error){alert(error.message)}};\n'
+    "    if(activeProfile){const pieces=activeProfile.split('/'),benchmark=pieces.shift(),profile=pieces.join('/');try{mount"
+    "ChartBuilder(document.querySelector('#run-chart'),await loadChartData([id]),{benchmark,profile,singleProfile:true})}cat"
+    "ch(error){document.querySelector('#run-chart').innerHTML=displayError(error)}}\n"
     "  }catch(error){app.innerHTML=shell('runs',breadcrumbs([{route:'runs',label:'Runs'},{route:'run/'+enc(id),label:id}])+di"
     'splayError(error))}\n'
     '}\n'
@@ -1584,7 +1607,15 @@ class RunService:
                 return False
             return True
 
-        return [record for record in self.model().values() if matches(record)]
+        records = [record for record in self.model().values() if matches(record)]
+        return sorted(
+            records,
+            key=lambda record: (
+                record.get("queued_at") or record.get("started_at") or record.get("finished_at") or "",
+                record["id"],
+            ),
+            reverse=True,
+        )
 
     def save_draft(self, yaml_text):
         # Store only generated IDs under the configured result root; the API

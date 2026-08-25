@@ -16,6 +16,7 @@
 #include "WAVM/Platform/VectorOverMMap.h"
 #include "WAVM/Runtime/Intrinsics.h"
 #include "WAVM/Runtime/Runtime.h"
+#include "WAVM/Runtime/ModuleDebugInfo.h"
 #include "WAVM/RuntimeABI/RuntimeABI.h"
 
 namespace WAVM { namespace Intrinsics {
@@ -175,9 +176,14 @@ namespace WAVM { namespace Runtime {
 	{
 		IR::Module ir;
 		std::vector<U8> objectCode;
+		std::shared_ptr<ModuleDebugInfo> debugInfo;
 
-		Module(IR::Module&& inIR, std::vector<U8>&& inObjectCode)
-		: ir(inIR), objectCode(std::move(inObjectCode))
+		Module(IR::Module&& inIR,
+			   std::vector<U8>&& inObjectCode,
+			   std::shared_ptr<ModuleDebugInfo> inDebugInfo = nullptr)
+		: ir(std::move(inIR))
+		, objectCode(std::move(inObjectCode))
+		, debugInfo(std::move(inDebugInfo))
 		{
 		}
 	};

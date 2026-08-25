@@ -26,4 +26,15 @@ constexpr TStringBuf StreamingTopicRead = "StreamingTopicRead";
 constexpr TStringBuf PartitionsBalancingIdleTimeoutUsSetting = "PartitionsBalancingIdleTimeoutUs";
 constexpr TStringBuf UserSchemaColumnsSetting = "UserSchemaColumns";
 
+// Write settings
+
+namespace NDeliveryGuaranteeSetting {
+
+static constexpr TStringBuf Name = "deliveryguarantee";
+static constexpr TStringBuf PrettyName = "DELIVERY_GUARANTEE";
+static constexpr TStringBuf ExactlyOnceValue = "exactly_once";
+static constexpr TStringBuf AtLeastOnceValue = "at_least_once";
+
+} // namespace NDeliveryGuaranteeSetting
+
 } // namespace NYql

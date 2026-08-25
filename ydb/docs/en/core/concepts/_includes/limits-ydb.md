@@ -34,10 +34,10 @@ The _Error type_ column shows the status with which the query will complete in c
 
 ## Analytical table limits
 
-| Parameter | Value |
-| :--- | :--- |
-| Maximum row size | 8 MB |
-| Maximum size of an inserted data block | 8 MB |
+| Parameter | Value
+| :--- | :---
+| Maximum row size | 8 MB
+| Maximum size of an inserted data block | 8 MB
 
 ## Query execution limits {#query}
 
@@ -72,8 +72,8 @@ In previous versions of {{ ydb-short-name }}, queries were executed using an API
 
 ## Resource pool limits {#resource_pool}
 
-| Parameter | Value |
-| :--- | :--- |
-| Maximum number of resource pool classifiers | 1000 |
+| Parameter | Value
+| :--- | :---
+| Maximum number of resource pool classifiers | 1000
 
 Limits on the number of resources are imposed by limits on the number of schema objects. These limits can be found [above](#schema-object).

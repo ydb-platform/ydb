@@ -3,6 +3,7 @@
 #include "context.h"
 #include "requests.h"
 
+#include <yt/cpp/mapreduce/interface/config.h>
 #include <yt/cpp/mapreduce/interface/logging/yt_log.h>
 
 #include <yt/yt/core/tracing/trace_context.h>
@@ -120,6 +121,18 @@ TString FormatTraceParentHeader(const NTracing::TTraceId& traceId, const NTracin
         << "-01";
     traceparent.to_lower();
     return traceparent;
+}
+
+NDns::TDnsResolveOptions GetDnsResolveOptions(const TConfigPtr& config)
+{
+    if (config->ForceIpV4 && !config->ForceIpV6) {
+        return {.EnableIPv4 = true, .EnableIPv6 = false};
+    }
+    if (config->ForceIpV6 && !config->ForceIpV4) {
+        return {.EnableIPv4 = false, .EnableIPv6 = true};
+    }
+    // NB(achains): Dual-stack resolution, matching the legacy mapreduce/http client.
+    return {.EnableIPv4 = true, .EnableIPv6 = true};
 }
 
 ////////////////////////////////////////////////////////////////////////////////

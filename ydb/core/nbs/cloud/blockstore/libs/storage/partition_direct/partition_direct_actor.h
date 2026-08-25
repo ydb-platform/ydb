@@ -80,6 +80,18 @@ private:
     // At most one add-host runs at a time across the whole partition.
     std::optional<TAddHostInFlight> AddHostInFlight;
 
+    // Batch persisting of vchunk configs.
+    bool ExecutingUpdateVChunkConfig = false;
+    TVector<TPersistResultPromise> ExecutingUpdateVChunkConfigPromises;
+    TTxPartition::TUpdateVChunkConfig::TUpdateConfigRequests
+        PendingUpdateVChunkConfigRequests;
+
+    // Batch persisting of ahead and behind fields.
+    bool ExecutingUpdateDirtyMapState = false;
+    TVector<TPersistResultPromise> ExecutingUpdateDirtyMapStatePromises;
+    TTxPartition::TUpdateDirtyMapState::TUpdateStateRequests
+        PendingUpdateDirtyMapStateRequests;
+
 public:
     TPartitionActor(
         const NActors::TActorId& tablet,
@@ -226,6 +238,10 @@ private:
 
     void HandleUpdateVChunkConfigDuringDelete(
         const TEvPartitionDirectPrivate::TEvUpdateVChunkConfig::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void HandleUpdateDirtyMapStateDuringDelete(
+        const TEvPartitionDirectPrivate::TEvUpdateDirtyMapState::TPtr& ev,
         const NActors::TActorContext& ctx);
 
     void HandleFastPathServiceShutdownDuringDelete(

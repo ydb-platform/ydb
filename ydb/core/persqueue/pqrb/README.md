@@ -47,11 +47,12 @@ When the first read session connects, only root partitions are given out
 for reading.
 
 A child partition is given out for reading only after **all of its parents
-have been processed**. If Finish carried `ScaleAwareSDK`, **Finish** or
-**Commit** is enough. For the old SDK, Finish alone is not enough: it also
-needs `StartedReadingFromEndOffset` (reading started at the end) or
-**Commit**. Otherwise the children are not readable and the delay heuristic
-kicks in (see below).
+have been processed**, except when a session listed that child explicitly
+(see [Explicit partitions](#explicit-partitions)). If Finish carried
+`ScaleAwareSDK`, **Finish** or **Commit** is enough. For the old SDK, Finish
+alone is not enough: it also needs `StartedReadingFromEndOffset` (reading
+started at the end) or **Commit**. Otherwise the children are not readable
+and the delay heuristic kicks in (see below).
 
 If a read session dies, **Finish** is cleared on every partition it was
 reading. **Commit** is kept.
@@ -93,6 +94,11 @@ released and they are glued together. This is not a merge of 0 and 2.
 
 After Commit of both parents, 2 is a separate family; 0 and 1 may stay on
 different sessions.
+
+A parent family assigned to an explicit-partition session is not grown. It
+can still be absorbed into a common parent family so the child can be read;
+the special family moves to the common session (see
+[Explicit partitions](#explicit-partitions)).
 
 ## Session change
 
@@ -141,3 +147,18 @@ session.
 
 Active and inactive partition counters order **families**
 (`TPartitionFamilyComparator`), not sessions.
+
+## Explicit partitions
+
+A read session may list the partitions it wants (preferred groups). Those
+partitions are locked even if their parents are not processed yet: they have
+not been read to the end, and the last offset has not been committed.
+
+A family currently assigned to such a session always contains exactly one
+partition. Child partitions are not attached to it.
+
+That family (A) may be merged into another family (B) that is **not**
+assigned to an explicit-partition session. Then A moves onto B's session,
+never the other way around. This is needed when partitions A and B were
+merged and their child can be read only after the parent families are
+combined.

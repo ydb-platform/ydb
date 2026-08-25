@@ -283,6 +283,50 @@ Y_UNIT_TEST(DisconnectResetsFinishUntilParentsAreFinishedAgain) {
     env.AssertSameSession({0, 1, 2});
 }
 
+Y_UNIT_TEST(SpecialParentJoinsCommonFamilyOnMerge) {
+    TScaleEnv env;
+    env.CreateParents(2);
+    env.RegisterSession("session-common");
+    env.RegisterSession("session-pref", {2});
+    env.Merge(0, 1);
+    env.AssertLocked(0, "session-common");
+    env.AssertLocked(1, "session-pref");
+    env.Finish("session-pref", 1);
+    env.Finish("session-common", 0);
+    env.AssertLocked(0, "session-common");
+    env.AssertLocked(1, "session-common");
+    env.AssertLocked(2, "session-common");
+}
+
+Y_UNIT_TEST(MergeFreeFamilyIntoReleasingKeepsPartitionMapping) {
+    TScaleEnv env;
+    env.CreateParents(2);
+    env.RegisterSession("session-common");
+    env.RegisterSession("session-pref", {2});
+    env.Merge(0, 1);
+    env.AssertLocked(0, "session-common");
+    env.AssertLocked(1, "session-pref");
+
+    env.Finish("session-common", 0);
+
+    // A preferred session for the common parent forces that family to start
+    // releasing. Do not ack the release: the family stays Releasing.
+    env.RegisterSession("session-steal", {1}, /*pump=*/false);
+
+    env.Finish("session-pref", 1, /*scaleAware=*/true, /*fromEnd=*/true, /*pump=*/false);
+
+    // Completing the special family's merge-release while the common parent is
+    // still Releasing used to Destroy the free family without remapping, then
+    // crash in GetReadSessionsInfo: "Use of destroyed hash table".
+    env.AckRelease(env.Pipes.at("session-pref"), 1, "session-pref");
+    DispatchFor(env.tc);
+    env.SessionsInfo();
+
+    env.Pump();
+    env.AssertSameSession({0, 1});
+    UNIT_ASSERT_C(!env.SessionOf(2).empty(), "merge child must be assigned");
+}
+
 Y_UNIT_TEST(CommitThenRebalanceKeepsMergeChildIndependent) {
     TScaleEnv env;
     env.CreateParents(2);
@@ -319,6 +363,26 @@ Y_UNIT_TEST(CommitThenParentReleaseDoesNotReattachSplitChildren) {
     env.AssertLocked(1, "session-child");
     UNIT_ASSERT_C(!env.SessionOf(2).empty(), "the other split child must stay assigned");
     UNIT_ASSERT_VALUES_UNEQUAL(env.SessionOf(2), env.SessionOf(0));
+}
+
+Y_UNIT_TEST(PreferredUnreadableChildIsLockedForPreferredSession) {
+    TScaleEnv env;
+    env.CreateParents(1);
+    env.RegisterSession("session-0");
+    env.Split(0);
+    env.AssertLocked(0, "session-0");
+    env.AssertNotLocked(1);
+    env.AssertNotLocked(2);
+
+    env.RegisterSession("session-child", {2});
+    env.AssertLocked(0, "session-0");
+    env.AssertLocked(1, "session-child");
+    env.AssertNotLocked(2);
+
+    env.Finish("session-0", 0);
+    env.AssertLocked(0, "session-0");
+    env.AssertLocked(1, "session-child");
+    env.AssertLocked(2, "session-0");
 }
 
 Y_UNIT_TEST(CommitThenRebalanceKeepsChildrenIndependent) {

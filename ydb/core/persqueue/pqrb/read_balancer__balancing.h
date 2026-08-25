@@ -112,6 +112,7 @@ struct TPartitionFamily {
 
     bool IsCommon() const;
     bool IsLonely() const;
+    bool HasSpecialSession() const;
     bool HasActivePartitions() const;
 
     // Releases all partitions of the family.

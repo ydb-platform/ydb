@@ -632,3 +632,5 @@ en:
     to: /public-materials/videos.md
   - from: /reference/ydbops/scenarios.md
     to: /reference/ydbops/rolling-restart-scenario.md
+  - from: /devops/deployment-options/manual/node-authorization.md
+    to: /devops/concepts/node-authorization.md

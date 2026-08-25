@@ -10,6 +10,6 @@ items:
   - name: Managing a cluster's disk subsystem
     include: { mode: link, path: manual/toc_p.yaml }
   - name: Changing an actor system's configuration
-    href: manual/change_actorsystem_configs.md
+    href: ../devops/configuration-management/configuration-v1/change_actorsystem_configs.md
   - name: Maintenance without downtime
     href: manual/maintenance-without-downtime.md

@@ -276,7 +276,7 @@ Y_UNIT_TEST(DDiskTestWriteChecksumsDisabled) {
     ProbeDDiskWrite(true);
 }
 
-void ProbeDDiskRead(bool disableDDiskChecksums) {
+void ProbeDDiskRead(bool disableDDiskChecksums, float backgroundWriteRatio = 0) {
     TStringStream perfCfg;
     perfCfg << R"___(
         DDiskTestList: {
@@ -295,6 +295,11 @@ void ProbeDDiskRead(bool disableDDiskChecksums) {
                 IoSizeBytes: 4096
                 ExpectedChunkSize: 10485760
                 IsReadLoad: true
+    )___";
+    if (backgroundWriteRatio > 0) {
+        perfCfg << "BackgroundWriteRatio: " << backgroundWriteRatio << Endl;
+    }
+    perfCfg << R"___(
             }
         }
     )___";
@@ -309,6 +314,10 @@ Y_UNIT_TEST(DDiskTestRead) {
 
 Y_UNIT_TEST(DDiskTestReadChecksumsDisabled) {
     ProbeDDiskRead(true);
+}
+
+Y_UNIT_TEST(DDiskTestReadWithBackgroundWrites) {
+    ProbeDDiskRead(false, 0.5);
 }
 
 Y_UNIT_TEST(DDiskTestWriteLargeIo) {

@@ -200,6 +200,11 @@ message TEvLoadTestRequest {
         optional bool IOPoll = 17 [default = false];
         // Request size for read/write operations in bytes.
         optional uint32 IoSizeBytes = 18 [default = 4096];
+        // Unmeasured background writes per measured read during IsReadLoad.
+        // 0 disables them; 1.0 issues one write per read.
+        optional float BackgroundWriteRatio = 19 [default = 0];
+        // Background write size in KiB.
+        optional uint32 BackgroundWriteSizeKiB = 20 [default = 4];
     }
 
     message TPersistentBufferWriteLoad {

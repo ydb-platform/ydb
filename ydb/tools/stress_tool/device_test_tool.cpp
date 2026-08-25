@@ -292,12 +292,45 @@ int main(int argc, char **argv) {
                 continue;
             }
 
-            const ui32 ioSizeBytes = record.GetDDiskLoad().GetIoSizeBytes();
+            const auto& load = record.GetDDiskLoad();
+            const ui32 ioSizeBytes = load.GetIoSizeBytes();
             if (ioSizeBytes < 4096 || !IsPowerOf2(ioSizeBytes)) {
                 Cerr << "Error: invalid DDiskLoad.IoSizeBytes in DDiskTestList[" << i
                     << "].DDiskTestList[" << j << "]: " << ioSizeBytes
                     << " (must be power of two and >= 4096)" << Endl;
                 return 1;
+            }
+
+            const float backgroundWriteRatio = load.GetBackgroundWriteRatio();
+            if (backgroundWriteRatio < 0 || backgroundWriteRatio > 1
+                    || (backgroundWriteRatio > 0 && !load.GetIsReadLoad())) {
+                Cerr << "Error: invalid DDiskLoad.BackgroundWriteRatio in DDiskTestList[" << i
+                    << "].DDiskTestList[" << j << "]: " << backgroundWriteRatio
+                    << " (must be in [0, 1] writes per measured read, and nonzero only for read load)" << Endl;
+                return 1;
+            }
+            if (backgroundWriteRatio > 0) {
+                const ui32 backgroundWriteSizeKiB = load.GetBackgroundWriteSizeKiB();
+                if (backgroundWriteSizeKiB < 4 || !IsPowerOf2(backgroundWriteSizeKiB)
+                        || backgroundWriteSizeKiB > Max<ui32>() / 1024) {
+                    Cerr << "Error: invalid DDiskLoad.BackgroundWriteSizeKiB in DDiskTestList[" << i
+                        << "].DDiskTestList[" << j << "]: " << backgroundWriteSizeKiB
+                        << " (must be power of two and >= 4)" << Endl;
+                    return 1;
+                }
+                const ui32 backgroundWriteSizeBytes = backgroundWriteSizeKiB * 1024;
+                if (load.GetExpectedChunkSize() % backgroundWriteSizeBytes != 0) {
+                    Cerr << "Error: DDiskLoad.ExpectedChunkSize must be divisible by background write size"
+                        << " in DDiskTestList[" << i << "].DDiskTestList[" << j << "]" << Endl;
+                    return 1;
+                }
+                for (const auto& area : load.GetAreas()) {
+                    if (area.GetAreaSize() % backgroundWriteSizeBytes != 0) {
+                        Cerr << "Error: DDiskLoad.AreaSize must be divisible by background write size"
+                            << " in DDiskTestList[" << i << "].DDiskTestList[" << j << "]" << Endl;
+                        return 1;
+                    }
+                }
             }
         }
     }

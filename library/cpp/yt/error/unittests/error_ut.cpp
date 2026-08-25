@@ -84,7 +84,6 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-
 template <class T>
 void SetErrorAttribute(TError* error, const std::string& key, const T& value)
 {
@@ -92,7 +91,6 @@ void SetErrorAttribute(TError* error, const std::string& key, const T& value)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-
 
 TEST(TErrorTest, Wrap)
 {

@@ -272,7 +272,7 @@ TError::TErrorOr(const std::exception& ex)
         //  so we force materialize them via this function call.
         auto addAttribute = [this] (const auto& key, const auto& value) {
             std::visit([&] (const auto& actual) {
-                this->Add(key, actual);
+                Add(key, actual);
             }, value);
         };
         for (const auto& [key, value] : simpleException->GetAttributes()) {

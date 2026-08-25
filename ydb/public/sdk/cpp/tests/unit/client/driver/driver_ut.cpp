@@ -226,11 +226,14 @@ Y_UNIT_TEST_SUITE(SdkRuntimeTest) {
 
         UNIT_ASSERT(contextA->IsCancelled());
         UNIT_ASSERT(!scopeA->CreateContext());
-        UNIT_ASSERT(!contextA->CreateContext());
+        auto childContextA = contextA->CreateContext();
+        UNIT_ASSERT(childContextA);
+        UNIT_ASSERT(childContextA->IsCancelled());
         UNIT_ASSERT(!contextB->IsCancelled());
         auto secondContextB = scopeB->CreateContext();
         UNIT_ASSERT(secondContextB);
 
+        childContextA.reset();
         contextA.reset();
         contextB.reset();
         secondContextB.reset();
@@ -298,6 +301,40 @@ Y_UNIT_TEST_SUITE(SdkRuntimeTest) {
             UNIT_ASSERT(!scope->CreateContext());
 
             context.reset();
+            scope->CloseCallbacksAndWait();
+            client.Stop(true);
+        }
+    }
+
+    Y_UNIT_TEST(DriverScopeCancelCreateChildRace) {
+        constexpr size_t Iterations = 32;
+        for (size_t i = 0; i < Iterations; ++i) {
+            NYdbGrpc::TGRpcClientLow client(1);
+            auto scope = GetSdkRuntime().CreateDriverScope(client);
+            auto parentContext = scope->CreateContext();
+            NYdbGrpc::IQueueClientContextPtr childContext;
+            std::promise<void> start;
+            auto startFuture = start.get_future().share();
+
+            std::thread creator([&] {
+                startFuture.wait();
+                childContext = parentContext->CreateContext();
+            });
+            std::thread canceller([&] {
+                startFuture.wait();
+                scope->Cancel();
+            });
+
+            start.set_value();
+            creator.join();
+            canceller.join();
+
+            UNIT_ASSERT(childContext);
+            UNIT_ASSERT(childContext->IsCancelled());
+            UNIT_ASSERT(!scope->CreateContext());
+
+            childContext.reset();
+            parentContext.reset();
             scope->CloseCallbacksAndWait();
             client.Stop(true);
         }

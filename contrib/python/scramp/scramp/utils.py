@@ -1,7 +1,6 @@
 import hmac as hmaca
 from base64 import b64decode, b64encode
 
-
 SERVER_ERROR_INVALID_ENCODING = "invalid-encoding"
 SERVER_ERROR_EXTENSIONS_NOT_SUPPORTED = "extensions-not-supported"
 SERVER_ERROR_INVALID_PROOF = "invalid-proof"

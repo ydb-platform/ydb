@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    local_deferred_publish_client.cpp
     local_federated_topic_client.cpp
     local_topic_client_factory.cpp
     local_topic_client_helpers.cpp

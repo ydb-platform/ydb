@@ -567,7 +567,7 @@ private:
         }
 
         if (const auto& currentOwner = state.GetOperationActorId(); currentOwner != StreamingQueryOperationId) {
-            Finish(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Streaming operation '" << StreamingQueryOperationId << "' was lost, current operation id: '" << currentOwner << "'");
+            Finish(Ydb::StatusIds::PRECONDITION_FAILED, TStringBuilder() << "Streaming operation '" << StreamingQueryOperationId << "' was lost, current operation id: '" << currentOwner << "'");
             return;
         }
 
@@ -777,7 +777,9 @@ public:
 
         auto meta = GetOperationMeta();
 
-        // Start request
+        // Start request.
+        // All non compile-time only setting must be persisted into TScriptExecutionOperationMeta
+        // and also passed in TRestartScriptOperationQuery for correct operation restart.
         RunScriptActorId = Register(CreateRunScriptActor(eventProto, {
             .Database = request.GetDatabase(),
             .ExecutionId = ExecutionId,
@@ -785,6 +787,7 @@ public:
             .LeaseDuration = LeaseDuration,
             .ResultsTtl = GetDuration(meta.GetResultsTtl()),
             .ProgressStatsPeriod = ev.ProgressStatsPeriod,
+            .CheckpointInterval = ev.CheckpointInterval,
             .Counters = Counters,
             .SaveQueryPhysicalGraph = ev.SaveQueryPhysicalGraph,
             .PhysicalGraph = ev.QueryPhysicalGraph,
@@ -881,6 +884,10 @@ private:
         *meta.MutableRlPath() = eventProto.GetRlPath();
         DurationToProtoWithSaturation(LeaseDuration, meta.MutableLeaseDuration());
         DurationToProtoWithSaturation(ev.ProgressStatsPeriod, meta.MutableProgressStatsPeriod());
+
+        if (ev.CheckpointInterval) {
+            DurationToProtoWithSaturation(*ev.CheckpointInterval, meta.MutableCheckpointInterval());
+        }
 
         const auto operationTtl = ev.ForgetAfter ? ev.ForgetAfter : TDuration::Seconds(QueryServiceConfig.GetScriptForgetAfterDefaultSeconds());
         DurationToProtoWithSaturation(operationTtl, meta.MutableOperationTtl());
@@ -1230,6 +1237,7 @@ private:
             .LeaseDuration = LeaseDuration,
             .ResultsTtl = GetDuration(meta.GetResultsTtl()),
             .ProgressStatsPeriod = NProtoInterop::CastFromProto(meta.GetProgressStatsPeriod()),
+            .CheckpointInterval = meta.HasCheckpointInterval() ? std::optional(NProtoInterop::CastFromProto(meta.GetCheckpointInterval())) : std::nullopt,
             .Counters = Counters,
             .SaveQueryPhysicalGraph = meta.GetSaveQueryPhysicalGraph(),
             .PhysicalGraph = std::move(physicalGraph),
@@ -4532,18 +4540,10 @@ private:
     }
 
     void OnFinish(const Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
-        if (!OperationStatus) {
-            OperationStatus = status;
-        }
-
-        if (issues) {
-            OperationIssues.AddIssues(AddRootIssue(TStringBuilder() << "Update final status failed " << status, issues));
-        }
-
-        Send(Owner, new TEvScriptExecutionFinished(*OperationStatus, {
+        Send(Owner, new TEvScriptExecutionFinished(status, {
             .ExecutionEntryExists = ExecutionEntryExists,
             .AlreadyStopped = AlreadyFinalized,
-        }, std::move(OperationIssues)));
+        }, std::move(issues)));
     }
 
     std::optional<Ydb::StatusIds::StatusCode> OperationStatus;

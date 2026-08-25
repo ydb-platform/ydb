@@ -1711,10 +1711,13 @@
             "Base": "TCoInputBase",
             "Match": {"Type": "Callable", "Name": "SqlCombineInput"},
             "Children": [
-                {"Index": 1, "Name": "PresortKeyLambda",      "Type": "TExprBase"},
-                {"Index": 2, "Name": "PresortDirections",     "Type": "TExprBase"},
-                {"Index": 3, "Name": "KeyExtractorLambda",    "Type": "TCoLambda"},
-                {"Index": 4, "Name": "ListHandlerLambda",     "Type": "TCoLambda"}
+                {"Index": 1, "Name": "PresortUsedColumns",    "Type": "TExprBase"},
+                {"Index": 2, "Name": "PresortKeyLambda",      "Type": "TExprBase"},
+                {"Index": 3, "Name": "PresortDirectionNode",  "Type": "TExprBase"},
+                {"Index": 4, "Name": "KeyExtractUsedColumns", "Type": "TExprBase"},
+                {"Index": 5, "Name": "KeyExtractLambda",      "Type": "TCoLambda"},
+                {"Index": 6, "Name": "ArgMapUsedColumns",     "Type": "TExprBase"},
+                {"Index": 7, "Name": "ArgMapLambda",          "Type": "TCoLambda"}
             ]
         },
         {

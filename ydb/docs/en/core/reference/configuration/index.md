@@ -7,39 +7,7 @@ Each configuration section serves a specific purpose in defining how the {{ ydb-
 
 ## Configuration Sections
 
-<<<<<<< HEAD
 The following top-level configuration sections are available, listed in alphabetical order:
-=======
-| **Section** | **Required** | **Description** |
-| --- | --- | --- |
-| [{#T}](actor_system_config.md) | Yes | Distribution of CPU resources across actor system pools |
-| [{#T}](auth_config.md) | No | Authentication and authorization settings |
-| [{#T}](aws_client_config.md) | No | AWS client default settings |
-| [{#T}](blob_storage_config.md) | No | Static cluster group configuration for system tablets |
-| [{#T}](bridge_config.md) | No | Configuration of the [bridge mode](../../concepts/bridge.md) |
-| [{#T}](client_certificate_authorization.md) | No | Authentication using client certificates |
-| [{#T}](cms_config.md) | No | Cluster Management System (CMS) configuration |
-| [{#T}](domains_config.md) | No | Cluster domain configuration, including Blob Storage and State Storage |
-| [{#T}](feature_flags.md) | No | Feature flags to enable or disable certain {{ ydb-short-name }} capabilities |
-| [{#T}](healthcheck_config.md) | No | Thresholds and timeouts for the Health Check service |
-| [{#T}](hive_config.md) | No | Tablet launch configuration |
-| [{#T}](host_configs.md) | No | Typical host configurations for cluster nodes |
-| [{#T}](hosts.md) | Yes | Static cluster node configuration |
-| [{#T}](immediate_controls_config.md) | No | Configuration of dynamic cluster settings |
-| [{#T}](kafka_proxy_config.md) | No | Configuration of [Kafka Proxy](../../reference/kafka-api/index.md) |
-| [{#T}](log_config.md) | No | Logging configuration and parameters |
-| [{#T}](memory_controller_config.md) | No | Memory allocation and limits for database components |
-| [{#T}](monitoring_config.md) | No | Parameters of [YDB Monitoring](../embedded-ui/ydb-monitoring.md) |
-| [{#T}](node_broker_config.md) | No | Stable node name configuration |
-| [{#T}](query_service_config.md) | No | Configuration of external sources for federated queries |
-| [{#T}](resource_broker_config.md) | No | Resource broker for controlling CPU and memory consumption |
-| [{#T}](security_config.md) | No | Security configuration settings |
-| [{#T}](self_management_config.md) | No | Distributed configuration V2 and automatic cluster component management settings |
-| [{#T}](system_tablet_backup_config.md) | No | System tablet backup configuration |
-| [{#T}](table_service_config.md) | No | Query execution configuration settings |
-| [{#T}](tli_config.md) | No | Diagnostics parameters for [transaction lock invalidation](../../concepts/glossary.md#tli) (TLI) |
-| [{#T}](tls.md) | No | TLS configuration for secure connections |
->>>>>>> 617b68b36c5 (add description for force_shard_split_data_size setting (#41348))
 
 #|
 || **Section** | **Required** | **Description** ||
@@ -55,6 +23,7 @@ The following top-level configuration sections are available, listed in alphabet
 || [{#T}](hive.md) | No | Hive component configuration for tablet management ||
 || [{#T}](host_configs.md) | No | Typical host configurations for cluster nodes ||
 || [{#T}](hosts.md) | Yes | Static cluster nodes configuration ||
+|| [{#T}](immediate_controls_config.md) | No | Configuration of dynamic cluster settings ||
 || [{#T}](kafka.md) | No | [Kafka Proxy](../../reference/kafka-api/index.md) configuration ||
 || [{#T}](log_config.md) | No | Logging configuration and parameters ||
 || [{#T}](memory_controller_config.md) | No | Memory allocation and limits for database components ||

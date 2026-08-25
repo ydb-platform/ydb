@@ -32,12 +32,12 @@ TString TTextWriter::EscapeFieldValue(const TString& value) {
 }
 
 TMaybe<TString> TTextWriter::UnescapeFieldValue(const TString& escapedFieldValue) {
-    std::string::size_type startPos;
+    std::string::size_type startPos = 0;
     return UnescapeFieldValue(escapedFieldValue, startPos);
 }
 
 TMaybe<TString> TTextWriter::UnescapeFieldValue(const TString& escapedFieldValue, std::string::size_type& startPos) {
-    if (startPos > escapedFieldValue.size()) {
+    if (startPos >= escapedFieldValue.size()) {
         return "";
     }
 
@@ -62,7 +62,7 @@ TMaybe<TString> TTextWriter::UnescapeFieldValue(const TString& escapedFieldValue
             return result.Str();
         } else if (escapedFieldValue[startPos]=='\\') {
             startPos++;
-            if (startPos > escapedFieldValue.size()) {
+            if (startPos >= escapedFieldValue.size()) {
                 // invalid escaped string (\ is last character)
                 return {};
             } else {

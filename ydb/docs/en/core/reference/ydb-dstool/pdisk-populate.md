@@ -2,6 +2,12 @@
 
 Use the `pdisk populate` subcommand to move a selected set of VDisks to one PDisk. The command can save the active VDisks of a source PDisk to a snapshot file and then use that file to populate a destination PDisk.
 
+{% note warning %}
+
+Use `pdisk populate` for controlled device testing: it lets you place exactly the same set of VDisks on a new device and compare how the old and new devices handle that workload. Do not use this command for routine hardware replacement. For automatic relocation during planned maintenance, use the `LONG_TERM_MAINTENANCE_PLANNED` maintenance status. For controlled manual relocation, use `NO_NEW_VDISKS` together with `vdisk evict`. See [{#T}](../../maintenance/manual/moving_vdisks.md#moving_vdisk).
+
+{% endnote %}
+
 The Blob Storage Controller validates all selected VDisks and schedules their reassignment in a single atomic configuration transaction. If any VDisk cannot be reassigned, the configuration is not changed. The data migration itself continues asynchronously after the transaction is applied.
 
 General format of the command:

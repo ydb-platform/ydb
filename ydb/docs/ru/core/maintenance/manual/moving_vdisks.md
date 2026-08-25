@@ -2,27 +2,80 @@
 
 Иногда бывает нужно освободить блочное устройство для замены оборудования. Или один из VDisk'ов интенсивно используется и влияет на производительность остальных VDisk'ов, находящихся на том же PDisk'е. В этих случаях необходимо выполнить перевоз VDisk'ов.
 
-## Перевезти один из VDisk'ов с блочного устройства {#moving_vdisk}
+## Перевезти VDisk'и с блочного устройства {#moving_vdisk}
 
-Получите список идентификаторов VDisk'ов с помощью утилиты [{{ ydb-short-name }} DSTool](../../reference/ydb-dstool/index.md):
+### Автоматический перенос при плановом обслуживании
 
-```bash
-ydb-dstool -e <bs_endpoint> vdisk list --format tsv --columns VDiskId --no-header
-```
-
-Чтобы перевезти VDisk'и с блочного устройства, выполните на узле следующие команды:
+Для штатного обслуживания оборудования задайте исходному PDisk maintenance-статус `LONG_TERM_MAINTENANCE_PLANNED`:
 
 ```bash
-ydb-dstool -e <bs_endpoint> vdisk evict --vdisk-ids VDISK_ID1 ... VDISK_IDN
-ydbd admin bs config invoke --proto 'Command { ReassignGroupDisk { GroupId: <ID группы хранения> GroupGeneration: <Поколение группы хранения> FailRealmIdx: <FailRealm> FailDomainIdx: <FailDomain> VDiskIdx: <Номер слота> } }'
+ydb-dstool -e <bs_endpoint> pdisk set \
+  --maintenance-status LONG_TERM_MAINTENANCE_PLANNED \
+  --pdisk-ids "[NodeId:PDiskId]"
 ```
 
-* `VDISK_ID1 ... VDISK_IDN` — список идентификаторов VDisk'ов, вида `[GroupId:GroupGeneration:FailRealmIdx:FailDomainIdx:VDiskIdx]`. Идентификаторы разделяются пробелами.
-* `GroupId` — ID группы хранения.
-* `GroupGeneration` — поколение группы хранения.
-* `FailRealmIdx` — номер fail realm.
-* `FailDomainIdx` — номер fail domain.
-* `VDiskIdx` — номер слота.
+Этот статус запрещает размещение новых VDisk'ов на PDisk и указывает SelfHeal асинхронно переместить существующие VDisk'и. Blob Storage Controller выбирает подходящие целевые PDisk'и в соответствии с правилами размещения кластера.
+
+Если после обслуживания PDisk остаётся в кластере и снова может принимать новые VDisk'и, снимите запрос на обслуживание:
+
+```bash
+ydb-dstool -e <bs_endpoint> pdisk set \
+  --maintenance-status NO_REQUEST \
+  --pdisk-ids "[NodeId:PDiskId]"
+```
+
+### Управляемый ручной перенос
+
+Если требуется контролировать, какие VDisk'и перемещаются, запретите новые размещения на исходном PDisk и переместите выбранные VDisk'и вручную:
+
+1. Задайте исходному PDisk maintenance-статус `NO_NEW_VDISKS`:
+
+    ```bash
+    ydb-dstool -e <bs_endpoint> pdisk set \
+      --maintenance-status NO_NEW_VDISKS \
+      --pdisk-ids "[NodeId:PDiskId]"
+    ```
+
+1. Получите идентификаторы VDisk'ов, расположенных на исходном PDisk:
+
+    ```bash
+    ydb-dstool -e <bs_endpoint> vdisk list \
+      --format tsv --columns VDiskId NodeId:PDiskId --no-header \
+      | fgrep '[NodeId:PDiskId]'
+    ```
+
+1. Переместите выбранные VDisk'и:
+
+    ```bash
+    ydb-dstool -e <bs_endpoint> vdisk evict --vdisk-ids VDISK_ID1 ... VDISK_IDN
+    ```
+
+* `VDISK_ID1 ... VDISK_IDN` — идентификаторы VDisk'ов в формате `[GroupId:GroupGeneration:FailRealmIdx:FailDomainIdx:VDiskIdx]`, разделённые пробелами.
+* `NodeId:PDiskId` — идентификатор исходного PDisk.
+
+Если после операции PDisk снова может принимать новые VDisk'и, верните ему maintenance-статус `NO_REQUEST`.
+
+## Воспроизвести нагрузку PDisk на другом устройстве {#testing_device}
+
+Используйте [`pdisk populate`](../../reference/ydb-dstool/pdisk-populate.md) только для контролируемого тестирования устройств, когда требуется переместить на новое устройство точно такой же набор VDisk'ов и сравнить его производительность со старым устройством под той же нагрузкой.
+
+Сначала сохраните активные VDisk'и старого PDisk в снапшот:
+
+```bash
+ydb-dstool -e <bs_endpoint> pdisk populate \
+  --snapshot-from-pdisk '[SourceNodeId:SourcePDiskId]' \
+  --snapshot-file /tmp/source-pdisk.json
+```
+
+Проверьте снапшот, затем разместите те же VDisk'и на новом PDisk:
+
+```bash
+ydb-dstool -e <bs_endpoint> pdisk populate \
+  --destination-pdisk '[DestinationNodeId:DestinationPDiskId]' \
+  --snapshot-file /tmp/source-pdisk.json
+```
+
+В отличие от `vdisk evict`, эта команда размещает все выбранные VDisk'и на явно указанном целевом PDisk.
 
 ## Перевезти VDisk'и со сломанного/отсутствующего устройства {#removal_from_a_broken_device}
 

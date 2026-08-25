@@ -2,27 +2,80 @@
 
 Sometimes you may need to free up a block store volume to replace equipment. Or a VDisk may be in active use, affecting the performance of other VDisks running on the same PDisk. In cases like this, VDisks need to be moved.
 
-## Move a VDisk from a block store volume {#moving_vdisk}
+## Move VDisks from a block store volume {#moving_vdisk}
 
-Get a list of VDisk IDs using [{{ ydb-short-name }} DSTool](../../reference/ydb-dstool/index.md):
+### Automatic relocation during planned maintenance
 
-```bash
-ydb-dstool -e <bs_endpoint> vdisk list --format tsv --columns VDiskId --no-header
-```
-
-To move a VDisk from a block store volume, run the following commands on the cluster node:
+For routine hardware maintenance, set the source PDisk maintenance status to `LONG_TERM_MAINTENANCE_PLANNED`:
 
 ```bash
-ydb-dstool -e <bs_endpoint> vdisk evict --vdisk-ids VDISK_ID1 ... VDISK_IDN
-ydbd admin bs config invoke --proto 'Command { ReassignGroupDisk { GroupId: <Storage group ID> GroupGeneration: <Storage group generation> FailRealmIdx: <FailRealm> FailDomainIdx: <FailDomain> VDiskIdx: <Slot number> } }'
+ydb-dstool -e <bs_endpoint> pdisk set \
+  --maintenance-status LONG_TERM_MAINTENANCE_PLANNED \
+  --pdisk-ids "[NodeId:PDiskId]"
 ```
 
-* `VDISK_ID1 ... VDISK_IDN`: The list of VDisk IDs like `[GroupId:GroupGeneration:FailRealmIdx:FailDomainIdx:VDiskIdx]`. The IDs are separated by a space.
-* `GroupId`: The ID of the storage group.
-* `GroupGeneration`: Storage group generation.
-* `FailRealmIdx`: Fail realm number.
-* `FailDomainIdx`: Fail domain number.
-* `VDiskIdx`: Slot number.
+This status prevents new VDisks from being placed on the PDisk and instructs SelfHeal to move its existing VDisks asynchronously. The Blob Storage Controller selects suitable destination PDisks according to the cluster placement rules.
+
+If the PDisk remains in the cluster after maintenance and can accept new VDisks again, clear the maintenance request:
+
+```bash
+ydb-dstool -e <bs_endpoint> pdisk set \
+  --maintenance-status NO_REQUEST \
+  --pdisk-ids "[NodeId:PDiskId]"
+```
+
+### Controlled manual relocation
+
+If you need to control which VDisks are moved, prevent new placements on the source PDisk and evict the selected VDisks manually:
+
+1. Set the source PDisk maintenance status to `NO_NEW_VDISKS`:
+
+   ```bash
+   ydb-dstool -e <bs_endpoint> pdisk set \
+     --maintenance-status NO_NEW_VDISKS \
+     --pdisk-ids "[NodeId:PDiskId]"
+   ```
+
+1. Get the IDs of the VDisks located on the source PDisk:
+
+   ```bash
+   ydb-dstool -e <bs_endpoint> vdisk list \
+     --format tsv --columns VDiskId NodeId:PDiskId --no-header \
+     | fgrep '[NodeId:PDiskId]'
+   ```
+
+1. Evict the selected VDisks:
+
+   ```bash
+   ydb-dstool -e <bs_endpoint> vdisk evict --vdisk-ids VDISK_ID1 ... VDISK_IDN
+   ```
+
+* `VDISK_ID1 ... VDISK_IDN`: VDisk IDs in the `[GroupId:GroupGeneration:FailRealmIdx:FailDomainIdx:VDiskIdx]` format, separated by spaces.
+* `NodeId:PDiskId`: ID of the source PDisk.
+
+If the PDisk can accept new VDisks after the operation, set its maintenance status back to `NO_REQUEST`.
+
+## Reproduce a PDisk workload on another device {#testing_device}
+
+Use [`pdisk populate`](../../reference/ydb-dstool/pdisk-populate.md) only for controlled device testing, when you need to move exactly the same set of VDisks to a new device and compare its performance with the old device under the same workload.
+
+First, save the active VDisks of the old PDisk to a snapshot:
+
+```bash
+ydb-dstool -e <bs_endpoint> pdisk populate \
+  --snapshot-from-pdisk '[SourceNodeId:SourcePDiskId]' \
+  --snapshot-file /tmp/source-pdisk.json
+```
+
+Review the snapshot, then populate the new PDisk with the same VDisks:
+
+```bash
+ydb-dstool -e <bs_endpoint> pdisk populate \
+  --destination-pdisk '[DestinationNodeId:DestinationPDiskId]' \
+  --snapshot-file /tmp/source-pdisk.json
+```
+
+Unlike `vdisk evict`, this command places all selected VDisks on the explicitly specified destination PDisk.
 
 ## Move VDisks from a broken/missing block store volume {#removal_from_a_broken_device}
 

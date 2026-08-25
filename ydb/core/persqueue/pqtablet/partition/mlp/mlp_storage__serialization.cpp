@@ -80,14 +80,33 @@ void VarintSerialize(TString& buffer, ui64 value) {
     VarintSerialize(buffer, static_cast<i64>(value));
 }
 
-void VarintDeserialize(const char*& data, i64& value) {
-    data += in_long(value, data);
+bool ReadPackedLong(const char*& data, const char* end, i64& value) {
+    if (data >= end) {
+        return false;
+    }
+
+    char buf[9] = {};
+    const size_t remain = static_cast<size_t>(end - data);
+    memcpy(buf, data, Min(remain, sizeof(buf)));
+    const int bytes = in_long(value, buf);
+    if (bytes <= 0 || static_cast<size_t>(bytes) > remain) {
+        return false;
+    }
+    data += bytes;
+    return true;
 }
 
-void VarintDeserialize(const char*& data, ui64& value) {
-    i64 tmp;
-    VarintDeserialize(data, tmp);
+bool VarintDeserialize(const char*& data, const char* end, i64& value) {
+    return ReadPackedLong(data, end, value);
+}
+
+bool VarintDeserialize(const char*& data, const char* end, ui64& value) {
+    i64 tmp = 0;
+    if (!VarintDeserialize(data, end, tmp)) {
+        return false;
+    }
     value = tmp;
+    return true;
 }
 
 template<typename TMsg>
@@ -132,21 +151,24 @@ struct TItemDeserializer<TSnapshotMessage> {
     ui64 LastWriteTimestampDelta = 0;
 
     bool Deserialize(const char*& data, const char* end, TSnapshotMessage& msg) {
-        if (data == end) {
+        if (data + sizeof(TSnapshotMessage::Common.Value) > end) {
             return false;
         }
-        AFL_ENSURE(data < end)("d", std::distance(end, data));
 
         memcpy(&msg.Common.Value, data, sizeof(TSnapshotMessage::Common.Value));  // TODO BIGENDIAN/LOWENDIAN
         data += sizeof(TSnapshotMessage::Common.Value);
 
         ui64 delta;
-        VarintDeserialize(data, delta);
+        if (!VarintDeserialize(data, end, delta)) {
+            return false;
+        }
         LastWriteTimestampDelta += delta;
         msg.WriteTimestampDelta = LastWriteTimestampDelta;
 
         if (msg.Common.Fields.Status == static_cast<ui32>(TStorage::EMessageStatus::Locked)) {
-            VarintDeserialize(data, msg.LockingTimestampMilliSecondsDelta);
+            if (!VarintDeserialize(data, end, msg.LockingTimestampMilliSecondsDelta)) {
+                return false;
+            }
         }
 
         return true;
@@ -169,7 +191,7 @@ struct TItemDeserializer<TAddedMessage> {
     ui64 LastWriteTimestampDelta = 0;
 
     bool Deserialize(const char*& data, const char* end, TAddedMessage& msg) {
-        if (data + sizeof(msg.MessageGroup.Value) + 1 > end) {
+        if (data + sizeof(msg.MessageGroup.Value) > end) {
             return false;
         }
 
@@ -177,7 +199,9 @@ struct TItemDeserializer<TAddedMessage> {
         data += sizeof(msg.MessageGroup.Value);
 
         ui64 delta;
-        VarintDeserialize(data, delta);
+        if (!VarintDeserialize(data, end, delta)) {
+            return false;
+        }
         LastWriteTimestampDelta += delta;
         msg.WriteTimestampDelta = LastWriteTimestampDelta;
 
@@ -198,15 +222,16 @@ struct TItemSerializer<TMessageChange> {
 template<>
 struct TItemDeserializer<TMessageChange> {
     bool Deserialize(const char*& data, const char* end, TMessageChange& msg) {
-        if (data == end) {
+        if (data + sizeof(TMessageChange::Common.Value) > end) {
             return false;
         }
-        AFL_ENSURE(data < end)("d", std::distance(end, data));
 
         memcpy(&msg.Common.Value, data, sizeof(TMessageChange::Common.Value));  // TODO BIGENDIAN/LOWENDIAN
         data += sizeof(TMessageChange::Common.Value);
         if (msg.Common.Fields.Status == static_cast<ui32>(TStorage::EMessageStatus::Locked)) {
-            VarintDeserialize(data, msg.LockingTimestampMilliSecondsDelta);
+            if (!VarintDeserialize(data, end, msg.LockingTimestampMilliSecondsDelta)) {
+                return false;
+            }
         }
 
         return true;
@@ -230,14 +255,14 @@ struct TItemDeserializer<TDLQMessageV1> {
     ui64 LastSeqNo = 0;
 
     bool Deserialize(const char*& data, const char* end, TDLQMessageV1& msg) {
-        if (data + 2 > end) {
+        if (!VarintDeserialize(data, end, msg.Offset)) {
             return false;
         }
 
-        VarintDeserialize(data, msg.Offset);
-
         ui64 delta;
-        VarintDeserialize(data, delta);
+        if (!VarintDeserialize(data, end, delta)) {
+            return false;
+        }
         LastSeqNo += delta;
         msg.SeqNo = LastSeqNo;
 
@@ -312,7 +337,9 @@ struct TDeserializerWithOffset {
         }
 
         ui64 delta;
-        VarintDeserialize(Data, delta);
+        if (!VarintDeserialize(Data, End, delta)) {
+            return false;
+        }
         LastOffset += delta;
         offset = LastOffset;
 

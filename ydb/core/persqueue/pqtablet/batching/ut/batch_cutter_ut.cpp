@@ -10,6 +10,7 @@
 #include <library/cpp/streams/zstd/zstd.h>
 
 #include <util/generic/string.h>
+#include <util/generic/ylimits.h>
 #include <util/stream/mem.h>
 #include <util/stream/zlib.h>
 
@@ -245,6 +246,48 @@ Y_UNIT_TEST_SUITE(TBatchCutterTest) {
         const auto cut = TKafkaBatchCutter().Cut(TBatchCutterData(readResult, std::move(dataChunk)), 10);
         UNIT_ASSERT_VALUES_EQUAL(cut.size(), 1u);
         UNIT_ASSERT_VALUES_EQUAL(cut[0].GetData(), readResult.GetData());
+    }
+
+    Y_UNIT_TEST(CutSkipsNonPositiveCreateTimestampAfterWrap) {
+        NKafka::TKafkaRecordBatch batch;
+        batch.BaseOffset = 100;
+        batch.Magic = 2;
+        batch.LastOffsetDelta = 0;
+        batch.BaseTimestamp = Max<i64>();
+        batch.MaxTimestamp = Max<i64>();
+        batch.Records.push_back(MakeKafkaRecord(1, 0, "k0", "value0"));
+        batch.BatchLength = batch.Size(2)
+            - sizeof(NKafka::TKafkaRecordBatch::BaseOffsetMeta::Type)
+            - sizeof(NKafka::TKafkaRecordBatch::BatchLengthMeta::Type);
+
+        const auto readResult = MakeKafkaBatchReadResult(NKafka::WriteKafkaRecordBatch(batch));
+        const auto cut = TKafkaBatchCutter().Cut(
+            TBatchCutterData(readResult, NKikimr::GetDeserializedData(readResult.GetData())),
+            10);
+
+        UNIT_ASSERT_VALUES_EQUAL(cut.size(), 1u);
+        UNIT_ASSERT(!cut[0].HasCreateTimestampMS());
+    }
+
+    Y_UNIT_TEST(CutAppliesNegativeTimestampDelta) {
+        NKafka::TKafkaRecordBatch batch;
+        batch.BaseOffset = 100;
+        batch.Magic = 2;
+        batch.LastOffsetDelta = 0;
+        batch.BaseTimestamp = 1000;
+        batch.MaxTimestamp = 1000;
+        batch.Records.push_back(MakeKafkaRecord(-5, 0, "k0", "value0"));
+        batch.BatchLength = batch.Size(2)
+            - sizeof(NKafka::TKafkaRecordBatch::BaseOffsetMeta::Type)
+            - sizeof(NKafka::TKafkaRecordBatch::BatchLengthMeta::Type);
+
+        const auto readResult = MakeKafkaBatchReadResult(NKafka::WriteKafkaRecordBatch(batch));
+        const auto cut = TKafkaBatchCutter().Cut(
+            TBatchCutterData(readResult, NKikimr::GetDeserializedData(readResult.GetData())),
+            10);
+
+        UNIT_ASSERT_VALUES_EQUAL(cut.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(cut[0].GetCreateTimestampMS(), 995);
     }
 }
 

@@ -2,8 +2,11 @@
 #include <ydb/core/scheme_types/scheme_types_defs.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/packedtypes/longs.h>
+#include <library/cpp/packedtypes/zigzag.h>
 
 #include <util/generic/vector.h>
+#include <util/generic/ylimits.h>
 #include <util/random/fast.h>
 #include <util/datetime/base.h>
 #include <util/string/cast.h>
@@ -334,6 +337,34 @@ Y_UNIT_TEST_SUITE(TTypeCodecsTest) {
         chunk->Seal();
         UNIT_ASSERT(estimated >= output.Size() || estimated > 0);
         UNIT_ASSERT(output.Size() > 0);
+    }
+
+    Y_UNIT_TEST(LoadPackedI64ReadsExactBuffer) {
+        char buf[9] = {};
+        const int written = out_long(i64{0}, buf);
+        UNIT_ASSERT(written > 0);
+
+        i64 value = -1;
+        const int read = NScheme::LoadPackedI64(value, buf, buf + written);
+        UNIT_ASSERT_VALUES_EQUAL(read, written);
+        UNIT_ASSERT_VALUES_EQUAL(value, 0);
+    }
+
+    Y_UNIT_TEST(DeltaZigZagDecoderWrapsI32LikeUnsigned) {
+        char buf[32] = {};
+        char* p = buf;
+        p += out_long(static_cast<i64>(ZigZagEncode(Max<i32>())), p);
+        p += out_long(static_cast<i64>(ZigZagEncode(i32{1})), p);
+
+        NScheme::TDeltaValueDecoder<NScheme::TZigZagValueDecoder<i32>> decoder;
+        i32 first = 0;
+        i32 second = 0;
+        const size_t firstBytes = decoder.Load(buf, p, first);
+        const size_t secondBytes = decoder.Load(buf + firstBytes, p, second);
+        UNIT_ASSERT(firstBytes > 0);
+        UNIT_ASSERT(secondBytes > 0);
+        UNIT_ASSERT_VALUES_EQUAL(first, Max<i32>());
+        UNIT_ASSERT_VALUES_EQUAL(second, Min<i32>());
     }
 
 }

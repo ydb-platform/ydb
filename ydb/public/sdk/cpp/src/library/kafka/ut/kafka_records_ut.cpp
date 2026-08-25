@@ -4,6 +4,12 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <util/generic/ylimits.h>
+#include <util/stream/str.h>
+#include <util/stream/zlib.h>
+
+#include <vector>
+
 namespace NKafka {
 namespace {
 
@@ -378,6 +384,65 @@ TString WriteKafkaLegacyRecordBatchWrappers(const std::vector<TKafkaRecordBatchV
     return buffer.AsString();
 }
 
+TString GzipPayload(TStringBuf data) {
+    TString compressed;
+    TStringOutput output(compressed);
+    TZLibCompress gzip(&output, ZLib::GZip);
+    if (!data.empty()) {
+        gzip.Write(data.data(), data.size());
+    }
+    gzip.Finish();
+    output.Finish();
+    return compressed;
+}
+
+struct TOwnedLegacyRecord {
+    TString KeyStorage;
+    TString ValueStorage;
+    TKafkaRecordBatchV0 Entry;
+
+    TOwnedLegacyRecord(
+        i64 offset,
+        i64 timestamp,
+        TString key,
+        TString value,
+        ECompressionType compression = ECompressionType::NONE,
+        bool nullKey = false)
+        : KeyStorage(std::move(key))
+        , ValueStorage(std::move(value))
+    {
+        Entry.Offset = offset;
+        Entry.Record.Magic = 1;
+        Entry.Record.Attributes = static_cast<TKafkaRecordV0::AttributesMeta::Type>(compression);
+        Entry.Record.Timestamp = timestamp;
+        if (nullKey) {
+            Entry.Record.Key = std::nullopt;
+        } else {
+            Entry.Record.Key = TKafkaRawBytes(KeyStorage.data(), KeyStorage.size());
+        }
+        Entry.Record.Value = TKafkaRawBytes(ValueStorage.data(), ValueStorage.size());
+        Entry.Record.MessageSize = Entry.Record.Size(1)
+            - sizeof(TKafkaRecordV0::MessageSizeMeta::Type);
+    }
+};
+
+TString WriteCompressedMagic1Wrapper(i64 wrapperOffset, std::vector<TOwnedLegacyRecord>& inners) {
+    std::vector<TKafkaRecordBatchV0> innerEntries;
+    innerEntries.reserve(inners.size());
+    for (auto& inner : inners) {
+        innerEntries.push_back(inner.Entry);
+    }
+
+    TOwnedLegacyRecord wrapper(
+        wrapperOffset,
+        1000,
+        {},
+        GzipPayload(WriteKafkaLegacyRecordBatchWrappers(innerEntries, 1)),
+        ECompressionType::GZIP,
+        true);
+    return WriteKafkaLegacyRecordBatchWrappers({wrapper.Entry}, 1);
+}
+
 void AssertKafkaLegacyProducerBatchDeserialized(
     TKafkaVersion magic,
     ECompressionType compressionType,
@@ -696,6 +761,87 @@ Y_UNIT_TEST_SUITE(KafkaRecords) {
 
         UNIT_ASSERT_VALUES_EQUAL(parsed.BatchLength, expectedBatchLength);
         UNIT_ASSERT_VALUES_EQUAL(parsed.Records.size(), batch.Records.size());
+    }
+
+    Y_UNIT_TEST(GetRecordTimestampWrapsLikeJavaLong) {
+        UNIT_ASSERT_VALUES_EQUAL(GetRecordTimestamp(100, 5), 105);
+        UNIT_ASSERT_VALUES_EQUAL(GetRecordTimestamp(Max<i64>(), 0), Max<i64>());
+        UNIT_ASSERT_VALUES_EQUAL(GetRecordTimestamp(Min<i64>(), 0), Min<i64>());
+        UNIT_ASSERT_VALUES_EQUAL(GetRecordTimestamp(100, -100), 0);
+        UNIT_ASSERT_VALUES_EQUAL(GetRecordTimestamp(Max<i64>(), 1), Min<i64>());
+        UNIT_ASSERT_VALUES_EQUAL(GetRecordTimestamp(Min<i64>(), -1), Max<i64>());
+    }
+
+    Y_UNIT_TEST(ReadKafkaBatchHeaderRejectsEmptyCompressedLegacy) {
+        TString compressed;
+        {
+            TStringOutput output(compressed);
+            TZLibCompress gzip(&output, ZLib::GZip);
+            gzip.Finish();
+            output.Finish();
+        }
+
+        TKafkaRecordBatchV0 entry;
+        entry.Offset = 1;
+        entry.Record.Magic = 1;
+        entry.Record.Attributes = static_cast<TKafkaRecordV0::AttributesMeta::Type>(ECompressionType::GZIP);
+        entry.Record.Timestamp = 1000;
+        entry.Record.Value = TKafkaRawBytes(compressed.data(), compressed.size());
+        entry.Record.MessageSize = entry.Record.Size(1)
+            - sizeof(TKafkaRecordV0::MessageSizeMeta::Type);
+
+        TKafkaWriteBuffer buffer(BUFFER_SIZE);
+        TKafkaWritable writable(buffer);
+        entry.Write(writable, 1);
+
+        const TString bytes = buffer.AsString();
+        UNIT_ASSERT(!ReadKafkaBatchHeader(bytes));
+        UNIT_ASSERT_EXCEPTION(ReadRecordBatch(bytes), yexception);
+    }
+
+    Y_UNIT_TEST(ReadCompressedMagic1TreatsZeroWrapperOffsetAsLibrdkafka) {
+        std::vector<TOwnedLegacyRecord> inners;
+        inners.emplace_back(5, 1000, "k0", "v0");
+        inners.emplace_back(6, 1001, "k1", "v1");
+        const TString bytes = WriteCompressedMagic1Wrapper(0, inners);
+
+        const TKafkaRecordBatch parsed = ReadKafkaLegacyProducerBatch(bytes, 1);
+        UNIT_ASSERT_VALUES_EQUAL(parsed.Records.size(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(parsed.Records[0].OffsetDelta, 5);
+        UNIT_ASSERT_VALUES_EQUAL(parsed.Records[1].OffsetDelta, 6);
+
+        const auto header = ReadKafkaBatchHeader(bytes);
+        UNIT_ASSERT(header);
+        UNIT_ASSERT_VALUES_EQUAL(header->RecordsCount, 2);
+        UNIT_ASSERT_VALUES_EQUAL(header->BaseOffset, 5);
+        UNIT_ASSERT_VALUES_EQUAL(header->LastOffsetDelta, 1);
+    }
+
+    Y_UNIT_TEST(ReadCompressedMagic1RejectsWrapperOffsetLessThanLastInner) {
+        std::vector<TOwnedLegacyRecord> inners;
+        inners.emplace_back(8, 1000, "k0", "v0");
+        inners.emplace_back(10, 1001, "k1", "v1");
+        const TString bytes = WriteCompressedMagic1Wrapper(1, inners);
+
+        UNIT_ASSERT(!ReadKafkaBatchHeader(bytes));
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            ReadKafkaLegacyProducerBatch(bytes, 1),
+            yexception,
+            "Found invalid wrapper offset in compressed v1 message set");
+    }
+
+    Y_UNIT_TEST(ReadLegacyHeaderWrapsLastOffsetDeltaLikeJavaInt) {
+        TOwnedLegacyRecord first(0, 1000, "k0", "v0");
+        TOwnedLegacyRecord second(3'000'000'000LL, 1001, "k1", "v1");
+        const TString bytes = WriteKafkaLegacyRecordBatchWrappers({first.Entry, second.Entry}, 1);
+
+        const auto header = ReadKafkaBatchHeader(bytes);
+        UNIT_ASSERT(header);
+        UNIT_ASSERT_VALUES_EQUAL(header->RecordsCount, 2);
+        UNIT_ASSERT_VALUES_EQUAL(header->BaseOffset, 0);
+        UNIT_ASSERT_VALUES_EQUAL(
+            header->LastOffsetDelta,
+            static_cast<i32>(static_cast<ui32>(3'000'000'000LL)));
     }
 }
 

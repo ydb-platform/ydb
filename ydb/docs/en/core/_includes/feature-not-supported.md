@@ -1,1 +1,1 @@
-This functionality is not currently supported.
+This functionality is not supported at the moment.

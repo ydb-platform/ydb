@@ -71,7 +71,10 @@ TString ExtractSchemeChangeTargetName(const NKikimrSchemeOp::TModifyScheme& tx) 
         return tx.GetAlterUserAttributes().GetPathName();
     }
     // TTruncateTable/TCreateContinuousBackup/TAlterContinuousBackup/
-    // TDropContinuousBackup all name their target table TableName, not Name.
+    // TDropContinuousBackup/TRestoreTask all name their target table
+    // TableName, not Name. Restore's AbortPropose is an unconditional
+    // Y_ABORT stub, so an unresolved path here crashes the tablet rather
+    // than cleanly refusing -- this case must never reach that fallback.
     if (tx.HasTruncateTable()) {
         return tx.GetTruncateTable().GetTableName();
     }
@@ -83,6 +86,9 @@ TString ExtractSchemeChangeTargetName(const NKikimrSchemeOp::TModifyScheme& tx) 
     }
     if (tx.HasDropContinuousBackup()) {
         return tx.GetDropContinuousBackup().GetTableName();
+    }
+    if (tx.HasRestore()) {
+        return tx.GetRestore().GetTableName();
     }
 
     const auto* refl = tx.GetReflection();
@@ -234,6 +240,22 @@ TMaybe<TVector<TResolvedSchemeChangeTarget>> ResolveSchemeChangeTargets(const NK
             return Nothing();
         }
         return TVector<TResolvedSchemeChangeTarget>{std::move(*resolved)};
+    }
+
+    // AlterLogin has no path-bearing target at all -- it edits the
+    // database's user/group registry, not a child scheme object. Its 8
+    // sub-shapes (CreateUser/ModifyUser/RemoveUser/CreateGroup/...) each name
+    // an identity in a different field, none of them a scheme path, so no
+    // per-shape extraction is meaningful here. Attribute the record to the
+    // database root itself (WorkingDir), the same object AlterSubDomain
+    // targets when altering the root.
+    if (userTx.HasAlterLogin()) {
+        TPath workingDir = TPath::Resolve(userTx.GetWorkingDir(), ss);
+        if (workingDir.IsResolved()) {
+            return TVector<TResolvedSchemeChangeTarget>{
+                TResolvedSchemeChangeTarget{userTx.GetWorkingDir(), RelativeToDomain(workingDir), {}}};
+        }
+        return Nothing();
     }
 
     const TString targetName = ExtractSchemeChangeTargetName(userTx);

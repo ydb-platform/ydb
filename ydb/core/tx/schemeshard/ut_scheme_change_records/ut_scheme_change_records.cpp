@@ -103,6 +103,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
                 UNIT_ASSERT_VALUES_EQUAL(e.Targets.size(), 1u);
                 UNIT_ASSERT_VALUES_EQUAL(e.Targets[0].Path, "Table1");
                 UNIT_ASSERT(e.Order > 0);
+                AssertRecordedPathResolvesToTouchedObject(runtime, "/MyRoot", e);
                 break;
             }
         }
@@ -137,6 +138,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
             if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterTable
                 && e.Body.GetAlterTable().GetName() == "Table1") {
                 ++alterCount;
+                AssertRecordedPathResolvesToTouchedObject(runtime, "/MyRoot", e);
             }
         }
         UNIT_ASSERT_C(alterCount >= 1, "ALTER TABLE entry not found in notification log");
@@ -610,6 +612,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
             if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpMkDir
                 && e.Body.GetMkDir().GetName() == "DirA") {
                 found = true;
+                AssertRecordedPathResolvesToTouchedObject(runtime, "/MyRoot", e);
                 break;
             }
         }
@@ -1619,6 +1622,11 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
             "Dst1's target must record Src1 as its source");
         UNIT_ASSERT_VALUES_EQUAL_C(dstToSrc["Dst2"], "Src2",
             "Dst2's target must record Src2 as its source");
+        // Every one of the N targets must resolve, not just the first (the
+        // extractor only captures PathId for target[0], so [0] gets the full
+        // PathId cross-check and [1] gets a plain resolve check).
+        AssertRecordedPathResolvesToTouchedObject(runtime, "/MyRoot", *found, 0);
+        AssertRecordedPathResolvesToTouchedObject(runtime, "/MyRoot", *found, 1);
     }
 
     // Guards against the repeated field silently turning every record into a
@@ -1698,6 +1706,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
             "a rename has exactly one source, got " << found->Targets[0].SourcePaths.size());
         UNIT_ASSERT_VALUES_EQUAL_C(found->Targets[0].SourcePaths[0], "MoveSrc",
             "SourcePaths must record the object's old (source) location, database-relative");
+        AssertRecordedPathResolvesToTouchedObject(runtime, "/MyRoot", *found);
     }
 
     // Altering the database root itself: WorkingDir="/", Name="MyRoot"
@@ -1737,6 +1746,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         UNIT_ASSERT_VALUES_EQUAL(found->Targets.size(), 1u);
         UNIT_ASSERT_VALUES_EQUAL_C(found->Targets[0].Path, "",
             "the database root's own path, relative to itself, must be the empty string");
+        AssertRecordedPathResolvesToTouchedObject(runtime, "/MyRoot", *found);
     }
 
     // CreateIndexedTable already has a special case in
@@ -1775,6 +1785,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
                 ++indexedTableRecords;
                 UNIT_ASSERT_VALUES_EQUAL(e.Targets.size(), 1u);
                 storedPaths.push_back(e.Targets[0].Path);
+                AssertRecordedPathResolvesToTouchedObject(runtime, "/MyRoot", e);
             }
         }
         UNIT_ASSERT_VALUES_EQUAL_C(indexedTableRecords, 1u,
@@ -1795,8 +1806,15 @@ enum class EOpAuditClass {
     // constructed internally by ConstructParts/other handlers, a reserved
     // field number, or a deprecated value).
     NotUserLevel,
-    // User-level and a scheme change record resolves a path for it today.
+    // User-level; believed to resolve a path, but not driven end-to-end with
+    // a resolve assertion here. This is the state that let TMoveIndex's bug
+    // hide: "someone read the code and believes it resolves" is not proof.
     Safe,
+    // User-level, driven end-to-end by an existing test, which asserts the
+    // recorded path resolves (in the live scheme) to the object the
+    // operation actually touched -- not merely that a record with a
+    // non-empty path exists.
+    VerifiedByTest,
 };
 
 struct TOpAuditRow {
@@ -1810,67 +1828,67 @@ struct TOpAuditRow {
 // convention). Ordered by enum value.
 const TVector<TOpAuditRow>& GetOpAuditTable() {
     static const TVector<TOpAuditRow> table = {
-        {NKikimrSchemeOp::ESchemeOpMkDir, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpCreateTable, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpCreatePersQueueGroup, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpDropTable, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpDropPersQueueGroup, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpAlterTable, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpAlterPersQueueGroup, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpModifyACL, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpRmDir, EOpAuditClass::Safe},
+        {NKikimrSchemeOp::ESchemeOpMkDir, EOpAuditClass::VerifiedByTest}, // MkDirWritesLogEntry
+        {NKikimrSchemeOp::ESchemeOpCreateTable, EOpAuditClass::VerifiedByTest}, // CreateTableWritesLogEntry
+        {NKikimrSchemeOp::ESchemeOpCreatePersQueueGroup, EOpAuditClass::Safe}, // tier-1, not yet driven: TestCreatePQGroup exists
+        {NKikimrSchemeOp::ESchemeOpDropTable, EOpAuditClass::Safe}, // tier-1, not yet driven: post-drop needs a pre-drop-identity assertion shape, not the live-resolve helper (see DropByIdRecordsAPath for the pattern)
+        {NKikimrSchemeOp::ESchemeOpDropPersQueueGroup, EOpAuditClass::Safe}, // tier-1, not yet driven: TestDropPQGroup exists
+        {NKikimrSchemeOp::ESchemeOpAlterTable, EOpAuditClass::VerifiedByTest}, // AlterTableWritesLogEntry
+        {NKikimrSchemeOp::ESchemeOpAlterPersQueueGroup, EOpAuditClass::Safe}, // tier-1, not yet driven: TestAlterPQGroup exists
+        {NKikimrSchemeOp::ESchemeOpModifyACL, EOpAuditClass::Safe}, // tier-1, not yet driven: TestModifyACL exists (already exercised as fixture setup elsewhere, not as its own resolve assertion)
+        {NKikimrSchemeOp::ESchemeOpRmDir, EOpAuditClass::Safe}, // tier-1, not yet driven: TestRmDir exists
         {NKikimrSchemeOp::ESchemeOpSplitMergeTablePartitions, EOpAuditClass::NotUserLevel}, // IsChurnOp
-        {NKikimrSchemeOp::ESchemeOpBackup, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpCreateSubDomain, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpDropSubDomain, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpCreateRtmrVolume, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpCreateBlockStoreVolume, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpAlterBlockStoreVolume, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpAssignBlockStoreVolume, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpDropBlockStoreVolume, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpCreateKesus, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpDropKesus, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpForceDropSubDomain, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpCreateSolomonVolume, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpDropSolomonVolume, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpAlterKesus, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpAlterSubDomain, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpAlterUserAttributes, EOpAuditClass::Safe}, // fixed: PathName
-        {NKikimrSchemeOp::ESchemeOpForceDropUnsafe, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpCreateIndexedTable, EOpAuditClass::Safe},
+        {NKikimrSchemeOp::ESchemeOpBackup, EOpAuditClass::Safe}, // tier-2, not yet driven: TestBackup exists but needs a real/mocked export target to complete
+        {NKikimrSchemeOp::ESchemeOpCreateSubDomain, EOpAuditClass::Safe}, // tier-1, not yet driven: TestCreateSubDomain exists
+        {NKikimrSchemeOp::ESchemeOpDropSubDomain, EOpAuditClass::Safe}, // tier-1, not yet driven: TestDropSubDomain exists
+        {NKikimrSchemeOp::ESchemeOpCreateRtmrVolume, EOpAuditClass::Safe}, // tier-1, not yet driven: TestCreateRtmrVolume exists
+        {NKikimrSchemeOp::ESchemeOpCreateBlockStoreVolume, EOpAuditClass::Safe}, // tier-1, not yet driven: TestCreateBlockStoreVolume exists
+        {NKikimrSchemeOp::ESchemeOpAlterBlockStoreVolume, EOpAuditClass::Safe}, // tier-1, not yet driven: TestAlterBlockStoreVolume exists
+        {NKikimrSchemeOp::ESchemeOpAssignBlockStoreVolume, EOpAuditClass::Safe}, // tier-1, not yet driven: TestAssignBlockStoreVolume exists
+        {NKikimrSchemeOp::ESchemeOpDropBlockStoreVolume, EOpAuditClass::Safe}, // tier-1, not yet driven: TestDropBlockStoreVolume exists
+        {NKikimrSchemeOp::ESchemeOpCreateKesus, EOpAuditClass::Safe}, // tier-1, not yet driven: TestCreateKesus exists
+        {NKikimrSchemeOp::ESchemeOpDropKesus, EOpAuditClass::Safe}, // tier-1, not yet driven: TestDropKesus exists
+        {NKikimrSchemeOp::ESchemeOpForceDropSubDomain, EOpAuditClass::Safe}, // tier-1, not yet driven: TestForceDropSubDomain exists
+        {NKikimrSchemeOp::ESchemeOpCreateSolomonVolume, EOpAuditClass::Safe}, // tier-1, not yet driven: TestCreateSolomon exists
+        {NKikimrSchemeOp::ESchemeOpDropSolomonVolume, EOpAuditClass::Safe}, // tier-1, not yet driven: TestDropSolomon exists
+        {NKikimrSchemeOp::ESchemeOpAlterKesus, EOpAuditClass::Safe}, // tier-1, not yet driven: TestAlterKesus exists
+        {NKikimrSchemeOp::ESchemeOpAlterSubDomain, EOpAuditClass::VerifiedByTest}, // AlterDatabaseRootItselfStoresEmptyPath
+        {NKikimrSchemeOp::ESchemeOpAlterUserAttributes, EOpAuditClass::VerifiedByTest}, // fixed: PathName; AlterUserAttributesRecordsAPath
+        {NKikimrSchemeOp::ESchemeOpForceDropUnsafe, EOpAuditClass::VerifiedByTest}, // Drop.Id branch (V4); DropByIdRecordsAPath -- worked first time, already correct
+        {NKikimrSchemeOp::ESchemeOpCreateIndexedTable, EOpAuditClass::VerifiedByTest}, // CreateIndexedTableWritesExactlyOneRecordForTheTable
         {NKikimrSchemeOp::ESchemeOpCreateTableIndex, EOpAuditClass::NotUserLevel}, // part of CreateIndexedTable
-        {NKikimrSchemeOp::ESchemeOpCreateConsistentCopyTables, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpDropTableIndex, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpCreateExtSubDomain, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpAlterExtSubDomain, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpForceDropExtSubDomain, EOpAuditClass::Safe},
+        {NKikimrSchemeOp::ESchemeOpCreateConsistentCopyTables, EOpAuditClass::VerifiedByTest}, // ConsistentCopyTablesRecordsAllTargetsWithSources
+        {NKikimrSchemeOp::ESchemeOpDropTableIndex, EOpAuditClass::Safe}, // tier-1, not yet driven: TestDropTableIndex exists
+        {NKikimrSchemeOp::ESchemeOpCreateExtSubDomain, EOpAuditClass::Safe}, // tier-1, not yet driven: TestCreateExtSubDomain exists
+        {NKikimrSchemeOp::ESchemeOpAlterExtSubDomain, EOpAuditClass::Safe}, // tier-1, not yet driven: TestAlterExtSubDomain exists
+        {NKikimrSchemeOp::ESchemeOpForceDropExtSubDomain, EOpAuditClass::Safe}, // tier-1, not yet driven: TestForceDropExtSubDomain exists
         {NKikimrSchemeOp::ESchemeOp_DEPRECATED_35, EOpAuditClass::NotUserLevel},
-        {NKikimrSchemeOp::ESchemeOpUpgradeSubDomain, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpUpgradeSubDomainDecision, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpCreateIndexBuild, EOpAuditClass::Safe},
+        {NKikimrSchemeOp::ESchemeOpUpgradeSubDomain, EOpAuditClass::Safe}, // tier-1, not yet driven with the resolve assertion: TestUpgradeSubDomain exists; see UpgradeSubDomainRecordsAPath (counter-only, not resolve-checked -- upgrading blocks a second subscriber registration)
+        {NKikimrSchemeOp::ESchemeOpUpgradeSubDomainDecision, EOpAuditClass::Safe}, // tier-1, not yet driven: TestUpgradeSubDomainDecision exists
+        {NKikimrSchemeOp::ESchemeOpCreateIndexBuild, EOpAuditClass::Safe}, // tier-2, not yet driven: only reachable via the TIndexBuilder actor (TestBuildIndex), not a direct TModifyScheme helper
         {NKikimrSchemeOp::ESchemeOpInitiateBuildIndexMainTable, EOpAuditClass::NotUserLevel}, // multipart
-        {NKikimrSchemeOp::ESchemeOpCreateLock, EOpAuditClass::Safe},
+        {NKikimrSchemeOp::ESchemeOpCreateLock, EOpAuditClass::Safe}, // tier-1, not yet driven: TestLock exists
         {NKikimrSchemeOp::ESchemeOpApplyIndexBuild, EOpAuditClass::NotUserLevel}, // multipart
         {NKikimrSchemeOp::ESchemeOpFinalizeBuildIndexMainTable, EOpAuditClass::NotUserLevel}, // multipart
         {NKikimrSchemeOp::ESchemeOpAlterTableIndex, EOpAuditClass::NotUserLevel}, // multipart
-        {NKikimrSchemeOp::ESchemeOpAlterSolomonVolume, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpDropLock, EOpAuditClass::Safe},
+        {NKikimrSchemeOp::ESchemeOpAlterSolomonVolume, EOpAuditClass::Safe}, // tier-1, not yet driven: TestAlterSolomon exists
+        {NKikimrSchemeOp::ESchemeOpDropLock, EOpAuditClass::Safe}, // tier-1, not yet driven: TestUnlock exists
         {NKikimrSchemeOp::ESchemeOpFinalizeBuildIndexImplTable, EOpAuditClass::NotUserLevel}, // multipart
         {NKikimrSchemeOp::ESchemeOpInitiateBuildIndexImplTable, EOpAuditClass::NotUserLevel}, // multipart
         {NKikimrSchemeOp::ESchemeOpDropIndex, EOpAuditClass::NotUserLevel}, // multipart
         {NKikimrSchemeOp::ESchemeOpDropTableIndexAtMainTable, EOpAuditClass::NotUserLevel}, // multipart
-        {NKikimrSchemeOp::ESchemeOpCancelIndexBuild, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpCreateFileStore, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpAlterFileStore, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpDropFileStore, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpRestore, EOpAuditClass::Safe}, // Drop.Id-independent: no Name, but reachable only via internal import flow
-        {NKikimrSchemeOp::ESchemeOpCreateColumnStore, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpAlterColumnStore, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpDropColumnStore, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpCreateColumnTable, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpAlterColumnTable, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpDropColumnTable, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpAlterLogin, EOpAuditClass::Safe},
+        {NKikimrSchemeOp::ESchemeOpCancelIndexBuild, EOpAuditClass::Safe}, // tier-2, not yet driven: only reachable via the TIndexBuilder actor (TestCancelBuildIndex), needs an in-flight build to cancel
+        {NKikimrSchemeOp::ESchemeOpCreateFileStore, EOpAuditClass::Safe}, // tier-1, not yet driven: TestCreateFileStore exists
+        {NKikimrSchemeOp::ESchemeOpAlterFileStore, EOpAuditClass::Safe}, // tier-1, not yet driven: TestAlterFileStore exists
+        {NKikimrSchemeOp::ESchemeOpDropFileStore, EOpAuditClass::Safe}, // tier-1, not yet driven: TestDropFileStore exists
+        {NKikimrSchemeOp::ESchemeOpRestore, EOpAuditClass::Safe}, // fixed: TableName (RestoreRecordsAPath drives propose; full completion needs a real backup fixture, tier-3 for the resolve assertion)
+        {NKikimrSchemeOp::ESchemeOpCreateColumnStore, EOpAuditClass::Safe}, // tier-1, not yet driven: TestCreateOlapStore exists
+        {NKikimrSchemeOp::ESchemeOpAlterColumnStore, EOpAuditClass::Safe}, // tier-1, not yet driven: TestAlterOlapStore exists
+        {NKikimrSchemeOp::ESchemeOpDropColumnStore, EOpAuditClass::Safe}, // tier-1, not yet driven: TestDropOlapStore exists
+        {NKikimrSchemeOp::ESchemeOpCreateColumnTable, EOpAuditClass::Safe}, // tier-1, not yet driven: TestCreateColumnTable exists
+        {NKikimrSchemeOp::ESchemeOpAlterColumnTable, EOpAuditClass::Safe}, // tier-1, not yet driven: TestAlterColumnTable exists
+        {NKikimrSchemeOp::ESchemeOpDropColumnTable, EOpAuditClass::Safe}, // tier-1, not yet driven: TestDropColumnTable exists
+        {NKikimrSchemeOp::ESchemeOpAlterLogin, EOpAuditClass::VerifiedByTest}, // fixed: no path-bearing target, attributed to WorkingDir (database root); AlterLoginRecordsAPath
         {NKikimrSchemeOp::ESchemeOpCreateCdcStream, EOpAuditClass::Safe}, // NB: verified refused today; see PathBearingOpNeverStoresAnApproximatePath
         {NKikimrSchemeOp::ESchemeOpCreateCdcStreamImpl, EOpAuditClass::NotUserLevel},
         {NKikimrSchemeOp::ESchemeOpCreateCdcStreamAtTable, EOpAuditClass::NotUserLevel},
@@ -1880,74 +1898,176 @@ const TVector<TOpAuditRow>& GetOpAuditTable() {
         {NKikimrSchemeOp::ESchemeOpDropCdcStream, EOpAuditClass::Safe}, // NB: verified refused AND crashes today; see comment above TSchemeChangeRecordsOperationAuditTests
         {NKikimrSchemeOp::ESchemeOpDropCdcStreamImpl, EOpAuditClass::NotUserLevel},
         {NKikimrSchemeOp::ESchemeOpDropCdcStreamAtTable, EOpAuditClass::NotUserLevel},
-        {NKikimrSchemeOp::ESchemeOpMoveTable, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpMoveTableIndex, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpCreateSequence, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpAlterSequence, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpDropSequence, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpCreateReplication, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpAlterReplication, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpDropReplicationCascade, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpCreateBlobDepot, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpAlterBlobDepot, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpDropBlobDepot, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpMoveIndex, EOpAuditClass::Safe}, // fixed: SrcPath/DstPath are relative to TablePath
+        {NKikimrSchemeOp::ESchemeOpMoveTable, EOpAuditClass::VerifiedByTest}, // MoveRecordsDestinationAndSource
+        {NKikimrSchemeOp::ESchemeOpMoveTableIndex, EOpAuditClass::NotUserLevel}, // multipart: MoveTableIndexTask is constructed only as a MoveTable sub-op (schemeshard__operation_move_tables.cpp), never issued directly by a user
+        {NKikimrSchemeOp::ESchemeOpCreateSequence, EOpAuditClass::Safe}, // tier-1, not yet driven: TestCreateSequence exists
+        {NKikimrSchemeOp::ESchemeOpAlterSequence, EOpAuditClass::Safe}, // tier-1, not yet driven: TestAlterSequence exists
+        {NKikimrSchemeOp::ESchemeOpDropSequence, EOpAuditClass::Safe}, // tier-1, not yet driven: TestDropSequence exists
+        {NKikimrSchemeOp::ESchemeOpCreateReplication, EOpAuditClass::Safe}, // tier-2, not yet driven: TestCreateReplication exists but the target is a replicated table needing a source connection
+        {NKikimrSchemeOp::ESchemeOpAlterReplication, EOpAuditClass::Safe}, // tier-2, not yet driven: same setup as CreateReplication
+        {NKikimrSchemeOp::ESchemeOpDropReplicationCascade, EOpAuditClass::Safe}, // tier-2, not yet driven: same setup as CreateReplication
+        {NKikimrSchemeOp::ESchemeOpCreateBlobDepot, EOpAuditClass::Safe}, // tier-2, not yet driven: TestCreateBlobDepot exists but BlobDepot needs its backing tablet type stood up
+        {NKikimrSchemeOp::ESchemeOpAlterBlobDepot, EOpAuditClass::Safe}, // tier-2, not yet driven: same setup as CreateBlobDepot
+        {NKikimrSchemeOp::ESchemeOpDropBlobDepot, EOpAuditClass::Safe}, // tier-2, not yet driven: same setup as CreateBlobDepot
+        {NKikimrSchemeOp::ESchemeOpMoveIndex, EOpAuditClass::VerifiedByTest}, // fixed: SrcPath/DstPath are relative to TablePath; MoveIndexRecordsAPath
         {NKikimrSchemeOp::ESchemeOpAlterExtSubDomainCreateHive, EOpAuditClass::NotUserLevel}, // multipart
-        {NKikimrSchemeOp::ESchemeOpCreateExternalTable, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpDropExternalTable, EOpAuditClass::Safe},
+        {NKikimrSchemeOp::ESchemeOpCreateExternalTable, EOpAuditClass::Safe}, // tier-1, not yet driven: TestCreateExternalTable exists
+        {NKikimrSchemeOp::ESchemeOpDropExternalTable, EOpAuditClass::Safe}, // tier-1, not yet driven: TestDropExternalTable exists
         {NKikimrSchemeOp::ESchemeOpAlterExternalTable, EOpAuditClass::NotUserLevel}, // Y_ABORT: unimplemented
-        {NKikimrSchemeOp::ESchemeOpCreateExternalDataSource, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpDropExternalDataSource, EOpAuditClass::Safe},
+        {NKikimrSchemeOp::ESchemeOpCreateExternalDataSource, EOpAuditClass::Safe}, // tier-1, not yet driven: TestCreateExternalDataSource exists
+        {NKikimrSchemeOp::ESchemeOpDropExternalDataSource, EOpAuditClass::Safe}, // tier-1, not yet driven: TestDropExternalDataSource exists
         {NKikimrSchemeOp::ESchemeOpAlterExternalDataSource, EOpAuditClass::NotUserLevel}, // Y_ABORT: unimplemented
         {NKikimrSchemeOp::ESchemeOpCreateColumnBuild, EOpAuditClass::NotUserLevel}, // internal, built by CreateBuildIndex
-        {NKikimrSchemeOp::ESchemeOpCreateView, EOpAuditClass::Safe},
+        {NKikimrSchemeOp::ESchemeOpCreateView, EOpAuditClass::Safe}, // tier-1, not yet driven: TestCreateView exists
         {NKikimrSchemeOp::ESchemeOpAlterView, EOpAuditClass::NotUserLevel}, // Y_ABORT: unimplemented
-        {NKikimrSchemeOp::ESchemeOpDropView, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpDropReplication, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpCreateContinuousBackup, EOpAuditClass::Safe}, // fixed: TableName
-        {NKikimrSchemeOp::ESchemeOpAlterContinuousBackup, EOpAuditClass::Safe}, // fixed: TableName
-        {NKikimrSchemeOp::ESchemeOpDropContinuousBackup, EOpAuditClass::Safe}, // fixed: TableName
-        {NKikimrSchemeOp::ESchemeOpCreateResourcePool, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpDropResourcePool, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpAlterResourcePool, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups, EOpAuditClass::Safe}, // DstTablePath found by reflection (field named TablePath in some builds); see NB below
+        {NKikimrSchemeOp::ESchemeOpDropView, EOpAuditClass::Safe}, // tier-1, not yet driven: TestDropView exists
+        {NKikimrSchemeOp::ESchemeOpDropReplication, EOpAuditClass::Safe}, // tier-2, not yet driven: same setup as CreateReplication
+        {NKikimrSchemeOp::ESchemeOpCreateContinuousBackup, EOpAuditClass::VerifiedByTest}, // fixed: TableName; CreateContinuousBackupRecordsAPath
+        {NKikimrSchemeOp::ESchemeOpAlterContinuousBackup, EOpAuditClass::Safe}, // fixed: TableName; tier-1, not yet driven with the resolve assertion (CreateContinuousBackupRecordsAPath covers Create only)
+        {NKikimrSchemeOp::ESchemeOpDropContinuousBackup, EOpAuditClass::Safe}, // fixed: TableName; tier-1, not yet driven with the resolve assertion (target is gone post-drop, needs the DropByIdRecordsAPath-style pre-drop-identity shape)
+        {NKikimrSchemeOp::ESchemeOpCreateResourcePool, EOpAuditClass::Safe}, // tier-1, not yet driven: TestCreateResourcePool exists
+        {NKikimrSchemeOp::ESchemeOpDropResourcePool, EOpAuditClass::Safe}, // tier-1, not yet driven: TestDropResourcePool exists
+        {NKikimrSchemeOp::ESchemeOpAlterResourcePool, EOpAuditClass::Safe}, // tier-1, not yet driven: TestAlterResourcePool exists
+        {NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups, EOpAuditClass::Safe}, // OUT OF SCOPE (backup/restore family, decision pending per RFC-0129 plan); DstTablePath found by reflection (field named TablePath in some builds); see NB below
         {NKikimrSchemeOp::ESchemeOpRestoreIncrementalBackupAtTable, EOpAuditClass::NotUserLevel}, // multipart
-        {NKikimrSchemeOp::ESchemeOpCreateBackupCollection, EOpAuditClass::Safe},
+        {NKikimrSchemeOp::ESchemeOpCreateBackupCollection, EOpAuditClass::Safe}, // tier-1, not yet driven: TestCreateBackupCollection exists
         {NKikimrSchemeOp::ESchemeOpAlterBackupCollection, EOpAuditClass::NotUserLevel}, // Y_ABORT: unimplemented
-        {NKikimrSchemeOp::ESchemeOpDropBackupCollection, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpMoveSequence, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpBackupBackupCollection, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpBackupIncrementalBackupCollection, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpRestoreBackupCollection, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpCreateTransfer, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpAlterTransfer, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpDropTransfer, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpDropTransferCascade, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpCreateSysView, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpDropSysView, EOpAuditClass::Safe},
+        {NKikimrSchemeOp::ESchemeOpDropBackupCollection, EOpAuditClass::Safe}, // tier-1, not yet driven: TestDropBackupCollection exists
+        {NKikimrSchemeOp::ESchemeOpMoveSequence, EOpAuditClass::Safe}, // tier-1, not yet driven: TestMoveSequence exists
+        {NKikimrSchemeOp::ESchemeOpBackupBackupCollection, EOpAuditClass::Safe}, // OUT OF SCOPE (backup/restore family, decision pending per RFC-0129 plan)
+        {NKikimrSchemeOp::ESchemeOpBackupIncrementalBackupCollection, EOpAuditClass::Safe}, // OUT OF SCOPE (backup/restore family, decision pending per RFC-0129 plan)
+        {NKikimrSchemeOp::ESchemeOpRestoreBackupCollection, EOpAuditClass::Safe}, // OUT OF SCOPE (backup/restore family, decision pending per RFC-0129 plan)
+        {NKikimrSchemeOp::ESchemeOpCreateTransfer, EOpAuditClass::Safe}, // tier-2, not yet driven: TestCreateTransfer exists but the target needs a source connection like Replication
+        {NKikimrSchemeOp::ESchemeOpAlterTransfer, EOpAuditClass::Safe}, // tier-2, not yet driven: same setup as CreateTransfer
+        {NKikimrSchemeOp::ESchemeOpDropTransfer, EOpAuditClass::Safe}, // tier-2, not yet driven: same setup as CreateTransfer
+        {NKikimrSchemeOp::ESchemeOpDropTransferCascade, EOpAuditClass::Safe}, // tier-2, not yet driven: same setup as CreateTransfer
+        {NKikimrSchemeOp::ESchemeOpCreateSysView, EOpAuditClass::Safe}, // tier-1, not yet driven: TestCreateSysView exists
+        {NKikimrSchemeOp::ESchemeOpDropSysView, EOpAuditClass::Safe}, // tier-1, not yet driven: TestDropSysView exists
         {NKikimrSchemeOp::ESchemeOpCreateLongIncrementalRestoreOp, EOpAuditClass::NotUserLevel}, // internal, pushed as sub-op part
         {NKikimrSchemeOp::ESchemeOpChangePathState, EOpAuditClass::NotUserLevel}, // internal, pushed as sub-op part
-        {NKikimrSchemeOp::ESchemeOpRotateCdcStream, EOpAuditClass::Safe}, // NB: same nested-field shape as the other CDC ops; not independently re-verified here
+        {NKikimrSchemeOp::ESchemeOpRotateCdcStream, EOpAuditClass::Safe}, // NB: same nested-field shape as the other CDC ops (likely broken like them); no public API constructs it directly (only internal continuous-backup rotation), so user-level-ness itself is unconfirmed -- not independently re-verified here
         {NKikimrSchemeOp::ESchemeOpRotateCdcStreamImpl, EOpAuditClass::NotUserLevel},
         {NKikimrSchemeOp::ESchemeOpRotateCdcStreamAtTable, EOpAuditClass::NotUserLevel},
-        {NKikimrSchemeOp::ESchemeOpIncrementalRestoreFinalize, EOpAuditClass::Safe}, // NB: fresh top-level tx from schemeshard_incremental_restore_scan.cpp; TargetTablePaths not independently re-verified here
+        {NKikimrSchemeOp::ESchemeOpIncrementalRestoreFinalize, EOpAuditClass::NotUserLevel}, // constructed only by the internal scan actor (schemeshard_incremental_restore_scan.cpp), marked SetInternal(true), no client-facing entry point; also note TargetTablePaths is a repeated field the generic reflection walk cannot extract regardless
         {NKikimrSchemeOp::ESchemeOpCreateLongIncrementalBackupOp, EOpAuditClass::NotUserLevel}, // multipart
         {NKikimrSchemeOp::ESchemeOpDropColumnBuild, EOpAuditClass::NotUserLevel}, // internal, built by CreateBuildIndex
-        {NKikimrSchemeOp::ESchemeOpCreateSecret, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpAlterSecret, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpDropSecret, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpCreateStreamingQuery, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpDropStreamingQuery, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpAlterStreamingQuery, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpTruncateTable, EOpAuditClass::Safe}, // fixed: TableName
-        {NKikimrSchemeOp::ESchemeOpPrepareIndexValidation, EOpAuditClass::Safe},
+        {NKikimrSchemeOp::ESchemeOpCreateSecret, EOpAuditClass::Safe}, // tier-1, not yet driven: TestCreateSecret exists
+        {NKikimrSchemeOp::ESchemeOpAlterSecret, EOpAuditClass::Safe}, // tier-1, not yet driven: TestAlterSecret exists
+        {NKikimrSchemeOp::ESchemeOpDropSecret, EOpAuditClass::Safe}, // tier-1, not yet driven: TestDropSecret exists
+        {NKikimrSchemeOp::ESchemeOpCreateStreamingQuery, EOpAuditClass::Safe}, // tier-1, not yet driven: TestCreateStreamingQuery exists
+        {NKikimrSchemeOp::ESchemeOpDropStreamingQuery, EOpAuditClass::Safe}, // tier-1, not yet driven: TestDropStreamingQuery exists
+        {NKikimrSchemeOp::ESchemeOpAlterStreamingQuery, EOpAuditClass::Safe}, // tier-1, not yet driven: TestAlterStreamingQuery exists
+        {NKikimrSchemeOp::ESchemeOpTruncateTable, EOpAuditClass::VerifiedByTest}, // fixed: TableName; TruncateTableRecordsAPath
+        {NKikimrSchemeOp::ESchemeOpPrepareIndexValidation, EOpAuditClass::Safe}, // tier-3, not yet driven: no direct TestXxx helper; dispatch is shared with internal-only sibling ops in the same ConstructParts switch, user-level-ness unconfirmed
         {NKikimrSchemeOp::ESchemeOpIncrementalRestoreLockTargets, EOpAuditClass::NotUserLevel}, // internal, pushed as sub-op part
         {NKikimrSchemeOp::ESchemeOpIncrementalRestoreUnlockTargets, EOpAuditClass::NotUserLevel}, // internal, pushed as sub-op part
         {NKikimrSchemeOp::ESchemeOpCreateFullBackupOp, EOpAuditClass::NotUserLevel}, // internal, pushed as sub-op part
-        {NKikimrSchemeOp::ESchemeOpCreateTestShardSet, EOpAuditClass::Safe},
-        {NKikimrSchemeOp::ESchemeOpDropTestShardSet, EOpAuditClass::Safe},
+        {NKikimrSchemeOp::ESchemeOpCreateTestShardSet, EOpAuditClass::Safe}, // tier-1, not yet driven: TestCreateTestShardSet exists
+        {NKikimrSchemeOp::ESchemeOpDropTestShardSet, EOpAuditClass::Safe}, // tier-1, not yet driven: TestDropTestShardSet exists
     };
     return table;
+}
+
+// RFC 0129 V5: the closed set of op types allowed to remain `Safe` (grandfathered,
+// not yet `VerifiedByTest`), each with its per-row reason recorded as an inline
+// comment next to its GetOpAuditTable() entry above. A NEW user-level op landing
+// as `Safe` is not in this set and fails EveryOperationTypeIsClassified below --
+// growing the verification gap requires a deliberate edit to this set, not a
+// silent `Safe` in the table. The 4 backup-collection rows are separately out of
+// scope per the RFC-0129 plan and are included here for the same reason: their
+// behavior is deliberately untouched, not overlooked.
+const THashSet<NKikimrSchemeOp::EOperationType>& GetGrandfatheredSafeOps() {
+    static const THashSet<NKikimrSchemeOp::EOperationType> ops = {
+        NKikimrSchemeOp::ESchemeOpCreatePersQueueGroup,
+        NKikimrSchemeOp::ESchemeOpDropTable,
+        NKikimrSchemeOp::ESchemeOpDropPersQueueGroup,
+        NKikimrSchemeOp::ESchemeOpAlterPersQueueGroup,
+        NKikimrSchemeOp::ESchemeOpModifyACL,
+        NKikimrSchemeOp::ESchemeOpRmDir,
+        NKikimrSchemeOp::ESchemeOpBackup,
+        NKikimrSchemeOp::ESchemeOpCreateSubDomain,
+        NKikimrSchemeOp::ESchemeOpDropSubDomain,
+        NKikimrSchemeOp::ESchemeOpCreateRtmrVolume,
+        NKikimrSchemeOp::ESchemeOpCreateBlockStoreVolume,
+        NKikimrSchemeOp::ESchemeOpAlterBlockStoreVolume,
+        NKikimrSchemeOp::ESchemeOpAssignBlockStoreVolume,
+        NKikimrSchemeOp::ESchemeOpDropBlockStoreVolume,
+        NKikimrSchemeOp::ESchemeOpCreateKesus,
+        NKikimrSchemeOp::ESchemeOpDropKesus,
+        NKikimrSchemeOp::ESchemeOpForceDropSubDomain,
+        NKikimrSchemeOp::ESchemeOpCreateSolomonVolume,
+        NKikimrSchemeOp::ESchemeOpDropSolomonVolume,
+        NKikimrSchemeOp::ESchemeOpAlterKesus,
+        NKikimrSchemeOp::ESchemeOpDropTableIndex,
+        NKikimrSchemeOp::ESchemeOpCreateExtSubDomain,
+        NKikimrSchemeOp::ESchemeOpAlterExtSubDomain,
+        NKikimrSchemeOp::ESchemeOpForceDropExtSubDomain,
+        NKikimrSchemeOp::ESchemeOpUpgradeSubDomain,
+        NKikimrSchemeOp::ESchemeOpUpgradeSubDomainDecision,
+        NKikimrSchemeOp::ESchemeOpCreateIndexBuild,
+        NKikimrSchemeOp::ESchemeOpCreateLock,
+        NKikimrSchemeOp::ESchemeOpAlterSolomonVolume,
+        NKikimrSchemeOp::ESchemeOpDropLock,
+        NKikimrSchemeOp::ESchemeOpCancelIndexBuild,
+        NKikimrSchemeOp::ESchemeOpCreateFileStore,
+        NKikimrSchemeOp::ESchemeOpAlterFileStore,
+        NKikimrSchemeOp::ESchemeOpDropFileStore,
+        NKikimrSchemeOp::ESchemeOpRestore,
+        NKikimrSchemeOp::ESchemeOpCreateColumnStore,
+        NKikimrSchemeOp::ESchemeOpAlterColumnStore,
+        NKikimrSchemeOp::ESchemeOpDropColumnStore,
+        NKikimrSchemeOp::ESchemeOpCreateColumnTable,
+        NKikimrSchemeOp::ESchemeOpAlterColumnTable,
+        NKikimrSchemeOp::ESchemeOpDropColumnTable,
+        NKikimrSchemeOp::ESchemeOpCreateCdcStream,
+        NKikimrSchemeOp::ESchemeOpAlterCdcStream,
+        NKikimrSchemeOp::ESchemeOpDropCdcStream,
+        NKikimrSchemeOp::ESchemeOpCreateSequence,
+        NKikimrSchemeOp::ESchemeOpAlterSequence,
+        NKikimrSchemeOp::ESchemeOpDropSequence,
+        NKikimrSchemeOp::ESchemeOpCreateReplication,
+        NKikimrSchemeOp::ESchemeOpAlterReplication,
+        NKikimrSchemeOp::ESchemeOpDropReplicationCascade,
+        NKikimrSchemeOp::ESchemeOpCreateBlobDepot,
+        NKikimrSchemeOp::ESchemeOpAlterBlobDepot,
+        NKikimrSchemeOp::ESchemeOpDropBlobDepot,
+        NKikimrSchemeOp::ESchemeOpCreateExternalTable,
+        NKikimrSchemeOp::ESchemeOpDropExternalTable,
+        NKikimrSchemeOp::ESchemeOpCreateExternalDataSource,
+        NKikimrSchemeOp::ESchemeOpDropExternalDataSource,
+        NKikimrSchemeOp::ESchemeOpCreateView,
+        NKikimrSchemeOp::ESchemeOpDropView,
+        NKikimrSchemeOp::ESchemeOpDropReplication,
+        NKikimrSchemeOp::ESchemeOpAlterContinuousBackup,
+        NKikimrSchemeOp::ESchemeOpDropContinuousBackup,
+        NKikimrSchemeOp::ESchemeOpCreateResourcePool,
+        NKikimrSchemeOp::ESchemeOpDropResourcePool,
+        NKikimrSchemeOp::ESchemeOpAlterResourcePool,
+        NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups, // OUT OF SCOPE (backup family)
+        NKikimrSchemeOp::ESchemeOpCreateBackupCollection,
+        NKikimrSchemeOp::ESchemeOpDropBackupCollection,
+        NKikimrSchemeOp::ESchemeOpMoveSequence,
+        NKikimrSchemeOp::ESchemeOpBackupBackupCollection, // OUT OF SCOPE (backup family)
+        NKikimrSchemeOp::ESchemeOpBackupIncrementalBackupCollection, // OUT OF SCOPE (backup family)
+        NKikimrSchemeOp::ESchemeOpRestoreBackupCollection, // OUT OF SCOPE (backup family)
+        NKikimrSchemeOp::ESchemeOpCreateTransfer,
+        NKikimrSchemeOp::ESchemeOpAlterTransfer,
+        NKikimrSchemeOp::ESchemeOpDropTransfer,
+        NKikimrSchemeOp::ESchemeOpDropTransferCascade,
+        NKikimrSchemeOp::ESchemeOpCreateSysView,
+        NKikimrSchemeOp::ESchemeOpDropSysView,
+        NKikimrSchemeOp::ESchemeOpRotateCdcStream,
+        NKikimrSchemeOp::ESchemeOpCreateSecret,
+        NKikimrSchemeOp::ESchemeOpAlterSecret,
+        NKikimrSchemeOp::ESchemeOpDropSecret,
+        NKikimrSchemeOp::ESchemeOpCreateStreamingQuery,
+        NKikimrSchemeOp::ESchemeOpDropStreamingQuery,
+        NKikimrSchemeOp::ESchemeOpAlterStreamingQuery,
+        NKikimrSchemeOp::ESchemeOpPrepareIndexValidation,
+        NKikimrSchemeOp::ESchemeOpCreateTestShardSet,
+        NKikimrSchemeOp::ESchemeOpDropTestShardSet,
+    };
+    return ops;
 }
 
 } // namespace
@@ -1979,23 +2099,63 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsOperationClassificationTests) {
         UNIT_ASSERT_C(unclassified.empty(),
             "the following NKikimrSchemeOp::EOperationType values have no row in "
             "GetOpAuditTable (ut_scheme_change_records.cpp): " << JoinSeq(", ", unclassified)
-            << " -- classify each as user-level-reachable-and-path-resolves (Safe) or "
-            "not-user-level (NotUserLevel) before landing this change. If it is user-level "
-            "and its path does NOT resolve, that is a DDL outage: fix the extractor in "
-            "schemeshard__scheme_change_records.cpp first.");
+            << " -- classify each as NotUserLevel (never a user-level TModifyScheme), or "
+            "VerifiedByTest (drive it end-to-end and assert the recorded path resolves, "
+            "see AssertRecordedPathResolvesToTouchedObject). A new op must not land as "
+            "Safe -- that is the unverified state this guard exists to prevent. If it is "
+            "user-level and its path does NOT resolve, that is a DDL outage: fix the "
+            "extractor in schemeshard__scheme_change_records.cpp first.");
     }
 
-    // A newly classified Safe row must actually be reachable and resolve --
-    // this positive companion to EveryOperationTypeIsClassified prevents the
-    // table from being satisfied by marking everything NotUserLevel.
+    // RFC 0129 V5: tightens the guard from "someone classified this" to "someone
+    // ran this". A NEW user-level op must land as VerifiedByTest, not Safe --
+    // Safe is exactly the unverified state that hid the TMoveIndex bug. Only the
+    // closed, pre-existing set in GetGrandfatheredSafeOps() (each row's reason
+    // documented inline in GetOpAuditTable() above) may stay Safe.
+    Y_UNIT_TEST(NewSafeOpsMustBeGrandfatheredOrVerified) {
+        TVector<TString> ungrandfathered;
+        for (const auto& row : GetOpAuditTable()) {
+            if (row.Class == EOpAuditClass::Safe && !GetGrandfatheredSafeOps().contains(row.OpType)) {
+                ungrandfathered.push_back(NKikimrSchemeOp::EOperationType_Name(row.OpType));
+            }
+        }
+        UNIT_ASSERT_C(ungrandfathered.empty(),
+            "the following operation types are classified Safe but are not in the "
+            "grandfathered allowlist (GetGrandfatheredSafeOps in ut_scheme_change_records.cpp): "
+            << JoinSeq(", ", ungrandfathered) << " -- a NEW user-level operation must be driven "
+            "end-to-end and classified VerifiedByTest, not left Safe. If it genuinely cannot be "
+            "driven from this UT harness, add it to GetGrandfatheredSafeOps() with a reason "
+            "comment on its GetOpAuditTable() row explaining why, as a deliberate decision.");
+    }
+
+    // A newly classified Safe/VerifiedByTest row must actually be reachable
+    // and resolve -- this positive companion to EveryOperationTypeIsClassified
+    // prevents the table from being satisfied by marking everything
+    // NotUserLevel.
     Y_UNIT_TEST(TableIsNotVacuouslyAllNotUserLevel) {
+        ui32 userLevelCount = 0;
+        for (const auto& row : GetOpAuditTable()) {
+            userLevelCount += (row.Class == EOpAuditClass::Safe || row.Class == EOpAuditClass::VerifiedByTest);
+        }
+        UNIT_ASSERT_C(userLevelCount > 100,
+            "expected the overwhelming majority of operation types to be user-level and "
+            "safe; got only " << userLevelCount << " -- the classification table looks wrong");
+    }
+
+    // Makes the verification gap visible: Safe means "believed to resolve,
+    // read but not executed" -- exactly the state that hid the TMoveIndex
+    // bug. VerifiedByTest means an existing test drives the op end-to-end and
+    // asserts the recorded path resolves to the touched object. This count is
+    // the honest size of the remaining gap (closed incrementally by V3).
+    Y_UNIT_TEST(ReportSafeVsVerifiedByTestCounts) {
         ui32 safeCount = 0;
+        ui32 verifiedCount = 0;
         for (const auto& row : GetOpAuditTable()) {
             safeCount += (row.Class == EOpAuditClass::Safe);
+            verifiedCount += (row.Class == EOpAuditClass::VerifiedByTest);
         }
-        UNIT_ASSERT_C(safeCount > 100,
-            "expected the overwhelming majority of operation types to be user-level and "
-            "safe; got only " << safeCount << " -- the classification table looks wrong");
+        Cerr << "RFC-0129 audit table: Safe=" << safeCount << " VerifiedByTest=" << verifiedCount << Endl;
+        UNIT_ASSERT_C(safeCount + verifiedCount > 0, "sanity: table must be non-empty");
     }
 }
 
@@ -2036,6 +2196,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsOperationAuditTests) {
                 UNIT_ASSERT_VALUES_EQUAL(e.Targets.size(), 1u);
                 UNIT_ASSERT_C(AnyPathContains(e, "SubDir"),
                     "expected the target to be SubDir, got: " << AllTargetPaths(e));
+                AssertRecordedPathResolvesToTouchedObject(runtime, "/MyRoot", e);
             }
         }
         UNIT_ASSERT_C(found, "AlterUserAttributes must produce a scheme change record");
@@ -2149,6 +2310,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsOperationAuditTests) {
                 found = true;
                 UNIT_ASSERT_C(AnyPathContains(e, "Index2"),
                     "expected the target to be the new index name, got: " << AllTargetPaths(e));
+                AssertRecordedPathResolvesToTouchedObject(runtime, "/MyRoot", e);
             }
         }
         UNIT_ASSERT_C(found, "MoveIndex must produce a scheme change record");
@@ -2224,6 +2386,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsOperationAuditTests) {
                 found = true;
                 UNIT_ASSERT_C(AnyPathContains(e, "Table1"),
                     "expected the target to be Table1, got: " << AllTargetPaths(e));
+                AssertRecordedPathResolvesToTouchedObject(runtime, "/MyRoot", e);
             }
         }
         UNIT_ASSERT_C(found, "TruncateTable must produce a scheme change record");
@@ -2268,8 +2431,145 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsOperationAuditTests) {
                 found = true;
                 UNIT_ASSERT_C(AnyPathContains(e, "Table1"),
                     "expected the target to be Table1, got: " << AllTargetPaths(e));
+                AssertRecordedPathResolvesToTouchedObject(runtime, "/MyRoot", e);
             }
         }
         UNIT_ASSERT_C(found, "CreateContinuousBackup must produce a scheme change record");
+    }
+
+    Y_UNIT_TEST(RestoreRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        // Restore targets an existing table (it restores INTO it), unlike
+        // Create; the target must already exist for the propose to get past
+        // path resolution at all.
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const ui64 rejectedBefore = GetCumulativeCounter(runtime, "SchemeShard/SchemeChangePathMissing");
+
+        // TRestoreTask names its target TableName, like TTruncateTable/
+        // TCreateContinuousBackup before their extractor fixes -- not yet
+        // special-cased here. Driving Restore to full completion needs a
+        // real backup at the FS/S3 path (see ut_restore's TS3Mock rig); with
+        // no such fixture the data phase hangs, so this only checks the
+        // propose-time behavior (the same shape the outbox's own check
+        // observes) rather than the post-finalize resolve. That is still a
+        // real, meaningful assertion: before this fix, the propose itself
+        // was refused -- see the crash this test produced before the fix
+        // (Restore's AbortPropose is also an unconditional Y_ABORT stub, so
+        // the refusal took the tablet down rather than cleanly failing).
+        TestRestore(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table1"
+            TableDescription {
+                Name: "Table1"
+                Columns { Name: "key" Type: "Uint64" }
+                KeyColumnNames: ["key"]
+            }
+            FSSettings {
+                BasePath: "/tmp"
+                Path: "restore"
+            }
+        )");
+
+        const ui64 rejectedAfter = GetCumulativeCounter(runtime, "SchemeShard/SchemeChangePathMissing");
+        UNIT_ASSERT_VALUES_EQUAL_C(rejectedAfter, rejectedBefore, "Restore must resolve a path");
+    }
+
+    Y_UNIT_TEST(AlterLoginRecordsAPath) {
+        // TAlterLogin's target (the user/group being altered) is nested
+        // inside a oneof (e.g. CreateUser.User), never a top-level scalar
+        // Name/PathName/TableName field -- the generic reflection walk and
+        // every existing special case both miss it.
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        const ui64 rejectedBefore = GetCumulativeCounter(runtime, "SchemeShard/SchemeChangePathMissing");
+
+        const auto hashes = MakeTestPasswordHashes("password1");
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "alice", hashes.HashedPassword);
+
+        const ui64 rejectedAfter = GetCumulativeCounter(runtime, "SchemeShard/SchemeChangePathMissing");
+        UNIT_ASSERT_VALUES_EQUAL_C(rejectedAfter, rejectedBefore, "AlterLogin must resolve a path");
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        const TSchemeChangeRecordEntry* found = nullptr;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterLogin) {
+                found = &e;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(found, "AlterLogin must produce a scheme change record");
+        UNIT_ASSERT_VALUES_EQUAL_C(found->Targets.size(), 1u, "AlterLogin");
+        UNIT_ASSERT_VALUES_EQUAL_C(found->Targets[0].Path, "",
+            "AlterLogin has no path-bearing target -- it must be attributed to the "
+            "database root itself, relative to which the root's own path is empty");
+        AssertRecordedPathResolvesToTouchedObject(runtime, "/MyRoot", *found);
+    }
+
+    // RFC 0129 V4: the Drop.Id branch in ResolveSchemeChangeTargets (a
+    // TModifyScheme with Drop.Id set and Drop.Name/WorkingDir unset) is read
+    // but was never exercised by a test. Its only production producer is
+    // ydb/core/tx/replication/controller/dst_remover.cpp:46. TestForceDropUnsafe
+    // drives this exact shape: DROP_BY_PATH_ID_HELPERS builds TDrop with only
+    // Id set, no Name, no WorkingDir.
+    Y_UNIT_TEST(DropByIdRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TestMkDir(runtime, ++txId, "/MyRoot", "DirToDropById");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto pathVersion = ExtractPathVersion(DescribePath(runtime, "/MyRoot/DirToDropById"));
+        const ui64 droppedOwnerId = pathVersion.PathId.OwnerId;
+        const ui64 droppedLocalId = pathVersion.PathId.LocalPathId;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        const ui64 rejectedBefore = GetCumulativeCounter(runtime, "SchemeShard/SchemeChangePathMissing");
+
+        TestForceDropUnsafe(runtime, ++txId, droppedLocalId);
+        env.TestWaitNotification(runtime, txId);
+
+        const ui64 rejectedAfter = GetCumulativeCounter(runtime, "SchemeShard/SchemeChangePathMissing");
+        UNIT_ASSERT_VALUES_EQUAL_C(rejectedAfter, rejectedBefore,
+            "Drop.Id (Drop.Name/WorkingDir unset) must resolve a path by PathId");
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        const TSchemeChangeRecordEntry* found = nullptr;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpForceDropUnsafe) {
+                found = &e;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(found, "ForceDropUnsafe (Drop.Id) must produce a scheme change record");
+        UNIT_ASSERT_VALUES_EQUAL_C(found->Targets.size(), 1u, "ForceDropUnsafe");
+        UNIT_ASSERT_C(AnyPathContains(*found, "DirToDropById"),
+            "expected the target to be the dropped directory, got: " << AllTargetPaths(*found));
+        // The object is gone by finalize time, so the record must carry the
+        // resolved-at-propose PathId of the object the drop actually
+        // targeted -- assert against the identity captured before the drop,
+        // not a live re-resolve (which would correctly fail post-drop).
+        UNIT_ASSERT_VALUES_EQUAL_C(found->PathOwnerId, droppedOwnerId,
+            "recorded PathOwnerId must match the dropped object's owner");
+        UNIT_ASSERT_VALUES_EQUAL_C(found->PathLocalId, droppedLocalId,
+            "recorded PathLocalId must match the dropped object's identity, not some other path");
     }
 }

@@ -252,6 +252,41 @@ inline TString AllTargetPaths(const TSchemeChangeRecordEntry& entry) {
     return JoinSeq(",", paths);
 }
 
+// The assertion that would have caught the TMoveIndex bug: not "the recorded
+// string looks plausible", but "the recorded path resolves, in the live
+// scheme, to the very object the operation touched". `root` is the database
+// root (e.g. "/MyRoot"); `entry` must carry a resolved PathOwnerId/PathLocalId
+// (i.e. this runs after the op has completed, not mid-flight). Fails loudly
+// if the database-relative Path does not resolve, or resolves to a different
+// object than the one the extractor captured.
+inline void AssertRecordedPathResolvesToTouchedObject(
+    TTestActorRuntime& runtime, const TString& root, const TSchemeChangeRecordEntry& entry, size_t targetIdx = 0)
+{
+    UNIT_ASSERT_C(targetIdx < entry.Targets.size(),
+        "targetIdx " << targetIdx << " out of range, entry has " << entry.Targets.size() << " targets");
+    const TString& relPath = entry.Targets[targetIdx].Path;
+    const TString absPath = relPath.empty() ? root : (root + "/" + relPath);
+
+    auto describe = DescribePath(runtime, absPath);
+    UNIT_ASSERT_C(describe.GetStatus() == NKikimrScheme::StatusSuccess,
+        "recorded path \"" << relPath << "\" (absolute: \"" << absPath << "\") does not resolve "
+        "in the live scheme -- a bare/approximate path must fail this check, not pass it");
+
+    const ui64 resolvedOwnerId = describe.GetPathDescription().GetSelf().GetSchemeshardId();
+    const ui64 resolvedLocalId = describe.GetPathDescription().GetSelf().GetPathId();
+    UNIT_ASSERT_C(targetIdx != 0 || (entry.PathOwnerId != 0 || entry.PathLocalId != 0),
+        "entry has no resolved PathId to compare against -- was it read before FinalizeSchemeChangeRecord ran?");
+    if (targetIdx == 0) {
+        UNIT_ASSERT_VALUES_EQUAL_C(resolvedOwnerId, entry.PathOwnerId,
+            "recorded path \"" << relPath << "\" resolves to a different object's owner than "
+            "the one the operation touched (PathOwnerId mismatch)");
+        UNIT_ASSERT_VALUES_EQUAL_C(resolvedLocalId, entry.PathLocalId,
+            "recorded path \"" << relPath << "\" resolves to a different object than "
+            "the one the operation touched (PathLocalId mismatch): expected "
+            << entry.PathLocalId << ", resolved to " << resolvedLocalId);
+    }
+}
+
 struct TSchemeChangeRecordsReadResult {
     TVector<TSchemeChangeRecordEntry> Entries;
     ui64 ClosedThroughPlanStep = 0;

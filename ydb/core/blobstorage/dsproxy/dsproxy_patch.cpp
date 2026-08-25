@@ -118,6 +118,7 @@ class TBlobStorageGroupPatchRequest : public TBlobStorageGroupRequestActor {
     TBlobStorageGroupInfo::TVDiskIds VDisks;
 
     bool UseVPatch = false;
+    bool EnableVPatchForTesting = false;
     bool IsGoodPatchedBlobId = false;
     bool IsAllowedErasure = false;
     bool IsSecured = false;
@@ -170,6 +171,7 @@ public:
         , Deadline(params.Common.Event->Deadline)
         , Orbit(std::move(params.Common.Event->Orbit))
         , UseVPatch(params.UseVPatch)
+        , EnableVPatchForTesting(params.EnableVPatchForTesting)
     {}
 
     void ReplyAndDie(NKikimrProto::EReplyStatus status) override {
@@ -447,11 +449,14 @@ public:
             return;
         }
 
-        Y_ABORT_UNLESS(subgroupIdx < 32);
-        SuccessfulVPatchResultsMask |= ui32{1} << subgroupIdx;
-        const bool hasQuorum = Info->Type.GetErasure() == TErasureType::ErasureMirror3dc
-            ? NVPatch::HasMirror3dcQuorum(*Info, SuccessfulVPatchResultsMask)
-            : ReceivedResults == Info->Type.TotalPartCount();
+        bool hasQuorum;
+        if (Info->Type.GetErasure() == TErasureType::ErasureMirror3dc) {
+            Y_ABORT_UNLESS(subgroupIdx < 32);
+            SuccessfulVPatchResultsMask |= ui32{1} << subgroupIdx;
+            hasQuorum = NVPatch::HasMirror3dcQuorum(*Info, SuccessfulVPatchResultsMask);
+        } else {
+            hasQuorum = ReceivedResults == Info->Type.TotalPartCount();
+        }
         if (hasQuorum) {
             YDB_LOG_PATCH_LOG(PRI_DEBUG, "Got successful quorum, make own success response",
                 {"marker", "BPPA25"});
@@ -958,7 +963,8 @@ public:
         IsAllowedErasure = Info->Type.ErasureFamily() == TErasureType::ErasureParityBlock
                 || Info->Type.GetErasure() == TErasureType::ErasureNone
                 || Info->Type.GetErasure() == TErasureType::ErasureMirror3dc;
-        if (false && IsGoodPatchedBlobId && IsAllowedErasure && UseVPatch && OriginalGroupId == Info->GroupID && !IsSecured) {
+        if (EnableVPatchForTesting && IsGoodPatchedBlobId && IsAllowedErasure && UseVPatch
+                && OriginalGroupId == Info->GroupID && !IsSecured) {
             YDB_LOG_PATCH_LOG(PRI_DEBUG, "Start VPatch strategy from bootstrap",
                 {"marker", "BPPA03"});
             StartVPatch();

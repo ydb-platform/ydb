@@ -203,7 +203,8 @@ struct TDSProxyEnv {
                 }));
     }
 
-    std::unique_ptr<IActor> CreatePatchRequestActor(TEvBlobStorage::TEvPatch::TPtr &ev, bool useVPatch = false) {
+    std::unique_ptr<IActor> CreatePatchRequestActor(TEvBlobStorage::TEvPatch::TPtr &ev, bool useVPatch = false,
+            bool enableVPatchForTesting = false) {
         return std::unique_ptr<IActor>(CreateBlobStorageGroupPatchRequest(
             TBlobStorageGroupPatchParameters{
                 .Common = {
@@ -219,7 +220,8 @@ struct TDSProxyEnv {
                     .Event = ev->Get(),
                     .ExecutionRelay = ev->Get()->ExecutionRelay
                 },
-                .UseVPatch = useVPatch
+                .UseVPatch = useVPatch,
+                .EnableVPatchForTesting = enableVPatchForTesting,
             }));
     }
 };

@@ -435,6 +435,8 @@ struct TReassignOperation {
     }
 };
 
+TFullTabletId ToFullTabletId(TTabletId tabletId);
+
 } // NHive
 } // NKikimr
 

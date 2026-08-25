@@ -35,7 +35,14 @@ void TStoragePoolInfo::UpdateStorageGroup(TStorageGroupId groupId, const TEvCont
 }
 
 void TStoragePoolInfo::DeleteStorageGroup(TStorageGroupId groupId) {
-    Groups.erase(groupId);
+    auto it = Groups.find(groupId);
+    if (it != Groups.end()) {
+        if (!it->second.IsActive()) {
+            auto inactiveIt = std::remove(InactiveGroups.begin(), InactiveGroups.end(), groupId);
+            InactiveGroups.erase(inactiveIt, InactiveGroups.end());
+        }
+        Groups.erase(it);
+    }
 }
 
 template <>
@@ -174,8 +181,14 @@ THolder<TEvControllerSelectGroups::TGroupParameters> TStoragePoolInfo::BuildRefr
 }
 
 bool TStoragePoolInfo::AddTabletToWait(TTabletId tabletId) {
-    bool result = TabletsWaiting.empty();
+    bool result = TabletsWaiting.empty() && !(ShrinkRequest);
     TabletsWaiting.emplace_back(tabletId);
+    return result;
+}
+
+bool TStoragePoolInfo::SetShrinkRequest(TEvHive::TEvShrinkStoragePool::TPtr ev) {
+    bool result = TabletsWaiting.empty() && !(ShrinkRequest);
+    ShrinkRequest = std::move(ev);
     return result;
 }
 

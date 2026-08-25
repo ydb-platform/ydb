@@ -732,6 +732,9 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
             case Ydb::Table::FulltextIndexSettings_Tokenizer_KEYWORD:
                 Stream << "keyword";
                 break;
+            case Ydb::Table::FulltextIndexSettings_Tokenizer_ALPHANUMERIC:
+                Stream << "alphanumeric";
+                break;
             default:
                 ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected Ydb::Table::FulltextIndexSettings::Tokenizer");
         }

@@ -366,7 +366,7 @@ public:
         return result.Cast();
     }
 
-    NNodes::TCoNameValueTupleList BuildTopicWriteSettings(const TString& cluster, TPositionHandle pos, TExprContext& ctx) const {
+    TCoNameValueTupleList BuildTopicWriteSettings(const TString& cluster, TPositionHandle pos, const std::optional<TCoNameValueTupleList>& settings, TExprContext& ctx) const {
         TVector<TCoNameValueTuple> props;
 
         auto clusterConfiguration = State_->Configuration->ClustersConfigurationSettings.FindPtr(cluster);
@@ -381,6 +381,25 @@ public:
 
         if (clusterConfiguration->AddBearerToToken) {
             Add(props, AddBearerToTokenSetting, "1", pos, ctx);
+        }
+
+        if (settings) {
+            for (const auto& setting : *settings) {
+                const auto pos = setting.Ref().Pos();
+                const TStringBuf name = setting.Name();
+                const TStringBuf value = setting.Value().Cast<TCoAtom>();
+                if (name == NDeliveryGuaranteeSetting::Name && value == NDeliveryGuaranteeSetting::ExactlyOnceValue && !State_->DeferredPublicationExtIdPrefix) {
+                    TIssue issue(ctx.GetPosition(setting.Pos()), TStringBuilder()
+                        << "`" << NDeliveryGuaranteeSetting::PrettyName << "` = '" << NDeliveryGuaranteeSetting::ExactlyOnceValue
+                        << "' can not be used in current query context, falling back to default '" << NDeliveryGuaranteeSetting::AtLeastOnceValue << "'"
+                    );
+                    issue.Severity = TSeverityIds::S_WARNING;
+                    ctx.AddWarning(issue);
+                    continue;
+                }
+
+                Add(props, name, value, pos, ctx);
+            }
         }
 
         return Build<TCoNameValueTupleList>(ctx, pos)
@@ -414,7 +433,7 @@ public:
 
         auto dqPqTopicSinkSettingsBuilder = Build<TDqPqTopicSink>(ctx, write.Pos());
         dqPqTopicSinkSettingsBuilder.Topic(topicNode);
-        dqPqTopicSinkSettingsBuilder.Settings(BuildTopicWriteSettings(cluster, write.Pos(), ctx));
+        dqPqTopicSinkSettingsBuilder.Settings(BuildTopicWriteSettings(cluster, write.Pos(), std::nullopt, ctx));
         dqPqTopicSinkSettingsBuilder.Token<TCoSecureParam>().Name().Build("cluster:default_" + cluster).Build();
         auto dqPqTopicSinkSettings = dqPqTopicSinkSettingsBuilder.Done();
 
@@ -455,11 +474,23 @@ public:
             return nullptr;
         }
 
+        const auto input = insert.Input();
+        const auto isPureDqExpr = IsDqPureExpr(input);
+        if (!isPureDqExpr) {
+            if (!TDqCnUnionAll::Match(input.Raw())) {
+                return node;
+            }
+
+            if (!NDq::IsSingleConsumerConnection(input.Cast<TDqCnUnionAll>(), *getParents())) {
+                return node;
+            }
+        }
+
         auto dqSinkBuilder = Build<TDqSink>(ctx, insert.Pos())
             .DataSink(insert.DataSink())
             .Settings<TDqPqTopicSink>()
                 .Topic(topicNode)
-                .Settings(BuildTopicWriteSettings(cluster, insert.Pos(), ctx))
+                .Settings(BuildTopicWriteSettings(cluster, insert.Pos(), insert.Settings(), ctx))
                 .Token<TCoSecureParam>()
                     .Name()
                         .Value(TStringBuilder() << "cluster:default_" << cluster)
@@ -467,8 +498,7 @@ public:
                     .Build()
                 .Build();
 
-        const auto input = insert.Input();
-        if (IsDqPureExpr(input)) {
+        if (isPureDqExpr) {
             YQL_CLOG(INFO, ProviderPq) << "Optimize PqInsert `" << cluster << "`.`" << topicNode.Path().StringValue() << "`, build pure stage with sink";
 
             const auto dqSink = dqSinkBuilder
@@ -490,18 +520,9 @@ public:
                 .Done();
         }
 
-        if (!TDqCnUnionAll::Match(input.Raw())) {
-            return node;
-        }
-
-        const auto dqUnion = input.Cast<TDqCnUnionAll>();
-        if (!NDq::IsSingleConsumerConnection(dqUnion, *getParents())) {
-            return node;
-        }
-
         YQL_CLOG(INFO, ProviderPq) << "Optimize PqInsert `" << cluster << "`.`" << topicNode.Path().StringValue() << "`, push into existing stage";
 
-        const auto dqUnionOutput = dqUnion.Output();
+        const auto dqUnionOutput = input.Cast<TDqCnUnionAll>().Output();
         const auto dqSink = dqSinkBuilder
             .Index(dqUnionOutput.Index())
             .Done();

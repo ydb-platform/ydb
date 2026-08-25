@@ -5202,6 +5202,136 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         readSession->AddDataReceivedEvent(0, "test_message");
         pqGateway->WaitWriteSession(info.OutputTopicName)->ExpectMessage("test_message");
     }
+
+    Y_UNIT_TEST_F(DeliveryGuarantyWriteSettingDisabled, TStreamingTestFixture) {
+        SetupAppConfig().MutableFeatureFlags()->SetEnableExactlyOnceTopicsWriting(false);
+
+        constexpr char inputTopicName[] = "deliveryGuarantyWriteSettingDisabledInputTopic";
+        constexpr char outputTopicName[] = "deliveryGuarantyWriteSettingDisabledOutputTopic";
+        CreateTopic(inputTopicName);
+        CreateTopic(outputTopicName);
+
+        constexpr char pqSourceName[] = "sourceName";
+        CreatePqSource(pqSourceName);
+
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY streamingQuery AS
+            DO BEGIN
+                INSERT INTO `{pq_source}`.`{output_topic}` WITH (
+                    DELIVERY_GUARANTEE = "exactly_once"
+                ) SELECT * FROM `{pq_source}`.`{input_topic}`
+            END DO;)",
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ), EStatus::GENERIC_ERROR, "Exactly once delivery guarantee is disabled. Please contact your system administrator to enable it.");
+
+        // Test settings validation
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY streamingQuery AS
+            DO BEGIN
+                INSERT INTO `{pq_source}`.`{output_topic}` WITH (
+                    DLIVERY_GUARANTEE = "exactly_once"
+                ) SELECT * FROM `{pq_source}`.`{input_topic}`
+            END DO;)",
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ), EStatus::GENERIC_ERROR, "Unknown setting 'dliveryguarantee'");
+
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY streamingQuery AS
+            DO BEGIN
+                INSERT INTO `{pq_source}`.`{output_topic}` WITH (
+                    DELIVERY_GUARANTEE
+                ) SELECT * FROM `{pq_source}`.`{input_topic}`
+            END DO;)",
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ), EStatus::GENERIC_ERROR, "Expected `DELIVERY_GUARANTEE` = value");
+
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY streamingQuery AS
+            DO BEGIN
+                INSERT INTO `{pq_source}`.`{output_topic}` WITH (
+                    DELIVERY_GUARANTEE = "none"
+                ) SELECT * FROM `{pq_source}`.`{input_topic}`
+            END DO;)",
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ), EStatus::GENERIC_ERROR, "`DELIVERY_GUARANTEE` must be 'exactly_once' or 'at_least_once'");
+    }
+
+    Y_UNIT_TEST_F(DeliveryGuarantyWriteSettingEnabled, TStreamingTestFixture) {
+        {
+            auto& featureFlags = *SetupAppConfig().MutableFeatureFlags();
+            featureFlags.SetEnableExactlyOnceTopicsWriting(true);
+            featureFlags.SetEnableStreamingQueriesPqSinkDeduplication(true);
+        }
+
+        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
+
+        constexpr char inputTopicName[] = "deliveryGuarantyWriteSettingDisabledInputTopic";
+        constexpr char outputTopicName[] = "deliveryGuarantyWriteSettingDisabledOutputTopic";
+        CreateTopic(inputTopicName);
+        CreateTopic(outputTopicName);
+
+        constexpr char pqSourceName[] = "sourceName";
+        CreatePqSource(pqSourceName);
+
+        constexpr char queryName[] = "deliveryGuarantyWriteSetting";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                INSERT INTO `{pq_source}`.`{output_topic}` WITH (
+                    DELIVERY_GUARANTEE = "exactly_once"
+                ) SELECT * FROM `{pq_source}`.`{input_topic}`
+            END DO;)",
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName,
+            "query_name"_a = queryName
+        ));
+
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY deliveryGuarantyWriteSettingWithDeduplication AS
+            DO BEGIN
+                PRAGMA pq.EnableDeduplication = "TRUE";
+                INSERT INTO `{pq_source}`.`{output_topic}` WITH (
+                    DELIVERY_GUARANTEE = "exactly_once"
+                ) SELECT * FROM `{pq_source}`.`{input_topic}`
+            END DO;)",
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ), EStatus::GENERIC_ERROR, "`DELIVERY_GUARANTEE` = 'exactly_once' is not supported with enabled deduplication");
+
+        Sleep(TDuration::Seconds(1));
+
+        {
+            const auto& result = ExecQuery(fmt::format(R"(
+                SELECT Issues FROM `.sys/streaming_queries` WHERE Path = "/Root/{query_name}")",
+                "query_name"_a = queryName
+            ));
+            UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+            CheckScriptResult(result[0], 1, 1, [&](TResultSetParser& resultSet) {
+                UNIT_ASSERT_STRING_CONTAINS(resultSet.ColumnParser("Issues").GetOptionalUtf8().value_or(""), "Deferred publications is not supported");
+            });
+        }
+
+        ExecQuery(fmt::format(R"(
+            INSERT INTO `{pq_source}`.`{output_topic}` WITH (
+                DELIVERY_GUARANTEE = "exactly_once"
+            ) SELECT "test_message")",
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ), EStatus::SUCCESS, "`DELIVERY_GUARANTEE` = 'exactly_once' can not be used in current query context, falling back to default 'at_least_once'");
+
+        ReadTopicMessage(outputTopicName, "test_message");
+    }
 }
 
 } // namespace NKikimr::NKqp

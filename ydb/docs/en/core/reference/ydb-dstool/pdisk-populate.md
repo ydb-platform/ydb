@@ -4,7 +4,7 @@ Use the `pdisk populate` subcommand to move a selected set of VDisks to one PDis
 
 {% note warning %}
 
-Use `pdisk populate` for controlled device testing: it lets you place exactly the same set of VDisks on a new device and compare how the old and new devices handle that workload. Do not use this command for routine hardware replacement. For automatic relocation during planned maintenance, use the `LONG_TERM_MAINTENANCE_PLANNED` maintenance status. For controlled manual relocation, use `NO_NEW_VDISKS` together with `vdisk evict`. See [{#T}](../../maintenance/manual/moving_vdisks.md#moving_pdisk).
+Use `pdisk populate` for controlled device testing: it lets you place exactly the same set of VDisks on a new device and compare how the old and new devices handle that workload.
 
 {% endnote %}
 

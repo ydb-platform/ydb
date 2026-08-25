@@ -245,7 +245,11 @@ public:
             mapIt = TabletToTableMap.end();
         }
 
-        ReconcileTable(relativePath, table);
+        // A straggler of a previous table at this path must neither recreate an entry
+        // from its dead identity nor contribute counters to the table that lives here now
+        if (!ReconcileTable(relativePath, table)) {
+            return;
+        }
 
         if (IsFollowerRole && IsTableLevel(table)) {
             return;
@@ -395,26 +399,53 @@ private:
         return entry.PerPartitionGroup;
     }
 
-    void ReconcileTable(const TStringBuf relativePath, const TDetailedMetricsTableInfo& table) {
+    /**
+     * Bring the stored per-table state in line with the identity the reporting tablet
+     * carries.
+     *
+     * @return false if the report is stale — a tablet of a PREVIOUS table at this path
+     *         is still alive and still reporting. Its identity, the level included, says
+     *         nothing about the table that lives at this path now, so the caller must
+     *         drop the report whole rather than let it tear the current state down.
+     */
+    bool ReconcileTable(const TStringBuf relativePath, const TDetailedMetricsTableInfo& table) {
         auto it = Tables.find(relativePath);
         if (it == Tables.end()) {
-            return;
+            return true;
         }
 
         const TDetailedMetricsTableInfo& stored = it->second.Info;
-
-        if (table.MetricsLevel != stored.MetricsLevel) {
-            DropTableEntry(it);
-            return;
-        }
 
         // A table recreated at this path restarts SchemaVersion low, so a plain
         // SchemaVersion comparison would pin Info to the older, already deleted table
         // forever. A recreated table always gets a newer PathId, so the identity is
         // ordered by the PathId first, and only then by SchemaVersion within one PathId.
-        if (std::tie(table.TableId, table.SchemaVersion) > std::tie(stored.TableId, stored.SchemaVersion)) {
+        //
+        // assumes a path is only ever recreated by the SAME schemeshard,
+        // which hands out strictly increasing LocalPathIds. TPathId orders by
+        // (OwnerId, LocalPathId), so a path served by another schemeshard with a lower
+        // OwnerId would order backwards. Not reachable within one subdomain.
+        const auto incoming = std::tie(table.TableId, table.SchemaVersion);
+        const auto current = std::tie(stored.TableId, stored.SchemaVersion);
+
+        // DropTableEntry below invalidates both it and stored, hence the ordering is
+        // decided here, before anything is torn down, and not consulted afterwards
+        if (incoming < current) {
+            return false;
+        }
+
+        // An ALTER DATABASE TABLES_METRICS_LEVEL bumps NEITHER the PathId nor the
+        // SchemaVersion, so a level change arrives with an identity EQUAL
+        if (table.MetricsLevel != stored.MetricsLevel) {
+            DropTableEntry(it);
+            return true;
+        }
+
+        if (incoming > current) {
             it->second.Info = table;
         }
+
+        return true;
     }
 
     /**

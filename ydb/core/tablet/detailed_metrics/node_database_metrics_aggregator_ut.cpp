@@ -2015,6 +2015,98 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
     }
 
     /**
+     * Verify that a straggler report from a tablet of a table PREVIOUS to the one now
+     * living at this path is dropped whole rather than reconciled: it carries the old
+     * (PathId, SchemaVersion), so nothing about it — its MetricsLevel included — says
+     * anything about the table that lives at this path now.
+     *
+     * @note The scenario from the PR review: a table is dropped and recreated at the
+     *       same path with a new PathId AND a different level. The new table's own
+     *       tablet reports and builds the correct state. A tablet of the OLD table is
+     *       still alive (draining) and keeps sending its own 5s report, which still
+     *       carries the old PathId and the old level. Without the ordering guard in
+     *       front of the level check, that stale report hits the level-mismatch branch,
+     *       DropTableEntry wipes the NEW table's counters, and GetOrCreateTable rebuilds
+     *       the entry from the stale (and now current) Info — the tree flaps between the
+     *       two shapes every 5s until the old tablet is forgotten.
+     */
+    Y_UNIT_TEST(StaleReportOfARecreatedTableDoesNotDropTheNewState) {
+        NMonitoring::TDynamicCounterPtr rootGroup = MakeIntrusive<NMonitoring::TDynamicCounters>();
+
+        auto aggregator = CreateNodeDatabaseMetricsAggregator(
+            rootGroup,
+            DATABASE_PATH,
+            false /* isFollowerRole */
+        );
+
+        const TInstant now = TInstant::Seconds(100);
+
+        // TABLE_ID at the partition level: a per_partition leaf
+        TFakeTablet straggler(1000, 0);
+        straggler.SetSimple(DB_UNIQUE_ROWS_TOTAL, 1);
+        straggler.Report(aggregator, TDetailedMetricsSettings::MetricsLevelPartition, now, TABLE_ID, TABLE_PATH);
+        aggregator->RecalculateAllCounters();
+
+        UNIT_ASSERT(FindLeafCounters(rootGroup, straggler.TabletId, straggler.FollowerId));
+
+        // The table is dropped and recreated at the same path: a newer PathId, and the
+        // level moves to TABLE. Its own tablet builds the correct collapse bucket.
+        TFakeTablet newTablet(2000, 0);
+        newTablet.SetSimple(DB_UNIQUE_ROWS_TOTAL, 7).AddCumulative(CONSUMED_CPU, 100);
+        newTablet.Report(aggregator, TDetailedMetricsSettings::MetricsLevelTable, now, RECREATED_TABLE_ID, TABLE_PATH);
+        aggregator->RecalculateAllCounters();
+
+        DumpCounters("Counters after the recreated table's own tablet reported", rootGroup);
+
+        auto tableCounters = FindTableBucketCounters(rootGroup);
+        UNIT_ASSERT(tableCounters);
+        UNIT_ASSERT_VALUES_EQUAL(GetCounterValue(tableCounters, "SUM(DbUniqueRowsTotal)"), 7);
+        UNIT_ASSERT_VALUES_EQUAL(GetCounterValue(tableCounters, "ConsumedCPU"), 100);
+        UNIT_ASSERT(!FindLeafCounters(rootGroup, straggler.TabletId, straggler.FollowerId));
+
+        // The OLD table's tablet is still alive and reports again, carrying the OLD
+        // PathId and the OLD (partition) level — the straggler
+        straggler.SetSimple(DB_UNIQUE_ROWS_TOTAL, 999);
+        straggler.Report(aggregator, TDetailedMetricsSettings::MetricsLevelPartition, now, TABLE_ID, TABLE_PATH);
+        aggregator->RecalculateAllCounters();
+
+        DumpCounters("Counters after the straggler of the old table reported", rootGroup);
+
+        // The new table's collapse bucket survives, its VALUES are exactly as they were
+        // — a rebuilt-from-stale entry would have the right shape with zeroed contents,
+        // which a presence-only check would not catch
+        auto tableCountersAfterStraggler = FindTableBucketCounters(rootGroup);
+        UNIT_ASSERT(tableCountersAfterStraggler);
+        UNIT_ASSERT_VALUES_EQUAL(GetCounterValue(tableCountersAfterStraggler, "SUM(DbUniqueRowsTotal)"), 7);
+        UNIT_ASSERT_VALUES_EQUAL(GetCounterValue(tableCountersAfterStraggler, "ConsumedCPU"), 100);
+
+        // No per_partition subtree reappeared: the straggler's report was dropped whole,
+        // never reaching GetOrCreateTable
+        auto tableGroup = FindTableGroup(rootGroup);
+        UNIT_ASSERT(tableGroup);
+        UNIT_ASSERT(!tableGroup->FindSubgroup("detailed_metrics", "per_partition"));
+
+        // The bucket is still the SAME live object, not a fresh one: a further report of
+        // the new table's own tablet keeps accumulating rather than restarting from zero
+        newTablet.AddCumulative(CONSUMED_CPU, 50);
+        newTablet.Report(aggregator, TDetailedMetricsSettings::MetricsLevelTable, now, RECREATED_TABLE_ID, TABLE_PATH);
+        aggregator->RecalculateAllCounters();
+
+        UNIT_ASSERT_VALUES_EQUAL(GetCounterValue(FindTableBucketCounters(rootGroup), "ConsumedCPU"), 100 + 50);
+
+        // Forgetting the straggler's tablet finds no leaf and no source ID in the live
+        // bucket: it never contributed to it, so this is a no-op, and the live table's
+        // bucket and its table= group survive
+        aggregator->ForgetTablet(straggler.TabletId, straggler.FollowerId);
+
+        UNIT_ASSERT(FindTableGroup(rootGroup));
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetCounterValue(FindTableBucketCounters(rootGroup), "ConsumedCPU"),
+            100 + 50
+        );
+    }
+
+    /**
      * Verify that a renamed table manifests as drop-old/create-new, with no stale
      * table= group left behind once the last of its tablets has reported the new path.
      *

@@ -811,6 +811,7 @@ class WorkflowContractTest(unittest.TestCase):
             workflow,
         )
         self.assertIn("Wait for or rerun the main coverage workflow", workflow)
+        self.assertIn("then rerun this PR coverage workflow", workflow)
 
     def test_untrusted_yaml_is_loaded_safely(self) -> None:
         checks = (
@@ -861,6 +862,28 @@ class WorkflowContractTest(unittest.TestCase):
         self.assertIn('if [ ! -f "${report_dir}/index.html" ]', action)
         self.assertNotIn('-t "${CODECOV_TOKEN}"', action)
         self.assertNotIn("set -x", action)
+
+    def test_landing_revalidates_pr_head_before_s3_upload(self) -> None:
+        workflow = (
+            GITHUB_DIR / "workflows" / "cpp_codecov.yml"
+        ).read_text(encoding="utf-8")
+        landing = workflow[workflow.index("  landing:") :]
+        self.assertIn("Verify current PR head before landing publication", landing)
+        self.assertIn("id: landing_pr_head", landing)
+        self.assertIn(
+            "EXPECTED_SHA: ${{ needs.detect.outputs.report_sha }}",
+            landing,
+        )
+        self.assertIn(
+            "PR_NUMBER: ${{ needs.detect.outputs.pr_number }}",
+            landing,
+        )
+        self.assertIn("pr.state !== 'open' || pr.head.sha !== expectedSha", landing)
+        self.assertIn("steps.landing_pr_head.outcome == 'success'", landing)
+        self.assertLess(
+            landing.index("Verify current PR head before landing publication"),
+            landing.index("- name: Upload landing page"),
+        )
 
     def test_pr_is_selective_and_main_always_runs_every_suite(self) -> None:
         workflow = (

@@ -60,6 +60,7 @@ ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.GoodRequestCreateStrea
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.GoodRequestCreateStreamV2
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.GoodRequestGetRecords
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.GoodRequestGetRecordsCbor
+ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.ListShards
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.ListShardsExclusiveStartShardId
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.ListShardsTimestamp
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.ListShardsToken
@@ -130,9 +131,11 @@ ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestReceiveMessage_TableIm
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestSendMessage
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestSendMessageBatch_TableImplementation
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestSendMessageFifoQueue
+ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestSendMessageWithAttributes
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestSendMessageWithIAMWithoutFolderId
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestSendMessage_Deduplication_Compatibility
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestSendMessage_Deduplication_Compatibility_TablesFormat0
+ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestSendMessage_Deduplication_Compatibility_WithUserSettings
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestSendMessage_MigrationFinished_WithUserSettings
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestSetQueueAttributes
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestTagQueueMultipleQueriesInflight
@@ -141,8 +144,10 @@ ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestTopicMissing_ReceivePu
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.PartitionSplit_AutosplitByLoad_KllSketchBasedSplit_MessageGroupId
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestAuthPriority
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestChangeMessageVisibilityBasic
+ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestChangeMessageVisibilityBatch
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestChangeMessageVisibilityBatchInvalid
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestChangeMessageVisibilityBatchMixedTimeouts
+ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestChangeMessageVisibilityBatchWithAtSignInConsumerNameInFederation
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestChangeMessageVisibilityExtendTimeout
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestChangeMessageVisibilityInvalid
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestChangeMessageVisibilityWithAtSignInConsumerNameInFederation
@@ -207,6 +212,7 @@ ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestReceiveMessageKafk
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestReceiveMessageNonExistingQueue
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestReceiveMessageNotUtf8
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestReceiveMessageReturnToQueue
+ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestReceiveMessageWithAtSignInConsumerNameInFederation
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestReceiveMessageWithAttemptIdChangeVisibilityInvalidatesReplay
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestReceiveMessageWithDifferentAttemptIds
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSendMessage
@@ -255,6 +261,7 @@ ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestGetQueueAttribu
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestGetQueueAttributesFifoWithConsumersRetentionExtended
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestGetQueueAttributesFifoWithConsumersRetentionShrinked
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestGetQueueAttributesStd0Consumers
+ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestGetQueueAttributesStdDlq
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestGetQueueAttributesStdDlq3Consumers
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestGetQueueAttributesStdWithConsumersRetentionExtended
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestGetQueueAttributesStdWithConsumersRetentionShrinked
@@ -275,6 +282,7 @@ ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestPurgeQueueInval
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestPurgeQueueNonExisting
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestReceiveMessage
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestReceiveMessageInvalidQueueUrl
+ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestReceiveMessageNonExistingQueue
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestReceiveMessageNotUtf8
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestReceiveMessageReturnToQueue
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestReceiveMessageWithAttemptId
@@ -368,6 +376,7 @@ ydb/core/tx/datashard/ut_export unittest.sole chunk
 ydb/core/tx/datashard/ut_lock_rows DataShardLockRows.RandomizedDeadlockDetection
 ydb/core/tx/datashard/ut_lock_rows unittest.[*/*] chunk
 ydb/core/tx/datashard/ut_stats DataShardStats.CollectKeySampleFollower-0-1
+ydb/core/tx/datashard/ut_stats DataShardStats.CollectKeySampleLeader-0-0
 ydb/core/tx/datashard/ut_stats DataShardStats.CollectKeySampleLeader-0-1
 ydb/core/tx/datashard/ut_stats DataShardStats.CollectKeySampleLeader-1-0
 ydb/core/tx/datashard/ut_stats DataShardStats.HasSchemaChanges_Families
@@ -409,6 +418,7 @@ ydb/tests/datashard/ttl test_ttl.py.TestTTL.test_ttl[table_Date_1__SYNC-pk_types
 ydb/tests/datashard/ttl test_ttl.py.TestTTL.test_ttl[table_Datetime_1_UNIQUE_SYNC-pk_types5-all_types5-index5-Datetime-UNIQUE-SYNC]
 ydb/tests/fq/generic/streaming py3test.sole chunk
 ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup_watermarks[v1-8-False-1-1-fq_client0-mvp_external_ydb_endpoint0]
+ydb/tests/fq/http_api test_http_api.py.TestHttpApi.test_simple_analytics_query
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_topic_restore_state[False]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_streaming_query_issues_after_restart[kikimr0-False]
 ydb/tests/functional/audit test_canonical_records.py.test_dstool_evict_vdisk_grpc

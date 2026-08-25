@@ -224,6 +224,15 @@ TDirectBlockGroup::TDirectBlockGroup(
     Y_ASSERT(pbufferIds.size() == ddisksIds.size());
     Y_ASSERT(pbufferIds.size() >= DirectBlockGroupHostCount);
 
+    const ui64 copyRangeBandwidth =
+        StorageConfig->GetCopyRangeBandwidthMbs() * 1_MB;
+    if (copyRangeBandwidth) {
+        CopyRangeBucket.emplace(
+            ActorSystem->Timestamp(),
+            copyRangeBandwidth,
+            copyRangeBandwidth);
+    }
+
     for (THostIndex host = 0; host < ddisksIds.size(); ++host) {
         AddDDiskAndPBufferConnection(host, ddisksIds[host], pbufferIds[host]);
     }
@@ -1330,6 +1339,17 @@ void TDirectBlockGroup::OnAddHostResult(
 
     DoEstablishConnection(newHostIndex, EConnectionType::DDisk);
     DoEstablishConnection(newHostIndex, EConnectionType::PBuffer);
+}
+
+TDuration TDirectBlockGroup::TakeCopyRangeBudget(ui64 byteCount)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    if (!CopyRangeBucket) {
+        return {};
+    }
+
+    return CopyRangeBucket->Register(ActorSystem->Timestamp(), byteCount);
 }
 
 ui32 TDirectBlockGroup::GetNodeId(THostIndex host) const

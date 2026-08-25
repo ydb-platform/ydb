@@ -47,6 +47,7 @@ TStorageConfig::TStorageConfig(
     xxx(PBufferCleanupLsnStep,              ui64,     3000                    )\
     xxx(UseDirectSessionTransport,          bool,     false                   )\
     xxx(EnableChecksums,                    bool,     true                    )\
+    xxx(CopyRangeBandwidthMbs,              ui32,     200                     )\
 
 // BLOCKSTORE_STORAGE_CONFIG_RO
 // clang-format on

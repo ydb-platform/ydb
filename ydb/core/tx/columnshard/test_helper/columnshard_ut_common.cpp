@@ -656,8 +656,7 @@ NTxUT::TPlanStep PrepareTablet(TTestBasicRuntime& runtime, const ui64 tableId, c
     options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
     runtime.DispatchEvents(options);
 
-    TestTableDescription tableDescription;
-    tableDescription.Standalone = standalone;
+    TestTableDescription tableDescription{ .Standalone = standalone };
     tableDescription.Schema = schema;
     tableDescription.Pk = {};
     for (ui64 i = 0; i < keySize; ++i) {

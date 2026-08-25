@@ -81,7 +81,7 @@ public:
 
         constexpr ui32 presetId = Standalone ? 0 : 1;
 
-        // Add invalid widow schema preset version, if SchemaVersionCleaner will not erase it, then test will fail.
+        // Add invalid widow schema, if SchemaVersionCleaner will not erase it, then test will fail
         {
             NKikimrTxColumnShard::TSchemaPresetVersionInfo info;
             info.SetId(presetId);
@@ -94,7 +94,7 @@ public:
         }
 
         {
-            // Add invalid widow table version, if SchemaVersionCleaner will not erase it, then test will fail.
+            // Add invalid widow table version, if SchemaVersionCleaner will not erase it, then test will fail
             NKikimrTxColumnShard::TTableVersionInfo versionInfo;
             versionInfo.SetSchemaPresetId(presetId);
             versionInfo.SetSinceStep(5);

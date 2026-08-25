@@ -1902,7 +1902,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
     }
 
     Y_UNIT_TEST(WriteStandalone) {
-        TestTableDescription table{ .Standalone = true };
+        TestTableDescription table;
         TestWrite(table);
     }
 

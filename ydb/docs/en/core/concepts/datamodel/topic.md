@@ -68,6 +68,8 @@ Autopartitioning is paused for this topic, meaning that the number of partitions
 
 Examples of YQL queries for switching between different autopartitioning strategies can be found [here](../../yql/reference/syntax/alter-topic.md#autopartitioning).
 
+{% include [no_up_and_down](./_includes/no_up_and_down.md) %}
+
 ### Autopartitioning constraints {#autopartitioning_constraints}
 
 The following constraints apply when using autopartitioning:

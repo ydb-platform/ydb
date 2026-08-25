@@ -63,6 +63,7 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTestReboots) {
                     {1, 2, 3}, TSerializedCellMatrix(cells, 5, 3), true);
             }
 
+            const bool isCompact = runtime.GetAppData().FeatureFlags.GetEnableCompactFulltextIndex();
             const ui64 buildIndexId = ++t.TxId;
             {
                 auto indexColumns = TVector<TString>{"text"};
@@ -100,7 +101,7 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTestReboots) {
                 {
                     auto rows = CountRows(runtime, TTestTxConfig::SchemeShard, "/MyRoot/texts/index1/" + TString(NTableIndex::ImplTable));
                     Cerr << "... posting table contains " << rows << " rows" << Endl;
-                    UNIT_ASSERT_VALUES_EQUAL(rows, 38);
+                    UNIT_ASSERT_VALUES_EQUAL(rows, isCompact ? 24 : 38);
                 }
 
                 {

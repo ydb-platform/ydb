@@ -7,6 +7,10 @@ inputs:
   codecov_token:
     description: Codecov upload token
     required: true
+  github_token:
+    description: GitHub token used to revalidate a PR head before publication
+    required: false
+    default: ""
   aws_access_key_id:
     description: Yandex Object Storage access key
     required: false
@@ -41,9 +45,6 @@ inputs:
     default: ""
   commit_sha:
     description: Commit SHA for meta/links
-    required: true
-  parent_sha:
-    description: Complete Codecov baseline SHA used for carryforward
     required: true
   branch:
     description: Branch name for Codecov (ref_name / head_ref)
@@ -147,60 +148,6 @@ runs:
         # Prefer PyPI: self-hosted runners often cannot download cli.codecov.io.
         pip3 install --user 'codecov-cli==11.3.1'
 
-    - name: Upload to Codecov
-      shell: bash
-      env:
-        CODECOV_TOKEN: ${{ inputs.codecov_token }}
-        OUT: ${{ steps.ya.outputs.out_dir }}
-        FLAG: ${{ steps.suite.outputs.flag }}
-        SUITE: ${{ inputs.suite }}
-        COMMIT_SHA: ${{ inputs.commit_sha }}
-        PARENT_SHA: ${{ inputs.parent_sha }}
-        BRANCH: ${{ inputs.branch }}
-        PR_NUMBER: ${{ inputs.pr_number }}
-        REPOSITORY_SLUG: ${{ github.repository }}
-      run: |
-        set -euo pipefail
-        if [ -z "${CODECOV_TOKEN}" ]; then
-          echo "CODECOV_TOKEN is empty" >&2
-          exit 1
-        fi
-        if [[ ! "${COMMIT_SHA}" =~ ^[0-9a-fA-F]{40}$ ]]; then
-          echo "Codecov commit SHA must contain exactly 40 hexadecimal characters" >&2
-          exit 1
-        fi
-        if [[ ! "${PARENT_SHA}" =~ ^[0-9a-fA-F]{40}$ ]]; then
-          echo "Codecov parent SHA must contain exactly 40 hexadecimal characters" >&2
-          exit 1
-        fi
-        if [ "${PARENT_SHA}" = "${COMMIT_SHA}" ]; then
-          echo "Codecov parent SHA must differ from the uploaded commit SHA" >&2
-          exit 1
-        fi
-        if [ -z "${BRANCH}" ]; then
-          echo "Codecov branch is empty" >&2
-          exit 1
-        fi
-        export PATH="${HOME}/.local/bin:${PATH}"
-        upload_args=(
-          --fail-on-error
-          --git-service github
-          --slug "${REPOSITORY_SLUG}"
-          --sha "${COMMIT_SHA}"
-          --parent-sha "${PARENT_SHA}"
-          --branch "${BRANCH}"
-          --disable-search
-          --plugin noop
-          --file "${OUT}/coverage.lcov"
-          --flag "${FLAG}"
-          --name "${SUITE}"
-        )
-        # Needed so Codecov attaches the upload to the PR (statuses / comment), not only the commit.
-        if [ -n "${PR_NUMBER}" ]; then
-          upload_args+=(--pull-request-number "${PR_NUMBER}")
-        fi
-        codecovcli upload-coverage "${upload_args[@]}"
-
     - name: Generate filtered HTML report
       id: html
       if: >-
@@ -243,6 +190,82 @@ runs:
           pip3 install --user 'awscli==1.46.0'
         fi
 
+    - name: Verify current PR head before publication
+      id: pr_head
+      if: ${{ inputs.pr_number != '' }}
+      uses: actions/github-script@v8
+      env:
+        EXPECTED_SHA: ${{ inputs.commit_sha }}
+        PR_NUMBER: ${{ inputs.pr_number }}
+      with:
+        github-token: ${{ inputs.github_token }}
+        script: |
+          const expectedSha = process.env.EXPECTED_SHA;
+          const pullNumber = Number(process.env.PR_NUMBER);
+          if (!/^[0-9a-f]{40}$/i.test(expectedSha)) {
+            core.setFailed('Expected PR head must be a 40-character hexadecimal SHA.');
+            return;
+          }
+          if (!Number.isSafeInteger(pullNumber) || pullNumber <= 0) {
+            core.setFailed('PR number must be a positive integer.');
+            return;
+          }
+          const { data: pr } = await github.rest.pulls.get({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            pull_number: pullNumber,
+          });
+          if (pr.state !== 'open' || pr.head.sha !== expectedSha) {
+            core.setFailed(
+              `Refusing to publish stale coverage: expected open PR head ${expectedSha}, ` +
+              `current state=${pr.state}, head=${pr.head.sha}.`
+            );
+          }
+
+    - name: Upload to Codecov
+      shell: bash
+      env:
+        CODECOV_TOKEN: ${{ inputs.codecov_token }}
+        OUT: ${{ steps.ya.outputs.out_dir }}
+        FLAG: ${{ steps.suite.outputs.flag }}
+        SUITE: ${{ inputs.suite }}
+        COMMIT_SHA: ${{ inputs.commit_sha }}
+        BRANCH: ${{ inputs.branch }}
+        PR_NUMBER: ${{ inputs.pr_number }}
+        REPOSITORY_SLUG: ${{ github.repository }}
+      run: |
+        set -euo pipefail
+        if [ -z "${CODECOV_TOKEN}" ]; then
+          echo "CODECOV_TOKEN is empty" >&2
+          exit 1
+        fi
+        if [[ ! "${COMMIT_SHA}" =~ ^[0-9a-fA-F]{40}$ ]]; then
+          echo "Codecov commit SHA must contain exactly 40 hexadecimal characters" >&2
+          exit 1
+        fi
+        if [ -z "${BRANCH}" ]; then
+          echo "Codecov branch is empty" >&2
+          exit 1
+        fi
+        export PATH="${HOME}/.local/bin:${PATH}"
+        upload_args=(
+          --fail-on-error
+          --git-service github
+          --slug "${REPOSITORY_SLUG}"
+          --sha "${COMMIT_SHA}"
+          --branch "${BRANCH}"
+          --disable-search
+          --plugin noop
+          --file "${OUT}/coverage.lcov"
+          --flag "${FLAG}"
+          --name "${SUITE}"
+        )
+        # Needed so Codecov attaches the upload to the PR (statuses / comment), not only the commit.
+        if [ -n "${PR_NUMBER}" ]; then
+          upload_args+=(--pull-request-number "${PR_NUMBER}")
+        fi
+        codecovcli upload-coverage "${upload_args[@]}"
+
     - name: Publish HTML report to Object Storage
       # Still publish HTML if Codecov upload fails.
       if: >-
@@ -251,6 +274,7 @@ runs:
           steps.ya.outcome == 'success' &&
           steps.export.outcome == 'success' &&
           steps.html.outcome == 'success' &&
+          (inputs.pr_number == '' || steps.pr_head.outcome == 'success') &&
           inputs.aws_access_key_id != '' &&
           inputs.aws_secret_access_key != ''
         }}

@@ -927,6 +927,15 @@ message TKqpTableSinkSettings {
     optional bool NeedLookup = 27;
     optional bool SkipMissingRows = 28;
     optional EInputRowFormat InputRowFormat = 29 [default = INPUT_ROW_FORMAT_FLAT];
+    // Target shard IDs for per-shard write affinity.
+    // When set, the WriteActor only writes to the specified shards.
+    repeated uint64 TargetShardIds = 30;
+    // Expected node ID for task scheduling affinity.
+    // When set, the task will be scheduled on the specified node.
+    optional uint64 ExpectedNodeId = 31;
+    // For MODE_FILL (CTAS): the destination table path (the table being created).
+    // Table.Path refers to the source schema table; this field holds the actual write target.
+    optional string CtasDestinationPath = 32;
 }
 
 message TReadVectorTopK {

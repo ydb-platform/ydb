@@ -256,6 +256,7 @@ using IShardedWriteControllerPtr = TIntrusivePtr<IShardedWriteController>;
 struct TShardedWriteControllerSettings {
     i64 MemoryLimitTotal = 0;
     bool Inconsistent = false;
+    std::optional<THashSet<ui64>> TargetShardIds;
 };
 
 IShardedWriteControllerPtr CreateShardedWriteController(

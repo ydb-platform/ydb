@@ -13,7 +13,7 @@ items:
 - name: Core
   items:
   - name: Developer UI security guidelines
-    href: core/developer-ui-security-guidelines.md
+    href: developer-ui-security-guidelines.md
   - name: General schema
     href: general-schema.md
   - name: Distributed storage

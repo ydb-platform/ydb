@@ -4,6 +4,7 @@
 
 #include <util/string/ascii.h>
 #include <util/string/builder.h>
+#include <util/string/cast.h>
 #include <util/string/strip.h>
 
 namespace NKikimr::NHttpProxy {
@@ -106,6 +107,60 @@ bool IsValidRequestHost(TStringBuf host) {
     return !host.empty() && host.find_first_of("/?#") == TStringBuf::npos;
 }
 
+bool TryParseTcpPort(TStringBuf value, ui16& port) {
+    ui16 parsed = 0;
+    if (!TryFromString(value, parsed) || parsed == 0) {
+        return false;
+    }
+    port = parsed;
+    return true;
+}
+
+void SplitHostAndPort(TStringBuf host, TStringBuf& hostname, bool& hasPort, ui16& port) {
+    hostname = host;
+    hasPort = false;
+    port = 0;
+    if (host.empty()) {
+        return;
+    }
+    if (host[0] == '[') {
+        const size_t close = host.find(']');
+        if (close == TStringBuf::npos) {
+            return;
+        }
+        hostname = host.SubStr(0, close + 1);
+        const TStringBuf rest = host.SubStr(close + 1);
+        if (!rest.empty() && rest[0] == ':') {
+            ui16 parsed = 0;
+            if (TryParseTcpPort(rest.SubStr(1), parsed)) {
+                hasPort = true;
+                port = parsed;
+            }
+        }
+        return;
+    }
+    const size_t colon = host.find(':');
+    if (colon == TStringBuf::npos || host.find(':', colon + 1) != TStringBuf::npos) {
+        return;
+    }
+    hostname = host.SubStr(0, colon);
+    ui16 parsed = 0;
+    if (TryParseTcpPort(host.SubStr(colon + 1), parsed)) {
+        hasPort = true;
+        port = parsed;
+    }
+}
+
+TString FormatSqsEndpoint(TStringBuf scheme, TStringBuf hostname, bool hasPort, ui16 port) {
+    const ui16 defaultPort = scheme == "https" ? 443 : 80;
+    TStringBuilder result;
+    result << scheme << "://" << hostname;
+    if (hasPort && port != defaultPort) {
+        result << ':' << port;
+    }
+    return result;
+}
+
 } // namespace
 
 TString MakeSqsRequestEndpoint(TStringBuf host, TStringBuf headersBlob, bool tlsSecure) {
@@ -118,13 +173,33 @@ TString MakeSqsRequestEndpoint(TStringBuf host, TStringBuf headersBlob, bool tls
     if (!IsValidRequestHost(host)) {
         return {};
     }
+
+    TStringBuf hostname;
+    bool hostHasPort = false;
+    ui16 hostPort = 0;
+    SplitHostAndPort(host, hostname, hostHasPort, hostPort);
+    if (!IsValidRequestHost(hostname)) {
+        return {};
+    }
+
     TString scheme = tlsSecure ? "https" : "http";
     if (TStringBuf proto = headers.Get("x-forwarded-proto"); !proto.empty()) {
         if (TString normalized = NormalizeForwardedProto(proto); !normalized.empty()) {
             scheme = std::move(normalized);
         }
     }
-    return TStringBuilder() << scheme << "://" << host;
+
+    bool hasPort = false;
+    ui16 port = 0;
+    if (ui16 forwardedPort = 0; TryParseTcpPort(FirstForwardedValue(headers.Get("x-forwarded-port")), forwardedPort)) {
+        hasPort = true;
+        port = forwardedPort;
+    } else if (hostHasPort) {
+        hasPort = true;
+        port = hostPort;
+    }
+
+    return FormatSqsEndpoint(scheme, hostname, hasPort, port);
 }
 
 TString MakeSqsRequestEndpoint(const THttpRequestContext& httpContext) {

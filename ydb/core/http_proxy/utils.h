@@ -19,6 +19,8 @@ TString LogHttpRequestResponseCommonInfoString(const THttpRequestContext& httpCo
 // tlsSecure is true when the connection to http_proxy itself is TLS.
 // Prefers the first X-Forwarded-Host token when it is a host[:port] without '/', '#' or '?';
 // otherwise uses host. Unknown X-Forwarded-Proto values fall back to tlsSecure.
+// Port, highest wins: valid X-Forwarded-Port, then port in the chosen host, else the
+// scheme default (80/http, 443/https). Default ports are omitted from the URL.
 TString MakeSqsRequestEndpoint(TStringBuf host, TStringBuf headers, bool tlsSecure);
 TString MakeSqsRequestEndpoint(const THttpRequestContext& httpContext);
 

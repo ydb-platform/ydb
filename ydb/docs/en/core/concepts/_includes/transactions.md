@@ -38,7 +38,7 @@ For transactions that read column-oriented tables, use:
 
 Implicit transaction logic applies when a single YQL script is sent to the server without an explicitly selected [transaction mode](#modes). Typical entry points:
 
-* [Embedded UI](../../reference/embedded-ui/index.md) — the **Query** tab on the database page ([query form](../../reference/embedded-ui/ydb-monitoring.md#tenant_scheme)), when run without selecting an explicit transaction mode in the settings.
+* [{{ ydb-ui-name }}](../../reference/ydb-ui/index.md) — the **Query** tab on the database page ([query form](../../reference/ydb-ui/ydb-monitoring.md#tenant_scheme)), when run without selecting an explicit transaction mode in the settings.
 * [{{ ydb-short-name }} CLI](../../reference/ydb-cli/index.md) — a one-off script via [`ydb sql`](../../reference/ydb-cli/sql.md).
 * Applications using the [{{ ydb-short-name }} SDK](../../reference/ydb-sdk/index.md) — [ImplicitTx](../../recipes/ydb-sdk/tx-control.md#implicittx) mode.
 
@@ -67,7 +67,7 @@ In this mode, based on the query, {{ ydb-short-name }} decides whether to execut
 
 To set a transaction mode explicitly, use the corresponding options at each entry point:
 
-* [Embedded UI](../../reference/embedded-ui/index.md) — choose a transaction mode in the execution settings on the **Query** tab.
+* [{{ ydb-ui-name }}](../../reference/ydb-ui/index.md) — choose a transaction mode in the execution settings on the **Query** tab.
 * [{{ ydb-short-name }} CLI](../../reference/ydb-cli/index.md) — for [`table query execute`](../../reference/ydb-cli/table-query-execute.md) with `data` queries, set the [`--tx-mode`](../../reference/ydb-cli/table-query-execute.md#options) parameter (default: `serializable-rw`, which corresponds to *Serializable*).
 * [{{ ydb-short-name }} SDK](../../reference/ydb-sdk/index.md) — see [setting the mode in the {{ ydb-short-name }} SDK](../../recipes/ydb-sdk/tx-control.md).
 
@@ -79,7 +79,15 @@ For more information about supported YQL constructs, see the [YQL documentation]
 
 Listed below are the features and limitations of YQL support in {{ ydb-short-name }}, which might not be obvious at first glance and are worth noting:
 
-* Multi-statement transactions (transactions made up of a sequence of YQL statements) are supported. Transactions may interact with client software, or in other words, client interactions with the database might look as follows: `BEGIN; make a SELECT; analyze the SELECT results on the client side; ...; make an UPDATE; COMMIT`. We should note that if the transaction body is fully formed before accessing the database, it will be processed more efficiently.
+* Multi-statement transactions (transactions made up of a sequence of YQL statements) are supported. Transactions may interact with client software, or in other words, client interactions with the database might look as follows:
+
+  ```text
+  BEGIN; make a SELECT; analyze the SELECT results on the client side;
+  ...; make an UPDATE; COMMIT
+  ```
+
+  We should note that if the transaction body is fully formed before accessing the database, it will be processed more efficiently.
+
 * {{ ydb-short-name }} does not support transactions that combine DDL and DML queries. The conventional [ACID](https://en.wikipedia.org/wiki/ACID) notion of a transaction is applicable specifically to DML queries, that is, queries that change data. DDL queries must be idempotent, meaning repeatable if an error occurs. If you need to manipulate a schema, each manipulation is transactional, while a set of manipulations is not.
 * YQL implementation used in {{ ydb-short-name }} employs the [Optimistic Concurrency Control](https://en.wikipedia.org/wiki/Optimistic_concurrency_control) mechanism. If an entity is affected during a transaction, optimistic blocking is applied. When the transaction is complete, the mechanism verifies that the locks have not been invalidated. For the user, locking optimism means that when transactions are competing with one another, the one that finishes first wins. Competing transactions fail with the `Transaction locks invalidated` error.
 * All changes made during the transaction accumulate in the database server memory and are applied when the transaction completes. If the locks are not invalidated, all the changes accumulated are committed atomically; if at least one lock is invalidated, none of the changes are committed. The above model involves certain restrictions: changes made by a single transaction must fit inside the available memory.

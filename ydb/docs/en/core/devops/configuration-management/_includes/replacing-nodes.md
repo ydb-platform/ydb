@@ -1,5 +1,3 @@
-# Replacing Node FQDN
-
 This procedure describes how to replace the FQDN (Fully Qualified Domain Name) of a {{ ydb-short-name }} cluster node without downtime.
 
 ## Prerequisites

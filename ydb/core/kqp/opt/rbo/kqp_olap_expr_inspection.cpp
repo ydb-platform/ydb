@@ -72,15 +72,6 @@ bool IsAtomListComparison(const TCoAtomList& list, TString* columnName = nullptr
     return true;
 }
 
-bool IsAtomListComparison(const TExprNode::TPtr& node) {
-    if (!node || !node->IsList() || (node->ChildrenSize() != 3 && node->ChildrenSize() != 4) || !node->Child(0)->IsAtom()) {
-        return false;
-    }
-
-    const auto op = TString(node->Child(0)->Content());
-    return ComparisonSigns().contains(op) || SubstringFormats().contains(op);
-}
-
 void AddColumn(TOlapFilterInspection& inspection, const TString& columnName) {
     if (!columnName.empty()) {
         inspection.Columns.insert(columnName);
@@ -542,6 +533,26 @@ std::optional<TExplainRanges> ParseRangesForExplain(const TExprNode::TPtr& node)
     return std::nullopt;
 }
 
+bool IsOlapColumnAtomPosition(const TExprNode& node, ui32 index) {
+    if (node.IsCallable("KqpOlapApplyColumnArg")) {
+        return index == TKqpOlapApplyColumnArg::idx_ColumnName;
+    }
+
+    if (node.IsCallable("KqpOlapJsonValue") || node.IsCallable("KqpOlapJsonExists")) {
+        return index == TKqpOlapJsonValue::idx_Column;
+    }
+
+    if (!node.IsList()) {
+        return false;
+    }
+
+    const auto size = node.ChildrenSize();
+    if (size == 1) {
+        return index == 0;
+    }
+    return size <= 5 && index > 0 && node.Child(0)->IsAtom();
+}
+
 TExprNode::TPtr RenameColumnsImpl(const TExprNode::TPtr& node, const THashMap<TString, TString>& renameMap, TExprContext& ctx) {
     if (!node) {
         return node;
@@ -560,13 +571,13 @@ TExprNode::TPtr RenameColumnsImpl(const TExprNode::TPtr& node, const THashMap<TS
     bool changed = false;
     auto children = node->ChildrenList();
     for (ui32 i = 0; i < children.size(); ++i) {
-        if (IsAtomListComparison(node) && i == 1 && children[i]->IsAtom()) {
+        if (children[i]->IsAtom() && IsOlapColumnAtomPosition(*node, i)) {
             const auto it = renameMap.find(TString(children[i]->Content()));
             if (it != renameMap.end()) {
                 children[i] = ctx.NewAtom(children[i]->Pos(), it->second);
                 changed = true;
-                continue;
             }
+            continue;
         }
 
         auto renamed = RenameColumnsImpl(children[i], renameMap, ctx);

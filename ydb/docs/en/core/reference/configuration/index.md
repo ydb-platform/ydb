@@ -23,10 +23,11 @@ The following configuration sections are available, listed in alphabetical order
 | [{#T}](hive_config.md) | No | Tablet launch configuration |
 | [{#T}](host_configs.md) | No | Typical host configurations for cluster nodes |
 | [{#T}](hosts.md) | Yes | Static cluster node configuration |
+| [{#T}](immediate_controls_config.md) | No | Configuration of dynamic cluster settings |
 | [{#T}](kafka_proxy_config.md) | No | Configuration of [Kafka Proxy](../../reference/kafka-api/index.md) |
 | [{#T}](log_config.md) | No | Logging configuration and parameters |
 | [{#T}](memory_controller_config.md) | No | Memory allocation and limits for database components |
-| [{#T}](monitoring_config.md) | No | Parameters of [YDB Monitoring](../embedded-ui/ydb-monitoring.md) |
+| [{#T}](monitoring_config.md) | No | Parameters of [YDB Monitoring](../ydb-ui/ydb-monitoring.md) |
 | [{#T}](node_broker_config.md) | No | Stable node name configuration |
 | [{#T}](query_service_config.md) | No | Configuration of external sources for federated queries |
 | [{#T}](resource_broker_config.md) | No | Resource broker for controlling CPU and memory consumption |

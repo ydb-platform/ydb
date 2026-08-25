@@ -399,7 +399,7 @@ void TFastPathService::ScheduleAfterDelay(
         std::move(callback));
 }
 
-NThreading::TFuture<void> TFastPathService::UpdateVChunkConfig(
+TPersistResultFuture TFastPathService::UpdateVChunkConfig(
     const TVChunkConfig& cfg)
 {
     auto event =
@@ -409,7 +409,7 @@ NThreading::TFuture<void> TFastPathService::UpdateVChunkConfig(
     return result;
 }
 
-NThreading::TFuture<void> TFastPathService::UpdateDirtyMapState(
+TPersistResultFuture TFastPathService::UpdateDirtyMapState(
     ui32 vChunkIndex,
     TDirtyMapStateProto state)
 {

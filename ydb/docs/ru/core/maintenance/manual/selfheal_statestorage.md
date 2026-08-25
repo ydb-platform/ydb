@@ -8,6 +8,8 @@
 
 В процессе работы кластеров узлы, на которых работает {{ ydb-short-name }} могут выходить из строя целиком.
 
+Self Heal State Storage — это механизм SelfHeal для подсистем распространения метаданных. SelfHeal хранилища (диски и группы хранения) описан в [{#T}](selfheal.md).
+
 Self Heal State Storage обеспечивает сохранение работоспособности [подсистем распространения метаданных](../../concepts/glossary.md#state-storage), [Board](../../concepts/glossary.md#board), [SchemeBoard](../../concepts/glossary.md#scheme-board) кластера, если невозможно быстро восстановить вышедшие из строя узлы, и автоматически увеличивать количество реплик этих подсистем при добавлении новых узлов в кластер.
 
 Self Heal State Storage обеспечивает:
@@ -106,4 +108,4 @@ config:
 
 ## Проверка результата {#verify-result}
 
-Проверить, что изменения применились, можно  в разделе `CMS` в [Embedded UI](../../reference/embedded-ui/index.md) кластера (доступен на порту 8765): перейдите на вкладку `Sentinel` для просмотра статуса Sentinel и Self Heal State Storage.
+Проверить, что изменения применились, можно  в разделе `CMS` в [{{ ydb-ui-name }}](../../reference/ydb-ui/index.md) кластера (доступен на порту 8765): перейдите на вкладку `Sentinel` для просмотра статуса Sentinel и Self Heal State Storage.

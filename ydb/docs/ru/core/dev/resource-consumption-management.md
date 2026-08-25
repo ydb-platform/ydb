@@ -215,7 +215,7 @@ CREATE RESOURCE POOL the_ceo WITH (
 
 При необходимости пользователь может явно указать, в каком пуле следует выполнить заданный запрос. В настоящий момент это можно сделать следующим образом:
 
-- **Embedded UI** — в окне настройки запуска запроса `Query execution settings` через параметр `Resource pool`.
+- **{{ ydb-ui-name }}** — в окне настройки запуска запроса `Query execution settings` через параметр `Resource pool`.
 - **YDB CLI** — в команде [`ydb sql`](../reference/ydb-cli/sql.md) с параметром `--resource-pool`, например, `ydb sql --resource-pool my_pool -s "SELECT 1"`.
 - **YDB CLI ([интерактивный режим](../reference/ydb-cli/interactive-cli.md))** — [командой](../reference/ydb-cli/interactive-cli.md#internal-vars) `SET resource_pool = my_pool`, где `my_pool` — наименование пула ресурсов.
 - **YDB CPP SDK** — в настройках запуска запроса через параметр [ResourcePool](https://github.com/ydb-platform/ydb/blob/fb05a8472be6b2770528b3e90093e67a7bca8f0e/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/query.h#L111).
@@ -296,7 +296,7 @@ where State = 'EXECUTING'
 
 ### Системные представления
 
-Информацию о системных представлениях, связанных с пулами ресурсов и классификаторами пулов ресурсов, можно найти на странице [{#T}](system-views.md#resource_pools).
+Информацию о системных представлениях, связанных с пулами ресурсов и классификаторами пулов ресурсов, можно найти на странице [Информация о пулах ресурсов](system-views.md#resource_pools).
 
 ## См. также
 

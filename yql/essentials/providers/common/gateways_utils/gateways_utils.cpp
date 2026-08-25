@@ -1,5 +1,6 @@
 #include "gateways_utils.h"
 
+#include <yql/essentials/providers/common/activation/yql_activation.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <yql/essentials/providers/common/proto/static_gateways_config.pb.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
@@ -36,6 +37,7 @@ TGatewaySQLFlags TGatewaySQLFlags::From(const TGatewaysConfig& config, const TAc
     }
 
     TGatewaySQLFlags flags;
+    const NConfig::TActivationGroupRegistry activationGroups(config);
 
     {
         const auto& simple = config.GetSqlCore().GetTranslationFlags();
@@ -49,7 +51,7 @@ TGatewaySQLFlags TGatewaySQLFlags::From(const TGatewaysConfig& config, const TAc
 
         if (!flag.HasActivation()) {
             // Unconditionally enable
-        } else if (isActive(flag.GetActivation())) {
+        } else if (isActive(activationGroups.Resolve(flag.GetActivation()))) {
             flags.Activated_.emplace(name);
         } else {
             continue;

@@ -11,6 +11,7 @@
 
 #include <util/folder/tempdir.h>
 #include <util/generic/strbuf.h>
+#include <util/stream/file.h>
 
 #include <contrib/libs/protobuf/src/google/protobuf/text_format.h>
 
@@ -107,72 +108,77 @@ Y_UNIT_TEST(ParseValuesFromFile) {
             .AddNullableColumn("ColInt", colType[2])
             .Build();
 
-    NBackup::TQueryFromFileIterator it("table_path", dataFileName, tableDesc.GetColumns(), 4096, 0, 0);
+    NBackup::TQueryBuilder qb("table_path", tableDesc.GetColumns());
+    qb.Begin();
+
+    TFileInput input(dataFileName);
+    TString line;
+    while (input.ReadLine(line)) {
+        qb.AddLine(line);
+    }
+    TParams params = qb.EndAndGetResultingParams();
+
+    auto value = params.GetValue("$items");
+    UNIT_ASSERT(value);
+    TValueParser parser(*value);
+
+    UNIT_ASSERT(parser.GetKind() == TTypeParser::ETypeKind::List);
+    parser.OpenList();
 
     ui32 rowsRead = 0;
-    while (!it.Empty()) {
-        auto params = it.ReadNextGetParams();
-
-        auto value = params.GetValue("$items");
-        UNIT_ASSERT(value);
-        TValueParser parser(*value);
-
-        UNIT_ASSERT(parser.GetKind() == TTypeParser::ETypeKind::List);
-        parser.OpenList();
-        while (parser.TryNextListItem()) {
-            UNIT_ASSERT(parser.GetKind() == TTypeParser::ETypeKind::Struct);
-            parser.OpenStruct();
-            for (ui32 col = 0; col < ColSize; ++col) {
-                const bool nextMemberOk = parser.TryNextMember();
-                UNIT_ASSERT(nextMemberOk);
-                UNIT_ASSERT(parser.GetKind() == TTypeParser::ETypeKind::Optional);
-                parser.OpenOptional();
-                UNIT_ASSERT(parser.GetPrimitiveType() == colType[col]);
-                switch (col) {
-                case 0: {
-                    UNIT_ASSERT(parser.GetPrimitiveType() == EPrimitiveType::Uint32);
-                    parser.CloseOptional();
-                    const std::optional<ui32> val = parser.GetOptionalUint32();
-                    if (rowsRead % 2 == 0) {
-                        UNIT_ASSERT(!val);
-                    } else {
-                        UNIT_ASSERT(val);
-                        UNIT_ASSERT(*val == rowsRead);
-                    }
-                    break;
-                }
-                case 1: {
-                    UNIT_ASSERT(parser.GetPrimitiveType() == EPrimitiveType::String);
-                    parser.CloseOptional();
-                    TString col2str = TStringBuilder() << "TestString" << 2 * rowsRead << "with number";
-                    const std::optional<TString> val = parser.GetOptionalString();
-                    if (rowsRead % 2 == 0) {
-                        UNIT_ASSERT(val);
-                        UNIT_ASSERT_STRINGS_EQUAL(*val, col2str);
-                    } else {
-                        UNIT_ASSERT(!val);
-                    }
-                    break;
-                }
-                case 2: {
-                    UNIT_ASSERT(parser.GetPrimitiveType() == EPrimitiveType::Int64);
-                    parser.CloseOptional();
-                    const std::optional<i64> val = parser.GetOptionalInt64();
-                    UNIT_ASSERT(val);
-                    UNIT_ASSERT(*val == rowsRead*rowsRead);
-                    break;
-                }
-                default:
-                    UNIT_FAIL("Unexpected columt number");
-                }
-            }
+    while (parser.TryNextListItem()) {
+        UNIT_ASSERT(parser.GetKind() == TTypeParser::ETypeKind::Struct);
+        parser.OpenStruct();
+        for (ui32 col = 0; col < ColSize; ++col) {
             const bool nextMemberOk = parser.TryNextMember();
-            UNIT_ASSERT(!nextMemberOk);
-            parser.CloseStruct();
-            ++rowsRead;
+            UNIT_ASSERT(nextMemberOk);
+            UNIT_ASSERT(parser.GetKind() == TTypeParser::ETypeKind::Optional);
+            parser.OpenOptional();
+            UNIT_ASSERT(parser.GetPrimitiveType() == colType[col]);
+            switch (col) {
+            case 0: {
+                UNIT_ASSERT(parser.GetPrimitiveType() == EPrimitiveType::Uint32);
+                parser.CloseOptional();
+                const std::optional<ui32> val = parser.GetOptionalUint32();
+                if (rowsRead % 2 == 0) {
+                    UNIT_ASSERT(!val);
+                } else {
+                    UNIT_ASSERT(val);
+                    UNIT_ASSERT(*val == rowsRead);
+                }
+                break;
+            }
+            case 1: {
+                UNIT_ASSERT(parser.GetPrimitiveType() == EPrimitiveType::String);
+                parser.CloseOptional();
+                TString col2str = TStringBuilder() << "TestString" << 2 * rowsRead << "with number";
+                const std::optional<TString> val = parser.GetOptionalString();
+                if (rowsRead % 2 == 0) {
+                    UNIT_ASSERT(val);
+                    UNIT_ASSERT_STRINGS_EQUAL(*val, col2str);
+                } else {
+                    UNIT_ASSERT(!val);
+                }
+                break;
+            }
+            case 2: {
+                UNIT_ASSERT(parser.GetPrimitiveType() == EPrimitiveType::Int64);
+                parser.CloseOptional();
+                const std::optional<i64> val = parser.GetOptionalInt64();
+                UNIT_ASSERT(val);
+                UNIT_ASSERT(*val == rowsRead*rowsRead);
+                break;
+            }
+            default:
+                UNIT_FAIL("Unexpected column number");
+            }
         }
-        parser.CloseList();
+        const bool nextMemberOk = parser.TryNextMember();
+        UNIT_ASSERT(!nextMemberOk);
+        parser.CloseStruct();
+        ++rowsRead;
     }
+    parser.CloseList();
     UNIT_ASSERT(rowsRead == RowSize);
 }
 

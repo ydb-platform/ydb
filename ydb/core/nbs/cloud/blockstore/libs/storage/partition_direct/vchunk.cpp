@@ -297,11 +297,25 @@ TExecutorPtr TVChunk::GetExecutor() const
     return Executor;
 }
 
-ui64 TVChunk::GetPBufferUsedSize(THostIndex hostIndex) const
+TCountAndSize TVChunk::GetPBuffersUsage(THostIndex hostIndex) const
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    return BlocksDirtyMap->GetPBufferUsedSize(hostIndex);
+    return BlocksDirtyMap->GetPBuffersUsage(hostIndex);
+}
+
+TCountAndSize TVChunk::GetAheadBlocks(THostIndex hostIndex) const
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    return BlocksDirtyMap->GetAheadBlocks(hostIndex);
+}
+
+TCountAndSize TVChunk::GetBehindBlocks(THostIndex hostIndex) const
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    return BlocksDirtyMap->GetBehindBlocks(hostIndex);
 }
 
 std::optional<ui64> TVChunk::GetSafeBarrierForErase() const
@@ -849,9 +863,11 @@ void TVChunk::DoPersistDirtyMap()
         [weakSelf = weak_from_this(),
          executor = Executor,
          stateGeneration]   //
-        (const TFuture<void>& f) mutable
+        (const TPersistResultFuture& f) mutable
         {
-            Y_UNUSED(f);
+            if (f.GetValue() != EPersistResult::Success) {
+                return;
+            }
             executor->ExecuteSimple(
                 [weakSelf = std::move(weakSelf), stateGeneration]()
                 {
@@ -999,10 +1015,11 @@ void TVChunk::PersistNextPendingConfig()
         PartitionDirectService->UpdateVChunkConfig(pending.Config);
     onPersisted.Subscribe(
         [weakSelf = weak_from_this(), executor = Executor]   //
-        (const TFuture<void>& f)
+        (const TPersistResultFuture& f) mutable
         {
-            Y_UNUSED(f);
-
+            if (f.GetValue() != EPersistResult::Success) {
+                return;
+            }
             executor->ExecuteSimple(
                 [weakSelf = std::move(weakSelf)]()
                 {

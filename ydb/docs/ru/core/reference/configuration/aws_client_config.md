@@ -60,4 +60,4 @@ aws_client_config:
 
 - [{#T}](../../yql/reference/syntax/create-external-data-source.md) — внешний источник данных с протоколом S3 в YQL.
 - [{#T}](../../devops/deployment-options/manual/federated-queries/index.md) — федеративные запросы и внешние источники.
-- [{#T}](../../recipes/import-export-column-tables.md) — импорт и экспорт колоночных таблиц через объектное хранилище.
+- [{#T}](../../recipes/backup/import-export-column-tables.md) — импорт и экспорт колоночных таблиц через объектное хранилище.

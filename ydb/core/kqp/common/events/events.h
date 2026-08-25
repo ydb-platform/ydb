@@ -109,9 +109,6 @@ struct TEvKqp {
     struct TEvCancelQueryResponse : public TEventPB<TEvCancelQueryResponse,
         NKikimrKqp::TEvCancelQueryResponse, TKqpEvents::EvCancelQueryResponse> {};
 
-    struct TEvKqpProxyPublishRequest :
-        public TEventLocal<TEvKqpProxyPublishRequest, TKqpEvents::EvKqpProxyPublishRequest> {};
-
     using TEvInitiateShutdownRequest = NPrivateEvents::TEvInitiateShutdownRequest;
 
     struct TEvScriptRequest : public TEventLocal<TEvScriptRequest, TKqpEvents::EvScriptRequest> {

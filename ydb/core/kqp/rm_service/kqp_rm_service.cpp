@@ -52,6 +52,8 @@ TTxState::~TTxState() {
 namespace {
 
 static constexpr double MYEPS = 1e-9;
+static constexpr TDuration SYSTEM_STATE_REQUEST_PERIOD = TDuration::Seconds(10);
+
 
 ui64 OverPercentage(ui64 limit, double percent) {
     return static_cast<double>(limit) / 100 * (100 - percent) + MYEPS;
@@ -152,6 +154,7 @@ struct TEvPrivate {
         EvSchedulePublishResources,
         EvTakeResourcesSnapshot,
         EvWarmupDeadline,
+        EvSystemStateRequest
     };
 
     struct TEvPublishResources : public TEventLocal<TEvPublishResources, EEv::EvPublishResources> {
@@ -161,6 +164,9 @@ struct TEvPrivate {
     };
 
     struct TEvWarmupDeadline : public TEventLocal<TEvWarmupDeadline, EEv::EvWarmupDeadline> {
+    };
+
+    struct TEvSystemStateRequest : public TEventLocal<TEvSystemStateRequest, EEv::EvSystemStateRequest> {
     };
 };
 
@@ -695,6 +701,9 @@ public:
 
     void Handle(NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
+
+        Schedule(SYSTEM_STATE_REQUEST_PERIOD, new TEvPrivate::TEvSystemStateRequest);
+        
         if (record.SystemStateInfoSize() != 1)  {
             YDB_LOG_DEBUG("Unexpected whiteboard info");
             return;
@@ -723,7 +732,7 @@ private:
             hFunc(TEvPrivate::TEvPublishResources, HandleWork);
             hFunc(TEvPrivate::TEvSchedulePublishResources, HandleWork);
             hFunc(NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse, Handle);
-            hFunc(TEvKqp::TEvKqpProxyPublishRequest, HandleWork);
+            hFunc(TEvPrivate::TEvSystemStateRequest, HandleWork);
             hFunc(TEvResourceBroker::TEvConfigResponse, HandleWork);
             hFunc(TEvResourceBroker::TEvResourceBrokerResponse, HandleWork);
             hFunc(TEvTenantPool::TEvTenantPoolStatus, HandleWork);
@@ -750,15 +759,8 @@ private:
         PublishResourceUsage("alloc");
     }
 
-    void HandleWork(TEvKqp::TEvKqpProxyPublishRequest::TPtr&) {
+    void HandleWork(TEvPrivate::TEvSystemStateRequest::TPtr&) {
         SendWhiteboardRequest();
-        if (AppData()->TenantName.empty() || !SelfDataCenterId) {
-            YDB_LOG_INFO("Cannot start publishing usage for kqp_proxy",
-                {"tenants", AppData()->TenantName},
-                {"selfDataCenterId", SelfDataCenterId.value_or("empty")});
-            return;
-        }
-        PublishResourceUsage("kqp_proxy");
     }
 
     void HandleWork(TEvResourceBroker::TEvConfigResponse::TPtr& ev) {

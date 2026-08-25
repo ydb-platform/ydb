@@ -619,7 +619,10 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
     }
 
     Y_UNIT_TEST(DefaultAndGeneratedRejected) {
-        TTestFixture fixture;
+        TTestFixture fixture(
+            /* featureFlagEnabled */ true,
+            /* indexStreamWrite */ true,
+            /* generatedStored */ true);
         fixture.Rejects(DefaultExprDDL(TStringBuilder()
                 << "v Uint64 DEFAULT " << DefaultExpr << " GENERATED ALWAYS AS (CAST(k AS Uint64)) STORED"),
             "same time");
@@ -816,7 +819,8 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
     Y_UNIT_TEST(ExpressionLiteralAndGeneratedDefaultsStayConsistent) {
         TTestFixture fixture(
             /* featureFlagEnabled */ true,
-            /* indexStreamWrite */ true);
+            /* indexStreamWrite */ true,
+            /* generatedStored */ true);
         fixture.Exec(TStringBuilder() << R"(
             CREATE TABLE TestTable (
                 k Int32 NOT NULL,
@@ -851,7 +855,10 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
     }
 
     Y_UNIT_TEST(UpsertNotNullGeneratedDependsOnNotNullExpressionDefault) {
-        TTestFixture fixture;
+        TTestFixture fixture(
+            /* featureFlagEnabled */ true,
+            /* indexStreamWrite */ true,
+            /* generatedStored */ true);
         fixture.Exec(R"(
             CREATE TABLE TestTable (
                 id Int32 NOT NULL,
@@ -1113,7 +1120,10 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
     }
 
     Y_UNIT_TEST(AlterOnGeneratedColumnRejected) {
-        TTestFixture fixture;
+        TTestFixture fixture(
+            /* featureFlagEnabled */ true,
+            /* indexStreamWrite */ true,
+            /* generatedStored */ true);
         fixture.Exec(R"(
             CREATE TABLE TestTable (
                 k Int32 NOT NULL,

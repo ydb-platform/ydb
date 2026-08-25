@@ -35,6 +35,22 @@ Y_UNIT_TEST_SUITE(SqsRequestEndpoint) {
             "https://lbkx.example.net:8443");
     }
 
+    Y_UNIT_TEST(AcceptsForwardedHostWithDomainAndNonStandardPort) {
+        UNIT_ASSERT_VALUES_EQUAL(
+            MakeSqsRequestEndpoint(
+                "backend.internal:8771",
+                "X-Forwarded-Host: example.com:8080\r\n",
+                false),
+            "http://example.com:8080");
+        UNIT_ASSERT_VALUES_EQUAL(
+            MakeSqsRequestEndpoint(
+                "backend.internal:8771",
+                "X-Forwarded-Host: example.com:8080\r\n"
+                "X-Forwarded-Proto: https\r\n",
+                false),
+            "https://example.com:8080");
+    }
+
     Y_UNIT_TEST(TakesFirstForwardedTokenAndLowercasesProto) {
         UNIT_ASSERT_VALUES_EQUAL(
             MakeSqsRequestEndpoint(

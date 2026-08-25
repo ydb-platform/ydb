@@ -73,3 +73,21 @@ class TestSqsTopicRequestEndpoint(KikimrSqsTopicTestBase):
         assert_that(default_url, is_not(equal_to(created_url)))
         assert_that(urlsplit(default_url).path, equal_to(created_path))
         assert_that(default_url.startswith('https://'), equal_to(False))
+
+    def test_forwarded_host_accepts_domain_with_port(self):
+        queue_name = self._make_queue_name('forwarded_host_domain_with_port')
+        public_host = 'example.com:8080'
+
+        with self._boto_client_with_forwarded_host(public_host, proto='http') as (origin, client):
+            created_url = client.create_queue(QueueName=queue_name)['QueueUrl']
+            self._queue_url = created_url
+
+            created_path = urlsplit(created_url).path
+            assert_that(created_url, equal_to(origin + created_path))
+            assert_that(created_url, equal_to('http://example.com:8080' + created_path))
+
+            get_url = client.get_queue_url(QueueName=queue_name)['QueueUrl']
+            assert_that(get_url, equal_to(created_url))
+
+            listed = client.list_queues(QueueNamePrefix=queue_name).get('QueueUrls', [])
+            assert_that(listed, has_item(created_url))

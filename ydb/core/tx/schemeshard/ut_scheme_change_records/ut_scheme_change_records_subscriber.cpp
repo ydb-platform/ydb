@@ -2262,6 +2262,83 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
             "the table was never actually created");
     }
 
+    // A force-drop must not leave the fetch stream stuck behind the in-flight
+    // record it aborted: AbortRelatedOperations completes every part via
+    // AbortUnsafe, so the operation reaches DoneTransactions and its record
+    // gets finalised instead of stranding at CompletedAtUs = 0 forever.
+    Y_UNIT_TEST(ForceDropDoesNotStrandInFlightRecord) {
+        TTestBasicRuntime runtime;
+        TTestEnvOptions opts;
+        opts.EnableSchemeChangeRecords(true);
+        TTestEnv env(runtime, opts);
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "forcedrop:sub", regHandle);
+
+        TestMkDir(runtime, ++txId, "/MyRoot", "DirB");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto dirDesc = DescribePath(runtime, "/MyRoot/DirB");
+        const ui64 dirLocalPathId = dirDesc.GetPathId();
+
+        // Park a CreateTable in flight under the subtree, then force-drop the
+        // subtree: the in-flight op is aborted via AbortUnsafe.
+        TVector<THolder<IEventHandle>> suppressed;
+        auto prevObserver = SetSuppressObserver(runtime, suppressed,
+            TEvDataShard::TEvSchemaChanged::EventType);
+
+        const ui64 createTxId = ++txId;
+        AsyncCreateTable(runtime, createTxId, "/MyRoot/DirB", R"(
+            Name: "StrandedCandidate"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        const ui64 dropTxId = ++txId;
+        AsyncForceDropUnsafe(runtime, dropTxId, dirLocalPathId);
+
+        runtime.SetObserverFunc(prevObserver);
+        for (auto& ev : suppressed) {
+            runtime.Send(ev.Release(), 0, true);
+        }
+        suppressed.clear();
+        env.TestWaitNotification(runtime, {createTxId, dropTxId});
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        // The aborted op's own record must be finalised (not stuck at 0).
+        auto entries = ReadSchemeChangeRecords(runtime);
+        const TSchemeChangeRecordEntry* abortedEntry = nullptr;
+        for (const auto& e : entries) {
+            if (e.TxId == createTxId) {
+                abortedEntry = &e;
+            }
+        }
+        UNIT_ASSERT_C(abortedEntry, "the force-dropped in-flight op must still produce a record");
+        UNIT_ASSERT_C(abortedEntry->CompletedAtUs != 0,
+            "a force-dropped in-flight record must not strand at CompletedAtUs = 0; "
+            "that would wedge the fetch stream behind it permanently");
+
+        // Positive companion: a subsequent normal DDL's record is delivered
+        // afterwards, proving the stream genuinely made progress and was not
+        // just empty or already broken before the force-drop.
+        TestMkDir(runtime, ++txId, "/MyRoot", "AfterForceDrop");
+        env.TestWaitNotification(runtime, txId);
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        TAutoPtr<IEventHandle> fetchHandle;
+        auto* fetch = FetchSchemeChangeRecords(runtime, "forcedrop:sub", 0, 1000, fetchHandle);
+        bool sawAfter = false;
+        for (size_t i = 0; i < static_cast<size_t>(fetch->Record.EntriesSize()); ++i) {
+            const auto& targets = fetch->Record.GetEntries(i).GetTargets();
+            if (targets.size() == 1 && targets[0].GetPath() == "AfterForceDrop") {
+                sawAfter = true;
+            }
+        }
+        UNIT_ASSERT_C(sawAfter,
+            "a normal DDL issued after the force-drop must still be delivered to the "
+            "subscriber; the stream must not stop dead at the aborted operation's order");
+    }
+
     // A TolerateOrphanedPaths recovery removes an in-flight tx's rows
     // without finalising its already-reserved outbox row. That row must not
     // stay at CompletedAtUs = 0 forever, or the fetch stream wedges behind

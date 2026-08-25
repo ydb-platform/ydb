@@ -3,6 +3,7 @@ RECURSE(
     ctx
     helpers
     md5
+    oob
     prefix
     sdk
     throw

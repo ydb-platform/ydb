@@ -2,6 +2,7 @@ UNITTEST()
 
 PEERDIR(
     library/cpp/json
+    library/cpp/resource
     library/cpp/testing/unittest
     ydb/core/protos
     ydb/library/wasm/api
@@ -21,6 +22,10 @@ SRCS(
     with_helpers_ut.cpp
     ../wasm/manifest.cpp
     ../blob_chunks.cpp
+)
+
+RESOURCE(
+    ydb/services/udf_store/ut/data/throw_with_dwarf.wasm /throw_with_dwarf.wasm
 )
 
 END()

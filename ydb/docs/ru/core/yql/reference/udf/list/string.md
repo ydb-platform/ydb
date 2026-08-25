@@ -71,7 +71,12 @@ SELECT String::Strip("YQL ");       -- "YQL"
 
   Переводят регистр ascii символов строки к ВЕРХНЕМУ, нижнему или Заглавному виду.
 
-* `String::SplitToList(string:String?, delimeter:String, [ DelimeterString:Bool?, SkipEmpty:Bool?, Limit:Uint64? ]) -> List<String>`
+*
+
+  ```text
+  String::SplitToList(string:String?, delimeter:String,
+  [ DelimeterString:Bool?, SkipEmpty:Bool?, Limit:Uint64? ]) -> List<String>
+  ```
 
   Разбивает строку на подстроки по разделителю.
   `string` -- исходная строка
@@ -123,7 +128,12 @@ SELECT String::SplitToList("1,2,3,4,5,6,7", ",", 3 as Limit); -- ["1", "2", "3",
 
   Проверяют, отвечает ли ascii строка указанному условию.
 
-* `String::LevensteinDistance(stringOne:String{Flags:AutoMap}, stringTwo:String{Flags:AutoMap}) -> Uint64`
+*
+
+  ```text
+  String::LevensteinDistance(stringOne:String{Flags:AutoMap},
+  stringTwo:String{Flags:AutoMap}) -> Uint64
+  ```
 
   Вычисляет расстояние Левенштейна для переданных строк.
 

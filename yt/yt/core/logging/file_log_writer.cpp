@@ -138,7 +138,7 @@ public:
                     } catch (const std::exception& ex) {
                         YT_TLOG_ERROR("Log file disabled: reload failed")
                             .With("FileName", BaseFileName_)
-                            .With(TError(ex));
+                            .With(ex);
                     }
                 }
             }
@@ -146,7 +146,7 @@ public:
             Disabled_ = true;
             YT_TLOG_ERROR("Log file disabled: space check failed")
                 .With("FileName", BaseFileName_)
-                .With(TError(ex));
+                .With(ex);
 
             Close();
         }
@@ -166,7 +166,7 @@ protected:
         Disabled_ = true;
         YT_TLOG_ERROR("Disabled log file")
             .With("FileName", BaseFileName_)
-            .With(TError(ex));
+            .With(ex);
 
         Close();
     }
@@ -268,7 +268,7 @@ private:
             Disabled_ = true;
             YT_TLOG_ERROR("Failed to open log file")
                 .With("FileName", FileName_)
-                .With(TError(ex));
+                .With(ex);
 
             Close();
         } catch (...) {
@@ -291,7 +291,7 @@ private:
         } catch (const std::exception& ex) {
             YT_TLOG_ERROR("Failed to close log file; ignored")
                 .With("FileName", FileName_)
-                .With(TError(ex));
+                .With(ex);
         } catch (...) {
             YT_ABORT();
         }
@@ -313,7 +313,7 @@ private:
             RenameFiles(fileNames);
         } catch (const std::exception& ex) {
             YT_TLOG_ERROR("Failed to rotate log files")
-                .With(TError(ex));
+                .With(ex);
         } catch (...) {
             YT_ABORT();
         }

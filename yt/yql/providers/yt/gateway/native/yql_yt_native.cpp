@@ -37,6 +37,7 @@
 #include <yql/essentials/providers/common/codec/yql_codec_type_flags.h>
 #include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/providers/common/proto/static_gateways_config.pb.h>
 #include <yql/essentials/providers/result/expr_nodes/yql_res_expr_nodes.h>
 
 #include <yql/essentials/ast/yql_expr.h>
@@ -257,7 +258,7 @@ public:
         SetYtLoggerGlobalBackend(
             Services_.Config->HasYtLogLevel() ? Services_.Config->GetYtLogLevel() : -1,
             Services_.Config->GetYtDebugLogSize(),
-            Services_.Config->GetYtDebugLogFile(),
+            Services_.StaticConfig->GetYtDebugLogFile(),
             Services_.Config->GetYtDebugLogAlwaysWrite()
         );
     }
@@ -313,6 +314,10 @@ public:
             return session->Async([session, logCtx] {
                 YQL_LOG_CTX_ROOT_SESSION_SCOPE(logCtx);
                 try {
+                    with_lock(session->SecureTmpFolderPreparationsMutex_) {
+                        session->SecureTmpFolderPreparationsByCluster_.clear();
+                    }
+
                     session->TxCache_.AbortAll();
                 } catch (...) {
                     YQL_CLOG(ERROR, ProviderYt) << CurrentExceptionMessage();
@@ -6373,6 +6378,8 @@ private:
 } // NNative
 
 IYtGateway::TPtr CreateYtNativeGateway(const TYtNativeServices& services) {
+    YQL_ENSURE(services.Config);
+    YQL_ENSURE(services.StaticConfig);
     return MakeIntrusive<NNative::TYtNativeGateway>(services);
 }
 

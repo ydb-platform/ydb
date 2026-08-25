@@ -76,7 +76,6 @@ private:
             Q(Column_));
     }
 
-private:
     TString Var_;
     TString Column_;
 };
@@ -336,7 +335,6 @@ private:
             Definitions_);
     }
 
-private:
     TString Label_;
     TNodePtr PartitionKeySelector_;
     TNodePtr PartitionColumns_;

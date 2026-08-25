@@ -472,6 +472,7 @@ namespace similarity {
             total_memory_allocated += sizemass;
             char *linkList = (char *)malloc(sizemass);
             CHECK(linkList);
+            memset(linkList, 0, sizemass);
             linkLists_[i] = linkList;
             ElList_[i]->copyHigherLevelLinksToOptIndex(linkList, 0);
         };

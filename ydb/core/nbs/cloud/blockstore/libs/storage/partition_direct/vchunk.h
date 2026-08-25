@@ -42,6 +42,7 @@ public:
         IPartitionDirectService* partitionDirectService,
         const TDiskDescription& diskDescription,
         const TVChunkConfig& vChunkConfig,
+        const TDirtyMapStateProto& dirtyMapState,
         IDirectBlockGroupPtr directBlockGroup,
         ui32 syncRequestsBatchSize,
         ui64 vChunkSize,
@@ -70,7 +71,9 @@ public:
 
     [[nodiscard]] const TVChunkConfig& GetConfig() const;
     [[nodiscard]] TExecutorPtr GetExecutor() const;
-    [[nodiscard]] ui64 GetPBufferUsedSize(THostIndex hostIndex) const;
+    [[nodiscard]] TCountAndSize GetPBuffersUsage(THostIndex hostIndex) const;
+    [[nodiscard]] TCountAndSize GetAheadBlocks(THostIndex hostIndex) const;
+    [[nodiscard]] TCountAndSize GetBehindBlocks(THostIndex hostIndex) const;
 
     // This vchunk's contribution to the tablet-wide cleanup watermark: the
     // smallest lsn still held in PBuffers, or nullopt when nothing is inflight.

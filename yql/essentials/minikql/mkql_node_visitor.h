@@ -136,7 +136,6 @@ class TExploringNodeVisitor: public INodeVisitor {
 public:
     using TNodesVec = TStackVec<TNode*, 2>;
 
-public:
     void Visit(TTypeType& node) override;
     void Visit(TVoidType& node) override;
     void Visit(TNullType& node) override;
@@ -186,7 +185,6 @@ public:
 private:
     void AddChildNode(TNode* parent, TNode& child);
 
-private:
     std::vector<TNode*> NodeList_;
     std::vector<TNode*>* Stack_ = nullptr;
     bool BuildConsumersMap_ = false;

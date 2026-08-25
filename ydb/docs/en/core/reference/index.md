@@ -3,7 +3,7 @@
 This documentation section contains reference information on various aspects of {{ ydb-short-name }}, including:
 
 * [{#T}](../yql/reference/index.md)
-* [{#T}](./embedded-ui/index.md)
+* [{#T}](./ydb-ui/index.md)
 * [{#T}](../integrations/index.md)
 * [{#T}](./ydb-cli/index.md)
 * [{#T}](./ydb-sdk/index.md)

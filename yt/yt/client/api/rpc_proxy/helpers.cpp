@@ -589,7 +589,7 @@ void FromProto(NTableClient::TColumnSchema* schema, const NProto::TColumnSchema&
         if (protoSchema.has_type() && GetPhysicalType(v1Type) != physicalType) {
             THROW_ERROR_EXCEPTION("Fields \"type_v3\" and \"type\" do not match")
                 .With("type_v3", ToString(*columnType))
-                .With("type", protoSchema.type());
+                .With("type", physicalType);
         }
     } else if (protoSchema.has_logical_type()) {
         auto logicalType = FromProto<ESimpleLogicalValueType>(protoSchema.logical_type());
@@ -597,7 +597,7 @@ void FromProto(NTableClient::TColumnSchema* schema, const NProto::TColumnSchema&
         if (protoSchema.has_type() && GetPhysicalType(logicalType) != physicalType) {
             THROW_ERROR_EXCEPTION("Fields \"logical_type\" and \"type\" do not match")
                 .With("logical_type", ToString(*columnType))
-                .With("type", protoSchema.type());
+                .With("type", physicalType);
         }
     } else if (protoSchema.has_type()) {
         columnType = MakeLogicalType(GetLogicalType(physicalType), protoSchema.required());

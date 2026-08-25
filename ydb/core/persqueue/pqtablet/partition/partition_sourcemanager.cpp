@@ -63,7 +63,8 @@ TPartitionSourceManager::TModificationBatch::TModificationBatch(TPartitionSource
     : Manager(manager)
     , Node(Manager.GetPartitionNode())
     , SourceIdWriter(format)
-    , HeartbeatEmitter(Manager.Partition.SourceIdStorage) {
+    , HeartbeatEmitter(Manager.Partition.SourceIdStorage)
+    , SchemaChangeEmitter(Manager.Partition.SourceIdStorage) {
 }
 
 TPartitionSourceManager::TModificationBatch::~TModificationBatch() {
@@ -71,6 +72,10 @@ TPartitionSourceManager::TModificationBatch::~TModificationBatch() {
 
 TMaybe<THeartbeat> TPartitionSourceManager::TModificationBatch::CanEmitHeartbeat() const {
     return HeartbeatEmitter.CanEmit();
+}
+
+TMaybe<TSchemaChangeInfo> TPartitionSourceManager::TModificationBatch::CanEmitSchemaChange() const {
+    return SchemaChangeEmitter.CanEmit();
 }
 
 TPartitionSourceManager::TSourceManager TPartitionSourceManager::TModificationBatch::GetSource(const TString& id) {
@@ -163,6 +168,30 @@ void TPartitionSourceManager::TSourceManager::Update(ui64 seqNo, ui64 offset, TI
 
 void TPartitionSourceManager::TSourceManager::Update(THeartbeat&& heartbeat) {
     Batch.HeartbeatEmitter.Process(SourceId, std::move(heartbeat));
+}
+
+void TPartitionSourceManager::TSourceManager::Update(TSchemaChangeInfo&& schemaChange) {
+    // Unlike heartbeats (emitter-only until AnswerCurrentWrites), schema changes also
+    // persist LastSchemaChange via SourceIdWriter so crash recovery can advance
+    // GetCommittedSchemaChangeVersion() without waiting for a re-ACK.
+    // Keep the same regression guard as SchemaChangeEmitter::Process (prefer writer
+    // state when present so a later Update in this batch cannot regress).
+
+    auto copySchemaChange = schemaChange;
+    Batch.SchemaChangeEmitter.Process(SourceId, std::move(copySchemaChange));
+
+    const TSourceIdInfo* info = nullptr;
+    if (InWriter != WriteStorage().end()) {
+        info = &InWriter->second;
+    } else if (InMemory != MemoryStorage().end()) {
+        info = &InMemory->second;
+    }
+
+    // ExecRequest rejects schema changes without an explicit in-memory/writer source.
+    Y_DEBUG_ABORT_UNLESS(info);
+    if (info && (!info->LastSchemaChange || schemaChange.Version > info->LastSchemaChange->Version)) {
+        Batch.SourceIdWriter.RegisterSourceId(SourceId, info->Updated(std::move(schemaChange)));
+    }
 }
 
 

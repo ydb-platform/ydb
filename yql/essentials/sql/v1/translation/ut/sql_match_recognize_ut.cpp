@@ -678,8 +678,10 @@ SELECT *
 FROM Input MATCH_RECOGNIZE(
     PATTERN (
         PERMUTE( )" + std::accumulate(cbegin(vars) + 1, cend(vars), vars.front(),
-                                      [](const std::string& acc, const std::string& v) {
-                                          return acc + ", " + v;
+                                      [](std::string acc, const std::string& v) {
+                                          acc += ", ";
+                                          acc += v;
+                                          return acc;
                                       }) +
                                   R"(
         )

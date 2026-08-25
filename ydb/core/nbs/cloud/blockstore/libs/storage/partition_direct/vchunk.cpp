@@ -11,6 +11,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/disk_description.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/dirty_map.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/region_geometry.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/dirty_map.pb.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/future_helper.h>
@@ -50,6 +51,7 @@ TVChunk::TVChunk(
     IPartitionDirectService* partitionDirectService,
     const TDiskDescription& diskDescription,
     const TVChunkConfig& vChunkConfig,
+    const TDirtyMapStateProto& dirtyMapState,
     IDirectBlockGroupPtr directBlockGroup,
     ui32 syncRequestsBatchSize,
     ui64 vChunkSize,
@@ -82,6 +84,8 @@ TVChunk::TVChunk(
         NKikimrServices::NBS_PARTITION,
         "%s Create",
         LogTitle.GetWithTime().c_str());
+
+    BlocksDirtyMap->Load(dirtyMapState);
 }
 
 TVChunk::~TVChunk()
@@ -293,11 +297,25 @@ TExecutorPtr TVChunk::GetExecutor() const
     return Executor;
 }
 
-ui64 TVChunk::GetPBufferUsedSize(THostIndex hostIndex) const
+TCountAndSize TVChunk::GetPBuffersUsage(THostIndex hostIndex) const
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    return BlocksDirtyMap->GetPBufferUsedSize(hostIndex);
+    return BlocksDirtyMap->GetPBuffersUsage(hostIndex);
+}
+
+TCountAndSize TVChunk::GetAheadBlocks(THostIndex hostIndex) const
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    return BlocksDirtyMap->GetAheadBlocks(hostIndex);
+}
+
+TCountAndSize TVChunk::GetBehindBlocks(THostIndex hostIndex) const
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    return BlocksDirtyMap->GetBehindBlocks(hostIndex);
 }
 
 std::optional<ui64> TVChunk::GetSafeBarrierForErase() const
@@ -333,7 +351,7 @@ TString TVChunk::DebugPrintDirtyMap()
     sb << "AheadBehind:" << BlocksDirtyMap->DebugPrintAheadBehindBrief()
        << "\n";
     sb << "Ahead:\n" << BlocksDirtyMap->DebugPrintAhead();
-    sb << "Behind\n" << BlocksDirtyMap->DebugPrintBehind();
+    sb << "Behind:\n" << BlocksDirtyMap->DebugPrintBehind();
     sb << "DDiskSyncs: " << BlocksDirtyMap->DebugPrintInflightSync() << "\n";
     return sb;
 }
@@ -830,27 +848,47 @@ void TVChunk::DoPersistDirtyMap()
     DirtyMapStatePersisting = true;
 
     auto state = BlocksDirtyMap->GetStateForPersist();
+    const ui32 stateGeneration = state.GetStateGeneration();
     LOG_INFO(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "%s DoPersistDirtyMap: %s",
+        "%s Will persist dirty map. State generation %u",
         LogTitle.GetWithTime().c_str(),
-        state.DebugString().c_str());
+        stateGeneration);
 
-    DirectBlockGroup->Schedule(
-        TDuration::Seconds(1),
+    auto future = PartitionDirectService->UpdateDirtyMapState(
+        VChunkConfig.GetVChunkIndex(),
+        std::move(state));
+    future.Subscribe(
         [weakSelf = weak_from_this(),
-         stateGeneration = state.GetStateGeneration()]   //
-        ()
+         executor = Executor,
+         stateGeneration]   //
+        (const TPersistResultFuture& f) mutable
         {
-            if (auto self = weakSelf.lock()) {
-                self->OnDirtyMapPersisted(stateGeneration);
+            if (f.GetValue() != EPersistResult::Success) {
+                return;
             }
+            executor->ExecuteSimple(
+                [weakSelf = std::move(weakSelf), stateGeneration]()
+                {
+                    if (auto self = weakSelf.lock()) {
+                        self->OnDirtyMapPersisted(stateGeneration);
+                    }
+                });
         });
 }
 
 void TVChunk::OnDirtyMapPersisted(ui32 stateGeneration)
 {
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    LOG_INFO(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s Dirty map persisted. State generation: %u",
+        LogTitle.GetWithTime().c_str(),
+        stateGeneration);
+
     DirtyMapStatePersisting = false;
     BlocksDirtyMap->StatePersisted(stateGeneration);
 }
@@ -977,10 +1015,11 @@ void TVChunk::PersistNextPendingConfig()
         PartitionDirectService->UpdateVChunkConfig(pending.Config);
     onPersisted.Subscribe(
         [weakSelf = weak_from_this(), executor = Executor]   //
-        (const TFuture<void>& f)
+        (const TPersistResultFuture& f) mutable
         {
-            Y_UNUSED(f);
-
+            if (f.GetValue() != EPersistResult::Success) {
+                return;
+            }
             executor->ExecuteSimple(
                 [weakSelf = std::move(weakSelf)]()
                 {

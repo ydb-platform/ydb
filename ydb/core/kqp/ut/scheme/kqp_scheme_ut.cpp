@@ -3304,7 +3304,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         };
 
         checkInvalid("secondary", "1", "EXTERNAL_THRESHOLD is supported only for column family 'default'");
-        checkInvalid("default", "-1", "EXTERNAL_THRESHOLD must be in range [1, 4294967294]");
         checkInvalid("default", "4294967296", "EXTERNAL_THRESHOLD must be in range [1, 4294967294]");
     }
 

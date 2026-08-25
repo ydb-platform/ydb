@@ -31,7 +31,15 @@ TMaybe<TSchemeChangeRawTarget> ExtractSchemeChangeMoveTarget(const NKikimrScheme
         return TSchemeChangeRawTarget{tx.GetMoveSequence().GetDstPath(), tx.GetMoveSequence().GetSrcPath()};
     }
     if (tx.HasMoveIndex()) {
-        return TSchemeChangeRawTarget{tx.GetMoveIndex().GetDstPath(), tx.GetMoveIndex().GetSrcPath()};
+        // Unlike MoveTable/MoveTableIndex/MoveSequence, TMoveIndex.SrcPath/
+        // DstPath are index names relative to TablePath, not absolute paths
+        // (confirmed against index/operation_move_index.cpp, which resolves
+        // them via mainTablePath.Child(...)). Join with TablePath so the
+        // result matches what every other move shape carries.
+        const auto& moveIndex = tx.GetMoveIndex();
+        return TSchemeChangeRawTarget{
+            TStringBuilder() << moveIndex.GetTablePath() << '/' << moveIndex.GetDstPath(),
+            TStringBuilder() << moveIndex.GetTablePath() << '/' << moveIndex.GetSrcPath()};
     }
     return Nothing();
 }
@@ -53,9 +61,28 @@ TVector<TSchemeChangeRawTarget> ExtractSchemeChangeCopyTargets(const NKikimrSche
 // Name of the object a user-level TModifyScheme targets, found via reflection
 // so a newly added object type is covered without extending a switch.
 TString ExtractSchemeChangeTargetName(const NKikimrSchemeOp::TModifyScheme& tx) {
-    // The only shape where the name is not directly at <SubMessage>.Name.
+    // Shapes where the name is not at a direct submessage's scalar Name field,
+    // so the generic one-level reflection walk below cannot find it.
     if (tx.HasCreateIndexedTable()) {
         return tx.GetCreateIndexedTable().GetTableDescription().GetName();
+    }
+    // TAlterUserAttributes names its target PathName, not Name.
+    if (tx.HasAlterUserAttributes()) {
+        return tx.GetAlterUserAttributes().GetPathName();
+    }
+    // TTruncateTable/TCreateContinuousBackup/TAlterContinuousBackup/
+    // TDropContinuousBackup all name their target table TableName, not Name.
+    if (tx.HasTruncateTable()) {
+        return tx.GetTruncateTable().GetTableName();
+    }
+    if (tx.HasCreateContinuousBackup()) {
+        return tx.GetCreateContinuousBackup().GetTableName();
+    }
+    if (tx.HasAlterContinuousBackup()) {
+        return tx.GetAlterContinuousBackup().GetTableName();
+    }
+    if (tx.HasDropContinuousBackup()) {
+        return tx.GetDropContinuousBackup().GetTableName();
     }
 
     const auto* refl = tx.GetReflection();

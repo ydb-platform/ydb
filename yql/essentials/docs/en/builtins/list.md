@@ -391,6 +391,8 @@ Arguments:
 Type returned:
 `U` for `ListFold`, `U?` for `ListFold1`.
 
+`ListFold` allows [linear types](../types/linear.md) `Linear<T>` in the state type `U`. If the state contains linear values, `updateLambda` must consume every linear value passed to it exactly once on each iteration and return the resulting state of the same type.
+
 ```yql
 $l = [1, 4, 7, 2];
 $y = ($x, $y) -> { RETURN $x + $y; };
@@ -401,6 +403,21 @@ SELECT
     ListFold([], 3, $y) AS fold_empty,                 -- 3
     ListFold1($l, $z, $y) AS fold1,                    -- 17
     ListFold1([], $z, $y) AS fold1_empty;              -- Null
+```
+
+With a linear state, `ListFold` can modify a mutable dictionary without copying it on every iteration:
+
+```yql
+SELECT Block(($arg) -> {
+    $dict = ListFold(
+        [1, 2, 3, 2, 1],
+        ToMutDict({0: 0}, $arg),
+        ($item, $state) -> {
+            RETURN MutDictInsert($state, $item, 1);
+        }
+    );
+    RETURN ListSort(DictKeys(FromMutDict($dict)));
+}); -- [0, 1, 2, 3]
 ```
 
 ## ListFoldMap, ListFold1Map {#listfoldmap}

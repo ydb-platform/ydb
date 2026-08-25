@@ -636,6 +636,8 @@ ListMin(List<T>?)->T?
 Возвращаемый тип:
 U для ListFold, опциональный U для ListFold1.
 
+`ListFold` допускает [линейные типы](../types/linear.md) `Linear<T>` в типе состояния U. Если состояние содержит линейные значения, `updateLambda` должна на каждой итерации потребить каждое переданное линейное значение ровно один раз и вернуть результирующее состояние того же типа.
+
 #### Примеры
 
 ```yql
@@ -648,6 +650,21 @@ SELECT
     ListFold([], 3, $y) AS fold_empty,                 -- 3
     ListFold1($l, $z, $y) AS fold1,                    -- 17
     ListFold1([], $z, $y) AS fold1_empty;              -- Null
+```
+
+С помощью линейного состояния в `ListFold` можно изменять мутабельный словарь без его копирования на каждой итерации:
+
+```yql
+SELECT Block(($arg) -> {
+    $dict = ListFold(
+        [1, 2, 3, 2, 1],
+        ToMutDict({0: 0}, $arg),
+        ($item, $state) -> {
+            RETURN MutDictInsert($state, $item, 1);
+        }
+    );
+    RETURN ListSort(DictKeys(FromMutDict($dict)));
+}); -- [0, 1, 2, 3]
 ```
 
 #### Сигнатура

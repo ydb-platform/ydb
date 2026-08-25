@@ -3,6 +3,7 @@
 #include "http_req.h"
 
 #include <library/cpp/string_utils/url/url.h>
+#include <ydb/library/http/rfc7239_forwarded.h>
 
 #include <util/generic/maybe.h>
 #include <util/string/ascii.h>
@@ -110,112 +111,7 @@ bool IsValidRequestHost(TStringBuf host) {
     return !host.empty() && host.find_first_of("/?#") == TStringBuf::npos;
 }
 
-void SkipOws(TStringBuf& s) {
-    while (!s.empty() && (s[0] == ' ' || s[0] == '\t')) {
-        s = s.SubStr(1);
-    }
-}
-
-bool IsHttpTchar(char c) {
-    return IsAsciiAlnum(c)
-        || c == '!' || c == '#' || c == '$' || c == '%' || c == '&' || c == '\''
-        || c == '*' || c == '+' || c == '-' || c == '.' || c == '^' || c == '_'
-        || c == '`' || c == '|' || c == '~';
-}
-
-bool ParseHttpToken(TStringBuf& s, TStringBuf& token) {
-    size_t n = 0;
-    while (n < s.size() && IsHttpTchar(s[n])) {
-        ++n;
-    }
-    if (n == 0) {
-        return false;
-    }
-    token = s.SubStr(0, n);
-    s = s.SubStr(n);
-    return true;
-}
-
-bool ParseHttpQuotedString(TStringBuf& s, TString& value) {
-    if (s.empty() || s[0] != '"') {
-        return false;
-    }
-    s = s.SubStr(1);
-    value.clear();
-    while (!s.empty()) {
-        const char c = s[0];
-        s = s.SubStr(1);
-        if (c == '"') {
-            return true;
-        }
-        if (c == '\\') {
-            if (s.empty()) {
-                return false;
-            }
-            value.push_back(s[0]);
-            s = s.SubStr(1);
-            continue;
-        }
-        value.push_back(c);
-    }
-    return false;
-}
-
-bool ParseForwardedPairValue(TStringBuf& s, TString& value) {
-    SkipOws(s);
-    if (!s.empty() && s[0] == '"') {
-        return ParseHttpQuotedString(s, value);
-    }
-    size_t n = 0;
-    while (n < s.size() && s[n] != ';' && s[n] != ',') {
-        ++n;
-    }
-    value = TString{StripString(s.SubStr(0, n))};
-    s = s.SubStr(n);
-    return !value.empty();
-}
-
-// RFC 7239: first valid host= / proto= left to right. Port is part of host (Host ABNF).
-void ParseRfc7239Forwarded(TStringBuf header, TString& host, TString& proto) {
-    host.clear();
-    proto.clear();
-    TStringBuf s = header;
-    while (!s.empty()) {
-        SkipOws(s);
-        if (s.empty()) {
-            break;
-        }
-        if (s[0] == ',' || s[0] == ';') {
-            s = s.SubStr(1);
-            continue;
-        }
-        TStringBuf name;
-        if (!ParseHttpToken(s, name)) {
-            while (!s.empty() && s[0] != ';' && s[0] != ',') {
-                s = s.SubStr(1);
-            }
-            continue;
-        }
-        SkipOws(s);
-        if (s.empty() || s[0] != '=') {
-            continue;
-        }
-        s = s.SubStr(1);
-        TString value;
-        if (!ParseForwardedPairValue(s, value)) {
-            continue;
-        }
-        if (host.empty() && AsciiEqualsIgnoreCase(name, "host") && IsValidRequestHost(value)) {
-            host = std::move(value);
-        } else if (proto.empty() && AsciiEqualsIgnoreCase(name, "proto")) {
-            if (TString normalized = NormalizeForwardedProto(value); !normalized.empty()) {
-                proto = std::move(normalized);
-            }
-        }
-    }
-}
-
-TString JoinForwardedHeaderValues(const NHttp::THeaders& headers) {
+TString JoinForwardedHeaderValues(const ::NHttp::THeaders& headers) {
     TStringBuilder out;
     const auto range = headers.Headers.equal_range("forwarded");
     for (auto it = range.first; it != range.second; ++it) {
@@ -265,30 +161,35 @@ TString FormatSqsEndpoint(TStringBuf scheme, TStringBuf hostname, TMaybe<ui16> p
 } // namespace
 
 TString MakeSqsRequestEndpoint(TStringBuf host, TStringBuf headersBlob, bool tlsSecure) {
-    const NHttp::THeaders headers(headersBlob);
-    TString rfcHost;
-    TString rfcProto;
-    ParseRfc7239Forwarded(JoinForwardedHeaderValues(headers), rfcHost, rfcProto);
+    const ::NHttp::THeaders headers(headersBlob);
+    const auto forwarded = ::NKikimr::NHttp::ParseRfc7239Forwarded(JoinForwardedHeaderValues(headers));
 
-    if (IsValidRequestHost(rfcHost)) {
-        host = rfcHost;
-    } else if (TStringBuf forwardedHost = FirstForwardedValue(headers.Get("x-forwarded-host"));
-               IsValidRequestHost(forwardedHost))
-    {
-        host = forwardedHost;
+    TStringBuf hostname;
+    TMaybe<ui16> hostPort;
+    if (!forwarded.Host.empty()) {
+        hostname = forwarded.Host;
+        hostPort = forwarded.Port;
+    } else {
+        TStringBuf chosen = host;
+        if (TStringBuf forwardedHost = FirstForwardedValue(headers.Get("x-forwarded-host"));
+            IsValidRequestHost(forwardedHost))
+        {
+            chosen = forwardedHost;
+        }
+        if (!IsValidRequestHost(chosen)) {
+            return {};
+        }
+        const auto split = SplitHostAndPort(chosen);
+        hostname = split.first;
+        hostPort = split.second;
     }
-    if (!IsValidRequestHost(host)) {
-        return {};
-    }
-
-    const auto [hostname, hostPort] = SplitHostAndPort(host);
     if (!IsValidRequestHost(hostname)) {
         return {};
     }
 
     TString scheme = tlsSecure ? "https" : "http";
-    if (!rfcProto.empty()) {
-        scheme = rfcProto;
+    if (forwarded.Proto == "http" || forwarded.Proto == "https") {
+        scheme = forwarded.Proto;
     } else if (TStringBuf proto = headers.Get("x-forwarded-proto"); !proto.empty()) {
         if (TString normalized = NormalizeForwardedProto(proto); !normalized.empty()) {
             scheme = std::move(normalized);

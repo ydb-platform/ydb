@@ -10,8 +10,13 @@
 | Название очереди          | CPU | Memory | Описание                                        |
 |---------------------------| --- | --- |----------------------------------------------------|
 | `queue_ttl`               | 2 | — | Операции удаления данных по [TTL](../../concepts/ttl.md).                |
+<<<<<<< HEAD
 | `queue_backup`            | 2 | — | Операции [резервного копирования](../../devops/backup-and-recovery.md#s3).                |
 | `queue_restore`           | 2 | — | Операции [восстановления из резервной копии](../../devops/backup-and-recovery.md#s3).     |
+=======
+| `queue_backup`            | 2 | — | Операции [резервного копирования](../../devops/backup-and-recovery/index.md#s3).                |
+| `queue_restore`           | 10 | — | Операции [восстановления из резервной копии](../../devops/backup-and-recovery/index.md#s3).     |
+>>>>>>> 4e9031a2733 (docs: correct Resource Broker restore queue limit (#51076))
 | `queue_build_index`       | 10 | — | Операции [онлайн-создания вторичного индекса](../../concepts/query_execution/secondary_indexes.md#index-add).   |
 | `queue_cdc_initial_scan` | 4 | — | [Первоначальное сканирование таблицы](../../concepts/cdc.md#initial-scan).             |
 

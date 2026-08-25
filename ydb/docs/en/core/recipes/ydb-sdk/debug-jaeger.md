@@ -152,3 +152,5 @@ Below are examples of the code enabling Jaeger tracing in different {{ ydb-short
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
 {% endlist %}
+
+{% include [feature-not-supported](../../_includes/feature-not-supported.md) %}

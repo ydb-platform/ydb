@@ -543,3 +543,5 @@ The `OnChanged(false)` call might occur not only due to cancellation by a new `D
 * [Leader election](../../recipes/ydb-sdk/leader-election.md)
 * [Service discovery](../../recipes/ydb-sdk/service-discovery.md)
 * [Configuration publication](../../recipes/ydb-sdk/config-publication.md)
+
+{% include [feature-not-supported](../../_includes/feature-not-supported.md) %}

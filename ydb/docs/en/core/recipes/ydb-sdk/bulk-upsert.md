@@ -413,3 +413,5 @@ Below are examples of using the {{ ydb-short-name }} SDK built-in tools for bulk
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
 {% endlist %}
+
+{% include [feature-not-supported](../../_includes/feature-not-supported.md) %}

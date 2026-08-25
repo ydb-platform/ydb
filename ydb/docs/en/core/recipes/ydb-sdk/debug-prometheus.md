@@ -98,3 +98,5 @@ Below are examples of the code for enabling metrics in Prometheus in different {
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
 {% endlist %}
+
+{% include [feature-not-supported](../../_includes/feature-not-supported.md) %}

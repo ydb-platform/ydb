@@ -43,3 +43,5 @@ This option only makes sense if the cluster is operating in [bridge mode](../../
   This functionality is not currently supported.
 
 {% endlist %}
+
+{% include [feature-not-supported](../../_includes/feature-not-supported.md) %}

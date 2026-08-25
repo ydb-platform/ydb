@@ -8,46 +8,12 @@ codecov:
   notify:
     wait_for_ci: true
 
+github_checks: false
+
 coverage:
   status:
-    # Only publish checks for suite flags with a fresh upload on this commit.
-    # Historical main reports remain available as comparison baselines.
-    default_rules:
-      flag_coverage_not_uploaded_behavior: exclude
-    project:
-      default: off
-      cpp_sdk:
-        flags:
-          - cpp_sdk
-        target: auto
-        threshold: 0.1%
-      cli:
-        flags:
-          - cli
-        target: auto
-        threshold: 5%
-      cli_workload:
-        flags:
-          - cli_workload
-        target: auto
-        threshold: 5%
-    patch:
-      default: off
-      cpp_sdk:
-        flags:
-          - cpp_sdk
-        target: 80%
-        informational: true
-      cli:
-        flags:
-          - cli
-        target: 80%
-        informational: true
-      cli_workload:
-        flags:
-          - cli_workload
-        target: 80%
-        informational: true
+    project: off
+    patch: off
 
 flag_management:
   default_rules:
@@ -58,18 +24,43 @@ flag_management:
     - name: cpp_sdk
       paths:
         - ydb/public/sdk/cpp/**
+      statuses:
+        - type: project
+          target: auto
+          threshold: 0.1%
+          flag_coverage_not_uploaded_behavior: exclude
+        - type: patch
+          target: 80%
+          informational: true
+          flag_coverage_not_uploaded_behavior: exclude
     - name: cli
       paths:
         - ydb/apps/ydb/**
         - ydb/public/lib/ydb_cli/**
+      statuses:
+        - type: project
+          target: auto
+          threshold: 5%
+          flag_coverage_not_uploaded_behavior: exclude
+        - type: patch
+          target: 80%
+          informational: true
+          flag_coverage_not_uploaded_behavior: exclude
     - name: cli_workload
       paths:
         - ydb/library/workload/**
+      statuses:
+        - type: project
+          target: auto
+          threshold: 5%
+          flag_coverage_not_uploaded_behavior: exclude
+        - type: patch
+          target: 80%
+          informational: true
+          flag_coverage_not_uploaded_behavior: exclude
 
 comment:
-  layout: "diff, flags, files"
+  layout: "condensed_header, condensed_files, condensed_footer"
   behavior: default
   require_changes: false
-  # Selective PR uploads make the unscoped project aggregate misleading.
-  # Show only freshly measured suite flags.
   hide_project_coverage: true

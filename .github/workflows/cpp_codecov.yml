@@ -176,8 +176,6 @@ jobs:
           persist-credentials: false
 
       - name: Validate Codecov configuration (dogfood only)
-        if: github.event_name == 'push'
-        continue-on-error: true
         run: curl --fail-with-body --data-binary @.github/codecov.yml https://codecov.io/validate
 
       - name: Fetch pinned PR head

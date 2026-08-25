@@ -642,13 +642,13 @@ NTxUT::TPlanStep SetupSchema(
     if (table.Standalone) {
         txBody = TTestSchema::CreateStandaloneTableTxBody(pathId, table.Schema, table.Pk, specials);
     } else {
-        txBody = TTestSchema::CreateInitShardTxBody(pathId, table.Standalone, table.Schema, table.Pk, specials);
+        txBody = TTestSchema::CreateInitShardTxBody(pathId, false, table.Schema, table.Pk, specials);
     }
     return SetupSchema(runtime, sender, txBody, txId);
 }
 
-NTxUT::TPlanStep PrepareTablet(
-    TTestBasicRuntime& runtime, const ui64 tableId, const std::vector<NArrow::NTest::TTestColumn>& schema, const ui32 keySize, const bool standalone) {
+NTxUT::TPlanStep PrepareTablet(TTestBasicRuntime& runtime, const ui64 tableId, const std::vector<NArrow::NTest::TTestColumn>& schema,
+    const ui32 keySize, const bool standalone) {
     using namespace NTxUT;
     CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
 

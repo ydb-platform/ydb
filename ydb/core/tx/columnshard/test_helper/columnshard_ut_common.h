@@ -660,8 +660,8 @@ struct TestTableDescription {
     TString codec = "none", const ui64 txId = 10);
 [[nodiscard]] NTxUT::TPlanStep SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, const ui64 txId);
 
-[[nodiscard]] NTxUT::TPlanStep PrepareTablet(
-    TTestBasicRuntime& runtime, const ui64 tableId, const std::vector<NArrow::NTest::TTestColumn>& schema, const ui32 keySize = 1, const bool standalone = true);
+[[nodiscard]] NTxUT::TPlanStep PrepareTablet(TTestBasicRuntime& runtime, const ui64 tableId,
+    const std::vector<NArrow::NTest::TTestColumn>& schema, const ui32 keySize = 1, const bool standalone = true);
 
 std::shared_ptr<arrow::RecordBatch> ReadAllAsBatch(
     TTestBasicRuntime& runtime, const ui64 tableId, const NOlap::TSnapshot& snapshot, const std::vector<NArrow::NTest::TTestColumn>& schema);

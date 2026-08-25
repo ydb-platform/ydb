@@ -90,7 +90,8 @@ TVector<TRegionPtr> CreateRegions(
     ui64 blockCount,
     ui32 blockSize,
     const TVector<IDirectBlockGroupPtr>& directBlockGroups,
-    const TVChunkConfigByIndex& vChunkConfigs,
+    const TVChunkConfigs& vChunkConfigs,
+    const TDirtyMapStateProtos& dirtyMapStates,
     const TStorageConfig& storageConfig,
     NMonitoring::TDynamicCounterPtr counters)
 {
@@ -108,6 +109,7 @@ TVector<TRegionPtr> CreateRegions(
             i,
             directBlockGroups,
             vChunkConfigs,
+            dirtyMapStates,
             storageConfig.GetSyncRequestsBatchSize(),
             storageConfig.GetVChunkSize(),
             regionCounters);
@@ -127,7 +129,8 @@ TFastPathService::TFastPathService(
     ui64 blockCount,
     ui32 blockSize,
     TVector<IDirectBlockGroupPtr> directBlockGroups,
-    TVChunkConfigByIndex vChunkConfigs,
+    const TVChunkConfigs& vChunkConfigs,
+    const TDirtyMapStateProtos& dirtyMapStates,
     TStorageConfigPtr storageConfig,
     ISchedulerPtr scheduler,
     ITimerPtr timer,
@@ -147,6 +150,7 @@ TFastPathService::TFastPathService(
           blockSize,
           DirectBlockGroups,
           vChunkConfigs,
+          dirtyMapStates,
           *StorageConfig,
           MakeCountersChain(
               counters,
@@ -395,11 +399,24 @@ void TFastPathService::ScheduleAfterDelay(
         std::move(callback));
 }
 
-NThreading::TFuture<void> TFastPathService::UpdateVChunkConfig(
+TPersistResultFuture TFastPathService::UpdateVChunkConfig(
     const TVChunkConfig& cfg)
 {
     auto event =
         std::make_unique<TEvPartitionDirectPrivate::TEvUpdateVChunkConfig>(cfg);
+    auto result = event->UpdateCompleted.GetFuture();
+    ActorSystem->Send(PartitionActorId, event.release());
+    return result;
+}
+
+TPersistResultFuture TFastPathService::UpdateDirtyMapState(
+    ui32 vChunkIndex,
+    TDirtyMapStateProto state)
+{
+    auto event =
+        std::make_unique<TEvPartitionDirectPrivate::TEvUpdateDirtyMapState>(
+            vChunkIndex,
+            std::move(state));
     auto result = event->UpdateCompleted.GetFuture();
     ActorSystem->Send(PartitionActorId, event.release());
     return result;

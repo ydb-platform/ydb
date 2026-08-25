@@ -4,6 +4,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_roles.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/dirty_map.pb.h>
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 
@@ -15,381 +16,14 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-namespace {
-template <typename T>
-TVector<ui64> DoMakeLsnVector(std::span<const T> segments)
-{
-    TVector<ui64> result;
-    result.reserve(segments.size());
-    for (const auto& segment: segments) {
-        result.push_back(segment.Lsn);
-    }
-    return result;
-}
-
-}   // namespace
-
-////////////////////////////////////////////////////////////////////////////////
-
-TReadRangeHint::TReadRangeHint(
-    THostMask hostMask,
-    ui64 lsn,
-    TBlockRange64 requestRelativeRange,
-    TBlockRange64 vchunkRange,
-    TRangeLock&& lock)
-    : HostMask(hostMask)
-    , Lsn(lsn)
-    , RequestRelativeRange(requestRelativeRange)
-    , VChunkRange(vchunkRange)
-    , Lock(std::move(lock))
-{}
-
-TReadRangeHint::TReadRangeHint(TReadRangeHint&& other) noexcept = default;
-TReadRangeHint& TReadRangeHint::operator=(
-    TReadRangeHint&& other) noexcept = default;
-
-TString TReadRangeHint::DebugPrint() const
-{
-    return TStringBuilder()
-           << Lsn << "{" << HostMask.Print() << VChunkRange.Print()
-           << RequestRelativeRange.Print() << "};";
-}
-
-TString TReadHint::DebugPrint() const
-{
-    if (RangeHints.empty()) {
-        return (WaitReady.IsReady()) ? "WaitReady:Ready" : "WaitReady:NotReady";
-    }
-
-    TStringBuilder result;
-    for (const auto& hint: RangeHints) {
-        result << hint.DebugPrint();
-    }
-
-    return result;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-// static
-TVector<ui64> TPBufferSegment::MakeLsnVector(
-    std::span<const TPBufferSegment> segments)
-{
-    TVector<ui64> result;
-    result.reserve(segments.size());
-    for (const auto& segment: segments) {
-        result.push_back(segment.Lsn);
-    }
-    return result;
-}
-
-TString TPBufferSegment::DebugPrint(bool brief) const
-{
-    if (brief) {
-        return ToString(Lsn);
-    }
-    return TStringBuilder() << Lsn << Range.Print();
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-TString TFlushHint::DebugPrint(bool brief) const
-{
-    TStringBuilder builder;
-    bool first = true;
-    for (const auto& segment: Segments) {
-        if (!first) {
-            builder << ",";
-        }
-        builder << segment.DebugPrint(brief);
-        first = false;
-    }
-    return builder;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-void TFlushHints::AddHint(
-    THostIndex source,
-    THostIndex destination,
-    ui64 lsn,
-    TBlockRange64 range)
-{
-    Hints[THostRoute{
-              .SourceHostIndex = source,
-              .DestinationHostIndex = destination}]
-        .Segments.emplace_back(lsn, range);
-}
-
-bool TFlushHints::Empty() const
-{
-    return Hints.empty();
-}
-
-const TFlushHints::THints& TFlushHints::GetAllHints() const
-{
-    return Hints;
-}
-
-TFlushHints::THints TFlushHints::TakeAllHints()
-{
-    return std::move(Hints);
-}
-
-TString TFlushHints::DebugPrint() const
-{
-    TStringBuilder builder;
-    for (const auto& [route, hint]: Hints) {
-        builder << route.DebugPrint() << ":" << hint.DebugPrint(false) << ";";
-    }
-    return builder;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-TString TEraseSegment::DebugPrint(bool brief) const
-{
-    if (brief) {
-        return ToString(Lsn);
-    }
-    return TStringBuilder() << Generation << ":" << Lsn;
-}
-
-TString TEraseHint::DebugPrint(bool brief) const
-{
-    TStringBuilder builder;
-    bool first = true;
-    for (const auto& segment: Segments) {
-        if (!first) {
-            builder << ",";
-        }
-        builder << segment.DebugPrint(brief);
-        first = false;
-    }
-    return builder;
-}
-
-void TEraseHints::AddHint(THostIndex host, ui64 lsn)
-{
-    Hints[host].Segments.emplace_back(
-        0,   // TODO(drbasic)
-        lsn);
-}
-
-bool TEraseHints::Empty() const
-{
-    return Hints.empty();
-}
-
-const TEraseHints::THints& TEraseHints::GetAllHints() const
-{
-    return Hints;
-}
-
-TEraseHints::THints TEraseHints::TakeAllHints()
-{
-    return std::move(Hints);
-}
-
-TString TEraseHints::DebugPrint() const
-{
-    TStringBuilder builder;
-    for (const auto& [host, hint]: Hints) {
-        builder << PrintHostIndex(host) << ":" << hint.DebugPrint(false) << ";";
-    }
-    return builder;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-void TDDiskState::Init(ui64 totalBlockCount, ui64 operationalBlockCount)
-{
-    TotalBlockCount = totalBlockCount;
-    OperationalBlockCount = operationalBlockCount;
-    UpdateState(true);
-}
-
-void TDDiskState::SwitchOffline()
-{
-    State = EState::Disabled;
-    OperationalBlockCount = 0;
-}
-
-bool TDDiskState::IsLagging() const
-{
-    return Lagging;
-}
-
-void TDDiskState::StartLagging()
-{
-    Lagging = true;
-}
-
-void TDDiskState::StopLagging()
-{
-    Lagging = false;
-}
-
-bool TDDiskState::IsTrackingEnabled() const
-{
-    return State != EState::Disabled && (Lagging || IsFresh());
-}
-
-void TDDiskState::OnRangeFlushed(TBlockRange64 range, EFlushCompletion flush)
-{
-    if (!IsTrackingEnabled()) {
-        return;
-    }
-
-    // The replica is lagging and data has not been written. Adding the range to
-    // the behind map. Due to lagging switching races with notifications, it is
-    // possible to receive successful flush confirmation on a lagging replica.
-    // We will ignore such ranges for safety.
-    if (Lagging && flush == EFlushCompletion::Missed) {
-        BehindField.Add(range);
-    }
-
-    // The replica is not lagging and data has been written. Adding the range to
-    // the ahead map.
-    if (!Lagging && flush == EFlushCompletion::Completed) {
-        AddAhead(range);
-    }
-
-    UpdateState(false);
-}
-
-TDDiskState::EState TDDiskState::GetState() const
-{
-    return State;
-}
-
-bool TDDiskState::CanReadFromDDisk(TBlockRange64 range) const
-{
-    if (State == EState::Disabled) {
-        return false;
-    }
-    if (State == EState::Operational) {
-        return true;
-    }
-
-    // if (AheadField.Contains(range))
-    //    return true;
-    if (BehindField.Overlaps(range)) {
-        return false;
-    }
-
-    return range.End < OperationalBlockCount;
-}
-
-std::optional<TBlockRange64> TDDiskState::GetFreshRange() const
-{
-    std::optional<TBlockRange64> result;
-
-    if (GetState() == TDDiskState::EState::Operational ||
-        GetState() == TDDiskState::EState::Disabled)
-    {
-        return result;
-    }
-
-    if (!BehindField.Empty()) {
-        BehindField.Enumerate(
-            [&](TBlockRange64 range)
-            {
-                result = range;
-                return TBlockRangeField::EEnumerateContinuation::Stop;
-            });
-        return result;
-    }
-
-    result = TBlockRange64::WithLength(
-        OperationalBlockCount,
-        TotalBlockCount - OperationalBlockCount);
-
-    return result;
-}
-
-void TDDiskState::RangeSynced(TBlockRange64 range)
-{
-    BehindField.Remove(range);
-    AheadField.Remove(range);
-
-    const ui64 newWatermark = range.End + 1;
-    if (OperationalBlockCount < newWatermark &&
-        !BehindField.Overlaps(TBlockRange64::WithLength(0, newWatermark)))
-    {
-        OperationalBlockCount = newWatermark;
-    }
-    UpdateState(false);
-}
-
-void TDDiskState::UpdateWatermarkDebugOnly(ui64 blockCount)
-{
-    Y_ABORT_UNLESS(blockCount <= TotalBlockCount);
-
-    OperationalBlockCount = blockCount;
-    UpdateState(false);
-}
-
-TString TDDiskState::DebugPrint() const
-{
-    TStringBuilder result;
-    result << "{" << ToString(State);
-    if (State == EState::Fresh) {
-        result << (Lagging ? "-" : "+");
-    }
-    result << "," << OperationalBlockCount << "}";
-    return result;
-}
-
-TString TDDiskState::DebugPrintAhead() const
-{
-    return AheadField.Print();
-}
-
-TString TDDiskState::DebugPrintBehind() const
-{
-    return BehindField.Print();
-}
-
-bool TDDiskState::IsFresh() const
-{
-    return OperationalBlockCount != TotalBlockCount || !BehindField.Empty();
-}
-
-void TDDiskState::UpdateState(bool force)
-{
-    if (!force && State == EState::Disabled) {
-        return;
-    }
-
-    State = IsFresh() ? EState::Fresh : EState::Operational;
-}
-
-void TDDiskState::AddAhead(TBlockRange64 range)
-{
-    Y_ABORT_UNLESS(!Lagging);
-
-    BehindField.Remove(range);
-    AheadField.Add(range);
-    if (OperationalBlockCount) {
-        AheadField.Remove(TBlockRange64::WithLength(0, OperationalBlockCount));
-    }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 TString TPBufferCounters::DebugPrint() const
 {
     TStringBuilder result;
 
-    result << "{CurrentRecordsCount:" << CurrentRecordsCount << ", "
-           << "CurrentBytesCount:" << CurrentBytesCount << ", "
-           << "TotalRecordsCount:" << TotalRecordsCount << ", "
-           << "TotalBytesCount:" << TotalBytesCount << ", "
-           << "CurrentLockedRecordsCount:" << CurrentLockedRecordsCount << ", "
-           << "CurrentLockedBytesCount:" << CurrentLockedBytesCount << ", "
-           << "TotalLockedRecordsCount:" << TotalLockedRecordsCount << ", "
-           << "TotalLockedBytesCount:" << TotalLockedBytesCount << "}";
+    result << "{Current:" << Current.Print(true) << ", "
+           << "Total:" << Total.Print(true) << ", "
+           << "CurrentLocked:" << CurrentLocked.Print(true) << ", "
+           << "TotalLocked:" << TotalLocked.Print(true) << "}";
 
     return result;
 }
@@ -419,6 +53,15 @@ TBlocksDirtyMap::~TBlocksDirtyMap()
         });
 }
 
+void TBlocksDirtyMap::Load(const TDirtyMapStateProto& proto)
+{
+    size_t ddisk = 0;   // TODO (drbasic). Reliable ddisk matching.
+    for (const auto& ddiskState: proto.GetDDiskStates()) {
+        DDiskStates[ddisk].Load(ddiskState);
+        ++ddisk;
+    }
+}
+
 void TBlocksDirtyMap::UpdateConfig(const TVChunkConfig& vChunkConfig)
 {
     ResizeHosts(vChunkConfig.GetHostCount());
@@ -434,6 +77,7 @@ void TBlocksDirtyMap::UpdateConfig(const TVChunkConfig& vChunkConfig)
     for (auto indx: added) {
         const auto watermark = vChunkConfig.GetWatermark(indx);
         DDiskStates[indx].Init(
+            this,
             BlockCount,
             watermark ? *watermark / BlockSize : BlockCount);
     }
@@ -627,6 +271,11 @@ TEraseHints TBlocksDirtyMap::MakeEraseHint(size_t batchSize)
         Y_ABORT_UNLESS(item);
 
         auto& val = item->Value;
+
+        if (!CheckEraseAbility(item->Range, val)) {
+            ReadyToErase.insert(lsn);
+            continue;
+        }
 
         for (THostIndex host: val.GetEraseNeeded()) {
             val.RequestErase(host);
@@ -923,13 +572,35 @@ const TPBufferCounters& TBlocksDirtyMap::GetPBufferCounters(
     return PBufferCounters[host];
 }
 
-ui64 TBlocksDirtyMap::GetPBufferUsedSize(THostIndex host) const
+TCountAndSize TBlocksDirtyMap::GetPBuffersUsage(THostIndex host) const
 {
     if (host >= PBufferCounters.size()) {
-        return 0;
+        return {};
     }
 
-    return PBufferCounters[host].CurrentBytesCount;
+    return PBufferCounters[host].Current;
+}
+
+TCountAndSize TBlocksDirtyMap::GetAheadBlocks(THostIndex host) const
+{
+    if (host >= DDiskStates.size()) {
+        return {};
+    }
+
+    TCountAndSize result = DDiskStates[host].GetAheadSegmentsStat();
+    result.Size *= BlockSize;
+    return result;
+}
+
+TCountAndSize TBlocksDirtyMap::GetBehindBlocks(THostIndex host) const
+{
+    if (host >= DDiskStates.size()) {
+        return {};
+    }
+
+    TCountAndSize result = DDiskStates[host].GetBehindSegmentsStat();
+    result.Size *= BlockSize;
+    return result;
 }
 
 void TBlocksDirtyMap::LockPBuffer(ui64 lsn)
@@ -1034,17 +705,13 @@ void TBlocksDirtyMap::DataToPBufferAdded(
 
     switch (counter) {
         case IReadyQueue::EPBufferCounter::Total: {
-            counters.CurrentRecordsCount++;
-            counters.CurrentBytesCount += byteCount;
-            counters.TotalRecordsCount++;
-            counters.TotalBytesCount += byteCount;
+            counters.Current.Add(byteCount);
+            counters.Total.Add(byteCount);
             break;
         }
         case IReadyQueue::EPBufferCounter::Locked: {
-            counters.CurrentLockedRecordsCount++;
-            counters.CurrentLockedBytesCount += byteCount;
-            counters.TotalLockedRecordsCount++;
-            counters.TotalLockedBytesCount += byteCount;
+            counters.CurrentLocked.Add(byteCount);
+            counters.TotalLocked.Add(byteCount);
             break;
         }
     }
@@ -1059,22 +726,19 @@ void TBlocksDirtyMap::DataFromPBufferReleased(
 
     switch (counter) {
         case IReadyQueue::EPBufferCounter::Total: {
-            Y_ABORT_UNLESS(counters.CurrentRecordsCount > 0);
-            Y_ABORT_UNLESS(counters.CurrentBytesCount >= byteCount);
-
-            counters.CurrentRecordsCount--;
-            counters.CurrentBytesCount -= byteCount;
+            counters.Current.Sub(byteCount);
             break;
         }
         case IReadyQueue::EPBufferCounter::Locked: {
-            Y_ABORT_UNLESS(counters.CurrentLockedRecordsCount > 0);
-            Y_ABORT_UNLESS(counters.CurrentLockedBytesCount >= byteCount);
-
-            counters.CurrentLockedRecordsCount--;
-            counters.CurrentLockedBytesCount -= byteCount;
+            counters.CurrentLocked.Sub(byteCount);
             break;
         }
     }
+}
+
+void TBlocksDirtyMap::OnBehindAheadChanged()
+{
+    ++BehindAheadGeneration;
 }
 
 bool TBlocksDirtyMap::NeedFlush() const
@@ -1085,6 +749,34 @@ bool TBlocksDirtyMap::NeedFlush() const
 bool TBlocksDirtyMap::NeedErase() const
 {
     return !ReadyToErase.empty() || !ReadyToEraseBelated.empty();
+}
+
+bool TBlocksDirtyMap::NeedPersist() const
+{
+    return BehindAheadGeneration > PersistedGeneration;
+}
+
+TDirtyMapStateProto TBlocksDirtyMap::GetStateForPersist() const
+{
+    TDirtyMapStateProto result;
+    result.SetStateGeneration(GetCurrentGeneration());
+    for (const auto& ddiskState: DDiskStates) {
+        ddiskState.Save(result.AddDDiskStates());
+    }
+    return result;
+}
+
+void TBlocksDirtyMap::StatePersisted(ui32 persistGeneration)
+{
+    Y_ABORT_UNLESS(persistGeneration > PersistedGeneration);
+    Y_ABORT_UNLESS(persistGeneration <= BehindAheadGeneration);
+
+    PersistedGeneration = persistGeneration;
+}
+
+ui32 TBlocksDirtyMap::GetCurrentGeneration() const
+{
+    return BehindAheadGeneration;
 }
 
 TString TBlocksDirtyMap::DebugPrintPBuffers()
@@ -1193,6 +885,20 @@ TString TBlocksDirtyMap::DebugPrintBehind() const
             continue;
         }
         result << "  " << PrintHostIndex(h) << ": " << behind << "\n";
+    }
+    return result;
+}
+
+TString TBlocksDirtyMap::DebugPrintAheadBehindBrief() const
+{
+    TStringBuilder result;
+    result << "gen:" << GetCurrentGeneration() << "/" << PersistedGeneration
+           << " ";
+    for (THostIndex h = 0; h < GetHostCount(); ++h) {
+        auto brief = DDiskStates[h].DebugPrintAheadBehindBrief();
+        if (brief) {
+            result << PrintHostIndex(h) << ":" << brief;
+        }
     }
     return result;
 }
@@ -1332,6 +1038,44 @@ void TBlocksDirtyMap::InflightFlushFinished(TBlockRange64 range)
         });
 }
 
+bool TBlocksDirtyMap::CheckEraseAbility(
+    TBlockRange64 range,
+    TInflightInfo& inflightInfo)
+{
+    if (BehindAheadGeneration == 0) {
+        // There is not a single red block.
+        return true;
+    }
+
+    if (inflightInfo.GetPersistGeneration() &&
+        inflightInfo.GetPersistGeneration() <= PersistedGeneration)
+    {
+        // Red blocks already persisted. Can erase.
+        return true;
+    }
+
+    const bool eraseBlocked = AnyOf(
+        DDiskStates,
+        [&](const TDDiskState& ddiskState)
+        {
+            return ddiskState.IsTrackingEnabled() &&
+                   ddiskState.HasBehindOverlapping(range);
+        });
+
+    if (!eraseBlocked) {
+        // Don't overlaps with red blocks. Can erase.
+        return true;
+    }
+
+    if (!inflightInfo.GetPersistGeneration()) {
+        // The red blocks from this inflightInfo are already in the current
+        // generation. Start waiting for data with the current or newer
+        // generation to be persisted.
+        inflightInfo.SetPersistGeneration(BehindAheadGeneration);
+    }
+    return false;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 bool TBlocksDirtyMap::TInfoEraseBelated::operator<(
@@ -1343,18 +1087,6 @@ bool TBlocksDirtyMap::TInfoEraseBelated::operator<(
     };
 
     return makeTuple(*this) < makeTuple(other);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-TVector<ui64> MakeLsnVector(std::span<const TPBufferSegment> segments)
-{
-    return DoMakeLsnVector<TPBufferSegment>(segments);
-}
-
-TVector<ui64> MakeLsnVector(std::span<const TEraseSegment> segments)
-{
-    return DoMakeLsnVector<TEraseSegment>(segments);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

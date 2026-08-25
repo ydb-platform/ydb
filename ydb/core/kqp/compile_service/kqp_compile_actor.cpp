@@ -142,6 +142,9 @@ public:
 
         if (UserRequestContext && UserRequestContext->IsStreamingQuery) {
             config->_KqpEnableSpilling = false;
+            config->OptValidateStreamingCheckpoints = true;
+        } else {
+            config->OptValidateStreamingCheckpoints = false;
         }
 
         if (UsePessimisticLocks) {

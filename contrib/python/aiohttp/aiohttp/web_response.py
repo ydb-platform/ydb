@@ -6,6 +6,7 @@ import json
 import math
 import time
 import warnings
+import zlib
 from concurrent.futures import Executor
 from http import HTTPStatus
 from http.cookies import SimpleCookie
@@ -75,9 +76,20 @@ CONTENT_CODINGS = {coding.value: coding for coding in ContentCoding}
 
 class StreamResponse(BaseClass, HeadersMixin):
 
-    _length_check = True
-
     _body: Union[None, bytes, bytearray, Payload]
+    _length_check = True
+    _body = None
+    _keep_alive: Optional[bool] = None
+    _chunked: bool = False
+    _compression: bool = False
+    _compression_strategy: int = zlib.Z_DEFAULT_STRATEGY
+    _compression_force: Optional[ContentCoding] = None
+    _req: Optional["BaseRequest"] = None
+    _payload_writer: Optional[AbstractStreamWriter] = None
+    _eof_sent: bool = False
+    _must_be_empty_body: Optional[bool] = None
+    _body_length = 0
+    _cookies: Optional[SimpleCookie] = None
 
     def __init__(
         self,
@@ -85,22 +97,20 @@ class StreamResponse(BaseClass, HeadersMixin):
         status: int = 200,
         reason: Optional[str] = None,
         headers: Optional[LooseHeaders] = None,
+        _real_headers: Optional[CIMultiDict[str]] = None,
     ) -> None:
-        self._body = None
-        self._keep_alive: Optional[bool] = None
-        self._chunked = False
-        self._compression = False
-        self._compression_force: Optional[ContentCoding] = None
-        self._cookies = SimpleCookie()
+        """Initialize a new stream response object.
 
-        self._req: Optional[BaseRequest] = None
-        self._payload_writer: Optional[AbstractStreamWriter] = None
-        self._eof_sent = False
-        self._must_be_empty_body: Optional[bool] = None
-        self._body_length = 0
+        _real_headers is an internal parameter used to pass a pre-populated
+        headers object. It is used by the `Response` class to avoid copying
+        the headers when creating a new response object. It is not intended
+        to be used by external code.
+        """
         self._state: Dict[str, Any] = {}
 
-        if headers is not None:
+        if _real_headers is not None:
+            self._headers = _real_headers
+        elif headers is not None:
             self._headers: CIMultiDict[str] = CIMultiDict(headers)
         else:
             self._headers = CIMultiDict()
@@ -169,17 +179,18 @@ class StreamResponse(BaseClass, HeadersMixin):
 
     def enable_chunked_encoding(self, chunk_size: Optional[int] = None) -> None:
         """Enables automatic chunked transfer encoding."""
-        self._chunked = True
-
         if hdrs.CONTENT_LENGTH in self._headers:
             raise RuntimeError(
-                "You can't enable chunked encoding when " "a content length is set"
+                "You can't enable chunked encoding when a content length is set"
             )
         if chunk_size is not None:
             warnings.warn("Chunk size is deprecated #1615", DeprecationWarning)
+        self._chunked = True
 
     def enable_compression(
-        self, force: Optional[Union[bool, ContentCoding]] = None
+        self,
+        force: Optional[Union[bool, ContentCoding]] = None,
+        strategy: int = zlib.Z_DEFAULT_STRATEGY,
     ) -> None:
         """Enables response compression encoding."""
         # Backwards compatibility for when force was a bool <0.17.
@@ -189,12 +200,13 @@ class StreamResponse(BaseClass, HeadersMixin):
                 "Using boolean for force is deprecated #3318", DeprecationWarning
             )
         elif force is not None:
-            assert isinstance(force, ContentCoding), (
-                "force should one of " "None, bool or " "ContentEncoding"
-            )
+            assert isinstance(
+                force, ContentCoding
+            ), "force should one of None, bool or ContentEncoding"
 
         self._compression = True
         self._compression_force = force
+        self._compression_strategy = strategy
 
     @property
     def headers(self) -> "CIMultiDict[str]":
@@ -202,6 +214,8 @@ class StreamResponse(BaseClass, HeadersMixin):
 
     @property
     def cookies(self) -> SimpleCookie:
+        if self._cookies is None:
+            self._cookies = SimpleCookie()
         return self._cookies
 
     def set_cookie(
@@ -223,10 +237,8 @@ class StreamResponse(BaseClass, HeadersMixin):
         Sets new cookie or updates existent with new value.
         Also updates only those params which are not None.
         """
-        old = self._cookies.get(name)
-        if old is not None and old.coded_value == "":
-            # deleted cookie
-            self._cookies.pop(name, None)
+        if self._cookies is None:
+            self._cookies = SimpleCookie()
 
         self._cookies[name] = value
         c = self._cookies[name]
@@ -256,14 +268,22 @@ class StreamResponse(BaseClass, HeadersMixin):
             c["samesite"] = samesite
 
     def del_cookie(
-        self, name: str, *, domain: Optional[str] = None, path: str = "/"
+        self,
+        name: str,
+        *,
+        domain: Optional[str] = None,
+        path: str = "/",
+        secure: Optional[bool] = None,
+        httponly: Optional[bool] = None,
+        samesite: Optional[str] = None,
     ) -> None:
         """Delete cookie.
 
         Creates new empty expired cookie.
         """
         # TODO: do we need domain/path here?
-        self._cookies.pop(name, None)
+        if self._cookies is not None:
+            self._cookies.pop(name, None)
         self.set_cookie(
             name,
             "",
@@ -271,6 +291,9 @@ class StreamResponse(BaseClass, HeadersMixin):
             expires="Thu, 01 Jan 1970 00:00:00 GMT",
             domain=domain,
             path=path,
+            secure=secure,
+            httponly=httponly,
+            samesite=samesite,
         )
 
     @property
@@ -284,7 +307,7 @@ class StreamResponse(BaseClass, HeadersMixin):
             value = int(value)
             if self._chunked:
                 raise RuntimeError(
-                    "You can't set content length when " "chunked encoding is enable"
+                    "You can't set content length when chunked encoding is enable"
                 )
             self._headers[hdrs.CONTENT_LENGTH] = str(value)
         else:
@@ -400,7 +423,9 @@ class StreamResponse(BaseClass, HeadersMixin):
             return
         assert self._payload_writer is not None
         self._headers[hdrs.CONTENT_ENCODING] = coding.value
-        self._payload_writer.enable_compression(coding.value)
+        self._payload_writer.enable_compression(
+            coding.value, self._compression_strategy
+        )
         # Compressed payload may have different content length,
         # remove the header
         self._headers.popall(hdrs.CONTENT_LENGTH, None)
@@ -465,8 +490,6 @@ class StreamResponse(BaseClass, HeadersMixin):
             if not self._must_be_empty_body:
                 writer.enable_chunking()
                 headers[hdrs.TRANSFER_ENCODING] = "chunked"
-            if hdrs.CONTENT_LENGTH in headers:
-                del headers[hdrs.CONTENT_LENGTH]
         elif self._length_check:  # Disabled for WebSockets
             writer.length = self.content_length
             if writer.length is None:
@@ -512,7 +535,7 @@ class StreamResponse(BaseClass, HeadersMixin):
         status_line = f"HTTP/{version[0]}.{version[1]} {self._status} {self._reason}"
         await writer.write_headers(status_line, self._headers)
 
-    async def write(self, data: bytes) -> None:
+    async def write(self, data: Union[bytes, bytearray, memoryview]) -> None:
         assert isinstance(
             data, (bytes, bytearray, memoryview)
         ), "data argument must be byte-ish (%r)" % type(data)
@@ -583,6 +606,9 @@ class StreamResponse(BaseClass, HeadersMixin):
 
 
 class Response(StreamResponse):
+
+    _compressed_body: Optional[bytes] = None
+
     def __init__(
         self,
         *,
@@ -601,13 +627,11 @@ class Response(StreamResponse):
 
         if headers is None:
             real_headers: CIMultiDict[str] = CIMultiDict()
-        elif not isinstance(headers, CIMultiDict):
-            real_headers = CIMultiDict(headers)
         else:
-            real_headers = headers  # = cast('CIMultiDict[str]', headers)
+            real_headers = CIMultiDict(headers)
 
         if content_type is not None and "charset" in content_type:
-            raise ValueError("charset must not be in content_type " "argument")
+            raise ValueError("charset must not be in content_type argument")
 
         if text is not None:
             if hdrs.CONTENT_TYPE in real_headers:
@@ -640,14 +664,13 @@ class Response(StreamResponse):
                 content_type += "; charset=" + charset
             real_headers[hdrs.CONTENT_TYPE] = content_type
 
-        super().__init__(status=status, reason=reason, headers=real_headers)
+        super().__init__(status=status, reason=reason, _real_headers=real_headers)
 
         if text is not None:
             self.text = text
         else:
             self.body = body
 
-        self._compressed_body: Optional[bytes] = None
         self._zlib_executor_size = zlib_executor_size
         self._zlib_executor = zlib_executor
 
@@ -754,7 +777,7 @@ class Response(StreamResponse):
                 body_len = len(self._body) if self._body else "0"
                 # https://www.rfc-editor.org/rfc/rfc9110.html#section-8.6-7
                 if body_len != "0" or (
-                    self.status != 304 and request.method.upper() != hdrs.METH_HEAD
+                    self.status != 304 and request.method not in hdrs.METH_HEAD_ALL
                 ):
                     self._headers[hdrs.CONTENT_LENGTH] = str(body_len)
 

@@ -1,0 +1,15 @@
+items:
+- name: Рецепты коллекций резервных копий
+  href: backup-collections/index.md
+  include:
+    mode: link
+    path: backup-collections/toc_p.yaml
+- name: Рецепты резервного копирования системных таблеток
+  href: system-tablet-backup/index.md
+  include:
+    mode: link
+    path: system-tablet-backup/toc_p.yaml
+- name: Резервное копирование в NFS
+  href: nfs-backup/nfs-backup.md
+- name: Импорт и экспорт данных в колоночные таблицы
+  href: import-export-column-tables.md

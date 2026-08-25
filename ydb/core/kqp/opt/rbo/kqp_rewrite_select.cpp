@@ -1372,7 +1372,12 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
                                         distinctAggregationTraitsPostAggregate, havingFilterLambda, uniqueAggColumnId, distinctAll, ctx, node->Pos());
         }
 
+        auto values = GetSetting(setItem->Tail(), "values");
+        Y_ENSURE(!values, "New RBO does not support 'values' set items");
+
         auto result = GetSetting(setItem->Tail(), "result");
+        Y_ENSURE(result || values, "New RBO expects either 'values' or 'result' at a set item");
+        
         // Process all aggregations in result item.
         ProcessAggregationsInResultItems(result, aggregationUniqueColNames, expressionsMapPreAgg, groupByKeysExpressionsMap, aggregationTraits,
                                          distinctAggregationTraitsPostAggregate, expressionsMapPostAgg, uniqueAggColumnId, distinctAll, ctx, node->Pos());

@@ -88,9 +88,9 @@ public:
             serializedRequest = request->Serialize();
         } catch (const std::exception& ex) {
             responseHandler->HandleError(TError(NRpc::EErrorCode::TransportError, "Request serialization failed")
-                << *EndpointAttributes
-                << TErrorAttribute("request_id", request->GetRequestId())
-                << ex);
+                .With(*EndpointAttributes)
+                .With("request_id", request->GetRequestId())
+                .With(ex));
             return nullptr;
         }
 
@@ -328,8 +328,8 @@ private:
         void ReportError(const TError& error)
         {
             auto detailedError = error
-                << TErrorAttribute("request_id", RequestId_)
-                << GetEndpointAttributes();
+                .With("request_id", RequestId_)
+                .With(GetEndpointAttributes());
 
             YT_TLOG_DEBUG("Local request failed")
                 .With("RequestId", RequestId_)

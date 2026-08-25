@@ -1,13 +1,28 @@
 name: Codecov C++ (SDK / CLI / workload)
 
-# pull_request_target: required for fork → upstream PRs so repo secrets (CODECOV_TOKEN, AWS, …)
-# are available. Workflow YAML is always taken from the base branch (main).
-# Product code is checked out from refs/pull/<n>/merge; coverage actions/scripts are then
-# overlaid from the PR base SHA so an untrusted PR tree cannot replace secret-bearing helpers.
+# PR coverage intentionally uses pull_request_target: repository secrets and
+# self-hosted runners are available only after the trusted workflow from main
+# verifies that the PR author and event sender have write access, or a repository
+# writer explicitly approves an external PR with ok-to-test. Product code is
+# checked out at the exact PR head SHA, while coverage helpers come from the PR
+# base SHA.
 on:
   pull_request_target:
     branches: [main]
-    types: [opened, synchronize, reopened, labeled]
+    types: [opened, synchronize, reopened, closed, labeled]
+    paths:
+      - "ydb/public/sdk/cpp/**"
+      - "ydb/apps/ydb/**"
+      - "ydb/public/lib/ydb_cli/**"
+      - "ydb/tests/functional/ydb_cli/**"
+      - "ydb/library/workload/**"
+      - ".github/actions/run_clang_codecov/**"
+      - ".github/actions/setup_ci_ydb_service_account_key_file_credentials/**"
+      - ".github/scripts/codecov/**"
+      - "!.github/scripts/codecov/tests/**"
+      - ".github/workflows/cpp_codecov.yml"
+      - ".github/workflows/cpp_codecov_checks.yml"
+      - ".github/codecov.yml"
   push:
     branches: [main]
     paths:
@@ -17,208 +32,288 @@ on:
       - "ydb/tests/functional/ydb_cli/**"
       - "ydb/library/workload/**"
       - ".github/actions/run_clang_codecov/**"
-      - ".github/scripts/tests/codecov_suites.py"
-      - ".github/scripts/tests/detect_codecov_matrix.py"
-      - ".github/scripts/tests/export_coverage_lcov.py"
-      - ".github/scripts/tests/generate_coverage_landing.py"
-      - ".github/scripts/tests/overlay_trusted_codecov_ci.sh"
+      - ".github/actions/setup_ci_ydb_service_account_key_file_credentials/**"
+      - ".github/scripts/codecov/**"
+      - "!.github/scripts/codecov/tests/**"
       - ".github/workflows/cpp_codecov.yml"
+      - ".github/workflows/cpp_codecov_checks.yml"
       - ".github/codecov.yml"
-  # Baselines on main: push + paths above (only changed suites). No weekly cron —
-  # unused flags stay via Codecov carryforward until the next relevant merge.
-  workflow_dispatch:
-    inputs:
-      suites:
-        description: Suites to run (use "all" to seed Codecov / S3 baselines on main)
-        type: choice
-        options:
-          - all
-          - cpp_sdk
-          - cli
-          - cli_workload
-        default: all
 
+# GitHub cannot filter label names in `on`. Irrelevant labels therefore get a
+# unique workflow group and skip every job. ok-to-test shares the PR group but
+# label events cannot cancel a running workflow before the sender is verified.
+# A later synchronize/closed event can still invalidate the approved PR SHA.
+# Main runs use a unique workflow-level group: a later main push must not cancel
+# a different suite before its new baseline reaches Codecov.
 concurrency:
   group: >-
     ${{
-      startsWith(github.event_name, 'pull_request') && format('codecov-pr-{0}', github.event.pull_request.number)
-      || github.event_name == 'workflow_dispatch' && 'codecov-manual'
-      || 'codecov-main'
+      github.event_name == 'pull_request_target'
+      && format('codecov-pr-{0}{1}', github.event.pull_request.number,
+          github.event.action == 'labeled' && github.event.label.name != 'ok-to-test'
+          && format('-ignore-{0}', github.run_id) || '')
+      || format('codecov-{0}-{1}', github.event_name, github.run_id)
     }}
-  cancel-in-progress: true
+  cancel-in-progress: >-
+    ${{ github.event_name == 'pull_request_target' && github.event.action != 'labeled' }}
 
 permissions:
   contents: read
-  pull-requests: write
-  statuses: write
+  pull-requests: read
 
 jobs:
   detect:
     name: Detect suites
-    # Upstream only; PRs only when targeting main (stable-* etc. skip the whole job).
     if: >-
       github.repository == 'ydb-platform/ydb' &&
-      (!startsWith(github.event_name, 'pull_request') || github.base_ref == 'main')
+      (github.event_name != 'pull_request_target' ||
+       (github.event.pull_request.state == 'open' &&
+        github.base_ref == 'main' &&
+        (github.event.action != 'labeled' || github.event.label.name == 'ok-to-test')))
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.decide.outputs.matrix || '[]' }}
       should_run: ${{ steps.decide.outputs.should_run || 'false' }}
-      hanging_labels: ${{ steps.decide.outputs.hanging_labels || '[]' }}
-      # Head SHA for Codecov/S3 meta; PR number for S3 prefix (empty on push/manual).
-      commit_sha: ${{ github.event.pull_request.head.sha || github.sha }}
-      pr_number: ${{ github.event.pull_request.number || '' }}
+      checkout_repository: ${{ steps.metadata.outputs.checkout_repository }}
+      checkout_sha: ${{ steps.metadata.outputs.checkout_sha }}
+      base_sha: ${{ steps.metadata.outputs.base_sha }}
+      report_sha: ${{ steps.metadata.outputs.report_sha }}
+      report_branch: ${{ steps.metadata.outputs.report_branch }}
+      pr_number: ${{ steps.metadata.outputs.pr_number }}
+      storage_prefix: ${{ steps.metadata.outputs.storage_prefix }}
     steps:
-      # pull_request_target runs with secrets; only collaborators may trigger (fork PRs included).
-      - name: Collaborator check
-        if: startsWith(github.event_name, 'pull_request')
+      - name: Authorize PR coverage
+        id: authorization
+        if: github.event_name == 'pull_request_target'
+        uses: actions/github-script@v8
+        with:
+          # The restricted workflow GITHUB_TOKEN returned false 404 responses
+          # for this endpoint. This PAT is used only by the trusted gate.
+          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          script: |
+            const getPermission = async (username) => {
+              try {
+                const { data } = await github.rest.repos.getCollaboratorPermissionLevel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  username,
+                });
+                return data.permission;
+              } catch (error) {
+                if (!error.status || error.status !== 404) throw error;
+                return 'none';
+              }
+            };
+            const isWriter = (permission) => ['admin', 'write'].includes(permission);
+
+            if (context.payload.action === 'labeled') {
+              if (context.payload.label?.name !== 'ok-to-test') {
+                core.setOutput('allowed', 'false');
+                return;
+              }
+              const sender = context.payload.sender.login;
+              const permission = await getPermission(sender);
+              if (!isWriter(permission)) {
+                core.warning(
+                  `Ignoring ok-to-test from @${sender}: write permission is required (${permission}).`
+                );
+                core.setOutput('allowed', 'false');
+                return;
+              }
+              core.info(`PR coverage approved by @${sender}.`);
+              core.setOutput('allowed', 'true');
+              return;
+            }
+
+            const users = [...new Set([
+              context.payload.pull_request.user.login,
+              context.payload.sender.login,
+            ])];
+
+            for (const username of users) {
+              const permission = await getPermission(username);
+              if (!isWriter(permission)) {
+                core.notice(
+                  `C++ coverage is waiting for a repository writer to apply ok-to-test ` +
+                  `(@${username}: ${permission}).`
+                );
+                core.setOutput('allowed', 'false');
+                return;
+              }
+            }
+            core.setOutput('allowed', 'true');
+
+      - name: Pin PR head
+        id: pr
+        if: >-
+          github.event_name == 'pull_request_target' &&
+          steps.authorization.outputs.allowed == 'true'
         uses: actions/github-script@v8
         with:
           script: |
-            const sender = context.payload.sender.login;
-            try {
-              await github.rest.repos.checkCollaborator({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                username: sender,
-              });
-            } catch (error) {
-              if (!error.status || error.status != 404) throw error;
-              core.setFailed(
-                `Only repository collaborators can trigger Codecov (sender: @${sender}).`
-              );
+            const eventPr = context.payload.pull_request;
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: eventPr.number,
+            });
+
+            if (pr.state !== 'open' || pr.base.repo.full_name !== context.repo.owner + '/' + context.repo.repo || pr.base.ref !== 'main') {
+              core.setFailed('Coverage runs only for open pull requests targeting ydb-platform/ydb:main.');
+              return;
+            }
+            if (pr.head.sha !== eventPr.head.sha) {
+              core.setFailed('The PR head changed after this workflow started. Please use the latest run.');
+              return;
+            }
+            if (!pr.head.repo) {
+              core.setFailed('The PR head repository is unavailable.');
+              return;
             }
 
-      # PR product tree (merge ref). push / workflow_dispatch: the event commit.
-      - uses: actions/checkout@v5
-        with:
-          ref: ${{ startsWith(github.event_name, 'pull_request') && format('refs/pull/{0}/merge', github.event.pull_request.number) || github.sha }}
-          fetch-depth: 0
+            const branch = pr.head.repo.full_name === pr.base.repo.full_name
+              ? pr.head.ref
+              : pr.head.label;
+            core.setOutput('repository', pr.head.repo.full_name);
+            core.setOutput('sha', pr.head.sha);
+            core.setOutput('base_sha', eventPr.base.sha);
+            core.setOutput('branch', branch);
 
-      # Trusted marketplace action + inline copy (not a local composite): helpers must
-      # come from base, not from the PR tree that was just checked out.
-      - name: Checkout trusted coverage CI helpers from base
-        if: startsWith(github.event_name, 'pull_request')
+      - name: Checkout trusted detection helpers
+        if: >-
+          github.event_name != 'pull_request_target' ||
+          steps.authorization.outputs.allowed == 'true'
         uses: actions/checkout@v5
         with:
-          ref: ${{ github.event.pull_request.base.sha }}
+          repository: ${{ github.repository }}
+          ref: ${{ steps.pr.outputs.base_sha || github.sha }}
+          fetch-depth: 0
           sparse-checkout: |
-            .github/actions/run_clang_codecov
-            .github/actions/setup_ci_ydb_service_account_key_file_credentials
-            .github/scripts/tests/codecov_suites.py
-            .github/scripts/tests/detect_codecov_matrix.py
-            .github/scripts/tests/export_coverage_lcov.py
-            .github/scripts/tests/generate_coverage_landing.py
-            .github/scripts/tests/overlay_trusted_codecov_ci.sh
+            .github/scripts/codecov/codecov_suites.py
+            .github/scripts/codecov/detect_codecov_matrix.py
           sparse-checkout-cone-mode: false
-          path: _trusted_coverage_ci
+          persist-credentials: false
 
-      - name: Overlay trusted coverage CI helpers
-        if: startsWith(github.event_name, 'pull_request')
-        run: bash _trusted_coverage_ci/.github/scripts/tests/overlay_trusted_codecov_ci.sh
-
-      - name: Strip coverage labels on sync/open/reopen
-        if: >-
-          startsWith(github.event_name, 'pull_request') &&
-          (github.event.action == 'synchronize' ||
-           github.event.action == 'opened' ||
-           github.event.action == 'reopened')
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR: ${{ github.event.pull_request.number }}
-        run: |
-          set -euo pipefail
-          labels=$(gh api "repos/${{ github.repository }}/issues/${PR}/labels" --jq '.[].name')
-          for lab in coverage/sdk coverage/cli coverage/workload coverage/all; do
-            if printf '%s\n' "$labels" | grep -qx "$lab"; then
-              echo "Removing label $lab (paths-only mode after ${{ github.event.action }})"
-              enc=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=''))" "$lab")
-              gh api -X DELETE "repos/${{ github.repository }}/issues/${PR}/labels/${enc}" || true
-            fi
-          done
-
-      - name: Collect changed files / labels
+      - name: Collect changed files
         id: inputs
+        if: >-
+          github.event_name != 'pull_request_target' ||
+          steps.authorization.outputs.allowed == 'true'
         env:
-          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE_SHA: ${{ github.event.before }}
+          AFTER_SHA: ${{ github.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD_SHA: ${{ steps.pr.outputs.sha }}
+          PR_BASE_SHA: ${{ steps.pr.outputs.base_sha }}
         run: |
           set -euo pipefail
-          MODE=paths
-          CHANGED_FILE=$(mktemp)
-          LABELS_FILE=$(mktemp)
-          echo '[]' > "$LABELS_FILE"
-          EVENT="${{ github.event_name }}"
+          changed_file=$(mktemp)
 
-          if [ "$EVENT" = "workflow_dispatch" ]; then
-            MODE=labels
-            case "${{ inputs.suites }}" in
-              all) echo '["coverage/all"]' > "$LABELS_FILE" ;;
-              cpp_sdk) echo '["coverage/sdk"]' > "$LABELS_FILE" ;;
-              cli) echo '["coverage/cli"]' > "$LABELS_FILE" ;;
-              cli_workload) echo '["coverage/workload"]' > "$LABELS_FILE" ;;
-              *) echo "Unknown suites input: ${{ inputs.suites }}" >&2; exit 1 ;;
-            esac
-            : > "$CHANGED_FILE"
-          elif [ "$EVENT" = "push" ]; then
-            BEFORE="${{ github.event.before }}"
-            AFTER="${{ github.sha }}"
-            if [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
-              git diff --name-only HEAD~1 HEAD > "$CHANGED_FILE" || git ls-files > "$CHANGED_FILE"
-            else
-              git diff --name-only "$BEFORE" "$AFTER" > "$CHANGED_FILE"
-            fi
-          elif [ "$EVENT" = "pull_request" ] || [ "$EVENT" = "pull_request_target" ]; then
-            if [ "${{ github.event.action }}" = "labeled" ]; then
-              gh api "repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/labels" \
-                --jq '[.[].name]' > "$LABELS_FILE"
-              if python3 -c 'import json,sys; labs=json.load(open(sys.argv[1])); sys.exit(0 if any(str(l).startswith("coverage/") for l in labs) else 1)' "$LABELS_FILE"; then
-                MODE=labels
-              else
-                MODE=paths
-                gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
-                  --paginate --jq '.[].filename' > "$CHANGED_FILE"
+          case "$EVENT_NAME" in
+            pull_request_target)
+              local_head_ref="refs/remotes/origin/codecov-pr-${PR_NUMBER}-head"
+              git fetch --no-tags --no-recurse-submodules origin \
+                "+refs/pull/${PR_NUMBER}/head:${local_head_ref}"
+              fetched_head=$(git rev-parse --verify "${local_head_ref}^{commit}")
+              if [ "$fetched_head" != "$PR_HEAD_SHA" ]; then
+                echo "The PR head changed while collecting files. Please use the latest run." >&2
+                exit 1
               fi
-            else
-              MODE=paths
-              gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
-                --paginate --jq '.[].filename' > "$CHANGED_FILE"
-            fi
-          fi
+              git -c core.quotePath=false diff --name-only --no-renames \
+                "$PR_BASE_SHA...$PR_HEAD_SHA" -- \
+                > "$changed_file"
+              ;;
+            push)
+              if [ "$BEFORE_SHA" = "0000000000000000000000000000000000000000" ]; then
+                git -c core.quotePath=false diff --name-only --no-renames \
+                  HEAD~1 HEAD > "$changed_file"
+              else
+                git -c core.quotePath=false diff --name-only --no-renames \
+                  "$BEFORE_SHA" "$AFTER_SHA" > "$changed_file"
+              fi
+              ;;
+            *)
+              echo "Unsupported event: $EVENT_NAME" >&2
+              exit 1
+              ;;
+          esac
 
-          echo "mode=$MODE" >> "$GITHUB_OUTPUT"
-          echo "changed_files_file=$CHANGED_FILE" >> "$GITHUB_OUTPUT"
-          echo "labels_file=$LABELS_FILE" >> "$GITHUB_OUTPUT"
-          echo "mode=$MODE"
-          echo "changed files:" && head -50 "$CHANGED_FILE" || true
-          echo "labels:" && cat "$LABELS_FILE"
+          echo "changed_files_file=$changed_file" >> "$GITHUB_OUTPUT"
+          echo "Changed files:"
+          head -100 "$changed_file"
 
       - name: Decide matrix
         id: decide
+        if: >-
+          github.event_name != 'pull_request_target' ||
+          steps.authorization.outputs.allowed == 'true'
+        env:
+          CHANGED_FILES_FILE: ${{ steps.inputs.outputs.changed_files_file }}
         run: |
           set -euo pipefail
-          EVENT="${{ github.event_name }}"
-          if { [ "$EVENT" = "pull_request" ] || [ "$EVENT" = "pull_request_target" ]; } && [ "${{ github.event.action }}" = "labeled" ]; then
-            LAB="${{ github.event.label.name }}"
-            case "$LAB" in
-              coverage/*) ;;
-              *)
-                echo "matrix=[]" >> "$GITHUB_OUTPUT"
-                echo "should_run=false" >> "$GITHUB_OUTPUT"
-                echo "hanging_labels=[]" >> "$GITHUB_OUTPUT"
-                exit 0
-                ;;
-            esac
+          python3 .github/scripts/codecov/detect_codecov_matrix.py \
+            --changed-files-file "$CHANGED_FILES_FILE"
+
+      - name: Resolve checkout and report metadata
+        id: metadata
+        if: >-
+          github.event_name != 'pull_request_target' ||
+          steps.authorization.outputs.allowed == 'true'
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_SHA: ${{ github.sha }}
+          REF_NAME: ${{ github.ref_name }}
+          REPOSITORY: ${{ github.repository }}
+          PR_REPOSITORY: ${{ steps.pr.outputs.repository }}
+          PR_SHA: ${{ steps.pr.outputs.sha }}
+          PR_BASE_SHA: ${{ steps.pr.outputs.base_sha }}
+          PR_BRANCH: ${{ steps.pr.outputs.branch }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = pull_request_target ]; then
+            checkout_repository="$PR_REPOSITORY"
+            checkout_sha="$PR_SHA"
+            base_sha="$PR_BASE_SHA"
+            report_branch="$PR_BRANCH"
+            pr_number="$PR_NUMBER"
+            storage_prefix="ydb/pr-${PR_NUMBER}/coverage"
+          else
+            checkout_repository="$REPOSITORY"
+            checkout_sha="$EVENT_SHA"
+            base_sha=""
+            report_branch="$REF_NAME"
+            pr_number=""
+            storage_prefix="ydb/coverage"
           fi
 
-          LABELS=$(cat "${{ steps.inputs.outputs.labels_file }}")
-          python3 .github/scripts/tests/detect_codecov_matrix.py \
-            --mode "${{ steps.inputs.outputs.mode }}" \
-            --changed-files-file "${{ steps.inputs.outputs.changed_files_file }}" \
-            --labels "$LABELS"
+          {
+            echo "checkout_repository=$checkout_repository"
+            echo "checkout_sha=$checkout_sha"
+            echo "base_sha=$base_sha"
+            echo "report_sha=$checkout_sha"
+            echo "report_branch=$report_branch"
+            echo "pr_number=$pr_number"
+            echo "storage_prefix=$storage_prefix"
+          } >> "$GITHUB_OUTPUT"
 
   coverage:
     name: Coverage (${{ matrix.suite }})
     needs: detect
-    if: needs.detect.outputs.should_run == 'true'
+    if: >-
+      needs.detect.result == 'success' &&
+      needs.detect.outputs.should_run == 'true'
+    # A newer main job supersedes only the same suite. It must not cancel a
+    # different flag whose baseline is still being produced by an older push.
+    concurrency:
+      group: >-
+        ${{
+          github.event_name == 'push'
+          && format('codecov-main-{0}', matrix.suite)
+          || format('codecov-run-{0}-{1}', github.run_id, matrix.suite)
+        }}
+      cancel-in-progress: ${{ github.event_name == 'push' }}
     runs-on: [self-hosted, auto-provisioned, build-preset-relwithdebinfo]
     timeout-minutes: 480
     strategy:
@@ -226,52 +321,32 @@ jobs:
       matrix:
         suite: ${{ fromJson(needs.detect.outputs.matrix) }}
     steps:
-      - name: Verify PR is mergeable
-        if: startsWith(github.event_name, 'pull_request')
-        uses: actions/github-script@v8
-        with:
-          script: |
-            let pr = context.payload.pull_request;
-            if (pr.mergeable == null || !pr.merge_commit_sha) {
-              const { data } = await github.rest.pulls.get({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                pull_number: pr.number,
-              });
-              pr = data;
-            }
-            if (!pr.mergeable || !pr.merge_commit_sha) {
-              core.setFailed(
-                'Unable to merge PR into the base branch. Please rebase or resolve conflicts and re-request coverage.'
-              );
-            }
-
-      - uses: actions/checkout@v5
-        with:
-          ref: ${{ startsWith(github.event_name, 'pull_request') && format('refs/pull/{0}/merge', github.event.pull_request.number) || github.sha }}
-          fetch-depth: 0
-
-      - name: Checkout trusted coverage CI helpers from base
-        if: startsWith(github.event_name, 'pull_request')
+      - name: Checkout measured code
         uses: actions/checkout@v5
         with:
-          ref: ${{ github.event.pull_request.base.sha }}
+          repository: ${{ needs.detect.outputs.checkout_repository }}
+          ref: ${{ needs.detect.outputs.checkout_sha }}
+          fetch-depth: 0
+          allow-unsafe-pr-checkout: true
+          persist-credentials: false
+
+      - name: Checkout trusted coverage helpers from PR base
+        if: github.event_name == 'pull_request_target'
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.detect.outputs.base_sha }}
           sparse-checkout: |
             .github/actions/run_clang_codecov
             .github/actions/setup_ci_ydb_service_account_key_file_credentials
-            .github/scripts/tests/codecov_suites.py
-            .github/scripts/tests/detect_codecov_matrix.py
-            .github/scripts/tests/export_coverage_lcov.py
-            .github/scripts/tests/generate_coverage_landing.py
-            .github/scripts/tests/overlay_trusted_codecov_ci.sh
-          sparse-checkout-cone-mode: false
+            .github/scripts/codecov
           path: _trusted_coverage_ci
+          persist-credentials: false
 
-      - name: Overlay trusted coverage CI helpers
-        if: startsWith(github.event_name, 'pull_request')
-        run: bash _trusted_coverage_ci/.github/scripts/tests/overlay_trusted_codecov_ci.sh
+      - name: Overlay trusted coverage helpers
+        if: github.event_name == 'pull_request_target'
+        run: bash _trusted_coverage_ci/.github/scripts/codecov/overlay_trusted_codecov_ci.sh
 
-      - name: Setup ydb access
+      - name: Setup YDB access
         uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
         with:
           ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
@@ -288,31 +363,96 @@ jobs:
           bazel_remote_username: ${{ secrets.REMOTE_CACHE_USERNAME }}
           bazel_remote_password: ${{ secrets.REMOTE_CACHE_PASSWORD }}
           pr_number: ${{ needs.detect.outputs.pr_number }}
-          commit_sha: ${{ needs.detect.outputs.commit_sha }}
-          branch: ${{ github.head_ref || github.ref_name }}
+          commit_sha: ${{ needs.detect.outputs.report_sha }}
+          branch: ${{ needs.detect.outputs.report_branch }}
+          storage_prefix: ${{ needs.detect.outputs.storage_prefix }}
 
-  finalize:
-    name: Finalize PR labels
+      - name: Remove YDB credentials
+        if: always()
+        run: rm -f -- /tmp/ydb_service_account.json
+
+  landing:
+    name: Publish HTML landing page
     needs: [detect, coverage]
-    # Also run when the run is cancelled (cancel-in-progress): one-shot labels must
-    # be cleared so coverage/* can be re-applied.
     if: >-
       always() &&
-      startsWith(github.event_name, 'pull_request') &&
-      needs.detect.outputs.should_run == 'true'
+      needs.detect.result == 'success' &&
+      needs.detect.outputs.should_run == 'true' &&
+      needs.coverage.result == 'success'
     runs-on: ubuntu-latest
     steps:
-      - name: Remove coverage labels
+      - name: Checkout landing generator
+        uses: actions/checkout@v5
+        with:
+          repository: ${{ github.repository }}
+          ref: ${{ needs.detect.outputs.base_sha || needs.detect.outputs.checkout_sha }}
+          sparse-checkout: .github/scripts/codecov/generate_coverage_landing.py
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: Generate landing page
         env:
-          GH_TOKEN: ${{ github.token }}
-          PR: ${{ github.event.pull_request.number }}
+          EVENT_NAME: ${{ github.event_name }}
+          MATRIX: ${{ needs.detect.outputs.matrix }}
         run: |
           set -euo pipefail
-          labels=$(gh api "repos/${{ github.repository }}/issues/${PR}/labels" --jq '.[].name')
-          for lab in coverage/sdk coverage/cli coverage/workload coverage/all; do
-            if printf '%s\n' "$labels" | grep -qx "$lab"; then
-              echo "Removing label $lab"
-              enc=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=''))" "$lab")
-              gh api -X DELETE "repos/${{ github.repository }}/issues/${PR}/labels/${enc}" || true
-            fi
+          mkdir -p coverage_landing
+          if [ "$EVENT_NAME" = push ]; then
+            suites=(cpp_sdk cli cli_workload)
+          else
+            mapfile -t suites < <(python3 -c 'import json,os; print("\n".join(json.loads(os.environ["MATRIX"])))')
+          fi
+          args=()
+          for suite in "${suites[@]}"; do
+            case "$suite" in
+              cpp_sdk|cli|cli_workload)
+                args+=(--suite "${suite}=./${suite}/index.html")
+                ;;
+              *)
+                echo "Unexpected suite: $suite" >&2
+                exit 1
+                ;;
+            esac
           done
+          python3 .github/scripts/codecov/generate_coverage_landing.py \
+            --output coverage_landing/index.html \
+            --title "YDB C++ coverage" \
+            "${args[@]}"
+
+      - name: Check Object Storage credentials
+        id: storage
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.YDB_TECH_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.YDB_TECH_AWS_SECRET_ACCESS_KEY }}
+        run: |
+          if [ -n "$AWS_ACCESS_KEY_ID" ] && [ -n "$AWS_SECRET_ACCESS_KEY" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install AWS CLI
+        if: steps.storage.outputs.enabled == 'true'
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          pip3 install --user 'awscli==1.46.0'
+
+      - name: Upload landing page
+        if: steps.storage.outputs.enabled == 'true'
+        continue-on-error: true
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.YDB_TECH_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.YDB_TECH_AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ru-central1
+          STORAGE_PREFIX: ${{ needs.detect.outputs.storage_prefix }}
+        run: |
+          set -euo pipefail
+          export PATH="${HOME}/.local/bin:${PATH}"
+          if ! command -v aws >/dev/null 2>&1; then
+            echo "AWS CLI is unavailable; skip best-effort landing upload" >&2
+            exit 0
+          fi
+          aws --endpoint-url https://storage.yandexcloud.net s3 cp \
+            coverage_landing/index.html \
+            "s3://ydb-appteam-sdk-reports/${STORAGE_PREFIX}/index.html"

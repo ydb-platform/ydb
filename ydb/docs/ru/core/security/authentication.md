@@ -264,7 +264,7 @@ C=RU,ST=MSK,O=MyOrg,CN=account1.apps.example.net@cert
 
 1. Изоляция кластера — ограничить круг хостов и приложений, которые могут установить TLS-соединение с узлами {{ ydb-short-name }}.
 
-2. Защита от ошибок конфигурации — не допустить подключения к чужим кластерам {{ ydb-short-name }}, например, при неверном параметре [node-broker](../devops/deployment-options/manual/node-authorization.md) динамический узел не подключится к чужому кластеру, тогда как при обычном TLS такое соединение могло бы установиться.
+2. Защита от ошибок конфигурации — не допустить подключения к чужим кластерам {{ ydb-short-name }}, например, при неверном параметре [node-broker](../devops/configuration-management/configuration-v1/node-authorization.md) динамический узел не подключится к чужому кластеру, тогда как при обычном TLS такое соединение могло бы установиться.
 
 3. Усложнение атак на прикладной уровень — процесс на постороннем хосте без подходящего сертификата не получает доступ к API кластера, даже если сетевой маршрут до порта существует.
 
@@ -282,9 +282,9 @@ C=RU,ST=MSK,O=MyOrg,CN=account1.apps.example.net@cert
 
 - **Interconnect** — при включении TLS в секции [interconnect_config](../reference/configuration/tls.md#interconnect) [Interconnect](../concepts/glossary.md#actor-system-interconnect) требует клиентский сертификат.
 
-- **gRPC** — можно включить запрос сертификата клиента для аутентификации устройств, а также отдельно включить его обязательную проверку (недоверенный сертификат отклоняется всегда). Настройка сервера описана в секциях [grpc_config](../reference/configuration/tls.md#grpc) и [client_certificate_authorization](../reference/configuration/client_certificate_authorization.md), а подключение клиента — в разделе [Параметры TLS-соединения](../reference/ydb-cli/connect.md#tls).
-
 - **Kafka API** — при включении mTLS требует клиентский сертификат; проверяется только цепочка доверия к CA, соединение без сертификата или с недоверенным сертификатом не устанавливается. Настройка сервера описана в секции [kafka_proxy_config](../reference/configuration/kafka_proxy_config.md), а подключение клиента — в разделе [Аутентификация устройств по mTLS](../reference/kafka-api/auth.md#device-auth).
+
+- **gRPC** и **YDB Monitoring** — можно включить запрос сертификата клиента для аутентификации устройств, а также отдельно включить его обязательную проверку (недоверенный сертификат отклоняется всегда). Настройка gRPC описана в секциях [grpc_config](../reference/configuration/tls.md#grpc) и [client_certificate_authorization](../reference/configuration/client_certificate_authorization.md), а подключение клиента — в разделе [Параметры TLS-соединения](../reference/ydb-cli/connect.md#tls); настройка мониторинга YDB Monitoring описана в секции [monitoring_config](../reference/configuration/monitoring_config.md#tls).
 
 ## Аутентификация с использованием стороннего IAM-провайдера {#iam}
 

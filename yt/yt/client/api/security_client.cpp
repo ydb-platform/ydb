@@ -47,16 +47,16 @@ TError TCheckPermissionResult::ToError(
                     user,
                     permission);
             }
-            error <<= TErrorAttribute("user", user);
-            error <<= TErrorAttribute("permission", permission);
+            error.Add("user", user);
+            error.Add("permission", permission);
             if (ObjectId) {
-                error <<= TErrorAttribute("denied_by", ObjectId);
+                error.Add("denied_by", ObjectId);
             }
             if (SubjectId) {
-                error <<= TErrorAttribute("denied_for", SubjectId);
+                error.Add("denied_for", SubjectId);
             }
             if (column) {
-                error <<= TErrorAttribute("column", *column);
+                error.Add("column", *column);
             }
             return error;
         }
@@ -96,10 +96,10 @@ TError TCheckPermissionByAclResult::ToError(const std::string& user, EPermission
                     user,
                     permission);
             }
-            error <<= TErrorAttribute("user", user);
-            error <<= TErrorAttribute("permission", permission);
+            error.Add("user", user);
+            error.Add("permission", permission);
             if (SubjectId) {
-                error <<= TErrorAttribute("denied_for", SubjectId);
+                error.Add("denied_for", SubjectId);
             }
             return error;
         }

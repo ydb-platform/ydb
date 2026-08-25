@@ -16,6 +16,8 @@
 #include <yt/yt/core/https/config.h>
 #include <yt/yt/core/https/server.h>
 
+#include <yt/yt/core/dns/dns_resolver.h>
+
 #include <yt/yt/core/net/config.h>
 #include <yt/yt/core/net/connection.h>
 #include <yt/yt/core/net/dialer.h>
@@ -38,6 +40,8 @@
 #include <library/cpp/testing/common/network.h>
 
 #include <library/cpp/yt/string/stream.h>
+
+#include <library/cpp/yt/threading/atomic_object.h>
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -773,6 +777,57 @@ TEST_P(THttpServerTest, SimpleRequest)
     ASSERT_EQ(EStatusCode::OK, rsp->GetStatusCode());
 }
 
+class TRecordingDnsResolver
+    : public NDns::IDnsResolver
+{
+public:
+    NThreading::TAtomicObject<NDns::TDnsResolveOptions> LastOptions;
+
+    TFuture<TNetworkAddress> Resolve(
+        const std::string& /*hostName*/,
+        const NDns::TDnsResolveOptions& options) override
+    {
+        LastOptions.Store(options);
+        return MakeFuture(TNetworkAddress::Parse("127.0.0.1"));
+    }
+};
+
+TEST_P(THttpServerTest, ClientDnsResolveOptions)
+{
+    Server->AddHandler("/ok", New<TOKHttpHandler>());
+    Server->Start();
+
+    auto fakeDns = New<TRecordingDnsResolver>();
+    auto* addressResolver = TAddressResolver::Get();
+    auto realDns = addressResolver->GetDnsResolver();
+    addressResolver->SetDnsResolver(fakeDns);
+    addressResolver->PurgeCache();
+    auto guard = Finally([&] {
+        addressResolver->SetDnsResolver(realDns);
+        addressResolver->PurgeCache();
+    });
+
+    NDns::TDnsResolveOptions options{.EnableIPv4 = true, .EnableIPv6 = false};
+
+    IClientPtr client;
+    if (!GetParam()) {
+        auto clientConfig = New<NHttp::TClientConfig>();
+        clientConfig->DnsResolveOptions = options;
+        client = NHttp::CreateClient(clientConfig, Poller);
+    } else {
+        auto clientConfig = New<NHttps::TClientConfig>();
+        clientConfig->Credentials = New<NHttps::TClientCredentialsConfig>();
+        clientConfig->Credentials->CertificateAuthority = CreateTestKeyBlob("ca.pem");
+        clientConfig->DnsResolveOptions = options;
+        client = NHttps::CreateClient(clientConfig, Poller);
+    }
+
+    auto rsp = WaitFor(client->Get(TestUrl + "/ok")).ValueOrThrow();
+    ASSERT_EQ(EStatusCode::OK, rsp->GetStatusCode());
+    // Checks that client->Get actually routes through Resolve with dns resolve options from client config.
+    EXPECT_EQ(fakeDns->LastOptions.Load(), options);
+}
+
 TEST_P(THttpServerTest, EmptyPath)
 {
     Server->AddHandler("/", New<TOKHttpHandler>());
@@ -1140,17 +1195,18 @@ public:
     void HandleRequest(const IRequestPtr& /*req*/, const IResponseWriterPtr& /*rsp*/) override
     {
         auto finally = Finally([this] {
-            YT_LOG_DEBUG("Running finally block");
+            YT_TLOG_DEBUG("Running finally block");
             Canceled.Set();
         });
 
         auto p = NewPromise<void>();
         p.OnCanceled(BIND([p] (const TError& error) {
-            YT_LOG_INFO(error, "Promise is canceled");
+            YT_TLOG_INFO("Promise is canceled")
+                .With(error);
             p.Set(error);
         }));
 
-        YT_LOG_DEBUG("Blocking on promise");
+        YT_TLOG_DEBUG("Blocking on promise");
         WaitFor(p.ToFuture())
             .ThrowOnError();
     }
@@ -1179,7 +1235,7 @@ TEST_P(THttpServerTest, RequestCancel)
         .ThrowOnError();
 
     Sleep(TDuration::Seconds(1));
-    YT_LOG_DEBUG("Closing client connection");
+    YT_TLOG_DEBUG("Closing client connection");
     WaitFor(connection->CloseWrite())
         .ThrowOnError();
 

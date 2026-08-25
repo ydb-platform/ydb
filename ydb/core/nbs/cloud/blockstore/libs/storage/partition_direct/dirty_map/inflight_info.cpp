@@ -59,6 +59,7 @@ TInflightInfo::TInflightInfo(TInflightInfo&& other) noexcept
     , StartAt(other.StartAt)
     , PBuffersLockCount(other.PBuffersLockCount)
     , QuorumReadyPromise(std::move(other.QuorumReadyPromise))
+    , PersistGeneration(other.PersistGeneration)
     , DesiredDDisks(other.DesiredDDisks)
     , Disabled(other.Disabled)
     , WriteRequested(other.WriteRequested)
@@ -363,13 +364,25 @@ void TInflightInfo::UnlockPBuffer()
     }
 }
 
+void TInflightInfo::SetPersistGeneration(ui32 persistGeneration)
+{
+    Y_ABORT_UNLESS(PersistGeneration == 0);
+
+    PersistGeneration = persistGeneration;
+}
+
+ui32 TInflightInfo::GetPersistGeneration() const
+{
+    return PersistGeneration;
+}
+
 TString TInflightInfo::DebugPrint(TInstant now) const
 {
     TStringBuilder result;
     result << " " << FormatDuration(now - StartAt) << ", " << ToString(State)
            << ", size:" << ByteCount << ", locks:" << PBuffersLockCount
-           << ", dd:" << DesiredDDisks.Print() << ", d:" << Disabled.Print()
-           << ", wr:" << WriteRequested.Print()
+           << ", pgen:" << PersistGeneration << ", dd:" << DesiredDDisks.Print()
+           << ", d:" << Disabled.Print() << ", wr:" << WriteRequested.Print()
            << ", wc:" << WriteConfirmed.Print()
            << ", fr:" << FlushRequested.Print()
            << ", fc:" << FlushConfirmed.Print()

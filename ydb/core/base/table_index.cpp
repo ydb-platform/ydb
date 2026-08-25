@@ -80,6 +80,13 @@ constexpr std::string_view GlobalFulltextWithRelevanceImplTables[] = {
 };
 static_assert(std::is_sorted(std::begin(GlobalFulltextWithRelevanceImplTables), std::end(GlobalFulltextWithRelevanceImplTables)));
 
+constexpr std::string_view GlobalFulltextCompactRelevanceImplTables[] = {
+    NFulltext::DocsTable,
+    NFulltext::StatsTable,
+    ImplTable,
+};
+static_assert(std::is_sorted(std::begin(GlobalFulltextCompactRelevanceImplTables), std::end(GlobalFulltextCompactRelevanceImplTables)));
+
 bool IsSecondaryIndex(NKikimrSchemeOp::EIndexType indexType) {
     switch (indexType) {
         case NKikimrSchemeOp::EIndexTypeGlobal:
@@ -328,8 +335,9 @@ std::span<const std::string_view> GetImplTables(
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
             return GlobalFulltextPlainImplTables;
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
-        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
             return GlobalFulltextWithRelevanceImplTables;
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
+            return GlobalFulltextCompactRelevanceImplTables;
         case NKikimrSchemeOp::EIndexTypeGlobalJson:
         case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
             return GlobalFulltextPlainImplTables;

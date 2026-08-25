@@ -9,6 +9,7 @@
 #include <yt/yql/providers/yt/gateway/native/yql_yt_native.h>
 #include <yql/essentials/core/file_storage/proto/file_storage.pb.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/providers/common/proto/static_gateways_config.pb.h>
 #include <yt/yql/providers/yt/provider/yql_yt_provider.h>
 
 namespace NYql {
@@ -205,6 +206,7 @@ std::pair<std::shared_ptr<TYtState>, IYtGateway::TPtr> InitTest(const NTesting::
     TYtNativeServices nativeServices;
     auto gatewaysConfig = MakeGatewaysConfig(port);
     nativeServices.Config = std::make_shared<TYtGatewayConfig>(gatewaysConfig.GetYt());
+    nativeServices.StaticConfig = std::make_shared<TYtStaticGatewayConfig>();
     nativeServices.FileStorage = CreateFileStorage(TFileStorageConfig{});
     nativeServices.SecretMasker = CreateDummySecretMasker();
     nativeServices.TvmClient = CreateDummyTvmClient();

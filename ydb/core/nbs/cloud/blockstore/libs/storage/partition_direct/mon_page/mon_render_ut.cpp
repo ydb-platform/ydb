@@ -38,7 +38,9 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
             .InflightByOperation = inflightByOperation,
             .Errors =
                 {.ConsecutiveErrorCount = 1, .ConsecutiveSuccessCount = 7},
-            .PBufferUsedSize = 4096,
+            .PBuffersUsage{.Count = 1, .Size = 4096},
+            .AheadBlocks{.Count = 2, .Size = 8192},
+            .BehindBlocks{.Count = 3, .Size = 12288},
         };
         THostSnapshot sufferer{
             .Index = 1,
@@ -175,6 +177,10 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         UNIT_ASSERT_STRING_CONTAINS(html, "1 Online");
         UNIT_ASSERT_STRING_CONTAINS(html, "1 Sufferer");
         UNIT_ASSERT_STRING_CONTAINS(html, "Consecutive success");
+        UNIT_ASSERT_STRING_CONTAINS(html, "PBuffers usage");
+        UNIT_ASSERT_STRING_CONTAINS(html, "1 / 4.00 KiB");
+        UNIT_ASSERT_STRING_CONTAINS(html, "2 / 8.00 KiB");
+        UNIT_ASSERT_STRING_CONTAINS(html, "3 / 12.00 KiB");
         // The add-host button lives on the detail page only.
         UNIT_ASSERT(!html.Contains("action=addhost"));
     }
@@ -196,6 +202,9 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         UNIT_ASSERT_STRING_CONTAINS(html, "back to DBGs");
         // Host indexes render in the log format ("H0"), not as raw ui8 bytes.
         UNIT_ASSERT_STRING_CONTAINS(html, "<td>H0</td>");
+        UNIT_ASSERT_STRING_CONTAINS(html, "1 / 4.00 KiB");
+        UNIT_ASSERT_STRING_CONTAINS(html, "2 / 8.00 KiB");
+        UNIT_ASSERT_STRING_CONTAINS(html, "3 / 12.00 KiB");
         // The add-host form: POST with parameters both in the URL (read by
         // the tablet) and as hidden fields (read by the mon proxy router).
         UNIT_ASSERT_STRING_CONTAINS(html, "<form method='post'");
@@ -306,7 +315,7 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
             .LocalDb =
                 TLocalDbContents{
                     .VolumeConfig = "DiskId: vol-1",
-                    .VChunkConfigs = {TVChunkConfig::MakeDefault(3, 5, 3)},
+                    .VChunkConfigs = {{3, TVChunkConfig::MakeDefault(3, 5, 3)}},
                 },
         };
 

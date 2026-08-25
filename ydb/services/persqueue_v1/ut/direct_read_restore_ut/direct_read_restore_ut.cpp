@@ -184,6 +184,8 @@ struct TDirectReadRestoreEnv {
     std::atomic<ui64> DirectReadResponseCount{0};
     // Control-path DirectReadAck delivered to partition actor.
     std::atomic<ui64> DirectReadAckCount{0};
+    // TEvPartitionReady delivered to read session actor (proves WaitForData was reset).
+    std::atomic<ui64> PartitionReadyCount{0};
 
     // Prepare/Publish delivered while Forget responses are held (late reply onto Forget stage).
     std::atomic<ui64> LateNonForgetReplyDuringForget{0};
@@ -346,6 +348,9 @@ struct TDirectReadRestoreEnv {
             }
             if (ev->CastAsLocal<NGRpcProxy::V1::TEvPQProxy::TEvDirectReadAck>()) {
                 ++DirectReadAckCount;
+            }
+            if (ev->CastAsLocal<NGRpcProxy::V1::TEvPQProxy::TEvPartitionReady>()) {
+                ++PartitionReadyCount;
             }
             // While Register is delayed, Stage/Publish still reach the cache and are buffered
             // until Register — tablet DirectRead state may already have advanced.
@@ -1625,6 +1630,82 @@ Y_UNIT_TEST(HasCmdForgetReadResultOnPublishDuringForgetRestore) {
     ReleaseAndWaitUpdateSession(
         [&] { Env.ReleaseHeldForgets(); },
         "releasing Forget after late Publish must not kill partition actor");
+}
+
+// Regression test (LOGBROKER-10609): ResendRecentRequests() must reset WaitForData when data is available
+// after pipe restart. Without the fix, WaitForData stays true forever when ReadTimestampMs
+// or MaxTimeLagMs is set and ReadOffset < EndOffset (data available), causing the client
+// to hang waiting for data that is already there.
+Y_UNIT_TEST(ResendRecentRequestsResetsWaitForDataWhenDataAvailable) {
+    WriteOneMessage();
+
+    // Open a non-DirectRead session with max_lag set so WaitForData becomes true.
+    // max_lag triggers the same code path as ReadTimestampMs in InitStartReading.
+    Client.Connect(Env.Endpoint);
+
+    auto& runtime = Runtime();
+
+    // Init control session with max_lag set per-topic to trigger WaitForData = true.
+    RunWithDispatch(runtime, [&] {
+        Client.ControlContext = MakeHolder<grpc::ClientContext>();
+        Client.ControlStream = Client.Stub->StreamRead(Client.ControlContext.Get());
+        DR_ENSURE(Client.ControlStream);
+
+        StreamReadMessage::FromClient req;
+        auto* topicSettings = req.mutable_init_request()->add_topics_read_settings();
+        topicSettings->set_path(kTopicPath);
+        topicSettings->mutable_max_lag()->set_seconds(3600); // 1 hour lag → WaitForData = true
+        req.mutable_init_request()->set_consumer(kConsumer);
+        DR_ENSURE(Client.ControlStream->Write(req));
+
+        StreamReadMessage::FromServer resp;
+        DR_ENSURE(Client.ControlStream->Read(&resp));
+        if (resp.server_message_case() != StreamReadMessage::FromServer::kInitResponse) {
+            ythrow yexception() << "expected InitResponse, got " << resp.ShortDebugString();
+        }
+
+        // Send read request to start the session.
+        StreamReadMessage::FromClient readReq;
+        readReq.mutable_read_request()->set_bytes_size(100_KB);
+        DR_ENSURE(Client.ControlStream->Write(readReq));
+        return true;
+    });
+
+    // Wait for partition assign and confirm.
+    RunWithDispatch(runtime, [&] {
+        StreamReadMessage::FromServer resp;
+        DR_ENSURE(Client.ControlStream->Read(&resp));
+        if (resp.server_message_case() != StreamReadMessage::FromServer::kStartPartitionSessionRequest) {
+            ythrow yexception() << "expected StartPartitionSessionRequest, got " << resp.ShortDebugString();
+        }
+        const ui64 assignId = resp.start_partition_session_request().partition_session().partition_session_id();
+
+        StreamReadMessage::FromClient req;
+        req.mutable_start_partition_session_response()->set_partition_session_id(assignId);
+        DR_ENSURE(Client.ControlStream->Write(req));
+        return true;
+    });
+
+    // Record PartitionReady count before reboot.
+    const ui64 partitionReadyBefore = Env.PartitionReadyCount.load();
+
+    // Reboot PQ tablet → pipe dies → ResendRecentRequests() is called.
+    // With the fix: WaitForData is reset and SendPartitionReady is called because
+    // data is available (ReadOffset < EndOffset).
+    // Without the fix: WaitForData stays true, no PartitionReady, client hangs.
+    Env.RebootPqTablet();
+
+    // Wait for PartitionReady to be delivered (proves WaitForData was reset).
+    WaitUntil(runtime, [&] {
+        return Env.PartitionReadyCount.load() > partitionReadyBefore
+            || Env.ErrorCloseSession.load() > 0;
+    }, TDuration::Seconds(10));
+
+    UNIT_ASSERT_C(Env.ErrorCloseSession.load() == 0,
+        "session must not close; reason=" << Env.ErrorCloseReason);
+    UNIT_ASSERT_C(Env.PartitionReadyCount.load() > partitionReadyBefore,
+        "TEvPartitionReady must be delivered after pipe restart when data is available; "
+        "this proves ResendRecentRequests reset WaitForData and called SendPartitionReady");
 }
 
 } // Y_UNIT_TEST_SUITE_F(TDirectReadRestoreRaceTest)

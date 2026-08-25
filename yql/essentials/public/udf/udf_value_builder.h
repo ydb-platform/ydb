@@ -30,7 +30,6 @@ class IDictValueBuilder {
 public:
     using TPtr = TUniquePtr<IDictValueBuilder>;
 
-public:
     virtual ~IDictValueBuilder() = default;
 
     virtual IDictValueBuilder& Add(TUnboxedValue&& key, TUnboxedValue&& value) = 0;
@@ -44,7 +43,6 @@ class IListValueBuilder {
 public:
     using TPtr = TUniquePtr<IListValueBuilder>;
 
-public:
     virtual ~IListValueBuilder() = default;
 
     // Destroys (moves out from) the element

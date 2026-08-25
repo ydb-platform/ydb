@@ -155,50 +155,16 @@ void MakePQTabletConfig(const TOperationContext& context,
 }
 
 class TBootstrapConfigWrapper: public NKikimrPQ::TBootstrapConfig {
-    struct TSerializedProposeTransaction {
-        TString Value;
-
-        static TSerializedProposeTransaction Serialize(const NKikimrPQ::TBootstrapConfig& value) {
-            NKikimrPQ::TEvProposeTransaction record;
-            record.MutableConfig()->MutableBootstrapConfig()->CopyFrom(value);
-            return {record.SerializeAsString()};
-        }
-    };
-
-    struct TSerializedUpdateConfig {
-        TString Value;
-
-        static TSerializedUpdateConfig Serialize(const NKikimrPQ::TBootstrapConfig& value) {
-            NKikimrPQ::TUpdateConfig record;
-            record.MutableBootstrapConfig()->CopyFrom(value);
-            return {record.SerializeAsString()};
-        }
-    };
-
-    mutable std::optional<std::variant<
-        TSerializedProposeTransaction,
-        TSerializedUpdateConfig
-    >> PreSerialized;
-
-    template <typename T>
-    const TString& Get() const {
-        if (!PreSerialized) {
-            PreSerialized.emplace(T::Serialize(*this));
-        }
-
-        const auto* value = std::get_if<T>(&PreSerialized.value());
-        Y_ABORT_UNLESS(value);
-
-        return value->Value;
-    }
+    mutable std::optional<TString> PreSerializedProposeTransaction;
 
 public:
     const TString& GetPreSerializedProposeTransaction() const {
-        return Get<TSerializedProposeTransaction>();
-    }
-
-    const TString& GetPreSerializedUpdateConfig() const {
-        return Get<TSerializedUpdateConfig>();
+        if (!PreSerializedProposeTransaction) {
+            NKikimrPQ::TEvProposeTransaction record;
+            record.MutableConfig()->MutableBootstrapConfig()->CopyFrom(*this);
+            PreSerializedProposeTransaction = record.SerializeAsString();
+        }
+        return *PreSerializedProposeTransaction;
     }
 };
 
@@ -680,6 +646,9 @@ bool TPropose::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationCon
         context.SS->PersistCreateStep(db, pathId, step);
     }
 
+    txState->PlanStep = step;
+    context.SS->PersistTxPlanStep(db, OperationId, step);
+
     return TryPersistState(context);
 }
 
@@ -696,19 +665,8 @@ bool TPropose::ProgressState(TOperationContext& context)
     Y_ABORT_UNLESS(txState);
     Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreatePQGroup || txState->TxType == TTxState::TxAlterPQGroup);
 
-    //
-    // If the program works according to the new scheme, then we must add PQ tablets to the list for
-    // the Coordinator. At this stage, we cannot rely on the value of
-    // the EnablePQConfigTransactionsAtSchemeShard flag. Because the operation could have started on one tablet
-    // and moved to another by that time.
-    //
-    // Therefore, here we check the value of the minStep field, which is filled in in
-    // the TEvProposeTransactionResult handler
-    //
     TSet<TTabletId> shardSet;
-    if (ui64(txState->MinStep) > 0) {
-        PrepareShards(*txState, shardSet, context);
-    }
+    PrepareShards(*txState, shardSet, context);
     context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, txState->MinStep, shardSet);
 
     return false;
@@ -770,6 +728,27 @@ bool TPropose::CanPersistState(const TTxState& txState,
         return false;
     }
 
+    // Back-fill of an Id on a pre-existing topic must stamp IdTxStep with the exact plan
+    // step (see PersistState). For an alter StepCreated is already valid, so without this
+    // guard persist could run as soon as the shards report COMPLETE - potentially before
+    // TEvOperationPlan sets PlanStep. That would persist the Id with no IdTxStep, leaving
+    // the name-keyed fallback disabled for writers and losing live producers' mappings.
+    // Wait for the plan step instead; TEvOperationPlan will re-trigger TryPersistState.
+    if (AppData()->FeatureFlags.GetEnableTopicSourceIdMappingById()
+            && txState.TxType == TTxState::TxAlterPQGroup
+            && txState.PlanStep == InvalidStepId) {
+        TTopicInfo::TPtr pqGroup = context.SS->Topics[PathId];
+        if (pqGroup && pqGroup->AlterData) {
+            const auto& newTabletConfig = pqGroup->AlterData->GetTabletConfig();
+            if (newTabletConfig.HasId() && !newTabletConfig.GetId().HasTxStep()) {
+                LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                            DebugHint() << " can't persist state: " <<
+                            "Id back-fill is waiting for the plan step to stamp TxStep");
+                return false;
+            }
+        }
+    }
+
     return true;
 }
 
@@ -793,6 +772,17 @@ void TPropose::PersistState(const TTxState& txState,
 
     NKikimrPQ::TPQTabletConfig tabletConfig = pqGroup->GetTabletConfig();
     NKikimrPQ::TPQTabletConfig newTabletConfig = pqGroup->AlterData->GetTabletConfig();
+
+    // Only an alter can back-fill an Id on a pre-existing topic. A create always stamps the
+    // sentinel TxStep = 0 in CreatePersQueueGroup, so never touch it here.
+    if (txState.TxType == TTxState::TxAlterPQGroup
+            && newTabletConfig.HasId() && !newTabletConfig.GetId().HasTxStep()
+            && txState.PlanStep != InvalidStepId) {
+        // The Id is filled by this alter transaction: remember the exact plan step so
+        // writers keep the name-keyed fallback during the transition window.
+        newTabletConfig.MutableId()->SetTxStep(ui64(txState.PlanStep));
+        Y_PROTOBUF_SUPPRESS_NODISCARD newTabletConfig.SerializeToString(&pqGroup->AlterData->TabletConfig);
+    }
 
     pqGroup->FinishAlter();
 

@@ -309,7 +309,7 @@ namespace {
             Become(&TThis::StateFuncDDisk);
             RegisterMonPage();
             if (!Config.EnableChecksums) {
-                YDB_LOG_WARN("TDDiskActor booting with integrity checksums disabled",
+                YDB_LOG_NOTICE("TDDiskActor booting with integrity checksums disabled",
                     {"marker", "BSDD55"},
                     {"DDiskId", DDiskId});
             }

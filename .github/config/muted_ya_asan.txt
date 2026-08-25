@@ -47,6 +47,7 @@ ydb/core/kqp/ut/rbo KqpRboYql.BasicHashJoin-UseBlockHashJoin
 ydb/core/kqp/ut/rbo KqpRboYql.ClickBench_YQL
 ydb/core/kqp/ut/rbo KqpRboYql.ClickBench_YQL_Single
 ydb/core/kqp/ut/rbo KqpRboYql.ColumnStatistics+ColumnStore
+ydb/core/kqp/ut/rbo KqpRboYql.FallbackToYqlDisabled
 ydb/core/kqp/ut/rbo KqpRboYql.Having
 ydb/core/kqp/ut/rbo KqpRboYql.TPCDS_YQL
 ydb/core/kqp/ut/rbo unittest.[*/*] chunk
@@ -65,6 +66,7 @@ ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_NotNullDefault+EnableC
 ydb/core/kqp/ut/scheme KqpConstraints.DropDefaultThenUpsertWithIndex-EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpScheme.AlterTableCompactAccessDenied+UseQueryService
 ydb/core/kqp/ut/scheme KqpScheme.CreateDropTableViaApiMultipleTime
+ydb/core/kqp/ut/scheme KqpScheme.CreateExternalDataSource
 ydb/core/kqp/ut/scheme KqpScheme.ParallelDropStreamingQuery
 ydb/core/kqp/ut/service KqpQueryService.FlowControllOnHugeRealTable-LongRow
 ydb/core/kqp/ut/tli KqpTli.Basic

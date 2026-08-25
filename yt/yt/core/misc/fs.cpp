@@ -892,6 +892,7 @@ void WrapIOErrors(std::function<void()> func)
 
             case EIO:
             case ENOSPC:
+            case EDQUOT:
             case EROFS:
             case EWOULDBLOCK: // aka EAGAIN
 #ifdef _linux_
@@ -1224,7 +1225,7 @@ std::optional<std::string> FindBinaryPath(const std::string& binary)
 bool IsOutOfDiskSpaceError(const TError& error)
 {
 #ifdef _linux_
-    return error.FindMatching(ELinuxErrorCode::NOSPC).has_value();
+    return error.FindMatching({ELinuxErrorCode::NOSPC, ELinuxErrorCode::DQUOT}).has_value();
 #else
     Y_UNUSED(error);
     YT_UNIMPLEMENTED();

@@ -432,6 +432,57 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
         });
     }
 
+    Y_UNIT_TEST_F(NestedVariantTypes, TJsonParserFixture) {
+        ExpectedBatches = 1;
+
+        CheckSuccess(MakeParser({{"nested", "[VariantType; [StructType;[[a; [DataType; String]]; [b; [OptionalType; [DataType; Int8]]]; [c; [OptionalType; [DataType; Int64]]]]]]"}, {"a1", "[DataType; String]"}}, [&](ui64 numberRows, TVector<std::span<NYql::NUdf::TUnboxedValue>> result) {
+            UNIT_ASSERT_VALUES_EQUAL(4, numberRows);
+
+            UNIT_ASSERT_VALUES_EQUAL(2, result.size());
+            UNIT_ASSERT(result[0][0]);
+            {
+                auto var = result[0][0];
+                UNIT_ASSERT(var.GetVariantIndex() == 0);
+                auto val = var.GetVariantItem();
+                UNIT_ASSERT_VALUES_EQUAL("key1", TString(val.AsStringRef()));
+            }
+            UNIT_ASSERT_VALUES_EQUAL("hello1", TString(result[1][0].AsStringRef()));
+
+            UNIT_ASSERT(result[0][1]);
+            {
+                auto var = result[0][1];
+                UNIT_ASSERT(var.GetVariantIndex() == 1);
+                auto val = var.GetVariantItem();
+                UNIT_ASSERT_VALUES_EQUAL(2, val.Get<i64>());
+            }
+            UNIT_ASSERT_VALUES_EQUAL("hello2", TString(result[1][1].AsStringRef()));
+
+            UNIT_ASSERT(result[0][2]);
+            {
+                auto var = result[0][2];
+                UNIT_ASSERT(var.GetVariantIndex() == 2);
+                auto val = var.GetVariantItem();
+                UNIT_ASSERT_VALUES_EQUAL(2222, val.Get<i64>());
+            }
+            UNIT_ASSERT_VALUES_EQUAL("hello3", TString(result[1][2].AsStringRef()));
+
+            {
+                auto var = result[0][3];
+                UNIT_ASSERT(var.GetVariantIndex() == 1);
+                auto val = var.GetVariantItem();
+                UNIT_ASSERT(!val);
+            }
+            UNIT_ASSERT_VALUES_EQUAL("hello4", TString(result[1][3].AsStringRef()));
+        }));
+
+        Parser->ParseMessages({
+            GetMessage(FIRST_OFFSET, R"({"a1": "hello1", "nested": "key1"})"),
+            GetMessage(FIRST_OFFSET + 1, R"({"a1": "hello2", "nested": 2})"),
+            GetMessage(FIRST_OFFSET + 2, R"({"a1": "hello3", "nested": 2222})"),
+            GetMessage(FIRST_OFFSET + 3, R"({"a1": "hello4", "nested": null})"),
+        });
+    }
+
     Y_UNIT_TEST_F(NestedStructTypes, TJsonParserFixture) {
         ExpectedBatches = 1;
 

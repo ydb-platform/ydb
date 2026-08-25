@@ -1,0 +1,53 @@
+#include "vdisk_histogram_latency.h"
+
+#include <library/cpp/monlib/dynamic_counters/counters.h>
+#include <library/cpp/testing/unittest/registar.h>
+
+namespace NKikimr::NVDiskMon {
+
+    Y_UNIT_TEST_SUITE(TVDiskLatencyCounters) {
+
+        Y_UNIT_TEST(CompletedAndInFlightLatencyCountersAreReportedSeparately) {
+            auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+            TLtcHisto histo(counters, "handleclass", "GetFast", NPDisk::DEVICE_TYPE_ROT);
+
+            histo.Collect(TDuration::MilliSeconds(123), 42);
+            histo.AddInFlightRequest(1, TInstant::MilliSeconds(1'000));
+            histo.AddInFlightRequest(2, TInstant::MilliSeconds(1'500));
+            histo.UpdateCounters(TInstant::MilliSeconds(2'500));
+
+            auto handleClassGroup = counters->FindSubgroup("handleclass", "GetFast");
+            UNIT_ASSERT(handleClassGroup);
+            auto latencyGroup = handleClassGroup->FindSubgroup("subsystem", "latency_histo");
+            UNIT_ASSERT(latencyGroup);
+
+            auto completedSum = latencyGroup->FindCounter("LatencyMsCompletedSum");
+            auto completedCount = latencyGroup->FindCounter("LatencyCompletedCount");
+            auto inFlightSum = latencyGroup->FindCounter("InFlightLatencyMsSum");
+            auto inFlightCount = latencyGroup->FindCounter("InFlightCount");
+            auto maxLatency = latencyGroup->FindCounter("LatencyMsMax");
+
+            UNIT_ASSERT(completedSum->ForDerivative());
+            UNIT_ASSERT(completedCount->ForDerivative());
+            UNIT_ASSERT(!inFlightSum->ForDerivative());
+            UNIT_ASSERT(!inFlightCount->ForDerivative());
+            UNIT_ASSERT(!maxLatency->ForDerivative());
+
+            UNIT_ASSERT_VALUES_EQUAL(completedSum->Val(), 123);
+            UNIT_ASSERT_VALUES_EQUAL(completedCount->Val(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(inFlightSum->Val(), 2'500);
+            UNIT_ASSERT_VALUES_EQUAL(inFlightCount->Val(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(maxLatency->Val(), 1'500);
+
+            histo.RemoveInFlightRequest(1);
+            histo.UpdateCounters(TInstant::MilliSeconds(3'000));
+
+            UNIT_ASSERT_VALUES_EQUAL(completedSum->Val(), 123);
+            UNIT_ASSERT_VALUES_EQUAL(completedCount->Val(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(inFlightSum->Val(), 1'500);
+            UNIT_ASSERT_VALUES_EQUAL(inFlightCount->Val(), 1);
+        }
+
+    } // Y_UNIT_TEST_SUITE(TVDiskLatencyCounters)
+
+} // namespace NKikimr::NVDiskMon

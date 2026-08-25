@@ -3,9 +3,12 @@
 #include "defs.h"
 
 #include <ydb/core/base/blobstorage.h>
+#include <ydb/core/util/max_tracker.h>
 
 #include <library/cpp/monlib/dynamic_counters/percentile/percentile.h>
 #include <library/cpp/monlib/metrics/histogram_collector.h>
+
+#include <util/generic/hash.h>
 
 namespace NKikimr {
     namespace NVDiskMon {
@@ -21,20 +24,28 @@ namespace NKikimr {
         class TLtcHisto {
         public:
             TLtcHisto(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
-                    const TString &name,
-                    const TString &value,
-                    NPDisk::EDeviceType type);
+                      const TString& name,
+                      const TString& value,
+                      NPDisk::EDeviceType type);
 
             // update histogram with with an operation with duration 'd'
             void Collect(TDuration d, ui64 size = 0);
+            void AddInFlightRequest(ui64 requestId, TInstant receivedTime);
+            void RemoveInFlightRequest(ui64 requestId);
+            void UpdateCounters(TInstant now);
 
         private:
             NMonitoring::THistogramPtr Histo;
             ::NMonitoring::TDynamicCounters::TCounterPtr ThroughputBytes;
+            TMaxTracker LatencyMsMax;
+            ::NMonitoring::TDynamicCounters::TCounterPtr LatencyMsCompletedSum;
+            ::NMonitoring::TDynamicCounters::TCounterPtr LatencyCompletedCount;
+            ::NMonitoring::TDynamicCounters::TCounterPtr InFlightLatencyMsSum;
+            ::NMonitoring::TDynamicCounters::TCounterPtr InFlightCount;
+            THashMap<ui64, TInstant> InFlightRequests;
         };
 
         using TLtcHistoPtr = std::shared_ptr<TLtcHisto>;
 
-    } // NVDiskMon
-} // NKikimr
-
+    } // namespace NVDiskMon
+} // namespace NKikimr

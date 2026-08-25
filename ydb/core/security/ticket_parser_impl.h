@@ -2045,8 +2045,8 @@ protected:
             record.ExpireTime = GetDerived()->GetExpireTime(record, now);
             record.SetErrorRefreshTime(this, now);
             CounterTicketsErrorsRetryable->Inc();
-            BLOG_W("Ticket " << record.GetMaskedTicket()
-                << " (" << record.PeerName << ") has now retryable error message '" << error.Message << errorLogMessage << "'");
+            BLOG_W("Failed to process ticket " << record.GetMaskedTicket()
+                << " (" << record.PeerName << "): retryable error '" << error.Message << errorLogMessage << "'");
             if (record.RefreshRetryableErrorImmediately) {
                 record.RefreshRetryableErrorImmediately = false;
                 GetDerived()->CanRefreshTicket(key, record);
@@ -2058,8 +2058,8 @@ protected:
             record.UnsetToken();
             record.SetOkRefreshTime(this, now);
             CounterTicketsErrorsPermanent->Inc();
-            BLOG_W("Ticket " << record.GetMaskedTicket()
-                << " (" << record.PeerName << ") has now permanent error message '" << error.Message << errorLogMessage << "'");
+            BLOG_W("Failed to process ticket " << record.GetMaskedTicket()
+                << " (" << record.PeerName << "): non-retryable error '" << error.Message << errorLogMessage << "'");
         }
         CounterTicketsErrors->Inc();
         record.IsLowRequestPriority = true;

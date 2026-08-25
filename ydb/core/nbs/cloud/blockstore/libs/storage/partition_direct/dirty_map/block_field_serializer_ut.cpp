@@ -9,8 +9,46 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace {
+
+void AssertFieldsEqual(
+    const TBlockRangeField& expected,
+    const TBlockRangeField& actual)
+{
+    UNIT_ASSERT_VALUES_EQUAL(expected.Print(), actual.Print());
+    UNIT_ASSERT_VALUES_EQUAL(
+        expected.GetSegmentCount(),
+        actual.GetSegmentCount());
+    UNIT_ASSERT_VALUES_EQUAL(expected.GetBlockCount(), actual.GetBlockCount());
+}
+
+void AssertRestored(
+    const TBlockRangeField& source,
+    const TBlockFieldProto& proto)
+{
+    TBlockRangeField restored;
+    LoadBlockField(proto, &restored);
+    AssertFieldsEqual(source, restored);
+}
+
+}   // namespace
+
+////////////////////////////////////////////////////////////////////////////////
+
 Y_UNIT_TEST_SUITE(TBlockFieldSerializerTest)
 {
+    Y_UNIT_TEST(ShouldSaveAndLoadEmptyField)
+    {
+        TBlockRangeField source;
+
+        TBlockFieldProto proto;
+        SaveBlockField(source, MaxVChunkBlockCount, &proto);
+
+        UNIT_ASSERT(
+            proto.GetEncodingCase() == TBlockFieldProto::ENCODING_NOT_SET);
+        AssertRestored(source, proto);
+    }
+
     Y_UNIT_TEST(ShouldSaveSparseRangesWithRunLengthEncoding)
     {
         TBlockRangeField source;
@@ -29,10 +67,7 @@ Y_UNIT_TEST_SUITE(TBlockFieldSerializerTest)
         UNIT_ASSERT_VALUES_EQUAL(1, static_cast<ui8>(encoding[2]));
         UNIT_ASSERT_VALUES_EQUAL(5, static_cast<ui8>(encoding[3]));
 
-        TBlockRangeField target;
-        LoadBlockField(proto, &target);
-
-        UNIT_ASSERT_VALUES_EQUAL(source.Print(), target.Print());
+        AssertRestored(source, proto);
     }
 
     Y_UNIT_TEST(ShouldEncodeLongRunLengths)
@@ -51,10 +86,7 @@ Y_UNIT_TEST_SUITE(TBlockFieldSerializerTest)
         UNIT_ASSERT_VALUES_EQUAL(255, static_cast<ui8>(encoding[3]));
         UNIT_ASSERT_VALUES_EQUAL(0, static_cast<ui8>(encoding[4]));
 
-        TBlockRangeField target;
-        LoadBlockField(proto, &target);
-
-        UNIT_ASSERT_VALUES_EQUAL(source.Print(), target.Print());
+        AssertRestored(source, proto);
     }
 
     Y_UNIT_TEST(ShouldSaveFragmentedRangesWithBitMask)
@@ -80,6 +112,7 @@ Y_UNIT_TEST_SUITE(TBlockFieldSerializerTest)
         TBlockRangeField target;
         LoadBlockField(proto, &target);
 
+        AssertFieldsEqual(source, target);
         UNIT_ASSERT_VALUES_EQUAL(
             MaxVChunkBlockCount / 2,
             target.GetSegmentCount());
@@ -108,10 +141,12 @@ Y_UNIT_TEST_SUITE(TBlockFieldSerializerTest)
         SaveBlockField(field, MaxVChunkBlockCount, &proto);
         UNIT_ASSERT(
             proto.GetEncodingCase() == TBlockFieldProto::kRunLengthEncoding);
+        AssertRestored(field, proto);
 
         field.Add(TBlockRange64::WithLength(segmentThreshold * 2, 1));
         SaveBlockField(field, MaxVChunkBlockCount, &proto);
         UNIT_ASSERT(proto.GetEncodingCase() == TBlockFieldProto::kBitMask);
+        AssertRestored(field, proto);
     }
 
     Y_UNIT_TEST(ShouldUseRuntimeBlockCountToChooseEncoding)
@@ -128,6 +163,7 @@ Y_UNIT_TEST_SUITE(TBlockFieldSerializerTest)
 
         UNIT_ASSERT(proto.GetEncodingCase() == TBlockFieldProto::kBitMask);
         UNIT_ASSERT(proto.GetBitMask().size() <= blockCount / 8);
+        AssertRestored(field, proto);
     }
 }
 

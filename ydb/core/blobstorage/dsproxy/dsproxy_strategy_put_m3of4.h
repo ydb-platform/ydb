@@ -108,6 +108,7 @@ protected:
         const ui32 requiredNumMetadataParts = minLatency ? 4 : 2;
         const ui32 requiredNumParts = requiredNumDataParts + requiredNumMetadataParts;
 
+        groupDiskRequests.PutsPending.reserve(requiredNumParts);
         for (bool ignoreSlowDisks : {true, false}) {
             for (bool considerLost : {true, false}) {
                 // fix the data part of the subgroup

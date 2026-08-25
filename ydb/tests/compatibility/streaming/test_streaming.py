@@ -380,10 +380,12 @@ class StreamingTestBase:
             messages_count=len(expected_output),
             consumer_name=self.consumer_name,
             database=self.database_path,
-            endpoint=endpoint)
+            endpoint=endpoint,
+            timeout=60)
         if (len(read_data) != len(expected_output)):
             read_data = read_data[-len(expected_output):]        # deduplication disabled
         assert sorted(read_data) == sorted(expected_output)
+        wait_completed_checkpoints(self.cluster, f"/Root/{self.query_name}")
 
     def do_test_part1(self, extra_suffix=''):
         suffix = ('value1' if self.test_precompute_queries else '') + extra_suffix

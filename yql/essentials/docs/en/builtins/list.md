@@ -460,7 +460,7 @@ Specifics:
 
 * The end is not included, i.e. `ListFromRange(1,3) == AsList(1,2)`.
 * The type for the resulting elements is selected as the broadest from the argument types. For example, `ListFromRange(1, 2, 0.5)` results in a `Double` list.
-* `Decimal` ranges are supported starting from language version [2026.02](../changelog/2026.02.md). `Start`, `End`, and an explicit `Step` must have exactly the same `Decimal(N, M)` type.
+* `Decimal` ranges are supported starting from language version [2026.02](../changelog/2026.02.md).
 * If the start and the end is one of the date representing type, the step has to be `Interval`.
 * The list is "lazy", but if it's used incorrectly, it can still consume a lot of RAM.
 * If the step is positive and the end is less than or equal to the start, the result list is empty.

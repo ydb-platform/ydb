@@ -2,7 +2,7 @@
 
 Below is an example of setting the balancing algorithm option that prefers a [pile](../../concepts/glossary.md#pile) in a given [state](../../concepts/bridge.md#pile-states) in the {{ ydb-short-name }} SDK.
 
-If no state is specified when setting the option, the SDK prefers the PRIMARY pile.
+If the state is not specified when setting the option, the SDK prefers the PRIMARY [pile](../../concepts/glossary.md#pile).
 
 This option only makes sense if the cluster is operating in [bridge mode](../../concepts/bridge.md). Otherwise, the SDK uses [random choice balancing](./balancing-random-choice.md).
 
@@ -10,7 +10,7 @@ This option only makes sense if the cluster is operating in [bridge mode](../../
 
 - Go
 
-  This functionality is not currently supported.
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - C++
 
@@ -32,20 +32,22 @@ This option only makes sense if the cluster is operating in [bridge mode](../../
 
 - Python
 
-  This functionality is not currently supported.
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - JavaScript
 
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - Java
 
-  This functionality is not currently supported.
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - Rust
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
-  Track progress or vote for Rust SDK support: [ydb-rs-sdk#491](https://github.com/ydb-platform/ydb-rs-sdk/issues/491)
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}

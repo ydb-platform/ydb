@@ -64,6 +64,16 @@ public:
         return Proto->GetEnableShuffleElimination();
     }
 
+    bool EnableCsWriteAffinity() const {
+        // QP_FORCE_CS_WRITE_AFFINITY: force the per-shard write affinity mode
+        // regardless of the PRAGMA value. Used for testing/debugging.
+#ifdef QP_FORCE_CS_WRITE_AFFINITY
+        return true;
+#else
+        return Proto->GetEnableCsWriteAffinity();
+#endif
+    }
+
     ui32 DqChannelVersion() const {
         return Proto->GetDqChannelVersion();
     }

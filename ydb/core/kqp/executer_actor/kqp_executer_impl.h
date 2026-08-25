@@ -315,6 +315,66 @@ protected:
                 // TODO: make sure we don't miss any shards
                 // Y_DEBUG_ABORT_UNLESS(!stageInfo.Meta.IsDatashard() && !stageInfo.Meta.IsOlap());
                 // Y_DEBUG_ABORT_UNLESS(!stageInfo.Meta.ShardKey);
+
+                // CsWriteAffinity: For OLAP sink stages with EnableCsWriteAffinity,
+                // the target column table's shards are NOT automatically added to shardIds above
+                // (because they are sinks, not scan sources). We add them here so they get
+                // resolved to nodes via the shard resolver, enabling per-shard task creation
+                // in CountComputeTasks and ColumnShardHashV1 shuffle routing.
+                if (stageInfo.Meta.Tx.Body->EnableCsWriteAffinity()) {
+                    for (const auto& sink : stage.GetSinks()) {
+                        if (sink.HasInternalSink()
+                                && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
+                            NKikimrKqp::TKqpTableSinkSettings sinkSettings;
+                            if (sink.GetInternalSink().GetSettings().UnpackTo(&sinkSettings)
+                                    && sinkSettings.GetIsOlap()) {
+                                // For CTAS (fill_table), use ShardKey partitions.
+                                if (sinkSettings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_FILL
+                                        && stageInfo.Meta.ShardKey) {
+                                    for (const auto& partition : stageInfo.Meta.ShardKey->GetPartitions()) {
+                                        shardIds.insert(partition.ShardId);
+                                    }
+                                }
+                                // For OLAP sinks (INSERT/REPLACE/FILL), use ColumnTableInfo column shards.
+                                if (stageInfo.Meta.ColumnTableInfoPtr
+                                        && stageInfo.Meta.ColumnTableInfoPtr->Description.HasSharding()) {
+                                    const auto& sharding = stageInfo.Meta.ColumnTableInfoPtr->Description.GetSharding();
+                                    for (const auto& shardId : sharding.GetColumnShards()) {
+                                        shardIds.insert(shardId);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+#ifdef QP_FORCE_CS_WRITE_AFFINITY
+                // Invariant: with the force flag, stages with OLAP sinks must have
+                // destination shards in shardIds so they get resolved to nodes.
+                // Stages without OLAP sinks (e.g. pure Transform stages) may have
+                // empty shardIds — that's fine, they fall through to the standard path.
+                bool hasOlapSink = false;
+                for (const auto& sink : stage.GetSinks()) {
+                    if (sink.HasInternalSink()
+                            && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
+                        NKikimrKqp::TKqpTableSinkSettings sinkSettings;
+                        if (sink.GetInternalSink().GetSettings().UnpackTo(&sinkSettings)
+                                && sinkSettings.GetIsOlap()) {
+                            hasOlapSink = true;
+                            break;
+                        }
+                    }
+                }
+                AFL_VERIFY(!stageInfo.Meta.Tx.Body->EnableCsWriteAffinity()
+                            || !hasOlapSink
+                            || !shardIds.empty())
+                    ("stageId", stageInfo.Id)
+                    ("hasOlapSink", hasOlapSink)
+                    ("shardIdsSize", shardIds.size())
+                    ("hasColumnTableInfo", stageInfo.Meta.ColumnTableInfoPtr != nullptr)
+                    ("hasShardKey", stageInfo.Meta.ShardKey != nullptr)
+                    ("msg", "QP_FORCE_CS_WRITE_AFFINITY requires destination shards in shardIds for OLAP sink stages");
+#endif
             }
         }
 

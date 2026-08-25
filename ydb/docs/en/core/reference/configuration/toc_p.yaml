@@ -19,13 +19,8 @@ items:
   href: host_configs.md
 - name: hosts
   href: hosts.md
-<<<<<<< HEAD
-=======
 - name: immediate_controls_config
   href: immediate_controls_config.md
-- name: kafka_proxy_config
-  href: kafka_proxy_config.md
->>>>>>> 617b68b36c5 (add description for force_shard_split_data_size setting (#41348))
 - name: log_config
   href: log_config.md
 - name: memory_controller_config

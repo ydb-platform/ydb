@@ -1020,7 +1020,7 @@ NTable::ITransactionMapPtr TDataShardUserDb::GetReadTxMap(const TTableId& tableI
         VolatileTxId && !VolatileCommitTxIds.empty() ||
         // We need tx map when current lock has uncommitted changes
         LockTxId && Self.SysLocksTable().HasCurrentWriteLock(tableId) ||
-        // In SnapshotIsolatiom mode we need tx map to see changes committed by our
+        // In SnapshotIsolation mode we need tx map to see changes committed by our
         // own locks earlier in this EvWrite (immediate commit path). Those deltas
         // remain in the localdb under their original LockTxId; without a TxMap entry
         // they are only visible at MvccVersion, which may be newer than SnapshotVersion.

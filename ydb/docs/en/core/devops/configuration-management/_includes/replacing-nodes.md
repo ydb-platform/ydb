@@ -1,120 +1,80 @@
-# Replacing Node FQDN
+# Replacing a Node's FQDN
 
-This procedure describes how to replace the FQDN (Fully Qualified Domain Name) of a {{ ydb-short-name }} cluster node without downtime.
+Sometimes, a node's FQDN changes, but the node itself remains in the system under a different name. Simply changing the node name in the `hosts` section will not work because `BS_CONTROLLER` internally stores the resource bindings to the `FQDN:IcPort` pairs, where `IcPort` is the Interconnect port number on which the node operates.
 
-## Prerequisites
+## Replacement Procedure
 
-{% include [fault-tolerance](../configuration-v1/_includes/fault-tolerance.md) %}
+1. Determine the `NodeId` of the node to be replaced.
+2. Prepare the `DefineBox` command that describes the cluster resources, in which an element `EnforcedNodeId: <NodeId>` will be added for the resources of the node to be replaced.
+3. Execute this command.
+4. Replace the FQDN in the `hosts` list in `cluster.yaml`.
+5. Perform a rolling restart.
+6. Remove the `EnforcedNodeId` field from `DefineBox` and replace `Fqdn` with the new node name.
+7. Execute `DefineBox` with the new values.
 
-{% include [warning-configuration-error](../configuration-v1/_includes/warning-configuration-error.md) %}
+## Example
 
-## Procedure Overview
+Suppose a cluster consists of three nodes.
 
-The FQDN replacement process involves:
-
-1. **Preparation**: Verify cluster health and prepare a new node configuration
-2. **Node shutdown**: Gracefully stop the node to be replaced
-3. **Configuration update**: Update the cluster configuration with a new FQDN
-4. **Node restart**: Start the node with new FQDN
-5. **Verification**: Confirm successful FQDN change
-
-## Step-by-Step Instructions
-
-### Step 1: Verify Cluster Health
-
-Before starting the replacement, ensure the cluster is healthy:
-
-```bash
-{{ ydb-cli }} monitoring healthcheck
-```
-
-### Step 2: Prepare New Node Configuration
-
-1. Update DNS records to point the new FQDN to the same IP address
-2. Update TLS certificates if they include hostname verification
-3. Prepare updated configuration files with the new FQDN
-
-### Step 3: Stop the Target Node
-
-Gracefully stop the node that needs FQDN replacement:
-
-```bash
-# For systemd-managed nodes
-sudo systemctl stop ydbd-storage
-
-# For manually started nodes
-kill -TERM <ydbd_pid>
-```
-
-### Step 4: Update Cluster Configuration
-
-Update the cluster configuration to reflect the new FQDN:
+`config.yaml`:
 
 ```yaml
-# Example configuration update
-hosts:
-  - host: new-hostname.example.com  # Updated FQDN
-    host_config_id: 1
-    port: 19001
-    location:
-      unit: "1"
-      data_center: "DC1"
-      rack: "1"
+- host: host1.my.sub.net
+  node_id: 1
+  location: {unit: 12345, data_center: MYDC, rack: r1}
+- host: host2.my.sub.net
+  node_id: 2
+  location: {unit: 23456, data_center: MYDC, rack: r2}
+- host: host3.my.sub.net
+  node_id: 3
+  location: {unit: 34567, data_center: MYDC, rack: r3}
 ```
 
-### Step 5: Apply Configuration Changes
+`DefineBox` looks like this:
 
-Apply the updated configuration to the cluster:
-
-```bash
-{{ ydb-cli }} admin config replace --config-file updated-config.yaml
+```proto
+DefineBox {
+    BoxId: 1
+    Host { Key { Fqdn: "host1.my.sub.net" IcPort: 19001 } HostConfigId: 1 }
+    Host { Key { Fqdn: "host2.my.sub.net" IcPort: 19001 } HostConfigId: 1 }
+    Host { Key { Fqdn: "host3.my.sub.net" IcPort: 19001 } HostConfigId: 1 }
+}
 ```
 
-### Step 6: Start Node with New FQDN
+Suppose we want to rename `host1.my.sub.net` to `host4.my.sub.net`. First, create the following `DefineBox`:
 
-Start the node using the new FQDN:
-
-```bash
-# Update hostname if necessary
-sudo hostnamectl set-hostname new-hostname.example.com
-
-# Start the node
-sudo systemctl start ydbd-storage
+```proto
+DefineBox {
+    BoxId: 1
+    Host { Key { Fqdn: "host1.my.sub.net" IcPort: 19001 } HostConfigId: 1 EnforcedNodeId: 1 }
+    Host { Key { Fqdn: "host2.my.sub.net" IcPort: 19001 } HostConfigId: 1 }
+    Host { Key { Fqdn: "host3.my.sub.net" IcPort: 19001 } HostConfigId: 1 }
+}
 ```
 
-### Step 7: Verify the Change
+Then modify `config.yaml`:
 
-Confirm the FQDN change was successful:
-
-```bash
-# Check node status
-{{ ydb-cli }} monitoring healthcheck
-
-# Verify node registration
-{{ ydb-cli }} admin config fetch | grep new-hostname
+```yaml
+- host: host4.my.sub.net
+  node_id: 1
+  location: {unit: 12345, data_center: MYDC, rack: r1}
+- host: host2.my.sub.net
+  node_id: 2
+  location: {unit: 23456, data_center: MYDC, rack: r2}
+- host: host3.my.sub.net
+  node_id: 3
+  location: {unit: 34567, data_center: MYDC, rack: r3}
 ```
 
-## Troubleshooting
+Next, perform a rolling restart of the cluster.
 
-### Common Issues
+Finally, apply the adjusted `DefineBox`:
 
-1. **DNS resolution problems**: Ensure new FQDN resolves correctly
-2. **Certificate validation errors**: Update certificates if they include hostname verification
-3. **Node registration failures**: Check network connectivity and firewall rules
-
-### Recovery Procedures
-
-If the FQDN replacement fails:
-
-1. Revert DNS changes to the original FQDN
-2. Restore the original configuration
-3. Restart the node with the original settings
-4. Investigate and resolve the underlying issue
-
-## Best Practices
-
-1. **Test in staging**: Always test FQDN replacement in a non-production environment first
-2. **Backup configurations**: Keep backups of working configurations before making changes
-3. **Monitor during change**: Watch cluster health metrics during the replacement process
-4. **Document changes**: Maintain records of FQDN changes for future reference
-5. **Coordinate with the team**: Ensure all team members are aware of the planned change
+```proto
+DefineBox {
+    BoxId: 1
+    Host { Key { Fqdn: "host4.my.sub.net" IcPort: 19001 } HostConfigId: 1 }
+    Host { Key { Fqdn: "host2.my.sub.net" IcPort: 19001 } HostConfigId: 1 }
+    Host { Key { Fqdn: "host3.my.sub.net" IcPort: 19001 } HostConfigId: 1 }
+}
+```

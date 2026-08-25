@@ -23,6 +23,6 @@ Main topics:
 * [{#T}](config-overview.md)
 * [{#T}](dynamic-config-selectors.md)
 * [{#T}](dynamic-config-volatile-config.md)
-* [{#T}](replacing_nodes.md)
+* [{#T}](../../devops/configuration-management/configuration-v2/replacing-nodes.md)
 * [{#T}](blobdepot.md)
 * [{#T}](blobdepot_decommit.md)

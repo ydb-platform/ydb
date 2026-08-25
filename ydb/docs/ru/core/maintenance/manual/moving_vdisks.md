@@ -2,21 +2,27 @@
 
 Иногда бывает нужно освободить блочное устройство для замены оборудования. Или один из VDisk'ов интенсивно используется и влияет на производительность остальных VDisk'ов, находящихся на том же PDisk'е. В этих случаях необходимо выполнить перевоз VDisk'ов.
 
-## Перевезти один VDisk с блочного устройства {#moving_vdisk}
+## Перевезти один из VDisk'ов с блочного устройства {#moving_vdisk}
 
-Получите идентификатор VDisk с помощью утилиты [{{ ydb-short-name }} DSTool](../../reference/ydb-dstool/index.md):
+Получите список идентификаторов VDisk'ов с помощью утилиты [{{ ydb-short-name }} DSTool](../../reference/ydb-dstool/index.md):
 
 ```bash
 ydb-dstool -e <bs_endpoint> vdisk list --format tsv --columns VDiskId --no-header
 ```
 
-Переместите выбранный VDisk:
+Чтобы перевезти VDisk'и с блочного устройства, выполните на узле следующие команды:
 
 ```bash
-ydb-dstool -e <bs_endpoint> vdisk evict --vdisk-ids VDISK_ID
+ydb-dstool -e <bs_endpoint> vdisk evict --vdisk-ids VDISK_ID1 ... VDISK_IDN
+ydbd admin bs config invoke --proto 'Command { ReassignGroupDisk { GroupId: <ID группы хранения> GroupGeneration: <Поколение группы хранения> FailRealmIdx: <FailRealm> FailDomainIdx: <FailDomain> VDiskIdx: <Номер слота> } }'
 ```
 
-Blob Storage Controller выбирает подходящий целевой PDisk в соответствии с правилами размещения кластера. `VDISK_ID` — идентификатор VDisk в формате `[GroupId:GroupGeneration:FailRealmIdx:FailDomainIdx:VDiskIdx]`.
+* `VDISK_ID1 ... VDISK_IDN` — список идентификаторов VDisk'ов, вида `[GroupId:GroupGeneration:FailRealmIdx:FailDomainIdx:VDiskIdx]`. Идентификаторы разделяются пробелами.
+* `GroupId` — ID группы хранения.
+* `GroupGeneration` — поколение группы хранения.
+* `FailRealmIdx` — номер fail realm.
+* `FailDomainIdx` — номер fail domain.
+* `VDiskIdx` — номер слота.
 
 ## Перевезти все VDisk'и для планового обслуживания {#moving_pdisk}
 

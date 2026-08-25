@@ -4,11 +4,11 @@ Schema versions before 4 are deliberately rejected by ``load_manifest``.  They
 did not carry immutable plan steps, so interpreting them as resumable results
 would be unsafe.
 """
+
 from copy import deepcopy
 from pathlib import Path
 
 from ydb.tools.ydb_bench.lib.common import BenchmarkError, atomic_write_json
-
 
 SCHEMA_VERSION = 4
 PENDING = "pending"
@@ -33,6 +33,7 @@ def transition(record, state, **fields):
 
 def load_manifest(path):
     import json
+
     try:
         with Path(path).open(encoding="utf-8") as stream:
             value = json.load(stream)
@@ -47,6 +48,7 @@ def load_manifest(path):
 
 class ResultStore:
     """Own a manifest and ensure each published version is atomically replaced."""
+
     def __init__(self, path, manifest):
         self.path = Path(path)
         self.manifest = deepcopy(manifest)
@@ -63,6 +65,18 @@ class ResultStore:
             self.manifest["steps"][index] = transition(record, state, **fields)
             self.write()
             return self.manifest["steps"][index]
+        raise BenchmarkError("unknown run step {}".format(step_id))
+
+    def update_step(self, step_id, **fields):
+        """Atomically add progress fields without changing a running step's state."""
+        for record in self.manifest["steps"]:
+            if record["id"] != step_id:
+                continue
+            if record["state"] != RUNNING:
+                raise BenchmarkError("cannot update step {} in state {}".format(step_id, record["state"]))
+            record.update(fields)
+            self.write()
+            return record
         raise BenchmarkError("unknown run step {}".format(step_id))
 
     def add_artifacts(self, step_id, artifacts):

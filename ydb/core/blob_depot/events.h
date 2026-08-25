@@ -30,6 +30,7 @@ namespace NKikimr {
             EvPushMetrics,
             EvPrepareWriteS3,
             EvPrepareWriteS3Result,
+            EvPushS3RouterMetrics,
         };
 
 #define BLOBDEPOT_PARAM_ARG(ARG) std::optional<std::decay_t<decltype(Record.Get##ARG())>> param##ARG,
@@ -77,6 +78,7 @@ namespace NKikimr {
         BLOBDEPOT_EVENT_PB(EvPushMetrics, BytesRead, BytesWritten);
         BLOBDEPOT_EVENT_PB_NO_ARGS(EvPrepareWriteS3);
         BLOBDEPOT_EVENT_PB_NO_ARGS(EvPrepareWriteS3Result);
+        BLOBDEPOT_EVENT_PB_NO_ARGS(EvPushS3RouterMetrics);
 
         template<typename TEvent>
         struct TResponseFor {};

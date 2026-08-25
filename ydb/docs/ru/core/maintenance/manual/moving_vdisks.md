@@ -2,7 +2,23 @@
 
 Иногда бывает нужно освободить блочное устройство для замены оборудования. Или один из VDisk'ов интенсивно используется и влияет на производительность остальных VDisk'ов, находящихся на том же PDisk'е. В этих случаях необходимо выполнить перевоз VDisk'ов.
 
-## Перевезти VDisk'и с блочного устройства {#moving_vdisk}
+## Перевезти один VDisk с блочного устройства {#moving_vdisk}
+
+Получите идентификатор VDisk с помощью утилиты [{{ ydb-short-name }} DSTool](../../reference/ydb-dstool/index.md):
+
+```bash
+ydb-dstool -e <bs_endpoint> vdisk list --format tsv --columns VDiskId --no-header
+```
+
+Переместите выбранный VDisk:
+
+```bash
+ydb-dstool -e <bs_endpoint> vdisk evict --vdisk-ids VDISK_ID
+```
+
+Blob Storage Controller выбирает подходящий целевой PDisk в соответствии с правилами размещения кластера. `VDISK_ID` — идентификатор VDisk в формате `[GroupId:GroupGeneration:FailRealmIdx:FailDomainIdx:VDiskIdx]`.
+
+## Перевезти все VDisk'и для планового обслуживания {#moving_pdisk}
 
 ### Автоматический перенос при плановом обслуживании
 

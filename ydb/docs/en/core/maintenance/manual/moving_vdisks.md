@@ -2,7 +2,23 @@
 
 Sometimes you may need to free up a block store volume to replace equipment. Or a VDisk may be in active use, affecting the performance of other VDisks running on the same PDisk. In cases like this, VDisks need to be moved.
 
-## Move VDisks from a block store volume {#moving_vdisk}
+## Move one VDisk from a block store volume {#moving_vdisk}
+
+Get the VDisk ID using [{{ ydb-short-name }} DSTool](../../reference/ydb-dstool/index.md):
+
+```bash
+ydb-dstool -e <bs_endpoint> vdisk list --format tsv --columns VDiskId --no-header
+```
+
+Move the selected VDisk:
+
+```bash
+ydb-dstool -e <bs_endpoint> vdisk evict --vdisk-ids VDISK_ID
+```
+
+The Blob Storage Controller selects a suitable destination PDisk according to the cluster placement rules. `VDISK_ID` is a VDisk ID in the `[GroupId:GroupGeneration:FailRealmIdx:FailDomainIdx:VDiskIdx]` format.
+
+## Move all VDisks for planned maintenance {#moving_pdisk}
 
 ### Automatic relocation during planned maintenance
 

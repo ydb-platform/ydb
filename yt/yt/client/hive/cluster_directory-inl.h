@@ -284,6 +284,18 @@ bool TClusterDirectoryBase<TConnection>::HasTvmId(NAuth::TTvmId tvmId) const
 }
 
 template <std::derived_from<NApi::IConnection> TConnection>
+std::optional<typename TClusterDirectoryBase<TConnection>::TCluster> TClusterDirectoryBase<TConnection>::FindCluster(
+    const std::string& name) const
+{
+    auto guard = Guard(Lock_);
+    auto it = NameToCluster_.find(name);
+    if (it == NameToCluster_.end()) {
+        return std::nullopt;
+    }
+    return it->second;
+}
+
+template <std::derived_from<NApi::IConnection> TConnection>
 TClusterDirectoryBase<TConnection>::TCluster TClusterDirectoryBase<TConnection>::CreateCluster(
     const std::string& name,
     const NYTree::INodePtr& config)

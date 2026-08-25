@@ -152,4 +152,8 @@ message TStorageServiceConfig
     // actor mailbox. Connect still uses the actor path. Falls back to the actor
     // path when no direct session is available for the destination node.
     optional bool UseDirectSessionTransport = 31;
+
+    // Defaults to true. When false, NBS does not calculate or attach per-block
+    // checksums and DDisk/PersistentBuffer ignore checksum machinery.
+    optional bool EnableChecksums = 32;
 }

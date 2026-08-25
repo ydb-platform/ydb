@@ -415,6 +415,45 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
     AssertReadResult(readResult2, payload2);
 }
 
+[[maybe_unused]] void TestWriteAndReadWithoutChecksums(
+        NDDisk::TDDiskConfig ddiskConfig) {
+    ddiskConfig.EnableChecksums = false;
+    TTestContext ctx(std::move(ddiskConfig));
+    NDDisk::TQueryCredentials creds = Connect(ctx, 31, 1);
+
+    const TString payload = MakeData('N', MinBlockSize);
+    auto write = std::make_unique<NDDisk::TEvWrite>(
+        creds,
+        NDDisk::TBlockSelector(8, MinBlockSize, MinBlockSize),
+        NDDisk::TWriteInstruction(0));
+    write->AddPayload(MakeAlignedRope(payload));
+    auto writeResult =
+        ctx.SendAndGrab<NDDisk::TEvWriteResult>(write.release());
+    AssertStatus<NDDisk::TEvWriteResult>(writeResult, TReplyStatus::OK);
+
+    auto readResult = ctx.SendAndGrab<NDDisk::TEvReadResult>(
+        new NDDisk::TEvRead(
+            creds,
+            {8, MinBlockSize, MinBlockSize},
+            {true}));
+    AssertStatus<NDDisk::TEvReadResult>(readResult, TReplyStatus::OK);
+    UNIT_ASSERT_VALUES_EQUAL(
+        readResult->Get()->GetPayload(0).ConvertToString(), payload);
+    UNIT_ASSERT_VALUES_EQUAL(readResult->Get()->Record.ChecksumsSize(), 0u);
+
+    auto zeroReadResult = ctx.SendAndGrab<NDDisk::TEvReadResult>(
+        new NDDisk::TEvRead(
+            creds,
+            {8, 2 * MinBlockSize, MinBlockSize},
+            {true}));
+    AssertStatus<NDDisk::TEvReadResult>(zeroReadResult, TReplyStatus::OK);
+    UNIT_ASSERT_VALUES_EQUAL(
+        zeroReadResult->Get()->GetPayload(0).ConvertToString(),
+        TString(MinBlockSize, '\0'));
+    UNIT_ASSERT_VALUES_EQUAL(
+        zeroReadResult->Get()->Record.ChecksumsSize(), 0u);
+}
+
 [[maybe_unused]] void TestCheckVChunksArePerTablet(NDDisk::TDDiskConfig ddiskConfig) {
     TTestContext ctx(std::move(ddiskConfig));
 

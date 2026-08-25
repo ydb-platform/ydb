@@ -46,9 +46,15 @@ std::unique_ptr<NReader::NCommon::ISourcesConstructor> TUserTableAccessor::Selec
     AFL_VERIFY(readDescription.PKRangesFilter);
     // here we select portions for a read
     std::vector<IColumnEngine::TSelectedPortionInfo> portions =
+<<<<<<< HEAD
         context.GetEngine().Select(PathId.InternalPathId, readDescription.GetSnapshot(), *readDescription.PKRangesFilter,
             readDescription.readNonconflictingPortions, readDescription.readConflictingPortions, readDescription.ownPortions, context.GetOrbit(), readDescription.TxId, readDescription.ScanId);
     
+=======
+        context.GetEngine().Select(PathId.InternalPathId, readDescription, context.GetDataLocksManager());
+    const bool needDuplicateFiltering = readDescription.NeedDuplicateFiltering();
+
+>>>>>>> dc4af3bb31e ( Fix wrong scan results in CS scans (#46747))
     switch (readerClass) {
         case NReader::EReaderClass::Plain: {
             std::vector<std::shared_ptr<TPortionInfo>> sources;
@@ -62,7 +68,8 @@ std::unique_ptr<NReader::NCommon::ISourcesConstructor> TUserTableAccessor::Selec
             for (auto&& i : portions) {
                 sources.emplace_back(NReader::NSimple::TSourceConstructor(i.GetPortion(), i.GetIsVisible(), readDescription.GetSorting()));
             }
-            return std::make_unique<NReader::NSimple::TPortionsSources>(std::move(sources), readDescription.GetSorting());
+            return std::make_unique<NReader::NSimple::TPortionsSources>(
+                std::move(sources), readDescription.GetSorting(), needDuplicateFiltering);
         }
         case NReader::EReaderClass::Trivial: {
             std::deque<NReader::NTrivial::TSourceConstructor> sources;
@@ -70,7 +77,7 @@ std::unique_ptr<NReader::NCommon::ISourcesConstructor> TUserTableAccessor::Selec
                 sources.emplace_back(NReader::NTrivial::TSourceConstructor(i.GetPortion(), i.GetIsVisible(), readDescription.GetSorting()));
             }
             return std::make_unique<NReader::NTrivial::TPortionsSources>(
-                std::move(sources), readDescription.GetSorting(), readDescription.GetFakeSort());
+                std::move(sources), readDescription.GetSorting(), readDescription.GetFakeSort(), needDuplicateFiltering);
         }
     }
     return nullptr;

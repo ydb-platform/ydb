@@ -65,15 +65,45 @@ TConclusionStatus TReadMetadata::Init(const NColumnShard::TColumnShard* owner, c
         }
     }
 
+<<<<<<< HEAD
     StatsMode = readDescription.StatsMode;
     DeduplicationPolicy = readDescription.DeduplicationPolicy;
     GroupedMemoryLimiterOperator = readDescription.GroupedMemoryLimiterOperator;
+=======
+    StatsMode = read.StatsMode;
+    GroupedMemoryLimiterOperator = read.GroupedMemoryLimiterOperator;
+
+    if (read.readConflictingPortions) {
+        auto& opManager = owner->GetOperationsManager();
+        std::vector<TPortionInfo::TConstPtr> conflictingPortions = SourcesConstructor->GetConflictingPortions();
+        if (!conflictingPortions.empty()) {
+            for (const TPortionInfo::TConstPtr& p : conflictingPortions) {
+                // add maybe conflicting writes
+                if (!p->IsCommitted()) {
+                    AFL_VERIFY(p->GetPortionType() == EPortionType::Written);
+                    auto* written = static_cast<const TWrittenPortionInfo*>(p.get());
+                    auto writeId = written->GetInsertWriteId();
+                    auto op = opManager.GetOperationByInsertWriteIdVerified(writeId);
+                    // we do not need to check our own uncommitted writes
+                    if (op->GetLockId() != *LockId) {
+                        AddMaybeConflictingWrite(writeId, op->GetLockId());
+                    }
+                }
+            }
+
+            // register the lock in the end, when Init() is successful for sure
+            DataLockGuard = owner->GetDataLocksManager()->RegisterLock<NDataLocks::TListPortionsLock>(
+                read.GetLockName(), conflictingPortions, NDataLocks::ELockCategory::Scan, true);
+        }
+    }
+>>>>>>> dc4af3bb31e ( Fix wrong scan results in CS scans (#46747))
     return TConclusionStatus::Success();
 }
 
 TReadMetadata::TReadMetadata(const std::shared_ptr<const TVersionedIndex>& schemaIndex, const TReadDescription& read)
     : TBase(schemaIndex, read.GetSorting(), read.GetProgram(), schemaIndex->GetSchemaVerified(read.GetSnapshot()), read.GetSnapshot(),
           read.GetScanCursorVerified(), read.GetTabletId())
+    , DuplicateFilteringNeeded(read.NeedDuplicateFiltering())
     , TableMetadataAccessor(read.TableMetadataAccessor)
     , ReadStats(std::make_shared<TReadStats>())
 {

@@ -88,12 +88,13 @@ public:
             info.SetSinceStep(5);
             info.SetSinceTxId(1);
             info.MutableSchema()->SetVersion(0);
-            db.Table<Schema::SchemaPresetVersionInfo>().Key(presetId, 5, 1).Update(
-                NIceDb::TUpdate<Schema::SchemaPresetVersionInfo::InfoProto>(info.SerializeAsString()));
+            db.Table<Schema::SchemaPresetVersionInfo>()
+                .Key(presetId, 5, 1)
+                .Update(NIceDb::TUpdate<Schema::SchemaPresetVersionInfo::InfoProto>(info.SerializeAsString()));
         }
 
         {
-        // Add invalid widow table version, if SchemaVersionCleaner will not erase it, then test will fail.
+            // Add invalid widow table version, if SchemaVersionCleaner will not erase it, then test will fail.
             NKikimrTxColumnShard::TTableVersionInfo versionInfo;
             versionInfo.SetSchemaPresetId(presetId);
             versionInfo.SetSinceStep(5);

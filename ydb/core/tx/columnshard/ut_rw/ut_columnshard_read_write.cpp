@@ -1902,7 +1902,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
     }
 
     Y_UNIT_TEST(WriteStandalone) {
-        TestTableDescription table{.Standalone = true};
+        TestTableDescription table{ .Standalone = true };
         TestWrite(table);
     }
 
@@ -1919,7 +1919,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
     }
 
     Y_UNIT_TEST_DUO(WriteOverload, Standalone) {
-        TestTableDescription table{.Standalone = Standalone};
+        TestTableDescription table{ .Standalone = Standalone };
         TestWriteOverload(table);
     }
 
@@ -1939,7 +1939,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         }
 
         const ui64 tableId = 1;
-        TestTableDescription table{.Standalone = false};
+        TestTableDescription table{ .Standalone = false };
         Y_UNUSED(SetupSchema(runtime, sender, tableId, table));
 
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvDataShard::TEvCompactTable(/*ownerId=*/1, tableId));

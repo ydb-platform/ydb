@@ -299,10 +299,6 @@ public:
     TInsertThenDeleteAfterCommit(TTxSettings txSettings) : TxSettings_(txSettings) { SetFillTables(false); }
 protected:
     void DoExecute() override {
-        // TODO: SnapshotRW + row table: DELETE doesn't see uncommitted INSERT from same tx without mid-tx read
-        if (!GetIsOlap() && TxSettings_.GetMode() == TTxSettings::TS_SNAPSHOT_RW) {
-            return;
-        }
         TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
         tx.Begin();
         tx.Exec(R"(INSERT INTO KV2 (Key, Value) VALUES (1u, "inserted");)");
@@ -424,8 +420,7 @@ public:
 protected:
     void DoExecute() override {
         // TODO: OLAP: INSERT doesn't see DELETE from same tx without mid-tx read
-        // TODO: SnapshotRW: INSERT doesn't see DELETE from same tx without mid-tx read
-        if (GetIsOlap() || TxSettings_.GetMode() == TTxSettings::TS_SNAPSHOT_RW) {
+        if (GetIsOlap()) {
             return;
         }
         TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
@@ -466,10 +461,6 @@ public:
     TInsertThenUpdateThenDeleteAfterCommit(TTxSettings txSettings) : TxSettings_(txSettings) { SetFillTables(false); }
 protected:
     void DoExecute() override {
-        // TODO: SnapshotRW + row table: DELETE doesn't see uncommitted writes from same tx without mid-tx read
-        if (!GetIsOlap() && TxSettings_.GetMode() == TTxSettings::TS_SNAPSHOT_RW) {
-            return;
-        }
         TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
         tx.Begin();
         tx.Exec(R"(INSERT INTO KV2 (Key, Value) VALUES (1u, "inserted");)");

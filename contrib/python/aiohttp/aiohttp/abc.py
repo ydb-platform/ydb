@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import socket
+import zlib
 from abc import ABC, abstractmethod
 from collections.abc import Sized
 from http.cookies import BaseCookie, Morsel
@@ -16,6 +17,7 @@ from typing import (
     Optional,
     Tuple,
     TypedDict,
+    Union,
 )
 
 from multidict import CIMultiDict
@@ -59,6 +61,9 @@ class AbstractRouter(ABC):
 
 
 class AbstractMatchInfo(ABC):
+
+    __slots__ = ()
+
     @property  # pragma: no branch
     @abstractmethod
     def handler(self) -> Callable[[Request], Awaitable[StreamResponse]]:
@@ -171,6 +176,11 @@ class AbstractCookieJar(Sized, IterableBase):
     def __init__(self, *, loop: Optional[asyncio.AbstractEventLoop] = None) -> None:
         self._loop = loop or asyncio.get_event_loop()
 
+    @property
+    @abstractmethod
+    def quote_cookie(self) -> bool:
+        """Return True if cookies should be quoted."""
+
     @abstractmethod
     def clear(self, predicate: Optional[ClearCookiePredicate] = None) -> None:
         """Clear all cookies if no predicate is passed."""
@@ -191,12 +201,12 @@ class AbstractCookieJar(Sized, IterableBase):
 class AbstractStreamWriter(ABC):
     """Abstract stream writer."""
 
-    buffer_size = 0
-    output_size = 0
+    buffer_size: int = 0
+    output_size: int = 0
     length: Optional[int] = 0
 
     @abstractmethod
-    async def write(self, chunk: bytes) -> None:
+    async def write(self, chunk: Union[bytes, bytearray, memoryview]) -> None:
         """Write chunk into stream."""
 
     @abstractmethod
@@ -208,7 +218,9 @@ class AbstractStreamWriter(ABC):
         """Flush the write buffer."""
 
     @abstractmethod
-    def enable_compression(self, encoding: str = "deflate") -> None:
+    def enable_compression(
+        self, encoding: str = "deflate", strategy: int = zlib.Z_DEFAULT_STRATEGY
+    ) -> None:
         """Enable HTTP body compression"""
 
     @abstractmethod
@@ -225,6 +237,8 @@ class AbstractStreamWriter(ABC):
 class AbstractAccessLogger(ABC):
     """Abstract writer to access log."""
 
+    __slots__ = ("logger", "log_format")
+
     def __init__(self, logger: logging.Logger, log_format: str) -> None:
         self.logger = logger
         self.log_format = log_format
@@ -232,3 +246,8 @@ class AbstractAccessLogger(ABC):
     @abstractmethod
     def log(self, request: BaseRequest, response: StreamResponse, time: float) -> None:
         """Emit log to logger."""
+
+    @property
+    def enabled(self) -> bool:
+        """Check if logger is enabled."""
+        return True

@@ -120,7 +120,6 @@ public:
     using TStatus = IGraphTransformer::TStatus;
     using TFutureStatus = NThreading::TFuture<TStatus>;
 
-public:
     ~TProgram() override;
 
     void SetLanguageVersion(TLangVersion version);
@@ -399,7 +398,7 @@ private:
         TUdfIndexPackageSet::TPtr udfIndexPackageSet,
         const TFileStoragePtr& fileStorage,
         const IUrlPreprocessing::TPtr& urlPreprocessing,
-        const TGatewaysConfig* gatewaysConfig,
+        THolder<TGatewaysConfig> gatewaysConfig,
         TString filename,
         TString sourceCode,
         TString sessionId,
@@ -435,7 +434,6 @@ private:
     NThreading::TFuture<IGraphTransformer::TStatus> AsyncTransformWithFallback(bool applyAsyncChanges);
     void SaveExprRoot();
 
-private:
     std::optional<bool> CheckFallbackIssues(const TIssues& issues);
     void HandleSourceCode();
     void HandleTranslationSettings(NSQLTranslation::TTranslationSettings& settings);
@@ -471,7 +469,7 @@ private:
     const IUrlPreprocessing::TPtr UrlPreprocessing_;
     TUserDataTable SavedUserDataTable_;
     TUserDataStorage::TPtr UserDataStorage_;
-    const TGatewaysConfig* GatewaysConfig_;
+    const THolder<TGatewaysConfig> GatewaysConfig_;
     TString Filename_;
     TString SourceCode_;
     ESourceSyntax SourceSyntax_;

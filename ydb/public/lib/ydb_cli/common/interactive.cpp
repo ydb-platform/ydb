@@ -66,12 +66,17 @@ TString AskAnyInputWithPrompt(const TString& prompt, bool verbose) {
 
 bool AskYesOrNo(const TString& query, std::optional<bool> defaultAnswer) {
     std::vector<TString> choices = {"y", "yes", "n", "no"};
+    auto promptBuilder = TStringBuilder() << query;
+
     if (defaultAnswer) {
         choices.push_back("");
+        promptBuilder << (*defaultAnswer ? " [Y/n] " : " [y/N] ");
+    } else {
+        promptBuilder << " [y/n] ";
     }
 
     bool result = defaultAnswer.value_or(false);
-    TString prompt = query;
+    TString prompt = promptBuilder;
     AskInputWithPrompt(prompt, [&](const TString& input) {
         const auto choice = to_lower(input);
         if (!IsIn(choices, choice)) {
@@ -87,33 +92,6 @@ bool AskYesOrNo(const TString& query, std::optional<bool> defaultAnswer) {
 
         return true;
     }, /* verbose */ false, /* exitOnError */ defaultAnswer.has_value());
-
-    return result;
-}
-
-bool AskPrompt(const std::string& query, bool defaultAnswer) {
-    if (!IsStdinInteractive()) {
-        Cerr << query << " Non interactive session, assuming default answer: " << defaultAnswer << Endl;
-        return defaultAnswer;
-    }
-
-    bool result = defaultAnswer;
-    TString prompt = TStringBuilder() << query << (defaultAnswer ? " [Y/n] " : " [y/N] ");
-    AskInputWithPrompt(prompt, [&](const TString& input) {
-        const auto choice = to_lower(input);
-        if (!IsIn({"y", "yes", "n", "no", ""}, choice)) {
-            prompt = "Please type \"y\" (yes) or \"n\" (no): ";
-            return false;
-        }
-
-        if (choice == "y" || choice == "yes") {
-            result = true;
-        } else if (choice == "n" || choice == "no") {
-            result = false;
-        }
-
-        return true;
-    });
 
     return result;
 }

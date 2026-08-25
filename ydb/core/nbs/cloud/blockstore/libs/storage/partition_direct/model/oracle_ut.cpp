@@ -19,7 +19,7 @@ namespace {
 struct THostStateControllerMock: public IHostStateController
 {
     TMap<THostIndex, EHostState> States;
-    ui64 HostPBufferUsedSize = 1_MB;
+    TCountAndSize HostPBufferUsedSize{.Count = 1, .Size = 1_MB};
 
     // Records every host index passed to QueryAddHost, in call order.
     TVector<THostIndex> AddHostQueries;
@@ -36,7 +36,7 @@ struct THostStateControllerMock: public IHostStateController
         States[hostIndex] = newState;
     }
 
-    ui64 GetHostPBufferUsedSize(THostIndex hostIndex) const override
+    TCountAndSize GetPBuffersUsage(THostIndex hostIndex) const override
     {
         Y_UNUSED(hostIndex);
 

@@ -3,6 +3,7 @@ import inspect
 import io
 import json
 import os
+import plistlib
 import shutil
 import signal
 import socket
@@ -21,7 +22,7 @@ from urllib.error import HTTPError
 from urllib.parse import quote
 from unittest import mock
 
-from ydb.tools.ydb_bench.lib import actors_core, cli, import_results, runner, web
+from ydb.tools.ydb_bench.lib import actors_core, cli, import_results, runner, topology, web
 from ydb.tools.ydb_bench.lib.actors_core import (
     PING_BENCHMARK,
     STAR_PING_BENCHMARK,
@@ -44,6 +45,7 @@ from ydb.tools.ydb_bench.lib.results import ResultStore, SCHEMA_VERSION, load_ma
 from ydb.tools.ydb_bench.lib.runner import run_command
 from ydb.tools.ydb_bench.lib.topology import (
     CpuTopology,
+    _parse_darwin_topology,
     discover_topology,
     parse_cpu_list,
     plan_affinity,
@@ -1214,6 +1216,58 @@ class YdbBenchTest(unittest.TestCase):
     def test_cpu_list_parser(self):
         self.assertEqual(parse_cpu_list("0-3,8,10-11\n"), (0, 1, 2, 3, 8, 10, 11))
 
+    def test_darwin_topology_uses_device_tree_clusters(self):
+        entries = []
+        for cpu, cluster, kind in ((0, 0, "E"), (1, 0, "E"), (2, 1, "P"), (3, 1, "P"), (4, 2, "P")):
+            entries.append(
+                {
+                    "logical-cpu-id": cpu,
+                    "cluster-id": cluster.to_bytes(4, byteorder="little"),
+                    "cluster-type": kind.encode("ascii") + b"\0",
+                }
+            )
+        entries.append(entries[0].copy())
+        topology = _parse_darwin_topology(
+            plistlib.dumps([{"IORegistryEntryChildren": entries}]),
+            (0, 1, 2, 3, 4),
+        )
+
+        self.assertEqual(topology.chiplets, ((0, (0, 1)), (0, (2, 3)), (0, (4,))))
+        self.assertEqual(
+            topology.chiplet_labels,
+            (
+                ((0, 1), "Efficiency cluster"),
+                ((2, 3), "Performance cluster 1"),
+                ((4,), "Performance cluster 2"),
+            ),
+        )
+        self.assertEqual(topology.physical_cores, ((0,), (1,), (2,), (3,), (4,)))
+        self.assertEqual(topology.smt_siblings, topology.physical_cores)
+        self.assertEqual(topology_record(topology)["chiplets"][0]["label"], "Efficiency cluster")
+
+    def test_darwin_topology_rejects_conflicting_cpu_entries(self):
+        entries = [
+            {"logical-cpu-id": 0, "cluster-id": 0, "cluster-type": b"E\0"},
+            {"logical-cpu-id": 0, "cluster-id": 1, "cluster-type": b"P\0"},
+        ]
+
+        self.assertIsNone(
+            _parse_darwin_topology(
+                plistlib.dumps([{"IORegistryEntryChildren": entries}]),
+                (0,),
+            )
+        )
+
+    def test_darwin_topology_discovery_times_out(self):
+        with mock.patch.object(
+            topology.subprocess,
+            "run",
+            side_effect=topology.subprocess.TimeoutExpired("ioreg", 10),
+        ) as run:
+            self.assertIsNone(topology._discover_darwin_topology((0,)))
+
+        self.assertEqual(run.call_args.kwargs["timeout"], 10)
+
     def test_topology_discovery_intersects_sysfs_with_allowed_cpus(self):
         sys_root = self.root / "sys" / "devices" / "system"
         for node_id, cpus in ((0, "0-3"), (1, "4-7")):
@@ -1861,6 +1915,23 @@ class WebTest(unittest.TestCase):
         self.assertEqual(model["complete"]["status"], "completed")
         self.assertEqual(model["imported"]["source"], "imported")
 
+    def test_web_runs_are_sorted_newest_first(self):
+        self._manifest(self.root / "older")
+        self._manifest(self.root / "newer")
+        for run_id, started_at in (
+            ("older", "2025-01-01T00:00:00+00:00"),
+            ("newer", "2025-02-01T00:00:00+00:00"),
+        ):
+            path = self.root / run_id / "run.json"
+            manifest = json.loads(path.read_text(encoding="utf-8"))
+            manifest["started_at"] = started_at
+            path.write_text(json.dumps(manifest), encoding="utf-8")
+        service = RunService(self.root)
+        try:
+            self.assertEqual([record["id"] for record in service.filtered_model({})], ["newer", "older"])
+        finally:
+            service.shutdown()
+
     def test_chart_data_groups_summary_rows_by_affinity(self):
         self._manifest(self.root / "complete")
         summary = self.root / "complete" / "ping-bench" / "baseline" / "summary.csv"
@@ -1934,6 +2005,18 @@ class WebTest(unittest.TestCase):
             with urllib.request.urlopen(base + "/app.js") as response:
                 script = response.read()
                 self.assertIn(b"System topology", script)
+                self.assertIn(b"NUMA, cache and cores", script)
+                self.assertIn(b"function affinityTree", script)
+                self.assertIn(b"class=affinity-tree", script)
+                self.assertIn(b"SMT threads", script)
+                self.assertIn(b"<span class=cpu-ranges>vCPU ", script)
+                self.assertNotIn(b"(core.index+1)", script)
+                self.assertIn(b"Unavailable", script)
+                self.assertNotIn(b"Use in new run", script)
+                self.assertNotIn(b"data-mode", script)
+                self.assertNotIn(b"<th>First mask</th>", script)
+                self.assertNotIn(b"Physical cores (", script)
+                self.assertNotIn(b"SMT sibling sets (", script)
                 self.assertIn(b"New run", script)
                 self.assertIn(b"<th>Duration</th>", script)
                 self.assertIn(b"<th>Runs</th>", script)
@@ -1941,9 +2024,20 @@ class WebTest(unittest.TestCase):
                 self.assertIn(b"id=refresh-run", script)
                 self.assertIn(b"Queue position:", script)
                 self.assertIn(b"Currently running:", script)
+                self.assertIn(b"class=run-tabs", script)
+                self.assertIn(b"profileKeys.length===1?profileKeys[0]", script)
+                self.assertIn(b"class=\"card profile-overview\"", script)
+                self.assertIn(b"<strong>Execution details</strong>", script)
+                self.assertIn(b"<strong>Interrupted.</strong>", script)
+                self.assertIn(b"<summary>Downloads</summary>", script)
+                self.assertNotIn(b"['queued','running','recovery_required'].includes(run.state)", script)
                 self.assertIn(b"<option>queued</option>", script)
                 self.assertNotIn(b"setInterval(()=>renderRun", script)
                 self.assertIn(b"function cpuRanges", script)
+                self.assertIn(b"function humanTime", script)
+                self.assertIn(b"dateStyle:'medium',timeStyle:'short'", script)
+                self.assertIn(b"function elapsedLabel", script)
+                self.assertIn(b"record.status==='running'?Date.now()", script)
                 self.assertIn(b"ranges such as 1-16", script)
                 self.assertIn(b"function compactIntegerRanges", script)
                 self.assertIn(b"benchmarkChanged", script)

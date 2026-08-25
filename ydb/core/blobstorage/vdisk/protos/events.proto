@@ -125,7 +125,8 @@ message GetLogoBlobResponse {
 };
 
 message GetLogoBlobIndexStatRequest {
-
+    bool stream = 1; // false preserves the legacy single-response protocol
+    uint32 max_batch_bytes = 2; // zero selects the VDisk default; the value is advisory
 }
 
 message ChannelInfo {
@@ -148,4 +149,13 @@ message LogoBlobIndexStat {
 message GetLogoBlobIndexStatResponse {
     string status = 1;
     LogoBlobIndexStat stat = 2;
+    // The default is terminal so a streaming-aware client can consume a legacy
+    // response from a VDisk that does not know about this field.
+    bool has_more = 3;
+    uint64 sequence_id = 4; // one-based in streaming mode
+}
+
+message GetLogoBlobIndexStatResponseAck {
+    optional uint64 sequence_id = 1;
+    optional bool cancel = 2; // terminate the stream instead of producing the next batch
 }

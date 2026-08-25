@@ -61,7 +61,7 @@ const std::vector<ECodec>& GetSupportedCodecIds()
 {
     static const std::vector<ECodec> supportedCodecIds = [] {
         std::vector<ECodec> codecIds;
-        for (auto codecId : TEnumTraits<ECodec>::GetDomainValues()) {
+        for (auto codecId : TEnumTraits<ECodec>::GetUniqueDomainValues()) {
             if (FindCodec(codecId)) {
                 codecIds.push_back(codecId);
             }
@@ -78,4 +78,3 @@ const std::vector<ECodec>& GetSupportedCodecIds()
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NErasure
-

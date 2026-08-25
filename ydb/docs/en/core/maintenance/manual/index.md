@@ -10,6 +10,7 @@ Main topics:
 * [{#T}](moving_vdisks.md)
 * [{#T}](balancing_load.md)
 * [{#T}](selfheal.md)
+* [{#T}](selfheal_statestorage.md)
 * [{#T}](scrubbing.md)
 * [{#T}](disk_end_space.md)
 * [{#T}](../../devops/deployment-options/manual/decommissioning.md)

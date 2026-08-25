@@ -605,7 +605,6 @@ class TestViewer(object):
                                     'CreateTxId',
                                     'PathId',
                                     'PublicKeys',
-                                    'OriginalUserToken',
                                     'HashesInitParams',
                                     })
 
@@ -820,6 +819,65 @@ class TestViewer(object):
         return cls.normalize_result(cls.get_viewer("/viewer/groups", {
             'fields_required': 'all'
         }))
+
+    # A strict database user is allowed to filter groups by group_id/node_id/pdisk_id, and every such
+    # filter is validated against the storage of the database, so the handler has to fetch GroupId,
+    # NodeId and PDiskId from BS controller. GroupId is a part of the response anyway, but the disks
+    # behind a group are cluster-level data, so they must not be rendered for such a user - unlike
+    # the response of a viewer+ user.
+    @classmethod
+    def test_storage_groups_pdisk_fields_hidden_for_database_user(cls):
+        def disks_of_groups(response):
+            if 'status_code' in response:
+                return response
+
+            def vdisk_disks(vdisk):
+                disks = {key: vdisk[key] for key in ('VDiskId', 'NodeId') if key in vdisk}
+                if 'PDisk' in vdisk:
+                    disks['PDisk'] = {'PDiskId': (vdisk['PDisk'] or {}).get('PDiskId')}
+                return disks
+
+            return {
+                'StorageGroups': [
+                    {
+                        'GroupId': group.get('GroupId'),
+                        'VDisks': [vdisk_disks(vdisk) for vdisk in group.get('VDisks') or []],
+                    }
+                    for group in response.get('StorageGroups') or []
+                ],
+            }
+
+        base_params = {
+            'database': cls.dedicated_db,
+            'fields_required': 'VDisk,PDisk,NodeId,PDiskId',
+        }
+        # The ids to filter by are taken from the actual response of the database, so they end up
+        # canonized together with the request of every case below.
+        probe = cls.get_viewer("/storage/groups", base_params)
+        probe_group = next(iter(probe.get('StorageGroups') or []), {})
+        probe_vdisk = next(iter(probe_group.get('VDisks') or []), {})
+        # PDiskId is reported as "<node_id>-<pdisk_id>", but the filter takes the local id only
+        pdisk_id = str((probe_vdisk.get('PDisk') or {}).get('PDiskId') or '').rsplit('-', 1)[-1]
+
+        cases = [
+            base_params,
+            {**base_params, 'group_id': str(probe_group.get('GroupId'))},
+            {**base_params, 'node_id': str(probe_vdisk.get('NodeId'))},
+            {**base_params, 'pdisk_id': pdisk_id},
+        ]
+        users = {
+            'database': cls.make_cookie_headers(cls.database_session_id),
+            'root': cls.default_headers,
+        }
+        return [
+            {
+                'request': "/storage/groups?" + urlencode(params, safe='/,'),
+                'user': user,
+                'response': disks_of_groups(cls.get_viewer("/storage/groups", params, headers=headers)),
+            }
+            for params in cases
+            for user, headers in users.items()
+        ]
 
     @classmethod
     def test_viewer_groups_group_by_pool_name(cls):

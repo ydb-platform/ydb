@@ -4,6 +4,7 @@
 #include "request.h"
 #include "utils.h"
 
+#include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/core/http_proxy/events.h>
 #include <ydb/core/persqueue/public/list_topics/list_all_topics_actor.h>
 #include <ydb/core/persqueue/events/internal.h>
@@ -187,12 +188,10 @@ namespace NKikimr::NSqsTopic::V1 {
             const TRichQueueUrl queueUrl{
                 .Database = DatabaseName_,
                 .TopicPath = ToString(topicPath),
-                .Consumer = topicConsumer.Consumer,
+                .Consumer = NPersQueue::ConvertOldConsumerName(topicConsumer.Consumer, ctx),
                 .Fifo = topicConsumer.Fifo,
             };
-            TString path = PackQueueUrlPath(queueUrl);
-            TString url = TStringBuilder() << GetEndpoint(Cfg()) << path;
-            result.add_queue_urls(url);
+            result.add_queue_urls(MakeQueueUrl(queueUrl, Request_.get()));
         }
         return this->ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ctx);
     }

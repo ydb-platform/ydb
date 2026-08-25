@@ -2485,6 +2485,8 @@ Y_UNIT_TEST_QUAD(FullTextDeliveryProblem, LimitRowsPerRequest, EnableIndexStream
     auto& runtime = *kikimr.GetTestServer().GetRuntime();
     auto db = kikimr.GetQueryClient();
 
+    const bool compact = kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.GetEnableCompactFulltextIndex();
+
     // Create table with fulltext index using RunCall to properly handle fake threads
     kikimr.RunCall([&]() { CreateTexts(db); return true; });
     kikimr.RunCall([&]() { UpsertTexts(db); return true; });
@@ -2506,7 +2508,7 @@ Y_UNIT_TEST_QUAD(FullTextDeliveryProblem, LimitRowsPerRequest, EnableIndexStream
     THashMap<ui64, int> shardSet;
     UNIT_ASSERT(!docsShards.empty());
     UNIT_ASSERT(!implShards.empty());
-    UNIT_ASSERT(!dictShards.empty());
+    UNIT_ASSERT(compact || !dictShards.empty());
     UNIT_ASSERT(!statsShards.empty());
     UNIT_ASSERT(!mainShards.empty());
 

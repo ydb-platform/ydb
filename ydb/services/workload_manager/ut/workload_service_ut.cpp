@@ -1,5 +1,7 @@
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
 
 #include <ydb/services/workload_manager/ut/common/workload_service_ut_common.h>
 
@@ -1178,9 +1180,19 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersDdl) {
 
         auto settings = TQueryRunnerSettings().PoolId("").UserSID("test@user");
         const TString& poolId = "my_pool";
-        CreateSampleResourcePoolClassifier(ydb, settings, poolId);
+        const TString& classifierId = CreateSampleResourcePoolClassifier(ydb, settings, poolId);
 
         WaitForFail(ydb, settings, poolId);
+
+        ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
+            DROP RESOURCE POOL )" << poolId << R"(;
+        )", NYdb::EStatus::PRECONDITION_FAILED, TStringBuilder() << "referenced by resource pool classifiers: " << classifierId);
+
+        WaitForFail(ydb, settings, poolId);
+
+        ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
+            DROP RESOURCE POOL CLASSIFIER )" << classifierId << R"(;
+        )");
 
         ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
             DROP RESOURCE POOL )" << poolId << R"(;
@@ -1282,6 +1294,29 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersDdl) {
         return count;
     }
 
+    // Drops through tx proxy directly, bypassing the DDL check that forbids dropping a referenced
+    // pool — reproduces the dangling state left by clusters from before YQ-5514.
+    void DropResourcePoolBypassingClassifierCheck(TIntrusivePtr<IYdbSetup> ydb, const TString& poolId) {
+        auto request = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
+        request->Record.SetDatabaseName(CanonizePath(ydb->GetSettings().DomainName_));
+        auto& schemeTx = *request->Record.MutableTransaction()->MutableModifyScheme();
+        schemeTx.SetWorkingDir(JoinPath({CanonizePath(ydb->GetSettings().DomainName_), ".metadata/workload_manager/pools/"}));
+        schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropResourcePool);
+        schemeTx.MutableDrop()->SetName(poolId);
+
+        auto* runtime = ydb->GetRuntime();
+        const auto edgeActor = runtime->AllocateEdgeActor();
+        runtime->Send(new IEventHandle(MakeTxProxyID(), edgeActor, request.release()));
+        runtime->GrabEdgeEvent<TEvTxUserProxy::TEvProposeTransactionStatus>(edgeActor, FUTURE_WAIT_TIMEOUT);
+
+        IYdbSetup::WaitFor(FUTURE_WAIT_TIMEOUT, "pool drop", [ydb, poolId](TString& errorString) {
+            auto kind = ydb->Navigate(TStringBuilder() << ".metadata/workload_manager/pools/" << poolId)->ResultSet.at(0).Kind;
+
+            errorString = TStringBuilder() << "kind = " << kind;
+            return kind == NSchemeCache::TSchemeCacheNavigate::EKind::KindUnknown;
+        });
+    }
+
     Y_UNIT_TEST(TestClassifierPointingToNonExistentPool) {
         auto ydb = TYdbSetupSettings().Create();
 
@@ -1350,8 +1385,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersDdl) {
 
         UNIT_ASSERT_VALUES_EQUAL(CountClassifiers(ydb, classifierId), 1u);
 
-        // Drop the pool the classifier references
-        ydb->ExecuteSchemeQuery(TStringBuilder() << "DROP RESOURCE POOL " << poolId << ";");
+        DropResourcePoolBypassingClassifierCheck(ydb, poolId);
 
         // DROP of the classifier must succeed even though the pool is gone:
         // pool existence validation is skipped for Drop operations
@@ -1397,8 +1431,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersDdl) {
 
         UNIT_ASSERT_VALUES_EQUAL(CountClassifiers(ydb, classifierId), 1u);
 
-        // Drop the pool that the classifier references
-        ydb->ExecuteSchemeQuery(TStringBuilder() << "DROP RESOURCE POOL " << poolId << ";");
+        DropResourcePoolBypassingClassifierCheck(ydb, poolId);
 
         // Altering a non-pool attribute (RANK) must still fail because the
         // preparation actor validates all referenced pools for any ALTER operation.

@@ -86,7 +86,6 @@ protected:
 private:
     void OnPgImpl(ui32 typeId);
 
-private:
     const ITypeInfoHelper2& TypeHelper2_;
 };
 #endif

@@ -1,6 +1,6 @@
-#include "kqp_formats_ut_helpers.h"
+#include "ut_helpers.h"
 
-#include <ydb/core/kqp/common/result_set_format/kqp_formats_arrow.h>
+#include <ydb/library/formats/arrow/minikql/minikql.h>
 
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/minikql/mkql_type_helper.h>
@@ -9,7 +9,7 @@
 #include <yql/essentials/types/binary_json/write.h>
 #include <yql/essentials/utils/yql_panic.h>
 
-namespace NKikimr::NKqp::NFormats {
+namespace NKikimr::NArrow::NMkql {
 
 namespace {
 
@@ -215,7 +215,7 @@ NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow::Array>& arr
     }
 
     if (!innerArray->IsNull(row)) {
-        value = NFormats::ExtractUnboxedValue(innerArray, row, innerType, holderFactory);
+        value = NMkql::ExtractUnboxedValue(innerArray, row, innerType, holderFactory);
     }
 
     for (ui32 i = 1; i < depth; ++i) {
@@ -236,7 +236,7 @@ NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow::Array>& arr
 
     for (ui32 index = 0; index < structType->GetMembersCount(); ++index) {
         auto memberType = structType->GetMemberType(index);
-        itemsPtr[index] = NFormats::ExtractUnboxedValue(typedArray->field(index), row, memberType, holderFactory);
+        itemsPtr[index] = NMkql::ExtractUnboxedValue(typedArray->field(index), row, memberType, holderFactory);
     }
     return result;
 }
@@ -253,7 +253,7 @@ NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow::Array>& arr
 
     for (ui32 index = 0; index < tupleType->GetElementsCount(); ++index) {
         auto elementType = tupleType->GetElementType(index);
-        itemsPtr[index] = NFormats::ExtractUnboxedValue(typedArray->field(index), row, elementType, holderFactory);
+        itemsPtr[index] = NMkql::ExtractUnboxedValue(typedArray->field(index), row, elementType, holderFactory);
     }
     return result;
 }
@@ -271,7 +271,7 @@ NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow::Array>& arr
     NUdf::TUnboxedValue* items = nullptr;
     auto list = holderFactory.CreateDirectArrayHolder(len, items);
     for (ui64 i = 0; i < static_cast<ui64>(len); ++i) {
-        *items++ = NFormats::ExtractUnboxedValue(arraySlice, i, itemType, holderFactory);
+        *items++ = NMkql::ExtractUnboxedValue(arraySlice, i, itemType, holderFactory);
     }
     return list;
 }
@@ -294,8 +294,8 @@ NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow::Array>& arr
     std::shared_ptr<arrow::Array> payloadArray = structArray->field(1);
 
     for (ui64 i = 0; i < static_cast<ui64>(structArray->length()); ++i) {
-        auto key = NFormats::ExtractUnboxedValue(keyArray, i, keyType, holderFactory);
-        auto payload = NFormats::ExtractUnboxedValue(payloadArray, i, payloadType, holderFactory);
+        auto key = NMkql::ExtractUnboxedValue(keyArray, i, keyType, holderFactory);
+        auto payload = NMkql::ExtractUnboxedValue(payloadArray, i, payloadType, holderFactory);
         dictBuilder->Add(std::move(key), std::move(payload));
     }
     return dictBuilder->Build();
@@ -331,7 +331,7 @@ NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow::Array>& arr
         innerType = static_cast<NMiniKQL::TTupleType*>(innerType)->GetElementType(variantIndex);
     }
 
-    auto value = NFormats::ExtractUnboxedValue(valuesArray, rowInChild, innerType, holderFactory);
+    auto value = NMkql::ExtractUnboxedValue(valuesArray, rowInChild, innerType, holderFactory);
     return holderFactory.CreateVariantHolder(value.Release(), variantIndex);
 }
 
@@ -448,4 +448,4 @@ NMiniKQL::TUnboxedValueVector ExtractUnboxedVector(const std::shared_ptr<arrow::
     return values;
 }
 
-} // namespace NKikimr::NKqp::NFormats
+} // namespace NKikimr::NArrow::NMkql

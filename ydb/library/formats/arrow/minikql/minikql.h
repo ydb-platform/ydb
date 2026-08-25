@@ -5,7 +5,7 @@
 #include <yql/essentials/minikql/mkql_node.h>
 
 /**
- * @file kqp_formats_arrow.h
+ * @file minikql.h
  * @brief Utilities for converting MiniKQL types to Apache Arrow types and vice versa.
  *
  * This module provides a comprehensive mapping between YQL internal type system (MiniKQL)
@@ -13,7 +13,7 @@
  * (integers, strings, etc.) and complex types (structs, lists, optionals, etc.).
  */
 
-namespace NKikimr::NKqp::NFormats {
+namespace NKikimr::NArrow::NMkql {
 
 constexpr size_t MAX_VARIANT_FLATTEN_SIZE = static_cast<size_t>(arrow::UnionType::kMaxTypeCode) + 1;
 constexpr size_t MAX_VARIANT_NESTED_SIZE = MAX_VARIANT_FLATTEN_SIZE * MAX_VARIANT_FLATTEN_SIZE;
@@ -173,4 +173,4 @@ bool IsArrowCompatible(const NMiniKQL::TType* type);
  */
 void AppendElement(NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder, const NMiniKQL::TType* type);
 
-} // namespace NKikimr::NKqp::NFormats
+} // namespace NKikimr::NArrow::NMkql

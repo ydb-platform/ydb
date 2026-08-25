@@ -2,8 +2,8 @@
 
 #include <util/string/hex.h>
 
-#include <ydb/core/kqp/common/result_set_format/ut/kqp_formats_ut_helpers.h>
-#include <ydb/core/kqp/common/result_set_format/kqp_formats_arrow.h>
+#include <ydb/library/formats/arrow/minikql/ut/ut_helpers.h>
+#include <ydb/library/formats/arrow/minikql/minikql.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/library/testlib/helpers.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
@@ -29,11 +29,11 @@ inline static constexpr size_t TEST_ARRAY_PG_SIZE = TEST_ARRAY_DATATYPE_SIZE;
 inline static constexpr ui8 DECIMAL_PRECISION = 35;
 inline static constexpr ui8 DECIMAL_SCALE = 10;
 inline static constexpr ui32 VARIANT_NESTED_SIZE = 260;
-inline static constexpr ui32 VARIANT_OVER_LIMIT_SIZE = NKikimr::NKqp::NFormats::MAX_VARIANT_NESTED_SIZE + 1;
+inline static constexpr ui32 VARIANT_OVER_LIMIT_SIZE = NKikimr::NArrow::NMkql::MAX_VARIANT_NESTED_SIZE + 1;
 
 static_assert(DECIMAL_PRECISION >= DECIMAL_SCALE, "Decimal precision must be greater than or equal to scale");
-static_assert(VARIANT_NESTED_SIZE <= NKikimr::NKqp::NFormats::MAX_VARIANT_NESTED_SIZE, "VARIANT_NESTED_SIZE must be less than or equal to MAX_VARIANT_NESTED_SIZE");
-static_assert(VARIANT_OVER_LIMIT_SIZE > NKikimr::NKqp::NFormats::MAX_VARIANT_NESTED_SIZE, "VARIANT_OVER_LIMIT_SIZE must be greater than MAX_VARIANT_NESTED_SIZE");
+static_assert(VARIANT_NESTED_SIZE <= NKikimr::NArrow::NMkql::MAX_VARIANT_NESTED_SIZE, "VARIANT_NESTED_SIZE must be less than or equal to MAX_VARIANT_NESTED_SIZE");
+static_assert(VARIANT_OVER_LIMIT_SIZE > NKikimr::NArrow::NMkql::MAX_VARIANT_NESTED_SIZE, "VARIANT_OVER_LIMIT_SIZE must be greater than MAX_VARIANT_NESTED_SIZE");
 
 namespace {
 
@@ -1360,7 +1360,7 @@ void AssertUnboxedValuesAreEqual(NUdf::TUnboxedValue& left, NUdf::TUnboxedValue&
 
 } // namespace
 
-namespace NKikimr::NKqp::NFormats {
+namespace NKikimr::NArrow::NMkql {
 
 namespace {
 
@@ -2923,4 +2923,4 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
     }
 }
 
-} // namespace NKikimr::NKqp::NFormats
+} // namespace NKikimr::NArrow::NMkql

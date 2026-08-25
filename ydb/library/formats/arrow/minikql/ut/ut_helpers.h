@@ -6,18 +6,18 @@
 #include <yql/essentials/minikql/mkql_node.h>
 
 /**
- * @file kqp_formats_ut_helpers.h
- * @brief Utilities for testing KQP formats.
+ * @file ut_helpers.h
+ * @brief Utilities for testing MiniKQL-to-Arrow conversions.
  *
- * This module provides utilities for testing KQP formats.
+ * This module provides utilities for testing MiniKQL-to-Arrow conversions.
  * It includes functions for making arrow arrays and extracting unboxed values from arrow arrays.
  */
 
-namespace NKikimr::NKqp::NFormats {
+namespace NKikimr::NArrow::NMkql {
 
 /**
  * @brief Make arrow array builder for given type.
- * The type is converted to arrow type by NKqp::NFormats::GetArrowType function.
+ * The type is converted to arrow type by NMkql::GetArrowType function.
  *
  * @param type type to make builder for
  * @return unique pointer to arrow array builder
@@ -26,7 +26,7 @@ std::unique_ptr<arrow::ArrayBuilder> MakeArrowBuilder(const NMiniKQL::TType* typ
 
 /**
  * @brief Make arrow array for given values and type.
- * The type is converted to arrow type by NKqp::NFormats::GetArrowType function.
+ * The type is converted to arrow type by NMkql::GetArrowType function.
  *
  * @param values values to make array for
  * @param itemType type of each element to parse it and to construct corresponding arrow type
@@ -36,7 +36,7 @@ std::shared_ptr<arrow::Array> MakeArrowArray(NMiniKQL::TUnboxedValueVector& valu
 
 /**
  * @brief Extract unboxed value from arrow array for given row and type.
- * The type of the item and the arrow array type must be the same by NKqp::NFormats::GetArrowType function.
+ * The type of the item and the arrow array type must be the same by NMkql::GetArrowType function.
  *
  * @param array arrow array to extract value from
  * @param row row to extract value from
@@ -49,7 +49,7 @@ NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow::Array>& arr
 
 /**
  * @brief Extract unboxed values from arrow array for given type.
- * The type of items and the arrow array type must be the same by NKqp::NFormats::GetArrowType function.
+ * The type of items and the arrow array type must be the same by NMkql::GetArrowType function.
  *
  * @param array arrow array to extract values from
  * @param itemType type of each element to parse it and to construct corresponding arrow type
@@ -59,4 +59,4 @@ NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow::Array>& arr
 NMiniKQL::TUnboxedValueVector ExtractUnboxedVector(const std::shared_ptr<arrow::Array>& array,
     const NMiniKQL::TType* itemType, const NMiniKQL::THolderFactory& holderFactory);
 
-} // namespace NKikimr::NKqp::NFormats
+} // namespace NKikimr::NArrow::NMkql

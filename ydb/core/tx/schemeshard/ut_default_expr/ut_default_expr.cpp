@@ -9,7 +9,7 @@ namespace {
 
 void EnableDefaultFromExpression(TTestActorRuntime& runtime) {
     runtime.GetAppData().FeatureFlags.SetEnableDefaultFromExpression(true);
-    runtime.GetAppData().FeatureFlags.SetEnableGeneratedStored(true);
+    runtime.GetAppData().FeatureFlags.SetEnableGeneratedStored(false);
 }
 
 const NKikimrSchemeOp::TColumnDescription* FindColumn(const NKikimrScheme::TEvDescribeSchemeResult& describe, const TString& name) {
@@ -334,6 +334,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardDefaultExprTest) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         EnableDefaultFromExpression(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableGeneratedStored(true);
 
         ui64 txId = 100;
 
@@ -377,6 +378,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardDefaultExprTest) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         EnableDefaultFromExpression(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableGeneratedStored(true);
 
         ui64 txId = 100;
 

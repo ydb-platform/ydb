@@ -8,6 +8,7 @@ using namespace NSchemeShardUT_Private;
 namespace {
 
 void EnableGeneratedColumns(TTestActorRuntime& runtime) {
+    runtime.GetAppData().FeatureFlags.SetEnableDefaultFromExpression(false);
     runtime.GetAppData().FeatureFlags.SetEnableGeneratedStored(true);
     runtime.GetAppData().FeatureFlags.SetEnableGeneratedVirtual(true);
 }

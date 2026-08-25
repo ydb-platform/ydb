@@ -2,6 +2,7 @@
 
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/schemeshard_counters.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 #include <util/string/printf.h>
 #include <util/string/join.h>
@@ -1830,64 +1831,64 @@ const TVector<TOpAuditRow>& GetOpAuditTable() {
     static const TVector<TOpAuditRow> table = {
         {NKikimrSchemeOp::ESchemeOpMkDir, EOpAuditClass::VerifiedByTest}, // MkDirWritesLogEntry
         {NKikimrSchemeOp::ESchemeOpCreateTable, EOpAuditClass::VerifiedByTest}, // CreateTableWritesLogEntry
-        {NKikimrSchemeOp::ESchemeOpCreatePersQueueGroup, EOpAuditClass::Safe}, // tier-1, not yet driven: TestCreatePQGroup exists
+        {NKikimrSchemeOp::ESchemeOpCreatePersQueueGroup, EOpAuditClass::VerifiedByTest}, // CreatePQGroupRecordsAPath
         {NKikimrSchemeOp::ESchemeOpDropTable, EOpAuditClass::Safe}, // tier-1, not yet driven: post-drop needs a pre-drop-identity assertion shape, not the live-resolve helper (see DropByIdRecordsAPath for the pattern)
-        {NKikimrSchemeOp::ESchemeOpDropPersQueueGroup, EOpAuditClass::Safe}, // tier-1, not yet driven: TestDropPQGroup exists
+        {NKikimrSchemeOp::ESchemeOpDropPersQueueGroup, EOpAuditClass::VerifiedByTest}, // DropPersQueueGroupRecordsAPath
         {NKikimrSchemeOp::ESchemeOpAlterTable, EOpAuditClass::VerifiedByTest}, // AlterTableWritesLogEntry
-        {NKikimrSchemeOp::ESchemeOpAlterPersQueueGroup, EOpAuditClass::Safe}, // tier-1, not yet driven: TestAlterPQGroup exists
-        {NKikimrSchemeOp::ESchemeOpModifyACL, EOpAuditClass::Safe}, // tier-1, not yet driven: TestModifyACL exists (already exercised as fixture setup elsewhere, not as its own resolve assertion)
-        {NKikimrSchemeOp::ESchemeOpRmDir, EOpAuditClass::Safe}, // tier-1, not yet driven: TestRmDir exists
+        {NKikimrSchemeOp::ESchemeOpAlterPersQueueGroup, EOpAuditClass::VerifiedByTest}, // AlterPersQueueGroupRecordsAPath
+        {NKikimrSchemeOp::ESchemeOpModifyACL, EOpAuditClass::VerifiedByTest}, // ModifyACLRecordsAPath
+        {NKikimrSchemeOp::ESchemeOpRmDir, EOpAuditClass::VerifiedByTest}, // RmDirRecordsAPath
         {NKikimrSchemeOp::ESchemeOpSplitMergeTablePartitions, EOpAuditClass::NotUserLevel}, // IsChurnOp
-        {NKikimrSchemeOp::ESchemeOpBackup, EOpAuditClass::Safe}, // tier-2, not yet driven: TestBackup exists but needs a real/mocked export target to complete
-        {NKikimrSchemeOp::ESchemeOpCreateSubDomain, EOpAuditClass::Safe}, // tier-1, not yet driven: TestCreateSubDomain exists
-        {NKikimrSchemeOp::ESchemeOpDropSubDomain, EOpAuditClass::Safe}, // tier-1, not yet driven: TestDropSubDomain exists
-        {NKikimrSchemeOp::ESchemeOpCreateRtmrVolume, EOpAuditClass::Safe}, // tier-1, not yet driven: TestCreateRtmrVolume exists
-        {NKikimrSchemeOp::ESchemeOpCreateBlockStoreVolume, EOpAuditClass::Safe}, // tier-1, not yet driven: TestCreateBlockStoreVolume exists
-        {NKikimrSchemeOp::ESchemeOpAlterBlockStoreVolume, EOpAuditClass::Safe}, // tier-1, not yet driven: TestAlterBlockStoreVolume exists
-        {NKikimrSchemeOp::ESchemeOpAssignBlockStoreVolume, EOpAuditClass::Safe}, // tier-1, not yet driven: TestAssignBlockStoreVolume exists
+        {NKikimrSchemeOp::ESchemeOpBackup, EOpAuditClass::Safe}, // tier-2, propose-time only: BackupRecordsAPath drives the propose (resolves a path); full completion needs a real/mocked S3 endpoint, tier-3 for the resolve assertion
+        {NKikimrSchemeOp::ESchemeOpCreateSubDomain, EOpAuditClass::VerifiedByTest}, // CreateSubDomainRecordsAPath
+        {NKikimrSchemeOp::ESchemeOpDropSubDomain, EOpAuditClass::VerifiedByTest}, // DropSubDomainRecordsAPath
+        {NKikimrSchemeOp::ESchemeOpCreateRtmrVolume, EOpAuditClass::VerifiedByTest}, // CreateRtmrVolumeRecordsAPath
+        {NKikimrSchemeOp::ESchemeOpCreateBlockStoreVolume, EOpAuditClass::VerifiedByTest}, // CreateBlockStoreVolumeRecordsAPath
+        {NKikimrSchemeOp::ESchemeOpAlterBlockStoreVolume, EOpAuditClass::VerifiedByTest}, // AlterBlockStoreVolumeRecordsAPath
+        {NKikimrSchemeOp::ESchemeOpAssignBlockStoreVolume, EOpAuditClass::VerifiedByTest}, // AssignBlockStoreVolumeRecordsAPath
         {NKikimrSchemeOp::ESchemeOpDropBlockStoreVolume, EOpAuditClass::Safe}, // tier-1, not yet driven: TestDropBlockStoreVolume exists
-        {NKikimrSchemeOp::ESchemeOpCreateKesus, EOpAuditClass::Safe}, // tier-1, not yet driven: TestCreateKesus exists
-        {NKikimrSchemeOp::ESchemeOpDropKesus, EOpAuditClass::Safe}, // tier-1, not yet driven: TestDropKesus exists
-        {NKikimrSchemeOp::ESchemeOpForceDropSubDomain, EOpAuditClass::Safe}, // tier-1, not yet driven: TestForceDropSubDomain exists
-        {NKikimrSchemeOp::ESchemeOpCreateSolomonVolume, EOpAuditClass::Safe}, // tier-1, not yet driven: TestCreateSolomon exists
-        {NKikimrSchemeOp::ESchemeOpDropSolomonVolume, EOpAuditClass::Safe}, // tier-1, not yet driven: TestDropSolomon exists
-        {NKikimrSchemeOp::ESchemeOpAlterKesus, EOpAuditClass::Safe}, // tier-1, not yet driven: TestAlterKesus exists
+        {NKikimrSchemeOp::ESchemeOpCreateKesus, EOpAuditClass::VerifiedByTest}, // CreateKesusRecordsAPath
+        {NKikimrSchemeOp::ESchemeOpDropKesus, EOpAuditClass::VerifiedByTest}, // DropKesusRecordsAPath
+        {NKikimrSchemeOp::ESchemeOpForceDropSubDomain, EOpAuditClass::VerifiedByTest}, // ForceDropSubDomainRecordsAPath
+        {NKikimrSchemeOp::ESchemeOpCreateSolomonVolume, EOpAuditClass::VerifiedByTest}, // CreateSolomonVolumeRecordsAPath
+        {NKikimrSchemeOp::ESchemeOpDropSolomonVolume, EOpAuditClass::VerifiedByTest}, // DropSolomonVolumeRecordsAPath
+        {NKikimrSchemeOp::ESchemeOpAlterKesus, EOpAuditClass::VerifiedByTest}, // AlterKesusRecordsAPath
         {NKikimrSchemeOp::ESchemeOpAlterSubDomain, EOpAuditClass::VerifiedByTest}, // AlterDatabaseRootItselfStoresEmptyPath
         {NKikimrSchemeOp::ESchemeOpAlterUserAttributes, EOpAuditClass::VerifiedByTest}, // fixed: PathName; AlterUserAttributesRecordsAPath
         {NKikimrSchemeOp::ESchemeOpForceDropUnsafe, EOpAuditClass::VerifiedByTest}, // Drop.Id branch (V4); DropByIdRecordsAPath -- worked first time, already correct
         {NKikimrSchemeOp::ESchemeOpCreateIndexedTable, EOpAuditClass::VerifiedByTest}, // CreateIndexedTableWritesExactlyOneRecordForTheTable
         {NKikimrSchemeOp::ESchemeOpCreateTableIndex, EOpAuditClass::NotUserLevel}, // part of CreateIndexedTable
         {NKikimrSchemeOp::ESchemeOpCreateConsistentCopyTables, EOpAuditClass::VerifiedByTest}, // ConsistentCopyTablesRecordsAllTargetsWithSources
-        {NKikimrSchemeOp::ESchemeOpDropTableIndex, EOpAuditClass::Safe}, // tier-1, not yet driven: TestDropTableIndex exists
-        {NKikimrSchemeOp::ESchemeOpCreateExtSubDomain, EOpAuditClass::Safe}, // tier-1, not yet driven: TestCreateExtSubDomain exists
-        {NKikimrSchemeOp::ESchemeOpAlterExtSubDomain, EOpAuditClass::Safe}, // tier-1, not yet driven: TestAlterExtSubDomain exists
-        {NKikimrSchemeOp::ESchemeOpForceDropExtSubDomain, EOpAuditClass::Safe}, // tier-1, not yet driven: TestForceDropExtSubDomain exists
+        {NKikimrSchemeOp::ESchemeOpDropTableIndex, EOpAuditClass::NotUserLevel}, // GENERIC_HELPERS(DropTableIndex) issues ESchemeOpDropIndex on the wire, not this value; not found in ConvertToTxType either -- appears vestigial. See DropTableIndexRecordsAPath (drives the real wire op, ESchemeOpDropIndex).
+        {NKikimrSchemeOp::ESchemeOpCreateExtSubDomain, EOpAuditClass::VerifiedByTest}, // CreateExtSubDomainRecordsAPath
+        {NKikimrSchemeOp::ESchemeOpAlterExtSubDomain, EOpAuditClass::VerifiedByTest}, // AlterExtSubDomainRecordsAPath
+        {NKikimrSchemeOp::ESchemeOpForceDropExtSubDomain, EOpAuditClass::VerifiedByTest}, // ForceDropExtSubDomainRecordsAPath
         {NKikimrSchemeOp::ESchemeOp_DEPRECATED_35, EOpAuditClass::NotUserLevel},
         {NKikimrSchemeOp::ESchemeOpUpgradeSubDomain, EOpAuditClass::Safe}, // tier-1, not yet driven with the resolve assertion: TestUpgradeSubDomain exists; see UpgradeSubDomainRecordsAPath (counter-only, not resolve-checked -- upgrading blocks a second subscriber registration)
-        {NKikimrSchemeOp::ESchemeOpUpgradeSubDomainDecision, EOpAuditClass::Safe}, // tier-1, not yet driven: TestUpgradeSubDomainDecision exists
-        {NKikimrSchemeOp::ESchemeOpCreateIndexBuild, EOpAuditClass::Safe}, // tier-2, not yet driven: only reachable via the TIndexBuilder actor (TestBuildIndex), not a direct TModifyScheme helper
+        {NKikimrSchemeOp::ESchemeOpUpgradeSubDomainDecision, EOpAuditClass::VerifiedByTest}, // UpgradeSubDomainDecisionRecordsAPath
+        {NKikimrSchemeOp::ESchemeOpCreateIndexBuild, EOpAuditClass::VerifiedByTest}, // fixed: InitiateIndexBuild.Table is an absolute path, not a bare name -- unresolved refusal used to crash the tablet via the impl-table TCreateTable's AbortPropose stub; CreateIndexBuildRecordsAPath
         {NKikimrSchemeOp::ESchemeOpInitiateBuildIndexMainTable, EOpAuditClass::NotUserLevel}, // multipart
-        {NKikimrSchemeOp::ESchemeOpCreateLock, EOpAuditClass::Safe}, // tier-1, not yet driven: TestLock exists
+        {NKikimrSchemeOp::ESchemeOpCreateLock, EOpAuditClass::VerifiedByTest}, // CreateLockRecordsAPath
         {NKikimrSchemeOp::ESchemeOpApplyIndexBuild, EOpAuditClass::NotUserLevel}, // multipart
         {NKikimrSchemeOp::ESchemeOpFinalizeBuildIndexMainTable, EOpAuditClass::NotUserLevel}, // multipart
         {NKikimrSchemeOp::ESchemeOpAlterTableIndex, EOpAuditClass::NotUserLevel}, // multipart
-        {NKikimrSchemeOp::ESchemeOpAlterSolomonVolume, EOpAuditClass::Safe}, // tier-1, not yet driven: TestAlterSolomon exists
-        {NKikimrSchemeOp::ESchemeOpDropLock, EOpAuditClass::Safe}, // tier-1, not yet driven: TestUnlock exists
+        {NKikimrSchemeOp::ESchemeOpAlterSolomonVolume, EOpAuditClass::VerifiedByTest}, // AlterSolomonVolumeRecordsAPath (propose-time resolve; alter itself is rejected by PQ/Solomon-specific validation)
+        {NKikimrSchemeOp::ESchemeOpDropLock, EOpAuditClass::VerifiedByTest}, // DropLockRecordsAPath
         {NKikimrSchemeOp::ESchemeOpFinalizeBuildIndexImplTable, EOpAuditClass::NotUserLevel}, // multipart
         {NKikimrSchemeOp::ESchemeOpInitiateBuildIndexImplTable, EOpAuditClass::NotUserLevel}, // multipart
-        {NKikimrSchemeOp::ESchemeOpDropIndex, EOpAuditClass::NotUserLevel}, // multipart
+        {NKikimrSchemeOp::ESchemeOpDropIndex, EOpAuditClass::VerifiedByTest}, // fixed: TDropIndex.TableName, not Name -- unresolved refusal used to crash the tablet (same AbortPropose-stub class as CreateIndexBuild); DropTableIndexRecordsAPath. This is the real wire OperationType TestDropTableIndex sends, despite the helper's C++ name.
         {NKikimrSchemeOp::ESchemeOpDropTableIndexAtMainTable, EOpAuditClass::NotUserLevel}, // multipart
-        {NKikimrSchemeOp::ESchemeOpCancelIndexBuild, EOpAuditClass::Safe}, // tier-2, not yet driven: only reachable via the TIndexBuilder actor (TestCancelBuildIndex), needs an in-flight build to cancel
-        {NKikimrSchemeOp::ESchemeOpCreateFileStore, EOpAuditClass::Safe}, // tier-1, not yet driven: TestCreateFileStore exists
+        {NKikimrSchemeOp::ESchemeOpCancelIndexBuild, EOpAuditClass::VerifiedByTest}, // fixed: CancelIndexBuild.TablePath is an absolute path, same shape/fix as CreateIndexBuild; CancelIndexBuildRecordsAPath
+        {NKikimrSchemeOp::ESchemeOpCreateFileStore, EOpAuditClass::VerifiedByTest}, // CreateFileStoreRecordsAPath
         {NKikimrSchemeOp::ESchemeOpAlterFileStore, EOpAuditClass::Safe}, // tier-1, not yet driven: TestAlterFileStore exists
-        {NKikimrSchemeOp::ESchemeOpDropFileStore, EOpAuditClass::Safe}, // tier-1, not yet driven: TestDropFileStore exists
+        {NKikimrSchemeOp::ESchemeOpDropFileStore, EOpAuditClass::VerifiedByTest}, // DropFileStoreRecordsAPath
         {NKikimrSchemeOp::ESchemeOpRestore, EOpAuditClass::Safe}, // fixed: TableName (RestoreRecordsAPath drives propose; full completion needs a real backup fixture, tier-3 for the resolve assertion)
-        {NKikimrSchemeOp::ESchemeOpCreateColumnStore, EOpAuditClass::Safe}, // tier-1, not yet driven: TestCreateOlapStore exists
-        {NKikimrSchemeOp::ESchemeOpAlterColumnStore, EOpAuditClass::Safe}, // tier-1, not yet driven: TestAlterOlapStore exists
-        {NKikimrSchemeOp::ESchemeOpDropColumnStore, EOpAuditClass::Safe}, // tier-1, not yet driven: TestDropOlapStore exists
-        {NKikimrSchemeOp::ESchemeOpCreateColumnTable, EOpAuditClass::Safe}, // tier-1, not yet driven: TestCreateColumnTable exists
-        {NKikimrSchemeOp::ESchemeOpAlterColumnTable, EOpAuditClass::Safe}, // tier-1, not yet driven: TestAlterColumnTable exists
-        {NKikimrSchemeOp::ESchemeOpDropColumnTable, EOpAuditClass::Safe}, // tier-1, not yet driven: TestDropColumnTable exists
+        {NKikimrSchemeOp::ESchemeOpCreateColumnStore, EOpAuditClass::VerifiedByTest}, // CreateColumnStoreRecordsAPath
+        {NKikimrSchemeOp::ESchemeOpAlterColumnStore, EOpAuditClass::VerifiedByTest}, // AlterColumnStoreRecordsAPath
+        {NKikimrSchemeOp::ESchemeOpDropColumnStore, EOpAuditClass::VerifiedByTest}, // DropColumnStoreRecordsAPath
+        {NKikimrSchemeOp::ESchemeOpCreateColumnTable, EOpAuditClass::VerifiedByTest}, // CreateColumnTableRecordsAPath
+        {NKikimrSchemeOp::ESchemeOpAlterColumnTable, EOpAuditClass::VerifiedByTest}, // AlterColumnTableRecordsAPath
+        {NKikimrSchemeOp::ESchemeOpDropColumnTable, EOpAuditClass::VerifiedByTest}, // DropColumnTableRecordsAPath
         {NKikimrSchemeOp::ESchemeOpAlterLogin, EOpAuditClass::VerifiedByTest}, // fixed: no path-bearing target, attributed to WorkingDir (database root); AlterLoginRecordsAPath
         {NKikimrSchemeOp::ESchemeOpCreateCdcStream, EOpAuditClass::Safe}, // NB: verified refused today; see PathBearingOpNeverStoresAnApproximatePath
         {NKikimrSchemeOp::ESchemeOpCreateCdcStreamImpl, EOpAuditClass::NotUserLevel},
@@ -1900,49 +1901,49 @@ const TVector<TOpAuditRow>& GetOpAuditTable() {
         {NKikimrSchemeOp::ESchemeOpDropCdcStreamAtTable, EOpAuditClass::NotUserLevel},
         {NKikimrSchemeOp::ESchemeOpMoveTable, EOpAuditClass::VerifiedByTest}, // MoveRecordsDestinationAndSource
         {NKikimrSchemeOp::ESchemeOpMoveTableIndex, EOpAuditClass::NotUserLevel}, // multipart: MoveTableIndexTask is constructed only as a MoveTable sub-op (schemeshard__operation_move_tables.cpp), never issued directly by a user
-        {NKikimrSchemeOp::ESchemeOpCreateSequence, EOpAuditClass::Safe}, // tier-1, not yet driven: TestCreateSequence exists
-        {NKikimrSchemeOp::ESchemeOpAlterSequence, EOpAuditClass::Safe}, // tier-1, not yet driven: TestAlterSequence exists
+        {NKikimrSchemeOp::ESchemeOpCreateSequence, EOpAuditClass::VerifiedByTest}, // CreateSequenceRecordsAPath
+        {NKikimrSchemeOp::ESchemeOpAlterSequence, EOpAuditClass::VerifiedByTest}, // AlterSequenceRecordsAPath
         {NKikimrSchemeOp::ESchemeOpDropSequence, EOpAuditClass::Safe}, // tier-1, not yet driven: TestDropSequence exists
-        {NKikimrSchemeOp::ESchemeOpCreateReplication, EOpAuditClass::Safe}, // tier-2, not yet driven: TestCreateReplication exists but the target is a replicated table needing a source connection
-        {NKikimrSchemeOp::ESchemeOpAlterReplication, EOpAuditClass::Safe}, // tier-2, not yet driven: same setup as CreateReplication
-        {NKikimrSchemeOp::ESchemeOpDropReplicationCascade, EOpAuditClass::Safe}, // tier-2, not yet driven: same setup as CreateReplication
+        {NKikimrSchemeOp::ESchemeOpCreateReplication, EOpAuditClass::VerifiedByTest}, // CreateReplicationRecordsAPath
+        {NKikimrSchemeOp::ESchemeOpAlterReplication, EOpAuditClass::VerifiedByTest}, // AlterReplicationRecordsAPath
+        {NKikimrSchemeOp::ESchemeOpDropReplicationCascade, EOpAuditClass::VerifiedByTest}, // DropReplicationCascadeRecordsAPath
         {NKikimrSchemeOp::ESchemeOpCreateBlobDepot, EOpAuditClass::Safe}, // tier-2, not yet driven: TestCreateBlobDepot exists but BlobDepot needs its backing tablet type stood up
         {NKikimrSchemeOp::ESchemeOpAlterBlobDepot, EOpAuditClass::Safe}, // tier-2, not yet driven: same setup as CreateBlobDepot
         {NKikimrSchemeOp::ESchemeOpDropBlobDepot, EOpAuditClass::Safe}, // tier-2, not yet driven: same setup as CreateBlobDepot
         {NKikimrSchemeOp::ESchemeOpMoveIndex, EOpAuditClass::VerifiedByTest}, // fixed: SrcPath/DstPath are relative to TablePath; MoveIndexRecordsAPath
         {NKikimrSchemeOp::ESchemeOpAlterExtSubDomainCreateHive, EOpAuditClass::NotUserLevel}, // multipart
-        {NKikimrSchemeOp::ESchemeOpCreateExternalTable, EOpAuditClass::Safe}, // tier-1, not yet driven: TestCreateExternalTable exists
-        {NKikimrSchemeOp::ESchemeOpDropExternalTable, EOpAuditClass::Safe}, // tier-1, not yet driven: TestDropExternalTable exists
+        {NKikimrSchemeOp::ESchemeOpCreateExternalTable, EOpAuditClass::VerifiedByTest}, // CreateExternalTableRecordsAPath
+        {NKikimrSchemeOp::ESchemeOpDropExternalTable, EOpAuditClass::VerifiedByTest}, // DropExternalTableRecordsAPath
         {NKikimrSchemeOp::ESchemeOpAlterExternalTable, EOpAuditClass::NotUserLevel}, // Y_ABORT: unimplemented
-        {NKikimrSchemeOp::ESchemeOpCreateExternalDataSource, EOpAuditClass::Safe}, // tier-1, not yet driven: TestCreateExternalDataSource exists
-        {NKikimrSchemeOp::ESchemeOpDropExternalDataSource, EOpAuditClass::Safe}, // tier-1, not yet driven: TestDropExternalDataSource exists
+        {NKikimrSchemeOp::ESchemeOpCreateExternalDataSource, EOpAuditClass::VerifiedByTest}, // CreateExternalDataSourceRecordsAPath
+        {NKikimrSchemeOp::ESchemeOpDropExternalDataSource, EOpAuditClass::VerifiedByTest}, // DropExternalDataSourceRecordsAPath
         {NKikimrSchemeOp::ESchemeOpAlterExternalDataSource, EOpAuditClass::NotUserLevel}, // Y_ABORT: unimplemented
         {NKikimrSchemeOp::ESchemeOpCreateColumnBuild, EOpAuditClass::NotUserLevel}, // internal, built by CreateBuildIndex
-        {NKikimrSchemeOp::ESchemeOpCreateView, EOpAuditClass::Safe}, // tier-1, not yet driven: TestCreateView exists
+        {NKikimrSchemeOp::ESchemeOpCreateView, EOpAuditClass::VerifiedByTest}, // CreateViewRecordsAPath
         {NKikimrSchemeOp::ESchemeOpAlterView, EOpAuditClass::NotUserLevel}, // Y_ABORT: unimplemented
-        {NKikimrSchemeOp::ESchemeOpDropView, EOpAuditClass::Safe}, // tier-1, not yet driven: TestDropView exists
-        {NKikimrSchemeOp::ESchemeOpDropReplication, EOpAuditClass::Safe}, // tier-2, not yet driven: same setup as CreateReplication
+        {NKikimrSchemeOp::ESchemeOpDropView, EOpAuditClass::VerifiedByTest}, // DropViewRecordsAPath
+        {NKikimrSchemeOp::ESchemeOpDropReplication, EOpAuditClass::VerifiedByTest}, // DropReplicationRecordsAPath
         {NKikimrSchemeOp::ESchemeOpCreateContinuousBackup, EOpAuditClass::VerifiedByTest}, // fixed: TableName; CreateContinuousBackupRecordsAPath
         {NKikimrSchemeOp::ESchemeOpAlterContinuousBackup, EOpAuditClass::Safe}, // fixed: TableName; tier-1, not yet driven with the resolve assertion (CreateContinuousBackupRecordsAPath covers Create only)
-        {NKikimrSchemeOp::ESchemeOpDropContinuousBackup, EOpAuditClass::Safe}, // fixed: TableName; tier-1, not yet driven with the resolve assertion (target is gone post-drop, needs the DropByIdRecordsAPath-style pre-drop-identity shape)
-        {NKikimrSchemeOp::ESchemeOpCreateResourcePool, EOpAuditClass::Safe}, // tier-1, not yet driven: TestCreateResourcePool exists
-        {NKikimrSchemeOp::ESchemeOpDropResourcePool, EOpAuditClass::Safe}, // tier-1, not yet driven: TestDropResourcePool exists
-        {NKikimrSchemeOp::ESchemeOpAlterResourcePool, EOpAuditClass::Safe}, // tier-1, not yet driven: TestAlterResourcePool exists
+        {NKikimrSchemeOp::ESchemeOpDropContinuousBackup, EOpAuditClass::VerifiedByTest}, // DropContinuousBackupRecordsAPath
+        {NKikimrSchemeOp::ESchemeOpCreateResourcePool, EOpAuditClass::VerifiedByTest}, // CreateResourcePoolRecordsAPath
+        {NKikimrSchemeOp::ESchemeOpDropResourcePool, EOpAuditClass::VerifiedByTest}, // DropResourcePoolRecordsAPath
+        {NKikimrSchemeOp::ESchemeOpAlterResourcePool, EOpAuditClass::VerifiedByTest}, // AlterResourcePoolRecordsAPath
         {NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups, EOpAuditClass::Safe}, // OUT OF SCOPE (backup/restore family, decision pending per RFC-0129 plan); DstTablePath found by reflection (field named TablePath in some builds); see NB below
         {NKikimrSchemeOp::ESchemeOpRestoreIncrementalBackupAtTable, EOpAuditClass::NotUserLevel}, // multipart
-        {NKikimrSchemeOp::ESchemeOpCreateBackupCollection, EOpAuditClass::Safe}, // tier-1, not yet driven: TestCreateBackupCollection exists
+        {NKikimrSchemeOp::ESchemeOpCreateBackupCollection, EOpAuditClass::VerifiedByTest}, // CreateBackupCollectionRecordsAPath
         {NKikimrSchemeOp::ESchemeOpAlterBackupCollection, EOpAuditClass::NotUserLevel}, // Y_ABORT: unimplemented
-        {NKikimrSchemeOp::ESchemeOpDropBackupCollection, EOpAuditClass::Safe}, // tier-1, not yet driven: TestDropBackupCollection exists
+        {NKikimrSchemeOp::ESchemeOpDropBackupCollection, EOpAuditClass::VerifiedByTest}, // DropBackupCollectionRecordsAPath
         {NKikimrSchemeOp::ESchemeOpMoveSequence, EOpAuditClass::Safe}, // tier-1, not yet driven: TestMoveSequence exists
         {NKikimrSchemeOp::ESchemeOpBackupBackupCollection, EOpAuditClass::Safe}, // OUT OF SCOPE (backup/restore family, decision pending per RFC-0129 plan)
         {NKikimrSchemeOp::ESchemeOpBackupIncrementalBackupCollection, EOpAuditClass::Safe}, // OUT OF SCOPE (backup/restore family, decision pending per RFC-0129 plan)
         {NKikimrSchemeOp::ESchemeOpRestoreBackupCollection, EOpAuditClass::Safe}, // OUT OF SCOPE (backup/restore family, decision pending per RFC-0129 plan)
-        {NKikimrSchemeOp::ESchemeOpCreateTransfer, EOpAuditClass::Safe}, // tier-2, not yet driven: TestCreateTransfer exists but the target needs a source connection like Replication
-        {NKikimrSchemeOp::ESchemeOpAlterTransfer, EOpAuditClass::Safe}, // tier-2, not yet driven: same setup as CreateTransfer
-        {NKikimrSchemeOp::ESchemeOpDropTransfer, EOpAuditClass::Safe}, // tier-2, not yet driven: same setup as CreateTransfer
-        {NKikimrSchemeOp::ESchemeOpDropTransferCascade, EOpAuditClass::Safe}, // tier-2, not yet driven: same setup as CreateTransfer
-        {NKikimrSchemeOp::ESchemeOpCreateSysView, EOpAuditClass::Safe}, // tier-1, not yet driven: TestCreateSysView exists
-        {NKikimrSchemeOp::ESchemeOpDropSysView, EOpAuditClass::Safe}, // tier-1, not yet driven: TestDropSysView exists
+        {NKikimrSchemeOp::ESchemeOpCreateTransfer, EOpAuditClass::VerifiedByTest}, // CreateTransferRecordsAPath
+        {NKikimrSchemeOp::ESchemeOpAlterTransfer, EOpAuditClass::VerifiedByTest}, // AlterTransferRecordsAPath
+        {NKikimrSchemeOp::ESchemeOpDropTransfer, EOpAuditClass::VerifiedByTest}, // DropTransferRecordsAPath
+        {NKikimrSchemeOp::ESchemeOpDropTransferCascade, EOpAuditClass::VerifiedByTest}, // DropTransferCascadeRecordsAPath
+        {NKikimrSchemeOp::ESchemeOpCreateSysView, EOpAuditClass::VerifiedByTest}, // CreateSysViewRecordsAPath
+        {NKikimrSchemeOp::ESchemeOpDropSysView, EOpAuditClass::VerifiedByTest}, // DropSysViewRecordsAPath
         {NKikimrSchemeOp::ESchemeOpCreateLongIncrementalRestoreOp, EOpAuditClass::NotUserLevel}, // internal, pushed as sub-op part
         {NKikimrSchemeOp::ESchemeOpChangePathState, EOpAuditClass::NotUserLevel}, // internal, pushed as sub-op part
         {NKikimrSchemeOp::ESchemeOpRotateCdcStream, EOpAuditClass::Safe}, // NB: same nested-field shape as the other CDC ops (likely broken like them); no public API constructs it directly (only internal continuous-backup rotation), so user-level-ness itself is unconfirmed -- not independently re-verified here
@@ -1951,121 +1952,67 @@ const TVector<TOpAuditRow>& GetOpAuditTable() {
         {NKikimrSchemeOp::ESchemeOpIncrementalRestoreFinalize, EOpAuditClass::NotUserLevel}, // constructed only by the internal scan actor (schemeshard_incremental_restore_scan.cpp), marked SetInternal(true), no client-facing entry point; also note TargetTablePaths is a repeated field the generic reflection walk cannot extract regardless
         {NKikimrSchemeOp::ESchemeOpCreateLongIncrementalBackupOp, EOpAuditClass::NotUserLevel}, // multipart
         {NKikimrSchemeOp::ESchemeOpDropColumnBuild, EOpAuditClass::NotUserLevel}, // internal, built by CreateBuildIndex
-        {NKikimrSchemeOp::ESchemeOpCreateSecret, EOpAuditClass::Safe}, // tier-1, not yet driven: TestCreateSecret exists
+        {NKikimrSchemeOp::ESchemeOpCreateSecret, EOpAuditClass::VerifiedByTest}, // CreateSecretRecordsAPath
         {NKikimrSchemeOp::ESchemeOpAlterSecret, EOpAuditClass::Safe}, // tier-1, not yet driven: TestAlterSecret exists
-        {NKikimrSchemeOp::ESchemeOpDropSecret, EOpAuditClass::Safe}, // tier-1, not yet driven: TestDropSecret exists
-        {NKikimrSchemeOp::ESchemeOpCreateStreamingQuery, EOpAuditClass::Safe}, // tier-1, not yet driven: TestCreateStreamingQuery exists
-        {NKikimrSchemeOp::ESchemeOpDropStreamingQuery, EOpAuditClass::Safe}, // tier-1, not yet driven: TestDropStreamingQuery exists
+        {NKikimrSchemeOp::ESchemeOpDropSecret, EOpAuditClass::VerifiedByTest}, // DropSecretRecordsAPath
+        {NKikimrSchemeOp::ESchemeOpCreateStreamingQuery, EOpAuditClass::VerifiedByTest}, // CreateStreamingQueryRecordsAPath
+        {NKikimrSchemeOp::ESchemeOpDropStreamingQuery, EOpAuditClass::VerifiedByTest}, // DropStreamingQueryRecordsAPath
         {NKikimrSchemeOp::ESchemeOpAlterStreamingQuery, EOpAuditClass::Safe}, // tier-1, not yet driven: TestAlterStreamingQuery exists
         {NKikimrSchemeOp::ESchemeOpTruncateTable, EOpAuditClass::VerifiedByTest}, // fixed: TableName; TruncateTableRecordsAPath
         {NKikimrSchemeOp::ESchemeOpPrepareIndexValidation, EOpAuditClass::Safe}, // tier-3, not yet driven: no direct TestXxx helper; dispatch is shared with internal-only sibling ops in the same ConstructParts switch, user-level-ness unconfirmed
         {NKikimrSchemeOp::ESchemeOpIncrementalRestoreLockTargets, EOpAuditClass::NotUserLevel}, // internal, pushed as sub-op part
         {NKikimrSchemeOp::ESchemeOpIncrementalRestoreUnlockTargets, EOpAuditClass::NotUserLevel}, // internal, pushed as sub-op part
         {NKikimrSchemeOp::ESchemeOpCreateFullBackupOp, EOpAuditClass::NotUserLevel}, // internal, pushed as sub-op part
-        {NKikimrSchemeOp::ESchemeOpCreateTestShardSet, EOpAuditClass::Safe}, // tier-1, not yet driven: TestCreateTestShardSet exists
-        {NKikimrSchemeOp::ESchemeOpDropTestShardSet, EOpAuditClass::Safe}, // tier-1, not yet driven: TestDropTestShardSet exists
+        {NKikimrSchemeOp::ESchemeOpCreateTestShardSet, EOpAuditClass::VerifiedByTest}, // CreateTestShardSetRecordsAPath
+        {NKikimrSchemeOp::ESchemeOpDropTestShardSet, EOpAuditClass::VerifiedByTest}, // DropTestShardSetRecordsAPath
     };
     return table;
 }
 
-// RFC 0129 V5: the closed set of op types allowed to remain `Safe` (grandfathered,
-// not yet `VerifiedByTest`), each with its per-row reason recorded as an inline
-// comment next to its GetOpAuditTable() entry above. A NEW user-level op landing
-// as `Safe` is not in this set and fails EveryOperationTypeIsClassified below --
-// growing the verification gap requires a deliberate edit to this set, not a
-// silent `Safe` in the table. The 4 backup-collection rows are separately out of
-// scope per the RFC-0129 plan and are included here for the same reason: their
-// behavior is deliberately untouched, not overlooked.
+// RFC 0129 V5: the closed set of op types allowed to remain `Safe`
+// (grandfathered, not yet `VerifiedByTest`), each with its per-row reason
+// recorded as an inline comment next to its GetOpAuditTable() entry above.
+// A NEW user-level op landing as `Safe` is not in this set (nor in
+// GetOutOfScopeBackupOps() below) and fails NewSafeOpsMustBeGrandfatheredOrVerified
+// -- growing the verification gap requires a deliberate edit to one of these
+// two sets, not a silent `Safe` in the table.
 const THashSet<NKikimrSchemeOp::EOperationType>& GetGrandfatheredSafeOps() {
     static const THashSet<NKikimrSchemeOp::EOperationType> ops = {
-        NKikimrSchemeOp::ESchemeOpCreatePersQueueGroup,
         NKikimrSchemeOp::ESchemeOpDropTable,
-        NKikimrSchemeOp::ESchemeOpDropPersQueueGroup,
-        NKikimrSchemeOp::ESchemeOpAlterPersQueueGroup,
-        NKikimrSchemeOp::ESchemeOpModifyACL,
-        NKikimrSchemeOp::ESchemeOpRmDir,
         NKikimrSchemeOp::ESchemeOpBackup,
-        NKikimrSchemeOp::ESchemeOpCreateSubDomain,
-        NKikimrSchemeOp::ESchemeOpDropSubDomain,
-        NKikimrSchemeOp::ESchemeOpCreateRtmrVolume,
-        NKikimrSchemeOp::ESchemeOpCreateBlockStoreVolume,
-        NKikimrSchemeOp::ESchemeOpAlterBlockStoreVolume,
-        NKikimrSchemeOp::ESchemeOpAssignBlockStoreVolume,
         NKikimrSchemeOp::ESchemeOpDropBlockStoreVolume,
-        NKikimrSchemeOp::ESchemeOpCreateKesus,
-        NKikimrSchemeOp::ESchemeOpDropKesus,
-        NKikimrSchemeOp::ESchemeOpForceDropSubDomain,
-        NKikimrSchemeOp::ESchemeOpCreateSolomonVolume,
-        NKikimrSchemeOp::ESchemeOpDropSolomonVolume,
-        NKikimrSchemeOp::ESchemeOpAlterKesus,
-        NKikimrSchemeOp::ESchemeOpDropTableIndex,
-        NKikimrSchemeOp::ESchemeOpCreateExtSubDomain,
-        NKikimrSchemeOp::ESchemeOpAlterExtSubDomain,
-        NKikimrSchemeOp::ESchemeOpForceDropExtSubDomain,
         NKikimrSchemeOp::ESchemeOpUpgradeSubDomain,
-        NKikimrSchemeOp::ESchemeOpUpgradeSubDomainDecision,
-        NKikimrSchemeOp::ESchemeOpCreateIndexBuild,
-        NKikimrSchemeOp::ESchemeOpCreateLock,
-        NKikimrSchemeOp::ESchemeOpAlterSolomonVolume,
-        NKikimrSchemeOp::ESchemeOpDropLock,
-        NKikimrSchemeOp::ESchemeOpCancelIndexBuild,
-        NKikimrSchemeOp::ESchemeOpCreateFileStore,
         NKikimrSchemeOp::ESchemeOpAlterFileStore,
-        NKikimrSchemeOp::ESchemeOpDropFileStore,
         NKikimrSchemeOp::ESchemeOpRestore,
-        NKikimrSchemeOp::ESchemeOpCreateColumnStore,
-        NKikimrSchemeOp::ESchemeOpAlterColumnStore,
-        NKikimrSchemeOp::ESchemeOpDropColumnStore,
-        NKikimrSchemeOp::ESchemeOpCreateColumnTable,
-        NKikimrSchemeOp::ESchemeOpAlterColumnTable,
-        NKikimrSchemeOp::ESchemeOpDropColumnTable,
         NKikimrSchemeOp::ESchemeOpCreateCdcStream,
         NKikimrSchemeOp::ESchemeOpAlterCdcStream,
         NKikimrSchemeOp::ESchemeOpDropCdcStream,
-        NKikimrSchemeOp::ESchemeOpCreateSequence,
-        NKikimrSchemeOp::ESchemeOpAlterSequence,
         NKikimrSchemeOp::ESchemeOpDropSequence,
-        NKikimrSchemeOp::ESchemeOpCreateReplication,
-        NKikimrSchemeOp::ESchemeOpAlterReplication,
-        NKikimrSchemeOp::ESchemeOpDropReplicationCascade,
         NKikimrSchemeOp::ESchemeOpCreateBlobDepot,
         NKikimrSchemeOp::ESchemeOpAlterBlobDepot,
         NKikimrSchemeOp::ESchemeOpDropBlobDepot,
-        NKikimrSchemeOp::ESchemeOpCreateExternalTable,
-        NKikimrSchemeOp::ESchemeOpDropExternalTable,
-        NKikimrSchemeOp::ESchemeOpCreateExternalDataSource,
-        NKikimrSchemeOp::ESchemeOpDropExternalDataSource,
-        NKikimrSchemeOp::ESchemeOpCreateView,
-        NKikimrSchemeOp::ESchemeOpDropView,
-        NKikimrSchemeOp::ESchemeOpDropReplication,
         NKikimrSchemeOp::ESchemeOpAlterContinuousBackup,
-        NKikimrSchemeOp::ESchemeOpDropContinuousBackup,
-        NKikimrSchemeOp::ESchemeOpCreateResourcePool,
-        NKikimrSchemeOp::ESchemeOpDropResourcePool,
-        NKikimrSchemeOp::ESchemeOpAlterResourcePool,
-        NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups, // OUT OF SCOPE (backup family)
-        NKikimrSchemeOp::ESchemeOpCreateBackupCollection,
-        NKikimrSchemeOp::ESchemeOpDropBackupCollection,
         NKikimrSchemeOp::ESchemeOpMoveSequence,
-        NKikimrSchemeOp::ESchemeOpBackupBackupCollection, // OUT OF SCOPE (backup family)
-        NKikimrSchemeOp::ESchemeOpBackupIncrementalBackupCollection, // OUT OF SCOPE (backup family)
-        NKikimrSchemeOp::ESchemeOpRestoreBackupCollection, // OUT OF SCOPE (backup family)
-        NKikimrSchemeOp::ESchemeOpCreateTransfer,
-        NKikimrSchemeOp::ESchemeOpAlterTransfer,
-        NKikimrSchemeOp::ESchemeOpDropTransfer,
-        NKikimrSchemeOp::ESchemeOpDropTransferCascade,
-        NKikimrSchemeOp::ESchemeOpCreateSysView,
-        NKikimrSchemeOp::ESchemeOpDropSysView,
         NKikimrSchemeOp::ESchemeOpRotateCdcStream,
-        NKikimrSchemeOp::ESchemeOpCreateSecret,
         NKikimrSchemeOp::ESchemeOpAlterSecret,
-        NKikimrSchemeOp::ESchemeOpDropSecret,
-        NKikimrSchemeOp::ESchemeOpCreateStreamingQuery,
-        NKikimrSchemeOp::ESchemeOpDropStreamingQuery,
         NKikimrSchemeOp::ESchemeOpAlterStreamingQuery,
         NKikimrSchemeOp::ESchemeOpPrepareIndexValidation,
-        NKikimrSchemeOp::ESchemeOpCreateTestShardSet,
-        NKikimrSchemeOp::ESchemeOpDropTestShardSet,
+    };
+    return ops;
+}
+
+// RFC 0129: the backup/restore family explicitly parked out of scope by the
+// RFC-0129 plan -- a separate, distinct set from GetGrandfatheredSafeOps()
+// above (not a comment convention on shared rows), so "not yet driven" and
+// "deliberately untouched" cannot be confused with each other. Their outbox
+// behavior is unverified by design, not overlooked; see the RFC-0129 plan's
+// "Out of scope: backup collections and incremental backups" section.
+const THashSet<NKikimrSchemeOp::EOperationType>& GetOutOfScopeBackupOps() {
+    static const THashSet<NKikimrSchemeOp::EOperationType> ops = {
+        NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups,
+        NKikimrSchemeOp::ESchemeOpBackupBackupCollection,
+        NKikimrSchemeOp::ESchemeOpBackupIncrementalBackupCollection,
+        NKikimrSchemeOp::ESchemeOpRestoreBackupCollection,
     };
     return ops;
 }
@@ -2109,23 +2056,53 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsOperationClassificationTests) {
 
     // RFC 0129 V5: tightens the guard from "someone classified this" to "someone
     // ran this". A NEW user-level op must land as VerifiedByTest, not Safe --
-    // Safe is exactly the unverified state that hid the TMoveIndex bug. Only the
-    // closed, pre-existing set in GetGrandfatheredSafeOps() (each row's reason
-    // documented inline in GetOpAuditTable() above) may stay Safe.
+    // Safe is exactly the unverified state that hid the TMoveIndex bug. Only
+    // two closed, pre-existing sets may stay Safe: GetGrandfatheredSafeOps()
+    // (not yet driven, each row's reason documented inline in GetOpAuditTable()
+    // above) and GetOutOfScopeBackupOps() (deliberately untouched per the
+    // RFC-0129 plan). The failure message names the offending op type and
+    // which decision (drive it, or explicitly park it) it is missing.
     Y_UNIT_TEST(NewSafeOpsMustBeGrandfatheredOrVerified) {
         TVector<TString> ungrandfathered;
         for (const auto& row : GetOpAuditTable()) {
-            if (row.Class == EOpAuditClass::Safe && !GetGrandfatheredSafeOps().contains(row.OpType)) {
-                ungrandfathered.push_back(NKikimrSchemeOp::EOperationType_Name(row.OpType));
+            if (row.Class != EOpAuditClass::Safe) {
+                continue;
             }
+            if (GetGrandfatheredSafeOps().contains(row.OpType) || GetOutOfScopeBackupOps().contains(row.OpType)) {
+                continue;
+            }
+            ungrandfathered.push_back(NKikimrSchemeOp::EOperationType_Name(row.OpType));
         }
         UNIT_ASSERT_C(ungrandfathered.empty(),
-            "the following operation types are classified Safe but are not in the "
-            "grandfathered allowlist (GetGrandfatheredSafeOps in ut_scheme_change_records.cpp): "
+            "the following operation types are classified Safe but are not in either "
+            "GetGrandfatheredSafeOps or GetOutOfScopeBackupOps (ut_scheme_change_records.cpp): "
             << JoinSeq(", ", ungrandfathered) << " -- a NEW user-level operation must be driven "
             "end-to-end and classified VerifiedByTest, not left Safe. If it genuinely cannot be "
             "driven from this UT harness, add it to GetGrandfatheredSafeOps() with a reason "
-            "comment on its GetOpAuditTable() row explaining why, as a deliberate decision.");
+            "comment on its GetOpAuditTable() row explaining why, as a deliberate decision. If it "
+            "is part of the backup/restore family parked by the RFC-0129 plan, add it to "
+            "GetOutOfScopeBackupOps() instead.");
+    }
+
+    // The out-of-scope backup set must stay exactly the 4 rows the RFC-0129
+    // plan named -- catches both accidental shrinkage (an op silently
+    // dropped back into the ordinary verification path without anyone
+    // deciding that) and accidental growth (a non-backup op parked here to
+    // dodge GetGrandfatheredSafeOps's per-row reason requirement).
+    Y_UNIT_TEST(OutOfScopeBackupOpsIsExactlyTheNamedFour) {
+        const THashSet<NKikimrSchemeOp::EOperationType> expected = {
+            NKikimrSchemeOp::ESchemeOpBackupBackupCollection,
+            NKikimrSchemeOp::ESchemeOpBackupIncrementalBackupCollection,
+            NKikimrSchemeOp::ESchemeOpRestoreBackupCollection,
+            NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups,
+        };
+        UNIT_ASSERT_VALUES_EQUAL_C(GetOutOfScopeBackupOps().size(), expected.size(),
+            "GetOutOfScopeBackupOps must contain exactly the 4 backup/restore ops named by "
+            "the RFC-0129 plan's out-of-scope decision -- no more, no fewer");
+        for (const auto& opType : expected) {
+            UNIT_ASSERT_C(GetOutOfScopeBackupOps().contains(opType),
+                "GetOutOfScopeBackupOps is missing " << NKikimrSchemeOp::EOperationType_Name(opType));
+        }
     }
 
     // A newly classified Safe/VerifiedByTest row must actually be reachable
@@ -2571,5 +2548,2435 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsOperationAuditTests) {
             "recorded PathOwnerId must match the dropped object's owner");
         UNIT_ASSERT_VALUES_EQUAL_C(found->PathLocalId, droppedLocalId,
             "recorded PathLocalId must match the dropped object's identity, not some other path");
+    }
+    // ---- RFC 0129 V3: tier-1 create ops driven end-to-end ----
+
+    Y_UNIT_TEST(CreatePQGroupRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "PQGroup1"
+            TotalGroupCount: 1
+            PartitionPerTablet: 1
+            PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        bool found = false;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreatePersQueueGroup) {
+                found = true;
+                UNIT_ASSERT_C(AnyPathContains(e, "PQGroup1"),
+                    "expected the target to be PQGroup1, got: " << AllTargetPaths(e));
+                AssertRecordedPathResolvesToTouchedObject(runtime, "/MyRoot", e);
+            }
+        }
+        UNIT_ASSERT_C(found, "CreatePQGroup must produce a scheme change record");
+    }
+
+    Y_UNIT_TEST(CreateSubDomainRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestCreateSubDomain(runtime, ++txId, "/MyRoot", R"(
+            Name: "USD1"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        bool found = false;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateSubDomain) {
+                found = true;
+                UNIT_ASSERT_C(AnyPathContains(e, "USD1"),
+                    "expected the target to be USD1, got: " << AllTargetPaths(e));
+                AssertRecordedPathResolvesToTouchedObject(runtime, "/MyRoot", e);
+            }
+        }
+        UNIT_ASSERT_C(found, "CreateSubDomain must produce a scheme change record");
+    }
+
+    Y_UNIT_TEST(CreateRtmrVolumeRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestCreateRtmrVolume(runtime, ++txId, "/MyRoot", R"(
+            Name: "rtmr1"
+            PartitionsCount: 0
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        bool found = false;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateRtmrVolume) {
+                found = true;
+                UNIT_ASSERT_C(AnyPathContains(e, "rtmr1"),
+                    "expected the target to be rtmr1, got: " << AllTargetPaths(e));
+                AssertRecordedPathResolvesToTouchedObject(runtime, "/MyRoot", e);
+            }
+        }
+        UNIT_ASSERT_C(found, "CreateRtmrVolume must produce a scheme change record");
+    }
+
+    Y_UNIT_TEST(CreateBlockStoreVolumeRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
+        vdescr.SetName("BSVolume1");
+        auto& vc = *vdescr.MutableVolumeConfig();
+        vc.SetBlockSize(4096);
+        vc.AddPartitions()->SetBlockCount(16);
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-2");
+
+        TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        bool found = false;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateBlockStoreVolume) {
+                found = true;
+                UNIT_ASSERT_C(AnyPathContains(e, "BSVolume1"),
+                    "expected the target to be BSVolume1, got: " << AllTargetPaths(e));
+                AssertRecordedPathResolvesToTouchedObject(runtime, "/MyRoot", e);
+            }
+        }
+        UNIT_ASSERT_C(found, "CreateBlockStoreVolume must produce a scheme change record");
+    }
+
+    Y_UNIT_TEST(CreateKesusRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestCreateKesus(runtime, ++txId, "/MyRoot", R"(Name: "Kesus1")");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        bool found = false;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateKesus) {
+                found = true;
+                UNIT_ASSERT_C(AnyPathContains(e, "Kesus1"),
+                    "expected the target to be Kesus1, got: " << AllTargetPaths(e));
+                AssertRecordedPathResolvesToTouchedObject(runtime, "/MyRoot", e);
+            }
+        }
+        UNIT_ASSERT_C(found, "CreateKesus must produce a scheme change record");
+    }
+
+    Y_UNIT_TEST(CreateSolomonVolumeRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestCreateSolomon(runtime, ++txId, "/MyRoot", R"(
+            Name: "Solomon1"
+            PartitionCount: 2
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        bool found = false;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateSolomonVolume) {
+                found = true;
+                UNIT_ASSERT_C(AnyPathContains(e, "Solomon1"),
+                    "expected the target to be Solomon1, got: " << AllTargetPaths(e));
+                AssertRecordedPathResolvesToTouchedObject(runtime, "/MyRoot", e);
+            }
+        }
+        UNIT_ASSERT_C(found, "CreateSolomon must produce a scheme change record");
+    }
+
+    Y_UNIT_TEST(CreateFileStoreRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        NKikimrSchemeOp::TFileStoreDescription descr;
+        descr.SetName("FileStore1");
+        auto& config = *descr.MutableConfig();
+        config.SetBlockSize(4096);
+        config.SetBlocksCount(4096);
+        config.SetFileSystemId("FileStore1");
+        config.SetCloudId("cloud");
+        config.SetFolderId("folder");
+        config.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        config.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        config.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        config.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-2");
+
+        TestCreateFileStore(runtime, ++txId, "/MyRoot", descr.DebugString());
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        bool found = false;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateFileStore) {
+                found = true;
+                UNIT_ASSERT_C(AnyPathContains(e, "FileStore1"),
+                    "expected the target to be FileStore1, got: " << AllTargetPaths(e));
+                AssertRecordedPathResolvesToTouchedObject(runtime, "/MyRoot", e);
+            }
+        }
+        UNIT_ASSERT_C(found, "CreateFileStore must produce a scheme change record");
+    }
+
+    Y_UNIT_TEST(CreateColumnStoreRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestCreateOlapStore(runtime, ++txId, "/MyRoot", R"(
+            Name: "OlapStore1"
+            ColumnShardCount: 1
+            SchemaPresets {
+                Name: "default"
+                Schema {
+                    Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                    Columns { Name: "data" Type: "Utf8" }
+                    KeyColumnNames: "timestamp"
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        bool found = false;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateColumnStore) {
+                found = true;
+                UNIT_ASSERT_C(AnyPathContains(e, "OlapStore1"),
+                    "expected the target to be OlapStore1, got: " << AllTargetPaths(e));
+                AssertRecordedPathResolvesToTouchedObject(runtime, "/MyRoot", e);
+            }
+        }
+        UNIT_ASSERT_C(found, "CreateOlapStore must produce a scheme change record");
+    }
+
+    Y_UNIT_TEST(CreateColumnTableRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable1"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: "timestamp"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        bool found = false;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateColumnTable) {
+                found = true;
+                UNIT_ASSERT_C(AnyPathContains(e, "ColumnTable1"),
+                    "expected the target to be ColumnTable1, got: " << AllTargetPaths(e));
+                AssertRecordedPathResolvesToTouchedObject(runtime, "/MyRoot", e);
+            }
+        }
+        UNIT_ASSERT_C(found, "CreateColumnTable must produce a scheme change record");
+    }
+
+    Y_UNIT_TEST(CreateExtSubDomainRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestCreateExtSubDomain(runtime, ++txId, "/MyRoot", R"(
+            Name: "ExtSubDomain1"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        bool found = false;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateExtSubDomain) {
+                found = true;
+                UNIT_ASSERT_C(AnyPathContains(e, "ExtSubDomain1"),
+                    "expected the target to be ExtSubDomain1, got: " << AllTargetPaths(e));
+                AssertRecordedPathResolvesToTouchedObject(runtime, "/MyRoot", e);
+            }
+        }
+        UNIT_ASSERT_C(found, "CreateExtSubDomain must produce a scheme change record");
+    }
+
+    Y_UNIT_TEST(CreateExternalTableRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true).RunFakeConfigDispatcher(true));
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestCreateExternalDataSource(runtime, ++txId, "/MyRoot", R"(
+            Name: "ExternalDataSource1"
+            SourceType: "ObjectStorage"
+            Location: "https://s3.cloud.net/my_bucket"
+            Auth { None {} }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateExternalTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ExternalTable1"
+            SourceType: "General"
+            DataSourcePath: "/MyRoot/ExternalDataSource1"
+            Location: "/"
+            Columns { Name: "key" Type: "Uint64" }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        bool found = false;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateExternalTable) {
+                found = true;
+                UNIT_ASSERT_C(AnyPathContains(e, "ExternalTable1"),
+                    "expected the target to be ExternalTable1, got: " << AllTargetPaths(e));
+                AssertRecordedPathResolvesToTouchedObject(runtime, "/MyRoot", e);
+            }
+        }
+        UNIT_ASSERT_C(found, "CreateExternalTable must produce a scheme change record");
+    }
+
+    Y_UNIT_TEST(CreateExternalDataSourceRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true).RunFakeConfigDispatcher(true));
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestCreateExternalDataSource(runtime, ++txId, "/MyRoot", R"(
+            Name: "ExternalDataSource2"
+            SourceType: "ObjectStorage"
+            Location: "https://s3.cloud.net/my_bucket"
+            Auth { None {} }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        bool found = false;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateExternalDataSource) {
+                found = true;
+                UNIT_ASSERT_C(AnyPathContains(e, "ExternalDataSource2"),
+                    "expected the target to be ExternalDataSource2, got: " << AllTargetPaths(e));
+                AssertRecordedPathResolvesToTouchedObject(runtime, "/MyRoot", e);
+            }
+        }
+        UNIT_ASSERT_C(found, "CreateExternalDataSource must produce a scheme change record");
+    }
+
+    Y_UNIT_TEST(CreateViewRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestCreateView(runtime, ++txId, "/MyRoot", R"(
+            Name: "View1"
+            QueryText: "Some query"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        bool found = false;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateView) {
+                found = true;
+                UNIT_ASSERT_C(AnyPathContains(e, "View1"),
+                    "expected the target to be View1, got: " << AllTargetPaths(e));
+                AssertRecordedPathResolvesToTouchedObject(runtime, "/MyRoot", e);
+            }
+        }
+        UNIT_ASSERT_C(found, "CreateView must produce a scheme change record");
+    }
+
+    Y_UNIT_TEST(CreateResourcePoolRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestMkDir(runtime, ++txId, "/MyRoot", ".metadata/workload_manager/pools");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateResourcePool(runtime, ++txId, "/MyRoot/.metadata/workload_manager/pools", R"(
+            Name: "ResourcePool1"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        bool found = false;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateResourcePool) {
+                found = true;
+                UNIT_ASSERT_C(AnyPathContains(e, "ResourcePool1"),
+                    "expected the target to be ResourcePool1, got: " << AllTargetPaths(e));
+                AssertRecordedPathResolvesToTouchedObject(runtime, "/MyRoot", e);
+            }
+        }
+        UNIT_ASSERT_C(found, "CreateResourcePool must produce a scheme change record");
+    }
+
+    Y_UNIT_TEST(CreateBackupCollectionRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true).EnableBackupService(true));
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestMkDir(runtime, ++txId, "/MyRoot", ".backups");
+        env.TestWaitNotification(runtime, txId);
+        TestMkDir(runtime, ++txId, "/MyRoot/.backups", "collections");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", R"(
+            Name: "BackupCollection1"
+            ExplicitEntryList {
+                Entries {
+                    Type: ETypeTable
+                    Path: "/MyRoot/Table1"
+                }
+            }
+            Cluster: {}
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        bool found = false;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateBackupCollection) {
+                found = true;
+                UNIT_ASSERT_C(AnyPathContains(e, "BackupCollection1"),
+                    "expected the target to be BackupCollection1, got: " << AllTargetPaths(e));
+                AssertRecordedPathResolvesToTouchedObject(runtime, "/MyRoot", e);
+            }
+        }
+        UNIT_ASSERT_C(found, "CreateBackupCollection must produce a scheme change record");
+    }
+
+    Y_UNIT_TEST(CreateSysViewRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestCreateSysView(runtime, ++txId, "/MyRoot/.sys", R"(
+            Name: "sys_view_1"
+            Type: EPartitionStats
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        bool found = false;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateSysView) {
+                found = true;
+                UNIT_ASSERT_C(AnyPathContains(e, "sys_view_1"),
+                    "expected the target to be sys_view_1, got: " << AllTargetPaths(e));
+                AssertRecordedPathResolvesToTouchedObject(runtime, "/MyRoot", e);
+            }
+        }
+        UNIT_ASSERT_C(found, "CreateSysView must produce a scheme change record");
+    }
+
+    Y_UNIT_TEST(CreateSecretRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestCreateSecret(runtime, ++txId, "/MyRoot", R"(
+            Name: "Secret1"
+            Value: "value1"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        bool found = false;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateSecret) {
+                found = true;
+                UNIT_ASSERT_C(AnyPathContains(e, "Secret1"),
+                    "expected the target to be Secret1, got: " << AllTargetPaths(e));
+                AssertRecordedPathResolvesToTouchedObject(runtime, "/MyRoot", e);
+            }
+        }
+        UNIT_ASSERT_C(found, "CreateSecret must produce a scheme change record");
+    }
+
+    Y_UNIT_TEST(CreateStreamingQueryRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestCreateStreamingQuery(runtime, ++txId, "/MyRoot", R"(
+            Name: "StreamingQuery1"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        bool found = false;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateStreamingQuery) {
+                found = true;
+                UNIT_ASSERT_C(AnyPathContains(e, "StreamingQuery1"),
+                    "expected the target to be StreamingQuery1, got: " << AllTargetPaths(e));
+                AssertRecordedPathResolvesToTouchedObject(runtime, "/MyRoot", e);
+            }
+        }
+        UNIT_ASSERT_C(found, "CreateStreamingQuery must produce a scheme change record");
+    }
+
+    Y_UNIT_TEST(CreateTestShardSetRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestCreateTestShardSet(runtime, ++txId, "/MyRoot", CreateTestShardSetConfig("TestShardSet1"));
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        bool found = false;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateTestShardSet) {
+                found = true;
+                UNIT_ASSERT_C(AnyPathContains(e, "TestShardSet1"),
+                    "expected the target to be TestShardSet1, got: " << AllTargetPaths(e));
+                AssertRecordedPathResolvesToTouchedObject(runtime, "/MyRoot", e);
+            }
+        }
+        UNIT_ASSERT_C(found, "CreateTestShardSet must produce a scheme change record");
+    }
+
+    Y_UNIT_TEST(CreateSequenceRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestCreateSequence(runtime, ++txId, "/MyRoot", R"(
+            Name: "Sequence1"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        bool found = false;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateSequence) {
+                found = true;
+                UNIT_ASSERT_C(AnyPathContains(e, "Sequence1"),
+                    "expected the target to be Sequence1, got: " << AllTargetPaths(e));
+                AssertRecordedPathResolvesToTouchedObject(runtime, "/MyRoot", e);
+            }
+        }
+        UNIT_ASSERT_C(found, "CreateSequence must produce a scheme change record");
+    }
+
+    Y_UNIT_TEST(CreateLockRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestLock(runtime, ++txId, "/MyRoot", "Table1");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        bool found = false;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateLock) {
+                found = true;
+                UNIT_ASSERT_C(AnyPathContains(e, "Table1"),
+                    "expected the target to be Table1, got: " << AllTargetPaths(e));
+                AssertRecordedPathResolvesToTouchedObject(runtime, "/MyRoot", e);
+            }
+        }
+        UNIT_ASSERT_C(found, "CreateLock must produce a scheme change record");
+    }
+    // ---- RFC 0129 V3: tier-1 alter ops driven end-to-end ----
+
+    Y_UNIT_TEST(AlterPersQueueGroupRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "PQGroup1"
+            TotalGroupCount: 1
+            PartitionPerTablet: 1
+            PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestAlterPQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "PQGroup1"
+            PQTabletConfig: {PartitionConfig { LifetimeSeconds : 20}}
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        bool found = false;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterPersQueueGroup) {
+                found = true;
+                UNIT_ASSERT_C(AnyPathContains(e, "PQGroup1"),
+                    "expected the target to be PQGroup1, got: " << AllTargetPaths(e));
+                AssertRecordedPathResolvesToTouchedObject(runtime, "/MyRoot", e);
+            }
+        }
+        UNIT_ASSERT_C(found, "AlterPQGroup must produce a scheme change record");
+    }
+
+    Y_UNIT_TEST(AlterBlockStoreVolumeRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
+        vdescr.SetName("BSVolume1");
+        auto& vc = *vdescr.MutableVolumeConfig();
+        vc.SetBlockSize(4096);
+        vc.AddPartitions()->SetBlockCount(16);
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-2");
+        TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
+        env.TestWaitNotification(runtime, txId);
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        NKikimrSchemeOp::TBlockStoreVolumeDescription alterDescr;
+        alterDescr.SetName("BSVolume1");
+        auto& alterVc = *alterDescr.MutableVolumeConfig();
+        alterVc.SetVersion(1);
+        alterVc.AddPartitions()->SetBlockCount(16);
+        alterVc.AddPartitions()->SetBlockCount(16);
+        TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot", alterDescr.DebugString());
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        bool found = false;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterBlockStoreVolume) {
+                found = true;
+                UNIT_ASSERT_C(AnyPathContains(e, "BSVolume1"),
+                    "expected the target to be BSVolume1, got: " << AllTargetPaths(e));
+                AssertRecordedPathResolvesToTouchedObject(runtime, "/MyRoot", e);
+            }
+        }
+        UNIT_ASSERT_C(found, "AlterBlockStoreVolume must produce a scheme change record");
+    }
+
+    Y_UNIT_TEST(AlterKesusRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TestCreateKesus(runtime, ++txId, "/MyRoot", R"(Name: "Kesus1")");
+        env.TestWaitNotification(runtime, txId);
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestAlterKesus(runtime, ++txId, "/MyRoot", R"(
+            Name: "Kesus1"
+            Config { self_check_period_millis: 3000 }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        bool found = false;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterKesus) {
+                found = true;
+                UNIT_ASSERT_C(AnyPathContains(e, "Kesus1"),
+                    "expected the target to be Kesus1, got: " << AllTargetPaths(e));
+                AssertRecordedPathResolvesToTouchedObject(runtime, "/MyRoot", e);
+            }
+        }
+        UNIT_ASSERT_C(found, "AlterKesus must produce a scheme change record");
+    }
+
+    Y_UNIT_TEST(AlterExtSubDomainRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TestCreateExtSubDomain(runtime, ++txId, "/MyRoot", R"(Name: "ExtSubDomain1")");
+        env.TestWaitNotification(runtime, txId);
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        // Not verified via ReadSchemeChangeRecords here, same constraint as
+        // UpgradeSubDomainRecordsAPath: ExternalSchemeShard:true turns this
+        // SchemeShard into one no longer serving a single transaction-
+        // supporting domain, so registering a second (internal, read-only)
+        // subscriber is refused. The counter check is the load-bearing
+        // assertion -- it fires before the domain state changes.
+        const ui64 rejectedBefore = GetCumulativeCounter(runtime, "SchemeShard/SchemeChangePathMissing");
+
+        TestAlterExtSubDomain(runtime, ++txId, "/MyRoot", R"(
+            Name: "ExtSubDomain1"
+            ExternalSchemeShard: true
+            PlanResolution: 50
+            Coordinators: 1
+            Mediators: 1
+            TimeCastBucketsPerMediator: 2
+            StoragePools {
+                Name: "name_USER_0_kind_hdd-1"
+                Kind: "pool-kind-1"
+            }
+            StoragePools {
+                Name: "name_USER_0_kind_hdd-2"
+                Kind: "pool-kind-2"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const ui64 rejectedAfter = GetCumulativeCounter(runtime, "SchemeShard/SchemeChangePathMissing");
+        UNIT_ASSERT_VALUES_EQUAL_C(rejectedAfter, rejectedBefore, "AlterExtSubDomain must resolve a path");
+    }
+
+    Y_UNIT_TEST(AlterSolomonVolumeRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TestCreateSolomon(runtime, ++txId, "/MyRoot", R"(
+            Name: "Solomon1"
+            PartitionCount: 2
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        // Alter without any actual partition/channel change: a real alter needs
+        // reflecting the just-created shard layout, which this test does not
+        // need -- only that the outbox resolves the target before whatever
+        // status the op itself returns.
+        const ui64 rejectedBefore = GetCumulativeCounter(runtime, "SchemeShard/SchemeChangePathMissing");
+        TestAlterSolomon(runtime, ++txId, "/MyRoot", R"(
+            Name: "Solomon1"
+            ChannelProfileId: 3
+        )", {NKikimrScheme::StatusInvalidParameter});
+        const ui64 rejectedAfter = GetCumulativeCounter(runtime, "SchemeShard/SchemeChangePathMissing");
+        UNIT_ASSERT_VALUES_EQUAL_C(rejectedAfter, rejectedBefore, "AlterSolomon must resolve a path");
+    }
+
+    Y_UNIT_TEST(AlterColumnStoreRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TestCreateOlapStore(runtime, ++txId, "/MyRoot", R"(
+            Name: "OlapStore1"
+            ColumnShardCount: 1
+            SchemaPresets {
+                Name: "default"
+                Schema {
+                    Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                    Columns { Name: "data" Type: "Utf8" }
+                    KeyColumnNames: "timestamp"
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestAlterOlapStore(runtime, ++txId, "/MyRoot", R"(
+            Name: "OlapStore1"
+            AlterSchemaPresets {
+                Name: "default"
+                AlterSchema {
+                    AddColumns { Name: "comment" Type: "Utf8" }
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        bool found = false;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterColumnStore) {
+                found = true;
+                UNIT_ASSERT_C(AnyPathContains(e, "OlapStore1"),
+                    "expected the target to be OlapStore1, got: " << AllTargetPaths(e));
+                AssertRecordedPathResolvesToTouchedObject(runtime, "/MyRoot", e);
+            }
+        }
+        UNIT_ASSERT_C(found, "AlterOlapStore must produce a scheme change record");
+    }
+
+    Y_UNIT_TEST(AlterColumnTableRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable1"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: "timestamp"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable1"
+            UpsertMultiColumnStatistics { Name: "s1" ColumnNames: "data" Types: COUNT_MIN_SKETCH }
+        )", {NKikimrScheme::StatusSuccess});
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        bool found = false;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterColumnTable) {
+                found = true;
+                UNIT_ASSERT_C(AnyPathContains(e, "ColumnTable1"),
+                    "expected the target to be ColumnTable1, got: " << AllTargetPaths(e));
+                AssertRecordedPathResolvesToTouchedObject(runtime, "/MyRoot", e);
+            }
+        }
+        UNIT_ASSERT_C(found, "AlterColumnTable must produce a scheme change record");
+    }
+
+    Y_UNIT_TEST(AlterSequenceRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TestCreateSequence(runtime, ++txId, "/MyRoot", R"(Name: "Sequence1")");
+        env.TestWaitNotification(runtime, txId);
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestAlterSequence(runtime, ++txId, "/MyRoot", R"(
+            Name: "Sequence1"
+            Increment: 2
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        bool found = false;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterSequence) {
+                found = true;
+                UNIT_ASSERT_C(AnyPathContains(e, "Sequence1"),
+                    "expected the target to be Sequence1, got: " << AllTargetPaths(e));
+                AssertRecordedPathResolvesToTouchedObject(runtime, "/MyRoot", e);
+            }
+        }
+        UNIT_ASSERT_C(found, "AlterSequence must produce a scheme change record");
+    }
+
+    Y_UNIT_TEST(AlterResourcePoolRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TestMkDir(runtime, ++txId, "/MyRoot", ".metadata/workload_manager/pools");
+        env.TestWaitNotification(runtime, txId);
+        TestCreateResourcePool(runtime, ++txId, "/MyRoot/.metadata/workload_manager/pools", R"(
+            Name: "ResourcePool1"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestAlterResourcePool(runtime, ++txId, "/MyRoot/.metadata/workload_manager/pools", R"(
+            Name: "ResourcePool1"
+            Properties {
+                Properties {
+                    key: "concurrent_query_limit",
+                    value: "20"
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        bool found = false;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterResourcePool) {
+                found = true;
+                UNIT_ASSERT_C(AnyPathContains(e, "ResourcePool1"),
+                    "expected the target to be ResourcePool1, got: " << AllTargetPaths(e));
+                AssertRecordedPathResolvesToTouchedObject(runtime, "/MyRoot", e);
+            }
+        }
+        UNIT_ASSERT_C(found, "AlterResourcePool must produce a scheme change record");
+    }
+    // ---- RFC 0129 V3: tier-1 drop-family ops driven end-to-end ----
+    //
+    // The object is gone by finalize time, so each of these captures the
+    // touched object's identity BEFORE the drop (like DropByIdRecordsAPath)
+    // and asserts the record's PathOwnerId/PathLocalId against that captured
+    // identity, rather than re-resolving a path that no longer exists.
+
+    Y_UNIT_TEST(DropTableRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto pathVersion = ExtractPathVersion(DescribePath(runtime, "/MyRoot/Table1"));
+        const ui64 droppedOwnerId = pathVersion.PathId.OwnerId;
+        const ui64 droppedLocalId = pathVersion.PathId.LocalPathId;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestDropTable(runtime, ++txId, "/MyRoot", "Table1");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        const TSchemeChangeRecordEntry* found = nullptr;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpDropTable) {
+                found = &e;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(found, "DropTable must produce a scheme change record");
+        UNIT_ASSERT_C(AnyPathContains(*found, "Table1"),
+            "expected the target to be Table1, got: " << AllTargetPaths(*found));
+        UNIT_ASSERT_VALUES_EQUAL_C(found->PathOwnerId, droppedOwnerId, "recorded PathOwnerId must match the dropped object's owner");
+        UNIT_ASSERT_VALUES_EQUAL_C(found->PathLocalId, droppedLocalId, "recorded PathLocalId must match the dropped object's identity");
+    }
+
+    Y_UNIT_TEST(DropPersQueueGroupRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "PQGroup1"
+            TotalGroupCount: 1
+            PartitionPerTablet: 1
+            PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto pathVersion = ExtractPathVersion(DescribePath(runtime, "/MyRoot/PQGroup1"));
+        const ui64 droppedOwnerId = pathVersion.PathId.OwnerId;
+        const ui64 droppedLocalId = pathVersion.PathId.LocalPathId;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestDropPQGroup(runtime, ++txId, "/MyRoot", "PQGroup1");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        const TSchemeChangeRecordEntry* found = nullptr;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpDropPersQueueGroup) {
+                found = &e;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(found, "DropPQGroup must produce a scheme change record");
+        UNIT_ASSERT_C(AnyPathContains(*found, "PQGroup1"),
+            "expected the target to be PQGroup1, got: " << AllTargetPaths(*found));
+        UNIT_ASSERT_VALUES_EQUAL_C(found->PathOwnerId, droppedOwnerId, "recorded PathOwnerId must match the dropped object's owner");
+        UNIT_ASSERT_VALUES_EQUAL_C(found->PathLocalId, droppedLocalId, "recorded PathLocalId must match the dropped object's identity");
+    }
+
+    Y_UNIT_TEST(DropSubDomainRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TestCreateSubDomain(runtime, ++txId, "/MyRoot", R"(Name: "USD1")");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto pathVersion = ExtractPathVersion(DescribePath(runtime, "/MyRoot/USD1"));
+        const ui64 droppedOwnerId = pathVersion.PathId.OwnerId;
+        const ui64 droppedLocalId = pathVersion.PathId.LocalPathId;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestDropSubDomain(runtime, ++txId, "/MyRoot", "USD1");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        const TSchemeChangeRecordEntry* found = nullptr;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpDropSubDomain) {
+                found = &e;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(found, "DropSubDomain must produce a scheme change record");
+        UNIT_ASSERT_C(AnyPathContains(*found, "USD1"),
+            "expected the target to be USD1, got: " << AllTargetPaths(*found));
+        UNIT_ASSERT_VALUES_EQUAL_C(found->PathOwnerId, droppedOwnerId, "recorded PathOwnerId must match the dropped object's owner");
+        UNIT_ASSERT_VALUES_EQUAL_C(found->PathLocalId, droppedLocalId, "recorded PathLocalId must match the dropped object's identity");
+    }
+
+    Y_UNIT_TEST(DropKesusRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TestCreateKesus(runtime, ++txId, "/MyRoot", R"(Name: "Kesus1")");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto pathVersion = ExtractPathVersion(DescribePath(runtime, "/MyRoot/Kesus1"));
+        const ui64 droppedOwnerId = pathVersion.PathId.OwnerId;
+        const ui64 droppedLocalId = pathVersion.PathId.LocalPathId;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestDropKesus(runtime, ++txId, "/MyRoot", "Kesus1");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        const TSchemeChangeRecordEntry* found = nullptr;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpDropKesus) {
+                found = &e;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(found, "DropKesus must produce a scheme change record");
+        UNIT_ASSERT_C(AnyPathContains(*found, "Kesus1"),
+            "expected the target to be Kesus1, got: " << AllTargetPaths(*found));
+        UNIT_ASSERT_VALUES_EQUAL_C(found->PathOwnerId, droppedOwnerId, "recorded PathOwnerId must match the dropped object's owner");
+        UNIT_ASSERT_VALUES_EQUAL_C(found->PathLocalId, droppedLocalId, "recorded PathLocalId must match the dropped object's identity");
+    }
+
+    Y_UNIT_TEST(DropSolomonVolumeRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TestCreateSolomon(runtime, ++txId, "/MyRoot", R"(
+            Name: "Solomon1"
+            PartitionCount: 2
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto pathVersion = ExtractPathVersion(DescribePath(runtime, "/MyRoot/Solomon1"));
+        const ui64 droppedOwnerId = pathVersion.PathId.OwnerId;
+        const ui64 droppedLocalId = pathVersion.PathId.LocalPathId;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestDropSolomon(runtime, ++txId, "/MyRoot", "Solomon1");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        const TSchemeChangeRecordEntry* found = nullptr;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpDropSolomonVolume) {
+                found = &e;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(found, "DropSolomon must produce a scheme change record");
+        UNIT_ASSERT_C(AnyPathContains(*found, "Solomon1"),
+            "expected the target to be Solomon1, got: " << AllTargetPaths(*found));
+        UNIT_ASSERT_VALUES_EQUAL_C(found->PathOwnerId, droppedOwnerId, "recorded PathOwnerId must match the dropped object's owner");
+        UNIT_ASSERT_VALUES_EQUAL_C(found->PathLocalId, droppedLocalId, "recorded PathLocalId must match the dropped object's identity");
+    }
+
+    Y_UNIT_TEST(ForceDropSubDomainRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TestCreateSubDomain(runtime, ++txId, "/MyRoot", R"(Name: "USD1")");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto pathVersion = ExtractPathVersion(DescribePath(runtime, "/MyRoot/USD1"));
+        const ui64 droppedOwnerId = pathVersion.PathId.OwnerId;
+        const ui64 droppedLocalId = pathVersion.PathId.LocalPathId;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestForceDropSubDomain(runtime, ++txId, "/MyRoot", "USD1");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        const TSchemeChangeRecordEntry* found = nullptr;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpForceDropSubDomain) {
+                found = &e;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(found, "ForceDropSubDomain must produce a scheme change record");
+        UNIT_ASSERT_C(AnyPathContains(*found, "USD1"),
+            "expected the target to be USD1, got: " << AllTargetPaths(*found));
+        UNIT_ASSERT_VALUES_EQUAL_C(found->PathOwnerId, droppedOwnerId, "recorded PathOwnerId must match the dropped object's owner");
+        UNIT_ASSERT_VALUES_EQUAL_C(found->PathLocalId, droppedLocalId, "recorded PathLocalId must match the dropped object's identity");
+    }
+
+    Y_UNIT_TEST(ForceDropExtSubDomainRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TestCreateExtSubDomain(runtime, ++txId, "/MyRoot", R"(Name: "ExtSubDomain1")");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto pathVersion = ExtractPathVersion(DescribePath(runtime, "/MyRoot/ExtSubDomain1"));
+        const ui64 droppedOwnerId = pathVersion.PathId.OwnerId;
+        const ui64 droppedLocalId = pathVersion.PathId.LocalPathId;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestForceDropExtSubDomain(runtime, ++txId, "/MyRoot", "ExtSubDomain1");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        const TSchemeChangeRecordEntry* found = nullptr;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpForceDropExtSubDomain) {
+                found = &e;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(found, "ForceDropExtSubDomain must produce a scheme change record");
+        UNIT_ASSERT_C(AnyPathContains(*found, "ExtSubDomain1"),
+            "expected the target to be ExtSubDomain1, got: " << AllTargetPaths(*found));
+        UNIT_ASSERT_VALUES_EQUAL_C(found->PathOwnerId, droppedOwnerId, "recorded PathOwnerId must match the dropped object's owner");
+        UNIT_ASSERT_VALUES_EQUAL_C(found->PathLocalId, droppedLocalId, "recorded PathLocalId must match the dropped object's identity");
+    }
+
+    Y_UNIT_TEST(DropFileStoreRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        NKikimrSchemeOp::TFileStoreDescription descr;
+        descr.SetName("FileStore1");
+        auto& config = *descr.MutableConfig();
+        config.SetBlockSize(4096);
+        config.SetBlocksCount(4096);
+        config.SetFileSystemId("FileStore1");
+        config.SetCloudId("cloud");
+        config.SetFolderId("folder");
+        config.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        config.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        config.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        config.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-2");
+        TestCreateFileStore(runtime, ++txId, "/MyRoot", descr.DebugString());
+        env.TestWaitNotification(runtime, txId);
+
+        const auto pathVersion = ExtractPathVersion(DescribePath(runtime, "/MyRoot/FileStore1"));
+        const ui64 droppedOwnerId = pathVersion.PathId.OwnerId;
+        const ui64 droppedLocalId = pathVersion.PathId.LocalPathId;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestDropFileStore(runtime, ++txId, "/MyRoot", "FileStore1");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        const TSchemeChangeRecordEntry* found = nullptr;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpDropFileStore) {
+                found = &e;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(found, "DropFileStore must produce a scheme change record");
+        UNIT_ASSERT_C(AnyPathContains(*found, "FileStore1"),
+            "expected the target to be FileStore1, got: " << AllTargetPaths(*found));
+        UNIT_ASSERT_VALUES_EQUAL_C(found->PathOwnerId, droppedOwnerId, "recorded PathOwnerId must match the dropped object's owner");
+        UNIT_ASSERT_VALUES_EQUAL_C(found->PathLocalId, droppedLocalId, "recorded PathLocalId must match the dropped object's identity");
+    }
+
+    Y_UNIT_TEST(DropColumnStoreRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TestCreateOlapStore(runtime, ++txId, "/MyRoot", R"(
+            Name: "OlapStore1"
+            ColumnShardCount: 1
+            SchemaPresets {
+                Name: "default"
+                Schema {
+                    Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                    Columns { Name: "data" Type: "Utf8" }
+                    KeyColumnNames: "timestamp"
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto pathVersion = ExtractPathVersion(DescribePath(runtime, "/MyRoot/OlapStore1"));
+        const ui64 droppedOwnerId = pathVersion.PathId.OwnerId;
+        const ui64 droppedLocalId = pathVersion.PathId.LocalPathId;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestDropOlapStore(runtime, ++txId, "/MyRoot", "OlapStore1");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        const TSchemeChangeRecordEntry* found = nullptr;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpDropColumnStore) {
+                found = &e;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(found, "DropOlapStore must produce a scheme change record");
+        UNIT_ASSERT_C(AnyPathContains(*found, "OlapStore1"),
+            "expected the target to be OlapStore1, got: " << AllTargetPaths(*found));
+        UNIT_ASSERT_VALUES_EQUAL_C(found->PathOwnerId, droppedOwnerId, "recorded PathOwnerId must match the dropped object's owner");
+        UNIT_ASSERT_VALUES_EQUAL_C(found->PathLocalId, droppedLocalId, "recorded PathLocalId must match the dropped object's identity");
+    }
+
+    Y_UNIT_TEST(DropColumnTableRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable1"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: "timestamp"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto pathVersion = ExtractPathVersion(DescribePath(runtime, "/MyRoot/ColumnTable1"));
+        const ui64 droppedOwnerId = pathVersion.PathId.OwnerId;
+        const ui64 droppedLocalId = pathVersion.PathId.LocalPathId;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestDropColumnTable(runtime, ++txId, "/MyRoot", "ColumnTable1");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        const TSchemeChangeRecordEntry* found = nullptr;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpDropColumnTable) {
+                found = &e;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(found, "DropColumnTable must produce a scheme change record");
+        UNIT_ASSERT_C(AnyPathContains(*found, "ColumnTable1"),
+            "expected the target to be ColumnTable1, got: " << AllTargetPaths(*found));
+        UNIT_ASSERT_VALUES_EQUAL_C(found->PathOwnerId, droppedOwnerId, "recorded PathOwnerId must match the dropped object's owner");
+        UNIT_ASSERT_VALUES_EQUAL_C(found->PathLocalId, droppedLocalId, "recorded PathLocalId must match the dropped object's identity");
+    }
+
+    Y_UNIT_TEST(DropExternalTableRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true).RunFakeConfigDispatcher(true));
+        ui64 txId = 100;
+
+        TestCreateExternalDataSource(runtime, ++txId, "/MyRoot", R"(
+            Name: "ExternalDataSource1"
+            SourceType: "ObjectStorage"
+            Location: "https://s3.cloud.net/my_bucket"
+            Auth { None {} }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestCreateExternalTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ExternalTable1"
+            SourceType: "General"
+            DataSourcePath: "/MyRoot/ExternalDataSource1"
+            Location: "/"
+            Columns { Name: "key" Type: "Uint64" }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto pathVersion = ExtractPathVersion(DescribePath(runtime, "/MyRoot/ExternalTable1"));
+        const ui64 droppedOwnerId = pathVersion.PathId.OwnerId;
+        const ui64 droppedLocalId = pathVersion.PathId.LocalPathId;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestDropExternalTable(runtime, ++txId, "/MyRoot", "ExternalTable1");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        const TSchemeChangeRecordEntry* found = nullptr;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpDropExternalTable) {
+                found = &e;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(found, "DropExternalTable must produce a scheme change record");
+        UNIT_ASSERT_C(AnyPathContains(*found, "ExternalTable1"),
+            "expected the target to be ExternalTable1, got: " << AllTargetPaths(*found));
+        UNIT_ASSERT_VALUES_EQUAL_C(found->PathOwnerId, droppedOwnerId, "recorded PathOwnerId must match the dropped object's owner");
+        UNIT_ASSERT_VALUES_EQUAL_C(found->PathLocalId, droppedLocalId, "recorded PathLocalId must match the dropped object's identity");
+    }
+
+    Y_UNIT_TEST(DropExternalDataSourceRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true).RunFakeConfigDispatcher(true));
+        ui64 txId = 100;
+
+        TestCreateExternalDataSource(runtime, ++txId, "/MyRoot", R"(
+            Name: "ExternalDataSource1"
+            SourceType: "ObjectStorage"
+            Location: "https://s3.cloud.net/my_bucket"
+            Auth { None {} }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto pathVersion = ExtractPathVersion(DescribePath(runtime, "/MyRoot/ExternalDataSource1"));
+        const ui64 droppedOwnerId = pathVersion.PathId.OwnerId;
+        const ui64 droppedLocalId = pathVersion.PathId.LocalPathId;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestDropExternalDataSource(runtime, ++txId, "/MyRoot", "ExternalDataSource1");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        const TSchemeChangeRecordEntry* found = nullptr;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpDropExternalDataSource) {
+                found = &e;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(found, "DropExternalDataSource must produce a scheme change record");
+        UNIT_ASSERT_C(AnyPathContains(*found, "ExternalDataSource1"),
+            "expected the target to be ExternalDataSource1, got: " << AllTargetPaths(*found));
+        UNIT_ASSERT_VALUES_EQUAL_C(found->PathOwnerId, droppedOwnerId, "recorded PathOwnerId must match the dropped object's owner");
+        UNIT_ASSERT_VALUES_EQUAL_C(found->PathLocalId, droppedLocalId, "recorded PathLocalId must match the dropped object's identity");
+    }
+
+    Y_UNIT_TEST(DropViewRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TestCreateView(runtime, ++txId, "/MyRoot", R"(
+            Name: "View1"
+            QueryText: "Some query"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto pathVersion = ExtractPathVersion(DescribePath(runtime, "/MyRoot/View1"));
+        const ui64 droppedOwnerId = pathVersion.PathId.OwnerId;
+        const ui64 droppedLocalId = pathVersion.PathId.LocalPathId;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestDropView(runtime, ++txId, "/MyRoot", "View1");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        const TSchemeChangeRecordEntry* found = nullptr;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpDropView) {
+                found = &e;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(found, "DropView must produce a scheme change record");
+        UNIT_ASSERT_C(AnyPathContains(*found, "View1"),
+            "expected the target to be View1, got: " << AllTargetPaths(*found));
+        UNIT_ASSERT_VALUES_EQUAL_C(found->PathOwnerId, droppedOwnerId, "recorded PathOwnerId must match the dropped object's owner");
+        UNIT_ASSERT_VALUES_EQUAL_C(found->PathLocalId, droppedLocalId, "recorded PathLocalId must match the dropped object's identity");
+    }
+
+    Y_UNIT_TEST(DropContinuousBackupRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key"   Type: "Uint64" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestCreateContinuousBackup(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table1"
+            ContinuousBackupDescription {
+                StreamName: "0_continuousBackupImpl"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto pathVersion = ExtractPathVersion(DescribePath(runtime, "/MyRoot/Table1"));
+        const ui64 tableOwnerId = pathVersion.PathId.OwnerId;
+        const ui64 tableLocalId = pathVersion.PathId.LocalPathId;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestDropContinuousBackup(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table1"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        const TSchemeChangeRecordEntry* found = nullptr;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpDropContinuousBackup) {
+                found = &e;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(found, "DropContinuousBackup must produce a scheme change record");
+        UNIT_ASSERT_C(AnyPathContains(*found, "Table1"),
+            "expected the target to be Table1, got: " << AllTargetPaths(*found));
+        // DropContinuousBackup's target is the table it was created on -- the
+        // table itself is not dropped, so the ordinary live-resolve
+        // assertion would also work here, but the pre-op-captured identity
+        // is used for symmetry with the other Drop* rows in this suite.
+        UNIT_ASSERT_VALUES_EQUAL_C(found->PathOwnerId, tableOwnerId, "recorded PathOwnerId must match Table1's owner");
+        UNIT_ASSERT_VALUES_EQUAL_C(found->PathLocalId, tableLocalId, "recorded PathLocalId must match Table1's identity");
+    }
+
+    Y_UNIT_TEST(DropResourcePoolRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TestMkDir(runtime, ++txId, "/MyRoot", ".metadata/workload_manager/pools");
+        env.TestWaitNotification(runtime, txId);
+        TestCreateResourcePool(runtime, ++txId, "/MyRoot/.metadata/workload_manager/pools", R"(
+            Name: "ResourcePool1"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto pathVersion = ExtractPathVersion(DescribePath(runtime, "/MyRoot/.metadata/workload_manager/pools/ResourcePool1"));
+        const ui64 droppedOwnerId = pathVersion.PathId.OwnerId;
+        const ui64 droppedLocalId = pathVersion.PathId.LocalPathId;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestDropResourcePool(runtime, ++txId, "/MyRoot/.metadata/workload_manager/pools", "ResourcePool1");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        const TSchemeChangeRecordEntry* found = nullptr;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpDropResourcePool) {
+                found = &e;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(found, "DropResourcePool must produce a scheme change record");
+        UNIT_ASSERT_C(AnyPathContains(*found, "ResourcePool1"),
+            "expected the target to be ResourcePool1, got: " << AllTargetPaths(*found));
+        UNIT_ASSERT_VALUES_EQUAL_C(found->PathOwnerId, droppedOwnerId, "recorded PathOwnerId must match the dropped object's owner");
+        UNIT_ASSERT_VALUES_EQUAL_C(found->PathLocalId, droppedLocalId, "recorded PathLocalId must match the dropped object's identity");
+    }
+
+    Y_UNIT_TEST(DropBackupCollectionRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true).EnableBackupService(true));
+        ui64 txId = 100;
+
+        TestMkDir(runtime, ++txId, "/MyRoot", ".backups");
+        env.TestWaitNotification(runtime, txId);
+        TestMkDir(runtime, ++txId, "/MyRoot/.backups", "collections");
+        env.TestWaitNotification(runtime, txId);
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", R"(
+            Name: "BackupCollection1"
+            ExplicitEntryList {
+                Entries {
+                    Type: ETypeTable
+                    Path: "/MyRoot/Table1"
+                }
+            }
+            Cluster: {}
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto pathVersion = ExtractPathVersion(DescribePath(runtime, "/MyRoot/.backups/collections/BackupCollection1"));
+        const ui64 droppedOwnerId = pathVersion.PathId.OwnerId;
+        const ui64 droppedLocalId = pathVersion.PathId.LocalPathId;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", R"(Name: "BackupCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        const TSchemeChangeRecordEntry* found = nullptr;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpDropBackupCollection) {
+                found = &e;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(found, "DropBackupCollection must produce a scheme change record");
+        UNIT_ASSERT_C(AnyPathContains(*found, "BackupCollection1"),
+            "expected the target to be BackupCollection1, got: " << AllTargetPaths(*found));
+        UNIT_ASSERT_VALUES_EQUAL_C(found->PathOwnerId, droppedOwnerId, "recorded PathOwnerId must match the dropped object's owner");
+        UNIT_ASSERT_VALUES_EQUAL_C(found->PathLocalId, droppedLocalId, "recorded PathLocalId must match the dropped object's identity");
+    }
+
+    Y_UNIT_TEST(DropSysViewRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TestCreateSysView(runtime, ++txId, "/MyRoot/.sys", R"(
+            Name: "sys_view_1"
+            Type: EPartitionStats
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto pathVersion = ExtractPathVersion(DescribePath(runtime, "/MyRoot/.sys/sys_view_1"));
+        const ui64 droppedOwnerId = pathVersion.PathId.OwnerId;
+        const ui64 droppedLocalId = pathVersion.PathId.LocalPathId;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestDropSysView(runtime, ++txId, "/MyRoot/.sys", "sys_view_1");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        const TSchemeChangeRecordEntry* found = nullptr;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpDropSysView) {
+                found = &e;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(found, "DropSysView must produce a scheme change record");
+        UNIT_ASSERT_C(AnyPathContains(*found, "sys_view_1"),
+            "expected the target to be sys_view_1, got: " << AllTargetPaths(*found));
+        UNIT_ASSERT_VALUES_EQUAL_C(found->PathOwnerId, droppedOwnerId, "recorded PathOwnerId must match the dropped object's owner");
+        UNIT_ASSERT_VALUES_EQUAL_C(found->PathLocalId, droppedLocalId, "recorded PathLocalId must match the dropped object's identity");
+    }
+
+    Y_UNIT_TEST(DropSecretRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TestCreateSecret(runtime, ++txId, "/MyRoot", R"(
+            Name: "Secret1"
+            Value: "value1"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto pathVersion = ExtractPathVersion(DescribePath(runtime, "/MyRoot/Secret1"));
+        const ui64 droppedOwnerId = pathVersion.PathId.OwnerId;
+        const ui64 droppedLocalId = pathVersion.PathId.LocalPathId;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestDropSecret(runtime, ++txId, "/MyRoot", "Secret1");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        const TSchemeChangeRecordEntry* found = nullptr;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpDropSecret) {
+                found = &e;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(found, "DropSecret must produce a scheme change record");
+        UNIT_ASSERT_C(AnyPathContains(*found, "Secret1"),
+            "expected the target to be Secret1, got: " << AllTargetPaths(*found));
+        UNIT_ASSERT_VALUES_EQUAL_C(found->PathOwnerId, droppedOwnerId, "recorded PathOwnerId must match the dropped object's owner");
+        UNIT_ASSERT_VALUES_EQUAL_C(found->PathLocalId, droppedLocalId, "recorded PathLocalId must match the dropped object's identity");
+    }
+
+    Y_UNIT_TEST(DropStreamingQueryRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TestCreateStreamingQuery(runtime, ++txId, "/MyRoot", R"(
+            Name: "StreamingQuery1"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto pathVersion = ExtractPathVersion(DescribePath(runtime, "/MyRoot/StreamingQuery1"));
+        const ui64 droppedOwnerId = pathVersion.PathId.OwnerId;
+        const ui64 droppedLocalId = pathVersion.PathId.LocalPathId;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestDropStreamingQuery(runtime, ++txId, "/MyRoot", "StreamingQuery1");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        const TSchemeChangeRecordEntry* found = nullptr;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpDropStreamingQuery) {
+                found = &e;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(found, "DropStreamingQuery must produce a scheme change record");
+        UNIT_ASSERT_C(AnyPathContains(*found, "StreamingQuery1"),
+            "expected the target to be StreamingQuery1, got: " << AllTargetPaths(*found));
+        UNIT_ASSERT_VALUES_EQUAL_C(found->PathOwnerId, droppedOwnerId, "recorded PathOwnerId must match the dropped object's owner");
+        UNIT_ASSERT_VALUES_EQUAL_C(found->PathLocalId, droppedLocalId, "recorded PathLocalId must match the dropped object's identity");
+    }
+
+    Y_UNIT_TEST(DropTestShardSetRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TestCreateTestShardSet(runtime, ++txId, "/MyRoot", CreateTestShardSetConfig("TestShardSet1"));
+        env.TestWaitNotification(runtime, txId);
+
+        const auto pathVersion = ExtractPathVersion(DescribePath(runtime, "/MyRoot/TestShardSet1"));
+        const ui64 droppedOwnerId = pathVersion.PathId.OwnerId;
+        const ui64 droppedLocalId = pathVersion.PathId.LocalPathId;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestDropTestShardSet(runtime, ++txId, "/MyRoot", "TestShardSet1");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        const TSchemeChangeRecordEntry* found = nullptr;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpDropTestShardSet) {
+                found = &e;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(found, "DropTestShardSet must produce a scheme change record");
+        UNIT_ASSERT_C(AnyPathContains(*found, "TestShardSet1"),
+            "expected the target to be TestShardSet1, got: " << AllTargetPaths(*found));
+        UNIT_ASSERT_VALUES_EQUAL_C(found->PathOwnerId, droppedOwnerId, "recorded PathOwnerId must match the dropped object's owner");
+        UNIT_ASSERT_VALUES_EQUAL_C(found->PathLocalId, droppedLocalId, "recorded PathLocalId must match the dropped object's identity");
+    }
+
+    Y_UNIT_TEST(DropTableIndexRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "Table1"
+                Columns { Name: "key" Type: "Uint64" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+                Name: "Index1"
+                KeyColumnNames: ["value"]
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto pathVersion = ExtractPathVersion(DescribePath(runtime, "/MyRoot/Table1/Index1"));
+        const ui64 droppedOwnerId = pathVersion.PathId.OwnerId;
+        const ui64 droppedLocalId = pathVersion.PathId.LocalPathId;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestDropTableIndex(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table1"
+            IndexName: "Index1"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // TestDropTableIndex issues ESchemeOpDropIndex as the top-level
+        // OperationType (see GENERIC_HELPERS(DropTableIndex, ...ESchemeOpDropIndex,
+        // ...) in ut_helpers/helpers.cpp) -- ESchemeOpDropTableIndex is a
+        // distinct, apparently-unissued enum value.
+        auto entries = ReadSchemeChangeRecords(runtime);
+        const TSchemeChangeRecordEntry* found = nullptr;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpDropIndex) {
+                found = &e;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(found, "DropTableIndex must produce a scheme change record");
+        UNIT_ASSERT_C(AnyPathContains(*found, "Index1"),
+            "expected the target to be Index1, got: " << AllTargetPaths(*found));
+        UNIT_ASSERT_VALUES_EQUAL_C(found->PathOwnerId, droppedOwnerId, "recorded PathOwnerId must match the dropped index's owner");
+        UNIT_ASSERT_VALUES_EQUAL_C(found->PathLocalId, droppedLocalId, "recorded PathLocalId must match the dropped index's identity");
+    }
+
+    Y_UNIT_TEST(DropLockRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestLock(runtime, ++txId, "/MyRoot", "Table1");
+        const ui64 lockId = txId;
+        env.TestWaitNotification(runtime, txId);
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestUnlock(runtime, ++txId, lockId, "/MyRoot", "Table1");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        bool found = false;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpDropLock) {
+                found = true;
+                UNIT_ASSERT_C(AnyPathContains(e, "Table1"),
+                    "expected the target to be Table1, got: " << AllTargetPaths(e));
+                AssertRecordedPathResolvesToTouchedObject(runtime, "/MyRoot", e);
+            }
+        }
+        UNIT_ASSERT_C(found, "DropLock (unlock) must produce a scheme change record");
+    }
+
+    Y_UNIT_TEST(RmDirRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TestMkDir(runtime, ++txId, "/MyRoot", "DirToRemove");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto pathVersion = ExtractPathVersion(DescribePath(runtime, "/MyRoot/DirToRemove"));
+        const ui64 droppedOwnerId = pathVersion.PathId.OwnerId;
+        const ui64 droppedLocalId = pathVersion.PathId.LocalPathId;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestRmDir(runtime, ++txId, "/MyRoot", "DirToRemove");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        const TSchemeChangeRecordEntry* found = nullptr;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpRmDir) {
+                found = &e;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(found, "RmDir must produce a scheme change record");
+        UNIT_ASSERT_C(AnyPathContains(*found, "DirToRemove"),
+            "expected the target to be DirToRemove, got: " << AllTargetPaths(*found));
+        UNIT_ASSERT_VALUES_EQUAL_C(found->PathOwnerId, droppedOwnerId, "recorded PathOwnerId must match the removed dir's owner");
+        UNIT_ASSERT_VALUES_EQUAL_C(found->PathLocalId, droppedLocalId, "recorded PathLocalId must match the removed dir's identity");
+    }
+
+    Y_UNIT_TEST(ModifyACLRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestModifyACL(runtime, ++txId, "/MyRoot", "Table1", "", "bob@builtin");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        bool found = false;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpModifyACL) {
+                found = true;
+                UNIT_ASSERT_C(AnyPathContains(e, "Table1"),
+                    "expected the target to be Table1, got: " << AllTargetPaths(e));
+                AssertRecordedPathResolvesToTouchedObject(runtime, "/MyRoot", e);
+            }
+        }
+        UNIT_ASSERT_C(found, "ModifyACL must produce a scheme change record");
+    }
+
+    // RFC 0129 FINDING: ESchemeOpCreateIndexBuild IS issued as a top-level
+    // TModifyScheme.OperationType by TIndexBuilder (InitiateIndexBuild.Table,
+    // an absolute path) -- ConstructParts then decomposes it into
+    // TCreateTableIndex/TInitializeBuildIndex/... sub-ops. Before the
+    // extractor fix below, InitiateIndexBuild.Table was not recognized by
+    // any special case or the generic Name-field walk, so the propose was
+    // refused. That refusal is worse than a clean StatusInvalidParameter:
+    // AbortOperationPropose unconditionally calls AbortPropose on every
+    // already-proposed part in the same request, including the index's
+    // impl-table TCreateTable sub-op -- whose AbortPropose is a Y_ABORT
+    // stub ("no AbortPropose for TCreateTable") -- so the refusal crashed
+    // the tablet (SIGABRT) instead of failing cleanly. VERBATIM crash seen
+    // before the fix: "VERIFY failed: no AbortPropose for TCreateTable" at
+    // schemeshard__operation_create_table.cpp:814, reached via
+    // AbortOperationPropose <- CheckSchemeChangeRecordHasPath rejecting
+    // InitiateIndexBuild. Fixed by resolving InitiateIndexBuild.Table (and
+    // CancelIndexBuild.TablePath, same shape) directly in
+    // ResolveSchemeChangeTargets -- see schemeshard__scheme_change_records.cpp.
+    Y_UNIT_TEST(CreateIndexBuildRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key"   Type: "Uint32" }
+            Columns { Name: "index" Type: "Uint32" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table1",
+            TBuildIndexConfig{"Index1", NKikimrSchemeOp::EIndexTypeGlobal, {"index"}, {}, {}});
+        const ui64 buildIndexId = txId;
+        env.TestWaitNotification(runtime, buildIndexId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        bool found = false;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateIndexBuild) {
+                found = true;
+                UNIT_ASSERT_C(AnyPathContains(e, "Table1"),
+                    "expected the target to be Table1, got: " << AllTargetPaths(e));
+                AssertRecordedPathResolvesToTouchedObject(runtime, "/MyRoot", e);
+            }
+        }
+        UNIT_ASSERT_C(found, "CreateIndexBuild must produce a scheme change record");
+    }
+
+    Y_UNIT_TEST(CancelIndexBuildRecordsAPath) {
+        // Same fix as CreateIndexBuildRecordsAPath: CancelIndexBuild.TablePath
+        // is an absolute path, resolved directly now instead of refused.
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key"   Type: "Uint32" }
+            Columns { Name: "index" Type: "Uint32" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table1",
+            TBuildIndexConfig{"Index1", NKikimrSchemeOp::EIndexTypeGlobal, {"index"}, {}, {}});
+        const ui64 buildIndexId = txId;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestCancelBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId);
+        env.TestWaitNotification(runtime, buildIndexId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        bool found = false;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpCancelIndexBuild) {
+                found = true;
+                UNIT_ASSERT_C(AnyPathContains(e, "Table1"),
+                    "expected the target to be Table1, got: " << AllTargetPaths(e));
+                AssertRecordedPathResolvesToTouchedObject(runtime, "/MyRoot", e);
+            }
+        }
+        UNIT_ASSERT_C(found, "CancelIndexBuild must produce a scheme change record");
+    }
+    // ---- RFC 0129 V3: tier-2 ops driven end-to-end ----
+
+    Y_UNIT_TEST(CreateReplicationRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true).InitYdbDriver(true));
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestCreateReplication(runtime, ++txId, "/MyRoot", R"(
+            Name: "Replication1"
+            Config {
+              Specific {
+                Targets {
+                  SrcPath: "/MyRoot1/Table"
+                  DstPath: "/MyRoot2/Table"
+                }
+              }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        bool found = false;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateReplication) {
+                found = true;
+                UNIT_ASSERT_C(AnyPathContains(e, "Replication1"),
+                    "expected the target to be Replication1, got: " << AllTargetPaths(e));
+                AssertRecordedPathResolvesToTouchedObject(runtime, "/MyRoot", e);
+            }
+        }
+        UNIT_ASSERT_C(found, "CreateReplication must produce a scheme change record");
+    }
+
+    Y_UNIT_TEST(AlterReplicationRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true).InitYdbDriver(true));
+        ui64 txId = 100;
+
+        TestCreateReplication(runtime, ++txId, "/MyRoot", R"(
+            Name: "Replication1"
+            Config {
+              Specific {
+                Targets {
+                  SrcPath: "/MyRoot1/Table"
+                  DstPath: "/MyRoot2/Table"
+                }
+              }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestAlterReplication(runtime, ++txId, "/MyRoot", R"(
+            Name: "Replication1"
+            State { Paused {} }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        bool found = false;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterReplication) {
+                found = true;
+                UNIT_ASSERT_C(AnyPathContains(e, "Replication1"),
+                    "expected the target to be Replication1, got: " << AllTargetPaths(e));
+                AssertRecordedPathResolvesToTouchedObject(runtime, "/MyRoot", e);
+            }
+        }
+        UNIT_ASSERT_C(found, "AlterReplication must produce a scheme change record");
+    }
+
+    Y_UNIT_TEST(DropReplicationRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true).InitYdbDriver(true));
+        ui64 txId = 100;
+
+        TestCreateReplication(runtime, ++txId, "/MyRoot", R"(
+            Name: "Replication1"
+            Config {
+              Specific {
+                Targets {
+                  SrcPath: "/MyRoot1/Table"
+                  DstPath: "/MyRoot2/Table"
+                }
+              }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto pathVersion = ExtractPathVersion(DescribePath(runtime, "/MyRoot/Replication1"));
+        const ui64 droppedOwnerId = pathVersion.PathId.OwnerId;
+        const ui64 droppedLocalId = pathVersion.PathId.LocalPathId;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestDropReplication(runtime, ++txId, "/MyRoot", "Replication1");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        const TSchemeChangeRecordEntry* found = nullptr;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpDropReplication) {
+                found = &e;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(found, "DropReplication must produce a scheme change record");
+        UNIT_ASSERT_C(AnyPathContains(*found, "Replication1"),
+            "expected the target to be Replication1, got: " << AllTargetPaths(*found));
+        UNIT_ASSERT_VALUES_EQUAL_C(found->PathOwnerId, droppedOwnerId, "recorded PathOwnerId must match the dropped object's owner");
+        UNIT_ASSERT_VALUES_EQUAL_C(found->PathLocalId, droppedLocalId, "recorded PathLocalId must match the dropped object's identity");
+    }
+
+    Y_UNIT_TEST(DropReplicationCascadeRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true).InitYdbDriver(true));
+        ui64 txId = 100;
+
+        TestCreateReplication(runtime, ++txId, "/MyRoot", R"(
+            Name: "Replication1"
+            Config {
+              Specific {
+                Targets {
+                  SrcPath: "/MyRoot1/Table"
+                  DstPath: "/MyRoot2/Table"
+                }
+              }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto pathVersion = ExtractPathVersion(DescribePath(runtime, "/MyRoot/Replication1"));
+        const ui64 droppedOwnerId = pathVersion.PathId.OwnerId;
+        const ui64 droppedLocalId = pathVersion.PathId.LocalPathId;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestDropReplicationCascade(runtime, ++txId, "/MyRoot", "Replication1");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        const TSchemeChangeRecordEntry* found = nullptr;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpDropReplicationCascade) {
+                found = &e;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(found, "DropReplicationCascade must produce a scheme change record");
+        UNIT_ASSERT_C(AnyPathContains(*found, "Replication1"),
+            "expected the target to be Replication1, got: " << AllTargetPaths(*found));
+        UNIT_ASSERT_VALUES_EQUAL_C(found->PathOwnerId, droppedOwnerId, "recorded PathOwnerId must match the dropped object's owner");
+        UNIT_ASSERT_VALUES_EQUAL_C(found->PathLocalId, droppedLocalId, "recorded PathLocalId must match the dropped object's identity");
+    }
+
+    Y_UNIT_TEST(CreateTransferRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true).InitYdbDriver(true));
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateTransfer(runtime, ++txId, "/MyRoot", R"(
+            Name: "Transfer1"
+            Config {
+              TransferSpecific {
+                Target {
+                  SrcPath: "/MyRoot1/Table"
+                  DstPath: "/MyRoot/Table"
+                }
+              }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        bool found = false;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateTransfer) {
+                found = true;
+                UNIT_ASSERT_C(AnyPathContains(e, "Transfer1"),
+                    "expected the target to be Transfer1, got: " << AllTargetPaths(e));
+                AssertRecordedPathResolvesToTouchedObject(runtime, "/MyRoot", e);
+            }
+        }
+        UNIT_ASSERT_C(found, "CreateTransfer must produce a scheme change record");
+    }
+
+    Y_UNIT_TEST(AlterTransferRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true).InitYdbDriver(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateTransfer(runtime, ++txId, "/MyRoot", R"(
+            Name: "Transfer1"
+            Config {
+              TransferSpecific {
+                Target {
+                  SrcPath: "/MyRoot1/Table"
+                  DstPath: "/MyRoot/Table"
+                }
+              }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestAlterTransfer(runtime, ++txId, "/MyRoot", R"(
+            Name: "Transfer1"
+            State { Paused {} }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        bool found = false;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterTransfer) {
+                found = true;
+                UNIT_ASSERT_C(AnyPathContains(e, "Transfer1"),
+                    "expected the target to be Transfer1, got: " << AllTargetPaths(e));
+                AssertRecordedPathResolvesToTouchedObject(runtime, "/MyRoot", e);
+            }
+        }
+        UNIT_ASSERT_C(found, "AlterTransfer must produce a scheme change record");
+    }
+
+    Y_UNIT_TEST(DropTransferRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true).InitYdbDriver(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateTransfer(runtime, ++txId, "/MyRoot", R"(
+            Name: "Transfer1"
+            Config {
+              TransferSpecific {
+                Target {
+                  SrcPath: "/MyRoot1/Table"
+                  DstPath: "/MyRoot/Table"
+                }
+              }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto pathVersion = ExtractPathVersion(DescribePath(runtime, "/MyRoot/Transfer1"));
+        const ui64 droppedOwnerId = pathVersion.PathId.OwnerId;
+        const ui64 droppedLocalId = pathVersion.PathId.LocalPathId;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestDropTransfer(runtime, ++txId, "/MyRoot", "Transfer1");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        const TSchemeChangeRecordEntry* found = nullptr;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpDropTransfer) {
+                found = &e;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(found, "DropTransfer must produce a scheme change record");
+        UNIT_ASSERT_C(AnyPathContains(*found, "Transfer1"),
+            "expected the target to be Transfer1, got: " << AllTargetPaths(*found));
+        UNIT_ASSERT_VALUES_EQUAL_C(found->PathOwnerId, droppedOwnerId, "recorded PathOwnerId must match the dropped object's owner");
+        UNIT_ASSERT_VALUES_EQUAL_C(found->PathLocalId, droppedLocalId, "recorded PathLocalId must match the dropped object's identity");
+    }
+
+    Y_UNIT_TEST(DropTransferCascadeRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true).InitYdbDriver(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateTransfer(runtime, ++txId, "/MyRoot", R"(
+            Name: "Transfer1"
+            Config {
+              TransferSpecific {
+                Target {
+                  SrcPath: "/MyRoot1/Table"
+                  DstPath: "/MyRoot/Table"
+                }
+              }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto pathVersion = ExtractPathVersion(DescribePath(runtime, "/MyRoot/Transfer1"));
+        const ui64 droppedOwnerId = pathVersion.PathId.OwnerId;
+        const ui64 droppedLocalId = pathVersion.PathId.LocalPathId;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestDropTransferCascade(runtime, ++txId, "/MyRoot", "Transfer1");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        const TSchemeChangeRecordEntry* found = nullptr;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpDropTransferCascade) {
+                found = &e;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(found, "DropTransferCascade must produce a scheme change record");
+        UNIT_ASSERT_C(AnyPathContains(*found, "Transfer1"),
+            "expected the target to be Transfer1, got: " << AllTargetPaths(*found));
+        UNIT_ASSERT_VALUES_EQUAL_C(found->PathOwnerId, droppedOwnerId, "recorded PathOwnerId must match the dropped object's owner");
+        UNIT_ASSERT_VALUES_EQUAL_C(found->PathLocalId, droppedLocalId, "recorded PathLocalId must match the dropped object's identity");
+    }
+
+    Y_UNIT_TEST(BackupRecordsAPath) {
+        // Same shape as RestoreRecordsAPath above: driving Backup to full
+        // completion needs a real/mocked S3 endpoint (see ut_backup's
+        // TS3Mock rig); without it the data phase hangs, so this only
+        // checks the propose-time path resolution -- the same check the
+        // outbox itself performs -- not the post-finalize resolve.
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        const ui64 rejectedBefore = GetCumulativeCounter(runtime, "SchemeShard/SchemeChangePathMissing");
+
+        TestBackup(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table1"
+            S3Settings {
+                Endpoint: "localhost:1"
+                Scheme: HTTP
+            }
+        )");
+
+        const ui64 rejectedAfter = GetCumulativeCounter(runtime, "SchemeShard/SchemeChangePathMissing");
+        UNIT_ASSERT_VALUES_EQUAL_C(rejectedAfter, rejectedBefore, "Backup must resolve a path");
+    }
+    Y_UNIT_TEST(AssignBlockStoreVolumeRecordsAPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
+        vdescr.SetName("BSVolume1");
+        auto& vc = *vdescr.MutableVolumeConfig();
+        vc.SetBlockSize(4096);
+        vc.AddPartitions()->SetBlockCount(16);
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-2");
+        TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
+        env.TestWaitNotification(runtime, txId);
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestAssignBlockStoreVolume(runtime, ++txId, "/MyRoot", "BSVolume1", "Owner123");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        bool found = false;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpAssignBlockStoreVolume) {
+                found = true;
+                UNIT_ASSERT_C(AnyPathContains(e, "BSVolume1"),
+                    "expected the target to be BSVolume1, got: " << AllTargetPaths(e));
+                AssertRecordedPathResolvesToTouchedObject(runtime, "/MyRoot", e);
+            }
+        }
+        UNIT_ASSERT_C(found, "AssignBlockStoreVolume must produce a scheme change record");
+    }
+
+    Y_UNIT_TEST(UpgradeSubDomainDecisionRecordsAPath) {
+        // Same registration constraint as UpgradeSubDomainRecordsAPath: once
+        // the domain is upgraded to serve transactions on its own, a second
+        // subscriber registration is refused, so this asserts via the
+        // rejection counter (propose-time resolution), not a live read.
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSchemeChangeRecords(true));
+        ui64 txId = 100;
+
+        // Must register before AlterSubDomain(Coordinators/Mediators): that
+        // alone already breaks single-domain-serving, and RegisterSubscriber
+        // itself would then be refused (not just a later ReadSchemeChangeRecords
+        // call) -- same ordering constraint as UpgradeSubDomainRecordsAPath.
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestCreateSubDomain(runtime, ++txId, "/MyRoot", R"(Name: "USD1")");
+        env.TestWaitNotification(runtime, txId);
+        TestAlterSubDomain(runtime, ++txId, "/MyRoot", R"(
+            Name: "USD1"
+            PlanResolution: 50
+            Coordinators: 1
+            Mediators: 1
+            TimeCastBucketsPerMediator: 2
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestUpgradeSubDomain(runtime, ++txId, "/MyRoot", "USD1");
+        env.TestWaitNotification(runtime, txId);
+
+        const ui64 rejectedBefore = GetCumulativeCounter(runtime, "SchemeShard/SchemeChangePathMissing");
+        TestUpgradeSubDomainDecision(runtime, ++txId, "/MyRoot", "USD1", NKikimrSchemeOp::TUpgradeSubDomain::Commit);
+        env.TestWaitNotification(runtime, txId);
+        const ui64 rejectedAfter = GetCumulativeCounter(runtime, "SchemeShard/SchemeChangePathMissing");
+        UNIT_ASSERT_VALUES_EQUAL_C(rejectedAfter, rejectedBefore, "UpgradeSubDomainDecision must resolve a path");
     }
 }

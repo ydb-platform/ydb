@@ -90,6 +90,30 @@ TString ExtractSchemeChangeTargetName(const NKikimrSchemeOp::TModifyScheme& tx) 
     if (tx.HasRestore()) {
         return tx.GetRestore().GetTableName();
     }
+    // TBackupTask (Restore's sibling) also names its target table TableName,
+    // not Name. Backup's AbortPropose is likewise an unconditional Y_ABORT
+    // stub (TBackupRestoreOperationBase), so an unresolved path here crashed
+    // the tablet the same way Restore's did before its fix.
+    if (tx.HasBackup()) {
+        return tx.GetBackup().GetTableName();
+    }
+    // TInitiateBuildIndexMainTable/TFinalizeBuildIndexMainTable are
+    // per-sub-op TModifyScheme's the index-build state machine proposes on
+    // their own (each its own top-level OperationType, not nested inside
+    // InitiateIndexBuild) -- same TableName-not-Name shape as the ops above.
+    if (tx.HasInitiateBuildIndexMainTable()) {
+        return tx.GetInitiateBuildIndexMainTable().GetTableName();
+    }
+    if (tx.HasFinalizeBuildIndexMainTable()) {
+        return tx.GetFinalizeBuildIndexMainTable().GetTableName();
+    }
+    // TDropTableIndex's ConstructParts decomposition proposes a TDropIndex
+    // sub-op (its own top-level OperationType, ESchemeOpDropIndex/
+    // ESchemeOpDropTableIndexAtMainTable). Its target is the index itself
+    // (TableName/IndexName, relative to WorkingDir), not a direct Name field.
+    if (tx.HasDropIndex()) {
+        return TStringBuilder() << tx.GetDropIndex().GetTableName() << '/' << tx.GetDropIndex().GetIndexName();
+    }
 
     const auto* refl = tx.GetReflection();
     std::vector<const google::protobuf::FieldDescriptor*> setFields;
@@ -119,13 +143,23 @@ TString ExtractSchemeChangeTargetName(const NKikimrSchemeOp::TModifyScheme& tx) 
     return {};
 }
 
-// Database-relative form of a resolved path: the domain prefix and its
-// joining slash stripped from PathString(). The database root itself is ""
-// (its PathString() equals the domain prefix), so a child of root is "name"
-// with no leading slash.
-TString RelativeToDomain(const TPath& resolved) {
+// Database-relative form of a resolved path: the schemeshard's own root
+// prefix and its joining slash stripped from PathString(). The database
+// root itself is "" (its PathString() equals the root prefix), so a child
+// of root is "name" with no leading slash.
+//
+// Anchored on TPath::Root(ss) (this schemeshard's own serving root), NOT on
+// resolved.GetDomainPathString(): a freshly created subdomain becomes its
+// own domain root as soon as its TPathElement is constructed, so for a
+// CreateSubDomain/CreateExtSubDomain target, GetDomainPathString() used to
+// return the target's OWN path -- making abs == domain and the computed
+// relative path silently empty (indistinguishable from a record legitimately
+// about the database root itself, e.g. AlterSubDomain(root)). A subscriber
+// registered against the parent domain needs the child's path relative to
+// the parent it is subscribed to, not relative to the child's own new domain.
+TString RelativeToDomain(const TPath& resolved, TSchemeShard* ss) {
     TString abs = resolved.PathString();
-    TString domain = resolved.GetDomainPathString();
+    TString domain = TPath::Root(ss).PathString();
     Y_DEBUG_ABORT_UNLESS(abs.StartsWith(domain));
     TString rel = abs.substr(domain.size());
     if (!rel.empty() && rel[0] == '/') {
@@ -154,7 +188,7 @@ TString RelativeSourceToDomain(const TString& absSrcPath, TSchemeShard* ss) {
     }
     TPath src = TPath::Resolve(absSrcPath, ss);
     if (src.IsResolved()) {
-        return RelativeToDomain(src);
+        return RelativeToDomain(src, ss);
     }
     // Fallback: same domain-prefix-strip the resolved path uses, without
     // requiring the source to still exist.
@@ -184,11 +218,11 @@ TMaybe<TResolvedSchemeChangeTarget> ResolveRawTarget(const TSchemeChangeRawTarge
     }
     TPath target = TPath::Resolve(raw.AbsDstPath, ss);
     if (target.IsResolved()) {
-        return TResolvedSchemeChangeTarget{raw.AbsDstPath, RelativeToDomain(target), relSources};
+        return TResolvedSchemeChangeTarget{raw.AbsDstPath, RelativeToDomain(target, ss), relSources};
     }
     TPath parent = TPath::Resolve(TString(TStringBuf(raw.AbsDstPath).RBefore('/')), ss);
     if (parent.IsResolved()) {
-        TString relParent = RelativeToDomain(parent);
+        TString relParent = RelativeToDomain(parent, ss);
         if (!relParent.empty()) {
             relParent += '/';
         }
@@ -253,9 +287,48 @@ TMaybe<TVector<TResolvedSchemeChangeTarget>> ResolveSchemeChangeTargets(const NK
         TPath workingDir = TPath::Resolve(userTx.GetWorkingDir(), ss);
         if (workingDir.IsResolved()) {
             return TVector<TResolvedSchemeChangeTarget>{
-                TResolvedSchemeChangeTarget{userTx.GetWorkingDir(), RelativeToDomain(workingDir), {}}};
+                TResolvedSchemeChangeTarget{userTx.GetWorkingDir(), RelativeToDomain(workingDir, ss), {}}};
         }
         return Nothing();
+    }
+
+    // TIndexBuilder issues ESchemeOpCreateIndexBuild/ESchemeOpCancelIndexBuild
+    // as the top-level TModifyScheme.OperationType (ConstructParts then
+    // decomposes it into TCreateTableIndex/TInitializeBuildIndex/... sub-ops
+    // with their own, separately-classified operation types). Unlike every
+    // other shape above, InitiateIndexBuild.Table and CancelIndexBuild.TablePath
+    // are already absolute paths, not bare names to join with WorkingDir --
+    // and the target table already exists (the build/cancel acts on it), so
+    // resolve it directly via ResolveRawTarget rather than the generic walk.
+    // Before this case existed, an unresolved path here rejected the whole
+    // propose via AbortOperationPropose, which unconditionally calls
+    // AbortPropose on every already-proposed part -- including the index's
+    // impl-table TCreateTable sub-op, whose AbortPropose is a Y_ABORT stub,
+    // so the refusal crashed the tablet instead of cleanly failing.
+    if (userTx.HasInitiateIndexBuild()) {
+        TMaybe<TResolvedSchemeChangeTarget> resolved = ResolveRawTarget(
+            TSchemeChangeRawTarget{userTx.GetInitiateIndexBuild().GetTable(), {}}, ss);
+        return resolved
+            ? TMaybe<TVector<TResolvedSchemeChangeTarget>>{TVector<TResolvedSchemeChangeTarget>{std::move(*resolved)}}
+            : Nothing();
+    }
+    if (userTx.HasCancelIndexBuild()) {
+        TMaybe<TResolvedSchemeChangeTarget> resolved = ResolveRawTarget(
+            TSchemeChangeRawTarget{userTx.GetCancelIndexBuild().GetTablePath(), {}}, ss);
+        return resolved
+            ? TMaybe<TVector<TResolvedSchemeChangeTarget>>{TVector<TResolvedSchemeChangeTarget>{std::move(*resolved)}}
+            : Nothing();
+    }
+    // ApplyIndexBuild shares CancelIndexBuild's TIndexBuildControl message
+    // (TablePath, an absolute path) -- same fix, same reason: it is proposed
+    // as its own top-level TModifyScheme during index-build finalisation,
+    // not nested inside InitiateIndexBuild.
+    if (userTx.HasApplyIndexBuild()) {
+        TMaybe<TResolvedSchemeChangeTarget> resolved = ResolveRawTarget(
+            TSchemeChangeRawTarget{userTx.GetApplyIndexBuild().GetTablePath(), {}}, ss);
+        return resolved
+            ? TMaybe<TVector<TResolvedSchemeChangeTarget>>{TVector<TResolvedSchemeChangeTarget>{std::move(*resolved)}}
+            : Nothing();
     }
 
     const TString targetName = ExtractSchemeChangeTargetName(userTx);
@@ -264,7 +337,7 @@ TMaybe<TVector<TResolvedSchemeChangeTarget>> ResolveSchemeChangeTargets(const NK
             TPath target = TPath::Init(ss->MakeLocalId(userTx.GetDrop().GetId()), ss);
             if (target.IsResolved()) {
                 return TVector<TResolvedSchemeChangeTarget>{
-                    TResolvedSchemeChangeTarget{target.PathString(), RelativeToDomain(target), {}}};
+                    TResolvedSchemeChangeTarget{target.PathString(), RelativeToDomain(target, ss), {}}};
             }
         }
         return Nothing();
@@ -276,14 +349,14 @@ TMaybe<TVector<TResolvedSchemeChangeTarget>> ResolveSchemeChangeTargets(const NK
 
     TPath target = TPath::Resolve(abs, ss);
     if (target.IsResolved()) {
-        return TVector<TResolvedSchemeChangeTarget>{TResolvedSchemeChangeTarget{abs, RelativeToDomain(target), {}}};
+        return TVector<TResolvedSchemeChangeTarget>{TResolvedSchemeChangeTarget{abs, RelativeToDomain(target, ss), {}}};
     }
 
     TPath workingDir = TPath::Resolve(userTx.GetWorkingDir(), ss);
     if (!workingDir.IsResolved()) {
         return Nothing();
     }
-    TString relParent = RelativeToDomain(workingDir);
+    TString relParent = RelativeToDomain(workingDir, ss);
     if (!relParent.empty()) {
         relParent += '/';
     }
@@ -445,7 +518,7 @@ void TSchemeShard::FinalizeSchemeChangeRecord(NIceDb::TNiceDb& db, const TActorC
         if (!resolved.IsResolved()) {
             continue;
         }
-        canonicalTargets[i].Path = RelativeToDomain(resolved);
+        canonicalTargets[i].Path = RelativeToDomain(resolved, this);
         anyResolved = true;
         if (i == 0) {
             resolvedPathId = resolved.Base()->PathId;

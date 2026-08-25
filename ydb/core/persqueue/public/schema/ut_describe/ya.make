@@ -5,11 +5,7 @@ SIZE(MEDIUM)
 YQL_LAST_ABI_VERSION()
 
 SRCS(
-    check_dlq_topics_ut.cpp
-    create_topic_ut.cpp
-    dlq_acl_ut.cpp
-    schema_ops_ut.cpp
-    validation_ut.cpp
+    describe_operation_ut.cpp
 )
 
 PEERDIR(

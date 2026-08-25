@@ -11,12 +11,7 @@
 #include <yql/essentials/parser/pg_wrapper/interface/comp_factory.h>
 #include <ydb/library/yaml_config/yaml_config.h>
 
-#include <csignal>
-
 int main(int argc, char **argv) {
-    // Synthetic crash for verifying CI/ya coredump collection. Do not merge.
-    std::raise(SIGSEGV);
-
     SetupTerminateHandler();
 
     auto factories = std::make_shared<NKikimr::TModuleFactories>();

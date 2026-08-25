@@ -76,6 +76,39 @@ struct TDDiskDeviceInfo {
     ui32 DDiskSlotId;
 };
 
+inline NDDisk::TDDiskConfig MakeDDiskConfig(
+        const NDevicePerfTest::TDDiskTest& testProto,
+        bool enableChecksums) {
+    NDDisk::TDDiskConfig config;
+    config.EnableChecksums = enableChecksums;
+    bool initialized = false;
+
+    for (ui32 i = 0; i < testProto.DDiskTestListSize(); ++i) {
+        const auto& record = testProto.GetDDiskTestList(i);
+        if (record.Command_case() != NKikimr::TEvLoadTestRequest::CommandCase::kDDiskLoad) {
+            continue;
+        }
+
+        const auto& load = record.GetDDiskLoad();
+        const bool useSQPoll = load.GetSQPoll();
+        const bool useIOPoll = load.GetIOPoll();
+
+        if (!initialized) {
+            config.UseSQPoll = useSQPoll;
+            config.UseIOPoll = useIOPoll;
+            initialized = true;
+            continue;
+        }
+
+        if (config.UseSQPoll != useSQPoll || config.UseIOPoll != useIOPoll) {
+            ythrow TWithBackTrace<yexception>()
+                << "Invalid configuration: all DDiskLoad entries must use identical SQPoll/IOPoll values";
+        }
+    }
+
+    return config;
+}
+
 class TDDiskPerfTestActor : public TActor<TDDiskPerfTestActor> {
     TVector<TDDiskDeviceInfo> Devices;
     ui64 CurrentTest = 0;
@@ -194,7 +227,8 @@ protected:
                 ddiskId->SetNodeId(Devices[d].NodeId);
                 ddiskId->SetPDiskId(Devices[d].PDiskIdNum);
                 ddiskId->SetDDiskSlotId(Devices[d].DDiskSlotId);
-                ctx.Register(CreateDDiskLoadTest(record.GetDDiskLoad(), ctx.SelfID, Counters, d, d));
+                ctx.Register(CreateDDiskLoadTest(record.GetDDiskLoad(), ctx.SelfID, Counters, d, d,
+                    !Cfg.DisableDDiskChecksums));
                 break;
             }
             default:
@@ -243,7 +277,10 @@ protected:
 
         ui32 deviceIdx = static_cast<ui32>(ev->Get()->Tag);
         Y_ABORT_UNLESS(deviceIdx < Devices.size());
-        PendingResults[deviceIdx] = {ev->Get()->Report, ev->Get()->ErrorReason};
+        PendingResults[deviceIdx] = {
+            ev->Get()->ErrorReason == "OK" ? ev->Get()->Report : nullptr,
+            ev->Get()->ErrorReason
+        };
         ++ReceivedResults;
 
         if (ReceivedResults == Devices.size()) {
@@ -293,42 +330,14 @@ struct TDDiskTest : public TPDiskTest<ChunkSize> {
         return proto;
     }
 
-    NDDisk::TDDiskConfig ExtractDDiskConfig() const {
-        NDDisk::TDDiskConfig config;
-        bool initialized = false;
-
-        for (ui32 i = 0; i < TestProto.DDiskTestListSize(); ++i) {
-            const auto& record = TestProto.GetDDiskTestList(i);
-            if (record.Command_case() != NKikimr::TEvLoadTestRequest::CommandCase::kDDiskLoad) {
-                continue;
-            }
-
-            const auto& load = record.GetDDiskLoad();
-            const bool useSQPoll = load.GetSQPoll();
-            const bool useIOPoll = load.GetIOPoll();
-
-            if (!initialized) {
-                config.UseSQPoll = useSQPoll;
-                config.UseIOPoll = useIOPoll;
-                initialized = true;
-                continue;
-            }
-
-            if (config.UseSQPoll != useSQPoll || config.UseIOPoll != useIOPoll) {
-                ythrow TWithBackTrace<yexception>()
-                    << "Invalid configuration: all DDiskLoad entries must use identical SQPoll/IOPoll values";
-            }
-        }
-
-        return config;
-    }
-
     void Init() override {
         try {
             TBase::DoBasicSetup();
 
             auto groupInfo = MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::ErasureNone);
-            const NDDisk::TDDiskConfig ddiskConfig = ExtractDDiskConfig();
+            const NDDisk::TDDiskConfig ddiskConfig =
+                MakeDDiskConfig(TestProto, !TBase::Cfg.DisableDDiskChecksums);
+            TBase::Printer->AddGlobalParam("DDiskChecksums", ddiskConfig.EnableChecksums ? "on" : "off");
 
             for (ui32 i = 0; i < TBase::Cfg.NumDevices(); ++i) {
                 const TActorId ddiskId = MakeBlobStorageDDiskId(1, i + 1, DDiskSlotId);

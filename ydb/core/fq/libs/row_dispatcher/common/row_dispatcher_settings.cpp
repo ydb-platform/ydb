@@ -16,6 +16,9 @@ TRowDispatcherSettings::TJsonParserSettings::TJsonParserSettings(const NConfig::
     if (config.GetBufferCellCount()) {
         BufferCellCount = config.GetBufferCellCount();
     }
+    if (config.HasEnableStructuredParsing()) {
+        StructuredParsing = config.GetEnableStructuredParsing();
+    }
 }
 
 TRowDispatcherSettings::TCompileServiceSettings::TCompileServiceSettings(const NConfig::TCompileServiceConfig& config) {

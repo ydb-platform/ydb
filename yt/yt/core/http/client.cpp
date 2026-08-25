@@ -129,7 +129,7 @@ private:
         if (auto ipOrError = TNetworkAddress::TryParse(host); ipOrError.IsOK()) {
             address = ipOrError.Value();
         } else {
-            auto asyncAddress = TAddressResolver::Get()->Resolve(ToString(host));
+            auto asyncAddress = TAddressResolver::Get()->Resolve(host, Config_->DnsResolveOptions);
             address = WaitFor(asyncAddress)
                 .ValueOrThrow();
         }

@@ -143,7 +143,7 @@ TErrorOr<TTabletInfoPtr> TTableMountInfo::GetRandomMountedTablet() const
             IsHunkStorage() ? PhysicalPath : Path);
         if (!Tablets.empty()) {
             // NB: For cache invalidation.
-            error <<= TErrorAttribute("tablet_id", Tablets[0]->TabletId);
+            error.Add("tablet_id", Tablets[0]->TabletId);
         }
 
         return error;

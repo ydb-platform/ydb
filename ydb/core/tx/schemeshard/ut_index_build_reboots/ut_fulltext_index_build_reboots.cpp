@@ -93,7 +93,6 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTestReboots) {
                 TestDescribeResult(DescribePath(runtime, indexPath, true, true, true),
                     {NLs::PathExist, NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady)});
                 TestDescribeResult(DescribePath(runtime, indexPath + "/" + NTableIndex::ImplTable, true, true, true), {NLs::PathExist});
-                TestDescribeResult(DescribePath(runtime, indexPath + "/" + NTableIndex::NFulltext::DictTable, true, true, true), {NLs::PathExist});
                 TestDescribeResult(DescribePath(runtime, indexPath + "/" + NTableIndex::NFulltext::DocsTable, true, true, true), {NLs::PathExist});
                 TestDescribeResult(DescribePath(runtime, indexPath + "/" + NTableIndex::NFulltext::StatsTable, true, true, true), {NLs::PathExist});
 
@@ -102,12 +101,6 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTestReboots) {
                     auto rows = CountRows(runtime, TTestTxConfig::SchemeShard, "/MyRoot/texts/index1/" + TString(NTableIndex::ImplTable));
                     Cerr << "... posting table contains " << rows << " rows" << Endl;
                     UNIT_ASSERT_VALUES_EQUAL(rows, 38);
-                }
-
-                {
-                    auto rows = CountRows(runtime, TTestTxConfig::SchemeShard, "/MyRoot/texts/index1/" + TString(NTableIndex::NFulltext::DictTable));
-                    Cerr << "... dictionary table contains " << rows << " rows" << Endl;
-                    UNIT_ASSERT_VALUES_EQUAL(rows, 24);
                 }
 
                 {

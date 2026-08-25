@@ -1486,6 +1486,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         auto storagePoolType = StoragePoolTypes.emplace_back("hdd");
         auto& appConfig = SetupAppConfig();
         appConfig.MutableFeatureFlags()->SetEnableExternalDataSourceAuthMethodIam(true);
+        appConfig.MutableFeatureFlags()->SetEnableExternalDataSourceAuthMethodIamForSolomon(true);
         constexpr char cloudId[] =  "testcloud4";
         constexpr char cloudIdAlt[] =  "testcloud5";
 

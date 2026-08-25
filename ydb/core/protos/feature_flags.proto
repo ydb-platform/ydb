@@ -376,4 +376,5 @@ message TFeatureFlags {
     optional bool EnableSuperLemmer = 319 [default = false];
     optional bool EnableImportInParquet = 320 [default = false];
     optional bool EnableS3Scheduling = 321 [default = false];
+    optional bool EnableExternalDataSourceAuthMethodIamForSolomon = 322 [default = false];
 }

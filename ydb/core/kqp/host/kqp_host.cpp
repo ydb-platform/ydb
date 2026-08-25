@@ -1251,7 +1251,8 @@ public:
                                                                                  Config->FeatureFlags.GetEnableExternalSourceSchemaInference(),
                                                                                  FederatedQuerySetup->S3GatewayConfig.GetAllowLocalFiles(),
                                                                                  QueryServiceConfig.GetAllExternalDataSourcesAreAvailable(),
-                                                                                 std::set<TString>(availableExternalDataSources.cbegin(), availableExternalDataSources.cend()));
+                                                                                 std::set<TString>(availableExternalDataSources.cbegin(), availableExternalDataSources.cend()),
+                                                                                 Config->FeatureFlags.GetEnableExternalDataSourceAuthMethodIamForSolomon());
         }
     }
 

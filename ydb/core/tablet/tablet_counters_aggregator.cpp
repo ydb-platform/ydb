@@ -30,7 +30,9 @@
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/monlib/dynamic_counters/encode.h>
 
+#include <algorithm>
 #include <optional>
+#include <tuple>
 
 #include <util/generic/xrange.h>
 #include <util/string/vector.h>
@@ -119,6 +121,20 @@ bool IsCollectedMetricsLevel(EDetailedMetricsLevel level) {
     return false;
 }
 
+/**
+ * Order two reports of the SAME table path by which table they identify. A table
+ * recreated at a path restarts SchemaVersion low, so the PathId comes first and the
+ * SchemaVersion only breaks ties within one PathId.
+ *
+ * assumes a path is only ever recreated by the SAME schemeshard, which hands
+ * out strictly increasing LocalPathIds. TPathId orders by (OwnerId, LocalPathId), so a
+ * path served by another schemeshard with a lower OwnerId would order backwards. Not
+ * reachable within one subdomain.
+ */
+bool IsOlderThan(const TDetailedMetricsTableInfo& lhs, const TDetailedMetricsTableInfo& rhs) {
+    return std::tie(lhs.TableId, lhs.SchemaVersion) < std::tie(rhs.TableId, rhs.SchemaVersion);
+}
+
 ::NMonitoring::TDynamicCounterPtr GetDetailedMetricsRawGroup(
     ::NMonitoring::TDynamicCounterPtr countersRoot, const TActorContext& ctx)
 {
@@ -177,12 +193,24 @@ public:
         }
 
         auto& db = itDb->second;
-        db.TabletContributions[msg.TabletID][msg.FollowerId] = TDetailedMetricsTableInfo{
+
+        const TDetailedMetricsTableInfo info{
             .TableId = msg.TableId,
             .TablePath = msg.TablePath,
             .SchemaVersion = msg.SchemaVersion,
             .MetricsLevel = static_cast<EDetailedMetricsLevel>(msg.MetricsLevel),
         };
+
+        db.TabletContributions[msg.TabletID][msg.FollowerId] = info;
+
+        // Promote into the per-path "latest known identity" whenever this report is NOT
+        // OLDER than what is stored — not strictly newer, because ALTER DATABASE
+        // TABLES_METRICS_LEVEL bumps neither TableId nor SchemaVersion and must still
+        // update the level. See TDetailedMetricsForDb::LatestByPath.
+        auto [itLatest, latestInserted] = db.LatestByPath.try_emplace(info.TablePath, info);
+        if (!latestInserted && !IsOlderThan(info, itLatest->second)) {
+            itLatest->second = info;
+        }
 
         // Fires once per tablet every 5s, hence TRACE
         YDB_LOG_TRACE_CTX(ctx, "Remembered the identity of the table reported by the tablet",
@@ -234,7 +262,27 @@ public:
             return;
         }
 
-        if (!IsCollectedMetricsLevel(table->MetricsLevel)) {
+        auto itLatest = db.LatestByPath.find(table->TablePath);
+        Y_DEBUG_ABORT_UNLESS(itLatest != db.LatestByPath.end());
+        if (itLatest == db.LatestByPath.end()) {
+            return;
+        }
+        if (IsOlderThan(*table, itLatest->second)) {
+            if (db.Aggregator) {
+                db.Aggregator->ForgetTablet(tabletId, followerId);
+            }
+
+            YDB_LOG_TRACE_CTX(ctx, "Skipping a stale report of a table recreated at this path",
+                {"tabletId", tabletId},
+                {"followerId", followerId},
+                {"tablePath", table->TablePath},
+                {"schemaVersion", table->SchemaVersion});
+            return;
+        }
+
+        const EDetailedMetricsLevel metricsLevel = table->MetricsLevel;
+
+        if (!IsCollectedMetricsLevel(metricsLevel)) {
             // The table stopped collecting: withdraw what this tablet published before
             // the level dropped
             if (db.Aggregator) {
@@ -244,7 +292,7 @@ public:
             YDB_LOG_TRACE_CTX(ctx, "Skipping the detailed metrics of the table",
                 {"tabletId", tabletId},
                 {"tablePath", table->TablePath},
-                {"metricsLevel", static_cast<ui32>(table->MetricsLevel)});
+                {"metricsLevel", static_cast<ui32>(metricsLevel)});
             return;
         }
 
@@ -257,7 +305,7 @@ public:
             CreateDetailedMetricsAggregator(db, ctx);
         }
 
-        db.Aggregator->AddCounters(*table, tabletId, followerId, tabletType,
+        db.Aggregator->AddCounters(table->TablePath, metricsLevel, tabletId, followerId, tabletType,
             *executorCounters, *appCounters, ctx.Now());
     }
 
@@ -1099,6 +1147,18 @@ private:
         TNodeDatabaseMetricsAggregatorPtr Aggregator;
 
         THashMap<ui64, THashMap<ui32, TDetailedMetricsTableInfo>> TabletContributions;
+
+        /**
+         * The newest identity (by (TableId, SchemaVersion), ties broken towards the
+         * latest report) seen at each table path on this node for this database — the
+         * authoritative answer to "which table lives at this path right now", kept
+         * separately from TabletContributions because a table dropped and recreated at
+         * the same path leaves its old tablets still reporting for a few more rounds,
+         * each carrying its own (by then stale) idea of the identity and level. See
+         * SetTableInfo() (where this is promoted) and ApplyDetailedMetrics() (where a
+         * stale tablet is rejected against it).
+         */
+        THashMap<TString, TDetailedMetricsTableInfo> LatestByPath;
     };
 
     void RequestDatabasePath(TPathId tenantPathId, TDetailedMetricsForDb& db, const TActorContext& ctx) {
@@ -1155,6 +1215,7 @@ private:
         }
 
         db.TabletContributions.clear();
+        db.LatestByPath.clear();
         db.Aggregator = nullptr;
 
         YDB_LOG_INFO_CTX(ctx, "Dropped the detailed metrics aggregator of the database",
@@ -1175,9 +1236,16 @@ private:
             return;
         }
 
-        if (itTablet->second.erase(followerId) == 0) {
+        auto itFollower = itTablet->second.find(followerId);
+        if (itFollower == itTablet->second.end()) {
             return;
         }
+
+        // Captured before erasing: needed below to tell whether this was the LAST
+        // tablet still reporting this path, once it is gone
+        const TString path = itFollower->second.TablePath;
+
+        itTablet->second.erase(itFollower);
 
         if (db.Aggregator) {
             db.Aggregator->ForgetTablet(tabletId, followerId);
@@ -1185,6 +1253,22 @@ private:
 
         if (itTablet->second.empty()) {
             db.TabletContributions.erase(itTablet);
+        }
+
+        // O(tablets), but only on tablet forget which assumed less often than reports
+        // if this is an issue — mirroring of TabletContributions' is the way to fix it
+        const bool stillReported = std::any_of(
+            db.TabletContributions.begin(), db.TabletContributions.end(),
+            [&path](const auto& tabletContribution) {
+                const auto& byFollower = tabletContribution.second;
+                return std::any_of(byFollower.begin(), byFollower.end(),
+                    [&path](const auto& followerContribution) {
+                        return followerContribution.second.TablePath == path;
+                    });
+            });
+
+        if (!stillReported) {
+            db.LatestByPath.erase(path);
         }
     }
 

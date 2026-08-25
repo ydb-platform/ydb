@@ -80,7 +80,8 @@ public:
      *          series in every bucket, so the caller decides the cardinality
      */
     virtual void AddCounters(
-        const TDetailedMetricsTableInfo& table,
+        const TString& tablePath,
+        EDetailedMetricsLevel metricsLevel,
         ui64 tabletId,
         ui32 followerId,
         TTabletTypes::EType tabletType,

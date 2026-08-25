@@ -9,8 +9,6 @@
 #include <util/string/cast.h>
 #include <util/system/mutex.h>
 
-#include <tuple>
-
 namespace NKikimr {
 
 /**
@@ -173,7 +171,7 @@ private:
  *       the effective metrics level of the table.
  */
 struct TTableEntry {
-    TDetailedMetricsTableInfo Info;
+    EDetailedMetricsLevel MetricsLevel = TDetailedMetricsSettings::MetricsLevelUnspecified;
 
     NMonitoring::TDynamicCounterPtr TableGroup;
 
@@ -213,7 +211,8 @@ public:
     {}
 
     void AddCounters(
-        const TDetailedMetricsTableInfo& table,
+        const TString& tablePath,
+        EDetailedMetricsLevel metricsLevel,
         ui64 tabletId,
         ui32 followerId,
         TTabletTypes::EType tabletType,
@@ -232,7 +231,7 @@ public:
         }
 
         const TTabletKey tablet(tabletId, followerId);
-        const TStringBuf relativePath = MakeRelativeTablePath(DatabasePrefix, table.TablePath);
+        const TStringBuf relativePath = MakeRelativeTablePath(DatabasePrefix, tablePath);
 
         // A tablet reports exactly one table, so a tablet, which is re-reported under
         // another one, leaves behind a contribution to the old table, which ForgetTablet
@@ -245,17 +244,13 @@ public:
             mapIt = TabletToTableMap.end();
         }
 
-        // A straggler of a previous table at this path must neither recreate an entry
-        // from its dead identity nor contribute counters to the table that lives here now
-        if (!ReconcileTable(relativePath, table)) {
+        ReconcileTable(relativePath, metricsLevel);
+
+        if (IsFollowerRole && IsTableLevel(metricsLevel)) {
             return;
         }
 
-        if (IsFollowerRole && IsTableLevel(table)) {
-            return;
-        }
-
-        auto* entry = GetOrCreateTable(table, relativePath);
+        auto* entry = GetOrCreateTable(metricsLevel, relativePath);
         if (!entry) {
             return;
         }
@@ -268,7 +263,7 @@ public:
                 false,
                 "tablet %" PRIu64 " of table %s reports type %s but the table expects %s",
                 tabletId,
-                entry->Info.TablePath.c_str(),
+                tablePath.c_str(),
                 TTabletTypes::TypeToStr(tabletType),
                 TTabletTypes::TypeToStr(entry->RegisteredTabletType)
             );
@@ -286,7 +281,7 @@ public:
             TabletToTableMap.emplace(tablet, TString(relativePath));
         }
 
-        if (IsTableLevel(entry->Info)) {
+        if (IsTableLevel(entry->MetricsLevel)) {
             auto& bucket = entry->TableBucket;
             if (!bucket) {
                 bucket = MakeHolder<TCountersBucket>(
@@ -372,12 +367,12 @@ private:
         );
     }
 
-    static bool IsTableLevel(const TDetailedMetricsTableInfo& table) {
-        return table.MetricsLevel == TDetailedMetricsSettings::MetricsLevelTable;
+    static bool IsTableLevel(EDetailedMetricsLevel level) {
+        return level == TDetailedMetricsSettings::MetricsLevelTable;
     }
 
-    static bool IsPartitionLevel(const TDetailedMetricsTableInfo& table) {
-        return table.MetricsLevel == TDetailedMetricsSettings::MetricsLevelPartition;
+    static bool IsPartitionLevel(EDetailedMetricsLevel level) {
+        return level == TDetailedMetricsSettings::MetricsLevelPartition;
     }
 
     NMonitoring::TDynamicCounterPtr GetOrCreateDatabaseGroup() {
@@ -400,63 +395,28 @@ private:
     }
 
     /**
-     * Bring the stored per-table state in line with the identity the reporting tablet
-     * carries.
-     *
-     * @return false if the report is stale — a tablet of a PREVIOUS table at this path
-     *         is still alive and still reporting. Its identity, the level included, says
-     *         nothing about the table that lives at this path now, so the caller must
-     *         drop the report whole rather than let it tear the current state down.
+     * Switch the stored shape to match the level the caller now reports for this path.
      */
-    bool ReconcileTable(const TStringBuf relativePath, const TDetailedMetricsTableInfo& table) {
+    void ReconcileTable(const TStringBuf relativePath, EDetailedMetricsLevel metricsLevel) {
         auto it = Tables.find(relativePath);
         if (it == Tables.end()) {
-            return true;
+            return;
         }
 
-        const TDetailedMetricsTableInfo& stored = it->second.Info;
-
-        // A table recreated at this path restarts SchemaVersion low, so a plain
-        // SchemaVersion comparison would pin Info to the older, already deleted table
-        // forever. A recreated table always gets a newer PathId, so the identity is
-        // ordered by the PathId first, and only then by SchemaVersion within one PathId.
-        //
-        // assumes a path is only ever recreated by the SAME schemeshard,
-        // which hands out strictly increasing LocalPathIds. TPathId orders by
-        // (OwnerId, LocalPathId), so a path served by another schemeshard with a lower
-        // OwnerId would order backwards. Not reachable within one subdomain.
-        const auto incoming = std::tie(table.TableId, table.SchemaVersion);
-        const auto current = std::tie(stored.TableId, stored.SchemaVersion);
-
-        // DropTableEntry below invalidates both it and stored, hence the ordering is
-        // decided here, before anything is torn down, and not consulted afterwards
-        if (incoming < current) {
-            return false;
-        }
-
-        // An ALTER DATABASE TABLES_METRICS_LEVEL bumps NEITHER the PathId nor the
-        // SchemaVersion, so a level change arrives with an identity EQUAL
-        if (table.MetricsLevel != stored.MetricsLevel) {
+        if (metricsLevel != it->second.MetricsLevel) {
             DropTableEntry(it);
-            return true;
         }
-
-        if (incoming > current) {
-            it->second.Info = table;
-        }
-
-        return true;
     }
 
     /**
      * @return The per-table state, or nullptr if the table collects no detailed metrics
      */
-    TTableEntry* GetOrCreateTable(const TDetailedMetricsTableInfo& table, const TStringBuf relativePath) {
-        if (!IsTableLevel(table) && !IsPartitionLevel(table)) {
+    TTableEntry* GetOrCreateTable(EDetailedMetricsLevel metricsLevel, const TStringBuf relativePath) {
+        if (!IsTableLevel(metricsLevel) && !IsPartitionLevel(metricsLevel)) {
             return nullptr;
         }
 
-        if (!table.TableId || !table.TablePath) {
+        if (relativePath.empty()) {
             return nullptr;
         }
 
@@ -473,7 +433,7 @@ private:
         // TString, once, shared between the map key and the GetSubgroup() call
         const TString newKey(relativePath);
         auto& entry = Tables[newKey];
-        entry.Info = table;
+        entry.MetricsLevel = metricsLevel;
         entry.TableGroup = GetOrCreateDatabaseGroup()->GetSubgroup(TABLE_LABEL, newKey);
 
         return &entry;
@@ -488,7 +448,7 @@ private:
 
         auto& entry = it->second;
 
-        if (IsTableLevel(entry.Info)) {
+        if (IsTableLevel(entry.MetricsLevel)) {
             ForgetTableBucketTablet(it->first, entry, tablet);
         } else {
             ForgetLeaf(it->first, entry, tablet);

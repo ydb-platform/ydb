@@ -27,26 +27,16 @@ const TString DATABASE_PATH = "/Root/db";
 const TString TABLE_PATH = "/Root/db/dir/table";
 const TString RELATIVE_TABLE_PATH = "dir/table";
 
-const TPathId TABLE_ID(72057594046644480ull, 42);
-
-// The same schemeshard owner as TABLE_ID, but a different local id, reporting under
-// the very same TABLE_PATH: models a table dropped and recreated at the same path,
-// or an ESchemeOpMoveTable rename that moves the old table away and a new one is
-// created at the vacated path.
-const TPathId RECREATED_TABLE_ID(72057594046644480ull, 44);
-
 // Another table of the very same database
 const TString OTHER_TABLE_PATH = "/Root/db/dir/other_table";
 const TString OTHER_RELATIVE_TABLE_PATH = "dir/other_table";
 
-const TPathId OTHER_TABLE_ID(72057594046644480ull, 43);
-
-// The very same table after an ESchemeOpMoveTable rename: another path, a fresh
-// PathId and a bumped schema version, reported by the very same tablets
+// The very same table after an ESchemeOpMoveTable rename: another path, reported by
+// the very same tablets. Whatever changes upstream (a fresh PathId, a bumped schema
+// version) is the Tablet Counters Aggregator's concern, not this class's — see the
+// class comment in the header. All this layer ever sees is a different path.
 const TString RENAMED_TABLE_PATH = "/Root/db/dir/renamed_table";
 const TString RENAMED_RELATIVE_TABLE_PATH = "dir/renamed_table";
-
-const TPathId RENAMED_TABLE_ID(72057594046644480ull, 45);
 
 constexpr TTabletTypes::EType TABLET_TYPE = TTabletTypes::DataShard;
 
@@ -159,23 +149,16 @@ struct TFakeTablet {
         const TNodeDatabaseMetricsAggregatorPtr& aggregator,
         EDetailedMetricsLevel level,
         TInstant now,
-        const TPathId& tableId = TABLE_ID,
         const TString& tablePath = TABLE_PATH,
-        TTabletTypes::EType tabletType = TABLET_TYPE,
-        ui64 schemaVersion = 1
+        TTabletTypes::EType tabletType = TABLET_TYPE
     ) {
-        TDetailedMetricsTableInfo table;
-        table.TableId = tableId;
-        table.TablePath = tablePath;
-        table.SchemaVersion = schemaVersion;
-        table.MetricsLevel = level;
-
         // An empty baseline (the very first report) makes the diff a plain copy
         auto appDiff = AppCounters.MakeDiffForAggr(AppBaseline);
         auto executorDiff = ExecutorCounters.MakeDiffForAggr(ExecutorBaseline);
 
         aggregator->AddCounters(
-            table,
+            tablePath,
+            level,
             TabletId,
             FollowerId,
             tabletType,
@@ -1103,7 +1086,6 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
             trees.Leaders,
             TDetailedMetricsSettings::MetricsLevelPartition,
             now,
-            OTHER_TABLE_ID,
             OTHER_TABLE_PATH
         );
 
@@ -1300,42 +1282,31 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
         const TInstant now = TInstant::Seconds(100);
 
         struct TCase {
-            TPathId TableId;
             TString TablePath;
             TString ExpectedLabel;
         };
 
         const TVector<TCase> cases = {
             // Within the database: the database path and the separator are stripped
-            {TPathId(1, 1), "/Root/db1/dir/table", "dir/table"},
-            {TPathId(1, 2), "/Root/db1/table",     "table"},
+            {"/Root/db1/dir/table", "dir/table"},
+            {"/Root/db1/table",     "table"},
 
             // NOT within the database: the path is reported as is, so that the odd
             // looking label is noticed instead of the counters being silently misplaced
-            {TPathId(1, 3), "/Root/db10/table",    "/Root/db10/table"},
-            {TPathId(1, 4), "/Root/other/table",   "/Root/other/table"},
+            {"/Root/db10/table",    "/Root/db10/table"},
+            {"/Root/other/table",   "/Root/other/table"},
         };
 
         ui64 tabletId = 1000;
 
         for (const auto& testCase : cases) {
-            TDetailedMetricsTableInfo table;
-            table.TableId = testCase.TableId;
-            table.TablePath = testCase.TablePath;
-            table.SchemaVersion = 1;
-            table.MetricsLevel = TDetailedMetricsSettings::MetricsLevelTable;
-
             TFakeTablet tablet(tabletId++, 0);
             tablet.SetSimple(DB_UNIQUE_ROWS_TOTAL, 1);
-
-            aggregator->AddCounters(
-                table,
-                tablet.TabletId,
-                tablet.FollowerId,
-                TABLET_TYPE,
-                tablet.ExecutorCounters,
-                tablet.AppCounters,
-                now
+            tablet.Report(
+                aggregator,
+                TDetailedMetricsSettings::MetricsLevelTable,
+                now,
+                testCase.TablePath
             );
         }
 
@@ -1394,7 +1365,6 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
                 aggregator,
                 TDetailedMetricsSettings::MetricsLevelTable,
                 now,
-                OTHER_TABLE_ID,
                 OTHER_TABLE_PATH
             );
             aggregator->RecalculateAllCounters();
@@ -1443,7 +1413,6 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
                 aggregator,
                 TDetailedMetricsSettings::MetricsLevelPartition,
                 now,
-                OTHER_TABLE_ID,
                 OTHER_TABLE_PATH
             );
             aggregator->RecalculateAllCounters();
@@ -1476,21 +1445,18 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
     }
 
     /**
-     * Verify that two different TPathIds, which report the very same table path, share
+     * Verify that two different tablets, which report the very same table path, share
      * ONE counter group and ONE aggregate rather than fragmenting the tree between them.
      *
-     * @note In production this happens whenever a table is dropped and a new one is
-     *       created at the same path, or when an ESchemeOpMoveTable rename moves the
-     *       old table away and a new table is created at the vacated old path: the
-     *       schemeshard hands out a fresh PathId, but the "table" label of the counter
-     *       tree is keyed by path, not by PathId. Before this fix, the state map was
-     *       keyed by PathId, so the two reports created two TTableEntry-s aliasing one
-     *       GetSubgroup() result: their TAggregatedTabletCounters overwrote each other's
-     *       sums, and forgetting the last tablet of the OLDER entry unconditionally
-     *       removed the shared group, detaching the counters the SURVIVING entry still
-     *       wrote into.
+     * @note This is what keying the per-table state by PATH rather than by any secondary
+     *       identity buys: whatever two tablets disagree about upstream (a table dropped
+     *       and recreated at the same path, an ESchemeOpMoveTable rename, or simply two
+     *       partitions of one live table), if they report the same path, they land in
+     *       the same entry here. Telling a live table's tablets apart from a stale
+     *       table's stragglers is the caller's job (the Tablet Counters Aggregator's
+     *       LatestByPath), not this class's — see the class comment in the header.
      */
-    Y_UNIT_TEST(SamePathUnderDifferentPathIdsSharesOneTable) {
+    Y_UNIT_TEST(TwoTabletsAtTheSamePathShareOneTable) {
         const TInstant now = TInstant::Seconds(100);
 
         // TEST 1: The table level, where both tablets contribute to a shared bucket
@@ -1503,40 +1469,31 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
                 false /* isFollowerRole */
             );
 
-            TFakeTablet oldTablet(1000, 0);
-            TFakeTablet newTablet(1001, 0);
+            TFakeTablet tabletA(1000, 0);
+            TFakeTablet tabletB(1001, 0);
 
-            oldTablet.SetSimple(DB_UNIQUE_ROWS_TOTAL, 5);
-            oldTablet.Report(aggregator, TDetailedMetricsSettings::MetricsLevelTable, now, TABLE_ID, TABLE_PATH);
+            tabletA.SetSimple(DB_UNIQUE_ROWS_TOTAL, 5);
+            tabletA.Report(aggregator, TDetailedMetricsSettings::MetricsLevelTable, now);
 
-            newTablet.SetSimple(DB_UNIQUE_ROWS_TOTAL, 7);
-            newTablet.Report(
-                aggregator,
-                TDetailedMetricsSettings::MetricsLevelTable,
-                now,
-                RECREATED_TABLE_ID,
-                TABLE_PATH
-            );
+            tabletB.SetSimple(DB_UNIQUE_ROWS_TOTAL, 7);
+            tabletB.Report(aggregator, TDetailedMetricsSettings::MetricsLevelTable, now);
 
             aggregator->RecalculateAllCounters();
 
-            DumpCounters("Table level counters of two PathIds at one path", rootGroup);
+            DumpCounters("Table level counters of two tablets at one path", rootGroup);
 
-            // Exactly one table= group holds the sum of both PathIds' contributions:
-            // under the bug this would read 5 or 7 (whichever entry recalculated last),
-            // never their sum
+            // Exactly one table= group holds the sum of both tablets' contributions
             UNIT_ASSERT(FindTableGroup(rootGroup));
             UNIT_ASSERT_VALUES_EQUAL(
                 GetCounterValue(FindTableBucketCounters(rootGroup), "SUM(DbUniqueRowsTotal)"),
                 5 + 7
             );
 
-            // The tablet of the OLDER PathId is forgotten: the group must stay reachable,
-            // because the surviving PathId's entry still owns it
-            aggregator->ForgetTablet(oldTablet.TabletId, oldTablet.FollowerId);
+            // One tablet is forgotten: the group must stay reachable, held up by the survivor
+            aggregator->ForgetTablet(tabletA.TabletId, tabletA.FollowerId);
             aggregator->RecalculateAllCounters();
 
-            DumpCounters("Table level counters after forgetting the older PathId's tablet", rootGroup);
+            DumpCounters("Table level counters after forgetting one tablet", rootGroup);
 
             UNIT_ASSERT(FindTableGroup(rootGroup));
             UNIT_ASSERT_VALUES_EQUAL(
@@ -1555,50 +1512,38 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
                 false /* isFollowerRole */
             );
 
-            TFakeTablet oldTablet(1000, 0);
-            TFakeTablet newTablet(1001, 0);
+            TFakeTablet tabletA(1000, 0);
+            TFakeTablet tabletB(1001, 0);
 
-            oldTablet.SetSimple(DB_UNIQUE_ROWS_TOTAL, 5);
-            oldTablet.Report(
-                aggregator,
-                TDetailedMetricsSettings::MetricsLevelPartition,
-                now,
-                TABLE_ID,
-                TABLE_PATH
-            );
+            tabletA.SetSimple(DB_UNIQUE_ROWS_TOTAL, 5);
+            tabletA.Report(aggregator, TDetailedMetricsSettings::MetricsLevelPartition, now);
 
-            newTablet.SetSimple(DB_UNIQUE_ROWS_TOTAL, 7);
-            newTablet.Report(
-                aggregator,
-                TDetailedMetricsSettings::MetricsLevelPartition,
-                now,
-                RECREATED_TABLE_ID,
-                TABLE_PATH
-            );
+            tabletB.SetSimple(DB_UNIQUE_ROWS_TOTAL, 7);
+            tabletB.Report(aggregator, TDetailedMetricsSettings::MetricsLevelPartition, now);
 
             aggregator->RecalculateAllCounters();
 
-            DumpCounters("Partition level leaves of two PathIds at one path", rootGroup);
+            DumpCounters("Partition level leaves of two tablets at one path", rootGroup);
 
             // Both leaves live under the very same table= group
             UNIT_ASSERT(FindTableGroup(rootGroup));
 
-            auto oldLeaf = FindLeafCounters(rootGroup, oldTablet.TabletId, oldTablet.FollowerId);
-            UNIT_ASSERT(oldLeaf);
-            UNIT_ASSERT_VALUES_EQUAL(GetCounterValue(oldLeaf, "SUM(DbUniqueRowsTotal)"), 5);
+            auto leafA = FindLeafCounters(rootGroup, tabletA.TabletId, tabletA.FollowerId);
+            UNIT_ASSERT(leafA);
+            UNIT_ASSERT_VALUES_EQUAL(GetCounterValue(leafA, "SUM(DbUniqueRowsTotal)"), 5);
 
-            auto newLeaf = FindLeafCounters(rootGroup, newTablet.TabletId, newTablet.FollowerId);
-            UNIT_ASSERT(newLeaf);
-            UNIT_ASSERT_VALUES_EQUAL(GetCounterValue(newLeaf, "SUM(DbUniqueRowsTotal)"), 7);
+            auto leafB = FindLeafCounters(rootGroup, tabletB.TabletId, tabletB.FollowerId);
+            UNIT_ASSERT(leafB);
+            UNIT_ASSERT_VALUES_EQUAL(GetCounterValue(leafB, "SUM(DbUniqueRowsTotal)"), 7);
 
-            // Forgetting the OLDER PathId's tablet must not detach the surviving leaf
-            aggregator->ForgetTablet(oldTablet.TabletId, oldTablet.FollowerId);
+            // Forgetting one tablet must not detach the surviving leaf
+            aggregator->ForgetTablet(tabletA.TabletId, tabletA.FollowerId);
 
-            DumpCounters("Partition level leaves after forgetting the older PathId's tablet", rootGroup);
+            DumpCounters("Partition level leaves after forgetting one tablet", rootGroup);
 
-            UNIT_ASSERT(!FindLeafCounters(rootGroup, oldTablet.TabletId, oldTablet.FollowerId));
+            UNIT_ASSERT(!FindLeafCounters(rootGroup, tabletA.TabletId, tabletA.FollowerId));
 
-            auto survivingLeaf = FindLeafCounters(rootGroup, newTablet.TabletId, newTablet.FollowerId);
+            auto survivingLeaf = FindLeafCounters(rootGroup, tabletB.TabletId, tabletB.FollowerId);
             UNIT_ASSERT(survivingLeaf);
             UNIT_ASSERT_VALUES_EQUAL(GetCounterValue(survivingLeaf, "SUM(DbUniqueRowsTotal)"), 7);
         }
@@ -1803,8 +1748,9 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
      * Verify that a per-table ALTER, which enables the detailed metrics of a table that
      * collected none, starts emitting the leaves.
      *
-     * @note Unlike the database default change above, this one DOES bump the schema
-     *       version, and it is the level, which decides what is built either way.
+     * @note Whatever an ALTER TABLE bumps upstream (schema version, in production) is
+     *       the Tablet Counters Aggregator's concern, not this class's — see the class
+     *       comment in the header. All this layer ever reacts to is the level.
      */
     Y_UNIT_TEST(SchemaBumpEnablesPartitionLevel) {
         NMonitoring::TDynamicCounterPtr rootGroup = MakeIntrusive<NMonitoring::TDynamicCounters>();
@@ -1821,29 +1767,13 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
         leader.SetSimple(DB_UNIQUE_ROWS_TOTAL, 5);
 
         // The table follows a database default, which collects nothing
-        leader.Report(
-            aggregator,
-            TDetailedMetricsSettings::MetricsLevelUnspecified,
-            now,
-            TABLE_ID,
-            TABLE_PATH,
-            TABLET_TYPE,
-            1 /* schemaVersion */
-        );
+        leader.Report(aggregator, TDetailedMetricsSettings::MetricsLevelUnspecified, now);
         aggregator->RecalculateAllCounters();
 
         UNIT_ASSERT(!rootGroup->FindSubgroup("database", DATABASE_PATH));
 
         // ALTER TABLE ... SET (DETAILED_METRICS_LEVEL = PARTITION)
-        leader.Report(
-            aggregator,
-            TDetailedMetricsSettings::MetricsLevelPartition,
-            now,
-            TABLE_ID,
-            TABLE_PATH,
-            TABLET_TYPE,
-            2 /* schemaVersion */
-        );
+        leader.Report(aggregator, TDetailedMetricsSettings::MetricsLevelPartition, now);
         aggregator->RecalculateAllCounters();
 
         DumpCounters("Counters after the ALTER enabled the partition level", rootGroup);
@@ -1858,14 +1788,15 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
     }
 
     /**
-     * Verify that a schema version bump, which does NOT change the effective level,
-     * keeps the counters of the table exactly where they are.
+     * Verify that a report, which does NOT change the effective level, keeps the
+     * counters of the table exactly where they are.
      *
      * @note The level is the only thing, which decides the shape of the entry, so a
-     *       plain ALTER has nothing to reconcile. Rebuilding the table on every schema
-     *       bump instead would restart the accumulated cumulative counters from zero —
-     *       a consumer reads that as a counter reset — and would blank the leaves of
-     *       the partitions, which have not reported since the ALTER.
+     *       plain ALTER (which does not, upstream, change the effective level) has
+     *       nothing to reconcile here. Rebuilding the table on every such report instead
+     *       would restart the accumulated cumulative counters from zero — a consumer
+     *       reads that as a counter reset — and would blank the leaves of the
+     *       partitions, which have not reported since.
      */
     Y_UNIT_TEST(SchemaBumpAtTheSameLevelKeepsTheCounters) {
         NMonitoring::TDynamicCounterPtr rootGroup = MakeIntrusive<NMonitoring::TDynamicCounters>();
@@ -1897,21 +1828,13 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
             100
         );
 
-        // The ALTER bumps the schema version, and only the first partition has noticed
-        // it so far
+        // The ALTER reaches this class as a report at the very same level, and only the
+        // first partition has noticed it so far
         leader1.AddCumulative(CONSUMED_CPU, 50);
-        leader1.Report(
-            aggregator,
-            TDetailedMetricsSettings::MetricsLevelPartition,
-            now,
-            TABLE_ID,
-            TABLE_PATH,
-            TABLET_TYPE,
-            2 /* schemaVersion */
-        );
+        leader1.Report(aggregator, TDetailedMetricsSettings::MetricsLevelPartition, now);
         aggregator->RecalculateAllCounters();
 
-        DumpCounters("Counters after a schema bump at the very same level", rootGroup);
+        DumpCounters("Counters after a report at the very same level", rootGroup);
 
         // The accumulated counter keeps growing rather than restarting from the delta
         UNIT_ASSERT_VALUES_EQUAL(
@@ -2015,98 +1938,6 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
     }
 
     /**
-     * Verify that a straggler report from a tablet of a table PREVIOUS to the one now
-     * living at this path is dropped whole rather than reconciled: it carries the old
-     * (PathId, SchemaVersion), so nothing about it — its MetricsLevel included — says
-     * anything about the table that lives at this path now.
-     *
-     * @note The scenario from the PR review: a table is dropped and recreated at the
-     *       same path with a new PathId AND a different level. The new table's own
-     *       tablet reports and builds the correct state. A tablet of the OLD table is
-     *       still alive (draining) and keeps sending its own 5s report, which still
-     *       carries the old PathId and the old level. Without the ordering guard in
-     *       front of the level check, that stale report hits the level-mismatch branch,
-     *       DropTableEntry wipes the NEW table's counters, and GetOrCreateTable rebuilds
-     *       the entry from the stale (and now current) Info — the tree flaps between the
-     *       two shapes every 5s until the old tablet is forgotten.
-     */
-    Y_UNIT_TEST(StaleReportOfARecreatedTableDoesNotDropTheNewState) {
-        NMonitoring::TDynamicCounterPtr rootGroup = MakeIntrusive<NMonitoring::TDynamicCounters>();
-
-        auto aggregator = CreateNodeDatabaseMetricsAggregator(
-            rootGroup,
-            DATABASE_PATH,
-            false /* isFollowerRole */
-        );
-
-        const TInstant now = TInstant::Seconds(100);
-
-        // TABLE_ID at the partition level: a per_partition leaf
-        TFakeTablet straggler(1000, 0);
-        straggler.SetSimple(DB_UNIQUE_ROWS_TOTAL, 1);
-        straggler.Report(aggregator, TDetailedMetricsSettings::MetricsLevelPartition, now, TABLE_ID, TABLE_PATH);
-        aggregator->RecalculateAllCounters();
-
-        UNIT_ASSERT(FindLeafCounters(rootGroup, straggler.TabletId, straggler.FollowerId));
-
-        // The table is dropped and recreated at the same path: a newer PathId, and the
-        // level moves to TABLE. Its own tablet builds the correct collapse bucket.
-        TFakeTablet newTablet(2000, 0);
-        newTablet.SetSimple(DB_UNIQUE_ROWS_TOTAL, 7).AddCumulative(CONSUMED_CPU, 100);
-        newTablet.Report(aggregator, TDetailedMetricsSettings::MetricsLevelTable, now, RECREATED_TABLE_ID, TABLE_PATH);
-        aggregator->RecalculateAllCounters();
-
-        DumpCounters("Counters after the recreated table's own tablet reported", rootGroup);
-
-        auto tableCounters = FindTableBucketCounters(rootGroup);
-        UNIT_ASSERT(tableCounters);
-        UNIT_ASSERT_VALUES_EQUAL(GetCounterValue(tableCounters, "SUM(DbUniqueRowsTotal)"), 7);
-        UNIT_ASSERT_VALUES_EQUAL(GetCounterValue(tableCounters, "ConsumedCPU"), 100);
-        UNIT_ASSERT(!FindLeafCounters(rootGroup, straggler.TabletId, straggler.FollowerId));
-
-        // The OLD table's tablet is still alive and reports again, carrying the OLD
-        // PathId and the OLD (partition) level — the straggler
-        straggler.SetSimple(DB_UNIQUE_ROWS_TOTAL, 999);
-        straggler.Report(aggregator, TDetailedMetricsSettings::MetricsLevelPartition, now, TABLE_ID, TABLE_PATH);
-        aggregator->RecalculateAllCounters();
-
-        DumpCounters("Counters after the straggler of the old table reported", rootGroup);
-
-        // The new table's collapse bucket survives, its VALUES are exactly as they were
-        // — a rebuilt-from-stale entry would have the right shape with zeroed contents,
-        // which a presence-only check would not catch
-        auto tableCountersAfterStraggler = FindTableBucketCounters(rootGroup);
-        UNIT_ASSERT(tableCountersAfterStraggler);
-        UNIT_ASSERT_VALUES_EQUAL(GetCounterValue(tableCountersAfterStraggler, "SUM(DbUniqueRowsTotal)"), 7);
-        UNIT_ASSERT_VALUES_EQUAL(GetCounterValue(tableCountersAfterStraggler, "ConsumedCPU"), 100);
-
-        // No per_partition subtree reappeared: the straggler's report was dropped whole,
-        // never reaching GetOrCreateTable
-        auto tableGroup = FindTableGroup(rootGroup);
-        UNIT_ASSERT(tableGroup);
-        UNIT_ASSERT(!tableGroup->FindSubgroup("detailed_metrics", "per_partition"));
-
-        // The bucket is still the SAME live object, not a fresh one: a further report of
-        // the new table's own tablet keeps accumulating rather than restarting from zero
-        newTablet.AddCumulative(CONSUMED_CPU, 50);
-        newTablet.Report(aggregator, TDetailedMetricsSettings::MetricsLevelTable, now, RECREATED_TABLE_ID, TABLE_PATH);
-        aggregator->RecalculateAllCounters();
-
-        UNIT_ASSERT_VALUES_EQUAL(GetCounterValue(FindTableBucketCounters(rootGroup), "ConsumedCPU"), 100 + 50);
-
-        // Forgetting the straggler's tablet finds no leaf and no source ID in the live
-        // bucket: it never contributed to it, so this is a no-op, and the live table's
-        // bucket and its table= group survive
-        aggregator->ForgetTablet(straggler.TabletId, straggler.FollowerId);
-
-        UNIT_ASSERT(FindTableGroup(rootGroup));
-        UNIT_ASSERT_VALUES_EQUAL(
-            GetCounterValue(FindTableBucketCounters(rootGroup), "ConsumedCPU"),
-            100 + 50
-        );
-    }
-
-    /**
      * Verify that a renamed table manifests as drop-old/create-new, with no stale
      * table= group left behind once the last of its tablets has reported the new path.
      *
@@ -2150,10 +1981,7 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
                 aggregator,
                 TDetailedMetricsSettings::MetricsLevelTable,
                 now,
-                RENAMED_TABLE_ID,
-                RENAMED_TABLE_PATH,
-                TABLET_TYPE,
-                2 /* schemaVersion */
+                RENAMED_TABLE_PATH
             );
             aggregator->RecalculateAllCounters();
 
@@ -2176,10 +2004,7 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
                 aggregator,
                 TDetailedMetricsSettings::MetricsLevelTable,
                 now,
-                RENAMED_TABLE_ID,
-                RENAMED_TABLE_PATH,
-                TABLET_TYPE,
-                2 /* schemaVersion */
+                RENAMED_TABLE_PATH
             );
             aggregator->RecalculateAllCounters();
 
@@ -2227,10 +2052,7 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
                 aggregator,
                 TDetailedMetricsSettings::MetricsLevelPartition,
                 now,
-                RENAMED_TABLE_ID,
-                RENAMED_TABLE_PATH,
-                TABLET_TYPE,
-                2 /* schemaVersion */
+                RENAMED_TABLE_PATH
             );
             aggregator->RecalculateAllCounters();
 
@@ -2277,7 +2099,6 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
             aggregator,
             TDetailedMetricsSettings::MetricsLevelPartition,
             now,
-            TABLE_ID,
             TABLE_PATH,
             TTabletTypes::ColumnShard
         );
@@ -2317,7 +2138,6 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
             aggregator,
             TDetailedMetricsSettings::MetricsLevelPartition,
             now,
-            OTHER_TABLE_ID,
             OTHER_TABLE_PATH
         );
 

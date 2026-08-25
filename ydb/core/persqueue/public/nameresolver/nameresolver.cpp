@@ -69,29 +69,10 @@ bool HasModernPathSeparator(TStringBuf topic) {
     return false;
 }
 
-bool IsLegacyStyleName(TStringBuf topic) {
-    // Modern paths use a single '/' separator (e.g. PQ/rt3.dc1--topic leaf under a dir).
-    // Short legacy may still contain accidental '//' (account--a//b) without a modern sep.
-    if (HasModernPathSeparator(topic)) {
-        return false;
-    }
-    if (topic.StartsWith("rt3.") || topic.Contains("--") || topic.Contains("@")) {
-        return true;
-    }
-    return !topic.Contains("/");
-}
-
 bool IsExplicitLegacyName(TStringBuf topic) {
     // Unlike bare names, these are never relative modern paths inside a user DB.
     return !HasModernPathSeparator(topic)
         && (topic.StartsWith("rt3.") || topic.Contains("--") || topic.Contains("@"));
-}
-
-// True when database is a strict child of lbRoot (e.g. Root/account1 under Root).
-bool IsDatabaseUnderLbRoot(TStringBuf databaseNorm, TStringBuf lbRoot) {
-    return !lbRoot.empty()
-        && databaseNorm != lbRoot
-        && IsPathPrefix(databaseNorm, lbRoot);
 }
 
 bool IsCleanRelativePath(TStringBuf path) {
@@ -401,19 +382,9 @@ std::expected<TResolvedName, TString> ResolveName(
     };
 
     if (!isFederation) {
-        if (!IsLegacyStyleName(topicName)) {
-            return wrap(JoinWithDatabase(database, databaseNorm, topicName));
-        }
-        auto parsed = TryParseLegacyToModernPath(topicName, localDc, dc);
-        if (!parsed) {
-            return std::unexpected(parsed.error());
-        }
-        // Bare name inside a user DB under LbRoot stays in that DB (CREATE TOPIC in tenant).
-        // Explicit legacy (rt3/--/@) and bare names outside LbRoot still join via LbRoot.
-        if (!IsExplicitLegacyName(topicName) && IsDatabaseUnderLbRoot(databaseNorm, lbRoot)) {
-            return wrap(JoinWithDatabase(database, databaseNorm, *parsed));
-        }
-        return wrap(JoinWithRoot(lbRoot, database, std::move(*parsed)));
+        // FCC: never interpret rt3. / -- / @ as a legacy name. A leaf like
+        // TestSchemeList--test-topic-1 is a literal topic under the database.
+        return wrap(JoinWithDatabase(database, databaseNorm, topicName));
     }
 
     // Federation mode.

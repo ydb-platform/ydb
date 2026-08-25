@@ -37,22 +37,68 @@ Y_UNIT_TEST(CreateTopicSuccess) {
         NKikimrPQ::TPQTabletConfig::EConsumerType_Name(::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_STREAMING));
 }
 
-Y_UNIT_TEST(CreateTopicLegacyName) {
+Y_UNIT_TEST(CreateTopicKeepsLiteralDashDashName) {
     auto setup = CreateSetup();
     auto& runtime = setup->GetRuntime();
     runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(true);
 
-    const TString legacyName = "rt3.dc1--account--topic";
-    AssertStatus(DoCreate(runtime, MakeCreateTopicRequest(legacyName)), Ydb::StatusIds::SUCCESS);
+    const TString name = "TestSchemeList--test-topic-1";
+    const TString path = "/Root/" + name;
+    AssertStatus(DoCreate(runtime, MakeCreateTopicRequest(name)), Ydb::StatusIds::SUCCESS);
 
     auto edge = runtime.AllocateEdgeActor();
-    runtime.Register(NDescriber::CreateDescriberActor(edge, "/Root", {legacyName}));
+    runtime.Register(NDescriber::CreateDescriberActor(edge, "/Root", {name}));
     auto response = runtime.GrabEdgeEvent<NDescriber::TEvDescribeTopicsResponse>(TDuration::Seconds(5));
     UNIT_ASSERT_VALUES_EQUAL(response->Topics.size(), 1u);
-    const auto it = response->Topics.find(legacyName);
+    const auto it = response->Topics.find(name);
     UNIT_ASSERT(it != response->Topics.end());
     UNIT_ASSERT_VALUES_EQUAL(it->second.Status, NDescriber::EStatus::SUCCESS);
-    UNIT_ASSERT_VALUES_EQUAL(it->second.RealPath, "/Root/account/topic");
+    UNIT_ASSERT_VALUES_EQUAL(it->second.RealPath, path);
+
+    // "--" is not a path separator: the converted legacy path must not exist.
+    auto convertedEdge = runtime.AllocateEdgeActor();
+    runtime.Register(NDescriber::CreateDescriberActor(convertedEdge, "/Root", {TString("TestSchemeList/test-topic-1")}));
+    auto converted = runtime.GrabEdgeEvent<NDescriber::TEvDescribeTopicsResponse>(TDuration::Seconds(5));
+    UNIT_ASSERT_VALUES_EQUAL(converted->Topics.size(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(converted->Topics.begin()->second.Status, NDescriber::EStatus::NOT_FOUND);
+}
+
+// https://github.com/ydb-platform/ydb/issues/50971
+// Go SDK TestSchemeList creates a topic named like t.Name() (contains "--") and
+// lists the database root. FCC must keep the leaf literal: no -- → / rewrite.
+Y_UNIT_TEST(CreateFccLegacyLookingNameListedAsLiteral) {
+    auto setup = CreateSetup("FccLegacyLookingSchemeList");
+    auto& runtime = setup->GetRuntime();
+    runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(true);
+
+    const TVector<TString> names = {
+        "TestSchemeList--test-topic-1",
+        "rt3.dc1--account--topic",
+    };
+    for (const auto& name : names) {
+        AssertStatus(DoCreate(runtime, MakeCreateTopicRequest(name)), Ydb::StatusIds::SUCCESS);
+    }
+
+    auto ls = setup->GetServer().AnnoyingClient->Ls("/Root");
+    UNIT_ASSERT(ls);
+    UNIT_ASSERT_VALUES_EQUAL(ls->Record.GetSchemeStatus(), NKikimrScheme::StatusSuccess);
+
+    auto findChild = [&](TStringBuf childName) -> const NKikimrSchemeOp::TDirEntry* {
+        for (const auto& child : ls->Record.GetPathDescription().GetChildren()) {
+            if (child.GetName() == childName) {
+                return &child;
+            }
+        }
+        return nullptr;
+    };
+
+    for (const auto& name : names) {
+        const auto* child = findChild(name);
+        UNIT_ASSERT_C(child, name);
+        UNIT_ASSERT_VALUES_EQUAL(child->GetPathType(), NKikimrSchemeOp::EPathTypePersQueueGroup);
+    }
+    UNIT_ASSERT(!findChild("TestSchemeList"));
+    UNIT_ASSERT(!findChild("account"));
 }
 
 Y_UNIT_TEST(CreateSharedConsumer) {

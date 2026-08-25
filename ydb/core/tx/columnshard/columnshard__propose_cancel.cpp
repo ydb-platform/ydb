@@ -23,6 +23,17 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         LOG_S_DEBUG("TTxProposeCancel.Execute");
 
+        auto op = Self->ProgressTxController->GetTxOperator(TxId, ETxOperatorStatus::InProgress, /*optional*/ true);
+        if (!op) {
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD_TX)("event", "skip_cancel_no_operator")("tx_id", TxId);
+            return true;
+        }
+        // race TTxProposeCancel vs TTxPlanStep, we do not wanna cancel a planned transaction
+        if (op->IsPlanned()) {
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD_TX)("event", "skip_cancel_already_planned")("tx_id", TxId)(
+                "plan_step", op->GetStep());
+            return true;
+        }
         if (auto* lock = Self->GetOperationsManager().GetLockFeaturesForTxOptional(TxId)) {
             AFL_VERIFY(lock->IsTxIdAssigned())("tx_id", TxId)("lock_id", lock->GetLockId());
             lock->SetNeedsAborting();

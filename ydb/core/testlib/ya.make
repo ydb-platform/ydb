@@ -120,6 +120,7 @@ PEERDIR(
     ydb/core/tx/conveyor_composite/usage
     ydb/core/tx/priorities/service
     ydb/core/tx/priorities/usage
+    ydb/core/tx/limiter/grouped_memory/service
     ydb/core/tx/limiter/grouped_memory/usage
     ydb/services/fq
     ydb/services/kesus

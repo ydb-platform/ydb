@@ -36,6 +36,10 @@ Y_UNIT_TEST_SUITE(KqpOlapScanCleanup) {
         // Intercepting events requires the test to drive the dispatch loop, so every SDK call goes through
         // RunCall/RunInThreadPool while the main thread keeps the actor system running.
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetUseRealThreads(false);
+        // Not the default "lc-buckets": that one needs 10 portions to compact, the test has 2.
+        settings.AppConfig.MutableColumnShardConfig()->SetDefaultCompactionPreset("l-buckets");
+        // Off by default on this branch. Without it the cleanup floor never advances.
+        settings.AppConfig.MutableFeatureFlags()->SetEnableSnapshotsLocking(true);
         // The shard collects nothing younger than the oldest registered snapshot minus these margins, and the
         // defaults put that floor further into the past than the test runs.
         auto& longTxConfig = *settings.AppConfig.MutableLongTxServiceConfig();
@@ -211,6 +215,8 @@ Y_UNIT_TEST_SUITE(KqpOlapScanCleanup) {
         csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
 
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetUseRealThreads(false);
+        settings.AppConfig.MutableColumnShardConfig()->SetDefaultCompactionPreset("l-buckets");
+        settings.AppConfig.MutableFeatureFlags()->SetEnableSnapshotsLocking(true);
         auto& longTxConfig = *settings.AppConfig.MutableLongTxServiceConfig();
         longTxConfig.SetLocalSnapshotPromotionTimeSeconds(1);
         longTxConfig.SetMaxClockSkewMs(1000);

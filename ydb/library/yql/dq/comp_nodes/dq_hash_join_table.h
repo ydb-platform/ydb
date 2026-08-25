@@ -127,11 +127,20 @@ class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
         });
     }
 
-    // Cross join has no keys, so every build row matches and there is nothing to look up
-    void ForEach(std::invocable<TSingleTuple> auto consume) const {
-        for (TSingleTuple tuple : BuildData_) {
-            consume(tuple);
+    bool ForEachFrom(size_t& resumeIndex, std::invocable<TSingleTuple> auto consume,
+                     std::predicate auto isFull) const {
+        const size_t nTuples = static_cast<size_t>(BuildData_.NTuples);
+        for (; resumeIndex < nTuples; ++resumeIndex) {
+            consume(TSingleTuple{
+                BuildData_.PackedTuples.data() + resumeIndex * RowWidth_,
+                BuildData_.Overflow.data()
+            });
+            if (isFull()) {
+                ++resumeIndex;
+                return false;
+            }
         }
+        return true;
     }
 
     // Call only after the pair is accepted, including join filters. Marking inside Lookup would

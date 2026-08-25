@@ -1530,6 +1530,81 @@ TJoinTestData CrossJoinAllFiltersTestData() {
     return td;
 }
 
+TJoinTestData TrueCrossJoinTestDataLeftIsBuild() {
+    auto td = TrueCrossJoinTestData();
+    td.JoinSettings.BuildSide = NMiniKQL::EBuildSide::Left;
+    return td;
+}
+
+constexpr int CrossJoinOutputBufferBoundedRows = 30000;
+
+TJoinTestData CrossJoinOutputBufferBoundedTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    constexpr int rightSize = CrossJoinOutputBufferBoundedRows;
+    TVector<ui64> leftKeys = {1};
+    TVector<ui64> leftValues = {2};
+    TVector<ui64> rightKeys(rightSize);
+    TVector<ui64> rightValues(rightSize);
+    for (int index = 0; index < rightSize; ++index) {
+        rightKeys[index] = index;
+        rightValues[index] = 2 * index;
+    }
+
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+    AsCrossJoin(td);
+    return td;
+}
+
+TJoinTestData CrossJoinSpillingTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    constexpr int leftSize = 3;
+    constexpr int rightSize = 15000;
+    TVector<ui64> leftKeys(leftSize);
+    TVector<ui64> leftValues(leftSize);
+    for (int index = 0; index < leftSize; ++index) {
+        leftKeys[index] = index;
+        leftValues[index] = 10 * index;
+    }
+    TVector<ui64> rightKeys(rightSize);
+    TVector<ui64> rightValues(rightSize);
+    for (int index = 0; index < rightSize; ++index) {
+        rightKeys[index] = 2 * index + 3;
+        rightValues[index] = index;
+    }
+
+    TVector<ui64> expLeftKeys;
+    TVector<ui64> expLeftValues;
+    TVector<ui64> expRightKeys;
+    TVector<ui64> expRightValues;
+    expLeftKeys.reserve(leftSize * rightSize);
+    expLeftValues.reserve(leftSize * rightSize);
+    expRightKeys.reserve(leftSize * rightSize);
+    expRightValues.reserve(leftSize * rightSize);
+    for (int left = 0; left < leftSize; ++left) {
+        for (int right = 0; right < rightSize; ++right) {
+            expLeftKeys.push_back(leftKeys[left]);
+            expLeftValues.push_back(leftValues[left]);
+            expRightKeys.push_back(rightKeys[right]);
+            expRightValues.push_back(rightValues[right]);
+        }
+    }
+
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+    td.Result = ConvertVectorsToTuples(setup, expLeftKeys, expLeftValues, expRightKeys, expRightValues);
+
+    constexpr int packedTupleSize = 2 * 8 + 5;
+    constexpr ui64 joinMemory = packedTupleSize * (0.5 * rightSize);
+    td.JoinMemoryConstraint = joinMemory;
+    AsCrossJoin(td);
+    return td;
+}
+
 // Shape of a probe side produced by a chain of LEFT JOINs in the new optimizer:
 // several 4-byte payload columns interleaved with 1-byte flag columns, with the
 // join key sitting in the middle. Such a row is short enough for the small-tuple
@@ -1931,6 +2006,14 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
         Test(CrossJoinAllFiltersTestData(), BlockJoin);
     }
 
+    Y_UNIT_TEST(TestHashCrossJoinLeftIsBuild) {
+        Test(TrueCrossJoinTestDataLeftIsBuild(), true);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashCrossJoinSpilling, BlockJoin) {
+        Test(CrossJoinSpillingTestData(), BlockJoin);
+    }
+
     Y_UNIT_TEST(TestBlockSpilling) { 
         Test(SpillingTestData(), true);
     }
@@ -1962,6 +2045,11 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
     Y_UNIT_TEST(TestOutputBufferBoundedLeftSemiSpillingLeftIsBuild) {
         auto td = LeftSemiSpillingTestDataLeftIsBuild();
         AssertOutputBufferBounded(MeasureOutputBlocks(td), 100000);
+    }
+
+    Y_UNIT_TEST(TestOutputBufferBoundedCrossJoin) {
+        auto td = CrossJoinOutputBufferBoundedTestData();
+        AssertOutputBufferBounded(MeasureOutputBlocks(td), CrossJoinOutputBufferBoundedRows);
     }
 }
 } // namespace NKikimr::NMiniKQL

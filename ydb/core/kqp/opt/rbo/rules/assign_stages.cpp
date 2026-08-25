@@ -31,8 +31,6 @@ void FinalizeJoinPhysicalProps(TOpJoin& join, const TRBOContext& rboCtx) {
 
     const auto joinKind = GetValidJoinKind(join.JoinKind);
     if (joinKind == "Cross") {
-        // MapJoin cannot build a cartesian product, so the only BlockHashJoin option is grace.
-        // The stage graph keeps mapping the left side and broadcasting the right one regardless.
         props.UseBlockHashJoin = config.GetUseBlockHashJoin() && config.GetUseBlockHashJoinForCross();
         if (props.UseBlockHashJoin) {
             props.JoinAlgo = EJoinAlgoType::GraceJoin;

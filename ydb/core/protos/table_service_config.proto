@@ -512,10 +512,6 @@ message TTableServiceConfig {
 
     optional bool UseBlockHashJoin = 124 [default = true, (InvalidateCompileCache) = true];
 
-    // Opt-in: build Cross joins (no equality keys) as BlockHashJoin instead of a nested-loop Condense.
-    // Requires UseBlockHashJoin. Off by default because Cross is a cartesian product.
-    optional bool UseBlockHashJoinForCross = 145 [default = false, (InvalidateCompileCache) = true];
-
     optional uint32 DisableOlapBlocksOnColumnsLimit = 125 [default = 1000, (InvalidateCompileCache) = true];
 
     optional uint64 QueryDeadlockTimeoutMs = 126 [default = 600000];
@@ -570,4 +566,6 @@ message TTableServiceConfig {
 
     // Prune key columns
     optional bool EnablePruneKeyColumns = 144 [default = true];
+
+    optional bool UseBlockHashJoinForCross = 145 [default = false, (InvalidateCompileCache) = true];
 };

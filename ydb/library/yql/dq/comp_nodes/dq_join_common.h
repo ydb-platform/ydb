@@ -265,6 +265,7 @@ struct TTableAndSomeData {
     TMKQLDeque<TFuturePage> Futures;
     std::optional<TPackResult> CurrentProbePack;
     ui32 ProbeResumeIndex = 0;
+    size_t BuildCursor = 0;
     size_t PreservedResumeIndex = 0;
 };
 
@@ -444,6 +445,7 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
         TProbeSpiller<Settings> Spiller;
         std::optional<TPackResult> FetchedPack;
         ui32 ResumeIndex = 0;
+        size_t BuildCursor = 0;
         // Cursor of the post-probe scan over preserved rows left in the in-memory tables
         int PreservedBucketIndex = 0;
         size_t PreservedResumeIndex = 0;
@@ -547,7 +549,7 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
         auto notEnoughMemory = [hasSpiller = !!Spiller_] {
             return hasSpiller && TlsAllocState->IsMemoryYellowZoneEnabled();
         };
-        auto lookupToTable = [&](TTable& table, TSingleTuple probeRow) {
+        auto lookupToTable = [&](TTable& table, TSingleTuple probeRow, size_t& buildCursor) {
             if constexpr (HasFilter) {
                 filter->StartProbeRow(probeRow);
             }
@@ -566,8 +568,10 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                 }
             };
             if constexpr (Join.Kind == EJoinKind::Cross) {
-                // No equality keys, so every build row pairs with the probe row and only filters drop pairs
-                table.ForEach(onMatch);
+                if (!table.ForEachFrom(buildCursor, onMatch, isFull)) {
+                    return false;
+                }
+                buildCursor = 0;
             } else {
                 table.Lookup(probeRow, onMatch);
             }
@@ -582,6 +586,7 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                     }
                 }
             }
+            return true;
         };
         if (std::get_if<Init>(&State_)) {
             State_ = FetchingBuild{*this};
@@ -739,7 +744,10 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                     } else {
                         TTable* thisTable = std::get_if<TTable>(&state.Spiller.GetState().Buckets[bucketIndex]);
                         MKQL_ENSURE(thisTable, "sanity check");
-                        lookupToTable(*thisTable, tuple);
+                        if (!lookupToTable(*thisTable, tuple, state.BuildCursor)) {
+                            state.ResumeIndex = idx - 1;
+                            return EFetchResult::One;
+                        }
                     }
                     if (isFull()) {
                         state.ResumeIndex = idx;
@@ -806,7 +814,10 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                             if (idx++ < table->ProbeResumeIndex) {
                                 continue;
                             }
-                            lookupToTable(table->Table, probeTuple);
+                            if (!lookupToTable(table->Table, probeTuple, table->BuildCursor)) {
+                                table->ProbeResumeIndex = idx - 1;
+                                return EFetchResult::One;
+                            }
                             if (isFull()) {
                                 table->ProbeResumeIndex = idx;
                                 return EFetchResult::One;

@@ -651,7 +651,6 @@ TExprNode::TPtr TPhysicalJoinBuilder::BuildPhysicalJoin(TExprNode::TPtr leftInpu
 TExprNode::TPtr TPhysicalJoinBuilder::BuildPhysicalOp(TExprNode::TPtr leftInput, TExprNode::TPtr rightInput, bool useBlockHashJoin, const TTypeAnnotationContext& typesCtx) {
     const auto joinKind = to_lower(Join->JoinKind);
     if (joinKind == "cross" && !useBlockHashJoin) {
-        // Nested loops over a condensed right side; BlockHashJoin does the cartesian product itself
         return BuildCrossJoin(leftInput, rightInput);
     }
 

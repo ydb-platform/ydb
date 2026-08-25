@@ -366,4 +366,6 @@ message TFeatureFlags {
     // Keys SourceId→Partition mapping by a unique topic Id (UUID) instead of the topic name,
     // so that deleting and recreating a topic with the same name does not inherit stale mappings.
     optional bool EnableTopicSourceIdMappingById = 313 [default = false];
+    optional bool EnableSharedReadingStructuredJsonParsing = 314 [default = false];
+    optional bool EnableExactlyOnceTopicsWriting = 315 [default = false];
 }

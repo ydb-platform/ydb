@@ -1915,6 +1915,23 @@ class WebTest(unittest.TestCase):
         self.assertEqual(model["complete"]["status"], "completed")
         self.assertEqual(model["imported"]["source"], "imported")
 
+    def test_web_runs_are_sorted_newest_first(self):
+        self._manifest(self.root / "older")
+        self._manifest(self.root / "newer")
+        for run_id, started_at in (
+            ("older", "2025-01-01T00:00:00+00:00"),
+            ("newer", "2025-02-01T00:00:00+00:00"),
+        ):
+            path = self.root / run_id / "run.json"
+            manifest = json.loads(path.read_text(encoding="utf-8"))
+            manifest["started_at"] = started_at
+            path.write_text(json.dumps(manifest), encoding="utf-8")
+        service = RunService(self.root)
+        try:
+            self.assertEqual([record["id"] for record in service.filtered_model({})], ["newer", "older"])
+        finally:
+            service.shutdown()
+
     def test_chart_data_groups_summary_rows_by_affinity(self):
         self._manifest(self.root / "complete")
         summary = self.root / "complete" / "ping-bench" / "baseline" / "summary.csv"
@@ -2007,9 +2024,20 @@ class WebTest(unittest.TestCase):
                 self.assertIn(b"id=refresh-run", script)
                 self.assertIn(b"Queue position:", script)
                 self.assertIn(b"Currently running:", script)
+                self.assertIn(b"class=run-tabs", script)
+                self.assertIn(b"profileKeys.length===1?profileKeys[0]", script)
+                self.assertIn(b"class=\"card profile-overview\"", script)
+                self.assertIn(b"<strong>Execution details</strong>", script)
+                self.assertIn(b"<strong>Interrupted.</strong>", script)
+                self.assertIn(b"<summary>Downloads</summary>", script)
+                self.assertNotIn(b"['queued','running','recovery_required'].includes(run.state)", script)
                 self.assertIn(b"<option>queued</option>", script)
                 self.assertNotIn(b"setInterval(()=>renderRun", script)
                 self.assertIn(b"function cpuRanges", script)
+                self.assertIn(b"function humanTime", script)
+                self.assertIn(b"dateStyle:'medium',timeStyle:'short'", script)
+                self.assertIn(b"function elapsedLabel", script)
+                self.assertIn(b"record.status==='running'?Date.now()", script)
                 self.assertIn(b"ranges such as 1-16", script)
                 self.assertIn(b"function compactIntegerRanges", script)
                 self.assertIn(b"benchmarkChanged", script)

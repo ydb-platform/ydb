@@ -625,9 +625,12 @@ namespace {
 
         auto defaultExprPtr = defaultExpr.Ptr();
         if (!skipAnnotationValidation && !IsSameAnnotation(*defaultTypeUnwrapped, *type)) {
+            TIssueScopeGuard issueScope(ctx.IssueManager, [&]() {
+                return MakeIntrusive<TIssue>(ctx.GetPosition(pos), typeMismatchMessage());
+            });
+
             auto status = TryConvertTo(defaultExprPtr, *columnType, ctx, typesCtx);
             if (status == IGraphTransformer::TStatus::Error) {
-                ctx.AddError(TIssue(ctx.GetPosition(pos), typeMismatchMessage()));
                 return IGraphTransformer::TStatus::Error;
             }
 
@@ -932,7 +935,8 @@ namespace {
     }
 
     bool ParseConstraintNode(TExprContext& ctx, const TTypeAnnotationContext& typeCtx, TKikimrColumnMetadata& columnMeta, const TExprList& columnTuple,
-        TCoNameValueTuple constraint, bool& needEval, bool isAlter = false) {
+        TCoNameValueTuple constraint, bool& needEval, bool enableDefaultFromExpression, bool isAlter = false)
+    {
         auto nameNode = columnTuple.Item(0).Cast<TCoAtom>();
         auto typeNode = columnTuple.Item(1);
 
@@ -945,11 +949,13 @@ namespace {
             YQL_ENSURE(defaultType && constraint.Value().IsValid());
             TExprBase constrValue = constraint.Value().Cast();
 
-            // CREATE TABLE stores every captured DEFAULT source as an expression, even if it is a
-            // literal. ADD COLUMN keeps its legacy literal/constant-folding path
+            // CREATE TABLE stores captured DEFAULT sources as expressions when the feature is
+            // enabled. With the feature disabled, literal defaults keep the legacy proto path
             const TExprNode* defaultSource = FindDefaultSourceConstraint(columnTuple);
-            const bool preserveSourceExpression = defaultSource
-                && (!isAlter || !NDq::IsConstantExpr(constrValue.Ptr()));
+            const bool useDefaultFromExpression = defaultSource && !isAlter
+                && (enableDefaultFromExpression || !IsLiteralDefaultValue(constrValue));
+            const bool preserveSourceExpression = useDefaultFromExpression
+                || (defaultSource && isAlter && !NDq::IsConstantExpr(constrValue.Ptr()));
 
             if (auto status = ValidateDefaultColumn(type, defaultType, constraint.Value().Cast(), constraint.Pos(),
                 columnName, nullptr, ctx, typeCtx, [&](TExprNode::TPtr expr) {
@@ -972,7 +978,7 @@ namespace {
                 return false;
             }
 
-            if (defaultSource && !isAlter) {
+            if (useDefaultFromExpression) {
                 columnMeta.DefaultExpression = TDefaultExpressionColumnInfo{};
                 columnMeta.DefaultExpression->Context = TString(defaultSource->Child(0)->Content());
                 columnMeta.DefaultExpression->ExprText = TString(defaultSource->Child(1)->Content());
@@ -1707,7 +1713,8 @@ private:
                 const auto& columnConstraints = columnTuple.Item(2).Cast<TCoNameValueTuple>();
                 for(const auto& constraint: columnConstraints.Value().Cast<TCoNameValueTupleList>()) {
                     bool needEval = false;
-                    if (!ParseConstraintNode(ctx, Types, columnMeta, columnTuple, constraint, needEval)) {
+                    if (!ParseConstraintNode(ctx, Types, columnMeta, columnTuple, constraint, needEval,
+                            SessionCtx->Config().FeatureFlags.GetEnableDefaultFromExpression())) {
                         return TStatus::Error;
                     }
 
@@ -2454,7 +2461,8 @@ private:
                         const auto& columnConstraints = columnTuple.Item(2).Cast<TCoNameValueTuple>();
                         for(const auto& constraint: columnConstraints.Value().Cast<TCoNameValueTupleList>()) {
                             bool needEval = false;
-                            if (!ParseConstraintNode(ctx, Types, columnMeta, columnTuple, constraint, needEval, true)) {
+                            if (!ParseConstraintNode(ctx, Types, columnMeta, columnTuple, constraint, needEval,
+                                    SessionCtx->Config().FeatureFlags.GetEnableDefaultFromExpression(), true)) {
                                 return TStatus::Error;
                             }
 

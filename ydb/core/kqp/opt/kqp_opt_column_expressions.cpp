@@ -230,8 +230,9 @@ std::pair<TExprBase, TCoAtomList> BuildStoredGeneratedColumnsViaStreamLookup(con
     for (const auto& dep : missingDeps) {
         const auto* columnType = table.GetColumnType(dep);
         YQL_ENSURE(columnType, "Unknown generated dependency column " << dep);
+        const bool hasInsertValue = insertOnlyColumns.contains(dep);
 
-        TExprBase depValue = insertOnlyColumns.contains(dep)
+        TExprBase depValue = hasInsertValue
             ? TExprBase(Build<TCoMember>(ctx, pos)
                 .Struct(leftRow)
                 .Name().Build(dep)
@@ -252,19 +253,18 @@ std::pair<TExprBase, TCoAtomList> BuildStoredGeneratedColumnsViaStreamLookup(con
                 .Name().Build(dep)
                 .Done();
 
-            TExprBase presentValue = columnType->IsOptionalOrNull()
+            // If a missing table row has an insert-only value, both lookup branches have the
+            // column's schema type. Do not make a NOT NULL dependency optional just to merge them
+            TExprBase presentValue = columnType->IsOptionalOrNull() || hasInsertValue
                 ? TExprBase(fetchedMember)
                 : TExprBase(Build<TCoJust>(ctx, pos).Input(fetchedMember).Done());
 
             const TExprBase missingValue = [&]() -> TExprBase {
-                if (insertOnlyColumns.contains(dep)) {
-                    auto leftValue = Build<TCoMember>(ctx, pos)
+                if (hasInsertValue) {
+                    return Build<TCoMember>(ctx, pos)
                         .Struct(leftRow)
                         .Name().Build(dep)
                         .Done();
-                    return columnType->IsOptionalOrNull()
-                        ? TExprBase(leftValue)
-                        : TExprBase(Build<TCoJust>(ctx, pos).Input(leftValue).Done());
                 }
                 return Build<TCoNothing>(ctx, pos)
                     .OptionalType(NCommon::BuildTypeExpr(pos, *optionalType, ctx))

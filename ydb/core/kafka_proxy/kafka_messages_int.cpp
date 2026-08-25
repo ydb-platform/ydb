@@ -59,12 +59,14 @@ void TKafkaReadable::skip(size_t length) {
 }
 
 char TKafkaReadable::take(size_t shift) {
-    checkEof(shift + sizeof(char));
+    if (shift >= left()) {
+        ythrow yexception() << "unexpected end of stream";
+    }
     return *(Is.Data() + Position + shift);
 }
 
 size_t TKafkaReadable::left() const {
-    return Is.Size() - Position;
+    return Position < Is.Size() ? Is.Size() - Position : 0;
 }
 
 size_t TKafkaReadable::position() const {
@@ -72,10 +74,30 @@ size_t TKafkaReadable::position() const {
 }
 
 void TKafkaReadable::checkEof(size_t length) {
-    if (Position + length > Is.Size()) {
+    if (length > left()) {
         ythrow yexception() << "unexpected end of stream";
     }
 }
+
+namespace NPrivate {
+
+ui32 ReadTaggedFieldsCount(TKafkaReadable& readable) {
+    const ui32 count = readable.readUnsignedVarint<ui32>();
+    constexpr size_t kMinTaggedFieldBytes = 2;
+    if (count > 0 && static_cast<size_t>(count) > readable.left() / kMinTaggedFieldBytes) {
+        ythrow yexception() << "tagged fields count " << count << " exceeds remaining bytes";
+    }
+    return count;
+}
+
+void SkipTaggedField(TKafkaReadable& readable, ui32 size) {
+    if (static_cast<size_t>(size) > readable.left()) {
+        ythrow yexception() << "tagged field had invalid length " << size;
+    }
+    readable.skip(size);
+}
+
+} // namespace NPrivate
 
 char Hex(const unsigned char c) {
     return c < 10 ? '0' + c : 'A' + c - 10;

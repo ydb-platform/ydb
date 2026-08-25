@@ -24,14 +24,14 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
     struct TUpdateConfigRequest
     {
         NStorage::NPartitionDirect::TVChunkConfig Config;
-        NThreading::TPromise<void> Promise;
+        TPersistResultPromise Promise;
     };
 
     struct TUpdateDirtyMapStateRequest
     {
         ui32 VChunkIndex = 0;
         TDirtyMapStateProto Proto;
-        NThreading::TPromise<void> Promise;
+        TPersistResultPromise Promise;
     };
 
     explicit TPartitionDirectServiceMock(bool dropScheduledCallbacks = false)
@@ -64,21 +64,23 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
         executor->ExecuteSimple(std::move(callback));
     }
 
-    NThreading::TFuture<void> UpdateVChunkConfig(
+    TPersistResultFuture UpdateVChunkConfig(
         const NStorage::NPartitionDirect::TVChunkConfig& cfg) override
     {
-        UpdateConfigRequests.emplace_back(cfg, NThreading::NewPromise());
+        UpdateConfigRequests.emplace_back(
+            cfg,
+            NThreading::NewPromise<EPersistResult>());
         return UpdateConfigRequests.back().Promise.GetFuture();
     }
 
-    NThreading::TFuture<void> UpdateDirtyMapState(
+    TPersistResultFuture UpdateDirtyMapState(
         ui32 vChunkIndex,
         TDirtyMapStateProto state) override
     {
         UpdateDirtyMapStateRequests.emplace_back(TUpdateDirtyMapStateRequest{
             .VChunkIndex = vChunkIndex,
             .Proto = std::move(state),
-            .Promise = NThreading::NewPromise()});
+            .Promise = NThreading::NewPromise<EPersistResult>()});
         return UpdateDirtyMapStateRequests.back().Promise.GetFuture();
     }
 

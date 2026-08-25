@@ -334,7 +334,7 @@ void BindSocket(SOCKET serverSocket, const TNetworkAddress& address)
             NRpc::EErrorCode::TransportError,
             "Failed to bind a server socket to %v",
             address)
-            << TError::FromSystem();
+            .With(TError::FromSystem());
     }
 }
 

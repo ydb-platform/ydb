@@ -1265,6 +1265,11 @@ private:
             counters = counters->GetSubgroup("path", context->StreamingQueryPath);
         }
 
+        NFq::TCheckpointCoordinatorSettings setting;
+        if (const auto& checkpointInterval = context->CheckpointInterval) {
+            setting.SetCheckpointingPeriod(*checkpointInterval);
+        }
+
         const auto& checkpointId = context->CheckpointId;
         const auto generation = context->CurrentExecutionGeneration;
         Y_VALIDATE(generation, "Missing current execution generation");
@@ -1273,11 +1278,13 @@ private:
             ::NFq::TCoordinatorId(checkpointId, generation),
             NYql::NDq::MakeCheckpointStorageID(),
             SelfId(),
-            {},
+            setting,
             counters,
             graphParams,
             stateLoadMode,
-            streamingDisposition).Release());
+            streamingDisposition
+        ).Release());
+
         YDB_LOG_DEBUG("Created new CheckpointCoordinator",
             {"marker", "KQPDATA"},
             {"actorId", SelfId()},

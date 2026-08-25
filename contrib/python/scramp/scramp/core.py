@@ -8,8 +8,6 @@ from secrets import token_bytes, token_hex
 from stringprep import (
     in_table_a1,
     in_table_b1,
-    in_table_c12,
-    in_table_c21_c22,
     in_table_c3,
     in_table_c4,
     in_table_c5,
@@ -17,6 +15,8 @@ from stringprep import (
     in_table_c7,
     in_table_c8,
     in_table_c9,
+    in_table_c12,
+    in_table_c21_c22,
     in_table_d1,
     in_table_d2,
 )
@@ -24,9 +24,8 @@ from stringprep import (
 from asn1crypto.x509 import Certificate
 
 from scramp.utils import (
-    IterationCount,
-    SERVER_ERROR_CHANNEL_BINDINGS_DONT_MATCH,
     SERVER_ERROR_CHANNEL_BINDING_NOT_SUPPORTED,
+    SERVER_ERROR_CHANNEL_BINDINGS_DONT_MATCH,
     SERVER_ERROR_EXTENSIONS_NOT_SUPPORTED,
     SERVER_ERROR_INVALID_ENCODING,
     SERVER_ERROR_INVALID_PROOF,
@@ -35,6 +34,7 @@ from scramp.utils import (
     SERVER_ERROR_SERVER_DOES_SUPPORT_CHANNEL_BINDING,
     SERVER_ERROR_UNKNOWN_USER,
     SERVER_ERROR_UNSUPPORTED_CHANNEL_BINDING_TYPE,
+    IterationCount,
     ScramException,
     b64dec,
     b64enc,
@@ -43,7 +43,6 @@ from scramp.utils import (
     uenc,
     xor,
 )
-
 
 # https://tools.ietf.org/html/rfc5802
 # https://www.rfc-editor.org/rfc/rfc7677.txt
@@ -239,7 +238,7 @@ class ScramMechanism:
         if s_nonce is not None:
             s_nonce = Nonce(s_nonce)
         return ScramServer(
-            self, auth_fn, channel_binding=channel_binding, s_nonce=s_nonce
+            self, AuthFn(auth_fn), channel_binding=channel_binding, s_nonce=s_nonce
         )
 
     def parse_iteration_count(self, i):
@@ -689,6 +688,42 @@ def _username_unescape(username):
     return username.replace(ESCAPE_COMMA, ",").replace(ESCAPE_EQUALS, "=")
 
 
+class AuthFn:
+    def __init__(self, auth_fn):
+        if not callable(auth_fn):
+            raise ScramException(
+                "The 'auth_fn' must be callable", SERVER_ERROR_OTHER_ERROR
+            )
+        self.auth_fn = auth_fn
+
+    def __call__(self, username):
+        try:
+            salt, stored_key, server_key, i = self.auth_fn(str(username))  # pyright: ignore[reportGeneralTypeIssues]
+        except BaseException as e:
+            raise ScramException("Unknown user", SERVER_ERROR_UNKNOWN_USER) from e
+
+        if not isinstance(stored_key, bytes):
+            raise ScramException(
+                f"The 'stored_key' must be of type bytes, "
+                f"but found type {type(stored_key)}",
+                SERVER_ERROR_OTHER_ERROR,
+            )
+
+        if not isinstance(server_key, bytes):
+            raise ScramException(
+                f"The 'server_key' must be of type bytes, "
+                f"but found type {type(server_key)}",
+                SERVER_ERROR_OTHER_ERROR,
+            )
+
+        return (
+            Salt(salt),
+            stored_key,
+            server_key,
+            IterationCount(i, 1, MAX_ITERATION_COUNT),
+        )
+
+
 def _get_client_first(username, c_nonce, gs2_header):
     bare = ",".join((f"n={username.escape()}", f"r={c_nonce}"))
     return bare, str(gs2_header) + bare
@@ -748,17 +783,14 @@ def _set_client_first(client_first, s_nonce, channel_binding, use_binding, auth_
     nonce = c_nonce + s_nonce
     user = Username.from_escaped(msg["n"])
 
-    try:
-        salt, stored_key, server_key, i = auth_fn(str(user))
-    except BaseException as e:
-        raise ScramException("Unknown user", SERVER_ERROR_UNKNOWN_USER) from e
+    salt, stored_key, server_key, i = auth_fn(user)
 
     return (
         nonce,
         client_first_bare,
         upgrade_mechanism,
         gs2_header,
-        Salt(salt),
+        salt,
         stored_key,
         server_key,
         i,

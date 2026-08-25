@@ -85,7 +85,14 @@ extern "C" {  // portability definitions are in global scope, not a namespace
 #endif  // __restrict__
 #endif  // CROARING_REGULAR_VISUAL_STUDIO
 
-#if defined(__x86_64__) || defined(_M_X64)
+#if defined(__riscv) || defined(_M_RISCV32) || defined(_M_RISCV64)
+#define CROARING_IS_RISCV 1
+
+#if (defined(__riscv_xlen) && (__riscv_xlen == 64)) || defined(_M_RISCV64)
+#define CROARING_IS_RISCV64 1
+#endif
+
+#elif defined(__x86_64__) || defined(_M_X64)
 // we have an x64 processor
 #define CROARING_IS_X64 1
 
@@ -628,7 +635,7 @@ static inline void croaring_refcount_inc(croaring_refcount_t *val) {
 static inline bool croaring_refcount_dec(croaring_refcount_t *val) {
     assert(*val > 0);
     *val -= 1;
-    return val == 0;
+    return *val == 0;
 }
 
 static inline uint32_t croaring_refcount_get(const croaring_refcount_t *val) {

@@ -471,7 +471,7 @@ void TConnection::OnProxyListUpdate()
         UpdateProxyListBackoffStrategy_.Next();
         int attempt = UpdateProxyListBackoffStrategy_.GetInvocationIndex() % Config_->MaxProxyListUpdateAttempts;
         if (attempt == 0) {
-            ChannelPool_->SetPeerDiscoveryError(TError(ex) << *MakeErrorAttributes(Config_));
+            ChannelPool_->SetPeerDiscoveryError(TError(ex).With(*MakeErrorAttributes(Config_)));
         }
 
         auto backoff = UpdateProxyListBackoffStrategy_.GetBackoff();

@@ -1,1 +1,1 @@
-from ydb.tests.olap.load.lib.workload_manager import * # noqa
+from ydb.tests.workload_manager.workload_manager import * # noqa

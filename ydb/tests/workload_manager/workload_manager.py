@@ -7,9 +7,9 @@ import traceback
 import ydb
 import ydb.tests.olap.lib.remote_execution as re
 
-from . import tpch
-from .conftest import LoadSuiteBase
-from .clickbench import ClickbenchParallelBase
+from ydb.tests.olap.load.lib import tpch
+from ydb.tests.olap.load.lib.conftest import LoadSuiteBase
+from ydb.tests.olap.load.lib.clickbench import ClickbenchParallelBase
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.ydb_cli import YdbCliHelper, WorkloadType
 from ydb.tests.olap.lib.utils import get_external_param

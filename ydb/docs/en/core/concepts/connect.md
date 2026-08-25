@@ -43,9 +43,8 @@ A connection string is a URL-formatted string that specifies the endpoint and pa
 
 Examples:
 
-- `grpc://localhost:7135?database=/local`
-
 ```text
+grpc://localhost:7135?database=/local
 grpcs://ydb.serverless.yandexcloud.net:2135?database=/ru-central1/b1g8skpblkos03malf3s/etn01q5ko6sh271beftr
 ```
 

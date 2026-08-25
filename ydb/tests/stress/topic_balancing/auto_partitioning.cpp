@@ -50,6 +50,7 @@ struct TOptions {
     bool CommitData = false;
     bool NoAutoPartitioningSupport = false;
     bool AutoPartitioning = false;
+    bool PreferredSessions = false;
     TDuration MaxLag = TDuration::Seconds(10);
     TDuration NewPartitionGrace = TDuration::Seconds(15);
 
@@ -113,6 +114,10 @@ struct TOptions {
                 "Disable SDK AutoPartitioningSupport (old SDK: Finish is not enough, heuristic delay)")
             .NoArgument()
             .SetFlag(&NoAutoPartitioningSupport);
+        opts.AddLongOption("preferred-sessions",
+                "Every second read session lists 1-5 random topic partitions")
+            .NoArgument()
+            .SetFlag(&PreferredSessions);
         opts.AddLongOption("rewind-rps",
                 "After warmup, CommitOffset this many times per second to a random already-processed offset")
             .RequiredArgument("COUNT")
@@ -235,6 +240,35 @@ struct TAssignmentTracker {
         with_lock (Mutex) {
             return {Started.begin(), Started.end()};
         }
+    }
+
+    std::vector<ui32> AllPartitionIds() {
+        with_lock (Mutex) {
+            std::vector<ui32> ids;
+            ids.reserve(Parts.size());
+            for (const auto& [id, _] : Parts) {
+                ids.push_back(id);
+            }
+            return ids;
+        }
+    }
+
+    std::vector<ui32> PickRandomPartitionIds(ui32 minCount, ui32 maxCount) {
+        auto ids = AllPartitionIds();
+        if (ids.empty() || maxCount == 0) {
+            return {};
+        }
+        const ui32 hi = Min(maxCount, static_cast<ui32>(ids.size()));
+        const ui32 lo = Min(minCount, hi);
+        if (lo == 0) {
+            return {};
+        }
+        const ui32 count = lo + RandomNumber<ui32>(hi - lo + 1);
+        for (ui32 i = 0; i < count; ++i) {
+            std::swap(ids[i], ids[i + RandomNumber<ui32>(ids.size() - i)]);
+        }
+        ids.resize(count);
+        return ids;
     }
 
     void NoteProcessed(ui32 partitionId, ui64 nextOffset) {
@@ -455,6 +489,7 @@ struct TTrackedSession {
     std::shared_ptr<IReadSession> Session;
     std::shared_ptr<TSessionState> State;
     std::shared_ptr<TAssignmentTracker> Tracker;
+    bool Preferred = false;
 
     void ReleaseAll() {
         if (!State) {
@@ -648,7 +683,9 @@ int RunAutoPartitioningWorkload(int argc, const char* argv[]) {
     const std::string topicPath = MakeTopicPath(opts.Database, opts.Path);
     const bool autoPartitioningSupport = !opts.NoAutoPartitioningSupport;
     Cerr << "mode=auto-partitioning AutoPartitioningSupport="
-        << (autoPartitioningSupport ? "true" : "false") << Endl << Flush;
+        << (autoPartitioningSupport ? "true" : "false")
+        << " PreferredSessions=" << (opts.PreferredSessions ? "true" : "false")
+        << Endl << Flush;
 
     auto driverConfig = TDriverConfig()
         .SetNetworkThreadsNum(16)
@@ -756,6 +793,8 @@ int RunAutoPartitioningWorkload(int argc, const char* argv[]) {
     std::atomic<ui32> targetSessions{opts.MaxSessions};
     std::atomic<ui64> opened{0};
     std::atomic<ui64> closed{0};
+    std::atomic<ui64> preferredOpened{0};
+    std::atomic<ui64> sessionSeq{0};
     std::atomic<ui64> readMessages{0};
     std::atomic<bool> allowSessionChurn{false};
     std::atomic<bool> allowRewind{false};
@@ -782,13 +821,25 @@ int RunAutoPartitioningWorkload(int argc, const char* argv[]) {
             }
         };
 
+        TTopicReadSettings topicSettings(topicPath);
+        const bool preferPartitions = opts.PreferredSessions && (sessionSeq.fetch_add(1) % 2 == 1);
+        if (preferPartitions) {
+            const auto preferredIds = tracker->PickRandomPartitionIds(1, 5);
+            if (!preferredIds.empty()) {
+                tracked.Preferred = true;
+                for (ui32 id : preferredIds) {
+                    topicSettings.AppendPartitionIds(id);
+                }
+            }
+        }
+
         TReadSessionSettings settings;
         settings
             .ConsumerName(opts.Consumer)
             .MaxMemoryUsageBytes(1_MB)
             .ConnectTimeout(TDuration::Seconds(30))
             .AutoPartitioningSupport(autoPartitioningSupport)
-            .AppendTopics(topicPath);
+            .AppendTopics(std::move(topicSettings));
 
         settings.EventHandlers_.HandlersExecutor(handlersExecutor);
         settings.EventHandlers_.StartPartitionSessionHandler(
@@ -882,6 +933,7 @@ int RunAutoPartitioningWorkload(int argc, const char* argv[]) {
 
                 if (needCreate) {
                     auto session = createSession();
+                    const bool preferred = session.Preferred;
                     bool keep = false;
                     {
                         with_lock (sessions.Mutex) {
@@ -893,6 +945,9 @@ int RunAutoPartitioningWorkload(int argc, const char* argv[]) {
                     }
                     if (keep) {
                         opened.fetch_add(1);
+                        if (preferred) {
+                            preferredOpened.fetch_add(1);
+                        }
                     } else {
                         session.Close();
                         closed.fetch_add(1);
@@ -1029,6 +1084,7 @@ int RunAutoPartitioningWorkload(int argc, const char* argv[]) {
                 << " commitPending=" << commitQueue.Size()
                 << " committed=" << commitQueue.Committed.load()
                 << " opened=" << opened.load()
+                << " preferred=" << preferredOpened.load()
                 << " closed=" << closed.load()
                 << " rewindOk=" << rewindOk.load()
                 << " rewindFail=" << rewindFail.load()
@@ -1059,6 +1115,7 @@ int RunAutoPartitioningWorkload(int argc, const char* argv[]) {
 
     Cerr << "Stress finished partitions=" << partitionCount
         << " sessionsOpened=" << opened.load()
+        << " preferredOpened=" << preferredOpened.load()
         << " sessionsClosed=" << closed.load()
         << " written=" << written.load()
         << " read=" << readMessages.load()

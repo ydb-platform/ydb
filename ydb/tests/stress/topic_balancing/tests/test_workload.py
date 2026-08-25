@@ -92,3 +92,31 @@ class TestTopicBalancingAutoPartitioningWorkload(StressFixture):
             "--min-sessions", "32",
             "--max-lag-ms", "15000",
         ])
+
+
+class TestTopicBalancingAutoPartitioningPreferredWorkload(TestTopicBalancingAutoPartitioningWorkload):
+    """Same auto-partitioning churn, but every second read session lists 1-5 random partitions."""
+
+    def _run(self, extra_args):
+        super()._run(["--preferred-sessions", *extra_args])
+
+    @pytest.mark.parametrize("sdk", ["scale_aware_sdk", "old_sdk"])
+    def test_read(self, sdk):
+        self._run([
+            "--path", f"topic_balancing_preferred_read_{sdk}",
+            *self._sdk_args(sdk),
+            "--min-sessions", "32",
+            "--max-lag-ms", "10000",
+        ])
+
+    @pytest.mark.parametrize("sdk", ["scale_aware_sdk", "old_sdk"])
+    def test_commit_reread(self, sdk):
+        self._run([
+            "--path", f"topic_balancing_preferred_commit_reread_{sdk}",
+            *self._sdk_args(sdk),
+            "--commit-data",
+            "--rewind-rps", "2",
+            "--rewind-target", "assigned",
+            "--min-sessions", "32",
+            "--max-lag-ms", "15000",
+        ])

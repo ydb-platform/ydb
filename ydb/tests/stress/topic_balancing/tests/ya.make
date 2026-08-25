@@ -10,7 +10,7 @@ TEST_SRCS(
 REQUIREMENTS(ram:32 cpu:8)
 SIZE(LARGE)
 TAG(ya:fat)
-TIMEOUT(1200)
+TIMEOUT(2400)
 
 DEPENDS(
     ydb/tests/stress/topic_balancing

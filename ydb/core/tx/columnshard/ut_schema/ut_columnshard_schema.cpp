@@ -448,7 +448,7 @@ public:
     }
 };
 
-std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TString>& blobs, const bool standalone,
+std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const bool standalone, const std::vector<TString>& blobs,
     const std::vector<TTestSchema::TTableSpecials>& specsExt, std::optional<ui32> eventLoss = {}, const bool buildTTL = true) {
     auto specs = specsExt;
     if (buildTTL) {
@@ -727,7 +727,7 @@ TTestSchema::TTableSpecials InitialSpec(const EInitialEviction init, TDuration i
 }
 
 std::vector<std::pair<ui32, ui64>> TestTiersAndTtl(
-    const bool standalone, const TTestSchema::TTableSpecials& spec, bool reboots, EInitialEviction init, bool testTtl) {
+    const TTestSchema::TTableSpecials& spec, bool reboots, EInitialEviction init, bool testTtl, bool standalone) {
     const std::vector<ui64> ts = { 1600000000, 1620000000 };
 
     ui32 overlapSize = 0;   // TODO: 40 * 1000 (it should lead to fewer row count in result)
@@ -754,7 +754,7 @@ std::vector<std::pair<ui32, ui64>> TestTiersAndTtl(
         changes.AddTierAlters(spec, { allowBoth, allowOne, allowNone }, alters);
     }
 
-    auto rowsBytes = TestTiers(reboots, blobs, standalone, alters);
+    auto rowsBytes = TestTiers(reboots, standalone, blobs, alters);
     for (auto&& i : rowsBytes) {
         Cerr << i.first << "/" << i.second << Endl;
     }
@@ -768,12 +768,12 @@ std::vector<std::pair<ui32, ui64>> TestTiersAndTtl(
 }
 
 std::vector<std::pair<ui32, ui64>> TestOneTierExport(const std::optional<TString>& columnToUpdateWithTs,
-    const std::vector<TTestSchema::TTableSpecials>& alters, const std::vector<ui64>& ts, bool reboots, std::optional<ui32> loss,
+    const std::vector<TTestSchema::TTableSpecials>& alters, const std::vector<ui64>& ts, bool reboots, bool standalone, std::optional<ui32> loss,
     const bool buildTTL = true) {
     ui32 overlapSize = 0;
     std::vector<TString> blobs = MakeData(ts, PORTION_ROWS, overlapSize, columnToUpdateWithTs);
 
-    auto rowsBytes = TestTiers(reboots, blobs, true /* standalone */, alters, loss, buildTTL);
+    auto rowsBytes = TestTiers(reboots, standalone, blobs, alters, loss, buildTTL);
     for (auto&& i : rowsBytes) {
         Cerr << i.first << "/" << i.second << Endl;
     }
@@ -790,7 +790,7 @@ void TestTwoHotTiers(
     spec.Tiers.emplace_back(TTestSchema::TStorageTier("tier1").SetTtlColumn("timestamp"));
     spec.Tiers[(revCompaction ? 0 : 1)].SetCodec("zstd");
 
-    auto rowsBytes = TestTiersAndTtl(standalone, spec, reboot, initial, changeTtl);
+    auto rowsBytes = TestTiersAndTtl(spec, reboot, initial, changeTtl, standalone);
     if (changeTtl) {
         UNIT_ASSERT_VALUES_EQUAL(rowsBytes.size(), 4);
         UNIT_ASSERT_VALUES_EQUAL(rowsBytes[0].first, 3 * PORTION_ROWS);
@@ -824,7 +824,7 @@ void TestHotAndColdTiers(bool reboot, bool standalone, const EInitialEviction in
     spec.Tiers.emplace_back(TTestSchema::TStorageTier("tier0").SetTtlColumn("timestamp"));
     spec.Tiers.emplace_back(TTestSchema::TStorageTier("tier1").SetTtlColumn("timestamp"));
     spec.Tiers.back().S3 = TTestSchema::TStorageTier::FakeS3();
-    TestTiersAndTtl(standalone, spec, reboot, initial, false /* testTtl */);
+    TestTiersAndTtl(spec, reboot, initial, false /* testTtl */, standalone);
 }
 
 struct TExportTestOpts {
@@ -833,7 +833,7 @@ struct TExportTestOpts {
     std::optional<ui32> NoTier;
 };
 
-void TestExport(bool reboot, TExportTestOpts&& opts = TExportTestOpts{}) {
+void TestExport(bool reboot, bool standalone, TExportTestOpts&& opts = TExportTestOpts{}) {
     auto spec = TTestSchema::TTableSpecials{}.WithForcedCompaction(true);
     spec.SetTtlColumn("timestamp");
     spec.Tiers.emplace_back(TTestSchema::TStorageTier("cold").SetTtlColumn("timestamp"));
@@ -857,8 +857,8 @@ void TestExport(bool reboot, TExportTestOpts&& opts = TExportTestOpts{}) {
         alters[alterNo].Tiers.clear();
     }
 
-    auto rowsBytes =
-        TestOneTierExport(opts.Misconfig == 2 ? std::optional<TString>{} : spec.GetTtlColumn(), alters, ts, reboot, opts.Loss, !opts.Misconfig);
+    auto rowsBytes = TestOneTierExport(
+        opts.Misconfig == 2 ? std::optional<TString>{} : spec.GetTtlColumn(), alters, ts, reboot, standalone, opts.Loss, !opts.Misconfig);
     if (!opts.Misconfig) {
         changes.Assert(spec, rowsBytes, 1);
     }
@@ -1194,7 +1194,7 @@ void TestEmptyDroppedTableCleanupWaitsForReadWindow(const bool enableSnapshotsLo
     UNIT_ASSERT(!controller->GetTheOnlyShard()->GetTablesManager().HasTable(pathId, /*withDeleted=*/true));
 }
 
-void TestCompaction(std::optional<ui32> numWrites = {}) {
+void TestCompaction(bool standalone, std::optional<ui32> numWrites = {}) {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
     auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
@@ -1211,7 +1211,7 @@ void TestCompaction(std::optional<ui32> numWrites = {}) {
     ui64 tableId = 1;
     ui64 txId = 100;
 
-    TestTableDescription tableDesc{ .Standalone = false };
+    TestTableDescription tableDesc{ .Standalone = standalone };
     auto planStep = SetupSchema(runtime, sender, tableId, tableDesc, "none", ++txId);
     // Set tiering
 
@@ -1253,7 +1253,7 @@ void TestCompaction(std::optional<ui32> numWrites = {}) {
     }
 }
 
-void TestProposeResultNotViaPipe() {
+void TestProposeResultNotViaPipe(const bool standalone) {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
     auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
@@ -1290,7 +1290,7 @@ void TestProposeResultNotViaPipe() {
         }
         return false;
     });
-    auto txBody = TTestSchema::CreateInitShardTxBody(tableId, true, testYdbSchema, testYdbPk, {}, "/Root/olapStore");
+    auto txBody = TTestSchema::CreateInitShardTxBody(tableId, standalone, testYdbSchema, testYdbPk, {}, "/Root/olap");
     auto event =
         std::make_unique<TEvColumnShard::TEvProposeTransaction>(NKikimrTxColumnShard::TX_KIND_SCHEMA, schemeShardId, sender, txId, txBody, 0, 0);
     ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, event.release());
@@ -1398,14 +1398,14 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
         CreateTable(Reboots, GenerateInternalPathId, Standalone);
     }
 
-    Y_UNIT_TEST(ProposeResultNotViaPipe) {
-        TestProposeResultNotViaPipe();
+    Y_UNIT_TEST_DUO(ProposeResultNotViaPipe, Standalone) {
+        TestProposeResultNotViaPipe(Standalone);
     }
 
-    Y_UNIT_TEST_OCTO(TTL, Reboot, Internal, Standalone) {
+    Y_UNIT_TEST_SEDECIM(TTL, Reboot, Internal, FirstPkColumn, Standalone) {
         for (auto typeId : { NTypeIds::Timestamp, NTypeIds::Datetime, NTypeIds::Date, NTypeIds::Uint32, NTypeIds::Uint64 }) {
             Cerr << "Running TestTtl ttlColumnType=" << NKikimr::NScheme::TypeName(typeId) << Endl;
-            TestTtl(Reboot, Internal, /*useFirstPkColumnForTtl=*/false, Standalone, typeId);
+            TestTtl(Reboot, Internal, FirstPkColumn, Standalone, typeId);
         }
     }
 
@@ -1461,45 +1461,26 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
         TestHotAndColdTiers(true, Standalone, EInitialEviction::Ttl);
     }
 
-    Y_UNIT_TEST(OneColdTier) {
-        TestExport(false);
+    Y_UNIT_TEST_QUATRO(OneColdTier, Reboot, Standalone) {
+        TestExport(Reboot, Standalone);
     }
 
-    Y_UNIT_TEST(RebootOneColdTier) {
-        TestExport(true);
+    Y_UNIT_TEST_QUATRO(ExportAfterFail, Reboot, Standalone) {
+        TestExport(Reboot, Standalone, TExportTestOpts{ .Misconfig = 1 });
     }
 
-    Y_UNIT_TEST(ExportAfterFail) {
-        TestExport(false, TExportTestOpts{ .Misconfig = 1 });
+    Y_UNIT_TEST_QUATRO(ForgetAfterFail, Reboot, Standalone) {
+        TestExport(Reboot, Standalone, TExportTestOpts{ .Misconfig = 2 });
     }
 
-    Y_UNIT_TEST(RebootExportAfterFail) {
-        TestExport(true, TExportTestOpts{ .Misconfig = 1 });
+    Y_UNIT_TEST_QUATRO(ExportWithLostAnswer, Reboot, Standalone) {
+        TestExport(Reboot, Standalone, TExportTestOpts{ .Loss = 1 });
     }
 
-    Y_UNIT_TEST(ForgetAfterFail) {
-        TestExport(false, TExportTestOpts{ .Misconfig = 2 });
+    Y_UNIT_TEST_QUATRO(ForgetWithLostAnswer, Reboot, Standalone) {
+        TestExport(Reboot, Standalone, TExportTestOpts{ .Loss = 2 });
     }
 
-    Y_UNIT_TEST(RebootForgetAfterFail) {
-        TestExport(true, TExportTestOpts{ .Misconfig = 2 });
-    }
-
-    Y_UNIT_TEST(ExportWithLostAnswer) {
-        TestExport(false, TExportTestOpts{ .Loss = 1 });
-    }
-
-    Y_UNIT_TEST(RebootExportWithLostAnswer) {
-        TestExport(true, TExportTestOpts{ .Loss = 1 });
-    }
-
-    Y_UNIT_TEST(ForgetWithLostAnswer) {
-        TestExport(false, TExportTestOpts{ .Loss = 2 });
-    }
-
-    Y_UNIT_TEST(RebootForgetWithLostAnswer) {
-        TestExport(true, TExportTestOpts{ .Loss = 2 });
-    }
 #if 0
     Y_UNIT_TEST(RebootReadNoTier) {
         TestExport(true, TExportTestOpts{.NoTier = 3});
@@ -1508,8 +1489,8 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
     // TODO: LastTierBorderIsTtl = false
     // TODO: AlterTierBorderAfterExport
 
-    Y_UNIT_TEST(ColdCompactionSmoke) {
-        TestCompaction();
+    Y_UNIT_TEST_DUO(ColdCompactionSmoke, Standalone) {
+        TestCompaction(Standalone);
     }
 
     Y_UNIT_TEST_QUATRO(Drop, Reboots, GenerateInternalPathId) {

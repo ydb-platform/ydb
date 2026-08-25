@@ -6,6 +6,7 @@
 #include <ydb/core/tx/columnshard/operations/write_data.h>
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 #include <ydb/core/tx/columnshard/test_helper/shard_writer.h>
+#include <ydb/core/tx/columnshard/test_helper/test_combinator.h>
 
 #include <ydb/library/formats/arrow/simple_builder/array.h>
 #include <ydb/library/formats/arrow/simple_builder/batch.h>
@@ -71,55 +72,34 @@ public:
     }
 };
 
+template <bool Standalone>
 class TSchemaVersionsCleaner: public NYDBTest::ILocalDBModifier {
 public:
     virtual void Apply(NTabletFlatExecutor::TTransactionContext& txc) const override {
         using namespace NColumnShard;
         NIceDb::TNiceDb db(txc.DB);
 
-        // Determine if the table uses a schema preset (InStore/column store) or is standalone.
-        // For standalone tables, SchemaPresetId in TableVersionInfo is 0 (no preset).
-        // For InStore tables, it references a registered schema preset.
-        bool hasSchemaPreset = false;
-        {
-            auto versionRowset = db.Table<Schema::TableVersionInfo>().Select();
-            if (versionRowset.IsReady() && !versionRowset.EndOfSet()) {
-                NKikimrTxColumnShard::TTableVersionInfo existingVersion;
-                if (existingVersion.ParseFromString(versionRowset.GetValue<Schema::TableVersionInfo::InfoProto>())) {
-                    hasSchemaPreset = existingVersion.HasSchemaPresetId() && existingVersion.GetSchemaPresetId() > 0;
-                }
-            }
-        }
+        constexpr ui32 presetId = Standalone ? 0 : 1;
 
-        // The SchemaVersionsNormalizer only handles schema preset versions.
-        // For standalone tables (no preset), injecting fake TableVersionInfo entries would cause
-        // the normalizer to crash because it expects every TableVersionInfo to have a corresponding
-        // entry in SchemaPresetVersionInfo. Therefore, we only inject fake entries for InStore tables.
-        if (hasSchemaPreset) {
-            // Add invalid widow schema preset version, if SchemaVersionCleaner will not erase it, then test will fail.
+        // Add invalid widow schema preset version, if SchemaVersionCleaner will not erase it, then test will fail.
+        {
             NKikimrTxColumnShard::TSchemaPresetVersionInfo info;
-            info.SetId(1);
+            info.SetId(presetId);
             info.SetSinceStep(5);
             info.SetSinceTxId(1);
             info.MutableSchema()->SetVersion(0);
-            db.Table<Schema::SchemaPresetVersionInfo>().Key(1, 5, 1).Update(
+            db.Table<Schema::SchemaPresetVersionInfo>().Key(presetId, 5, 1).Update(
                 NIceDb::TUpdate<Schema::SchemaPresetVersionInfo::InfoProto>(info.SerializeAsString()));
+        }
 
-            // Resolve actual internal pathId from TableInfo.
-            auto rowset = db.Table<Schema::TableInfo>().Select();
-            UNIT_ASSERT(rowset.IsReady());
-            UNIT_ASSERT(!rowset.EndOfSet());
-            const auto pathId = TInternalPathId::FromRawValue(rowset.GetValue<Schema::TableInfo::PathId>());
-            Cerr << "QQQ: " << "pathId: " << pathId << Endl;
-
-            // Add invalid widow table version, if SchemaVersionCleaner will not erase it, then test will fail.
+        {
+        // Add invalid widow table version, if SchemaVersionCleaner will not erase it, then test will fail.
             NKikimrTxColumnShard::TTableVersionInfo versionInfo;
-            versionInfo.SetSchemaPresetId(1);
+            versionInfo.SetSchemaPresetId(presetId);
             versionInfo.SetSinceStep(5);
             versionInfo.SetSinceTxId(1);
-            db.Table<Schema::TableVersionInfo>()
-                .Key(pathId.GetRawValue(), 5, 1)
-                .Update(NIceDb::TUpdate<Schema::TableVersionInfo::InfoProto>(versionInfo.SerializeAsString()));
+            db.Table<Schema::TableVersionInfo>().Key(1, 5, 1).Update(
+                NIceDb::TUpdate<Schema::TableVersionInfo::InfoProto>(versionInfo.SerializeAsString()));
         }
     }
 };
@@ -357,7 +337,7 @@ constexpr ui64 SchemeShardPathId = 1;
 Y_UNIT_TEST_SUITE(Normalizers) {
     template <class TInitDBModifier, class TVerifyDBModifier = TNoopLocalDBModifier,
         class TController = TInitVerifyDBController<TInitDBModifier, TVerifyDBModifier>>
-    void TestNormalizerImpl(const TNormalizerChecker& checker = TNormalizerChecker()) {
+    void TestNormalizerImpl(const TNormalizerChecker& checker, bool standalone = true) {
         using namespace NArrow;
         auto csControllerGuard = NYDBTest::TControllers::RegisterCSControllerGuard<TController>();
         checker.OnControllerRegistered(*csControllerGuard.operator->());
@@ -373,7 +353,7 @@ Y_UNIT_TEST_SUITE(Normalizers) {
         const std::vector<NArrow::NTest::TTestColumn> schema = { NArrow::NTest::TTestColumn("key1", TTypeInfo(NTypeIds::Uint64)),
             NArrow::NTest::TTestColumn("key2", TTypeInfo(NTypeIds::Uint64)), NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8)) };
         const std::vector<ui32> columnsIds = { 1, 2, 3 };
-        auto planStep = PrepareTablet(runtime, tableId, schema, 2);
+        auto planStep = PrepareTablet(runtime, tableId, schema, 2, standalone);
         const ui64 baseTxId = 111;
 
         NConstruction::IArrayBuilder::TPtr key1Column =
@@ -469,7 +449,7 @@ Y_UNIT_TEST_SUITE(Normalizers) {
         TestNormalizerImpl<TInsertedPortionsCleaner>(TLocalNormalizerChecker());
     }
 
-    Y_UNIT_TEST(SchemaVersionsNormalizer) {
+    Y_UNIT_TEST_DUO(SchemaVersionsNormalizer, Standalone) {
         class TLocalNormalizerChecker: public TNormalizerChecker {
         public:
             virtual void CorrectFeatureFlagsOnStart(TFeatureFlags& featuresFlags) const override {
@@ -483,7 +463,7 @@ Y_UNIT_TEST_SUITE(Normalizers) {
             }
         };
 
-        TestNormalizerImpl<TSchemaVersionsCleaner>(TLocalNormalizerChecker());
+        TestNormalizerImpl<TSchemaVersionsCleaner<Standalone>>(TLocalNormalizerChecker(), Standalone);
     }
 
     Y_UNIT_TEST(CleanEmptyPortionsNormalizer) {

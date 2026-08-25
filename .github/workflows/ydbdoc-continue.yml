@@ -43,7 +43,7 @@ jobs:
           echo "YDBDOC_YDB_SA_KEY_FILE=$RUNNER_TEMP/ydb-sa.json" >> "$GITHUB_ENV"
 
       - name: Continue translation with operator feedback
-        uses: ydb-platform/ydbdoc-review@v0.1.0
+        uses: ydb-platform/ydbdoc-review@v0.2.2
         with:
           mode: continue
           repo: ${{ github.repository }}

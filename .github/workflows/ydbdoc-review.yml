@@ -35,7 +35,7 @@ jobs:
           git fetch origin ${{ github.event.pull_request.base.ref }}:refs/remotes/origin/${{ github.event.pull_request.base.ref }}
 
       - name: Documentation translation review
-        uses: ydb-platform/ydbdoc-review@v0.1.0
+        uses: ydb-platform/ydbdoc-review@v0.2.2
         with:
           repo: ${{ github.repository }}
           pr: ${{ github.event.pull_request.number }}

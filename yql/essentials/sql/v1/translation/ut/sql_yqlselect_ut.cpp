@@ -17,7 +17,7 @@ Y_UNIT_TEST(LangVer) {
     UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_STRING_CONTAINS(
         Err2Str(res),
-        "YqlSelect is not available before language version 2026.02");
+        "YqlSelect is not available before language version 2026.03");
 }
 
 Y_UNIT_TEST(AutoTopLevel) {

@@ -3090,7 +3090,7 @@ Y_UNIT_TEST(ForStatementLangVerFailure) {
     UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_STRING_CONTAINS(
         Err2Str(res),
-        "FOR without EVALUATE is not available before language version 2026.02");
+        "FOR without EVALUATE is not available before language version 2026.03");
 }
 
 Y_UNIT_TEST(ForStatementLangVerSuccess) {
@@ -3114,7 +3114,7 @@ Y_UNIT_TEST(ParallelForStatementLangVer) {
     UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_STRING_CONTAINS(
         Err2Str(res),
-        "PARALLEL FOR is not available before language version 2026.02");
+        "PARALLEL FOR is not available before language version 2026.03");
 }
 
 Y_UNIT_TEST(FunctionLangVerUnavailable) {

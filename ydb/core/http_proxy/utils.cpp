@@ -2,6 +2,9 @@
 
 #include "http_req.h"
 
+#include <library/cpp/string_utils/url/url.h>
+
+#include <util/generic/maybe.h>
 #include <util/string/ascii.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
@@ -224,56 +227,37 @@ TString JoinForwardedHeaderValues(const NHttp::THeaders& headers) {
     return out;
 }
 
-bool TryParseTcpPort(TStringBuf value, ui16& port) {
+TMaybe<ui16> TryParseTcpPort(TStringBuf value) {
     ui16 parsed = 0;
     if (!TryFromString(value, parsed) || parsed == 0) {
-        return false;
+        return Nothing();
     }
-    port = parsed;
-    return true;
+    return parsed;
 }
 
-void SplitHostAndPort(TStringBuf host, TStringBuf& hostname, bool& hasPort, ui16& port) {
-    hostname = host;
-    hasPort = false;
-    port = 0;
-    if (host.empty()) {
-        return;
+std::pair<TStringBuf, TMaybe<ui16>> SplitHostAndPort(TStringBuf host) {
+    TStringBuf scheme;
+    TStringBuf hostname;
+    ui16 port = 0;
+    if (TryGetSchemeHostAndPort(host, scheme, hostname, port)) {
+        return {hostname, port != 0 ? TMaybe<ui16>(port) : Nothing()};
     }
-    if (host[0] == '[') {
-        const size_t close = host.find(']');
-        if (close == TStringBuf::npos) {
-            return;
-        }
-        hostname = host.SubStr(0, close + 1);
-        const TStringBuf rest = host.SubStr(close + 1);
-        if (!rest.empty() && rest[0] == ':') {
-            ui16 parsed = 0;
-            if (TryParseTcpPort(rest.SubStr(1), parsed)) {
-                hasPort = true;
-                port = parsed;
-            }
-        }
-        return;
+
+    TStringBuf hostAndPort = GetHostAndPort(host);
+    TStringBuf hostOnly;
+    TStringBuf portStr;
+    if (hostAndPort && hostAndPort.back() != ']' && hostAndPort.TryRSplit(':', hostOnly, portStr)) {
+        return {hostOnly, Nothing()};
     }
-    const size_t colon = host.find(':');
-    if (colon == TStringBuf::npos || host.find(':', colon + 1) != TStringBuf::npos) {
-        return;
-    }
-    hostname = host.SubStr(0, colon);
-    ui16 parsed = 0;
-    if (TryParseTcpPort(host.SubStr(colon + 1), parsed)) {
-        hasPort = true;
-        port = parsed;
-    }
+    return {hostAndPort ? hostAndPort : host, Nothing()};
 }
 
-TString FormatSqsEndpoint(TStringBuf scheme, TStringBuf hostname, bool hasPort, ui16 port) {
+TString FormatSqsEndpoint(TStringBuf scheme, TStringBuf hostname, TMaybe<ui16> port) {
     const ui16 defaultPort = scheme == "https" ? 443 : 80;
     TStringBuilder result;
     result << scheme << "://" << hostname;
-    if (hasPort && port != defaultPort) {
-        result << ':' << port;
+    if (port && *port != defaultPort) {
+        result << ':' << *port;
     }
     return result;
 }
@@ -297,10 +281,7 @@ TString MakeSqsRequestEndpoint(TStringBuf host, TStringBuf headersBlob, bool tls
         return {};
     }
 
-    TStringBuf hostname;
-    bool hostHasPort = false;
-    ui16 hostPort = 0;
-    SplitHostAndPort(host, hostname, hostHasPort, hostPort);
+    const auto [hostname, hostPort] = SplitHostAndPort(host);
     if (!IsValidRequestHost(hostname)) {
         return {};
     }
@@ -314,17 +295,12 @@ TString MakeSqsRequestEndpoint(TStringBuf host, TStringBuf headersBlob, bool tls
         }
     }
 
-    bool hasPort = false;
-    ui16 port = 0;
-    if (ui16 forwardedPort = 0; TryParseTcpPort(FirstForwardedValue(headers.Get("x-forwarded-port")), forwardedPort)) {
-        hasPort = true;
-        port = forwardedPort;
-    } else if (hostHasPort) {
-        hasPort = true;
+    TMaybe<ui16> port = TryParseTcpPort(FirstForwardedValue(headers.Get("x-forwarded-port")));
+    if (!port) {
         port = hostPort;
     }
 
-    return FormatSqsEndpoint(scheme, hostname, hasPort, port);
+    return FormatSqsEndpoint(scheme, hostname, port);
 }
 
 TString MakeSqsRequestEndpoint(const THttpRequestContext& httpContext) {

@@ -229,6 +229,24 @@ struct TScaleEnv {
         Pump();
     }
 
+    void Started(const TString& session, ui32 partition, bool pump = true) {
+        auto it = Pipes.find(session);
+        UNIT_ASSERT_C(it != Pipes.end(), session);
+        tc.Runtime->SendToPipe(
+            tc.BalancerTabletId,
+            tc.Edge,
+            new TEvPersQueue::TEvReadingPartitionStartedRequest(it->second, "user", partition),
+            0,
+            GetPipeConfigWithRetries(),
+            it->second
+        );
+        if (pump) {
+            Pump();
+        } else {
+            DispatchFor(tc, TDuration::MilliSeconds(50));
+        }
+    }
+
     void Finish(const TString& session, ui32 partition, bool scaleAware = true, bool fromEnd = true, bool pump = true) {
         auto it = Pipes.find(session);
         UNIT_ASSERT_C(it != Pipes.end(), session);

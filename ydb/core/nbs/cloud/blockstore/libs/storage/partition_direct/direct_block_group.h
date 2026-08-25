@@ -219,9 +219,9 @@ public:
         NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
         NKikimrBlobStorage::NDDisk::TDDiskId pbufferId) = 0;
 
-    // Reserves byteCount from this DirectBlockGroup's aggregate range-copy
-    // bandwidth budget. Returns the delay before the operation may start;
-    // zero means it may start immediately or throttling is disabled.
+    // Reserves byteCount from the disk-wide range-copy bandwidth budget shared
+    // by all DirectBlockGroups. Returns the delay before the operation may
+    // start. Zero means it may start immediately or throttling is disabled.
     virtual TDuration TakeCopyRangeBudget(ui64 byteCount) = 0;
 
     // Translate host index to NodeId.

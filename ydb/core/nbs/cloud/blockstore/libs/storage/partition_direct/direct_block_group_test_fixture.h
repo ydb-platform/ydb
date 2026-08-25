@@ -85,16 +85,14 @@ struct TDBGFixture: public NUnitTest::TBaseFixture
         std::unique_ptr<NTransport::IStorageTransport> transport,
         const TVector<NKikimr::NBsController::TDDiskId>& ddisksIds,
         const TVector<NKikimr::NBsController::TDDiskId>& pbufferIds,
-        size_t directBlockGroupIndex = 0,
-        TStorageConfigPtr storageConfig = nullptr) const;
+        size_t directBlockGroupIndex = 0) const;
 
     template <typename TTransport>
         requires std::derived_from<TTransport, NTransport::IStorageTransport>
     [[nodiscard]] std::shared_ptr<TDirectBlockGroup> MakeDirectBlockGroup(
         const TExecutorPtr& executor,
         std::unique_ptr<TTransport> transport,
-        size_t directBlockGroupIndex = 0,
-        TStorageConfigPtr storageConfig = nullptr) const
+        size_t directBlockGroupIndex = 0) const
     {
         auto ddisks = transport->GetDDiskIds();
         auto pbuffers = transport->GetPBufferIds();
@@ -104,8 +102,7 @@ struct TDBGFixture: public NUnitTest::TBaseFixture
             std::move(transport),
             ddisks,
             pbuffers,
-            directBlockGroupIndex,
-            std::move(storageConfig));
+            directBlockGroupIndex);
     }
 
     // Interleaves the simulated runtime and the coroutine executor: dispatches

@@ -17,7 +17,6 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_model.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/ddisk_helpers.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/storage_transport.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/throttling/simple_leaky_bucket.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error_utils.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/scheduler.h>
@@ -288,7 +287,6 @@ private:
     TVector<TVChunkWeakPtr> VChunks;
     TOracle Oracle;
     TDirectBlockGroupCounters Counters;
-    std::optional<TSimpleLeakyBucket> CopyRangeBucket;
 
     bool BlockedGenerationDetected = false;
 

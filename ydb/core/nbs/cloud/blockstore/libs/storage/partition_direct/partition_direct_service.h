@@ -78,6 +78,11 @@ struct IPartitionDirectService
     virtual bool TryAdvancePBufferBarrier(
         const NKikimr::NBsController::TDDiskId& pbufferDDiskId,
         ui64 lsn) = 0;
+
+    // Reserves byteCount from the disk-wide range-copy bandwidth budget.
+    // Returns the delay before the operation may start. Zero means it may start
+    // immediately or throttling is disabled. Called from DBG executor threads.
+    virtual TDuration TakeVolumeCopyRangeBudget(ui64 byteCount) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

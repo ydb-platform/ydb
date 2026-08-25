@@ -155,17 +155,11 @@ TDBGFixture::MakeDirectBlockGroup(
     std::unique_ptr<NStorage::NTransport::IStorageTransport> transport,
     const TVector<NKikimr::NBsController::TDDiskId>& ddisksIds,
     const TVector<NKikimr::NBsController::TDDiskId>& pbufferIds,
-    size_t directBlockGroupIndex,
-    TStorageConfigPtr storageConfig) const
+    size_t directBlockGroupIndex) const
 {
-    if (!storageConfig) {
-        storageConfig =
-            std::make_shared<TStorageConfig>(NProto::TStorageServiceConfig());
-    }
-
     return std::make_shared<TDirectBlockGroup>(
         Runtime->GetActorSystem(0),
-        std::move(storageConfig),
+        std::make_shared<TStorageConfig>(NProto::TStorageServiceConfig()),
         executor,
         DiskDescription,
         directBlockGroupIndex,

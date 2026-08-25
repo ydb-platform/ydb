@@ -76,69 +76,31 @@ NWilson::TTraceId CreateTraceId()
         NWilson::TTraceId::MAX_TIME_TO_LIVE);
 }
 
-TStorageConfigPtr MakeStorageConfig(ui64 copyRangeBandwidthMbs)
-{
-    NProto::TStorageServiceConfig config;
-    config.SetCopyRangeBandwidthMbs(copyRangeBandwidthMbs);
-    return std::make_shared<TStorageConfig>(std::move(config));
-}
-
 }   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
 Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
 {
-    Y_UNIT_TEST_F(ShouldNotThrottleCopyRangeWhenDisabled, TDBGFixture)
+    Y_UNIT_TEST_F(ShouldDelegateCopyRangeBudgetToService, TDBGFixture)
     {
         auto executor = MakeExecutor();
         auto dbg = MakeDirectBlockGroup(
             executor,
             std::make_unique<TStorageTransportMock>());
 
-        const auto delay =
-            RunOnExecutor(
-                executor,
-                [dbg] { return dbg->TakeCopyRangeBudget(CopyRangeSize); })
-                .GetValue(WaitTimeout);
+        auto initialReady = RunAndGetInitialReady(dbg);
+        WaitReady(executor, initialReady);
 
-        UNIT_ASSERT_VALUES_EQUAL(TDuration::Zero(), delay);
-    }
+        Service->CopyRangeBudgetDelay = TDuration::MilliSeconds(250);
+        const auto delay = RunOnExecutor(
+                               executor,
+                               [dbg] { return dbg->TakeCopyRangeBudget(2_MB); })
+                               .GetValue(WaitTimeout);
 
-    Y_UNIT_TEST_F(ShouldThrottleCopyRangeAndRefillBudget, TDBGFixture)
-    {
-        constexpr ui64 copyRangeBandwidthMbs = 2;
-
-        auto executor = MakeExecutor();
-        auto dbg = MakeDirectBlockGroup(
-            executor,
-            std::make_unique<TStorageTransportMock>(),
-            0,
-            MakeStorageConfig(copyRangeBandwidthMbs));
-
-        auto takeBudget = [&]
-        {
-            return RunOnExecutor(
-                       executor,
-                       [dbg]
-                       { return dbg->TakeCopyRangeBudget(CopyRangeSize); })
-                .GetValue(WaitTimeout);
-        };
-
-        // The initial budget allows one second of bandwidth to start
-        // immediately: two 1 MB ranges at 2 MB/s.
-        UNIT_ASSERT_VALUES_EQUAL(TDuration::Zero(), takeBudget());
-        UNIT_ASSERT_VALUES_EQUAL(TDuration::Zero(), takeBudget());
-
-        // The third range creates a 1 MB debt at 2 MB/s.
-        UNIT_ASSERT_VALUES_EQUAL(TDuration::MilliSeconds(500), takeBudget());
-
-        // Refill is capped at one second of bandwidth, so idle time does not
-        // accumulate a larger burst.
-        Runtime->AdvanceCurrentTime(TDuration::Seconds(10));
-        UNIT_ASSERT_VALUES_EQUAL(TDuration::Zero(), takeBudget());
-        UNIT_ASSERT_VALUES_EQUAL(TDuration::Zero(), takeBudget());
-        UNIT_ASSERT_VALUES_EQUAL(TDuration::MilliSeconds(500), takeBudget());
+        UNIT_ASSERT_VALUES_EQUAL(TDuration::MilliSeconds(250), delay);
+        UNIT_ASSERT_VALUES_EQUAL(1u, Service->CopyRangeBudgetRequestCount);
+        UNIT_ASSERT_VALUES_EQUAL(2_MB, Service->LastCopyRangeBudgetByteCount);
     }
 
     // The initial-ready signal fires exactly once, only after the locked

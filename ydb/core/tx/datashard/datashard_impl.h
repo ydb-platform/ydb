@@ -2483,11 +2483,10 @@ private:
                 return size;
             };
 
-            YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "Sending snapshot for split op from srcTablet to dstTablet",
-                {"operationId", ev->Record.GetOperationCookie()},
-                {"srcTabletId", ev->Record.GetSrcTabletId()},
-                {"dstTabletId", dstTabletId},
-                {"totalSize", fnCalcTotalSize(*ev)});
+            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+                            "Sending snapshot for split opId " << ev->Record.GetOperationCookie()
+                            << " from datashard " << ev->Record.GetSrcTabletId()
+                            << " to datashard " << dstTabletId << " size " << fnCalcTotalSize(*ev));
 
             NTabletPipe::SendData(ctx, PipesToDstShards[dstTabletId], ev.Release());
         }
@@ -2558,9 +2557,9 @@ private:
             auto ev = MakeHolder<TEvChangeExchange::TEvActivateSender>();
             ev->Record.SetOrigin(Origin);
 
-            YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "Activate change sender",
-                {"origin", ev->Record.GetOrigin()},
-                {"dst", dstTabletId});
+            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Activate change sender"
+                << ": origin# " << ev->Record.GetOrigin()
+                << ", dst# " << dstTabletId);
 
             NTabletPipe::SendData(ctx, PipesToDstShards[dstTabletId], ev.Release());
         }
@@ -3355,9 +3354,8 @@ protected:
     using TTabletExecutedFlat::Enqueue;
 
     void Enqueue(STFUNC_SIG) override {
-        YDB_LOG_WARN_COMP(NKikimrServices::TX_DATASHARD, "TDataShard::StateInit unhandled event",
-            {"type", ev->GetTypeRewrite()},
-            {"event", ev->ToString()});
+        ALOG_WARN(NKikimrServices::TX_DATASHARD, "TDataShard::StateInit unhandled event type: " << ev->GetTypeRewrite()
+                           << " event: " << ev->ToString());
     }
 
     // In this state we are not handling external pipes to datashard tablet (it's just another init phase)
@@ -3375,9 +3373,8 @@ protected:
             HFunc(TEvLongTxService::TEvLockStatus, Handle);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
-                YDB_LOG_WARN_COMP(NKikimrServices::TX_DATASHARD, "TDataShard::StateInactive unhandled event",
-                    {"type", ev->GetTypeRewrite()},
-                    {"event", ev->ToString()});
+                ALOG_WARN(NKikimrServices::TX_DATASHARD, "TDataShard::StateInactive unhandled event type: " << ev->GetTypeRewrite()
+                           << " event: " << ev->ToString());
             }
             break;
         }
@@ -3525,9 +3522,7 @@ protected:
             HFunc(TEvDataShard::TEvVacuum, Handle);
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
-                    YDB_LOG_WARN_COMP(NKikimrServices::TX_DATASHARD, "TDataShard::StateWork unhandled event",
-                        {"type", ev->GetTypeRewrite()},
-                        {"event", ev->ToString()});
+                    ALOG_WARN(NKikimrServices::TX_DATASHARD, "TDataShard::StateWork unhandled event type: " << ev->GetTypeRewrite() << " event: " << ev->ToString());
                 }
                 break;
         }
@@ -3558,9 +3553,8 @@ protected:
             HFunc(TEvPrivate::TEvBuildTableStatsError, Handle);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
-                YDB_LOG_WARN_COMP(NKikimrServices::TX_DATASHARD, "TDataShard::StateWorkAsFollower unhandled event",
-                    {"type", ev->GetTypeRewrite()},
-                    {"event", ev->ToString()});
+                ALOG_WARN(NKikimrServices::TX_DATASHARD, "TDataShard::StateWorkAsFollower unhandled event type: " << ev->GetTypeRewrite()
+                           << " event: " << ev->ToString());
             }
             break;
         }
@@ -3585,10 +3579,8 @@ protected:
     }
 
     void ReportState(const TActorContext &ctx, ui32 state) {
-        YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "Reporting state to schemeshard",
-            {"tabletId", TabletID()},
-            {"state", DatashardStateName(State)},
-            {"currentSchemeShardId", CurrentSchemeShardId});
+        LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, TabletID() << " Reporting state " << DatashardStateName(State)
+                    << " to schemeshard " << CurrentSchemeShardId);
         Y_ENSURE(state != TShardState::Offline || !HasSharedBlobs(),
                  "Datashard " << TabletID() << " tried to go offline while having shared blobs");
         if (!StateReportPipe) {
@@ -3621,17 +3613,15 @@ protected:
 
             // Don't report stats until they are build for the first time
             if (!ti.Stats.StatsUpdateTime && !IsFollower()) {
-                YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "SendPeriodicTableStats at datashard for tableId but no stats yet",
-                    {"tabletId", TabletID()},
-                    {"tableId", tableId});
+                LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "SendPeriodicTableStats at datashard " << TabletID()
+                            << ", for tableId " << tableId << ", but no stats yet"
+                );
                 continue;
             }
 
             if (!DbStatsReportPipe) {
-                YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "SendPeriodicTableStats register new pipe at datashard",
-                    {"tabletId", TabletID()},
-                    {"followerId", FollowerId()},
-                    {"tableInfosCount", TableInfos.size()});
+                LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "SendPeriodicTableStats register new pipe at datashard " << TabletID()
+                    << " FollowerId " << FollowerId() << ", TableInfos size = " << TableInfos.size());
 
                 NTabletPipe::TClientConfig clientConfig;
                 DbStatsReportPipe = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, CurrentSchemeShardId, clientConfig));
@@ -3724,10 +3714,7 @@ protected:
             if (DstSplitDescription)
                 ev->Record.SetIsDstSplit(true);
 
-            YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "TEvPeriodicTableStats from datashard",
-                {"tabletId", TabletID()},
-                {"followerId", FollowerId()},
-                {"tableId", tableId});
+            LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "TEvPeriodicTableStats from datashard " << TabletID() << ", FollowerId " << FollowerId() << ", tableId " << tableId);
             NTabletPipe::SendData(ctx, DbStatsReportPipe, ev.Release());
         }
 

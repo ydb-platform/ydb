@@ -521,7 +521,9 @@ private:
         SecretSnapshotRequired = false;
         // SecureParams is now populated — launch any deferred PQ topic describes
         // that need the resolved secret token.
-        StartPqTopicResolver();
+        if (TopicPartitionSnapshotRequired) {
+            StartPqTopicResolver();
+        }
         if (!WaitRequired()) {
             Execute();
         }
@@ -611,7 +613,7 @@ private:
         }
         if (SecretSnapshotRequired) {
             GetSecretsSnapshot();
-        } else {
+        } else if (TopicPartitionSnapshotRequired) {
             StartPqTopicResolver();
         }
         if (ResourceSnapshotRequired) {
@@ -1393,10 +1395,6 @@ private:
     }
 
     void StartPqTopicResolver() {
-        if (!TopicPartitionSnapshotRequired) {
-            return;
-        }
-
         // Pass a non-const mutable copy of the shared_ptr so the resolver can patch it.
         auto mutableGraph = std::const_pointer_cast<NKikimrKqp::TQueryPhysicalGraph>(
             Request.QueryPhysicalGraph);

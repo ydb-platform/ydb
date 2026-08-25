@@ -808,6 +808,11 @@ message TDDiskDiskListResponse {
         repeated uint64 DDiskTabletIds = 2; // tablets using this disk in the DDisk role
         repeated uint64 PersistentBufferTabletIds = 3; // tablets using this disk in the PersistentBuffer role
         optional bool Available = 4;
+        // Full underlying PDisk state as reported by Whiteboard (e.g. "Normal",
+        // "Missing", "Timeout", "NodeDisconnected", one of the Initial*/*Error
+        // states, or "Unknown" if it was never reported to CMS). This is a more
+        // detailed status than Available, which is only a coarse up/down flag.
+        optional string State = 5;
     }
 
     optional TStatus Status = 1;

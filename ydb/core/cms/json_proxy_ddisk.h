@@ -148,10 +148,20 @@ private:
 
     template <typename TRecord>
     void ReplyRecord(const TRecord& record, const TActorContext& ctx) {
+        // NOTE: StringifyNumbers only affects singular (optional) fields; it does
+        // NOT cover repeated fields (e.g. DDiskTabletIds/PersistentBufferTabletIds,
+        // or the DirectBlockGroupId/TabletId repeated fields elsewhere). Those are
+        // controlled separately by StringifyNumbersRepeated. Without it, large
+        // uint64 tablet ids (which routinely exceed Number.MAX_SAFE_INTEGER) are
+        // emitted as raw JSON numbers and get silently rounded by the browser's
+        // JSON parser, making distinct tablet ids collapse into a handful of
+        // duplicate values in the UI. Both options must be set to keep singular
+        // and repeated fields consistently safe for JS clients.
         auto config = NProtobufJson::TProto2JsonConfig()
             .SetFormatOutput(false)
             .SetEnumMode(NProtobufJson::TProto2JsonConfig::EnumName)
-            .SetStringifyNumbers(NProtobufJson::TProto2JsonConfig::StringifyLongNumbersForDouble);
+            .SetStringifyNumbers(NProtobufJson::TProto2JsonConfig::StringifyLongNumbersForDouble)
+            .SetStringifyNumbersRepeated(NProtobufJson::TProto2JsonConfig::StringifyLongNumbersForDouble);
         Reply(TString(NMonitoring::HTTPOKJSON) + NProtobufJson::Proto2Json(record, config), ctx);
     }
 

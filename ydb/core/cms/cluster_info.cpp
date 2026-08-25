@@ -510,7 +510,15 @@ void TClusterInfo::UpdatePDiskState(const TPDiskID &id, const NKikimrWhiteboard:
     }
 
     auto &pdisk = PDiskRef(id);
+    // NOTE: this coarse State (used for general CMS maintenance/locking logic,
+    // e.g. IsDown/IsLocked and host/device state reporting) intentionally only
+    // treats the fully-up Normal state as UP; consumers that need to
+    // distinguish "still starting up" from "genuinely broken" (e.g. the NBS
+    // 2.0 DDisk availability check) should use IsPDiskStateUp(RawState)
+    // instead, see IsDDiskAvailable()/GetDDiskStateName().
     pdisk.State = info.GetState() == NKikimrBlobStorage::TPDiskState::Normal ? UP : DOWN;
+    pdisk.StateKnown = true;
+    pdisk.RawState = info.GetState();
 }
 
 void TClusterInfo::AddVDisk(const NKikimrBlobStorage::TBaseConfig::TVSlot &info)

@@ -447,6 +447,7 @@ private:
     void Handle(TEvCms::TEvDDiskTabletListRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvCms::TEvDDiskDiskListRequest::TPtr &ev, const TActorContext &ctx);
     bool IsDDiskAvailable(const NKikimrBlobStorage::NDDisk::TDDiskId &id) const;
+    TString GetDDiskStateName(const NKikimrBlobStorage::NDDisk::TDDiskId &id) const;
     void Handle(TEvPrivate::TEvClusterInfo::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvLogAndSend::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvPersistDDiskInfo::TPtr &ev, const TActorContext &ctx);

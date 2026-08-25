@@ -37,6 +37,13 @@ const Nbs2Tablets = {
     // up-to-date highlighting.
     diskAvailability: {},
 
+    // Cache of the full underlying PDisk state name (e.g. "Normal", "Missing",
+    // "Timeout", "NodeDisconnected", one of the Initial*/*Error states, or
+    // "Unknown"), keyed the same way as diskAvailability. Populated from the
+    // same /ddisk/disks responses and used to show a more detailed status in
+    // hints and in the State column than the plain available/unavailable flag.
+    diskState: {},
+
     requestToken: 0,
 
     init: function() {
@@ -164,14 +171,21 @@ const Nbs2Tablets = {
             });
     },
 
-    // Remembers the availability of the disk referenced by a TDiskUsage-like
-    // object (as returned by cms/api/json/ddisk/disks), keyed by the
-    // underlying PDisk (availability does not depend on the DDisk slot id).
+    // Remembers the availability and full state name of the disk referenced
+    // by a TDiskUsage-like object (as returned by cms/api/json/ddisk/disks),
+    // keyed by the underlying PDisk (neither depends on the DDisk slot id).
     recordDiskAvailability: function(diskUsage) {
         const diskIdObj = this.field(diskUsage, 'DiskId', 'diskId');
+        if (!diskIdObj) return;
+        const key = this.diskId(diskIdObj);
         const available = this.field(diskUsage, 'Available', 'available');
-        if (!diskIdObj || available === undefined) return;
-        this.diskAvailability[this.diskId(diskIdObj)] = available !== false;
+        if (available !== undefined) {
+            this.diskAvailability[key] = available !== false;
+        }
+        const state = this.field(diskUsage, 'State', 'state');
+        if (state !== undefined) {
+            this.diskState[key] = state;
+        }
     },
 
     // Returns true only if the disk is known (from a previously loaded
@@ -180,6 +194,13 @@ const Nbs2Tablets = {
     isDiskUnavailable: function(id) {
         const available = this.diskAvailability[this.diskId(id)];
         return available === false;
+    },
+
+    // Returns the full underlying PDisk state name (e.g. "Normal", "Missing",
+    // "Timeout", "NodeDisconnected", one of the Initial*/*Error states) for a
+    // disk, if known from a previously loaded /ddisk/disks response.
+    diskStateName: function(id) {
+        return this.diskState[this.diskId(id)] || 'Unknown';
     },
 
     field: function(object, ...names) {
@@ -238,7 +259,7 @@ const Nbs2Tablets = {
         const pdiskId = this.field(id, 'PDiskId', 'pdiskId') || 0;
         const slotId = this.field(id, 'DDiskSlotId', 'dDiskSlotId', 'ddiskSlotId') || 0;
         const label = nodeId + ':' + pdiskId + ':' + slotId;
-        const hint = 'Node: ' + (nodeId || '—');
+        const hint = 'Node: ' + (nodeId || '—') + '\nState: ' + this.diskStateName(id);
         const url = role === 'PersistentBuffer'
             ? this.persistentBufferUrl(nodeId, pdiskId, slotId)
             : this.ddiskUrl(nodeId, pdiskId, slotId);
@@ -310,12 +331,23 @@ const Nbs2Tablets = {
 
         this.disksPage.forEach((disk) => {
             const diskIdObj = this.field(disk, 'DiskId', 'diskId');
-            const ddiskTabletIds = (this.field(disk, 'DDiskTabletIds', 'dDiskTabletIds', 'ddiskTabletIds') || []).map(String);
-            const persistentBufferTabletIds = (this.field(disk, 'PersistentBufferTabletIds', 'persistentBufferTabletIds') || []).map(String);
+            // Deduplicate tablet ids within each role's own list: the backend is
+            // expected to report each tablet at most once per (disk, role), but
+            // be defensive here too, so that the rendered "DDisk: ... (a, b, c)" /
+            // "Persistent Buffer: ... (a, b, c)" lists never show the same tablet
+            // id repeated, which would otherwise make the list look much larger
+            // than the deduplicated count shown in the "Tablets" column.
+            const ddiskTabletIds = Array.from(new Set((this.field(disk, 'DDiskTabletIds', 'dDiskTabletIds', 'ddiskTabletIds') || []).map(String)));
+            const persistentBufferTabletIds = Array.from(new Set((this.field(disk, 'PersistentBufferTabletIds', 'persistentBufferTabletIds') || []).map(String)));
             const available = this.field(disk, 'Available', 'available');
             const unavailable = available === false;
             const key = this.ddiskKey(diskIdObj);
-            const status = unavailable ? 'Unavailable' : 'Available';
+            // Show the full underlying PDisk state (e.g. "Normal", "Missing",
+            // "Timeout", "NodeDisconnected", one of the Initial*/*Error states)
+            // rather than just the coarse available/unavailable flag, falling
+            // back to that flag if the backend didn't report a state name.
+            const stateName = this.field(disk, 'State', 'state');
+            const status = stateName || (unavailable ? 'Unavailable' : 'Available');
             const detailsId = key.replace(/:/g, '-');
             const roles = [];
             const tabletIds = new Set(ddiskTabletIds.concat(persistentBufferTabletIds));

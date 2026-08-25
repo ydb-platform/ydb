@@ -1,16 +1,12 @@
 ### FAMILY <family_name> (column setting)
 
-<<<<<<< HEAD
-Specifies that this column belongs to the specified column group. For more information, see [{#T}](../create_table/family.md).
-=======
 {% if oss == true and backend_name == "YDB" %}
 
 {% include [OLTP_only_allow_note](../../../../_includes/only_allow_for_oltp_note.md) %}
 
 {% endif %}
 
-Specifies the belonging of this column to the specified group of columns. For more details, see the section [{#T}](../create_table/family.md).
->>>>>>> 3cc83c6fefe (Clarifications regarding column groups (#45849))
+Specifies that this column belongs to the specified column group. For more information, see [{#T}](../create_table/family.md).
 
 ### DEFAULT <default_value>
 
@@ -49,9 +45,8 @@ You can set the following compression parameters for columns:
 
 * `level` — compression level; supported only for `zstd` (allowed values are 0 through 22).
 
-<<<<<<< HEAD
 If `COMPRESSION()` is specified without parameters, the column uses the default compression. Currently that is `lz4`; future versions will let you configure default compression at the cluster or table level.
-=======
+
 ### ENCODING([OFF|DICT]) {#encoding}
 
 {% if oss == true and backend_name == "YDB" %}
@@ -68,4 +63,3 @@ Available options:
 * `ENCODING(OFF)` — disables special encoding. Data will be stored in the standard format without additional encoding.
 
 If `ENCODING()` is set without parameters, the default encoding will be used for the column. Currently, it is `OFF`; in future versions, it will be possible to configure the default encoding at the database or table level.
->>>>>>> 3cc83c6fefe (Clarifications regarding column groups (#45849))

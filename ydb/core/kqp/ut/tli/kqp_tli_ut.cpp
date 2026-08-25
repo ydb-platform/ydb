@@ -792,7 +792,7 @@ namespace {
         return FromString<ui64>(issues.substr(pos, endPos - pos));
     }
 
-    /* size_t CountTliRecords(const TString& logs, const TString& component, const TString& messagePattern) {
+    size_t CountTliRecords(const TString& logs, const TString& component, const TString& messagePattern) {
         size_t count = 0;
         for (const auto& record : ExtractTliRecords(logs)) {
             if (record.Contains("component=" + component) && MatchesMessage(record, messagePattern)) {
@@ -800,35 +800,31 @@ namespace {
             }
         }
         return count;
-    } */
-
-    struct TRequiredRecordCounts {
-        size_t SessionActorBreakerCount;
-        size_t SessionActorVictimCount;
-        size_t DataShardBreakerCount;
-        size_t DataShardVictimCount;
-    };
+    }
 
     void AssertTliRecordCounts(
         const TString& logs,
         const TTliLogPatterns& patterns,
-        const TRequiredRecordCounts& recordCounts)
+        size_t sessionActorBreakerCount,
+        size_t sessionActorVictimCount,
+        size_t dataShardBreakerCount,
+        size_t dataShardVictimCount)
     {
         size_t actualBreakerSessionActorCount = CountTliRecords(logs, "SessionActor", patterns.BreakerSessionActorMessagePattern);
-        /* UNIT_ASSERT_VALUES_EQUAL_C(actualBreakerSessionActorCount, expectedBreakerCount,
-            "breaker SessionActor TLI record count mismatch"); */
+        UNIT_ASSERT_VALUES_EQUAL_C(actualBreakerSessionActorCount, sessionActorBreakerCount,
+            "breaker SessionActor TLI record count mismatch");
 
         size_t actualVictimSessionActorCount = CountTliRecords(logs, "SessionActor", patterns.VictimSessionActorMessagePattern);
-        /*UNIT_ASSERT_VALUES_EQUAL_C(actualVictimSessionActorCount, expectedVictimCount,
-            "victim SessionActor TLI record count mismatch"); */
+        UNIT_ASSERT_VALUES_EQUAL_C(actualVictimSessionActorCount, sessionActorVictimCount,
+            "victim SessionActor TLI record count mismatch");
 
         size_t actualBreakerDatashardCount = CountTliRecords(logs, "DataShard", patterns.BreakerDatashardMessage);
-        /* UNIT_ASSERT_VALUES_EQUAL_C(actualBreakerDatashardCount, expectedBreakerCount,
-            "breaker DataShard TLI record count mismatch"); */
+        UNIT_ASSERT_VALUES_EQUAL_C(actualBreakerDatashardCount, dataShardBreakerCount,
+            "breaker DataShard TLI record count mismatch");
 
         size_t actualVictimDatashardCount = CountTliRecords(logs, "DataShard", patterns.VictimDatashardMessage);
-        /* UNIT_ASSERT_VALUES_EQUAL_C(actualVictimDatashardCount, expectedVictimCount,
-            "victim DataShard TLI record count mismatch"); */
+        UNIT_ASSERT_VALUES_EQUAL_C(actualVictimDatashardCount, dataShardVictimCount,
+            "victim DataShard TLI record count mismatch");
     }
 
     // Verify TLI issue content
@@ -851,8 +847,10 @@ namespace {
         const TString& breakerQueryText,
         const TString& victimQueryText,
         const std::optional<TString>& victimExtraQueryText = std::nullopt,
-        size_t expectedBreakerCount = 1,
-        size_t expectedVictimCount = 1
+        size_t sessionActorBreakerCount = 1,
+        size_t sessionActorVictimCount = 1,
+        size_t dataShardBreakerCount = 1,
+        size_t dataShardVictimCount = 1
     )
     {
         DumpTliRecords(ss.Str());
@@ -870,7 +868,11 @@ namespace {
         UNIT_ASSERT_C(std::find(occurrences.begin(), occurrences.end(), *victimQuerySpanId) != occurrences.end(),
             "VictimQuerySpanId should match between issue and victim SessionActor log");
 
-        AssertTliRecordCounts(ss.Str(), patterns, expectedBreakerCount, expectedVictimCount);
+        AssertTliRecordCounts(ss.Str(), patterns,
+            sessionActorBreakerCount,
+            sessionActorVictimCount,
+            dataShardBreakerCount,
+            dataShardVictimCount);
     }
 
     void VerifyTliIssueAndLogsWhenDisabled(
@@ -975,7 +977,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
         ctx.reset();
 
-        VerifyTliIssueAndLogs(issues, ss, breakerQueryText, victimQueryText, victimCommitText);
+        VerifyTliIssueAndLogs(issues, ss, breakerQueryText, victimQueryText, victimCommitText, 1, 2, 1, 1);
     }
 
     Y_UNIT_TEST(SeparateCommit) {
@@ -999,7 +1001,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
         ctx.reset();
 
-        VerifyTliIssueAndLogs(issues, ss, breakerQueryText, victimQueryText, victimCommitText);
+        VerifyTliIssueAndLogs(issues, ss, breakerQueryText, victimQueryText, victimCommitText, 2, 2, 1, 1);
     }
 
     // ALL writes go to the SAME table (same shard), and the
@@ -1040,7 +1042,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
         ctx.reset();
 
-        VerifyTliIssueAndLogs(issues, ss, breakerQueryText, victimQueryText, victimCommitText);
+        VerifyTliIssueAndLogs(issues, ss, breakerQueryText, victimQueryText, victimCommitText, 7, 2, 1, 1);
     }
 
     // Test: Many upserts in a single transaction, the breaker is the middle upsert
@@ -1072,7 +1074,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
         ctx.reset();
 
-        VerifyTliIssueAndLogs(issues, ss, breakerUpdateTable2, victimSelectTable2);
+        VerifyTliIssueAndLogs(issues, ss, breakerUpdateTable2, victimSelectTable2, {}, 3, 4, 1, 1);
     }
 
     // Test: Multi-table writes with standalone COMMIT_TX (TPCC-like scenario)
@@ -1108,7 +1110,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
         ctx.reset();
 
-        VerifyTliIssueAndLogs(issues, ss, breakerUpdateTable2, victimSelectTable2);
+        VerifyTliIssueAndLogs(issues, ss, breakerUpdateTable2, victimSelectTable2, {}, 3, 4, 1, 1);
     }
 
     // Test: Victim reads key 1, breaker writes key 1, victim writes key 2
@@ -1127,7 +1129,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
         ctx.reset();
 
-        VerifyTliIssueAndLogs(issues, ss, breakerQueryText, victimQueryText);
+        VerifyTliIssueAndLogs(issues, ss, breakerQueryText, victimQueryText, {}, 1, 2, 1, 1);
     }
 
     // Test: Victim reads and writes the same table before breaker commits.
@@ -1151,7 +1153,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
         ctx.reset();
 
-        VerifyTliIssueAndLogs(issues, ss, breakerQueryText, victimQueryText, victimWriteText, 2, 1);
+        VerifyTliIssueAndLogs(issues, ss, breakerQueryText, victimQueryText, victimWriteText, 1, 2, 1, 1);
     }
 
     // Test: Multi-table scenario where victim reads and writes the same table,
@@ -1180,7 +1182,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         ctx.reset();
 
         VerifyTliIssueAndLogs(issues, ss, breakerQueryText, victimSelectTable1, victimUpdateTable1,
-            /* expectedBreakerCount */ 2);
+            2, 4, 2, 1);
     }
 
     // Test: Victim reads multiple keys, breaker writes them all
@@ -1200,7 +1202,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
         ctx.reset();
 
-        VerifyTliIssueAndLogs(issues, ss, breakerQueryText, victimQueryText);
+        VerifyTliIssueAndLogs(issues, ss, breakerQueryText, victimQueryText, {}, 1, 2, 1, 1);
     }
 
     // Test: Cross-table lock breakage - victim reads TableA, breaker writes TableA, victim writes TableB
@@ -1219,7 +1221,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
         ctx.reset();
 
-        VerifyTliIssueAndLogs(issues, ss, breakerQueryText, victimQueryText);
+        VerifyTliIssueAndLogs(issues, ss, breakerQueryText, victimQueryText, {}, 1, 2, 1, 1);
     }
 
     // Test: Two victims on two different tables, one breaker writes to both tables.
@@ -1260,9 +1262,9 @@ Y_UNIT_TEST_SUITE(KqpTli) {
 
         // Verify each victim independently
         VerifyTliIssueAndLogs(issues1, ss, breakerUpdate1, victim1QueryText, victim1CommitText,
-            /* expectedBreakerCount */ 2, /* expectedVictimCount */ 2);
+            4, 4, 2, 2);
         VerifyTliIssueAndLogs(issues2, ss, breakerUpdate2, victim2QueryText, victim2CommitText,
-            /* expectedBreakerCount */ 2, /* expectedVictimCount */ 2);
+            4, 4, 2, 2);
     }
 
     // Test: InvisibleRowSkips - victim reads at snapshot V1, breaker commits at V2, victim reads again
@@ -1294,7 +1296,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         // AND the victim re-read detects InvisibleRowSkips (1 deferred entry) = 2 total
         VerifyTliIssueAndLogs(issues, ss, breakerQueryText, victimRead1Text,
             /* victimExtraQueryText */ std::nullopt,
-            /* expectedBreakerSessionActorCount */ 2);
+            2, 3, 2, 1);
     }
 
     // Test: Victim snapshots on one key, breaker commits, victim reads and writes another key
@@ -1322,7 +1324,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
         ctx.reset();
 
-        VerifyTliIssueAndLogs(issues, ss, breakerQueryText, victimReadText, victimSnapshotText);
+        VerifyTliIssueAndLogs(issues, ss, breakerQueryText, victimReadText, victimSnapshotText, 1, 3, 1, 1);
     }
 
     // Test: Deferred lock detection with many queries in both breaker and victim transactions.
@@ -1365,7 +1367,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
         ctx.reset();
 
-        VerifyTliIssueAndLogs(issues, ss, breakerUpdateTable3, victimSelectTable3, victimSnapshotTable1);
+        VerifyTliIssueAndLogs(issues, ss, breakerUpdateTable3, victimSelectTable3, victimSnapshotTable1, 1, 5, 1, 1);
     }
 
     // Test: Concurrent UPSERT...SELECT transactions - replicates user's production scenario
@@ -1482,7 +1484,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
         ctx.reset();
 
-        VerifyTliIssueAndLogs(issues, ss, breakerUpdateTable2, victimSelectTable2);
+        VerifyTliIssueAndLogs(issues, ss, breakerUpdateTable2, victimSelectTable2, {}, 3, 4, 1, 1);
     }
 
     // Test: 2-node version of ManyUpsertsStandaloneCommit
@@ -1516,7 +1518,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
         ctx.reset();
 
-        VerifyTliIssueAndLogs(issues, ss, breakerUpdateTable2, victimSelectTable2);
+        VerifyTliIssueAndLogs(issues, ss, breakerUpdateTable2, victimSelectTable2, {}, 3, 4, 1, 1);
     }
 
     // Test: 2-node version of ConcurrentUpsertSelect
@@ -1601,7 +1603,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
             // Destroy runner to flush async logger before reading `ss`.
         }
 
-        VerifyTliIssueAndLogs(issues, ss, breakerQueryText, victimQueryText, victimCommitText);
+        VerifyTliIssueAndLogs(issues, ss, breakerQueryText, victimQueryText, victimCommitText, 1, 2, 1, 1);
 
         // When Wilson tracing is active, SessionActor TLI logs must include TraceId
         const TString logs = ss.Str();
@@ -1663,7 +1665,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         // Without the fix, T's breaker log is missing (count would be 1 instead of 2).
         VerifyTliIssueAndLogs(tIssues, ss, externalBreakerWrite, tSelectTable2,
             /* victimExtraQueryText */ std::nullopt,
-            /* expectedBreakerCount */ 2, /* expectedVictimCount */ 1);
+            3, 2, 2, 1);
 
         // Additionally verify T's breaker log content (T broke VictimOfT's lock on table1)
         const auto patterns = MakeTliLogPatterns();
@@ -1713,9 +1715,9 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         // Table2 and Table3 (NOT ignored): full TLI verification
         // 3 breaker records: Table2 immediate + Table3 immediate + Table3 deferred
         VerifyTliIssueAndLogs(issues, ss, breakerUpdate2, victimQueryText, victimCommitText,
-            /* expectedBreakerCount */ 3, /* expectedVictimCount */ 1);
+            7, 2, 3, 1);
         VerifyTliIssueAndLogs(issues, ss, breakerUpdate3, victimQueryText, victimCommitText,
-            /* expectedBreakerCount */ 3, /* expectedVictimCount */ 1);
+            7, 2, 3, 1);
 
         // Table1 (IGNORED): no breaker TLI records
         VerifyNoTliLogsForIgnoredTable(issues, ss, breakerUpdate1);
@@ -1766,9 +1768,9 @@ Y_UNIT_TEST_SUITE(KqpTli) {
 
         // Verify each non-ignored table independently like other multi-victim tests.
         VerifyTliIssueAndLogs(issues1, ss, breakerUpdate2, victim1QueryText, victim1CommitText,
-            /* expectedBreakerCount */ 4, /* expectedVictimCount */ 2);
+            8, 6, 4, 2);
         VerifyTliIssueAndLogs(issues2, ss, breakerUpdate3, victim2QueryText, victim2CommitText,
-            /* expectedBreakerCount */ 4, /* expectedVictimCount */ 2);
+            8, 6, 4, 2);
 
         // Table1 (IGNORED): no breaker TLI records.
         VerifyNoTliLogsForIgnoredTable(issues1, ss, breakerUpdate1);
@@ -1798,7 +1800,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
         ctx.reset();
 
-        VerifyTliIssueAndLogs(issues, ss, breakerQueryText, victimQueryText, victimCommitText);
+        VerifyTliIssueAndLogs(issues, ss, breakerQueryText, victimQueryText, victimCommitText, 1, 2, 1, 1);
     }
 
     Y_UNIT_TEST(SeparateCommitDataQuery) {
@@ -1828,7 +1830,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
         ctx.reset();
 
-        VerifyTliIssueAndLogs(issues, ss, breakerQueryText, victimQueryText, victimCommitText);
+        VerifyTliIssueAndLogs(issues, ss, breakerQueryText, victimQueryText, victimCommitText, 2, 2, 1, 1);
     }
 
 }

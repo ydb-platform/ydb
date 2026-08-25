@@ -1,0 +1,12 @@
+UNITTEST()
+
+SIZE(SMALL)
+TIMEOUT(15)
+
+FORK_SUBTESTS()
+
+SRCS(
+    main.cpp
+)
+
+END()

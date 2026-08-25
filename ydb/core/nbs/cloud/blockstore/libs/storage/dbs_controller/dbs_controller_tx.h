@@ -13,11 +13,11 @@ namespace NYdb::NBS::NBlockStore::NStorage::NDbsController {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-#define BLOCKSTORE_DBS_CONTROLLER_TRANSACTIONS(xxx, ...) \
-    xxx(InitSchema, __VA_ARGS__)                         \
-    xxx(LoadState, __VA_ARGS__)                          \
-    xxx(UpdateDDiskMap, __VA_ARGS__)                     \
-    xxx(RemoveTabletDDiskMap, __VA_ARGS__)               \
+#define BLOCKSTORE_DBS_CONTROLLER_TRANSACTIONS(xxx, ...)                       \
+    xxx(InitSchema, __VA_ARGS__)                                               \
+    xxx(LoadState, __VA_ARGS__)                                                \
+    xxx(UpdateDDiskMap, __VA_ARGS__)                                           \
+    xxx(RemoveTabletDDiskMap, __VA_ARGS__)                                     \
     xxx(GetPartitionsForNode, __VA_ARGS__)
 
 // BLOCKSTORE_DBS_CONTROLLER_TRANSACTIONS

@@ -272,25 +272,33 @@ class Test(TestBase):
 
     def test_pdisk_populate(self):
         snapshot_file = 'pdisk-populate-snapshot.json'
-        base_config = (
-            BaseConfigBuilder()
-            .add_node(node_id=1)
-            .add_node(node_id=2)
-            .add_pdisk(node_id=1, pdisk_id=1001, expected_slot_count=8)
-            .add_pdisk(node_id=2, pdisk_id=1002, expected_slot_count=8)
-            .add_group(group_id=0x80000001, vslot_ids=[(1, 1001, 1000)])
-            .add_vslot(
-                node_id=1,
-                pdisk_id=1001,
-                vslot_id=1000,
-                group_id=0x80000001,
-                group_generation=7,
-                fail_realm_idx=1,
-                fail_domain_idx=2,
-                vdisk_idx=3,
-            )
-            .build()
+        group_id = 0x80000001
+        group_nodes = range(1, 9)
+        destination_node_id = 9
+        destination_pdisk_id = 1000 + destination_node_id
+        vslot_id = 1000
+
+        builder = BaseConfigBuilder()
+        for node_id in range(1, destination_node_id + 1):
+            builder.add_node(node_id=node_id)
+            builder.add_pdisk(node_id=node_id, pdisk_id=1000 + node_id, expected_slot_count=8)
+        builder.add_group(
+            group_id=group_id,
+            erasure_species='block-4-2',
+            vslot_ids=[(node_id, 1000 + node_id, vslot_id) for node_id in group_nodes],
         )
+        for fail_domain_idx, node_id in enumerate(group_nodes):
+            builder.add_vslot(
+                node_id=node_id,
+                pdisk_id=1000 + node_id,
+                vslot_id=vslot_id,
+                group_id=group_id,
+                group_generation=1,
+                fail_realm_idx=0,
+                fail_domain_idx=fail_domain_idx,
+                vdisk_idx=0,
+            )
+        base_config = builder.build()
 
         return [
             self._trace(
@@ -304,7 +312,7 @@ class Test(TestBase):
                 '--dry-run',
                 'pdisk',
                 'populate',
-                '--destination-pdisk=[2:1002]',
+                f'--destination-pdisk=[{destination_node_id}:{destination_pdisk_id}]',
                 '--snapshot-file=' + snapshot_file,
                 '--suppress-donor-mode',
                 with_grpc_calls=True,

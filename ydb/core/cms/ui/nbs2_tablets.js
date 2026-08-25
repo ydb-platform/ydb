@@ -134,7 +134,12 @@ const Nbs2Tablets = {
         $.getJSON('cms/api/json/ddisk/tablets', params)
             .done((data) => {
                 if (token !== this.requestToken) return;
-                this.checkStatus(data);
+                try {
+                    this.checkStatus(data);
+                } catch (error) {
+                    $('#nbs2-tablets-error').text('Failed to load NBS 2.0 tablets: ' + error.message);
+                    return;
+                }
                 this.tablets = this.field(data, 'Tablets', 'tablets') || [];
                 this.totalCount = Number(this.field(data, 'TotalCount', 'totalCount')) || 0;
                 $('#nbs2-tablets-error').empty();
@@ -158,7 +163,12 @@ const Nbs2Tablets = {
         $.getJSON('cms/api/json/ddisk/disks', params)
             .done((data) => {
                 if (token !== this.requestToken) return;
-                this.checkStatus(data);
+                try {
+                    this.checkStatus(data);
+                } catch (error) {
+                    $('#nbs2-tablets-error').text('Failed to load NBS 2.0 disks: ' + error.message);
+                    return;
+                }
                 this.disksPage = this.field(data, 'Disks', 'disks') || [];
                 this.totalCount = Number(this.field(data, 'TotalCount', 'totalCount')) || 0;
                 this.disksPage.forEach((disk) => this.recordDiskAvailability(disk));

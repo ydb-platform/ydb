@@ -776,6 +776,7 @@ message TDDiskTabletListResponse {
         optional uint32 UnavailablePersistentBufferCount = 6;
     }
 
+    reserved 2;
     optional TStatus Status = 1;
     repeated TTabletRevision Tablets = 3;
     // Total number of items matching the filter (before paging), used by the UI
@@ -815,6 +816,7 @@ message TDDiskDiskListResponse {
         optional string State = 5;
     }
 
+    reserved 2;
     optional TStatus Status = 1;
     repeated TDiskUsage Disks = 3;
     optional uint32 TotalCount = 4;

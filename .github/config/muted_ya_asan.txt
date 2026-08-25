@@ -239,6 +239,8 @@ ydb/core/viewer/tests test.py.TestViewer.test_viewer_query_long_multipart
 ydb/core/ymq/actor/cloud_events/cloud_events_ut unittest.sole chunk
 ydb/core/ymq/actor/yc_search_ut TIndexProcesorTests.TestSingleCreateQueueEvent
 ydb/library/actors/interconnect/ut InterconnectDirectSession.DoesNotReceiveUnexpectedReplies
+ydb/library/actors/interconnect/ut InterconnectDirectSession.SendWithReplyCallbackRegistersReceiver
+ydb/library/actors/interconnect/ut InterconnectSessionV2.ActorSystemRoundTrip
 ydb/library/actors/interconnect/ut InterconnectSessionV2.ActorSystemTeardownIdleSessions
 ydb/library/actors/interconnect/ut InterconnectSessionV2.ClosePeerSocketAndReconnect
 ydb/library/actors/interconnect/ut InterconnectSessionV2.DirectSessionRoundTrip

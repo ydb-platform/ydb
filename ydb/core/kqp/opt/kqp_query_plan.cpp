@@ -2548,23 +2548,10 @@ public:
     NJson::TJsonValue Reconstruct(
         const NJson::TJsonValue& plan
     ) {
-        auto reconstructed = ReconstructImpl(plan, 0, 0, false, nullptr, Nothing());
-        return reconstructed;
+        return ReconstructImpl(plan, 0, 0, false, nullptr, Nothing());
     }
 
 private:
-    static TMaybe<double> GetCpuTimeMs(const NJson::TJsonValue& stats) {
-        if (!stats.GetMapSafe().contains("CpuTimeUs")) {
-            return Nothing();
-        }
-
-        const auto& cpuTime = stats.GetMapSafe().at("CpuTimeUs");
-        const double cpuTimeUs = cpuTime.IsMap()
-            ? cpuTime.GetMapSafe().at("Max").GetDoubleSafe()
-            : cpuTime.GetDoubleSafe();
-        return cpuTimeUs / 1000.0;
-    }
-
     static void ApplyCpuTime(NJson::TJsonValue& op, const TMaybe<double>& cpuTimeMs) {
         if (cpuTimeMs) {
             op["A-SelfCpu"] = *cpuTimeMs;
@@ -2592,7 +2579,13 @@ private:
             if (stats.contains("Table")) {
                 ownTableStats = &stats.at("Table");
             }
-            ownCpuTimeMs = GetCpuTimeMs(plan.GetMapSafe().at("Stats"));
+            if (stats.contains("CpuTimeUs")) {
+                const auto& cpuTime = stats.at("CpuTimeUs");
+                const double cpuTimeUs = cpuTime.IsMap()
+                    ? cpuTime.GetMapSafe().at("Max").GetDoubleSafe()
+                    : cpuTime.GetDoubleSafe();
+                ownCpuTimeMs = cpuTimeUs / 1000.0;
+            }
         }
         const auto effectiveCpuTimeMs = ownCpuTimeMs ? ownCpuTimeMs : inheritedCpuTimeMs;
 

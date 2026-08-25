@@ -172,6 +172,9 @@
             "uri": "file://test_canonical_requests.Test.test_pdisk_populate/results.txt"
         },
         {
+            "uri": "file://test_canonical_requests.Test.test_pdisk_populate/pdisk-populate-snapshot.json"
+        },
+        {
             "uri": "file://test_canonical_requests.Test.test_pdisk_populate/results.txt.0"
         }
     ],

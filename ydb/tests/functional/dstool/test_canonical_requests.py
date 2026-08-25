@@ -270,8 +270,11 @@ class Test(TestBase):
             self._trace('pdisk', 'list', '--columns', 'NodeId:PDiskId', 'Status', with_grpc_calls=True),
         ]
 
-    def test_pdisk_populate(self):
+    def test_pdisk_populate(self, monkeypatch):
         snapshot_file = 'pdisk-populate-snapshot.json'
+        snapshot_dir = yatest.common.test_output_path()
+        snapshot_path = os.path.join(snapshot_dir, snapshot_file)
+        monkeypatch.chdir(snapshot_dir)
         group_id = 0x80000001
         group_nodes = range(1, 9)
         destination_node_id = 9
@@ -300,26 +303,26 @@ class Test(TestBase):
             )
         base_config = builder.build()
 
-        return [
-            self._trace(
-                'pdisk',
-                'populate',
-                '--snapshot-from-pdisk=[1:1001]',
-                '--snapshot-file=' + snapshot_file,
-                mock_base_config=base_config,
-            ),
-            self._trace(
-                '--dry-run',
-                'pdisk',
-                'populate',
-                f'--destination-pdisk=[{destination_node_id}:{destination_pdisk_id}]',
-                '--snapshot-file=' + snapshot_file,
-                '--suppress-donor-mode',
-                with_grpc_calls=True,
-                mock_base_config=base_config,
-                fake_grpc_handler=FakePopulatePDiskHandler(),
-            ),
-        ]
+        snapshot_trace = self._trace(
+            'pdisk',
+            'populate',
+            '--snapshot-from-pdisk=[1:1001]',
+            '--snapshot-file=' + snapshot_file,
+            mock_base_config=base_config,
+        )
+        snapshot_canonical = yatest.common.canonical_file(snapshot_path, local=True, universal_lines=True)
+        populate_trace = self._trace(
+            '--dry-run',
+            'pdisk',
+            'populate',
+            f'--destination-pdisk=[{destination_node_id}:{destination_pdisk_id}]',
+            '--snapshot-file=' + snapshot_file,
+            '--suppress-donor-mode',
+            with_grpc_calls=True,
+            mock_base_config=base_config,
+            fake_grpc_handler=FakePopulatePDiskHandler(),
+        )
+        return [snapshot_trace, snapshot_canonical, populate_trace]
 
     def test_cluster_get_set(self):
         return [

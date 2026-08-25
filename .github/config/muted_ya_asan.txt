@@ -71,6 +71,7 @@ ydb/core/kqp/ut/tli KqpTli.Basic
 ydb/core/kqp/ut/tli KqpTli.BasicDataQuery
 ydb/core/kqp/ut/tli KqpTli.BasicWithWilsonTracing
 ydb/core/kqp/ut/tli KqpTli.BreakerAndVictimInSameTransaction
+ydb/core/kqp/ut/tli KqpTli.ConcurrentUpsertSelect
 ydb/core/kqp/ut/tli KqpTli.ConcurrentUpsertSelect2Node
 ydb/core/kqp/ut/tli KqpTli.CrossTables
 ydb/core/kqp/ut/tli KqpTli.DifferentKeys

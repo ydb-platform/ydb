@@ -101,10 +101,127 @@ TString NormalizeForwardedProto(TStringBuf proto) {
     return scheme;
 }
 
-// Host / X-Forwarded-Host must be host[:port] (or [ipv6]:port). Reject path, query and fragment
-// so they cannot leak into QueueUrl as https://evil.com/phishing#/v1/...
+// Host / X-Forwarded-Host / Forwarded host= must be host[:port] (or [ipv6]:port).
+// Reject path, query and fragment so they cannot leak into QueueUrl as https://evil.com/phishing#/v1/...
 bool IsValidRequestHost(TStringBuf host) {
     return !host.empty() && host.find_first_of("/?#") == TStringBuf::npos;
+}
+
+void SkipOws(TStringBuf& s) {
+    while (!s.empty() && (s[0] == ' ' || s[0] == '\t')) {
+        s = s.SubStr(1);
+    }
+}
+
+bool IsHttpTchar(char c) {
+    return IsAsciiAlnum(c)
+        || c == '!' || c == '#' || c == '$' || c == '%' || c == '&' || c == '\''
+        || c == '*' || c == '+' || c == '-' || c == '.' || c == '^' || c == '_'
+        || c == '`' || c == '|' || c == '~';
+}
+
+bool ParseHttpToken(TStringBuf& s, TStringBuf& token) {
+    size_t n = 0;
+    while (n < s.size() && IsHttpTchar(s[n])) {
+        ++n;
+    }
+    if (n == 0) {
+        return false;
+    }
+    token = s.SubStr(0, n);
+    s = s.SubStr(n);
+    return true;
+}
+
+bool ParseHttpQuotedString(TStringBuf& s, TString& value) {
+    if (s.empty() || s[0] != '"') {
+        return false;
+    }
+    s = s.SubStr(1);
+    value.clear();
+    while (!s.empty()) {
+        const char c = s[0];
+        s = s.SubStr(1);
+        if (c == '"') {
+            return true;
+        }
+        if (c == '\\') {
+            if (s.empty()) {
+                return false;
+            }
+            value.push_back(s[0]);
+            s = s.SubStr(1);
+            continue;
+        }
+        value.push_back(c);
+    }
+    return false;
+}
+
+bool ParseForwardedPairValue(TStringBuf& s, TString& value) {
+    SkipOws(s);
+    if (!s.empty() && s[0] == '"') {
+        return ParseHttpQuotedString(s, value);
+    }
+    size_t n = 0;
+    while (n < s.size() && s[n] != ';' && s[n] != ',') {
+        ++n;
+    }
+    value = TString{StripString(s.SubStr(0, n))};
+    s = s.SubStr(n);
+    return !value.empty();
+}
+
+// RFC 7239: first valid host= / proto= left to right. Port is part of host (Host ABNF).
+void ParseRfc7239Forwarded(TStringBuf header, TString& host, TString& proto) {
+    host.clear();
+    proto.clear();
+    TStringBuf s = header;
+    while (!s.empty()) {
+        SkipOws(s);
+        if (s.empty()) {
+            break;
+        }
+        if (s[0] == ',' || s[0] == ';') {
+            s = s.SubStr(1);
+            continue;
+        }
+        TStringBuf name;
+        if (!ParseHttpToken(s, name)) {
+            while (!s.empty() && s[0] != ';' && s[0] != ',') {
+                s = s.SubStr(1);
+            }
+            continue;
+        }
+        SkipOws(s);
+        if (s.empty() || s[0] != '=') {
+            continue;
+        }
+        s = s.SubStr(1);
+        TString value;
+        if (!ParseForwardedPairValue(s, value)) {
+            continue;
+        }
+        if (host.empty() && AsciiEqualsIgnoreCase(name, "host") && IsValidRequestHost(value)) {
+            host = std::move(value);
+        } else if (proto.empty() && AsciiEqualsIgnoreCase(name, "proto")) {
+            if (TString normalized = NormalizeForwardedProto(value); !normalized.empty()) {
+                proto = std::move(normalized);
+            }
+        }
+    }
+}
+
+TString JoinForwardedHeaderValues(const NHttp::THeaders& headers) {
+    TStringBuilder out;
+    const auto range = headers.Headers.equal_range("forwarded");
+    for (auto it = range.first; it != range.second; ++it) {
+        if (!out.empty()) {
+            out << ", ";
+        }
+        out << it->second;
+    }
+    return out;
 }
 
 bool TryParseTcpPort(TStringBuf value, ui16& port) {
@@ -165,8 +282,14 @@ TString FormatSqsEndpoint(TStringBuf scheme, TStringBuf hostname, bool hasPort, 
 
 TString MakeSqsRequestEndpoint(TStringBuf host, TStringBuf headersBlob, bool tlsSecure) {
     const NHttp::THeaders headers(headersBlob);
-    if (TStringBuf forwardedHost = FirstForwardedValue(headers.Get("x-forwarded-host"));
-        IsValidRequestHost(forwardedHost))
+    TString rfcHost;
+    TString rfcProto;
+    ParseRfc7239Forwarded(JoinForwardedHeaderValues(headers), rfcHost, rfcProto);
+
+    if (IsValidRequestHost(rfcHost)) {
+        host = rfcHost;
+    } else if (TStringBuf forwardedHost = FirstForwardedValue(headers.Get("x-forwarded-host"));
+               IsValidRequestHost(forwardedHost))
     {
         host = forwardedHost;
     }
@@ -183,7 +306,9 @@ TString MakeSqsRequestEndpoint(TStringBuf host, TStringBuf headersBlob, bool tls
     }
 
     TString scheme = tlsSecure ? "https" : "http";
-    if (TStringBuf proto = headers.Get("x-forwarded-proto"); !proto.empty()) {
+    if (!rfcProto.empty()) {
+        scheme = rfcProto;
+    } else if (TStringBuf proto = headers.Get("x-forwarded-proto"); !proto.empty()) {
         if (TString normalized = NormalizeForwardedProto(proto); !normalized.empty()) {
             scheme = std::move(normalized);
         }

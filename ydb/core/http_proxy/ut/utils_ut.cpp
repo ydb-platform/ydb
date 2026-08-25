@@ -138,6 +138,145 @@ Y_UNIT_TEST_SUITE(SqsRequestEndpoint) {
         }
     }
 
+    Y_UNIT_TEST(Rfc7239ForwardedPresenceMatrix) {
+        struct TCase {
+            const char* Name;
+            TStringBuf Host;
+            TStringBuf Headers;
+            bool Tls;
+            TStringBuf Expected;
+        };
+
+        const TCase cases[] = {
+            // No Forwarded header
+            {"no_forwarded", "backend.internal:8771", "", false, "http://backend.internal:8771"},
+
+            // Only host=
+            {"host", "backend.internal:8771",
+             "Forwarded: host=example.com\r\n", false, "http://example.com"},
+            {"host_port_quoted", "backend.internal:8771",
+             "Forwarded: host=\"example.com:8080\"\r\n", false, "http://example.com:8080"},
+            {"host_port_unquoted", "backend.internal:8771",
+             "Forwarded: host=example.com:8080\r\n", false, "http://example.com:8080"},
+            {"host_empty_request_host", "",
+             "Forwarded: host=example.com\r\n", false, "http://example.com"},
+
+            // Only proto=
+            {"proto_https", "backend.internal:8771",
+             "Forwarded: proto=https\r\n", false, "https://backend.internal:8771"},
+            {"proto_http_overrides_tls", "backend.internal:8771",
+             "Forwarded: proto=http\r\n", true, "http://backend.internal:8771"},
+            {"proto_empty_request_host", "",
+             "Forwarded: proto=https\r\n", false, ""},
+
+            // host= + proto=
+            {"host_proto", "backend.internal:8771",
+             "Forwarded: host=example.com;proto=https\r\n", false, "https://example.com"},
+            {"host_port_proto", "backend.internal:8771",
+             "Forwarded: host=\"example.com:8080\";proto=https\r\n", false, "https://example.com:8080"},
+            {"proto_then_host", "backend.internal:8771",
+             "Forwarded: proto=https;host=example.com\r\n", false, "https://example.com"},
+            {"host_proto_empty_request_host", "",
+             "Forwarded: host=example.com;proto=https\r\n", false, "https://example.com"},
+
+            // for= / by= ignored
+            {"for_by_ignored", "backend.internal:8771",
+             "Forwarded: for=192.0.2.43;by=203.0.113.60;host=example.com;proto=https\r\n",
+             false, "https://example.com"},
+
+            // RFC 7.5 chain: first element has only for=, host/proto on a later element
+            {"rfc_example_chain", "backend.internal:8771",
+             "Forwarded: for=192.0.2.43, for=198.51.100.17;by=203.0.113.60;proto=http;host=example.com\r\n",
+             false, "http://example.com"},
+
+            // First host=/proto= wins
+            {"first_element_wins", "backend.internal:8771",
+             "Forwarded: host=first.example;proto=http, host=second.example;proto=https\r\n",
+             false, "http://first.example"},
+
+            // Quoted proto, case-insensitive names
+            {"quoted_proto_case", "backend.internal:8771",
+             "Forwarded: Host=example.com;PROTO=\"HTTPS\"\r\n", false, "https://example.com"},
+
+            // Whitespace around tokens
+            {"ows", "backend.internal:8771",
+             "Forwarded: for=192.0.2.43; host=\"example.com:8080\"; proto=https\r\n",
+             false, "https://example.com:8080"},
+
+            // IPv6 host must be quoted
+            {"ipv6_host_port", "backend.internal:8771",
+             "Forwarded: host=\"[2001:db8:cafe::17]:8080\";proto=https\r\n",
+             false, "https://[2001:db8:cafe::17]:8080"},
+
+            // Multiple Forwarded header fields (RFC 7.1)
+            {"split_headers", "backend.internal:8771",
+             "Forwarded: for=192.0.2.43\r\n"
+             "Forwarded: host=example.com;proto=https\r\n",
+             false, "https://example.com"},
+
+            // Invalid host falls back to X-Forwarded-Host / Host
+            {"invalid_host_fallback_xfh", "backend.internal:8771",
+             "Forwarded: host=evil.com/phishing\r\n"
+             "X-Forwarded-Host: example.com\r\n",
+             false, "http://example.com"},
+            {"invalid_host_fallback_host", "backend.internal:8771",
+             "Forwarded: host=evil.com/phishing\r\n",
+             false, "http://backend.internal:8771"},
+
+            // Unknown proto falls back to X-Forwarded-Proto / TLS
+            {"unknown_proto_fallback_xfp", "backend.internal:8771",
+             "Forwarded: host=example.com;proto=ftp\r\n"
+             "X-Forwarded-Proto: https\r\n",
+             false, "https://example.com"},
+
+            // Forwarded overrides X-Forwarded-*
+            {"overrides_xfh", "backend.internal:8771",
+             "Forwarded: host=rfc.example\r\n"
+             "X-Forwarded-Host: xfh.example\r\n",
+             false, "http://rfc.example"},
+            {"overrides_xproto", "backend.internal:8771",
+             "Forwarded: host=example.com;proto=https\r\n"
+             "X-Forwarded-Proto: http\r\n",
+             false, "https://example.com"},
+
+            // X-Forwarded-Port still wins over port in Forwarded host
+            {"xfp_overrides_rfc_host_port", "backend.internal:8771",
+             "Forwarded: host=\"example.com:8080\";proto=https\r\n"
+             "X-Forwarded-Port: 8443\r\n",
+             false, "https://example.com:8443"},
+
+            // Forwarded host without port + X-Forwarded-Port
+            {"rfc_host_xfp", "backend.internal:8771",
+             "Forwarded: host=example.com\r\n"
+             "X-Forwarded-Port: 8080\r\n",
+             false, "http://example.com:8080"},
+
+            // Default ports omitted
+            {"default_https_omitted", "backend.internal:8771",
+             "Forwarded: host=example.com;proto=https\r\n",
+             false, "https://example.com"},
+            {"explicit_443_omitted", "backend.internal:8771",
+             "Forwarded: host=\"example.com:443\";proto=https\r\n",
+             false, "https://example.com"},
+        };
+
+        for (const auto& c : cases) {
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                MakeSqsRequestEndpoint(c.Host, c.Headers, c.Tls),
+                c.Expected,
+                c.Name);
+        }
+    }
+
+    Y_UNIT_TEST(Rfc7239ForwardedFullString) {
+        UNIT_ASSERT_VALUES_EQUAL(
+            MakeSqsRequestEndpoint(
+                "backend.internal:8771",
+                "Forwarded: for=192.0.2.60;host=\"mysite.com:8080\";proto=http;by=8.8.8.8\r\n",
+                false),
+            "http://mysite.com:8080");
+    }
+
     Y_UNIT_TEST(UsesHostAndPlainHttp) {
         UNIT_ASSERT_VALUES_EQUAL(
             MakeSqsRequestEndpoint("sqs.ydb.test:8443", "", false),
@@ -361,5 +500,22 @@ Y_UNIT_TEST_SUITE(SqsRequestEndpoint) {
         UNIT_ASSERT_VALUES_EQUAL(
             MakeSqsRequestEndpoint(request->Host, request->Headers, false),
             "https://example.com:8443");
+    }
+
+    Y_UNIT_TEST(ParsedHttpRequestRfc7239Forwarded) {
+        auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+        endpoint->Secure = false;
+        const TString raw =
+            "POST / HTTP/1.1\r\n"
+            "Host: vla5-2135.lbkx.example.net:8771\r\n"
+            "Forwarded: for=192.0.2.43, for=198.51.100.17;host=\"lbkx.example.net:8443\";proto=https\r\n"
+            "X-Forwarded-Host: ignored.example\r\n"
+            "X-Forwarded-Proto: http\r\n"
+            "\r\n";
+        auto request = MakeIntrusive<NHttp::THttpIncomingRequest>(
+            raw, endpoint, NHttp::THttpConfig::SocketAddressType{});
+        UNIT_ASSERT_VALUES_EQUAL(
+            MakeSqsRequestEndpoint(request->Host, request->Headers, false),
+            "https://lbkx.example.net:8443");
     }
 }

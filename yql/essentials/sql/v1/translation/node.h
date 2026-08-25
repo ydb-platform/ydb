@@ -1307,6 +1307,7 @@ struct TFamilyEntry {
     TNodePtr Compression;
     TNodePtr CompressionLevel;
     TNodePtr CacheMode;
+    TNodePtr ExternalThreshold;
 };
 
 struct TIndexDescription {

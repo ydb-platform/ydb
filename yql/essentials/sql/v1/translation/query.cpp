@@ -1903,6 +1903,9 @@ public:
                 if (family.CacheMode) {
                     familyDesc = L(familyDesc, Q(Y(Q("cache_mode"), family.CacheMode)));
                 }
+                if (family.ExternalThreshold) {
+                    familyDesc = L(familyDesc, Q(Y(Q("external_threshold"), family.ExternalThreshold)));
+                }
                 columnFamilies = L(columnFamilies, Q(familyDesc));
             }
             actions = L(actions, Q(Y(Q("alterColumnFamilies"), Q(columnFamilies))));

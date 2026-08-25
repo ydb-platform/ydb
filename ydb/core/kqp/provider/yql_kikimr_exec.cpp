@@ -2000,6 +2000,7 @@ public:
             }
 
             ui64 alterTableFlags = 0; //additional flags to pass options without public api modification
+            TMaybe<TFamilySettings> familySettings;
             Ydb::Table::AlterTableRequest alterTableRequest;
             alterTableRequest.set_path(table.Metadata->Name);
 
@@ -2433,6 +2434,26 @@ public:
                                                 << "' for a column family"));
                                         return SyncError();
                                     }
+                                } else if (name == "external_threshold") {
+                                    const auto value = familySetting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
+                                    ui32 threshold;
+                                    if (!TryFromString<ui32>(value, threshold) || threshold == 0 || threshold == Max<ui32>()) {
+                                        ctx.AddError(TIssue(ctx.GetPosition(familySetting.Value().Ref().Pos()),
+                                            "EXTERNAL_THRESHOLD must be in range [1, 4294967294]"));
+                                        return SyncError();
+                                    }
+                                    if (f->name() != "default") {
+                                        ctx.AddError(TIssue(ctx.GetPosition(familySetting.Name().Pos()),
+                                            "EXTERNAL_THRESHOLD is supported only for column family 'default'"));
+                                        return SyncError();
+                                    }
+                                    if (familySettings) {
+                                        ctx.AddError(TIssue(ctx.GetPosition(familySetting.Name().Pos()),
+                                            "EXTERNAL_THRESHOLD can be specified only once"));
+                                        return SyncError();
+                                    }
+                                    familySettings = TFamilySettings{threshold};
+                                    alterTableRequest.mutable_alter_storage_settings();
                                 } else {
                                     ctx.AddError(TIssue(ctx.GetPosition(familySetting.Name().Pos()),
                                         TStringBuilder() << "Unknown column family setting name: " << name));
@@ -3423,7 +3444,12 @@ public:
                 if (!SessionCtx->Query().DocumentApiRestricted) {
                     requestType = NKikimr::NDocApi::RequestType;
                 }
-                future = Gateway->AlterTable(cluster, std::move(alterTableRequest), requestType, alterTableFlags, std::move(indexBuildSettings));
+                TAuxSettings settings = std::move(indexBuildSettings);
+                if (familySettings) {
+                    settings = std::move(*familySettings);
+                }
+                future = Gateway->AlterTable(cluster, std::move(alterTableRequest), requestType, alterTableFlags,
+                    std::move(settings));
             }
 
             return WrapFuture(future,

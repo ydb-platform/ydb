@@ -36,6 +36,8 @@
 
 #include <util/string/join.h>
 
+#include <variant>
+
 namespace NKikimr {
     namespace NMiniKQL {
         class IFunctionRegistry;
@@ -67,6 +69,12 @@ struct TKikimrQueryPhaseLimits {
 struct TKikimrQueryLimits {
     TKikimrQueryPhaseLimits PhaseLimits;
 };
+
+struct TFamilySettings {
+    ui32 ExternalThreshold;
+};
+
+using TAuxSettings = std::variant<NKikimrIndexBuilder::TIndexBuildSettings, TFamilySettings>;
 
 struct TIndexDescription {
     struct TLocalBloomFilterDescription {
@@ -1630,7 +1638,7 @@ public:
         const std::shared_ptr<const NKikimr::NKqp::TKqpPhyTxHolder> &phyTx) = 0;
 
     virtual NThreading::TFuture<TGenericResult> AlterTable(const TString& cluster, Ydb::Table::AlterTableRequest&& req,
-        const TMaybe<TString>& requestType, ui64 flags, NKikimrIndexBuilder::TIndexBuildSettings&& buildSettings) = 0;
+        const TMaybe<TString>& requestType, ui64 flags, TAuxSettings&& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> RenameTable(const TString& src, const TString& dst, const TString& cluster) = 0;
 

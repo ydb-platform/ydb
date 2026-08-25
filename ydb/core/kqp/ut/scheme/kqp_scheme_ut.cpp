@@ -3253,6 +3253,61 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         UNIT_ASSERT_VALUES_EQUAL(describeResult.GetTableDescription().GetStorageSettings().GetExternalDataChannelsCount().value(), 7);
     }
 
+    Y_UNIT_TEST(AlterDefaultFamilyExternalThreshold) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        const TString tableName = "/Root/TableWithExternalThreshold";
+
+        auto result = session.ExecuteSchemeQuery(TStringBuilder() << R"(
+            CREATE TABLE `)" << tableName << R"(` (
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+            ALTER TABLE `)" << tableName << R"(`
+                ALTER FAMILY default SET EXTERNAL_THRESHOLD 230052;
+        )").GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        const auto describeResult = kikimr.GetTestClient().Ls(tableName);
+        const auto& families = describeResult->Record.GetPathDescription().GetTable()
+            .GetPartitionConfig().GetColumnFamilies();
+        UNIT_ASSERT_VALUES_EQUAL(families.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(families[0].GetId(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(families[0].GetStorageConfig().GetExternalThreshold(), 230052);
+    }
+
+    Y_UNIT_TEST(AlterExternalThresholdValidation) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        const TString tableName = "/Root/TableWithExternalThresholdValidation";
+
+        auto result = session.ExecuteSchemeQuery(TStringBuilder() << R"(
+            CREATE TABLE `)" << tableName << R"(` (
+                Key Uint64,
+                Value String FAMILY secondary,
+                PRIMARY KEY (Key),
+                FAMILY secondary ()
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        const auto checkInvalid = [&](TStringBuf family, TStringBuf value, TStringBuf expectedIssue) {
+            const auto alterResult = session.ExecuteSchemeQuery(TStringBuilder() << R"(
+                ALTER TABLE `)" << tableName << R"(`
+                    ALTER FAMILY )" << family << " SET EXTERNAL_THRESHOLD " << value << ";"
+            ).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::GENERIC_ERROR, alterResult.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(alterResult.GetIssues().ToString(), expectedIssue, alterResult.GetIssues().ToString());
+        };
+
+        checkInvalid("secondary", "1", "EXTERNAL_THRESHOLD is supported only for column family 'default'");
+        checkInvalid("default", "-1", "EXTERNAL_THRESHOLD must be in range [1, 4294967294]");
+        checkInvalid("default", "4294967296", "EXTERNAL_THRESHOLD must be in range [1, 4294967294]");
+    }
+
     Y_UNIT_TEST(CreateAndAlterTableComplex) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();

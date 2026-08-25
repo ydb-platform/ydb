@@ -1,6 +1,7 @@
 #include <yt/yt/core/test_framework/framework.h>
 
 #include <yt/yt/core/actions/bind.h>
+#include <yt/yt/core/actions/future.h>
 
 #include <yt/yt/core/concurrency/delayed_executor.h>
 
@@ -144,6 +145,32 @@ TEST(TDelayedExecutorTest, SubmitAndCancel)
     EXPECT_EQ(0, *fired);
     EXPECT_EQ(1, state->Constructors);
     EXPECT_EQ(1, state->Destructors);
+}
+
+TEST(TDelayedExecutorTest, MakeDelayedAndCancel)
+{
+    auto future = TDelayedExecutor::MakeDelayed(TDuration::Seconds(100));
+
+    EXPECT_TRUE(future.Cancel(TError(NYT::EErrorCode::Timeout, "Waited long enough")));
+
+    auto error = future.TryGet();
+    ASSERT_TRUE(error);
+    EXPECT_EQ(NYT::EErrorCode::Canceled, error->GetCode());
+    ASSERT_EQ(1, std::ssize(error->InnerErrors()));
+    EXPECT_EQ(NYT::EErrorCode::Timeout, error->InnerErrors()[0].GetCode());
+}
+
+//! OK errors cannot become inner ones and are dropped.
+TEST(TDelayedExecutorTest, MakeDelayedAndCancelWithOKError)
+{
+    auto future = TDelayedExecutor::MakeDelayed(TDuration::Seconds(100));
+
+    EXPECT_TRUE(future.Cancel(TError()));
+
+    auto error = future.TryGet();
+    ASSERT_TRUE(error);
+    EXPECT_EQ(NYT::EErrorCode::Canceled, error->GetCode());
+    EXPECT_TRUE(error->InnerErrors().empty());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

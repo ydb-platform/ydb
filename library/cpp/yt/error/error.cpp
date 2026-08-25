@@ -718,13 +718,17 @@ void TError::AddAttributes(TAnyMergeableDictionaryRef attributes)
 
 void TError::AddInnerError(const TError& innerError)
 {
-    YT_VERIFY(!innerError.IsOK());
+    if (innerError.IsOK()) {
+        return;
+    }
     MutableInnerErrors()->push_back(innerError);
 }
 
 void TError::AddInnerError(TError&& innerError)
 {
-    YT_VERIFY(!innerError.IsOK());
+    if (innerError.IsOK()) {
+        return;
+    }
     MutableInnerErrors()->push_back(std::move(innerError));
 }
 

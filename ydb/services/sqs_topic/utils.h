@@ -7,15 +7,19 @@ namespace NKikimrConfig {
     class TSqsConfig;
 } // namespace NKikimrConfig
 
-namespace NKikimr::NGrpcService {
-    class IRequestOpCtx;
-} // namespace NKikimr::NGrpcService
+namespace NKikimr::NGRpcService {
+    class IRequestCtxBaseMtSafe;
+} // namespace NKikimr::NGRpcService
 
 namespace NKikimr::NPQ::NMLP {
     struct TMessageId;
 } // namespace NKikimr::NPQ::NMLP
 
 namespace NKikimr::NSqsTopic {
+
+    struct TRichQueueUrl;
+
+    inline constexpr TStringBuf REQUEST_ENDPOINT_METADATA_KEY = "sqsRequestEndpoint";
 
     struct TQueueNameWithConsumer {
         TStringBuf QueueName;
@@ -26,7 +30,7 @@ namespace NKikimr::NSqsTopic {
 
     const NKikimrConfig::TSqsConfig& Cfg();
 
-    TString GetEndpoint(const NKikimrConfig::TSqsConfig& config);
+    TString MakeQueueUrl(const TRichQueueUrl& queueUrl, const NGRpcService::IRequestCtxBaseMtSafe* request);
 
     TString GenerateMessageId(const TString& database, const TString& topicPath, const NPQ::NMLP::TMessageId& pos);
 

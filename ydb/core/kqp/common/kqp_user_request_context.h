@@ -39,6 +39,7 @@ struct TUserRequestContext : public TAtomicRefCount<TUserRequestContext> {
     TString StreamingQueryPath;
     TString WatermarkLateEventsPolicy;
     std::shared_ptr<NYql::NPq::NProto::StreamingDisposition> StreamingDisposition;
+    std::optional<TDuration> CheckpointInterval;
 
     TUserRequestContext() = default;
 

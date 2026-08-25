@@ -475,6 +475,20 @@
             "uri": "https://{canondata_backend}/1903885/fdf3d9a48d438f90af2da132ed3e94bcfa6909fe/resource.tar.gz#test.test_Optimizers-NormalizeEqualityFilterOverJoin-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[Optimizers-PruneUnusedColumnsOverSqlCombine-default.txt-Debug]": [
+        {
+            "checksum": "f4493e95efbfc5c12b4f562547400932",
+            "size": 820,
+            "uri": "https://{canondata_backend}/1937424/a5b61b6a0035ba45ebf1653cefec3d3d8a3d80c9/resource.tar.gz#test.test_Optimizers-PruneUnusedColumnsOverSqlCombine-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[Optimizers-PruneUnusedColumnsOverSqlCombine-default.txt-Results]": [
+        {
+            "checksum": "e3647bd4ffe3af8f6709893b98f0b052",
+            "size": 2109,
+            "uri": "https://{canondata_backend}/1809005/8d8e1e69cdc27add6ccde69bcdaa3af32ff1645e/resource.tar.gz#test.test_Optimizers-PruneUnusedColumnsOverSqlCombine-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[Result-Pickle-default.txt-Debug]": [
         {
             "checksum": "ff0f81f90265c0afaa74303e7198d058",

@@ -222,6 +222,13 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
     }
 
     auto createImplTable = [&](NKikimrSchemeOp::TTableDescription&& implTableDesc, const THashSet<TString>& localSequences = {}) {
+        // Index impl tables inherit their base table's detailed metrics level. Gated on the
+        // feature flag: the base table's setting may have been persisted while the flag was on,
+        // and an unguarded copy would make the impl table's TCreateTable reject the whole build.
+        if (AppData()->FeatureFlags.GetEnableDataShardDetailedMetrics() && tableInfo->HasDetailedMetricsSettings()) {
+            *implTableDesc.MutableDetailedMetricsSettings()->MutableConfigured() = tableInfo->GetDetailedMetricsSettings();
+        }
+
         if (GetIndexType(indexDesc) != NKikimrSchemeOp::EIndexTypeGlobalUnique ||
             context.SS->EnableOnlineAddUniqueIndex) {
             implTableDesc.MutablePartitionConfig()->SetShadowData(true);

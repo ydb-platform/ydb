@@ -393,9 +393,9 @@
     ],
     "test.test[combine-empty_right-default.txt-Debug]": [
         {
-            "checksum": "c29a43ac5650e7be17d583623bebb252",
-            "size": 1079,
-            "uri": "https://{canondata_backend}/1809005/2ce584b96db16773aaed916c12bcff0f656a73a8/resource.tar.gz#test.test_combine-empty_right-default.txt-Debug_/opt.yql"
+            "checksum": "9fadf6468f6b77f2cad567b24580678f",
+            "size": 1142,
+            "uri": "https://{canondata_backend}/1937367/334454d51c3ebfb6f5299008cb320d71b0ad03b0/resource.tar.gz#test.test_combine-empty_right-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[combine-empty_right-default.txt-Results]": [
@@ -407,9 +407,9 @@
     ],
     "test.test[combine-right_only_presort-default.txt-Debug]": [
         {
-            "checksum": "75b8d680c985f42424a52a0864758acd",
-            "size": 1267,
-            "uri": "https://{canondata_backend}/1936273/18e40ff197d3b57f9d3b1b49715b8d47ade19740/resource.tar.gz#test.test_combine-right_only_presort-default.txt-Debug_/opt.yql"
+            "checksum": "60e9fd1106a7d3174c1a865f2cfcd919",
+            "size": 1333,
+            "uri": "https://{canondata_backend}/1937367/334454d51c3ebfb6f5299008cb320d71b0ad03b0/resource.tar.gz#test.test_combine-right_only_presort-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[combine-right_only_presort-default.txt-Results]": [
@@ -421,9 +421,9 @@
     ],
     "test.test[combine-single_key-default.txt-Debug]": [
         {
-            "checksum": "b771962fa7eca05e70567e609141651e",
-            "size": 1196,
-            "uri": "https://{canondata_backend}/1916746/7f910841edd8e6c739c4eaa79dc8012f58694f75/resource.tar.gz#test.test_combine-single_key-default.txt-Debug_/opt.yql"
+            "checksum": "e8a56e9478f8b62bda2c9792d4cd0f1e",
+            "size": 1259,
+            "uri": "https://{canondata_backend}/1937367/334454d51c3ebfb6f5299008cb320d71b0ad03b0/resource.tar.gz#test.test_combine-single_key-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[combine-single_key-default.txt-Results]": [

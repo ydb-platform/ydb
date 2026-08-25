@@ -1533,40 +1533,33 @@ Y_UNIT_TEST(UnauthenticatedRejectedWhenRequired) {
     AssertStatus(result, Ydb::StatusIds::UNAUTHORIZED, "Unauthenticated access is forbidden");
 }
 
-Y_UNIT_TEST(FccTopicNameFormatsCreateAndDescribeAliases) {
+Y_UNIT_TEST(FccKeepsLiteralDashDashTopicName) {
     auto setup = CreateSetup("TopicNameFormatsFcc");
     auto& runtime = setup->GetRuntime();
 
-    MkDir(*setup, "/Root", "fcclegacy");
+    const TString name = "TestSchemeList--test-topic-1";
+    const TString path = "/Root/" + name;
+    CreateTopic(runtime, name);
+    AssertDescribeAliases(runtime, {name, path}, path);
+
+    auto ls = setup->GetServer().AnnoyingClient->Ls("/Root");
+    UNIT_ASSERT(ls);
+    bool listed = false;
+    for (const auto& child : ls->Record.GetPathDescription().GetChildren()) {
+        if (child.GetName() == name) {
+            listed = true;
+            UNIT_ASSERT_VALUES_EQUAL(child.GetPathType(), NKikimrSchemeOp::EPathTypePersQueueGroup);
+        }
+        UNIT_ASSERT_VALUES_UNEQUAL(child.GetName(), "TestSchemeList");
+    }
+    UNIT_ASSERT(listed);
+
     MkDir(*setup, "/Root", "fccmodern");
-    MkDir(*setup, "/Root", "fccshort");
-
-    const TVector<TString> legacyAliases = {
-        "rt3.dc1--fcclegacy--topic",
-        "fcclegacy--topic",
-        "fcclegacy/topic",
-        "/Root/fcclegacy/topic",
-    };
-    CreateTopic(runtime, "rt3.dc1--fcclegacy--topic");
-    AssertDescribeAliases(runtime, legacyAliases, "/Root/fcclegacy/topic");
-
-    const TVector<TString> modernAliases = {
-        "rt3.dc1--fccmodern--topic",
-        "fccmodern--topic",
-        "fccmodern/topic",
-        "/Root/fccmodern/topic",
-    };
     CreateTopic(runtime, "fccmodern/topic");
-    AssertDescribeAliases(runtime, modernAliases, "/Root/fccmodern/topic");
-
-    const TVector<TString> shortAliases = {
-        "rt3.dc1--fccshort--topic",
-        "fccshort--topic",
-        "fccshort/topic",
-        "/Root/fccshort/topic",
-    };
-    CreateTopic(runtime, "fccshort--topic");
-    AssertDescribeAliases(runtime, shortAliases, "/Root/fccshort/topic");
+    AssertDescribeAliases(
+        runtime,
+        {"fccmodern/topic", "/Root/fccmodern/topic"},
+        "/Root/fccmodern/topic");
 }
 
 Y_UNIT_TEST(FederationTopicNameFormats) {

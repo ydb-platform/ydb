@@ -549,8 +549,11 @@ public:
 
     TError GetCanceledError() const
     {
-        return TError(NYT::EErrorCode::Canceled, "RPC request is canceled")
-            << ThrottledError_;
+        auto error = TError(NYT::EErrorCode::Canceled, "RPC request is canceled");
+        if (ThrottledError_) {
+            error.Add(*ThrottledError_);
+        }
+        return error;
     }
 
     void Cancel() override
@@ -1917,25 +1920,27 @@ void TServiceBase::DoHandleRequest(TIncomingRequest&& incomingRequest)
 
     if (incomingRequest.RequestQueue->IsQueueSizeLimitExceeded()) {
         incomingRequest.RuntimeInfo->RequestQueueSizeLimitErrorCounter.Increment();
-        ReplyError(
-            TError(NRpc::EErrorCode::RequestQueueSizeLimitExceeded, "Request queue size limit exceeded")
-                << TErrorAttribute("method_limit", incomingRequest.RuntimeInfo->QueueSizeLimit.load(std::memory_order::relaxed))
-                << TErrorAttribute("queue_limit", incomingRequest.RequestQueue->GetQueueSizeLimit())
-                << TErrorAttribute("queue", incomingRequest.RequestQueue->GetName())
-                << incomingRequest.ThrottledError,
-            std::move(incomingRequest));
+        auto error = TError(NRpc::EErrorCode::RequestQueueSizeLimitExceeded, "Request queue size limit exceeded")
+            .With("method_limit", incomingRequest.RuntimeInfo->QueueSizeLimit.load(std::memory_order::relaxed))
+            .With("queue_limit", incomingRequest.RequestQueue->GetQueueSizeLimit())
+            .With("queue", incomingRequest.RequestQueue->GetName());
+        if (incomingRequest.ThrottledError) {
+            error.Add(*incomingRequest.ThrottledError);
+        }
+        ReplyError(std::move(error), std::move(incomingRequest));
         return;
     }
 
     if (incomingRequest.RequestQueue->IsQueueByteSizeLimitExceeded()) {
         incomingRequest.RuntimeInfo->RequestQueueByteSizeLimitErrorCounter.Increment();
-        ReplyError(
-            TError(NRpc::EErrorCode::RequestQueueSizeLimitExceeded, "Request queue bytes size limit exceeded")
-                << TErrorAttribute("method_limit", incomingRequest.RuntimeInfo->QueueByteSizeLimit.load(std::memory_order::relaxed))
-                << TErrorAttribute("queue_limit", incomingRequest.RequestQueue->GetQueueByteSizeLimit())
-                << TErrorAttribute("queue", incomingRequest.RequestQueue->GetName())
-                << incomingRequest.ThrottledError,
-            std::move(incomingRequest));
+        auto error = TError(NRpc::EErrorCode::RequestQueueSizeLimitExceeded, "Request queue bytes size limit exceeded")
+            .With("method_limit", incomingRequest.RuntimeInfo->QueueByteSizeLimit.load(std::memory_order::relaxed))
+            .With("queue_limit", incomingRequest.RequestQueue->GetQueueByteSizeLimit())
+            .With("queue", incomingRequest.RequestQueue->GetName());
+        if (incomingRequest.ThrottledError) {
+            error.Add(*incomingRequest.ThrottledError);
+        }
+        ReplyError(std::move(error), std::move(incomingRequest));
         return;
     }
 

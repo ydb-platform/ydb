@@ -158,7 +158,7 @@ void TConnection::Close()
 
         if (Error_.IsOK()) {
             Error_ = TError(NBus::EErrorCode::TransportError, "Bus terminated")
-                << *EndpointAttributes_;
+                .With(*EndpointAttributes_);
         }
 
         if (State_ == EState::Open) {
@@ -538,9 +538,9 @@ void TConnection::Abort(const TError& error, NLogging::ELogLevel logLevel)
 
     // Construct a detailed error.
     YT_VERIFY(!error.IsOK());
-    auto detailedError = error << *EndpointAttributes_;
+    auto detailedError = error.With(*EndpointAttributes_);
     if (PeerAttributes_) {
-        detailedError <<= *PeerAttributes_;
+        detailedError.Add(*PeerAttributes_);
     }
 
     {
@@ -855,9 +855,9 @@ void TConnection::Terminate(const TError& error)
 {
     // Construct a detailed error.
     YT_VERIFY(!error.IsOK());
-    auto detailedError = error << *EndpointAttributes_;
+    auto detailedError = error.With(*EndpointAttributes_);
     if (PeerAttributes_) {
-        detailedError <<= *PeerAttributes_;
+        detailedError.Add(*PeerAttributes_);
     }
 
     auto guard = Guard(Lock_);

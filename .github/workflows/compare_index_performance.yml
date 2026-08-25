@@ -36,6 +36,10 @@ on:
           - vector
           - fulltext
         default: vector
+      index_type:
+        description: 'Index type passed to the workload with --index-type (empty = workload default)'
+        required: false
+        default: ''
       rows:
         description: 'Number of rows in generated database'
         required: false
@@ -177,6 +181,7 @@ jobs:
           INPUT_BUILD_PRESET: ${{ inputs.build_preset || 'release' }}
           INPUT_REF: ${{ inputs.ref || 'main' }}
           INPUT_WORKLOAD: ${{ inputs.workload || 'all' }}
+          INPUT_INDEX_TYPE: ${{ inputs.index_type || '' }}
           INPUT_ROWS: ${{ inputs.rows || '10000' }}
           INPUT_TARGETS: ${{ inputs.targets || '1000' }}
           INPUT_ITERATIONS: ${{ inputs.iterations || '10' }}
@@ -230,6 +235,7 @@ jobs:
             --test-param compare_ref="$INPUT_REF" \
             --test-param compare_targets="$INPUT_TARGETS" \
             --test-param compare_workload="$INPUT_WORKLOAD" \
+            --test-param compare_index_type="$INPUT_INDEX_TYPE" \
             --test-param compare_rows="$INPUT_ROWS" \
             --test-param compare_iterations="$INPUT_ITERATIONS" \
             --test-param compare_warmup="$INPUT_WARMUP" \

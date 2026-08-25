@@ -806,7 +806,7 @@ void TStreamingTestFixture::CheckScriptExecutionsCount(ui64 expectedExecutionsCo
     });
 }
 
-void TStreamingTestFixture::WaitCheckpointUpdate(const std::string& checkpointId) {
+void TStreamingTestFixture::WaitCheckpointUpdate(const TString& checkpointId) {
     std::optional<uint64_t> minSeqNo;
     WaitFor(TEST_OPERATION_TIMEOUT, "checkpoint update", [&](TString& error) {
         const auto& result = ExecQuery(fmt::format(
@@ -840,6 +840,95 @@ void TStreamingTestFixture::WaitCheckpointUpdate(const std::string& checkpointId
 
         error = TStringBuilder() << "seq_no is not changed from: " << *minSeqNo;
         return false;
+    });
+}
+
+void TStreamingTestFixture::CheckNoCheckpointUpdate(const TString& checkpointId, TDuration waitDuration) {
+    const auto getLastSeqNo = [&]() {
+        const auto& result = ExecQuery(fmt::format(R"sql(
+            SELECT MAX(seq_no) AS seq_no FROM `.metadata/streaming/checkpoints/checkpoints_metadata`
+            WHERE graph_id = "{checkpoint_id}";
+        )sql",
+            "checkpoint_id"_a = checkpointId
+        ));
+        UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+
+        std::optional<ui64> seqNo;
+        CheckScriptResult(result[0], 1, 1, [&seqNo](TResultSetParser& resultSet) {
+            seqNo = resultSet.ColumnParser(0).GetOptionalUint64();
+        });
+        UNIT_ASSERT_C(seqNo, "Checkpoints not found for graph " << checkpointId);
+
+        return *seqNo;
+    };
+
+    Sleep(TDuration::Seconds(2));  // Wait for checkpoints garbage collection after query start / restart
+
+    const auto seqNo = getLastSeqNo();
+    Sleep(waitDuration);
+    UNIT_ASSERT_VALUES_EQUAL_C(getLastSeqNo(), seqNo, "Unexpected checkpoint for graph " << checkpointId);
+}
+
+TString TStreamingTestFixture::GetStreamingQueryCheckpointId(const TString& queryName) {
+    const TString queryPath = TStringBuilder() << "/Root/" << queryName;
+
+    TString checkpointId;
+    WaitFor(TDuration::Seconds(30), TStringBuilder() << "checkpoint graph for " << queryPath, [&](TString& error) {
+        const auto& result = ExecQuery(fmt::format(R"sql(
+            SELECT DISTINCT graph_id FROM `.metadata/streaming/checkpoints/checkpoints_metadata`
+            WHERE graph_id LIKE "%{query_path}";
+        )sql",
+            "query_path"_a = queryPath
+        ));
+        UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+
+        TResultSetParser resultSet(result[0]);
+        if (resultSet.RowsCount() != 1) {
+            error = TStringBuilder() << "found " << resultSet.RowsCount() << " checkpoint graphs";
+            return false;
+        }
+
+        UNIT_ASSERT(resultSet.TryNextRow());
+        checkpointId = resultSet.ColumnParser(0).GetOptionalString().value_or("");
+        UNIT_ASSERT(!checkpointId.empty());
+        return true;
+    });
+
+    return checkpointId;
+}
+
+void TStreamingTestFixture::CheckStreamingQueryProperty(const TString& queryName, const TString& propertyName, const TString& expectedValue) {
+    auto& runtime = GetRuntime();
+    const auto& queryDesc = Navigate(runtime, runtime.AllocateEdgeActor(), JoinPath({"Root", queryName}), NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+
+    const auto& resultSet = queryDesc->ResultSet;
+    UNIT_ASSERT_VALUES_EQUAL(resultSet.size(), 1);
+
+    const auto& streamingQuery = resultSet.at(0);
+    UNIT_ASSERT_VALUES_EQUAL(streamingQuery.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindStreamingQuery);
+    UNIT_ASSERT(streamingQuery.StreamingQueryInfo);
+
+    const auto& properties = streamingQuery.StreamingQueryInfo->Description.GetProperties().GetProperties();
+    const auto it = properties.find(propertyName);
+    UNIT_ASSERT_C(it != properties.end(), "Property '" << propertyName << "' not found");
+    UNIT_ASSERT_VALUES_EQUAL(it->second, expectedValue);
+}
+
+void TStreamingTestFixture::WaitStreamingQueryStatus(const TString& queryName, const TString& expectedStatus) {
+    WaitFor(TEST_OPERATION_TIMEOUT, TStringBuilder() << "streaming query status " << expectedStatus, [&](TString& error) {
+        const auto& result = ExecQuery(fmt::format(R"(
+            SELECT Status FROM `.sys/streaming_queries` WHERE Path = "/Root/{query_name}";)",
+            "query_name"_a = queryName
+        ));
+        UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+
+        std::string status;
+        CheckScriptResult(result[0], 1, 1, [&](TResultSetParser& resultSet) {
+            status = resultSet.ColumnParser("Status").GetOptionalUtf8().value_or("");
+        });
+
+        error = TStringBuilder() << "query status: " << status;
+        return status == expectedStatus;
     });
 }
 

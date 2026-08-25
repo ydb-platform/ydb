@@ -204,7 +204,17 @@ public:
 
     void CheckScriptExecutionsCount(ui64 expectedExecutionsCount, ui64 expectedLeasesCount);
 
-    void WaitCheckpointUpdate(const std::string& checkpointId);
+    // Streaming queries
+
+    void WaitCheckpointUpdate(const TString& checkpointId);
+
+    void CheckNoCheckpointUpdate(const TString& checkpointId, TDuration waitDuration = TDuration::Seconds(5));
+
+    TString GetStreamingQueryCheckpointId(const TString& queryName);
+
+    void CheckStreamingQueryProperty(const TString& queryName, const TString& propertyName, const TString& expectedValue);
+
+    void WaitStreamingQueryStatus(const TString& queryName, const TString& expectedStatus = "RUNNING");
 
     // Mock Connector utils
 

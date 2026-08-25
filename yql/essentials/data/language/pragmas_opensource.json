@@ -3,6 +3,9 @@
     "name": "yt.Annotations"
   },
   {
+    "name": "yt.ApplyMaxJobCountToAll"
+  },
+  {
     "name": "yt.ApplyStoredConstraints"
   },
   {

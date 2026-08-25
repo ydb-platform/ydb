@@ -135,6 +135,7 @@ public:
     NCommon::TConfSetting<TString, StaticPerCluster> _SecureTmpRoot;
     NCommon::TConfSetting<bool, StaticPerCluster> _EnableQLFilter;
     NCommon::TConfSetting<ui64, StaticPerCluster> NativeYtTypeCompatibility;
+    NCommon::TConfSetting<bool, StaticPerCluster> ApplyMaxJobCountToAll;
 
     // static global
     NCommon::TConfSetting<TString, Static> Auth;

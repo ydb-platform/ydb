@@ -29,6 +29,7 @@ enum class EYtOpProp: ui32 {
     AllowSampling         = 1 << 6,
     TemporaryChunkCombine = 1 << 7,
     PublishedChunkCombine = 1 << 8,
+    ForceApplyMaxJobCount = 1 << 9,
 };
 
 Y_DECLARE_FLAGS(EYtOpProps, EYtOpProp);

@@ -1437,7 +1437,8 @@ private:
             | EYtSettingType::KeySwitch
             | EYtSettingType::MapOutputType
             | EYtSettingType::ReduceInputType
-            | EYtSettingType::NoDq;
+            | EYtSettingType::NoDq
+            | EYtSettingType::ForceApplyMaxJobCount;
 
         if (hasMapLambda) {
             acceptedSettings |= EYtSettingType::BlockInputReady | EYtSettingType::BlockInputApplied;

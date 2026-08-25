@@ -239,9 +239,24 @@ void FillSpec(NYT::TNode& spec,
         spec["description"] = *val;
     }
 
-    if (!opProps.HasFlags(EYtOpProp::IntermediateData)) {
-        if (auto val = settings->MaxJobCount.Get(cluster)) {
-            spec["max_job_count"] = static_cast<i64>(*val);
+    if (auto val = settings->MaxJobCount.Get(cluster)) {
+        const bool applyToIntermediate = settings->ApplyMaxJobCountToAll.Get(cluster).GetOrElse(DEFAULT_APPLY_MAX_JOB_COUNT_TO_ALL) ||
+            opProps.HasFlags(EYtOpProp::ForceApplyMaxJobCount);
+        TMaybe<TStringBuf> settingName;
+        if (!opProps.HasFlags(EYtOpProp::IntermediateData)) {
+            settingName = "max_job_count";
+        } else if (applyToIntermediate) {
+            if (opProps.HasAnyOfFlags(EYtOpProp::WithReducer)) {
+                // mapreduce: apply even if map stage is empty
+                settingName = "max_map_job_count";
+            } else {
+                // sort
+                settingName = "max_partition_job_count";
+            }
+        }
+        if (settingName) {
+            YQL_ENSURE(!settingName->empty());
+            spec[*settingName] = static_cast<i64>(*val);
         }
     }
 

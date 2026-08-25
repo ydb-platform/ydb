@@ -93,6 +93,10 @@ class TScriptResultHandlerActor final : public TActorBootstrapped<TScriptResultH
                 return JsonMeta.has_value();
             }
 
+            bool IsFinished() const {
+                return Meta.finished();
+            }
+
         private:
             Ydb::Query::Internal::ResultSetMeta Meta;
             std::optional<NJson::TJsonValue> JsonMeta;
@@ -116,6 +120,19 @@ class TScriptResultHandlerActor final : public TActorBootstrapped<TScriptResultH
             bool ShouldSaveResult() const {
                 const auto rowsCount = PendingResult.rows_size();
                 return rowsCount && (Truncated || rowsCount >= MIN_SAVE_RESULT_BATCH_ROWS || ByteCount - AccumulatedSize >= MIN_SAVE_RESULT_BATCH_SIZE);
+            }
+
+            // Persist finished/truncated into meta when there is nothing left to drain.
+            // Without this, a late StreamData(finished=true) after the last row batch was
+            // already saved leaves Meta.finished unset until the actor exits.
+            void UpdateMetaOnComplete() {
+                if (!PendingResult.rows().empty() || !(Truncated || Finished) || Meta.IsFinished()) {
+                    return;
+                }
+
+                auto& meta = Meta.MutableMeta();
+                meta.set_number_rows(RowCount);
+                meta.set_finished(true);
             }
         };
 
@@ -463,6 +480,7 @@ private:
                     meta.set_truncated(true);
                 }
             }
+            resultSetInfo.UpdateMetaOnComplete();
         } else {
             YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "Skip truncated result part with rows",
                 {"logPrefix", LogPrefix()},
@@ -529,9 +547,7 @@ private:
         auto& resultSetInfo = infos[resultSetIndex];
         auto& meta = resultSetInfo.Meta.MutableMeta();
         meta.set_number_rows(resultSetInfo.RowCount);
-        if (resultSetInfo.PendingResult.rows().empty() && (resultSetInfo.Truncated || resultSetInfo.Finished)) {
-            meta.set_finished(true);
-        }
+        resultSetInfo.UpdateMetaOnComplete();
 
         if (const auto freeSpaceBytes = SaveResultsState.GetFreeSpaceBytes(); freeSpaceBytes > 0) {
             for (auto& [channelId, channel] : StreamChannels) {
@@ -823,6 +839,21 @@ private:
                 {"logPrefix", LogPrefix()});
             ContinueExecute();
             return;
+        }
+
+        // Query completed successfully: ensure result set meta reports finished=true.
+        // Covers the race where the last rows were saved before StreamData(finished=true).
+        if (FinishInfo.IsSuccess()) {
+            for (auto& info : SaveResultsState.ResultSetInfos) {
+                info.Finished = true;
+                info.UpdateMetaOnComplete();
+            }
+            if (SaveResultsState.HasMetaToSave()) {
+                YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Wait for finished result meta to save",
+                    {"logPrefix", LogPrefix()});
+                ContinueExecute();
+                return;
+            }
         }
 
         if (HasOperationInflight()) {

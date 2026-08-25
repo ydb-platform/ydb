@@ -1341,6 +1341,7 @@ public:
                 case EGroupFields::MaxVDiskSlotUsage:
                 case EGroupFields::MaxNormalizedOccupancy:
                 case EGroupFields::MaxVDiskRawUsage:
+                case EGroupFields::GroupSizeInUnits:
                     break;
             }
         }
@@ -1415,6 +1416,9 @@ public:
                     break;
                 case EGroupFields::MaxVDiskRawUsage:
                     SortCollection(GroupView, [](const TGroup* group) { return group->MaxVDiskRawUsage; }, ReverseSort);
+                    break;
+                case EGroupFields::GroupSizeInUnits:
+                    SortCollection(GroupView, [](const TGroup* group) { return group->GroupSizeInUnits; }, ReverseSort);
                     break;
                 case EGroupFields::PDiskId:
                 case EGroupFields::NodeId:

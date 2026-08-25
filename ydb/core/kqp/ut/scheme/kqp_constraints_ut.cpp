@@ -3139,7 +3139,8 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
             auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unsupported type of literal: Nothing");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
+                "Column addition with a DEFAULT expression is not supported");
         }
 
         {
@@ -3204,7 +3205,8 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
             auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unsupported type of literal: CurrentUtcTimestamp");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
+                "Column addition with a DEFAULT expression is not supported");
         }
     }
 

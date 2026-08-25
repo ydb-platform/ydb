@@ -206,3 +206,26 @@ class FakeReassignGroupDiskHandler:
         response.Status = MessageBusStatus.MSTATUS_OK
         response.BlobStorageConfigResponse.CopyFrom(config_response)
         return response
+
+
+class FakePopulatePDiskHandler:
+    def handle(self, func, *params):
+        assert func == 'BlobStorageConfig'
+        bs_request = params[0]
+
+        config_response = kikimr_bsconfig.TConfigResponse()
+        for command in bs_request.Request.Command:
+            assert command.HasField('PopulatePDisk')
+            config_response.Status.add().Success = True
+
+        if bs_request.Request.Rollback:
+            config_response.Success = False
+            config_response.ErrorDescription = 'fake transaction rollback'
+            config_response.RollbackSuccess = True
+        else:
+            config_response.Success = True
+
+        response = kikimr_msgbus.TResponse()
+        response.Status = MessageBusStatus.MSTATUS_OK
+        response.BlobStorageConfigResponse.CopyFrom(config_response)
+        return response

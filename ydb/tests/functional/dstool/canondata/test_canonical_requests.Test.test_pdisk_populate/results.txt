@@ -1,0 +1,87 @@
+dstool -e <endpoint> --mon-port <mon_port> pdisk populate --snapshot-from-pdisk=[1:1001] --snapshot-file=pdisk-populate-snapshot.json
+Exit Status: 0
+===== stdout =====
+[80000001:_:1:2:3]
+
+===== mock_base_config =====
+
+TBaseConfig {
+PDisk {
+  NodeId: 1
+  PDiskId: 1001
+  PDiskConfig {
+    ExpectedSlotCount: 8
+    SlotSizeInUnits: 0
+  }
+  BoxId: 1
+  DriveStatus: ACTIVE
+  ExpectedSlotCount: 8
+  PDiskMetrics {
+    EnforcedDynamicSlotSize: 0
+    SlotCount: 8
+    SlotSizeInUnits: 0
+  }
+}
+PDisk {
+  NodeId: 2
+  PDiskId: 1002
+  PDiskConfig {
+    ExpectedSlotCount: 8
+    SlotSizeInUnits: 0
+  }
+  BoxId: 1
+  DriveStatus: ACTIVE
+  ExpectedSlotCount: 8
+  PDiskMetrics {
+    EnforcedDynamicSlotSize: 0
+    SlotCount: 8
+    SlotSizeInUnits: 0
+  }
+}
+VSlot {
+  VSlotId {
+    NodeId: 1
+    PDiskId: 1001
+    VSlotId: 1000
+  }
+  GroupId: 2147483649
+  GroupGeneration: 7
+  FailRealmIdx: 1
+  FailDomainIdx: 2
+  VDiskIdx: 3
+  VDiskMetrics {
+    AvailableSize: 0
+    AllocatedSize: 0
+    State: OK
+    Replicated: true
+  }
+  Status: "READY"
+  Ready: true
+}
+Group {
+  GroupId: 2147483649
+  GroupGeneration: 1
+  ErasureSpecies: "none"
+  VSlotId {
+    NodeId: 1
+    PDiskId: 1001
+    VSlotId: 1000
+  }
+  BoxId: 1
+  StoragePoolId: 1
+}
+Node {
+  NodeId: 1
+  HostKey {
+    Fqdn: "localhost"
+    IcPort: 19001
+  }
+}
+Node {
+  NodeId: 2
+  HostKey {
+    Fqdn: "localhost"
+    IcPort: 19001
+  }
+}
+}

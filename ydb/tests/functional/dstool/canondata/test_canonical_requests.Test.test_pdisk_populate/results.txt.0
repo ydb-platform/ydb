@@ -1,0 +1,112 @@
+dstool -e <endpoint> --mon-port <mon_port> --dry-run pdisk populate --destination-pdisk=[2:1002] --snapshot-file=pdisk-populate-snapshot.json --suppress-donor-mode
+Exit Status: 0
+===== stderr =====
+success
+
+===== grpc_calls =====
+=== Invoke BlobStorageConfig ===
+Domain: 1
+Request {
+  Command {
+    PopulatePDisk {
+      DestinationPDisk {
+        TargetPDiskId {
+          NodeId: 2
+          PDiskId: 1002
+        }
+      }
+      VDiskId {
+        GroupID: 2147483649
+        GroupGeneration: 7
+        Ring: 1
+        Domain: 2
+        VDisk: 3
+      }
+      SuppressDonorMode: true
+    }
+  }
+  Rollback: true
+}
+
+===== mock_base_config =====
+
+TBaseConfig {
+PDisk {
+  NodeId: 1
+  PDiskId: 1001
+  PDiskConfig {
+    ExpectedSlotCount: 8
+    SlotSizeInUnits: 0
+  }
+  BoxId: 1
+  DriveStatus: ACTIVE
+  ExpectedSlotCount: 8
+  PDiskMetrics {
+    EnforcedDynamicSlotSize: 0
+    SlotCount: 8
+    SlotSizeInUnits: 0
+  }
+}
+PDisk {
+  NodeId: 2
+  PDiskId: 1002
+  PDiskConfig {
+    ExpectedSlotCount: 8
+    SlotSizeInUnits: 0
+  }
+  BoxId: 1
+  DriveStatus: ACTIVE
+  ExpectedSlotCount: 8
+  PDiskMetrics {
+    EnforcedDynamicSlotSize: 0
+    SlotCount: 8
+    SlotSizeInUnits: 0
+  }
+}
+VSlot {
+  VSlotId {
+    NodeId: 1
+    PDiskId: 1001
+    VSlotId: 1000
+  }
+  GroupId: 2147483649
+  GroupGeneration: 7
+  FailRealmIdx: 1
+  FailDomainIdx: 2
+  VDiskIdx: 3
+  VDiskMetrics {
+    AvailableSize: 0
+    AllocatedSize: 0
+    State: OK
+    Replicated: true
+  }
+  Status: "READY"
+  Ready: true
+}
+Group {
+  GroupId: 2147483649
+  GroupGeneration: 1
+  ErasureSpecies: "none"
+  VSlotId {
+    NodeId: 1
+    PDiskId: 1001
+    VSlotId: 1000
+  }
+  BoxId: 1
+  StoragePoolId: 1
+}
+Node {
+  NodeId: 1
+  HostKey {
+    Fqdn: "localhost"
+    IcPort: 19001
+  }
+}
+Node {
+  NodeId: 2
+  HostKey {
+    Fqdn: "localhost"
+    IcPort: 19001
+  }
+}
+}

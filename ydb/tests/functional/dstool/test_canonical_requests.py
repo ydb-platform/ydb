@@ -25,7 +25,7 @@ from ydb.tests.library.clients.kikimr_dynconfig_client import DynConfigClient
 from ydb.core.protos.whiteboard_disk_states_pb2 import EVDiskState
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 import ydb.public.api.protos.draft.ydb_dynamic_config_pb2 as dynconfig
-from .conftest import BaseConfigBuilder, FakeReassignGroupDiskHandler
+from .conftest import BaseConfigBuilder, FakePopulatePDiskHandler, FakeReassignGroupDiskHandler
 
 logger = logging.getLogger(__name__)
 C_4GB = 4 * 2**30
@@ -268,6 +268,49 @@ class Test(TestBase):
             self._trace('--dry-run', 'pdisk', 'set', '--status=INACTIVE', '--pdisk-ids', '[1:1]', with_grpc_calls=True),
             self._trace('pdisk', 'set', '--status=INACTIVE', '--pdisk-ids', '[1:1000]', '[2:1]', with_grpc_calls=True),
             self._trace('pdisk', 'list', '--columns', 'NodeId:PDiskId', 'Status', with_grpc_calls=True),
+        ]
+
+    def test_pdisk_populate(self):
+        snapshot_file = 'pdisk-populate-snapshot.json'
+        base_config = (
+            BaseConfigBuilder()
+            .add_node(node_id=1)
+            .add_node(node_id=2)
+            .add_pdisk(node_id=1, pdisk_id=1001, expected_slot_count=8)
+            .add_pdisk(node_id=2, pdisk_id=1002, expected_slot_count=8)
+            .add_group(group_id=0x80000001, vslot_ids=[(1, 1001, 1000)])
+            .add_vslot(
+                node_id=1,
+                pdisk_id=1001,
+                vslot_id=1000,
+                group_id=0x80000001,
+                group_generation=7,
+                fail_realm_idx=1,
+                fail_domain_idx=2,
+                vdisk_idx=3,
+            )
+            .build()
+        )
+
+        return [
+            self._trace(
+                'pdisk',
+                'populate',
+                '--snapshot-from-pdisk=[1:1001]',
+                '--snapshot-file=' + snapshot_file,
+                mock_base_config=base_config,
+            ),
+            self._trace(
+                '--dry-run',
+                'pdisk',
+                'populate',
+                '--destination-pdisk=[2:1002]',
+                '--snapshot-file=' + snapshot_file,
+                '--suppress-donor-mode',
+                with_grpc_calls=True,
+                mock_base_config=base_config,
+                fake_grpc_handler=FakePopulatePDiskHandler(),
+            ),
         ]
 
     def test_cluster_get_set(self):

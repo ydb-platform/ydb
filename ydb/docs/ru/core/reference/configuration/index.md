@@ -193,7 +193,6 @@ domains_config:
 #### Настройки режима аутентификации {#security-auth}
 
 #|
-<<<<<<< HEAD
 || Параметр | Описание ||
 || `enforce_user_token_requirement` | Режим обязательной [аутентификации](../../security/authentication.md).
 
@@ -242,36 +241,6 @@ domains_config:
 
 Значение по умолчанию: пустая строка.
     ||
-=======
-|| **Раздел** | **Обязателен** | **Описание** ||
-|| [{#T}](actor_system_config.md) | Да | Распределение CPU-ресурсов по пулам акторной системы ||
-|| [{#T}](auth_config.md) | Нет | Настройки аутентификации и авторизации ||
-|| [{#T}](aws_client_config.md) | Нет | Настройки по умолчанию клиента AWS ||
-|| [{#T}](blob_storage_config.md) | Нет | Конфигурация статической группы кластера для системных таблеток ||
-|| [{#T}](bridge_config.md) | Нет | Конфигурация [режима bridge](../../concepts/bridge.md) ||
-|| [{#T}](client_certificate_authorization.md) | Нет | Аутентификация с помощью клиентских сертификатов ||
-|| [{#T}](cms_config.md) | Нет | Конфигурация Cluster Management System (CMS) ||
-|| [{#T}](domains_config.md) | Нет | Конфигурация домена кластера, включая Blob Storage и State Storage ||
-|| [{#T}](feature_flags.md) | Нет | Функциональные флаги для включения или отключения определённых возможностей {{ ydb-short-name }} ||
-|| [{#T}](healthcheck_config.md) | Нет | Пороговые значения и таймауты сервиса Health Check ||
-|| [{#T}](hive_config.md) | Нет | Конфигурация запуска таблеток ||
-|| [{#T}](host_configs.md) | Нет | Типовые конфигурации хостов для узлов кластера ||
-|| [{#T}](hosts.md) | Да | Конфигурация статических узлов кластера ||
-|| [{#T}](immediate_controls_config.md) | Нет | Конфигурация динамических настроек кластера ||
-|| [{#T}](kafka_proxy_config.md) | Нет | Конфигурация [Kafka Proxy](../../reference/kafka-api/index.md) ||
-|| [{#T}](log_config.md) | Нет | Конфигурация и параметры логирования ||
-|| [{#T}](memory_controller_config.md) | Нет | Распределение памяти и лимиты для компонентов базы данных ||
-|| [{#T}](monitoring_config.md) | Нет | Параметры [YDB Monitoring](../embedded-ui/ydb-monitoring.md) ||
-|| [{#T}](node_broker_config.md) | Нет | Конфигурация стабильных имен узлов ||
-|| [{#T}](query_service_config.md) | Нет | Конфигурация внешних источников для федеративных запросов ||
-|| [{#T}](resource_broker_config.md) | Нет | Брокер ресурсов для контроля потребления CPU и памяти ||
-|| [{#T}](security_config.md) | Нет | Настройки конфигурации безопасности ||
-|| [{#T}](self_management_config.md) | Нет | Настройки распределённой конфигурации V2 и автоматического управления компонентами кластера ||
-|| [{#T}](system_tablet_backup_config.md) | Нет | Конфигурация резервного копирования системных таблеток ||
-|| [{#T}](table_service_config.md) | Нет | Настройки конфигурации выполнения запросов||
-|| [{#T}](tli_config.md) | Нет | Параметры диагностики [инвалидации блокировок транзакций](../../concepts/glossary.md#tli) (TLI) ||
-|| [{#T}](tls.md) | Нет | Конфигурация TLS для безопасных соединений ||
->>>>>>> 617b68b36c5 (add description for force_shard_split_data_size setting (#41348))
 |#
 
 ### Первичные настройки безопасности {#security-bootstrap}

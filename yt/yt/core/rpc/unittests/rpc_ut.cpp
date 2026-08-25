@@ -159,17 +159,6 @@ TYPED_TEST(TRpcTest, DefaultUserIsRoot)
     EXPECT_FALSE(rsp->has_user());
 }
 
-TYPED_TEST(TGrpcAuthenticatedTest, EmptyUserIsRootForCompatibility)
-{
-    TTestProxy proxy(this->CreateChannel());
-    auto req = proxy.PassCall();
-    req->SetUser("");
-    auto rspOrError = WaitForFast(req->Invoke());
-    EXPECT_TRUE(rspOrError.IsOK()) << ToString(rspOrError);
-    const auto& rsp = rspOrError.Value();
-    EXPECT_EQ("authenticated-user", rsp->user());
-}
-
 TYPED_TEST(TGrpcAuthenticatedTest, ManuallySpecifiedUserMismatch)
 {
     TTestProxy proxy(this->CreateChannel());
@@ -190,6 +179,23 @@ TYPED_TEST(TRpcTest, UserTag)
     const auto& rsp = rspOrError.Value();
     EXPECT_EQ(req->GetUser(), rsp->user());
     EXPECT_EQ(req->GetUserTag(), rsp->user_tag());
+}
+
+TYPED_TEST(TRpcTest, StartTime)
+{
+    TTestProxy proxy(this->CreateChannel());
+    auto req = proxy.PassCall();
+
+    auto beforeInvoke = TInstant::Now();
+    auto rspOrError = WaitForFast(req->Invoke());
+    auto afterInvoke = TInstant::Now();
+
+    EXPECT_TRUE(rspOrError.IsOK()) << ToString(rspOrError);
+    const auto& rsp = rspOrError.Value();
+    ASSERT_TRUE(rsp->has_start_time());
+    auto startTime = NYT::FromProto<TInstant>(rsp->start_time());
+    EXPECT_GE(startTime, beforeInvoke);
+    EXPECT_LE(startTime, afterInvoke);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1670,6 +1676,130 @@ TEST_F(TAttachmentsOutputStreamTest, CloseTimeout2)
     auto error = WaitForFast(future3);
     EXPECT_FALSE(error.IsOK());
     EXPECT_EQ(NYT::EErrorCode::Timeout, error.GetCode());
+}
+
+TEST_F(TAttachmentsOutputStreamTest, WindowDrainedTime)
+{
+    auto stream = CreateStream(5);
+
+    // The window is empty, the counter is running.
+    Sleep(TDuration::MilliSeconds(50));
+    auto elapsed1 = stream->GetWindowDrainedTime();
+    EXPECT_GE(elapsed1, TDuration::MilliSeconds(50));
+
+    // Non-empty, the counter is frozen.
+    auto payload1 = TSharedRef::FromString(std::string("abc"));
+    auto future1 = stream->Write(payload1);
+    EXPECT_TRUE(future1.IsSet());
+    auto elapsed2 = stream->GetWindowDrainedTime();
+    Sleep(TDuration::MilliSeconds(50));
+    EXPECT_EQ(stream->GetWindowDrainedTime(), elapsed2);
+
+    auto payload2 = TSharedRef::FromString(std::string("de"));
+    auto future2 = stream->Write(payload2);
+    EXPECT_TRUE(future2.IsSet());
+
+    // Partial drain.
+    stream->HandleFeedback({3});
+    Sleep(TDuration::MilliSeconds(50));
+    EXPECT_EQ(stream->GetWindowDrainedTime(), elapsed2);
+
+    // Full drain, the counter is running.
+    stream->HandleFeedback({5});
+    Sleep(TDuration::MilliSeconds(50));
+    auto elapsed3 = stream->GetWindowDrainedTime();
+    EXPECT_GE(elapsed3 - elapsed2, TDuration::MilliSeconds(50));
+
+    // Close puts the end-of-stream block into the window.
+    auto closeFuture = stream->Close();
+    auto elapsed4 = stream->GetWindowDrainedTime();
+    Sleep(TDuration::MilliSeconds(50));
+    EXPECT_EQ(stream->GetWindowDrainedTime(), elapsed4);
+
+    // The final acknowledgement completes the stream.
+    stream->HandleFeedback({6});
+    EXPECT_TRUE(closeFuture.IsSet());
+    EXPECT_TRUE(WaitForFast(closeFuture).IsOK());
+    auto elapsed5 = stream->GetWindowDrainedTime();
+    Sleep(TDuration::MilliSeconds(50));
+    EXPECT_EQ(stream->GetWindowDrainedTime(), elapsed5);
+}
+
+TEST_F(TAttachmentsOutputStreamTest, WindowDrainedTimeFrozenOnAbort)
+{
+    auto stream = CreateStream(5);
+
+    stream->Abort(TError("oops"));
+
+    auto elapsed = stream->GetWindowDrainedTime();
+    Sleep(TDuration::MilliSeconds(50));
+    EXPECT_EQ(stream->GetWindowDrainedTime(), elapsed);
+}
+
+TEST_F(TAttachmentsOutputStreamTest, WriteStallTime)
+{
+    auto stream = CreateStream(5);
+
+    // No writes, the timer is idle.
+    Sleep(TDuration::MilliSeconds(50));
+    EXPECT_EQ(stream->GetWriteStallTime(), TDuration::Zero());
+
+    // The write fits into the window.
+    auto payload1 = TSharedRef::FromString(std::string("abc"));
+    auto future1 = stream->Write(payload1);
+    EXPECT_TRUE(future1.IsSet());
+    Sleep(TDuration::MilliSeconds(50));
+    EXPECT_EQ(stream->GetWriteStallTime(), TDuration::Zero());
+
+    // The write overflows the window, start the timer.
+    auto payload2 = TSharedRef::FromString(std::string("defg"));
+    auto future2 = stream->Write(payload2);
+    EXPECT_FALSE(future2.IsSet());
+    Sleep(TDuration::MilliSeconds(50));
+    auto stalled1 = stream->GetWriteStallTime();
+    EXPECT_GE(stalled1, TDuration::MilliSeconds(50));
+
+    // Partial drain, not enough to unpark the write, timer is still running.
+    stream->HandleFeedback({1});
+    EXPECT_FALSE(future2.IsSet());
+    Sleep(TDuration::MilliSeconds(50));
+    auto stalled2 = stream->GetWriteStallTime();
+    EXPECT_GE(stalled2 - stalled1, TDuration::MilliSeconds(50));
+
+    // The stall is over.
+    stream->HandleFeedback({3});
+    EXPECT_TRUE(future2.IsSet());
+    EXPECT_TRUE(WaitForFast(future2).IsOK());
+    auto stalled3 = stream->GetWriteStallTime();
+    Sleep(TDuration::MilliSeconds(50));
+    EXPECT_EQ(stream->GetWriteStallTime(), stalled3);
+
+    // Close is not counted as a stall.
+    auto closeFuture = stream->Close();
+    Sleep(TDuration::MilliSeconds(50));
+    stream->HandleFeedback({8});
+    EXPECT_TRUE(closeFuture.IsSet());
+    EXPECT_TRUE(WaitForFast(closeFuture).IsOK());
+    EXPECT_EQ(stream->GetWriteStallTime(), stalled3);
+}
+
+TEST_F(TAttachmentsOutputStreamTest, WriteStallTimeFrozenOnAbort)
+{
+    auto stream = CreateStream(5);
+
+    // An oversized write is parked right away.
+    auto payload = TSharedRef::FromString(std::string("abcdefgh"));
+    auto future = stream->Write(payload);
+    EXPECT_FALSE(future.IsSet());
+    Sleep(TDuration::MilliSeconds(50));
+
+    stream->Abort(TError("oops"));
+    EXPECT_TRUE(future.IsSet());
+
+    auto elapsed = stream->GetWriteStallTime();
+    EXPECT_GE(elapsed, TDuration::MilliSeconds(50));
+    Sleep(TDuration::MilliSeconds(50));
+    EXPECT_EQ(stream->GetWriteStallTime(), elapsed);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

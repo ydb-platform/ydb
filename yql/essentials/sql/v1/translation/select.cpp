@@ -476,7 +476,7 @@ protected:
 
     void AllColumns() override {
         Y_DEBUG_ABORT_UNLESS(Source_);
-        return Source_->AllColumns();
+        Source_->AllColumns();
     }
 
     const TColumns* GetColumns() const override {
@@ -524,7 +524,6 @@ protected:
         Source_->SetCompositeSelect(composite);
     }
 
-protected:
     void SetSource(ISource* source) {
         Source_ = source;
     }
@@ -582,7 +581,6 @@ protected:
         return result ? result : ISource::FindColumnMistype(name);
     }
 
-protected:
     TColumns Columns_;
 };
 
@@ -2622,7 +2620,6 @@ private:
         return Y("block", Q(L(block, Y("return", "core"))));
     }
 
-private:
     TSourcePtr Source_;
     TVector<TNodePtr> GroupByExpr_;
     TVector<TNodePtr> DistinctAggrExpr_;
@@ -2894,7 +2891,6 @@ private:
         return terms;
     }
 
-private:
     TSourcePtr Source_;
     TNodePtr With_;
     const bool WithExtFunction_;
@@ -3278,7 +3274,7 @@ public:
     }
 
     void AddTmpWindowColumn(const TString& column) override {
-        return Source_->AddTmpWindowColumn(column);
+        Source_->AddTmpWindowColumn(column);
     }
 
     bool AddAggregation(TContext& ctx, TAggregationPtr aggr) override {
@@ -3709,9 +3705,10 @@ public:
             input = Y(ctx.UseUnordered(*Source_) ? "OrderedMap" : "Map", input, extraMembersLambda);
         }
 
-        return Y("SqlCombineInput", input, presortKeySelector, presortDirection,
-                 BuildLambda(Pos_, Y("row"), extractKey),
-                 BuildLambda(Pos_, Y("row"), Arg_));
+        return Y("SqlCombineInput", input,
+                 Y("Void"), presortKeySelector, presortDirection,
+                 Y("Void"), BuildLambda(Pos_, Y("row"), extractKey),
+                 Y("Void"), BuildLambda(Pos_, Y("row"), Arg_));
     }
 
     TPtr CloneCombineInputSource() const {

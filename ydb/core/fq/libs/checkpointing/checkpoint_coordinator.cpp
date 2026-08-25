@@ -119,7 +119,69 @@ void TCheckpointCoordinator::Handle(NFq::TEvCheckpointCoordinator::TEvReadyState
 }
 
 void TCheckpointCoordinator::ScheduleNextCheckpoint() {
-    Schedule(Settings.GetCheckpointingPeriod(), new TEvCheckpointCoordinator::TEvScheduleCheckpointing());
+    const auto now = TActivationContext::Monotonic();
+    const auto checkpointPeriod = Settings.GetCheckpointingPeriod();
+    if (!ScheduleCheckpointContext.NextCheckpointStartAt) {
+        // First checkpoint period must start from restore completion time
+        ScheduleCheckpointContext.NextCheckpointStartAt = now + checkpointPeriod;
+        ScheduleCheckpointContext.MetricsReportedAt = now;
+    }
+
+    if (ScheduleCheckpointContext.NextCheckpointStartAt > now) {
+        // Checkpoint time in the future
+
+        if (!ScheduleCheckpointContext.WaitScheduleNextCheckpointEventForCheckpointStartAt) {
+            ScheduleCheckpointContext.WaitScheduleNextCheckpointEventForCheckpointStartAt = true;
+            Schedule(ScheduleCheckpointContext.NextCheckpointStartAt, new TEvCheckpointCoordinator::TEvScheduleCheckpointing(/* waitStatistics */ false));
+        }
+        return;
+    }
+
+    if (const auto report = now - ScheduleCheckpointContext.MetricsReportedAt >= checkpointPeriod; !CanStartNewCheckpoint(report)) {
+        // Checkpoint can not be created due to inflight limit, schedule metrics refresh and wait for current checkpoint completion
+        if (report) {
+            ScheduleCheckpointContext.MetricsReportedAt = now;
+        }
+
+        if (!ScheduleCheckpointContext.WaitScheduleNextCheckpointEventForStatistics) {
+            // Refresh skipped checkpoints statistics, at most once in max(checkpointPeriod, 1s)
+            ScheduleCheckpointContext.WaitScheduleNextCheckpointEventForStatistics = true;
+            Schedule(ScheduleCheckpointContext.MetricsReportedAt + std::max(checkpointPeriod, TScheduleCheckpointContext::MIN_METRICS_REPORT_GRANULARITY), new TEvCheckpointCoordinator::TEvScheduleCheckpointing(/* waitStatistics */ true));
+        }
+        return;
+    }
+
+    ScheduleCheckpointContext.NextCheckpointStartAt = now + checkpointPeriod;
+    ScheduleCheckpointContext.MetricsReportedAt = now;
+
+    do {
+        FailedZeroCheckpoint = false;
+        Metrics.SkippedDueToInFlightLimit->Sub(SkippedDueToInFlightLimitCounter);
+        SkippedDueToInFlightLimitCounter = 0;
+        InitCheckpoint();
+
+        // Keep going only for a zero period
+    } while (ScheduleCheckpointContext.NextCheckpointStartAt <= now && CanStartNewCheckpoint(/* log */ false));
+
+    ScheduleNextCheckpoint();
+}
+
+bool TCheckpointCoordinator::CanStartNewCheckpoint(const bool log) {
+    const auto checkpointsInFly = PendingCheckpoints.size() + PendingCommitCheckpoints.size();
+    if (checkpointsInFly < Settings.GetMaxInflight() && (!InitingZeroCheckpoint || FailedZeroCheckpoint)) {
+        return true;
+    }
+
+    if (log) {
+        YDB_LOG_WARN("Skip schedule checkpoint event since inflight checkpoint limit exceeded",
+            {"coordinatorId", CoordinatorId},
+            {"current", checkpointsInFly},
+            {"limit", Settings.GetMaxInflight()});
+        Metrics.SkippedDueToInFlightLimit->Inc();
+        ++SkippedDueToInFlightLimitCounter;
+    }
+
+    return false;
 }
 
 void TCheckpointCoordinator::UpdateInProgressMetric() {
@@ -420,24 +482,19 @@ void TCheckpointCoordinator::InitCheckpoint() {
     Send(StorageProxy, req.release(), IEventHandle::FlagTrackDelivery);
 }
 
-void TCheckpointCoordinator::Handle(const TEvCheckpointCoordinator::TEvScheduleCheckpointing::TPtr&) {
+void TCheckpointCoordinator::Handle(const TEvCheckpointCoordinator::TEvScheduleCheckpointing::TPtr& ev) {
+    const bool waitStatistics = ev->Get()->WaitStatistics;
     YDB_LOG_DEBUG("Got TEvScheduleCheckpointing",
-        {"coordinatorId", CoordinatorId});
-    ScheduleNextCheckpoint();
-    const auto checkpointsInFly = PendingCheckpoints.size() + PendingCommitCheckpoints.size();
-    if (checkpointsInFly >= Settings.GetMaxInflight() || (InitingZeroCheckpoint && !FailedZeroCheckpoint)) {
-        YDB_LOG_WARN("Skip schedule checkpoint event since inflight checkpoint limit exceeded",
-            {"coordinatorId", CoordinatorId},
-            {"current", checkpointsInFly},
-            {"limit", Settings.GetMaxInflight()});
-        Metrics.SkippedDueToInFlightLimit->Inc();
-        ++SkippedDueToInFlightLimitCounter;
-        return;
+        {"coordinatorId", CoordinatorId},
+        {"waitStatistics", waitStatistics});
+
+    if (waitStatistics) {
+        ScheduleCheckpointContext.WaitScheduleNextCheckpointEventForStatistics = false;
+    } else {
+        ScheduleCheckpointContext.WaitScheduleNextCheckpointEventForCheckpointStartAt = false;
     }
-    FailedZeroCheckpoint = false;
-    Metrics.SkippedDueToInFlightLimit->Sub(SkippedDueToInFlightLimitCounter);
-    SkippedDueToInFlightLimitCounter = 0;
-    InitCheckpoint();
+
+    ScheduleNextCheckpoint();
 }
 
 void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvCreateCheckpointResponse::TPtr& ev) {
@@ -457,6 +514,7 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvCreateCheckpo
         ++*Metrics.FailedToCreate;
         ++*Metrics.StorageError;
         CheckpointingSnapshotRotationIndex = CheckpointingSnapshotRotationPeriod; // Next checkpoint is snapshot.
+        ScheduleNextCheckpoint();
     };
 
     if (issues) {
@@ -596,6 +654,7 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvSetCheckpoint
         ++*Metrics.StorageError;
         PendingCheckpoints.erase(it);
         FailedZeroCheckpoint = InitingZeroCheckpoint;
+        ScheduleNextCheckpoint();
         return;
     }
 
@@ -701,6 +760,7 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvCompleteCheck
     }
     PendingCommitCheckpoints.erase(it);
     UpdateInProgressMetric();
+    ScheduleNextCheckpoint();
 }
 
 void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvAbortCheckpointResponse::TPtr& ev) {
@@ -725,6 +785,7 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvAbortCheckpoi
     FailedZeroCheckpoint = InitingZeroCheckpoint;
     PendingCommitCheckpoints.erase(checkpointId);
     UpdateInProgressMetric();
+    ScheduleNextCheckpoint();
 }
 
 void TCheckpointCoordinator::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr& ev) {
@@ -783,6 +844,7 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointCoordinator::TEvRunGraph:
     Y_DEBUG_ABORT_UNLESS(InitingZeroCheckpoint);
     Y_DEBUG_ABORT_UNLESS(!FailedZeroCheckpoint);
     InitingZeroCheckpoint = false;
+    ScheduleNextCheckpoint();
     // TODO: run graph only now, not before zero checkpoint inited
 }
 

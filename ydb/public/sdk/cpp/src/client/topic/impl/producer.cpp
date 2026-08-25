@@ -967,6 +967,7 @@ void TProducer::TSessionsWorker::DestroyWriteSession(std::uint32_t partition) {
 
     if (it->second->DirectToPartition) {
         Producer->EventsWorker->UnsubscribeFromPartition(partition);
+        Producer->MessagesWorker->DropContinuationTokens(partition);
     }
 
     // Remove idle bookkeeping before erasing the session from SessionsIndex so stale
@@ -1360,6 +1361,10 @@ std::optional<TContinuationToken> TProducer::TMessagesWorker::GetContinuationTok
 void TProducer::TMessagesWorker::HandleContinuationToken(std::uint32_t partition, TContinuationToken&& continuationToken) {
     auto [it, _] = ContinuationTokens.try_emplace(partition);
     it->second.push_back(std::move(continuationToken));
+}
+
+void TProducer::TMessagesWorker::DropContinuationTokens(std::uint32_t partition) {
+    ContinuationTokens.erase(partition);
 }
 
 bool TProducer::TMessagesWorker::IsQueueEmpty() const {

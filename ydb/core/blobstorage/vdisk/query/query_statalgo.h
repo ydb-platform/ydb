@@ -97,13 +97,14 @@ namespace NKikimr {
     // The returned key is independent of a snapshot and can therefore be used
     // to resume after the old snapshot is released and a new one is acquired.
     ////////////////////////////////////////////////////////////////////////////
-    template <class TAggr, class TKey, class TMemRec>
-    std::optional<TDbStatYieldedState<TKey, TMemRec>> TraverseDbWithoutMerge(
+    template <class TAggr, class TKey, class TMemRec, class TShouldStop>
+    std::optional<TDbStatYieldedState<TKey, TMemRec>> TraverseDbWithoutMergeImpl(
             const TIntrusivePtr<THullCtx>& hullCtx,
             TAggr* aggr,
             const ::NKikimr::TLevelIndexSnapshot<TKey, TMemRec>& snap,
             std::optional<TDbStatYieldedState<TKey, TMemRec>> yieldedState,
             std::optional<TDbStatYieldPolicy> yieldPolicy,
+            TShouldStop&& shouldStop,
             TIntrusivePtr<NMonotonic::IMonotonicTimeProvider> monotonicTimeProvider = {})
     {
         using TYieldedState = TDbStatYieldedState<TKey, TMemRec>;
@@ -127,6 +128,10 @@ namespace NKikimr {
             const TKey key = heap.GetCurKey();
             heap.PutToMergerAndAdvance(&merger);
 
+            if (heap.Valid() && shouldStop()) {
+                return TYieldedState{key};
+            }
+
             // Do not yield after the final key; finish in the current quantum.
             if (heap.Valid() && yieldChecker.StepAndCheckForYield()) {
                 return TYieldedState{key};
@@ -135,6 +140,47 @@ namespace NKikimr {
 
         aggr->Finish();
         return std::nullopt;
+    }
+
+    template <class TAggr, class TKey, class TMemRec>
+    std::optional<TDbStatYieldedState<TKey, TMemRec>> TraverseDbWithoutMerge(
+            const TIntrusivePtr<THullCtx>& hullCtx,
+            TAggr* aggr,
+            const ::NKikimr::TLevelIndexSnapshot<TKey, TMemRec>& snap,
+            std::optional<TDbStatYieldedState<TKey, TMemRec>> yieldedState,
+            std::optional<TDbStatYieldPolicy> yieldPolicy,
+            TIntrusivePtr<NMonotonic::IMonotonicTimeProvider> monotonicTimeProvider = {})
+    {
+        return TraverseDbWithoutMergeImpl(
+            hullCtx,
+            aggr,
+            snap,
+            std::move(yieldedState),
+            std::move(yieldPolicy),
+            [] { return false; },
+            std::move(monotonicTimeProvider));
+    }
+
+    template <class TAggr, class TKey, class TMemRec, class TShouldStop>
+    std::optional<TDbStatYieldedState<TKey, TMemRec>> TraverseDbWithoutMergeUntil(
+            const TIntrusivePtr<THullCtx>& hullCtx,
+            TAggr* aggr,
+            const ::NKikimr::TLevelIndexSnapshot<TKey, TMemRec>& snap,
+            std::optional<TDbStatYieldedState<TKey, TMemRec>> yieldedState,
+            std::optional<TDbStatYieldPolicy> yieldPolicy,
+            TShouldStop&& shouldStop,
+            TIntrusivePtr<NMonotonic::IMonotonicTimeProvider> monotonicTimeProvider = {})
+    {
+        // Like the time-based variant above, the stop predicate is checked only
+        // after all physical records for the current key have been processed.
+        return TraverseDbWithoutMergeImpl(
+            hullCtx,
+            aggr,
+            snap,
+            std::move(yieldedState),
+            std::move(yieldPolicy),
+            std::forward<TShouldStop>(shouldStop),
+            std::move(monotonicTimeProvider));
     }
 
     ////////////////////////////////////////////////////////////////////////////

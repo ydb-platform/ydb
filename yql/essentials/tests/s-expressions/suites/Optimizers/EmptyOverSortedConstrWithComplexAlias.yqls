@@ -1,0 +1,14 @@
+(
+(let res_sink (DataSink 'result))
+(let str_type (DataType 'String))
+(let list_type (ListType (StructType '('"key" str_type) '('"subkey" str_type) '('"value" str_type))))
+(let list (List list_type))
+(let sorted_list (AssumeSorted list '((Bool '"true") (Bool '"true")) (lambda '(item) '((Member item '"key") (Member item '"subkey")))))
+(let result (OrderedFlatMap sorted_list (lambda '(item) (block '(
+  (let key (Member item '"key"))
+  (let subkey (Member item '"subkey"))
+  (return (Just (AsStruct '('complex '(key subkey)) '('"key" key) '('"subkey" subkey) '('"value" (Member item '"value")))))
+)))))
+(let world (Write! world res_sink (Key) result '('('type))))
+(return (Commit! world res_sink))
+)

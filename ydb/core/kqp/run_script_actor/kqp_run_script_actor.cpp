@@ -80,7 +80,8 @@ public:
     void Bootstrap() {
         YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Bootstrap",
             {"logPrefix", LogPrefix()},
-            {"streamingDisposition", (Ctx->UserRequestContext->StreamingDisposition ? Ctx->UserRequestContext->StreamingDisposition->DebugString() : "null")});
+            {"streamingDisposition", (Ctx->UserRequestContext->StreamingDisposition ? Ctx->UserRequestContext->StreamingDisposition->DebugString() : "null")},
+            {"checkpointInterval", Ctx->UserRequestContext->CheckpointInterval ? ToString(*Ctx->UserRequestContext->CheckpointInterval) : "null"});
         Become(&TThis::StateFuncCreating);
     }
 
@@ -100,6 +101,8 @@ private:
         userRequestContext->StreamingQueryPath = settings.StreamingQueryPath;
         userRequestContext->WatermarkLateEventsPolicy = settings.WatermarkLateEventsPolicy;
         userRequestContext->StreamingDisposition = settings.StreamingDisposition;
+        userRequestContext->CurrentExecutionGeneration = settings.LeaseGeneration;
+        userRequestContext->CheckpointInterval = settings.CheckpointInterval;
 
         return std::make_shared<TScriptExecutionContext>(TScriptExecutionContext{
             .UserRequestContext = std::move(userRequestContext),
@@ -125,7 +128,6 @@ private:
             ev->SetProgressStatsPeriod(settings.ProgressStatsPeriod ? settings.ProgressStatsPeriod : TDuration::MilliSeconds(queryServiceConfig.GetProgressStatsPeriodMs()));
         }
 
-        ev->SetGeneration(settings.LeaseGeneration);
         return ev;
     }
 

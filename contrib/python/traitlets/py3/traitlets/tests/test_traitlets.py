@@ -1,3 +1,9 @@
+"""Reusable trait-testing helpers shipped with the package.
+
+Do not remove: downstream projects (e.g. ipywidgets) import TraitTestBase
+from here to test their own trait types.
+"""
+
 from __future__ import annotations
 
 from typing import Any

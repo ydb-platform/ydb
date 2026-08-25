@@ -415,6 +415,7 @@ struct TEvBlobStorage {
         EvSyncLogDiskOutOfSpace,
         EvRecoveryLogCutDone,
         EvFreshCompactionStarted,
+        EvGetLogoBlobIndexStatResponseAck,
 
         EvYardInitResult = EvPut + 9 * 512,                     /// 268 636 672
         EvLogResult,
@@ -551,6 +552,11 @@ struct TEvBlobStorage {
         EvControllerUpdateSyncerState               = 0x1003162f,
         EvControllerAllocateDDiskBlockGroup         = 0x10031630,
         EvControllerAllocateDDiskBlockGroupResult   = 0x10031631,
+        EvControllerDDiskInfoListTablets            = 0x10031632,
+        EvControllerDDiskInfoListTabletsResult      = 0x10031633,
+        EvControllerDDiskInfoGetTablet              = 0x10031634,
+        EvControllerDDiskInfoGetTabletResult        = 0x10031635,
+        EvControllerDDiskInfoTabletRevisionChanged  = 0x10031636,
 
         // BSC interface result section
         EvControllerNodeServiceSetUpdate            = 0x10031802,
@@ -2671,6 +2677,11 @@ struct TEvBlobStorage {
 
     struct TEvControllerAllocateDDiskBlockGroup;
     struct TEvControllerAllocateDDiskBlockGroupResult;
+    struct TEvControllerDDiskInfoListTablets;
+    struct TEvControllerDDiskInfoListTabletsResult;
+    struct TEvControllerDDiskInfoGetTablet;
+    struct TEvControllerDDiskInfoGetTabletResult;
+    struct TEvControllerDDiskInfoTabletRevisionChanged;
 
     struct TEvMonStreamQuery;
     struct TEvMonStreamActorDeathNote;

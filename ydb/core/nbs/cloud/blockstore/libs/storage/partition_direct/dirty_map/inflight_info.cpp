@@ -371,7 +371,7 @@ void TInflightInfo::SetPersistGeneration(ui32 persistGeneration)
     PersistGeneration = persistGeneration;
 }
 
-ui64 TInflightInfo::GetPersistGeneration() const
+ui32 TInflightInfo::GetPersistGeneration() const
 {
     return PersistGeneration;
 }

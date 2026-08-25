@@ -57,7 +57,13 @@ If the CLI completed all the steps listed at the beginning of this article but f
 
 If the authentication mode is known, but the necessary additional parameters are not, the command is aborted and an error message describing the issue is returned:
 
-- `(No such file or directory) util/system/file.cpp:857: can't open "<filepath>" with mode RdOnly|Seq (0x00000028)`: Couldn't open and read the file `<filepath>` specified in a parameter passing the file name and path.
+```text
+(No such file or directory) util/system/file.cpp:857:
+can't open "<filepath>" with mode RdOnly|Seq (0x00000028)
+```
+
+— Couldn't open and read the file `<filepath>` specified in a parameter passing the file name and path.
+
 
 ## Additional parameters {#additional}
 

@@ -1843,7 +1843,6 @@ private:
         State_.Set(ENodeState::Const, /*val=*/true /* FIXME: To avoid CheckAggregationLevel issue for non-const TypeOf. */);
     }
 
-private:
     TNodePtr RunConfig_;
 };
 
@@ -2849,7 +2848,6 @@ private:
         return TCallNode::DoInit(ctx, src);
     }
 
-private:
     TString Mode_;
 };
 
@@ -2916,7 +2914,6 @@ private:
         return IsStart ? "HopStart" : "HopEnd";
     }
 
-private:
     TVector<TNodePtr> Args_;
 };
 
@@ -4222,6 +4219,10 @@ TNodeResult BuildBuiltinFunc(
             }
 
             auto name = multi ? "MultiAggregateBy" : "AggregateBy";
+            if (isYqlSelect) {
+                return UnsupportedYqlSelect(ctx, TStringBuilder() << "Aggregation '" << name << "'");
+            }
+
             auto aggr = BuildFactoryAggregation(pos, name, "", aggMode, multi);
             return TNonNull(TNodePtr(new TBasicAggrFunc(pos, name, aggr, args)));
         }

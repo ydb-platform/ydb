@@ -4,6 +4,10 @@
 
 #include "http.h"
 
+#include <yt/cpp/mapreduce/interface/fwd.h>
+
+#include <yt/yt/core/dns/public.h>
+
 #include <util/generic/fwd.h>
 
 namespace NYT {
@@ -35,6 +39,9 @@ TString GetLoggedAttributes(const THttpHeader& header, const TString& url, bool 
 void LogRequest(const THttpHeader& header, const TString& url, bool includeParameters, const TString& requestId, const TString& hostName);
 
 TString FormatTraceParentHeader(const NTracing::TTraceId& traceId, const NTracing::TSpanId& spanId);
+
+//! Maps ForceIpV4/ForceIpV6 config flags onto DNS resolve options for yt/core HTTP clients.
+NDns::TDnsResolveOptions GetDnsResolveOptions(const TConfigPtr& config);
 
 ////////////////////////////////////////////////////////////////////////////////
 

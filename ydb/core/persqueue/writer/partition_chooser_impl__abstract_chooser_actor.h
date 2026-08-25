@@ -41,14 +41,15 @@ public:
                                    NPersQueue::TTopicConverterPtr& fullConverter,
                                    const TString& sourceId,
                                    std::optional<ui32> preferedPartition,
-                                   NWilson::TTraceId traceId)
+                                   NWilson::TTraceId traceId,
+                                   const NKikimrPQ::TPQTabletConfig::TTopicId* topicId = nullptr)
         : TBase(NKikimrServices::PQ_PARTITION_CHOOSER)
         , Parent(parentId)
         , SourceId(sourceId)
         , PreferedPartition(preferedPartition)
         , Chooser(chooser)
         , Span(TWilsonTopic::TopicDetailed, std::move(traceId), "Topic.ChoosePartition")
-        , TableHelper(fullConverter->GetClientsideName(), fullConverter->GetTopicForSrcIdHash())
+        , TableHelper(fullConverter, topicId)
         , PartitionHelper(Span.GetTraceId())
     {
     }
@@ -160,6 +161,15 @@ protected:
     void HandleSelect(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
         if (!TableHelper.HandleSelect(ev, ctx)) {
             return ReplyError(ErrorCode::INITIALIZING, TStringBuilder() << "kqp error Marker# PQ50 : " <<  ev->Get()->Record.DebugString(), ctx);
+        }
+
+        if (TableHelper.NeedLegacyKeySelect()) {
+            // No row for the id key: within the transition window look up the legacy
+            // name-based key, continuing the same transaction. Stay in StateSelect.
+            YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_PARTITION_CHOOSER, "Select from the table by legacy topic name",
+                {"logPrefix", LOG_PREFIX});
+            TableHelper.SendLegacyKeySelectRequest(ctx);
+            return;
         }
 
         YDB_LOG_TRACE_COMP(NKikimrServices::PQ_PARTITION_CHOOSER, "Selected from table",

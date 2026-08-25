@@ -8,9 +8,14 @@ from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.functional.security.lib.cluster_config import create_ydb_configurator, generate_certificates
 from ydb.tests.functional.security.lib.security_test_helpers import mon_base_url as get_mon_base_url
 from ydb.tests.functional.security.lib.security_test_helpers import grant_describe_schema_provided
+from ydb.tests.functional.security.lib.security_test_helpers import get_foreign_node_id_for_database
+from ydb.tests.functional.security.lib.security_test_helpers import get_nodelist_ids
 from ydb.tests.functional.security.lib.security_test_helpers import get_tenant_path_id
 from ydb.tests.functional.security.lib.security_test_helpers import get_tenant_schemeshard_id
+from ydb.tests.functional.security.lib.security_test_helpers import get_storage_ids
+from ydb.tests.functional.security.lib.security_test_helpers import get_unknown_node_id
 from ydb.tests.functional.security.lib.security_test_helpers import run_viewer_query
+from ydb.tests.functional.security.lib.security_test_helpers import wait_for_storage_ids
 from ydb.tests.functional.security.lib.security_test_helpers import wait_for_viewer_ready
 from ydb.tests.oss.ydb_sdk_import import ydb
 
@@ -223,6 +228,38 @@ def tenant_describe_ids(ydb_cluster_with_extra_sids_controls, tenant_database):
         'path_id': get_tenant_path_id(cluster, tenant_database, tenant_database, use_tls=True, token='root@builtin'),
         'schemeshard_id': get_tenant_schemeshard_id(cluster, tenant_database, tenant_database, use_tls=True, token='root@builtin'),
     }
+
+
+@pytest.fixture(scope='module')
+def tenant_nodelist_ids(ydb_cluster_with_extra_sids_controls, tenant_database):
+    base_url = get_mon_base_url(ydb_cluster_with_extra_sids_controls)
+    return get_nodelist_ids(base_url, database=tenant_database)
+
+
+@pytest.fixture(scope='module')
+def foreign_node_id(ydb_cluster_with_extra_sids_controls, tenant_database):
+    base_url = get_mon_base_url(ydb_cluster_with_extra_sids_controls)
+    return get_foreign_node_id_for_database(base_url, tenant_database)
+
+
+# Storage groups of the tenant database and the nodes/pdisks they live on.
+@pytest.fixture(scope='module')
+def tenant_storage_ids(ydb_cluster_with_extra_sids_controls, tenant_database):
+    base_url = get_mon_base_url(ydb_cluster_with_extra_sids_controls)
+    return wait_for_storage_ids(base_url, tenant_database)
+
+
+# The same for the whole cluster, so that a test can pick an id outside the tenant database.
+@pytest.fixture(scope='module')
+def cluster_storage_ids(ydb_cluster_with_extra_sids_controls, tenant_storage_ids):
+    base_url = get_mon_base_url(ydb_cluster_with_extra_sids_controls)
+    return get_storage_ids(base_url)
+
+
+@pytest.fixture(scope='module')
+def unknown_node_id(ydb_cluster_with_extra_sids_controls):
+    base_url = get_mon_base_url(ydb_cluster_with_extra_sids_controls)
+    return get_unknown_node_id(base_url)
 
 
 @pytest.fixture

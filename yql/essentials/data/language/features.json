@@ -36,6 +36,10 @@
         "description": "Reserved '_yql_' column name prefix in YT tables",
         "min_langver": "max"
     },
+    "ConvertDynamicTablesToStaticBeforeJoin": {
+        "description": "Converts dynamic tables to static before join by default",
+        "min_langver": "2026.02"
+    },
     "Materialize": {
         "description": "MATERIALIZE",
         "min_langver": "2026.02"

@@ -18,6 +18,7 @@ from ydb.tests.tools.fq_runner.kikimr_utils import ComputeExtension
 from ydb.tests.tools.fq_runner.kikimr_utils import StatsModeExtension
 from ydb.tests.tools.fq_runner.kikimr_utils import BindingsModeExtension
 from ydb.tests.tools.fq_runner.kikimr_utils import YdbMvpExtension
+from ydb.tests.tools.fq_runner.kikimr_utils import SynchronizationServiceExtension
 from ydb.tests.tools.fq_runner.kikimr_utils import start_kikimr
 from ydb.tests.tools.fq_runner.kikimr_utils import YQV1_VERSION_NAME, YQV2_VERSION_NAME
 from ydb.tests.fq.s3.s3_helpers import S3
@@ -98,6 +99,7 @@ def get_kikimr_extensions(s3: S3, yq_version: str, kikimr_settings, mvp_external
         YdbMvpExtension(mvp_external_ydb_endpoint),
         StatsModeExtension(kikimr_settings.get("stats_mode", "")),
         BindingsModeExtension(kikimr_settings.get("bindings_mode", ""), yq_version),
+        SynchronizationServiceExtension(),
     ]
 
 

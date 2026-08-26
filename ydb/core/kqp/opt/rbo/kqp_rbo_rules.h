@@ -366,6 +366,16 @@ class TExpandCBOTreeRule : public ISimplifiedRule {
 };
 
 /**
+* Pull up a map that is stuck above CBO tree
+*/
+class TPullUpMapOverCBORule : public ISimplifiedRule {
+  public:
+    TPullUpMapOverCBORule() : ISimplifiedRule("Pull up map over CBO", ERuleProperties::RequireParents) {}
+
+    virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
+};
+
+/**
  * Optimize CBO Tree
  */
 class TOptimizeCBOTreeRule : public ISimplifiedRule {

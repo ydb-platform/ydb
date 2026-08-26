@@ -23,7 +23,10 @@ void TCachedPartitionWriter::OnWriteRequest(THolder<TEvPartitionWriter::TEvWrite
 
         ctx.Send(Actor, ev.Release(), 0, 0, std::move(traceId));
     } else {
-        QuotedRequests.emplace_back(std::move(ev));
+        QuotedRequests.push_back(TUserWriteRequest{
+            .Write = std::move(ev),
+            .TraceId = std::move(traceId),
+        });
     }
 }
 
@@ -47,7 +50,7 @@ void TCachedPartitionWriter::OnWriteAccepted(const TEvPartitionWriter::TEvWriteA
 
         SentRequests.emplace_back(next.Write->Record.GetPartitionRequest().GetCookie());
 
-        ctx.Send(Actor, next.Write.Release());
+        ctx.Send(Actor, next.Write.Release(), 0, 0, std::move(next.TraceId));
     }
 }
 

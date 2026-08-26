@@ -4,6 +4,7 @@
 
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
 #include <ydb/core/persqueue/writer/writer.h>
+#include <ydb/library/actors/wilson/wilson_trace.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -24,6 +25,7 @@ struct TSendTxWriteRequestParams {
     TString SessionId;
     TString TxId;
     ui64 Cookie;
+    NWilson::TTraceId TraceId;
 };
 
 struct TEnsurePartitionWriterExistParams {
@@ -73,6 +75,7 @@ protected:
     TPQTabletMock* PQTablet = nullptr;
 
     THashMap<ui64, TTxId> CookieToTxId;
+    THashMap<ui64, NWilson::TTraceId> CookieToWriteRequestTraceId;
     THashMap<TTxId, TActorId> TxIdToPartitionWriter;
     THashMap<TActorId, TTxId> PartitionWriterToTxId;
 

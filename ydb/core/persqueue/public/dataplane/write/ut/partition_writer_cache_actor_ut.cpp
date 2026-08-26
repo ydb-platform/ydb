@@ -233,6 +233,38 @@ Y_UNIT_TEST_F(PipeDisconnectForwardsDisconnected, TPartitionWriterCacheActorFixt
     UNIT_ASSERT_EQUAL(event->ErrorCode, EErrorCode::PartitionDisconnected);
 }
 
+Y_UNIT_TEST_F(QuotedWriteKeepsTraceId, TPartitionWriterCacheActorFixture)
+{
+    TActorId partitionWriterCache = CreatePartitionWriterCacheActor();
+
+    THashMap<ui64, NWilson::TTraceId> expectedTraceId;
+    for (ui64 cookie = 1; cookie <= 6; ++cookie) {
+        auto traceId = NWilson::TTraceId::NewTraceId(15, NWilson::TTraceId::MAX_TIME_TO_LIVE);
+        expectedTraceId.emplace(cookie, NWilson::TTraceId(traceId));
+        SendTxWriteRequest(partitionWriterCache, {
+            .SessionId = "sessionId",
+            .TxId = "txId-A",
+            .Cookie = cookie,
+            .TraceId = std::move(traceId),
+        });
+    }
+
+    PQTablet->AppendWriteReply(1);
+
+    TDispatchOptions options;
+    options.CustomFinalCondition = [this]() {
+        return CookieToWriteRequestTraceId.contains(6);
+    };
+    Ctx->Runtime->DispatchEvents(options);
+
+    UNIT_ASSERT(CookieToWriteRequestTraceId.contains(6));
+    UNIT_ASSERT(CookieToWriteRequestTraceId.at(6) == expectedTraceId.at(6));
+    for (ui64 cookie = 1; cookie <= 5; ++cookie) {
+        UNIT_ASSERT(CookieToWriteRequestTraceId.contains(cookie));
+        UNIT_ASSERT(CookieToWriteRequestTraceId.at(cookie) == expectedTraceId.at(cookie));
+    }
+}
+
 }
 
 }

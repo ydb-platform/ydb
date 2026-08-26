@@ -96,6 +96,8 @@ void TPartitionWriterCacheActorFixture::SetupEventObserver()
             auto p = CookieToTxId.find(event->GetCookie());
             UNIT_ASSERT(p != CookieToTxId.end());
 
+            CookieToWriteRequestTraceId.emplace(event->GetCookie(), NWilson::TTraceId(ev->TraceId));
+
             if (!TxIdToPartitionWriter.contains(p->second)) {
                 TxIdToPartitionWriter[p->second] = ev->Recipient;
                 PartitionWriterToTxId[ev->Recipient] = p->second;
@@ -140,7 +142,14 @@ void TPartitionWriterCacheActorFixture::SendTxWriteRequest(const TActorId& recip
     auto* w = write->Request->Record.MutablePartitionRequest()->AddCmdWrite();
     Y_UNUSED(w);
 
-    Ctx->Runtime->Send(recipient, Ctx->Edge, write.release(), 0, true);
+    Ctx->Runtime->Send(new IEventHandle(
+        recipient,
+        Ctx->Edge,
+        write.release(),
+        0,
+        0,
+        nullptr,
+        NWilson::TTraceId(params.TraceId)), 0, true);
 }
 
 void TPartitionWriterCacheActorFixture::EnsurePartitionWriterExist(const TEnsurePartitionWriterExistParams& params)

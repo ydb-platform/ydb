@@ -23,6 +23,7 @@ struct TCachedPartitionWriter {
 
     struct TUserWriteRequest {
         THolder<TEvPartitionWriter::TEvWriteRequest> Write;
+        NWilson::TTraceId TraceId;
     };
 
     struct TSentRequest {

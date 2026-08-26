@@ -26,7 +26,7 @@ Anonymous authentication should only be used for evaluation purposes on local da
 
 {% endnote %}
 
-The `enforce_user_token_requirement` flag in the [authentication mode settings](../reference/configuration/security_config.md#security-auth) {{ ydb-short-name }} is responsible for disabling anonymous authentication mode.
+The `enforce_user_token_requirement` flag in the [authentication mode settings](../reference/configuration/security_config.md#security-auth) of {{ ydb-short-name }} is responsible for disabling anonymous authentication mode.
 
 Depending on the authentication mode settings, the actual authentication may not be anonymous:
 
@@ -55,18 +55,18 @@ The authentication process using a login and password includes the following ste
 2. The service verifies the authentication data, and upon successful matching, creates a token and returns it to the client.
 3. The client accesses the database, passing a token as authentication information.
 
-To enable authentication by username and password, you must ensure that the parameters `use_login_provider` and `enable_login_authentication` are set to the default value `true` in [the configuration](../reference/configuration/auth_config.md). Additionally, to disable anonymous authentication, you must set the parameter value [`enforce_user_token_requirement` to `true`](../reference/configuration/security_config.md).
+To enable authentication by login and password, you must ensure that the parameters `use_login_provider` and `enable_login_authentication` are set to the default value `true` in [the configuration](../reference/configuration/auth_config.md). Additionally, to disable anonymous authentication, you must set the parameter value [`enforce_user_token_requirement` to `true`](../reference/configuration/security_config.md).
 
 Read about role and user management in [{#T}](../security/authorization.md).
 
 ### Password complexity {#password-complexity}
 
-{{ ydb-short-name }}allows you to configure password complexity requirements. If a password provided via the `CREATE USER` or `ALTER USER` commands does not meet the complexity criteria, the command execution will fail with an error.
+{{ ydb-short-name }} allows you to configure password complexity requirements. If a password provided via the `CREATE USER` or `ALTER USER` commands does not meet the complexity criteria, the command execution will fail with an error.
 By default, no restrictions are imposed on passwords: a password of any length is accepted, including an empty string; the password may contain any number of digits and letters in any case, as well as special characters from the `!@#$%^&*()_+{}|<>?=` list. To set password complexity restrictions, you need to fill in the `password_complexity` section in the [configuration](../reference/configuration/auth_config.md#password-complexity).
 
 ### Forced user lock/unlock
 
-There is another way to prevent a user from authenticating — forced blocking by a cluster or database administrator. Administrators can unblock both users who were forcibly blocked and users who became blocked due to exceeding the limit on the number of incorrect password attempts. Detailed information about forced blocking and unblocking of users can be found in the description of the [`ALTER USER LOGIN/NOLOGIN`](../yql/reference/syntax/alter-user.md) command.
+There is another way to prevent a user from authenticating — forced lock by a cluster or database administrator. Administrators can unlock both users who were forcibly locked and users who became locked due to exceeding the limit on the number of incorrect password attempts. Detailed information about forced lock and unlock of users can be found in the description of the [`ALTER USER LOGIN/NOLOGIN`](../yql/reference/syntax/alter-user.md) command.
 
 ### Password brute-force protection
 
@@ -82,11 +82,11 @@ By default, the user is given 4 attempts to enter the correct password. Otherwis
 
 If necessary, the cluster or database administrator can [unlock](../yql/reference/syntax/alter-user.md) a user ahead of schedule.
 
-Information about the user lockout status and the number of incorrect password attempts can be found in the [system view](../dev/system-views.md#system-view) of the user.
+Information about the user lockout status and the number of incorrect password attempts can be found in the [system view](../dev/system-views.md#users) of the user.
 
 ## Authentication using LDAP directory {#ldap}
 
-Interaction with an [LDAP directory](https://en.wikipedia.org/wiki/Lightweight_Directory_Access_Protocol) is integrated into {{ ydb-short-name }}. The LDAP directory is an external service relative to {{ ydb-short-name }} and is used for authentication and authorization of database users. Before using this authentication and authorization method, you must have a deployed LDAP service and configured network access between it and the {{ ydb-short-name }} servers.
+{{ ydb-short-name }} integrates interaction with an [LDAP directory](https://en.wikipedia.org/wiki/Lightweight_Directory_Access_Protocol). The LDAP directory is an external service in relation to {{ ydb-short-name }} and is used for authenticating and authorizing database users. Before using this method of authentication and authorization, you must have a deployed LDAP service and configured network access between it and {{ ydb-short-name }} servers.
 
 Examples of supported LDAP directory implementations: [OpenLdap](https://openldap.org/), [Active Directory](https://azure.microsoft.com/en-us/products/active-directory/).
 
@@ -142,7 +142,7 @@ After user authentication in the system, a token is generated, which is verified
 
 Groups, like the user themselves, are subjects for performing operations on database schema objects. To control access to various database resources, subjects can be assigned access rights. And according to the list of assigned rights, subjects will be authorized to perform certain operations.
 
-The process of obtaining the list of user groups from the LDAP directory is similar to the actions performed during authentication. First, a *bind* operation is performed for the service user whose credentials are recorded in the `bind_dn` and `bind_password` parameters of the [ldap_authentication](../reference/configuration/auth_config.md#ldap-auth-config) section of the configuration file. After successful authentication, a search is performed for the user record for which the token was previously generated. The search is also performed according to the `search_filter` parameter. If the user still exists, the returned result of the *search* operation will be a list of values of the attribute specified in the `requested_group_attribute` parameter. If this parameter is empty, then the reverse membership attribute for the group will be `memberOf`. The `memberOf` attribute stores the Distinguished Names (DN) of the groups the user belongs to.
+The process of obtaining the list of user groups from the LDAP directory is similar to the actions performed during authentication. First, a *bind* operation is performed for the service account whose credentials are recorded in the `bind_dn` and `bind_password` parameters of the [ldap_authentication](../reference/configuration/auth_config.md#ldap-auth-config) section of the configuration file. After successful authentication, a search is performed for the user record for which the token was previously generated. The search is also performed according to the `search_filter` parameter. If the user still exists, the returned result of the *search* operation will be a list of values of the attribute specified in the `requested_group_attribute` parameter. If this parameter is empty, then the reverse membership attribute for the group will be `memberOf`. The `memberOf` attribute stores the Distinguished Names (DN) of the groups the user belongs to.
 
 #### Obtaining groups
 
@@ -205,7 +205,7 @@ When using an unencrypted connection, all data transmitted in requests to the LD
 
 #### LDAPS
 
-For {{ ydb-short-name }} to automatically establish an encrypted connection to the LDAP server, you need to set the **scheme**[configuration parameter](../reference/configuration/auth_config.md#ldap-auth-config) to `ldaps`. The TLS handshake will be initiated on the port specified in the configuration. If no port is specified, the default port 636 will be used for the `ldaps` scheme. The LDAP server must be configured to accept TLS connections on the specified ports.
+For {{ ydb-short-name }} to automatically establish an encrypted connection to the LDAP server, you need to set the **scheme** in the [configuration parameter](../reference/configuration/auth_config.md#ldap-auth-config) to `ldaps`. The TLS handshake will be initiated on the port specified in the configuration. If no port is specified, the default port 636 will be used for the `ldaps` scheme. The LDAP server must be configured to accept TLS connections on the specified ports.
 
 #### LDAP protocol extension `StartTls` {#starttls}
 
@@ -234,7 +234,7 @@ Client certificate verification during [device authentication](#device-auth) and
 
 {% endnote %}
 
-Successful certificate authentication creates a user SID with the suffix `@<domain>`, where `<domain>` is the [parameter value](../reference/configuration/auth_config.md#iam-auth-config) of `certificate_authentication_domain` in the `auth_config` section (default: `cert`). The name is formed from all attributes of the certificate's Subject field in `Name=Value,...@<domain>` notation. The order of attributes corresponds to the order of fields in the certificate. Example:
+Successful certificate authentication creates a user SID with the suffix `@<domain>`, where `<domain>` is the [parameter value](../reference/configuration/auth_config.md) `certificate_authentication_domain` in the `auth_config` section (default: `cert`). The name is formed from all attributes of the certificate's Subject field in `Name=Value,...@<domain>` notation. The order of attributes corresponds to the order of fields in the certificate. Example:
 
 
 ```text
@@ -252,7 +252,7 @@ Certificate verification rules and group assignment are set in the [client_certi
 
 ### Client configuration
 
-For more details on configuring the [{{ ydb-short-name }} CLI](../reference/ydb-cli/index.md), see the [TLS connection parameters](../reference/ydb-cli/connect.md#activated-profile) section.
+For more details on configuring the [{{ ydb-short-name }} CLI](../reference/ydb-cli/index.md), see the [additional connection parameters](../reference/ydb-cli/connect.md#additional) section.
 
 ## Device authentication by certificate {#device-auth}
 
@@ -279,8 +279,8 @@ After passing device authentication, [user or application authentication](./auth
 Device authentication is optional and configured independently: the mechanism can be enabled on some ports and disabled on others.
 
 - **Interconnect** — when TLS is enabled in the [interconnect_config](../reference/configuration/tls.md#interconnect) section, [Interconnect](../concepts/glossary.md#actor-system-interconnect) requires a client certificate.
-- **gRPC** — you can enable client certificate request for device authentication, and also separately enable mandatory verification (an untrusted certificate is always rejected). Server configuration is described in the [grpc_config](../reference/configuration/tls.md#grpc) and [client_certificate_authorization](../reference/configuration/client_certificate_authorization.md) sections, and client connection — in the [TLS connection parameters](../reference/ydb-cli/connect.md#activated-profile) section.
-- **Kafka API** — when mTLS is enabled, it requires a client certificate; only the trust chain to the CA is verified, a connection without a certificate or with an untrusted certificate is not established. Server configuration is described in the [kafka_proxy_config](../reference/configuration/kafka_proxy_config.md) section, and client connection — in the [Device authentication via mTLS](../reference/kafka-api/auth.md#mtls-auth) section.
+- **Kafka API** — when mTLS is enabled, it requires a client certificate; only the trust chain to the CA is verified, a connection without a certificate or with an untrusted certificate is not established. Server configuration is described in the [kafka_proxy_config](../reference/configuration/kafka_proxy_config.md) section, and client connection — in the [Device authentication via mTLS](../reference/kafka-api/auth.md#device-auth) section.
+- **gRPC** and **YDB Monitoring** — you can enable client certificate request for device authentication, and also separately enable its mandatory verification (an untrusted certificate is always rejected). gRPC configuration is described in the sections [grpc_config](../reference/configuration/tls.md#grpc) and [client_certificate_authorization](../reference/configuration/client_certificate_authorization.md), and client connection in the section [additional connection parameters](../reference/ydb-cli/connect.md#additional); YDB Monitoring configuration is described in the section [monitoring_config](../reference/configuration/monitoring_config.md#tls).
 
 ## Authentication using a third-party IAM provider {#iam}
 

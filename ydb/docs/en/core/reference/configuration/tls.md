@@ -36,9 +36,9 @@ grpc_config:
 ```
 
 
-### Kafka Wire Protocol
+### Kafka protocol
 
-{{ ydb-short-name }} exposes a separate network port for the [Kafka wire protocol](../../reference/kafka-api/index.md). This protocol is used for external communication with client applications initially designed to work with [Apache Kafka](https://kafka.apache.org/).
+{{ ydb-short-name }} exposes a separate network port for the [Kafka protocol](../../reference/kafka-api/index.md). This protocol is used for external communication with client applications initially designed to work with [Apache Kafka](https://kafka.apache.org/).
 
 Example of enabling TLS for the Kafka protocol using a file containing both the certificate and the private key:
 
@@ -61,7 +61,7 @@ kafka_proxy_config:
 
 ### HTTP
 
-{{ ydb-short-name }} exposes a separate HTTP network port for running the [{{ ydb-ui-name }}](../../reference/ydb-ui/index.md), exposing [metrics](../../devops/observability/monitoring.md), and other miscellaneous endpoints.
+{{ ydb-short-name }} exposes a separate HTTP network port for running the [Embedded UI](../../reference/ydb-ui/index.md), exposing [metrics](../../devops/observability/monitoring.md), and other miscellaneous endpoints.
 
 Example of enabling TLS on the HTTP port, making it use HTTPS:
 
@@ -72,11 +72,13 @@ monitoring_config:
 ```
 
 
+For a detailed description of TLS parameters for monitoring, see the [monitoring_config](./monitoring_config.md#tls) section.
+
 ## {{ ydb-short-name }} as a client
 
 ### LDAP
 
-{{ ydb-short-name }} supports [LDAP](../../security/authentication.md#ldap-auth-provider) for user authentication. The LDAP protocol has two options for enabling TLS.
+{{ ydb-short-name }} supports [LDAP](../../security/authentication.md#ldap) for user authentication. The LDAP protocol has two options for enabling TLS.
 
 Example of enabling TLS for LDAP via the `StartTls` protocol extension:
 

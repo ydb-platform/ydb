@@ -924,12 +924,6 @@ void TWriteSessionImpl::Connect(const TDuration& delay) {
         if (delay)
             connectDelayContext = ClientContext->CreateContext();
         connectTimeoutContext = ClientContext->CreateContext();
-        if (!connectContext || !connectTimeoutContext || (delay && !connectDelayContext)) {
-            // The underlying gRPC client is closing and no longer accepts new contexts.
-            AbortImpl();
-            return;
-        }
-
         // Previous operations contexts.
 
         // Set new context

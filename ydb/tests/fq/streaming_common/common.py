@@ -36,7 +36,6 @@ def set_test_env(request):
     os.environ["YDB_TEST_DEFAULT_CHECKPOINTING_PERIOD_MS"] = checkpointing_period_ms
     os.environ["YDB_TEST_LEASE_DURATION_SEC"] = param.get("lease_duration_sec", "5")
     rebalancing_timeout_ms = param.get("rebalancing_timeout_ms", "60000")
-    print(f"rebalancing_timeout_ms {rebalancing_timeout_ms}")
     os.environ["YDB_TEST_ROW_DISPATCHER_REBALANCING_TIMEOUT_MS"] = rebalancing_timeout_ms
 
 
@@ -49,6 +48,13 @@ def get_ydb_config(request, enable_fq_connector=None):
     enable_streaming_partition_balancing = param.get("use_partition_balancing", True)
     enable_user_attributes_in_topic_query = param.get("enable_user_attributes_in_topic_query", True)
     enable_dq_source_stream_lookup_join = param.get("enable_dq_source_stream_lookup_join", True)
+    enable_dq_source_stream_lookup_join_local_lookups = param.get(
+        "enable_dq_source_stream_lookup_join_local_lookups", False
+    )  # TODO YQ-5431
+    enable_dq_source_stream_lookup_join_fullscan = param.get("enable_dq_source_stream_lookup_join_fullscan", True)
+    enable_dq_source_stream_lookup_join_shuffle_mode = param.get(
+        "enable_dq_source_stream_lookup_join_shuffle_mode", True
+    )
 
     extra_feature_flags = {
         "enable_external_data_sources",
@@ -61,6 +67,12 @@ def get_ydb_config(request, enable_fq_connector=None):
         extra_feature_flags.add("enable_shared_reading_in_streaming_queries")
     if enable_streaming_queries:
         extra_feature_flags.add("enable_streaming_queries")
+    if enable_dq_source_stream_lookup_join_local_lookups:
+        extra_feature_flags.add("enable_dq_source_stream_lookup_join_local_lookups")
+    if enable_dq_source_stream_lookup_join_fullscan:
+        extra_feature_flags.add("enable_dq_source_stream_lookup_join_fullscan")
+    if enable_dq_source_stream_lookup_join_shuffle_mode:
+        extra_feature_flags.add("enable_dq_source_stream_lookup_join_shuffle_mode")
 
     disabled_feature_flags = []
     if enable_user_attributes_in_topic_query:

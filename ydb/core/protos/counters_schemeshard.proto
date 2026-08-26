@@ -646,7 +646,7 @@ enum EPercentileCounters {
         Ranges: { Value: 512      Name: "512"   }
         Ranges: { Value: 1024     Name: "1024"  }
         Ranges: { Value: 2048     Name: "2048"  }  // used as initial arena size
-        Ranges: { Value: 3072     Name: "3072"  }  // middle step be more accurate in the area of interest
+        Ranges: { Value: 3072     Name: "3072"  }  // middle step to be more accurate in the area of interest
         Ranges: { Value: 4096     Name: "4096"  }
         Ranges: { Value: 8192     Name: "8192"  }
         Ranges: { Value: 16384    Name: "16384" }
@@ -660,7 +660,7 @@ enum EPercentileCounters {
         Ranges: { Value: 1024     Name: "1024"   }
         Ranges: { Value: 2048     Name: "2048"   }
         Ranges: { Value: 4096     Name: "4096"   }  // used as initial arena size
-        Ranges: { Value: 5120     Name: "5120"   }  // several middle steps be more accurate in the area of interest
+        Ranges: { Value: 5120     Name: "5120"   }  // several middle steps to be more accurate in the area of interest
         Ranges: { Value: 6144     Name: "6144"   }
         Ranges: { Value: 7168     Name: "7168"   }
         Ranges: { Value: 8192     Name: "8192"   }

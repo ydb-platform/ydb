@@ -7290,6 +7290,514 @@ TSemanticSnapshotExportResult ExportGlobalRankPlan(
     return ExportSemanticSnapshotV1(root, ctx.RboCtx);
 }
 
+enum class EQ51WindowMutation {
+    None,
+    MissingMetadata,
+    Factory,
+    Options,
+    ResultType,
+    InputBinder,
+    DefinitionName,
+    PartitionType,
+    PartitionReference,
+    OrderType,
+    Direction,
+    NullOrder,
+    Frame,
+    DuplicateName,
+    MissingLeaf,
+    NonAggregateInput,
+    AggregateKeys,
+    AggregateFunction,
+    SplitIntermediatePhase,
+    SplitStateProducer,
+    SplitStateUse,
+};
+
+TString Q51WindowName(ui32 ordinal, EQ51WindowMutation mutation) {
+    if (mutation == EQ51WindowMutation::DuplicateName && ordinal == 1) {
+        ordinal = 0;
+    }
+    return TStringBuilder() << "_yql_anonymous_window" << ordinal;
+}
+
+struct TQ51DefinitionKey {
+    TExprNode::TPtr RowDescriptor;
+    TExprNode::TPtr Lambda;
+};
+
+TQ51DefinitionKey Q51DefinitionKey(
+    TExportTestContext& ctx,
+    TStringBuf name,
+    TStringBuf typeName,
+    NUdf::EDataSlot slot,
+    bool nullable,
+    bool groupRef,
+    ui32 index)
+{
+    const auto pos = TPositionHandle();
+    const auto* itemType = ScalarType(ctx, slot);
+    const auto* valueType = ScalarType(ctx, slot, nullable);
+    const auto* rowType = ctx.ExprCtx.MakeType<TStructExprType>(
+        TVector<const TItemExprType*>{
+            ctx.ExprCtx.MakeType<TItemExprType>(name, valueType),
+        });
+    const auto descriptor = [&]() {
+        return nullable
+            ? OptionalDataTypeDescriptor(
+                ctx,
+                typeName,
+                itemType,
+                valueType)
+            : DataTypeDescriptor(ctx, typeName, itemType);
+    };
+
+    auto row = ctx.ExprCtx.NewArgument(pos, "window_row");
+    row->SetTypeAnn(rowType);
+    TExprNode::TPtr reference;
+    if (groupRef) {
+        reference = TypedCallable(
+            ctx,
+            "YqlGroupRef",
+            {
+                row,
+                descriptor(),
+                ctx.ExprCtx.NewAtom(pos, ToString(index)),
+                ctx.ExprCtx.NewAtom(pos, name),
+            },
+            valueType);
+    } else {
+        reference = TypedCallable(
+            ctx,
+            "Member",
+            {row, ctx.ExprCtx.NewAtom(pos, name)},
+            valueType);
+    }
+    auto rowDescriptor = TypedCallable(
+        ctx,
+        "StructType",
+        {
+            ctx.ExprCtx.NewList(
+                pos,
+                {ctx.ExprCtx.NewAtom(pos, name), descriptor()}),
+        },
+        ctx.ExprCtx.MakeType<TTypeExprType>(rowType));
+    return {
+        .RowDescriptor = std::move(rowDescriptor),
+        .Lambda = ctx.ExprCtx.NewLambda(
+            pos,
+            ctx.ExprCtx.NewArguments(pos, {row}),
+            std::move(reference)),
+    };
+}
+
+TExprNode::TPtr Q51WindowDefinition(
+    TExportTestContext& ctx,
+    ui32 ordinal,
+    bool sum,
+    TStringBuf partition,
+    TStringBuf order,
+    EQ51WindowMutation mutation,
+    bool mutate)
+{
+    const auto pos = TPositionHandle();
+    const TString windowName = Q51WindowName(ordinal, mutation);
+    const bool partitionNullable = sum
+        ? mutate && mutation == EQ51WindowMutation::PartitionType
+        : true;
+    const bool partitionGroupRef = sum
+        ? !(mutate && mutation == EQ51WindowMutation::PartitionReference)
+        : false;
+    const bool orderNullable =
+        !(mutate && mutation == EQ51WindowMutation::OrderType);
+    auto partitionKey = Q51DefinitionKey(
+        ctx,
+        partition,
+        "Int64",
+        NUdf::EDataSlot::Int64,
+        partitionNullable,
+        partitionGroupRef,
+        0);
+    auto orderKey = Q51DefinitionKey(
+        ctx,
+        order,
+        "Date",
+        NUdf::EDataSlot::Date,
+        orderNullable,
+        sum,
+        1);
+    auto group = TypedCallable(
+        ctx,
+        "YqlGroup",
+        {
+            std::move(partitionKey.RowDescriptor),
+            std::move(partitionKey.Lambda),
+        },
+        nullptr);
+    auto sort = TypedCallable(
+        ctx,
+        "YqlSort",
+        {
+            std::move(orderKey.RowDescriptor),
+            std::move(orderKey.Lambda),
+            ctx.ExprCtx.NewAtom(
+                pos,
+                mutate && mutation == EQ51WindowMutation::Direction
+                    ? "desc"
+                    : "asc"),
+            ctx.ExprCtx.NewAtom(
+                pos,
+                mutate && mutation == EQ51WindowMutation::NullOrder
+                    ? "last"
+                    : "first"),
+        },
+        nullptr);
+    const auto frameSetting = [&](TStringBuf name, TExprNode::TPtr value) {
+        return ctx.ExprCtx.NewList(
+            pos,
+            {ctx.ExprCtx.NewAtom(pos, name), std::move(value)});
+    };
+    const auto* int32Type = ScalarType(ctx, NUdf::EDataSlot::Int32);
+    auto frame = ctx.ExprCtx.NewList(
+        pos,
+        {
+            frameSetting("type", ctx.ExprCtx.NewAtom(pos, "rows")),
+            frameSetting("from", ctx.ExprCtx.NewAtom(pos, "up")),
+            frameSetting("to", ctx.ExprCtx.NewAtom(pos, "f")),
+            frameSetting(
+                "to_value",
+                TypedLiteral(
+                    ctx,
+                    "Int32",
+                    mutate && mutation == EQ51WindowMutation::Frame
+                        ? TStringBuf("1")
+                        : TStringBuf("0"),
+                    int32Type)),
+        });
+    return TypedCallable(
+        ctx,
+        "YqlWindow",
+        {
+            ctx.ExprCtx.NewAtom(
+                pos,
+                mutate && mutation == EQ51WindowMutation::DefinitionName
+                    ? TStringBuf("_other_window")
+                    : TStringBuf(windowName)),
+            ctx.ExprCtx.NewAtom(pos, ""),
+            ctx.ExprCtx.NewList(pos, {std::move(group)}),
+            ctx.ExprCtx.NewList(pos, {std::move(sort)}),
+            std::move(frame),
+        },
+        nullptr);
+}
+
+TExpression Q51WindowExpression(
+    TExportTestContext& ctx,
+    ui32 ordinal,
+    bool sum,
+    TStringBuf input,
+    TStringBuf partition,
+    TStringBuf order,
+    EQ51WindowMutation mutation,
+    bool mutate)
+{
+    const auto pos = TPositionHandle();
+    const bool wrongResult =
+        mutate && mutation == EQ51WindowMutation::ResultType;
+    const auto* decimalType = DecimalType(
+        ctx,
+        wrongResult ? TStringBuf("34") : TStringBuf("35"),
+        "2");
+    const auto* optionalDecimalType = DecimalType(
+        ctx,
+        wrongResult ? TStringBuf("34") : TStringBuf("35"),
+        "2",
+        true);
+    auto row = ctx.ExprCtx.NewArgument(pos, "row");
+    auto inputRow = row;
+    if (mutate && mutation == EQ51WindowMutation::InputBinder) {
+        inputRow = ctx.ExprCtx.NewArgument(pos, "other_row");
+    }
+    auto member = TypedCallable(
+        ctx,
+        "Member",
+        {inputRow, ctx.ExprCtx.NewAtom(pos, input)},
+        optionalDecimalType);
+    auto factory = TypedCallable(
+        ctx,
+        "YqlWinFactory",
+        {
+            ctx.ExprCtx.NewAtom(
+                pos,
+                mutate && mutation == EQ51WindowMutation::Factory
+                    ? (sum ? TStringBuf("max") : TStringBuf("sum"))
+                    : (sum ? TStringBuf("sum") : TStringBuf("max"))),
+        },
+        ctx.ExprCtx.MakeType<TUnitExprType>());
+    TExprNode::TListType options;
+    if (mutate && mutation == EQ51WindowMutation::Options) {
+        options.push_back(ctx.ExprCtx.NewAtom(pos, "distinct"));
+    }
+    auto window = TypedCallable(
+        ctx,
+        "YqlAggWin",
+        {
+            std::move(factory),
+            ctx.ExprCtx.NewAtom(pos, Q51WindowName(ordinal, mutation)),
+            ctx.ExprCtx.NewList(pos, std::move(options)),
+            OptionalDecimalDataTypeDescriptor(
+                ctx,
+                wrongResult ? TStringBuf("34") : TStringBuf("35"),
+                "2",
+                decimalType,
+                optionalDecimalType),
+            std::move(member),
+        },
+        optionalDecimalType);
+    auto definition =
+        mutate && mutation == EQ51WindowMutation::MissingMetadata
+        ? TExprNode::TPtr{}
+        : Q51WindowDefinition(
+            ctx,
+            ordinal,
+            sum,
+            partition,
+            order,
+            mutation,
+            mutate);
+    return TExpression(
+        ctx.ExprCtx.NewLambda(
+            pos,
+            ctx.ExprCtx.NewArguments(pos, {row}),
+            std::move(window)),
+        &ctx.ExprCtx,
+        &ctx.ExpressionProps,
+        std::move(definition));
+}
+
+struct TQ51Branch {
+    TIntrusivePtr<TOpMap> Window;
+};
+
+TQ51Branch MakeQ51SumBranch(
+    TExportTestContext& ctx,
+    const TKikimrTableDescription& table,
+    TStringBuf prefix,
+    ui32 ordinal,
+    bool split,
+    EQ51WindowMutation mutation)
+{
+    const bool mutate = ordinal == 0;
+    const auto pos = TPositionHandle();
+    const auto* itemType = ScalarType(ctx, NUdf::EDataSlot::Int64);
+    const auto* dateType = ScalarType(ctx, NUdf::EDataSlot::Date, true);
+    const auto* decimal7Type = DecimalType(ctx, "7", "2", true);
+    const auto* decimal35Type = DecimalType(ctx, "35", "2", true);
+    const TString alias(prefix);
+    const TString item = TStringBuilder() << prefix << ".item";
+    const TString date = TStringBuilder() << prefix << ".d_date";
+    const TString amount = TStringBuilder() << prefix << ".amount";
+    const TString total = TStringBuilder() << prefix << ".total";
+    const TString state = TStringBuilder() << prefix << ".state";
+    const TString running = TStringBuilder() << prefix << ".running";
+    auto read = MakeRead(ctx, table, alias, {"item", "d_date", "amount"});
+    SetExactOutputType(ctx, *read, {
+        {item, itemType},
+        {date, dateType},
+        {amount, decimal7Type},
+    });
+
+    TVector<TInfoUnit> keys{TInfoUnit(item), TInfoUnit(date)};
+    if (mutate && mutation == EQ51WindowMutation::AggregateKeys) {
+        std::swap(keys[0], keys[1]);
+    }
+    TIntrusivePtr<TOpAggregate> aggregate;
+    if (split) {
+        auto intermediate = MakeIntrusive<TOpAggregate>(
+            read,
+            TVector<TOpAggregationTraits>{TOpAggregationTraits(
+                TInfoUnit(amount),
+                mutate && mutation == EQ51WindowMutation::SplitStateProducer
+                    ? "max"
+                    : "sum",
+                TInfoUnit(state))},
+            keys,
+            mutate && mutation ==
+                    EQ51WindowMutation::SplitIntermediatePhase
+                ? EOpPhase::Undefined
+                : EOpPhase::Intermediate,
+            false,
+            pos);
+        SetExactOutputType(ctx, *intermediate, {
+            {keys[0].GetFullName(), keys[0] == TInfoUnit(item) ? itemType : dateType},
+            {keys[1].GetFullName(), keys[1] == TInfoUnit(item) ? itemType : dateType},
+            {state, decimal35Type},
+        });
+        TVector<TOpAggregationTraits> finalTraits{TOpAggregationTraits(
+            TInfoUnit(
+                mutate && mutation == EQ51WindowMutation::SplitStateUse
+                    ? item
+                    : state),
+            "sum",
+            TInfoUnit(total))};
+        aggregate = MakeIntrusive<TOpAggregate>(
+            intermediate,
+            std::move(finalTraits),
+            keys,
+            EOpPhase::Final,
+            false,
+            pos);
+        TVector<std::pair<TString, const TTypeAnnotationNode*>> outputs{
+            {keys[0].GetFullName(), keys[0] == TInfoUnit(item) ? itemType : dateType},
+            {keys[1].GetFullName(), keys[1] == TInfoUnit(item) ? itemType : dateType},
+            {total, decimal35Type},
+        };
+        SetExactOutputType(ctx, *aggregate, outputs);
+    } else {
+        aggregate = MakeIntrusive<TOpAggregate>(
+            read,
+            TVector<TOpAggregationTraits>{TOpAggregationTraits(
+                TInfoUnit(amount),
+                mutate && mutation == EQ51WindowMutation::AggregateFunction
+                    ? "max"
+                    : "sum",
+                TInfoUnit(total))},
+            keys,
+            EOpPhase::Undefined,
+            false,
+            pos);
+        SetExactOutputType(ctx, *aggregate, {
+            {keys[0].GetFullName(), keys[0] == TInfoUnit(item) ? itemType : dateType},
+            {keys[1].GetFullName(), keys[1] == TInfoUnit(item) ? itemType : dateType},
+            {total, decimal35Type},
+        });
+    }
+
+    TIntrusivePtr<IOperator> windowInput = aggregate;
+    if (mutate && mutation == EQ51WindowMutation::NonAggregateInput) {
+        auto carrier = MakeIntrusive<TOpMap>(
+            aggregate,
+            pos,
+            TVector<TMapElement>{});
+        SetExactOutputType(ctx, *carrier, {
+            {keys[0].GetFullName(), keys[0] == TInfoUnit(item) ? itemType : dateType},
+            {keys[1].GetFullName(), keys[1] == TInfoUnit(item) ? itemType : dateType},
+            {total, decimal35Type},
+        });
+        windowInput = carrier;
+    }
+    auto window = MakeIntrusive<TOpMap>(
+        windowInput,
+        pos,
+        TVector<TMapElement>{TMapElement(
+            TInfoUnit(running),
+            Q51WindowExpression(
+                ctx,
+                ordinal,
+                true,
+                total,
+                item,
+                date,
+                mutation,
+                mutate))});
+    TVector<std::pair<TString, const TTypeAnnotationNode*>> windowOutputs{
+        {keys[0].GetFullName(), keys[0] == TInfoUnit(item) ? itemType : dateType},
+        {keys[1].GetFullName(), keys[1] == TInfoUnit(item) ? itemType : dateType},
+        {total, decimal35Type},
+        {running, decimal35Type},
+    };
+    SetExactOutputType(ctx, *window, windowOutputs);
+    return {.Window = std::move(window)};
+}
+
+TSemanticSnapshotExportResult ExportQ51WindowPlan(
+    EQ51WindowMutation mutation = EQ51WindowMutation::None,
+    bool split = false)
+{
+    TExportTestContext ctx;
+    const auto& table = AddTable(ctx, "/Root/Q51", {
+        {"item", "Int64", true},
+        {"d_date", "Date", false},
+        {"amount", "Decimal(7,2)", false},
+    });
+    auto web = MakeQ51SumBranch(ctx, table, "web", 0, split, mutation);
+    auto store = MakeQ51SumBranch(ctx, table, "store", 1, split, mutation);
+    const auto pos = TPositionHandle();
+    const auto* optionalItemType =
+        ScalarType(ctx, NUdf::EDataSlot::Int64, true);
+    const auto* dateType = ScalarType(ctx, NUdf::EDataSlot::Date, true);
+    const auto* decimal35Type = DecimalType(ctx, "35", "2", true);
+    auto join = MakeIntrusive<TOpJoin>(
+        web.Window,
+        store.Window,
+        pos,
+        "Full",
+        TVector<std::pair<TInfoUnit, TInfoUnit>>{
+            {TInfoUnit("web.item"), TInfoUnit("store.item")},
+            {TInfoUnit("web.d_date"), TInfoUnit("store.d_date")},
+        },
+        TVector<TExpression>{});
+    SetExactOutputType(ctx, *join, {
+        {"web.item", optionalItemType},
+        {"web.d_date", dateType},
+        {"web.total", decimal35Type},
+        {"web.running", decimal35Type},
+        {"store.item", optionalItemType},
+        {"store.d_date", dateType},
+        {"store.total", decimal35Type},
+        {"store.running", decimal35Type},
+    });
+
+    TVector<TMapElement> maxElements;
+    maxElements.emplace_back(
+        TInfoUnit("web.max"),
+        Q51WindowExpression(
+            ctx,
+            2,
+            false,
+            "web.running",
+            "web.item",
+            "web.d_date",
+            mutation,
+            false));
+    if (mutation != EQ51WindowMutation::MissingLeaf) {
+        maxElements.emplace_back(
+            TInfoUnit("store.max"),
+            Q51WindowExpression(
+                ctx,
+                3,
+                false,
+                "store.running",
+                "web.item",
+                "web.d_date",
+                mutation,
+                false));
+    }
+    auto maximum = MakeIntrusive<TOpMap>(
+        join,
+        pos,
+        std::move(maxElements));
+    TVector<std::pair<TString, const TTypeAnnotationNode*>> maximumOutputs{
+        {"web.item", optionalItemType},
+        {"web.d_date", dateType},
+        {"web.total", decimal35Type},
+        {"web.running", decimal35Type},
+        {"store.item", optionalItemType},
+        {"store.d_date", dateType},
+        {"store.total", decimal35Type},
+        {"store.running", decimal35Type},
+        {"web.max", decimal35Type},
+    };
+    TVector<TString> rootColumns{"web.max"};
+    if (mutation != EQ51WindowMutation::MissingLeaf) {
+        maximumOutputs.emplace_back("store.max", decimal35Type);
+        rootColumns.push_back("store.max");
+    }
+    SetExactOutputType(ctx, *maximum, maximumOutputs);
+    TOpRoot root(maximum, pos, rootColumns);
+    return ExportSemanticSnapshotV1(root, ctx.RboCtx);
+}
+
 Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
     Y_UNIT_TEST(OutputIsDeterministicAcrossEquivalentAllocations) {
         UNIT_ASSERT_VALUES_EQUAL(ExportDeterministicPlan(), ExportDeterministicPlan());
@@ -19690,6 +20198,327 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                     << "mutation unexpectedly exported: "
                     << static_cast<ui32>(mutation));
             UNIT_ASSERT(!result.UnsupportedReason.empty());
+        }
+    }
+
+    Y_UNIT_TEST(ExportsExactQ51RowsWindowsAndAggregateDataflow) {
+        for (const bool split : {false, true}) {
+            const auto snapshot = ParseSupported(
+                ExportQ51WindowPlan(EQ51WindowMutation::None, split));
+            size_t windowProjects = 0;
+            size_t sumProjects = 0;
+            size_t maxProjects = 0;
+            size_t sumLeaves = 0;
+            size_t maxLeaves = 0;
+            THashSet<TString> names;
+
+            for (const auto& node :
+                 snapshot["plan"]["nodes"].GetArraySafe())
+            {
+                if (node["op"].GetStringSafe() != "project") {
+                    continue;
+                }
+                TVector<const NJson::TJsonValue*> windows;
+                for (const auto& column :
+                     node["columns"].GetArraySafe())
+                {
+                    const auto& expression = column["expression"];
+                    if (!expression["kind"].IsString()) {
+                        continue;
+                    }
+                    const TString kind =
+                        expression["kind"].GetStringSafe();
+                    if (kind == "window_rows_sum" ||
+                        kind == "window_rows_max")
+                    {
+                        windows.push_back(&expression);
+                    }
+                }
+                if (windows.empty()) {
+                    continue;
+                }
+
+                ++windowProjects;
+                const bool sumProject =
+                    windows.size() == 1 &&
+                    (*windows.front())["kind"].GetStringSafe() ==
+                        "window_rows_sum";
+                const bool maxProject =
+                    windows.size() == 2 &&
+                    (*windows[0])["kind"].GetStringSafe() ==
+                        "window_rows_max" &&
+                    (*windows[1])["kind"].GetStringSafe() ==
+                        "window_rows_max";
+                UNIT_ASSERT(sumProject || maxProject);
+                sumProjects += sumProject;
+                maxProjects += maxProject;
+
+                THashSet<ui64> localExecutionOrder;
+                for (const auto* expression : windows) {
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        expression->GetMapSafe().size(),
+                        9);
+                    UNIT_ASSERT(!(*expression)["input"]
+                        .GetStringSafe().empty());
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        (*expression)["partition_by"]
+                            .GetArraySafe().size(),
+                        1);
+                    UNIT_ASSERT(
+                        (*expression)["partition_by"][0].IsString());
+                    const auto& order = (*expression)["order_by"];
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        order.GetArraySafe().size(),
+                        1);
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        order[0].GetMapSafe().size(),
+                        3);
+                    UNIT_ASSERT(!order[0]["column"]
+                        .GetStringSafe().empty());
+                    UNIT_ASSERT(order[0]["ascending"]
+                        .GetBooleanSafe());
+                    UNIT_ASSERT(order[0]["nulls_first"]
+                        .GetBooleanSafe());
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        (*expression)["frame"].GetStringSafe(),
+                        "rows_unbounded_preceding_current_row");
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        (*expression)["type"].GetStringSafe(),
+                        "Decimal(35,2)");
+                    UNIT_ASSERT((*expression)["nullable"]
+                        .GetBooleanSafe());
+
+                    const TString name =
+                        (*expression)["window_name"].GetStringSafe();
+                    UNIT_ASSERT(names.insert(name).second);
+                    const ui64 executionOrder =
+                        (*expression)["execution_order"]
+                            .GetUIntegerSafe();
+                    UNIT_ASSERT(localExecutionOrder.insert(
+                        executionOrder).second);
+                    if (name == "_yql_anonymous_window0" ||
+                        name == "_yql_anonymous_window1")
+                    {
+                        UNIT_ASSERT_VALUES_EQUAL(
+                            (*expression)["kind"].GetStringSafe(),
+                            "window_rows_sum");
+                        UNIT_ASSERT_VALUES_EQUAL(executionOrder, 0);
+                        ++sumLeaves;
+                    } else if (name ==
+                            "_yql_anonymous_window2")
+                    {
+                        UNIT_ASSERT_VALUES_EQUAL(
+                            (*expression)["kind"].GetStringSafe(),
+                            "window_rows_max");
+                        UNIT_ASSERT_VALUES_EQUAL(executionOrder, 0);
+                        ++maxLeaves;
+                    } else {
+                        UNIT_ASSERT_VALUES_EQUAL(
+                            name,
+                            "_yql_anonymous_window3");
+                        UNIT_ASSERT_VALUES_EQUAL(
+                            (*expression)["kind"].GetStringSafe(),
+                            "window_rows_max");
+                        UNIT_ASSERT_VALUES_EQUAL(executionOrder, 1);
+                        ++maxLeaves;
+                    }
+                }
+
+                if (sumProject) {
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        localExecutionOrder,
+                        THashSet<ui64>({0}));
+                    const auto& aggregate = FindNodeById(
+                        snapshot,
+                        node["input"].GetStringSafe());
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        aggregate["op"].GetStringSafe(),
+                        "aggregate");
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        aggregate["phase"].GetStringSafe(),
+                        split ? TStringBuf("final")
+                              : TStringBuf("undefined"));
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        aggregate["keys"].GetArraySafe().size(),
+                        2);
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        aggregate["keys"][0].GetStringSafe(),
+                        (*windows.front())["partition_by"][0]
+                            .GetStringSafe());
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        aggregate["keys"][1].GetStringSafe(),
+                        (*windows.front())["order_by"][0]["column"]
+                            .GetStringSafe());
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        aggregate["aggregates"]
+                            .GetArraySafe().size(),
+                        1);
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        aggregate["aggregates"][0]["function"]
+                            .GetStringSafe(),
+                        "sum");
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        aggregate["aggregates"][0]["output"]
+                            .GetStringSafe(),
+                        (*windows.front())["input"]
+                            .GetStringSafe());
+                    if (split) {
+                        const auto& intermediate = FindNodeById(
+                            snapshot,
+                            aggregate["input"].GetStringSafe());
+                        UNIT_ASSERT_VALUES_EQUAL(
+                            intermediate["op"].GetStringSafe(),
+                            "aggregate");
+                        UNIT_ASSERT_VALUES_EQUAL(
+                            intermediate["phase"].GetStringSafe(),
+                            "intermediate");
+                        UNIT_ASSERT_VALUES_EQUAL(
+                            Strings(intermediate["keys"]),
+                            Strings(aggregate["keys"]));
+                        UNIT_ASSERT_VALUES_EQUAL(
+                            intermediate["aggregates"]
+                                .GetArraySafe().size(),
+                            1);
+                        UNIT_ASSERT_VALUES_EQUAL(
+                            intermediate["aggregates"][0]["function"]
+                                .GetStringSafe(),
+                            "sum");
+                    }
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        localExecutionOrder,
+                        THashSet<ui64>({0, 1}));
+                }
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL(windowProjects, 3);
+            UNIT_ASSERT_VALUES_EQUAL(sumProjects, 2);
+            UNIT_ASSERT_VALUES_EQUAL(maxProjects, 1);
+            UNIT_ASSERT_VALUES_EQUAL(sumLeaves, 2);
+            UNIT_ASSERT_VALUES_EQUAL(maxLeaves, 2);
+            UNIT_ASSERT_VALUES_EQUAL(names.size(), 4);
+        }
+    }
+
+    Y_UNIT_TEST(Q51RowsWindowGrammarAndDataflowFailClosed) {
+        struct TCase {
+            EQ51WindowMutation Mutation;
+            bool Split = false;
+            TStringBuf ExpectedReason;
+        };
+        const TCase cases[] = {
+            {
+                EQ51WindowMutation::MissingMetadata,
+                false,
+                "has no source window metadata",
+            },
+            {
+                EQ51WindowMutation::Factory,
+                false,
+                "q51 running MAX partition field",
+            },
+            {
+                EQ51WindowMutation::Options,
+                false,
+                "does not admit aggregation options",
+            },
+            {
+                EQ51WindowMutation::ResultType,
+                false,
+                "requires one direct Optional<Decimal(35,2)> YqlAggWin",
+            },
+            {
+                EQ51WindowMutation::InputBinder,
+                false,
+                "must be one direct Optional<Decimal(35,2)> member",
+            },
+            {
+                EQ51WindowMutation::DefinitionName,
+                false,
+                "definition name does not match YqlAggWin",
+            },
+            {
+                EQ51WindowMutation::PartitionType,
+                false,
+                "q51 running SUM partition field must be exact Int64",
+            },
+            {
+                EQ51WindowMutation::PartitionReference,
+                false,
+                "must be one direct named YqlGroupRef",
+            },
+            {
+                EQ51WindowMutation::OrderType,
+                false,
+                "q51 running SUM order field must be exact Optional<Date>",
+            },
+            {
+                EQ51WindowMutation::Direction,
+                false,
+                "must be the exact atom asc",
+            },
+            {
+                EQ51WindowMutation::NullOrder,
+                false,
+                "must be the exact atom first",
+            },
+            {
+                EQ51WindowMutation::Frame,
+                false,
+                "frame endpoint must be exact Int32(0)",
+            },
+            {
+                EQ51WindowMutation::DuplicateName,
+                false,
+                "functions, names, and source ordinals must be globally canonical and unique",
+            },
+            {
+                EQ51WindowMutation::MissingLeaf,
+                false,
+                "requires singleton SUM Projects and one two-MAX Project",
+            },
+            {
+                EQ51WindowMutation::NonAggregateInput,
+                false,
+                "must directly consume an Aggregate",
+            },
+            {
+                EQ51WindowMutation::AggregateKeys,
+                false,
+                "requires one exact two-key logical or final Aggregate",
+            },
+            {
+                EQ51WindowMutation::AggregateFunction,
+                false,
+                "must consume the exact direct Aggregate SUM output",
+            },
+            {
+                EQ51WindowMutation::SplitIntermediatePhase,
+                true,
+                "requires one private matching intermediate SUM state",
+            },
+            {
+                EQ51WindowMutation::SplitStateProducer,
+                true,
+                "requires one private matching intermediate SUM state",
+            },
+            {
+                EQ51WindowMutation::SplitStateUse,
+                true,
+                "requires one private matching intermediate SUM state",
+            },
+        };
+        for (const auto& test : cases) {
+            const auto result =
+                ExportQ51WindowPlan(test.Mutation, test.Split);
+            UNIT_ASSERT_C(
+                !result.IsSupported(),
+                TStringBuilder()
+                    << "q51 mutation unexpectedly exported: "
+                    << static_cast<ui32>(test.Mutation));
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                test.ExpectedReason);
         }
     }
 

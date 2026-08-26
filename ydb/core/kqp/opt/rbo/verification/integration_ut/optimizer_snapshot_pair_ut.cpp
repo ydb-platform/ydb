@@ -3561,15 +3561,19 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
         }
     }
 
-    Y_UNIT_TEST(RealHostRejectsUnsafeTpcdsQuery51WindowMetadata) {
+    Y_UNIT_TEST(RealHostCapturesExactTpcdsQuery51RowsWindows) {
         NYql::IModuleResolver::TPtr moduleResolver;
-        UNIT_ASSERT(NYql::GetYqlDefaultModuleResolverWithContext(moduleResolver));
+        UNIT_ASSERT(
+            NYql::GetYqlDefaultModuleResolverWithContext(moduleResolver));
 
         auto kikimr = MakeTpcdsRunner();
         CreateTpcdsColumnTables(kikimr);
 
         auto sink = std::make_shared<TRecordingSemanticSnapshotSink>();
-        auto host = MakeHost(kikimr.GetTestServer(), std::move(moduleResolver), sink);
+        auto host = MakeHost(
+            kikimr.GetTestServer(),
+            std::move(moduleResolver),
+            sink);
         IKqpHost::TPrepareSettings settings;
         settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
         const TString query = TpcdsQuery(51);
@@ -3591,10 +3595,260 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
         UNIT_ASSERT_VALUES_EQUAL_C(results.size(), 2, issues);
         UNIT_ASSERT(results[0].Boundary == ERBOSemanticSnapshotBoundaryV1::Initial);
         UNIT_ASSERT(results[1].Boundary == ERBOSemanticSnapshotBoundaryV1::Final);
-        for (const auto& result : results) {
-            UNIT_ASSERT(!result.IsSupported());
-            UNIT_ASSERT(!result.UnsupportedReason.empty());
+        const auto initial = ParseSnapshot(results[0]);
+        const auto final = ParseSnapshot(results[1]);
+
+        const auto assertWindows = [](
+            const NJson::TJsonValue& snapshot,
+            TStringBuf sumPhase)
+        {
+            TVector<std::pair<TString, TString>> windowProjects;
+            THashSet<TString> names;
+            size_t sumProjects = 0;
+            size_t maxProjects = 0;
+            size_t sumLeaves = 0;
+            size_t maxLeaves = 0;
+            for (const auto* project : PlanNodes(snapshot, "project")) {
+                TVector<const NJson::TJsonValue*> windows;
+                for (const auto& column :
+                     (*project)["columns"].GetArraySafe())
+                {
+                    const auto& expression = column["expression"];
+                    if (!expression["kind"].IsString()) {
+                        continue;
+                    }
+                    const TString kind =
+                        expression["kind"].GetStringSafe();
+                    if (kind == "window_rows_sum" ||
+                        kind == "window_rows_max")
+                    {
+                        windows.push_back(&expression);
+                    }
+                }
+                if (windows.empty()) {
+                    continue;
+                }
+
+                const bool sumProject =
+                    windows.size() == 1 &&
+                    (*windows.front())["kind"].GetStringSafe() ==
+                        "window_rows_sum";
+                const bool maxProject =
+                    windows.size() == 2 &&
+                    (*windows[0])["kind"].GetStringSafe() ==
+                        "window_rows_max" &&
+                    (*windows[1])["kind"].GetStringSafe() ==
+                        "window_rows_max";
+                UNIT_ASSERT(sumProject || maxProject);
+                sumProjects += sumProject;
+                maxProjects += maxProject;
+
+                TString partition;
+                THashSet<ui64> localExecutionOrder;
+                for (const auto* expression : windows) {
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        expression->GetMapSafe().size(),
+                        9);
+                    UNIT_ASSERT(!(*expression)["input"]
+                        .GetStringSafe().empty());
+                    const auto& partitionBy =
+                        (*expression)["partition_by"].GetArraySafe();
+                    UNIT_ASSERT_VALUES_EQUAL(partitionBy.size(), 1);
+                    UNIT_ASSERT(partitionBy[0].IsString());
+                    if (partition.empty()) {
+                        partition = partitionBy[0].GetStringSafe();
+                    } else {
+                        UNIT_ASSERT_VALUES_EQUAL(
+                            partitionBy[0].GetStringSafe(),
+                            partition);
+                    }
+                    const auto& order =
+                        (*expression)["order_by"].GetArraySafe();
+                    UNIT_ASSERT_VALUES_EQUAL(order.size(), 1);
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        order[0].GetMapSafe().size(),
+                        3);
+                    UNIT_ASSERT(!order[0]["column"]
+                        .GetStringSafe().empty());
+                    UNIT_ASSERT(order[0]["ascending"]
+                        .GetBooleanSafe());
+                    UNIT_ASSERT(order[0]["nulls_first"]
+                        .GetBooleanSafe());
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        (*expression)["frame"].GetStringSafe(),
+                        "rows_unbounded_preceding_current_row");
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        (*expression)["type"].GetStringSafe(),
+                        "Decimal(35,2)");
+                    UNIT_ASSERT((*expression)["nullable"]
+                        .GetBooleanSafe());
+
+                    const TString name =
+                        (*expression)["window_name"].GetStringSafe();
+                    UNIT_ASSERT(names.insert(name).second);
+                    const ui64 executionOrder =
+                        (*expression)["execution_order"]
+                            .GetUIntegerSafe();
+                    UNIT_ASSERT(localExecutionOrder.insert(
+                        executionOrder).second);
+                    if (name == "_yql_anonymous_window0" ||
+                        name == "_yql_anonymous_window1")
+                    {
+                        UNIT_ASSERT_VALUES_EQUAL(
+                            (*expression)["kind"].GetStringSafe(),
+                            "window_rows_sum");
+                        UNIT_ASSERT_VALUES_EQUAL(executionOrder, 0);
+                        ++sumLeaves;
+                    } else if (name ==
+                            "_yql_anonymous_window2")
+                    {
+                        UNIT_ASSERT_VALUES_EQUAL(
+                            (*expression)["kind"].GetStringSafe(),
+                            "window_rows_max");
+                        UNIT_ASSERT_VALUES_EQUAL(executionOrder, 0);
+                        ++maxLeaves;
+                    } else {
+                        UNIT_ASSERT_VALUES_EQUAL(
+                            name,
+                            "_yql_anonymous_window3");
+                        UNIT_ASSERT_VALUES_EQUAL(
+                            (*expression)["kind"].GetStringSafe(),
+                            "window_rows_max");
+                        UNIT_ASSERT_VALUES_EQUAL(executionOrder, 1);
+                        ++maxLeaves;
+                    }
+                }
+
+                if (sumProject) {
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        localExecutionOrder,
+                        THashSet<ui64>({0}));
+                    const auto& aggregate = PlanNode(
+                        snapshot,
+                        (*project)["input"].GetStringSafe());
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        aggregate["op"].GetStringSafe(),
+                        "aggregate");
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        aggregate["phase"].GetStringSafe(),
+                        sumPhase);
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        aggregate["keys"].GetArraySafe().size(),
+                        2);
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        aggregate["keys"][0].GetStringSafe(),
+                        partition);
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        aggregate["keys"][1].GetStringSafe(),
+                        (*windows.front())["order_by"][0]["column"]
+                            .GetStringSafe());
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        aggregate["aggregates"]
+                            .GetArraySafe().size(),
+                        1);
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        aggregate["aggregates"][0]["function"]
+                            .GetStringSafe(),
+                        "sum");
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        aggregate["aggregates"][0]["output"]
+                            .GetStringSafe(),
+                        (*windows.front())["input"]
+                            .GetStringSafe());
+                    if (sumPhase == "final") {
+                        const auto& intermediate = PlanNode(
+                            snapshot,
+                            aggregate["input"].GetStringSafe());
+                        UNIT_ASSERT_VALUES_EQUAL(
+                            intermediate["op"].GetStringSafe(),
+                            "aggregate");
+                        UNIT_ASSERT_VALUES_EQUAL(
+                            intermediate["phase"].GetStringSafe(),
+                            "intermediate");
+                        UNIT_ASSERT_VALUES_EQUAL(
+                            intermediate["keys"].GetArraySafe().size(),
+                            2);
+                        UNIT_ASSERT_VALUES_EQUAL(
+                            intermediate["keys"][0].GetStringSafe(),
+                            partition);
+                        UNIT_ASSERT_VALUES_EQUAL(
+                            intermediate["keys"][1].GetStringSafe(),
+                            (*windows.front())["order_by"][0]["column"]
+                                .GetStringSafe());
+                    }
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        localExecutionOrder,
+                        THashSet<ui64>({0, 1}));
+                }
+                windowProjects.emplace_back(
+                    (*project)["id"].GetStringSafe(),
+                    std::move(partition));
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL(windowProjects.size(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(sumProjects, 2);
+            UNIT_ASSERT_VALUES_EQUAL(maxProjects, 1);
+            UNIT_ASSERT_VALUES_EQUAL(sumLeaves, 2);
+            UNIT_ASSERT_VALUES_EQUAL(maxLeaves, 2);
+            UNIT_ASSERT_VALUES_EQUAL(names.size(), 4);
+            for (ui32 ordinal = 0; ordinal < 4; ++ordinal) {
+                UNIT_ASSERT(names.contains(TStringBuilder()
+                    << "_yql_anonymous_window" << ordinal));
+            }
+            return windowProjects;
+        };
+
+        const auto initialWindowProjects =
+            assertWindows(initial, "undefined");
+        Y_UNUSED(initialWindowProjects);
+        UNIT_ASSERT(initial["stage_graph"].IsNull());
+
+        const auto finalWindowProjects =
+            assertWindows(final, "final");
+        UNIT_ASSERT(final["stage_graph"].IsMap());
+        size_t windowShuffles = 0;
+        for (const auto& [projectId, partition] :
+             finalWindowProjects)
+        {
+            TString stageId;
+            for (const auto& stage :
+                 final["stage_graph"]["stages"].GetArraySafe())
+            {
+                for (const auto& node : stage["nodes"].GetArraySafe()) {
+                    if (node.GetStringSafe() == projectId) {
+                        UNIT_ASSERT(stageId.empty());
+                        stageId = stage["id"].GetStringSafe();
+                    }
+                }
+            }
+            UNIT_ASSERT(!stageId.empty());
+            size_t inputs = 0;
+            for (const auto& edge :
+                 final["stage_graph"]["edges"].GetArraySafe())
+            {
+                if (edge["consumer"].GetStringSafe() != stageId) {
+                    continue;
+                }
+                ++inputs;
+                ++windowShuffles;
+                UNIT_ASSERT_VALUES_EQUAL(
+                    edge["kind"].GetStringSafe(),
+                    "hash_shuffle");
+                UNIT_ASSERT_VALUES_EQUAL(
+                    edge["keys"].GetArraySafe().size(),
+                    1);
+                UNIT_ASSERT_VALUES_EQUAL(
+                    edge["keys"][0].GetStringSafe(),
+                    partition);
+                UNIT_ASSERT_VALUES_EQUAL(
+                    edge["hash_function"].GetStringSafe(),
+                    "HashV2");
+                UNIT_ASSERT(!edge["use_spilling"].GetBooleanSafe());
+            }
+            UNIT_ASSERT_VALUES_EQUAL(inputs, 1);
         }
+        UNIT_ASSERT_VALUES_EQUAL(windowShuffles, 3);
     }
 
     Y_UNIT_TEST(RealHostCapturesExactTpcdsWholePartitionWindowAvgs) {

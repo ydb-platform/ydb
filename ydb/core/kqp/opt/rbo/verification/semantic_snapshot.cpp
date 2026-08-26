@@ -570,7 +570,8 @@ void AuditExactScalarExpression(const NJson::TJsonValue& root) {
         if (kind == "column" || kind == "bound" || kind == "void" ||
             kind == "literal" || kind == "null" ||
             kind == "window_sum" || kind == "window_avg" ||
-            kind == "window_rank")
+            kind == "window_rank" || kind == "window_rows_sum" ||
+            kind == "window_rows_max")
         {
             continue;
         }
@@ -8183,6 +8184,7 @@ public:
         ValidateCheckedConcatProjectionTopology();
         ValidateWholePartitionWindowProjectionTopology();
         ValidateGlobalRankProjectionTopology();
+        ValidateQ51WindowProjectionTopology();
         ValidateErrorOnNullProjectionTopology();
         const auto rootNames = OutputNames(*Root.GetInput());
         auto output = JsonArray();
@@ -9469,6 +9471,17 @@ private:
     void PrepareGlobalRankProjection(
         TOpMap& map,
         const THashSet<TString>& inputNames);
+
+    void PrepareQ51WindowProjection(
+        TOpMap& map,
+        const THashSet<TString>& inputNames);
+
+    void CertifyQ51SumProjection(
+        TOpMap& map,
+        const TQ51ProjectionWindow& window,
+        const THashMap<const IOperator*, TVector<IOperator*>>& parents);
+
+    void ValidateQ51WindowProjectionTopology();
 
     void CertifyWholePartitionWindowProjection(
         TOpMap& map,
@@ -11280,6 +11293,7 @@ private:
                     OutputNames(*map.GetInput());
                 const auto inputNames =
                     VisibleInputNames(map, *map.GetInput());
+                PrepareQ51WindowProjection(map, inputNames);
                 PrepareGlobalRankProjection(map, inputNames);
                 THashSet<TString> renameSources;
                 for (const auto& element : map.MapElements) {
@@ -11317,7 +11331,12 @@ private:
                     }
                     auto column = JsonMap();
                     column["output"] = output;
-                    if (auto* rank =
+                    if (auto* window =
+                            PreparedQ51Windows.FindPtr(&element))
+                    {
+                        column["expression"] =
+                            std::move(window->Expression);
+                    } else if (auto* rank =
                             PreparedGlobalRankWindows.FindPtr(&element))
                     {
                         column["expression"] =
@@ -11961,6 +11980,10 @@ private:
         PreparedGlobalRankWindows;
     THashMap<TOpMap*, TVector<TGlobalRankProjectionWindow>>
         GlobalRankProjectionWindows;
+    THashMap<const TMapElement*, TQ51Window>
+        PreparedQ51Windows;
+    THashMap<TOpMap*, TVector<TQ51ProjectionWindow>>
+        Q51ProjectionWindows;
     THashMap<const IOperator*, TVector<IOperator*>>
         MainConsumers;
     THashMap<const IOperator*, TString> Ids;

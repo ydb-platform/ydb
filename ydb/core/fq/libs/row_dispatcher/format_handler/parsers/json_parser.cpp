@@ -169,9 +169,6 @@ public:
                         return true;
                     }
                 }
-                if (alternativesCount == 0) {
-                    return true;
-                }
                 if (status.IsSuccess()) {
                     status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, isQuiet ? TString() : TStringBuilder() << "Failed to parse Variant type");
                 }
@@ -640,6 +637,9 @@ private:
             case NKikimr::NMiniKQL::TTypeBase::EKind::Variant: {
                 auto variantType = AS_TYPE(NKikimr::NMiniKQL::TVariantType, type);
                 const auto alternativesCount = variantType->GetAlternativesCount();
+                if (alternativesCount == 0) {
+                    return TStatus::Fail(EStatusId::UNSUPPORTED, TStringBuilder() << "Variant with zero alternatives");
+                }
                 for (ui32 index = 0; index != alternativesCount; ++index) {
                     auto alternativeType = variantType->GetAlternativeType(index);
                     auto success = ParseNestedType(alternativeType);

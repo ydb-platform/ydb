@@ -178,11 +178,21 @@ void AddExecutorPoolsImpl(
 
     std::optional<TCpuTopology> parsedCpuTopology;
     const TCpuTopology* cpuTopology = suppliedCpuTopology;
-    if (hasPlacement && !cpuTopology) {
-        auto result = ParseCpuTopology();
-        Y_ABORT_UNLESS(result, "Failed to parse CPU topology for executor placement: %s", result.error().c_str());
-        parsedCpuTopology.emplace(std::move(*result));
-        cpuTopology = &*parsedCpuTopology;
+    if (hasPlacement) {
+        if (!cpuTopology) {
+            auto result = ParseCpuTopology();
+            Y_ABORT_UNLESS(result, "Failed to parse CPU topology for executor placement: %s", result.error().c_str());
+            parsedCpuTopology.emplace(std::move(*result));
+            cpuTopology = &*parsedCpuTopology;
+        }
+        ui32 cpuCountPerGroup = 0;
+        for (const auto& group : cpuTopology->PlacementGroups) {
+            ui32 curGroupCpuCount = group.Cpus.CpuCount();
+            if (!cpuCountPerGroup) {
+                cpuCountPerGroup = curGroupCpuCount;
+            }
+            Y_ABORT_UNLESS(cpuCountPerGroup == curGroupCpuCount, "CPU topology placement groups are uneven");
+        }
     }
 
     cpuManager.PingInfoByPool.resize(systemConfig.ExecutorSize());

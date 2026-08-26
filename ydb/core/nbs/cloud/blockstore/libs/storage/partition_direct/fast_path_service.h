@@ -175,7 +175,7 @@ private:
 
     void ScheduleVChunkCountersUpdate();
     void QueryVChunkStats();
-    void OnVChunkStats(TVChunkStatsGatherResult result);
+    void OnVChunkStats(const TVChunkStatsGatherResult& result);
 
     void MaybeTriggerPBufferCleanup(ui64 lsn);
     void PBufferCleanup();

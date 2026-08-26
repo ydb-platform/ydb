@@ -47,6 +47,9 @@ enum class ELatencyPercentile
     Max,
 };
 
+// Per-vchunk row cap on the counters tab (0 = dump everything).
+constexpr size_t DefaultVChunkStatsLimit = 200;
+
 struct TTabletInfo
 {
     ui64 TabletId = 0;
@@ -148,7 +151,7 @@ struct TMonPageData
     // rows for SelectedVChunkDbg when ShowVChunks is set. VChunkStatsLimit
     // is the per-vchunk row cap (0 = dump everything).
     std::optional<TVChunkStatsGatherResult> VChunkStats;
-    size_t VChunkStatsLimit = 200;
+    size_t VChunkStatsLimit = DefaultVChunkStatsLimit;
     std::optional<ui32> SelectedVChunkDbg;
     bool ShowVChunks = false;
     // Latency tab: which percentile colors the heatmap / slot grid, and

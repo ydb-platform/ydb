@@ -762,7 +762,7 @@ void TFastPathService::QueryVChunkStats()
             });
 }
 
-void TFastPathService::OnVChunkStats(TVChunkStatsGatherResult result)
+void TFastPathService::OnVChunkStats(const TVChunkStatsGatherResult& result)
 {
     VChunkCounters.Publish(result.Total);
     ScheduleVChunkCountersUpdate();

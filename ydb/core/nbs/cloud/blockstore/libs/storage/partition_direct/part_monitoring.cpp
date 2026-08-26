@@ -81,18 +81,17 @@ ELatencyPercentile ParseSelectedPercentile(const TCgiParameters& cgi)
     return ELatencyPercentile::P99;
 }
 
-// Per-vchunk row cap. all=1 dumps everything; limit=N overrides the default
-// 200.
+// Per-vchunk row cap. all=1 dumps everything; limit=N overrides the default.
 size_t ParseVChunkStatsLimit(const TCgiParameters& cgi)
 {
     if (cgi.Get("all") == "1") {
         return 0;
     }
-    size_t limit = 200;
-    if (cgi.Has("limit")) {
-        TryFromString(cgi.Get("limit"), limit);
+    size_t limit = 0;
+    if (cgi.Has("limit") && TryFromString(cgi.Get("limit"), limit)) {
+        return limit;
     }
-    return limit;
+    return DefaultVChunkStatsLimit;
 }
 
 std::optional<EOperation> ParseSelectedLatencyOperation(

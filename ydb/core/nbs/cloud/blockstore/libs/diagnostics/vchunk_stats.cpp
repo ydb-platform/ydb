@@ -104,7 +104,6 @@ const char* VChunkOperationName(EVChunkOperation operation)
         case EVChunkOperation::MAX:
             Y_ABORT("Invalid operation");
     }
-    return "Read";
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -72,6 +72,11 @@
     "kind": "Normal"
   },
   {
+    "name": "AsErased",
+    "kind": "Normal",
+    "minLangVer": "2026.02"
+  },
+  {
     "name": "AsList",
     "kind": "Normal"
   },
@@ -1127,6 +1132,11 @@
   {
     "name": "ParseTypeHandle",
     "kind": "Normal"
+  },
+  {
+    "name": "PeekErased",
+    "kind": "Normal",
+    "minLangVer": "2026.02"
   },
   {
     "name": "PercentRank",

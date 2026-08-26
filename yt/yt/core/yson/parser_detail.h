@@ -73,11 +73,11 @@ public:
                         THROW_ERROR_EXCEPTION("Stray %Qv found; maybe you should use yson_type = %Qlv",
                             character,
                             EYsonType::ListFragment)
-                            << *this;
+                            .With(this->GetErrorAttributes());
                     }
                     THROW_ERROR_EXCEPTION("Stray %Qv found",
                         character)
-                        << *this;
+                        .With(this->GetErrorAttributes());
                 } else if (!TBase::IsEmpty()) {
                     TBase::Advance(1);
                 }
@@ -85,9 +85,9 @@ public:
         } catch (const std::exception& ex) {
             auto [context, contextPosition] = TBase::GetContextFromCheckpoint();
             THROW_ERROR_EXCEPTION(EErrorCode::ParseError, "Error occurred while parsing YSON")
-                << TErrorAttribute("context", EscapeC(TStringBuf(context)))
-                << TErrorAttribute("context_pos", contextPosition)
-                << ex;
+                .With("context", EscapeC(TStringBuf(context)))
+                .With("context_pos", contextPosition)
+                .With(ex);
         }
     }
 
@@ -171,7 +171,7 @@ private:
         if (NestingLevel_ >= NestingLevelLimit_) {
             auto nestingLevelLimit = NestingLevelLimit_;
             THROW_ERROR_EXCEPTION(EErrorCode::DepthLimitExceeded, "Depth limit exceeded while parsing YSON")
-                << TErrorAttribute("limit", nestingLevelLimit);
+                .With("limit", nestingLevelLimit);
         }
 
         ++NestingLevel_;
@@ -265,10 +265,10 @@ private:
                     }
                 } else if (ch == EndSymbol) {
                     THROW_ERROR_EXCEPTION("Unexpected end of stream while parsing node")
-                        << *this;
+                        .With(this->GetErrorAttributes());
                 } else {
                     THROW_ERROR_EXCEPTION("Unexpected %Qv while parsing node", ch)
-                        << *this;
+                        .With(this->GetErrorAttributes());
                 }
                 break;
             }
@@ -303,7 +303,7 @@ private:
                 } else {
                     THROW_ERROR_EXCEPTION("Unexpected %Qv while parsing key",
                         ch)
-                        << *this;
+                        .With(this->GetErrorAttributes());
                 }
             }
         }
@@ -328,7 +328,7 @@ private:
                 THROW_ERROR_EXCEPTION("Expected %Qv but %Qv found",
                     KeyValueSeparatorSymbol,
                     ch)
-                    << *this;
+                    .With(this->GetErrorAttributes());
             }
             ParseNode<AllowFinish>();
 
@@ -346,7 +346,7 @@ private:
                     ItemSeparatorSymbol,
                     endSymbol,
                     ch)
-                    << *this;
+                    .With(this->GetErrorAttributes());
             }
         }
     }
@@ -384,7 +384,7 @@ private:
                     ItemSeparatorSymbol,
                     endSymbol,
                     ch)
-                    << *this;
+                    .With(this->GetErrorAttributes());
             }
         }
     }
@@ -407,8 +407,8 @@ private:
             } catch (const std::exception& ex) {
                 // This exception is wrapped in parser.
                 THROW_ERROR CreateLiteralError(ETokenType::Double, valueBuffer.begin(), valueBuffer.size())
-                    << *this
-                    << ex;
+                    .With(this->GetErrorAttributes())
+                    .With(ex);
             }
             Consumer_->OnDoubleScalar(value);
         } else if (numericResult == ENumericResult::Int64) {
@@ -418,8 +418,8 @@ private:
             } catch (const std::exception& ex) {
                 // This exception is wrapped in parser.
                 THROW_ERROR CreateLiteralError(ETokenType::Int64, valueBuffer.begin(), valueBuffer.size())
-                    << *this
-                    << ex;
+                    .With(this->GetErrorAttributes())
+                    .With(ex);
             }
             Consumer_->OnInt64Scalar(value);
         } else if (numericResult == ENumericResult::Uint64) {
@@ -429,8 +429,8 @@ private:
             } catch (const std::exception& ex) {
                 // This exception is wrapped in parser.
                 THROW_ERROR CreateLiteralError(ETokenType::Uint64, valueBuffer.begin(), valueBuffer.size())
-                    << *this
-                    << ex;
+                    .With(this->GetErrorAttributes())
+                    .With(ex);
             }
             Consumer_->OnUint64Scalar(value);
         }

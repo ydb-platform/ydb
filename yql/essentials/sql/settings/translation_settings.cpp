@@ -6,6 +6,7 @@
 
 #include <library/cpp/deprecated/split/split_iterator.h>
 
+#include <util/string/cast.h>
 #include <util/string/split.h>
 #include <util/string/join.h>
 #include <util/system/env.h>
@@ -33,7 +34,7 @@ public:
 };
 
 [[noreturn]] TString ThrowBad(TStringBuf flag, const TVector<TString>& args) {
-    YQL_ENSURE(false, "Bad " << flag << "args [" << JoinSeq(", ", args) << "]");
+    YQL_ENSURE(false, "Bad " << flag << " args [" << JoinSeq(", ", args) << "]");
 }
 
 } // namespace
@@ -186,6 +187,21 @@ void ParseTranslationSettings(const TExtendedSqlFlags& flags, TTranslationSettin
                 } else {
                     ThrowBad("YqlSelect", args);
                 }
+            },
+        },
+        {
+            "MaxParseTreeDepth",
+            [](const TVector<TString>& args, TTranslationSettings& s) {
+                if (args.size() != 1) {
+                    ThrowBad("MaxParseTreeDepth", args);
+                }
+
+                size_t value = 0;
+                if (!TryFromString(args[0], value)) {
+                    ThrowBad("MaxParseTreeDepth", args);
+                }
+
+                s.MaxParseTreeDepth = value;
             },
         },
     };

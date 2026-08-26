@@ -147,7 +147,7 @@ void TStatistics::ProcessNodeWithCallback(const TStatisticPath& path, const NYTr
             THROW_ERROR_EXCEPTION(
                 "Invalid statistics type: expected map or integral type but found sample of type %Qlv",
                 sample->GetType())
-                << TErrorAttribute("sample", sample);
+                .With("sample", sample);
     }
 }
 
@@ -217,7 +217,7 @@ i64 GetNumericValue(const TStatistics& statistics, const TStatisticPath& path)
     auto value = FindNumericValue(statistics, path);
     if (!value) {
         THROW_ERROR_EXCEPTION("Statistics is not present")
-            << TErrorAttribute("requested_path", path);
+            .With("requested_path", path);
     } else {
         return *value;
     }
@@ -236,8 +236,8 @@ std::optional<TSummary> FindSummary(const TStatistics& statistics, const TStatis
     if (iterator != data.end() && iterator->first != path &&
         iterator->first.StartsWith(path))
     {
-        THROW_ERROR_EXCEPTION("Invalid statistics type: cannot get summary since it is a map") <<
-            TErrorAttribute("requested_path", path);
+        THROW_ERROR_EXCEPTION("Invalid statistics type: cannot get summary since it is a map")
+            .With("requested_path", path);
     } else if (iterator == data.end() || iterator->first != path) {
         return std::nullopt;
     } else {

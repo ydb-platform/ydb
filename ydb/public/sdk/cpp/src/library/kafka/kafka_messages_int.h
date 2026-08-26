@@ -154,6 +154,33 @@ inline TKafkaInt32 ArraySize(TKafkaVersion version, TKafkaInt32 size) {
     }
 }
 
+inline void EnsureLengthFitsRemaining(TKafkaReadable& readable, TKafkaInt32 length, const char* kind, const char* name) {
+    if (static_cast<size_t>(length) > readable.left()) {
+        ythrow yexception() << kind << " field " << name << " had invalid length " << length;
+    }
+}
+
+template<typename TItemTypeDesc>
+inline void EnsureArrayAllocationFits(TKafkaReadable& readable, TKafkaInt32 length, size_t elementSize, const char* name) {
+    EnsureLengthFitsRemaining(readable, length, "array", name);
+
+    const size_t count = static_cast<size_t>(length);
+    const size_t elem = elementSize == 0 ? 1 : elementSize;
+
+    if constexpr (TItemTypeDesc::FixedLength) {
+        if (count > readable.left() / elem) {
+            ythrow yexception() << "array field " << name << " had invalid length " << length;
+        }
+    }
+
+    if (count > readable.MaxArrayBytes() / elem) {
+        ythrow yexception() << "array field " << name << " had invalid length " << length;
+    }
+}
+
+ui32 ReadTaggedFieldsCount(TKafkaReadable& readable);
+void SkipTaggedField(TKafkaReadable& readable, ui32 size);
+
 
 inline IOutputStream& operator <<(IOutputStream& out, const TKafkaUuid& /*value*/) {
     return out << "---";
@@ -363,6 +390,7 @@ public:
         } else if (length > Max<i16>()){
             ythrow yexception() << "string field " << Meta::Name << " had invalid length " << length;
         } else {
+            EnsureLengthFitsRemaining(readable, length, "string", Meta::Name);
             value = TString();
             value->ReserveAndResize(length);
             readable.read(const_cast<char*>(value->data()), length);
@@ -432,6 +460,7 @@ public:
                 ythrow yexception() << "non-nullable field " << Meta::Name << " was serialized as null";
             }
         } else {
+            EnsureLengthFitsRemaining(readable, length, "bytes", Meta::Name);
             value = readable.Bytes(length);
         }
     }
@@ -488,6 +517,7 @@ public:
                 ythrow yexception() << "non-nullable field " << Meta::Name << " was serialized as null";
             }
         } else {
+            EnsureLengthFitsRemaining(readable, length, "bytes", Meta::Name);
             TString data;
             data.ReserveAndResize(length);
             readable.read(const_cast<char*>(data.data()), length);
@@ -538,13 +568,17 @@ public:
     inline static void DoRead(TKafkaReadable& readable, TKafkaVersion version, TKafkaRecords& value) {
         int length = ReadArraySize<Meta>(readable, version);
         if (length > 0) {
+            EnsureLengthFitsRemaining(readable, length, "records", Meta::Name);
             char magic = readable.take(16);
             value.emplace();
 
             if (magic < CURRENT_RECORD_VERSION) {
                 ReadLegacyRecordBatch(readable, magic, length, *value);
             } else {
-                (*value).Read(readable, magic);
+                const auto data = readable.Bytes(static_cast<size_t>(length));
+                TBuffer buffer(data.data(), data.size());
+                TKafkaReadable batchReadable(buffer, readable);
+                (*value).Read(batchReadable, magic);
             }
         } else {
             value = std::nullopt;
@@ -607,6 +641,7 @@ public:
                 ythrow yexception() << "non-nullable field " << Meta::Name << " was serialized as null";
             }
         }
+        EnsureArrayAllocationFits<typename Meta::ItemTypeDesc>(readable, length, sizeof(TValueType), Meta::Name);
         value.resize(length);
 
         for (int i = 0; i < length; ++i) {
@@ -640,7 +675,7 @@ public:
 //
 template<typename Meta>
 inline void Write(TWriteCollector& collector, TKafkaWritable& writable, TKafkaInt16 version, const typename Meta::Type& value) {
-    if (VersionCheck<Meta::PresentVersions.Min, Meta::PresentVersions.Max>(version)) { 
+    if (VersionCheck<Meta::PresentVersions.Min, Meta::PresentVersions.Max>(version)) {
         if (VersionCheck<Meta::TaggedVersions.Min, Meta::TaggedVersions.Max>(version)) {
             if (!IsDefaultValue<Meta>(value)) {
                 ++collector.NumTaggedFields;
@@ -653,7 +688,7 @@ inline void Write(TWriteCollector& collector, TKafkaWritable& writable, TKafkaIn
 
 template<typename Meta>
 inline void Read(TKafkaReadable& readable, TKafkaInt16 version, typename Meta::Type& value) {
-    if (!VersionNone<Meta::TaggedVersions.Min, Meta::TaggedVersions.Max>() 
+    if (!VersionNone<Meta::TaggedVersions.Min, Meta::TaggedVersions.Max>()
         && VersionCheck<Meta::TaggedVersions.Min, Meta::TaggedVersions.Max>(version)) {
         return;
     } else {
@@ -718,9 +753,19 @@ inline void WriteTag(TKafkaWritable& writable, TKafkaInt16 version, const typena
 }
 
 template<typename Meta>
-inline void ReadTag(TKafkaReadable& readable, TKafkaInt16 version, typename Meta::Type& value) {
+inline void ReadTag(TKafkaReadable& readable, TKafkaInt16 version, ui32 size, typename Meta::Type& value) {
     if constexpr (!VersionNone<Meta::TaggedVersions.Min, Meta::TaggedVersions.Max>()) {
+        if (static_cast<size_t>(size) > readable.left()) {
+            ythrow yexception() << "tagged field " << Meta::Name << " had invalid length " << size;
+        }
+        const size_t end = readable.position() + static_cast<size_t>(size);
         TypeStrategy<Meta, typename Meta::Type>::DoRead(readable, version, value);
+        if (readable.position() > end) {
+            ythrow yexception() << "tagged field " << Meta::Name << " overran declared length " << size;
+        }
+        readable.skip(end - readable.position());
+    } else {
+        SkipTaggedField(readable, size);
     }
 }
 

@@ -1,0 +1,14 @@
+#pragma once
+#include <yql/essentials/public/issue/yql_issue.h>
+
+#include <ydb/library/yql/dq/proto/dq_state_load_plan.pb.h>
+#include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
+
+#include <util/generic/hash.h>
+
+namespace NFq {
+
+// Make plan for loading streaming offsets from an old graph.
+bool MakeContinueFromStreamingOffsetsPlan(const google::protobuf::RepeatedPtrField<NYql::NDqProto::TDqTask>& src, const google::protobuf::RepeatedPtrField<NYql::NDqProto::TDqTask>& dst, bool force, THashMap<ui64, NYql::NDqProto::NDqStateLoadPlan::TTaskPlan>& plan, NYql::TIssues& issues);
+
+} // namespace NFq

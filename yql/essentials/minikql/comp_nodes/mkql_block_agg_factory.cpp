@@ -6,8 +6,7 @@
 
 #include <yql/essentials/parser/pg_wrapper/interface/arrow.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 struct TAggregatorFactories {
     THashMap<TString, std::unique_ptr<IBlockAggregatorFactory>> Factories;
@@ -27,7 +26,8 @@ struct TAggregatorFactories {
 
 const IBlockAggregatorFactory& GetBlockAggregatorFactory(TStringBuf name) {
     const auto& f = Singleton<TAggregatorFactories>()->Factories;
-    TStringBuf left, right;
+    TStringBuf left;
+    TStringBuf right;
     if (name.TrySplit('#', left, right)) {
         name = left;
     }
@@ -40,5 +40,4 @@ const IBlockAggregatorFactory& GetBlockAggregatorFactory(TStringBuf name) {
     return *it->second;
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

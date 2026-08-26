@@ -123,7 +123,7 @@
         {"shape":"AccessDeniedException"},
         {"shape":"InvalidParameterValuesException"}
       ],
-      "documentation":"<p>Copies the specified image from the specified Region to the current Region. For more information about copying images, see <a href=\"https://docs.aws.amazon.com/workspaces/latest/adminguide/copy-custom-image.html\"> Copy a Custom WorkSpaces Image</a>.</p> <p>In the China (Ningxia) Region, you can copy images only within the same Region.</p> <p>In Amazon Web Services GovCloud (US), to copy images to and from other Regions, contact Amazon Web Services Support.</p> <important> <p>Before copying a shared image, be sure to verify that it has been shared from the correct Amazon Web Services account. To determine if an image has been shared and to see the ID of the Amazon Web Services account that owns an image, use the <a href=\"https://docs.aws.amazon.com/workspaces/latest/api/API_DescribeWorkspaceImages.html\">DescribeWorkSpaceImages</a> and <a href=\"https://docs.aws.amazon.com/workspaces/latest/api/API_DescribeWorkspaceImagePermissions.html\">DescribeWorkspaceImagePermissions</a> API operations. </p> </important>"
+      "documentation":"<p>Copies the specified image from the specified Region to the current Region. For more information about copying images, see <a href=\"https://docs.aws.amazon.com/workspaces/latest/adminguide/copy-custom-image.html\"> Copy a Custom WorkSpaces Image</a>.</p> <p>In the China (Ningxia) Region, you can copy images only within the same Region.</p> <p>In Amazon Web Services GovCloud (US), to copy images to and from other Regions, contact Amazon Web ServicesSupport.</p> <important> <p>Before copying a shared image, be sure to verify that it has been shared from the correct Amazon Web Services account. To determine if an image has been shared and to see the ID of the Amazon Web Services account that owns an image, use the <a href=\"https://docs.aws.amazon.com/workspaces/latest/api/API_DescribeWorkspaceImages.html\">DescribeWorkSpaceImages</a> and <a href=\"https://docs.aws.amazon.com/workspaces/latest/api/API_DescribeWorkspaceImagePermissions.html\">DescribeWorkspaceImagePermissions</a> API operations. </p> </important>"
     },
     "CreateAccountLinkInvitation":{
       "name":"CreateAccountLinkInvitation",
@@ -624,6 +624,20 @@
       ],
       "documentation":"<p>Retrieves a list that describes the connection aliases used for cross-Region redirection. For more information, see <a href=\"https://docs.aws.amazon.com/workspaces/latest/adminguide/cross-region-redirection.html\"> Cross-Region Redirection for Amazon WorkSpaces</a>.</p>"
     },
+    "DescribeCustomWorkspaceImageImport":{
+      "name":"DescribeCustomWorkspaceImageImport",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"DescribeCustomWorkspaceImageImportRequest"},
+      "output":{"shape":"DescribeCustomWorkspaceImageImportResult"},
+      "errors":[
+        {"shape":"AccessDeniedException"},
+        {"shape":"ResourceNotFoundException"}
+      ],
+      "documentation":"<p>Retrieves information about a WorkSpace BYOL image being imported via ImportCustomWorkspaceImage.</p>"
+    },
     "DescribeImageAssociations":{
       "name":"DescribeImageAssociations",
       "http":{
@@ -892,6 +906,24 @@
       ],
       "documentation":"<p>Imports client branding. Client branding allows you to customize your WorkSpace's client login portal. You can tailor your login portal company logo, the support email address, support link, link to reset password, and a custom message for users trying to sign in.</p> <p>After you import client branding, the default branding experience for the specified platform type is replaced with the imported experience</p> <note> <ul> <li> <p>You must specify at least one platform type when importing client branding.</p> </li> <li> <p>You can import up to 6 MB of data with each request. If your request exceeds this limit, you can import client branding for different platform types using separate requests.</p> </li> <li> <p>In each platform type, the <code>SupportEmail</code> and <code>SupportLink</code> parameters are mutually exclusive. You can specify only one parameter for each platform type, but not both.</p> </li> <li> <p>Imported data can take up to a minute to appear in the WorkSpaces client.</p> </li> </ul> </note>"
     },
+    "ImportCustomWorkspaceImage":{
+      "name":"ImportCustomWorkspaceImage",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"ImportCustomWorkspaceImageRequest"},
+      "output":{"shape":"ImportCustomWorkspaceImageResult"},
+      "errors":[
+        {"shape":"AccessDeniedException"},
+        {"shape":"InvalidParameterValuesException"},
+        {"shape":"OperationNotSupportedException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"ResourceAlreadyExistsException"},
+        {"shape":"ResourceLimitExceededException"}
+      ],
+      "documentation":"<p>Imports the specified Windows 10 or 11 Bring Your Own License (BYOL) image into Amazon WorkSpaces using EC2 Image Builder. The image must be an already licensed image that is in your Amazon Web Services account, and you must own the image. For more information about creating BYOL images, see <a href=\"https://docs.aws.amazon.com/workspaces/latest/adminguide/byol-windows-images.html\"> Bring Your Own Windows Desktop Licenses</a>. </p>"
+    },
     "ImportWorkspaceImage":{
       "name":"ImportWorkspaceImage",
       "http":{
@@ -1006,6 +1038,21 @@
       ],
       "documentation":"<p>Modifies the properties of the specified Amazon WorkSpaces clients.</p>"
     },
+    "ModifyEndpointEncryptionMode":{
+      "name":"ModifyEndpointEncryptionMode",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"ModifyEndpointEncryptionModeRequest"},
+      "output":{"shape":"ModifyEndpointEncryptionModeResponse"},
+      "errors":[
+        {"shape":"AccessDeniedException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"OperationNotSupportedException"}
+      ],
+      "documentation":"<p>Modifies the endpoint encryption mode that allows you to configure the specified directory between Standard TLS and FIPS 140-2 validated mode. </p>"
+    },
     "ModifySamlProperties":{
       "name":"ModifySamlProperties",
       "http":{
@@ -1064,7 +1111,10 @@
       "output":{"shape":"ModifyWorkspaceAccessPropertiesResult"},
       "errors":[
         {"shape":"ResourceNotFoundException"},
-        {"shape":"AccessDeniedException"}
+        {"shape":"AccessDeniedException"},
+        {"shape":"InvalidParameterValuesException"},
+        {"shape":"InvalidParameterCombinationException"},
+        {"shape":"OperationNotSupportedException"}
       ],
       "documentation":"<p>Specifies which devices and operating systems users can use to access their WorkSpaces. For more information, see <a href=\"https://docs.aws.amazon.com/workspaces/latest/adminguide/update-directory-details.html#control-device-access\"> Control Device Access</a>.</p>"
     },
@@ -1279,7 +1329,7 @@
       },
       "input":{"shape":"TerminateWorkspacesRequest"},
       "output":{"shape":"TerminateWorkspacesResult"},
-      "documentation":"<p>Terminates the specified WorkSpaces.</p> <important> <p>Terminating a WorkSpace is a permanent action and cannot be undone. The user's data is destroyed. If you need to archive any user data, contact Amazon Web Services Support before terminating the WorkSpace.</p> </important> <p>You can terminate a WorkSpace that is in any state except <code>SUSPENDED</code>.</p> <p>This operation is asynchronous and returns before the WorkSpaces have been completely terminated. After a WorkSpace is terminated, the <code>TERMINATED</code> state is returned only briefly before the WorkSpace directory metadata is cleaned up, so this state is rarely returned. To confirm that a WorkSpace is terminated, check for the WorkSpace ID by using <a href=\"https://docs.aws.amazon.com/workspaces/latest/api/API_DescribeWorkspaces.html\"> DescribeWorkSpaces</a>. If the WorkSpace ID isn't returned, then the WorkSpace has been successfully terminated.</p> <note> <p>Simple AD and AD Connector are made available to you free of charge to use with WorkSpaces. If there are no WorkSpaces being used with your Simple AD or AD Connector directory for 30 consecutive days, this directory will be automatically deregistered for use with Amazon WorkSpaces, and you will be charged for this directory as per the <a href=\"http://aws.amazon.com/directoryservice/pricing/\">Directory Service pricing terms</a>.</p> <p>To delete empty directories, see <a href=\"https://docs.aws.amazon.com/workspaces/latest/adminguide/delete-workspaces-directory.html\"> Delete the Directory for Your WorkSpaces</a>. If you delete your Simple AD or AD Connector directory, you can always create a new one when you want to start using WorkSpaces again.</p> </note>"
+      "documentation":"<p>Terminates the specified WorkSpaces.</p> <important> <p>Terminating a WorkSpace is a permanent action and cannot be undone. The user's data is destroyed. If you need to archive any user data, contact Amazon Web ServicesSupport before terminating the WorkSpace.</p> </important> <p>You can terminate a WorkSpace that is in any state except <code>SUSPENDED</code>.</p> <p>This operation is asynchronous and returns before the WorkSpaces have been completely terminated. After a WorkSpace is terminated, the <code>TERMINATED</code> state is returned only briefly before the WorkSpace directory metadata is cleaned up, so this state is rarely returned. To confirm that a WorkSpace is terminated, check for the WorkSpace ID by using <a href=\"https://docs.aws.amazon.com/workspaces/latest/api/API_DescribeWorkspaces.html\"> DescribeWorkSpaces</a>. If the WorkSpace ID isn't returned, then the WorkSpace has been successfully terminated.</p> <note> <p>Simple AD and AD Connector are made available to you free of charge to use with WorkSpaces. If there are no WorkSpaces being used with your Simple AD or AD Connector directory for 30 consecutive days, this directory will be automatically deregistered for use with Amazon WorkSpaces, and you will be charged for this directory as per the <a href=\"http://aws.amazon.com/directoryservice/pricing/\">Directory Service pricing terms</a>.</p> <p>To delete empty directories, see <a href=\"https://docs.aws.amazon.com/workspaces/latest/adminguide/delete-workspaces-directory.html\"> Delete the Directory for Your WorkSpaces</a>. If you delete your Simple AD or AD Connector directory, you can always create a new one when you want to start using WorkSpaces again.</p> </note>"
     },
     "TerminateWorkspacesPool":{
       "name":"TerminateWorkspacesPool",
@@ -1398,7 +1448,7 @@
         {"shape":"InvalidParameterValuesException"},
         {"shape":"OperationNotSupportedException"}
       ],
-      "documentation":"<p>Shares or unshares an image with one account in the same Amazon Web Services Region by specifying whether that account has permission to copy the image. If the copy image permission is granted, the image is shared with that account. If the copy image permission is revoked, the image is unshared with the account.</p> <p>After an image has been shared, the recipient account can copy the image to other Regions as needed.</p> <p>In the China (Ningxia) Region, you can copy images only within the same Region.</p> <p>In Amazon Web Services GovCloud (US), to copy images to and from other Regions, contact Amazon Web Services Support.</p> <p>For more information about sharing images, see <a href=\"https://docs.aws.amazon.com/workspaces/latest/adminguide/share-custom-image.html\"> Share or Unshare a Custom WorkSpaces Image</a>.</p> <note> <ul> <li> <p>To delete an image that has been shared, you must unshare the image before you delete it.</p> </li> <li> <p>Sharing Bring Your Own License (BYOL) images across Amazon Web Services accounts isn't supported at this time in Amazon Web Services GovCloud (US). To share BYOL images across accounts in Amazon Web Services GovCloud (US), contact Amazon Web Services Support.</p> </li> </ul> </note>"
+      "documentation":"<p>Shares or unshares an image with one account in the same Amazon Web Services Region by specifying whether that account has permission to copy the image. If the copy image permission is granted, the image is shared with that account. If the copy image permission is revoked, the image is unshared with the account.</p> <p>After an image has been shared, the recipient account can copy the image to other Regions as needed.</p> <p>In the China (Ningxia) Region, you can copy images only within the same Region.</p> <p>In Amazon Web Services GovCloud (US), to copy images to and from other Regions, contact Amazon Web ServicesSupport.</p> <p>For more information about sharing images, see <a href=\"https://docs.aws.amazon.com/workspaces/latest/adminguide/share-custom-image.html\"> Share or Unshare a Custom WorkSpaces Image</a>.</p> <note> <ul> <li> <p>To delete an image that has been shared, you must unshare the image before you delete it.</p> </li> <li> <p>Sharing Bring Your Own License (BYOL) images across Amazon Web Services accounts isn't supported at this time in Amazon Web Services GovCloud (US). To share BYOL images across accounts in Amazon Web Services GovCloud (US), contact Amazon Web ServicesSupport.</p> </li> </ul> </note>"
     },
     "UpdateWorkspacesPool":{
       "name":"UpdateWorkspacesPool",
@@ -1485,6 +1535,43 @@
       },
       "documentation":"<p>The user is not authorized to access a resource.</p>",
       "exception":true
+    },
+    "AccessEndpoint":{
+      "type":"structure",
+      "members":{
+        "AccessEndpointType":{
+          "shape":"AccessEndpointType",
+          "documentation":"<p>Indicates the type of access endpoint.</p>"
+        },
+        "VpcEndpointId":{
+          "shape":"AlphanumericDashUnderscoreNonEmptyString",
+          "documentation":"<p>Indicates the VPC endpoint to use for access.</p>"
+        }
+      },
+      "documentation":"<p>Describes the access type and endpoint for a WorkSpace.</p>"
+    },
+    "AccessEndpointConfig":{
+      "type":"structure",
+      "required":["AccessEndpoints"],
+      "members":{
+        "AccessEndpoints":{
+          "shape":"AccessEndpointList",
+          "documentation":"<p>Indicates a list of access endpoints associated with this directory.</p>"
+        },
+        "InternetFallbackProtocols":{
+          "shape":"InternetFallbackProtocolList",
+          "documentation":"<p>Indicates a list of protocols that fallback to using the public Internet when streaming over a VPC endpoint is not available.</p>"
+        }
+      },
+      "documentation":"<p>Describes the access endpoint configuration for a WorkSpace.</p>"
+    },
+    "AccessEndpointList":{
+      "type":"list",
+      "member":{"shape":"AccessEndpoint"}
+    },
+    "AccessEndpointType":{
+      "type":"string",
+      "enum":["STREAMING_WSP"]
     },
     "AccessPropertyValue":{
       "type":"string",
@@ -1602,6 +1689,10 @@
       "pattern":"^(http|https)\\://\\S+"
     },
     "Alias":{"type":"string"},
+    "AlphanumericDashUnderscoreNonEmptyString":{
+      "type":"string",
+      "pattern":"^[a-zA-Z0-9\\_\\-]{1,1000}$"
+    },
     "AmazonUuid":{
       "type":"string",
       "max":36,
@@ -1635,8 +1726,7 @@
     },
     "ApplicationNotSupportedException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The specified application is not supported.</p>",
       "exception":true
     },
@@ -1764,8 +1854,7 @@
     },
     "AssociateIpGroupsResult":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "AssociateWorkspaceApplicationRequest":{
       "type":"structure",
@@ -1864,8 +1953,7 @@
     },
     "AuthorizeIpRulesResult":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "AvailableUserSessions":{
       "type":"integer",
@@ -2109,8 +2197,7 @@
     },
     "ComputeNotCompatibleException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The compute type of the WorkSpace is not compatible with the application.</p>",
       "exception":true
     },
@@ -2479,8 +2566,7 @@
     },
     "CreateTagsResult":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "CreateUpdatedWorkspaceImageRequest":{
       "type":"structure",
@@ -2658,6 +2744,10 @@
         "TimeoutSettings":{
           "shape":"TimeoutSettings",
           "documentation":"<p>Indicates the timeout settings of the pool.</p>"
+        },
+        "RunningMode":{
+          "shape":"PoolsRunningMode",
+          "documentation":"<p>The running mode for the pool.</p>"
         }
       }
     },
@@ -2692,6 +2782,41 @@
           "documentation":"<p>Information about the WorkSpaces that were created.</p> <p>Because this operation is asynchronous, the identifier returned is not immediately available for use with other operations. For example, if you call <a>DescribeWorkspaces</a> before the WorkSpace is created, the information returned can be incomplete.</p>"
         }
       }
+    },
+    "CustomImageProtocol":{
+      "type":"string",
+      "enum":[
+        "PCOIP",
+        "DCV",
+        "BYOP"
+      ]
+    },
+    "CustomWorkspaceImageImportErrorDetails":{
+      "type":"structure",
+      "members":{
+        "ErrorCode":{
+          "shape":"ErrorCode",
+          "documentation":"<p>The error code that is returned for the image import.</p>"
+        },
+        "ErrorMessage":{
+          "shape":"ImageErrorMessage",
+          "documentation":"<p>The text of the error message that is returned for the image import.</p>"
+        }
+      },
+      "documentation":"<p>Describes in-depth details about the error. These details include the possible causes of the error and troubleshooting information.</p>"
+    },
+    "CustomWorkspaceImageImportErrorDetailsList":{
+      "type":"list",
+      "member":{"shape":"CustomWorkspaceImageImportErrorDetails"}
+    },
+    "CustomWorkspaceImageImportState":{
+      "type":"string",
+      "enum":[
+        "PENDING",
+        "IN_PROGRESS",
+        "COMPLETED",
+        "ERROR"
+      ]
     },
     "DataReplication":{
       "type":"string",
@@ -2809,10 +2934,6 @@
     "DefaultWorkspaceCreationProperties":{
       "type":"structure",
       "members":{
-        "EnableWorkDocs":{
-          "shape":"BooleanObject",
-          "documentation":"<p>Specifies whether the directory is enabled for Amazon WorkDocs.</p>"
-        },
         "EnableInternetAccess":{
           "shape":"BooleanObject",
           "documentation":"<p>Specifies whether to automatically assign an Elastic public IP address to WorkSpaces in this directory by default. If enabled, the Elastic public IP address allows outbound internet access from your WorkSpaces when you’re using an internet gateway in the Amazon VPC in which your WorkSpaces are located. If you're using a Network Address Translation (NAT) gateway for outbound internet access from your VPC, or if your WorkSpaces are in public subnets and you manually assign them Elastic IP addresses, you should disable this setting. This setting applies to new WorkSpaces that you launch or to existing WorkSpaces that you rebuild. For more information, see <a href=\"https://docs.aws.amazon.com/workspaces/latest/adminguide/amazon-workspaces-vpc.html\"> Configure a VPC for Amazon WorkSpaces</a>.</p>"
@@ -2901,8 +3022,7 @@
     },
     "DeleteClientBrandingResult":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteConnectClientAddInRequest":{
       "type":"structure",
@@ -2923,8 +3043,7 @@
     },
     "DeleteConnectClientAddInResult":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteConnectionAliasRequest":{
       "type":"structure",
@@ -2938,8 +3057,7 @@
     },
     "DeleteConnectionAliasResult":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteIpGroupRequest":{
       "type":"structure",
@@ -2953,8 +3071,7 @@
     },
     "DeleteIpGroupResult":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteTagsRequest":{
       "type":"structure",
@@ -2975,8 +3092,7 @@
     },
     "DeleteTagsResult":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteWorkspaceBundleRequest":{
       "type":"structure",
@@ -2989,8 +3105,7 @@
     },
     "DeleteWorkspaceBundleResult":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteWorkspaceImageRequest":{
       "type":"structure",
@@ -3004,8 +3119,7 @@
     },
     "DeleteWorkspaceImageResult":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeployWorkspaceApplicationsRequest":{
       "type":"structure",
@@ -3042,8 +3156,7 @@
     },
     "DeregisterWorkspaceDirectoryResult":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DescribeAccountModificationsRequest":{
       "type":"structure",
@@ -3069,8 +3182,7 @@
     },
     "DescribeAccountRequest":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DescribeAccountResult":{
       "type":"structure",
@@ -3086,6 +3198,10 @@
         "DedicatedTenancyAccountType":{
           "shape":"DedicatedTenancyAccountType",
           "documentation":"<p>The type of linked account.</p>"
+        },
+        "Message":{
+          "shape":"Message",
+          "documentation":"<p>The text message to describe the status of BYOL.</p>"
         }
       }
     },
@@ -3354,6 +3470,53 @@
         "NextToken":{
           "shape":"PaginationToken",
           "documentation":"<p>The token to use to retrieve the next page of results. This value is null when there are no more results to return. </p>"
+        }
+      }
+    },
+    "DescribeCustomWorkspaceImageImportRequest":{
+      "type":"structure",
+      "required":["ImageId"],
+      "members":{
+        "ImageId":{
+          "shape":"WorkspaceImageId",
+          "documentation":"<p>The identifier of the WorkSpace image.</p>"
+        }
+      }
+    },
+    "DescribeCustomWorkspaceImageImportResult":{
+      "type":"structure",
+      "members":{
+        "ImageId":{
+          "shape":"WorkspaceImageId",
+          "documentation":"<p>The identifier of the WorkSpace image.</p>"
+        },
+        "InfrastructureConfigurationArn":{
+          "shape":"InfrastructureConfigurationArn",
+          "documentation":"<p>The infrastructure configuration ARN that specifies how the WorkSpace image is built.</p>"
+        },
+        "State":{
+          "shape":"CustomWorkspaceImageImportState",
+          "documentation":"<p>The state of the WorkSpace image.</p>"
+        },
+        "Created":{
+          "shape":"Timestamp",
+          "documentation":"<p>The timestamp when the WorkSpace image import was created.</p>"
+        },
+        "LastUpdatedTime":{
+          "shape":"Timestamp",
+          "documentation":"<p>The timestamp when the WorkSpace image import was last updated.</p>"
+        },
+        "ImageSource":{
+          "shape":"ImageSourceIdentifier",
+          "documentation":"<p>Describes the image import source.</p>"
+        },
+        "ImageBuilderInstanceId":{
+          "shape":"NonEmptyString",
+          "documentation":"<p>The image builder instance ID of the WorkSpace image.</p>"
+        },
+        "ErrorDetails":{
+          "shape":"CustomWorkspaceImageImportErrorDetailsList",
+          "documentation":"<p>Describes in-depth details about the error. These details include the possible causes of the error and troubleshooting information.</p>"
         }
       }
     },
@@ -3699,7 +3862,7 @@
         },
         "Limit":{
           "shape":"Limit50",
-          "documentation":"<p>The maximum number of items to return.</p>"
+          "documentation":"<p>The maximum size of each page of results. The default value is 20 and the maximum value is 50.</p>"
         },
         "NextToken":{
           "shape":"PaginationToken",
@@ -3888,8 +4051,7 @@
     },
     "DisassociateConnectionAliasResult":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DisassociateIpGroupsRequest":{
       "type":"structure",
@@ -3910,8 +4072,7 @@
     },
     "DisassociateIpGroupsResult":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DisassociateWorkspaceApplicationRequest":{
       "type":"structure",
@@ -3948,6 +4109,10 @@
       "type":"list",
       "member":{"shape":"IpAddress"}
     },
+    "DnsIpv6Addresses":{
+      "type":"list",
+      "member":{"shape":"Ipv6Address"}
+    },
     "DomainName":{
       "type":"string",
       "pattern":"^([a-zA-Z0-9]+[.-])+([a-zA-Z0-9])+$"
@@ -3955,6 +4120,24 @@
     "Ec2ImageId":{
       "type":"string",
       "pattern":"^ami\\-([a-f0-9]{8}|[a-f0-9]{17})$"
+    },
+    "Ec2ImportTaskId":{
+      "type":"string",
+      "max":28,
+      "min":19,
+      "pattern":"^import-ami\\-([a-zA-Z0-9]{8}|[a-zA-Z0-9]{17})$"
+    },
+    "EndpointEncryptionMode":{
+      "type":"string",
+      "enum":[
+        "STANDARD_TLS",
+        "FIPS_VALIDATED"
+      ]
+    },
+    "ErrorCode":{
+      "type":"string",
+      "max":256,
+      "min":1
     },
     "ErrorDetails":{
       "type":"structure",
@@ -4139,6 +4322,24 @@
       "type":"list",
       "member":{"shape":"ImageAssociatedResourceType"}
     },
+    "ImageBuildVersionArn":{
+      "type":"string",
+      "max":2048,
+      "min":1,
+      "pattern":"^arn:aws[^:]*:imagebuilder:[^:]+:(?:[0-9]{12}|aws(?:-[a-z-]+)?):image/[a-z0-9-_]+/(?:(?:([0-9]+|x)\\.([0-9]+|x)\\.([0-9]+|x))|(?:[0-9]+\\.[0-9]+\\.[0-9]+/[0-9]+))$"
+    },
+    "ImageComputeType":{
+      "type":"string",
+      "enum":[
+        "BASE",
+        "GRAPHICS_G4DN"
+      ]
+    },
+    "ImageErrorMessage":{
+      "type":"string",
+      "max":2048,
+      "min":1
+    },
     "ImagePermission":{
       "type":"structure",
       "members":{
@@ -4190,6 +4391,25 @@
     "ImageResourceAssociationList":{
       "type":"list",
       "member":{"shape":"ImageResourceAssociation"}
+    },
+    "ImageSourceIdentifier":{
+      "type":"structure",
+      "members":{
+        "Ec2ImportTaskId":{
+          "shape":"Ec2ImportTaskId",
+          "documentation":"<p>The EC2 import task ID to import the image from the Amazon EC2 VM import process.</p>"
+        },
+        "ImageBuildVersionArn":{
+          "shape":"ImageBuildVersionArn",
+          "documentation":"<p>The ARN of the EC2 Image Builder image.</p>"
+        },
+        "Ec2ImageId":{
+          "shape":"Ec2ImageId",
+          "documentation":"<p>The identifier of the EC2 image.</p>"
+        }
+      },
+      "documentation":"<p>Describes the image import source.</p>",
+      "union":true
     },
     "ImageType":{
       "type":"string",
@@ -4261,6 +4481,70 @@
         }
       }
     },
+    "ImportCustomWorkspaceImageRequest":{
+      "type":"structure",
+      "required":[
+        "ImageName",
+        "ImageDescription",
+        "ComputeType",
+        "Protocol",
+        "ImageSource",
+        "InfrastructureConfigurationArn",
+        "Platform",
+        "OsVersion"
+      ],
+      "members":{
+        "ImageName":{
+          "shape":"WorkspaceImageName",
+          "documentation":"<p>The name of the WorkSpace image.</p>"
+        },
+        "ImageDescription":{
+          "shape":"WorkspaceImageDescription",
+          "documentation":"<p>The description of the WorkSpace image.</p>"
+        },
+        "ComputeType":{
+          "shape":"ImageComputeType",
+          "documentation":"<p>The supported compute type for the WorkSpace image.</p>"
+        },
+        "Protocol":{
+          "shape":"CustomImageProtocol",
+          "documentation":"<p>The supported protocol for the WorkSpace image. Windows 11 does not support PCOIP protocol.</p>"
+        },
+        "ImageSource":{
+          "shape":"ImageSourceIdentifier",
+          "documentation":"<p>The options for image import source.</p>"
+        },
+        "InfrastructureConfigurationArn":{
+          "shape":"InfrastructureConfigurationArn",
+          "documentation":"<p>The infrastructure configuration ARN that specifies how the WorkSpace image is built.</p>"
+        },
+        "Platform":{
+          "shape":"Platform",
+          "documentation":"<p>The platform for the WorkSpace image source.</p>"
+        },
+        "OsVersion":{
+          "shape":"OSVersion",
+          "documentation":"<p>The OS version for the WorkSpace image source.</p>"
+        },
+        "Tags":{
+          "shape":"TagList",
+          "documentation":"<p>The resource tags. Each WorkSpaces resource can have a maximum of 50 tags.</p>"
+        }
+      }
+    },
+    "ImportCustomWorkspaceImageResult":{
+      "type":"structure",
+      "members":{
+        "ImageId":{
+          "shape":"WorkspaceImageId",
+          "documentation":"<p>The identifier of the WorkSpace image.</p>"
+        },
+        "State":{
+          "shape":"CustomWorkspaceImageImportState",
+          "documentation":"<p>The state of the WorkSpace image.</p>"
+        }
+      }
+    },
     "ImportWorkspaceImageRequest":{
       "type":"structure",
       "required":[
@@ -4307,10 +4591,15 @@
     },
     "IncompatibleApplicationsException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The specified application is not compatible with the resource.</p>",
       "exception":true
+    },
+    "InfrastructureConfigurationArn":{
+      "type":"string",
+      "max":2048,
+      "min":1,
+      "pattern":"^arn:aws[^:]*:imagebuilder:[^:]+:(?:[0-9]{12}|aws):infrastructure-configuration/[a-z0-9-_]+$"
     },
     "InternalServerException":{
       "type":"structure",
@@ -4318,6 +4607,25 @@
         "message":{"shape":"ExceptionMessage"}
       },
       "documentation":"<p>Unexpected server error occured.</p>",
+      "exception":true
+    },
+    "InternetFallbackProtocol":{
+      "type":"string",
+      "enum":["PCOIP"]
+    },
+    "InternetFallbackProtocolList":{
+      "type":"list",
+      "member":{"shape":"InternetFallbackProtocol"}
+    },
+    "InvalidParameterCombinationException":{
+      "type":"structure",
+      "members":{
+        "message":{
+          "shape":"ExceptionMessage",
+          "documentation":"<p>The exception error message.</p>"
+        }
+      },
+      "documentation":"<p>Two or more of the selected parameter values cannot be used together.</p>",
       "exception":true
     },
     "InvalidParameterValuesException":{
@@ -4457,6 +4765,10 @@
       "type":"list",
       "member":{"shape":"IpRuleItem"}
     },
+    "Ipv6Address":{
+      "type":"string",
+      "pattern":"^(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|[0-9a-fA-F]{1,4}(?::[0-9a-fA-F]{1,4}){0,6}::[0-9a-fA-F]{1,4}$"
+    },
     "Limit":{
       "type":"integer",
       "max":25,
@@ -4566,6 +4878,7 @@
       "type":"integer",
       "min":0
     },
+    "Message":{"type":"string"},
     "MicrosoftEntraConfig":{
       "type":"structure",
       "members":{
@@ -4663,6 +4976,10 @@
     "ModifyAccountResult":{
       "type":"structure",
       "members":{
+        "Message":{
+          "shape":"Message",
+          "documentation":"<p>The text message to describe the status of BYOL modification.</p>"
+        }
       }
     },
     "ModifyCertificateBasedAuthPropertiesRequest":{
@@ -4685,8 +5002,7 @@
     },
     "ModifyCertificateBasedAuthPropertiesResult":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "ModifyClientPropertiesRequest":{
       "type":"structure",
@@ -4707,8 +5023,28 @@
     },
     "ModifyClientPropertiesResult":{
       "type":"structure",
+      "members":{}
+    },
+    "ModifyEndpointEncryptionModeRequest":{
+      "type":"structure",
+      "required":[
+        "DirectoryId",
+        "EndpointEncryptionMode"
+      ],
       "members":{
+        "DirectoryId":{
+          "shape":"DirectoryId",
+          "documentation":"<p> The identifier of the directory.</p>"
+        },
+        "EndpointEncryptionMode":{
+          "shape":"EndpointEncryptionMode",
+          "documentation":"<p>The encryption mode used for endpoint connections when streaming to WorkSpaces Personal or WorkSpace Pools.</p>"
+        }
       }
+    },
+    "ModifyEndpointEncryptionModeResponse":{
+      "type":"structure",
+      "members":{}
     },
     "ModifySamlPropertiesRequest":{
       "type":"structure",
@@ -4730,8 +5066,7 @@
     },
     "ModifySamlPropertiesResult":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "ModifySelfservicePermissionsRequest":{
       "type":"structure",
@@ -4752,8 +5087,7 @@
     },
     "ModifySelfservicePermissionsResult":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "ModifyStreamingPropertiesRequest":{
       "type":"structure",
@@ -4771,8 +5105,7 @@
     },
     "ModifyStreamingPropertiesResult":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "ModifyWorkspaceAccessPropertiesRequest":{
       "type":"structure",
@@ -4793,8 +5126,7 @@
     },
     "ModifyWorkspaceAccessPropertiesResult":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "ModifyWorkspaceCreationPropertiesRequest":{
       "type":"structure",
@@ -4815,8 +5147,7 @@
     },
     "ModifyWorkspaceCreationPropertiesResult":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "ModifyWorkspacePropertiesRequest":{
       "type":"structure",
@@ -4838,8 +5169,7 @@
     },
     "ModifyWorkspacePropertiesResult":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "ModifyWorkspaceStateRequest":{
       "type":"structure",
@@ -4860,8 +5190,7 @@
     },
     "ModifyWorkspaceStateResult":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "NetworkAccessConfiguration":{
       "type":"structure",
@@ -4880,6 +5209,13 @@
     "NonEmptyString":{
       "type":"string",
       "min":1
+    },
+    "OSVersion":{
+      "type":"string",
+      "enum":[
+        "Windows_10",
+        "Windows_11"
+      ]
     },
     "OperatingSystem":{
       "type":"structure",
@@ -4915,8 +5251,7 @@
     },
     "OperatingSystemNotCompatibleException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The operating system of the WorkSpace is not compatible with the application.</p>",
       "exception":true
     },
@@ -4980,6 +5315,17 @@
     "PendingCreateStandbyWorkspacesRequestList":{
       "type":"list",
       "member":{"shape":"PendingCreateStandbyWorkspacesRequest"}
+    },
+    "Platform":{
+      "type":"string",
+      "enum":["WINDOWS"]
+    },
+    "PoolsRunningMode":{
+      "type":"string",
+      "enum":[
+        "AUTO_STOP",
+        "ALWAYS_ON"
+      ]
     },
     "Protocol":{
       "type":"string",
@@ -5087,10 +5433,6 @@
         "SubnetIds":{
           "shape":"SubnetIds",
           "documentation":"<p>The identifiers of the subnets for your virtual private cloud (VPC). Make sure that the subnets are in supported Availability Zones. The subnets must also be in separate Availability Zones. If these conditions are not met, you will receive an OperationNotSupportedException error.</p>"
-        },
-        "EnableWorkDocs":{
-          "shape":"BooleanObject",
-          "documentation":"<p>Indicates whether Amazon WorkDocs is enabled or disabled. If you have enabled this parameter and WorkDocs is not available in the Region, you will receive an OperationNotSupportedException error. Set <code>EnableWorkDocs</code> to disabled, and try again.</p>"
         },
         "EnableSelfService":{
           "shape":"BooleanObject",
@@ -5296,8 +5638,7 @@
     },
     "RestoreWorkspaceResult":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "RevokeIpRulesRequest":{
       "type":"structure",
@@ -5318,8 +5659,7 @@
     },
     "RevokeIpRulesResult":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "RootStorage":{
       "type":"structure",
@@ -5537,8 +5877,7 @@
     },
     "StartWorkspacesPoolResult":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "StartWorkspacesRequest":{
       "type":"structure",
@@ -5587,8 +5926,7 @@
     },
     "StopWorkspacesPoolResult":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "StopWorkspacesRequest":{
       "type":"structure",
@@ -5763,8 +6101,7 @@
     },
     "TerminateWorkspacesPoolResult":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "TerminateWorkspacesPoolSessionRequest":{
       "type":"structure",
@@ -5778,8 +6115,7 @@
     },
     "TerminateWorkspacesPoolSessionResult":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "TerminateWorkspacesRequest":{
       "type":"structure",
@@ -5862,8 +6198,7 @@
     },
     "UpdateConnectClientAddInResult":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateConnectionAliasPermissionRequest":{
       "type":"structure",
@@ -5884,8 +6219,7 @@
     },
     "UpdateConnectionAliasPermissionResult":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateDescription":{
       "type":"string",
@@ -5926,8 +6260,7 @@
     },
     "UpdateRulesOfIpGroupResult":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateWorkspaceBundleRequest":{
       "type":"structure",
@@ -5944,8 +6277,7 @@
     },
     "UpdateWorkspaceBundleResult":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateWorkspaceImagePermissionRequest":{
       "type":"structure",
@@ -5971,8 +6303,7 @@
     },
     "UpdateWorkspaceImagePermissionResult":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateWorkspacesPoolRequest":{
       "type":"structure",
@@ -6005,6 +6336,10 @@
         "TimeoutSettings":{
           "shape":"TimeoutSettings",
           "documentation":"<p>Indicates the timeout settings of the specified pool.</p>"
+        },
+        "RunningMode":{
+          "shape":"PoolsRunningMode",
+          "documentation":"<p>The desired running mode for the pool. The running mode can only be updated when the pool is in a stopped state.</p>"
         }
       }
     },
@@ -6207,6 +6542,10 @@
           "shape":"IpAddress",
           "documentation":"<p>The IP address of the WorkSpace.</p>"
         },
+        "Ipv6Address":{
+          "shape":"Ipv6Address",
+          "documentation":"<p>The IPv6 address of the WorkSpace.</p>"
+        },
         "State":{
           "shape":"WorkspaceState",
           "documentation":"<p>The operational state of the WorkSpace.</p> <ul> <li> <p> <code>PENDING</code> – The WorkSpace is in a waiting state (for example, the WorkSpace is being created).</p> </li> <li> <p> <code>AVAILABLE</code> – The WorkSpace is running and has passed the health checks.</p> </li> <li> <p> <code>IMPAIRED</code> – Refer to <code>UNHEALTHY</code> state.</p> </li> <li> <p> <code>UNHEALTHY</code> – The WorkSpace is not responding to health checks.</p> </li> <li> <p> <code>REBOOTING</code> – The WorkSpace is being rebooted (restarted).</p> </li> <li> <p> <code>STARTING</code> – The WorkSpace is starting up and health checks are being run.</p> </li> <li> <p> <code>REBUILDING</code> – The WorkSpace is being rebuilt.</p> </li> <li> <p> <code>RESTORING</code> – The WorkSpace is being restored.</p> </li> <li> <p> <code>MAINTENANCE</code> – The WorkSpace is undergoing scheduled maintenance by Amazon Web Services.</p> </li> <li> <p> <code>ADMIN_MAINTENANCE</code> – The WorkSpace is undergoing maintenance by the WorkSpaces administrator.</p> </li> <li> <p> <code>TERMINATING</code> – The WorkSpace is being deleted.</p> </li> <li> <p> <code>TERMINATED</code> – The WorkSpace has been deleted.</p> </li> <li> <p> <code>SUSPENDED</code> – The WorkSpace has been suspended for image creation.</p> </li> <li> <p> <code>UPDATING</code> – The WorkSpace is undergoing an update.</p> </li> <li> <p> <code>STOPPING</code> – The WorkSpace is being stopped.</p> </li> <li> <p> <code>STOPPED</code> – The WorkSpace has been stopped.</p> </li> <li> <p> <code>ERROR </code> – The WorkSpace is an error state (for example, an error occurred during startup).</p> </li> </ul> <note> <p>After a WorkSpace is terminated, the <code>TERMINATED</code> state is returned only briefly before the WorkSpace directory metadata is cleaned up, so this state is rarely returned. To confirm that a WorkSpace is terminated, check for the WorkSpace ID by using <a href=\"https://docs.aws.amazon.com/workspaces/latest/api/API_DescribeWorkspaces.html\"> DescribeWorkSpaces</a>. If the WorkSpace ID isn't returned, then the WorkSpace has been successfully terminated.</p> </note>"
@@ -6304,6 +6643,14 @@
         "DeviceTypeLinux":{
           "shape":"AccessPropertyValue",
           "documentation":"<p>Indicates whether users can use Linux clients to access their WorkSpaces.</p>"
+        },
+        "DeviceTypeWorkSpacesThinClient":{
+          "shape":"AccessPropertyValue",
+          "documentation":"<p>Indicates whether users can access their WorkSpaces through a WorkSpaces Thin Client.</p>"
+        },
+        "AccessEndpointConfig":{
+          "shape":"AccessEndpointConfig",
+          "documentation":"<p>Specifies the configuration for accessing the WorkSpace.</p>"
         }
       },
       "documentation":"<p>The device types and operating systems that can be used to access a WorkSpace. For more information, see <a href=\"https://docs.aws.amazon.com/workspaces/latest/adminguide/workspaces-network-requirements.html\">Amazon WorkSpaces Client Network Requirements</a>.</p>"
@@ -6411,10 +6758,6 @@
     "WorkspaceCreationProperties":{
       "type":"structure",
       "members":{
-        "EnableWorkDocs":{
-          "shape":"BooleanObject",
-          "documentation":"<p>Indicates whether Amazon WorkDocs is enabled for your WorkSpaces.</p> <note> <p>If WorkDocs is already enabled for a WorkSpaces directory and you disable it, new WorkSpaces launched in the directory will not have WorkDocs enabled. However, WorkDocs remains enabled for any existing WorkSpaces, unless you either disable users' access to WorkDocs or you delete the WorkDocs site. To disable users' access to WorkDocs, see <a href=\"https://docs.aws.amazon.com/workdocs/latest/adminguide/inactive-user.html\">Disabling Users</a> in the <i>Amazon WorkDocs Administration Guide</i>. To delete a WorkDocs site, see <a href=\"https://docs.aws.amazon.com/workdocs/latest/adminguide/manage-sites.html\">Deleting a Site</a> in the <i>Amazon WorkDocs Administration Guide</i>.</p> <p>If you enable WorkDocs on a directory that already has existing WorkSpaces, the existing WorkSpaces and any new WorkSpaces that are launched in the directory will have WorkDocs enabled.</p> </note>"
-        },
         "EnableInternetAccess":{
           "shape":"BooleanObject",
           "documentation":"<p>Indicates whether internet access is enabled for your WorkSpaces.</p>"
@@ -6469,6 +6812,10 @@
           "shape":"DnsIpAddresses",
           "documentation":"<p>The IP addresses of the DNS servers for the directory.</p>"
         },
+        "DnsIpv6Addresses":{
+          "shape":"DnsIpv6Addresses",
+          "documentation":"<p>The IPv6 addresses of the DNS servers for the directory.</p>"
+        },
         "CustomerUserName":{
           "shape":"UserName",
           "documentation":"<p>The user name for the service account.</p>"
@@ -6516,6 +6863,10 @@
         "CertificateBasedAuthProperties":{
           "shape":"CertificateBasedAuthProperties",
           "documentation":"<p>The certificate-based authentication properties used to authenticate SAML 2.0 Identity Provider (IdP) user identities to Active Directory for WorkSpaces login.</p>"
+        },
+        "EndpointEncryptionMode":{
+          "shape":"EndpointEncryptionMode",
+          "documentation":"<p>Endpoint encryption mode that allows you to configure the specified directory between Standard TLS and FIPS 140-2 validated mode.</p>"
         },
         "MicrosoftEntraConfig":{
           "shape":"MicrosoftEntraConfig",
@@ -6708,7 +7059,10 @@
         "MultipleUserProfiles",
         "StagedAppxPackage",
         "UnsupportedOsUpgrade",
-        "InsufficientRearmCount"
+        "InsufficientRearmCount",
+        "ProtocolOSIncompatibility",
+        "MemoryIntegrityIncompatibility",
+        "RestrictedDriveLetterInUse"
       ]
     },
     "WorkspaceImageId":{
@@ -6848,6 +7202,10 @@
         "WorkspaceName":{
           "shape":"WorkspaceName",
           "documentation":"<p>The name of the user-decoupled WorkSpace.</p> <note> <p> <code>WorkspaceName</code> is required if <code>UserName</code> is <code>[UNDEFINED]</code> for user-decoupled WorkSpaces. <code>WorkspaceName</code> is not applicable if <code>UserName</code> is specified for user-assigned WorkSpaces.</p> </note>"
+        },
+        "Ipv6Address":{
+          "shape":"Ipv6Address",
+          "documentation":"<p>The IPv6 address for the WorkSpace.</p>"
         }
       },
       "documentation":"<p>Describes the information used to create a WorkSpace.</p>"
@@ -6969,7 +7327,8 @@
         "State",
         "CreatedAt",
         "BundleId",
-        "DirectoryId"
+        "DirectoryId",
+        "RunningMode"
       ],
       "members":{
         "PoolId":{
@@ -6986,7 +7345,7 @@
         },
         "PoolName":{
           "shape":"WorkspacesPoolName",
-          "documentation":"<p>The name of the pool,</p>"
+          "documentation":"<p>The name of the pool.</p>"
         },
         "Description":{
           "shape":"UpdateDescription",
@@ -7019,6 +7378,10 @@
         "TimeoutSettings":{
           "shape":"TimeoutSettings",
           "documentation":"<p>The amount of time that a pool session remains active after users disconnect. If they try to reconnect to the pool session after a disconnection or network interruption within this time interval, they are connected to their previous session. Otherwise, they are connected to a new session with a new pool instance.</p>"
+        },
+        "RunningMode":{
+          "shape":"PoolsRunningMode",
+          "documentation":"<p>The running mode of the pool.</p>"
         }
       },
       "documentation":"<p>Describes a pool of WorkSpaces.</p>"

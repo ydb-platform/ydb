@@ -1,6 +1,9 @@
 #include "kafka_offset_fetch_actor.h"
 
+#include <ydb/core/base/appdata.h>
+
 #include <ydb/core/kafka_proxy/actors/kafka_create_topics_actor.h>
+#include <ydb/core/kafka_proxy/actors/kafka_metadata_service.h>
 #include <ydb/core/kafka_proxy/kafka_consumer_groups_metadata_initializers.h>
 #include "ydb/core/kafka_proxy/kafka_consumer_members_metadata_initializers.h"
 #include <ydb/core/kafka_proxy/kafka_events.h>
@@ -9,6 +12,9 @@
 #include <ydb/core/kafka_proxy/kafka_events.h>
 
 #include "ydb/services/persqueue_v1/actors/schema_actors.h"
+#include <ydb/library/actors/core/log.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KAFKA_PROXY
 
 namespace NKafka {
 NKikimr::NGRpcProxy::V1::TDescribeTopicActorSettings ConsumerOffsetSettings(std::shared_ptr<TSet<TString>> consumers, std::shared_ptr<TSet<ui32>>& partitions) {
@@ -32,7 +38,8 @@ class TTopicOffsetActor: public NKikimr::NGRpcProxy::V1::TPQInternalSchemaActor<
                                                        NKikimr::NGRpcProxy::V1::TLocalRequestBase,
                                                        NKikimr::NGRpcProxy::V1::TEvPQProxy::TEvPartitionLocationResponse>,
                          public NKikimr::NGRpcProxy::V1::TDescribeTopicActorImpl,
-                         public NKikimr::NGRpcProxy::V1::TCdcStreamCompatible {
+                         public NKikimr::NGRpcProxy::V1::TCdcStreamCompatible,
+                         public TKafkaExceptionHandler<TTopicOffsetActor> {
     using TBase = NKikimr::NGRpcProxy::V1::TPQInternalSchemaActor<TTopicOffsetActor,
         NKikimr::NGRpcProxy::V1::TLocalRequestBase,
         NKikimr::NGRpcProxy::V1::TEvPQProxy::TEvPartitionLocationResponse>;
@@ -58,14 +65,18 @@ class TTopicOffsetActor: public NKikimr::NGRpcProxy::V1::TPQInternalSchemaActor<
 
     void Bootstrap(const NActors::TActorContext& ctx) override {
         Y_UNUSED(ctx);
-        KAFKA_LOG_D("Get commited offsets for topic '" << OriginalTopicName
-            << "' for user '" << UserSID << "'");
+        YDB_LOG_DEBUG("Get commited offsets for topic for user",
+            {LogPrefix()},
+            {"originalTopicName", OriginalTopicName},
+            {"userSID", UserSID});
         SendDescribeProposeRequest();
         Become(&TTopicOffsetActor::StateWork);
     };
 
-    TStringBuilder LogPrefix() const {
-        return TStringBuilder() << "KafkaTopicOffsetActor: ";
+    NStructuredLog::TStructuredMessage LogPrefix() const {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "KafkaTopicOffsetActor"},
+            {"selfId", SelfId()});
     }
 
     void StateWork(TAutoPtr<IEventHandle>& ev) {
@@ -84,11 +95,13 @@ class TTopicOffsetActor: public NKikimr::NGRpcProxy::V1::TPQInternalSchemaActor<
             const TActorContext& ctx) override {
         Y_UNUSED(ctx);
 
-        KAFKA_LOG_D("Error raised for '" << OriginalTopicName << "'"
-            << " for user '" << UserSID << "'."
-            << " Error: '" << error << "',"
-            << " ErrorCode: '" << static_cast<int>(errorCode) << "',"
-            << " StatusCode: '" << status<< "'.");
+        YDB_LOG_DEBUG("Error raised for for user Error: ErrorCode: StatusCode",
+            {LogPrefix()},
+            {"originalTopicName", OriginalTopicName},
+            {"userSID", UserSID},
+            {"error", error},
+            {"errorCode", static_cast<int>(errorCode)},
+            {"status", status});
 
         THolder<TEvKafka::TEvCommitedOffsetsResponse> response(new TEvKafka::TEvCommitedOffsetsResponse());
         response->TopicName = OriginalTopicName;
@@ -137,13 +150,16 @@ class TTopicOffsetActor: public NKikimr::NGRpcProxy::V1::TPQInternalSchemaActor<
                        const TActorContext& ctx) override {
         Y_UNUSED(ctx);
         Y_UNUSED(ev);
-        Y_ABORT();
+        AFL_ENSURE(false)("reason", "TOffsetFetchActor: unexpected TEvGetPartitionsLocationResponse")("database", Database)("path", TopicPath);
     };
 
     void HandleCacheNavigateResponse(NKikimr::TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) override {
         const auto& response = ev->Get()->Request.Get()->ResultSet.front();
-        KAFKA_LOG_D("TEvNavigateKeySetResult received for topic '" << OriginalTopicName
-            << "' for user '" << UserSID << "'. PQGroupInfo is present: " << (response.PQGroupInfo.Get() != nullptr));
+        YDB_LOG_DEBUG("TEvNavigateKeySetResult received for topic for user PQGroupInfo is",
+            {LogPrefix()},
+            {"originalTopicName", OriginalTopicName},
+            {"userSID", UserSID},
+            {"present", (response.PQGroupInfo.Get() != nullptr)});
         if (!response.PQGroupInfo) {
             THolder<TEvKafka::TEvCommitedOffsetsResponse> response(new TEvKafka::TEvCommitedOffsetsResponse());
             response->TopicName = OriginalTopicName;
@@ -173,8 +189,10 @@ class TTopicOffsetActor: public NKikimr::NGRpcProxy::V1::TPQInternalSchemaActor<
     }
 
     void Reply(const TActorContext& ctx) override {
-        KAFKA_LOG_D("Replying for topic '" << OriginalTopicName
-            << "' for user '" << UserSID << "'" << " with status NONE_ERROR");
+        YDB_LOG_DEBUG("Replying for topic for user with status NONE_ERROR",
+            {LogPrefix()},
+            {"originalTopicName", OriginalTopicName},
+            {"userSID", UserSID});
         THolder<TEvKafka::TEvCommitedOffsetsResponse> response(new TEvKafka::TEvCommitedOffsetsResponse());
         response->TopicName = OriginalTopicName;
         response->Status = NONE_ERROR;
@@ -199,7 +217,9 @@ NActors::IActor* CreateKafkaOffsetFetchActor(const TContext::TPtr context, const
 
 void TKafkaOffsetFetchActor::Bootstrap(const NActors::TActorContext& ctx) {
     // If API level <= 7, Groups would be empty. In this case we convert message to level 8 and process it uniformely later
-    KAFKA_LOG_D("New request for user " << GetUsernameOrAnonymous(Context));
+    YDB_LOG_DEBUG("New request for user",
+        {LogPrefix()},
+        {"userName", GetUsernameOrAnonymous(Context)});
 
     if (Message->Groups.empty()) {
         TOffsetFetchRequestData::TOffsetFetchRequestGroup group;
@@ -226,11 +246,21 @@ void TKafkaOffsetFetchActor::Bootstrap(const NActors::TActorContext& ctx) {
         }
     }
     if (!GroupsToFetch.empty()) {
+        if (Context->KafkaTableFeatureFlagChanged(NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions())) {
+            Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, std::make_shared<TOffsetFetchResponseData>(), EKafkaErrors::COORDINATOR_NOT_AVAILABLE));
+            Die(ctx);
+            return;
+        }
         // if topics were not specified for some groups,
         // topics for such groups will be retrieved from the table
-        Kqp = std::make_unique<TKqpTxHelper>(Context->ResourceDatabasePath);
+        if (!NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions()) {
+            Kqp = std::make_unique<TKqpTxHelper>(Context->ResourceDatabasePath);
+        } else {
+            Kqp = std::make_unique<TKqpTxHelper>(Context->DatabasePath);
+        }
         Kqp->SendCreateSessionRequest(ctx);
-        KAFKA_LOG_D("Creating KQP Session");
+        YDB_LOG_DEBUG("Creating KQP Session",
+            {LogPrefix()});
     } else {
         FillMapWithGroupRequests();
         for (const auto& topicToEntities : TopicToEntities) {
@@ -260,6 +290,7 @@ void TKafkaOffsetFetchActor::Handle(TEvKafka::TEvCommitedOffsetsResponse::TPtr& 
 
     auto eventPtr = ev->Release();
     TString topicName = eventPtr->TopicName;
+    const bool topicExists = eventPtr->Status == NONE_ERROR;
     TopicsToResponses[topicName] = eventPtr;
     bool topicNotCreatedYet = false;
     auto& topicGroupRequests = GroupRequests[topicName];
@@ -267,28 +298,27 @@ void TKafkaOffsetFetchActor::Handle(TEvKafka::TEvCommitedOffsetsResponse::TPtr& 
         if (topicNotCreatedYet) {
             break;
         }
-        auto topicResponse = GetOffsetResponseForTopic(topicRequest, groupId);
-        for (const auto& topicPartition : topicResponse.Partitions) {
-            if (topicNotCreatedYet) {
-                break;
+        TString topicNameWithoutDb = GetTopicNameWithoutDb(DatabasePath, *topicRequest.Name);
+        TString topicPath = NormalizePath(DatabasePath, topicNameWithoutDb);
+        if (topicExists && Context->Config.GetAutoCreateConsumersEnable()) {
+            auto partitionsToOffsets = TopicsToResponses[topicName]->PartitionIdToOffsets;
+            bool consumerOnTopic = false;
+            if (partitionsToOffsets) {
+                for (const auto& [_, consumers] : *partitionsToOffsets) {
+                    if (consumers.contains(groupId)) {
+                        consumerOnTopic = true;
+                        break;
+                    }
+                }
             }
-            TString topicName = GetTopicNameWithoutDb(DatabasePath, *topicRequest.Name);
-            TString topicPath = NormalizePath(DatabasePath, topicName);
-            if (topicPartition.ErrorCode == EKafkaErrors::RESOURCE_NOT_FOUND &&
-                Context->Config.GetAutoCreateConsumersEnable()) {
-                // consumer is not assigned to the topic case
-                TKafkaOffsetFetchActor::CreateConsumerGroupIfNecessary(topicName,
-                                                                        topicPath,
-                                                                        topicName,
-                                                                        groupId);
-                break;
-            } else if (topicPartition.ErrorCode == EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION &&
-                        Context->Config.GetAutoCreateTopicsEnable()) {
-                // topic or partition does not exist case
-                CreateTopicIfNecessary(topicName, *topicRequest.Name, ctx);
-                topicNotCreatedYet = true;
-                break;
+            if (!consumerOnTopic) {
+                CreateConsumerGroupIfNecessary(topicNameWithoutDb, topicPath, topicNameWithoutDb, groupId);
             }
+        } else if (!topicExists &&
+                    TopicsToResponses[topicName]->Status == EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION &&
+                    Context->Config.GetAutoCreateTopicsEnable()) {
+            CreateTopicIfNecessary(topicNameWithoutDb, *topicRequest.Name, ctx);
+            topicNotCreatedYet = true;
         }
     }
     if (InflyTopics == 0) {
@@ -334,9 +364,13 @@ void TKafkaOffsetFetchActor::Handle(const TEvKafka::TEvResponse::TPtr& ev, const
 void TKafkaOffsetFetchActor::Handle(NKikimr::NReplication::TEvYdbProxy::TEvAlterTopicResponse::TPtr& ev, const TActorContext& ctx) {
     NYdb::TStatus& result = ev->Get()->Result;
     if (result.GetStatus() == NYdb::EStatus::SUCCESS) {
-        KAFKA_LOG_D("Handling TEvAlterTopicResponse. Status: " << result.GetStatus() << "\n");
+        YDB_LOG_DEBUG("Handling TEvAlterTopicResponse. \n",
+            {LogPrefix()},
+            {"status", result.GetStatus()});
     } else {
-        KAFKA_LOG_I("Handling TEvAlterTopicResponse. Status: " << result.GetStatus() << "\n");
+        YDB_LOG_INFO("Handling TEvAlterTopicResponse. \n",
+            {LogPrefix()},
+            {"status", result.GetStatus()});
     }
     if (result.GetStatus() != NYdb::EStatus::SUCCESS) {
         InflyTopics--;
@@ -369,24 +403,36 @@ void TKafkaOffsetFetchActor::Handle(NKikimr::NReplication::TEvYdbProxy::TEvAlter
 }
 
 void TKafkaOffsetFetchActor::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const TActorContext& ctx) {
-    KAFKA_LOG_D("Got KQP CreateSession response");
+    YDB_LOG_DEBUG("Got KQP CreateSession response",
+        {LogPrefix()});
     if (!Kqp->HandleCreateSessionResponse(ev, ctx)) {
         Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, std::make_shared<TOffsetFetchResponseData>(), EKafkaErrors::UNKNOWN_SERVER_ERROR));
-        KAFKA_LOG_D("KQP Session Error");
+        YDB_LOG_DEBUG("KQP Session Error",
+            {LogPrefix()});
         return;
     }
     NYdb::TParamsBuilder params = BuildFetchAssignmentsParams(GroupsToFetch);
-    Kqp->SendYqlRequest(Sprintf(FETCH_ASSIGNMENTS.c_str(), NKikimr::NGRpcProxy::V1::TKafkaConsumerMembersMetaInitManager::GetInstant()->FormPathToResourceTable(Context->ResourceDatabasePath).c_str()), params.Build(), KqpCookie, ctx);
+    Kqp->SendYqlRequest(Sprintf(FETCH_ASSIGNMENTS.c_str(), NKikimr::NGRpcProxy::V1::TKafkaConsumerMembersMetaInitManager::GetInstant()->FormPathToResourceTable(GetMetadataDatabasePath()).c_str()), params.Build(), KqpCookie, ctx);
 }
 
 void NKafka::TKafkaOffsetFetchActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
     std::vector<std::pair<std::optional<TString>, TConsumerProtocolAssignment>> assignments;
-    KAFKA_LOG_D("Received KQP response");
+    YDB_LOG_DEBUG("Received KQP response",
+        {LogPrefix()});
+    if (ev && TryRequestConsumerMetadataTablesCreation(ev->Get()->Record.GetYdbStatus(), GetMetadataDatabasePath(), Context->ResourceDatabasePath, ctx)) {
+        auto response = GetOffsetFetchResponse();
+        Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, response, EKafkaErrors::COORDINATOR_NOT_AVAILABLE));
+        Die(ctx);
+        return;
+    }
+
     ParseGroupsAssignments(ev, assignments);
 
     if (assignments.empty()) {
         auto response = GetOffsetFetchResponse();
-        KAFKA_LOG_D("Sending response to user " << GetUsernameOrAnonymous(Context));
+        YDB_LOG_DEBUG("Sending response to user",
+            {LogPrefix()},
+            {"userName", GetUsernameOrAnonymous(Context)});
         Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, response, static_cast<EKafkaErrors>(response->ErrorCode)));
         Die(ctx);
         return;
@@ -460,13 +506,11 @@ void TKafkaOffsetFetchActor::ParseGroupsAssignments(const NKqp::TEvKqp::TEvQuery
         TString groupId = parser.ColumnParser("consumer_group").GetUtf8().c_str();
         if (!assignmentStr.empty()) {
             TKafkaBytes assignment = assignmentStr;
-            TKafkaVersion version = *(TKafkaVersion*)(assignment.value().data() + sizeof(TKafkaVersion));
-            TBuffer buffer(assignment.value().data() + sizeof(TKafkaVersion), assignment.value().size_bytes() - sizeof(TKafkaVersion));
-            TKafkaReadable readable(buffer);
-
-            TConsumerProtocolAssignment consumerAssignment;
-            consumerAssignment.Read(readable, version);
-            assignments.emplace_back(groupId, consumerAssignment);
+            auto consumerAssignment = TryReadConsumerProtocolBlob<TConsumerProtocolAssignment>(assignment);
+            if (!consumerAssignment) {
+                continue;
+            }
+            assignments.emplace_back(groupId, *consumerAssignment);
         }
     }
 }
@@ -585,13 +629,34 @@ TOffsetFetchResponseData::TOffsetFetchResponseGroup::TOffsetFetchResponseTopics 
                     partition.Metadata = groupPartitionToOffset->second.Metadata;
                     partition.ErrorCode = NONE_ERROR;
                 } else {
-                    partition.ErrorCode = RESOURCE_NOT_FOUND;
-                    KAFKA_LOG_ERROR("Group " << groupId << " not found for topic " << topicName);
+                    // Existing partition, no committed offset for this group.
+                    partition.CommittedOffset = -1;
+                    partition.ErrorCode = NONE_ERROR;
+                    YDB_LOG_DEBUG("No committed offset for group on partition",
+                        {LogPrefix()},
+                        {"groupId", groupId},
+                        {"topicName", topicName},
+                        {"requestPartition", requestPartition});
                 }
             } else {
-                partition.ErrorCode = RESOURCE_NOT_FOUND;
-                KAFKA_LOG_ERROR("Partition " << requestPartition << " not found for topic " << topicName);
+                // Kafka OffsetFetch does not fail on an unknown partition:
+                // NONE + committedOffset = -1.
+                partition.CommittedOffset = -1;
+                partition.ErrorCode = NONE_ERROR;
+                YDB_LOG_DEBUG("Partition not found for topic",
+                    {LogPrefix()},
+                    {"requestPartition", requestPartition},
+                    {"topicName", topicName});
             }
+            topic.Partitions.push_back(partition);
+        }
+    } else if (TopicsToResponses[topicName]->Status == UNKNOWN_TOPIC_OR_PARTITION) {
+        // Kafka coordinator OffsetFetch does not check that the topic exists.
+        for (auto requestPartition: requestTopic.PartitionIndexes) {
+            TOffsetFetchResponseData::TOffsetFetchResponseGroup::TOffsetFetchResponseTopics::TOffsetFetchResponsePartitions partition;
+            partition.PartitionIndex = requestPartition;
+            partition.CommittedOffset = -1;
+            partition.ErrorCode = NONE_ERROR;
             topic.Partitions.push_back(partition);
         }
     } else {
@@ -627,7 +692,8 @@ void TKafkaOffsetFetchActor::FillMapWithGroupRequests() {
 }
 
 void NKafka::TKafkaOffsetFetchActor::Die(const TActorContext &ctx) {
-    KAFKA_LOG_D("Dying.");
+    YDB_LOG_DEBUG("Dying",
+        {LogPrefix()});
     for (const TActorId& actorId : DependantActors) {
         Send(actorId, new TEvents::TEvPoisonPill());
     }
@@ -635,6 +701,10 @@ void NKafka::TKafkaOffsetFetchActor::Die(const TActorContext &ctx) {
         Kqp->CloseKqpSession(ctx);
     }
     TBase::Die(ctx);
+}
+
+TString NKafka::TKafkaOffsetFetchActor::GetMetadataDatabasePath() const {
+    return NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions() ? Context->DatabasePath : Context->ResourceDatabasePath;
 }
 
 }

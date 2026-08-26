@@ -161,4 +161,27 @@ ui32 TController::GetTxOperatorsCount() const {
     return count;
 }
 
+namespace {
+const ::NKikimr::NColumnShard::TColumnShard* GetShardVerified(
+    const THashMap<ui64, const ::NKikimr::NColumnShard::TColumnShard*>& shardActuals, const ui64 tabletId) {
+    if (tabletId) {
+        auto it = shardActuals.find(tabletId);
+        AFL_VERIFY(it != shardActuals.end());
+        return it->second;
+    }
+    AFL_VERIFY(shardActuals.size() == 1);
+    return shardActuals.begin()->second;
+}
+}   // namespace
+
+ui64 TController::GetNodePortionsCountLimitVerified(const ui64 tabletId) const {
+    TGuard<TMutex> g(Mutex);
+    const auto* shard = GetShardVerified(ShardActuals, tabletId);
+    AFL_VERIFY(shard->HasIndex());
+    const auto& engine = shard->GetIndexAs<NOlap::TColumnEngineForLogs>();
+    const auto& tables = engine.GetTables();
+    AFL_VERIFY(!tables.empty());
+    return tables.begin()->second->GetOptimizerPlanner().GetNodePortionsCountLimit();
+}
+
 }   // namespace NKikimr::NYDBTest::NColumnShard

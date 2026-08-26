@@ -134,6 +134,16 @@ public:
         OffloadMerge = FromStringWithDefault<bool>(Params.Get("offload_merge"), OffloadMerge);
         MetadataCache = FromStringWithDefault<bool>(Params.Get("metadata_cache"), MetadataCache);
         ShowAllDatabases = FromStringWithDefault<bool>(Params.Get("show_all_databases"), ShowAllDatabases);
+        if (ShowAllDatabases && IsStrictDatabaseOnlyRequest()) {
+            YDB_LOG_NOTICE_COMP(NKikimrServices::VIEWER, "Access denied: `show_all_databases` is not allowed for database-scoped access",
+                {"logPrefix", GetLogPrefix()},
+                {"user", GetUserSID()},
+                {"database", Database});
+            ReplyAndPassAway(
+                GETHTTPACCESSDENIED("text/plain", "`show_all_databases` is not allowed for database-scoped access"),
+                "Access denied");
+            return;
+        }
 
         TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
         auto* domain = domains->GetDomain();
@@ -681,6 +691,9 @@ public:
     }
 
     static ui64 GetSlotSize(const NKikimrSysView::TPDiskInfo& pdiskInfo) {
+        if (pdiskInfo.GetExpectedSlotSize()) {
+            return pdiskInfo.GetExpectedSlotSize();
+        }
         if (pdiskInfo.GetExpectedSlotCount()) {
             return pdiskInfo.GetTotalSize() / pdiskInfo.GetExpectedSlotCount();
         } else {

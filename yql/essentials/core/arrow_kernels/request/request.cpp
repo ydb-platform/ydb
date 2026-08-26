@@ -108,6 +108,7 @@ ui32 TKernelRequestBuilder::Udf(const TString& name, bool isPolymorphic, const T
     if (!isPolymorphic) {
         // find scalar func too
         std::vector<TType*> scalarInputTypes;
+        scalarInputTypes.reserve(inputTypes.size());
         for (const auto& t : inputTypes) {
             scalarInputTypes.push_back(AS_TYPE(TBlockType, t)->GetItemType());
         }

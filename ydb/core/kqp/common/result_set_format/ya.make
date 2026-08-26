@@ -7,7 +7,9 @@ SRCS(
 
 PEERDIR(
     contrib/libs/apache/arrow
+#    ydb/core/formats/arrow
     ydb/public/api/protos
+    ydb/library/formats/arrow/modifier
     ydb/library/mkql_proto/protos
     ydb/library/yql/dq/proto
     ydb/library/yql/dq/runtime

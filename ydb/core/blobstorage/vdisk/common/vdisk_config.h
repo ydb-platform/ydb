@@ -128,6 +128,9 @@ namespace NKikimr {
         ui32 HullCompSortedPartsNum;
         double HullCompLevelRateThreshold;
         TControlWrapper HullCompFreeSpaceThresholdPerMille;
+        TControlWrapper HullCompEmergencyMaxSsts;
+        TControlWrapper HullCompEmergencyChunkReserve;
+        TControlWrapper HullCompEmergencyEnableAtColor;
         TControlWrapper FreshCompMaxInFlightWrites;
         TControlWrapper FreshCompMaxInFlightReads;
         TControlWrapper HullCompMaxInFlightWrites;
@@ -282,6 +285,8 @@ namespace NKikimr {
         TControlWrapper PhantomFlagStorageLimit;
         TControlWrapper VolatilePhantomFlagStorageBlobSizeLimit;
         TControlWrapper EnableFreshSyncDataThrottling;
+        TControlWrapper EnableChecksumReadValidationOnVDisk;
+        TControlWrapper EnableChecksumWriteValidationOnVDisk;
 
         ///////////// CHUNK Keeper //////////////////
         TControlWrapper EnableChunkKeeper;

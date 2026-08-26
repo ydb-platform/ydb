@@ -5,7 +5,13 @@ import ydb
 import os
 import logging
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
-from ydb.tests.olap.lib.utils import external_param_is_true, get_external_param, get_ci_version, get_self_version
+from ydb.tests.olap.lib.utils import (
+    external_param_is_true,
+    get_external_param,
+    get_ci_version,
+    get_test_tools_git_info,
+    get_test_tools_version,
+)
 from time import time_ns
 from datetime import datetime
 
@@ -211,7 +217,12 @@ class ResultsProcessor:
                 info['ci_sanitizer'] = ci_sanitizer
             info['ignore_stderr_content'] = cls.ignore_stderr_content
 
-            info['test_tools_version'] = get_self_version()
+            info['test_tools_version'] = get_test_tools_version()
+            test_git_info = get_test_tools_git_info()
+            if test_git_info:
+                info['test_tools_git'] = test_git_info
+            if os.getenv('CI_TEST_VERSION'):
+                info['test_version'] = os.getenv('CI_TEST_VERSION')
 
             data = {
                 'Db': cls.get_cluster_id(),
@@ -252,7 +263,41 @@ class ResultsProcessor:
             branch = f'origin/{branch}' if branch else ''
 
             summary = results.get('summary', {})
-            json_string = json.dumps(results, separators=(',', ':'))
+            report_url = os.getenv('ALLURE_RESOURCE_URL', None)
+            if report_url is None:
+                sandbox_task_id = get_external_param('SANDBOX_TASK_ID', None)
+                if sandbox_task_id is not None:
+                    report_url = f'https://sandbox.yandex-team.ru/task/{sandbox_task_id}/allure_report'
+            # Enrich payload stored in `json` with resolved run knobs / CI context.
+            # Keep original CLI summary fields (max_sessions/threads/warmup_seconds when present).
+            new_order = results.get('transactions', {}).get('NewOrder', {})
+            payload = dict(results)
+            payload['meta'] = {
+                'run_type': run_type,
+                'compaction_mode': get_external_param(
+                    'tpcc-compaction-mode',
+                    os.getenv('TPCC_COMPACTION_MODE', 'none'),
+                ),
+                'deploy_method': (
+                    os.getenv('CI_DEPLOY_METHOD')
+                    or get_external_param('deploy-method', '')
+                ),
+                'cluster': cluster_name,
+                'client_host': get_external_param('client-host', os.getenv('CLIENT_HOST', '')),
+                'max_sessions': summary.get('max_sessions'),
+                'threads': summary.get('threads'),
+                'warmup_seconds': summary.get('warmup_seconds'),
+                'report_url': report_url,
+                'ci_launch_id': os.getenv('CI_LAUNCH_ID') or None,
+                'ci_launch_url': os.getenv('CI_LAUNCH_URL') or None,
+                'test_tools_version': get_test_tools_version(),
+                'test_tools_git': get_test_tools_git_info() or None,
+                'test_version': os.getenv('CI_TEST_VERSION') or None,
+                # Full stays in column newOrderLatency90; Ms/Pure are alternate views.
+                'newOrderLatency90_ms': new_order.get('percentiles_ms', {}).get('90'),
+                'newOrderLatency90_pure': new_order.get('percentiles_pure', {}).get('90'),
+            }
+            json_string = json.dumps(payload, separators=(',', ':'))
             data = {
                 'timestamp': int(1000000 * warmup_start_ts),
                 'cluster': cluster_name,

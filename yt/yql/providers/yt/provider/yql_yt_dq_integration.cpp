@@ -668,11 +668,13 @@ public:
         ui64 dataSize = 0;
         for (auto& [cluster, info]: clusterToNodesAndErasure) {
             auto res = EstimateColumnStats(ctx, clusterToGroups[cluster], dataSize);
+            // TODO(aneporada): set ErasureCodecCpuForDq in configs and/or take ErasureCodecCpu as a default
             auto codecCpu = ytState->Configuration->ErasureCodecCpuForDq.Get(cluster);
             if (!codecCpu) {
                 continue;
             }
             size_t idx = 0;
+            const ui64 effectiveDataSizePerJob = Max(ui64(dataSizePerJob / *codecCpu), 10_KB);
             for (auto& [node, hasErasure]: info) {
                 if (!hasErasure) {
                     ++idx;
@@ -680,8 +682,7 @@ public:
                 }
                 ui64 readSize = std::accumulate(res[idx].begin(), res[idx].end(), 0ull);
                 ++idx;
-                dataSizePerJob = Max(ui64(dataSizePerJob / *codecCpu), 10_KB);
-                const ui64 parts = (readSize + dataSizePerJob - 1) / dataSizePerJob;
+                const ui64 parts = (readSize + effectiveDataSizePerJob - 1) / effectiveDataSizePerJob;
                 if (parts > maxTasksPerStage) {
                     AddErrorWrap(ctx, node->Pos(), "too big table with erasure codec");
                     return Nothing();

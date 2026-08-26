@@ -6,8 +6,11 @@ SRCS(
     direct_block_group_impl_ut.cpp
     direct_block_group_mock.cpp
     direct_block_group_test_fixture.cpp
+    direct_session_registry_ut.cpp
     erase_request_ut.cpp
+    fast_path_service_ut.cpp
     flush_request_ut.cpp
+    ic_direct_storage_transport_ut.cpp
     read_request_ut.cpp
     vchunk_ut.cpp
     write_request_test_fixture.cpp

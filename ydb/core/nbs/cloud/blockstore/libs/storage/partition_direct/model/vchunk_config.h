@@ -2,7 +2,7 @@
 
 #include "host_roles.h"
 
-#include <util/generic/hash.h>
+#include <util/generic/map.h>
 #include <util/system/types.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
@@ -22,6 +22,7 @@ public:
         THostMask enabledHosts,
         TVector<std::optional<ui64>> watermarks);
 
+    [[nodiscard]] bool Empty() const;
     [[nodiscard]] size_t GetHostCount() const;
     [[nodiscard]] ui32 GetVChunkIndex() const;
 
@@ -35,6 +36,7 @@ public:
     // host.
     void DisableHost(THostIndex hostIndex);
 
+    // Add new host and assign new role for it.
     void AppendHost();
 
     // Disables the host. Demote ddisk and pbuffer. If possible, adds ddisk on
@@ -46,6 +48,7 @@ public:
     TString DemoteHost(THostIndex hostIndex);
     // Adds ddisk to the host.
     void PromoteHost(THostIndex hostIndex);
+    TString PromoteHostIfNeeded();
 
     [[nodiscard]] EHostRole GetPBufferRole(THostIndex hostIndex) const;
     [[nodiscard]] EHostRole GetDDiskRole(THostIndex hostIndex) const;
@@ -62,17 +65,28 @@ public:
 
     // Get a list of all DDisks (enabled and disabled).
     [[nodiscard]] THostMask GetDDisks() const;
+    // Get a list of all enabled DDisks.
+    [[nodiscard]] THostMask GetEnabledDDisks() const;
     // Get a list of all DDisks with full data (enabled or not).
     [[nodiscard]] THostMask GetFullDDisks() const;
     // Get a list of all healthy DDisks (enabled and full filed).
     [[nodiscard]] THostMask GetHealthyDDisks() const;
 
-    void SetWatermark(THostIndex hostIndex, std::optional<ui64> watermark);
+    // If std::nullopt is set, it means that the disk is fully filled with data
+    // and the waterline value is higher than the disk size. If the waterline
+    // value is set, it means that disk blocks less than this value can be read,
+    // and those that are equal to or higher than this value are not yet filled.
+    // In other words, if the value is 0, no disk blocks can be read.
+    void SetWatermark(
+        THostIndex hostIndex,
+        std::optional<ui64> watermarkBlockCount);
     [[nodiscard]] std::optional<ui64> GetWatermark(THostIndex hostIndex) const;
 
     [[nodiscard]] THostMask GetDisabledHosts() const;
 
     [[nodiscard]] bool IsValid() const;
+
+    bool operator==(const TVChunkConfig& other) const;
 
     [[nodiscard]] TString DebugPrint() const;
 
@@ -88,9 +102,7 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// Vchunk index -> persisted config override. Vchunks without an entry fall
-// back to TVChunkConfig::Make().
-using TVChunkConfigByIndex = THashMap<ui32, TVChunkConfig>;
+using TVChunkConfigs = TMap<ui32, TVChunkConfig>;
 
 ////////////////////////////////////////////////////////////////////////////////
 

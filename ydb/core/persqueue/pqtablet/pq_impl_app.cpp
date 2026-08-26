@@ -1,6 +1,7 @@
 #include "pq_impl.h"
 #include "pq_impl_types.h"
 
+#include <ydb/core/base/mon_auth.h>
 #include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/persqueue/common/common_app.h>
 #include <ydb/core/persqueue/pqtablet/common/logging.h>
@@ -33,6 +34,33 @@ namespace {
     bool ShouldShowSendReadSetAction(const TDistributedTransaction& tx) {
         return tx.State == NKikimrPQ::TTransaction_EState_WAIT_RS;
     }
+
+    bool IsKnownPublicPersQueueDevUiParam(const TStringBuf name) {
+        static constexpr TStringBuf names[] = {
+            "TabletID",
+            "FollowerID",
+            "kv",
+            "section",
+            "consumer",
+            "partitionId",
+            "TxId",
+        };
+        return std::find(std::begin(names), std::end(names), name) != std::end(names);
+    }
+
+    bool IsPublicPersQueueDevUiRequest(const TCgiParameters& cgi) {
+        for (const auto& [name, _] : cgi) {
+            if (!IsKnownPublicPersQueueDevUiParam(name)) {
+                YDB_LOG_WARN_COMP(NKikimrServices::PERSQUEUE, "PersQueue DevUI request is admin only",
+                    {"logPrefix", LogPrefix()},
+                    {"param", name},
+                    {"cgi", cgi.Print()});
+                return false;
+            }
+        }
+        return true;
+    }
+
 }
 
 
@@ -153,7 +181,10 @@ private:
             }
         }
 
-        LOG_D("Answer TEvRemoteHttpInfoRes: to " << Sender << " self " << ctx.SelfID);
+        YDB_LOG_DEBUG_COMP(Service, "Answer TEvRemoteHttpInfoRes: to self",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"sender", Sender},
+            {"selfId", ctx.SelfID});
         ctx.Send(Sender, new NMon::TEvRemoteHttpInfoRes(str.Str()));
         Die(ctx);
     }
@@ -263,7 +294,8 @@ bool TPersQueue::OnRenderAppHtmlPageTx(NMon::TEvRemoteHttpInfo::TPtr& ev, const 
                                         }
                                         TABLED() {
                                             if (!predicate.HasPredicate() && ShouldShowSendReadSetAction(*tx)) {
-                                                str << RenderSendReadSetHtmlForms(*tx, MakeArrayRef(&tabletID, 1));
+                                                str << RenderSendReadSetHtmlForms(
+                                                    *tx, MakeArrayRef(&tabletID, 1), ev->Get()->PathInfo());
                                             }
                                         }
                                     }
@@ -280,7 +312,7 @@ bool TPersQueue::OnRenderAppHtmlPageTx(NMon::TEvRemoteHttpInfo::TPtr& ev, const 
                         }
                         if (readSetPending > 0 && ShouldShowSendReadSetAction(*tx)) {
                              str << "Send ReadSet for all " << readSetPending << " waiting tablets";
-                             str << RenderSendReadSetHtmlForms(*tx, Nothing());
+                             str << RenderSendReadSetHtmlForms(*tx, Nothing(), ev->Get()->PathInfo());
                         }
                     }
                 }
@@ -300,17 +332,27 @@ bool TPersQueue::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TAc
         return true;
     }
 
-    if (ev->Get()->Cgi().Has("SendReadSet")) {
+    const auto& cgi = ev->Get()->Cgi();
+    if (!IsTabletDevUiAccessAllowed(
+            AppData(ctx),
+            ev->Get()->PathInfo(),
+            ev->Get()->GetUserToken(),
+            IsPublicPersQueueDevUiRequest(cgi)))
+    {
+        ctx.Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
+        return true;
+    }
+    if (cgi.Has("SendReadSet")) {
         return OnSendReadSetToYourself(ev, ctx);
     }
 
-    if (ev->Get()->Cgi().Has("kv")) {
+    if (cgi.Has("kv")) {
         return TKeyValueFlat::OnRenderAppHtmlPage(ev, ctx);
     }
 
-    if (ev->Get()->Cgi().Has("consumer") && ev->Get()->Cgi().Has("partitionId")) {
-        auto partitionIdStr = ev->Get()->Cgi().Get("partitionId");
-        auto consumer = ev->Get()->Cgi().Get("consumer");
+    if (cgi.Has("consumer") && cgi.Has("partitionId")) {
+        auto partitionIdStr = cgi.Get("partitionId");
+        auto consumer = cgi.Get("consumer");
 
         char *endptr;
         const ui64 partitionId = strtoull(partitionIdStr.c_str(), &endptr, 10);
@@ -322,11 +364,13 @@ bool TPersQueue::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TAc
         }
     }
 
-    if (ev->Get()->Cgi().Has("TxId")) {
+    if (cgi.Has("TxId")) {
         return OnRenderAppHtmlPageTx(ev, ctx);
     }
 
-    PQ_LOG_I("Handle TEvRemoteHttpInfo: " << ev->Get()->Query);
+    YDB_LOG_INFO_COMP(NKikimrServices::PERSQUEUE, "Handle",
+        {"logPrefix", LogPrefix()},
+        {"TEvRemoteHttpInfo", ev->Get()->Query});
 
     TMap<ui32, TActorId> res;
     for (auto& p : Partitions) {

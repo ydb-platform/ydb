@@ -77,7 +77,7 @@ public:
             {"logPrefix", GetLogPrefix()},
             {"tabletId", TabletId},
             {"replyStatus", NKikimrProto::EReplyStatus_Name(msg->Status)});
-        SideEffects.Complete(ctx);
+        SideEffects.Complete(ctx, Self->Requests);
     }
 };
 

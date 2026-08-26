@@ -2,11 +2,11 @@
 
 #include <library/cpp/yt/compact_containers/compact_flat_map.h>
 
+#include <library/cpp/yt/containers/static_ring_queue.h>
+
 #include <library/cpp/yt/threading/fork_aware_spin_lock.h>
 
 #include <library/cpp/yt/memory/leaky_singleton.h>
-
-#include <yt/yt/core/misc/static_ring_queue.h>
 
 namespace NYT::NConcurrency {
 

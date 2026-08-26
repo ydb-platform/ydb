@@ -194,6 +194,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     NKikimrSchemeOp::EIndexType IndexType = NKikimrSchemeOp::EIndexTypeInvalid;
 
     EBuildKind BuildKind = EBuildKind::BuildKindUnspecified;
+    bool IsRebuild = false;
 
     TString IndexName;
     TVector<TString> IndexColumns;
@@ -230,6 +231,8 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             Recompute,
             Filter,
             FilterBorders,
+            RebuildDrop,    // dropping old impl tables for rebuild
+            RebuildCreate,  // creating new impl tables for rebuild
         };
         ui32 Level = 1;
         ui32 Round = 0;
@@ -675,6 +678,9 @@ public:
             row.template GetValueOrDefault<Schema::IndexBuild::ParentBuildId>(
                 indexInfo->ParentBuildId);
 
+        indexInfo->IsRebuild =
+            row.template GetValueOrDefault<Schema::IndexBuild::IsRebuild>(false);
+
         indexInfo->Billed.SetUploadRows(row.template GetValueOrDefault<Schema::IndexBuild::UploadRowsBilled>(0));
         indexInfo->Billed.SetUploadBytes(row.template GetValueOrDefault<Schema::IndexBuild::UploadBytesBilled>(0));
         indexInfo->Billed.SetReadRows(row.template GetValueOrDefault<Schema::IndexBuild::ReadRowsBilled>(0));
@@ -896,7 +902,7 @@ public:
         return State == EState::Cancelled || State == EState::Rejected;
     }
 
-    bool IsFinished() const {
+    virtual bool IsFinished() const {
         return IsDone() || IsCancelled();
     }
 
@@ -1022,6 +1028,10 @@ struct TSetColumnConstraintOperationInfo: public TIndexBuildInfo {
 
     bool IsDone() const override {
         return OperationState == EOperationState::Done;
+    }
+
+    bool IsFinished() const override {
+        return IsDone();
     }
 
     bool IsCloseToCompletion() const {

@@ -1365,6 +1365,1025 @@ Y_UNIT_TEST_SUITE(KqpReadCommittedPg) {
         tester.Execute();
     }
 
+    // =========================================================================
+    // INSERT, DELETE, INSERT within the same RC transaction: final row should survive
+    // =========================================================================
+    class TInsertDeleteInsertSameTx : public TTableDataModificationTester {
+    protected:
+        void DoExecute() override {
+            auto client = Kikimr->GetQueryClient();
+            auto session = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+
+            auto result1 = Kikimr->RunCall([&] {
+                return session.ExecuteQuery(Q_(R"(
+                    INSERT INTO `/Root/Test` (Group, Name, Amount, Comment) VALUES (998u, "NewRow", 500u, "First");
+                )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW())).ExtractValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(result1.GetStatus(), EStatus::SUCCESS, result1.GetIssues().ToString());
+            auto tx = result1.GetTransaction();
+            UNIT_ASSERT(tx && tx->IsActive());
+
+            auto result2 = Kikimr->RunCall([&] {
+                return session.ExecuteQuery(Q_(R"(
+                    DELETE FROM `/Root/Test` WHERE Group = 998u AND Name = "NewRow";
+                )"), TTxControl::Tx(*tx)).ExtractValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(result2.GetStatus(), EStatus::SUCCESS, result2.GetIssues().ToString());
+            tx = result2.GetTransaction();
+            UNIT_ASSERT(tx && tx->IsActive());
+
+            auto result3 = Kikimr->RunCall([&] {
+                return session.ExecuteQuery(Q_(R"(
+                    INSERT INTO `/Root/Test` (Group, Name, Amount, Comment) VALUES (998u, "NewRow", 500u, "Second");
+                )"), TTxControl::Tx(*tx).CommitTx()).ExtractValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(result3.GetStatus(), EStatus::SUCCESS, result3.GetIssues().ToString());
+
+            auto verify = Kikimr->RunCall([&] {
+                return session.ExecuteQuery(Q_(R"(
+                    SELECT Comment FROM `/Root/Test` WHERE Group = 998u AND Name = "NewRow";
+                )"), TTxControl::BeginTx(TTxSettings::SnapshotRW()).CommitTx()).ExtractValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(verify.GetStatus(), EStatus::SUCCESS, verify.GetIssues().ToString());
+            CompareYson(R"([[["Second"]]])", FormatResultSetYson(verify.GetResultSet(0)));
+        }
+    };
+
+    Y_UNIT_TEST(TInsertDeleteInsertSameTx) {
+        TInsertDeleteInsertSameTx tester;
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
+    class TLockOnlyShardDistributedCommit : public TTableDataModificationTester {
+    protected:
+        void DoExecute() override {
+            auto& runtime = *Kikimr->GetTestServer().GetRuntime();
+            auto client = Kikimr->GetQueryClient();
+            auto session = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+
+            {
+                auto r = Kikimr->RunCall([&] {
+                    return client.ExecuteQuery(R"(
+                        CREATE TABLE `/Root/T1` (
+                            Key Uint32 NOT NULL,
+                            Val String,
+                            PRIMARY KEY (Key)
+                        ) WITH (AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10);
+                        CREATE TABLE `/Root/T2` (
+                            Key Uint32 NOT NULL,
+                            Val String,
+                            PRIMARY KEY (Key)
+                        ) WITH (AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10);
+                    )", TTxControl::NoTx()).ExtractValueSync();
+                });
+                UNIT_ASSERT_C(r.IsSuccess(), r.GetIssues().ToString());
+            }
+
+            auto future = Kikimr->RunInThreadPool([&] {
+                return session.ExecuteQuery(Q_(R"(
+                    UPSERT INTO `/Root/T1` (Key, Val) VALUES (1u, "a");
+                    UPDATE `/Root/T2` ON (Key, Val) VALUES (2u, "b");
+                )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW()).CommitTx()).ExtractValueSync();
+            });
+
+            auto result = runtime.WaitFuture(future);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+    };
+
+    Y_UNIT_TEST(TLockOnlyShardDistributedCommit) {
+        TLockOnlyShardDistributedCommit tester;
+        tester.SetIsOlap(false);
+        tester.SetFillTables(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
+    // =========================================================================
+    // EvWrite should not use a stale snapshot after reread in ReadCommitted
+    //
+    // Tx A starts UPDATE WHERE (ReadCommitted). We block the first lock request.
+    // Tx B commits a change to the same row. We release the blocked lock.
+    // Tx A rereads the modified row and should see Tx B's committed value,
+    // then write its own update on top of the latest committed data.
+    // =========================================================================
+    class TEvWriteUsesFreshSnapshotAfterReread : public TTableDataModificationTester {
+    protected:
+        void DoExecute() override {
+            auto& runtime = *Kikimr->GetTestServer().GetRuntime();
+            auto client = Kikimr->GetQueryClient();
+            auto session1 = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+            auto session2 = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+
+            size_t evLockCounter = 0;
+            size_t evReadCounter = 0;
+            std::vector<std::unique_ptr<IEventHandle>> blockedLocks;
+
+            auto grab = [&](TAutoPtr<IEventHandle>& ev) -> auto {
+                if (ev->GetTypeRewrite() == NKikimr::NEvents::TDataEvents::TEvLockRows::EventType) {
+                    ++evLockCounter;
+                    if (evLockCounter == 1) {
+                        blockedLocks.emplace_back(ev.Release());
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
+                } else if (ev->GetTypeRewrite() == NKikimr::TEvDataShard::TEvRead::EventType) {
+                    ++evReadCounter;
+                } else if (ev->GetTypeRewrite() == NKikimr::NEvents::TDataEvents::TEvWrite::EventType) {
+                    auto* writeEv = ev->Get<NKikimr::NEvents::TDataEvents::TEvWrite>();
+                    auto lockMode = writeEv->Record.GetLockMode();
+                    UNIT_ASSERT_VALUES_EQUAL(lockMode, NKikimrDataEvents::PESSIMISTIC_NONE);
+                    UNIT_ASSERT_VALUES_EQUAL(writeEv->Record.GetMvccSnapshot().GetStep(), 0);
+                    UNIT_ASSERT_VALUES_EQUAL(writeEv->Record.GetMvccSnapshot().GetTxId(), 0);
+                }
+                return TTestActorRuntime::EEventAction::PROCESS;
+            };
+
+            auto saveObserver = runtime.SetObserverFunc(grab);
+            Y_DEFER { runtime.SetObserverFunc(saveObserver); };
+
+            auto futureA = Kikimr->RunInThreadPool([&] {
+                return session1.ExecuteQuery(Q_(R"(
+                    UPDATE `/Root/Test` SET Amount = 999u WHERE Group = 1u AND Name = "Paul";
+                )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW())).ExtractValueSync();
+            });
+
+            {
+                TDispatchOptions opts;
+                opts.FinalEvents.emplace_back([&](IEventHandle&) {
+                    return evLockCounter >= 1 && evReadCounter >= 1;
+                });
+                runtime.DispatchEvents(opts, TDuration::Seconds(30));
+                UNIT_ASSERT(evReadCounter >= 1);
+                UNIT_ASSERT(evLockCounter == 1);
+            }
+
+            {
+                auto resultB = Kikimr->RunCall([&] {
+                    return session2.ExecuteQuery(Q_(R"(
+                        UPSERT INTO `/Root/Test` (Group, Name, Amount, Comment)
+                        VALUES (1u, "Paul", 500u, "ConcurrentChange");
+                    )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW()).CommitTx()).ExtractValueSync();
+                });
+                UNIT_ASSERT_VALUES_EQUAL_C(resultB.GetStatus(), EStatus::SUCCESS, resultB.GetIssues().ToString());
+            }
+
+            for (auto& ev : blockedLocks) {
+                runtime.Send(ev.release());
+            }
+
+            auto resultA = runtime.WaitFuture(futureA);
+            UNIT_ASSERT_VALUES_EQUAL_C(resultA.GetStatus(), EStatus::SUCCESS, resultA.GetIssues().ToString());
+            auto txA = resultA.GetTransaction();
+            UNIT_ASSERT(txA && txA->IsActive());
+
+            auto commitA = Kikimr->RunCall([&] { return txA->Commit().ExtractValueSync(); });
+            UNIT_ASSERT_VALUES_EQUAL_C(commitA.GetStatus(), EStatus::SUCCESS, commitA.GetIssues().ToString());
+
+            auto verify = Kikimr->RunCall([&] {
+                return session1.ExecuteQuery(Q_(R"(
+                    SELECT Amount, Comment FROM `/Root/Test` WHERE Group = 1u AND Name = "Paul";
+                )"), TTxControl::BeginTx(TTxSettings::SnapshotRW()).CommitTx()).ExtractValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(verify.GetStatus(), EStatus::SUCCESS, verify.GetIssues().ToString());
+            CompareYson(R"([[[999u];["ConcurrentChange"]]])", FormatResultSetYson(verify.GetResultSet(0)));
+        }
+    };
+
+    Y_UNIT_TEST(TEvWriteUsesFreshSnapshotAfterReread) {
+        TEvWriteUsesFreshSnapshotAfterReread tester;
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
+    // =========================================================================
+    // Concurrent UPDATE on a table with a unique index should block correctly
+    //
+    // Tx A and Tx B update different primary rows to the same indexed value.
+    // Tx B must block on the unique index lock, not on a main-table row lock.
+    // =========================================================================
+    class TUpdateWithUniqueIndexBlocksConcurrent : public TTableDataModificationTester {
+    protected:
+        void DoExecute() override {
+            auto& runtime = *Kikimr->GetTestServer().GetRuntime();
+            auto client = Kikimr->GetQueryClient();
+            auto session1 = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+            auto session2 = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+
+            auto futureA = Kikimr->RunInThreadPool([&] {
+                return session1.ExecuteQuery(Q_(R"(
+                    UPDATE `/Root/Test2` SET Comment = "Shared" WHERE Group = 1u AND Name = "Paul";
+                )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW())).ExtractValueSync();
+            });
+
+            auto resultA = runtime.WaitFuture(futureA);
+            UNIT_ASSERT_VALUES_EQUAL_C(resultA.GetStatus(), EStatus::SUCCESS, resultA.GetIssues().ToString());
+            auto txA = resultA.GetTransaction();
+            UNIT_ASSERT(txA && txA->IsActive());
+
+            auto futureB = Kikimr->RunInThreadPool([&] {
+                return session2.ExecuteQuery(Q_(R"(
+                    UPDATE `/Root/Test2` SET Comment = "Shared" WHERE Group = 1u AND Name = "Anna";
+                )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW())).ExtractValueSync();
+            });
+
+            {
+                TDispatchOptions opts;
+                opts.CustomFinalCondition = [&]() {
+                    return futureB.HasValue() || futureB.HasException();
+                };
+                opts.FinalEvents.emplace_back([](IEventHandle&) { return false; });
+                runtime.DispatchEvents(opts, TDuration::Seconds(2));
+                UNIT_ASSERT_C(!futureB.HasValue() && !futureB.HasException(),
+                    "Tx B should be blocked waiting for Tx A's unique-index lock");
+            }
+
+            {
+                auto commitA = Kikimr->RunInThreadPool([&] { return txA->Commit().ExtractValueSync(); });
+                auto commitResult = runtime.WaitFuture(commitA);
+                UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::SUCCESS, commitResult.GetIssues().ToString());
+            }
+
+            auto resultB = runtime.WaitFuture(futureB);
+            UNIT_ASSERT_VALUES_EQUAL_C(resultB.GetStatus(), EStatus::PRECONDITION_FAILED, resultB.GetIssues().ToString());
+
+            auto verify = Kikimr->RunCall([&] {
+                return session1.ExecuteQuery(Q_(R"(
+                    SELECT Group, Name, Comment FROM `/Root/Test2` WHERE Comment = "Shared";
+                )"), TTxControl::BeginTx(TTxSettings::SnapshotRW()).CommitTx()).ExtractValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(verify.GetStatus(), EStatus::SUCCESS, verify.GetIssues().ToString());
+            CompareYson(R"([[1u;"Paul";["Shared"]]])", FormatResultSetYson(verify.GetResultSet(0)));
+        }
+    };
+
+    Y_UNIT_TEST(TUpdateWithUniqueIndexBlocksConcurrent) {
+        TUpdateWithUniqueIndexBlocksConcurrent tester;
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
+    // =========================================================================
+    // Row replaced between read & lock in UPDATE WHERE
+    //
+    // Tx A starts UPDATE WHERE, reads the row, and we block its first lock.
+    // Tx B UPSERTs (replaces) the row and commits. We release Tx A's lock.
+    // Tx A should reread and see the replaced row data, not the original.
+    // =========================================================================
+    class TUpdateWhereRowReplacedBetweenReadAndLock : public TTableDataModificationTester {
+    protected:
+        void DoExecute() override {
+            auto& runtime = *Kikimr->GetTestServer().GetRuntime();
+            auto client = Kikimr->GetQueryClient();
+            auto session1 = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+            auto session2 = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+
+            size_t evReadCounter = 0;
+            size_t evLockCounter = 0;
+            std::vector<std::unique_ptr<IEventHandle>> blockedLocks;
+
+            auto grab = [&](TAutoPtr<IEventHandle>& ev) -> auto {
+                if (ev->GetTypeRewrite() == NKikimr::TEvDataShard::TEvRead::EventType) {
+                    ++evReadCounter;
+                } else if (ev->GetTypeRewrite() == NKikimr::NEvents::TDataEvents::TEvLockRows::EventType) {
+                    ++evLockCounter;
+                    if (evLockCounter == 1) {
+                        blockedLocks.emplace_back(ev.Release());
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
+                }
+                return TTestActorRuntime::EEventAction::PROCESS;
+            };
+
+            auto saveObserver = runtime.SetObserverFunc(grab);
+            Y_DEFER { runtime.SetObserverFunc(saveObserver); };
+
+            auto futureA = Kikimr->RunInThreadPool([&] {
+                return session1.ExecuteQuery(Q_(R"(
+                    UPDATE `/Root/Test` SET Comment = "UpdatedByA" WHERE Group = 1u AND Name = "Paul";
+                )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW())).ExtractValueSync();
+            });
+
+            {
+                TDispatchOptions opts;
+                opts.FinalEvents.emplace_back([&](IEventHandle&) {
+                    return evReadCounter >= 1 && evLockCounter >= 1;
+                });
+                runtime.DispatchEvents(opts, TDuration::Seconds(30));
+                UNIT_ASSERT(evReadCounter >= 1);
+                UNIT_ASSERT(evLockCounter == 1);
+            }
+
+            {
+                auto resultB = Kikimr->RunCall([&] {
+                    return session2.ExecuteQuery(Q_(R"(
+                        UPSERT INTO `/Root/Test` (Group, Name, Amount, Comment)
+                        VALUES (1u, "Paul", 999u, "ReplacedRow");
+                    )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW()).CommitTx()).ExtractValueSync();
+                });
+                UNIT_ASSERT_VALUES_EQUAL_C(resultB.GetStatus(), EStatus::SUCCESS, resultB.GetIssues().ToString());
+            }
+
+            for (auto& ev : blockedLocks) {
+                runtime.Send(ev.release());
+            }
+
+            auto resultA = runtime.WaitFuture(futureA);
+            UNIT_ASSERT_VALUES_EQUAL_C(resultA.GetStatus(), EStatus::SUCCESS, resultA.GetIssues().ToString());
+            UNIT_ASSERT(evReadCounter >= 2);
+            auto txA = resultA.GetTransaction();
+            UNIT_ASSERT(txA && txA->IsActive());
+
+            auto commitA = Kikimr->RunCall([&] { return txA->Commit().ExtractValueSync(); });
+            UNIT_ASSERT_VALUES_EQUAL_C(commitA.GetStatus(), EStatus::SUCCESS, commitA.GetIssues().ToString());
+
+            auto verify = Kikimr->RunCall([&] {
+                return session1.ExecuteQuery(Q_(R"(
+                    SELECT Amount, Comment FROM `/Root/Test` WHERE Group = 1u AND Name = "Paul";
+                )"), TTxControl::BeginTx(TTxSettings::SnapshotRW()).CommitTx()).ExtractValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(verify.GetStatus(), EStatus::SUCCESS, verify.GetIssues().ToString());
+            CompareYson(R"([[[999u];["UpdatedByA"]]])", FormatResultSetYson(verify.GetResultSet(0)));
+        }
+    };
+
+    Y_UNIT_TEST(TUpdateWhereRowReplacedBetweenReadAndLock) {
+        TUpdateWhereRowReplacedBetweenReadAndLock tester;
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
+    // =========================================================================
+    // Row replaced between read & lock in DELETE WHERE
+    //
+    // Tx A starts DELETE WHERE, reads the row, and we block its first lock.
+    // Tx B UPSERTs (replaces) the row and commits. We release Tx A's lock.
+    // Tx A should reread and delete the replaced row.
+    // =========================================================================
+    class TDeleteWhereRowReplacedBetweenReadAndLock : public TTableDataModificationTester {
+    protected:
+        void DoExecute() override {
+            auto& runtime = *Kikimr->GetTestServer().GetRuntime();
+            auto client = Kikimr->GetQueryClient();
+            auto session1 = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+            auto session2 = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+
+            size_t evReadCounter = 0;
+            size_t evLockCounter = 0;
+            std::vector<std::unique_ptr<IEventHandle>> blockedLocks;
+
+            auto grab = [&](TAutoPtr<IEventHandle>& ev) -> auto {
+                if (ev->GetTypeRewrite() == NKikimr::TEvDataShard::TEvRead::EventType) {
+                    ++evReadCounter;
+                } else if (ev->GetTypeRewrite() == NKikimr::NEvents::TDataEvents::TEvLockRows::EventType) {
+                    ++evLockCounter;
+                    if (evLockCounter == 1) {
+                        blockedLocks.emplace_back(ev.Release());
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
+                }
+                return TTestActorRuntime::EEventAction::PROCESS;
+            };
+
+            auto saveObserver = runtime.SetObserverFunc(grab);
+            Y_DEFER { runtime.SetObserverFunc(saveObserver); };
+
+            auto futureA = Kikimr->RunInThreadPool([&] {
+                return session1.ExecuteQuery(Q_(R"(
+                    DELETE FROM `/Root/Test` WHERE Group = 1u AND Name = "Paul";
+                )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW())).ExtractValueSync();
+            });
+
+            {
+                TDispatchOptions opts;
+                opts.FinalEvents.emplace_back([&](IEventHandle&) {
+                    return evReadCounter >= 1 && evLockCounter >= 1;
+                });
+                runtime.DispatchEvents(opts, TDuration::Seconds(30));
+                UNIT_ASSERT(evReadCounter >= 1);
+                UNIT_ASSERT(evLockCounter == 1);
+            }
+
+            {
+                auto resultB = Kikimr->RunCall([&] {
+                    return session2.ExecuteQuery(Q_(R"(
+                        UPSERT INTO `/Root/Test` (Group, Name, Amount, Comment)
+                        VALUES (1u, "Paul", 999u, "ReplacedRow");
+                    )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW()).CommitTx()).ExtractValueSync();
+                });
+                UNIT_ASSERT_VALUES_EQUAL_C(resultB.GetStatus(), EStatus::SUCCESS, resultB.GetIssues().ToString());
+            }
+
+            for (auto& ev : blockedLocks) {
+                runtime.Send(ev.release());
+            }
+
+            auto resultA = runtime.WaitFuture(futureA);
+            UNIT_ASSERT_VALUES_EQUAL_C(resultA.GetStatus(), EStatus::SUCCESS, resultA.GetIssues().ToString());
+            UNIT_ASSERT(evReadCounter >= 2);
+            auto txA = resultA.GetTransaction();
+            UNIT_ASSERT(txA && txA->IsActive());
+
+            auto commitA = Kikimr->RunCall([&] { return txA->Commit().ExtractValueSync(); });
+            UNIT_ASSERT_VALUES_EQUAL_C(commitA.GetStatus(), EStatus::SUCCESS, commitA.GetIssues().ToString());
+
+            auto verify = Kikimr->RunCall([&] {
+                return session1.ExecuteQuery(Q_(R"(
+                    SELECT * FROM `/Root/Test` WHERE Group = 1u AND Name = "Paul";
+                )"), TTxControl::BeginTx(TTxSettings::SnapshotRW()).CommitTx()).ExtractValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(verify.GetStatus(), EStatus::SUCCESS, verify.GetIssues().ToString());
+            CompareYson(R"([])", FormatResultSetYson(verify.GetResultSet(0)));
+        }
+    };
+
+    Y_UNIT_TEST(TDeleteWhereRowReplacedBetweenReadAndLock) {
+        TDeleteWhereRowReplacedBetweenReadAndLock tester;
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
+    // =========================================================================
+    // Row deleted between read & lock in UPDATE WHERE
+    //
+    // Tx A starts UPDATE WHERE, we block the first lock. Tx B DELETEs the
+    // row and commits. We release Tx A's lock. Tx A's lock succeeds but the
+    // row is marked modified. Tx A rereads, finds no row → updates 0 rows.
+    // =========================================================================
+    class TUpdateWhereRowDeletedBetweenReadAndLock : public TTableDataModificationTester {
+    protected:
+        void DoExecute() override {
+            auto& runtime = *Kikimr->GetTestServer().GetRuntime();
+            auto client = Kikimr->GetQueryClient();
+            auto session1 = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+            auto session2 = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+
+            size_t evLockCounter = 0;
+            std::vector<std::unique_ptr<IEventHandle>> blockedLocks;
+
+            auto grab = [&](TAutoPtr<IEventHandle>& ev) -> auto {
+                if (ev->GetTypeRewrite() == NKikimr::NEvents::TDataEvents::TEvLockRows::EventType) {
+                    ++evLockCounter;
+                    if (evLockCounter == 1) {
+                        blockedLocks.emplace_back(ev.Release());
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
+                }
+                return TTestActorRuntime::EEventAction::PROCESS;
+            };
+
+            auto saveObserver = runtime.SetObserverFunc(grab);
+            Y_DEFER { runtime.SetObserverFunc(saveObserver); };
+
+            auto futureA = Kikimr->RunInThreadPool([&] {
+                return session1.ExecuteQuery(Q_(R"(
+                    UPDATE `/Root/Test` SET Comment = "UpdatedByA" WHERE Group = 1u AND Name = "Paul";
+                )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW())).ExtractValueSync();
+            });
+
+            {
+                TDispatchOptions opts;
+                opts.FinalEvents.emplace_back([&](IEventHandle&) {
+                    return evLockCounter >= 1;
+                });
+                runtime.DispatchEvents(opts, TDuration::Seconds(30));
+                UNIT_ASSERT(evLockCounter == 1);
+            }
+
+            {
+                auto resultB = Kikimr->RunCall([&] {
+                    return session2.ExecuteQuery(Q_(R"(
+                        DELETE FROM `/Root/Test` WHERE Group = 1u AND Name = "Paul";
+                    )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW()).CommitTx()).ExtractValueSync();
+                });
+                UNIT_ASSERT_VALUES_EQUAL_C(resultB.GetStatus(), EStatus::SUCCESS, resultB.GetIssues().ToString());
+            }
+
+            for (auto& ev : blockedLocks) {
+                runtime.Send(ev.release());
+            }
+
+            auto resultA = runtime.WaitFuture(futureA);
+            UNIT_ASSERT_VALUES_EQUAL_C(resultA.GetStatus(), EStatus::SUCCESS, resultA.GetIssues().ToString());
+            auto txA = resultA.GetTransaction();
+            UNIT_ASSERT(txA && txA->IsActive());
+
+            auto commitA = Kikimr->RunCall([&] { return txA->Commit().ExtractValueSync(); });
+            UNIT_ASSERT_VALUES_EQUAL_C(commitA.GetStatus(), EStatus::SUCCESS, commitA.GetIssues().ToString());
+
+            auto verify = Kikimr->RunCall([&] {
+                return session1.ExecuteQuery(Q_(R"(
+                    SELECT * FROM `/Root/Test` WHERE Group = 1u AND Name = "Paul";
+                )"), TTxControl::BeginTx(TTxSettings::SnapshotRW()).CommitTx()).ExtractValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(verify.GetStatus(), EStatus::SUCCESS, verify.GetIssues().ToString());
+            CompareYson(R"([])", FormatResultSetYson(verify.GetResultSet(0)));
+        }
+    };
+
+    Y_UNIT_TEST(TUpdateWhereRowDeletedBetweenReadAndLock) {
+        TUpdateWhereRowDeletedBetweenReadAndLock tester;
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
+    // =========================================================================
+    // Row deleted between read & lock in DELETE WHERE
+    //
+    // Tx A starts DELETE WHERE, we block the first lock. Tx B DELETEs the
+    // row and commits. We release Tx A's lock. Tx A's lock succeeds but the
+    // row is marked modified. Tx A rereads, finds no row → deletes 0 rows.
+    // =========================================================================
+    class TDeleteWhereRowDeletedBetweenReadAndLock : public TTableDataModificationTester {
+    protected:
+        void DoExecute() override {
+            auto& runtime = *Kikimr->GetTestServer().GetRuntime();
+            auto client = Kikimr->GetQueryClient();
+            auto session1 = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+            auto session2 = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+
+            size_t evLockCounter = 0;
+            std::vector<std::unique_ptr<IEventHandle>> blockedLocks;
+
+            auto grab = [&](TAutoPtr<IEventHandle>& ev) -> auto {
+                if (ev->GetTypeRewrite() == NKikimr::NEvents::TDataEvents::TEvLockRows::EventType) {
+                    ++evLockCounter;
+                    if (evLockCounter == 1) {
+                        blockedLocks.emplace_back(ev.Release());
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
+                }
+                return TTestActorRuntime::EEventAction::PROCESS;
+            };
+
+            auto saveObserver = runtime.SetObserverFunc(grab);
+            Y_DEFER { runtime.SetObserverFunc(saveObserver); };
+
+            auto futureA = Kikimr->RunInThreadPool([&] {
+                return session1.ExecuteQuery(Q_(R"(
+                    DELETE FROM `/Root/Test` WHERE Group = 1u AND Name = "Paul";
+                )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW())).ExtractValueSync();
+            });
+
+            {
+                TDispatchOptions opts;
+                opts.FinalEvents.emplace_back([&](IEventHandle&) {
+                    return evLockCounter >= 1;
+                });
+                runtime.DispatchEvents(opts, TDuration::Seconds(30));
+                UNIT_ASSERT(evLockCounter == 1);
+            }
+
+            {
+                auto resultB = Kikimr->RunCall([&] {
+                    return session2.ExecuteQuery(Q_(R"(
+                        DELETE FROM `/Root/Test` WHERE Group = 1u AND Name = "Paul";
+                    )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW()).CommitTx()).ExtractValueSync();
+                });
+                UNIT_ASSERT_VALUES_EQUAL_C(resultB.GetStatus(), EStatus::SUCCESS, resultB.GetIssues().ToString());
+            }
+
+            for (auto& ev : blockedLocks) {
+                runtime.Send(ev.release());
+            }
+
+            auto resultA = runtime.WaitFuture(futureA);
+            UNIT_ASSERT_VALUES_EQUAL_C(resultA.GetStatus(), EStatus::SUCCESS, resultA.GetIssues().ToString());
+            auto txA = resultA.GetTransaction();
+            UNIT_ASSERT(txA && txA->IsActive());
+
+            auto commitA = Kikimr->RunCall([&] { return txA->Commit().ExtractValueSync(); });
+            UNIT_ASSERT_VALUES_EQUAL_C(commitA.GetStatus(), EStatus::SUCCESS, commitA.GetIssues().ToString());
+
+            auto verify = Kikimr->RunCall([&] {
+                return session1.ExecuteQuery(Q_(R"(
+                    SELECT * FROM `/Root/Test` WHERE Group = 1u AND Name = "Paul";
+                )"), TTxControl::BeginTx(TTxSettings::SnapshotRW()).CommitTx()).ExtractValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(verify.GetStatus(), EStatus::SUCCESS, verify.GetIssues().ToString());
+            CompareYson(R"([])", FormatResultSetYson(verify.GetResultSet(0)));
+        }
+    };
+
+    Y_UNIT_TEST(TDeleteWhereRowDeletedBetweenReadAndLock) {
+        TDeleteWhereRowDeletedBetweenReadAndLock tester;
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
+    // =========================================================================
+    // Reread changed row in UPDATE WHERE: WHERE condition no longer matches
+    //
+    // Tx A: UPDATE WHERE Comment = "None" (matches Paul initially).
+    //       We block Tx A's first lock. Tx B: UPDATE SET Comment = "Changed"
+    //       WHERE Name = "Paul", commits. Release Tx A's lock. Tx A rereads,
+    //       Comment is "Changed", doesn't match WHERE Comment = "None" → 0 rows updated.
+    // =========================================================================
+    class TUpdateWhereRereadChangedRowNoMatch : public TTableDataModificationTester {
+    protected:
+        void DoExecute() override {
+            auto& runtime = *Kikimr->GetTestServer().GetRuntime();
+            auto client = Kikimr->GetQueryClient();
+            auto session1 = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+            auto session2 = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+
+            size_t evLockCounter = 0;
+            std::vector<std::unique_ptr<IEventHandle>> blockedLocks;
+
+            auto grab = [&](TAutoPtr<IEventHandle>& ev) -> auto {
+                if (ev->GetTypeRewrite() == NKikimr::NEvents::TDataEvents::TEvLockRows::EventType) {
+                    ++evLockCounter;
+                    if (evLockCounter == 1) {
+                        blockedLocks.emplace_back(ev.Release());
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
+                }
+                return TTestActorRuntime::EEventAction::PROCESS;
+            };
+
+            auto saveObserver = runtime.SetObserverFunc(grab);
+            Y_DEFER { runtime.SetObserverFunc(saveObserver); };
+
+            auto futureA = Kikimr->RunInThreadPool([&] {
+                return session1.ExecuteQuery(Q_(R"(
+                    UPDATE `/Root/Test` SET Amount = 999u WHERE Comment = "None" AND Name = "Paul";
+                )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW())).ExtractValueSync();
+            });
+
+            {
+                TDispatchOptions opts;
+                opts.FinalEvents.emplace_back([&](IEventHandle&) {
+                    return evLockCounter >= 1;
+                });
+                runtime.DispatchEvents(opts, TDuration::Seconds(30));
+                UNIT_ASSERT(evLockCounter == 1);
+            }
+
+            {
+                auto resultB = Kikimr->RunCall([&] {
+                    return session2.ExecuteQuery(Q_(R"(
+                        UPDATE `/Root/Test` SET Comment = "Changed" WHERE Group = 1u AND Name = "Paul";
+                    )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW()).CommitTx()).ExtractValueSync();
+                });
+                UNIT_ASSERT_VALUES_EQUAL_C(resultB.GetStatus(), EStatus::SUCCESS, resultB.GetIssues().ToString());
+            }
+
+            for (auto& ev : blockedLocks) {
+                runtime.Send(ev.release());
+            }
+
+            auto resultA = runtime.WaitFuture(futureA);
+            UNIT_ASSERT_VALUES_EQUAL_C(resultA.GetStatus(), EStatus::SUCCESS, resultA.GetIssues().ToString());
+            auto txA = resultA.GetTransaction();
+            UNIT_ASSERT(txA && txA->IsActive());
+
+            auto commitA = Kikimr->RunCall([&] { return txA->Commit().ExtractValueSync(); });
+            UNIT_ASSERT_VALUES_EQUAL_C(commitA.GetStatus(), EStatus::SUCCESS, commitA.GetIssues().ToString());
+
+            auto verify = Kikimr->RunCall([&] {
+                return session1.ExecuteQuery(Q_(R"(
+                    SELECT Amount, Comment FROM `/Root/Test` WHERE Group = 1u AND Name = "Paul";
+                )"), TTxControl::BeginTx(TTxSettings::SnapshotRW()).CommitTx()).ExtractValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(verify.GetStatus(), EStatus::SUCCESS, verify.GetIssues().ToString());
+            CompareYson(R"([[[300u];["Changed"]]])", FormatResultSetYson(verify.GetResultSet(0)));
+        }
+    };
+
+    Y_UNIT_TEST(TUpdateWhereRereadChangedRowNoMatch) {
+        TUpdateWhereRereadChangedRowNoMatch tester;
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
+    // =========================================================================
+    // Reread changed row in DELETE WHERE: WHERE condition no longer matches
+    //
+    // Tx A: DELETE WHERE Comment = "None" (matches Paul initially).
+    //       We block Tx A's first lock. Tx B: UPDATE SET Comment = "Changed"
+    //       WHERE Name = "Paul", commits. Release Tx A's lock. Tx A rereads,
+    //       Comment is "Changed", doesn't match WHERE Comment = "None" → 0 rows deleted.
+    // =========================================================================
+    class TDeleteWhereRereadChangedRowNoMatch : public TTableDataModificationTester {
+    protected:
+        void DoExecute() override {
+            auto& runtime = *Kikimr->GetTestServer().GetRuntime();
+            auto client = Kikimr->GetQueryClient();
+            auto session1 = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+            auto session2 = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+
+            size_t evLockCounter = 0;
+            std::vector<std::unique_ptr<IEventHandle>> blockedLocks;
+
+            auto grab = [&](TAutoPtr<IEventHandle>& ev) -> auto {
+                if (ev->GetTypeRewrite() == NKikimr::NEvents::TDataEvents::TEvLockRows::EventType) {
+                    ++evLockCounter;
+                    if (evLockCounter == 1) {
+                        blockedLocks.emplace_back(ev.Release());
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
+                }
+                return TTestActorRuntime::EEventAction::PROCESS;
+            };
+
+            auto saveObserver = runtime.SetObserverFunc(grab);
+            Y_DEFER { runtime.SetObserverFunc(saveObserver); };
+
+            auto futureA = Kikimr->RunInThreadPool([&] {
+                return session1.ExecuteQuery(Q_(R"(
+                    DELETE FROM `/Root/Test` WHERE Comment = "None" AND Name = "Paul";
+                )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW())).ExtractValueSync();
+            });
+
+            {
+                TDispatchOptions opts;
+                opts.FinalEvents.emplace_back([&](IEventHandle&) {
+                    return evLockCounter >= 1;
+                });
+                runtime.DispatchEvents(opts, TDuration::Seconds(30));
+                UNIT_ASSERT(evLockCounter == 1);
+            }
+
+            {
+                auto resultB = Kikimr->RunCall([&] {
+                    return session2.ExecuteQuery(Q_(R"(
+                        UPDATE `/Root/Test` SET Comment = "Changed" WHERE Group = 1u AND Name = "Paul";
+                    )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW()).CommitTx()).ExtractValueSync();
+                });
+                UNIT_ASSERT_VALUES_EQUAL_C(resultB.GetStatus(), EStatus::SUCCESS, resultB.GetIssues().ToString());
+            }
+
+            for (auto& ev : blockedLocks) {
+                runtime.Send(ev.release());
+            }
+
+            auto resultA = runtime.WaitFuture(futureA);
+            UNIT_ASSERT_VALUES_EQUAL_C(resultA.GetStatus(), EStatus::SUCCESS, resultA.GetIssues().ToString());
+            auto txA = resultA.GetTransaction();
+            UNIT_ASSERT(txA && txA->IsActive());
+
+            auto commitA = Kikimr->RunCall([&] { return txA->Commit().ExtractValueSync(); });
+            UNIT_ASSERT_VALUES_EQUAL_C(commitA.GetStatus(), EStatus::SUCCESS, commitA.GetIssues().ToString());
+
+            auto verify = Kikimr->RunCall([&] {
+                return session1.ExecuteQuery(Q_(R"(
+                    SELECT Amount, Comment FROM `/Root/Test` WHERE Group = 1u AND Name = "Paul";
+                )"), TTxControl::BeginTx(TTxSettings::SnapshotRW()).CommitTx()).ExtractValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(verify.GetStatus(), EStatus::SUCCESS, verify.GetIssues().ToString());
+            CompareYson(R"([[[300u];["Changed"]]])", FormatResultSetYson(verify.GetResultSet(0)));
+        }
+    };
+
+    Y_UNIT_TEST(TDeleteWhereRereadChangedRowNoMatch) {
+        TDeleteWhereRereadChangedRowNoMatch tester;
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
+    // =========================================================================
+    // Reread changed row in UPDATE WHERE: WHERE condition still matches
+    //
+    // Tx A: UPDATE WHERE Name = "Paul" AND Comment >= "" (matches, scan query).
+    //       We block Tx A's first lock. Tx B: UPDATE SET Amount = 999 WHERE
+    //       Name = "Paul", commits. Release Tx A's lock. Tx A rereads,
+    //       row still matches → updates with latest data (Amount starts from 999).
+    // =========================================================================
+    class TUpdateWhereRereadStillMatches : public TTableDataModificationTester {
+    protected:
+        void DoExecute() override {
+            auto& runtime = *Kikimr->GetTestServer().GetRuntime();
+            auto client = Kikimr->GetQueryClient();
+            auto session1 = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+            auto session2 = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+
+            size_t evLockCounter = 0;
+            std::vector<std::unique_ptr<IEventHandle>> blockedLocks;
+
+            auto grab = [&](TAutoPtr<IEventHandle>& ev) -> auto {
+                if (ev->GetTypeRewrite() == NKikimr::NEvents::TDataEvents::TEvLockRows::EventType) {
+                    ++evLockCounter;
+                    if (evLockCounter == 1) {
+                        blockedLocks.emplace_back(ev.Release());
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
+                }
+                return TTestActorRuntime::EEventAction::PROCESS;
+            };
+
+            auto saveObserver = runtime.SetObserverFunc(grab);
+            Y_DEFER { runtime.SetObserverFunc(saveObserver); };
+
+            auto futureA = Kikimr->RunInThreadPool([&] {
+                return session1.ExecuteQuery(Q_(R"(
+                    UPDATE `/Root/Test` SET Comment = "UpdatedByA" WHERE Name = "Paul" AND Comment >= "";
+                )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW())).ExtractValueSync();
+            });
+
+            {
+                TDispatchOptions opts;
+                opts.FinalEvents.emplace_back([&](IEventHandle&) {
+                    return evLockCounter >= 1;
+                });
+                runtime.DispatchEvents(opts, TDuration::Seconds(30));
+                UNIT_ASSERT(evLockCounter == 1);
+            }
+
+            {
+                auto resultB = Kikimr->RunCall([&] {
+                    return session2.ExecuteQuery(Q_(R"(
+                        UPDATE `/Root/Test` SET Amount = 999u WHERE Group = 1u AND Name = "Paul";
+                    )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW()).CommitTx()).ExtractValueSync();
+                });
+                UNIT_ASSERT_VALUES_EQUAL_C(resultB.GetStatus(), EStatus::SUCCESS, resultB.GetIssues().ToString());
+            }
+
+            for (auto& ev : blockedLocks) {
+                runtime.Send(ev.release());
+            }
+
+            auto resultA = runtime.WaitFuture(futureA);
+            UNIT_ASSERT_VALUES_EQUAL_C(resultA.GetStatus(), EStatus::SUCCESS, resultA.GetIssues().ToString());
+            auto txA = resultA.GetTransaction();
+            UNIT_ASSERT(txA && txA->IsActive());
+
+            auto commitA = Kikimr->RunCall([&] { return txA->Commit().ExtractValueSync(); });
+            UNIT_ASSERT_VALUES_EQUAL_C(commitA.GetStatus(), EStatus::SUCCESS, commitA.GetIssues().ToString());
+
+            auto verify = Kikimr->RunCall([&] {
+                return session1.ExecuteQuery(Q_(R"(
+                    SELECT Amount, Comment FROM `/Root/Test` WHERE Group = 1u AND Name = "Paul";
+                )"), TTxControl::BeginTx(TTxSettings::SnapshotRW()).CommitTx()).ExtractValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(verify.GetStatus(), EStatus::SUCCESS, verify.GetIssues().ToString());
+            CompareYson(R"([[[999u];["UpdatedByA"]]])", FormatResultSetYson(verify.GetResultSet(0)));
+        }
+    };
+
+    Y_UNIT_TEST(TUpdateWhereRereadStillMatches) {
+        TUpdateWhereRereadStillMatches tester;
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
+    // =========================================================================
+    // INSERT blocks concurrent UPSERT to the same row
+    //
+    // Tx A: INSERT a new row, keep open. Tx B: UPSERT the same key.
+    // Tx B should block on Tx A's lock. After Tx A commits, Tx B succeeds
+    // (overwrites the row).
+    // =========================================================================
+    class TInsertBlocksUpsert : public TTableDataModificationTester {
+    protected:
+        void DoExecute() override {
+            auto& runtime = *Kikimr->GetTestServer().GetRuntime();
+            auto client = Kikimr->GetQueryClient();
+            auto session1 = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+            auto session2 = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+
+            auto futureA = Kikimr->RunInThreadPool([&] {
+                return session1.ExecuteQuery(Q_(R"(
+                    INSERT INTO `/Root/Test` (Group, Name, Comment) VALUES (500u, "NewRow", "TxA");
+                )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW())).ExtractValueSync();
+            });
+
+            auto resultA = runtime.WaitFuture(futureA);
+            UNIT_ASSERT_VALUES_EQUAL_C(resultA.GetStatus(), EStatus::SUCCESS, resultA.GetIssues().ToString());
+            auto txA = resultA.GetTransaction();
+            UNIT_ASSERT(txA && txA->IsActive());
+
+            auto futureB = Kikimr->RunInThreadPool([&] {
+                return session2.ExecuteQuery(Q_(R"(
+                    UPSERT INTO `/Root/Test` (Group, Name, Comment) VALUES (500u, "NewRow", "TxB");
+                )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW())).ExtractValueSync();
+            });
+
+            {
+                TDispatchOptions opts;
+                opts.CustomFinalCondition = [&]() {
+                    return futureB.HasValue() || futureB.HasException();
+                };
+                opts.FinalEvents.emplace_back([](IEventHandle&) { return false; });
+                runtime.DispatchEvents(opts, TDuration::Seconds(2));
+                UNIT_ASSERT_C(!futureB.HasValue() && !futureB.HasException(),
+                    "Tx B UPSERT should be blocked waiting for Tx A's INSERT lock");
+            }
+
+            {
+                auto commitA = Kikimr->RunInThreadPool([&] { return txA->Commit().ExtractValueSync(); });
+                auto commitResult = runtime.WaitFuture(commitA);
+                UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::SUCCESS, commitResult.GetIssues().ToString());
+            }
+
+            auto resultB = runtime.WaitFuture(futureB);
+            UNIT_ASSERT_VALUES_EQUAL_C(resultB.GetStatus(), EStatus::SUCCESS, resultB.GetIssues().ToString());
+            auto txB = resultB.GetTransaction();
+            UNIT_ASSERT(txB && txB->IsActive());
+            auto commitB = Kikimr->RunInThreadPool([&] { return txB->Commit().ExtractValueSync(); });
+            auto commitResult = runtime.WaitFuture(commitB);
+            UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::SUCCESS, commitResult.GetIssues().ToString());
+
+            auto verify = Kikimr->RunCall([&] {
+                return session1.ExecuteQuery(Q_(R"(
+                    SELECT Comment FROM `/Root/Test` WHERE Group = 500u AND Name = "NewRow";
+                )"), TTxControl::BeginTx(TTxSettings::SnapshotRW()).CommitTx()).ExtractValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(verify.GetStatus(), EStatus::SUCCESS, verify.GetIssues().ToString());
+            CompareYson(R"([[["TxB"]]])", FormatResultSetYson(verify.GetResultSet(0)));
+        }
+    };
+
+    Y_UNIT_TEST(TInsertBlocksUpsert) {
+        TInsertBlocksUpsert tester;
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
+    // =========================================================================
+    // INSERT blocks concurrent REPLACE to the same row
+    //
+    // Tx A: INSERT a new row, keep open. Tx B: REPLACE the same key.
+    // Tx B should block on Tx A's lock. After Tx A commits, Tx B succeeds
+    // (overwrites the row).
+    // =========================================================================
+    class TInsertBlocksReplace : public TTableDataModificationTester {
+    protected:
+        void DoExecute() override {
+            auto& runtime = *Kikimr->GetTestServer().GetRuntime();
+            auto client = Kikimr->GetQueryClient();
+            auto session1 = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+            auto session2 = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+
+            auto futureA = Kikimr->RunInThreadPool([&] {
+                return session1.ExecuteQuery(Q_(R"(
+                    INSERT INTO `/Root/Test` (Group, Name, Comment) VALUES (600u, "NewRow", "TxA");
+                )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW())).ExtractValueSync();
+            });
+
+            auto resultA = runtime.WaitFuture(futureA);
+            UNIT_ASSERT_VALUES_EQUAL_C(resultA.GetStatus(), EStatus::SUCCESS, resultA.GetIssues().ToString());
+            auto txA = resultA.GetTransaction();
+            UNIT_ASSERT(txA && txA->IsActive());
+
+            auto futureB = Kikimr->RunInThreadPool([&] {
+                return session2.ExecuteQuery(Q_(R"(
+                    REPLACE INTO `/Root/Test` (Group, Name, Comment) VALUES (600u, "NewRow", "TxB");
+                )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW())).ExtractValueSync();
+            });
+
+            {
+                TDispatchOptions opts;
+                opts.CustomFinalCondition = [&]() {
+                    return futureB.HasValue() || futureB.HasException();
+                };
+                opts.FinalEvents.emplace_back([](IEventHandle&) { return false; });
+                runtime.DispatchEvents(opts, TDuration::Seconds(2));
+                UNIT_ASSERT_C(!futureB.HasValue() && !futureB.HasException(),
+                    "Tx B REPLACE should be blocked waiting for Tx A's INSERT lock");
+            }
+
+            {
+                auto commitA = Kikimr->RunInThreadPool([&] { return txA->Commit().ExtractValueSync(); });
+                auto commitResult = runtime.WaitFuture(commitA);
+                UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::SUCCESS, commitResult.GetIssues().ToString());
+            }
+
+            auto resultB = runtime.WaitFuture(futureB);
+            UNIT_ASSERT_VALUES_EQUAL_C(resultB.GetStatus(), EStatus::SUCCESS, resultB.GetIssues().ToString());
+            auto txB = resultB.GetTransaction();
+            UNIT_ASSERT(txB && txB->IsActive());
+            auto commitB = Kikimr->RunInThreadPool([&] { return txB->Commit().ExtractValueSync(); });
+            auto commitResult = runtime.WaitFuture(commitB);
+            UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::SUCCESS, commitResult.GetIssues().ToString());
+
+            auto verify = Kikimr->RunCall([&] {
+                return session1.ExecuteQuery(Q_(R"(
+                    SELECT Comment FROM `/Root/Test` WHERE Group = 600u AND Name = "NewRow";
+                )"), TTxControl::BeginTx(TTxSettings::SnapshotRW()).CommitTx()).ExtractValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(verify.GetStatus(), EStatus::SUCCESS, verify.GetIssues().ToString());
+            CompareYson(R"([[["TxB"]]])", FormatResultSetYson(verify.GetResultSet(0)));
+        }
+    };
+
+    Y_UNIT_TEST(TInsertBlocksReplace) {
+        TInsertBlocksReplace tester;
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
 } // Y_UNIT_TEST_SUITE(KqpReadCommittedPg)
 
 } // namespace NKqp

@@ -423,6 +423,9 @@ namespace NKikimr::NBlobDepot {
                     {"cookie", Ev->Cookie},
                     {"key", key},
                     {"blobId", id});
+                // DataKind is deliberately left at USER: this copies user payload out of the group
+                // being decommitted, and stalling that while the destination is short of space is
+                // the wanted behaviour.
                 SendToBSProxy(SelfId(), channel.GroupId, new TEvBlobStorage::TEvPut(TEvBlobStorage::TEvPut::TParameters{
                         .BlobId = id,
                         .Buffer = TRope(TRcBuf(buffer)),

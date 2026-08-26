@@ -128,7 +128,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        SideEffects.Complete(ctx);
+        SideEffects.Complete(ctx, Self->Requests);
     }
 };
 

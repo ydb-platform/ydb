@@ -8,9 +8,12 @@
 #include <ydb/core/kqp/ut/olap/helpers/writer.h>
 
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/formats/arrow/accessor/sub_columns/constructor.h>
 #include <ydb/core/formats/arrow/accessor/sub_columns/types.h>
 #include <ydb/core/formats/arrow/serializer/native.h>
 #include <ydb/core/kqp/ut/common/columnshard.h>
+#include <ydb/core/tx/columnshard/columnshard_impl.h>
+#include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/source.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
@@ -31,6 +34,43 @@
 
 
 namespace NKikimr::NKqp {
+
+namespace {
+
+class TUnsupportedDenseEncodingVersionController final : public NYDBTest::NColumnShard::TController {
+private:
+    using TBase = NYDBTest::NColumnShard::TController;
+
+    TAtomicCounter Enabled = 0;
+    TAtomicCounter VersionChanged = 0;
+
+    void OnAfterLocalTxCommitted(
+        const NActors::TActorContext& ctx, const ::NKikimr::NColumnShard::TColumnShard& shard, const TString& txInfo) override
+    {
+        if (Enabled.Val() && !VersionChanged.Val()) {
+            const auto& index = shard.GetIndexAs<NOlap::TColumnEngineForLogs>();
+            const auto schema = index.GetVersionedSchemas().GetDefaultVersionedIndex().GetLastSchema();
+            const auto& constructor = schema->GetColumnLoaderVerified("Col2")->GetAccessorConstructor();
+            const auto settings = constructor.GetObjectPtrVerifiedAs<NArrow::NAccessor::NSubColumns::TConstructor>();
+            const_cast<NArrow::NAccessor::NSubColumns::TSettings&>(settings->GetSettings())
+                .SetDenseEncodingVersion(NArrow::NAccessor::NSubColumns::GetMaxDenseEncodingVersion() + 1);
+            VersionChanged.Inc();
+        }
+        TBase::OnAfterLocalTxCommitted(ctx, shard, txInfo);
+    }
+
+public:
+    void Enable() {
+        Enabled.Inc();
+    }
+
+    bool IsVersionChanged() const {
+        return VersionChanged.Val();
+    }
+
+};
+
+}   // namespace
 
 Y_UNIT_TEST_SUITE(KqpOlapJson) {
 
@@ -1572,6 +1612,78 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
         }
     }
 
+    Y_UNIT_TEST(DenseEncoding) {
+        // An empty object has no stored values for that row and is read back as an absent document.
+        const TString script = R"(
+        STOP_COMPACTION
+        ------
+        SCHEMA:
+        CREATE TABLE `/Root/ColumnTable` (
+            Col1 Uint64 NOT NULL,
+            Col2 JsonDocument,
+            PRIMARY KEY (Col1)
+        )
+        PARTITION BY HASH(Col1)
+        WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2,
+                    `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `OTHERS_ALLOWED_FRACTION`=`0`,
+                    `DICTIONARY_UNIQUE_FRACTION`=`1`, `DENSE_ENCODING_VERSION`=`1`)
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES (1u, JsonDocument('{"a":"one"}')), (2u, JsonDocument('{}'))
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES (3u, JsonDocument('{"a":"two"}')), (4u, JsonDocument('{"a":"one"}'))
+        ------
+        ONE_COMPACTION
+        ------
+        READ: SELECT * FROM `/Root/ColumnTable` ORDER BY Col1;
+        EXPECTED: [[1u;["{\"a\":\"one\"}"]];[2u;#];[3u;["{\"a\":\"two\"}"]];[4u;["{\"a\":\"one\"}"]]]
+        )";
+        Variator::ToExecutor(Variator::SingleScript(script)).Execute();
+    }
+
+    Y_UNIT_TEST(UnsupportedDenseEncodingVersionFailsQuery) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
+        settings.AppConfig.MutableColumnShardConfig()->SetReaderClassName("SIMPLE");
+        TKikimrRunner kikimr(settings);
+        auto controller = NYDBTest::TControllers::RegisterCSControllerGuard<TUnsupportedDenseEncodingVersionController>();
+
+        auto execute = [&](const TString& query) {
+            return kikimr.GetQueryClient().ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        };
+
+        auto result = execute(R"(
+            CREATE TABLE `/Root/ColumnTable` (
+                Col1 Uint64 NOT NULL,
+                Col2 JsonDocument,
+                PRIMARY KEY (Col1)
+            )
+            PARTITION BY HASH(Col1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
+
+            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2,
+                `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `OTHERS_ALLOWED_FRACTION`=`0`,
+                `DICTIONARY_UNIQUE_FRACTION`=`1`, `DENSE_ENCODING_VERSION`=`1`);
+        )");
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
+
+        controller->Enable();
+        result = execute(R"(
+            REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES (1u, JsonDocument('{"a":"one"}'));
+        )");
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
+        UNIT_ASSERT(controller->IsVersionChanged());
+
+        result = kikimr.GetQueryClient()
+                     .ExecuteQuery("SELECT Col2 FROM `/Root/ColumnTable` ORDER BY Col1;", NYdb::NQuery::TTxControl::BeginTx().CommitTx())
+                     .GetValueSync();
+        UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToOneLineString());
+        UNIT_ASSERT_C(result.GetIssues().ToOneLineString().contains("unsupported dense encoding version"), result.GetIssues().ToOneLineString());
+    }
+
 }
 
 namespace {
@@ -1694,6 +1806,29 @@ Y_UNIT_TEST_SUITE(KqpOlapJsonNativeScalars) {
         ------
         READ: SELECT * FROM `/Root/ColumnTable` ORDER BY Col1;
         EXPECTED: [[1u;["{\"n\":1.5}"]];[2u;["{\"n\":2.5}"]];[3u;["{\"n\":3.5}"]];[4u;["{\"n\":1.5}"]]]
+        ------
+        )" << NativeValueTypeCheck(EValueType::Double);
+        Variator::ToExecutor(Variator::SingleScript(script)).Execute();
+    }
+
+    // A full cycle test for doubles near max magnitude. The stored value stays exact; reading back renders
+    // it with fewer digits (17 in, 16 out) on BinaryJson level.
+    Y_UNIT_TEST(CompactionNearMaxDouble) {
+        const TString script = TStringBuilder() << NativeTableSetup() << R"(
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES (1u, JsonDocument('{"n" : 1.7976931348623157e308}')),
+                                                             (2u, JsonDocument('{"n" : -1.7976931348623157e308}'))
+        ------
+        READ: SELECT * FROM `/Root/ColumnTable` ORDER BY Col1;
+        EXPECTED: [[1u;["{\"n\":1.797693134862316e+308}"]];[2u;["{\"n\":-1.797693134862316e+308}"]]]
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES (3u, JsonDocument('{"n" : 1.5}'))
+        ------
+        ONE_COMPACTION
+        ------
+        READ: SELECT * FROM `/Root/ColumnTable` ORDER BY Col1;
+        EXPECTED: [[1u;["{\"n\":1.797693134862316e+308}"]];[2u;["{\"n\":-1.797693134862316e+308}"]];[3u;["{\"n\":1.5}"]]]
         ------
         )" << NativeValueTypeCheck(EValueType::Double);
         Variator::ToExecutor(Variator::SingleScript(script)).Execute();

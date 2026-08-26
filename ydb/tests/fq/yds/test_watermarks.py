@@ -55,7 +55,7 @@ class TestWatermarks(TestYdsBase):
         )
         self.init_topics(f"test_watermarks_{'shared' if shared_reading else 'no_shared'}")
 
-        ts = "CAST(ts AS Timestamp)" if shared_reading else "__ydb_write_time"
+        ts = "CAST(ts AS Timestamp)" if shared_reading else 'SystemMetadata("write_time")'
 
         sql = Rf'''
             USE {YDS_CONNECTION};
@@ -99,14 +99,18 @@ class TestWatermarks(TestYdsBase):
         ])
         assert self.read_stream(1) == []
 
-        time.sleep(2)
-
-        self.write_stream(['{"ts": "1970-01-01T00:00:44Z", "pass": 0}'])
         expected = [
             '{"result":["1970-01-01T00:00:42Z"]}',
             '{"result":["1970-01-01T00:00:42Z"]}',
         ]
-        assert self.read_stream(len(expected)) == expected
+        read = []
+        deadline = time.time() + 60
+        while len(read) < len(expected):
+            time.sleep(2)
+            self.write_stream(['{"ts": "1970-01-01T00:00:44Z", "pass": 0}'])
+            read += self.read_stream(len(expected) - len(read), timeout=5)
+            assert time.time() < deadline, f"Expected {expected}, but got {read}"
+        assert read == expected
 
         stop_yds_query(client, query_id)
 
@@ -125,7 +129,7 @@ class TestWatermarks(TestYdsBase):
         )
         self.init_topics(f"test_idle_watermarks_{'shared' if shared_reading else 'no_shared'}", partitions_count=2)
 
-        ts = "CAST(ts AS Timestamp)" if shared_reading else "__ydb_write_time"
+        ts = "CAST(ts AS Timestamp)" if shared_reading else 'SystemMetadata("write_time")'
 
         sql = Rf'''
             USE {YDS_CONNECTION};

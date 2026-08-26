@@ -25,6 +25,23 @@ meta:
 
   support_links:
     cluster:
+      - title: Support
+        source: url
+        # url source supports named placeholders.
+        # Template values are percent-encoded before they are put into the URL.
+        # Placeholders are resolved from request parameters and cluster info fields with the same name.
+        url: https://service.example.net/instance/{host}?dc={support_dc}
+        # link_parameter_mappings are used only for extra query parameters.
+        link_parameter_mappings:
+          - parameter: cluster_name
+            # Get the value from a request parameter.
+            from_request: cluster
+          - parameter: workspace
+            # Get the value from a cluster info field.
+            from_cluster_info: namespace
+          - parameter: bucket
+            # Use the same value for every link.
+            static_value: support
       - source: grafana/dashboard
         title: Cluster Overview
         url: /d/ydb_cluster/overview

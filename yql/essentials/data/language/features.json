@@ -1,84 +1,244 @@
 {
+    "Experiments": {
+        "min_langver": "max",
+        "is_backport_allowed": true
+    },
+    "IfWithoutEvaluate": {
+        "description": "IF without EVALUATE",
+        "min_langver": "max",
+        "is_backport_allowed": true
+    },
+    "ForWithoutEvaluate": {
+        "description": "FOR without EVALUATE",
+        "min_langver": "max",
+        "is_backport_allowed": true
+    },
+    "ParallelFor": {
+        "description": "PARALLEL FOR",
+        "min_langver": "max",
+        "is_backport_allowed": true
+    },
+    "Combine": {
+        "description": "COMBINE",
+        "min_langver": "2026.02",
+        "is_backport_allowed": true
+    },
+    "AggPhases": {
+        "description": "GROUP BY MODE",
+        "min_langver": "max",
+        "is_backport_allowed": true
+    },
+    "YqlSelect": {
+        "min_langver": "max",
+        "is_backport_allowed": true
+    },
+    "YtReservedColumnPrefix": {
+        "description": "Reserved '_yql_' column name prefix in YT tables",
+        "min_langver": "max"
+    },
     "Materialize": {
         "description": "MATERIALIZE",
         "min_langver": "2026.02"
     },
-    "Experiments": {
-        "min_langver": "max"
+    "AlwaysWithFixDecimalConversionMode": {
+        "description": "Always use Decimal common type conversion fixup",
+        "min_langver": "2026.02"
     },
-    "IfWithoutEvaluate": {
-        "description": "IF without EVALUATE",
-        "min_langver": "max"
+    "DecimalArithmeticWithCommonType": {
+        "description": "Arithmetic operations on Decimal values with different types",
+        "min_langver": "max",
+        "is_backport_allowed": true
     },
-    "ForWithoutEvaluate": {
-        "description": "FOR without EVALUATE",
-        "min_langver": "max"
+    "TypeErasure": {
+        "min_langver": "2026.02"
     },
-    "ParallelFor": {
-        "description": "PARALLEL FOR",
-        "min_langver": "max"
+    "DecimalListFromRange": {
+        "description": "ListFromRange over Decimal",
+        "min_langver": "2026.02"
     },
-    "Combine": {
-        "description": "COMBINE",
-        "min_langver": "max"
-    },
-    "AggPhases": {
-        "description": "GROUP BY MODE",
-        "min_langver": "max"
-    },
-    "YqlSelect": {
-        "min_langver": "max"
+    "HybridRankFunction": {
+        "description": "HybridRank",
+        "min_langver": "2026.02",
+        "is_backport_allowed": true
     },
     "YqlRangeWindows": {
         "min_langver": "2026.01"
     },
+    "PgPragmaWarning": {
+        "description": "PRAGMA Warning",
+        "min_langver": "2026.01",
+        "is_backport_allowed": true
+    },
+    "PositionOfWithIssueFunction": {
+        "description": "PositionOf/WithIssue",
+        "min_langver": "2026.01",
+        "is_backport_allowed": true
+    },
+    "AsOptionalFunction": {
+        "description": "AsOptional",
+        "min_langver": "2026.01",
+        "is_backport_allowed": true
+    },
+    "YsonUtf8": {
+        "min_langver":"2026.01",
+        "is_backport_allowed": true
+    },
     "YtCreateView": {
         "description": "CREATE VIEW",
-        "min_langver": "2025.05"
+        "min_langver": "2025.05",
+        "is_backport_allowed": true
     },
     "YtDropView": {
         "description": "DROP VIEW",
+        "min_langver": "2025.05",
+        "is_backport_allowed": true
+    },
+    "LinearDestroy": {
         "min_langver": "2025.05"
+    },
+    "FullTextFunction": {
+        "description": "FullText",
+        "min_langver": "2025.05",
+        "is_backport_allowed": true
+    },
+    "WriteOffsetWithColon": {
+        "min_langver": "2025.05",
+        "is_backport_allowed": true
+    },
+    "DateTimeFormatZ": {
+        "description": "%z specifier",
+        "min_langver": "2025.05"
+    },
+    "YsonConvert": {
+        "min_langver": "2025.05",
+        "is_backport_allowed": true
+    },
+    "YsonMut": {
+        "min_langver": "2025.05",
+        "is_backport_allowed": true
+    },
+    "YsonIterate": {
+        "min_langver": "2025.05",
+        "is_backport_allowed": true
     },
     "InlineSubquery": {
         "description": "Inline subquery",
-        "min_langver": "2025.04"
+        "min_langver": "2025.04",
+        "is_backport_allowed": true
     },
     "UdfNamedArgumentLayers": {
         "description": "Udf: named argument Layers",
-        "min_langver": "2025.04"
+        "min_langver": "2025.04",
+        "is_backport_allowed": true
     },
     "PartitionListTableFunction": {
         "description": "PARTITION_LIST table function",
-        "min_langver": "2025.04"
+        "min_langver": "2025.04",
+        "is_backport_allowed": true
     },
     "PartitionsTableFunction": {
         "description": "PARTITIONS table function",
-        "min_langver": "2025.04"
+        "min_langver": "2025.04",
+        "is_backport_allowed": true
+    },
+    "ConcatFunction": {
+        "description": "Concat",
+        "min_langver": "2025.04",
+        "is_backport_allowed": true
+    },
+    "NullIfFunction": {
+        "description": "NullIf",
+        "min_langver": "2025.04",
+        "is_backport_allowed": true
+    },
+    "SimplePgFunction": {
+        "description": "SimplePg",
+        "min_langver": "2025.04",
+        "is_backport_allowed": true
+    },
+    "RandomValueSampleFunction": {
+        "description": "RandomValue/RandomSample",
+        "min_langver": "2025.04",
+        "is_backport_allowed": true
     },
     "ReplaceInto": {
         "description": "REPLACE",
+        "min_langver": "2025.04",
+        "is_backport_allowed": true
+    },
+    "LinearTypes": {
         "min_langver": "2025.04"
+    },
+    "SideEffects": {
+        "min_langver": "2025.04",
+        "is_backport_allowed": true
     },
     "LegacyNotNull": {
         "max_langver": "2025.03"
     },
     "UnionDistinct": {
         "description": "UNION DISTINCT",
-        "min_langver": "2025.03"
+        "min_langver": "2025.03",
+        "is_backport_allowed": true
     },
     "ExceptIntersect": {
         "description": "EXCEPT/INTERSECT",
-        "min_langver": "2025.03"
+        "min_langver": "2025.03",
+        "is_backport_allowed": true
     },
     "UdfNamedArgumentDepends": {
         "description": "Udf: named argument Depends",
-        "min_langver": "2025.03"
+        "min_langver": "2025.03",
+        "is_backport_allowed": true
     },
     "PersistableFlattenAndAggrExprs": {
         "min_langver": "2025.03"
     },
+    "FlattenOptionalByNonOptional": {
+        "min_langver": "2025.03",
+        "is_backport_allowed": true
+    },
+    "Sha512": {
+        "min_langver": "2025.03",
+        "is_backport_allowed": true
+    },
+    "IPv4Uint32": {
+        "min_langver": "2025.03",
+        "is_backport_allowed": true
+    },
+    "SwapBytes": {
+        "min_langver": "2025.03",
+        "is_backport_allowed": true
+    },
+    "ValidateRegexp": {
+        "min_langver": "2025.03",
+        "is_backport_allowed": true
+    },
+    "Interval64Seconds": {
+        "min_langver": "2025.03",
+        "is_backport_allowed": true
+    },
     "GroupByExprAfterWhere": {
         "min_langver": "2025.02"
+    },
+    "StringReverseBytes": {
+        "min_langver": "2025.02",
+        "is_backport_allowed": true
+    },
+    "StringAsciiEqualsContainsIgnoreCase": {
+        "min_langver": "2025.02",
+        "is_backport_allowed": true
+    },
+    "StringAsciiPrefixSuffixIgnoreCase": {
+        "min_langver": "2025.01",
+        "is_backport_allowed": true
+    },
+    "StringReverse": {
+        "max_langver": "2025.01",
+        "is_backport_allowed": true
+    },
+    "StringTwoArgs": {
+        "max_langver": "2025.01",
+        "is_backport_allowed": true
     }
 }

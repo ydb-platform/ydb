@@ -172,6 +172,9 @@ struct TJournalChunkWriterConfig
     int MaxFlushRowCount;
     i64 MaxFlushDataSize;
 
+    //! Maximum number of inflight PutBlocks/Flush requests per replica.
+    int MaxInFlightFlushCount;
+
     bool PreferLocalHost;
 
     TDuration NodeRpcTimeout;

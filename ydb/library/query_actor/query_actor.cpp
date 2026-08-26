@@ -254,7 +254,7 @@ void TQueryBase::RunDataQuery(TString sql, NYdb::TParamsBuilder* params, TTxCont
     }
 
     Subscribe<Table::ExecuteDataQueryResponse, TEvQueryBasePrivate::TEvDataQueryResult>(
-        DoLocalRpc<TExecuteDataQueryRequest>(std::move(request), Database, token, TActivationContext::ActorSystem(), true));
+        DoLocalRpc<TExecuteDataQueryRequest>(std::move(request), Database, token, RequestType, TActivationContext::ActorSystem(), true));
 }
 
 void TQueryBase::Handle(TEvQueryBasePrivate::TEvDataQueryResult::TPtr& ev) {
@@ -315,7 +315,7 @@ void TQueryBase::RunStreamQuery(TString sql, NYdb::TParamsBuilder* params, ui64 
         token = NACLib::TSystemUsers::Metadata().SerializeAsString();
     }
 
-    StreamQueryProcessor = DoLocalRpcStreamSameMailbox<TExecuteStreamQueryRequest>(std::move(request), Database, token, ActorContext(), true, channelBufferSize);
+    StreamQueryProcessor = DoLocalRpcStreamSameMailbox<TExecuteStreamQueryRequest>(std::move(request), Database, token, RequestType, ActorContext(), true, channelBufferSize);
     ReadNextStreamPart();
 }
 

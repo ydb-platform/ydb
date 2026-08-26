@@ -1581,6 +1581,11 @@
                 "ColumnId": 33,
                 "ColumnName": "SmallBlobsQuotaExceeded",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 34,
+                "ColumnName": "TablesMetricsLevel",
+                "ColumnType": "Uint32"
             }
         ],
         "ColumnsDropped": [],
@@ -1619,7 +1624,8 @@
                     30,
                     31,
                     32,
-                    33
+                    33,
+                    34
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -2329,11 +2335,6 @@
         ],
         "ColumnsAdded": [
             {
-                "ColumnId": 29,
-                "ColumnName": "ColumnTableColumnsLimit",
-                "ColumnType": "Uint64"
-            },
-            {
                 "ColumnId": 1,
                 "ColumnName": "PathId",
                 "ColumnType": "Uint64"
@@ -2472,13 +2473,22 @@
                 "ColumnId": 28,
                 "ColumnName": "ImportsLimit",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 29,
+                "ColumnName": "ColumnTableColumnsLimit",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 30,
+                "ColumnName": "TablesMetricsLevel",
+                "ColumnType": "Uint32"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
-                    29,
                     1,
                     2,
                     3,
@@ -2506,7 +2516,9 @@
                     25,
                     26,
                     27,
-                    28
+                    28,
+                    29,
+                    30
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -5420,6 +5432,11 @@
                 "ColumnId": 58,
                 "ColumnName": "ParentBuildId",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 59,
+                "ColumnName": "IsRebuild",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -5483,7 +5500,8 @@
                     55,
                     56,
                     57,
-                    58
+                    58,
+                    59
                 ],
                 "RoomID": 0,
                 "Codec": 0,

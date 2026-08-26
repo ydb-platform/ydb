@@ -392,8 +392,8 @@ void ResolveYPath(
                 NYTree::EErrorCode::ResolveError,
                 "Error resolving path %v",
                 originalPath)
-                << TErrorAttribute("method", context->GetMethod())
-                << ex;
+                .With("method", context->GetMethod())
+                .With(ex);
         }
     }
 }

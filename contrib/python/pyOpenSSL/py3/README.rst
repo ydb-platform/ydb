@@ -9,10 +9,6 @@ pyOpenSSL -- A Python wrapper around the OpenSSL library
 .. image:: https://github.com/pyca/pyopenssl/workflows/CI/badge.svg?branch=main
    :target: https://github.com/pyca/pyopenssl/actions?query=workflow%3ACI+branch%3Amain
 
-.. image:: https://codecov.io/github/pyca/pyopenssl/branch/main/graph/badge.svg
-   :target: https://codecov.io/github/pyca/pyopenssl
-   :alt: Test coverage
-
 **Note:** The Python Cryptographic Authority **strongly suggests** the use of `pyca/cryptography`_
 where possible. If you are using pyOpenSSL for anything other than making a TLS connection
 **you should move to cryptography and drop your pyOpenSSL dependency**.

@@ -147,6 +147,17 @@ TIntrusiveListWithAutoDelete<TItem, TDelete> TAsyncSlruCacheListManager<TItem, T
 }
 
 template <class TItem, class TDerived>
+bool TAsyncSlruCacheListManager<TItem, TDerived>::IsOversized(i64 weight, i64 cookieWeight) const
+{
+    auto otherCookieWeight = CookieWeightCounter_ - cookieWeight;
+    YT_VERIFY(otherCookieWeight >= 0);
+
+    // Existing younger items are evicted before the newly inserted item. Older items, including
+    // those moved back to younger during trimming, and other insertion cookies are not.
+    return weight > Capacity_.load() - OlderWeightCounter_ - otherCookieWeight;
+}
+
+template <class TItem, class TDerived>
 bool TAsyncSlruCacheListManager<TItem, TDerived>::TouchItem(TItem* item)
 {
     if (item->Empty()) {
@@ -264,6 +275,11 @@ TAsyncSlruCacheBase<TKey, TValue, THash>::TCounters::TCounters(
     auto profilerWithAsyncTag = profiler.WithTag("hit_type", "async");
     AsyncHitWeightCounter = profilerWithAsyncTag.Counter("/hit_weight");
     AsyncHitCounter = profilerWithAsyncTag.Counter("/hit_count");
+
+    RejectedOversizedCounter = profiler.Counter("/rejected_oversized");
+    RejectedOversizedWeightCounter = profiler.Counter("/rejected_oversized_weight");
+    EvictedCounter = profiler.Counter("/evicted_count");
+    EvictedWeightCounter = profiler.Counter("/evicted_weight");
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -274,7 +290,7 @@ TAsyncSlruCacheBase<TKey, TValue, THash>::TAsyncSlruCacheBase(
     const NProfiling::TProfiler& profiler)
     : Config_(std::move(config))
     , Capacity_(Config_->Capacity)
-    , Counters_(profiler)
+    , MainCounters_(profiler)
     , SmallGhostCounters_(profiler.WithPrefix("/small_ghost_cache"))
     , LargeGhostCounters_(profiler.WithPrefix("/large_ghost_cache"))
 {
@@ -307,6 +323,7 @@ TAsyncSlruCacheBase<TKey, TValue, THash>::TAsyncSlruCacheBase(
     });
 
     GhostCachesEnabled_.store(Config_->EnableGhostCaches);
+    RejectOversizedItems_.store(Config_->RejectOversizedItems);
 
     YT_VERIFY(IsPowerOf2(Config_->ShardCount));
     Shards_.reset(new TShard[Config_->ShardCount]);
@@ -328,10 +345,12 @@ TAsyncSlruCacheBase<TKey, TValue, THash>::TAsyncSlruCacheBase(
 
             shard.SmallGhost.Reconfigure(
                 static_cast<i64>(shardCapacity * Config_->SmallGhostCacheRatio),
-                Config_->YoungerSizeFraction);
+                Config_->YoungerSizeFraction,
+                Config_->RejectOversizedItems);
             shard.LargeGhost.Reconfigure(
                 static_cast<i64>(shardCapacity * Config_->LargeGhostCacheRatio),
-                Config_->YoungerSizeFraction);
+                Config_->YoungerSizeFraction,
+                Config_->RejectOversizedItems);
         }
 
         shard.Parent = this;
@@ -350,17 +369,21 @@ void TAsyncSlruCacheBase<TKey, TValue, THash>::Reconfigure(const TSlruCacheDynam
     if (!config->EnableGhostCaches) {
         GhostCachesEnabled_.store(false);
     }
+    RejectOversizedItems_.store(config->RejectOversizedItems.value_or(Config_->RejectOversizedItems));
 
     for (int shardIndex = 0; shardIndex < Config_->ShardCount; ++shardIndex) {
         auto& shard = Shards_[shardIndex];
 
         if (GhostCachesEnabled_.load()) {
+            auto rejectOversizedItems = RejectOversizedItems_.load();
             shard.SmallGhost.Reconfigure(
                 static_cast<i64>(shardCapacity * Config_->SmallGhostCacheRatio),
-                youngerSizeFraction);
+                youngerSizeFraction,
+                rejectOversizedItems);
             shard.LargeGhost.Reconfigure(
                 static_cast<i64>(shardCapacity * Config_->LargeGhostCacheRatio),
-                youngerSizeFraction);
+                youngerSizeFraction,
+                rejectOversizedItems);
         }
 
         auto writerGuard = WriterGuard(shard.SpinLock);
@@ -393,21 +416,21 @@ TAsyncSlruCacheBase<TKey, TValue, THash>::Find(const THeterogenousKey& key)
 
     auto itemIt = shard->ItemMap.find(key);
     if (itemIt == shard->ItemMap.end()) {
-        Counters_.MissedCounter.Increment();
+        MainCounters_.MissedCounter.Increment();
         return nullptr;
     }
 
     auto* item = itemIt->second;
     auto value = item->Value;
     if (!value) {
-        Counters_.MissedCounter.Increment();
+        MainCounters_.MissedCounter.Increment();
         return nullptr;
     }
 
     bool needToDrain = shard->TouchItem(item);
 
-    Counters_.SyncHitWeightCounter.Increment(item->CachedWeight);
-    Counters_.SyncHitCounter.Increment();
+    MainCounters_.SyncHitWeightCounter.Increment(item->CachedWeight);
+    MainCounters_.SyncHitCounter.Increment();
 
     readerGuard.Release();
 
@@ -465,14 +488,22 @@ TAsyncSlruCacheBase<TKey, TValue, THash>::Lookup(const THeterogenousKey& key)
 {
     auto* shard = GetShardByKey(key);
 
+    auto [valueFuture, resurrected] = DoLookup(shard, key);
+
     if (GhostCachesEnabled_.load()) {
-        shard->SmallGhost.Lookup(key);
-        shard->LargeGhost.Lookup(key);
+        if (resurrected) {
+            const auto& value = valueFuture.GetOrCrash().Value();
+            auto weight = GetWeight(value);
+            shard->SmallGhost.Resurrect(value, weight);
+            shard->LargeGhost.Resurrect(value, weight);
+        } else {
+            shard->SmallGhost.Lookup(key);
+            shard->LargeGhost.Lookup(key);
+        }
     }
 
-    auto valueFuture = DoLookup(shard, key);
     if (!valueFuture) {
-        Counters_.MissedCounter.Increment();
+        MainCounters_.MissedCounter.Increment();
     }
     return valueFuture;
 }
@@ -505,8 +536,10 @@ void TAsyncSlruCacheBase<TKey, TValue, THash>::Touch(const TValuePtr& value)
 
 template <class TKey, class TValue, class THash>
 template <class THeterogenousKey>
-typename TAsyncSlruCacheBase<TKey, TValue, THash>::TValueFuture
-TAsyncSlruCacheBase<TKey, TValue, THash>::DoLookup(TShard* shard, const THeterogenousKey& key)
+auto
+TAsyncSlruCacheBase<TKey, TValue, THash>::DoLookup(
+    TShard* shard,
+    const THeterogenousKey& key) -> std::pair<TValueFuture, bool>
 {
     auto readerGuard = ReaderGuard(shard->SpinLock);
 
@@ -519,11 +552,11 @@ TAsyncSlruCacheBase<TKey, TValue, THash>::DoLookup(TShard* shard, const THeterog
         auto valueFuture = item->GetValueFuture();
 
         if (item->Value) {
-            Counters_.SyncHitWeightCounter.Increment(item->CachedWeight);
-            Counters_.SyncHitCounter.Increment();
+            MainCounters_.SyncHitWeightCounter.Increment(item->CachedWeight);
+            MainCounters_.SyncHitCounter.Increment();
         } else {
-            Counters_.AsyncHitCounter.Increment();
-            item->AsyncHitCount.fetch_add(1);
+            MainCounters_.AsyncHitCounter.Increment();
+            item->AsyncHitCount.fetch_add(1, std::memory_order::relaxed);
         }
 
         readerGuard.Release();
@@ -533,7 +566,7 @@ TAsyncSlruCacheBase<TKey, TValue, THash>::DoLookup(TShard* shard, const THeterog
             shard->DrainTouchBuffer();
         }
 
-        return valueFuture;
+        return {std::move(valueFuture), false};
     }
 
     auto valueIt = valueMap.find(key);
@@ -557,19 +590,31 @@ TAsyncSlruCacheBase<TKey, TValue, THash>::DoLookup(TShard* shard, const THeterog
         auto valueFuture = item->GetValueFuture();
 
         if (item->Value) {
-            Counters_.SyncHitWeightCounter.Increment(item->CachedWeight);
-            Counters_.SyncHitCounter.Increment();
+            MainCounters_.SyncHitWeightCounter.Increment(item->CachedWeight);
+            MainCounters_.SyncHitCounter.Increment();
         } else {
-            Counters_.AsyncHitCounter.Increment();
-            item->AsyncHitCount.fetch_add(1);
+            MainCounters_.AsyncHitCounter.Increment();
+            item->AsyncHitCount.fetch_add(1, std::memory_order::relaxed);
         }
 
         shard->DrainTouchBuffer();
 
-        return valueFuture;
+        return {std::move(valueFuture), false};
     }
 
     shard->DrainTouchBuffer();
+
+    i64 weight = GetWeight(value);
+    if (RejectOversizedItems_.load() && shard->IsOversized(weight, /*cookieWeight*/ 0)) {
+        MainCounters_.SyncHitWeightCounter.Increment(weight);
+        MainCounters_.SyncHitCounter.Increment();
+        MainCounters_.RejectedOversizedCounter.Increment();
+        MainCounters_.RejectedOversizedWeightCounter.Increment(weight);
+
+        writerGuard.Release();
+
+        return {MakeFuture(value), true};
+    }
 
     {
         auto* item = new TItem(value);
@@ -580,20 +625,14 @@ TAsyncSlruCacheBase<TKey, TValue, THash>::DoLookup(TShard* shard, const THeterog
         EmplaceOrCrash(itemMap, key, item);
         ++Size_;
 
-        i64 weight = GetWeight(item->Value);
         shard->PushToYounger(item, weight);
-        Counters_.SyncHitWeightCounter.Increment(weight);
-        Counters_.SyncHitCounter.Increment();
+        MainCounters_.SyncHitWeightCounter.Increment(weight);
+        MainCounters_.SyncHitCounter.Increment();
 
         // NB: Releases the lock.
         TrimWithNotify(shard, writerGuard, value);
 
-        if (GhostCachesEnabled_.load()) {
-            shard->SmallGhost.Resurrect(value, weight);
-            shard->LargeGhost.Resurrect(value, weight);
-        }
-
-        return valueFuture;
+        return {std::move(valueFuture), true};
     }
 }
 
@@ -602,9 +641,15 @@ auto TAsyncSlruCacheBase<TKey, TValue, THash>::BeginInsert(const TKey& key, i64 
 {
     auto* shard = GetShardByKey(key);
 
-    if (auto valueFuture = DoLookup(shard, key)) {
+    auto [valueFuture, resurrected] = DoLookup(shard, key);
+    if (valueFuture) {
         if (GhostCachesEnabled_.load()) {
-            if (valueFuture.IsSet() && valueFuture.GetOrCrash().IsOK()) {
+            if (resurrected) {
+                const auto& value = valueFuture.GetOrCrash().Value();
+                auto weight = GetWeight(value);
+                shard->SmallGhost.Resurrect(value, weight);
+                shard->LargeGhost.Resurrect(value, weight);
+            } else if (valueFuture.IsSet() && valueFuture.GetOrCrash().IsOK()) {
                 bool smallInserted = shard->SmallGhost.BeginInsert(key, cookieWeight);
                 bool largeInserted = shard->LargeGhost.BeginInsert(key, cookieWeight);
                 if (smallInserted || largeInserted) {
@@ -641,15 +686,17 @@ auto TAsyncSlruCacheBase<TKey, TValue, THash>::BeginInsert(const TKey& key, i64 
         auto itemIt = itemMap.find(key);
         if (itemIt != itemMap.end()) {
             auto* item = itemIt->second;
-            shard->TouchItem(item);
+            if (shard->TouchItem(item)) {
+                shard->DrainTouchBuffer();
+            }
             auto valueFuture = item->GetValueFuture();
 
             if (item->Value) {
-                Counters_.SyncHitWeightCounter.Increment(item->CachedWeight);
-                Counters_.SyncHitCounter.Increment();
+                MainCounters_.SyncHitWeightCounter.Increment(item->CachedWeight);
+                MainCounters_.SyncHitCounter.Increment();
             } else {
-                Counters_.AsyncHitCounter.Increment();
-                item->AsyncHitCount.fetch_add(1);
+                MainCounters_.AsyncHitCounter.Increment();
+                item->AsyncHitCount.fetch_add(1, std::memory_order::relaxed);
             }
 
             auto value = item->Value;
@@ -686,7 +733,7 @@ auto TAsyncSlruCacheBase<TKey, TValue, THash>::BeginInsert(const TKey& key, i64 
             EmplaceOrCrash(itemMap, key, item);
             ++Size_;
 
-            Counters_.MissedCounter.Increment();
+            MainCounters_.MissedCounter.Increment();
 
             shard->UpdateCookie(item, /*countDelta*/ 1, cookieWeight);
             if (cookieWeight > 0) {
@@ -711,21 +758,30 @@ auto TAsyncSlruCacheBase<TKey, TValue, THash>::BeginInsert(const TKey& key, i64 
         }
 
         if (auto value = valueIt->second.Lock()) {
-            auto* item = new TItem(value);
-            value->Item_ = item;
+            i64 weight = GetWeight(value);
+            if (RejectOversizedItems_.load() && shard->IsOversized(weight, /*cookieWeight*/ 0)) {
+                MainCounters_.SyncHitWeightCounter.Increment(weight);
+                MainCounters_.SyncHitCounter.Increment();
+                MainCounters_.RejectedOversizedCounter.Increment();
+                MainCounters_.RejectedOversizedWeightCounter.Increment(weight);
 
-            EmplaceOrCrash(itemMap, key, item);
-            ++Size_;
+                guard.Release();
+            } else {
+                auto* item = new TItem(value);
+                value->Item_ = item;
 
-            i64 weight = GetWeight(item->Value);
-            shard->PushToYounger(item, weight);
-            Counters_.SyncHitWeightCounter.Increment(weight);
-            Counters_.SyncHitCounter.Increment();
+                EmplaceOrCrash(itemMap, key, item);
+                ++Size_;
 
-            // NB: Releases the lock.
-            TrimWithNotify(shard, guard, value);
+                shard->PushToYounger(item, weight);
+                MainCounters_.SyncHitWeightCounter.Increment(weight);
+                MainCounters_.SyncHitCounter.Increment();
 
-            guard.Release();
+                // NB: Releases the lock.
+                TrimWithNotify(shard, guard, value);
+
+                guard.Release();
+            }
 
             if (GhostCachesEnabled_.load()) {
                 shard->SmallGhost.Resurrect(value, weight);
@@ -798,9 +854,43 @@ void TAsyncSlruCacheBase<TKey, TValue, THash>::EndInsert(const TInsertCookie& in
 
     shard->DrainTouchBuffer();
 
+    auto* item = GetOrCrash(shard->ItemMap, key);
+    YT_VERIFY(!item->Value);
+
+    i64 weight = GetWeight(value);
+    if (RejectOversizedItems_.load()) {
+        auto cookieWeight = item->CachedWeight;
+        if (shard->IsOversized(weight, cookieWeight)) {
+            auto asyncHitCount = item->AsyncHitCount.load(std::memory_order::relaxed);
+            shard->UpdateCookie(item, /*countDelta*/ -1, -cookieWeight);
+            EraseOrCrash(shard->ItemMap, key);
+            --Size_;
+
+            auto promise = std::move(item->ValuePromise);
+            delete item;
+
+            MainCounters_.MissedWeightCounter.Increment(weight);
+            MainCounters_.AsyncHitWeightCounter.Increment(weight * asyncHitCount);
+            MainCounters_.RejectedOversizedCounter.Increment();
+            MainCounters_.RejectedOversizedWeightCounter.Increment(weight);
+
+            // NB: Releases the lock.
+            TrimWithNotify(shard, guard, nullptr, -cookieWeight);
+
+            if (insertCookie.InsertedIntoSmallGhost_) {
+                shard->SmallGhost.EndInsert(value, weight);
+            }
+            if (insertCookie.InsertedIntoLargeGhost_) {
+                shard->LargeGhost.EndInsert(value, weight);
+            }
+
+            promise.Set(value);
+            return;
+        }
+    }
+
     value->SetCache(MakeWeak(this));
 
-    auto* item = GetOrCrash(shard->ItemMap, key);
     item->Value = value;
     value->Item_ = item;
     auto promise = item->ValuePromise;
@@ -810,11 +900,11 @@ void TAsyncSlruCacheBase<TKey, TValue, THash>::EndInsert(const TInsertCookie& in
     auto cookieWeight = item->CachedWeight;
     shard->UpdateCookie(item, /*countDelta*/ -1, -cookieWeight);
 
-    i64 weight = GetWeight(item->Value);
     shard->PushToYounger(item, weight);
     // MissedCounter and AsyncHitCounter have already been incremented in BeginInsert.
-    Counters_.MissedWeightCounter.Increment(weight);
-    Counters_.AsyncHitWeightCounter.Increment(weight * item->AsyncHitCount.load());
+    MainCounters_.MissedWeightCounter.Increment(weight);
+    MainCounters_.AsyncHitWeightCounter.Increment(
+        weight * item->AsyncHitCount.load(std::memory_order::relaxed));
 
     // NB: Releases the lock.
     TrimWithNotify(shard, guard, value, -cookieWeight);
@@ -1023,7 +1113,7 @@ void TAsyncSlruCacheBase<TKey, TValue, THash>::UpdateWeight(const TKey& key)
     // If item weight increases, it means that some parts of the item were missing in cache,
     // so add delta to missed weight.
     if (weightDelta > 0) {
-        Counters_.MissedWeightCounter.Increment(weightDelta);
+        MainCounters_.MissedWeightCounter.Increment(weightDelta);
     }
 
     TrimWithNotify(shard, guard, nullptr, weightDelta);
@@ -1072,6 +1162,12 @@ bool TAsyncSlruCacheBase<TKey, TValue, THash>::IsResurrectionSupported() const
 }
 
 template <class TKey, class TValue, class THash>
+auto TAsyncSlruCacheBase<TKey, TValue, THash>::GetMainCounters() const -> const TCounters&
+{
+    return MainCounters_;
+}
+
+template <class TKey, class TValue, class THash>
 auto TAsyncSlruCacheBase<TKey, TValue, THash>::GetSmallGhostCounters() const -> const TCounters&
 {
     return SmallGhostCounters_;
@@ -1108,7 +1204,7 @@ bool TAsyncSlruCacheBase<TKey, TValue, THash>::TGhostShard::DoLookup(const THete
         Counters_->SyncHitCounter.Increment();
     } else {
         Counters_->AsyncHitCounter.Increment();
-        item->AsyncHitCount.fetch_add(1);
+        item->AsyncHitCount.fetch_add(1, std::memory_order::relaxed);
     }
 
     readerGuard.Release();
@@ -1178,14 +1274,16 @@ bool TAsyncSlruCacheBase<TKey, TValue, THash>::TGhostShard::BeginInsert(const TK
     auto itemIt = ItemMap_.find(key);
     if (itemIt != ItemMap_.end()) {
         auto* item = itemIt->second;
-        this->TouchItem(item);
+        if (this->TouchItem(item)) {
+            this->DrainTouchBuffer();
+        }
 
         if (item->Inserted) {
             Counters_->SyncHitWeightCounter.Increment(item->CachedWeight);
             Counters_->SyncHitCounter.Increment();
         } else {
             Counters_->AsyncHitCounter.Increment();
-            item->AsyncHitCount.fetch_add(1);
+            item->AsyncHitCount.fetch_add(1, std::memory_order::relaxed);
         }
 
         return false;
@@ -1240,13 +1338,28 @@ void TAsyncSlruCacheBase<TKey, TValue, THash>::TGhostShard::EndInsert(TValuePtr 
     YT_VERIFY(!item->Inserted);
     this->UpdateCookie(item, /*countDelta*/ -1, -item->CachedWeight);
 
+    if (RejectOversizedItems_ && this->IsOversized(weight, /*cookieWeight*/ 0)) {
+        EraseOrCrash(ItemMap_, key);
+
+        Counters_->MissedWeightCounter.Increment(weight);
+        Counters_->AsyncHitWeightCounter.Increment(
+            weight * item->AsyncHitCount.load(std::memory_order::relaxed));
+        Counters_->RejectedOversizedCounter.Increment();
+        Counters_->RejectedOversizedWeightCounter.Increment(weight);
+
+        guard.Release();
+        delete item;
+        return;
+    }
+
     item->Value = std::move(value);
     item->Inserted = true;
 
     this->PushToYounger(item, weight);
     // MissedCounter and AsyncHitCounter have already been incremented in BeginInsert.
     Counters_->MissedWeightCounter.Increment(weight);
-    Counters_->AsyncHitWeightCounter.Increment(weight * item->AsyncHitCount.load());
+    Counters_->AsyncHitWeightCounter.Increment(
+        weight * item->AsyncHitCount.load(std::memory_order::relaxed));
 
     // NB: Releases the lock.
     Trim(guard);
@@ -1258,12 +1371,37 @@ void TAsyncSlruCacheBase<TKey, TValue, THash>::TGhostShard::Resurrect(const TVal
     YT_VERIFY(value);
     const auto& key = value->GetKey();
 
+    if (DoLookup(key, /*allowAsyncHits*/ true)) {
+        return;
+    }
+
     auto guard = WriterGuard(SpinLock_);
 
     this->DrainTouchBuffer();
 
     auto itemIt = ItemMap_.find(key);
     if (itemIt != ItemMap_.end()) {
+        auto* item = itemIt->second;
+        if (this->TouchItem(item)) {
+            this->DrainTouchBuffer();
+        }
+
+        if (item->Inserted) {
+            Counters_->SyncHitWeightCounter.Increment(item->CachedWeight);
+            Counters_->SyncHitCounter.Increment();
+        } else {
+            Counters_->AsyncHitCounter.Increment();
+            item->AsyncHitCount.fetch_add(1, std::memory_order::relaxed);
+        }
+
+        return;
+    }
+
+    if (RejectOversizedItems_ && this->IsOversized(weight, /*cookieWeight*/ 0)) {
+        Counters_->SyncHitWeightCounter.Increment(weight);
+        Counters_->SyncHitCounter.Increment();
+        Counters_->RejectedOversizedCounter.Increment();
+        Counters_->RejectedOversizedWeightCounter.Increment(weight);
         return;
     }
 
@@ -1376,9 +1514,10 @@ void TAsyncSlruCacheBase<TKey, TValue, THash>::TGhostShard::UpdateCookieWeight(c
 }
 
 template <class TKey, class TValue, class THash>
-void TAsyncSlruCacheBase<TKey, TValue, THash>::TGhostShard::Reconfigure(i64 capacity, double youngerSizeFraction)
+void TAsyncSlruCacheBase<TKey, TValue, THash>::TGhostShard::Reconfigure(i64 capacity, double youngerSizeFraction, bool rejectOversizedItems)
 {
     auto writerGuard = WriterGuard(SpinLock_);
+    RejectOversizedItems_ = rejectOversizedItems;
     TAsyncSlruCacheListManager<TGhostItem, TGhostShard>::Reconfigure(capacity, youngerSizeFraction);
     this->DrainTouchBuffer();
     Trim(writerGuard);
@@ -1388,8 +1527,16 @@ template <class TKey, class TValue, class THash>
 void TAsyncSlruCacheBase<TKey, TValue, THash>::TGhostShard::Trim(NThreading::TWriterGuard<NThreading::TReaderWriterSpinLock>& guard)
 {
     auto evictedItems = this->TrimNoDelete();
+    i64 evictedWeight = 0;
     for (const auto& item : evictedItems) {
+        evictedWeight += item.CachedWeight;
         EraseOrCrash(ItemMap_, item.Key);
+    }
+    if (!evictedItems.Empty()) {
+        Counters_->EvictedCounter.Increment(evictedItems.Size());
+        if (evictedWeight > 0) {
+            Counters_->EvictedWeightCounter.Increment(evictedWeight);
+        }
     }
 
     // NB. Evicted items must die outside of critical section.
@@ -1407,7 +1554,9 @@ TAsyncSlruCacheBase<TKey, TValue, THash>::TShard::Trim(TIntrusiveListWithAutoDel
     std::vector<TValuePtr> evictedValues;
     evictedValues.reserve(evictedItems.Size());
 
+    i64 evictedWeight = 0;
     for (auto& item : evictedItems) {
+        evictedWeight += item.CachedWeight;
         auto& value = item.Value;
 
         EraseOrCrash(ItemMap, value->GetKey());
@@ -1421,6 +1570,12 @@ TAsyncSlruCacheBase<TKey, TValue, THash>::TShard::Trim(TIntrusiveListWithAutoDel
         value->Item_ = nullptr;
 
         evictedValues.push_back(std::move(value));
+    }
+    if (!evictedItems.Empty()) {
+        Parent->MainCounters_.EvictedCounter.Increment(evictedItems.Size());
+        if (evictedWeight > 0) {
+            Parent->MainCounters_.EvictedWeightCounter.Increment(evictedWeight);
+        }
     }
 
     return evictedValues;

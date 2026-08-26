@@ -21,7 +21,8 @@ enum class EDataFormat {
     Parquet /* "parquet" */,
     NoFraming /* "no-framing" */,
     NewlineDelimited /* "newline-delimited" */,
-    Raw /* "raw" */
+    Raw /* "raw" */,
+    Svg /* "svg" */
 };
 
 // EMessagingFormat to be used in both input and output when working with files/pipes in operations related to messaging

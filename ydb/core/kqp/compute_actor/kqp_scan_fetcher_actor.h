@@ -20,6 +20,7 @@
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/wilson/wilson_trace.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
 
 namespace NKikimr::NKqp::NScanPrivate {
 
@@ -56,6 +57,7 @@ private:
     const ui32 LockNodeId;
     const TMaybe<NKikimrDataEvents::ELockMode> LockMode;
     const TCPULimits CPULimits;
+    const bool UseBatchPool;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -66,7 +68,8 @@ public:
         std::vector<NActors::TActorId>&& computeActors, const ui64 txId, const TMaybe<ui64> lockTxId, const ui32 lockNodeId,
         const TMaybe<NKikimrDataEvents::ELockMode> lockMode, const TString& database,
         const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta, const TShardsScanningPolicy& shardsScanningPolicy,
-        TIntrusivePtr<TKqpCounters> counters, NWilson::TTraceId traceId, const TCPULimits& cpuLimits);
+        TIntrusivePtr<TKqpCounters> counters, NWilson::TTraceId traceId, const TCPULimits& cpuLimits,
+        bool useBatchPool = false);
 
     static TVector<TSerializedTableRange> BuildSerializedTableRanges(
         const NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta::TReadOpMeta& readData);
@@ -74,8 +77,10 @@ public:
     void Bootstrap();
 
     STATEFN(StateFunc) {
-        NActors::TLogContextGuard lGuard =
-            NActors::TLogContextBuilder::Build()("self_id", SelfId())("scan_id", ScanId)("tx_id", std::get<ui64>(TxId));
+        YDB_LOG_CREATE_CONTEXT(
+            {"selfId", SelfId()},
+            {"scanId", ScanId},
+            {"txId", std::get<ui64>(TxId)});
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvKqpCompute::TEvScanInitActor, HandleExecute);

@@ -1,6 +1,7 @@
 from __future__ import annotations
 from enum import StrEnum
 from os import getenv
+from pathlib import Path
 from time import time
 from .conftest import LoadSuiteBase
 from ydb.tests.olap.lib.results_processor import ResultsProcessor
@@ -97,31 +98,66 @@ class TpccSuiteBase(LoadSuiteBase):
             LoadSuiteBase.KeyMeasurement('tpcc_warehouses', 'TPC-C Warehouses', [
                 LoadSuiteBase.KeyMeasurement.Interval('#ccffcc'),
             ], 'Warehouses count'),
+            LoadSuiteBase.KeyMeasurement('tpcc_max_sessions', 'TPC-C max-sessions', [
+                LoadSuiteBase.KeyMeasurement.Interval('#ccffcc'),
+            ], 'Resolved max sessions (MaxInflight), after auto-detect if unset'),
+            LoadSuiteBase.KeyMeasurement('tpcc_threads', 'TPC-C threads', [
+                LoadSuiteBase.KeyMeasurement.Interval('#ccffcc'),
+            ], 'Resolved executor thread count, after auto-detect if unset'),
+            LoadSuiteBase.KeyMeasurement('tpcc_warmup_seconds', 'TPC-C warmup', [
+                LoadSuiteBase.KeyMeasurement.Interval('#ccffcc'),
+            ], 'Resolved warmup duration in seconds, after auto/min-floor adjustments'),
             LoadSuiteBase.KeyMeasurement('tpcc_efficiency', 'TPC-C Efficiency', [
                 LoadSuiteBase.KeyMeasurement.Interval('#ccffcc'),
             ], 'Efficiency of TPC-C'),
             LoadSuiteBase.KeyMeasurement('tpcc_tpmc', 'TPC-C TPMC', [
                 LoadSuiteBase.KeyMeasurement.Interval('#ccffcc'),
             ], 'Transactions per minute C of TPC-C'),
-            LoadSuiteBase.KeyMeasurement('tpcc_NewOrder_perc_90', 'TPC-C NewOrder p90', [
-                LoadSuiteBase.KeyMeasurement.Interval('#ccffcc'),
-            ], '90 percentile of NewOrder transactions in ms'),
-            LoadSuiteBase.KeyMeasurement('tpcc_Delivery_perc_90', 'TPC-C Delivery p90', [
-                LoadSuiteBase.KeyMeasurement.Interval('#ccffcc'),
-            ], '90 percentile of Delivery transactions in ms'),
-            LoadSuiteBase.KeyMeasurement('tpcc_Payment_perc_90', 'TPC-C Payment p90', [
-                LoadSuiteBase.KeyMeasurement.Interval('#ccffcc'),
-            ], '90 percentile of Payment transactions in ms'),
-            LoadSuiteBase.KeyMeasurement('tpcc_StockLevel_perc_90', 'TPC-C StockLevel p90', [
-                LoadSuiteBase.KeyMeasurement.Interval('#ccffcc'),
-            ], '90 percentile of StockLevel transactions in ms'),
-            LoadSuiteBase.KeyMeasurement('tpcc_OrderStatus_perc_90', 'TPC-C OrderStatus p90', [
-                LoadSuiteBase.KeyMeasurement.Interval('#ccffcc'),
-            ], '90 percentile of OrderStatus transactions in ms'),
+            *cls._tpcc_latency_key_measurements(),
         ], ''
+
+    @classmethod
+    def _tpcc_latency_key_measurements(cls) -> list[LoadSuiteBase.KeyMeasurement]:
+        measurements = []
+        for tx in ('NewOrder', 'Delivery', 'Payment', 'StockLevel', 'OrderStatus'):
+            measurements.extend([
+                LoadSuiteBase.KeyMeasurement(
+                    f'tpcc_{tx}_perc_90',
+                    f'TPC-C {tx} p90 (full)',
+                    [LoadSuiteBase.KeyMeasurement.Interval('#ccffcc')],
+                    f'90 percentile Full (+inflight queue) of {tx} transactions in ms',
+                ),
+                LoadSuiteBase.KeyMeasurement(
+                    f'tpcc_{tx}_ms_perc_90',
+                    f'TPC-C {tx} p90 (ms)',
+                    [LoadSuiteBase.KeyMeasurement.Interval('#ccffcc')],
+                    f'90 percentile Ms (no queue wait) of {tx} transactions in ms',
+                ),
+                LoadSuiteBase.KeyMeasurement(
+                    f'tpcc_{tx}_pure_perc_90',
+                    f'TPC-C {tx} p90 (pure)',
+                    [LoadSuiteBase.KeyMeasurement.Interval('#ccffcc')],
+                    f'90 percentile Pure (in-tx queries) of {tx} transactions in ms',
+                ),
+            ])
+        return measurements
+
+    @staticmethod
+    def _signal_tpcc_load_started() -> None:
+        """Notify flamegraph collector that import/setup is done and load begins."""
+        marker = getenv('FLAMEGRAPH_LOAD_MARKER')
+        if not marker:
+            return
+        path = Path(marker)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(f'{time()}\n', encoding='utf-8')
+        logging.info('FLAMEGRAPH_LOAD_MARKER written: %s', marker)
 
     def test(self):
         assert len(self.get_users()) == 1, 'multiuser TPC-C not supported'
+        self.save_nodes_state()
+        # After setup_class import/compaction — right before TPC-C load (warmup+measure).
+        self._signal_tpcc_load_started()
         result = YdbCliHelper.run_tpcc(
             remote_cli_path=self._remote_cli_path,
             users=self.get_users(),
@@ -131,13 +167,22 @@ class TpccSuiteBase(LoadSuiteBase):
             threads=self.threads,
             tx_mode=self.tx_mode
         )[self.get_users()[0]]
+        end_time = time()
+        verify_errors = type(self).check_nodes_verifies_with_timing(result.start_time, end_time)
+        node_errors = type(self).check_nodes_diagnostics_with_timing(result, result.start_time, end_time)
         stats = result.get_stats('test')
         measure_start_time = stats.get('tpcc_json', {}).get('summary', {}).get('measure_start_ts', result.start_time)
+        summary = stats.get('tpcc_json', {}).get('summary', {})
         allure_table_strings = {
             'time_warmup': time_interval_str(result.start_time, measure_start_time),
-            'time_measure': time_interval_str(measure_start_time, time())
+            'time_measure': time_interval_str(measure_start_time, end_time),
+            'compaction_mode': str(self.compaction_mode),
+            'deploy_method': getenv('CI_DEPLOY_METHOD') or get_external_param('deploy-method', ''),
+            'max_sessions': summary.get('max_sessions', ''),
+            'threads': summary.get('threads', ''),
+            'warmup_seconds': summary.get('warmup_seconds', ''),
         }
-        self.process_query_result(result, 'test', True, allure_table_strings=allure_table_strings)
+        self.process_query_result(result, 'test', True, allure_table_strings=allure_table_strings, node_errors=node_errors, verify_errors=verify_errors)
         if result.success and 'tpcc_json' in stats:
             run_type = f'ydb_cli_{str(self.tx_mode).replace("-rw", "")}_{getenv("TPCC_RUN_TYPE", "default")}'
             ResultsProcessor.upload_tpcc_results(stats['tpcc_json'], run_type, result.start_time)

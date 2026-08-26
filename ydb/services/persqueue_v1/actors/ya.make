@@ -44,6 +44,8 @@ SRCS(
     persqueue_utils.cpp
     helpers.h
     helpers.cpp
+    fill_batched_data_offset.h
+    fill_batched_data.h
     partition_actor.h
     partition_actor.cpp
     partition_id.h

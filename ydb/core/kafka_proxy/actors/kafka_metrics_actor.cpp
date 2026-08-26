@@ -1,4 +1,5 @@
 #include "kafka_metrics_actor.h"
+#include "actors.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>
@@ -12,7 +13,8 @@ namespace NKafka {
 
     using namespace NActors;
 
-    class TKafkaMetricsActor : public NActors::TActorBootstrapped<TKafkaMetricsActor> {
+    class TKafkaMetricsActor : public NActors::TActorBootstrapped<TKafkaMetricsActor>
+                             , public TKafkaExceptionHandler<TKafkaMetricsActor> {
         using TBase = NActors::TActorBootstrapped<TKafkaMetricsActor>;
     public:
         explicit TKafkaMetricsActor(const TKafkaMetricsSettings& settings)
@@ -24,8 +26,10 @@ namespace NKafka {
             TBase::Become(&TKafkaMetricsActor::StateWork);
         }
 
-        TStringBuilder LogPrefix() const {
-            return {};
+        NStructuredLog::TStructuredMessage LogPrefix() const {
+            return YDB_LOG_CREATE_MESSAGE(
+                {"actorClassName", "KafkaMetricsActor"},
+                {"selfId", SelfId()});
         }
 
     private:
@@ -47,7 +51,7 @@ namespace NKafka {
     };
 
     TIntrusivePtr<NMonitoring::TDynamicCounters> TKafkaMetricsActor::GetGroupFromLabels(const TVector<std::pair<TString, TString>>& labels) {
-        Y_ABORT_UNLESS(labels.size() > 1);
+        AFL_ENSURE(labels.size() > 1)("labels_size", labels.size());
         auto group = Settings.Counters->GetSubgroup(labels[0].first, labels[0].second);
         for (ui32 i = 1; i + 1 < labels.size(); ++i) {
             if (labels[i].second.empty())

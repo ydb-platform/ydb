@@ -120,6 +120,7 @@ class TopicReaderSync:
         return self._caller.safe_call_with_result(
             self._async_reader.receive_batch(
                 max_messages=max_messages,
+                max_bytes=max_bytes,
             ),
             timeout,
         )
@@ -145,6 +146,7 @@ class TopicReaderSync:
             self._async_reader.receive_batch_with_tx(
                 tx=tx,
                 max_messages=max_messages,
+                max_bytes=max_bytes,
             ),
             timeout,
         )

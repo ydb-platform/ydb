@@ -7,6 +7,7 @@ PEERDIR(
     ydb/core/scheme
     ydb/library/actors/core
     ydb/library/formats/arrow
+    ydb/library/formats/arrow/modifier
     ydb/library/services
     yql/essentials/minikql
     yql/essentials/types/binary_json

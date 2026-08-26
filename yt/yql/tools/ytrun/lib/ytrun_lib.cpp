@@ -15,6 +15,8 @@
 #include <yt/yql/providers/yt/fmr/fmr_tool_lib/yql_yt_fmr_initializer.h>
 #include <yt/yql/providers/yt/fmr/table_data_service/discovery/file/yql_yt_file_service_discovery.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/providers/common/proto/static_gateways_config.pb.h>
 #include <yql/essentials/core/peephole_opt/yql_opt_peephole_physical.h>
 #include <yql/essentials/core/services/yql_transform_pipeline.h>
 #include <yql/essentials/core/cbo/simple/cbo_simple.h>
@@ -94,8 +96,12 @@ TYtRunTool::TYtRunTool(TString name)
                             counters << TStringBuf(" (") << (100ul * progress.Counters->Completed / progress.Counters->Total) << TStringBuf("%)");
                         }
                     }
+                    TStringBuilder waitingRemoteId;
+                    if (progress.WaitingRemoteId) {
+                        waitingRemoteId << ", waitingRemoteId: " << progress.WaitingRemoteId;
+                    }
                     Cerr << "Operation: [" << progress.Category << "] " << progress.Id
-                        << ", state: " << progress.State << remoteId << counters
+                        << ", state: " << progress.State << remoteId << waitingRemoteId << counters
                         << ", current stage: " << progress.Stage.first << Endl;
                 });
             });
@@ -155,19 +161,25 @@ TYtRunTool::TYtRunTool(TString name)
             GetRunOptions().GatewaysConfig = MakeHolder<TGatewaysConfig>();
         }
 
+        if (!GetRunOptions().StaticGatewaysConfig) {
+            GetRunOptions().StaticGatewaysConfig = MakeHolder<TStaticGatewaysConfig>();
+            SyncWithStaticGateways(*GetRunOptions().StaticGatewaysConfig, *GetRunOptions().GatewaysConfig);
+        }
+
         auto ytConfig = GetRunOptions().GatewaysConfig->MutableYt();
+        auto staticYtConfig = GetRunOptions().StaticGatewaysConfig->MutableYt();
         ytConfig->SetGatewayThreads(NumYtThreads_);
         if (MrJobBin_.empty()) {
-            ytConfig->ClearMrJobBin();
+            staticYtConfig->ClearMrJobBin();
         } else {
-            ytConfig->SetMrJobBin(MrJobBin_);
-            ytConfig->SetMrJobBinMd5(MD5::File(MrJobBin_));
+            staticYtConfig->SetMrJobBin(MrJobBin_);
+            staticYtConfig->SetMrJobBinMd5(MD5::File(MrJobBin_));
         }
 
         if (MrJobUdfsDir_.empty()) {
-            ytConfig->ClearMrJobUdfsDir();
+            staticYtConfig->ClearMrJobUdfsDir();
         } else {
-            ytConfig->SetMrJobUdfsDir(MrJobUdfsDir_);
+            staticYtConfig->SetMrJobUdfsDir(MrJobUdfsDir_);
         }
         auto attr = ytConfig->MutableDefaultSettings()->Add();
         attr->SetName("KeepTempTables");
@@ -208,6 +220,7 @@ IYtGateway::TPtr TYtRunTool::CreateYtGateway() {
     services.FunctionRegistry = GetFuncRegistry().Get();
     services.FileStorage = GetFileStorage();
     services.Config = std::make_shared<TYtGatewayConfig>(GetRunOptions().GatewaysConfig->GetYt());
+    services.StaticConfig = std::make_shared<TYtStaticGatewayConfig>(GetRunOptions().StaticGatewaysConfig->GetYt());
     services.SecretMasker = CreateSecretMasker();
     services.TvmClient = CreateTvmClient(TvmConfig_);
     services.YtAccessProvider = CreateYtAccessProvider(services.TvmClient, AccessProviderConfig_);

@@ -80,7 +80,7 @@ public:
         const arrow::Array& GetArray() const {
             return *CurrentArrayData;
         }
-        i64 GetLocalIndex() const {
+        ui32 GetLocalIndex() const {
             return ChunkAddress->GetAddress().GetLocalIndex(CurrentIndex);
         }
 

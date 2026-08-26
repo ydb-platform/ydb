@@ -9,11 +9,12 @@
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_program_builder_test_utils.h>
 #include <yql/essentials/minikql/udf_value_test_support/udf_value_comparator_utils.h>
 
+#include <util/generic/size_literals.h>
+
 #include <cstring>
 #include <algorithm>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -54,55 +55,54 @@ public:
 
         TStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, TTestStreamParams& params)
             : TBase(memInfo)
-            , CompCtx(compCtx)
-            , Params(params)
+            , CompCtx_(compCtx)
+            , Params_(params)
         {
         }
 
     private:
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
-            auto size = Params.TestYieldStreamData.size();
-            if (Index == size) {
+            auto size = Params_.TestYieldStreamData.size();
+            if (Index_ == size) {
                 return NUdf::EFetchStatus::Finish;
             }
 
-            const auto val = Params.TestYieldStreamData[Index];
-            if (Params.Yield == val) {
-                ++Index;
+            const auto val = Params_.TestYieldStreamData[Index_];
+            if (Params_.Yield == val) {
+                ++Index_;
                 return NUdf::EFetchStatus::Yield;
             }
 
             NUdf::TUnboxedValue* items = nullptr;
-            result = CompCtx.HolderFactory.CreateDirectArrayHolder(2, items);
+            result = CompCtx_.HolderFactory.CreateDirectArrayHolder(2, items);
             items[0] = NUdf::TUnboxedValuePod(val);
-            items[1] = NUdf::TUnboxedValuePod(MakeString(ToString(val) * Params.StringSize));
+            items[1] = NUdf::TUnboxedValuePod(MakeString(ToString(val) * Params_.StringSize));
 
-            ++Index;
+            ++Index_;
 
             return NUdf::EFetchStatus::Ok;
         }
 
-    private:
-        TComputationContext& CompCtx;
-        ui64 Index = 0;
-        TTestStreamParams& Params;
+        TComputationContext& CompCtx_;
+        ui64 Index_ = 0;
+        TTestStreamParams& Params_;
     };
 
     TTestStreamWrapper(TComputationMutables& mutables, TTestStreamParams& params)
         : TBaseComputation(mutables)
-        , Params(params)
+        , Params_(params)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        return ctx.HolderFactory.Create<TStreamValue>(ctx, Params);
+        return ctx.HolderFactory.Create<TStreamValue>(ctx, Params_);
     }
 
 private:
     void RegisterDependencies() const final {
     }
 
-    TTestStreamParams& Params;
+    TTestStreamParams& Params_;
 };
 
 IComputationNode* WrapTestStream(const TComputationNodeFactoryContext& ctx, TTestStreamParams& params) {
@@ -118,15 +118,15 @@ TComputationNodeFactory GetNodeFactory(TTestStreamParams& params) {
     };
 }
 
-template <bool LLVM>
-TRuntimeNode MakeStream(TSetup<LLVM>& setup) {
+template <bool LLVM, bool SPILLING = false>
+TRuntimeNode MakeStream(TSetup<LLVM, SPILLING>& setup) {
     TProgramBuilder& pb = *setup.PgmBuilder;
 
     TCallableBuilder callableBuilder(*setup.Env, "TestYieldStream",
                                      pb.NewStreamType(
                                          NTest::ConvertToMinikqlType<NTest::TStructType<NTest::TStructMember<"a", ui64>, NTest::TStructMember<"b", TStringBuf>>>(pb)));
 
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 template <bool OverFlow>
@@ -146,7 +146,7 @@ TRuntimeNode Combine(TProgramBuilder& pb, TRuntimeNode stream, std::function<TRu
         });
     };
 
-    return OverFlow ? pb.FromFlow(pb.CombineCore(pb.ToFlow(stream, {}), keyExtractor, init, update, finishLambda, 64ul << 20)) : pb.CombineCore(stream, keyExtractor, init, update, finishLambda, 64ul << 20);
+    return OverFlow ? pb.FromFlow(pb.CombineCore(pb.ToFlow(stream, {}), keyExtractor, init, update, finishLambda, 64UL << 20)) : pb.CombineCore(stream, keyExtractor, init, update, finishLambda, 64UL << 20);
 }
 
 template <bool SPILLING>
@@ -158,6 +158,108 @@ TRuntimeNode WideLastCombiner(TProgramBuilder& pb, TRuntimeNode flow,
     } else {
         return pb.WideLastCombiner(flow, extractor, init, update, finish);
     }
+}
+
+// https://github.com/ydb-platform/ydb/issues/40326
+enum class ETeardownCombinerKind {
+    Combiner,
+    LastCombiner,
+    LastCombinerWithSpilling,
+};
+
+TRuntimeNode BuildAggrConcatCombinerGraph(TProgramBuilder& pb, TRuntimeNode input,
+                                          const TProgramBuilder::TExpandLambda& expand, ETeardownCombinerKind kind) {
+    const auto wideFlow = pb.ExpandMap(pb.ToFlow(input, {}), expand);
+    const TProgramBuilder::TWideLambda extractor = [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front()}; };
+    const TProgramBuilder::TBinaryWideLambda init = [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.back()}; };
+    const TProgramBuilder::TTernaryWideLambda update = [&](TRuntimeNode::TList, TRuntimeNode::TList items, TRuntimeNode::TList state) -> TRuntimeNode::TList { return {pb.AggrConcat(state.front(), items.back())}; };
+    const TProgramBuilder::TBinaryWideLambda finish = [&](TRuntimeNode::TList, TRuntimeNode::TList state) -> TRuntimeNode::TList { return state; };
+
+    TRuntimeNode combined;
+    switch (kind) {
+        case ETeardownCombinerKind::Combiner:
+            combined = pb.WideCombiner(wideFlow, 0ULL, extractor, init, update, finish);
+            break;
+        case ETeardownCombinerKind::LastCombiner:
+            combined = pb.WideLastCombiner(wideFlow, extractor, init, update, finish);
+            break;
+        case ETeardownCombinerKind::LastCombinerWithSpilling:
+            combined = pb.WideLastCombinerWithSpilling(wideFlow, extractor, init, update, finish);
+            break;
+    }
+    return pb.FromFlow(pb.NarrowMap(combined, [&](TRuntimeNode::TList items) { return items.front(); }));
+}
+
+// Unlike TMockSpiller (which completes every operation synchronously), this spiller's
+// Put operations never complete (real spillers are asynchronous).
+class TPendingMockSpiller: public ISpiller {
+public:
+    NThreading::TFuture<TKey> Put(NYql::TChunkedBuffer&&) override {
+        Promises_.push_back(NThreading::NewPromise<TKey>());
+        return Promises_.back().GetFuture();
+    }
+    NThreading::TFuture<std::optional<NYql::TChunkedBuffer>> Get(TKey) override {
+        return NThreading::MakeFuture<std::optional<NYql::TChunkedBuffer>>(std::nullopt);
+    }
+    NThreading::TFuture<std::optional<NYql::TChunkedBuffer>> Extract(TKey) override {
+        return NThreading::MakeFuture<std::optional<NYql::TChunkedBuffer>>(std::nullopt);
+    }
+    NThreading::TFuture<void> Delete(TKey) override {
+        return NThreading::MakeFuture();
+    }
+    void ReportAlloc(ui64) override {
+    }
+    void ReportFree(ui64) override {
+    }
+
+private:
+    TVector<NThreading::TPromise<TKey>> Promises_;
+};
+
+// Unlike TMockSpillerFactory (which creates synchronous spillers that complete immediately),
+// this factory creates spillers whose Put operations never complete, modeling a query being
+// torn down while spill operations are still in flight.
+class TPendingMockSpillerFactory: public ISpillerFactory {
+public:
+    void SetTaskCounters(const TIntrusivePtr<NYql::NDq::TSpillingTaskCounters>&) override {
+    }
+    void SetMemoryReportingCallbacks(ISpiller::TMemoryReportCallback, ISpiller::TMemoryReportCallback) override {
+    }
+    ISpiller::TPtr CreateSpiller() override {
+        return std::make_shared<TPendingMockSpiller>();
+    }
+};
+
+// https://github.com/ydb-platform/ydb/issues/40326
+template <bool UseLLVM, bool UseSpilling>
+void RunLastCombinerTeardownTest(std::shared_ptr<ISpillerFactory> spillerFactory, bool appendYieldSentinel) {
+    static constexpr ui64 RowCount = 400;
+    static constexpr ui64 StringSize = 5000;
+    TTestStreamParams params;
+    params.StringSize = StringSize;
+    for (ui64 i = 0; i < RowCount; ++i) {
+        params.TestYieldStreamData.push_back(i);
+    }
+    if (appendYieldSentinel) {
+        params.TestYieldStreamData.push_back(TTestStreamParams::Yield);
+        params.TestYieldStreamData.push_back(RowCount);
+    }
+    TSetup<UseLLVM, UseSpilling> setup(GetNodeFactory(params));
+    TProgramBuilder& pb = *setup.PgmBuilder;
+
+    const auto stream = MakeStream<UseLLVM, UseSpilling>(setup);
+    const auto pgmReturn = BuildAggrConcatCombinerGraph(pb, stream,
+                                                        [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Member(item, "a"), pb.Member(item, "b")}; },
+                                                        UseSpilling ? ETeardownCombinerKind::LastCombinerWithSpilling : ETeardownCombinerKind::LastCombiner);
+
+    const auto graph = setup.BuildGraph(pgmReturn);
+    if (spillerFactory) {
+        graph->GetContext().SpillerFactory = std::move(spillerFactory);
+    }
+
+    const auto streamVal = graph->GetValue();
+    NUdf::TUnboxedValue result;
+    UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Yield);
 }
 
 void CheckIfStreamHasExpectedStringValues(const NUdf::TUnboxedValue& streamValue, std::unordered_set<TString>& expected) {
@@ -425,6 +527,35 @@ Y_UNIT_TEST_LLVM(TestSkipYieldRespectsMemLimit) {
     UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Finish);
     UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Finish);
 }
+// https://github.com/ydb-platform/ydb/issues/40326
+Y_UNIT_TEST_LLVM(TestMemoryLimitExceptionTeardownSafety) {
+    TSetup<LLVM> setup;
+    TProgramBuilder& pb = *setup.PgmBuilder;
+
+    const auto listType = pb.NewListType(pb.NewDataType(NUdf::TDataType<char*>::Id));
+    const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
+
+    const auto pgmReturn = BuildAggrConcatCombinerGraph(pb, TRuntimeNode(list, /*isImmediate=*/false),
+                                                        [&](TRuntimeNode item) -> TRuntimeNode::TList { return {item}; },
+                                                        ETeardownCombinerKind::Combiner);
+
+    const auto graph = setup.BuildGraph(pgmReturn, {list});
+    static constexpr ui32 RowCount = 8192;
+    static constexpr ui32 KeyCount = 64;
+    static constexpr size_t PayloadSize = 2048;
+    static constexpr ui64 MemoryLimit = 128_KB;
+    NUdf::TUnboxedValue* items = nullptr;
+    graph->GetEntryPoint(0, /*require=*/true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(RowCount, items));
+    for (ui32 i = 0; i < RowCount; ++i) {
+        items[i] = NUdf::TUnboxedValuePod(MakeString(TStringBuilder() << "key_" << (i % KeyCount) << "_" << TString(PayloadSize, 'x')));
+    }
+
+    const auto streamVal = graph->GetValue();
+    setup.Alloc.Ref().SetLimit(setup.Alloc.Ref().GetAllocated() + MemoryLimit);
+    NUdf::TUnboxedValue result;
+    UNIT_ASSERT_EXCEPTION(streamVal.Fetch(result), TMemoryLimitExceededException);
+    setup.Alloc.Ref().SetLimit(0);
+}
 #endif // defined(_asan_enabled_)
 } // Y_UNIT_TEST_SUITE(TMiniKQLWideCombinerTest)
 
@@ -432,7 +563,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideCombinerPerfTest) {
 Y_UNIT_TEST_LLVM(TestSumDoubleBooleanKeys) {
     TSetup<LLVM> setup;
 
-    double positive = 0.0, negative = 0.0;
+    double positive = 0.0;
+    double negative = 0.0;
     const auto t = TInstant::Now();
     for (const auto& sample : I8Samples) {
         (sample.second > 0.0 ? positive : negative) += sample.second;
@@ -444,7 +576,7 @@ Y_UNIT_TEST_LLVM(TestSumDoubleBooleanKeys) {
     const auto listType = NTest::ConvertToMinikqlType<TVector<double>>(pb);
     const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideCombiner(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, false), {}),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideCombiner(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, /*isImmediate=*/false), {}),
                                                                                 [&](TRuntimeNode item) -> TRuntimeNode::TList { return {item}; }), 0ULL,
                                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {pb.AggrGreater(items.front(), pb.NewDataLiteral(0.0))}; },
                                                                    [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList { return items; },
@@ -454,7 +586,7 @@ Y_UNIT_TEST_LLVM(TestSumDoubleBooleanKeys) {
 
     const auto graph = setup.BuildGraph(pgmReturn, {list});
     NUdf::TUnboxedValue* items = nullptr;
-    graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(I8Samples.size(), items));
+    graph->GetEntryPoint(0, /*require=*/true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(I8Samples.size(), items));
     std::transform(I8Samples.cbegin(), I8Samples.cend(), items, [](const std::pair<i8, double> s) { return ToValue<double>(s.second); });
 
     const auto t1 = TInstant::Now();
@@ -479,7 +611,12 @@ Y_UNIT_TEST_LLVM(TestMinMaxSumDoubleBooleanKeys) {
     auto samples = I8Samples;
     samples.emplace_back(-1, -1.0); // ensure to have at least one negative value
     samples.emplace_back(1, 1.0);   // ensure to have at least one positive value
-    double pSum = 0.0, nSum = 0.0, pMax = 0.0, nMax = -1000.0, pMin = 1000.0, nMin = 0.0;
+    double pSum = 0.0;
+    double nSum = 0.0;
+    double pMax = 0.0;
+    double nMax = -1000.0;
+    double pMin = 1000.0;
+    double nMin = 0.0;
     const auto t = TInstant::Now();
     for (const auto& sample : samples) {
         if (sample.second > 0.0) {
@@ -500,7 +637,7 @@ Y_UNIT_TEST_LLVM(TestMinMaxSumDoubleBooleanKeys) {
     const auto listType = NTest::ConvertToMinikqlType<TVector<double>>(pb);
     const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideCombiner(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, false), {}),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideCombiner(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, /*isImmediate=*/false), {}),
                                                                                 [&](TRuntimeNode item) -> TRuntimeNode::TList { return {item}; }), 0ULL,
                                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {pb.AggrGreater(items.front(), pb.NewDataLiteral(0.0))}; },
                                                                    [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front(), items.front(), items.front()}; },
@@ -510,7 +647,7 @@ Y_UNIT_TEST_LLVM(TestMinMaxSumDoubleBooleanKeys) {
 
     const auto graph = setup.BuildGraph(pgmReturn, {list});
     NUdf::TUnboxedValue* items = nullptr;
-    graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(samples.size(), items));
+    graph->GetEntryPoint(0, /*require=*/true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(samples.size(), items));
     std::transform(samples.cbegin(), samples.cend(), items, [](const std::pair<i8, double> s) { return ToValue<double>(s.second); });
 
     const auto t1 = TInstant::Now();
@@ -550,7 +687,8 @@ Y_UNIT_TEST_LLVM(TestSumDoubleSmallKey) {
     }
     const auto cppTime = TInstant::Now() - t;
 
-    std::vector<std::pair<i8, double>> one, two;
+    std::vector<std::pair<i8, double>> one;
+    std::vector<std::pair<i8, double>> two;
     one.reserve(expects.size());
     two.reserve(expects.size());
 
@@ -562,7 +700,7 @@ Y_UNIT_TEST_LLVM(TestSumDoubleSmallKey) {
     const auto listType = NTest::ConvertToMinikqlType<TVector<std::tuple<i8, double>>>(pb);
     const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideCombiner(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, false), {}),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideCombiner(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, /*isImmediate=*/false), {}),
                                                                                 [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }), 0ULL,
                                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front()}; },
                                                                    [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.back()}; },
@@ -572,7 +710,7 @@ Y_UNIT_TEST_LLVM(TestSumDoubleSmallKey) {
 
     const auto graph = setup.BuildGraph(pgmReturn, {list});
     NUdf::TUnboxedValue* items = nullptr;
-    graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(I8Samples.size(), items));
+    graph->GetEntryPoint(0, /*require=*/true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(I8Samples.size(), items));
     for (const auto& sample : I8Samples) {
         NUdf::TUnboxedValue* pair = nullptr;
         *items++ = graph->GetHolderFactory().CreateDirectArrayHolder(2U, pair);
@@ -610,7 +748,8 @@ Y_UNIT_TEST_LLVM(TestMinMaxSumDoubleSmallKey) {
     }
     const auto cppTime = TInstant::Now() - t;
 
-    std::vector<std::pair<i8, std::array<double, 3U>>> one, two;
+    std::vector<std::pair<i8, std::array<double, 3U>>> one;
+    std::vector<std::pair<i8, std::array<double, 3U>>> two;
     one.reserve(expects.size());
     two.reserve(expects.size());
 
@@ -622,7 +761,7 @@ Y_UNIT_TEST_LLVM(TestMinMaxSumDoubleSmallKey) {
     const auto listType = NTest::ConvertToMinikqlType<TVector<std::tuple<i8, double>>>(pb);
     const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideCombiner(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, false), {}),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideCombiner(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, /*isImmediate=*/false), {}),
                                                                                 [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }), 0ULL,
                                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front()}; },
                                                                    [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.back(), items.back(), items.back()}; },
@@ -632,7 +771,7 @@ Y_UNIT_TEST_LLVM(TestMinMaxSumDoubleSmallKey) {
 
     const auto graph = setup.BuildGraph(pgmReturn, {list});
     NUdf::TUnboxedValue* items = nullptr;
-    graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(I8Samples.size(), items));
+    graph->GetEntryPoint(0, /*require=*/true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(I8Samples.size(), items));
     for (const auto& sample : I8Samples) {
         NUdf::TUnboxedValue* pair = nullptr;
         *items++ = graph->GetHolderFactory().CreateDirectArrayHolder(2U, pair);
@@ -670,7 +809,8 @@ Y_UNIT_TEST_LLVM(TestSumDoubleStringKey) {
     }
     const auto cppTime = TInstant::Now() - t;
 
-    std::vector<std::pair<std::string_view, double>> one, two;
+    std::vector<std::pair<std::string_view, double>> one;
+    std::vector<std::pair<std::string_view, double>> two;
     one.reserve(expects.size());
     two.reserve(expects.size());
 
@@ -682,7 +822,7 @@ Y_UNIT_TEST_LLVM(TestSumDoubleStringKey) {
     const auto listType = NTest::ConvertToMinikqlType<TVector<std::tuple<TStringBuf, double>>>(pb);
     const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideCombiner(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, false), {}),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideCombiner(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, /*isImmediate=*/false), {}),
                                                                                 [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }), 0ULL,
                                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front()}; },
                                                                    [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.back()}; },
@@ -692,7 +832,7 @@ Y_UNIT_TEST_LLVM(TestSumDoubleStringKey) {
 
     const auto graph = setup.BuildGraph(pgmReturn, {list});
     NUdf::TUnboxedValue* items = nullptr;
-    graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(stringI8Samples.size(), items));
+    graph->GetEntryPoint(0, /*require=*/true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(stringI8Samples.size(), items));
     for (const auto& sample : stringI8Samples) {
         NUdf::TUnboxedValue* pair = nullptr;
         *items++ = graph->GetHolderFactory().CreateDirectArrayHolder(2U, pair);
@@ -733,7 +873,8 @@ Y_UNIT_TEST_LLVM(TestMinMaxSumDoubleStringKey) {
     }
     const auto cppTime = TInstant::Now() - t;
 
-    std::vector<std::pair<std::string_view, std::array<double, 3U>>> one, two;
+    std::vector<std::pair<std::string_view, std::array<double, 3U>>> one;
+    std::vector<std::pair<std::string_view, std::array<double, 3U>>> two;
     one.reserve(expects.size());
     two.reserve(expects.size());
 
@@ -745,7 +886,7 @@ Y_UNIT_TEST_LLVM(TestMinMaxSumDoubleStringKey) {
     const auto listType = NTest::ConvertToMinikqlType<TVector<std::tuple<TStringBuf, double>>>(pb);
     const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideCombiner(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, false), {}),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideCombiner(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, /*isImmediate=*/false), {}),
                                                                                 [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }), 0ULL,
                                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front()}; },
                                                                    [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.back(), items.back(), items.back()}; },
@@ -755,7 +896,7 @@ Y_UNIT_TEST_LLVM(TestMinMaxSumDoubleStringKey) {
 
     const auto graph = setup.BuildGraph(pgmReturn, {list});
     NUdf::TUnboxedValue* items = nullptr;
-    graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(stringI8Samples.size(), items));
+    graph->GetEntryPoint(0, /*require=*/true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(stringI8Samples.size(), items));
     for (const auto& sample : stringI8Samples) {
         NUdf::TUnboxedValue* pair = nullptr;
         *items++ = graph->GetHolderFactory().CreateDirectArrayHolder(2U, pair);
@@ -802,7 +943,8 @@ Y_UNIT_TEST_LLVM(TestMinMaxSumTupleKey) {
     }
     const auto cppTime = TInstant::Now() - t;
 
-    std::vector<std::pair<std::pair<ui32, std::string>, std::array<double, 3U>>> one, two;
+    std::vector<std::pair<std::pair<ui32, std::string>, std::array<double, 3U>>> one;
+    std::vector<std::pair<std::pair<ui32, std::string>, std::array<double, 3U>>> two;
     one.reserve(expects.size());
     two.reserve(expects.size());
 
@@ -814,7 +956,7 @@ Y_UNIT_TEST_LLVM(TestMinMaxSumTupleKey) {
     const auto listType = NTest::ConvertToMinikqlType<TVector<std::tuple<std::tuple<ui32, TStringBuf>, double>>>(pb);
     const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideCombiner(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, false), {}),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideCombiner(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, /*isImmediate=*/false), {}),
                                                                                 [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(pb.Nth(item, 0U), 0U), pb.Nth(pb.Nth(item, 0U), 1U), pb.Nth(item, 1U)}; }), 0ULL,
                                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front(), items[1U]}; },
                                                                    [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.back(), items.back(), items.back()}; },
@@ -824,7 +966,7 @@ Y_UNIT_TEST_LLVM(TestMinMaxSumTupleKey) {
 
     const auto graph = setup.BuildGraph(pgmReturn, {list});
     NUdf::TUnboxedValue* items = nullptr;
-    graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(pairSamples.size(), items));
+    graph->GetEntryPoint(0, /*require=*/true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(pairSamples.size(), items));
     for (const auto& sample : pairSamples) {
         NUdf::TUnboxedValue* pair = nullptr;
         *items++ = graph->GetHolderFactory().CreateDirectArrayHolder(2U, pair);
@@ -882,7 +1024,8 @@ Y_UNIT_TEST_LLVM(TestTpch) {
     }
     const auto cppTime = TInstant::Now() - t;
 
-    std::vector<std::pair<std::pair<std::string, std::string>, std::pair<ui64, std::array<double, 5U>>>> one, two;
+    std::vector<std::pair<std::pair<std::string, std::string>, std::pair<ui64, std::array<double, 5U>>>> one;
+    std::vector<std::pair<std::pair<std::string, std::string>, std::pair<ui64, std::array<double, 5U>>>> two;
     one.reserve(expects.size());
     two.reserve(expects.size());
 
@@ -895,7 +1038,7 @@ Y_UNIT_TEST_LLVM(TestTpch) {
     const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
 
     const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideCombiner(
-                                                       pb.WideFilter(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, false), {}),
+                                                       pb.WideFilter(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, /*isImmediate=*/false), {}),
                                                                                   [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U), pb.Nth(item, 3U), pb.Nth(item, 4U), pb.Nth(item, 5U), pb.Nth(item, 6U)}; }),
                                                                      [&](TRuntimeNode::TList items) { return pb.AggrLessOrEqual(items.front(), pb.NewDataLiteral<ui64>(border)); }), 0ULL,
                                                        [&](TRuntimeNode::TList item) -> TRuntimeNode::TList { return {item[1U], item[2U]}; },
@@ -916,7 +1059,7 @@ Y_UNIT_TEST_LLVM(TestTpch) {
 
     const auto graph = setup.BuildGraph(pgmReturn, {list});
     NUdf::TUnboxedValue* items = nullptr;
-    graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(TpchSamples.size(), items));
+    graph->GetEntryPoint(0, /*require=*/true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(TpchSamples.size(), items));
     for (const auto& sample : TpchSamples) {
         NUdf::TUnboxedValue* elements = nullptr;
         *items++ = graph->GetHolderFactory().CreateDirectArrayHolder(7U, elements);
@@ -1169,7 +1312,7 @@ Y_UNIT_TEST_LLVM(TestSpillingBucketsDistribution) {
     const auto listType = NTest::ConvertToMinikqlType<TVector<std::tuple<ui64, ui64>>>(pb);
     const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
 
-    const auto pgmReturn = pb.FromFlow(pb.NarrowMap(pb.WideLastCombinerWithSpilling(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, false), {}),
+    const auto pgmReturn = pb.FromFlow(pb.NarrowMap(pb.WideLastCombinerWithSpilling(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, /*isImmediate=*/false), {}),
                                                                                                  [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                                                     [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front()}; },
                                                                                     [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.back()}; },
@@ -1182,7 +1325,7 @@ Y_UNIT_TEST_LLVM(TestSpillingBucketsDistribution) {
     graph->GetContext().SpillerFactory = spillerFactory;
 
     NUdf::TUnboxedValue* items = nullptr;
-    graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(samples.size(), items));
+    graph->GetEntryPoint(0, /*require=*/true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(samples.size(), items));
     for (const auto& sample : samples) {
         NUdf::TUnboxedValue* pair = nullptr;
         *items++ = graph->GetHolderFactory().CreateDirectArrayHolder(2U, pair);
@@ -1207,13 +1350,25 @@ Y_UNIT_TEST_LLVM(TestSpillingBucketsDistribution) {
     auto anyEmpty = std::any_of(flushedBucketsSizes.begin(), flushedBucketsSizes.end(), [](size_t size) { return size == 0; });
     UNIT_ASSERT_C(!anyEmpty, "Spiller flushed empty bucket");
 }
+// https://github.com/ydb-platform/ydb/issues/40326
+Y_UNIT_TEST_LLVM_SPILLING(TestTeardownMidConsumptionSafety) {
+    RunLastCombinerTeardownTest<LLVM, SPILLING>(SPILLING ? std::make_shared<TMockSpillerFactory>() : nullptr,
+                                                /*appendYieldSentinel=*/true);
+}
+
+// https://github.com/ydb-platform/ydb/issues/40326
+Y_UNIT_TEST_LLVM(TestTeardownWithPendingSpillWrites) {
+    RunLastCombinerTeardownTest<LLVM, true>(std::make_shared<TPendingMockSpillerFactory>(),
+                                            /*appendYieldSentinel=*/false);
+}
 } // Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerTest)
 
 Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerPerfTest) {
 Y_UNIT_TEST_LLVM(TestSumDoubleBooleanKeys) {
     TSetup<LLVM> setup;
 
-    double positive = 0.0, negative = 0.0;
+    double positive = 0.0;
+    double negative = 0.0;
     const auto t = TInstant::Now();
     for (const auto& sample : I8Samples) {
         (sample.second > 0.0 ? positive : negative) += sample.second;
@@ -1225,7 +1380,7 @@ Y_UNIT_TEST_LLVM(TestSumDoubleBooleanKeys) {
     const auto listType = NTest::ConvertToMinikqlType<TVector<double>>(pb);
     const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideLastCombiner(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, false), {}),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideLastCombiner(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, /*isImmediate=*/false), {}),
                                                                                     [&](TRuntimeNode item) -> TRuntimeNode::TList { return {item}; }),
                                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {pb.AggrGreater(items.front(), pb.NewDataLiteral(0.0))}; },
                                                                        [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList { return items; },
@@ -1235,7 +1390,7 @@ Y_UNIT_TEST_LLVM(TestSumDoubleBooleanKeys) {
 
     const auto graph = setup.BuildGraph(pgmReturn, {list});
     NUdf::TUnboxedValue* items = nullptr;
-    graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(I8Samples.size(), items));
+    graph->GetEntryPoint(0, /*require=*/true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(I8Samples.size(), items));
     std::transform(I8Samples.cbegin(), I8Samples.cend(), items, [](const std::pair<i8, double> s) { return ToValue<double>(s.second); });
 
     const auto t1 = TInstant::Now();
@@ -1258,7 +1413,12 @@ Y_UNIT_TEST_LLVM(TestSumDoubleBooleanKeys) {
 Y_UNIT_TEST_LLVM(TestMinMaxSumDoubleBooleanKeys) {
     TSetup<LLVM> setup;
 
-    double pSum = 0.0, nSum = 0.0, pMax = 0.0, nMax = -1000.0, pMin = 1000.0, nMin = 0.0;
+    double pSum = 0.0;
+    double nSum = 0.0;
+    double pMax = 0.0;
+    double nMax = -1000.0;
+    double pMin = 1000.0;
+    double nMin = 0.0;
     const auto t = TInstant::Now();
     for (const auto& sample : I8Samples) {
         if (sample.second > 0.0) {
@@ -1279,7 +1439,7 @@ Y_UNIT_TEST_LLVM(TestMinMaxSumDoubleBooleanKeys) {
     const auto listType = NTest::ConvertToMinikqlType<TVector<double>>(pb);
     const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideLastCombiner(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, false), {}),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideLastCombiner(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, /*isImmediate=*/false), {}),
                                                                                     [&](TRuntimeNode item) -> TRuntimeNode::TList { return {item}; }),
                                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {pb.AggrGreater(items.front(), pb.NewDataLiteral(0.0))}; },
                                                                        [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front(), items.front(), items.front()}; },
@@ -1289,7 +1449,7 @@ Y_UNIT_TEST_LLVM(TestMinMaxSumDoubleBooleanKeys) {
 
     const auto graph = setup.BuildGraph(pgmReturn, {list});
     NUdf::TUnboxedValue* items = nullptr;
-    graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(I8Samples.size(), items));
+    graph->GetEntryPoint(0, /*require=*/true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(I8Samples.size(), items));
     std::transform(I8Samples.cbegin(), I8Samples.cend(), items, [](const std::pair<i8, double> s) { return ToValue<double>(s.second); });
 
     const auto t1 = TInstant::Now();
@@ -1329,7 +1489,8 @@ Y_UNIT_TEST_LLVM(TestSumDoubleSmallKey) {
     }
     const auto cppTime = TInstant::Now() - t;
 
-    std::vector<std::pair<i8, double>> one, two;
+    std::vector<std::pair<i8, double>> one;
+    std::vector<std::pair<i8, double>> two;
     one.reserve(expects.size());
     two.reserve(expects.size());
 
@@ -1341,7 +1502,7 @@ Y_UNIT_TEST_LLVM(TestSumDoubleSmallKey) {
     const auto listType = NTest::ConvertToMinikqlType<TVector<std::tuple<i8, double>>>(pb);
     const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideLastCombiner(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, false), {}),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideLastCombiner(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, /*isImmediate=*/false), {}),
                                                                                     [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front()}; },
                                                                        [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.back()}; },
@@ -1351,7 +1512,7 @@ Y_UNIT_TEST_LLVM(TestSumDoubleSmallKey) {
 
     const auto graph = setup.BuildGraph(pgmReturn, {list});
     NUdf::TUnboxedValue* items = nullptr;
-    graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(I8Samples.size(), items));
+    graph->GetEntryPoint(0, /*require=*/true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(I8Samples.size(), items));
     for (const auto& sample : I8Samples) {
         NUdf::TUnboxedValue* pair = nullptr;
         *items++ = graph->GetHolderFactory().CreateDirectArrayHolder(2U, pair);
@@ -1389,7 +1550,8 @@ Y_UNIT_TEST_LLVM(TestMinMaxSumDoubleSmallKey) {
     }
     const auto cppTime = TInstant::Now() - t;
 
-    std::vector<std::pair<i8, std::array<double, 3U>>> one, two;
+    std::vector<std::pair<i8, std::array<double, 3U>>> one;
+    std::vector<std::pair<i8, std::array<double, 3U>>> two;
     one.reserve(expects.size());
     two.reserve(expects.size());
 
@@ -1401,7 +1563,7 @@ Y_UNIT_TEST_LLVM(TestMinMaxSumDoubleSmallKey) {
     const auto listType = NTest::ConvertToMinikqlType<TVector<std::tuple<i8, double>>>(pb);
     const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideLastCombiner(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, false), {}),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideLastCombiner(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, /*isImmediate=*/false), {}),
                                                                                     [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front()}; },
                                                                        [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.back(), items.back(), items.back()}; },
@@ -1411,7 +1573,7 @@ Y_UNIT_TEST_LLVM(TestMinMaxSumDoubleSmallKey) {
 
     const auto graph = setup.BuildGraph(pgmReturn, {list});
     NUdf::TUnboxedValue* items = nullptr;
-    graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(I8Samples.size(), items));
+    graph->GetEntryPoint(0, /*require=*/true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(I8Samples.size(), items));
     for (const auto& sample : I8Samples) {
         NUdf::TUnboxedValue* pair = nullptr;
         *items++ = graph->GetHolderFactory().CreateDirectArrayHolder(2U, pair);
@@ -1449,7 +1611,8 @@ Y_UNIT_TEST_LLVM(TestSumDoubleStringKey) {
     }
     const auto cppTime = TInstant::Now() - t;
 
-    std::vector<std::pair<std::string_view, double>> one, two;
+    std::vector<std::pair<std::string_view, double>> one;
+    std::vector<std::pair<std::string_view, double>> two;
     one.reserve(expects.size());
     two.reserve(expects.size());
 
@@ -1461,7 +1624,7 @@ Y_UNIT_TEST_LLVM(TestSumDoubleStringKey) {
     const auto listType = NTest::ConvertToMinikqlType<TVector<std::tuple<TStringBuf, double>>>(pb);
     const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideLastCombiner(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, false), {}),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideLastCombiner(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, /*isImmediate=*/false), {}),
                                                                                     [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front()}; },
                                                                        [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.back()}; },
@@ -1471,7 +1634,7 @@ Y_UNIT_TEST_LLVM(TestSumDoubleStringKey) {
 
     const auto graph = setup.BuildGraph(pgmReturn, {list});
     NUdf::TUnboxedValue* items = nullptr;
-    graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(stringI8Samples.size(), items));
+    graph->GetEntryPoint(0, /*require=*/true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(stringI8Samples.size(), items));
     for (const auto& sample : stringI8Samples) {
         NUdf::TUnboxedValue* pair = nullptr;
         *items++ = graph->GetHolderFactory().CreateDirectArrayHolder(2U, pair);
@@ -1512,7 +1675,8 @@ Y_UNIT_TEST_LLVM(TestMinMaxSumDoubleStringKey) {
     }
     const auto cppTime = TInstant::Now() - t;
 
-    std::vector<std::pair<std::string_view, std::array<double, 3U>>> one, two;
+    std::vector<std::pair<std::string_view, std::array<double, 3U>>> one;
+    std::vector<std::pair<std::string_view, std::array<double, 3U>>> two;
     one.reserve(expects.size());
     two.reserve(expects.size());
 
@@ -1524,7 +1688,7 @@ Y_UNIT_TEST_LLVM(TestMinMaxSumDoubleStringKey) {
     const auto listType = NTest::ConvertToMinikqlType<TVector<std::tuple<TStringBuf, double>>>(pb);
     const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideLastCombiner(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, false), {}),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideLastCombiner(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, /*isImmediate=*/false), {}),
                                                                                     [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front()}; },
                                                                        [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.back(), items.back(), items.back()}; },
@@ -1534,7 +1698,7 @@ Y_UNIT_TEST_LLVM(TestMinMaxSumDoubleStringKey) {
 
     const auto graph = setup.BuildGraph(pgmReturn, {list});
     NUdf::TUnboxedValue* items = nullptr;
-    graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(stringI8Samples.size(), items));
+    graph->GetEntryPoint(0, /*require=*/true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(stringI8Samples.size(), items));
     for (const auto& sample : stringI8Samples) {
         NUdf::TUnboxedValue* pair = nullptr;
         *items++ = graph->GetHolderFactory().CreateDirectArrayHolder(2U, pair);
@@ -1581,7 +1745,8 @@ Y_UNIT_TEST_LLVM(TestMinMaxSumTupleKey) {
     }
     const auto cppTime = TInstant::Now() - t;
 
-    std::vector<std::pair<std::pair<ui32, std::string>, std::array<double, 3U>>> one, two;
+    std::vector<std::pair<std::pair<ui32, std::string>, std::array<double, 3U>>> one;
+    std::vector<std::pair<std::pair<ui32, std::string>, std::array<double, 3U>>> two;
     one.reserve(expects.size());
     two.reserve(expects.size());
 
@@ -1593,7 +1758,7 @@ Y_UNIT_TEST_LLVM(TestMinMaxSumTupleKey) {
     const auto listType = NTest::ConvertToMinikqlType<TVector<std::tuple<std::tuple<ui32, TStringBuf>, double>>>(pb);
     const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideLastCombiner(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, false), {}),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideLastCombiner(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, /*isImmediate=*/false), {}),
                                                                                     [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(pb.Nth(item, 0U), 0U), pb.Nth(pb.Nth(item, 0U), 1U), pb.Nth(item, 1U)}; }),
                                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front(), items[1U]}; },
                                                                        [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.back(), items.back(), items.back()}; },
@@ -1603,7 +1768,7 @@ Y_UNIT_TEST_LLVM(TestMinMaxSumTupleKey) {
 
     const auto graph = setup.BuildGraph(pgmReturn, {list});
     NUdf::TUnboxedValue* items = nullptr;
-    graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(pairSamples.size(), items));
+    graph->GetEntryPoint(0, /*require=*/true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(pairSamples.size(), items));
     for (const auto& sample : pairSamples) {
         NUdf::TUnboxedValue* pair = nullptr;
         *items++ = graph->GetHolderFactory().CreateDirectArrayHolder(2U, pair);
@@ -1661,7 +1826,8 @@ Y_UNIT_TEST_LLVM(TestTpch) {
     }
     const auto cppTime = TInstant::Now() - t;
 
-    std::vector<std::pair<std::pair<std::string, std::string>, std::pair<ui64, std::array<double, 5U>>>> one, two;
+    std::vector<std::pair<std::pair<std::string, std::string>, std::pair<ui64, std::array<double, 5U>>>> one;
+    std::vector<std::pair<std::pair<std::string, std::string>, std::pair<ui64, std::array<double, 5U>>>> two;
     one.reserve(expects.size());
     two.reserve(expects.size());
 
@@ -1674,7 +1840,7 @@ Y_UNIT_TEST_LLVM(TestTpch) {
     const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
 
     const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideLastCombiner(
-                                                       pb.WideFilter(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, false), {}),
+                                                       pb.WideFilter(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, /*isImmediate=*/false), {}),
                                                                                   [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U), pb.Nth(item, 3U), pb.Nth(item, 4U), pb.Nth(item, 5U), pb.Nth(item, 6U)}; }),
                                                                      [&](TRuntimeNode::TList items) { return pb.AggrLessOrEqual(items.front(), pb.NewDataLiteral<ui64>(border)); }),
                                                        [&](TRuntimeNode::TList item) -> TRuntimeNode::TList { return {item[1U], item[2U]}; },
@@ -1695,7 +1861,7 @@ Y_UNIT_TEST_LLVM(TestTpch) {
 
     const auto graph = setup.BuildGraph(pgmReturn, {list});
     NUdf::TUnboxedValue* items = nullptr;
-    graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(TpchSamples.size(), items));
+    graph->GetEntryPoint(0, /*require=*/true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(TpchSamples.size(), items));
     for (const auto& sample : TpchSamples) {
         NUdf::TUnboxedValue* elements = nullptr;
         *items++ = graph->GetHolderFactory().CreateDirectArrayHolder(7U, elements);
@@ -1727,5 +1893,4 @@ Y_UNIT_TEST_LLVM(TestTpch) {
 }
 } // Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerPerfTest)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

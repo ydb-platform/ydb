@@ -52,8 +52,7 @@ LIBRARY()
         group_metrics_exchange.cpp
         mon_main.cpp
         mon_main.h
-        recommissioner.cpp
-        recommissioner.h
+        move_data.cpp
         s3.h
         s3_router.h
         s3_router_events.h

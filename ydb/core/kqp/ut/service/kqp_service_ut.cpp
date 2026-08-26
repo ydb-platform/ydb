@@ -989,6 +989,65 @@ struct TDictCase {
             "Expected SUCCESS because retry to another node was in progress, but got: " << result.GetIssues().ToString());
     }
 
+    /* Scenario (rolling upgrade / node drain):
+        - Every TEvStartKqpTasksRequest bounces back as undelivered with ReasonActorUnknown,
+          so the executer keeps rescheduling internal retries until the budget is exhausted.
+        - A node going away is a transient condition, so the query must terminate with the
+          retriable UNAVAILABLE, just like the Disconnected and NODE_SHUTTING_DOWN paths do,
+          and not with the non-retriable INTERNAL_ERROR.
+     */
+    Y_UNIT_TEST(RetriesExhaustedByActorUnknownIsUnavailable) {
+        TKikimrSettings settings = TKikimrSettings()
+                                    .SetNodeCount(2)
+                                    .SetUseRealThreads(false);
+        auto* retriesConfig = settings.AppConfig.MutableTableServiceConfig()->MutableExecuterRetriesConfig();
+        retriesConfig->SetMaxRetryNumber(2);
+        retriesConfig->SetMinDelayToRetryMs(1);
+        retriesConfig->SetMaxDelayToRetryMs(5);
+
+        TKikimrRunner kikimr(settings);
+        kikimr.RunCall([&]() { CreateLargeTable(kikimr, 100, 2, 2, 10, 2); });
+
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        auto queryClient = kikimr.RunCall([&] { return kikimr.GetQueryClient(); });
+
+        ui32 bouncedRequests = 0;
+
+        // Imitate a draining node: the KQP node-service actor is already gone, so every
+        // attempt to start tasks there comes back with ReasonActorUnknown. Bounce the
+        // requests to all the nodes, otherwise the planner may hand the tasks over to a
+        // node that is not tracked yet and the outcome becomes timing dependent.
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvKqpNode::TEvStartKqpTasksRequest::EventType) {
+                ++bouncedRequests;
+                auto undeliveredEv = new TEvents::TEvUndelivered(
+                    TEvKqpNode::TEvStartKqpTasksRequest::EventType,
+                    TEvents::TEvUndelivered::ReasonActorUnknown);
+                auto senderNodeIndex = ev->Recipient.NodeId() - runtime.GetNodeId(0);
+                runtime.Send(new IEventHandle(ev->Sender, ev->Recipient, undeliveredEv, 0, ev->Cookie),
+                    senderNodeIndex, true);
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        auto result = kikimr.RunCall([&queryClient]() {
+            return queryClient.ExecuteQuery(R"(
+                SELECT COUNT(*) AS cnt, SUM(Data) AS sum_data
+                FROM `/Root/LargeTable`
+                LIMIT 100
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        });
+
+        UNIT_ASSERT_C(bouncedRequests > 0, "The query did not send a single TEvStartKqpTasksRequest, "
+            "so the ActorUnknown retry path was never reached");
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::UNAVAILABLE,
+            "Expected the retriable UNAVAILABLE after the ActorUnknown retries are exhausted, but got: "
+                << result.GetStatus() << ", " << result.GetIssues().ToString());
+    }
+
 }
 
 } // namespace NKqp

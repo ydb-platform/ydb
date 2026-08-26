@@ -1,0 +1,68 @@
+syntax = "proto3";
+
+import "ydb/core/protos/blobstorage_ddisk.proto";
+
+import "ydb/core/nbs/cloud/storage/core/protos/error.proto";
+
+package NYdb.NBS.NBlockStore.NStorage.NDbsController.NProto;
+option java_package = "ru.yandex.ydb.core.nbs.dbs_controller.proto";
+
+
+//
+// Структура с описанием зависимостей Partition от DDisk-ов (включая PBuffer-ы)
+// Уважает DirectBlockGroup-ы
+//
+message TDirectBlockGroupDDisks {
+  message TDDiskIds {
+    NKikimrBlobStorage.NDDisk.TDDiskId DDisk = 1;
+    NKikimrBlobStorage.NDDisk.TDDiskId PersistentBuffer = 2;
+  }
+  repeated TDDiskIds DDiskIds = 1;
+}
+
+message TPartitionDDisks {
+  repeated TDirectBlockGroupDDisks DirectBlockGroupsDDisks = 1;
+}
+
+//
+// Запрос на обновление отношений в Rel(DDiskId, TabletId)
+// для данной таблетки.
+// Все тройки (TabletId, DirectBlockGroupId, DDiskId), содержащиеся в PartitionDDisks запроса,
+// добавляются в отношение с сохранением информации о типе DDisk (обычный или PBuffer).
+// Все тройки (TabletId, DirectBlockGroupId, DDiskId) с TabletId запроса,
+// не содержащиеся в PartitionDDisks запроса, удаляются из отношения.
+//
+message TUpdateDDiskMapRequest {
+  uint64 TabletId = 1;                  // Id таблетки partition
+  TPartitionDDisks PartitionDDisks = 2; // Список DDisk-ов, от которых зависит partition
+}
+
+message TUpdateDDiskMapResponse {
+  NYdb.NBS.NProto.TError Error = 1;
+}
+
+//
+// Запрос на удаление всех отношений таблетки в Rel(DDiskId, TabletId).
+//
+message TRemoveTabletDDiskMapRequest {
+  uint64 TabletId = 1;                  // Id таблетки partition
+}
+
+message TRemoveTabletDDiskMapResponse {
+  NYdb.NBS.NProto.TError Error = 1;
+}
+
+//
+// GetPartitionsForNode
+//
+message TGetPartitionsForNodeRequest
+{
+  uint32 NodeId = 1;
+}
+
+message TGetPartitionsForNodeResponse
+{
+  NYdb.NBS.NProto.TError Error = 1;
+
+  repeated uint64 Partitions = 2;
+}

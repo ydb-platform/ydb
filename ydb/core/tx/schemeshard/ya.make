@@ -35,6 +35,7 @@ RECURSE_FOR_TESTS(
     ut_incremental_restore
     ut_incremental_restore_reboots
     ut_full_backup
+    ut_generated_columns
     ut_index
     ut_index_build
     ut_index_build_reboots

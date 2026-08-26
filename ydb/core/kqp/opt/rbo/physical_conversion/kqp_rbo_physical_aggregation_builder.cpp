@@ -1105,7 +1105,9 @@ TExprNode::TPtr TPhysicalAggregationBuilder::BuildNarrowMapForPhysicalAggregatio
         // clang-format on
     }
 
-    const auto outputs = NPhysicalConvertionUtils::BuildNameSet(Aggregate->GetOutputIUs());
+    // Keep grouping and DistinctAll keys in the combiner, but not its output.
+    const auto outputs = NPhysicalConvertionUtils::BuildNameSet(
+        NPhysicalConvertionUtils::GetLiveOutputIUs(*Aggregate));
 
     // clang-format off
     return Ctx.Builder(Pos)
@@ -1395,23 +1397,33 @@ void TPhysicalAggregationBuilder::PopulateAggregateColTypeMap(const TIntrusivePt
 
 THashMap<TString, const TTypeAnnotationNode*> TPhysicalAggregationBuilder::GetIntermediateAggregationInputType() const {
     THashMap<TString, const TTypeAnnotationNode*> colTypeMap;
-    if (Aggregate->GetInput()->GetKind() == EOperator::UnionAll) {
-        const auto unionAll = CastOperator<TOpUnionAll>(Aggregate->GetInput());
-        const auto leftInput = unionAll->GetLeftInput();
-        const auto rightInput = unionAll->GetRightInput();
-        if (leftInput->GetKind() == EOperator::Map && rightInput->GetKind() == EOperator::Map) {
-            const auto leftMap = CastOperator<TOpMap>(leftInput);
-            const auto rightMap = CastOperator<TOpMap>(rightInput);
-            if (leftMap->GetInput()->GetKind() == EOperator::Aggregate && rightMap->GetInput()->GetKind() == EOperator::Aggregate) {
-                const auto leftAggregate = CastOperator<TOpAggregate>(leftMap->GetInput());
-                const auto rightAggregate = CastOperator<TOpAggregate>(rightMap->GetInput());
-                auto leftStructType = leftAggregate->GetInput()->Type->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-                auto rightStructType = rightAggregate->GetInput()->Type->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-                PopulateAggregateColTypeMap(leftAggregate, leftStructType, colTypeMap);
-                PopulateAggregateColTypeMap(rightAggregate, rightStructType, colTypeMap);
-            }
-        }
+    if (Aggregate->GetInput()->GetKind() != EOperator::UnionAll) {
+        return colTypeMap;
     }
+
+    // Only the shape produced by the distinct aggregation expansion is handled: every union
+    // input is a map over a partial aggregate.
+    const auto unionAll = CastOperator<TOpUnionAll>(Aggregate->GetInput());
+    TVector<TIntrusivePtr<TOpAggregate>> partialAggregates;
+    partialAggregates.reserve(unionAll->Children.size());
+    for (const auto& input : unionAll->Children) {
+        if (input->GetKind() != EOperator::Map) {
+            return {};
+        }
+
+        const auto map = CastOperator<TOpMap>(input);
+        if (map->GetInput()->GetKind() != EOperator::Aggregate) {
+            return {};
+        }
+
+        partialAggregates.push_back(CastOperator<TOpAggregate>(map->GetInput()));
+    }
+
+    for (const auto& partialAggregate : partialAggregates) {
+        const auto structType = partialAggregate->GetInput()->Type->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+        PopulateAggregateColTypeMap(partialAggregate, structType, colTypeMap);
+    }
+
     return colTypeMap;
 }
 

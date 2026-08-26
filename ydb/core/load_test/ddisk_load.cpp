@@ -212,6 +212,7 @@ class TDDiskLoadTestActor : public TActorBootstrapped<TDDiskLoadTestActor> {
     TRope ZeroData;
     bool AlignSourceData = true;
     bool IsReadLoad = false;
+    bool EnableChecksums = true;
     ui32 IoSizeBytes = 4096;
 
     TString IOSizeInfo = ToString(IoSizeBytes);
@@ -240,11 +241,13 @@ public:
     }
 
     TDDiskLoadTestActor(const NKikimr::TEvLoadTestRequest::TDDiskLoad& cmd, const TActorId& parent,
-            const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui64 /*index*/, ui64 tag)
+            const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui64 /*index*/, ui64 tag,
+            bool enableChecksums)
         : Parent(parent)
         , Tag(tag)
         , MaxInFlight(4, 0, 65536)
         , Rng(Now().GetValue())
+        , EnableChecksums(enableChecksums)
         , Report(new TEvLoad::TLoadReport())
     {
         VERIFY_PARAM(DurationSeconds);
@@ -381,6 +384,7 @@ public:
 
         Connected = true;
         Credentials.DDiskInstanceGuid = msg.GetDDiskInstanceGuid();
+        Credentials.ConnectionToken.emplace(msg.GetConnectionToken());
 
         PrepareDataAndStart(ctx);
     }
@@ -505,7 +509,7 @@ public:
             if (Connected && !DisconnectSent) {
                 DisconnectSent = true;
                 auto ev = std::make_unique<NDDisk::TEvDisconnect>();
-                Credentials.Serialize(ev->Record.MutableCredentials());
+                Credentials.SerializeForRequest(ev->Record.MutableCredentials());
                 SendRequest(ctx, std::move(ev));
             } else {
                 FinishAndDie(ctx);
@@ -613,7 +617,11 @@ public:
             } else {
                 auto ev = std::make_unique<NDDisk::TEvWrite>(Credentials,
                     NDDisk::TBlockSelector(vChunkIndex, offsetInChunk, size), NDDisk::TWriteInstruction(0));
-                ev->AddPayload(TRope(RandomData));
+                if (EnableChecksums) {
+                    ev->AddPayloadThenChecksum(TRope(RandomData));
+                } else {
+                    ev->AddPayload(TRope(RandomData));
+                }
                 SendRequest(ctx, std::move(ev), requestIdx);
             }
             ++RequestsSent;
@@ -659,7 +667,11 @@ public:
                 const ui64 requestIdx = NewTRequestInfo(size, now, true);
                 auto ev = std::make_unique<NDDisk::TEvWrite>(Credentials,
                     NDDisk::TBlockSelector(vChunkIndex, offsetInChunk, size), NDDisk::TWriteInstruction(0));
-                ev->AddPayload(TRope(ZeroData));
+                if (EnableChecksums) {
+                    ev->AddPayloadThenChecksum(TRope(ZeroData));
+                } else {
+                    ev->AddPayload(TRope(ZeroData));
+                }
                 SendRequest(ctx, std::move(ev), requestIdx);
                 ++InFlight;
 
@@ -855,8 +867,9 @@ public:
 } // namespace
 
 IActor *CreateDDiskLoadTest(const NKikimr::TEvLoadTestRequest::TDDiskLoad& cmd,
-        const TActorId& parent, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui64 index, ui64 tag) {
-    return new TDDiskLoadTestActor(cmd, parent, counters, index, tag);
+        const TActorId& parent, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui64 index, ui64 tag,
+        bool enableChecksums) {
+    return new TDDiskLoadTestActor(cmd, parent, counters, index, tag, enableChecksums);
 }
 
 } // NKikimr

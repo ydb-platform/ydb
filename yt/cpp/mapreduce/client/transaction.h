@@ -45,7 +45,7 @@ public:
     const TClientContext GetContext() const;
 
     void Ping() const;
-    void Commit();
+    void Commit(const TCommitTransactionOptions& options = {});
     void Abort();
     void Detach();
 
@@ -83,7 +83,7 @@ private:
         const TTransactionId& transactionId,
         TDuration timeout);
 
-    void Stop(EStopAction action);
+    void Stop(EStopAction action, const TCommitTransactionOptions& commitOptions = {});
 };
 
 ////////////////////////////////////////////////////////////////////////////////

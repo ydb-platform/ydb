@@ -896,4 +896,74 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
         });
     }
 
+    Y_UNIT_TEST(ConsistentCopyTableWithGeneratedColumns) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableGeneratedStored(true);
+        runtime.GetAppData().FeatureFlags.SetEnableGeneratedVirtual(true);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "a"   Type: "Int32"  }
+            Columns { Name: "b"   Type: "Int32"  }
+            Columns {
+                Name: "sum"
+                Type: "Int32"
+                DefaultFromExpression {
+                    ExprText: "a + b"
+                    Stored: true
+                    DependencyColumnNames: ["a", "b"]
+                    Context: "USE `/MyRoot`;"
+                }
+            }
+            Columns {
+                Name: "diff"
+                Type: "Int32"
+                DefaultFromExpression {
+                    ExprText: "a - b"
+                    Stored: false
+                    DependencyColumnNames: ["a", "b"]
+                    Context: ""
+                }
+            }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestConsistentCopyTables(runtime, ++txId, "/MyRoot", R"(
+            CopyTableDescriptions {
+                SrcPath: "/MyRoot/Table"
+                DstPath: "/MyRoot/TableCopy"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto findColumn = [](const NKikimrScheme::TEvDescribeSchemeResult& describe,
+                             const TString& name) -> const NKikimrSchemeOp::TColumnDescription* {
+            for (const auto& column : describe.GetPathDescription().GetTable().GetColumns()) {
+                if (column.GetName() == name) {
+                    return &column;
+                }
+            }
+            return nullptr;
+        };
+
+        auto describe = DescribePath(runtime, "/MyRoot/TableCopy");
+
+        const auto* sum = findColumn(describe, "sum");
+        UNIT_ASSERT_C(sum && sum->HasDefaultFromExpression(), describe.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(sum->GetDefaultFromExpression().GetExprText(), "a + b");
+        UNIT_ASSERT_VALUES_EQUAL(sum->GetDefaultFromExpression().GetStored(), true);
+        UNIT_ASSERT_VALUES_EQUAL(sum->GetDefaultFromExpression().GetContext(), "USE `/MyRoot`;");
+        UNIT_ASSERT_VALUES_EQUAL(sum->GetDefaultFromExpression().DependencyColumnNamesSize(), 2u);
+
+        const auto* diff = findColumn(describe, "diff");
+        UNIT_ASSERT_C(diff && diff->HasDefaultFromExpression(), describe.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(diff->GetDefaultFromExpression().GetExprText(), "a - b");
+        UNIT_ASSERT_VALUES_EQUAL(diff->GetDefaultFromExpression().GetStored(), false);
+    }
 }

@@ -3,9 +3,6 @@
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <ydb/core/persqueue/common/common_app.h>
 
-#define DEBUG(message)
-
-
 namespace NKikimr::NPQ::NBalancing {
 
 void TBalancer::RenderApp(NApp::TNavigationBar& __navigationBar) const {
@@ -110,6 +107,9 @@ void TBalancer::RenderApp(NApp::TNavigationBar& __navigationBar) const {
                             TABLED() {
                                 if (node) {
                                     for (auto* parent : node->DirectParents) {
+                                        if (!parent) {
+                                            continue;
+                                        }
                                         HREF("#" + partitionAnchor(parent->Id)) { __stream << parent->Id; }
                                         __stream << ", ";
                                     }

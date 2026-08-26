@@ -4,7 +4,7 @@
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 
 #include <yql/essentials/sql/settings/translation_settings.h>
-#include <yql/essentials/sql/v1/sql.h>
+#include <yql/essentials/sql/v1/translation/sql.h>
 #include <yql/essentials/sql/v1/lexer/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
 #include <yql/essentials/sql/v1/proto_parser/proto_parser.h>

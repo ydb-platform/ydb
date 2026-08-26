@@ -5,6 +5,7 @@
 #include "file_writer.h"
 #include "helpers.h"
 #include "private.h"
+#include "request_info.h"
 #include "row_batch_reader.h"
 #include "row_batch_writer.h"
 #include "row_stream.h"
@@ -37,8 +38,6 @@
 #include <yt/yt/client/api/distributed_table_session.h>
 #include <yt/yt/client/api/distributed_file_session.h>
 
-#include <yt/yt/client/rpc/request_info.h>
-
 #include <yt/yt/client/ypath/rich.h>
 
 #include <yt/yt/library/auth/credentials_injecting_channel.h>
@@ -48,6 +47,7 @@
 
 #include <yt/yt/core/ytree/convert.h>
 
+#include <yt/yt/core/misc/protobuf_helpers.h>
 #include <yt/yt/core/yson/protobuf_helpers.h>
 
 namespace NYT::NApi::NRpcProxy {
@@ -253,7 +253,7 @@ ITransactionPtr TClient::AttachTransaction(
         options.PingPeriod,
         std::move(stickyParameters),
         rsp->sequence_number_source_id(),
-        "Transaction attached");
+        "Attached");
 }
 
 TFuture<IPrerequisitePtr> TClient::AttachChaosLease(
@@ -583,7 +583,7 @@ TFuture<void> TClient::AlterTable(
         ToProto(req->mutable_replication_progress(), *options.ReplicationProgress);
     }
     if (options.ClipTimestamp) {
-        req->set_clip_timestamp(*options.ClipTimestamp);
+        req->set_clip_timestamp(ToProto(*options.ClipTimestamp));
     }
 
     ToProto(req->mutable_mutating_options(), options);
@@ -697,7 +697,7 @@ TFuture<std::vector<TTableReplicaId>> TClient::GetInSyncReplicas(
     SetTimeoutOptions(*req, options);
 
     if (options.Timestamp) {
-        req->set_timestamp(options.Timestamp);
+        req->set_timestamp(ToProto(options.Timestamp));
     }
 
     YT_OPTIONAL_SET_PROTO(req, cached_sync_replicas_timeout, options.CachedSyncReplicasTimeout);
@@ -721,7 +721,7 @@ TFuture<std::vector<TTableReplicaId>> TClient::GetInSyncReplicas(
     SetTimeoutOptions(*req, options);
 
     if (options.Timestamp) {
-        req->set_timestamp(options.Timestamp);
+        req->set_timestamp(ToProto(options.Timestamp));
     }
 
     YT_OPTIONAL_SET_PROTO(req, cached_sync_replicas_timeout, options.CachedSyncReplicasTimeout);
@@ -760,8 +760,8 @@ TFuture<std::vector<TTabletInfo>> TClient::GetTabletInfos(
             tabletInfo.TotalRowCount = protoTabletInfo.total_row_count();
             tabletInfo.TrimmedRowCount = protoTabletInfo.trimmed_row_count();
             tabletInfo.DelayedLocklessRowCount = protoTabletInfo.delayed_lockless_row_count();
-            tabletInfo.BarrierTimestamp = protoTabletInfo.barrier_timestamp();
-            tabletInfo.LastWriteTimestamp = protoTabletInfo.last_write_timestamp();
+            tabletInfo.BarrierTimestamp = FromProto<NTransactionClient::TTimestamp>(protoTabletInfo.barrier_timestamp());
+            tabletInfo.LastWriteTimestamp = FromProto<NTransactionClient::TTimestamp>(protoTabletInfo.last_write_timestamp());
             tabletInfo.TableReplicaInfos = protoTabletInfo.replicas().empty()
                 ? std::nullopt
                 : std::make_optional(std::vector<TTabletInfo::TTableReplicaInfo>());
@@ -770,7 +770,7 @@ TFuture<std::vector<TTabletInfo>> TClient::GetTabletInfos(
             for (const auto& protoReplicaInfo : protoTabletInfo.replicas()) {
                 auto& currentReplica = tabletInfo.TableReplicaInfos->emplace_back();
                 currentReplica.ReplicaId = FromProto<TGuid>(protoReplicaInfo.replica_id());
-                currentReplica.LastReplicationTimestamp = protoReplicaInfo.last_replication_timestamp();
+                currentReplica.LastReplicationTimestamp = FromProto<NTransactionClient::TTimestamp>(protoReplicaInfo.last_replication_timestamp());
                 currentReplica.Mode = FromProto<ETableReplicaMode>(protoReplicaInfo.mode());
                 currentReplica.CurrentReplicationRowIndex = protoReplicaInfo.current_replication_row_index();
                 currentReplica.CommittedReplicationRowIndex = protoReplicaInfo.committed_replication_row_index();
@@ -904,6 +904,8 @@ TFuture<ITableFragmentWriterPtr> TClient::CreateTableFragmentWriter(
 
     FillRequest(req.Get(), cookie, options);
 
+    SetWriteTableFragmentRequestInfo(req, cookie);
+
     auto schema = New<TTableSchema>();
     auto promise = NewPromise<TSignedWriteFragmentResultPtr>();
 
@@ -942,6 +944,8 @@ IFileFragmentWriterPtr TClient::CreateFileFragmentWriter(
 
     FillRequest(req.Get(), cookie, options);
 
+    SetWriteFileFragmentRequestInfo(req, cookie);
+
     return NRpcProxy::CreateFileFragmentWriter(std::move(req));
 }
 
@@ -962,6 +966,12 @@ TFuture<IQueueRowsetPtr> TClient::PullQueue(
     req->set_offset(offset);
     req->set_partition_index(partitionIndex);
     ToProto(req->mutable_row_batch_read_options(), rowBatchReadOptions);
+
+    if (NTracing::IsCurrentTraceContextRecorded()) {
+        req->TracingTags().emplace_back("yt.queue_path", ToString(queuePath));
+        req->TracingTags().emplace_back("yt.offset", ToString(offset));
+        req->TracingTags().emplace_back("yt.partition_index", ToString(partitionIndex));
+    }
 
     req->set_use_native_tablet_node_api(options.UseNativeTabletNodeApi);
     req->set_replica_consistency(static_cast<NProto::EReplicaConsistency>(options.ReplicaConsistency));
@@ -994,6 +1004,15 @@ TFuture<IQueueRowsetPtr> TClient::PullQueueConsumer(
     YT_OPTIONAL_SET_PROTO(req, offset, offset);
     req->set_partition_index(partitionIndex);
     ToProto(req->mutable_row_batch_read_options(), rowBatchReadOptions);
+
+    if (NTracing::IsCurrentTraceContextRecorded()) {
+        req->TracingTags().emplace_back("yt.consumer_path", ToString(consumerPath));
+        req->TracingTags().emplace_back("yt.queue_path", ToString(queuePath));
+        if (offset) {
+            req->TracingTags().emplace_back("yt.offset", ToString(*offset));
+        }
+        req->TracingTags().emplace_back("yt.partition_index", ToString(partitionIndex));
+    }
 
     req->set_replica_consistency(static_cast<NProto::EReplicaConsistency>(options.ReplicaConsistency));
 
@@ -2107,6 +2126,8 @@ TFuture<NApi::TMultiTablePartitions> TClient::PartitionTables(
 
     SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
 
+    SetPartitionTablesRequestInfo(req, paths, *req);
+
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspPartitionTablesPtr& rsp) {
         return FromProto<TMultiTablePartitions>(*rsp);
     }));
@@ -2124,6 +2145,8 @@ TFuture<ITablePartitionReaderPtr> TClient::CreateTablePartitionReader(
     InitStreamingRequest(*req);
 
     FillRequest(req.Get(), cookie, /*format*/ std::nullopt, options);
+
+    SetReadTablePartitionRequestInfo(req, *req);
 
     return NRpc::CreateRpcClientInputStream(std::move(req))
         .AsUnique().Apply(BIND([] (IAsyncZeroCopyInputStreamPtr&& inputStream) -> TFuture<ITablePartitionReaderPtr>{
@@ -2182,10 +2205,7 @@ TFuture<IFormattedTableReaderPtr> TClient::CreateFormattedTableReader(
 
     FillRequest(req.Get(), path, format, options);
 
-    SetReadTableRequestInfo(
-        req,
-        path,
-        *req);
+    SetReadTableRequestInfo(req, path, *req);
 
     return CreateRpcClientInputStream(std::move(req))
         .AsUnique().Apply(BIND([] (IAsyncZeroCopyInputStreamPtr&& inputStream) {
@@ -2214,6 +2234,8 @@ TFuture<IFormattedTableReaderPtr> TClient::CreateFormattedTablePartitionReader(
     InitStreamingRequest(*req);
 
     FillRequest(req.Get(), cookie, format, options);
+
+    SetReadTablePartitionRequestInfo(req, *req);
 
     return CreateRpcClientInputStream(std::move(req))
         .AsUnique().Apply(BIND([] (IAsyncZeroCopyInputStreamPtr&& inputStream) {
@@ -2886,7 +2908,7 @@ TFuture<TQuery> TClient::GetQuery(
         ToProto(req->mutable_attributes(), options.Attributes);
     }
     if (options.Timestamp) {
-        req->set_timestamp(options.Timestamp);
+        req->set_timestamp(ToProto(options.Timestamp));
     }
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetQueryPtr& rsp) {
@@ -2944,7 +2966,7 @@ TFuture<TListQueriesResult> TClient::ListQueries(
         return TListQueriesResult{
             .Queries = FromProto<std::vector<TQuery>>(rsp->queries()),
             .Incomplete = rsp->incomplete(),
-            .Timestamp = rsp->timestamp(),
+            .Timestamp = FromProto<NTransactionClient::TTimestamp>(rsp->timestamp()),
         };
     }));
 }
@@ -3308,7 +3330,7 @@ TFuture<TSignedShuffleHandlePtr> TClient::StartShuffle(
 TFuture<IRowBatchReaderPtr> TClient::CreateShuffleReader(
     const TSignedShuffleHandlePtr& signedShuffleHandle,
     int partitionIndex,
-    std::optional<TIndexRange> writerIndexRange,
+    std::optional<TIndexRange> logicalWriterIndexRange,
     const TShuffleReaderOptions& options)
 {
     auto proxy = CreateApiServiceProxy();
@@ -3321,10 +3343,10 @@ TFuture<IRowBatchReaderPtr> TClient::CreateShuffleReader(
     if (options.Config) {
         req->set_reader_config(ToProto(ConvertToYsonString(options.Config)));
     }
-    if (writerIndexRange) {
-        auto* writerIndexRangeProto = req->mutable_writer_index_range();
-        writerIndexRangeProto->set_begin(writerIndexRange->first);
-        writerIndexRangeProto->set_end(writerIndexRange->second);
+    if (logicalWriterIndexRange) {
+        auto* logicalWriterIndexRangeProto = req->mutable_writer_index_range();
+        logicalWriterIndexRangeProto->set_begin(logicalWriterIndexRange->first);
+        logicalWriterIndexRangeProto->set_end(logicalWriterIndexRange->second);
     }
 
     return CreateRpcClientInputStream(std::move(req))
@@ -3336,7 +3358,7 @@ TFuture<IRowBatchReaderPtr> TClient::CreateShuffleReader(
 TFuture<IRowBatchWriterPtr> TClient::CreateShuffleWriter(
     const TSignedShuffleHandlePtr& signedShuffleHandle,
     const std::string& partitionColumn,
-    std::optional<int> writerIndex,
+    std::optional<int> logicalWriterIndex,
     const TShuffleWriterOptions& options)
 {
     auto proxy = CreateApiServiceProxy();
@@ -3348,8 +3370,8 @@ TFuture<IRowBatchWriterPtr> TClient::CreateShuffleWriter(
     if (options.Config) {
         req->set_writer_config(ToProto(ConvertToYsonString(options.Config)));
     }
-    if (writerIndex) {
-        req->set_writer_index(*writerIndex);
+    if (logicalWriterIndex) {
+        req->set_writer_index(*logicalWriterIndex);
     }
     req->set_overwrite_existing_writer_data(options.OverwriteExistingWriterData);
 

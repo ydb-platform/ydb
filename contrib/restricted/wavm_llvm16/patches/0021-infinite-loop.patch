@@ -1,0 +1,119 @@
+--- contrib/restricted/wavm_llvm16/Lib/LLVMJIT/EmitCore.cpp	(9f792fa1777224478cd9d5b1bf90810582377ec2)
++++ contrib/restricted/wavm_llvm16/Lib/LLVMJIT/EmitCore.cpp	(index)
+@@ -74,6 +74,10 @@ void EmitFunctionContext::loop(ControlStructureImm imm)
+ 	irBuilder.CreateBr(loopBodyBlock);
+ 	irBuilder.SetInsertPoint(loopBodyBlock);
+ 
++	emitRuntimeIntrinsic("throwIfCurrentTimeoutExpired",
++						 FunctionType({}, {}, IR::CallingConvention::intrinsic),
++						 {});
++
+ 	// Push a control context that ends at the end block/phi.
+ 	pushControlStack(ControlContext::Type::loop, blockType.results(), endBlock, endPHIs);
+ 
+--- contrib/restricted/wavm_llvm16/Lib/Runtime/Intrinsics.cpp	(9f792fa1777224478cd9d5b1bf90810582377ec2)
++++ contrib/restricted/wavm_llvm16/Lib/Runtime/Intrinsics.cpp	(index)
+@@ -255,3 +255,57 @@ HashMap<std::string, Intrinsics::Function*> Intrinsics::getUninstantiatedFunctio
+ 
+ 	return result;
+ }
++
++namespace WAVM { namespace Runtime {
++
++#ifdef __APPLE__
++static constexpr auto WAVM_CLOCK_TYPE = _CLOCK_MONOTONIC_RAW;
++#else
++static constexpr auto WAVM_CLOCK_TYPE = CLOCK_MONOTONIC_COARSE;
++#endif
++
++class Deadline {
++public:
++	bool isDeadlineReached() const {
++		if (!deadline.has_value()) {
++			return false;
++		}
++	
++		struct timespec current = {};
++		if (clock_gettime(WAVM_CLOCK_TYPE, &current) != 0) {
++			// The simplest thing to do here is to assume that the deadline just hasn't arrived.
++			return false;
++		}
++	
++		return current.tv_sec > deadline->tv_sec ||
++			(current.tv_sec == deadline->tv_sec && current.tv_nsec >= deadline->tv_nsec);
++	}
++	
++	void setDeadline(std::optional<struct timespec> newDeadline) {
++		deadline = newDeadline;
++	}
++	
++private:
++	std::optional<struct timespec> deadline;
++};
++
++static thread_local Deadline currentDeadline;
++
++__attribute__((__noinline__)) void setCurrentDeadline(std::optional<struct timespec> deadline)
++{
++	currentDeadline.setDeadline(deadline);
++}
++
++__attribute__((__noinline__)) bool isCurrentDeadlineReached()
++{
++	return currentDeadline.isDeadlineReached();
++}
++
++struct timespec getInstant()
++{
++	struct timespec current = {};
++	WAVM_ASSERT(clock_gettime(WAVM_CLOCK_TYPE, &current) == 0);
++	return current;
++}
++	
++}}
+--- contrib/restricted/wavm_llvm16/Lib/Runtime/RuntimePrivate.h	(9f792fa1777224478cd9d5b1bf90810582377ec2)
++++ contrib/restricted/wavm_llvm16/Lib/Runtime/RuntimePrivate.h	(index)
+@@ -417,3 +417,9 @@ namespace WAVM { namespace Intrinsics {
+ 	HashMap<std::string, Function*> getUninstantiatedFunctions(
+ 		const std::initializer_list<const Intrinsics::Module*>& moduleRefs);
+ }}
++
++namespace WAVM { namespace Runtime {
++	void setCurrentDeadline(std::optional<struct timespec> deadline);
++	bool isCurrentDeadlineReached();
++	struct timespec getInstant();
++}}
+--- contrib/restricted/wavm_llvm16/Lib/Runtime/WAVMIntrinsics.cpp	(9f792fa1777224478cd9d5b1bf90810582377ec2)
++++ contrib/restricted/wavm_llvm16/Lib/Runtime/WAVMIntrinsics.cpp	(index)
+@@ -80,3 +80,19 @@ WAVM_DEFINE_INTRINSIC_FUNCTION(wavmIntrinsics, "debugBreak", void, debugBreak)
+ {
+ 	Log::printf(Log::debug, "================== wavmIntrinsics.debugBreak\n");
+ }
++
++WAVM_DEFINE_INTRINSIC_FUNCTION(wavmIntrinsics,
++							   "throwIfCurrentTimeoutExpired",
++							   void,
++							   throwIfCurrentTimeoutExpired)
++{
++	static thread_local int counter = 0;
++	static constexpr int COUNTER_CHECK_PERIOD = 8192;
++
++	if (counter == COUNTER_CHECK_PERIOD) {
++		if(isCurrentDeadlineReached()) { throwException(ExceptionTypes::timeoutExpired); }
++		counter = 0;
++	} else {
++		++counter;
++	}
++}
+--- contrib/restricted/wavm_llvm16/Include/WAVM/Runtime/Runtime.h	(9f792fa1777224478cd9d5b1bf90810582377ec2)
++++ contrib/restricted/wavm_llvm16/Include/WAVM/Runtime/Runtime.h	(index)
+@@ -182,7 +182,8 @@ namespace WAVM { namespace Runtime {
+ 	visit(outOfMemory);                                                                            \
+ 	visit(misalignedAtomicMemoryAccess, WAVM::IR::ValueType::i64);                                 \
+ 	visit(waitOnUnsharedMemory, WAVM::IR::ValueType::externref);                                   \
+-	visit(invalidArgument);
++	visit(invalidArgument);																		   \
++	visit(timeoutExpired);
+ 
+ 	// Information about a runtime exception.
+ 	namespace ExceptionTypes {

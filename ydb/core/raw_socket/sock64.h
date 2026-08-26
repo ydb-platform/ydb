@@ -160,7 +160,7 @@ public:
         : TInet64StreamSocket(std::move(socket))
     {
         Service = service;
-        if (serverCreds.has_value()) {
+        if (serverCreds.has_value() && *serverCreds) {
             ServerCreds = *serverCreds;
             UseMtlsAuth = true;
         }

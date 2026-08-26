@@ -20,6 +20,11 @@ struct TStatisticsAggregator::TTxAnalyzeOpCancel : public TTxBase {
         const TString& operationId = record.GetOperationId();
         const TString& dbName = record.GetDatabaseName();
 
+        YDB_LOG_DEBUG("[AnalyzeOp] TTxAnalyzeOpCancel::Execute",
+            {"tabletId", Self->TabletID()},
+            {"opId", operationId.Quote()},
+            {"dbName", dbName});
+
         auto* op = Self->ForceTraversalOperation(operationId);
         if (!op || op->DatabaseName != dbName) {
             return true; // NOT_FOUND handled in Complete

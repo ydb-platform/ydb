@@ -37,8 +37,11 @@ struct IReadyQueue
     // the old one.
     virtual void Register(ui64 lsn, EQueueType queueType) = 0;
 
-    // Removes all registrations from Lsn.
-    virtual void UnRegister(ui64 lsn) = 0;
+    // Removes Lsn registration.
+    virtual void UnRegister(ui64 lsn, EQueueType queueType) = 0;
+
+    // Notifies of flushes completion to DDisks.
+    virtual void FlushCompleted(ui64 lsn, THostMask ddisks) = 0;
 
     // Notification about the change of byte counters in PBuffer
     virtual void DataToPBufferAdded(
@@ -83,7 +86,7 @@ public:
         // concurrent read sees the pre-write data on DDisk, as before).
         PBufferPendingWrite,
 
-        // During the recovery, a item without quorum was detected. It must be
+        // During the recovery, an item without quorum was detected. It must be
         // copied to other PBuffers.
         // Reading will be possible only after receiving a quorum.
         PBufferIncompleteWrite,
@@ -109,8 +112,11 @@ public:
         PBufferErased,
     };
 
+    // Restored from PBuffer on recovery.
     TInflightInfo(
         IReadyQueue* readyQueues,
+        THostMask desiredDDisks,
+        THostMask disabled,
         ui64 lsn,
         size_t byteCount,
         THostIndex host);
@@ -118,15 +124,21 @@ public:
     // Pending write: lsn is generated but data is not in any PBuffer yet.
     // ReadMask is empty (reads wait on the quorum future) and the write is not
     // flushable. Call OnWritten once a quorum of PBuffers confirms the write.
-    TInflightInfo(IReadyQueue* readyQueue, ui64 lsn, size_t byteCount);
+    TInflightInfo(
+        IReadyQueue* readyQueue,
+        THostMask desiredDDisks,
+        THostMask disabled,
+        ui64 lsn,
+        size_t byteCount);
 
     TInflightInfo(TInflightInfo&& other) noexcept;
 
     ~TInflightInfo();
 
-    // Detach from ReadyQueue.
+    // Detach from ReadyQueue. Called before parent DirtyMap destroyed.
     void Detach();
 
+    // Instance of PBuffer record found on host during recovery.
     void RestorePBuffer(THostIndex host);
 
     // Transitions a pending write (see the byteCount-only constructor) to the
@@ -145,12 +157,10 @@ public:
     // DDisk, specified in the parameter destination. If InvalidHostIndex is
     // returned, it means that the transfer of data to destination has already
     // been requested earlier.
-    [[nodiscard]] THostIndex RequestFlush(
-        THostIndex destination,
-        THostMask disabledHosts);
+    [[nodiscard]] THostIndex RequestFlush(THostIndex destination);
     void ConfirmFlush(THostIndex host);
     void FlushFailed(THostIndex host);
-    [[nodiscard]] THostMask GetRequestedFlushes() const;
+    [[nodiscard]] THostMask GetInflightFlushes() const;
 
     void RequestErase(THostIndex host);
     // Returns true when all erases confirmed.
@@ -160,13 +170,19 @@ public:
     // requested/confirmed.
     [[nodiscard]] THostMask GetEraseNeeded() const;
 
-    // Skip removed hosts flushing and erase. Update state.
-    void RemoveHosts(THostMask removed);
+    // Update state according to the changed configuration.
+    void UpdateHosts(THostMask added, THostMask removed, THostMask disabled);
 
     // Sets a lock that prohibits erasing the PBuffer.
     void LockPBuffer();
     // Removes the lock that prohibits erasing the PBuffer.
     void UnlockPBuffer();
+
+    // The generation of the DirtyMap persisted state. If a generation has been
+    // assigned, it means that erasing can only be started after saving of data
+    // from that or higher generation in the partition local database.
+    void SetPersistGeneration(ui32 persistGeneration);
+    [[nodiscard]] ui32 GetPersistGeneration() const;
 
     TString DebugPrint(TInstant now) const;
 
@@ -182,6 +198,10 @@ private:
 
     void SetState(EState newState);
 
+    void MaybeAdvanceToFlushed();
+    void MaybeAdvanceToErased();
+    void MaybeQueryErase();
+
     EState State;
 
     IReadyQueue* ReadyQueue = nullptr;
@@ -190,10 +210,12 @@ private:
     TInstant StartAt;
     size_t PBuffersLockCount = 0;
     NThreading::TPromise<void> QuorumReadyPromise;
+    ui32 PersistGeneration = 0;
 
+    THostMask DesiredDDisks;
+    THostMask Disabled;
     THostMask WriteRequested;
     THostMask WriteConfirmed;
-    THostMask FlushDesired;
     THostMask FlushRequested;
     THostMask FlushConfirmed;
     THostMask EraseRequested;

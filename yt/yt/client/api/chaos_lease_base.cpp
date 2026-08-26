@@ -27,9 +27,9 @@ TChaosLeaseBase::TChaosLeaseBase(
     , Timeout_(timeout)
     , PingAncestors_(pingAncestors)
     , PingPeriod_(pingPeriod)
-    , Logger(logger.WithTag("ChaosLeaseId: %v, %v",
-        Id_,
-        Client_->GetConnection()->GetLoggingTag()))
+    , Logger(logger
+        .WithTag("ChaosLeaseId", Id_)
+        .WithTags(Client_->GetConnection()->GetLoggingTags()))
 { }
 
 NApi::IClientPtr TChaosLeaseBase::GetClient() const
@@ -52,10 +52,10 @@ TFuture<void> TChaosLeaseBase::Ping(const TPrerequisitePingOptions& options)
     return DoPing(options).Apply(
         BIND([=, this, this_ = MakeStrong(this)] (const TErrorOr<void>& resultOrError) {
             if (resultOrError.IsOK()) {
-                YT_LOG_DEBUG("Chaos lease pinged");
+                YT_TLOG_DEBUG("Chaos lease pinged");
             } else if (resultOrError.FindMatching(NYTree::EErrorCode::ResolveError)) {
                 // Hard error.
-                YT_LOG_DEBUG("Chaos lease has expired or was aborted");
+                YT_TLOG_DEBUG("Chaos lease has expired or was aborted");
 
                 {
                     auto guard = Guard(SpinLock_);
@@ -67,11 +67,12 @@ TFuture<void> TChaosLeaseBase::Ping(const TPrerequisitePingOptions& options)
                 THROW_ERROR(resultOrError);
             } else {
                 // Soft error.
-                YT_LOG_DEBUG(resultOrError, "Error pinging chaos lease");
+                YT_TLOG_DEBUG("Error pinging chaos lease")
+                    .With(resultOrError);
 
                 THROW_ERROR_EXCEPTION("Error pinging chaos lease %v",
                     GetId())
-                    << resultOrError;
+                    .With(resultOrError);
             }
         }));
 }
@@ -97,19 +98,21 @@ TFuture<void> TChaosLeaseBase::Abort(const TPrerequisiteAbortOptions& options)
                     auto guard = Guard(SpinLock_);
 
                     if (!AbortPromise_) {
-                        YT_LOG_DEBUG(rspOrError, "Chaos lease is no longer aborting, abort response ignored");
+                        YT_TLOG_DEBUG("Chaos lease is no longer aborting, abort response ignored")
+                            .With(rspOrError);
                         return;
                     }
 
                     TError abortError;
                     if (rspOrError.IsOK()) {
-                        YT_LOG_DEBUG("Chaos lease aborted");
+                        YT_TLOG_DEBUG("Chaos lease aborted");
                     } else {
-                        YT_LOG_DEBUG(rspOrError, "Error aborting chaos lease");
+                        YT_TLOG_DEBUG("Error aborting chaos lease")
+                            .With(rspOrError);
 
                         abortError = TError("Error aborting chaos lease %v",
                             GetId())
-                            << rspOrError;
+                            .With(rspOrError);
                     }
 
                     auto abortPromise = std::exchange(AbortPromise_, TPromise<void>());

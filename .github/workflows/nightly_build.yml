@@ -1,7 +1,7 @@
 name: Nightly-Build  # workflow used to upload built binaries to s3
 on:
   schedule:
-    - cron: "0 3 * * *"  # At 03:00 every day
+    - cron: "45 22 * * *"  # At 22:45 every day
   workflow_dispatch:
     inputs:
       use_default_branches:
@@ -79,7 +79,7 @@ jobs:
       shell: bash
       run: |
         set -x
-        s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-check-md5 "ydb/apps/ydbd/ydbd" "s3://ydb-builds/${{ matrix.branch }}/${{ matrix.build_preset }}/ydbd" -d
+        s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-check-md5 --force "ydb/apps/ydbd/ydbd" "s3://ydb-builds/${{ matrix.branch }}/${{ matrix.build_preset }}/ydbd" -d
         if [ -e ydb/tests/library/compatibility/configs/dump/config-meta.json ]; then
           s3cmd sync --follow-symlinks --acl-public --no-progress --stats --check-md5 "ydb/tests/library/compatibility/configs/dump/config-meta.json" "s3://ydb-builds/${{ matrix.branch }}/${{ matrix.build_preset }}/config-meta.json" -d
           echo 'Config dump uploaded to [storage](${{ vars.AWS_ENDPOINT }}/ydb-builds/${{ matrix.branch }}/${{ matrix.build_preset }}/config-meta.json).' >> $GITHUB_STEP_SUMMARY

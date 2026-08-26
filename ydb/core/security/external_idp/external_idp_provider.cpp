@@ -95,7 +95,7 @@ TDuration ApplyDownwardJitter(const TDuration& jitter) {
 }
 
 TDuration CalculateRetry(const TDuration& minPeriod, const TDuration& maxPeriod, ui64 attempt) {
-    const auto backoff = minPeriod + TDuration::Seconds(1ul << Min(attempt, 10ul));
+    const auto backoff = minPeriod + TDuration::Seconds(1ul << Min<ui64>(attempt, 10));
     const auto clamped = Min(backoff, maxPeriod);
     return ApplyDownwardJitter(clamped);
 }

@@ -158,6 +158,24 @@ NYT::TNode FilterSchemaColumns(const NYT::TNode& origSchema, const NYT::TNode& f
     return filteredSchema;
 }
 
+class TSingularTypesVisitor : public TDefaultTypeAnnotationVisitor {
+public:
+    void Visit(const TVoidExprType&) override {
+        SingularTypeFlags_ |= NTCF_VOID;
+    }
+
+    void Visit(const TNullExprType&) override {
+        SingularTypeFlags_ |= NTCF_NULL;
+    }
+
+    ui64 SingularTypeFlags() const {
+        return SingularTypeFlags_;
+    }
+
+private:
+    ui64 SingularTypeFlags_ = 0ul;
+};
+
 }
 
 ui64 GetItemNativeYtTypeFlags(const TTypeAnnotationNode& type) {
@@ -1290,9 +1308,15 @@ void TYqlRowSpecInfo::FillDefValues(NYT::TNode& attrs, const NCommon::TStructMem
 void TYqlRowSpecInfo::FillFlags(NYT::TNode& attrs) const {
     attrs[RowSpecAttrStrictSchema] = StrictSchema;
     attrs[RowSpecAttrNativeYtTypeFlags] = NativeYtTypeFlags;
+
     // Backward compatibility. TODO: remove after releasing compatibility flags
     if (NativeYtTypeFlags != 0) {
         attrs[RowSpecAttrUseNativeYtTypes] = true;
+
+        // Backward compatibility with NTCF_VOID & NTCF_NULL presence in row spec
+        TSingularTypesVisitor visitor;
+        Type->Accept(visitor);
+        attrs[RowSpecAttrNativeYtTypeFlags] = NativeYtTypeFlags | visitor.SingularTypeFlags();
     }
 }
 
@@ -1349,8 +1373,16 @@ void TYqlRowSpecInfo::FillAttrNode(NYT::TNode& attrs, bool useCompactForm) const
         if (itemType->GetKind() == ETypeAnnotationKind::Data && itemType->Cast<TDataExprType>()->GetSlot() == EDataSlot::Yson) {
             patchedFields.insert(item->GetName());
         } else {
-            if (itemType->GetKind() == ETypeAnnotationKind::Optional) {
+            const bool wasOptional = itemType->GetKind() == ETypeAnnotationKind::Optional;
+            if (wasOptional) {
                 itemType = itemType->Cast<TOptionalExprType>()->GetItemType();
+            }
+            const bool singular = itemType->GetKind() == ETypeAnnotationKind::Void
+                || itemType->GetKind() == ETypeAnnotationKind::Null;
+            if (wasOptional && singular && !(NativeYtTypeFlags & NTCF_COMPLEX)) {
+                // Backward compatibility with old optional singulars behavior
+                patchedFields.insert(item->GetName());
+                continue;
             }
             auto flags = GetNativeYtTypeFlagsImpl(itemType);
             if (flags != (flags & NativeYtTypeFlags)) {
@@ -1595,6 +1627,28 @@ bool TYqlRowSpecInfo::KeepPureSortOnly(TExprContext& ctx) {
     return sortIsChanged;
 }
 
+bool TYqlRowSpecInfo::HasNonNativeDescendingSort() const {
+    YQL_ENSURE(SortMembers.size() <= SortedBy.size());
+    YQL_ENSURE(SortMembers.size() <= SortDirections.size());
+    for (size_t i = 0; i < SortMembers.size(); ++i) {
+        if (!SortDirections[i] && SortedBy[i] != SortMembers[i] && Type->FindItem(SortMembers[i])) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool TYqlRowSpecInfo::HasNativeDescendingSort() const {
+    YQL_ENSURE(SortMembers.size() <= SortedBy.size());
+    YQL_ENSURE(SortMembers.size() <= SortDirections.size());
+    for (size_t i = 0; i < SortMembers.size(); ++i) {
+        if (!SortDirections[i] && SortedBy[i] == SortMembers[i] && Type->FindItem(SortMembers[i])) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool TYqlRowSpecInfo::ClearNativeDescendingSort(TExprContext& ctx) {
     for (size_t i = 0; i < SortDirections.size(); ++i) {
         if (!SortDirections[i] && Type->FindItem(SortedBy[i])) {
@@ -1604,7 +1658,7 @@ bool TYqlRowSpecInfo::ClearNativeDescendingSort(TExprContext& ctx) {
     return false;
 }
 
-bool TYqlRowSpecInfo::MakeCommonSortness(TExprContext& ctx, const TYqlRowSpecInfo& from) {
+bool TYqlRowSpecInfo::MakeCommonSortness(TExprContext& ctx, const TYqlRowSpecInfo& from, bool useNativeDescSort) {
     bool sortIsChanged = false;
     UniqueKeys = false; // Merge of two and more tables cannot have unique keys
     const size_t resultSize = Min<size_t>(SortMembers.size(), from.SortMembers.size()); // Truncate all calculated columns
@@ -1612,7 +1666,28 @@ bool TYqlRowSpecInfo::MakeCommonSortness(TExprContext& ctx, const TYqlRowSpecInf
         sortIsChanged = ClearSortness(ctx, resultSize);
     }
     for (size_t i = 0; i < resultSize; ++i) {
-        if (SortMembers[i] != from.SortMembers[i] || SortedBy[i] != from.SortedBy[i] || SortedByTypes[i] != from.SortedByTypes[i] || SortDirections[i] != from.SortDirections[i]) {
+        bool mismatch = SortMembers[i] != from.SortMembers[i] ||
+                        SortDirections[i] != from.SortDirections[i];
+        if (!mismatch) {
+            if (!useNativeDescSort || SortDirections[i]) {
+                // ascending sort or no native desc sort support
+                mismatch = SortedBy[i] != from.SortedBy[i] || SortedByTypes[i] != from.SortedByTypes[i];
+            } else {
+                auto myType = GetType();
+                auto fromType = from.GetType();
+                YQL_ENSURE(myType && fromType);
+                auto myMemberType = myType->FindItemType(SortMembers[i]);
+                auto fromMemberType = fromType->FindItemType(from.SortMembers[i]);
+                if (fromMemberType == myMemberType) {
+                    // fix SortedBy
+                    SortedBy[i] = SortMembers[i];
+                    SortedByTypes[i] = myMemberType;
+                }
+                mismatch = myMemberType != fromMemberType;
+            }
+        }
+
+        if (mismatch) {
             sortIsChanged = ClearSortness(ctx, i) || sortIsChanged;
             break;
         }

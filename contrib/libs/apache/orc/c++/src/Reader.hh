@@ -410,6 +410,9 @@ namespace orc {
     std::map<uint32_t, BloomFilterIndex> getBloomFilters(
         uint32_t stripeIndex, const std::set<uint32_t>& included) const override;
 
+    std::vector<std::pair<uint64_t, uint64_t>> preBufferRange(
+        const std::vector<uint32_t>& stripes, const std::list<uint64_t>& includeTypes) override;
+
     void preBuffer(const std::vector<uint32_t>& stripes,
                    const std::list<uint64_t>& includeTypes) override;
     void releaseBuffer(uint64_t boundary) override;

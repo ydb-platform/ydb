@@ -23,6 +23,7 @@ PY_SRCS(
 )
 #TIMEOUT(60)
 REQUIREMENTS(cpu:4)
+REQUIREMENTS(ram:16)
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
@@ -30,6 +31,8 @@ IF (SANITIZER_TYPE)
 ELSE()
     SIZE(MEDIUM)
     FORK_SUBTESTS()
+    REQUIREMENTS(ram:12)
+    SPLIT_FACTOR(20)
 ENDIF()
 
 PEERDIR(
@@ -52,3 +55,8 @@ DEPENDS(
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+    streaming_large
+    generic
+)

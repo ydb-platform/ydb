@@ -60,7 +60,30 @@ struct TNbsDbgLikeFinishStats {
     NHdr::THistogram ReadDDiskUs{kLatencyHistMaxUs, kLatencyHistPrecision};
 };
 
-using TLoadWorkerFinishStats = std::variant<TNbsDbgLikeFinishStats>;
+// Aggregated statistics parsed from the interconnect load actor's final
+// result summary (see NInterconnect::TLoadActor::PublishResults() in
+// ydb/library/actors/interconnect/load.cpp), used to render a Speed/IOPS/
+// latency-percentiles table for the stress tool (see
+// ydb/tools/stress_tool/device_test_tool_interconnect_test.h).
+struct TInterconnectLoadFinishStats {
+    bool Valid = false;              // whether stats were successfully parsed
+    TDuration ThroughputWindow;      // window over which throughput was measured
+    ui64 ThroughputBytes = 0;        // bytes transferred within ThroughputWindow
+    ui64 ThroughputSamples = 0;      // number of messages accounted within ThroughputWindow
+    ui64 BytesPerSecond = 0;         // throughput, bytes/sec (as reported by the load actor)
+    TDuration RttWindow;             // window over which RTT samples were collected
+    ui64 RttSamples = 0;             // number of RTT samples within RttWindow
+    ui64 NumDropped = 0;             // number of dropped (timed out) messages
+
+    // Latency (RTT) percentiles; pair of {quantile in [0..1], value in microseconds}.
+    TVector<std::pair<double, ui64>> LatencyPercentilesUs;
+
+    double GetIops() const {
+        return RttWindow != TDuration::Zero() ? RttSamples / RttWindow.SecondsFloat() : 0.0;
+    }
+};
+
+using TLoadWorkerFinishStats = std::variant<TNbsDbgLikeFinishStats, TInterconnectLoadFinishStats>;
 
 struct TEvLoad {
     enum EEv {
@@ -342,6 +365,22 @@ inline TNbsDbgLikeFinishStats* GetNbsDbgLikeFinishStats(
 inline void SetNbsDbgLikeFinishStats(
     TEvLoad::TEvLoadTestFinished& ev,
     TNbsDbgLikeFinishStats stats)
+{
+    ev.WorkerStats = TLoadWorkerFinishStats{std::move(stats)};
+}
+
+inline const TInterconnectLoadFinishStats* GetInterconnectLoadFinishStats(
+    const TEvLoad::TEvLoadTestFinished& ev)
+{
+    if (!ev.WorkerStats) {
+        return nullptr;
+    }
+    return std::get_if<TInterconnectLoadFinishStats>(&*ev.WorkerStats);
+}
+
+inline void SetInterconnectLoadFinishStats(
+    TEvLoad::TEvLoadTestFinished& ev,
+    TInterconnectLoadFinishStats stats)
 {
     ev.WorkerStats = TLoadWorkerFinishStats{std::move(stats)};
 }

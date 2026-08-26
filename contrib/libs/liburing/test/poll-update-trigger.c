@@ -52,9 +52,7 @@ int main(int argc, char *argv[])
 	 * writeable.
 	 */
 	sqe = io_uring_get_sqe(&ring);
-	io_uring_prep_poll_remove(sqe, 1);
-	sqe->len = IORING_POLL_UPDATE_EVENTS;
-	sqe->poll32_events = POLLOUT;
+	io_uring_prep_poll_update(sqe, 1, 0, POLLOUT, IORING_POLL_UPDATE_EVENTS);
 	sqe->user_data = 2;
 	io_uring_submit(&ring);
 

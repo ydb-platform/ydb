@@ -50,7 +50,7 @@ class SolomonTestBase:
     def solomon_endpoint(self) -> str:
         return os.environ["SOLOMON_HTTP_ENDPOINT"]
 
-    def create_source(self, kikimr: Kikimr, source_name: str) -> None:
+    def create_source(self, kikimr: Kikimr, source_name: str) -> str:
         kikimr.ydb_client.query(
             f"""
             CREATE EXTERNAL DATA SOURCE `{source_name}` WITH (
@@ -61,6 +61,7 @@ class SolomonTestBase:
             );
             """
         )
+        return source_name
 
     def prepare(
         self, kikimr: Kikimr, entity_name: Callable[[str], str], name: str, shards_count: int = 1
@@ -272,15 +273,18 @@ class TestScalarSolomonWriteInYdb(SolomonTestBase):
         source_name, (shard,) = self.prepare(kikimr, entity_name, "write_repeat")
         ref = shard.ref(source_name)
 
+        simple_source_name2 = self.create_source(kikimr, entity_name("write_repeat2"))
+        simple_source_name3 = self.create_source(kikimr, entity_name("write_repeat3"))
+
         # Several independent statements writing into the same shard.
         kikimr.ydb_client.query(
             f"""INSERT INTO {ref}
                 SELECT CurrentUtcTimestamp() AS Ts, "my_data" AS Label, 42 AS Sensor;
 
-                INSERT INTO {ref}
+                INSERT INTO {shard.ref(simple_source_name2)}
                 SELECT CurrentUtcTimestamp() + Interval("PT1M") AS Ts, "other_data" AS Label, 43 AS Sensor;
 
-                INSERT INTO {ref}
+                INSERT INTO {shard.ref(simple_source_name3)}
                 SELECT CurrentUtcTimestamp() + Interval("PT2M") AS Ts, "my_data" AS Label, 44 AS Sensor;"""
         )
         self.assert_shard(shard, [42, 43, 44])
@@ -289,20 +293,23 @@ class TestScalarSolomonWriteInYdb(SolomonTestBase):
         source_name2, (shard2,) = self.prepare(kikimr, entity_name, "write_repeat_mixed")
         ref2 = shard2.ref(source_name2)
 
+        mixed_source_name2 = self.create_source(kikimr, entity_name("write_repeat_mixed2"))
+        mixed_source_name3 = self.create_source(kikimr, entity_name("write_repeat_mixed3"))
+
         kikimr.ydb_client.query(
             f"""INSERT INTO {ref2} (Ts, Label, Sensor) VALUES
                     (Timestamp("2020-01-01T00:00:00Z"), "my_series", 42),
                     (Timestamp("2020-01-01T00:01:00Z"), "my_other_series", 43),
                     (Timestamp("2020-01-01T00:02:00Z"), "my_series", 44);
 
-                INSERT INTO {ref2}
+                INSERT INTO {shard2.ref(mixed_source_name2)}
                 SELECT * FROM AS_TABLE([
                     <|Ts: Timestamp("2020-01-01T00:10:00Z"), Label: "my_series", Sensor: 52|>,
                     <|Ts: Timestamp("2020-01-01T00:11:00Z"), Label: "my_other_series", Sensor: 53|>,
                     <|Ts: Timestamp("2020-01-01T00:12:00Z"), Label: "my_series", Sensor: 54|>,
                 ]);
 
-                INSERT INTO {ref2}
+                INSERT INTO {shard2.ref(mixed_source_name3)}
                 SELECT
                     a.Ts,
                     Unwrap(CAST(a.Id AS String)) AS Id,
@@ -607,8 +614,7 @@ class TestScalarSolomonWriteInYdb(SolomonTestBase):
         restricted_source = entity_name("restricted_source")
         self.create_source(kikimr, restricted_source)
 
-        test_client = YdbClient(kikimr.endpoint.endpoint, kikimr.endpoint.database, "test@builtin")
-        test_client.wait_connection()
+        test_client = YdbClient.from_driver_config(kikimr.endpoint.endpoint, kikimr.endpoint.database, "test@builtin")
         try:
             self._expect_error(
                 kikimr,

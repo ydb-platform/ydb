@@ -592,6 +592,10 @@ message TEvLoadTestRequest {
         optional uint32 DurationSeconds = 11;
         optional bool UseProtobufWithPayload = 12;
         optional uint32 RdmaMode = 13;
+        // Warm-up period: samples generated during this initial delay are
+        // excluded from the reported throughput/RTT statistics (see
+        // MeasurementStartTime in ydb/library/actors/interconnect/load.cpp).
+        optional uint32 DelayBeforeMeasurementsSeconds = 14 [default = 15];
     }
 
     optional uint64 Cookie = 1;

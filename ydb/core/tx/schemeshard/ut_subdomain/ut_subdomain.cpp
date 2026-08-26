@@ -1206,10 +1206,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                             "KeyColumnNames: [\"RowId\"]"
                         );
 
-        env.TestWaitNotification(runtime, {100, 101});
+        env.TestWaitNotification(runtime, {txId - 2, txId - 1});
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                            {LsCheckSubDomainParamsInMassiveCase("USER_0", subdomainPathId),
-                            NLs::PathVersionEqual(4),
+                            NLs::PathVersionEqual(5),
                             NLs::PathsInsideDomain(1),
                             NLs::ShardsInsideDomain(7)});
 
@@ -1309,10 +1309,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                             "KeyColumnNames: [\"RowId\"]"
                         );
 
-        env.TestWaitNotification(runtime, {100, 101, 102});
+        env.TestWaitNotification(runtime, {txId - 3, txId - 2, txId - 1});
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                            {LsCheckSubDomainParamsInMassiveCase("USER_0", subdomainPathId),
-                            NLs::PathVersionEqual(5),
+                            NLs::PathVersionEqual(6),
                             NLs::PathsInsideDomain(2),
                             NLs::ShardsInsideDomain(7)});
 
@@ -1320,7 +1320,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                            {NLs::InSubdomain});
 
         TestForceDropSubDomain(runtime, txId++,  "/MyRoot", "USER_0");
-        env.TestWaitNotification(runtime, 103);
+        env.TestWaitNotification(runtime, txId - 1);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                            {NLs::PathNotExist});

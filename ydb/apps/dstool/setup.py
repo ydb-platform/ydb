@@ -53,6 +53,7 @@ setuptools.setup(
         'ydb/public/api/protos/annotations',
         'ydb/public/api/protos/draft',
         'ydb/public/api/protos',
+        'ydb/apps/dstool/protos',
         'ydb/apps/dstool/lib',
         'ydb/apps/dstool',
     ],

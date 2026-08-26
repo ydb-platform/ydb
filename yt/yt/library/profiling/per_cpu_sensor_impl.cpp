@@ -99,8 +99,10 @@ template <class T>
 void TPerCpuSummary<T>::Record(T value)
 {
     auto tscp = TTscp::Get();
-    auto guard = Guard(Shards_[tscp.ProcessorId].Lock);
-    Shards_[tscp.ProcessorId].Value.Record(value);
+    auto& shard = Shards_[tscp.ProcessorId];
+    auto guard = Guard(shard.Lock);
+    shard.Value.Record(value);
+    shard.Empty.store(false, std::memory_order::release);
 }
 
 template <class T>
@@ -108,6 +110,9 @@ TSummarySnapshot<T> TPerCpuSummary<T>::GetSummary()
 {
     TSummarySnapshot<T> value;
     for (const auto& shard : Shards_) {
+        if (shard.Empty.load(std::memory_order::acquire)) {
+            continue;
+        }
         auto guard = Guard(shard.Lock);
         value += shard.Value;
     }
@@ -119,9 +124,13 @@ TSummarySnapshot<T> TPerCpuSummary<T>::GetSummaryAndReset()
 {
     TSummarySnapshot<T> value;
     for (auto& shard : Shards_) {
+        if (shard.Empty.load(std::memory_order::acquire)) {
+            continue;
+        }
         auto guard = Guard(shard.Lock);
         value += shard.Value;
         shard.Value = {};
+        shard.Empty.store(true, std::memory_order::release);
     }
     return value;
 }

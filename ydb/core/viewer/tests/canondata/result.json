@@ -852,6 +852,8 @@
                                 "ChangeTime": "not-zero-number-text",
                                 "Device": "Green",
                                 "EnforcedDynamicSlotSize": "not-zero-number-text",
+                                "ExpectedSlotCount": 0,
+                                "ExpectedSlotSize": "0",
                                 "Guid": "1",
                                 "LogTotalSize": "not-zero-number-text",
                                 "LogUsedSize": "not-zero-number-text",
@@ -955,6 +957,8 @@
                                 "ChangeTime": "not-zero-number-text",
                                 "Device": "Green",
                                 "EnforcedDynamicSlotSize": "not-zero-number-text",
+                                "ExpectedSlotCount": 0,
+                                "ExpectedSlotSize": "0",
                                 "Guid": "1",
                                 "LogTotalSize": "not-zero-number-text",
                                 "LogUsedSize": "not-zero-number-text",
@@ -1058,6 +1062,8 @@
                                 "ChangeTime": "not-zero-number-text",
                                 "Device": "Green",
                                 "EnforcedDynamicSlotSize": "not-zero-number-text",
+                                "ExpectedSlotCount": 0,
+                                "ExpectedSlotSize": "0",
                                 "Guid": "1",
                                 "LogTotalSize": "not-zero-number-text",
                                 "LogUsedSize": "not-zero-number-text",
@@ -1162,6 +1168,8 @@
                                 "ChangeTime": "not-zero-number-text",
                                 "Device": "Green",
                                 "EnforcedDynamicSlotSize": "not-zero-number-text",
+                                "ExpectedSlotCount": 0,
+                                "ExpectedSlotSize": "0",
                                 "Guid": "1",
                                 "LogTotalSize": "not-zero-number-text",
                                 "LogUsedSize": "not-zero-number-text",
@@ -1266,6 +1274,8 @@
                                 "ChangeTime": "not-zero-number-text",
                                 "Device": "Green",
                                 "EnforcedDynamicSlotSize": "not-zero-number-text",
+                                "ExpectedSlotCount": 0,
+                                "ExpectedSlotSize": "0",
                                 "Guid": "1",
                                 "LogTotalSize": "not-zero-number-text",
                                 "LogUsedSize": "not-zero-number-text",
@@ -1324,6 +1334,156 @@
         ],
         "TotalGroups": 5
     },
+    "test.TestViewer.test_storage_groups_pdisk_fields_hidden_for_database_user": [
+        {
+            "request": "/storage/groups?database=/Root/dedicated_db&fields_required=VDisk,PDisk,NodeId,PDiskId",
+            "response": {
+                "StorageGroups": [
+                    {
+                        "GroupId": "2181038082",
+                        "VDisks": [
+                            {
+                                "NodeId": 1,
+                                "VDiskId": "2181038082-2-0-0-0"
+                            }
+                        ]
+                    }
+                ]
+            },
+            "user": "database"
+        },
+        {
+            "request": "/storage/groups?database=/Root/dedicated_db&fields_required=VDisk,PDisk,NodeId,PDiskId",
+            "response": {
+                "StorageGroups": [
+                    {
+                        "GroupId": "2181038082",
+                        "VDisks": [
+                            {
+                                "NodeId": 1,
+                                "PDisk": {
+                                    "PDiskId": "1-1"
+                                },
+                                "VDiskId": "2181038082-2-0-0-0"
+                            }
+                        ]
+                    }
+                ]
+            },
+            "user": "root"
+        },
+        {
+            "request": "/storage/groups?database=/Root/dedicated_db&fields_required=VDisk,PDisk,NodeId,PDiskId&group_id=2181038082",
+            "response": {
+                "StorageGroups": [
+                    {
+                        "GroupId": "2181038082",
+                        "VDisks": [
+                            {
+                                "NodeId": 1,
+                                "VDiskId": "2181038082-2-0-0-0"
+                            }
+                        ]
+                    }
+                ]
+            },
+            "user": "database"
+        },
+        {
+            "request": "/storage/groups?database=/Root/dedicated_db&fields_required=VDisk,PDisk,NodeId,PDiskId&group_id=2181038082",
+            "response": {
+                "StorageGroups": [
+                    {
+                        "GroupId": "2181038082",
+                        "VDisks": [
+                            {
+                                "NodeId": 1,
+                                "PDisk": {
+                                    "PDiskId": "1-1"
+                                },
+                                "VDiskId": "2181038082-2-0-0-0"
+                            }
+                        ]
+                    }
+                ]
+            },
+            "user": "root"
+        },
+        {
+            "request": "/storage/groups?database=/Root/dedicated_db&fields_required=VDisk,PDisk,NodeId,PDiskId&node_id=1",
+            "response": {
+                "StorageGroups": [
+                    {
+                        "GroupId": "2181038082",
+                        "VDisks": [
+                            {
+                                "NodeId": 1,
+                                "VDiskId": "2181038082-2-0-0-0"
+                            }
+                        ]
+                    }
+                ]
+            },
+            "user": "database"
+        },
+        {
+            "request": "/storage/groups?database=/Root/dedicated_db&fields_required=VDisk,PDisk,NodeId,PDiskId&node_id=1",
+            "response": {
+                "StorageGroups": [
+                    {
+                        "GroupId": "2181038082",
+                        "VDisks": [
+                            {
+                                "NodeId": 1,
+                                "PDisk": {
+                                    "PDiskId": "1-1"
+                                },
+                                "VDiskId": "2181038082-2-0-0-0"
+                            }
+                        ]
+                    }
+                ]
+            },
+            "user": "root"
+        },
+        {
+            "request": "/storage/groups?database=/Root/dedicated_db&fields_required=VDisk,PDisk,NodeId,PDiskId&pdisk_id=1",
+            "response": {
+                "StorageGroups": [
+                    {
+                        "GroupId": "2181038082",
+                        "VDisks": [
+                            {
+                                "NodeId": 1,
+                                "VDiskId": "2181038082-2-0-0-0"
+                            }
+                        ]
+                    }
+                ]
+            },
+            "user": "database"
+        },
+        {
+            "request": "/storage/groups?database=/Root/dedicated_db&fields_required=VDisk,PDisk,NodeId,PDiskId&pdisk_id=1",
+            "response": {
+                "StorageGroups": [
+                    {
+                        "GroupId": "2181038082",
+                        "VDisks": [
+                            {
+                                "NodeId": 1,
+                                "PDisk": {
+                                    "PDiskId": "1-1"
+                                },
+                                "VDiskId": "2181038082-2-0-0-0"
+                            }
+                        ]
+                    }
+                ]
+            },
+            "user": "root"
+        }
+    ],
     "test.TestViewer.test_storage_stats": {
         "Paths": [
             {
@@ -3104,6 +3264,1102 @@
                 "Owner": "user1",
                 "Path": "/Root/dedicated_db"
             }
+        },
+        {},
+        {
+            "Common": {
+                "ACL": [
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "database"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "viewer"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "monitoring"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "None"
+                        ],
+                        "Subject": "user1"
+                    }
+                ],
+                "EffectiveACL": [
+                    {
+                        "AccessRights": [
+                            "ConnectDatabase"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "USERS"
+                    },
+                    {
+                        "AccessRights": [
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "METADATA-READERS"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "DATA-READERS"
+                    },
+                    {
+                        "AccessRights": [
+                            "UpdateRow",
+                            "EraseRow"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "DATA-WRITERS"
+                    },
+                    {
+                        "AccessRights": [
+                            "WriteAttributes",
+                            "CreateDirectory",
+                            "CreateTable",
+                            "CreateQueue",
+                            "RemoveSchema",
+                            "AlterSchema",
+                            "WriteUserAttributes"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "DDL-ADMINS"
+                    },
+                    {
+                        "AccessRights": [
+                            "GrantAccessRights"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "ACCESS-ADMINS"
+                    },
+                    {
+                        "AccessRights": [
+                            "CreateDatabase",
+                            "DropDatabase"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "DATABASE-ADMINS"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "database"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "viewer"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "monitoring"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "None"
+                        ],
+                        "Subject": "user1"
+                    }
+                ],
+                "Owner": "user1",
+                "Path": "/Root/dedicated_db"
+            }
+        },
+        {},
+        {},
+        {
+            "Common": {
+                "ACL": [
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "database"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "viewer"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "monitoring"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Object"
+                        ],
+                        "Subject": "user1"
+                    }
+                ],
+                "EffectiveACL": [
+                    {
+                        "AccessRights": [
+                            "ConnectDatabase"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "USERS"
+                    },
+                    {
+                        "AccessRights": [
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "METADATA-READERS"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "DATA-READERS"
+                    },
+                    {
+                        "AccessRights": [
+                            "UpdateRow",
+                            "EraseRow"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "DATA-WRITERS"
+                    },
+                    {
+                        "AccessRights": [
+                            "WriteAttributes",
+                            "CreateDirectory",
+                            "CreateTable",
+                            "CreateQueue",
+                            "RemoveSchema",
+                            "AlterSchema",
+                            "WriteUserAttributes"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "DDL-ADMINS"
+                    },
+                    {
+                        "AccessRights": [
+                            "GrantAccessRights"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "ACCESS-ADMINS"
+                    },
+                    {
+                        "AccessRights": [
+                            "CreateDatabase",
+                            "DropDatabase"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "DATABASE-ADMINS"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "database"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "viewer"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "monitoring"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Object"
+                        ],
+                        "Subject": "user1"
+                    }
+                ],
+                "Owner": "user1",
+                "Path": "/Root/dedicated_db"
+            }
+        },
+        {},
+        {},
+        {
+            "Common": {
+                "ACL": [
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "database"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "viewer"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "monitoring"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Container"
+                        ],
+                        "Subject": "user1"
+                    }
+                ],
+                "EffectiveACL": [
+                    {
+                        "AccessRights": [
+                            "ConnectDatabase"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "USERS"
+                    },
+                    {
+                        "AccessRights": [
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "METADATA-READERS"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "DATA-READERS"
+                    },
+                    {
+                        "AccessRights": [
+                            "UpdateRow",
+                            "EraseRow"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "DATA-WRITERS"
+                    },
+                    {
+                        "AccessRights": [
+                            "WriteAttributes",
+                            "CreateDirectory",
+                            "CreateTable",
+                            "CreateQueue",
+                            "RemoveSchema",
+                            "AlterSchema",
+                            "WriteUserAttributes"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "DDL-ADMINS"
+                    },
+                    {
+                        "AccessRights": [
+                            "GrantAccessRights"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "ACCESS-ADMINS"
+                    },
+                    {
+                        "AccessRights": [
+                            "CreateDatabase",
+                            "DropDatabase"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "DATABASE-ADMINS"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "database"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "viewer"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "monitoring"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Container"
+                        ],
+                        "Subject": "user1"
+                    }
+                ],
+                "Owner": "user1",
+                "Path": "/Root/dedicated_db"
+            }
+        },
+        {},
+        {},
+        {
+            "Common": {
+                "ACL": [
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "database"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "viewer"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "monitoring"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Only"
+                        ],
+                        "Subject": "user1"
+                    }
+                ],
+                "EffectiveACL": [
+                    {
+                        "AccessRights": [
+                            "ConnectDatabase"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "USERS"
+                    },
+                    {
+                        "AccessRights": [
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "METADATA-READERS"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "DATA-READERS"
+                    },
+                    {
+                        "AccessRights": [
+                            "UpdateRow",
+                            "EraseRow"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "DATA-WRITERS"
+                    },
+                    {
+                        "AccessRights": [
+                            "WriteAttributes",
+                            "CreateDirectory",
+                            "CreateTable",
+                            "CreateQueue",
+                            "RemoveSchema",
+                            "AlterSchema",
+                            "WriteUserAttributes"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "DDL-ADMINS"
+                    },
+                    {
+                        "AccessRights": [
+                            "GrantAccessRights"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "ACCESS-ADMINS"
+                    },
+                    {
+                        "AccessRights": [
+                            "CreateDatabase",
+                            "DropDatabase"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "DATABASE-ADMINS"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "database"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "viewer"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "monitoring"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Only"
+                        ],
+                        "Subject": "user1"
+                    }
+                ],
+                "Owner": "user1",
+                "Path": "/Root/dedicated_db"
+            }
+        },
+        {},
+        {},
+        {
+            "Common": {
+                "ACL": [
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "database"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "viewer"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "monitoring"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "user1"
+                    }
+                ],
+                "EffectiveACL": [
+                    {
+                        "AccessRights": [
+                            "ConnectDatabase"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "USERS"
+                    },
+                    {
+                        "AccessRights": [
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "METADATA-READERS"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "DATA-READERS"
+                    },
+                    {
+                        "AccessRights": [
+                            "UpdateRow",
+                            "EraseRow"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "DATA-WRITERS"
+                    },
+                    {
+                        "AccessRights": [
+                            "WriteAttributes",
+                            "CreateDirectory",
+                            "CreateTable",
+                            "CreateQueue",
+                            "RemoveSchema",
+                            "AlterSchema",
+                            "WriteUserAttributes"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "DDL-ADMINS"
+                    },
+                    {
+                        "AccessRights": [
+                            "GrantAccessRights"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "ACCESS-ADMINS"
+                    },
+                    {
+                        "AccessRights": [
+                            "CreateDatabase",
+                            "DropDatabase"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "DATABASE-ADMINS"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "database"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "viewer"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "monitoring"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "user1"
+                    }
+                ],
+                "Owner": "user1",
+                "Path": "/Root/dedicated_db"
+            }
+        },
+        {},
+        {
+            "Common": {
+                "ACL": [
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "database"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "viewer"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "monitoring"
+                    }
+                ],
+                "EffectiveACL": [
+                    {
+                        "AccessRights": [
+                            "ConnectDatabase"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "USERS"
+                    },
+                    {
+                        "AccessRights": [
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "METADATA-READERS"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "DATA-READERS"
+                    },
+                    {
+                        "AccessRights": [
+                            "UpdateRow",
+                            "EraseRow"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "DATA-WRITERS"
+                    },
+                    {
+                        "AccessRights": [
+                            "WriteAttributes",
+                            "CreateDirectory",
+                            "CreateTable",
+                            "CreateQueue",
+                            "RemoveSchema",
+                            "AlterSchema",
+                            "WriteUserAttributes"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "DDL-ADMINS"
+                    },
+                    {
+                        "AccessRights": [
+                            "GrantAccessRights"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "ACCESS-ADMINS"
+                    },
+                    {
+                        "AccessRights": [
+                            "CreateDatabase",
+                            "DropDatabase"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "DATABASE-ADMINS"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "database"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "viewer"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "monitoring"
+                    }
+                ],
+                "Owner": "user1",
+                "Path": "/Root/dedicated_db"
+            }
         }
     ],
     "test.TestViewer.test_viewer_acl_write_invalid": {
@@ -3903,6 +5159,30 @@
             "text": "Parameter 'path' or 'tablet_id' is required"
         }
     },
+    "test.TestViewer.test_viewer_database_stats": {
+        "/Root/dedicated_db": {
+            "DatabaseNodes": 1,
+            "Problems": [],
+            "StorageGroups": 1,
+            "StorageNodes": 1
+        },
+        "/Root/serverless_db": {
+            "DatabaseNodes": 1,
+            "Problems": [],
+            "StorageGroups": 1,
+            "StorageNodes": 1
+        },
+        "/Root/shared_db": {
+            "DatabaseNodes": 1,
+            "Problems": [],
+            "StorageGroups": 1,
+            "StorageNodes": 1
+        },
+        "no-database": {
+            "status_code": 400,
+            "text": "Database is required"
+        }
+    },
     "test.TestViewer.test_viewer_describe": {
         "/Root": {
             "LastExistedPrefixDescription": {},
@@ -3987,7 +5267,7 @@
                     "PQPartitionsInside": "0",
                     "PQPartitionsLimit": "1000000",
                     "PathId_Depricated": "1",
-                    "PathsInside": "40",
+                    "PathsInside": "41",
                     "PathsLimit": "10000",
                     "ProcessingParams": {
                         "Coordinators": [
@@ -4124,7 +5404,8 @@
                             "Kind": "hdd",
                             "Name": "dynamic_storage_pool:1"
                         }
-                    ]
+                    ],
+                    "TablesMetricsLevel": 0
                 },
                 "Self": {
                     "ACL": "text",
@@ -4206,8 +5487,8 @@
                     "PQGroupsInside": "0",
                     "PQPartitionsInside": "0",
                     "PQPartitionsLimit": "1000000",
-                    "PathId_Depricated": "35",
-                    "PathsInside": "33",
+                    "PathId_Depricated": "36",
+                    "PathsInside": "34",
                     "PathsLimit": "10000",
                     "ProcessingParams": {
                         "Coordinators": [
@@ -4262,7 +5543,8 @@
                             "Kind": "hdd",
                             "Name": "/Root/dedicated_db:hdd"
                         }
-                    ]
+                    ],
+                    "TablesMetricsLevel": 0
                 },
                 "Self": {
                     "ACL": "text",
@@ -4329,8 +5611,8 @@
                     "PQGroupsInside": "0",
                     "PQPartitionsInside": "0",
                     "PQPartitionsLimit": "1000000",
-                    "PathId_Depricated": "37",
-                    "PathsInside": "28",
+                    "PathId_Depricated": "38",
+                    "PathsInside": "29",
                     "PathsLimit": "10000",
                     "ProcessingParams": {
                         "Coordinators": [
@@ -4383,7 +5665,8 @@
                             "Kind": "hdd",
                             "Name": "/Root/shared_db:hdd"
                         }
-                    ]
+                    ],
+                    "TablesMetricsLevel": 0
                 },
                 "Self": {
                     "ACL": "",
@@ -4464,8 +5747,8 @@
                     "PQGroupsInside": "0",
                     "PQPartitionsInside": "0",
                     "PQPartitionsLimit": "1000000",
-                    "PathId_Depricated": "36",
-                    "PathsInside": "33",
+                    "PathId_Depricated": "37",
+                    "PathsInside": "34",
                     "PathsLimit": "10000",
                     "ProcessingParams": {
                         "Coordinators": [
@@ -4520,7 +5803,8 @@
                             "Kind": "hdd",
                             "Name": "/Root/shared_db:hdd"
                         }
-                    ]
+                    ],
+                    "TablesMetricsLevel": 0
                 },
                 "Self": {
                     "ACL": "",
@@ -8755,6 +10039,8 @@
                             "ChangeTime": "not-zero-number-text",
                             "Device": "Green",
                             "EnforcedDynamicSlotSize": "not-zero-number-text",
+                            "ExpectedSlotCount": 0,
+                            "ExpectedSlotSize": "0",
                             "Guid": "1",
                             "LogTotalSize": "not-zero-number-text",
                             "LogUsedSize": "not-zero-number-text",
@@ -8784,7 +10070,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "35"
+                                "X2": "36"
                             },
                             "Utilization": "number"
                         },
@@ -8801,7 +10087,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "36"
+                                "X2": "37"
                             },
                             "Utilization": "number"
                         }
@@ -9175,7 +10461,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "36"
+                                "X2": "37"
                             },
                             "Utilization": "number"
                         }
@@ -9199,7 +10485,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "35"
+                                "X2": "36"
                             },
                             "Utilization": "number"
                         },
@@ -9216,7 +10502,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "35"
+                                "X2": "36"
                             },
                             "Utilization": "number"
                         }
@@ -9387,7 +10673,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "35"
+                                "X2": "36"
                             },
                             "Utilization": "number"
                         }
@@ -9411,7 +10697,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "36"
+                                "X2": "37"
                             },
                             "Utilization": "number"
                         },
@@ -9428,7 +10714,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "36"
+                                "X2": "37"
                             },
                             "Utilization": "number"
                         }
@@ -9589,7 +10875,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "35"
+                                "X2": "36"
                             },
                             "Utilization": "number"
                         }
@@ -9613,7 +10899,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "36"
+                                "X2": "37"
                             },
                             "Utilization": "number"
                         },
@@ -9630,7 +10916,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "36"
+                                "X2": "37"
                             },
                             "Utilization": "number"
                         }
@@ -9777,6 +11063,8 @@
                             "ChangeTime": "not-zero-number-text",
                             "Device": "Green",
                             "EnforcedDynamicSlotSize": "not-zero-number-text",
+                            "ExpectedSlotCount": 0,
+                            "ExpectedSlotSize": "0",
                             "Guid": "1",
                             "LogTotalSize": "not-zero-number-text",
                             "LogUsedSize": "not-zero-number-text",
@@ -9806,7 +11094,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "35"
+                                "X2": "36"
                             },
                             "Utilization": "number"
                         },
@@ -9823,7 +11111,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "36"
+                                "X2": "37"
                             },
                             "Utilization": "number"
                         }
@@ -10239,7 +11527,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "35"
+                                "X2": "36"
                             },
                             "Utilization": "number"
                         }
@@ -10263,7 +11551,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "36"
+                                "X2": "37"
                             },
                             "Utilization": "number"
                         },
@@ -10280,7 +11568,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "36"
+                                "X2": "37"
                             },
                             "Utilization": "number"
                         }
@@ -10441,7 +11729,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "36"
+                                "X2": "37"
                             },
                             "Utilization": "number"
                         }
@@ -10465,7 +11753,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "35"
+                                "X2": "36"
                             },
                             "Utilization": "number"
                         },
@@ -10482,7 +11770,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "35"
+                                "X2": "36"
                             },
                             "Utilization": "number"
                         }
@@ -11093,6 +12381,8 @@
                 "ChangeTime": "not-zero-number-text",
                 "Device": 1,
                 "EnforcedDynamicSlotSize": "not-zero-number-text",
+                "ExpectedSlotCount": 0,
+                "ExpectedSlotSize": "0",
                 "Guid": "1",
                 "LogTotalSize": "not-zero-number-text",
                 "LogUsedSize": "not-zero-number-text",
@@ -13072,6 +14362,8 @@
                             "ChangeTime": "not-zero-number-text",
                             "Device": "Green",
                             "EnforcedDynamicSlotSize": "not-zero-number-text",
+                            "ExpectedSlotCount": 0,
+                            "ExpectedSlotSize": "0",
                             "Guid": "1",
                             "LogTotalSize": "not-zero-number-text",
                             "LogUsedSize": "not-zero-number-text",
@@ -13101,7 +14393,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "35"
+                                "X2": "36"
                             },
                             "Utilization": "number"
                         },
@@ -13118,7 +14410,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "36"
+                                "X2": "37"
                             },
                             "Utilization": "number"
                         }
@@ -13468,6 +14760,8 @@
                             "ChangeTime": "not-zero-number-text",
                             "Device": "Green",
                             "EnforcedDynamicSlotSize": "not-zero-number-text",
+                            "ExpectedSlotCount": 0,
+                            "ExpectedSlotSize": "0",
                             "Guid": "1",
                             "LogTotalSize": "not-zero-number-text",
                             "LogUsedSize": "not-zero-number-text",
@@ -13497,7 +14791,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "35"
+                                "X2": "36"
                             },
                             "Utilization": "number"
                         },
@@ -13514,7 +14808,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "36"
+                                "X2": "37"
                             },
                             "Utilization": "number"
                         }
@@ -13864,6 +15158,8 @@
                             "ChangeTime": "not-zero-number-text",
                             "Device": "Green",
                             "EnforcedDynamicSlotSize": "not-zero-number-text",
+                            "ExpectedSlotCount": 0,
+                            "ExpectedSlotSize": "0",
                             "Guid": "1",
                             "LogTotalSize": "not-zero-number-text",
                             "LogUsedSize": "not-zero-number-text",
@@ -13893,7 +15189,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "35"
+                                "X2": "36"
                             },
                             "Utilization": "number"
                         },
@@ -13910,7 +15206,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "36"
+                                "X2": "37"
                             },
                             "Utilization": "number"
                         }
@@ -14260,6 +15556,8 @@
                             "ChangeTime": "not-zero-number-text",
                             "Device": "Green",
                             "EnforcedDynamicSlotSize": "not-zero-number-text",
+                            "ExpectedSlotCount": 0,
+                            "ExpectedSlotSize": "0",
                             "Guid": "1",
                             "LogTotalSize": "not-zero-number-text",
                             "LogUsedSize": "not-zero-number-text",
@@ -14289,7 +15587,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "35"
+                                "X2": "36"
                             },
                             "Utilization": "number"
                         },
@@ -14306,7 +15604,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "36"
+                                "X2": "37"
                             },
                             "Utilization": "number"
                         }
@@ -14656,6 +15954,8 @@
                             "ChangeTime": "not-zero-number-text",
                             "Device": "Green",
                             "EnforcedDynamicSlotSize": "not-zero-number-text",
+                            "ExpectedSlotCount": 0,
+                            "ExpectedSlotSize": "0",
                             "Guid": "1",
                             "LogTotalSize": "not-zero-number-text",
                             "LogUsedSize": "not-zero-number-text",
@@ -14685,7 +15985,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "35"
+                                "X2": "36"
                             },
                             "Utilization": "number"
                         },
@@ -14702,7 +16002,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "36"
+                                "X2": "37"
                             },
                             "Utilization": "number"
                         }
@@ -16939,7 +18239,7 @@
                     "CoresTotal": "not-zero-number",
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "35",
+                    "Id": "36",
                     "MemoryLimit": "not-zero-number-text",
                     "MemoryStats": {},
                     "Metrics": "not-empty-object",
@@ -17010,11 +18310,11 @@
                 {
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "37",
+                    "Id": "38",
                     "Metrics": "not-empty-object",
                     "Name": "/Root/serverless_db",
                     "Owner": "root",
-                    "ResourceId": "36",
+                    "ResourceId": "37",
                     "State": "RUNNING",
                     "StateStats": [
                         {
@@ -17033,7 +18333,7 @@
                     "CoresTotal": "not-zero-number",
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "36",
+                    "Id": "37",
                     "MemoryLimit": "not-zero-number-text",
                     "MemoryStats": {},
                     "Metrics": "not-empty-object",
@@ -17146,7 +18446,7 @@
                     "CoresTotal": "not-zero-number",
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "35",
+                    "Id": "36",
                     "MemoryLimit": "not-zero-number-text",
                     "MemoryStats": {},
                     "Metrics": "not-empty-object",
@@ -17213,12 +18513,12 @@
                 {
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "37",
+                    "Id": "38",
                     "Metrics": "not-empty-object",
                     "Name": "/Root/serverless_db",
                     "Overall": "Green",
                     "Owner": "root",
-                    "ResourceId": "36",
+                    "ResourceId": "37",
                     "State": "RUNNING",
                     "StateStats": [
                         {
@@ -17233,7 +18533,7 @@
                     "CoresTotal": "not-zero-number",
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "36",
+                    "Id": "37",
                     "MemoryLimit": "not-zero-number-text",
                     "MemoryStats": {},
                     "Metrics": "not-empty-object",
@@ -17476,8 +18776,8 @@
     },
     "test.TestViewer.test_waiting_for_cluster_ready": {},
     "test.TestViewer.test_whoami_database": {
-        "status_code": 403,
-        "text": "<html><body><h1>403 Forbidden</h1></body></html>"
+        "status_code": 400,
+        "text": "`database` is required for /viewer/whoami"
     },
     "test.TestViewer.test_whoami_monitoring": {
         "AuthType": "Login",

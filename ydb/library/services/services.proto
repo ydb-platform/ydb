@@ -480,6 +480,8 @@ enum EServiceKikimr {
     // BlobChecker
     BLOB_CHECKER_ORCHESTRATOR = 4300;
     BLOB_CHECKER_WORKER = 4301;
+
+    DBS_CONTROLLER = 4400;
 };
 
 message TActivity {
@@ -1183,5 +1185,6 @@ message TActivity {
         BLOB_CHECKER_WORKER_ACTOR = 694;
         BS_PERSISTENT_BUFFER_RA = 695;
         SCHEMESHARD_LOCAL_INDEX_MIGRATOR = 696;
+        BS_LEVEL_INDEX_STAT_STREAM_QUERY = 697;
     };
 };

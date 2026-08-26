@@ -9,6 +9,7 @@ message TDDiskConfig
     optional bool UseSQPoll = 1;
     optional bool UseIOPoll = 2;
     optional bool ForcePDiskFallback = 3;
+    optional bool EnableChecksums = 4;
 }
 
 message TPBufferConfig
@@ -61,4 +62,11 @@ message TPBufferConfig
     // Deallocate a chunk proactively when it has been freed for this many seconds.
     // Default 30 seconds.
     optional uint32 DeallocateThresholdSeconds = 15;
+
+    // TEvListPersistentBuffer must not observe a partially-applied write/erase for its tablet: the
+    // listing is deferred (queued and retried) while any disk operation is in flight for the
+    // requesting tablet. These parameters bound how long/how often we wait before giving up and
+    // replying with an OVERLOADED error to avoid returning a potentially-stale view.
+    optional uint32 ListPersistentBufferMaxRetries = 16;
+    optional uint32 ListPersistentBufferRetryPeriodMilliseconds = 17;
 }

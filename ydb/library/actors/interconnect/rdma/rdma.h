@@ -8,6 +8,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <span>
 
 struct ibv_qp;
 struct ibv_cq;
@@ -34,10 +35,17 @@ class TRdmaCtx;
 class TCqCommon;
 class TCqActor;
 class IMemPool;
+class TMemRegion;
 struct TEvRdmaIoDone;
 
 class TQueuePair;
 class IIbVerbsBuilder;
+
+struct TSendSge {
+    const void* Data;
+    size_t Size;
+    const TMemRegion* MemRegion;
+};
 
 struct TRdmaRuntimeParams {
     int MaxCqe;   // max capacity of single queue under CQ actor abstruction. -1 - use limit from rdma context
@@ -148,9 +156,14 @@ class IIbVerbsBuilder : public NNonCopyable::TNonCopyable {
     friend class TIbVerbsBuilderImpl;
 public:
     virtual ~IIbVerbsBuilder() = default;
+    // !!!
+    // The builder never owns buffers. The caller must keep every buffer alive
+    // until the matching completion callback is delivered
     virtual void AddReadVerb(void* mrAddr, ui32 mrlKey, void* dstAddr, ui32 dstRkey, ui32 dstSize,
         std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> ioCb) noexcept = 0;
-    virtual void AddSendVerb(TRcBuf packet,
+    virtual bool AddSendVerb(const TRcBuf& packet,
+        std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> ioCb) noexcept = 0;
+    virtual void AddSendVerb(std::span<const TSendSge> sgList,
         std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> ioCb) noexcept = 0;
 private:
     IIbVerbsBuilder() noexcept = default;

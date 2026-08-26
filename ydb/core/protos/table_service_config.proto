@@ -556,4 +556,16 @@ message TTableServiceConfig {
     // Cluster default for automatic secondary-index selection in index lookup joins.
     // Overridable per session via PRAGMA ydb.EnableAutoIndexSelectionForIndexLookupJoin.
     optional bool EnableAutoIndexSelectionForIndexLookupJoin = 139 [default = false, (InvalidateCompileCache) = true];
+
+    // Defer join-filter inlining until after cost-based optimization.
+    optional bool EnableInlineJoinFiltersAfterCBO = 140 [default = true, (InvalidateCompileCache) = true];
+    optional bool EnableVectorSearchActor = 141 [default = true, (InvalidateCompileCache) = true];
+    optional bool EnableOlapPushdownRegexp = 142 [default = false, (InvalidateCompileCache) = true];
+
+    optional bool EnableSmallComputeMemoryAllocations = 143 [default = true];
+
+    // Prune key columns
+    optional bool EnablePruneKeyColumns = 144 [default = true];
+
+    optional bool UseBlockHashJoinForCross = 145 [default = false, (InvalidateCompileCache) = true];
 };

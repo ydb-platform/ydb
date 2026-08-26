@@ -68,22 +68,6 @@
                 }
             }
         },
-        "clang-format": {
-            "executable": {
-                "clang-format": [
-                    "clang-format"
-                ]
-            },
-            "formula": "build/platform/clang/clang-format/clang-format18.json"
-        },
-        "clang-format-16": {
-            "executable": {
-                "clang-format": [
-                    "clang-format"
-                ]
-            },
-            "formula": "build/platform/clang/clang-format/clang-format16.json"
-        },
         "clang-format-18": {
             "executable": {
                 "clang-format": [
@@ -571,50 +555,7 @@
             ],
             "tools": {
                 "clang-format": {
-                    "bottle": "clang-format",
-                    "executable": "clang-format"
-                }
-            }
-        },
-        "clang-format-16": {
-            "platforms": [
-                {
-                    "default": true,
-                    "host": {
-                        "arch": "x86_64",
-                        "os": "LINUX"
-                    }
-                },
-                {
-                    "default": true,
-                    "host": {
-                        "arch": "aarch64",
-                        "os": "LINUX"
-                    }
-                },
-                {
-                    "default": true,
-                    "host": {
-                        "os": "WIN"
-                    }
-                },
-                {
-                    "default": true,
-                    "host": {
-                        "os": "DARWIN"
-                    }
-                },
-                {
-                    "default": true,
-                    "host": {
-                        "arch": "arm64",
-                        "os": "DARWIN"
-                    }
-                }
-            ],
-            "tools": {
-                "clang-format-16": {
-                    "bottle": "clang-format-16",
+                    "bottle": "clang-format-18",
                     "executable": "clang-format"
                 }
             }
@@ -1158,6 +1099,27 @@
                     },
                     "target": {
                         "arch": "armv8a_cortex_a53",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": false,
+                    "host": {
+                        "os": "LINUX"
+                    },
+                    "target": {
+                        "arch": "armv9a_grace",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": false,
+                    "host": {
+                        "arch": "aarch64",
+                        "os": "LINUX"
+                    },
+                    "target": {
+                        "arch": "armv9a_grace",
                         "os": "LINUX"
                     }
                 },
@@ -1929,6 +1891,27 @@
                     },
                     "target": {
                         "arch": "armv8a_cortex_a53",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "LINUX"
+                    },
+                    "target": {
+                        "arch": "armv9a_grace",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "aarch64",
+                        "os": "LINUX"
+                    },
+                    "target": {
+                        "arch": "armv9a_grace",
                         "os": "LINUX"
                     }
                 },
@@ -2907,9 +2890,6 @@
         },
         "clang-format": {
             "description": "Run Clang-Format source code formatter"
-        },
-        "clang-format-16": {
-            "description": "Run Clang-Format source code formatter (16 version)"
         },
         "clang-format-18": {
             "description": "Run Clang-Format source code formatter (18 version)"

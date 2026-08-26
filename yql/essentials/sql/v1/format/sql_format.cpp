@@ -994,7 +994,8 @@ private:
 
     void VisitSmartParenthesis(const TRule_smart_parenthesis& msg) {
         if (!IsSelect(msg)) {
-            return VisitAllFields(msg.GetDescriptor(), msg);
+            VisitAllFields(msg.GetDescriptor(), msg);
+            return;
         }
 
         Y_ENSURE(msg.GetBlock2().HasAlt1());
@@ -3205,7 +3206,6 @@ private:
         CurrentIndent_ -= OneIndent;
     }
 
-private:
     const TStaticData& StaticData_;
     const TParsedTokenList& ParsedTokens_;
     const TParsedTokenList& Comments_;

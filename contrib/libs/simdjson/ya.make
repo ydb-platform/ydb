@@ -10,9 +10,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(4.6.4)
+VERSION(4.6.8)
 
-ORIGINAL_SOURCE(https://github.com/simdjson/simdjson/archive/v4.6.4.tar.gz)
+ORIGINAL_SOURCE(https://github.com/simdjson/simdjson/archive/v4.6.8.tar.gz)
 
 ADDINCL(
     GLOBAL contrib/libs/simdjson/include
@@ -25,7 +25,6 @@ NO_UTIL()
 
 CFLAGS(
     -DSIMDJSON_AVX512_ALLOWED=1
-    -DSIMDJSON_DEVELOPMENT_CHECKS
     -DSIMDJSON_UTF8VALIDATION=1
 )
 

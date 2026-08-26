@@ -1,3 +1,4 @@
+# cython: freethreading_compatible = True
 import cython
 
 import numpy as np

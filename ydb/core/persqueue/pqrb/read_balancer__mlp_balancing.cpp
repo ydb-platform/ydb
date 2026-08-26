@@ -3,6 +3,8 @@
 
 #include <util/generic/ymath.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PERSQUEUE_READ_BALANCER
+
 namespace NKikimr::NPQ::NBalancing {
 
 namespace {
@@ -114,6 +116,7 @@ void TMLPConsumer::RestoreReceiveAttemptPartition(const TString& receiveAttemptI
 
 std::vector<TReceiveAttemptPartitionDelete> TMLPConsumer::CollectExpiredReceiveAttemptPartitions(TInstant now) {
     std::vector<TReceiveAttemptPartitionDelete> deletes;
+    deletes.reserve(ReceiveAttemptPartitions.size());
     absl::erase_if(ReceiveAttemptPartitions, [&](const auto& entry) {
         if (entry.second.Expiry <= now) {
             deletes.push_back(MakeDeleteKey(entry.first));
@@ -121,6 +124,16 @@ std::vector<TReceiveAttemptPartitionDelete> TMLPConsumer::CollectExpiredReceiveA
         }
         return false;
     });
+    return deletes;
+}
+
+std::vector<TReceiveAttemptPartitionDelete> TMLPConsumer::ExtractReceiveAttemptPartitions() {
+    std::vector<TReceiveAttemptPartitionDelete> deletes;
+    deletes.reserve(ReceiveAttemptPartitions.size());
+    for (const auto& [receiveAttemptId, _] : ReceiveAttemptPartitions) {
+        deletes.push_back(MakeDeleteKey(receiveAttemptId));
+    }
+    ReceiveAttemptPartitions.clear();
     return deletes;
 }
 
@@ -192,7 +205,9 @@ void TMLPConsumer::Rebuild() {
         }
     }
 
-    PQ_LOG_D("Rebuild " << JoinSeq(",", PartitionsForBalancing) << " partitions for balancing");
+    YDB_LOG_DEBUG("Rebuild partitions for balancing",
+        {"logPrefix", LogPrefix()},
+        {"partitionsForBalancing", JoinSeq(",", PartitionsForBalancing)});
 }
 
 const TMLPConsumer::TMetrics& TMLPConsumer::GetMetrics() const {
@@ -212,7 +227,9 @@ TPrepareGetPartitionResponse TMLPBalancer::PrepareGetPartitionResponse(
 
     auto* consumerConfig = NPQ::GetConsumer(GetConfig(), consumerName);
     if (!consumerConfig) {
-        PQ_LOG_D("Consumer '" << consumerName << "' does not exist");
+        YDB_LOG_DEBUG("Consumer does not exist",
+            {"logPrefix", LogPrefix()},
+            {"consumerName", consumerName});
         result.IsError = true;
         result.ErrorStatus = Ydb::StatusIds::SCHEME_ERROR;
         result.ErrorMessage = TStringBuilder() << "Consumer '" << consumerName << "' does not exist";
@@ -220,7 +237,9 @@ TPrepareGetPartitionResponse TMLPBalancer::PrepareGetPartitionResponse(
     }
 
     if (consumerConfig->GetType() != NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP) {
-        PQ_LOG_D("Consumer '" << consumerName << "' is not MLP consumer");
+        YDB_LOG_DEBUG("Consumer is not MLP consumer",
+            {"logPrefix", LogPrefix()},
+            {"consumerName", consumerName});
         result.IsError = true;
         result.ErrorStatus = Ydb::StatusIds::SCHEME_ERROR;
         result.ErrorMessage = TStringBuilder() << "Consumer '" << consumerName << "' is not MLP consumer";
@@ -270,14 +289,18 @@ void TMLPBalancer::Handle(TEvPQ::TEvMLPGetRuntimeAttributesRequest::TPtr& ev) {
 
     const auto* consumerConfig = NPQ::GetConsumer(GetConfig(), consumerName);
     if (!consumerConfig) {
-        PQ_LOG_D("Consumer '" << consumerName << "' does not exist");
+        YDB_LOG_DEBUG("Consumer does not exist",
+            {"logPrefix", LogPrefix()},
+            {"consumerName", consumerName});
         TopicActor.Send(ev->Sender, new TEvPQ::TEvMLPErrorResponse(Ydb::StatusIds::SCHEME_ERROR,
             TStringBuilder() << "Consumer '" << consumerName << "' does not exist"), 0, ev->Cookie);
         return;
     }
 
     if (consumerConfig->GetType() != NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP) {
-        PQ_LOG_D("Consumer '" << consumerName << "' is not MLP consumer");
+        YDB_LOG_DEBUG("Consumer is not MLP consumer",
+            {"logPrefix", LogPrefix()},
+            {"consumerName", consumerName});
         TopicActor.Send(ev->Sender, new TEvPQ::TEvMLPErrorResponse(Ydb::StatusIds::SCHEME_ERROR,
             TStringBuilder() << "Consumer '" << consumerName << "' is not MLP consumer"), 0, ev->Cookie);
         return;
@@ -285,7 +308,9 @@ void TMLPBalancer::Handle(TEvPQ::TEvMLPGetRuntimeAttributesRequest::TPtr& ev) {
 
     auto it = Consumers.find(consumerName);
     if (it == Consumers.end()) {
-        PQ_LOG_D("Consumer '" << consumerName << "' is not initialized");
+        YDB_LOG_DEBUG("Consumer is not initialized",
+            {"logPrefix", LogPrefix()},
+            {"consumerName", consumerName});
         TopicActor.Send(ev->Sender, new TEvPQ::TEvMLPGetRuntimeAttributesResponse(0, 0, 0), 0, ev->Cookie);
         return;
     }
@@ -302,7 +327,9 @@ void TMLPBalancer::Handle(TEvPQ::TEvMLPGetRuntimeAttributesRequest::TPtr& ev) {
 }
 
 void TMLPBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext&) {
-    PQ_LOG_D("Handle TEvPersQueue::TEvStatusResponse " << ev->Get()->Record.ShortDebugString());
+    YDB_LOG_DEBUG("Handle TEvPersQueue::TEvStatusResponse",
+        {"logPrefix", LogPrefix()},
+        {"ev", ev->Get()->Record.ShortDebugString()});
 
     absl::flat_hash_map<TString, bool> mlpConsumers;
     for (const auto& consumer : GetConfig().GetConsumers()) {
@@ -347,7 +374,9 @@ void TMLPBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActo
 
 void TMLPBalancer::Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPtr& ev, const TActorContext&) {
     auto& record = ev->Get()->Record;
-    PQ_LOG_D("Handle TEvPQ::TEvReadingPartitionStatusRequest " << record.ShortDebugString());
+    YDB_LOG_DEBUG("Handle TEvPQ::TEvReadingPartitionStatusRequest",
+        {"logPrefix", LogPrefix()},
+        {"ev", record.ShortDebugString()});
     SetUseForReading(record.GetConsumer(),
                      record.GetPartitionId(),
                      true, // reading is finished
@@ -363,7 +392,9 @@ void TMLPBalancer::Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPtr& ev, con
 
 void TMLPBalancer::Handle(TEvPQ::TEvMLPConsumerStatus::TPtr& ev) {
     auto& record = ev->Get()->Record;
-    PQ_LOG_D("Handle TEvPQ::TEvMLPConsumerStatus " << record.ShortDebugString());
+    YDB_LOG_DEBUG("Handle TEvPQ::TEvMLPConsumerStatus",
+        {"logPrefix", LogPrefix()},
+        {"ev", record.ShortDebugString()});
     SetUseForReading(record.GetConsumer(),
                      record.GetPartitionId(),
                      std::nullopt, // reading is finished
@@ -377,7 +408,7 @@ void TMLPBalancer::Handle(TEvPQ::TEvMLPConsumerStatus::TPtr& ev) {
                      record.GetCookie());
 }
 
-void TMLPBalancer::UpdateConfig(const std::vector<ui32>& addedPartitions) {
+std::vector<TReceiveAttemptPartitionDelete> TMLPBalancer::UpdateConfig(const std::vector<ui32>& addedPartitions) {
     absl::flat_hash_set<TString> mlpConsumers;
     for (const auto& consumer : GetConfig().GetConsumers()) {
         if (consumer.GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP) {
@@ -385,6 +416,7 @@ void TMLPBalancer::UpdateConfig(const std::vector<ui32>& addedPartitions) {
         }
     }
 
+    std::vector<TReceiveAttemptPartitionDelete> deletes;
     for (auto it = Consumers.begin(); it != Consumers.end();) {
         auto& [consumerName, consumer] = *it;
         it++;
@@ -397,6 +429,8 @@ void TMLPBalancer::UpdateConfig(const std::vector<ui32>& addedPartitions) {
                 consumer.Rebuild();
             }
         } else {
+            auto consumerDeletes = consumer.ExtractReceiveAttemptPartitions();
+            deletes.insert(deletes.end(), std::make_move_iterator(consumerDeletes.begin()), std::make_move_iterator(consumerDeletes.end()));
             Consumers.erase(consumerName);
         }
     }
@@ -407,6 +441,8 @@ void TMLPBalancer::UpdateConfig(const std::vector<ui32>& addedPartitions) {
             it->second.Rebuild();
         }
     }
+
+    return deletes;
 }
 
 void TMLPBalancer::SetUseForReading(const TString& consumerName,
@@ -418,12 +454,16 @@ void TMLPBalancer::SetUseForReading(const TString& consumerName,
                                     ui64 cookie) {
     auto* consumerConfig = NPQ::GetConsumer(GetConfig(), consumerName);
     if (!consumerConfig) {
-        PQ_LOG_D("Consumer '" << consumerName << "' does not exist");
+        YDB_LOG_DEBUG("Consumer does not exist",
+            {"logPrefix", LogPrefix()},
+            {"consumerName", consumerName});
         return;
     }
 
     if (consumerConfig->GetType() != NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP) {
-        PQ_LOG_D("Consumer '" << consumerName << "' is not MLP consumer");
+        YDB_LOG_DEBUG("Consumer is not MLP consumer",
+            {"logPrefix", LogPrefix()},
+            {"consumerName", consumerName});
         return;
     }
 

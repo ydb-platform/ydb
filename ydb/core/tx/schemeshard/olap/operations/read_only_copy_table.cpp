@@ -577,6 +577,9 @@ public:
         // create new path and inherit properties from src
         dstPath.MaterializeLeaf(srcPath.Base()->Owner, allocatedPathId, /*allowInactivePath*/ true);
         result->SetPathId(dstPath.Base()->PathId.LocalPathId);
+
+        context.SS->TabletCounters->Simple()[COUNTER_COLUMN_TABLE_COUNT].Add(1);
+
         dstPath.Base()->CreateTxId = OperationId.GetTxId();
         dstPath.Base()->LastTxId = OperationId.GetTxId();
         dstPath.Base()->PathState = TPathElement::EPathState::EPathStateCreate;
@@ -596,6 +599,7 @@ public:
                 std::make_shared<TColumnTableInfo>(*srcTable));
             tableInfo->AlterVersion += 1;
             tableInfo->IsReadOnly = true;
+            tableInfo->Stats = {};
             context.SS->SetPartitioning(dstPath.Base()->PathId, tableInfo.GetPtr());
         }
         context.SS->IncrementPathDbRefCount(dstPath.Base()->PathId, "copy table info");

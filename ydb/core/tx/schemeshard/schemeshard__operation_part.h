@@ -773,7 +773,7 @@ ISubOperation::TPtr CreateDropSysView(TOperationId id, TTxState::ETxState state)
 
 // Secret
 // Create
-ISubOperation::TPtr CreateNewSecret(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateNewSecret(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
 ISubOperation::TPtr CreateNewSecret(TOperationId id, TTxState::ETxState state);
 // Alter
 ISubOperation::TPtr CreateAlterSecret(TOperationId id, const TTxTransaction& tx);

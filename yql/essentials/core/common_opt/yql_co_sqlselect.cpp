@@ -1167,7 +1167,7 @@ void FillInputIndices(const TExprNode::TPtr& from, const TExprNode::TPtr& finalE
         for (; inputIndex < from->Tail().ChildrenSize(); ++inputIndex) {
             auto inputAlias = from->Tail().Child(inputIndex)->Child(1)->Content();
             const auto& read = from->Tail().Child(inputIndex)->Head();
-            const auto& columns = from->Tail().Child(inputIndex)->Tail();
+            const auto& columns = *from->Tail().Child(inputIndex)->Child(2);
             if (x.second.first != Max<ui32>() && x.second.first != inputIndex) {
                 continue;
             }
@@ -1272,7 +1272,7 @@ TExprNode::TListType BuildCleanedColumns(TPositionHandle pos, const TExprNode::T
         auto inputAlias = from->Tail().Child(i)->Child(1)->Content();
         inputAliases.push_back(TString(inputAlias));
         if (list->IsCallable("PgResolvedCall")) {
-            const auto& columns = from->Tail().Child(i)->Tail();
+            const auto& columns = *from->Tail().Child(i)->Child(2);
             if (inputAlias.empty()) {
                 inputAliases.back() = inputAlias = list->Head().Content();
             }

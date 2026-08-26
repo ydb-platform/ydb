@@ -4,6 +4,7 @@
 #include <yql/essentials/providers/pg/provider/yql_pg_provider.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/providers/common/proto/static_gateways_config.pb.h>
 #include <yql/essentials/providers/common/udf_resolve/yql_outproc_udf_resolver.h>
 #include <yql/essentials/providers/common/udf_resolve/yql_simple_udf_resolver.h>
 #include <yql/essentials/providers/common/udf_resolve/yql_udf_resolver_with_index.h>
@@ -44,7 +45,7 @@
 #include <yql/essentials/sql/v1/ide/completion/check/check_complete.h>
 #include <yql/essentials/sql/v1/format/sql_format.h>
 #include <yql/essentials/sql/v1/format/check/check_format.h>
-#include <yql/essentials/sql/v1/sql.h>
+#include <yql/essentials/sql/v1/translation/sql.h>
 #include <yql/essentials/sql/sql.h>
 #include <yql/essentials/sql/v1/lexer/check/check_lexers.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
@@ -130,8 +131,7 @@ private:
 
 class TPeepHolePipelineConfigurator: public NYql::IPipelineConfigurator {
 public:
-    TPeepHolePipelineConfigurator() {
-    }
+    TPeepHolePipelineConfigurator() = default;
 
     void AfterCreate(NYql::TTransformationPipeline* pipeline) const final {
         Y_UNUSED(pipeline);
@@ -151,11 +151,9 @@ public:
 
 namespace NYql {
 
-TFacadeRunOptions::TFacadeRunOptions() {
-}
+TFacadeRunOptions::TFacadeRunOptions() = default;
 
-TFacadeRunOptions::~TFacadeRunOptions() {
-}
+TFacadeRunOptions::~TFacadeRunOptions() = default;
 
 void TFacadeRunOptions::InitLogger() {
     if (Verbosity != LOG_DEF_PRIORITY || ShowLog) {
@@ -364,6 +362,7 @@ void TFacadeRunOptions::Parse(int argc, const char** argv) {
     opts.AddLongOption("sql-flags", "SQL translator pragma flags").SplitHandler(&sqlFlags, ',');
     opts.AddLongOption("syntax-version", "SQL syntax version").StoreResult(&SyntaxVersion).DefaultValue(1);
     opts.AddLongOption("ansi-lexer", "Use ansi lexer").NoArgument().SetFlag(&AnsiLexer);
+    opts.AddLongOption("auto-use-yql-libs", "Implicitly mark yql_libs/* files as libraries").NoArgument().SetFlag(&AutoUseYqlLibs);
     opts.AddLongOption("assume-ydb-on-slash", "Assume YDB provider if cluster name starts with '/'").NoArgument().SetFlag(&AssumeYdbOnClusterWithSlash);
 
     opts.AddLongOption("with-final-issues", "Include some final messages (like statistic) in issues").NoArgument().SetFlag(&WithFinalIssues);
@@ -510,6 +509,9 @@ void TFacadeRunOptions::Parse(int argc, const char** argv) {
         GatewaysConfig = ParseProtoFromResource<TGatewaysConfig>("gateways.conf");
     }
 
+    StaticGatewaysConfig = MakeHolder<TStaticGatewaysConfig>();
+    SyncWithStaticGateways(*StaticGatewaysConfig, *GatewaysConfig);
+
     {
         TGatewaySQLFlags gatewaySqlFlags;
         for (const auto& flag : sqlFlags) {
@@ -548,8 +550,7 @@ TFacadeRunner::TFacadeRunner(TString name)
 {
 }
 
-TFacadeRunner::~TFacadeRunner() {
-}
+TFacadeRunner::~TFacadeRunner() = default;
 
 TIntrusivePtr<NKikimr::NMiniKQL::IFunctionRegistry> TFacadeRunner::GetFuncRegistry() {
     return FuncRegistry_;
@@ -602,14 +603,24 @@ int TFacadeRunner::DoMain(int argc, const char** argv) {
     NKikimr::NMiniKQL::FillStaticModules(*funcRegistry);
     FuncRegistry_ = funcRegistry;
 
-    NSQLTranslationV1::TLexers lexers;
-    lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
-    lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
-    NSQLTranslationV1::TParsers parsers;
-    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(
-        /*isAmbiguityError=*/RunOptions_.TestSyntaxAmbiguities);
-    parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory(
-        /*isAmbiguityError=*/RunOptions_.TestSyntaxAmbiguities);
+    NSQLTranslation::TTranslationSettings settings;
+    NSQLTranslation::ParseTranslationSettings(RunOptions_.SqlFlags, settings);
+
+    NSQLTranslationV1::TLexers lexers = {
+        .Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory(),
+        .Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory(),
+    };
+
+    NSQLTranslationV1::TParsers parsers = {
+        .Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(
+            /*isAmbiguityError=*/RunOptions_.TestSyntaxAmbiguities,
+            /*isAmbiguityDebugging=*/false,
+            /*maxParseTreeDepth=*/settings.MaxParseTreeDepth),
+        .Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory(
+            /*isAmbiguityError=*/RunOptions_.TestSyntaxAmbiguities,
+            /*isAmbiguityDebugging=*/false,
+            /*maxParseTreeDepth=*/settings.MaxParseTreeDepth),
+    };
 
     NSQLTranslation::TTranslators translators(
         nullptr,
@@ -620,6 +631,7 @@ int TFacadeRunner::DoMain(int argc, const char** argv) {
     if (RunOptions_.PgSupport) {
         ctx.NextUniqueId = NPg::GetSqlLanguageParser()->GetContext().NextUniqueId;
     }
+
     IModuleResolver::TPtr moduleResolver;
     TModuleResolver::TModuleChecker moduleChecker;
     if (RunOptions_.TestLexers ||
@@ -654,6 +666,7 @@ int TFacadeRunner::DoMain(int argc, const char** argv) {
                 settings.ClusterMapping = clusters;
                 settings.SyntaxVersion = 1;
                 settings.AlwaysAllowExports = true;
+                settings.MaxParseTreeDepth = NSQLTranslation::SQL_MAX_PARSE_TREE_DEPTH;
 
                 auto ast = NSQLTranslationV1::SqlToYql(lexers, parsers, query, settings);
                 if (!ast.IsOk()) {
@@ -787,6 +800,10 @@ int TFacadeRunner::DoMain(int argc, const char** argv) {
     factory.SetCredentials(RunOptions_.Credentials);
     factory.EnableRangeComputeFor();
 
+    if (RunOptions_.AutoUseYqlLibs) {
+        factory.EnableAutoUseYqlLibs();
+    }
+
     if (!urlListers.empty()) {
         factory.SetUrlListerManager(MakeUrlListerManager(urlListers));
     }
@@ -894,9 +911,13 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
 
             NSQLTranslationV1::TParsers parsers = {
                 .Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(
-                    /*isAmbiguityError=*/true),
+                    /*isAmbiguityError=*/true,
+                    /*isAmbiguityDebugging=*/false,
+                    /*maxParseTreeDepth=*/settings.MaxParseTreeDepth),
                 .Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory(
-                    /*isAmbiguityError=*/true),
+                    /*isAmbiguityError=*/true,
+                    /*isAmbiguityDebugging=*/false,
+                    /*maxParseTreeDepth=*/settings.MaxParseTreeDepth),
             };
 
             NSQLTranslation::TTranslators translators(

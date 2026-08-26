@@ -304,6 +304,175 @@ TExprNode::TPtr OptimizeLMap(const TExprNode::TPtr& node, TExprContext& ctx, TOp
     return node;
 }
 
+bool CollectLambdaUsedFields(const TCoLambda& lambda, TSet<TStringBuf>& usedFields, TOptimizeContext& optCtx) {
+    return HaveFieldsSubset(lambda.Body().Ptr(), lambda.Args().Arg(0).Ref(), usedFields, *optCtx.ParentsMap);
+}
+
+TExprNode::TPtr SqlCombineInputSubsetFields(const TCoSqlCombineInput& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+    const auto itemType = GetSeqItemType(node.Input().Ref().GetTypeAnn());
+    if (itemType->GetKind() != ETypeAnnotationKind::Struct) {
+        return node.Ptr();
+    }
+
+    const auto rowType = itemType->Cast<TStructExprType>();
+    if (rowType->GetSize() == 0) {
+        return node.Ptr();
+    }
+
+    TSet<TStringBuf> presortKeyFields;
+    const auto presortKeyLambdaNode = node.PresortKeyLambda().Maybe<TCoLambda>();
+    if (presortKeyLambdaNode) {
+        if (!CollectLambdaUsedFields(presortKeyLambdaNode.Cast(), presortKeyFields, optCtx)) {
+            return node.Ptr();
+        }
+    }
+
+    TSet<TStringBuf> keyExtractFields;
+    if (!CollectLambdaUsedFields(node.KeyExtractLambda(), keyExtractFields, optCtx)) {
+        return node.Ptr();
+    }
+
+    TSet<TStringBuf> argMapFields;
+    if (!CollectLambdaUsedFields(node.ArgMapLambda(), argMapFields, optCtx)) {
+        return node.Ptr();
+    }
+
+    TSet<TStringBuf> usedFields;
+    usedFields.insert(keyExtractFields.cbegin(), keyExtractFields.cend());
+    usedFields.insert(presortKeyFields.cbegin(), presortKeyFields.cend());
+    usedFields.insert(argMapFields.cbegin(), argMapFields.cend());
+
+    if (usedFields.empty() || usedFields.size() >= rowType->GetSize()) {
+        return node.Ptr();
+    }
+
+    const auto buildUsedColumns = [&](const TSet<TStringBuf>& fields) {
+        TExprNode::TListType columns;
+        for (const auto& item : rowType->GetItems()) {
+            if (fields.contains(item->GetName())) {
+                columns.push_back(ctx.NewAtom(node.Pos(), item->GetName()));
+            }
+        }
+        return ctx.NewList(node.Pos(), std::move(columns));
+    };
+
+    TExprNode::TListType fieldNodes;
+    for (const auto& item : rowType->GetItems()) {
+        if (usedFields.contains(item->GetName())) {
+            fieldNodes.push_back(ctx.NewAtom(node.Pos(), item->GetName()));
+        }
+    }
+
+    auto builder = Build<TCoSqlCombineInput>(ctx, node.Pos())
+        .InitFrom(node)
+        .Input<TCoExtractMembers>()
+            .Input(node.Input())
+            .Members().Add(fieldNodes).Build()
+        .Build()
+        .KeyExtractUsedColumns(buildUsedColumns(keyExtractFields))
+        .ArgMapUsedColumns(buildUsedColumns(argMapFields));
+
+    if (presortKeyLambdaNode) {
+        builder.PresortUsedColumns(buildUsedColumns(presortKeyFields));
+    }
+
+    return builder.Done().Ptr();
+}
+
+TExprNode::TPtr OptimizeSqlCombineInput(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+    const TCoSqlCombineInput self(node);
+    auto ret = SqlCombineInputSubsetFields(self, ctx, optCtx);
+    if (ret != node) {
+        YQL_CLOG(DEBUG, Core) << node->Content() << "SubsetFields";
+        return ret;
+    }
+    return node;
+}
+
+TExprNode::TPtr NarrowSqlCombineInputArgMap(const TCoSqlCombineInput& input, const TSet<TStringBuf>& usedFields, TExprContext& ctx) {
+    const auto argMapLambda = input.ArgMapLambda();
+    const auto argMapType = argMapLambda.Body().Ref().GetTypeAnn()->Cast<TStructExprType>();
+
+    TExprNode::TListType fieldNodes;
+    for (const auto& item : argMapType->GetItems()) {
+        const auto& name = item->GetName();
+        if (usedFields.contains(name)) {
+            fieldNodes.push_back(ctx.NewAtom(input.Pos(), name));
+        }
+    }
+
+    if (fieldNodes.size() == argMapType->GetSize()) {
+        return input.Ptr();
+    }
+
+    TMaybeNode<TExprBase> newBody;
+    if (fieldNodes.empty()) {
+        newBody = Build<TCoAsStruct>(ctx, input.Pos()).Done();
+    } else {
+        newBody = Build<TCoFilterMembers>(ctx, input.Pos())
+                      .Input(argMapLambda.Body())
+                      .Members().Add(fieldNodes)
+                  .Build().Done();
+    }
+
+    const auto newArgMap = Build<TCoLambda>(ctx, input.Pos())
+        .Args({"row"})
+        .Body<TExprApplier>()
+            .Apply(newBody.Cast())
+            .With(argMapLambda.Args().Arg(0), "row")
+        .Build()
+        .Done();
+
+    return Build<TCoSqlCombineInput>(ctx, input.Pos())
+        .InitFrom(input)
+        .ArgMapLambda(newArgMap)
+        .Done().Ptr();
+}
+
+TExprNode::TPtr SqlCombineSubsetFields(const TCoSqlCombine& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+    const auto usingLambda = node.UsingLambda();
+    const auto leftInput = node.LeftInput().Ptr();
+    const auto rightInput = node.RightInput().Ptr();
+
+    auto newLeftInput = leftInput;
+    const auto& leftArg = usingLambda.Args().Arg(1).Ref();
+    if (GetSeqItemType(leftArg.GetTypeAnn())->GetKind() == ETypeAnnotationKind::Struct) {
+        TSet<TStringBuf> leftUsedFields;
+        if (HaveFieldsSubsetLMap(usingLambda.Body().Ptr(), leftArg, leftUsedFields, *optCtx.ParentsMap)) {
+            newLeftInput = NarrowSqlCombineInputArgMap(TCoSqlCombineInput(leftInput), leftUsedFields, ctx);
+        }
+    }
+
+    auto newRightInput = rightInput;
+    const auto& rightArg = usingLambda.Args().Arg(2).Ref();
+    if (GetSeqItemType(rightArg.GetTypeAnn())->GetKind() == ETypeAnnotationKind::Struct) {
+        TSet<TStringBuf> rightUsedFields;
+        if (HaveFieldsSubsetLMap(usingLambda.Body().Ptr(), rightArg, rightUsedFields, *optCtx.ParentsMap)) {
+            newRightInput = NarrowSqlCombineInputArgMap(TCoSqlCombineInput(rightInput), rightUsedFields, ctx);
+        }
+    }
+
+    if (newLeftInput == leftInput && newRightInput == rightInput) {
+        return node.Ptr();
+    }
+
+    return Build<TCoSqlCombine>(ctx, node.Pos())
+        .InitFrom(node)
+        .LeftInput(newLeftInput)
+        .RightInput(newRightInput)
+        .Done().Ptr();
+}
+
+TExprNode::TPtr OptimizeSqlCombine(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+    const TCoSqlCombine self(node);
+    auto ret = SqlCombineSubsetFields(self, ctx, optCtx);
+    if (ret != node) {
+        YQL_CLOG(DEBUG, Core) << node->Content() << "SubsetFields";
+        return ret;
+    }
+    return node;
+}
+
 TExprNode::TPtr RenameJoinTable(TPositionHandle pos, TExprNode::TPtr table,
     const THashMap<TString, TString>& upstreamTablesRename, TExprContext& ctx)
 {
@@ -391,6 +560,18 @@ TExprNode::TPtr ReassembleJoinEquality(TExprNode::TPtr columns, const THashSet<T
     return ret;
 }
 
+bool AreAnyOfLinkOptionsPresent(TExprNode::TPtr joinTree, const std::initializer_list<std::string_view>& linkOptions) {
+    if (joinTree->IsAtom()) {
+        return false;
+    }
+    for (auto option : joinTree->Child(5)->Children()) {
+        if (option->Head().IsAtom(linkOptions)) {
+            return true;
+        }
+    }
+    return AreAnyOfLinkOptionsPresent(joinTree->Child(1), linkOptions) || AreAnyOfLinkOptionsPresent(joinTree->Child(2), linkOptions);
+}
+
 TExprNode::TPtr FuseJoinTree(TExprNode::TPtr downstreamJoinTree, TExprNode::TPtr upstreamJoinTree, const THashSet<TStringBuf>& upstreamLabels,
     const THashMap<TString, TString>& upstreamTablesRename, const THashMap<TString, TString>& upstreamColumnsBackRename,
     TExprContext& ctx)
@@ -450,9 +631,18 @@ bool IsSuitableToFuseInputMultiLabels(TOptimizeContext &optCtx) {
 }
 
 TExprNode::TPtr FuseEquiJoins(const TExprNode::TPtr& node, ui32 upstreamIndex, TExprContext& ctx, TOptimizeContext &optCtx) {
-    ui32 downstreamInputs = node->ChildrenSize() - 2;
     auto upstreamList = node->Child(upstreamIndex)->Child(0);
     auto upstreamLabel = node->Child(upstreamIndex)->Child(1);
+    ui32 upstreamInputs = upstreamList->ChildrenSize() - 2;
+    ui32 downstreamInputs = node->ChildrenSize() - 2;
+
+    auto downstreamJoinTree = node->Child(downstreamInputs);
+    auto upstreamJoinTree = upstreamList->Child(upstreamInputs);
+    if (AreAnyOfLinkOptionsPresent(downstreamJoinTree, {"force_star"}) ||
+        AreAnyOfLinkOptionsPresent(upstreamJoinTree, {"force_star"})) {
+        return node;
+    }
+
     THashSet<TStringBuf> upstreamLabelsAssociatedByInputIndex;
     THashSet<TStringBuf> downstreamLabels;
     for (ui32 i = 0; i < downstreamInputs; ++i) {
@@ -479,7 +669,6 @@ TExprNode::TPtr FuseEquiJoins(const TExprNode::TPtr& node, ui32 upstreamIndex, T
     THashMap<TString, TString> upstreamTablesRename; // rename of conflicted upstream tables
     THashMap<TString, TString> upstreamColumnsBackRename; // renamed of columns under upstreamLabel to full name inside upstream
     TMap<TString, TVector<TString>> upstreamColumnsRename;
-    ui32 upstreamInputs = upstreamList->ChildrenSize() - 2;
     THashSet<TStringBuf> upstreamLabels;
     for (ui32 i = 0; i < upstreamInputs; ++i) {
         auto label = upstreamList->Child(i)->Child(1);
@@ -537,9 +726,7 @@ TExprNode::TPtr FuseEquiJoins(const TExprNode::TPtr& node, ui32 upstreamIndex, T
         }
     }
 
-    auto downstreamJoinTree = node->Child(downstreamInputs);
     auto downstreamSettings = node->Children().back();
-    auto upstreamJoinTree = upstreamList->Child(upstreamInputs);
     TExprNode::TListType settingsChildren;
 
     for (auto& setting : upstreamList->Children().back()->Children()) {
@@ -607,33 +794,33 @@ TExprNode::TPtr FuseEquiJoins(const TExprNode::TPtr& node, ui32 upstreamIndex, T
         }
     }
 
-   for (auto& x : upstreamColumnsRename) {
-       for (auto& y : x.second) {
-           TStringBuf part1;
-           TStringBuf part2;
-           SplitTableName(x.first, part1, part2);
-           TStringBuf labelName = upstreamLabel->Content();
-           if (upstreamLabelsAssociatedByInputIndex.size() > 1) {
-               if (upstreamLabelsAssociatedByInputIndex.contains(part1)) {
-                   continue;
-               } else {
-                   labelName = part1;
-               }
-           }
+    for (auto& x : upstreamColumnsRename) {
+        for (auto& y : x.second) {
+            TStringBuf part1;
+            TStringBuf part2;
+            SplitTableName(x.first, part1, part2);
+            TStringBuf labelName = upstreamLabel->Content();
+            if (upstreamLabelsAssociatedByInputIndex.size() > 1) {
+                if (upstreamLabelsAssociatedByInputIndex.contains(part1)) {
+                    continue;
+                } else {
+                    labelName = part1;
+                }
+            }
 
-           if (auto renamed = upstreamTablesRename.FindPtr(part1)) {
-               part1 = *renamed;
-           }
+            if (auto renamed = upstreamTablesRename.FindPtr(part1)) {
+                part1 = *renamed;
+            }
 
-           settingsChildren.push_back(ctx.Builder(node->Pos())
-               .List()
-                   .Atom(0, "rename")
-                   .Atom(1, TString::Join(part1, ".", part2))
-                   .Atom(2, TString::Join(labelName, ".", y))
-               .Seal()
-               .Build());
-       }
-   }
+            settingsChildren.push_back(ctx.Builder(node->Pos())
+                .List()
+                    .Atom(0, "rename")
+                    .Atom(1, TString::Join(part1, ".", part2))
+                    .Atom(2, TString::Join(labelName, ".", y))
+                .Seal()
+                .Build());
+        }
+    }
 
     auto joinTree = FuseJoinTree(downstreamJoinTree, upstreamJoinTree, upstreamLabelsAssociatedByInputIndex,
         upstreamTablesRename, upstreamColumnsBackRename, ctx);
@@ -1235,8 +1422,9 @@ TExprNode::TPtr PullUpFlatMapOverEquiJoin(const TExprNode::TPtr& node, TExprCont
             toPull.push_back(i);
         } else {
             // If cannot pull flat map with labels list stop processing.
-            if (!input.Scope().Ref().IsAtom())
+            if (!input.Scope().Ref().IsAtom()) {
                 return node;
+            }
         }
 
         err = canaryLabels.Add(ctx, *input.Scope().Ptr(), structType);
@@ -1259,11 +1447,11 @@ TExprNode::TPtr PullUpFlatMapOverEquiJoin(const TExprNode::TPtr& node, TExprCont
         YQL_ENSURE(status == IGraphTransformer::TStatus::Ok);
 
         status = EquiJoinAnnotation(node->Pos(), canaryResultType, canaryLabels,
-                                         *joinTreeWithInputRenames, options, ctx);
+                                         *joinTreeWithInputRenames, options, ctx, *optCtx.Types);
         YQL_ENSURE(status == IGraphTransformer::TStatus::Ok);
 
         status = EquiJoinAnnotation(node->Pos(), noRenamesResultType, actualLabels,
-                                    *joinTree, options, ctx);
+                                    *joinTree, options, ctx, *optCtx.Types);
         YQL_ENSURE(status == IGraphTransformer::TStatus::Ok);
     }
 
@@ -2532,6 +2720,8 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
 
     map["LMap"] = std::bind(&OptimizeLMap, _1, _2, _3);
     map["OrderedLMap"] = std::bind(&OptimizeLMap, _1, _2, _3);
+    map["SqlCombineInput"] = std::bind(&OptimizeSqlCombineInput, _1, _2, _3);
+    map["SqlCombine"] = std::bind(&OptimizeSqlCombine, _1, _2, _3);
 
     map[TCoGroupingCore::CallableName()] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         TCoGroupingCore self(node);
@@ -2671,6 +2861,13 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
     map["ExtractMembers"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         TCoExtractMembers self(node);
         if (!optCtx.IsSingleUsage(self.Input())) {
+            return node;
+        }
+
+        if (self.Input().Maybe<TCoWithWorld>()) {
+            if (auto res = ApplyExtractMembersToWithWorld(self.Input().Ptr(), self.Members().Ptr(), ctx, {})) {
+                return res;
+            }
             return node;
         }
 
@@ -2837,6 +3034,13 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
 
         if (const auto tableSource = self.Input().Maybe<TCoTableSource>()) {
             if (auto res = ApplyExtractMembersToTableSource(self.Input().Ptr(), self.Members().Ptr(), ctx, {})) {
+                return res;
+            }
+            return node;
+        }
+
+        if (const auto sqlCombine = self.Input().Maybe<TCoSqlCombine>()) {
+            if (auto res = ApplyExtractMembersToSqlCombine(self.Input().Ptr(), self.Members().Ptr(), ctx, {})) {
                 return res;
             }
             return node;
@@ -3460,8 +3664,9 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
         TExprNode::TListType renamed;
         renamed.reserve(self.LeftRenames().Size() >> 1U);
         for (auto i = 0U; i < self.LeftRenames().Size(); ++++i) {
-            if (leftFileldsSet.emplace(self.LeftRenames().Item(i).Value()).second)
+            if (leftFileldsSet.emplace(self.LeftRenames().Item(i).Value()).second) {
                 renamed.emplace_back(self.LeftRenames().Item(i).Ptr());
+            }
         }
 
         if (leftFileldsSet.size() < leftItemType.Cast<TStructExprType>()->GetSize()) {

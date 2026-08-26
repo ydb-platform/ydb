@@ -631,7 +631,7 @@ void TBatch::UnpackTo(TVector<TClientBlob> *blobs) const
             TBatchDeserializer<NKikimrPQ::TBatchHeader::ECompressed>(*this).Unpack(blobs);
             break;
         default:
-            Y_ABORT("uknown type");
+            AFL_ENSURE(false)("reason", "unknown type")("format", static_cast<int>(type));
     };
 }
 

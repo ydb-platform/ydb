@@ -64,6 +64,7 @@ public:
     void SetFileStorage(TFileStoragePtr fileStorage);
     void SetUrlPreprocessing(IUrlPreprocessing::TPtr urlPreprocessing);
     void EnableRangeComputeFor();
+    void EnableAutoUseYqlLibs();
     void SetArrowResolver(IArrowResolver::TPtr arrowResolver);
     void SetUdfResolverLogfile(const TString& path);
     void AddRemoteLayersProvider(const TString& alias, NLayers::IRemoteLayerProviderPtr provider);
@@ -104,6 +105,7 @@ private:
     IUrlPreprocessing::TPtr UrlPreprocessing_;
     TString Runner_;
     bool EnableRangeComputeFor_ = false;
+    bool AutoUseYqlLibs_ = false;
     IArrowResolver::TPtr ArrowResolver_;
     TMaybe<TString> UdfResolverLogfile_;
     THashMap<TString, NLayers::IRemoteLayerProviderPtr> RemoteLayersProviders_;
@@ -118,7 +120,6 @@ public:
     using TStatus = IGraphTransformer::TStatus;
     using TFutureStatus = NThreading::TFuture<TStatus>;
 
-public:
     ~TProgram() override;
 
     void SetLanguageVersion(TLangVersion version);
@@ -397,12 +398,13 @@ private:
         TUdfIndexPackageSet::TPtr udfIndexPackageSet,
         const TFileStoragePtr& fileStorage,
         const IUrlPreprocessing::TPtr& urlPreprocessing,
-        const TGatewaysConfig* gatewaysConfig,
+        THolder<TGatewaysConfig> gatewaysConfig,
         TString filename,
         TString sourceCode,
         TString sessionId,
         const TString& runner,
         bool enableRangeComputeFor,
+        bool autoUseYqlLibs,
         IArrowResolver::TPtr arrowResolver,
         EHiddenMode hiddenMode,
         const TQContext& qContext,
@@ -432,7 +434,6 @@ private:
     NThreading::TFuture<IGraphTransformer::TStatus> AsyncTransformWithFallback(bool applyAsyncChanges);
     void SaveExprRoot();
 
-private:
     std::optional<bool> CheckFallbackIssues(const TIssues& issues);
     void HandleSourceCode();
     void HandleTranslationSettings(NSQLTranslation::TTranslationSettings& settings);
@@ -468,7 +469,7 @@ private:
     const IUrlPreprocessing::TPtr UrlPreprocessing_;
     TUserDataTable SavedUserDataTable_;
     TUserDataStorage::TPtr UserDataStorage_;
-    const TGatewaysConfig* GatewaysConfig_;
+    const THolder<TGatewaysConfig> GatewaysConfig_;
     TString Filename_;
     TString SourceCode_;
     ESourceSyntax SourceSyntax_;

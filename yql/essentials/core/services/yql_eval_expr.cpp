@@ -1,5 +1,4 @@
 #include "yql_eval_expr.h"
-#include "yql_transform_pipeline.h"
 #include "yql_out_transformers.h"
 
 #include <yql/essentials/ast/serialize/yql_expr_serialize.h>
@@ -18,8 +17,12 @@
 
 #include <library/cpp/yson/node/node_io.h>
 #include <library/cpp/string_utils/base64/base64.h>
+#include <library/cpp/time_provider/monotonic.h>
 
+#include <util/generic/scope.h>
 #include <util/string/builder.h>
+
+#include <memory>
 
 namespace NYql {
 
@@ -45,6 +48,51 @@ THashSet<TStringBuf> SubqueryExpandFuncs = {
     TStringBuf("SubqueryOrderBy"),
     TStringBuf("SubqueryAssumeOrderBy")};
 
+using TEvaluateExpressionCache = THashMap<TString, TExprNode::TPtr>;
+
+IGraphTransformer::TStatus SyncTransformWithDuration(
+    IGraphTransformer& transformer,
+    TExprNode::TPtr& root,
+    TExprContext& ctx,
+    TDuration& duration)
+{
+    const auto start = TMonotonic::Now();
+    Y_DEFER {
+        duration += TMonotonic::Now() - start;
+    };
+    return SyncTransform(transformer, root, ctx);
+}
+
+class TEvaluateExpressionTransformer final: public TSyncTransformerBase {
+public:
+    TEvaluateExpressionTransformer(TTypeAnnotationContext& types,
+                                   TTypeAnnCallableFactory typeAnnCallableFactory,
+                                   const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,
+                                   IGraphTransformer* calcTransformer,
+                                   std::shared_ptr<TEvaluateExpressionCache> evalCache = std::make_shared<TEvaluateExpressionCache>(),
+                                   bool clearCacheOnRewind = true)
+        : EvalCache_(std::move(evalCache))
+        , ClearCacheOnRewind_(clearCacheOnRewind)
+        , Types_(types)
+        , TypeAnnCallableFactory_(std::move(typeAnnCallableFactory))
+        , CalcTransformer_(calcTransformer)
+        , FunctionRegistry_(functionRegistry)
+    {
+    }
+
+    IGraphTransformer::TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override;
+
+    void Rewind() override;
+
+private:
+    std::shared_ptr<TEvaluateExpressionCache> EvalCache_;
+    bool ClearCacheOnRewind_;
+    TTypeAnnotationContext& Types_;
+    TTypeAnnCallableFactory TypeAnnCallableFactory_;
+    IGraphTransformer* CalcTransformer_;
+    const NKikimr::NMiniKQL::IFunctionRegistry& FunctionRegistry_;
+};
+
 } // namespace
 
 bool CheckPendingArgs(const TExprNode& root, TNodeSet& visited, TNodeMap<const TExprNode*>& activeArgs, const TNodeMap<ui32>& externalWorlds, TExprContext& ctx,
@@ -55,6 +103,10 @@ bool CheckPendingArgs(const TExprNode& root, TNodeSet& visited, TNodeMap<const T
 
     if (root.IsCallable({"TypeOf", "SqlColumnOrType", "SqlPlainColumnOrType"})) {
         underTypeOf = true;
+    }
+
+    if (root.IsCallable({"YqlColumnRef", "PgColumnRef"})) {
+        hasUnresolvedTypes = true;
     }
 
     if (root.Type() == TExprNode::Argument) {
@@ -98,7 +150,6 @@ public:
     TNodeMap<bool> Visited;
     bool ForceConfigure = false;
 
-public:
     void Scan(const TExprNode& node) {
         VisitExpr(node, [this](const TExprNode& n) {
             if (n.IsCallable(ConfigureName)) {
@@ -213,7 +264,6 @@ private:
         it->second = hasConfigPending;
     }
 
-private:
     THashSet<TStringBuf> PendingFileAliases_;
     THashSet<TStringBuf> PendingFolderPrefixes_;
 };
@@ -428,9 +478,7 @@ TExprNode::TPtr QuoteCode(const TExprNode::TPtr& node, TExprContext& ctx, TNodeO
     }
 }
 
-IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExprNode::TPtr& output,
-                                              TTypeAnnotationContext& types, TExprContext& ctx, const IFunctionRegistry& functionRegistry,
-                                              IGraphTransformer* calcTransfomer, TTypeAnnCallableFactory typeAnnCallableFactory) {
+IGraphTransformer::TStatus TEvaluateExpressionTransformer::DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
     output = input;
     if (ctx.Step.IsDone(TExprStep::ExprEval)) {
         return IGraphTransformer::TStatus::Ok;
@@ -446,12 +494,23 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
     bool isOptionalAtom = false;
     bool isTypePipeline = false;
     bool isCodePipeline = false;
-    TTransformationPipeline pipeline(&types, typeAnnCallableFactory);
+
+    TTransformationPipeline pipeline(&Types_, TypeAnnCallableFactory_);
     pipeline.AddServiceTransformers();
     pipeline.AddPreTypeAnnotation();
-    pipeline.AddExpressionEvaluation(functionRegistry, calcTransfomer);
+    pipeline.Add(
+        THolder<IGraphTransformer>(MakeHolder<TEvaluateExpressionTransformer>(
+            Types_,
+            TypeAnnCallableFactory_,
+            FunctionRegistry_,
+            CalcTransformer_,
+            EvalCache_,
+            /*clearCacheOnRewind=*/false)),
+        "EvaluateExpression",
+        TIssuesIds::CORE_EXPR_EVALUATION);
     pipeline.AddIOAnnotation();
     pipeline.AddTypeAnnotationTransformer();
+
     auto topLevelTypeCheck = [&](TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) -> IGraphTransformer::TStatus {
         output = input;
         if (!input->GetTypeAnn()) {
@@ -498,19 +557,19 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
                              pure = false;
                              if (IsPureIsolatedLambda(*input)) {
                                  pure = true;
-                                 if (calcTransfomer) {
+                                 if (CalcTransformer_) {
                                      calcProvider.ConstructInPlace();
                                  } else {
                                      if (nextProvider.empty()) {
-                                         nextProvider = types.GetDefaultDataSource();
+                                         nextProvider = Types_.GetDefaultDataSource();
                                      }
                                      if (!nextProvider.empty() &&
-                                         types.DataSourceMap.contains(nextProvider)) {
-                                         calcProvider = types.DataSourceMap[nextProvider].Get();
+                                         Types_.DataSourceMap.contains(nextProvider)) {
+                                         calcProvider = Types_.DataSourceMap[nextProvider].Get();
                                      }
                                  }
-                             } else if (!calcTransfomer) {
-                                 for (auto& p : types.DataSources) {
+                             } else if (!CalcTransformer_) {
+                                 for (auto& p : Types_.DataSources) {
                                      TSyncMap syncList;
                                      if (p->CanBuildResult(*input, syncList)) {
                                          bool canExec = true;
@@ -529,7 +588,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
                                              }
 
                                              TNodeSet visited;
-                                             if (!ValidateCalcWorlds(*calcWorldRoot, types, visited)) {
+                                             if (!ValidateCalcWorlds(*calcWorldRoot, Types_, visited)) {
                                                  canExec = false;
                                                  break;
                                              }
@@ -563,7 +622,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
                          return IGraphTransformer::TStatus::Ok;
                      }), "CheckPure", EYqlIssueCode::TIssuesIds_EIssueCode_DEFAULT_ERROR, "Ensure expression is computable");
 
-    pipeline.Add(MakePeepholeOptimization(&types), "PeepHole", EYqlIssueCode::TIssuesIds_EIssueCode_DEFAULT_ERROR, "Peephole optimizations");
+    pipeline.Add(MakePeepholeOptimization(&Types_), "PeepHole", EYqlIssueCode::TIssuesIds_EIssueCode_DEFAULT_ERROR, "Peephole optimizations");
 
     auto fullTransformer = pipeline.Build();
 
@@ -575,7 +634,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
     modifyCallables.insert(ConfigureName);
     modifyCallables.insert(CommitName);
     modifyCallables.insert("CommitAll!");
-    for (auto& dataSink : types.DataSinks) {
+    for (auto& dataSink : Types_.DataSinks) {
         dataSink->FillModifyCallables(modifyCallables);
     }
 
@@ -583,8 +642,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
     TOptimizeExprSettings settings(nullptr);
     settings.VisitChanges = true;
     settings.TrackFrames = true;
-    static const char ReuseLambdaFlag[] = "EvalReuseLambda";
-    settings.ReuseLambda = !IsOptimizerDisabled<ReuseLambdaFlag>(types);
+    settings.ReuseLambda = true;
     auto status = OptimizeExpr(output, output, [&](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
         if (node->IsCallable("EvaluateIf!")) {
             if (!EnsureMinArgsCount(*node, 3, ctx)) {
@@ -708,7 +766,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
             }
 
             auto itemsCount = list->ChildrenSize() - (list->IsCallable("List") ? 1 : 0);
-            const auto limit = seq ? types.EvaluateForLimit : types.EvaluateParallelForLimit;
+            const auto limit = seq ? Types_.EvaluateForLimit : Types_.EvaluateParallelForLimit;
             if (itemsCount > limit) {
                 ctx.AddError(TIssue(ctx.GetPosition(list->Pos()), TStringBuilder() << "Too large list for EVALUATE " << (seq ? "" : "PARALLEL ") << "FOR, allowed: " << limit << ", got: " << itemsCount));
                 return nullptr;
@@ -778,8 +836,8 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
                 }
 
                 auto itemsCount = keys->ChildrenSize() - (keys->IsCallable("List") ? 1 : 0);
-                if (itemsCount > types.EvaluateOrderByColumnLimit) {
-                    ctx.AddError(TIssue(ctx.GetPosition(keys->Pos()), TStringBuilder() << "Too many columns for subquery order by, allowed: " << types.EvaluateOrderByColumnLimit << ", got: " << itemsCount));
+                if (itemsCount > Types_.EvaluateOrderByColumnLimit) {
+                    ctx.AddError(TIssue(ctx.GetPosition(keys->Pos()), TStringBuilder() << "Too many columns for subquery order by, allowed: " << Types_.EvaluateOrderByColumnLimit << ", got: " << itemsCount));
                     return nullptr;
                 }
 
@@ -856,8 +914,8 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
                 }
 
                 auto itemsCount = list->ChildrenSize();
-                if (itemsCount > types.EvaluateParallelForLimit) {
-                    ctx.AddError(TIssue(ctx.GetPosition(list->Pos()), TStringBuilder() << "Too large list for subquery loop, allowed: " << types.EvaluateParallelForLimit << ", got: " << itemsCount));
+                if (itemsCount > Types_.EvaluateParallelForLimit) {
+                    ctx.AddError(TIssue(ctx.GetPosition(list->Pos()), TStringBuilder() << "Too large list for subquery loop, allowed: " << Types_.EvaluateParallelForLimit << ", got: " << itemsCount));
                     return nullptr;
                 }
 
@@ -1040,54 +1098,52 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
             clonedArg = ctx.NewCallable(clonedArg->Pos(), "SerializeCode", {clonedArg});
         }
 
-        TString key;
-        TString yson;
-        NYT::TNode ysonNode;
-        if (types.QContext) {
-            key = MakeCacheKey(*clonedArg);
-            if (types.QContext.CanRead() && types.QContext.CaptureMode() != EQPlayerCaptureMode::Full) {
-                auto item = types.QContext.GetReader()->Get({.Component = EvaluationComponent, .Label = key}).GetValueSync();
+        const TString key = MakeCacheKey(*clonedArg);
+        auto calculate = [&]() -> TExprNode::TPtr {
+            TString yson;
+            NYT::TNode ysonNode;
+            if (Types_.QContext && Types_.QContext.CanRead() && Types_.QContext.CaptureMode() != EQPlayerCaptureMode::Full) {
+                auto item = Types_.QContext.GetReader()->Get({.Component = EvaluationComponent, .Label = key}).GetValueSync();
                 if (!item) {
                     throw yexception() << "Missing replay data";
                 }
 
                 ysonNode = NYT::NodeFromYsonString(item->Value);
             }
-        }
 
-        do {
-            if (ysonNode.IsUndefined() && isAtomPipeline && clonedArg->IsCallable("String")) {
-                ysonNode = NYT::TNode()("Data", NYT::TNode(clonedArg->Head().Content()));
-                yson = NYT::NodeToYsonString(ysonNode, NYT::NYson::EYsonFormat::Binary);
-            } else {
-                calcProvider.Clear();
-                calcWorldRoot.Drop();
-                fullTransformer->Rewind();
-                auto prevSteps = ctx.Step;
-                TEvalScope scope(types, ctx);
-                ctx.Step.Reset();
-                if (prevSteps.IsDone(TExprStep::Recapture)) {
-                    ctx.Step.Done(TExprStep::Recapture);
-                }
-                status = SyncTransform(*fullTransformer, clonedArg, ctx);
-                ctx.Step = prevSteps;
-                if (status.Level == IGraphTransformer::TStatus::Error) {
-                    return nullptr;
-                }
+            do {
+                if (ysonNode.IsUndefined() && isAtomPipeline && clonedArg->IsCallable("String")) {
+                    ysonNode = NYT::TNode()("Data", NYT::TNode(clonedArg->Head().Content()));
+                    yson = NYT::NodeToYsonString(ysonNode, NYT::NYson::EYsonFormat::Binary);
+                } else {
+                    calcProvider.Clear();
+                    calcWorldRoot.Drop();
+                    fullTransformer->Rewind();
+                    auto prevSteps = ctx.Step;
+                    TEvalScope scope(Types_, ctx);
+                    ctx.Step.Reset();
+                    if (prevSteps.IsDone(TExprStep::Recapture)) {
+                        ctx.Step.Done(TExprStep::Recapture);
+                    }
+                    status = SyncTransform(*fullTransformer, clonedArg, ctx);
+                    ctx.Step = prevSteps;
+                    if (status.Level == IGraphTransformer::TStatus::Error) {
+                        return nullptr;
+                    }
 
-                // execute calcWorldRoot
-                auto execTransformer = CreateExecutionTransformer(types, [](const TOperationProgress&) {}, /*withFinalize=*/false);
-                status = SyncTransform(*execTransformer, calcWorldRoot, ctx);
-                if (status.Level == IGraphTransformer::TStatus::Error) {
-                    return nullptr;
-                }
+                    // execute calcWorldRoot
+                    auto execTransformer = CreateExecutionTransformer(Types_, [](const TOperationProgress&) {}, /*withFinalize=*/false);
+                    status = SyncTransform(*execTransformer, calcWorldRoot, ctx);
+                    if (status.Level == IGraphTransformer::TStatus::Error) {
+                        return nullptr;
+                    }
 
-                if (types.QContext.CanRead() && types.QContext.CaptureMode() != EQPlayerCaptureMode::Full) {
-                    break;
-                }
+                    if (Types_.QContext.CanRead() && Types_.QContext.CaptureMode() != EQPlayerCaptureMode::Full) {
+                        break;
+                    }
 
-                IDataProvider::TFillSettings fillSettings;
-                // clang-format off
+                    IDataProvider::TFillSettings fillSettings;
+                    // clang-format off
                 auto delegatedNode = Build<TResult>(ctx, node->Pos())
                     .Input(clonedArg)
                     .BytesLimit()
@@ -1113,107 +1169,129 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
                     .Origin(calcWorldRoot)
                     .Done()
                     .Ptr();
-                // clang-format on
+                    // clang-format on
 
-                auto atomType = ctx.MakeType<TUnitExprType>();
-                for (auto idx : {TResOrPullBase::idx_BytesLimit, TResOrPullBase::idx_RowsLimit, TResOrPullBase::idx_FormatDetails,
-                                 TResOrPullBase::idx_Format, TResOrPullBase::idx_PublicId, TResOrPullBase::idx_Discard, TResOrPullBase::idx_Settings}) {
-                    delegatedNode->Child(idx)->SetTypeAnn(atomType);
-                    delegatedNode->Child(idx)->SetState(TExprNode::EState::ConstrComplete);
+                    auto atomType = ctx.MakeType<TUnitExprType>();
+                    for (auto idx : {TResOrPullBase::idx_BytesLimit, TResOrPullBase::idx_RowsLimit, TResOrPullBase::idx_FormatDetails,
+                                     TResOrPullBase::idx_Format, TResOrPullBase::idx_PublicId, TResOrPullBase::idx_Discard, TResOrPullBase::idx_Settings}) {
+                        delegatedNode->Child(idx)->SetTypeAnn(atomType);
+                        delegatedNode->Child(idx)->SetState(TExprNode::EState::ConstrComplete);
+                    }
+
+                    delegatedNode->SetTypeAnn(atomType);
+                    delegatedNode->SetState(TExprNode::EState::ConstrComplete);
+                    auto& transformer = CalcTransformer_ ? *CalcTransformer_ : (*calcProvider.Get())->GetCallableExecutionTransformer();
+                    ++Types_.EvaluationStats.CalcProviderCalls;
+                    status = SyncTransformWithDuration(transformer, delegatedNode, ctx, Types_.EvaluationStats.CalcProviderDurationSum);
+                    if (status.Level == IGraphTransformer::TStatus::Error) {
+                        return nullptr;
+                    }
+
+                    yson = TString{delegatedNode->GetResult().Content()};
+                    ysonNode = NYT::NodeFromYsonString(yson);
                 }
 
-                delegatedNode->SetTypeAnn(atomType);
-                delegatedNode->SetState(TExprNode::EState::ConstrComplete);
-                auto& transformer = calcTransfomer ? *calcTransfomer : (*calcProvider.Get())->GetCallableExecutionTransformer();
-                status = SyncTransform(transformer, delegatedNode, ctx);
-                if (status.Level == IGraphTransformer::TStatus::Error) {
-                    return nullptr;
+                if (ysonNode.HasKey("FallbackProvider")) {
+                    nextProvider = ysonNode["FallbackProvider"].AsString();
+                } else if (Types_.QContext.CanWrite()) {
+                    Types_.QContext.GetWriter()->Put({.Component = EvaluationComponent, .Label = key}, yson).GetValueSync();
                 }
+            } while (ysonNode.HasKey("FallbackProvider"));
 
-                yson = TString{delegatedNode->GetResult().Content()};
-                ysonNode = NYT::NodeFromYsonString(yson);
-            }
+            auto dataNode = ysonNode["Data"];
+            if (isAtomPipeline) {
+                if (isOptionalAtom) {
+                    if (dataNode.IsEntity() || dataNode.AsList().empty()) {
+                        ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Failed to get atom from an empty optional"));
+                        return nullptr;
+                    }
 
-            if (ysonNode.HasKey("FallbackProvider")) {
-                nextProvider = ysonNode["FallbackProvider"].AsString();
-            } else if (types.QContext.CanWrite()) {
-                types.QContext.GetWriter()->Put({.Component = EvaluationComponent, .Label = key}, yson).GetValueSync();
-            }
-        } while (ysonNode.HasKey("FallbackProvider"));
-
-        auto dataNode = ysonNode["Data"];
-        if (isAtomPipeline) {
-            if (isOptionalAtom) {
-                if (dataNode.IsEntity() || dataNode.AsList().empty()) {
-                    ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Failed to get atom from an empty optional"));
-                    return nullptr;
+                    dataNode = dataNode.AsList().front();
                 }
-
-                dataNode = dataNode.AsList().front();
+                TString value;
+                if (dataNode.IsString()) {
+                    value = dataNode.AsString();
+                } else {
+                    YQL_ENSURE(dataNode.IsList() && dataNode.AsList().size() == 1 && dataNode.AsList().front().IsString(), "Unexpected atom value: " << NYT::NodeToYsonString(dataNode));
+                    value = Base64Decode(dataNode.AsList().front().AsString());
+                }
+                return ctx.NewAtom(node->Pos(), value);
             }
-            TString value;
-            if (dataNode.IsString()) {
-                value = dataNode.AsString();
-            } else {
-                YQL_ENSURE(dataNode.IsList() && dataNode.AsList().size() == 1 && dataNode.AsList().front().IsString(), "Unexpected atom value: " << NYT::NodeToYsonString(dataNode));
-                value = Base64Decode(dataNode.AsList().front().AsString());
-            }
-            return ctx.NewAtom(node->Pos(), value);
-        }
 
-        TScopedAlloc alloc(__LOCATION__);
-        TTypeEnvironment env(alloc);
-        TStringStream err;
-        TProgramBuilder pgmBuilder(env, functionRegistry);
-        TType* mkqlType = NCommon::BuildType(*clonedArg->GetTypeAnn(), pgmBuilder, err);
-        if (!mkqlType) {
-            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Failed to process type: " << err.Str()));
-            return nullptr;
-        }
-
-        TMemoryUsageInfo memInfo("Eval");
-        THolderFactory holderFactory(alloc.Ref(), memInfo);
-        auto value = NCommon::ParseYsonNodeInResultFormat(holderFactory, dataNode, mkqlType, &err);
-        if (!value) {
-            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Failed to parse data: " << err.Str()));
-            return nullptr;
-        }
-
-        if (isTypePipeline) {
-            auto yson = TStringBuf(value->AsStringRef());
-            auto type = NCommon::ParseTypeFromYson(yson, ctx, ctx.GetPosition(node->Pos()));
-            if (!type) {
+            TScopedAlloc alloc(__LOCATION__);
+            TTypeEnvironment env(alloc);
+            TStringStream err;
+            TProgramBuilder pgmBuilder(env, FunctionRegistry_);
+            TType* mkqlType = NCommon::BuildType(*clonedArg->GetTypeAnn(), pgmBuilder, err);
+            if (!mkqlType) {
+                ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Failed to process type: " << err.Str()));
                 return nullptr;
             }
 
-            return ExpandType(node->Pos(), *type, ctx);
-        }
-
-        if (isCodePipeline) {
-            TExprNode::TPtr result = DeserializeGraph(node->Pos(), TStringBuf(value->AsStringRef()), ctx);
-            if (!result) {
+            TMemoryUsageInfo memInfo("Eval");
+            THolderFactory holderFactory(alloc.Ref(), memInfo);
+            auto value = NCommon::ParseYsonNodeInResultFormat(holderFactory, dataNode, mkqlType, &err);
+            if (!value) {
+                ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Failed to parse data: " << err.Str()));
                 return nullptr;
             }
 
-            TNodeOnNodeOwnedMap replaces;
-            VisitExpr(*result, [&](const TExprNode& input) {
-                if (input.IsCallable("WorldArg")) {
-                    YQL_ENSURE(input.ChildrenSize() == 1 && input.Child(0)->IsAtom());
-                    auto index = FromString<ui32>(input.Child(0)->Content());
-                    YQL_ENSURE(index < marked.ExternalWorldsList.size());
-                    YQL_ENSURE(replaces.emplace(&input, marked.ExternalWorldsList[index]).second);
+            if (isTypePipeline) {
+                auto yson = TStringBuf(value->AsStringRef());
+                auto type = NCommon::ParseTypeFromYson(yson, ctx, ctx.GetPosition(node->Pos()));
+                if (!type) {
+                    return nullptr;
                 }
 
-                return true;
-            });
+                return ExpandType(node->Pos(), *type, ctx);
+            }
 
-            result = ctx.ReplaceNodes(std::move(result), replaces);
-            ctx.Step.Repeat(TExprStep::ExpandApplyForLambdas).Repeat(TExprStep::ExpandSeq);
-            hasPendingEvaluations = hasPendingEvaluations.Combine(IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, /*hasRestart=*/true));
+            if (isCodePipeline) {
+                TExprNode::TPtr result = DeserializeGraph(node->Pos(), TStringBuf(value->AsStringRef()), ctx);
+                if (!result) {
+                    return nullptr;
+                }
+
+                TNodeOnNodeOwnedMap replaces;
+                VisitExpr(*result, [&](const TExprNode& input) {
+                    if (input.IsCallable("WorldArg")) {
+                        YQL_ENSURE(input.ChildrenSize() == 1 && input.Child(0)->IsAtom());
+                        auto index = FromString<ui32>(input.Child(0)->Content());
+                        YQL_ENSURE(index < marked.ExternalWorldsList.size());
+                        YQL_ENSURE(replaces.emplace(&input, marked.ExternalWorldsList[index]).second);
+                    }
+
+                    return true;
+                });
+
+                result = ctx.ReplaceNodes(std::move(result), replaces);
+                ctx.Step.Repeat(TExprStep::ExpandApplyForLambdas).Repeat(TExprStep::ExpandSeq);
+                hasPendingEvaluations = hasPendingEvaluations.Combine(IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, /*hasRestart=*/true));
+                return result;
+            }
+
+            return NCommon::ValueToExprLiteral(clonedArg->GetTypeAnn(), *value, ctx, node->Pos());
+        };
+
+        auto calculateWithCache = [&]() -> TExprNode::TPtr {
+            ++Types_.EvaluationStats.Count;
+            if (!Types_.EnableEvaluateExprCache) {
+                return calculate();
+            }
+
+            if (const auto* cached = EvalCache_->FindPtr(key)) {
+                ++Types_.EvaluationStats.CacheHits;
+                return *cached;
+            }
+
+            auto result = calculate();
+            if (result) {
+                (*EvalCache_)[key] = result;
+            }
             return result;
-        }
+        };
 
-        return NCommon::ValueToExprLiteral(clonedArg->GetTypeAnn(), *value, ctx, node->Pos());
+        return calculateWithCache();
     }, ctx, settings);
 
     if (status.Level == IGraphTransformer::TStatus::Error) {
@@ -1231,6 +1309,25 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
     ctx.Step.Repeat(TExprStep::Configure);
     ctx.Step.Done(TExprStep::ExprEval);
     return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, /*hasRestart=*/true);
+}
+
+void TEvaluateExpressionTransformer::Rewind() {
+    if (ClearCacheOnRewind_) {
+        EvalCache_->clear();
+    }
+}
+
+THolder<IGraphTransformer> CreateEvaluateExpressionTransformer(
+    TTypeAnnotationContext& types,
+    const IFunctionRegistry& functionRegistry,
+    IGraphTransformer* calcTransformer,
+    TTypeAnnCallableFactory typeAnnCallableFactory)
+{
+    return MakeHolder<TEvaluateExpressionTransformer>(
+        types,
+        std::move(typeAnnCallableFactory),
+        functionRegistry,
+        calcTransformer);
 }
 
 } // namespace NYql

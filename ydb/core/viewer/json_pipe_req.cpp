@@ -1,5 +1,6 @@
 #include "json_pipe_req.h"
 #include "log.h"
+#include <ydb/core/base/auth.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
 #include <util/generic/overloaded.h>
@@ -167,20 +168,21 @@ void TViewerPipeClient::BuildParamsFromFormData(TStringBuf data) {
 }
 
 void TViewerPipeClient::SetupTracing(const TString& handlerName) {
+    constexpr ui8 viewerTraceMaxVerbosity = TComponentTracingLevels::DynamicNodesOnly;
+
     auto request = GetRequest();
     NWilson::TTraceId traceId;
     TString traceparent = request.GetHeader("traceparent");
     if (traceparent) {
-        traceId = NWilson::TTraceId::FromTraceparentHeader(traceparent, TComponentTracingLevels::ProductionVerbose);
+        traceId = NWilson::TTraceId::FromTraceparentHeader(traceparent, viewerTraceMaxVerbosity);
     }
     TString wantTrace = request.GetHeader("X-Want-Trace");
     TString traceVerbosity = request.GetHeader("X-Trace-Verbosity");
     TString traceTTL = request.GetHeader("X-Trace-TTL");
     if (!traceId && (FromStringWithDefault<bool>(wantTrace) || !traceVerbosity.empty() || !traceTTL.empty())) {
-        ui8 verbosity = TComponentTracingLevels::ProductionVerbose;
+        ui8 verbosity = viewerTraceMaxVerbosity;
         if (traceVerbosity) {
-            verbosity = FromStringWithDefault<ui8>(traceVerbosity, verbosity);
-            verbosity = std::min(verbosity, NWilson::TTraceId::MAX_VERBOSITY);
+            verbosity = std::min(viewerTraceMaxVerbosity, FromStringWithDefault<ui8>(traceVerbosity, verbosity));
         }
         ui32 ttl = Max<ui32>();
         if (traceTTL) {
@@ -208,6 +210,9 @@ TViewerPipeClient::TViewerPipeClient(IViewer* viewer, NMon::TEvHttpInfo::TPtr& e
     if (NHttp::Trim(Event->Get()->Request.GetHeader("Content-Type").Before(';'), ' ') == "application/x-www-form-urlencoded") {
         BuildParamsFromFormData(Event->Get()->Request.GetPostContent());
     }
+    if (!Event->Get()->Database.empty()) {
+        Database = Event->Get()->Database;
+    }
     InitConfig(Params);
     SetupTracing(handlerName);
 }
@@ -223,6 +228,9 @@ TViewerPipeClient::TViewerPipeClient(IViewer* viewer, NHttp::TEvHttpProxy::TEvHt
     }
     if (NHttp::Trim(headers.Get("Content-Type").Before(';'), ' ') == "application/x-www-form-urlencoded") {
         BuildParamsFromFormData(HttpEvent->Get()->Request->Body);
+    }
+    if (!HttpEvent->Get()->Database.empty()) {
+        Database = HttpEvent->Get()->Database;
     }
     InitConfig(Params);
     SetupTracing(handlerName);
@@ -462,6 +470,9 @@ TViewerPipeClient::TRequestResponse<TEvViewer::TEvViewerResponse> TViewerPipeCli
         }
     }
     SendRequest(viewerServiceId, ev, flags, nodeId, response.Span.GetTraceId());
+    if (flags & IEventHandle::FlagSubscribeOnSession) {
+        SubscriptionNodeIds.push_back(nodeId);
+    }
     return response;
 }
 
@@ -1013,14 +1024,79 @@ bool TViewerPipeClient::IsDatabaseRequest() const {
     return DatabaseBoardInfoResponse || ResourceBoardInfoResponse;
 }
 
+bool TViewerPipeClient::AreDatabaseNodesKnown() const {
+    return (DatabaseBoardInfoResponse && DatabaseBoardInfoResponse->IsOk()) ||
+        (ResourceBoardInfoResponse && ResourceBoardInfoResponse->IsOk());
+}
+
+bool TViewerPipeClient::IsStrictDatabaseOnlyRequest() {
+    if (!StrictDatabaseOnlyRequest.has_value()) {
+        StrictDatabaseOnlyRequest = IsStrictDatabaseOnlyToken(AppData(), GetRequest().GetUserTokenObject());
+    }
+    return *StrictDatabaseOnlyRequest;
+}
+
+TString TViewerPipeClient::GetUserSID() const {
+    NACLibProto::TUserToken userToken;
+    if (!userToken.ParseFromString(GetRequest().GetUserTokenObject())) {
+        return {};
+    }
+    return userToken.GetUserSID();
+}
+
+bool TViewerPipeClient::DenyRequestIfNodesAreOutOfDatabase(std::span<const TNodeId> nodeIds) {
+    if (nodeIds.empty()) {
+        return false;
+    }
+    // We can't validate the scope of the requested nodes without the database node list,
+    // so an unresolved database denies the request.
+    if (!AreDatabaseNodesKnown()) {
+        YDB_LOG_NOTICE_COMP(
+            NKikimrServices::VIEWER,
+            "Access denied: database node list is unavailable, request cannot be validated",
+            {"logPrefix", GetLogPrefix()},
+            {"user", GetUserSID()},
+            {"database", Database});
+        ReplyAndPassAway(
+            GETHTTPACCESSDENIED(
+                "text/plain",
+                "Database node list is unavailable, request cannot be validated"),
+            "Access denied");
+        return true;
+    }
+    std::unordered_set<TNodeId> databaseNodes;
+    const auto nodes = GetDatabaseNodes();
+    databaseNodes.insert(nodes.begin(), nodes.end());
+    for (const auto& nodeId : nodeIds) {
+        if (!databaseNodes.contains(nodeId)) {
+            YDB_LOG_NOTICE_COMP(
+                NKikimrServices::VIEWER,
+                "Access denied: requested node is outside the specified database",
+                {"logPrefix", GetLogPrefix()},
+                {"user", GetUserSID()},
+                {"database", Database},
+                {"outOfDatabaseNode", nodeId});
+            ReplyAndPassAway(
+                GETHTTPACCESSDENIED(
+                    "text/plain",
+                    "Some requested nodes are outside the specified database"),
+                "Access denied");
+            return true;
+        }
+    }
+    return false;
+}
+
 void TViewerPipeClient::InitConfig(const TCgiParameters& params) {
     Followers = FromStringWithDefault(params.Get("followers"), Followers);
     Metrics = FromStringWithDefault(params.Get("metrics"), Metrics);
     WithRetry = FromStringWithDefault(params.Get("with_retry"), WithRetry);
     MaxRequestsInFlight = FromStringWithDefault(params.Get("max_requests_in_flight"), MaxRequestsInFlight);
-    Database = params.Get("database");
     if (!Database) {
-        Database = params.Get("tenant");
+        Database = params.Get("database");
+        if (!Database) {
+            Database = params.Get("tenant");
+        }
     }
     Direct = FromStringWithDefault<bool>(params.Get("direct"), Direct);
     JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), true);

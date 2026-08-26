@@ -9,7 +9,9 @@ A high performance core database driver for connecting ClickHouse to Python, Pan
 * Superset Connector
 * SQLAlchemy Core (select, joins, lightweight deletes; limited feature set)
 
-ClickHouse Connect currently uses the ClickHouse HTTP interface for maximum compatibility.
+ClickHouse Connect uses the ClickHouse HTTP interface for maximum compatibility. An experimental
+[chDB](https://clickhouse.com/docs/chdb) backend is also available for running queries against an embedded
+in-process engine with `get_client(interface='chdb')`. Install it with `pip install clickhouse-connect[chdb]`.
 
 ### Installation
 

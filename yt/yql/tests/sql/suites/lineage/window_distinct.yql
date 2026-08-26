@@ -1,0 +1,10 @@
+USE plato;
+
+PRAGMA DistinctOverWindow;
+
+INSERT INTO Output WITH TRUNCATE
+SELECT
+    key,
+    COUNT(DISTINCT value) OVER w AS cnt
+FROM Input
+WINDOW w AS (PARTITION BY key);

@@ -9,6 +9,8 @@ namespace NYql {
 
 namespace {
 
+using namespace NNodes;
+
 struct TPresortTraits {
     bool HasPresort;
     TExprNode::TListType Keys;
@@ -57,8 +59,22 @@ TExprNodeBuilder& AppendKeyComponent(TExprNodeBuilder& parent, size_t index, con
 }
 
 TExprNode::TPtr PrepareSqlCombineInputSource(const TExprNode& combineInput, ui32 tableIndex, TStringBuf inputPrefix, const TTypeAnnotationNode* commonKeyType, TPositionHandle pos, TExprContext& ctx) {
-    const auto keyExtract = combineInput.Child(3);
+    const auto keyExtract = combineInput.Child(TCoSqlCombineInput::idx_KeyExtractLambda);
     const auto sourceKeyType = keyExtract->GetTypeAnn();
+    const auto presortUsedColumns = combineInput.Child(TCoSqlCombineInput::idx_PresortUsedColumns)->ChildrenList();
+    const auto argMapUsedColumns = combineInput.Child(TCoSqlCombineInput::idx_ArgMapUsedColumns)->ChildrenList();
+    TSet<TStringBuf> usedColumnNames;
+    for (const auto& atom : presortUsedColumns) {
+        usedColumnNames.insert(atom->Content());
+    }
+    for (const auto& atom : argMapUsedColumns) {
+        usedColumnNames.insert(atom->Content());
+    }
+    TExprNode::TListType inputUsedColumns;
+    inputUsedColumns.reserve(usedColumnNames.size());
+    for (const auto& name : usedColumnNames) {
+        inputUsedColumns.push_back(ctx.NewAtom(pos, name));
+    }
     TExprNode::TListType keyComponents;
     TExprNode::TListType filterNullMemberNames;
     TVector<TString> replaceMemberNames;
@@ -94,7 +110,11 @@ TExprNode::TPtr PrepareSqlCombineInputSource(const TExprNode& combineInput, ui32
                         .Callable(0, "FlattenMembers")
                             .List(0)
                                 .Atom(0, inputPrefix)
-                                .Arg(1, "row")
+                                .Callable(1, "FilterMembers")
+                                    .Arg(0, "row")
+                                    .Add(1, ctx.NewList(pos, std::move(inputUsedColumns)))
+                                .Seal()
+
                             .Seal()
                             .List(1)
                                 .Atom(0, "")
@@ -141,8 +161,8 @@ TExprNode::TPtr BuildPrefixedKeyExtractor(const TPositionHandle& pos, TStringBuf
 }
 
 TPresortTraits BuildSqlCombinePresortTraits(const TExprNode& combineInput, TStringBuf inputPrefix, TPositionHandle pos, TExprContext& ctx) {
-    const auto& presortKey = combineInput.Child(1);
-    const auto& presortDir = combineInput.Child(2);
+    const auto& presortKey = combineInput.Child(TCoSqlCombineInput::idx_PresortKeyLambda);
+    const auto& presortDir = combineInput.Child(TCoSqlCombineInput::idx_PresortDirectionNode);
     const auto keyType = presortKey->GetTypeAnn();
     const bool isMulti = keyType->GetKind() == ETypeAnnotationKind::Tuple;
     const ui32 presortSize = isMulti ? keyType->Cast<TTupleExprType>()->GetSize() : 1;
@@ -259,11 +279,12 @@ TExprNode::TPtr ExpandSqlCombine(const TExprNode::TPtr& node, TExprContext& ctx,
     Y_UNUSED(typesCtx);
     YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content();
 
-    const auto& leftCombineInput = *node->Child(0);
-    const auto& rightCombineInput = *node->Child(1);
+    const auto& leftCombineInput = *node->Child(TCoSqlCombine::idx_LeftInput);
+    const auto& rightCombineInput = *node->Child(TCoSqlCombine::idx_RightInput);
+    const auto& usingLambda = *node->Child(TCoSqlCombine::idx_UsingLambda);
     const auto pos = node->Pos();
 
-    const auto commonKeyType = node->Child(2)->Head().Head().GetTypeAnn();
+    const auto commonKeyType = usingLambda.Head().Head().GetTypeAnn();
 
     const auto leftTagged = PrepareSqlCombineInputSource(leftCombineInput, 0, YqlListJoinCoreLeftInputPrefix,  commonKeyType, pos, ctx);
     const auto rightTagged = PrepareSqlCombineInputSource(rightCombineInput, 1, YqlListJoinCoreRightInputPrefix, commonKeyType, pos, ctx);
@@ -295,9 +316,10 @@ TExprNode::TPtr ExpandSqlCombine(const TExprNode::TPtr& node, TExprContext& ctx,
             .Seal()
         .Seal().Build();
 
-    const auto& usingLambda = *node->Child(2);
-    const auto& leftInputItemType = *leftCombineInput.Head().GetTypeAnn()->Cast<TListExprType>()->GetItemType();
-    const auto& rightInputItemType = *rightCombineInput.Head().GetTypeAnn()->Cast<TListExprType>()->GetItemType();
+    const auto& leftArgMapLambda = leftCombineInput.ChildPtr(TCoSqlCombineInput::idx_ArgMapLambda);
+    const auto& rightArgMapLambda = rightCombineInput.ChildPtr(TCoSqlCombineInput::idx_ArgMapLambda);
+    const auto& leftInputItemType = *leftArgMapLambda->Head().Head().GetTypeAnn();
+    const auto& rightInputItemType = *rightArgMapLambda->Head().Head().GetTypeAnn();
     auto chopperHandler = ctx.Builder(pos)
         .Lambda()
             .Param("key")
@@ -305,9 +327,9 @@ TExprNode::TPtr ExpandSqlCombine(const TExprNode::TPtr& node, TExprContext& ctx,
             .Callable("ListJoinCore")
                 .Arg(0, "groupStream")
                 .Add(1, ExpandType(pos, *commonKeyType, ctx))
-                .Add(2, leftCombineInput.ChildPtr(4))
+                .Add(2, leftArgMapLambda)
                 .Add(3, ExpandType(pos, leftInputItemType, ctx))
-                .Add(4, rightCombineInput.ChildPtr(4))
+                .Add(4, rightArgMapLambda)
                 .Add(5, ExpandType(pos, rightInputItemType, ctx))
                 .Lambda(6)
                     .Param("keyArg")
@@ -329,28 +351,22 @@ TExprNode::TPtr ExpandSqlCombine(const TExprNode::TPtr& node, TExprContext& ctx,
             .Seal()
         .Seal().Build();
 
-    const auto result = ctx.Builder(pos)
-        .Callable("PartitionsByKeys")
+    return ctx.Builder(pos)
+        .Callable("LPartitionsByKeys")
             .Add(0, std::move(merged))
             .Add(1, partitionKeySelector)
             .Add(2, std::move(presortDirection))
             .Add(3, std::move(presortKeySelector))
             .Lambda(4)
-                .Param("partitionList")
-                .Callable("ForwardList")
-                    .Callable(0, "Chopper")
-                        .Callable(0, "ToStream")
-                            .Arg(0, "partitionList")
-                        .Seal()
-                        .Add(1, partitionKeySelector)
-                        .Add(2, std::move(groupSwitch))
-                        .Add(3, std::move(chopperHandler))
-                    .Seal()
+                .Param("partitionStream")
+                .Callable("Chopper")
+                    .Arg(0, "partitionStream")
+                    .Add(1, partitionKeySelector)
+                    .Add(2, std::move(groupSwitch))
+                    .Add(3, std::move(chopperHandler))
                 .Seal()
             .Seal()
         .Seal().Build();
-
-    return result;
 }
 
 } // namespace NYql

@@ -6,6 +6,7 @@ PEERDIR(
     ydb/core/blobstorage/base
     ydb/core/blobstorage/vdisk/hulldb/barriers
     ydb/core/blobstorage/vdisk/hulldb/base
+    ydb/core/util
 )
 
 SRCS(
@@ -25,8 +26,10 @@ SRCS(
     query_readbatch.h
     query_spacetracker.h
     query_statalgo.h
+    query_stat_yield.h
     query_statdb.cpp
     query_statdb.h
+    query_statdb_stream.h
     query_stathuge.cpp
     query_stathuge.h
     query_stattablet.cpp

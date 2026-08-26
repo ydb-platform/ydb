@@ -10,6 +10,8 @@
 #include <util/generic/map.h>
 #include <util/generic/maybe.h>
 
+#include <ydb/core/protos/blobstorage_base3.pb.h>
+
 namespace NKikimr::NCms {
 
 struct TCmsSentinelConfig {

@@ -4,8 +4,7 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 Y_UNIT_TEST_SUITE(TMiniKQLFromStringTest) {
 Y_UNIT_TEST_LLVM(TestFromString) {
@@ -37,5 +36,4 @@ Y_UNIT_TEST_LLVM(TestFromStringHugePayload) {
 }
 } // Y_UNIT_TEST_SUITE(TMiniKQLFromStringTest)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

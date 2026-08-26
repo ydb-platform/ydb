@@ -4,7 +4,7 @@ from clickhouse_connect.driver.binding import quote_identifier
 
 
 class ChIdentifierPreparer(IdentifierPreparer):
-    quote_identifier = staticmethod(quote_identifier)
+    quote_identifier = staticmethod(quote_identifier)  # type: ignore[assignment]
 
     def __init__(self, dialect, **kwargs):
         super().__init__(dialect, **kwargs)

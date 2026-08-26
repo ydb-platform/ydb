@@ -64,6 +64,10 @@ void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndex
             Y_DEBUG_ABORT_S(InvalidIndexType(IndexType));
             break;
     }
+
+    if (IsRebuild) {
+        result->SetIsRebuild(true);
+    }
 }
 
 void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrIndexBuilder::TColumnBuildSettings* result) const {

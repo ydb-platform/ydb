@@ -12,12 +12,21 @@ namespace NKikimr::NKqp::NPhysicalConvertionUtils {
 TString GetFullName(const TString& name);
 TString GetFullName(const TInfoUnit& name);
 
+// Returns LiveOut in logical schema order.
+TVector<TInfoUnit> GetLiveOutputIUs(IOperator& op);
+
+// Returns child-edge LiveIn in the child's logical schema order.
+TVector<TInfoUnit> GetLiveInputIUs(IOperator& op, ui32 childIndex);
+
 TExprNode::TPtr BuildMultiConsumerHandler(TExprNode::TPtr input, const ui32 numConsumers, TExprContext& ctx, TPositionHandle pos);
 bool IsMultiConsumerHandlerNeeded(const TIntrusivePtr<IOperator>& op);
 TCoAtomList BuildAtomList(TStringBuf value, TPositionHandle pos, TExprContext& ctx);
 TExprNode::TPtr ReplaceArg(TExprNode::TPtr input, TExprNode::TPtr arg, TExprContext &ctx, bool removeAliases = false);
 TExprNode::TPtr ExtractMembers(TExprNode::TPtr input, TExprContext &ctx, TVector<TInfoUnit> members);
 TExprNode::TPtr BuildRenameMap(TExprNode::TPtr input, const TVector<std::pair<TString, TString>>& renames, TExprContext& ctx);
+TExprNode::TPtr ConvertToWideJoinFilter(TExprNode::TPtr input, const TVector<TInfoUnit>& inputs,
+                                        const TVector<bool>& unwrapOptionalInputs, TExprContext& ctx);
+TExprNode::TPtr BuildVoidLambda(TExprContext& ctx, TPositionHandle pos);
 
 template <typename T>
 THashSet<TString> BuildNameSet(const TVector<T>& columns) {

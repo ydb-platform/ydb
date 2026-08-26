@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: platformdirs
-Version: 4.10.0
+Version: 4.11.1
 Summary: A small Python package for determining appropriate platform-specific dirs, e.g. a `user data dir`.
 Project-URL: Changelog, https://platformdirs.readthedocs.io/en/latest/changelog.html
 Project-URL: Documentation, https://platformdirs.readthedocs.io
@@ -22,6 +22,7 @@ Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
 Classifier: Programming Language :: Python :: 3.13
 Classifier: Programming Language :: Python :: 3.14
+Classifier: Programming Language :: Python :: 3.15
 Classifier: Programming Language :: Python :: Implementation :: CPython
 Classifier: Programming Language :: Python :: Implementation :: PyPy
 Classifier: Topic :: Software Development :: Libraries :: Python Modules

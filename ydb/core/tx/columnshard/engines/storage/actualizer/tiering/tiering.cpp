@@ -202,6 +202,7 @@ void TTieringActualizer::DoExtractTasks(
             Counters.SkipEvictionForTooEarly->Add(1);
             continue;
         }
+        // This is a best-effort check, address might differ from the queue key when the task is built
         if (!tasksContext.IsRWAddressAvailable(address)) {
             Counters.SkipEvictionForLimit->Add(1);
             continue;
@@ -226,6 +227,7 @@ void TTieringActualizer::DoExtractTasks(
 
                 switch (tasksContext.AddPortion(portion, std::move(features), info->GetLateness())) {
                     case TTieringProcessContext::EAddPortionResult::TASK_LIMIT_EXCEEDED:
+                        Counters.SkipEvictionForLimit->Add(1);
                         limitEnriched = true;
                         break;
                     case TTieringProcessContext::EAddPortionResult::PORTION_LOCKED:

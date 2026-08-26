@@ -1,6 +1,6 @@
 #include "kqp_proxy_service_impl.h"
 
-#include <ydb/core/kqp/workload_service/actors/actors.h>
+#include <ydb/services/workload_manager/actors/actors.h>
 
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
@@ -69,7 +69,7 @@ public:
 
         if (databaseStateIt == DatabaseStates.End()) {
             DatabaseStates.Insert({database, TDatabaseState{.Database = database}});
-            Register(NWorkload::CreateDatabaseFetcherActor(SelfId(), database));
+            Register(NWorkloadManager::CreateDatabaseFetcherActor(SelfId(), database));
             StartIdleCheck();
             return;
         }
@@ -87,7 +87,7 @@ public:
         }
     }
 
-    void Handle(NWorkload::TEvFetchDatabaseResponse::TPtr& ev) {
+    void Handle(NWorkloadManager::TEvFetchDatabaseResponse::TPtr& ev) {
         auto databaseStateIt = DatabaseStates.Find(ev->Get()->Database);
         if (databaseStateIt == DatabaseStates.End()) {
             return;
@@ -144,7 +144,7 @@ public:
     STRICT_STFUNC(StateFunc,
         hFunc(TEvPrivate::TEvSubscribeOnDatabase, Handle);
         hFunc(TEvPrivate::TEvPingDatabaseSubscription, Handle);
-        hFunc(NWorkload::TEvFetchDatabaseResponse, Handle);
+        hFunc(NWorkloadManager::TEvFetchDatabaseResponse, Handle);
         sFunc(TEvents::TEvPoison, HandlePoison);
         sFunc(TEvents::TEvWakeup, HandleWakeup);
 

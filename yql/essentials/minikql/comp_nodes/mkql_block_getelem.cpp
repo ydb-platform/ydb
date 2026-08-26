@@ -6,8 +6,9 @@
 #include <yql/essentials/minikql/mkql_type_helper.h>
 #include <yql/essentials/public/udf/udf_type_printer.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+#include <utility>
+
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -71,7 +72,7 @@ class TAddOptionalLevelHelper {
 public:
     TAddOptionalLevelHelper(TType* returnType, std::shared_ptr<arrow::DataType> returnArrowType)
         : IsReturnExternalOptional_(NeedWrapWithExternalOptional(returnType))
-        , ReturnArrowType_(returnArrowType)
+        , ReturnArrowType_(std::move(returnArrowType))
     {
     }
 
@@ -129,10 +130,10 @@ private:
 class TBlockGetElementExec {
 public:
     TBlockGetElementExec(const std::shared_ptr<arrow::DataType>& returnArrowType, ui32 index, EOptionalityHandlerStrategy resultStrategy, TAddOptionalLevelHelper addOptionalHelper)
-        : ReturnArrowType(returnArrowType)
-        , Index(index)
-        , ResultStrategy(resultStrategy)
-        , AddOptionalHelper(std::move(addOptionalHelper))
+        : ReturnArrowType_(returnArrowType)
+        , Index_(index)
+        , ResultStrategy_(resultStrategy)
+        , AddOptionalHelper_(std::move(addOptionalHelper))
     {
     }
 
@@ -141,18 +142,18 @@ public:
         MKQL_ENSURE(inputDatum.is_array(), "Array expected.");
 
         const auto& tuple = inputDatum.array();
-        auto child = tuple->child_data[Index];
-        switch (ResultStrategy) {
+        auto child = tuple->child_data[Index_];
+        switch (ResultStrategy_) {
             case EOptionalityHandlerStrategy::ReturnChildAsIs: {
                 *res = arrow::Datum(child);
                 return arrow::Status::OK();
             }
             case EOptionalityHandlerStrategy::AddOptionalToChild: {
-                *res = arrow::Datum(AddOptionalHelper.AddOptionalToChild(tuple, Index, ctx));
+                *res = arrow::Datum(AddOptionalHelper_.AddOptionalToChild(tuple, Index_, ctx));
                 return arrow::Status::OK();
             }
             case EOptionalityHandlerStrategy::IntersectOptionals: {
-                *res = arrow::Datum(AddOptionalHelper.IntersectOptionals(tuple, Index, ctx));
+                *res = arrow::Datum(AddOptionalHelper_.IntersectOptionals(tuple, Index_, ctx));
                 return arrow::Status::OK();
             }
             case EOptionalityHandlerStrategy::ReturnNull:
@@ -168,22 +169,22 @@ public:
         MKQL_ENSURE(inputDatum.is_scalar(), "Scalar expected.");
 
         if (!inputDatum.scalar()->is_valid) {
-            *res = arrow::Datum(arrow::MakeNullScalar(ReturnArrowType));
+            *res = arrow::Datum(arrow::MakeNullScalar(ReturnArrowType_));
             return arrow::Status::OK();
         }
         const auto& tuple = arrow::internal::checked_cast<const arrow::StructScalar&>(*inputDatum.scalar());
 
-        switch (ResultStrategy) {
+        switch (ResultStrategy_) {
             case EOptionalityHandlerStrategy::ReturnChildAsIs: {
-                *res = arrow::Datum(tuple.value[Index]);
+                *res = arrow::Datum(tuple.value[Index_]);
                 return arrow::Status::OK();
             }
             case EOptionalityHandlerStrategy::AddOptionalToChild: {
-                *res = arrow::Datum(AddOptionalHelper.AddOptionalToChildOfValidTuple(tuple, Index));
+                *res = arrow::Datum(AddOptionalHelper_.AddOptionalToChildOfValidTuple(tuple, Index_));
                 return arrow::Status::OK();
             }
             case EOptionalityHandlerStrategy::IntersectOptionals: {
-                *res = arrow::Datum(AddOptionalHelper.IntersectOptionalsOfValidTuple(tuple, Index));
+                *res = arrow::Datum(AddOptionalHelper_.IntersectOptionalsOfValidTuple(tuple, Index_));
                 return arrow::Status::OK();
             }
             case EOptionalityHandlerStrategy::ReturnNull:
@@ -203,10 +204,10 @@ public:
     }
 
 private:
-    const std::shared_ptr<arrow::DataType> ReturnArrowType;
-    const ui32 Index;
-    EOptionalityHandlerStrategy ResultStrategy;
-    TAddOptionalLevelHelper AddOptionalHelper;
+    const std::shared_ptr<arrow::DataType> ReturnArrowType_;
+    const ui32 Index_;
+    EOptionalityHandlerStrategy ResultStrategy_;
+    TAddOptionalLevelHelper AddOptionalHelper_;
 };
 
 std::shared_ptr<arrow::compute::ScalarKernel> MakeBlockGetElementKernel(const TVector<TType*>& argTypes, TType* resultType,
@@ -268,5 +269,4 @@ IComputationNode* WrapBlockNth(TCallable& callable, const TComputationNodeFactor
     return WrapBlockGetElement<TTupleType>(callable, ctx);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

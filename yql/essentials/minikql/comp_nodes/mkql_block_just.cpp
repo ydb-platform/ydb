@@ -7,16 +7,15 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_type_helper.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
 template <bool Trivial>
 class TJustBlockExec {
 public:
-    TJustBlockExec(const std::shared_ptr<arrow::DataType>& returnArrowType)
-        : ReturnArrowType(returnArrowType)
+    explicit TJustBlockExec(const std::shared_ptr<arrow::DataType>& returnArrowType)
+        : ReturnArrowType_(returnArrowType)
     {
     }
 
@@ -30,10 +29,10 @@ public:
         if (inputDatum.is_scalar()) {
             std::vector<std::shared_ptr<arrow::Scalar>> arrowValue;
             arrowValue.emplace_back(inputDatum.scalar());
-            *res = arrow::Datum(std::make_shared<arrow::StructScalar>(arrowValue, ReturnArrowType));
+            *res = arrow::Datum(std::make_shared<arrow::StructScalar>(arrowValue, ReturnArrowType_));
         } else {
             auto array = inputDatum.array();
-            auto newArrayData = arrow::ArrayData::Make(ReturnArrowType, array->length, {nullptr}, 0, 0);
+            auto newArrayData = arrow::ArrayData::Make(ReturnArrowType_, array->length, {nullptr}, 0, 0);
             newArrayData->child_data.push_back(array);
             *res = arrow::Datum(newArrayData);
         }
@@ -42,7 +41,7 @@ public:
     }
 
 private:
-    const std::shared_ptr<arrow::DataType> ReturnArrowType;
+    const std::shared_ptr<arrow::DataType> ReturnArrowType_;
 };
 
 template <bool Trivial>
@@ -85,5 +84,4 @@ IComputationNode* WrapBlockJust(TCallable& callable, const TComputationNodeFacto
     return new TBlockFuncNode(ctx.Mutables, ctx.RuntimeSettings->DatumValidation.Get(), callable.GetType()->GetName(), std::move(argsNodes), argsTypes, callable.GetType()->GetReturnType(), *kernel, kernel);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

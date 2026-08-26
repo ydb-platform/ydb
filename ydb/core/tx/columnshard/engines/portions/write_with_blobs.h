@@ -35,22 +35,22 @@ public:
 
         class TBuilder {
         private:
-            TBlobInfo* OwnerBlob;
             TWritePortionInfoWithBlobsConstructor* OwnerPortion;
+            ui32 BlobIndex;
 
         public:
-            TBuilder(TBlobInfo& blob, TWritePortionInfoWithBlobsConstructor& portion)
-                : OwnerBlob(&blob)
-                , OwnerPortion(&portion)
+            TBuilder(TWritePortionInfoWithBlobsConstructor& portion, const ui32 blobIndex)
+                : OwnerPortion(&portion)
+                , BlobIndex(blobIndex)
             {
             }
 
             ui64 GetSize() const {
-                return OwnerBlob->GetSize();
+                return OwnerPortion->MutableBlobInfoVerified(BlobIndex).GetSize();
             }
 
             void AddChunk(const std::shared_ptr<IPortionDataChunk>& chunk) {
-                return OwnerBlob->AddChunk(*OwnerPortion, chunk);
+                return OwnerPortion->MutableBlobInfoVerified(BlobIndex).AddChunk(*OwnerPortion, chunk);
             }
         };
 
@@ -72,6 +72,7 @@ public:
                 result.append(i->GetData());
             }
             ChunksOrdered.clear();
+            AFL_VERIFY(result.size() == Size)("result", result.size())("expected", Size);
             return result;
         }
     };
@@ -86,10 +87,17 @@ private:
         AFL_VERIFY(!PortionConstructor->HaveBlobsData());
     }
 
-    TBlobInfo::TBuilder StartBlob(const std::shared_ptr<IBlobsStorageOperator>& bOperator) {
-        Blobs.emplace_back(TBlobInfo(bOperator));
-        return TBlobInfo::TBuilder(Blobs.back(), *this);
+    TBlobInfo& MutableBlobInfoVerified(const ui32 blobIndex) {
+        AFL_VERIFY(blobIndex < Blobs.size())("index", blobIndex)("size", Blobs.size());
+        return Blobs[blobIndex];
     }
+
+    TBlobInfo::TBuilder StartBlob(const std::shared_ptr<IBlobsStorageOperator>& bOperator) {
+        const ui32 blobIndex = Blobs.size();
+        Blobs.emplace_back(TBlobInfo(bOperator));
+        return TBlobInfo::TBuilder(*this, blobIndex);
+    }
+    friend class TBlobInfo::TBuilder;
     friend class TWritePortionInfoWithBlobsResult;
 
 public:

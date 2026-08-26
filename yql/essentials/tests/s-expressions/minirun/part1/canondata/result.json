@@ -573,6 +573,20 @@
             "uri": "https://{canondata_backend}/1775059/60d3783e71327a4ad8c7c214c319a056d03c678e/resource.tar.gz#test.test_Optimizers-MoveExtractMembersOverSkip-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[Optimizers-MoveExtractMembersOverSqlCombine-default.txt-Debug]": [
+        {
+            "checksum": "6a10275422fdf8dcb35a7cbd4d5d6805",
+            "size": 862,
+            "uri": "https://{canondata_backend}/1925842/821cd1686a32ac75616496da70baca3a66bc3181/resource.tar.gz#test.test_Optimizers-MoveExtractMembersOverSqlCombine-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[Optimizers-MoveExtractMembersOverSqlCombine-default.txt-Results]": [
+        {
+            "checksum": "12a2ead3c1a5d3cd9a7a87541cfe60a6",
+            "size": 1110,
+            "uri": "https://{canondata_backend}/1942671/d4ed3e8b3476690208386729644e5b2886a5d7c0/resource.tar.gz#test.test_Optimizers-MoveExtractMembersOverSqlCombine-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[Optimizers-ReverseAfterSort-default.txt-Debug]": [
         {
             "checksum": "409f0c02310d84c0a0894705fb5b9126",
@@ -603,9 +617,9 @@
     ],
     "test.test[Optimizers-ToFlowOverCollect-default.txt-Debug]": [
         {
-            "checksum": "d6a4a87d4b2c8796516c797d959d8995",
-            "size": 342,
-            "uri": "https://{canondata_backend}/1931696/8d09db27d90cfdfd98118b4ff08700478c65f513/resource.tar.gz#test.test_Optimizers-ToFlowOverCollect-default.txt-Debug_/opt.yql"
+            "checksum": "3774f6f73f3203426ea5d5dddf61ed97",
+            "size": 257,
+            "uri": "https://{canondata_backend}/1936997/05211f2a965471801e031942cea89fe188f547ed/resource.tar.gz#test.test_Optimizers-ToFlowOverCollect-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[Optimizers-ToFlowOverCollect-default.txt-Results]": [

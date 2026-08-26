@@ -545,12 +545,12 @@ void TCloudAuthRequestProxy::DoReply() {
 void TCloudAuthRequestProxy::SetError(const TErrorClass& errorClass, const TString& message) {
     auto* error = MakeMutableError();
     ::NKikimr::NSQS::MakeError(error, errorClass, Sprintf("%s Request id to report: %s.", message.c_str(), RequestId_.c_str()));
-    if (Callback_) {
-        Callback_->OnIamAuthError();
-    }
 }
 
 void TCloudAuthRequestProxy::OnSuccessfulAuth() {
+    if (Callback_) {
+        Callback_->OnIamAuthSuccess();
+    }
 #define SQS_REQUEST_CASE(action) \
     ProposeStaticCreds(*RequestHolder_->Y_CAT(Mutable, action)());
 

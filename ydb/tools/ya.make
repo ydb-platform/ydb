@@ -2,9 +2,11 @@ RECURSE(
     blobsan
     cfg
     disk_obliterator
+    pdisktool
     mnc
     include_sanitizer
     partcheck
+    ydb_bench
     query_replay
     query_replay_yt
     stress_tool

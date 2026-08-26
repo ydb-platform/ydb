@@ -8,4 +8,6 @@ JAR_RESOURCE(3573993651)
 
 SRC_RESOURCE(3573993762)
 
+ORIGINAL_SOURCE(https://github.com/protocolbuffers/protobuf)
+
 END()

@@ -1,3 +1,4 @@
+# cython: freethreading_compatible = True
 import sys
 from typing import Iterable, Any, Optional
 
@@ -22,10 +23,17 @@ cdef char * errors = 'strict'
 cdef char * utf8 = 'utf8'
 cdef dict array_templates = {}
 cdef bint must_swap = sys.byteorder == 'big'
-cdef array.array swapper = array.array('Q', [0])
 
-for c in 'bBuhHiIlLqQfd':
+for c in 'bBhHiIlLqQfd':
     array_templates[c] = array.array(c, [])
+
+
+cdef inline unsigned long long _bswap_uint64(unsigned long long v):
+    """Byte-swap a 64-bit unsigned integer for big-endian systems."""
+    return (((v & 0xFF) << 56) | (((v >> 8) & 0xFF) << 48) |
+            (((v >> 16) & 0xFF) << 40) | (((v >> 24) & 0xFF) << 32) |
+            (((v >> 32) & 0xFF) << 24) | (((v >> 40) & 0xFF) << 16) |
+            (((v >> 48) & 0xFF) << 8) | ((v >> 56) & 0xFF))
 
 
 cdef class ResponseBuffer:
@@ -177,7 +185,7 @@ cdef class ResponseBuffer:
                         self.buf_loc += 1
                     else:
                         b = self._read_byte_load()
-                    sz += ((b & 0x7f) << shift)
+                    sz += (<unsigned long long>(b & 0x7f)) << shift
                     if (b & 0x80) == 0:
                         break
                     shift += 7
@@ -223,7 +231,7 @@ cdef class ResponseBuffer:
                         self.buf_loc += 1
                     else:
                         b = self._read_byte_load()
-                    sz += ((b & 0x7f) << shift)
+                    sz += (<unsigned long long>(b & 0x7f)) << shift
                     if (b & 0x80) == 0:
                         break
                     shift += 7
@@ -270,7 +278,7 @@ cdef class ResponseBuffer:
                 self.buf_loc += 1
             else:
                 b = self._read_byte_load()
-            sz += ((b & 0x7f) << shift)
+            sz += (<unsigned long long>(b & 0x7f)) << shift
             if (b & 0x80) == 0:
                 return sz
             shift += 7
@@ -279,11 +287,11 @@ cdef class ResponseBuffer:
     @cython.wraparound(False)
     def read_uint64(self) -> int:
         cdef ull_wrapper* x
+        cdef unsigned long long tmp
         cdef char* b = self.read_bytes_c(8)
         if must_swap:
-            memcpy(swapper.data.as_voidptr, b, 8)
-            swapper.byteswap()
-            return swapper[0]
+            memcpy(&tmp, b, 8)
+            return _bswap_uint64(tmp)
         x = <ull_wrapper *> b
         return x.int_value
 

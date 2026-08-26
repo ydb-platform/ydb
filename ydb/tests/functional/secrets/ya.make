@@ -13,6 +13,7 @@ TEST_SRCS(
     test_secrets.py
     test_secrets_usage.py
     test_secrets_monitoring.py
+    test_show_create_external_data_source.py
 )
 
 SPLIT_FACTOR(20)
@@ -25,7 +26,9 @@ DEPENDS(
 
 PEERDIR(
     contrib/python/boto3
+    contrib/python/requests
     ydb/tests/functional/secrets/lib
+    ydb/tests/functional/security/lib
     ydb/tests/library
     ydb/tests/library/fixtures
     ydb/tests/library/flavours

@@ -51,6 +51,7 @@ PEERDIR(
     ydb/library/yql/providers/common/http_gateway
     ydb/library/yql/providers/pq/proto
     ydb/services/metadata/abstract
+    ydb/services/udf_store/wasm
 )
 
 GENERATE_ENUM_SERIALIZATION(

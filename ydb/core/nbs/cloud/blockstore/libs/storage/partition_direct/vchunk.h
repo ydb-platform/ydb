@@ -13,10 +13,13 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/vchunk_counters.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/request.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/model/disk_description.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/log_title.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/dirty_map.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_state.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_model.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/public.h>
 
@@ -35,8 +38,11 @@ class TVChunk
 public:
     TVChunk(
         NActors::TActorSystem* actorSystem,
+        ITraceService* traceService,
         IPartitionDirectService* partitionDirectService,
+        const TDiskDescription& diskDescription,
         const TVChunkConfig& vChunkConfig,
+        const TDirtyMapStateProto& dirtyMapState,
         IDirectBlockGroupPtr directBlockGroup,
         ui32 syncRequestsBatchSize,
         ui64 vChunkSize,
@@ -59,11 +65,15 @@ public:
 
     void SetHostState(THostIndex hostIndex, EHostState state);
 
-    void OnHostAppended(size_t newHostCount);
+    // If the current count of hosts in the config is less than the desired
+    // host count, update the config and persist it in the tablet.
+    void UpdateHostCount(size_t newHostCount);
 
     [[nodiscard]] const TVChunkConfig& GetConfig() const;
-    [[nodiscard]] ui64 GetPBufferUsedSize(THostIndex hostIndex) const;
-    [[nodiscard]] TString DebugPrintDirtyMap();
+    [[nodiscard]] TExecutorPtr GetExecutor() const;
+    [[nodiscard]] TCountAndSize GetPBuffersUsage(THostIndex hostIndex) const;
+    [[nodiscard]] TCountAndSize GetAheadBlocks(THostIndex hostIndex) const;
+    [[nodiscard]] TCountAndSize GetBehindBlocks(THostIndex hostIndex) const;
 
     // This vchunk's contribution to the tablet-wide cleanup watermark: the
     // smallest lsn still held in PBuffers, or nullopt when nothing is inflight.
@@ -71,6 +81,11 @@ public:
     // the cleanup cannot erase records that are not accounted for yet.
     // Must run on the executor thread.
     [[nodiscard]] std::optional<ui64> GetSafeBarrierForErase() const;
+
+    [[nodiscard]] TString DebugPrintDirtyMap();
+
+    // Snapshot for the mon page. Must run on the executor thread.
+    [[nodiscard]] TVChunkSnapshot BuildMonSnapshot();
 
     // IWriteClient implementation
     void OnWriteBlocksResponse(
@@ -84,20 +99,19 @@ private:
     friend struct TBaseFixture;
 
     using TPrepareConfigFunc = std::function<TVChunkConfig()>;
-    using TApplyPersistedConfigFunc = std::function<void()>;
 
     struct TPendingVChunkConfig
     {
         TPrepareConfigFunc PrepareConfig;
-        TApplyPersistedConfigFunc ApplyPersisted;
-
         TVChunkConfig Config;
+        TString Message;
     };
 
     void UpdateDirtyMap(const TDBGRestoreResponse& response);
 
     void DoStart();
     void DoStop();
+    void OnStopped();
 
     void DoReadBlocksLocal(
         TTracedPromise<TReadBlocksLocalResponse> promise,
@@ -116,6 +130,9 @@ private:
     void OnEraseBelatedResponse(
         const TEraseRequestExecutor::TResponse& response);
 
+    void DoPersistDirtyMap();
+    void OnDirtyMapPersisted(ui32 stateGeneration);
+
     void ScheduleCleaningUp();
     void CleaningUp();
 
@@ -123,29 +140,32 @@ private:
 
     // Persists newConfig to the partition's local DB. The in-memory config is
     // unchanged; the new value applies after config persisted.
-    void UpdateConfig(
-        TPrepareConfigFunc prepareConfig,
-        TApplyPersistedConfigFunc applyPersisted);
+    void UpdateConfig(TPrepareConfigFunc prepareConfig, TString message);
     void PersistNextPendingConfig();
     void OnConfigPersisted();
+    void ApplyConfig(TVChunkConfig newConfig, const TString& message);
 
     TVChunkConfig PrepareNewConfig(
         THostIndex hostIndex,
         EHostState state) const;
-    void ApplyConfig();
 
     void OnCopierStopped(
         THostIndex hostIndex,
         TDDiskDataCopier::EResult result);
     void OnCopyComplete(THostIndex hostIndex, TDDiskDataCopier::EResult result);
+    void DemoteUnavailbleHostsIfNeeded();
+    [[nodiscard]] THostMask GetDDisksForDemote() const;
 
     // Checks DirtyMap's initial readiness and waits it if need.
     void WaitForDirtyMapReady();
 
+    [[nodiscard]] TString PrintHostAndNode(THostIndex host) const;
     [[nodiscard]] TString PrintInflight() const;
 
     NActors::TActorSystem* const ActorSystem = nullptr;
+    ITraceService* const TraceService = nullptr;
     IPartitionDirectService* const PartitionDirectService = nullptr;
+    const TDiskDescription DiskDescription;
     const TExecutorPtr Executor;
     const TThreadChecker ExecutorThreadChecker{Executor};
     const IDirectBlockGroupPtr DirectBlockGroup;
@@ -156,7 +176,8 @@ private:
     TLogTitle LogTitle;
     TVChunkConfig VChunkConfig;
     TList<TPendingVChunkConfig> PendingVChunkConfigs;
-    TBlocksDirtyMap BlocksDirtyMap;
+    bool DirtyMapStatePersisting = false;
+    TBlocksDirtyMapPtr BlocksDirtyMap;
     // One-shot signal of the INITIAL DirtyMap assembly at tablet start.
     NThreading::TPromise<void> DirtyMapReady = NThreading::NewPromise();
     TMap<THostIndex, TDDiskDataCopierPtr> Copiers;

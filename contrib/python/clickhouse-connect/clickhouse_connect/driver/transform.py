@@ -3,7 +3,7 @@ import logging
 from clickhouse_connect.datatypes import registry
 from clickhouse_connect.driver.common import write_leb128
 from clickhouse_connect.driver.compression import get_compressor
-from clickhouse_connect.driver.exceptions import StreamCompleteException, StreamFailureError
+from clickhouse_connect.driver.exceptions import OperationalError, StreamCompleteException, StreamFailureError
 from clickhouse_connect.driver.insert import InsertContext
 from clickhouse_connect.driver.npquery import NumpyResult
 from clickhouse_connect.driver.query import QueryContext, QueryResult
@@ -71,8 +71,10 @@ class NativeTransform:
                         raise StreamFailureError(error_msg) from None
                     raise StreamFailureError("Stream ended unexpectedly (connection closed by server)") from ex
 
-                # Handle async streaming errors (ClientPayloadError from aiohttp)
-                if ex.__class__.__name__ == "ClientPayloadError":
+                # A read failure partway through the stream: OperationalError from the sync reader,
+                # ClientPayloadError from aiohttp. ClickHouse may have written the real error into the
+                # response body before the connection dropped, so prefer that over the transport error.
+                if isinstance(ex, OperationalError) or ex.__class__.__name__ == "ClientPayloadError":
                     if source.last_message:
                         error_msg = None
                         exception_tag = getattr(source, "exception_tag", None)
@@ -106,7 +108,8 @@ class NativeTransform:
 
     @staticmethod
     def build_insert(context: InsertContext):
-        compressor = get_compressor(context.compression)
+        compression = context.compression if isinstance(context.compression, str) else None
+        compressor = get_compressor(compression)
 
         def chunk_gen():
             for block in context.next_block():

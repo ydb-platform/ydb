@@ -339,6 +339,10 @@ bool BuildAlterTableAddIndexRequest(const Ydb::Table::AlterTableRequest* req, NK
         settings->set_if_not_exist(true);
     }
 
+    if (flags & NKqpProto::TKqpSchemeOperation::FLAG_REBUILD_INDEX) {
+        settings->set_is_rebuild(true);
+    }
+
     if (desc.parallel()) {
         settings->set_max_shards_in_flight(desc.parallel());
     }
@@ -1516,6 +1520,10 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
             auto alterColumn = alterColumnTable->MutableAlterSchema()->AddAlterColumns();
             alterColumn->SetName(alter.Getname());
 
+            if (alter.has_not_null()) {
+                alterColumn->SetNotNull(alter.not_null());
+            }
+
             if (!alter.family().empty()) {
                 alterColumn->SetColumnFamilyName(alter.family());
             }
@@ -2011,7 +2019,6 @@ void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescr
 
             break;
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
-        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
             FillGlobalIndexSettings(
                 *index->mutable_global_fulltext_relevance_index()->mutable_dict_table_settings(),
                 tableIndex.GetIndexImplTableDescriptions(NTableIndex::NFulltext::DictTablePosition)
@@ -2027,6 +2034,23 @@ void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescr
             FillGlobalIndexSettings(
                 *index->mutable_global_fulltext_relevance_index()->mutable_posting_table_settings(),
                 tableIndex.GetIndexImplTableDescriptions(NTableIndex::NFulltext::PostingTablePosition)
+            );
+
+            *index->mutable_global_fulltext_relevance_index()->mutable_fulltext_settings() = tableIndex.GetFulltextIndexDescription().GetSettings();
+
+            break;
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
+            FillGlobalIndexSettings(
+                *index->mutable_global_fulltext_relevance_index()->mutable_docs_table_settings(),
+                tableIndex.GetIndexImplTableDescriptions(NTableIndex::NFulltext::DocsTablePosition - 1)
+            );
+            FillGlobalIndexSettings(
+                *index->mutable_global_fulltext_relevance_index()->mutable_stats_table_settings(),
+                tableIndex.GetIndexImplTableDescriptions(NTableIndex::NFulltext::StatsTablePosition - 1)
+            );
+            FillGlobalIndexSettings(
+                *index->mutable_global_fulltext_relevance_index()->mutable_posting_table_settings(),
+                tableIndex.GetIndexImplTableDescriptions(NTableIndex::NFulltext::PostingTablePosition - 1)
             );
 
             *index->mutable_global_fulltext_relevance_index()->mutable_fulltext_settings() = tableIndex.GetFulltextIndexDescription().GetSettings();

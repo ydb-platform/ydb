@@ -11,6 +11,7 @@ import six
 import functools
 
 from google.protobuf.text_format import Parse
+from ydb.core.protos import blobstorage_base3_pb2
 from ydb.core.protos import blobstorage_config_pb2
 import ydb.core.protos.msgbus_pb2 as msgbus
 import ydb.core.protos.grpc_pb2_grpc as grpc_server
@@ -355,7 +356,7 @@ class KiKiMRMessageBusClient(object):
             cmd = request.Request.Command.add().UpdateDriveStatus
             cmd.HostKey.NodeId = pdisk.NodeId
             cmd.PDiskId = pdisk.PDiskId
-            cmd.Status = blobstorage_config_pb2.EDriveStatus.ACTIVE
+            cmd.Status = blobstorage_base3_pb2.EDriveStatus.ACTIVE
 
         response = self.send(request, 'BlobStorageConfig').BlobStorageConfigResponse
 

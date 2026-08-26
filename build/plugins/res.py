@@ -10,7 +10,7 @@ def remove_prefix(text, prefix):
 
 
 @ymake.macro
-def RESOURCE_FILES(unit: ymake.Unit, *args: tuple[str, ...]):
+def RESOURCE_FILES(unit: ymake.Unit, *args: str):
     """
     @usage: RESOURCE_FILES([DONT_COMPRESS] [PREFIX {prefix}] [STRIP prefix_to_strip] {path})
 
@@ -74,7 +74,7 @@ def RESOURCE_FILES(unit: ymake.Unit, *args: tuple[str, ...]):
 
 
 @ymake.macro
-def _ALL_RESOURCE_FILES(unit: ymake.Unit, macro: str, *args: tuple[str, ...]):
+def _ALL_RESOURCE_FILES(unit: ymake.Unit, macro: str, *args: str):
     # This is only validation, actual work is done in ymake.core.conf implementation
     for arg in args:
         if '*' in arg or '?' in arg:
@@ -82,12 +82,12 @@ def _ALL_RESOURCE_FILES(unit: ymake.Unit, macro: str, *args: tuple[str, ...]):
 
 
 @ymake.macro
-def ALL_RESOURCE_FILES(unit: ymake.Unit, *args: tuple[str, ...]):
+def ALL_RESOURCE_FILES(unit: ymake.Unit, *args: str):
     _ALL_RESOURCE_FILES(unit, 'ALL_RESOURCE_FILES', args)
 
 
 @ymake.macro
-def ALL_RESOURCE_FILES_FROM_DIRS(unit: ymake.Unit, *args: tuple[str, ...]):
+def ALL_RESOURCE_FILES_FROM_DIRS(unit: ymake.Unit, *args: str):
     _ALL_RESOURCE_FILES(unit, 'ALL_RESOURCE_FILES_FROM_DIRS', args)
 
 

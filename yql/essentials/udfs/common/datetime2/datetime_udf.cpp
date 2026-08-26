@@ -5,6 +5,7 @@
 #include <yql/essentials/public/udf/udf_helpers.h>
 #include <yql/essentials/public/udf/arrow/udf_arrow_helpers.h>
 
+#include <yql/essentials/core/langver/feature.gen.h>
 #include <yql/essentials/public/langver/yql_langver.h>
 
 #include <util/datetime/base.h>
@@ -2943,7 +2944,7 @@ public:
         NYql::TLangVersion WriteOffsetWithColonAvailableSince;
         TStringRef WriteOffsetWithColonRuntimeSetting(builder.GetRuntimeSetting(TStringRef::Of("MakeWriteOffsetWithColonAvailableSince")));
         if (WriteOffsetWithColonRuntimeSetting.empty()) {
-            WriteOffsetWithColonAvailableSince = NYql::MakeLangVersion(2025, 5);
+            WriteOffsetWithColonAvailableSince = NYql::NFeature::WriteOffsetWithColon.MinLangVer;
         } else {
             if (!NYql::ParseLangVersion(WriteOffsetWithColonRuntimeSetting, WriteOffsetWithColonAvailableSince)) {
                 UdfTerminate((TStringBuilder() << "Runtime setting 'MakeWriteOffsetWithColonAvailableSince' is misconfigured").c_str());
@@ -3526,8 +3527,9 @@ private:
                             ++it;
                             --digits;
                         }
-                        for (; !digits && limit && std::isdigit(*it); --limit, ++it)
+                        for (; !digits && limit && std::isdigit(*it); --limit, ++it) {
                             ;
+                        }
                         while (digits--) {
                             usec *= 10U;
                         }
@@ -3537,8 +3539,8 @@ private:
                     break;
                 }
                 case 'z':
-                    if (currentLangVersion < NYql::MakeLangVersion(2025, 5)) {
-                        throw yexception() << "%z specfifier is available since 2025.05";
+                    if (auto x = NYql::EnsureIsAvailableOn(currentLangVersion, NYql::EBackportCompatibleFeaturesMode::None, NYql::NFeature::DateTimeFormatZ); !x) {
+                        throw yexception() << x.error();
                     }
                     if (useTzNameScanner) {
                         throw yexception() << "%Z specifier is already used for parsing";
@@ -3751,7 +3753,7 @@ SIMPLE_MODULE(TDateTime2Module,
               TIntervalFromMinutes,
 
               TLangVerForked<
-                  NYql::MakeLangVersion(2025, 03),
+                  NYql::NFeature::Interval64Seconds.MinLangVer,
                   NLegacy::TIntervalFromSeconds,
                   NActual::TIntervalFromSeconds>,
 
@@ -3801,7 +3803,7 @@ SIMPLE_MODULE(TDateTime2Module,
                                   SimpleDatetimeToIntervalUdf<TM64ResourceName, EndOf<TTM64Storage>>>,
 
               TLangVerForked<
-                  NYql::MakeLangVersion(2025, 03),
+                  NYql::NFeature::Interval64Seconds.MinLangVer,
                   TToUnits<ToSecondsUDF, /* TResult = */ ui32, /* TSignedResult = */ i32, /* TWResult = */ i64, 1>,
                   TToUnits<ToSecondsUDF, /* TResult = */ ui32, /* TSignedResult = */ i64, /* TWResult = */ i64, 1>>,
 

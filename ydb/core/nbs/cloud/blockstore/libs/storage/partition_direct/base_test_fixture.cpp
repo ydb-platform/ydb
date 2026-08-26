@@ -297,6 +297,25 @@ bool TBaseFixture::WaitEraseRequests(size_t count, TDuration timeout)
     return Wait(ErasePromises, count, timeout);
 }
 
+size_t TBaseFixture::ReplyUpdateRequests()
+{
+    auto requests = std::move(PartitionDirectService->UpdateConfigRequests);
+    for (auto& r: requests) {
+        r.Promise.SetValue(EPersistResult::Success);
+    }
+    return requests.size();
+}
+
+size_t TBaseFixture::ReplyUpdateDirtyMapStateRequests()
+{
+    auto requests =
+        std::move(PartitionDirectService->UpdateDirtyMapStateRequests);
+    for (auto& r: requests) {
+        r.Promise.SetValue(EPersistResult::Success);
+    }
+    return requests.size();
+}
+
 template <typename T>
 void TBaseFixture::SetResult(
     TVector<NThreading::TPromise<T>>& promises,

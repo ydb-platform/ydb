@@ -22,7 +22,7 @@ namespace NKqp {
 
 using namespace NYql;
 
-enum EOperator : ui32 { EmptySource, Source, Map, AddDependencies, Filter, Join, Aggregate, Limit, Sort, UnionAll, CBOTree, Root };
+enum EOperator : ui32 { EmptySource, Source, Map, AddDependencies, Filter, Join, Aggregate, Limit, Sort, UnionAll, TableLookup, IndexLookupJoin, CBOTree, Root };
 
 // clang-format off
 #define PHASE_ENUM(X) \
@@ -69,12 +69,15 @@ enum ESortDir : ui32 { None = 0x00, Asc = 0x01, Desc = 0x02 };
 // engaged empty value.
 struct TOperatorAnalysisProps {
     void Clear() {
+        LiveInByChild.reset();
         LiveOut.reset();
         Aliases.reset();
         NameConstraints.reset();
         InRootAliasRegion = false;
     }
 
+    // Requirements per child edge; LiveOut is their union at the output.
+    std::optional<TVector<TInfoUnitSet>> LiveInByChild;
     std::optional<TInfoUnitSet> LiveOut;
     std::optional<TPlanAliases::TAliasMap> Aliases;
     std::optional<TPlanNameConstraints> NameConstraints;
@@ -167,8 +170,7 @@ public:
     virtual ~ILivenessContext() = default;
 
     virtual const TInfoUnitSet& GetLiveOut(IOperator* op) const = 0;
-    virtual bool AddLiveColumns(const TIntrusivePtr<IOperator>& op, const TVector<TInfoUnit>& columns) = 0;
-    virtual bool AddLiveColumns(const TIntrusivePtr<IOperator>& op, const TInfoUnitSet& columns) = 0;
+    virtual void AddLiveInput(IOperator* op, ui32 childIndex, const TInfoUnitSet& columns) = 0;
     virtual void AddExpressionDeps(const TExpression& expr, TInfoUnitSet& target) = 0;
 };
 
@@ -351,6 +353,33 @@ public:
     }
 };
 
+/**
+ * Operator with an arbitrary number of inputs. The inputs are the children, in order.
+ */
+class IVariadicOperator: public IOperator {
+public:
+    IVariadicOperator(EOperator kind, TPositionHandle pos)
+        : IOperator(kind, pos) {
+    }
+
+    IVariadicOperator(EOperator kind, TPositionHandle pos, TVector<TIntrusivePtr<IOperator>> inputs)
+        : IOperator(kind, pos) {
+        Children = std::move(inputs);
+    }
+
+    TVector<TIntrusivePtr<IOperator>>& GetInputs() {
+        return Children;
+    }
+
+    TIntrusivePtr<IOperator>& GetInput(size_t index) {
+        return Children[index];
+    }
+
+    void SetInputs(TVector<TIntrusivePtr<IOperator>> newInputs) {
+        Children = std::move(newInputs);
+    }
+};
+
 class TOpEmptySource: public IOperator {
 public:
     TOpEmptySource(TPositionHandle pos)
@@ -377,7 +406,12 @@ public:
         TExprNode::TPtr ComputeNode;  // ranges expression pushed into the read
         TVector<TString> KeyColumns;  // all table key columns (with or without alias prefix)
         size_t UsedPrefixLen = 0;     // how many leading key columns are range-constrained
+        size_t PointPrefixLen = 0;    // how many are pinned to a single value
         TMaybe<size_t> ExpectedMaxRanges;
+        TExprNode::TPtr Points;
+        const TStructExprType* PointsItemType = nullptr;
+        TVector<TString> PointColumns;
+        TMaybe<size_t> ExpectedMaxPoints;
     };
 
     TOpRead(TExprNode::TPtr node);
@@ -633,8 +667,9 @@ protected:
     void ComputeOutputIUs() override;
 };
 
-class TOpUnionAll: public IBinaryOperator {
+class TOpUnionAll: public IVariadicOperator {
 public:
+    TOpUnionAll(TVector<TIntrusivePtr<IOperator>> inputs, TPositionHandle pos, TVector<TInfoUnit> columns, bool ordered = false);
     TOpUnionAll(TIntrusivePtr<IOperator> leftArg, TIntrusivePtr<IOperator> rightArg, TPositionHandle pos,
                 TVector<TInfoUnit> columns, bool ordered = false);
     virtual void PropagateLiveness(ILivenessContext& ctx) override;
@@ -730,6 +765,78 @@ private:
     EOpPhase SortPhase{EOpPhase::Undefined};
 };
 
+enum class ELookupStrategy : ui32 {
+    LookupRows,
+    LookupJoinRows,
+};
+
+class TOpTableLookup: public IUnaryOperator {
+public:
+    struct TLookupKeyPrefix {
+        TExprNode::TPtr Points;
+        const TStructExprType* PointsItemType = nullptr;
+        TVector<TString> Columns;
+        TVector<std::pair<TString, TInfoUnit>> Equalities;
+    };
+
+    TOpTableLookup(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TExprNode::TPtr& table, const TVector<TString>& fetchColumns,
+                   const TVector<TInfoUnit>& outputIUs, const TVector<TInfoUnit>& lookupKeys);
+
+    TOpTableLookup(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TExprNode::TPtr& table,
+                   const TVector<TString>& fetchColumns, const TVector<TInfoUnit>& outputIUs, const TVector<TInfoUnit>& lookupKeys,
+                   const TVector<TString>& lookupKeyColumns, const TString& joinKind,
+                   const std::optional<TExpression>& fetchedRowFilter,
+                   const std::optional<TLookupKeyPrefix>& prefix = std::nullopt,
+                   const TVector<std::pair<TInfoUnit, TInfoUnit>>& residualJoinKeys = {});
+
+    virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
+    virtual TVector<std::reference_wrapper<TExpression>> GetExpressions() override;
+    virtual void PropagateLiveness(ILivenessContext& ctx) override;
+    virtual TString ToString(TExprContext& ctx) override;
+    virtual NJson::TJsonValue ToJson(ui32 explainFlags) override;
+    virtual TString GetExplainName() const override { return IsJoin() ? "TableLookupJoin" : "TableLookup"; }
+
+    virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
+
+    bool IsJoin() const {
+        return Strategy == ELookupStrategy::LookupJoinRows;
+    }
+
+    TExprNode::TPtr Table;
+    TVector<TString> FetchColumns;
+    TVector<TInfoUnit> OutputIUs;
+    TVector<TInfoUnit> LookupKeys;
+    TVector<TString> LookupKeyColumns;
+    TString JoinKind;
+    std::optional<TExpression> FetchedRowFilter;
+    std::optional<TLookupKeyPrefix> Prefix;
+    ELookupStrategy Strategy{ELookupStrategy::LookupRows};
+    TVector<std::pair<TInfoUnit, TInfoUnit>> ResidualJoinKeys;
+
+protected:
+    void ComputeOutputIUs() override;
+};
+
+/***
+ * Logical representation of index lookup join. In runtime it conusmes a tuple (left row, optional<right row>, cookie).
+ * Where cookie is (left row id, first row, last row).
+ ***/
+class TOpIndexLookupJoin: public IUnaryOperator {
+public:
+    TOpIndexLookupJoin(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TString& joinKind, const TVector<std::pair<TInfoUnit, TInfoUnit>>& joinKeys);
+
+    virtual TString ToString(TExprContext& ctx) override;
+    virtual NJson::TJsonValue ToJson(ui32 explainFlags) override;
+    virtual TString GetExplainName() const override { return "IndexLookupJoin"; }
+
+    TIntrusivePtr<TOpTableLookup> GetTableLookup();
+
+    TString JoinKind;
+    TVector<std::pair<TInfoUnit, TInfoUnit>> JoinKeys;
+
+protected:
+    void ComputeOutputIUs() override;
+};
 
 /***
  * This operator packages a subtree of operators in order to pass them to dynamic programming optimizer

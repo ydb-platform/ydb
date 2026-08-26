@@ -495,12 +495,15 @@ TEST_P(TFairShareHierarchicalSlotQueueStressTest, StressTest)
         for (int j = 0; j < tagHierarchyCounts[i]; ++j) {
             auto tag = Format("tag_%v_%v", i, j);
             tagHierarchy[i].emplace(tag, lengths[j]);
-            YT_LOG_DEBUG("Tag: %v, Weight: %v", tag, lengths[j]);
+            YT_TLOG_DEBUG("Generated tag")
+                .With("Tag", tag)
+                .With("Weight", lengths[j]);
         }
     }
 
     for (auto& tagList : tagLists) {
-        YT_LOG_DEBUG("TagList: %v", tagList);
+        YT_TLOG_DEBUG("Generated tag list")
+            .With("TagList", tagList);
     }
 
     THashMap<TGuid, TNodeStat> stats;
@@ -521,7 +524,8 @@ TEST_P(TFairShareHierarchicalSlotQueueStressTest, StressTest)
         stats[guid].RequestBandwidth = 0;
         stats[guid].RequestCount = 0;
 
-        YT_LOG_DEBUG("Levels: %v", levels);
+        YT_TLOG_DEBUG("Generated levels")
+            .With("Levels", levels);
     }
 
     std::uniform_int_distribution<i64> sizeDist(1_MB, maxRequestSize);
@@ -575,7 +579,9 @@ TEST_P(TFairShareHierarchicalSlotQueueStressTest, StressTest)
             levels.push_back(TFairShareHierarchyLevel<TTestTag>(tag.first, tag.second));
         }
 
-        YT_LOG_TRACE("Try to put slot (Size: %v, Levels: %v)", size, tags);
+        YT_TLOG_TRACE("Try to put slot")
+            .With("Size", size)
+            .With("Levels", tags);
 
         auto slot = queue->EnqueueSlot(
             size,
@@ -621,9 +627,13 @@ TEST_P(TFairShareHierarchicalSlotQueueStressTest, StressTest)
                 };
             }));
 
-            YT_LOG_TRACE("Slot put successfully (Size: %v, Levels: %v)", size, tags);
+            YT_TLOG_TRACE("Slot put successfully")
+                .With("Size", size)
+                .With("Levels", tags);
         } else {
-            YT_LOG_TRACE("Slot put failed (Size: %v, Levels: %v)", size, tags);
+            YT_TLOG_TRACE("Slot put failed")
+                .With("Size", size)
+                .With("Levels", tags);
         }
     };
 
@@ -697,15 +707,15 @@ TEST_P(TFairShareHierarchicalSlotQueueStressTest, StressTest)
 
                     if (randomGenerator() % 200 == 0) {
                         if (auto sensors = exporter->ReadJson({})) {
-                            YT_LOG_DEBUG("Sensors: %v", *sensors);
+                            YT_TLOG_DEBUG("Collected sensors")
+                                .With("Sensors", *sensors);
                         }
                         TStringStream output;
                         NYson::TYsonWriter writer(&output, NYson::EYsonFormat::Pretty, NYson::EYsonType::MapFragment);
                         hierarchicalScheduler->BuildOrchid(&writer);
                         writer.Flush();
-                        YT_LOG_DEBUG(
-                            "Orchid: %v",
-                            NYson::TYsonString(output.Str(), NYson::EYsonType::MapFragment));
+                        YT_TLOG_DEBUG("Built orchid")
+                            .With("Orchid", NYson::TYsonString(output.Str(), NYson::EYsonType::MapFragment));
                     }
                 }
             }).AsyncVia(threadPool->GetInvoker()).Run();

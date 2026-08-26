@@ -1,9 +1,10 @@
 #include "tablet_counters_aggregator.h"
 #include "tablet_counters_app.h"
 #include "labeled_counters_merger.h"
-#include "labeled_db_counters.h"
+#include "detailed_metrics/node_database_metrics_aggregator.h"
 #include "detailed_metrics/ydb_metrics_mapper.h"
 #include "private/aggregated_counters.h"
+#include "private/aggregated_tablet_counters.h"
 #include "private/labeled_db_counters.h"
 
 #include <ydb/library/actors/core/log.h>
@@ -16,6 +17,8 @@
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
+#include <ydb/core/base/path.h>
+#include <ydb/core/protos/table_metrics_settings.pb.h>
 #include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/sys_view/service/db_counters.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
@@ -33,6 +36,8 @@
 #include <util/string/vector.h>
 #include <util/string/split.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TABLET_AGGREGATOR
+
 #ifdef _darwin_
 #pragma GCC diagnostic ignored "-Wformat"
 #endif
@@ -41,6 +46,8 @@
 namespace NKikimr {
 
 const ui32 WAKEUP_TIMEOUT_SECONDS = 4;
+
+constexpr TDuration DATABASE_PATH_RESOLVE_TIMEOUT = TDuration::Seconds(10);
 
 TStringBuf GetHistogramAggregateSimpleName(TStringBuf name) {
     TStringBuf buffer(name);
@@ -79,18 +86,204 @@ TActorId MakeTabletCountersAggregatorID(ui32 node, bool follower) {
     }
 }
 
+namespace {
+
+////////////////////////////////////////////
+// Detailed metrics (the private per node counter tree)
+
+const TString DETAILED_METRICS_RAW_GROUP = "ydb_detailed_raw";
+
+// TEvTabletSetTableInfo::MetricsLevel is a plain ui32 (to keep the event free of the
+// schemeshard proto header), carrying the raw values of the schemeshard proto enum;
+// these asserts guard against the two silently drifting apart
+static_assert(static_cast<ui32>(TDetailedMetricsSettings::MetricsLevelUnspecified) ==
+    NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelUnspecified);
+static_assert(static_cast<ui32>(TDetailedMetricsSettings::MetricsLevelDisabled) ==
+    NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelDisabled);
+static_assert(static_cast<ui32>(TDetailedMetricsSettings::MetricsLevelTable) ==
+    NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable);
+static_assert(static_cast<ui32>(TDetailedMetricsSettings::MetricsLevelPartition) ==
+    NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition);
+
+bool IsCollectedMetricsLevel(EDetailedMetricsLevel level) {
+    switch (level) {
+        case TDetailedMetricsSettings::MetricsLevelTable:
+        case TDetailedMetricsSettings::MetricsLevelPartition:
+            return true;
+
+        case TDetailedMetricsSettings::MetricsLevelUnspecified:
+        case TDetailedMetricsSettings::MetricsLevelDisabled:
+            return false;
+    }
+
+    return false;
+}
+
+::NMonitoring::TDynamicCounterPtr GetDetailedMetricsRawGroup(
+    ::NMonitoring::TDynamicCounterPtr countersRoot, const TActorContext& ctx)
+{
+    static TMutex lock;
+    TGuard<TMutex> guard(lock);
+
+    auto group = countersRoot->FindSubgroup("counters", DETAILED_METRICS_RAW_GROUP);
+    if (!group) {
+        group = MakeIntrusive<::NMonitoring::TDynamicCounters>(
+            ::NMonitoring::TCountableBase::EVisibility::Private);
+        countersRoot->RegisterSubgroup("counters", DETAILED_METRICS_RAW_GROUP, group);
+
+        YDB_LOG_INFO_CTX(ctx, "Created the private root group of the detailed metrics counter tree");
+    }
+
+    return group;
+}
+
+} // namespace <anonymous>
+
 ////////////////////////////////////////////
 class TTabletMon {
 public:
     //
-    TTabletMon(::NMonitoring::TDynamicCounterPtr counters, bool isFollower, TActorId dbWatcherActorId)
+    TTabletMon(::NMonitoring::TDynamicCounterPtr counters, bool isFollower, TActorId dbWatcherActorId,
+            bool dbCountersEnabled, bool detailedMetricsEnabled, const TActorContext& ctx)
         : Counters(GetServiceCounters(counters, isFollower ? "followers" : "tablets"))
         , AllTypes(MakeIntrusive<TTabletCountersForTabletType>(Counters.Get(), "type", "all"))
         , IsFollower(isFollower)
         , DbWatcherActorId(dbWatcherActorId)
+        , DbCountersEnabled(dbCountersEnabled)
+        , DetailedMetricsEnabled(detailedMetricsEnabled)
     {
         if (!IsFollower) {
             YdbCounters = MakeIntrusive<TYdbTabletCounters>(GetServiceCounters(counters, "ydb"), Counters);
+        }
+
+        if (DetailedMetricsEnabled) {
+            DetailedMetricsGroup = GetDetailedMetricsRawGroup(counters, ctx);
+        }
+    }
+
+    void SetTableInfo(const TEvTabletCounters::TEvTabletSetTableInfo& msg, const TActorContext& ctx) {
+        if (!DetailedMetricsEnabled) {
+            return;
+        }
+
+        // Register a watch the first time this database is seen, so the detailed
+        // metrics of its tables are reclaimed on database removal even when the
+        // (leader-only) db counters feature is off. TDbWatcherActor dedupes by path
+        // id (sys_view/service/db_counters.cpp), so the "inserted" check here is not
+        // load-bearing for correctness, only for cutting one event every 5s per tablet.
+        auto [itDb, inserted] = DetailedMetricsByPathId.try_emplace(msg.TenantPathId);
+        if (inserted && DbWatcherActorId) {
+            ctx.Send(DbWatcherActorId, new NSysView::TEvSysView::TEvWatchDatabase(msg.TenantPathId));
+        }
+
+        auto& db = itDb->second;
+        db.TabletContributions[msg.TabletID][msg.FollowerId] = TDetailedMetricsTableInfo{
+            .TableId = msg.TableId,
+            .TablePath = msg.TablePath,
+            .SchemaVersion = msg.SchemaVersion,
+            .MetricsLevel = static_cast<EDetailedMetricsLevel>(msg.MetricsLevel),
+        };
+
+        // Fires once per tablet every 5s, hence TRACE
+        YDB_LOG_TRACE_CTX(ctx, "Remembered the identity of the table reported by the tablet",
+            {"tabletId", msg.TabletID},
+            {"followerId", msg.FollowerId},
+            {"tablePath", msg.TablePath},
+            {"schemaVersion", msg.SchemaVersion},
+            {"metricsLevel", msg.MetricsLevel});
+    }
+
+    void ApplyDetailedMetrics(ui64 tabletId, ui32 followerId, TTabletTypes::EType tabletType,
+        TPathId tenantPathId, const TTabletCountersBase* executorCounters,
+        const TTabletCountersBase* appCounters, const TActorContext& ctx)
+    {
+        if (!DetailedMetricsEnabled) {
+            return;
+        }
+
+        if (!tenantPathId || !executorCounters || !appCounters) {
+            // Logged on every round of the counters of every tablet, hence TRACE
+            YDB_LOG_TRACE_CTX(ctx, "Skipping the detailed metrics of the tablet",
+                {"tabletId", tabletId},
+                {"tenantPathId", tenantPathId.ToString()},
+                {"hasExecutorCounters", executorCounters != nullptr},
+                {"hasAppCounters", appCounters != nullptr});
+            return;
+        }
+
+        auto itDb = DetailedMetricsByPathId.find(tenantPathId);
+        if (itDb == DetailedMetricsByPathId.end()) {
+            // An identity event (TEvTabletSetTableInfo) always creates the database entry
+            // first, so no entry means nothing is known to attribute these counters to yet
+            return;
+        }
+        auto& db = itDb->second;
+
+        auto itTablet = db.TabletContributions.find(tabletId);
+        const TDetailedMetricsTableInfo* table = nullptr;
+        if (itTablet != db.TabletContributions.end()) {
+            auto itFollower = itTablet->second.find(followerId);
+            if (itFollower != itTablet->second.end()) {
+                table = &itFollower->second;
+            }
+        }
+        if (!table) {
+            YDB_LOG_TRACE_CTX(ctx, "Skipping the counters of a tablet with no known table",
+                {"tabletId", tabletId},
+                {"followerId", followerId});
+            return;
+        }
+
+        if (!IsCollectedMetricsLevel(table->MetricsLevel)) {
+            // The table stopped collecting: withdraw what this tablet published before
+            // the level dropped
+            if (db.Aggregator) {
+                db.Aggregator->ForgetTablet(tabletId, followerId);
+            }
+
+            YDB_LOG_TRACE_CTX(ctx, "Skipping the detailed metrics of the table",
+                {"tabletId", tabletId},
+                {"tablePath", table->TablePath},
+                {"metricsLevel", static_cast<ui32>(table->MetricsLevel)});
+            return;
+        }
+
+        if (!db.Aggregator) {
+            if (!db.DatabasePath) {
+                RequestDatabasePath(tenantPathId, db, ctx);
+                return;
+            }
+
+            CreateDetailedMetricsAggregator(db, ctx);
+        }
+
+        db.Aggregator->AddCounters(*table, tabletId, followerId, tabletType,
+            *executorCounters, *appCounters, ctx.Now());
+    }
+
+    void ResolveDatabasePath(NSchemeCache::TSchemeCacheNavigate* navigate, const TActorContext& ctx) {
+        for (const auto& entry : navigate->ResultSet) {
+            const auto pathId = entry.TableId.PathId;
+
+            auto it = DetailedMetricsByPathId.find(pathId);
+            if (it == DetailedMetricsByPathId.end()) {
+                continue;
+            }
+
+            auto& db = it->second;
+
+            // Let the next round of the counters request the path again
+            db.DatabasePathRequestedAt = TInstant::Zero();
+
+            if (entry.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
+                YDB_LOG_WARN_CTX(ctx, "Failed to resolve the database path of the detailed metrics",
+                    {"pathId", pathId.ToString()},
+                    {"status", static_cast<ui32>(entry.Status)});
+                continue;
+            }
+
+            db.DatabasePath = CanonizePath(entry.Path);
+            CreateDetailedMetricsAggregator(db, ctx);
         }
     }
 
@@ -105,7 +298,7 @@ public:
             typeCounters->Apply(tabletId, executorCounters, appCounters, tabletType);
         }
         //
-        if (!IsFollower && DbWatcherActorId && tenantPathId) {
+        if (!IsFollower && DbCountersEnabled && tenantPathId) {
             auto dbCounters = GetDbCounters(tenantPathId, ctx);
             if (dbCounters) {
                 auto* limitedAppCounters = GetOrAddLimitedAppCounters(tabletType);
@@ -176,7 +369,7 @@ public:
         iterDbLabeled->Apply(tabletId, labeledCounters);
     }
 
-    void ForgetTablet(ui64 tabletId, TTabletTypes::EType tabletType, TPathId tenantPathId) {
+    void ForgetTablet(ui64 tabletId, TTabletTypes::EType tabletType, TPathId tenantPathId, ui32 followerId) {
         AllTypes->Forget(tabletId);
         // and now erase from every other path
         auto iterTabletType = CountersByTabletType.find(tabletType);
@@ -187,6 +380,7 @@ public:
         if (auto itPath = CountersByPathId.find(tenantPathId); itPath != CountersByPathId.end()) {
             itPath->second->Forget(tabletId, tabletType);
         }
+        ForgetTabletDetailedMetrics(tabletId, followerId, tenantPathId);
 
         for (auto iter = LabeledDbCounters.begin(); iter != LabeledDbCounters.end(); ++iter) {
             iter->second->ForgetTablet(tabletId);
@@ -274,7 +468,8 @@ public:
 
     void QueryLabeledCounters(const NKikimrLabeledCounters::TEvTabletLabeledCountersRequest& request, NKikimrLabeledCounters::TEvTabletLabeledCountersResponse& response, const TActorContext& ctx) {
 
-        LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "got request v" << request.GetVersion());
+        YDB_LOG_INFO_CTX(ctx, "Received labeled counters request",
+            {"requestVersion", request.GetVersion()});
 
         TString group = request.HasGroup() ? request.GetGroup() : "";
         TTabletTypes::EType tabletType = request.GetTabletType();
@@ -308,13 +503,20 @@ public:
                 ++cc;
             }
         }
-        LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "request processed, " << cc << " groups processed");
+        YDB_LOG_INFO_CTX(ctx, "Request processed",
+            {"groupsProcessed", cc});
     }
 
     void RecalcAll() {
         AllTypes->RecalcAll();
         for (auto& [_, counters] : CountersByTabletType) {
             counters->RecalcAll();
+        }
+
+        for (auto& [_, db] : DetailedMetricsByPathId) {
+            if (db.Aggregator) {
+                db.Aggregator->RecalculateAllCounters();
+            }
         }
 
         if (YdbCounters) {
@@ -326,8 +528,9 @@ public:
         }
     }
 
-    void RemoveTabletsByPathId(TPathId pathId) {
+    void RemoveTabletsByPathId(TPathId pathId, const TActorContext& ctx) {
         CountersByPathId.erase(pathId);
+        RemoveDetailedMetricsByPathId(pathId, ctx);
     }
 
     void RemoveTabletsByDbPath(const TString& dbPath) {
@@ -335,13 +538,12 @@ public:
     }
 
     TVector<NPrivate::TTabletCounterValue> Find(const TString& name) const {
+        TVector<NPrivate::TTabletCounterValue> results;
         for (auto [_, counters] : CountersByTabletType) {
-            if (auto result = counters->Find(name)) {
-                return result;
-            }
+            counters->Find(name, results);
         }
 
-        return {};
+        return results;
     }
 
 private:
@@ -365,18 +567,20 @@ private:
         {
             Y_ABORT_UNLESS(executorCounters);
 
+            const TInstant now = NActors::TActivationContext::Now();
+
             if (executorCounters) {
                 if (!TabletExecutorCounters.IsInitialized) {
                     TabletExecutorCounters.Initialize(executorCounters);
                 }
-                TabletExecutorCounters.Apply(tabletId, executorCounters, tabletType);
+                TabletExecutorCounters.Apply(tabletId, executorCounters, tabletType, now);
             }
 
             if (appCounters) {
                 if (!TabletAppCounters.IsInitialized) {
                     TabletAppCounters.Initialize(limitedAppCounters ? limitedAppCounters : appCounters);
                 }
-                TabletAppCounters.Apply(tabletId, appCounters, tabletType);
+                TabletAppCounters.Apply(tabletId, appCounters, tabletType, now);
             }
         }
 
@@ -440,304 +644,20 @@ private:
             }
         }
 
-        TVector<NPrivate::TTabletCounterValue> Find(const TString& name) const {
-            if (auto result = TabletExecutorCounters.Find(name)) {
-                return result;
-            } else {
-                return TabletAppCounters.Find(name);
-            }
+        bool Find(const TString& name, TVector<NPrivate::TTabletCounterValue>& results) const {
+            return TabletExecutorCounters.Find(name, results)
+                || TabletAppCounters.Find(name, results);
         }
 
     private:
-        //
-        class TSolomonCounters {
-        public:
-            //
-            bool IsInitialized;
-
-            TSolomonCounters(::NMonitoring::TDynamicCounterPtr counterGroup)
-                : IsInitialized(false)
-                , AggregatedSimpleCounters(counterGroup)
-                , AggregatedCumulativeCounters(counterGroup)
-                , AggregatedHistogramCounters(counterGroup)
-                , CounterGroup(counterGroup)
-            {}
-
-            void Initialize(const TTabletCountersBase* counters) {
-                Y_ABORT_UNLESS(!IsInitialized);
-
-                if (counters) {
-                    THashMap<TString, THolder<NPrivate::THistogramCounter>> histogramAggregates;
-
-                    // percentile counters
-                    FullSizePercentile = counters->Percentile().Size();
-                    AggregatedHistogramCounters.Reserve(FullSizePercentile);
-                    for (ui32 i = 0; i < FullSizePercentile; ++i) {
-                        if (!counters->PercentileCounterName(i)) {
-                            DeprecatedPercentile.insert(i);
-                            continue;
-                        }
-
-                        auto& percentileCounter = counters->Percentile()[i];
-                        const char* percentileCounterName = counters->PercentileCounterName(i);
-                        AggregatedHistogramCounters.AddCounter(
-                            percentileCounterName,
-                            percentileCounter,
-                            histogramAggregates);
-                    }
-
-                    // simple counters
-                    FullSizeSimple = counters->Simple().Size();
-                    AggregatedSimpleCounters.Reserve(FullSizeSimple);
-                    for (ui32 i = 0; i < FullSizeSimple; ++i) {
-                        const char* name = counters->SimpleCounterName(i);
-                        if (!name) {
-                            DeprecatedSimple.insert(i);
-                            continue;
-                        }
-                        auto itHistogramAggregate = histogramAggregates.find(name);
-                        if (itHistogramAggregate != histogramAggregates.end()) {
-                            AggregatedSimpleCounters.AddSimpleCounter(name, std::move(itHistogramAggregate->second));
-                        } else {
-                            AggregatedSimpleCounters.AddSimpleCounter(name);
-                        }
-                    }
-
-                    // cumulative counters
-                    FullSizeCumulative = counters->Cumulative().Size();
-                    AggregatedCumulativeCounters.Reserve(FullSizeCumulative);
-                    for (ui32 i = 0; i < FullSizeCumulative; ++i) {
-                        const char* name = counters->CumulativeCounterName(i);
-                        if (!name) {
-                            DeprecatedCumulative.insert(i);
-                            continue;
-                        }
-                        auto itHistogramAggregate = histogramAggregates.find(name);
-                        if (itHistogramAggregate != histogramAggregates.end()) {
-                            AggregatedCumulativeCounters.AddCumulativeCounter(name, std::move(itHistogramAggregate->second));
-                        } else {
-                            AggregatedCumulativeCounters.AddCumulativeCounter(name);
-                        }
-                        auto counter = CounterGroup->GetCounter(name, true);
-                        CumulativeCounters.push_back(counter);
-                    }
-                }
-
-                //
-                IsInitialized = true;
-            }
-
-            void Apply(ui64 tabletId, const TTabletCountersBase* counters, TTabletTypes::EType tabletType) {
-                Y_ABORT_UNLESS(counters);
-
-                TInstant now = NActors::TActivationContext::Now();
-                auto it = LastAggregateUpdateTime.find(tabletId);
-                TDuration diff;
-                if (it != LastAggregateUpdateTime.end()) {
-                    diff = now - it->second;
-                    it->second = now;
-                } else {
-                    LastAggregateUpdateTime.emplace(tabletId, now);
-                }
-
-                // simple counters
-                ui32 nextSimpleOffset = 0;
-                TVector<ui64> simpleValues;
-                simpleValues.resize(FullSizeSimple); // more than needed
-                for (ui32 i = 0; i < FullSizeSimple; ++i) {
-                    if (!counters->SimpleCounterName(i)) {
-                        continue;
-                    }
-                    const ui32 offset = nextSimpleOffset++;
-                    const ui64 value = counters->Simple()[i].Get();
-                    simpleValues[offset] = value;
-                }
-                AggregatedSimpleCounters.SetValues(tabletId, simpleValues, tabletType);
-
-                // cumulative counters
-                ui32 nextCumulativeOffset = 0;
-                TVector<ui64> cumulativeValues;
-                cumulativeValues.resize(FullSizeCumulative, 0);
-                for (ui32 i = 0; i < FullSizeCumulative; ++i) {
-                    if (!counters->CumulativeCounterName(i)) {
-                        continue;
-                    }
-                    const ui32 offset = nextCumulativeOffset++;
-                    const ui64 valueDiff = counters->Cumulative()[i].Get();
-                    if (diff) {
-                        cumulativeValues[offset] = valueDiff * 1000000 / diff.MicroSeconds(); // differentiate value to per second rate
-                    }
-                    Y_ABORT_UNLESS(offset < CumulativeCounters.size(), "inconsistent counters for tablet type %s", TTabletTypes::TypeToStr(tabletType));
-                    *CumulativeCounters[offset] += valueDiff;
-                }
-                AggregatedCumulativeCounters.SetValues(tabletId, cumulativeValues, tabletType);
-
-                // percentile counters
-                ui32 nextPercentileOffset = 0;
-                for (ui32 i = 0; i < FullSizePercentile; ++i) {
-                    if (!counters->PercentileCounterName(i)) {
-                        continue;
-                    }
-
-                    const ui32 offset = nextPercentileOffset++;
-                    AggregatedHistogramCounters.SetValue(
-                        tabletId,
-                        offset,
-                        counters->Percentile()[i],
-                        counters->PercentileCounterName(i),
-                        tabletType);
-                }
-
-            }
-
-            void Forget(ui64 tabletId) {
-                Y_ABORT_UNLESS(IsInitialized);
-
-                AggregatedSimpleCounters.ForgetTablet(tabletId);
-                AggregatedCumulativeCounters.ForgetTablet(tabletId);
-                AggregatedHistogramCounters.ForgetTablet(tabletId);
-                LastAggregateUpdateTime.erase(tabletId);
-            }
-
-            void RecalcAll() {
-                AggregatedSimpleCounters.RecalcAll();
-                AggregatedCumulativeCounters.RecalcAll();
-            }
-
-            template <bool IsSaving>
-            void Convert(NKikimrSysView::TDbCounters& sumCounters,
-                NKikimrSysView::TDbCounters& maxCounters)
-            {
-                // simple counters
-                auto* simpleSum = sumCounters.MutableSimple();
-                auto* simpleMax = maxCounters.MutableSimple();
-                simpleSum->Resize(FullSizeSimple, 0);
-                simpleMax->Resize(FullSizeSimple, 0);
-                ui32 nextSimpleOffset = 0;
-                for (ui32 i = 0; i < FullSizeSimple; ++i) {
-                    if (DeprecatedSimple.find(i) != DeprecatedSimple.end()) {
-                        if constexpr (IsSaving) {
-                            (*simpleSum)[i] = 0;
-                            (*simpleMax)[i] = 0;
-                        }
-                        continue;
-                    }
-                    const ui32 offset = nextSimpleOffset++;
-                    if constexpr (IsSaving) {
-                        (*simpleSum)[i] = AggregatedSimpleCounters.GetSum(offset);
-                        (*simpleMax)[i] = AggregatedSimpleCounters.GetMax(offset);
-                    } else {
-                        AggregatedSimpleCounters.SetSum(offset, (*simpleSum)[i]);
-                        AggregatedSimpleCounters.SetMax(offset, (*simpleMax)[i]);
-                    }
-                }
-                // cumulative counters
-                auto* cumulativeSum = sumCounters.MutableCumulative();
-                auto* cumulativeMax = maxCounters.MutableCumulative();
-                cumulativeSum->Resize(FullSizeCumulative, 0);
-                cumulativeMax->Resize(FullSizeCumulative, 0);
-                ui32 nextCumulativeOffset = 0;
-                for (ui32 i = 0; i < FullSizeCumulative; ++i) {
-                    if (DeprecatedCumulative.find(i) != DeprecatedCumulative.end()) {
-                        if constexpr (IsSaving) {
-                            (*cumulativeSum)[i] = 0;
-                            (*cumulativeMax)[i] = 0;
-                        }
-                        continue;
-                    }
-                    const ui32 offset = nextCumulativeOffset++;
-                    Y_ABORT_UNLESS(offset < CumulativeCounters.size(),
-                        "inconsistent cumulative counters %u >= %lu", offset, CumulativeCounters.size());
-                    if constexpr (IsSaving) {
-                        (*cumulativeSum)[i] = *CumulativeCounters[offset];
-                        (*cumulativeMax)[i] = AggregatedCumulativeCounters.GetMax(offset);
-                    } else {
-                        *CumulativeCounters[offset] = (*cumulativeSum)[i];
-                        AggregatedCumulativeCounters.SetMax(offset, (*cumulativeMax)[i]);
-                    }
-                }
-                // percentile counters
-                auto* histogramSum = sumCounters.MutableHistogram();
-                if (sumCounters.HistogramSize() < FullSizePercentile) {
-                    auto missing = FullSizePercentile - sumCounters.HistogramSize();
-                    for (; missing > 0; --missing) {
-                        sumCounters.AddHistogram();
-                    }
-                }
-                ui32 nextPercentileOffset = 0;
-                for (ui32 i = 0; i < FullSizePercentile; ++i) {
-                    if (DeprecatedPercentile.find(i) != DeprecatedPercentile.end()) {
-                        continue;
-                    }
-                    auto* buckets = (*histogramSum)[i].MutableBuckets();
-                    const ui32 offset = nextPercentileOffset++;
-                    auto histogram = AggregatedHistogramCounters.GetHistogram(offset);
-                    auto snapshot = histogram->Snapshot();
-                    auto count = snapshot->Count();
-                    buckets->Resize(count, 0);
-                    if constexpr (!IsSaving) {
-                        histogram->Reset();
-                    }
-                    for (ui32 r = 0; r < count; ++r) {
-                        if constexpr (IsSaving) {
-                            (*buckets)[r] = snapshot->Value(r);
-                        } else {
-                            histogram->Collect(snapshot->UpperBound(r), (*buckets)[r]);
-                        }
-                    }
-                }
-            }
-
-            void ToProto(NKikimrSysView::TDbCounters& sumCounters,
-                NKikimrSysView::TDbCounters& maxCounters)
-            {
-                Convert<true>(sumCounters, maxCounters);
-            }
-
-            void FromProto(NKikimrSysView::TDbCounters& sumCounters,
-                NKikimrSysView::TDbCounters& maxCounters)
-            {
-                Convert<false>(sumCounters, maxCounters);
-            }
-
-            TVector<NPrivate::TTabletCounterValue> Find(const TString& name) const {
-                if (!IsInitialized) {
-                    return {};
-                }
-
-                if (auto result = AggregatedSimpleCounters.Find(name)) {
-                    return result;
-                } else {
-                    return AggregatedCumulativeCounters.Find(name);
-                }
-            }
-
-        private:
-            ui32 FullSizeSimple = 0;
-            THashSet<ui32> DeprecatedSimple;
-            ui32 FullSizeCumulative = 0;
-            THashSet<ui32> DeprecatedCumulative;
-            ui32 FullSizePercentile = 0;
-            THashSet<ui32> DeprecatedPercentile;
-            //
-            NPrivate::TAggregatedSimpleCounters AggregatedSimpleCounters;
-            NPrivate::TCountersVector CumulativeCounters;
-            NPrivate::TAggregatedCumulativeCounters AggregatedCumulativeCounters;
-            NPrivate::TAggregatedHistogramCounters AggregatedHistogramCounters;
-
-            THashMap<ui64, TInstant> LastAggregateUpdateTime;
-
-            ::NMonitoring::TDynamicCounterPtr CounterGroup;
-        };
-
         //
         ::NMonitoring::TDynamicCounterPtr TabletCountersSection;
 
         ::NMonitoring::TDynamicCounterPtr TabletExecutorCountersSection;
         ::NMonitoring::TDynamicCounterPtr TabletAppCountersSection;
 
-        TSolomonCounters TabletExecutorCounters;
-        TSolomonCounters TabletAppCounters;
+        NPrivate::TAggregatedTabletCounters TabletExecutorCounters;
+        NPrivate::TAggregatedTabletCounters TabletAppCounters;
     };
 
     using TTabletCountersForTabletTypePtr = TIntrusivePtr<TTabletCountersForTabletType>;
@@ -1109,15 +1029,17 @@ public:
 
     class TTabletsDbWatcherCallback : public NKikimr::NSysView::TDbWatcherCallback {
         TActorSystem* ActorSystem = {};
+        bool Follower = false;
 
     public:
-        explicit TTabletsDbWatcherCallback(TActorSystem* actorSystem)
+        TTabletsDbWatcherCallback(TActorSystem* actorSystem, bool follower)
             : ActorSystem(actorSystem)
+            , Follower(follower)
         {}
 
         void OnDatabaseRemoved(const TString& dbPath, TPathId pathId) override {
             auto evRemove = MakeHolder<TEvTabletCounters::TEvRemoveDatabase>(dbPath, pathId);
-            auto aggregator = MakeTabletCountersAggregatorID(ActorSystem->NodeId, false);
+            auto aggregator = MakeTabletCountersAggregatorID(ActorSystem->NodeId, Follower);
             ActorSystem->Send(aggregator, evRemove.Release());
         }
     };
@@ -1166,6 +1088,117 @@ private:
     }
 
 private:
+    ////////////////////////////////////////////
+    // Detailed metrics
+
+    struct TDetailedMetricsForDb {
+        TString DatabasePath;
+
+        TInstant DatabasePathRequestedAt;
+
+        TNodeDatabaseMetricsAggregatorPtr Aggregator;
+
+        THashMap<ui64, THashMap<ui32, TDetailedMetricsTableInfo>> TabletContributions;
+    };
+
+    void RequestDatabasePath(TPathId tenantPathId, TDetailedMetricsForDb& db, const TActorContext& ctx) {
+        const TInstant now = ctx.Now();
+        if (db.DatabasePathRequestedAt && db.DatabasePathRequestedAt + DATABASE_PATH_RESOLVE_TIMEOUT > now) {
+            return;
+        }
+
+        if (db.DatabasePathRequestedAt) {
+            YDB_LOG_WARN_CTX(ctx, "Retrying the database path resolve of the detailed metrics: no reply to the previous request",
+                {"pathId", tenantPathId.ToString()});
+        }
+
+        db.DatabasePathRequestedAt = now;
+
+        using TNavigate = NSchemeCache::TSchemeCacheNavigate;
+        auto request = MakeHolder<TNavigate>();
+
+        if (const auto& domain = AppData(ctx)->DomainsInfo->Domain) {
+            request->DatabaseName = domain->Name;
+        }
+
+        request->ResultSet.push_back({});
+
+        auto& entry = request->ResultSet.back();
+        entry.TableId.PathId = tenantPathId;
+        entry.Operation = TNavigate::EOp::OpPath;
+        entry.RequestType = TNavigate::TEntry::ERequestType::ByTableId;
+        entry.RedirectRequired = false;
+
+        ctx.Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request));
+    }
+
+    void CreateDetailedMetricsAggregator(TDetailedMetricsForDb& db, const TActorContext& ctx) {
+        db.Aggregator = CreateNodeDatabaseMetricsAggregator(
+            DetailedMetricsGroup,
+            db.DatabasePath,
+            IsFollower
+        );
+
+        YDB_LOG_INFO_CTX(ctx, "Created the detailed metrics aggregator of the database",
+            {"databasePath", db.DatabasePath});
+    }
+
+    void ResetDetailedMetricsAggregator(TPathId pathId, TDetailedMetricsForDb& db, const TActorContext& ctx) {
+        if (!db.Aggregator) {
+            return;
+        }
+
+        for (const auto& [tabletId, byFollower] : db.TabletContributions) {
+            for (const auto& [followerId, _] : byFollower) {
+                db.Aggregator->ForgetTablet(tabletId, followerId);
+            }
+        }
+
+        db.TabletContributions.clear();
+        db.Aggregator = nullptr;
+
+        YDB_LOG_INFO_CTX(ctx, "Dropped the detailed metrics aggregator of the database",
+            {"databasePath", db.DatabasePath},
+            {"pathId", pathId.ToString()});
+    }
+
+    void ForgetTabletDetailedMetrics(ui64 tabletId, ui32 followerId, TPathId tenantPathId) {
+        auto itDb = DetailedMetricsByPathId.find(tenantPathId);
+        if (itDb == DetailedMetricsByPathId.end()) {
+            return;
+        }
+
+        auto& db = itDb->second;
+
+        auto itTablet = db.TabletContributions.find(tabletId);
+        if (itTablet == db.TabletContributions.end()) {
+            return;
+        }
+
+        if (itTablet->second.erase(followerId) == 0) {
+            return;
+        }
+
+        if (db.Aggregator) {
+            db.Aggregator->ForgetTablet(tabletId, followerId);
+        }
+
+        if (itTablet->second.empty()) {
+            db.TabletContributions.erase(itTablet);
+        }
+    }
+
+    void RemoveDetailedMetricsByPathId(TPathId pathId, const TActorContext& ctx) {
+        auto it = DetailedMetricsByPathId.find(pathId);
+        if (it == DetailedMetricsByPathId.end()) {
+            return;
+        }
+
+        ResetDetailedMetricsAggregator(pathId, it->second, ctx);
+        DetailedMetricsByPathId.erase(it);
+    }
+
+private:
     ::NMonitoring::TDynamicCounterPtr Counters;
     TTabletCountersForTabletTypePtr AllTypes;
     bool IsFollower = false;
@@ -1184,6 +1217,13 @@ private:
     TLabeledCountersByDbPath LabeledDbCounters;
     TLabeledCountersByTabletTypeAndGroup LabeledCountersByTabletTypeAndGroup;
     TQuietTabletCounters QuietTabletCounters;
+
+    bool DbCountersEnabled = false;
+    bool DetailedMetricsEnabled = false;
+
+    ::NMonitoring::TDynamicCounterPtr DetailedMetricsGroup;
+
+    THashMap<TPathId, TDetailedMetricsForDb> DetailedMetricsByPathId;
 };
 
 
@@ -1225,7 +1265,9 @@ private:
     void HandleWork(TEvTabletCounters::TEvTabletLabeledCountersResponse::TPtr &ev, const TActorContext &ctx);//from cluster aggregator
     void HandleWork(NMon::TEvHttpInfo::TPtr& ev, const TActorContext &ctx);
     void HandleWakeup(const TActorContext &ctx);
-    void HandleWork(TEvTabletCounters::TEvRemoveDatabase::TPtr& ev);
+    void HandleWork(TEvTabletCounters::TEvRemoveDatabase::TPtr& ev, const TActorContext& ctx);
+    void HandleWork(TEvTabletCounters::TEvTabletSetTableInfo::TPtr& ev, const TActorContext& ctx);
+    void HandleWork(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx);
 
     TString RenderSearch(const TStringBuf relPath, const TString& name) const;
 
@@ -1256,12 +1298,20 @@ TTabletCountersAggregatorActor::Bootstrap(const TActorContext &ctx) {
     TAppData* appData = AppData(ctx);
     Y_ABORT_UNLESS(!TabletMon);
 
-    if (AppData(ctx)->FeatureFlags.GetEnableDbCounters() && !Follower) {
-        auto callback = MakeIntrusive<TTabletMon::TTabletsDbWatcherCallback>(ctx.ActorSystem());
+    // GetEnableDbCounters gates the leader-only per-database "tablets" counters (a
+    // SysView feature); the watcher actor itself is also needed by the detailed
+    // metrics of EITHER role, so the two features no longer share DbWatcherActorId as
+    // a single implicit feature gate (see the DbCountersEnabled member of TTabletMon).
+    const bool dbCountersEnabled = appData->FeatureFlags.GetEnableDbCounters() && !Follower;
+    const bool detailedMetricsEnabled = appData->FeatureFlags.GetEnableDataShardDetailedMetrics();
+
+    if (dbCountersEnabled || detailedMetricsEnabled) {
+        auto callback = MakeIntrusive<TTabletMon::TTabletsDbWatcherCallback>(ctx.ActorSystem(), Follower);
         DbWatcherActorId = ctx.Register(NSysView::CreateDbWatcherActor(callback));
     }
 
-    TabletMon = new TTabletMon(appData->Counters, Follower, DbWatcherActorId);
+    TabletMon = new TTabletMon(appData->Counters, Follower, DbWatcherActorId,
+        dbCountersEnabled, detailedMetricsEnabled, ctx);
     auto mon = appData->Mon;
     if (mon) {
         if (!Follower)
@@ -1282,30 +1332,37 @@ TTabletCountersAggregatorActor::Bootstrap(const TActorContext &ctx) {
 ////////////////////////////////////////////
 void
 TTabletCountersAggregatorActor::HandleWork(TEvTabletCounters::TEvTabletAddCounters::TPtr &ev, const TActorContext &ctx) {
-    Y_UNUSED(ctx);
     TEvTabletCounters::TEvTabletAddCounters* msg = ev->Get();
     TabletMon->Apply(msg->TabletID, msg->TabletType, msg->TenantPathId, msg->ExecutorCounters.Get(), msg->AppCounters.Get(), ctx);
+    TabletMon->ApplyDetailedMetrics(msg->TabletID, msg->FollowerId, msg->TabletType,
+        msg->TenantPathId, msg->ExecutorCounters.Get(), msg->AppCounters.Get(), ctx);
+}
+
+////////////////////////////////////////////
+void
+TTabletCountersAggregatorActor::HandleWork(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev, const TActorContext &ctx) {
+    TabletMon->ResolveDatabasePath(ev->Get()->Request.Get(), ctx);
 }
 
 ////////////////////////////////////////////
 void
 TTabletCountersAggregatorActor::HandleWork(TEvTabletCounters::TEvTabletAddLabeledCounters::TPtr &ev, const TActorContext &ctx) {
     TEvTabletCounters::TEvTabletAddLabeledCounters* msg = ev->Get();
-    LOG_DEBUG_S(ctx, NKikimrServices::TABLET_AGGREGATOR,
-                "got labeledCounters " << msg->LabeledCounters.Get()->GetDatabasePath() << " " <<
-                msg->LabeledCounters.Get()->GetGroup() << " " <<
-                (msg->TabletType == TTabletTypes::PersQueue ? "PQ" : "different"));
+    YDB_LOG_DEBUG_CTX(ctx, "Received labeled counters",
+        {"databasePath", msg->LabeledCounters.Get()->GetDatabasePath()},
+        {"group", msg->LabeledCounters.Get()->GetGroup()},
+        {"tabletTypeLabel", (msg->TabletType == TTabletTypes::PersQueue ? "PQ" : "other")});
     if (msg->LabeledCounters.Get()->GetDatabasePath()) {
         if (msg->TabletType == TTabletTypes::PersQueue) {
-            LOG_DEBUG_S(ctx, NKikimrServices::TABLET_AGGREGATOR,
-                        "got labeledCounters from db: " << msg->LabeledCounters.Get()->GetDatabasePath() <<
-                        "; tablet: " << msg->TabletID);
+            YDB_LOG_DEBUG_CTX(ctx, "Applying labeled counters from database",
+                {"databasePath", msg->LabeledCounters.Get()->GetDatabasePath()},
+                {"tabletId", msg->TabletID});
             TabletMon->ApplyLabeledDbCounters(msg->LabeledCounters.Get()->GetDatabasePath().GetRef(), msg->TabletID, msg->LabeledCounters.Get(), ctx);
         } else {
-            LOG_ERROR_S(ctx, NKikimrServices::TABLET_AGGREGATOR,
-                        "got labeledCounters from unknown Tablet Type: " << msg->TabletType <<
-                        "; db: " << msg->LabeledCounters.Get()->GetDatabasePath() <<
-                        "; tablet: " << msg->TabletID);
+            YDB_LOG_ERROR_CTX(ctx, "Labeled counters from unsupported tablet type",
+                {"tabletType", msg->TabletType},
+                {"databasePath", msg->LabeledCounters.Get()->GetDatabasePath()},
+                {"tabletId", msg->TabletID});
             return;
         }
     } else {
@@ -1320,7 +1377,7 @@ void
 TTabletCountersAggregatorActor::HandleWork(TEvTabletCounters::TEvTabletCountersForgetTablet::TPtr &ev, const TActorContext &ctx) {
     Y_UNUSED(ctx);
     TEvTabletCounters::TEvTabletCountersForgetTablet* msg = ev->Get();
-    TabletMon->ForgetTablet(msg->TabletID, msg->TabletType, msg->TenantPathId);
+    TabletMon->ForgetTablet(msg->TabletID, msg->TabletType, msg->TenantPathId, msg->FollowerId);
 }
 
 ////////////////////////////////////////////
@@ -1455,9 +1512,14 @@ TTabletCountersAggregatorActor::HandleWork(TEvTabletCounters::TEvTabletLabeledCo
 
 
 ////////////////////////////////////////////
-void TTabletCountersAggregatorActor::HandleWork(TEvTabletCounters::TEvRemoveDatabase::TPtr& ev) {
-    TabletMon->RemoveTabletsByPathId(ev->Get()->PathId);
+void TTabletCountersAggregatorActor::HandleWork(TEvTabletCounters::TEvRemoveDatabase::TPtr& ev, const TActorContext& ctx) {
+    TabletMon->RemoveTabletsByPathId(ev->Get()->PathId, ctx);
     TabletMon->RemoveTabletsByDbPath(ev->Get()->DbPath);
+}
+
+////////////////////////////////////////////
+void TTabletCountersAggregatorActor::HandleWork(TEvTabletCounters::TEvTabletSetTableInfo::TPtr& ev, const TActorContext& ctx) {
+    TabletMon->SetTableInfo(*ev->Get(), ctx);
 }
 
 ////////////////////////////////////////////
@@ -1482,7 +1544,7 @@ TString TTabletCountersAggregatorActor::RenderSearch(const TStringBuf relPath, c
                         LI() { str << "Cumulative."; }
                     }
                 }
-                LI() { str << "The search stops when the first match is found. It is recommended to specify the full name of the counter."; }
+                LI() { str << "The search stops when the first match for each tablet type is found. It is recommended to specify the full name of the counter."; }
                 LI() { str << "The instantaneous values of the counter are displayed."; }
             }
         }
@@ -1583,7 +1645,9 @@ STFUNC(TTabletCountersAggregatorActor::StateWork) {
         HFunc(TEvTabletCounters::TEvTabletAddLabeledCounters, HandleWork);
         HFunc(TEvTabletCounters::TEvTabletLabeledCountersRequest, HandleWork);
         HFunc(TEvTabletCounters::TEvTabletLabeledCountersResponse, HandleWork); //from cluster aggregator, for http requests
-        hFunc(TEvTabletCounters::TEvRemoveDatabase, HandleWork);
+        HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleWork);
+        HFunc(TEvTabletCounters::TEvRemoveDatabase, HandleWork);
+        HFunc(TEvTabletCounters::TEvTabletSetTableInfo, HandleWork);
         HFunc(NMon::TEvHttpInfo, HandleWork);
         CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
 
@@ -1600,9 +1664,9 @@ CreateTabletCountersAggregator(bool follower) {
     return new TTabletCountersAggregatorActor(follower);
 }
 
-void TabletCountersForgetTablet(ui64 tabletId, TTabletTypes::EType tabletType, TPathId tenantPathId, bool follower, TActorIdentity identity) {
+void TabletCountersForgetTablet(ui64 tabletId, TTabletTypes::EType tabletType, TPathId tenantPathId, bool follower, TActorIdentity identity, ui32 followerId) {
     const TActorId countersAggregator = MakeTabletCountersAggregatorID(identity.NodeId(), follower);
-    identity.Send(countersAggregator, new TEvTabletCounters::TEvTabletCountersForgetTablet(tabletId, tabletType, tenantPathId));
+    identity.Send(countersAggregator, new TEvTabletCounters::TEvTabletCountersForgetTablet(tabletId, tabletType, tenantPathId, followerId));
 }
 
 ///////////////////////////////////////////
@@ -1674,7 +1738,9 @@ public:
             flags |= IEventHandle::FlagSubscribeOnSession;
         }
         ctx.Send(aggregatorServiceId, request.Release(), flags, nodeId);
-        LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator actor request to node " << nodeId << " " << ctx.SelfID);
+        YDB_LOG_INFO_CTX(ctx, "Sent request to node",
+            {"nodeId", nodeId},
+            {"selfId", ctx.SelfID});
         ++NodesRequested;
     }
 
@@ -1685,9 +1751,13 @@ public:
             ctx.Send(nameserviceId, new TEvInterconnect::TEvListNodes());
             TBase::Become(&TThis::StateRequestedBrowse);
             ctx.Schedule(TDuration::Seconds(AGGREGATOR_TIMEOUT_SECONDS), new TEvents::TEvWakeup());
-            LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator new request V1 Initiator " << Initiator << " self " << ctx.SelfID << " worker " << WorkerId);
+            YDB_LOG_INFO_CTX(ctx, "Started cluster aggregation request v1",
+                {"initiator", Initiator},
+                {"selfId", ctx.SelfID},
+                {"workerId", WorkerId});
         } else {
-            LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator new request V1 " << ctx.SelfID);
+            YDB_LOG_INFO_CTX(ctx, "Spawning worker actors v1",
+                {"selfId", ctx.SelfID});
             for (ui32 i = 0; i < WorkerId; ++i) {
                 ctx.Register(new TClusterLabeledCountersAggregatorActorV1(ctx.SelfID, TabletType, WorkerId, i));
             }
@@ -1732,7 +1802,9 @@ public:
 
     void Undelivered(TEvents::TEvUndelivered::TPtr &ev, const TActorContext &ctx) {
         ui32 nodeId = ev.Get()->Cookie;
-        LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator actor undelivered node " << nodeId << " " << ctx.SelfID);
+        YDB_LOG_INFO_CTX(ctx, "Request undelivered to node",
+            {"nodeId", nodeId},
+            {"selfId", ctx.SelfID});
         if (SessionSubscriptions->IsSubscribed(nodeId)) {
             SessionSubscriptions->Unsubscribe(nodeId);
         }
@@ -1747,7 +1819,9 @@ public:
 
     void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &ev, const TActorContext &ctx) {
         ui32 nodeId = ev->Get()->NodeId;
-        LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator actor disconnected node " << nodeId << " " << ctx.SelfID);
+        YDB_LOG_INFO_CTX(ctx, "Node disconnected",
+            {"nodeId", nodeId},
+            {"selfId", ctx.SelfID});
         SessionSubscriptions->Handle(ev);
         if (PerNodeResponse.emplace(nodeId, nullptr).second) {
             NodeResponseReceived(ctx);
@@ -1756,7 +1830,9 @@ public:
 
     void HandleResponse(TEvTabletCounters::TEvTabletLabeledCountersResponse::TPtr &ev, const TActorContext &ctx) {
         ui64 nodeId = ev.Get()->Cookie;
-        LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator actor got response node " << nodeId << " " << ctx.SelfID);
+        YDB_LOG_INFO_CTX(ctx, "Received response from node",
+            {"nodeId", nodeId},
+            {"selfId", ctx.SelfID});
         if (SessionSubscriptions->IsSubscribed(nodeId)) {
             SessionSubscriptions->Unsubscribe(nodeId);
         }
@@ -1773,14 +1849,15 @@ public:
     }
 
     void HandleTimeout(const TActorContext &ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator actor got TIMEOUT");
+        YDB_LOG_DEBUG_CTX(ctx, "Aggregation request timed out");
         ReplyAndDie(ctx);
     }
 
     void ReplyAndDie(const TActorContext& ctx) {
         TAutoPtr<TEvTabletCounters::TEvTabletLabeledCountersResponse> response(new TEvTabletCounters::TEvTabletLabeledCountersResponse);
 
-        LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator all answers received - replying " << ctx.SelfID);
+        YDB_LOG_INFO_CTX(ctx, "All node responses received, sending reply",
+            {"selfId", ctx.SelfID});
 
         TVector<ui8> types;
         TVector<ui8> aggrFuncs;
@@ -1906,7 +1983,11 @@ public:
                 labeledCounter.SetName(g.second->GetCounterName(i));
             }
         }
-        LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator request processed  - got " << numGroups << " groups and " << numCounters << " counters " << ctx.SelfID << " Initiator " << Initiator);
+        YDB_LOG_INFO_CTX(ctx, "Request processed",
+            {"numGroups", numGroups},
+            {"numCounters", numCounters},
+            {"selfId", ctx.SelfID},
+            {"initiator", Initiator});
         ui64 cookie = NumWorkers ? WorkerId : 0;
         ctx.Send(Initiator, response.Release(), 0, cookie);
         TBase::Die(ctx);
@@ -1965,7 +2046,9 @@ public:
             flags |= IEventHandle::FlagSubscribeOnSession;
         }
         ctx.Send(aggregatorServiceId, request.Release(), flags, nodeId);
-        LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator actor request to node " << nodeId << " " << ctx.SelfID);
+        YDB_LOG_INFO_CTX(ctx, "Sent request to node",
+            {"nodeId", nodeId},
+            {"selfId", ctx.SelfID});
         ++NodesRequested;
     }
 
@@ -1976,9 +2059,13 @@ public:
             ctx.Send(nameserviceId, new TEvInterconnect::TEvListNodes());
             TBase::Become(&TThis::StateRequestedBrowse);
             ctx.Schedule(TDuration::Seconds(AGGREGATOR_TIMEOUT_SECONDS), new TEvents::TEvWakeup());
-            LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator new request V2 Initiator " << Initiator << " self " << ctx.SelfID << " worker " << WorkerId);
+            YDB_LOG_INFO_CTX(ctx, "Started cluster aggregation request v2",
+                {"initiator", Initiator},
+                {"selfId", ctx.SelfID},
+                {"workerId", WorkerId});
         } else {
-            LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator new request V2 " << ctx.SelfID);
+            YDB_LOG_INFO_CTX(ctx, "Spawning worker actors v2",
+                {"selfId", ctx.SelfID});
             for (ui32 i = 0; i < WorkerId; ++i) {
                 ctx.Register(new TClusterLabeledCountersAggregatorActorV2(ctx.SelfID, TabletType, Group, WorkerId, i));
             }
@@ -2023,7 +2110,9 @@ public:
 
     void Undelivered(TEvents::TEvUndelivered::TPtr &ev, const TActorContext &ctx) {
         ui32 nodeId = ev.Get()->Cookie;
-        LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator actor undelivered node " << nodeId << " "  << ctx.SelfID);
+        YDB_LOG_INFO_CTX(ctx, "Request undelivered to node",
+            {"nodeId", nodeId},
+            {"selfId", ctx.SelfID});
         if (SessionSubscriptions->IsSubscribed(nodeId)) {
             SessionSubscriptions->Unsubscribe(nodeId);
         }
@@ -2038,7 +2127,9 @@ public:
 
     void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &ev, const TActorContext &ctx) {
         ui32 nodeId = ev->Get()->NodeId;
-        LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator actor disconnected node " << nodeId << " " << ctx.SelfID);
+        YDB_LOG_INFO_CTX(ctx, "Node disconnected",
+            {"nodeId", nodeId},
+            {"selfId", ctx.SelfID});
         SessionSubscriptions->Handle(ev);
         if (PerNodeResponse.emplace(nodeId, nullptr).second) {
             NodeResponseReceived(ctx);
@@ -2047,16 +2138,18 @@ public:
 
     void HandleResponse(TEvTabletCounters::TEvTabletLabeledCountersResponse::TPtr &ev, const TActorContext &ctx) {
         ui64 nodeId = ev.Get()->Cookie;
-        LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR,
-                   "aggregator actor got response node " << nodeId << " " << ctx.SelfID);
+        YDB_LOG_INFO_CTX(ctx, "Received response from node",
+            {"nodeId", nodeId},
+            {"selfId", ctx.SelfID});
         if (SessionSubscriptions->IsSubscribed(nodeId)) {
             SessionSubscriptions->Unsubscribe(nodeId);
         }
         PreProcessResponse(ev->Get());
 
         auto [it, emplaced] = PerNodeResponse.emplace(nodeId, ev->Release().Release());
-        LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR,
-                   "aggregator actor merged response node " << nodeId << " " << ctx.SelfID);
+        YDB_LOG_INFO_CTX(ctx, "Merged response from node",
+            {"nodeId", nodeId},
+            {"selfId", ctx.SelfID});
 
         if (emplaced) {
             Merger.Merge(it->second->Record);
@@ -2072,13 +2165,14 @@ public:
     }
 
     void HandleTimeout(const TActorContext &ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator actor got TIMEOUT");
+        YDB_LOG_DEBUG_CTX(ctx, "Aggregation request timed out");
         ReplyAndDie(ctx);
     }
 
     virtual void ReplyAndDie(const TActorContext& ctx) {
-        LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR,
-                   "aggregator request processed " << ctx.SelfID << " Initiator " << Initiator);
+        YDB_LOG_INFO_CTX(ctx, "Request processed",
+            {"selfId", ctx.SelfID},
+            {"initiator", Initiator});
         ui64 cookie = NumWorkers ? WorkerId : 0;
         ctx.Send(Initiator, Response.Release(), 0, cookie);
         TBase::Die(ctx);
@@ -2093,7 +2187,9 @@ public:
     {}
 
     void ReplyAndDie(const TActorContext& ctx) override {
-        LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator request processed " << ctx.SelfID << " Initiator " << Initiator);
+        YDB_LOG_INFO_CTX(ctx, "Request processed",
+            {"selfId", ctx.SelfID},
+            {"initiator", Initiator});
         ui64 cookie = NumWorkers ? WorkerId : 0;
         for (auto& counters : *Response->Record.MutableLabeledCountersByGroup()) {
             TVector<TString> groups;

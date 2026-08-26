@@ -11,8 +11,7 @@
 
 #include <util/system/unaligned_mem.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -41,34 +40,34 @@ NUdf::TUnboxedValuePod MakeTzFromBytes(const NUdf::TUnboxedValue& data) {
 
 template <bool IsOptional>
 class TFromBytesWrapper: public TMutableComputationNode<TFromBytesWrapper<IsOptional>> {
-    typedef TMutableComputationNode<TFromBytesWrapper<IsOptional>> TBaseComputation;
+    using TBaseComputation = TMutableComputationNode<TFromBytesWrapper<IsOptional>>;
 
 public:
     TFromBytesWrapper(TComputationMutables& mutables, IComputationNode* data, NUdf::TDataTypeId schemeType, ui32 param1, ui32 param2)
         : TBaseComputation(mutables)
-        , Data(data)
-        , SchemeType(NUdf::GetDataSlot(schemeType))
-        , Param1(param1)
-        , Param2(param2)
+        , Data_(data)
+        , SchemeType_(NUdf::GetDataSlot(schemeType))
+        , Param1_(param1)
+        , Param2_(param2)
     {
-        if (SchemeType == NUdf::EDataSlot::Decimal) {
-            DecimalBound = NYql::NDecimal::TInt128(1);
+        if (SchemeType_ == NUdf::EDataSlot::Decimal) {
+            DecimalBound_ = NYql::NDecimal::TInt128(1);
             NYql::NDecimal::TInt128 ten(10U);
-            for (ui32 i = 0; i < Param1; ++i) {
-                DecimalBound *= ten;
+            for (ui32 i = 0; i < Param1_; ++i) {
+                DecimalBound_ *= ten;
             }
 
-            NegDecimalBound = -DecimalBound;
+            NegDecimalBound_ = -DecimalBound_;
         }
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        auto data = Data->GetValue(ctx);
+        auto data = Data_->GetValue(ctx);
         if (IsOptional && !data) {
             return NUdf::TUnboxedValuePod();
         }
 
-        switch (SchemeType) {
+        switch (SchemeType_) {
             case NUdf::EDataSlot::TzDate:
                 return MakeTzFromBytes<NUdf::TTzDate>(data);
             case NUdf::EDataSlot::TzDatetime:
@@ -107,11 +106,11 @@ public:
                     return NUdf::TUnboxedValuePod(v);
                 }
 
-                if (v >= DecimalBound) {
+                if (v >= DecimalBound_) {
                     return NUdf::TUnboxedValuePod(NYql::NDecimal::Inf());
                 }
 
-                if (v <= NegDecimalBound) {
+                if (v <= NegDecimalBound_) {
                     return NUdf::TUnboxedValuePod(-NYql::NDecimal::Inf());
                 }
 
@@ -119,7 +118,7 @@ public:
             }
 
             default:
-                if (IsValidValue(SchemeType, data)) {
+                if (IsValidValue(SchemeType_, data)) {
                     return data.Release();
                 } else {
                     return NUdf::TUnboxedValuePod();
@@ -129,14 +128,14 @@ public:
 
 private:
     void RegisterDependencies() const final {
-        this->DependsOn(Data);
+        this->DependsOn(Data_);
     }
 
-    IComputationNode* const Data;
-    const NUdf::EDataSlot SchemeType;
-    const ui32 Param1;
-    const ui32 Param2;
-    NYql::NDecimal::TInt128 DecimalBound, NegDecimalBound;
+    IComputationNode* const Data_;
+    const NUdf::EDataSlot SchemeType_;
+    const ui32 Param1_;
+    const ui32 Param2_;
+    NYql::NDecimal::TInt128 DecimalBound_, NegDecimalBound_;
 };
 
 } // namespace
@@ -170,5 +169,4 @@ IComputationNode* WrapFromBytes(TCallable& callable, const TComputationNodeFacto
     }
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

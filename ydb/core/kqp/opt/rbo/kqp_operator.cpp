@@ -1,6 +1,7 @@
 #include "kqp_operator.h"
 #include "kqp_expression.h"
 #include "kqp_rbo_utils.h"
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/opt/rbo/kqp_olap_expr_inspection.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 
@@ -175,6 +176,15 @@ NJson::TJsonValue TOpRead::ToJson(ui32 explainFlags) {
     auto path = TKqpTable(TableCallable).Path().StringValue();
     auto slash = path.rfind('/');
     res["Table"] = (slash == TString::npos) ? path : path.substr(slash + 1);
+
+    if (slash != TString::npos && TStringBuf(path).SubStr(slash + 1) == NTableIndex::ImplTable) {
+        const auto indexSlash = path.rfind('/', slash - 1);
+        if (indexSlash != TString::npos) {
+            const auto tableSlash = path.rfind('/', indexSlash - 1);
+            res["Table"] = path.substr(tableSlash == TString::npos ? 0 : tableSlash + 1);
+            res["Index"] = path.substr(indexSlash + 1, slash - indexSlash - 1);
+        }
+    }
 
     res["Storage"] = StorageType == NYql::EStorageType::RowStorage ? "Row" : "Column";
 
@@ -554,7 +564,7 @@ TOpAddDependencies::TOpAddDependencies(TIntrusivePtr<IOperator> input, TPosition
 
 TVector<std::pair<TInfoUnit, const TTypeAnnotationNode*>> TOpAddDependencies::GetDependencyPairs() {
     TVector<std::pair<TInfoUnit, const TTypeAnnotationNode*>> result;
-    for (size_t i=0; i<Dependencies.size(); i++) {
+    for (size_t i = 0; i < Dependencies.size(); i++) {
         result.push_back(std::make_pair(Dependencies[i], Types[i]));
     }
     return result;
@@ -578,12 +588,12 @@ void TOpAddDependencies::ComputeOutputIUs() {
 
 TString TOpAddDependencies::ToString(TExprContext& ctx) {
     Y_UNUSED(ctx);
-    
+
     auto res = TStringBuilder();
     res << "Correlated [";
-    for (size_t i=0; i<Dependencies.size(); i++) {
+    for (size_t i = 0; i < Dependencies.size(); i++) {
         res << Dependencies[i].GetFullName();
-        if (i!=Dependencies.size()-1) {
+        if (i != Dependencies.size() - 1) {
             res << ",";
         }
     }
@@ -833,12 +843,17 @@ NJson::TJsonValue TOpJoin::ToJson(ui32 explainFlags) {
  * OpUnionAll operator methods
  */
 
-TOpUnionAll::TOpUnionAll(TIntrusivePtr<IOperator> leftInput, TIntrusivePtr<IOperator> rightInput, TPositionHandle pos,
-                         TVector<TInfoUnit> columns, bool ordered)
-    : IBinaryOperator(EOperator::UnionAll, pos, leftInput, rightInput)
+TOpUnionAll::TOpUnionAll(TVector<TIntrusivePtr<IOperator>> inputs, TPositionHandle pos, TVector<TInfoUnit> columns, bool ordered)
+    : IVariadicOperator(EOperator::UnionAll, pos, std::move(inputs))
     , Columns(std::move(columns))
     , Ordered(ordered) {
     Y_ENSURE(!Columns.empty(), "UnionAll must have columns");
+    Y_ENSURE(Children.size() >= 2, "UnionAll must have at least two inputs");
+}
+
+TOpUnionAll::TOpUnionAll(TIntrusivePtr<IOperator> leftInput, TIntrusivePtr<IOperator> rightInput, TPositionHandle pos,
+                         TVector<TInfoUnit> columns, bool ordered)
+    : TOpUnionAll(TVector<TIntrusivePtr<IOperator>>{leftInput, rightInput}, pos, std::move(columns), ordered) {
 }
 
 // Recompute ius for now
@@ -999,7 +1014,191 @@ TString TOpSort::ToString(TExprContext& ctx) {
     }
 
     res << " Phase: " << ToStringPhase(SortPhase);
-    
+
+    return res;
+}
+
+TOpTableLookup::TOpTableLookup(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TExprNode::TPtr& table,
+                               const TVector<TString>& fetchColumns, const TVector<TInfoUnit>& outputIUs,
+                               const TVector<TInfoUnit>& lookupKeys)
+    : IUnaryOperator(EOperator::TableLookup, pos, input)
+    , Table(table)
+    , FetchColumns(fetchColumns)
+    , OutputIUs(outputIUs)
+    , LookupKeys(lookupKeys) {
+}
+
+TOpTableLookup::TOpTableLookup(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TExprNode::TPtr& table,
+                               const TVector<TString>& fetchColumns, const TVector<TInfoUnit>& outputIUs,
+                               const TVector<TInfoUnit>& lookupKeys, const TVector<TString>& lookupKeyColumns,
+                               const TString& joinKind, const std::optional<TExpression>& fetchedRowFilter,
+                               const std::optional<TLookupKeyPrefix>& prefix,
+                               const TVector<std::pair<TInfoUnit, TInfoUnit>>& residualJoinKeys)
+    : IUnaryOperator(EOperator::TableLookup, pos, input)
+    , Table(table)
+    , FetchColumns(fetchColumns)
+    , OutputIUs(outputIUs)
+    , LookupKeys(lookupKeys)
+    , LookupKeyColumns(lookupKeyColumns)
+    , JoinKind(joinKind)
+    , FetchedRowFilter(fetchedRowFilter)
+    , Prefix(prefix)
+    , Strategy(ELookupStrategy::LookupJoinRows)
+    , ResidualJoinKeys(residualJoinKeys) {
+    Y_ENSURE(LookupKeys.size() == LookupKeyColumns.size(), "Lookup join keys must be paired with table key columns");
+    Y_ENSURE(!LookupKeys.empty(), "Lookup join needs at least one key");
+    Y_ENSURE(JoinKind == "Inner" || JoinKind == "Left" || JoinKind == "LeftSemi" || JoinKind == "LeftOnly", "Unsupported lookup join kind");
+    if (Prefix) {
+        Y_ENSURE(Prefix->Points, "Lookup key prefix needs a points expression");
+        Y_ENSURE(Prefix->PointsItemType, "Lookup key prefix needs a typed points expression");
+        Y_ENSURE(!Prefix->Columns.empty(), "Lookup key prefix needs at least one column");
+    }
+}
+
+void TOpTableLookup::ComputeOutputIUs() {
+    if (!IsJoin()) {
+        Props.OutputIUs = OutputIUs;
+        return;
+    }
+
+    auto res = GetInput()->GetOutputIUs();
+    res.insert(res.end(), OutputIUs.begin(), OutputIUs.end());
+    Props.OutputIUs = std::move(res);
+}
+
+TVector<TInfoUnit> TOpTableLookup::GetUsedIUs(TPlanProps& props) {
+    Y_UNUSED(props);
+    auto res = LookupKeys;
+    if (Prefix) {
+        for (const auto& [column, iu] : Prefix->Equalities) {
+            Y_UNUSED(column);
+            res.push_back(iu);
+        }
+    }
+    return res;
+}
+
+TVector<std::reference_wrapper<TExpression>> TOpTableLookup::GetExpressions() {
+    if (!FetchedRowFilter) {
+        return {};
+    }
+    return {*FetchedRowFilter};
+}
+
+TString TOpTableLookup::ToString(TExprContext& ctx) {
+    Y_UNUSED(ctx);
+    TStringBuilder res;
+    res << GetExplainName() << ": " << TKqpTable(Table).Path().StringValue();
+    if (IsJoin()) {
+        res << ", kind: " << JoinKind;
+    }
+    res << ", keys: [";
+    for (size_t i = 0; i < LookupKeys.size(); i++) {
+        res << LookupKeys[i].GetFullName();
+        if (IsJoin()) {
+            res << " = " << LookupKeyColumns[i];
+        }
+        if (i + 1 < LookupKeys.size()) {
+            res << ", ";
+        }
+    }
+    res << "], columns: [";
+    for (size_t i = 0; i < FetchColumns.size(); i++) {
+        res << FetchColumns[i];
+        if (i + 1 < FetchColumns.size()) {
+            res << ", ";
+        }
+    }
+    res << "]";
+    if (Prefix) {
+        res << ", key prefix: [" << JoinSeq(", ", Prefix->Columns) << "]";
+        for (const auto& [column, iu] : Prefix->Equalities) {
+            res << ", " << column << " = " << iu.GetFullName();
+        }
+    }
+    if (FetchedRowFilter) {
+        res << ", filter: " << FetchedRowFilter->ToString();
+    }
+    for (const auto& [leftKey, rightKey] : ResidualJoinKeys) {
+        res << ", residual: " << leftKey.GetFullName() << " = " << rightKey.GetFullName();
+    }
+    return res;
+}
+
+NJson::TJsonValue TOpTableLookup::ToJson(ui32 explainFlags) {
+    auto res = IOperator::ToJson(explainFlags);
+    res["Table"] = TKqpTable(Table).Path().StringValue();
+    if (IsJoin()) {
+        res["JoinKind"] = JoinKind;
+        TStringBuilder condition;
+        for (size_t i = 0; i < LookupKeys.size(); ++i) {
+            if (i != 0) {
+                condition << ", ";
+            }
+            condition << LookupKeys[i].GetFullName() << " = " << LookupKeyColumns[i];
+        }
+        if (Prefix) {
+            for (const auto& [column, iu] : Prefix->Equalities) {
+                condition << ", " << iu.GetFullName() << " = " << column;
+            }
+            res["LookupKeyPrefix"] = JoinSeq(", ", Prefix->Columns);
+        }
+        for (const auto& [leftKey, rightKey] : ResidualJoinKeys) {
+            if (!condition.empty()) {
+                condition << ", ";
+            }
+            condition << leftKey.GetFullName() << " = " << rightKey.GetFullName();
+        }
+        res["Condition"] = TString(condition);
+    }
+    if (FetchedRowFilter) {
+        res["Predicate"] = FetchedRowFilter->ToExplainString();
+    }
+    return res;
+}
+
+/**
+ * OpIndexLookupJoin operator methods
+ */
+
+TOpIndexLookupJoin::TOpIndexLookupJoin(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TString& joinKind,
+                                       const TVector<std::pair<TInfoUnit, TInfoUnit>>& joinKeys)
+    : IUnaryOperator(EOperator::IndexLookupJoin, pos, input)
+    , JoinKind(joinKind)
+    , JoinKeys(joinKeys) {
+}
+
+TIntrusivePtr<TOpTableLookup> TOpIndexLookupJoin::GetTableLookup() {
+    auto& input = GetInput();
+    Y_ENSURE(input->Kind == EOperator::TableLookup, "Index lookup join must be fed by a table lookup");
+    auto lookup = CastOperator<TOpTableLookup>(input);
+    Y_ENSURE(lookup->IsJoin(), "Index lookup join must be fed by a table lookup in join mode");
+    return lookup;
+}
+
+void TOpIndexLookupJoin::ComputeOutputIUs() {
+    if (!JoinOutputsRight(JoinKind)) {
+        Props.OutputIUs = GetTableLookup()->GetInput()->GetOutputIUs();
+        return;
+    }
+    Props.OutputIUs = GetInput()->GetOutputIUs();
+}
+
+TString TOpIndexLookupJoin::ToString(TExprContext& ctx) {
+    Y_UNUSED(ctx);
+    TStringBuilder res;
+    res << "IndexLookupJoin, Kind: " << JoinKind << " [" << FormatJoinKeys(JoinKeys) << "]";
+    return res;
+}
+
+NJson::TJsonValue TOpIndexLookupJoin::ToJson(ui32 explainFlags) {
+    auto res = IOperator::ToJson(explainFlags);
+    res["Name"] = TStringBuilder() << JoinKind << "Join (Lookup)";
+    res["JoinKind"] = JoinKind;
+    res["JoinAlgo"] = "Lookup";
+    if (!JoinKeys.empty()) {
+        res["Condition"] = FormatJoinKeys(JoinKeys);
+    }
     return res;
 }
 

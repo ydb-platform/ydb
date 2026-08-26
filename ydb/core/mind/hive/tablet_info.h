@@ -161,6 +161,7 @@ public:
     mutable TString BootState;
     TInstant PostponedStart;
     EBalancerPolicy BalancerPolicy;
+    bool IsBackup = false;
     TNodeId FailedNodeId = 0; // last time we tried to start the tablet, we failed on this node
     TInstant BootTime;
     TNodeFilter NodeFilter;
@@ -204,10 +205,8 @@ public:
     TString FamilyString() const;
     void ChangeVolatileState(EVolatileState state);
 
-    bool IsReadyToBoot() const {
-        return NodeId == 0 && VolatileState == EVolatileState::TABLET_VOLATILE_STATE_STOPPED;
-    }
-
+    bool IsReadyToWork() const;
+    bool IsReadyToBoot() const;
     bool IsReadyToStart(TInstant now) const;
     bool IsStarting() const;
     bool IsStartingOnNode(TNodeId nodeId) const;

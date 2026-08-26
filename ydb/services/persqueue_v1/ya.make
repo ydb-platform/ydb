@@ -52,4 +52,5 @@ RECURSE_FOR_TESTS(
     ut
     ut/new_schemecache_ut
     ut/describes_ut
+    ut/direct_read_restore_ut
 )

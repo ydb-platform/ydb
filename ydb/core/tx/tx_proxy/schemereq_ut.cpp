@@ -25,6 +25,12 @@ namespace NKikimr::NTxProxyUT {
 
 using namespace NYdb;
 
+namespace {
+
+const TString PEER_NAME = "192.168.0.101";
+
+} // namespace
+
 // TTestEnv from proxy_ut_helpers.h does not fit for the tuning we need here.
 class TTestEnv {
 public:
@@ -290,7 +296,7 @@ void CreateLocalUser2(TTestEnv& env, const TString& database, const TString& nam
         runtime->Send(new IEventHandle(MakeTicketParserID(), edge, new TEvTicketParser::TEvAuthorizeTicket({
             .Ticket = token,
             .Database = database,
-            .PeerName = "test",
+            .PeerName = PEER_NAME,
         })), 0);
 
         Cerr << __FUNCTION__ << " call ticket_parser" << Endl;
@@ -338,7 +344,7 @@ void CreateLocalGroup2(TTestEnv& env, const TString& database, const TString& na
         runtime->Send(new IEventHandle(MakeTicketParserID(), edge, new TEvTicketParser::TEvAuthorizeTicket({
             .Ticket = token,
             .Database = database,
-            .PeerName = "test",
+            .PeerName = PEER_NAME,
         })), 0);
 
         Cerr << __FUNCTION__ << " call ticket_parser" << Endl;

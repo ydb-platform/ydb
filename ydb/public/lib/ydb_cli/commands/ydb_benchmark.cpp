@@ -126,7 +126,7 @@ void TWorkloadCommandBenchmark::Config(TConfig& config) {
 TString TWorkloadCommandBenchmark::PatchQuery(const TStringBuf& original) const {
     std::vector<TStringBuf> lines;
     for (auto& line : StringSplitter(original).Split('\n').SkipEmpty()) {
-        if (line.StartsWith("--") && !line.StartsWith("--!")) {
+        if (line.StartsWith("--") && !line.StartsWith("--!") && !line.StartsWith("--#")) {
             continue;
         }
 

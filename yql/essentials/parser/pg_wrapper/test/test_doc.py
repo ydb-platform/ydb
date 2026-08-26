@@ -62,7 +62,7 @@ def test_doc():
         print("WILL SKIP TESTS BEFORE: ", skip_before)
     if stop_at is not None:
         print("WILL STOP AT: ", stop_at)
-    doc_src = yatest.common.source_path("contrib/ydb/docs/ru/core/postgresql/_includes/functions.md")
+    doc_src = yatest.common.source_path("yql/essentials/docs/ru/_includes/pg_functions.md")
     with open(doc_src) as f:
         doc_data = f.readlines()
     in_code = False

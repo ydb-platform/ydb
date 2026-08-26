@@ -1,9 +1,9 @@
+#include "auth.h"
+#include "appdata.h"
+
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/library/aclib/aclib.h>
-
-#include "auth.h"
-#include "appdata.h"
 
 namespace NKikimr {
 
@@ -70,12 +70,41 @@ bool IsAdministrator(const TAppData* appData, const NACLib::TUserToken* userToke
     return IsTokenAllowed(userToken, appData->AdministrationAllowedSIDs);
 }
 
-bool IsStrictDatabaseOnlyToken(const TAppData* appData, const TString& userTokenSerialized) {
+EAccessLevel GetHighestAccessLevel(const TAppData* appData, const NACLib::TUserToken* userToken) {
     const auto& securityConfig = appData->DomainsConfig.GetSecurityConfig();
-    return IsTokenAllowed(userTokenSerialized, securityConfig.GetDatabaseAllowedSIDs())
-        && !IsTokenAllowed(userTokenSerialized, securityConfig.GetViewerAllowedSIDs())
-        && !IsTokenAllowed(userTokenSerialized, securityConfig.GetMonitoringAllowedSIDs())
-        && !IsTokenAllowed(userTokenSerialized, securityConfig.GetAdministrationAllowedSIDs());
+    const bool isAdministrationAllowed = IsAdministrator(appData, userToken);
+    const bool isMonitoringAllowed = isAdministrationAllowed
+        || IsTokenAllowed(userToken, securityConfig.GetMonitoringAllowedSIDs());
+    const bool isViewerAllowed = isMonitoringAllowed
+        || IsTokenAllowed(userToken, securityConfig.GetViewerAllowedSIDs());
+    const bool isDatabaseAllowed = isViewerAllowed
+        || IsTokenAllowed(userToken, securityConfig.GetDatabaseAllowedSIDs());
+
+    // The order of checks is important: we want to return the highest level that is allowed.
+    // I.e. if a user is in any sids list, but the administration allowed sids list is empty,
+    // we need to return the EAccessLevel::Administration access level.
+    if (isAdministrationAllowed) {
+        return EAccessLevel::Administration;
+    }
+    if (isMonitoringAllowed) {
+        return EAccessLevel::Monitoring;
+    }
+    if (isViewerAllowed) {
+        return EAccessLevel::Viewer;
+    }
+    if (isDatabaseAllowed) {
+        return EAccessLevel::Database;
+    }
+    return EAccessLevel::None;
+}
+
+EAccessLevel GetHighestAccessLevel(const TAppData* appData, const TString& userTokenSerialized) {
+    NACLib::TUserToken userToken = ParseUserToken(userTokenSerialized);
+    return GetHighestAccessLevel(appData, &userToken);
+}
+
+bool IsStrictDatabaseOnlyToken(const TAppData* appData, const TString& userTokenSerialized) {
+    return GetHighestAccessLevel(appData, userTokenSerialized) == EAccessLevel::Database;
 }
 
 bool IsDatabaseAdministrator(const NACLib::TUserToken* userToken, const NACLib::TSID& databaseOwner) {

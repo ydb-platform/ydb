@@ -37,7 +37,7 @@ bool AreFieldSchemasEquivalent(
 
 std::unique_ptr<TUniverseLoadSchedule> ComputeUniverseLoadSchedule(const TUniverseSchemaPtr& loadUniverseSchema)
 {
-    YT_LOG_DEBUG("Started computing universe load schedule");
+    YT_TLOG_DEBUG("Started computing universe load schedule");
 
     const auto& nativeUniverseDescriptor = ITypeRegistry::Get()->GetUniverseDescriptor();
 
@@ -47,36 +47,36 @@ std::unique_ptr<TUniverseLoadSchedule> ComputeUniverseLoadSchedule(const TUniver
         auto typeTag = loadTypeSchema->Tag;
         const auto* nativeTypeDescriptor = nativeUniverseDescriptor.FindTypeDescriptorByTag(typeTag);
         if (!nativeTypeDescriptor) {
-            YT_LOG_DEBUG("Type is present in load schema but is missing in registry; skipped (TypeTag: %x, TypeName: %v)",
-                typeTag,
-                loadTypeSchema->Name);
+            YT_TLOG_DEBUG("Type is present in load schema but is missing in registry; skipped")
+                .WithFormat("TypeTag", "%x", typeTag)
+                .With("TypeName", loadTypeSchema->Name);
             continue;
         }
 
         auto loadTypeSchemaYson = ConvertToYsonString(loadTypeSchema);
         if (nativeTypeDescriptor->GetSchemaYson() == loadTypeSchemaYson) {
-            YT_LOG_DEBUG("Type schemas match; using native load (TypeName: %v)",
-                nativeTypeDescriptor->GetName());
+            YT_TLOG_DEBUG("Type schemas match; using native load")
+                .With("TypeName", nativeTypeDescriptor->GetName());
             continue;
         }
 
         if (nativeTypeDescriptor->IsTemplate() != loadTypeSchema->Template) {
             THROW_ERROR_EXCEPTION("Type %v has different template flags in load schema and in native schema",
                 nativeTypeDescriptor->GetName())
-                << TErrorAttribute("native_template", nativeTypeDescriptor->IsTemplate())
-                << TErrorAttribute("load_template", loadTypeSchema->Template);
+                .With("native_template", nativeTypeDescriptor->IsTemplate())
+                .With("load_template", loadTypeSchema->Template);
         }
 
         if (loadTypeSchema->BaseTypeTags != nativeTypeDescriptor->BaseTypeTags()) {
             THROW_ERROR_EXCEPTION("Type %v has different base types in load schema and in native schema",
                 nativeTypeDescriptor->GetName())
-                << TErrorAttribute("native_base_type_tags", nativeTypeDescriptor->BaseTypeTags())
-                << TErrorAttribute("load_base_type_tags", loadTypeSchema->BaseTypeTags);
+                .With("native_base_type_tags", nativeTypeDescriptor->BaseTypeTags())
+                .With("load_base_type_tags", loadTypeSchema->BaseTypeTags);
         }
 
         if (AreFieldSchemasEquivalent(*nativeTypeDescriptor, loadTypeSchema)) {
-            YT_LOG_DEBUG("Type schemas match; using native load (TypeName: %v)",
-                nativeTypeDescriptor->GetName());
+            YT_TLOG_DEBUG("Type schemas match; using native load")
+                .With("TypeName", nativeTypeDescriptor->GetName());
             continue;
         }
 
@@ -106,17 +106,17 @@ std::unique_ptr<TUniverseLoadSchedule> ComputeUniverseLoadSchedule(const TUniver
 
         typeLoadSchedule.MissingFieldTags = {missingFieldTags.begin(), missingFieldTags.end()};
 
-        YT_LOG_DEBUG("Type schemas do not match; using compat load (TypeName: %v, LoadFieldTags: %v, MissingFieldTags: %v)",
-            nativeTypeDescriptor->GetName(),
-            typeLoadSchedule.LoadFieldTags,
-            typeLoadSchedule.MissingFieldTags);
+        YT_TLOG_DEBUG("Type schemas do not match; using compat load")
+            .With("TypeName", nativeTypeDescriptor->GetName())
+            .With("LoadFieldTags", typeLoadSchedule.LoadFieldTags)
+            .With("MissingFieldTags", typeLoadSchedule.MissingFieldTags);
 
         EmplaceOrCrash(universeLoadSchedule->LoadScheduleMap, typeTag, std::move(typeLoadSchedule));
         hasCompatLoad = true;
     }
 
-    YT_LOG_DEBUG("Finished computing universe load schedule (HasCompatLoad: %v)",
-        hasCompatLoad);
+    YT_TLOG_DEBUG("Finished computing universe load schedule")
+        .With("HasCompatLoad", hasCompatLoad);
 
     return hasCompatLoad ? std::move(universeLoadSchedule) : nullptr;
 }
@@ -140,7 +140,8 @@ TLoadSessionGuard::TLoadSessionGuard(const TUniverseSchemaPtr& schema)
     static std::atomic<TLoadEpoch::TUnderlying> LoadEpochCounter;
     loadState.Epoch = TLoadEpoch(++LoadEpochCounter);
     loadState.Schedule = ComputeUniverseLoadSchedule(schema);
-    YT_LOG_DEBUG("Load session started (Epoch: %v)", loadState.Epoch);
+    YT_TLOG_DEBUG("Load session started")
+        .With("Epoch", loadState.Epoch);
 }
 
 TLoadSessionGuard::~TLoadSessionGuard()
@@ -148,7 +149,7 @@ TLoadSessionGuard::~TLoadSessionGuard()
     auto& loadState = *UniverseLoadState;
     YT_VERIFY(std::exchange(loadState.Active, false));
     loadState.Schedule.reset();
-    YT_LOG_DEBUG("Load session finished");
+    YT_TLOG_DEBUG("Load session finished");
 }
 
 ////////////////////////////////////////////////////////////////////////////////

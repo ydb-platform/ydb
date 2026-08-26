@@ -540,11 +540,17 @@ namespace orc {
     if (hasNulls && !notNull[rowId]) {
       writeString(buffer, "null");
     } else {
+      const size_t tag = static_cast<size_t>(tags_[rowId]);
+      if (tag >= fieldPrinter_.size()) {
+        throw ParseError("Invalid union tag " + to_string(static_cast<int64_t>(tag)) +
+                         " for union with " +
+                         to_string(static_cast<int64_t>(fieldPrinter_.size())) + " children");
+      }
       writeString(buffer, "{\"tag\": ");
-      const auto numBuffer = std::to_string(static_cast<int64_t>(tags_[rowId]));
+      const auto numBuffer = std::to_string(static_cast<int64_t>(tag));
       writeString(buffer, numBuffer.c_str());
       writeString(buffer, ", \"value\": ");
-      fieldPrinter_[tags_[rowId]]->printRow(offsets_[rowId]);
+      fieldPrinter_[tag]->printRow(offsets_[rowId]);
       writeChar(buffer, '}');
     }
   }

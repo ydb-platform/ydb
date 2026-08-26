@@ -9,7 +9,7 @@ OpenSource SDKs in the following programming languages are available to work wit
 | Go | [ydb-platform/ydb-go-sdk](https://github.com/ydb-platform/ydb-go-sdk) | [https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3) |
 | Java | [ydb-platform/ydb-java-sdk](https://github.com/ydb-platform/ydb-java-sdk) | N/A |
 | Python | [ydb-platform/ydb-python-sdk](https://github.com/ydb-platform/ydb-python-sdk) | [https://ydb-platform.github.io/ydb-python-sdk](https://ydb-platform.github.io/ydb-python-sdk/) |
-| С# (.NET) | [ydb-platform/ydb-dotnet-sdk](https://github.com/ydb-platform/ydb-dotnet-sdk) | N/A |
+| C# (.NET) | [ydb-platform/ydb-dotnet-sdk](https://github.com/ydb-platform/ydb-dotnet-sdk) | N/A |
 | JavaScript | [ydb-platform/ydb-js-sdk](https://github.com/ydb-platform/ydb-js-sdk) | [https://ydb.js.org](https://ydb.js.org) |
 | Rust | [ydb-platform/ydb-rs-sdk](https://github.com/ydb-platform/ydb-rs-sdk) | N/A |
 {% if oss %}

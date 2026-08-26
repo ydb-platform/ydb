@@ -8,10 +8,8 @@
 #include <functional>
 #include <iostream>
 #include <list>
-#include <map>
 #include <memory>
 #include <mutex>
-#include <ratio>
 #include <sstream>
 #include <string>
 #include <unordered_map>
@@ -28,6 +26,7 @@
 #include "opentelemetry/common/timestamp.h"
 #include "opentelemetry/exporters/otlp/otlp_http.h"
 #include "opentelemetry/exporters/otlp/otlp_http_client.h"
+#include "opentelemetry/ext/http/client/detail/default_factory.h"
 #include "opentelemetry/ext/http/client/http_client.h"
 #include "opentelemetry/ext/http/client/http_client_factory.h"
 #include "opentelemetry/ext/http/common/url_parser.h"
@@ -42,9 +41,16 @@
 // clang-format off
 #include "opentelemetry/exporters/otlp/protobuf_include_prefix.h" // IWYU pragma: keep
 // clang-format on
+#include <google/protobuf/arena.h>
 #include <google/protobuf/descriptor.h>
 #include <google/protobuf/message.h>
 #include <google/protobuf/stubs/port.h>
+#include <google/protobuf/util/json_util.h>
+#include <string_view>
+// IWYU pragma: no_include <google/protobuf/stubs/status.h>
+// IWYU pragma: no_include <google/protobuf/stubs/stringpiece.h>
+// IWYU pragma: no_include <google/protobuf/json/json.h>
+// IWYU pragma: no_include <absl/status/status.h>
 // clang-format off
 #include "opentelemetry/exporters/otlp/protobuf_include_suffix.h" // IWYU pragma: keep
 // clang-format on
@@ -71,11 +77,19 @@ class ResponseHandler : public http_client::EventHandler
 {
 public:
   /**
-   * Creates a response handler, that by default doesn't display to console
+   * Creates a response handler, that by default doesn't display to console.
+   * Deserializes the response body into the caller-provided typed message on
+   * successful 2xx responses.
    */
-  ResponseHandler(std::function<bool(opentelemetry::sdk::common::ExportResult)> &&callback,
+  ResponseHandler(std::function<bool(opentelemetry::sdk::common::ExportResult,
+                                     google::protobuf::Message *)> &&callback,
+                  google::protobuf::Message *response,
+                  HttpRequestContentType content_type,
                   bool console_debug = false)
-      : result_callback_{std::move(callback)}, console_debug_{console_debug}
+      : result_callback_{std::move(callback)},
+        response_{response},
+        content_type_{content_type},
+        console_debug_{console_debug}
   {}
 
   std::string BuildResponseLogMessage(http_client::Response &response,
@@ -121,8 +135,30 @@ public:
         {
           log_message = BuildResponseLogMessage(response, body_);
         }
-        OTEL_INTERNAL_LOG_DEBUG("[OTLP HTTP Client] Export success, " << log_message);
       }
+    }
+
+    // On 2xx with a non-empty body, parse it into the caller-provided typed response
+    if (response_ != nullptr && result == sdk::common::ExportResult::kSuccess && !body_.empty())
+    {
+      if (content_type_ == HttpRequestContentType::kJson)
+      {
+        if (!google::protobuf::util::JsonStringToMessage(body_, response_).ok())
+        {
+          OTEL_INTERNAL_LOG_ERROR("[OTLP HTTP Client] Failed to parse JSON response body");
+          result = sdk::common::ExportResult::kFailure;
+        }
+      }
+      else if (!response_->ParseFromString(body_))
+      {
+        OTEL_INTERNAL_LOG_ERROR("[OTLP HTTP Client] Failed to parse response body");
+        result = sdk::common::ExportResult::kFailure;
+      }
+    }
+
+    if (console_debug_ && result == sdk::common::ExportResult::kSuccess)
+    {
+      OTEL_INTERNAL_LOG_DEBUG("[OTLP HTTP Client] Export success, " << log_message);
     }
 
     {
@@ -323,19 +359,23 @@ public:
     // first.
     OtlpHttpClient *owner                                    = owner_;
     const opentelemetry::ext::http::client::Session *session = session_;
+    auto callback                                            = std::move(result_callback_);
+    google::protobuf::Message *response                      = response_;
 
-    owner_   = nullptr;
-    session_ = nullptr;
+    owner_    = nullptr;
+    session_  = nullptr;
+    response_ = nullptr;
+
+    // Run the callback before releasing the session, so the arena-owned response stays alive.
+    if (callback)
+    {
+      callback(result, response);
+    }
 
     if (nullptr != owner && nullptr != session)
     {
       // Release the session at last
       owner->ReleaseSession(*session);
-
-      if (result_callback_)
-      {
-        result_callback_(result);
-      }
     }
   }
 
@@ -361,7 +401,14 @@ private:
   std::string body_ = "";
 
   // Result callback when in async mode
-  std::function<bool(opentelemetry::sdk::common::ExportResult)> result_callback_;
+  std::function<bool(opentelemetry::sdk::common::ExportResult, google::protobuf::Message *)>
+      result_callback_;
+
+  // Optional typed response, filled on 2xx
+  google::protobuf::Message *response_ = nullptr;
+
+  // Request and response body encoding
+  HttpRequestContentType content_type_;
 
   // Whether to print the results from the callback
   bool console_debug_ = false;
@@ -663,9 +710,19 @@ void ConvertListFieldToJson(nlohmann::json &value,
 }  // namespace
 
 OtlpHttpClient::OtlpHttpClient(OtlpHttpClientOptions &&options)
+    : OtlpHttpClient(std::move(options), ext::http::client::detail::GetDefaultHttpClientFactory())
+{}
+
+OtlpHttpClient::OtlpHttpClient(OtlpHttpClientOptions &&options,
+                               const std::shared_ptr<ext::http::client::HttpClientFactory> &factory)
+    : OtlpHttpClient(std::move(options), factory->Create(options.thread_instrumentation))
+{}
+
+OtlpHttpClient::OtlpHttpClient(OtlpHttpClientOptions &&options,
+                               std::shared_ptr<ext::http::client::HttpClient> http_client)
     : is_shutdown_(false),
       options_(std::move(options)),
-      http_client_(http_client::HttpClientFactory::Create(options_.thread_instrumentation)),
+      http_client_(std::move(http_client)),
       start_session_counter_(0),
       finished_session_counter_(0)
 {
@@ -704,59 +761,36 @@ OtlpHttpClient::~OtlpHttpClient()
     ;
 }
 
-OtlpHttpClient::OtlpHttpClient(OtlpHttpClientOptions &&options,
-                               std::shared_ptr<ext::http::client::HttpClient> http_client)
-    : is_shutdown_(false),
-      options_(std::move(options)),
-      http_client_(std::move(http_client)),
-      start_session_counter_(0),
-      finished_session_counter_(0)
-{
-  http_client_->SetMaxSessionsPerConnection(options_.max_requests_per_connection);
-}
-
 // ----------------------------- HTTP Client methods ------------------------------
-opentelemetry::sdk::common::ExportResult OtlpHttpClient::Export(
-    const google::protobuf::Message &message) noexcept
-{
-  std::shared_ptr<opentelemetry::sdk::common::ExportResult> session_result =
-      std::make_shared<opentelemetry::sdk::common::ExportResult>(
-          opentelemetry::sdk::common::ExportResult::kSuccess);
-  opentelemetry::sdk::common::ExportResult export_result = Export(
-      message,
-      [session_result](opentelemetry::sdk::common::ExportResult result) {
-        *session_result = result;
-        return result == opentelemetry::sdk::common::ExportResult::kSuccess;
-      },
-      0);
-
-  if (opentelemetry::sdk::common::ExportResult::kSuccess != export_result)
-  {
-    return export_result;
-  }
-
-  return *session_result;
-}
-
 sdk::common::ExportResult OtlpHttpClient::Export(
     const google::protobuf::Message &message,
-    std::function<bool(opentelemetry::sdk::common::ExportResult)> &&result_callback) noexcept
-{
-  return Export(message, std::move(result_callback), options_.max_concurrent_requests);
-}
-
-sdk::common::ExportResult OtlpHttpClient::Export(
-    const google::protobuf::Message &message,
-    std::function<bool(opentelemetry::sdk::common::ExportResult)> &&result_callback,
+    std::unique_ptr<google::protobuf::Arena> &&arena,
+    google::protobuf::Message *response,
+    std::function<bool(opentelemetry::sdk::common::ExportResult, google::protobuf::Message *)>
+        &&result_callback,
     std::size_t max_running_requests) noexcept
 {
-  auto session = createSession(message, std::move(result_callback));
-  if (opentelemetry::nostd::holds_alternative<sdk::common::ExportResult>(session))
+  // Only a sync export (max_running_requests == 0) needs to capture the result of the callback.
+  std::shared_ptr<sdk::common::ExportResult> session_result;
+  auto callback = std::move(result_callback);
+  if (max_running_requests == 0)
   {
-    return opentelemetry::nostd::get<sdk::common::ExportResult>(session);
+    session_result =
+        std::make_shared<sdk::common::ExportResult>(sdk::common::ExportResult::kSuccess);
+    callback = [session_result, cb = std::move(callback)](sdk::common::ExportResult result,
+                                                          google::protobuf::Message *resp) {
+      *session_result = result;
+      return cb(result, resp);
+    };
   }
 
-  addSession(std::move(opentelemetry::nostd::get<HttpSessionData>(session)));
+  auto session = createSession(message, std::move(arena), response, std::move(callback));
+  if (auto *result = opentelemetry::nostd::get_if<sdk::common::ExportResult>(&session))
+  {
+    return *result;
+  }
+
+  addSession(std::move(*opentelemetry::nostd::get_if<HttpSessionData>(&session)));
 
   // Wait for the response to be received
   if (options_.console_debug)
@@ -781,6 +815,12 @@ sdk::common::ExportResult OtlpHttpClient::Export(
   if (!wait_successful)
   {
     return opentelemetry::sdk::common::ExportResult::kFailure;
+  }
+
+  // Only sync export (max_running_requests == 0) have final result to return here.
+  if (max_running_requests == 0)
+  {
+    return *session_result;
   }
 
   return opentelemetry::sdk::common::ExportResult::kSuccess;
@@ -885,7 +925,10 @@ opentelemetry::nostd::variant<opentelemetry::sdk::common::ExportResult,
                               OtlpHttpClient::HttpSessionData>
 OtlpHttpClient::createSession(
     const google::protobuf::Message &message,
-    std::function<bool(opentelemetry::sdk::common::ExportResult)> &&result_callback) noexcept
+    std::unique_ptr<google::protobuf::Arena> &&arena,
+    google::protobuf::Message *response,
+    std::function<bool(opentelemetry::sdk::common::ExportResult, google::protobuf::Message *)>
+        &&result_callback) noexcept
 {
   // Parse uri and store it to cache
   if (http_uri_.empty())
@@ -901,7 +944,7 @@ OtlpHttpClient::createSession(
       OTEL_INTERNAL_LOG_ERROR(error_message);
 
       const auto result = opentelemetry::sdk::common::ExportResult::kFailure;
-      result_callback(result);
+      result_callback(result, response);
       return result;
     }
 
@@ -936,7 +979,7 @@ OtlpHttpClient::createSession(
       }
 
       const auto result = opentelemetry::sdk::common::ExportResult::kFailure;
-      result_callback(result);
+      result_callback(result, response);
       return result;
     }
     content_type = kHttpBinaryContentType;
@@ -971,7 +1014,7 @@ OtlpHttpClient::createSession(
     OTEL_INTERNAL_LOG_ERROR(error_message);
 
     const auto result = opentelemetry::sdk::common::ExportResult::kFailure;
-    result_callback(result);
+    result_callback(result, response);
     return result;
   }
 
@@ -998,12 +1041,31 @@ OtlpHttpClient::createSession(
     request->SetCompression(opentelemetry::ext::http::client::Compression::kGzip);
   }
 
-  // Returns the created session data
   return HttpSessionData{
       std::move(session),
       std::shared_ptr<opentelemetry::ext::http::client::EventHandler>{
-          new ResponseHandler(std::move(result_callback), options_.console_debug)}};
+          std::make_shared<ResponseHandler>(std::move(result_callback), response,
+                                            options_.content_type, options_.console_debug)},
+      std::move(arena), response};
 }
+
+OtlpHttpClient::HttpSessionData::HttpSessionData() noexcept = default;
+
+OtlpHttpClient::HttpSessionData::HttpSessionData(
+    std::shared_ptr<opentelemetry::ext::http::client::Session> &&input_session,
+    std::shared_ptr<opentelemetry::ext::http::client::EventHandler> &&input_handle,
+    std::unique_ptr<google::protobuf::Arena> &&input_arena,
+    google::protobuf::Message *input_response) noexcept
+    : session(std::move(input_session)),
+      event_handle(std::move(input_handle)),
+      arena(std::move(input_arena)),
+      response(input_response)
+{}
+
+OtlpHttpClient::HttpSessionData::~HttpSessionData()                           = default;
+OtlpHttpClient::HttpSessionData::HttpSessionData(HttpSessionData &&) noexcept = default;
+OtlpHttpClient::HttpSessionData &OtlpHttpClient::HttpSessionData::operator=(
+    HttpSessionData &&) noexcept = default;
 
 void OtlpHttpClient::addSession(HttpSessionData &&session_data) noexcept
 {

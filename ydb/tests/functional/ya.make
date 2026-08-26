@@ -42,6 +42,7 @@ RECURSE(
     tpcc
     tenants
     ttl
+    udf_store
     wardens
     ydb_cli
 )

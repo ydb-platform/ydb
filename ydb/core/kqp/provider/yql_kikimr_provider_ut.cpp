@@ -4,8 +4,8 @@
 
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
-#include <yql/essentials/sql/v1/context.h>
-#include <yql/essentials/sql/v1/source.h>
+#include <yql/essentials/sql/v1/translation/context.h>
+#include <yql/essentials/sql/v1/translation/source.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

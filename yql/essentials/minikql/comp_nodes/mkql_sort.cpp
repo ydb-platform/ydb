@@ -9,10 +9,9 @@
 #include <yql/essentials/utils/sort.h>
 
 #include <algorithm>
-#include <iterator>
+#include <numeric>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -29,7 +28,7 @@ std::vector<NUdf::EDataSlot> PrepareKeyTypesByScheme(const std::vector<std::tupl
 }
 
 class TEncoders: public TComputationValue<TEncoders> {
-    typedef TComputationValue<TEncoders> TBase;
+    using TBase = TComputationValue<TEncoders>;
 
 public:
     TEncoders(TMemoryUsageInfo* memInfo, const std::vector<std::tuple<NUdf::EDataSlot, bool, TType*>>& keySchemeTypes,
@@ -38,7 +37,7 @@ public:
     {
         Columns.reserve(keySchemeTypes.size());
         for (const auto& x : keySchemeTypes) {
-            Columns.push_back(Nothing());
+            Columns.emplace_back(Nothing());
             auto type = std::get<2>(x);
             if (allowEncoding && type) {
                 NeedEncode = true;
@@ -54,141 +53,147 @@ public:
 class TGatherIteratorRef {
 public:
     TGatherIteratorRef(NUdf::TUnboxedValue& first, NUdf::TUnboxedValue& second)
-        : First(first)
-        , Second(second)
+        : First_(first)
+        , Second_(second)
     {
     }
 
+    // NOLINTNEXTLINE(google-explicit-constructor)
     operator TKeyPayloadPair() const {
-        return TKeyPayloadPair(First, Second);
+        return TKeyPayloadPair(First_, Second_);
     }
 
     TGatherIteratorRef& operator=(const TKeyPayloadPair& rhs) {
-        First = rhs.first;
-        Second = rhs.second;
+        First_ = rhs.first;
+        Second_ = rhs.second;
         return *this;
     }
 
+    // Defaulting this operator would delete it because the members are references.
+    // NOLINTNEXTLINE(modernize-use-equals-default)
     TGatherIteratorRef& operator=(const TGatherIteratorRef& rhs) {
-        First = rhs.First;
-        Second = rhs.Second;
+        First_ = rhs.First_;
+        Second_ = rhs.Second_;
         return *this;
     }
 
-    friend void swap(TGatherIteratorRef x, TGatherIteratorRef y) {
-        std::swap(x.First, y.First);
-        std::swap(x.Second, y.Second);
+    // NOLINTNEXTLINE(readability-identifier-naming)
+    friend void swap(TGatherIteratorRef lhs, TGatherIteratorRef rhs) {
+        std::swap(lhs.First_, rhs.First_);
+        std::swap(lhs.Second_, rhs.Second_);
     }
 
 private:
-    NUdf::TUnboxedValue& First;
-    NUdf::TUnboxedValue& Second;
+    NUdf::TUnboxedValue& First_;
+    NUdf::TUnboxedValue& Second_;
 };
 
-class TGatherIterator: public std::iterator<std::random_access_iterator_tag, TKeyPayloadPair,
-                                            ptrdiff_t, TKeyPayloadPair*, TGatherIteratorRef> {
+class TGatherIterator {
 public:
+    using iterator_category = std::random_access_iterator_tag;
+    using value_type = TKeyPayloadPair;
+    using difference_type = ptrdiff_t;
+    using pointer = TKeyPayloadPair*;
+    using reference = TGatherIteratorRef;
+
     TGatherIterator()
-        : First(nullptr)
-        , Second(nullptr)
+        : First_(nullptr)
+        , Second_(nullptr)
     {
     }
 
     TGatherIterator(NUdf::TUnboxedValue* first, NUdf::TUnboxedValue* second)
-        : First(first)
-        , Second(second)
+        : First_(first)
+        , Second_(second)
     {
     }
 
     TGatherIterator(const TGatherIterator&) = default;
     TGatherIterator& operator=(const TGatherIterator&) = default;
+
     TGatherIteratorRef operator*() const& {
-        return TGatherIteratorRef(*First, *Second);
+        return TGatherIteratorRef(*First_, *Second_);
     }
 
     TGatherIterator& operator++() {
-        First++;
-        Second++;
+        ++First_;
+        ++Second_;
         return *this;
     }
 
     TGatherIterator& operator--() {
-        First--;
-        Second--;
+        --First_;
+        --Second_;
         return *this;
     }
 
     TGatherIterator operator++(int) {
-        TGatherIterator tmp(*this);
-        First++;
-        Second++;
-        return tmp;
+        TGatherIterator previous(*this);
+        ++*this;
+        return previous;
     }
 
     TGatherIterator operator--(int) {
-        TGatherIterator tmp(*this);
-        First--;
-        Second--;
-        return tmp;
+        TGatherIterator previous(*this);
+        --*this;
+        return previous;
     }
 
-    TGatherIterator& operator+=(ptrdiff_t rhs) {
-        First += rhs;
-        Second += rhs;
+    TGatherIterator& operator+=(ptrdiff_t offset) {
+        First_ += offset;
+        Second_ += offset;
         return *this;
     }
 
-    TGatherIterator& operator-=(ptrdiff_t rhs) {
-        First -= rhs;
-        Second -= rhs;
+    TGatherIterator& operator-=(ptrdiff_t offset) {
+        First_ -= offset;
+        Second_ -= offset;
         return *this;
     }
 
-    ptrdiff_t operator-(TGatherIterator& rhs) const& {
-        return First - rhs.First;
+    ptrdiff_t operator-(const TGatherIterator& rhs) const& {
+        return First_ - rhs.First_;
     }
 
-    TGatherIterator operator+(ptrdiff_t n) const& {
-        TGatherIterator tmp(*this);
-        tmp.First += n;
-        tmp.Second += n;
-        return tmp;
+    TGatherIterator operator+(ptrdiff_t offset) const& {
+        TGatherIterator result(*this);
+        result += offset;
+        return result;
     }
 
-    TGatherIterator operator-(ptrdiff_t n) const& {
-        TGatherIterator tmp(*this);
-        tmp.First -= n;
-        tmp.Second -= n;
-        return tmp;
+    TGatherIterator operator-(ptrdiff_t offset) const& {
+        TGatherIterator result(*this);
+        result -= offset;
+        return result;
     }
 
     bool operator==(const TGatherIterator& rhs) const& {
-        return First == rhs.First;
+        return First_ == rhs.First_;
     }
 
     bool operator!=(const TGatherIterator& rhs) const& {
-        return First != rhs.First;
+        return First_ != rhs.First_;
     }
 
-    bool operator<(TGatherIterator& rhs) const& {
-        return First < rhs.First;
+    bool operator<(const TGatherIterator& rhs) const& {
+        return First_ < rhs.First_;
     }
 
-    bool operator<=(TGatherIterator& rhs) const& {
-        return First <= rhs.First;
+    bool operator<=(const TGatherIterator& rhs) const& {
+        return First_ <= rhs.First_;
     }
 
-    bool operator>(TGatherIterator& rhs) const& {
-        return First > rhs.First;
+    bool operator>(const TGatherIterator& rhs) const& {
+        return First_ > rhs.First_;
     }
 
-    bool operator>=(TGatherIterator& rhs) const& {
-        return First >= rhs.First;
+    bool operator>=(const TGatherIterator& rhs) const& {
+        return First_ >= rhs.First_;
     }
 
 private:
-    NUdf::TUnboxedValue* First;
-    NUdf::TUnboxedValue* Second;
+    NUdf::TUnboxedValue* First_;
+    NUdf::TUnboxedValue* Second_;
 };
 
 using TComparator = std::function<bool(const TKeyPayloadPairVector::value_type&, const TKeyPayloadPairVector::value_type&)>;
@@ -305,7 +310,7 @@ struct TCompareDescr {
                 NUdf::TUnboxedValue array = ctx.HolderFactory.CreateDirectArrayHolder(KeyTypes.size(), arrayItems);
                 for (ui32 i = 0; i < KeyTypes.size(); ++i) {
                     if (auto& e = encoders.Columns[i]) {
-                        arrayItems[i] = MakeString(e->Encode(Get(item).GetElement(i), false));
+                        arrayItems[i] = MakeString(e->Encode(Get(item).GetElement(i), /*desc=*/false));
                     } else {
                         arrayItems[i] = Get(item).GetElement(i);
                     }
@@ -314,7 +319,7 @@ struct TCompareDescr {
                 Set(item) = std::move(array);
             }
         } else if (auto& encoder = encoders.Columns.front()) {
-            Set(item) = MakeString(encoder->Encode(Get(item), false));
+            Set(item) = MakeString(encoder->Encode(Get(item), /*desc=*/false));
         }
     }
 
@@ -339,18 +344,18 @@ protected:
         IComputationNode* ascending,
         bool stealed)
         : TBaseComputation(mutables)
-        , Description(mutables, std::move(keySchemeTypes), comparators)
-        , List(list)
-        , Item(item)
-        , Key(key)
-        , Ascending(ascending)
-        , Stealed(stealed)
+        , Description_(mutables, std::move(keySchemeTypes), comparators)
+        , List_(list)
+        , Item_(item)
+        , Key_(key)
+        , Ascending_(ascending)
+        , Stealed_(stealed)
     {
     }
 
 public:
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        const auto& list = List->GetValue(ctx);
+        const auto& list = List_->GetValue(ctx);
         auto ptr = list.GetElements();
         if (MaybeInplace && ptr) {
             TUnboxedValueVector keys;
@@ -362,7 +367,7 @@ public:
                 return ctx.HolderFactory.GetEmptyContainerLazy();
             }
 
-            if (Stealed) {
+            if (Stealed_) {
                 res = list;
                 inplace = const_cast<NUdf::TUnboxedValue*>(ptr);
             } else {
@@ -371,17 +376,17 @@ public:
 
             keys.reserve(size);
             for (size_t i = 0; i < size; ++i) {
-                if (!Stealed) {
+                if (!Stealed_) {
                     inplace[i] = ptr[i];
                 }
 
-                Item->SetValue(ctx, NUdf::TUnboxedValuePod(ptr[i]));
-                keys.emplace_back(Key->GetValue(ctx));
+                Item_->SetValue(ctx, NUdf::TUnboxedValuePod(ptr[i]));
+                keys.emplace_back(Key_->GetValue(ctx));
             }
 
-            Description.Prepare(ctx, keys);
+            Description_.Prepare(ctx, keys);
             static_cast<const TWrapperImpl*>(this)->PerformInplace(ctx, size, keys.data(), inplace,
-                                                                   Description.MakeComparator<TKeyPayloadPairVector>(Ascending->GetValue(ctx)));
+                                                                   Description_.MakeComparator<TKeyPayloadPairVector>(Ascending_->GetValue(ctx)));
 
             return res.Release();
         } else {
@@ -390,8 +395,8 @@ public:
                 auto size = list.GetListLength();
                 items.reserve(size);
                 for (ui32 i = 0; i < size; ++i) {
-                    Item->SetValue(ctx, NUdf::TUnboxedValuePod(ptr[i]));
-                    items.emplace_back(Key->GetValue(ctx), Item->GetValue(ctx));
+                    Item_->SetValue(ctx, NUdf::TUnboxedValuePod(ptr[i]));
+                    items.emplace_back(Key_->GetValue(ctx), Item_->GetValue(ctx));
                 }
             } else {
                 const auto& iter = list.GetListIterator();
@@ -400,8 +405,8 @@ public:
                 }
 
                 for (NUdf::TUnboxedValue item; iter.Next(item);) {
-                    Item->SetValue(ctx, std::move(item));
-                    items.emplace_back(Key->GetValue(ctx), Item->GetValue(ctx));
+                    Item_->SetValue(ctx, std::move(item));
+                    items.emplace_back(Key_->GetValue(ctx), Item_->GetValue(ctx));
                 }
             }
 
@@ -409,27 +414,27 @@ public:
                 return ctx.HolderFactory.GetEmptyContainerLazy();
             }
 
-            Description.Prepare(ctx, items);
+            Description_.Prepare(ctx, items);
             return static_cast<const TWrapperImpl*>(this)->Perform(ctx, items,
-                                                                   Description.MakeComparator<TKeyPayloadPairVector>(Ascending->GetValue(ctx)));
+                                                                   Description_.MakeComparator<TKeyPayloadPairVector>(Ascending_->GetValue(ctx)));
         }
     }
 
 protected:
     void RegisterDependencies() const override {
-        this->DependsOn(List);
-        this->Own(Item);
-        this->DependsOn(Key);
-        this->DependsOn(Ascending);
+        this->DependsOn(List_);
+        this->Own(Item_);
+        this->DependsOn(Key_);
+        this->DependsOn(Ascending_);
     }
 
 private:
-    TCompareDescr Description;
-    IComputationNode* const List;
-    IComputationExternalNode* const Item;
-    IComputationNode* const Key;
-    IComputationNode* const Ascending;
-    const bool Stealed;
+    TCompareDescr Description_;
+    IComputationNode* const List_;
+    IComputationExternalNode* const Item_;
+    IComputationNode* const Key_;
+    IComputationNode* const Ascending_;
+    const bool Stealed_;
 };
 
 class TAlgoWrapper: public TAlgoBaseWrapper<TAlgoWrapper, true> {
@@ -448,13 +453,13 @@ public:
         IComputationNode* ascending,
         bool stealed)
         : TBaseComputation(mutables, std::move(keySchemeTypes), comparators, list, item, key, ascending, stealed)
-        , Algorithm(algorithm)
-        , AlgorithmInplace(algorithmInplace)
+        , Algorithm_(algorithm)
+        , AlgorithmInplace_(algorithmInplace)
     {
     }
 
     NUdf::TUnboxedValuePod Perform(TComputationContext& ctx, TKeyPayloadPairVector& items, const TComparator& comparator) const {
-        Algorithm(items.begin(), items.end(), comparator);
+        Algorithm_(items.begin(), items.end(), comparator);
 
         NUdf::TUnboxedValue* inplace = nullptr;
         const auto result = ctx.HolderFactory.CreateDirectArrayHolder(items.size(), inplace);
@@ -464,13 +469,14 @@ public:
         return result;
     }
 
-    void PerformInplace(TComputationContext&, ui32 size, NUdf::TUnboxedValue* keys, NUdf::TUnboxedValue* items, const TComparator& comparator) const {
-        AlgorithmInplace(TGatherIterator(keys, items), TGatherIterator(keys, items) + size, comparator);
+    void PerformInplace(TComputationContext&, ui32 size, NUdf::TUnboxedValue* keys, NUdf::TUnboxedValue* items,
+                        const TComparator& comparator) const {
+        AlgorithmInplace_(TGatherIterator(keys, items), TGatherIterator(keys, items) + size, comparator);
     }
 
 private:
-    const TAlgorithm Algorithm;
-    const TAlgorithmInplace AlgorithmInplace;
+    const TAlgorithm Algorithm_;
+    const TAlgorithmInplace AlgorithmInplace_;
 };
 
 class TNthAlgoWrapper: public TAlgoBaseWrapper<TNthAlgoWrapper, false> {
@@ -487,19 +493,19 @@ public:
         IComputationExternalNode* item,
         IComputationNode* key,
         IComputationNode* ascending)
-        : TBaseComputation(mutables, std::move(keySchemeTypes), comparators, list, item, key, ascending, false)
-        , Algorithm(algorithm)
-        , Nth(nth)
+        : TBaseComputation(mutables, std::move(keySchemeTypes), comparators, list, item, key, ascending, /*stealed=*/false)
+        , Algorithm_(algorithm)
+        , Nth_(nth)
     {
     }
 
     NUdf::TUnboxedValuePod Perform(TComputationContext& ctx, TKeyPayloadPairVector& items, const TComparator& comparator) const {
-        const auto n = std::min<ui64>(Nth->GetValue(ctx).Get<ui64>(), items.size());
+        const auto n = std::min<ui64>(Nth_->GetValue(ctx).Get<ui64>(), items.size());
         if (!n) {
             return ctx.HolderFactory.GetEmptyContainerLazy();
         }
 
-        Algorithm(items.begin(), items.begin() + n, items.end(), comparator);
+        Algorithm_(items.begin(), items.begin() + n, items.end(), comparator);
         items.resize(n);
 
         NUdf::TUnboxedValue* inplace = nullptr;
@@ -510,7 +516,8 @@ public:
         return result;
     }
 
-    void PerformInplace(TComputationContext& ctx, ui32 size, NUdf::TUnboxedValue* keys, NUdf::TUnboxedValue* items, const TComparator& comparator) const {
+    void PerformInplace(TComputationContext& ctx, ui32 size, NUdf::TUnboxedValue* keys, NUdf::TUnboxedValue* items,
+                        const TComparator& comparator) const {
         Y_UNUSED(ctx);
         Y_UNUSED(size);
         Y_UNUSED(keys);
@@ -522,11 +529,11 @@ public:
 private:
     void RegisterDependencies() const final {
         TBaseComputation::RegisterDependencies();
-        this->DependsOn(Nth);
+        this->DependsOn(Nth_);
     }
 
-    const TNthAlgorithm Algorithm;
-    IComputationNode* const Nth;
+    const TNthAlgorithm Algorithm_;
+    IComputationNode* const Nth_;
 };
 
 class TKeepTopWrapper: public TMutableComputationNode<TKeepTopWrapper> {
@@ -545,36 +552,36 @@ public:
         IComputationNode* ascending,
         IComputationExternalNode* hotkey)
         : TBaseComputation(mutables)
-        , Description(mutables, std::move(keySchemeTypes), comparators)
-        , Count(count)
-        , List(list)
-        , Item(item)
-        , Arg(arg)
-        , Key(key)
-        , Ascending(ascending)
-        , HotKey(hotkey)
+        , Description_(mutables, std::move(keySchemeTypes), comparators)
+        , Count_(count)
+        , List_(list)
+        , Item_(item)
+        , Arg_(arg)
+        , Key_(key)
+        , Ascending_(ascending)
+        , HotKey_(hotkey)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        const auto count = Count->GetValue(ctx).Get<ui64>();
+        const auto count = Count_->GetValue(ctx).Get<ui64>();
         if (!count) {
             return ctx.HolderFactory.GetEmptyContainerLazy();
         }
 
-        auto list = List->GetValue(ctx);
-        auto item = Item->GetValue(ctx);
+        auto list = List_->GetValue(ctx);
+        auto item = Item_->GetValue(ctx);
 
         const auto size = list.GetListLength();
 
         if (size < count) {
             return ctx.HolderFactory.Append(list.Release(), item.Release());
         }
-        auto hotkey = HotKey->GetValue(ctx);
+        auto hotkey = HotKey_->GetValue(ctx);
         auto hotkey_prepared = hotkey;
 
         if (!hotkey_prepared.IsInvalid()) {
-            Description.PrepareValue(ctx, hotkey_prepared);
+            Description_.PrepareValue(ctx, hotkey_prepared);
         }
 
         if (size == count) {
@@ -584,45 +591,45 @@ public:
 
                 const auto ptr = list.GetElements();
                 std::transform(ptr, ptr + size, std::back_inserter(keys), [&](const NUdf::TUnboxedValuePod item) {
-                    Arg->SetValue(ctx, item);
-                    return Key->GetValue(ctx);
+                    Arg_->SetValue(ctx, item);
+                    return Key_->GetValue(ctx);
                 });
 
                 auto keys_copy = keys;
 
-                Description.Prepare(ctx, keys);
+                Description_.Prepare(ctx, keys);
 
-                const auto& ascending = Ascending->GetValue(ctx);
-                const auto max = std::max_element(keys.begin(), keys.end(), Description.MakeComparator<TUnboxedValueVector>(ascending));
+                const auto& ascending = Ascending_->GetValue(ctx);
+                const auto max = std::max_element(keys.begin(), keys.end(), Description_.MakeComparator<TUnboxedValueVector>(ascending));
                 hotkey_prepared = *max;
-                HotKey->SetValue(ctx, std::move(keys_copy[max - keys.begin()]));
+                HotKey_->SetValue(ctx, std::move(keys_copy[max - keys.begin()]));
             }
         }
 
         const auto copy = item;
-        Arg->SetValue(ctx, item.Release());
-        auto key_prepared = Key->GetValue(ctx);
-        Description.PrepareValue(ctx, key_prepared);
+        Arg_->SetValue(ctx, item.Release());
+        auto key_prepared = Key_->GetValue(ctx);
+        Description_.PrepareValue(ctx, key_prepared);
 
-        const auto& ascending = Ascending->GetValue(ctx);
+        const auto& ascending = Ascending_->GetValue(ctx);
 
-        if (Description.MakeComparator<TUnboxedValueVector>(ascending)(key_prepared, hotkey_prepared)) {
+        if (Description_.MakeComparator<TUnboxedValueVector>(ascending)(key_prepared, hotkey_prepared)) {
             const auto reserve = std::max<ui64>(count << 1ULL, 1ULL << 8ULL);
             if (size < reserve) {
-                return ctx.HolderFactory.Append(list.Release(), Arg->GetValue(ctx).Release());
+                return ctx.HolderFactory.Append(list.Release(), Arg_->GetValue(ctx).Release());
             }
 
-            TKeyPayloadPairVector items(1U, TKeyPayloadPair(Key->GetValue(ctx), Arg->GetValue(ctx)));
+            TKeyPayloadPairVector items(1U, TKeyPayloadPair(Key_->GetValue(ctx), Arg_->GetValue(ctx)));
             items.reserve(items.size() + size);
 
             const auto ptr = list.GetElements();
             std::transform(ptr, ptr + size, std::back_inserter(items), [&](const NUdf::TUnboxedValuePod item) {
-                Arg->SetValue(ctx, item);
-                return TKeyPayloadPair(Key->GetValue(ctx), Arg->GetValue(ctx));
+                Arg_->SetValue(ctx, item);
+                return TKeyPayloadPair(Key_->GetValue(ctx), Arg_->GetValue(ctx));
             });
 
-            Description.Prepare(ctx, items);
-            NYql::FastNthElement(items.begin(), items.begin() + count - 1U, items.end(), Description.MakeComparator<TKeyPayloadPairVector>(ascending));
+            Description_.Prepare(ctx, items);
+            NYql::FastNthElement(items.begin(), items.begin() + count - 1U, items.end(), Description_.MakeComparator<TKeyPayloadPairVector>(ascending));
             items.resize(count);
 
             NUdf::TUnboxedValue* inplace = nullptr;
@@ -638,23 +645,23 @@ public:
 
 private:
     void RegisterDependencies() const final {
-        DependsOn(Count);
-        DependsOn(List);
-        DependsOn(Item);
-        Own(Arg);
-        DependsOn(Key);
-        DependsOn(Ascending);
-        Own(HotKey);
+        DependsOn(Count_);
+        DependsOn(List_);
+        DependsOn(Item_);
+        Own(Arg_);
+        DependsOn(Key_);
+        DependsOn(Ascending_);
+        Own(HotKey_);
     }
 
-    TCompareDescr Description;
-    IComputationNode* const Count;
-    IComputationNode* const List;
-    IComputationNode* const Item;
-    IComputationExternalNode* const Arg;
-    IComputationNode* const Key;
-    IComputationNode* const Ascending;
-    IComputationExternalNode* const HotKey;
+    TCompareDescr Description_;
+    IComputationNode* const Count_;
+    IComputationNode* const List_;
+    IComputationNode* const Item_;
+    IComputationExternalNode* const Arg_;
+    IComputationNode* const Key_;
+    IComputationNode* const Ascending_;
+    IComputationExternalNode* const HotKey_;
 };
 
 std::vector<std::tuple<NUdf::EDataSlot, bool, TType*>> GetKeySchemeTypes(TType* keyType, TType* ascType) {
@@ -800,5 +807,4 @@ IComputationNode* WrapKeepTop(TCallable& callable, const TComputationNodeFactory
     return new TKeepTopWrapper(ctx.Mutables, GetKeySchemeTypes(keyType, ascType), comparators, count, list, item, itemArg, key, ascending, hotkey);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

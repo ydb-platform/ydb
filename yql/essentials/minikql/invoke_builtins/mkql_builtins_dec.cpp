@@ -2,8 +2,7 @@
 
 #include <yql/essentials/minikql/mkql_safe_arithmetic_ops.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -72,5 +71,4 @@ void RegisterDecrement(IBuiltinFunctionRegistry& registry) {
     NDecimal::RegisterUnaryFunctionForAllPrecisions<TDecimalDec, TUnaryArgsOpt>(registry, "Dec_");
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

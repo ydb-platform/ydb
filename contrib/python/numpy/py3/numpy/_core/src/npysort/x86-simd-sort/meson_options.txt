@@ -1,0 +1,10 @@
+option('build_tests', type : 'boolean', value : false,
+  description : 'Build test suite (default: "false").')
+option('build_benchmarks', type : 'boolean', value : false,
+  description : 'Build benchmarking suite (default: "false").')
+option('build_ippbench', type : 'boolean', value : false,
+  description : 'Add IPP sort to benchmarks (default: "false").')
+option('build_vqsortbench', type : 'boolean', value : true,
+  description : 'Add google vqsort to benchmarks (default: "true").')
+option('use_openmp', type : 'boolean', value : false,
+  description : 'Use OpenMP to accelerate key-value sort (default: "false").')

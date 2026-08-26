@@ -82,7 +82,7 @@ std::pair<ESchemaCompatibility, TError> CheckTableSchemaCompatibilityImpl(
                     currentTypeCompatibility.first,
                     TError("Column %v input type is incompatible with output type",
                         inputColumn->GetDiagnosticNameString())
-                        << currentTypeCompatibility.second
+                        .With(currentTypeCompatibility.second)
                 };
             }
 
@@ -247,9 +247,9 @@ std::pair<ESchemaCompatibility, TError> CheckTableSchemaCompatibility(
     auto [result, error] = CheckTableSchemaCompatibilityImpl(inputSchema, outputSchema, options);
     if (result != ESchemaCompatibility::FullyCompatible) {
         error = TError(NTableClient::EErrorCode::IncompatibleSchemas, "Table schemas are incompatible")
-            << error
-            << TErrorAttribute("input_table_schema", inputSchema)
-            << TErrorAttribute("output_table_schema", outputSchema);
+            .With(error)
+            .With("input_table_schema", inputSchema)
+            .With("output_table_schema", outputSchema);
     }
     return std::pair(result, std::move(error));
 }

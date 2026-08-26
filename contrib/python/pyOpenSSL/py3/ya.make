@@ -4,7 +4,7 @@ PY3_LIBRARY()
 
 SUBSCRIBER(g:python-contrib)
 
-VERSION(23.0.0)
+VERSION(25.1.0)
 
 LICENSE(Apache-2.0)
 
@@ -29,6 +29,7 @@ RESOURCE_FILES(
     PREFIX contrib/python/pyOpenSSL/py3/
     .dist-info/METADATA
     .dist-info/top_level.txt
+    OpenSSL/py.typed
 )
 
 END()

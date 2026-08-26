@@ -4,6 +4,7 @@ RECURSE(
     example
     fq
     functional
+    hash_test
     library
     library/sqs
     olap

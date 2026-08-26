@@ -35,7 +35,7 @@ public:
 
         // Service Account Service
         ui16 servicePort = PortManager.GetPort(8443);
-        ServiceAccountService = NCloud::CreateServiceAccountService("localhost:" + ToString(servicePort));
+        ServiceAccountService = NCloud::CreateServiceAccountService("localhost:" + ToString(servicePort), "ydb-sa");
         Runtime->Register(ServiceAccountService);
 
         // Service Account Service Mock
@@ -83,6 +83,9 @@ Y_UNIT_TEST_SUITE_F(TServiceAccountServiceTest, TServiceAccountServiceFixture) {
         UNIT_ASSERT(result);
         UNIT_ASSERT(result->Status.Ok());
         UNIT_ASSERT_EQUAL(result->Response.id(), "Service1");
+        with_lock (ServiceAccountServiceMock.MetadataMutex) {
+            UNIT_ASSERT_STRING_CONTAINS(ServiceAccountServiceMock.CapturedUserAgent, "ydb-sa/");
+        }
     }
 
     Y_UNIT_TEST(IssueToken) {
@@ -100,5 +103,8 @@ Y_UNIT_TEST_SUITE_F(TServiceAccountServiceTest, TServiceAccountServiceFixture) {
         UNIT_ASSERT(result);
         UNIT_ASSERT(result->Status.Ok());
         UNIT_ASSERT_EQUAL(result->Response.iam_token(), IAM_TOKEN);
+        with_lock (ServiceAccountServiceMock.MetadataMutex) {
+            UNIT_ASSERT_STRING_CONTAINS(ServiceAccountServiceMock.CapturedUserAgent, "ydb-sa/");
+        }
     }
 }

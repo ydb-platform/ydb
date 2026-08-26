@@ -458,7 +458,7 @@ class TestMultipartUpload(BaseUploadTest):
             if checksum_algorithm:
                 checksum_member = f'Checksum{checksum_algorithm.upper()}'
                 response = upload_part_response['service_response']
-                response[checksum_member] = f'sum{i+1}=='
+                response[checksum_member] = f'sum{i + 1}=='
 
             upload_part_response['expected_params'] = expected_params
             self.stubber.add_response(**upload_part_response)

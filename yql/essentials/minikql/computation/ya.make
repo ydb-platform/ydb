@@ -28,6 +28,7 @@ PEERDIR(
     yql/essentials/public/udf/arrow
     yql/essentials/minikql/arrow
     yql/essentials/minikql/runtime_settings
+    yql/essentials/utils/meta
 )
 
 IF (YQL_EMULATE_LAZY_ITERABLES)

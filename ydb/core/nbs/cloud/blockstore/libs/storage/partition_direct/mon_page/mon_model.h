@@ -3,7 +3,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_stat.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_state.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/oracle.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/mon_model.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 
 #include <ydb/core/mind/bscontroller/types.h>
@@ -23,6 +23,16 @@ enum class EMonPage
     Overview,
     Dbg,
     LocalDb,
+    VChunk,
+    Latency,
+};
+
+enum class ELatencyPercentile
+{
+    P50,
+    P90,
+    P99,
+    Max,
 };
 
 struct TTabletInfo
@@ -36,18 +46,11 @@ struct TTabletInfo
 struct TFastPathServiceInfo
 {
     ui64 LsnCounter = 0;
+    // Minimum safe barrier across all DBGs from the last finished cleanup
+    // round; 0 until the first round finishes.
+    ui64 LastSafeBarrier = 0;
     size_t TotalVChunks = 0;
     size_t DbgCount = 0;
-};
-
-struct THostSnapshot
-{
-    THostIndex Index = InvalidHostIndex;
-    EHostState State = EHostState::Online;
-    EHostHealth Health = EHostHealth::Online;
-    TInflightByOperation InflightByOperation{};
-    THostStat::TErrorsInfo Errors;
-    ui64 PBufferUsedSize = 0;
 };
 
 struct TConnectionSnapshot
@@ -65,6 +68,16 @@ struct TDbgSnapshot
     size_t VChunkCount = 0;
     TVector<THostSnapshot> Hosts;
     TVector<TConnectionSnapshot> Connections;
+    TVChunkConfigs VChunkConfigs;
+    // OracleConfig.TimePredictionHistorySize for this DBG (0 => disabled).
+    size_t LatencyHistoryCapacity = 0;
+};
+
+struct TVChunkSnapshot
+{
+    TVChunkConfig VChunkConfig;
+    std::optional<ui64> SafeBarrier;
+    TString DirtyMapDump;
 };
 
 // Persisted tablet state (local DB). Protos are pre-dumped to text; an absent
@@ -75,7 +88,7 @@ struct TLocalDbContents
     std::optional<TString> DirectBlockGroupsConnections;
     std::optional<TString> AddHostInProgress;
     // Persisted per-vchunk overrides.
-    TVector<TVChunkConfig> VChunkConfigs;
+    TVChunkConfigs VChunkConfigs;
 };
 
 struct TMonPageData
@@ -91,6 +104,14 @@ struct TMonPageData
     std::optional<ui32> SelectedDbg;
     // Local DB tab.
     std::optional<TLocalDbContents> LocalDb;
+    // VChunk tab: the requested index (absent => only the input form) and the
+    // snapshot (absent => no such vchunk).
+    std::optional<ui32> SelectedVChunk;
+    std::optional<TVChunkSnapshot> VChunk;
+    // Latency tab: which percentile colors the heatmap / slot grid, and
+    // which operation filters the slot grid (absent => worst across ops).
+    ELatencyPercentile SelectedPercentile = ELatencyPercentile::P99;
+    std::optional<EOperation> SelectedLatencyOperation;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

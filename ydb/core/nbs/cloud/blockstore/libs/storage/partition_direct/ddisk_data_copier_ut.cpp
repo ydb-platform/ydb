@@ -22,6 +22,13 @@ THostMask MakePrimariesMask()
     return result;
 }
 
+void FinishFlushes(TBlocksDirtyMap& dirtyMap, const TFlushHints& hints)
+{
+    for (const auto& [route, flush]: hints.GetAllHints()) {
+        dirtyMap.FlushFinished(route, {MakeLsnVector(flush.Segments)}, {});
+    }
+}
+
 struct TFixture: public TBaseFixture
 {
     TDDiskDataCopierPtr Copier;
@@ -32,14 +39,16 @@ struct TFixture: public TBaseFixture
 
         VChunkConfig.PromoteHost(3);
         VChunkConfig.SetWatermark(3, BlockSize * VChunkBlockCount);
-        DirtyMap.UpdateConfig(VChunkConfig);
+        DirtyMap->UpdateConfig(VChunkConfig);
 
         Copier = std::make_shared<TDDiskDataCopier>(
             Runtime->GetActorSystem(0),
+            TraceService.get(),
             PartitionDirectService.get(),
+            DiskDescription,
             VChunkConfig,
             DirectBlockGroup,
-            &DirtyMap,
+            DirtyMap,
             FreshDDisk);
     }
 };
@@ -53,25 +62,25 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
         Init();
 
         UNIT_ASSERT_VALUES_EQUAL(
-            "H0*{Operational,32768,32768};"
-            "H1*{Operational,32768,32768};"
-            "H2*{Operational,32768,32768};"
-            "H3*{Operational,32768,32768};"
-            "H4+{Disabled,0,0};",
-            DirtyMap.DebugPrintDDiskState());
+            "H0*{Operational,32768};"
+            "H1*{Operational,32768};"
+            "H2*{Operational,32768};"
+            "H3*{Operational,32768};"
+            "H4+{Disabled,0};",
+            DirtyMap->DebugPrintDDiskState());
 
         // Mark DDisk#1 completely fresh.
-        DirtyMap.MarkFresh(FreshDDisk, 0);
+        DirtyMap->UpdateWatermarkDebugOnly(FreshDDisk, 0);
         UNIT_ASSERT_VALUES_EQUAL(
-            "H0*{Operational,32768,32768};"
-            "H1*{Fresh,0,0};"   // Watermarks
-            "H2*{Operational,32768,32768};"
-            "H3*{Operational,32768,32768};"
-            "H4+{Disabled,0,0};",
-            DirtyMap.DebugPrintDDiskState());
+            "H0*{Operational,32768};"
+            "H1*{Fresh+,0};"   // Watermarks
+            "H2*{Operational,32768};"
+            "H3*{Operational,32768};"
+            "H4+{Disabled,0};",
+            DirtyMap->DebugPrintDDiskState());
 
         // No ranges locked.
-        UNIT_ASSERT_VALUES_EQUAL("", DirtyMap.DebugPrintLockedDDiskRanges());
+        UNIT_ASSERT_VALUES_EQUAL("", DirtyMap->DebugPrintLockedDDiskRanges());
 
         // Start data copy
         ExpectedRange = TBlockRange64::WithLength(0, BlocksPerCopy);
@@ -85,7 +94,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
             UNIT_ASSERT_VALUES_EQUAL(
                 ExpectedRange.Print() + "[H1];" + ExpectedRange.Print() +
                     "[H0,H2,H3];",
-                DirtyMap.DebugPrintLockedDDiskRanges());
+                DirtyMap->DebugPrintLockedDDiskRanges());
 
             // Complete reading and re-arm promise.
             SetReadResult({.Error = MakeError(S_OK)}, false);
@@ -93,7 +102,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
             // expectedRange should be locked for copying.
             UNIT_ASSERT_VALUES_EQUAL(
                 ExpectedRange.Print() + "[H1];",
-                DirtyMap.DebugPrintLockedDDiskRanges());
+                DirtyMap->DebugPrintLockedDDiskRanges());
 
             // Set next expected range right before completing write.
             auto nextExpectedRange = TBlockRange64::WithLength(
@@ -109,13 +118,13 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
             if (i == 5) {
                 // Check state on 5th iteration
                 UNIT_ASSERT_VALUES_EQUAL(
-                    "H0*{Operational,32768,32768};"
-                    "H1*{Fresh,1536,1792};"   // Watermarks for reading
-                                              // and writing raised
-                    "H2*{Operational,32768,32768};"
-                    "H3*{Operational,32768,32768};"
-                    "H4+{Disabled,0,0};",
-                    DirtyMap.DebugPrintDDiskState());
+                    "H0*{Operational,32768};"
+                    "H1*{Fresh+,1536};"   // Watermarks for reading
+                                          // and writing raised
+                    "H2*{Operational,32768};"
+                    "H3*{Operational,32768};"
+                    "H4+{Disabled,0};",
+                    DirtyMap->DebugPrintDDiskState());
             }
         }
 
@@ -127,18 +136,19 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
 
         // All DDisk fully operational
         UNIT_ASSERT_VALUES_EQUAL(
-            "H0*{Operational,32768,32768};"
-            "H1*{Operational,32768,32768};"
-            "H2*{Operational,32768,32768};"
-            "H3*{Operational,32768,32768};"
-            "H4+{Disabled,0,0};",
-            DirtyMap.DebugPrintDDiskState());
+            "H0*{Operational,32768};"
+            "H1*{Operational,32768};"
+            "H2*{Operational,32768};"
+            "H3*{Operational,32768};"
+            "H4+{Disabled,0};",
+            DirtyMap->DebugPrintDDiskState());
     }
 
-    Y_UNIT_TEST_F(ShouldStopOnReadError, TFixture)
+    Y_UNIT_TEST_F(ShouldRetryOnReadError, TFixture)
     {
         Init();
 
+        size_t readsCount = 0;
         DirectBlockGroup->ReadBlocksFromDDiskHandler = [&]   //
             (ui32 vChunkIndex,
              THostIndex hostIndex,
@@ -152,35 +162,41 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
             Y_UNUSED(guardedSglist);
             Y_UNUSED(traceId);
 
+            ++readsCount;
+
+            // ReadExecutor will respond with E_REJECTED even if all replicas
+            // returned a non-retriable error.
             return MakeFuture<TDBGReadBlocksResponse>(
-                {.Error = MakeError(E_REJECTED)});
+                {.Error = MakeError(E_IO)});
         };
 
         // Mark DDisk#1 completely fresh.
-        DirtyMap.MarkFresh(FreshDDisk, 0);
+        DirtyMap->UpdateWatermarkDebugOnly(FreshDDisk, 0);
 
         // Start data copy
         ExpectedRange = TBlockRange64::WithLength(0, BlocksPerCopy);
         auto complete = Copier->Start();
 
-        // Data copying should be completed with error.
-        UNIT_ASSERT_VALUES_EQUAL(true, complete.IsReady());
-        UNIT_ASSERT_VALUES_EQUAL(
-            TDDiskDataCopier::EResult::Error,
-            complete.GetValue());
+        // Wait for read retry scheduled.
+        WaitScheduledTasks(1, TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(3, readsCount);
 
-        UNIT_ASSERT_VALUES_EQUAL(0, *DirtyMap.GetFreshWatermark(FreshDDisk));
+        // Data copying should not be advanced.
+        UNIT_ASSERT_VALUES_EQUAL(false, complete.IsReady());
+        UNIT_ASSERT_VALUES_EQUAL(
+            TBlockRange64::WithLength(0, 32768),
+            *DirtyMap->GetFreshRange(FreshDDisk));
 
         UNIT_ASSERT_VALUES_EQUAL(
-            "H0*{Operational,32768,32768};"
-            "H1*{Fresh,0,256};"   // Watermarks
-            "H2*{Operational,32768,32768};"
-            "H3*{Operational,32768,32768};"
-            "H4+{Disabled,0,0};",
-            DirtyMap.DebugPrintDDiskState());
+            "H0*{Operational,32768};"
+            "H1*{Fresh+,0};"   // Watermarks
+            "H2*{Operational,32768};"
+            "H3*{Operational,32768};"
+            "H4+{Disabled,0};",
+            DirtyMap->DebugPrintDDiskState());
     }
 
-    Y_UNIT_TEST_F(ShouldStopOnWriteError, TFixture)
+    Y_UNIT_TEST_F(ShouldStopOnNonRetriableWriteError, TFixture)
     {
         Init();
 
@@ -199,11 +215,11 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
             Y_UNUSED(traceId);
 
             return MakeFuture<TDBGWriteBlocksResponse>(
-                {.Error = MakeError(E_REJECTED)});
+                {.Error = MakeError(E_IO_SILENT)});
         };
 
         // Mark DDisk#1 completely fresh.
-        DirtyMap.MarkFresh(FreshDDisk, 0);
+        DirtyMap->UpdateWatermarkDebugOnly(FreshDDisk, 0);
 
         // Start data copy
         ExpectedRange = TBlockRange64::WithLength(0, BlocksPerCopy);
@@ -218,15 +234,322 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
             TDDiskDataCopier::EResult::Error,
             complete.GetValue());
 
-        UNIT_ASSERT_VALUES_EQUAL(0, *DirtyMap.GetFreshWatermark(FreshDDisk));
+        UNIT_ASSERT_VALUES_EQUAL(
+            TBlockRange64::WithLength(0, 32768),
+            *DirtyMap->GetFreshRange(FreshDDisk));
 
         UNIT_ASSERT_VALUES_EQUAL(
-            "H0*{Operational,32768,32768};"
-            "H1*{Fresh,0,256};"   // Watermarks
-            "H2*{Operational,32768,32768};"
-            "H3*{Operational,32768,32768};"
-            "H4+{Disabled,0,0};",
-            DirtyMap.DebugPrintDDiskState());
+            "H0*{Operational,32768};"
+            "H1*{Fresh+,0};"   // Watermarks
+            "H2*{Operational,32768};"
+            "H3*{Operational,32768};"
+            "H4+{Disabled,0};",
+            DirtyMap->DebugPrintDDiskState());
+    }
+
+    Y_UNIT_TEST_F(ShouldClearInflightSyncOnNonRetriableWriteError, TFixture)
+    {
+        Init();
+
+        // Will respond with a non-retriable error for write requests.
+        DirectBlockGroup->WriteBlocksToDDiskHandler = [&]   //
+            (ui32 vChunkIndex,
+             THostIndex hostIndex,
+             TBlockRange64 range,
+             const TGuardedSgList& guardedSglist,
+             const NWilson::TTraceId& traceId)
+        {
+            Y_UNUSED(vChunkIndex);
+            Y_UNUSED(hostIndex);
+            Y_UNUSED(range);
+            Y_UNUSED(guardedSglist);
+            Y_UNUSED(traceId);
+
+            return MakeFuture<TDBGWriteBlocksResponse>(
+                {.Error = MakeError(E_IO_SILENT)});
+        };
+
+        // Mark DDisk#1 completely fresh.
+        DirtyMap->UpdateWatermarkDebugOnly(FreshDDisk, 0);
+
+        // Start data copy
+        ExpectedRange = TBlockRange64::WithLength(0, BlocksPerCopy);
+        auto complete = Copier->Start();
+
+        // The range sync is registered as in-flight while the copy is running.
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H1[0..255]ready;",
+            DirtyMap->DebugPrintInflightSync());
+
+        // Read range - OK.
+        SetReadResult({.Error = MakeError(S_OK)}, false);
+
+        // Data copying should be completed with error.
+        UNIT_ASSERT_VALUES_EQUAL(true, complete.IsReady());
+        UNIT_ASSERT_VALUES_EQUAL(
+            TDDiskDataCopier::EResult::Error,
+            complete.GetValue());
+
+        // The failed sync must be removed from the in-flight sync map
+        // (EndRangeSync(syncId, false)), so it does not leak.
+        UNIT_ASSERT_VALUES_EQUAL("", DirtyMap->DebugPrintInflightSync());
+
+        // The fresh range must NOT advance after a failed sync.
+        UNIT_ASSERT_VALUES_EQUAL(
+            TBlockRange64::WithLength(0, 32768),
+            *DirtyMap->GetFreshRange(FreshDDisk));
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H0*{Operational,32768};"
+            "H1*{Fresh+,0};"   // Watermarks unchanged
+            "H2*{Operational,32768};"
+            "H3*{Operational,32768};"
+            "H4+{Disabled,0};",
+            DirtyMap->DebugPrintDDiskState());
+    }
+
+    Y_UNIT_TEST_F(ShouldClearInflightSyncOnReadError, TFixture)
+    {
+        Init();
+
+        size_t readsCount = 0;
+        DirectBlockGroup->ReadBlocksFromDDiskHandler = [&]   //
+            (ui32 vChunkIndex,
+             THostIndex hostIndex,
+             TBlockRange64 range,
+             const TGuardedSgList& guardedSglist,
+             const NWilson::TTraceId& traceId)
+        {
+            Y_UNUSED(vChunkIndex);
+            Y_UNUSED(hostIndex);
+            Y_UNUSED(range);
+            Y_UNUSED(guardedSglist);
+            Y_UNUSED(traceId);
+
+            ++readsCount;
+
+            // ReadExecutor will respond with E_REJECTED even if all replicas
+            // returned a non-retriable error.
+            return MakeFuture<TDBGReadBlocksResponse>(
+                {.Error = MakeError(E_IO)});
+        };
+
+        // Mark DDisk#1 completely fresh.
+        DirtyMap->UpdateWatermarkDebugOnly(FreshDDisk, 0);
+
+        // Start data copy
+        ExpectedRange = TBlockRange64::WithLength(0, BlocksPerCopy);
+        auto complete = Copier->Start();
+
+        // Wait for read retry scheduled.
+        WaitScheduledTasks(1, TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(3, readsCount);
+
+        // The failed sync must be removed from the in-flight sync map
+        // (EndRangeSync(syncId, false)) even on a read error, so it does not
+        // leak across retries.
+        UNIT_ASSERT_VALUES_EQUAL("", DirtyMap->DebugPrintInflightSync());
+
+        // Data copying should not be advanced.
+        UNIT_ASSERT_VALUES_EQUAL(false, complete.IsReady());
+
+        // The fresh range must NOT advance after a failed sync.
+        UNIT_ASSERT_VALUES_EQUAL(
+            TBlockRange64::WithLength(0, 32768),
+            *DirtyMap->GetFreshRange(FreshDDisk));
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H0*{Operational,32768};"
+            "H1*{Fresh+,0};"   // Watermarks unchanged
+            "H2*{Operational,32768};"
+            "H3*{Operational,32768};"
+            "H4+{Disabled,0};",
+            DirtyMap->DebugPrintDDiskState());
+    }
+
+    Y_UNIT_TEST_F(ShouldClearInflightSyncOnRetriableWriteError, TFixture)
+    {
+        Init();
+
+        // Will respond with a retriable error for write requests.
+        DirectBlockGroup->WriteBlocksToDDiskHandler = [&]   //
+            (ui32 vChunkIndex,
+             THostIndex hostIndex,
+             TBlockRange64 range,
+             const TGuardedSgList& guardedSglist,
+             const NWilson::TTraceId& traceId)
+        {
+            Y_UNUSED(vChunkIndex);
+            Y_UNUSED(hostIndex);
+            Y_UNUSED(range);
+            Y_UNUSED(guardedSglist);
+            Y_UNUSED(traceId);
+
+            return MakeFuture<TDBGWriteBlocksResponse>(
+                {.Error = MakeError(E_REJECTED)});
+        };
+
+        // Mark DDisk#1 completely fresh.
+        DirtyMap->UpdateWatermarkDebugOnly(FreshDDisk, 0);
+
+        // Start data copy
+        ExpectedRange = TBlockRange64::WithLength(0, BlocksPerCopy);
+        auto complete = Copier->Start();
+
+        // The range sync is registered as in-flight while the copy is running.
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H1[0..255]ready;",
+            DirtyMap->DebugPrintInflightSync());
+
+        // Read range - OK. The subsequent write fails with a retriable error.
+        SetReadResult({.Error = MakeError(S_OK)}, false);
+
+        // The retriable error must schedule a retry, not complete the copy.
+        UNIT_ASSERT_VALUES_EQUAL(false, complete.IsReady());
+
+        // Even on a retriable write error the failed sync must be removed from
+        // the in-flight sync map (EndRangeSync(syncId, false)), so it does not
+        // leak across retries.
+        UNIT_ASSERT_VALUES_EQUAL("", DirtyMap->DebugPrintInflightSync());
+
+        // The fresh range must NOT advance after a failed sync.
+        UNIT_ASSERT_VALUES_EQUAL(
+            TBlockRange64::WithLength(0, 32768),
+            *DirtyMap->GetFreshRange(FreshDDisk));
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H0*{Operational,32768};"
+            "H1*{Fresh+,0};"   // Watermarks unchanged
+            "H2*{Operational,32768};"
+            "H3*{Operational,32768};"
+            "H4+{Disabled,0};",
+            DirtyMap->DebugPrintDDiskState());
+    }
+
+    Y_UNIT_TEST_F(ShouldClearInflightSyncAfterSuccessfulRange, TFixture)
+    {
+        Init();
+
+        // Mark DDisk#1 completely fresh.
+        DirtyMap->UpdateWatermarkDebugOnly(FreshDDisk, 0);
+
+        // Start data copy
+        ExpectedRange = TBlockRange64::WithLength(0, BlocksPerCopy);
+        auto complete = Copier->Start();
+
+        // The first range sync is registered as in-flight.
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H1[0..255]ready;",
+            DirtyMap->DebugPrintInflightSync());
+
+        // Read range #0 - OK.
+        SetReadResult({.Error = MakeError(S_OK)}, false);
+
+        // The next range starts right after writing range #0.
+        ExpectedRange = TBlockRange64::WithLength(BlocksPerCopy, BlocksPerCopy);
+
+        // Stop the copier so it finishes after the current range's write.
+        Copier->Stop();
+
+        // Write range #0 - OK. EndRangeSync(syncId, true) must remove the
+        // completed entry from the in-flight sync map and advance the fresh
+        // range.
+        SetWriteResult(
+            TDBGWriteBlocksResponse{.Error = MakeError(S_OK)},
+            false);
+
+        // Data copying should be interrupted right after the successful range.
+        UNIT_ASSERT_VALUES_EQUAL(true, complete.IsReady());
+        UNIT_ASSERT_VALUES_EQUAL(
+            TDDiskDataCopier::EResult::Interrupted,
+            complete.GetValue());
+
+        // The successfully synced range must be removed from the in-flight sync
+        // map; nothing must leak.
+        UNIT_ASSERT_VALUES_EQUAL("", DirtyMap->DebugPrintInflightSync());
+
+        // The fresh range advanced by exactly one copy range.
+        UNIT_ASSERT_VALUES_EQUAL(
+            TBlockRange64::MakeClosedInterval(256, 32767),
+            *DirtyMap->GetFreshRange(FreshDDisk));
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H0*{Operational,32768};"
+            "H1*{Fresh+,256};"   // Watermark advanced by one copy range
+            "H2*{Operational,32768};"
+            "H3*{Operational,32768};"
+            "H4+{Disabled,0};",
+            DirtyMap->DebugPrintDDiskState());
+    }
+
+    Y_UNIT_TEST_F(ShouldRetryOnRetriableWriteError, TFixture)
+    {
+        Init();
+
+        size_t readsCount = 0;
+        DirectBlockGroup->ReadBlocksFromDDiskHandler = [&]   //
+            (ui32 vChunkIndex,
+             THostIndex hostIndex,
+             TBlockRange64 range,
+             const TGuardedSgList& guardedSglist,
+             const NWilson::TTraceId& traceId)
+        {
+            Y_UNUSED(vChunkIndex);
+            Y_UNUSED(hostIndex);
+            Y_UNUSED(range);
+            Y_UNUSED(guardedSglist);
+            Y_UNUSED(traceId);
+
+            ++readsCount;
+
+            return MakeFuture<TDBGReadBlocksResponse>(
+                {.Error = MakeError(S_OK)});
+        };
+
+        size_t writesCount = 0;
+        // Will response with error for write requests.
+        DirectBlockGroup->WriteBlocksToDDiskHandler = [&]   //
+            (ui32 vChunkIndex,
+             THostIndex hostIndex,
+             TBlockRange64 range,
+             const TGuardedSgList& guardedSglist,
+             const NWilson::TTraceId& traceId)
+        {
+            Y_UNUSED(vChunkIndex);
+            Y_UNUSED(hostIndex);
+            Y_UNUSED(range);
+            Y_UNUSED(guardedSglist);
+            Y_UNUSED(traceId);
+
+            ++writesCount;
+
+            return MakeFuture<TDBGWriteBlocksResponse>(
+                {.Error = MakeError(E_REJECTED)});
+        };
+
+        // Mark DDisk#1 completely fresh.
+        DirtyMap->UpdateWatermarkDebugOnly(FreshDDisk, 0);
+
+        // Start data copy
+        ExpectedRange = TBlockRange64::WithLength(0, BlocksPerCopy);
+        auto complete = Copier->Start();
+
+        // Wait for copy range retry scheduled.
+        WaitScheduledTasks(1, TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(1, readsCount);
+        UNIT_ASSERT_VALUES_EQUAL(1, writesCount);
+
+        // Data copying should not be advanced.
+        UNIT_ASSERT_VALUES_EQUAL(false, complete.IsReady());
+        UNIT_ASSERT_VALUES_EQUAL(
+            TBlockRange64::WithLength(0, 32768),
+            *DirtyMap->GetFreshRange(FreshDDisk));
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H0*{Operational,32768};"
+            "H1*{Fresh+,0};"   // Watermarks
+            "H2*{Operational,32768};"
+            "H3*{Operational,32768};"
+            "H4+{Disabled,0};",
+            DirtyMap->DebugPrintDDiskState());
     }
 
     Y_UNIT_TEST_F(ShouldStartAfterStop, TFixture)
@@ -234,7 +557,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
         Init();
 
         // Mark DDisk#1 completely fresh.
-        DirtyMap.MarkFresh(FreshDDisk, 0);
+        DirtyMap->UpdateWatermarkDebugOnly(FreshDDisk, 0);
 
         // Start data coping
         ExpectedRange = TBlockRange64::WithLength(0, BlocksPerCopy);
@@ -264,12 +587,12 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
             complete.GetValue());
 
         UNIT_ASSERT_VALUES_EQUAL(
-            "H0*{Operational,32768,32768};"
-            "H1*{Fresh,256,256};"   // Watermarks
-            "H2*{Operational,32768,32768};"
-            "H3*{Operational,32768,32768};"
-            "H4+{Disabled,0,0};",
-            DirtyMap.DebugPrintDDiskState());
+            "H0*{Operational,32768};"
+            "H1*{Fresh+,256};"   // Watermarks
+            "H2*{Operational,32768};"
+            "H3*{Operational,32768};"
+            "H4+{Disabled,0};",
+            DirtyMap->DebugPrintDDiskState());
 
         // Start data coping again
         ExpectedRange = TBlockRange64::WithLength(256, BlocksPerCopy);
@@ -299,12 +622,12 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
             complete.GetValue());
 
         UNIT_ASSERT_VALUES_EQUAL(
-            "H0*{Operational,32768,32768};"
-            "H1*{Fresh,512,512};"   // Watermarks
-            "H2*{Operational,32768,32768};"
-            "H3*{Operational,32768,32768};"
-            "H4+{Disabled,0,0};",
-            DirtyMap.DebugPrintDDiskState());
+            "H0*{Operational,32768};"
+            "H1*{Fresh+,512};"   // Watermarks
+            "H2*{Operational,32768};"
+            "H3*{Operational,32768};"
+            "H4+{Disabled,0};",
+            DirtyMap->DebugPrintDDiskState());
     }
 
     Y_UNIT_TEST_F(ShouldStartFromWaterline, TFixture)
@@ -312,7 +635,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
         Init();
 
         // Mark DDisk#1 partially fresh.
-        DirtyMap.MarkFresh(FreshDDisk, CopyRangeSize);
+        DirtyMap->UpdateWatermarkDebugOnly(FreshDDisk, CopyRangeSize);
 
         // Start data copy
         ExpectedRange = TBlockRange64::WithLength(256, BlocksPerCopy);
@@ -335,42 +658,56 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
             complete.GetValue());
 
         UNIT_ASSERT_VALUES_EQUAL(
-            CopyRangeSize * 2,
-            *DirtyMap.GetFreshWatermark(FreshDDisk));
+            TBlockRange64::MakeClosedInterval(512, 32767),
+            *DirtyMap->GetFreshRange(FreshDDisk));
 
         UNIT_ASSERT_VALUES_EQUAL(
-            "H0*{Operational,32768,32768};"
-            "H1*{Fresh,512,512};"   // Watermarks
-            "H2*{Operational,32768,32768};"
-            "H3*{Operational,32768,32768};"
-            "H4+{Disabled,0,0};",
-            DirtyMap.DebugPrintDDiskState());
+            "H0*{Operational,32768};"
+            "H1*{Fresh+,512};"   // Watermarks
+            "H2*{Operational,32768};"
+            "H3*{Operational,32768};"
+            "H4+{Disabled,0};",
+            DirtyMap->DebugPrintDDiskState());
     }
 
     Y_UNIT_TEST_F(ShouldCopyWithWrites, TFixture)
     {
+        const auto overlapped_0 = TBlockRange64::WithLength(
+            10,
+            10);   // overlapped with #0 sync range
+        const auto overlapped_1 = TBlockRange64::WithLength(
+            260,
+            10);   // overlapped with #1 sync range
+        const auto overlapped_01 = TBlockRange64::WithLength(
+            250,
+            10);   // overlapped with #0 + #1 sync range
+
         Init();
         RangeData = GenerateRandomString(CopyRangeSize * 3);
 
         // Mark DDisk#1 completely fresh.
-        DirtyMap.MarkFresh(FreshDDisk, 0);
+        DirtyMap->UpdateWatermarkDebugOnly(FreshDDisk, 0);
 
-        DirtyMap.RegisterInflightWrite(123, TBlockRange64::WithLength(10, 10));
-        DirtyMap.WriteFinished(
+        DirtyMap->RegisterInflightWrite(123, TBlockRange64::WithLength(10, 10));
+        DirtyMap->WriteFinished(
             123,
-            TBlockRange64::WithLength(10, 10),   // #0
+            overlapped_0,
             MakePrimariesMask(),
             MakePrimariesMask());
-        DirtyMap.RegisterInflightWrite(124, TBlockRange64::WithLength(250, 10));
-        DirtyMap.WriteFinished(
+        DirtyMap->RegisterInflightWrite(
             124,
-            TBlockRange64::WithLength(250, 10),   // #0 + #1
+            TBlockRange64::WithLength(250, 10));
+        DirtyMap->WriteFinished(
+            124,
+            overlapped_01,
             MakePrimariesMask(),
             MakePrimariesMask());
-        DirtyMap.RegisterInflightWrite(125, TBlockRange64::WithLength(260, 10));
-        DirtyMap.WriteFinished(
+        DirtyMap->RegisterInflightWrite(
             125,
-            TBlockRange64::WithLength(260, 10),   // #1
+            TBlockRange64::WithLength(260, 10));
+        DirtyMap->WriteFinished(
+            125,
+            overlapped_1,
             MakePrimariesMask(),
             MakePrimariesMask());
 
@@ -379,13 +716,17 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
         auto complete = Copier->Start();
 
         // Coping range #0 in progress.
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H1[0..255]ready;",
+            DirtyMap->DebugPrintInflightSync());
 
         // Flush hints should not contains writes overlapped with copied
         // range #0
-        auto flushHints = DirtyMap.MakeFlushHint(1);
+        auto flushHints = DirtyMap->MakeFlushHint(1);
         UNIT_ASSERT_VALUES_EQUAL(
             "H0->H0:125[260..269];"
             "H0->H3:125[260..269];"
+            "H1->H1:125[260..269];"
             "H2->H2:125[260..269];",
             flushHints.DebugPrint());
 
@@ -401,11 +742,22 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
             TDBGWriteBlocksResponse{.Error = MakeError(S_OK)},
             false);
 
+        // Coping range #1 waiting for flushes completed.
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H1[256..511]wait;",
+            DirtyMap->DebugPrintInflightSync());
+
+        // Complete flushes to start coping range #1.
+        FinishFlushes(*DirtyMap, flushHints);
+
         // Coping range #1 in progress.
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H1[256..511]ready;",
+            DirtyMap->DebugPrintInflightSync());
 
         // Flush hints should not contains writes overlapped with range #1,
         // but contains #0
-        flushHints = DirtyMap.MakeFlushHint(1);
+        flushHints = DirtyMap->MakeFlushHint(1);
         UNIT_ASSERT_VALUES_EQUAL(
             "H0->H0:123[10..19];"
             "H0->H3:123[10..19];"
@@ -426,9 +778,12 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
             false);
 
         //  Coping range #2 in progress.
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H1[512..767]ready;",
+            DirtyMap->DebugPrintInflightSync());
 
         // Flush hints should contains writes overlapped with range #1
-        flushHints = DirtyMap.MakeFlushHint(1);
+        flushHints = DirtyMap->MakeFlushHint(1);
         UNIT_ASSERT_VALUES_EQUAL(
             "H0->H0:124[250..259];"
             "H0->H3:124[250..259];"
@@ -444,6 +799,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
         SetWriteResult(
             TDBGWriteBlocksResponse{.Error = MakeError(S_OK)},
             false);
+        UNIT_ASSERT_VALUES_EQUAL("", DirtyMap->DebugPrintInflightSync());
 
         // Data copying should be completed with error.
         UNIT_ASSERT_VALUES_EQUAL(true, complete.IsReady());
@@ -452,8 +808,8 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
             complete.GetValue());
 
         UNIT_ASSERT_VALUES_EQUAL(
-            CopyRangeSize * 3,
-            *DirtyMap.GetFreshWatermark(FreshDDisk));
+            TBlockRange64::MakeClosedInterval(768, 32767),
+            *DirtyMap->GetFreshRange(FreshDDisk));
     }
 }
 

@@ -293,4 +293,98 @@ Y_UNIT_TEST_SUITE(BlockingQueueTest) {
         pusher1.Join();
         pusher2.Join();
     }
+
+    Y_UNIT_TEST(DefaultProviderTotalSizeEqualsSize) {
+        NThreading::TBlockingQueue<int> queue(100);
+
+        UNIT_ASSERT_VALUES_EQUAL(queue.TotalSize(), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(queue.Size(), 0u);
+
+        for (int i = 0; i != 10; ++i) {
+            queue.Push(i);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(queue.TotalSize(), queue.Size());
+        UNIT_ASSERT_VALUES_EQUAL(queue.TotalSize(), 10u);
+
+        queue.Pop();
+        UNIT_ASSERT_VALUES_EQUAL(queue.TotalSize(), queue.Size());
+        UNIT_ASSERT_VALUES_EQUAL(queue.TotalSize(), 9u);
+    }
+
+    Y_UNIT_TEST(CustomSizeProviderTotalSize) {
+        struct TStringSizeProvider {
+            size_t operator()(const TString& s) const {
+                return s.size();
+            }
+        };
+
+        NThreading::TBlockingQueue<TString, TStringSizeProvider> queue(100);
+
+        UNIT_ASSERT_VALUES_EQUAL(queue.TotalSize(), 0u);
+
+        queue.Push("hello");
+        queue.Push("world!");
+        UNIT_ASSERT_VALUES_EQUAL(queue.TotalSize(), 11u);
+        UNIT_ASSERT_VALUES_EQUAL(queue.Size(), 2u);
+
+        queue.Pop();
+        UNIT_ASSERT_VALUES_EQUAL(queue.TotalSize(), 6u);
+
+        auto drained = queue.Drain();
+        UNIT_ASSERT_VALUES_EQUAL(drained.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(queue.TotalSize(), 0u);
+        UNIT_ASSERT(queue.Empty());
+    }
+
+    Y_UNIT_TEST(CustomSizeProviderPushBlocksUntilSpace) {
+        struct TStringSizeProvider {
+            size_t operator()(const TString& s) const {
+                return s.size();
+            }
+        };
+
+        NThreading::TBlockingQueue<TString, TStringSizeProvider> queue(10);
+
+        UNIT_ASSERT(queue.Push("12345"));
+        UNIT_ASSERT(queue.Push("67890"));
+        UNIT_ASSERT_VALUES_EQUAL(queue.TotalSize(), 10u);
+        UNIT_ASSERT(!queue.Push("ab", TDuration::MilliSeconds(50)));
+
+        queue.Pop();
+        UNIT_ASSERT(queue.Push("ab", TDuration::Seconds(1)));
+        UNIT_ASSERT_VALUES_EQUAL(queue.TotalSize(), 7u);
+    }
+
+    Y_UNIT_TEST(CustomSizeProviderAllowsAtLeastOneOversizedElement) {
+        struct TStringSizeProvider {
+            size_t operator()(const TString& s) const {
+                return s.size();
+            }
+        };
+
+        NThreading::TBlockingQueue<TString, TStringSizeProvider> queue(10);
+
+        // Empty queue accepts an element even if SizeProvider(e) > maxSize.
+        const TString oversized(20, 'a');
+        UNIT_ASSERT_VALUES_EQUAL(queue.ElementSize(oversized), 20u);
+        UNIT_ASSERT(queue.Push(oversized, TDuration::Seconds(1)));
+        UNIT_ASSERT_VALUES_EQUAL(queue.Size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(queue.TotalSize(), 20u);
+
+        // While non-empty, another oversized element does not fit and times out.
+        UNIT_ASSERT(!queue.Push(TString(20, 'b'), TDuration::MilliSeconds(50)));
+        UNIT_ASSERT_VALUES_EQUAL(queue.Size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(queue.TotalSize(), 20u);
+
+        // After pop, oversized can be pushed again.
+        queue.Pop();
+        UNIT_ASSERT(queue.Empty());
+        UNIT_ASSERT(queue.Push(TString(15, 'c')));
+        UNIT_ASSERT_VALUES_EQUAL(queue.TotalSize(), 15u);
+
+        // Fits by maxSize alone, but temporarily no space while oversized occupies the queue.
+        UNIT_ASSERT_VALUES_EQUAL(queue.ElementSize("123456"), 6u);
+        UNIT_ASSERT(!queue.Push("123456", TDuration::MilliSeconds(50)));
+    }
 }

@@ -301,6 +301,90 @@ Y_UNIT_TEST(DataQueryMulti) {
     UNIT_ASSERT_EQUAL_C(plan.GetMapSafe().at("Plan").GetMapSafe().at("Plans").GetArraySafe().size(), 0, result.GetQueryPlan());
 }
 
+Y_UNIT_TEST(TxIdInFullStatsPlan) {
+    NKikimrConfig::TAppConfig app;
+    app.MutableFeatureFlags()->SetEnableTxIdInStats(true);
+    TKikimrRunner kikimr(app);
+    auto db = kikimr.GetTableClient();
+    auto session = db.CreateSession().GetValueSync().GetSession();
+
+    TExecDataQuerySettings settings;
+    settings.CollectQueryStats(ECollectQueryStatsMode::Full);
+
+    auto result = session.ExecuteDataQuery(R"(
+        SELECT * FROM `/Root/TwoShard`;
+    )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), settings).ExtractValueSync();
+    result.GetIssues().PrintTo(Cerr);
+    AssertSuccessResult(result);
+
+    NJson::TJsonValue plan;
+    UNIT_ASSERT_C(NJson::ReadJsonTree(result.GetQueryPlan(), &plan, true), result.GetQueryPlan());
+
+    // Executer TxId is reported per execution phase, so that the plan can be matched with
+    // the TxId written by LWTrace probes.
+    const auto& plans = plan.GetMapSafe().at("Plan").GetMapSafe().at("Plans").GetArraySafe();
+    UNIT_ASSERT_C(!plans.empty(), result.GetQueryPlan());
+
+    bool txIdFound = false;
+    for (const auto& phase : plans) {
+        const auto* txId = phase.GetMapSafe().FindPtr("TxId");
+        if (txId) {
+            UNIT_ASSERT_C(txId->GetUIntegerSafe() > 0, result.GetQueryPlan());
+            txIdFound = true;
+        }
+    }
+    UNIT_ASSERT_C(txIdFound, result.GetQueryPlan());
+}
+
+Y_UNIT_TEST(NoTxIdWhenFeatureFlagDisabled) {
+    // EnableTxIdInStats defaults to false: TxId must not appear in the plan.
+    auto kikimr = DefaultKikimrRunner();
+    auto db = kikimr.GetTableClient();
+    auto session = db.CreateSession().GetValueSync().GetSession();
+
+    TExecDataQuerySettings settings;
+    settings.CollectQueryStats(ECollectQueryStatsMode::Full);
+
+    auto result = session.ExecuteDataQuery(R"(
+        SELECT * FROM `/Root/TwoShard`;
+    )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), settings).ExtractValueSync();
+    result.GetIssues().PrintTo(Cerr);
+    AssertSuccessResult(result);
+
+    NJson::TJsonValue plan;
+    UNIT_ASSERT_C(NJson::ReadJsonTree(result.GetQueryPlan(), &plan, true), result.GetQueryPlan());
+
+    for (const auto& phase : plan.GetMapSafe().at("Plan").GetMapSafe().at("Plans").GetArraySafe()) {
+        UNIT_ASSERT_C(!phase.GetMapSafe().contains("TxId"), result.GetQueryPlan());
+    }
+}
+
+Y_UNIT_TEST(NoTxIdForLiteralOnlyQuery) {
+    NKikimrConfig::TAppConfig app;
+    app.MutableFeatureFlags()->SetEnableTxIdInStats(true);
+    TKikimrRunner kikimr(app);
+    auto db = kikimr.GetTableClient();
+    auto session = db.CreateSession().GetValueSync().GetSession();
+
+    TExecDataQuerySettings settings;
+    settings.CollectQueryStats(ECollectQueryStatsMode::Full);
+
+    // Literal-only execution never reaches shards and gets no executer TxId,
+    // so nothing must be reported (and nothing must crash).
+    auto result = session.ExecuteDataQuery(R"(
+        SELECT 1;
+    )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), settings).ExtractValueSync();
+    result.GetIssues().PrintTo(Cerr);
+    AssertSuccessResult(result);
+
+    NJson::TJsonValue plan;
+    UNIT_ASSERT_C(NJson::ReadJsonTree(result.GetQueryPlan(), &plan, true), result.GetQueryPlan());
+
+    for (const auto& phase : plan.GetMapSafe().at("Plan").GetMapSafe().at("Plans").GetArraySafe()) {
+        UNIT_ASSERT_C(!phase.GetMapSafe().contains("TxId"), result.GetQueryPlan());
+    }
+}
+
 Y_UNIT_TEST(RequestUnitForBadRequestExecute) {
     auto kikimr = DefaultKikimrRunner();
     auto db = kikimr.GetTableClient();
@@ -379,6 +463,88 @@ Y_UNIT_TEST(RequestUnitForExecute) {
         UNIT_ASSERT(ru != result.GetResponseMetadata().end());
         UNIT_ASSERT(atoi(ru->second.c_str()) > 1);
     }
+}
+
+Y_UNIT_TEST(LegacySimplifiedPlanTableFullScanActualStats) {
+    NKikimrConfig::TAppConfig app;
+    app.MutableTableServiceConfig()->SetEnableNewRBO(false);
+
+    TKikimrRunner kikimr{TKikimrSettings(app)};
+    auto db = kikimr.GetTableClient();
+    auto session = db.CreateSession().GetValueSync().GetSession();
+
+    TExecDataQuerySettings settings;
+    settings.CollectQueryStats(ECollectQueryStatsMode::Full);
+
+    const auto execute = [&](const TString& query) {
+        auto result = session.ExecuteDataQuery(
+            query,
+            TTxControl::BeginTx().CommitTx(),
+            settings
+        ).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        NJson::TJsonValue plan;
+        UNIT_ASSERT_C(NJson::ReadJsonTree(result.GetQueryPlan(), &plan, true), result.GetQueryPlan());
+        return plan.GetMapSafe().at("SimplifiedPlan");
+    };
+
+    const auto fullScanPlan = execute(R"(
+        SELECT Key, Value1 FROM `/Root/TwoShard`;
+    )");
+    const auto fullScan = FindPlanNodeByKv(fullScanPlan, "Name", "TableFullScan");
+    UNIT_ASSERT_C(fullScan.IsDefined(), fullScanPlan);
+    UNIT_ASSERT_C(fullScan.GetMapSafe().contains("A-Rows"), fullScanPlan);
+    UNIT_ASSERT_VALUES_EQUAL_C(fullScan.GetMapSafe().at("A-Rows").GetDoubleSafe(), 6, fullScanPlan);
+    UNIT_ASSERT_C(fullScan.GetMapSafe().contains("A-Size"), fullScanPlan);
+    UNIT_ASSERT_C(fullScan.GetMapSafe().at("A-Size").GetDoubleSafe() > 0, fullScanPlan);
+
+    const auto limitedPlan = execute(R"(
+        SELECT Key, Value1 FROM `/Root/TwoShard` LIMIT 3;
+    )");
+    const auto limitNode = FindPlanNodeByKv(limitedPlan, "Node Type", "Limit");
+    UNIT_ASSERT_C(limitNode.IsDefined(), limitedPlan);
+
+    const auto limit = FindPlanNodeByKv(limitNode, "Name", "Limit");
+    UNIT_ASSERT_C(limit.IsDefined(), limitedPlan);
+    UNIT_ASSERT_C(limit.GetMapSafe().contains("A-Rows"), limitedPlan);
+    UNIT_ASSERT_VALUES_EQUAL_C(limit.GetMapSafe().at("A-Rows").GetDoubleSafe(), 3, limitedPlan);
+
+    const auto limitedScan = FindPlanNodeByKv(limitNode, "Name", "TableFullScan");
+    UNIT_ASSERT_C(limitedScan.IsDefined(), limitedPlan);
+    UNIT_ASSERT_C(limitedScan.GetMapSafe().contains("A-Rows"), limitedPlan);
+    UNIT_ASSERT_C(limitedScan.GetMapSafe().at("A-Rows").GetDoubleSafe() > 0, limitedPlan);
+    UNIT_ASSERT_C(limitedScan.GetMapSafe().contains("A-Size"), limitedPlan);
+    UNIT_ASSERT_C(limitedScan.GetMapSafe().at("A-Size").GetDoubleSafe() > 0, limitedPlan);
+}
+
+Y_UNIT_TEST(LegacySimplifiedPlanQueryServiceTableFullScanActualStats) {
+    NKikimrConfig::TAppConfig app;
+    app.MutableTableServiceConfig()->SetEnableNewRBO(false);
+
+    TKikimrRunner kikimr{TKikimrSettings(app)};
+    auto client = kikimr.GetQueryClient();
+    auto settings = NYdb::NQuery::TExecuteQuerySettings()
+        .StatsMode(NYdb::NQuery::EStatsMode::Full);
+
+    auto result = client.ExecuteQuery(R"(
+        SELECT Key, Value1 FROM `/Root/TwoShard`;
+    )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    UNIT_ASSERT(result.GetStats());
+    UNIT_ASSERT(result.GetStats()->GetPlan());
+
+    NJson::TJsonValue plan;
+    UNIT_ASSERT_C(
+        NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan, true),
+        *result.GetStats()->GetPlan());
+    const auto simplifiedPlan = plan.GetMapSafe().at("SimplifiedPlan");
+    const auto fullScan = FindPlanNodeByKv(simplifiedPlan, "Name", "TableFullScan");
+    UNIT_ASSERT_C(fullScan.IsDefined(), simplifiedPlan);
+    UNIT_ASSERT_C(fullScan.GetMapSafe().contains("A-Rows"), simplifiedPlan);
+    UNIT_ASSERT_VALUES_EQUAL_C(fullScan.GetMapSafe().at("A-Rows").GetDoubleSafe(), 6, simplifiedPlan);
+    UNIT_ASSERT_C(fullScan.GetMapSafe().contains("A-Size"), simplifiedPlan);
+    UNIT_ASSERT_C(fullScan.GetMapSafe().at("A-Size").GetDoubleSafe() > 0, simplifiedPlan);
 }
 
 Y_UNIT_TEST(StatsProfile) {

@@ -57,6 +57,7 @@ PY_SRCS(
 )
 
 PEERDIR(
+    ydb/apps/dstool/protos
     ydb/core/protos
     ydb/public/api/protos
     ydb/public/api/grpc

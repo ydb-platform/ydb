@@ -1,0 +1,18 @@
+{
+    "schema" = <
+        unique_keys = %true;
+        strict = %true;
+    > [
+        {
+            "name" = "value";
+            "type" = "int64";
+            "sort_order" = "ascending";
+        };
+        {
+            "name" = "key";
+            "type" = "string";
+        };
+    ];
+    "_yql_dynamic" = %true;
+    "_yql_dynamic_native_read" = %true;
+}

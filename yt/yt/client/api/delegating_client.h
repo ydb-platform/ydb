@@ -1030,16 +1030,16 @@ public:
     DELEGATE_METHOD(TFuture<IRowBatchReaderPtr>, CreateShuffleReader, (
         const TSignedShuffleHandlePtr& shuffleHandle,
         int partitionIndex,
-        std::optional<std::pair<int, int>> writerIndexRange,
+        std::optional<std::pair<int, int>> logicalWriterIndexRange,
         const TShuffleReaderOptions& options),
-        (shuffleHandle, partitionIndex, writerIndexRange, options))
+        (shuffleHandle, partitionIndex, logicalWriterIndexRange, options))
 
     DELEGATE_METHOD(TFuture<IRowBatchWriterPtr>, CreateShuffleWriter, (
         const TSignedShuffleHandlePtr& shuffleHandle,
         const std::string& partitionColumn,
-        std::optional<int> writerIndex,
+        std::optional<int> logicalWriterIndex,
         const TShuffleWriterOptions& options),
-        (shuffleHandle, partitionColumn, writerIndex, options))
+        (shuffleHandle, partitionColumn, logicalWriterIndex, options))
 
     #undef DELEGATE_METHOD
 

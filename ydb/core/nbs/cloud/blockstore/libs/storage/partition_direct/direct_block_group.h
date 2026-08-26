@@ -128,7 +128,9 @@ public:
     // Starts the DBG and returns a future that resolves when the locked-session
     // quorum is reached for the first time. Intended only to gate the
     // synchronous start.
-    virtual NThreading::TFuture<void> Run(IPartitionDirectService* service) = 0;
+    virtual NThreading::TFuture<void> Run(
+        ITraceService* traceService,
+        IPartitionDirectService* service) = 0;
 
     virtual NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksFromDDisk(
         ui32 vChunkIndex,
@@ -209,9 +211,6 @@ public:
     virtual NThreading::TFuture<TListPBufferResponse> ListPBuffers(
         THostIndex hostIndex) = 0;
 
-    // Query dump for DirectBlockGroup and VChunks.
-    virtual NThreading::TFuture<TDBGDumpResponse> Dump() = 0;
-
     // Result of the DBG's AddHost request. On success (empty error) applies the
     // new host; on failure (e.g. rejected at MaxHostCount) logs the reason.
     virtual void OnAddHostResult(
@@ -220,8 +219,19 @@ public:
         NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
         NKikimrBlobStorage::NDDisk::TDDiskId pbufferId) = 0;
 
+    // Reserves byteCount from the disk-wide range-copy bandwidth budget shared
+    // by all DirectBlockGroups. Returns the delay before the operation may
+    // start. Zero means it may start immediately or throttling is disabled.
+    [[nodiscard]] virtual TDuration TakeCopyRangeBudget(ui64 byteCount) = 0;
+
+    // Translate host index to NodeId.
+    [[nodiscard]] virtual ui32 GetNodeId(THostIndex host) const = 0;
+
+    // Query dump for DirectBlockGroup and VChunks.
+    virtual NThreading::TFuture<TDBGDumpResponse> Dump() = 0;
+
     // Builds this DBG's monitoring snapshot on the executor thread (like Dump).
-    virtual NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot() = 0;
+    virtual NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot() const = 0;
 };
 
 using IDirectBlockGroupPtr = std::shared_ptr<IDirectBlockGroup>;

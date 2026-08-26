@@ -3,12 +3,13 @@ from __future__ import annotations
 import io
 import logging
 from abc import ABC, abstractmethod
-from collections.abc import Generator, Iterable, Sequence
+from collections.abc import Generator, Sequence
 from datetime import timezone, tzinfo
 from typing import (
     TYPE_CHECKING,
     Any,
     BinaryIO,
+    cast,
 )
 from zoneinfo import ZoneInfoNotFoundError
 
@@ -18,16 +19,21 @@ from clickhouse_connect.datatypes import dynamic as dynamic_module
 from clickhouse_connect.datatypes.base import ClickHouseType
 from clickhouse_connect.datatypes.registry import get_from_name
 from clickhouse_connect.driver import options, tzutil
-from clickhouse_connect.driver.binding import quote_identifier
+from clickhouse_connect.driver._backend.models import ClientConfig, QueryRuntime
+from clickhouse_connect.driver._backend.operations import CommandOp, Operation, QueryOp, RawQueryOp
+from clickhouse_connect.driver._backend.orchestration import (
+    InitializationResult,
+    init_sequence,
+    insert_context_sequence,
+    run_sync,
+)
+from clickhouse_connect.driver.binding import bind_query, str_query_value
 from clickhouse_connect.driver.common import (
     StreamContext,
     coerce_bool,
     coerce_int,
     dict_copy,
-)
-from clickhouse_connect.driver.constants import (
-    CH_VERSION_WITH_PROTOCOL,
-    PROTOCOL_VERSION_WITH_LOW_CARD,
+    version_at_least,
 )
 from clickhouse_connect.driver.exceptions import (
     DataError,
@@ -36,7 +42,7 @@ from clickhouse_connect.driver.exceptions import (
 )
 from clickhouse_connect.driver.external import ExternalData
 from clickhouse_connect.driver.insert import InsertContext
-from clickhouse_connect.driver.models import ColumnDef, SettingDef, SettingStatus
+from clickhouse_connect.driver.models import SettingDef, SettingStatus, setting_status
 from clickhouse_connect.driver.options import (
     check_arrow,
     check_numpy,
@@ -55,6 +61,7 @@ from clickhouse_connect.driver.query import (
     to_arrow_batches,
 )
 from clickhouse_connect.driver.summary import QuerySummary
+from clickhouse_connect.driver.types import Closable
 
 if TYPE_CHECKING:
     import numpy
@@ -62,9 +69,13 @@ if TYPE_CHECKING:
     import polars
     import pyarrow
 
-io.DEFAULT_BUFFER_SIZE = 1024 * 256
+io.DEFAULT_BUFFER_SIZE = 1024 * 256  # type: ignore[misc]  # override module default buffer size
 logger = logging.getLogger(__name__)
 arrow_str_setting = "output_format_arrow_string_as_string"
+
+# Orchestration queries are internal, so their decode must not be affected by
+# user-configured global read formats such as set_default_formats("String", "bytes").
+_INTERNAL_QUERY_FORMATS = {"String": "string"}
 
 
 def _strip_utc_timezone_from_arrow(table: pyarrow.Table) -> pyarrow.Table:
@@ -117,8 +128,11 @@ class Client(ABC):
     compression: str | None = None
     write_compression: str | None = None
     protocol_version = 0
-    valid_transport_settings = set()
-    optional_transport_settings = set()
+    # User-supplied initial ClickHouse settings, set by subclasses before
+    # initialization so generated setting defaults never overwrite them
+    _initial_settings: dict[str, Any] | None = None
+    valid_transport_settings: set[str] = set()
+    optional_transport_settings: set[str] = set()
     database = None
     max_error_message = 0
     _tz_source: TzSource = "auto"
@@ -169,7 +183,7 @@ class Client(ABC):
         """
         self.query_limit = coerce_int(query_limit)
         self.query_retries = coerce_int(query_retries)
-        if database and not database == "__default__":
+        if database and database != "__default__":
             self.database = database
         if show_clickhouse_errors is not None:
             self.show_clickhouse_errors = coerce_bool(show_clickhouse_errors)
@@ -184,9 +198,9 @@ class Client(ABC):
         self._tz_source = resolved_tz_source
 
         # Initialize attributes that will be set during connection
-        self.server_version = None
-        self.server_tz = timezone.utc
-        self.server_settings = {}
+        self.server_version: str | None = None
+        self.server_tz: tzinfo = timezone.utc
+        self.server_settings: dict[str, SettingDef] = {}
 
         if autoconnect:
             self._init_common_settings(resolved_tz_source)
@@ -195,51 +209,38 @@ class Client(ABC):
             self._deferred_tz_source = resolved_tz_source
 
     def _init_common_settings(self, tz_source: TzSource):
-        self.server_tz, self._dst_safe = timezone.utc, True
-        self.server_version, server_tz = tuple(self.command("SELECT version(), timezone()", use_database=False))
-        try:
-            server_tz_info = tzutil.resolve_zone(server_tz)
-            server_tz_info, self._dst_safe = tzutil.normalize_timezone(server_tz_info, trust_fixed_offset=True)
-            self.server_tz = server_tz_info
-        except ZoneInfoNotFoundError:
-            logger.warning(
-                "Server timezone %s could not be resolved, falling back to UTC; %s",
-                server_tz,
-                tzutil.TZDATA_HINT,
-            )
-        if tz_source == "auto":
-            self._apply_server_tz = self._dst_safe
-        else:
-            self._apply_server_tz = tz_source == "server"
+        config = ClientConfig(settings=self._initial_settings or {}, timezone_policy=tz_source)
+        result = run_sync(init_sequence(config), self._execute_operation)
+        self._apply_init_result(result)
 
-        if not self._apply_server_tz and not tzutil.local_tz_dst_safe:
-            logger.warning(
-                "local timezone %s may return unexpected times due to Daylight Savings Time/" + "Summer Time differences",
-                tzutil.local_tz.tzname(None),
-            )
-        readonly = "readonly"
-        if not self.min_version("19.17"):
-            readonly = common.get_setting("readonly")
-        server_settings = self.query(f"SELECT name, value, {readonly} as readonly FROM system.settings LIMIT 10000")
-        self.server_settings = {row["name"]: SettingDef(**row) for row in server_settings.named_results()}
+    def _execute_operation(self, operation: Operation) -> object:
+        """Execute an orchestration operation through this client's semantic methods.
 
-        if self.min_version(CH_VERSION_WITH_PROTOCOL) and common.get_setting("use_protocol_version"):
-            #  Unfortunately we have to validate that the client protocol version is actually used by ClickHouse
-            #  since the query parameter could be stripped off (in particular, by CHProxy)
-            test_data = self.raw_query(
-                "SELECT 1 AS check", fmt="Native", settings={"client_protocol_version": PROTOCOL_VERSION_WITH_LOW_CARD}
-            )
-            if test_data[8:16] == b"\x01\x01\x05check":
-                self.protocol_version = PROTOCOL_VERSION_WITH_LOW_CARD
-        if self._setting_status("date_time_input_format").is_writable:
-            self.set_client_setting("date_time_input_format", "best_effort")
-        if (
-            self._setting_status("allow_experimental_json_type").is_set
-            and self._setting_status("cast_string_to_dynamic_use_inference").is_writable
-        ):
-            self.set_client_setting("cast_string_to_dynamic_use_inference", "1")
-        if self.min_version("24.8") and not self.min_version("24.10"):
-            dynamic_module.json_serialization_format = 0
+        AsyncClient overrides this with a coroutine variant, so sync base-class
+        helpers that dispatch through it must themselves be overridden there.
+        """
+        settings = dict(operation.settings) or None
+        if isinstance(operation, CommandOp):
+            return self.command(operation.text, settings=settings, use_database=operation.use_database)
+        if isinstance(operation, QueryOp):
+            return self.query(operation.text, settings=settings, query_formats=dict(_INTERNAL_QUERY_FORMATS))
+        if isinstance(operation, RawQueryOp):
+            return self.raw_query(operation.text, settings=settings, fmt=operation.fmt)
+        raise TypeError(f"Unsupported operation type: {type(operation).__name__}")
+
+    def _apply_init_result(self, result: InitializationResult) -> None:
+        server_info = result.server_info
+        self.server_version = server_info.version
+        self.server_tz = server_info.timezone
+        self._dst_safe = result.timezone_dst_safe
+        self._apply_server_tz = result.apply_server_timezone
+        self.server_settings = dict(server_info.settings)
+        if result.protocol_version:
+            self.protocol_version = result.protocol_version
+        if result.json_serialization_format is not None:
+            dynamic_module.json_serialization_format = result.json_serialization_format
+        for key, value in result.client_setting_writes:
+            self.set_client_setting(key, value)
 
     def _validate_settings(self, settings: dict[str, Any] | None) -> dict[str, str]:
         """
@@ -247,16 +248,31 @@ class Client(ABC):
         :param settings:  Dictionary of setting name and values
         :return: A filtered dictionary of settings with values rendered as strings
         """
-        validated = {}
+        validated: dict[str, str] = {}
         invalid_action = common.get_setting("invalid_setting_action")
+        if not settings:
+            return validated
         for key, value in settings.items():
             str_value = self._validate_setting(key, value, invalid_action)
             if str_value is not None:
-                validated[key] = value
+                # Container values (e.g. `additional_table_filters`) must be sent as a properly
+                # quoted/escaped ClickHouse literal (str_value); Python's own str()/repr of a dict
+                # or list is not valid ClickHouse syntax and would otherwise be mangled by urlencode.
+                # Scalar values are passed through as-is to preserve their original type.
+                validated[key] = str_value if isinstance(value, (dict, list, tuple)) else value
         return validated
 
     def _validate_setting(self, key: str, value: Any, invalid_action: str) -> str | None:
-        str_value = str(value)
+        if isinstance(value, dict):
+            # Settings of Map type (e.g. `additional_table_filters`) must be sent as a ClickHouse
+            # map literal, always with single-quoted/escaped keys and values -- regardless of the
+            # unrelated `dict_parameter_format` setting, which only governs bound query parameters.
+            pairs = (f"{str_query_value(k)}: {str_query_value(v)}" for k, v in value.items())
+            str_value = f"{{{', '.join(pairs)}}}"
+        elif isinstance(value, (list, tuple)):
+            str_value = str_query_value(value)
+        else:
+            str_value = str(value)
         if value is True:
             str_value = "1"
         elif value is False:
@@ -282,10 +298,7 @@ class Client(ABC):
         return str_value
 
     def _setting_status(self, key: str) -> SettingStatus:
-        comp_setting = self.server_settings.get(key)
-        if not comp_setting:
-            return SettingStatus(False, False)
-        return SettingStatus(comp_setting.value != "0", comp_setting.readonly != 1)
+        return setting_status(self.server_settings, key)
 
     def _prep_query(self, context: QueryContext):
         if context.is_select and not context.has_limit and self.query_limit:
@@ -294,6 +307,22 @@ class Client(ABC):
                 return context.final_query + limit.encode()
             return context.final_query + limit
         return context.final_query
+
+    def _columns_only_result(self, context: QueryContext, columns_meta: Sequence[dict[str, Any]]) -> QueryResult:
+        """Build the empty result for a columns-only (LIMIT 0) metadata probe."""
+        names: list[str] = []
+        types: list[ClickHouseType] = []
+        renamer = context.column_renamer
+        for col in columns_meta:
+            name = col["name"]
+            if renamer is not None:
+                try:
+                    name = renamer(name)
+                except Exception as e:
+                    logger.debug("Failed to rename col '%s'. Skipping rename. Error: %s", name, e)
+            names.append(name)
+            types.append(get_from_name(col["type"]))
+        return QueryResult([], None, tuple(names), tuple(types))  # type: ignore[arg-type]
 
     def _check_tz_change(self, new_tz) -> tzinfo | None:
         if new_tz:
@@ -349,7 +378,7 @@ class Client(ABC):
         column_oriented: bool | None = None,
         use_numpy: bool | None = None,
         max_str_len: int | None = None,
-        context: QueryContext = None,
+        context: QueryContext | None = None,
         query_tz: str | tzinfo | None = None,
         column_tzs: dict[str, str | tzinfo] | None = None,
         external_data: ExternalData | None = None,
@@ -363,14 +392,17 @@ class Client(ABC):
         """
         if query and query.lower().strip().startswith("select __connect_version__"):
             return QueryResult(
-                [[f"ClickHouse Connect v.{version()}  ⓒ ClickHouse Inc."]], None, ("connect_version",), (get_from_name("String"),)
+                [[f"ClickHouse Connect v.{version()}  ⓒ ClickHouse Inc."]],
+                None,
+                ("connect_version",),
+                (get_from_name("String"),),
             )
         kwargs = locals().copy()
         del kwargs["self"]
         query_context = self.create_query_context(**kwargs)
         if query_context.is_command:
             response = self.command(
-                query,
+                cast(str, query),
                 parameters=query_context.parameters,
                 settings=query_context.settings,
                 external_data=query_context.external_data,
@@ -390,7 +422,7 @@ class Client(ABC):
         column_formats: dict[str, str | dict[str, str]] | None = None,
         encoding: str | None = None,
         use_none: bool | None = None,
-        context: QueryContext = None,
+        context: QueryContext | None = None,
         query_tz: str | tzinfo | None = None,
         column_tzs: dict[str, str | tzinfo] | None = None,
         external_data: ExternalData | None = None,
@@ -413,7 +445,7 @@ class Client(ABC):
         column_formats: dict[str, str | dict[str, str]] | None = None,
         encoding: str | None = None,
         use_none: bool | None = None,
-        context: QueryContext = None,
+        context: QueryContext | None = None,
         query_tz: str | tzinfo | None = None,
         column_tzs: dict[str, str | tzinfo] | None = None,
         external_data: ExternalData | None = None,
@@ -436,7 +468,7 @@ class Client(ABC):
         column_formats: dict[str, str | dict[str, str]] | None = None,
         encoding: str | None = None,
         use_none: bool | None = None,
-        context: QueryContext = None,
+        context: QueryContext | None = None,
         query_tz: str | tzinfo | None = None,
         column_tzs: dict[str, str | tzinfo] | None = None,
         external_data: ExternalData | None = None,
@@ -450,13 +482,32 @@ class Client(ABC):
         """
         return self._context_query(locals(), use_numpy=False, streaming=True).rows_stream
 
+    def _prep_raw_query_runtime(
+        self,
+        query: str,
+        parameters: Sequence | dict[str, Any] | None,
+        settings: dict[str, Any] | None,
+        fmt: str | None,
+        use_database: bool,
+    ) -> tuple[str | bytes, dict[str, str], QueryRuntime]:
+        """Append the format, bind parameters, and build the runtime for a raw query."""
+        if fmt:
+            query += f"\n FORMAT {fmt}"
+        final_query, bind_params = bind_query(query, parameters, self.server_tz)
+        runtime = QueryRuntime(
+            database=self.database if use_database else None,
+            settings=self._validate_settings(settings or {}),
+            retries=self.query_retries,
+        )
+        return final_query, bind_params, runtime
+
     @abstractmethod
     def raw_query(
         self,
         query: str,
         parameters: Sequence | dict[str, Any] | None = None,
         settings: dict[str, Any] | None = None,
-        fmt: str = None,
+        fmt: str | None = None,
         use_database: bool = True,
         external_data: ExternalData | None = None,
         transport_settings: dict[str, str] | None = None,
@@ -480,7 +531,7 @@ class Client(ABC):
         query: str,
         parameters: Sequence | dict[str, Any] | None = None,
         settings: dict[str, Any] | None = None,
-        fmt: str = None,
+        fmt: str | None = None,
         use_database: bool = True,
         external_data: ExternalData | None = None,
         transport_settings: dict[str, str] | None = None,
@@ -508,7 +559,7 @@ class Client(ABC):
         encoding: str | None = None,
         use_none: bool | None = None,
         max_str_len: int | None = None,
-        context: QueryContext = None,
+        context: QueryContext | None = None,
         external_data: ExternalData | None = None,
         transport_settings: dict[str, str] | None = None,
     ) -> numpy.ndarray:
@@ -531,7 +582,7 @@ class Client(ABC):
         encoding: str | None = None,
         use_none: bool | None = None,
         max_str_len: int | None = None,
-        context: QueryContext = None,
+        context: QueryContext | None = None,
         external_data: ExternalData | None = None,
         transport_settings: dict[str, str] | None = None,
     ) -> StreamContext:
@@ -557,7 +608,7 @@ class Client(ABC):
         use_na_values: bool | None = None,
         query_tz: str | None = None,
         column_tzs: dict[str, str | tzinfo] | None = None,
-        context: QueryContext = None,
+        context: QueryContext | None = None,
         external_data: ExternalData | None = None,
         use_extended_dtypes: bool | None = None,
         transport_settings: dict[str, str] | None = None,
@@ -585,7 +636,7 @@ class Client(ABC):
         use_na_values: bool | None = None,
         query_tz: str | None = None,
         column_tzs: dict[str, str | tzinfo] | None = None,
-        context: QueryContext = None,
+        context: QueryContext | None = None,
         external_data: ExternalData | None = None,
         use_extended_dtypes: bool | None = None,
         transport_settings: dict[str, str] | None = None,
@@ -688,7 +739,7 @@ class Client(ABC):
         if as_pandas and use_extended_dtypes is None:
             use_extended_dtypes = True
         return QueryContext(
-            query=query,
+            query=cast(str | bytes, query),
             parameters=parameters,
             settings=settings,
             query_formats=query_formats,
@@ -766,13 +817,16 @@ class Client(ABC):
         self._add_integration_tag("arrow")
         settings = self._update_arrow_settings(settings, use_strings)
         return to_arrow_batches(
-            self.raw_stream(
-                query,
-                parameters,
-                settings,
-                fmt="ArrowStream",
-                external_data=external_data,
-                transport_settings=transport_settings,
+            cast(
+                io.IOBase,
+                self.raw_stream(
+                    query,
+                    parameters,
+                    settings,
+                    fmt="ArrowStream",
+                    external_data=external_data,
+                    transport_settings=transport_settings,
+                ),
             )
         )
 
@@ -814,7 +868,7 @@ class Client(ABC):
             check_polars()
             self._add_integration_tag("polars")
 
-            def converter(table: pyarrow.Table) -> polars.DataFrame:
+            def converter(table: pyarrow.Table) -> polars.DataFrame:  # type: ignore[misc]
                 table = _apply_arrow_tz_policy(table, self.tz_mode)
                 return options.pl.from_arrow(table)
 
@@ -867,7 +921,7 @@ class Client(ABC):
             check_polars()
             self._add_integration_tag("polars")
 
-            def converter(table: pyarrow.Table) -> polars.DataFrame:
+            def converter(table: pyarrow.Table) -> polars.DataFrame:  # type: ignore[misc]
                 table = _apply_arrow_tz_policy(table, self.tz_mode)
                 return options.pl.from_arrow(table)
         else:
@@ -882,7 +936,7 @@ class Client(ABC):
             for batch in reader:
                 yield converter(batch)
 
-        return StreamContext(raw_stream, df_generator())
+        return StreamContext(cast(Closable, raw_stream), df_generator())
 
     def _update_arrow_settings(self, settings: dict[str, Any] | None, use_strings: bool | None) -> dict[str, Any]:
         settings = dict_copy(settings)
@@ -903,8 +957,8 @@ class Client(ABC):
         self,
         cmd: str,
         parameters: Sequence | dict[str, Any] | None = None,
-        data: str | bytes = None,
-        settings: dict[str, Any] = None,
+        data: str | bytes | None = None,
+        settings: dict[str, Any] | None = None,
         use_database: bool = True,
         external_data: ExternalData | None = None,
         transport_settings: dict[str, str] | None = None,
@@ -920,8 +974,9 @@ class Client(ABC):
          the default user database
         :param external_data: ClickHouse "external data" to send with command/query
         :param transport_settings: Optional dictionary of transport level settings (HTTP headers, etc.)
-        :return: Decoded response from ClickHouse as either a string, int, or sequence of strings, or QuerySummary
-        if no data returned. Explicitly handled read-style commands can return an empty string for empty results.
+        :return: Decoded response from ClickHouse as a string, int, or sequence of strings for a statement that
+         produces a result set, an empty string when that result set has no rows, or a QuerySummary for a statement
+         that produces no result set such as a DDL or other control command.
         """
 
     @abstractmethod
@@ -934,14 +989,14 @@ class Client(ABC):
     def insert(
         self,
         table: str | None = None,
-        data: Sequence[Sequence[Any]] = None,
-        column_names: str | Iterable[str] = "*",
+        data: Sequence[Sequence[Any]] | None = None,
+        column_names: str | Sequence[str] | None = "*",
         database: str | None = None,
-        column_types: Sequence[ClickHouseType] = None,
-        column_type_names: Sequence[str] = None,
+        column_types: Sequence[ClickHouseType] | None = None,
+        column_type_names: Sequence[str] | None = None,
         column_oriented: bool = False,
         settings: dict[str, Any] | None = None,
-        context: InsertContext = None,
+        context: InsertContext | None = None,
         transport_settings: dict[str, str] | None = None,
     ) -> QuerySummary:
         """
@@ -966,6 +1021,8 @@ class Client(ABC):
         if (context is None or context.empty) and data is None:
             raise ProgrammingError("No data specified for insert") from None
         if context is None:
+            if table is None:
+                raise ProgrammingError("No table specified for insert") from None
             context = self.create_insert_context(
                 table,
                 column_names,
@@ -984,14 +1041,14 @@ class Client(ABC):
 
     def insert_df(
         self,
-        table: str = None,
+        table: str | None = None,
         df=None,
         database: str | None = None,
         settings: dict | None = None,
         column_names: Sequence[str] | None = None,
-        column_types: Sequence[ClickHouseType] = None,
-        column_type_names: Sequence[str] = None,
-        context: InsertContext = None,
+        column_types: Sequence[ClickHouseType] | None = None,
+        column_type_names: Sequence[str] | None = None,
+        context: InsertContext | None = None,
         transport_settings: dict[str, str] | None = None,
     ) -> QuerySummary:
         """
@@ -1034,7 +1091,7 @@ class Client(ABC):
         self,
         table: str,
         arrow_table,
-        database: str = None,
+        database: str | None = None,
         settings: dict | None = None,
         transport_settings: dict[str, str] | None = None,
     ) -> QuerySummary:
@@ -1051,7 +1108,7 @@ class Client(ABC):
         full_table = table if "." in table or not database else f"{database}.{table}"
         compression = self.write_compression if self.write_compression in ("zstd", "lz4") else None
         column_names, insert_block = arrow_buffer(arrow_table, compression)
-        return self.raw_insert(full_table, column_names, insert_block, settings, "Arrow", transport_settings)
+        return self.raw_insert(full_table, column_names, insert_block, settings, "Arrow", transport_settings=transport_settings)
 
     def insert_df_arrow(
         self,
@@ -1117,8 +1174,8 @@ class Client(ABC):
         table: str,
         column_names: str | Sequence[str] | None = None,
         database: str | None = None,
-        column_types: Sequence[ClickHouseType] = None,
-        column_type_names: Sequence[str] = None,
+        column_types: Sequence[ClickHouseType] | None = None,
+        column_type_names: Sequence[str] | None = None,
         column_oriented: bool = False,
         settings: dict[str, Any] | None = None,
         data: Sequence[Sequence[Any]] | None = None,
@@ -1140,70 +1197,28 @@ class Client(ABC):
         :param transport_settings: Optional dictionary of transport level settings (HTTP headers, etc.)
         :return: Reusable insert context
         """
-        full_table = table
-        if "." not in table:
-            if database:
-                full_table = f"{quote_identifier(database)}.{quote_identifier(table)}"
-            else:
-                full_table = quote_identifier(table)
-        column_defs = []
-        if column_types is None and column_type_names is None:
-            describe_result = self.query(f"DESCRIBE TABLE {full_table}", settings=settings)
-            column_defs = [
-                ColumnDef(**row) for row in describe_result.named_results() if row["default_type"] not in ("ALIAS", "MATERIALIZED")
-            ]
-        if column_names is None or isinstance(column_names, str) and column_names == "*":
-            column_names = [cd.name for cd in column_defs]
-            column_types = [cd.ch_type for cd in column_defs]
-        elif isinstance(column_names, str):
-            column_names = [column_names]
-        if len(column_names) == 0:
-            raise ValueError("Column names must be specified for insert")
-        if not column_types:
-            if column_type_names:
-                column_types = [get_from_name(name) for name in column_type_names]
-            else:
-                column_map = {d.name: d for d in column_defs}
-                try:
-                    column_types = [column_map[name].ch_type for name in column_names]
-                except KeyError as ex:
-                    raise ProgrammingError(f"Unrecognized column {ex} in table {table}") from None
-        if len(column_names) != len(column_types):
-            raise ProgrammingError("Column names do not match column types") from None
-        return InsertContext(
-            full_table,
-            column_names,
-            column_types,
-            column_oriented=column_oriented,
-            settings=settings,
-            transport_settings=transport_settings,
-            data=data,
+        return run_sync(
+            insert_context_sequence(
+                table,
+                column_names,
+                database,
+                column_types,
+                column_type_names,
+                column_oriented,
+                settings,
+                data,
+                transport_settings,
+            ),
+            self._execute_operation,
         )
 
     def min_version(self, version_str: str) -> bool:
         """
         Determine whether the connected server is at least the submitted version
-        For Altinity Stable versions like 22.8.15.25.altinitystable
-        the last condition in the first list comprehension expression is added
         :param version_str: A version string consisting of up to 4 integers delimited by dots
         :return: True if version_str is greater than the server_version, False if less than
         """
-        try:
-            server_parts = [int(x) for x in self.server_version.split(".") if x.isnumeric()]
-            server_parts.extend([0] * (4 - len(server_parts)))
-            version_parts = [int(x) for x in version_str.split(".")]
-            version_parts.extend([0] * (4 - len(version_parts)))
-        except ValueError:
-            logger.warning(
-                "Server %s or requested version %s does not match format of numbers separated by dots", self.server_version, version_str
-            )
-            return False
-        for x, y in zip(server_parts, version_parts):
-            if x > y:
-                return True
-            if x < y:
-                return False
-        return True
+        return version_at_least(self.server_version, version_str)
 
     def _add_integration_tag(self, name: str) -> None:
         """Transport hook to surface 3rd party lib integration info (default: no-op)."""
@@ -1222,7 +1237,7 @@ class Client(ABC):
         self,
         table: str,
         column_names: Sequence[str] | None = None,
-        insert_block: str | bytes | Generator[bytes, None, None] | BinaryIO = None,
+        insert_block: str | bytes | Generator[bytes, None, None] | BinaryIO | None = None,
         settings: dict | None = None,
         fmt: str | None = None,
         compression: str | None = None,

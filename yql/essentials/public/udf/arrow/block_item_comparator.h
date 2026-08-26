@@ -232,7 +232,6 @@ public:
     {
     }
 
-public:
     i64 DoCompare(TBlockItem lhs, TBlockItem rhs) const {
         for (ui32 i = 0; i < Children_.size(); ++i) {
             auto res = Children_[i]->Compare(lhs.AsTuple()[i], rhs.AsTuple()[i]);

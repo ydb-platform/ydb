@@ -11,7 +11,7 @@ namespace NKikimr::NMiniKQL::NMatchRecognize {
 namespace {
 
 struct TNfaSetup {
-    TNfaSetup(const TRowPattern& pattern)
+    explicit TNfaSetup(const TRowPattern& pattern)
         : Setup(GetAuxCallableFactory())
         , Graph(InitComputationGrah(pattern))
         , Nfa(InitNfa(pattern))
@@ -37,7 +37,7 @@ struct TNfaSetup {
         for (size_t i = 0; i != VarCount; ++i) {
             callableBuilder.Add(pgmBuilder.Arg(NTest::ConvertToMinikqlType<bool>(pgmBuilder)));
         }
-        auto testNfa = TRuntimeNode(callableBuilder.Build(), false);
+        auto testNfa = TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
         auto graph = Setup.BuildGraph(testNfa);
         return graph;
     }
@@ -61,7 +61,7 @@ struct TNfaSetup {
         for (auto& d : Defines) {
             defines.push_back(d);
         }
-        return TNfa(transitionGraph, MatchedVars, defines, TAfterMatchSkipTo{EAfterMatchSkipTo::PastLastRow, ""});
+        return TNfa(transitionGraph, MatchedVars, defines, TAfterMatchSkipTo{.To = EAfterMatchSkipTo::PastLastRow, .Var = ""});
     }
 
     TComputationNodeFactory GetAuxCallableFactory() {
@@ -98,20 +98,20 @@ struct TNfaSetup {
     TNfa Nfa;
 };
 
-static TVector<size_t> CountNonEpsilonInputs(const TNfaTransitionGraph& graph) {
+TVector<size_t> CountNonEpsilonInputs(const TNfaTransitionGraph& graph) {
     TVector<size_t> nonEpsIns(graph.Transitions.size());
-    for (size_t node = 0; node != graph.Transitions.size(); node++) {
-        if (!std::holds_alternative<TEpsilonTransitions>(graph.Transitions[node])) {
+    for (const auto& transition : graph.Transitions) {
+        if (!std::holds_alternative<TEpsilonTransitions>(transition)) {
             std::visit(TNfaTransitionDestinationVisitor([&](size_t toNode) {
                            nonEpsIns[toNode]++;
                            return 0;
-                       }), graph.Transitions[node]);
+                       }), transition);
         }
     }
     return nonEpsIns;
 }
 
-static TVector<size_t> CountNonEpsilonOutputs(const TNfaTransitionGraph& graph) {
+TVector<size_t> CountNonEpsilonOutputs(const TNfaTransitionGraph& graph) {
     TVector<size_t> nonEpsOuts(graph.Transitions.size());
     nonEpsOuts.resize(graph.Transitions.size());
     for (size_t node = 0; node < graph.Transitions.size(); node++) {
@@ -128,7 +128,7 @@ Y_UNIT_TEST_SUITE(MatchRecognizeNfa) {
 
 Y_UNIT_TEST(OutputStateHasNoOutputEdges) {
     TScopedAlloc alloc(__LOCATION__);
-    const TRowPattern pattern{{TRowPatternFactor{"A", 1, 1, false, false, false}}};
+    const TRowPattern pattern{{TRowPatternFactor{.Primary = "A", .QuantityMin = 1, .QuantityMax = 1, .Greedy = false, .Output = false, .Unused = false}}};
     const auto transitionGraph = TNfaTransitionGraphBuilder::Create(pattern, {{"A", 0}});
     const auto& output = transitionGraph->Transitions.at(transitionGraph->Output);
     UNIT_ASSERT(std::get_if<TVoidTransition>(&output));
@@ -136,20 +136,27 @@ Y_UNIT_TEST(OutputStateHasNoOutputEdges) {
 Y_UNIT_TEST(EpsilonChainsEliminated) {
     TScopedAlloc alloc(__LOCATION__);
     const TRowPattern pattern{
-        {TRowPatternFactor{"A", 1, 1, false, false, false},
-         TRowPatternFactor{"B", 1, 100, false, false, false},
+        {TRowPatternFactor{.Primary = "A", .QuantityMin = 1, .QuantityMax = 1, .Greedy = false, .Output = false, .Unused = false},
+         TRowPatternFactor{.Primary = "B", .QuantityMin = 1, .QuantityMax = 100, .Greedy = false, .Output = false, .Unused = false},
          TRowPatternFactor{
-             TRowPattern{
-                 {TRowPatternFactor{"C", 1, 1, false, false, false}},
-                 {TRowPatternFactor{"D", 1, 1, false, false, false}}},
-             1, 1, false, false, false}},
-        {TRowPatternFactor{
-             TRowPattern{{
-                 TRowPatternFactor{"E", 1, 1, false, false, false},
-                 TRowPatternFactor{"F", 1, 100, false, false, false},
-             }},
-             2, 100, false, false, false},
-         TRowPatternFactor{"G", 1, 1, false, false, false}}};
+             .Primary = TRowPattern{
+                 {TRowPatternFactor{.Primary = "C", .QuantityMin = 1, .QuantityMax = 1, .Greedy = false, .Output = false, .Unused = false}},
+                 {TRowPatternFactor{.Primary = "D", .QuantityMin = 1, .QuantityMax = 1, .Greedy = false, .Output = false, .Unused = false}}},
+             .QuantityMin = 1,
+             .QuantityMax = 1,
+             .Greedy = false,
+             .Output = false,
+             .Unused = false}},
+        {TRowPatternFactor{.Primary = TRowPattern{{
+                               TRowPatternFactor{.Primary = "E", .QuantityMin = 1, .QuantityMax = 1, .Greedy = false, .Output = false, .Unused = false},
+                               TRowPatternFactor{.Primary = "F", .QuantityMin = 1, .QuantityMax = 100, .Greedy = false, .Output = false, .Unused = false},
+                           }},
+                           .QuantityMin = 2,
+                           .QuantityMax = 100,
+                           .Greedy = false,
+                           .Output = false,
+                           .Unused = false},
+         TRowPatternFactor{.Primary = "G", .QuantityMin = 1, .QuantityMax = 1, .Greedy = false, .Output = false, .Unused = false}}};
     const auto graph = TNfaTransitionGraphBuilder::Create(pattern, TNfaSetup::BuildVarLookup(pattern));
     auto nonEpsIns = CountNonEpsilonInputs(*graph);
     auto nonEpsOuts = CountNonEpsilonOutputs(*graph);
@@ -166,8 +173,8 @@ Y_UNIT_TEST(EpsilonChainsEliminated) {
 Y_UNIT_TEST(SingleEpsilonsEliminated) {
     TScopedAlloc alloc(__LOCATION__);
     const TRowPattern pattern{{
-        TRowPatternFactor{"A", 1, 1, false, false, false},
-        TRowPatternFactor{"B", 1, 1, false, false, false},
+        TRowPatternFactor{.Primary = "A", .QuantityMin = 1, .QuantityMax = 1, .Greedy = false, .Output = false, .Unused = false},
+        TRowPatternFactor{.Primary = "B", .QuantityMin = 1, .QuantityMax = 1, .Greedy = false, .Output = false, .Unused = false},
     }};
     const auto graph = TNfaTransitionGraphBuilder::Create(pattern, TNfaSetup::BuildVarLookup(pattern));
     for (size_t node = 0; node != graph->Transitions.size(); node++) {
@@ -191,7 +198,7 @@ TMemoryUsageInfo memUsage("MatchedVars");
 Y_UNIT_TEST(SingleVarAcceptNothing) {
     TScopedAlloc alloc(__LOCATION__);
     THolderFactory holderFactory(alloc.Ref(), memUsage);
-    const TRowPattern pattern{{TRowPatternFactor{"A", 1, 1, false, false, false}}};
+    const TRowPattern pattern{{TRowPatternFactor{.Primary = "A", .QuantityMin = 1, .QuantityMax = 1, .Greedy = false, .Output = false, .Unused = false}}};
     TNfaSetup setup{pattern};
     auto& defineA = setup.Defines.at(0);
     auto& ctx = setup.Ctx();
@@ -205,7 +212,7 @@ Y_UNIT_TEST(SingleVarAcceptNothing) {
 Y_UNIT_TEST(SingleVarAcceptEveryRow) {
     TScopedAlloc alloc(__LOCATION__);
     THolderFactory holderFactory(alloc.Ref(), memUsage);
-    const TRowPattern pattern{{TRowPatternFactor{"A", 1, 1, false, false, false}}};
+    const TRowPattern pattern{{TRowPatternFactor{.Primary = "A", .QuantityMin = 1, .QuantityMax = 1, .Greedy = false, .Output = false, .Unused = false}}};
     TNfaSetup setup{pattern};
     auto& defineA = setup.Defines.at(0);
     auto& ctx = setup.Ctx();
@@ -219,7 +226,7 @@ Y_UNIT_TEST(SingleVarAcceptEveryRow) {
 Y_UNIT_TEST(SingleAlternatedVarAcceptEven) {
     TScopedAlloc alloc(__LOCATION__);
     THolderFactory holderFactory(alloc.Ref(), memUsage);
-    const TRowPattern pattern{{TRowPatternFactor{"A", 1, 1, false, false, false}}};
+    const TRowPattern pattern{{TRowPatternFactor{.Primary = "A", .QuantityMin = 1, .QuantityMax = 1, .Greedy = false, .Output = false, .Unused = false}}};
     TNfaSetup setup{pattern};
     auto& defineA = setup.Defines.at(0);
     auto& ctx = setup.Ctx();
@@ -238,7 +245,7 @@ Y_UNIT_TEST(SingleVarRepeatedAndCheckRanges) {
     THolderFactory holderFactory(alloc.Ref(), memUsage);
     // "A{1, 6}"
     const TRowPattern pattern{
-        {TRowPatternFactor{"A", 1, seriesLength, false, false, false}}};
+        {TRowPatternFactor{.Primary = "A", .QuantityMin = 1, .QuantityMax = seriesLength, .Greedy = false, .Output = false, .Unused = false}}};
     TNfaSetup setup{pattern};
     auto& defineA = setup.Defines.at(0);
     auto& ctx = setup.Ctx();
@@ -272,9 +279,9 @@ Y_UNIT_TEST(SingleVarDuplicated) {
     TScopedAlloc alloc(__LOCATION__);
     THolderFactory holderFactory(alloc.Ref(), memUsage);
     // "A A A"
-    const TRowPattern pattern{{TRowPatternFactor{"A", 1, 1, false, false, false},
-                               TRowPatternFactor{"A", 1, 1, false, false, false},
-                               TRowPatternFactor{"A", 1, 1, false, false, false}}};
+    const TRowPattern pattern{{TRowPatternFactor{.Primary = "A", .QuantityMin = 1, .QuantityMax = 1, .Greedy = false, .Output = false, .Unused = false},
+                               TRowPatternFactor{.Primary = "A", .QuantityMin = 1, .QuantityMax = 1, .Greedy = false, .Output = false, .Unused = false},
+                               TRowPatternFactor{.Primary = "A", .QuantityMin = 1, .QuantityMax = 1, .Greedy = false, .Output = false, .Unused = false}}};
     TNfaSetup setup{pattern};
     auto& defineA = setup.Defines.at(0);
     auto& ctx = setup.Ctx();
@@ -292,8 +299,8 @@ Y_UNIT_TEST(TwoSeqAlternatedVarsAcceptEven) {
     THolderFactory holderFactory(alloc.Ref(), memUsage);
     //"A B"
     const TRowPattern pattern{{
-        TRowPatternFactor{"A", 1, 1, false, false, false},
-        TRowPatternFactor{"B", 1, 1, false, false, false},
+        TRowPatternFactor{.Primary = "A", .QuantityMin = 1, .QuantityMax = 1, .Greedy = false, .Output = false, .Unused = false},
+        TRowPatternFactor{.Primary = "B", .QuantityMin = 1, .QuantityMax = 1, .Greedy = false, .Output = false, .Unused = false},
     }};
     TNfaSetup setup{pattern};
     auto& defineA = setup.Defines.at(0);
@@ -313,8 +320,8 @@ Y_UNIT_TEST(TwoORedAlternatedVarsAcceptEvery) {
     THolderFactory holderFactory(alloc.Ref(), memUsage);
     //"A | B"
     const TRowPattern pattern{
-        {TRowPatternFactor{"A", 1, 1, false, false, false}},
-        {TRowPatternFactor{"B", 1, 1, false, false, false}},
+        {TRowPatternFactor{.Primary = "A", .QuantityMin = 1, .QuantityMax = 1, .Greedy = false, .Output = false, .Unused = false}},
+        {TRowPatternFactor{.Primary = "B", .QuantityMin = 1, .QuantityMax = 1, .Greedy = false, .Output = false, .Unused = false}},
     };
     TNfaSetup setup{pattern};
     auto& defineA = setup.Defines.at(0);
@@ -337,7 +344,7 @@ Y_UNIT_TEST(AnyStar) {
     TScopedAlloc alloc(__LOCATION__);
     THolderFactory holderFactory(alloc.Ref(), memUsage);
     const TRowPattern pattern{{
-        TRowPatternFactor{"ANY", 1, inputSize, false, false, false},
+        TRowPatternFactor{.Primary = "ANY", .QuantityMin = 1, .QuantityMax = inputSize, .Greedy = false, .Output = false, .Unused = false},
     }};
     TNfaSetup setup{pattern};
     auto& defineA = setup.Defines.at(0);
@@ -360,7 +367,7 @@ Y_UNIT_TEST(AnyStarUnused) {
     TScopedAlloc alloc(__LOCATION__);
     THolderFactory holderFactory(alloc.Ref(), memUsage);
     const TRowPattern pattern{{
-        TRowPatternFactor{"ANY", 1, inputSize, false, false, true},
+        TRowPatternFactor{.Primary = "ANY", .QuantityMin = 1, .QuantityMax = inputSize, .Greedy = false, .Output = false, .Unused = true},
     }};
     TNfaSetup setup{pattern};
     auto& defineA = setup.Defines.at(0);
@@ -388,7 +395,7 @@ Y_UNIT_TEST(AStar) {
     TScopedAlloc alloc(__LOCATION__);
     THolderFactory holderFactory(alloc.Ref(), memUsage);
     const TRowPattern pattern{{
-        TRowPatternFactor{"A", 1, seriesLength, false, false, false},
+        TRowPatternFactor{.Primary = "A", .QuantityMin = 1, .QuantityMax = seriesLength, .Greedy = false, .Output = false, .Unused = false},
     }};
     TNfaSetup setup{pattern};
     auto& defineA = setup.Defines.at(0);
@@ -423,9 +430,9 @@ Y_UNIT_TEST(A_AnyStar_B_SingleMatch) {
     TScopedAlloc alloc(__LOCATION__);
     THolderFactory holderFactory(alloc.Ref(), memUsage);
     const TRowPattern pattern{{
-        TRowPatternFactor{"A", 1, 1, false, false, false},
-        TRowPatternFactor{"ANY", 1, offsetB - offsetA - 1, false, false, false},
-        TRowPatternFactor{"B", 1, 1, false, false, false},
+        TRowPatternFactor{.Primary = "A", .QuantityMin = 1, .QuantityMax = 1, .Greedy = false, .Output = false, .Unused = false},
+        TRowPatternFactor{.Primary = "ANY", .QuantityMin = 1, .QuantityMax = offsetB - offsetA - 1, .Greedy = false, .Output = false, .Unused = false},
+        TRowPatternFactor{.Primary = "B", .QuantityMin = 1, .QuantityMax = 1, .Greedy = false, .Output = false, .Unused = false},
     }};
     TNfaSetup setup{pattern};
     auto& defineA = setup.Defines.at(0);
@@ -463,9 +470,9 @@ Y_UNIT_TEST(A_AnyStar_B_Series) {
     TScopedAlloc alloc(__LOCATION__);
     THolderFactory holderFactory(alloc.Ref(), memUsage);
     const TRowPattern pattern{{
-        TRowPatternFactor{"A", 1, 1, false, false, false},
-        TRowPatternFactor{"ANY", 1, offsetB - offsetA - 1, false, false, false},
-        TRowPatternFactor{"B", 1, 1, false, false, false},
+        TRowPatternFactor{.Primary = "A", .QuantityMin = 1, .QuantityMax = 1, .Greedy = false, .Output = false, .Unused = false},
+        TRowPatternFactor{.Primary = "ANY", .QuantityMin = 1, .QuantityMax = offsetB - offsetA - 1, .Greedy = false, .Output = false, .Unused = false},
+        TRowPatternFactor{.Primary = "B", .QuantityMin = 1, .QuantityMax = 1, .Greedy = false, .Output = false, .Unused = false},
     }};
     TNfaSetup setup{pattern};
     auto& defineA = setup.Defines.at(0);
@@ -504,11 +511,11 @@ Y_UNIT_TEST(A_AnyStar_B_AnyStar_C_SingleMatch) {
     TScopedAlloc alloc(__LOCATION__);
     THolderFactory holderFactory(alloc.Ref(), memUsage);
     const TRowPattern pattern{{
-        TRowPatternFactor{"A", 1, 1, false, false, false},
-        TRowPatternFactor{"ANY", 1, offsetB - offsetA - 1, false, false, false},
-        TRowPatternFactor{"B", 1, 1, false, false, false},
-        TRowPatternFactor{"ANY", 1, offsetC - offsetB - 1, false, false, false},
-        TRowPatternFactor{"C", 1, 1, false, false, false},
+        TRowPatternFactor{.Primary = "A", .QuantityMin = 1, .QuantityMax = 1, .Greedy = false, .Output = false, .Unused = false},
+        TRowPatternFactor{.Primary = "ANY", .QuantityMin = 1, .QuantityMax = offsetB - offsetA - 1, .Greedy = false, .Output = false, .Unused = false},
+        TRowPatternFactor{.Primary = "B", .QuantityMin = 1, .QuantityMax = 1, .Greedy = false, .Output = false, .Unused = false},
+        TRowPatternFactor{.Primary = "ANY", .QuantityMin = 1, .QuantityMax = offsetC - offsetB - 1, .Greedy = false, .Output = false, .Unused = false},
+        TRowPatternFactor{.Primary = "C", .QuantityMin = 1, .QuantityMax = 1, .Greedy = false, .Output = false, .Unused = false},
     }};
     TNfaSetup setup{pattern};
     auto& defineA = setup.Defines.at(0);
@@ -553,11 +560,11 @@ Y_UNIT_TEST(A_AnyStar_B_AnyStar_C_Series) {
     TScopedAlloc alloc(__LOCATION__);
     THolderFactory holderFactory(alloc.Ref(), memUsage);
     const TRowPattern pattern{{
-        TRowPatternFactor{"A", 1, 1, false, false, false},
-        TRowPatternFactor{"ANY", 1, offsetB - offsetA - 1, false, false, false},
-        TRowPatternFactor{"B", 1, 1, false, false, false},
-        TRowPatternFactor{"ANY", 1, offsetC - offsetB - 1, false, false, false},
-        TRowPatternFactor{"C", 1, 1, false, false, false},
+        TRowPatternFactor{.Primary = "A", .QuantityMin = 1, .QuantityMax = 1, .Greedy = false, .Output = false, .Unused = false},
+        TRowPatternFactor{.Primary = "ANY", .QuantityMin = 1, .QuantityMax = offsetB - offsetA - 1, .Greedy = false, .Output = false, .Unused = false},
+        TRowPatternFactor{.Primary = "B", .QuantityMin = 1, .QuantityMax = 1, .Greedy = false, .Output = false, .Unused = false},
+        TRowPatternFactor{.Primary = "ANY", .QuantityMin = 1, .QuantityMax = offsetC - offsetB - 1, .Greedy = false, .Output = false, .Unused = false},
+        TRowPatternFactor{.Primary = "C", .QuantityMin = 1, .QuantityMax = 1, .Greedy = false, .Output = false, .Unused = false},
     }};
     TNfaSetup setup{pattern};
     auto& defineA = setup.Defines.at(0);

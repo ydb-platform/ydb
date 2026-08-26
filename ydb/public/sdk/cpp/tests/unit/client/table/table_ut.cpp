@@ -388,6 +388,50 @@ TEST(TableTest, DriverStopFromResponseCallbackRunsStopNotifications) {
     }));
 }
 
+TEST(TableTest, DriverStopDoesNotAffectOtherDriver) {
+    TMockTableService tableService;
+    std::unique_ptr<grpc::Server> grpcServer;
+    std::unique_ptr<TDriver> driverB;
+    std::unique_ptr<NTable::TTableClient> tableClientB;
+    std::unique_ptr<NTable::TSession> tableSessionB;
+
+    StartServerWithTableService(
+        tableService,
+        grpcServer,
+        driverB,
+        tableClientB,
+        tableSessionB
+    );
+
+    TDriver driverA(driverB->GetConfig());
+    NTable::TTableClient tableClientA(driverA);
+
+    std::promise<void> createTableStarted;
+    auto createTableStartedFuture = createTableStarted.get_future();
+    std::promise<void> continueCreateTable;
+    tableService.CreateTableStarted = &createTableStarted;
+    tableService.ContinueCreateTable = continueCreateTable.get_future().share();
+
+    auto requestB = tableSessionB->CreateTable(
+        "/Root/My/DB/driver_scope_isolation",
+        NTable::TTableBuilder().Build()
+    );
+    ASSERT_EQ(createTableStartedFuture.wait_for(std::chrono::seconds(10)), std::future_status::ready);
+
+    driverA.Stop(true);
+
+    auto stoppedResult = tableClientA.CreateSession().ExtractValueSync();
+    ASSERT_EQ(stoppedResult.GetStatus(), EStatus::CLIENT_CANCELLED);
+    ASSERT_FALSE(requestB.Wait(TDuration::MilliSeconds(100)));
+
+    continueCreateTable.set_value();
+    ASSERT_TRUE(requestB.Wait(TDuration::Seconds(10)));
+    ASSERT_TRUE(requestB.ExtractValueSync().IsSuccess());
+
+    auto secondResultB = tableClientB->CreateSession().ExtractValueSync();
+    ASSERT_TRUE(secondResultB.IsSuccess());
+}
+
 TEST(TableTest, DropLastOwnersFromResponseCallbackDoesNotDeadlock) {
     TMockTableService tableService;
     std::unique_ptr<grpc::Server> grpcServer;

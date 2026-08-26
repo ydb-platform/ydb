@@ -6,10 +6,48 @@
 #include <ydb/core/persqueue/public/pq_rl_helpers.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/library/aclib/aclib.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/events.h>
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/services/services.pb.h>
 #include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
 #include <ydb/public/api/protos/draft/persqueue_error_codes.pb.h> // strange
 
+#include <util/system/backtrace.h>
+#include <util/system/type_name.h>
+
 namespace NKafka {
+
+template <typename TDerived>
+class TKafkaExceptionHandler: public NActors::IActorExceptionHandler {
+public:
+    bool OnUnhandledException(const std::exception& exc) override {
+        auto* self = static_cast<TDerived*>(this);
+        const auto& ctx = self->ActorContext();
+        YDB_LOG_CRIT_CTX_COMP(ctx, NKikimrServices::KAFKA_PROXY, "Unhandled exception in kafka actor",
+            {"actor", TypeName<TDerived>()},
+            {"typeName", TypeName(exc)},
+            {"exception", exc.what()},
+            {"backTrace", TBackTrace::FromCurrentException().PrintToString()});
+        self->OnKafkaUnhandledException(exc, ctx);
+        return true;
+    }
+
+    // Default: tear down the TCP connection when available so the client reconnects.
+    // Override GetKafkaConnectionId() in actors that own a TContext.
+    NActors::TActorId GetKafkaConnectionId() const {
+        return {};
+    }
+
+    void OnKafkaUnhandledException(const std::exception&, const NActors::TActorContext& ctx) {
+        auto* self = static_cast<TDerived*>(this);
+        if (const auto connectionId = self->GetKafkaConnectionId()) {
+            ctx.Send(connectionId, new NActors::TEvents::TEvPoison);
+            return;
+        }
+        ctx.Send(self->SelfId(), new NActors::TEvents::TEvPoison);
+    }
+};
 
 static constexpr int ProxyNodeId = 1;
 static constexpr char UnderlayPrefix[] = "u-";
@@ -61,6 +99,7 @@ struct TContext {
     TString CloudId;
     TString DatabaseId;
     TString ResourceDatabasePath;
+    std::optional<bool> InitialServerlessTransactionsFlagValue;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TString ClientDC;
     bool IsServerless = false;
@@ -72,6 +111,11 @@ struct TContext {
 
     bool Authenticated() {
         return !RequireAuthentication || AuthenticationStep == SUCCESS;
+    }
+
+    bool KafkaTableFeatureFlagChanged(bool serverlessTransactionsEnabledNow) const {
+        return InitialServerlessTransactionsFlagValue.has_value() &&
+               *InitialServerlessTransactionsFlagValue != serverlessTransactionsEnabledNow;
     }
 };
 
@@ -117,6 +161,8 @@ inline EKafkaErrors ConvertErrorCode(Ydb::StatusIds::StatusCode status) {
             return EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION;
         case Ydb::StatusIds::UNAUTHORIZED:
             return EKafkaErrors::TOPIC_AUTHORIZATION_FAILED;
+        case Ydb::StatusIds::TIMEOUT:
+            return EKafkaErrors::REQUEST_TIMED_OUT;
         default:
             return EKafkaErrors::UNKNOWN_SERVER_ERROR;
     }
@@ -189,7 +235,8 @@ inline TString GetUserSerializedToken(std::shared_ptr<TContext> context) {
     return context->RequireAuthentication ? context->UserToken->GetSerializedToken() : "";
 }
 
-NActors::IActor* CreateKafkaApiVersionsActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TApiVersionsRequestData>& message);
+NActors::IActor* CreateKafkaApiVersionsActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TApiVersionsRequestData>& message,
+                                            TKafkaVersion requestApiVersion);
 NActors::IActor* CreateKafkaInitProducerIdActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TInitProducerIdRequestData>& message);
 NActors::IActor* CreateKafkaMetadataActor(const TContext::TPtr context, const ui64 correlationId,
                                           const TMessagePtr<TMetadataRequestData>& message,

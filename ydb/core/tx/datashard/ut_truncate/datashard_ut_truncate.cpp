@@ -23,7 +23,6 @@ public:
 
         Server = new TServer(serverSettings);
         Runtime = Server->GetRuntime();
-        Runtime->GetAppData(0).FeatureFlags.SetEnableTruncateTable(true);
 
         if (enableDebugLogs) {
             Runtime->SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -312,6 +311,79 @@ Y_UNIT_TEST_SUITE(DataShardTruncate) {
 
         auto afterResult = ReadTable(server, shards, tableId);
         UNIT_ASSERT_VALUES_EQUAL(afterResult, "");
+    }
+
+    Y_UNIT_TEST(TruncateBreaksStaleSnapshotSameTable) {
+        auto serverHelper = TServerHelper();
+        auto [server, runtime, edgeSender] = serverHelper.GetObjects();
+
+        CreateShardedTable(server, edgeSender, "/Root", "table_1", 1);
+        ExecSQL(server, edgeSender, R"(
+            UPSERT INTO `/Root/table_1` (key, value) VALUES (1, 100), (2, 200), (3, 300);
+        )");
+
+        TString sessionId, txId;
+        auto read1 = KqpSimpleBegin(*runtime, sessionId, txId, Q_(R"(
+            SELECT key, value FROM `/Root/table_1` ORDER BY key;
+        )"));
+        UNIT_ASSERT_C(!read1.empty() && !read1.StartsWith("ERROR"), "first read must succeed, got: " << read1);
+
+        ui64 truncateTxId = AsyncTruncateTable(server, edgeSender, "/Root", "table_1");
+        WaitTxNotification(server, edgeSender, truncateTxId);
+
+        auto read2 = KqpSimpleContinue(*runtime, sessionId, txId, Q_(R"(
+            SELECT key, value FROM `/Root/table_1` WHERE key >= 0 ORDER BY key;
+        )"));
+        Cerr << "read#2 after truncate: [" << read2 << "]" << Endl;
+
+        auto commitFuture = KqpSimpleSendCommit(*runtime, sessionId, txId, Q_(R"(SELECT 1;)"));
+        auto commitResponse = AwaitResponse(*runtime, std::move(commitFuture));
+        Cerr << "commit status: " << commitResponse.operation().status() << Endl;
+
+        // The stale read must fail; the transaction must not be able to commit successfully.
+        UNIT_ASSERT_C(read2.StartsWith("ERROR"),
+            "stale read must fail after TRUNCATE, got: [" << read2 << "]");
+        UNIT_ASSERT_VALUES_UNEQUAL_C(commitResponse.operation().status(), Ydb::StatusIds::SUCCESS,
+            "transaction must not commit after reading a truncated table");
+    }
+
+    Y_UNIT_TEST(TruncateBreaksStaleSnapshotOtherTable) {
+        auto serverHelper = TServerHelper();
+        auto [server, runtime, edgeSender] = serverHelper.GetObjects();
+
+        CreateShardedTable(server, edgeSender, "/Root", "table_1", 1);
+        CreateShardedTable(server, edgeSender, "/Root", "table_2", 1);
+        ExecSQL(server, edgeSender, R"(
+            UPSERT INTO `/Root/table_1` (key, value) VALUES (1, 100), (2, 200), (3, 300);
+        )");
+        ExecSQL(server, edgeSender, R"(
+            UPSERT INTO `/Root/table_2` (key, value) VALUES (1, 111), (2, 222);
+        )");
+
+        TString sessionId, txId;
+        auto read1 = KqpSimpleBegin(*runtime, sessionId, txId, Q_(R"(
+            SELECT key, value FROM `/Root/table_1` ORDER BY key;
+        )"));
+        UNIT_ASSERT_C(!read1.empty() && !read1.StartsWith("ERROR"), "first read must succeed, got: " << read1);
+
+        ui64 truncate1 = AsyncTruncateTable(server, edgeSender, "/Root", "table_1");
+        WaitTxNotification(server, edgeSender, truncate1);
+        ui64 truncate2 = AsyncTruncateTable(server, edgeSender, "/Root", "table_2");
+        WaitTxNotification(server, edgeSender, truncate2);
+
+        auto read2 = KqpSimpleContinue(*runtime, sessionId, txId, Q_(R"(
+            SELECT key, value FROM `/Root/table_2` WHERE key >= 0 ORDER BY key;
+        )"));
+        Cerr << "read#2 of table_2 after truncate: [" << read2 << "]" << Endl;
+
+        auto commitFuture = KqpSimpleSendCommit(*runtime, sessionId, txId, Q_(R"(SELECT 1;)"));
+        auto commitResponse = AwaitResponse(*runtime, std::move(commitFuture));
+        Cerr << "commit status: " << commitResponse.operation().status() << Endl;
+
+        UNIT_ASSERT_C(read2.StartsWith("ERROR"),
+            "stale read of the other truncated table must fail, got: [" << read2 << "]");
+        UNIT_ASSERT_VALUES_UNEQUAL_C(commitResponse.operation().status(), Ydb::StatusIds::SUCCESS,
+            "transaction must not commit after reading a truncated table");
     }
 
     Y_UNIT_TEST(TruncateTableWithKqpSelects) {

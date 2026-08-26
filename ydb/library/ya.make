@@ -17,6 +17,7 @@ RECURSE(
     fyamlcpp
     global_plugins
     grpc
+    http
     http_proxy
     intersection_tree
     json_index
@@ -28,6 +29,7 @@ RECURSE(
     mkql_proto
     naming_conventions
     ncloud
+    nmslib
     pdisk_io
     persqueue
     planner
@@ -46,6 +48,7 @@ RECURSE(
     time_series_vec
     union_copy_set
     wilson_ids
+    wasm
     workload
     workload
     yaml_config

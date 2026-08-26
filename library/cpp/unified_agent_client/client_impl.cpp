@@ -8,6 +8,7 @@
 #include <contrib/libs/grpc/src/core/lib/iomgr/executor.h>
 
 #include <util/charset/utf8.h>
+#include <util/generic/scope.h>
 #include <util/generic/size_literals.h>
 #include <util/system/env.h>
 
@@ -513,14 +514,22 @@ namespace NUnifiedAgent::NPrivate {
     }
 
     void TClientSession::CheckGrpcCallInactivity() {
-        with_lock(Lock) {
-            if (Closed || !Started) {
-                return;
+        if (!Lock.TryAcquire()) {
+            TSpinWait sw;
+
+            while (Lock.IsLocked() || !Lock.TryAcquire()) {
+                if (ForkInProgress.load()) {
+                    return;
+                }
+                sw.Sleep();
             }
-            const auto timeout = Client->GetParameters().GrpcCallInactivityTimeout;
-            if (timeout == TDuration::Zero()) {
-                return;
-            }
+        }
+        Y_DEFER {
+            Lock.Release();
+        };
+
+        const auto timeout = Client->GetParameters().GrpcCallInactivityTimeout;
+        if (!Closed && Started && timeout != TDuration::Zero()) {
             if (NegotiatedProtocol.Defined() && *NegotiatedProtocol > 0 &&
                 ActiveGrpcCall &&
                 !CloseStarted &&

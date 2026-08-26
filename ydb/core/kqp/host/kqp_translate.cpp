@@ -10,7 +10,7 @@
 #include <yql/essentials/parser/pg_wrapper/interface/parser.h>
 #include <yql/essentials/sql/sql.h>
 #include <yql/essentials/sql/v0/sql.h>
-#include <yql/essentials/sql/v1/sql.h>
+#include <yql/essentials/sql/v1/translation/sql.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>

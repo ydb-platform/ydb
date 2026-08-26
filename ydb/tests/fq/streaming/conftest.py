@@ -101,6 +101,15 @@ class KikimrRollingUpgrade(Kikimr):
         yield
 
 
+@pytest.fixture(scope="module")
+def kikimr(request):
+    param = getattr(request, "param", {})
+    set_test_env(request)
+    kikimr = Kikimr(get_ydb_config(request), enable_discovery=param.get("enable_discovery", True))
+    yield kikimr
+    kikimr.stop()
+
+
 @pytest.fixture
 def entity_name(request):
     suffix = ''.join(random.choices(string.ascii_letters + string.digits, k=8))

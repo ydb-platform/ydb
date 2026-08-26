@@ -1,4 +1,5 @@
 #include <ydb/core/fq/libs/checkpoint_storage/storage_service.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 #include <ydb/core/fq/libs/checkpointing_common/defs.h>
 #include <ydb/core/fq/libs/checkpoint_storage/events/events.h>
@@ -72,7 +73,8 @@ public:
         storageConfig.SetEndpoint(GetEnv("YDB_ENDPOINT"));
         storageConfig.SetDatabase(GetEnv("YDB_DATABASE"));
         storageConfig.SetToken("");
-        storageConfig.SetTablePrefix(CreateGuidAsString());
+        TablePrefix = CreateGuidAsString();
+        storageConfig.SetTablePrefix(TablePrefix);
 
         auto& gcConfig = *config.MutableCheckpointGarbageConfig();
         gcConfig.SetEnabled(enableGc);
@@ -97,6 +99,7 @@ public:
         authConfig.SetUseBuiltinDomain(true);
         ServerSettings = MakeHolder<Tests::TServerSettings>(MsgBusPort, authConfig);
         ServerSettings->AppConfig->MutableFeatureFlags()->SetEnableStreamingQueries(true);
+        ServerSettings->AppConfig->MutableTableServiceConfig()->MutableQueryLimits()->SetResultRowsLimit(5);
 
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableStreamingQueries(true);
@@ -368,6 +371,7 @@ public:
     UNIT_TEST(ShouldSaveState);
     UNIT_TEST(ShouldGetState);
     UNIT_TEST(ShouldUseGc);
+    UNIT_TEST(ShouldTablesHaveAutoPartitioning);
     UNIT_TEST_SUITE_END();
 
     void ShouldRegister() {
@@ -556,12 +560,28 @@ public:
         NKikimr::NMiniKQL::TScopedAlloc Alloc(__LOCATION__);
 
         RegisterDefaultCoordinator();
-        CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
-        auto state = MakeState("some random state");
-        SaveState(1317, CheckpointId1, state);
+        size_t count = 20;
+        ui64 taskId1 = 1316;
+        ui64 taskId2 = 1317;
 
-        auto actual = GetState(1317, GraphId, CheckpointId1);
-        UNIT_ASSERT_VALUES_EQUAL(state, actual);
+        for (size_t seqNo = 0; seqNo < count; ++seqNo) {
+            auto checkpointId = TCheckpointId(Generation, seqNo);
+            CreateCheckpoint(GraphId, Generation, checkpointId, false);
+            auto state1 = MakeState(TStringBuilder() << "some random state " << seqNo << " " << taskId1);
+            SaveState(taskId1, checkpointId, state1);
+            auto state2 = MakeState(TStringBuilder() << "some random state " << seqNo << " " << taskId2);
+            SaveState(taskId2, checkpointId, state2);
+        }
+
+        ui64 seqNo = 10;
+        auto checkpointId = TCheckpointId(Generation, seqNo);
+        auto actual1 = GetState(taskId1, GraphId, checkpointId);
+        auto expected1 = MakeState(TStringBuilder() << "some random state " << seqNo << " " << taskId1);
+        UNIT_ASSERT_VALUES_EQUAL(expected1, actual1);
+
+        auto actual2 = GetState(taskId2, GraphId, checkpointId);
+        auto expected2 = MakeState(TStringBuilder() << "some random state " << seqNo << " " << taskId2);
+        UNIT_ASSERT_VALUES_EQUAL(expected2, actual2);
     }
 
     void ShouldUseGc() {
@@ -580,10 +600,72 @@ public:
         }, TRetryOptions(100, TDuration::MilliSeconds(100)), true);
     }
 
+    // Verifies that all checkpoint storage tables have auto-partitioning enabled
+    // and MinPartitionsCount=1, for both local (TTableCreator) and SDK creation paths.
+    void ShouldTablesHaveAutoPartitioning() {
+        TString endpoint;
+        TString database;
+        TString tablePathPrefix;
+
+        if constexpr (UseYdbSdk) {
+            // SDK mode: tables are at YDB_DATABASE/TablePrefix/tableName
+            endpoint = GetEnv("YDB_ENDPOINT");
+            database = GetEnv("YDB_DATABASE");
+            tablePathPrefix = database + "/" + TablePrefix;
+        } else {
+            // Local mode: the storage proxy uses CHECKPOINTS_TABLE_PREFIX =
+            // ".metadata/streaming/checkpoints" relative to the tenant root.
+            endpoint = TStringBuilder() << "localhost:" << GrpcPort;
+            database = Server->GetRuntime()->GetAppData().TenantName;
+            tablePathPrefix = database + "/.metadata/streaming/checkpoints";
+        }
+
+        auto driverConfig = NYdb::TDriverConfig().SetEndpoint(endpoint);
+        NYdb::TDriver driver(driverConfig);
+        NYdb::NTable::TTableClient tableClient(driver);
+
+        // Obtain a session to call DescribeTable (session-level method)
+        auto sessionResult = tableClient.CreateSession().GetValueSync();
+        UNIT_ASSERT_C(sessionResult.IsSuccess(),
+            "Failed to create YDB session: " << sessionResult.GetIssues().ToOneLineString());
+        auto session = sessionResult.GetSession();
+
+        // Check each of the three tables created by TCheckpointStorage::Init()
+        auto checkTable = [&](const TString& tableName) {
+            TString fullPath = tablePathPrefix + "/" + tableName;
+            auto describeResult = session.DescribeTable(fullPath).GetValueSync();
+            UNIT_ASSERT_C(describeResult.IsSuccess(),
+                "Failed to describe table '" << tableName << "' at path '" << fullPath << "': "
+                << describeResult.GetIssues().ToOneLineString());
+
+            const auto& tableDesc = describeResult.GetTableDescription();
+            const auto& partSettings = tableDesc.GetPartitioningSettings();
+
+            // Verify auto-partitioning by size is enabled
+            auto partBySize = partSettings.GetPartitioningBySize();
+            UNIT_ASSERT_C(partBySize.has_value(),
+                "Partitioning-by-size setting is absent for table '" << tableName << "'");
+            UNIT_ASSERT_C(*partBySize,
+                "Partitioning-by-size is not enabled for table '" << tableName << "'");
+
+            // Verify MinPartitionsCount == 1
+            UNIT_ASSERT_VALUES_EQUAL_C(partSettings.GetMinPartitionsCount(), 1u,
+                "MinPartitionsCount != 1 for table '" << tableName << "'");
+        };
+
+        checkTable("coordinators_sync");
+        checkTable("checkpoints_metadata");
+        checkTable("checkpoints_graphs_description");
+        checkTable("states");
+
+        driver.Stop(true);
+    }
+
 private:
     TPortManager PortManager;
     ui16 MsgBusPort = 0;
     ui16 GrpcPort = 0;
+    TString TablePrefix;  // Stores the table prefix used during SDK initialization
     THolder<Tests::TServerSettings> ServerSettings;
     THolder<Tests::TServer> Server;
     THolder<Tests::TClient> Client;

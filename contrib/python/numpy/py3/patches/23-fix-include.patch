@@ -1,0 +1,15 @@
+--- contrib/python/numpy/py3/numpy/_core/src/npysort/x86-simd-sort/src/xss-common-keyvaluesort.hpp	(index)
++++ contrib/python/numpy/py3/numpy/_core/src/npysort/x86-simd-sort/src/xss-common-keyvaluesort.hpp	(working tree)
+@@ -16 +16 @@
+-#include <omp.h>
++#error #include <omp.h>
+--- contrib/python/numpy/py3/numpy/distutils/include/npy_cpu_dispatch_config.aarch64.h	(index)
++++ contrib/python/numpy/py3/numpy/distutils/include/npy_cpu_dispatch_config.aarch64.h	(working tree)
+@@ -395 +395 @@ NPY__CPU_EXPAND(EXEC_CB(SVE, __VA_ARGS__)) \
+-    #include <riscv_vector.h>
++#error    #include <riscv_vector.h>
+--- contrib/python/numpy/py3/numpy/distutils/include/npy_cpu_dispatch_config.x86_64.h	(index)
++++ contrib/python/numpy/py3/numpy/distutils/include/npy_cpu_dispatch_config.x86_64.h	(working tree)
+@@ -407 +407 @@ NPY__CPU_EXPAND(EXEC_CB(AVX512_ICL, __VA_ARGS__)) \
+-    #include <riscv_vector.h>
++#error    #include <riscv_vector.h>

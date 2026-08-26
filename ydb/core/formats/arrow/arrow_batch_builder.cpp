@@ -80,6 +80,16 @@ arrow::Status AppendCell(arrow::RecordBatchBuilder& builder, const TCell& cell, 
     return AppendCell(*builder.GetFieldAs<TBuilderType>(colNum), cell);
 }
 
+template <>
+arrow::Status AppendCell<arrow::DurationType>(arrow::RecordBatchBuilder& builder, const TCell& cell, ui32 colNum) {
+    if (builder.GetField(colNum)->type()->id() == arrow::Type::INT64) {
+        return AppendCell<arrow::Int64Type>(builder, cell, colNum);
+    }
+
+    using TBuilderType = typename arrow::TypeTraits<arrow::DurationType>::BuilderType;
+    return AppendCell(*builder.GetFieldAs<TBuilderType>(colNum), cell);
+}
+
 arrow::Status AppendCell(arrow::RecordBatchBuilder& builder, const TCell& cell, ui32 colNum, NScheme::TTypeInfo type) {
     arrow::Status result;
     auto callback = [&]<typename TType>(TTypeWrapper<TType> typeHolder) {

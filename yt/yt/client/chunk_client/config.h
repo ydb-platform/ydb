@@ -101,10 +101,9 @@ DEFINE_REFCOUNTED_TYPE(TEncodingWriterConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TRemoteReaderConfigBase
+struct TRemoteReaderConfigBase
     : public virtual NYTree::TYsonStruct
 {
-public:
     //! Factors to calculate peer load as linear combination of disk queue and net queue.
     double NetQueueSizeFactor;
     double DiskQueueSizeFactor;
@@ -261,6 +260,9 @@ struct TReplicationReaderConfig
     //! data nodes via the io_consumed request field.
     TDuration IoConsumedReportWindow;
 
+    //! If set, reported to data nodes via the io_fair_share_weight request field.
+    std::optional<double> IoFairShareWeight;
+
     REGISTER_YSON_STRUCT(TReplicationReaderConfig);
 
     static void Register(TRegistrar registrar);
@@ -371,8 +373,6 @@ struct TReplicationWriterConfig
     //! If |true| then the chunk is fsynced to disk upon closing.
     bool SyncOnClose;
 
-    bool EnableDirectIO;
-
     //! If |true| then the chunk is finished as soon as MinUploadReplicationFactor chunks are written.
     bool EnableEarlyFinish;
 
@@ -398,6 +398,9 @@ struct TReplicationWriterConfig
     //! Sliding window over which the job's recently consumed I/O is reported to
     //! data nodes via the io_consumed request field.
     TDuration IoConsumedReportWindow;
+
+    //! If set, reported to data nodes via the io_fair_share_weight request field.
+    std::optional<double> IoFairShareWeight;
 
     int GetDirectUploadNodeCount();
 

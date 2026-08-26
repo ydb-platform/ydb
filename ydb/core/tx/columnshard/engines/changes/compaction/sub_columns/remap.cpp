@@ -20,8 +20,7 @@ TRemapColumns::TOthersData::TFinishContext TRemapColumns::BuildRemapInfo(
         builder.Add(i.first, statsByKeyIndex[i.second].GetRecordsCount(), statsByKeyIndex[i.second].GetDataSize(),
             settings.IsSparsed(statsByKeyIndex[i.second].GetRecordsCount(), recordsCount) ? NArrow::NAccessor::IChunkedArray::EType::SparsedArray
                                                                                           : NArrow::NAccessor::IChunkedArray::EType::Array,
-            // For now others always encode in BinaryJson
-            NArrow::NAccessor::NSubColumns::EValueType::BinaryJson);
+            NArrow::NAccessor::NSubColumns::OthersExplicitBinaryJson);
         remap[i.second] = idx++;
     }
     return TOthersData::TFinishContext(builder.Finish(), remap);

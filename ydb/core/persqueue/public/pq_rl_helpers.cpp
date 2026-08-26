@@ -2,6 +2,7 @@
 
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/tx/scheme_board/subscriber.h>
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NPQ {
 
@@ -36,7 +37,7 @@ bool TRlHelpers::IsQuotaInflight() const {
 }
 
 bool TRlHelpers::IsQuotaRequired() const {
-    Y_ENSURE(MeteringMode.Defined());
+    AFL_ENSURE(MeteringMode.Defined());
     return MeteringMode == NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS && Ctx;
 }
 

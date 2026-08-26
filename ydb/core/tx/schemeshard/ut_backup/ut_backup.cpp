@@ -401,4 +401,42 @@ Y_UNIT_TEST_SUITE(TBackupTests) {
         env.TestWaitNotification(runtime, txId);
     }
 
+    Y_UNIT_TEST(ShouldRejectBackupOfTableWithGeneratedColumn) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        runtime.GetAppData().FeatureFlags.SetEnableGeneratedStored(true);
+        runtime.GetAppData().FeatureFlags.SetEnableGeneratedVirtual(true);
+
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "a"   Type: "Int32"  }
+            Columns { Name: "b"   Type: "Int32"  }
+            Columns {
+                Name: "sum"
+                Type: "Int32"
+                DefaultFromExpression {
+                    ExprText: "a + b"
+                    Stored: true
+                    DependencyColumnNames: ["a", "b"]
+                    Context: ""
+                }
+            }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestBackup(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            S3Settings {
+                Endpoint: "localhost:1"
+                Scheme: HTTP
+            }
+        )",
+            { { NKikimrScheme::StatusPreconditionFailed, "Cannot backup table with generated column 'sum'" } });
+    }
+
 } // TBackupTests

@@ -37,7 +37,9 @@ SRCS(
     log_ut.cpp
     mon_ut.cpp
     scheduler_actor_ut.cpp
+    subsystem_ut.cpp
     mailbox_lockfree_ut.cpp
+    servicemap_ut.cpp
     struct_log_ut.cpp
 )
 

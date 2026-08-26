@@ -365,12 +365,13 @@ THolder<IComputationGraph> ConstructJoinGraphStream(EJoinKind joinKind, ETestedJ
                                         descr.LeftSource.KeyColumnIndexes, descr.RightSource.KeyColumnIndexes,
                                         renames.Left, renames.Right,
                                         pb.NewStreamType(pb.NewMultiType(blockResultTypes)),
-                                        joinSettings);
+                                        joinSettings, descr.LeftFilter, descr.RightFilter, descr.CommonFilter);
         }
         case ETestedJoinAlgo::kScalarHash: {
             return pb.FromFlow(dqPb.DqScalarHashJoin(
                 ToWideFlow(pb, args.Left), ToWideFlow(pb, args.Right), joinKind, descr.LeftSource.KeyColumnIndexes,
-                descr.RightSource.KeyColumnIndexes, renames.Left, renames.Right, pb.NewFlowType(multiResultType)));
+                descr.RightSource.KeyColumnIndexes, renames.Left, renames.Right, pb.NewFlowType(multiResultType),
+                descr.LeftFilter, descr.RightFilter, descr.CommonFilter));
         }
         default:
             Y_ABORT("unreachable");

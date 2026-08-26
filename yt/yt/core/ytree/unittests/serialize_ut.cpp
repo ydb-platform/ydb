@@ -528,6 +528,35 @@ TEST(TYTreeSerializationTest, ProtobufKeepUnknown)
     }
 }
 
+using TTestMessageAsString = TProtoSerializedAsString<NProto::TTestMessage>;
+
+TEST(TYTreeSerializationTest, ProtobufAsString)
+{
+    TTestMessageAsString message;
+    message.set_int32_field(1);
+    message.set_string_field("test");
+
+    auto yson = ConvertToYsonString(message);
+    EXPECT_EQ(yson, ConvertToYsonString(message.SerializeAsString()));
+
+    // ConvertTo takes the pull parser for a YSON string, so pass a node to reach the other overload.
+    EXPECT_EQ(ConvertTo<TTestMessageAsString>(ConvertToNode(yson)), message);
+    EXPECT_EQ(PullParserConvert<TTestMessageAsString>(yson), message);
+}
+
+TEST(TYTreeSerializationTest, ProtobufAsStringMalformed)
+{
+    // Field 2, length-delimited, declares 5 bytes of payload but carries only 2.
+    auto yson = BuildYsonStringFluently().Value(TStringBuf("\x12\x05" "ab"));
+
+    EXPECT_THROW_WITH_SUBSTRING(
+        ConvertTo<TTestMessageAsString>(ConvertToNode(yson)),
+        "Error parsing protobuf message from string");
+    EXPECT_THROW_WITH_SUBSTRING(
+        PullParserConvert<TTestMessageAsString>(yson),
+        "Error parsing protobuf message from string");
+}
+
 TEST(TSerializationTest, ProtobufRepeatedField)
 {
     google::protobuf::RepeatedField<i64> original;

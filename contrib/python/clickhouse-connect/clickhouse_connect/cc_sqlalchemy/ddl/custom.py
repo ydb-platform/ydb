@@ -12,8 +12,8 @@ class CreateDatabase(DDL):
     def __init__(
         self,
         name: str,
-        engine: str = None,
-        zoo_path: str = None,
+        engine: str | None = None,
+        zoo_path: str | None = None,
         shard_name: str = "{shard}",
         replica_name: str = "{replica}",
         exists_ok: bool = False,

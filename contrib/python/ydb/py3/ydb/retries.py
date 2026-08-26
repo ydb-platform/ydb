@@ -7,7 +7,8 @@ from typing import Any, Callable, Generator, Optional, Union
 
 from . import issues
 from ._errors import check_retriable_error
-from .opentelemetry.tracing import SpanName, create_span as _create_span
+from .observability.metrics import observe_retry_metrics
+from .observability.tracing import SpanName, create_span as _create_span
 
 
 def _try_span_attrs(backoff_ms: Optional[int]):
@@ -157,6 +158,7 @@ def retry_operation_impl(
         raise status
 
 
+@observe_retry_metrics
 def retry_operation_sync(
     callee: Callable[..., Any],
     retry_settings: Optional[RetrySettings] = None,
@@ -181,6 +183,7 @@ def retry_operation_sync(
     return None
 
 
+@observe_retry_metrics
 async def retry_operation_async(  # pylint: disable=W1113
     callee: Callable[..., Any],
     retry_settings: Optional[RetrySettings] = None,
@@ -200,19 +203,23 @@ async def retry_operation_async(  # pylint: disable=W1113
     Returns awaitable result of coroutine. If retries are not succussful exception is raised.
     """
     backoff_ms: Optional[int] = None
+
+    @functools.wraps(callee)
+    async def traced_callee(*a: Any, **kw: Any) -> Any:
+        with _create_span(SpanName.TRY, _try_span_attrs(backoff_ms)):
+            return await callee(*a, **kw)
+
     with _create_span(SpanName.RUN_WITH_RETRY):
-        for next_opt in retry_operation_impl(callee, retry_settings, *args, **kwargs):
+        for next_opt in retry_operation_impl(traced_callee, retry_settings, *args, **kwargs):
             if isinstance(next_opt, YdbRetryOperationSleepOpt):
                 backoff_ms = int(next_opt.timeout * 1000)
                 if next_opt.timeout > 0:
                     await asyncio.sleep(next_opt.timeout)
             else:
-                with _create_span(SpanName.TRY, _try_span_attrs(backoff_ms)) as try_span:
-                    try:
-                        return await next_opt.result
-                    except BaseException as e:  # pylint: disable=W0703
-                        try_span.set_error(e)
-                        next_opt.set_exception(e)
+                try:
+                    return await next_opt.result
+                except BaseException as e:  # pylint: disable=W0703
+                    next_opt.set_exception(e)
     return None
 
 

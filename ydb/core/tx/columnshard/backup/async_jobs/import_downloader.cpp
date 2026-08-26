@@ -51,14 +51,27 @@ public:
             Counters.OnError();
             return Fail(result.GetError().GetErrorMessage());
         }
-        Register(result.DetachResult().release());
+        DownloaderActorId = Register(result.DetachResult().release());
         Become(&TThis::StateMain);
     }
 
     STRICT_STFUNC(StateMain,
         hFunc(NKikimr::TEvDataShard::TEvGetS3DownloadInfo, Handle) hFunc(NKikimr::TEvDataShard::TEvStoreS3DownloadInfo, Handle)
             hFunc(NKikimr::TEvDataShard::TEvS3UploadRowsRequest, Handle) hFunc(NKikimr::TEvDataShard::TEvAsyncJobComplete, Handle)
-                hFunc(TEvPrivate::TEvBackupImportRecordBatchResult, Handle))
+                hFunc(TEvPrivate::TEvBackupImportRecordBatchResult, Handle) cFunc(NActors::TEvents::TEvPoisonPill::EventType, HandlePoisonPill))
+
+    void HandlePoisonPill() {
+        Counters.OnActorDead();
+        PassAway();
+    }
+
+    void PassAway() override {
+        if (DownloaderActorId) {
+            Send(DownloaderActorId, new NActors::TEvents::TEvPoisonPill());
+            DownloaderActorId = {};
+        }
+        TActorBootstrapped<TImportDownloader>::PassAway();
+    }
 
     void Handle(TEvPrivate::TEvBackupImportRecordBatchResult::TPtr&) {
         auto response = std::make_unique<NKikimr::TEvDataShard::TEvS3UploadRowsResponse>();
@@ -176,6 +189,7 @@ public:
     }
 
 private:
+    TActorId DownloaderActorId;
     NDataShard::TS3Download LastInfo;
     TActorId LastActorId;
     NActors::TActorId SubscriberActorId;

@@ -8,8 +8,11 @@
 
 #include "interconnect_session_iface.h"
 #include "interconnect_direct_session.h"
+#include "interconnect_uring_engine.h"
+#include "v2_event_serializer.h"
 #include "logging/logging.h"
 
+#include <deque>
 #include <memory>
 #include <unordered_map>
 
@@ -23,8 +26,12 @@ namespace NActors {
     //   * exposes a thread-safe direct send/receive interface (IDirectSession) to subscribers via
     //     TEvInterconnect::TEvNodeConnected.
     //
-    // NOTE: the data-plane operations (packetization, socket IO, input session, pinging, metrics, ...)
-    // are intentionally left as stubs in this first integration step.
+    // Its data plane serializes events with TEventSerializer/TEventDeserializer and moves bytes through
+    // a single shared io_uring ring owned by TInterconnectUringEngineActor. Outgoing events (both the
+    // normal actor-system Forward path and IDirectSession::Send) are serialized and handed to the engine
+    // one buffer at a time (single send in flight); incoming bytes are fed to the deserializer and each
+    // reconstructed event is offered to the direct-session receive table before falling back to normal
+    // actor-system delivery.
     class TInterconnectSessionTCPv2
        : public TActor<TInterconnectSessionTCPv2>
        , public TInterconnectLoggingBase
@@ -47,20 +54,35 @@ namespace NActors {
         void StartHandshake() override;
         void ReestablishConnectionWithHandshake(TDisconnectReason reason) override;
         void CloseInputSession() override;
-        bool IsRdmaInUse() override { return false; }
-        bool HasRdmaState() const override { return false; }
+        ERdmaState GetRdmaState() const override { return ERdmaState::None; }
         bool SupportsContinuation() const override { return false; }
 
         const TSessionParams& GetParams() const override { return Params; }
         const TIntrusivePtr<NInterconnect::TStreamSocket>& GetSocket() const override { return Socket; }
-        ui64 GetTotalOutputQueueSize() const override { return 0; }
+        ui64 GetTotalOutputQueueSize() const override;
         std::optional<ui8> GetXDCFlags() const override { return std::nullopt; }
-        TDuration GetPingRTT() const override { return TDuration::Zero(); }
-        i64 GetClockSkew() const override { return 0; }
+        TDuration GetPingRTT() const override { return TDuration::FromValue(PingRTT->load()); }
+        i64 GetClockSkew() const override { return ClockSkew->load(); }
         void GenerateHttpInfo(NMon::TEvHttpInfoRes::TPtr& ev) override;
 
     private:
         friend class TActor<TInterconnectSessionTCPv2>;
+
+        struct TEvPrivate {
+            enum {
+                EvTerminate = EventSpaceBegin(TEvents::ES_PRIVATE),
+                EvCheckSubscriberLiveness,
+            };
+
+            struct TEvTerminate : TEventLocal<TEvTerminate, EvTerminate> {
+                TDisconnectReason Reason;
+
+                TEvTerminate(TDisconnectReason reason) : Reason(reason) {}
+            };
+
+            struct TEvCheckSubscriberLiveness
+                : TEventLocal<TEvCheckSubscriberLiveness, EvCheckSubscriberLiveness> {};
+        };
 
         STATEFN(StateFunc) {
             STRICT_STFUNC_BODY(
@@ -69,8 +91,10 @@ namespace NActors {
                 fFunc(TEvInterconnect::TEvConnectNode::EventType, HandleSubscribe)
                 fFunc(TEvents::TEvSubscribe::EventType, HandleSubscribe)
                 fFunc(TEvents::TEvUnsubscribe::EventType, HandleUnsubscribe)
+                cFunc(TEvPrivate::TEvCheckSubscriberLiveness::EventType, CheckSubscriberLiveness)
                 cFunc(TEvents::TEvPoisonPill::EventType, HandlePoison)
                 cFunc(TEvInterconnect::EvForwardDelayed, IgnoreForwardDelayed)
+                hFunc(TEvPrivate::TEvTerminate, [&](auto& ev) { Terminate(ev->Get()->Reason); });
             )
         }
 
@@ -78,12 +102,16 @@ namespace NActors {
         void ForwardWithSubscribe(STATEFN_SIG);
         void HandleSubscribe(STATEFN_SIG);
         void HandleUnsubscribe(STATEFN_SIG);
+        void CheckSubscriberLiveness();
         void HandlePoison();
         void IgnoreForwardDelayed() {}
 
-        void AddSubscriber(const TActorId& actorId, ui64 cookie);
+        void EnqueueOutgoing(TAutoPtr<IEventHandle> ev);
+
+        void AddSubscriber(const TActorId& actorId, ui64 cookie, ui32 activityIndex = Max<ui32>());
         IEventBase* MakeNodeConnectedEvent() const;
 
+    private:
         TInterconnectProxyTCP* const Proxy;
         TSessionParams Params;
 
@@ -91,10 +119,22 @@ namespace NActors {
         TIntrusivePtr<NInterconnect::TStreamSocket> XdcSocket;
 
         // thread-safe direct send/receive handle shared with users via TEvNodeConnected
+        class TDirectSessionV2;
         std::shared_ptr<TDirectSessionV2> DirectSession;
 
-        // subscribers awaiting connection state notifications (actor id -> cookie)
-        std::unordered_map<TActorId, ui64, TActorId::THash> Subscribers;
+        // io_uring data plane
+        ui64 EngineHandle = 0;
+
+        struct TSubscriberInfo {
+            ui64 Cookie = 0;
+            ui32 ActivityIndex = Max<ui32>();
+        };
+
+        // subscribers awaiting connection state notifications
+        THashMap<TActorId, TSubscriberInfo> Subscribers;
+
+        std::shared_ptr<std::atomic<int64_t>> ClockSkew = std::make_shared<std::atomic<int64_t>>();
+        std::shared_ptr<std::atomic<uint64_t>> PingRTT = std::make_shared<std::atomic<uint64_t>>();
     };
 
 }

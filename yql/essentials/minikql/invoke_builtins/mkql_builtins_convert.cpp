@@ -8,8 +8,9 @@
 #include <yql/essentials/types/binary_json/write.h>
 #include <yql/essentials/types/binary_json/read.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+#include <array>
+
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -44,7 +45,7 @@ struct TFloatToIntegralImpl {
         auto& module = ctx.Codegen.GetModule();
         const auto val = GetterFor<TIn>(arg, context, block);
         const auto type = Type::getInt32Ty(context);
-        const auto fnType = FunctionType::get(type, {val->getType()}, false);
+        const auto fnType = FunctionType::get(type, {val->getType()}, /*isVarArg=*/false);
         const auto name = std::is_same<TIn, float>() ? "MyFloatClassify" : "MyDoubleClassify";
         ctx.Codegen.AddGlobalMapping(name, reinterpret_cast<const void*>(static_cast<int (*)(TIn)>(&std::fpclassify)));
         const auto func = module.getOrInsertFunction(name, fnType).getCallee();
@@ -111,7 +112,7 @@ struct TFloatToIntegralImpl<TIn, bool> {
         auto& module = ctx.Codegen.GetModule();
         const auto val = GetterFor<TIn>(arg, context, block);
         const auto type = Type::getInt32Ty(context);
-        const auto fnType = FunctionType::get(type, {val->getType()}, false);
+        const auto fnType = FunctionType::get(type, {val->getType()}, /*isVarArg=*/false);
         const auto name = std::is_same<TIn, float>() ? "MyFloatClassify" : "MyDoubleClassify";
         ctx.Codegen.AddGlobalMapping(name, reinterpret_cast<const void*>(static_cast<int (*)(TIn)>(&std::fpclassify)));
         const auto func = module.getOrInsertFunction(name, fnType).getCallee();
@@ -484,8 +485,8 @@ struct TDatetimeScaleUp: public TArithmeticConstraintsUnary<TInput, TOutput> {
         const auto mul = BinaryOperator::CreateMul(ConstantInt::get(cast->getType(), TDatetimeScale<TInput, TOutput>::Modifier), cast, "mul", block);
         const auto wide = SetterFor<TOutput>(mul, context, block);
         if constexpr (Tz) {
-            const uint64_t init[] = {0ULL, 0xFFFFULL};
-            const auto mask = ConstantInt::get(arg->getType(), APInt(128, 2, init));
+            const std::array<uint64_t, 2> init = {0ULL, 0xFFFFULL};
+            const auto mask = ConstantInt::get(arg->getType(), APInt(128, 2, init.data()));
             const auto tzid = BinaryOperator::CreateAnd(arg, mask, "tzid", block);
             const auto full = BinaryOperator::CreateOr(wide, tzid, "full", block);
             return full;
@@ -520,8 +521,8 @@ struct TDatetimeScaleDown: public TArithmeticConstraintsUnary<TInput, TOutput> {
         const auto cast = StaticCast<TInput, TOutput>(div, context, block);
         const auto wide = SetterFor<TOutput>(cast, context, block);
         if constexpr (Tz) {
-            const uint64_t init[] = {0ULL, 0xFFFFULL};
-            const auto mask = ConstantInt::get(arg->getType(), APInt(128, 2, init));
+            const std::array<uint64_t, 2> init = {0ULL, 0xFFFFULL};
+            const auto mask = ConstantInt::get(arg->getType(), APInt(128, 2, init.data()));
             const auto tzid = BinaryOperator::CreateAnd(arg, mask, "tzid", block);
             const auto full = BinaryOperator::CreateOr(wide, tzid, "full", block);
             return full;
@@ -552,8 +553,8 @@ struct TDatetimeTzStub {
     static Value* Generate(Value* arg, const TCodegenContext&, BasicBlock*& block)
     {
         if constexpr (Cleanup) {
-            const uint64_t init[] = {0xFFFFFFFFFFFFFFFFULL, 0xFFFFFFFFFFFF0000ULL};
-            const auto mask = ConstantInt::get(arg->getType(), APInt(128, 2, init));
+            const std::array<uint64_t, 2> init = {0xFFFFFFFFFFFFFFFFULL, 0xFFFFFFFFFFFF0000ULL};
+            const auto mask = ConstantInt::get(arg->getType(), APInt(128, 2, init.data()));
             return BinaryOperator::CreateAnd(arg, mask, "clean", block);
         } else {
             return arg;
@@ -1608,5 +1609,4 @@ void RegisterConvert(IBuiltinFunctionRegistry& registry) {
     RegisterJsonDocumentConvert(registry);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

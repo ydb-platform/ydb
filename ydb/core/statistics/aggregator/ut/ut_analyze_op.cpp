@@ -1,5 +1,6 @@
 #include <ydb/core/statistics/ut_common/ut_common.h>
 
+#include <ydb/library/testlib/helpers.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/testlib/tablet_helpers.h>
@@ -19,17 +20,9 @@ void Out<Ydb::Table::AnalyzeState_State>(IOutputStream& o, Ydb::Table::AnalyzeSt
 namespace NKikimr {
 namespace NStat {
 
-namespace {
-
-void PrepareTable(TTestEnv& env, const TString& tableName) {
-    CreateUniformTable(env, "Database", tableName);
-}
-
-} // namespace
-
 Y_UNIT_TEST_SUITE(AnalyzeOpList) {
 
-    Y_UNIT_TEST(ListEmpty) {
+    Y_UNIT_TEST_TWIN(ListEmpty, ColumnShard) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
         CreateDatabase(env, "Database");
@@ -42,25 +35,21 @@ Y_UNIT_TEST_SUITE(AnalyzeOpList) {
         UNIT_ASSERT_VALUES_EQUAL(result.GetNextPageToken(), "");
     }
 
-    Y_UNIT_TEST(ListAfterAnalyze) {
+    Y_UNIT_TEST_TWIN(ListAfterAnalyze, ColumnShard) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
         CreateDatabase(env, "Database");
-        PrepareTable(env, "Table");
-
-        ui64 saTabletId;
-        auto pathId = ResolvePathId(runtime, "/Root/Database/Table", nullptr, &saTabletId);
+        const auto tableInfo = PrepareTable(env, "Database", "Table", ColumnShard);
 
         const TString opId = "op1";
-        TAnalyzedTable analyzedTable(pathId);
+        TAnalyzedTable analyzedTable(tableInfo.PathId);
         auto req = MakeAnalyzeRequest({analyzedTable}, opId, "/Root/Database");
-        // Set path in the table proto
-        req->Record.MutableTables(0)->SetPath("/Root/Database/Table");
+        req->Record.MutableTables(0)->SetPath(tableInfo.Path);
         auto sender = runtime.AllocateEdgeActor();
-        runtime.SendToPipe(saTabletId, sender, req.release());
+        runtime.SendToPipe(tableInfo.SaTabletId, sender, req.release());
         runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender);
 
-        auto result = TestListAnalyzeOps(runtime, saTabletId, "/Root/Database");
+        auto result = TestListAnalyzeOps(runtime, tableInfo.SaTabletId, "/Root/Database");
         UNIT_ASSERT_GE(result.EntriesSize(), 1);
         bool found = false;
         for (int i = 0; i < (int)result.EntriesSize(); ++i) {
@@ -74,7 +63,7 @@ Y_UNIT_TEST_SUITE(AnalyzeOpList) {
         UNIT_ASSERT_C(found, "Operation not found in list");
     }
 
-    Y_UNIT_TEST(ListUnknownDb) {
+    Y_UNIT_TEST_TWIN(ListUnknownDb, ColumnShard) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
         CreateDatabase(env, "Database");
@@ -86,7 +75,7 @@ Y_UNIT_TEST_SUITE(AnalyzeOpList) {
         TestListAnalyzeOps(runtime, saTabletId, "", 100, {}, Ydb::StatusIds::BAD_REQUEST);
     }
 
-    Y_UNIT_TEST(FeatureFlagOff) {
+    Y_UNIT_TEST_TWIN(FeatureFlagOff, ColumnShard) {
         const TString opId = "opOff";
         TTestEnv env(1, 1, /*useRealThreads=*/false,
             [](Tests::TServerSettings& settings) {
@@ -94,20 +83,17 @@ Y_UNIT_TEST_SUITE(AnalyzeOpList) {
             });
         auto& runtime = *env.GetServer().GetRuntime();
         CreateDatabase(env, "Database");
-        PrepareTable(env, "Table");
+        const auto tableInfo = PrepareTable(env, "Database", "Table", ColumnShard);
 
-        ui64 saTabletId;
-        auto pathId = ResolvePathId(runtime, "/Root/Database/Table", nullptr, &saTabletId);
+        Analyze(runtime, tableInfo.SaTabletId, {{tableInfo.PathId}}, opId, "/Root/Database");
 
-        Analyze(runtime, saTabletId, {{pathId}}, opId, "/Root/Database");
-
-        TestListAnalyzeOps(runtime, saTabletId, "/Root/Database", 100, {},
+        TestListAnalyzeOps(runtime, tableInfo.SaTabletId, "/Root/Database", 100, {},
             Ydb::StatusIds::UNSUPPORTED);
-        TestGetAnalyzeOp(runtime, saTabletId, "/Root/Database", opId,
+        TestGetAnalyzeOp(runtime, tableInfo.SaTabletId, "/Root/Database", opId,
             Ydb::StatusIds::UNSUPPORTED);
-        TestCancelAnalyzeOp(runtime, saTabletId, "/Root/Database", opId,
+        TestCancelAnalyzeOp(runtime, tableInfo.SaTabletId, "/Root/Database", opId,
             Ydb::StatusIds::UNSUPPORTED);
-        TestForgetAnalyzeOp(runtime, saTabletId, "/Root/Database", opId,
+        TestForgetAnalyzeOp(runtime, tableInfo.SaTabletId, "/Root/Database", opId,
             Ydb::StatusIds::UNSUPPORTED);
 
         // Turn the flag back on so the Get handler proceeds to the lookup, then verify
@@ -116,11 +102,11 @@ Y_UNIT_TEST_SUITE(AnalyzeOpList) {
         for (ui32 nodeIdx = 0; nodeIdx < runtime.GetNodeCount(); ++nodeIdx) {
             runtime.GetAppData(nodeIdx).FeatureFlags.SetEnableAnalyzeLongRunningOperation(true);
         }
-        TestGetAnalyzeOp(runtime, saTabletId, "/Root/Database", opId,
+        TestGetAnalyzeOp(runtime, tableInfo.SaTabletId, "/Root/Database", opId,
             Ydb::StatusIds::NOT_FOUND);
     }
 
-    Y_UNIT_TEST(GetNotFound) {
+    Y_UNIT_TEST_TWIN(GetNotFound, ColumnShard) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
         CreateDatabase(env, "Database");
@@ -133,23 +119,20 @@ Y_UNIT_TEST_SUITE(AnalyzeOpList) {
             Ydb::StatusIds::NOT_FOUND);
     }
 
-    Y_UNIT_TEST(AnalyzeSameOpIdDifferentDb) {
+    Y_UNIT_TEST_TWIN(AnalyzeSameOpIdDifferentDb, ColumnShard) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
         CreateDatabase(env, "Database");
-        PrepareTable(env, "Table");
-
-        ui64 saTabletId;
-        auto pathId = ResolvePathId(runtime, "/Root/Database/Table", nullptr, &saTabletId);
+        const auto tableInfo = PrepareTable(env, "Database", "Table", ColumnShard);
 
         const TString sharedOpId = "opSame";
         const TString firstDb = "/Root/Database";
         const TString secondDb = "/Root/OtherTenant";
 
         // First analyze runs to completion → STATE_DONE in firstDb history.
-        Analyze(runtime, saTabletId, {{pathId}}, sharedOpId, firstDb);
+        Analyze(runtime, tableInfo.SaTabletId, {{tableInfo.PathId}}, sharedOpId, firstDb);
         {
-            auto result = TestGetAnalyzeOp(runtime, saTabletId, firstDb, sharedOpId);
+            auto result = TestGetAnalyzeOp(runtime, tableInfo.SaTabletId, firstDb, sharedOpId);
             UNIT_ASSERT_VALUES_EQUAL_C(
                 result.GetAnalyzeOperation().GetState(),
                 Ydb::Table::AnalyzeState::STATE_DONE,
@@ -160,25 +143,25 @@ Y_UNIT_TEST_SUITE(AnalyzeOpList) {
         // entry collides on opId but lives under a different database; TxAnalyze
         // must drop the older entry rather than replaying its cached terminal
         // response (which would belong to firstDb, not secondDb).
-        TAnalyzedTable analyzedTable(pathId);
+        TAnalyzedTable analyzedTable(tableInfo.PathId);
         auto req = MakeAnalyzeRequest({analyzedTable}, sharedOpId, secondDb);
-        req->Record.MutableTables(0)->SetPath("/Root/Database/Table");
+        req->Record.MutableTables(0)->SetPath(tableInfo.Path);
         auto sender = runtime.AllocateEdgeActor();
-        runtime.SendToPipe(saTabletId, sender, req.release());
+        runtime.SendToPipe(tableInfo.SaTabletId, sender, req.release());
         // Drain enough simulated time for the TxAnalyze to commit (the second
         // operation may or may not run a full traversal — we only care about the
         // collision resolution, not the analysis itself).
         runtime.SimulateSleep(TDuration::MilliSeconds(100));
 
         // The first entry (firstDb) was replaced: Get under firstDb is now NOT_FOUND.
-        TestGetAnalyzeOp(runtime, saTabletId, firstDb, sharedOpId,
+        TestGetAnalyzeOp(runtime, tableInfo.SaTabletId, firstDb, sharedOpId,
             Ydb::StatusIds::NOT_FOUND);
 
         // The new entry is present under secondDb (state is whatever the active
         // schedule produced — at minimum it must not be the cached DONE response
         // from the firstDb operation; we'd see that as STATE_DONE here if the
         // replay path had fired).
-        auto result = TestGetAnalyzeOp(runtime, saTabletId, secondDb, sharedOpId);
+        auto result = TestGetAnalyzeOp(runtime, tableInfo.SaTabletId, secondDb, sharedOpId);
         const auto state = result.GetAnalyzeOperation().GetState();
         UNIT_ASSERT_C(
             state == Ydb::Table::AnalyzeState::STATE_ENQUEUED ||
@@ -189,20 +172,17 @@ Y_UNIT_TEST_SUITE(AnalyzeOpList) {
                 << (int)state);
     }
 
-    Y_UNIT_TEST(ListTerminalHistory) {
+    Y_UNIT_TEST_TWIN(ListTerminalHistory, ColumnShard) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
         CreateDatabase(env, "Database");
-        PrepareTable(env, "Table");
-
-        ui64 saTabletId;
-        auto pathId = ResolvePathId(runtime, "/Root/Database/Table", nullptr, &saTabletId);
+        const auto tableInfo = PrepareTable(env, "Database", "Table", ColumnShard);
 
         // Run a full analyze and wait for completion
-        Analyze(runtime, saTabletId, {{pathId}}, "opHistory", "/Root/Database");
+        Analyze(runtime, tableInfo.SaTabletId, {{tableInfo.PathId}}, "opHistory", "/Root/Database");
 
         // Should still be listed as DONE
-        auto result = TestListAnalyzeOps(runtime, saTabletId, "/Root/Database");
+        auto result = TestListAnalyzeOps(runtime, tableInfo.SaTabletId, "/Root/Database");
         bool foundDone = false;
         for (int i = 0; i < (int)result.EntriesSize(); ++i) {
             const auto& entry = result.GetEntries(i);
@@ -221,21 +201,18 @@ Y_UNIT_TEST_SUITE(AnalyzeOpList) {
         UNIT_ASSERT_C(foundDone, "DONE operation not found in history");
     }
 
-    Y_UNIT_TEST(ProgressAfterDone) {
+    Y_UNIT_TEST_TWIN(ProgressAfterDone, ColumnShard) {
         // After analyze completes, the operation is visible as DONE with progress = 100.
         // Note: TEvAnalyzeActorProgress is a local event (not serializable over pipe),
         // so progress field testing is done via the full end-to-end analyze flow here.
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
         CreateDatabase(env, "Database");
-        PrepareTable(env, "Table");
+        const auto tableInfo = PrepareTable(env, "Database", "Table", ColumnShard);
 
-        ui64 saTabletId;
-        auto pathId = ResolvePathId(runtime, "/Root/Database/Table", nullptr, &saTabletId);
+        Analyze(runtime, tableInfo.SaTabletId, {{tableInfo.PathId}}, "opProgress", "/Root/Database");
 
-        Analyze(runtime, saTabletId, {{pathId}}, "opProgress", "/Root/Database");
-
-        auto result = TestGetAnalyzeOp(runtime, saTabletId, "/Root/Database", "opProgress");
+        auto result = TestGetAnalyzeOp(runtime, tableInfo.SaTabletId, "/Root/Database", "opProgress");
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), Ydb::StatusIds::SUCCESS,
             result.ShortDebugString());
         UNIT_ASSERT_VALUES_EQUAL_C(
@@ -250,16 +227,25 @@ Y_UNIT_TEST_SUITE(AnalyzeOpList) {
             "DonePaths should equal Paths after completion");
     }
 
-    Y_UNIT_TEST(ProgressIntermediateColumnShards) {
-        // For a column table with several shards the AnalyzeActor reports progress
-        // to the Statistics Aggregator as each shard's scan completes. Verify that
-        // intermediate progress (0 < ShardsDone < ShardsTotal) is reflected by
-        // GetAnalyzeOperation while the analyze is still in flight.
-        constexpr int kShardCount = 4;
+    Y_UNIT_TEST_TWIN(ProgressIntermediate, ColumnShard) {
+        // The AnalyzeActor reports progress to the Statistics Aggregator as each
+        // shard's scan completes. Verify that intermediate progress is reflected
+        // by GetAnalyzeOperation while the analyze is still in flight.
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
         CreateDatabase(env, "Database");
-        auto tableInfo = PrepareColumnTable(env, "Database", "Table", kShardCount);
+
+        // ColumnTable dispatches one scan actor per shard, so shardsTotal equals
+        // the shard count and intermediate progress is observable. DataShard
+        // dispatches a single scan actor for the whole table (shardsTotal = 1),
+        // so only 0% is observable before completion.
+        TTableInfo tableInfo;
+        if constexpr (ColumnShard) {
+            constexpr int kShardCount = 4;
+            tableInfo = PrepareColumnTable(env, "Database", "Table", kShardCount);
+        } else {
+            tableInfo = PrepareTable(env, "Database", "Table", ColumnShard);
+        }
 
         const ui64 saTabletId = tableInfo.SaTabletId;
         const TPathId pathId = tableInfo.PathId;
@@ -269,13 +255,12 @@ Y_UNIT_TEST_SUITE(AnalyzeOpList) {
         // from the AnalyzeActor to the Statistics Aggregator.
         TBlockEvents<TEvStatistics::TEvAnalyzeActorResult> blockResult(runtime);
 
-        // Allow progress events with ShardsDone in {0, 1, 2}; block ShardsDone >= 3.
-        // Once a (4, >=3) event is observed (blocked), the SA has already processed
-        // the prior (4, 0), (4, 1), (4, 2) events from the AnalyzeActor's mailbox
-        // and stored ShardsDone = 2.
+        // Block progress events at or above the cap (shardsTotal - 1) so the SA
+        // stores the last unblocked ShardsDone value while the analyze is mid-flight.
+        const ui32 blockThreshold = ColumnShard ? 3 : 1;
         TBlockEvents<TEvStatistics::TEvAnalyzeActorProgress> blockHigh(runtime,
-            [](auto& ev) {
-                return ev->Get()->ShardsDone >= 3;
+            [blockThreshold](auto& ev) {
+                return ev->Get()->ShardsDone >= blockThreshold;
             });
 
         TAnalyzedTable analyzedTable(pathId);
@@ -284,8 +269,8 @@ Y_UNIT_TEST_SUITE(AnalyzeOpList) {
         auto sender = runtime.AllocateEdgeActor();
         runtime.SendToPipe(saTabletId, sender, req.release());
 
-        // Wait until the AnalyzeActor has tried to report ShardsDone >= 3.
-        runtime.WaitFor("intermediate progress reported",
+        // Wait until the AnalyzeActor has tried to report ShardsDone >= blockThreshold.
+        runtime.WaitFor("progress reported",
             [&]{ return !blockHigh.empty(); });
 
         auto result = TestGetAnalyzeOp(runtime, saTabletId, "/Root/Database", opId);
@@ -296,29 +281,30 @@ Y_UNIT_TEST_SUITE(AnalyzeOpList) {
         UNIT_ASSERT_VALUES_EQUAL_C(op.GetState(),
             Ydb::Table::AnalyzeState::STATE_IN_PROGRESS,
             "Expected STATE_IN_PROGRESS while analyze is mid-flight");
-        // Internally the SA stored shardsDone=2 out of shardsTotal=4 → 50% progress.
-        // The shard counters are not part of the public API; only progress is.
-        UNIT_ASSERT_DOUBLES_EQUAL(op.GetProgress(), 50.0f, 0.01f);
+        if constexpr (ColumnShard) {
+            // 4 shards, 2 done → 50%.
+            UNIT_ASSERT_DOUBLES_EQUAL(op.GetProgress(), 50.0f, 0.01f);
+        } else {
+            // 1 shard, 0 done → 0%.
+            UNIT_ASSERT_DOUBLES_EQUAL(op.GetProgress(), 0.0f, 0.01f);
+        }
         // The active table appears in InProgressPaths while traversal is running.
         UNIT_ASSERT_VALUES_EQUAL(op.InProgressPathsSize(), 1);
         UNIT_ASSERT_VALUES_EQUAL(op.GetInProgressPaths(0), tableInfo.Path);
         UNIT_ASSERT_VALUES_EQUAL(op.DonePathsSize(), 0);
     }
 
-    Y_UNIT_TEST(ForgetTerminal) {
+    Y_UNIT_TEST_TWIN(ForgetTerminal, ColumnShard) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
         CreateDatabase(env, "Database");
-        PrepareTable(env, "Table");
+        const auto tableInfo = PrepareTable(env, "Database", "Table", ColumnShard);
 
-        ui64 saTabletId;
-        auto pathId = ResolvePathId(runtime, "/Root/Database/Table", nullptr, &saTabletId);
-
-        Analyze(runtime, saTabletId, {{pathId}}, "opForget", "/Root/Database");
+        Analyze(runtime, tableInfo.SaTabletId, {{tableInfo.PathId}}, "opForget", "/Root/Database");
 
         // Should be listed
         {
-            auto result = TestListAnalyzeOps(runtime, saTabletId, "/Root/Database");
+            auto result = TestListAnalyzeOps(runtime, tableInfo.SaTabletId, "/Root/Database");
             bool found = false;
             for (int i = 0; i < (int)result.EntriesSize(); ++i) {
                 if (result.GetEntries(i).GetOperationId() == "opForget") {
@@ -330,38 +316,35 @@ Y_UNIT_TEST_SUITE(AnalyzeOpList) {
         }
 
         // Forget it
-        TestForgetAnalyzeOp(runtime, saTabletId, "/Root/Database", "opForget");
+        TestForgetAnalyzeOp(runtime, tableInfo.SaTabletId, "/Root/Database", "opForget");
 
         // Should be gone
-        TestGetAnalyzeOp(runtime, saTabletId, "/Root/Database", "opForget",
+        TestGetAnalyzeOp(runtime, tableInfo.SaTabletId, "/Root/Database", "opForget",
             Ydb::StatusIds::NOT_FOUND);
     }
 
-    Y_UNIT_TEST(CancelDone) {
+    Y_UNIT_TEST_TWIN(CancelDone, ColumnShard) {
         // Cancelling an already-done operation is idempotent (returns SUCCESS).
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
         CreateDatabase(env, "Database");
-        PrepareTable(env, "Table");
+        const auto tableInfo = PrepareTable(env, "Database", "Table", ColumnShard);
 
-        ui64 saTabletId;
-        auto pathId = ResolvePathId(runtime, "/Root/Database/Table", nullptr, &saTabletId);
-
-        Analyze(runtime, saTabletId, {{pathId}}, "opCancel", "/Root/Database");
+        Analyze(runtime, tableInfo.SaTabletId, {{tableInfo.PathId}}, "opCancel", "/Root/Database");
 
         // Operation should be DONE; cancelling it returns SUCCESS (idempotent)
-        TestCancelAnalyzeOp(runtime, saTabletId, "/Root/Database", "opCancel",
+        TestCancelAnalyzeOp(runtime, tableInfo.SaTabletId, "/Root/Database", "opCancel",
             Ydb::StatusIds::SUCCESS);
 
         // State should still be DONE
-        auto result = TestGetAnalyzeOp(runtime, saTabletId, "/Root/Database", "opCancel");
+        auto result = TestGetAnalyzeOp(runtime, tableInfo.SaTabletId, "/Root/Database", "opCancel");
         UNIT_ASSERT_VALUES_EQUAL_C(
             result.GetAnalyzeOperation().GetState(),
             Ydb::Table::AnalyzeState::STATE_DONE,
             "Cancel of DONE op should not change state");
     }
 
-    Y_UNIT_TEST(CancelAndForgetNonTerminal) {
+    Y_UNIT_TEST_TWIN(CancelAndForgetNonTerminal, ColumnShard) {
         //   * One active op (IN_PROGRESS) held mid-flight by blocking the SA-internal
         //     per-table result.
         //   * One queued op (ENQUEUED) that can't start while the active one runs.
@@ -375,11 +358,10 @@ Y_UNIT_TEST_SUITE(AnalyzeOpList) {
         //        flip is deferred via DispatchFinishTraversalTx which marks the op
         //        STATE_CANCELLED and poisons the SA-internal AnalyzeActor via
         //        ResetTraversalState. Verified by polling Get until STATE_CANCELLED.
-        constexpr int kShardCount = 4;
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
         CreateDatabase(env, "Database");
-        auto tableInfo = PrepareColumnTable(env, "Database", "Table", kShardCount);
+        const auto tableInfo = PrepareTable(env, "Database", "Table", ColumnShard);
 
         const ui64 saTabletId = tableInfo.SaTabletId;
         const TPathId pathId = tableInfo.PathId;

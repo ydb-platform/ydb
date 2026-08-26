@@ -2034,11 +2034,16 @@ private:
         auto state = MakeIntrusive<TPqState>(sessionId);
         state->SupportRtmrMode = false;
         state->AddTransparentPrefixToTransparentSystemColumns = false;
+        state->EnableSettingsValidation = true;
         state->EnableUserAttributesInTopicQuery = Config->FeatureFlags.GetEnableUserAttributesInTopicQuery();
         state->StreamingTopicsReadByDefault = false;
         state->EnableTopicsPredicatePushdown = Config->FeatureFlags.GetEnableTopicsPredicatePushdown();
         state->ForbidYqlSysColumnsAndSystemMetadata = QueryServiceConfig.GetStreamingQueries().GetForbidYqlSysColumnsAndSystemMetadata();
         state->EnablePqConstraintsTransformer = Config->_KqpYqlConstraintsTransformerEnabled.Get().GetOrElse(false);
+        state->EnableWatermarks = Config->GetEnableWatermarks();
+        state->EnableWatermarksAdvanced = Config->GetEnableWatermarksAdvanced();
+        state->EnableStreamingPartitionBalancing = Config->GetEnableStreamingPartitionBalancing();
+        state->EnableExactlyOnceDeliveryGuaranty = Config->FeatureFlags.GetEnableExactlyOnceTopicsWriting();
         state->Types = TypesCtx.Get();
         state->DbResolver = FederatedQuerySetup->DatabaseAsyncResolver;
         state->FunctionRegistry = FuncRegistry;
@@ -2048,7 +2053,13 @@ private:
         state->Gateway->OpenSession(sessionId, "username");
 
         if (const auto requestContext = SessionCtx->GetUserRequestContext()) {
-            state->StreamingTopicsReadByDefault = requestContext->IsStreamingQuery;
+            if (requestContext->IsStreamingQuery) {
+                state->StreamingTopicsReadByDefault = true;
+
+                if (Config->FeatureFlags.GetEnableExactlyOnceTopicsWriting()) {
+                    state->DeferredPublicationExtIdPrefix = TStringBuilder() << "__ydb_streaming:" << requestContext->StreamingQueryPath << ":" << requestContext->CurrentExecutionId;
+                }
+            }
 
             if (const auto disposition = requestContext->StreamingDisposition) {
                 state->Disposition = *disposition;

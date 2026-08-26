@@ -2,6 +2,7 @@
 
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
 #include <ydb/core/kqp/gateway/utils/metadata_helpers.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
@@ -10,6 +11,7 @@
 #include <ydb/library/conclusion/generic/result.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/core/external_sources/iceberg_fields.h>
+#include <ydb/services/scheme_secret/resolver.h>
 
 namespace NKikimr::NKqp {
 
@@ -30,7 +32,8 @@ TAsyncStatus ValidateExternalDatasourceSecrets(const NKikimrSchemeOp::TExternalD
         externalDataSourceDesc.GetAuth(),
         userToken ? new NACLib::TUserToken(*userToken) : nullptr,
         externalData.GetDatabase(),
-        externalData.GetActorSystem()
+        externalData.GetActorSystem(),
+        true
     );
 
     return describeFuture.Apply([secrets](const NThreading::TFuture<TEvDescribeSecretsResponse::TDescription>& f) {
@@ -60,6 +63,18 @@ TString GetSecretName(const NYql::TCreateObjectSettings& settings, const TString
     return GetOrEmpty(settings, secretKeyPrefix + "_path");
 }
 
+[[nodiscard]] TYqlConclusionStatus CheckOldSecretCreationAllowed(
+    bool disableOldSecretCreation,
+    const TString& secretName)
+{
+    if (disableOldSecretCreation && secretName && !NSecret::IsSchemeSecret(secretName)) {
+        return TYqlConclusionStatus::Fail(
+            NYql::TIssuesIds::KIKIMR_BAD_REQUEST,
+            "Old secrets are disabled for creating new objects. Please use new secrets");
+    }
+    return TYqlConclusionStatus::Success();
+}
+
 [[nodiscard]] TYqlConclusionStatus FillCreateExternalDataSourceDesc(
     NKikimrSchemeOp::TExternalDataSourceDescription& externalDataSourceDesc,
     const TString& name,
@@ -71,6 +86,9 @@ TString GetSecretName(const NYql::TCreateObjectSettings& settings, const TString
     externalDataSourceDesc.SetLocation(GetOrEmpty(settings, "location"));
     externalDataSourceDesc.SetInstallation(GetOrEmpty(settings, "installation"));
 
+    const bool disableOldSecretCreation = actorSystem &&
+        AppData(actorSystem)->FeatureFlags.GetDisableOldSecretCreation();
+
     const TString& authMethod = GetOrEmpty(settings, "auth_method");
     if (authMethod == "NONE") {
         externalDataSourceDesc.MutableAuth()->MutableNone();
@@ -78,30 +96,78 @@ TString GetSecretName(const NYql::TCreateObjectSettings& settings, const TString
         auto& sa = *externalDataSourceDesc.MutableAuth()->MutableServiceAccount();
         sa.SetId(GetOrEmpty(settings, "service_account_id"));
         sa.SetSecretName(GetSecretName(settings, "service_account_secret"));
+        if (const auto status =
+            CheckOldSecretCreationAllowed(
+                disableOldSecretCreation, sa.GetSecretName()); status.IsFail())
+        {
+            return status;
+        }
     } else if (authMethod == "BASIC") {
         auto& basic = *externalDataSourceDesc.MutableAuth()->MutableBasic();
         basic.SetLogin(GetOrEmpty(settings, "login"));
         basic.SetPasswordSecretName(GetSecretName(settings, "password_secret"));
+        if (const auto status =
+            CheckOldSecretCreationAllowed(
+                disableOldSecretCreation, basic.GetPasswordSecretName()); status.IsFail())
+        {
+            return status;
+        }
     } else if (authMethod == "MDB_BASIC") {
         auto& mdbBasic = *externalDataSourceDesc.MutableAuth()->MutableMdbBasic();
         mdbBasic.SetServiceAccountId(GetOrEmpty(settings, "service_account_id"));
         mdbBasic.SetServiceAccountSecretName(GetSecretName(settings, "service_account_secret"));
         mdbBasic.SetLogin(GetOrEmpty(settings, "login"));
         mdbBasic.SetPasswordSecretName(GetSecretName(settings, "password_secret"));
+        if (const auto status =
+            CheckOldSecretCreationAllowed(
+                disableOldSecretCreation, mdbBasic.GetServiceAccountSecretName()); status.IsFail())
+        {
+            return status;
+        }
+        if (const auto status =
+            CheckOldSecretCreationAllowed(
+                disableOldSecretCreation, mdbBasic.GetPasswordSecretName()); status.IsFail())
+        {
+            return status;
+        }
     } else if (authMethod == "AWS") {
         auto& aws = *externalDataSourceDesc.MutableAuth()->MutableAws();
         aws.SetAwsAccessKeyIdSecretName(GetSecretName(settings, "aws_access_key_id_secret"));
         aws.SetAwsSecretAccessKeySecretName(GetSecretName(settings, "aws_secret_access_key_secret"));
         aws.SetAwsRegion(GetOrEmpty(settings, "aws_region"));
+        if (const auto status =
+            CheckOldSecretCreationAllowed(
+                disableOldSecretCreation, aws.GetAwsAccessKeyIdSecretName()); status.IsFail())
+        {
+            return status;
+        }
+        if (const auto status =
+            CheckOldSecretCreationAllowed(
+                disableOldSecretCreation, aws.GetAwsSecretAccessKeySecretName()); status.IsFail())
+        {
+            return status;
+        }
     } else if (authMethod == "TOKEN") {
         auto& token = *externalDataSourceDesc.MutableAuth()->MutableToken();
         token.SetTokenSecretName(GetSecretName(settings, "token_secret"));
+        if (const auto status =
+            CheckOldSecretCreationAllowed(
+                disableOldSecretCreation, token.GetTokenSecretName()); status.IsFail())
+        {
+            return status;
+        }
     } else if (authMethod == "IAM") {
         auto& iam = *externalDataSourceDesc.MutableAuth()->MutableIam();
         iam.SetServiceAccountId(GetOrEmpty(settings, "service_account_id"));
         iam.SetInitialTokenSecretName(GetSecretName(settings, "initial_token_secret"));
         // Note: user must not be allowed to specify resource_id;
         // database authorization relies on resource_id lookup;
+        if (const auto status =
+            CheckOldSecretCreationAllowed(
+                disableOldSecretCreation, iam.GetInitialTokenSecretName()); status.IsFail())
+        {
+            return status;
+        }
     } else {
         return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, TStringBuilder() << "Internal error. Unknown auth method: " << authMethod);
     }
@@ -306,16 +372,15 @@ TAsyncStatus TExternalDataSourceManager::ExecutePrepared(const NKqpProto::TKqpSc
 }
 
 namespace {
+bool IsIamAuth(const auto& schemeTx) {
+    return schemeTx.GetCreateExternalDataSource().GetAuth().identity_case() == NKikimrSchemeOp::TAuth::kIam;
+}
 bool IsResolveResourceIdNeeded(const auto& schemeTx) {
-    return schemeTx.GetCreateExternalDataSource().GetAuth().identity_case() == NKikimrSchemeOp::TAuth::kIam
-        && !schemeTx.GetCreateExternalDataSource().GetAuth().GetIam().HasResourceId();
+    return !schemeTx.GetCreateExternalDataSource().GetAuth().GetIam().HasResourceId();
 }
 
 TAsyncStatus ResolveResourceId(TAsyncStatus validationFuture, const TExternalDataSourceManager::TExternalModificationContext& context, const std::shared_ptr<NKikimrSchemeOp::TModifyScheme>& schemeTxState, const std::shared_ptr<std::vector<TString>>& secrets) {
     auto actorSystem = context.GetActorSystem();
-    if (!AppData(actorSystem)->FeatureFlags.GetEnableExternalDataSourceAuthMethodIam()) {
-        return NThreading::MakeFuture(TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_UNSUPPORTED, "AUTH_METHOD=IAM is disabled. Please contact your system administrator to enable it"));
-    }
     return ChainFeatures(validationFuture, [schemeTxState, secrets, actorSystem] () -> TAsyncStatus {
         if (!secrets || secrets->size() != 1) {
             return NThreading::MakeFuture(TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, TStringBuilder() << "AUTH=IAM expected resolved secrets"));
@@ -353,19 +418,58 @@ TAsyncStatus ResolveResourceId(TAsyncStatus validationFuture, const TExternalDat
             });
     });
 }
+
+TYqlConclusionStatus YqlConclusionFromGrpcStatus(const NYdbGrpc::TGrpcStatus& grpcStatus) {
+    if (grpcStatus.Ok()) {
+        return TYqlConclusionStatus::Success();
+    }
+    if (grpcStatus.InternalError) {
+        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, TStringBuilder() << "Grpc internal error: "<< grpcStatus.Msg);
+    }
+    return TYqlConclusionStatus::Fail(NYql::YqlStatusFromYdbStatus(NKikimr::NRpcService::GrpcStatusToYdbStatus(static_cast<grpc::StatusCode>(grpcStatus.GRpcStatusCode))), grpcStatus.ToDebugString());
+}
+
+TAsyncStatus ValidateServiceAccount(TAsyncStatus validationFuture, const TExternalDataSourceManager::TExternalModificationContext& context, const std::shared_ptr<NKikimrSchemeOp::TModifyScheme>& schemeTxState, const std::shared_ptr<std::vector<TString>>& secrets) {
+    auto actorSystem = context.GetActorSystem();
+    return ChainFeatures(validationFuture, [schemeTxState, actorSystem, secrets] {
+        Y_ENSURE(secrets && secrets->size() == 1);
+        auto& iamAuth = schemeTxState->GetCreateExternalDataSource().GetAuth().GetIam();
+        return AuthorizeServiceAccountUse(iamAuth.GetServiceAccountId(),
+                (*secrets)[0],
+                actorSystem
+        ).Apply([](const NThreading::TFuture<NYdbGrpc::TGrpcStatus>& future) {
+            try {
+                auto grpcStatus = future.GetValueSync();
+                return YqlConclusionFromGrpcStatus(grpcStatus);
+            } catch (std::exception&) {
+                return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, TStringBuilder() << "Unexpected exception: " << CurrentExceptionMessage());
+            }
+        });
+    });
+}
 } // namespace {
 
 TAsyncStatus TExternalDataSourceManager::ExecuteSchemeRequest(const NKikimrSchemeOp::TModifyScheme& schemeTx, const TExternalModificationContext& context, NKqpProto::TKqpSchemeOperation::OperationCase operationCase) const {
     TAsyncStatus validationFuture = NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Success());
     auto schemeTxState = std::make_shared<NKikimrSchemeOp::TModifyScheme>(schemeTx);
     if (operationCase == NKqpProto::TKqpSchemeOperation::kCreateExternalDataSource) {
-        bool isResolveResourceIdNeeded = IsResolveResourceIdNeeded(schemeTx);
-        auto secrets = isResolveResourceIdNeeded ? std::make_shared<std::vector<TString>>() : nullptr;
+        bool isIamAuth = IsIamAuth(schemeTx);
+        bool isResolveResourceIdNeeded = isIamAuth && IsResolveResourceIdNeeded(schemeTx);
+        auto secrets = isIamAuth ? std::make_shared<std::vector<TString>>() : nullptr;
+        if (isIamAuth) {
+            auto actorSystem = context.GetActorSystem();
+            if (!AppData(actorSystem)->FeatureFlags.GetEnableExternalDataSourceAuthMethodIam()) {
+                return NThreading::MakeFuture(TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_UNSUPPORTED, "AUTH_METHOD=IAM is disabled. Please contact your system administrator to enable it"));
+            }
+        }
         validationFuture = ChainFeatures(validationFuture, [schemeTxState, context, secrets] {
             return ValidateExternalDatasourceSecrets(schemeTxState->GetCreateExternalDataSource(), context, secrets);
         });
         if (isResolveResourceIdNeeded) {
             validationFuture = ResolveResourceId(validationFuture, context, schemeTxState, secrets);
+        }
+        if (isIamAuth) {
+            validationFuture = ValidateServiceAccount(validationFuture, context, schemeTxState, secrets);
         }
     }
     return ChainFeatures(validationFuture, [schemeTxState, context] {

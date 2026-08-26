@@ -1,45 +1,47 @@
-from encodings.aliases import aliases
-from hashlib import sha256
-from json import dumps
-from typing import Any, Dict, Iterator, List, Optional, Tuple, Union
+from __future__ import annotations
 
-from .constant import TOO_BIG_SEQUENCE
+from encodings.aliases import aliases
+from re import sub
+from typing import Any, Iterator, List, Tuple
+
+from .constant import RE_POSSIBLE_ENCODING_INDICATION, TOO_BIG_SEQUENCE
 from .utils import iana_name, is_multi_byte_encoding, unicode_range
 
 
 class CharsetMatch:
     def __init__(
         self,
-        payload: bytes,
+        payload: bytes | bytearray,
         guessed_encoding: str,
         mean_mess_ratio: float,
         has_sig_or_bom: bool,
-        languages: "CoherenceMatches",
-        decoded_payload: Optional[str] = None,
+        languages: CoherenceMatches,
+        decoded_payload: str | None = None,
+        preemptive_declaration: str | None = None,
     ):
-        self._payload: bytes = payload
+        self._payload: bytes | bytearray = payload
 
         self._encoding: str = guessed_encoding
         self._mean_mess_ratio: float = mean_mess_ratio
         self._languages: CoherenceMatches = languages
         self._has_sig_or_bom: bool = has_sig_or_bom
-        self._unicode_ranges: Optional[List[str]] = None
+        self._unicode_ranges: list[str] | None = None
 
-        self._leaves: List[CharsetMatch] = []
+        self._leaves: list[CharsetMatch] = []
         self._mean_coherence_ratio: float = 0.0
 
-        self._output_payload: Optional[bytes] = None
-        self._output_encoding: Optional[str] = None
+        self._output_payload: bytes | None = None
+        self._output_encoding: str | None = None
 
-        self._string: Optional[str] = decoded_payload
+        self._string: str | None = decoded_payload
+
+        self._preemptive_declaration: str | None = preemptive_declaration
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, CharsetMatch):
-            raise TypeError(
-                "__eq__ cannot be invoked on {} and {}.".format(
-                    str(other.__class__), str(self.__class__)
-                )
-            )
+            if isinstance(other, str):
+                return iana_name(other) == self.encoding
+            return False
         return self.encoding == other.encoding and self.fingerprint == other.fingerprint
 
     def __lt__(self, other: object) -> bool:
@@ -52,11 +54,14 @@ class CharsetMatch:
         chaos_difference: float = abs(self.chaos - other.chaos)
         coherence_difference: float = abs(self.coherence - other.coherence)
 
-        # Below 1% difference --> Use Coherence
-        if chaos_difference < 0.01 and coherence_difference > 0.02:
+        # Below 0.5% difference --> Use Coherence
+        if chaos_difference < 0.005 and coherence_difference > 0.02:
             return self.coherence > other.coherence
-        elif chaos_difference < 0.01 and coherence_difference <= 0.02:
+        elif chaos_difference < 0.005 and coherence_difference <= 0.02:
             # When having a difficult decision, use the result that decoded as many multi-byte as possible.
+            # preserve RAM usage!
+            if len(self._payload) >= TOO_BIG_SEQUENCE:
+                return self.chaos < other.chaos
             return self.multi_byte_usage > other.multi_byte_usage
 
         return self.chaos < other.chaos
@@ -69,12 +74,22 @@ class CharsetMatch:
         # Lazy Str Loading
         if self._string is None:
             self._string = str(self._payload, self._encoding, "strict")
+            # UTF-7 BOM is encoded in modified Base64 whose byte boundary
+            # can overlap with the next character, so raw-byte stripping
+            # is unreliable. Strip the decoded BOM character instead.
+            if (
+                self._has_sig_or_bom
+                and self._encoding == "utf_7"
+                and self._string
+                and self._string[0] == "\ufeff"
+            ):
+                self._string = self._string[1:]
         return self._string
 
     def __repr__(self) -> str:
-        return "<CharsetMatch '{}' bytes({})>".format(self.encoding, self.fingerprint)
+        return f"<CharsetMatch '{self.encoding}' fp({self.fingerprint})>"
 
-    def add_submatch(self, other: "CharsetMatch") -> None:
+    def add_submatch(self, other: CharsetMatch) -> None:
         if not isinstance(other, CharsetMatch) or other == self:
             raise ValueError(
                 "Unable to add instance <{}> as a submatch of a CharsetMatch".format(
@@ -90,11 +105,11 @@ class CharsetMatch:
         return self._encoding
 
     @property
-    def encoding_aliases(self) -> List[str]:
+    def encoding_aliases(self) -> list[str]:
         """
         Encoding name are known by many name, using this could help when searching for IBM855 when it's listed as CP855.
         """
-        also_known_as: List[str] = []
+        also_known_as: list[str] = []
         for u, p in aliases.items():
             if self.encoding == u:
                 also_known_as.append(p)
@@ -111,7 +126,7 @@ class CharsetMatch:
         return self._has_sig_or_bom
 
     @property
-    def languages(self) -> List[str]:
+    def languages(self) -> list[str]:
         """
         Return the complete list of possible languages found in decoded sequence.
         Usually not really useful. Returned list may be empty even if 'language' property return something != 'Unknown'.
@@ -165,14 +180,14 @@ class CharsetMatch:
         return round(self.coherence * 100, ndigits=3)
 
     @property
-    def raw(self) -> bytes:
+    def raw(self) -> bytes | bytearray:
         """
         Original untouched bytes.
         """
         return self._payload
 
     @property
-    def submatch(self) -> List["CharsetMatch"]:
+    def submatch(self) -> list[CharsetMatch]:
         return self._leaves
 
     @property
@@ -180,19 +195,17 @@ class CharsetMatch:
         return len(self._leaves) > 0
 
     @property
-    def alphabets(self) -> List[str]:
+    def alphabets(self) -> list[str]:
         if self._unicode_ranges is not None:
             return self._unicode_ranges
         # list detected ranges
-        detected_ranges: List[Optional[str]] = [
-            unicode_range(char) for char in str(self)
-        ]
+        detected_ranges: list[str | None] = [unicode_range(char) for char in str(self)]
         # filter and sort
         self._unicode_ranges = sorted(list({r for r in detected_ranges if r}))
         return self._unicode_ranges
 
     @property
-    def could_be_from_charset(self) -> List[str]:
+    def could_be_from_charset(self) -> list[str]:
         """
         The complete list of encoding that output the exact SAME str result and therefore could be the originating
         encoding.
@@ -207,16 +220,34 @@ class CharsetMatch:
         """
         if self._output_encoding is None or self._output_encoding != encoding:
             self._output_encoding = encoding
-            self._output_payload = str(self).encode(encoding, "replace")
+            decoded_string = str(self)
+            if (
+                self._preemptive_declaration is not None
+                and self._preemptive_declaration.lower()
+                not in ["utf-8", "utf8", "utf_8"]
+            ):
+                patched_header = sub(
+                    RE_POSSIBLE_ENCODING_INDICATION,
+                    lambda m: m.string[m.span()[0] : m.span()[1]].replace(
+                        m.groups()[0],
+                        iana_name(self._output_encoding).replace("_", "-"),  # type: ignore[arg-type]
+                    ),
+                    decoded_string[:8192],
+                    count=1,
+                )
+
+                decoded_string = patched_header + decoded_string[8192:]
+
+            self._output_payload = decoded_string.encode(encoding, "replace")
 
         return self._output_payload  # type: ignore
 
     @property
-    def fingerprint(self) -> str:
+    def fingerprint(self) -> int:
         """
-        Retrieve the unique SHA256 computed using the transformed (re-encoded) payload. Not the original one.
+        Retrieve a hash fingerprint of the decoded payload, used for deduplication.
         """
-        return sha256(self.output()).hexdigest()
+        return hash(str(self))
 
 
 class CharsetMatches:
@@ -225,13 +256,13 @@ class CharsetMatches:
     Act like a list(iterable) but does not implements all related methods.
     """
 
-    def __init__(self, results: Optional[List[CharsetMatch]] = None):
-        self._results: List[CharsetMatch] = sorted(results) if results else []
+    def __init__(self, results: list[CharsetMatch] | None = None):
+        self._results: list[CharsetMatch] = sorted(results) if results else []
 
     def __iter__(self) -> Iterator[CharsetMatch]:
         yield from self._results
 
-    def __getitem__(self, item: Union[int, str]) -> CharsetMatch:
+    def __getitem__(self, item: int | str) -> CharsetMatch:
         """
         Retrieve a single item either by its position or encoding name (alias may be used here).
         Raise KeyError upon invalid index or encoding not present in results.
@@ -263,7 +294,7 @@ class CharsetMatches:
                 )
             )
         # We should disable the submatch factoring when the input file is too heavy (conserve RAM usage)
-        if len(item.raw) <= TOO_BIG_SEQUENCE:
+        if len(item.raw) < TOO_BIG_SEQUENCE:
             for match in self._results:
                 if match.fingerprint == item.fingerprint and match.chaos == item.chaos:
                     match.add_submatch(item)
@@ -271,7 +302,7 @@ class CharsetMatches:
         self._results.append(item)
         self._results = sorted(self._results)
 
-    def best(self) -> Optional["CharsetMatch"]:
+    def best(self) -> CharsetMatch | None:
         """
         Simply return the first match. Strict equivalent to matches[0].
         """
@@ -279,7 +310,7 @@ class CharsetMatches:
             return None
         return self._results[0]
 
-    def first(self) -> Optional["CharsetMatch"]:
+    def first(self) -> CharsetMatch | None:
         """
         Redundant method, call the method best(). Kept for BC reasons.
         """
@@ -294,31 +325,31 @@ class CliDetectionResult:
     def __init__(
         self,
         path: str,
-        encoding: Optional[str],
-        encoding_aliases: List[str],
-        alternative_encodings: List[str],
+        encoding: str | None,
+        encoding_aliases: list[str],
+        alternative_encodings: list[str],
         language: str,
-        alphabets: List[str],
+        alphabets: list[str],
         has_sig_or_bom: bool,
         chaos: float,
         coherence: float,
-        unicode_path: Optional[str],
+        unicode_path: str | None,
         is_preferred: bool,
     ):
         self.path: str = path
-        self.unicode_path: Optional[str] = unicode_path
-        self.encoding: Optional[str] = encoding
-        self.encoding_aliases: List[str] = encoding_aliases
-        self.alternative_encodings: List[str] = alternative_encodings
+        self.unicode_path: str | None = unicode_path
+        self.encoding: str | None = encoding
+        self.encoding_aliases: list[str] = encoding_aliases
+        self.alternative_encodings: list[str] = alternative_encodings
         self.language: str = language
-        self.alphabets: List[str] = alphabets
+        self.alphabets: list[str] = alphabets
         self.has_sig_or_bom: bool = has_sig_or_bom
         self.chaos: float = chaos
         self.coherence: float = coherence
         self.is_preferred: bool = is_preferred
 
     @property
-    def __dict__(self) -> Dict[str, Any]:  # type: ignore
+    def __dict__(self) -> dict[str, Any]:  # type: ignore
         return {
             "path": self.path,
             "encoding": self.encoding,
@@ -334,4 +365,6 @@ class CliDetectionResult:
         }
 
     def to_json(self) -> str:
+        from json import dumps
+
         return dumps(self.__dict__, ensure_ascii=True, indent=4)

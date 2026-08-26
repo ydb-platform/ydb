@@ -22,6 +22,9 @@ struct TJoinDescription {
     bool SliceBlocks = false;
     TVector<int> ScalarizeLeftColumns;
     TVector<int> ScalarizeRightColumns;
+    TDqProgramBuilder::TJoinFilterLambda LeftFilter;
+    TDqProgramBuilder::TJoinFilterLambda RightFilter;
+    TDqProgramBuilder::TJoinCommonFilterLambda CommonFilter;
 };
 
 bool IsBlockJoin(ETestedJoinAlgo algo);

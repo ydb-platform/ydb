@@ -1,0 +1,2485 @@
+import hashlib
+import inspect
+import io
+import json
+import os
+import plistlib
+import shutil
+import signal
+import socket
+import stat
+import tempfile
+import textwrap
+import threading
+import time
+import unittest
+import urllib.request
+import zipfile
+from contextlib import redirect_stderr, redirect_stdout
+from dataclasses import FrozenInstanceError, fields, replace
+from pathlib import Path
+from urllib.error import HTTPError
+from urllib.parse import quote
+from unittest import mock
+
+from ydb.tools.ydb_bench.lib import actors_core, cli, import_results, runner, topology, web
+from ydb.tools.ydb_bench.lib.actors_core import (
+    PING_BENCHMARK,
+    STAR_PING_BENCHMARK,
+    RunConfiguration,
+    parse_metrics,
+    run_actors_core,
+)
+from ydb.tools.ydb_bench.benchmarks import MEMORY_BENCHMARK
+from ydb.tools.ydb_bench.benchmarks.memory import parse_worker_metrics, validate_metrics as validate_memory_metrics
+from ydb.tools.ydb_bench.benchmarks.registry import (
+    BenchmarkDefinition,
+    BenchmarkRegistry,
+    DimensionDefinition,
+    ParameterDefinition,
+)
+from ydb.tools.ydb_bench.lib.cli import main
+from ydb.tools.ydb_bench.lib.common import BenchmarkError, BenchmarkInterrupted, extract_executable
+from ydb.tools.ydb_bench.lib.config import CONFIG_SCHEMA, build_run_plan, config_schema, load_config
+from ydb.tools.ydb_bench.lib.results import ResultStore, SCHEMA_VERSION, load_manifest, transition
+from ydb.tools.ydb_bench.lib.runner import run_command
+from ydb.tools.ydb_bench.lib.topology import (
+    CpuTopology,
+    _parse_darwin_topology,
+    discover_topology,
+    parse_cpu_list,
+    plan_affinity,
+    plan_background_load,
+    topology_record,
+)
+from ydb.tools.ydb_bench.lib.import_results import export_archive, import_archive
+from ydb.tools.ydb_bench.lib.web import (
+    RunService,
+    _add_memory_fairness_rows,
+    chart_data,
+    comparison_keys,
+    make_server,
+    read_model,
+)
+
+
+class YdbBenchTest(unittest.TestCase):
+    def setUp(self):
+        self.temporary_directory = tempfile.TemporaryDirectory(prefix="ydb-bench-test-")
+        self.root = Path(self.temporary_directory.name)
+
+    def tearDown(self):
+        self.temporary_directory.cleanup()
+
+    def _script(self, body, name="fake_benchmark.sh"):
+        path = self.root / name
+        path.write_text("#!/bin/sh\n{}".format(textwrap.dedent(body)), encoding="utf-8")
+        path.chmod(0o755)
+        return path
+
+    def _binary(self, path):
+        data = path.read_bytes()
+        return extract_executable(data, self.root / "extracted", "actors_core_ut_fat")
+
+    def _config(self, body, name="bench.yaml"):
+        path = self.root / name
+        path.write_text(textwrap.dedent(body), encoding="utf-8")
+        return path
+
+    def _configuration(self, repetitions=1, timeout=5, benchmark=PING_BENCHMARK):
+        return RunConfiguration(
+            benchmark=benchmark,
+            profile="test",
+            threads=(1, 2),
+            actor_pairs=(32,),
+            parameter_values=(1,),
+            duration_seconds=1,
+            repetitions=repetitions,
+            timeout_seconds=timeout,
+        )
+
+    def _worker_metrics_benchmark(self):
+        return replace(
+            PING_BENCHMARK,
+            parse_worker_metrics=MEMORY_BENCHMARK.parse_worker_metrics,
+            render_worker_metrics=MEMORY_BENCHMARK.render_worker_metrics,
+        )
+
+    def test_extract_executable_is_atomic_executable_and_hashed(self):
+        data = b"#!/bin/sh\nexit 0\n"
+        artifact = extract_executable(data, self.root / "bin", "test-binary")
+        self.assertEqual(artifact.sha256, hashlib.sha256(data).hexdigest())
+        self.assertEqual(artifact.size, len(data))
+        self.assertEqual(artifact.path.read_bytes(), data)
+        self.assertTrue(artifact.path.stat().st_mode & stat.S_IXUSR)
+        self.assertEqual(list(artifact.path.parent.glob(".test-binary.*")), [])
+
+    def test_parse_metrics_ignores_unittest_output(self):
+        stdout = "\n".join(
+            [
+                "[==========] Running 1 test",
+                PING_BENCHMARK.csv_header,
+                "1,32,1,1000,1.5,900,1100",
+                "[       OK ] HeavyActorBenchmark::SendActivateReceiveCSVManual",
+            ]
+        )
+        self.assertEqual(parse_metrics(stdout)[0]["msgs_per_sec"], 1000)
+
+    def test_parse_star_metrics_uses_star_column(self):
+        """Parse the star CSV header first, then verify its benchmark-specific value column."""
+        stdout = "\n".join([STAR_PING_BENCHMARK.csv_header, "1,32,4,1000,1.5,900,1100"])
+        rows = parse_metrics(stdout, STAR_PING_BENCHMARK)
+        self.assertEqual(rows[0]["star_multiply"], 4)
+
+    def test_parse_metrics_rejects_header_without_rows(self):
+        with self.assertRaisesRegex(BenchmarkError, "no metric rows"):
+            parse_metrics(PING_BENCHMARK.csv_header + "\n[       OK ]")
+
+    def test_list_describe_and_config_schema_expose_current_contract(self):
+        """List benchmarks, describe ping then star, and finally validate the printed schema."""
+        output = io.StringIO()
+        with redirect_stdout(output):
+            self.assertEqual(main(["list"]), 0)
+            self.assertEqual(main(["describe", "ping-bench"]), 0)
+            self.assertEqual(main(["describe", "star-ping-bench"]), 0)
+        description = output.getvalue()
+        self.assertIn("ping-bench", description)
+        self.assertIn("star-ping-bench", description)
+        self.assertNotIn("smoke", description)
+
+        schema_output = io.StringIO()
+        with redirect_stdout(schema_output):
+            self.assertEqual(main(["config-schema"]), 0)
+        self.assertEqual(json.loads(schema_output.getvalue()), CONFIG_SCHEMA)
+        self.assertEqual(set(CONFIG_SCHEMA["properties"]), {"ping-bench", "star-ping-bench", "memory-bandwidth-bench"})
+
+    def test_cli_json_discovery_and_validation_do_not_create_output(self):
+        config = self._config("""
+            ping-bench:
+              invalid:
+                threads: []
+                duration: 1
+                repetitions: 1
+                affinity: [none]
+            """)
+        output = io.StringIO()
+        with redirect_stdout(output):
+            self.assertEqual(main(["list", "--json"]), 0)
+        listed = json.loads(output.getvalue())
+        self.assertIn("defaults", listed[0])
+        self.assertIn("affinity_modes", listed[0])
+        self.assertIn("examples", listed[0])
+
+        output, errors = io.StringIO(), io.StringIO()
+        with redirect_stdout(output), redirect_stderr(errors):
+            self.assertEqual(main(["validate", "--config", str(config), "--json"]), 1)
+        result = json.loads(output.getvalue())
+        self.assertEqual(result["error"]["path"], "ping-bench.invalid.threads")
+        self.assertIn("non-empty", result["error"]["message"])
+        self.assertEqual(errors.getvalue(), "")
+        self.assertFalse((self.root / "output").exists())
+
+    def test_cli_report_stdout_and_queue_error_policies(self):
+        benchmark = self._script("""
+            test "$ACTORSYSTEM_INFLIGHTS" = "2" || exit 23
+            echo "threads,actorPairs,in_flight,msgs_per_sec,elapsed_seconds,min_pair_sent_msgs,max_pair_sent_msgs"
+            echo "1,32,2,1000,1.0,900,1100"
+            """)
+        config = self._config("""
+            ping-bench:
+              fails: {threads: [1], actor-pairs: [32], inflight: [1], duration: 1, repetitions: 2, affinity: [none]}
+              succeeds: {threads: [1], actor-pairs: [32], inflight: [2], duration: 1, repetitions: 1, affinity: [none]}
+            """)
+
+        def loader(_):
+            return benchmark.read_bytes()
+
+        fail_fast = self.root / "fail-fast"
+        fail_fast_stdout, fail_fast_stderr = io.StringIO(), io.StringIO()
+        with redirect_stdout(fail_fast_stdout), redirect_stderr(fail_fast_stderr):
+            self.assertEqual(main(["run", "--config", str(config), "--output", str(fail_fast)], loader), 1)
+        fail_fast_manifest = json.loads((fail_fast / "run.json").read_text())
+        self.assertEqual(len(fail_fast_manifest["runs"]), 1)
+        self.assertEqual([step["state"] for step in fail_fast_manifest["steps"]], ["failed", "cancelled", "cancelled"])
+        self.assertTrue(all(step.get("reason") for step in fail_fast_manifest["steps"] if step["state"] == "cancelled"))
+        self.assertEqual(fail_fast_stdout.getvalue(), "")
+        self.assertIn("failed 2 benchmark profiles: {}".format(fail_fast), fail_fast_stderr.getvalue())
+
+        continued, stdout, stderr = self.root / "continued", io.StringIO(), io.StringIO()
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            self.assertEqual(
+                main(
+                    [
+                        "run",
+                        "--config",
+                        str(config),
+                        "--output",
+                        str(continued),
+                        "--continue-on-error",
+                        "--report-json",
+                        "-",
+                    ],
+                    loader,
+                ),
+                1,
+            )
+        report_payload = stdout.getvalue().strip()
+        report, offset = json.JSONDecoder().raw_decode(report_payload)
+        self.assertEqual(report_payload[offset:].strip(), "")
+        self.assertTrue(report_payload.startswith("{"))
+        self.assertTrue(report_payload.endswith("}"))
+        self.assertEqual(report_payload.count("{"), report_payload.count("}"))
+        report_stored = json.loads((continued / "run.json").read_text())
+        self.assertEqual(report, json.loads((continued / "run.json").read_text()))
+        self.assertEqual([run["status"] for run in report["runs"]], ["failed", "completed"])
+        self.assertEqual([step["state"] for step in report["steps"]], ["failed", "cancelled", "passed"])
+        self.assertIn("profile stopped after failure", report["steps"][1]["reason"])
+        self.assertEqual(report, report_stored)
+        self.assertIn("failed 2 benchmark profiles: {}".format(continued), stderr.getvalue())
+        self.assertIn("succeeds/summary.csv", stderr.getvalue())
+
+        report_json_output = self.root / "continued-path-report.json"
+        continued_path = self.root / "continued-path"
+        path_stdout, path_stderr = io.StringIO(), io.StringIO()
+        with redirect_stdout(path_stdout), redirect_stderr(path_stderr):
+            self.assertEqual(
+                main(
+                    [
+                        "run",
+                        "--config",
+                        str(config),
+                        "--output",
+                        str(continued_path),
+                        "--continue-on-error",
+                        "--report-json",
+                        str(report_json_output),
+                    ],
+                    loader,
+                ),
+                1,
+            )
+        self.assertEqual(path_stdout.getvalue(), "")
+        report = json.loads(report_json_output.read_text())
+        self.assertEqual(report["status"], "failed")
+        self.assertEqual(report["runs"], report_stored["runs"])
+        self.assertIn("failed 2 benchmark profiles:", path_stderr.getvalue())
+        self.assertIn("succeeds/summary.csv", path_stderr.getvalue())
+
+    def test_registry_accepts_a_fake_adapter_and_generates_its_schema(self):
+        """Adapters can be registered independently of the CLI, config loader, and executor."""
+        registry = BenchmarkRegistry()
+        fake = BenchmarkDefinition(
+            name="fake-bench",
+            description="test adapter",
+            resource_name="actors_core_ut_fat",
+            parameters=(
+                ParameterDefinition(
+                    "actor-pairs", "pairs", default=(512,), environment="ACTORSYSTEM_ACTOR_PAIRS", column="actorPairs"
+                ),
+                ParameterDefinition(
+                    "samples", "Sample counts", default=(1,), environment="FAKE_SAMPLES", column="samples"
+                ),
+            ),
+            dimensions=(
+                DimensionDefinition("threads"),
+                DimensionDefinition("actorPairs"),
+                DimensionDefinition("samples"),
+            ),
+            metrics=PING_BENCHMARK.metrics,
+            parse_metrics=PING_BENCHMARK.parse_metrics,
+            render_metrics=PING_BENCHMARK.render_metrics,
+            validate_metrics=PING_BENCHMARK.validate_metrics,
+            summarize_metrics=PING_BENCHMARK.summarize_metrics,
+            render_summary=PING_BENCHMARK.render_summary,
+            command=lambda binary, benchmark, configuration, case: [str(binary), "Fake::Run"],
+            environment=lambda configuration, case: {
+                "ACTORSYSTEM_THREADS": str(case["threads"]),
+                "ACTORSYSTEM_ACTOR_PAIRS": ",".join(map(str, configuration.parameters["actor-pairs"])),
+                "FAKE_SAMPLES": ",".join(map(str, configuration.parameters["samples"])),
+            },
+            process_cases=PING_BENCHMARK.process_cases,
+        )
+        self.assertIs(registry.register(fake), fake)
+        self.assertEqual(list(registry), ["fake-bench"])
+        schema = config_schema(registry)
+        self.assertEqual(set(schema["properties"]), {"fake-bench"})
+        self.assertIn("samples", schema["properties"]["fake-bench"]["additionalProperties"]["properties"])
+        script = self._script("""
+            echo "threads,actorPairs,samples,msgs_per_sec,elapsed_seconds,min_pair_sent_msgs,max_pair_sent_msgs"
+            if test "$ACTORSYSTEM_THREADS" = "1"; then
+              echo "1,32,1,1000,1.0,900,1100"
+            else
+              echo "2,32,1,2000,1.0,1800,2200"
+            fi
+            """)
+        output = self.root / "fake-output"
+        output.mkdir()
+        configuration = RunConfiguration(
+            benchmark=fake,
+            profile="fake",
+            threads=(1, 2),
+            actor_pairs=(32,),
+            parameter_values=(1,),
+            duration_seconds=1,
+            repetitions=1,
+            timeout_seconds=5,
+        )
+        manifest = run_actors_core(self._binary(script), configuration, output, {"commit_id": "test"})
+        self.assertEqual(manifest["benchmark"], "fake-bench")
+        self.assertIn("samples", (output / "summary.csv").read_text().splitlines()[0])
+
+    def test_benchmark_definition_declares_immutable_test_filter(self):
+        """The actor test selector is frozen benchmark metadata, not a post-construction attribute."""
+        self.assertIn("test_filter", {field.name for field in fields(BenchmarkDefinition)})
+        self.assertEqual(PING_BENCHMARK.test_filter, "HeavyActorBenchmark::SendActivateReceiveCSVManual")
+        with self.assertRaises(FrozenInstanceError):
+            PING_BENCHMARK.test_filter = "Other::Filter"
+
+    def test_config_supports_multiple_benchmarks_and_profiles(self):
+        """Load ping baseline, ping focused, then star sweep while preserving YAML order."""
+        config = self._config("""
+            ping-bench:
+              baseline:
+                threads: [1, 2, 4]
+                duration: 3
+                repetitions: 5
+                affinity: [none]
+              focused:
+                threads: [16]
+                actor-pairs: [1024]
+                inflight: [2, 4]
+                duration: 10
+                repetitions: 1
+                affinity: [pack-numa-pack-chiplet]
+            star-ping-bench:
+              star-sweep:
+                threads: [8]
+                stars: [1, 2, 4]
+                duration: 4
+                repetitions: 2
+                affinity: [none, spread-numa-pack-chiplet]
+            """)
+        loaded = load_config(config, perf_enabled=True, perf_frequency=123)
+        self.assertEqual(
+            [(run.benchmark.name, run.profile) for run in loaded.runs],
+            [
+                ("ping-bench", "baseline"),
+                ("ping-bench", "focused"),
+                ("star-ping-bench", "star-sweep"),
+            ],
+        )
+        self.assertEqual(loaded.runs[0].actor_pairs, (512,))
+        self.assertEqual(loaded.runs[0].parameter_values, (1,))
+        self.assertEqual(loaded.runs[1].parameter_values, (2, 4))
+        self.assertEqual(loaded.runs[2].parameter_values, (1, 2, 4))
+        self.assertTrue(all(run.perf_enabled for run in loaded.runs))
+        self.assertTrue(all(run.perf_frequency == 123 for run in loaded.runs))
+
+    def test_run_plan_expands_config_in_stable_queue_order(self):
+        loaded = load_config(self._config("""
+            ping-bench:
+              first: {threads: [1, 2], duration: 1, repetitions: 2, affinity: [none, pack-numa-pack-chiplet]}
+              second: {threads: [1], duration: 1, repetitions: 1, affinity: [none]}
+            """))
+        plan = build_run_plan(loaded)
+        self.assertEqual(
+            [(s.profile, s.affinity, s.threads, s.repeat) for s in plan.steps],
+            [
+                ("first", "none", 1, 1),
+                ("first", "none", 1, 2),
+                ("first", "none", 2, 1),
+                ("first", "none", 2, 2),
+                ("first", "pack-numa-pack-chiplet", 1, 1),
+                ("first", "pack-numa-pack-chiplet", 1, 2),
+                ("first", "pack-numa-pack-chiplet", 2, 1),
+                ("first", "pack-numa-pack-chiplet", 2, 2),
+                ("second", "none", 1, 1),
+            ],
+        )
+        self.assertEqual(len({step.id for step in plan.steps}), len(plan.steps))
+
+    def test_cli_reuses_precomputed_step_index_and_rejects_unknown_events(self):
+        """Event lookup never rescans the immutable plan and diagnoses keys absent from it."""
+
+        class OnePassSteps:
+            def __init__(self, values):
+                self.values = values
+                self.iterations = 0
+
+            def __iter__(self):
+                self.iterations += 1
+                if self.iterations > 1:
+                    raise AssertionError("plan steps were scanned again")
+                return iter(self.values)
+
+        config = self._config(
+            """
+            ping-bench:
+              indexed: {threads: [1], actor-pairs: [32], inflight: [1], duration: 1, repetitions: 1, affinity: [none]}
+            """,
+            name="indexed.yaml",
+        )
+
+        def indexed_plan():
+            plan = build_run_plan(load_config(config))
+            steps = OnePassSteps(plan.steps)
+            return replace(plan, steps=steps), steps
+
+        def successful_run(_binary, _configuration, _output_directory, **kwargs):
+            emit = kwargs["event_sink"]
+            event = {"affinity": "none", "threads": 1, "case": 1, "repeat": 1}
+            emit({"type": "step-started", **event})
+            emit({"type": "step-finished", "state": "passed", **event})
+            return {"summary": "summary.csv"}
+
+        plan, steps = indexed_plan()
+        with mock.patch.object(cli, "build_run_plan", return_value=plan), mock.patch.object(
+            cli, "run_benchmark", side_effect=successful_run
+        ):
+            self.assertEqual(
+                cli.main(
+                    ["run", "--config", str(config), "--output", str(self.root / "indexed-output")],
+                    resource_loader=lambda _: b"#!/bin/sh\nexit 0\n",
+                ),
+                0,
+            )
+        self.assertEqual(steps.iterations, 1)
+
+        def unknown_run(_binary, _configuration, _output_directory, **kwargs):
+            kwargs["event_sink"]({"type": "step-started", "affinity": "none", "threads": 99, "case": 1, "repeat": 1})
+
+        plan, steps = indexed_plan()
+        error = io.StringIO()
+        with redirect_stderr(error), mock.patch.object(cli, "build_run_plan", return_value=plan), mock.patch.object(
+            cli, "run_benchmark", side_effect=unknown_run
+        ):
+            self.assertEqual(
+                cli.main(
+                    ["run", "--config", str(config), "--output", str(self.root / "unknown-event-output")],
+                    resource_loader=lambda _: b"#!/bin/sh\nexit 0\n",
+                ),
+                1,
+            )
+        self.assertEqual(steps.iterations, 1)
+        self.assertIn("benchmark event does not match a planned step", error.getvalue())
+
+    def test_memory_config_expands_generic_parameter_matrix(self):
+        loaded = load_config(self._config("""
+            memory-bandwidth-bench:
+              mixed:
+                threads: [1, 2]
+                random-percent: [0, 50]
+                random-mode: [copy, write]
+                buffer-size-mb: [8]
+                part-size-kb: [512]
+                duration: 1
+                repetitions: 2
+                affinity: [none, pack-numa]
+            """))
+        configuration = loaded.runs[0]
+        self.assertIs(configuration.benchmark, MEMORY_BENCHMARK)
+        self.assertEqual(configuration.parameters["random-percent"], (0, 50))
+        plan = build_run_plan(loaded)
+        self.assertEqual(len(plan.steps), 32)
+        self.assertEqual(plan.steps[0].parameters["random-percent"], 0)
+        self.assertEqual(plan.steps[-1].parameters["random-mode"], "write")
+        self.assertEqual({step.threads for step in plan.steps}, {1, 2})
+        self.assertEqual({step.affinity for step in plan.steps}, {"none", "pack-numa"})
+
+    def test_automatic_timeout_counts_measurements_inside_each_process(self):
+        """Memory cases time one measurement; actor processes time their pairs/value matrix, never other threads."""
+        actors = load_config(
+            self._config(
+                """
+                ping-bench:
+                  sweep:
+                    threads: [1, 2, 4]
+                    actor-pairs: [32, 64]
+                    inflight: [1, 2, 4]
+                    duration: 5
+                    repetitions: 1
+                    affinity: [none]
+                """,
+                name="actor-timeout.yaml",
+            )
+        ).runs[0]
+        memory = load_config(
+            self._config(
+                """
+                memory-bandwidth-bench:
+                  sweep:
+                    threads: [1, 2, 4]
+                    random-percent: [0, 50, 100]
+                    random-mode: [copy, write]
+                    buffer-size-mb: [8, 16]
+                    part-size-kb: [512, 1024]
+                    duration: 5
+                    repetitions: 1
+                    affinity: [none]
+                """,
+                name="memory-timeout.yaml",
+            )
+        ).runs[0]
+
+        with self.subTest(benchmark="actors"):
+            self.assertEqual(actors.timeout_seconds, 2 * 3 * 5 * 3 + 30)
+        with self.subTest(benchmark="memory"):
+            self.assertEqual(memory.timeout_seconds, 5 * 3 + 30)
+
+    def test_memory_metric_validation_requires_process_case(self):
+        """The adapter contract exposes case as required and rejects old two-argument calls."""
+        case_parameter = inspect.signature(validate_memory_metrics).parameters["case"]
+        self.assertIs(case_parameter.default, inspect.Parameter.empty)
+        with self.assertRaises(TypeError):
+            validate_memory_metrics([], self._configuration(benchmark=MEMORY_BENCHMARK))
+
+    def test_memory_worker_metrics_keep_raw_workers(self):
+        stdout = "\n".join(
+            (
+                "workers.csv",
+                "worker,scope,operations,payload_bytes,read_bytes,written_bytes,ops_per_sec,payload_mb_per_sec,read_mb_per_sec,write_mb_per_sec,memory_traffic_mb_per_sec",
+                "0,sequential,10,20,20,20,100,200,200,200,400",
+                "1,random,30,30,30,30,300,300,300,300,600",
+            )
+        )
+        rows = parse_worker_metrics(stdout, MEMORY_BENCHMARK)
+        self.assertEqual([(row["worker"], row["scope"]) for row in rows], [(0, "sequential"), (1, "random")])
+        self.assertEqual(rows[1]["ops_per_sec"], 300.0)
+
+    def test_missing_worker_metrics_finalizes_manifest_and_step(self):
+        benchmark = self._worker_metrics_benchmark()
+        script = self._script("""
+            echo "threads,actorPairs,in_flight,msgs_per_sec,elapsed_seconds,min_pair_sent_msgs,max_pair_sent_msgs"
+            echo "1,32,1,1000,1.0,900,1100"
+            """)
+        output = self.root / "missing-worker-output"
+        output.mkdir()
+        events = []
+
+        with self.assertRaisesRegex(BenchmarkError, "does not contain workers.csv"):
+            run_actors_core(
+                self._binary(script),
+                self._configuration(benchmark=benchmark),
+                output,
+                tool_revision={"commit_id": "test"},
+                event_sink=events.append,
+            )
+
+        manifest = json.loads((output / "run.json").read_text())
+        repetition = output / "none" / "threads-001" / "repeat-001"
+        self.assertEqual(manifest["status"], "failed")
+        self.assertEqual(manifest["state"], "failed")
+        self.assertIn("does not contain workers.csv", manifest["error"])
+        self.assertNotIn("metrics", manifest["runs"][0])
+        self.assertNotIn("worker_metrics", manifest["runs"][0])
+        self.assertFalse((repetition / "metrics.csv").exists())
+        self.assertFalse((repetition / "workers.csv").exists())
+        self.assertEqual([event["type"] for event in events], ["step-started", "step-finished"])
+        self.assertEqual(events[-1]["state"], "failed")
+        self.assertEqual(events[-1]["fields"]["error"], manifest["error"])
+
+    def test_empty_worker_metrics_finalizes_manifest_and_step(self):
+        benchmark = self._worker_metrics_benchmark()
+        script = self._script("""
+            echo "threads,actorPairs,in_flight,msgs_per_sec,elapsed_seconds,min_pair_sent_msgs,max_pair_sent_msgs"
+            echo "1,32,1,1000,1.0,900,1100"
+            echo "workers.csv"
+            echo "worker,scope,operations"
+            """)
+        output = self.root / "empty-worker-output"
+        output.mkdir()
+        events = []
+
+        with self.assertRaisesRegex(BenchmarkError, "produced no worker metrics"):
+            run_actors_core(
+                self._binary(script),
+                self._configuration(benchmark=benchmark),
+                output,
+                tool_revision={"commit_id": "test"},
+                event_sink=events.append,
+            )
+
+        manifest = json.loads((output / "run.json").read_text())
+        self.assertEqual(manifest["status"], "failed")
+        self.assertEqual(manifest["state"], "failed")
+        self.assertIn("produced no worker metrics", manifest["runs"][0]["error"])
+        self.assertEqual(events[-1]["type"], "step-finished")
+        self.assertEqual(events[-1]["state"], "failed")
+        self.assertEqual(events[-1]["fields"]["error"], manifest["error"])
+
+    def test_worker_metrics_write_failure_rolls_back_metric_artifacts(self):
+        benchmark = self._worker_metrics_benchmark()
+        script = self._script("""
+            echo "threads,actorPairs,in_flight,msgs_per_sec,elapsed_seconds,min_pair_sent_msgs,max_pair_sent_msgs"
+            echo "1,32,1,1000,1.0,900,1100"
+            echo "workers.csv"
+            echo "worker,scope,operations"
+            echo "0,sequential,10"
+            """)
+        output = self.root / "worker-write-failure-output"
+        output.mkdir()
+        events = []
+
+        original_atomic_write_text = actors_core.atomic_write_text
+
+        def write_or_fail(path, contents):
+            if Path(path).name == "workers.csv":
+                raise OSError("worker metrics disk full")
+            return original_atomic_write_text(path, contents)
+
+        with mock.patch.object(actors_core, "atomic_write_text", side_effect=write_or_fail):
+            with self.assertRaisesRegex(BenchmarkError, "worker metrics disk full"):
+                run_actors_core(
+                    self._binary(script),
+                    self._configuration(benchmark=benchmark),
+                    output,
+                    tool_revision={"commit_id": "test"},
+                    event_sink=events.append,
+                )
+
+        manifest = json.loads((output / "run.json").read_text())
+        repetition = output / "none" / "threads-001" / "repeat-001"
+        self.assertEqual(manifest["status"], "failed")
+        self.assertEqual(manifest["state"], "failed")
+        self.assertEqual(manifest["error"], "worker metrics disk full")
+        self.assertNotIn("metrics", manifest["runs"][0])
+        self.assertNotIn("worker_metrics", manifest["runs"][0])
+        self.assertFalse((repetition / "metrics.csv").exists())
+        self.assertFalse((repetition / "workers.csv").exists())
+        self.assertEqual(events[-1]["type"], "step-finished")
+        self.assertEqual(events[-1]["state"], "failed")
+        self.assertEqual(events[-1]["fields"]["error"], manifest["error"])
+
+    def test_result_state_machine_rejects_invalid_transition_and_old_schema(self):
+        pending = {"id": "step-1", "state": "pending", "artifacts": []}
+        running = transition(pending, "running")
+        self.assertEqual(transition(running, "passed")["state"], "passed")
+        with self.assertRaisesRegex(BenchmarkError, "invalid result state transition"):
+            transition(pending, "passed")
+        old = self.root / "old.json"
+        old.write_text('{"schema_version": 3}', encoding="utf-8")
+        with self.assertRaisesRegex(BenchmarkError, "unsupported result manifest schema"):
+            load_manifest(old)
+        old.write_text("[]", encoding="utf-8")
+        with self.assertRaisesRegex(BenchmarkError, "JSON object"):
+            load_manifest(old)
+
+    def test_result_store_never_publishes_missing_artifacts(self):
+        path = self.root / "run.json"
+        store = ResultStore(path, {"steps": [{"id": "step-1", "state": "pending", "artifacts": []}]})
+        store.write()
+        with self.assertRaisesRegex(BenchmarkError, "state pending"):
+            store.add_artifacts("step-1", ["missing.txt"])
+        store.transition_step("step-1", "running")
+        with self.assertRaisesRegex(BenchmarkError, "not durably available"):
+            store.add_artifacts("step-1", ["missing.txt"])
+        artifact = self.root / "stdout.txt"
+        artifact.write_text("ok", encoding="utf-8")
+        store.add_artifacts("step-1", ["stdout.txt"])
+        store.transition_step("step-1", "passed")
+        self.assertEqual(load_manifest(path)["steps"][0]["artifacts"], ["stdout.txt"])
+        with self.assertRaisesRegex(BenchmarkError, "state passed"):
+            store.add_artifacts("step-1", ["stdout.txt"])
+
+    def test_config_rejects_empty_arrays_unknown_fields_and_unsafe_profile_names(self):
+        """Reject empty threads, then an unknown field, then an unsafe profile path."""
+        cases = (
+            (
+                "empty-threads.yaml",
+                """
+                ping-bench:
+                  baseline:
+                    threads: []
+                    duration: 1
+                    repetitions: 1
+                    affinity: [none]
+                """,
+                "non-empty array",
+            ),
+            (
+                "unknown-field.yaml",
+                """
+                ping-bench:
+                  baseline:
+                    threads: [1]
+                    duration: 1
+                    repetitions: 1
+                    affinity: [none]
+                    surprise: 42
+                """,
+                "unknown fields: surprise",
+            ),
+            (
+                "unsafe-name.yaml",
+                """
+                ping-bench:
+                  ../escape:
+                    threads: [1]
+                    duration: 1
+                    repetitions: 1
+                    affinity: [none]
+                """,
+                "profile names must match",
+            ),
+        )
+        for name, body, error in cases:
+            with self.subTest(name=name), self.assertRaisesRegex(BenchmarkError, error):
+                load_config(self._config(body, name=name))
+
+    def test_config_rejects_non_finite_timeout(self):
+        """Reject NaN, positive infinity, then negative infinity as profile timeouts."""
+        for value in (".nan", ".inf", "-.inf"):
+            with self.subTest(value=value), self.assertRaisesRegex(BenchmarkError, "finite positive number"):
+                load_config(
+                    self._config(
+                        """
+                        ping-bench:
+                          baseline:
+                            threads: [1]
+                            duration: 1
+                            repetitions: 1
+                            affinity: [none]
+                            timeout: {}
+                        """.format(value),
+                        name="timeout-{}.yaml".format(value.replace("/", "_")),
+                    )
+                )
+
+    def test_config_rejects_duplicate_yaml_keys(self):
+        """Parse a profile with duplicate threads keys and reject it before normalization."""
+        config = self._config("""
+            ping-bench:
+              baseline:
+                threads: [1]
+                threads: [2]
+                duration: 1
+                repetitions: 1
+                affinity: [none]
+            """)
+        with self.assertRaisesRegex(BenchmarkError, "duplicate key 'threads'"):
+            load_config(config)
+
+    def test_perf_requires_profile_build(self):
+        config = self._config("""
+            ping-bench:
+              baseline:
+                threads: [1]
+                duration: 1
+                repetitions: 1
+                affinity: [none]
+            """)
+        error = io.StringIO()
+        with redirect_stderr(error):
+            code = main(
+                [
+                    "run",
+                    "--config",
+                    str(config),
+                    "--perf",
+                    "--output",
+                    str(self.root / "non-profile"),
+                ],
+                resource_loader=lambda _: b"fake",
+                tool_revision={"build_type": "relwithdebinfo", "commit_id": "test"},
+            )
+        self.assertEqual(code, 1)
+        self.assertIn("--build=profile", error.getvalue())
+        self.assertFalse((self.root / "non-profile").exists())
+
+    def test_cli_runs_multiple_benchmarks_and_profiles(self):
+        """Run ping-bench/first, ping-bench/second, then star-ping-bench/star with separate summaries."""
+        benchmark = self._script("""
+            test "$ACTORSYSTEM_TEST_MODE" = "manual" || exit 10
+            test "$ACTORSYSTEM_THREADS" = "1" || exit 11
+            test "$ACTORSYSTEM_ACTOR_PAIRS" = "32" || exit 12
+            case "$1" in
+              HeavyActorBenchmark::SendActivateReceiveCSVManual)
+                test "$ACTORSYSTEM_INFLIGHTS" = "1" || exit 13
+                echo "threads,actorPairs,in_flight,msgs_per_sec,elapsed_seconds,min_pair_sent_msgs,max_pair_sent_msgs"
+                echo "1,32,1,1000,1.0,900,1100"
+                ;;
+              HeavyActorBenchmark::StarSendActivateReceiveCSVManual)
+                test "$ACTORSYSTEM_STARS" = "2" || exit 14
+                test "$ACTORSYSTEM_DURATION" = "2" || exit 15
+                printf '%s%s\n' \
+                  "threads,actorPairs,star_multiply,msgs_per_sec,elapsed_seconds," \
+                  "min_pair_sent_msgs,max_pair_sent_msgs"
+                echo "1,32,2,2000,2.0,1800,2200"
+                ;;
+              *) exit 16 ;;
+            esac
+            """)
+        config = self._config("""
+            ping-bench:
+              first:
+                threads: [1]
+                actor-pairs: [32]
+                duration: 1
+                repetitions: 1
+                affinity: [none]
+              second:
+                threads: [1]
+                actor-pairs: [32]
+                duration: 1
+                repetitions: 1
+                affinity: [none]
+            star-ping-bench:
+              star:
+                threads: [1]
+                actor-pairs: [32]
+                stars: [2]
+                duration: 2
+                repetitions: 1
+                affinity: [none]
+            """)
+        output = self.root / "multi-output"
+        console = io.StringIO()
+        with redirect_stderr(console):
+            code = main(
+                ["run", "--config", str(config), "--output", str(output)],
+                resource_loader=lambda _: benchmark.read_bytes(),
+                tool_revision={"build_type": "relwithdebinfo", "commit_id": "test"},
+            )
+        self.assertEqual(code, 0)
+        manifest = json.loads((output / "run.json").read_text())
+        self.assertEqual(manifest["status"], "completed")
+        self.assertEqual(manifest["state"], "passed")
+        self.assertEqual(manifest["schema_version"], SCHEMA_VERSION)
+        self.assertEqual(len(manifest["runs"]), 3)
+        self.assertTrue(all(run["status"] == "completed" for run in manifest["runs"]))
+        self.assertEqual(
+            [run["summary"] for run in manifest["runs"]],
+            [
+                "ping-bench/first/summary.csv",
+                "ping-bench/second/summary.csv",
+                "star-ping-bench/star/summary.csv",
+            ],
+        )
+        first = (output / "ping-bench" / "first" / "summary.csv").read_text()
+        second = (output / "ping-bench" / "second" / "summary.csv").read_text()
+        star = (output / "star-ping-bench" / "star" / "summary.csv").read_text()
+        self.assertIn("in_flight", first.splitlines()[0])
+        self.assertIn("none,1,32,1,1,1000.0", first)
+        self.assertEqual(first, second)
+        self.assertIn("star_multiply", star.splitlines()[0])
+        self.assertIn("none,1,32,2,1,2000.0", star)
+        self.assertFalse((output / "summary.csv").exists())
+        self.assertNotIn("summary", manifest)
+        self.assertIn("ping-bench/first: ping-bench/first/summary.csv", console.getvalue())
+        self.assertIn("star-ping-bench/star: star-ping-bench/star/summary.csv", console.getvalue())
+
+    def test_cli_generated_manifest_round_trips_through_portable_archive(self):
+        """A real CLI manifest keeps its integer case index when imported."""
+        benchmark = self._script("""
+            test "$1" = "HeavyActorBenchmark::SendActivateReceiveCSVManual" || exit 10
+            echo "threads,actorPairs,in_flight,msgs_per_sec,elapsed_seconds,min_pair_sent_msgs,max_pair_sent_msgs"
+            echo "1,32,1,1000,1.0,900,1100"
+            """)
+        config = self._config("""
+            ping-bench:
+              portable:
+                threads: [1]
+                actor-pairs: [32]
+                inflight: [1]
+                duration: 1
+                repetitions: 1
+                affinity: [none]
+            """)
+        output = self.root / "portable-source"
+        with redirect_stderr(io.StringIO()):
+            self.assertEqual(
+                main(
+                    ["run", "--config", str(config), "--output", str(output)],
+                    resource_loader=lambda _: benchmark.read_bytes(),
+                    tool_revision={"build_type": "relwithdebinfo", "commit_id": "test"},
+                ),
+                0,
+            )
+
+        produced = load_manifest(output / "run.json")
+        self.assertEqual(produced["steps"][0]["case"], 1)
+        destination = self.root / "portable-destination"
+        with export_archive(output) as archive:
+            imported = import_archive(destination, archive.read_bytes())
+        restored = load_manifest(destination / imported["id"] / "run.json")
+        self.assertEqual(restored["steps"][0]["case"], 1)
+        self.assertEqual(restored["steps"][0]["parameters"], produced["steps"][0]["parameters"])
+
+    def test_cli_exit_code_uses_interruption_error_type(self):
+        config = self._config("""
+            ping-bench:
+              test:
+                threads: [1]
+                duration: 1
+                repetitions: 1
+                affinity: [none]
+            """)
+
+        def loader_for(error):
+            def loader(_):
+                raise error
+
+            return loader
+
+        error_output = io.StringIO()
+        with redirect_stderr(error_output):
+            generic_code = main(
+                ["run", "--config", str(config), "--output", str(self.root / "generic-error")],
+                resource_loader=loader_for(BenchmarkError("benchmark failed")),
+            )
+            interrupted_code = main(
+                ["run", "--config", str(config), "--output", str(self.root / "interrupted-error")],
+                resource_loader=loader_for(BenchmarkInterrupted("benchmark stopped")),
+            )
+        self.assertEqual(generic_code, 1)
+        self.assertEqual(interrupted_code, 130)
+        generic_manifest = json.loads((self.root / "generic-error" / "run.json").read_text())
+        interrupted_manifest = json.loads((self.root / "interrupted-error" / "run.json").read_text())
+        self.assertEqual(generic_manifest["status"], "failed")
+        self.assertEqual(generic_manifest["state"], "failed")
+        self.assertEqual(generic_manifest["schema_version"], SCHEMA_VERSION)
+        self.assertEqual(interrupted_manifest["status"], "interrupted")
+        self.assertEqual(interrupted_manifest["state"], "cancelled")
+        self.assertEqual(interrupted_manifest["schema_version"], SCHEMA_VERSION)
+        self.assertTrue(interrupted_manifest["steps"])
+        self.assertTrue(all(step["state"] == "cancelled" for step in interrupted_manifest["steps"]))
+        self.assertTrue(all("benchmark stopped" in step["reason"] for step in interrupted_manifest["steps"]))
+
+    def test_run_writes_manifest_raw_metrics_and_median_summary(self):
+        script = self._script("""
+            test "$1" = "HeavyActorBenchmark::SendActivateReceiveCSVManual" || exit 10
+            test "$ACTORSYSTEM_TEST_MODE" = "manual" || exit 11
+            test "$ACTORSYSTEM_THREADS" = "1" -o "$ACTORSYSTEM_THREADS" = "2" || exit 12
+            test "$ACTORSYSTEM_ACTOR_PAIRS" = "32" || exit 13
+            test "$ACTORSYSTEM_INFLIGHTS" = "1" || exit 14
+            test "$ACTORSYSTEM_DURATION" = "1" || exit 15
+            echo "[ RUN      ] benchmark"
+            echo "threads,actorPairs,in_flight,msgs_per_sec,elapsed_seconds,min_pair_sent_msgs,max_pair_sent_msgs"
+            if test "$ACTORSYSTEM_THREADS" = "1"; then
+              echo "1,32,1,1000,1.0,900,1100"
+            else
+              echo "2,32,1,2000,1.0,1800,2200"
+            fi
+            """)
+        output = self.root / "output"
+        output.mkdir()
+        manifest = run_actors_core(
+            self._binary(script),
+            self._configuration(repetitions=3),
+            output,
+            tool_revision={"commit_id": "test"},
+            work_dir_hint=self.root,
+        )
+        self.assertEqual(manifest["status"], "completed")
+        self.assertEqual(len(manifest["runs"]), 6)
+        self.assertTrue((output / "summary.csv").is_file())
+        self.assertIn("none,1,32,1,3,1000.0,1000.0,1000.0,1.0", (output / "summary.csv").read_text())
+        stored = json.loads((output / "run.json").read_text())
+        self.assertEqual(stored["schema_version"], SCHEMA_VERSION)
+        self.assertEqual(stored["state"], "passed")
+        self.assertEqual(stored["benchmark"], "ping-bench")
+        self.assertEqual(stored["affinity"][0]["mode"], "none")
+        self.assertEqual(stored["binary"]["sha256"], self._binary(script).sha256)
+        for threads in (1, 2):
+            for index in range(1, 4):
+                repetition = output / "none" / "threads-{:03d}".format(threads) / "repeat-{:03d}".format(index)
+                self.assertTrue((repetition / "stdout.txt").is_file())
+                self.assertTrue((repetition / "stderr.txt").is_file())
+                self.assertTrue((repetition / "metrics.csv").is_file())
+
+    def test_star_run_selects_star_filter_environment_and_summary(self):
+        """Select the star filter, pass stars and duration, then render a star-specific summary."""
+        script = self._script("""
+            test "$1" = "HeavyActorBenchmark::StarSendActivateReceiveCSVManual" || exit 10
+            test "$ACTORSYSTEM_STARS" = "2,4" || exit 11
+            test "$ACTORSYSTEM_DURATION" = "3" || exit 12
+            echo "threads,actorPairs,star_multiply,msgs_per_sec,elapsed_seconds,min_pair_sent_msgs,max_pair_sent_msgs"
+            if test "$ACTORSYSTEM_THREADS" = "1"; then
+              echo "1,32,2,1000,3.0,900,1100"
+              echo "1,32,4,2000,3.0,1800,2200"
+            else
+              echo "2,32,2,3000,3.0,2800,3200"
+              echo "2,32,4,4000,3.0,3800,4200"
+            fi
+            """)
+        output = self.root / "star-output"
+        output.mkdir()
+        configuration = RunConfiguration(
+            **{
+                **self._configuration(benchmark=STAR_PING_BENCHMARK).__dict__,
+                "parameter_values": (2, 4),
+                "duration_seconds": 3,
+            }
+        )
+        manifest = run_actors_core(
+            self._binary(script),
+            configuration,
+            output,
+            tool_revision={"commit_id": "test"},
+        )
+        self.assertEqual(manifest["benchmark"], "star-ping-bench")
+        self.assertEqual(manifest["parameters"]["stars"], [2, 4])
+        self.assertIn("star_multiply", (output / "summary.csv").read_text().splitlines()[0])
+
+    def test_perf_run_preserves_binary_data_report_and_buildids(self):
+        benchmark = self._script("""
+            echo "threads,actorPairs,in_flight,msgs_per_sec,elapsed_seconds,min_pair_sent_msgs,max_pair_sent_msgs"
+            if test "$ACTORSYSTEM_THREADS" = "1"; then
+              echo "1,32,1,1000,1.0,900,1100"
+            else
+              echo "2,32,1,2000,1.0,1800,2200"
+            fi
+            """)
+        fake_perf = self._script(
+            """
+            subcommand="$1"
+            shift
+            case "$subcommand" in
+              record)
+                while [ "$1" != "--" ]; do
+                  if [ "$1" = "-o" ]; then
+                    shift
+                    output="$1"
+                  fi
+                  shift
+                done
+                shift
+                echo fake-perf-data > "$output"
+                exec "$@"
+                ;;
+              report)
+                echo "42.00% actors_core_ut_fat HotFunction"
+                ;;
+              buildid-list)
+                echo "0123456789abcdef actors_core_ut_fat"
+                ;;
+              *)
+                exit 90
+                ;;
+            esac
+            """,
+            name="perf",
+        )
+        output = self.root / "perf-output"
+        output.mkdir()
+        configuration = self._configuration()
+        configuration = RunConfiguration(
+            **{
+                **configuration.__dict__,
+                "perf_enabled": True,
+                "perf_frequency": 123,
+            }
+        )
+        path = os.environ.get("PATH", "")
+        with mock.patch.dict(os.environ, {"PATH": "{}{}{}".format(fake_perf.parent, os.pathsep, path)}):
+            manifest = run_actors_core(
+                self._binary(benchmark),
+                configuration,
+                output,
+                tool_revision={"build_type": "profile", "commit_id": "test"},
+                work_dir_hint=self.root,
+            )
+
+        self.assertEqual(manifest["status"], "completed")
+        self.assertEqual(manifest["profiler"]["event"], "cycles:u")
+        self.assertEqual(manifest["profiler"]["frequency_hz"], 123)
+        self.assertEqual(manifest["binary"]["artifact"], "profiler/actors_core_ut_fat")
+        self.assertEqual(
+            (output / manifest["binary"]["artifact"]).read_bytes(),
+            benchmark.read_bytes(),
+        )
+        repetition = output / "none" / "threads-001" / "repeat-001"
+        self.assertTrue((repetition / "perf.data").is_file())
+        self.assertIn("HotFunction", (repetition / "perf-report.txt").read_text())
+        self.assertIn("0123456789abcdef", (repetition / "perf-buildids.txt").read_text())
+        run = manifest["runs"][0]
+        self.assertEqual(run["perf_data"], "none/threads-001/repeat-001/perf.data")
+        self.assertEqual([record["name"] for record in run["perf_postprocessing"]], ["report", "buildid-list"])
+
+    def test_empty_csv_fails_even_with_zero_exit_code(self):
+        script = self._script("""
+            echo "threads,actorPairs,in_flight,msgs_per_sec,elapsed_seconds,min_pair_sent_msgs,max_pair_sent_msgs"
+            """)
+        output = self.root / "empty-output"
+        output.mkdir()
+        with self.assertRaisesRegex(BenchmarkError, "no metric rows"):
+            run_actors_core(
+                self._binary(script),
+                self._configuration(),
+                output,
+                tool_revision={"commit_id": "test"},
+            )
+        manifest = json.loads((output / "run.json").read_text())
+        self.assertEqual(manifest["status"], "failed")
+        self.assertEqual(manifest["state"], "failed")
+        self.assertEqual(manifest["schema_version"], SCHEMA_VERSION)
+
+    def test_start_failure_finalizes_manifest(self):
+        script = self._script("exit 0")
+        binary = self._binary(script)
+        binary.path.chmod(0o644)
+        output = self.root / "start-failure-output"
+        output.mkdir()
+
+        with self.assertRaisesRegex(BenchmarkError, "noexec"):
+            run_actors_core(
+                binary,
+                self._configuration(),
+                output,
+                tool_revision={"commit_id": "test"},
+                work_dir_hint=self.root,
+            )
+
+        manifest = json.loads((output / "run.json").read_text())
+        self.assertEqual(manifest["status"], "failed")
+        self.assertEqual(manifest["state"], "failed")
+        self.assertEqual(manifest["schema_version"], SCHEMA_VERSION)
+        self.assertIn("finished_at", manifest)
+        self.assertIn("noexec", manifest["error"])
+        self.assertEqual(len(manifest["runs"]), 1)
+        self.assertIn("finished_at", manifest["runs"][0])
+        self.assertIsNone(manifest["runs"][0]["exit_code"])
+        self.assertEqual(manifest["runs"][0]["error"], manifest["error"])
+        self.assertFalse((output / "none" / "threads-001" / "repeat-001").exists())
+
+    @unittest.skipUnless(hasattr(os, "killpg"), "requires POSIX process groups")
+    def test_timeout_signals_the_whole_process_group(self):
+        marker = self.root / "child-terminated"
+        script = self._script(
+            """
+            marker="$1"
+            (
+                trap 'echo 15 > "$marker"; exit 0' TERM
+                while :; do
+                    sleep 1
+                done
+            ) &
+            trap 'wait; exit 0' TERM
+            while :; do
+                sleep 1
+            done
+            """,
+            name="process_tree.sh",
+        )
+        result = run_command(
+            [script, marker],
+            {},
+            timeout_seconds=0.5,
+            grace_seconds=2,
+        )
+        self.assertTrue(result.timed_out)
+        self.assertEqual(marker.read_text().strip(), str(int(signal.SIGTERM)))
+
+    def test_permission_error_mentions_noexec_and_work_dir(self):
+        path = self.root / "not-executable"
+        path.write_text("#!/bin/sh\n")
+        path.chmod(0o644)
+        with self.assertRaisesRegex(BenchmarkError, "noexec.*--work-dir"):
+            run_command([path], {}, timeout_seconds=1, work_dir_hint=self.root)
+
+    def test_affinity_uses_taskset_without_preexec_fn(self):
+        process = mock.Mock()
+        process.communicate.return_value = ("output", "")
+        process.returncode = 0
+        command = ("benchmark", "--flag", "value with spaces")
+
+        with mock.patch.object(os, "sched_setaffinity", create=True), mock.patch.object(
+            runner.shutil, "which", return_value="/usr/bin/taskset"
+        ), mock.patch.object(runner.subprocess, "Popen", return_value=process) as popen:
+            result = run_command(command, {}, timeout_seconds=1, cpu_affinity=(4, 2, 4))
+
+        self.assertEqual(
+            popen.call_args.args[0],
+            ("/usr/bin/taskset", "--cpu-list", "2,4", "benchmark", "--flag", "value with spaces"),
+        )
+        self.assertNotIn("preexec_fn", popen.call_args.kwargs)
+        self.assertTrue(popen.call_args.kwargs["start_new_session"])
+        self.assertEqual(result.command, command)
+
+    @unittest.skipUnless(
+        hasattr(os, "sched_getaffinity") and shutil.which("taskset"),
+        "requires Linux taskset",
+    )
+    def test_taskset_applies_requested_affinity(self):
+        cpu = min(os.sched_getaffinity(0))
+        script = self._script('taskset --pid --cpu-list "$$"')
+        result = run_command(
+            [script],
+            {},
+            timeout_seconds=5,
+            cpu_affinity=(cpu,),
+        )
+
+        self.assertEqual(result.exit_code, 0, result.stderr)
+        self.assertEqual(result.stdout.rsplit(":", 1)[-1].strip(), str(cpu))
+
+    def test_cpu_list_parser(self):
+        self.assertEqual(parse_cpu_list("0-3,8,10-11\n"), (0, 1, 2, 3, 8, 10, 11))
+
+    def test_darwin_topology_uses_device_tree_clusters(self):
+        entries = []
+        for cpu, cluster, kind in ((0, 0, "E"), (1, 0, "E"), (2, 1, "P"), (3, 1, "P"), (4, 2, "P")):
+            entries.append(
+                {
+                    "logical-cpu-id": cpu,
+                    "cluster-id": cluster.to_bytes(4, byteorder="little"),
+                    "cluster-type": kind.encode("ascii") + b"\0",
+                }
+            )
+        entries.append(entries[0].copy())
+        topology = _parse_darwin_topology(
+            plistlib.dumps([{"IORegistryEntryChildren": entries}]),
+            (0, 1, 2, 3, 4),
+        )
+
+        self.assertEqual(topology.chiplets, ((0, (0, 1)), (0, (2, 3)), (0, (4,))))
+        self.assertEqual(
+            topology.chiplet_labels,
+            (
+                ((0, 1), "Efficiency cluster"),
+                ((2, 3), "Performance cluster 1"),
+                ((4,), "Performance cluster 2"),
+            ),
+        )
+        self.assertEqual(topology.physical_cores, ((0,), (1,), (2,), (3,), (4,)))
+        self.assertEqual(topology.smt_siblings, topology.physical_cores)
+        self.assertEqual(topology_record(topology)["chiplets"][0]["label"], "Efficiency cluster")
+
+    def test_darwin_topology_rejects_conflicting_cpu_entries(self):
+        entries = [
+            {"logical-cpu-id": 0, "cluster-id": 0, "cluster-type": b"E\0"},
+            {"logical-cpu-id": 0, "cluster-id": 1, "cluster-type": b"P\0"},
+        ]
+
+        self.assertIsNone(
+            _parse_darwin_topology(
+                plistlib.dumps([{"IORegistryEntryChildren": entries}]),
+                (0,),
+            )
+        )
+
+    def test_darwin_topology_discovery_times_out(self):
+        with mock.patch.object(
+            topology.subprocess,
+            "run",
+            side_effect=topology.subprocess.TimeoutExpired("ioreg", 10),
+        ) as run:
+            self.assertIsNone(topology._discover_darwin_topology((0,)))
+
+        self.assertEqual(run.call_args.kwargs["timeout"], 10)
+
+    def test_topology_discovery_intersects_sysfs_with_allowed_cpus(self):
+        sys_root = self.root / "sys" / "devices" / "system"
+        for node_id, cpus in ((0, "0-3"), (1, "4-7")):
+            node = sys_root / "node" / "node{}".format(node_id)
+            node.mkdir(parents=True)
+            node.joinpath("cpulist").write_text(cpus, encoding="utf-8")
+        for cpu, shared in ((0, "0-1"), (1, "0-1"), (2, "2-3"), (3, "2-3")):
+            cache = sys_root / "cpu" / "cpu{}".format(cpu) / "cache" / "index3"
+            cache.mkdir(parents=True)
+            cache.joinpath("level").write_text("3", encoding="utf-8")
+            cache.joinpath("shared_cpu_list").write_text(shared, encoding="utf-8")
+
+        topology = discover_topology(sys_root, allowed_cpus=(1, 2, 3, 4))
+        self.assertEqual(topology.allowed_cpus, (1, 2, 3, 4))
+        self.assertEqual(topology.numa_nodes, ((0, (1, 2, 3)), (1, (4,))))
+        self.assertEqual(topology.chiplets, ((0, (1,)), (0, (2, 3))))
+        record = topology_record(topology)
+        self.assertEqual(record["version"], 2)
+        self.assertEqual(
+            record["numa_nodes"],
+            [
+                {"id": 0, "cpus": [1, 2, 3]},
+                {"id": 1, "cpus": [4]},
+            ],
+        )
+        self.assertEqual(
+            record["chiplets"],
+            [
+                {"numa_node": 0, "cpus": [1]},
+                {"numa_node": 0, "cpus": [2, 3]},
+            ],
+        )
+
+    def test_topology_hierarchy_from_synthetic_sysfs(self):
+        cases = (
+            {
+                "name": "single_numa_smt",
+                "nodes": ((0, "0-3"),),
+                "l3": ((0, "0-3"),),
+                "cpu_data": ((0, 0, 0, "0-1"), (1, 0, 0, "0-1"), (2, 0, 1, "2-3"), (3, 0, 1, "2-3")),
+                "allowed": (0, 1, 2, 3),
+                "cores": ((0, 1), (2, 3)),
+                "siblings": ((0, 1), (2, 3)),
+                "reasons": (),
+            },
+            {
+                "name": "multi_numa_multiple_chiplets_smt_off",
+                "nodes": ((0, "0-1"), (1, "2-3")),
+                "l3": ((0, "0-1"), (1, "2-3")),
+                "cpu_data": ((0, 0, 0, "0"), (1, 0, 1, "1"), (2, 1, 0, "2"), (3, 1, 1, "3")),
+                "allowed": (0, 1, 2, 3),
+                "cores": ((0,), (1,), (2,), (3,)),
+                "siblings": ((0,), (1,), (2,), (3,)),
+                "reasons": (),
+            },
+            {
+                "name": "asymmetric_cpuset",
+                "nodes": ((0, "0-3"),),
+                "l3": ((1, "0-1"), (2, "2-3")),
+                "cpu_data": ((0, 0, 0, "0-1"), (1, 0, 0, "0-1"), (2, 0, 1, "2-3"), (3, 0, 1, "2-3")),
+                "allowed": (1, 2),
+                "cores": ((1,), (2,)),
+                "siblings": ((1,), (2,)),
+                "reasons": (),
+            },
+            {
+                "name": "missing_numa_l3_and_incomplete_topology",
+                "nodes": (),
+                "l3": (),
+                "cpu_data": ((0, None, None, None), (1, 0, 1, None)),
+                "allowed": (0, 1),
+                "cores": ((0,), (1,)),
+                "siblings": ((0,), (1,)),
+                "reasons": ("numa", "chiplet", "chiplet", "physical_core", "smt"),
+            },
+        )
+        for case in cases:
+            with self.subTest(case["name"]):
+                sys_root = self.root / case["name"] / "sys" / "devices" / "system"
+                for node_id, cpus in case["nodes"]:
+                    node = sys_root / "node" / "node{}".format(node_id)
+                    node.mkdir(parents=True)
+                    node.joinpath("cpulist").write_text(cpus, encoding="utf-8")
+                for cpu, cpus in case["l3"]:
+                    cache = sys_root / "cpu" / "cpu{}".format(cpu) / "cache" / "index3"
+                    cache.mkdir(parents=True)
+                    cache.joinpath("level").write_text("3", encoding="utf-8")
+                    cache.joinpath("shared_cpu_list").write_text(cpus, encoding="utf-8")
+                for cpu, package, core, siblings in case["cpu_data"]:
+                    topology = sys_root / "cpu" / "cpu{}".format(cpu) / "topology"
+                    topology.mkdir(parents=True, exist_ok=True)
+                    if package is not None:
+                        topology.joinpath("physical_package_id").write_text(str(package), encoding="utf-8")
+                    if core is not None:
+                        topology.joinpath("core_id").write_text(str(core), encoding="utf-8")
+                    if siblings is not None:
+                        topology.joinpath("thread_siblings_list").write_text(siblings, encoding="utf-8")
+
+                topology = discover_topology(sys_root, allowed_cpus=case["allowed"])
+                self.assertEqual(topology.version, 2)
+                self.assertEqual(topology.physical_cores, case["cores"])
+                self.assertEqual(topology.smt_siblings, case["siblings"])
+                self.assertEqual(tuple(level for level, _ in topology.hierarchy_reasons), case["reasons"])
+                record = topology_record(topology)
+                self.assertEqual(record["version"], 2)
+                self.assertEqual(record["allowed_cpus"], list(case["allowed"]))
+
+    def test_partial_l3_topology_disables_only_chiplet_affinity_modes(self):
+        sys_root = self.root / "partial-l3" / "sys" / "devices" / "system"
+        for node_id, cpus in ((0, "0-1"), (1, "2-3")):
+            node = sys_root / "node" / "node{}".format(node_id)
+            node.mkdir(parents=True)
+            node.joinpath("cpulist").write_text(cpus, encoding="utf-8")
+        for cpu in (0, 1):
+            cache = sys_root / "cpu" / "cpu{}".format(cpu) / "cache" / "index3"
+            cache.mkdir(parents=True)
+            cache.joinpath("level").write_text("3", encoding="utf-8")
+            cache.joinpath("shared_cpu_list").write_text("0-1", encoding="utf-8")
+
+        topology = discover_topology(sys_root, allowed_cpus=(0, 1, 2, 3))
+
+        self.assertEqual(topology.chiplets, ((0, (0, 1)),))
+        self.assertIn("do not cover all allowed CPUs", topology.chiplet_topology_reason)
+        self.assertIn("missing: 2, 3", topology.chiplet_topology_reason)
+        self.assertIn(("chiplet", topology.chiplet_topology_reason), topology.hierarchy_reasons)
+        with mock.patch.object(os, "sched_setaffinity", create=True):
+            self.assertTrue(plan_affinity("pack-numa", topology, 1).supported)
+            placement = plan_affinity("pack-numa-pack-chiplet", topology, 1)
+        self.assertFalse(placement.supported)
+        self.assertIn("chiplet-based affinity is unavailable", placement.reason)
+
+    def test_cross_numa_l3_group_disables_chiplet_affinity_modes(self):
+        sys_root = self.root / "cross-numa-l3" / "sys" / "devices" / "system"
+        for node_id, cpus in ((0, "0-1"), (1, "2-3")):
+            node = sys_root / "node" / "node{}".format(node_id)
+            node.mkdir(parents=True)
+            node.joinpath("cpulist").write_text(cpus, encoding="utf-8")
+        for cpu in range(4):
+            cache = sys_root / "cpu" / "cpu{}".format(cpu) / "cache" / "index3"
+            cache.mkdir(parents=True)
+            cache.joinpath("level").write_text("3", encoding="utf-8")
+            cache.joinpath("shared_cpu_list").write_text("0-3", encoding="utf-8")
+
+        topology = discover_topology(sys_root, allowed_cpus=(0, 1, 2, 3))
+
+        self.assertEqual(topology.chiplets, ())
+        self.assertIn("does not belong to exactly one NUMA node", topology.chiplet_topology_reason)
+        self.assertIn(("chiplet", topology.chiplet_topology_reason), topology.hierarchy_reasons)
+        with mock.patch.object(os, "sched_setaffinity", create=True):
+            self.assertTrue(plan_affinity("pack-numa", topology, 1).supported)
+            placement = plan_affinity("pack-numa-pack-chiplet", topology, 1)
+        self.assertFalse(placement.supported)
+        self.assertIn("chiplet-based affinity is unavailable", placement.reason)
+
+    def test_affinity_modes_select_compositional_deterministic_masks(self):
+        topology = CpuTopology(
+            allowed_cpus=tuple(range(16)),
+            numa_nodes=((0, tuple(range(8))), (1, tuple(range(8, 16)))),
+            chiplets=((0, (0, 1, 2, 3)), (0, (4, 5, 6, 7)), (1, (8, 9, 10, 11)), (1, (12, 13, 14, 15))),
+            physical_cores=((0, 1), (2, 3), (4, 5), (6, 7), (8, 9), (10, 11), (12, 13), (14, 15)),
+        )
+        expected = {
+            "none": None,
+            "pack-numa": tuple(range(8)),
+            "pack-numa-pack-chiplet": (0, 1, 2, 3),
+            "spread-numa-pack-chiplet": (0, 1, 2, 3),
+            "pack-numa-pack-chiplet-pack-core": (0, 1, 2, 3),
+            "pack-numa-pack-chiplet-spread-core": (0, 1, 2),
+            "pack-numa-spread-chiplet-pack-core": (0, 1, 4, 5),
+            "pack-numa-spread-chiplet-spread-core": (0, 2, 4),
+            "spread-numa-pack-chiplet-pack-core": (0, 1, 8, 9),
+            "spread-numa-pack-chiplet-spread-core": (0, 2, 8),
+            "spread-numa-spread-chiplet-pack-core": (0, 1, 8, 9),
+            "spread-numa-spread-chiplet-spread-core": (0, 4, 8),
+        }
+        with mock.patch.object(os, "sched_setaffinity", create=True):
+            for mode, cpus in expected.items():
+                with self.subTest(mode=mode):
+                    placement = plan_affinity(mode, topology, 3)
+                    self.assertEqual(placement.cpus, cpus)
+                    self.assertEqual(plan_affinity(mode, topology, 3), placement)
+
+    def test_affinity_modes_support_smt_off_and_asymmetric_cpuset(self):
+        topology = CpuTopology(
+            allowed_cpus=(1, 2, 4, 7),
+            numa_nodes=((0, (1, 2, 4, 7)),),
+            chiplets=((0, (1, 2)), (0, (4, 7))),
+            physical_cores=((1,), (2,), (4,), (7,)),
+        )
+        with mock.patch.object(os, "sched_setaffinity", create=True):
+            self.assertEqual(plan_affinity("pack-numa", topology, 2).cpus, (1, 2, 4, 7))
+            self.assertEqual(plan_affinity("pack-numa-spread-chiplet-spread-core", topology, 3).cpus, (1, 2, 4))
+            unsupported = plan_affinity("spread-numa-pack-chiplet", topology, 2)
+        self.assertFalse(unsupported.supported)
+        self.assertIn("spread-numa", unsupported.reason)
+
+    def test_all_affinity_modes_with_smt_disabled(self):
+        topology = CpuTopology(
+            allowed_cpus=tuple(range(16)),
+            numa_nodes=((0, tuple(range(8))), (1, tuple(range(8, 16)))),
+            chiplets=((0, (0, 1, 2, 3)), (0, (4, 5, 6, 7)), (1, (8, 9, 10, 11)), (1, (12, 13, 14, 15))),
+            physical_cores=tuple((cpu,) for cpu in range(16)),
+        )
+        expected = {
+            "none": None,
+            "pack-numa": tuple(range(8)),
+            "pack-numa-pack-chiplet": (0, 1, 2, 3),
+            "spread-numa-pack-chiplet": (0, 1, 2, 3),
+            "pack-numa-pack-chiplet-pack-core": (0, 1, 2),
+            "pack-numa-pack-chiplet-spread-core": (0, 1, 2),
+            "pack-numa-spread-chiplet-pack-core": (0, 2, 4),
+            "pack-numa-spread-chiplet-spread-core": (0, 2, 4),
+            "spread-numa-pack-chiplet-pack-core": (0, 2, 8),
+            "spread-numa-pack-chiplet-spread-core": (0, 2, 8),
+            "spread-numa-spread-chiplet-pack-core": (0, 4, 8),
+            "spread-numa-spread-chiplet-spread-core": (0, 4, 8),
+        }
+        with mock.patch.object(os, "sched_setaffinity", create=True):
+            for mode, cpus in expected.items():
+                with self.subTest(mode=mode):
+                    self.assertEqual(plan_affinity(mode, topology, 3).cpus, cpus)
+
+    def test_unpinned_all_numa_background_requires_multiple_numa_nodes(self):
+        single_node = CpuTopology(
+            allowed_cpus=(0, 1, 2, 3),
+            numa_nodes=((0, (0, 1, 2, 3)),),
+            chiplets=((0, (0, 1, 2, 3)),),
+            physical_cores=((0,), (1,), (2,), (3,)),
+        )
+        unsupported = plan_background_load("coherence-all-numa", single_node, None, 1)
+        self.assertFalse(unsupported.supported)
+        self.assertIn("at least two NUMA nodes", unsupported.reason)
+
+        two_nodes = replace(
+            single_node,
+            numa_nodes=((0, (0, 1)), (1, (2, 3))),
+            chiplets=((0, (0, 1)), (1, (2, 3))),
+        )
+        supported = plan_background_load("coherence-all-numa", two_nodes, None, 1)
+        self.assertTrue(supported.supported)
+        self.assertEqual(supported.workers, 2)
+
+    def test_unavailable_affinity_mode_is_reported_not_guessed(self):
+        topology = CpuTopology(
+            allowed_cpus=(0, 1),
+            numa_nodes=((0, (0, 1)),),
+            chiplets=((0, (0, 1)),),
+        )
+        with mock.patch.object(os, "sched_setaffinity", create=True):
+            placement = plan_affinity("spread-numa-pack-chiplet", topology, 2)
+        self.assertFalse(placement.supported)
+        self.assertIn("spread-numa", placement.reason)
+
+    def test_run_skips_when_all_affinity_modes_are_unsupported(self):
+        script = self._script("exit 99")
+        output = self.root / "unsupported-output"
+        output.mkdir()
+        topology = CpuTopology(
+            allowed_cpus=(0, 1),
+            numa_nodes=((0, (0, 1)),),
+            chiplets=((0, (0, 1)),),
+        )
+        configuration = RunConfiguration(
+            benchmark=PING_BENCHMARK,
+            profile="test",
+            threads=(1, 2),
+            actor_pairs=(32,),
+            parameter_values=(1,),
+            duration_seconds=1,
+            repetitions=1,
+            timeout_seconds=5,
+            affinity_modes=("spread-numa-pack-chiplet",),
+        )
+
+        with mock.patch.object(actors_core, "discover_topology", return_value=topology), mock.patch.object(
+            os, "sched_setaffinity", create=True
+        ):
+            result = run_actors_core(
+                self._binary(script),
+                configuration,
+                output,
+                tool_revision={"commit_id": "test"},
+            )
+
+        manifest = json.loads((output / "run.json").read_text())
+        self.assertEqual(result["status"], "unsupported")
+        self.assertEqual(manifest["status"], "unsupported")
+        self.assertEqual(manifest["state"], "unsupported")
+        self.assertIn("finished_at", manifest)
+        self.assertIn("unsupported", manifest["error"])
+        self.assertEqual(manifest["runs"], [])
+        self.assertEqual(manifest["affinity"][0]["status"], "unsupported")
+        self.assertTrue((output / "summary.csv").exists())
+        self.assertEqual(manifest["summary"], "summary.csv")
+        self.assertEqual(manifest["repetitions"], "repetitions.csv")
+        self.assertEqual(manifest["summary_rows"], 0)
+
+
+class WebTest(unittest.TestCase):
+    def setUp(self):
+        self.temporary_directory = tempfile.TemporaryDirectory(prefix="ydb-bench-web-test-")
+        self.root = Path(self.temporary_directory.name)
+
+    def tearDown(self):
+        self.temporary_directory.cleanup()
+
+    def _manifest(self, directory, status="completed", imported=False):
+        directory.mkdir(parents=True, exist_ok=True)
+        value = {
+            "schema_version": SCHEMA_VERSION,
+            "status": status,
+            "state": "running" if status == "running" else "passed",
+            "started_at": "2025-01-01T00:00:00+00:00",
+            "runs": [{"benchmark": "ping-bench", "profile": "baseline", "status": status}],
+            "steps": [
+                {
+                    "id": "step-1",
+                    "benchmark": "ping-bench",
+                    "profile": "baseline",
+                    "affinity": "none",
+                    "threads": 1,
+                    "case": 1,
+                    "parameters": {},
+                    "repeat": 1,
+                    "state": "running" if status == "running" else "passed",
+                    "artifacts": ["artifact.txt"],
+                }
+            ],
+            "config": {
+                "snapshot": "ping-bench:\n  baseline: {threads: [1], duration: 1, repetitions: 1, affinity: [none]}\n",
+            },
+            "topology": {
+                "version": 2,
+                "allowed_cpus": [0],
+                "numa_nodes": [{"id": 0, "cpus": [0]}],
+                "chiplets": [{"numa_node": 0, "cpus": [0]}],
+                "physical_cores": [[0]],
+                "smt_siblings": [[0]],
+                "hierarchy_reasons": [],
+            },
+        }
+        if status != "running":
+            value["finished_at"] = "2025-01-01T00:00:01+00:00"
+        if imported:
+            value["imported"] = True
+        (directory / "run.json").write_text(json.dumps(value), encoding="utf-8")
+        (directory / "artifact.txt").write_text("artifact", encoding="utf-8")
+
+    def _portable_archive(self, extra=None, version=SCHEMA_VERSION, corrupt=False, run_updates=None):
+        run = {
+            "schema_version": version,
+            "status": "completed",
+            "state": "passed",
+            "started_at": "2025-01-01T00:00:00+00:00",
+            "finished_at": "2025-01-01T00:00:01+00:00",
+            "runs": [],
+            "steps": [
+                {
+                    "id": "step-1",
+                    "benchmark": "ping-bench",
+                    "profile": "baseline",
+                    "affinity": "none",
+                    "threads": 1,
+                    "case": 1,
+                    "parameters": {},
+                    "repeat": 1,
+                    "state": "passed",
+                    "artifacts": ["artifact.txt"],
+                }
+            ],
+            "topology": {
+                "version": 2,
+                "allowed_cpus": [0],
+                "numa_nodes": [{"id": 0, "cpus": [0]}],
+                "chiplets": [{"numa_node": 0, "cpus": [0]}],
+                "physical_cores": [[0]],
+                "smt_siblings": [[0]],
+                "hierarchy_reasons": [],
+            },
+        }
+        run.update(run_updates or {})
+        files = {"run.json": json.dumps(run).encode(), "artifact.txt": b"artifact"}
+        entries = [
+            {"path": name, "sha256": hashlib.sha256(data).hexdigest(), "size": len(data)}
+            for name, data in files.items()
+        ]
+        if corrupt:
+            entries[0]["sha256"] = "0" * 64
+        manifest = json.dumps({"format_version": 1, "files": entries}).encode()
+        stream = io.BytesIO()
+        with zipfile.ZipFile(stream, "w") as archive:
+            archive.writestr("import.json", manifest)
+            for name, data in files.items():
+                archive.writestr(name, data)
+            for name, data in (extra or {}).items():
+                archive.writestr(name, data)
+        return stream.getvalue()
+
+    def test_import_rejects_hostile_corrupt_and_old_archives(self):
+        with self.assertRaisesRegex(BenchmarkError, "unsafe"):
+            import_archive(self.root, self._portable_archive({"../escape": b"x"}))
+        with self.assertRaisesRegex(BenchmarkError, "hash mismatch"):
+            import_archive(self.root, self._portable_archive(corrupt=True))
+        with self.assertRaisesRegex(BenchmarkError, "schema version"):
+            import_archive(self.root, self._portable_archive(version=3))
+        stream = io.BytesIO()
+        with zipfile.ZipFile(stream, "w") as archive:
+            link = zipfile.ZipInfo("link")
+            link.external_attr = (stat.S_IFLNK | 0o777) << 16
+            archive.writestr(link, "run.json")
+            archive.writestr("import.json", b'{"format_version":1,"files":[]}')
+        with self.assertRaisesRegex(BenchmarkError, "unexpected member type"):
+            import_archive(self.root, stream.getvalue())
+
+    def test_import_rejects_nonterminal_and_malformed_run_manifests(self):
+        with self.assertRaisesRegex(BenchmarkError, "state must be terminal"):
+            import_archive(self.root, self._portable_archive(run_updates={"status": "running", "state": "running"}))
+        with self.assertRaisesRegex(BenchmarkError, "steps must be a list"):
+            import_archive(self.root, self._portable_archive(run_updates={"steps": {}}))
+        with self.assertRaisesRegex(BenchmarkError, "topology is missing"):
+            import_archive(self.root, self._portable_archive(run_updates={"topology": {}}))
+        with self.assertRaisesRegex(BenchmarkError, "status must be terminal"):
+            import_archive(
+                self.root,
+                self._portable_archive(
+                    run_updates={
+                        "runs": [
+                            {
+                                "benchmark": "ping-bench",
+                                "profile": "baseline",
+                                "status": "running",
+                            }
+                        ]
+                    }
+                ),
+            )
+        malformed_step = {
+            "id": "step-1",
+            "benchmark": "ping-bench",
+            "profile": "baseline",
+            "affinity": "none",
+            "threads": 1,
+            "case": 1,
+            "parameters": {},
+            "repeat": 1,
+            "state": "passed",
+            "artifacts": ["not-in-archive.txt"],
+        }
+        with self.assertRaisesRegex(BenchmarkError, "does not name a file in the archive"):
+            import_archive(self.root, self._portable_archive(run_updates={"steps": [malformed_step]}))
+
+    def test_import_rejects_invalid_case_indices(self):
+        for case in (True, 0, 1.5):
+            with self.subTest(case=case), self.assertRaisesRegex(
+                BenchmarkError, r"steps\[0\]\.case must be an integer greater than or equal to 1"
+            ):
+                step = {
+                    "id": "step-1",
+                    "benchmark": "ping-bench",
+                    "profile": "baseline",
+                    "affinity": "none",
+                    "threads": 1,
+                    "case": case,
+                    "parameters": {},
+                    "repeat": 1,
+                    "state": "passed",
+                    "artifacts": ["artifact.txt"],
+                }
+                import_archive(self.root, self._portable_archive(run_updates={"steps": [step]}))
+
+    def test_import_rejects_duplicate_step_ids(self):
+        step = {
+            "id": "same",
+            "benchmark": "ping-bench",
+            "profile": "baseline",
+            "affinity": "none",
+            "threads": 1,
+            "case": 1,
+            "parameters": {},
+            "repeat": 1,
+            "state": "passed",
+            "artifacts": [],
+        }
+        with self.assertRaisesRegex(BenchmarkError, "duplicate step id"):
+            import_archive(self.root, self._portable_archive(run_updates={"steps": [step, dict(step)]}))
+
+    def test_import_installs_immutable_normalized_result(self):
+        imported = import_archive(self.root, self._portable_archive())
+        self.assertEqual(imported["source"], "imported")
+        run = self.root / imported["id"]
+        self.assertEqual(read_model(self.root)[imported["id"]]["source"], "imported")
+        self.assertFalse((run / "run.json").stat().st_mode & stat.S_IWUSR)
+        with self.assertRaises(FileExistsError):
+            (run / "artifact.txt").open("x")
+
+    def test_import_removes_read_only_staging_after_atomic_install_failure(self):
+        with mock.patch.object(import_results.os, "replace", side_effect=OSError("injected replace failure")):
+            with self.assertRaisesRegex(OSError, "injected replace failure"):
+                import_archive(self.root, self._portable_archive())
+        self.assertEqual(list((self.root / "imports").glob(".import-*")), [])
+
+    def test_export_uses_the_same_portable_archive_contract(self):
+        self._manifest(self.root / "complete")
+        destination = self.root / "other-host"
+        with export_archive(self.root / "complete") as archive:
+            imported = import_archive(destination, archive.read_bytes())
+        self.assertEqual(imported["source"], "imported")
+        self.assertEqual((destination / imported["id"] / "artifact.txt").read_text(), "artifact")
+
+    def test_web_archive_streams_from_temporary_file_and_cleans_it(self):
+        self._manifest(self.root / "complete")
+        (self.root / "complete" / "large.bin").write_bytes(b"x" * (web._STREAM_CHUNK_SIZE * 2 + 17))
+        server = make_server("127.0.0.1", 0, self.root)
+        worker = threading.Thread(target=server.serve_forever, daemon=True)
+        worker.start()
+        temporary_paths = []
+        read_sizes = []
+        copy_stream = web._copy_stream
+
+        def track_copy(source, destination):
+            temporary_paths.append(Path(source.name))
+
+            class TrackedSource:
+                def read(self, size):
+                    read_sizes.append(size)
+                    return source.read(size)
+
+            copy_stream(TrackedSource(), destination)
+
+        try:
+            base = "http://127.0.0.1:{}".format(server.server_port)
+            with mock.patch.object(web, "_copy_stream", side_effect=track_copy), mock.patch.object(
+                Path, "read_bytes", side_effect=AssertionError("archive must not materialize files")
+            ):
+                with urllib.request.urlopen(base + "/api/runs/complete/archive") as response:
+                    self.assertTrue(response.read().startswith(b"PK"))
+            self.assertEqual(len(temporary_paths), 1)
+            self.assertTrue(temporary_paths[0].name.startswith("ydb-bench-export-"))
+            deadline = time.monotonic() + 2
+            while temporary_paths[0].exists() and time.monotonic() < deadline:
+                time.sleep(0.01)
+            self.assertFalse(temporary_paths[0].exists())
+            self.assertTrue(read_sizes)
+            self.assertEqual(set(read_sizes), {web._STREAM_CHUNK_SIZE})
+        finally:
+            server.shutdown()
+            worker.join()
+            server.server_close()
+
+    def test_run_service_events_rejects_path_traversal_for_persisted_runs(self):
+        with tempfile.TemporaryDirectory(prefix="ydb-bench-events-outside-", dir=self.root.parent) as outside:
+            outside_path = Path(outside)
+            (outside_path / "events.jsonl").write_text('{"sequence":1,"type":"outside"}\n', encoding="utf-8")
+            service = RunService(self.root)
+            with self.assertRaisesRegex(BenchmarkError, "run not found"):
+                service.events("../" + outside_path.name)
+
+    def test_run_service_events_decodes_each_persisted_line_once(self):
+        self._manifest(self.root / "complete")
+        (self.root / "complete" / "events.jsonl").write_text(
+            '{"sequence":1,"type":"first"}\n{"sequence":2,"type":"second"}\n',
+            encoding="utf-8",
+        )
+        service = RunService(self.root)
+        loads = json.loads
+        with mock.patch.object(web.json, "loads", wraps=loads) as decode:
+            events = service.events("complete", after=1)
+        self.assertEqual([event["type"] for event in events], ["second"])
+        self.assertEqual(decode.call_count, 2)
+
+    def test_download_content_disposition_encodes_hostile_run_and_artifact_names(self):
+        run_id = 'run"\r\n\\é'
+        artifact_name = 'report"\r\n\\é.txt'
+        self._manifest(self.root / run_id)
+        (self.root / run_id / artifact_name).write_text("artifact", encoding="utf-8")
+        server = make_server("127.0.0.1", 0, self.root)
+        worker = threading.Thread(target=server.serve_forever, daemon=True)
+        worker.start()
+        try:
+            base = "http://127.0.0.1:{}".format(server.server_port)
+            paths = (
+                "/api/runs/{}/config".format(quote(run_id, safe="")),
+                "/api/runs/{}/artifact/{}".format(quote(run_id, safe=""), quote(artifact_name, safe="")),
+            )
+            for path in paths:
+                with self.subTest(path=path), urllib.request.urlopen(base + path) as response:
+                    disposition = response.headers["Content-Disposition"]
+                    disposition.encode("ascii")
+                    self.assertEqual(disposition.count('"'), 2)
+                    self.assertNotIn("\r", disposition)
+                    self.assertNotIn("\n", disposition)
+                    self.assertNotIn("\\", disposition)
+                    self.assertNotIn("é", disposition)
+                    self.assertIn("filename*=UTF-8''", disposition)
+                    self.assertIn("%22%0D%0A%5C%C3%A9", disposition)
+        finally:
+            server.shutdown()
+            worker.join()
+            server.server_close()
+
+    def test_events_endpoint_rejects_non_integer_after_query(self):
+        self._manifest(self.root / "complete")
+        server = make_server("127.0.0.1", 0, self.root)
+        worker = threading.Thread(target=server.serve_forever, daemon=True)
+        worker.start()
+        try:
+            base = "http://127.0.0.1:{}".format(server.server_port)
+            with self.assertRaises(HTTPError) as caught:
+                urllib.request.urlopen(base + "/api/runs/complete/events?after=abc")
+            self.assertEqual(caught.exception.code, 400)
+            self.assertIn("must be an integer", caught.exception.read().decode())
+        finally:
+            server.shutdown()
+            worker.join()
+            server.server_close()
+
+    def test_comparison_key_rules(self):
+        model = {
+            "one": {
+                "steps": [
+                    {"benchmark": "ping", "profile": "p", "affinity": "none"},
+                    {"benchmark": "ping", "profile": "q", "affinity": "pack"},
+                ],
+                "runs": [],
+            },
+            "two": {
+                "steps": [
+                    {"benchmark": "ping", "profile": "p", "affinity": "none"},
+                    {"benchmark": "ping", "profile": "q", "affinity": "none"},
+                ],
+                "runs": [],
+            },
+        }
+        keys = comparison_keys(model, ["one", "two"])
+        self.assertEqual(keys["benchmark_profile_affinity"], ["ping/p/none"])
+        self.assertEqual(keys["benchmark_profile_one_affinity"], ["ping/p", "ping/q"])
+        self.assertEqual(keys["within_run_benchmark_profile"]["one"], ["ping/p", "ping/q"])
+
+    def test_web_read_model_covers_active_completed_and_imported_runs(self):
+        self._manifest(self.root / "active", "running")
+        self._manifest(self.root / "complete")
+        self._manifest(self.root / "imported", imported=True)
+        model = read_model(self.root)
+        self.assertEqual(model["active"]["status"], "running")
+        self.assertEqual(model["complete"]["status"], "completed")
+        self.assertEqual(model["imported"]["source"], "imported")
+
+    def test_web_runs_are_sorted_newest_first(self):
+        self._manifest(self.root / "older")
+        self._manifest(self.root / "newer")
+        for run_id, started_at in (
+            ("older", "2025-01-01T00:00:00+00:00"),
+            ("newer", "2025-02-01T00:00:00+00:00"),
+        ):
+            path = self.root / run_id / "run.json"
+            manifest = json.loads(path.read_text(encoding="utf-8"))
+            manifest["started_at"] = started_at
+            path.write_text(json.dumps(manifest), encoding="utf-8")
+        service = RunService(self.root)
+        try:
+            self.assertEqual([record["id"] for record in service.filtered_model({})], ["newer", "older"])
+        finally:
+            service.shutdown()
+
+    def test_chart_data_groups_summary_rows_by_affinity(self):
+        self._manifest(self.root / "complete")
+        summary = self.root / "complete" / "ping-bench" / "baseline" / "summary.csv"
+        summary.parent.mkdir(parents=True)
+        summary.write_text(
+            "affinity_mode,threads,actorPairs,in_flight,repetitions,median_msgs_per_sec,min_msgs_per_sec,max_msgs_per_sec,median_elapsed_seconds\n"
+            "none,1,512,1,1,10,9,11,1.0\n"
+            "none,2,512,1,1,20,19,21,1.0\n"
+            "pack-numa,1,512,1,1,12,11,13,1.0\n",
+            encoding="utf-8",
+        )
+        summary.with_name("run.json").write_text(
+            json.dumps(
+                {
+                    "affinity": [
+                        {"mode": "none", "cpus": None},
+                        {"mode": "pack-numa", "cpus": [0, 1, 2, 4]},
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        value = chart_data(self.root, ["complete"])
+        self.assertEqual(value["dimensions"], ["actorPairs", "in_flight", "threads"])
+        self.assertIn("median_msgs_per_sec", value["metrics"])
+        self.assertEqual([item["affinity"] for item in value["series"]], ["none", "pack-numa"])
+        self.assertEqual(value["series"][0]["rows"][1]["threads"], 2)
+        self.assertIsNone(value["series"][0]["cpus"])
+        self.assertEqual(value["series"][1]["cpus"], [0, 1, 2, 4])
+        self.assertIn("dimension_metadata", value)
+
+    def test_memory_fairness_is_derived_per_repeat_before_aggregation(self):
+        dimensions = ["threads", "random_percent", "scope", "worker_aggregation"]
+        rows = []
+        for repeat, minimum, maximum, mean in ((1, 80, 120, 100), (2, 90, 110, 100)):
+            for aggregation, value in (("min", minimum), ("max", maximum), ("mean", mean)):
+                rows.append(
+                    {
+                        "threads": 4,
+                        "random_percent": 50,
+                        "scope": "random",
+                        "worker_aggregation": aggregation,
+                        "repeat_aggregation": "raw",
+                        "repeat": repeat,
+                        "ops_per_sec": value,
+                    }
+                )
+        grouped = {"none": rows}
+        _add_memory_fairness_rows(grouped, dimensions)
+        raw = [row for row in rows if row.get("worker_aggregation") == "fairness" and row["repeat"] != "*"]
+        self.assertEqual([row["worker_max_min_spread_pct"] for row in raw], [40, 20])
+        self.assertEqual([row["worker_mean_min_gap_pct"] for row in raw], [20, 10])
+        median = next(
+            row
+            for row in rows
+            if row.get("worker_aggregation") == "fairness" and row.get("repeat_aggregation") == "median"
+        )
+        self.assertEqual(median["worker_max_min_spread_pct"], 30)
+        self.assertEqual(median["worker_mean_min_gap_pct"], 15)
+
+    def test_web_static_api_is_csp_protected_and_read_only(self):
+        self._manifest(self.root / "complete")
+        server = make_server("127.0.0.1", 0, self.root)
+        worker = threading.Thread(target=server.serve_forever)
+        worker.start()
+        try:
+            base = "http://127.0.0.1:{}".format(server.server_port)
+            with urllib.request.urlopen(base + "/") as response:
+                self.assertIn("default-src 'self'", response.headers["Content-Security-Policy"])
+                self.assertIn(b"app.js", response.read())
+            with urllib.request.urlopen(base + "/app.js") as response:
+                script = response.read()
+                self.assertIn(b"System topology", script)
+                self.assertIn(b"NUMA, cache and cores", script)
+                self.assertIn(b"function affinityTree", script)
+                self.assertIn(b"class=affinity-tree", script)
+                self.assertIn(b"SMT threads", script)
+                self.assertIn(b"<span class=cpu-ranges>vCPU ", script)
+                self.assertNotIn(b"(core.index+1)", script)
+                self.assertIn(b"Unavailable", script)
+                self.assertNotIn(b"Use in new run", script)
+                self.assertNotIn(b"data-mode", script)
+                self.assertNotIn(b"<th>First mask</th>", script)
+                self.assertNotIn(b"Physical cores (", script)
+                self.assertNotIn(b"SMT sibling sets (", script)
+                self.assertIn(b"New run", script)
+                self.assertIn(b"<th>Duration</th>", script)
+                self.assertIn(b"<th>Runs</th>", script)
+                self.assertIn(b"class=affinity-details><td colspan=3>", script)
+                self.assertIn(b"id=refresh-run", script)
+                self.assertIn(b"Queue position:", script)
+                self.assertIn(b"Currently running:", script)
+                self.assertIn(b"class=run-tabs", script)
+                self.assertIn(b"profileKeys.length===1?profileKeys[0]", script)
+                self.assertIn(b"class=\"card profile-overview\"", script)
+                self.assertIn(b"<strong>Execution details</strong>", script)
+                self.assertIn(b"<strong>Interrupted.</strong>", script)
+                self.assertIn(b"<summary>Downloads</summary>", script)
+                self.assertNotIn(b"['queued','running','recovery_required'].includes(run.state)", script)
+                self.assertIn(b"<option>queued</option>", script)
+                self.assertNotIn(b"setInterval(()=>renderRun", script)
+                self.assertIn(b"function cpuRanges", script)
+                self.assertIn(b"function humanTime", script)
+                self.assertIn(b"dateStyle:'medium',timeStyle:'short'", script)
+                self.assertIn(b"function elapsedLabel", script)
+                self.assertIn(b"record.status==='running'?Date.now()", script)
+                self.assertIn(b"ranges such as 1-16", script)
+                self.assertIn(b"function compactIntegerRanges", script)
+                self.assertIn(b"benchmarkChanged", script)
+                self.assertIn(b"classList.contains('affinity')", script)
+                self.assertIn(b"parameter.minimum??1", script)
+                self.assertIn(b"function parameterCases", script)
+                self.assertIn(b"class=parameter-choice", script)
+                self.assertIn(b"Incomplete data:", script)
+                self.assertIn(b"internal gaps break chart lines", script)
+                self.assertIn(b"segments.push(segment)", script)
+                self.assertIn(b"for(const points of segments)", script)
+                self.assertIn(b"function mountChartBuilder", script)
+                self.assertIn(b"function defaultActorCharts", script)
+                self.assertIn(b"function defaultMemoryCharts", script)
+                self.assertIn(b"function defaultChartScope", script)
+                self.assertIn(b"['actorPairs','in_flight']", script)
+                self.assertIn(b"['actorPairs','star_multiply']", script)
+                self.assertIn(b"metric:'median_msgs_per_sec'", script)
+                self.assertIn(b"chartTitle=scope.title", script)
+                self.assertIn(b"title:facets.map", script)
+                self.assertIn(b"worker_max_min_spread_pct", script)
+                self.assertIn(b"worker_mean_min_gap_pct", script)
+                self.assertIn(b"function mountSingleChart", script)
+                self.assertIn(b"function chartMultiplierDimensions", script)
+                self.assertIn(b"function labelExpandedSeries", script)
+                self.assertIn(b"queried.has(name)", script)
+                self.assertIn(b"varyingFacets", script)
+                self.assertIn(b"matched.map(item=>item.facets", script)
+                self.assertIn(b"indexed.length===1", script)
+                self.assertIn(b"singleProfile:true", script)
+                self.assertIn(b"{...chart,id:nextId++}", script)
+                self.assertIn(b"function expandedSeries", script)
+                self.assertIn(b"Add line row", script)
+                self.assertIn(b"class=query-row", script)
+                self.assertIn(b"Add chart", script)
+                self.assertIn(b"function globLabelMatch", script)
+                self.assertIn(b"25|50|75", script)
+                self.assertIn(b"data-metric=\"combined\"", script)
+                self.assertIn(b"Configure chart", script)
+                self.assertIn(b"class=modal-backdrop", script)
+                self.assertIn(b"role=dialog", script)
+                self.assertIn(b"function bindChartTooltips", script)
+                self.assertIn(b"rightItem.value-leftItem.value", script)
+                self.assertIn(b'chart-color-', script)
+                self.assertNotIn(b'<span style="color:', script)
+                self.assertIn(b'CPUs: not recorded', script)
+            with urllib.request.urlopen(base + "/api/runs") as response:
+                self.assertEqual(json.loads(response.read())[0]["id"], "complete")
+            request = urllib.request.Request(base + "/api/import", data=self._portable_archive(), method="POST")
+            with urllib.request.urlopen(request) as response:
+                self.assertEqual(json.loads(response.read())["source"], "imported")
+            with self.assertRaisesRegex(Exception, "HTTP Error 400"):
+                urllib.request.urlopen(urllib.request.Request(base + "/api/runs", method="POST"))
+        finally:
+            server.shutdown()
+            worker.join()
+            server.server_close()
+
+    def test_web_ui_api_exposes_builder_topology_downloads_and_drafts(self):
+        self._manifest(self.root / "complete")
+        server = make_server("127.0.0.1", 0, self.root)
+        worker = threading.Thread(target=server.serve_forever, daemon=True)
+        worker.start()
+        base = "http://127.0.0.1:{}".format(server.server_port)
+        yaml_text = "ping-bench:\n  ui: {threads: [1], duration: 1, repetitions: 1, affinity: [none]}\n"
+        try:
+
+            def json_request(path, body):
+                request = urllib.request.Request(
+                    base + path,
+                    data=json.dumps(body).encode(),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                return json.loads(urllib.request.urlopen(request).read())
+
+            editor = json_request("/api/editor-config", {"yaml": yaml_text, "perf": False})
+            self.assertEqual(editor["profiles"][0]["name"], "ui")
+            empty_editor = json_request("/api/editor-config", {"yaml": "\n  \n", "perf": False})
+            self.assertEqual(empty_editor["profiles"], [])
+            self.assertIn("memory-bandwidth-bench", [item["name"] for item in empty_editor["benchmarks"]])
+            self.assertIsNone(editor["profiles"][0]["timeout"])
+            explicit_timeout = json_request(
+                "/api/editor-config",
+                {"yaml": yaml_text.replace("affinity: [none]}", "affinity: [none], timeout: 42}"), "perf": False},
+            )
+            self.assertEqual(explicit_timeout["profiles"][0]["timeout"], 42)
+            self.assertIn("ping-bench", [item["name"] for item in editor["benchmarks"]])
+            topology = json.loads(urllib.request.urlopen(base + "/api/system-topology").read())
+            self.assertIn("allowed_cpus", topology["topology"])
+            self.assertEqual(len(topology["affinity"]), 12)
+            draft = json_request("/api/drafts", {"yaml": yaml_text})
+            self.assertTrue(Path(draft["path"]).is_file())
+            with urllib.request.urlopen(base + "/api/runs/complete/config") as response:
+                self.assertIn("attachment", response.headers["Content-Disposition"])
+                self.assertIn(b"ping-bench", response.read())
+            with urllib.request.urlopen(base + "/api/runs/complete/config.json") as response:
+                self.assertIn("ping-bench", json.loads(response.read())["yaml"])
+            with urllib.request.urlopen(base + "/api/runs/complete/archive") as response:
+                self.assertEqual(response.headers["Content-Type"], "application/zip")
+                self.assertTrue(response.read().startswith(b"PK"))
+            with urllib.request.urlopen(base + "/api/runs/complete/artifact/artifact.txt") as response:
+                self.assertEqual(response.read(), b"artifact")
+        finally:
+            server.shutdown()
+            worker.join()
+            server.server_close()
+
+    def test_web_rejects_remote_listener_without_opt_in(self):
+        self._manifest(self.root / "complete")
+        with self.assertRaisesRegex(BenchmarkError, "allow-remote"):
+            make_server("0.0.0.0", 0, self.root)
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            self.assertEqual(main(["web", "--listen", "0.0.0.0", "--output", str(self.root), "--no-open"]), 1)
+        self.assertIn("allow-remote", stderr.getvalue())
+
+    def test_web_uses_ipv6_socket_for_ipv6_listener(self):
+        server = make_server("::1", 0, self.root, allow_remote=True)
+        try:
+            self.assertEqual(server.address_family, socket.AF_INET6)
+        finally:
+            server.server_close()
+
+    def test_web_run_api_validates_plans_runs_reconnects_and_cancels(self):
+        """The web service owns a fake executor after each HTTP request ends."""
+        started = threading.Event()
+        release = threading.Event()
+
+        def fake_executor(run, emit, cancelled):
+            step = run["store"].manifest["steps"][0]
+            emit({"type": "step-started", "step_id": step["id"]})
+            emit({"type": "stdout", "data": "fake output\\n"})
+            started.set()
+            while not release.wait(0.01):
+                if cancelled.is_set():
+                    return
+            emit({"type": "step-finished", "step_id": step["id"], "state": "passed"})
+
+        server = make_server("127.0.0.1", 0, self.root, executor=fake_executor)
+        worker = threading.Thread(target=server.serve_forever, daemon=True)
+        worker.start()
+        base = "http://127.0.0.1:{}".format(server.server_port)
+        yaml_text = "ping-bench:\n  fake: {threads: [1], duration: 1, repetitions: 1, affinity: [none]}\n"
+        try:
+
+            def request(path, method="GET", body=None):
+                value = urllib.request.urlopen(
+                    urllib.request.Request(base + path, data=body, method=method), timeout=3
+                ).read()
+                return json.loads(value)
+
+            self.assertTrue(request("/api/validate", "POST", yaml_text.encode())["valid"])
+            self.assertEqual(len(request("/api/plan", "POST", yaml_text.encode())["plan"]), 1)
+            created = request("/api/runs", "POST", yaml_text.encode())
+            self.assertTrue(started.wait(2))
+            detail = request("/api/runs/" + created["id"])
+            self.assertEqual(detail["steps"][0]["state"], "running")
+            self.assertIn("fake output", detail["tail"]["stdout"])
+            self.assertIn(
+                "step-started", urllib.request.urlopen(base + "/api/runs/" + created["id"] + "/events").read().decode()
+            )
+            self.assertTrue(request("/api/runs/" + created["id"] + "/cancel", "POST")["cancelled"])
+            self.assertTrue(request("/api/runs/" + created["id"] + "/cancel", "POST")["cancelled"])
+            for _ in range(100):
+                if request("/api/runs/" + created["id"])["state"] == "cancelled":
+                    break
+                time.sleep(0.01)
+            self.assertEqual(request("/api/runs/" + created["id"])["state"], "cancelled")
+        finally:
+            release.set()
+            server.shutdown()
+            server.server_close()
+
+    def test_run_service_serializes_emission_and_idempotent_cancellation(self):
+        """Executor progress and duplicate cancel requests share one ordered publication boundary."""
+        race = threading.Barrier(3)
+        release_executor = threading.Event()
+
+        def fake_executor(run, emit, _cancelled):
+            step_id = run["store"].manifest["steps"][0]["id"]
+            emit({"type": "step-started", "step_id": step_id})
+            race.wait()
+            emit({"type": "stdout", "data": "executor progress\n"})
+            emit({"type": "step-finished", "step_id": step_id, "state": "passed"})
+            self.assertTrue(release_executor.wait(2))
+
+        service = RunService(self.root, executor=fake_executor)
+        yaml_text = "ping-bench:\n  race: {threads: [1], duration: 1, repetitions: 1, affinity: [none]}\n"
+        run_id = service.start(yaml_text)["id"]
+        responses = []
+
+        def cancel():
+            race.wait()
+            responses.append(service.cancel(run_id))
+
+        cancellers = [threading.Thread(target=cancel) for _ in range(2)]
+        for thread in cancellers:
+            thread.start()
+        for thread in cancellers:
+            thread.join(2)
+            self.assertFalse(thread.is_alive())
+        release_executor.set()
+
+        run = service._runs[run_id]
+        self.assertTrue(run["finished"].wait(2))
+        events = service.events(run_id)
+        self.assertEqual([event["sequence"] for event in events], list(range(1, len(events) + 1)))
+        self.assertEqual(sum(event["type"] == "cancel-requested" for event in events), 1)
+        self.assertEqual(events[-1]["type"], "run-finished")
+        self.assertEqual(events[-1]["state"], "cancelled")
+        self.assertEqual(len(responses), 2)
+        self.assertTrue(all(response["cancelled"] for response in responses))
+        self.assertEqual(run["store"].manifest["events"], len(events))
+        persisted = [json.loads(line) for line in (run["root"] / "events.jsonl").read_text().splitlines()]
+        self.assertEqual(persisted, events)
+
+        # Cancelling a terminal run is also idempotent and must not append an event.
+        self.assertEqual(service.cancel(run_id)["state"], "cancelled")
+        self.assertEqual(service.events(run_id), events)
+
+    def test_run_service_shutdown_cancels_and_joins_active_workers(self):
+        """Server teardown cancels the active run and every queued run."""
+        started = threading.Event()
+        cancellation_seen = threading.Event()
+        queued_started = threading.Event()
+
+        def fake_executor(run, emit, cancelled):
+            if run["loaded"].runs[0].profile == "queued":
+                queued_started.set()
+                return
+            step_id = run["store"].manifest["steps"][0]["id"]
+            emit({"type": "step-started", "step_id": step_id})
+            started.set()
+            self.assertTrue(cancelled.wait(2))
+            cancellation_seen.set()
+
+        server = make_server("127.0.0.1", 0, self.root, executor=fake_executor)
+        yaml_text = "ping-bench:\n  shutdown: {threads: [1], duration: 1, repetitions: 1, affinity: [none]}\n"
+        run_id = server.service.start(yaml_text)["id"]
+        self.assertTrue(started.wait(2))
+        queued_yaml = "ping-bench:\n  queued: {threads: [1], duration: 1, repetitions: 1, affinity: [none]}\n"
+        queued_id = server.service.start(queued_yaml)["id"]
+        dispatcher = server.service._dispatcher_thread
+
+        # Both public HTTP-server teardown paths are lifecycle boundaries.  A
+        # direct close is enough even when serve_forever was never entered.
+        server.server_close()
+        self.assertTrue(cancellation_seen.is_set())
+        self.assertFalse(queued_started.is_set())
+        run = server.service._runs[run_id]
+        self.assertFalse(dispatcher.is_alive())
+        manifest = load_manifest(run["root"] / "run.json")
+        self.assertEqual(manifest["state"], "cancelled")
+        self.assertEqual(manifest["status"], "cancelled")
+        self.assertIn("finished_at", manifest)
+        self.assertTrue(all(step["state"] == "cancelled" for step in manifest["steps"]))
+        events = server.service.events(run_id)
+        self.assertEqual(sum(event["type"] == "cancel-requested" for event in events), 1)
+        self.assertEqual(events[-1]["type"], "run-finished")
+        queued_manifest = load_manifest(server.service._runs[queued_id]["root"] / "run.json")
+        self.assertEqual(queued_manifest["state"], "cancelled")
+        self.assertNotIn("started_at", queued_manifest)
+        self.assertTrue(all(step["state"] == "cancelled" for step in queued_manifest["steps"]))
+
+        # Repeated shutdown is a no-op, and no run can cross the closed
+        # service's start-vs-shutdown publication boundary.
+        self.assertEqual(server.service.shutdown(), server.service.shutdown())
+        with self.assertRaisesRegex(BenchmarkError, "shutting down"):
+            server.service.start(yaml_text)
+
+    def test_run_service_shutdown_timeout_does_not_claim_a_live_worker_is_terminal(self):
+        """A diagnostic timeout reports unfinished work without hiding an orphan."""
+        started = threading.Event()
+        release = threading.Event()
+
+        def stubborn_executor(run, emit, _cancelled):
+            step_id = run["store"].manifest["steps"][0]["id"]
+            emit({"type": "step-started", "step_id": step_id})
+            started.set()
+            release.wait(2)
+            emit({"type": "step-finished", "step_id": step_id, "state": "passed"})
+
+        service = RunService(self.root, executor=stubborn_executor)
+        yaml_text = "ping-bench:\n  stubborn: {threads: [1], duration: 1, repetitions: 1, affinity: [none]}\n"
+        run_id = service.start(yaml_text)["id"]
+        self.assertTrue(started.wait(2))
+        dispatcher = service._dispatcher_thread
+        before = time.monotonic()
+        result = service.shutdown(timeout=0.05)
+        elapsed = time.monotonic() - before
+        try:
+            self.assertLess(elapsed, 0.5)
+            self.assertEqual(result["timed_out"], [run_id])
+            manifest_path = service._runs[run_id]["root"] / "run.json"
+            incomplete_manifest = load_manifest(manifest_path)
+            self.assertEqual(incomplete_manifest["state"], "running")
+            self.assertNotIn("finished_at", incomplete_manifest)
+            incomplete_events = service.events(run_id)
+            self.assertEqual(incomplete_events[-1]["type"], "cancel-requested")
+            self.assertTrue(dispatcher.is_alive())
+        finally:
+            release.set()
+        # A later production-style shutdown must continue waiting rather than
+        # returning a cached incomplete result.
+        completed = service.shutdown()
+        self.assertEqual(completed["timed_out"], [])
+        self.assertFalse(dispatcher.is_alive())
+        terminal_manifest = load_manifest(manifest_path)
+        self.assertEqual(terminal_manifest["state"], "cancelled")
+        self.assertIn("finished_at", terminal_manifest)
+        terminal_events = service.events(run_id)
+        self.assertEqual(terminal_events[-1]["type"], "run-finished")
+        self.assertEqual(sum(event["type"] == "cancel-requested" for event in terminal_events), 1)
+
+    def test_run_service_rejects_a_start_racing_with_shutdown(self):
+        """A run delayed before publication is rejected after shutdown wins the race."""
+        topology = discover_topology()
+        discovering = threading.Event()
+        release = threading.Event()
+        errors = []
+
+        def delayed_topology():
+            discovering.set()
+            self.assertTrue(release.wait(2))
+            return topology
+
+        service = RunService(self.root, executor=lambda *_args: None)
+        yaml_text = "ping-bench:\n  race: {threads: [1], duration: 1, repetitions: 1, affinity: [none]}\n"
+
+        def start():
+            try:
+                service.start(yaml_text)
+            except Exception as error:
+                errors.append(error)
+
+        with mock.patch.object(web, "discover_topology", side_effect=delayed_topology):
+            starter = threading.Thread(target=start)
+            starter.start()
+            self.assertTrue(discovering.wait(2))
+            self.assertEqual(service.shutdown(timeout=0.1)["cancelled"], [])
+            release.set()
+            starter.join(2)
+        self.assertFalse(starter.is_alive())
+        self.assertEqual(len(errors), 1)
+        self.assertIsInstance(errors[0], BenchmarkError)
+        self.assertIn("shutting down", str(errors[0]))
+        self.assertEqual(service._runs, {})
+        self.assertEqual(list(self.root.glob("*-web")), [])
+
+    def test_run_service_executes_web_runs_in_fifo_order_and_cancels_queued_run(self):
+        """Only the dispatcher may promote a queued run into the executor."""
+        started = {name: threading.Event() for name in ("first", "second", "third")}
+        release = {name: threading.Event() for name in ("first", "second")}
+        execution_order = []
+
+        def fake_executor(run, emit, cancelled):
+            profile = run["loaded"].runs[0].profile
+            execution_order.append(profile)
+            started[profile].set()
+            self.assertTrue(release[profile].wait(2))
+            if cancelled.is_set():
+                return
+            step_id = run["store"].manifest["steps"][0]["id"]
+            emit({"type": "step-started", "step_id": step_id})
+            emit({"type": "step-finished", "step_id": step_id, "state": "passed"})
+
+        def config(profile):
+            return "ping-bench:\n  {}: {{threads: [1], duration: 1, repetitions: 1, affinity: [none]}}\n".format(
+                profile
+            )
+
+        service = RunService(self.root, executor=fake_executor)
+        first = service.start(config("first"))
+        self.assertEqual(first["state"], "queued")
+        self.assertTrue(started["first"].wait(2))
+        second = service.start(config("second"))
+        third = service.start(config("third"))
+
+        second_detail = service.detail(second["id"])
+        third_detail = service.detail(third["id"])
+        self.assertEqual(second_detail["state"], "queued")
+        self.assertEqual(second_detail["queue_position"], 1)
+        self.assertEqual(second_detail["current_run_id"], first["id"])
+        self.assertEqual(third_detail["queue_position"], 2)
+        self.assertTrue(all(step["state"] == "pending" for step in second_detail["steps"]))
+
+        cancelled = service.cancel(third["id"])
+        self.assertEqual(cancelled["state"], "cancelled")
+        self.assertTrue(service._runs[third["id"]]["finished"].is_set())
+        self.assertFalse(started["third"].is_set())
+        cancelled_detail = service.detail(third["id"])
+        self.assertIsNone(cancelled_detail["started_at"])
+        self.assertTrue(all(step["state"] == "cancelled" for step in cancelled_detail["steps"]))
+        self.assertEqual(
+            [event["type"] for event in service.events(third["id"])],
+            ["cancel-requested", "run-finished"],
+        )
+
+        release["first"].set()
+        self.assertTrue(started["second"].wait(2))
+        self.assertEqual(execution_order, ["first", "second"])
+        self.assertFalse(started["third"].is_set())
+        release["second"].set()
+        self.assertTrue(service._runs[second["id"]]["finished"].wait(2))
+        self.assertEqual(service.detail(first["id"])["state"], "passed")
+        self.assertEqual(service.detail(second["id"])["state"], "passed")
+        self.assertEqual(execution_order, ["first", "second"])
+
+    def test_failed_web_run_does_not_block_next_queued_run(self):
+        """A run-level failure is terminal for that run, not for the web FIFO."""
+        first_started = threading.Event()
+        release_failure = threading.Event()
+        second_finished = threading.Event()
+
+        def fake_executor(run, emit, _cancelled):
+            profile = run["loaded"].runs[0].profile
+            if profile == "fail":
+                first_started.set()
+                self.assertTrue(release_failure.wait(2))
+                raise BenchmarkError("expected failure")
+            step_id = run["store"].manifest["steps"][0]["id"]
+            emit({"type": "step-started", "step_id": step_id})
+            emit({"type": "step-finished", "step_id": step_id, "state": "passed"})
+            second_finished.set()
+
+        def config(profile):
+            return "ping-bench:\n  {}: {{threads: [1], duration: 1, repetitions: 1, affinity: [none]}}\n".format(
+                profile
+            )
+
+        service = RunService(self.root, executor=fake_executor)
+        failed = service.start(config("fail"), continue_on_error=True)
+        self.assertTrue(first_started.wait(2))
+        passed = service.start(config("pass"), continue_on_error=False)
+        self.assertEqual(service.detail(passed["id"])["state"], "queued")
+        release_failure.set()
+        self.assertTrue(second_finished.wait(2))
+        self.assertTrue(service._runs[passed["id"]]["finished"].wait(2))
+        self.assertEqual(service.detail(failed["id"])["state"], "failed")
+        self.assertEqual(service.detail(passed["id"])["state"], "passed")
+
+
+if __name__ == "__main__":
+    unittest.main()

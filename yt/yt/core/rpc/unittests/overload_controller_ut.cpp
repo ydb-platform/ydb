@@ -67,7 +67,7 @@ TOverloadControllerConfigPtr CreateConfig(const THashMap<std::string, TMethodInf
 
     for (const auto& [trackerName, methods] : schema) {
         TOverloadTrackerConfig trackerConfig(EOverloadTrackerConfigType::MeanWaitTime);
-        auto trackerMeanWaitTimeConfig = trackerConfig.TryGetConcrete<TOverloadTrackerMeanWaitTimeConfig>();
+        auto trackerMeanWaitTimeConfig = trackerConfig.GetConcrete<TOverloadTrackerMeanWaitTimeConfig>();
 
         for (const auto& methodInfo : methods) {
             {

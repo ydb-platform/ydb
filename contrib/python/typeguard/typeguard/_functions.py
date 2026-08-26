@@ -136,11 +136,7 @@ def check_argument_types() -> Literal[True]:
     func = find_function(frame)
     f_locals = frame.f_locals
     memo = TypeCheckMemo(frame.f_globals, frame.f_locals)
-    if sys.version_info >= (3, 10):
-        sig = signature(func, globals=frame.f_globals, locals=frame.f_locals)
-    else:
-        sig = signature(func)
-
+    sig = signature(func, globals=frame.f_globals, locals=frame.f_locals)
     arguments = {}
     for param in sig.parameters.values():
         if param.annotation is Parameter.empty or param.annotation is Any:

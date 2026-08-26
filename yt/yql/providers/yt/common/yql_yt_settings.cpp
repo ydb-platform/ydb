@@ -125,6 +125,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, QueryCacheUseForCalc);
     REGISTER_SETTING(*this, QueryCacheUseExpirationTimeout);
     REGISTER_SETTING(*this, QueryCacheCombineChunksReplace);
+    REGISTER_SETTING(*this, QueryCacheReportProgress);
 
     REGISTER_SETTING(*this, DefaultMemoryLimit);
     REGISTER_SETTING(*this, DefaultMemoryReserveFactor).Lower(0.0).Upper(1.0);
@@ -345,6 +346,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, CommonJoinCoreLimit);
     REGISTER_SETTING(*this, CombineCoreLimit).Lower(1_MB); // Min 1Mb
     REGISTER_SETTING(*this, SwitchLimit).Lower(1_MB); // Min 1Mb
+    REGISTER_SETTING(*this, JoinCommonAnySideFirst);
     REGISTER_SETTING(*this, JoinMergeTablesLimit);
     REGISTER_SETTING(*this, JoinMergeUseSmallAsPrimary);
     REGISTER_SETTING(*this, JoinMergeReduceJobMaxSize).Lower(1); // YT requires max_data_size_per_job to be > 0, YT default is 200GB
@@ -525,6 +527,8 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, BatchListFolderConcurrency).Lower(1); // Upper bound on concurrent batch folder list requests https://yt.yandex-team.ru/docs/api/commands#execute_batch
     REGISTER_SETTING(*this, ForceTmpSecurity);
     REGISTER_SETTING(*this, JoinCommonUseMapMultiOut);
+    REGISTER_SETTING(*this, JoinCommonUseFlatPayload);
+    REGISTER_SETTING(*this, JoinCommonFlatPayloadColumnLimit);
     REGISTER_SETTING(*this, _EnableYtPartitioning);
     REGISTER_SETTING(*this, EnableDynamicStoreReadInDQ);
     REGISTER_SETTING(*this, UseDefaultArrowAllocatorInJobs);
@@ -642,6 +646,9 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, TmpSecurity).Parser([](const TString& v) { return FromString<ETmpSecurityMode>(v); });
     REGISTER_SETTING(*this, _ParseExpressionColumns);
     REGISTER_SETTING(*this, _SecureTmpTokenUsersAccessPeriod);
+    REGISTER_SETTING(*this, _FixEndlessLoopInDropIfExists);
+    REGISTER_SETTING(*this, _ForbidReservedColumns);
+    REGISTER_SETTING(*this, ApplyMaxJobCountToAll);
 }
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings) {

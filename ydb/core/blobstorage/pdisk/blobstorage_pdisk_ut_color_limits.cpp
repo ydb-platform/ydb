@@ -177,8 +177,10 @@ Y_UNIT_TEST_SUITE(TColorLimitsTest) {
             TOwner owner1 = NPDisk::EOwner::OwnerBeginUser + 1;
             TOwner owner2 = NPDisk::EOwner::OwnerBeginUser + 2;
 
-            chunkTracker.AddOwner(owner1, TVDiskID());
-            chunkTracker.AddOwner(owner2, TVDiskID());
+            TVDiskID vdiskId1(TGroupID(EGroupConfigurationType::Dynamic, 1, 1).GetRaw(), 1, TVDiskIdShort(0, 0, 0));
+            TVDiskID vdiskId2(TGroupID(EGroupConfigurationType::Dynamic, 1, 2).GetRaw(), 1, TVDiskIdShort(0, 0, 0));
+            chunkTracker.AddOwner(owner1, vdiskId1);
+            chunkTracker.AddOwner(owner2, vdiskId2);
 
             double occupancy;
             // consume 100% of personal quota and 50% of common quota

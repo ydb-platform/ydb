@@ -1113,6 +1113,37 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         ShouldSwitchEncryptionOnOffWithoutReformatting(false);
     }
 
+    Y_UNIT_TEST(EmptyMetadataIsReportedAsNoMetadata) {
+        TActorTestContext testCtx({});
+        testCtx.GetPDisk();
+
+        const TString metadata = "metadata";
+        testCtx.Send(new NPDisk::TEvWriteMetadata(TRcBuf(metadata)));
+        auto writeResult = testCtx.Recv<NPDisk::TEvWriteMetadataResult>();
+        UNIT_ASSERT_VALUES_EQUAL(writeResult->Outcome, NPDisk::EPDiskMetadataOutcome::OK);
+
+        testCtx.Send(new NPDisk::TEvReadMetadata());
+        auto readResult = testCtx.Recv<NPDisk::TEvReadMetadataResult>();
+        UNIT_ASSERT_VALUES_EQUAL(readResult->Outcome, NPDisk::EPDiskMetadataOutcome::OK);
+        UNIT_ASSERT_VALUES_EQUAL(
+            TRcBuf(readResult->Metadata).ExtractUnderlyingContainerOrCopy<TString>(),
+            metadata);
+
+        testCtx.Send(new NPDisk::TEvWriteMetadata(TRcBuf()));
+        writeResult = testCtx.Recv<NPDisk::TEvWriteMetadataResult>();
+        UNIT_ASSERT_VALUES_EQUAL(writeResult->Outcome, NPDisk::EPDiskMetadataOutcome::OK);
+
+        testCtx.Send(new NPDisk::TEvReadMetadata());
+        readResult = testCtx.Recv<NPDisk::TEvReadMetadataResult>();
+        UNIT_ASSERT_VALUES_EQUAL(readResult->Outcome, NPDisk::EPDiskMetadataOutcome::NO_METADATA);
+
+        testCtx.RestartPDiskSync();
+
+        testCtx.Send(new NPDisk::TEvReadMetadata());
+        readResult = testCtx.Recv<NPDisk::TEvReadMetadataResult>();
+        UNIT_ASSERT_VALUES_EQUAL(readResult->Outcome, NPDisk::EPDiskMetadataOutcome::NO_METADATA);
+    }
+
     Y_UNIT_TEST(PDiskOwnerSlayRace) {
         for (bool encryption: {true, false}) {
             TActorTestContext::TSettings settings{};
@@ -1396,6 +1427,51 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
 
         setColor(0);
         checkColor(TColor::GREEN);
+    }
+
+    // Verifies the UseDeviceOverestimationRatioMerged ICB option:
+    //  - it is registered under NKikimrConfig::TImmediateControlsConfig
+    //    ("icb->PDiskControls.UseDeviceOverestimationRatioMerged") as soon as
+    //    the PDisk actor is bootstrapped;
+    //  - it defaults to enabled (1), i.e. the merged (cross-source) metric is
+    //    used by default;
+    //  - its value can be flipped at runtime (0/1), without a PDisk/cluster
+    //    restart, exactly the way an admin would toggle it back to the legacy
+    //    algorithm via a console ICB command if the new metric misbehaved.
+    Y_UNIT_TEST(UseDeviceOverestimationRatioMergedControlDefaultsToEnabledAndIsToggleable) {
+        TActorTestContext testCtx{{}};
+        testCtx.GetPDisk(); // inits pdisk, which registers the ICB control
+
+        auto &icb = testCtx.GetRuntime()->GetAppData().Icb;
+        auto control = icb->PDiskControls.UseDeviceOverestimationRatioMerged.AtomicLoad();
+        UNIT_ASSERT_C(control, "UseDeviceOverestimationRatioMerged control must be registered by PDisk::Initialize");
+
+        // Enabled (merged metric) by default, as required: no operator action
+        // needed to get the improved metric.
+        UNIT_ASSERT_VALUES_EQUAL(control->Get(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(control->GetDefault(), 1);
+        UNIT_ASSERT(control->IsDefault());
+
+        // Disabling reverts to the legacy algorithm -- this must be possible
+        // without restarting the PDisk/cluster, i.e. purely via the ICB value.
+        // This mirrors how a console ICB command (SetFromHtmlRequest under the
+        // hood) would toggle the option at runtime.
+        control->SetFromHtmlRequest(0);
+        UNIT_ASSERT_VALUES_EQUAL(control->Get(), 0);
+
+        // Re-enabling brings back the merged metric, again without a restart.
+        control->SetFromHtmlRequest(1);
+        UNIT_ASSERT_VALUES_EQUAL(control->Get(), 1);
+
+        // Out-of-range values must be clamped to [0, 1], same as any other
+        // boolean-like ICB control (e.g. SemiStrictSpaceIsolation's bounds).
+        control->SetFromHtmlRequest(5);
+        UNIT_ASSERT_VALUES_EQUAL(control->Get(), 1);
+        control->SetFromHtmlRequest(-5);
+        UNIT_ASSERT_VALUES_EQUAL(control->Get(), 0);
+
+        control->RestoreDefault();
+        UNIT_ASSERT_VALUES_EQUAL(control->Get(), 1);
     }
 
     Y_UNIT_TEST(DeviceHaltTooLong) {
@@ -1858,6 +1934,13 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         auto pdiskConfig = testCtx.GetPDiskConfig();
         using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
         pdiskConfig->SpaceColorBorder = TColor::ORANGE;
+
+        // TVDiskMock creates VDisks of static groups, turn off their chunk reserve to measure the shared quota alone
+        TControlWrapper staticGroupChunkReservePerMille(0, 0, 1000);
+        TControlBoard::RegisterSharedControl(staticGroupChunkReservePerMille,
+                testCtx.GetRuntime()->GetAppData().Icb->PDiskControls.StaticGroupChunkReservePerMille);
+        staticGroupChunkReservePerMille = 0;
+
         testCtx.UpdateConfigRecreatePDisk(pdiskConfig);
         // The actual value of SharedQuota.HardLimit is initialized in TActorTestContext
         // with quite a complex formula. The value used here was obtained experimentally.
@@ -2045,6 +2128,129 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         CheckEvCheckSpace(testCtx, vdisk0, sharedFree, fairQuota, vdisk0Used, 0.99, vdisk0SlotUtilization, 99.6, 3, 4, TColor::RED);
         CheckEvCheckSpace(testCtx, vdisk1, sharedFree, fairQuota*2, vdisk1Used, 0.99, vdisk1SlotUtilization, 99.6, 3, 4, TColor::RED);
         CheckEvCheckSpace(testCtx, vdisk2, sharedFree, fairQuota, 0, 0.99, 0.0, 99.6, 3, 4, TColor::RED);
+    }
+
+    Y_UNIT_TEST(ExpectedSlotSizeHardLimitRoundsDownToChunkSize) {
+        TActorTestContext testCtx({
+            .DiskSize = 1_GB,
+            .ChunkSize = 1_MB,
+        });
+
+        const ui32 formatChunkSize = testCtx.SafeRunOnPDisk([](const NPDisk::TPDisk* pdisk) {
+            return pdisk->Format.ChunkSize;
+        });
+        const ui64 expectedSlotSize = 3ull * formatChunkSize + 1;
+
+        auto pdiskConfig = testCtx.GetPDiskConfig();
+        pdiskConfig->ExpectedSlotSize = expectedSlotSize;
+        testCtx.UpdateConfigRecreatePDisk(pdiskConfig);
+
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+        vdisk.SendEvLogSync();
+
+        const auto evCheckSpaceResult = testCtx.TestResponse<NPDisk::TEvCheckSpaceResult>(
+            new NPDisk::TEvCheckSpace(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound),
+            NKikimrProto::OK);
+
+        const ui32 expectedHardLimitChunks = expectedSlotSize / formatChunkSize;
+        UNIT_ASSERT_VALUES_EQUAL(expectedHardLimitChunks, 3u);
+        UNIT_ASSERT_VALUES_EQUAL(evCheckSpaceResult->TotalChunks, expectedHardLimitChunks);
+        UNIT_ASSERT_LE(ui64(evCheckSpaceResult->TotalChunks) * formatChunkSize, expectedSlotSize);
+    }
+
+    Y_UNIT_TEST(StaticGroupChunkReserve) {
+        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+
+        TActorTestContext testCtx({});
+
+        // TVDiskMock makes a group id with the top bit clear, i.e. a static group, unless asked otherwise
+        TVDiskMock staticVDisk(&testCtx);
+        TVDiskMock dynamicVDisk(&testCtx, true);
+        staticVDisk.InitFull();
+        dynamicVDisk.InitFull();
+
+        // Let the neighbour from the dynamic group take everything it can
+        ui32 dynamicChunks = 0;
+        for (;;) {
+            const auto reserveResult = testCtx.TestResponse<NPDisk::TEvChunkReserveResult>(
+                new NPDisk::TEvChunkReserve(dynamicVDisk.PDiskParams->Owner, dynamicVDisk.PDiskParams->OwnerRound, 1));
+            if (reserveResult->Status != NKikimrProto::OK) {
+                UNIT_ASSERT_VALUES_EQUAL(reserveResult->Status, NKikimrProto::OUT_OF_SPACE);
+                break;
+            }
+            ++dynamicChunks;
+        }
+        UNIT_ASSERT_GT(dynamicChunks, 0);
+
+        auto dynamicSpace = testCtx.TestResponse<NPDisk::TEvCheckSpaceResult>(
+            new NPDisk::TEvCheckSpace(dynamicVDisk.PDiskParams->Owner, dynamicVDisk.PDiskParams->OwnerRound),
+            NKikimrProto::OK);
+        UNIT_ASSERT_GE(StatusFlagToSpaceColor(dynamicSpace->StatusFlags), TColor::ORANGE);
+
+        // The VDisk of the static group keeps allocating and committing chunks and still reports free space
+        staticVDisk.ReserveChunk();
+        staticVDisk.CommitReservedChunks();
+
+        auto staticSpace = testCtx.TestResponse<NPDisk::TEvCheckSpaceResult>(
+            new NPDisk::TEvCheckSpace(staticVDisk.PDiskParams->Owner, staticVDisk.PDiskParams->OwnerRound),
+            NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(StatusFlagToSpaceColor(staticSpace->StatusFlags), TColor::GREEN);
+        UNIT_ASSERT_GT(staticSpace->FreeChunks, 0);
+    }
+
+    Y_UNIT_TEST(SlotSizeBytesUsesFormulaUnlessExpectedSlotSizeIsSet) {
+        TActorTestContext testCtx({
+            .DiskSize = 1_GB,
+            .ChunkSize = 1_MB,
+        });
+
+        const ui32 firstNodeId = testCtx.GetRuntime()->GetFirstNodeId();
+        testCtx.GetRuntime()->SetDispatchTimeout(10 * TDuration::MilliSeconds(testCtx.GetPDiskConfig()->StatisticsUpdateIntervalMs));
+        testCtx.GetRuntime()->RegisterService(NNodeWhiteboard::MakeNodeWhiteboardServiceId(firstNodeId), testCtx.Sender);
+
+        auto waitForPDiskStateUpdate = [&](ui32 expectedSlotCount, ui64 expectedSlotSize) {
+            for (ui32 i = 0; i < 10; ++i) {
+                const auto evPDiskStateUpdate = testCtx.Recv<NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateUpdate>();
+                const NKikimrWhiteboard::TPDiskStateInfo& pdiskInfo = evPDiskStateUpdate->Record;
+                if (pdiskInfo.GetExpectedSlotCount() == expectedSlotCount &&
+                        pdiskInfo.GetExpectedSlotSize() == expectedSlotSize) {
+                    return;
+                }
+            }
+            UNIT_ASSERT_C(false, "No PDisk state update with expected slot settings received");
+        };
+
+        auto getSlotSizeBytes = [&] {
+            return testCtx.SafeRunOnPDisk([](const NPDisk::TPDisk* pdisk) {
+                return pdisk->Mon.SlotSizeBytes->Val();
+            });
+        };
+
+        const ui32 expectedSlotCount = 4;
+        const ui32 slotSizeInUnits = 0;
+
+        testCtx.TestResponse<NPDisk::TEvChangeExpectedSlotCountResult>(
+            new NPDisk::TEvChangeExpectedSlotCount(expectedSlotCount, slotSizeInUnits),
+            NKikimrProto::OK);
+        testCtx.Send(new TEvents::TEvWakeup());
+        waitForPDiskStateUpdate(expectedSlotCount, 0);
+
+        const ui64 formulaSlotSizeBytes = testCtx.SafeRunOnPDisk([&](const NPDisk::TPDisk* pdisk) {
+            return ui64(pdisk->Keeper.GetUserChunkPoolSize() / expectedSlotCount) * ui64(pdisk->Format.ChunkSize);
+        });
+        UNIT_ASSERT_VALUES_EQUAL(getSlotSizeBytes(), formulaSlotSizeBytes);
+
+        const ui64 expectedSlotSize = 3ull * testCtx.GetPDiskConfig()->ChunkSize + 1;
+        UNIT_ASSERT_VALUES_UNEQUAL(expectedSlotSize, formulaSlotSizeBytes);
+
+        testCtx.TestResponse<NPDisk::TEvChangeExpectedSlotCountResult>(
+            new NPDisk::TEvChangeExpectedSlotCount(expectedSlotCount, slotSizeInUnits, expectedSlotSize),
+            NKikimrProto::OK);
+        testCtx.Send(new TEvents::TEvWakeup());
+        waitForPDiskStateUpdate(expectedSlotCount, expectedSlotSize);
+
+        UNIT_ASSERT_VALUES_EQUAL(getSlotSizeBytes(), expectedSlotSize);
     }
 
     Y_UNIT_TEST(PDiskCapacityAlertWithFullCommonLog) {

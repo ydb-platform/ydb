@@ -207,7 +207,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
 
         const std::vector<std::string> texts = {
             fmt::format(R"(
-                ;INSERT INTO `{pq_source}`.`{output_topic}`
+                ;PRAGMA ydb.OptValidateStreamingCheckpoints = "FALSE";INSERT INTO `{pq_source}`.`{output_topic}`
                 /* A */
                 SELECT * FROM `{pq_source}`.`{input_topic}`
                 LIMIT 1;)",
@@ -249,7 +249,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
             .CheckPlan = true,
         }, {
             .Name = "B",
-            .Status = "CREATED",
+            .Status = "FAILED",
+            .Issues = "Invalid override planner settings",
             .Text = texts[1],
         }});
     }
@@ -315,7 +316,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
             UNIT_ASSERT_VALUES_EQUAL(*resultSet.ColumnParser("Path").GetOptionalUtf8(), "/Root/A");
             UNIT_ASSERT_VALUES_EQUAL(*resultSet.ColumnParser("Text").GetOptionalUtf8(), GetQueryText("A"));
             UNIT_ASSERT_VALUES_EQUAL(*resultSet.ColumnParser("Run").GetOptionalBool(), true);
-            UNIT_ASSERT_VALUES_EQUAL(*resultSet.ColumnParser("ResourcePool").GetOptionalUtf8(), "default");
+            UNIT_ASSERT_VALUES_EQUAL(*resultSet.ColumnParser("ResourcePool").GetOptionalUtf8(), "");
         });
     }
 
@@ -393,7 +394,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
         for (ui64 i = 0; i < NUMBER_OF_QUERIES; ++i) {
             const auto name = TStringBuilder() << "query-" << i;
             const std::string text = fmt::format(R"(
-                ;INSERT INTO `{pq_source}`.`{output_topic}`
+                ;PRAGMA ydb.OptValidateStreamingCheckpoints = "FALSE";INSERT INTO `{pq_source}`.`{output_topic}`
                 SELECT Data || "{payload}" FROM `{pq_source}`.`{input_topic}`
                 LIMIT 1;)",
                 "payload"_a = payload,

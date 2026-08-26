@@ -5,11 +5,13 @@
     "endpointPrefix":"license-manager",
     "jsonVersion":"1.1",
     "protocol":"json",
+    "protocols":["json"],
     "serviceFullName":"AWS License Manager",
     "serviceId":"License Manager",
     "signatureVersion":"v4",
     "targetPrefix":"AWSLicenseManager",
-    "uid":"license-manager-2018-08-01"
+    "uid":"license-manager-2018-08-01",
+    "auth":["aws.auth#sigv4"]
   },
   "operations":{
     "AcceptGrant":{
@@ -153,6 +155,42 @@
       ],
       "documentation":"<p>Creates a license.</p>"
     },
+    "CreateLicenseAssetGroup":{
+      "name":"CreateLicenseAssetGroup",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"CreateLicenseAssetGroupRequest"},
+      "output":{"shape":"CreateLicenseAssetGroupResponse"},
+      "errors":[
+        {"shape":"ValidationException"},
+        {"shape":"InvalidParameterValueException"},
+        {"shape":"AuthorizationException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"RateLimitExceededException"},
+        {"shape":"ServerInternalException"}
+      ],
+      "documentation":"<p>Creates a license asset group.</p>"
+    },
+    "CreateLicenseAssetRuleset":{
+      "name":"CreateLicenseAssetRuleset",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"CreateLicenseAssetRulesetRequest"},
+      "output":{"shape":"CreateLicenseAssetRulesetResponse"},
+      "errors":[
+        {"shape":"ValidationException"},
+        {"shape":"InvalidParameterValueException"},
+        {"shape":"AuthorizationException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"RateLimitExceededException"},
+        {"shape":"ServerInternalException"}
+      ],
+      "documentation":"<p>Creates a license asset ruleset.</p>"
+    },
     "CreateLicenseConfiguration":{
       "name":"CreateLicenseConfiguration",
       "http":{
@@ -288,6 +326,42 @@
       ],
       "documentation":"<p>Deletes the specified license.</p>"
     },
+    "DeleteLicenseAssetGroup":{
+      "name":"DeleteLicenseAssetGroup",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"DeleteLicenseAssetGroupRequest"},
+      "output":{"shape":"DeleteLicenseAssetGroupResponse"},
+      "errors":[
+        {"shape":"ValidationException"},
+        {"shape":"InvalidParameterValueException"},
+        {"shape":"AuthorizationException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"RateLimitExceededException"},
+        {"shape":"ServerInternalException"}
+      ],
+      "documentation":"<p>Deletes a license asset group.</p>"
+    },
+    "DeleteLicenseAssetRuleset":{
+      "name":"DeleteLicenseAssetRuleset",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"DeleteLicenseAssetRulesetRequest"},
+      "output":{"shape":"DeleteLicenseAssetRulesetResponse"},
+      "errors":[
+        {"shape":"ValidationException"},
+        {"shape":"InvalidParameterValueException"},
+        {"shape":"AuthorizationException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"RateLimitExceededException"},
+        {"shape":"ServerInternalException"}
+      ],
+      "documentation":"<p>Deletes a license asset ruleset.</p>"
+    },
     "DeleteLicenseConfiguration":{
       "name":"DeleteLicenseConfiguration",
       "http":{
@@ -417,6 +491,42 @@
       ],
       "documentation":"<p>Gets detailed information about the specified license.</p>"
     },
+    "GetLicenseAssetGroup":{
+      "name":"GetLicenseAssetGroup",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"GetLicenseAssetGroupRequest"},
+      "output":{"shape":"GetLicenseAssetGroupResponse"},
+      "errors":[
+        {"shape":"ValidationException"},
+        {"shape":"InvalidParameterValueException"},
+        {"shape":"AuthorizationException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"RateLimitExceededException"},
+        {"shape":"ServerInternalException"}
+      ],
+      "documentation":"<p>Gets a license asset group.</p>"
+    },
+    "GetLicenseAssetRuleset":{
+      "name":"GetLicenseAssetRuleset",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"GetLicenseAssetRulesetRequest"},
+      "output":{"shape":"GetLicenseAssetRulesetResponse"},
+      "errors":[
+        {"shape":"ValidationException"},
+        {"shape":"InvalidParameterValueException"},
+        {"shape":"AuthorizationException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"RateLimitExceededException"},
+        {"shape":"ServerInternalException"}
+      ],
+      "documentation":"<p>Gets a license asset ruleset.</p>"
+    },
     "GetLicenseConfiguration":{
       "name":"GetLicenseConfiguration",
       "http":{
@@ -505,6 +615,24 @@
       ],
       "documentation":"<p>Gets the License Manager settings for the current Region.</p>"
     },
+    "ListAssetsForLicenseAssetGroup":{
+      "name":"ListAssetsForLicenseAssetGroup",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"ListAssetsForLicenseAssetGroupRequest"},
+      "output":{"shape":"ListAssetsForLicenseAssetGroupResponse"},
+      "errors":[
+        {"shape":"ValidationException"},
+        {"shape":"InvalidParameterValueException"},
+        {"shape":"AuthorizationException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"RateLimitExceededException"},
+        {"shape":"ServerInternalException"}
+      ],
+      "documentation":"<p>Lists assets for a license asset group.</p>"
+    },
     "ListAssociationsForLicenseConfiguration":{
       "name":"ListAssociationsForLicenseConfiguration",
       "http":{
@@ -559,6 +687,42 @@
       ],
       "documentation":"<p>Lists the license configuration operations that failed.</p>"
     },
+    "ListLicenseAssetGroups":{
+      "name":"ListLicenseAssetGroups",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"ListLicenseAssetGroupsRequest"},
+      "output":{"shape":"ListLicenseAssetGroupsResponse"},
+      "errors":[
+        {"shape":"ValidationException"},
+        {"shape":"InvalidParameterValueException"},
+        {"shape":"AuthorizationException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"RateLimitExceededException"},
+        {"shape":"ServerInternalException"}
+      ],
+      "documentation":"<p>Lists license asset groups.</p>"
+    },
+    "ListLicenseAssetRulesets":{
+      "name":"ListLicenseAssetRulesets",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"ListLicenseAssetRulesetsRequest"},
+      "output":{"shape":"ListLicenseAssetRulesetsResponse"},
+      "errors":[
+        {"shape":"ValidationException"},
+        {"shape":"InvalidParameterValueException"},
+        {"shape":"AuthorizationException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"RateLimitExceededException"},
+        {"shape":"ServerInternalException"}
+      ],
+      "documentation":"<p>Lists license asset rulesets.</p>"
+    },
     "ListLicenseConfigurations":{
       "name":"ListLicenseConfigurations",
       "http":{
@@ -576,6 +740,24 @@
         {"shape":"RateLimitExceededException"}
       ],
       "documentation":"<p>Lists the license configurations for your account.</p>"
+    },
+    "ListLicenseConfigurationsForOrganization":{
+      "name":"ListLicenseConfigurationsForOrganization",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"ListLicenseConfigurationsForOrganizationRequest"},
+      "output":{"shape":"ListLicenseConfigurationsForOrganizationResponse"},
+      "errors":[
+        {"shape":"InvalidParameterValueException"},
+        {"shape":"ServerInternalException"},
+        {"shape":"FilterLimitExceededException"},
+        {"shape":"AuthorizationException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"RateLimitExceededException"}
+      ],
+      "documentation":"<p>Lists license configurations for an organization.</p>"
     },
     "ListLicenseConversionTasks":{
       "name":"ListLicenseConversionTasks",
@@ -771,12 +953,13 @@
       "output":{"shape":"ListTagsForResourceResponse"},
       "errors":[
         {"shape":"InvalidParameterValueException"},
+        {"shape":"ValidationException"},
         {"shape":"ServerInternalException"},
         {"shape":"AuthorizationException"},
         {"shape":"AccessDeniedException"},
         {"shape":"RateLimitExceededException"}
       ],
-      "documentation":"<p>Lists the tags for the specified license configuration.</p>"
+      "documentation":"<p>Lists the tags for the specified resource. For more information about tagging support in License Manager, see the <a href=\"https://docs.aws.amazon.com/license-manager/latest/APIReference/API_TagResource.html\">TagResource</a> operation.</p>"
     },
     "ListTokens":{
       "name":"ListTokens",
@@ -842,12 +1025,13 @@
       "output":{"shape":"TagResourceResponse"},
       "errors":[
         {"shape":"InvalidParameterValueException"},
+        {"shape":"ValidationException"},
         {"shape":"ServerInternalException"},
         {"shape":"AuthorizationException"},
         {"shape":"AccessDeniedException"},
         {"shape":"RateLimitExceededException"}
       ],
-      "documentation":"<p>Adds the specified tags to the specified license configuration.</p>"
+      "documentation":"<p>Adds the specified tags to the specified resource. The following resources support tagging in License Manager:</p> <ul> <li> <p>Licenses</p> </li> <li> <p>Grants</p> </li> <li> <p>License configurations</p> </li> <li> <p>Report generators</p> </li> </ul>"
     },
     "UntagResource":{
       "name":"UntagResource",
@@ -859,12 +1043,49 @@
       "output":{"shape":"UntagResourceResponse"},
       "errors":[
         {"shape":"InvalidParameterValueException"},
+        {"shape":"ValidationException"},
         {"shape":"ServerInternalException"},
         {"shape":"AuthorizationException"},
         {"shape":"AccessDeniedException"},
         {"shape":"RateLimitExceededException"}
       ],
-      "documentation":"<p>Removes the specified tags from the specified license configuration.</p>"
+      "documentation":"<p>Removes the specified tags from the specified resource.</p>"
+    },
+    "UpdateLicenseAssetGroup":{
+      "name":"UpdateLicenseAssetGroup",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"UpdateLicenseAssetGroupRequest"},
+      "output":{"shape":"UpdateLicenseAssetGroupResponse"},
+      "errors":[
+        {"shape":"ValidationException"},
+        {"shape":"InvalidParameterValueException"},
+        {"shape":"AuthorizationException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"RateLimitExceededException"},
+        {"shape":"ServerInternalException"}
+      ],
+      "documentation":"<p>Updates a license asset group.</p>"
+    },
+    "UpdateLicenseAssetRuleset":{
+      "name":"UpdateLicenseAssetRuleset",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"UpdateLicenseAssetRulesetRequest"},
+      "output":{"shape":"UpdateLicenseAssetRulesetResponse"},
+      "errors":[
+        {"shape":"ValidationException"},
+        {"shape":"InvalidParameterValueException"},
+        {"shape":"AuthorizationException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"RateLimitExceededException"},
+        {"shape":"ServerInternalException"}
+      ],
+      "documentation":"<p>Updates a license asset ruleset.</p>"
     },
     "UpdateLicenseConfiguration":{
       "name":"UpdateLicenseConfiguration",
@@ -880,7 +1101,8 @@
         {"shape":"AuthorizationException"},
         {"shape":"AccessDeniedException"},
         {"shape":"RateLimitExceededException"},
-        {"shape":"ResourceLimitExceededException"}
+        {"shape":"ResourceLimitExceededException"},
+        {"shape":"ConflictException"}
       ],
       "documentation":"<p>Modifies the attributes of an existing license configuration.</p>"
     },
@@ -919,7 +1141,8 @@
         {"shape":"ServerInternalException"},
         {"shape":"AuthorizationException"},
         {"shape":"AccessDeniedException"},
-        {"shape":"RateLimitExceededException"}
+        {"shape":"RateLimitExceededException"},
+        {"shape":"ConflictException"}
       ],
       "documentation":"<p>Adds or removes the specified license configurations for the specified Amazon Web Services resource.</p> <p>You can update the license specifications of AMIs, instances, and hosts. You cannot update the license specifications for launch templates and CloudFormation templates, as they send license configurations to the operation that creates the resource.</p>"
     },
@@ -936,7 +1159,9 @@
         {"shape":"ServerInternalException"},
         {"shape":"AuthorizationException"},
         {"shape":"AccessDeniedException"},
-        {"shape":"RateLimitExceededException"}
+        {"shape":"RateLimitExceededException"},
+        {"shape":"ValidationException"},
+        {"shape":"ConflictException"}
       ],
       "documentation":"<p>Updates License Manager settings for the current Region.</p>"
     }
@@ -999,17 +1224,49 @@
     "AllowedOperationList":{
       "type":"list",
       "member":{"shape":"AllowedOperation"},
-      "max":7,
+      "max":8,
       "min":1
+    },
+    "AndRuleStatement":{
+      "type":"structure",
+      "members":{
+        "MatchingRuleStatements":{
+          "shape":"MatchingRuleStatementList",
+          "documentation":"<p>Matching rule statements.</p>"
+        },
+        "ScriptRuleStatements":{
+          "shape":"ScriptRuleStatementList",
+          "documentation":"<p>Script rule statements.</p>"
+        }
+      },
+      "documentation":"<p>AND rule statement.</p>"
     },
     "Arn":{
       "type":"string",
       "max":2048,
-      "pattern":"^arn:aws(-(cn|us-gov|iso-b|iso-c|iso-d))?:[A-Za-z0-9][A-Za-z0-9_/.-]{0,62}:[A-Za-z0-9_/.-]{0,63}:[A-Za-z0-9_/.-]{0,63}:[A-Za-z0-9][A-Za-z0-9:_/+=,@.-]{0,1023}$"
+      "pattern":"^arn:aws[a-zA-Z-]*:[A-Za-z0-9][A-Za-z0-9_/.-]{0,62}:[A-Za-z0-9_/.-]{0,63}:[A-Za-z0-9_/.-]{0,63}:[A-Za-z0-9][A-Za-z0-9:_/+=,@.-]{0,1023}$"
     },
     "ArnList":{
       "type":"list",
       "member":{"shape":"Arn"}
+    },
+    "Asset":{
+      "type":"structure",
+      "members":{
+        "AssetArn":{
+          "shape":"String",
+          "documentation":"<p>Amazon Resource Name (ARN) of the asset.</p>"
+        },
+        "LatestAssetDiscoveryTime":{
+          "shape":"DateTime",
+          "documentation":"<p>Latest asset discovery time.</p>"
+        }
+      },
+      "documentation":"<p>Asset.</p>"
+    },
+    "AssetList":{
+      "type":"list",
+      "member":{"shape":"Asset"}
     },
     "AuthorizationException":{
       "type":"structure",
@@ -1067,8 +1324,7 @@
     },
     "CheckInLicenseResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "CheckoutBorrowLicenseRequest":{
       "type":"structure",
@@ -1314,6 +1570,10 @@
         "AllowedOperations":{
           "shape":"AllowedOperationList",
           "documentation":"<p>Allowed operations for the grant.</p>"
+        },
+        "Tags":{
+          "shape":"TagList",
+          "documentation":"<p>Tags to add to the grant. For more information about tagging support in License Manager, see the <a href=\"https://docs.aws.amazon.com/license-manager/latest/APIReference/API_TagResource.html\">TagResource</a> operation.</p>"
         }
       }
     },
@@ -1392,6 +1652,102 @@
         }
       }
     },
+    "CreateLicenseAssetGroupRequest":{
+      "type":"structure",
+      "required":[
+        "Name",
+        "LicenseAssetGroupConfigurations",
+        "AssociatedLicenseAssetRulesetARNs",
+        "ClientToken"
+      ],
+      "members":{
+        "Name":{
+          "shape":"LicenseAssetResourceName",
+          "documentation":"<p>License asset group name.</p>"
+        },
+        "Description":{
+          "shape":"LicenseAssetResourceDescription",
+          "documentation":"<p>License asset group description.</p>"
+        },
+        "LicenseAssetGroupConfigurations":{
+          "shape":"LicenseAssetGroupConfigurationList",
+          "documentation":"<p>License asset group configurations.</p>"
+        },
+        "AssociatedLicenseAssetRulesetARNs":{
+          "shape":"LicenseAssetRulesetArnList",
+          "documentation":"<p>ARNs of associated license asset rulesets.</p>"
+        },
+        "Properties":{
+          "shape":"LicenseAssetGroupPropertyList",
+          "documentation":"<p>License asset group properties.</p>"
+        },
+        "Tags":{
+          "shape":"TagList",
+          "documentation":"<p>Tags to add to the license asset group.</p>"
+        },
+        "ClientToken":{
+          "shape":"String",
+          "documentation":"<p>Unique, case-sensitive identifier that you provide to ensure the idempotency of the request.</p>"
+        }
+      }
+    },
+    "CreateLicenseAssetGroupResponse":{
+      "type":"structure",
+      "required":[
+        "LicenseAssetGroupArn",
+        "Status"
+      ],
+      "members":{
+        "LicenseAssetGroupArn":{
+          "shape":"String",
+          "documentation":"<p>Amazon Resource Name (ARN) of the license asset group.</p>"
+        },
+        "Status":{
+          "shape":"String",
+          "documentation":"<p>License asset group status.</p>"
+        }
+      }
+    },
+    "CreateLicenseAssetRulesetRequest":{
+      "type":"structure",
+      "required":[
+        "Name",
+        "Rules",
+        "ClientToken"
+      ],
+      "members":{
+        "Name":{
+          "shape":"LicenseAssetResourceName",
+          "documentation":"<p>License asset ruleset name.</p>"
+        },
+        "Description":{
+          "shape":"LicenseAssetResourceDescription",
+          "documentation":"<p>License asset ruleset description.</p>"
+        },
+        "Rules":{
+          "shape":"LicenseAssetRuleList",
+          "documentation":"<p>License asset rules.</p>"
+        },
+        "Tags":{
+          "shape":"TagList",
+          "documentation":"<p>Tags to add to the license asset ruleset.</p>"
+        },
+        "ClientToken":{
+          "shape":"String",
+          "documentation":"<p>Unique, case-sensitive identifier that you provide to ensure the idempotency of the request.</p>"
+        }
+      }
+    },
+    "CreateLicenseAssetRulesetResponse":{
+      "type":"structure",
+      "required":["LicenseAssetRulesetArn"],
+      "members":{
+        "LicenseAssetRulesetArn":{
+          "shape":"String",
+          "documentation":"<p>Amazon Resource Name (ARN) of the license asset ruleset.</p>"
+        }
+      }
+    },
     "CreateLicenseConfigurationRequest":{
       "type":"structure",
       "required":[
@@ -1421,7 +1777,7 @@
         },
         "LicenseRules":{
           "shape":"StringList",
-          "documentation":"<p>License rules. The syntax is #name=value (for example, #allowedTenancy=EC2-DedicatedHost). The available rules vary by dimension, as follows.</p> <ul> <li> <p> <code>Cores</code> dimension: <code>allowedTenancy</code> | <code>licenseAffinityToHost</code> | <code>maximumCores</code> | <code>minimumCores</code> </p> </li> <li> <p> <code>Instances</code> dimension: <code>allowedTenancy</code> | <code>maximumCores</code> | <code>minimumCores</code> | <code>maximumSockets</code> | <code>minimumSockets</code> | <code>maximumVcpus</code> | <code>minimumVcpus</code> </p> </li> <li> <p> <code>Sockets</code> dimension: <code>allowedTenancy</code> | <code>licenseAffinityToHost</code> | <code>maximumSockets</code> | <code>minimumSockets</code> </p> </li> <li> <p> <code>vCPUs</code> dimension: <code>allowedTenancy</code> | <code>honorVcpuOptimization</code> | <code>maximumVcpus</code> | <code>minimumVcpus</code> </p> </li> </ul> <p>The unit for <code>licenseAffinityToHost</code> is days and the range is 1 to 180. The possible values for <code>allowedTenancy</code> are <code>EC2-Default</code>, <code>EC2-DedicatedHost</code>, and <code>EC2-DedicatedInstance</code>. The possible values for <code>honorVcpuOptimization</code> are <code>True</code> and <code>False</code>.</p>"
+          "documentation":"<p>License rules. The syntax is #name=value (for example, #allowedTenancy=EC2-DedicatedHost). The available rules vary by dimension, as follows.</p> <ul> <li> <p> <code>Cores</code> dimension: <code>allowedTenancy</code> | <code>licenseAffinityToHost</code> | <code>maximumCores</code> | <code>minimumCores</code> </p> </li> <li> <p> <code>Instances</code> dimension: <code>allowedTenancy</code> | <code>maximumVcpus</code> | <code>minimumVcpus</code> </p> </li> <li> <p> <code>Sockets</code> dimension: <code>allowedTenancy</code> | <code>licenseAffinityToHost</code> | <code>maximumSockets</code> | <code>minimumSockets</code> </p> </li> <li> <p> <code>vCPUs</code> dimension: <code>allowedTenancy</code> | <code>honorVcpuOptimization</code> | <code>maximumVcpus</code> | <code>minimumVcpus</code> </p> </li> </ul> <p>The unit for <code>licenseAffinityToHost</code> is days and the range is 1 to 180. The possible values for <code>allowedTenancy</code> are <code>EC2-Default</code>, <code>EC2-DedicatedHost</code>, and <code>EC2-DedicatedInstance</code>. The possible values for <code>honorVcpuOptimization</code> are <code>True</code> and <code>False</code>.</p>"
         },
         "Tags":{
           "shape":"TagList",
@@ -1434,6 +1790,10 @@
         "ProductInformationList":{
           "shape":"ProductInformationList",
           "documentation":"<p>Product information.</p>"
+        },
+        "LicenseExpiry":{
+          "shape":"BoxLong",
+          "documentation":"<p>License configuration expiry.</p>"
         }
       }
     },
@@ -1584,6 +1944,10 @@
         "ClientToken":{
           "shape":"ClientToken",
           "documentation":"<p>Unique, case-sensitive identifier that you provide to ensure the idempotency of the request.</p>"
+        },
+        "Tags":{
+          "shape":"TagList",
+          "documentation":"<p>Tags to add to the license. For more information about tagging support in License Manager, see the <a href=\"https://docs.aws.amazon.com/license-manager/latest/APIReference/API_TagResource.html\">TagResource</a> operation.</p>"
         }
       }
     },
@@ -1732,6 +2096,26 @@
         }
       }
     },
+    "CrossAccountDiscoveryServiceStatus":{
+      "type":"structure",
+      "members":{
+        "Message":{
+          "shape":"String",
+          "documentation":"<p>Status message for cross-account discovery service.</p>"
+        }
+      },
+      "documentation":"<p>Status information for cross-account discovery service.</p>"
+    },
+    "CrossRegionDiscoveryStatus":{
+      "type":"structure",
+      "members":{
+        "Message":{
+          "shape":"RegionStatusMap",
+          "documentation":"<p>Map of region status messages for cross-region discovery.</p>"
+        }
+      },
+      "documentation":"<p>Status information for cross-region discovery.</p>"
+    },
     "DateTime":{"type":"timestamp"},
     "DatetimeRange":{
       "type":"structure",
@@ -1786,6 +2170,40 @@
         }
       }
     },
+    "DeleteLicenseAssetGroupRequest":{
+      "type":"structure",
+      "required":["LicenseAssetGroupArn"],
+      "members":{
+        "LicenseAssetGroupArn":{
+          "shape":"Arn",
+          "documentation":"<p>Amazon Resource Name (ARN) of the license asset group.</p>"
+        }
+      }
+    },
+    "DeleteLicenseAssetGroupResponse":{
+      "type":"structure",
+      "required":["Status"],
+      "members":{
+        "Status":{
+          "shape":"LicenseAssetGroupStatus",
+          "documentation":"<p>License asset group status.</p>"
+        }
+      }
+    },
+    "DeleteLicenseAssetRulesetRequest":{
+      "type":"structure",
+      "required":["LicenseAssetRulesetArn"],
+      "members":{
+        "LicenseAssetRulesetArn":{
+          "shape":"Arn",
+          "documentation":"<p>Amazon Resource Name (ARN) of the license asset ruleset.</p>"
+        }
+      }
+    },
+    "DeleteLicenseAssetRulesetResponse":{
+      "type":"structure",
+      "members":{}
+    },
     "DeleteLicenseConfigurationRequest":{
       "type":"structure",
       "required":["LicenseConfigurationArn"],
@@ -1798,8 +2216,7 @@
     },
     "DeleteLicenseConfigurationResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteLicenseManagerReportGeneratorRequest":{
       "type":"structure",
@@ -1813,8 +2230,7 @@
     },
     "DeleteLicenseManagerReportGeneratorResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteLicenseRequest":{
       "type":"structure",
@@ -1858,8 +2274,7 @@
     },
     "DeleteTokenResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DigitalSignatureMethod":{
       "type":"string",
@@ -2150,6 +2565,46 @@
         }
       }
     },
+    "GetLicenseAssetGroupRequest":{
+      "type":"structure",
+      "required":["LicenseAssetGroupArn"],
+      "members":{
+        "LicenseAssetGroupArn":{
+          "shape":"Arn",
+          "documentation":"<p>Amazon Resource Name (ARN) of the license asset group.</p>"
+        }
+      }
+    },
+    "GetLicenseAssetGroupResponse":{
+      "type":"structure",
+      "required":["LicenseAssetGroup"],
+      "members":{
+        "LicenseAssetGroup":{
+          "shape":"LicenseAssetGroup",
+          "documentation":"<p>License asset group.</p>"
+        }
+      }
+    },
+    "GetLicenseAssetRulesetRequest":{
+      "type":"structure",
+      "required":["LicenseAssetRulesetArn"],
+      "members":{
+        "LicenseAssetRulesetArn":{
+          "shape":"Arn",
+          "documentation":"<p>Amazon Resource Name (ARN) of the license asset ruleset.</p>"
+        }
+      }
+    },
+    "GetLicenseAssetRulesetResponse":{
+      "type":"structure",
+      "required":["LicenseAssetRuleset"],
+      "members":{
+        "LicenseAssetRuleset":{
+          "shape":"LicenseAssetRuleset",
+          "documentation":"<p>License asset ruleset.</p>"
+        }
+      }
+    },
     "GetLicenseConfigurationRequest":{
       "type":"structure",
       "required":["LicenseConfigurationArn"],
@@ -2230,6 +2685,10 @@
         "DisassociateWhenNotFound":{
           "shape":"BoxBoolean",
           "documentation":"<p>When true, disassociates a resource when software is uninstalled.</p>"
+        },
+        "LicenseExpiry":{
+          "shape":"BoxLong",
+          "documentation":"<p>License Expiry.</p>"
         }
       }
     },
@@ -2347,8 +2806,7 @@
     },
     "GetServiceSettingsRequest":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "GetServiceSettingsResponse":{
       "type":"structure",
@@ -2372,6 +2830,18 @@
         "LicenseManagerResourceShareArn":{
           "shape":"String",
           "documentation":"<p>Amazon Resource Name (ARN) of the resource share. The License Manager management account provides member accounts with access to this share.</p>"
+        },
+        "CrossRegionDiscoveryHomeRegion":{
+          "shape":"String",
+          "documentation":"<p>Cross region discovery home region.</p>"
+        },
+        "CrossRegionDiscoverySourceRegions":{
+          "shape":"StringList",
+          "documentation":"<p>Cross region discovery source regions.</p>"
+        },
+        "ServiceStatus":{
+          "shape":"ServiceStatus",
+          "documentation":"<p>Service status.</p>"
         }
       }
     },
@@ -2529,6 +2999,28 @@
       "max":50,
       "pattern":"^(-?(?:[1-9][0-9]*)?[0-9]{4})-(1[0-2]|0[1-9])-(3[0-1]|0[1-9]|[1-2][0-9])T(2[0-3]|[0-1][0-9]):([0-5][0-9]):([0-5][0-9])(\\.[0-9]+)?(Z|[+-](?:2[ 0-3]|[0-1][0-9]):[0-5][0-9])+$"
     },
+    "InstanceRuleStatement":{
+      "type":"structure",
+      "members":{
+        "AndRuleStatement":{
+          "shape":"AndRuleStatement",
+          "documentation":"<p>AND rule statement.</p>"
+        },
+        "OrRuleStatement":{
+          "shape":"OrRuleStatement",
+          "documentation":"<p>OR rule statement.</p>"
+        },
+        "MatchingRuleStatement":{
+          "shape":"MatchingRuleStatement",
+          "documentation":"<p>Matching rule statement.</p>"
+        },
+        "ScriptRuleStatement":{
+          "shape":"ScriptRuleStatement",
+          "documentation":"<p>Script rule statement.</p>"
+        }
+      },
+      "documentation":"<p>Instance rule statement.</p>"
+    },
     "Integer":{"type":"integer"},
     "InvalidParameterValueException":{
       "type":"structure",
@@ -2677,6 +3169,165 @@
       },
       "documentation":"<p>Software license that is managed in License Manager.</p>"
     },
+    "LicenseAssetGroup":{
+      "type":"structure",
+      "required":[
+        "Name",
+        "AssociatedLicenseAssetRulesetARNs",
+        "LicenseAssetGroupArn",
+        "Status"
+      ],
+      "members":{
+        "Name":{
+          "shape":"String",
+          "documentation":"<p>License asset group name.</p>"
+        },
+        "Description":{
+          "shape":"String",
+          "documentation":"<p>License asset group description.</p>"
+        },
+        "LicenseAssetGroupConfigurations":{
+          "shape":"LicenseAssetGroupConfigurationList",
+          "documentation":"<p>License asset group configurations.</p>"
+        },
+        "AssociatedLicenseAssetRulesetARNs":{
+          "shape":"LicenseAssetRulesetArnList",
+          "documentation":"<p>ARNs of associated license asset rulesets.</p>"
+        },
+        "Properties":{
+          "shape":"LicenseAssetGroupPropertyList",
+          "documentation":"<p>License asset group properties.</p>"
+        },
+        "LicenseAssetGroupArn":{
+          "shape":"Arn",
+          "documentation":"<p>Amazon Resource Name (ARN) of the license asset group.</p>"
+        },
+        "Status":{
+          "shape":"LicenseAssetGroupStatus",
+          "documentation":"<p>License asset group status.</p>"
+        },
+        "StatusMessage":{
+          "shape":"String",
+          "documentation":"<p>License asset group status message.</p>"
+        },
+        "LatestUsageAnalysisTime":{
+          "shape":"DateTime",
+          "documentation":"<p>Latest usage analysis time.</p>"
+        },
+        "LatestResourceDiscoveryTime":{
+          "shape":"DateTime",
+          "documentation":"<p>Latest resource discovery time.</p>"
+        }
+      },
+      "documentation":"<p>License asset group.</p>"
+    },
+    "LicenseAssetGroupConfiguration":{
+      "type":"structure",
+      "members":{
+        "UsageDimension":{
+          "shape":"String",
+          "documentation":"<p>License Asset Group Configuration Usage dimension.</p>"
+        }
+      },
+      "documentation":"<p>License asset group configuration.</p>"
+    },
+    "LicenseAssetGroupConfigurationList":{
+      "type":"list",
+      "member":{"shape":"LicenseAssetGroupConfiguration"}
+    },
+    "LicenseAssetGroupList":{
+      "type":"list",
+      "member":{"shape":"LicenseAssetGroup"}
+    },
+    "LicenseAssetGroupProperty":{
+      "type":"structure",
+      "required":[
+        "Key",
+        "Value"
+      ],
+      "members":{
+        "Key":{
+          "shape":"String",
+          "documentation":"<p>Property key.</p>"
+        },
+        "Value":{
+          "shape":"String",
+          "documentation":"<p>Property value.</p>"
+        }
+      },
+      "documentation":"<p>License asset group property.</p>"
+    },
+    "LicenseAssetGroupPropertyList":{
+      "type":"list",
+      "member":{"shape":"LicenseAssetGroupProperty"}
+    },
+    "LicenseAssetGroupStatus":{
+      "type":"string",
+      "documentation":"<p>License asset group status. Allowed values are</p> <ul> <li> <p> <code>ACTIVE</code> </p> </li> <li> <p> <code>DISABLED</code> </p> </li> <li> <p> <code>DELETED</code> </p> </li> </ul>",
+      "enum":[
+        "ACTIVE",
+        "DISABLED",
+        "DELETED"
+      ]
+    },
+    "LicenseAssetResourceDescription":{
+      "type":"string",
+      "max":1024
+    },
+    "LicenseAssetResourceName":{
+      "type":"string",
+      "max":128
+    },
+    "LicenseAssetRule":{
+      "type":"structure",
+      "required":["RuleStatement"],
+      "members":{
+        "RuleStatement":{
+          "shape":"RuleStatement",
+          "documentation":"<p>Rule statement.</p>"
+        }
+      },
+      "documentation":"<p>License asset rule.</p>"
+    },
+    "LicenseAssetRuleList":{
+      "type":"list",
+      "member":{"shape":"LicenseAssetRule"}
+    },
+    "LicenseAssetRuleset":{
+      "type":"structure",
+      "required":[
+        "Name",
+        "Rules",
+        "LicenseAssetRulesetArn"
+      ],
+      "members":{
+        "Name":{
+          "shape":"String",
+          "documentation":"<p>License asset ruleset name.</p>"
+        },
+        "Description":{
+          "shape":"String",
+          "documentation":"<p>License asset ruleset description.</p>"
+        },
+        "Rules":{
+          "shape":"LicenseAssetRuleList",
+          "documentation":"<p>License asset rules.</p>"
+        },
+        "LicenseAssetRulesetArn":{
+          "shape":"Arn",
+          "documentation":"<p>Amazon Resource Name (ARN) of the license asset ruleset.</p>"
+        }
+      },
+      "documentation":"<p>License asset ruleset.</p>"
+    },
+    "LicenseAssetRulesetArnList":{
+      "type":"list",
+      "member":{"shape":"Arn"}
+    },
+    "LicenseAssetRulesetList":{
+      "type":"list",
+      "member":{"shape":"LicenseAssetRuleset"}
+    },
     "LicenseConfiguration":{
       "type":"structure",
       "members":{
@@ -2743,6 +3394,10 @@
         "AutomatedDiscoveryInformation":{
           "shape":"AutomatedDiscoveryInformation",
           "documentation":"<p>Automated discovery information.</p>"
+        },
+        "LicenseExpiry":{
+          "shape":"BoxLong",
+          "documentation":"<p>License configuration expiry time in Unix timestamp format.</p>"
         }
       },
       "documentation":"<p>A license configuration is an abstraction of a customer license agreement that can be consumed and enforced by License Manager. Components include specifications for the license type (licensing by instance, socket, CPU, or vCPU), allowed tenancy (shared tenancy, Dedicated Instance, Dedicated Host, or all of these), host affinity (how long a VM must be associated with a host), and the number of licenses purchased and used.</p>"
@@ -2776,6 +3431,24 @@
     "LicenseConfigurationAssociations":{
       "type":"list",
       "member":{"shape":"LicenseConfigurationAssociation"}
+    },
+    "LicenseConfigurationRuleStatement":{
+      "type":"structure",
+      "members":{
+        "AndRuleStatement":{
+          "shape":"AndRuleStatement",
+          "documentation":"<p>AND rule statement.</p>"
+        },
+        "OrRuleStatement":{
+          "shape":"OrRuleStatement",
+          "documentation":"<p>OR rule statement.</p>"
+        },
+        "MatchingRuleStatement":{
+          "shape":"MatchingRuleStatement",
+          "documentation":"<p>Matching rule statement.</p>"
+        }
+      },
+      "documentation":"<p>License configuration rule statement.</p>"
     },
     "LicenseConfigurationStatus":{
       "type":"string",
@@ -2828,6 +3501,10 @@
         "UsageOperation":{
           "shape":"UsageOperation",
           "documentation":"<p>The Usage operation value that corresponds to the license type you are converting your resource from. For more information about which platforms correspond to which usage operation values see <a href=\"https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/billing-info-fields.html#billing-info\">Sample data: usage operation by platform </a> </p>"
+        },
+        "ProductCodes":{
+          "shape":"ProductCodeList",
+          "documentation":"<p>Product codes referred to in the license conversion process.</p>"
         }
       },
       "documentation":"<p>Information about a license type conversion task.</p>"
@@ -2953,6 +3630,24 @@
       "type":"list",
       "member":{"shape":"LicenseOperationFailure"}
     },
+    "LicenseRuleStatement":{
+      "type":"structure",
+      "members":{
+        "AndRuleStatement":{
+          "shape":"AndRuleStatement",
+          "documentation":"<p>AND rule statement.</p>"
+        },
+        "OrRuleStatement":{
+          "shape":"OrRuleStatement",
+          "documentation":"<p>OR rule statement.</p>"
+        },
+        "MatchingRuleStatement":{
+          "shape":"MatchingRuleStatement",
+          "documentation":"<p>Matching rule statement.</p>"
+        }
+      },
+      "documentation":"<p>License rule statement.</p>"
+    },
     "LicenseSpecification":{
       "type":"structure",
       "required":["LicenseConfigurationArn"],
@@ -3001,6 +3696,44 @@
       },
       "documentation":"<p>You do not have enough licenses available to support a new resource launch.</p>",
       "exception":true
+    },
+    "ListAssetsForLicenseAssetGroupRequest":{
+      "type":"structure",
+      "required":[
+        "LicenseAssetGroupArn",
+        "AssetType"
+      ],
+      "members":{
+        "LicenseAssetGroupArn":{
+          "shape":"String",
+          "documentation":"<p>Amazon Resource Name (ARN) of the license asset group.</p>"
+        },
+        "AssetType":{
+          "shape":"String",
+          "documentation":"<p>Asset type. The possible values are <code>Instance</code> | <code>License</code> | <code>LicenseConfiguration</code>.</p>"
+        },
+        "MaxResults":{
+          "shape":"BoxInteger",
+          "documentation":"<p>Maximum number of results to return in a single call.</p>"
+        },
+        "NextToken":{
+          "shape":"String",
+          "documentation":"<p>Token for the next set of results.</p>"
+        }
+      }
+    },
+    "ListAssetsForLicenseAssetGroupResponse":{
+      "type":"structure",
+      "members":{
+        "Assets":{
+          "shape":"AssetList",
+          "documentation":"<p>Assets.</p>"
+        },
+        "NextToken":{
+          "shape":"String",
+          "documentation":"<p>Token for the next set of results.</p>"
+        }
+      }
     },
     "ListAssociationsForLicenseConfigurationRequest":{
       "type":"structure",
@@ -3098,6 +3831,104 @@
         }
       }
     },
+    "ListLicenseAssetGroupsRequest":{
+      "type":"structure",
+      "members":{
+        "Filters":{
+          "shape":"Filters",
+          "documentation":"<p>Filters to scope the results. Following filters are supported</p> <ul> <li> <p> <code>LicenseAssetRulesetArn</code> </p> </li> </ul>"
+        },
+        "MaxResults":{
+          "shape":"BoxInteger",
+          "documentation":"<p>Maximum number of results to return in a single call.</p>"
+        },
+        "NextToken":{
+          "shape":"String",
+          "documentation":"<p>Token for the next set of results.</p>"
+        }
+      }
+    },
+    "ListLicenseAssetGroupsResponse":{
+      "type":"structure",
+      "members":{
+        "LicenseAssetGroups":{
+          "shape":"LicenseAssetGroupList",
+          "documentation":"<p>License asset groups.</p>"
+        },
+        "NextToken":{
+          "shape":"String",
+          "documentation":"<p>Token for the next set of results.</p>"
+        }
+      }
+    },
+    "ListLicenseAssetRulesetsRequest":{
+      "type":"structure",
+      "members":{
+        "Filters":{
+          "shape":"Filters",
+          "documentation":"<p>Filters to scope the results. Following filters are supported</p> <ul> <li> <p> <code>Name</code> </p> </li> </ul>"
+        },
+        "ShowAWSManagedLicenseAssetRulesets":{
+          "shape":"Boolean",
+          "documentation":"<p>Specifies whether to show License Manager managed license asset rulesets.</p>"
+        },
+        "MaxResults":{
+          "shape":"BoxInteger",
+          "documentation":"<p>Maximum number of results to return in a single call.</p>"
+        },
+        "NextToken":{
+          "shape":"String",
+          "documentation":"<p>Token for the next set of results.</p>"
+        }
+      }
+    },
+    "ListLicenseAssetRulesetsResponse":{
+      "type":"structure",
+      "members":{
+        "LicenseAssetRulesets":{
+          "shape":"LicenseAssetRulesetList",
+          "documentation":"<p>License asset rulesets.</p>"
+        },
+        "NextToken":{
+          "shape":"String",
+          "documentation":"<p>Token for the next set of results.</p>"
+        }
+      }
+    },
+    "ListLicenseConfigurationsForOrganizationRequest":{
+      "type":"structure",
+      "members":{
+        "LicenseConfigurationArns":{
+          "shape":"StringList",
+          "documentation":"<p>License configuration ARNs.</p>"
+        },
+        "MaxResults":{
+          "shape":"BoxInteger",
+          "documentation":"<p>Maximum number of results to return in a single call.</p>"
+        },
+        "NextToken":{
+          "shape":"String",
+          "documentation":"<p>Token for the next set of results.</p>"
+        },
+        "Filters":{
+          "shape":"Filters",
+          "documentation":"<p>Filters to scope the results.</p>"
+        }
+      }
+    },
+    "ListLicenseConfigurationsForOrganizationResponse":{
+      "type":"structure",
+      "members":{
+        "LicenseConfigurations":{
+          "shape":"LicenseConfigurations",
+          "documentation":"<p>License configurations.</p>"
+        },
+        "NextToken":{
+          "shape":"String",
+          "documentation":"<p>Token for the next set of results.</p>"
+        }
+      }
+    },
     "ListLicenseConfigurationsRequest":{
       "type":"structure",
       "members":{
@@ -3115,7 +3946,7 @@
         },
         "Filters":{
           "shape":"Filters",
-          "documentation":"<p>Filters to scope the results. The following filters and logical operators are supported:</p> <ul> <li> <p> <code>licenseCountingType</code> - The dimension for which licenses are counted. Possible values are <code>vCPU</code> | <code>Instance</code> | <code>Core</code> | <code>Socket</code>. Logical operators are <code>EQUALS</code> | <code>NOT_EQUALS</code>.</p> </li> <li> <p> <code>enforceLicenseCount</code> - A Boolean value that indicates whether hard license enforcement is used. Logical operators are <code>EQUALS</code> | <code>NOT_EQUALS</code>.</p> </li> <li> <p> <code>usagelimitExceeded</code> - A Boolean value that indicates whether the available licenses have been exceeded. Logical operators are <code>EQUALS</code> | <code>NOT_EQUALS</code>.</p> </li> </ul>"
+          "documentation":"<p>Filters to scope the results. The following filters and logical operators are supported:</p> <ul> <li> <p> <code>licenseCountingType</code> - The dimension for which licenses are counted. Possible values are <code>vCPU</code> | <code>Instance</code> | <code>Core</code> | <code>Socket</code>.</p> </li> <li> <p> <code>enforceLicenseCount</code> - A Boolean value that indicates whether hard license enforcement is used.</p> </li> <li> <p> <code>usagelimitExceeded</code> - A Boolean value that indicates whether the available licenses have been exceeded.</p> </li> </ul>"
         }
       }
     },
@@ -3457,7 +4288,7 @@
       "members":{
         "ResourceArn":{
           "shape":"String",
-          "documentation":"<p>Amazon Resource Name (ARN) of the license configuration.</p>"
+          "documentation":"<p>Amazon Resource Name (ARN) of the resource.</p>"
         }
       }
     },
@@ -3522,7 +4353,7 @@
         },
         "Filters":{
           "shape":"Filters",
-          "documentation":"<p>Filters to scope the results. The following filters and logical operators are supported:</p> <ul> <li> <p> <code>resourceArn</code> - The ARN of the license configuration resource. Logical operators are <code>EQUALS</code> | <code>NOT_EQUALS</code>.</p> </li> <li> <p> <code>resourceType</code> - The resource type (<code>EC2_INSTANCE</code> | <code>EC2_HOST</code> | <code>EC2_AMI</code> | <code>SYSTEMS_MANAGER_MANAGED_INSTANCE</code>). Logical operators are <code>EQUALS</code> | <code>NOT_EQUALS</code>.</p> </li> <li> <p> <code>resourceAccount</code> - The ID of the account that owns the resource. Logical operators are <code>EQUALS</code> | <code>NOT_EQUALS</code>.</p> </li> </ul>"
+          "documentation":"<p>Filters to scope the results. The following filters and logical operators are supported:</p> <ul> <li> <p> <code>resourceArn</code> - The ARN of the license configuration resource.</p> </li> <li> <p> <code>resourceType</code> - The resource type (<code>EC2_INSTANCE</code> | <code>EC2_HOST</code> | <code>EC2_AMI</code> | <code>SYSTEMS_MANAGER_MANAGED_INSTANCE</code>).</p> </li> <li> <p> <code>resourceAccount</code> - The ID of the account that owns the resource.</p> </li> </ul>"
         }
       }
     },
@@ -3558,6 +4389,33 @@
     "ManagedResourceSummaryList":{
       "type":"list",
       "member":{"shape":"ManagedResourceSummary"}
+    },
+    "MatchingRuleStatement":{
+      "type":"structure",
+      "required":[
+        "KeyToMatch",
+        "Constraint",
+        "ValueToMatch"
+      ],
+      "members":{
+        "KeyToMatch":{
+          "shape":"String",
+          "documentation":"<p>Key to match.</p> <p>The following keys and are supported when the RuleStatement type is <code>Instance</code>: </p> <ul> <li> <p> <code>Platform</code> - The name of the platform. Logical operators are <code>EQUALS</code> and <code>NOT_EQUALS</code>. </p> </li> <li> <p> <code>EC2BillingProduct</code> - The billing product code. Logical operators are <code>EQUALS</code> and <code>NOT_EQUALS</code>. Possible values are: <code>windows-server-enterprise</code> | <code>windows-byol</code> | <code>rhel</code> | <code>rhel-byol</code> | <code>rhel-high-availability</code> | <code>ubuntu-pro</code> | <code>suse-linux</code> | <code>sql-server-standard</code> | <code>sql-server-enterprise</code>. </p> </li> <li> <p> <code>MarketPlaceProductCode</code> - The Marketplace product code. Logical operators are <code>EQUALS</code> and <code>NOT_EQUALS</code>. </p> </li> <li> <p> <code>AMIId</code> - The ID of the AMI. Logical operators are <code>EQUALS</code> and <code>NOT_EQUALS</code>. </p> </li> <li> <p> <code>InstanceType</code> - The instance type. Logical operators are <code>EQUALS</code> and <code>NOT_EQUALS</code>. </p> </li> <li> <p> <code>InstanceId</code> - The ID of the instance. Logical operators are <code>EQUALS</code> and <code>NOT_EQUALS</code>. </p> </li> <li> <p> <code>HostId</code> - The ID of the host. Logical operators are <code>EQUALS</code> and <code>NOT_EQUALS</code>. </p> </li> <li> <p> <code>AccountId</code> - The ID of the account. Logical operators are <code>EQUALS</code> and <code>NOT_EQUALS</code>. </p> </li> </ul> <p>The following keys and are supported when the RuleStatement type is <code>License</code>: </p> <ul> <li> <p> <code>LicenseArn</code> - The ARN of a Managed Entitlement License. Logical operators are <code>EQUALS</code> and <code>NOT_EQUALS</code>. </p> </li> <li> <p> <code>ProductSKU</code> - The productSKU of the license. Logical operators are <code>EQUALS</code> and <code>NOT_EQUALS</code>. </p> </li> <li> <p> <code>Issuer</code> - The issuer of the license. Logical operators are <code>EQUALS</code> and <code>NOT_EQUALS</code>. </p> </li> <li> <p> <code>Beneficiary</code> - The beneficiary of the license. Logical operators are <code>EQUALS</code> and <code>NOT_EQUALS</code>. </p> </li> <li> <p> <code>LicenseStatus</code> - The status of the license. Logical operators are <code>EQUALS</code> and <code>NOT_EQUALS</code>. </p> </li> <li> <p> <code>HomeRegion</code> - The home region of the license. Logical operators are <code>EQUALS</code> and <code>NOT_EQUALS</code>. </p> </li> </ul> <p>The following keys and are supported when the RuleStatement type is <code>License Configuration</code>: </p> <ul> <li> <p> <code>LicenseConfigurationArn</code> - The ARN of a self-managed license configuration. Logical operators are <code>EQUALS</code> and <code>NOT_EQUALS</code>. </p> </li> <li> <p> <code>AccountId</code> - The account of the license configuration. Logical operators are <code>EQUALS</code> and <code>NOT_EQUALS</code>. </p> </li> </ul>"
+        },
+        "Constraint":{
+          "shape":"String",
+          "documentation":"<p>Constraint.</p>"
+        },
+        "ValueToMatch":{
+          "shape":"StringList",
+          "documentation":"<p>Value to match.</p>"
+        }
+      },
+      "documentation":"<p>Matching rule statement.</p>"
+    },
+    "MatchingRuleStatementList":{
+      "type":"list",
+      "member":{"shape":"MatchingRuleStatement"}
     },
     "MaxSize100":{
       "type":"integer",
@@ -3606,6 +4464,20 @@
       },
       "documentation":"<p>The options you can specify when you create a new version of a grant, such as activation override behavior. For more information, see <a href=\"https://docs.aws.amazon.com/license-manager/latest/userguide/granted-licenses.html\">Granted licenses in License Manager</a> in the <i>License Manager User Guide</i>.</p>"
     },
+    "OrRuleStatement":{
+      "type":"structure",
+      "members":{
+        "MatchingRuleStatements":{
+          "shape":"MatchingRuleStatementList",
+          "documentation":"<p>Matching rule statements.</p>"
+        },
+        "ScriptRuleStatements":{
+          "shape":"ScriptRuleStatementList",
+          "documentation":"<p>Script rule statements.</p>"
+        }
+      },
+      "documentation":"<p>OR rule statement.</p>"
+    },
     "OrganizationConfiguration":{
       "type":"structure",
       "required":["EnableIntegration"],
@@ -3623,6 +4495,36 @@
       "max":1,
       "min":1
     },
+    "ProductCodeId":{
+      "type":"string",
+      "pattern":"^[A-Za-z0-9]{1,25}$"
+    },
+    "ProductCodeList":{
+      "type":"list",
+      "member":{"shape":"ProductCodeListItem"}
+    },
+    "ProductCodeListItem":{
+      "type":"structure",
+      "required":[
+        "ProductCodeId",
+        "ProductCodeType"
+      ],
+      "members":{
+        "ProductCodeId":{
+          "shape":"ProductCodeId",
+          "documentation":"<p>The product code ID</p>"
+        },
+        "ProductCodeType":{
+          "shape":"ProductCodeType",
+          "documentation":"<p>The product code type</p>"
+        }
+      },
+      "documentation":"<p>A list item that contains a product code.</p>"
+    },
+    "ProductCodeType":{
+      "type":"string",
+      "enum":["marketplace"]
+    },
     "ProductInformation":{
       "type":"structure",
       "required":[
@@ -3636,7 +4538,7 @@
         },
         "ProductInformationFilterList":{
           "shape":"ProductInformationFilterList",
-          "documentation":"<p>A Product information filter consists of a <code>ProductInformationFilterComparator</code> which is a logical operator, a <code>ProductInformationFilterName</code> which specifies the type of filter being declared, and a <code>ProductInformationFilterValue</code> that specifies the value to filter on. </p> <p>Accepted values for <code>ProductInformationFilterName</code> are listed here along with descriptions and valid options for <code>ProductInformationFilterComparator</code>. </p> <p>The following filters and are supported when the resource type is <code>SSM_MANAGED</code>:</p> <ul> <li> <p> <code>Application Name</code> - The name of the application. Logical operator is <code>EQUALS</code>.</p> </li> <li> <p> <code>Application Publisher</code> - The publisher of the application. Logical operator is <code>EQUALS</code>.</p> </li> <li> <p> <code>Application Version</code> - The version of the application. Logical operator is <code>EQUALS</code>.</p> </li> <li> <p> <code>Platform Name</code> - The name of the platform. Logical operator is <code>EQUALS</code>.</p> </li> <li> <p> <code>Platform Type</code> - The platform type. Logical operator is <code>EQUALS</code>.</p> </li> <li> <p> <code>Tag:key</code> - The key of a tag attached to an Amazon Web Services resource you wish to exclude from automated discovery. Logical operator is <code>NOT_EQUALS</code>. The key for your tag must be appended to <code>Tag:</code> following the example: <code>Tag:name-of-your-key</code>. <code>ProductInformationFilterValue</code> is optional if you are not using values for the key. </p> </li> <li> <p> <code>AccountId</code> - The 12-digit ID of an Amazon Web Services account you wish to exclude from automated discovery. Logical operator is <code>NOT_EQUALS</code>.</p> </li> <li> <p> <code>License Included</code> - The type of license included. Logical operators are <code>EQUALS</code> and <code>NOT_EQUALS</code>. Possible values are: <code>sql-server-enterprise</code> | <code>sql-server-standard</code> | <code>sql-server-web</code> | <code>windows-server-datacenter</code>.</p> </li> </ul> <p>The following filters and logical operators are supported when the resource type is <code>RDS</code>:</p> <ul> <li> <p> <code>Engine Edition</code> - The edition of the database engine. Logical operator is <code>EQUALS</code>. Possible values are: <code>oracle-ee</code> | <code>oracle-se</code> | <code>oracle-se1</code> | <code>oracle-se2</code>.</p> </li> <li> <p> <code>License Pack</code> - The license pack. Logical operator is <code>EQUALS</code>. Possible values are: <code>data guard</code> | <code>diagnostic pack sqlt</code> | <code>tuning pack sqlt</code> | <code>ols</code> | <code>olap</code>.</p> </li> </ul>"
+          "documentation":"<p>A Product information filter consists of a <code>ProductInformationFilterComparator</code> which is a logical operator, a <code>ProductInformationFilterName</code> which specifies the type of filter being declared, and a <code>ProductInformationFilterValue</code> that specifies the value to filter on. </p> <p>Accepted values for <code>ProductInformationFilterName</code> are listed here along with descriptions and valid options for <code>ProductInformationFilterComparator</code>. </p> <p>The following filters and are supported when the resource type is <code>SSM_MANAGED</code>:</p> <ul> <li> <p> <code>Application Name</code> - The name of the application. Logical operator is <code>EQUALS</code>.</p> </li> <li> <p> <code>Application Publisher</code> - The publisher of the application. Logical operator is <code>EQUALS</code>.</p> </li> <li> <p> <code>Application Version</code> - The version of the application. Logical operator is <code>EQUALS</code>.</p> </li> <li> <p> <code>Platform Name</code> - The name of the platform. Logical operator is <code>EQUALS</code>.</p> </li> <li> <p> <code>Platform Type</code> - The platform type. Logical operator is <code>EQUALS</code>.</p> </li> <li> <p> <code>Tag:key</code> - The key of a tag attached to an Amazon Web Services resource you wish to exclude from automated discovery. Logical operator is <code>NOT_EQUALS</code>. The key for your tag must be appended to <code>Tag:</code> following the example: <code>Tag:name-of-your-key</code>. <code>ProductInformationFilterValue</code> is optional if you are not using values for the key. </p> </li> <li> <p> <code>AccountId</code> - The 12-digit ID of an Amazon Web Services account you wish to exclude from automated discovery. Logical operator is <code>NOT_EQUALS</code>.</p> </li> <li> <p> <code>License Included</code> - The type of license included. Logical operators are <code>EQUALS</code> and <code>NOT_EQUALS</code>. Possible values are: <code>sql-server-enterprise</code> | <code>sql-server-standard</code> | <code>sql-server-web</code> | <code>windows-server-datacenter</code>.</p> </li> </ul> <p>The following filters and logical operators are supported when the resource type is <code>RDS</code>:</p> <ul> <li> <p> <code>Engine Edition</code> - The edition of the database engine. Logical operator is <code>EQUALS</code>. Possible values are: <code>oracle-ee</code> | <code>oracle-se</code> | <code>oracle-se1</code> | <code>oracle-se2</code> | <code>db2-se</code> | <code>db2-ae</code>.</p> </li> <li> <p> <code>License Pack</code> - The license pack. Logical operator is <code>EQUALS</code>. Possible values are: <code>data guard</code> | <code>diagnostic pack sqlt</code> | <code>tuning pack sqlt</code> | <code>ols</code> | <code>olap</code>.</p> </li> </ul>"
         }
       },
       "documentation":"<p>Describes product information for a license configuration.</p>"
@@ -3730,6 +4632,21 @@
       "documentation":"<p>This is not the correct Region for the resource. Try again.</p>",
       "exception":true
     },
+    "RegionStatus":{
+      "type":"structure",
+      "members":{
+        "Status":{
+          "shape":"String",
+          "documentation":"<p>Status value for the region.</p>"
+        }
+      },
+      "documentation":"<p>Status information for a specific region.</p>"
+    },
+    "RegionStatusMap":{
+      "type":"map",
+      "key":{"shape":"String"},
+      "value":{"shape":"RegionStatus"}
+    },
     "RejectGrantRequest":{
       "type":"structure",
       "required":["GrantArn"],
@@ -3767,11 +4684,22 @@
     },
     "ReportContext":{
       "type":"structure",
-      "required":["licenseConfigurationArns"],
       "members":{
         "licenseConfigurationArns":{
           "shape":"ArnList",
           "documentation":"<p>Amazon Resource Name (ARN) of the license configuration that this generator reports on.</p>"
+        },
+        "licenseAssetGroupArns":{
+          "shape":"ArnList",
+          "documentation":"<p>Amazon Resource Names (ARNs) of the license asset groups to include in the report.</p>"
+        },
+        "reportStartDate":{
+          "shape":"DateTime",
+          "documentation":"<p>Start date for the report data collection period.</p>"
+        },
+        "reportEndDate":{
+          "shape":"DateTime",
+          "documentation":"<p>End date for the report data collection period.</p>"
         }
       },
       "documentation":"<p>Details of the license configuration that this generator reports on.</p>"
@@ -3795,7 +4723,8 @@
       "enum":[
         "DAY",
         "WEEK",
-        "MONTH"
+        "MONTH",
+        "ONE_TIME"
       ]
     },
     "ReportGenerator":{
@@ -3869,7 +4798,8 @@
       "type":"string",
       "enum":[
         "LicenseConfigurationSummaryReport",
-        "LicenseConfigurationUsageReport"
+        "LicenseConfigurationUsageReport",
+        "LicenseAssetGroupUsageReport"
       ]
     },
     "ReportTypeList":{
@@ -3902,6 +4832,30 @@
         "ResourceOwningAccountId":{
           "shape":"String",
           "documentation":"<p>ID of the account that owns the resource.</p>"
+        },
+        "MarketplaceProductCodes":{
+          "shape":"StringList",
+          "documentation":"<p>List of Marketplace product codes associated with the resource.</p>"
+        },
+        "UsageOperation":{
+          "shape":"String",
+          "documentation":"<p>Usage operation value that corresponds to the license type for billing purposes.</p>"
+        },
+        "AmiId":{
+          "shape":"String",
+          "documentation":"<p>Amazon Machine Image (AMI) ID associated with the resource.</p>"
+        },
+        "HostId":{
+          "shape":"String",
+          "documentation":"<p>Dedicated Host ID where the resource is running.</p>"
+        },
+        "Region":{
+          "shape":"String",
+          "documentation":"<p>Region where the resource is located.</p>"
+        },
+        "InstanceType":{
+          "shape":"String",
+          "documentation":"<p>EC2 instance type of the resource.</p>"
         }
       },
       "documentation":"<p>Details about a resource.</p>"
@@ -3936,6 +4890,24 @@
         "SYSTEMS_MANAGER_MANAGED_INSTANCE"
       ]
     },
+    "RuleStatement":{
+      "type":"structure",
+      "members":{
+        "LicenseConfigurationRuleStatement":{
+          "shape":"LicenseConfigurationRuleStatement",
+          "documentation":"<p>License configuration rule statement.</p>"
+        },
+        "LicenseRuleStatement":{
+          "shape":"LicenseRuleStatement",
+          "documentation":"<p>License rule statement.</p>"
+        },
+        "InstanceRuleStatement":{
+          "shape":"InstanceRuleStatement",
+          "documentation":"<p>Instance rule statement.</p>"
+        }
+      },
+      "documentation":"<p>Rule statement.</p>"
+    },
     "S3Location":{
       "type":"structure",
       "members":{
@@ -3950,6 +4922,28 @@
       },
       "documentation":"<p>Details of the S3 bucket that report generator reports are published to.</p>"
     },
+    "ScriptRuleStatement":{
+      "type":"structure",
+      "required":[
+        "KeyToMatch",
+        "Script"
+      ],
+      "members":{
+        "KeyToMatch":{
+          "shape":"String",
+          "documentation":"<p>Key name to match against in the script rule evaluation.</p>"
+        },
+        "Script":{
+          "shape":"String",
+          "documentation":"<p>Script code used to evaluate the rule condition.</p>"
+        }
+      },
+      "documentation":"<p>Rule statement that uses a script to evaluate license asset conditions.</p>"
+    },
+    "ScriptRuleStatementList":{
+      "type":"list",
+      "member":{"shape":"ScriptRuleStatement"}
+    },
     "ServerInternalException":{
       "type":"structure",
       "members":{
@@ -3958,6 +4952,20 @@
       "documentation":"<p>The server experienced an internal error. Try again.</p>",
       "exception":true,
       "fault":true
+    },
+    "ServiceStatus":{
+      "type":"structure",
+      "members":{
+        "CrossAccountDiscovery":{
+          "shape":"CrossAccountDiscoveryServiceStatus",
+          "documentation":"<p>Status of cross-account discovery service.</p>"
+        },
+        "CrossRegionDiscovery":{
+          "shape":"CrossRegionDiscoveryStatus",
+          "documentation":"<p>Status of cross-region discovery service.</p>"
+        }
+      },
+      "documentation":"<p>Overall service status information for License Manager.</p>"
     },
     "SignedToken":{
       "type":"string",
@@ -3978,14 +4986,14 @@
       "members":{
         "Key":{
           "shape":"String",
-          "documentation":"<p>Tag key.</p>"
+          "documentation":"<p>The tag key.</p>"
         },
         "Value":{
           "shape":"String",
-          "documentation":"<p>Tag value.</p>"
+          "documentation":"<p>The tag value.</p>"
         }
       },
-      "documentation":"<p>Details about a tag for a license configuration.</p>"
+      "documentation":"<p>Details about the tags for a resource. For more information about tagging support in License Manager, see the <a href=\"https://docs.aws.amazon.com/license-manager/latest/APIReference/API_TagResource.html\">TagResource</a> operation.</p>"
     },
     "TagKeyList":{
       "type":"list",
@@ -4004,7 +5012,7 @@
       "members":{
         "ResourceArn":{
           "shape":"String",
-          "documentation":"<p>Amazon Resource Name (ARN) of the license configuration.</p>"
+          "documentation":"<p>Amazon Resource Name (ARN) of the resource. The following examples provide an example ARN for each supported resource in License Manager:</p> <ul> <li> <p>Licenses - <code>arn:aws:license-manager::111122223333:license:l-EXAMPLE2da7646d6861033667f20e895</code> </p> </li> <li> <p>Grants - <code>arn:aws:license-manager::111122223333:grant:g-EXAMPLE7b19f4a0ab73679b0beb52707</code> </p> </li> <li> <p>License configurations - <code>arn:aws:license-manager:us-east-1:111122223333:license-configuration:lic-EXAMPLE6a788d4c8acd4264ff0ecf2ed2d</code> </p> </li> <li> <p>Report generators - <code>arn:aws:license-manager:us-east-1:111122223333:report-generator:r-EXAMPLE825b4a4f8fe5a3e0c88824e5fc6</code> </p> </li> </ul>"
         },
         "Tags":{
           "shape":"TagList",
@@ -4014,8 +5022,7 @@
     },
     "TagResourceResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "TokenData":{
       "type":"structure",
@@ -4081,7 +5088,7 @@
       "members":{
         "ResourceArn":{
           "shape":"String",
-          "documentation":"<p>Amazon Resource Name (ARN) of the license configuration.</p>"
+          "documentation":"<p>Amazon Resource Name (ARN) of the resource.</p>"
         },
         "TagKeys":{
           "shape":"TagKeyList",
@@ -4091,7 +5098,105 @@
     },
     "UntagResourceResponse":{
       "type":"structure",
+      "members":{}
+    },
+    "UpdateLicenseAssetGroupRequest":{
+      "type":"structure",
+      "required":[
+        "AssociatedLicenseAssetRulesetARNs",
+        "LicenseAssetGroupArn",
+        "ClientToken"
+      ],
       "members":{
+        "Name":{
+          "shape":"LicenseAssetResourceName",
+          "documentation":"<p>License asset group name.</p>"
+        },
+        "Description":{
+          "shape":"LicenseAssetResourceDescription",
+          "documentation":"<p>License asset group description.</p>"
+        },
+        "LicenseAssetGroupConfigurations":{
+          "shape":"LicenseAssetGroupConfigurationList",
+          "documentation":"<p>License asset group configurations.</p>"
+        },
+        "AssociatedLicenseAssetRulesetARNs":{
+          "shape":"LicenseAssetRulesetArnList",
+          "documentation":"<p>ARNs of associated license asset rulesets.</p>"
+        },
+        "Properties":{
+          "shape":"LicenseAssetGroupPropertyList",
+          "documentation":"<p>License asset group properties.</p>"
+        },
+        "LicenseAssetGroupArn":{
+          "shape":"Arn",
+          "documentation":"<p>Amazon Resource Name (ARN) of the license asset group.</p>"
+        },
+        "Status":{
+          "shape":"LicenseAssetGroupStatus",
+          "documentation":"<p>License asset group status. The possible values are <code>ACTIVE</code> | <code>DISABLED</code>.</p>"
+        },
+        "ClientToken":{
+          "shape":"String",
+          "documentation":"<p>Unique, case-sensitive identifier that you provide to ensure the idempotency of the request.</p>"
+        }
+      }
+    },
+    "UpdateLicenseAssetGroupResponse":{
+      "type":"structure",
+      "required":[
+        "LicenseAssetGroupArn",
+        "Status"
+      ],
+      "members":{
+        "LicenseAssetGroupArn":{
+          "shape":"String",
+          "documentation":"<p>Amazon Resource Name (ARN) of the license asset group.</p>"
+        },
+        "Status":{
+          "shape":"String",
+          "documentation":"<p>License asset group status.</p>"
+        }
+      }
+    },
+    "UpdateLicenseAssetRulesetRequest":{
+      "type":"structure",
+      "required":[
+        "Rules",
+        "LicenseAssetRulesetArn",
+        "ClientToken"
+      ],
+      "members":{
+        "Name":{
+          "shape":"LicenseAssetResourceName",
+          "documentation":"<p>License asset ruleset name.</p>"
+        },
+        "Description":{
+          "shape":"LicenseAssetResourceDescription",
+          "documentation":"<p>License asset ruleset description.</p>"
+        },
+        "Rules":{
+          "shape":"LicenseAssetRuleList",
+          "documentation":"<p>License asset rules.</p>"
+        },
+        "LicenseAssetRulesetArn":{
+          "shape":"Arn",
+          "documentation":"<p>Amazon Resource Name (ARN) of the license asset ruleset.</p>"
+        },
+        "ClientToken":{
+          "shape":"String",
+          "documentation":"<p>Unique, case-sensitive identifier that you provide to ensure the idempotency of the request.</p>"
+        }
+      }
+    },
+    "UpdateLicenseAssetRulesetResponse":{
+      "type":"structure",
+      "required":["LicenseAssetRulesetArn"],
+      "members":{
+        "LicenseAssetRulesetArn":{
+          "shape":"String",
+          "documentation":"<p>Amazon Resource Name (ARN) of the license asset ruleset.</p>"
+        }
       }
     },
     "UpdateLicenseConfigurationRequest":{
@@ -4133,13 +5238,16 @@
         "DisassociateWhenNotFound":{
           "shape":"BoxBoolean",
           "documentation":"<p>When true, disassociates a resource when software is uninstalled.</p>"
+        },
+        "LicenseExpiry":{
+          "shape":"BoxLong",
+          "documentation":"<p>License configuration expiry time.</p>"
         }
       }
     },
     "UpdateLicenseConfigurationResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateLicenseManagerReportGeneratorRequest":{
       "type":"structure",
@@ -4184,8 +5292,7 @@
     },
     "UpdateLicenseManagerReportGeneratorResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateLicenseSpecificationsForResourceRequest":{
       "type":"structure",
@@ -4207,8 +5314,7 @@
     },
     "UpdateLicenseSpecificationsForResourceResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateServiceSettingsRequest":{
       "type":"structure",
@@ -4228,13 +5334,16 @@
         "EnableCrossAccountsDiscovery":{
           "shape":"BoxBoolean",
           "documentation":"<p>Activates cross-account discovery.</p>"
+        },
+        "EnabledDiscoverySourceRegions":{
+          "shape":"StringList",
+          "documentation":"<p>Cross region discovery enabled source regions.</p>"
         }
       }
     },
     "UpdateServiceSettingsResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UsageOperation":{
       "type":"string",

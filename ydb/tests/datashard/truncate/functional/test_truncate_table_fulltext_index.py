@@ -8,7 +8,7 @@ CLUSTER_CONFIG = dict(
         'TX_DATASHARD': LogLevels.DEBUG,
         'KQP_PROXY': LogLevels.DEBUG,
     },
-    extra_feature_flags=["enable_fulltext_index", "enable_fulltext_index_prefix", "enable_truncate_table"]
+    extra_feature_flags=["enable_fulltext_index", "enable_fulltext_index_prefix"]
 )
 
 

@@ -1171,6 +1171,7 @@ public:
             case NKikimrProto::RESTART:
             case NKikimrProto::NOT_YET:
             case NKikimrProto::NO_GROUP:
+            case NKikimrProto::NOT_FOUND:
             case NKikimrProto::UNKNOWN:
                 YDB_LOG_ERROR_CTX(ctx, "TScaleRecommenderManip got error reply during configuring hive",
                     {"tenantPath", Tenant->Path},
@@ -4135,7 +4136,7 @@ void TTenantsManager::Handle(TEvHive::TEvShrinkStoragePoolDone::TPtr &ev, const 
         return;
     }
     auto pool = poolIt->second;
-    if (pool->State != TStoragePool::EState::SHRINKING) {
+    if (pool->State != TStoragePool::EState::SHRINKING && pool->State != TStoragePool::EState::NOT_UPDATED) {
         return;
     }
 

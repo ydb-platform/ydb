@@ -1,14 +1,15 @@
 #include "error.h"
 
 #include <grpcpp/impl/codegen/status_code_enum.h>
+#include <ydb/core/grpc_services/local_rpc/local_rpc.h> // for NKikimr::NRpcService::GrpcStatusToYdbStatus
+#include <ydb/library/yql/dq/actors/dq.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
 #include <yql/essentials/utils/yql_panic.h>
-#include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 namespace NYql::NConnector {
     NApi::TError NewSuccess() {
         NApi::TError error;
-        error.set_status(Ydb::StatusIds_StatusCode::StatusIds_StatusCode_SUCCESS);
+        error.set_status(Ydb::StatusIds::SUCCESS);
         return error;
     }
 
@@ -28,30 +29,16 @@ namespace NYql::NConnector {
     }
 
     NDqProto::StatusIds::StatusCode ErrorToDqStatus(const NApi::TError& error) {
-        switch (error.status()) {
-            case ::Ydb::StatusIds::StatusCode::StatusIds_StatusCode_BAD_REQUEST:
-                return NDqProto::StatusIds::StatusCode::StatusIds_StatusCode_BAD_REQUEST;
-            case ::Ydb::StatusIds::StatusCode::StatusIds_StatusCode_INTERNAL_ERROR:
-                return NDqProto::StatusIds::StatusCode::StatusIds_StatusCode_INTERNAL_ERROR;
-            case ::Ydb::StatusIds::StatusCode::StatusIds_StatusCode_UNSUPPORTED:
-                return NDqProto::StatusIds::StatusCode::StatusIds_StatusCode_UNSUPPORTED;
-            case ::Ydb::StatusIds::StatusCode::StatusIds_StatusCode_NOT_FOUND:
-                return NDqProto::StatusIds::StatusCode::StatusIds_StatusCode_BAD_REQUEST;
-            case ::Ydb::StatusIds::StatusCode::StatusIds_StatusCode_SCHEME_ERROR:
-                return NDqProto::StatusIds::StatusCode::StatusIds_StatusCode_SCHEME_ERROR;
-            default:
-                ythrow yexception() << "Unexpected YDB status code: " << ::Ydb::StatusIds::StatusCode_Name(error.status());
-        }
+        return NYql::NDq::YdbStatusToDqStatus(error.status(), NYql::NDq::EStatusCompatibilityLevel::WithUnauthorized);
     }
 
     NApi::TError ErrorFromGRPCStatus(const NYdbGrpc::TGrpcStatus& status) {
         NApi::TError result;
 
-        if (status.GRpcStatusCode == grpc::OK) {
-            result.set_status(Ydb::StatusIds_StatusCode::StatusIds_StatusCode_SUCCESS);
+        if (status.Ok()) {
+            result.set_status(Ydb::StatusIds::SUCCESS);
         } else {
-            // FIXME: more appropriate error code for network error
-            result.set_status(Ydb::StatusIds_StatusCode::StatusIds_StatusCode_INTERNAL_ERROR);
+            result.set_status(status.InternalError ? Ydb::StatusIds::INTERNAL_ERROR : NKikimr::NRpcService::GrpcStatusToYdbStatus(static_cast<grpc::StatusCode>(status.GRpcStatusCode)));
             result.set_message(TString{status.Msg});
         }
 

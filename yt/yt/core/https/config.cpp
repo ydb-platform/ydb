@@ -14,7 +14,10 @@ void TServerCredentialsConfig::Register(TRegistrar registrar)
 
 void TServerConfig::Register(TRegistrar registrar)
 {
-    registrar.Parameter("credentials", &TThis::Credentials);
+    // Null credentials are tolerated by CreateServer (falls back to a plain HTTP
+    // server); this lets the multi-protocol "http" backend omit TLS config.
+    registrar.Parameter("credentials", &TThis::Credentials)
+        .Default();
 
     registrar.Preprocessor([] (TThis* config) {
         config->ServerName = "Https";

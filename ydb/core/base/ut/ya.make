@@ -12,6 +12,10 @@ PEERDIR(
     yql/essentials/sql/pg_dummy
 )
 
+RESOURCE(
+    word_break_test.json word_break_test.json
+)
+
 SRCS(
     blobstorage_grouptype_ut.cpp
     fulltext_ut.cpp

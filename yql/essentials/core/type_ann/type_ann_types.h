@@ -8,6 +8,7 @@
 
 
 namespace NYql::NTypeAnnImpl {
+
     template <ETypeAnnotationKind>
     IGraphTransformer::TStatus TypeWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);
 
@@ -58,6 +59,4 @@ namespace NYql::NTypeAnnImpl {
     template <TExprNode::EType>
     IGraphTransformer::TStatus MakeCodeWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);
 
-    bool CheckLinearLangver(TPositionHandle pos, TLangVersion langver, TExprContext& ctx);
 } // namespace NYql::NTypeAnnImpl
-

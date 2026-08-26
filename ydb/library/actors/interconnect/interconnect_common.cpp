@@ -1,6 +1,10 @@
 #include "interconnect_common.h"
+#include "interconnect_uring_engine.h"
 
 namespace NActors {
+
+    TInterconnectProxyCommon::TInterconnectProxyCommon() = default;
+    TInterconnectProxyCommon::~TInterconnectProxyCommon() = default;
 
     double TInterconnectProxyCommon::CalculateNetworkUtilization() {
         const ui64 sessions = NumSessionsWithDataInQueue.load();

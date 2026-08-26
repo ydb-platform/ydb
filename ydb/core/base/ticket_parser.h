@@ -114,33 +114,6 @@ namespace NKikimr {
                 , Signature(std::move(init.Signature))
             {
             }
-
-            TEvAuthorizeTicket(const TString& ticket)
-                : Ticket(ticket)
-            {}
-
-            TEvAuthorizeTicket(const TString& ticket, const TVector<std::pair<TString, TString>>& attributes, const TVector<TString>& permissions)
-                : Ticket(ticket)
-                , Entries({{ToPermissions(permissions), attributes}})
-            {}
-
-            TEvAuthorizeTicket(const TString& ticket, const TVector<std::pair<TString, TString>>& attributes, const TVector<TPermission>& permissions)
-                : Ticket(ticket)
-                , Entries({{permissions, attributes}})
-            {}
-
-            TEvAuthorizeTicket(const TString& ticket, const TString& peerName, const TVector<TEntry>& entries)
-                : Ticket(ticket)
-                , PeerName(peerName)
-                , Entries(entries)
-            {}
-
-            TEvAuthorizeTicket(TAccessKeySignature&& sign, const TString& peerName, const TVector<TEntry>& entries)
-                : PeerName(peerName)
-                , Entries(entries)
-                , Signature(std::move(sign))
-            {}
-
         };
 
         struct TError {

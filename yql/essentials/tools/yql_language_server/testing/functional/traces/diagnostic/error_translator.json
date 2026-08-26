@@ -1,0 +1,68 @@
+[
+  {
+    "jsonrpc": "2.0",
+    "method": "textDocument/didOpen",
+    "params": {
+      "textDocument": {
+        "uri": "file:///tmp/a.yql",
+        "languageId": "yql",
+        "version": 1,
+        "text": "SELECT\n    a\nFROM (\n    SELECT\n        1 AS b\n);\n"
+      }
+    }
+  },
+  {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "textDocument/diagnostic",
+    "params": {
+      "identifier": "YQL",
+      "textDocument": {
+        "uri": "file:///tmp/a.yql"
+      },
+      "previousResultId": "0"
+    }
+  },
+  {
+    "id": 1,
+    "jsonrpc": "2.0",
+    "result": {
+      "items": [
+        {
+          "code": "DEFAULT_ERROR",
+          "message": "Column a is not in source column set. Did you mean b?",
+          "range": {
+            "end": {
+              "character": 5,
+              "line": 1
+            },
+            "start": {
+              "character": 4,
+              "line": 1
+            }
+          },
+          "severity": 1,
+          "source": "translator"
+        },
+        {
+          "code": "DEFAULT_ERROR",
+          "message": "Column a is not in source column set. Did you mean b?",
+          "range": {
+            "end": {
+              "character": 5,
+              "line": 1
+            },
+            "start": {
+              "character": 4,
+              "line": 1
+            }
+          },
+          "severity": 1,
+          "source": "typecheck"
+        }
+      ],
+      "kind": "full",
+      "resultId": "1"
+    }
+  }
+]

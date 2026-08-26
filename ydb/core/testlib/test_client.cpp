@@ -76,6 +76,7 @@
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/proxy_service/kqp_proxy_service.h>
+#include <ydb/services/workload_manager/service/service.h>
 #include <ydb/core/kqp/finalize_script_service/kqp_finalize_script_service.h>
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/protos/replication.pb.h>
@@ -122,6 +123,7 @@
 #include <ydb/core/statistics/aggregator/aggregator.h>
 #include <ydb/core/statistics/service/service.h>
 #include <ydb/core/keyvalue/keyvalue.h>
+#include <ydb/core/blob_depot/blob_depot.h>
 #include <ydb/core/test_tablet/test_tablet.h>
 #include <ydb/core/persqueue/pq.h>
 #include <ydb/core/persqueue/deferred_publish/registry_actor.h>
@@ -134,10 +136,12 @@
 #include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
 #include <ydb/core/tx/conveyor_composite/service/service.h>
+#include <ydb/core/tx/priorities/service/service.h>
 #include <ydb/core/tx/priorities/usage/service.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 #include <ydb/core/tx/columnshard/data_accessor/cache_policy/policy.h>
 #include <ydb/core/tx/columnshard/overload_manager/overload_manager_service.h>
+#include <ydb/core/tx/columnshard/flow_control_manager/flow_control_manager_service.h>
 #include <ydb/core/tx/general_cache/usage/service.h>
 #include <ydb/library/folder_service/mock/mock_folder_service_adapter.h>
 
@@ -736,11 +740,12 @@ namespace Tests {
             Cerr << "TServer::EnableGrpc on GrpcPort " << options.Port << ", node " << system->NodeId << Endl;
         }
 
-        system->Register(
-            NConsole::CreateJaegerTracingConfigurator(appData.TracingConfigurator, Settings->AppConfig->GetTracingConfig()),
-            TMailboxType::ReadAsFilled,
-            appData.UserPoolId
-        );
+        for (IActor* configurator : NConsole::CreateJaegerTracingConfigurators(
+                appData.TracingConfigurator,
+                appData.UserFacingTracingConfigurator,
+                *Settings->AppConfig)) {
+            system->Register(configurator, TMailboxType::ReadAsFilled, appData.UserPoolId);
+        }
 
         auto grpcMon = system->Register(NGRpcService::CreateGrpcMonService(), TMailboxType::ReadAsFilled, appData.UserPoolId);
         system->RegisterLocalService(NGRpcService::GrpcMonServiceId(), grpcMon);
@@ -1154,6 +1159,10 @@ namespace Tests {
             TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
                 &CreateKeyValueFlat, TMailboxType::Revolving, appData.UserPoolId,
                 TMailboxType::Revolving, appData.SystemPoolId));
+        localConfig.TabletClassInfo[TTabletTypes::BlobDepot] =
+            TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
+                &NBlobDepot::CreateBlobDepot, TMailboxType::ReadAsFilled, appData.UserPoolId,
+                TMailboxType::ReadAsFilled, appData.SystemPoolId));
         localConfig.TabletClassInfo[TTabletTypes::TestShard] =
             TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
                 &NKikimr::NTestShard::CreateTestShard, TMailboxType::Revolving, appData.UserPoolId,
@@ -1267,24 +1276,37 @@ namespace Tests {
             Runtime->RegisterService(NOlap::NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }
         {
-            auto* actor = NPrioritiesQueue::TCompServiceOperator::CreateService(NPrioritiesQueue::TConfig(), appData.Counters);
+            auto* actor = NPrioritiesQueue::CreateService<NPrioritiesQueue::TCompConveyorPolicy>(NPrioritiesQueue::TConfig(), appData.Counters);
             const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
             Runtime->RegisterService(NPrioritiesQueue::TCompServiceOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }
         {
-            auto* actor = NConveyor::TScanServiceOperator::CreateService(NConveyor::TConfig(), appData.Counters);
+            auto* actor = NConveyor::CreateService<NConveyor::TScanConveyorPolicy>(NConveyor::TConfig(), appData.Counters);
             const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
             Runtime->RegisterService(NConveyor::TScanServiceOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }
         {
-            auto* actor = NConveyorComposite::TServiceOperator::CreateService(NConveyorComposite::NConfig::TConfig::BuildDefault(), appData.Counters);
-            const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
-            Runtime->RegisterService(NConveyorComposite::TServiceOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
+            const auto registerService = [&](const ui32 poolId, const bool useBatchPool) {
+                auto counters = appData.Counters->GetSubgroup("actor_system_pool_id", ::ToString(poolId));
+                auto* actor = NConveyorComposite::CreateService(NConveyorComposite::NConfig::TConfig::BuildDefault(), counters);
+                const auto aid = Runtime->Register(actor, nodeIdx, poolId, TMailboxType::Revolving, 0);
+                Runtime->RegisterService(
+                    NConveyorComposite::TServiceOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx), useBatchPool), aid, nodeIdx);
+            };
+
+            registerService(appData.UserPoolId, false);
+            registerService(appData.BatchPoolId, true);
         }
         {
             auto actor = NColumnShard::NOverload::TOverloadManagerServiceOperator::CreateService(appData.Counters);
             const auto aid = Runtime->Register(actor.release(), nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
             Runtime->RegisterService(NColumnShard::NOverload::TOverloadManagerServiceOperator::MakeServiceId(), aid, nodeIdx);
+        }
+        {
+            auto countersGroup = NColumnShard::NFlowControl::TFlowControlManagerServiceOperator::BuildCountersGroup(appData.Counters);
+            auto actor = NColumnShard::NFlowControl::TFlowControlManagerServiceOperator::CreateService(countersGroup);
+            const auto aid = Runtime->Register(actor.release(), nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
+            Runtime->RegisterService(NColumnShard::NFlowControl::TFlowControlManagerServiceOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }
         Runtime->Register(CreateLabelsMaintainer({}), nodeIdx, appData.SystemPoolId, TMailboxType::Revolving, 0);
 
@@ -1352,6 +1374,14 @@ namespace Tests {
             TActorId describeSchemaSecretsServiceId = Runtime->Register(describeSchemaSecretsService, nodeIdx, userPoolId);
             Runtime->RegisterService(NSecret::MakeDescribeSchemaSecretServiceId(Runtime->GetNodeId(nodeIdx)), describeSchemaSecretsServiceId, nodeIdx);
         }
+
+        {
+            const auto& appData = Runtime->GetAppData(nodeIdx);
+            IActor* workloadManager = NWorkloadManager::CreateService(NWorkloadManager::GetWorkloadManagerCounters(appData.Counters));
+            TActorId workloadManagerId = Runtime->Register(workloadManager, nodeIdx, userPoolId, TMailboxType::HTSwap, 0);
+            Runtime->RegisterService(NWorkloadManager::MakeServiceId(Runtime->GetNodeId(nodeIdx)), workloadManagerId, nodeIdx);
+        }
+
         {
             auto kqpProxySharedResources = std::make_shared<NKqp::TKqpProxySharedResources>();
 
@@ -1622,6 +1652,7 @@ namespace Tests {
 
             NKafka::TListenerSettings settings;
             settings.Port = Settings->AppConfig->GetKafkaProxyConfig().GetListeningPort();
+            settings.Address = Settings->AppConfig->GetKafkaProxyConfig().GetListeningAddress();
             bool ssl = false;
             if (Settings->AppConfig->GetKafkaProxyConfig().HasSslCertificate()) {
                 ssl = true;

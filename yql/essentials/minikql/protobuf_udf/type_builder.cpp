@@ -48,7 +48,6 @@ private:
     TType* GetOptionalType(TType* type);
     TType* GetListType(TType* type, const std::optional<NYT::NDetail::TProtobufFieldOptions>& ytOpts, TFlags<EFieldFlag>& flags);
 
-private:
     using TTypeMap = THashMap<TType*, TType*>;
 
     EEnumFormat EnumFormat_;
@@ -92,9 +91,7 @@ TTypeBuilder::TTypeBuilder(EEnumFormat enumFormat,
     }
 }
 
-TTypeBuilder::~TTypeBuilder()
-{
-}
+TTypeBuilder::~TTypeBuilder() = default;
 
 void TTypeBuilder::Build(const Descriptor* descriptor, TProtoInfo* info) {
     Info_ = info;

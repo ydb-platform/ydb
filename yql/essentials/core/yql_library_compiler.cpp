@@ -53,8 +53,9 @@ bool ReplaceNodes(TExprNode& node, const TNodeOnNodeOwnedMap& replaces, bool& ha
 TString Load(const TString& path)
 {
     TFile file(path, EOpenModeFlag::RdOnly);
-    if (file.GetLength() <= 0)
+    if (file.GetLength() <= 0) {
         return TString();
+    }
     std::vector<TString::value_type> buffer(file.GetLength());
     file.Load(buffer.data(), buffer.size());
     return TString(buffer.data(), buffer.size());
@@ -115,8 +116,9 @@ bool CompileLibrary(const NSQLTranslation::TTranslators& translators, const TStr
         return false;
     }
 
-    if (!CompileExpr(*res.Root, cohesion, ctx))
+    if (!CompileExpr(*res.Root, cohesion, ctx)) {
         return false;
+    }
 
     if (!optimize) {
         return true;
@@ -181,8 +183,9 @@ bool LinkLibraries(THashMap<TString, TLibraryCohesion>& libs, TExprContext& ctx,
     if (!replaces.empty()) {
         for (auto& lib : libs) {
             for (auto& expo : lib.second.Exports.Symbols(lib.second.Exports.ExprCtx())) {
-                if (const auto find = replaces.find(expo.second.Get()); replaces.cend() != find)
+                if (const auto find = replaces.find(expo.second.Get()); replaces.cend() != find) {
                     expo.second = find->second;
+                }
             }
         }
     }
@@ -218,10 +221,11 @@ bool CompileLibraries(const NSQLTranslation::TTranslators& translators, const TU
             }
 
             if (!libraryData.empty()) {
-                if (CompileLibrary(translators, alias, libraryData, ctx, libs[alias], optimize))
+                if (CompileLibrary(translators, alias, libraryData, ctx, libs[alias], optimize)) {
                     modules[TModuleResolver::NormalizeModuleName(alias)] = libs[alias].Exports;
-                else
+                } else {
                     return false;
+                }
             }
         }
     }

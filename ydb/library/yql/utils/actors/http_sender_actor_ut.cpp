@@ -1,74 +1,64 @@
-#include "ydb/core/testlib/basics/appdata.h"
-
-#include <ydb/core/fq/libs/actors/logging/log.h>
-#include <ydb/core/fq/libs/ydb/util.h>
-#include <ydb/core/fq/libs/ydb/ydb.h>
-
-#include <ydb/core/fq/libs/control_plane_proxy/events/events.h>
-
-#include <ydb/library/actors/core/executor_pool_basic.h>
-#include <ydb/library/actors/core/scheduler_basic.h>
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/library/yql/utils/actors/http_sender_actor.h>
 #include <ydb/library/yql/utils/actors/http_sender.h>
-
-#include <ydb/core/testlib/basics/runtime.h>
-#include <ydb/core/base/path.h>
-
-#include <util/system/env.h>
 
 namespace NYql {
 
 using namespace NActors;
-using namespace NKikimr;
 
 namespace {
 
-//////////////////////////////////////////////////////
-
-using TRuntimePtr = std::shared_ptr<TTestActorRuntime>;
-
 struct TTestBootstrap {
+    TTestActorRuntimeBase Runtime;
     TActorId SelfActorId;
     TActorId HttpSenderActorId;
     TActorId HttpProxyActorId;
 
     NYql::NDq::THttpSenderRetryPolicy::TPtr RetryPolicy;
-    TRuntimePtr Runtime;
 
     TTestBootstrap(NYql::NDq::THttpSenderRetryPolicy::TPtr retryPolicy)
-        : SelfActorId(0, "SELF")
+        : Runtime(1, true)
+        , SelfActorId(0, "SELF")
         , HttpSenderActorId(0, "SENDER")
         , HttpProxyActorId(0, "PROXY")
         , RetryPolicy(retryPolicy)
-        , Runtime(PrepareTestActorRuntime())
     {
+        Runtime.Initialize();
+
+        SelfActorId = Runtime.AllocateEdgeActor();
+        HttpProxyActorId = Runtime.AllocateEdgeActor();
+
+        auto httpSender = NYql::NDq::CreateHttpSenderActor(
+            SelfActorId,
+            HttpProxyActorId,
+            RetryPolicy
+        );
+        HttpSenderActorId = Runtime.Register(httpSender);
+        Runtime.EnableScheduleForActor(HttpSenderActorId, true);
     }
 
     void SendHttpOutgoingRequest()
     {
-        auto sender = Runtime->AllocateEdgeActor();
+        auto sender = Runtime.AllocateEdgeActor();
         auto req = NHttp::THttpOutgoingRequest::CreateRequestGet("124");
         auto request = std::make_unique<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(req);
-        Runtime->Send(new IEventHandle(HttpSenderActorId, sender, request.release()));
+        Runtime.Send(new IEventHandle(HttpSenderActorId, sender, request.release()));
     }
 
     template<typename T>
     std::pair<TAutoPtr<IEventHandle>, T*> Grab()
     {
         TAutoPtr<IEventHandle> handle;
-        T* event = Runtime->GrabEdgeEvent<T>(handle, TDuration::Seconds(10));
+        T* event = Runtime.GrabEdgeEvent<T>(handle, TDuration::Seconds(10));
         return {handle, event};
     }
 
     void HandleHttpProxyOutgoing(std::unique_ptr<NHttp::THttpIncomingResponse>&& response) {
         auto [_, event] = Grab<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>();
-        auto t = NHttp::THttpIncomingResponse(event->Request);
 
-        NHttp::THttpOutgoingRequestPtr request = nullptr; //new NHttp::THttpOutgoingRequest();
-
-        Runtime->Send(new IEventHandle(
+        Runtime.Send(new IEventHandle(
             HttpSenderActorId,
             HttpProxyActorId,
             new NHttp::TEvHttpProxy::TEvHttpIncomingResponse(event->Request, response.release())));
@@ -85,30 +75,9 @@ struct TTestBootstrap {
         response->Status = "500";
         HandleHttpProxyOutgoing(std::move(response));
     }
-
-private:
-    TRuntimePtr PrepareTestActorRuntime()
-    {
-        TRuntimePtr runtime(new TTestBasicRuntime(1, true));
-        runtime->Initialize(TAppPrepare().Unwrap());
-
-        SelfActorId = runtime->AllocateEdgeActor();
-        HttpProxyActorId = runtime->AllocateEdgeActor();
-
-        auto httpSender = NYql::NDq::CreateHttpSenderActor(
-            SelfActorId,
-            HttpProxyActorId,
-            RetryPolicy
-        );
-        HttpSenderActorId = runtime->Register(httpSender);
-
-        return runtime;
-    }
 };
 
 } // namespace
-
-//////////////////////////////////////////////////////
 
 Y_UNIT_TEST_SUITE(THttpSenderTests) {
     Y_UNIT_TEST(SuccessResponse)
@@ -201,7 +170,5 @@ Y_UNIT_TEST_SUITE(THttpSenderTests) {
         }
     }
 };
-
-
 
 } // namespace NYql

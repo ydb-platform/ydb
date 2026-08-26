@@ -1,10 +1,14 @@
 #include "alter_topic_operation.h"
 #include "schema_operation.h"
+#include "check_dlq_topics.h"
 
 #include <ydb/core/grpc_services/rpc_calls.h>
 #include <ydb/core/persqueue/common/actor.h>
+#include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/ydb_convert/tx_proxy_status.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT Service
 
 namespace NKikimr::NPQ::NSchema {
 
@@ -37,7 +41,8 @@ public:
 
 private:
     void DoDescribe() {
-        LOG_D("DoDescribe");
+        YDB_LOG_DEBUG("DoDescribe",
+            {"logPrefix", NPQ_LOG_PREFIX});
         Become(&TAlterTopicOperationActor::DescribeState);
 
         RegisterWithSameMailbox(NDescriber::CreateDescriberActor(
@@ -52,7 +57,8 @@ private:
     }
 
     void Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
-        LOG_D("Handle NDescriber::TEvDescribeTopicsResponse");
+        YDB_LOG_DEBUG("Handle NDescriber::TEvDescribeTopicsResponse",
+            {"logPrefix", NPQ_LOG_PREFIX});
 
         auto& topics = ev->Get()->Topics;
         AFL_ENSURE(topics.size() == 1)("s", topics.size());
@@ -75,6 +81,9 @@ private:
             case NDescriber::EStatus::UNAUTHORIZED_WITH_DESCRIBE_ACCESS: {
                 return ReplyAndDie(Ydb::StatusIds::UNAUTHORIZED, NDescriber::Description(Settings.Strategy->GetTopicName(), TopicInfo.Status));
             }
+            case NDescriber::EStatus::BAD_REQUEST: {
+                return ReplyAndDie(Ydb::StatusIds::BAD_REQUEST, NDescriber::Description(Settings.Strategy->GetTopicName(), TopicInfo.Status));
+            }
             default: {
                 return ReplyAndDie(Ydb::StatusIds::SCHEME_ERROR, NDescriber::Description(Settings.Strategy->GetTopicName(), TopicInfo.Status));
             }
@@ -90,14 +99,16 @@ private:
 
 private:
     void DoGetClustersList() {
-        LOG_D("DoGetClustersList");
+        YDB_LOG_DEBUG("DoGetClustersList",
+            {"logPrefix", NPQ_LOG_PREFIX});
         Become(&TAlterTopicOperationActor::GetClustersListState);
         Send(NPQ::NClusterTracker::MakeClusterTrackerID(), new NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersList());
     }
 
     void Handle(NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersListResponse::TPtr& ev) {
-        LOG_D("Handle NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersListResponse: "
-            << (ev->Get()->Success ? ev->Get()->ClustersList->DebugString() : "error"));
+        YDB_LOG_DEBUG("Handle",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"getClustersListResponse", (ev->Get()->Success ? ev->Get()->ClustersList->DebugString() : "error")});
 
         auto& response = *ev->Get();
         if (response.Success) {
@@ -116,7 +127,8 @@ private:
 
 private:
     void DoAlter() {
-        LOG_D("DoAlter");
+        YDB_LOG_DEBUG("DoAlter",
+            {"logPrefix", NPQ_LOG_PREFIX});
 
         Become(&TAlterTopicOperationActor::AlterState);
 
@@ -164,21 +176,13 @@ private:
         }
 
         ModifyScheme = modifyScheme;
-
-        if (Settings.PrepareOnly) {
-            return ReplyAndDie(Ydb::StatusIds::SUCCESS, "");
-        } else {
-            RegisterWithSameMailbox(CreateSchemaOperation(
-                SelfId(),
-                TopicInfo.RealPath,
-                std::move(proposal),
-                Settings.Cookie
-            ));
-        }
+        Proposal = std::move(proposal);
+        return DoCheckDlqOrPropose();
     }
 
     void Handle(TEvSchemaOperationResponse::TPtr& ev) {
-        LOG_D("Handle TEvSchemaOperationResponse");
+        YDB_LOG_DEBUG("Handle TEvSchemaOperationResponse",
+            {"logPrefix", NPQ_LOG_PREFIX});
         auto& response = *ev->Get();
         return ReplyAndDie(response.Status, std::move(response.ErrorMessage));
     }
@@ -191,8 +195,64 @@ private:
     }
 
 private:
+    void DoCheckDlqOrPropose() {
+        const NKikimrPQ::TPQTabletConfig emptyOldConfig;
+        const auto& oldConfig = TopicInfo.Info
+            ? TopicInfo.Info->Description.GetPQTabletConfig()
+            : emptyOldConfig;
+        if (auto* actor = CreateCheckDlqTopicsActorIfNeeded(
+                SelfId(),
+                Database,
+                ModifyScheme.GetAlterPersQueueGroup().GetPQTabletConfig(),
+                oldConfig,
+                TCheckDlqTopicsSettings{
+                    .UserToken = Settings.UserToken
+                }))
+        {
+            Become(&TAlterTopicOperationActor::CheckDlqState);
+            RegisterWithSameMailbox(actor);
+            return;
+        }
+        return DoProposeOrReply();
+    }
+
+    void Handle(TEvCheckDlqTopicsResponse::TPtr& ev) {
+        YDB_LOG_DEBUG("Handle TEvCheckDlqTopicsResponse",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"status", ev->Get()->Status},
+            {"errorMessage", ev->Get()->ErrorMessage});
+        if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
+            return ReplyAndDie(ev->Get()->Status, std::move(ev->Get()->ErrorMessage));
+        }
+        return DoProposeOrReply();
+    }
+
+    STFUNC(CheckDlqState) {
+        switch(ev->GetTypeRewrite()) {
+            hFunc(TEvCheckDlqTopicsResponse, Handle);
+            sFunc(TEvents::TEvPoison, PassAway);
+        }
+    }
+
+    void DoProposeOrReply() {
+        if (Settings.PrepareOnly) {
+            return ReplyAndDie(Ydb::StatusIds::SUCCESS, "");
+        }
+        RegisterWithSameMailbox(CreateSchemaOperation(
+            SelfId(),
+            TopicInfo.RealPath,
+            std::move(Proposal),
+            Settings.Cookie
+        ));
+        Become(&TAlterTopicOperationActor::AlterState);
+    }
+
+private:
     void ReplyAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage) {
-        LOG_D("ReplyAndDie " << errorCode << " '" << errorMessage << "'");
+        YDB_LOG_DEBUG("ReplyAndDie",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"errorCode", errorCode},
+            {"errorMessage", errorMessage});
         if (errorCode == Ydb::StatusIds::SUCCESS && !Settings.PrepareOnly) {
             ModifyScheme = {};
         }
@@ -206,6 +266,7 @@ private:
     const TString Database;
 
     NDescriber::TTopicInfo TopicInfo;
+    std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> Proposal;
     NKikimrSchemeOp::TModifyScheme ModifyScheme;
     NPQ::NClusterTracker::TClustersList::TConstPtr ClustersList;
 };

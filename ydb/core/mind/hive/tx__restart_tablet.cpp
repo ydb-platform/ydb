@@ -70,7 +70,7 @@ public:
             {"logPrefix", GetLogPrefix()},
             {"tabletId", TabletId},
             {"sideEffects", SideEffects});
-        SideEffects.Complete(ctx);
+        SideEffects.Complete(ctx, Self->Requests);
     }
 };
 

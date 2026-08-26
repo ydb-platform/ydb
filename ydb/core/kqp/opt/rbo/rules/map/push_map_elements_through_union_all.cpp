@@ -305,8 +305,9 @@ TPushMapElementsThroughUnionAllRule::SimpleMatchAndApply(const TIntrusivePtr<IOp
         return input;
     }
 
-    unionAll->Children[0] = MakeIntrusive<TOpMap>(unionAll->Children[0], topMap->Pos, pushedElements, topMap->Ordered);
-    unionAll->Children[1] = MakeIntrusive<TOpMap>(unionAll->Children[1], topMap->Pos, pushedElements, topMap->Ordered);
+    for (auto& child : unionAll->Children) {
+        child = MakeIntrusive<TOpMap>(child, topMap->Pos, pushedElements, topMap->Ordered);
+    }
     unionAll->Columns = std::move(newColumns);
     if (!renameMap.empty()) {
         props.Subplans.RenameReferences(renameMap, ctx.ExprCtx);

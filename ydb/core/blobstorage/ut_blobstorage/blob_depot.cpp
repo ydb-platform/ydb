@@ -316,4 +316,52 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
         TestBasicCheckIntegrity(tenv, 1, tenv.RegularGroups[0]);
         TestBasicCheckIntegrity(tenv, 1, tenv.BlobDepot);
     }
+
+    // The agent does not forward the write, it re-originates it under a blob id of its own, so
+    // every field the underlying group needs has to be copied across by hand. Without that a system
+    // tablet writing through a virtual group reaches the disks as user data.
+    Y_UNIT_TEST(DataKindSurvivesTheAgent) {
+        ui32 seed;
+        LoadSeed(seed);
+        TBlobDepotTestEnvironment tenv(seed);
+        auto& env = *tenv.Env;
+
+        ui64 tabletId = 100500;
+        for (const auto dataKind : {NKikimrBlobStorage::TDataKind::USER, NKikimrBlobStorage::TDataKind::SYSTEM}) {
+            const TString data = TStringBuilder() << "data_" << static_cast<int>(dataKind);
+
+            // Both the original write into the virtual group and the one the agent relays into a
+            // real group carry this exact buffer, so matching on it picks up both hops.
+            std::vector<NKikimrBlobStorage::TDataKind::E> seen;
+            env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+                if (ev->GetTypeRewrite() == TEvBlobStorage::EvPut) {
+                    auto *put = ev->Get<TEvBlobStorage::TEvPut>();
+                    if (put->Buffer.ConvertToString() == data) {
+                        seen.push_back(put->DataKind);
+                    }
+                }
+                return true;
+            };
+
+            const TLogoBlobID id(tabletId++, 1, 1, 0, data.size(), 0);
+            const TActorId sender = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+            env.Runtime->WrapInActorContext(sender, [&] {
+                SendToBSProxy(sender, tenv.BlobDepot, new TEvBlobStorage::TEvPut(TEvBlobStorage::TEvPut::TParameters{
+                    .BlobId = id,
+                    .Buffer = TRope(data),
+                    .Deadline = TInstant::Max(),
+                    .DataKind = dataKind,
+                }));
+            });
+            auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(sender, false);
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+
+            env.Runtime->FilterFunction = nullptr;
+
+            UNIT_ASSERT_C(seen.size() >= 2, "the agent did not relay the write, nothing was proven");
+            for (const auto kind : seen) {
+                UNIT_ASSERT_EQUAL(kind, dataKind);
+            }
+        }
+    }
 }

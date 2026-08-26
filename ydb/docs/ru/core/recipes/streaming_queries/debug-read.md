@@ -13,5 +13,5 @@
 ## См. также
 
 * [{#T}](../../concepts/query_execution/topics.md)
-* [{#T}](../../yql/reference/syntax/select/streaming.md)
+* [{#T}](../../yql/reference/syntax/select/topics.md)
 * [{#T}](../../dev/streaming-query/streaming-query-formats.md)

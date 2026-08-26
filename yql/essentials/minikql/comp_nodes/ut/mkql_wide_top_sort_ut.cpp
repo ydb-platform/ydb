@@ -7,8 +7,7 @@
 
 #include <cstring>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -36,7 +35,7 @@ Y_UNIT_TEST_LLVM(TopByFirstKeyAsc) {
 
     const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideTop(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                            [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
-                                                              NTest::ConvertValueToLiteralNode(pb, ui64(4)), {{0U, NTest::ConvertValueToLiteralNode(pb, true)}}),
+                                                              NTest::ConvertValueToLiteralNode(pb, ui64(4)), {{0U, NTest::ConvertValueToLiteralNode(pb, /*simpleNode=*/true)}}),
                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(tupleType, items); }));
 
     const auto graph = setup.BuildGraph(pgmReturn);
@@ -57,7 +56,7 @@ Y_UNIT_TEST_LLVM(TopByFirstKeyDesc) {
 
     const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideTop(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                            [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
-                                                              NTest::ConvertValueToLiteralNode(pb, ui64(6)), {{0U, NTest::ConvertValueToLiteralNode(pb, false)}}),
+                                                              NTest::ConvertValueToLiteralNode(pb, ui64(6)), {{0U, NTest::ConvertValueToLiteralNode(pb, /*simpleNode=*/false)}}),
                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(tupleType, items); }));
 
     const auto graph = setup.BuildGraph(pgmReturn);
@@ -80,7 +79,7 @@ Y_UNIT_TEST_LLVM(TopBySecondKeyAsc) {
 
     const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideTop(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                            [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
-                                                              NTest::ConvertValueToLiteralNode(pb, ui64(3)), {{1U, NTest::ConvertValueToLiteralNode(pb, true)}}),
+                                                              NTest::ConvertValueToLiteralNode(pb, ui64(3)), {{1U, NTest::ConvertValueToLiteralNode(pb, /*simpleNode=*/true)}}),
                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(tupleType, items); }));
 
     const auto graph = setup.BuildGraph(pgmReturn);
@@ -100,7 +99,7 @@ Y_UNIT_TEST_LLVM(TopBySecondKeyDesc) {
 
     const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideTop(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                            [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
-                                                              NTest::ConvertValueToLiteralNode(pb, ui64(2)), {{1U, NTest::ConvertValueToLiteralNode(pb, false)}}),
+                                                              NTest::ConvertValueToLiteralNode(pb, ui64(2)), {{1U, NTest::ConvertValueToLiteralNode(pb, /*simpleNode=*/false)}}),
                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(tupleType, items); }));
 
     const auto graph = setup.BuildGraph(pgmReturn);
@@ -123,7 +122,7 @@ Y_UNIT_TEST_LLVM(TopWithLargeCount) {
 
     const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideTop(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                            [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
-                                                              NTest::ConvertValueToLiteralNode(pb, ui64(4000000000)), {{0U, NTest::ConvertValueToLiteralNode(pb, true)}}),
+                                                              NTest::ConvertValueToLiteralNode(pb, ui64(4000000000)), {{0U, NTest::ConvertValueToLiteralNode(pb, /*simpleNode=*/true)}}),
                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(tupleType, items); }));
 
     const auto graph = setup.BuildGraph(pgmReturn);
@@ -142,7 +141,7 @@ Y_UNIT_TEST_LLVM(TopSortByFirstSecondAscDesc) {
 
     const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideTopSort(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                                [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
-                                                                  NTest::ConvertValueToLiteralNode(pb, ui64(4)), {{0U, NTest::ConvertValueToLiteralNode(pb, true)}, {1U, NTest::ConvertValueToLiteralNode(pb, false)}}),
+                                                                  NTest::ConvertValueToLiteralNode(pb, ui64(4)), {{0U, NTest::ConvertValueToLiteralNode(pb, /*simpleNode=*/true)}, {1U, NTest::ConvertValueToLiteralNode(pb, /*simpleNode=*/false)}}),
                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(tupleType, items); }));
 
     const auto graph = setup.BuildGraph(pgmReturn);
@@ -163,7 +162,7 @@ Y_UNIT_TEST_LLVM(TopSortByFirstSecondDescAsc) {
 
     const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideTopSort(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                                [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
-                                                                  NTest::ConvertValueToLiteralNode(pb, ui64(6)), {{0U, NTest::ConvertValueToLiteralNode(pb, false)}, {1U, NTest::ConvertValueToLiteralNode(pb, true)}}),
+                                                                  NTest::ConvertValueToLiteralNode(pb, ui64(6)), {{0U, NTest::ConvertValueToLiteralNode(pb, /*simpleNode=*/false)}, {1U, NTest::ConvertValueToLiteralNode(pb, /*simpleNode=*/true)}}),
                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(tupleType, items); }));
 
     const auto graph = setup.BuildGraph(pgmReturn);
@@ -186,7 +185,7 @@ Y_UNIT_TEST_LLVM(TopSortBySecondFirstAscDesc) {
 
     const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideTopSort(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                                [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
-                                                                  NTest::ConvertValueToLiteralNode(pb, ui64(4)), {{1U, NTest::ConvertValueToLiteralNode(pb, true)}, {0U, NTest::ConvertValueToLiteralNode(pb, false)}}),
+                                                                  NTest::ConvertValueToLiteralNode(pb, ui64(4)), {{1U, NTest::ConvertValueToLiteralNode(pb, /*simpleNode=*/true)}, {0U, NTest::ConvertValueToLiteralNode(pb, /*simpleNode=*/false)}}),
                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(tupleType, items); }));
 
     const auto graph = setup.BuildGraph(pgmReturn);
@@ -207,7 +206,7 @@ Y_UNIT_TEST_LLVM(TopSortBySecondFirstDescAsc) {
 
     const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideTopSort(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                                [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
-                                                                  NTest::ConvertValueToLiteralNode(pb, ui64(6)), {{1U, NTest::ConvertValueToLiteralNode(pb, false)}, {0U, NTest::ConvertValueToLiteralNode(pb, true)}}),
+                                                                  NTest::ConvertValueToLiteralNode(pb, ui64(6)), {{1U, NTest::ConvertValueToLiteralNode(pb, /*simpleNode=*/false)}, {0U, NTest::ConvertValueToLiteralNode(pb, /*simpleNode=*/true)}}),
                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(tupleType, items); }));
 
     const auto graph = setup.BuildGraph(pgmReturn);
@@ -227,7 +226,7 @@ Y_UNIT_TEST_LLVM(TopSortLargeList) {
 
     const auto minusday = i64(-24LL * 60LL * 60LL * 1000000LL); // -1 Day
     const auto step = pb.NewDataLiteral<NUdf::EDataSlot::Interval>(NUdf::TStringRef((const char*)&minusday, sizeof(minusday)));
-    const auto list = pb.ListFromRange(pb.NewTzDataLiteral<NUdf::TTzDate>(30000u, 42u), pb.NewTzDataLiteral<NUdf::TTzDate>(10000u, 42u), step);
+    const auto list = pb.ListFromRange(pb.NewTzDataLiteral<NUdf::TTzDate>(30000U, 42U), pb.NewTzDataLiteral<NUdf::TTzDate>(10000U, 42U), step);
 
     const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideTopSort(pb.ExpandMap(pb.ToFlow(pb.Enumerate(list), {}),
                                                                                [&](TRuntimeNode item) -> TRuntimeNode::TList {
@@ -235,7 +234,7 @@ Y_UNIT_TEST_LLVM(TopSortLargeList) {
                                                                                    const auto day = pb.StrictFromString(pb.Substring(utf, NTest::ConvertValueToLiteralNode(pb, ui32(8)), NTest::ConvertValueToLiteralNode(pb, ui32(2))), NTest::ConvertToMinikqlType<ui8>(pb));
                                                                                    return {pb.Nth(item, 0U), utf, day, pb.Nth(item, 1U)};
                                                                                }),
-                                                                  NTest::ConvertValueToLiteralNode(pb, ui64(7)), {{2U, NTest::ConvertValueToLiteralNode(pb, true)}, {0U, NTest::ConvertValueToLiteralNode(pb, false)}}),
+                                                                  NTest::ConvertValueToLiteralNode(pb, ui64(7)), {{2U, NTest::ConvertValueToLiteralNode(pb, /*simpleNode=*/true)}, {0U, NTest::ConvertValueToLiteralNode(pb, /*simpleNode=*/false)}}),
                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode { return items[1]; }));
 
     const auto graph = setup.BuildGraph(pgmReturn);
@@ -263,7 +262,7 @@ Y_UNIT_TEST_LLVM(TopSortLargeCount) {
 
     const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideTopSort(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                                [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
-                                                                  NTest::ConvertValueToLiteralNode(pb, ui64(4000000000)), {{0U, NTest::ConvertValueToLiteralNode(pb, true)}, {1U, NTest::ConvertValueToLiteralNode(pb, false)}}),
+                                                                  NTest::ConvertValueToLiteralNode(pb, ui64(4000000000)), {{0U, NTest::ConvertValueToLiteralNode(pb, /*simpleNode=*/true)}, {1U, NTest::ConvertValueToLiteralNode(pb, /*simpleNode=*/false)}}),
                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(tupleType, items); }));
 
     const auto graph = setup.BuildGraph(pgmReturn);
@@ -284,7 +283,7 @@ Y_UNIT_TEST_LLVM(SortByFirstKeyAsc) {
 
     const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideSort(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                             [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
-                                                               {{0U, NTest::ConvertValueToLiteralNode(pb, true)}}),
+                                                               {{0U, NTest::ConvertValueToLiteralNode(pb, /*simpleNode=*/true)}}),
                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(tupleType, items); }));
 
     const auto graph = setup.BuildGraph(pgmReturn);
@@ -336,7 +335,7 @@ Y_UNIT_TEST_LLVM(SortByExtDateTypeAsc) {
 
     const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideSort(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                             [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
-                                                               {{0U, NTest::ConvertValueToLiteralNode(pb, true)}}),
+                                                               {{0U, NTest::ConvertValueToLiteralNode(pb, /*simpleNode=*/true)}}),
                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(tupleType, items); }));
 
     const auto graph = setup.BuildGraph(pgmReturn);
@@ -409,5 +408,4 @@ Y_UNIT_TEST_LLVM_SPILLING(SortWithSpillingMultiKey) {
 
 } // Y_UNIT_TEST_SUITE(TMiniKQLWideSortTest)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

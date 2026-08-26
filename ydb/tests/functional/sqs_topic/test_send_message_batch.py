@@ -76,6 +76,7 @@ class TestSqsTopicSendMessageBatch(KikimrSqsTopicTestBase):
                     'Id': str(index),
                     'MessageBody': message_body,
                     'MessageGroupId': 'message-group-1',
+                    'MessageDeduplicationId': 'deduplication-id-{}'.format(index),
                 }
                 for index, message_body in enumerate(message_bodies)
             ],

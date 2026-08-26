@@ -1,5 +1,6 @@
 import unittest
 from dataclasses import dataclass
+from unittest import mock
 
 from textual.widgets import TabPane, TabbedContent
 
@@ -125,6 +126,29 @@ class ViewerTabNavigationTest(unittest.IsolatedAsyncioTestCase):
                             include_agents=True,
                             include_operation=True,
                         )
+
+    async def test_reopening_active_operation_deactivates_pane_before_removal(self):
+        app = Viewer()
+        async with app.run_test() as pilot:
+            await app.run_action("open_operation('install')")
+            tabs = app.query_one("#tabs", TabbedContent)
+            active_during_removal = []
+            pane_active_during_removal = []
+            remove_pane = tabs.remove_pane
+
+            def capture_active_tab(pane_id: str):
+                active_during_removal.append(tabs.active)
+                pane_active_during_removal.append(tabs.get_tab(pane_id).has_class("-active"))
+                return remove_pane(pane_id)
+
+            with mock.patch.object(tabs, "remove_pane", side_effect=capture_active_tab):
+                await app.run_action("open_operation('install')")
+
+            await pilot.pause()
+            self.assertEqual(active_during_removal, ["general"])
+            self.assertEqual(pane_active_during_removal, [False])
+            self.assertEqual(self._actual_tabs(app), ["general", "operation"])
+            self.assertEqual(tabs.active, "operation")
 
     async def _assert_command_sequence(
         self,

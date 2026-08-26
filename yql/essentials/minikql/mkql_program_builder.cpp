@@ -21,6 +21,18 @@ namespace NKikimr::NMiniKQL {
 
 namespace {
 
+TString WrapDecimalComparationName(
+    NUdf::TStringRef name, const TDataDecimalType& type1, const TDataDecimalType& type2) {
+    TStringBuilder result;
+    result << TStringBuf(name.Data(), name.Size());
+    const i8 scaleDifference = static_cast<i8>(type2.GetParams().second) -
+                               static_cast<i8>(type1.GetParams().second);
+    if (scaleDifference != 0) {
+        result << '_' << static_cast<i16>(scaleDifference);
+    }
+    return result;
+}
+
 struct TDataFunctionFlags {
     enum {
         HasBooleanResult = 0x01,
@@ -72,8 +84,10 @@ void EnsureScriptSpecificTypes(
     std::vector<TNode*>& nodeStack)
 {
     switch (scriptType) {
-        case EScriptType::Lua:
-            return TLuaTypeChecker().Walk(funcType, nodeStack);
+        case EScriptType::Lua: {
+            TLuaTypeChecker().Walk(funcType, nodeStack);
+            return;
+        }
         case EScriptType::Python:
         case EScriptType::Python2:
         case EScriptType::Python3:
@@ -91,10 +105,14 @@ void EnsureScriptSpecificTypes(
         case EScriptType::SystemPython3_11:
         case EScriptType::SystemPython3_12:
         case EScriptType::SystemPython3_13:
-        case EScriptType::SystemPython3_14:
-            return TPythonTypeChecker().Walk(funcType, nodeStack);
-        case EScriptType::Javascript:
-            return TJavascriptTypeChecker().Walk(funcType, nodeStack);
+        case EScriptType::SystemPython3_14: {
+            TPythonTypeChecker().Walk(funcType, nodeStack);
+            return;
+        }
+        case EScriptType::Javascript: {
+            TJavascriptTypeChecker().Walk(funcType, nodeStack);
+            return;
+        }
         default:
             MKQL_ENSURE(false, "Unknown script type " << static_cast<ui32>(scriptType));
     }
@@ -1841,15 +1859,23 @@ TRuntimeNode TProgramBuilder::BlockDecimalMul(TRuntimeNode first, TRuntimeNode s
 }
 
 TRuntimeNode TProgramBuilder::ListFromRange(TRuntimeNode start, TRuntimeNode end, TRuntimeNode step) {
-    MKQL_ENSURE(start.GetStaticType()->IsData(), "Expected data");
-    MKQL_ENSURE(end.GetStaticType()->IsSameType(*start.GetStaticType()), "Mismatch type");
-    MKQL_ENSURE(IsNumericType(AS_TYPE(TDataType, start)->GetSchemeType()) ||
+    MKQL_ENSURE(start.GetStaticType()->IsData(), "ListFromRange expects Start to be data");
+    MKQL_ENSURE(end.GetStaticType()->IsData(), "ListFromRange expects End to be data");
+    MKQL_ENSURE(step.GetStaticType()->IsData(), "ListFromRange expects Step to be data");
+    const auto startSchemeType = AS_TYPE(TDataType, start)->GetSchemeType();
+    const bool isDecimal = startSchemeType == NUdf::TDataType<NUdf::TDecimal>::Id;
+    MKQL_ENSURE(end.GetStaticType()->IsSameType(*start.GetStaticType()),
+                "ListFromRange expects Start and End to have the same type");
+    MKQL_ENSURE(IsNumericType(startSchemeType) || isDecimal ||
                     IsDateType(AS_TYPE(TDataType, start)->GetSchemeType()) ||
                     IsTzDateType(AS_TYPE(TDataType, start)->GetSchemeType()) ||
                     IsIntervalType(AS_TYPE(TDataType, start)->GetSchemeType()),
-                "Expected numeric, date or tzdate");
+                "ListFromRange expects numeric, Decimal, date, tzdate, or interval Start");
 
-    if (IsNumericType(AS_TYPE(TDataType, start)->GetSchemeType())) {
+    if (isDecimal) {
+        MKQL_ENSURE(step.GetStaticType()->IsSameType(*start.GetStaticType()),
+                    "ListFromRange expects Decimal Start and Step to have the same precision and scale");
+    } else if (IsNumericType(startSchemeType)) {
         MKQL_ENSURE(IsNumericType(AS_TYPE(TDataType, step)->GetSchemeType()), "Expected numeric");
     } else {
         MKQL_ENSURE(IsIntervalType(AS_TYPE(TDataType, step)->GetSchemeType()), "Expected interval");
@@ -3224,6 +3250,43 @@ TRuntimeNode TProgramBuilder::AggrCompare(const std::string_view& callableName, 
     return InvokeBinary(callableName, NewDataType(NUdf::TDataType<bool>::Id), data1, data2);
 }
 
+TRuntimeNode TProgramBuilder::ConvertIntegralToDecimal(TRuntimeNode data) {
+    bool isOptional;
+    const auto dataType = UnpackOptionalData(data, isOptional);
+    const auto& dataTypeInfo = NUdf::GetDataTypeInfo(*dataType->GetDataSlot());
+    MKQL_ENSURE(dataTypeInfo.Features & NUdf::EDataTypeFeatures::IntegralType, "Expected integral data.");
+    return ToDecimal(data, dataTypeInfo.DecimalDigits, 0);
+}
+
+std::pair<TRuntimeNode, TRuntimeNode> TProgramBuilder::ConvertIntegralToDecimalForComparison(std::pair<TRuntimeNode, TRuntimeNode> comparisonData) {
+    bool isOptionalLeft;
+    bool isOptionalRight;
+    const auto leftType = UnpackOptionalData(comparisonData.first, isOptionalLeft);
+    const auto rightType = UnpackOptionalData(comparisonData.second, isOptionalRight);
+    const auto convertIntegral = [this](TRuntimeNode integralData, const TDataType* integralType, const TDataDecimalType* decimalType) {
+        if (RuntimeVersion < 85U) {
+            const auto scale = decimalType->GetParams().second;
+            return ToDecimal(
+                integralData,
+                std::min<ui8>(NYql::NDecimal::MaxPrecision,
+                              NUdf::GetDataTypeInfo(*integralType->GetDataSlot()).DecimalDigits + scale),
+                scale);
+        }
+        return ConvertIntegralToDecimal(integralData);
+    };
+    if (leftType->GetSchemeType() == NUdf::TDataType<NUdf::TDecimal>::Id &&
+        NUdf::GetDataTypeInfo(*rightType->GetDataSlot()).Features & NUdf::EDataTypeFeatures::IntegralType) {
+        comparisonData.second = convertIntegral(comparisonData.second, rightType, static_cast<const TDataDecimalType*>(leftType));
+        return comparisonData;
+    }
+    if (rightType->GetSchemeType() == NUdf::TDataType<NUdf::TDecimal>::Id &&
+        NUdf::GetDataTypeInfo(*leftType->GetDataSlot()).Features & NUdf::EDataTypeFeatures::IntegralType) {
+        comparisonData.first = convertIntegral(comparisonData.first, leftType, static_cast<const TDataDecimalType*>(rightType));
+        return comparisonData;
+    }
+    return comparisonData;
+}
+
 TRuntimeNode TProgramBuilder::DataCompare(const std::string_view& callableName, TRuntimeNode data1, TRuntimeNode data2) {
     bool isOptionalLeft;
     bool isOptionalRight;
@@ -3233,7 +3296,7 @@ TRuntimeNode TProgramBuilder::DataCompare(const std::string_view& callableName, 
     const auto lId = leftType->GetSchemeType();
     const auto rId = rightType->GetSchemeType();
 
-    if (lId == NUdf::TDataType<NUdf::TDecimal>::Id && rId == NUdf::TDataType<NUdf::TDecimal>::Id) {
+    if (lId == NUdf::TDataType<NUdf::TDecimal>::Id && rId == NUdf::TDataType<NUdf::TDecimal>::Id && RuntimeVersion < 84U) {
         const auto& lDec = static_cast<TDataDecimalType*>(leftType)->GetParams();
         const auto& rDec = static_cast<TDataDecimalType*>(rightType)->GetParams();
         if (lDec.second < rDec.second) {
@@ -3245,26 +3308,25 @@ TRuntimeNode TProgramBuilder::DataCompare(const std::string_view& callableName, 
                               std::min<ui8>(rDec.first + lDec.second - rDec.second, NYql::NDecimal::MaxPrecision),
                               lDec.second);
         }
-    } else if (lId == NUdf::TDataType<NUdf::TDecimal>::Id &&
-               NUdf::GetDataTypeInfo(NUdf::GetDataSlot(rId)).Features & NUdf::EDataTypeFeatures::IntegralType) {
-        const auto scale = static_cast<TDataDecimalType*>(leftType)->GetParams().second;
-        data2 = ToDecimal(data2,
-                          std::min<ui8>(NYql::NDecimal::MaxPrecision,
-                                        NUdf::GetDataTypeInfo(NUdf::GetDataSlot(rId)).DecimalDigits + scale),
-                          scale);
-    } else if (rId == NUdf::TDataType<NUdf::TDecimal>::Id &&
-               NUdf::GetDataTypeInfo(NUdf::GetDataSlot(lId)).Features & NUdf::EDataTypeFeatures::IntegralType) {
-        const auto scale = static_cast<TDataDecimalType*>(rightType)->GetParams().second;
-        data1 = ToDecimal(data1,
-                          std::min<ui8>(NYql::NDecimal::MaxPrecision,
-                                        NUdf::GetDataTypeInfo(NUdf::GetDataSlot(lId)).DecimalDigits + scale),
-                          scale);
     }
+    const auto convertedData = ConvertIntegralToDecimalForComparison({data1, data2});
+    data1 = convertedData.first;
+    data2 = convertedData.second;
 
-    const std::array<TRuntimeNode, 2> args = {{data1, data2}};
     const auto boolType = NewDataType(NUdf::TDataType<bool>::Id);
     const auto resultType = isOptionalLeft || isOptionalRight ? NewOptionalType(boolType) : boolType;
-    return Invoke(callableName, resultType, args);
+    TString comparisonName(callableName);
+    const auto comparisonLeftType = UnpackOptionalData(data1, isOptionalLeft);
+    const auto comparisonRightType = UnpackOptionalData(data2, isOptionalRight);
+    if (comparisonLeftType->GetSchemeType() == NUdf::TDataType<NUdf::TDecimal>::Id &&
+        comparisonRightType->GetSchemeType() == NUdf::TDataType<NUdf::TDecimal>::Id &&
+        RuntimeVersion >= 84U) {
+        comparisonName = WrapDecimalComparationName(
+            NUdf::TStringRef(callableName.data(), callableName.size()),
+            *static_cast<const TDataDecimalType*>(comparisonLeftType),
+            *static_cast<const TDataDecimalType*>(comparisonRightType));
+    }
+    return InvokeBinary(comparisonName, resultType, data1, data2);
 }
 
 TRuntimeNode TProgramBuilder::BuildRangeLogical(const std::string_view& callableName, const TArrayRef<const TRuntimeNode>& lists) {
@@ -3503,6 +3565,30 @@ TRuntimeNode TProgramBuilder::NextMTRand(TRuntimeNode rand) {
 
     TCallableBuilder callableBuilder(Env_, __func__, returnType);
     callableBuilder.Add(rand);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
+}
+
+TRuntimeNode TProgramBuilder::AsErased(TRuntimeNode value) {
+    if constexpr (RuntimeVersion < 83U) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+
+    TCallableBuilder callableBuilder(Env_, __func__, NewResourceType(ErasedResourceTag));
+    callableBuilder.Add(value);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
+}
+
+TRuntimeNode TProgramBuilder::PeekErased(TRuntimeNode resource, TType* expectedType) {
+    if constexpr (RuntimeVersion < 83U) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+
+    auto resType = AS_TYPE(TResourceType, resource);
+    MKQL_ENSURE(resType->GetTag() == ErasedResourceTag, "Expected _Erased resource");
+
+    TCallableBuilder callableBuilder(Env_, __func__, NewOptionalType(expectedType));
+    callableBuilder.Add(resource);
+    callableBuilder.Add(TRuntimeNode(expectedType, /*isImmediate=*/true));
     return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
@@ -6422,6 +6508,47 @@ TRuntimeNode TProgramBuilder::BlockVariant(TRuntimeNode item, const std::string_
     return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
+TRuntimeNode TProgramBuilder::BlockVariantItem(TRuntimeNode variant) {
+    if constexpr (RuntimeVersion < 82) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+    auto blockType = AS_TYPE(TBlockType, variant.GetStaticType());
+    auto inputItemType = blockType->GetItemType();
+    bool isOptional;
+    auto unpacked = UnpackOptional(inputItemType, isOptional);
+    auto variantType = AS_TYPE(TVariantType, unpacked);
+    auto alternativeType = variantType->GetAlternativeType(0);
+    auto itemReturnType = isOptional ? NewOptionalType(alternativeType) : alternativeType;
+    auto returnType = NewBlockType(itemReturnType, blockType->GetShape());
+
+    TCallableBuilder callableBuilder(Env_, __func__, returnType);
+    callableBuilder.Add(variant);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
+}
+
+TRuntimeNode TProgramBuilder::BlockDynamicVariant(TRuntimeNode item, TRuntimeNode index, TType* variantType) {
+    if constexpr (RuntimeVersion < 83) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+    auto type = AS_TYPE(TVariantType, variantType);
+    auto expectedIndexSlot = type->GetUnderlyingType()->IsTuple() ? NUdf::EDataSlot::Uint32 : NUdf::EDataSlot::Utf8;
+
+    auto itemBlockType = AS_TYPE(TBlockType, item.GetStaticType());
+    auto indexBlockType = AS_TYPE(TBlockType, index.GetStaticType());
+
+    bool isOptional;
+    auto indexItemType = UnpackOptionalData(indexBlockType->GetItemType(), isOptional);
+    MKQL_ENSURE(indexItemType->GetDataSlot() == expectedIndexSlot, "Mismatch type of index");
+
+    auto returnType = NewBlockType(TOptionalType::Create(type, Env_), GetResultShape({itemBlockType, indexBlockType}));
+
+    TCallableBuilder callableBuilder(Env_, __func__, returnType);
+    callableBuilder.Add(item);
+    callableBuilder.Add(index);
+    callableBuilder.Add(TRuntimeNode(variantType, /*isImmediate=*/true));
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
+}
+
 TRuntimeNode TProgramBuilder::BlockIf(TRuntimeNode condition, TRuntimeNode thenBranch, TRuntimeNode elseBranch) {
     const auto conditionType = AS_TYPE(TBlockType, condition.GetStaticType());
     MKQL_ENSURE(AS_TYPE(TDataType, conditionType->GetItemType())->GetSchemeType() == NUdf::TDataType<bool>::Id,
@@ -6500,7 +6627,7 @@ TRuntimeNode TProgramBuilder::BlockCombineAll(TRuntimeNode flow, std::optional<u
 }
 
 TRuntimeNode TProgramBuilder::BuildBlockCombineHashed(const std::string_view& callableName, TRuntimeNode input,
-                                                      std::optional<ui32> filterColumn, const TArrayRef<ui32>& keys,
+                                                      std::optional<ui32> filterColumn, TArrayRef<const ui32> keys,
                                                       const TArrayRef<const TAggInfo>& aggs, TType* returnType) {
     const auto inputType = input.GetStaticType();
     MKQL_ENSURE(inputType->IsStream() || inputType->IsFlow(), "Expected either stream or flow as input type");
@@ -6537,7 +6664,7 @@ TRuntimeNode TProgramBuilder::BuildBlockCombineHashed(const std::string_view& ca
 }
 
 TRuntimeNode TProgramBuilder::BlockCombineHashed(TRuntimeNode flow, std::optional<ui32> filterColumn,
-                                                 const TArrayRef<ui32>& keys,
+                                                 TArrayRef<const ui32> keys,
                                                  const TArrayRef<const TAggInfo>& aggs,
                                                  TType* returnType) {
     MKQL_ENSURE(flow.GetStaticType()->IsStream(), "Expected stream as input type");
@@ -6547,7 +6674,7 @@ TRuntimeNode TProgramBuilder::BlockCombineHashed(TRuntimeNode flow, std::optiona
 }
 
 TRuntimeNode TProgramBuilder::BuildBlockMergeFinalizeHashed(const std::string_view& callableName, TRuntimeNode input,
-                                                            const TArrayRef<ui32>& keys,
+                                                            TArrayRef<const ui32> keys,
                                                             const TArrayRef<const TAggInfo>& aggs,
                                                             TType* returnType) {
     const auto inputType = input.GetStaticType();
@@ -6578,7 +6705,7 @@ TRuntimeNode TProgramBuilder::BuildBlockMergeFinalizeHashed(const std::string_vi
     return TRuntimeNode(builder.Build(), /*isImmediate=*/false);
 }
 
-TRuntimeNode TProgramBuilder::BlockMergeFinalizeHashed(TRuntimeNode flow, const TArrayRef<ui32>& keys,
+TRuntimeNode TProgramBuilder::BlockMergeFinalizeHashed(TRuntimeNode flow, TArrayRef<const ui32> keys,
                                                        const TArrayRef<const TAggInfo>& aggs, TType* returnType) {
     MKQL_ENSURE(flow.GetStaticType()->IsStream(), "Expected stream as input type");
     MKQL_ENSURE(returnType->IsStream(), "Expected stream as return type");
@@ -6587,7 +6714,7 @@ TRuntimeNode TProgramBuilder::BlockMergeFinalizeHashed(TRuntimeNode flow, const 
 }
 
 TRuntimeNode TProgramBuilder::BuildBlockMergeManyFinalizeHashed(const std::string_view& callableName, TRuntimeNode input,
-                                                                const TArrayRef<ui32>& keys,
+                                                                TArrayRef<const ui32> keys,
                                                                 const TArrayRef<const TAggInfo>& aggs,
                                                                 ui32 streamIndex,
                                                                 const TVector<TVector<ui32>>& streams, TType* returnType) {
@@ -6631,7 +6758,7 @@ TRuntimeNode TProgramBuilder::BuildBlockMergeManyFinalizeHashed(const std::strin
     return TRuntimeNode(builder.Build(), /*isImmediate=*/false);
 }
 
-TRuntimeNode TProgramBuilder::BlockMergeManyFinalizeHashed(TRuntimeNode flow, const TArrayRef<ui32>& keys,
+TRuntimeNode TProgramBuilder::BlockMergeManyFinalizeHashed(TRuntimeNode flow, TArrayRef<const ui32> keys,
                                                            const TArrayRef<const TAggInfo>& aggs,
                                                            ui32 streamIndex,
                                                            const TVector<TVector<ui32>>& streams,

@@ -12,7 +12,6 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/threading/local_executor/local_executor.h>
-#include <library/cpp/threading/mux_event/mux_event.h>
 
 #ifndef NDEBUG
 const bool DETAILED_LOG = false;
@@ -495,38 +494,31 @@ void KqpRm::ConcurrentTasks() {
     {
         auto tx = MakeTx(1, rm);
 
-        std::array<TMuxEvent, 10> events;
         NPar::LocalExecutor().RunAdditionalThreads(10);
         std::atomic<ui64> failedAllocations = 0;
 
-        for (auto i = 0u; i < 10u; i++) {
-            NPar::LocalExecutor().Exec([&](int taskId) mutable {
-                auto count = 0u;
-                for (auto n = 0u; n < 20u; n++) {
-                    for (auto j = 0u; j < 20u; j++) {
-                        if (!rm->AllocateResources(*tx, taskId, NRm::TKqpResourcesRequest{.ExecutionUnits = j, .Memory = j * 10u})) {
-                            failedAllocations++;
-                            Sleep(TDuration::MilliSeconds(j * 10));
-                            break;
-                        }
-                        count += j;
+        NPar::LocalExecutor().ExecRange([&](int index) {
+            const int taskId = index + 1;
+            auto count = 0u;
+            for (auto n = 0u; n < 20u; n++) {
+                for (auto j = 0u; j < 20u; j++) {
+                    if (!rm->AllocateResources(*tx, taskId, NRm::TKqpResourcesRequest{.ExecutionUnits = j, .Memory = j * 10u})) {
+                        failedAllocations++;
+                        Sleep(TDuration::MilliSeconds(j * 10));
+                        break;
                     }
-                    for (auto j = 20u; j > 0u; j--) {
-                        if (count < j) {
-                            break;
-                        }
-                        rm->FreeResources(*tx, taskId, NRm::TKqpResourcesRequest{.ExecutionUnits = j, .Memory = j * 10u});
-                        count -= j;
-                    }
+                    count += j;
                 }
-                rm->FreeResources(*tx, taskId, NRm::TKqpResourcesRequest{.ExecutionUnits = count, .Memory = count * 10u});
-                events[taskId - 1].Signal();
-            }, i + 1, NPar::TLocalExecutor::MED_PRIORITY);
-        }
-
-        for (auto i = 0; i < 10; i++) {
-            events[i].WaitI();
-        }
+                for (auto j = 20u; j > 0u; j--) {
+                    if (count < j) {
+                        break;
+                    }
+                    rm->FreeResources(*tx, taskId, NRm::TKqpResourcesRequest{.ExecutionUnits = j, .Memory = j * 10u});
+                    count -= j;
+                }
+            }
+            rm->FreeResources(*tx, taskId, NRm::TKqpResourcesRequest{.ExecutionUnits = count, .Memory = count * 10u});
+        }, 0, 10, NPar::TLocalExecutor::WAIT_COMPLETE | NPar::TLocalExecutor::MED_PRIORITY);
 
         UNIT_ASSERT_GT(failedAllocations.load(), 0);
         AssertResourceManagerStats(rm, 1000, 100);
@@ -548,38 +540,30 @@ void KqpRm::ConcurrentChannels() {
         {
             auto qm = CreateChannelQuotaManager(rm, tx, 0, 16);
 
-            std::array<TMuxEvent, 10> events;
             NPar::LocalExecutor().RunAdditionalThreads(10);
             std::atomic<ui64> failedAllocations = 0;
 
-            for (auto i = 0u; i < 10u; i++) {
-                NPar::LocalExecutor().Exec([&](int taskId) mutable {
-                    auto count = 0u;
-                    for (auto n = 0u; n < 20u; n++) {
-                        for (auto j = 0u; j < 20u; j++) {
-                            if (!qm->AllocateQuota(j * 10u)) {
-                                failedAllocations++;
-                                Sleep(TDuration::MilliSeconds(j * 10));
-                                break;
-                            }
-                            count += j;
+            NPar::LocalExecutor().ExecRange([&](int) {
+                auto count = 0u;
+                for (auto n = 0u; n < 20u; n++) {
+                    for (auto j = 0u; j < 20u; j++) {
+                        if (!qm->AllocateQuota(j * 10u)) {
+                            failedAllocations++;
+                            Sleep(TDuration::MilliSeconds(j * 10));
+                            break;
                         }
-                        for (auto j = 20u; j > 0u; j--) {
-                            if (count < j) {
-                                break;
-                            }
-                            qm->FreeQuota(j * 10u);
-                            count -= j;
-                        }
+                        count += j;
                     }
-                    qm->FreeQuota(count * 10u);
-                    events[taskId - 1].Signal();
-                }, i + 1, NPar::TLocalExecutor::MED_PRIORITY);
-            }
-
-            for (auto i = 0; i < 10; i++) {
-                events[i].WaitI();
-            }
+                    for (auto j = 20u; j > 0u; j--) {
+                        if (count < j) {
+                            break;
+                        }
+                        qm->FreeQuota(j * 10u);
+                        count -= j;
+                    }
+                }
+                qm->FreeQuota(count * 10u);
+            }, 0, 10, NPar::TLocalExecutor::WAIT_COMPLETE | NPar::TLocalExecutor::MED_PRIORITY);
 
             UNIT_ASSERT_GT(failedAllocations.load(), 0);
         }

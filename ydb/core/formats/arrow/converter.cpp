@@ -218,6 +218,7 @@ static std::shared_ptr<arrow::Array> InplaceConvertColumn(const std::shared_ptr<
             newData->type = arrow::int32();
             return std::make_shared<arrow::NumericArray<arrow::Int32Type>>(newData);
         }
+        case NScheme::NTypeIds::Interval:
         case NScheme::NTypeIds::Timestamp64:
         case NScheme::NTypeIds::Interval64:
         case NScheme::NTypeIds::Datetime64: {

@@ -51,6 +51,7 @@ PEERDIR(
     ydb/core/ymq/base
     ydb/core/ymq/error
     library/cpp/json
+    library/cpp/openssl/crypto
 )
 
 END()

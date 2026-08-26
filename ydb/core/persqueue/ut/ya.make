@@ -48,8 +48,6 @@ SRCS(
     pqtablet_ut.cpp
     sourceid_ut.cpp
     user_info_ut.cpp
-    pqrb_describes_ut.cpp
-    partition_scale_manager_graph_cmp_ut.cpp
     utils_ut.cpp
     events_ut.cpp
     write_id_ut.cpp
@@ -61,6 +59,7 @@ RESOURCE(
     ydb/core/persqueue/ut/resources/counters_pqproxy_firstclass.html counters_pqproxy_firstclass.html
     ydb/core/persqueue/ut/resources/counters_topics.html counters_topics.html
     ydb/core/persqueue/ut/resources/counters_topics_extended.html counters_topics_extended.html
+    ydb/core/persqueue/ut/resources/counters_topics_read.html counters_topics_read.html
 
     ydb/core/persqueue/ut/resources/partition_counters/federation/after_write.html federation_after_write.html
     ydb/core/persqueue/ut/resources/partition_counters/federation/after_read.html federation_after_read.html

@@ -31,6 +31,7 @@
 #include "util_string.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/blobstorage_data_kind.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/base/tablet_pipecache.h>
@@ -51,10 +52,8 @@
 #include <util/generic/ymath.h>
 #include <util/random/random.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::LOCAL_DB_BACKUP
 
-#define LOG_BACKUP_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, BackupLogPrefix() << stream)
-#define LOG_BACKUP_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, BackupLogPrefix() << stream)
-#define LOG_BACKUP_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, BackupLogPrefix() << stream)
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {
@@ -253,7 +252,7 @@ void TExecutor::Broken(EBrokenReason reason) {
     if (Owner) {
         ForceSendCounters();
         TabletCountersForgetTablet(Owner->TabletID(), Owner->TabletType(),
-            Owner->Info()->TenantPathId, Stats->IsFollower(), SelfId());
+            Owner->Info()->TenantPathId, Stats->IsFollower(), SelfId(), FollowerId);
         Owner->Detach(OwnerCtx());
     }
 
@@ -868,7 +867,7 @@ void TExecutor::Boot(TEvTablet::TEvBoot::TPtr &ev, const TActorContext &ctx) {
     if (Stats->IsFollower()) {
         ForceSendCounters();
         TabletCountersForgetTablet(Owner->TabletID(), Owner->TabletType(),
-            Owner->Info()->TenantPathId, Stats->IsFollower(), SelfId());
+            Owner->Info()->TenantPathId, Stats->IsFollower(), SelfId(), FollowerId);
     }
 
     if (!Counters) {
@@ -959,7 +958,7 @@ void TExecutor::Restored(TEvTablet::TEvRestored::TPtr &ev, const TActorContext &
 void TExecutor::DetachTablet() {
     ForceSendCounters();
     TabletCountersForgetTablet(Owner->TabletID(), Owner->TabletType(),
-        Owner->Info()->TenantPathId, Stats->IsFollower(), SelfId());
+        Owner->Info()->TenantPathId, Stats->IsFollower(), SelfId(), FollowerId);
     return PassAway();
 }
 
@@ -4146,7 +4145,8 @@ void TExecutor::UpdateCounters(const TActorContext &ctx) {
 
         TActorId countersAggregator = MakeTabletCountersAggregatorID(SelfId().NodeId(), Stats->IsFollower());
         Send(countersAggregator, new TEvTabletCounters::TEvTabletAddCounters(
-            CounterEventsInFlight, tabletId, tabletType, tenantPathId, executorCounters, externalTabletCounters));
+            CounterEventsInFlight, tabletId, tabletType, tenantPathId, executorCounters, externalTabletCounters,
+            FollowerId));
 
         if (ResourceMetrics) {
             ResourceMetrics->TryUpdate(ctx);
@@ -4175,7 +4175,8 @@ void TExecutor::ForceSendCounters() {
 
         TActorId countersAggregator = MakeTabletCountersAggregatorID(SelfId().NodeId(), Stats->IsFollower());
         Send(countersAggregator, new TEvTabletCounters::TEvTabletAddCounters(
-            CounterEventsInFlight, tabletId, tabletType, tenantPathId, executorCounters, externalTabletCounters));
+            CounterEventsInFlight, tabletId, tabletType, tenantPathId, executorCounters, externalTabletCounters,
+            FollowerId));
     }
 }
 
@@ -4424,6 +4425,8 @@ STFUNC(TExecutor::StateInit) {
 }
 
 STFUNC(TExecutor::StateBoot) {
+    YDB_LOG_CREATE_CONTEXT(GetLogPrefix(),
+        {"actorStateFunc", "StateBoot"});
     Y_ENSURE(BootLogic);
     switch (ev->GetTypeRewrite()) {
         // N.B. must work during follower promotion to leader
@@ -4438,6 +4441,8 @@ STFUNC(TExecutor::StateBoot) {
 }
 
 STFUNC(TExecutor::StateWork) {
+    YDB_LOG_CREATE_CONTEXT(GetLogPrefix(),
+        {"actorStateFunc", "StateWork"});
     switch (ev->GetTypeRewrite()) {
         HFunc(TEvPrivate::TEvActivateExecution, Handle);
         HFunc(TEvPrivate::TEvActivateLowExecution, Handle);
@@ -4478,6 +4483,8 @@ STFUNC(TExecutor::StateWork) {
 }
 
 STFUNC(TExecutor::StateFollower) {
+    YDB_LOG_CREATE_CONTEXT(GetLogPrefix(),
+        {"actorStateFunc", "StateFollower"});
     switch (ev->GetTypeRewrite()) {
         HFunc(TEvPrivate::TEvActivateExecution, Handle);
         HFunc(TEvPrivate::TEvActivateLowExecution, Handle);
@@ -4498,6 +4505,8 @@ STFUNC(TExecutor::StateFollower) {
 
 STFUNC(TExecutor::StateFollowerBoot) {
     Y_ENSURE(BootLogic);
+    YDB_LOG_CREATE_CONTEXT(GetLogPrefix(),
+        {"actorStateFunc", "StateBoot"});
     switch (ev->GetTypeRewrite()) {
         // N.B. must handle activities started before resync
         HFunc(TEvPrivate::TEvActivateExecution, Handle);
@@ -5061,6 +5070,8 @@ THolder<TDirectPartWriter> TExecutor::BeginWritePart(ui32 tableId)
         }
     }
 
+    cfg.DataKind = DataKindByTabletType(Owner->TabletType());
+
     TLogoBlobID mask(Owner->TabletID(), Generation(), step, Max<ui8>(), 0, 0);
 
     if (auto logl = Logger->Log(ELnLev::Info)) {
@@ -5231,6 +5242,8 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
         snapshot->Subset->TxStatus.clear();
     }
 
+    comp->DataKind = DataKindByTabletType(Owner->TabletType());
+
     TLogoBlobID mask(Owner->TabletID(), Generation(),
                     snapshot->Barrier->Step, Max<ui8>(), 0, 0);
 
@@ -5380,8 +5393,12 @@ void TExecutor::SetPreloadTablesData(THashSet<ui32> tables) {
 }
 
 
-TStringBuilder TExecutor::BackupLogPrefix() const {
-    return TStringBuilder() << "[" << Owner->TabletID() << ":" << Generation0 << "] ";
+NActors::NStructuredLog::TStructuredMessage TExecutor::GetLogPrefix() const {
+    return YDB_LOG_CREATE_MESSAGE(
+        {"actorClassName", "TExecutor"},
+        {"selfId", SelfId()},
+        {"tabletId", Owner->TabletID()},
+        {"generation", Generation0});
 }
 
 void TExecutor::StartNewBackup() {
@@ -5398,7 +5415,7 @@ void TExecutor::StartNewBackup() {
     ui64 tabletId = Owner->TabletID();
 
     if (std::find(excludeTabletIds.begin(), excludeTabletIds.end(), tabletId) != excludeTabletIds.end()) {
-        LOG_BACKUP_D("Tablet excluded from backup");
+        YDB_LOG_DEBUG("Tablet excluded from backup");
         return;
     }
 
@@ -5421,7 +5438,10 @@ void TExecutor::StartNewBackup() {
         tabletId, Generation0, Step0, scheme, exclusion);
 
     if (snapshotWriter && changelogWriter) {
-        LOG_BACKUP_N("Starting new backup" << " Type# " << tabletType << " Gen# " << Generation0 << " Step# " << Step0);
+        YDB_LOG_NOTICE("Starting new backup",
+            {"type", tabletType},
+            {"gen", Generation0},
+            {"step", Step0});
         auto snapshotWriterActor = Register(snapshotWriter, TMailboxType::HTSwap, AppData()->IOPoolId);
         const ui32 workBudgetPercent = std::clamp<ui32>(backupConfig.GetSnapshotWorkBudgetPercent(), 1, 100);
         for (const auto& [tableId, table] : tables) {
@@ -5438,7 +5458,8 @@ void TExecutor::StartNewBackup() {
         auto changelogWriterActor = Register(changelogWriter, TMailboxType::HTSwap, AppData()->SystemPoolId);
         CommitManager->BackupLogic.Start(SelfId(), changelogWriterActor);
     } else {
-        LOG_BACKUP_D("Backup not configured");
+        YDB_LOG_DEBUG("Backup not configured",
+            {"backupLogPrefix", GetLogPrefix()});
     }
 }
 
@@ -5446,7 +5467,8 @@ void TExecutor::Handle(NBackup::TEvSnapshotCompleted::TPtr& ev) {
     BackupSnapshotInProgress = false;
     Counters->Simple()[TExecutorCounters::BACKUP_SNAPSHOT_IN_PROGRESS].Set(0);
     if (ev->Get()->Success) {
-        LOG_BACKUP_N("Snapshot completed" << " Bytes# " << ev->Get()->WrittenBytes);
+        YDB_LOG_NOTICE("Snapshot completed",
+            {"bytes", ev->Get()->WrittenBytes});
         Owner->BackupSnapshotComplete(OwnerCtx());
 
         if (CommitManager->BackupLogic.IsRunning()) {
@@ -5477,7 +5499,8 @@ void TExecutor::FailBackup(const TString& error) {
         Y_TABLET_ERROR(error);
     }
 
-    LOG_BACKUP_E(error);
+    YDB_LOG_ERROR("Backup failed",
+        {"error", error});
     CommitManager->BackupLogic.Stop();
     ScheduleRetryBackup();
 }
@@ -5492,9 +5515,9 @@ void TExecutor::ScheduleRetryBackup() {
         }
 
         auto retryTimeout = BackupRetry->Next();
-        LOG_BACKUP_N("Scheduling backup retry"
-            << " Timeout# " << retryTimeout
-            << " Attempt# " << BackupRetry->GetIteration());
+        YDB_LOG_NOTICE("Scheduling backup retry",
+            {"timeout", retryTimeout},
+            {"attempt", BackupRetry->GetIteration()});
         Schedule(retryTimeout, new NBackup::TEvStartNewBackup);
     }
 }
@@ -5538,12 +5561,23 @@ void TExecutor::MoveData(TEvTablet::TEvMoveData::TPtr& ev) {
     }
 }
 
+void TExecutor::StartMoveDataVacuumFromOwner() {
+    MoveDataVacuumInProgress = true;
+    StartVacuum(TNoTag());
+}
+
 void TExecutor::VacuumComplete(TVacuumGeneration generation, const TActorContext& ctx) {
     if (generation) {
         Owner->VacuumComplete(generation, ctx);
     }
+    if (MoveDataVacuumInProgress) {
+        Owner->MoveDataCompleted(ctx);
+    }
+    MoveDataVacuumInProgress = false;
     for (const auto& actor : MoveDataSubscribers) {
-        ctx.Send(actor, new TEvTablet::TEvMoveDataResponse(TabletId()));
+        ctx.Send(actor, new TEvTablet::TEvMoveDataResponse(
+            TabletId(),
+            NKikimrTabletBase::TEvMoveDataResponse::Success));
     }
     MoveDataSubscribers.clear();
 }

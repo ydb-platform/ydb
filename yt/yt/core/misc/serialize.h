@@ -1,11 +1,11 @@
 #pragma once
 
 #include "public.h"
-#include "property.h"
 #include "serialize_dump.h"
 
 #include <library/cpp/yt/memory/ref.h>
 
+#include <library/cpp/yt/misc/property.h>
 #include <library/cpp/yt/misc/strong_typedef.h>
 
 #include <util/stream/buffered.h>

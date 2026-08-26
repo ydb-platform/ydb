@@ -1,10 +1,16 @@
 #include "formatter.h"
 
+#include <library/cpp/yt/logging/structured_payload.h>
+#include <library/cpp/yt/logging/tag.h>
+
 #include <library/cpp/yt/cpu_clock/clock.h>
 
 #include <library/cpp/yt/misc/port.h>
 
-#ifdef YT_USE_SSE42
+#include <bit>
+#include <variant>
+
+#ifdef __SSE4_2__
     #include <emmintrin.h>
     #include <pmmintrin.h>
 #endif
@@ -93,56 +99,110 @@ void FormatMessage(TBaseFormatter* out, TStringBuf message)
 {
     auto current = message.begin();
 
-#ifdef YT_USE_SSE42
+#ifdef __SSE4_2__
     auto vectorLow = _mm_set1_epi8(PrintableASCIILow);
     auto vectorHigh = _mm_set1_epi8(PrintableASCIIHigh);
 #endif
 
-    auto appendChar = [&] {
-        char ch = *current;
+    auto appendCharRaw = [&] (char* cursor, unsigned char ch) {
         if (ch == '\n') {
-            out->AppendString("\\n");
+            *cursor++ = '\\';
+            *cursor++ = 'n';
         } else if (ch == '\t') {
-            out->AppendString("\\t");
+            *cursor++ = '\\';
+            *cursor++ = 't';
         } else if (ch < PrintableASCIILow || ch > PrintableASCIIHigh) {
-            unsigned char unsignedCh = ch;
-            out->AppendString("\\x");
-            out->AppendChar(IntToHexLowercase[unsignedCh >> 4]);
-            out->AppendChar(IntToHexLowercase[unsignedCh & 15]);
+            *cursor++ = '\\';
+            *cursor++ = 'x';
+            *cursor++ = IntToHexLowercase[ch >> 4];
+            *cursor++ = IntToHexLowercase[ch & 15];
         } else {
-            out->AppendChar(ch);
+            *cursor++ = ch;
         }
-        ++current;
+
+        return cursor;
     };
 
     while (current < message.end()) {
+        // Guarantee there is enough space so that per-character bounds checks can be skipped.
         if (out->GetBytesRemaining() < MessageBufferWatermarkSize) {
             out->AppendString(TStringBuf("...<message truncated>"));
             break;
         }
-#ifdef YT_USE_SSE42
-        // Use SSE for optimization.
-        if (current + 16 > message.end()) {
-            appendChar();
-        } else {
-            const void* inPtr = &(*current);
-            void* outPtr = out->GetCursor();
-            auto value = _mm_lddqu_si128(static_cast<const __m128i*>(inPtr));
-            if (_mm_movemask_epi8(_mm_cmplt_epi8(value, vectorLow)) ||
-                _mm_movemask_epi8(_mm_cmpgt_epi8(value, vectorHigh))) {
-                for (int index = 0; index < 16; ++index) {
-                    appendChar();
-                }
-            } else {
-                _mm_storeu_si128(static_cast<__m128i*>(outPtr), value);
+
+        char* cursor = out->GetCursor();
+
+#ifdef __SSE4_2__
+        if (current + 16 <= message.end()) {
+            auto value = _mm_lddqu_si128(reinterpret_cast<const __m128i*>(current));
+            int mask = _mm_movemask_epi8(_mm_cmplt_epi8(value, vectorLow)) |
+                _mm_movemask_epi8(_mm_cmpgt_epi8(value, vectorHigh));
+                       _mm_movemask_epi8(_mm_cmpgt_epi8(value, vectorHigh));
+
+            if (mask == 0) {
+                // Fast path: perfect 16 chars
+                _mm_storeu_si128(reinterpret_cast<__m128i*>(cursor), value);
                 out->Advance(16);
                 current += 16;
+                continue;
             }
+
+            int processed = 0;
+            while (mask != 0) {
+                int badCharIndex = std::countr_zero(static_cast<ui32>(mask));
+
+                while (processed < badCharIndex) {
+                    *cursor++ = current[processed++];
+                }
+
+                cursor = appendCharRaw(cursor, current[processed++]);
+
+                mask &= mask - 1;
+            }
+
+            while (processed < 16) {
+                *cursor++ = current[processed++];
+            }
+
+            out->Advance(cursor - out->GetCursor());
+            current += 16;
+            continue;
         }
-#else
-        // Unoptimized version.
-        appendChar();
 #endif
+        // Unoptimized tail
+        cursor = appendCharRaw(cursor, *current++);
+        out->Advance(cursor - out->GetCursor());
+    }
+}
+
+// Formats |Message (Key: Value, ...)|, with well-known tags (e.g. an error) appended
+// after the |(...)| group. Well-known tags are always written last, so a single pass
+// suffices. Every piece -- message, tag keys/values, and the newline separating a
+// well-known tag -- goes through FormatMessage and is escaped, so the rendered payload
+// stays on a single physical line (a newline is emitted as the literal "\n").
+void FormatPayload(TBaseFormatter* out, const TTaggedLogEventPayload& payload)
+{
+    TTaggedPayloadReader reader(payload);
+    FormatMessage(out, reader.ReadMessage());
+    bool parenOpen = false;
+    while (auto tag = reader.TryReadTag()) {
+        if (tag->IsWellKnown) {
+            if (parenOpen) {
+                out->AppendChar(')');
+                parenOpen = false;
+            }
+            FormatMessage(out, "\n"_sb);
+            FormatMessage(out, tag->Value);
+        } else {
+            out->AppendString(parenOpen ? ", "_sb : " ("_sb);
+            parenOpen = true;
+            FormatMessage(out, tag->Key);
+            out->AppendString(": "_sb);
+            FormatMessage(out, tag->Value);
+        }
+    }
+    if (parenOpen) {
+        out->AppendChar(')');
     }
 }
 
@@ -186,7 +246,13 @@ void TPlainTextEventFormatter::Format(TBaseFormatter* buffer, const TLogEvent& e
 
     buffer->AppendChar('\t');
 
-    FormatMessage(buffer, event.MessageRef.ToStringBuf());
+    if (const auto* tagged = std::get_if<TTaggedLogEventPayload>(&event.Payload)) {
+        FormatPayload(buffer, *tagged);
+    } else {
+        // A structured event routed to a plain-text writer: emit its raw YSON fragment
+        // (escaped, so the record stays a single physical line).
+        FormatMessage(buffer, GetYsonFromStructuredPayload(std::get<TStructuredLogEventPayload>(event.Payload)).AsStringBuf());
+    }
 
     buffer->AppendChar('\t');
 

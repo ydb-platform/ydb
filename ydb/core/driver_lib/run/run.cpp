@@ -5,9 +5,11 @@
 #include "kikimr_services_initializers.h"
 
 #include <ydb/core/kqp/compile_service/kqp_warmup_compile_actor.h>
+#include <ydb/core/kqp/common/dynamic_function_registry.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
 #include <ydb/core/memory_controller/memory_controller.h>
+#include <ydb/core/persqueue/pqtablet/blob/header.h>
 #include <ydb/library/actors/core/callstack.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -139,6 +141,7 @@
 #include <ydb/services/persqueue_v1/topic_deferred_publish.h>
 #include <ydb/services/rate_limiter/grpc_service.h>
 #include <ydb/services/replication/grpc_service.h>
+#include <ydb/services/distributed_storage/grpc_service.h>
 #include <ydb/services/test_shard/grpc_service.h>
 #include <ydb/services/ydb/ydb_clickhouse_internal.h>
 #include <ydb/services/ydb/ydb_dummy.h>
@@ -201,6 +204,16 @@
 namespace NKikimr {
 
 namespace {
+
+// client_certificate_authorization (request/required) applies to grpc_config.ssl_port only.
+void FillGrpcSslDataFromClientCertificateAuthorization(
+    NYdbGrpc::TSslData& sslData,
+    const NKikimrConfig::TAppConfig& appConfig
+) {
+    const auto& clientCertificateAuthorization = appConfig.GetClientCertificateAuthorization();
+    sslData.DoRequestClientCertificate = clientCertificateAuthorization.GetRequestClientCertificate();
+    sslData.ClientCertificateRequired = clientCertificateAuthorization.GetClientCertificateRequired();
+}
 
 void StopGRpcServers(std::weak_ptr<TGRpcServersWrapper> grpcServersWrapper, bool isDisabled = false) {
     auto wrapper = grpcServersWrapper.lock();
@@ -472,6 +485,7 @@ public:
         }
 
         appData->InitFeatureFlags(Config.GetFeatureFlags());
+        NPQ::InitMaxHeaderSize(appData->FeatureFlags);
         appData->AllowHugeKeyValueDeletes = Config.GetFeatureFlags().GetAllowHugeKeyValueDeletes();
         appData->EnableKqpSpilling = Config.GetTableServiceConfig().GetSpillingServiceConfig().GetLocalFileConfig().GetEnable();
 
@@ -669,6 +683,7 @@ void TKikimrRunner::InitializeMonitoring(const TKikimrRunConfig& runConfig, bool
         monConfig.CertificateFile = appConfig.GetMonitoringConfig().GetMonitoringCertificateFile();
         monConfig.PrivateKeyFile = appConfig.GetMonitoringConfig().GetMonitoringPrivateKeyFile();
         monConfig.CaFile = appConfig.GetMonitoringConfig().GetMonitoringCaFile();
+        monConfig.ClientCertificateRequired = appConfig.GetMonitoringConfig().GetClientCertificateRequired();
         monConfig.RedirectMainPageTo = appConfig.GetMonitoringConfig().GetRedirectMainPageTo();
         monConfig.RequireCountersAuthentication = appConfig.GetMonitoringConfig().GetRequireCountersAuthentication();
         if (appConfig.GetMonitoringConfig().CompressContentTypesSize() > 0) {
@@ -872,6 +887,8 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
         names["config"] = &hasConfig;
         TServiceCfg hasBridge = services.empty();
         names["bridge"] = &hasBridge;
+        TServiceCfg hasDistributedStorage = services.empty();
+        names["distributed_storage"] = &hasDistributedStorage;
         TServiceCfg hasTestShard = services.empty();
         names["test_shard"] = &hasTestShard;
 #if defined(YDB_EMBEDDED_NBS_ENABLED)
@@ -1193,6 +1210,10 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
             server.AddService(new NGRpcService::TBridgeGRpcService(ActorSystem.Get(), Counters, grpcRequestProxies[0]));
         }
 
+        if (hasDistributedStorage) {
+            server.AddService(new NGRpcService::TDistributedStorageGRpcService(ActorSystem.Get(), Counters, grpcRequestProxies[0]));
+        }
+
         if (hasTestShard) {
             server.AddService(new NGRpcService::TTestShardSetGRpcService(ActorSystem.Get(), Counters, grpcRequestProxies[0]));
         }
@@ -1295,7 +1316,7 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
             sslData.Root = ReadFile(pathToCaFile);
             sslData.Cert = ReadFile(pathToCertificateFile);
             sslData.Key = ReadFile(pathToPrivateKeyFile);
-            sslData.DoRequestClientCertificate = appConfig.GetClientCertificateAuthorization().GetRequestClientCertificate();
+            FillGrpcSslDataFromClientCertificateAuthorization(sslData, appConfig);
             sslOpts.SetSslData(sslData);
 
             grpcServers.push_back({ "grpcs", new NYdbGrpc::TGRpcServer(sslOpts, Counters) });
@@ -1352,6 +1373,8 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
                     pathToPrivateKeyFile = GET_PATH_TO_FILE(grpcConfig, PathToPrivateKeyFile, Key);
                 }
                 sslData.Key = ReadFile(pathToPrivateKeyFile);
+                // client_certificate_authorization applies to the main grpcs port only.
+                // ext_endpoints need their own mTLS settings (not implemented yet).
 #undef GET_PATH_TO_FILE
 
                 xopts.SetSslData(sslData);
@@ -1527,6 +1550,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
 
     if (runConfig.AppConfig.HasKafkaProxyConfig()) {
         AppData->KafkaProxyConfig.CopyFrom(runConfig.AppConfig.GetKafkaProxyConfig());
+    }
+
+    if (runConfig.AppConfig.HasHttpProxyConfig()) {
+        AppData->HttpProxyConfig.CopyFrom(runConfig.AppConfig.GetHttpProxyConfig());
     }
 
     if (runConfig.AppConfig.HasNetClassifierConfig()) {
@@ -1745,6 +1772,10 @@ void TKikimrRunner::InitializeLogSettings(const TKikimrRunConfig& runConfig)
 
     if (logConfig.HasAllowDropEntries()) {
         LogSettings->SetAllowDrop(logConfig.GetAllowDropEntries());
+    }
+
+    if (logConfig.HasEnableStructuredLogInJson()) {
+        LogSettings->SetEnableStructuredLogInJson(logConfig.GetEnableStructuredLogInJson());
     }
 
     if (logConfig.HasUseLocalTimestamps()) {
@@ -2127,6 +2158,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
 
     sil->AddServiceInitializer(new TMemoryControllerInitializer(runConfig, ProcessMemoryInfoProvider));
 
+    if (serviceMask.EnableWorkloadManagerService) {
+        sil->AddServiceInitializer(new TWorkloadManagerServiceInitializer(runConfig));
+    }
+
     if (serviceMask.EnableKqp) {
         sil->AddServiceInitializer(new TKqpServiceInitializer(runConfig, ModuleFactories, *this));
     }
@@ -2250,6 +2285,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TOverloadManagerInitializer(runConfig));
     }
 
+    if (serviceMask.EnableCsFlowControlManager) {
+        sil->AddServiceInitializer(new TFlowControlManagerInitializer(runConfig));
+    }
+
 #if defined(YDB_EMBEDDED_NBS_ENABLED)
     if (serviceMask.EnableNBSService) {
         sil->AddServiceInitializer(new TNbsServiceInitializer(runConfig));
@@ -2257,6 +2296,8 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
 #endif
 
     if (serviceMask.EnableUdfStore) {
+        Y_ABORT_UNLESS(NKqp::AsDynamicFunctionRegistry(FunctionRegistry.Get()),
+            "FunctionRegistry must implement NKqp::IDynamicFunctionRegistry for UDF store");
         sil->AddServiceInitializer(new TUdfStoreInitializer(runConfig, FunctionRegistry));
     }
 
@@ -2406,12 +2447,12 @@ void TKikimrRunner::KikimrStop(bool graceful) {
         StopGRpcServers(GRpcServersWrapper, true);
     }
 
-    if (ActorSystem) {
-        ActorSystem->Stop();
-    }
-
     if (YqSharedResources) {
         YqSharedResources->Stop();
+    }
+
+    if (ActorSystem) {
+        ActorSystem->Stop();
     }
 
     if (ModuleFactories) {
@@ -2469,7 +2510,7 @@ void TKikimrRunner::InitializeRegistries(const TKikimrRunConfig& runConfig) {
     TypeRegistry.Reset(new NScheme::TKikimrTypeRegistry());
     TypeRegistry->CalculateMetadataEtag();
 
-    FunctionRegistry.Reset(NMiniKQL::CreateFunctionRegistry(NMiniKQL::CreateBuiltinRegistry())->Clone());
+    FunctionRegistry = NKqp::CreateDynamicFunctionRegistry(NMiniKQL::CreateBuiltinRegistry());
     FormatFactory.Reset(new TFormatFactory);
 
     const TString& udfsDir = runConfig.AppConfig.GetUDFsDir();

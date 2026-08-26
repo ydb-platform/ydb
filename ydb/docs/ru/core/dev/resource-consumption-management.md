@@ -22,13 +22,13 @@ CREATE RESOURCE POOL olap WITH (
     CONCURRENT_QUERY_LIMIT=10,
     QUEUE_SIZE=1000,
     DATABASE_LOAD_CPU_THRESHOLD=80,
-    RESOURCES_WEIGHT=100,
+    RESOURCE_WEIGHT=100,
     QUERY_CPU_LIMIT_PERCENT_PER_NODE=50,
     TOTAL_CPU_LIMIT_PERCENT_PER_NODE=70
 )
 ```
 
-Ознакомиться с полным перечнем параметров пулов ресурсов можно в справке по [{#T}](../yql/reference/syntax/create-resource-pool.md#parameters). Часть параметров является глобальными для всей базы данных (например, `CONCURRENT_QUERY_LIMIT`, `QUEUE_SIZE`, `DATABASE_LOAD_CPU_THRESHOLD`), а другие — применяются только к одному вычислительному узлу (например, `QUERY_CPU_LIMIT_PERCENT_PER_NODE`, `TOTAL_CPU_LIMIT_PERCENT_PER_NODE`, `TOTAL_MEMORY_LIMIT_PERCENT_PER_NODE`). Между всеми пулами может разделяться CPU в случае переподписки на одном вычислительном узле с помощью `RESOURCES_WEIGHT`.
+Ознакомиться с полным перечнем параметров пулов ресурсов можно в справке по [{#T}](../yql/reference/syntax/create-resource-pool.md#parameters). Часть параметров является глобальными для всей базы данных (например, `CONCURRENT_QUERY_LIMIT`, `QUEUE_SIZE`, `DATABASE_LOAD_CPU_THRESHOLD`), а другие — применяются только к одному вычислительному узлу (например, `QUERY_CPU_LIMIT_PERCENT_PER_NODE`, `TOTAL_CPU_LIMIT_PERCENT_PER_NODE`, `TOTAL_MEMORY_LIMIT_PERCENT_PER_NODE`). Между всеми пулами может разделяться CPU в случае переподписки на одном вычислительном узле с помощью `RESOURCE_WEIGHT`.
 
 ![resource_pools](../_assets/resource_pool.png)
 
@@ -64,18 +64,18 @@ Issues:
 
 Как и в случае `CONCURRENT_QUERY_LIMIT`, при превышении указанного порога нагрузки запросы отправляются в очередь ожидания.
 
-### Распределение ресурсов в соответствии с RESOURCES_WEIGHT {#resources_weight}
+### Распределение ресурсов в соответствии с RESOURCE_WEIGHT {#resources_weight}
 
 ![resource_pools](../_assets/resources_weight.png)
 
-Параметр `RESOURCES_WEIGHT` начинает работать только в случае переподписки и при наличии более одного пула ресурсов в системе. В текущей реализации `RESOURCES_WEIGHT` влияет только на распределение ресурсов `vCPU`. Когда в пуле ресурсов появляются запросы, он начинает участвовать в распределении ресурсов. Для этого в пулах происходит перерасчёт лимитов согласно алгоритму [Max-min fairness](https://en.wikipedia.org/wiki/Max-min_fairness). Само перераспределение ресурсов выполняется на каждом вычислительном узле индивидуально, как показано на рисунке выше.
+Параметр `RESOURCE_WEIGHT` начинает работать только в случае переподписки и при наличии более одного пула ресурсов в системе. В текущей реализации `RESOURCE_WEIGHT` влияет только на распределение ресурсов `vCPU`. Когда в пуле ресурсов появляются запросы, он начинает участвовать в распределении ресурсов. Для этого в пулах происходит перерасчёт лимитов согласно алгоритму [Max-min fairness](https://en.wikipedia.org/wiki/Max-min_fairness). Само перераспределение ресурсов выполняется на каждом вычислительном узле индивидуально, как показано на рисунке выше.
 
 Допустим, у нас есть узел в системе с доступными $10 vCPU$. Установлены ограничения:
 
 - $TOTAL\_CPU\_LIMIT\_PERCENT\_PER\_NODE = 30$,
 - $QUERY\_CPU\_LIMIT\_PERCENT\_PER\_NODE = 50$.
 
-В этом случае у пула ресурсов будет ограничение $3 vCPU$ на узел и $1.5 vCPU$ на один запрос в этом пуле (рисунок *a*). Если в системе существует 4 таких пула, и все они пытаются использовать максимальные ресурсы, это составит $12 vCPU$, что превышает предел доступных ресурсов на узле ($10 vCPU$). В этом случае начинают действовать `RESOURCES_WEIGHT`, и каждому пулу будет выделено по $2.5 vCPU$ (рисунок *b*).
+В этом случае у пула ресурсов будет ограничение $3 vCPU$ на узел и $1.5 vCPU$ на один запрос в этом пуле (рисунок *a*). Если в системе существует 4 таких пула, и все они пытаются использовать максимальные ресурсы, это составит $12 vCPU$, что превышает предел доступных ресурсов на узле ($10 vCPU$). В этом случае начинают действовать `RESOURCE_WEIGHT`, и каждому пулу будет выделено по $2.5 vCPU$ (рисунок *b*).
 
 Если необходимо увеличить выделяемые ресурсы для конкретного пула, можно изменить его вес, например, на 200. Тогда этот пул получит $3 vCPU$, а остальные пулы поделят поровну оставшиеся $7 vCPU$, что составит $\frac{7}{3} vCPU$ на каждый пул (рисунок *c*).
 
@@ -94,7 +94,7 @@ CREATE RESOURCE POOL default WITH (
     CONCURRENT_QUERY_LIMIT=-1,
     QUEUE_SIZE=-1,
     DATABASE_LOAD_CPU_THRESHOLD=-1,
-    RESOURCES_WEIGHT=-1,
+    RESOURCE_WEIGHT=-1,
     TOTAL_MEMORY_LIMIT_PERCENT_PER_NODE=-1,
     QUERY_CPU_LIMIT_PERCENT_PER_NODE=-1,
     TOTAL_CPU_LIMIT_PERCENT_PER_NODE=-1
@@ -136,7 +136,7 @@ WITH (
 ```
 
 - `RESOURCE_POOL` — имя пула ресурсов, в который будет отправлен запрос, удовлетворяющий требованиям, заданным в классификаторе пула ресурсов.
-- `MEMBER_NAME` — группа пользователей или пользователь, запросы которых будут отправлены в указанный пул ресурсов.
+- `MEMBER_NAME` — группа пользователей или пользователь, запросы которых будут отправлены в указанный пул ресурсов. Подробнее о формате значения см. [CREATE RESOURCE POOL CLASSIFIER](../yql/reference/syntax/create-resource-pool-classifier.md#member-name-format).
 
 ## Управление ACL классификатора пула ресурсов
 
@@ -183,7 +183,7 @@ CREATE RESOURCE POOL olap WITH (
     CONCURRENT_QUERY_LIMIT=20,
     QUEUE_SIZE=100,
     DATABASE_LOAD_CPU_THRESHOLD=80,
-    RESOURCES_WEIGHT=20,
+    RESOURCE_WEIGHT=20,
     QUERY_CPU_LIMIT_PERCENT_PER_NODE=80,
     TOTAL_CPU_LIMIT_PERCENT_PER_NODE=100
 );
@@ -191,7 +191,7 @@ CREATE RESOURCE POOL olap WITH (
 CREATE RESOURCE POOL the_ceo WITH (
     CONCURRENT_QUERY_LIMIT=20,
     QUEUE_SIZE=100,
-    RESOURCES_WEIGHT=100,
+    RESOURCE_WEIGHT=100,
     QUERY_CPU_LIMIT_PERCENT_PER_NODE=100,
     TOTAL_CPU_LIMIT_PERCENT_PER_NODE=100
 );
@@ -215,7 +215,7 @@ CREATE RESOURCE POOL the_ceo WITH (
 
 При необходимости пользователь может явно указать, в каком пуле следует выполнить заданный запрос. В настоящий момент это можно сделать следующим образом:
 
-- **Embedded UI** — в окне настройки запуска запроса `Query execution settings` через параметр `Resource pool`.
+- **{{ ydb-ui-name }}** — в окне настройки запуска запроса `Query execution settings` через параметр `Resource pool`.
 - **YDB CLI** — в команде [`ydb sql`](../reference/ydb-cli/sql.md) с параметром `--resource-pool`, например, `ydb sql --resource-pool my_pool -s "SELECT 1"`.
 - **YDB CLI ([интерактивный режим](../reference/ydb-cli/interactive-cli.md))** — [командой](../reference/ydb-cli/interactive-cli.md#internal-vars) `SET resource_pool = my_pool`, где `my_pool` — наименование пула ресурсов.
 - **YDB CPP SDK** — в настройках запуска запроса через параметр [ResourcePool](https://github.com/ydb-platform/ydb/blob/fb05a8472be6b2770528b3e90093e67a7bca8f0e/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/query.h#L111).
@@ -296,7 +296,7 @@ where State = 'EXECUTING'
 
 ### Системные представления
 
-Информацию о системных представлениях, связанных с пулами ресурсов и классификаторами пулов ресурсов, можно найти на странице [{#T}](system-views.md#resource_pools).
+Информацию о системных представлениях, связанных с пулами ресурсов и классификаторами пулов ресурсов, можно найти на странице [Информация о пулах ресурсов](system-views.md#resource_pools).
 
 ## См. также
 

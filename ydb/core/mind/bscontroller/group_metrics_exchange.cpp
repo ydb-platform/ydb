@@ -1,5 +1,7 @@
 #include "impl.h"
 
+#include <ydb/core/node_whiteboard/node_whiteboard.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT BS_CONTROLLER
 
 namespace NKikimr::NBsController {

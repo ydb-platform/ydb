@@ -14,12 +14,11 @@ from .transaction import QueryTxContext
 from .. import _utilities
 from ... import issues
 from ...settings import BaseRequestSettings
-from ..._grpc.grpcwrapper import common_utils
 from ..._grpc.grpcwrapper import ydb_query_public_types as _ydb_query_public
 
 from ...query import base
 from ...query.session import BaseQuerySession
-from ...opentelemetry.tracing import SpanName, create_ydb_span, set_peer_attributes, span_finish_callback
+from ...observability.tracing import SpanName, create_ydb_span, set_peer_attributes, span_finish_callback
 
 from ..._constants import DEFAULT_INITIAL_RESPONSE_TIMEOUT
 
@@ -53,7 +52,7 @@ class QuerySession(BaseQuerySession["AsyncDriver"]):
         self._stream = await self._attach_call()
         self._status_stream = _utilities.AsyncResponseIterator(
             self._stream,
-            lambda response: common_utils.ServerStatus.from_proto(response),
+            self._attach_stream_wrapper,
         )
 
         try:
@@ -110,6 +109,7 @@ class QuerySession(BaseQuerySession["AsyncDriver"]):
             await self._create_call(settings=settings)
             set_peer_attributes(span, self._peer)
             await self._attach()
+            self._session_metrics.count_open()
 
         return self
 
@@ -136,6 +136,7 @@ class QuerySession(BaseQuerySession["AsyncDriver"]):
         schema_inclusion_mode: Optional[base.QuerySchemaInclusionMode] = None,
         result_set_format: Optional[base.QueryResultSetFormat] = None,
         arrow_format_settings: Optional[base.ArrowFormatSettings] = None,
+        pool_id: Optional[str] = None,
     ) -> AsyncResponseContextIterator:
         """Sends a query to Query Service
 
@@ -157,6 +158,7 @@ class QuerySession(BaseQuerySession["AsyncDriver"]):
          1) QueryResultSetFormat.VALUE, which is default;
          2) QueryResultSetFormat.ARROW.
         :param arrow_format_settings: Settings for Arrow format when result_set_format is ARROW.
+        :param pool_id: Optional resource pool ID for routing the query to a specific resource pool.
 
         :return: Iterator with result sets
         """
@@ -182,6 +184,7 @@ class QuerySession(BaseQuerySession["AsyncDriver"]):
                 arrow_format_settings=arrow_format_settings,
                 concurrent_result_sets=concurrent_result_sets,
                 settings=settings,
+                pool_id=pool_id,
             )
         return AsyncResponseContextIterator(
             it=stream_it,

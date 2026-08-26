@@ -39,7 +39,7 @@ def extract_macro_calls2(unit, macro_value_name):
 
 
 @ymake.macro
-def JAVA_MODULE(unit: ymake.Unit, *args: tuple[str, ...]):
+def JAVA_MODULE(unit: ymake.Unit, *args: str):
     args_delim = unit.get('ARGS_DELIM')
 
     if unit.get('YA_IDE_IDEA') != 'yes':
@@ -143,13 +143,13 @@ def JAVA_MODULE(unit: ymake.Unit, *args: tuple[str, ...]):
 
 
 @ymake.macro
-def _ADD_JAVA_STYLE_CHECKS(unit: ymake.Unit, *args: tuple[str, ...]):
+def _ADD_JAVA_STYLE_CHECKS(unit: ymake.Unit, *args: str):
     if unit.get('LINT_LEVEL_VALUE') != "none" and common.get_no_lint_value(unit) != 'none':
         unit.onadd_check(['JAVA_STYLE', unit.get('LINT_LEVEL_VALUE')] + list(args))
 
 
 @ymake.macro
-def _ADD_KOTLIN_STYLE_CHECKS(unit: ymake.Unit, *args: tuple[str, ...]):
+def _ADD_KOTLIN_STYLE_CHECKS(unit: ymake.Unit, *args: str):
     """
     ktlint can be disabled using NO_LINT() and NO_LINT(ktlint)
     """
@@ -159,7 +159,7 @@ def _ADD_KOTLIN_STYLE_CHECKS(unit: ymake.Unit, *args: tuple[str, ...]):
 
 
 @ymake.macro
-def _ADD_CLASSPATH_CLASH_CHECK(unit: ymake.Unit, *args: tuple[str, ...]):
+def _ADD_CLASSPATH_CLASH_CHECK(unit: ymake.Unit, *args: str):
     jdeps_val = (unit.get('CHECK_JAVA_DEPS_VALUE') or '').lower()
     if jdeps_val and jdeps_val not in ('yes', 'no', 'strict'):
         ymake.report_configure_error('CHECK_JAVA_DEPS: "yes", "no" or "strict" required')
@@ -168,7 +168,7 @@ def _ADD_CLASSPATH_CLASH_CHECK(unit: ymake.Unit, *args: tuple[str, ...]):
 
 
 @ymake.macro
-def _ADD_CLASSPATH_CLASH_CHECK_IF_UBERJAR(unit: ymake.Unit, *args: tuple[str, ...]):
+def _ADD_CLASSPATH_CLASH_CHECK_IF_UBERJAR(unit: ymake.Unit, *args: str):
     uberjar_val = (unit.get('MAKE_UBERJAR_VALUE') or '').lower()
     if uberjar_val and uberjar_val not in ('yes', 'no'):
         ymake.report_configure_error('MAKE_UBERJAR: "yes" or "no" required')
@@ -177,7 +177,7 @@ def _ADD_CLASSPATH_CLASH_CHECK_IF_UBERJAR(unit: ymake.Unit, *args: tuple[str, ..
 
 
 @ymake.macro
-def _ADD_CLASSPATH_CLASH_CHECK_IF_NOT_UBERJAR(unit: ymake.Unit, *args: tuple[str, ...]):
+def _ADD_CLASSPATH_CLASH_CHECK_IF_NOT_UBERJAR(unit: ymake.Unit, *args: str):
     uberjar_val = (unit.get('MAKE_UBERJAR_VALUE') or '').lower()
     if uberjar_val and uberjar_val not in ('yes', 'no'):
         ymake.report_configure_error('MAKE_UBERJAR: "yes" or "no" required')
@@ -186,7 +186,7 @@ def _ADD_CLASSPATH_CLASH_CHECK_IF_NOT_UBERJAR(unit: ymake.Unit, *args: tuple[str
 
 
 @ymake.macro
-def _ADD_DETEKT_REPORT_CHECK(unit: ymake.Unit, *args: tuple[str, ...]):
+def _ADD_DETEKT_REPORT_CHECK(unit: ymake.Unit, *args: str):
     if unit.get('WITH_KOTLIN_VALUE') == 'yes' and unit.get('WITH_KOTLINC_PLUGIN_DETEKT') == 'yes':
         unit.onadd_check(['detekt.report'] + list(args))
 
@@ -195,7 +195,7 @@ def _ADD_DETEKT_REPORT_CHECK(unit: ymake.Unit, *args: tuple[str, ...]):
 
 
 @ymake.macro
-def _CHECK_JAVA_SRCDIR(unit: ymake.Unit, *args: tuple[str, ...]):
+def _CHECK_JAVA_SRCDIR(unit: ymake.Unit, *args: str):
     args = list(args)
     if 'SKIP_CHECK_SRCDIR' in args:
         return
@@ -214,7 +214,7 @@ def _CHECK_JAVA_SRCDIR(unit: ymake.Unit, *args: tuple[str, ...]):
 
 
 @ymake.macro
-def _FILL_JAR_COPY_RESOURCES_CMD(unit: ymake.Unit, *args: tuple[str, ...]):
+def _FILL_JAR_COPY_RESOURCES_CMD(unit: ymake.Unit, *args: str):
     if len(args) == 4:
         varname, srcdir, base_classes_dir, reslist = tuple(args)
         package = ''
@@ -229,7 +229,7 @@ def _FILL_JAR_COPY_RESOURCES_CMD(unit: ymake.Unit, *args: tuple[str, ...]):
 
 
 @ymake.macro
-def _FILL_JAR_GEN_SRCS(unit: ymake.Unit, *args: tuple[str, ...]):
+def _FILL_JAR_GEN_SRCS(unit: ymake.Unit, *args: str):
     varname, jar_type, srcdir, base_classes_dir, java_list, kt_list, res_list = tuple(args[0:7])
     resolved_srcdir = unit.resolve_arc_path(srcdir)
     if not resolved_srcdir.startswith('$') or resolved_srcdir.startswith('$S'):
@@ -253,7 +253,7 @@ def _FILL_JAR_GEN_SRCS(unit: ymake.Unit, *args: tuple[str, ...]):
 
 
 @ymake.macro
-def _CHECK_RUN_JAVA_PROG_CLASSPATH(unit: ymake.Unit, *args: tuple[str, ...]):
+def _CHECK_RUN_JAVA_PROG_CLASSPATH(unit: ymake.Unit, *args: str):
     if len(args) != 1:
         ymake.report_configure_error(
             'multiple CLASSPATH elements in RUN_JAVA_PROGRAM invocation no more supported. Use JAVA_RUNTIME_PEERDIR on the JAVA_PROGRAM module instead'
@@ -313,13 +313,13 @@ def parse_words(words):
 
 
 @ymake.macro
-def GENERATE_SCRIPT(unit: ymake.Unit, *args: tuple[str, ...]):
+def GENERATE_SCRIPT(unit: ymake.Unit, *args: str):
     for out, tmpl, props in parse_words(list(args)):
         unit.on_add_gen_java_script([out, tmpl] + list(props))
 
 
 @ymake.macro
-def _JDK_VERSION_MACRO_CHECK(unit: ymake.Unit, *args: tuple[str, ...]):
+def _JDK_VERSION_MACRO_CHECK(unit: ymake.Unit, *args: str):
     if len(args) != 1:
         unit.message(["error", "Invalid syntax. Single argument required."])
     jdk_version = args[0]
@@ -385,7 +385,7 @@ def _maven_coords_for_project(unit, project_dir):
 
 
 @ymake.macro
-def _SETUP_MAVEN_EXPORT_COORDS_IF_NEED(unit: ymake.Unit, *args: tuple[str, ...]):
+def _SETUP_MAVEN_EXPORT_COORDS_IF_NEED(unit: ymake.Unit, *args: str):
     if not unit.enabled('MAVEN_EXPORT'):
         return
 
@@ -400,7 +400,7 @@ def _get_classpath(unit, dir):
 
 
 @ymake.macro
-def _SETUP_PROJECT_COORDS_IF_NEEDED(unit: ymake.Unit, *args: tuple[str, ...]):
+def _SETUP_PROJECT_COORDS_IF_NEEDED(unit: ymake.Unit, *args: str):
     if not unit.enabled('EXPORT_GRADLE'):
         return
 
@@ -418,8 +418,27 @@ def _JAVA_RESOURCE_TAR_VALIDATE_EXTRACT_ROOT(unit: ymake.Unit, extract_root: str
 
 
 @ymake.macro
-def JAVAC_FLAGS(unit: ymake.Unit, *args: tuple[str, ...]):
+def JAVAC_FLAGS(unit: ymake.Unit, *args: str):
     if '-proc:full' in args or '-proc:only' in args:
         ymake.report_configure_error(
             'Usage -proc:full and -proc:only is forbidden in JAVAC_FLAGS, please, use ANNOTATION_PROCESSOR or USE_ANNOTATION_PROCESSOR macroses'
         )
+
+
+@ymake.macro
+def ENABLE_KOTLIN_ABI_JAR(unit: ymake.Unit, *args: str):
+    if not unit.enabled('WITH_KOTLIN_VALUE'):
+        ymake.report_configure_error('ENABLE_KOTLIN_ABI_JAR requires WITH_KOTLIN')
+        return
+
+    version = unit.get('_KOTLIN_VERSION')
+    try:
+        parsed_version = tuple(int(component) for component in version.split('.'))
+    except (AttributeError, ValueError):
+        ymake.report_configure_error(
+            'ENABLE_KOTLIN_ABI_JAR requires a numeric Kotlin version; found {}'.format(version or '<empty>')
+        )
+        return
+
+    if parsed_version < (2, 3, 10):
+        ymake.report_configure_error('ENABLE_KOTLIN_ABI_JAR requires Kotlin 2.3.10 or newer; found {}'.format(version))

@@ -40,6 +40,7 @@ public:
         AddHandler(0, &TDqReadWrap::Match, HNDL(BuildStageWithReadWrap));
         AddHandler(0, &TKqlReadTable::Match, HNDL(BuildReadTableStage));
         AddHandler(0, &TKqlReadTableFullTextIndex::Match, HNDL(BuildReadTableFullTextIndexStage));
+        AddHandler(0, &TKqlReadTableVectorIndex::Match, HNDL(BuildReadTableVectorIndexStage));
         AddHandler(0, &TKqlReadTableRanges::Match, HNDL(BuildReadTableRangesStage));
         AddHandler(0, &TKqlStreamLookupTable::Match, HNDL(BuildStreamLookupTableStages));
         AddHandler(0, &TKqlIndexLookupJoin::Match, HNDL(BuildStreamIdxLookupJoinStagesKeepSorted));
@@ -201,6 +202,12 @@ protected:
     TMaybeNode<TExprBase> BuildReadTableFullTextIndexStage(TExprBase node, TExprContext& ctx) {
         TExprBase output = KqpBuildReadTableFullTextIndexStage(node, ctx, KqpCtx);
         DumpAppliedRule("BuildReadTableFullTextIndexStage", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> BuildReadTableVectorIndexStage(TExprBase node, TExprContext& ctx) {
+        TExprBase output = KqpBuildReadTableVectorIndexStage(node, ctx, KqpCtx);
+        DumpAppliedRule("BuildReadTableVectorIndexStage", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 
@@ -676,7 +683,7 @@ protected:
         bool shuffleEliminationWithMap = KqpCtx.Config->OptShuffleEliminationWithMap.Get().GetOrElse(true);
         bool rightCollectStage = !KqpCtx.Config->GetAllowMultiBroadcasts();
         TExprBase output = DqBuildJoin(node, ctx, optCtx, *getParents(), IsGlobal,
-            pushLeftStage, KqpCtx.Config->GetHashJoinMode(), false, KqpCtx.Config->UseGraceJoinCoreForMap.Get().GetOrElse(false), KqpCtx.Config->GetUseBlockHashJoin(), KqpCtx.Config->OptShuffleElimination.Get().GetOrElse(KqpCtx.Config->GetDefaultEnableShuffleElimination()), shuffleEliminationWithMap,
+            pushLeftStage, TypesCtx, KqpCtx.Config->GetHashJoinMode(), false, KqpCtx.Config->UseGraceJoinCoreForMap.Get().GetOrElse(false), KqpCtx.Config->GetUseBlockHashJoin(), KqpCtx.Config->OptShuffleElimination.Get().GetOrElse(KqpCtx.Config->GetDefaultEnableShuffleElimination()), shuffleEliminationWithMap,
             rightCollectStage,
             KqpCtx.Config->BlockHashJoinSwapLeftJoinSides.Get().GetOrElse(false)
         );

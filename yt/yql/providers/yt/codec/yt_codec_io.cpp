@@ -1498,6 +1498,7 @@ public:
             auto streamReaderResult = arrow::ipc::RecordBatchStreamReader::Open(InputStream_.get());
             if (!streamReaderResult.ok() && InputStream_->EOSReached() && InputStream_->Tell().ValueOrDie() == 0) {
                 // Workaround for YT-23495
+                // TODO(dagorokhov): remove the 0-byte workaround (YT-28650)
                 return false;
             }
             StreamReader_ = ARROW_RESULT(streamReaderResult);
@@ -1527,6 +1528,10 @@ public:
 
             // InputStream EOS hasn't reached yet - next Arrow IPC stream must be present
             StreamReader_.reset();
+            return ReadNext();
+        }
+
+        if (batch->num_rows() == 0) {
             return ReadNext();
         }
 
@@ -2050,6 +2055,15 @@ public:
     {
         Fields_ = GetFields(Specs_.Outputs[tableIndex].RowType, columns);
         NativeYtTypeFlags_ = Specs_.Outputs[tableIndex].NativeYtTypeFlags;
+
+        if (!(NativeYtTypeFlags_ & NTCF_COMPLEX)) {
+            // Backward compatibility with old optional singulars behavior
+            for (TField& field : Fields_) {
+                if (field.Optional && (field.Type->IsVoid() || field.Type->IsNull())) {
+                    field.Optional = false;
+                }
+            }
+        }
     }
 
 protected:

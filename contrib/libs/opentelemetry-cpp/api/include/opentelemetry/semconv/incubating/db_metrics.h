@@ -371,17 +371,21 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricDbClientConnecti
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Histogram<uint64_t>>
 CreateSyncInt64MetricDbClientConnectionsCreateTime(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateUInt64Histogram(kMetricDbClientConnectionsCreateTime,
                                       descrMetricDbClientConnectionsCreateTime,
                                       unitMetricDbClientConnectionsCreateTime);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Histogram<double>>
 CreateSyncDoubleMetricDbClientConnectionsCreateTime(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleHistogram(kMetricDbClientConnectionsCreateTime,
                                       descrMetricDbClientConnectionsCreateTime,
                                       unitMetricDbClientConnectionsCreateTime);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -401,33 +405,41 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricDbClientConnecti
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
 CreateSyncInt64MetricDbClientConnectionsIdleMax(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64UpDownCounter(kMetricDbClientConnectionsIdleMax,
                                          descrMetricDbClientConnectionsIdleMax,
                                          unitMetricDbClientConnectionsIdleMax);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
 CreateSyncDoubleMetricDbClientConnectionsIdleMax(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleUpDownCounter(kMetricDbClientConnectionsIdleMax,
                                           descrMetricDbClientConnectionsIdleMax,
                                           unitMetricDbClientConnectionsIdleMax);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricDbClientConnectionsIdleMax(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableUpDownCounter(kMetricDbClientConnectionsIdleMax,
                                                    descrMetricDbClientConnectionsIdleMax,
                                                    unitMetricDbClientConnectionsIdleMax);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricDbClientConnectionsIdleMax(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableUpDownCounter(kMetricDbClientConnectionsIdleMax,
                                                     descrMetricDbClientConnectionsIdleMax,
                                                     unitMetricDbClientConnectionsIdleMax);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -447,33 +459,41 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricDbClientConnecti
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
 CreateSyncInt64MetricDbClientConnectionsIdleMin(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64UpDownCounter(kMetricDbClientConnectionsIdleMin,
                                          descrMetricDbClientConnectionsIdleMin,
                                          unitMetricDbClientConnectionsIdleMin);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
 CreateSyncDoubleMetricDbClientConnectionsIdleMin(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleUpDownCounter(kMetricDbClientConnectionsIdleMin,
                                           descrMetricDbClientConnectionsIdleMin,
                                           unitMetricDbClientConnectionsIdleMin);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricDbClientConnectionsIdleMin(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableUpDownCounter(kMetricDbClientConnectionsIdleMin,
                                                    descrMetricDbClientConnectionsIdleMin,
                                                    unitMetricDbClientConnectionsIdleMin);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricDbClientConnectionsIdleMin(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableUpDownCounter(kMetricDbClientConnectionsIdleMin,
                                                     descrMetricDbClientConnectionsIdleMin,
                                                     unitMetricDbClientConnectionsIdleMin);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -493,33 +513,41 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricDbClientConnecti
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
 CreateSyncInt64MetricDbClientConnectionsMax(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64UpDownCounter(kMetricDbClientConnectionsMax,
                                          descrMetricDbClientConnectionsMax,
                                          unitMetricDbClientConnectionsMax);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
 CreateSyncDoubleMetricDbClientConnectionsMax(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleUpDownCounter(kMetricDbClientConnectionsMax,
                                           descrMetricDbClientConnectionsMax,
                                           unitMetricDbClientConnectionsMax);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricDbClientConnectionsMax(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableUpDownCounter(kMetricDbClientConnectionsMax,
                                                    descrMetricDbClientConnectionsMax,
                                                    unitMetricDbClientConnectionsMax);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricDbClientConnectionsMax(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableUpDownCounter(kMetricDbClientConnectionsMax,
                                                     descrMetricDbClientConnectionsMax,
                                                     unitMetricDbClientConnectionsMax);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -540,33 +568,41 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricDbClientConnecti
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
 CreateSyncInt64MetricDbClientConnectionsPendingRequests(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64UpDownCounter(kMetricDbClientConnectionsPendingRequests,
                                          descrMetricDbClientConnectionsPendingRequests,
                                          unitMetricDbClientConnectionsPendingRequests);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
 CreateSyncDoubleMetricDbClientConnectionsPendingRequests(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleUpDownCounter(kMetricDbClientConnectionsPendingRequests,
                                           descrMetricDbClientConnectionsPendingRequests,
                                           unitMetricDbClientConnectionsPendingRequests);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricDbClientConnectionsPendingRequests(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableUpDownCounter(kMetricDbClientConnectionsPendingRequests,
                                                    descrMetricDbClientConnectionsPendingRequests,
                                                    unitMetricDbClientConnectionsPendingRequests);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricDbClientConnectionsPendingRequests(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableUpDownCounter(kMetricDbClientConnectionsPendingRequests,
                                                     descrMetricDbClientConnectionsPendingRequests,
                                                     unitMetricDbClientConnectionsPendingRequests);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -586,33 +622,41 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricDbClientConnecti
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Counter<uint64_t>>
 CreateSyncInt64MetricDbClientConnectionsTimeouts(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateUInt64Counter(kMetricDbClientConnectionsTimeouts,
                                     descrMetricDbClientConnectionsTimeouts,
                                     unitMetricDbClientConnectionsTimeouts);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Counter<double>>
 CreateSyncDoubleMetricDbClientConnectionsTimeouts(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleCounter(kMetricDbClientConnectionsTimeouts,
                                     descrMetricDbClientConnectionsTimeouts,
                                     unitMetricDbClientConnectionsTimeouts);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricDbClientConnectionsTimeouts(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableCounter(kMetricDbClientConnectionsTimeouts,
                                              descrMetricDbClientConnectionsTimeouts,
                                              unitMetricDbClientConnectionsTimeouts);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricDbClientConnectionsTimeouts(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableCounter(kMetricDbClientConnectionsTimeouts,
                                               descrMetricDbClientConnectionsTimeouts,
                                               unitMetricDbClientConnectionsTimeouts);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -632,33 +676,41 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricDbClientConnecti
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
 CreateSyncInt64MetricDbClientConnectionsUsage(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64UpDownCounter(kMetricDbClientConnectionsUsage,
                                          descrMetricDbClientConnectionsUsage,
                                          unitMetricDbClientConnectionsUsage);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
 CreateSyncDoubleMetricDbClientConnectionsUsage(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleUpDownCounter(kMetricDbClientConnectionsUsage,
                                           descrMetricDbClientConnectionsUsage,
                                           unitMetricDbClientConnectionsUsage);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricDbClientConnectionsUsage(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableUpDownCounter(kMetricDbClientConnectionsUsage,
                                                    descrMetricDbClientConnectionsUsage,
                                                    unitMetricDbClientConnectionsUsage);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricDbClientConnectionsUsage(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableUpDownCounter(kMetricDbClientConnectionsUsage,
                                                     descrMetricDbClientConnectionsUsage,
                                                     unitMetricDbClientConnectionsUsage);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -679,17 +731,21 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricDbClientConnecti
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Histogram<uint64_t>>
 CreateSyncInt64MetricDbClientConnectionsUseTime(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateUInt64Histogram(kMetricDbClientConnectionsUseTime,
                                       descrMetricDbClientConnectionsUseTime,
                                       unitMetricDbClientConnectionsUseTime);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Histogram<double>>
 CreateSyncDoubleMetricDbClientConnectionsUseTime(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleHistogram(kMetricDbClientConnectionsUseTime,
                                       descrMetricDbClientConnectionsUseTime,
                                       unitMetricDbClientConnectionsUseTime);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -710,17 +766,21 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricDbClientConnecti
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Histogram<uint64_t>>
 CreateSyncInt64MetricDbClientConnectionsWaitTime(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateUInt64Histogram(kMetricDbClientConnectionsWaitTime,
                                       descrMetricDbClientConnectionsWaitTime,
                                       unitMetricDbClientConnectionsWaitTime);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Histogram<double>>
 CreateSyncDoubleMetricDbClientConnectionsWaitTime(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleHistogram(kMetricDbClientConnectionsWaitTime,
                                       descrMetricDbClientConnectionsWaitTime,
                                       unitMetricDbClientConnectionsWaitTime);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -741,33 +801,41 @@ OPENTELEMETRY_DEPRECATED static constexpr const char
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
 CreateSyncInt64MetricDbClientCosmosdbActiveInstanceCount(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64UpDownCounter(kMetricDbClientCosmosdbActiveInstanceCount,
                                          descrMetricDbClientCosmosdbActiveInstanceCount,
                                          unitMetricDbClientCosmosdbActiveInstanceCount);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
 CreateSyncDoubleMetricDbClientCosmosdbActiveInstanceCount(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleUpDownCounter(kMetricDbClientCosmosdbActiveInstanceCount,
                                           descrMetricDbClientCosmosdbActiveInstanceCount,
                                           unitMetricDbClientCosmosdbActiveInstanceCount);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricDbClientCosmosdbActiveInstanceCount(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableUpDownCounter(kMetricDbClientCosmosdbActiveInstanceCount,
                                                    descrMetricDbClientCosmosdbActiveInstanceCount,
                                                    unitMetricDbClientCosmosdbActiveInstanceCount);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricDbClientCosmosdbActiveInstanceCount(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableUpDownCounter(kMetricDbClientCosmosdbActiveInstanceCount,
                                                     descrMetricDbClientCosmosdbActiveInstanceCount,
                                                     unitMetricDbClientCosmosdbActiveInstanceCount);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -788,17 +856,21 @@ OPENTELEMETRY_DEPRECATED static constexpr const char
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Histogram<uint64_t>>
 CreateSyncInt64MetricDbClientCosmosdbOperationRequestCharge(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateUInt64Histogram(kMetricDbClientCosmosdbOperationRequestCharge,
                                       descrMetricDbClientCosmosdbOperationRequestCharge,
                                       unitMetricDbClientCosmosdbOperationRequestCharge);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Histogram<double>>
 CreateSyncDoubleMetricDbClientCosmosdbOperationRequestCharge(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleHistogram(kMetricDbClientCosmosdbOperationRequestCharge,
                                       descrMetricDbClientCosmosdbOperationRequestCharge,
                                       unitMetricDbClientCosmosdbOperationRequestCharge);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**

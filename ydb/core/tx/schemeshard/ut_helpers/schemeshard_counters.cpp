@@ -14,7 +14,7 @@ using namespace NKikimr;
 
 namespace {
 
-NKikimrTabletBase::TEvGetCountersResponse GetCounters(TTestBasicRuntime& runtime) {
+NKikimrTabletBase::TEvGetCountersResponse GetCounters(TTestActorRuntime& runtime) {
     const auto sender = runtime.AllocateEdgeActor();
     runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, new TEvTablet::TEvGetCounters);
     auto ev = runtime.GrabEdgeEvent<TEvTablet::TEvGetCountersResponse>(sender);
@@ -58,7 +58,7 @@ void CheckSimpleCounter(TTestBasicRuntime& runtime, const TString& name, ui64 va
     UNIT_ASSERT_VALUES_EQUAL(value, GetSimpleCounter(runtime, name));
 }
 
-ui64 GetCumulativeCounter(TTestBasicRuntime& runtime, const TString& name) {
+ui64 GetCumulativeCounter(TTestActorRuntime& runtime, const TString& name) {
     const auto counters = GetCounters(runtime);
     for (const auto& counter : counters.GetTabletCounters().GetAppCounters().GetCumulativeCounters()) {
         if (name != counter.GetName()) {

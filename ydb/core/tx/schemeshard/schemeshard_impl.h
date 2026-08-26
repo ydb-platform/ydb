@@ -101,6 +101,7 @@ struct TIndexBuildInfo;
 struct TSetColumnConstraintOperationInfo;
 struct TIndexBuildShardStatus;
 
+
 class TSchemeShard
     : public TActor<TSchemeShard>
     , public NTabletFlatExecutor::TTabletExecutedFlat
@@ -283,6 +284,80 @@ public:
     ui64 MaxIncompatibleChange = 0;
     THashMap<TPathId, TPathElement::TPtr> PathsById;
     TLocalPathId NextLocalPathId = 0;
+    ui64 NextSchemeChangeOrder = 0;
+    ui64 SchemeChangeFloorOrder = 0;
+    ui64 MaxSchemeChangeRecords = 100000;
+    // Disabling this serves credentials to every subscriber over an unauthenticated protocol.
+    bool RedactSchemeChangeSensitiveFields = true;
+    TDuration SchemeChangeSubscriberStaleTtl = TDuration::Days(30);
+    ui64 MaxSchemeChangeSubscribers = 100;
+    static constexpr size_t MaxSchemeChangeSubscriberIdLength = 256;
+    ui64 LastAssignedPlanStep = 0;
+    // Do not filter on TTxState::State: a tx in Done that is not yet erased must keep its entry.
+    TMap<ui64, ui32> InFlightByPlanStep;
+
+    void AddInFlightPlanStep(ui64 step) {
+        if (step) {
+            ++InFlightByPlanStep[step];
+        }
+    }
+    void RemoveInFlightPlanStep(ui64 step) {
+        if (!step) {
+            return;
+        }
+        auto it = InFlightByPlanStep.find(step);
+        if (it == InFlightByPlanStep.end()) {
+            return;
+        }
+        if (--it->second == 0) {
+            InFlightByPlanStep.erase(it);
+        }
+    }
+    ui64 GetClosedThroughPlanStep() const {
+        if (InFlightByPlanStep.empty()) {
+            return LastAssignedPlanStep;
+        }
+        const ui64 minInFlight = InFlightByPlanStep.begin()->first;
+        return minInFlight ? minInFlight - 1 : 0;
+    }
+    ui64 SchemeChangeCleanupBatchSize = 1000;
+    TDuration SchemeChangeCleanupInterval = TDuration::MilliSeconds(10);
+
+    ui64 MaxSchemeChangeBodiesPerRequest = 1000;
+
+    mutable ui64 NextSchemeChangeOrderPersistCount = 0;
+    mutable ui64 TestSchemeChangeRedoBytesAccum = 0;
+    ui64 SchemeChangeCleanupTxCount = 0;
+
+    struct TSubscriberInfo {
+        ui64 LastAckedOrder = 0;
+        TInstant LastActivityAt;
+        ui32 State = 1;
+        ui64 StartOrder = 0;
+    };
+    THashMap<TString, TSubscriberInfo> Subscribers;
+
+    ui64 GetVisibleSchemeChangeTail() const;
+
+    void UpdateSchemeChangeGauges() const;
+
+    ui64 GetMinSubscriberOrder(TInstant) const {
+        if (Subscribers.empty()) {
+            return GetVisibleSchemeChangeTail();
+        }
+        ui64 m = Max<ui64>();
+        for (const auto& [_, info] : Subscribers) {
+            m = Min(m, info.LastAckedOrder);
+        }
+        return m;
+    }
+
+    bool IsSubscriberStale(const TSubscriberInfo& info, TInstant now) const {
+        if (!SchemeChangeSubscriberStaleTtl) {
+            return false;
+        }
+        return (now - info.LastActivityAt) >= SchemeChangeSubscriberStaleTtl;
+    }
 
     THashMap<TPathId, TTableInfo::TPtr> Tables;
     THashMap<TPathId, TTableInfo::TPtr> TTLEnabledTables;
@@ -904,6 +979,30 @@ public:
     void PersistShardTx(NIceDb::TNiceDb& db, TShardIdx shardIdx, TTxId txId);
     void PersistUpdateNextPathId(NIceDb::TNiceDb& db) const;
     void PersistUpdateNextShardIdx(NIceDb::TNiceDb& db) const;
+    void PersistUpdateNextSchemeChangeOrder(NIceDb::TNiceDb& db) const;
+    void PersistSchemeChangeFloorOrder(NIceDb::TNiceDb& db) const;
+    void PersistUpdateLastAssignedPlanStep(NIceDb::TNiceDb& db) const;
+
+    void PersistSchemeChangePendingOrder(NIceDb::TNiceDb& db, TTxId txId, ui32 requestIdx,
+        ui64 order, const TVector<TOperation::TSchemeChangeTarget>& targets) const;
+
+    static TString EncodeSchemeChangeTargets(const TVector<TOperation::TSchemeChangeTarget>& targets);
+    static TVector<TOperation::TSchemeChangeTarget> DecodeSchemeChangeTargets(const TString& encoded);
+    void PersistRemoveSchemeChangePendingOrder(NIceDb::TNiceDb& db, TTxId txId, ui32 requestIdx) const;
+
+    // Must run for the whole batch before any record is persisted: local-DB
+    // writes already made are not undone by AbortOperationPropose.
+    bool CheckSchemeChangeRecordHasPath(const NKikimrSchemeOp::TModifyScheme& requestTx, TString& rejectReason);
+
+    bool PersistSchemeChangeRecordAtPropose(NIceDb::TNiceDb& db, TTxId txId, ui32 requestIdx,
+        const NKikimrSchemeOp::TModifyScheme& requestTx, TOperation::TSchemeChangeSlot& slot,
+        const TString& userSid = {});
+
+    void FinalizeSchemeChangeRecord(NIceDb::TNiceDb& db, const TActorContext& ctx,
+        const TOperation::TSchemeChangeSlot& slot, TStepId planStep, bool aborted = false);
+    ui64 AllocateSchemeChangeOrderInMemory();
+
+    ui32 CountTransactionSupportingDomains() const;
     void PersistParentDomain(NIceDb::TNiceDb& db, TPathId parentDomain) const;
     void PersistParentDomainEffectiveACL(NIceDb::TNiceDb& db, const TString& owner, const TString& effectiveACL, ui64 effectiveACLVersion) const;
     void PersistShardsToDelete(NIceDb::TNiceDb& db, const THashSet<TShardIdx>& shardsIdxs);

@@ -308,6 +308,33 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
         }
     }
 
+    // Must stay after every ProcessOperationParts call: writing via NIceDb sets
+    // DirectAccessGranted, which trips Y_VERIFY_S(IsUndoChangesSafe) in a later part.
+
+    // An unresolvable target is skipped and counted, never refused: refusing runs
+    // AbortOperationPropose, whose per-operation stubs are Y_ABORT in 45 places.
+    if (AppData()->FeatureFlags.GetEnableSchemeChangeRecords()) {
+        NIceDb::TNiceDb db(context.GetDB());
+        operation->SchemeChangeOrderBase = NextSchemeChangeOrder;
+        operation->SchemeChangeOrdersReserved = true;
+        for (ui32 i = 0; i < rewrittenTransactions.size(); ++i) {
+            TString skipReason;
+            if (!CheckSchemeChangeRecordHasPath(rewrittenTransactions[i], skipReason)) {
+                TabletCounters->Cumulative()[COUNTER_SCHEME_CHANGE_PATH_MISSING].Increment(1);
+                LOG_WARN_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "scheme change record skipped, target path unresolved"
+                        << ", txId: " << txId
+                        << ", requestIdx: " << i
+                        << ", reason: " << skipReason);
+                continue;
+            }
+            TOperation::TSchemeChangeSlot slot;
+            if (PersistSchemeChangeRecordAtPropose(db, txId, i, rewrittenTransactions[i], slot)) {
+                operation->SchemeChangeSlots.push_back(std::move(slot));
+            }
+        }
+    }
+
     return response;
 }
 
@@ -325,6 +352,11 @@ void TSchemeShard::AbortOperationPropose(const TTxId txId, TOperationContext& co
     }
 
     context.MemChanges.UnDo(context.SS);
+
+    // The local-DB rollback reverts the persisted counter, but not this one.
+    if (operation->SchemeChangeOrdersReserved) {
+        NextSchemeChangeOrder = operation->SchemeChangeOrderBase;
+    }
 
     // And remove aborted operation from existence
     Operations.erase(txId);
@@ -702,6 +734,16 @@ struct TSchemeShard::TTxOperationPlanStep: public NTabletFlatExecutor::TTransact
                         << ", message: " << record.ShortDebugString()
                         << ", at schemeshard: " << Self->TabletID());
 
+        // Flag-guarded: without it, every plan step of every cluster writes a
+        // SysParams row for a ceiling only the outbox ever reads.
+        if (AppData()->FeatureFlags.GetEnableSchemeChangeRecords()
+            && ui64(step) > Self->LastAssignedPlanStep)
+        {
+            Self->LastAssignedPlanStep = ui64(step);
+            NIceDb::TNiceDb db(txc.DB);
+            Self->PersistUpdateLastAssignedPlanStep(db);
+        }
+
         for (size_t i = 0; i < txCount; ++i) {
             const auto txId = TTxId(record.GetTransactions(i).GetTxId());
             const auto coordinator = ActorIdFromProto(record.GetTransactions(i).GetAckTo());
@@ -728,6 +770,14 @@ struct TSchemeShard::TTxOperationPlanStep: public NTabletFlatExecutor::TTransact
                                     << " operation part is already done"
                                     << ", operationId: " << opId);
                     continue;
+                }
+
+                if (auto* txState = Self->FindTx(opId)) {
+                    // A redelivered plan step (mediator reconnect) must not bump the refcount twice.
+                    if (txState->PlanStep == InvalidStepId) {
+                        Self->AddInFlightPlanStep(ui64(step));
+                    }
+                    txState->PlanStep = step;
                 }
 
                 TOperationContext context{Self, txc, ctx, OnComplete, MemChanges, DbChanges};

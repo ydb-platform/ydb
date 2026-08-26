@@ -1,0 +1,46 @@
+// Scheme change records subscriber protocol. Subscribers register with a
+// stable string ID, fetch records in order, pull bodies for the subset they
+// need, and ack consumed ranges.
+syntax = "proto3";
+
+package NKikimrSchemeShard;
+
+option java_package = "ru.yandex.kikimr.proto";
+
+
+// One target of a scheme change: the object's identity after the change,
+// and where it came from if the op moves or copies. Cardinality of
+// SourcePaths is not assumed 1:1 with the target: a rename has one source
+// for one target, but a future N-sources-into-one-target op would list all
+// of them here rather than picking one arbitrarily -- a consumer must not
+// assume SourcePaths[0] is the only source.
+message TSchemeChangeTarget {
+    // The target's identity after the change. Always set, never empty.
+    string Path = 1;
+    // Old location(s) this target came from: the prior path for a
+    // move/rename, the source table for a copy target. Empty for a plain
+    // create/alter/drop. May hold more than one entry.
+    repeated string SourcePaths = 2;
+}
+
+// Wire/storage encoding for a record's N authoritative targets. Used both as
+// the local-DB column payload (a delimiter could occur inside a path, so a
+// serialized repeated-message is the safe encoding) and internally when
+// carrying targets through in-memory operation state.
+message TSchemeChangeRecordTargets {
+    repeated TSchemeChangeTarget Targets = 1;
+}
+
+// How precisely a record's PlanStep locates it in the coordinator timeline.
+message TSchemeChangePosition {
+    enum EKind {
+        KIND_UNSPECIFIED = 0;
+        // PlanStep is the coordinator step this operation was actually planned
+        // at. Safe to interleave against data records carrying the same clock.
+        KIND_EXACT = 1;
+        // The operation never reached a coordinator, so PlanStep is a LOWER
+        // BOUND: the highest step already applied. Use for window assignment
+        // only; such records touched no shard.
+        KIND_BUCKETED = 2;
+    }
+}

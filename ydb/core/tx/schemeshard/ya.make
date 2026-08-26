@@ -44,6 +44,7 @@ RECURSE_FOR_TESTS(
     ut_metrics
     ut_move
     ut_move_reboots
+    ut_scheme_change_records
     ut_olap
     ut_olap_reboots
     ut_partition_stats
@@ -118,6 +119,7 @@ SRCS(
     schemeshard__monitoring.cpp
     schemeshard__monitoring.h
     schemeshard__notify.cpp
+    schemeshard__scheme_change_records.cpp
     schemeshard__op_traits.h
     schemeshard__operation.cpp
     schemeshard__operation.h

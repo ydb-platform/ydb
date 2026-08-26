@@ -722,8 +722,13 @@ void TColumnShard::MoveDataCompleted(const TActorContext& ctx) {
         queues = GetIndexAs<NOlap::TColumnEngineForLogs>().GetMoveDataQueueSizes();
     }
     Counters.GetCSCounters().OnMoveDataQueues(queues.Pending, queues.ConfirmedToMove, queues.InFlight);
-    switch (NOlap::NActualizer::ClassifyMoveDataGate(
-        MoveDataState.VacuumCompleted, queues, GetStoragesManager()->GetDefaultOperator()->HasBlobsForGroups(MoveDataState.TargetGroups))) {
+    // HasBlobsForGroups walks BlobsToKeep, BlobsToDelete, BlobsToDeleteDelayed and the
+    // shared/borrowed registries; as a plain argument it ran on every wakeup even when the
+    // vacuum or the queues already blocked the gate. Short-circuit so the scan is paid for
+    // only once the cheap gates pass - the classifier returns before reading it anyway.
+    const bool cheapGatesPass = MoveDataState.VacuumCompleted && queues.GetTotal() == 0;
+    switch (NOlap::NActualizer::ClassifyMoveDataGate(MoveDataState.VacuumCompleted, queues,
+        cheapGatesPass && GetStoragesManager()->GetDefaultOperator()->HasBlobsForGroups(MoveDataState.TargetGroups))) {
         case NOlap::NActualizer::EMoveDataGate::BlockedByVacuum:
             Y_UNREACHABLE();
         case NOlap::NActualizer::EMoveDataGate::BlockedByPortions:

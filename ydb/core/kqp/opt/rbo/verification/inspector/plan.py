@@ -111,6 +111,48 @@ def render_expression(expression: ir.Expr) -> str:
             f"partition_by={_list(partition_by, _quote)}, "
             f"type={_quote(scalar_type)}, nullable={_boolean(nullable)})"
         )
+    if kind in ir.WINDOW_ROWS_KINDS:
+        window_input = _required(expression.window_input, "input")
+        window_name = _required(expression.window_name, "window_name")
+        execution_order = _required(
+            expression.execution_order,
+            "execution_order",
+        )
+        partition_by = _required(expression.partition_by, "partition_by")
+        order_by = _required(expression.order_by, "order_by")
+        frame = _required(expression.window_frame, "frame")
+        scalar_type = _required(expression.result_type, "type")
+        nullable = _required(expression.nullable, "nullable")
+        if not isinstance(window_input, str) or not window_input:
+            raise InspectionError(f"{kind} input must be a non-empty string")
+        if not isinstance(window_name, str) or not window_name:
+            raise InspectionError(f"{kind} name must be a non-empty string")
+        if type(execution_order) is not int or execution_order < 0:
+            raise InspectionError(
+                f"{kind} execution_order must be a non-negative integer"
+            )
+        if (
+            not isinstance(partition_by, tuple)
+            or len(partition_by) != 1
+            or not isinstance(partition_by[0], str)
+            or not partition_by[0]
+        ):
+            raise InspectionError(f"{kind} must have exactly one partition key")
+        if not isinstance(order_by, tuple) or len(order_by) != 1:
+            raise InspectionError(f"{kind} must have exactly one order key")
+        if frame != ir.WINDOW_RANK_FRAME:
+            raise InspectionError(f"{kind} frame is unsupported")
+        if scalar_type != ir.WHOLE_PARTITION_DECIMAL_SUM_TYPE or nullable is not True:
+            raise InspectionError(
+                f"{kind} result must be Optional<Decimal(35,2)>"
+            )
+        return (
+            f"{kind}(input={_quote(window_input)}, name={_quote(window_name)}, "
+            f"execution_order={execution_order}, "
+            f"partition_by={_list(partition_by, _quote)}, "
+            f"order_by={_list(order_by, _order)}, frame={_quote(frame)}, "
+            f"type={_quote(scalar_type)}, nullable=true)"
+        )
     if kind == "window_rank":
         window_name = _required(expression.window_name, "window_name")
         execution_order = _required(

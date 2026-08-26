@@ -31,6 +31,7 @@ from .ir import (
     SortOrder,
     Subplan,
     UnionAll,
+    WINDOW_ROWS_KINDS,
     expression_columns,
     plan_node_inputs,
     validate_snapshot,
@@ -724,6 +725,11 @@ class Evaluator:
                 for projection in node.columns
                 if projection.expression.kind == "window_rank"
             )
+            row_windows = tuple(
+                projection.expression
+                for projection in node.columns
+                if projection.expression.kind in WINDOW_ROWS_KINDS
+            )
 
             def project(
                 relation: Relation,
@@ -818,27 +824,40 @@ class Evaluator:
                     ),
                 )
 
-            if ranks:
-                # Rank validation excludes subplans, so each source outcome can
-                # retain its correlated unstable-sort choices directly.
+            if ranks or row_windows:
+                # Ordered-window validation excludes subplans, so each source
+                # outcome can retain its unstable-sort choices directly.
                 outcomes: list[Outcome] = []
                 for outcome_index, source_outcome in enumerate(source.outcomes):
-                    (
-                        ranked,
-                        relational_values,
-                        rank_enabled,
-                        rank_choices,
-                    ) = self._window_rank_values(
-                        node,
-                        source_outcome.relation,
-                        ranks,
-                        outcome_index,
-                    )
+                    if ranks:
+                        (
+                            windowed,
+                            relational_values,
+                            window_enabled,
+                            window_choices,
+                        ) = self._window_rank_values(
+                            node,
+                            source_outcome.relation,
+                            ranks,
+                            outcome_index,
+                        )
+                    else:
+                        (
+                            windowed,
+                            relational_values,
+                            window_enabled,
+                            window_choices,
+                        ) = self._window_rows_values(
+                            node,
+                            source_outcome.relation,
+                            row_windows,
+                            outcome_index,
+                        )
                     outcomes.append(
                         Outcome(
-                            smt.and_(source_outcome.enabled, rank_enabled),
+                            smt.and_(source_outcome.enabled, window_enabled),
                             project(
-                                ranked,
+                                windowed,
                                 lambda _index, _row: {},
                                 relational_values,
                             ),
@@ -847,13 +866,13 @@ class Evaluator:
                                 (
                                     smt.FALSE
                                     if not marked_sources and not checked_concats
-                                    else project_error(ranked)
+                                    else project_error(windowed)
                                 ),
                             ),
                             source_outcome.decisions,
                             _merge_choices(
                                 source_outcome.choices,
-                                rank_choices,
+                                window_choices,
                             ),
                         )
                     )
@@ -1113,6 +1132,128 @@ class Evaluator:
                     smt.FALSE,
                     smt.add(smt.ONE, *preceding),
                 )
+        return (
+            replace(
+                source,
+                sequence=False,
+                order=None,
+                ordinals=None,
+                present_prefix=False,
+            ),
+            tuple(relational_values),
+            smt.and_(*enabled),
+            choices,
+        )
+
+    def _window_rows_values(
+        self,
+        node: Project,
+        source: Relation,
+        windows: tuple[Expr, ...],
+        outcome_index: int,
+    ) -> tuple[
+        Relation,
+        tuple[Mapping[Expr, Value], ...],
+        smt.Term,
+        tuple[BoundedChoice, ...],
+    ]:
+        """Evaluate q51's task-local unstable ROWS-prefix windows.
+
+        Every transported definition lowers an independent unstable sort.
+        Equal-date peers may therefore use a different permutation in each
+        leaf, including the two outer MAX calls.  The Project publishes no
+        downstream sequence contract.
+        """
+
+        ordered_windows = tuple(
+            sorted(windows, key=lambda window: window.execution_order)
+        )
+        row_count = len(source.rows)
+        construction_cost = len(ordered_windows) * (
+            row_count * row_count + row_count * (row_count - 1) // 2
+        )
+        _require_relation_row_pairs(construction_cost, "q51 ROWS window")
+        enabled: list[smt.Term] = []
+        choices: tuple[BoundedChoice, ...] = ()
+        relational_values: list[dict[Expr, Value]] = [
+            {} for _row in source.rows
+        ]
+        for window in ordered_windows:
+            assert window.window_input is not None
+            assert window.partition_by is not None and len(window.partition_by) == 1
+            assert window.execution_order is not None
+            assert window.order_by is not None and len(window.order_by) == 1
+            assert window.result_type is not None
+            _require_order_columns(source.columns, window.order_by, "q51 ROWS window")
+            partition = window.partition_by[0]
+            if partition not in {column.name for column in source.columns}:
+                raise RelationError(
+                    f"q51 ROWS window partition column {partition!r} is unavailable"
+                )
+            ordinals, window_choices = _fresh_ordinals(
+                self.scalar.script,
+                f"{self.choice_scope}:window_rows:{node.id}:"
+                f"{outcome_index}:{window.execution_order}:ordinal",
+                source.rows,
+            )
+            enabled.append(
+                _window_rows_ordinal_constraints(
+                    self.scalar,
+                    source.rows,
+                    ordinals,
+                    partition,
+                    window.order_by,
+                )
+            )
+            choices = _merge_choices(choices, window_choices)
+            for candidate_index, candidate in enumerate(source.rows):
+                guarded_values = tuple(
+                    (
+                        smt.and_(
+                            row.present,
+                            self.scalar.not_distinct(
+                                candidate.values[partition],
+                                row.values[partition],
+                            ),
+                            smt.not_(
+                                smt.lt(
+                                    ordinals[candidate_index],
+                                    ordinals[row_index],
+                                )
+                            ),
+                            smt.not_(row.values[window.window_input].is_null),
+                        ),
+                        row.values[window.window_input],
+                    )
+                    for row_index, row in enumerate(source.rows)
+                )
+                if window.kind == "window_rows_sum":
+                    value = _decimal_sum_value(
+                        guarded_values,
+                        window.result_type,
+                        True,
+                        "q51 running Decimal SUM",
+                    )
+                else:
+                    guards = tuple(guard for guard, _value in guarded_values)
+                    value = Value(
+                        window.result_type,
+                        smt.not_(smt.or_(*guards)),
+                        decimal.aggregate_max(
+                            tuple(
+                                (guard, item.value)
+                                for guard, item in guarded_values
+                            )
+                        ),
+                        decimal_finite_abs_bound=max(
+                            (
+                                _decimal_finite_abs_bound(item)
+                                for _guard, item in guarded_values
+                            ),
+                            default=0,
+                        ),
+                    )
+                relational_values[candidate_index][window] = value
         return (
             replace(
                 source,
@@ -4507,6 +4648,58 @@ def _ordinal_constraints(
                 ),
                 smt.or_(
                     smt.not_(smt.and_(both, _row_less(right, left, order))),
+                    smt.lt(ordinals[right_index], ordinals[left_index]),
+                ),
+            ))
+    return smt.and_(*constraints)
+
+
+def _window_rows_ordinal_constraints(
+    scalar: ScalarEncoder,
+    rows: tuple[Row, ...],
+    ordinals: tuple[smt.Term, ...],
+    partition: str,
+    order: tuple[SortOrder, ...],
+) -> smt.Term:
+    """Constrain one unstable sort independently inside each q51 partition."""
+
+    if len(rows) != len(ordinals):
+        raise RelationError("q51 ROWS window ordinals do not align with rows")
+    live_indices = _live_row_indices(rows)
+    bound = smt.int_value(len(live_indices))
+    constraints: list[smt.Term] = []
+    for row, ordinal in zip(rows, ordinals):
+        in_range = smt.and_(
+            smt.not_(smt.lt(ordinal, smt.ZERO)),
+            smt.lt(ordinal, bound),
+        )
+        constraints.append(
+            smt.ite(row.present, in_range, smt.eq(ordinal, smt.ZERO))
+        )
+    for position, left_index in enumerate(live_indices):
+        left = rows[left_index]
+        for right_index in live_indices[position + 1 :]:
+            right = rows[right_index]
+            same_partition = scalar.not_distinct(
+                left.values[partition],
+                right.values[partition],
+            )
+            comparable = smt.and_(
+                left.present,
+                right.present,
+                same_partition,
+            )
+            constraints.extend((
+                smt.or_(
+                    smt.not_(comparable),
+                    smt.not_(smt.eq(ordinals[left_index], ordinals[right_index])),
+                ),
+                smt.or_(
+                    smt.not_(smt.and_(comparable, _row_less(left, right, order))),
+                    smt.lt(ordinals[left_index], ordinals[right_index]),
+                ),
+                smt.or_(
+                    smt.not_(smt.and_(comparable, _row_less(right, left, order))),
                     smt.lt(ordinals[right_index], ordinals[left_index]),
                 ),
             ))

@@ -176,7 +176,13 @@ class Encoder:
             assert expression.result_type is not None
             return self.null(expression.result_type)
 
-        if expression.kind in {"window_sum", "window_avg", "window_rank"}:
+        if expression.kind in {
+            "window_sum",
+            "window_avg",
+            "window_rank",
+            "window_rows_sum",
+            "window_rows_max",
+        }:
             try:
                 return relational_values[expression]
             except KeyError as error:

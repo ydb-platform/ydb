@@ -22,6 +22,7 @@ TEST_SRCS(
     test_verify.py
     test_window_avg.py
     test_window_rank.py
+    test_window_rows.py
     test_window_sum.py
 )
 

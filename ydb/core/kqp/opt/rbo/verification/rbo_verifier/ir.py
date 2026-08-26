@@ -64,6 +64,17 @@ WINDOW_RANK_RESULT_TYPE = "Uint64"
 WINDOW_RANK_FRAME = "rows_unbounded_preceding_current_row"
 MAX_WINDOW_RANKS_PER_PROJECT = 2
 MAX_WINDOW_RANKS_PER_SNAPSHOT = 6
+WINDOW_ROWS_KINDS = frozenset({"window_rows_sum", "window_rows_max"})
+WINDOW_ROWS_PARTITION_TYPE = "Int64"
+WINDOW_ROWS_ORDER_TYPE = DATE
+Q51_PRICE_TYPE = "Decimal(7,2)"
+MAX_WINDOW_ROWS_PER_PROJECT = 2
+MAX_WINDOW_ROWS_PROJECTS_PER_SNAPSHOT = 3
+MAX_WINDOW_ROWS_PER_SNAPSHOT = 4
+Q51_WINDOW_NAMES = tuple(
+    f"_yql_anonymous_window{index}"
+    for index in range(MAX_WINDOW_ROWS_PER_SNAPSHOT)
+)
 
 
 class SnapshotError(ValueError):
@@ -690,6 +701,70 @@ def _parse_expr(
             nullable=nullable,
             window_input=_string(obj["input"], f"{path}.input"),
             partition_by=partition_by,
+        )
+
+    if kind in WINDOW_ROWS_KINDS:
+        _keys(
+            obj,
+            {
+                "kind",
+                "input",
+                "partition_by",
+                "order_by",
+                "frame",
+                "window_name",
+                "execution_order",
+                "type",
+                "nullable",
+            },
+            path,
+        )
+        window_name = _string(obj["window_name"], f"{path}.window_name")
+        if not window_name:
+            _fail(f"{path}.window_name", "must not be empty")
+        raw_partition = _array(obj["partition_by"], f"{path}.partition_by")
+        if len(raw_partition) != 1:
+            _fail(
+                f"{path}.partition_by",
+                f"{kind} requires exactly one partition key",
+            )
+        partition_by = (
+            _string(raw_partition[0], f"{path}.partition_by[0]"),
+        )
+        order_by = _parse_sort_order(obj["order_by"], f"{path}.order_by")
+        if (
+            len(order_by) != 1
+            or not order_by[0].ascending
+            or not order_by[0].nulls_first
+            or order_by[0].comparison is not None
+        ):
+            _fail(
+                f"{path}.order_by",
+                f"{kind} requires one ascending nulls-first direct order key",
+            )
+        frame = _string(obj["frame"], f"{path}.frame")
+        if frame != WINDOW_RANK_FRAME:
+            _fail(
+                f"{path}.frame",
+                f"{kind} frame must be {WINDOW_RANK_FRAME!r}",
+            )
+        result_type = _scalar_type(obj["type"], f"{path}.type")
+        nullable = _bool(obj["nullable"], f"{path}.nullable")
+        if result_type != WHOLE_PARTITION_DECIMAL_SUM_TYPE or not nullable:
+            _fail(path, f"{kind} result must be Optional<Decimal(35,2)>")
+        return Expr(
+            kind=kind,
+            result_type=result_type,
+            nullable=nullable,
+            window_input=_string(obj["input"], f"{path}.input"),
+            partition_by=partition_by,
+            window_name=window_name,
+            execution_order=_index(
+                obj["execution_order"],
+                f"{path}.execution_order",
+            ),
+            order_by=order_by,
+            window_frame=frame,
         )
 
     if kind == "window_rank":
@@ -1750,6 +1825,52 @@ def _infer_expr(
                     else "Optional<Int64> or Optional<String>"
                 )
                 _fail(path, f"{expr.kind} partition key must be {expected}")
+        return ValueType(WHOLE_PARTITION_DECIMAL_SUM_TYPE, True)
+
+    if expr.kind in WINDOW_ROWS_KINDS:
+        if (
+            expr.result_type != WHOLE_PARTITION_DECIMAL_SUM_TYPE
+            or expr.nullable is not True
+            or expr.window_input is None
+            or expr.partition_by is None
+            or len(expr.partition_by) != 1
+            or expr.window_name is None
+            or not expr.window_name
+            or expr.execution_order is None
+            or expr.order_by is None
+            or len(expr.order_by) != 1
+            or expr.window_frame != WINDOW_RANK_FRAME
+        ):
+            _fail(path, f"{expr.kind} must carry the audited q51 ROWS shape")
+        window_input = columns.get(expr.window_input)
+        if window_input is None:
+            _fail(path, f"window input column {expr.window_input!r} is not available")
+        if window_input.value_type != ValueType(WHOLE_PARTITION_DECIMAL_SUM_TYPE, True):
+            _fail(
+                path,
+                f"{expr.kind} input must be Optional<Decimal(35,2)>",
+            )
+        partition_name = expr.partition_by[0]
+        partition = columns.get(partition_name)
+        if partition is None:
+            _fail(path, f"window partition column {partition_name!r} is not available")
+        if partition.type != WINDOW_ROWS_PARTITION_TYPE:
+            _fail(path, f"{expr.kind} partition key must be Int64 or Optional<Int64>")
+        order = expr.order_by[0]
+        if (
+            not order.ascending
+            or not order.nulls_first
+            or order.comparison is not None
+        ):
+            _fail(
+                path,
+                f"{expr.kind} requires one ascending nulls-first direct order key",
+            )
+        key = columns.get(order.column)
+        if key is None:
+            _fail(path, f"window order column {order.column!r} is not available")
+        if key.value_type != ValueType(WINDOW_ROWS_ORDER_TYPE, True):
+            _fail(path, f"{expr.kind} order key must be Optional<Date>")
         return ValueType(WHOLE_PARTITION_DECIMAL_SUM_TYPE, True)
 
     if expr.kind == "window_rank":
@@ -3160,6 +3281,296 @@ def _validate_window_rank_dataflow(
     _unique(names, "snapshot.plan window_rank names")
 
 
+def _validate_window_rows_dataflow(
+    snapshot: Snapshot,
+    schemas: Mapping[str, Mapping[str, Column]],
+) -> None:
+    """Admit only q51's private ordered-ROWS Project leaves."""
+
+    windows_by_project: dict[str, list[Expr]] = {}
+    window_count = 0
+    mixed_window_count = 0
+    for node in snapshot.plan.nodes:
+        for expression in _node_expressions(node):
+            mixed_window_count += sum(
+                _expression_kind_count(expression, kind)
+                for kind in ("window_sum", "window_avg", "window_rank")
+            )
+        if isinstance(node, Project):
+            for index, projection in enumerate(node.columns):
+                counts = {
+                    kind: _expression_kind_count(projection.expression, kind)
+                    for kind in WINDOW_ROWS_KINDS
+                }
+                count = sum(counts.values())
+                window_count += count
+                if not count:
+                    continue
+                if count != 1 or projection.expression.kind not in WINDOW_ROWS_KINDS:
+                    _fail(
+                        f"node {node.id!r}.columns[{index}].expression",
+                        "q51 ROWS window must be one complete top-level Project expression",
+                    )
+                windows_by_project.setdefault(node.id, []).append(
+                    projection.expression
+                )
+            continue
+        if any(
+            sum(
+                _expression_kind_count(expression, kind)
+                for kind in WINDOW_ROWS_KINDS
+            )
+            for expression in _node_expressions(node)
+        ):
+            _fail(
+                f"node {node.id!r}",
+                "q51 ROWS windows may appear only as top-level Project expressions",
+            )
+
+    predicate_window_count = 0
+    for subplan in snapshot.plan.subplans:
+        if isinstance(subplan, ExistsSubplan) and subplan.predicate is not None:
+            predicate_window_count += sum(
+                _expression_kind_count(subplan.predicate, kind)
+                for kind in WINDOW_ROWS_KINDS
+            )
+            mixed_window_count += sum(
+                _expression_kind_count(subplan.predicate, kind)
+                for kind in ("window_sum", "window_avg", "window_rank")
+            )
+    window_count += predicate_window_count
+    if not window_count:
+        return
+    if snapshot.plan.subplans:
+        _fail("snapshot.plan.subplans", "q51 ROWS windows do not admit subplans")
+    if predicate_window_count:
+        _fail(
+            "snapshot.plan",
+            "q51 ROWS windows may appear only as top-level Project expressions",
+        )
+    if mixed_window_count:
+        _fail(
+            "snapshot.plan",
+            "q51 ROWS windows may not be mixed with other window leaves",
+        )
+    if window_count != MAX_WINDOW_ROWS_PER_SNAPSHOT:
+        _fail(
+            "snapshot.plan",
+            "q51 requires exactly four ROWS window leaves",
+        )
+    if len(windows_by_project) != MAX_WINDOW_ROWS_PROJECTS_PER_SNAPSHOT:
+        _fail(
+            "snapshot.plan",
+            "q51 requires exactly three ROWS window Projects",
+        )
+
+    all_windows = tuple(
+        window
+        for windows in windows_by_project.values()
+        for window in windows
+    )
+    if sum(window.kind == "window_rows_sum" for window in all_windows) != 2:
+        _fail("snapshot.plan", "q51 requires exactly two running SUM leaves")
+    if sum(window.kind == "window_rows_max" for window in all_windows) != 2:
+        _fail("snapshot.plan", "q51 requires exactly two running MAX leaves")
+    names = tuple(window.window_name for window in all_windows)
+    if len(set(names)) != len(names) or set(names) != set(Q51_WINDOW_NAMES):
+        _fail(
+            "snapshot.plan",
+            "q51 ROWS window names must be exactly "
+            f"{Q51_WINDOW_NAMES!r}",
+        )
+
+    nodes = snapshot.plan.node_map()
+    main_nodes = _plan_descendants(nodes, snapshot.plan.root)
+    consumers: dict[str, list[PlanNode]] = {
+        node.id: [] for node in snapshot.plan.nodes
+    }
+    for consumer in snapshot.plan.nodes:
+        for producer in plan_node_inputs(consumer):
+            consumers[producer].append(consumer)
+
+    for project_id, windows in windows_by_project.items():
+        project = nodes[project_id]
+        assert isinstance(project, Project)
+        if project_id not in main_nodes:
+            _fail(
+                f"node {project_id!r}",
+                "q51 ROWS window must belong to the main result plan",
+            )
+        if len(consumers[project_id]) > 1:
+            _fail(
+                f"node {project_id!r}",
+                "a q51 ROWS window Project must not fan out",
+            )
+        if len(windows) > MAX_WINDOW_ROWS_PER_PROJECT:
+            _fail(
+                f"node {project_id!r}.columns",
+                "q51 ROWS window count exceeds the "
+                f"{MAX_WINDOW_ROWS_PER_PROJECT}-leaf Project audit bound",
+            )
+        orders = tuple(window.execution_order for window in windows)
+        if sorted(orders) != list(range(len(windows))):
+            _fail(
+                f"node {project_id!r}.columns",
+                "q51 ROWS window execution_order must be the complete distinct "
+                f"range 0..{len(windows) - 1}",
+            )
+        kinds = {window.kind for window in windows}
+        if "window_rows_sum" in kinds and (
+            len(windows) != 1 or kinds != {"window_rows_sum"}
+        ):
+            _fail(
+                f"node {project_id!r}.columns",
+                "a q51 running SUM Project must contain exactly one window leaf",
+            )
+        if kinds == {"window_rows_sum"}:
+            if windows[0].window_name not in Q51_WINDOW_NAMES[:2]:
+                _fail(
+                    f"node {project_id!r}.columns",
+                    "q51 running SUM names must be canonical windows 0 and 1",
+                )
+        elif tuple(
+            window.window_name
+            for window in sorted(windows, key=lambda item: item.execution_order)
+        ) != Q51_WINDOW_NAMES[2:]:
+            _fail(
+                f"node {project_id!r}.columns",
+                "q51 running MAX orders 0 and 1 must be canonical windows 2 and 3",
+            )
+
+        aggregate = nodes.get(project.input)
+        for window in windows:
+            assert window.window_input is not None
+            assert window.partition_by is not None
+            assert window.order_by is not None
+            if window.kind != "window_rows_sum":
+                continue
+            if not (
+                isinstance(aggregate, Aggregate)
+                and aggregate.phase in {"undefined", "final"}
+                and aggregate.keys
+                and not aggregate.distinct_all
+            ):
+                _fail(
+                    f"node {project_id!r}.input",
+                    "a q51 running SUM Project must directly consume one grouped, "
+                    "logical or final Aggregate",
+                )
+            required_keys = window.partition_by + tuple(
+                item.column for item in window.order_by
+            )
+            if any(column not in aggregate.keys for column in required_keys):
+                _fail(
+                    f"node {project_id!r}.columns",
+                    "q51 running SUM partition and order columns must be direct "
+                    "keys of its Aggregate input",
+                )
+            matching_traits = tuple(
+                trait
+                for trait in aggregate.aggregates
+                if trait.output == window.window_input
+            )
+            if not (
+                len(matching_traits) == 1
+                and matching_traits[0].function == "sum"
+                and not matching_traits[0].distinct
+                and not matching_traits[0].unwrap
+                and matching_traits[0].output_type
+                == WHOLE_PARTITION_DECIMAL_SUM_TYPE
+                and matching_traits[0].output_nullable
+            ):
+                _fail(
+                    f"node {project_id!r}.columns",
+                    "q51 running SUM input must be the direct "
+                    "Optional<Decimal(35,2)> SUM output of its Aggregate input",
+                )
+            if aggregate.phase == "undefined" and schemas[aggregate.input][
+                matching_traits[0].input
+            ].value_type != ValueType(Q51_PRICE_TYPE, True):
+                _fail(
+                    f"node {aggregate.id!r}.aggregates",
+                    "logical q51 running SUM must consume Optional<Decimal(7,2)>",
+                )
+            if consumers[aggregate.id] != [project]:
+                _fail(
+                    f"node {aggregate.id!r}",
+                    "a q51 running SUM Aggregate must have one direct Project "
+                    "consumer and no fanout",
+                )
+            if aggregate.phase == "final":
+                intermediate = nodes.get(aggregate.input)
+                state = matching_traits[0].input
+                if not (
+                    isinstance(intermediate, Aggregate)
+                    and intermediate.phase == "intermediate"
+                    and not intermediate.distinct_all
+                    and intermediate.keys == aggregate.keys
+                ):
+                    _fail(
+                        f"node {aggregate.id!r}.input",
+                        "final q51 running SUM Aggregate must directly consume "
+                        "one matching intermediate Aggregate",
+                    )
+                source_traits = tuple(
+                    trait
+                    for trait in intermediate.aggregates
+                    if (
+                        trait.output == state
+                        and trait.function == "sum"
+                        and not trait.distinct
+                        and not trait.unwrap
+                    )
+                )
+                final_uses = tuple(
+                    trait for trait in aggregate.aggregates if trait.input == state
+                )
+                if not (
+                    len(source_traits) == 1
+                    and len(final_uses) == 1
+                    and schemas[intermediate.id][state].value_type
+                    == ValueType(WHOLE_PARTITION_DECIMAL_SUM_TYPE, True)
+                    and schemas[intermediate.input][source_traits[0].input].value_type
+                    == ValueType(Q51_PRICE_TYPE, True)
+                ):
+                    _fail(
+                        f"node {aggregate.id!r}.aggregates",
+                        "final q51 running SUM must consume exactly one matching "
+                        "Optional<Decimal(35,2)> intermediate SUM state",
+                    )
+                if consumers[intermediate.id] != [aggregate]:
+                    _fail(
+                        f"node {intermediate.id!r}",
+                        "a q51 running SUM intermediate Aggregate must have one "
+                        "direct final Aggregate consumer and no fanout",
+                    )
+
+    max_projects = tuple(
+        nodes[project_id]
+        for project_id, windows in windows_by_project.items()
+        if windows[0].kind == "window_rows_max"
+    )
+    assert len(max_projects) == 1
+    max_project = max_projects[0]
+    assert isinstance(max_project, Project)
+    max_windows = tuple(
+        sorted(
+            windows_by_project[max_project.id],
+            key=lambda window: window.execution_order,
+        )
+    )
+    if (
+        max_windows[0].window_input == max_windows[1].window_input
+        or max_windows[0].partition_by != max_windows[1].partition_by
+        or max_windows[0].order_by != max_windows[1].order_by
+    ):
+        _fail(
+            f"node {max_project.id!r}.columns",
+            "q51 running MAX requires two distinct inputs over one identical "
+            "partition/order specification",
+        )
+
+
 def _validate_void_dataflow(
     snapshot: Snapshot,
     schemas: Mapping[str, Mapping[str, Column]],
@@ -3580,7 +3991,8 @@ def expression_columns(expression: Expr) -> frozenset[str]:
             expression.column if expression.kind == "column" else None,
             (
                 expression.window_input
-                if expression.kind in {"window_sum", "window_avg"}
+                if expression.kind
+                in {"window_sum", "window_avg"} | WINDOW_ROWS_KINDS
                 else None
             ),
         )
@@ -3588,7 +4000,8 @@ def expression_columns(expression: Expr) -> frozenset[str]:
     )
     if expression.kind in {"window_sum", "window_avg"}:
         columns |= frozenset(expression.partition_by or ())
-    if expression.kind == "window_rank":
+    if expression.kind == "window_rank" or expression.kind in WINDOW_ROWS_KINDS:
+        columns |= frozenset(expression.partition_by or ())
         columns |= frozenset(
             item.column for item in expression.order_by or ()
         )
@@ -4869,6 +5282,7 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
     )
     _validate_error_projection_dataflow(snapshot)
     checked_concat_corridor(snapshot)
+    _validate_window_rows_dataflow(snapshot, schemas)
     _validate_whole_partition_decimal_window_dataflow(snapshot, schemas)
     _validate_window_rank_dataflow(snapshot, schemas)
     _validate_void_dataflow(snapshot, schemas)

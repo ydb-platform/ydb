@@ -92,6 +92,30 @@ class ExpressionRendererTest(unittest.TestCase):
                 'type="Uint64", nullable=false)',
             ),
             (
+                ir.Expr(
+                    kind="window_rows_max",
+                    window_input="web_sales",
+                    window_name="window1",
+                    execution_order=1,
+                    partition_by=("item_sk",),
+                    order_by=(
+                        ir.SortOrder(
+                            "d_date",
+                            ascending=True,
+                            nulls_first=True,
+                        ),
+                    ),
+                    window_frame=ir.WINDOW_RANK_FRAME,
+                    result_type="Decimal(35,2)",
+                    nullable=True,
+                ),
+                'window_rows_max(input="web_sales", name="window1", '
+                'execution_order=1, partition_by=["item_sk"], '
+                'order_by=[{column="d_date", direction=asc, nulls=first}], '
+                'frame="rows_unbounded_preceding_current_row", '
+                'type="Decimal(35,2)", nullable=true)',
+            ),
+            (
                 ir.Expr(kind="and", args=(one, two)),
                 'and(args=[literal(type="Int64", value=1), '
                 'literal(type="Int64", value=2)])',

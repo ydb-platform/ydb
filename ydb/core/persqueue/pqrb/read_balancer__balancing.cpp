@@ -1366,7 +1366,10 @@ bool TConsumer::ProccessReadingFinished(ui32 partitionId, bool wasInactive, cons
                         if (other != family) {
                             auto [f, v] = MergeFamilies(family, other, ctx);
                             family = f;
-                            const bool joiningCommon = other->TargetStatus == TPartitionFamily::ETargetStatus::Merge
+                            // MergeFamilies may Destroy `other`; only inspect it if
+                            // the merge was deferred (v == false).
+                            const bool joiningCommon = !v
+                                && other->TargetStatus == TPartitionFamily::ETargetStatus::Merge
                                 && other->MergeTo == family->Id;
                             allParentsMerged = allParentsMerged && (v || joiningCommon);
                         }

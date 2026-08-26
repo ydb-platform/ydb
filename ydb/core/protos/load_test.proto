@@ -152,16 +152,19 @@ message TEvLoadTestRequest {
             enum EAreaInit {
                 INIT_NONE = 0;
 
-                // requires ExpectedChunkSize: the idea is just to preallocate all chunks
+                // Write one zeroed IoSizeBytes block at the start of each chunk
+                // (preallocates chunks). Schema default for omitted InitType;
+                // used as-is for write loads.
                 INIT_ZEROES_FIRST_BLOCK = 1;
 
                 // Zero-fill every IoSizeBytes slot. Required for read load with
                 // checksums: DDisk serves never-written blocks as in-memory zeros
-                // and does not issue device I/O.
+                // and does not issue device I/O. The load actor treats omitted
+                // InitType as INIT_ZEROES_FULL when IsReadLoad is set.
                 INIT_ZEROES_FULL = 2;
             }
             optional uint32 AreaSize = 1; // must be a multiple of IoSizeBytes
-            optional EAreaInit InitType = 2 [default = INIT_ZEROES_FULL];
+            optional EAreaInit InitType = 2 [default = INIT_ZEROES_FIRST_BLOCK];
             optional uint32 Weight = 3 [default = 1]; // probability weight
             optional bool Sequential = 4 [default = true];
         }

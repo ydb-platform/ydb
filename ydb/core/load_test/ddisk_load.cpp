@@ -26,6 +26,20 @@ namespace {
 constexpr size_t SimulatedBufferSizeBytes = 128ull << 20; // 128 MiB
 constexpr size_t SimulatedBufferAlignment = 4096;
 
+using TAreaProto = NKikimr::TEvLoadTestRequest::TDDiskLoad::TArea;
+
+TAreaProto::EAreaInit ResolveAreaInitType(bool isReadLoad, const TAreaProto& area) {
+    if (!isReadLoad) {
+        return area.GetInitType();
+    }
+    if (!area.HasInitType() || area.GetInitType() == TAreaProto::INIT_ZEROES_FULL) {
+        return TAreaProto::INIT_ZEROES_FULL;
+    }
+    ythrow TLoadActorException()
+        << "read load requires InitType INIT_ZEROES_FULL (omit InitType to use it); "
+        << "INIT_NONE and INIT_ZEROES_FIRST_BLOCK leave unread slots as in-memory zeros";
+}
+
 class TAlignedPayloadChunk : public IContiguousChunk {
     std::unique_ptr<char, decltype(&free)> Owner;
     char* Ptr = nullptr;
@@ -312,7 +326,7 @@ public:
                 areaSize,
                 area.GetWeight(),
                 area.GetSequential(),
-                area.GetInitType(),
+                ResolveAreaInitType(IsReadLoad, area),
                 nextBaseChunk,
                 numChunks,
                 0,

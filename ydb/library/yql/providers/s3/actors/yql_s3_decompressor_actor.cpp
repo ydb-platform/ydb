@@ -3,10 +3,12 @@
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/actor_coroutine.h>
+#include <ydb/library/yql/dq/actors/compute/dq_schedulable.h>
 #include <ydb/library/yql/providers/s3/compressors/factory.h>
 #include <ydb/library/yql/providers/s3/events/events.h>
 #include <yql/essentials/utils/yql_panic.h>
 
+#include <util/generic/scope.h>
 #include <util/generic/size_literals.h>
 
 #if defined(_linux_) || defined(_darwin_)
@@ -21,10 +23,12 @@ namespace {
 
 class TS3DecompressorCoroImpl : public TActorCoroImpl {
 public:
-    TS3DecompressorCoroImpl(const TActorId& parent, const TString& compression)
+    TS3DecompressorCoroImpl(const TActorId& parent, const TString& compression, IDqSchedulerContextPtr schedulerContext)
         : TActorCoroImpl(256_KB)
         , Compression(compression)
         , Parent(parent)
+        , SchedulerContext(std::move(schedulerContext))
+        , Work(SchedulerContext ? SchedulerContext->CreateSchedulableWork() : nullptr)
     {}
 
 private:
@@ -37,10 +41,7 @@ private:
 
     private:
         bool nextImpl() final {
-            while (!Coro->InputFinished || !Coro->Requests.empty()) {
-                Coro->CpuTime += Coro->GetCpuTimeDelta();
-                Coro->ProcessOneEvent();
-                Coro->StartCycleCount = GetCycleCountFast();
+            while (true) {
                 if (Coro->InputBuffer) {
                     RawDataBuffer.swap(Coro->InputBuffer);
                     Coro->InputBuffer.clear();
@@ -48,6 +49,12 @@ private:
                     working_buffer = NDB::BufferBase::Buffer(rawData, rawData + RawDataBuffer.size());
                     return true;
                 }
+                if (Coro->InputFinished && Coro->Requests.empty()) {
+                    break;
+                }
+                Coro->CpuTime += Coro->GetCpuTimeDelta();
+                Coro->ProcessOneEvent();
+                Coro->StartCycleCount = GetCycleCountFast();
             }
             return false;
         }
@@ -59,7 +66,15 @@ private:
     STRICT_STFUNC(StateFunc,
         hFunc(TEvS3Provider::TEvDecompressDataRequest, Handle);
         hFunc(NActors::TEvents::TEvPoison, Handle);
+        sFunc(NActors::TEvents::TEvWakeup, HandleWakeup);
     )
+
+    // CPU scheduler (TQuery::ResumeTasks) may send multiple TEvWakeups while we
+    // are throttled — one per peer's StopExecution. StartUnit's WaitForSpecificEvent
+    // consumes only the first; extras leak into the general event flow and reach
+    // StateFunc via WaitForEvent in ProcessOneEvent. Ignore them here; StartUnit
+    // re-checks StartExecution on every wakeup anyway.
+    void HandleWakeup() {}
 
     void Handle(TEvS3Provider::TEvDecompressDataRequest::TPtr& ev) {
         Requests.push(std::move(ev->Release()));
@@ -72,8 +87,49 @@ private:
         InputFinished = true;
     }
 
+    void StartUnit() {
+        if (!Work || Working) {
+            return;
+        }
+        while (!Work->StartExecution(TMonotonic::Now())) {
+            (void)WaitForSpecificEvent<NActors::TEvents::TEvWakeup>(
+                &TS3DecompressorCoroImpl::ProcessUnexpectedEvent,
+                TMonotonic::Now() + Work->CalculateDelay(TMonotonic::Now()));
+        }
+        Working = true;
+    }
+
+    void ProcessUnexpectedEvent(TAutoPtr<::NActors::IEventHandle> ev) {
+        StateFunc(ev);
+    }
+
+    void StopUnit() {
+        if (!Work || !Working) {
+            return;
+        }
+        bool forced = false;
+        Work->StopExecution(forced);
+        Working = false;
+    }
+
+    void SetUpstreamPause(bool paused) {
+        if (UpstreamPaused == paused) {
+            return;
+        }
+        UpstreamPaused = paused;
+        if (UpstreamPaused) {
+            StopUnit();
+        } else {
+            StartUnit();
+        }
+    }
+
     void Run() final {
         StartCycleCount = GetCycleCountFast();
+
+        if (Work) {
+            Work->RegisterForResume(SelfActorId);
+        }
 
         try {
             std::unique_ptr<NDB::ReadBuffer> coroBuffer = std::make_unique<TCoroReadBuffer>(this);
@@ -82,6 +138,8 @@ private:
             YQL_ENSURE(decompressorBuffer, "Unsupported " << Compression << " compression.");
             while (!decompressorBuffer->eof()) {
                 decompressorBuffer->nextIfAtEnd();
+                StartUnit();
+                Y_DEFER { StopUnit(); };
                 TString data{decompressorBuffer->available(), ' '};
                 decompressorBuffer->read(&data.front(), decompressorBuffer->available());
                 Send(Parent, new TEvS3Provider::TEvDecompressDataResult(std::move(data), TakeCpuTimeDelta()));
@@ -101,8 +159,13 @@ private:
             Requests.pop();
             return;
         }
+
+        SetUpstreamPause(true);
+
         TAutoPtr<::NActors::IEventHandle> ev(WaitForEvent().Release());
         StateFunc(ev);
+
+        SetUpstreamPause(false);
     }
 
     void ExtractDataPart(TEvS3Provider::TEvDecompressDataRequest& event) {
@@ -127,6 +190,10 @@ private:
     TActorId Parent;
     bool InputFinished = false;
     std::queue<THolder<TEvS3Provider::TEvDecompressDataRequest>> Requests;
+    const IDqSchedulerContextPtr SchedulerContext;
+    std::unique_ptr<IDqSchedulableWork> Work;
+    bool Working = false;            // holds HDRF slot — allowed to consume CPU
+    bool UpstreamPaused = false;     // waiting on decompress input / HDRF admission — stop consuming
 };
 
 class TS3DecompressorCoroActor : public TActorCoro {
@@ -143,8 +210,8 @@ private:
 
 } // anonymous namespace
 
-NActors::IActor* CreateS3DecompressorActor(const NActors::TActorId& parent, const TString& compression) {
-    return new TS3DecompressorCoroActor(MakeHolder<TS3DecompressorCoroImpl>(parent, compression));
+NActors::IActor* CreateS3DecompressorActor(const NActors::TActorId& parent, const TString& compression, IDqSchedulerContextPtr schedulerContext) {
+    return new TS3DecompressorCoroActor(MakeHolder<TS3DecompressorCoroImpl>(parent, compression, std::move(schedulerContext)));
 }
 
 } // namespace NYql::NDq

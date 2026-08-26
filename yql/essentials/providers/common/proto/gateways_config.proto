@@ -78,6 +78,8 @@ message THttpGatewayConfig {
     optional uint64 LowSpeedBytesLimit = 9;
     optional TDnsResolverConfig DnsResolverConfig = 10;
     optional uint64 MaxRetries = 11;
+    optional uint32 PoolCapsPushPeriodMs = 12;
+    optional double MinDefaultPoolShare = 13;
 }
 
 /////////////////////////////// YT ///////////////////////////////
@@ -414,6 +416,7 @@ message TS3GatewayConfig {
     optional uint64 MaxInflight = 18; // Default = 20
     optional uint64 DataInflight = 19; // Default = 200 MB
     optional bool AllowLocalFiles = 20;
+    optional bool EnableScheduling = 21;
 
     repeated TAttr DefaultSettings = 100;
 }

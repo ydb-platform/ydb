@@ -5,6 +5,7 @@
 #include <ydb/core/base/events.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/resource_pools/resource_pool_settings.h>
+#include <ydb/library/yql/dq/actors/compute/dq_schedulable.h>
 
 namespace NKikimr::NKqp::NScheduler {
 
@@ -31,6 +32,10 @@ public:
     bool RemoveQuery(const NHdrf::TQueryId& queryId);
 
     void UpdateFairShare();
+
+    // Returns per-leaf-pool FairShare / TotalCpu, normalized to [0..1],
+    // keyed by fully-qualified (databaseId, poolId).
+    THashMap<NYql::NDq::TPoolKey, double> GetLeafPoolFairShares() const;
 
 private:
     static constexpr NHdrf::TQueryId READ_QUERY_ID = -1;

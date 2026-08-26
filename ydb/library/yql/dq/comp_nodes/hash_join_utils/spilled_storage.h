@@ -88,15 +88,24 @@ template <TSpillerSettings Settings> class TBucketsSpiller {
         return num;
     }
 
+    int NextRoundRobinBucket() {
+        const int index = RoundRobinCursor_;
+        RoundRobinCursor_ = (RoundRobinCursor_ + 1) % Settings.Buckets;
+        return index;
+    }
+
   public:
-    TBucketsSpiller(ISpiller::TPtr spiller, const NPackedTuple::TTupleLayout* layout)
+    TBucketsSpiller(ISpiller::TPtr spiller, const NPackedTuple::TTupleLayout* layout, bool roundRobin = false)
         : Buckets_(Settings.Buckets)
         , Spiller_(spiller)
         , Layout_(layout)
+        , RoundRobin_(roundRobin)
     {}
 
     void AddRow(TSingleTuple tuple) {
-        int bucketIndex = Settings.BucketIndex(tuple);
+        // Cross has no keys, so hashing would pile every row into one bucket. Round robin keeps the
+        // buckets even, which is what lets the join load the build side bucket by bucket.
+        int bucketIndex = RoundRobin_ ? NextRoundRobinBucket() : Settings.BucketIndex(tuple);
         TBucket& thisBucket = Buckets_[bucketIndex];
         thisBucket.BuildingPage.AppendTuple(tuple, Layout_);
         thisBucket.DetatchBuildingPageIfLimitReached<Settings.BucketSizeBytes>();
@@ -155,6 +164,8 @@ template <TSpillerSettings Settings> class TBucketsSpiller {
     ISpiller::TPtr Spiller_;
     std::optional<TMKQLVector<BlobIdAndBucketIndex>> SpillingPages_;
     const NPackedTuple::TTupleLayout* Layout_;
+    bool RoundRobin_ = false;
+    int RoundRobinCursor_ = 0;
 };
 
 template <TSpillerSettings Settings> class TProbeSpiller {

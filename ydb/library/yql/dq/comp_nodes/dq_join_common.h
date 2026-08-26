@@ -267,6 +267,7 @@ struct TTableAndSomeData {
     ui32 ProbeResumeIndex = 0;
     size_t BuildCursor = 0;
     size_t PreservedResumeIndex = 0;
+    size_t ProbeKeyCursor = 0;
 };
 
 namespace NJoinPackedTuples {
@@ -400,7 +401,7 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
     struct FetchingBuild {
         FetchingBuild(Self& self)
             : Build(std::move(self.Sources_).Build())
-            , Spiller(self.Spiller_, self.Layouts_.Build)
+            , Spiller(self.Spiller_, self.Layouts_.Build, Join.Kind == EJoinKind::Cross)
         {
             self.Logger_.LogDebug("FetchingBuild stage started");
         }
@@ -437,6 +438,15 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                 std::accumulate(Spiller.GetState().Buckets.begin(), Spiller.GetState().Buckets.end(), 0,
                                 [&](int spilled, const SpillerType::Bucket& bucket) { return spilled += SpillerType::IsBucketSpilled(bucket); });
 
+            if constexpr (Join.Kind == EJoinKind::Cross) {
+                for (int index = 0; index < std::ssize(Spiller.GetState().Buckets); ++index) {
+                    if (SpillerType::IsBucketSpilled(Spiller.GetState().Buckets[index])) {
+                        CrossProbeBucket = index;
+                        break;
+                    }
+                }
+            }
+
             self.Logger_.LogDebug(Sprintf("Probing stage started, in memory buckets: %i, spilled buckets: %i",
                                           inMemoryBuckets, spilledBuckets));
         }
@@ -449,6 +459,10 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
         // Cursor of the post-probe scan over preserved rows left in the in-memory tables
         int PreservedBucketIndex = 0;
         size_t PreservedResumeIndex = 0;
+        // A Cross probe row visits every build bucket, so pausing needs the bucket next to BuildCursor
+        int CrossBucketIndex = 0;
+        // All Cross probe rows share one spilled stream, parked in the first spilled bucket
+        std::optional<int> CrossProbeBucket;
     };
 
     using DumpedBuckets = std::unordered_map<int, TSpilledBucket>;
@@ -475,6 +489,8 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
     struct PairAndMetadata {
         TSpilledBucket Buckets;
         int BucketIndex;
+        // Cross reads the probe stream once per build bucket, so only the last pass may drop the blobs
+        bool IsLastPair = false;
         std::variant<TFutureTableData, TTableAndSomeData> Table = TFutureTableData{};
     };
 
@@ -482,11 +498,20 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
         JoinPairsOfPartitions(Self& self, std::unordered_map<int, TSpilledBucket>&& pairs)
             : Pairs(std::move(pairs))
         {
-            self.Logger_.LogDebug(Sprintf("JoinPairsOfPartitions stage started, partitions count: %i", pairs.size()));
+            if constexpr (Join.Kind == EJoinKind::Cross) {
+                for (auto& [index, bucket] : Pairs) {
+                    CrossProbeKeys.insert(CrossProbeKeys.end(), bucket.Probe.begin(), bucket.Probe.end());
+                    bucket.Probe.clear();
+                }
+            }
+            self.Logger_.LogDebug(Sprintf("JoinPairsOfPartitions stage started, partitions count: %i",
+                                          static_cast<int>(Pairs.size())));
         }
 
         std::unordered_map<int, TSpilledBucket> Pairs;
         std::optional<PairAndMetadata> SelectedPair;
+        // Cross has no keys, so every build bucket has to see the whole probe stream
+        TMKQLVector<ISpiller::TKey> CrossProbeKeys;
     };
 
     class Sources {
@@ -737,16 +762,40 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                     if (idx++ < state.ResumeIndex) {
                         continue;
                     }
-                    int bucketIndex = Settings.BucketIndex(tuple);
-                    bool thisBucketSpilled = state.Spiller.IsBucketSpilled(bucketIndex);
-                    if (thisBucketSpilled) {
-                        state.Spiller.AddRow({.Val = tuple, .Side = ESide::Probe, .BucketIndex = bucketIndex});
+                    if constexpr (Join.Kind == EJoinKind::Cross) {
+                        auto& buckets = state.Spiller.GetState().Buckets;
+                        for (; state.CrossBucketIndex < std::ssize(buckets); ++state.CrossBucketIndex) {
+                            TTable* thisTable = std::get_if<TTable>(&buckets[state.CrossBucketIndex]);
+                            if (!thisTable || thisTable->Empty()) {
+                                continue;
+                            }
+                            if (!lookupToTable(*thisTable, tuple, state.BuildCursor)) {
+                                state.ResumeIndex = idx - 1;
+                                return EFetchResult::One;
+                            }
+                            if (isFull()) {
+                                state.ResumeIndex = idx - 1;
+                                ++state.CrossBucketIndex;
+                                return EFetchResult::One;
+                            }
+                        }
+                        state.CrossBucketIndex = 0;
+                        if (state.CrossProbeBucket) {
+                            state.Spiller.AddRow(
+                                {.Val = tuple, .Side = ESide::Probe, .BucketIndex = *state.CrossProbeBucket});
+                        }
                     } else {
-                        TTable* thisTable = std::get_if<TTable>(&state.Spiller.GetState().Buckets[bucketIndex]);
-                        MKQL_ENSURE(thisTable, "sanity check");
-                        if (!lookupToTable(*thisTable, tuple, state.BuildCursor)) {
-                            state.ResumeIndex = idx - 1;
-                            return EFetchResult::One;
+                        int bucketIndex = Settings.BucketIndex(tuple);
+                        bool thisBucketSpilled = state.Spiller.IsBucketSpilled(bucketIndex);
+                        if (thisBucketSpilled) {
+                            state.Spiller.AddRow({.Val = tuple, .Side = ESide::Probe, .BucketIndex = bucketIndex});
+                        } else {
+                            TTable* thisTable = std::get_if<TTable>(&state.Spiller.GetState().Buckets[bucketIndex]);
+                            MKQL_ENSURE(thisTable, "sanity check");
+                            if (!lookupToTable(*thisTable, tuple, state.BuildCursor)) {
+                                state.ResumeIndex = idx - 1;
+                                return EFetchResult::One;
+                            }
                         }
                     }
                     if (isFull()) {
@@ -777,7 +826,8 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                 std::optional bucket = GetFrontOrNull(state.Pairs);
                 if (bucket.has_value()) {
                     state.SelectedPair =
-                        PairAndMetadata{.Buckets = std::move(bucket->second), .BucketIndex = bucket->first};
+                        PairAndMetadata{.Buckets = std::move(bucket->second), .BucketIndex = bucket->first,
+                                        .IsLastPair = state.Pairs.empty()};
                     TFutureTableData data;
                     for (ISpiller::TKey key : state.SelectedPair->Buckets.Build) {
                         data.Futures.push_back(Spiller_->Extract(key));
@@ -788,7 +838,6 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                     State_ = Finish{};
                 }
             } else {
-                TMKQLVector<ISpiller::TKey>& currentProbe = state.SelectedPair->Buckets.Probe;
                 if (auto* tdata = std::get_if<TFutureTableData>(&state.SelectedPair->Table)) {
                     if (tdata->All.IsReady()) {
                         TMKQLVector<TPackResult> vec;
@@ -804,9 +853,16 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                 } else {
                     auto* table = std::get_if<TTableAndSomeData>(&state.SelectedPair->Table);
                     MKQL_ENSURE(table, "sanity check");
+                    TMKQLVector<ISpiller::TKey>* probeKeys = &state.SelectedPair->Buckets.Probe;
+                    bool mayDropBlobs = true;
+                    if constexpr (Join.Kind == EJoinKind::Cross) {
+                        probeKeys = &state.CrossProbeKeys;
+                        mayDropBlobs = state.SelectedPair->IsLastPair;
+                    }
                     constexpr int MinFuturesInBuffer = 10;
-                    while (table->Futures.size() < MinFuturesInBuffer && !currentProbe.empty()) {
-                        table->Futures.push_back(Spiller_->Extract(*GetBackOrNull(currentProbe)));
+                    while (table->Futures.size() < MinFuturesInBuffer && table->ProbeKeyCursor < probeKeys->size()) {
+                        const ISpiller::TKey key = (*probeKeys)[table->ProbeKeyCursor++];
+                        table->Futures.push_back(mayDropBlobs ? Spiller_->Extract(key) : Spiller_->Get(key));
                     }
                     if (table->CurrentProbePack.has_value()) {
                         ui32 idx = 0;
@@ -826,7 +882,7 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                         table->CurrentProbePack = std::nullopt;
                         table->ProbeResumeIndex = 0;
                     } else if (table->Futures.empty()) {
-                        MKQL_ENSURE(currentProbe.empty(), "sanity check");
+                        MKQL_ENSURE(table->ProbeKeyCursor == probeKeys->size(), "sanity check");
                         if constexpr (PreservedRowsInBuildTable()) {
                             if (!EmitPreservedBuildRows(table->Table, table->PreservedResumeIndex, consume, isFull)) {
                                 return EFetchResult::One;

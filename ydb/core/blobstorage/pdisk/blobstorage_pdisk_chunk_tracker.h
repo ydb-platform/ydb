@@ -61,6 +61,14 @@ public:
         SetExpectedOwnerSettings(ExpectedOwnerCount, newOwnerSize);
     }
 
+    // The pool the owners share is not a constant, it gives chunks away to the common log of a disk with static
+    // groups and takes them back when the last of those groups is gone
+    void SetTotal(i64 total) {
+        Y_VERIFY(total >= 0);
+        Total = total;
+        RedistributeQuotas();
+    }
+
     void SetExpectedOwnerSettings(size_t newOwnerCount, i64 newOwnerSize) {
         Y_VERIFY(newOwnerSize >= 0);
         ExpectedOwnerCount = newOwnerCount;
@@ -288,6 +296,11 @@ using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
     THolder<TPerOwnerQuotaTracker> OwnerQuota;
     TKeeperParams Params;
     TColorLimits ColorLimits;
+    TColorLimits ChunkLimits;
+
+    // Reset is still applying the chunks the owners and the common log already have, the pool must not be given away
+    // to anybody until it knows how much of it is actually free
+    bool IsResetting = false;
 
     // Chunk reserve of the static group owners. Nothing is taken out of the shared quota for it: the reserve is the
     // number of chunks of the shared quota kept free for an owner, and the part of it the owner does not use yet is
@@ -321,6 +334,8 @@ public:
     bool Reset(const TKeeperParams &params, const TColorLimits &limits, TString &outErrorReason) {
         Params = params;
         ColorLimits = limits;
+        ChunkLimits = TColorLimits::MakeChunkLimits(params.ChunkBaseLimit);
+        IsResetting = true;
 
         GlobalQuota->Reset(params.TotalChunks, limits);
         i64 unappropriated = params.TotalChunks;
@@ -339,7 +354,14 @@ public:
             return false;
         }
 
-        i64 staticLog = params.HasStaticGroups ? params.CommonStaticLogChunks : 0;
+        // A disk whose common log has a pool of its own gets the log pool of the static groups here and keeps it
+        // until the next start. On a disk that shares the pool with the owners it is taken out of the chunk pool at
+        // the end of Reset instead, once it is known how much of that pool is free, and it follows the static group
+        // owners from there on.
+        i64 staticLog = 0;
+        if (params.SeparateCommonLog && HasStaticGroupOwners(params)) {
+            staticLog = params.CommonStaticLogChunks;
+        }
         unappropriated += GlobalQuota->AddSystemOwner(OwnerCommonStaticLog, staticLog, "Common Log Static Group Bonus");
         if (unappropriated < 0) {
             outErrorReason = (TStringBuilder() << "Error adding OwnerCommonStaticLog quota, size# " << staticLog
@@ -377,9 +399,8 @@ public:
         }
 
         SharedQuota->SetName("SharedQuota");
-        TColorLimits chunkLimits = TColorLimits::MakeChunkLimits(params.ChunkBaseLimit);
-        SharedQuota->ForceHardLimit(GlobalQuota->GetHardLimit(OwnerBeginUser), chunkLimits);
-        OwnerQuota->Reset(GlobalQuota->GetHardLimit(OwnerBeginUser), chunkLimits);
+        SharedQuota->ForceHardLimit(GlobalQuota->GetHardLimit(OwnerBeginUser), ChunkLimits);
+        OwnerQuota->Reset(GlobalQuota->GetHardLimit(OwnerBeginUser), ChunkLimits);
         OwnerQuota->SetExpectedOwnerSettings(params.ExpectedOwnerCount, params.ExpectedOwnerSize);
 
         for (TAtomic &reserve : StaticReserve) {
@@ -418,6 +439,8 @@ public:
         ColorBorder = params.SpaceColorBorder;
         ColorBorderOccupancy = OwnerQuota->GetOccupancyForColor(ColorBorder);
 
+        IsResetting = false;
+        RecomputeCommonStaticLog();
         RecomputeStaticReserve();
         return true;
     }
@@ -428,6 +451,7 @@ public:
         if (IsStaticGroupVDisk(vdiskId)) {
             StaticOwners.push_back(owner);
         }
+        RecomputeCommonStaticLog();
         RecomputeStaticReserve();
     }
 
@@ -448,6 +472,7 @@ public:
             }
         }
         OwnerQuota->RemoveOwner(owner);
+        RecomputeCommonStaticLog();
         RecomputeStaticReserve();
     }
 
@@ -560,6 +585,11 @@ public:
     }
 
     TColor::E GetSpaceColor(TOwner owner, double *occupancy) const {
+        if (owner == OwnerCommonStaticLog) {
+            // A static group VDisk is told how the common log is doing, not how the log pool of the static groups is:
+            // that pool is there to keep its writes going, not to excuse it from cutting the log with everybody else
+            return EstimateSpaceColor(OwnerSystem, 0, occupancy);
+        }
         return EstimateSpaceColor(owner, 0, occupancy);
     }
 
@@ -578,22 +608,24 @@ public:
             return ret;
         } else {
             switch (owner) {
-                case OwnerCommonStaticLog:
-                    if (Params.SeparateCommonLog) {
-                        if (GlobalQuota->GetHardLimit(OwnerCommonStaticLog) == 0) {
-                            // No static group bonus, use common quota for the request
-                            return GlobalQuota->EstimateSpaceColor(OwnerSystem, allocationSize, occupancy);
-                        } else {
-                            return GlobalQuota->EstimateSpaceColor(OwnerCommonStaticLog, allocationSize, occupancy);
-                        }
-                    } else {
-                        if (GlobalQuota->GetHardLimit(OwnerCommonStaticLog) == 0) {
-                            // No static group bonus, use common quota for the request
-                            return SharedQuota->EstimateSpaceColor(allocationSize, occupancy);
-                        } else {
-                            return GlobalQuota->EstimateSpaceColor(OwnerCommonStaticLog, allocationSize, occupancy);
-                        }
+                case OwnerCommonStaticLog: {
+                    // A static group log write is served out of the common quota or, when that one has no room left,
+                    // out of the log pool of the static groups, so it is as well off as the better of the two. An
+                    // empty log pool comes out black and loses, which is what a disk without static groups needs.
+                    double commonOccupancy;
+                    TColor::E commonColor = Params.SeparateCommonLog
+                            ? GlobalQuota->EstimateSpaceColor(OwnerSystem, allocationSize, &commonOccupancy)
+                            : SharedQuota->EstimateSpaceColor(allocationSize, &commonOccupancy);
+                    double staticOccupancy;
+                    TColor::E staticColor = GlobalQuota->EstimateSpaceColor(OwnerCommonStaticLog, allocationSize,
+                            &staticOccupancy);
+                    if (staticColor < commonColor) {
+                        *occupancy = staticOccupancy;
+                        return staticColor;
                     }
+                    *occupancy = commonOccupancy;
+                    return commonColor;
+                }
                 case OwnerSystem:
                     if (Params.SeparateCommonLog) {
                         return GlobalQuota->EstimateSpaceColor(OwnerSystem, allocationSize, occupancy);
@@ -655,6 +687,8 @@ public:
             SharedQuota->Release(count);
             // A static group owner that releases chunks gets the released part of its reserve held back again
             RecomputeStaticReserveFree();
+            // The log pool of a disk with static groups may still be waiting for the chunks it could not get
+            RecomputeCommonStaticLog();
         } else {
             switch (owner) {
                 case OwnerCommonStaticLog:
@@ -674,6 +708,8 @@ public:
                             SharedQuota->Release(releaseCommon);
                         }
                     }
+                    // The chunks of a log pool that outlived its static groups go back to the owners as the log is cut
+                    RecomputeCommonStaticLog();
                     break;
                 }
                 default:
@@ -769,6 +805,56 @@ public:
     }
 
 private:
+    static bool HasStaticGroupOwners(const TKeeperParams &params) {
+        return AnyOf(params.OwnersInfo, [](const auto &it) { return IsStaticGroupVDisk(it.second.VDiskId); });
+    }
+
+    // Size of the log pool of a disk with static groups. The configured size is what a disk of a usual size gets; a
+    // small disk gives the log a sixteenth of its chunk pool instead, having no room for the whole of it.
+    i64 GetDesiredCommonStaticLog(i64 current) const {
+        if (StaticOwners.empty()) {
+            return 0;
+        }
+        const i64 pool = SharedQuota->GetHardLimit() + current;
+        return Min(Params.CommonStaticLogChunks, pool / 16);
+    }
+
+    // The common log of a disk that shares the chunk pool with the owners gets a pool of its own once the disk has
+    // static groups, so that the VDisks of those groups can write their logs even when the chunk pool is exhausted.
+    // It follows the static group owners: waiting for the next start of the PDisk to create it leaves a freshly
+    // formatted disk without the protection until then, and waiting for one to give it back keeps the chunks of a
+    // slain static group idle. A disk whose common log has a pool of its own has nothing to take the chunks from
+    // and keeps what Reset gave it.
+    void RecomputeCommonStaticLog() {
+        if (IsResetting || Params.SeparateCommonLog) {
+            return;
+        }
+
+        const i64 current = GlobalQuota->GetHardLimit(OwnerCommonStaticLog);
+        const i64 desired = GetDesiredCommonStaticLog(current);
+        i64 target = current;
+        if (desired > current) {
+            // Only the free space above the red zone is taken, the rest is left to the owners for their compactions
+            // and picked up later, as they release chunks
+            const i64 red = ChunkLimits.GetQuotaForColor(TColor::RED, SharedQuota->GetHardLimit());
+            const i64 room = Max<i64>(SharedQuota->GetFree() - red, 0);
+            target = current + Min(desired - current, room);
+        } else if (desired < current) {
+            // The chunks the log has already taken are given back as the log is cut
+            target = Max(desired, GlobalQuota->GetUsed(OwnerCommonStaticLog));
+        }
+        if (target == current) {
+            return;
+        }
+
+        const i64 pool = GlobalQuota->GetHardLimit(OwnerBeginUser) + current - target;
+        GlobalQuota->ForceHardLimit(OwnerCommonStaticLog, target);
+        GlobalQuota->ForceHardLimit(OwnerBeginUser, pool);
+        SharedQuota->ForceHardLimit(pool, ChunkLimits);
+        OwnerQuota->SetTotal(pool);
+        RecomputeStaticReserve();
+    }
+
     // A static group owner must keep working even when its neighbours from dynamic groups have eaten the whole shared
     // quota, otherwise the tablets living in the static group take the whole cluster down. Each of them gets its
     // personal quota worth of chunks kept free: the part of it the owner does not use yet is hidden from the other

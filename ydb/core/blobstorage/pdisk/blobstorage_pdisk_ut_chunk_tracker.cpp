@@ -30,6 +30,13 @@ Y_UNIT_TEST_SUITE(TChunkTrackerTest) {
         return MakeVDiskId(EGroupConfigurationType::Static, groupLocalId);
     }
 
+    // The chunk reserve tests below run on pools of a hundred chunks or so: give the static group owners no log pool,
+    // which would take a large part of such a small pool, and a cap that fits their personal quotas
+    static void SetupStaticGroupParams(NPDisk::TKeeperParams &params) {
+        params.CommonStaticLogChunks = 0;
+        params.StaticGroupChunkReservePerMille = 500;
+    }
+
     Y_UNIT_TEST(AddRemove) {
         using namespace NPDisk;
 
@@ -268,7 +275,7 @@ Y_UNIT_TEST_SUITE(TChunkTrackerTest) {
             .TotalChunks = 205 /*system*/ + 100,
             .ExpectedOwnerCount = 4,
         };
-        params.StaticGroupChunkReservePerMille = 500;
+        SetupStaticGroupParams(params);
 
         TString errorReason;
         UNIT_ASSERT_C(chunkTracker.Reset(params, TColorLimits::MakeLogLimits(), errorReason), errorReason);
@@ -313,7 +320,7 @@ Y_UNIT_TEST_SUITE(TChunkTrackerTest) {
             .TotalChunks = 205 /*system*/ + 100,
             .ExpectedOwnerCount = 4,
         };
-        params.StaticGroupChunkReservePerMille = 500;
+        SetupStaticGroupParams(params);
 
         TString errorReason;
         UNIT_ASSERT_C(chunkTracker.Reset(params, TColorLimits::MakeLogLimits(), errorReason), errorReason);
@@ -344,7 +351,7 @@ Y_UNIT_TEST_SUITE(TChunkTrackerTest) {
             .TotalChunks = 205 /*system*/ + 100,
             .ExpectedOwnerCount = 4,
         };
-        params.StaticGroupChunkReservePerMille = 500;
+        SetupStaticGroupParams(params);
 
         TString errorReason;
         UNIT_ASSERT_C(chunkTracker.Reset(params, TColorLimits::MakeLogLimits(), errorReason), errorReason);
@@ -380,7 +387,7 @@ Y_UNIT_TEST_SUITE(TChunkTrackerTest) {
             .TotalChunks = 205 /*system*/ + 100,
             .ExpectedOwnerCount = 4,
         };
-        params.StaticGroupChunkReservePerMille = 500;
+        SetupStaticGroupParams(params);
 
         TString errorReason;
         UNIT_ASSERT_C(chunkTracker.Reset(params, TColorLimits::MakeLogLimits(), errorReason), errorReason);
@@ -415,7 +422,7 @@ Y_UNIT_TEST_SUITE(TChunkTrackerTest) {
             .TotalChunks = 205 /*system*/ + 100,
             .ExpectedOwnerCount = 4,
         };
-        params.StaticGroupChunkReservePerMille = 500;
+        SetupStaticGroupParams(params);
         params.OwnersInfo[staticOwner] = {
             .ChunksOwned = 95,
             .VDiskId = StaticVDiskId(),
@@ -448,7 +455,7 @@ Y_UNIT_TEST_SUITE(TChunkTrackerTest) {
             .TotalChunks = 205 /*system*/ + 100,
             .ExpectedOwnerCount = 4,
         };
-        params.StaticGroupChunkReservePerMille = 500;
+        SetupStaticGroupParams(params);
 
         TString errorReason;
         UNIT_ASSERT_C(chunkTracker.Reset(params, TColorLimits::MakeLogLimits(), errorReason), errorReason);
@@ -498,7 +505,7 @@ Y_UNIT_TEST_SUITE(TChunkTrackerTest) {
             .TotalChunks = 205 /*system*/ + 100,
             .ExpectedOwnerCount = 0,
         };
-        params.StaticGroupChunkReservePerMille = 500;
+        SetupStaticGroupParams(params);
 
         TString errorReason;
         UNIT_ASSERT_C(chunkTracker.Reset(params, TColorLimits::MakeLogLimits(), errorReason), errorReason);
@@ -537,7 +544,7 @@ Y_UNIT_TEST_SUITE(TChunkTrackerTest) {
         };
         // The common log of such a disk has no pool of its own, it allocates from the very same shared quota
         params.SeparateCommonLog = false;
-        params.StaticGroupChunkReservePerMille = 500;
+        SetupStaticGroupParams(params);
 
         TString errorReason;
         TChunkTracker chunkTracker;
@@ -561,6 +568,91 @@ Y_UNIT_TEST_SUITE(TChunkTrackerTest) {
         UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerStaticReserve(staticOwner), 50);
     }
 
+    Y_UNIT_TEST(CommonStaticLogFollowsStaticGroupOwners) {
+        using namespace NPDisk;
+        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+
+        TOwner staticOwner = 101;
+        TOwner dynamicOwner = 102;
+        TKeeperParams params {
+            .TotalChunks = 1 /*syslog*/ + 5 /*system reserve*/ + 400,
+            .ExpectedOwnerCount = 4,
+            .SysLogSize = 1,
+            .MaxCommonLogChunks = 40,
+            .CommonStaticLogChunks = 20,
+        };
+        // The common log of such a disk has no pool of its own, it allocates from the very same shared quota
+        params.SeparateCommonLog = false;
+
+        TString errorReason;
+        TChunkTracker chunkTracker;
+        UNIT_ASSERT_C(chunkTracker.Reset(params, TColorLimits::MakeLogLimits(), errorReason), errorReason);
+
+        // A disk with no static groups keeps the whole chunk pool for its owners
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetTotalHardLimit(), 400);
+        chunkTracker.AddOwner(dynamicOwner, DynamicVDiskId());
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetTotalHardLimit(), 400);
+
+        // The log gets a pool of its own as soon as a VDisk of a static group shows up, without waiting for the PDisk
+        // to be restarted
+        chunkTracker.AddOwner(staticOwner, StaticVDiskId());
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetTotalHardLimit(), 380);
+
+        // And that pool is what keeps the static group VDisks writing their logs on an exhausted disk
+        while (chunkTracker.TryAllocate(dynamicOwner, 1, errorReason)) {
+        }
+        UNIT_ASSERT(!chunkTracker.TryAllocate(OwnerSystem, 1, errorReason));
+        UNIT_ASSERT_C(chunkTracker.TryAllocate(OwnerCommonStaticLog, 10, errorReason), errorReason);
+
+        // They are still told how the common log is really doing, so that they keep cutting it like everybody else
+        double occupancy;
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetSpaceColor(OwnerCommonStaticLog, &occupancy), TColor::RED);
+
+        // A slain static group leaves its log pool behind, and the chunks go back to the owners as the log is cut
+        chunkTracker.RemoveOwner(staticOwner);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetTotalHardLimit(), 390);
+        chunkTracker.Release(OwnerCommonStaticLog, 10);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetTotalHardLimit(), 400);
+    }
+
+    Y_UNIT_TEST(CommonStaticLogNeverKeepsAnOverfullDiskFromStarting) {
+        using namespace NPDisk;
+
+        TOwner staticOwner = 101;
+        TOwner dynamicOwner = 102;
+        TKeeperParams params {
+            .TotalChunks = 1 /*syslog*/ + 5 /*system reserve*/ + 400,
+            .ExpectedOwnerCount = 4,
+            .SysLogSize = 1,
+            .CommonLogSize = 10,
+            .MaxCommonLogChunks = 40,
+            .CommonStaticLogChunks = 20,
+        };
+        params.SeparateCommonLog = false;
+        params.OwnersInfo[staticOwner] = {
+            .ChunksOwned = 0,
+            .VDiskId = StaticVDiskId(),
+            .Weight = 1,
+        };
+        params.OwnersInfo[dynamicOwner] = {
+            .ChunksOwned = 390,
+            .VDiskId = DynamicVDiskId(),
+            .Weight = 1,
+        };
+
+        // A disk filled to the brim must start up: the log pool takes what is free and nothing of what is used
+        TString errorReason;
+        TChunkTracker chunkTracker;
+        UNIT_ASSERT_C(chunkTracker.Reset(params, TColorLimits::MakeLogLimits(), errorReason), errorReason);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetTotalHardLimit(), 400);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetTotalUsed(), 400);
+
+        // The log gets its pool once the owners have something to spare
+        chunkTracker.Release(dynamicOwner, 30);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetTotalHardLimit(), 380);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetTotalUsed(), 370);
+    }
+
     Y_UNIT_TEST(StaticGroupReserveIsCappedAndCanBeDisabled) {
         using namespace NPDisk;
 
@@ -569,7 +661,7 @@ Y_UNIT_TEST_SUITE(TChunkTrackerTest) {
             .TotalChunks = 205 /*system*/ + 100,
             .ExpectedOwnerCount = 0,
         };
-        params.StaticGroupChunkReservePerMille = 500;
+        SetupStaticGroupParams(params);
 
         TString errorReason;
         UNIT_ASSERT_C(chunkTracker.Reset(params, TColorLimits::MakeLogLimits(), errorReason), errorReason);

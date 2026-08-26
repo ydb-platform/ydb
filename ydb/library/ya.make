@@ -28,6 +28,11 @@ RECURSE(
     mkql_proto
     naming_conventions
     ncloud
+<<<<<<< HEAD
+=======
+    net
+    nmslib
+>>>>>>> 92fe0e4c74c (Fix IPv4/IPv6 source address in SQS HTTP and HTTP proxy (YDBBUGS-683) (#51227))
     pdisk_io
     persqueue
     planner

@@ -79,8 +79,7 @@ NColorizer::TColors& AutoColors(IOutputStream& out) {
     }
 }
 
-TString HttpsLink(const TString& fqdnAndUri, IOutputStream& colorsOut) {
-    const auto& colors = NConsoleClient::AutoColors(colorsOut);
+TString HttpsLink(const TString& fqdnAndUri, const NColorizer::TColors& colors) {
     return TStringBuilder() << colors.Cyan() << "https://" << fqdnAndUri << colors.OldColor();
 }
 

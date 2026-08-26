@@ -1842,6 +1842,7 @@ FROM `{table_name}`"""
                 )
                 WHERE foo.bar regexp "lunch" and foo.bat.`0` > 0
                       {comment_for_pushdown} OR ListLength(foo.baz) > 5
+                      OR foo.bum.b IS NOT NULL OR foo.bum.d IS DISTINCT FROM NULL OR foo.bum.c
                 ;
                 $in = SELECT * FROM $in FLATTEN COLUMNS; -- expand foo
                 $in = SELECT
@@ -1906,10 +1907,14 @@ FROM `{table_name}`"""
         for source in collect_plan_nodes(json.loads(result_sets[0].rows[0]["Plan"])["Plan"], "Source"):
             for operator in source.get("Operators", []):
                 if operator.get("SourceType", None) == "pq":
+                    logger.debug(operator)
                     assert pushdown_key in operator
                     filter = operator[pushdown_key]
                     assert "`bar`" in filter
                     assert "`bat`" in filter
+                    assert "((`foo`).`bum`).`b`" in filter
+                    assert "((`foo`).`bum`).`c`" in filter
+                    assert "((`foo`).`bum`).`d`" in filter
                     sources += 1
         assert sources > 0
 

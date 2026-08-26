@@ -28,6 +28,10 @@ namespace NKikimr::NOlap::NReader::NCommon {
 class ISourcesConstructor;
 }
 
+namespace NKikimr::NOlap::NDataLocks {
+class TManager;
+}
+
 namespace NKikimr::NOlap {
 class IColumnEngine;
 
@@ -92,6 +96,7 @@ public:
         const NOlap::IPathIdTranslator& PathIdTranslator;
         const IColumnEngine& Engine;
         std::shared_ptr<NLWTrace::TOrbit> Orbit;
+        std::shared_ptr<NDataLocks::TManager> DataLocksManager;
 
     public:
         const NOlap::IPathIdTranslator& GetPathIdTranslator() const {
@@ -105,10 +110,17 @@ public:
             return Orbit;
         }
 
-        TSelectMetadataContext(const NOlap::IPathIdTranslator& pathIdTranslator, const IColumnEngine& engine, const std::shared_ptr<NLWTrace::TOrbit>& orbit)
+        const std::shared_ptr<NDataLocks::TManager>& GetDataLocksManager() const {
+            return DataLocksManager;
+        }
+
+        TSelectMetadataContext(const NOlap::IPathIdTranslator& pathIdTranslator, const IColumnEngine& engine,
+            const std::shared_ptr<NLWTrace::TOrbit>& orbit, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager)
             : PathIdTranslator(pathIdTranslator)
             , Engine(engine)
-            , Orbit(orbit) {
+            , Orbit(orbit)
+            , DataLocksManager(dataLocksManager)
+        {
         }
     };
 

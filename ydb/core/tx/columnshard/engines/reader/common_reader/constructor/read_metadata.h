@@ -1,6 +1,7 @@
 #pragma once
 #include <ydb/core/formats/arrow/reader/position.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
+#include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_context.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_metadata.h>
 #include <ydb/core/tx/columnshard/engines/reader/common/scan_memory_limiter.h>
@@ -43,8 +44,8 @@ public:
         DoFillReadStats(*stats);
     }
 
-    virtual std::vector<TInsertWriteId> GetUncommittedWriteIds() const {
-        return std::vector<TInsertWriteId>();
+    virtual std::vector<TPortionInfo::TConstPtr> GetConflictingPortions() const {
+        return std::vector<TPortionInfo::TConstPtr>();
     }
 
     TString DebugString() const {
@@ -91,6 +92,7 @@ class TReadMetadata: public TReadMetadataBase {
 private:
     mutable TAtomicCounter BreakLockOnReadFinished = TAtomicCounter();
     std::shared_ptr<NColumnShard::TLockSharingInfo> LockSharingInfo;
+    std::shared_ptr<NOlap::NDataLocks::TManager::TGuard> DataLockGuard;
 
     class TWriteIdInfo {
     private:

@@ -340,6 +340,11 @@ public:
     }
 
     size_t GetBlobIdx(const TLogoBlobID& id) const {
+        // Single-blob put is the overwhelmingly common case and it is called once per response
+        // item (i.e. once per part), so answer it with a comparison instead of a hash lookup.
+        if (Blobs.size() == 1 && Blobs[0].BlobId.FullID() == id.FullID()) {
+            return 0;
+        }
         const auto it = BlobMap.find(id.FullID());
         Y_ABORT_UNLESS(it != BlobMap.end());
         return it->second;

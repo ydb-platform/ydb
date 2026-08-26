@@ -7,6 +7,7 @@
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/wrappers/abstract.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
+#include <ydb/core/wrappers/unavailable_storage.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/http/http_proxy.h>
@@ -80,9 +81,11 @@ namespace NKikimr::NBlobDepot {
         std::atomic<ui64> BalancerResolveFailures{0};
         std::atomic<ui64> EndpointSwitches{0};
         std::atomic<ui64> FiveXxRefreshTriggers{0};
+        std::atomic<ui64> PendingRejects{0};
         std::atomic<bool> IsUsingProxy{false};
 
         TLatencyHistogram BalancerResolveLatency;
+        TLatencyHistogram PendingLatency;
     };
 
     class TRouteCounters : public TThrRefBase {
@@ -175,6 +178,19 @@ namespace NKikimr::NBlobDepot {
         return value.exchange(0);
     }
 
+    // Answers requests the router cannot serve yet with a regular S3 error response. The base class
+    // delays such replies through its backoff policy, which makes no sense here -- the caller has to
+    // learn about the missing endpoint right away.
+    class TNoEndpointStorageOperator : public NWrappers::NExternalStorage::TUnavailableExternalStorageOperator {
+    public:
+        TNoEndpointStorageOperator(const TString& exceptionName, const TString& reason)
+            : TUnavailableExternalStorageOperator(exceptionName, reason)
+        {
+            BackoffPolicy = std::make_shared<NWrappers::NExternalStorage::TThreadSafeBackoff>(
+                0, TDuration::Zero(), TDuration::Zero());
+        }
+    };
+
     class TBlobDepotS3Router : public TActorBootstrapped<TBlobDepotS3Router> {
         struct TEvPrivate {
             enum {
@@ -190,14 +206,20 @@ namespace NKikimr::NBlobDepot {
         TString OriginalEndpoint;
         TString CurrentEndpoint;
         TActorId InnerWrapperId;
+        TActorId UnavailableWrapperId;
         TActorId HttpProxyId;
         TActorId PipeId;
         bool PipeConnected = false;
         bool RefreshInFlight = false;
         bool RefreshScheduled = false;
 
+        struct TPendingRequest {
+            TMonotonic EnqueuedAt;
+            std::unique_ptr<IEventHandle> Ev;
+        };
+
         static constexpr size_t MaxPendingRequests = 256;
-        std::deque<std::unique_ptr<IEventHandle>> PendingRequests;
+        std::deque<TPendingRequest> PendingRequests;
 
         TRouterStats Stats;
 
@@ -249,6 +271,18 @@ namespace NKikimr::NBlobDepot {
             FlushPendingRequests();
         }
 
+        TActorId GetUnavailableWrapperId() {
+            if (!UnavailableWrapperId) {
+                auto storageOperator = std::make_shared<TNoEndpointStorageOperator>(
+                    "ServiceUnavailable", TStringBuilder() << "S3 endpoint is not resolved yet, id# " << LogId);
+                storageOperator->InitReplyAdapter(std::make_shared<TRouterReplyAdapter>(
+                    TActivationContext::ActorSystem(), SelfId(), TEvPrivate::EvRefreshNow, nullptr));
+                UnavailableWrapperId = Register(NWrappers::CreateStorageWrapper(std::move(storageOperator)));
+            }
+
+            return UnavailableWrapperId;
+        }
+
         void RejectRequest(std::unique_ptr<IEventHandle> ev) {
             YDB_LOG_DEBUG("S3Router has no endpoint yet, rejecting request",
                 {"marker", "BDTS32"},
@@ -256,11 +290,17 @@ namespace NKikimr::NBlobDepot {
                 {"type", ev->GetTypeRewrite()},
                 {"pending", PendingRequests.size()});
 
-            if (ev->Flags & IEventHandle::FlagTrackDelivery) {
-                TActivationContext::Send(new IEventHandle(ev->Sender, SelfId(),
-                    new TEvents::TEvUndelivered(ev->GetTypeRewrite(),
-                        TEvents::TEvUndelivered::ReasonActorUnknown), 0, ev->Cookie));
-            }
+            ++Stats.PendingRejects;
+            TActivationContext::Send(IEventHandle::Forward(std::move(ev), GetUnavailableWrapperId()));
+        }
+
+        void RejectPendingRequest(TPendingRequest&& pending) {
+            RecordPendingLatency(pending, TActivationContext::Monotonic());
+            RejectRequest(std::move(pending.Ev));
+        }
+
+        void RecordPendingLatency(const TPendingRequest& pending, TMonotonic now) {
+            Stats.PendingLatency.Record((now - pending.EnqueuedAt).MilliSeconds());
         }
 
         void FlushPendingRequests() {
@@ -275,10 +315,12 @@ namespace NKikimr::NBlobDepot {
                 {"count", PendingRequests.size()},
                 {"endpoint", CurrentEndpoint});
 
+            const TMonotonic now = TActivationContext::Monotonic();
             while (!PendingRequests.empty()) {
                 auto pending = std::move(PendingRequests.front());
                 PendingRequests.pop_front();
-                TActivationContext::Send(pending.release()->Forward(InnerWrapperId));
+                RecordPendingLatency(pending, now);
+                TActivationContext::Send(IEventHandle::Forward(std::move(pending.Ev), InnerWrapperId));
             }
         }
 
@@ -381,11 +423,13 @@ namespace NKikimr::NBlobDepot {
                 record.SetBalancerResolveFailures(ExchangeAtomic(Stats.BalancerResolveFailures));
                 record.SetEndpointSwitches(ExchangeAtomic(Stats.EndpointSwitches));
                 record.SetFiveXxRefreshTriggers(ExchangeAtomic(Stats.FiveXxRefreshTriggers));
+                record.SetPendingRejects(ExchangeAtomic(Stats.PendingRejects));
                 record.SetIsUsingProxy(Stats.IsUsingProxy.load());
 
                 Stats.BalancerRoute.Latency.Take(record.MutableBalancerLatencyHistogram());
                 Stats.NonBalancerRoute.Latency.Take(record.MutableNonBalancerLatencyHistogram());
                 Stats.BalancerResolveLatency.Take(record.MutableBalancerResolveLatencyHistogram());
+                Stats.PendingLatency.Take(record.MutablePendingLatencyHistogram());
 
                 NTabletPipe::SendData(SelfId(), PipeId, event.release());
             }
@@ -499,7 +543,10 @@ namespace NKikimr::NBlobDepot {
                     {"id", LogId},
                     {"type", ev->GetTypeRewrite()},
                     {"pending", PendingRequests.size() + 1});
-                PendingRequests.emplace_back(ev.Release());
+                PendingRequests.push_back(TPendingRequest{
+                    .EnqueuedAt = TActivationContext::Monotonic(),
+                    .Ev = std::unique_ptr<IEventHandle>(ev.Release()),
+                });
                 return;
             }
 
@@ -548,13 +595,17 @@ namespace NKikimr::NBlobDepot {
                 {"pending", PendingRequests.size()});
 
             while (!PendingRequests.empty()) {
-                RejectRequest(std::move(PendingRequests.front()));
+                RejectPendingRequest(std::move(PendingRequests.front()));
                 PendingRequests.pop_front();
             }
 
             if (InnerWrapperId) {
                 Send(InnerWrapperId, new TEvents::TEvPoison());
                 InnerWrapperId = {};
+            }
+            if (UnavailableWrapperId) {
+                Send(UnavailableWrapperId, new TEvents::TEvPoison());
+                UnavailableWrapperId = {};
             }
             if (HttpProxyId) {
                 Send(HttpProxyId, new TEvents::TEvPoison());

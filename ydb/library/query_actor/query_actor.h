@@ -332,7 +332,7 @@ public:
         }
 
         if (auto delay = RetryState->GetNextRetryDelay(status)) {
-            YDB_LOG_NOTICE_COMP(LogComponent, "Retry status after",
+            YDB_LOG_NOTICE_COMP(LogComponent, "Retry failed status",
                 {"logPrefix", LogPrefix()},
                 {"status", status},
                 {"delay", *delay});

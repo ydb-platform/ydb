@@ -161,7 +161,7 @@ public:
                 break;
             }
             default: {
-                YDB_LOG_CRIT("Unexpected operation",
+                YDB_LOG_CRIT("Unexpected operation type",
                     {"logPrefix", LogPrefix},
                     {"type", NKikimrSchemeOp::EOperationType_Name(OperationType)});
                 Y_ABORT("Unexpected operation type");
@@ -228,7 +228,7 @@ public:
         Y_ABORT_UNLESS(request.ResultSet.size() == 1);
         const NSchemeCache::TSchemeCacheNavigate::TEntry& result  = request.ResultSet[0];
         if (result.Status != EStatus::Ok) {
-            YDB_LOG_DEBUG("Describe",
+            YDB_LOG_DEBUG("Describe failed",
                 {"logPrefix", LogPrefix},
                 {"result", result.Status});
         }
@@ -270,9 +270,9 @@ public:
     }
 
     void Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev) {
-        YDB_LOG_DEBUG("Dump logPrefix, TEvProposeTransactionStatus",
+        YDB_LOG_DEBUG("Transaction execution advanced",
             {"logPrefix", LogPrefix},
-            {"TEvProposeTransactionStatus", ev->Get()->Record});
+            {"event", ev->Get()->Record});
         const auto ssStatus = ev->Get()->Record.GetSchemeShardStatus();
         switch (ev->Get()->Status()) {
             case NTxProxy::TResultStatus::ExecComplete:
@@ -379,16 +379,16 @@ public:
     }
 
     void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionRegistered::TPtr& ev) {
-        YDB_LOG_DEBUG("Subscribe registered",
+        YDB_LOG_DEBUG("Subscribe on transaction registered",
             {"logPrefix", LogPrefix},
             {"onTx", ev->Get()->Record.GetTxId()});
     }
 
     void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev) {
-        YDB_LOG_DEBUG("Transaction Doublechecking...",
+        YDB_LOG_DEBUG("Transaction completed Doublechecking...",
             {"logPrefix", LogPrefix},
             {"request", GetOperationType()},
-            {"completed", ev->Get()->Record.GetTxId()});
+            {"completedTransactionId", ev->Get()->Record.GetTxId()});
         FallBack();
     }
 

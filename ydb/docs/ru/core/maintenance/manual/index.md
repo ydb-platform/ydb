@@ -14,6 +14,8 @@
   * [{#T}](selfheal.md).
   * [{#T}](../../devops/deployment-options/manual/decommissioning.md).
   * [{#T}](moving_vdisks.md).
+  * [{#T}](blobdepot.md).
+  * [{#T}](blobdepot_decommit.md).
 
 * Решение проблем:
 

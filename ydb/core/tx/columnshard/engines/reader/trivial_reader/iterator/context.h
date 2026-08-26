@@ -41,8 +41,7 @@ private:
     mutable std::optional<std::shared_ptr<TFetchingScript>> RestoreResultScript;
 
     bool NeedDuplicateFiltering() const {
-        return GetReadMetadata()->GetDeduplicationPolicy() == EDeduplicationPolicy::PREVENT_DUPLICATES &&
-               GetReadMetadata()->TableMetadataAccessor->NeedDuplicateFiltering();
+        return GetReadMetadata()->NeedDuplicateFiltering();
     }
 
 public:
@@ -77,7 +76,7 @@ public:
 
     virtual TString ProfileDebugString() const override;
 
-    void RegisterActors(const NCommon::ISourcesConstructor& sources);
+    void RegisterActors(NCommon::ISourcesConstructor& sources);
     void UnregisterActors();
 
     NActors::TActorId GetDuplicatesManagerVerified() const {

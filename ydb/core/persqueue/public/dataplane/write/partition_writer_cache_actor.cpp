@@ -178,7 +178,7 @@ void TPartitionWriterCacheActor::TryForwardToOwner(TEvent* event, TEventQueue<TE
             p = queue.Events.find(queue.Expected);
         }
     } else {
-        queue.Events.emplace(cookie, event);
+        queue.Events.try_emplace(cookie, std::unique_ptr<TEvent>(event));
     }
 }
 

@@ -317,7 +317,7 @@ private:
         } else {
             YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Got result handler finish",
                 {"logPrefix", LogPrefix()},
-                {"finished", ev->Sender});
+                {"sender", ev->Sender});
         }
 
         ExecutionInfo = std::move(ev->Get()->Info);

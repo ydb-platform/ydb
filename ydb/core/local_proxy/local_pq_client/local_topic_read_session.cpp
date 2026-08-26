@@ -483,7 +483,7 @@ private:
         for (const auto& commitOffset : message.partitions_committed_offsets()) {
             const auto partitionSessionId = commitOffset.partition_session_id();
             const auto offset = commitOffset.committed_offset();
-            YDB_LOG_DEBUG("Partition offset commited",
+            YDB_LOG_DEBUG("Partition offset committed",
                 {"logPrefix", LogPrefix()},
                 {"session", partitionSessionId},
                 {"offset", offset});

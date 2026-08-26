@@ -1173,7 +1173,7 @@ bool TTopicSession::CheckNewClient(NFq::TEvRowDispatcher::TEvStartSession::TPtr&
 
     const auto& source = ev->Get()->Record.GetSource();
     if (Config.GetConsumerMode() != TRowDispatcherSettings::EConsumerMode::Without && ConsumerName && ConsumerName != source.GetConsumerName()) {
-        YDB_LOG_INFO("Different consumer, expected actual, send error",
+        YDB_LOG_INFO("Send error due to unexpected different consumer",
             {"logPrefix", LogPrefix},
             {"consumerName", ConsumerName},
             {"sourceConsumerName", source.GetConsumerName()});
@@ -1182,7 +1182,7 @@ bool TTopicSession::CheckNewClient(NFq::TEvRowDispatcher::TEvStartSession::TPtr&
     }
 
     if (SkipJsonErrors && SkipJsonErrors != source.GetSkipJsonErrors()) {
-        YDB_LOG_INFO("Different skip json errors mode, expected actual, send error",
+        YDB_LOG_INFO("Send error due to unexpected different skip json errors mode",
             {"logPrefix", LogPrefix},
             {"skipJsonErrors", SkipJsonErrors},
             {"sourceSkipJsonErrors", source.GetSkipJsonErrors()});

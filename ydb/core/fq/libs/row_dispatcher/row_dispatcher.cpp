@@ -1137,8 +1137,8 @@ void TRowDispatcher::DeleteConsumer(NActors::TActorId readActorId) {
     YDB_LOG_DEBUG("DeleteConsumer",
         {"logPrefix", LogPrefix},
         {"readActorId", readActorId},
-        {"QueryId", consumer->QueryId},
-        {"Partitions.size", consumer->Partitions.size()});
+        {"queryId", consumer->QueryId},
+        {"partitionsSize", consumer->Partitions.size()});
     for (auto& [partitionId, partition] : consumer->Partitions) {
         auto event = std::make_unique<NFq::TEvRowDispatcher::TEvStopSession>();
         *event->Record.MutableSource() = consumer->SourceParams;

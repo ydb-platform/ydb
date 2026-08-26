@@ -240,6 +240,13 @@ private:
         return false;
     }
 
+    bool IsSupportedGuess(const TCoGuess& guess) {
+        if (Settings.IsEnabled(EFlag::StructOperators)) {
+            return CheckExpressionNodeForPushdown(guess.Variant());
+        }
+        return false;
+    }
+
     bool IsMemberColumn(const TExprBase& node) {
         if (const auto member = node.Maybe<TCoMember>()) {
             return IsMemberColumn(member.Cast());
@@ -346,6 +353,9 @@ public:
         }
         if (auto maybeNth = node.Maybe<TCoNth>()) {
             return IsSupportedNth(maybeNth.Cast());
+        }
+        if (auto maybeGuess = node.Maybe<TCoGuess>()) {
+            return IsSupportedGuess(maybeGuess.Cast());
         }
         if (auto maybeSafeCast = node.Maybe<TCoSafeCast>()) {
             return IsSupportedSafeCast(maybeSafeCast.Cast());

@@ -282,19 +282,16 @@ public:
     void Handle(const TEvYdbCompute::TEvUpdateAclResponse::TPtr& ev) {
         const auto& status = ev.Get()->Get()->Status;
         if (!status.IsSuccess()) {
-            YDB_LOG_ERROR("[ydb] [SynchronizationService]: UpdateAcl response for .sys directory, issues",
-                {"scope", Scope},
-                {"issues", status.GetIssues().ToOneLineString()});
+            LOG_E("[ydb] [SynchronizationService]: UpdateAcl response for .sys directory for scope " << Scope 
+                << ", issues " << status.GetIssues().ToOneLineString());
             ReplyErrorAndPassAway(NYdb::NAdapters::ToYqlIssues(status.GetIssues()),
                  "Error updating ACL for .sys directory at the synchronization stage");
             return;
         }
-        YDB_LOG_INFO("[ydb] [SynchronizationService]: ACL inheritance removed for .sys directory for the scope",
-            {"scope", Scope});
+        LOG_I("[ydb] [SynchronizationService]: ACL inheritance removed for .sys directory for the scope " << "scope", Scope);
         if (WorkloadManagerConfig.GetEnable() && !ComputeDatabase.workload_manager_synchronized()) {
             Become(&TSynchronizeScopeActor::StateCreateResourcePoolsFunc);
-            YDB_LOG_INFO("[ydb] [SynchronizationService]: Start creating resource pools for the scope after UpdateAcl",
-                {"scope", Scope});
+            LOG_I("[ydb] [SynchronizationService]: Start creating resource pools for the scope " << Scope << "after UpdateAcl");
             CreateResourcePools();
             return;
         }

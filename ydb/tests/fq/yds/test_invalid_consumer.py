@@ -30,4 +30,4 @@ class TestConsumer(TestYdsBase):
         logging.debug("Describe result: {}".format(describe_result))
         describe_string = "{}".format(describe_result)
         assert "Query failed with code BAD_REQUEST" in describe_string
-        assert "no read rule provided for consumer" in describe_string
+        assert "Consumer `InvalidConsumerName` does not exist in topic" in describe_string

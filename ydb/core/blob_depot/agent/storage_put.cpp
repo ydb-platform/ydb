@@ -12,6 +12,9 @@ namespace NKikimr::NBlobDepot {
             const bool IssueUncertainWrites = false;
 
             enum : ui32 { MaxS3SlowDownRetries = 100 };
+            // Transport-level S3 failures (connection reset, request timeout) carry no HTTP status and are
+            // transient; retry them a few times instead of failing the whole put.
+            enum : ui32 { MaxS3ErrorRetries = 3 };
 
             ui32 PutsInFlight = 0;
             bool PutsIssued = false;
@@ -24,6 +27,13 @@ namespace NKikimr::NBlobDepot {
             TActorId WriterActorId;
             ui64 ConnectionInstanceOnStart;
             ui32 S3SlowDownRetries = 0;
+            ui32 S3ErrorRetries = 0;
+
+            // phases of the query: allocation of an S3 locator by the tablet (this is where SlowDown
+            // throttling shows up), the upload itself and the commit of the key to the tablet
+            NWilson::TSpan PrepareWriteS3Span;
+            NWilson::TSpan WriteS3Span;
+            NWilson::TSpan CommitBlobSeqSpan;
 
         public:
             using TBlobStorageQuery::TBlobStorageQuery;
@@ -52,6 +62,8 @@ namespace NKikimr::NBlobDepot {
             }
 
             void OnDestroy(bool success) override {
+                Agent.CancelPendingCommitBlobSeq(this);
+
                 if (IsInFlight || LocatorInFlight) {
                     Y_ABORT_UNLESS(!success);
                     SendDiscardSpoiled(false);
@@ -200,7 +212,7 @@ namespace NKikimr::NBlobDepot {
                         {"blobSeqId", BlobSeqId},
                         {"groupId", groupId},
                         {"blobId", id});
-                    Agent.SendToProxy(groupId, std::move(ev), this, nullptr);
+                    Agent.SendToProxy(groupId, std::move(ev), this, nullptr, Span.GetTraceId());
                     Agent.BytesWritten += id.BlobSize();
                     ++PutsInFlight;
                 };
@@ -242,10 +254,20 @@ namespace NKikimr::NBlobDepot {
                     {"uncertainWrite", uncertainWrite},
                     {"msg", CommitBlobSeq});
 
-                Agent.Issue(CommitBlobSeq, this, nullptr);
+                CommitBlobSeqSpan = NWilson::TSpan(TWilsonBlobDepot::AgentInternals, Span.GetTraceId(),
+                    "BlobDepotAgent.CommitBlobSeq", NWilson::EFlags::AUTO_END);
 
                 Y_ABORT_UNLESS(!WaitingForCommitBlobSeq);
                 WaitingForCommitBlobSeq = true;
+
+                // CommitNotify is fire-and-forget from EndWithSuccess for uncertain writes; keep the
+                // old 1:1 path so it is not cancelled when the query is destroyed immediately after.
+                if (item->GetCommitNotify()) {
+                    Agent.Issue(CommitBlobSeq, this, nullptr, CommitBlobSeqSpan.GetTraceId());
+                } else {
+                    NKikimrBlobDepot::TEvCommitBlobSeq msg = CommitBlobSeq;
+                    Agent.EnqueueCommitBlobSeq(this, std::move(msg));
+                }
             }
 
             void RemoveBlobSeqFromInFlight() {
@@ -298,6 +320,10 @@ namespace NKikimr::NBlobDepot {
                         Y_ABORT("unexpected response");
                     }
                 }, response);
+            }
+
+            void OnCommitBlobSeqResult(NKikimrBlobDepot::TEvCommitBlobSeqResult&& msg) override {
+                HandleCommitBlobSeqResult(nullptr, msg);
             }
 
             void HandlePutResult(TRequestContext::TPtr /*context*/, TEvBlobStorage::TEvPutResult& msg) {
@@ -353,8 +379,14 @@ namespace NKikimr::NBlobDepot {
                 Y_ABORT_UNLESS(msg.ItemsSize() == 1);
                 auto& item = msg.GetItems(0);
                 if (const auto status = item.GetStatus(); status != NKikimrProto::OK && status != NKikimrProto::RACE) {
+                    if (CommitBlobSeqSpan) {
+                        CommitBlobSeqSpan.EndError(item.GetErrorReason());
+                    }
                     EndWithError(item.GetStatus(), item.GetErrorReason());
                 } else {
+                    if (CommitBlobSeqSpan) {
+                        CommitBlobSeqSpan.EndOk();
+                    }
                     // it's okay to treat RACE as OK here since values are immutable in Virtual Group mode
                     CheckIfFinished();
                 }
@@ -421,7 +453,17 @@ namespace NKikimr::NBlobDepot {
                     p->SetGeneration(generation);
                 }
                 item->SetLen(Request.Id.BlobSize());
-                Agent.Issue(query, this, nullptr);
+
+                PrepareWriteS3Span = NWilson::TSpan(TWilsonBlobDepot::AgentInternals, Span.GetTraceId(),
+                    "BlobDepotAgent.PrepareWriteS3", NWilson::EFlags::AUTO_END);
+                if (PrepareWriteS3Span && S3SlowDownRetries) {
+                    PrepareWriteS3Span.Attribute("slow_down_retry", S3SlowDownRetries);
+                }
+                if (PrepareWriteS3Span && S3ErrorRetries) {
+                    PrepareWriteS3Span.Attribute("error_retry", S3ErrorRetries);
+                }
+
+                Agent.Issue(query, this, nullptr, PrepareWriteS3Span.GetTraceId());
             }
 
             void HandlePrepareWriteS3Result(TRequestContext::TPtr /*context*/, NKikimrBlobDepot::TEvPrepareWriteS3Result& msg) {
@@ -429,7 +471,13 @@ namespace NKikimr::NBlobDepot {
                 Y_ABORT_UNLESS(msg.ItemsSize() == 1);
                 const auto& item = msg.GetItems(0);
                 if (item.GetStatus() != NKikimrProto::OK) {
+                    if (PrepareWriteS3Span) {
+                        PrepareWriteS3Span.EndError(item.GetErrorReason());
+                    }
                     return EndWithError(item.GetStatus(), item.GetErrorReason());
+                }
+                if (PrepareWriteS3Span) {
+                    PrepareWriteS3Span.EndOk();
                 }
 
                 auto *commitItem = CommitBlobSeq.MutableItems(0);
@@ -446,6 +494,12 @@ namespace NKikimr::NBlobDepot {
                     {"agentId", Agent.LogId},
                     {"queryId", GetQueryId()},
                     {"key", key});
+
+                WriteS3Span = NWilson::TSpan(TWilsonBlobDepot::AgentInternals, Span.GetTraceId(),
+                    "BlobDepotAgent.WriteS3", NWilson::EFlags::AUTO_END);
+                if (WriteS3Span) {
+                    WriteS3Span.Attribute("size", static_cast<i64>(Request.Buffer.size()));
+                }
 
                 // Pass a copy so Request.Buffer remains intact for potential SlowDown-driven retries.
                 WriterActorId = IssueWriteS3(std::move(key), TRope(Request.Buffer), Request.Id, temp);
@@ -467,10 +521,23 @@ namespace NKikimr::NBlobDepot {
 
                 WriterActorId = {};
 
+                if (WriteS3Span) {
+                    if (error) {
+                        if (slowDown) {
+                            WriteS3Span.Attribute("slow_down", true);
+                        }
+                        WriteS3Span.EndError(*error);
+                    } else {
+                        WriteS3Span.EndOk();
+                    }
+                }
+
+                bool tabletDisconnected = false;
                 if (ConnectionInstanceOnStart != Agent.ConnectionInstance) {
                     error = "BlobDepot tablet disconnected";
                     slowDown = false;
                     LocatorInFlight.reset(); // prevent discarding this locator
+                    tabletDisconnected = true;
                 }
 
                 if (!error) {
@@ -520,6 +587,28 @@ namespace NKikimr::NBlobDepot {
                     return;
                 }
 
+                if (!tabletDisconnected && S3ErrorRetries < MaxS3ErrorRetries) {
+                    // Transient transport-level failure. Discard the spoiled locator (the object may or may not
+                    // have made it to S3, so the tablet has to collect it as trash) and start over with a freshly
+                    // allocated one. No SlowDown flag here: S3 did not ask us to back off.
+                    YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "S3_put_error_retry",
+                        {"marker", "BDEV45"},
+                        {"VG", Agent.VirtualGroupId},
+                        {"BDT", Agent.TabletId},
+                        {"G", Agent.BlobDepotGeneration},
+                        {"Q", QueryId},
+                        {"locator", LocatorInFlight},
+                        {"retry", S3ErrorRetries});
+                    ++S3ErrorRetries;
+                    SendDiscardSpoiled(/*s3SlowDown=*/false);
+                    // Reset the per-attempt S3Locator from CommitBlobSeq so HandlePrepareWriteS3Result repopulates it.
+                    if (CommitBlobSeq.ItemsSize()) {
+                        CommitBlobSeq.MutableItems(0)->ClearS3Locator();
+                    }
+                    IssueS3Put();
+                    return;
+                }
+
                 // Generic (non-SlowDown) error: LocatorInFlight is not reset here on purpose -- OnDestroy will
                 // generate a spoiled blob message to the tablet.
                 EndWithError(NKikimrProto::ERROR, TStringBuilder() << "failed to put object to S3: " << *error);
@@ -527,6 +616,132 @@ namespace NKikimr::NBlobDepot {
         };
 
         return new TPutQuery(*this, std::move(ev), received);
+    }
+
+    void TBlobDepotAgent::EnqueueCommitBlobSeq(TQuery *query, NKikimrBlobDepot::TEvCommitBlobSeq&& msg) {
+        Y_ABORT_UNLESS(query);
+        Y_ABORT_UNLESS(msg.ItemsSize() == 1);
+
+        PendingCommitBlobSeq.push_back(TPendingCommitBlobSeqItem{
+            .Query = query,
+            .LifetimeToken = query->EnsureLifetimeToken(),
+            .Item = std::move(*msg.MutableItems(0)),
+        });
+
+        YDB_LOG_DEBUG("EnqueueCommitBlobSeq",
+            {"marker", "BDA55"},
+            {"agentId", LogId},
+            {"queryId", query->GetQueryId()},
+            {"pending", PendingCommitBlobSeq.size()});
+
+        if (PendingCommitBlobSeq.size() >= MaxCommitBlobSeqBatch) {
+            FlushCommitBlobSeq();
+            return;
+        }
+
+        if (!CommitBlobSeqFlushScheduled) {
+            CommitBlobSeqFlushScheduled = true;
+            TActivationContext::Send(new IEventHandle(TEvPrivate::EvFlushCommitBlobSeq, 0, SelfId(), {}, nullptr, 0));
+        }
+    }
+
+    void TBlobDepotAgent::CancelPendingCommitBlobSeq(TQuery *query) {
+        for (auto it = PendingCommitBlobSeq.begin(); it != PendingCommitBlobSeq.end(); ) {
+            if (it->Query == query) {
+                it = PendingCommitBlobSeq.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+
+    void TBlobDepotAgent::FailPendingCommitBlobSeq() {
+        std::deque<TPendingCommitBlobSeqItem> pending = std::move(PendingCommitBlobSeq);
+        PendingCommitBlobSeq.clear();
+        for (auto& item : pending) {
+            if (item.LifetimeToken.expired()) {
+                continue;
+            }
+            NKikimrBlobDepot::TEvCommitBlobSeqResult result;
+            auto *responseItem = result.AddItems();
+            responseItem->SetStatus(NKikimrProto::ERROR);
+            responseItem->SetErrorReason("BlobDepot tablet disconnected");
+            item.Query->OnCommitBlobSeqResult(std::move(result));
+        }
+    }
+
+    void TBlobDepotAgent::HandleFlushCommitBlobSeq() {
+        CommitBlobSeqFlushScheduled = false;
+        FlushCommitBlobSeq();
+    }
+
+    void TBlobDepotAgent::FlushCommitBlobSeq() {
+        while (!PendingCommitBlobSeq.empty()) {
+            auto context = std::make_shared<TCommitBlobSeqBatchContext>();
+            NKikimrBlobDepot::TEvCommitBlobSeq msg;
+
+            while (!PendingCommitBlobSeq.empty() && context->Entries.size() < MaxCommitBlobSeqBatch) {
+                auto pending = std::move(PendingCommitBlobSeq.front());
+                PendingCommitBlobSeq.pop_front();
+                if (pending.LifetimeToken.expired()) {
+                    continue;
+                }
+                context->Entries.push_back(TCommitBlobSeqBatchContext::TEntry{
+                    .Query = pending.Query,
+                    .LifetimeToken = std::move(pending.LifetimeToken),
+                });
+                *msg.AddItems() = std::move(pending.Item);
+            }
+
+            if (context->Entries.empty()) {
+                continue;
+            }
+
+            YDB_LOG_DEBUG("FlushCommitBlobSeq",
+                {"marker", "BDA56"},
+                {"agentId", LogId},
+                {"items", context->Entries.size()},
+                {"stillPending", PendingCommitBlobSeq.size()});
+
+            Issue(std::move(msg), this, std::move(context));
+        }
+    }
+
+    void TBlobDepotAgent::HandleCommitBlobSeqBatchResult(TRequestContext::TPtr context, TResponse response) {
+        auto& batch = context->Obtain<TCommitBlobSeqBatchContext>();
+
+        auto deliver = [&](size_t index, NKikimrBlobDepot::TEvCommitBlobSeqResult&& result) {
+            Y_ABORT_UNLESS(index < batch.Entries.size());
+            auto& entry = batch.Entries[index];
+            if (entry.LifetimeToken.expired()) {
+                return;
+            }
+            entry.Query->OnCommitBlobSeqResult(std::move(result));
+        };
+
+        std::visit(TOverloaded{
+            [&](TEvBlobDepot::TEvCommitBlobSeqResult *ev) {
+                auto& record = ev->Record;
+                Y_ABORT_UNLESS(record.ItemsSize() == batch.Entries.size());
+                for (size_t i = 0; i < batch.Entries.size(); ++i) {
+                    NKikimrBlobDepot::TEvCommitBlobSeqResult single;
+                    single.MutableItems()->Add()->CopyFrom(record.GetItems(i));
+                    deliver(i, std::move(single));
+                }
+            },
+            [&](TTabletDisconnected) {
+                for (size_t i = 0; i < batch.Entries.size(); ++i) {
+                    NKikimrBlobDepot::TEvCommitBlobSeqResult single;
+                    auto *item = single.AddItems();
+                    item->SetStatus(NKikimrProto::ERROR);
+                    item->SetErrorReason("BlobDepot tablet disconnected");
+                    deliver(i, std::move(single));
+                }
+            },
+            [&](auto&& /*other*/) {
+                Y_ABORT("unexpected CommitBlobSeq batch response");
+            }
+        }, response);
     }
 
 } // NKikimr::NBlobDepot

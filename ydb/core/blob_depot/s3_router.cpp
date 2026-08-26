@@ -19,6 +19,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <deque>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT
 
@@ -195,6 +196,9 @@ namespace NKikimr::NBlobDepot {
         bool RefreshInFlight = false;
         bool RefreshScheduled = false;
 
+        static constexpr size_t MaxPendingRequests = 256;
+        std::deque<std::unique_ptr<IEventHandle>> PendingRequests;
+
         TRouterStats Stats;
 
         TMonotonic BalancerRequestStartedAt;
@@ -214,7 +218,8 @@ namespace NKikimr::NBlobDepot {
             const ui32 hi = RefreshSecMax();
             const ui32 sec = lo == hi ? lo
                 : lo + TAppData::RandomProvider->GenRand() % (hi - lo + 1);
-            return TDuration::Seconds(sec);
+            Y_UNUSED(sec);
+            return TDuration::Seconds(1);
         }
 
         TDuration MetricsPushInterval() const {
@@ -242,6 +247,40 @@ namespace NKikimr::NBlobDepot {
                 TActivationContext::ActorSystem(), SelfId(), TEvPrivate::EvRefreshNow,
                 std::move(routeCounters)));
             InnerWrapperId = Register(NWrappers::CreateStorageWrapper(std::move(storageOperator)));
+            FlushPendingRequests();
+        }
+
+        void RejectRequest(std::unique_ptr<IEventHandle> ev) {
+            YDB_LOG_DEBUG("S3Router has no endpoint yet, rejecting request",
+                {"marker", "BDTS32"},
+                {"id", LogId},
+                {"type", ev->GetTypeRewrite()},
+                {"pending", PendingRequests.size()});
+
+            if (ev->Flags & IEventHandle::FlagTrackDelivery) {
+                TActivationContext::Send(new IEventHandle(ev->Sender, SelfId(),
+                    new TEvents::TEvUndelivered(ev->GetTypeRewrite(),
+                        TEvents::TEvUndelivered::ReasonActorUnknown), 0, ev->Cookie));
+            }
+        }
+
+        void FlushPendingRequests() {
+            Y_ABORT_UNLESS(InnerWrapperId);
+            if (PendingRequests.empty()) {
+                return;
+            }
+
+            YDB_LOG_DEBUG("S3Router flushing pending requests",
+                {"marker", "BDTS33"},
+                {"id", LogId},
+                {"count", PendingRequests.size()},
+                {"endpoint", CurrentEndpoint});
+
+            while (!PendingRequests.empty()) {
+                auto pending = std::move(PendingRequests.front());
+                PendingRequests.pop_front();
+                TActivationContext::Send(pending.release()->Forward(InnerWrapperId));
+            }
         }
 
         void BuildInnerWrapper(const TString& endpoint) {
@@ -450,10 +489,22 @@ namespace NKikimr::NBlobDepot {
         }
 
         void Forward(STATEFN_SIG) {
-            if (!InnerWrapperId) {
+            if (InnerWrapperId) {
+                TActivationContext::Send(ev->Forward(InnerWrapperId));
                 return;
             }
-            TActivationContext::Send(ev->Forward(InnerWrapperId));
+
+            if (PendingRequests.size() < MaxPendingRequests) {
+                YDB_LOG_DEBUG("S3Router queueing request until balancer resolves",
+                    {"marker", "BDTS34"},
+                    {"id", LogId},
+                    {"type", ev->GetTypeRewrite()},
+                    {"pending", PendingRequests.size() + 1});
+                PendingRequests.emplace_back(ev.Release());
+                return;
+            }
+
+            RejectRequest(std::unique_ptr<IEventHandle>(ev.Release()));
         }
 
     public:
@@ -471,7 +522,6 @@ namespace NKikimr::NBlobDepot {
             const TString& endpoint = Settings.GetSettings().GetEndpoint();
             OriginalEndpoint = endpoint;
             CreatePipe();
-            BuildInnerWrapper(endpoint);
             SchedulePushMetrics();
 
             YDB_LOG_INFO("S3Router bootstrap",
@@ -484,6 +534,8 @@ namespace NKikimr::NBlobDepot {
             if (BalancerEnabled()) {
                 IssueBalancerRequest();
                 ScheduleNextRefresh();
+            } else {
+                BuildInnerWrapper(endpoint);
             }
             Become(&TThis::StateWork);
         }
@@ -492,8 +544,13 @@ namespace NKikimr::NBlobDepot {
             YDB_LOG_INFO("S3Router shutting down",
                 {"marker", "BDTS31"},
                 {"id", LogId},
-                {"currentEndpoint", CurrentEndpoint});
+                {"currentEndpoint", CurrentEndpoint},
+                {"pending", PendingRequests.size()});
 
+            while (!PendingRequests.empty()) {
+                RejectRequest(std::move(PendingRequests.front()));
+                PendingRequests.pop_front();
+            }
             if (InnerWrapperId) {
                 Send(InnerWrapperId, new TEvents::TEvPoison());
                 InnerWrapperId = {};

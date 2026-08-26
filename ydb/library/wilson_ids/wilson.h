@@ -106,6 +106,13 @@ namespace NKikimr {
         };
     };
 
+    struct TWilsonBlobDepot {
+        enum {
+            AgentQuery = TComponentTracingLevels::TDistributedStorage::TopLevel,
+            AgentInternals = TComponentTracingLevels::TDistributedStorage::Basic,
+        };
+    };
+
     struct TWilsonTablet {
         enum {
             TabletTopLevel = TComponentTracingLevels::TTablet::TopLevel,

@@ -41,6 +41,10 @@ namespace NKikimr::NBlobDepot {
         agent.InvalidateStepRequests.clear();
         agent.PushCallbacks.clear();
 
+        if (!agent.S3ThrottleHeld.empty()) {
+            S3Manager->OnS3WriteInFlightRemoved(/*success=*/false, agent.S3ThrottleHeld.size());
+            agent.S3ThrottleHeld.clear();
+        }
         for (TS3Locator locator : agent.S3WritesInFlight) {
             // they were not in InFlightTrashS3, so we just have to delete them
             S3Manager->AddTrashToCollect(locator);

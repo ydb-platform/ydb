@@ -131,7 +131,33 @@ protected:
         }
     };
 
-    struct TTxRequest : public NTabletFlatExecutor::ITransaction {
+    static bool CanBatchWriteLogIntermediate(const TIntermediate &intermediate) {
+        return intermediate.Stat.RequestType == TRequestType::WriteOnly
+            && !intermediate.HasIncrementGeneration
+            && !intermediate.SetExecutorFastLogPolicy
+            && !intermediate.TrimLeakedBlobs;
+    }
+
+    struct TTxRequestBase {
+        static bool CheckConsistency(NTabletFlatExecutor::TTransactionContext &txc, TKeyValueFlat *self) {
+#ifdef KIKIMR_KEYVALUE_CONSISTENCY_CHECKS
+            TKeyValueState state;
+            if (!TTxInit::LoadStateFromDB(state, txc.DB)) {
+                return false;
+            }
+            Y_ABORT_UNLESS(!state.IsDamaged());
+            state.VerifyEqualIndex(self->State);
+            txc.DB.NoMoreReadsForTx();
+            return true;
+#else
+            Y_UNUSED(txc);
+            Y_UNUSED(self);
+            return true;
+#endif
+        }
+    };
+
+    struct TTxRequest : public NTabletFlatExecutor::ITransaction, TTxRequestBase {
         THolder<TIntermediate> Intermediate;
         TKeyValueFlat *Self;
         TVector<TLogoBlobID> TrashBeingCommitted;
@@ -149,7 +175,7 @@ protected:
         bool Execute(NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx) override {
             YDB_LOG_DEBUG_COMP(NKikimrServices::KEYVALUE, "TTxRequest Execute",
                 {"keyValue", txc.Tablet});
-            if (!CheckConsistency(txc)) {
+            if (!CheckConsistency(txc, Self)) {
                 return false;
             }
             if (Self->State.GetIsDamaged()) {
@@ -169,21 +195,52 @@ protected:
             Self->State.PushTrashBeingCommitted(TrashBeingCommitted, ctx);
             Self->State.RequestComplete(Intermediate, ctx, Self->Info());
         }
+    };
 
-        bool CheckConsistency(NTabletFlatExecutor::TTransactionContext &txc) {
-#ifdef KIKIMR_KEYVALUE_CONSISTENCY_CHECKS
-            TKeyValueState state;
-            if (!TTxInit::LoadStateFromDB(state, txc.DB)) {
+    struct TTxBatchRequest : public NTabletFlatExecutor::ITransaction, TTxRequestBase {
+        TVector<THolder<TIntermediate>> Intermediates;
+        TKeyValueFlat *Self;
+        TVector<TLogoBlobID> TrashBeingCommitted;
+
+        TTxBatchRequest(TVector<THolder<TIntermediate>> intermediates, TKeyValueFlat *keyValueFlat, NWilson::TTraceId &&traceId)
+            : NTabletFlatExecutor::ITransaction(std::move(traceId))
+            , Intermediates(std::move(intermediates))
+            , Self(keyValueFlat)
+        {
+            for (auto &intermediate : Intermediates) {
+                intermediate->Response.SetStatus(NMsgBusProxy::MSTATUS_UNKNOWN);
+            }
+        }
+
+        TTxType GetTxType() const override { return TXTYPE_REQUEST; }
+
+        bool Execute(NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx) override {
+            YDB_LOG_DEBUG_COMP(NKikimrServices::KEYVALUE, "TTxBatchRequest Execute",
+                {"keyValue", txc.Tablet},
+                {"batchSize", Intermediates.size()});
+            if (!CheckConsistency(txc, Self)) {
                 return false;
             }
-            Y_ABORT_UNLESS(!state.IsDamaged());
-            state.VerifyEqualIndex(Self->State);
-            txc.DB.NoMoreReadsForTx();
+            if (Self->State.GetIsDamaged()) {
+                return true;
+            }
+            TSimpleDbFlat db(txc.DB, TrashBeingCommitted);
+            for (auto &intermediate : Intermediates) {
+                Self->State.RequestExecute(intermediate, db, ctx, Self->Info());
+            }
             return true;
-#else
-            Y_UNUSED(txc);
-            return true;
-#endif
+        }
+
+        void Complete(const TActorContext &ctx) override {
+            YDB_LOG_DEBUG_COMP(NKikimrServices::KEYVALUE, "TTxBatchRequest Complete",
+                {"keyValue", Self->TabletID()},
+                {"batchSize", Intermediates.size()});
+            Self->State.PushTrashBeingCommitted(TrashBeingCommitted, ctx);
+            for (auto &intermediate : Intermediates) {
+                Self->State.RequestComplete(intermediate, ctx, Self->Info());
+            }
+            Self->WriteLogTxInFlight = false;
+            Self->StartWriteLogTxIfNeeded(ctx);
         }
     };
 
@@ -438,10 +495,29 @@ protected:
         }
     };
 
+    static constexpr ui32 MaxWriteLogBatch = 64;
+
     TKeyValueState State;
     TDeque<TAutoPtr<IEventHandle>> InitialEventsQueue;
     TActorId CollectorActorId;
     TDeque<TEvTablet::TEvMoveData::TPtr> MoveDataRequestsQueue;
+    TDeque<THolder<TIntermediate>> PendingWriteLogIntermediates;
+    bool WriteLogTxInFlight = false;
+
+    void StartWriteLogTxIfNeeded(const TActorContext &ctx) {
+        if (WriteLogTxInFlight || PendingWriteLogIntermediates.empty()) {
+            return;
+        }
+        TVector<THolder<TIntermediate>> batch;
+        batch.reserve(Min<size_t>(PendingWriteLogIntermediates.size(), MaxWriteLogBatch));
+        while (!PendingWriteLogIntermediates.empty() && batch.size() < MaxWriteLogBatch) {
+            batch.push_back(std::move(PendingWriteLogIntermediates.front()));
+            PendingWriteLogIntermediates.pop_front();
+        }
+        NWilson::TTraceId traceId = batch.front()->Span.GetTraceId();
+        WriteLogTxInFlight = true;
+        Execute(new TTxBatchRequest(std::move(batch), this, std::move(traceId)), ctx);
+    }
 
     void OnDetach(const TActorContext &ctx) override {
         YDB_LOG_DEBUG_COMP(NKikimrServices::KEYVALUE, "OnDetach",
@@ -554,9 +630,15 @@ protected:
 
         CheckYellowChannels(ev->Get()->Intermediate->Stat);
 
-        State.OnEvIntermediate(*(ev->Get()->Intermediate));
-        auto traceId = ev->Get()->Intermediate->Span.GetTraceId();
-        Execute(new TTxRequest(std::move(ev->Get()->Intermediate), this, std::move(traceId)), ctx);
+        THolder<TIntermediate> intermediate = std::move(ev->Get()->Intermediate);
+        State.OnEvIntermediate(*intermediate);
+        if (CanBatchWriteLogIntermediate(*intermediate)) {
+            PendingWriteLogIntermediates.push_back(std::move(intermediate));
+            StartWriteLogTxIfNeeded(ctx);
+            return;
+        }
+        auto traceId = intermediate->Span.GetTraceId();
+        Execute(new TTxRequest(std::move(intermediate), this, std::move(traceId)), ctx);
     }
 
     void Handle(TEvKeyValue::TEvNotify::TPtr &ev, const TActorContext &ctx) {

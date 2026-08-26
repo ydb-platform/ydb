@@ -64,6 +64,10 @@ private:
         TWriteSource WriteSource;
         NKikimrBlobStorage::TDataKind::E DataKind = NKikimrBlobStorage::TDataKind::USER;
         NWilson::TSpan Span;
+        // Span is not created for single-blob puts, where it would just duplicate the
+        // request-level DSProxy.Put span; keep the parent trace id in that case, otherwise
+        // VDisk requests would carry no trace id and the trace would stop at DSProxy.
+        NWilson::TTraceId SpanlessTraceId;
         std::shared_ptr<TEvBlobStorage::TExecutionRelay> ExecutionRelay;
         TInstant Deadline;
 
@@ -85,10 +89,16 @@ private:
             , ExtraBlockChecks(std::move(extraBlockChecks))
             , WriteSource(writeSource)
             , DataKind(dataKind)
-            , Span(single ? NWilson::TSpan() : NWilson::TSpan(TWilson::BlobStorage, std::move(traceId), "DSProxy.Put.Blob"))
+            , Span(single ? NWilson::TSpan() : NWilson::TSpan(TWilson::BlobStorage, NWilson::TTraceId(traceId), "DSProxy.Put.Blob"))
+            , SpanlessTraceId(single ? std::move(traceId) : NWilson::TTraceId())
             , ExecutionRelay(std::move(executionRelay))
             , Deadline(deadline)
         {}
+
+        // Trace id for requests sent to VDisks on behalf of this blob.
+        NWilson::TTraceId GetTraceIdForVDiskRequest() const {
+            return Span ? Span.GetTraceId() : NWilson::TTraceId(SpanlessTraceId);
+        }
 
         void Output(IOutputStream& s) const {
             s << BlobId;
@@ -304,8 +314,8 @@ public:
                     auto [orderNumber, ptr] = *it++;
                     TBlobInfo& blob = Blobs[ptr->BlobIdx];
                     ev->AddVPut(ptr->Id, TRcBuf(ptr->Buffer), nullptr, blob.IssueKeepFlag, blob.IgnoreBlock,
-                        blob.IsZeroEntry, &blob.ExtraBlockChecks, blob.Span.GetTraceId(), checksumming, blob.WriteSource,
-                        blob.DataKind);
+                        blob.IsZeroEntry, &blob.ExtraBlockChecks, blob.GetTraceIdForVDiskRequest(), checksumming,
+                        blob.WriteSource, blob.DataKind);
                     HandoffPartsSent += ptr->IsHandoff;
                     vput.AddSubrequest(ptr->Id);
                 }

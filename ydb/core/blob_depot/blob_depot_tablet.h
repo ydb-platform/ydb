@@ -83,6 +83,13 @@ namespace NKikimr::NBlobDepot {
         std::shared_ptr<TToken> Token = std::make_shared<TToken>();
         TControlWrapper MaxLoadedTrashRecords = 1'000'000;
 
+        // Ceilings for the adaptive S3 concurrency limiters in TS3Manager. Always read through the
+        // wrapper at the point of use, never cached into a member, so that changing them via ICB
+        // takes effect on a running tablet.
+        TControlWrapper S3MaxWritesInFlight = 100'000;
+        TControlWrapper S3MaxDeletesInFlight = 4;
+        TControlWrapper S3MaxObjectsToDeleteAtOnce = 100;
+
         struct TAgent {
             struct TConnection {
                 TActorId PipeServerId;
@@ -108,6 +115,10 @@ namespace NKikimr::NBlobDepot {
             float LastPushedApproximateFreeSpaceShare = 0.0f;
 
             THashSet<TS3Locator> S3WritesInFlight;
+            // Locators that still occupy MaxWritesInFlight. Released when HTTP upload finishes
+            // (CommitBlobSeq arrives) or is abandoned (DiscardSpoiled / agent disconnect), not
+            // when the commit transaction completes.
+            THashSet<TS3Locator> S3ThrottleHeld;
         };
 
         struct TPipeServerContext {
@@ -195,7 +206,11 @@ namespace NKikimr::NBlobDepot {
                 {"marker", "BDT24"},
                 {"id", GetLogId()});
             if (AppData()->Icb) {
-                TControlBoard::RegisterSharedControl(MaxLoadedTrashRecords, AppData()->Icb->BlobDepotControls.MaxLoadedTrashRecords);
+                auto& controls = AppData()->Icb->BlobDepotControls;
+                TControlBoard::RegisterSharedControl(MaxLoadedTrashRecords, controls.MaxLoadedTrashRecords);
+                TControlBoard::RegisterSharedControl(S3MaxWritesInFlight, controls.S3MaxWritesInFlight);
+                TControlBoard::RegisterSharedControl(S3MaxDeletesInFlight, controls.S3MaxDeletesInFlight);
+                TControlBoard::RegisterSharedControl(S3MaxObjectsToDeleteAtOnce, controls.S3MaxObjectsToDeleteAtOnce);
             }
             Executor()->RegisterExternalTabletCounters(TabletCountersPtr);
             TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_MODE_STARTING] = 1;
@@ -372,6 +387,20 @@ namespace NKikimr::NBlobDepot {
         void Handle(TEvBlobDepot::TEvCommitBlobSeq::TPtr ev);
         void Handle(TEvBlobDepot::TEvDiscardSpoiledBlobSeq::TPtr ev);
         void Handle(TEvBlobDepot::TEvPrepareWriteS3::TPtr ev);
+
+        struct TPendingCommitBlobSeq {
+            ui32 NodeId = 0;
+            ui64 AgentInstanceId = 0;
+            std::unique_ptr<TEvBlobDepot::TEvCommitBlobSeq::THandle> Request;
+        };
+
+        static constexpr ui32 MaxCommitBlobSeqBatch = 64;
+        std::deque<TPendingCommitBlobSeq> PendingCommitBlobSeq;
+        bool CommitBlobSeqTxInFlight = false;
+
+        class TTxCommitBlobSeq;
+        void StartCommitBlobSeqTxIfNeeded();
+        void ReleaseS3HttpThrottle(TAgent& agent, const NKikimrBlobDepot::TEvCommitBlobSeq& record, bool success);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // S3 operations

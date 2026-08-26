@@ -288,14 +288,15 @@ namespace NKikimr::NBlobDepot {
             return;
         }
 
-        while (NumDeleteTxInFlight + ActiveDeleters.size() < CurrentMaxDeletesInFlight) {
+        while (NumDeleteTxInFlight + ActiveDeleters.size() < EffectiveMaxDeletesInFlight()) {
             if (DeleteQueue.empty()) {
                 break;
             }
 
             // create list of locators we are going to delete during this operation
             THashMap<TString, TS3Locator> locators;
-            while (!DeleteQueue.empty() && locators.size() < MaxObjectsToDeleteAtOnce) {
+            const size_t maxObjectsToDeleteAtOnce = MaxObjectsToDeleteAtOnce();
+            while (!DeleteQueue.empty() && locators.size() < maxObjectsToDeleteAtOnce) {
                 const TS3Locator& locator = DeleteQueue.front();
                 locators.emplace(locator.MakeObjectName(BasePath), locator);
                 DeleteQueue.pop_front();
@@ -365,7 +366,7 @@ namespace NKikimr::NBlobDepot {
                     // S3 asked us to slow down: requeue, shrink concurrency, and arm exponential backoff.
                     DeleteQueue.insert(DeleteQueue.end(), msg.LocatorsThrottled.begin(), msg.LocatorsThrottled.end());
                     CurrentMaxDeletesInFlight = 1;
-                    Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_DELETE_MAX_IN_FLIGHT] = CurrentMaxDeletesInFlight;
+                    Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_DELETE_MAX_IN_FLIGHT] = EffectiveMaxDeletesInFlight();
                     Self->TabletCounters->Cumulative()[NKikimrBlobDepot::COUNTER_S3_DELETE_THROTTLE_ACTIVATIONS] += 1;
                     ConsecutiveSuccessfulDeleteBatches = 0;
                     const TDuration delay = DeleteBackoff.Next();
@@ -375,7 +376,7 @@ namespace NKikimr::NBlobDepot {
                         {"id", Self->GetLogId()},
                         {"delay", delay},
                         {"throttled", msg.LocatorsThrottled.size()},
-                        {"currentMaxDeletesInFlight", CurrentMaxDeletesInFlight});
+                        {"currentMaxDeletesInFlight", EffectiveMaxDeletesInFlight()});
                     YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "S3_delete_throttled",
                         {"marker", "BDEV36"},
                         {"BDT", Self->TabletID()},
@@ -383,15 +384,16 @@ namespace NKikimr::NBlobDepot {
                         {"throttled", msg.LocatorsThrottled.size()});
                 } else if (!msg.LocatorsOk.empty()) {
                     // Pure success: gradually restore concurrency.
-                    if (CurrentMaxDeletesInFlight < MaxDeletesInFlight) {
+                    const ui32 maxDeletesInFlight = MaxDeletesInFlight();
+                    if (CurrentMaxDeletesInFlight < maxDeletesInFlight) {
                         if (++ConsecutiveSuccessfulDeleteBatches >= SuccessesPerConcurrencyStepUp) {
                             ConsecutiveSuccessfulDeleteBatches = 0;
                             ++CurrentMaxDeletesInFlight;
-                            if (CurrentMaxDeletesInFlight >= MaxDeletesInFlight) {
-                                CurrentMaxDeletesInFlight = MaxDeletesInFlight;
+                            if (CurrentMaxDeletesInFlight >= maxDeletesInFlight) {
+                                CurrentMaxDeletesInFlight = maxDeletesInFlight;
                                 DeleteBackoff.Reset();
                             }
-                            Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_DELETE_MAX_IN_FLIGHT] = CurrentMaxDeletesInFlight;
+                            Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_DELETE_MAX_IN_FLIGHT] = EffectiveMaxDeletesInFlight();
                         }
                     }
                 }

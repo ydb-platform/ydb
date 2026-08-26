@@ -5,8 +5,11 @@
 
 #include <ydb/core/base/services/blobstorage_service_id.h>
 #include <ydb/core/blob_depot/s3_router_events.h>
+#include <ydb/core/control/lib/immediate_control_board_wrapper.h>
 #include <ydb/core/protos/blob_depot_config.pb.h>
 #include <ydb/core/util/backoff.h>
+#include <ydb/library/actors/wilson/wilson_span.h>
+#include <ydb/library/wilson_ids/wilson.h>
 
 namespace NKikimr::NBlobDepot {
 
@@ -260,6 +263,7 @@ namespace NKikimr::NBlobDepot {
                 EvPendingEventQueueWatchdog,
                 EvPushMetrics,
                 EvS3GetThrottleWakeup,
+                EvFlushCommitBlobSeq,
             };
         };
 
@@ -311,6 +315,7 @@ namespace NKikimr::NBlobDepot {
                 cFunc(TEvPrivate::EvPushMetrics, HandlePushMetrics);
 
                 cFunc(TEvPrivate::EvS3GetThrottleWakeup, HandleS3GetThrottleWakeup);
+                cFunc(TEvPrivate::EvFlushCommitBlobSeq, HandleFlushCommitBlobSeq);
             )
 
             DeletePendingQueries.Clear();
@@ -417,9 +422,10 @@ namespace NKikimr::NBlobDepot {
         void Handle(TRequestContext::TPtr context, NKikimrBlobDepot::TEvAllocateIdsResult& msg);
 
         template<typename T, typename = typename TEvBlobDepot::TEventFor<T>::Type>
-        ui64 Issue(T msg, TRequestSender *sender, TRequestContext::TPtr context);
+        ui64 Issue(T msg, TRequestSender *sender, TRequestContext::TPtr context, NWilson::TTraceId traceId = {});
 
-        ui64 Issue(std::unique_ptr<IEventBase> ev, TRequestSender *sender, TRequestContext::TPtr context);
+        ui64 Issue(std::unique_ptr<IEventBase> ev, TRequestSender *sender, TRequestContext::TPtr context,
+            NWilson::TTraceId traceId = {});
 
         void Handle(TEvBlobDepot::TEvPushNotify::TPtr ev);
 
@@ -446,13 +452,13 @@ namespace NKikimr::NBlobDepot {
             bool Destroyed = false;
             std::shared_ptr<TEvBlobStorage::TExecutionRelay> ExecutionRelay;
             ui32 BlockChecksRemain = 3;
-
-            struct TLifetimeToken {};
-            std::shared_ptr<TLifetimeToken> LifetimeToken;
+            NWilson::TSpan Span;
 
             static constexpr TDuration WatchdogDuration = TDuration::Seconds(10);
 
         public:
+            struct TLifetimeToken {};
+
             TQuery(TBlobDepotAgent& agent, std::unique_ptr<IEventHandle> event, TMonotonic received);
             virtual ~TQuery();
 
@@ -471,14 +477,25 @@ namespace NKikimr::NBlobDepot {
             virtual void OnDestroy(bool /*success*/) {}
             virtual void OnPutS3ObjectResponse(std::optional<TString>&& /*error*/, bool /*slowDown*/) { Y_ABORT(); }
             virtual void OnCheckIntegrity(TCheckOutcome&& /*outcome*/) {}
+            virtual void OnCommitBlobSeqResult(NKikimrBlobDepot::TEvCommitBlobSeqResult&& /*msg*/) { Y_ABORT(); }
 
             NKikimrProto::EReplyStatus CheckBlockForTablet(ui64 tabletId, std::optional<ui32> generation,
                 ui32 *blockedGeneration = nullptr);
+
+            std::shared_ptr<TLifetimeToken> EnsureLifetimeToken() {
+                if (!LifetimeToken) {
+                    LifetimeToken = std::make_shared<TLifetimeToken>();
+                }
+                return LifetimeToken;
+            }
 
             using TFinishCallback = std::function<void(std::optional<TString>, const char*)>;
             void IssueReadS3(const TString& key, ui32 offset, ui32 len, TFinishCallback finish, ui64 readId);
 
             TActorId IssueWriteS3(TString&& key, TRope&& buffer, TLogoBlobID id, TS3Locator locator);
+
+        protected:
+            std::shared_ptr<TLifetimeToken> LifetimeToken;
 
         protected: // reading logic
             struct TReadContext;
@@ -593,7 +610,8 @@ namespace NKikimr::NBlobDepot {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // DS proxy interaction
 
-        void SendToProxy(ui32 groupId, std::unique_ptr<IEventBase> event, TRequestSender *sender, TRequestContext::TPtr context);
+        void SendToProxy(ui32 groupId, std::unique_ptr<IEventBase> event, TRequestSender *sender,
+            TRequestContext::TPtr context, NWilson::TTraceId traceId = {});
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Blocks
@@ -634,9 +652,12 @@ namespace NKikimr::NBlobDepot {
         // restore the cap. Throttling is per-agent because GETs are issued from the agent without any tablet
         // round-trip, so there is no central place to gate them.
 
-        static constexpr ui32 MaxS3GetsInFlight = 32;
         static constexpr ui32 SuccessesPerGetConcurrencyStepUp = 3;
         static constexpr ui32 MaxS3GetSlowDownRetries = 100;
+
+        TControlWrapper S3MaxGetsInFlight = 256;
+        ui32 MaxS3GetsInFlight() const { return Max<ui32>(1, S3MaxGetsInFlight); }
+        ui32 EffectiveMaxS3GetsInFlight() const { return Min(CurrentMaxS3GetsInFlight, MaxS3GetsInFlight()); }
 
         struct TPendingS3Read {
             TString Key;
@@ -650,7 +671,7 @@ namespace NKikimr::NBlobDepot {
         TBackoff S3GetBackoff{TDuration::MilliSeconds(100), TDuration::Seconds(60)};
         TMonotonic S3GetThrottleUntil;
         bool S3GetWakeupScheduled = false;
-        ui32 CurrentMaxS3GetsInFlight = MaxS3GetsInFlight;
+        ui32 CurrentMaxS3GetsInFlight = Max<ui32>();
         ui32 ConsecutiveSuccessfulGetBatches = 0;
         ui32 S3GetsInFlight = 0;
         ui32 S3PutsInFlight = 0;
@@ -664,6 +685,39 @@ namespace NKikimr::NBlobDepot {
         void HandleS3GetThrottleWakeup();
 
         void IncS3HttpErrorCounter(const TString& operation, int httpCode);
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // CommitBlobSeq coalescing
+        //
+        // Many parallel TEvPut finish WriteS3 around the same time and each used to send its own 1-item
+        // TEvCommitBlobSeq. Under load that floods the single BlobDepot tablet pipe/tx queue. Coalesce ready
+        // commits into one multi-item request (flushed at the end of the current mailbox burst).
+
+        static constexpr ui32 MaxCommitBlobSeqBatch = 64;
+
+        struct TPendingCommitBlobSeqItem {
+            TQuery *Query = nullptr;
+            std::weak_ptr<TQuery::TLifetimeToken> LifetimeToken;
+            NKikimrBlobDepot::TEvCommitBlobSeq::TItem Item;
+        };
+
+        struct TCommitBlobSeqBatchContext : TRequestContext {
+            struct TEntry {
+                TQuery *Query = nullptr;
+                std::weak_ptr<TQuery::TLifetimeToken> LifetimeToken;
+            };
+            std::vector<TEntry> Entries;
+        };
+
+        std::deque<TPendingCommitBlobSeqItem> PendingCommitBlobSeq;
+        bool CommitBlobSeqFlushScheduled = false;
+
+        void EnqueueCommitBlobSeq(TQuery *query, NKikimrBlobDepot::TEvCommitBlobSeq&& msg);
+        void CancelPendingCommitBlobSeq(TQuery *query);
+        void FailPendingCommitBlobSeq();
+        void FlushCommitBlobSeq();
+        void HandleFlushCommitBlobSeq();
+        void HandleCommitBlobSeqBatchResult(TRequestContext::TPtr context, TResponse response);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Metrics

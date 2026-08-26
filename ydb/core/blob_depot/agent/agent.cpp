@@ -31,6 +31,10 @@ namespace NKikimr::NBlobDepot {
     void TBlobDepotAgent::Bootstrap() {
         Become(&TThis::StateFunc);
 
+        if (AppData()->Icb) {
+            TControlBoard::RegisterSharedControl(S3MaxGetsInFlight, AppData()->Icb->BlobDepotControls.S3MaxGetsInFlight);
+        }
+
         SetupCounters();
 
         if (TabletId && TabletId != Max<ui64>()) {

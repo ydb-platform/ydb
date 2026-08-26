@@ -352,15 +352,6 @@ void TBlocksDirtyMap::WriteFinished(
     }
 
     inflightItem.OnWritten(requested, confirmed);
-    /*
-    const auto demotedHosts = DisabledHosts.Exclude(DesiredDDisks);
-    if (!demotedHosts.Empty()) {
-        inflightItem.UpdateHosts(
-            THostMask::MakeEmpty(),
-            demotedHosts,
-            DisabledHosts);
-    }
-            */
 }
 
 void TBlocksDirtyMap::FlushFinished(

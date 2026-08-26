@@ -67,6 +67,11 @@ These describe the load applied through the YDB storage layer code (DDisk).
 
 Each `DDiskTestList` entry contains one or more `DDiskLoad` sources.
 
+DDisk and Persistent Buffer checksums are enabled by default. Pass
+`--disable-ddisk-checksums` to disable both checksum generation in the load
+actors and checksum handling in DDisk. For client/server DDisk tests, pass the
+option to both processes so the client and server use the same mode.
+
 #### Parameters for `DDiskLoad`
 - `Tag` - a unique numeric identifier for the load source.
 - `DDiskId` - the DDisk address `{ NodeId, PDiskId, DDiskSlotId }`.

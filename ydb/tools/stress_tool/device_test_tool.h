@@ -601,6 +601,7 @@ struct TPerfTestConfig {
     ui32 InFlightTo = 0;
     TIntrusivePtr<NPDisk::TSectorMap> SectorMap; // SectorMaps[0] alias
     bool DisablePDiskDataEncryption;
+    bool DisableDDiskChecksums;
     NActors::NLog::EPriority LogLevel = NActors::NLog::PRI_WARN;
 
     TMap<const TString, NPDisk::EDeviceType> DeviceStrToType {
@@ -641,16 +642,18 @@ struct TPerfTestConfig {
             const TString monPort, bool doLockFile, const TString runCountStr = "1",
             const TString inFlightFromStr = "0", const TString inFlightToStr = "0",
             bool disablePDiskDataEncryption = false,
+            bool disableDDiskChecksums = false,
             NActors::NLog::EPriority logLevel = NActors::NLog::PRI_WARN)
         : TPerfTestConfig(TVector<TString>{path}, name, type, outputFormatName,
                 monPort, doLockFile, runCountStr, inFlightFromStr, inFlightToStr,
-                disablePDiskDataEncryption, logLevel)
+                disablePDiskDataEncryption, disableDDiskChecksums, logLevel)
     {}
 
     TPerfTestConfig(const TVector<TString>& paths, const TString name, const TString type, const TString outputFormatName,
             const TString monPort, bool doLockFile, const TString runCountStr = "1",
             const TString inFlightFromStr = "0", const TString inFlightToStr = "0",
             bool disablePDiskDataEncryption = false,
+            bool disableDDiskChecksums = false,
             NActors::NLog::EPriority logLevel = NActors::NLog::PRI_WARN)
         : Paths(paths)
         , Path(paths.at(0))
@@ -661,6 +664,7 @@ struct TPerfTestConfig {
         , InFlightFrom(std::strtol(inFlightFromStr.c_str(), nullptr, 10))
         , InFlightTo(std::strtol(inFlightToStr.c_str(), nullptr, 10))
         , DisablePDiskDataEncryption(disablePDiskDataEncryption)
+        , DisableDDiskChecksums(disableDDiskChecksums)
         , LogLevel(logLevel)
     {
         auto it_type = DeviceStrToType.find(type);

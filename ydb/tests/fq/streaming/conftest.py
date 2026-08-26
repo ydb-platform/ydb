@@ -105,7 +105,8 @@ class KikimrRollingUpgrade(Kikimr):
 def kikimr(request):
     param = getattr(request, "param", {})
     set_test_env(request)
-    kikimr = Kikimr(get_ydb_config(request), enable_discovery=param.get("enable_discovery", True))
+    kikimr = Kikimr(get_ydb_config(request), enable_discovery=param.get("enable_discovery", True),
+        tenant_database="/Root/romashka")
     yield kikimr
     kikimr.stop()
 
@@ -120,27 +121,27 @@ def entity_name(request):
     return entity_name_wrapper
 
 
-@pytest.fixture(scope="module")
-def kikimr(request):
+# @pytest.fixture(scope="module")
+# def kikimr(request):
 
-    from ydb.tests.library.compatibility.fixtures import (
-        init_stable_binary_path,
-    )
+#     from ydb.tests.library.compatibility.fixtures import (
+#         init_stable_binary_path,
+#     )
 
-    main_binary_path = kikimr_driver_path()
+#     main_binary_path = kikimr_driver_path()
 
-    logger.info(f"Main binary path: {main_binary_path}")
-    logger.info(f"Stable binary path: {init_stable_binary_path}")
+#     logger.info(f"Main binary path: {main_binary_path}")
+#     logger.info(f"Stable binary path: {init_stable_binary_path}")
 
-    set_test_env(request)
-    config = get_ydb_config(request)
-    config.set_binary_paths([main_binary_path])
+#     set_test_env(request)
+#     config = get_ydb_config(request)
+#     config.set_binary_paths([main_binary_path])
 
-    kikimr = KikimrRollingUpgrade(
-        config,
-        main_binary_path=main_binary_path,
-        stable_binary_path=init_stable_binary_path,
-        tenant_database="/Root/romashka",
-    )
-    yield kikimr
-    kikimr.stop()
+#     kikimr = KikimrRollingUpgrade(
+#         config,
+#         main_binary_path=main_binary_path,
+#         stable_binary_path=init_stable_binary_path,
+#         tenant_database="/Root/romashka",
+#     )
+#     yield kikimr
+#     kikimr.stop()

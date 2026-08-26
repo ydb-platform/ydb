@@ -3,7 +3,7 @@ import logging
 import os
 import tempfile
 import time
-from typing import Self
+from typing import Optional, Self
 import yatest.common
 import yaml
 import ydb
@@ -403,7 +403,6 @@ class Kikimr:
         self.cluster = KiKiMR(config)
         self.cluster.start(timeout_seconds=timeout_seconds)
 
-<<<<<<< HEAD
         # Determine the database for dynamic nodes (slots).
         # When a dedicated tenant_database is given, create it first so that
         # KQP tasks are dispatched exclusively to dynamic nodes of that tenant.
@@ -449,15 +448,14 @@ class Kikimr:
     def recreate_driver(self):
         self.ydb_client.stop()
         self.ydb_client = YdbClient(
-            database=self.endpoint.database, endpoint=f"grpc://{self.endpoint.endpoint}", enable_discovery=False
+            database=self.endpoint.database, endpoint=f"grpc://{self.endpoint.endpoint}", enable_discovery=False)
 
     @staticmethod
     def _setup_ydb_client(endpoint: Endpoint, enable_discovery: bool) -> YdbClient:
         return YdbClient.from_driver_config(
             database=endpoint.database,
             endpoint=f"grpc://{endpoint.endpoint}",
-            enable_discovery=enable_discovery,
->>>>>>> upstream/main
+            enable_discovery=enable_discovery
         )
 
     def stop(self) -> None:

@@ -2011,19 +2011,25 @@ TDbgSnapshot TDirectBlockGroup::DoBuildMonSnapshot() const
     }
 
     auto hostsStat = Oracle.BuildHostStats(TInstant::Now());
+    TVChunkConfigs vChunkConfigs;
     for (const auto& weakVChunk: VChunks) {
         if (auto vChunk = weakVChunk.lock()) {
+            vChunkConfigs[vChunk->GetConfig().GetVChunkIndex()] =
+                vChunk->GetConfig();
+
             for (THostIndex host = 0; host < GetHostCount(); ++host) {
                 hostsStat[host].AheadBlocks += vChunk->GetAheadBlocks(host);
                 hostsStat[host].BehindBlocks += vChunk->GetBehindBlocks(host);
             }
         }
     }
+
     return {
         .Index = DirectBlockGroupIndex,
         .VChunkCount = VChunks.size(),
         .Hosts = std::move(hostsStat),
         .Connections = std::move(connections),
+        .VChunkConfigs = std::move(vChunkConfigs),
         .LatencyHistoryCapacity = Oracle.GetLatencyHistoryCapacity(),
     };
 }

@@ -94,6 +94,7 @@
   - guiddef.h
   - handleapi.h
   - heapapi.h
+  - hidsdi.h
   - htmlhelp.h
   - http.h
   - hvsocket.h
@@ -240,6 +241,7 @@
   - stringapiset.h
   - strsafe.h
   - suppress.h
+  - swdevice.h
   - synchapi.h
   - sys/locking.h
   - sys/utime.h

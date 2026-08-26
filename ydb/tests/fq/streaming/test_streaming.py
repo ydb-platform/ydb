@@ -1829,7 +1829,7 @@ FROM `{table_name}`"""
                             bum: Variant<
                                 a: Tuple<Int, String>?,
                                 b: List<Int>,
-                                c: bool,
+                                c: Bool,
                                 d: Int8,
                                 e: Int64,
                                 f: Dict<String,Int?>

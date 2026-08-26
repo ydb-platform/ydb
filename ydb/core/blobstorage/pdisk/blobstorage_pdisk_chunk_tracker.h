@@ -290,11 +290,11 @@ using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
     TColorLimits ColorLimits;
 
     // Chunk reserve of the static group owners. Nothing is taken out of the shared quota for it: the reserve is the
-    // number of chunks of the shared quota an owner is guaranteed to be able to allocate, and the part of it the owner
-    // does not use yet is simply not given to anybody else.
+    // number of chunks of the shared quota kept free for an owner, and the part of it the owner does not use yet is
+    // hidden from the other owners, so that they stop taking user writes while it is still there.
     std::array<TAtomic, 256> StaticReserve = {}; // Always allocated, can be read from anywhere
     static_assert(sizeof(TOwner) == 1, "Make sure to use large enough StaticReserve buffer");
-    // Sum of the unused reserves, i.e. the free space of the shared quota that is held back from the other owners
+    // Sum of the unused reserves, i.e. the free space of the shared quota that is hidden from the other owners
     TAtomic StaticReserveFreeTotal = 0;
     TStackVec<TOwner, 8> StaticOwners; // Can be accessed only from the main thread
 
@@ -490,13 +490,12 @@ public:
         return OwnerQuota->GetUsed(owner);
     }
 
-    // Number of chunks of the shared quota a static group owner is guaranteed to be able to allocate, 0 for all the
-    // other owners
+    // Number of chunks of the shared quota kept free for a static group owner, 0 for all the other owners
     i64 GetOwnerStaticReserve(TOwner owner) const {
         return AtomicGet(StaticReserve[owner]);
     }
 
-    // The part of the reserve the owner does not use yet, i.e. the space held back from the other owners for it
+    // The part of the reserve the owner does not use yet, i.e. the space hidden from the other owners for it
     i64 GetOwnerStaticReserveFree(TOwner owner) const {
         return Max<i64>(GetOwnerStaticReserve(owner) - OwnerQuota->GetUsed(owner), 0);
     }
@@ -609,16 +608,11 @@ public:
 
     bool TryAllocate(TOwner owner, i64 count, TString &outErrorReason) {
         if (IsOwnerUser(owner)) {
-            // The reserves of the static group owners are the last chunks of the shared quota, this owner may take
-            // them only as far as the reserve is its own
-            const i64 floor = GetStaticReserveFloor(owner);
-            if (floor && SharedQuota->GetAllocatableFree() - floor < count) {
-                outErrorReason = (TStringBuilder() << "Allocation of count# " << count
-                        << " chunks does not fit into the shared quota, free# " << SharedQuota->GetFree()
-                        << " reserved for the static group owners# " << floor
-                        << " Marker# BPQ11");
-                return false;
-            }
+            // The reserve of a static group owner is deliberately not enforced here. PDisk can not tell a write that
+            // brings in new user data from a write that compacts what is already there, while the space colors can:
+            // the owners stop taking user writes at yellow and keep compacting and cutting the log down to black.
+            // Refusing an allocation because of the reserve would hit the housekeeping too, and on a disk that is
+            // already full the housekeeping is the only thing that can free some space.
             OwnerQuota->ForceAllocate(owner, count);
             if (SharedQuota->TryAllocate(count, outErrorReason)) {
                 RecomputeStaticReserveFree();
@@ -776,9 +770,9 @@ public:
 
 private:
     // A static group owner must keep working even when its neighbours from dynamic groups have eaten the whole shared
-    // quota, otherwise the tablets living in the static group take the whole cluster down. Each of them is guaranteed
-    // its personal quota worth of chunks: the part of that guarantee the owner does not use yet is held back from the
-    // other owners instead of being taken out of the shared quota, so nothing of the disk is left idle.
+    // quota, otherwise the tablets living in the static group take the whole cluster down. Each of them gets its
+    // personal quota worth of chunks kept free: the part of it the owner does not use yet is hidden from the other
+    // owners instead of being taken out of the shared quota, so nothing of the disk is left idle.
     void RecomputeStaticReserve() {
         if (StaticOwners.empty()) {
             AtomicSet(StaticReserveFreeTotal, 0);
@@ -827,9 +821,11 @@ private:
     }
 
     // Free space of the shared quota that is reserved for the static group owners other than this one, i.e. the part
-    // of it this owner is not allowed to touch
+    // of it this owner is expected to keep its hands off. The reserves never take away the last chunks of the quota,
+    // so that an owner is throttled by them, but is never told that the disk is completely full because of them.
     i64 GetStaticReserveFloor(TOwner owner) const {
-        return Max<i64>(AtomicGet(StaticReserveFreeTotal) - GetOwnerStaticReserveFree(owner), 0);
+        const i64 floor = Max<i64>(AtomicGet(StaticReserveFreeTotal) - GetOwnerStaticReserveFree(owner), 0);
+        return Min(floor, SharedQuota->GetAllocatableFree());
     }
 };
 

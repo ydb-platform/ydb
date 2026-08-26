@@ -54,6 +54,11 @@ public:
     // portions that the current tx has written
     std::optional<THashSet<TInsertWriteId>> ownPortions;
 
+    bool NeedDuplicateFiltering() const {
+        AFL_VERIFY(TableMetadataAccessor);
+        return DeduplicationPolicy == EDeduplicationPolicy::PREVENT_DUPLICATES && TableMetadataAccessor->NeedDuplicateFiltering();
+    }
+
     bool IsReverseSort() const {
         return Sorting == ERequestSorting::DESC;
     }

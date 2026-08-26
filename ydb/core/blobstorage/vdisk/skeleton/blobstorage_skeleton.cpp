@@ -1499,6 +1499,37 @@ namespace NKikimr {
             }
         }
 
+        void Handle(TEvGetVDiskSpaceReportRequest::TPtr& ev, const TActorContext& ctx) {
+            YDB_LOG_DEBUG_CTX_COMP(ctx, BS_VDISK_OTHER, "TEvGetVDiskSpaceReportRequest",
+                {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
+                {"marker", "BSVS46"});
+
+            if (VDiskSpaceReportActorId) {
+                auto response = std::make_unique<TEvGetVDiskSpaceReportResponse>(
+                    NKikimrProto::TRYLATER,
+                    "another VDisk space report is already in progress",
+                    ctx.Now(),
+                    nullptr,
+                    nullptr);
+                SendVDiskResponse(ctx, ev->Sender, response.release(), ev->Cookie, VCtx, {});
+                return;
+            }
+
+            IActor* actor = CreateVDiskSpaceReportActor(
+                HullCtx,
+                HugeBlobCtx,
+                PDiskCtx,
+                ctx.SelfID,
+                Db->HugeKeeperID,
+                Db->SyncLogID,
+                Db->ChunkKeeperActorID,
+                MinHugeBlobInBytes,
+                ev);
+            VDiskSpaceReportActorId = RunInBatchPool(ctx, actor);
+            ActiveActors.Insert(VDiskSpaceReportActorId, __FILE__, __LINE__, ctx,
+                NKikimrServices::BLOBSTORAGE);
+        }
+
         ////////////////////////////////////////////////////////////////////////
         // STREAM QUERIES
         ////////////////////////////////////////////////////////////////////////
@@ -2836,6 +2867,9 @@ namespace NKikimr {
             if (ev->Sender == ShredActorId) {
                 ShredActorId = {};
             }
+            if (ev->Sender == VDiskSpaceReportActorId) {
+                VDiskSpaceReportActorId = {};
+            }
             ActiveActors.Erase(ev->Sender);
         }
 
@@ -3293,6 +3327,7 @@ namespace NKikimr {
             HFunc(TEvBlobStorage::TEvVAssimilate, Handle)
             HFunc(TEvBlobStorage::TEvVDbStat, Handle)
             HFunc(TEvGetLogoBlobIndexStatRequest, Handle)
+            HFunc(TEvGetVDiskSpaceReportRequest, Handle)
             HFunc(TEvBlobStorage::TEvMonStreamQuery, Handle)
             HFunc(TEvBlobStorage::TEvMonStreamActorDeathNote, Handle)
             HFunc(TEvBlobStorage::TEvVCompact, Handle)
@@ -3464,6 +3499,7 @@ namespace NKikimr {
         TActorId DefragId;
         TActorId BalancingId;
         TActorId MetadataActorId;
+        TActorId VDiskSpaceReportActorId;
         bool HasUnreadableBlobs = false;
         std::unique_ptr<TVDiskCompactionState> VDiskCompactionState;
         TMemorizableControlWrapper EnableVPatch;

@@ -18,7 +18,7 @@ The following tasks should be performed before using the dynamic configuration i
 
 1. Enable [database node authentication and authorization](../../devops/deployment-options/manual/node-authorization.md).
 
-2. Export the current settings from the [CMS](../../concepts/glossary.md#cms) in YAML format using the following command if [CMS-based configuration management](cms.md) has been used in the cluster:
+2. Export the current settings from the [CMS](../../concepts/glossary.md#cms) in YAML format using the following command if [CMS-based configuration management](../../devops/configuration-management/configuration-v1/cms.md) has been used in the cluster:
 
     ```bash
     ./ydbd -s grpcs://<node1.ydb.tech>:2135 --ca-file ca.crt --token-file ydbd-token \
@@ -210,4 +210,3 @@ The list may be expanded in the future.
 
 * Using more than 30 different [labels](./dynamic-config-selectors.md) in [selectors](./dynamic-config-selectors.md) can lead to validation delays of several seconds, as {{ ydb-short-name }} needs to check the validity of each possible final configuration. The number of values for a single label has much less impact.
 * Using large files (more than 500KiB for a cluster with 1000 nodes) can lead to increased network traffic in the cluster when updating the configuration. The traffic volume is directly proportional to the number of nodes and the configuration size.
-

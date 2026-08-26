@@ -88,7 +88,7 @@ private:
 
     virtual void DoInitCursor(const std::shared_ptr<IScanCursor>& cursor) override;
 
-    virtual std::vector<TInsertWriteId> GetUncommittedWriteIds() const override;
+    virtual std::vector<TPortionInfo::TConstPtr> GetConflictingPortions() const override;
 
     virtual std::shared_ptr<NCommon::IDataSource> DoExtractNextImpl(const std::shared_ptr<NCommon::TSpecialReadContext>& context) override {
         auto constructor = TBase::PopObjectWithAccessor();

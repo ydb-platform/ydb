@@ -433,17 +433,12 @@ public:
         }
     }
 
-    std::shared_ptr<TPortionInfo> GetPortionOptional(const ui64 portion, const bool committedOnly = true) const {
-        if (auto it = Portions.find(portion); it != Portions.end()) {
-            return it->second;
-        }
-
-        if (committedOnly) {
+    std::shared_ptr<TPortionInfo> GetPortionOptional(const ui64 portion) const {
+        auto it = Portions.find(portion);
+        if (it == Portions.end()) {
             return nullptr;
         }
-
-        auto it = InsertedPortionsById.find(portion);
-        return it != InsertedPortionsById.end() ? it->second : nullptr;
+        return it->second;
     }
 
     bool ErasePortion(const ui64 portion);

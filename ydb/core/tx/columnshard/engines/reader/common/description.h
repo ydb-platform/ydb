@@ -63,6 +63,17 @@ public:
         return Sorting == ERequestSorting::DESC;
     }
 
+    TString GetLockName() const {
+        if (TxId != 0 && ScanId != 0) {
+            // proper kqp scan
+            return TStringBuilder() << "scan:" << TxId << ":" << ScanId;
+        } else {
+            // internal scan
+            AFL_VERIFY(!ScanIdentifier.empty());
+            return TStringBuilder() << "scan:" << GetScanIdentifier();
+        }
+    }
+
     // List of columns
     std::vector<ui32> ColumnIds;
 

@@ -2362,7 +2362,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             });
 
             error = TStringBuilder() << "Query issues: " << issues;
-            return issues.contains("no read rule provided for consumer 'unknownConsumer' in topic");
+            return issues.contains("Consumer `unknownConsumer` does not exist in topic");
         });
 
         ExecExternalQuery(fmt::format(R"(

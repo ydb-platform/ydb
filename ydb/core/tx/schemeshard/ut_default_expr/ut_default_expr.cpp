@@ -12,6 +12,10 @@ void EnableDefaultFromExpression(TTestActorRuntime& runtime) {
     runtime.GetAppData().FeatureFlags.SetEnableGeneratedStored(false);
 }
 
+void DisableDefaultFromExpression(TTestActorRuntime& runtime) {
+    runtime.GetAppData().FeatureFlags.SetEnableDefaultFromExpression(false);
+}
+
 const NKikimrSchemeOp::TColumnDescription* FindColumn(const NKikimrScheme::TEvDescribeSchemeResult& describe, const TString& name) {
     const auto& table = describe.GetPathDescription().GetTable();
     for (const auto& column : table.GetColumns()) {
@@ -78,6 +82,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardDefaultExprTest) {
     Y_UNIT_TEST(CreateFeatureFlagDisabled) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
+        DisableDefaultFromExpression(runtime);
 
         ui64 txId = 100;
 
@@ -306,6 +311,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardDefaultExprTest) {
     Y_UNIT_TEST(AlterSetDefaultExpressionFeatureFlagDisabled) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
+        DisableDefaultFromExpression(runtime);
 
         ui64 txId = 100;
 

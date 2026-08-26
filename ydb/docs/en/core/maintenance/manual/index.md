@@ -19,7 +19,6 @@ Main topics:
 * [{#T}](node_restarting.md)
 * [{#T}](dynamic-config.md)
 * [{#T}](cluster_expansion.md)
-* [{#T}](cms.md)
 * [{#T}](config-overview.md)
 * [{#T}](dynamic-config-selectors.md)
 * [{#T}](dynamic-config-volatile-config.md)

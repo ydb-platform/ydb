@@ -168,6 +168,7 @@ public:
                         resultValue = HolderFactory->CreateVariantHolder(resultValue, index);
                         return true;
                     }
+                    resultValue = NYql::NUdf::TUnboxedValue();
                 }
                 if (status.IsSuccess()) {
                     status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, isQuiet ? TString() : TStringBuilder() << "Failed to parse Variant type");
@@ -226,7 +227,7 @@ public:
                 auto tupleType = AS_TYPE(NKikimr::NMiniKQL::TTupleType, type);
                 auto elementsCount = tupleType->GetElementsCount();
                 NYql::NUdf::TUnboxedValue *resultValues;
-                resultValue = HolderFactory->CreateDirectArrayHolder(elementsCount, resultValues);
+                auto tuple = HolderFactory->CreateDirectArrayHolder(elementsCount, resultValues);
                 size_t idx = 0;
                 array.reset();
                 for (auto elt : array) {
@@ -250,6 +251,7 @@ public:
                         return false;
                     }
                 }
+                resultValue = std::move(tuple);
                 break;
             }
 
@@ -268,7 +270,7 @@ public:
                 Y_ENSURE(memberNames.size() == membersCount);
 
                 NYql::NUdf::TUnboxedValue *resultValues;
-                resultValue = HolderFactory->CreateDirectArrayHolder(membersCount, resultValues);
+                auto structValue = HolderFactory->CreateDirectArrayHolder(membersCount, resultValues);
                 object.reset();
                 for (auto elt : object) {
                     std::string_view name;
@@ -301,6 +303,7 @@ public:
                         return false;
                     }
                 }
+                resultValue = std::move(structValue);
                 break;
             }
 
@@ -335,7 +338,7 @@ public:
                 GetDictionaryKeyTypes(keyType, keyTypes, isTuple, encoded, useIHash);
                 Y_ENSURE(!(isTuple || encoded || useIHash));
                 status = TStatus::Success();
-                resultValue = HolderFactory->CreateDirectHashedDictHolder(
+                auto dictValue = HolderFactory->CreateDirectHashedDictHolder(
                     [&, this](auto& map) {
                         for (auto elt : jsonObject) {
                             std::string_view name;
@@ -358,7 +361,11 @@ public:
                         }
                     },
                     keyTypes, false, true, nullptr, nullptr, nullptr);
-                return status.IsSuccess();
+                if (status.IsSuccess()) {
+                    resultValue = std::move(dictValue);
+                    return true;
+                }
+                return false;
             }
 
             default:
